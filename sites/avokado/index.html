@@ -73,6 +73,13 @@
   .sticky-cta.on{transform:translate(-50%,0);opacity:1}
 
   section{position:relative}
+  .section-blend{z-index:2;isolation:isolate}
+  .section-blend::before{
+    content:'';position:absolute;z-index:0;left:0;right:0;top:-150px;height:170px;
+    background:linear-gradient(180deg,transparent 0%,var(--blend-color,var(--bg)) 88%,var(--blend-color,var(--bg)) 100%);
+    pointer-events:none;
+  }
+  .section-blend > *{position:relative;z-index:1}
   .wrap{max-width:1100px;margin:0 auto;padding:0 5vw}
   .kicker{font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--gold);margin-bottom:14px}
   h2{font-size:clamp(26px,3.4vw,42px);margin-bottom:18px}
@@ -106,17 +113,14 @@
   .t-hint{margin-top:30px;font-size:12px;letter-spacing:.2em;color:var(--dim);animation-delay:9.5s}
 
   .hero-offer{position:absolute;left:0;right:0;bottom:0;z-index:3;
-    display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;
-    padding:16px 5vw;background:linear-gradient(180deg,rgba(10,15,11,0),rgba(10,15,11,.92) 45%);
+    display:flex;align-items:center;justify-content:flex-end;gap:24px;
+    padding:24px 5vw 32px;background:linear-gradient(180deg,rgba(10,15,11,0),rgba(10,15,11,.68) 70%,rgba(10,15,11,.82));
     opacity:0;animation:tfade 1.2s ease 3.2s forwards}
-  .ho-text{display:flex;flex-direction:column;gap:4px;min-width:0}
-  .ho-text h2{margin:0;font-family:'Manrope',sans-serif;font-size:clamp(14px,1.35vw,17px);color:var(--cream);font-weight:700;line-height:1.3}
-  .ho-text span{font-size:clamp(11.5px,1vw,13.5px);color:var(--dim)}
-  .ho-btn{display:inline-flex;flex-direction:column;align-items:center;gap:1px;text-decoration:none;white-space:nowrap;
-    background:linear-gradient(180deg,var(--brass),#c39f68);color:#20180c;font-weight:700;font-size:15.5px;
-    padding:12px 26px;border-radius:999px;transition:transform .2s}
-  .ho-btn i{font-style:normal;font-size:11px;font-weight:500;opacity:.75}
-  .ho-btn:hover{transform:translateY(-2px)}
+  .ho-btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;white-space:nowrap;
+    border:1px solid rgba(216,185,129,.75);background:rgba(14,20,16,.28);backdrop-filter:blur(12px);
+    -webkit-backdrop-filter:blur(12px);color:var(--cream);font-weight:500;font-size:15px;letter-spacing:.04em;
+    padding:13px 30px;border-radius:999px;transition:transform .2s,background .2s,border-color .2s}
+  .ho-btn:hover{transform:translateY(-2px);background:rgba(216,185,129,.15);border-color:var(--brass)}
 
   /* ---------- АКТ 2 · МОНОЛОГ ---------- */
   .act2{padding:110px 0 90px;background:linear-gradient(180deg,rgba(14,20,16,.86) 0%,rgba(14,20,16,.93) 55%,rgba(16,19,18,.99) 100%),url('assets/bg-hall-blur.webp') center top/cover no-repeat}
@@ -197,6 +201,20 @@
   .btn-final:hover{transform:translateY(-2px)}
   .finale .sub{margin-top:16px;font-size:13px;color:var(--dim)}
 
+  /* ---------- КОНТАКТЫ ---------- */
+  .contacts{padding:120px 0 110px;background:#0a0f0c;text-align:center}
+  .contacts .lead{max-width:44em;margin:0 auto}
+  .contact-actions{display:flex;justify-content:center;gap:14px;flex-wrap:wrap;margin:42px 0 38px}
+  .contact-main{min-width:220px;padding:16px 28px;border-radius:999px;text-decoration:none;font-weight:700;transition:transform .2s,background .2s}
+  .contact-main.booking{background:var(--brass);color:#20180c;border:1px solid var(--brass)}
+  .contact-main.chat{background:rgba(216,185,129,.06);color:var(--cream);border:1px solid rgba(216,185,129,.72)}
+  .contact-main:hover{transform:translateY(-2px)}
+  .contact-main.chat:hover{background:rgba(216,185,129,.14)}
+  .contact-links{display:flex;justify-content:center;align-items:center;gap:10px 26px;flex-wrap:wrap;max-width:920px;margin:0 auto}
+  .contact-links a,.contact-links span{color:var(--dim);font-size:13.5px;text-decoration:none;transition:color .2s}
+  .contact-links a:hover{color:var(--brass)}
+  .contact-hours{margin-top:28px;color:var(--gold);font-size:13px;letter-spacing:.04em}
+
   .studio-light{background:#f0efe7 !important;color:#232a1f}
   .studio-light h2,.studio-light h3{color:#1d2a22}
   .studio-light .lead{color:#48584d}
@@ -232,7 +250,6 @@
   .studio-light .faq summary{color:#232a1f}
   .studio-light .faq p{color:#4a5a4e}
   .studio-light .faq details{border-bottom-color:#d6ddcc}
-  .brass-rule{height:1px;background:linear-gradient(90deg,transparent,var(--brass) 18%,var(--brass) 82%,transparent);margin:0}
   .brass-ring{position:relative}
   .brass-ring::before{content:'';position:absolute;inset:-10px;border:1px solid rgba(216,185,129,.45);border-radius:inherit;pointer-events:none}
   footer{background:#0a0f0b;color:var(--faint);font-size:13px;padding:30px 5vw;line-height:1.7;text-align:center}
@@ -262,8 +279,7 @@
     .head-btn{font-size:12px;padding:7px 13px}
 
     /* хиро: титры выше липкой кнопки, компактнее */
-    .hero-offer{flex-direction:column;align-items:stretch;text-align:center;gap:12px;padding:14px 5vw 18px}
-    .ho-text h2{font-size:14px}
+    .hero-offer{justify-content:center;padding:14px 5vw 24px}
     .ho-btn{justify-content:center;padding:14px 20px}
     .hero-titles{padding-bottom:23svh}
     .t-brand .wordmark{font-size:30px !important}
@@ -292,6 +308,7 @@
     .obj{padding:9px 13px;font-size:13.5px}
     .finale{min-height:82svh;padding-bottom:14svh}
     .btn-final{font-size:15.5px;padding:16px 28px}
+    .contacts{padding:82px 0 78px}.contact-actions{flex-direction:column;margin:34px 0}.contact-main{min-width:0}
     footer{padding-bottom:88px}
     section{scroll-margin-top:60px}
   }
@@ -308,7 +325,7 @@
   <a class="head-btn" href="/contacts.html">Написать нам</a>
 </header>
 
-<a class="sticky-cta" id="cta" href="https://n396010.yclients.com/company/375899/personal/menu" target="_blank" rel="noopener">Пробный сеанс — 500 ₽</a>
+<a class="sticky-cta" id="cta" data-entry-point="sticky_cta" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=sticky_cta" target="_blank" rel="noopener">Пробный сеанс — 500 ₽</a>
 
 <!-- ═══ АКТ 1 · ХИРО «ВЕЧЕР» ═══ -->
 <section class="hero" id="top">
@@ -325,21 +342,16 @@
     <div class="t-echo script" style="right:10%;top:34%;animation-delay:10.6s">уверенность</div>
     <h1 class="t-brand t-fade" style="font-weight:inherit;font-size:inherit"><span class="wordmark" style="font-size:clamp(34px,4.6vw,60px)">АВ<svg class="avo-o" viewBox="0 0 48 54" aria-hidden="true"><path d="M25.5 8 C26.5 5 25 2.5 23 2" fill="none" stroke="#d8b981" stroke-width="1.6" stroke-linecap="round"/><path d="M24 9.5 C20.4 9.5 15.6 15.6 14.1 22.3 C12.6 29.1 17.3 38 24 38 C30.7 38 35.4 29.1 33.9 22.3 C32.4 15.6 27.6 9.5 24 9.5 Z" fill="none" stroke="#d8b981" stroke-width="2.1" stroke-linejoin="round"/><circle cx="24" cy="27" r="4.6" fill="#d8b981"/></svg>КАДО</span><span class="wm-sub">студия дизайна тела</span></h1>
     <div class="t-slogan t-fade">УВЕРЕННОСТЬ · СВОБОДА · РЕЗУЛЬТАТ</div>
-    <p class="visually-hidden">Аппаратный вакуумно-роликовый массаж, коррекция фигуры и лазерная эпиляция в Иркутске — студия дизайна тела АВОКАДО на улице Красноказачья, 84.</p>
     <div class="t-script script">Быть красивой и уверенной —<br>это мой выбор</div>
     <div class="t-hint t-fade">ЛИСТАЙТЕ — ЭТО ЕЁ ИСТОРИЯ ↓</div>
   </div>
   <div class="hero-offer">
-    <div class="ho-text">
-      <h2>Аппаратный массаж и коррекция фигуры в Иркутске</h2>
-      <span>Красноказачья, 84 · ежедневно 09:00–21:00 · 5,0 на 2ГИС и Яндексе</span>
-    </div>
-    <a class="ho-btn" href="https://n396010.yclients.com/company/375899/personal/menu" target="_blank" rel="noopener">Пробный сеанс — 500 ₽<i>вместо 2 100 ₽</i></a>
+    <a class="ho-btn" href="#contacts">Записаться</a>
   </div>
 </section>
 
 <!-- ═══ АКТ 2 · МОНОЛОГ ═══ -->
-<section class="act2">
+<section class="act2 section-blend" style="--blend-color:#0e1410">
   <div class="wrap grid">
     <figure class="rv"><img src="assets/heroine-dress.png" alt="Героиня истории АВОКАДО в вечернем платье" loading="lazy"></figure>
     <div class="rv">
@@ -350,9 +362,8 @@
   </div>
 </section>
 
-<div class="brass-rule"></div>
 <!-- ═══ АКТ 3 · ИЗНУРЕНИЕ ═══ -->
-<section class="act3">
+<section class="act3 section-blend" style="--blend-color:#101312">
   <div class="wrap inner">
     <div class="kicker rv">Знакомо?</div>
     <h2 class="rv">Сколько раз вы уже начинали заново?</h2>
@@ -370,7 +381,7 @@
 </section>
 
 <!-- ═══ АКТ 4 · ДРУГОЙ ПУТЬ · ЗУМ ═══ -->
-<section class="zoomstage" id="metod">
+<section class="zoomstage section-blend" id="metod" style="--blend-color:#0e1410">
   <div class="zscene z1">
     <img class="fig" src="assets/heroine-sport.png" alt="Героиня">
     <div class="zcopy rv">
@@ -406,7 +417,7 @@
 </section>
 
 <!-- ═══ АППАРАТЫ И СТУДИЯ ═══ -->
-<section class="studio-light" style="padding:100px 0">
+<section class="studio-light section-blend" style="padding:100px 0;--blend-color:#f0efe7">
   <div class="wrap">
     <div class="kicker rv">Чем работаем</div>
     <h2 class="rv">Настоящие аппараты. Настоящие фото. Настоящая студия</h2>
@@ -422,7 +433,7 @@
 
 
 <!-- ═══ КАК ПРОХОДИТ ПЕРВЫЙ ВИЗИТ ═══ -->
-<section class="visit">
+<section class="visit section-blend" style="--blend-color:#0e1410">
   <div class="wrap">
     <div class="kicker rv">Первый визит по шагам</div>
     <h2 class="rv">Вы придёте — и вот что будет дальше</h2>
@@ -452,9 +463,8 @@
   </div>
 </section>
 
-<div class="brass-rule"></div>
 <!-- ═══ ПРАЙС ═══ -->
-<section class="price studio-light" id="price">
+<section class="price studio-light section-blend" id="price" style="--blend-color:#f0efe7">
   <div class="wrap">
     <div class="kicker rv">Первый шаг</div>
     <h2 class="rv">Попробуйте — за 500 ₽</h2>
@@ -495,9 +505,8 @@
   </div>
 </section>
 
-<div class="brass-rule"></div>
 <!-- ═══ ДОВЕРИЕ ═══ -->
-<section class="trust">
+<section class="trust section-blend" style="--blend-color:#6d7c4f">
   <div class="wrap">
     <div class="kicker rv" style="color:#e6dfc4">Не верьте нам на слово — проверьте</div>
     <h2 class="rv">Более 400 оценок на картах — и высшая по обеим</h2>
@@ -511,9 +520,8 @@
 </section>
 
 
-<div class="brass-rule"></div>
 <!-- ═══ FAQ ═══ -->
-<section class="faq studio-light" id="faq">
+<section class="faq studio-light section-blend" id="faq" style="--blend-color:#f0efe7">
   <div class="wrap">
     <div class="kicker rv">Частые вопросы</div>
     <h2 class="rv">Что обычно спрашивают перед первым визитом</h2>
@@ -537,12 +545,12 @@
       <p>Да. Аппаратный массаж не проводится при беременности, варикозной болезни, тромбофлебите, онкологических и острых воспалительных заболеваниях. На консультации обязательно расскажите специалисту о состоянии здоровья — подберём безопасную программу или честно отговорим.</p></details>
 
     <details class="rv"><summary>Где вы находитесь и как записаться?</summary>
-      <p>Иркутск, улица Красноказачья, 84 — работаем ежедневно с 09:00 до 21:00. Записаться можно онлайн за минуту, по телефону +7 950 100 1059 или в мессенджерах: WhatsApp, Telegram, ВКонтакте.</p></details>
+      <p>Иркутск, улица Красноказачья, 84 — работаем ежедневно, по предварительной записи. Записаться можно онлайн за минуту, по телефону +7 950 100 1059 или в мессенджерах: WhatsApp, Telegram, ВКонтакте.</p></details>
   </div>
 </section>
 
 <!-- ═══ ГАРАНТИЯ ═══ -->
-<section class="guar">
+<section class="guar section-blend" style="--blend-color:#0e1410">
   <div class="wrap gg">
     <div>
       <div class="kicker rv">Честные правила</div>
@@ -560,22 +568,47 @@
 </section>
 
 <!-- ═══ ФИНАЛ ═══ -->
-<section class="finale">
+<section class="finale section-blend" style="--blend-color:#0e1410">
   <img class="bgimg" src="assets/hero-poster.jpg" alt="Студия дизайна тела АВОКАДО — уверенность и результат" loading="lazy">
   <div class="inner">
     <div class="script rv">Позволь себе быть красивой — легко</div>
-    <a class="btn-final rv" href="https://n396010.yclients.com/company/375899/personal/menu" target="_blank" rel="noopener">Начать с пробного за 500 ₽</a>
-    <div class="sub rv">Запись занимает меньше минуты · Красноказачья, 84 · ежедневно 09:00–21:00<br>
+    <a class="btn-final rv" data-entry-point="finale_cta" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=finale_cta" target="_blank" rel="noopener">Начать с пробного за 500 ₽</a>
+    <div class="sub rv">Запись занимает меньше минуты · Красноказачья, 84 · ежедневно, по предварительной записи<br>
       Не готовы записаться прямо сейчас? <a href="#contacts" style="color:var(--brass)">Напишите нам</a> — ответим и подскажем, с чего начать.</div>
   </div>
 </section>
 
+<!-- ═══ КОНТАКТЫ ═══ -->
+<section class="contacts section-blend" id="contacts" style="--blend-color:#0a0f0c">
+  <div class="wrap">
+    <div class="kicker rv">Связаться со студией</div>
+    <h2 class="rv">Выберите удобный способ</h2>
+    <p class="lead rv">Аппаратный массаж и коррекция фигуры в Иркутске. АВОКАДО ждёт вас на Красноказачьей, 84, 1 этаж.</p>
+    <div class="contact-actions rv">
+      <a class="contact-main booking" data-entry-point="contacts_booking" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=contacts_booking" target="_blank" rel="noopener">Записаться онлайн</a>
+      <a class="contact-main chat" data-chat-link href="#" target="_blank" rel="noopener">Обсудить в чате</a>
+    </div>
+    <nav class="contact-links rv" aria-label="Контакты и социальные сети">
+      <a href="https://2gis.ru/irkutsk/firm/70000001045439507" target="_blank" rel="noopener">2ГИС</a>
+      <a href="tel:+79501001059">+7 950 100 1059</a>
+      <a href="https://wa.me/79501001059" target="_blank" rel="noopener">WhatsApp</a>
+      <a data-chat-link href="#" target="_blank" rel="noopener">Telegram</a>
+      <a href="https://vk.com/lasermkt" target="_blank" rel="noopener">ВКонтакте</a>
+      <span>Иркутск, Красноказачья, 84, 1 этаж</span>
+    </nav>
+    <p class="contact-hours rv">Ежедневно, по предварительной записи</p>
+  </div>
+</section>
+
 <footer>
-  АВОКАДО · студия дизайна тела · Иркутск, ул. Красноказачья, 84 · ежедневно 09:00–21:00<br>
+  АВОКАДО · студия дизайна тела · Иркутск, ул. Красноказачья, 84 · ежедневно, по предварительной записи<br>
   <a href="tel:+79501001059">+7 950 100 1059</a> · <a href="/contacts.html">все способы связаться</a>
 </footer>
 
 <script>
+  var STUDIO_CHAT_URL = 'https://t.me/+79501001059';
+  document.querySelectorAll('[data-chat-link]').forEach(function(a){ a.href = STUDIO_CHAT_URL; });
+
   // Минимальный JS: reveal-блоки, липкая CTA после хиро, фон шапки, ступени зума.
 
   // Атрибуция: ловим UTM на входе, храним визит и пробрасываем метки в запись Yclients.
@@ -610,6 +643,8 @@
           try{
             var u = new URL(a.href);
             utmKeys.forEach(function(k){ if(stored[k]) u.searchParams.set(k, stored[k]); });
+            // Не смешиваем точки входа: у каждой CTA остаётся собственная метка.
+            if(a.dataset.entryPoint) u.searchParams.set('utm_content', a.dataset.entryPoint);
             a.href = u.toString();
           }catch(e){}
         });
@@ -684,10 +719,10 @@
 {"@type":["HealthAndBeautyBusiness","LocalBusiness"],"@id":"https://avokado.synapsebusiness.ru/#studio",
  "name":"АВОКАДО — студия дизайна тела","description":"Студия дизайна тела в Иркутске: аппаратный вакуумно-роликовый массаж, коррекция фигуры курсом, кавитация, RF-лифтинг, лазерная эпиляция, ручной массаж.",
  "address":{"@type":"PostalAddress","streetAddress":"улица Красноказачья, 84","addressLocality":"Иркутск","addressRegion":"Иркутская область","addressCountry":"RU"},
- "telephone":"+7 950 100 1059","priceRange":"₽₽",
- "openingHoursSpecification":[{"@type":"OpeningHoursSpecification","dayOfWeek":["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"],"opens":"09:00","closes":"21:00"}],
+ "telephone":"+7 950 100 1059","priceRange":"₽₽","slogan":"Аппаратный массаж и коррекция фигуры в Иркутске",
+ "additionalProperty":{"@type":"PropertyValue","name":"Режим работы","value":"Ежедневно, по предварительной записи"},
  "aggregateRating":{"@type":"AggregateRating","ratingValue":"5.0","reviewCount":"400","bestRating":"5"},
- "sameAs":["https://vk.com/lasermkt","https://t.me/avocado_studio38","https://2gis.ru/irkutsk/firm/70000001045439507"],
+ "sameAs":["https://vk.com/lasermkt","https://t.me/+79501001059","https://2gis.ru/irkutsk/firm/70000001045439507"],
  "hasOfferCatalog":{"@type":"OfferCatalog","name":"Услуги студии","itemListElement":[
   {"@type":"Offer","name":"Пробный ТУРБО-массаж всего тела, 60 мин","price":"500","priceCurrency":"RUB"},
   {"@type":"Offer","name":"LPG-массаж всего тела, 45 мин","price":"990","priceCurrency":"RUB"},
@@ -703,7 +738,7 @@
  {"@type":"Question","name":"Аппаратный массаж — это больно?","acceptedAnswer":{"@type":"Answer","text":"Нет. Процедура проходит в специальном костюме и ощущается как плотный разминающий массаж, интенсивность регулируется под клиента."}},
  {"@type":"Question","name":"Нужно ли соблюдать диету и ходить в зал?","acceptedAnswer":{"@type":"Answer","text":"Нет. Аппарат работает с подкожной клетчаткой и лимфотоком, обязательных запретов студия не выдаёт."}},
  {"@type":"Question","name":"Какие есть противопоказания?","acceptedAnswer":{"@type":"Answer","text":"Беременность, варикозная болезнь, тромбофлебит, онкологические и острые воспалительные заболевания. Обязательна консультация со специалистом."}},
- {"@type":"Question","name":"Где находится студия АВОКАДО и как записаться?","acceptedAnswer":{"@type":"Answer","text":"Иркутск, улица Красноказачья, 84, ежедневно с 09:00 до 21:00. Запись онлайн, по телефону +7 950 100 1059 или в мессенджерах."}}]}
+ {"@type":"Question","name":"Где находится студия АВОКАДО и как записаться?","acceptedAnswer":{"@type":"Answer","text":"Иркутск, улица Красноказачья, 84, 1 этаж. Студия работает ежедневно, по предварительной записи. Запись онлайн, по телефону +7 950 100 1059 или в мессенджерах."}}]}
 ]}
 </script>
 </body>
