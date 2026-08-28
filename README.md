@@ -40,6 +40,30 @@
 Пароли, токены, ключи — никогда. Репозиторий публичный, всё содержимое
 и так отдаётся посетителям сайтов.
 
+## Пароль на панель
+
+Файл авторизации хранится вне Git, в Docker-томе `caddy_data`. Сначала создайте
+bcrypt-хеш командой `docker compose exec caddy caddy hash-password`, затем
+создайте каталог и файл:
+
+```sh
+docker compose exec caddy mkdir -p /data/auth
+docker compose exec -T caddy sh -c 'cat > /data/auth/panel.conf'
+```
+
+Во вторую команду передайте конфигурацию, подставив имя пользователя и
+полученный bcrypt-хеш, после чего нажмите `Ctrl-D`:
+
+```caddyfile
+basic_auth {
+	USER BCRYPT_HASH
+}
+```
+
+Примените изменение командой `docker compose exec caddy caddy reload --config
+/etc/caddy/Caddyfile`. Чтобы снять пароль, удалите файл командой `docker compose
+exec caddy rm /data/auth/panel.conf` и снова перезагрузите Caddy.
+
 ## Ручное применение
 
 Установить версию скрипта синхронизации из репозитория:
