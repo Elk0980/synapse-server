@@ -176,6 +176,26 @@
   .plist .row span:last-child{color:var(--gold);white-space:nowrap}
   .note{font-size:12.5px;color:var(--faint);margin-top:18px;line-height:1.5}
 
+  /* ---------- ПОДАРОЧНЫЙ СЕРТИФИКАТ ---------- */
+  .certificate{padding:120px 0 130px;overflow:hidden;text-align:center;background:
+    linear-gradient(180deg,rgba(10,15,12,.9),rgba(10,15,12,.7) 45%,rgba(10,15,12,.92)),
+    url('assets/hall-blur-bg_1920x1080.jpg') center/cover no-repeat}
+  .certificate::after{content:'';position:absolute;z-index:0;left:0;right:0;bottom:0;height:150px;background:linear-gradient(180deg,transparent,#0e1410);pointer-events:none}
+  .certificate .lead{max-width:42em;margin:0 auto}
+  .certificate-stage{width:min(760px,82vw);margin:48px auto 38px;perspective:1400px;filter:drop-shadow(0 32px 24px rgba(0,0,0,.42))}
+  .certificate-float{animation:certificate-float 6s ease-in-out infinite}
+  .certificate-card{position:relative;aspect-ratio:1.75;transform-style:preserve-3d;transform:rotateY(var(--certificate-turn,0deg));will-change:transform}
+  .certificate-face{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+  .certificate-back{transform:rotateY(180deg)}
+  @keyframes certificate-float{0%,100%{transform:translateY(-12px)}50%{transform:translateY(12px)}}
+  .certificate-controls{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin:0 auto 20px}
+  .certificate-value{border:1px solid rgba(216,185,129,.55);border-radius:999px;background:rgba(14,20,16,.62);color:var(--cream);padding:10px 18px;font:700 14px 'Manrope',sans-serif;cursor:pointer;transition:background .2s,color .2s,border-color .2s,transform .2s}
+  .certificate-value:hover{transform:translateY(-2px);border-color:var(--brass)}
+  .certificate-value[aria-pressed="true"]{background:var(--brass);border-color:var(--brass);color:#20180c}
+  .certificate-choice{min-height:1.5em;color:var(--dim);font-size:14px}
+  .certificate-cta{display:inline-block;margin-top:24px;background:linear-gradient(180deg,var(--brass),#c39f68);color:#20180c;font-weight:700;text-decoration:none;padding:16px 32px;border-radius:999px;transition:transform .2s}
+  .certificate-cta:hover{transform:translateY(-2px)}
+
   /* ---------- ДОВЕРИЕ ---------- */
   .trust{padding:90px 0;background:var(--sage-deep)}
   .tgrid{display:flex;flex-wrap:wrap;gap:16px;margin-top:36px}
@@ -294,6 +314,9 @@
     .zscene{padding:56px 0 !important}
     .zcopy{padding:20px}
     .price{padding:70px 0}
+    .certificate{padding:76px 0 90px;background-image:linear-gradient(180deg,rgba(10,15,12,.9),rgba(10,15,12,.7) 45%,rgba(10,15,12,.92)),url('assets/hall-blur-bg-mob_1080x1920.jpg')}
+    .certificate-stage{width:100%;margin:36px auto 30px}
+    .certificate-value{padding:9px 14px;font-size:13px}
     .trust{padding:64px 0}
     .guar{padding:64px 0}
     .qlist{gap:11px;margin-top:26px}
@@ -317,6 +340,10 @@
   .wordmark{display:inline-flex;align-items:baseline;font-family:'Cormorant','Times New Roman',serif;font-weight:600;letter-spacing:.22em;color:#d8b981;text-decoration:none}
   .wordmark .avo-o{height:1.05em;width:auto;align-self:center;margin:0 .06em;transform:translateY(.08em)}
   .wm-sub{display:block;font-family:'Manrope',sans-serif;font-size:.38em;letter-spacing:.44em;color:#e0cba0;text-transform:uppercase;margin-top:.4em;text-align:center;text-shadow:0 1px 12px rgba(0,0,0,.6)}
+  @media (prefers-reduced-motion:reduce){
+    .certificate-float{animation:none}
+    .certificate-card{transform:rotateY(0deg) !important;will-change:auto}
+  }
 </style>
 </head>
 <body>
@@ -503,6 +530,32 @@
   </div>
 </section>
 
+<!-- ═══ ПОДАРОЧНЫЙ СЕРТИФИКАТ ═══ -->
+<section class="certificate section-blend" id="certificate" style="--blend-color:#0e1410">
+  <div class="wrap">
+    <div class="kicker rv">Забота в подарок</div>
+    <h2 class="rv">Подарочный сертификат АВОКАДО</h2>
+    <p class="lead rv">Подарите время для себя и возможность выбрать подходящую процедуру в студии.</p>
+    <div class="certificate-stage rv" aria-label="Подарочный сертификат: лицевая сторона и условия на обороте">
+      <div class="certificate-float">
+        <div class="certificate-card">
+          <img class="certificate-face certificate-front" src="assets/certificate-avokado-light.svg" alt="Лицевая сторона подарочного сертификата АВОКАДО">
+          <img class="certificate-face certificate-back" src="assets/certificate-avokado-back.svg" alt="Оборот подарочного сертификата с условиями">
+        </div>
+      </div>
+    </div>
+    <div class="certificate-controls rv" aria-label="Выберите номинал сертификата">
+      <button class="certificate-value" type="button" data-value="990" aria-pressed="true">990 ₽</button>
+      <button class="certificate-value" type="button" data-value="2100" aria-pressed="false">2 100 ₽</button>
+      <button class="certificate-value" type="button" data-value="3100" aria-pressed="false">3 100 ₽</button>
+      <button class="certificate-value" type="button" data-value="4700" aria-pressed="false">4 700 ₽</button>
+      <button class="certificate-value" type="button" data-value="4990" aria-pressed="false">4 990 ₽</button>
+    </div>
+    <p class="certificate-choice rv" aria-live="polite">Выбран сертификат на 990 ₽</p>
+    <a class="certificate-cta rv" data-entry-point="certificate" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=certificate" target="_blank" rel="noopener">Заказать сертификат</a>
+  </div>
+</section>
+
 <!-- ═══ ДОВЕРИЕ ═══ -->
 <section class="trust section-blend" style="--blend-color:#6d7c4f">
   <div class="wrap">
@@ -606,6 +659,42 @@
 <script>
   var STUDIO_CHAT_URL = 'https://t.me/+79501001059';
   document.querySelectorAll('[data-chat-link]').forEach(function(a){ a.href = STUDIO_CHAT_URL; });
+
+  // Номинал сертификата и привязанный к прокрутке переворот карточки.
+  (function(){
+    var section = document.getElementById('certificate');
+    var card = section && section.querySelector('.certificate-card');
+    if(!section || !card) return;
+
+    var choice = section.querySelector('.certificate-choice');
+    section.querySelectorAll('.certificate-value').forEach(function(button){
+      button.addEventListener('click',function(){
+        section.querySelectorAll('.certificate-value').forEach(function(item){ item.setAttribute('aria-pressed','false'); });
+        button.setAttribute('aria-pressed','true');
+        choice.textContent = 'Выбран сертификат на ' + Number(button.dataset.value).toLocaleString('ru-RU') + ' ₽';
+      });
+    });
+
+    var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    var visible = false;
+    var frame = 0;
+    function drawTurn(){
+      frame = 0;
+      if(reduceMotion.matches){ card.style.setProperty('--certificate-turn','0deg'); return; }
+      var rect = section.getBoundingClientRect();
+      var progress = Math.max(0,Math.min(1,(window.innerHeight - rect.top) / (window.innerHeight + rect.height)));
+      card.style.setProperty('--certificate-turn',(progress * 180).toFixed(2) + 'deg');
+    }
+    function requestTurn(){ if(visible && !frame) frame = requestAnimationFrame(drawTurn); }
+    var turnObserver = new IntersectionObserver(function(entries){
+      visible = entries[0].isIntersecting;
+      if(visible) requestTurn();
+    },{threshold:0});
+    turnObserver.observe(section);
+    window.addEventListener('scroll',requestTurn,{passive:true});
+    window.addEventListener('resize',requestTurn);
+    if(reduceMotion.addEventListener) reduceMotion.addEventListener('change',requestTurn);
+  })();
 
   // Минимальный JS: reveal-блоки, липкая CTA после хиро, фон шапки, ступени зума.
 
