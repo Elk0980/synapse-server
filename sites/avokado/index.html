@@ -682,8 +682,23 @@
       frame = 0;
       if(reduceMotion.matches){ card.style.setProperty('--certificate-turn','0deg'); return; }
       var rect = section.getBoundingClientRect();
-      var progress = Math.max(0,Math.min(1,(window.innerHeight - rect.top) / (window.innerHeight + rect.height)));
-      card.style.setProperty('--certificate-turn',(progress * 180).toFixed(2) + 'deg');
+      var viewport = window.visualViewport;
+      var viewportHeight = viewport ? viewport.height : window.innerHeight;
+      var viewportTop = viewport ? viewport.offsetTop : 0;
+      var progress = (viewportHeight - (rect.top - viewportTop)) / (viewportHeight + rect.height);
+      if(!Number.isFinite(progress)) progress = 0;
+      progress = Math.max(0,Math.min(1,progress));
+
+      var turnProgress = 0;
+      if(progress >= .65){
+        turnProgress = 1;
+      }else if(progress > .35){
+        var flipProgress = (progress - .35) / .3;
+        turnProgress = flipProgress < .5
+          ? 4 * flipProgress * flipProgress * flipProgress
+          : 1 - Math.pow(-2 * flipProgress + 2,3) / 2;
+      }
+      card.style.setProperty('--certificate-turn',(turnProgress * 180).toFixed(2) + 'deg');
     }
     function requestTurn(){ if(visible && !frame) frame = requestAnimationFrame(drawTurn); }
     var turnObserver = new IntersectionObserver(function(entries){
