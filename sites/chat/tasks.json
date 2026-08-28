@@ -1,0 +1,36 @@
+{
+  "benefits": {
+    "problemsSolved": null,
+    "saved": null,
+    "earned": null
+  },
+  "tasks": [
+    {
+      "task": "Подготовить форму для новых заявок",
+      "assignee": "Команда Synapse",
+      "expectedDueDate": "30 августа 2026",
+      "status": "in_progress",
+      "completionDate": null,
+      "link": null,
+      "sample": true
+    },
+    {
+      "task": "Проверить уведомления из чата",
+      "assignee": "Команда Synapse",
+      "expectedDueDate": "2 сентября 2026",
+      "status": "in_progress",
+      "completionDate": null,
+      "link": null,
+      "sample": true
+    },
+    {
+      "task": "Добавить контакты на сайт",
+      "assignee": "Команда Synapse",
+      "expectedDueDate": "25 августа 2026",
+      "status": "completed",
+      "completionDate": "25 августа 2026",
+      "link": "../synapse/kontakty.html",
+      "sample": true
+    }
+  ]
+}
