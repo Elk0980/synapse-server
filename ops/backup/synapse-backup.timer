@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Synapse host backup every night
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+RandomizedDelaySec=30m
+Unit=synapse-backup.service
+
+[Install]
+WantedBy=timers.target
