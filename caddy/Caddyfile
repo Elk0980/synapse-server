@@ -68,3 +68,10 @@ taisabai.synapsebusiness.ru {
   import draft
   import static
 }
+
+# --- Доска задач агентов ----------------------------------------------------
+board.synapsebusiness.ru {
+  root * /srv/sites/board
+  import draft
+  import static
+}
