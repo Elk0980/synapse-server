@@ -1,0 +1,55 @@
+# Synapse Business — единый вход.
+# Сертификаты выпускаются автоматически при первом обращении к домену.
+# Новый клиент = новый блок ниже + папка в sites/. Больше ничего не нужно.
+
+{
+  email admin@synapsebusiness.ru
+  acme_ca https://acme-v02.api.letsencrypt.org/directory
+}
+
+(static) {
+  encode zstd gzip
+  file_server
+  header {
+    X-Content-Type-Options nosniff
+    Referrer-Policy strict-origin-when-cross-origin
+    -Server
+  }
+  handle_errors {
+    respond "{err.status_code} {err.status_text}"
+  }
+}
+
+# --- Панель черновиков: все сайты в одном месте -----------------------------
+panel.synapsebusiness.ru {
+  root * /srv/panel
+  header X-Robots-Tag "noindex, nofollow"
+  import static
+}
+
+# --- Корневой домен: пока ведёт на панель -----------------------------------
+synapsebusiness.ru, www.synapsebusiness.ru {
+  root * /srv/panel
+  import static
+}
+
+# --- Клиент: Авокадо (студия дизайна тела, Иркутск) -------------------------
+avokado.synapsebusiness.ru {
+  root * /srv/sites/avokado
+  import static
+}
+
+# Черновой вариант того же клиента — пример, как показывать версии рядом.
+# Папки sites/avokado-v2 пока нет: домен ответит 404, это ожидаемо.
+avokado-v2.synapsebusiness.ru {
+  root * /srv/sites/avokado-v2
+  header X-Robots-Tag "noindex, nofollow"
+  import static
+}
+
+# --- Клиент: ALVI (SPA, Иркутск) --------------------------------------------
+# Файлы ещё не перенесены — домен поднимется, как только появится папка.
+alvi.synapsebusiness.ru {
+  root * /srv/sites/alvi
+  import static
+}

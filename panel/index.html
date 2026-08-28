@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Synapse Business — панель сайтов</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --line:#232b36;
+    --text:#e6edf3; --dim:#8b949e; --faint:#6e7681;
+    --live:#3fb950; --draft:#d29922; --none:#484f58; --accent:#58a6ff;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    padding:36px 5vw 80px}
+  header{max-width:1180px;margin:0 auto 34px}
+  h1{font-size:22px;font-weight:650;letter-spacing:-.01em}
+  .sub{color:var(--dim);font-size:14px;margin-top:6px}
+  .sub b{color:var(--text);font-weight:600}
+
+  .grid{max-width:1180px;margin:0 auto;display:grid;gap:18px;
+    grid-template-columns:repeat(auto-fill,minmax(330px,1fr))}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    overflow:hidden;display:flex;flex-direction:column}
+  .shot{position:relative;height:190px;background:#0b0f14;border-bottom:1px solid var(--line);
+    overflow:hidden}
+  .shot iframe{position:absolute;top:0;left:0;width:1280px;height:800px;border:0;
+    transform:scale(.2578);transform-origin:0 0;pointer-events:none;filter:saturate(.95)}
+  .shot .veil{position:absolute;inset:0;background:linear-gradient(180deg,transparent 60%,rgba(13,17,23,.55))}
+  .shot .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    color:var(--faint);font-size:13px}
+
+  .body{padding:16px 18px 18px;display:flex;flex-direction:column;gap:10px;flex:1}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .name{font-weight:600;font-size:15.5px}
+  .tag{font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+    padding:3px 9px;border-radius:999px;border:1px solid}
+  .t-live{color:var(--live);border-color:rgba(63,185,80,.35);background:rgba(63,185,80,.08)}
+  .t-draft{color:var(--draft);border-color:rgba(210,153,34,.35);background:rgba(210,153,34,.08)}
+  .t-none{color:var(--none);border-color:#2a3038}
+  .desc{color:var(--dim);font-size:13.5px}
+  .links{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:6px}
+  a.btn{font-size:13px;text-decoration:none;color:var(--text);border:1px solid var(--line);
+    border-radius:7px;padding:7px 12px;transition:border-color .15s,color .15s}
+  a.btn:hover{border-color:var(--accent);color:var(--accent)}
+  a.btn.dead{color:var(--faint);border-color:#232b36;pointer-events:none}
+
+  footer{max-width:1180px;margin:40px auto 0;color:var(--faint);font-size:13px;
+    border-top:1px solid var(--line);padding-top:18px;line-height:1.7}
+  code{background:#1c2330;padding:2px 6px;border-radius:5px;font-size:12.5px;color:#c9d1d9}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Панель сайтов Synapse Business</h1>
+  <p class="sub">Сервер <b>synapse-core</b> · 72.56.249.147 · Москва. Все клиентские сайты и их черновики. Превью живые — то, что видно в карточке, открыто прямо сейчас.</p>
+</header>
+
+<div class="grid">
+
+  <article class="card">
+    <div class="shot">
+      <iframe src="https://avokado.synapsebusiness.ru/" loading="lazy" title="Авокадо"></iframe>
+      <div class="veil"></div>
+    </div>
+    <div class="body">
+      <div class="row">
+        <span class="name">Авокадо</span>
+        <span class="tag t-live">Опубликован</span>
+      </div>
+      <p class="desc">Студия дизайна тела, Иркутск. Хиро-видео, воронка, прайс, FAQ, SEO, атрибуция UTM в Yclients.</p>
+      <div class="links">
+        <a class="btn" href="https://avokado.synapsebusiness.ru/" target="_blank" rel="noopener">Открыть</a>
+        <a class="btn" href="https://avokado.synapsebusiness.ru/contacts.html" target="_blank" rel="noopener">Контакты</a>
+      </div>
+    </div>
+  </article>
+
+  <article class="card">
+    <div class="shot"><div class="empty">Вариант ещё не собран</div></div>
+    <div class="body">
+      <div class="row">
+        <span class="name">Авокадо · вариант 2</span>
+        <span class="tag t-draft">Черновик</span>
+      </div>
+      <p class="desc">Место под второй вариант того же сайта — чтобы показывать клиенту версии рядом и открывать выбранную.</p>
+      <div class="links">
+        <a class="btn dead" href="#">Открыть</a>
+      </div>
+    </div>
+  </article>
+
+  <article class="card">
+    <div class="shot"><div class="empty">Файлы не перенесены</div></div>
+    <div class="body">
+      <div class="row">
+        <span class="name">ALVI</span>
+        <span class="tag t-none">Не перенесён</span>
+      </div>
+      <p class="desc">SPA ALVI, Иркутск. Сейчас живёт на стороннем хостинге; переезд сюда — следующим шагом.</p>
+      <div class="links">
+        <a class="btn dead" href="#">Открыть</a>
+      </div>
+    </div>
+  </article>
+
+</div>
+
+<footer>
+  Как добавить сайт: положить файлы в <code>sites/&lt;имя&gt;/</code> и добавить блок домена в <code>caddy/Caddyfile</code>.
+  Сервер забирает изменения из репозитория каждые две минуты и применяет сам — сертификат для нового поддомена выпускается при первом открытии.<br>
+  Страница закрыта от поисковых систем, но доступна всем, кто знает адрес. Пароль на неё поставим отдельным шагом.
+</footer>
+
+</body>
+</html>
