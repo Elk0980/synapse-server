@@ -96,15 +96,16 @@
   }
   .hero::after{content:'';position:absolute;inset:0;
     background:linear-gradient(180deg,rgba(14,20,16,.35) 0%,rgba(14,20,16,0) 28%,rgba(14,20,16,0) 55%,rgba(14,20,16,.55) 80%,rgba(14,20,16,.96) 100%)}
-  .loop-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .55s ease;z-index:1}
-  .loop-video.on{opacity:1}
   .hero-titles{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;text-align:center;padding-bottom:11svh;pointer-events:none}
   .t-fade{opacity:0;animation:tfade 1.4s ease forwards}
   @keyframes tfade{to{opacity:1}}
   .t-brand{animation-delay:.8s;display:flex;flex-direction:column;align-items:center}
   .t-slogan{font-size:clamp(12px,1.2vw,16px);letter-spacing:.42em;text-transform:uppercase;color:#cfae83;margin-top:10px;animation-delay:2.4s}
   .t-script{font-size:clamp(26px,3.4vw,46px);color:#e0c294;margin-top:26px;line-height:1.3;text-shadow:0 2px 24px rgba(0,0,0,.55);
-    opacity:0;clip-path:inset(0 100% 0 0);animation:hwrite 2.6s ease-out 7.8s forwards, hfade 6s ease 12s forwards}
+    animation:hfade 6s ease 12s forwards}
+  .t-script-line{display:block;width:max-content;max-width:100%;margin-inline:auto;opacity:0;clip-path:inset(0 100% 0 0)}
+  .t-script-line:first-child{animation:hwrite 1.85s cubic-bezier(.18,.68,.24,1) 7.8s forwards}
+  .t-script-line:last-child{animation:hwrite .9s cubic-bezier(.18,.68,.24,1) 9.9s forwards}
   @keyframes hwrite{0%{opacity:1;clip-path:inset(0 100% 0 0)}100%{opacity:1;clip-path:inset(0 0 0 0)}}
   @keyframes hfade{to{opacity:.38}}
   .t-echo{position:absolute;pointer-events:none;font-size:clamp(34px,5vw,64px);color:#e0c294;line-height:1.2;
@@ -330,20 +331,17 @@
 <!-- ═══ АКТ 1 · ХИРО «ВЕЧЕР» ═══ -->
 <section class="hero" id="top">
   <video id="herovid" autoplay muted playsinline preload="auto" poster="assets/hero-poster.jpg">
-    <source id="hv-webm" src="assets/hero-entrance.webm" type="video/webm">
-    <source id="hv-mp4" src="assets/hero-entrance.mp4" type="video/mp4">
-  </video>
-  <video id="loopvid" class="loop-video" muted playsinline loop preload="auto" aria-hidden="true">
-    <source id="lv-webm" src="assets/hero-loop.webm" type="video/webm">
-    <source id="lv-mp4" src="assets/hero-loop.mp4" type="video/mp4">
+    <source src="assets/hero-full-web.webm" type="video/webm" media="(min-width: 821px)">
+    <source src="assets/hero-full-web_2.mp4" type="video/mp4" media="(min-width: 821px)">
+    <source src="assets/hero-full-mob_2.mp4" type="video/mp4" media="(max-width: 820px)">
   </video>
   <div class="hero-titles">
     <div class="t-echo script" style="left:8%;top:16%">Авокадо</div>
     <div class="t-echo script" style="right:10%;top:34%;animation-delay:10.6s">уверенность</div>
     <h1 class="t-brand t-fade" style="font-weight:inherit;font-size:inherit"><span class="wordmark" style="font-size:clamp(34px,4.6vw,60px)">АВ<svg class="avo-o" viewBox="0 0 48 54" aria-hidden="true"><path d="M25.5 8 C26.5 5 25 2.5 23 2" fill="none" stroke="#d8b981" stroke-width="1.6" stroke-linecap="round"/><path d="M24 9.5 C20.4 9.5 15.6 15.6 14.1 22.3 C12.6 29.1 17.3 38 24 38 C30.7 38 35.4 29.1 33.9 22.3 C32.4 15.6 27.6 9.5 24 9.5 Z" fill="none" stroke="#d8b981" stroke-width="2.1" stroke-linejoin="round"/><circle cx="24" cy="27" r="4.6" fill="#d8b981"/></svg>КАДО</span><span class="wm-sub">студия дизайна тела</span></h1>
     <div class="t-slogan t-fade">УВЕРЕННОСТЬ · СВОБОДА · РЕЗУЛЬТАТ</div>
-    <div class="t-script script">Быть красивой и уверенной —<br>это мой выбор</div>
-    <div class="t-hint t-fade">ЛИСТАЙТЕ — ЭТО ЕЁ ИСТОРИЯ ↓</div>
+    <div class="t-script script"><span class="t-script-line">Быть красивой и уверенной —</span><span class="t-script-line">это мой выбор</span></div>
+    <div class="t-hint t-fade">ЛИСТАЙТЕ ↓</div>
   </div>
   <div class="hero-offer">
     <a class="ho-btn" href="#contacts">Записаться</a>
@@ -662,18 +660,12 @@
     }catch(e){}
   })();
 
-  // Мобильным — вертикальная нарезка того же ролика (кроп 9:16), легче и в кадре крупнее
+  // Мобильным — вертикальная версия того же цельного ролика (кроп 9:16)
   (function(){
     try{
       if (window.matchMedia('(max-width: 820px)').matches){
-        var hv = document.getElementById('herovid'), lv = document.getElementById('loopvid');
-        document.getElementById('hv-webm').remove();
-        document.getElementById('hv-mp4').src = 'assets/hero-entrance-mob.mp4';
+        var hv = document.getElementById('herovid');
         hv.setAttribute('poster','assets/hero-poster-mob.jpg');
-        document.getElementById('lv-webm').remove();
-        document.getElementById('lv-mp4').src = 'assets/hero-loop-mob.mp4';
-        hv.load(); lv.load();
-        var p = hv.play(); if(p && p.catch){ p.catch(function(){}); }
       }
     }catch(e){}
   })();
@@ -698,13 +690,28 @@
       io2.observe(hero);
 
       var hv = document.getElementById('herovid');
-      var lv = document.getElementById('loopvid');
-      if(hv && lv){
-        hv.addEventListener('ended', function(){
-          var p = lv.play();
+      if(hv){
+        var loopStart = 10.666;
+        var restartLoop = function(){
+          hv.currentTime = loopStart;
+          var p = hv.play();
           if(p && p.catch){ p.catch(function(){}); }
-          lv.classList.add('on');
-        });
+        };
+
+        if('requestVideoFrameCallback' in hv){
+          var watchFrame = function(now, metadata){
+            var end = Number.isFinite(hv.duration) ? hv.duration : 16.625;
+            if(metadata.mediaTime >= end - .04){ restartLoop(); }
+            hv.requestVideoFrameCallback(watchFrame);
+          };
+          hv.requestVideoFrameCallback(watchFrame);
+        }else{
+          hv.addEventListener('timeupdate', function(){
+            var end = Number.isFinite(hv.duration) ? hv.duration : 16.625;
+            if(hv.currentTime >= end - .15){ restartLoop(); }
+          });
+        }
+        hv.addEventListener('ended', restartLoop);
       }
     }catch(err){
       document.querySelectorAll('.rv').forEach(function(el){ el.classList.add('on'); });
