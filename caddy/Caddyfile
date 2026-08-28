@@ -24,6 +24,7 @@
 # --- Панель черновиков: все сайты в одном месте -----------------------------
 panel.synapsebusiness.ru {
   root * /srv/panel
+  import /data/auth/*.conf
   import draft
   import static
 }
