@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Доска задач агентов</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0d12;
+        --panel: #131720;
+        --line: #293040;
+        --muted: #929bad;
+        --text: #f3f5f8;
+        --accent: #8da2ff;
+        --danger: #ff6b78;
+        --warn: #ffc857;
+        --ok: #57d39b;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          15px/1.5 system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+      main {
+        width: min(1500px, 100%);
+        margin: auto;
+        padding: clamp(18px, 3vw, 42px);
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+      h1 {
+        margin-bottom: 6px;
+        font-size: clamp(26px, 4vw, 42px);
+        letter-spacing: -0.03em;
+      }
+      .subtitle,
+      .empty,
+      .meta {
+        color: var(--muted);
+      }
+      .toolbar,
+      .files-panel {
+        margin: 26px 0;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--panel);
+      }
+      .filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      label {
+        flex: 1 1 210px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      select {
+        display: block;
+        width: 100%;
+        margin-top: 6px;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: #0d1119;
+        color: var(--text);
+        font: inherit;
+      }
+      .files-panel h2 {
+        margin-bottom: 4px;
+        font-size: 20px;
+      }
+      .file-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 10px;
+        margin-top: 14px;
+      }
+      .file-item {
+        padding: 11px 12px;
+        border-left: 3px solid var(--accent);
+        border-radius: 7px;
+        background: #0d1119;
+        overflow-wrap: anywhere;
+      }
+      .file-item strong {
+        display: block;
+        color: #dbe1ff;
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        font-size: 13px;
+      }
+      .conflict {
+        border-left-color: var(--danger);
+        background: #261419;
+      }
+      .board {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(250px, 1fr));
+        gap: 14px;
+        overflow-x: auto;
+        padding-bottom: 10px;
+      }
+      .column {
+        min-height: 260px;
+        padding: 13px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: #0f1219;
+      }
+      .column-title {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin: 0 2px 13px;
+        font-size: 15px;
+      }
+      .count {
+        min-width: 26px;
+        padding: 2px 8px;
+        border-radius: 20px;
+        background: var(--line);
+        text-align: center;
+      }
+      .cards {
+        display: grid;
+        gap: 11px;
+      }
+      .card {
+        padding: 15px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel);
+        box-shadow: 0 7px 24px #0003;
+      }
+      .card.blocked {
+        border-color: #7d3039;
+        background: linear-gradient(145deg, #281419, #151820);
+      }
+      .badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+      .badge {
+        padding: 3px 7px;
+        border-radius: 5px;
+        background: #242b39;
+        color: #bdc7d9;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+      .badge.sample {
+        background: #3a315c;
+        color: #ded5ff;
+      }
+      .badge.block {
+        background: #57232a;
+        color: #ffb3ba;
+      }
+      .card h3 {
+        margin-bottom: 10px;
+        font-size: 16px;
+        line-height: 1.35;
+      }
+      .card dl {
+        display: grid;
+        grid-template-columns: 76px 1fr;
+        gap: 5px 8px;
+        margin: 0;
+        font-size: 13px;
+      }
+      dt {
+        color: var(--muted);
+      }
+      dd {
+        margin: 0;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .reason {
+        margin: 12px 0 0;
+        padding: 10px;
+        border-radius: 8px;
+        background: #351a20;
+        color: #ffc2c7;
+        font-size: 13px;
+      }
+      .error {
+        padding: 18px;
+        border: 1px solid var(--danger);
+        border-radius: 10px;
+        color: #ffc2c7;
+      }
+      @media (max-width: 700px) {
+        main {
+          padding: 18px 12px;
+        }
+        .board {
+          grid-template-columns: 1fr;
+          overflow: visible;
+        }
+        .column {
+          min-height: 120px;
+        }
+        .toolbar,
+        .files-panel {
+          margin: 18px 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Доска задач агентов</h1>
+        <p class="subtitle">
+          Работы, ответственные и занятые файлы — в одном месте.
+        </p>
+      </header>
+      <section class="toolbar" aria-label="Фильтры">
+        <div class="filters">
+          <label
+            >Исполнитель<select id="assignee">
+              <option value="">Все исполнители</option>
+            </select></label
+          >
+          <label
+            >Дорожка<select id="track">
+              <option value="">Все дорожки</option>
+            </select></label
+          >
+        </div>
+      </section>
+      <section class="files-panel" aria-labelledby="files-title">
+        <h2 id="files-title">Кто какие файлы сейчас правит</h2>
+        <p class="subtitle">
+          Показаны задачи в работе и заблокированные задачи. Красным отмечены
+          пересечения.
+        </p>
+        <div id="files" class="file-list"></div>
+      </section>
+      <section
+        id="board"
+        class="board"
+        aria-label="Задачи по статусам"
+      ></section>
+    </main>
+    <script>
+      const columns = [
+        { key: "в очереди", title: "В очереди" },
+        { key: "в работе", title: "В работе" },
+        { key: "на проверке", title: "На проверке" },
+        { key: "готово", title: "Готово" },
+      ];
+      const activeFileStatuses = new Set(["в работе", "заблокировано"]);
+      let tasks = [];
+      const board = document.querySelector("#board");
+      const files = document.querySelector("#files");
+      const assignee = document.querySelector("#assignee");
+      const track = document.querySelector("#track");
+      const escapeHtml = (value) =>
+        String(value ?? "").replace(
+          /[&<>'"]/g,
+          (char) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              "'": "&#39;",
+              '"': "&quot;",
+            })[char],
+        );
+
+      function fillFilter(select, values) {
+        [...new Set(values)]
+          .sort((a, b) => a.localeCompare(b, "ru"))
+          .forEach((value) => {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = value;
+            select.append(option);
+          });
+      }
+      function visibleTasks() {
+        return tasks.filter(
+          (task) =>
+            (!assignee.value || task.исполнитель === assignee.value) &&
+            (!track.value || task.дорожка === track.value),
+        );
+      }
+      function card(task) {
+        const blocked = task.статус === "заблокировано";
+        const fileNames = Array.isArray(task["файлы которые правит"])
+          ? task["файлы которые правит"].join(", ")
+          : "—";
+        return `<article class="card${blocked ? " blocked" : ""}">
+        <div class="badges">${task.sample ? '<span class="badge sample">Пример</span>' : ""}${blocked ? '<span class="badge block">Заблокировано</span>' : ""}<span class="badge">${escapeHtml(task.исполнитель)}</span></div>
+        <h3>${escapeHtml(task.задача)}</h3><dl>
+          <dt>ID</dt><dd>${escapeHtml(task.id)}</dd><dt>Дорожка</dt><dd>${escapeHtml(task.дорожка)}</dd><dt>Файлы</dt><dd>${escapeHtml(fileNames)}</dd>
+          <dt>Начато</dt><dd>${escapeHtml(task.начато || "—")}</dd><dt>Обновлено</dt><dd>${escapeHtml(task.обновлено || "—")}</dd>
+        </dl>${blocked ? `<p class="reason"><strong>Причина:</strong> ${escapeHtml(task.комментарий || "Не указана")}</p>` : task.комментарий ? `<p class="meta">${escapeHtml(task.комментарий)}</p>` : ""}</article>`;
+      }
+      function renderFiles(list) {
+        const entries = list
+          .filter((task) => activeFileStatuses.has(task.статус))
+          .flatMap((task) =>
+            (task["файлы которые правит"] || []).map((file) => ({
+              file,
+              task,
+            })),
+          );
+        const counts = entries.reduce(
+          (map, item) => map.set(item.file, (map.get(item.file) || 0) + 1),
+          new Map(),
+        );
+        files.innerHTML = entries.length
+          ? entries
+              .map(
+                ({ file, task }) =>
+                  `<div class="file-item${counts.get(file) > 1 ? " conflict" : ""}"><strong>${escapeHtml(file)}</strong>${escapeHtml(task.исполнитель)} · ${escapeHtml(task.id)}${task.sample ? " · ПРИМЕР" : ""}${counts.get(file) > 1 ? " · ПЕРЕСЕЧЕНИЕ" : ""}</div>`,
+              )
+              .join("")
+          : '<p class="empty">Нет занятых файлов для выбранных фильтров.</p>';
+      }
+      function render() {
+        const list = visibleTasks();
+        renderFiles(list);
+        board.innerHTML = columns
+          .map((column) => {
+            const columnTasks = list.filter(
+              (task) =>
+                task.статус === column.key ||
+                (column.key === "в очереди" && task.статус === "заблокировано"),
+            );
+            return `<section class="column"><h2 class="column-title"><span>${column.title}</span><span class="count">${columnTasks.length}</span></h2><div class="cards">${columnTasks.map(card).join("") || '<p class="empty">Нет задач</p>'}</div></section>`;
+          })
+          .join("");
+      }
+      async function load() {
+        try {
+          const response = await fetch("./board.json", { cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          tasks = await response.json();
+          fillFilter(
+            assignee,
+            tasks.map((task) => task.исполнитель),
+          );
+          fillFilter(
+            track,
+            tasks.map((task) => task.дорожка),
+          );
+          render();
+        } catch (error) {
+          board.innerHTML = `<p class="error">Не удалось загрузить board.json: ${escapeHtml(error.message)}</p>`;
+          files.innerHTML = '<p class="empty">Данные недоступны.</p>';
+        }
+      }
+      assignee.addEventListener("change", render);
+      track.addEventListener("change", render);
+      load();
+    </script>
+  </body>
+</html>
