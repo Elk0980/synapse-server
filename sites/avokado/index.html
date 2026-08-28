@@ -331,9 +331,9 @@
 <!-- ═══ АКТ 1 · ХИРО «ВЕЧЕР» ═══ -->
 <section class="hero" id="top">
   <video id="herovid" autoplay muted playsinline preload="auto" poster="assets/hero-poster.jpg">
-    <source src="assets/hero-full-web.webm" type="video/webm" media="(min-width: 821px)">
-    <source src="assets/hero-full-web_2.mp4" type="video/mp4" media="(min-width: 821px)">
-    <source src="assets/hero-full-mob_2.mp4" type="video/mp4" media="(max-width: 820px)">
+    <source src="assets/hero-full-web_3.webm" type="video/webm" media="(min-width: 821px)">
+    <source src="assets/hero-full-web_3.mp4" type="video/mp4" media="(min-width: 821px)">
+    <source src="assets/hero-full-mob_3.mp4" type="video/mp4" media="(max-width: 820px)">
   </video>
   <div class="hero-titles">
     <div class="t-echo script" style="left:8%;top:16%">Авокадо</div>
@@ -691,7 +691,7 @@
 
       var hv = document.getElementById('herovid');
       if(hv){
-        var loopStart = 10.666;
+        var loopStart = 9.9583;
         var restartLoop = function(){
           hv.currentTime = loopStart;
           var p = hv.play();
@@ -700,14 +700,14 @@
 
         if('requestVideoFrameCallback' in hv){
           var watchFrame = function(now, metadata){
-            var end = Number.isFinite(hv.duration) ? hv.duration : 16.625;
+            var end = Number.isFinite(hv.duration) ? hv.duration : 15.9166;
             if(metadata.mediaTime >= end - .04){ restartLoop(); }
             hv.requestVideoFrameCallback(watchFrame);
           };
           hv.requestVideoFrameCallback(watchFrame);
         }else{
           hv.addEventListener('timeupdate', function(){
-            var end = Number.isFinite(hv.duration) ? hv.duration : 16.625;
+            var end = Number.isFinite(hv.duration) ? hv.duration : 15.9166;
             if(hv.currentTime >= end - .15){ restartLoop(); }
           });
         }
