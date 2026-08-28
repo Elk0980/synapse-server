@@ -9,6 +9,32 @@
 
 <script>
 document.documentElement.classList.replace("no-js", "js");
+
+// Apply saved visibility before the stylesheet and page content are parsed.
+// This prevents hidden dashboard blocks from appearing for a frame on load.
+(function () {
+const storageKey = "synapse_cabinet_layout_v1";
+const blockIds = [
+"money", "money-chart-invested", "money-chart-received", "money-chart-romi",
+"funnel", "sources", "dialogs", "crm", "projects", "integrations", "activity"
+];
+
+try {
+const savedLayout = JSON.parse(localStorage.getItem(storageKey) || "{}");
+const hiddenIds = blockIds.filter((id) => savedLayout[id] === false);
+
+if (hiddenIds.length) {
+const style = document.createElement("style");
+style.id = "cabinet-layout-style";
+style.textContent = hiddenIds
+.map((id) => `[data-block-id="${id}"]{display:none!important}`)
+.join("");
+document.head.appendChild(style);
+}
+} catch (error) {
+// An unavailable or malformed localStorage value should not break the cabinet.
+}
+})();
 </script>
 
 <style>
@@ -230,7 +256,7 @@ pointer-events: none;
 
 .topbar-inner {
 display: grid;
-grid-template-columns: minmax(170px, 1fr) auto auto minmax(150px, 1fr);
+grid-template-columns: minmax(170px, 1fr) auto auto auto minmax(150px, 1fr);
 gap: 20px;
 align-items: center;
 width: min(100%, var(--content));
@@ -399,6 +425,100 @@ color: var(--accent);
 background: rgba(159, 212, 255, 0.08);
 font-family: Georgia, serif;
 }
+
+.layout-button {
+display: inline-flex;
+min-height: 42px;
+align-items: center;
+justify-content: center;
+padding: 9px 16px;
+border: 1px solid rgba(159, 212, 255, 0.28);
+border-radius: 999px;
+color: var(--text);
+background: rgba(159, 212, 255, 0.07);
+cursor: pointer;
+font-size: 0.74rem;
+white-space: nowrap;
+}
+
+.layout-button:hover,
+.layout-button:focus-visible {
+border-color: rgba(159, 212, 255, 0.72);
+outline: none;
+background: rgba(159, 212, 255, 0.13);
+}
+
+.layout-panel {
+position: fixed;
+z-index: 180;
+inset: 0;
+display: grid;
+justify-items: end;
+background: rgba(5, 4, 4, 0.66);
+backdrop-filter: blur(7px);
+}
+
+.layout-panel-card {
+display: flex;
+width: min(100%, 430px);
+height: 100%;
+flex-direction: column;
+padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+border-left: 1px solid var(--line-blue);
+background: var(--surface);
+box-shadow: -24px 0 70px rgba(0, 0, 0, 0.46);
+}
+
+.layout-panel-head {
+display: flex;
+gap: 20px;
+align-items: flex-start;
+justify-content: space-between;
+margin-bottom: 22px;
+}
+
+.layout-panel-head h2 { margin-bottom: 5px; font-size: 1.8rem; }
+.layout-panel-head p { margin-bottom: 0; color: var(--muted); font-size: 0.78rem; }
+.layout-close { width: 42px; flex: 0 0 auto; padding: 0; font-size: 1.35rem; }
+.layout-options { overflow-y: auto; border-top: 1px solid var(--line); }
+.layout-option {
+display: flex;
+gap: 18px;
+align-items: center;
+justify-content: space-between;
+padding: 15px 2px;
+border-bottom: 1px solid var(--line);
+cursor: pointer;
+}
+.layout-option span:first-child { font-size: 0.88rem; }
+.layout-switch {
+position: relative;
+width: 44px;
+height: 24px;
+flex: 0 0 auto;
+appearance: none;
+border: 1px solid rgba(244, 240, 235, 0.22);
+border-radius: 999px;
+background: rgba(255, 255, 255, 0.08);
+cursor: pointer;
+transition: background-color 180ms ease, border-color 180ms ease;
+}
+.layout-switch::after {
+position: absolute;
+top: 3px;
+left: 3px;
+width: 16px;
+height: 16px;
+border-radius: 50%;
+content: "";
+background: var(--muted);
+transition: transform 180ms ease, background-color 180ms ease;
+}
+.layout-switch:checked { border-color: var(--sapphire); background: var(--sapphire); }
+.layout-switch:checked::after { background: white; transform: translateX(20px); }
+.layout-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.layout-reset { width: 100%; margin-top: auto; padding: 13px 18px; }
+body.layout-panel-open { overflow: hidden; }
 
 .app-shell {
 width: min(100%, var(--content));
@@ -1331,7 +1451,7 @@ transform: rotate(17deg) translateX(650%);
 
 @media (max-width: 1050px) {
 .topbar-inner {
-grid-template-columns: minmax(140px, 1fr) auto auto minmax(90px, 1fr);
+grid-template-columns: minmax(140px, 1fr) auto auto auto minmax(90px, 1fr);
 }
 
 .money-grid {
@@ -1364,7 +1484,7 @@ repeat(3, minmax(95px, 0.5fr));
 
 @media (max-width: 780px) {
 .topbar-inner {
-grid-template-columns: 1fr auto auto;
+grid-template-columns: 1fr auto auto auto;
 border-radius: 27px;
 }
 
@@ -1458,6 +1578,15 @@ padding: 9px;
 
 .brand-copy {
 display: none;
+}
+
+.layout-button { padding-inline: 12px; }
+
+.layout-panel-card {
+width: 100%;
+padding-right: max(18px, env(safe-area-inset-right));
+padding-left: max(18px, env(safe-area-inset-left));
+border-left: 0;
 }
 
 .app-shell {
@@ -1646,6 +1775,16 @@ data-view-target="admin"
 </button>
 </div>
 
+<button
+class="layout-button"
+id="layout-open"
+type="button"
+aria-haspopup="dialog"
+aria-controls="layout-panel"
+>
+Настроить кабинет
+</button>
+
 <div class="account">
 <span class="account-copy">
 <strong id="account-name"></strong>
@@ -1684,7 +1823,7 @@ data-view="cabinet"
 <span class="context-pill">TaiSabai · тестовый период</span>
 </header>
 
-<section class="dashboard-section" aria-labelledby="money-title">
+<section class="dashboard-section" aria-labelledby="money-title" data-block-id="money">
 <div class="section-head">
 <div>
 <p class="section-kicker">Экономика</p>
@@ -1697,7 +1836,7 @@ data-view="cabinet"
 <div class="money-grid" id="money-grid"></div>
 </section>
 
-<section class="dashboard-section" aria-labelledby="funnel-title">
+<section class="dashboard-section" aria-labelledby="funnel-title" data-block-id="funnel">
 <div class="section-head">
 <div>
 <p class="section-kicker">Путь клиента</p>
@@ -1724,7 +1863,7 @@ aria-labelledby="loss-panel-title"
 </div>
 </section>
 
-<section class="dashboard-section" aria-labelledby="sources-title">
+<section class="dashboard-section" aria-labelledby="sources-title" data-block-id="sources">
 <div class="section-head">
 <div>
 <p class="section-kicker">Привлечение</p>
@@ -1737,7 +1876,7 @@ aria-labelledby="loss-panel-title"
 <div class="source-grid" id="source-grid"></div>
 </section>
 
-<section class="dashboard-section" aria-labelledby="dialogs-title">
+<section class="dashboard-section" aria-labelledby="dialogs-title" data-block-id="dialogs">
 <div class="section-head">
 <div>
 <p class="section-kicker">Коммуникации</p>
@@ -1750,7 +1889,7 @@ aria-labelledby="loss-panel-title"
 <div class="dialog-list" id="dialog-list"></div>
 </section>
 
-<section class="dashboard-section" aria-labelledby="crm-title">
+<section class="dashboard-section" aria-labelledby="crm-title" data-block-id="crm">
 <div class="section-head">
 <div>
 <p class="section-kicker">Продажи</p>
@@ -1784,7 +1923,7 @@ hidden
 <span class="context-pill">Портфель проектов</span>
 </header>
 
-<section class="dashboard-section" aria-labelledby="projects-title">
+<section class="dashboard-section" aria-labelledby="projects-title" data-block-id="projects">
 <div class="section-head">
 <div>
 <p class="section-kicker">Управление портфелем</p>
@@ -1806,7 +1945,7 @@ hidden
 </div>
 </section>
 
-<section class="dashboard-section" aria-labelledby="integrations-title">
+<section class="dashboard-section" aria-labelledby="integrations-title" data-block-id="integrations">
 <div class="section-head">
 <div>
 <p class="section-kicker">Подключения</p>
@@ -1819,7 +1958,7 @@ hidden
 <div class="integration-grid" id="integration-grid"></div>
 </section>
 
-<section class="dashboard-section" aria-labelledby="activity-title">
+<section class="dashboard-section" aria-labelledby="activity-title" data-block-id="activity">
 <div class="section-head">
 <div>
 <p class="section-kicker">Журнал</p>
@@ -1833,6 +1972,20 @@ hidden
 </section>
 </section>
 </main>
+
+<div class="layout-panel" id="layout-panel" role="dialog" aria-modal="true" aria-labelledby="layout-title" hidden>
+<div class="layout-panel-card">
+<div class="layout-panel-head">
+<div>
+<h2 id="layout-title">Настроить кабинет</h2>
+<p>Выберите блоки и диаграммы, которые хотите видеть.</p>
+</div>
+<button class="layout-button layout-close" id="layout-close" type="button" aria-label="Закрыть настройки">×</button>
+</div>
+<div class="layout-options" id="layout-options"></div>
+<button class="layout-button layout-reset" id="layout-reset" type="button">Сбросить по умолчанию</button>
+</div>
+</div>
 
 <div class="toast" id="toast" role="status" aria-live="polite">
 Подключение отключено в демонстрационном файле.
@@ -2145,6 +2298,117 @@ window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const byId = (id) => document.getElementById(id);
 
+const LAYOUT_STORAGE_KEY = "synapse_cabinet_layout_v1";
+const CABINET_BLOCKS = [
+{ id: "money", label: "Деньги" },
+{ id: "money-chart-invested", label: "Диаграмма: Вложено" },
+{ id: "money-chart-received", label: "Диаграмма: Получено" },
+{ id: "money-chart-romi", label: "Диаграмма: ROMI" },
+{ id: "funnel", label: "Воронка" },
+{ id: "sources", label: "Источники" },
+{ id: "dialogs", label: "Последние диалоги" },
+{ id: "crm", label: "CRM" },
+{ id: "projects", label: "Проекты" },
+{ id: "integrations", label: "Интеграции" },
+{ id: "activity", label: "Что сделала система" }
+];
+
+const readLayout = () => {
+try {
+const value = JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY) || "{}");
+return value && typeof value === "object" ? value : {};
+} catch (error) {
+return {};
+}
+};
+
+let cabinetLayout = readLayout();
+
+const applyLayout = () => {
+let style = byId("cabinet-layout-style");
+
+if (!style) {
+style = document.createElement("style");
+style.id = "cabinet-layout-style";
+document.head.appendChild(style);
+}
+
+style.textContent = CABINET_BLOCKS
+.filter((block) => cabinetLayout[block.id] === false)
+.map((block) => `[data-block-id="${block.id}"]{display:none!important}`)
+.join("");
+};
+
+const saveLayout = () => {
+try {
+localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(cabinetLayout));
+} catch (error) {
+// Visibility still works for this session when storage is unavailable.
+}
+};
+
+const syncLayoutControls = () => {
+document.querySelectorAll("[data-layout-toggle]").forEach((toggle) => {
+toggle.checked = cabinetLayout[toggle.dataset.layoutToggle] !== false;
+});
+};
+
+const bindLayoutPanel = () => {
+const panel = byId("layout-panel");
+const openButton = byId("layout-open");
+const closeButton = byId("layout-close");
+const options = byId("layout-options");
+
+options.innerHTML = CABINET_BLOCKS.map((block) => `
+<label class="layout-option">
+<span>${escapeHTML(block.label)}</span>
+<input class="layout-switch" type="checkbox" data-layout-toggle="${block.id}">
+</label>
+`).join("");
+
+const closePanel = () => {
+panel.hidden = true;
+document.body.classList.remove("layout-panel-open");
+openButton.setAttribute("aria-expanded", "false");
+openButton.focus();
+};
+
+const openPanel = () => {
+syncLayoutControls();
+panel.hidden = false;
+document.body.classList.add("layout-panel-open");
+openButton.setAttribute("aria-expanded", "true");
+closeButton.focus();
+};
+
+openButton.setAttribute("aria-expanded", "false");
+openButton.addEventListener("click", openPanel);
+closeButton.addEventListener("click", closePanel);
+panel.addEventListener("click", (event) => {
+if (event.target === panel) closePanel();
+});
+panel.addEventListener("keydown", (event) => {
+if (event.key === "Escape") closePanel();
+});
+options.addEventListener("change", (event) => {
+const toggle = event.target.closest("[data-layout-toggle]");
+if (!toggle) return;
+cabinetLayout[toggle.dataset.layoutToggle] = toggle.checked;
+saveLayout();
+applyLayout();
+});
+byId("layout-reset").addEventListener("click", () => {
+cabinetLayout = {};
+try {
+localStorage.removeItem(LAYOUT_STORAGE_KEY);
+} catch (error) {
+// Reset the current page even when storage is unavailable.
+}
+applyLayout();
+syncLayoutControls();
+});
+};
+
 const escapeHTML = (value) =>
 String(value)
 .replaceAll("&", "&amp;")
@@ -2204,6 +2468,7 @@ const gradientId = `spark-gradient-${index}`;
 return `
 <svg
 class="sparkline"
+data-block-id="money-chart-${["invested", "received", "romi"][index]}"
 viewBox="0 0 ${width} ${height}"
 preserveAspectRatio="none"
 role="img"
@@ -2613,6 +2878,9 @@ return sha256fallback(text);
 
 const authScreen = byId("auth");
 const authError = byId("auth-error");
+
+bindLayoutPanel();
+applyLayout();
 
 byId("auth-form").addEventListener("submit", async (event) => {
 event.preventDefault();
