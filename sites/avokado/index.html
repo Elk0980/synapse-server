@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Аппаратный массаж и коррекция фигуры в Иркутске — студия АВОКАДО | Пробный сеанс 500 ₽</title>
+<meta name="description" content="Аппаратный вакуумно-роликовый массаж, коррекция фигуры, кавитация, RF-лифтинг и лазерная эпиляция в Иркутске. Студия дизайна тела АВОКАДО на Красноказачьей, 84. Высшая оценка на 2ГИС и Яндекс.Картах. Пробный сеанс всего тела — 500 ₽ вместо 2100 ₽.">
+<meta name="keywords" content="аппаратный массаж Иркутск, LPG массаж Иркутск, коррекция фигуры Иркутск, лазерная эпиляция Иркутск, антицеллюлитный массаж, RF-лифтинг, кавитация, студия дизайна тела">
+<link rel="canonical" href="https://avokado.synapsebusiness.ru/">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="geo.region" content="RU-IRK"><meta name="geo.placename" content="Иркутск">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="АВОКАДО — студия дизайна тела">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:title" content="Аппаратный массаж и коррекция фигуры в Иркутске — студия АВОКАДО. Пробный сеанс 500 ₽">
+<meta property="og:description" content="Коррекция фигуры курсом на аппарате BeautySib, лазерная эпиляция, RF-лифтинг. Рейтинг 5,0 на 2ГИС и Яндексе. Красноказачья, 84.">
+<meta property="og:image" content="assets/hero-poster.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Manrope:wght@400;500;700&family=Cormorant:wght@500;600&family=Marck+Script&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0e1410;          /* тёмная база */
+    --panel:#15201a;
+    --sage:#93a56f;        /* ФИРМЕННЫЙ зелёный с вывески студии */
+    --sage-deep:#6d7c4f;   /* тень фирменного */
+    --velvet:#6d7c4f;      /* блок доверия — фирменный зелёный */
+    --gold:#c9a97a;        /* латунь вывески */
+    --brass:#d8b981;       /* яркая латунь — «золотая полоска» */
+    --mint:#a7d8c4;        /* мята интерьера — вторичный акцент */
+    --lime:#a7d8c4;        /* совместимость */
+    --cream:#efe9dc;
+    --dim:#a8b39e;
+    --faint:#6d7a66;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{font-family:'Manrope','Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--cream);overflow-x:hidden}
+  h1,h2,h3{font-family:'Unbounded',Georgia,serif;font-weight:700;line-height:1.15}
+  img{max-width:100%;display:block}
+  a{color:inherit}
+  .visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+  .script{font-family:'Marck Script','Segoe Script',cursive}
+
+  /* ---------- шапка ---------- */
+  header{
+    position:fixed;top:0;left:0;right:0;z-index:60;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 4vw;
+    background:linear-gradient(180deg,rgba(14,20,16,.85),rgba(14,20,16,0));
+  }
+  header.solid{background:rgba(14,20,16,.93);border-bottom:1px solid rgba(217,184,124,.12)}
+  .logo{text-decoration:none;color:var(--cream)}
+  .head-btn{
+    text-decoration:none;font-size:13.5px;letter-spacing:.05em;
+    color:var(--gold);border:1.5px solid var(--gold);
+    padding:9px 18px;border-radius:999px;transition:opacity .2s;white-space:nowrap;
+  }
+  .head-btn:hover{opacity:.75}
+
+  /* ---------- липкая CTA ---------- */
+  .sticky-cta{
+    position:fixed;left:50%;bottom:18px;z-index:60;
+    transform:translate(-50%,90px);opacity:0;
+    transition:transform .45s ease,opacity .45s ease;
+    display:flex;gap:10px;align-items:center;
+    background:linear-gradient(180deg,var(--brass),#c39f68);color:#20180c;
+    padding:14px 26px;border-radius:999px;
+    font-weight:700;font-size:15px;text-decoration:none;white-space:nowrap;
+    box-shadow:0 16px 40px -12px rgba(216,185,129,.45);
+  }
+  .sticky-cta.on{transform:translate(-50%,0);opacity:1}
+
+  section{position:relative}
+  .wrap{max-width:1100px;margin:0 auto;padding:0 5vw}
+  .kicker{font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--gold);margin-bottom:14px}
+  h2{font-size:clamp(26px,3.4vw,42px);margin-bottom:18px}
+  .lead{font-size:clamp(15px,1.4vw,18px);line-height:1.65;color:var(--dim)}
+
+  /* появление блоков */
+  .rv{opacity:0;transform:translateY(26px);transition:opacity .7s ease,transform .7s ease}
+  .rv.on{opacity:1;transform:translateY(0)}
+
+  /* ---------- АКТ 1 · ХИРО ---------- */
+  .hero{height:100svh;overflow:hidden}
+  .hero video,.hero .poster{
+    position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  }
+  .hero::after{content:'';position:absolute;inset:0;
+    background:linear-gradient(180deg,rgba(14,20,16,.35) 0%,rgba(14,20,16,0) 28%,rgba(14,20,16,0) 55%,rgba(14,20,16,.55) 80%,rgba(14,20,16,.96) 100%)}
+  .loop-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .55s ease;z-index:1}
+  .loop-video.on{opacity:1}
+  .hero-titles{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;text-align:center;padding-bottom:11svh;pointer-events:none}
+  .t-fade{opacity:0;animation:tfade 1.4s ease forwards}
+  @keyframes tfade{to{opacity:1}}
+  .t-brand{animation-delay:.8s;display:flex;flex-direction:column;align-items:center}
+  .t-slogan{font-size:clamp(12px,1.2vw,16px);letter-spacing:.42em;text-transform:uppercase;color:#cfae83;margin-top:10px;animation-delay:2.4s}
+  .t-script{font-size:clamp(26px,3.4vw,46px);color:#e0c294;margin-top:26px;line-height:1.3;text-shadow:0 2px 24px rgba(0,0,0,.55);
+    opacity:0;clip-path:inset(0 100% 0 0);animation:hwrite 2.6s ease-out 7.8s forwards, hfade 6s ease 12s forwards}
+  @keyframes hwrite{0%{opacity:1;clip-path:inset(0 100% 0 0)}100%{opacity:1;clip-path:inset(0 0 0 0)}}
+  @keyframes hfade{to{opacity:.38}}
+  .t-echo{position:absolute;pointer-events:none;font-size:clamp(34px,5vw,64px);color:#e0c294;line-height:1.2;
+    opacity:0;animation:echofade 5s ease 9.4s forwards}
+  @keyframes echofade{0%{opacity:0}35%{opacity:.11}100%{opacity:.07}}
+  .t-hint{margin-top:30px;font-size:12px;letter-spacing:.2em;color:var(--dim);animation-delay:9.5s}
+
+  .hero-offer{position:absolute;left:0;right:0;bottom:0;z-index:3;
+    display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;
+    padding:16px 5vw;background:linear-gradient(180deg,rgba(10,15,11,0),rgba(10,15,11,.92) 45%);
+    opacity:0;animation:tfade 1.2s ease 3.2s forwards}
+  .ho-text{display:flex;flex-direction:column;gap:4px;min-width:0}
+  .ho-text b{font-size:clamp(14px,1.35vw,17px);color:var(--cream);font-weight:700;line-height:1.3}
+  .ho-text span{font-size:clamp(11.5px,1vw,13.5px);color:var(--dim)}
+  .ho-btn{display:inline-flex;flex-direction:column;align-items:center;gap:1px;text-decoration:none;white-space:nowrap;
+    background:linear-gradient(180deg,var(--brass),#c39f68);color:#20180c;font-weight:700;font-size:15.5px;
+    padding:12px 26px;border-radius:999px;transition:transform .2s}
+  .ho-btn i{font-style:normal;font-size:11px;font-weight:500;opacity:.75}
+  .ho-btn:hover{transform:translateY(-2px)}
+
+  /* ---------- АКТ 2 · МОНОЛОГ ---------- */
+  .act2{padding:110px 0 90px;background:linear-gradient(180deg,rgba(14,20,16,.86) 0%,rgba(14,20,16,.93) 55%,rgba(16,19,18,.99) 100%),url('assets/bg-hall-blur.webp') center top/cover no-repeat}
+  .act2 .grid{display:grid;grid-template-columns:.8fr 1.2fr;gap:6vw;align-items:center}
+  .act2 figure{position:relative;justify-self:center}
+  .act2 img{height:min(72svh,620px);width:auto;filter:drop-shadow(0 30px 50px rgba(0,0,0,.6))}
+  .quote{font-size:clamp(18px,2vw,25px);line-height:1.6;color:var(--cream)}
+  .quote em{font-style:normal;color:var(--gold)}
+  .quote .sig{display:block;margin-top:18px;font-size:15px;color:var(--faint)}
+
+  /* ---------- АКТ 3 · ИЗНУРЕНИЕ ---------- */
+  .act3{padding:100px 0;background:#101312;filter:none}
+  .act3 .inner{filter:grayscale(.55) brightness(.92)}
+  .qlist{display:flex;flex-direction:column;gap:14px;margin-top:36px;max-width:36em}
+  .q{font-size:clamp(15px,1.6vw,19px);line-height:1.5;color:#c8cabe;border-left:2px solid #3a4038;padding-left:16px}
+  .cal{margin-top:38px;display:inline-flex;align-items:baseline;gap:14px;background:#181c19;border:1px solid #2a2f2b;border-radius:14px;padding:18px 26px}
+  .cal b{font-family:'Unbounded',serif;font-size:34px;color:#d3d5c8}
+  .cal span{font-size:13px;color:#8b9184;max-width:16em;line-height:1.4}
+  .act3 .verdict{margin-top:34px;font-size:clamp(17px,1.9vw,23px);color:var(--cream)}
+  .act3 .verdict b{color:var(--brass)}
+
+  /* ---------- АКТ 4 · ЗУМ-СЦЕНЫ ---------- */
+  .zoomstage{position:relative}
+  .zscene{min-height:100svh;display:flex;align-items:center;overflow:hidden;position:relative}
+  .zscene .fig{position:absolute;right:8vw;bottom:-4svh;height:92svh;width:auto}
+  .zphoto{position:absolute;right:6vw;top:50%;transform:translateY(-50%);height:74svh;width:min(34vw,470px);object-fit:cover;border-radius:22px;box-shadow:0 40px 80px -40px rgba(0,0,0,.8)}
+  .zscene.z3 .zphoto{opacity:.55}
+  .zcopy{position:relative;z-index:2;max-width:560px;margin-left:6vw;padding:40px 0}
+  .obj{display:inline-block;background:rgba(14,20,16,.9);border:1px solid #3a4a36;border-radius:12px;padding:11px 16px;font-size:15px;margin:6px 8px 6px 0}
+  .ans{display:flex;gap:12px;align-items:flex-start;background:rgba(147,165,111,.14);border:1px solid rgba(216,185,129,.5);border-radius:14px;padding:14px 18px;font-size:15px;line-height:1.5;margin-top:12px}
+  .ans b{color:var(--brass)}
+
+  /* ---------- ФОТО-ПОЛОСА ---------- */
+  .strip{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:44px}
+  .strip figure{border-radius:14px;overflow:hidden;background:var(--panel)}
+  .strip img{width:100%;height:230px;object-fit:cover}
+  .strip figcaption{font-size:12.5px;color:var(--faint);padding:10px 12px;line-height:1.4}
+
+  /* ---------- ПРАЙС ---------- */
+  .price{padding:110px 0}
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:40px}
+  .card{background:var(--panel);border:1px solid rgba(217,184,124,.14);border-radius:18px;padding:26px}
+  .card.hot{border-color:var(--brass);box-shadow:0 20px 50px -30px rgba(167,216,196,.35)}
+  .card .tag{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
+  .card.hot .tag{color:var(--lime)}
+  .card h3{font-size:18px;margin-bottom:8px;line-height:1.35}
+  .card .p{font-family:'Unbounded',serif;font-size:26px;margin:10px 0 4px}
+  .card .p s{font-size:15px;color:var(--faint);margin-left:8px;font-family:'Manrope',sans-serif}
+  .card p.d{font-size:13.5px;color:var(--dim);line-height:1.5}
+  .plist{margin-top:26px;display:grid;grid-template-columns:repeat(2,1fr);gap:8px 34px}
+  .plist .row{display:flex;justify-content:space-between;gap:14px;font-size:14.5px;padding:9px 0;border-bottom:1px dashed rgba(217,184,124,.16)}
+  .plist .row span:last-child{color:var(--gold);white-space:nowrap}
+  .note{font-size:12.5px;color:var(--faint);margin-top:18px;line-height:1.5}
+
+  /* ---------- ДОВЕРИЕ ---------- */
+  .trust{padding:90px 0;background:var(--sage-deep)}
+  .tgrid{display:flex;flex-wrap:wrap;gap:16px;margin-top:36px}
+  .tcell{flex:1;min-width:200px;background:rgba(14,20,16,.35);border-radius:16px;padding:24px;text-align:center;color:inherit;transition:transform .18s ease,background .18s ease}
+  a.tcell:hover{transform:translateY(-3px);background:rgba(14,20,16,.5)}
+  .tcell b{font-family:'Unbounded',serif;font-size:30px;color:var(--brass)}
+  .tcell div{font-size:13px;color:#e8ebd8;margin-top:8px;line-height:1.45}
+
+  /* ---------- ГАРАНТИЯ ---------- */
+  .guar{padding:100px 0}
+  .gg{display:grid;grid-template-columns:1.1fr .9fr;gap:6vw;align-items:start}
+  .gpoint{display:flex;gap:14px;margin-top:18px;font-size:15.5px;line-height:1.55;color:var(--cream)}
+  .gpoint::before{content:'—';color:var(--lime);flex-shrink:0}
+  .contra{background:var(--panel);border:1px solid rgba(217,184,124,.14);border-radius:18px;padding:26px;font-size:13.5px;color:var(--dim);line-height:1.6}
+  .contra b{color:var(--cream)}
+
+  /* ---------- ФИНАЛ ---------- */
+  .finale{min-height:92svh;display:flex;align-items:flex-end;justify-content:center;text-align:center;overflow:hidden;padding-bottom:10svh}
+  .finale .bgimg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 20%}
+  .finale::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(14,20,16,.5),rgba(14,20,16,.15) 40%,rgba(14,20,16,.92))}
+  .finale .inner{position:relative;z-index:2;padding:0 5vw}
+  .finale .script{font-size:clamp(28px,4vw,52px);color:#e0c294;line-height:1.3;text-shadow:0 2px 24px rgba(0,0,0,.6)}
+  .btn-final{display:inline-block;margin-top:30px;background:linear-gradient(180deg,var(--brass),#c39f68);color:#20180c;font-weight:700;font-size:17px;text-decoration:none;padding:18px 38px;border-radius:999px;transition:transform .2s}
+  .btn-final:hover{transform:translateY(-2px)}
+  .finale .sub{margin-top:16px;font-size:13px;color:var(--dim)}
+
+  .studio-light{background:#f0efe7 !important;color:#232a1f}
+  .studio-light h2,.studio-light h3{color:#1d2a22}
+  .studio-light .lead{color:#48584d}
+  .studio-light .kicker{color:#7d6636}
+  .studio-light .card{background:#ffffff;border-color:#dcdccb}
+  .studio-light .card.hot{border-color:var(--sage);box-shadow:0 20px 50px -30px rgba(147,165,111,.45)}
+  .studio-light .card p.d{color:#5a6a5e}
+  .studio-light .card .p s{color:#93a196}
+  .studio-light .plist .row{border-bottom:1px dashed #c3d4c7}
+  .studio-light .plist .row span:last-child{color:#6d7c4f;font-weight:700}
+  .studio-light .note{color:#7d8b80}
+  .studio-light .strip figure{background:#ffffff;border:1px solid #d8e5da}
+  .studio-light .strip figcaption{color:#5a6a5e}
+  /* ---------- КАК ПРОХОДИТ ВИЗИТ ---------- */
+  .visit{padding:100px 0}
+  .vsteps{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:44px;counter-reset:v}
+  .vstep{position:relative;padding:26px 22px;background:var(--panel);border:1px solid rgba(217,184,124,.16);border-radius:18px}
+  .vstep::before{counter-increment:v;content:counter(v);position:absolute;top:-14px;left:22px;
+    width:30px;height:30px;border-radius:50%;background:var(--brass);color:#20180c;
+    font-family:'Unbounded',serif;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .vstep h3{font-size:16.5px;margin:6px 0 8px;color:var(--cream)}
+  .vstep p{font-size:14px;line-height:1.55;color:var(--dim)}
+  .vstep .dur{display:inline-block;margin-top:10px;font-size:12px;color:var(--brass);letter-spacing:.06em}
+  @media (max-width:820px){.vsteps{grid-template-columns:1fr;gap:22px;margin-top:36px}.visit{padding:64px 0}}
+  /* ---------- FAQ ---------- */
+  .faq{padding:100px 0}
+  .faq details{border-bottom:1px solid rgba(217,184,124,.18);padding:20px 0}
+  .faq summary{cursor:pointer;list-style:none;font-size:clamp(16px,1.7vw,19px);font-weight:700;color:var(--cream);display:flex;justify-content:space-between;gap:18px;align-items:flex-start}
+  .faq summary::-webkit-details-marker{display:none}
+  .faq summary::after{content:'+';color:var(--brass);font-size:24px;line-height:1;flex-shrink:0;transition:transform .25s}
+  .faq details[open] summary::after{transform:rotate(45deg)}
+  .faq p{margin-top:12px;font-size:15.5px;line-height:1.65;color:var(--dim);max-width:52em}
+  .studio-light .faq summary{color:#232a1f}
+  .studio-light .faq p{color:#4a5a4e}
+  .studio-light .faq details{border-bottom-color:#d6ddcc}
+  .brass-rule{height:1px;background:linear-gradient(90deg,transparent,var(--brass) 18%,var(--brass) 82%,transparent);margin:0}
+  .brass-ring{position:relative}
+  .brass-ring::before{content:'';position:absolute;inset:-10px;border:1px solid rgba(216,185,129,.45);border-radius:inherit;pointer-events:none}
+  footer{background:#0a0f0b;color:var(--faint);font-size:13px;padding:30px 5vw;line-height:1.7;text-align:center}
+  footer a{color:var(--gold);text-decoration:none}
+
+  /* ---------- мобильная ---------- */
+  @media (max-width:820px){
+    .act2 .grid{grid-template-columns:1fr}
+    .act2 figure{order:-1}
+    .act2 img{height:44svh}
+    .zscene .fig{display:none}
+    .zphoto{position:static;transform:none;width:calc(100% - 12vw);height:38svh;margin:20px 6vw 0}
+    .zscene.z2,.zscene.z3{flex-direction:column;justify-content:center;min-height:auto;padding:60px 0}
+    .zcopy{margin:0 6vw;background:rgba(14,20,16,.6);border-radius:16px;padding:22px}
+    .strip{grid-template-columns:repeat(2,1fr)}
+    .cards{grid-template-columns:1fr}
+    .plist{grid-template-columns:1fr}
+    .gg{grid-template-columns:1fr}
+    .sticky-cta{font-size:13.5px;padding:13px 22px;bottom:14px}
+    .t-slogan{letter-spacing:.24em;font-size:11px}
+
+    /* компактная шапка: логотип и кнопка не съедают экран */
+    header{padding:9px 4vw}
+    .logo .wordmark{font-size:15px !important;letter-spacing:.16em}
+    .logo span[style*="9.5px"]{font-size:7.5px !important;letter-spacing:.22em}
+    .head-btn{font-size:12px;padding:7px 13px}
+
+    /* хиро: титры выше липкой кнопки, компактнее */
+    .hero-offer{flex-direction:column;align-items:stretch;text-align:center;gap:12px;padding:14px 5vw 18px}
+    .ho-text b{font-size:14px}
+    .ho-btn{justify-content:center;padding:14px 20px}
+    .hero-titles{padding-bottom:23svh}
+    .t-brand .wordmark{font-size:30px !important}
+    .wm-sub{font-size:.34em;letter-spacing:.3em}
+    .t-script{font-size:22px;margin-top:16px}
+    .t-hint{margin-top:18px;font-size:10.5px}
+
+    /* плотнее вертикальный ритм */
+    .act2{padding:70px 0 60px}
+    .act3{padding:64px 0}
+    .zscene{padding:56px 0 !important}
+    .zcopy{padding:20px}
+    .price{padding:70px 0}
+    .trust{padding:64px 0}
+    .guar{padding:64px 0}
+    .qlist{gap:11px;margin-top:26px}
+    .strip{gap:10px;margin-top:28px}
+    .strip img{height:180px}
+    .cards{gap:12px;margin-top:26px}
+    .card{padding:20px}
+    .tgrid{gap:10px}
+    .tcell{padding:18px}
+    .cal{padding:14px 18px}
+    .cal b{font-size:27px}
+    .ans{padding:12px 15px;font-size:14.5px}
+    .obj{padding:9px 13px;font-size:13.5px}
+    .finale{min-height:82svh;padding-bottom:14svh}
+    .btn-final{font-size:15.5px;padding:16px 28px}
+    footer{padding-bottom:88px}
+    section{scroll-margin-top:60px}
+  }
+
+  .wordmark{display:inline-flex;align-items:baseline;font-family:'Cormorant','Times New Roman',serif;font-weight:600;letter-spacing:.22em;color:#d8b981;text-decoration:none}
+  .wordmark .avo-o{height:1.05em;width:auto;align-self:center;margin:0 .06em;transform:translateY(.08em)}
+  .wm-sub{display:block;font-family:'Manrope',sans-serif;font-size:.38em;letter-spacing:.44em;color:#e0cba0;text-transform:uppercase;margin-top:.4em;text-align:center;text-shadow:0 1px 12px rgba(0,0,0,.6)}
+</style>
+</head>
+<body>
+
+<header id="hdr">
+  <a class="logo" href="#" style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-decoration:none"><span class="wordmark" style="font-size:21px">АВ<svg class="avo-o" viewBox="0 0 48 54" aria-hidden="true"><path d="M25.5 8 C26.5 5 25 2.5 23 2" fill="none" stroke="#d8b981" stroke-width="1.6" stroke-linecap="round"/><path d="M24 9.5 C20.4 9.5 15.6 15.6 14.1 22.3 C12.6 29.1 17.3 38 24 38 C30.7 38 35.4 29.1 33.9 22.3 C32.4 15.6 27.6 9.5 24 9.5 Z" fill="none" stroke="#d8b981" stroke-width="2.1" stroke-linejoin="round"/><circle cx="24" cy="27" r="4.6" fill="#d8b981"/></svg>КАДО</span><span style="font-family:\'Manrope\',sans-serif;font-size:9.5px;letter-spacing:.34em;color:#cfae83;text-transform:uppercase;padding-left:2px">студия дизайна тела</span></a>
+  <a class="head-btn" href="/contacts.html">Написать нам</a>
+</header>
+
+<a class="sticky-cta" id="cta" href="https://n396010.yclients.com/company/375899/personal/menu" target="_blank" rel="noopener">Пробный сеанс — 500 ₽</a>
+
+<!-- ═══ АКТ 1 · ХИРО «ВЕЧЕР» ═══ -->
+<section class="hero" id="top">
+  <video id="herovid" autoplay muted playsinline preload="auto" poster="assets/hero-poster.jpg">
+    <source id="hv-webm" src="assets/hero-entrance.webm" type="video/webm">
+    <source id="hv-mp4" src="assets/hero-entrance.mp4" type="video/mp4">
+  </video>
+  <video id="loopvid" class="loop-video" muted playsinline loop preload="auto" aria-hidden="true">
+    <source id="lv-webm" src="assets/hero-loop.webm" type="video/webm">
+    <source id="lv-mp4" src="assets/hero-loop.mp4" type="video/mp4">
+  </video>
+  <div class="hero-titles">
+    <div class="t-echo script" style="left:8%;top:16%">Авокадо</div>
+    <div class="t-echo script" style="right:10%;top:34%;animation-delay:10.6s">уверенность</div>
+    <h1 class="t-brand t-fade" style="font-weight:inherit;font-size:inherit"><span class="wordmark" style="font-size:clamp(34px,4.6vw,60px)">АВ<svg class="avo-o" viewBox="0 0 48 54" aria-hidden="true"><path d="M25.5 8 C26.5 5 25 2.5 23 2" fill="none" stroke="#d8b981" stroke-width="1.6" stroke-linecap="round"/><path d="M24 9.5 C20.4 9.5 15.6 15.6 14.1 22.3 C12.6 29.1 17.3 38 24 38 C30.7 38 35.4 29.1 33.9 22.3 C32.4 15.6 27.6 9.5 24 9.5 Z" fill="none" stroke="#d8b981" stroke-width="2.1" stroke-linejoin="round"/><circle cx="24" cy="27" r="4.6" fill="#d8b981"/></svg>КАДО</span><span class="wm-sub">студия дизайна тела</span></h1>
+    <div class="t-slogan t-fade">УВЕРЕННОСТЬ · СВОБОДА · РЕЗУЛЬТАТ</div>
+    <p class="visually-hidden">Аппаратный вакуумно-роликовый массаж, коррекция фигуры и лазерная эпиляция в Иркутске — студия дизайна тела АВОКАДО на улице Красноказачья, 84.</p>
+    <div class="t-script script">Быть красивой и уверенной —<br>это мой выбор</div>
+    <div class="t-hint t-fade">ЛИСТАЙТЕ — ЭТО ЕЁ ИСТОРИЯ ↓</div>
+  </div>
+  <div class="hero-offer">
+    <div class="ho-text">
+      <b>Аппаратный массаж и коррекция фигуры в Иркутске</b>
+      <span>Красноказачья, 84 · ежедневно 09:00–21:00 · 5,0 на 2ГИС и Яндексе</span>
+    </div>
+    <a class="ho-btn" href="https://n396010.yclients.com/company/375899/personal/menu" target="_blank" rel="noopener">Пробный сеанс — 500 ₽<i>вместо 2 100 ₽</i></a>
+  </div>
+</section>
+
+<!-- ═══ АКТ 2 · МОНОЛОГ ═══ -->
+<section class="act2">
+  <div class="wrap grid">
+    <figure class="rv"><img src="assets/heroine-dress.png" alt="Героиня истории АВОКАДО в вечернем платье" loading="lazy"></figure>
+    <div class="rv">
+      <div class="kicker">Её история · часть 1</div>
+      <p class="quote">«Я, как и каждая девушка, мечтаю быть красивой, уверенной, с идеальной фигурой. Но в нынешнем темпе жизни <em>не получается держаться</em> диет, тренировок и прочих «очевидных» вещей.
+      <span class="sig">— героиня АВОКАДО</span></p>
+    </div>
+  </div>
+</section>
+
+<div class="brass-rule"></div>
+<!-- ═══ АКТ 3 · ИЗНУРЕНИЕ ═══ -->
+<section class="act3">
+  <div class="wrap inner">
+    <div class="kicker rv">Знакомо?</div>
+    <h2 class="rv">Сколько раз вы уже начинали заново?</h2>
+    <div class="qlist">
+      <div class="q rv">Сколько раз вы обещали себе начать «с понедельника»?</div>
+      <div class="q rv">Сколько диет закончились срывом — и плюс два кило сверху?</div>
+      <div class="q rv">Изнурительные тренировки, брошенные через неделю?</div>
+      <div class="q rv">Платье, которое ждёт, «когда похудею»?</div>
+      <div class="q rv">Фото, где вы себя не узнаёте?</div>
+      <div class="q rv">Лето, к которому опять «не успела»?</div>
+    </div>
+    <div class="cal rv"><b>60 дней</b><span>запретов и приседаний через силу — и сантиметр показывает почти то же самое</span></div>
+    <p class="verdict rv">Она тоже через это прошла. И выбрала <b>другой путь</b>.</p>
+  </div>
+</section>
+
+<!-- ═══ АКТ 4 · ДРУГОЙ ПУТЬ · ЗУМ ═══ -->
+<section class="zoomstage" id="metod">
+  <div class="zscene z1">
+    <img class="fig" src="assets/heroine-sport.png" alt="Героиня">
+    <div class="zcopy rv">
+      <div class="kicker">Её история · другой путь</div>
+      <h2>Вы просто лежите. Работает аппарат</h2>
+      <p class="lead">Коррекцией фигуры в студии занимается аппаратный вакуумно-роликовый массаж: вакуум приподнимает кожу, ролики разминают подкожную клетчатку, разгоняется лимфа, кожа подтягивается. Без залов, без запретов, без «через не могу».</p>
+    </div>
+  </div>
+  <div class="zscene z2">
+    <img class="zphoto" src="assets/vacuum-roller-thigh.webp" alt="Вакуумно-роликовый массаж бедра — процедура крупным планом" loading="lazy">
+    <div class="zcopy rv">
+      <div class="kicker">Что вас останавливает</div>
+      <h2>Скажем честно — об этом думают все</h2>
+      <div>
+        <span class="obj">«Это больно?»</span>
+        <span class="obj">«Результата ждать месяцами?»</span>
+        <span class="obj">«А если не сработает?»</span>
+        <span class="obj">«Вернётся обратно?»</span>
+      </div>
+    </div>
+  </div>
+  <div class="zscene z3">
+    <img class="zphoto" src="assets/rf-cavitation-belly.webp" alt="RF-лифтинг живота — процедура крупным планом" loading="lazy">
+    <div class="zcopy rv">
+      <div class="kicker">Наши ответы</div>
+      <h2>Поэтому мы устроены так</h2>
+      <div class="ans"><div><b>Не больно.</b> Пробный сеанс за 500 ₽ — почувствовать метод на себе до любых решений. Это спа-ритуал: халаты, простыни, спокойная атмосфера.</div></div>
+      <div class="ans"><div><b>Не месяцами.</b> Замеры — на каждом этапе курса: сантиметры и килограммы фиксируем в цифрах, прогресс видно, а не «кажется».</div></div>
+      <div class="ans"><div><b>Не «повезёт — не повезёт».</b> 46% клиентов возвращаются снова — почти каждая вторая. В отзывах пишут результат цифрами: «за год минус 6–7 кг, другой размер одежды».</div></div>
+      <div class="ans"><div><b>Не бросите на середине.</b> Расписание курса стоит в календаре, мы напоминаем о каждом сеансе, а перенести — можно. Начатый курс доводим до конца вместе.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ АППАРАТЫ И СТУДИЯ ═══ -->
+<section class="studio-light" style="padding:100px 0">
+  <div class="wrap">
+    <div class="kicker rv">Чем работаем</div>
+    <h2 class="rv">Настоящие аппараты. Настоящие фото. Настоящая студия</h2>
+    <p class="lead rv" style="max-width:40em">Вакуумно-роликовый аппарат BeautySib, диодный лазер WINKICER для эпиляции, кавитация и RF-лифтинг. Всё на фото ниже снято в нашей студии на Красноказачьей, 84 — приходите и увидите то же самое.</p>
+    <div class="strip">
+      <figure class="rv"><img src="assets/lpg-suit-beautysib.webp" alt="Вакуумно-роликовый аппаратный массаж в студии АВОКАДО, Иркутск" loading="lazy" width="560" height="230"><figcaption>Вакуумно-роликовый массаж — процедура идёт в специальном костюме</figcaption></figure>
+      <figure class="rv"><img src="assets/rf-cavitation-belly.webp" alt="Кавитация и RF-лифтинг зоны живота в студии дизайна тела АВОКАДО" loading="lazy" width="560" height="230"><figcaption>Кавитация и RF-лифтинг — прицельно по зонам</figcaption></figure>
+      <figure class="rv"><img src="assets/laser-machine.webp" alt="Диодный лазер WINKICER для лазерной эпиляции в Иркутске" loading="lazy" width="560" height="230"><figcaption>Диодный лазер WINKICER — эпиляция без боли</figcaption></figure>
+      <figure class="rv"><img src="assets/consult-green-wall.webp" alt="Бесплатная консультация перед курсом аппаратного массажа" loading="lazy" width="560" height="230"><figcaption>Перед курсом — бесплатная консультация и подбор программы</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══ КАК ПРОХОДИТ ПЕРВЫЙ ВИЗИТ ═══ -->
+<section class="visit">
+  <div class="wrap">
+    <div class="kicker rv">Первый визит по шагам</div>
+    <h2 class="rv">Вы придёте — и вот что будет дальше</h2>
+    <p class="lead rv" style="max-width:40em">Ничего неизвестного: рассказываем заранее, чтобы вы шли спокойно. Всё вместе занимает около полутора часов.</p>
+    <div class="vsteps">
+      <div class="vstep rv">
+        <h3>Знакомство и осмотр</h3>
+        <p>Специалист спросит о вашей цели и состоянии здоровья, посмотрит кожу и зоны, о которых вы переживаете. Никаких оценок и нравоучений.</p>
+        <span class="dur">10–15 минут</span>
+      </div>
+      <div class="vstep rv">
+        <h3>Замеры и программа</h3>
+        <p>Снимем мерки и зафиксируем точку старта — потом по ним будем сверять прогресс. Подберём программу и честно скажем, чего от неё ждать.</p>
+        <span class="dur">10 минут</span>
+      </div>
+      <div class="vstep rv">
+        <h3>Сам сеанс</h3>
+        <p>Аппаратный массаж всего тела в специальном костюме. Халат и простыни наши, музыка спокойная. Интенсивность настроим под вас в процессе.</p>
+        <span class="dur">60 минут</span>
+      </div>
+      <div class="vstep rv">
+        <h3>Решение — за вами</h3>
+        <p>Расскажем, какой курс подошёл бы под вашу цель и сколько это стоит. Захотите подумать — думайте: пробный сеанс ни к чему не обязывает.</p>
+        <span class="dur">5 минут</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="brass-rule"></div>
+<!-- ═══ ПРАЙС ═══ -->
+<section class="price studio-light" id="price">
+  <div class="wrap">
+    <div class="kicker rv">Первый шаг</div>
+    <h2 class="rv">Попробуйте — за 500 ₽</h2>
+    <div class="cards">
+      <div class="card hot rv">
+        <div class="tag">Лучший первый шаг · экономия 1 600 ₽</div>
+        <h3>ТУРБО-массаж всего тела · 60 мин</h3>
+        <div class="p">500 ₽ <s>2 100 ₽</s></div>
+        <p class="d">Что входит: осмотр и консультация специалиста, подбор программы под вашу цель, полный сеанс аппаратного массажа всего тела, замеры на старте. Халат и простыни — наши.</p>
+        <p class="d" style="margin-top:10px;color:var(--brass)">Цена действует только на первый визит. Ни к чему не обязывает.</p>
+      </div>
+      <div class="card rv">
+        <div class="tag">Акция первого визита</div>
+        <h3>LPG-массаж всего тела · 45 мин</h3>
+        <div class="p">990 ₽ <s>2 100 ₽</s></div>
+        <p class="d">Знакомство с вакуумно-роликовым массажем — в специальном костюме, комфортно, без синяков.</p>
+      </div>
+      <div class="card rv">
+        <div class="tag">Акция первого визита</div>
+        <h3>Ручной массаж · 60 мин</h3>
+        <div class="p">1 650 ₽ <s>2 500 ₽</s></div>
+        <p class="d">Спа-ритуал с эфирными маслами — если хочется начать с рук мастера, а не с аппарата.</p>
+      </div>
+    </div>
+    <div class="plist rv">
+      <div class="row"><span>Аппаратный массаж 45 мин</span><span>2 100 ₽</span></div>
+      <div class="row"><span>Аппаратный массаж 60 мин</span><span>3 100 ₽</span></div>
+      <div class="row"><span>Аппаратный массаж 90 мин</span><span>4 700 ₽</span></div>
+      <div class="row"><span>Вакуумно-роликовый 30 мин</span><span>2 100 ₽</span></div>
+      <div class="row"><span>Гемолимфодренажный 60 мин</span><span>3 000 ₽</span></div>
+      <div class="row"><span>Липопластика</span><span>4 990 ₽</span></div>
+      <div class="row"><span>RF-лифтинг лица</span><span>от 1 150 ₽</span></div>
+      <div class="row"><span>Лазерная эпиляция</span><span>от 500 ₽</span></div>
+      <div class="row"><span>Комбо ЛЭ «Хочу всё» (безлимит по зонам)</span><span>4 990 ₽</span></div>
+      <div class="row"><span>Массажи лица</span><span>от 1 400 ₽</span></div>
+    </div>
+    <p class="note">Цены — из системы онлайн-записи студии. Курс «Невесомость» (10 сеансов) и другие курсовые программы подбираются на консультации — состав и цену зафиксируем до старта.</p>
+  </div>
+</section>
+
+<div class="brass-rule"></div>
+<!-- ═══ ДОВЕРИЕ ═══ -->
+<section class="trust">
+  <div class="wrap">
+    <div class="kicker rv" style="color:#e6dfc4">Не верьте нам на слово — проверьте</div>
+    <h2 class="rv">Более 400 оценок на картах — и высшая по обеим</h2>
+    <div class="tgrid">
+      <a class="tcell rv" href="https://2gis.ru/irkutsk/firm/70000001045439507" target="_blank" rel="noopener" style="text-decoration:none;display:block"><b>5,0</b><div>рейтинг в 2ГИС — более 300 оценок<br><span style="opacity:.7">смотреть отзывы →</span></div></a>
+      <a class="tcell rv" href="https://yandex.ru/maps/?text=%D0%90%D0%B2%D0%BE%D0%BA%D0%B0%D0%B4%D0%BE%20%D0%98%D1%80%D0%BA%D1%83%D1%82%D1%81%D0%BA%20%D0%9A%D1%80%D0%B0%D1%81%D0%BD%D0%BE%D0%BA%D0%B0%D0%B7%D0%B0%D1%87%D1%8C%D1%8F%2084" target="_blank" rel="noopener" style="text-decoration:none;display:block"><b>5,0</b><div>рейтинг в Яндексе — более 120 оценок<br><span style="opacity:.7">смотреть отзывы →</span></div></a>
+      <div class="tcell rv"><b>46%</b><div>клиентов возвращаются снова — почти каждая вторая</div></div>
+      <div class="tcell rv"><b>2026</b><div>«Номинант» премии 2ГИС</div></div>
+    </div>
+  </div>
+</section>
+
+
+<div class="brass-rule"></div>
+<!-- ═══ FAQ ═══ -->
+<section class="faq studio-light" id="faq">
+  <div class="wrap">
+    <div class="kicker rv">Частые вопросы</div>
+    <h2 class="rv">Что обычно спрашивают перед первым визитом</h2>
+
+    <details class="rv"><summary>Сколько стоит аппаратный массаж в Иркутске у вас?</summary>
+      <p>Пробный сеанс аппаратного массажа всего тела — 500 ₽ вместо 2100 ₽, он для первого визита и включает бесплатную консультацию. Дальше: 45 минут — 2100 ₽, 60 минут — 3100 ₽, 90 минут — 4700 ₽. Курсовые программы считаем на консультации: состав и цену фиксируем до старта.</p></details>
+
+    <details class="rv"><summary>Сколько сеансов нужно, чтобы увидеть результат?</summary>
+      <p>Курсом: обычно это 10 и более сеансов с частотой 1–3 раза в неделю. Замеры делаем на этапах курса, поэтому прогресс видно в сантиметрах, а не «на глаз». Точное количество подберёт специалист после осмотра — оно зависит от зоны и вашей цели.</p></details>
+
+    <details class="rv"><summary>Это больно? Останутся ли синяки?</summary>
+      <p>Процедура проходит в специальном костюме и ощущается как плотный разминающий массаж — не больно. Интенсивность регулируется под вас: если некомфортно, скажите мастеру, и он убавит. Именно поэтому мы предлагаем начать с пробного сеанса за 500 ₽ — чтобы вы почувствовали метод до того, как решаться на курс.</p></details>
+
+    <details class="rv"><summary>Нужно ли сидеть на диете и ходить в зал?</summary>
+      <p>Нет, никаких обязательных запретов мы не выдаём. Аппарат работает с подкожной клетчаткой и лимфотоком сам — вы в это время просто лежите. Если вы уже занимаетесь спортом, курс хорошо с ним сочетается, но это не условие.</p></details>
+
+    <details class="rv"><summary>Что если я не смогу прийти на сеанс?</summary>
+      <p>Сеанс можно перенести — напишите нам заранее в WhatsApp или Telegram. Мы напоминаем о каждой записи, чтобы курс не рассыпался: доведённый до конца курс — это и есть результат, ради которого вы приходите.</p></details>
+
+    <details class="rv"><summary>Есть ли противопоказания?</summary>
+      <p>Да. Аппаратный массаж не проводится при беременности, варикозной болезни, тромбофлебите, онкологических и острых воспалительных заболеваниях. На консультации обязательно расскажите специалисту о состоянии здоровья — подберём безопасную программу или честно отговорим.</p></details>
+
+    <details class="rv"><summary>Где вы находитесь и как записаться?</summary>
+      <p>Иркутск, улица Красноказачья, 84 — работаем ежедневно с 09:00 до 21:00. Записаться можно онлайн за минуту, по телефону +7 950 100 1059 или в мессенджерах: WhatsApp, Telegram, ВКонтакте.</p></details>
+  </div>
+</section>
+
+<!-- ═══ ГАРАНТИЯ ═══ -->
+<section class="guar">
+  <div class="wrap gg">
+    <div>
+      <div class="kicker rv">Честные правила</div>
+      <h2 class="rv">Мы не обещаем чудо. Мы измеряем результат</h2>
+      <div class="gpoint rv">Пробный сеанс за 500 ₽ ни к чему не обязывает: попробуйте метод, задайте вопросы, решите спокойно.</div>
+      <div class="gpoint rv">Перед курсом — бесплатная консультация: специалист оценит состояние кожи и честно скажет, чем курс поможет именно вам, и поможет ли.</div>
+      <div class="gpoint rv">Замеры фиксируем на каждом этапе курса — ваш прогресс существует в сантиметрах и килограммах, а не в обещаниях.</div>
+      <div class="gpoint rv">Результат достигается курсом: условия программ действуют при прохождении полного курса — все детали закрепим на консультации.</div>
+    </div>
+    <div class="contra rv">
+      <b>Важно знать до записи.</b><br><br>
+      У аппаратного массажа есть противопоказания: беременность, варикозная болезнь, тромбофлебит, онкологические и острые воспалительные заболевания. На консультации обязательно расскажите специалисту о состоянии здоровья — подберём безопасную программу или честно отговорим.
+    </div>
+  </div>
+</section>
+
+<!-- ═══ ФИНАЛ ═══ -->
+<section class="finale">
+  <img class="bgimg" src="assets/hero-poster.jpg" alt="Студия дизайна тела АВОКАДО — уверенность и результат" loading="lazy">
+  <div class="inner">
+    <div class="script rv">Позволь себе быть красивой — легко</div>
+    <a class="btn-final rv" href="https://n396010.yclients.com/company/375899/personal/menu" target="_blank" rel="noopener">Начать с пробного за 500 ₽</a>
+    <div class="sub rv">Запись занимает меньше минуты · Красноказачья, 84 · ежедневно 09:00–21:00<br>
+      Не готовы записаться прямо сейчас? <a href="#contacts" style="color:var(--brass)">Напишите нам</a> — ответим и подскажем, с чего начать.</div>
+  </div>
+</section>
+
+<footer>
+  АВОКАДО · студия дизайна тела · Иркутск, ул. Красноказачья, 84 · ежедневно 09:00–21:00<br>
+  <a href="tel:+79501001059">+7 950 100 1059</a> · <a href="/contacts.html">все способы связаться</a>
+</footer>
+
+<script>
+  // Минимальный JS: reveal-блоки, липкая CTA после хиро, фон шапки, ступени зума.
+
+  // Атрибуция: ловим UTM на входе, храним визит и пробрасываем метки в запись Yclients.
+  // Это закрывает главную дыру Авокадо — потерю источника при записи.
+  (function(){
+    try{
+      var KEY = 'avk_src';
+      var q = new URLSearchParams(location.search);
+      var utmKeys = ['utm_source','utm_medium','utm_campaign','utm_content','utm_term'];
+      var found = {};
+      utmKeys.forEach(function(k){ if(q.get(k)) found[k] = q.get(k); });
+
+      if(Object.keys(found).length){
+        found.first_seen = new Date().toISOString();
+        found.landing = location.pathname;
+        try{ localStorage.setItem(KEY, JSON.stringify(found)); }catch(e){}
+      }
+
+      var stored = {};
+      try{ stored = JSON.parse(localStorage.getItem(KEY) || '{}'); }catch(e){}
+      // если UTM нет — фиксируем реферера как источник
+      if(!stored.utm_source && document.referrer && document.referrer.indexOf(location.host) === -1){
+        try{
+          var host = new URL(document.referrer).hostname.replace('www.','');
+          stored = {utm_source: host, utm_medium: 'referral', first_seen: new Date().toISOString()};
+          localStorage.setItem(KEY, JSON.stringify(stored));
+        }catch(e){}
+      }
+
+      if(stored.utm_source){
+        document.querySelectorAll('a[href*="yclients.com"]').forEach(function(a){
+          try{
+            var u = new URL(a.href);
+            utmKeys.forEach(function(k){ if(stored[k]) u.searchParams.set(k, stored[k]); });
+            a.href = u.toString();
+          }catch(e){}
+        });
+      }
+
+      // события для будущего подключения к аналитике ЛК Synapse
+      window.dataLayer = window.dataLayer || [];
+      document.querySelectorAll('a[href*="yclients.com"], a[href^="tel:"], a[href*="wa.me"], a[href*="t.me"]').forEach(function(a){
+        a.addEventListener('click', function(){
+          var type = a.href.indexOf('yclients') > -1 ? 'booking_click'
+                   : a.href.indexOf('tel:') === 0 ? 'phone_click' : 'messenger_click';
+          window.dataLayer.push({event: type, source: stored.utm_source || 'direct', label: (a.innerText||'').trim().slice(0,60)});
+        });
+      });
+    }catch(e){}
+  })();
+
+  // Мобильным — вертикальная нарезка того же ролика (кроп 9:16), легче и в кадре крупнее
+  (function(){
+    try{
+      if (window.matchMedia('(max-width: 820px)').matches){
+        var hv = document.getElementById('herovid'), lv = document.getElementById('loopvid');
+        document.getElementById('hv-webm').remove();
+        document.getElementById('hv-mp4').src = 'assets/hero-entrance-mob.mp4';
+        hv.setAttribute('poster','assets/hero-poster-mob.jpg');
+        document.getElementById('lv-webm').remove();
+        document.getElementById('lv-mp4').src = 'assets/hero-loop-mob.mp4';
+        hv.load(); lv.load();
+        var p = hv.play(); if(p && p.catch){ p.catch(function(){}); }
+      }
+    }catch(e){}
+  })();
+
+  (function(){
+    try{
+      var io = new IntersectionObserver(function(es){
+        es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('on'); io.unobserve(e.target);} });
+      },{threshold:.15});
+      document.querySelectorAll('.rv').forEach(function(el){ io.observe(el); });
+
+      var hero = document.querySelector('.hero');
+      var cta = document.getElementById('cta');
+      var hdr = document.getElementById('hdr');
+      var io2 = new IntersectionObserver(function(es){
+        es.forEach(function(e){
+          var past = !e.isIntersecting;
+          cta.classList.toggle('on', past);
+          hdr.classList.toggle('solid', past);
+        });
+      },{threshold:.05});
+      io2.observe(hero);
+
+      var hv = document.getElementById('herovid');
+      var lv = document.getElementById('loopvid');
+      if(hv && lv){
+        hv.addEventListener('ended', function(){
+          var p = lv.play();
+          if(p && p.catch){ p.catch(function(){}); }
+          lv.classList.add('on');
+        });
+      }
+    }catch(err){
+      document.querySelectorAll('.rv').forEach(function(el){ el.classList.add('on'); });
+      document.getElementById('cta').classList.add('on');
+    }
+  })();
+</script>
+
+
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+{"@type":["HealthAndBeautyBusiness","LocalBusiness"],"@id":"https://avokado.synapsebusiness.ru/#studio",
+ "name":"АВОКАДО — студия дизайна тела","description":"Студия дизайна тела в Иркутске: аппаратный вакуумно-роликовый массаж, коррекция фигуры курсом, кавитация, RF-лифтинг, лазерная эпиляция, ручной массаж.",
+ "address":{"@type":"PostalAddress","streetAddress":"улица Красноказачья, 84","addressLocality":"Иркутск","addressRegion":"Иркутская область","addressCountry":"RU"},
+ "telephone":"+7 950 100 1059","priceRange":"₽₽",
+ "openingHoursSpecification":[{"@type":"OpeningHoursSpecification","dayOfWeek":["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"],"opens":"09:00","closes":"21:00"}],
+ "aggregateRating":{"@type":"AggregateRating","ratingValue":"5.0","reviewCount":"400","bestRating":"5"},
+ "sameAs":["https://vk.com/lasermkt","https://t.me/avocado_studio38","https://2gis.ru/irkutsk/firm/70000001045439507"],
+ "hasOfferCatalog":{"@type":"OfferCatalog","name":"Услуги студии","itemListElement":[
+  {"@type":"Offer","name":"Пробный ТУРБО-массаж всего тела, 60 мин","price":"500","priceCurrency":"RUB"},
+  {"@type":"Offer","name":"LPG-массаж всего тела, 45 мин","price":"990","priceCurrency":"RUB"},
+  {"@type":"Offer","name":"Аппаратный массаж, 45 мин","price":"2100","priceCurrency":"RUB"},
+  {"@type":"Offer","name":"Аппаратный массаж, 60 мин","price":"3100","priceCurrency":"RUB"},
+  {"@type":"Offer","name":"Аппаратный массаж, 90 мин","price":"4700","priceCurrency":"RUB"},
+  {"@type":"Offer","name":"Липопластика","price":"4990","priceCurrency":"RUB"},
+  {"@type":"Offer","name":"RF-лифтинг лица","price":"1150","priceCurrency":"RUB"},
+  {"@type":"Offer","name":"Лазерная эпиляция, комбо «Хочу всё»","price":"4990","priceCurrency":"RUB"}]}},
+{"@type":"FAQPage","@id":"https://avokado.synapsebusiness.ru/#faq","mainEntity":[
+ {"@type":"Question","name":"Сколько стоит аппаратный массаж в Иркутске?","acceptedAnswer":{"@type":"Answer","text":"Пробный сеанс аппаратного массажа всего тела — 500 ₽ вместо 2100 ₽, включая бесплатную консультацию. Далее: 45 минут — 2100 ₽, 60 минут — 3100 ₽, 90 минут — 4700 ₽."}},
+ {"@type":"Question","name":"Сколько сеансов нужно, чтобы увидеть результат?","acceptedAnswer":{"@type":"Answer","text":"Аппаратный массаж работает курсом: обычно 10 и более сеансов с частотой 1–3 раза в неделю. Замеры делаются на этапах курса, прогресс виден в сантиметрах."}},
+ {"@type":"Question","name":"Аппаратный массаж — это больно?","acceptedAnswer":{"@type":"Answer","text":"Нет. Процедура проходит в специальном костюме и ощущается как плотный разминающий массаж, интенсивность регулируется под клиента."}},
+ {"@type":"Question","name":"Нужно ли соблюдать диету и ходить в зал?","acceptedAnswer":{"@type":"Answer","text":"Нет. Аппарат работает с подкожной клетчаткой и лимфотоком, обязательных запретов студия не выдаёт."}},
+ {"@type":"Question","name":"Какие есть противопоказания?","acceptedAnswer":{"@type":"Answer","text":"Беременность, варикозная болезнь, тромбофлебит, онкологические и острые воспалительные заболевания. Обязательна консультация со специалистом."}},
+ {"@type":"Question","name":"Где находится студия АВОКАДО и как записаться?","acceptedAnswer":{"@type":"Answer","text":"Иркутск, улица Красноказачья, 84, ежедневно с 09:00 до 21:00. Запись онлайн, по телефону +7 950 100 1059 или в мессенджерах."}}]}
+]}
+</script>
+</body>
+</html>
