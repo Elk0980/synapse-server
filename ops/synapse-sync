@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+
+REPO_DIR=${SYNAPSE_REPO_DIR:-/opt/synapse}
+BRANCH=${SYNAPSE_BRANCH:-main}
+
+cd "$REPO_DIR"
+
+before=$(git rev-parse HEAD)
+git fetch --quiet origin "$BRANCH"
+git reset --hard "origin/$BRANCH"
+after=$(git rev-parse HEAD)
+
+[ "$before" != "$after" ] || exit 0
+
+# Apply Compose-level changes (including bind mounts) before reloading Caddy.
+docker compose up -d
+
+if ! docker compose exec -T caddy \
+  caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile; then
+  echo "Caddy reload failed; force-recreating the container" >&2
+  docker compose up -d --force-recreate caddy
+fi

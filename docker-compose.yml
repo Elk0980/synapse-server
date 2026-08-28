@@ -8,7 +8,7 @@ services:
       - "443:443"
       - "443:443/udp"
     volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy:/etc/caddy:ro
       - ./sites:/srv/sites:ro
       - ./panel:/srv/panel:ro
       - caddy_data:/data
