@@ -42,6 +42,12 @@
 
 ## Ручное применение
 
+Установить версию скрипта синхронизации из репозитория:
+
+```
+sudo install -m 0755 /opt/synapse/ops/synapse-sync /usr/local/sbin/synapse-sync
+```
+
 ```
 systemctl start synapse-sync.service   # применить сразу, не дожидаясь таймера
 journalctl -u synapse-sync -n 50       # что делал таймер
