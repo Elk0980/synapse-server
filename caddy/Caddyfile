@@ -15,15 +15,16 @@
     Referrer-Policy strict-origin-when-cross-origin
     -Server
   }
-  handle_errors {
-    respond "{err.status_code} {err.status_text}"
-  }
+}
+
+(draft) {
+  header X-Robots-Tag "noindex, nofollow"
 }
 
 # --- Панель черновиков: все сайты в одном месте -----------------------------
 panel.synapsebusiness.ru {
   root * /srv/panel
-  header X-Robots-Tag "noindex, nofollow"
+  import draft
   import static
 }
 
@@ -39,17 +40,30 @@ avokado.synapsebusiness.ru {
   import static
 }
 
-# Черновой вариант того же клиента — пример, как показывать версии рядом.
-# Папки sites/avokado-v2 пока нет: домен ответит 404, это ожидаемо.
+# Место под второй вариант сайта Авокадо.
 avokado-v2.synapsebusiness.ru {
   root * /srv/sites/avokado-v2
-  header X-Robots-Tag "noindex, nofollow"
+  import draft
   import static
 }
 
 # --- Клиент: ALVI (SPA, Иркутск) --------------------------------------------
-# Файлы ещё не перенесены — домен поднимется, как только появится папка.
 alvi.synapsebusiness.ru {
   root * /srv/sites/alvi
+  import draft
+  import static
+}
+
+# --- Synapse Business: сайт-презентация -------------------------------------
+synapse.synapsebusiness.ru {
+  root * /srv/sites/synapse
+  import draft
+  import static
+}
+
+# --- TaiSabai: прототип воронки «Переезд» -----------------------------------
+taisabai.synapsebusiness.ru {
+  root * /srv/sites/taisabai
+  import draft
   import static
 }

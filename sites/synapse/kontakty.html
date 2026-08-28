@@ -1,0 +1,1634 @@
+<!doctype html>
+<html lang="ru" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B0908">
+<meta name="color-scheme" content="dark">
+<title>Контакты — Synapse Business</title>
+
+<script>
+document.documentElement.classList.replace("no-js", "js");
+</script>
+
+<style>
+:root {
+--bg: #0B0908;
+--surface: #12100F;
+--surface-soft: #181513;
+--text: #F4F0EB;
+--muted: #B9AFA7;
+--accent: #9FD4FF;
+--sapphire: #2E6BD6;
+--sapphire-deep: #0B1F52;
+--green: #79DCB6;
+--red: #FF9C9C;
+--line: rgba(244, 240, 235, 0.11);
+--line-blue: rgba(159, 212, 255, 0.2);
+--shadow: 0 30px 86px rgba(0, 0, 0, 0.4);
+--radius-xl: 34px;
+--radius-lg: 24px;
+--radius-md: 17px;
+--content: 1180px;
+}
+
+*,
+*::before,
+*::after {
+box-sizing: border-box;
+}
+
+html {
+min-width: 0;
+background: var(--bg);
+scroll-behavior: smooth;
+scroll-padding-top: 90px;
+}
+
+body {
+min-width: 0;
+min-height: 100vh;
+margin: 0;
+overflow-x: hidden;
+color: var(--text);
+background:
+radial-gradient(circle at 84% 0%, rgba(46, 107, 214, 0.17), transparent 35rem),
+radial-gradient(circle at -10% 55%, rgba(11, 31, 82, 0.36), transparent 42rem),
+var(--bg);
+font-family: "Segoe UI", Arial, sans-serif;
+font-size: 16px;
+line-height: 1.55;
+text-rendering: optimizeLegibility;
+isolation: isolate;
+}
+
+@supports (overflow: clip) {
+body {
+overflow-x: clip;
+}
+}
+
+button,
+input,
+textarea,
+a {
+font: inherit;
+}
+
+a {
+color: inherit;
+}
+
+h1,
+h2,
+h3,
+p {
+margin-top: 0;
+}
+
+h1,
+h2,
+h3 {
+font-family: Georgia, "Times New Roman", serif;
+font-weight: 400;
+}
+
+[hidden] {
+display: none !important;
+}
+
+::selection {
+color: #07111F;
+background: var(--accent);
+}
+
+.ambient {
+position: fixed;
+z-index: -2;
+inset: 0;
+overflow: hidden;
+pointer-events: none;
+}
+
+.ambient::before,
+.ambient::after {
+position: absolute;
+width: 42rem;
+height: 42rem;
+border-radius: 50%;
+content: "";
+opacity: 0.13;
+filter: blur(115px);
+}
+
+.ambient::before {
+top: -24rem;
+right: -14rem;
+background: var(--accent);
+}
+
+.ambient::after {
+bottom: -25rem;
+left: -17rem;
+background: var(--sapphire);
+}
+
+.grain {
+position: fixed;
+z-index: -1;
+inset: 0;
+pointer-events: none;
+opacity: 0.14;
+background-image:
+repeating-linear-gradient(
+0deg,
+rgba(255, 255, 255, 0.016) 0,
+rgba(255, 255, 255, 0.016) 1px,
+transparent 1px,
+transparent 4px
+);
+mix-blend-mode: soft-light;
+}
+
+.skip-link {
+position: fixed;
+z-index: 100;
+top: 10px;
+left: 10px;
+padding: 10px 16px;
+border-radius: 999px;
+color: var(--bg);
+background: var(--accent);
+transform: translateY(-160%);
+transition: transform 180ms ease;
+}
+
+.skip-link:focus {
+transform: translateY(0);
+}
+
+
+.back-pill{position:relative;margin-left:auto;display:inline-flex;gap:8px;align-items:center;flex:0 0 auto;
+ min-height:40px;padding:9px 15px;border-radius:999px;text-decoration:none;
+ border:1px solid rgba(159,212,255,.28);color:var(--text);
+ background:linear-gradient(135deg,rgba(159,212,255,.12),rgba(255,255,255,.025));
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.09);font-size:.74rem;white-space:nowrap;
+ transition:border-color .2s,background-color .2s,transform .2s}
+.back-pill svg{width:15px;height:15px;flex:0 0 auto;transition:transform .2s}
+.back-pill:hover{border-color:rgba(159,212,255,.75);background-color:rgba(159,212,255,.1);
+ transform:translateY(-1px)}
+.back-pill:hover svg{transform:translateX(-3px)}
+.back-pill .back-word{display:inline}
+@media (max-width:520px){.back-pill{padding:9px 12px}.back-pill .back-word{display:none}}
+
+.site-header {
+position: fixed;
+z-index: 50;
+top: max(14px, env(safe-area-inset-top));
+left: 50%;
+width: min(calc(100% - 32px), 1280px);
+transform: translateX(-50%);
+}
+
+.header-inner {
+display: flex;
+min-width: 0;
+min-height: 60px;
+align-items: center;
+justify-content: space-between;
+padding: 8px 11px 8px 18px;
+border: 1px solid rgba(244, 240, 235, 0.1);
+border-radius: 999px;
+background: rgba(11, 9, 8, 0.75);
+box-shadow: 0 16px 55px rgba(0, 0, 0, 0.28);
+backdrop-filter: blur(20px);
+-webkit-backdrop-filter: blur(20px);
+}
+
+.brand {
+display: inline-flex;
+min-width: 0;
+gap: 11px;
+align-items: center;
+text-decoration: none;
+}
+
+.brand-core {
+position: relative;
+display: grid;
+width: 34px;
+height: 34px;
+flex: 0 0 auto;
+place-items: center;
+border: 1px solid rgba(159, 212, 255, 0.42);
+border-radius: 50%;
+color: var(--accent);
+background:
+radial-gradient(circle at 45% 38%, rgba(244, 240, 235, 0.78) 0 3%, transparent 4%),
+radial-gradient(circle, rgba(46, 107, 214, 0.64), rgba(11, 31, 82, 0.86));
+box-shadow:
+inset 0 0 18px rgba(159, 212, 255, 0.2),
+0 0 24px rgba(46, 107, 214, 0.26);
+font-family: Georgia, serif;
+font-size: 0.9rem;
+}
+
+.brand-core::before,
+.brand-core::after {
+position: absolute;
+top: 50%;
+left: 50%;
+width: 68%;
+height: 1px;
+content: "";
+background: linear-gradient(90deg, transparent, var(--accent), transparent);
+transform-origin: center;
+}
+
+.brand-core::before {
+transform: translate(-50%, -50%) rotate(43deg);
+}
+
+.brand-core::after {
+transform: translate(-50%, -50%) rotate(-43deg);
+}
+
+.brand-name {
+overflow: hidden;
+font-size: 0.76rem;
+font-weight: 700;
+letter-spacing: 0.16em;
+text-overflow: ellipsis;
+text-transform: uppercase;
+white-space: nowrap;
+}
+
+.page-label {
+padding-inline: 12px;
+color: var(--muted);
+font-size: 0.74rem;
+white-space: nowrap;
+}
+
+.container {
+width: min(100%, var(--content));
+min-width: 0;
+margin-inline: auto;
+}
+
+.hero {
+position: relative;
+display: grid;
+min-height: 78vh;
+min-height: 78svh;
+place-items: center;
+padding:
+clamp(145px, 17vw, 210px)
+max(22px, env(safe-area-inset-right))
+clamp(90px, 10vw, 135px)
+max(22px, env(safe-area-inset-left));
+}
+
+.hero-grid {
+display: grid;
+grid-template-columns: minmax(0, 1fr) minmax(300px, 0.48fr);
+gap: clamp(48px, 9vw, 120px);
+align-items: center;
+}
+
+.eyebrow {
+display: inline-flex;
+gap: 10px;
+align-items: center;
+margin: 0 0 21px;
+color: var(--accent);
+font-size: 0.72rem;
+font-weight: 700;
+letter-spacing: 0.18em;
+text-transform: uppercase;
+}
+
+.eyebrow::before {
+width: 28px;
+height: 1px;
+content: "";
+background: currentColor;
+box-shadow: 0 0 11px currentColor;
+}
+
+.hero h1 {
+max-width: 900px;
+margin-bottom: 28px;
+font-size: clamp(4.2rem, 9vw, 8rem);
+line-height: 0.91;
+letter-spacing: -0.06em;
+text-wrap: balance;
+}
+
+.hero-lead {
+max-width: 720px;
+margin-bottom: 0;
+color: var(--muted);
+font-size: clamp(1.12rem, 2.2vw, 1.45rem);
+line-height: 1.72;
+}
+
+.hero-lead strong {
+color: var(--text);
+font-weight: 500;
+}
+
+.hero-visual {
+position: relative;
+display: grid;
+width: min(100%, 370px);
+aspect-ratio: 1;
+place-items: center;
+justify-self: end;
+}
+
+.hero-ring {
+position: absolute;
+inset: 7%;
+border: 1px solid rgba(159, 212, 255, 0.14);
+border-radius: 50%;
+animation: rotate-orbit 28s linear infinite;
+}
+
+.hero-ring::before,
+.hero-ring::after {
+position: absolute;
+width: 9px;
+height: 9px;
+border-radius: 50%;
+content: "";
+background: var(--accent);
+box-shadow: 0 0 18px var(--accent);
+}
+
+.hero-ring::before {
+top: 12%;
+left: 18%;
+}
+
+.hero-ring::after {
+right: 7%;
+bottom: 28%;
+width: 6px;
+height: 6px;
+}
+
+.hero-ring-secondary {
+inset: 23%;
+border-style: dashed;
+animation-duration: 19s;
+animation-direction: reverse;
+}
+
+.hero-core {
+position: relative;
+z-index: 2;
+display: grid;
+width: 45%;
+aspect-ratio: 1;
+place-items: center;
+border: 1px solid rgba(159, 212, 255, 0.38);
+border-radius: 50%;
+color: var(--accent);
+background:
+radial-gradient(circle at 44% 36%, rgba(244, 240, 235, 0.8) 0 2%, transparent 3%),
+radial-gradient(circle, rgba(159, 212, 255, 0.2), rgba(46, 107, 214, 0.38), rgba(11, 31, 82, 0.82));
+box-shadow:
+inset 0 0 42px rgba(159, 212, 255, 0.16),
+0 0 76px rgba(46, 107, 214, 0.34);
+font-family: Georgia, serif;
+font-size: clamp(2.6rem, 5vw, 4.2rem);
+}
+
+.hero-core::after {
+position: absolute;
+inset: -17px;
+border: 1px solid rgba(159, 212, 255, 0.1);
+border-radius: inherit;
+content: "";
+animation: core-pulse 3.4s ease-in-out infinite;
+}
+
+.page-section {
+position: relative;
+padding:
+clamp(85px, 10vw, 135px)
+max(22px, env(safe-area-inset-right))
+clamp(95px, 11vw, 150px)
+max(22px, env(safe-area-inset-left));
+}
+
+.page-section::before {
+position: absolute;
+top: 0;
+left: 50%;
+width: min(calc(100% - 44px), var(--content));
+height: 1px;
+content: "";
+background: linear-gradient(90deg, transparent, var(--line), transparent);
+transform: translateX(-50%);
+}
+
+.section-head {
+display: flex;
+gap: 32px;
+align-items: flex-end;
+justify-content: space-between;
+margin-bottom: 42px;
+}
+
+.section-head h2 {
+max-width: 760px;
+margin-bottom: 0;
+font-size: clamp(2.7rem, 6vw, 5.5rem);
+line-height: 0.98;
+letter-spacing: -0.045em;
+text-wrap: balance;
+}
+
+.section-note {
+max-width: 430px;
+margin-bottom: 0;
+color: var(--muted);
+font-size: 0.84rem;
+text-align: right;
+}
+
+.contact-grid {
+display: grid;
+grid-template-columns: repeat(3, minmax(0, 1fr));
+gap: 15px;
+min-width: 0;
+}
+
+.contact-card {
+min-width: 0;
+padding: clamp(24px, 3vw, 33px);
+overflow: hidden;
+border: 1px solid var(--line);
+border-radius: var(--radius-lg);
+background:
+radial-gradient(circle at 100% 0%, rgba(159, 212, 255, 0.08), transparent 45%),
+linear-gradient(145deg, rgba(255, 255, 255, 0.038), rgba(255, 255, 255, 0.012));
+box-shadow: var(--shadow);
+transition:
+transform 220ms ease,
+border-color 220ms ease,
+box-shadow 220ms ease;
+}
+
+.contact-icon,
+.platform-icon {
+display: grid;
+width: 43px;
+height: 43px;
+place-items: center;
+border: 1px solid rgba(159, 212, 255, 0.2);
+border-radius: 14px;
+color: var(--accent);
+background: rgba(159, 212, 255, 0.06);
+font-size: 0.67rem;
+font-weight: 750;
+letter-spacing: 0.04em;
+}
+
+.contact-card h3 {
+margin: 25px 0 16px;
+font-size: clamp(1.8rem, 3.5vw, 2.7rem);
+line-height: 1;
+letter-spacing: -0.035em;
+}
+
+.todo-marker {
+display: block;
+min-height: 74px;
+padding: 15px;
+border: 1px dashed rgba(159, 212, 255, 0.35);
+border-radius: 15px;
+color: var(--accent);
+background: rgba(11, 31, 82, 0.29);
+font-family: Consolas, "Courier New", monospace;
+font-size: 0.76rem;
+line-height: 1.55;
+overflow-wrap: anywhere;
+}
+
+.form-section {
+padding-top: 0;
+}
+
+.form-shell {
+display: grid;
+grid-template-columns: minmax(280px, 0.65fr) minmax(0, 1.35fr);
+gap: clamp(42px, 8vw, 105px);
+align-items: start;
+padding: clamp(27px, 5vw, 60px);
+border: 1px solid var(--line);
+border-radius: var(--radius-xl);
+background:
+radial-gradient(circle at 95% 0%, rgba(46, 107, 214, 0.17), transparent 37%),
+linear-gradient(145deg, rgba(255, 255, 255, 0.038), rgba(255, 255, 255, 0.012));
+box-shadow: var(--shadow);
+}
+
+.form-intro h2 {
+margin-bottom: 20px;
+font-size: clamp(2.8rem, 5.8vw, 5.4rem);
+line-height: 0.96;
+letter-spacing: -0.05em;
+text-wrap: balance;
+}
+
+.form-intro > p:not(.eyebrow) {
+color: var(--muted);
+line-height: 1.75;
+}
+
+.form-honesty {
+margin-top: 28px;
+padding: 15px 17px;
+border: 1px solid rgba(159, 212, 255, 0.16);
+border-radius: 16px;
+color: var(--muted);
+background: rgba(159, 212, 255, 0.04);
+font-size: 0.75rem;
+}
+
+.contact-form {
+min-width: 0;
+}
+
+.field-grid {
+display: grid;
+grid-template-columns: repeat(2, minmax(0, 1fr));
+gap: 17px;
+}
+
+.field {
+min-width: 0;
+}
+
+.field-wide {
+grid-column: 1 / -1;
+}
+
+.field label {
+display: block;
+margin-bottom: 8px;
+color: var(--text);
+font-size: 0.78rem;
+font-weight: 650;
+}
+
+.required-mark {
+color: var(--accent);
+}
+
+.field input,
+.field textarea {
+width: 100%;
+min-width: 0;
+border: 1px solid rgba(244, 240, 235, 0.13);
+border-radius: 15px;
+outline: none;
+color: var(--text);
+background: rgba(11, 9, 8, 0.54);
+box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+transition:
+border-color 180ms ease,
+box-shadow 180ms ease,
+background-color 180ms ease;
+}
+
+.field input {
+min-height: 53px;
+padding: 12px 15px;
+}
+
+.field textarea {
+min-height: 150px;
+padding: 14px 15px;
+line-height: 1.55;
+resize: vertical;
+}
+
+.field input::placeholder,
+.field textarea::placeholder {
+color: rgba(185, 175, 167, 0.5);
+}
+
+.field input:focus,
+.field textarea:focus {
+border-color: rgba(159, 212, 255, 0.63);
+background: rgba(11, 31, 82, 0.16);
+box-shadow:
+0 0 0 3px rgba(159, 212, 255, 0.07),
+0 0 22px rgba(159, 212, 255, 0.07);
+}
+
+.field input.is-invalid,
+.field textarea.is-invalid {
+border-color: rgba(255, 156, 156, 0.7);
+box-shadow: 0 0 0 3px rgba(255, 156, 156, 0.065);
+}
+
+.field-hint,
+.field-error {
+margin: 6px 0 0;
+font-size: 0.66rem;
+line-height: 1.45;
+}
+
+.field-hint {
+color: rgba(185, 175, 167, 0.63);
+}
+
+.field-error {
+min-height: 0;
+color: var(--red);
+}
+
+.form-footer {
+display: flex;
+gap: 17px;
+align-items: center;
+justify-content: space-between;
+margin-top: 23px;
+}
+
+.form-note {
+max-width: 360px;
+margin-bottom: 0;
+color: var(--muted);
+font-size: 0.68rem;
+line-height: 1.5;
+}
+
+.glass-pill {
+position: relative;
+display: inline-flex;
+min-height: 52px;
+gap: 10px;
+align-items: center;
+justify-content: center;
+overflow: hidden;
+padding: 12px 21px;
+border: 1px solid rgba(159, 212, 255, 0.28);
+border-radius: 999px;
+color: var(--text);
+background:
+linear-gradient(135deg, rgba(159, 212, 255, 0.11), rgba(255, 255, 255, 0.025));
+box-shadow:
+inset 0 1px 0 rgba(255, 255, 255, 0.1),
+0 11px 32px rgba(0, 0, 0, 0.22);
+font-size: 0.79rem;
+text-decoration: none;
+cursor: pointer;
+transition:
+transform 220ms ease,
+border-color 220ms ease,
+box-shadow 220ms ease,
+background-color 220ms ease;
+isolation: isolate;
+}
+
+.glass-pill::before {
+position: absolute;
+z-index: -1;
+top: -90%;
+left: -65%;
+width: 34%;
+height: 280%;
+content: "";
+background: linear-gradient(
+90deg,
+transparent,
+rgba(255, 255, 255, 0.66),
+transparent
+);
+transform: rotate(17deg) translateX(-280%);
+transition: transform 650ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.glass-pill svg {
+width: 18px;
+height: 18px;
+flex: 0 0 auto;
+transition: transform 220ms ease;
+}
+
+.glass-pill-primary {
+min-width: 155px;
+border-color: rgba(159, 212, 255, 0.46);
+background:
+linear-gradient(135deg, rgba(46, 107, 214, 0.56), rgba(11, 31, 82, 0.7));
+}
+
+.success-message {
+margin-top: 21px;
+padding: 17px 19px;
+border: 1px solid rgba(121, 220, 182, 0.28);
+border-radius: 16px;
+color: var(--green);
+background: rgba(121, 220, 182, 0.055);
+font-size: 0.8rem;
+line-height: 1.6;
+}
+
+.success-message strong {
+display: block;
+margin-bottom: 4px;
+color: var(--text);
+}
+
+.platform-grid {
+display: grid;
+grid-template-columns: repeat(4, minmax(0, 1fr));
+gap: 13px;
+min-width: 0;
+}
+
+.platform-card {
+position: relative;
+display: flex;
+min-width: 0;
+min-height: 190px;
+flex-direction: column;
+padding: 21px;
+overflow: hidden;
+border: 1px solid var(--line);
+border-radius: var(--radius-lg);
+background:
+linear-gradient(145deg, rgba(255, 255, 255, 0.036), rgba(255, 255, 255, 0.011));
+text-decoration: none;
+box-shadow: var(--shadow);
+transition:
+transform 220ms ease,
+border-color 220ms ease,
+box-shadow 220ms ease;
+}
+
+.platform-card::after {
+position: absolute;
+right: -35px;
+bottom: -48px;
+width: 120px;
+height: 120px;
+border-radius: 50%;
+content: "";
+background: rgba(46, 107, 214, 0.12);
+filter: blur(7px);
+}
+
+.platform-card h3 {
+position: relative;
+z-index: 1;
+margin: auto 0 8px;
+font-size: 1.55rem;
+line-height: 1;
+}
+
+.platform-action {
+position: relative;
+z-index: 1;
+display: flex;
+gap: 8px;
+align-items: center;
+color: var(--accent);
+font-size: 0.7rem;
+}
+
+.platform-action svg {
+width: 15px;
+height: 15px;
+transition: transform 200ms ease;
+}
+
+.final-section {
+padding:
+0
+max(22px, env(safe-area-inset-right))
+max(115px, env(safe-area-inset-bottom))
+max(22px, env(safe-area-inset-left));
+}
+
+.final-capsule {
+position: relative;
+display: flex;
+gap: 30px;
+align-items: center;
+justify-content: space-between;
+min-width: 0;
+padding: clamp(32px, 5vw, 58px);
+overflow: hidden;
+border: 1px solid rgba(159, 212, 255, 0.18);
+border-radius: var(--radius-xl);
+background:
+radial-gradient(circle at 85% 0%, rgba(46, 107, 214, 0.2), transparent 42%),
+linear-gradient(145deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.012));
+box-shadow: var(--shadow);
+}
+
+.final-capsule::before {
+position: absolute;
+top: -14rem;
+right: -8rem;
+width: 29rem;
+height: 29rem;
+border: 1px solid rgba(159, 212, 255, 0.09);
+border-radius: 50%;
+content: "";
+box-shadow:
+0 0 0 55px rgba(159, 212, 255, 0.014),
+0 0 0 110px rgba(159, 212, 255, 0.008);
+}
+
+.final-copy,
+.final-capsule .glass-pill {
+position: relative;
+z-index: 1;
+}
+
+.final-copy h2 {
+margin-bottom: 9px;
+font-size: clamp(2.4rem, 5vw, 4.5rem);
+line-height: 0.98;
+letter-spacing: -0.045em;
+}
+
+.final-copy p {
+max-width: 590px;
+margin-bottom: 0;
+color: var(--muted);
+}
+
+.site-footer {
+padding: 32px 22px 45px;
+color: rgba(185, 175, 167, 0.5);
+font-size: 0.69rem;
+letter-spacing: 0.12em;
+text-align: center;
+text-transform: uppercase;
+}
+
+.js .reveal {
+opacity: 0;
+transform: translateY(27px);
+transition:
+opacity 720ms cubic-bezier(0.2, 0.8, 0.2, 1),
+transform 720ms cubic-bezier(0.2, 0.8, 0.2, 1);
+transition-delay: var(--delay, 0ms);
+}
+
+.js .reveal.is-visible {
+opacity: 1;
+transform: translateY(0);
+}
+
+button:focus-visible,
+a:focus-visible {
+outline: 2px solid var(--accent);
+outline-offset: 4px;
+}
+
+@keyframes rotate-orbit {
+to {
+transform: rotate(360deg);
+}
+}
+
+@keyframes core-pulse {
+0%,
+100% {
+opacity: 0.35;
+transform: scale(0.96);
+}
+
+50% {
+opacity: 0.8;
+transform: scale(1.06);
+}
+}
+
+@media (hover: hover) {
+.contact-card:hover,
+.platform-card:hover {
+border-color: rgba(159, 212, 255, 0.28);
+box-shadow:
+0 32px 90px rgba(0, 0, 0, 0.47),
+0 0 38px rgba(159, 212, 255, 0.055);
+transform: translateY(-5px);
+}
+
+.platform-card:hover .platform-action svg {
+transform: translate(3px, -3px);
+}
+
+.glass-pill:hover {
+border-color: rgba(159, 212, 255, 0.8);
+background-color: rgba(159, 212, 255, 0.09);
+box-shadow:
+inset 0 1px 0 rgba(255, 255, 255, 0.15),
+0 0 31px rgba(159, 212, 255, 0.18),
+0 17px 38px rgba(0, 0, 0, 0.3);
+transform: translateY(-2px);
+}
+
+.glass-pill:hover::before {
+transform: rotate(17deg) translateX(650%);
+}
+
+.glass-pill:hover svg {
+transform: translateX(3px);
+}
+}
+
+@media (max-width: 950px) {
+.hero-grid {
+grid-template-columns: 1fr;
+}
+
+.hero-visual {
+width: min(100%, 450px);
+justify-self: center;
+}
+
+.contact-grid {
+grid-template-columns: 1fr;
+}
+
+.form-shell {
+grid-template-columns: 1fr;
+}
+
+.platform-grid {
+grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+}
+
+@media (max-width: 720px) {
+.section-head {
+align-items: flex-start;
+flex-direction: column;
+}
+
+.section-note {
+max-width: none;
+text-align: left;
+}
+
+.field-grid {
+grid-template-columns: 1fr;
+}
+
+.field-wide {
+grid-column: auto;
+}
+
+.form-footer {
+align-items: stretch;
+flex-direction: column;
+}
+
+.form-footer .glass-pill {
+width: 100%;
+}
+
+.final-capsule {
+align-items: flex-start;
+flex-direction: column;
+}
+}
+
+@media (max-width: 520px) {
+html {
+scroll-padding-top: 80px;
+}
+
+.site-header {
+top: max(10px, env(safe-area-inset-top));
+width: calc(100% - 24px);
+}
+
+.header-inner {
+min-height: 54px;
+padding-left: 13px;
+}
+
+.brand-name {
+max-width: 170px;
+font-size: 0.68rem;
+}
+
+.page-label {
+padding-inline: 7px;
+font-size: 0.65rem;
+}
+
+.hero {
+min-height: 100vh;
+min-height: 100svh;
+padding-top: 124px;
+padding-right: max(18px, env(safe-area-inset-right));
+padding-bottom: 88px;
+padding-left: max(18px, env(safe-area-inset-left));
+}
+
+.hero-grid {
+gap: 55px;
+}
+
+.hero h1 {
+font-size: clamp(3.8rem, 20vw, 5.2rem);
+}
+
+.hero-lead {
+font-size: 1.05rem;
+}
+
+.hero-visual {
+width: min(100%, 320px);
+}
+
+.page-section {
+padding-right: max(14px, env(safe-area-inset-right));
+padding-left: max(14px, env(safe-area-inset-left));
+}
+
+.section-head h2,
+.form-intro h2 {
+font-size: clamp(2.65rem, 13vw, 3.9rem);
+}
+
+.contact-card,
+.platform-card {
+border-radius: 23px;
+}
+
+.form-shell {
+padding: 23px 19px;
+border-radius: 26px;
+}
+
+.platform-grid {
+grid-template-columns: 1fr;
+}
+
+.platform-card {
+min-height: 170px;
+}
+
+.final-section {
+padding-right: max(14px, env(safe-area-inset-right));
+padding-left: max(14px, env(safe-area-inset-left));
+}
+
+.final-capsule {
+padding: 28px 21px;
+border-radius: 27px;
+}
+
+.final-capsule .glass-pill {
+width: 100%;
+}
+}
+
+@media (prefers-reduced-motion: reduce) {
+html {
+scroll-behavior: auto;
+}
+
+*,
+*::before,
+*::after {
+scroll-behavior: auto !important;
+animation-duration: 0.01ms !important;
+animation-iteration-count: 1 !important;
+transition-duration: 0.01ms !important;
+transition-delay: 0ms !important;
+}
+
+.js .reveal {
+opacity: 1;
+transform: none;
+}
+}
+</style>
+</head>
+
+<body id="top">
+<a class="skip-link" href="#contacts">Перейти к способам связи</a>
+
+<div class="ambient" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+
+<header class="site-header">
+<div class="header-inner">
+<a class="brand" href="https://claude.ai/code/artifact/be1a8924-bcce-4a07-b4e7-15f8e59fcf07" aria-label="Synapse Business — к началу страницы">
+<span class="brand-core" aria-hidden="true">S</span>
+<span class="brand-name">Synapse Business</span>
+</a>
+<a class="back-pill" href="https://claude.ai/code/artifact/be1a8924-bcce-4a07-b4e7-15f8e59fcf07"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M19 12H5m0 0 6-6m-6 6 6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="back-word">К Синапсу</span></a>
+<span class="page-label">Контакты</span>
+</div>
+</header>
+
+<main>
+<section class="hero" aria-labelledby="hero-title">
+<div class="container hero-grid">
+<div>
+<p class="eyebrow reveal">Остаёмся на связи</p>
+
+<h1 class="reveal" id="hero-title" style="--delay: 80ms">
+Контакты
+</h1>
+
+<p class="hero-lead reveal" style="--delay: 160ms">
+<strong>Напишите — отвечает живой человек, не бот.</strong>
+</p>
+</div>
+
+<div class="hero-visual reveal" style="--delay: 210ms" aria-hidden="true">
+<div class="hero-ring"></div>
+<div class="hero-ring hero-ring-secondary"></div>
+<div class="hero-core">S</div>
+</div>
+</div>
+</section>
+
+<section class="page-section" id="contacts" aria-labelledby="contacts-title">
+<div class="container">
+<header class="section-head">
+<div>
+<p class="eyebrow reveal">Способы связи</p>
+<h2 class="reveal" id="contacts-title" style="--delay: 70ms">
+Выберите удобный канал
+</h2>
+</div>
+
+<p class="section-note reveal" style="--delay: 130ms">
+Неподтверждённые контакты не публикуются и честно отмечены
+как данные, которые нужно добавить.
+</p>
+</header>
+
+<div class="contact-grid">
+<article class="contact-card reveal">
+<span class="contact-icon" aria-hidden="true">TG</span>
+<h3>Telegram</h3>
+<span class="todo-marker">
+{{TODO:ссылка на личный Telegram или бот}}
+</span>
+</article>
+
+<article class="contact-card reveal" style="--delay: 90ms">
+<span class="contact-icon" aria-hidden="true">@</span>
+<h3>Почта</h3>
+<span class="todo-marker">
+{{TODO:рабочая почта для клиентов}}
+</span>
+</article>
+
+<article class="contact-card reveal" style="--delay: 180ms">
+<span class="contact-icon" aria-hidden="true">TEL</span>
+<h3>Телефон</h3>
+<span class="todo-marker">
+{{TODO:номер, если Owner решит его публиковать}}
+</span>
+</article>
+</div>
+</div>
+</section>
+
+<section class="page-section form-section" aria-labelledby="form-title">
+<div class="container">
+<div class="form-shell reveal">
+<div class="form-intro">
+<p class="eyebrow">Первый разговор</p>
+<h2 id="form-title">Расскажите о своём бизнесе</h2>
+<p>
+Коротко опишите ситуацию и вопрос. Для начала достаточно
+нескольких предложений.
+</p>
+
+<div class="form-honesty">
+Форма работает только внутри этой страницы. Она не отправляет,
+не сохраняет и не передаёт введённые данные.
+</div>
+</div>
+
+<form class="contact-form" id="contact-form">
+<div class="field-grid">
+<div class="field">
+<label for="name">
+Имя <span class="required-mark" aria-hidden="true">*</span>
+</label>
+<input
+id="name"
+name="name"
+type="text"
+autocomplete="name"
+placeholder="Как к вам обращаться"
+required
+data-error="Укажите, как к вам обращаться."
+aria-describedby="name-hint name-error"
+>
+<p class="field-hint" id="name-hint">
+Имя или удобное обращение.
+</p>
+<p class="field-error" id="name-error" aria-live="polite"></p>
+</div>
+
+<div class="field">
+<label for="contact-method">
+Способ связи <span class="required-mark" aria-hidden="true">*</span>
+</label>
+<input
+id="contact-method"
+name="contact-method"
+type="text"
+autocomplete="off"
+placeholder="Telegram, почта или телефон"
+required
+data-error="Укажите, как с вами можно связаться."
+aria-describedby="contact-method-hint contact-method-error"
+>
+<p class="field-hint" id="contact-method-hint">
+Укажите канал и контакт одним текстом.
+</p>
+<p
+class="field-error"
+id="contact-method-error"
+aria-live="polite"
+></p>
+</div>
+
+<div class="field field-wide">
+<label for="business">
+Сфера бизнеса <span class="required-mark" aria-hidden="true">*</span>
+</label>
+<input
+id="business"
+name="business"
+type="text"
+autocomplete="organization"
+placeholder="Чем занимается ваш бизнес"
+required
+data-error="Укажите сферу вашего бизнеса."
+aria-describedby="business-hint business-error"
+>
+<p class="field-hint" id="business-hint">
+Например: услуги, туризм, недвижимость или локальный бизнес.
+</p>
+<p class="field-error" id="business-error" aria-live="polite"></p>
+</div>
+
+<div class="field field-wide">
+<label for="question">
+Вопрос <span class="required-mark" aria-hidden="true">*</span>
+</label>
+<textarea
+id="question"
+name="question"
+placeholder="Что происходит сейчас и какой результат вы хотите получить?"
+required
+data-error="Опишите ваш вопрос или задачу."
+aria-describedby="question-hint question-error"
+></textarea>
+<p class="field-hint" id="question-hint">
+Можно написать свободно — без технических терминов.
+</p>
+<p class="field-error" id="question-error" aria-live="polite"></p>
+</div>
+</div>
+
+<div class="form-footer">
+<p class="form-note">
+Нажатие кнопки покажет локальное подтверждение.
+Сетевой запрос выполняться не будет.
+</p>
+
+<button class="glass-pill glass-pill-primary" type="submit">
+Отправить
+<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+<path
+d="M5 12h14m0 0-6-6m6 6-6 6"
+stroke="currentColor"
+stroke-width="1.7"
+stroke-linecap="round"
+stroke-linejoin="round"
+/>
+</svg>
+</button>
+</div>
+
+<div
+class="success-message"
+id="success-message"
+role="status"
+tabindex="-1"
+hidden
+>
+<strong>Спасибо — форма заполнена.</strong>
+Это локальное подтверждение: данные никуда не отправлены.
+Подключение формы к CRM сейчас в работе.
+</div>
+</form>
+</div>
+</div>
+</section>
+
+<section class="page-section" aria-labelledby="platforms-title">
+<div class="container">
+<header class="section-head">
+<div>
+<p class="eyebrow reveal">Публичные каналы</p>
+<h2 class="reveal" id="platforms-title" style="--delay: 70ms">
+Наши площадки
+</h2>
+</div>
+
+<p class="section-note reveal" style="--delay: 130ms">
+Ссылки ведут на публичные площадки TaiSabai и открываются
+только после вашего нажатия.
+</p>
+</header>
+
+<div class="platform-grid">
+<a
+class="platform-card reveal"
+href="https://t.me/TaiSabai_community"
+target="_blank"
+rel="noopener"
+>
+<span class="platform-icon" aria-hidden="true">TG</span>
+<h3>Telegram</h3>
+<span class="platform-action">
+Открыть площадку
+<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+<path
+d="M7 17 17 7m0 0H9m8 0v8"
+stroke="currentColor"
+stroke-width="1.7"
+stroke-linecap="round"
+stroke-linejoin="round"
+/>
+</svg>
+</span>
+</a>
+
+<a
+class="platform-card reveal"
+href="https://www.tiktok.com/@user9083014140923"
+target="_blank"
+rel="noopener"
+style="--delay: 80ms"
+>
+<span class="platform-icon" aria-hidden="true">TT</span>
+<h3>TikTok</h3>
+<span class="platform-action">
+Открыть площадку
+<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+<path
+d="M7 17 17 7m0 0H9m8 0v8"
+stroke="currentColor"
+stroke-width="1.7"
+stroke-linecap="round"
+stroke-linejoin="round"
+/>
+</svg>
+</span>
+</a>
+
+<a
+class="platform-card reveal"
+href="https://vk.com/club240466302"
+target="_blank"
+rel="noopener"
+style="--delay: 160ms"
+>
+<span class="platform-icon" aria-hidden="true">VK</span>
+<h3>VK</h3>
+<span class="platform-action">
+Открыть площадку
+<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+<path
+d="M7 17 17 7m0 0H9m8 0v8"
+stroke="currentColor"
+stroke-width="1.7"
+stroke-linecap="round"
+stroke-linejoin="round"
+/>
+</svg>
+</span>
+</a>
+
+<a
+class="platform-card reveal"
+href="https://www.youtube.com/channel/UCFR8Ddely4U4wxUthtg_R9Q"
+target="_blank"
+rel="noopener"
+style="--delay: 240ms"
+>
+<span class="platform-icon" aria-hidden="true">YT</span>
+<h3>YouTube</h3>
+<span class="platform-action">
+Открыть площадку
+<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+<path
+d="M7 17 17 7m0 0H9m8 0v8"
+stroke="currentColor"
+stroke-width="1.7"
+stroke-linecap="round"
+stroke-linejoin="round"
+/>
+</svg>
+</span>
+</a>
+</div>
+</div>
+</section>
+
+<section class="final-section" aria-labelledby="final-title">
+<div class="container">
+<div class="final-capsule reveal">
+<div class="final-copy">
+<p class="eyebrow">Synapse Business</p>
+<h2 id="final-title">Вернуться к системе</h2>
+<p>
+Продолжите знакомство с Synapse Business с начала страницы.
+</p>
+</div>
+
+<a class="glass-pill" href="https://claude.ai/code/artifact/be1a8924-bcce-4a07-b4e7-15f8e59fcf07">
+<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+<path
+d="M12 19V5m0 0-6 6m6-6 6 6"
+stroke="currentColor"
+stroke-width="1.7"
+stroke-linecap="round"
+stroke-linejoin="round"
+/>
+</svg>
+Вернуться к Синапсу
+</a>
+</div>
+</div>
+</section>
+</main>
+
+<footer class="site-footer">
+Synapse Business · Контакты
+</footer>
+
+<script>
+(() => {
+"use strict";
+
+const reducedMotion =
+typeof window.matchMedia === "function" &&
+window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const revealItems = Array.from(document.querySelectorAll(".reveal"));
+
+const revealAll = () => {
+revealItems.forEach((item) => item.classList.add("is-visible"));
+};
+
+if (reducedMotion || !("IntersectionObserver" in window)) {
+revealAll();
+} else {
+const observer = new IntersectionObserver(
+(entries, activeObserver) => {
+entries.forEach((entry) => {
+if (!entry.isIntersecting) return;
+
+entry.target.classList.add("is-visible");
+activeObserver.unobserve(entry.target);
+});
+},
+{
+threshold: 0.1,
+rootMargin: "0px 0px -7% 0px"
+}
+);
+
+revealItems.forEach((item) => observer.observe(item));
+}
+
+const form = document.getElementById("contact-form");
+const successMessage = document.getElementById("success-message");
+const fields = Array.from(
+form.querySelectorAll("input[required], textarea[required]")
+);
+
+const getErrorElement = (field) =>
+document.getElementById(`${field.id}-error`);
+
+const markInvalid = (field) => {
+const message =
+field.dataset.error || "Пожалуйста, заполните это поле.";
+
+field.setCustomValidity(message);
+field.classList.add("is-invalid");
+field.setAttribute("aria-invalid", "true");
+
+const errorElement = getErrorElement(field);
+if (errorElement) {
+errorElement.textContent = message;
+}
+};
+
+const clearInvalid = (field) => {
+field.setCustomValidity("");
+field.classList.remove("is-invalid");
+field.removeAttribute("aria-invalid");
+
+const errorElement = getErrorElement(field);
+if (errorElement) {
+errorElement.textContent = "";
+}
+};
+
+fields.forEach((field) => {
+field.addEventListener("input", () => {
+clearInvalid(field);
+
+if (!successMessage.hidden) {
+successMessage.hidden = true;
+}
+});
+
+field.addEventListener("blur", () => {
+if (!field.value.trim()) {
+markInvalid(field);
+}
+});
+});
+
+form.addEventListener(
+"invalid",
+(event) => {
+const field = event.target;
+if (fields.includes(field)) {
+markInvalid(field);
+}
+},
+true
+);
+
+form.addEventListener("submit", (event) => {
+event.preventDefault();
+
+let firstInvalidField = null;
+
+fields.forEach((field) => {
+if (!field.value.trim()) {
+markInvalid(field);
+
+if (firstInvalidField === null) {
+firstInvalidField = field;
+}
+} else {
+clearInvalid(field);
+}
+});
+
+if (firstInvalidField !== null) {
+form.reportValidity();
+firstInvalidField.focus();
+return;
+}
+
+successMessage.hidden = false;
+successMessage.focus();
+
+form.reset();
+fields.forEach(clearInvalid);
+});
+})();
+</script>
+<script>
+(function(){
+if('scrollRestoration' in history){ history.scrollRestoration='manual'; }
+function toTop(){ window.scrollTo(0,0);
+ if(document.documentElement) document.documentElement.scrollTop=0;
+ if(document.body) document.body.scrollTop=0; }
+toTop();
+addEventListener('load',function(){ toTop(); setTimeout(toTop,0); });
+addEventListener('pageshow',function(e){ if(e.persisted) toTop(); });
+})();
+</script>
+</body>
+</html>
+<!--
+TODO:
+- {{TODO:ссылка на личный Telegram или бот}} — добавить подтверждённую ссылку для связи.
+- {{TODO:рабочая почта для клиентов}} — добавить подтверждённую рабочую почту.
+- {{TODO:номер, если Owner решит его публиковать}} — добавить номер только после решения Owner.
+-->
