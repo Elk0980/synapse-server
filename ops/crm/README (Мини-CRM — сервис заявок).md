@@ -1,8 +1,7 @@
 # Мини-CRM — сервис заявок
 
 Небольшой JSON API для заявок Synapse Business и основы сквозной аналитики. Он
-хранит карточку лида, переписку, текущий этап и данные продажи. Авторизации в
-сервисе нет: ограничивать доступ нужно на уровне сети или прокси.
+хранит карточку лида, переписку, историю этапов, расходы и данные продажи.
 
 ## Запуск
 
@@ -11,7 +10,8 @@
 
 ```sh
 mkdir -p data
-PORT=8080 DATABASE_PATH="$PWD/data/crm.sqlite" node ops/crm/server.js
+API_KEY='замените-на-свой-секрет' ALLOWED_ORIGINS='https://example.ru' \
+  PORT=8080 DATABASE_PATH="$PWD/data/crm.sqlite" node ops/crm/server.js
 ```
 
 Для Docker Compose подключите фрагмент к основной конфигурации:
@@ -23,7 +23,11 @@ docker compose -f docker-compose.yml -f ops/crm/compose-fragment.yml up -d crm
 В контейнере база находится в `/data/crm.sqlite` и сохраняется в именованном
 томе `crm_data`. При первом старте создаётся пустая база без демонстрационных
 записей. Локально путь задаётся переменной `DATABASE_PATH`; порт — переменной
-`PORT` (по умолчанию `8080`).
+`PORT` (по умолчанию `8080`). `API_KEY` обязателен: с пустым значением сервис
+не запускается. Все `POST` и `PATCH` запросы должны содержать заголовок
+`X-API-Key`. `ALLOWED_ORIGINS` — разделённый запятыми список веб-источников,
+которым разрешены CORS-запросы `POST /leads`; для них поддерживается preflight
+`OPTIONS`. Секрет храните только в переменных окружения, не в репозитории.
 
 Все запросы и ответы используют JSON. Даты передаются в ISO 8601, например
 `2026-08-29T12:00:00.000Z`.
@@ -35,10 +39,15 @@ docker compose -f docker-compose.yml -f ops/crm/compose-fragment.yml up -d crm
 `POST /leads`
 
 Обязательны `name` и `contact`. Допустимы `channel`, `source`, `tag`, `page`,
-`firstQuestion` и `comment`. Новая карточка всегда получает этап `новая`.
+`firstQuestion`, `comment`, `utmSource`, `utmMedium`, `utmCampaign`,
+`utmContent`, `referrer`, `landingPage` и `clientId`. Новая карточка всегда
+получает этап `новая`. При совпадении `contact` новая карточка не создаётся:
+обращение добавляется в сообщения существующей, а ответ имеет статус 200 и
+`duplicate: true`. Ограничение — пять запросов с одного IP в минуту.
 
 ```sh
 curl -X POST http://localhost:8080/leads -H 'Content-Type: application/json' \
+  -H 'X-API-Key: значение-из-окружения' \
   -d '{"name":"Анна","contact":"+79990000000","channel":"telegram","source":"Яндекс","tag":"consultation","page":"/audit","firstQuestion":"Сколько стоит аудит?"}'
 ```
 
@@ -48,6 +57,7 @@ curl -X POST http://localhost:8080/leads -H 'Content-Type: application/json' \
 
 ```sh
 curl -X POST http://localhost:8080/leads/1/messages -H 'Content-Type: application/json' \
+  -H 'X-API-Key: значение-из-окружения' \
   -d '{"author":"менеджер Ирина","text":"Договорились созвониться завтра"}'
 ```
 
@@ -62,17 +72,29 @@ curl -X POST http://localhost:8080/leads/1/messages -H 'Content-Type: applicatio
 curl 'http://localhost:8080/leads?stage=в%20работе&source=Яндекс'
 ```
 
+`GET /leads/:id` возвращает карточку вместе с массивами `messages` и
+`stageHistory`. `GET /leads/:id/messages` возвращает сообщения отдельно.
+
+### Изменить карточку
+
+`PATCH /leads/:id` изменяет переданные поля `name`, `contact`, `tag` и
+`comment`. Остальные поля этим методом изменить нельзя.
+
 ### Сменить этап
 
 `PATCH /leads/:id/stage`
 
 ```sh
 curl -X PATCH http://localhost:8080/leads/1/stage -H 'Content-Type: application/json' \
+  -H 'X-API-Key: значение-из-окружения' \
   -d '{"stage":"записан"}'
 ```
 
 Фиксированные этапы: `новая`, `в работе`, `записан`, `пришёл`, `продажа`,
 `отказ`.
+
+Каждая смена этапа записывается в `stageHistory` с прежним, новым этапом и
+временем изменения.
 
 ### Записать продажу
 
@@ -81,6 +103,7 @@ curl -X PATCH http://localhost:8080/leads/1/stage -H 'Content-Type: application/
 
 ```sh
 curl -X PATCH http://localhost:8080/leads/1/sale -H 'Content-Type: application/json' \
+  -H 'X-API-Key: значение-из-окружения' \
   -d '{"amount":45000,"soldAt":"2026-08-29T12:00:00Z"}'
 ```
 
@@ -88,13 +111,31 @@ curl -X PATCH http://localhost:8080/leads/1/sale -H 'Content-Type: application/j
 
 `GET /summary?from=:date&to=:date` группирует созданные за указанный период
 заявки по источнику. Для каждого источника возвращаются: `leads` (все заявки),
-`booked` (текущий этап не ниже `записан`), `visited` (не ниже `пришёл`), `sales`
-и `revenue`. Отказы не учитываются как дошедшие до записи или визита; источник
-без значения отображается как `не указан`.
+`booked` (текущий этап не ниже `записан`), `visited` (не ниже `пришёл`), `sales`,
+`revenue`, `cost`, `profit` и `romi` в процентах. `profit` равен выручке за
+вычетом расходов, а `romi` равен `null`, если расходов нет. Отказы не
+учитываются как дошедшие до записи или визита; источник без значения
+отображается как `не указан`.
 
 ```sh
 curl 'http://localhost:8080/summary?from=2026-08-01T00:00:00Z&to=2026-08-31T23:59:59Z'
 ```
+
+### Расходы
+
+`POST /costs` принимает `source`, дату ISO 8601 в `spentOn` и неотрицательное
+число `amount`. `GET /costs` возвращает все расходы.
+
+```sh
+curl -X POST http://localhost:8080/costs -H 'Content-Type: application/json' \
+  -H 'X-API-Key: значение-из-окружения' \
+  -d '{"source":"Яндекс","spentOn":"2026-08-15","amount":12000}'
+```
+
+### Экспорт
+
+`GET /export.csv` выгружает все заявки в CSV с UTF-8 BOM, разделителем `;` и
+экранированием значений для корректного открытия в Excel на русской Windows.
 
 ## Как добавить этап
 
@@ -107,5 +148,5 @@ curl 'http://localhost:8080/summary?from=2026-08-01T00:00:00Z&to=2026-08-31T23:5
 4. Если этап меняет смысл метрик, скорректируйте расчёт `/summary` и описание
    API, затем перезапустите сервис.
 
-Ошибки имеют HTTP-статус `400`, `404`, `413` или `500` и понятное поле `error`;
+Ошибки имеют подходящий HTTP-статус и понятное русское поле `error`;
 для неизвестного этапа ответ также содержит список `details.allowed`.
