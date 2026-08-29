@@ -1,18 +1,18 @@
 const C=window.PALITRA_CONFIG||{};
 const products=[
- {n:'Хризантема в нежно-персиковом',p:3290,c:'bukety'}, {n:'Белые гортензии',p:4590,c:'bukety'},
- {n:'Дембель 2026',p:4990,c:'muzhchinam'}, {n:'Шары на день рождения деток',p:5540,c:'den-rozhdeniya'},
- {n:'Дофаминовые шарики',p:6290,c:'dofaminovye'}, {n:'Мужской сет на день рождения',d:'сердце с фото и надписью + 20 шаров на атласной ленте',p:7990,c:'muzhchinam den-rozhdeniya'},
- {n:'Шары для деток',p:8390,c:'malysham den-rozhdeniya'}, {n:'Выписка мальчика',p:9270,c:'vypiska'},
- {n:'Корзина с розой Вегги',p:9990,c:'korziny'}, {n:'Летняя корзина ромашек',p:10990,c:'korziny'},
- {n:'Индивидуальное оформление шарами',d:'2 фонтана с печатью на сердце, баблс с фото именинника, цифры 102 см, шары в потолок',p:26870,c:'den-rozhdeniya',feature:true}
+ {n:'Хризантема в нежно-персиковом',p:3290,c:'bukety',img:'hrizantema.jpg',alt:'Букет хризантем в нежно-персиковом цвете — Palitra Love, Подольск'}, {n:'Белые гортензии',p:4590,c:'bukety',img:'gortenzii.jpg',alt:'Букет белых гортензий — Palitra Love, Подольск'},
+ {n:'Дембель 2026',p:4990,c:'muzhchinam',img:'dembel.jpg',alt:'Набор шаров «Дембель 2026» — Palitra Love, Подольск'}, {n:'Шары на день рождения деток',p:5540,c:'den-rozhdeniya',img:'shary-dr-detok.jpg',alt:'Шары на день рождения детей — Palitra Love, Подольск'},
+ {n:'Дофаминовые шарики',p:6290,c:'dofaminovye',img:'dofaminovye.jpg',alt:'Набор дофаминовых шариков — Palitra Love, Подольск'}, {n:'Мужской сет на день рождения',d:'сердце с фото и надписью + 20 шаров на атласной ленте',p:7990,c:'muzhchinam den-rozhdeniya',img:'muzhskoy-set.jpg',alt:'Мужской сет из шаров на день рождения — Palitra Love, Подольск'},
+ {n:'Шары для деток',p:8390,c:'malysham den-rozhdeniya',img:'shary-detkam.jpg',alt:'Праздничные шары для детей — Palitra Love, Подольск'}, {n:'Выписка мальчика',p:9270,c:'vypiska',img:'vypiska-malchik.jpg',alt:'Набор шаров на выписку мальчика — Palitra Love, Подольск'},
+ {n:'Корзина с розой Вегги',p:9990,c:'korziny',img:'korzina-vegg.jpg',alt:'Корзина с розой Вегги — Palitra Love, Подольск'}, {n:'Летняя корзина ромашек',p:10990,c:'korziny',img:'letnyaya-korzina.jpg',alt:'Летняя корзина ромашек — Palitra Love, Подольск'},
+ {n:'Индивидуальное оформление шарами',d:'2 фонтана с печатью на сердце, баблс с фото именинника, цифры 102 см, шары в потолок',p:26870,c:'den-rozhdeniya',feature:true,img:'individualnoe.jpg',alt:'Индивидуальное оформление праздника шарами — Palitra Love, Подольск'}
 ];
 const money=n=>new Intl.NumberFormat('ru-RU').format(n)+' руб.';
-const placeholder='<div class="photo" role="img" aria-label="Фотография будет добавлена">Фото из Telegram-канала<br>будет добавлено</div>';
 let cart=JSON.parse(localStorage.getItem('palitra-cart')||'[]');
 function save(){localStorage.setItem('palitra-cart',JSON.stringify(cart));drawCart();}
 function add(i){cart.push(i);save();document.querySelector('.cart').classList.remove('hidden')}
-function cards(list,feature=false){return list.map((x,i)=>`<article class="card ${feature&&x.feature?'feature':''}" data-cat="${x.c}">${placeholder}<div><h3>${x.n}</h3>${x.d?`<p>${x.d}</p>`:''}<p class="price">${money(x.p)}</p><p class="note">Цена на момент публикации, актуальную подтверждаем при заказе.</p><button data-add="${products.indexOf(x)}">В корзину</button></div></article>`).join('')}
+function cards(list,feature=false){return list.map((x,i)=>`<article class="card ${feature&&x.feature?'feature':''}" data-cat="${x.c}"><img class="photo" src="/assets/img/${x.img}" alt="${x.alt}" loading="lazy" decoding="async" width="800" height="1000"><div><h3>${x.n}</h3>${x.d?`<p>${x.d}</p>`:''}<p class="price">${money(x.p)}</p><p class="note">Цена на момент публикации, актуальную подтверждаем при заказе.</p><button data-add="${products.indexOf(x)}">В корзину</button></div></article>`).join('')}
+document.querySelectorAll('script[type="application/ld+json"]').forEach(script=>{const data=JSON.parse(script.textContent);const addImages=node=>{if(Array.isArray(node))return node.forEach(addImages);if(!node||typeof node!=='object')return;if(node['@type']==='Product'){const product=products.find(x=>x.n===node.name);if(product)node.image=`${C.SITE_URL}/assets/img/${product.img}`}Object.values(node).forEach(addImages)};addImages(data);script.textContent=JSON.stringify(data)});
 function drawCart(){document.querySelectorAll('[data-cart-count]').forEach(x=>x.textContent=cart.length);const b=document.querySelector('[data-cart-items]');if(!b)return;b.innerHTML=cart.length?cart.map((i,k)=>`<div class="cart-row"><span>${products[i].n}</span><b>${money(products[i].p)}</b><button aria-label="Удалить" data-remove="${k}">×</button></div>`).join(''):'<p>Корзина пуста.</p>';document.querySelector('[data-total]').textContent=money(cart.reduce((s,i)=>s+products[i].p,0));}
 const page=document.body.dataset.page;
 const catalog=document.querySelector('[data-products]');if(catalog){let list=products;if(page==='vypiska')list=products.filter(x=>x.c.includes('vypiska')||x.c.includes('bukety'));if(page==='birthday')list=products.filter(x=>[5540,8390,26870,7990].includes(x.p));if(page==='men')list=products.filter(x=>[4990,7990].includes(x.p));catalog.innerHTML=cards(list,page==='birthday')}
