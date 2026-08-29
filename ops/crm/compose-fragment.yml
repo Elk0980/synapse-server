@@ -1,0 +1,17 @@
+services:
+  crm:
+    image: node:24-alpine
+    restart: always
+    working_dir: /app
+    command: ["node", "server.js"]
+    environment:
+      PORT: "8080"
+      DATABASE_PATH: /data/crm.sqlite
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./ops/crm/server.js:/app/server.js:ro
+      - crm_data:/data
+
+volumes:
+  crm_data:
