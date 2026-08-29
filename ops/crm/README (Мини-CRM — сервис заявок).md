@@ -24,8 +24,10 @@ docker compose -f docker-compose.yml -f ops/crm/compose-fragment.yml up -d crm
 томе `crm_data`. При первом старте создаётся пустая база без демонстрационных
 записей. Локально путь задаётся переменной `DATABASE_PATH`; порт — переменной
 `PORT` (по умолчанию `8080`). `API_KEY` обязателен: с пустым значением сервис
-не запускается. Все `POST` и `PATCH` запросы должны содержать заголовок
-`X-API-Key`. `ALLOWED_ORIGINS` — разделённый запятыми список веб-источников,
+не запускается. Все `GET`, `PATCH` и `POST`, кроме публичного `POST /leads`,
+должны содержать заголовок `X-API-Key`. Публичными остаются только
+`POST /leads` и его preflight-запрос `OPTIONS`. `ALLOWED_ORIGINS` — разделённый запятыми
+список веб-источников,
 которым разрешены CORS-запросы `POST /leads`; для них поддерживается preflight
 `OPTIONS`. Секрет храните только в переменных окружения, не в репозитории.
 
@@ -43,11 +45,13 @@ docker compose -f docker-compose.yml -f ops/crm/compose-fragment.yml up -d crm
 `utmContent`, `referrer`, `landingPage` и `clientId`. Новая карточка всегда
 получает этап `новая`. При совпадении `contact` новая карточка не создаётся:
 обращение добавляется в сообщения существующей, а ответ имеет статус 200 и
-`duplicate: true`. Ограничение — пять запросов с одного IP в минуту.
+`duplicate: true`. Ограничение — пять запросов с одного IP в минуту. Адрес
+берётся из первого значения `X-Forwarded-For`, а если заголовка нет — из
+адреса сокета. Это доверяет заголовку: его должен устанавливать или очищать
+доверенный обратный прокси.
 
 ```sh
 curl -X POST http://localhost:8080/leads -H 'Content-Type: application/json' \
-  -H 'X-API-Key: значение-из-окружения' \
   -d '{"name":"Анна","contact":"+79990000000","channel":"telegram","source":"Яндекс","tag":"consultation","page":"/audit","firstQuestion":"Сколько стоит аудит?"}'
 ```
 
@@ -69,7 +73,8 @@ curl -X POST http://localhost:8080/leads/1/messages -H 'Content-Type: applicatio
 по отдельности или вместе:
 
 ```sh
-curl 'http://localhost:8080/leads?stage=в%20работе&source=Яндекс'
+curl 'http://localhost:8080/leads?stage=в%20работе&source=Яндекс' \
+  -H 'X-API-Key: значение-из-окружения'
 ```
 
 `GET /leads/:id` возвращает карточку вместе с массивами `messages` и
@@ -118,7 +123,8 @@ curl -X PATCH http://localhost:8080/leads/1/sale -H 'Content-Type: application/j
 отображается как `не указан`.
 
 ```sh
-curl 'http://localhost:8080/summary?from=2026-08-01T00:00:00Z&to=2026-08-31T23:59:59Z'
+curl 'http://localhost:8080/summary?from=2026-08-01T00:00:00Z&to=2026-08-31T23:59:59Z' \
+  -H 'X-API-Key: значение-из-окружения'
 ```
 
 ### Расходы

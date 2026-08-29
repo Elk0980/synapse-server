@@ -167,7 +167,9 @@ function corsHeaders(request) {
   return origin && ALLOWED_ORIGINS.has(origin) ? { 'access-control-allow-origin': origin, vary: 'Origin' } : {};
 }
 function checkRateLimit(request) {
-  const now = Date.now(); const ip = request.socket.remoteAddress || 'неизвестный';
+  const forwardedFor = request.headers['x-forwarded-for'];
+  const forwardedIp = typeof forwardedFor === 'string' ? forwardedFor.split(',')[0].trim() : '';
+  const now = Date.now(); const ip = forwardedIp || request.socket.remoteAddress || 'неизвестный';
   const attempts = (leadAttempts.get(ip) || []).filter((time) => now - time < 60000);
   if (attempts.length >= 5) fail(429, 'Превышен лимит: не более 5 заявок в минуту');
   attempts.push(now); leadAttempts.set(ip, attempts);
@@ -181,7 +183,7 @@ async function route(request, response) {
     response.writeHead(204, { ...headers, 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'Content-Type, X-API-Key', 'access-control-max-age': '600' });
     return response.end();
   }
-  if (request.method === 'POST' || request.method === 'PATCH') requireApiKey(request);
+  if (request.method === 'GET' || request.method === 'PATCH' || (request.method === 'POST' && url.pathname !== '/leads')) requireApiKey(request);
 
   if (request.method === 'POST' && url.pathname === '/leads') {
     checkRateLimit(request);
