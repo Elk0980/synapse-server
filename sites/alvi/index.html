@@ -1481,8 +1481,15 @@
       inset: 0;
       background-position: center;
       background-size: cover;
-      opacity: 0.09;
+      opacity: 0.14;
       pointer-events: none;
+    }
+
+    @media (max-width: 720px) {
+      .section-backdrop {
+        opacity: 0.1;
+        background-position: 50% 30%;
+      }
     }
 
     .content-section > .content-shell {
@@ -1730,7 +1737,7 @@
     </section>
 
     <section class="content-section" id="for-self" data-after-block="2">
-      <div class="section-backdrop" style="background-image:url('img/k4.jpg')" aria-hidden="true"></div>
+      <div class="section-backdrop" style="background-image:url('img/bg-self.jpg')" aria-hidden="true"></div>
       <div class="content-shell">
         <div class="section-split">
           <div>
@@ -1814,7 +1821,7 @@
     </section>
 
     <section class="content-section content-section--alt" id="for-two" data-after-block="3">
-      <div class="section-backdrop" style="background-image:url('img/k5.jpg')" aria-hidden="true"></div>
+      <div class="section-backdrop" style="background-image:url('img/bg-two.jpg')" aria-hidden="true"></div>
       <div class="content-shell">
         <div class="section-split">
           <div>
@@ -1866,7 +1873,7 @@
     </section>
 
     <section class="content-section" id="gift" data-after-block="4">
-      <div class="section-backdrop" style="background-image:url('img/k6.jpg')" aria-hidden="true"></div>
+      <div class="section-backdrop" style="background-image:url('img/bg-gift.jpg')" aria-hidden="true"></div>
       <div class="content-shell section-split">
         <div>
           <h2 class="content-title">Не угадывать. Дать выбрать.</h2>
