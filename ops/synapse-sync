@@ -6,18 +6,33 @@ BRANCH=${SYNAPSE_BRANCH:-main}
 
 cd "$REPO_DIR"
 
+config_hash() {
+  if [ -f caddy/Caddyfile ]; then
+    sha256sum caddy/Caddyfile | awk '{print $1}'
+  else
+    printf '%s\n' missing
+  fi
+}
+
 before=$(git rev-parse HEAD)
+before_caddy=$(config_hash)
 git fetch --quiet origin "$BRANCH"
 git reset --hard "origin/$BRANCH"
 after=$(git rev-parse HEAD)
+after_caddy=$(config_hash)
 
 [ "$before" != "$after" ] || exit 0
 
-# Apply Compose-level changes (including bind mounts) before reloading Caddy.
+# Apply Compose-level changes (including bind mounts).
 docker compose up -d
 
-if ! docker compose exec -T caddy \
-  caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile; then
-  echo "Caddy reload failed; force-recreating the container" >&2
-  docker compose up -d --force-recreate caddy
+if [ "$before_caddy" != "$after_caddy" ]; then
+  timestamp=$(date '+%Y-%m-%d %H:%M:%S %z')
+  if docker compose exec -T caddy \
+    caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile; then
+    printf '%s Caddy configuration reloaded\n' "$timestamp"
+  else
+    printf '%s Caddy reload failed; restarting container\n' "$timestamp" >&2
+    docker compose restart caddy
+  fi
 fi

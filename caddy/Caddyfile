@@ -75,3 +75,8 @@ board.synapsebusiness.ru {
   import draft
   import static
 }
+
+# --- Чат (временная заглушка до появления контейнера чата) ------------------
+chat.synapsebusiness.ru {
+  respond "Чат в разработке" 200
+}
