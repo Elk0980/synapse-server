@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <title>Страница не найдена — ALVI</title>
+  <meta name="description" content="Запрошенная страница сайта ALVI не найдена. Вернитесь на главную страницу или свяжитесь с салоном по телефону.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Lora:wght@400;500&amp;display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#f4f3f0; --ink:#23291f; --ink-dim:#5c6656; --gold:#8a6f3d; --line:rgba(35,41,31,.14); }
+    * { box-sizing:border-box; }
+    html { color:var(--ink); background:var(--bg); font-family:"Inter","Segoe UI",Arial,sans-serif; }
+    body { min-width:20rem; margin:0; overflow-x:hidden; background:var(--bg); }
+    a { color:var(--gold); text-underline-offset:.18em; }
+    header, main, footer { width:min(100% - 2rem,46rem); margin-inline:auto; }
+    header { padding:1.25rem 0; border-bottom:1px solid var(--line); }
+    .back { display:inline-flex; min-height:2.75rem; align-items:center; font-weight:600; text-decoration:none; }
+    main { min-height:calc(100vh - 12rem); padding:clamp(2.5rem,8vw,5rem) 0; }
+    h1 { max-width:42rem; margin:0 0 2rem; font-family:"Lora",Georgia,serif; font-size:clamp(2rem,8vw,3.6rem); font-weight:500; line-height:1.08; }
+    p { max-width:38rem; color:var(--ink-dim); font-size:1rem; line-height:1.7; }
+    .actions { display:flex; flex-wrap:wrap; gap:.75rem 1.5rem; margin-top:2rem; }
+    .actions a { display:inline-flex; min-height:2.75rem; align-items:center; font-weight:600; }
+    footer { padding:1.5rem 0 2.5rem; border-top:1px solid var(--line); font-size:.85rem; line-height:1.6; }
+  </style>
+  <style id="page-loader-styles">
+#page-loader{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:#07110c;opacity:0;pointer-events:none;transition:opacity 150ms ease}
+#page-loader.is-visible{opacity:1}
+#page-loader.is-complete{opacity:0;transition-duration:250ms}
+#page-loader img{display:block;width:auto;height:64px}
+#page-loader-line{position:absolute;right:0;bottom:0;left:0;height:2px;overflow:hidden}
+#page-loader-line::before{content:"";display:block;width:0;height:100%;background:#8a6f3d}
+#page-loader.is-visible:not(.is-complete) #page-loader-line::before{animation:page-loader-progress 4700ms linear forwards}
+#page-loader.is-complete #page-loader-line::before{width:100%;animation:none;transition:width 200ms ease-out}
+@keyframes page-loader-progress{0%{width:0}35%{width:60%}65%{width:78%}85%{width:86%}100%{width:90%}}
+@media(max-width:600px){#page-loader img{height:44px}}
+@media(prefers-reduced-motion:reduce){#page-loader,#page-loader.is-complete{transition:none}#page-loader.is-visible:not(.is-complete) #page-loader-line::before{animation:none}#page-loader.is-complete #page-loader-line::before{transition:none}}
+</style><script>
+(()=>{let finished=false,revealTimer,safetyTimer;const loader=()=>document.getElementById("page-loader");const finish=()=>{if(finished)return;finished=true;clearTimeout(revealTimer);clearTimeout(safetyTimer);const element=loader();if(!element)return;if(!element.classList.contains("is-visible")){element.style.display="none";return}element.classList.add("is-complete");setTimeout(()=>{element.style.display="none"},250)};revealTimer=setTimeout(()=>{if(!finished)loader()?.classList.add("is-visible")},300);safetyTimer=setTimeout(()=>{finished=true;clearTimeout(revealTimer);const element=loader();if(element)element.style.display="none"},5000);if(document.readyState==="complete")finish();else addEventListener("load",finish,{once:true})})();
+</script>
+</head>
+<body>
+  <div id="page-loader" aria-hidden="true"><img src="img/alvi-logo-full.png" alt="" width="823" height="823"><div id="page-loader-line"></div></div>
+  <header><a class="back" href="index.html">← На главную</a></header>
+  <main>
+    <h1>Страница не найдена</h1>
+    <p>Такой страницы на сайте ALVI нет. Возможно, адрес указан неверно или страница была удалена.</p>
+    <div class="actions"><a href="index.html">Вернуться на главную</a><a href="tel:+79246180555">Позвонить: +7 924 618-05-55</a></div>
+  </main>
+  <footer>ALVI · Иркутск, Депутатская улица, 71а · ежедневно с 09:30 до 20:30</footer>
+</body>
+</html>

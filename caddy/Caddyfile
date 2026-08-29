@@ -53,6 +53,11 @@ alvi.synapsebusiness.ru {
   root * /srv/sites/alvi
   import draft
   import static
+  handle_errors {
+    @not_found expression {http.error.status_code} == 404
+    rewrite @not_found /404.html
+    file_server
+  }
 }
 
 # --- Synapse Business: сайт-презентация -------------------------------------
