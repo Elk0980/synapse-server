@@ -1554,8 +1554,24 @@
     }
 
   </style>
+  <style id="page-loader-styles">
+#page-loader{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:#07110c;opacity:0;pointer-events:none;transition:opacity 150ms ease}
+#page-loader.is-visible{opacity:1}
+#page-loader.is-complete{opacity:0;transition-duration:250ms}
+#page-loader img{display:block;width:auto;height:64px}
+#page-loader-line{position:absolute;right:0;bottom:0;left:0;height:2px;overflow:hidden}
+#page-loader-line::before{content:"";display:block;width:0;height:100%;background:#8a6f3d}
+#page-loader.is-visible:not(.is-complete) #page-loader-line::before{animation:page-loader-progress 4700ms linear forwards}
+#page-loader.is-complete #page-loader-line::before{width:100%;animation:none;transition:width 200ms ease-out}
+@keyframes page-loader-progress{0%{width:0}35%{width:60%}65%{width:78%}85%{width:86%}100%{width:90%}}
+@media(max-width:600px){#page-loader img{height:44px}}
+@media(prefers-reduced-motion:reduce){#page-loader,#page-loader.is-complete{transition:none}#page-loader.is-visible:not(.is-complete) #page-loader-line::before{animation:none}#page-loader.is-complete #page-loader-line::before{transition:none}}
+</style><script>
+(()=>{let finished=false,revealTimer,safetyTimer;const loader=()=>document.getElementById("page-loader");const finish=()=>{if(finished)return;finished=true;clearTimeout(revealTimer);clearTimeout(safetyTimer);const element=loader();if(!element)return;if(!element.classList.contains("is-visible")){element.style.display="none";return}element.classList.add("is-complete");setTimeout(()=>{element.style.display="none"},250)};revealTimer=setTimeout(()=>{if(!finished)loader()?.classList.add("is-visible")},300);safetyTimer=setTimeout(()=>{finished=true;clearTimeout(revealTimer);const element=loader();if(element)element.style.display="none"},5000);if(document.readyState==="complete")finish();else addEventListener("load",finish,{once:true})})();
+</script>
 </head>
 <body>
+  <div id="page-loader" aria-hidden="true"><img src="img/alvi-logo-full.png" alt="" width="823" height="823"><div id="page-loader-line"></div></div>
   <a class="skip-link" href="#after-hero">Перейти к содержанию после вступления</a>
 
   <section class="hero" id="hero" aria-label="Вступление ALVI">
