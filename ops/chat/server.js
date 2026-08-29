@@ -126,10 +126,10 @@ function contactData(messages) {
 }
 async function createLead(row, data) {
   if (!CRM_URL || !CRM_API_KEY) { console.error('CRM_URL или CRM_API_KEY не настроены: заявка не создана'); return false; }
-  const payload = { name: data.name, contact: data.phone, channel: 'chat', page: row.page,
-    utm_source: row.utm_source, utm_medium: row.utm_medium, utm_campaign: row.utm_campaign,
-    utm_term: row.utm_term, utm_content: row.utm_content, client_id: row.client_id,
-    source: row.utm_source, firstQuestion: data.firstQuestion };
+  const payload = { name: data.name, contact: data.phone, channel: 'chat',
+    utmSource: row.utm_source, utmMedium: row.utm_medium, utmCampaign: row.utm_campaign,
+    utmContent: row.utm_content, clientId: row.client_id, referrer: row.referrer,
+    landingPage: row.page, source: row.utm_source, firstQuestion: data.firstQuestion };
   const response = await fetch(CRM_URL, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': CRM_API_KEY }, body: JSON.stringify(payload) });
   if (!response.ok) throw new Error(`CRM вернула HTTP ${response.status}`);
   const lead = await response.json();

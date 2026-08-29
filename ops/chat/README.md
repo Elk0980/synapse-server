@@ -21,6 +21,8 @@
 
 Секреты задаются только через окружение и не должны попадать в репозиторий.
 
+При создании заявки сервис передаёт CRM атрибуцию в полях `utmSource`, `utmMedium`, `utmCampaign`, `utmContent`, `clientId`, `referrer` и `landingPage`. Значение `utm_term` сохраняется в базе чата, но не отправляется в CRM, поскольку такого поля в CRM нет.
+
 ## API
 
 * `POST /conversations` — создать диалог. Принимает `site`, `page`, `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`, `referrer`, `client_id`; возвращает `id`, `visitorToken` и приветствие.
