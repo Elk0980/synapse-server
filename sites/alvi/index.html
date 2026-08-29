@@ -100,7 +100,7 @@
         "name": "Где вы находитесь и как найти вход?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Иркутск, Депутатская улица, 71а, цокольный этаж, Октябрьский район."
+          "text": "Иркутск, Депутатская улица, 71а, Октябрьский район."
         }
       },
       {
@@ -153,7 +153,7 @@
       --hero-dark-ink: #23291f;
       --header-pad-x: clamp(1.25rem, 4.2vw, 5rem);
       --header-pad-y: clamp(1rem, 2.5vw, 2rem);
-      --copy-left: clamp(1.25rem, 8vw, 9.5rem);
+      --copy-left: var(--header-pad-x);
       --copy-max: min(47rem, calc(45vw - var(--copy-left)));
     }
 
@@ -387,7 +387,7 @@
       inset: 0;
       display: flex;
       align-items: center;
-      padding: clamp(8rem, 17vh, 12rem) var(--header-pad-x) clamp(5rem, 11vh, 7rem) var(--copy-left);
+      padding: clamp(10rem, 20vh, 12rem) var(--header-pad-x) clamp(5rem, 11vh, 7rem) var(--copy-left);
       opacity: 0;
       pointer-events: none;
       transform: translateY(1.75rem);
@@ -425,6 +425,27 @@
 
     .hero-scene--final .hero-scene__content {
       max-width: 50vw;
+    }
+
+    .hero-ratings {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem;
+      margin: clamp(1.5rem, 3vh, 2.5rem) 0 0;
+    }
+
+    .hero-ratings .rating-pill {
+      margin: 0;
+      text-decoration: none;
+      transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease;
+    }
+
+    .hero-ratings .rating-pill:hover,
+    .hero-ratings .rating-pill:focus-visible {
+      color: var(--ink);
+      border-color: rgba(255, 255, 255, 0.76);
+      background: rgba(255, 255, 255, 0.9);
+      outline: none;
     }
 
     .rating-pill {
@@ -1408,6 +1429,123 @@
         scroll-behavior: auto !important;
       }
     }
+  
+    /* --- Боли, доказательства и фон-подложка (29.08) --- */
+    .final-needs {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(14.5rem, 1fr));
+      gap: 0.7rem;
+      margin: 1.3rem 0 0;
+      max-width: 54rem;
+    }
+
+    .need-card {
+      display: grid;
+      gap: 0.3rem;
+      padding: 0.9rem 1.05rem;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 1.05rem;
+      background: rgba(10, 16, 13, 0.42);
+      color: inherit;
+      text-decoration: none;
+      transition: background 280ms ease, border-color 280ms ease;
+    }
+
+    .need-card:hover,
+    .need-card:focus-visible {
+      background: rgba(22, 32, 26, 0.62);
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .need-card__pain {
+      font-family: "Lora", Georgia, serif;
+      font-size: 1.02rem;
+      line-height: 1.3;
+    }
+
+    .need-card__fix {
+      font-size: 0.8rem;
+      opacity: 0.82;
+      letter-spacing: 0.02em;
+    }
+
+    .need-card__proof {
+      font-size: 0.76rem;
+      font-style: italic;
+      line-height: 1.4;
+      opacity: 0.6;
+    }
+
+    .section-backdrop {
+      position: absolute;
+      inset: 0;
+      background-position: center;
+      background-size: cover;
+      opacity: 0.09;
+      pointer-events: none;
+    }
+
+    .content-section > .content-shell {
+      position: relative;
+      z-index: 1;
+    }
+
+    .proof {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(16.5rem, 1fr));
+      gap: 1rem;
+      margin: clamp(2rem, 4vw, 3rem) 0 0;
+    }
+
+    .proof-card {
+      padding: 1.15rem 1.3rem;
+      border: 1px solid var(--line);
+      border-radius: 1.05rem;
+      background: rgba(255, 255, 255, 0.55);
+    }
+
+    .proof-card p {
+      margin: 0 0 0.7rem;
+      font-family: "Lora", Georgia, serif;
+      font-style: italic;
+      line-height: 1.55;
+    }
+
+    .proof-card footer {
+      font-size: 0.8rem;
+      letter-spacing: 0.02em;
+      opacity: 0.7;
+    }
+
+    .proof-note {
+      margin: 0.9rem 0 0;
+      font-size: 0.82rem;
+      opacity: 0.68;
+    }
+
+    .hero-review {
+      max-width: 34rem;
+      margin: clamp(1.3rem, 3vh, 2rem) 0 0;
+      padding: 0.9rem 1.1rem;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 1.05rem;
+      background: rgba(10, 16, 13, 0.4);
+    }
+
+    .hero-review p {
+      margin: 0 0 0.45rem;
+      font-family: "Lora", Georgia, serif;
+      font-style: italic;
+      font-size: clamp(0.95rem, 1.3vw, 1.15rem);
+      line-height: 1.5;
+    }
+
+    .hero-review footer {
+      font-size: 0.78rem;
+      letter-spacing: 0.02em;
+      opacity: 0.62;
+    }
+
   </style>
 </head>
 <body>
@@ -1492,22 +1630,15 @@
       <div class="hero__scenes">
         <article class="hero-scene" data-scene="0" data-mobile-frame="0" data-range-start="0" data-range-end="0.15">
           <div class="hero-scene__content">
-            <p class="rating-pill">★ 4,8 · 398 оценок в 2ГИС</p>
             <h1 class="hero-title">Верни себе <em>баланс</em></h1>
 
-            <div class="hero-facts">
-              <span>Массаж и SPA-ритуалы в Иркутске · Депутатская, 71а</span>
-              <span>Программы 1 300 – 12 000 ₽</span>
+            <div class="hero-ratings">
+              <a class="rating-pill" href="https://2gis.ru/irkutsk/firm/70000001061502048" target="_blank" rel="noopener noreferrer">★ 4,8 · 398 оценок в 2ГИС</a>
+              <a class="rating-pill" href="https://yandex.ru/maps/org/alvi/132486598882/" target="_blank" rel="noopener noreferrer">★ 4,9 · 53 оценки на Яндекс Картах</a>
             </div>
 
-            <nav class="scenario-list" aria-label="Выбрать сценарий">
-              <a class="scenario-link" href="#for-self">Для себя / массаж и SPA</a>
-              <a class="scenario-link" href="#for-two">Для двоих / парные программы</a>
-              <a class="scenario-link" href="#gift">В подарок / сертификат</a>
-            </nav>
-
             <div class="hero-actions">
-              <a class="button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться в Telegram</a>
+              <a class="button" href="#quiz">Подобрать ритуал</a>
             </div>
             <p class="response-note">отвечаем в течение дня</p>
           </div>
@@ -1535,7 +1666,10 @@
           <div class="hero-scene__content">
             <h2 class="scene-title">Час, в котором никто ничего от вас не ждёт</h2>
             <p class="scene-copy">Тишина, тёплые руки мастера, музыка и чай после.<br>Тело вспоминает, как отпускать.</p>
-            <p class="review-quote">★ 4,8 — за атмосферу, чай и внимание. 398 оценок в 2ГИС</p>
+            <blockquote class="hero-review">
+              <p>«Уютно, спокойно и очень душевно. Девушки-мастера — профессионалы своего дела.»</p>
+              <footer>андрей · Яндекс Карты · июль 2025 · ★ 4,9 из 53 оценок</footer>
+            </blockquote>
           </div>
         </article>
 
@@ -1546,8 +1680,24 @@
             <h2 class="scene-title">Вы выходите другим человеком</h2>
             <p class="scene-copy scene-copy--dark">Плечи опущены. Дыхание глубокое. Голова ясная.</p>
             <p class="final-price-line">Массаж от 2 500 ₽ · SPA-ритуалы от 3 200 ₽ · Для двоих от 7 900 ₽</p>
+            <div class="final-needs">
+              <a class="need-card" href="#for-self">
+                <span class="need-card__pain">Не получается расслабиться</span>
+                <span class="need-card__fix">Массаж и SPA-ритуал для себя · от 2 500 ₽</span>
+                <span class="need-card__proof">«Уютно, спокойно и очень душевно» — андрей, Яндекс Карты</span>
+              </a>
+              <a class="need-card" href="#for-two">
+                <span class="need-card__pain">Давно не были вдвоём</span>
+                <span class="need-card__fix">Один кабинет, два мастера · от 7 900 ₽</span>
+                <span class="need-card__proof">«Свидание удалось» — lil, Яндекс Карты</span>
+              </a>
+              <a class="need-card" href="#gift">
+                <span class="need-card__pain">Нечего подарить</span>
+                <span class="need-card__fix">Сертификат на любую программу · доставка бесплатно</span>
+                <span class="need-card__proof">«Эмоций было через край» — Green_4, Яндекс Карты</span>
+              </a>
+            </div>
             <div class="final-actions">
-              <a class="button button--dark" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться в Telegram</a>
               <a class="button button--dark" href="#quiz">Подобрать ритуал за 3 вопроса</a>
             </div>
             <p class="final-signature">
@@ -1563,11 +1713,8 @@
         <span>листайте</span>
       </div>
 
-      <a class="intro-skip" href="#after-hero">Пропустить вступление</a>
+      <a class="intro-skip" href="#contacts">Связаться с нами</a>
 
-      <div class="hero__persistent-cta" id="hero-persistent-cta">
-        <a class="button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться в Telegram</a>
-      </div>
     </div>
   </section>
 
@@ -1583,6 +1730,7 @@
     </section>
 
     <section class="content-section" id="for-self" data-after-block="2">
+      <div class="section-backdrop" style="background-image:url('img/k4.jpg')" aria-hidden="true"></div>
       <div class="content-shell">
         <div class="section-split">
           <div>
@@ -1590,7 +1738,6 @@
             <p class="content-subtitle">Массаж и SPA-ритуалы в Иркутске — от 1 300 ₽</p>
             <p class="content-lead">Когда день закончился, а внутренний темп — нет. Не нужно никому объяснять, зачем вам этот час.</p>
           </div>
-          <div class="media-slot" role="img" aria-label="Ожидается фотография массажа и SPA-ритуала">[ФОТО: массаж и SPA-ритуал — ожидается от владельца]</div>
         </div>
 
         <div class="program-grid">
@@ -1651,10 +1798,23 @@
         </div>
 
         <p class="program-note">Полное меню: 10+ видов массажа, обёртывания, стоунтерапия, кедровая фитобочка, аппаратная косметология — для женщин и мужчин. Есть программа-вход от 1 300 ₽.</p>
+      
+        <div class="proof">
+          <blockquote class="proof-card">
+            <p>«Очень хорошее и расслабляющее место, получаю большое удовольствие от массажа. Девушки-мастера — профессионалы своего дела. Уютно, спокойно и очень душевно.»</p>
+            <footer>андрей · Яндекс Карты · 26 июля 2025 · ★ 5</footer>
+          </blockquote>
+          <blockquote class="proof-card">
+            <p>«Массажист Ирина постоянно спрашивала, не больно ли, каковы мои ощущения. После процедур подали чай с орешками и мёдом. Всё с такой приветливостью и радушием!»</p>
+            <footer>Natalia M. · Яндекс Карты · июль 2026 · ★ 5</footer>
+          </blockquote>
+        </div>
+        <p class="proof-note"><a class="text-link" href="https://yandex.ru/maps/org/alvi/132486598882/reviews/" target="_blank" rel="noopener noreferrer">Все 47 отзывов на Яндекс Картах →</a></p>
       </div>
     </section>
 
     <section class="content-section content-section--alt" id="for-two" data-after-block="3">
+      <div class="section-backdrop" style="background-image:url('img/k5.jpg')" aria-hidden="true"></div>
       <div class="content-shell">
         <div class="section-split">
           <div>
@@ -1662,7 +1822,6 @@
             <p class="content-subtitle">SPA для двоих в Иркутске — от 5 000 ₽</p>
             <p class="content-lead">Не ещё один пункт в совместных планах, а отдельное время для вас обоих: один кабинет, два мастера, общий выдох.</p>
           </div>
-          <div class="media-slot" role="img" aria-label="Ожидается фотография парной SPA-программы">[ФОТО: парная SPA-программа — ожидается от владельца]</div>
         </div>
 
         <div class="program-grid">
@@ -1687,10 +1846,27 @@
             <dl class="program-facts"><dt>Цена</dt><dd>12 000 ₽</dd><!-- Длительность: добавить после подтверждения данных. --></dl>
           </article>
         </div>
+      
+        <div class="proof">
+          <blockquote class="proof-card">
+            <p>«Были с парнем на программе „Спа-день“. 3 часа пролетают незаметно, особенно понравился массаж, даже не хотелось уходить.»</p>
+            <footer>Елена Хинтуханова · Яндекс Карты · 3 августа 2025 · ★ 5</footer>
+          </blockquote>
+          <blockquote class="proof-card">
+            <p>«Ходили с женой на спа-программу для двоих. Очень качественный массаж, учли все пожелания и проработали проблемные зоны. Приятный аромат трав и успокаивающая музыка быстро помогли расслабиться.»</p>
+            <footer>Денис Котов · Яндекс Карты · 24 января 2025 · ★ 5</footer>
+          </blockquote>
+          <blockquote class="proof-card">
+            <p>«Был с девушкой на спа-свидании. Спокойная музыка, качественный массаж, после посидели в комнате отдыха со свечами и вкусным чаем. Свидание удалось!»</p>
+            <footer>lil · Яндекс Карты · 26 июля 2025 · ★ 5</footer>
+          </blockquote>
+        </div>
+        <p class="proof-note"><a class="text-link" href="https://yandex.ru/maps/org/alvi/132486598882/reviews/" target="_blank" rel="noopener noreferrer">Все 47 отзывов на Яндекс Картах →</a></p>
       </div>
     </section>
 
     <section class="content-section" id="gift" data-after-block="4">
+      <div class="section-backdrop" style="background-image:url('img/k6.jpg')" aria-hidden="true"></div>
       <div class="content-shell section-split">
         <div>
           <h2 class="content-title">Не угадывать. Дать выбрать.</h2>
@@ -1698,27 +1874,35 @@
           <p class="content-lead">Сертификат ALVI на любую программу или сумму. Не нужно угадывать размер, цвет и вкус — нужный ритуал получатель выберет сам.</p>
           <p class="content-copy">✓ Бесплатная доставка по Иркутску<br>От 1 300 ₽ до SPA-дня за 12 000 ₽</p>
         </div>
-        <div class="media-slot" role="img" aria-label="Ожидается фотография подарочного сертификата ALVI">[ФОТО: подарочный сертификат ALVI — ожидается от владельца]</div>
+      
+        <div class="proof">
+          <blockquote class="proof-card">
+            <p>«Брал сертификат в подарок для супруги — эмоций было через край. Вернулась отдохнувшая, счастливая.»</p>
+            <footer>Green_4 · Яндекс Карты · 31 октября 2024 · ★ 5</footer>
+          </blockquote>
+          <blockquote class="proof-card">
+            <p>«Подруга на день рождения подарила сертификат в ALVI. Это был мой первый поход в спа на двоих, очень волновалась — но была приятно удивлена.»</p>
+            <footer>Евгения Николаенко · Яндекс Карты · 4 ноября 2024 · ★ 5</footer>
+          </blockquote>
+        </div>
+        <p class="proof-note"><a class="text-link" href="https://yandex.ru/maps/org/alvi/132486598882/reviews/" target="_blank" rel="noopener noreferrer">Все 47 отзывов на Яндекс Картах →</a></p>
       </div>
     </section>
 
     <section class="content-section content-section--panel" id="space" data-after-block="5">
       <div class="content-shell">
         <h2 class="content-title">Оставьте город наверху</h2>
-        <p class="content-subtitle">Салон на Депутатской 71а, цокольный этаж</p>
-        <p class="content-lead">ALVI на цокольном этаже — и мы говорим об этом честно: спуск по лестнице работает как переход из городского темпа. Внизу — светлый бетон стен, живые фитостены с тёплой подсветкой, кедровая бочка и запах масел.</p>
+        <p class="content-subtitle">Салон на Депутатской 71а</p>
+        <p class="content-lead">Светлый бетон стен, фитостены с тёплой подсветкой, кедровая бочка и запах масел. Город остаётся снаружи.</p>
 
         <div class="space-grid">
           <article class="space-card">
-            <div class="media-slot media-slot--small" role="img" aria-label="Ожидается фотография живых фитостен">[ФОТО: живые фитостены с подсветкой — ожидается от владельца]</div>
-            <div><h3>Живые фитостены с подсветкой</h3><p>настоящая зелень во всю стену кабинета.</p></div>
+            <div><h3>Фитостены с подсветкой</h3><p>настоящая зелень во всю стену кабинета.</p></div>
           </article>
           <article class="space-card">
-            <div class="media-slot media-slot--small" role="img" aria-label="Ожидается фотография кедровой фитобочки">[ФОТО: кедровая фитобочка — ожидается от владельца]</div>
             <div><h3>Кедровая фитобочка</h3><p>массив дерева, металлические обручи.</p></div>
           </article>
           <article class="space-card">
-            <div class="media-slot media-slot--small" role="img" aria-label="Ожидается фотография чайной зоны отдыха">[ФОТО: чай и зона отдыха — ожидается от владельца]</div>
             <div><h3>Чай и зона отдыха</h3><p>кресла, живое дерево, панно из стабилизированного мха.</p></div>
           </article>
         </div>
@@ -1730,20 +1914,13 @@
         <div>
           <h2 class="content-title">Хрупкая внешность. Сильные руки.</h2>
           <p class="content-subtitle">Татьяна — мастер и основательница ALVI</p>
-          <blockquote class="master-quote">«Какие крепкие сильные руки у хрупкой внешне девушки»<cite>— из отзыва гостя на 2ГИС</cite></blockquote>
+          <blockquote class="master-quote">«Какие крепкие сильные руки у хрупкой внешне девушки»<cite>— Ника Шишкина, Яндекс Карты, 23 января 2025</cite></blockquote>
           <!-- Опыт, обучение и специализацию добавить после подтверждения данных. -->
           <a class="content-button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться к Татьяне</a>
         </div>
-        <div class="media-slot" role="img" aria-label="Ожидается фотография Татьяны">[ФОТО: Татьяна, мастер и основательница ALVI — ожидается от владельца]</div>
       </div>
     </section>
 
-    <section class="content-section content-section--alt" id="quiet-days" data-after-block="7">
-      <div class="content-shell quiet-panel">
-        <p>Вс · Пн · Чт — самые тихие дни в ALVI. Если хочется, чтобы во всём салоне были только вы — выбирайте их: свободных окон больше, тишина глубже.</p>
-        <a class="content-button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Занять тихое окно</a>
-      </div>
-    </section>
 
     <section class="content-section content-section--panel" id="quiz" data-after-block="8">
       <div class="content-shell content-shell--narrow">
@@ -1779,7 +1956,6 @@
           <div class="quiz-actions">
             <!-- ВЫБРАНО БЕЗ OWNER'А: текст служебной кнопки квиза. -->
             <button class="content-button" type="submit">Показать программу</button>
-            <a class="content-button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться в Telegram</a>
           </div>
 
           <section class="quiz-result" id="quiz-result" tabindex="-1" aria-live="polite" aria-atomic="true" hidden>
@@ -1805,7 +1981,7 @@
           </details>
           <details>
             <summary>Где вы находитесь и как найти вход?</summary>
-            <p class="faq-answer">Иркутск, Депутатская улица, 71а, цокольный этаж, Октябрьский район.</p>
+            <p class="faq-answer">Иркутск, Депутатская улица, 71а, Октябрьский район.</p>
             <!-- Ориентир и описание входа добавить после подтверждения данных. -->
           </details>
           <details>
@@ -1832,7 +2008,7 @@
       <div class="content-shell content-shell--narrow">
         <h2 class="content-title">ALVI SPA</h2>
         <dl class="contact-grid">
-          <div class="contact-item"><dt>Адрес</dt><dd>Иркутск, Депутатская улица, 71а, цокольный этаж</dd></div>
+          <div class="contact-item"><dt>Адрес</dt><dd>Иркутск, Депутатская улица, 71а</dd></div>
           <div class="contact-item"><dt>Часы</dt><dd>Пн–Вс с 09:30 до 20:30 · по предварительной записи</dd></div>
           <div class="contact-item"><dt>2ГИС</dt><dd><a class="text-link" href="https://2gis.ru/irkutsk/firm/70000001061502048" target="_blank" rel="noopener noreferrer">Открыть карточку ALVI →</a></dd></div>
           <div class="contact-item"><dt>Телефон</dt><dd><a class="text-link" href="tel:+79246180555">+7 924 618-05-55</a></dd></div>
