@@ -5,3 +5,4 @@ taisabai.synapsebusiness.ru
 panel.synapsebusiness.ru
 board.synapsebusiness.ru
 chat.synapsebusiness.ru
+palitra.synapsebusiness.ru
