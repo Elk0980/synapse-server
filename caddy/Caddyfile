@@ -80,3 +80,11 @@ board.synapsebusiness.ru {
 chat.synapsebusiness.ru {
   respond "Чат в разработке" 200
 }
+
+# --- Palitra Love: магазин цветов и воздушных шаров (черновик) -------------
+palitra.synapsebusiness.ru {
+  root * /srv/sites/palitra
+  try_files {path} {path}/ /index.html
+  import draft
+  import static
+}
