@@ -1144,13 +1144,28 @@
     }
 
     .site-footer__inner {
-      display: flex;
+      display: grid;
       width: min(100%, 75rem);
       margin-inline: auto;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1.5rem;
+      gap: 0.65rem;
+      text-align: center;
     }
+
+    .site-footer__inner p { margin: 0; }
+
+    .site-footer__links { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.35rem 1rem; }
+
+    .site-footer a { color: var(--gold); }
+
+    .synapse-strip { padding: 0.65rem 1.25rem; text-align: center; color: #9ca394; background: #20251e; font-size: 0.72rem; letter-spacing: 0.04em; }
+
+    .synapse-strip a { color: #d3c29f; }
+
+    .cookie-notice { position: fixed; z-index: 100; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; gap: 1.25rem; padding: 0.8rem max(1.25rem, env(safe-area-inset-left)) calc(0.8rem + env(safe-area-inset-bottom)); color: #fffdf8; background: #2f5a34; box-shadow: 0 -0.5rem 1.5rem rgba(20,30,20,.18); font-size: 0.82rem; }
+
+    .cookie-notice button { flex: 0 0 auto; border: 0; border-radius: 999px; padding: 0.5rem 1.1rem; color: #23291f; background: #fffdf8; cursor: pointer; }
+
+    .cookie-notice.hidden { display: none; }
 
     .site-footer__brand {
       margin: 0;
@@ -2032,12 +2047,15 @@
     <footer class="site-footer" data-after-block="11">
       <div class="site-footer__inner">
         <p class="site-footer__brand">ALVI SPA</p>
-        <p>ИП Петрук Татьяна Александровна · ИНН 381497453085 · ОГРНИП 324385000056520</p>
+        <p>Индивидуальный предприниматель Петрук Татьяна Александровна · ИНН 381497453085 · ОГРНИП 324385000056520</p>
         <p>Иркутск, Депутатская улица, 71а · ежедневно с 09:30 до 20:30 · <a href="tel:+79246180555">+7 924 618-05-55</a></p>
+        <p class="site-footer__links"><a href="privacy.html">Политика конфиденциальности</a><a href="consent.html">Согласие на обработку персональных данных</a></p>
         <p>Есть противопоказания, проконсультируйтесь со специалистом.</p>
       </div>
     </footer>
+    <div class="synapse-strip">сайт работает на <a href="https://synapsebusiness.ru" target="_blank" rel="noopener">Synapse Business</a></div>
   </main>
+  <div class="cookie-notice" role="dialog" aria-label="Уведомление о cookie"><span>Сайт использует cookie для корректной работы.</span><button type="button">Хорошо</button></div>
 
   <script>
     (() => {
@@ -2777,6 +2795,15 @@
         syncDisplayMode();
         scheduleRender();
       }
+
+      const cookieNotice = document.querySelector(".cookie-notice");
+      try {
+        if (localStorage.getItem("alvi_cookie_ok")) cookieNotice?.classList.add("hidden");
+      } catch (error) {}
+      cookieNotice?.querySelector("button")?.addEventListener("click", () => {
+        cookieNotice.classList.add("hidden");
+        try { localStorage.setItem("alvi_cookie_ok", "1"); } catch (error) {}
+      });
 
       loadOptionalLogo();
       setupQuiz();
