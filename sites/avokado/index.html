@@ -20,6 +20,18 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Manrope:wght@400;500;700&family=Cormorant:wght@500;600&family=Marck+Script&display=swap" rel="stylesheet">
 <style>
+  #page-loader{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:#0e1410;opacity:0;pointer-events:none;transition:opacity 150ms ease}
+  #page-loader.is-visible{opacity:1}
+  #page-loader.is-complete{opacity:0;transition-duration:250ms}
+  .page-loader-logo{display:flex;align-items:center;color:#c9a97a;font:700 clamp(28px,5vw,48px)/1 'Unbounded',Georgia,serif;letter-spacing:.08em}
+  .page-loader-logo svg{width:1.05em;height:1.18em;margin:0 -.02em}
+  #page-loader-line{position:absolute;right:0;bottom:0;left:0;height:2px;overflow:hidden}
+  #page-loader-line::before{content:"";display:block;width:0;height:100%;background:#c9a97a}
+  #page-loader.is-visible:not(.is-complete) #page-loader-line::before{animation:page-loader-progress 4700ms linear forwards}
+  #page-loader.is-complete #page-loader-line::before{width:100%;animation:none;transition:width 200ms ease-out}
+  @keyframes page-loader-progress{0%{width:0}35%{width:60%}65%{width:78%}85%{width:86%}100%{width:90%}}
+  @media(prefers-reduced-motion:reduce){#page-loader,#page-loader.is-complete{transition:none}#page-loader.is-visible:not(.is-complete) #page-loader-line::before{animation:none}#page-loader.is-complete #page-loader-line::before{transition:none}}
+
   :root{
     --bg:#0e1410;          /* тёмная база */
     --panel:#15201a;
@@ -446,8 +458,12 @@
 @media(max-width:820px){.pain-grid{display:flex;flex-direction:column}.story-panel{order:-1}.qlist .q{grid-template-columns:96px 1fr;gap:12px}.method-intro{top:72px;font-size:11px;white-space:normal;width:90%}.method-heroine{display:block;right:-12vw;height:min(64svh,520px)}.scene-copy{margin:0 6vw;align-self:flex-end;margin-bottom:9svh}.method-scene:first-child .scene-copy{background:rgba(238,240,232,.84);padding:18px;border-radius:16px}.apparatus-grid{grid-template-columns:repeat(2,1fr);gap:8px}.apparatus-grid img{height:18svh}.apparatus-grid figcaption{font-size:10px;padding:7px}.scene-two{grid-template-columns:1fr;gap:12px;margin-bottom:5svh}.scene-two p{font-size:12px;margin-top:5px}.method-steps{grid-template-columns:1fr 1fr;gap:8px}.method-steps>div{padding:12px}.method-steps p{font-size:11px}.rating-grid{grid-template-columns:1fr;margin:15px 0}.rating-grid a{padding:16px}.method-scroll{height:500svh}.contact-actions{flex-direction:column}.finale{min-height:100svh}.finale>.inner{min-height:100svh}.cookie-notice{justify-content:space-between}}
 @media(prefers-reduced-motion:reduce){.flow-next span,.runway-figure.on .runway-model{animation:none}.runway-model{transform:none}.method-scene{transition:none}.method-intro{letter-spacing:.16em}}
 </style>
+<script>
+(()=>{let finished=false,revealTimer,safetyTimer;const loader=()=>document.getElementById("page-loader");const finish=()=>{if(finished)return;finished=true;clearTimeout(revealTimer);clearTimeout(safetyTimer);const element=loader();if(!element)return;if(!element.classList.contains("is-visible")){element.style.display="none";return}element.classList.add("is-complete");setTimeout(()=>{element.style.display="none"},250)};revealTimer=setTimeout(()=>{if(!finished)loader()?.classList.add("is-visible")},300);safetyTimer=setTimeout(()=>{finished=true;clearTimeout(revealTimer);const element=loader();if(element)element.style.display="none"},5000);if(document.readyState==="complete")finish();else addEventListener("load",finish,{once:true})})();
+</script>
 </head>
 <body>
+<div id="page-loader" aria-hidden="true"><div class="page-loader-logo">АВ<svg viewBox="0 0 48 54" aria-hidden="true"><path d="M25.5 8 C26.5 5 25 2.5 23 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M24 9.5 C20.4 9.5 15.6 15.6 14.1 22.3 C12.6 29.1 17.3 38 24 38 C30.7 38 35.4 29.1 33.9 22.3 C32.4 15.6 27.6 9.5 24 9.5 Z" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round"/><circle cx="24" cy="27" r="4.6" fill="currentColor"/></svg>КАДО</div><div id="page-loader-line"></div></div>
 
 <header id="hdr">
   <a class="logo" href="#" style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-decoration:none"><span class="wordmark" style="font-size:21px">АВ<svg class="avo-o" viewBox="0 0 48 54" aria-hidden="true"><path d="M25.5 8 C26.5 5 25 2.5 23 2" fill="none" stroke="#d8b981" stroke-width="1.6" stroke-linecap="round"/><path d="M24 9.5 C20.4 9.5 15.6 15.6 14.1 22.3 C12.6 29.1 17.3 38 24 38 C30.7 38 35.4 29.1 33.9 22.3 C32.4 15.6 27.6 9.5 24 9.5 Z" fill="none" stroke="#d8b981" stroke-width="2.1" stroke-linejoin="round"/><circle cx="24" cy="27" r="4.6" fill="#d8b981"/></svg>КАДО</span><span style="font-family:\'Manrope\',sans-serif;font-size:9.5px;letter-spacing:.34em;color:#cfae83;text-transform:uppercase;padding-left:2px">студия дизайна тела</span></a>
