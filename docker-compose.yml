@@ -3,6 +3,7 @@ services:
     image: caddy:2-alpine
     container_name: caddy
     restart: unless-stopped
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile", "--watch"]
     ports:
       - "80:80"
       - "443:443"
@@ -14,6 +15,19 @@ services:
       - caddy_data:/data
       - caddy_config:/config
 
+  crm:
+    build:
+      context: ./ops/crm
+    restart: always
+    environment:
+      PORT: "8080"
+      DATABASE_PATH: /data/crm.sqlite
+    expose:
+      - "8080"
+    volumes:
+      - crm_data:/data
+
 volumes:
   caddy_data:
   caddy_config:
+  crm_data:

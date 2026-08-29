@@ -58,6 +58,9 @@ alvi.synapsebusiness.ru {
 # --- Synapse Business: сайт-презентация -------------------------------------
 synapse.synapsebusiness.ru {
   root * /srv/sites/synapse
+  # cabinet.html uses same-origin /dashboard and /leads requests for CRM.
+  @crm path /dashboard /leads /leads/*
+  reverse_proxy @crm crm:8080
   import draft
   import static
 }
