@@ -63,7 +63,7 @@
 (()=>{let finished=false,revealTimer,safetyTimer;const loader=()=>document.getElementById("page-loader");const finish=()=>{if(finished)return;finished=true;clearTimeout(revealTimer);clearTimeout(safetyTimer);const element=loader();if(!element)return;if(!element.classList.contains("is-visible")){element.style.display="none";return}element.classList.add("is-complete");setTimeout(()=>{element.style.display="none"},250)};revealTimer=setTimeout(()=>{if(!finished)loader()?.classList.add("is-visible")},300);safetyTimer=setTimeout(()=>{finished=true;clearTimeout(revealTimer);const element=loader();if(element)element.style.display="none"},5000);if(document.readyState==="complete")finish();else addEventListener("load",finish,{once:true})})();
 </script></head>
 <body data-page="landing"><div id="page-loader" aria-hidden="true"><img src="/assets/img/logo-light.svg" alt="" width="200" height="65"><div id="page-loader-line"></div></div>
-  <header><nav><a class="brand" href="/"><img src="/assets/img/logo-dark.svg" alt="Palitra Love — цветы и шары в Подольске" width="200" height="65"></a><button class="menu" type="button" data-menu-toggle aria-expanded="false" aria-controls="mobile-navigation">Меню</button><div class="navlinks" id="mobile-navigation"><button class="menu-close" type="button" data-menu-close aria-label="Закрыть меню">×</button><a href="/catalog/bukety">Цветы</a><a href="/catalog/shary">Шары</a><a href="/vypiska">Выписка</a><a href="/den-rozhdeniya">День рождения</a><a href="/dostavka-i-oplata">Доставка</a></div><button class="cart-button" data-cart-open>Корзина · <span data-cart-count>0</span></button></nav></header>
+  <header><nav><a class="brand" href="/"><img src="/assets/img/logo-dark.svg" alt="Palitra Love — цветы и шары в Подольске" width="200" height="65"></a><button class="menu" type="button" data-menu-toggle aria-expanded="false" aria-controls="mobile-navigation">Меню</button><div class="navlinks" id="mobile-navigation"><button class="menu-close" type="button" data-menu-close aria-label="Закрыть меню">×</button><a href="/catalog">Каталог</a><a href="/catalog/bukety">Цветы</a><a href="/catalog/shary">Шары</a><a href="/vypiska">Выписка</a><a href="/den-rozhdeniya">День рождения</a><a href="/dostavka-i-oplata">Доставка</a></div><button class="cart-button" data-cart-open>Корзина · <span data-cart-count>0</span></button></nav></header>
   <main class="teacher-page">
     <div class="wrap breadcrumbs"><a href="/">Главная</a> / Букеты учителю</div>
     <section class="hero">
@@ -71,7 +71,7 @@
         <div>
           <h1>Букеты учителю на 5 октября</h1>
           <p class="lead">Подольск и Москва. Букеты от 3 290 руб. Заказ до 21:00 — привезём сегодня, минимум за 2 часа.</p>
-          <div class="actions"><a class="button teacher-button-light" href="#class-order">Собрать заказ на класс</a><a class="button teacher-button-outline" href="/catalog/bukety">В каталог</a></div>
+          <div class="actions"><a class="button teacher-button-light" href="#class-order">Собрать заказ на класс</a><a class="button teacher-button-outline" href="/catalog">В каталог</a></div>
         </div>
         <img class="hero-photo" src="/assets/img/pervoe-sentyabrya.jpg" alt="Букеты учителю на 5 октября" width="800" height="1000">
       </div>
