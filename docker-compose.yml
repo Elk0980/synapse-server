@@ -22,12 +22,33 @@ services:
     environment:
       PORT: "8080"
       DATABASE_PATH: /data/crm.sqlite
+      API_KEY: ${CRM_API_KEY}
+      ALLOWED_ORIGINS: ${CRM_ALLOWED_ORIGINS:-}
     expose:
       - "8080"
     volumes:
       - crm_data:/data
 
+  chat:
+    build:
+      context: ./ops/chat
+    restart: always
+    environment:
+      PORT: "8080"
+      DATABASE_PATH: /data/chat.sqlite
+      API_KEY: ${CHAT_API_KEY}
+      ALLOWED_ORIGINS: ${CHAT_ALLOWED_ORIGINS:-}
+      CRM_URL: http://crm:8080/leads
+      CRM_API_KEY: ${CRM_API_KEY}
+      MODEL_API_URL: ${MODEL_API_URL:-}
+      MODEL_API_KEY: ${MODEL_API_KEY:-}
+    expose:
+      - "8080"
+    volumes:
+      - chat_data:/data
+
 volumes:
   caddy_data:
   caddy_config:
   crm_data:
+  chat_data:
