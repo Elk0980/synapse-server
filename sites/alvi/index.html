@@ -1453,10 +1453,9 @@
           playsinline
           preload="none"
           poster="img/alvi-poster.png"
-          data-idle-webm="https://eypklzhonzslagod.public.blob.vercel-storage.com/alvi-idle.webm"
-          data-idle-mp4="https://eypklzhonzslagod.public.blob.vercel-storage.com/alvi-idle.mp4"
-          data-hero-webm="https://eypklzhonzslagod.public.blob.vercel-storage.com/alvi-hero.webm"
-          data-hero-mp4="https://eypklzhonzslagod.public.blob.vercel-storage.com/alvi-hero.mp4"
+          data-idle-webm="video/alvi-idle.webm"
+          data-idle-mp4="video/alvi-idle.mp4"
+          data-hero-webm="video/alvi-hero.webm"
           aria-hidden="true"
         ></video>
 
@@ -1876,13 +1875,14 @@
         idle: Object.freeze({
           enabled: true,
           duration: 14,
-          webm: "https://eypklzhonzslagod.public.blob.vercel-storage.com/alvi-idle.webm",
-          mp4: "https://eypklzhonzslagod.public.blob.vercel-storage.com/alvi-idle.mp4"
+          webm: "video/alvi-idle.webm",
+          mp4: "video/alvi-idle.mp4"
         }),
         hero: Object.freeze({
           enabled: true,
-          webm: "https://eypklzhonzslagod.public.blob.vercel-storage.com/alvi-hero.webm",
-          mp4: "https://eypklzhonzslagod.public.blob.vercel-storage.com/alvi-hero.mp4"
+          webm: "video/alvi-hero.webm",
+          // MP4-версию подключить после получения файла от владельца.
+          mp4: null
         })
       });
 
