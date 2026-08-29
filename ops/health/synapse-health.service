@@ -1,0 +1,10 @@
+[Unit]
+Description=Проверка живости сайтов Synapse
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/synapse-server/ops/health
+ExecStart=/opt/synapse-server/ops/health/check.sh
+User=root

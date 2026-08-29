@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Проверка живости сайтов</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { max-width: 1100px; margin: 0 auto; padding: 2rem; background: #111827; color: #e5e7eb; }
+    h1 { margin-bottom: .4rem; }
+    #updated { color: #9ca3af; }
+    table { width: 100%; margin-top: 2rem; border-collapse: collapse; background: #1f2937; }
+    th, td { padding: .8rem 1rem; text-align: left; border-bottom: 1px solid #374151; }
+    th { color: #9ca3af; }
+    .ok { color: #34d399; }
+    .fail { color: #f87171; }
+    @media (max-width: 650px) { body { padding: 1rem; } th, td { padding: .6rem; } }
+  </style>
+</head>
+<body>
+  <h1>Проверка живости сайтов</h1>
+  <div id="updated">Загрузка результатов…</div>
+  <table>
+    <thead><tr><th>Адрес</th><th>Состояние</th><th>Время ответа</th><th>Сертификат</th></tr></thead>
+    <tbody id="results"></tbody>
+  </table>
+  <script>
+    const results = document.querySelector('#results');
+    const updated = document.querySelector('#updated');
+
+    fetch(`status.json?ts=${Date.now()}`, { cache: 'no-store' })
+      .then(response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        updated.textContent = `Обновлено: ${new Date(response.headers.get('last-modified') || Date.now()).toLocaleString('ru-RU')}`;
+        return response.json();
+      })
+      .then(items => items.forEach(item => {
+        const row = document.createElement('tr');
+        const healthy = item['ошибка'] === null;
+        const values = [
+          item['адрес'],
+          healthy ? `Работает (HTTP ${item['код']})` : `Ошибка: ${item['ошибка']}`,
+          `${item['миллисекунды']} мс`,
+          item['дней до истечения сертификата'] === null ? 'не удалось прочитать' : `${item['дней до истечения сертификата']} дн.`
+        ];
+        values.forEach((value, index) => {
+          const cell = document.createElement('td');
+          cell.textContent = value;
+          if (index === 1) cell.className = healthy ? 'ok' : 'fail';
+          row.appendChild(cell);
+        });
+        results.appendChild(row);
+      }))
+      .catch(error => {
+        updated.textContent = `Не удалось загрузить status.json: ${error.message}`;
+        updated.className = 'fail';
+      });
+  </script>
+</body>
+</html>
