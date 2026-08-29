@@ -82,9 +82,9 @@ chat.synapsebusiness.ru {
 }
 
 # --- Palitra Love: магазин цветов и воздушных шаров (черновик) -------------
-palitra.synapsebusiness.ru {
-  root * /srv/sites/palitra
-  try_files {path} {path}/ /index.html
+palitra-love.synapsebusiness.ru {
+  root * /srv/sites/palitra-love
   import draft
+  try_files {path} {path}/index.html /index.html
   import static
 }

@@ -1,0 +1,4 @@
+User-agent: *
+Disallow: /
+
+Sitemap: https://palitra-love.synapsebusiness.ru/sitemap.xml
