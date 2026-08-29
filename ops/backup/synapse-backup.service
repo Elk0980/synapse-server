@@ -1,15 +1,12 @@
 [Unit]
-Description=Full Synapse host backup to Google Drive
+Description=Daily Synapse backup
 Wants=network-online.target docker.service
 After=network-online.target docker.service
 
 [Service]
 Type=oneshot
-EnvironmentFile=/etc/synapse-backup.env
+EnvironmentFile=-/etc/synapse-backup.env
 ExecStart=/usr/local/sbin/synapse-backup
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
-
-[Install]
-WantedBy=multi-user.target
