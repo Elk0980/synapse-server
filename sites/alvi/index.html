@@ -997,6 +997,25 @@
       margin-top: 2.5rem;
     }
 
+    .form-consent {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.7rem;
+      color: var(--ink-dim);
+      font-size: 0.82rem;
+      line-height: 1.5;
+    }
+
+    .form-consent input {
+      width: 1.1rem;
+      height: 1.1rem;
+      flex: 0 0 auto;
+      margin: 0.12rem 0 0;
+      accent-color: var(--green-deep);
+    }
+
+    .form-consent a { color: var(--gold); }
+
     .quiz-question {
       min-width: 0;
       margin: 0;
@@ -1991,9 +2010,14 @@
             </div>
           </fieldset>
 
+          <label class="form-consent">
+            <input id="quiz-consent" type="checkbox" name="personal_data_consent" required>
+            <span>Я даю <a href="soglasie.html">согласие на обработку персональных данных</a> и ознакомлен(а) с <a href="politika.html">политикой обработки персональных данных</a>.</span>
+          </label>
+
           <div class="quiz-actions">
             <!-- ВЫБРАНО БЕЗ OWNER'А: текст служебной кнопки квиза. -->
-            <button class="content-button" type="submit">Показать программу</button>
+            <button class="content-button" type="submit" disabled>Показать программу</button>
           </div>
 
           <section class="quiz-result" id="quiz-result" tabindex="-1" aria-live="polite" aria-atomic="true" hidden>
@@ -2065,7 +2089,7 @@
         <p class="site-footer__brand">ALVI SPA</p>
         <p>Индивидуальный предприниматель Петрук Татьяна Александровна · ИНН 381497453085 · ОГРНИП 324385000056520</p>
         <p>Иркутск, Депутатская улица, 71а · ежедневно с 09:30 до 20:30 · <a href="tel:+79246180555">+7 924 618-05-55</a></p>
-        <p class="site-footer__links"><a href="privacy.html">Политика конфиденциальности</a><a href="consent.html">Согласие на обработку персональных данных</a></p>
+        <p class="site-footer__links"><a href="oferta.html">Публичная оферта</a><a href="politika.html">Политика обработки персональных данных</a><a href="soglasie.html">Согласие на обработку персональных данных</a></p>
         <p>Есть противопоказания, проконсультируйтесь со специалистом.</p>
       </div>
     </footer>
@@ -2216,6 +2240,14 @@
 
       function setupQuiz() {
         if (!quizForm || !quizResult || !quizResultTitle || !quizResultCopy) return;
+
+        const consent = quizForm.querySelector('[name="personal_data_consent"]');
+        const submitButton = quizForm.querySelector('[type="submit"]');
+        const syncConsent = () => {
+          if (submitButton) submitButton.disabled = !consent?.checked;
+        };
+        consent?.addEventListener("change", syncConsent);
+        syncConsent();
 
         quizForm.addEventListener("submit", (event) => {
           event.preventDefault();
