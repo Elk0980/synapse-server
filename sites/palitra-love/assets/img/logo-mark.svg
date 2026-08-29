@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="Palitra Love">
+  <title>Palitra Love</title>
+  <rect x="2" y="2" width="116" height="116" fill="none" stroke="#173c2b" stroke-width="2.5"/>
+  <text x="60" y="56" text-anchor="middle" font-family="'Playfair Display','Times New Roman',Georgia,serif" font-size="34" letter-spacing="2" fill="#173c2b">PL</text>
+  <line x1="30" y1="70" x2="90" y2="70" stroke="#7a8051" stroke-width="1.4"/>
+  <text x="60" y="92" text-anchor="middle" font-family="'Playfair Display','Times New Roman',Georgia,serif" font-size="12" letter-spacing="3.5" fill="#7a8051">ПОДОЛЬСК</text>
+</svg>
