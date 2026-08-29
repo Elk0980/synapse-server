@@ -54,13 +54,32 @@
         color: var(--muted);
       }
       .toolbar,
-      .files-panel {
+      .files-panel,
+      .rules {
         margin: 26px 0;
         padding: 18px;
         border: 1px solid var(--line);
         border-radius: 16px;
         background: var(--panel);
       }
+      .rules {
+        padding: 0;
+        overflow: hidden;
+      }
+      .rules summary {
+        padding: 18px;
+        cursor: pointer;
+        font-size: 18px;
+        font-weight: 700;
+        list-style-position: inside;
+        user-select: none;
+      }
+      .rules summary:hover { color: var(--accent); }
+      .rules ol {
+        margin: 0;
+        padding: 0 38px 20px 58px;
+      }
+      .rules li { margin-top: 9px; padding-left: 4px; }
       .filters {
         display: flex;
         flex-wrap: wrap;
@@ -235,6 +254,19 @@
           Работы, ответственные и занятые файлы — в одном месте.
         </p>
       </header>
+      <details id="board-rules" class="rules">
+        <summary>Правила работы доски</summary>
+        <ol>
+          <li>Перед началом работы прочитать доску. Если задача уже занята другим агентом - не брать, взять следующую свободную.</li>
+          <li>Начал работу - дописать строку: дата, время, чат, задача, зона (файлы или сайт), статус.</li>
+          <li>Закончил - обновить свою строку. Чужие строки не трогать и не переписывать, только дописывать свою.</li>
+          <li>Дорожки: сайт клиента 1, сайт клиента 2, инфраструктура и сервер, материалы. Один файл в один момент правит один исполнитель.</li>
+          <li>Каждая задача исполнителю - своя ветка. Конфликт решается при слиянии, а не простоем.</li>
+          <li>Если задачи можно вести параллельно - вести параллельно. Держать исполнителя без работы при непустой очереди запрещено.</li>
+          <li>Статусы честные: LIVE, QA, SAMPLE, UNKNOWN, BLOCKED. Чужой самоотчёт - UNKNOWN до самостоятельной проверки.</li>
+          <li>Проверяет результат всегда не тот, кто делал.</li>
+        </ol>
+      </details>
       <section class="toolbar" aria-label="Фильтры">
         <div class="filters">
           <label
@@ -276,6 +308,16 @@
       const files = document.querySelector("#files");
       const assignee = document.querySelector("#assignee");
       const track = document.querySelector("#track");
+      const rules = document.querySelector("#board-rules");
+      const rulesStorageKey = "synapse-board-rules-open";
+      try {
+        rules.open = localStorage.getItem(rulesStorageKey) === "true";
+      } catch {}
+      rules.addEventListener("toggle", () => {
+        try {
+          localStorage.setItem(rulesStorageKey, String(rules.open));
+        } catch {}
+      });
       const escapeHtml = (value) =>
         String(value ?? "").replace(
           /[&<>'"]/g,

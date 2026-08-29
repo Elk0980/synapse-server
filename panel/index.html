@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Synapse Business — панель сайтов</title>
+<title>Synapse Business — панель проекта</title>
 <style>
   :root{
     --bg:#0d1117; --panel:#161b22; --line:#232b36;
@@ -19,6 +19,24 @@
   h1{font-size:22px;font-weight:650;letter-spacing:-.01em}
   .sub{color:var(--dim);font-size:14px;margin-top:6px}
   .sub b{color:var(--text);font-weight:600}
+
+  .link-section{max-width:1180px;margin:0 auto 34px}
+  .link-section h2{font-size:18px;margin-bottom:13px}
+  .link-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:12px}
+  .link-card{min-width:0;min-height:88px;padding:17px 18px;background:var(--panel);
+    border:1px solid var(--line);border-radius:12px;color:var(--text);text-decoration:none;
+    display:flex;flex-direction:column;justify-content:center;gap:5px;
+    transition:transform .15s,border-color .15s,background .15s}
+  .link-card:hover{transform:translateY(-2px);border-color:var(--accent);background:#19212c}
+  .link-title{display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:650}
+  .link-meta{color:var(--dim);font-size:12.5px;overflow-wrap:anywhere}
+  .health{width:9px;height:9px;flex:0 0 9px;border-radius:50%;background:var(--none);
+    box-shadow:0 0 0 3px rgba(72,79,88,.14);transition:background .2s,box-shadow .2s}
+  .health.is-live{background:var(--live);box-shadow:0 0 0 3px rgba(63,185,80,.14)}
+  .note{display:inline-block;color:var(--draft);font-size:11px;font-weight:600;
+    letter-spacing:.04em;text-transform:uppercase}
+
+  .sites-title{max-width:1180px;margin:42px auto 14px;font-size:18px}
 
   .grid{max-width:1180px;margin:0 auto;display:grid;gap:18px;
     grid-template-columns:repeat(auto-fill,minmax(330px,1fr))}
@@ -51,14 +69,64 @@
   footer{max-width:1180px;margin:40px auto 0;color:var(--faint);font-size:13px;
     border-top:1px solid var(--line);padding-top:18px;line-height:1.7}
   code{background:#1c2330;padding:2px 6px;border-radius:5px;font-size:12.5px;color:#c9d1d9}
+  @media (max-width:480px){
+    body{padding:24px 16px 60px}
+    header{margin-bottom:24px}
+    .link-section{margin-bottom:28px}
+    .grid{grid-template-columns:1fr}
+    .shot{height:170px}
+  }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Панель сайтов Synapse Business</h1>
-  <p class="sub">Сервер <b>synapse-core</b> · 72.56.249.147 · Москва. Все сайты и черновики в одном месте. Превью живые — показывают то, что открыто прямо сейчас.</p>
+  <h1>Панель проекта Synapse Business</h1>
+  <p class="sub">Сайты, рабочие инструменты и материалы проекта в одном месте.</p>
 </header>
+
+<section class="link-section" aria-labelledby="our-sites">
+  <h2 id="our-sites">Наши сайты</h2>
+  <div class="link-grid">
+    <a class="link-card" href="https://avokado.synapsebusiness.ru/" target="_blank" rel="noopener" data-health-url="https://avokado.synapsebusiness.ru/"><span class="link-title"><span class="health" aria-hidden="true"></span>Avokado</span><span class="link-meta">avokado.synapsebusiness.ru</span></a>
+    <a class="link-card" href="https://alvi.synapsebusiness.ru/" target="_blank" rel="noopener" data-health-url="https://alvi.synapsebusiness.ru/"><span class="link-title"><span class="health" aria-hidden="true"></span>ALVI</span><span class="link-meta">alvi.synapsebusiness.ru</span></a>
+    <a class="link-card" href="https://synapse.synapsebusiness.ru/" target="_blank" rel="noopener" data-health-url="https://synapse.synapsebusiness.ru/"><span class="link-title"><span class="health" aria-hidden="true"></span>Synapse Business</span><span class="link-meta">synapse.synapsebusiness.ru</span></a>
+    <a class="link-card" href="https://taisabai.synapsebusiness.ru/" target="_blank" rel="noopener" data-health-url="https://taisabai.synapsebusiness.ru/"><span class="link-title"><span class="health" aria-hidden="true"></span>TaiSabai прототип</span><span class="link-meta">taisabai.synapsebusiness.ru</span></a>
+  </div>
+</section>
+
+<section class="link-section" aria-labelledby="work-tools">
+  <h2 id="work-tools">Рабочие инструменты</h2>
+  <div class="link-grid">
+    <a class="link-card" href="https://synapse.synapsebusiness.ru/cabinet.html" target="_blank" rel="noopener" data-health-url="https://synapse.synapsebusiness.ru/cabinet.html"><span class="link-title"><span class="health" aria-hidden="true"></span>Личный кабинет</span><span class="link-meta">synapse.synapsebusiness.ru/cabinet.html</span></a>
+    <a class="link-card" href="https://board.synapsebusiness.ru/" target="_blank" rel="noopener" data-health-url="https://board.synapsebusiness.ru/"><span class="link-title"><span class="health" aria-hidden="true"></span>Доска задач агентов</span><span class="link-meta">board.synapsebusiness.ru</span></a>
+    <a class="link-card" href="https://chat.synapsebusiness.ru/" target="_blank" rel="noopener" data-health-url="https://chat.synapsebusiness.ru/"><span class="link-title"><span class="health" aria-hidden="true"></span>Чат</span><span class="note">В разработке</span></a>
+    <a class="link-card" href="https://panel.synapsebusiness.ru/" target="_blank" rel="noopener" data-health-url="https://panel.synapsebusiness.ru/"><span class="link-title"><span class="health" aria-hidden="true"></span>Панель сайтов</span><span class="link-meta">panel.synapsebusiness.ru</span></a>
+  </div>
+</section>
+
+<section class="link-section" aria-labelledby="storage">
+  <h2 id="storage">Хранилище и материалы</h2>
+  <div class="link-grid">
+    <a class="link-card" href="https://drive.google.com/drive/folders/1cSNlEE8fhxfwgAOJi2dBfJo23K2U9I18" target="_blank" rel="noopener"><span class="link-title">Google Диск, папка проекта</span><span class="link-meta">Основная папка проекта</span></a>
+    <a class="link-card" href="https://drive.google.com/drive/folders/1HtWGCSi1yDdeBPw_wUfOszDcLMrDRZ92" target="_blank" rel="noopener"><span class="link-title">Склад видео</span><span class="link-meta">Материалы на Google Диске</span></a>
+    <a class="link-card" href="https://drive.google.com/drive/folders/1rGW17UDSPR9HtpSiNV-DrabeHaTvoOOs" target="_blank" rel="noopener"><span class="link-title">Сырьё от генератора</span><span class="link-meta">Материалы на Google Диске</span></a>
+    <a class="link-card" href="https://drive.google.com/drive/folders/19h_zD2fItJDEiatOLdd7AZtRFteMu0Y8" target="_blank" rel="noopener"><span class="link-title">Готовое на сайт</span><span class="link-meta">Материалы на Google Диске</span></a>
+  </div>
+</section>
+
+<section class="link-section" aria-labelledby="services">
+  <h2 id="services">Сервисы</h2>
+  <div class="link-grid">
+    <a class="link-card" href="https://chatgpt.com/codex/cloud" target="_blank" rel="noopener"><span class="link-title">Codex</span><span class="link-meta">chatgpt.com</span></a>
+    <a class="link-card" href="https://gemini.google.com/app" target="_blank" rel="noopener"><span class="link-title">Gemini</span><span class="link-meta">gemini.google.com</span></a>
+    <a class="link-card" href="https://timeweb.cloud/my/servers/8936001" target="_blank" rel="noopener"><span class="link-title">Сервер Timeweb</span><span class="link-meta">Управление сервером</span></a>
+    <a class="link-card" href="https://www.reg.ru/user/account/card/121984499" target="_blank" rel="noopener"><span class="link-title">Домен на reg.ru</span><span class="link-meta">Управление доменом</span></a>
+    <a class="link-card" href="https://search.google.com/search-console" target="_blank" rel="noopener"><span class="link-title">Google Search Console</span><span class="link-meta">Поиск и индексация</span></a>
+  </div>
+</section>
+
+<h2 class="sites-title">Состояние сайтов</h2>
 
 <div class="grid">
 
@@ -136,6 +204,27 @@
   Черновик отличается от опубликованного одной строкой <code>import draft</code> — она закрывает страницу от поисковых систем.
   Страницы доступны всем, кто знает адрес: пароль на панель ставится отдельным шагом.
 </footer>
+
+<script>
+  const healthLinks = document.querySelectorAll("[data-health-url]");
+  healthLinks.forEach(async (link) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      await fetch(link.dataset.healthUrl, {
+        mode: "no-cors",
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      link.querySelector(".health")?.classList.add("is-live");
+      link.dataset.health = "available";
+    } catch {
+      link.dataset.health = "unavailable";
+    } finally {
+      clearTimeout(timeout);
+    }
+  });
+</script>
 
 </body>
 </html>
