@@ -2082,8 +2082,7 @@
         hero: Object.freeze({
           enabled: true,
           webm: "video/alvi-hero.webm",
-          // MP4-версию подключить после получения файла от владельца.
-          mp4: null
+          mp4: "video/alvi-hero-60fps.mp4"
         })
       });
 
@@ -2391,8 +2390,8 @@
         if (!video) return;
 
         const candidates = [];
-        if (video.canPlayType("video/webm")) candidates.push(source.webm);
-        candidates.push(source.mp4);
+        if (source.mp4 && video.canPlayType("video/mp4")) candidates.push(source.mp4);
+        candidates.push(source.webm);
         let candidateIndex = 0;
 
         const fallBackToFrames = () => {
@@ -2509,7 +2508,7 @@
       function renderVideo(progress) {
         if (!video || !Number.isFinite(video.duration) || video.duration <= 0) return;
         const targetTime = clamp(progress) * Math.max(video.duration - 0.04, 0);
-        if (Math.abs(video.currentTime - targetTime) < 0.035) return;
+        if (Math.abs(video.currentTime - targetTime) < 0.004) return;
 
         try {
           video.currentTime = targetTime;
