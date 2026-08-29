@@ -14,13 +14,15 @@ mkdir -p data
 PORT=8080 DATABASE_PATH="$PWD/data/crm.sqlite" node ops/crm/server.js
 ```
 
-Для Docker Compose подключите фрагмент к основной конфигурации:
+Сервис уже включён в корневой `docker-compose.yml` и собирается из этого
+каталога:
 
 ```sh
-docker compose -f docker-compose.yml -f ops/crm/compose-fragment.yml up -d crm
+docker compose up -d crm
 ```
 
-В контейнере база находится в `/data/crm.sqlite` и сохраняется в именованном
+Порт 8080 доступен только сервисам внутренней Compose-сети и не публикуется на
+хосте. В контейнере база находится в `/data/crm.sqlite` и сохраняется в именованном
 томе `crm_data`. При первом старте создаётся пустая база без демонстрационных
 записей. Локально путь задаётся переменной `DATABASE_PATH`; порт — переменной
 `PORT` (по умолчанию `8080`).
@@ -29,6 +31,16 @@ docker compose -f docker-compose.yml -f ops/crm/compose-fragment.yml up -d crm
 `2026-08-29T12:00:00.000Z`.
 
 ## Методы
+
+### Данные кабинета
+
+`GET /dashboard?period=today|7d|30d` возвращает сводку, воронку, источники и
+заявки в формате, который использует кабинет. Дополнительные фильтры — `stage`
+(`new`, `in_progress`, `booked`, `visited`, `sale`, `rejected`) и `source`.
+Ответ помечен `sample: true`, пока сервис не подключён к реальным источникам.
+
+Кабинет обновляет этап или сумму запросом `PATCH /leads/:id` с полем `stage`
+либо `amount` соответственно.
 
 ### Создать заявку
 

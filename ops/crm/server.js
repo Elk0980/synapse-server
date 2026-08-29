@@ -8,6 +8,15 @@ const PORT = Number.parseInt(process.env.PORT || '8080', 10);
 const DATABASE_PATH = process.env.DATABASE_PATH || '/data/crm.sqlite';
 const STAGES = ['новая', 'в работе', 'записан', 'пришёл', 'продажа', 'отказ'];
 const STAGE_RANK = new Map(STAGES.map((stage, index) => [stage, index]));
+const CABINET_STAGES = new Map([
+  ['new', 'новая'],
+  ['in_progress', 'в работе'],
+  ['booked', 'записан'],
+  ['visited', 'пришёл'],
+  ['sale', 'продажа'],
+  ['rejected', 'отказ'],
+]);
+const CABINET_STAGE_IDS = new Map([...CABINET_STAGES].map(([id, stage]) => [stage, id]));
 
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
   throw new Error('PORT должен быть целым числом от 1 до 65535');
@@ -143,6 +152,30 @@ function serializeLead(row) {
   };
 }
 
+function serializeCabinetLead(row) {
+  return {
+    id: row.id,
+    date: row.created_at,
+    name: row.name,
+    contact: row.contact,
+    channel: row.channel,
+    source: row.source,
+    tag: row.tag,
+    stage: CABINET_STAGE_IDS.get(row.stage),
+    amount: row.sale_amount,
+  };
+}
+
+function cabinetPeriod(period) {
+  const now = new Date();
+  const from = new Date(now);
+  if (period === 'today') from.setUTCHours(0, 0, 0, 0);
+  else if (period === '7d') from.setUTCDate(from.getUTCDate() - 7);
+  else if (period === '30d') from.setUTCDate(from.getUTCDate() - 30);
+  else fail(400, 'Неизвестный период', { allowed: ['today', '7d', '30d'] });
+  return from.toISOString();
+}
+
 function serializeMessage(row) {
   return {
     id: row.id,
@@ -161,6 +194,37 @@ function existingLead(id) {
 
 async function route(request, response) {
   const url = new URL(request.url, 'http://localhost');
+
+  if (request.method === 'GET' && url.pathname === '/dashboard') {
+    const from = cabinetPeriod(url.searchParams.get('period') || 'today');
+    const requestedStage = url.searchParams.get('stage');
+    const stage = requestedStage ? CABINET_STAGES.get(requestedStage) : null;
+    if (requestedStage && !stage) fail(400, 'Неизвестный этап', { allowed: [...CABINET_STAGES.keys()] });
+    const source = url.searchParams.get('source');
+    const clauses = ['created_at >= ?'];
+    const params = [from];
+    if (stage) { clauses.push('stage = ?'); params.push(stage); }
+    if (source) { clauses.push('source = ?'); params.push(source); }
+    const rows = db.prepare(`SELECT * FROM leads WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC, id DESC`).all(...params);
+    const allSources = db.prepare("SELECT DISTINCT source FROM leads WHERE source IS NOT NULL AND source != '' ORDER BY source").all();
+    const funnel = Object.fromEntries([...CABINET_STAGES].map(([id, name]) => {
+      const count = rows.filter((row) => row.stage === name).length;
+      return [id, { count, conversion: rows.length ? Math.round((count / rows.length) * 100) : 0 }];
+    }));
+    return send(response, 200, {
+      sample: true,
+      summary: {
+        total: rows.length,
+        booked: rows.filter((row) => row.stage !== 'отказ' && STAGE_RANK.get(row.stage) >= STAGE_RANK.get('записан')).length,
+        visited: rows.filter((row) => row.stage !== 'отказ' && STAGE_RANK.get(row.stage) >= STAGE_RANK.get('пришёл')).length,
+        sales: rows.filter((row) => row.stage === 'продажа').length,
+        revenue: rows.reduce((total, row) => total + (row.sale_amount || 0), 0),
+      },
+      funnel,
+      leads: rows.map(serializeCabinetLead),
+      sources: allSources.map((row) => row.source),
+    });
+  }
 
   if (request.method === 'POST' && url.pathname === '/leads') {
     const body = await readJson(request);
@@ -203,6 +267,26 @@ async function route(request, response) {
       requiredString(body.text, 'text')
     );
     return send(response, 201, serializeMessage(getMessage.get(Number(result.lastInsertRowid))));
+  }
+
+  match = url.pathname.match(/^\/leads\/(\d+)$/);
+  if (request.method === 'PATCH' && match) {
+    const id = leadId(match[1]);
+    existingLead(id);
+    const body = await readJson(request);
+    if (body.stage !== undefined) {
+      const stage = CABINET_STAGES.get(body.stage);
+      if (!stage) fail(400, 'Неизвестный этап', { allowed: [...CABINET_STAGES.keys()] });
+      updateStage.run(stage, id);
+    } else if (body.amount !== undefined) {
+      if (typeof body.amount !== 'number' || !Number.isFinite(body.amount) || body.amount < 0) {
+        fail(400, 'Поле «amount» должно быть неотрицательным числом');
+      }
+      updateSale.run(body.amount, new Date().toISOString(), id);
+    } else {
+      fail(400, 'Нужно передать поле «stage» или «amount»');
+    }
+    return send(response, 200, serializeCabinetLead(getLead.get(id)));
   }
 
   match = url.pathname.match(/^\/leads\/(\d+)\/stage$/);
