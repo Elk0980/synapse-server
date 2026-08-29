@@ -1096,10 +1096,40 @@ font-size: 0.62rem;
 white-space: nowrap;
 }
 
+.crm-toolbar {
+display: flex;
+gap: 12px;
+align-items: center;
+justify-content: space-between;
+margin-bottom: 18px;
+}
+
+.crm-periods { display: flex; flex-wrap: wrap; gap: 8px; }
+.crm-period,
+.crm-filter,
+.crm-table select,
+.crm-table input {
+min-height: 44px;
+border: 1px solid var(--line-blue);
+border-radius: 13px;
+color: var(--text);
+background: rgba(11, 9, 8, .72);
+font: inherit;
+}
+.crm-period { padding: 9px 15px; cursor: pointer; }
+.crm-period[aria-pressed="true"] { border-color: var(--accent); background: rgba(46,107,214,.3); }
+.crm-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.crm-filter { min-width: 150px; padding: 8px 34px 8px 12px; }
+.crm-summary { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:11px; margin-bottom:18px; }
+.crm-summary-card { padding:17px; border:1px solid var(--line); border-radius:17px; background:rgba(255,255,255,.025); }
+.crm-summary-card span { display:block; min-height:2.4em; color:var(--muted); font-size:.7rem; }
+.crm-summary-card strong { display:block; margin-top:6px; font-size:1.2rem; }
+.crm-no-data { display:block; margin-top:3px; color:var(--muted); font-size:.62rem; font-weight:400; }
 .crm-strip {
 display: grid;
-grid-template-columns: repeat(4, minmax(0, 1fr));
+grid-template-columns: repeat(6, minmax(0, 1fr));
 gap: 11px;
+margin-bottom:18px;
 }
 
 .crm-stage {
@@ -1153,6 +1183,15 @@ color: var(--muted);
 font-size: 0.64rem;
 }
 
+.crm-table-wrap { overflow-x:auto; border:1px solid var(--line); border-radius:19px; }
+.crm-table { width:100%; min-width:1050px; border-collapse:collapse; font-size:.78rem; }
+.crm-table th,.crm-table td { padding:12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; }
+.crm-table th { color:var(--muted); font-size:.65rem; font-weight:500; letter-spacing:.04em; }
+.crm-table tbody tr:last-child td { border-bottom:0; }
+.crm-table select { width:145px; padding:7px; }
+.crm-table input { width:125px; padding:7px 10px; }
+.crm-empty { padding:34px 20px; border:1px dashed var(--line-blue); border-radius:19px; color:var(--muted); text-align:center; }
+.crm-empty strong { display:block; margin-bottom:6px; color:var(--text); font-family:Georgia,"Times New Roman",serif; font-size:1.15rem; font-weight:400; }
 .project-table {
 overflow: hidden;
 border: 1px solid var(--line);
@@ -1537,6 +1576,9 @@ grid-row: 1;
 grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.crm-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.crm-toolbar { align-items:stretch; flex-direction:column; }
+
 .crm-stage:not(:last-child)::after {
 display: none;
 }
@@ -1621,6 +1663,11 @@ padding: 20px;
 .crm-strip {
 grid-template-columns: 1fr;
 }
+
+.crm-summary { grid-template-columns:1fr; }
+.crm-periods { display:grid; grid-template-columns:repeat(3,1fr); }
+.crm-period { padding-inline:8px; }
+.crm-filter { width:100%; }
 
 .funnel-step:last-child {
 grid-column: auto;
@@ -1896,10 +1943,21 @@ aria-labelledby="loss-panel-title"
 <h2 id="crm-title">CRM</h2>
 </div>
 <p class="section-description">
-Состояние клиентской базы от новой заявки до закрытой сделки.
+Воронка заявок и выручка по данным сервиса CRM.
 </p>
 </div>
-<div class="crm-strip" id="crm-strip"></div>
+<div class="crm-toolbar">
+<div class="crm-periods" id="crm-periods" aria-label="Период">
+<button class="crm-period" type="button" data-crm-period="today" aria-pressed="true">Сегодня</button>
+<button class="crm-period" type="button" data-crm-period="week" aria-pressed="false">Неделя</button>
+<button class="crm-period" type="button" data-crm-period="month" aria-pressed="false">Месяц</button>
+</div>
+<div class="crm-filters">
+<select class="crm-filter" id="crm-stage-filter" aria-label="Фильтр по этапу"></select>
+<select class="crm-filter" id="crm-source-filter" aria-label="Фильтр по источнику"></select>
+</div>
+</div>
+<div id="crm-content" aria-live="polite"></div>
 </section>
 </section>
 
@@ -2126,13 +2184,6 @@ status: "Следующий шаг"
 }
 ],
 
-crm: [
-{ name: "Новые", count: 38, amount: 620000 },
-{ name: "В работе", count: 19, amount: 470000 },
-{ name: "Оплата", count: 6, amount: 198000 },
-{ name: "Закрыто", count: 9, amount: 412000 }
-],
-
 projects: [
 {
 name: "TaiSabai",
@@ -2270,12 +2321,6 @@ dialogs: [
 { name:"Алексей", initials:"А", channel:"Instagram", message:"Есть подарочные сертификаты?", status:"Предложение" },
 { name:"Ольга Д.", initials:"ОД", channel:"Яндекс", message:"Приду с подругой, нужны два места подряд.", status:"Следующий шаг" }
 ],
-crm: [
-{ name:"Новые", count:54, amount:186000 },
-{ name:"В работе", count:31, amount:142000 },
-{ name:"Оплата", count:12, amount:64000 },
-{ name:"Закрыто", count:27, amount:196000 }
-],
 projects: [], integrations: [], activity: []
 });
 
@@ -2297,6 +2342,26 @@ typeof window.matchMedia === "function" &&
 window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const byId = (id) => document.getElementById(id);
+
+// Set this to the CRM service origin (without a trailing slash) when it is deployed.
+const CRM_API = "";
+const CRM_STAGES = Object.freeze([
+{ id:"new", label:"Новая" }, { id:"in_progress", label:"В работе" },
+{ id:"booked", label:"Записан" }, { id:"visited", label:"Пришёл" },
+{ id:"sale", label:"Продажа" }, { id:"rejected", label:"Отказ" }
+]);
+
+// Every CRM data request, including edits, goes through this function.
+const crmAPI = async (path, options = {}) => {
+if (!CRM_API) throw new Error("CRM_NOT_CONNECTED");
+const response = await fetch(`${CRM_API.replace(/\/$/, "")}${path}`, {
+...options,
+headers: { "Accept":"application/json", "Content-Type":"application/json", ...(options.headers || {}) }
+});
+if (!response.ok) throw new Error(`CRM_HTTP_${response.status}`);
+if (response.status === 204) return null;
+return response.json();
+};
 
 const LAYOUT_STORAGE_KEY = "synapse_cabinet_layout_v1";
 const CABINET_BLOCKS = [
@@ -2604,22 +2669,69 @@ ${escapeHTML(dialog.initials)}
 `).join("");
 };
 
+let crmState = { period:"today", stage:"", source:"" };
+const crmMissing = () => '<strong>—<small class="crm-no-data">нет данных</small></strong>';
+const crmMetric = (value, currency = false) =>
+(value === null || value === undefined) ? crmMissing() :
+`<strong>${escapeHTML(currency ? formatCurrency(value) : formatNumber(value))}</strong>`;
+const crmStageOptions = (selected) => CRM_STAGES.map((stage) =>
+`<option value="${stage.id}" ${stage.id === selected ? "selected" : ""}>${stage.label}</option>`).join("");
+
+const showCRMPlaceholder = (message = "Сервис заявок ещё не подключён") => {
+byId("crm-content").innerHTML = `<div class="crm-empty"><strong>${escapeHTML(message)}</strong><span>Здесь появятся реальные заявки после подключения сервиса.</span></div>`;
+};
+
+const renderCRMData = (payload) => {
+const summary = payload?.summary || {};
+const funnel = payload?.funnel || {};
+const leads = Array.isArray(payload?.leads) ? payload.leads : [];
+const sources = Array.isArray(payload?.sources) ? payload.sources : [];
+byId("crm-source-filter").innerHTML = '<option value="">Все источники</option>' + sources.map((source) => {
+const value = typeof source === "string" ? source : source?.id;
+const label = typeof source === "string" ? source : (source?.name || source?.id);
+return value == null ? "" : `<option value="${escapeHTML(value)}" ${String(value) === crmState.source ? "selected" : ""}>${escapeHTML(label)}</option>`;
+}).join("");
+const cards = [["Заявок за период","total"],["Дошло до записи","booked"],["Дошло до визита","visited"],["Продаж","sales"],["Выручка","revenue"]];
+byId("crm-content").innerHTML = `
+<div class="crm-summary">${cards.map(([label,key]) => `<article class="crm-summary-card"><span>${label}</span>${crmMetric(summary[key], key === "revenue")}</article>`).join("")}</div>
+<div class="crm-strip">${CRM_STAGES.map((stage) => {
+const item = funnel[stage.id] || {};
+return `<article class="crm-stage"><h3>${stage.label}</h3><div class="crm-data-row"><span class="crm-data-label">Количество</span>${crmMetric(item.count)}</div><div class="crm-data-row"><span class="crm-data-label">Переход</span>${item.conversion === null || item.conversion === undefined ? crmMissing() : `<strong>${escapeHTML(formatNumber(item.conversion))}%</strong>`}</div></article>`;
+}).join("")}</div>
+${leads.length ? `<div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Дата</th><th>Имя</th><th>Контакт</th><th>Канал</th><th>Источник</th><th>Метка</th><th>Этап</th><th>Сумма</th></tr></thead><tbody>${leads.map((lead) => `<tr><td>${escapeHTML(lead.date ?? "—")}</td><td>${escapeHTML(lead.name ?? "—")}</td><td>${escapeHTML(lead.contact ?? "—")}</td><td>${escapeHTML(lead.channel ?? "—")}</td><td>${escapeHTML(lead.source ?? "—")}</td><td>${escapeHTML(lead.tag ?? "—")}</td><td><select data-crm-stage-id="${escapeHTML(lead.id)}" aria-label="Этап заявки ${escapeHTML(lead.name ?? lead.id)}">${crmStageOptions(lead.stage)}</select></td><td><input type="number" min="0" step="1" inputmode="decimal" data-crm-amount-id="${escapeHTML(lead.id)}" value="${escapeHTML(lead.amount ?? "")}" placeholder="—" aria-label="Сумма продажи"></td></tr>`).join("")}</tbody></table></div>` : '<div class="crm-empty"><strong>Заявок за период нет</strong><span>Измените период или фильтры.</span></div>'}`;
+};
+
+const loadCRM = async () => {
+showCRMPlaceholder("Загрузка заявок…");
+try {
+const query = new URLSearchParams({ period:crmState.period });
+if (crmState.stage) query.set("stage", crmState.stage);
+if (crmState.source) query.set("source", crmState.source);
+renderCRMData(await crmAPI(`/dashboard?${query}`));
+} catch (error) { showCRMPlaceholder(); }
+};
+
 const renderCRM = () => {
-byId("crm-strip").innerHTML = DATA.crm.map((stage) => `
-<article class="crm-stage">
-<h3>${escapeHTML(stage.name)}</h3>
-<div class="crm-data-row">
-<span class="crm-data-label">Карточки</span>
-<strong>${escapeHTML(formatNumber(stage.count))}</strong>
-${sampleBadge()}
-</div>
-<div class="crm-data-row">
-<span class="crm-data-label">Сумма</span>
-<strong>${escapeHTML(formatCurrency(stage.amount))}</strong>
-${sampleBadge()}
-</div>
-</article>
-`).join("");
+byId("crm-stage-filter").innerHTML = '<option value="">Все этапы</option>' + crmStageOptions("");
+byId("crm-periods").addEventListener("click", (event) => {
+const button = event.target.closest("[data-crm-period]"); if (!button) return;
+crmState.period = button.dataset.crmPeriod;
+byId("crm-periods").querySelectorAll("button").forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
+loadCRM();
+});
+byId("crm-stage-filter").addEventListener("change", (event) => { crmState.stage = event.target.value; loadCRM(); });
+byId("crm-source-filter").addEventListener("change", (event) => { crmState.source = event.target.value; loadCRM(); });
+byId("crm-content").addEventListener("change", async (event) => {
+const stageId = event.target.dataset.crmStageId;
+const amountId = event.target.dataset.crmAmountId;
+if (!stageId && !amountId) return;
+const id = stageId || amountId;
+const body = stageId ? { stage:event.target.value } : { amount:event.target.value === "" ? null : Number(event.target.value) };
+event.target.disabled = true;
+try { await crmAPI(`/leads/${encodeURIComponent(id)}`, { method:"PATCH", body:JSON.stringify(body) }); await loadCRM(); }
+catch (error) { event.target.disabled = false; showCRMPlaceholder(); }
+});
+loadCRM();
 };
 
 const renderProjects = () => {
