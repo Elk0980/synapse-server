@@ -870,6 +870,21 @@
       background: var(--panel);
     }
 
+    .space-card--photo {
+      position: relative;
+      color: var(--hero-ink);
+      border-color: rgba(255, 255, 255, 0.16);
+      background-image: linear-gradient(180deg, rgba(6, 12, 9, 0.3) 0%, rgba(6, 12, 9, 0.8) 100%), url('img/space-barrel.jpg');
+      background-size: cover;
+      background-position: center 35%;
+    }
+
+    .space-card--photo h3,
+    .space-card--photo p {
+      color: var(--hero-ink);
+      text-shadow: 0 1px 14px rgba(4, 12, 8, 0.65);
+    }
+
     .program-card h3,
     .space-card h3 {
       margin: 0;
@@ -2106,8 +2121,8 @@
           <article class="space-card">
             <div><h3>Фитостены с подсветкой</h3><p>уникальный дизайн и настоящее панно из стабилизированного мха.</p></div>
           </article>
-          <article class="space-card">
-            <div><h3>Кедровая фитобочка</h3><p>массив дерева, металлические обручи.</p></div>
+          <article class="space-card space-card--photo">
+            <div><h3>Кедровая фитобочка</h3><p>массив натурального дерева — кедра, металлические обручи и лечебные травы.</p></div>
           </article>
           <article class="space-card">
             <div><h3>Чай и зона отдыха</h3><p>кресла, живое дерево, панно из стабилизированного мха.</p></div>
