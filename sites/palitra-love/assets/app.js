@@ -80,6 +80,12 @@ if(heroSlider){
  const dots=[...heroSlider.querySelectorAll('[data-hero-dot]')];
  const videoDisabled=matchMedia('(max-width: 767px), (prefers-reduced-motion: reduce)');
  let activeIndex=0,moving=false,hoverPaused=false,touchStartX=null;
+ const waitForFirstFrame=video=>new Promise(resolve=>{
+  if(video.readyState>=2){resolve();return}
+  const done=()=>{video.removeEventListener('loadeddata',done);video.removeEventListener('error',done);resolve()};
+  video.addEventListener('loadeddata',done,{once:true});
+  video.addEventListener('error',done,{once:true});
+ });
  const resetVideo=video=>{
   video.pause();
   video.currentTime=0;
@@ -99,30 +105,50 @@ if(heroSlider){
    if(index===activeIndex)dot.setAttribute('aria-current','true');else dot.removeAttribute('aria-current');
   });
  };
- const goTo=(nextIndex)=>{
+ const goTo=async(nextIndex)=>{
   if(moving||nextIndex===activeIndex)return;
   moving=true;
   const current=slides[activeIndex],next=slides[nextIndex],reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  resetVideo(current.querySelector('video'));
-  next.style.transform='translateX(100%)';
-  next.classList.add('is-moving');
-  next.style.visibility='visible';
+  const currentVideo=current.querySelector('video'),nextVideo=next.querySelector('video');
+  const currentCopy=current.querySelector('.hero-shopfront'),nextCopy=next.querySelector('.hero-shopfront');
+  if(!videoDisabled.matches){
+   if(!nextVideo.src){nextVideo.src=nextVideo.dataset.videoSrc;nextVideo.load()}
+   await waitForFirstFrame(nextVideo);
+   await nextVideo.play().catch(()=>{});
+  }
+  next.classList.add('is-entering');
   next.setAttribute('aria-hidden','false');
+  if(reduceMotion){
+   current.classList.remove('is-active');
+   next.classList.remove('is-entering');next.classList.add('is-active');
+   resetVideo(currentVideo);
+   activeIndex=nextIndex;
+   updateControls();
+   moving=false;
+   return;
+  }
+  currentCopy.classList.add('is-copy-leaving');
+  nextCopy.classList.add('is-copy-waiting');
+  next.getBoundingClientRect();
+  current.classList.add('is-leaving');
+  next.classList.add('is-crossfading');
   activeIndex=nextIndex;
   updateControls();
-  playActive();
-  next.getBoundingClientRect();
-  current.classList.add('is-moving');
-  current.style.transform='translateX(-100%)';
-  next.style.transform='translateX(0)';
+  setTimeout(()=>{
+   currentCopy.classList.add('is-copy-hidden');
+   nextCopy.classList.remove('is-copy-waiting');
+   nextCopy.classList.add('is-copy-entering');
+  },140);
   const finish=()=>{
-   current.classList.remove('is-active','is-moving');
-   current.style.visibility='';current.style.transform='';
-   next.classList.remove('is-moving');next.classList.add('is-active');
-   next.style.visibility='';next.style.transform='';
+   current.classList.remove('is-active','is-leaving');
+   next.classList.remove('is-entering','is-crossfading');next.classList.add('is-active');
+   currentCopy.classList.remove('is-copy-leaving','is-copy-hidden');
+   nextCopy.classList.remove('is-copy-entering');
+   resetVideo(currentVideo);
+   if(hoverPaused)nextVideo.pause();
    moving=false;
   };
-  if(reduceMotion)finish();else setTimeout(finish,600);
+  setTimeout(finish,420);
  };
  const next=()=>goTo((activeIndex+1)%slides.length);
  const previous=()=>goTo((activeIndex-1+slides.length)%slides.length);
