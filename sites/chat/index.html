@@ -38,13 +38,16 @@
   </div>
   <div class="backdrop" id="tasksPanel"><aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="tasksTitle"><div class="drawer-head"><h2 id="tasksTitle">Задачи</h2><button class="close" id="closeTasks" type="button" aria-label="Закрыть">×</button></div><div class="task-content" id="taskContent"><p class="empty">Загрузка…</p></div></aside></div>
   <script>
+    const CHAT_API_URL = 'http://localhost:8080';
     const STORAGE_KEY = 'synapse_chat_v1';
+    const SESSION_KEY = 'synapse_chat_session_v1';
     const INTRO = 'Здравствуйте, я Хью — ассистент Synapse Business. Веду вашу систему: сайт, чат, заявки и отчёты.';
-    const SYSTEM_NOTICE = 'Ответ придёт из системы — подключение бэкенда в работе';
     const messages = document.getElementById('messages');
     const input = document.getElementById('messageInput');
     const sendButton = document.getElementById('sendButton');
     let history = loadHistory();
+    let session = loadSession();
+    let sending = false;
 
     function loadHistory() {
       try {
@@ -53,7 +56,12 @@
       } catch (_) {}
       return [{ role: 'assistant', text: INTRO }];
     }
+    function loadSession() {
+      try { const saved = JSON.parse(localStorage.getItem(SESSION_KEY)); if (saved && Number.isInteger(saved.id) && typeof saved.token === 'string') return saved; } catch (_) {}
+      return null;
+    }
     function saveHistory() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(history)); } catch (_) {} }
+    function saveSession() { try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch (_) {} }
     function renderMessages() {
       messages.textContent = '';
       history.forEach(item => {
@@ -67,11 +75,37 @@
       });
       messages.scrollTop = messages.scrollHeight;
     }
-    function resizeInput() { input.style.height = 'auto'; input.style.height = `${Math.min(input.scrollHeight,140)}px`; sendButton.disabled = !input.value.trim(); }
-    document.getElementById('chatForm').addEventListener('submit', event => {
+    function resizeInput() { input.style.height = 'auto'; input.style.height = `${Math.min(input.scrollHeight,140)}px`; sendButton.disabled = sending || !input.value.trim(); }
+    async function startConversation() {
+      const query = new URLSearchParams(location.search);
+      const response = await fetch(`${CHAT_API_URL}/conversations`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+        site: location.hostname, page: location.href, referrer: document.referrer || null,
+        client_id: localStorage.getItem('client_id'), utm_source: query.get('utm_source'),
+        utm_medium: query.get('utm_medium'), utm_campaign: query.get('utm_campaign'),
+        utm_term: query.get('utm_term'), utm_content: query.get('utm_content')
+      }) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      if (!Number.isInteger(data.id) || typeof data.visitorToken !== 'string') throw new Error('Некорректный ответ сервиса');
+      session = { id: data.id, token: data.visitorToken }; saveSession();
+    }
+    document.getElementById('chatForm').addEventListener('submit', async event => {
       event.preventDefault(); const text = input.value.trim(); if (!text) return;
-      history.push({ role: 'user', text }, { role: 'system', text: SYSTEM_NOTICE }); saveHistory();
-      input.value = ''; resizeInput(); renderMessages(); input.focus();
+      sending = true; history.push({ role: 'user', text }); saveHistory();
+      input.value = ''; resizeInput(); renderMessages();
+      try {
+        if (!session) await startConversation();
+        const response = await fetch(`${CHAT_API_URL}/conversations/${session.id}/messages`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${session.token}` }, body: JSON.stringify({ text }) });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (typeof data.reply !== 'string' || !data.reply.trim()) throw new Error('Пустой ответ сервиса');
+        history.push({ role: 'assistant', text: data.reply.trim() });
+      } catch (error) {
+        console.error('Чат недоступен:', error);
+        history.push({ role: 'system', text: 'Не удалось отправить сообщение: сервис чата сейчас недоступен. Попробуйте ещё раз позже.' });
+      } finally {
+        sending = false; saveHistory(); renderMessages(); resizeInput(); input.focus();
+      }
     });
     input.addEventListener('input', resizeInput);
     input.addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); document.getElementById('chatForm').requestSubmit(); } });

@@ -1,0 +1,21 @@
+services:
+  chat:
+    image: node:22-bookworm-slim
+    restart: unless-stopped
+    working_dir: /app
+    command: ["node", "--experimental-sqlite", "server.js"]
+    volumes:
+      - ./ops/chat:/app:ro
+      - chat_data:/data
+    environment:
+      PORT: "8080"
+      DATABASE_PATH: /data/chat.sqlite
+      API_KEY: ${CHAT_API_KEY:?set CHAT_API_KEY}
+      ALLOWED_ORIGINS: ${CHAT_ALLOWED_ORIGINS:-}
+      CRM_URL: ${CHAT_CRM_URL:-}
+      CRM_API_KEY: ${CRM_API_KEY:-}
+      MODEL_API_URL: ${CHAT_MODEL_API_URL:-}
+      MODEL_API_KEY: ${CHAT_MODEL_API_KEY:-}
+
+volumes:
+  chat_data:
