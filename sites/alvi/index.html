@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="light">
 
   <title>Массаж и SPA в Иркутске — салон ALVI | Депутатская 71а</title>
-  <meta name="description" content="Массаж и SPA-ритуалы в Иркутске: расслабляющий массаж от 2 800 ₽, SPA-программы 3 500–8 900 ₽, программы для двоих 4 600–17 600 ₽. 4,9★ по 398 оценкам в 2ГИС. Кедровая бочка, фитостены. Запись в Telegram. Депутатская 71а.">
+  <meta name="description" content="Массаж и SPA-ритуалы в Иркутске: расслабляющий массаж от 2 800 ₽, SPA-программы 3 500–8 900 ₽, программы для двоих 6 900–17 600 ₽. 4,9★ по 398 оценкам в 2ГИС. Кедровая бочка, фитостены. Запись в Telegram. Депутатская 71а.">
   <link rel="canonical" href="https://alvi-spa-irkutsk.gzfh46j4jq.chatgpt.site/alvi.html">
   <meta property="og:type" content="website">
   <meta property="og:title" content="ALVI SPA — Верни себе баланс">
@@ -84,7 +84,7 @@
         "name": "Сколько стоит массаж в Иркутске в ALVI?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Расслабляющий массаж и массаж спины — 2 800 ₽, парный массаж — от 5 600 ₽. SPA-программы: «Релакс» — 3 500 ₽, «Душевное расслабление» — 5 600 ₽, «Ароматное погружение» — 6 300 ₽. Программы для двоих — 4 600–17 600 ₽."
+          "text": "Расслабляющий массаж и массаж спины — 2 800 ₽, парный массаж — от 5 600 ₽. SPA-программы: «Релакс» — 3 500 ₽, «Душевное расслабление» — 5 600 ₽, «Ароматное погружение» — 6 300 ₽. Программы для двоих — 6 900–17 600 ₽."
         }
       },
       {
@@ -133,18 +133,18 @@
       Они будут пересмотрены только при фактическом конфликте с кадрами.
     */
     :root {
-      --bg: #f4f3f0;
-      --bg2: #eceae5;
-      --panel: #ffffff;
-      --panel2: #f7f6f2;
-      --ink: #23291f;
-      --ink-dim: #5c6656;
-      --ink-faint: #8b9385;
+      --bg: #e8e4da;
+      --bg2: #ded9cd;
+      --panel: #f1eee6;
+      --panel2: #e6e2d8;
+      --ink: #2a3027;
+      --ink-dim: #5b6454;
+      --ink-faint: #8a9182;
       --gold: #8a6f3d;
       --gold-soft: #b39a68;
-      --green: #4e7c4a;
+      --green: #4a7147;
       --green-deep: #2f5a34;
-      --line: rgba(35, 41, 31, 0.12);
+      --line: rgba(42, 48, 39, 0.14);
 
       --hero-ink: #fffdf8;
       --hero-ink-muted: rgba(255, 253, 248, 0.76);
@@ -410,10 +410,10 @@
     }
 
     .hero-scene--final {
-      align-items: flex-start;
-      padding-top: 5vh;
+      align-items: center;
+      padding-top: clamp(5.5rem, 11vh, 7.5rem);
       padding-right: 31vw;
-      padding-bottom: 61vh;
+      padding-bottom: clamp(2rem, 5vh, 3.5rem);
       padding-left: 19vw;
       color: var(--hero-ink);
       transition: color 480ms ease;
@@ -626,7 +626,7 @@
     }
 
     .final-price-line {
-      margin: 1.2rem 0 0;
+      margin: 0.9rem 0 0;
       color: inherit;
       opacity: 0.86;
       font-size: 0.92rem;
@@ -847,7 +847,7 @@
       line-height: 1.55;
       border: 1px dashed var(--gold-soft);
       border-radius: 1.5rem;
-      background: rgba(255, 255, 255, 0.42);
+      background: rgba(246, 243, 235, 0.5);
     }
 
     .media-slot--small {
@@ -955,7 +955,7 @@
       padding: clamp(2rem, 5vw, 4rem);
       border: 1px solid rgba(47, 90, 52, 0.18);
       border-radius: 1.75rem;
-      background: #e1e9dd;
+      background: #dee2d3;
     }
 
     .quiet-panel p {
@@ -1006,7 +1006,7 @@
       line-height: 1.45;
       border: 1px dashed var(--gold-soft);
       border-radius: 0.5rem;
-      background: #fff9e9;
+      background: #efe9d8;
       overflow-wrap: anywhere;
     }
 
@@ -1073,7 +1073,7 @@
 
     .quiz-option:has(input:checked) {
       border-color: var(--green);
-      background: #edf4ea;
+      background: #e4e6da;
     }
 
     .quiz-option input {
@@ -1093,7 +1093,7 @@
       padding: clamp(1.4rem, 3vw, 2.25rem);
       border-left: 0.25rem solid var(--green);
       border-radius: 0 1.25rem 1.25rem 0;
-      background: #edf4ea;
+      background: #e4e6da;
     }
 
     .quiz-result[hidden] {
@@ -1501,15 +1501,15 @@
     .final-needs {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(14.5rem, 1fr));
-      gap: 0.7rem;
-      margin: 1.3rem 0 0;
+      gap: 0.55rem;
+      margin: 1rem 0 0;
       max-width: 54rem;
     }
 
     .need-card {
       display: grid;
-      gap: 0.3rem;
-      padding: 0.9rem 1.05rem;
+      gap: 0.24rem;
+      padding: 0.72rem 0.95rem;
       border: 1px solid rgba(255, 255, 255, 0.14);
       border-radius: 1.05rem;
       background: rgba(10, 16, 13, 0.42);
@@ -1575,7 +1575,7 @@
       padding: 1.15rem 1.3rem;
       border: 1px solid var(--line);
       border-radius: 1.05rem;
-      background: rgba(255, 255, 255, 0.55);
+      background: rgba(246, 243, 235, 0.6);
     }
 
     .proof-card p {
@@ -1633,6 +1633,72 @@
 @keyframes page-loader-progress{0%{width:0}35%{width:60%}65%{width:78%}85%{width:86%}100%{width:90%}}
 @media(max-width:600px){#page-loader img{height:44px}}
 @media(prefers-reduced-motion:reduce){#page-loader,#page-loader.is-complete{transition:none}#page-loader.is-visible:not(.is-complete) #page-loader-line::before{animation:none}#page-loader.is-complete #page-loader-line::before{transition:none}}
+
+    /* Финальная сцена: светлый текст поверх яркого кадра (правка Owner'а 30.08). */
+    .hero .hero-scene--final,
+    .hero .hero-scene--final .scene-title,
+    .hero .hero-scene--final .scene-copy--dark,
+    .hero .hero-scene--final .final-price-line,
+    .hero .hero-scene--final .need-card {
+      color: var(--hero-ink);
+    }
+    .hero .hero-scene--final .scene-title,
+    .hero .hero-scene--final .scene-copy--dark,
+    .hero .hero-scene--final .final-price-line {
+      text-shadow: 0 1px 16px rgba(4, 12, 8, 0.6);
+    }
+    .hero .hero-scene--final .final-signature,
+    .hero .hero-scene--final .final-signature strong {
+      color: var(--hero-ink);
+      text-shadow: 0 1px 16px rgba(4, 12, 8, 0.6);
+    }
+    .hero .hero-scene--final .need-card {
+      background: rgba(8, 16, 12, 0.58);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Блок отзывов — в тонах хиро, без резкого перехода на белое (правка 30.08). */
+    .trust-links {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0.4rem 2.2rem;
+      margin: 0;
+    }
+
+    #trust.content-section--panel {
+      color: var(--hero-ink);
+      border-bottom-color: rgba(255, 255, 255, 0.1);
+      background: linear-gradient(180deg, #1b2a1e 0%, #253021 100%);
+    }
+
+    #trust .trust-score strong { color: #d9c48f; }
+
+    #trust .trust-score span,
+    #trust .trust-copy { color: rgba(255, 253, 248, 0.82); }
+
+    #trust .text-link { color: #e3d4a7; }
+
+    #trust .text-link:hover,
+    #trust .text-link:focus-visible { color: #fffdf8; }
+
+    /* Низкие экраны: финальная сцена не должна обрезаться (правка 30.08). */
+    @media (max-height: 900px) {
+      .hero-scene--final .scene-copy { margin-top: 0.85rem; }
+      .hero-scene--final .final-price-line { margin-top: 0.65rem; }
+      .hero-scene--final .final-needs { gap: 0.45rem; margin-top: 0.75rem; }
+      .hero-scene--final .need-card { padding: 0.58rem 0.85rem; gap: 0.2rem; }
+      .hero-scene--final .need-card__pain { font-size: 0.95rem; }
+      .hero-scene--final .need-card__proof { font-size: 0.72rem; }
+      .hero-scene--final .final-actions { margin-top: 0.85rem; }
+      .hero-scene--final .final-signature { margin-top: 0.85rem; }
+    }
+
+    @media (max-height: 700px) {
+      .hero-scene--final .need-card__proof { display: none; }
+      .hero-scene--final .final-signature { display: none; }
+      .hero-scene--final .scene-title { font-size: clamp(1.9rem, 3.4vw, 2.6rem); }
+    }
 </style><script>
 (()=>{let finished=false,revealTimer,safetyTimer;const loader=()=>document.getElementById("page-loader");const finish=()=>{if(finished)return;finished=true;clearTimeout(revealTimer);clearTimeout(safetyTimer);const element=loader();if(!element)return;if(!element.classList.contains("is-visible")){element.style.display="none";return}element.classList.add("is-complete");setTimeout(()=>{element.style.display="none"},250)};revealTimer=setTimeout(()=>{if(!finished)loader()?.classList.add("is-visible")},300);safetyTimer=setTimeout(()=>{finished=true;clearTimeout(revealTimer);const element=loader();if(element)element.style.display="none"},5000);if(document.readyState==="complete")finish();else addEventListener("load",finish,{once:true})})();
 </script>
@@ -1754,8 +1820,8 @@
 
         <article class="hero-scene" data-scene="5" data-mobile-frame="4" data-range-start="0.55" data-range-end="0.72">
           <div class="hero-scene__content">
-            <h2 class="scene-title">Час, в котором никто ничего от вас не ждёт</h2>
-            <p class="scene-copy">Тишина, тёплые руки мастера, музыка и чай после.<br>Тело вспоминает, как отпускать.</p>
+            <h2 class="scene-title">Время, в котором никто ничего от вас не ждёт</h2>
+            <blockquote class="scene-quote"><p>Тишина, расслабляющая обстановка, тёплые руки мастера, музыка и чай после.<br>Тело ощущает баланс.</p></blockquote>
             <blockquote class="hero-review">
               <p>«Уютно, спокойно и очень душевно. Девушки-мастера — профессионалы своего дела.»</p>
               <footer>андрей · Яндекс Карты · июль 2025 · ★ 4,9 из 53 оценок</footer>
@@ -1769,7 +1835,7 @@
           <div class="hero-scene__content">
             <h2 class="scene-title">Вы выходите другим человеком</h2>
             <p class="scene-copy scene-copy--dark">Плечи опущены. Дыхание глубокое. Голова ясная.</p>
-            <p class="final-price-line">Массаж от 2 800 ₽ · SPA-ритуалы от 3 500 ₽ · Для двоих от 4 600 ₽</p>
+            <p class="final-price-line">Массаж от 2 800 ₽ · SPA-ритуалы от 3 500 ₽ · Для двоих от 6 900 ₽</p>
             <div class="final-needs">
               <a class="need-card" href="#for-self">
                 <span class="need-card__pain">Не получается расслабиться</span>
@@ -1778,7 +1844,7 @@
               </a>
               <a class="need-card" href="#for-two">
                 <span class="need-card__pain">Давно не были вдвоём</span>
-                <span class="need-card__fix">Один кабинет, два мастера · от 4 600 ₽</span>
+                <span class="need-card__fix">Один кабинет, два мастера · от 6 900 ₽</span>
                 <span class="need-card__proof">«Свидание удалось» — lil, Яндекс Карты</span>
               </a>
               <a class="need-card" href="#gift">
@@ -1813,8 +1879,11 @@
       <div class="content-shell trust-panel">
         <p class="trust-score"><strong>4,9</strong><span>— 398 подтверждённых оценок и 329 отзывов в 2ГИС.</span></p>
         <div>
-          <p class="trust-copy">Чаще всего гости отмечают: атмосферу · вкусный чай · музыку · чистоту · индивидуальный подход.</p>
-          <a class="text-link" href="https://2gis.ru/irkutsk/firm/70000001061502048" target="_blank" rel="noopener noreferrer">Читать отзывы в 2ГИС →</a>
+          <p class="trust-copy">Чаще всего гости отмечают: атмосферу · вкусный чай · музыку · чистоту · индивидуальный подход · мастеров своего дела.</p>
+          <p class="trust-links">
+            <a class="text-link" href="https://2gis.ru/irkutsk/firm/70000001061502048" target="_blank" rel="noopener noreferrer">Читать отзывы в 2ГИС →</a>
+            <a class="text-link" href="https://yandex.ru/maps/org/alvi/132486598882/reviews/" target="_blank" rel="noopener noreferrer">Яндекс Карты · 4,9 из 53 оценок →</a>
+          </p>
         </div>
       </div>
     </section>
@@ -1909,7 +1978,7 @@
         <div class="section-split">
           <div>
             <h2 class="content-title">Один ритм на двоих</h2>
-            <p class="content-subtitle">SPA для двоих в Иркутске — от 4 600 ₽</p>
+            <p class="content-subtitle">SPA для двоих в Иркутске — от 6 900 ₽</p>
             <p class="content-lead">Не ещё один пункт в совместных планах, а отдельное время для вас обоих: один кабинет, два мастера, общий выдох.</p>
           </div>
         </div>
@@ -2068,7 +2137,7 @@
         <div class="faq-list">
           <details>
             <summary>Сколько стоит массаж в Иркутске в ALVI?</summary>
-            <p class="faq-answer">Расслабляющий массаж и массаж спины — 2 800 ₽, парный массаж — от 5 600 ₽. SPA-программы: «Релакс» — 3 500 ₽, «Душевное расслабление» — 5 600 ₽, «Ароматное погружение» — 6 300 ₽. Программы для двоих — 4 600–17 600 ₽.</p>
+            <p class="faq-answer">Расслабляющий массаж и массаж спины — 2 800 ₽, парный массаж — от 5 600 ₽. SPA-программы: «Релакс» — 3 500 ₽, «Душевное расслабление» — 5 600 ₽, «Ароматное погружение» — 6 300 ₽. Программы для двоих — 6 900–17 600 ₽.</p>
           </details>
           <!-- FAQ о длительности добавить после подтверждения данных. -->
           <details>
