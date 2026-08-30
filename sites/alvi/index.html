@@ -498,6 +498,22 @@
       letter-spacing: 0.015em;
     }
 
+    .scene-quote {
+      margin: 1.15rem 0 0;
+      padding-left: 1.05rem;
+      border-left: 2px solid rgba(255, 255, 255, 0.3);
+      max-width: 34rem;
+    }
+    .scene-quote p {
+      margin: 0;
+      font-family: "Lora", Georgia, serif;
+      font-style: italic;
+      font-size: clamp(1.05rem, 2.1vw, 1.5rem);
+      line-height: 1.5;
+      color: rgba(255, 253, 248, 0.92);
+    }
+
+
     .scene-copy--dark {
       color: inherit;
       opacity: 0.82;
@@ -1721,7 +1737,7 @@
         <article class="hero-scene" data-scene="1" data-mobile-frame="1" data-range-start="0.07" data-range-end="0.25">
           <div class="hero-scene__content">
             <h2 class="scene-title">День закончился. Вы — нет.</h2>
-            <p class="scene-copy">Плечи подняты, дыхание короткое, голова продолжает работать.<br>Тело держит темп, даже когда вы легли.</p>
+            <blockquote class="scene-quote"><p>Каждый раз откладывая свой отдых — вы берёте в долг у своего состояния.</p></blockquote>
           </div>
         </article>
 
@@ -1730,7 +1746,7 @@
         <article class="hero-scene" data-scene="3" data-mobile-frame="2" data-range-start="0.33" data-range-end="0.47">
           <div class="hero-scene__content">
             <h2 class="scene-title">Это не проходит само</h2>
-            <p class="scene-copy">Выходные не разгружают. Отпуск раз в год не отменяет остальные триста пятьдесят дней. Напряжение просто копится дальше.</p>
+            <blockquote class="scene-quote"><p>Выходные не разгружают. Отпуск раз в год не отменяет остальные триста пятьдесят дней. Напряжение просто копится дальше.</p></blockquote>
           </div>
         </article>
 
