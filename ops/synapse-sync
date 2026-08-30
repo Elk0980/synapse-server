@@ -3,8 +3,19 @@ set -eu
 
 REPO_DIR=${SYNAPSE_REPO_DIR:-/opt/synapse}
 BRANCH=${SYNAPSE_BRANCH:-main}
+ENV_FILE=${SYNAPSE_ENV_FILE:-$REPO_DIR/.env}
 
 cd "$REPO_DIR"
+
+# The EXIT trap gives every invocation one concise deployment-state marker, even
+# when fetch, build, or startup fails. It intentionally prints no environment.
+report_state() {
+  status=$?
+  commit=$(git rev-parse --short=12 HEAD 2>/dev/null || printf '%s' unknown)
+  running=$(docker compose ps --status running -q 2>/dev/null | awk 'NF { count++ } END { print count+0 }')
+  printf 'synapse-sync commit=%s running=%s status=%s\n' "$commit" "$running" "$status"
+}
+trap report_state EXIT
 
 config_hash() {
   if [ -f caddy/Caddyfile ]; then
@@ -14,25 +25,54 @@ config_hash() {
   fi
 }
 
+has_value() {
+  key=$1
+  [ -f "$ENV_FILE" ] && awk -F= -v key="$key" '
+    $1 == key {
+      value = substr($0, index($0, "=") + 1)
+      if (value != "") found = 1
+    }
+    END { exit !found }
+  ' "$ENV_FILE"
+}
+
+ensure_secret() {
+  key=$1
+  has_value "$key" && return 0
+
+  # openssl produces a fresh value; there is deliberately no fallback/default.
+  value=$(openssl rand -hex 32)
+  printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+}
+
+# Create only absent required values. Existing non-empty values are never
+# rewritten, which keeps chat and CRM paired across all subsequent runs.
+umask 077
+if [ ! -e "$ENV_FILE" ]; then
+  : > "$ENV_FILE"
+fi
+chmod 600 "$ENV_FILE"
+ensure_secret CRM_API_KEY
+ensure_secret CHAT_API_KEY
+
 before=$(git rev-parse HEAD)
 before_caddy=$(config_hash)
 git fetch --quiet origin "$BRANCH"
-git reset --hard "origin/$BRANCH"
+git reset --hard --quiet "origin/$BRANCH"
 after=$(git rev-parse HEAD)
 after_caddy=$(config_hash)
 
-[ "$before" != "$after" ] || exit 0
-
-# Apply Compose-level changes (including bind mounts).
-docker compose up -d
+if [ "$before" != "$after" ]; then
+  # Compose rebuilds changed build contexts and also creates newly added services.
+  docker compose up -d --build
+else
+  # Reconcile stopped/exited services without spending time on an unnecessary build.
+  docker compose up -d --no-build
+fi
 
 if [ "$before_caddy" != "$after_caddy" ]; then
-  timestamp=$(date '+%Y-%m-%d %H:%M:%S %z')
-  if docker compose exec -T caddy \
+  if ! docker compose exec -T caddy \
     caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile; then
-    printf '%s Caddy configuration reloaded\n' "$timestamp"
-  else
-    printf '%s Caddy reload failed; restarting container\n' "$timestamp" >&2
     docker compose restart caddy
   fi
 fi
