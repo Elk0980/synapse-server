@@ -1699,6 +1699,36 @@
     #trust .text-link:hover,
     #trust .text-link:focus-visible { color: #fffdf8; }
 
+    /* Первый экран: кнопка и подпись — по центру внизу слайда (правка Owner'а 30.08). */
+    .hero-scene[data-scene="0"] .hero-actions {
+      position: absolute;
+      left: 50%;
+      bottom: clamp(4.6rem, 9vh, 6.4rem);
+      z-index: 21;
+      margin: 0;
+      transform: translateX(-50%);
+      justify-content: center;
+    }
+
+    .hero-scene[data-scene="0"] .response-note {
+      position: absolute;
+      left: 50%;
+      bottom: clamp(3rem, 6vh, 4.4rem);
+      z-index: 21;
+      margin: 0;
+      transform: translateX(-50%);
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .hero.is-compact-mode .hero-scene[data-scene="0"] .hero-actions,
+    .hero.is-compact-mode .hero-scene[data-scene="0"] .response-note {
+      position: static;
+      transform: none;
+      margin: 1rem 0 0;
+      text-align: left;
+    }
+
     /* Низкие экраны: финальная сцена не должна обрезаться (правка 30.08). */
     @media (max-height: 900px) {
       .hero-scene--final .scene-copy { margin-top: 0.85rem; }
