@@ -2898,68 +2898,65 @@
       const blocks = Array.from(document.querySelectorAll("[data-after-block]"));
       const visited = new Set();
       const loopDuration = 1200;
+      const motionStyles = document.createElement("style");
       let lastScrollY = window.scrollY;
       let direction = 1;
-      let inputToSkipUntil = 0;
-      let heldBlock = null;
-      let holdTimer = 0;
+      let inputToSkipUntil = window.location.hash ? performance.now() + 1000 : 0;
       let activeLoop = null;
+      let loopFinishTimer = 0;
       let settleTimer = 0;
 
-      const finishLoop = () => {
-        if (!activeLoop) return;
-        const elapsed = Number(activeLoop.currentTime) || 0;
-        activeLoop.currentTime = Math.ceil(elapsed / loopDuration) * loopDuration;
-        activeLoop.pause();
-        activeLoop.cancel();
-        activeLoop = null;
-      };
+      motionStyles.textContent = `
+        html { scroll-snap-type: y proximity; }
+        [data-after-block] {
+          scroll-snap-align: start;
+          scroll-snap-stop: normal;
+        }
+        .after-hero > [data-after-block]:not(:last-child) {
+          margin-block-end: clamp(-3rem, -4vw, -1.5rem);
+        }
+      `;
+      if (!reducedMotion.matches) document.head.append(motionStyles);
 
-      const releaseHold = () => {
-        window.clearTimeout(holdTimer);
-        holdTimer = 0;
-        heldBlock = null;
+      const stopLoopAtIterationEnd = () => {
+        if (!activeLoop) return;
+        window.clearTimeout(loopFinishTimer);
+        const loop = activeLoop;
+        const elapsed = Number(loop.currentTime) || 0;
+        const boundary = Math.floor(elapsed / loopDuration + 1) * loopDuration;
+        const remaining = Math.max(0, boundary - elapsed);
+        activeLoop = null;
+        loopFinishTimer = window.setTimeout(() => {
+          loop.currentTime = boundary;
+          loop.pause();
+        }, remaining);
       };
 
       const startDwell = (block) => {
         const key = `${block.dataset.afterBlock}:${direction}`;
         if (reducedMotion.matches || performance.now() < inputToSkipUntil || visited.has(key)) return;
         visited.add(key);
-        finishLoop();
-        activeLoop = block.animate(
+        stopLoopAtIterationEnd();
+        const visibleElement = block.querySelector(".content-title, .trust-score, .site-footer__brand, .content-shell") || block;
+        activeLoop = visibleElement.animate(
           [
-            { opacity: 1, transform: "translateY(0)" },
-            { opacity: 0.985, transform: "translateY(-2px)" },
-            { opacity: 1, transform: "translateY(0)" }
+            { transform: "translateY(0) scale(1)" },
+            { transform: "translateY(-8px) scale(1.015)" },
+            { transform: "translateY(0) scale(1)" }
           ],
           { duration: loopDuration, iterations: Infinity, easing: "ease-in-out" }
         );
-        heldBlock = block;
-        holdTimer = window.setTimeout(releaseHold, 500);
       };
 
       const inspectRestingBlock = () => {
-        if (heldBlock || reducedMotion.matches || performance.now() < inputToSkipUntil) return;
+        if (reducedMotion.matches || performance.now() < inputToSkipUntil) return;
         const restingLine = 0;
         const block = blocks.find((candidate) => Math.abs(candidate.getBoundingClientRect().top - restingLine) <= 18);
         if (block) startDwell(block);
       };
 
-      window.addEventListener("wheel", (event) => {
-        if (event.ctrlKey || reducedMotion.matches || performance.now() < inputToSkipUntil) return;
-        const movingDown = event.deltaY > 0;
-        if (activeLoop && movingDown) finishLoop();
-        if (heldBlock) {
-          event.preventDefault();
-          releaseHold();
-          window.scrollBy({ top: event.deltaY * 1.65, behavior: "auto" });
-          return;
-        }
-        if (event.deltaY !== 0) {
-          event.preventDefault();
-          window.scrollBy({ top: event.deltaY * 1.65, behavior: "auto" });
-        }
-      }, { passive: false });
+      window.addEventListener("wheel", () => stopLoopAtIterationEnd(), { passive: true });
+      window.addEventListener("touchmove", () => stopLoopAtIterationEnd(), { passive: true });
 
       window.addEventListener("scroll", () => {
         const nextY = window.scrollY;
@@ -2971,27 +2968,27 @@
 
       window.addEventListener("keydown", () => {
         inputToSkipUntil = performance.now() + 1000;
-        releaseHold();
-        finishLoop();
+        stopLoopAtIterationEnd();
       }, true);
 
       document.addEventListener("click", (event) => {
         if (!event.target.closest?.('a[href^="#"]')) return;
         inputToSkipUntil = performance.now() + 1000;
-        releaseHold();
-        finishLoop();
+        stopLoopAtIterationEnd();
       }, true);
 
       window.addEventListener("hashchange", () => {
         inputToSkipUntil = performance.now() + 1000;
-        releaseHold();
-        finishLoop();
+        stopLoopAtIterationEnd();
       });
 
       reducedMotion.addEventListener?.("change", () => {
-        if (!reducedMotion.matches) return;
-        releaseHold();
-        finishLoop();
+        if (reducedMotion.matches) {
+          stopLoopAtIterationEnd();
+          motionStyles.remove();
+          return;
+        }
+        document.head.append(motionStyles);
       });
     })();
     /* --- END MOTION V2 EXPERIMENT. --- */
