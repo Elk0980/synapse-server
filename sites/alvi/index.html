@@ -211,8 +211,8 @@
 
     .hero {
       position: relative;
-      height: 600vh;
-      min-height: 600vh;
+      height: 300vh;
+      min-height: 300vh;
       background: #07110c;
     }
 
@@ -1647,6 +1647,23 @@
     .hero .hero-scene--final .final-price-line {
       text-shadow: 0 1px 16px rgba(4, 12, 8, 0.6);
     }
+    .hero .hero-scene--final .button--dark {
+      color: rgba(255, 253, 248, 0.92);
+      font-size: 0.7rem;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+      border-color: rgba(255, 255, 255, 0.4);
+      background: rgba(8, 16, 12, 0.55);
+      backdrop-filter: blur(6px);
+    }
+
+    .hero .hero-scene--final .button--dark:not(:disabled):hover,
+    .hero .hero-scene--final .button--dark:not(:disabled):focus-visible {
+      color: #fffdf8;
+      border-color: var(--green-deep);
+      background: var(--green-deep);
+    }
+
     .hero .hero-scene--final .final-signature,
     .hero .hero-scene--final .final-signature strong {
       color: var(--hero-ink);
@@ -1784,7 +1801,7 @@
       </header>
 
       <div class="hero__scenes">
-        <article class="hero-scene" data-scene="0" data-mobile-frame="0" data-range-start="0" data-range-end="0.07">
+        <article class="hero-scene" data-scene="0" data-mobile-frame="0" data-range-start="0" data-range-end="0.14">
           <div class="hero-scene__content">
             <h1 class="hero-title">Верни себе <em>баланс</em></h1>
 
@@ -1800,14 +1817,14 @@
           </div>
         </article>
 
-        <article class="hero-scene" data-scene="1" data-mobile-frame="1" data-range-start="0.07" data-range-end="0.25">
+        <article class="hero-scene" data-scene="1" data-mobile-frame="1" data-range-start="0.14" data-range-end="0.28">
           <div class="hero-scene__content">
             <h2 class="scene-title">День закончился. Вы — нет.</h2>
             <blockquote class="scene-quote"><p>Каждый раз откладывая свой отдых — вы берёте в долг у своего состояния.</p></blockquote>
           </div>
         </article>
 
-        <div class="hero-scene hero-scene--breath" data-scene="2" data-range-start="0.25" data-range-end="0.33" aria-hidden="true"></div>
+        <div class="hero-scene hero-scene--breath" data-scene="2" data-range-start="0.28" data-range-end="0.33" aria-hidden="true"></div>
 
         <article class="hero-scene" data-scene="3" data-mobile-frame="2" data-range-start="0.33" data-range-end="0.47">
           <div class="hero-scene__content">
@@ -1816,9 +1833,9 @@
           </div>
         </article>
 
-        <div class="hero-scene hero-scene--breath" data-scene="4" data-range-start="0.47" data-range-end="0.55" aria-hidden="true"></div>
+        <div class="hero-scene hero-scene--breath" data-scene="4" data-range-start="0.47" data-range-end="0.52" aria-hidden="true"></div>
 
-        <article class="hero-scene" data-scene="5" data-mobile-frame="4" data-range-start="0.55" data-range-end="0.72">
+        <article class="hero-scene" data-scene="5" data-mobile-frame="4" data-range-start="0.52" data-range-end="0.66">
           <div class="hero-scene__content">
             <h2 class="scene-title">Время, в котором никто ничего от вас не ждёт</h2>
             <blockquote class="scene-quote"><p>Тишина, расслабляющая обстановка, тёплые руки мастера, музыка и чай после.<br>Тело ощущает баланс.</p></blockquote>
@@ -1829,9 +1846,9 @@
           </div>
         </article>
 
-        <div class="hero-scene hero-scene--breath" data-scene="6" data-range-start="0.72" data-range-end="0.80" aria-hidden="true"></div>
+        <div class="hero-scene hero-scene--breath" data-scene="6" data-range-start="0.66" data-range-end="0.71" aria-hidden="true"></div>
 
-        <article class="hero-scene hero-scene--final" data-scene="7" data-mobile-frame="6" data-range-start="0.80" data-range-end="1">
+        <article class="hero-scene hero-scene--final" data-scene="7" data-mobile-frame="6" data-range-start="0.71" data-range-end="1">
           <div class="hero-scene__content">
             <h2 class="scene-title">Вы выходите другим человеком</h2>
             <p class="scene-copy scene-copy--dark">Плечи опущены. Дыхание глубокое. Голова ясная.</p>
