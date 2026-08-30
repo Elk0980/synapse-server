@@ -211,8 +211,8 @@
 
     .hero {
       position: relative;
-      height: 300vh;
-      min-height: 300vh;
+      height: 380vh;
+      min-height: 380vh;
       background: #07110c;
     }
 
@@ -1678,8 +1678,6 @@
       letter-spacing: 0.11em;
       text-transform: uppercase;
       border-color: rgba(255, 255, 255, 0.4);
-      background: rgba(8, 16, 12, 0.55);
-      backdrop-filter: blur(6px);
     }
 
     .hero .hero-scene--final .button--dark:not(:disabled):hover,
@@ -1724,34 +1722,31 @@
     #trust .text-link:hover,
     #trust .text-link:focus-visible { color: #fffdf8; }
 
-    /* Первый экран: кнопка и подпись — по центру внизу слайда (правка Owner'а 30.08). */
-    .hero-scene[data-scene="0"] .hero-actions {
-      position: absolute;
-      left: 50%;
-      bottom: clamp(4.6rem, 9vh, 6.4rem);
-      z-index: 21;
-      margin: 0;
-      transform: translateX(-50%);
-      justify-content: center;
+    /* Стеклянные кнопки хиро с мягким бликом (правка Owner'а 30.08). */
+    .hero .button {
+      position: relative;
+      overflow: hidden;
+      color: rgba(255, 253, 248, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.34);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0.07) 45%, rgba(255, 255, 255, 0.17) 100%);
+      backdrop-filter: blur(10px) saturate(140%);
+      -webkit-backdrop-filter: blur(10px) saturate(140%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), inset 0 -1px 0 rgba(255, 255, 255, 0.1), 0 10px 30px rgba(4, 12, 8, 0.32);
     }
 
-    .hero-scene[data-scene="0"] .response-note {
+    .hero .button::after {
+      content: "";
       position: absolute;
-      left: 50%;
-      bottom: clamp(3rem, 6vh, 4.4rem);
-      z-index: 21;
-      margin: 0;
-      transform: translateX(-50%);
-      text-align: center;
-      white-space: nowrap;
+      inset: -20% -40%;
+      background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.5) 50%, transparent 62%);
+      transform: translateX(-130%);
+      animation: glassSheen 6s ease-in-out infinite;
+      pointer-events: none;
     }
 
-    .hero.is-compact-mode .hero-scene[data-scene="0"] .hero-actions,
-    .hero.is-compact-mode .hero-scene[data-scene="0"] .response-note {
-      position: static;
-      transform: none;
-      margin: 1rem 0 0;
-      text-align: left;
+    @keyframes glassSheen {
+      0%, 70% { transform: translateX(-130%); }
+      100% { transform: translateX(130%); }
     }
 
     /* Низкие экраны: финальная сцена не должна обрезаться (правка 30.08). */
@@ -1856,7 +1851,7 @@
       </header>
 
       <div class="hero__scenes">
-        <article class="hero-scene" data-scene="0" data-mobile-frame="0" data-range-start="0" data-range-end="0.14">
+        <article class="hero-scene" data-scene="0" data-mobile-frame="0" data-range-start="0" data-range-end="0.11">
           <div class="hero-scene__content">
             <h1 class="hero-title">Верни себе <em>баланс</em></h1>
 
@@ -1872,25 +1867,25 @@
           </div>
         </article>
 
-        <article class="hero-scene" data-scene="1" data-mobile-frame="1" data-range-start="0.14" data-range-end="0.28">
+        <article class="hero-scene" data-scene="1" data-mobile-frame="1" data-range-start="0.11" data-range-end="0.22">
           <div class="hero-scene__content">
             <h2 class="scene-title">День закончился. Вы — нет.</h2>
             <blockquote class="scene-quote"><p>Каждый раз откладывая свой отдых — вы берёте в долг у своего состояния.</p></blockquote>
           </div>
         </article>
 
-        <div class="hero-scene hero-scene--breath" data-scene="2" data-range-start="0.28" data-range-end="0.33" aria-hidden="true"></div>
+        <div class="hero-scene hero-scene--breath" data-scene="2" data-range-start="0.22" data-range-end="0.26" aria-hidden="true"></div>
 
-        <article class="hero-scene" data-scene="3" data-mobile-frame="2" data-range-start="0.33" data-range-end="0.47">
+        <article class="hero-scene" data-scene="3" data-mobile-frame="2" data-range-start="0.26" data-range-end="0.37">
           <div class="hero-scene__content">
             <h2 class="scene-title">Это не проходит само</h2>
             <blockquote class="scene-quote"><p>Выходные не разгружают. Отпуск раз в год не отменяет остальные триста пятьдесят дней. Напряжение просто копится дальше.</p></blockquote>
           </div>
         </article>
 
-        <div class="hero-scene hero-scene--breath" data-scene="4" data-range-start="0.47" data-range-end="0.52" aria-hidden="true"></div>
+        <div class="hero-scene hero-scene--breath" data-scene="4" data-range-start="0.37" data-range-end="0.41" aria-hidden="true"></div>
 
-        <article class="hero-scene" data-scene="5" data-mobile-frame="4" data-range-start="0.52" data-range-end="0.66">
+        <article class="hero-scene" data-scene="5" data-mobile-frame="4" data-range-start="0.41" data-range-end="0.52">
           <div class="hero-scene__content">
             <h2 class="scene-title">Время, в котором никто ничего от вас не ждёт</h2>
             <blockquote class="scene-quote"><p>Тишина, расслабляющая обстановка, тёплые руки мастера, музыка и чай после.<br>Тело ощущает баланс.</p></blockquote>
@@ -1901,9 +1896,9 @@
           </div>
         </article>
 
-        <div class="hero-scene hero-scene--breath" data-scene="6" data-range-start="0.66" data-range-end="0.71" aria-hidden="true"></div>
+        <div class="hero-scene hero-scene--breath" data-scene="6" data-range-start="0.52" data-range-end="0.56" aria-hidden="true"></div>
 
-        <article class="hero-scene hero-scene--final" data-scene="7" data-mobile-frame="6" data-range-start="0.71" data-range-end="1">
+        <article class="hero-scene hero-scene--final" data-scene="7" data-mobile-frame="6" data-range-start="0.56" data-range-end="1">
           <div class="hero-scene__content">
             <h2 class="scene-title">Вы выходите другим человеком</h2>
             <p class="scene-copy scene-copy--dark">Плечи опущены. Дыхание глубокое. Голова ясная.</p>
