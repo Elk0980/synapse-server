@@ -33,4 +33,43 @@ if(povodyTrack){
  povodCards.forEach((card,index)=>{const dot=document.createElement('button');dot.type='button';dot.className='povody-dot';dot.setAttribute('aria-label',`Повод ${index+1}`);dot.addEventListener('click',()=>card.scrollIntoView({behavior:'smooth',block:'nearest',inline:'start'}));dots.append(dot)});
  const updateDots=()=>{const active=Math.round(povodyTrack.scrollLeft/step());[...dots.children].forEach((dot,index)=>dot.classList.toggle('is-active',index===active))};
  povodyTrack.addEventListener('scroll',updateDots,{passive:true});updateDots();
+
+ const videoCards=povodCards.filter(card=>card.querySelector('[data-video-src]'));
+ const disableVideo=matchMedia('(max-width: 767px), (prefers-reduced-motion: reduce)');
+ let videoObserver,activeVideo;
+ const unloadVideo=video=>{
+  video.pause();
+  video.currentTime=0;
+  video.removeAttribute('src');
+  video.load();
+ };
+ const stopVideos=()=>{
+  videoObserver?.disconnect();
+  videoObserver=null;
+  videoCards.forEach(card=>unloadVideo(card.querySelector('video')));
+  activeVideo=null;
+ };
+ const startVideoObserver=()=>{
+  if(disableVideo.matches)return stopVideos();
+  const visibleCards=new Map();
+  videoObserver=new IntersectionObserver(entries=>{
+   entries.forEach(entry=>visibleCards.set(entry.target,entry.intersectionRatio));
+   const trackLeft=povodyTrack.getBoundingClientRect().left;
+   const activeCard=videoCards
+    .filter(card=>(visibleCards.get(card)||0)>=.6)
+    .sort((a,b)=>Math.abs(a.getBoundingClientRect().left-trackLeft)-Math.abs(b.getBoundingClientRect().left-trackLeft))[0];
+   const nextVideo=activeCard?.querySelector('video');
+   if(nextVideo===activeVideo)return;
+   if(activeVideo)unloadVideo(activeVideo);
+   activeVideo=nextVideo||null;
+   if(activeVideo){
+    activeVideo.src=activeVideo.dataset.videoSrc;
+    activeVideo.load();
+    activeVideo.play().catch(()=>{});
+   }
+  },{root:povodyTrack,threshold:[0,.6,1]});
+  videoCards.forEach(card=>videoObserver.observe(card));
+ };
+ disableVideo.addEventListener('change',startVideoObserver);
+ startVideoObserver();
 }
