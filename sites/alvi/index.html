@@ -1793,6 +1793,58 @@
     #trust .text-link:hover,
     #trust .text-link:focus-visible { color: #fffdf8; }
 
+    /* Живая вода фоном всей страницы после хиро (правка Owner'а 31.08). */
+    .page-water {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 600ms ease;
+    }
+
+    .page-water.is-on { opacity: 1; }
+
+    .page-water__video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .page-water__veil {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(232, 228, 218, 0.72) 0%, rgba(232, 228, 218, 0.68) 100%);
+    }
+
+    .after-hero {
+      position: relative;
+      z-index: 1;
+      background: transparent;
+    }
+
+    .after-hero .content-section { background: rgba(240, 236, 226, 0.4); }
+    .after-hero .content-section--alt { background: rgba(232, 228, 218, 0.46); }
+    .after-hero .content-section--panel { background: rgba(244, 240, 231, 0.4); }
+
+    .after-hero .program-card,
+    .after-hero .space-card:not(.space-card--photo),
+    .after-hero .quiz-panel,
+    .after-hero .review-card,
+    .after-hero .faq-item {
+      background: rgba(246, 243, 235, 0.62);
+      backdrop-filter: blur(3px);
+      -webkit-backdrop-filter: blur(3px);
+    }
+
+    .site-footer { position: relative; z-index: 1; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .page-water__video { display: none; }
+    }
+
     /* Пара кнопок, закреплённая в правом нижнем углу на всём сайте (правка Owner'а 31.08). */
     .floating-cta {
       position: fixed;
@@ -2091,6 +2143,15 @@
 
     </div>
   </section>
+
+  <div class="page-water" aria-hidden="true">
+    <video class="page-water__video" autoplay muted loop playsinline preload="none"
+           poster="img/water-poster.jpg">
+      <source src="img/water-loop.webm" type="video/webm">
+      <source src="img/water-loop.mp4" type="video/mp4">
+    </video>
+    <div class="page-water__veil"></div>
+  </div>
 
   <main class="after-hero" id="after-hero" tabindex="-1" aria-label="Основное содержание ALVI">
     <section class="content-section content-section--panel" id="trust" data-after-block="1" aria-label="Доверие гостей">
@@ -3291,6 +3352,32 @@
     })();
     /* --- END MOTION V2 EXPERIMENT. --- */
   </script>
+  <script>
+    (() => {
+      const layer = document.querySelector('.page-water');
+      const video = layer && layer.querySelector('video');
+      const hero = document.querySelector('.hero');
+      if (!layer || !video || !hero) return;
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      const conn = navigator.connection;
+      if (conn && (conn.saveData || /2g/.test(conn.effectiveType || ''))) return;
+      let started = false;
+      const update = () => {
+        const on = window.scrollY > hero.offsetHeight * 0.6;
+        if (on && !started) {
+          started = true;
+          video.preload = 'auto';
+          video.load();
+          video.play().catch(() => {});
+        }
+        layer.classList.toggle('is-on', on);
+      };
+      update();
+      addEventListener('scroll', update, { passive: true });
+      addEventListener('resize', update);
+    })();
+  </script>
+
   <div class="floating-cta">
     <div class="floating-cta__row">
       <a class="floating-cta__button" href="#quiz">Подобрать ритуал</a>
