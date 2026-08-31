@@ -1776,13 +1776,7 @@
       overflow: hidden;
       color: var(--hero-ink);
       border-bottom-color: rgba(255, 255, 255, 0.1);
-      background-color: #16221a;
-      background-image:
-        linear-gradient(180deg, rgba(10, 18, 13, 0.5) 0%, rgba(10, 18, 13, 0.62) 45%, rgba(12, 21, 15, 0.88) 100%),
-        url('img/trust-water.jpg');
-      background-size: cover;
-      background-position: center top;
-      background-repeat: no-repeat;
+      background: linear-gradient(180deg, rgba(9, 17, 12, 0.72) 0%, rgba(9, 17, 12, 0.34) 55%, rgba(9, 17, 12, 0.3) 100%);
     }
 
     #trust .trust-score strong { color: #d9c48f; }
@@ -1794,6 +1788,19 @@
 
     #trust .text-link:hover,
     #trust .text-link:focus-visible { color: #fffdf8; }
+
+    /* Низ хиро гасится в тон страницы — стык без «отрезка» (правка Owner'а 31.08). */
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: clamp(9rem, 26vh, 18rem);
+      z-index: 30;
+      background: linear-gradient(180deg, rgba(9, 17, 12, 0) 0%, rgba(9, 17, 12, 0.35) 45%, rgba(9, 17, 12, 0.72) 100%);
+      pointer-events: none;
+    }
 
     /* Живая вода фоном всей страницы после хиро (правка Owner'а 31.08). */
     .page-water {
@@ -3400,7 +3407,7 @@
       if (conn && (conn.saveData || /2g/.test(conn.effectiveType || ''))) return;
       let started = false;
       const update = () => {
-        const on = window.scrollY > hero.offsetHeight * 0.6;
+        const on = window.scrollY > hero.offsetHeight - innerHeight * 1.2;
         if (on && !started) {
           started = true;
           video.preload = 'auto';
