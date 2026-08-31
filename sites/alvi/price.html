@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Прайс ALVI SPA — Иркутск, Депутатская 71а</title>
+  <meta name="description" content="Полный прайс SPA-салона ALVI в Иркутске: SPA-программы для одного и для двоих, программы для лица, ручные массажи, солярий, сертификаты. Депутатская 71а.">
+  <link rel="canonical" href="https://alvi.synapsebusiness.ru/price.html">
+
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png" media="(prefers-color-scheme: light)">
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-dark-32.png" media="(prefers-color-scheme: dark)">
+  <link rel="apple-touch-icon" sizes="180x180" href="/img/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#22301f">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #16221a; --ink: #fffdf8; --ink-dim: rgba(255, 253, 248, 0.8); --ink-faint: rgba(255, 253, 248, 0.56);
+      --gold: #e3d4a7; --gold-soft: #b39a68; --green-deep: #e3d4a7;
+      --line: rgba(255, 255, 255, 0.16);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0; color: var(--ink); background: var(--bg);
+      font-family: "Lora", Georgia, serif; font-size: 1rem; line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; }
+
+    .page-water { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+    .page-water__video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .page-water__veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10, 18, 13, 0.6) 0%, rgba(10, 18, 13, 0.68) 100%); }
+
+    .price-header {
+      position: relative; z-index: 2;
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+      padding: clamp(1rem, 2.5vw, 1.75rem) clamp(1.25rem, 4vw, 3rem);
+      background: rgba(9, 17, 12, 0.55);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--line);
+    }
+    .price-header img { display: block; height: 3.2rem; width: auto; }
+    .price-header__back {
+      display: inline-flex; align-items: center; min-height: 2.6rem; padding: 0.55rem 1rem;
+      font-size: 0.78rem; letter-spacing: 0.09em; text-transform: uppercase; text-decoration: none;
+      border: 1px solid var(--line); border-radius: 999px; background: rgba(255, 255, 255, 0.08);
+      color: var(--ink);
+    }
+    .price-header__back:hover { border-color: rgba(255, 255, 255, 0.6); background: rgba(255, 253, 248, 0.9); color: #12211a; }
+
+    .price-intro {
+      position: relative; z-index: 2;
+      padding: clamp(2rem, 5vw, 3.5rem) clamp(1.25rem, 4vw, 3rem) 0;
+    }
+    .price-intro h1 {
+      margin: 0; font-family: "Lora", Georgia, serif; font-weight: 400;
+      font-size: clamp(2rem, 4.5vw, 3.4rem); line-height: 1.12; text-wrap: balance;
+    }
+    .price-intro p { margin: 0.9rem 0 0; max-width: 44rem; color: var(--ink-dim); }
+
+    .price-layout {
+      position: relative; z-index: 2;
+      display: grid; grid-template-columns: minmax(0, 17rem) minmax(0, 1fr);
+      gap: clamp(1.5rem, 3vw, 3rem); align-items: start;
+      padding: clamp(1.5rem, 4vw, 3rem) clamp(1.25rem, 4vw, 3rem) clamp(4rem, 8vw, 6rem);
+    }
+
+    .pnav {
+      position: sticky; top: 1.25rem;
+      max-height: calc(100vh - 2.5rem); overflow: auto; overscroll-behavior: contain;
+      padding: 1.1rem 1rem; border: 1px solid var(--line); border-radius: 1.25rem;
+      background: rgba(13, 23, 17, 0.6);
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    }
+    .pnav ul { margin: 0; padding: 0; list-style: none; }
+    .pnav > ul > li + li { margin-top: 0.85rem; }
+    .pnav__top {
+      display: block; font-family: "Lora", Georgia, serif; font-size: 1.05rem; line-height: 1.3;
+      text-decoration: none; color: var(--ink);
+    }
+    .pnav__top:hover, .pnav__top.is-active { color: var(--gold); }
+    .pnav__sub { margin: 0.45rem 0 0; padding-left: 0.85rem; border-left: 1px solid var(--line); }
+    .pnav__sub li + li { margin-top: 0.3rem; }
+    .pnav__sub a {
+      display: block; padding: 0.12rem 0; color: var(--ink-dim);
+      font-size: 0.86rem; line-height: 1.4; text-decoration: none;
+    }
+    .pnav__sub a:hover, .pnav__sub a.is-active { color: var(--gold); }
+
+    .pnav-toggle { display: none; }
+
+    .price-layout > * { min-width: 0; }
+    .price-content { min-width: 0; }
+    .ps { min-width: 0; scroll-margin-top: 1.5rem; }
+    .pc { min-width: 0; }
+    .ps + .ps { margin-top: clamp(2.5rem, 5vw, 4rem); }
+    .ps__title {
+      margin: 0 0 1.4rem; font-family: "Lora", Georgia, serif; font-weight: 400;
+      font-size: clamp(1.6rem, 3vw, 2.4rem); line-height: 1.2;
+    }
+    .ps__note { margin: 0 0 1.2rem; color: var(--ink-dim); font-size: 0.92rem; }
+
+    .pc {
+      scroll-margin-top: 1.5rem;
+      padding: clamp(1.25rem, 2.4vw, 1.9rem);
+      border: 1px solid var(--line); border-radius: 1.25rem;
+      background: rgba(13, 23, 17, 0.55);
+      backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+    }
+    .pc + .pc { margin-top: 1rem; }
+    .pc__title {
+      margin: 0; font-family: "Lora", Georgia, serif; font-weight: 400;
+      font-size: clamp(1.25rem, 2.2vw, 1.65rem); line-height: 1.25;
+    }
+    .pc__list { margin: 0.9rem 0 0; padding-left: 1.1rem; color: var(--ink-dim); }
+    .pc__list li { margin: 0.18rem 0; }
+    .pc__meta {
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.6rem 1.5rem;
+      margin: 1.1rem 0 0; padding-top: 0.9rem; border-top: 1px solid var(--line);
+    }
+    .pc__dur { color: var(--ink-faint); font-size: 0.9rem; }
+    .pc__price { font-family: "Lora", Georgia, serif; font-size: 1.5rem; color: var(--gold); }
+    .pc__actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.1rem; }
+    .pc__actions--section { margin-top: 1.4rem; }
+    .pc__button {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-height: 2.75rem; padding: 0.7rem 1.2rem;
+      font-size: 0.78rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+      text-decoration: none; border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 999px;
+      color: var(--ink); background: rgba(255, 255, 255, 0.08);
+      transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease;
+    }
+    .pc__button--main { color: #12211a; border-color: rgba(227, 212, 167, 0.9); background: var(--gold); }
+    .pc__button:hover { border-color: rgba(255, 255, 255, 0.7); color: #12211a; background: rgba(255, 253, 248, 0.9); }
+    .pc__button--main:hover { color: #12211a; background: #f0e4c4; }
+
+    .pt-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 1.25rem;
+      background: rgba(13, 23, 17, 0.55); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+    .pt { width: 100%; border-collapse: collapse; min-width: 30rem; }
+    .pt th, .pt td { padding: 0.85rem clamp(0.85rem, 1.6vw, 1.4rem); text-align: left; }
+    .pt th { color: var(--ink-faint); font-size: 0.74rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; }
+    .pt tbody tr + tr td { border-top: 1px solid var(--line); }
+    .pt__price { white-space: nowrap; font-weight: 600; color: var(--gold); }
+
+    .cert { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; }
+    .cert__card {
+      padding: clamp(1.25rem, 2.4vw, 1.9rem); border: 1px solid var(--line); border-radius: 1.25rem;
+      background: rgba(13, 23, 17, 0.55); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+    }
+    .cert__card p { margin: 0.7rem 0 0; color: var(--ink-dim); }
+
+    .site-footer {
+      position: relative; z-index: 2;
+      padding: clamp(2.5rem, 5vw, 4rem) clamp(1.25rem, 4vw, 3rem);
+      color: rgba(255, 253, 248, 0.78); background: #1b2a1e;
+      font-size: 0.86rem; line-height: 1.7;
+    }
+    .site-footer__inner { width: min(100%, 75rem); margin-inline: auto; }
+    .site-footer p { margin: 0; }
+    .site-footer__brand { font-family: "Lora", Georgia, serif; font-size: 1.3rem; color: #fffdf8; margin-bottom: 0.6rem; }
+    .site-footer__links { margin-top: 0.6rem; display: flex; flex-wrap: wrap; gap: 0.4rem 1.4rem; }
+    .site-footer__links a { color: rgba(255, 253, 248, 0.9); }
+
+    .floating-cta {
+      position: fixed; right: clamp(0.85rem, 2.2vw, 2.4rem); bottom: clamp(0.85rem, 2.2vw, 2rem);
+      z-index: 60; display: grid; gap: 0.4rem; justify-items: center; pointer-events: none;
+    }
+    .floating-cta__row { display: flex; gap: 0.55rem; pointer-events: auto; }
+    .floating-cta__button {
+      position: relative; display: inline-flex; align-items: center; justify-content: center;
+      overflow: hidden; min-width: 11.5rem; min-height: 2.9rem; padding: 0.75rem 1.1rem;
+      color: rgba(255, 253, 248, 0.96); font-size: 0.82rem; font-weight: 600; letter-spacing: 0.035em;
+      text-align: center; text-decoration: none;
+      border: 1px solid rgba(255, 255, 255, 0.32); border-radius: 999px;
+      background: linear-gradient(135deg, rgba(46, 70, 51, 0.72) 0%, rgba(18, 30, 22, 0.66) 45%, rgba(46, 70, 51, 0.72) 100%);
+      backdrop-filter: blur(12px) saturate(140%); -webkit-backdrop-filter: blur(12px) saturate(140%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 12px 32px rgba(4, 12, 8, 0.4);
+    }
+    .floating-cta__button::after {
+      content: ""; position: absolute; inset: -20% -40%;
+      background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.45) 50%, transparent 62%);
+      transform: translateX(-130%); animation: glassSheen 6s ease-in-out infinite; pointer-events: none;
+    }
+    @keyframes glassSheen { 0%, 70% { transform: translateX(-130%); } 100% { transform: translateX(130%); } }
+    .floating-cta__note {
+      margin: 0; padding: 0.15rem 0.6rem; color: rgba(255, 253, 248, 0.9); font-size: 0.66rem;
+      letter-spacing: 0.05em; border-radius: 999px; background: rgba(12, 22, 16, 0.55);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); pointer-events: none;
+    }
+
+    @media (max-width: 62rem) {
+      .price-layout { grid-template-columns: 1fr; }
+      .pnav { position: static; max-height: none; }
+      .pnav__sub { display: none; }
+      .pnav.is-open .pnav__sub { display: block; }
+      .pnav > ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.7rem; }
+      .pnav > ul > li + li { margin-top: 0; }
+    }
+
+    @media (max-width: 34rem) {
+      .floating-cta { left: clamp(0.85rem, 2.2vw, 2.4rem); justify-items: stretch; }
+      .floating-cta__row { justify-content: center; }
+      .floating-cta__button { min-width: 0; flex: 1 1 0; padding: 0.7rem 0.6rem; font-size: 0.74rem; }
+      .pc__button { width: 100%; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .page-water__video { display: none; }
+      .floating-cta__button::after { animation: none; opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-water" aria-hidden="true">
+    <video class="page-water__video" autoplay muted loop playsinline preload="auto" poster="img/water-poster.jpg">
+      <source src="img/water-loop.webm" type="video/webm">
+      <source src="img/water-loop.mp4" type="video/mp4">
+    </video>
+    <div class="page-water__veil"></div>
+  </div>
+
+  <header class="price-header">
+    <a href="index.html" aria-label="ALVI SPA — на главную"><img src="img/alvi-logo-full.png" alt="ALVI SPA" width="823" height="823"></a>
+    <a class="price-header__back" href="index.html">На главную</a>
+  </header>
+
+  <div class="price-intro">
+    <h1>Прайс ALVI</h1>
+    <p>Полный список программ и услуг салона на Депутатской, 71а. Цены за программу целиком, время — общая длительность визита. Есть противопоказания, проконсультируйтесь со специалистом.</p>
+  </div>
+
+  <div class="price-layout">
+    <nav class="pnav" aria-label="Разделы прайса">
+      <ul>
+        <li><a class="pnav__top" href="#s1">SPA-программы для одного</a>
+          <ul class="pnav__sub">
+            <li><a href="#s1-1">Программа «Душевное расслабление»</a></li>
+            <li><a href="#s1-2">Программа «Здоровая спина»</a></li>
+            <li><a href="#s1-3">Программа «Идеальное тело»</a></li>
+            <li><a href="#s1-4">Программа «Медовое наслаждение»</a></li>
+            <li><a href="#s1-5">Программа «Майами с камнями»</a></li>
+            <li><a href="#s1-6">Программа «Цитрусовый рай»</a></li>
+            <li><a href="#s1-7">Программа «Ароматное погружение»</a></li>
+            <li><a href="#s1-8">Программа «Для беременных»</a></li>
+            <li><a href="#s1-9">Программа «Релакс»</a></li>
+            <li><a href="#s1-10">Программа «Роскошное преображение»</a></li>
+            <li><a href="#s1-11">Программа для мужчин «Антистресс»</a></li>
+          </ul></li>
+        <li><a class="pnav__top" href="#s2">SPA-программы для двоих</a>
+          <ul class="pnav__sub">
+            <li><a href="#s2-1">«Успокаивающая, расслабляющая»</a></li>
+            <li><a href="#s2-2">«Обновление»</a></li>
+            <li><a href="#s2-3">«Спа-день»</a></li>
+            <li><a href="#s2-4">«Райский отдых»</a></li>
+            <li><a href="#s2-5">«Релакс-мини»</a></li>
+            <li><a href="#s2-6">«Релакс»</a></li>
+          </ul></li>
+        <li><a class="pnav__top" href="#s3">SPA-программы для лица</a>
+          <ul class="pnav__sub">
+            <li><a href="#s3-1">Программа «Свежий взгляд»</a></li>
+            <li><a href="#s3-2">Программа «Сияние»</a></li>
+            <li><a href="#s3-3">Программа «Питание»</a></li>
+          </ul></li>
+        <li><a class="pnav__top" href="#s4">Ручные массажи тела</a></li>
+        <li><a class="pnav__top" href="#s5">Ручные массажи лица, шеи и зоны декольте</a></li>
+        <li><a class="pnav__top" href="#s6">Отдельные услуги</a></li>
+        <li><a class="pnav__top" href="#s7">Солярий</a></li>
+        <li><a class="pnav__top" href="#s8">Сертификаты</a></li>
+      </ul>
+    </nav>
+
+    <div class="price-content">
+      <section class="ps" id="s1">
+        <h2 class="ps__title">SPA-программы для одного</h2>
+        <article class="pc" id="s1-1">
+          <h3 class="pc__title">Программа «Душевное расслабление»</h3>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Марципан»</li>
+            <li>Обертывание «Шоколад»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж тела и головы</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">2 часа 30 мин</span><span class="pc__price">5 600 ₽</span></p>
+          <div class="pc__actions">
+            <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s1-2">
+          <h3 class="pc__title">Программа «Здоровая спина»</h3>
+          <ul class="pc__list">
+            <li>Фитобочка с лечебными травами</li>
+            <li>Обертывание «Лечебно-грязевое»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Классический массаж спины и ШВЗ</li>
+            <li>Массаж тела с применением лечебных банок</li>
+            <li>Нанесение крема с прогревающим эффектом</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">2 часа 30 мин</span><span class="pc__price">5 600 ₽</span></p>
+          <div class="pc__actions">
+            <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s1-3">
+          <h3 class="pc__title">Программа «Идеальное тело»</h3>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Антицеллюлитное»</li>
+            <li>Обертывание «Водорослевое»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Антицеллюлитный массаж тела</li>
+            <li>Лимфодренажный массаж тела с использованием вакуумных банок</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">3 часа</span><span class="pc__price">6 800 ₽</span></p>
+          <div class="pc__actions">
+            <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s1-4">
+          <h3 class="pc__title">Программа «Медовое наслаждение»</h3>
+          <ul class="pc__list">
+            <li>Медовый массаж спины</li>
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Мед с облепихой»</li>
+            <li>Обертывание «Медовое»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж тела и головы</li>
+            <li>Нанесение крема с лечебными травами</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">3 часа</span><span class="pc__price">6 800 ₽</span></p>
+          <div class="pc__actions">
+            <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s1-5">
+          <h3 class="pc__title">Программа «Майами с камнями»</h3>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Кокос»</li>
+            <li>Обертывание «Кофейное»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Нейроседативный стоун массаж тела с камнями</li>
+            <li>Расслабляющий массаж головы</li>
+            <li>Расслабляющий массаж лица, шеи и зоны декольте с теплым маслом</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">3 часа</span><span class="pc__price">6 500 ₽</span></p>
+          <div class="pc__actions">
+            <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s1-6">
+          <h3 class="pc__title">Программа «Цитрусовый рай»</h3>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Цитрусовое»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж тела и головы с апельсиновым аромамаслом</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">2 часа</span><span class="pc__price">4 600 ₽</span></p>
+          <div class="pc__actions">
+            <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s1-7">
+          <h3 class="pc__title">Программа «Ароматное погружение»</h3>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Дикие ягоды»</li>
+            <li>Обертывание «Шоколад»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж тела с аромамаслами</li>
+            <li>Расслабляющий массаж лица, шеи и зоны декольте с теплым маслом</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">3 часа</span><span class="pc__price">6 300 ₽</span></p>
+          <div class="pc__actions">
+            <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s1-8">
+          <h3 class="pc__title">Программа «Для беременных»</h3>
+          <ul class="pc__list">
+            <li>Расслабляющий массаж головы</li>
+            <li>Расслабляющий массаж стоп и рук</li>
+            <li>Массаж лица, шеи и зоны декольте</li>
+            <li>Альгинатная маска</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">2 часа</span><span class="pc__price">4 800 ₽</span></p>
+          <div class="pc__actions">
+            <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s1-9">
+          <h3 class="pc__title">Программа «Релакс»</h3>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж тела и головы</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">1 час 30 мин</span><span class="pc__price">3 500 ₽</span></p>
+          <div class="pc__actions">
+            <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s1-10">
+          <h3 class="pc__title">Программа «Роскошное преображение»</h3>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Марципан»</li>
+            <li>Обертывание «Винное»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж всего тела и головы</li>
+            <li>Расслабляющий массаж лица, шеи и зоны декольте</li>
+            <li>Альгинатная маска</li>
+            <li>Нанесение уходового крема</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">4 часа</span><span class="pc__price">8 900 ₽</span></p>
+          <div class="pc__actions">
+            <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s1-11">
+          <h3 class="pc__title">Программа для мужчин «Антистресс»</h3>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Хвойное»</li>
+            <li>Обертывание «Кофейное»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж всего тела и головы</li>
+            <li>Расслабляющий массаж лица</li>
+            <li>Успокаивающая маска для лица</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">4 часа</span><span class="pc__price">8 900 ₽</span></p>
+          <div class="pc__actions">
+            <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+          </div>
+        </article>
+      </section>
+
+      <section class="ps" id="s2">
+        <h2 class="ps__title">SPA-программы для двоих</h2>
+        <article class="pc" id="s2-1">
+          <h3 class="pc__title">«Успокаивающая, расслабляющая»</h3>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Марципан»</li>
+            <li>Обертывание «Шоколад»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж тела и головы</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">2 часа 30 мин</span><span class="pc__price">10 800 ₽</span></p>
+          <div class="pc__actions">
+            <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s2-2">
+          <h3 class="pc__title">«Обновление»</h3>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Хвойное»</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж тела и головы</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">2 часа</span><span class="pc__price">8 900 ₽</span></p>
+          <div class="pc__actions">
+            <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s2-3">
+          <h3 class="pc__title">«Спа-день»</h3>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Дикие ягоды»</li>
+            <li>Обертывание «Кофейное»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж тела и головы</li>
+            <li>Расслабляющий массаж лица</li>
+            <li>Питательная маска для лица</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">3 часа</span><span class="pc__price">13 600 ₽</span></p>
+          <div class="pc__actions">
+            <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s2-4">
+          <h3 class="pc__title">«Райский отдых»</h3>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Скрабирование «Ягодный джем»</li>
+            <li>Обертывание «Винное»</li>
+            <li>Отдых под успокаивающую музыку</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж всего тела и головы</li>
+            <li>Расслабляющий массаж лица, шеи и зоны декольте</li>
+            <li>Альгинатная маска</li>
+            <li>Нанесение уходового крема</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">4 часа</span><span class="pc__price">17 600 ₽</span></p>
+          <div class="pc__actions">
+            <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s2-5">
+          <h3 class="pc__title">«Релакс-мини»</h3>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж тела и головы</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">1 час</span><span class="pc__price">4 600 ₽</span></p>
+          <div class="pc__actions">
+            <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s2-6">
+          <h3 class="pc__title">«Релакс»</h3>
+          <ul class="pc__list">
+            <li>Парение в фитобочке с лечебными травами</li>
+            <li>Гигиенический душ</li>
+            <li>Расслабляющий/классический массаж тела и головы</li>
+            <li>Чайная церемония в зоне отдыха</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">1 час 30 мин</span><span class="pc__price">6 900 ₽</span></p>
+          <div class="pc__actions">
+            <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+          </div>
+        </article>
+      </section>
+
+      <section class="ps" id="s3">
+        <h2 class="ps__title">SPA-программы для лица</h2>
+        <article class="pc" id="s3-1">
+          <h3 class="pc__title">Программа «Свежий взгляд»</h3>
+          <ul class="pc__list">
+            <li>Демакияж (молочко для очищения + патчи)</li>
+            <li>Пенка-мусс для лица, шеи и зоны декольте</li>
+            <li>Классический массаж лица, шеи и зоны декольте с теплым маслом</li>
+            <li>Альгинатная маска</li>
+            <li>Нанесение крема по типу кожи</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">1 час 20 мин</span><span class="pc__price">3 500 ₽</span></p>
+          <div class="pc__actions">
+            <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s3-2">
+          <h3 class="pc__title">Программа «Сияние»</h3>
+          <ul class="pc__list">
+            <li>Очищение и тонизирование лица</li>
+            <li>Лимфодренажный массаж лица, шеи и зоны декольте</li>
+            <li>Водорослевая маска</li>
+            <li>Нанесение крема по типу кожи</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">1 час 10 мин</span><span class="pc__price">2 900 ₽</span></p>
+          <div class="pc__actions">
+            <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+          </div>
+        </article>
+
+        <article class="pc" id="s3-3">
+          <h3 class="pc__title">Программа «Питание»</h3>
+          <ul class="pc__list">
+            <li>Демакияж (молочко для очищения + патчи)</li>
+            <li>Пенка-мусс для лица, шеи и зоны декольте</li>
+            <li>Медовый массаж лица, шеи и зоны декольте</li>
+            <li>Йогуртовая маска</li>
+            <li>Нанесение крема по типу кожи</li>
+          </ul>
+          <p class="pc__meta"><span class="pc__dur">1 час 10 мин</span><span class="pc__price">3 600 ₽</span></p>
+          <div class="pc__actions">
+            <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+          </div>
+        </article>
+      </section>
+
+      <section class="ps" id="s4">
+        <h2 class="ps__title">Ручные массажи тела</h2>
+        <div class="pt-wrap">
+          <table class="pt">
+            <thead><tr><th>Услуга</th><th>Длительность</th><th>Цена</th></tr></thead>
+            <tbody>
+            <tr><td>Парный массаж</td><td>60 мин / 90 мин</td><td class="pt__price">5 600 / 7 500 ₽</td></tr>
+            <tr><td>Классический массаж спины и ног</td><td>60 мин</td><td class="pt__price">2 800 ₽</td></tr>
+            <tr><td>Расслабляющий массаж тела</td><td>60 мин</td><td class="pt__price">2 800 ₽</td></tr>
+            <tr><td>Oil массаж с маслом (на выбор)</td><td>60 мин</td><td class="pt__price">3 000 ₽</td></tr>
+            <tr><td>Общий массаж всего тела</td><td>90 мин</td><td class="pt__price">3 800 ₽</td></tr>
+            <tr><td>Массаж головы + шея</td><td>20 мин</td><td class="pt__price">650 ₽</td></tr>
+            <tr><td>Массаж ног и стоп (до колен)</td><td>30 мин</td><td class="pt__price">1 300 ₽</td></tr>
+            <tr><td>Массаж рук</td><td>15 мин</td><td class="pt__price">650 ₽</td></tr>
+            <tr><td>Массаж в 4 руки</td><td>60 мин / 90 мин</td><td class="pt__price">5 500 / 7 500 ₽</td></tr>
+            <tr><td>Миофасциальный массаж всего тела с акцентом на проблемные зоны</td><td>60 мин</td><td class="pt__price">3 400 ₽</td></tr>
+            <tr><td>Медовый массаж</td><td>60 мин</td><td class="pt__price">3 700 ₽</td></tr>
+            <tr><td>Массаж спины и ШВЗ</td><td>40 мин / 60 мин</td><td class="pt__price">1 900 / 2 600 ₽</td></tr>
+            <tr><td>Лимфодренажный массаж на всё тело + протокол лимфатических узлов</td><td>60 мин</td><td class="pt__price">2 800 ₽</td></tr>
+            <tr><td>Испанский массаж</td><td>60 мин</td><td class="pt__price">2 700 ₽</td></tr>
+            <tr><td>Массаж для беременных</td><td>60 мин</td><td class="pt__price">3 200 ₽</td></tr>
+            <tr><td>Спортивный массаж по зонам</td><td>30 мин / 60 мин</td><td class="pt__price">2 500 / 4 800 ₽</td></tr>
+            <tr><td>«Бразильская попа»</td><td>30 мин</td><td class="pt__price">2 300 ₽</td></tr>
+            <tr><td>Нейроседативный массаж всего тела и головы</td><td>90 мин</td><td class="pt__price">4 300 ₽</td></tr>
+            <tr><td>Нейроседативный массаж камнями</td><td>60 мин</td><td class="pt__price">3 200 ₽</td></tr>
+            <tr><td>Антицеллюлитный массаж по зонам: бёдра и ягодицы · спина и руки · живот и бока</td><td>60 мин</td><td class="pt__price">3 900 ₽</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pc__actions pc__actions--section">
+          <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+          <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+        </div>
+      </section>
+
+      <section class="ps" id="s5">
+        <h2 class="ps__title">Ручные массажи лица, шеи и зоны декольте</h2>
+        <div class="pt-wrap">
+          <table class="pt">
+            <thead><tr><th>Услуга</th><th>Длительность</th><th>Цена</th></tr></thead>
+            <tbody>
+            <tr><td>Классический</td><td>40 мин</td><td class="pt__price">2 000 ₽</td></tr>
+            <tr><td>Медовый</td><td>40 мин</td><td class="pt__price">2 000 ₽</td></tr>
+            <tr><td>Нейроседативный массаж с камнями</td><td>40 мин</td><td class="pt__price">2 000 ₽</td></tr>
+            <tr><td>Лимфодренажный</td><td>40 мин</td><td class="pt__price">2 000 ₽</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pc__actions pc__actions--section">
+          <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+          <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+        </div>
+      </section>
+
+      <section class="ps" id="s6">
+        <h2 class="ps__title">Отдельные услуги</h2>
+        <p class="ps__note">Цена указана за одного гостя и за двоих.</p>
+        <div class="pt-wrap">
+          <table class="pt">
+            <thead><tr><th>Услуга</th><th>Длительность</th><th>Для одного / для двоих</th></tr></thead>
+            <tbody>
+            <tr><td>Фитобочка</td><td>20 мин</td><td class="pt__price">1 100 / 1 500 ₽</td></tr>
+            <tr><td>Обертывание</td><td>30 мин</td><td class="pt__price">1 100 / 2 000 ₽</td></tr>
+            <tr><td>Скрабирование</td><td>20 мин</td><td class="pt__price">1 100 / 2 000 ₽</td></tr>
+            <tr><td>Баночки с массажем / без массажа</td><td>20 мин</td><td class="pt__price">400 / 600 ₽</td></tr>
+            <tr><td>SPA для ног / для рук</td><td>20 мин</td><td class="pt__price">500 / 900 ₽</td></tr>
+            <tr><td>Массаж травяными мешочками — лицо</td><td>10 мин</td><td class="pt__price">500 / 900 ₽</td></tr>
+            <tr><td>Массаж травяными мешочками — тело</td><td>15 мин</td><td class="pt__price">600 / 1 100 ₽</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pc__actions pc__actions--section">
+          <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+          <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+        </div>
+      </section>
+
+      <section class="ps" id="s7">
+        <h2 class="ps__title">Солярий</h2>
+        <div class="pt-wrap">
+          <table class="pt">
+            <thead><tr><th>Услуга</th><th>Стоимость минуты</th><th>Цена</th></tr></thead>
+            <tbody>
+            <tr><td>Сеанс «Солярий»</td><td></td><td class="pt__price">35 ₽ / мин</td></tr>
+            <tr><td>Абонемент на 30 минут</td><td>33 ₽ за минуту</td><td class="pt__price">990 ₽</td></tr>
+            <tr><td>Абонемент на 50 минут</td><td>31 ₽ за минуту</td><td class="pt__price">1 550 ₽</td></tr>
+            <tr><td>Абонемент на 100 минут</td><td>29 ₽ за минуту</td><td class="pt__price">2 900 ₽</td></tr>
+            <tr><td>Абонемент на 150 минут</td><td>27 ₽ за минуту</td><td class="pt__price">4 050 ₽</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pc__actions pc__actions--section">
+          <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+          <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+        </div>
+      </section>
+
+      <section class="ps" id="s8">
+        <h2 class="ps__title">Сертификаты</h2>
+        <div class="cert">
+          <article class="cert__card">
+            <h3 class="pc__title">Электронный</h3>
+            <p>Приходит в мессенджер сразу после оплаты. Дарить можно в тот же день, из любого города.</p>
+          </article>
+          <article class="cert__card">
+            <h3 class="pc__title">Бумажный</h3>
+            <p>В конверте с лентой. По Иркутску привозим бесплатно, в отдалённые районы — за доплату, стоимость скажем в чате.</p>
+          </article>
+        </div>
+        <p class="ps__note">Сертификат оформляется на любую сумму или на конкретную программу из этого прайса.</p>
+        <div class="pc__actions pc__actions--section">
+          <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Забрать сертификат</a>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <p class="site-footer__brand">ALVI SPA</p>
+      <p>Индивидуальный предприниматель Петрук Татьяна Александровна · ИНН 381497453085 · ОГРНИП 324385000056520</p>
+      <p>Иркутск, Депутатская улица, 71а · ежедневно с 09:00 до 22:00 · <a href="tel:+79246180555">+7 924 618-05-55</a></p>
+      <p class="site-footer__links"><a href="oferta.html">Публичная оферта</a><a href="politika.html">Политика обработки персональных данных</a><a href="soglasie.html">Согласие на обработку персональных данных</a></p>
+      <p>Есть противопоказания, проконсультируйтесь со специалистом.</p>
+    </div>
+  </footer>
+
+  <div class="floating-cta">
+    <div class="floating-cta__row">
+      <a class="floating-cta__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+      <a class="floating-cta__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Связаться с нами</a>
+    </div>
+    <p class="floating-cta__note">отвечаем в течение 2 минут</p>
+  </div>
+
+  <script>
+    (() => {
+      const links = [...document.querySelectorAll('.pnav a')];
+      const targets = links
+        .map(a => ({ a, el: document.querySelector(a.getAttribute('href')) }))
+        .filter(x => x.el);
+      if (!targets.length) return;
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach(e => {
+          const hit = targets.find(t => t.el === e.target);
+          if (hit) hit.a.classList.toggle('is-active', e.isIntersecting);
+        });
+      }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+      targets.forEach(t => io.observe(t.el));
+    })();
+  </script>
+</body>
+</html>

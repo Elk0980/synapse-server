@@ -32,7 +32,7 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
 
   <script type="application/ld+json">
   {
@@ -178,7 +178,7 @@
     html {
       background: var(--bg);
       color: var(--ink);
-      font-family: "Rubik", "Segoe UI", Arial, sans-serif;
+      font-family: "Lora", Georgia, serif;
     }
 
     body {
@@ -354,6 +354,8 @@
       letter-spacing: 0.28em;
       text-indent: 0.28em;
     }
+
+    .hero__chrome .certificate-link + .certificate-link { margin-left: 0.5rem; }
 
     .certificate-link {
       display: inline-flex;
@@ -842,7 +844,7 @@
       display: block;
       max-width: 24rem;
       margin-top: 0.75rem;
-      font-family: "Rubik", "Segoe UI", Arial, sans-serif;
+      font-family: "Lora", Georgia, serif;
       font-size: clamp(1rem, 1.35vw, 1.2rem);
       font-weight: 400;
       line-height: 1.55;
@@ -1029,7 +1031,7 @@
       display: block;
       margin-top: 0.9rem;
       color: var(--ink-faint);
-      font-family: "Rubik", "Segoe UI", Arial, sans-serif;
+      font-family: "Lora", Georgia, serif;
       font-size: 0.78rem;
       font-style: normal;
       letter-spacing: 0.06em;
@@ -1816,28 +1818,63 @@
     .page-water__veil {
       position: absolute;
       inset: 0;
-      background: linear-gradient(180deg, rgba(232, 228, 218, 0.72) 0%, rgba(232, 228, 218, 0.68) 100%);
+      background: linear-gradient(180deg, rgba(10, 18, 13, 0.6) 0%, rgba(10, 18, 13, 0.66) 100%);
     }
 
+    /* Страница после хиро — в тонах блока отзывов: тёмная вода, светлый текст. */
     .after-hero {
       position: relative;
       z-index: 1;
       background: transparent;
+      --ink: #fffdf8;
+      --ink-dim: rgba(255, 253, 248, 0.8);
+      --ink-faint: rgba(255, 253, 248, 0.56);
+      --panel: rgba(13, 23, 17, 0.55);
+      --panel2: rgba(13, 23, 17, 0.42);
+      --bg: transparent;
+      --bg2: rgba(9, 17, 12, 0.34);
+      --line: rgba(255, 255, 255, 0.16);
+      --green: #cbb37c;
+      --green-deep: #e3d4a7;
+      --gold: #e3d4a7;
+      --gold-soft: #b39a68;
+      color: var(--ink);
     }
 
-    .after-hero .content-section { background: rgba(240, 236, 226, 0.4); }
-    .after-hero .content-section--alt { background: rgba(232, 228, 218, 0.46); }
-    .after-hero .content-section--panel { background: rgba(244, 240, 231, 0.4); }
+    .after-hero .content-section { background: rgba(9, 17, 12, 0.26); }
+    .after-hero .content-section--alt { background: rgba(9, 17, 12, 0.36); }
+    .after-hero .content-section--panel { background: rgba(9, 17, 12, 0.3); }
 
     .after-hero .program-card,
     .after-hero .space-card:not(.space-card--photo),
     .after-hero .quiz-panel,
     .after-hero .review-card,
-    .after-hero .faq-item {
-      background: rgba(246, 243, 235, 0.62);
+    .after-hero .faq-item,
+    .after-hero .contact-item,
+    .after-hero .media-slot {
+      background: rgba(13, 23, 17, 0.55);
+      border-color: rgba(255, 255, 255, 0.16);
       backdrop-filter: blur(3px);
       -webkit-backdrop-filter: blur(3px);
     }
+
+    .after-hero .button,
+    .after-hero .content-button,
+    .after-hero .quiz-option {
+      color: var(--ink);
+      border-color: rgba(255, 255, 255, 0.28);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .after-hero .button:hover,
+    .after-hero .content-button:hover,
+    .after-hero .quiz-option:hover {
+      color: #12211a;
+      border-color: rgba(255, 255, 255, 0.7);
+      background: rgba(255, 253, 248, 0.88);
+    }
+
+    .after-hero .section-backdrop { opacity: 0.1; }
 
     .site-footer { position: relative; z-index: 1; }
 
@@ -2055,6 +2092,7 @@
           >
           <span class="brand-mark__fallback">ALVI</span>
         </a>
+        <a class="certificate-link" href="price.html">Прайс →</a>
         <a class="certificate-link" href="#gift">Сертификат →</a>
       </header>
 
@@ -2458,7 +2496,7 @@
         <p class="site-footer__brand">ALVI SPA</p>
         <p>Индивидуальный предприниматель Петрук Татьяна Александровна · ИНН 381497453085 · ОГРНИП 324385000056520</p>
         <p>Иркутск, Депутатская улица, 71а · ежедневно с 09:00 до 22:00 · <a href="tel:+79246180555">+7 924 618-05-55</a></p>
-        <p class="site-footer__links"><a href="oferta.html">Публичная оферта</a><a href="politika.html">Политика обработки персональных данных</a><a href="soglasie.html">Согласие на обработку персональных данных</a></p>
+        <p class="site-footer__links"><a href="price.html">Прайс</a><a href="oferta.html">Публичная оферта</a><a href="politika.html">Политика обработки персональных данных</a><a href="soglasie.html">Согласие на обработку персональных данных</a></p>
         <p>Есть противопоказания, проконсультируйтесь со специалистом.</p>
       </div>
     </footer>
