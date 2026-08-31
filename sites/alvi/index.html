@@ -1663,9 +1663,9 @@
 
     .proof-card {
       padding: 1.15rem 1.3rem;
-      border: 1px solid var(--line);
+      border: 1px solid rgba(58, 38, 24, 0.5);
       border-radius: 1.05rem;
-      background: rgba(246, 243, 235, 0.6);
+      background: transparent;
     }
 
     .proof-card p {
@@ -1854,10 +1854,17 @@
     .after-hero .content-section--alt { background: rgba(9, 17, 12, 0.36); }
     .after-hero .content-section--panel { background: rgba(9, 17, 12, 0.3); }
 
+    /* Карточки отзывов — без заливки, только тёмно-коричневый контур (правка Owner'а 31.08). */
+    .after-hero .proof-card {
+      background: transparent;
+      border: 1px solid rgba(58, 38, 24, 0.5);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+
     .after-hero .program-card,
     .after-hero .space-card:not(.space-card--photo),
     .after-hero .quiz-panel,
-    .after-hero .review-card,
     .after-hero .faq-item,
     .after-hero .contact-item,
     .after-hero .media-slot {
@@ -2353,7 +2360,7 @@
       <div class="section-backdrop" style="background-image:url('img/bg-gift.jpg')" aria-hidden="true"></div>
       <div class="content-shell section-split">
         <div>
-          <h2 class="content-title">Не угадывать. Дать выбрать.</h2>
+          <h2 class="content-title">Не угадывать…<br>Дать выбрать подарок.</h2>
           <p class="content-subtitle">Подарочный сертификат в SPA — Иркутск, электронный или бумажный</p>
           <p class="content-lead">Сертификат ALVI на любую программу или сумму. Не нужно угадывать размер, цвет и вкус — нужный ритуал получатель выберет сам.</p>
           <p class="content-copy">Электронный — приходит в мессенджер, дарить можно сразу.<br>Бумажный — в конверте с лентой; по городу привозим бесплатно, в отдалённые районы — за доплату, стоимость скажем в чате.<br>От 3 500 ₽ до SPA-дня за 13 600 ₽</p>
