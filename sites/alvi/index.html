@@ -1750,6 +1750,91 @@
     #trust .text-link:hover,
     #trust .text-link:focus-visible { color: #fffdf8; }
 
+    /* Пара кнопок, закреплённая в правом нижнем углу на всём сайте (правка Owner'а 31.08). */
+    .floating-cta {
+      position: fixed;
+      right: clamp(0.85rem, 2.2vw, 2.4rem);
+      bottom: clamp(0.85rem, 2.2vw, 2rem);
+      z-index: 60;
+      display: grid;
+      gap: 0.4rem;
+      justify-items: center;
+      pointer-events: none;
+    }
+
+    .floating-cta__row {
+      display: flex;
+      gap: 0.55rem;
+      pointer-events: auto;
+    }
+
+    .floating-cta__button {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      box-sizing: border-box;
+      min-width: 11.5rem;
+      min-height: 2.9rem;
+      padding: 0.75rem 1.1rem;
+      color: rgba(255, 253, 248, 0.96);
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.035em;
+      text-align: center;
+      text-decoration: none;
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      border-radius: 999px;
+      background: linear-gradient(135deg, rgba(46, 70, 51, 0.72) 0%, rgba(18, 30, 22, 0.66) 45%, rgba(46, 70, 51, 0.72) 100%);
+      backdrop-filter: blur(12px) saturate(140%);
+      -webkit-backdrop-filter: blur(12px) saturate(140%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 12px 32px rgba(4, 12, 8, 0.4);
+      transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease;
+    }
+
+    .floating-cta__button::after {
+      content: "";
+      position: absolute;
+      inset: -20% -40%;
+      background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.45) 50%, transparent 62%);
+      transform: translateX(-130%);
+      animation: glassSheen 6s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    .floating-cta__button:hover,
+    .floating-cta__button:focus-visible {
+      color: #fff;
+      border-color: rgba(255, 255, 255, 0.6);
+      background: linear-gradient(135deg, rgba(58, 88, 63, 0.85) 0%, rgba(28, 46, 33, 0.8) 100%);
+      outline: none;
+    }
+
+    .floating-cta__note {
+      margin: 0;
+      padding: 0.15rem 0.6rem;
+      color: rgba(255, 253, 248, 0.9);
+      font-size: 0.66rem;
+      letter-spacing: 0.05em;
+      border-radius: 999px;
+      background: rgba(12, 22, 16, 0.55);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      pointer-events: none;
+    }
+
+    @media (max-width: 34rem) {
+      .floating-cta { left: clamp(0.85rem, 2.2vw, 2.4rem); justify-items: stretch; }
+      .floating-cta__row { justify-content: center; }
+      .floating-cta__button { min-width: 0; flex: 1 1 0; padding: 0.7rem 0.6rem; font-size: 0.74rem; }
+      .floating-cta__note { justify-self: center; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .floating-cta__button::after { animation: none; opacity: 0; }
+    }
+
     /* Стеклянные кнопки хиро с мягким бликом (правка Owner'а 30.08). */
     .hero .button {
       position: relative;
@@ -1888,10 +1973,6 @@
               <a class="rating-pill" href="https://yandex.ru/maps/org/alvi/132486598882/" target="_blank" rel="noopener noreferrer">★ 4,9 · 53 оценки на Яндекс Картах</a>
             </div>
 
-            <div class="hero-actions">
-              <a class="button" href="#quiz">Подобрать ритуал</a>
-            </div>
-            <p class="response-note">отвечаем в течение 2 минут</p>
           </div>
         </article>
 
@@ -1964,7 +2045,6 @@
         <span>листайте</span>
       </div>
 
-      <a class="intro-skip" href="#contacts">Связаться с нами</a>
 
     </div>
   </section>
@@ -3168,5 +3248,13 @@
     })();
     /* --- END MOTION V2 EXPERIMENT. --- */
   </script>
+  <div class="floating-cta">
+    <div class="floating-cta__row">
+      <a class="floating-cta__button" href="#quiz">Подобрать ритуал</a>
+      <a class="floating-cta__button" href="#contacts">Связаться с нами</a>
+    </div>
+    <p class="floating-cta__note">отвечаем в течение 2 минут</p>
+  </div>
+
 </body>
 </html>
