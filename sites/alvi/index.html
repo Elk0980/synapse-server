@@ -872,32 +872,55 @@
 
     .space-card--photo {
       position: relative;
-      color: var(--hero-ink);
-      border-color: rgba(255, 255, 255, 0.16);
-      background-image: linear-gradient(180deg, rgba(6, 12, 9, 0.5) 0%, rgba(6, 12, 9, 0.88) 100%), url('img/space-barrel.jpg');
+      overflow: hidden;
+      color: #fff;
+      border-color: rgba(255, 255, 255, 0.18);
+      background: #1b241d;
+    }
+
+    .space-card--photo::before,
+    .space-card--photo::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .space-card--photo::before {
+      z-index: 0;
       background-size: cover;
-      background-position: center 35%;
+      background-position: center 38%;
+      filter: brightness(1.55) saturate(1.12) contrast(0.97);
     }
 
-    .space-card--green {
-      background-image: linear-gradient(180deg, rgba(6, 12, 9, 0.5) 0%, rgba(6, 12, 9, 0.88) 100%), url('img/space-green.jpg');
-      background-position: center 40%;
+    .space-card--photo::after {
+      z-index: 1;
+      background: linear-gradient(180deg, rgba(8, 16, 12, 0.22) 0%, rgba(8, 16, 12, 0.12) 55%, rgba(8, 16, 12, 0.3) 100%);
     }
 
-    .space-card--tea {
-      background-image: linear-gradient(180deg, rgba(6, 12, 9, 0.5) 0%, rgba(6, 12, 9, 0.88) 100%), url('img/space-tea.jpg');
-      background-position: center 30%;
+    .space-card--photo > div {
+      position: relative;
+      z-index: 2;
+      padding: 0.9rem 1.05rem 1rem;
+      border-radius: 0.95rem;
+      background: linear-gradient(180deg, rgba(6, 13, 9, 0.78) 0%, rgba(6, 13, 9, 0.62) 100%);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
     }
+
+    .space-card--green::before { background-image: url('img/space-green.jpg'); }
+    .space-card--tea::before { background-image: url('img/space-tea.jpg'); background-position: center 30%; }
+    .space-card--barrel::before { background-image: url('img/space-barrel.jpg'); background-position: center 35%; }
 
     .space-card--photo h3 {
-      color: #fffdf8;
-      text-shadow: 0 2px 18px rgba(4, 12, 8, 0.8);
+      color: #fff;
+      text-shadow: 0 2px 20px rgba(4, 12, 8, 0.9);
     }
 
     .space-card--photo p {
-      color: #f4efe4;
+      color: #fff;
       font-weight: 500;
-      text-shadow: 0 2px 16px rgba(4, 12, 8, 0.9), 0 0 28px rgba(4, 12, 8, 0.7);
+      text-shadow: 0 2px 14px rgba(4, 12, 8, 0.95), 0 0 30px rgba(4, 12, 8, 0.8);
     }
 
     .program-card h3,
@@ -2131,7 +2154,7 @@
           <article class="space-card space-card--photo space-card--green">
             <div><h3>Фитостены с подсветкой</h3><p>уникальный дизайн и настоящее панно из стабилизированного мха.</p></div>
           </article>
-          <article class="space-card space-card--photo">
+          <article class="space-card space-card--photo space-card--barrel">
             <div><h3>Кедровая фитобочка</h3><p>массив натурального дерева — кедра, металлические обручи и лечебные травы.</p></div>
           </article>
           <article class="space-card space-card--photo space-card--tea">
