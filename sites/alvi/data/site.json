@@ -1,0 +1,855 @@
+{
+ "version": 1,
+ "sections": [
+  {
+   "id": "hero-0",
+   "title": "Хиро · сцена 1 «Верни себе баланс»",
+   "fields": [
+    {
+     "key": "hero-0.hero-title-1",
+     "label": "Заголовок",
+     "value": "Верни себе <em>баланс</em>",
+     "multiline": false
+    },
+    {
+     "key": "hero-0.rating-pill-1",
+     "label": "Плашка рейтинга",
+     "value": "★ 4,9 · 398 оценок в 2ГИС",
+     "multiline": false
+    },
+    {
+     "key": "hero-0.rating-pill-2",
+     "label": "Плашка рейтинга",
+     "value": "★ 4,9 · 53 оценки на Яндекс Картах",
+     "multiline": false
+    }
+   ]
+  },
+  {
+   "id": "hero-1",
+   "title": "Хиро · сцена 2",
+   "fields": [
+    {
+     "key": "hero-1.scene-title-1",
+     "label": "Заголовок сцены",
+     "value": "День закончился. Вы — нет.",
+     "multiline": false
+    },
+    {
+     "key": "hero-1.p-1",
+     "label": "Текст",
+     "value": "Каждый раз откладывая свой отдых — вы берёте в долг у своего состояния.",
+     "multiline": false
+    }
+   ]
+  },
+  {
+   "id": "hero-3",
+   "title": "Хиро · сцена 3",
+   "fields": [
+    {
+     "key": "hero-3.scene-title-1",
+     "label": "Заголовок сцены",
+     "value": "Это не проходит само",
+     "multiline": false
+    },
+    {
+     "key": "hero-3.p-1",
+     "label": "Текст",
+     "value": "Выходные не разгружают. Отпуск раз в год не отменяет остальные триста пятьдесят дней. Напряжение просто копится дальше.",
+     "multiline": true
+    }
+   ]
+  },
+  {
+   "id": "hero-5",
+   "title": "Хиро · сцена 4",
+   "fields": [
+    {
+     "key": "hero-5.scene-title-1",
+     "label": "Заголовок сцены",
+     "value": "Время, в котором никто ничего от вас не ждёт",
+     "multiline": false
+    },
+    {
+     "key": "hero-5.p-1",
+     "label": "Текст",
+     "value": "Тишина, расслабляющая обстановка, тёплые руки мастера, музыка и чай после.\nТело ощущает баланс.",
+     "multiline": true
+    },
+    {
+     "key": "hero-5.p-2",
+     "label": "Текст",
+     "value": "«Уютно, спокойно и очень душевно. Девушки-мастера — профессионалы своего дела.»",
+     "multiline": false
+    },
+    {
+     "key": "hero-5.footer-1",
+     "label": "Подпись",
+     "value": "андрей · Яндекс Карты · июль 2025 · ★ 4,9 из 53 оценок",
+     "multiline": false
+    }
+   ]
+  },
+  {
+   "id": "hero-7",
+   "title": "Хиро · финальная сцена",
+   "fields": [
+    {
+     "key": "hero-7.scene-title-1",
+     "label": "Заголовок сцены",
+     "value": "Вы выходите другим человеком",
+     "multiline": false
+    },
+    {
+     "key": "hero-7.scene-copy-1",
+     "label": "Текст сцены",
+     "value": "Плечи опущены. Дыхание глубокое. Голова ясная.",
+     "multiline": false
+    },
+    {
+     "key": "hero-7.final-price-line-1",
+     "label": "Строка цен",
+     "value": "Массаж от 2 800 ₽ · SPA-ритуалы от 3 500 ₽ · Для двоих от 6 900 ₽",
+     "multiline": false
+    },
+    {
+     "key": "hero-7.need-card-pain-1",
+     "label": "Карточка: боль",
+     "value": "Не получается расслабиться",
+     "multiline": false
+    },
+    {
+     "key": "hero-7.need-card-fix-1",
+     "label": "Карточка: решение",
+     "value": "Массаж и SPA-ритуал для себя · от 2 800 ₽",
+     "multiline": false
+    },
+    {
+     "key": "hero-7.need-card-proof-1",
+     "label": "Карточка: цитата",
+     "value": "«Уютно, спокойно и очень душевно» — андрей, Яндекс Карты",
+     "multiline": false
+    },
+    {
+     "key": "hero-7.need-card-pain-2",
+     "label": "Карточка: боль",
+     "value": "Давно не были вдвоём",
+     "multiline": false
+    },
+    {
+     "key": "hero-7.need-card-fix-2",
+     "label": "Карточка: решение",
+     "value": "Один кабинет, два мастера · от 6 900 ₽",
+     "multiline": false
+    },
+    {
+     "key": "hero-7.need-card-proof-2",
+     "label": "Карточка: цитата",
+     "value": "«Свидание удалось» — lil, Яндекс Карты",
+     "multiline": false
+    },
+    {
+     "key": "hero-7.need-card-pain-3",
+     "label": "Карточка: боль",
+     "value": "Нечего подарить",
+     "multiline": false
+    },
+    {
+     "key": "hero-7.need-card-fix-3",
+     "label": "Карточка: решение",
+     "value": "Сертификат на любую программу · доставка бесплатно",
+     "multiline": false
+    },
+    {
+     "key": "hero-7.need-card-proof-3",
+     "label": "Карточка: цитата",
+     "value": "«Эмоций было через край» — Green_4, Яндекс Карты",
+     "multiline": false
+    },
+    {
+     "key": "hero-7.button-1",
+     "label": "Ссылка",
+     "value": "Подобрать ритуал за 3 вопроса",
+     "multiline": false
+    },
+    {
+     "key": "hero-7.strong-1",
+     "label": "Акцент",
+     "value": "ALVI · Верни себе баланс",
+     "multiline": false
+    },
+    {
+     "key": "hero-7.span-1",
+     "label": "Текст",
+     "value": "Иркутск, Депутатская, 71а · ежедневно с 09:00 до 22:00",
+     "multiline": false
+    }
+   ]
+  },
+  {
+   "id": "trust",
+   "title": "Отзывы и рейтинг",
+   "fields": [
+    {
+     "key": "trust.strong-1",
+     "label": "Акцент",
+     "value": "4,9",
+     "multiline": false
+    },
+    {
+     "key": "trust.span-1",
+     "label": "Текст",
+     "value": "— 398 подтверждённых оценок и 329 отзывов в 2ГИС.",
+     "multiline": false
+    },
+    {
+     "key": "trust.trust-copy-1",
+     "label": "Текст",
+     "value": "Чаще всего гости отмечают: атмосферу · вкусный чай · музыку · чистоту · индивидуальный подход · мастеров своего дела.",
+     "multiline": true
+    },
+    {
+     "key": "trust.text-link-1",
+     "label": "Ссылка",
+     "value": "Читать отзывы в 2ГИС →",
+     "multiline": false
+    },
+    {
+     "key": "trust.text-link-2",
+     "label": "Ссылка",
+     "value": "Яндекс Карты · 4,9 из 53 оценок →",
+     "multiline": false
+    }
+   ],
+   "background": {
+    "default": null,
+    "image": null,
+    "opacity": null
+   }
+  },
+  {
+   "id": "for-self",
+   "title": "Проведи день для себя",
+   "fields": [
+    {
+     "key": "for-self.content-title-1",
+     "label": "Заголовок",
+     "value": "Проведи день для себя",
+     "multiline": false
+    },
+    {
+     "key": "for-self.content-subtitle-1",
+     "label": "Подзаголовок",
+     "value": "Массаж и SPA-ритуалы в Иркутске — от 2 800 ₽",
+     "multiline": false
+    },
+    {
+     "key": "for-self.p-1",
+     "label": "Текст",
+     "value": "Когда день закончился, а внутренний темп — нет. Не нужно никому объяснять, зачем вам это время.",
+     "multiline": true
+    },
+    {
+     "key": "for-self.program-note-1",
+     "label": "Примечание",
+     "value": "Полное меню: 10+ видов массажа, обёртывания, стоунтерапия, кедровая фитобочка — для женщин и мужчин. Самая короткая программа — «Релакс», 3 500 ₽.",
+     "multiline": true
+    },
+    {
+     "key": "for-self.p-2",
+     "label": "Текст",
+     "value": "«Очень хорошее и расслабляющее место, получаю большое удовольствие от массажа. Девушки-мастера — профессионалы своего дела. Уютно, спокойно и очень душевно.»",
+     "multiline": true
+    },
+    {
+     "key": "for-self.footer-1",
+     "label": "Подпись",
+     "value": "андрей · Яндекс Карты · 26 июля 2025 · ★ 5",
+     "multiline": false
+    },
+    {
+     "key": "for-self.p-3",
+     "label": "Текст",
+     "value": "«Массажист Ирина постоянно спрашивала, не больно ли, каковы мои ощущения. После процедур подали чай с орешками и мёдом. Всё с такой приветливостью и радушием!»",
+     "multiline": true
+    },
+    {
+     "key": "for-self.footer-2",
+     "label": "Подпись",
+     "value": "Natalia M. · Яндекс Карты · июль 2026 · ★ 5",
+     "multiline": false
+    },
+    {
+     "key": "for-self.text-link-1",
+     "label": "Ссылка",
+     "value": "Все 47 отзывов на Яндекс Картах →",
+     "multiline": false
+    }
+   ],
+   "background": {
+    "default": "img/bg-self.jpg",
+    "image": null,
+    "opacity": null
+   }
+  },
+  {
+   "id": "for-two",
+   "title": "Один ритм на двоих",
+   "fields": [
+    {
+     "key": "for-two.content-title-1",
+     "label": "Заголовок",
+     "value": "Один ритм на двоих",
+     "multiline": false
+    },
+    {
+     "key": "for-two.content-subtitle-1",
+     "label": "Подзаголовок",
+     "value": "SPA для двоих в Иркутске — от 6 900 ₽",
+     "multiline": false
+    },
+    {
+     "key": "for-two.content-lead-1",
+     "label": "Вводный текст",
+     "value": "Не ещё один пункт в совместных планах, а отдельное время для вас обоих: один кабинет, два мастера, общий выдох.",
+     "multiline": true
+    },
+    {
+     "key": "for-two.p-1",
+     "label": "Текст",
+     "value": "«Были с парнем на программе „Спа-день“. 3 часа пролетают незаметно, особенно понравился массаж, даже не хотелось уходить.»",
+     "multiline": true
+    },
+    {
+     "key": "for-two.footer-1",
+     "label": "Подпись",
+     "value": "Елена Хинтуханова · Яндекс Карты · 3 августа 2025 · ★ 5",
+     "multiline": false
+    },
+    {
+     "key": "for-two.p-2",
+     "label": "Текст",
+     "value": "«Ходили с женой на спа-программу для двоих. Очень качественный массаж, учли все пожелания и проработали проблемные зоны. Приятный аромат трав и успокаивающая музыка быстро помогли расслабиться.»",
+     "multiline": true
+    },
+    {
+     "key": "for-two.footer-2",
+     "label": "Подпись",
+     "value": "Денис Котов · Яндекс Карты · 24 января 2025 · ★ 5",
+     "multiline": false
+    },
+    {
+     "key": "for-two.p-3",
+     "label": "Текст",
+     "value": "«Был с девушкой на спа-свидании. Спокойная музыка, качественный массаж, после посидели в комнате отдыха со свечами и вкусным чаем. Свидание удалось!»",
+     "multiline": true
+    },
+    {
+     "key": "for-two.footer-3",
+     "label": "Подпись",
+     "value": "lil · Яндекс Карты · 26 июля 2025 · ★ 5",
+     "multiline": false
+    },
+    {
+     "key": "for-two.text-link-1",
+     "label": "Ссылка",
+     "value": "Все 47 отзывов на Яндекс Картах →",
+     "multiline": false
+    }
+   ],
+   "background": {
+    "default": "img/bg-two.jpg",
+    "image": null,
+    "opacity": null
+   }
+  },
+  {
+   "id": "gift",
+   "title": "Сертификат в подарок",
+   "fields": [
+    {
+     "key": "gift.content-title-1",
+     "label": "Заголовок",
+     "value": "Не угадывать…\nДать выбрать подарок.",
+     "multiline": true
+    },
+    {
+     "key": "gift.content-subtitle-1",
+     "label": "Подзаголовок",
+     "value": "Подарочный сертификат в SPA ALVI — Иркутск, электронный или бумажный",
+     "multiline": false
+    },
+    {
+     "key": "gift.content-lead-1",
+     "label": "Вводный текст",
+     "value": "Сертификат ALVI на любую программу или сумму. Не нужно угадывать размер, цвет и вкус — нужный ритуал получатель выберет сам.",
+     "multiline": true
+    },
+    {
+     "key": "gift.content-copy-1",
+     "label": "Текст",
+     "value": "Электронный — приходит в мессенджер, дарить можно сразу.\nБумажный — в конверте с лентой; по городу привозим бесплатно, в отдалённые районы — за доплату, стоимость скажем в чате.\nОт 3 500 ₽ до SPA-дня до 17 600 ₽",
+     "multiline": true
+    },
+    {
+     "key": "gift.p-1",
+     "label": "Текст",
+     "value": "«Брал сертификат в подарок для супруги — эмоций было через край. Вернулась отдохнувшая, счастливая.»",
+     "multiline": true
+    },
+    {
+     "key": "gift.footer-1",
+     "label": "Подпись",
+     "value": "Green_4 · Яндекс Карты · 31 октября 2024 · ★ 5",
+     "multiline": false
+    },
+    {
+     "key": "gift.p-2",
+     "label": "Текст",
+     "value": "«Подруга на день рождения подарила сертификат в ALVI. Это был мой первый поход в спа на двоих, очень волновалась — но была приятно удивлена.»",
+     "multiline": true
+    },
+    {
+     "key": "gift.footer-2",
+     "label": "Подпись",
+     "value": "Евгения Николаенко · Яндекс Карты · 4 ноября 2024 · ★ 5",
+     "multiline": false
+    },
+    {
+     "key": "gift.text-link-1",
+     "label": "Ссылка",
+     "value": "Все 47 отзывов на Яндекс Картах →",
+     "multiline": false
+    }
+   ],
+   "background": {
+    "default": "img/bg-gift.jpg",
+    "image": null,
+    "opacity": null
+   }
+  },
+  {
+   "id": "space",
+   "title": "Оставьте тревоги за стенами ALVI",
+   "fields": [
+    {
+     "key": "space.content-title-1",
+     "label": "Заголовок",
+     "value": "Оставьте тревоги и заботы за стенами ALVI",
+     "multiline": false
+    },
+    {
+     "key": "space.content-subtitle-1",
+     "label": "Подзаголовок",
+     "value": "Салон на Депутатской, 71а",
+     "multiline": false
+    },
+    {
+     "key": "space.content-lead-1",
+     "label": "Вводный текст",
+     "value": "Фитостены с тёплой подсветкой, кедровая бочка и запах масел, погружение в атмосферу единения с собой.\nГород остаётся снаружи.",
+     "multiline": true
+    },
+    {
+     "key": "space.h3-1",
+     "label": "Подзаголовок",
+     "value": "Фитостены с подсветкой",
+     "multiline": false
+    },
+    {
+     "key": "space.p-1",
+     "label": "Текст",
+     "value": "уникальный дизайн и настоящее панно из стабилизированного мха.",
+     "multiline": false
+    },
+    {
+     "key": "space.h3-2",
+     "label": "Подзаголовок",
+     "value": "Кедровая фитобочка",
+     "multiline": false
+    },
+    {
+     "key": "space.p-2",
+     "label": "Текст",
+     "value": "массив натурального дерева — кедра, металлические обручи и лечебные травы.",
+     "multiline": false
+    },
+    {
+     "key": "space.h3-3",
+     "label": "Подзаголовок",
+     "value": "Чай и зона отдыха",
+     "multiline": false
+    },
+    {
+     "key": "space.p-3",
+     "label": "Текст",
+     "value": "авторское оформление чайной зоны.",
+     "multiline": false
+    }
+   ],
+   "background": {
+    "default": null,
+    "image": null,
+    "opacity": null
+   }
+  },
+  {
+   "id": "quiz",
+   "title": "Подобрать ритуал за 3 вопроса",
+   "fields": [
+    {
+     "key": "quiz.content-title-1",
+     "label": "Заголовок",
+     "value": "Подобрать ритуал за 3 вопроса",
+     "multiline": false
+    },
+    {
+     "key": "quiz.legend-1",
+     "label": "Вопрос",
+     "value": "Для кого выбираете?",
+     "multiline": false
+    },
+    {
+     "key": "quiz.legend-2",
+     "label": "Вопрос",
+     "value": "Сколько времени есть?",
+     "multiline": false
+    },
+    {
+     "key": "quiz.legend-3",
+     "label": "Вопрос",
+     "value": "Что важнее?",
+     "multiline": false
+    },
+    {
+     "key": "quiz.a-1",
+     "label": "Ссылка",
+     "value": "согласие на обработку персональных данных",
+     "multiline": false
+    },
+    {
+     "key": "quiz.a-2",
+     "label": "Ссылка",
+     "value": "политикой обработки персональных данных",
+     "multiline": false
+    },
+    {
+     "key": "quiz.content-button-1",
+     "label": "Кнопка",
+     "value": "Показать программу",
+     "multiline": false
+    }
+   ],
+   "background": {
+    "default": null,
+    "image": null,
+    "opacity": null
+   }
+  },
+  {
+   "id": "faq",
+   "title": "Частые вопросы",
+   "fields": [
+    {
+     "key": "faq.content-title-1",
+     "label": "Заголовок",
+     "value": "Частые вопросы",
+     "multiline": false
+    },
+    {
+     "key": "faq.summary-1",
+     "label": "Вопрос",
+     "value": "Сколько стоит массаж в Иркутске в ALVI?",
+     "multiline": false
+    },
+    {
+     "key": "faq.faq-answer-1",
+     "label": "Текст",
+     "value": "Расслабляющий массаж и массаж спины — 2 800 ₽, парный массаж — от 5 600 ₽. SPA-программы: «Релакс» — 3 500 ₽, «Душевное расслабление» — 5 600 ₽, «Ароматное погружение» — 6 300 ₽. Программы для двоих — 6 900–17 600 ₽.",
+     "multiline": true
+    },
+    {
+     "key": "faq.summary-2",
+     "label": "Вопрос",
+     "value": "Как записаться?",
+     "multiline": false
+    },
+    {
+     "key": "faq.faq-answer-2",
+     "label": "Текст",
+     "value": "Через Telegram — отвечаем в течение 2 минут. Работаем ежедневно с 09:00 до 22:00 по предварительной записи.",
+     "multiline": true
+    },
+    {
+     "key": "faq.summary-3",
+     "label": "Вопрос",
+     "value": "Где вы находитесь?",
+     "multiline": false
+    },
+    {
+     "key": "faq.faq-answer-3",
+     "label": "Текст",
+     "value": "Иркутск, Депутатская улица, 71а, Октябрьский район.",
+     "multiline": false
+    },
+    {
+     "key": "faq.summary-4",
+     "label": "Вопрос",
+     "value": "Как оформить подарочный сертификат?",
+     "multiline": false
+    },
+    {
+     "key": "faq.faq-answer-4",
+     "label": "Текст",
+     "value": "Напишите в Telegram: сертификат бывает электронный (приходит в мессенджер) или бумажный в конверте с лентой. Оформляется на любую сумму или конкретную программу, доставка по Иркутску бесплатная.",
+     "multiline": true
+    },
+    {
+     "key": "faq.summary-5",
+     "label": "Вопрос",
+     "value": "Есть ли противопоказания?",
+     "multiline": false
+    },
+    {
+     "key": "faq.faq-answer-5",
+     "label": "Текст",
+     "value": "Да, к массажу и SPA-процедурам есть противопоказания — проконсультируйтесь со специалистом. При записи расскажите о самочувствии и хронических заболеваниях, мастер подберёт подходящую программу.",
+     "multiline": true
+    },
+    {
+     "key": "faq.summary-6",
+     "label": "Вопрос",
+     "value": "Принимаете ли мужчин?",
+     "multiline": false
+    },
+    {
+     "key": "faq.faq-answer-6",
+     "label": "Текст",
+     "value": "Да, программы и массаж — для женщин и мужчин.",
+     "multiline": false
+    }
+   ],
+   "background": {
+    "default": null,
+    "image": null,
+    "opacity": null
+   }
+  },
+  {
+   "id": "contacts",
+   "title": "Контакты",
+   "fields": [
+    {
+     "key": "contacts.content-title-1",
+     "label": "Заголовок",
+     "value": "ALVI SPA",
+     "multiline": false
+    },
+    {
+     "key": "contacts.dt-1",
+     "label": "Подпись",
+     "value": "Адрес",
+     "multiline": false
+    },
+    {
+     "key": "contacts.dd-1",
+     "label": "Значение",
+     "value": "Иркутск, Депутатская улица, 71а",
+     "multiline": false
+    },
+    {
+     "key": "contacts.dt-2",
+     "label": "Подпись",
+     "value": "Часы",
+     "multiline": false
+    },
+    {
+     "key": "contacts.dd-2",
+     "label": "Значение",
+     "value": "Пн–Вс с 09:00 до 22:00 · по предварительной записи",
+     "multiline": false
+    },
+    {
+     "key": "contacts.dt-3",
+     "label": "Подпись",
+     "value": "2ГИС",
+     "multiline": false
+    },
+    {
+     "key": "contacts.text-link-1",
+     "label": "Ссылка",
+     "value": "Открыть карточку ALVI →",
+     "multiline": false
+    },
+    {
+     "key": "contacts.dt-4",
+     "label": "Подпись",
+     "value": "Телефон",
+     "multiline": false
+    },
+    {
+     "key": "contacts.text-link-2",
+     "label": "Ссылка",
+     "value": "+7 924 618-05-55",
+     "multiline": false
+    },
+    {
+     "key": "contacts.dt-5",
+     "label": "Подпись",
+     "value": "Telegram для записи",
+     "multiline": false
+    },
+    {
+     "key": "contacts.text-link-3",
+     "label": "Ссылка",
+     "value": "Написать в Telegram →",
+     "multiline": false
+    },
+    {
+     "key": "contacts.dt-6",
+     "label": "Подпись",
+     "value": "Telegram-канал",
+     "multiline": false
+    },
+    {
+     "key": "contacts.text-link-4",
+     "label": "Ссылка",
+     "value": "Канал ALVI →",
+     "multiline": false
+    },
+    {
+     "key": "contacts.dt-7",
+     "label": "Подпись",
+     "value": "ВКонтакте",
+     "multiline": false
+    },
+    {
+     "key": "contacts.text-link-5",
+     "label": "Ссылка",
+     "value": "Сообщество ALVI →",
+     "multiline": false
+    },
+    {
+     "key": "contacts.dt-8",
+     "label": "Подпись",
+     "value": "MAX",
+     "multiline": false
+    },
+    {
+     "key": "contacts.text-link-6",
+     "label": "Ссылка",
+     "value": "Написать в MAX →",
+     "multiline": false
+    },
+    {
+     "key": "contacts.dt-9",
+     "label": "Подпись",
+     "value": "Почта",
+     "multiline": false
+    },
+    {
+     "key": "contacts.text-link-7",
+     "label": "Ссылка",
+     "value": "mail@spaalvi.ru",
+     "multiline": false
+    },
+    {
+     "key": "contacts.dt-10",
+     "label": "Подпись",
+     "value": "Официальный сайт",
+     "multiline": false
+    },
+    {
+     "key": "contacts.text-link-8",
+     "label": "Ссылка",
+     "value": "spaalvi.ru →",
+     "multiline": false
+    }
+   ],
+   "background": {
+    "default": null,
+    "image": null,
+    "opacity": null
+   }
+  },
+  {
+   "id": "footer",
+   "title": "Подвал",
+   "fields": [
+    {
+     "key": "footer.site-footer-brand-1",
+     "label": "Подвал: название",
+     "value": "ALVI SPA",
+     "multiline": false
+    },
+    {
+     "key": "footer.p-1",
+     "label": "Текст",
+     "value": "Индивидуальный предприниматель Петрук Татьяна Александровна · ИНН 381497453085 · ОГРНИП 324385000056520",
+     "multiline": true
+    },
+    {
+     "key": "footer.a-1",
+     "label": "Ссылка",
+     "value": "+7 924 618-05-55",
+     "multiline": false
+    },
+    {
+     "key": "footer.a-2",
+     "label": "Ссылка",
+     "value": "Прайс",
+     "multiline": false
+    },
+    {
+     "key": "footer.a-3",
+     "label": "Ссылка",
+     "value": "Публичная оферта",
+     "multiline": false
+    },
+    {
+     "key": "footer.a-4",
+     "label": "Ссылка",
+     "value": "Политика обработки персональных данных",
+     "multiline": false
+    },
+    {
+     "key": "footer.a-5",
+     "label": "Ссылка",
+     "value": "Согласие на обработку персональных данных",
+     "multiline": false
+    },
+    {
+     "key": "footer.p-2",
+     "label": "Текст",
+     "value": "Есть противопоказания, проконсультируйтесь со специалистом.",
+     "multiline": false
+    }
+   ]
+  },
+  {
+   "id": "floating",
+   "title": "Плавающие кнопки",
+   "fields": [
+    {
+     "key": "floating.floating-cta-button-1",
+     "label": "Плавающая кнопка",
+     "value": "Подобрать ритуал",
+     "multiline": false
+    },
+    {
+     "key": "floating.floating-cta-button-2",
+     "label": "Плавающая кнопка",
+     "value": "Связаться с нами",
+     "multiline": false
+    },
+    {
+     "key": "floating.floating-cta-note-1",
+     "label": "Подпись под кнопками",
+     "value": "отвечаем в течение 2 минут",
+     "multiline": false
+    }
+   ]
+  }
+ ]
+}
