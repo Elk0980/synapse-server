@@ -2322,7 +2322,7 @@
             </dl>
           </a>
 
-          <a class="program-card" href="price.html#s4">
+          <a class="program-card" href="price.html#s4-3">
             <h3>Расслабляющий массаж</h3>
             <p>Сильные руки, мягкий темп.</p>
             <dl class="program-facts">
@@ -2333,7 +2333,7 @@
             </dl>
           </a>
 
-          <a class="program-card" href="price.html#s4">
+          <a class="program-card" href="price.html#s4-2">
             <h3>Массаж спины и ног</h3>
             <p>Работа с тем, что болит к вечеру.</p>
             <dl class="program-facts">
@@ -2375,7 +2375,7 @@
         </div>
 
         <div class="program-grid">
-          <a class="program-card" href="price.html#s4">
+          <a class="program-card" href="price.html#s4-1">
             <h3>Парный массаж</h3>
             <p>Вдвоём в одном кабинете. Хороший первый шаг, если SPA-день пока кажется «слишком».</p>
             <dl class="program-facts"><dt>Цена</dt><dd>от 5 600 ₽</dd><dt>Время</dt><dd>60 / 90 мин</dd></dl>
@@ -3531,5 +3531,24 @@
     <p class="floating-cta__note">отвечаем в течение 2 минут</p>
   </div>
 
+<script src="price-render.js" defer></script>
+<script>
+  // Витрины «Проведи день для себя» и «Один ритм на двоих» берутся из data/price.json
+  // (редактируется в кабинете Synapse). Если данных нет — остаются карточки из разметки.
+  (function () {
+    const run = async () => {
+      if (!window.AlviPrice) return;
+      const data = await AlviPrice.load(['/api/price', 'data/price.json']);
+      if (!data) return;
+      for (const [block, sel] of [['self', '#for-self .program-grid'], ['two', '#for-two .program-grid']]) {
+        const grid = document.querySelector(sel);
+        const html = AlviPrice.renderShowcase(data, block);
+        if (grid && html.trim()) grid.innerHTML = html;
+      }
+    };
+    if (document.readyState === 'complete') run();
+    else window.addEventListener('load', run, { once: true });
+  })();
+</script>
 </body>
 </html>
