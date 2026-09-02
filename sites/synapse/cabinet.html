@@ -558,6 +558,12 @@ letter-spacing: 0.13em;
 min-width: 0;
 animation: view-enter 420ms ease both;
 }
+.tool-view { margin: 0 -24px; }
+.tool-frame { width: 100%; height: calc(100vh - 92px); min-height: 640px; border: 0; border-radius: 18px; background: #0b1510; display: block; }
+.view-switcher.has-tools { grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); min-width: 420px; }
+.view-switcher.has-tools button { white-space: nowrap; padding-left: 10px; padding-right: 10px; }
+@media (max-width: 900px) { .view-switcher.has-tools { min-width: 0; } .tool-view { margin: 0 -12px; } }
+.tool-note { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
 
 .page-heading {
 display: flex;
@@ -1822,6 +1828,9 @@ data-view-target="admin"
 >
 Админка
 </button>
+<button type="button" id="site-tab" role="tab" aria-selected="false" aria-controls="site-view" data-view-target="site" hidden>Сайт</button>
+<button type="button" id="price-tab" role="tab" aria-selected="false" aria-controls="price-view" data-view-target="price" hidden>Прайс</button>
+<button type="button" id="chat-tab" role="tab" aria-selected="false" aria-controls="chat-view" data-view-target="chat" hidden>Чат</button>
 </div>
 
 <button
@@ -2030,6 +2039,15 @@ hidden
 </div>
 <div class="activity-list" id="activity-list"></div>
 </section>
+</section>
+<section class="view-panel tool-view" id="site-view" role="tabpanel" aria-labelledby="site-tab" data-view="site" hidden>
+<iframe class="tool-frame" data-src="site-editor.html" title="Редактор сайта ALVI"></iframe>
+</section>
+<section class="view-panel tool-view" id="price-view" role="tabpanel" aria-labelledby="price-tab" data-view="price" hidden>
+<iframe class="tool-frame" data-src="price-editor.html" title="Редактор прайса ALVI"></iframe>
+</section>
+<section class="view-panel tool-view" id="chat-view" role="tabpanel" aria-labelledby="chat-tab" data-view="chat" hidden>
+<iframe class="tool-frame" data-src="https://chat.synapsebusiness.ru/" title="Чат"></iframe>
 </section>
 </main>
 
@@ -2858,11 +2876,19 @@ showToast();
 });
 };
 
+const VIEW_TITLES = { cabinet: "Кабинет", admin: "Админка", site: "Сайт — редактор", price: "Прайс — редактор", chat: "Чат" };
 const setView = (viewName, shouldScroll) => {
 const isCabinet = viewName === "cabinet";
 
-byId("cabinet-view").hidden = !isCabinet;
-byId("admin-view").hidden = isCabinet;
+document.querySelectorAll(".view-panel[data-view]").forEach((panel) => {
+const on = panel.dataset.view === viewName;
+panel.hidden = !on;
+if (on) {
+const frame = panel.querySelector("iframe[data-src]");
+if (frame && !frame.src) frame.src = frame.dataset.src;
+}
+});
+document.querySelector(".demo-banner").hidden = !isCabinet && viewName !== "admin";
 
 document.querySelectorAll("[data-view-target]").forEach((button) => {
 const isActive = button.dataset.viewTarget === viewName;
@@ -2870,9 +2896,7 @@ button.setAttribute("aria-selected", String(isActive));
 button.tabIndex = isActive ? 0 : -1;
 });
 
-document.title = isCabinet
-? "Кабинет — Synapse Business"
-: "Админка — Synapse Business";
+document.title = (VIEW_TITLES[viewName] || "Кабинет") + " — Synapse Business";
 
 if (shouldScroll) {
 window.scrollTo({
@@ -2938,6 +2962,13 @@ bindIntegrationPlaceholders();
 } else {
 document.getElementById("admin-tab").hidden = true;
 document.querySelector(".view-switcher").style.gridTemplateColumns = "1fr";
+}
+// Инструменты ALVI: редактор сайта, прайса и чат — для профилей ALVI и владельца
+if (profile.data === DATA_ALVI || profile.admin) {
+["site-tab", "price-tab", "chat-tab"].forEach((id) => { document.getElementById(id).hidden = false; });
+const sw = document.querySelector(".view-switcher");
+sw.classList.add("has-tools");
+sw.style.gridTemplateColumns = "";
 }
 bindViewSwitcher();
 setView("cabinet", false);
