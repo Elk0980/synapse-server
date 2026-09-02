@@ -138,6 +138,13 @@ function validateSite(doc) {
       if (typeof f.value !== 'string') problems.push(`Поле ${f.key}: значение должно быть строкой`);
       if (f.value && f.value.length > 4000) problems.push(`Поле ${f.key}: длиннее 4000 символов`);
       if (/<\s*(script|iframe|object|style)/i.test(f.value || '')) problems.push(`Поле ${f.key}: недопустимая разметка`);
+      if (f.style != null) {
+        if (typeof f.style !== 'object') problems.push(`Поле ${f.key}: style должен быть объектом`);
+        else {
+          if (f.style.font && !/^[\w ]{1,40}$/.test(f.style.font)) problems.push(`Поле ${f.key}: недопустимый шрифт`);
+          if (f.style.size != null && !(Number(f.style.size) >= 50 && Number(f.style.size) <= 300)) problems.push(`Поле ${f.key}: размер от 50% до 300%`);
+        }
+      }
     }
     if (sec.background && typeof sec.background !== 'object') problems.push(`Секция ${sec.id}: фон должен быть объектом`);
     if (sec.background && sec.background.image && !/^(img\/|\/api\/assets\/|https:\/\/)[\w\-./%]+$/.test(sec.background.image)) {
