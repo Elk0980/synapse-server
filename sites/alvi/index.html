@@ -1944,7 +1944,8 @@
       pointer-events: auto;
     }
 
-    .floating-cta__button {
+    .floating-cta__button,
+    .price-all__button {
       position: relative;
       display: inline-flex;
       align-items: center;
@@ -1969,7 +1970,8 @@
       transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease;
     }
 
-    .floating-cta__button::after {
+    .floating-cta__button::after,
+    .price-all__button::after {
       content: "";
       position: absolute;
       inset: -20% -40%;
@@ -1980,11 +1982,23 @@
     }
 
     .floating-cta__button:hover,
-    .floating-cta__button:focus-visible {
+    .floating-cta__button:focus-visible,
+    .price-all__button:hover,
+    .price-all__button:focus-visible {
       color: #fff;
       border-color: rgba(255, 255, 255, 0.6);
       background: linear-gradient(135deg, rgba(58, 88, 63, 0.85) 0%, rgba(28, 46, 33, 0.8) 100%);
       outline: none;
+    }
+
+    .price-all {
+      display: flex;
+      justify-content: center;
+      margin-top: clamp(1.6rem, 3vw, 2.6rem);
+    }
+
+    .price-all__button {
+      min-width: 13.5rem;
     }
 
     .floating-cta__note {
@@ -2008,7 +2022,7 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
-      .floating-cta__button::after { animation: none; opacity: 0; }
+      .floating-cta__button::after, .price-all__button::after { animation: none; opacity: 0; }
     }
 
     /* Стеклянные кнопки хиро с мягким бликом (правка Owner'а 30.08). */
@@ -2315,6 +2329,8 @@
             </dl>
           </a>
         </div>
+        <div class="price-all"><a class="price-all__button" href="price.html">Посмотреть весь прайс</a></div>
+
 
         <p class="program-note">Полное меню: 10+ видов массажа, обёртывания, стоунтерапия, кедровая фитобочка — для женщин и мужчин. Самая короткая программа — «Релакс», 3 500 ₽.</p>
       
@@ -2365,6 +2381,8 @@
             <dl class="program-facts"><dt>Цена</dt><dd>13 600 ₽</dd><!-- Длительность: добавить после подтверждения данных. --></dl>
           </a>
         </div>
+        <div class="price-all"><a class="price-all__button" href="price.html">Посмотреть весь прайс</a></div>
+
       
         <div class="proof">
           <blockquote class="proof-card">
