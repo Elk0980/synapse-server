@@ -55,6 +55,7 @@ services:
       PORT: "8080"
       DATABASE_PATH: /data/content.sqlite
       API_KEY: ${CONTENT_API_KEY}
+      EDITOR_KEY: ${CONTENT_EDITOR_KEY:-}
       ALLOWED_ORIGINS: ${CONTENT_ALLOWED_ORIGINS:-}
     expose:
       - "8080"
