@@ -60,6 +60,23 @@ alvi.synapsebusiness.ru {
     rewrite * /content/alvi/price
     reverse_proxy content:8080
   }
+  # Тексты и фоны главной (только чтение) и загруженные в кабинете картинки.
+  @site {
+    path /api/site
+    method GET
+  }
+  handle @site {
+    rewrite * /content/alvi/site
+    reverse_proxy content:8080
+  }
+  @assets {
+    path /api/assets/*
+    method GET
+  }
+  handle @assets {
+    uri replace /api/assets/ /content/alvi/assets/
+    reverse_proxy content:8080
+  }
   import draft
   import static
   handle_errors {
