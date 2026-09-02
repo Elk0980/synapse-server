@@ -5,18 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light">
 
-  <title>Массаж и SPA в Иркутске — салон ALVI | Депутатская 71а</title>
-  <meta name="description" content="Массаж и SPA-ритуалы в Иркутске: расслабляющий массаж от 2 800 ₽, SPA-программы 3 500–8 900 ₽, программы для двоих 6 900–17 600 ₽. 4,9★ по 398 оценкам в 2ГИС. Кедровая бочка, фитостены. Запись в Telegram. Депутатская 71а.">
-  <link rel="canonical" href="https://alvi-spa-irkutsk.gzfh46j4jq.chatgpt.site/alvi.html">
+  <title>Массаж и SPA в Иркутске — салон ALVI | Депутатская, 71а</title>
+  <meta name="description" content="Массаж и SPA-ритуалы в Иркутске: расслабляющий массаж от 2 800 ₽, SPA-программы 3 500–8 900 ₽, программы для двоих 6 900–17 600 ₽. 4,9★ по 398 оценкам в 2ГИС. Кедровая бочка, фитостены. Запись в Telegram. Депутатская, 71а.">
+  <link rel="canonical" href="https://alvi.synapsebusiness.ru/">
   <meta property="og:type" content="website">
   <meta property="og:title" content="ALVI SPA — Верни себе баланс">
   <meta property="og:description" content="Массаж и SPA-ритуалы в Иркутске · Депутатская, 71а">
-  <meta property="og:url" content="https://alvi-spa-irkutsk.gzfh46j4jq.chatgpt.site/alvi.html">
-  <meta property="og:image" content="https://alvi-spa-irkutsk.gzfh46j4jq.chatgpt.site/og.png">
+  <meta property="og:url" content="https://alvi.synapsebusiness.ru/">
+  <meta property="og:image" content="https://alvi.synapsebusiness.ru/img/alvi-poster.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="ALVI SPA — Верни себе баланс">
   <meta name="twitter:description" content="Массаж и SPA-ритуалы в Иркутске · Депутатская, 71а">
-  <meta name="twitter:image" content="https://alvi-spa-irkutsk.gzfh46j4jq.chatgpt.site/og.png">
+  <meta name="twitter:image" content="https://alvi.synapsebusiness.ru/img/alvi-poster.png">
 
   <!-- Иконки вкладки и экрана телефона (правка Owner'а 31.08). -->
   <link rel="icon" href="/favicon.ico" sizes="any">
@@ -109,7 +109,7 @@
       },
       {
         "@type": "Question",
-        "name": "Где вы находитесь и как найти вход?",
+        "name": "Где вы находитесь?",
         "acceptedAnswer": {
           "@type": "Answer",
           "text": "Иркутск, Депутатская улица, 71а, Октябрьский район."
@@ -226,7 +226,7 @@
       z-index: 1; /* выше фиксированного слоя воды, иначе видео закрывает хвост хиро */
       height: 320vh;
       min-height: 320vh;
-      background: #07110c;
+      background: transparent;
     }
 
     .hero__sticky {
@@ -1136,13 +1136,17 @@
     }
 
     .quiz-question legend {
+      float: left; /* заголовок внутри панели, а не на её границе */
+      width: 100%;
       max-width: 100%;
-      padding: 0 0.35rem;
+      margin: 0;
+      padding: 0;
       font-family: "Lora", Georgia, serif;
       font-size: clamp(1.25rem, 2vw, 1.65rem);
     }
 
     .quiz-options {
+      clear: both; /* после плавающего legend */
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 0.65rem;
@@ -1385,6 +1389,7 @@
     }
 
     .hero.is-compact-mode .hero__sticky {
+      opacity: 1 !important;
       position: relative;
       top: auto;
       height: auto;
@@ -1784,7 +1789,7 @@
       padding-bottom: clamp(2.5rem, 5vw, 4rem);
       color: var(--hero-ink);
       border-bottom-color: rgba(255, 255, 255, 0.1);
-      background: linear-gradient(180deg, rgba(9, 17, 12, 0.88) 0%, rgba(9, 17, 12, 0.6) 40%, rgba(9, 17, 12, 0.34) 100%);
+      background: linear-gradient(180deg, rgba(9, 17, 12, 0.78) 0%, rgba(9, 17, 12, 0.55) 40%, rgba(9, 17, 12, 0.34) 100%);
     }
 
     #trust .trust-score strong { color: #d9c48f; }
@@ -1799,6 +1804,7 @@
 
     /* Низ хиро гасится в тон страницы — стык без «отрезка» (правка Owner'а 31.08). */
     .hero::after {
+      display: none; /* переход к отзывам теперь делает шторка, градиент не нужен */
       content: "";
       position: absolute;
       right: 0;
@@ -1840,9 +1846,9 @@
     .after-hero {
       position: relative;
       z-index: 2;
-      /* Блок отзывов наезжает шторкой на закреплённый последний кадр хиро:
-         начинает входить ровно в момент, когда sticky перестаёт быть закреплённым. */
-      margin-top: -100vh;
+      /* Отзывы идут сразу за хиро: после открепления последний кадр уезжает вверх
+         и плавно гаснет (renderHandoff), под ним уже видна вода. */
+      margin-top: 0;
       background: transparent;
       --ink: #fffdf8;
       --ink-dim: rgba(255, 253, 248, 0.8);
@@ -2233,7 +2239,7 @@
             </div>
             <p class="final-signature">
               <strong>ALVI · Верни себе баланс</strong>
-              <span>Иркутск, Депутатская 71а · ежедневно с 09:00 до 22:00</span>
+              <span>Иркутск, Депутатская, 71а · ежедневно с 09:00 до 22:00</span>
             </p>
           </div>
         </article>
@@ -2288,8 +2294,8 @@
             <p>Мягкая программа для первого знакомства с ALVI.</p>
             <dl class="program-facts">
               <dt>Цена</dt><dd>3 500 ₽</dd>
-              <!-- Длительность: добавить после подтверждения данных. -->
-              <dt>Состав</dt><dd>SPA-программа с маслами.</dd>
+              <dt>Время</dt><dd>1 ч 30 мин</dd>
+              <dt>Состав</dt><dd>фитобочка с травами, массаж тела и головы, чайная церемония.</dd>
               <dt>Кому</dt><dd>если давно не были на массаже и хочется просто выдохнуть.</dd>
             </dl>
           </a>
@@ -2299,8 +2305,8 @@
             <p>Тело, голова и мысли отпускают по очереди.</p>
             <dl class="program-facts">
               <dt>Цена</dt><dd>5 600 ₽</dd>
-              <!-- Длительность: добавить после подтверждения данных. -->
-              <dt>Состав</dt><dd>комплексная SPA-программа.</dd>
+              <dt>Время</dt><dd>2 ч 30 мин</dd>
+              <dt>Состав</dt><dd>фитобочка, скраб «Марципан», обёртывание «Шоколад», массаж тела и головы, чай.</dd>
               <dt>Кому</dt><dd>после тяжёлой недели или перед важным событием.</dd>
             </dl>
           </a>
@@ -2310,8 +2316,8 @@
             <p>Глубокий ритуал с маслами.</p>
             <dl class="program-facts">
               <dt>Цена</dt><dd>6 300 ₽</dd>
-              <!-- Длительность: добавить после подтверждения данных. -->
-              <dt>Состав</dt><dd>SPA-ритуал с ароматерапией.</dd>
+              <dt>Время</dt><dd>3 ч</dd>
+              <dt>Состав</dt><dd>фитобочка, скраб «Дикие ягоды», обёртывание «Шоколад», массаж тела с аромамаслами, массаж лица и декольте, чай.</dd>
               <dt>Кому</dt><dd>когда нужно не «отдохнуть», а восстановиться.</dd>
             </dl>
           </a>
@@ -2321,8 +2327,8 @@
             <p>Сильные руки, мягкий темп.</p>
             <dl class="program-facts">
               <dt>Цена</dt><dd>2 800 ₽</dd>
-              <!-- Длительность: добавить после подтверждения данных. -->
-              <dt>Состав</dt><dd>классический массаж.</dd>
+              <dt>Время</dt><dd>60 мин</dd>
+              <dt>Состав</dt><dd>расслабляющий массаж всего тела.</dd>
               <dt>Кому</dt><dd>после сидячей работы.</dd>
             </dl>
           </a>
@@ -2332,8 +2338,8 @@
             <p>Работа с тем, что болит к вечеру.</p>
             <dl class="program-facts">
               <dt>Цена</dt><dd>2 800 ₽</dd>
-              <!-- Длительность: добавить после подтверждения данных. -->
-              <dt>Состав</dt><dd>прицельный массаж.</dd>
+              <dt>Время</dt><dd>60 мин</dd>
+              <dt>Состав</dt><dd>классический массаж спины и ног.</dd>
               <dt>Кому</dt><dd>если ноет поясница или устают ноги.</dd>
             </dl>
           </a>
@@ -2372,22 +2378,22 @@
           <a class="program-card" href="price.html#s4">
             <h3>Парный массаж</h3>
             <p>Вдвоём в одном кабинете. Хороший первый шаг, если SPA-день пока кажется «слишком».</p>
-            <dl class="program-facts"><dt>Цена</dt><dd>от 5 600 ₽</dd><!-- Длительность: добавить после подтверждения данных. --></dl>
+            <dl class="program-facts"><dt>Цена</dt><dd>от 5 600 ₽</dd><dt>Время</dt><dd>60 / 90 мин</dd></dl>
           </a>
           <a class="program-card" href="price.html#s2-2">
             <h3>Обновление</h3>
             <p>Парная SPA-программа для первого совместного визита.</p>
-            <dl class="program-facts"><dt>Цена</dt><dd>8 900 ₽</dd><!-- Длительность: добавить после подтверждения данных. --></dl>
+            <dl class="program-facts"><dt>Цена</dt><dd>8 900 ₽</dd><dt>Время</dt><dd>2 ч</dd></dl>
           </a>
           <a class="program-card" href="price.html#s2-1">
             <h3>Успокаивающая</h3>
             <p>Для годовщины или свидания без суеты.</p>
-            <dl class="program-facts"><dt>Цена</dt><dd>10 900 ₽</dd><!-- Длительность: добавить после подтверждения данных. --></dl>
+            <dl class="program-facts"><dt>Цена</dt><dd>10 900 ₽</dd><dt>Время</dt><dd>2 ч 30 мин</dd></dl>
           </a>
           <a class="program-card" href="price.html#s2-3">
             <h3>SPA-день</h3>
             <p>Программа-путешествие на несколько часов, с чаем и паузами.</p>
-            <dl class="program-facts"><dt>Цена</dt><dd>13 600 ₽</dd><!-- Длительность: добавить после подтверждения данных. --></dl>
+            <dl class="program-facts"><dt>Цена</dt><dd>13 600 ₽</dd><dt>Время</dt><dd>3 ч</dd></dl>
           </a>
         </div>
         <div class="price-all"><a class="price-all__button" href="price.html">Посмотреть весь прайс</a></div>
@@ -2439,7 +2445,7 @@
     <section class="content-section content-section--panel" id="space" data-after-block="5">
       <div class="content-shell">
         <h2 class="content-title">Оставьте тревоги и заботы за стенами ALVI</h2>
-        <p class="content-subtitle">Салон на Депутатской 71а</p>
+        <p class="content-subtitle">Салон на Депутатской, 71а</p>
         <p class="content-lead">Фитостены с тёплой подсветкой, кедровая бочка и запах масел, погружение в атмосферу единения с собой.<br>Город остаётся снаружи.</p>
 
         <div class="space-grid">
@@ -2507,7 +2513,7 @@
 
     <section class="content-section" id="faq" data-after-block="9">
       <div class="content-shell content-shell--narrow">
-        <h2 class="content-title">FAQ</h2>
+        <h2 class="content-title">Частые вопросы</h2>
         <div class="faq-list">
           <details>
             <summary>Сколько стоит массаж в Иркутске в ALVI?</summary>
@@ -2519,13 +2525,13 @@
             <p class="faq-answer">Через Telegram — отвечаем в течение 2 минут. Работаем ежедневно с 09:00 до 22:00 по предварительной записи.</p>
           </details>
           <details>
-            <summary>Где вы находитесь и как найти вход?</summary>
+            <summary>Где вы находитесь?</summary>
             <p class="faq-answer">Иркутск, Депутатская улица, 71а, Октябрьский район.</p>
             <!-- Ориентир и описание входа добавить после подтверждения данных. -->
           </details>
           <details>
-            <summary>Сколько действует подарочный сертификат?</summary>
-            <p class="faq-answer">Доставка сертификата по Иркутску бесплатная, оформить можно на любую сумму или конкретную программу.</p>
+            <summary>Как оформить подарочный сертификат?</summary>
+            <p class="faq-answer">Напишите в Telegram: сертификат бывает электронный (приходит в мессенджер) или бумажный в конверте с лентой. Оформляется на любую сумму или конкретную программу, доставка по Иркутску бесплатная.</p>
             <!-- Срок действия сертификата добавить после подтверждения данных. -->
           </details>
           <details>
@@ -3250,7 +3256,18 @@
         else renderFrames(activeProgress);
         renderScenes(activeProgress);
         renderInterface(activeProgress);
+        renderHandoff(activeProgress);
         renderFrameIdle(timestamp);
+      }
+
+      // Передача сцены: когда sticky отпускается и отзывы идут шторкой,
+      // хиро быстро гаснет, чтобы сквозь прозрачные секции была видна вода, а не последний кадр.
+      function renderHandoff(progress) {
+        if (!sticky || !hero) return;
+        const total = Math.max(hero.offsetHeight, 1);
+        const unpin = Math.max(0, (total - window.innerHeight) / total);
+        const out = 1 - smoothstep(unpin, Math.min(unpin + 0.16, 1), progress);
+        sticky.style.opacity = out.toFixed(3);
       }
 
       function clearWatchdog() {
