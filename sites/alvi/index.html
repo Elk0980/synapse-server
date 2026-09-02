@@ -1834,7 +1834,7 @@
     .after-hero {
       position: relative;
       z-index: 1;
-      margin-top: -32vh;
+      margin-top: -40vh;
       background: transparent;
       --ink: #fffdf8;
       --ink-dim: rgba(255, 253, 248, 0.8);
@@ -3420,6 +3420,23 @@
     })();
     /* --- END MOTION V2 EXPERIMENT. --- */
   </script>
+  <script>
+    const initCtaHide = () => {
+      const cta = document.querySelector('.floating-cta');
+      const footer = document.querySelector('.site-footer');
+      if (cta && footer && 'IntersectionObserver' in window) {
+        new IntersectionObserver((entries) => {
+          entries.forEach(e => cta.classList.toggle('is-hidden', e.isIntersecting));
+        }, { rootMargin: '0px 0px -10% 0px' }).observe(footer);
+      }
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initCtaHide, { once: true });
+    } else {
+      initCtaHide();
+    }
+  </script>
+
   <script>
     (() => {
       const layer = document.querySelector('.page-water');
