@@ -491,6 +491,7 @@
       <label>Кому подходит (главная)<input name="who" value="${esc(it.who || '')}"></label>
       <label class="is-wide">Описание для главной<input name="desc" value="${esc(it.desc || '')}"></label>
       <label class="is-wide">Состав одной строкой (главная)<input name="composition" value="${esc(it.composition || '')}"><small>если пусто — берутся первые пункты состава</small></label>
+      <label class="is-wide">Фото на фоне карточки (главная)<input name="photo" value="${esc(it.photo || '')}" placeholder="img/card-....jpg"><small>путь к файлу в папке сайта; пусто — без фото</small></label>
       ${isTable ? '' : `<label class="is-wide">Состав программы — по одному пункту в строке<textarea name="items">${esc((it.items || []).join('\n'))}</textarea></label>`}
       <div class="ed-form__actions">
         <button class="ed-btn ed-btn--main ed-btn--small" type="submit">Готово</button>
@@ -504,7 +505,7 @@
     if (!f) return;
     const fd = new FormData(form);
     const it = f.it;
-    for (const k of ['title', 'card', 'price', 'duration', 'who', 'desc', 'composition']) {
+    for (const k of ['title', 'card', 'price', 'duration', 'who', 'desc', 'composition', 'photo']) {
       if (fd.has(k)) it[k] = String(fd.get(k)).trim();
     }
     if (fd.has('items')) it.items = String(fd.get('items')).split('\n').map((s) => s.trim()).filter(Boolean);
