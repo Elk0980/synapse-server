@@ -85,7 +85,15 @@
       text-decoration: none; color: var(--ink);
     }
     .pnav__top:hover, .pnav__top.is-active { color: var(--gold); }
-    .pnav__sub { margin: 0.45rem 0 0; padding-left: 0.85rem; border-left: 1px solid var(--line); }
+    .pnav__sub { display: none; margin: 0.45rem 0 0; padding-left: 0.85rem; border-left: 1px solid var(--line); }
+    .pnav li.is-open > .pnav__sub { display: block; }
+    .pnav li.has-sub > .pnav__top { position: relative; padding-right: 1.4rem; }
+    .pnav li.has-sub > .pnav__top::after {
+      content: ""; position: absolute; right: 0.35rem; top: 0.45em;
+      width: 0.45em; height: 0.45em; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+      transform: rotate(45deg); transition: transform 200ms ease; opacity: 0.7;
+    }
+    .pnav li.has-sub.is-open > .pnav__top::after { transform: rotate(225deg); top: 0.6em; }
     .pnav__sub li + li { margin-top: 0.3rem; }
     .pnav__sub a {
       display: block; padding: 0.12rem 0; color: var(--ink-dim);
@@ -197,8 +205,6 @@
     @media (max-width: 62rem) {
       .price-layout { grid-template-columns: 1fr; }
       .pnav { position: static; max-height: none; }
-      .pnav__sub { display: none; }
-      .pnav.is-open .pnav__sub { display: block; }
       .pnav > ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.7rem; }
       .pnav > ul > li + li { margin-top: 0; }
     }
@@ -239,7 +245,7 @@
   <div class="price-layout">
     <nav class="pnav" aria-label="Разделы прайса">
       <ul>
-        <li><a class="pnav__top" href="#s1">SPA-программы для одного</a>
+        <li class="has-sub"><a class="pnav__top" href="#s1">SPA-программы для одного</a>
           <ul class="pnav__sub">
             <li><a href="#s1-1">Программа «Душевное расслабление»</a></li>
             <li><a href="#s1-2">Программа «Здоровая спина»</a></li>
@@ -253,7 +259,7 @@
             <li><a href="#s1-10">Программа «Роскошное преображение»</a></li>
             <li><a href="#s1-11">Программа для мужчин «Антистресс»</a></li>
           </ul></li>
-        <li><a class="pnav__top" href="#s2">SPA-программы для двоих</a>
+        <li class="has-sub"><a class="pnav__top" href="#s2">SPA-программы для двоих</a>
           <ul class="pnav__sub">
             <li><a href="#s2-1">«Успокаивающая, расслабляющая»</a></li>
             <li><a href="#s2-2">«Обновление»</a></li>
@@ -262,7 +268,7 @@
             <li><a href="#s2-5">«Релакс-мини»</a></li>
             <li><a href="#s2-6">«Релакс»</a></li>
           </ul></li>
-        <li><a class="pnav__top" href="#s3">SPA-программы для лица</a>
+        <li class="has-sub"><a class="pnav__top" href="#s3">SPA-программы для лица</a>
           <ul class="pnav__sub">
             <li><a href="#s3-1">Программа «Свежий взгляд»</a></li>
             <li><a href="#s3-2">Программа «Сияние»</a></li>
@@ -754,7 +760,7 @@
         </div>
         <p class="ps__note">Сертификат оформляется на любую сумму или на конкретную программу из этого прайса.</p>
         <div class="pc__actions pc__actions--section">
-          <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Забрать сертификат</a>
+          <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Оформить сертификат</a>
         </div>
       </section>
     </div>
@@ -785,10 +791,22 @@
         .map(a => ({ a, el: document.querySelector(a.getAttribute('href')) }))
         .filter(x => x.el);
       if (!targets.length) return;
+      const items = [...document.querySelectorAll('.pnav > ul > li')];
+      const openOnly = (li) => items.forEach(x => x.classList.toggle('is-open', x === li));
+      // Раскрытие подпунктов: по клику на раздел и при прокрутке до него
+      items.forEach(li => {
+        const top = li.querySelector('.pnav__top');
+        top.addEventListener('click', () => openOnly(li));
+      });
       const io = new IntersectionObserver((entries) => {
         entries.forEach(e => {
           const hit = targets.find(t => t.el === e.target);
-          if (hit) hit.a.classList.toggle('is-active', e.isIntersecting);
+          if (!hit) return;
+          hit.a.classList.toggle('is-active', e.isIntersecting);
+          if (e.isIntersecting) {
+            const li = hit.a.closest('.pnav > ul > li');
+            if (li && li.classList.contains('has-sub')) openOnly(li);
+          }
         });
       }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
       targets.forEach(t => io.observe(t.el));
