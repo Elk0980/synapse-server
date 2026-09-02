@@ -112,6 +112,13 @@
       margin: 0 0 1.4rem; font-family: "Lora", Georgia, serif; font-weight: 400;
       font-size: clamp(1.6rem, 3vw, 2.4rem); line-height: 1.2;
     }
+    .cert-photo { margin: 0 0 1.4rem; }
+    .cert-photo img { display: block; width: min(100%, 24rem); height: auto; border-radius: 1rem; border: 1px solid var(--line); }
+    @media (min-width: 62rem) {
+      .cert-photo { float: right; margin: 0 0 1rem 1.5rem; }
+      .cert-photo img { width: 17rem; }
+      #s8::after { content: ""; display: block; clear: both; }
+    }
     .ps__note { margin: 0 0 1.2rem; color: var(--ink-dim); font-size: 0.92rem; }
 
     .pc {
@@ -180,6 +187,9 @@
       z-index: 60; display: grid; gap: 0.4rem; justify-items: center; pointer-events: none;
     }
     .floating-cta__row { display: flex; gap: 0.55rem; pointer-events: auto; }
+    .floating-cta { transition: opacity 300ms ease, transform 300ms ease; }
+    .floating-cta.is-hidden { opacity: 0; transform: translateY(0.75rem); }
+    .floating-cta.is-hidden .floating-cta__row { pointer-events: none; }
     .floating-cta__button {
       position: relative; display: inline-flex; align-items: center; justify-content: center;
       overflow: hidden; min-width: 11.5rem; min-height: 2.9rem; padding: 0.75rem 1.1rem;
@@ -748,6 +758,9 @@
 
       <section class="ps" id="s8">
         <h2 class="ps__title">Сертификаты</h2>
+        <div class="cert-photo">
+          <img src="img/certificates.jpg" alt="Подарочные сертификаты ALVI SPA" width="403" height="691" loading="lazy">
+        </div>
         <div class="cert">
           <article class="cert__card">
             <h3 class="pc__title">Электронный</h3>
@@ -810,6 +823,15 @@
         });
       }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
       targets.forEach(t => io.observe(t.el));
+    })();
+    (() => {
+      const cta = document.querySelector('.floating-cta');
+      const footer = document.querySelector('.site-footer');
+      if (!cta || !footer) return;
+      const update = () => cta.classList.toggle('is-hidden', footer.getBoundingClientRect().top < window.innerHeight - 40);
+      update();
+      addEventListener('scroll', update, { passive: true });
+      addEventListener('resize', update);
     })();
   </script>
 </body>
