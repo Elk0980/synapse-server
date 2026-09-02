@@ -1217,6 +1217,8 @@ padding: 18px 20px;
 border-top: 1px solid var(--line);
 }
 
+.project-edit-link { display: inline-block; margin-top: 6px; font-size: 13px; color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(159,212,255,0.4); }
+.project-edit-link:hover { border-bottom-color: var(--accent); }
 .project-row-header {
 min-height: 48px;
 color: var(--muted);
@@ -2196,6 +2198,7 @@ crm: "LIVE"
 {
 name: "ALVI",
 type: "Спа и массаж",
+edit: { label: "Редактировать сайт → Прайс", href: "price-editor.html" },
 directions: "Основной сайт · воронки услуг",
 website: "LIVE",
 sources: "QA",
@@ -2321,7 +2324,17 @@ dialogs: [
 { name:"Алексей", initials:"А", channel:"Instagram", message:"Есть подарочные сертификаты?", status:"Предложение" },
 { name:"Ольга Д.", initials:"ОД", channel:"Яндекс", message:"Приду с подругой, нужны два места подряд.", status:"Следующий шаг" }
 ],
-projects: [], integrations: [], activity: []
+projects: [
+{
+name: "ALVI",
+type: "Спа и массаж",
+directions: "Основной сайт · прайс · витрины главной",
+website: "LIVE",
+sources: "QA",
+crm: "QA",
+edit: { label: "Редактировать сайт → Прайс", href: "price-editor.html" }
+}
+], integrations: [], activity: []
 });
 
 const PROFILES = {
@@ -2756,6 +2769,7 @@ DATA.projects.map((project) => `
 <span class="project-cell-label">Сайт</span>
 ${statusBadge(project.website)}
 <span class="admin-sample-line">${sampleBadge()} демо-статус</span>
+${project.edit ? `<a class="project-edit-link" href="${escapeHTML(project.edit.href)}">${escapeHTML(project.edit.label)}</a>` : ""}
 </div>
 
 <div class="project-cell">
