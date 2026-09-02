@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Редактор прайса ALVI — кабинет Synapse</title>
+  <title>Редактор сайта ALVI — тексты и фоны</title>
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -319,6 +319,21 @@
       .ed-form { grid-template-columns: 1fr; }
       .pnav .ed-count { float: none; }
     }
+    .ed-fields { display: grid; gap: 0.8rem; margin-top: 1rem; }
+    .ed-field { display: grid; gap: 0.3rem; }
+    .ed-field__label { font-size: 0.78rem; color: var(--ink-faint); letter-spacing: 0.03em; }
+    .ed-field input, .ed-field textarea {
+      font: inherit; font-size: 0.95rem; color: var(--ink); padding: 0.6rem 0.75rem; width: 100%;
+      border: 1px solid var(--line); border-radius: 0.6rem; background: rgba(9,17,12,0.45); resize: vertical;
+    }
+    .ed-field input:focus, .ed-field textarea:focus { outline: 1px solid var(--gold); }
+    .ed-bg { padding: 1rem; border: 1px solid var(--line); border-radius: 1rem; background: rgba(9,17,12,0.35); margin-top: 0.8rem; }
+    .ed-bg__head { display: flex; gap: 0.8rem; align-items: baseline; margin-bottom: 0.6rem; }
+    .ed-bg__preview { height: 9rem; border-radius: 0.7rem; background-size: cover; background-position: center; border: 1px solid var(--line); }
+    .ed-bg__preview--empty { display: flex; align-items: center; justify-content: center; color: var(--ink-faint); font-size: 0.85rem; }
+    .ed-bg__tools { display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; align-items: center; margin: 0.7rem 0 0.4rem; }
+    .ed-bg__tools input[type=range] { vertical-align: middle; width: 8rem; }
+    .ed-btn input[type=file] { display: none; }
   </style>
 </head>
 <body>
@@ -331,12 +346,12 @@
   </div>
 
   <div class="ed-bar">
-    <div class="ed-bar__title">Редактор прайса ALVI<small id="ed-sub">загрузка…</small></div>
+    <div class="ed-bar__title">Редактор сайта ALVI — тексты и фоны<small id="ed-sub">загрузка…</small></div>
     <span class="ed-status" id="ed-status"></span>
     <button class="ed-btn ed-btn--ghost" id="ed-history" type="button">История</button>
     <button class="ed-btn ed-btn--ghost" id="ed-key" type="button">Ключ</button>
-    <a class="ed-btn ed-btn--ghost" href="site-editor.html">Тексты и фоны</a>
-    <a class="ed-btn ed-btn--ghost" href="https://alvi.synapsebusiness.ru/price.html" target="_blank" rel="noopener">Открыть прайс ↗</a>
+    <a class="ed-btn ed-btn--ghost" href="price-editor.html">Прайс</a>
+    <a class="ed-btn ed-btn--ghost" href="https://alvi.synapsebusiness.ru/" target="_blank" rel="noopener">Открыть сайт ↗</a>
     <button class="ed-btn ed-btn--main" id="ed-save" type="button">Сохранить</button>
   </div>
 
@@ -345,272 +360,142 @@
       <ul id="ed-nav"></ul>
     </nav>
     <div class="price-content" id="ed-content">
-      <p class="ed-status">Загружаю прайс…</p>
+      <p class="ed-status">Загружаю тексты сайта…</p>
     </div>
   </div>
 
   <div class="ed-modal" id="ed-modal"><div class="ed-modal__box" id="ed-modal-box"></div></div>
 
-  <script src="https://alvi.synapsebusiness.ru/price-render.js"></script>
-  <script>
+    <script>
 (() => {
   'use strict';
   const params = new URLSearchParams(location.search);
-  const API = (params.get('api') || '').replace(/\/$/, '') + '/content/alvi/price';
+  const API_BASE = (params.get('api') || '').replace(/\/$/, '');
+  const API = API_BASE + '/content/alvi/site';
+  const ASSETS = API_BASE + '/content/alvi/assets';
+  const SITE = 'https://alvi.synapsebusiness.ru';
   const KEY_STORAGE = 'synapse_content_key';
-  const MAX_PER_CATEGORY = 8;
 
   const $ = (sel, root = document) => root.querySelector(sel);
-  const esc = (s) => window.AlviPrice ? AlviPrice.esc(s) : String(s ?? '');
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  let data = null;      // текущее состояние документа
-  let dirty = false;    // есть несохранённые изменения
-  let editing = null;   // id позиции, открытой на редактирование
-  let editingCat = null;
+  let data = null;
+  let dirty = false;
+  let author = '';
 
   const statusEl = $('#ed-status');
   const subEl = $('#ed-sub');
   const saveBtn = $('#ed-save');
 
-  function setStatus(text, kind) {
-    statusEl.textContent = text;
-    statusEl.className = 'ed-status' + (kind ? ' is-' + kind : '');
-  }
-  function markDirty() {
-    dirty = true;
-    saveBtn.textContent = 'Сохранить •';
-    setStatus('Есть несохранённые изменения');
-  }
-  function blockMax(block) { return Number(data.blocks?.[block]?.max) || 8; }
-  function blockTitle(block) { return data.blocks?.[block]?.title || block; }
-  function showcase(block) { return (data.showcase[block] ||= []); }
-  function inShowcase(id) { return showcase('self').includes(id) || showcase('two').includes(id); }
-  function catOf(id) { return AlviPrice.findItem(data, id)?.cat; }
-  function popularCount(cat) { return cat.items.filter((it) => inShowcase(it.id)).length; }
+  function setStatus(text, kind) { statusEl.textContent = text; statusEl.className = 'ed-status' + (kind ? ' is-' + kind : ''); }
+  function markDirty() { dirty = true; saveBtn.textContent = 'Сохранить •'; setStatus('Есть несохранённые изменения'); }
+  function imgUrl(p) { if (!p) return ''; if (/^https?:/.test(p)) return p; return SITE + (p.startsWith('/') ? p : '/' + p); }
 
-  /* --- звёзды --- */
-  function toggleStar(id, btn) {
-    const found = AlviPrice.findItem(data, id);
-    if (!found) return;
-    const { cat, it } = found;
-    const block = cat.block || 'self';
-    if (inShowcase(id)) {
-      for (const b of ['self', 'two']) data.showcase[b] = showcase(b).filter((x) => x !== id);
-      markDirty(); render(); return;
-    }
-    if (popularCount(cat) >= MAX_PER_CATEGORY) {
-      return refuse(btn, cat.id, `В разделе уже выбрано ${MAX_PER_CATEGORY} позиций — снимите звезду с другой`);
-    }
-    if (showcase(block).length >= blockMax(block)) {
-      return refuse(btn, cat.id, `В блоке «${blockTitle(block)}» на главной уже ${blockMax(block)} позиций — уберите одну в списке блока`);
-    }
-    showcase(block).push(id);
-    markDirty(); render();
+  /* --- рендер --- */
+  function fieldHtml(sec, f) {
+    const id = `f-${f.key.replace(/[^\w-]/g, '_')}`;
+    const long = f.multiline || (f.value && (f.value.length > 90 || f.value.includes('\n')));
+    const control = long
+      ? `<textarea id="${id}" data-field="${esc(f.key)}" rows="${Math.min(8, Math.max(2, Math.ceil((f.value || '').length / 80)))}">${esc(f.value)}</textarea>`
+      : `<input id="${id}" data-field="${esc(f.key)}" value="${esc(f.value)}">`;
+    return `<label class="ed-field"><span class="ed-field__label">${esc(f.label)}</span>${control}</label>`;
   }
-  function refuse(btn, catId, message) {
-    if (btn) { btn.classList.add('is-shake'); setTimeout(() => btn.classList.remove('is-shake'), 350); }
-    const sec = document.querySelector(`[data-cat="${catId}"] .ps__title`);
-    if (sec) {
-      let hint = sec.parentElement.querySelector('.ed-hint');
-      if (!hint) { hint = document.createElement('span'); hint.className = 'ed-hint'; sec.after(hint); }
-      hint.textContent = message;
-      setTimeout(() => hint.remove(), 4000);
-    }
-    setStatus(message, 'error');
-  }
-
-  /* --- витрины (псевдо-разделы) --- */
-  function moveShowcase(block, idx, delta) {
-    const list = showcase(block);
-    const j = idx + delta;
-    if (j < 0 || j >= list.length) return;
-    [list[idx], list[j]] = [list[j], list[idx]];
-    markDirty(); render();
-  }
-  function removeShowcase(block, idx) {
-    showcase(block).splice(idx, 1);
-    markDirty(); render();
-  }
-  function addShowcase(block, id) {
-    if (!id) return;
-    const found = AlviPrice.findItem(data, id);
-    if (!found) return;
-    if (inShowcase(id)) return setStatus('Эта позиция уже отмечена', 'error');
-    if (showcase(block).length >= blockMax(block)) return setStatus(`В блоке уже ${blockMax(block)} позиций`, 'error');
-    if (popularCount(found.cat) >= MAX_PER_CATEGORY) return setStatus(`В разделе «${found.cat.title}» уже ${MAX_PER_CATEGORY} популярных`, 'error');
-    showcase(block).push(id);
-    markDirty(); render();
-  }
-  function renderShowcaseSection(block) {
-    const list = showcase(block);
-    const max = blockMax(block);
-    const rows = list.map((id, i) => {
-      const f = AlviPrice.findItem(data, id);
-      const name = f ? (f.it.card || f.it.title) : id;
-      const sub = f ? `${f.cat.title} · ${f.it.price || ''}` : 'позиция не найдена';
-      return `<div class="ed-showcase__item" data-block="${block}" data-idx="${i}">
-        <span class="ed-showcase__num">${i + 1}</span>
-        <span class="ed-showcase__name">${esc(name)}<small>${esc(sub)}</small></span>
-        <button class="ed-btn ed-btn--small" type="button" data-act="up" title="Выше">↑</button>
-        <button class="ed-btn ed-btn--small" type="button" data-act="down" title="Ниже">↓</button>
-        <button class="ed-btn ed-btn--small ed-btn--danger" type="button" data-act="remove" title="Убрать с главной">✕</button>
-      </div>`;
-    }).join('');
-    const options = data.categories.flatMap((cat) => cat.items
-      .filter((it) => !inShowcase(it.id))
-      .map((it) => `<option value="${esc(it.id)}">${esc(cat.title)} — ${esc(it.card || it.title)}</option>`)).join('');
-    const full = list.length >= max;
-    return `<section class="ps" id="block-${block}" data-block="${block}">
-      <h2 class="ps__title">${esc(blockTitle(block))}<span class="ed-count${full ? ' is-full' : ''}">${list.length} / ${max}</span></h2>
-      <p class="ps__note">Эти позиции показываются на главной в блоке «${esc(blockTitle(block))}» в таком порядке. Звезда в разделах прайса добавляет позицию сюда.</p>
-      <div class="ed-showcase">${rows || '<p class="ed-showcase__empty">Пока пусто — отметьте позиции звездой или добавьте ниже.</p>'}</div>
-      <div class="ed-add">
-        <select class="ed-select" data-add-select="${block}"><option value="">— выбрать позицию —</option>${options}</select>
-        <button class="ed-btn ed-btn--small" type="button" data-add-btn="${block}" ${full ? 'disabled' : ''}>Добавить</button>
+  function backgroundHtml(sec) {
+    const bg = sec.background;
+    if (!bg) return '';
+    const current = bg.image || bg.default;
+    const isCustom = !!bg.image;
+    const preview = current ? `<div class="ed-bg__preview" style="background-image:url('${esc(imgUrl(current))}')"></div>` : `<div class="ed-bg__preview ed-bg__preview--empty">без картинки — видна вода</div>`;
+    const op = bg.opacity != null && bg.opacity !== '' ? Number(bg.opacity) : 0.1;
+    return `<div class="ed-bg" data-bg="${esc(sec.id)}">
+      <div class="ed-bg__head"><strong>Фон блока</strong><span class="ed-status">${isCustom ? 'своя картинка' : (bg.default ? 'как было изначально' : 'изначально без картинки')}</span></div>
+      ${preview}
+      <div class="ed-bg__tools">
+        <label class="ed-btn ed-btn--small">Загрузить картинку<input type="file" accept="image/jpeg,image/png,image/webp" data-upload="${esc(sec.id)}" hidden></label>
+        <button class="ed-btn ed-btn--small" type="button" data-bg-reset="${esc(sec.id)}" ${isCustom || bg.opacity != null ? '' : 'disabled'}>Вернуть как было</button>
+        <label class="ed-status">Яркость фона <input type="range" min="0.05" max="1" step="0.05" value="${op}" data-opacity="${esc(sec.id)}"> <span data-opacity-val="${esc(sec.id)}">${Math.round(op * 100)}%</span></label>
       </div>
-    </section>`;
-  }
-
-  /* --- редактирование позиций --- */
-  function starHtml(it, row) {
-    const on = inShowcase(it.id);
-    return `<button class="ed-star${row ? ' ed-star--row' : ''}${on ? ' is-on' : ''}" type="button" data-star="${esc(it.id)}" title="${on ? 'Убрать из популярных' : 'Отметить популярной'}" aria-pressed="${on}">${on ? '★' : '☆'}</button>`;
-  }
-  function editHtml(it, row) {
-    if (editing === it.id) return formHtml(it);
-    const btns = `<button class="ed-btn ed-btn--small" type="button" data-edit="${esc(it.id)}">Изменить</button>
-      <button class="ed-btn ed-btn--small ed-btn--danger" type="button" data-del="${esc(it.id)}">Удалить</button>`;
-    return row ? `<span class="ed-row-tools">${btns}</span>` : `<div class="pc__tools">${btns}</div>`;
-  }
-  function formHtml(it) {
-    const cat = catOf(it.id);
-    const isTable = cat && cat.kind === 'table';
-    return `<form class="ed-form" data-form="${esc(it.id)}">
-      <label class="is-wide">Название в прайсе<input name="title" value="${esc(it.title)}" required></label>
-      <label>Название на главной<input name="card" value="${esc(it.card || '')}"><small>коротко, без кавычек</small></label>
-      <label>Цена<input name="price" value="${esc(it.price || '')}"></label>
-      <label>Длительность<input name="duration" value="${esc(it.duration || '')}"></label>
-      <label>Кому подходит (главная)<input name="who" value="${esc(it.who || '')}"></label>
-      <label class="is-wide">Описание для главной<input name="desc" value="${esc(it.desc || '')}"></label>
-      <label class="is-wide">Состав одной строкой (главная)<input name="composition" value="${esc(it.composition || '')}"><small>если пусто — берутся первые пункты состава</small></label>
-      <label class="is-wide">Фото на фоне карточки (главная)<input name="photo" value="${esc(it.photo || '')}" placeholder="img/card-....jpg"><small>путь к файлу в папке сайта; пусто — без фото</small></label>
-      ${isTable ? '' : `<label class="is-wide">Состав программы — по одному пункту в строке<textarea name="items">${esc((it.items || []).join('\n'))}</textarea></label>`}
-      <div class="ed-form__actions">
-        <button class="ed-btn ed-btn--main ed-btn--small" type="submit">Готово</button>
-        <button class="ed-btn ed-btn--small" type="button" data-cancel="1">Отмена</button>
-      </div>
-    </form>`;
-  }
-  function applyForm(form) {
-    const id = form.dataset.form;
-    const f = AlviPrice.findItem(data, id);
-    if (!f) return;
-    const fd = new FormData(form);
-    const it = f.it;
-    for (const k of ['title', 'card', 'price', 'duration', 'who', 'desc', 'composition', 'photo']) {
-      if (fd.has(k)) it[k] = String(fd.get(k)).trim();
-    }
-    if (fd.has('items')) it.items = String(fd.get('items')).split('\n').map((s) => s.trim()).filter(Boolean);
-    editing = null; markDirty(); render();
-  }
-  function newId(cat) {
-    const used = new Set(data.categories.flatMap((c) => c.items.map((i) => i.id)).concat(data.categories.map((c) => c.id)));
-    let n = cat.items.length + 1;
-    while (used.has(`${cat.id}-${n}`)) n += 1;
-    return `${cat.id}-${n}`;
-  }
-  function addItem(catId) {
-    const cat = data.categories.find((c) => c.id === catId);
-    if (!cat) return;
-    const it = { id: newId(cat), title: 'Новая позиция', card: '', desc: '', composition: '', who: '', duration: '', price: '' };
-    if (cat.kind !== 'table') it.items = [];
-    cat.items.push(it);
-    editing = it.id; markDirty(); render();
-    document.getElementById(it.id)?.scrollIntoView({ block: 'center' });
-  }
-  function deleteItem(id) {
-    const f = AlviPrice.findItem(data, id);
-    if (!f) return;
-    if (!confirm(`Удалить «${f.it.title}» из прайса?`)) return;
-    f.cat.items = f.cat.items.filter((x) => x.id !== id);
-    for (const b of ['self', 'two']) data.showcase[b] = showcase(b).filter((x) => x !== id);
-    markDirty(); render();
-  }
-  function addCategory() {
-    const title = prompt('Название нового раздела');
-    if (!title) return;
-    const kind = confirm('Раздел с карточками программ? (Отмена — таблица «услуга · время · цена»)') ? 'programs' : 'table';
-    let n = data.categories.length + 1;
-    const ids = new Set(data.categories.map((c) => c.id).concat(['s8'])); // s8 занят сертификатами на странице прайса
-    while (ids.has(`s${n}`)) n += 1;
-    const cat = { id: `s${n}`, title: title.trim(), kind, block: 'self', items: [] };
-    if (kind === 'table') cat.head = ['Услуга', 'Длительность', 'Цена'];
-    data.categories.push(cat);
-    markDirty(); render();
-    document.getElementById(cat.id)?.scrollIntoView();
-  }
-  function renameCategory(catId) {
-    const cat = data.categories.find((c) => c.id === catId);
-    if (!cat) return;
-    const t = prompt('Название раздела', cat.title);
-    if (t && t.trim() && t.trim() !== cat.title) { cat.title = t.trim(); markDirty(); render(); }
-  }
-  function setCategoryBlock(catId, block) {
-    const cat = data.categories.find((c) => c.id === catId);
-    if (!cat || cat.block === block) return;
-    cat.block = block; markDirty(); render();
-  }
-  function deleteCategory(catId) {
-    const cat = data.categories.find((c) => c.id === catId);
-    if (!cat) return;
-    if (cat.items.length && !confirm(`Удалить раздел «${cat.title}» вместе с ${cat.items.length} позициями?`)) return;
-    data.categories = data.categories.filter((c) => c.id !== catId);
-    const ids = new Set(cat.items.map((i) => i.id));
-    for (const b of ['self', 'two']) data.showcase[b] = showcase(b).filter((x) => !ids.has(x));
-    markDirty(); render();
-  }
-  function titleExtra(cat) {
-    const n = popularCount(cat);
-    return `<span class="ed-count${n >= MAX_PER_CATEGORY ? ' is-full' : ''}" title="Популярных в разделе">★ ${n} / ${MAX_PER_CATEGORY}</span>
-      <span class="ed-title-tools">
-        <button class="ed-btn ed-btn--small ed-btn--ghost" type="button" data-rename="${esc(cat.id)}" title="Переименовать">✎</button>
-        <button class="ed-btn ed-btn--small ed-btn--ghost ed-btn--danger" type="button" data-delcat="${esc(cat.id)}" title="Удалить раздел">✕</button>
-      </span>`;
-  }
-  function sectionTools(cat) {
-    return `<div class="ed-section-tools">
-      <button class="ed-btn ed-btn--small" type="button" data-additem="${esc(cat.id)}">+ Добавить позицию</button>
-      <label class="ed-status">Звёзды этого раздела идут в блок:
-        <select class="ed-select" data-block-select="${esc(cat.id)}" style="min-width:auto;margin-left:.4rem">
-          <option value="self" ${cat.block === 'two' ? '' : 'selected'}>${esc(blockTitle('self'))}</option>
-          <option value="two" ${cat.block === 'two' ? 'selected' : ''}>${esc(blockTitle('two'))}</option>
-        </select></label>
+      <small class="ed-status">JPEG, PNG или WebP до 8 МБ. Картинка ложится под текст блока полупрозрачно; яркость регулируется ползунком.</small>
     </div>`;
   }
-
-  /* --- рендер всего --- */
+  function sectionHtml(sec) {
+    return `<section class="ps" id="sec-${esc(sec.id)}" data-sec="${esc(sec.id)}">
+      <h2 class="ps__title">${esc(sec.title)}</h2>
+      ${backgroundHtml(sec)}
+      <div class="ed-fields">${(sec.fields || []).map((f) => fieldHtml(sec, f)).join('')}</div>
+    </section>`;
+  }
   function render() {
     const y = window.scrollY;
-    const nav = $('#ed-nav');
-    const content = $('#ed-content');
-    const prefix = ['self', 'two'].map((b) => {
-      const n = showcase(b).length; const max = blockMax(b);
-      return `<li><a class="pnav__top" href="#block-${b}">${esc(blockTitle(b))}<span class="ed-count${n >= max ? ' is-full' : ''}">${n} / ${max}</span></a></li>`;
-    }).join('\n');
-    nav.innerHTML = AlviPrice.renderNav(data, { prefix, noCertificates: true }) +
-      `<li><button class="ed-btn ed-btn--small" type="button" id="ed-addcat" style="margin-top:.6rem">+ Новый раздел</button></li>`;
-    // счётчики популярных в меню
-    for (const cat of data.categories) {
-      const a = nav.querySelector(`a[href="#${cat.id}"]`);
-      if (a) a.insertAdjacentHTML('beforeend', `<span class="ed-count">★ ${popularCount(cat)}</span>`);
-    }
-    content.innerHTML = renderShowcaseSection('self') + renderShowcaseSection('two') +
-      AlviPrice.renderSections(data, {
-        editor: true, noCertificates: true, starHtml, editHtml, titleExtra,
-        addCardHtml: sectionTools, addRowHtml: sectionTools,
-      });
-    subEl.textContent = `версия ${data.version || '—'} · обновлено ${data.updatedAt ? new Date(data.updatedAt).toLocaleString('ru-RU') : '—'}` + (dirty ? ' · не сохранено' : '');
+    $('#ed-nav').innerHTML = data.sections.map((s) => `<li><a class="pnav__top" href="#sec-${esc(s.id)}">${esc(s.title)}</a></li>`).join('');
+    $('#ed-content').innerHTML = data.sections.map(sectionHtml).join('\n');
+    subEl.textContent = `версия ${data.version || '—'} · обновлено ${data.updatedAt ? new Date(data.updatedAt).toLocaleString('ru-RU') : '—'}` + (author ? ` · вы: ${author}` : '') + (dirty ? ' · не сохранено' : '');
     window.scrollTo(0, y);
+    initNav();
+  }
+  function initNav() {
+    const links = [...document.querySelectorAll('.pnav a')];
+    const targets = links.map((a) => ({ a, el: document.querySelector(a.getAttribute('href')) })).filter((x) => x.el);
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => { const hit = targets.find((t) => t.el === e.target); if (hit) hit.a.classList.toggle('is-active', e.isIntersecting); });
+    }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+    targets.forEach((t) => io.observe(t.el));
+  }
+
+  /* --- изменения --- */
+  function findField(key) { for (const s of data.sections) for (const f of s.fields || []) if (f.key === key) return f; return null; }
+  function sectionOf(id) { return data.sections.find((s) => s.id === id); }
+  document.addEventListener('input', (e) => {
+    const t = e.target;
+    if (t.dataset.field) { const f = findField(t.dataset.field); if (f && f.value !== t.value) { f.value = t.value; markDirty(); } }
+    if (t.dataset.opacity) {
+      const sec = sectionOf(t.dataset.opacity); if (!sec || !sec.background) return;
+      sec.background.opacity = Number(t.value);
+      const v = document.querySelector(`[data-opacity-val="${t.dataset.opacity}"]`); if (v) v.textContent = Math.round(Number(t.value) * 100) + '%';
+      const reset = document.querySelector(`[data-bg-reset="${t.dataset.opacity}"]`); if (reset) reset.disabled = false;
+      markDirty();
+    }
+  });
+  document.addEventListener('change', async (e) => {
+    const t = e.target;
+    if (t.dataset.upload && t.files && t.files[0]) {
+      const file = t.files[0]; const secId = t.dataset.upload;
+      await upload(secId, file);
+      t.value = '';
+    }
+  });
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('button, a');
+    if (!t) return;
+    if (t.dataset.bgReset) {
+      const sec = sectionOf(t.dataset.bgReset);
+      if (sec && sec.background) { sec.background.image = null; sec.background.opacity = null; markDirty(); render(); }
+      return;
+    }
+    if (t.dataset.restore) return restore(t.dataset.restore);
+    if (t.dataset.close) return $('#ed-modal').classList.remove('is-open');
+    if (t.id === 'ed-save') return save();
+    if (t.id === 'ed-history') return showHistory();
+    if (t.id === 'ed-key') { getKey(true); whoami(); return; }
+  });
+
+  async function upload(secId, file) {
+    const sec = sectionOf(secId); if (!sec || !sec.background) return;
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return setStatus('Нужен JPEG, PNG или WebP', 'error');
+    if (file.size > 8 * 1024 * 1024) return setStatus('Файл больше 8 МБ', 'error');
+    setStatus('Загружаю картинку…');
+    try {
+      const key = getKey(false); if (!key) throw new Error('Без ключа загрузить нельзя');
+      const r = await fetch(ASSETS, { method: 'POST', headers: { 'X-API-Key': key, 'Content-Type': file.type, 'X-Filename': encodeURIComponent(file.name) }, body: file });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status);
+      sec.background.image = j.url;
+      markDirty(); render();
+      setStatus('Картинка загружена — нажмите «Сохранить», чтобы она появилась на сайте', 'ok');
+    } catch (err) {
+      if (err.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} }
+      setStatus('Не загружено: ' + err.message, 'error');
+    }
   }
 
   /* --- ключ, сохранение, история --- */
@@ -618,22 +503,16 @@
     let key = '';
     try { key = sessionStorage.getItem(KEY_STORAGE) || ''; } catch (e) {}
     if (!key || force) {
-      key = prompt('Ключ редактора (CONTENT_API_KEY из .env на сервере). Хранится только в этой вкладке.') || '';
-      key = key.trim();
+      key = (prompt('Ключ редактора. Хранится только в этой вкладке.') || '').trim();
       try { if (key) sessionStorage.setItem(KEY_STORAGE, key); } catch (e) {}
     }
     return key;
   }
   async function apiFetch(url, opts = {}, withKey = false) {
     const headers = { 'Accept': 'application/json', ...(opts.headers || {}) };
-    if (withKey) {
-      const key = getKey(false);
-      if (!key) throw new Error('Без ключа сохранить нельзя');
-      headers['X-API-Key'] = key;
-    }
+    if (withKey) { const key = getKey(false); if (!key) throw new Error('Без ключа сохранить нельзя'); headers['X-API-Key'] = key; }
     const r = await fetch(url, { ...opts, headers, cache: 'no-store' });
-    let body = null;
-    try { body = await r.json(); } catch (e) {}
+    let body = null; try { body = await r.json(); } catch (e) {}
     if (!r.ok) {
       const msg = body?.error || `HTTP ${r.status}`;
       const details = Array.isArray(body?.details) ? '\n— ' + body.details.join('\n— ') : '';
@@ -641,99 +520,45 @@
     }
     return body;
   }
+  async function whoami() {
+    try { let key = ''; try { key = sessionStorage.getItem(KEY_STORAGE) || ''; } catch (e) {} if (!key) return; const w = await fetch(API_BASE + '/content/whoami', { headers: { 'X-API-Key': key } }); if (w.ok) { author = (await w.json()).author; render(); } } catch (e) {}
+  }
   async function save() {
     if (!data) return;
     saveBtn.disabled = true; setStatus('Сохраняю…');
     try {
       const res = await apiFetch(API, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }, true);
-      data.version = res.version; data.updatedAt = res.updatedAt; dirty = false;
-      saveBtn.textContent = 'Сохранить';
-      const t = new Date(res.updatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-      setStatus(`Сохранено ${t} · версия ${res.version}. На сайте появится сразу.`, 'ok');
+      data.version = res.version; data.updatedAt = res.updatedAt; dirty = false; saveBtn.textContent = 'Сохранить';
+      await whoami();
+      setStatus(`Сохранено ${new Date(res.updatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · версия ${res.version}. На сайте — сразу после обновления страницы.`, 'ok');
       render();
     } catch (e) {
       if (e.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} }
-      setStatus('Не сохранено: ' + e.message, 'error');
-      alert('Не сохранено.\n' + e.message);
+      setStatus('Не сохранено: ' + e.message, 'error'); alert('Не сохранено.\n' + e.message);
     } finally { saveBtn.disabled = false; }
   }
   async function showHistory() {
     const box = $('#ed-modal-box'); const modal = $('#ed-modal');
-    box.innerHTML = '<h3>История версий</h3><p class="ed-status">Загружаю…</p>';
-    modal.classList.add('is-open');
+    box.innerHTML = '<h3>История версий</h3><p class="ed-status">Загружаю…</p>'; modal.classList.add('is-open');
     try {
       const h = await apiFetch(API + '/history');
-      const li = (h.versions || []).map((v) => `<li><span>версия ${v.version} · ${new Date(v.created_at).toLocaleString('ru-RU')} · ${esc(v.author || '')}</span>
-        <button class="ed-btn ed-btn--small" type="button" data-restore="${v.version}">Вернуть</button></li>`).join('');
-      box.innerHTML = `<h3>История версий</h3><ul class="ed-modal__list">${li || '<li>пусто</li>'}</ul>
-        <button class="ed-btn ed-btn--small" type="button" data-close="1">Закрыть</button>`;
-    } catch (e) {
-      box.innerHTML = `<h3>История версий</h3><p class="ed-status is-error">${esc(e.message)}</p><button class="ed-btn ed-btn--small" type="button" data-close="1">Закрыть</button>`;
-    }
+      const li = (h.versions || []).map((v) => `<li><span>версия ${v.version} · ${new Date(v.created_at).toLocaleString('ru-RU')} · ${esc(v.author || '')}</span><button class="ed-btn ed-btn--small" type="button" data-restore="${v.version}">Вернуть</button></li>`).join('');
+      box.innerHTML = `<h3>История версий</h3><ul class="ed-modal__list">${li || '<li>пусто</li>'}</ul><button class="ed-btn ed-btn--small" type="button" data-close="1">Закрыть</button>`;
+    } catch (e) { box.innerHTML = `<h3>История версий</h3><p class="ed-status is-error">${esc(e.message)}</p><button class="ed-btn ed-btn--small" type="button" data-close="1">Закрыть</button>`; }
   }
   async function restore(version) {
-    if (!confirm(`Вернуть версию ${version}? Текущее состояние станет новой версией истории.`)) return;
-    try {
-      await apiFetch(API + '/restore/' + version, { method: 'POST' }, true);
-      $('#ed-modal').classList.remove('is-open');
-      await loadData(); setStatus(`Возвращена версия ${version}`, 'ok');
-    } catch (e) { setStatus('Откат не выполнен: ' + e.message, 'error'); alert('Откат не выполнен.\n' + e.message); }
+    if (!confirm(`Вернуть версию ${version}? Текущее состояние останется в истории.`)) return;
+    try { await apiFetch(API + '/restore/' + version, { method: 'POST' }, true); $('#ed-modal').classList.remove('is-open'); await loadData(); setStatus(`Возвращена версия ${version}`, 'ok'); }
+    catch (e) { setStatus('Откат не выполнен: ' + e.message, 'error'); alert('Откат не выполнен.\n' + e.message); }
   }
-  async function loadData() {
-    const d = await apiFetch(API);
-    data = d; data.showcase ||= { self: [], two: [] }; dirty = false; editing = null;
-    saveBtn.textContent = 'Сохранить';
-    render();
-  }
+  async function loadData() { data = await apiFetch(API); dirty = false; saveBtn.textContent = 'Сохранить'; render(); }
 
-  /* --- события --- */
-  document.addEventListener('click', (e) => {
-    const t = e.target.closest('button, a');
-    if (!t) return;
-    if (t.dataset.star) return toggleStar(t.dataset.star, t);
-    if (t.dataset.edit) { editing = t.dataset.edit; render(); return; }
-    if (t.dataset.cancel) { editing = null; render(); return; }
-    if (t.dataset.del) return deleteItem(t.dataset.del);
-    if (t.dataset.additem) return addItem(t.dataset.additem);
-    if (t.dataset.rename) return renameCategory(t.dataset.rename);
-    if (t.dataset.delcat) return deleteCategory(t.dataset.delcat);
-    if (t.id === 'ed-addcat') return addCategory();
-    if (t.dataset.addBtn) { const sel = document.querySelector(`select[data-add-select="${t.dataset.addBtn}"]`); return addShowcase(t.dataset.addBtn, sel?.value); }
-    if (t.dataset.act) {
-      const row = t.closest('.ed-showcase__item'); const block = row.dataset.block; const idx = Number(row.dataset.idx);
-      if (t.dataset.act === 'up') return moveShowcase(block, idx, -1);
-      if (t.dataset.act === 'down') return moveShowcase(block, idx, 1);
-      if (t.dataset.act === 'remove') return removeShowcase(block, idx);
-    }
-    if (t.dataset.restore) return restore(t.dataset.restore);
-    if (t.dataset.close) return $('#ed-modal').classList.remove('is-open');
-    if (t.id === 'ed-save') return save();
-    if (t.id === 'ed-history') return showHistory();
-    if (t.id === 'ed-key') { getKey(true); setStatus('Ключ обновлён для этой вкладки'); return; }
-  });
-  document.addEventListener('submit', (e) => {
-    const form = e.target.closest('form[data-form]');
-    if (!form) return;
-    e.preventDefault(); applyForm(form);
-  });
-  document.addEventListener('change', (e) => {
-    const sel = e.target.closest('select[data-block-select]');
-    if (sel) setCategoryBlock(sel.dataset.blockSelect, sel.value);
-  });
   window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
   document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); save(); } });
 
   (async () => {
-    if (!window.AlviPrice) {
-      setStatus('Не загрузился рендер прайса (price-render.js с сайта ALVI)', 'error');
-      $('#ed-content').innerHTML = '<p class="ed-status is-error">Не удалось загрузить price-render.js с alvi.synapsebusiness.ru. Проверьте, что сайт ALVI доступен.</p>';
-      return;
-    }
-    try { await loadData(); setStatus('Готово к работе'); }
-    catch (e) {
-      setStatus('Не удалось загрузить прайс: ' + e.message, 'error');
-      $('#ed-content').innerHTML = `<p class="ed-status is-error">Не удалось загрузить прайс: ${esc(e.message)}.<br>Сервис content должен быть поднят на сервере (см. ops/content).</p>`;
-    }
+    try { await loadData(); await whoami(); setStatus('Готово к работе'); }
+    catch (e) { setStatus('Не удалось загрузить тексты сайта: ' + e.message, 'error'); $('#ed-content').innerHTML = `<p class="ed-status is-error">Не удалось загрузить: ${esc(e.message)}</p>`; }
   })();
 })();
 

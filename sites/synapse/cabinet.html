@@ -2198,7 +2198,7 @@ crm: "LIVE"
 {
 name: "ALVI",
 type: "Спа и массаж",
-edit: { label: "Редактировать сайт → Прайс", href: "price-editor.html" },
+edit: { label: "Редактировать сайт → Прайс", href: "price-editor.html" }, edit2: { label: "Редактировать сайт → Тексты и фоны", href: "site-editor.html" },
 directions: "Основной сайт · воронки услуг",
 website: "LIVE",
 sources: "QA",
@@ -2332,7 +2332,7 @@ directions: "Основной сайт · прайс · витрины глав�
 website: "LIVE",
 sources: "QA",
 crm: "QA",
-edit: { label: "Редактировать сайт → Прайс", href: "price-editor.html" }
+edit: { label: "Редактировать сайт → Прайс", href: "price-editor.html" }, edit2: { label: "Редактировать сайт → Тексты и фоны", href: "site-editor.html" }
 }
 ], integrations: [], activity: []
 });
@@ -2770,6 +2770,7 @@ DATA.projects.map((project) => `
 ${statusBadge(project.website)}
 <span class="admin-sample-line">${sampleBadge()} демо-статус</span>
 ${project.edit ? `<a class="project-edit-link" href="${escapeHTML(project.edit.href)}">${escapeHTML(project.edit.label)}</a>` : ""}
+${project.edit2 ? `<a class="project-edit-link" href="${escapeHTML(project.edit2.href)}">${escapeHTML(project.edit2.label)}</a>` : ""}
 </div>
 
 <div class="project-cell">
