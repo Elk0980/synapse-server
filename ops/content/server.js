@@ -55,12 +55,16 @@ function seedDocuments() {
   for (const file of fs.readdirSync(SEED_DIR)) {
     if (!file.endsWith('.json')) continue;
     const key = file.replace(/\.json$/, '').replace('-', '/');
-    if (latestStmt.get(key)) continue;
+    const latest = latestStmt.get(key);
+    // Пока документ никто не правил руками (все версии — seed), обновлённый seed из репозитория
+    // становится новой версией. После первого сохранения из кабинета seed больше не вмешивается.
+    if (latest && latest.author !== 'seed') continue;
     try {
       const raw = fs.readFileSync(path.join(SEED_DIR, file), 'utf8');
       JSON.parse(raw);
-      insertStmt.run(key, 1, new Date().toISOString(), 'seed', raw);
-      console.log(`content: документ ${key} создан из seed`);
+      if (latest && latest.body === raw) continue;
+      insertStmt.run(key, latest ? latest.version + 1 : 1, new Date().toISOString(), 'seed', raw);
+      console.log(`content: документ ${key} ${latest ? 'обновлён' : 'создан'} из seed`);
     } catch (error) {
       console.error(`content: seed ${file} пропущен — ${error.message}`);
     }
