@@ -223,6 +223,7 @@
 
     .hero {
       position: relative;
+      z-index: 1; /* выше фиксированного слоя воды, иначе видео закрывает хвост хиро */
       height: 320vh;
       min-height: 320vh;
       background: #07110c;
@@ -1379,6 +1380,10 @@
       min-height: 0;
     }
 
+    @media (max-width: 899px) {
+      .after-hero { margin-top: 0; }
+    }
+
     .hero.is-compact-mode .hero__sticky {
       position: relative;
       top: auto;
@@ -1778,7 +1783,7 @@
       padding-bottom: clamp(2.5rem, 5vw, 4rem);
       color: var(--hero-ink);
       border-bottom-color: rgba(255, 255, 255, 0.1);
-      background: linear-gradient(180deg, rgba(9, 17, 12, 0.72) 0%, rgba(9, 17, 12, 0.34) 55%, rgba(9, 17, 12, 0.3) 100%);
+      background: linear-gradient(180deg, rgba(9, 17, 12, 0.88) 0%, rgba(9, 17, 12, 0.6) 40%, rgba(9, 17, 12, 0.34) 100%);
     }
 
     #trust .trust-score strong { color: #d9c48f; }
@@ -1833,8 +1838,10 @@
     /* Страница после хиро — в тонах блока отзывов: тёмная вода, светлый текст. */
     .after-hero {
       position: relative;
-      z-index: 1;
-      margin-top: -40vh;
+      z-index: 2;
+      /* Блок отзывов наезжает шторкой на закреплённый последний кадр хиро:
+         начинает входить ровно в момент, когда sticky перестаёт быть закреплённым. */
+      margin-top: -100vh;
       background: transparent;
       --ink: #fffdf8;
       --ink-dim: rgba(255, 253, 248, 0.8);
