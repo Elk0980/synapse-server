@@ -1663,7 +1663,7 @@
 
     .proof-card {
       padding: 1.15rem 1.3rem;
-      border: 1px solid rgba(58, 38, 24, 0.5);
+      border: 1px solid rgba(58, 38, 24, 0.15);
       border-radius: 1.05rem;
       background: transparent;
     }
@@ -1834,6 +1834,7 @@
     .after-hero {
       position: relative;
       z-index: 1;
+      margin-top: -32vh;
       background: transparent;
       --ink: #fffdf8;
       --ink-dim: rgba(255, 253, 248, 0.8);
@@ -1857,9 +1858,23 @@
     /* Карточки отзывов — без заливки, только тёмно-коричневый контур (правка Owner'а 31.08). */
     .after-hero .proof-card {
       background: transparent;
-      border: 1px solid rgba(58, 38, 24, 0.5);
+      border: 1px solid rgba(58, 38, 24, 0.15);
       backdrop-filter: none;
       -webkit-backdrop-filter: none;
+    }
+
+    .after-hero a.program-card {
+      display: block;
+      color: inherit;
+      text-decoration: none;
+      transition: border-color 200ms ease, transform 200ms ease;
+    }
+
+    .after-hero a.program-card:hover,
+    .after-hero a.program-card:focus-visible {
+      border-color: rgba(255, 255, 255, 0.4);
+      transform: translateY(-2px);
+      outline: none;
     }
 
     .after-hero .program-card,
@@ -2232,7 +2247,7 @@
         </div>
 
         <div class="program-grid">
-          <article class="program-card">
+          <a class="program-card" href="price.html#s1-9">
             <h3>Релакс</h3>
             <p>Мягкая программа для первого знакомства с ALVI.</p>
             <dl class="program-facts">
@@ -2241,9 +2256,9 @@
               <dt>Состав</dt><dd>SPA-программа с маслами.</dd>
               <dt>Кому</dt><dd>если давно не были на массаже и хочется просто выдохнуть.</dd>
             </dl>
-          </article>
+          </a>
 
-          <article class="program-card">
+          <a class="program-card" href="price.html#s1-1">
             <h3>Душевное расслабление</h3>
             <p>Тело, голова и мысли отпускают по очереди.</p>
             <dl class="program-facts">
@@ -2252,9 +2267,9 @@
               <dt>Состав</dt><dd>комплексная SPA-программа.</dd>
               <dt>Кому</dt><dd>после тяжёлой недели или перед важным событием.</dd>
             </dl>
-          </article>
+          </a>
 
-          <article class="program-card">
+          <a class="program-card" href="price.html#s1-7">
             <h3>Ароматное погружение</h3>
             <p>Глубокий ритуал с маслами.</p>
             <dl class="program-facts">
@@ -2263,9 +2278,9 @@
               <dt>Состав</dt><dd>SPA-ритуал с ароматерапией.</dd>
               <dt>Кому</dt><dd>когда нужно не «отдохнуть», а восстановиться.</dd>
             </dl>
-          </article>
+          </a>
 
-          <article class="program-card">
+          <a class="program-card" href="price.html#s4">
             <h3>Расслабляющий массаж</h3>
             <p>Сильные руки, мягкий темп.</p>
             <dl class="program-facts">
@@ -2274,9 +2289,9 @@
               <dt>Состав</dt><dd>классический массаж.</dd>
               <dt>Кому</dt><dd>после сидячей работы.</dd>
             </dl>
-          </article>
+          </a>
 
-          <article class="program-card">
+          <a class="program-card" href="price.html#s4">
             <h3>Массаж спины и ног</h3>
             <p>Работа с тем, что болит к вечеру.</p>
             <dl class="program-facts">
@@ -2285,10 +2300,10 @@
               <dt>Состав</dt><dd>прицельный массаж.</dd>
               <dt>Кому</dt><dd>если ноет поясница или устают ноги.</dd>
             </dl>
-          </article>
+          </a>
         </div>
 
-        <p class="program-note">Полное меню: 10+ видов массажа, обёртывания, стоунтерапия, кедровая фитобочка, аппаратная косметология — для женщин и мужчин. Самая короткая программа — «Релакс», 3 500 ₽.</p>
+        <p class="program-note">Полное меню: 10+ видов массажа, обёртывания, стоунтерапия, кедровая фитобочка — для женщин и мужчин. Самая короткая программа — «Релакс», 3 500 ₽.</p>
       
         <div class="proof">
           <blockquote class="proof-card">
@@ -2316,26 +2331,26 @@
         </div>
 
         <div class="program-grid">
-          <article class="program-card">
+          <a class="program-card" href="price.html#s4">
             <h3>Парный массаж</h3>
             <p>Вдвоём в одном кабинете. Хороший первый шаг, если SPA-день пока кажется «слишком».</p>
             <dl class="program-facts"><dt>Цена</dt><dd>от 5 600 ₽</dd><!-- Длительность: добавить после подтверждения данных. --></dl>
-          </article>
-          <article class="program-card">
+          </a>
+          <a class="program-card" href="price.html#s2-2">
             <h3>Обновление</h3>
             <p>Парная SPA-программа для первого совместного визита.</p>
             <dl class="program-facts"><dt>Цена</dt><dd>8 900 ₽</dd><!-- Длительность: добавить после подтверждения данных. --></dl>
-          </article>
-          <article class="program-card">
+          </a>
+          <a class="program-card" href="price.html#s2-1">
             <h3>Успокаивающая</h3>
             <p>Для годовщины или свидания без суеты.</p>
             <dl class="program-facts"><dt>Цена</dt><dd>10 900 ₽</dd><!-- Длительность: добавить после подтверждения данных. --></dl>
-          </article>
-          <article class="program-card">
+          </a>
+          <a class="program-card" href="price.html#s2-3">
             <h3>SPA-день</h3>
             <p>Программа-путешествие на несколько часов, с чаем и паузами.</p>
             <dl class="program-facts"><dt>Цена</dt><dd>13 600 ₽</dd><!-- Длительность: добавить после подтверждения данных. --></dl>
-          </article>
+          </a>
         </div>
       
         <div class="proof">
