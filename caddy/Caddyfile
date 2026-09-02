@@ -51,6 +51,15 @@ avokado-v2.synapsebusiness.ru {
 # --- Клиент: ALVI (SPA, Иркутск) --------------------------------------------
 alvi.synapsebusiness.ru {
   root * /srv/sites/alvi
+  # Прайс и витрины главной берутся из сервиса content (только чтение).
+  @price {
+    path /api/price
+    method GET
+  }
+  handle @price {
+    rewrite * /content/alvi/price
+    reverse_proxy content:8080
+  }
   import draft
   import static
   handle_errors {
@@ -67,6 +76,9 @@ synapse.synapsebusiness.ru {
   # CRM теперь сам проверяет X-API-Key и без него отвечает 401.
   @crm path /dashboard /leads /leads/*
   reverse_proxy @crm crm:8080
+  # Редактор прайса (price-editor.html) ходит в сервис content по тому же домену.
+  @content path /content/*
+  reverse_proxy @content content:8080
   import draft
   import static
 }
