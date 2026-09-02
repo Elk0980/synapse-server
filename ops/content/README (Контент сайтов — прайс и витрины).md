@@ -20,7 +20,30 @@ Node 24, встроенный `node:sqlite`, внешних пакетов не�
 - `POST /content/alvi/price/restore/N` — откат: версия N копируется как новая (по ключу).
 - `GET /health`.
 
-## Ключ
+## Документ `alvi/site` — тексты и фоны главной
+
+Редактор: `synapse.synapsebusiness.ru/site-editor.html`. На сайте доступен как `GET /api/site`.
+Секции = блоки главной; поля привязаны к элементам разметки через атрибут `data-edit="<секция>.<поле>"`
+(разметка проставлена скриптом `tag_site.py`, значения по умолчанию — в `seed/alvi-site.json`).
+`sites/alvi/site-apply.js` подставляет тексты (разрешены только em/strong/b/i/sup и перенос строки)
+и фоны: `background.image` (свой файл) или `background.default` (как было), `background.opacity`.
+
+## Файлы (фоны)
+
+- `POST /content/alvi/assets` — тело запроса = файл, заголовки `Content-Type: image/jpeg|png|webp`,
+  `X-Filename`, `X-API-Key`. До 8 МБ. Ответ: `{ url: "/api/assets/<имя>" }`.
+- `GET /content/alvi/assets/<имя>` — отдача файла; на сайте — `https://alvi.synapsebusiness.ru/api/assets/<имя>`.
+- Хранятся в `/data/assets/alvi` (том `content_data`).
+
+## Ключи
+
+Два ключа, оба создаёт `ops/synapse-sync` и оба лежат только в `/opt/synapse/.env`:
+- `CONTENT_API_KEY` — владелец (в истории версий подписывается «Влад»);
+- `CONTENT_EDITOR_KEY` — редактор со стороны клиента (подписывается «Татьяна»).
+Посмотреть: ` grep CONTENT_ /opt/synapse/.env`. Оба редактора принимают любой из ключей;
+`GET /content/whoami` с ключом отвечает, кто вы.
+
+## Ключ (историческая заметка)
 
 `CONTENT_API_KEY` создаётся автоматически скриптом `ops/synapse-sync` (как и ключи CRM и chat)
 и лежит только в `/opt/synapse/.env`. Посмотреть на сервере: ` grep CONTENT_API_KEY /opt/synapse/.env`.
