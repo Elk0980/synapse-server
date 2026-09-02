@@ -47,8 +47,23 @@ services:
     volumes:
       - chat_data:/data
 
+  content:
+    build:
+      context: ./ops/content
+    restart: always
+    environment:
+      PORT: "8080"
+      DATABASE_PATH: /data/content.sqlite
+      API_KEY: ${CONTENT_API_KEY}
+      ALLOWED_ORIGINS: ${CONTENT_ALLOWED_ORIGINS:-}
+    expose:
+      - "8080"
+    volumes:
+      - content_data:/data
+
 volumes:
   caddy_data:
   caddy_config:
   crm_data:
   chat_data:
+  content_data:
