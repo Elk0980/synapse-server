@@ -7,7 +7,7 @@
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=Cormorant+Garamond:wght@400;500;600&family=Playfair+Display:wght@400;500&family=Noto+Serif:wght@400;500&family=Manrope:wght@400;500;600&family=Montserrat:wght@400;500;600&family=Nunito:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #16221a; --ink: #fffdf8; --ink-dim: rgba(255, 253, 248, 0.8); --ink-faint: rgba(255, 253, 248, 0.56);
@@ -322,6 +322,9 @@
     .ed-fields { display: grid; gap: 0.8rem; margin-top: 1rem; }
     .ed-field { display: grid; gap: 0.3rem; }
     .ed-field__label { font-size: 0.78rem; color: var(--ink-faint); letter-spacing: 0.03em; }
+    .ed-field__head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.4rem 1rem; }
+    .ed-field__tools { display: inline-flex; gap: 0.4rem; }
+    .ed-select--mini { min-width: 0; padding: 0.2rem 0.5rem; font-size: 0.78rem; border-radius: 0.5rem; }
     .ed-field input, .ed-field textarea {
       font: inherit; font-size: 0.95rem; color: var(--ink); padding: 0.6rem 0.75rem; width: 100%;
       border: 1px solid var(--line); border-radius: 0.6rem; background: rgba(9,17,12,0.45); resize: vertical;
@@ -334,6 +337,29 @@
     .ed-bg__tools { display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; align-items: center; margin: 0.7rem 0 0.4rem; }
     .ed-bg__tools input[type=range] { vertical-align: middle; width: 8rem; }
     .ed-btn input[type=file] { display: none; }
+    .ed-modes { display: inline-flex; gap: 0.3rem; }
+    .ed-modes .is-on { background: rgba(227,212,167,0.2); border-color: rgba(227,212,167,0.7); }
+    .ed-visual { display: none; grid-template-columns: minmax(0, 1fr) 24rem; gap: 0; height: calc(100vh - 4.6rem); }
+    body.mode-visual .ed-visual { display: grid; }
+    body.mode-list .ed-visual { display: none; }
+    .ed-listmode { display: none; }
+    body.mode-list .ed-listmode { display: grid; }
+    .ed-frame-wrap { position: relative; background: #0b1510; }
+    .ed-frame-wrap iframe { width: 100%; height: 100%; border: 0; display: block; background: #0b1510; }
+    .ed-frame-hint { position: absolute; left: 50%; top: 1rem; transform: translateX(-50%); z-index: 2; padding: 0.5rem 0.9rem; border-radius: 999px; background: rgba(9,17,12,0.9); border: 1px solid var(--line); font-size: 0.8rem; color: var(--ink-dim); max-width: 90%; text-align: center; pointer-events: none; }
+    .ed-inspector { overflow: auto; padding: 1rem 1.1rem 4rem; border-left: 1px solid var(--line); background: rgba(9,17,12,0.72); backdrop-filter: blur(8px); }
+    .ed-insp__block { padding: 0.9rem 0 1.1rem; border-bottom: 1px solid var(--line); }
+    .ed-insp__block .ed-select { width: 100%; margin-top: 0.4rem; }
+    .ed-insp__list { display: grid; gap: 0.35rem; margin-top: 0.6rem; }
+    .ed-insp__list .ed-btn { justify-content: flex-start; text-align: left; white-space: normal; font-size: 0.78rem; }
+    .ed-inspector .ed-field { margin-top: 0.6rem; }
+    .ed-inspector .ed-field__tools { width: 100%; }
+    .ed-inspector .ed-field__tools select { flex: 1 1 0; min-width: 0; }
+    .ed-bg__range { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
+    @media (max-width: 62rem) {
+      .ed-visual { grid-template-columns: 1fr; grid-template-rows: 55vh 1fr; height: auto; }
+      .ed-inspector { border-left: 0; border-top: 1px solid var(--line); }
+    }
   </style>
 </head>
 <body>
@@ -348,6 +374,7 @@
   <div class="ed-bar">
     <div class="ed-bar__title">Редактор сайта ALVI — тексты и фоны<small id="ed-sub">загрузка…</small></div>
     <span class="ed-status" id="ed-status"></span>
+    <span class="ed-modes"><button class="ed-btn ed-btn--small ed-btn--ghost" id="ed-mode-visual" type="button">На странице</button><button class="ed-btn ed-btn--small ed-btn--ghost" id="ed-mode-list" type="button">Списком</button></span>
     <button class="ed-btn ed-btn--ghost" id="ed-history" type="button">История</button>
     <button class="ed-btn ed-btn--ghost" id="ed-key" type="button">Ключ</button>
     <a class="ed-btn ed-btn--ghost" href="price-editor.html">Прайс</a>
@@ -355,13 +382,18 @@
     <button class="ed-btn ed-btn--main" id="ed-save" type="button">Сохранить</button>
   </div>
 
-  <div class="price-layout">
-    <nav class="pnav" aria-label="Разделы прайса">
+  <div class="ed-visual">
+    <div class="ed-frame-wrap">
+      <div class="ed-frame-hint" id="ed-frame-hint">Загружаю сайт… Нажмите на любой текст, чтобы править его прямо на месте; на пустое место блока — чтобы сменить фон.</div>
+      <iframe id="ed-frame" title="Сайт ALVI — правка на месте" src="about:blank"></iframe>
+    </div>
+    <aside class="ed-inspector" id="ed-inspector"><p class="ed-status">Загружаю тексты сайта…</p></aside>
+  </div>
+  <div class="price-layout ed-listmode">
+    <nav class="pnav" aria-label="Блоки сайта">
       <ul id="ed-nav"></ul>
     </nav>
-    <div class="price-content" id="ed-content">
-      <p class="ed-status">Загружаю тексты сайта…</p>
-    </div>
+    <div class="price-content" id="ed-list"></div>
   </div>
 
   <div class="ed-modal" id="ed-modal"><div class="ed-modal__box" id="ed-modal-box"></div></div>
@@ -373,8 +405,11 @@
   const API_BASE = (params.get('api') || '').replace(/\/$/, '');
   const API = API_BASE + '/content/alvi/site';
   const ASSETS = API_BASE + '/content/alvi/assets';
-  const SITE = 'https://alvi.synapsebusiness.ru';
+  const SITE = params.get('site') || 'https://alvi.synapsebusiness.ru';
+  const SITE_ORIGIN = new URL(SITE).origin;
   const KEY_STORAGE = 'synapse_content_key';
+  const FONTS = ['Lora', 'Cormorant Garamond', 'Playfair Display', 'Noto Serif', 'Manrope', 'Montserrat', 'Nunito'];
+  const SIZES = [70, 80, 90, 100, 110, 125, 150, 175, 200];
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -382,27 +417,78 @@
   let data = null;
   let dirty = false;
   let author = '';
+  let mode = 'visual';          // visual | list
+  let selectedKey = null;       // выбранное поле
+  let selectedSection = null;   // выбранная секция (для фона)
+  let frameReady = false;
 
   const statusEl = $('#ed-status');
   const subEl = $('#ed-sub');
   const saveBtn = $('#ed-save');
+  const frame = $('#ed-frame');
 
   function setStatus(text, kind) { statusEl.textContent = text; statusEl.className = 'ed-status' + (kind ? ' is-' + kind : ''); }
-  function markDirty() { dirty = true; saveBtn.textContent = 'Сохранить •'; setStatus('Есть несохранённые изменения'); }
+  function markDirty() { dirty = true; saveBtn.textContent = 'Сохранить •'; setStatus('Есть несохранённые изменения'); renderSub(); }
   function imgUrl(p) { if (!p) return ''; if (/^https?:/.test(p)) return p; return SITE + (p.startsWith('/') ? p : '/' + p); }
+  function findField(key) { for (const s of data.sections) for (const f of s.fields || []) if (f.key === key) return f; return null; }
+  function sectionOfField(key) { return data.sections.find((s) => (s.fields || []).some((f) => f.key === key)); }
+  function sectionOf(id) { return data.sections.find((s) => s.id === id); }
+  function renderSub() {
+    subEl.textContent = `версия ${data?.version || '—'} · обновлено ${data?.updatedAt ? new Date(data.updatedAt).toLocaleString('ru-RU') : '—'}` + (author ? ` · вы: ${author}` : '') + (dirty ? ' · не сохранено' : '');
+  }
 
-  /* --- рендер --- */
-  function fieldHtml(sec, f) {
-    const id = `f-${f.key.replace(/[^\w-]/g, '_')}`;
-    const long = f.multiline || (f.value && (f.value.length > 90 || f.value.includes('\n')));
-    const control = long
-      ? `<textarea id="${id}" data-field="${esc(f.key)}" rows="${Math.min(8, Math.max(2, Math.ceil((f.value || '').length / 80)))}">${esc(f.value)}</textarea>`
-      : `<input id="${id}" data-field="${esc(f.key)}" value="${esc(f.value)}">`;
-    return `<label class="ed-field"><span class="ed-field__label">${esc(f.label)}</span>${control}</label>`;
+  /* ---------- связь со страницей сайта в рамке ---------- */
+  let pushTimer = 0;
+  function pushDoc() {
+    if (!frameReady || !data) return;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(() => frame.contentWindow.postMessage({ type: 'alvi-edit-doc', doc: data }, SITE_ORIGIN), 60);
+  }
+  window.addEventListener('message', (e) => {
+    if (e.origin !== SITE_ORIGIN) return;
+    const m = e.data || {};
+    if (m.type === 'alvi-edit-ready') { frameReady = true; pushDoc(); $('#ed-frame-hint')?.remove(); }
+    if (m.type === 'alvi-edit-select' && m.key) {
+      selectedKey = m.key;
+      const sec = sectionOfField(m.key); if (sec) selectedSection = sec.id;
+      renderInspector();
+    }
+    if (m.type === 'alvi-edit-section' && m.sectionId) {
+      if (sectionOf(m.sectionId)) { selectedSection = m.sectionId; selectedKey = null; renderInspector(); }
+    }
+    if (m.type === 'alvi-edit-change' && m.key) {
+      const f = findField(m.key);
+      if (f && f.value !== m.value) {
+        f.value = m.value; markDirty();
+        const ta = document.querySelector(`.ed-inspector textarea[data-field="${CSS.escape(m.key)}"]`);
+        if (ta && ta.value !== m.value && document.activeElement !== ta) ta.value = m.value;
+      }
+    }
+  });
+
+  /* ---------- общие кусочки разметки ---------- */
+  function styleControls(f) {
+    const st = f.style || {};
+    const fontOpts = ['<option value="">Шрифт: как на сайте</option>'].concat(FONTS.map((n) => `<option value="${n}" ${st.font === n ? 'selected' : ''}>${n}</option>`)).join('');
+    const sizeOpts = SIZES.map((n) => `<option value="${n}" ${Number(st.size || 100) === n ? 'selected' : ''}>${n === 100 ? 'Размер: как на сайте' : n + '%'}</option>`).join('');
+    return `<span class="ed-field__tools">
+      <select class="ed-select ed-select--mini" data-style-font="${esc(f.key)}" style="font-family:${st.font ? `'${st.font}', serif` : 'inherit'}">${fontOpts}</select>
+      <select class="ed-select ed-select--mini" data-style-size="${esc(f.key)}">${sizeOpts}</select>
+    </span>`;
+  }
+  function fieldHtml(f, opts = {}) {
+    const st = f.style || {};
+    const lines = (f.value || '').split('\n').length;
+    const rows = Math.min(10, Math.max(lines, Math.ceil((f.value || '').length / 60), 2));
+    return `<div class="ed-field" data-field-box="${esc(f.key)}">
+      <div class="ed-field__head"><span class="ed-field__label">${esc(f.label)}${opts.showSection ? ` <small>· ${esc(sectionOfField(f.key)?.title || '')}</small>` : ''}</span>${styleControls(f)}</div>
+      <textarea data-field="${esc(f.key)}" rows="${rows}" style="${st.font ? `font-family:'${st.font}', serif;` : ''}">${esc(f.value)}</textarea>
+      <small class="ed-status">Enter — перенос строки на сайте. Можно &lt;em&gt;курсив&lt;/em&gt; и &lt;strong&gt;жирный&lt;/strong&gt;.</small>
+    </div>`;
   }
   function backgroundHtml(sec) {
     const bg = sec.background;
-    if (!bg) return '';
+    if (!bg) return '<p class="ed-status">У этого блока фон не меняется.</p>';
     const current = bg.image || bg.default;
     const isCustom = !!bg.image;
     const preview = current ? `<div class="ed-bg__preview" style="background-image:url('${esc(imgUrl(current))}')"></div>` : `<div class="ed-bg__preview ed-bg__preview--empty">без картинки — видна вода</div>`;
@@ -413,70 +499,98 @@
       <div class="ed-bg__tools">
         <label class="ed-btn ed-btn--small">Загрузить картинку<input type="file" accept="image/jpeg,image/png,image/webp" data-upload="${esc(sec.id)}" hidden></label>
         <button class="ed-btn ed-btn--small" type="button" data-bg-reset="${esc(sec.id)}" ${isCustom || bg.opacity != null ? '' : 'disabled'}>Вернуть как было</button>
-        <label class="ed-status">Яркость фона <input type="range" min="0.05" max="1" step="0.05" value="${op}" data-opacity="${esc(sec.id)}"> <span data-opacity-val="${esc(sec.id)}">${Math.round(op * 100)}%</span></label>
       </div>
-      <small class="ed-status">JPEG, PNG или WebP до 8 МБ. Картинка ложится под текст блока полупрозрачно; яркость регулируется ползунком.</small>
+      <label class="ed-status ed-bg__range">Яркость фона <input type="range" min="0.05" max="1" step="0.05" value="${op}" data-opacity="${esc(sec.id)}"> <span data-opacity-val="${esc(sec.id)}">${Math.round(op * 100)}%</span></label>
+      <small class="ed-status">JPEG, PNG или WebP до 8 МБ.</small>
     </div>`;
   }
-  function sectionHtml(sec) {
-    return `<section class="ps" id="sec-${esc(sec.id)}" data-sec="${esc(sec.id)}">
-      <h2 class="ps__title">${esc(sec.title)}</h2>
-      ${backgroundHtml(sec)}
-      <div class="ed-fields">${(sec.fields || []).map((f) => fieldHtml(sec, f)).join('')}</div>
-    </section>`;
-  }
-  function render() {
-    const y = window.scrollY;
-    $('#ed-nav').innerHTML = data.sections.map((s) => `<li><a class="pnav__top" href="#sec-${esc(s.id)}">${esc(s.title)}</a></li>`).join('');
-    $('#ed-content').innerHTML = data.sections.map(sectionHtml).join('\n');
-    subEl.textContent = `версия ${data.version || '—'} · обновлено ${data.updatedAt ? new Date(data.updatedAt).toLocaleString('ru-RU') : '—'}` + (author ? ` · вы: ${author}` : '') + (dirty ? ' · не сохранено' : '');
-    window.scrollTo(0, y);
-    initNav();
-  }
-  function initNav() {
-    const links = [...document.querySelectorAll('.pnav a')];
-    const targets = links.map((a) => ({ a, el: document.querySelector(a.getAttribute('href')) })).filter((x) => x.el);
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach((e) => { const hit = targets.find((t) => t.el === e.target); if (hit) hit.a.classList.toggle('is-active', e.isIntersecting); });
-    }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
-    targets.forEach((t) => io.observe(t.el));
+
+  /* ---------- визуальный режим: рамка + инспектор ---------- */
+  function renderInspector() {
+    const box = $('#ed-inspector');
+    if (!box || !data) return;
+    const sec = selectedSection ? sectionOf(selectedSection) : null;
+    const f = selectedKey ? findField(selectedKey) : null;
+    const secSelect = `<select class="ed-select" id="ed-sec-select"><option value="">— блок сайта —</option>${data.sections.map((s) => `<option value="${esc(s.id)}" ${sec && sec.id === s.id ? 'selected' : ''}>${esc(s.title)}</option>`).join('')}</select>`;
+    box.innerHTML = `
+      <div class="ed-insp__block">
+        <div class="ed-field__label">Блок</div>
+        ${secSelect}
+        ${sec ? backgroundHtml(sec) : '<p class="ed-status">Нажмите на текст или блок на странице слева — здесь появятся его настройки.</p>'}
+      </div>
+      <div class="ed-insp__block">
+        <div class="ed-field__label">Текст</div>
+        ${f ? fieldHtml(f) : '<p class="ed-status">Нажмите на любой текст на странице, чтобы править его здесь или прямо на месте.</p>'}
+        ${sec && !f && (sec.fields || []).length ? `<div class="ed-insp__list">${(sec.fields || []).map((x) => `<button class="ed-btn ed-btn--small ed-btn--ghost" type="button" data-pick="${esc(x.key)}">${esc(x.label)}: ${esc((x.value || '').slice(0, 28))}…</button>`).join('')}</div>` : ''}
+      </div>`;
   }
 
-  /* --- изменения --- */
-  function findField(key) { for (const s of data.sections) for (const f of s.fields || []) if (f.key === key) return f; return null; }
-  function sectionOf(id) { return data.sections.find((s) => s.id === id); }
+  /* ---------- режим списком (все поля) ---------- */
+  function renderList() {
+    const nav = $('#ed-nav'); const content = $('#ed-list');
+    nav.innerHTML = data.sections.map((s) => `<li><a class="pnav__top" href="#sec-${esc(s.id)}">${esc(s.title)}</a></li>`).join('');
+    content.innerHTML = data.sections.map((sec) => `<section class="ps" id="sec-${esc(sec.id)}" data-sec="${esc(sec.id)}">
+      <h2 class="ps__title">${esc(sec.title)}</h2>
+      ${sec.background ? backgroundHtml(sec) : ''}
+      <div class="ed-fields">${(sec.fields || []).map((f) => fieldHtml(f)).join('')}</div>
+    </section>`).join('\n');
+  }
+  function render() {
+    document.body.classList.toggle('mode-visual', mode === 'visual');
+    document.body.classList.toggle('mode-list', mode === 'list');
+    $('#ed-mode-visual').classList.toggle('is-on', mode === 'visual');
+    $('#ed-mode-list').classList.toggle('is-on', mode === 'list');
+    if (mode === 'list') renderList(); else renderInspector();
+    renderSub();
+    pushDoc();
+  }
+
+  /* ---------- события ---------- */
   document.addEventListener('input', (e) => {
     const t = e.target;
-    if (t.dataset.field) { const f = findField(t.dataset.field); if (f && f.value !== t.value) { f.value = t.value; markDirty(); } }
+    if (t.tagName === 'TEXTAREA' && t.dataset.field) {
+      t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px';
+      const f = findField(t.dataset.field); if (f && f.value !== t.value) { f.value = t.value; markDirty(); pushDoc(); }
+      return;
+    }
+    if (t.dataset.styleFont || t.dataset.styleSize) {
+      const key = t.dataset.styleFont || t.dataset.styleSize;
+      const f = findField(key); if (!f) return;
+      f.style = f.style || {};
+      if (t.dataset.styleFont) { f.style.font = t.value || ''; const ta = document.querySelector(`textarea[data-field="${CSS.escape(key)}"]`); if (ta) ta.style.fontFamily = t.value ? `'${t.value}', serif` : ''; t.style.fontFamily = t.value ? `'${t.value}', serif` : 'inherit'; }
+      if (t.dataset.styleSize) f.style.size = Number(t.value);
+      if (!f.style.font && (!f.style.size || f.style.size === 100)) delete f.style;
+      markDirty(); pushDoc(); return;
+    }
     if (t.dataset.opacity) {
       const sec = sectionOf(t.dataset.opacity); if (!sec || !sec.background) return;
       sec.background.opacity = Number(t.value);
       const v = document.querySelector(`[data-opacity-val="${t.dataset.opacity}"]`); if (v) v.textContent = Math.round(Number(t.value) * 100) + '%';
       const reset = document.querySelector(`[data-bg-reset="${t.dataset.opacity}"]`); if (reset) reset.disabled = false;
-      markDirty();
+      markDirty(); pushDoc();
     }
   });
   document.addEventListener('change', async (e) => {
     const t = e.target;
-    if (t.dataset.upload && t.files && t.files[0]) {
-      const file = t.files[0]; const secId = t.dataset.upload;
-      await upload(secId, file);
-      t.value = '';
+    if (t.dataset.upload && t.files && t.files[0]) { const file = t.files[0]; await upload(t.dataset.upload, file); t.value = ''; return; }
+    if (t.id === 'ed-sec-select') {
+      selectedSection = t.value || null; selectedKey = null; renderInspector();
+      if (frameReady && selectedSection && !selectedSection.startsWith('hero')) frame.contentWindow.postMessage({ type: 'alvi-edit-scroll-section', sectionId: selectedSection }, SITE_ORIGIN);
     }
   });
   document.addEventListener('click', (e) => {
     const t = e.target.closest('button, a');
     if (!t) return;
-    if (t.dataset.bgReset) {
-      const sec = sectionOf(t.dataset.bgReset);
-      if (sec && sec.background) { sec.background.image = null; sec.background.opacity = null; markDirty(); render(); }
-      return;
-    }
+    if (t.dataset.bgReset) { const sec = sectionOf(t.dataset.bgReset); if (sec && sec.background) { sec.background.image = null; sec.background.opacity = null; markDirty(); render(); } return; }
+    if (t.dataset.pick) { selectedKey = t.dataset.pick; renderInspector(); if (frameReady) frame.contentWindow.postMessage({ type: 'alvi-edit-scroll', key: selectedKey }, SITE_ORIGIN); return; }
     if (t.dataset.restore) return restore(t.dataset.restore);
     if (t.dataset.close) return $('#ed-modal').classList.remove('is-open');
     if (t.id === 'ed-save') return save();
     if (t.id === 'ed-history') return showHistory();
     if (t.id === 'ed-key') { getKey(true); whoami(); return; }
+    if (t.id === 'ed-mode-visual') { mode = 'visual'; render(); return; }
+    if (t.id === 'ed-mode-list') { mode = 'list'; render(); return; }
+    if (t.id === 'ed-reload-frame') { frameReady = false; frame.src = frame.src; return; }
   });
 
   async function upload(secId, file) {
@@ -488,17 +602,14 @@
       const key = getKey(false); if (!key) throw new Error('Без ключа загрузить нельзя');
       const r = await fetch(ASSETS, { method: 'POST', headers: { 'X-API-Key': key, 'Content-Type': file.type, 'X-Filename': encodeURIComponent(file.name) }, body: file });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status);
+      if (!r.ok) { if (r.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} } throw new Error(j.error || 'HTTP ' + r.status); }
       sec.background.image = j.url;
       markDirty(); render();
       setStatus('Картинка загружена — нажмите «Сохранить», чтобы она появилась на сайте', 'ok');
-    } catch (err) {
-      if (err.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} }
-      setStatus('Не загружено: ' + err.message, 'error');
-    }
+    } catch (err) { setStatus('Не загружено: ' + err.message, 'error'); }
   }
 
-  /* --- ключ, сохранение, история --- */
+  /* ---------- ключ, сохранение, история ---------- */
   function getKey(force) {
     let key = '';
     try { key = sessionStorage.getItem(KEY_STORAGE) || ''; } catch (e) {}
@@ -521,7 +632,7 @@
     return body;
   }
   async function whoami() {
-    try { let key = ''; try { key = sessionStorage.getItem(KEY_STORAGE) || ''; } catch (e) {} if (!key) return; const w = await fetch(API_BASE + '/content/whoami', { headers: { 'X-API-Key': key } }); if (w.ok) { author = (await w.json()).author; render(); } } catch (e) {}
+    try { let key = ''; try { key = sessionStorage.getItem(KEY_STORAGE) || ''; } catch (e) {} if (!key) return; const w = await fetch(API_BASE + '/content/whoami', { headers: { 'X-API-Key': key } }); if (w.ok) { author = (await w.json()).author; renderSub(); } } catch (e) {}
   }
   async function save() {
     if (!data) return;
@@ -530,8 +641,8 @@
       const res = await apiFetch(API, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }, true);
       data.version = res.version; data.updatedAt = res.updatedAt; dirty = false; saveBtn.textContent = 'Сохранить';
       await whoami();
-      setStatus(`Сохранено ${new Date(res.updatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · версия ${res.version}. На сайте — сразу после обновления страницы.`, 'ok');
-      render();
+      setStatus(`Сохранено ${new Date(res.updatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · версия ${res.version}. Уже на сайте.`, 'ok');
+      renderSub();
     } catch (e) {
       if (e.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} }
       setStatus('Не сохранено: ' + e.message, 'error'); alert('Не сохранено.\n' + e.message);
@@ -557,8 +668,9 @@
   document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); save(); } });
 
   (async () => {
+    frame.src = SITE + '/?edit=1&v=' + Date.now();
     try { await loadData(); await whoami(); setStatus('Готово к работе'); }
-    catch (e) { setStatus('Не удалось загрузить тексты сайта: ' + e.message, 'error'); $('#ed-content').innerHTML = `<p class="ed-status is-error">Не удалось загрузить: ${esc(e.message)}</p>`; }
+    catch (e) { setStatus('Не удалось загрузить тексты сайта: ' + e.message, 'error'); $('#ed-inspector').innerHTML = `<p class="ed-status is-error">Не удалось загрузить: ${esc(e.message)}</p>`; }
   })();
 })();
 
