@@ -1925,6 +1925,19 @@
       pointer-events: none;
     }
 
+    .floating-cta {
+      transition: opacity 300ms ease, transform 300ms ease;
+    }
+
+    .floating-cta.is-hidden {
+      opacity: 0;
+      transform: translateY(0.75rem);
+    }
+
+    .floating-cta.is-hidden .floating-cta__row {
+      pointer-events: none;
+    }
+
     .floating-cta__row {
       display: flex;
       gap: 0.55rem;
@@ -3424,11 +3437,14 @@
     const initCtaHide = () => {
       const cta = document.querySelector('.floating-cta');
       const footer = document.querySelector('.site-footer');
-      if (cta && footer && 'IntersectionObserver' in window) {
-        new IntersectionObserver((entries) => {
-          entries.forEach(e => cta.classList.toggle('is-hidden', e.isIntersecting));
-        }, { rootMargin: '0px 0px -10% 0px' }).observe(footer);
-      }
+      if (!cta || !footer) return;
+      const update = () => {
+        const top = footer.getBoundingClientRect().top;
+        cta.classList.toggle('is-hidden', top < window.innerHeight - 40);
+      };
+      update();
+      addEventListener('scroll', update, { passive: true });
+      addEventListener('resize', update);
     };
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', initCtaHide, { once: true });
