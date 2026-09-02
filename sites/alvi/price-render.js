@@ -8,6 +8,14 @@
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]));
 
+  /* Фото карточек по умолчанию — пока позиции в базе без поля photo (задаётся в редакторе). */
+  const DEFAULT_PHOTOS = { 's4-1': 'img/card-s4-1.jpg', 's2-2': 'img/card-s2-2.jpg' };
+  const photoOf = (it) => it.photo || DEFAULT_PHOTOS[it.id] || '';
+  const certTitle = (data) => {
+    const t = data.certificates?.title || 'Сертификаты';
+    return /^\p{Extended_Pictographic}/u.test(t) ? t : '💌 ' + t;
+  };
+
   const BLOCK_BY_CATEGORY = (data, categoryId) => {
     const cat = (data.categories || []).find((c) => c.id === categoryId);
     return cat ? cat.block || 'self' : 'self';
@@ -72,7 +80,7 @@ ${rows}
           <img src="${esc(c.photo)}" alt="Подарочные сертификаты ALVI SPA" loading="lazy">
         </div>\n` : '';
     return `      <section class="ps" id="s8">
-        <h2 class="ps__title">${esc(c.title || 'Сертификаты')}</h2>
+        <h2 class="ps__title">${esc(certTitle(data))}</h2>
 ${photo}        <div class="cert">
 ${types}
         </div>
@@ -115,7 +123,7 @@ ${body}
       const sub = subs.length ? `\n          <ul class="pnav__sub">\n${subs.map((it) => `            <li><a href="#${esc(it.id)}">${esc(it.title)}</a></li>`).join('\n')}\n          </ul>` : '';
       li.push(`        <li${cls}><a class="pnav__top" href="#${esc(cat.id)}">${esc(cat.title)}</a>${sub}</li>`);
     }
-    if (!opts.noCertificates) li.splice(opts.prefix ? 1 : 0, 0, `        <li><a class="pnav__top" href="#s8">${esc(data.certificates?.title || 'Сертификаты')}</a></li>`);
+    if (!opts.noCertificates) li.splice(opts.prefix ? 1 : 0, 0, `        <li><a class="pnav__top" href="#s8">${esc(certTitle(data))}</a></li>`);
     return li.join('\n');
   }
 
@@ -138,8 +146,9 @@ ${body}
       const inner = `<h3>${esc(it.card || it.title)}</h3>
             ${it.desc ? `<p>${esc(it.desc)}</p>` : ''}
             <dl class="program-facts">${dl}</dl>`;
-      if (it.photo) {
-        return `          <a class="program-card program-card--photo" href="price.html#${esc(anchor)}" style="--card-photo:url('${esc(it.photo)}')">
+      const photo = photoOf(it);
+      if (photo) {
+        return `          <a class="program-card program-card--photo" href="price.html#${esc(anchor)}" style="--card-photo:url('${esc(photo)}')">
             <div class="program-card__body">${inner}</div>
           </a>`;
       }
