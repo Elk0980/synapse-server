@@ -1892,6 +1892,47 @@
       outline: none;
     }
 
+    /* Карточка услуги с фотографией на фоне — как карточки блока «Оставьте тревоги» */
+    .after-hero .program-card--photo {
+      position: relative;
+      overflow: hidden;
+      padding: 0.85rem;
+      background: #1b241d;
+      border-color: rgba(255, 255, 255, 0.18);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    .program-card--photo::before,
+    .program-card--photo::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+    .program-card--photo::before {
+      z-index: 0;
+      background-image: var(--card-photo);
+      background-size: cover;
+      background-position: center 45%;
+      filter: saturate(1.08);
+      transition: transform 600ms ease;
+    }
+    .program-card--photo::after {
+      z-index: 1;
+      background: linear-gradient(180deg, rgba(8, 16, 12, 0.14) 0%, rgba(8, 16, 12, 0.08) 55%, rgba(8, 16, 12, 0.28) 100%);
+    }
+    .after-hero a.program-card--photo:hover::before { transform: scale(1.03); }
+    .program-card__body {
+      position: relative;
+      z-index: 2;
+      padding: clamp(1rem, 2vw, 1.4rem);
+      border-radius: 0.95rem;
+      background: linear-gradient(180deg, rgba(6, 13, 9, 0.78) 0%, rgba(6, 13, 9, 0.62) 100%);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+    .program-card--photo { min-height: 20rem; display: flex !important; flex-direction: column; justify-content: flex-end; }
+
     .after-hero .program-card,
     .after-hero .space-card:not(.space-card--photo),
     .after-hero .quiz-panel,
@@ -2376,16 +2417,16 @@
         </div>
 
         <div class="program-grid">
-          <a class="program-card" href="price.html#s4-1">
+          <a class="program-card program-card--photo" href="price.html#s4-1" style="--card-photo:url('img/card-s4-1.jpg')"><div class="program-card__body">
             <h3>Парный массаж</h3>
             <p>Вдвоём в одном кабинете. Хороший первый шаг, если SPA-день пока кажется «слишком».</p>
             <dl class="program-facts"><dt>Цена</dt><dd>от 5 600 ₽</dd><dt>Время</dt><dd>60 / 90 мин</dd></dl>
-          </a>
-          <a class="program-card" href="price.html#s2-2">
+          </div></a>
+          <a class="program-card program-card--photo" href="price.html#s2-2" style="--card-photo:url('img/card-s2-2.jpg')"><div class="program-card__body">
             <h3>Обновление</h3>
             <p>Парная SPA-программа для первого совместного визита.</p>
             <dl class="program-facts"><dt>Цена</dt><dd>8 900 ₽</dd><dt>Время</dt><dd>2 ч</dd></dl>
-          </a>
+          </div></a>
           <a class="program-card" href="price.html#s2-1">
             <h3>Успокаивающая</h3>
             <p>Для годовщины или свидания без суеты.</p>
@@ -2423,9 +2464,9 @@
       <div class="content-shell section-split">
         <div>
           <h2 class="content-title">Не угадывать…<br>Дать выбрать подарок.</h2>
-          <p class="content-subtitle">Подарочный сертификат в SPA — Иркутск, электронный или бумажный</p>
+          <p class="content-subtitle">Подарочный сертификат в SPA ALVI — Иркутск, электронный или бумажный</p>
           <p class="content-lead">Сертификат ALVI на любую программу или сумму. Не нужно угадывать размер, цвет и вкус — нужный ритуал получатель выберет сам.</p>
-          <p class="content-copy">Электронный — приходит в мессенджер, дарить можно сразу.<br>Бумажный — в конверте с лентой; по городу привозим бесплатно, в отдалённые районы — за доплату, стоимость скажем в чате.<br>От 3 500 ₽ до SPA-дня за 13 600 ₽</p>
+          <p class="content-copy">Электронный — приходит в мессенджер, дарить можно сразу.<br>Бумажный — в конверте с лентой; по городу привозим бесплатно, в отдалённые районы — за доплату, стоимость скажем в чате.<br>От 3 500 ₽ до SPA-дня до 17 600 ₽</p>
         </div>
       
         <div class="proof">

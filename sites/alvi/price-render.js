@@ -101,7 +101,7 @@ ${types}
 ${body}
       </section>`);
     }
-    if (!opts.noCertificates) out.push(certificates(data));
+    if (!opts.noCertificates) out.unshift(certificates(data)); // сертификаты — первым разделом
     return out.join('\n\n');
   }
 
@@ -115,7 +115,7 @@ ${body}
       const sub = subs.length ? `\n          <ul class="pnav__sub">\n${subs.map((it) => `            <li><a href="#${esc(it.id)}">${esc(it.title)}</a></li>`).join('\n')}\n          </ul>` : '';
       li.push(`        <li${cls}><a class="pnav__top" href="#${esc(cat.id)}">${esc(cat.title)}</a>${sub}</li>`);
     }
-    if (!opts.noCertificates) li.push(`        <li><a class="pnav__top" href="#s8">${esc(data.certificates?.title || 'Сертификаты')}</a></li>`);
+    if (!opts.noCertificates) li.splice(opts.prefix ? 1 : 0, 0, `        <li><a class="pnav__top" href="#s8">${esc(data.certificates?.title || 'Сертификаты')}</a></li>`);
     return li.join('\n');
   }
 
@@ -135,10 +135,16 @@ ${body}
       if (comp) facts.push(['Состав', comp]);
       if (it.who) facts.push(['Кому', it.who]);
       const dl = facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
-      return `          <a class="program-card" href="price.html#${esc(anchor)}">
-            <h3>${esc(it.card || it.title)}</h3>
+      const inner = `<h3>${esc(it.card || it.title)}</h3>
             ${it.desc ? `<p>${esc(it.desc)}</p>` : ''}
-            <dl class="program-facts">${dl}</dl>
+            <dl class="program-facts">${dl}</dl>`;
+      if (it.photo) {
+        return `          <a class="program-card program-card--photo" href="price.html#${esc(anchor)}" style="--card-photo:url('${esc(it.photo)}')">
+            <div class="program-card__body">${inner}</div>
+          </a>`;
+      }
+      return `          <a class="program-card" href="price.html#${esc(anchor)}">
+            ${inner}
           </a>`;
     }).join('\n');
   }

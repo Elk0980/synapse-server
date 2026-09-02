@@ -258,6 +258,7 @@
   <div class="price-layout">
     <nav class="pnav" aria-label="Разделы прайса">
       <ul>
+        <li><a class="pnav__top" href="#s8">💌 Сертификаты</a></li>
         <li class="has-sub"><a class="pnav__top" href="#s1">SPA-программы для одного</a>
           <ul class="pnav__sub">
             <li><a href="#s1-1">Программа «Душевное расслабление»</a></li>
@@ -291,11 +292,31 @@
         <li><a class="pnav__top" href="#s5">Ручные массажи лица, шеи и зоны декольте</a></li>
         <li><a class="pnav__top" href="#s6">Отдельные услуги</a></li>
         <li><a class="pnav__top" href="#s7">Солярий</a></li>
-        <li><a class="pnav__top" href="#s8">Сертификаты</a></li>
       </ul>
     </nav>
 
     <div class="price-content">
+      <section class="ps" id="s8">
+        <h2 class="ps__title">💌 Сертификаты</h2>
+        <div class="cert-photo">
+          <img src="img/certificates.jpg" alt="Подарочные сертификаты ALVI SPA" width="403" height="691" loading="lazy">
+        </div>
+        <div class="cert">
+          <article class="cert__card">
+            <h3 class="pc__title">Электронный</h3>
+            <p>Приходит в мессенджер сразу после оплаты. Дарить можно в тот же день, из любого города.</p>
+          </article>
+          <article class="cert__card">
+            <h3 class="pc__title">Бумажный</h3>
+            <p>В конверте с лентой. По Иркутску привозим бесплатно, в отдалённые районы — за доплату, стоимость скажем в чате.</p>
+          </article>
+        </div>
+        <p class="ps__note">Сертификат оформляется на любую сумму или на конкретную программу из этого прайса.</p>
+        <div class="pc__actions pc__actions--section">
+          <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Оформить сертификат</a>
+        </div>
+      </section>
+
       <section class="ps" id="s1">
         <h2 class="ps__title">SPA-программы для одного</h2>
         <article class="pc" id="s1-1">
@@ -758,27 +779,6 @@
           <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
         </div>
       </section>
-
-      <section class="ps" id="s8">
-        <h2 class="ps__title">Сертификаты</h2>
-        <div class="cert-photo">
-          <img src="img/certificates.jpg" alt="Подарочные сертификаты ALVI SPA" width="403" height="691" loading="lazy">
-        </div>
-        <div class="cert">
-          <article class="cert__card">
-            <h3 class="pc__title">Электронный</h3>
-            <p>Приходит в мессенджер сразу после оплаты. Дарить можно в тот же день, из любого города.</p>
-          </article>
-          <article class="cert__card">
-            <h3 class="pc__title">Бумажный</h3>
-            <p>В конверте с лентой. По Иркутску привозим бесплатно, в отдалённые районы — за доплату, стоимость скажем в чате.</p>
-          </article>
-        </div>
-        <p class="ps__note">Сертификат оформляется на любую сумму или на конкретную программу из этого прайса.</p>
-        <div class="pc__actions pc__actions--section">
-          <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Оформить сертификат</a>
-        </div>
-      </section>
     </div>
   </div>
 
@@ -826,21 +826,21 @@
         .filter(x => x.el);
       if (!targets.length) return;
       const items = [...document.querySelectorAll('.pnav > ul > li')];
-      const openOnly = (li) => items.forEach(x => x.classList.toggle('is-open', x === li));
-      // Раскрытие подпунктов: по клику на раздел и при прокрутке до него
+      // Подпункты по умолчанию скрыты; раскрываются только кликом по разделу (повторный клик сворачивает)
       items.forEach(li => {
         const top = li.querySelector('.pnav__top');
-        top.addEventListener('click', () => openOnly(li));
+        if (!top) return;
+        top.addEventListener('click', () => {
+          const wasOpen = li.classList.contains('is-open');
+          items.forEach(x => x.classList.remove('is-open'));
+          if (!wasOpen) li.classList.add('is-open');
+        });
       });
       const io = new IntersectionObserver((entries) => {
         entries.forEach(e => {
           const hit = targets.find(t => t.el === e.target);
           if (!hit) return;
           hit.a.classList.toggle('is-active', e.isIntersecting);
-          if (e.isIntersecting) {
-            const li = hit.a.closest('.pnav > ul > li');
-            if (li && li.classList.contains('has-sub')) openOnly(li);
-          }
         });
       }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
       targets.forEach(t => io.observe(t.el));
