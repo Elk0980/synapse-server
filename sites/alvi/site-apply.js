@@ -11,16 +11,61 @@
     return h.replace(/\n/g, '<br>');
   }
 
+  /* Шрифты, которые можно выбрать в редакторе (Google Fonts). Пусто — как на сайте. */
+  const FONTS = {
+    'Lora': '"Lora", Georgia, serif',
+    'Cormorant Garamond': '"Cormorant Garamond", Georgia, serif',
+    'Playfair Display': '"Playfair Display", Georgia, serif',
+    'Noto Serif': '"Noto Serif", Georgia, serif',
+    'Manrope': '"Manrope", "Segoe UI", Arial, sans-serif',
+    'Montserrat': '"Montserrat", "Segoe UI", Arial, sans-serif',
+    'Nunito': '"Nunito", "Segoe UI", Arial, sans-serif',
+  };
+  function loadFonts(names) {
+    const need = [...new Set(names)].filter((n) => FONTS[n] && n !== 'Lora');
+    if (!need.length) return;
+    const id = 'alvi-site-fonts';
+    const fam = need.map((n) => 'family=' + encodeURIComponent(n).replace(/%20/g, '+') + ':ital,wght@0,400;0,500;0,600;1,400').join('&');
+    const href = 'https://fonts.googleapis.com/css2?' + fam + '&display=swap';
+    let link = document.getElementById(id);
+    if (link && link.getAttribute('href') === href) return;
+    if (!link) { link = document.createElement('link'); link.id = id; link.rel = 'stylesheet'; document.head.appendChild(link); }
+    link.href = href;
+  }
+  function applyStyle(el, style) {
+    const st = style || {};
+    if (st.font && FONTS[st.font]) el.style.fontFamily = FONTS[st.font]; else el.style.fontFamily = '';
+    const pct = Number(st.size);
+    if (pct && pct !== 100) {
+      el.style.fontSize = '';
+      const base = parseFloat(getComputedStyle(el).fontSize);
+      el.style.fontSize = (base * pct / 100).toFixed(2) + 'px';
+    } else {
+      el.style.fontSize = '';
+    }
+  }
+  let lastDoc = null;
   function applyFields(doc) {
+    lastDoc = doc;
     const map = new Map();
-    for (const sec of doc.sections || []) for (const f of sec.fields || []) map.set(f.key, f.value);
+    for (const sec of doc.sections || []) for (const f of sec.fields || []) map.set(f.key, f);
+    loadFonts([...map.values()].map((f) => f.style && f.style.font).filter(Boolean));
     document.querySelectorAll('[data-edit]').forEach((el) => {
       const key = el.getAttribute('data-edit');
       if (!map.has(key)) return;
-      const html = rich(map.get(key));
+      const f = map.get(key);
+      const html = rich(f.value);
       if (el.innerHTML.trim() !== html) el.innerHTML = html;
+      applyStyle(el, f.style);
     });
   }
+  /* Размер считается от текущего размера на экране — при смене ширины окна пересчитываем. */
+  let resizeTimer = 0;
+  window.addEventListener('resize', () => {
+    if (!lastDoc) return;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => applyFields(lastDoc), 200);
+  });
 
   function applyBackgrounds(doc) {
     for (const sec of doc.sections || []) {
@@ -54,7 +99,114 @@
     return null;
   }
 
-  window.AlviSite = { rich, applyFields, applyBackgrounds, load };
+  window.AlviSite = { rich, applyFields, applyBackgrounds, load, FONTS };
+
+  /* ================= Режим правки «как в Тильде» =================
+     Включается, когда страница открыта внутри редактора кабинета (iframe с ?edit=1).
+     Тексты правятся прямо на странице, изменения уходят родителю через postMessage. */
+  const EDIT_MODE = new URLSearchParams(location.search).get('edit') === '1' && window.parent !== window;
+  const PARENT_ORIGINS = ['https://synapse.synapsebusiness.ru', 'http://localhost:8125', 'http://127.0.0.1:8125'];
+  let parentOrigin = null;
+  const post = (msg) => { if (parentOrigin) window.parent.postMessage(msg, parentOrigin); };
+
+  /* innerHTML контентeditable → текст с разрешёнными тегами и переносами строк. */
+  function htmlToValue(el) {
+    let h = el.innerHTML;
+    h = h.replace(/<div><br\s*\/?><\/div>/gi, '\n').replace(/<div>/gi, '\n').replace(/<\/div>/gi, '');
+    h = h.replace(/<br\s*\/?>/gi, '\n');
+    h = h.replace(/<\/?(em|strong|b|i|sup)(\s[^>]*)?>/gi, (m, tag) => `<${m.startsWith('</') ? '/' : ''}${tag.toLowerCase()}>`);
+    h = h.replace(/<(?!\/?(em|strong|b|i|sup)>)[^>]+>/gi, '');
+    const t = document.createElement('textarea'); t.innerHTML = h;
+    return t.value.replace(/\u00a0/g, ' ').replace(/\n{3,}/g, '\n\n').replace(/\s+$/, '');
+  }
+
+  function enableEditMode() {
+    const style = document.createElement('style');
+    style.textContent = `
+      [data-edit] { outline: 1px dashed rgba(227,212,167,0.45); outline-offset: 3px; cursor: text; transition: outline-color 120ms; min-width: 1ch; }
+      [data-edit]:hover { outline-color: rgba(227,212,167,0.95); outline-style: solid; }
+      [data-edit].is-editing { outline: 2px solid #e3d4a7; outline-offset: 4px; box-shadow: 0 0 0 6px rgba(227,212,167,0.15); }
+      [data-edit][contenteditable]:focus { outline: 2px solid #e3d4a7; }
+      .content-section.is-edit-target, #trust.is-edit-target { box-shadow: inset 0 0 0 3px rgba(227,212,167,0.7); }
+      .floating-cta { pointer-events: none; opacity: 0.35; }
+      .cookie-notice { display: none !important; }
+      html { scroll-behavior: smooth; }`;
+    document.head.appendChild(style);
+    try { document.execCommand('defaultParagraphSeparator', false, 'br'); } catch (e) {}
+
+    let current = null;
+    const select = (el) => {
+      if (current && current !== el) { current.classList.remove('is-editing'); current.removeAttribute('contenteditable'); }
+      current = el;
+      el.classList.add('is-editing');
+      el.setAttribute('contenteditable', 'true');
+      el.focus();
+      const section = el.closest('section[id], footer, .floating-cta, article[data-scene]');
+      post({ type: 'alvi-edit-select', key: el.getAttribute('data-edit'), sectionId: section ? (section.id || (section.dataset.scene != null ? 'hero-' + section.dataset.scene : section.className.split(' ')[0])) : null });
+    };
+    document.addEventListener('click', (e) => {
+      const el = e.target.closest('[data-edit]');
+      if (el) { e.preventDefault(); e.stopPropagation(); if (current !== el) select(el); return; }
+      // клик по ссылке/кнопке вне редактируемого текста — не переходим
+      if (e.target.closest('a, button, label')) { e.preventDefault(); }
+      const section = e.target.closest('section[id]');
+      document.querySelectorAll('.is-edit-target').forEach((x) => x.classList.remove('is-edit-target'));
+      if (section) { section.classList.add('is-edit-target'); post({ type: 'alvi-edit-section', sectionId: section.id }); }
+    }, true);
+    document.addEventListener('input', (e) => {
+      const el = e.target.closest && e.target.closest('[data-edit]');
+      if (!el) return;
+      post({ type: 'alvi-edit-change', key: el.getAttribute('data-edit'), value: htmlToValue(el) });
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && current) { current.blur(); }
+    });
+    document.addEventListener('paste', (e) => {
+      const el = e.target.closest && e.target.closest('[data-edit]');
+      if (!el) return;
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+      document.execCommand('insertText', false, text);
+    });
+
+    window.addEventListener('message', (e) => {
+      if (!PARENT_ORIGINS.includes(e.origin)) return;
+      parentOrigin = e.origin;
+      const m = e.data || {};
+      if (m.type === 'alvi-edit-doc' && m.doc) {
+        // не трогаем элемент, который сейчас редактируется, чтобы не сбить курсор
+        const editingKey = current && current.getAttribute('data-edit');
+        const doc = m.doc;
+        lastDoc = doc;
+        const map = new Map();
+        for (const sec of doc.sections || []) for (const f of sec.fields || []) map.set(f.key, f);
+        loadFonts([...map.values()].map((f) => f.style && f.style.font).filter(Boolean));
+        document.querySelectorAll('[data-edit]').forEach((el) => {
+          const key = el.getAttribute('data-edit');
+          if (!map.has(key)) return;
+          const f = map.get(key);
+          if (key !== editingKey) { const html = rich(f.value); if (el.innerHTML.trim() !== html) el.innerHTML = html; }
+          applyStyle(el, f.style);
+        });
+        applyBackgrounds(doc);
+      }
+      if (m.type === 'alvi-edit-scroll' && m.key) {
+        const el = document.querySelector(`[data-edit="${CSS.escape(m.key)}"]`);
+        if (el) { el.scrollIntoView({ block: 'center' }); select(el); }
+      }
+      if (m.type === 'alvi-edit-scroll-section' && m.sectionId) {
+        const el = document.getElementById(m.sectionId);
+        if (el) el.scrollIntoView({ block: 'start' });
+      }
+    });
+    // сообщаем родителю, что готовы (он ответит документом)
+    for (const o of PARENT_ORIGINS) { try { window.parent.postMessage({ type: 'alvi-edit-ready' }, o); } catch (e) {} }
+  }
+
+  if (EDIT_MODE) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', enableEditMode, { once: true });
+    else enableEditMode();
+  }
 
   const run = async () => {
     const doc = await load();
