@@ -55,3 +55,30 @@ Node 24, встроенный `node:sqlite`, внешних пакетов не�
 mkdir -p data
 PORT=8080 DATABASE_PATH="$PWD/data/content.sqlite" API_KEY=test node ops/content/server.js
 ```
+
+## Единый вход
+
+Кабинет и редакторы используют cookie `synapse_session` (HttpOnly, Secure,
+SameSite=Lax, 30 дней). Пользователи задаются только в серверном `.env`:
+
+```dotenv
+AUTH_USERS='login:role:scrypt$N$r$p$base64url-salt$base64url-hash;login2:role:scrypt$N$r$p$base64url-salt$base64url-hash'
+```
+
+Допустимые роли: `owner` (все сайты) и `editor` (только `alvi` и `avokado`).
+Готовую запись без показа пароля в терминале создаёт скрипт:
+
+```sh
+node ops/content/make-password.js vladislav owner
+node ops/content/make-password.js tatyana editor
+```
+
+Обе напечатанные строки объединяют через `;` в `AUTH_USERS` и заключают всё значение в одинарные кавычки (они защищают символы `$` от подстановки Docker Compose). Пароли и хеши в
+репозиторий не добавляются. `SESSION_SECRET` автоматически создаётся командой
+`ops/synapse-sync` (`openssl rand -hex 32`, права `.env` 600); существующее
+значение не перезаписывается. Если запустить content без секрета, он создаст
+временный и предупредит, что сессии пропадут после перезапуска.
+
+Старые `X-API-Key` (`CONTENT_API_KEY` и `CONTENT_EDITOR_KEY`) продолжают работать
+для автоматики и как запасной вход редакторов. Cookie не требуется передавать
+кросс-доменным клиентам, а CORS не включает `Access-Control-Allow-Credentials`.
