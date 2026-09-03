@@ -2082,6 +2082,46 @@
       .floating-cta__button::after, .price-all__button::after { animation: none; opacity: 0; }
     }
 
+
+    /* ===== Баннер после отзывов: абонемент ALVI + Авокадо (два бренда, два фона из хиро) ===== */
+    .promo { position: fixed; inset: 0; z-index: 70; display: none; align-items: center; justify-content: center; padding: clamp(0.75rem, 3vw, 2.5rem); background: rgba(6, 12, 8, 0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+    .promo.is-open { display: flex; }
+    .promo__panel { position: relative; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; width: min(1400px, 100%); max-height: min(82vh, 760px); border-radius: 1.4rem; overflow: hidden; background: #0b1510; box-shadow: 0 40px 100px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(227, 212, 167, 0.22); animation: promoIn 420ms cubic-bezier(0.2, 0.7, 0.2, 1); }
+    @keyframes promoIn { from { opacity: 0; transform: translateY(1.5rem) scale(0.98); } to { opacity: 1; transform: none; } }
+    .promo__head { grid-column: 1 / -1; display: flex; align-items: center; gap: 1rem; padding: 1rem clamp(7.5rem, 10vw, 9.5rem) 1rem clamp(1.4rem, 3.5vw, 3rem); border-bottom: 1px solid rgba(227, 212, 167, 0.22); background: linear-gradient(90deg, rgba(18, 30, 22, 0.98) 0%, rgba(12, 20, 15, 0.98) 50%, rgba(28, 20, 10, 0.98) 100%); }
+    .promo__tagline { margin: 0; font-family: "Lora", Georgia, serif; font-weight: 400; font-style: italic; font-size: clamp(1.05rem, 1.8vw, 1.5rem); line-height: 1.3; color: rgba(255, 253, 248, 0.94); }
+    .promo__tagline em { font-style: normal; color: rgba(227, 212, 167, 0.98); }
+    .promo__half { position: relative; display: flex; flex-direction: column; justify-content: flex-end; gap: 0.7rem; padding: clamp(1.4rem, 3.5vw, 3rem); min-height: 22rem; color: rgba(255, 253, 248, 0.96); background: #0b1510 center / cover no-repeat; text-decoration: none; }
+    .promo__half--alvi { background-image: url('img/alvi-poster.png'); }
+    .promo__half--avokado { background-image: url('https://avokado.synapsebusiness.ru/assets/hero-poster.jpg'); }
+    .promo__half::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(6, 12, 8, 0.05) 0%, rgba(6, 12, 8, 0.35) 45%, rgba(6, 12, 8, 0.86) 100%); }
+    .promo__half--avokado::before { background: linear-gradient(180deg, rgba(20, 12, 4, 0.05) 0%, rgba(20, 12, 4, 0.35) 45%, rgba(20, 12, 4, 0.86) 100%); }
+    .promo__half + .promo__half::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 1px; background: linear-gradient(180deg, transparent, rgba(227, 212, 167, 0.5), transparent); }
+    .promo__half > * { position: relative; }
+    .promo__brand { font-size: 0.72rem; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(227, 212, 167, 0.9); margin: 0; }
+    .promo__title { margin: 0; font-family: "Lora", Georgia, serif; font-weight: 400; font-size: clamp(1.4rem, 2.4vw, 2.1rem); line-height: 1.1; }
+    .promo__copy { margin: 0; max-width: 32rem; font-size: clamp(0.92rem, 1.15vw, 1.05rem); line-height: 1.5; color: rgba(255, 253, 248, 0.86); }
+    .promo__note { margin: 0; font-size: 0.78rem; color: rgba(227, 212, 167, 0.85); letter-spacing: 0.03em; }
+    .promo__actions { margin-top: 0.4rem; }
+    .promo__button { min-width: 13rem; }
+    .promo__close { position: absolute; top: 0.75rem; right: 0.85rem; z-index: 3; display: inline-flex; align-items: center; gap: 0.45rem; height: 2.3rem; padding: 0 0.9rem 0 0.75rem; border-radius: 999px; border: 1px solid rgba(227, 212, 167, 0.45); background: rgba(6, 12, 8, 0.35); color: rgba(255, 253, 248, 0.88); font: inherit; font-size: 0.78rem; letter-spacing: 0.06em; cursor: pointer; transition: background-color 160ms, border-color 160ms; }
+    .promo__close span:first-child { font-size: 1.15rem; line-height: 1; }
+    .promo__close:hover, .promo__close:focus-visible { background: rgba(6, 12, 8, 0.7); border-color: rgba(227, 212, 167, 0.9); outline: none; }
+    @media (max-width: 899px) {
+      .promo { padding: 0.6rem; }
+      .promo__panel { grid-template-columns: 1fr; grid-template-rows: auto; max-height: calc(100vh - 1.2rem); overflow: auto; }
+      .promo__head { padding: 3.5rem 1.1rem 0.9rem; }
+      .promo__close { top: 0.6rem; right: 0.6rem; }
+      .promo__half { min-height: 17rem; padding: 1.2rem 1.1rem 1.4rem; }
+      .promo__half + .promo__half::after { display: none; }
+      .promo__title { font-size: 1.4rem; }
+      .promo__button { min-width: 0; width: 100%; }
+    }
+    /* В редакторе «вся страница» баннер лежит обычным блоком после отзывов, чтобы его тексты можно было править на месте. */
+    html.edit-full .promo { display: block; position: static; padding: 2rem clamp(1rem, 4vw, 3rem); background: transparent; backdrop-filter: none; }
+    html.edit-full .promo__panel { animation: none; margin: 0 auto; max-height: none; }
+    html.edit-full .promo__close { display: none; }
+
     /* Стеклянные кнопки хиро с мягким бликом (правка Owner'а 30.08). */
     .hero .button {
       position: relative;
@@ -2318,6 +2358,31 @@
         </div>
       </div>
     </section>
+
+    <!-- Баннер двух брендов: показывается один раз за визит, когда гость долистал до отзывов -->
+    <div class="promo" id="promo" role="dialog" aria-modal="true" aria-label="Абонемент ALVI и студия Авокадо">
+      <div class="promo__panel">
+        <button class="promo__close" type="button" id="promo-close" aria-label="Закрыть"><span>×</span><span>закрыть</span></button>
+        <div class="promo__head">
+          <p class="promo__tagline" data-edit="promo.promo-tagline-1">Совершенство — там, где есть и то, и другое: <em>красота без боли</em> в Авокадо и <em>отдых и расслабление</em> в ALVI.</p>
+        </div>
+        <div class="promo__half promo__half--alvi">
+          <p class="promo__brand" data-edit="promo.promo-brand-1">SPA ALVI · абонемент</p>
+          <h3 class="promo__title" data-edit="promo.promo-title-1">Абонемент ALVI — ритуалы по одной цене</h3>
+          <p class="promo__copy" data-edit="promo.promo-copy-1">Несколько визитов одной покупкой — выгоднее разовых и спокойнее: дата уже выбрана, остаётся только прийти. Подходит для себя и в подарок.</p>
+          <p class="promo__note" data-edit="promo.promo-note-1">Условия и варианты абонементов — у администратора</p>
+          <div class="promo__actions"><a class="price-all__button promo__button" href="https://t.me/+79246180555" target="_blank" rel="noopener" data-edit="promo.promo-button-1">Узнать про абонемент</a></div>
+        </div>
+        <a class="promo__half promo__half--avokado" href="https://avokado.synapsebusiness.ru/" target="_blank" rel="noopener">
+          <p class="promo__brand" data-edit="promo.promo-brand-2">АВОКАДО · студия дизайна тела</p>
+          <h3 class="promo__title" data-edit="promo.promo-title-2">Красота без боли: аппаратная коррекция фигуры и лазерная эпиляция</h3>
+          <p class="promo__copy" data-edit="promo.promo-copy-2">Второй салон того же владельца — Красноказачья, 84. Пробный сеанс аппаратного массажа — 500 ₽ вместо 2 100 ₽.</p>
+          <p class="promo__note" data-edit="promo.promo-note-2">5,0 в 2ГИС · 278 отзывов</p>
+          <div class="promo__actions"><span class="price-all__button promo__button" data-edit="promo.promo-button-2">Открыть сайт Авокадо</span></div>
+        </a>
+      </div>
+    </div>
+
 
     <section class="content-section" id="for-self" data-after-block="2">
       <div class="section-backdrop" style="background-image:url('img/bg-self.jpg')" aria-hidden="true"></div>
@@ -3573,6 +3638,35 @@
     <p class="floating-cta__note" data-edit="floating.floating-cta-note-1">отвечаем в течение 2 минут</p>
   </div>
 
+
+  <script>
+    /* Баннер после блока отзывов: один показ за визит, закрытие по кнопке, фону и Esc. В режиме правки — не всплывает. */
+    (() => {
+      const promo = document.getElementById("promo");
+      const trust = document.getElementById("trust");
+      if (!promo || !trust) return;
+      const EDIT = new URLSearchParams(location.search).get("edit") === "1";
+      const KEY = "alvi_promo_shown";
+      let shown = false;
+      try { shown = sessionStorage.getItem(KEY) === "1"; } catch (e) {}
+      const close = () => promo.classList.remove("is-open");
+      const open = () => {
+        if (promo.classList.contains("is-open")) return;
+        promo.classList.add("is-open");
+        try { sessionStorage.setItem(KEY, "1"); } catch (e) {}
+        promo.querySelector(".promo__close")?.focus({ preventScroll: true });
+      };
+      promo.querySelector("#promo-close")?.addEventListener("click", close);
+      promo.addEventListener("click", (e) => { if (e.target === promo) close(); });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+      window.alviPromoOpen = open;
+      if (EDIT || shown || !("IntersectionObserver" in window)) return;
+      const io = new IntersectionObserver((entries) => {
+        if (entries.some((x) => x.isIntersecting)) { io.disconnect(); setTimeout(open, 350); }
+      }, { threshold: 0.35 });
+      io.observe(trust);
+    })();
+  </script>
 <script src="site-apply.js" defer></script>
 <script src="price-render.js" defer></script>
 <script>
