@@ -1849,6 +1849,7 @@ aria-controls="layout-panel"
 <span id="account-business"></span>
 </span>
 <span class="account-avatar" id="account-avatar" aria-hidden="true"></span>
+<button class="glass-pill" id="logout" type="button">Выйти</button>
 </div>
 </div>
 </header>
@@ -2357,10 +2358,8 @@ edit: { label: "Редактировать сайт → Прайс", href: "pric
 });
 
 const PROFILES = {
-"vladislav": { hash: "1ab75bd21dd05a05d1c28e3fe4b387266c5d275c29938b62bf2c2b229e5faec0", data: DATA_TAISABAI, admin: true,  label: "Владислав Ксензов · владелец" },
-"taisabai":  { hash: "195b8df123d0efd637593d07379b4361fc1d7b97011e30e53a793608c09d4a48", data: DATA_TAISABAI, admin: false, label: "TaiSabai" },
-"alvi":      { hash: "d8a0c4d5eb483d383ecfadc22d4b065154e3f5bfcfc715b62fc3279da75bb930", data: DATA_ALVI,     admin: false, label: "ALVI" },
-"tatyana":   { hash: "3e60be37bb44ee4854a34d6c651dad3ac65ab65948a88098b8aca43a7a6d032c", data: DATA_ALVI,     admin: false, label: "Татьяна · ALVI", owner: "Татьяна" }
+"vladislav": { data: DATA_TAISABAI, admin: true, label: "Владислав Ксензов · владелец" },
+"tatyana": { data: DATA_ALVI, admin: false, label: "Татьяна · ALVI", owner: "Татьяна" }
 };
 
 (() => {
@@ -2975,101 +2974,53 @@ bindViewSwitcher();
 setView("cabinet", false);
 };
 
-const sha256fallback = (text) => {
-const K = [];
-const H = [1779033703, 3144134277, 1013904242, 2773480762,
-1359893119, 2600822924, 528734635, 1541459225];
-let n = 2;
-for (let i = 0; i < 64; n += 1) {
-let prime = true;
-for (let f = 2; f * f <= n; f += 1) { if (n % f === 0) { prime = false; break; } }
-if (prime) { K[i] = Math.floor((Math.cbrt(n) % 1) * 4294967296) | 0; i += 1; }
-}
-const bytes = Array.from(new TextEncoder().encode(text));
-const bitLen = bytes.length * 8;
-bytes.push(0x80);
-while (bytes.length % 64 !== 56) bytes.push(0);
-for (let i = 7; i >= 0; i -= 1) bytes.push((bitLen / Math.pow(2, i * 8)) & 255);
-const rr = (x, c) => (x >>> c) | (x << (32 - c));
-for (let b = 0; b < bytes.length; b += 64) {
-const w = new Array(64);
-for (let i = 0; i < 16; i += 1) {
-w[i] = (bytes[b + i * 4] << 24) | (bytes[b + i * 4 + 1] << 16) |
-(bytes[b + i * 4 + 2] << 8) | bytes[b + i * 4 + 3];
-}
-for (let i = 16; i < 64; i += 1) {
-const s0 = rr(w[i - 15], 7) ^ rr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
-const s1 = rr(w[i - 2], 17) ^ rr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
-w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
-}
-let [a, bb, c, d, e, f, g, h] = H;
-for (let i = 0; i < 64; i += 1) {
-const S1 = rr(e, 6) ^ rr(e, 11) ^ rr(e, 25);
-const ch = (e & f) ^ (~e & g);
-const t1 = (h + S1 + ch + K[i] + w[i]) | 0;
-const S0 = rr(a, 2) ^ rr(a, 13) ^ rr(a, 22);
-const mj = (a & bb) ^ (a & c) ^ (bb & c);
-const t2 = (S0 + mj) | 0;
-h = g; g = f; f = e; e = (d + t1) | 0;
-d = c; c = bb; bb = a; a = (t1 + t2) | 0;
-}
-[a, bb, c, d, e, f, g, h].forEach((v, i) => { H[i] = (H[i] + v) | 0; });
-}
-return H.map((v) => (v >>> 0).toString(16).padStart(8, "0")).join("");
-};
-
-const sha256 = async (text) => {
-if (window.crypto && window.crypto.subtle && window.isSecureContext) {
-try {
-const digest = await window.crypto.subtle.digest(
-"SHA-256",
-new TextEncoder().encode(text)
-);
-return Array.from(new Uint8Array(digest))
-.map((b) => b.toString(16).padStart(2, "0"))
-.join("");
-} catch (error) {
-return sha256fallback(text);
-}
-}
-return sha256fallback(text);
-};
-
 const authScreen = byId("auth");
 const authError = byId("auth-error");
+let booted = false;
 
 bindLayoutPanel();
 applyLayout();
 
-byId("auth-form").addEventListener("submit", async (event) => {
-event.preventDefault();
-
-const login = byId("auth-login").value.trim().toLowerCase();
-const pass = byId("auth-pass").value;
-const profile = PROFILES[login];
-let ok = false;
-
-if (profile) {
-try {
-ok = (await sha256(login + ":" + pass)) === profile.hash;
-} catch (error) {
-ok = false;
-}
-}
-
-if (!ok) {
+const showAuthError = (message) => {
+authError.textContent = message;
 authError.hidden = false;
-byId("auth-pass").value = "";
-byId("auth-pass").focus();
-return;
-}
-
+};
+const enterCabinet = (identity) => {
+const profile = PROFILES[identity.login];
+if (!profile) { showAuthError("У учётной записи нет профиля кабинета"); return; }
 authError.hidden = true;
 authScreen.hidden = true;
-boot(profile);
+if (!booted) { boot(profile); booted = true; }
+};
+
+byId("auth-form").addEventListener("submit", async (event) => {
+event.preventDefault();
+try {
+const response = await fetch("/content/login", {
+method: "POST", credentials: "same-origin", headers: { "Content-Type":"application/json" },
+body: JSON.stringify({ login:byId("auth-login").value.trim().toLowerCase(), password:byId("auth-pass").value })
+});
+if (!response.ok) {
+showAuthError(response.status === 429 ? "Слишком много попыток, подождите 10 минут" : "Неверный логин или пароль");
+byId("auth-pass").value = ""; return;
+}
+enterCabinet(await response.json());
+} catch (error) { showAuthError("Сервер входа недоступен"); }
 });
 
+byId("logout").addEventListener("click", async () => {
+try { await fetch("/content/logout", { method:"POST", credentials:"same-origin" }); } catch (error) {}
+location.reload();
+});
+
+(async () => {
+try {
+const response = await fetch("/content/whoami", { credentials:"same-origin", cache:"no-store" });
+if (response.ok) return enterCabinet(await response.json());
+if (response.status !== 401) showAuthError("Сервер входа недоступен");
+} catch (error) { showAuthError("Сервер входа недоступен"); }
 byId("auth-login").focus();
+})();
 })();
 </script>
 <script>

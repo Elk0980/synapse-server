@@ -375,6 +375,7 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   const esc = (s) => window.AlviPrice ? AlviPrice.esc(s) : String(s ?? '');
 
+  let sessionActive = false;
   let data = null;      // текущее состояние документа
   let dirty = false;    // есть несохранённые изменения
   let editing = null;   // id позиции, открытой на редактирование
@@ -387,6 +388,18 @@
   function setStatus(text, kind) {
     statusEl.textContent = text;
     statusEl.className = 'ed-status' + (kind ? ' is-' + kind : '');
+  }
+  function showLogin(message = 'Войдите в кабинет') { statusEl.className = 'ed-status is-error'; statusEl.innerHTML = `<a href="cabinet.html">${message}</a>`; }
+  async function whoami() {
+    try {
+      let key = ''; try { key = sessionStorage.getItem(KEY_STORAGE) || ''; } catch (e) {}
+      let response = await fetch(API_BASE + '/content/whoami', { credentials:'same-origin', cache:'no-store' });
+      sessionActive = response.ok;
+      if (!response.ok && key) response = await fetch(API_BASE + '/content/whoami', { headers:{'X-API-Key':key}, credentials:'same-origin', cache:'no-store' });
+      if (!response.ok) { showLogin(); return false; }
+      const identity = await response.json();
+      $('#ed-key').hidden = sessionActive; subEl.textContent += ` · вы: ${identity.author}`; return true;
+    } catch (e) { showLogin(); return false; }
   }
   function markDirty() {
     dirty = true;
@@ -573,10 +586,10 @@
     if (prepared.size > 8 * 1024 * 1024) return say('Файл больше 8 МБ даже после уменьшения', true);
     say('Загружаю…');
     try {
-      const key = getKey(false); if (!key) throw new Error('без ключа загрузить нельзя');
-      const r = await fetch(ASSETS, { method: 'POST', headers: { 'X-API-Key': key, 'Content-Type': prepared.type, 'X-Filename': encodeURIComponent(prepared.name) }, body: prepared });
+      const key = sessionActive ? '' : getKey(false); if (!sessionActive && !key) { showLogin(); throw new Error('Войдите в кабинет или укажите ключ'); }
+      const r = await fetch(ASSETS, { method: 'POST', credentials: 'same-origin', headers: { ...(key ? { 'X-API-Key': key } : {}), 'Content-Type': prepared.type, 'X-Filename': encodeURIComponent(prepared.name) }, body: prepared });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok) { if (r.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} } throw new Error(j.error || 'HTTP ' + r.status); }
+      if (!r.ok) { if (r.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} showLogin(); } else if (r.status === 403) showLogin('У вашей учётной записи нет доступа к этому сайту'); throw new Error(j.error || 'HTTP ' + r.status); }
       setPhoto(id, j.url);
       say('Фото загружено — нажмите «Готово», затем «Сохранить».');
     } catch (e) { say('Не загружено: ' + e.message, true); }
@@ -699,12 +712,12 @@
   }
   async function apiFetch(url, opts = {}, withKey = false) {
     const headers = { 'Accept': 'application/json', ...(opts.headers || {}) };
-    if (withKey) {
+    if (withKey && !sessionActive) {
       const key = getKey(false);
-      if (!key) throw new Error('Без ключа сохранить нельзя');
+      if (!key) { showLogin(); throw new Error('Войдите в кабинет или укажите ключ'); }
       headers['X-API-Key'] = key;
     }
-    const r = await fetch(url, { ...opts, headers, cache: 'no-store' });
+    const r = await fetch(url, { ...opts, headers, credentials: 'same-origin', cache: 'no-store' });
     let body = null;
     try { body = await r.json(); } catch (e) {}
     if (!r.ok) {
@@ -725,8 +738,9 @@
       setStatus(`Сохранено ${t} · версия ${res.version}. На сайте появится сразу.`, 'ok');
       render();
     } catch (e) {
-      if (e.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} }
-      setStatus('Не сохранено: ' + e.message, 'error');
+      if (e.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} showLogin(); }
+      else if (e.status === 403) setStatus('У вашей учётной записи нет доступа к этому сайту', 'error');
+      else setStatus('Не сохранено: ' + e.message, 'error');
       alert('Не сохранено.\n' + e.message);
     } finally { saveBtn.disabled = false; }
   }
@@ -803,7 +817,7 @@
       $('#ed-content').innerHTML = '<p class="ed-status is-error">Не удалось загрузить price-render.js с alvi.synapsebusiness.ru. Проверьте, что сайт ALVI доступен.</p>';
       return;
     }
-    try { await loadData(); setStatus('Готово к работе'); }
+    try { await loadData(); if (await whoami()) setStatus('Готово к работе'); }
     catch (e) {
       setStatus('Не удалось загрузить прайс: ' + e.message, 'error');
       $('#ed-content').innerHTML = `<p class="ed-status is-error">Не удалось загрузить прайс: ${esc(e.message)}.<br>Сервис content должен быть поднят на сервере (см. ops/content).</p>`;

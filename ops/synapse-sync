@@ -56,6 +56,7 @@ ensure_secret CRM_API_KEY
 ensure_secret CHAT_API_KEY
 ensure_secret CONTENT_API_KEY
 ensure_secret CONTENT_EDITOR_KEY
+ensure_secret SESSION_SECRET
 
 before=$(git rev-parse HEAD)
 before_caddy=$(config_hash)

@@ -497,6 +497,7 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+  let sessionActive = false;
   let data = null;
   let dirty = false;
   let author = '';
@@ -812,10 +813,10 @@
     if (file.size > 8 * 1024 * 1024) return setStatus('Файл больше 8 МБ', 'error');
     setStatus('Загружаю картинку…');
     try {
-      const key = getKey(false); if (!key) throw new Error('Без ключа загрузить нельзя');
-      const r = await fetch(ASSETS, { method: 'POST', headers: { 'X-API-Key': key, 'Content-Type': file.type, 'X-Filename': encodeURIComponent(file.name) }, body: file });
+      const key = sessionActive ? '' : getKey(false); if (!sessionActive && !key) { showLogin(); throw new Error('Войдите в кабинет или укажите ключ'); }
+      const r = await fetch(ASSETS, { method: 'POST', credentials: 'same-origin', headers: { ...(key ? { 'X-API-Key': key } : {}), 'Content-Type': file.type, 'X-Filename': encodeURIComponent(file.name) }, body: file });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok) { if (r.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} } throw new Error(j.error || 'HTTP ' + r.status); }
+      if (!r.ok) { if (r.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} showLogin(); } else if (r.status === 403) showLogin('У вашей учётной записи нет доступа к этому сайту'); throw new Error(j.error || 'HTTP ' + r.status); }
       sec.background.image = j.url;
       markDirty(); render();
       setStatus('Картинка загружена — нажмите «Сохранить», чтобы она появилась на сайте', 'ok');
@@ -834,8 +835,8 @@
   }
   async function apiFetch(url, opts = {}, withKey = false) {
     const headers = { 'Accept': 'application/json', ...(opts.headers || {}) };
-    if (withKey) { const key = getKey(false); if (!key) throw new Error('Без ключа сохранить нельзя'); headers['X-API-Key'] = key; }
-    const r = await fetch(url, { ...opts, headers, cache: 'no-store' });
+    if (withKey && !sessionActive) { const key = getKey(false); if (!key) { showLogin(); throw new Error('Войдите в кабинет или укажите ключ'); } headers['X-API-Key'] = key; }
+    const r = await fetch(url, { ...opts, headers, credentials: 'same-origin', cache: 'no-store' });
     let body = null; try { body = await r.json(); } catch (e) {}
     if (!r.ok) {
       const msg = body?.error || `HTTP ${r.status}`;
@@ -845,8 +846,16 @@
     return body;
   }
   async function whoami() {
-    try { let key = ''; try { key = sessionStorage.getItem(KEY_STORAGE) || ''; } catch (e) {} if (!key) return; const w = await fetch(API_BASE + '/content/whoami', { headers: { 'X-API-Key': key } }); if (w.ok) { author = (await w.json()).author; renderSub(); } } catch (e) {}
+    try {
+      let key = ''; try { key = sessionStorage.getItem(KEY_STORAGE) || ''; } catch (e) {}
+      let w = await fetch(API_BASE + '/content/whoami', { credentials:'same-origin', cache:'no-store' });
+      sessionActive = w.ok;
+      if (!w.ok && key) w = await fetch(API_BASE + '/content/whoami', { headers:{'X-API-Key':key}, credentials:'same-origin', cache:'no-store' });
+      if (!w.ok) { showLogin(); return false; }
+      author = (await w.json()).author; $('#ed-key').hidden = sessionActive; renderSub(); return true;
+    } catch (e) { showLogin(); return false; }
   }
+  function showLogin(message = 'Войдите в кабинет') { statusEl.className = 'ed-status is-error'; statusEl.innerHTML = `<a href="cabinet.html">${message}</a>`; }
   async function save() {
     if (!data) return;
     saveBtn.disabled = true; setStatus('Сохраняю…');
@@ -857,8 +866,9 @@
       setStatus(`Сохранено ${new Date(res.updatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · версия ${res.version}. Уже на сайте.`, 'ok');
       renderSub();
     } catch (e) {
-      if (e.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} }
-      setStatus('Не сохранено: ' + e.message, 'error'); alert('Не сохранено.\n' + e.message);
+      if (e.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} showLogin(); }
+      else if (e.status === 403) setStatus('У вашей учётной записи нет доступа к этому сайту', 'error');
+      else setStatus('Не сохранено: ' + e.message, 'error'); alert('Не сохранено.\n' + e.message);
     } finally { saveBtn.disabled = false; }
   }
   async function showHistory() {
@@ -882,7 +892,7 @@
 
   (async () => {
     frame.src = SITE + '/?edit=1&v=' + Date.now();
-    try { await loadData(); await whoami(); setStatus('Готово к работе'); }
+    try { await loadData(); if (await whoami()) setStatus('Готово к работе'); }
     catch (e) { setStatus('Не удалось загрузить тексты сайта: ' + e.message, 'error'); $('#ed-inspector').innerHTML = `<p class="ed-status is-error">Не удалось загрузить: ${esc(e.message)}</p>`; }
   })();
 })();
