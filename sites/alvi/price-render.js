@@ -11,10 +11,24 @@
   /* Фото карточек по умолчанию — пока позиции в базе без поля photo (задаётся в редакторе). */
   const DEFAULT_PHOTOS = { 's4-1': 'img/card-s4-1.jpg', 's2-2': 'img/card-s2-2.jpg' };
   const photoOf = (it) => it.photo || DEFAULT_PHOTOS[it.id] || '';
-  const certTitle = (data) => {
-    const t = data.certificates?.title || 'Сертификаты';
-    return /^\p{Extended_Pictographic}/u.test(t) ? t : '💌 ' + t;
-  };
+  /* Смайлики разделов: у сертификатов — конверт, у акций — подарок. В заголовках они анимированы (класс ps__emoji). */
+  const stripEmoji = (t) => String(t || '').replace(/^[\p{Extended_Pictographic}\uFE0F\u200D\s]+/u, '').trim();
+  const certTitle = (data) => stripEmoji(data.certificates?.title) || 'Сертификаты';
+  const isPromoCat = (cat) => !!cat && (cat.id === 'promo' || /^акци/iu.test(stripEmoji(cat.title)));
+  const emojiHtml = (kind) => kind === 'cert'
+    ? '<span class="ps__emoji ps__emoji--cert" aria-hidden="true">💌</span>'
+    : '<span class="ps__emoji ps__emoji--promo" aria-hidden="true">🎁</span>';
+  const headingHtml = (cat) => isPromoCat(cat) ? `${emojiHtml('promo')} ${esc(stripEmoji(cat.title))}` : esc(cat.title);
+  const navTitle = (cat) => isPromoCat(cat) ? '🎁 ' + esc(stripEmoji(cat.title)) : esc(cat.title);
+  /* Раздел «Акции», пока его нет в документе прайса: заглушка без выдуманных условий. */
+  const DEFAULT_PROMO = { id: 'promo', title: 'Акции', kind: 'programs', block: 'self', items: [], note: 'Действующие акции и специальные предложения меняются по сезону — уточните у администратора, что актуально сейчас.' };
+  /* Порядок разделов: акции сразу после сертификатов, остальное — как в документе. */
+  function orderedCategories(data, opts = {}) {
+    const cats = (data.categories || []).slice();
+    const i = cats.findIndex(isPromoCat);
+    const promo = i >= 0 ? cats.splice(i, 1)[0] : (opts.noDefaultPromo ? null : DEFAULT_PROMO);
+    return promo ? [promo].concat(cats) : cats;
+  }
 
   const BLOCK_BY_CATEGORY = (data, categoryId) => {
     const cat = (data.categories || []).find((c) => c.id === categoryId);
@@ -80,7 +94,7 @@ ${rows}
           <img src="${esc(c.photo)}" alt="Подарочные сертификаты ALVI SPA" loading="lazy">
         </div>\n` : '';
     return `      <section class="ps" id="s8">
-        <h2 class="ps__title">${esc(certTitle(data))}</h2>
+        <h2 class="ps__title">${emojiHtml('cert')} ${esc(certTitle(data))}</h2>
 ${photo}        <div class="cert">
 ${types}
         </div>
@@ -99,11 +113,13 @@ ${types}
   /* Разделы прайса (без сертификатов, если opts.noCertificates). */
   function renderSections(data, opts = {}) {
     const out = [];
-    for (const cat of data.categories || []) {
-      const title = `<h2 class="ps__title">${esc(cat.title)}${opts.editor && opts.titleExtra ? opts.titleExtra(cat) : ''}</h2>`;
+    for (const cat of orderedCategories(data, opts)) {
+      const isDefault = cat === DEFAULT_PROMO;
+      const title = `<h2 class="ps__title">${headingHtml(cat)}${opts.editor && opts.titleExtra && !isDefault ? opts.titleExtra(cat) : ''}</h2>`;
       let body;
-      if (cat.kind === 'table') body = tableSection(data, cat, opts);
-      else body = (cat.items || []).map((it) => programCard(data, it, opts)).join('\n\n') + (opts.editor && opts.addCardHtml ? opts.addCardHtml(cat) : '');
+      if (isDefault) body = `        <p class="ps__note">${esc(cat.note)}</p>\n        ${opts.editor ? (opts.promoPlaceholderHtml ? opts.promoPlaceholderHtml() : '') : actions(data, true)}`;
+      else if (cat.kind === 'table') body = tableSection(data, cat, opts);
+      else body = ((cat.items || []).map((it) => programCard(data, it, opts)).join('\n\n') || (cat.note ? `        <p class="ps__note">${esc(cat.note)}</p>` : '')) + (opts.editor && opts.addCardHtml ? opts.addCardHtml(cat) : '');
       out.push(`      <section class="ps" id="${esc(cat.id)}" data-cat="${esc(cat.id)}">
         ${title}
 ${body}
@@ -117,13 +133,13 @@ ${body}
   function renderNav(data, opts = {}) {
     const li = [];
     if (opts.prefix) li.push(opts.prefix);
-    for (const cat of data.categories || []) {
+    for (const cat of orderedCategories(data, opts)) {
       const subs = cat.kind === 'table' ? [] : (cat.items || []);
       const cls = subs.length ? ' class="has-sub"' : '';
       const sub = subs.length ? `\n          <ul class="pnav__sub">\n${subs.map((it) => `            <li><a href="#${esc(it.id)}">${esc(it.title)}</a></li>`).join('\n')}\n          </ul>` : '';
-      li.push(`        <li${cls}><a class="pnav__top" href="#${esc(cat.id)}">${esc(cat.title)}</a>${sub}</li>`);
+      li.push(`        <li${cls}><a class="pnav__top" href="#${esc(cat.id)}">${navTitle(cat)}</a>${sub}</li>`);
     }
-    if (!opts.noCertificates) li.splice(opts.prefix ? 1 : 0, 0, `        <li><a class="pnav__top" href="#s8">${esc(certTitle(data))}</a></li>`);
+    if (!opts.noCertificates) li.splice(opts.prefix ? 1 : 0, 0, `        <li><a class="pnav__top" href="#s8">💌 ${esc(certTitle(data))}</a></li>`);
     return li.join('\n');
   }
 
@@ -171,5 +187,5 @@ ${body}
     return null;
   }
 
-  window.AlviPrice = { esc, load, findItem, isPopular, renderSections, renderNav, renderShowcase, blockOf: BLOCK_BY_CATEGORY };
+  window.AlviPrice = { esc, load, findItem, isPopular, isPromoCat, renderSections, renderNav, renderShowcase, blockOf: BLOCK_BY_CATEGORY };
 })();

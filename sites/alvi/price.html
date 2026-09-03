@@ -108,6 +108,14 @@
     .ps { min-width: 0; scroll-margin-top: 1.5rem; }
     .pc { min-width: 0; }
     .ps + .ps { margin-top: clamp(2.5rem, 5vw, 4rem); }
+
+    /* Анимированные смайлики заголовков: конверт у сертификатов, подарок у акций */
+    .ps__emoji { display: inline-block; transform-origin: 50% 80%; will-change: transform; }
+    .ps__emoji--cert { animation: emojiWave 3.2s ease-in-out infinite; }
+    .ps__emoji--promo { animation: emojiGift 2.6s ease-in-out infinite; }
+    @keyframes emojiWave { 0%, 100% { transform: rotate(-8deg) translateY(0); } 25% { transform: rotate(8deg) translateY(-2px); } 50% { transform: rotate(-6deg) translateY(0); } 75% { transform: rotate(6deg) translateY(-1px); } }
+    @keyframes emojiGift { 0%, 55%, 100% { transform: translateY(0) scale(1); } 15% { transform: translateY(-6px) scale(1.08) rotate(-6deg); } 30% { transform: translateY(0) scale(1) rotate(4deg); } 42% { transform: translateY(-3px) scale(1.04) rotate(-2deg); } }
+    @media (prefers-reduced-motion: reduce) { .ps__emoji { animation: none; } }
     .ps__title {
       margin: 0 0 1.4rem; font-family: "Lora", Georgia, serif; font-weight: 400;
       font-size: clamp(1.6rem, 3vw, 2.4rem); line-height: 1.2;
@@ -259,6 +267,7 @@
     <nav class="pnav" aria-label="Разделы прайса">
       <ul>
         <li><a class="pnav__top" href="#s8">💌 Сертификаты</a></li>
+        <li><a class="pnav__top" href="#promo">🎁 Акции</a></li>
         <li class="has-sub"><a class="pnav__top" href="#s1">SPA-программы для одного</a>
           <ul class="pnav__sub">
             <li><a href="#s1-1">Программа «Душевное расслабление»</a></li>
@@ -297,7 +306,7 @@
 
     <div class="price-content">
       <section class="ps" id="s8">
-        <h2 class="ps__title">💌 Сертификаты</h2>
+        <h2 class="ps__title"><span class="ps__emoji ps__emoji--cert" aria-hidden="true">💌</span> Сертификаты</h2>
         <div class="cert-photo">
           <img src="img/certificates.jpg" alt="Подарочные сертификаты ALVI SPA" width="403" height="691" loading="lazy">
         </div>
@@ -314,6 +323,15 @@
         <p class="ps__note">Сертификат оформляется на любую сумму или на конкретную программу из этого прайса.</p>
         <div class="pc__actions pc__actions--section">
           <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Оформить сертификат</a>
+        </div>
+      </section>
+
+      <section class="ps" id="promo" data-cat="promo">
+        <h2 class="ps__title"><span class="ps__emoji ps__emoji--promo" aria-hidden="true">🎁</span> Акции</h2>
+        <p class="ps__note">Действующие акции и специальные предложения меняются по сезону — уточните у администратора, что актуально сейчас.</p>
+        <div class="pc__actions pc__actions--section">
+          <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+          <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
         </div>
       </section>
 
