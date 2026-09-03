@@ -1,0 +1,799 @@
+{
+  "version": 1,
+  "sections": [
+    {
+      "id": "top",
+      "title": "Хиро",
+      "fields": [
+        {
+          "key": "top.wm-sub-1",
+          "label": "Текст",
+          "value": "студия дизайна тела",
+          "multiline": false
+        },
+        {
+          "key": "top.t-slogan-1",
+          "label": "Слоган",
+          "value": "УВЕРЕННОСТЬ · СВОБОДА · РЕЗУЛЬТАТ",
+          "multiline": false
+        },
+        {
+          "key": "top.t-script-text-1",
+          "label": "Скриптовая строка",
+          "value": "Быть красивой и уверенной —",
+          "multiline": false
+        },
+        {
+          "key": "top.t-script-text-2",
+          "label": "Скриптовая строка",
+          "value": "это мой выбор",
+          "multiline": false
+        }
+      ],
+      "background": {
+        "default": "assets/hero-poster.jpg",
+        "image": null,
+        "opacity": null
+      }
+    },
+    {
+      "id": "pain",
+      "title": "Сколько раз вы мечтали…",
+      "fields": [
+        {
+          "key": "pain.rv-1",
+          "label": "Заголовок",
+          "value": "Сколько раз вы мечтали об идеальном теле?",
+          "multiline": false
+        },
+        {
+          "key": "pain.p-1",
+          "label": "Текст",
+          "value": "Сколько раз вы обещали себе начать «с понедельника»?",
+          "multiline": false
+        },
+        {
+          "key": "pain.p-2",
+          "label": "Текст",
+          "value": "Сколько диет закончились срывом — и плюс два кило сверху?",
+          "multiline": false
+        },
+        {
+          "key": "pain.p-3",
+          "label": "Текст",
+          "value": "Изнурительные тренировки, брошенные через неделю?",
+          "multiline": false
+        },
+        {
+          "key": "pain.p-4",
+          "label": "Текст",
+          "value": "Платье, которое ждёт, «когда похудею»?",
+          "multiline": false
+        },
+        {
+          "key": "pain.p-5",
+          "label": "Текст",
+          "value": "Фото, где вы себя не узнаёте?",
+          "multiline": false
+        },
+        {
+          "key": "pain.p-6",
+          "label": "Текст",
+          "value": "Лето, к которому опять «не успела»?",
+          "multiline": false
+        },
+        {
+          "key": "pain.p-7",
+          "label": "Текст",
+          "value": "<b>60 дней</b> запретов и приседаний через силу — и сантиметр показывает почти то же самое",
+          "multiline": false
+        },
+        {
+          "key": "pain.verdict-1",
+          "label": "Текст",
+          "value": "Поэтому я нашла вариант — <b>легче</b>.",
+          "multiline": false
+        },
+        {
+          "key": "pain.quote-1",
+          "label": "Цитата героини",
+          "value": "«Я, как и каждая девушка, мечтаю быть красивой, уверенной, с идеальной фигурой. Но в нынешнем темпе жизни <em>не получается держаться</em> диет, тренировок и прочих «очевидных» вещей.",
+          "multiline": true
+        }
+      ],
+      "background": {
+        "default": "",
+        "image": null,
+        "opacity": null
+      }
+    },
+    {
+      "id": "method-intro",
+      "title": "Метод · липкий подзаголовок",
+      "fields": [
+        {
+          "key": "method-intro.method-intro-title-1",
+          "label": "Текст",
+          "value": "АВОКАДО — студия дизайна тела",
+          "multiline": false
+        },
+        {
+          "key": "method-intro.method-intro-subtitle-1",
+          "label": "Текст",
+          "value": "Студия аппаратной коррекции фигуры и лазерной эпиляции",
+          "multiline": false
+        }
+      ]
+    },
+    {
+      "id": "method-0",
+      "title": "01 · Почему АВОКАДО",
+      "fields": [
+        {
+          "key": "method-0.h2-1",
+          "label": "Заголовок",
+          "value": "Почему АВОКАДО",
+          "multiline": false
+        },
+        {
+          "key": "method-0.scene-result-1",
+          "label": "Текст",
+          "value": "Вы просто лежите и получаете результат.",
+          "multiline": false
+        },
+        {
+          "key": "method-0.scene-explanation-1",
+          "label": "Текст",
+          "value": "Аппарат работает — без боли, диет и усилий, без спорт-залов, запретов и «через не могу».",
+          "multiline": false
+        },
+        {
+          "key": "method-0.scene-number-1",
+          "label": "Текст",
+          "value": "01",
+          "multiline": false
+        }
+      ]
+    },
+    {
+      "id": "method-1",
+      "title": "02 · Вы просто лежите",
+      "fields": [
+        {
+          "key": "method-1.h2-1",
+          "label": "Заголовок",
+          "value": "Вы просто лежите, работает аппарат",
+          "multiline": false
+        },
+        {
+          "key": "method-1.lead-1",
+          "label": "Лид",
+          "value": "Вакуум приподнимает кожу, ролики разминают подкожную клетчатку, разгоняется лимфа, кожа подтягивается.",
+          "multiline": true
+        },
+        {
+          "key": "method-1.scene-number-1",
+          "label": "Текст",
+          "value": "02",
+          "multiline": false
+        },
+        {
+          "key": "method-1.b-1",
+          "label": "Акцент",
+          "value": "Вакуумно-роликовый массаж",
+          "multiline": false
+        },
+        {
+          "key": "method-1.b-2",
+          "label": "Акцент",
+          "value": "Кавитация и RF-лифтинг",
+          "multiline": false
+        },
+        {
+          "key": "method-1.b-3",
+          "label": "Акцент",
+          "value": "Диодный лазер WINGDERM",
+          "multiline": false
+        },
+        {
+          "key": "method-1.b-4",
+          "label": "Акцент",
+          "value": "Бесплатная консультация",
+          "multiline": false
+        }
+      ]
+    },
+    {
+      "id": "method-2",
+      "title": "03 · Лазерная эпиляция",
+      "fields": [
+        {
+          "key": "method-2.h2-1",
+          "label": "Заголовок",
+          "value": "Гладкая кожа — без станка и вросших волос",
+          "multiline": false
+        },
+        {
+          "key": "method-2.lead-1",
+          "label": "Лид",
+          "value": "Диодный лазер WINGDERM работает по волосяному фолликулу — прицельно, с охлаждением, без боли. Курс планируем сразу, вместе с коррекцией фигуры.",
+          "multiline": true
+        },
+        {
+          "key": "method-2.scene-number-1",
+          "label": "Текст",
+          "value": "03",
+          "multiline": false
+        },
+        {
+          "key": "method-2.b-1",
+          "label": "Акцент",
+          "value": "Диодный лазер WINGDERM",
+          "multiline": false
+        },
+        {
+          "key": "method-2.b-2",
+          "label": "Акцент",
+          "value": "Работает мастер, а не аппарат сам по себе",
+          "multiline": false
+        },
+        {
+          "key": "method-2.b-3",
+          "label": "Акцент",
+          "value": "Курс, а не разовая процедура",
+          "multiline": false
+        }
+      ]
+    },
+    {
+      "id": "method-3",
+      "title": "04 · Скажем честно",
+      "fields": [
+        {
+          "key": "method-3.h2-1",
+          "label": "Заголовок",
+          "value": "Скажем честно",
+          "multiline": false
+        },
+        {
+          "key": "method-3.h3-1",
+          "label": "Подзаголовок",
+          "value": "Поэтому мы устроены так",
+          "multiline": false
+        },
+        {
+          "key": "method-3.objections-1",
+          "label": "Текст",
+          "value": "«Это больно?» · «Результата ждать месяцами?» · «А если не сработает?» · «Вернётся обратно?»",
+          "multiline": true
+        },
+        {
+          "key": "method-3.p-1",
+          "label": "Текст",
+          "value": "<b>Не больно.</b> Пробный сеанс за 500 ₽ — почувствовать метод на себе до любых решений. Это спа-ритуал: халаты, простыни, спокойная атмосфера.",
+          "multiline": true
+        },
+        {
+          "key": "method-3.p-2",
+          "label": "Текст",
+          "value": "<b>Не месяцами.</b> Замеры — на каждом этапе курса: сантиметры и килограммы фиксируем в цифрах, прогресс видно, а не «кажется».",
+          "multiline": true
+        },
+        {
+          "key": "method-3.p-3",
+          "label": "Текст",
+          "value": "<b>68% клиентов возвращаются снова</b> — каждая вторая отмечает результат цифрами: «за три месяца минус 10 – 20 кг».",
+          "multiline": true
+        },
+        {
+          "key": "method-3.p-4",
+          "label": "Текст",
+          "value": "Расписание курса стоит в календаре, мы напоминаем о каждом сеансе, подбирая удобные даты и время для Вас. Начатый курс доводим до конца вместе.",
+          "multiline": true
+        },
+        {
+          "key": "method-3.scene-number-1",
+          "label": "Текст",
+          "value": "04",
+          "multiline": false
+        }
+      ],
+      "background": {
+        "default": "assets/consult-green-wall.webp",
+        "image": null,
+        "opacity": null
+      }
+    },
+    {
+      "id": "method-4",
+      "title": "05 · Отзывы",
+      "fields": [
+        {
+          "key": "method-4.h2-1",
+          "label": "Заголовок",
+          "value": "Отзывы со всех площадок",
+          "multiline": false
+        },
+        {
+          "key": "method-4.p-1",
+          "label": "Текст",
+          "value": "Не верьте нам на слово — проверьте отзывы на картах.",
+          "multiline": false
+        },
+        {
+          "key": "method-4.scene-number-1",
+          "label": "Текст",
+          "value": "05",
+          "multiline": false
+        },
+        {
+          "key": "method-4.span-1",
+          "label": "Текст",
+          "value": "2ГИС · более 300 оценок",
+          "multiline": false
+        },
+        {
+          "key": "method-4.span-2",
+          "label": "Текст",
+          "value": "Яндекс · более 120 оценок",
+          "multiline": false
+        },
+        {
+          "key": "method-4.b-1",
+          "label": "Акцент",
+          "value": "5,0",
+          "multiline": false
+        },
+        {
+          "key": "method-4.b-2",
+          "label": "Акцент",
+          "value": "5,0",
+          "multiline": false
+        }
+      ]
+    },
+    {
+      "id": "method-5",
+      "title": "06 · Как мы работаем",
+      "fields": [
+        {
+          "key": "method-5.h2-1",
+          "label": "Заголовок",
+          "value": "Как мы работаем",
+          "multiline": false
+        },
+        {
+          "key": "method-5.p-1",
+          "label": "Текст",
+          "value": "Специалист спросит о вашей цели и состоянии здоровья, посмотрит кожу и зоны, о которых вы переживаете. Никаких оценок и нравоучений.",
+          "multiline": true
+        },
+        {
+          "key": "method-5.p-2",
+          "label": "Текст",
+          "value": "Снимем мерки и зафиксируем точку старта — потом по ним будем сверять прогресс. Подберём программу и честно скажем, чего от неё ждать.",
+          "multiline": true
+        },
+        {
+          "key": "method-5.p-3",
+          "label": "Текст",
+          "value": "Аппаратный массаж всего тела в специальном костюме. Халат и простыни наши, музыка спокойная. Интенсивность настроим под вас.",
+          "multiline": true
+        },
+        {
+          "key": "method-5.p-4",
+          "label": "Текст",
+          "value": "Расскажем, какой курс подошёл бы под вашу цель и сколько это стоит. Захотите подумать — думайте: пробный сеанс ни к чему не обязывает.",
+          "multiline": true
+        },
+        {
+          "key": "method-5.scene-number-1",
+          "label": "Текст",
+          "value": "06",
+          "multiline": false
+        },
+        {
+          "key": "method-5.b-1",
+          "label": "Акцент",
+          "value": "1. Знакомство и осмотр",
+          "multiline": false
+        },
+        {
+          "key": "method-5.b-2",
+          "label": "Акцент",
+          "value": "2. Замеры и программа",
+          "multiline": false
+        },
+        {
+          "key": "method-5.b-3",
+          "label": "Акцент",
+          "value": "3. Сам сеанс",
+          "multiline": false
+        },
+        {
+          "key": "method-5.b-4",
+          "label": "Акцент",
+          "value": "4. Решение — за вами",
+          "multiline": false
+        }
+      ]
+    },
+    {
+      "id": "price",
+      "title": "Цены",
+      "fields": [
+        {
+          "key": "price.rv-1",
+          "label": "Заголовок",
+          "value": "Цены и подарочный сертификат",
+          "multiline": false
+        },
+        {
+          "key": "price.block-subtitle-1",
+          "label": "Заголовок группы",
+          "value": "Попробуйте — за 500 ₽",
+          "multiline": false
+        },
+        {
+          "key": "price.block-subtitle-2",
+          "label": "Заголовок группы",
+          "value": "Лазерная эпиляция",
+          "multiline": false
+        },
+        {
+          "key": "price.lead-1",
+          "label": "Лид",
+          "value": "Аппаратную коррекцию и эпиляцию можно дополнить уходом за лицом и ручными массажами.",
+          "multiline": false
+        },
+        {
+          "key": "price.note-1",
+          "label": "Оговорка",
+          "value": "Цены — из системы онлайн-записи студии. Курс «Невесомость» (10 сеансов) и другие курсовые программы подбираются на консультации — состав и цену зафиксируем до старта.",
+          "multiline": true
+        },
+        {
+          "key": "price.note-2",
+          "label": "Оговорка",
+          "value": "Состав комплексов уточняйте на консультации.",
+          "multiline": false
+        },
+        {
+          "key": "price.note-3",
+          "label": "Оговорка",
+          "value": "Цены действуют на дату обновления, актуальные — на консультации.",
+          "multiline": false
+        },
+        {
+          "key": "price.kicker-1",
+          "label": "Подпись",
+          "value": "Первый шаг",
+          "multiline": false
+        }
+      ]
+    },
+    {
+      "id": "certificate",
+      "title": "Подарочный сертификат",
+      "fields": [
+        {
+          "key": "certificate.block-subtitle-1",
+          "label": "Заголовок группы",
+          "value": "Подарочный сертификат АВОКАДО",
+          "multiline": false
+        },
+        {
+          "key": "certificate.lead-1",
+          "label": "Лид",
+          "value": "Подарите время для себя и возможность выбрать подходящую процедуру в студии — сертификат распространяется в том числе на лазерную эпиляцию.",
+          "multiline": true
+        },
+        {
+          "key": "certificate.certificate-validity-1",
+          "label": "Срок действия",
+          "value": "действует 1 год с даты покупки",
+          "multiline": false
+        },
+        {
+          "key": "certificate.certificate-cta-1",
+          "label": "Кнопка или ссылка",
+          "value": "Заказать сертификат",
+          "multiline": false
+        },
+        {
+          "key": "certificate.kicker-1",
+          "label": "Подпись",
+          "value": "Забота в подарок",
+          "multiline": false
+        }
+      ]
+    },
+    {
+      "id": "contacts",
+      "title": "Контакты",
+      "fields": [
+        {
+          "key": "contacts.rv-1",
+          "label": "Заголовок",
+          "value": "Контакты",
+          "multiline": false
+        },
+        {
+          "key": "contacts.lead-1",
+          "label": "Лид",
+          "value": "АВОКАДО ждёт вас: Иркутск, Красноказачья, 84, 1 этаж.",
+          "multiline": false
+        },
+        {
+          "key": "contacts.contact-hours-1",
+          "label": "Часы работы",
+          "value": "Ежедневно, по предварительной записи",
+          "multiline": false
+        },
+        {
+          "key": "contacts.contact-main-1",
+          "label": "Кнопка или ссылка",
+          "value": "Записаться онлайн",
+          "multiline": false
+        },
+        {
+          "key": "contacts.a-1",
+          "label": "Кнопка или ссылка",
+          "value": "2ГИС",
+          "multiline": false
+        },
+        {
+          "key": "contacts.a-2",
+          "label": "Кнопка или ссылка",
+          "value": "Яндекс.Карты",
+          "multiline": false
+        },
+        {
+          "key": "contacts.a-3",
+          "label": "Кнопка или ссылка",
+          "value": "+7 950 100 1059",
+          "multiline": false
+        },
+        {
+          "key": "contacts.a-4",
+          "label": "Кнопка или ссылка",
+          "value": "WhatsApp",
+          "multiline": false
+        },
+        {
+          "key": "contacts.a-5",
+          "label": "Кнопка или ссылка",
+          "value": "ВКонтакте",
+          "multiline": false
+        },
+        {
+          "key": "contacts.a-6",
+          "label": "Кнопка или ссылка",
+          "value": "политикой конфиденциальности",
+          "multiline": false
+        },
+        {
+          "key": "contacts.kicker-1",
+          "label": "Подпись",
+          "value": "Связаться со студией",
+          "multiline": false
+        }
+      ]
+    },
+    {
+      "id": "faq",
+      "title": "Частые вопросы",
+      "fields": [
+        {
+          "key": "faq.block-subtitle-1",
+          "label": "Заголовок группы",
+          "value": "Что обычно спрашивают перед первым визитом",
+          "multiline": false
+        },
+        {
+          "key": "faq.p-1",
+          "label": "Текст",
+          "value": "Пробный сеанс аппаратного массажа всего тела — 500 ₽ вместо 2100 ₽, он для первого визита и включает бесплатную консультацию. Дальше: 45 минут — 2100 ₽, 60 минут — 3100 ₽, 90 минут — 4700 ₽. Курсовые программы считаем на консультации: состав и цену фиксируем до старта.",
+          "multiline": true
+        },
+        {
+          "key": "faq.p-2",
+          "label": "Текст",
+          "value": "Курсом: обычно это 10 и более сеансов с частотой 1–3 раза в неделю. Замеры делаем на этапах курса, поэтому прогресс видно в сантиметрах, а не «на глаз». Точное количество подберёт специалист после осмотра — оно зависит от зоны и вашей цели.",
+          "multiline": true
+        },
+        {
+          "key": "faq.p-3",
+          "label": "Текст",
+          "value": "Процедура проходит в специальном костюме и ощущается как плотный разминающий массаж — не больно. Интенсивность регулируется под вас: если некомфортно, скажите мастеру, и он убавит. Именно поэтому мы предлагаем начать с пробного сеанса за 500 ₽ — чтобы вы почувствовали метод до того, как решаться на курс.",
+          "multiline": true
+        },
+        {
+          "key": "faq.p-4",
+          "label": "Текст",
+          "value": "Нет, никаких обязательных запретов мы не выдаём. Аппарат работает с подкожной клетчаткой и лимфотоком сам — вы в это время просто лежите. Если вы уже занимаетесь спортом, курс хорошо с ним сочетается, но это не условие.",
+          "multiline": true
+        },
+        {
+          "key": "faq.p-5",
+          "label": "Текст",
+          "value": "Сеанс можно перенести — напишите нам заранее в WhatsApp или Telegram. Мы напоминаем о каждой записи, чтобы курс не рассыпался: доведённый до конца курс — это и есть результат, ради которого вы приходите.",
+          "multiline": true
+        },
+        {
+          "key": "faq.p-6",
+          "label": "Текст",
+          "value": "Да. Аппаратный массаж не проводится при беременности, варикозной болезни, тромбофлебите, онкологических и острых воспалительных заболеваниях. На консультации обязательно расскажите специалисту о состоянии здоровья — подберём безопасную программу или честно отговорим.",
+          "multiline": true
+        },
+        {
+          "key": "faq.p-7",
+          "label": "Текст",
+          "value": "Диодный лазер идёт с охлаждением насадки — ощущается как тёплое покалывание. Большинство клиентов спокойно проходят процедуру без анестезии.",
+          "multiline": true
+        },
+        {
+          "key": "faq.p-8",
+          "label": "Текст",
+          "value": "Волос уходит только в фазе роста, поэтому эпиляция всегда курс. Точное количество мастер называет на бесплатной консультации, после осмотра зоны.",
+          "multiline": true
+        },
+        {
+          "key": "faq.p-9",
+          "label": "Текст",
+          "value": "Да, это разные процедуры и они не мешают друг другу. Мы составляем общее расписание, чтобы вы приезжали реже.",
+          "multiline": true
+        },
+        {
+          "key": "faq.p-10",
+          "label": "Текст",
+          "value": "Иркутск, улица Красноказачья, 84 — работаем ежедневно, по предварительной записи. Записаться можно онлайн за минуту, по телефону +7 950 100 1059 или в мессенджерах: WhatsApp, Telegram, ВКонтакте.",
+          "multiline": true
+        },
+        {
+          "key": "faq.summary-1",
+          "label": "Вопрос",
+          "value": "Сколько стоит аппаратный массаж в Иркутске у вас?",
+          "multiline": false
+        },
+        {
+          "key": "faq.summary-2",
+          "label": "Вопрос",
+          "value": "Сколько сеансов нужно, чтобы увидеть результат?",
+          "multiline": false
+        },
+        {
+          "key": "faq.summary-3",
+          "label": "Вопрос",
+          "value": "Это больно? Останутся ли синяки?",
+          "multiline": false
+        },
+        {
+          "key": "faq.summary-4",
+          "label": "Вопрос",
+          "value": "Нужно ли сидеть на диете и ходить в зал?",
+          "multiline": false
+        },
+        {
+          "key": "faq.summary-5",
+          "label": "Вопрос",
+          "value": "Что если я не смогу прийти на сеанс?",
+          "multiline": false
+        },
+        {
+          "key": "faq.summary-6",
+          "label": "Вопрос",
+          "value": "Есть ли противопоказания?",
+          "multiline": false
+        },
+        {
+          "key": "faq.summary-7",
+          "label": "Вопрос",
+          "value": "Больно ли делать лазерную эпиляцию?",
+          "multiline": false
+        },
+        {
+          "key": "faq.summary-8",
+          "label": "Вопрос",
+          "value": "Сколько нужно сеансов?",
+          "multiline": false
+        },
+        {
+          "key": "faq.summary-9",
+          "label": "Вопрос",
+          "value": "Можно ли совмещать эпиляцию с курсом коррекции фигуры?",
+          "multiline": false
+        },
+        {
+          "key": "faq.summary-10",
+          "label": "Вопрос",
+          "value": "Где вы находитесь и как записаться?",
+          "multiline": false
+        },
+        {
+          "key": "faq.kicker-1",
+          "label": "Подпись",
+          "value": "Частые вопросы",
+          "multiline": false
+        }
+      ]
+    },
+    {
+      "id": "finale",
+      "title": "Финал",
+      "fields": [
+        {
+          "key": "finale.script-1",
+          "label": "Заголовок",
+          "value": "Позволь себе быть красивой — легко",
+          "multiline": false
+        },
+        {
+          "key": "finale.btn-final-1",
+          "label": "Кнопка или ссылка",
+          "value": "Начать с пробного за 500 ₽",
+          "multiline": false
+        },
+        {
+          "key": "finale.a-1",
+          "label": "Кнопка или ссылка",
+          "value": "политикой конфиденциальности",
+          "multiline": false
+        }
+      ],
+      "background": {
+        "default": "assets/hero-poster.jpg",
+        "image": null,
+        "opacity": null
+      }
+    },
+    {
+      "id": "footer",
+      "title": "Подвал",
+      "fields": [
+        {
+          "key": "footer.a-1",
+          "label": "Кнопка или ссылка",
+          "value": "+7 950 100 1059",
+          "multiline": false
+        },
+        {
+          "key": "footer.a-2",
+          "label": "Кнопка или ссылка",
+          "value": "Политика конфиденциальности",
+          "multiline": false
+        },
+        {
+          "key": "footer.a-3",
+          "label": "Кнопка или ссылка",
+          "value": "Согласие на обработку персональных данных",
+          "multiline": false
+        },
+        {
+          "key": "footer.footer-copy-1",
+          "label": "Текст",
+          "value": "АВОКАДО · студия дизайна тела · Иркутск, ул. Красноказачья, 84 · ежедневно, по предварительной записи",
+          "multiline": true
+        },
+        {
+          "key": "footer.footer-legal-1",
+          "label": "Текст",
+          "value": "Индивидуальный предприниматель Петрук Татьяна Александровна · ИНН 381497453085 · ОГРНИП 324385000056520",
+          "multiline": true
+        }
+      ]
+    },
+    {
+      "id": "cta",
+      "title": "Липкая кнопка",
+      "fields": [
+        {
+          "key": "cta.sticky-cta-1",
+          "label": "Кнопка или ссылка",
+          "value": "Пробный сеанс — 500 ₽",
+          "multiline": false
+        }
+      ]
+    }
+  ]
+}
