@@ -2121,6 +2121,8 @@
     html.edit-full .promo { display: block; position: static; padding: 2rem clamp(1rem, 4vw, 3rem); background: transparent; backdrop-filter: none; }
     html.edit-full .promo__panel { animation: none; margin: 0 auto; max-height: none; }
     html.edit-full .promo__close { display: none; }
+    /* Пока баннер открыт, плавающие кнопки и подсказка cookie не мешают */
+    html.promo-open .floating-cta, html.promo-open .cookie-notice { opacity: 0 !important; pointer-events: none !important; transition: opacity 200ms; }
 
     /* Стеклянные кнопки хиро с мягким бликом (правка Owner'а 30.08). */
     .hero .button {
@@ -3649,10 +3651,10 @@
       const KEY = "alvi_promo_shown";
       let shown = false;
       try { shown = sessionStorage.getItem(KEY) === "1"; } catch (e) {}
-      const close = () => promo.classList.remove("is-open");
+      const close = () => { promo.classList.remove("is-open"); document.documentElement.classList.remove("promo-open"); };
       const open = () => {
         if (promo.classList.contains("is-open")) return;
-        promo.classList.add("is-open");
+        promo.classList.add("is-open"); document.documentElement.classList.add("promo-open");
         try { sessionStorage.setItem(KEY, "1"); } catch (e) {}
         promo.querySelector(".promo__close")?.focus({ preventScroll: true });
       };
