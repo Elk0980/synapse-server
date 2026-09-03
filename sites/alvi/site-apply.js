@@ -130,7 +130,19 @@
       .content-section.is-edit-target, #trust.is-edit-target { box-shadow: inset 0 0 0 3px rgba(227,212,167,0.7); }
       .floating-cta { pointer-events: none; opacity: 0.35; }
       .cookie-notice { display: none !important; }
-      html { scroll-behavior: smooth; }`;
+      html { scroll-behavior: smooth; }
+      /* Режим «вся страница»: первый экран раскладывается сценами подряд, ничего не прокручивается внутри */
+      html.edit-full .hero { height: auto !important; min-height: 0 !important; }
+      html.edit-full .hero__sticky { position: relative !important; top: auto !important; height: auto !important; min-height: 0 !important; opacity: 1 !important; overflow: visible !important; }
+      html.edit-full .hero__media { position: absolute !important; inset: 0 !important; height: auto !important; }
+      html.edit-full .hero__scenes { position: relative !important; inset: auto !important; margin-top: 0 !important; z-index: 10; }
+      html.edit-full .hero-scene { position: relative !important; inset: auto !important; opacity: 1 !important; transform: none !important; pointer-events: auto !important; min-height: 34rem !important; padding-top: 6rem !important; padding-bottom: 4rem !important; border-bottom: 1px dashed rgba(227,212,167,0.25); }
+      html.edit-full .hero-scene--breath { display: none !important; }
+      html.edit-full .hero-scene .hero-scene__content { visibility: visible !important; }
+      html.edit-full .scroll-cue, html.edit-full .intro-skip { display: none !important; }
+      html.edit-full .hero__chrome { position: absolute !important; top: 0; margin: 0 !important; }
+      html.edit-full .floating-cta { position: absolute !important; }
+      html.edit-full .hero-scene .hero-scene__content { opacity: 1 !important; transform: none !important; }`;
     document.head.appendChild(style);
     try { document.execCommand('defaultParagraphSeparator', false, 'br'); } catch (e) {}
 
@@ -140,9 +152,10 @@
       current = el;
       el.classList.add('is-editing');
       el.setAttribute('contenteditable', 'true');
-      el.focus();
+      try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
       const section = el.closest('section[id], footer, .floating-cta, article[data-scene]');
-      post({ type: 'alvi-edit-select', key: el.getAttribute('data-edit'), sectionId: section ? (section.id || (section.dataset.scene != null ? 'hero-' + section.dataset.scene : section.className.split(' ')[0])) : null });
+      const r = el.getBoundingClientRect();
+      post({ type: 'alvi-edit-select', rect: { top: r.top + window.scrollY, left: r.left + window.scrollX, width: r.width, height: r.height }, key: el.getAttribute('data-edit'), sectionId: section ? (section.id || (section.dataset.scene != null ? 'hero-' + section.dataset.scene : section.className.split(' ')[0])) : null });
     };
     document.addEventListener('click', (e) => {
       const el = e.target.closest('[data-edit]');
@@ -174,6 +187,7 @@
       parentOrigin = e.origin;
       const m = e.data || {};
       if (m.type === 'alvi-edit-doc' && m.doc) {
+        setTimeout(() => { lastH = 0; reportHeight(); }, 100);
         // не трогаем элемент, который сейчас редактируется, чтобы не сбить курсор
         const editingKey = current && current.getAttribute('data-edit');
         const doc = m.doc;
@@ -190,15 +204,33 @@
         });
         applyBackgrounds(doc);
       }
+      if (m.type === 'alvi-edit-view') {
+        document.documentElement.classList.toggle('edit-full', !!m.full);
+        window.dispatchEvent(new Event('resize'));
+        setTimeout(reportHeight, 50); setTimeout(reportHeight, 400); setTimeout(reportHeight, 1200);
+      }
       if (m.type === 'alvi-edit-scroll' && m.key) {
         const el = document.querySelector(`[data-edit="${CSS.escape(m.key)}"]`);
-        if (el) { el.scrollIntoView({ block: 'center' }); select(el); }
+        if (el) { if (!document.documentElement.classList.contains('edit-full')) el.scrollIntoView({ block: 'center' }); select(el); }
       }
       if (m.type === 'alvi-edit-scroll-section' && m.sectionId) {
         const el = document.getElementById(m.sectionId);
-        if (el) el.scrollIntoView({ block: 'start' });
+        if (el) {
+          if (!document.documentElement.classList.contains('edit-full')) el.scrollIntoView({ block: 'start' });
+          const r = el.getBoundingClientRect();
+          post({ type: 'alvi-edit-rect', rect: { top: r.top + window.scrollY, left: r.left + window.scrollX, width: r.width, height: r.height } });
+        }
       }
     });
+    /* Высота страницы — родителю, чтобы холст показал её целиком */
+    let lastH = 0;
+    function reportHeight() {
+      const h = Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0);
+      if (Math.abs(h - lastH) < 4) return;
+      lastH = h; post({ type: 'alvi-edit-height', height: h });
+    }
+    if (window.ResizeObserver) { const ro = new ResizeObserver(() => reportHeight()); ro.observe(document.documentElement); if (document.body) ro.observe(document.body); }
+    setInterval(reportHeight, 1500);
     // сообщаем родителю, что готовы (он ответит документом)
     for (const o of PARENT_ORIGINS) { try { window.parent.postMessage({ type: 'alvi-edit-ready' }, o); } catch (e) {} }
   }
