@@ -315,6 +315,14 @@
     .ed-modal__list li span { flex: 1 1 auto; }
     .ed-modal input { width: 100%; }
     .ed-preview { position: fixed; right: 1rem; bottom: 1rem; z-index: 60; }
+    .ed-photo { display: grid; gap: 0.35rem; }
+    .ed-photo .ed-field__label { font-size: 0.78rem; color: var(--ink-faint); letter-spacing: 0.03em; }
+    .ed-photo__row { display: flex; gap: 0.9rem; align-items: flex-start; flex-wrap: wrap; }
+    .ed-photo__preview { width: 11rem; aspect-ratio: 4 / 3; border-radius: 0.7rem; border: 1px solid var(--line); background: rgba(9,17,12,0.45) center / cover no-repeat; flex: 0 0 auto; }
+    .ed-photo__preview.is-empty { display: flex; align-items: center; justify-content: center; color: var(--ink-faint); font-size: 0.82rem; }
+    .ed-photo__tools { display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-start; flex: 1 1 12rem; }
+    .ed-photo__tools .ed-btn input[type=file] { display: none; }
+    .ed-photo__tools small { font-size: 0.76rem; }
     @media (max-width: 62rem) {
       .ed-form { grid-template-columns: 1fr; }
       .pnav .ed-count { float: none; }
@@ -356,7 +364,11 @@
 (() => {
   'use strict';
   const params = new URLSearchParams(location.search);
-  const API = (params.get('api') || '').replace(/\/$/, '') + '/content/alvi/price';
+  const API_BASE = (params.get('api') || '').replace(/\/$/, '');
+  const API = API_BASE + '/content/alvi/price';
+  const ASSETS = API_BASE + '/content/alvi/assets';
+  const SITE = (params.get('site') || 'https://alvi.synapsebusiness.ru').replace(/\/$/, '');
+  const imgUrl = (p) => !p ? '' : (/^https?:/.test(p) ? p : p.startsWith('/api/assets/') ? ASSETS + p.slice('/api/assets'.length) : SITE + (p.startsWith('/') ? p : '/' + p));
   const KEY_STORAGE = 'synapse_content_key';
   const MAX_PER_CATEGORY = 8;
 
@@ -493,7 +505,18 @@
       <label>Кому подходит (главная)<input name="who" value="${esc(it.who || '')}"></label>
       <label class="is-wide">Описание для главной<input name="desc" value="${esc(it.desc || '')}"></label>
       <label class="is-wide">Состав одной строкой (главная)<input name="composition" value="${esc(it.composition || '')}"><small>если пусто — берутся первые пункты состава</small></label>
-      <label class="is-wide">Фото на фоне карточки (главная)<input name="photo" value="${esc(it.photo || '')}" placeholder="img/card-....jpg"><small>путь к файлу в папке сайта; пусто — без фото</small></label>
+      <div class="is-wide ed-photo" data-photo-box="${esc(it.id)}">
+        <span class="ed-field__label">Фото на фоне карточки (главная)</span>
+        <input type="hidden" name="photo" value="${esc(it.photo || '')}">
+        <div class="ed-photo__row">
+          <div class="ed-photo__preview ${it.photo ? '' : 'is-empty'}" style="${it.photo ? `background-image:url('${esc(imgUrl(it.photo))}')` : ''}">${it.photo ? '' : 'без фото'}</div>
+          <div class="ed-photo__tools">
+            <label class="ed-btn ed-btn--small">Загрузить фото<input type="file" accept="image/jpeg,image/png,image/webp" data-photo-upload="${esc(it.id)}" hidden></label>
+            <button class="ed-btn ed-btn--small ed-btn--danger" type="button" data-photo-clear="${esc(it.id)}" ${it.photo ? '' : 'disabled'}>Убрать</button>
+            <small class="ed-status" data-photo-status="${esc(it.id)}">JPEG, PNG или WebP; большие снимки уменьшаются до 1600 px сами.</small>
+          </div>
+        </div>
+      </div>
       ${isTable ? '' : `<label class="is-wide">Состав программы — по одному пункту в строке<textarea name="items">${esc((it.items || []).join('\n'))}</textarea></label>`}
       <div class="ed-form__actions">
         <button class="ed-btn ed-btn--main ed-btn--small" type="submit">Готово</button>
@@ -513,6 +536,56 @@
     if (fd.has('items')) it.items = String(fd.get('items')).split('\n').map((s) => s.trim()).filter(Boolean);
     editing = null; markDirty(); render();
   }
+  /* ---------- фото карточки: загрузка с компьютера ---------- */
+  function photoBox(id) { return document.querySelector(`[data-photo-box="${CSS.escape(id)}"]`); }
+  function setPhoto(id, url) {
+    const box = photoBox(id); if (!box) return;
+    box.querySelector('input[name="photo"]').value = url || '';
+    const pv = box.querySelector('.ed-photo__preview');
+    pv.classList.toggle('is-empty', !url); pv.textContent = url ? '' : 'без фото';
+    pv.style.backgroundImage = url ? `url('${imgUrl(url).replace(/'/g, '%27')}')` : '';
+    box.querySelector('[data-photo-clear]').disabled = !url;
+  }
+  /* Уменьшаем до 1600 px по длинной стороне прямо в браузере (без увеличения), чтобы не грузить сайт тяжёлыми файлами. */
+  function shrinkImage(file) {
+    return new Promise((resolve) => {
+      if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return resolve(null);
+      const img = new Image(); const src = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(src);
+        const max = 1600, k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+        if (k === 1 && file.size < 1.5 * 1024 * 1024) return resolve(file);
+        const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        const type = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+        c.toBlob((b) => resolve(b ? new File([b], file.name.replace(/\.[^.]+$/, '') + (type === 'image/png' ? '.png' : '.jpg'), { type }) : file), type, 0.86);
+      };
+      img.onerror = () => { URL.revokeObjectURL(src); resolve(file); };
+      img.src = src;
+    });
+  }
+  async function uploadPhoto(id, file) {
+    const st = document.querySelector(`[data-photo-status="${CSS.escape(id)}"]`);
+    const say = (t, bad) => { if (st) { st.textContent = t; st.className = 'ed-status' + (bad ? ' is-error' : ''); } };
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return say('Нужен JPEG, PNG или WebP', true);
+    say('Готовлю снимок…');
+    const prepared = await shrinkImage(file) || file;
+    if (prepared.size > 8 * 1024 * 1024) return say('Файл больше 8 МБ даже после уменьшения', true);
+    say('Загружаю…');
+    try {
+      const key = getKey(false); if (!key) throw new Error('без ключа загрузить нельзя');
+      const r = await fetch(ASSETS, { method: 'POST', headers: { 'X-API-Key': key, 'Content-Type': prepared.type, 'X-Filename': encodeURIComponent(prepared.name) }, body: prepared });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { if (r.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} } throw new Error(j.error || 'HTTP ' + r.status); }
+      setPhoto(id, j.url);
+      say('Фото загружено — нажмите «Готово», затем «Сохранить».');
+    } catch (e) { say('Не загружено: ' + e.message, true); }
+  }
+  document.addEventListener('change', (e) => {
+    const t = e.target;
+    if (t.dataset.photoUpload && t.files && t.files[0]) { const f = t.files[0]; uploadPhoto(t.dataset.photoUpload, f); t.value = ''; }
+  });
+
   function newId(cat) {
     const used = new Set(data.categories.flatMap((c) => c.items.map((i) => i.id)).concat(data.categories.map((c) => c.id)));
     let n = cat.items.length + 1;
@@ -693,6 +766,7 @@
     if (t.dataset.star) return toggleStar(t.dataset.star, t);
     if (t.dataset.edit) { editing = t.dataset.edit; render(); return; }
     if (t.dataset.cancel) { editing = null; render(); return; }
+    if (t.dataset.photoClear) { setPhoto(t.dataset.photoClear, ''); return; }
     if (t.dataset.del) return deleteItem(t.dataset.del);
     if (t.dataset.additem) return addItem(t.dataset.additem);
     if (t.dataset.rename) return renameCategory(t.dataset.rename);
