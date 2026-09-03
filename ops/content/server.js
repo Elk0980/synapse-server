@@ -206,7 +206,7 @@ function validatePrice(doc) {
   if (problems.length) fail(422, 'Документ не прошёл проверку', problems);
 }
 
-const VALIDATORS = { 'alvi/price': validatePrice, 'alvi/site': validateSite };
+const VALIDATORS = { 'alvi/price': validatePrice, 'alvi/site': validateSite, 'avokado/site': validateSite };
 
 function nextVersion(key) {
   const latest = latestStmt.get(key);

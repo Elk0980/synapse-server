@@ -517,6 +517,7 @@
 @media(max-width:820px){.pain-grid{display:flex;flex-direction:column}.story-panel{order:-1}.qlist .q{grid-template-columns:96px 1fr;gap:12px}.method-intro{top:var(--header-height);width:100%;padding:8px 5vw 9px;font-size:10px;line-height:1.15;white-space:normal}.method-intro-subtitle{margin-top:3px;font-size:.62em;line-height:1.2}.method-heroine{display:block;right:-12vw;height:min(520px,calc(100svh - var(--header-height) - var(--method-intro-height) - var(--method-content-gap)))}.scene-copy{margin:0 6vw;align-self:flex-end;margin-bottom:9svh}.method-scene:first-child .scene-copy{background:rgba(238,240,232,.84);padding:18px;border-radius:16px}.apparatus-grid{grid-template-columns:repeat(2,1fr);gap:8px}.apparatus-grid img{height:18svh}.apparatus-grid figcaption{font-size:10px;padding:7px}.scene-two{grid-template-columns:1fr;gap:12px;margin-bottom:5svh}.scene-two p{font-size:12px;margin-top:5px}.method-steps{grid-template-columns:1fr 1fr;gap:8px}.method-steps>div{padding:12px}.method-steps p{font-size:11px}.rating-grid{grid-template-columns:1fr;margin:15px 0}.rating-grid a{padding:16px}.method-scroll{height:600svh}.contact-actions{flex-direction:column}.finale{min-height:100svh}.finale>.inner{min-height:100svh}.cookie-notice{justify-content:space-between}}
 .method-scene[data-method-scene="3"]{background:linear-gradient(rgba(238,240,232,.82),rgba(238,240,232,.82)),url('assets/consult-green-wall.webp') center 38%/cover no-repeat}
 .method-scene[data-method-scene="3"] .scene-two>div{padding:24px;border-radius:18px;background:rgba(238,240,232,.78);color:#26352b;backdrop-filter:blur(2px)}
+.section-backdrop{position:absolute;inset:0;z-index:0;background-position:center;background-size:cover;background-repeat:no-repeat;pointer-events:none}.hero>.section-backdrop{z-index:1}.hero>.hero-titles{z-index:2}.pain-block>.section-backdrop~.wrap,.finale>.section-backdrop~.inner,.method-scene>.section-backdrop~.scene-copy{position:relative;z-index:2}
 @media(max-width:820px){.method-scene[data-method-scene="3"]{background-position:center center}.method-scene[data-method-scene="3"] .scene-two>div{padding:14px;background:rgba(238,240,232,.84)}}
 @media(prefers-reduced-motion:reduce){.flow-next span,.runway-figure.on .runway-model{animation:none}.runway-model{transform:none}.method-scene{transition:none}.method-intro{letter-spacing:.16em}.price-details summary::after{transition:none}}
 </style>
@@ -532,7 +533,7 @@
   <a class="head-btn" href="/contacts.html">Написать нам</a>
 </header>
 
-<a class="sticky-cta gold-cta" id="cta" data-entry-point="sticky_cta" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=sticky_cta" target="_blank" rel="noopener">Пробный сеанс — 500 ₽</a>
+<a class="sticky-cta gold-cta" id="cta" data-entry-point="sticky_cta" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=sticky_cta" target="_blank" rel="noopener" data-edit="cta.sticky-cta-1">Пробный сеанс — 500 ₽</a>
 
 <!-- ═══ АКТ 1 · ХИРО «ВЕЧЕР» ═══ -->
 <section class="hero" id="top" data-landing-block="1" aria-labelledby="hero-title">
@@ -544,9 +545,9 @@
   <div class="hero-titles">
     <div class="t-echo script" style="left:8%;top:16%">Авокадо</div>
     <div class="t-echo script" style="right:10%;top:34%;animation-delay:10.6s">уверенность</div>
-    <h1 class="t-brand t-fade" id="hero-title" style="font-weight:inherit;font-size:inherit"><span class="wordmark" style="font-size:clamp(34px,4.6vw,60px)">АВ<svg class="avo-o" viewBox="0 0 48 54" aria-hidden="true"><path d="M25.5 8 C26.5 5 25 2.5 23 2" fill="none" stroke="#d8b981" stroke-width="1.6" stroke-linecap="round"/><path d="M24 9.5 C20.4 9.5 15.6 15.6 14.1 22.3 C12.6 29.1 17.3 38 24 38 C30.7 38 35.4 29.1 33.9 22.3 C32.4 15.6 27.6 9.5 24 9.5 Z" fill="none" stroke="#d8b981" stroke-width="2.1" stroke-linejoin="round"/><circle cx="24" cy="27" r="4.6" fill="#d8b981"/></svg>КАДО</span><span class="wm-sub">студия дизайна тела</span></h1>
-    <div class="t-slogan t-fade">УВЕРЕННОСТЬ · СВОБОДА · РЕЗУЛЬТАТ</div>
-    <div class="t-script script"><span class="t-script-line"><span class="t-script-text">Быть красивой и уверенной —</span></span><span class="t-script-line"><span class="t-script-text">это мой выбор</span></span></div>
+    <h1 class="t-brand t-fade" id="hero-title" style="font-weight:inherit;font-size:inherit"><span class="wordmark" style="font-size:clamp(34px,4.6vw,60px)">АВ<svg class="avo-o" viewBox="0 0 48 54" aria-hidden="true"><path d="M25.5 8 C26.5 5 25 2.5 23 2" fill="none" stroke="#d8b981" stroke-width="1.6" stroke-linecap="round"/><path d="M24 9.5 C20.4 9.5 15.6 15.6 14.1 22.3 C12.6 29.1 17.3 38 24 38 C30.7 38 35.4 29.1 33.9 22.3 C32.4 15.6 27.6 9.5 24 9.5 Z" fill="none" stroke="#d8b981" stroke-width="2.1" stroke-linejoin="round"/><circle cx="24" cy="27" r="4.6" fill="#d8b981"/></svg>КАДО</span><span class="wm-sub" data-edit="top.wm-sub-1">студия дизайна тела</span></h1>
+    <div class="t-slogan t-fade" data-edit="top.t-slogan-1">УВЕРЕННОСТЬ · СВОБОДА · РЕЗУЛЬТАТ</div>
+    <div class="t-script script"><span class="t-script-line"><span class="t-script-text" data-edit="top.t-script-text-1">Быть красивой и уверенной —</span></span><span class="t-script-line"><span class="t-script-text" data-edit="top.t-script-text-2">это мой выбор</span></span></div>
     <div class="t-hint t-fade">ЛИСТАЙТЕ ↓</div>
   </div>
 </section>
@@ -556,22 +557,22 @@
   <div class="wrap">
     <div class="pain-grid">
       <div class="inner">
-    <h2 class="rv" id="pain-title">Сколько раз вы мечтали об идеальном теле?</h2>
+    <h2 class="rv" id="pain-title" data-edit="pain.rv-1">Сколько раз вы мечтали об идеальном теле?</h2>
     <div class="qlist">
-      <div class="q rv"><div class="shot" data-shot="phone-monday" aria-hidden="true"></div><p>Сколько раз вы обещали себе начать «с понедельника»?</p></div>
-      <div class="q rv"><div class="shot" data-shot="fridge-night" aria-hidden="true"></div><p>Сколько диет закончились срывом — и плюс два кило сверху?</p></div>
-      <div class="q rv"><div class="shot" data-shot="squat-pain" aria-hidden="true"></div><p>Изнурительные тренировки, брошенные через неделю?</p></div>
-      <div class="q rv"><div class="shot" data-shot="dress-choice" aria-hidden="true"></div><p>Платье, которое ждёт, «когда похудею»?</p></div>
-      <div class="q rv"><div class="shot" data-shot="photo-self" aria-hidden="true"></div><p>Фото, где вы себя не узнаёте?</p></div>
-      <div class="q rv"><div class="shot" data-shot="summer-dream" aria-hidden="true"></div><p>Лето, к которому опять «не успела»?</p></div>
+      <div class="q rv"><div class="shot" data-shot="phone-monday" aria-hidden="true"></div><p data-edit="pain.p-1">Сколько раз вы обещали себе начать «с понедельника»?</p></div>
+      <div class="q rv"><div class="shot" data-shot="fridge-night" aria-hidden="true"></div><p data-edit="pain.p-2">Сколько диет закончились срывом — и плюс два кило сверху?</p></div>
+      <div class="q rv"><div class="shot" data-shot="squat-pain" aria-hidden="true"></div><p data-edit="pain.p-3">Изнурительные тренировки, брошенные через неделю?</p></div>
+      <div class="q rv"><div class="shot" data-shot="dress-choice" aria-hidden="true"></div><p data-edit="pain.p-4">Платье, которое ждёт, «когда похудею»?</p></div>
+      <div class="q rv"><div class="shot" data-shot="photo-self" aria-hidden="true"></div><p data-edit="pain.p-5">Фото, где вы себя не узнаёте?</p></div>
+      <div class="q rv"><div class="shot" data-shot="summer-dream" aria-hidden="true"></div><p data-edit="pain.p-6">Лето, к которому опять «не успела»?</p></div>
     </div>
-    <div class="q rv"><p><b>60 дней</b> запретов и приседаний через силу — и сантиметр показывает почти то же самое</p></div>
-    <p class="verdict rv">Поэтому я нашла вариант — <b>легче</b>.</p><a class="flow-next" href="#metod" aria-label="Узнайте, какой вариант оказался легче"><span aria-hidden="true">↓</span></a>
+    <div class="q rv"><p data-edit="pain.p-7"><b>60 дней</b> запретов и приседаний через силу — и сантиметр показывает почти то же самое</p></div>
+    <p class="verdict rv" data-edit="pain.verdict-1">Поэтому я нашла вариант — <b>легче</b>.</p><a class="flow-next" href="#metod" aria-label="Узнайте, какой вариант оказался легче"><span aria-hidden="true">↓</span></a>
   </div>
       <div class="story-panel">
     <figure class="rv runway-figure"><img class="runway-model" src="assets/heroine-dress.png" alt="Героиня истории АВОКАДО в вечернем платье" width="342" height="1061" decoding="async" fetchpriority="high"></figure>
     <div class="rv">
-      <p class="quote">«Я, как и каждая девушка, мечтаю быть красивой, уверенной, с идеальной фигурой. Но в нынешнем темпе жизни <em>не получается держаться</em> диет, тренировок и прочих «очевидных» вещей.
+      <p class="quote" data-edit="pain.quote-1">«Я, как и каждая девушка, мечтаю быть красивой, уверенной, с идеальной фигурой. Но в нынешнем темпе жизни <em>не получается держаться</em> диет, тренировок и прочих «очевидных» вещей.
 </p>
     </div>
   </div>
@@ -581,40 +582,40 @@
 
 <!-- ═══ БЛОК 3 · МЕТОД: липкая слайдовая история ═══ -->
 <section class="method-block method-scroll" id="metod" data-landing-block="3" aria-labelledby="method-title">
-  <div class="method-intro rv">АВОКАДО — студия дизайна тела<span class="method-intro-subtitle">Студия аппаратной коррекции фигуры и лазерной эпиляции</span></div>
+  <div class="method-intro rv" id="method-intro"><span class="method-intro-title" data-edit="method-intro.method-intro-title-1">АВОКАДО — студия дизайна тела</span><span class="method-intro-subtitle" data-edit="method-intro.method-intro-subtitle-1">Студия аппаратной коррекции фигуры и лазерной эпиляции</span></div>
   <div class="method-sticky">
-    <article class="method-scene active" data-method-scene="0">
+    <article class="method-scene active" data-method-scene="0" id="method-0">
       <img class="method-heroine" src="assets/heroine-sport.png" alt="Героиня АВОКАДО в спортивном образе">
-      <div class="scene-copy"><span class="scene-number">01</span><h2 id="method-title">Почему АВОКАДО</h2><p class="scene-result">Вы просто лежите и получаете результат.</p><p class="scene-explanation">Аппарат работает — без боли, диет и усилий, без спорт-залов, запретов и «через не могу».</p></div>
+      <div class="scene-copy"><span class="scene-number" data-edit="method-0.scene-number-1">01</span><h2 id="method-title" data-edit="method-0.h2-1">Почему АВОКАДО</h2><p class="scene-result" data-edit="method-0.scene-result-1">Вы просто лежите и получаете результат.</p><p class="scene-explanation" data-edit="method-0.scene-explanation-1">Аппарат работает — без боли, диет и усилий, без спорт-залов, запретов и «через не могу».</p></div>
     </article>
-    <article class="method-scene" data-method-scene="1">
-      <div class="scene-copy scene-wide"><span class="scene-number">02</span><h2>Вы просто лежите, работает аппарат</h2><p class="lead">Вакуум приподнимает кожу, ролики разминают подкожную клетчатку, разгоняется лимфа, кожа подтягивается.</p><div class="apparatus-grid">
-        <figure><img src="assets/lpg-suit-beautysib.webp" alt="Вакуумно-роликовый массаж"><figcaption><b>Вакуумно-роликовый массаж</b> — процедура идёт в специальном костюме.</figcaption></figure>
-        <figure><img src="assets/rf-cavitation-belly.webp" alt="Кавитация и RF-лифтинг живота"><figcaption><b>Кавитация и RF-лифтинг</b> — прицельно по зонам.</figcaption></figure>
-        <figure><img src="assets/laser-machine.webp" alt="Диодный лазер WINGDERM" onerror="this.classList.add('is-missing')"><figcaption><b>Диодный лазер WINGDERM</b> — эпиляция без боли.</figcaption></figure>
-        <figure><img src="assets/consult-green-wall.webp" alt="Консультация в АВОКАДО"><figcaption><b>Бесплатная консультация</b> — подбор программы перед курсом.</figcaption></figure>
+    <article class="method-scene" data-method-scene="1" id="method-1">
+      <div class="scene-copy scene-wide"><span class="scene-number" data-edit="method-1.scene-number-1">02</span><h2 data-edit="method-1.h2-1">Вы просто лежите, работает аппарат</h2><p class="lead" data-edit="method-1.lead-1">Вакуум приподнимает кожу, ролики разминают подкожную клетчатку, разгоняется лимфа, кожа подтягивается.</p><div class="apparatus-grid">
+        <figure><img src="assets/lpg-suit-beautysib.webp" alt="Вакуумно-роликовый массаж"><figcaption><b data-edit="method-1.b-1">Вакуумно-роликовый массаж</b> — процедура идёт в специальном костюме.</figcaption></figure>
+        <figure><img src="assets/rf-cavitation-belly.webp" alt="Кавитация и RF-лифтинг живота"><figcaption><b data-edit="method-1.b-2">Кавитация и RF-лифтинг</b> — прицельно по зонам.</figcaption></figure>
+        <figure><img src="assets/laser-machine.webp" alt="Диодный лазер WINGDERM" onerror="this.classList.add('is-missing')"><figcaption><b data-edit="method-1.b-3">Диодный лазер WINGDERM</b> — эпиляция без боли.</figcaption></figure>
+        <figure><img src="assets/consult-green-wall.webp" alt="Консультация в АВОКАДО"><figcaption><b data-edit="method-1.b-4">Бесплатная консультация</b> — подбор программы перед курсом.</figcaption></figure>
       </div></div>
     </article>
-    <article class="method-scene" data-method-scene="2">
-      <div class="scene-copy scene-wide"><span class="scene-number">03</span><h2>Гладкая кожа — без станка и вросших волос</h2><p class="lead">Диодный лазер WINGDERM работает по волосяному фолликулу — прицельно, с охлаждением, без боли. Курс планируем сразу, вместе с коррекцией фигуры.</p><div class="apparatus-grid">
-        <figure><img src="assets/laser-machine.webp" alt="Диодный лазер WINGDERM" onerror="this.classList.add('is-missing')"><figcaption><b>Диодный лазер WINGDERM</b> — охлаждение насадки, процедура переносится спокойно.</figcaption></figure>
-        <figure><img src="assets/master-laser.webp" alt="Мастер проводит лазерную эпиляцию" onerror="this.classList.add('is-missing')"><figcaption><b>Работает мастер, а не аппарат сам по себе</b> — параметры подбираются под тип кожи и волоса.</figcaption></figure>
-        <figure><img src="assets/laser-belly.webp" alt="Лазерная эпиляция зоны живота" onerror="this.classList.add('is-missing')"><figcaption><b>Курс, а не разовая процедура</b> — количество сеансов называем на бесплатной консультации.</figcaption></figure>
+    <article class="method-scene" data-method-scene="2" id="method-2">
+      <div class="scene-copy scene-wide"><span class="scene-number" data-edit="method-2.scene-number-1">03</span><h2 data-edit="method-2.h2-1">Гладкая кожа — без станка и вросших волос</h2><p class="lead" data-edit="method-2.lead-1">Диодный лазер WINGDERM работает по волосяному фолликулу — прицельно, с охлаждением, без боли. Курс планируем сразу, вместе с коррекцией фигуры.</p><div class="apparatus-grid">
+        <figure><img src="assets/laser-machine.webp" alt="Диодный лазер WINGDERM" onerror="this.classList.add('is-missing')"><figcaption><b data-edit="method-2.b-1">Диодный лазер WINGDERM</b> — охлаждение насадки, процедура переносится спокойно.</figcaption></figure>
+        <figure><img src="assets/master-laser.webp" alt="Мастер проводит лазерную эпиляцию" onerror="this.classList.add('is-missing')"><figcaption><b data-edit="method-2.b-2">Работает мастер, а не аппарат сам по себе</b> — параметры подбираются под тип кожи и волоса.</figcaption></figure>
+        <figure><img src="assets/laser-belly.webp" alt="Лазерная эпиляция зоны живота" onerror="this.classList.add('is-missing')"><figcaption><b data-edit="method-2.b-3">Курс, а не разовая процедура</b> — количество сеансов называем на бесплатной консультации.</figcaption></figure>
       </div></div>
     </article>
-    <article class="method-scene" data-method-scene="3"><div class="scene-copy scene-two"><div><span class="scene-number">04</span><h2>Скажем честно</h2><p class="objections">«Это больно?» · «Результата ждать месяцами?» · «А если не сработает?» · «Вернётся обратно?»</p></div><div><h3>Поэтому мы устроены так</h3><p><b>Не больно.</b> Пробный сеанс за 500 ₽ — почувствовать метод на себе до любых решений. Это спа-ритуал: халаты, простыни, спокойная атмосфера.</p><p><b>Не месяцами.</b> Замеры — на каждом этапе курса: сантиметры и килограммы фиксируем в цифрах, прогресс видно, а не «кажется».</p><p><b>68% клиентов возвращаются снова</b> — каждая вторая отмечает результат цифрами: «за три месяца минус 10 – 20 кг».</p><p>Расписание курса стоит в календаре, мы напоминаем о каждом сеансе, подбирая удобные даты и время для Вас. Начатый курс доводим до конца вместе.</p></div></div></article>
-    <article class="method-scene" data-method-scene="4"><div class="scene-copy scene-wide"><span class="scene-number">05</span><h2>Отзывы со всех площадок</h2><div class="rating-grid"><a href="https://2gis.ru/irkutsk/firm/70000001045439507" target="_blank" rel="noopener"><b>5,0</b><span>2ГИС · более 300 оценок</span></a><a href="https://yandex.ru/profile/32740458188" target="_blank" rel="noopener"><b>5,0</b><span>Яндекс · более 120 оценок</span></a></div><p>Не верьте нам на слово — проверьте отзывы на картах.</p></div></article>
-    <article class="method-scene" data-method-scene="5"><div class="scene-copy scene-wide"><span class="scene-number">06</span><h2>Как мы работаем</h2><div class="method-steps"><div><b>1. Знакомство и осмотр</b><p>Специалист спросит о вашей цели и состоянии здоровья, посмотрит кожу и зоны, о которых вы переживаете. Никаких оценок и нравоучений.</p></div><div><b>2. Замеры и программа</b><p>Снимем мерки и зафиксируем точку старта — потом по ним будем сверять прогресс. Подберём программу и честно скажем, чего от неё ждать.</p></div><div><b>3. Сам сеанс</b><p>Аппаратный массаж всего тела в специальном костюме. Халат и простыни наши, музыка спокойная. Интенсивность настроим под вас.</p></div><div><b>4. Решение — за вами</b><p>Расскажем, какой курс подошёл бы под вашу цель и сколько это стоит. Захотите подумать — думайте: пробный сеанс ни к чему не обязывает.</p></div></div><a class="flow-next" href="#price" aria-label="Перейти к ценам и подарку"><span aria-hidden="true">↓</span></a></div></article>
+    <article class="method-scene" data-method-scene="3" id="method-3"><div class="scene-copy scene-two"><div><span class="scene-number" data-edit="method-3.scene-number-1">04</span><h2 data-edit="method-3.h2-1">Скажем честно</h2><p class="objections" data-edit="method-3.objections-1">«Это больно?» · «Результата ждать месяцами?» · «А если не сработает?» · «Вернётся обратно?»</p></div><div><h3 data-edit="method-3.h3-1">Поэтому мы устроены так</h3><p data-edit="method-3.p-1"><b>Не больно.</b> Пробный сеанс за 500 ₽ — почувствовать метод на себе до любых решений. Это спа-ритуал: халаты, простыни, спокойная атмосфера.</p><p data-edit="method-3.p-2"><b>Не месяцами.</b> Замеры — на каждом этапе курса: сантиметры и килограммы фиксируем в цифрах, прогресс видно, а не «кажется».</p><p data-edit="method-3.p-3"><b>68% клиентов возвращаются снова</b> — каждая вторая отмечает результат цифрами: «за три месяца минус 10 – 20 кг».</p><p data-edit="method-3.p-4">Расписание курса стоит в календаре, мы напоминаем о каждом сеансе, подбирая удобные даты и время для Вас. Начатый курс доводим до конца вместе.</p></div></div></article>
+    <article class="method-scene" data-method-scene="4" id="method-4"><div class="scene-copy scene-wide"><span class="scene-number" data-edit="method-4.scene-number-1">05</span><h2 data-edit="method-4.h2-1">Отзывы со всех площадок</h2><div class="rating-grid"><a href="https://2gis.ru/irkutsk/firm/70000001045439507" target="_blank" rel="noopener"><b data-edit="method-4.b-1">5,0</b><span data-edit="method-4.span-1">2ГИС · более 300 оценок</span></a><a href="https://yandex.ru/profile/32740458188" target="_blank" rel="noopener"><b data-edit="method-4.b-2">5,0</b><span data-edit="method-4.span-2">Яндекс · более 120 оценок</span></a></div><p data-edit="method-4.p-1">Не верьте нам на слово — проверьте отзывы на картах.</p></div></article>
+    <article class="method-scene" data-method-scene="5" id="method-5"><div class="scene-copy scene-wide"><span class="scene-number" data-edit="method-5.scene-number-1">06</span><h2 data-edit="method-5.h2-1">Как мы работаем</h2><div class="method-steps"><div><b data-edit="method-5.b-1">1. Знакомство и осмотр</b><p data-edit="method-5.p-1">Специалист спросит о вашей цели и состоянии здоровья, посмотрит кожу и зоны, о которых вы переживаете. Никаких оценок и нравоучений.</p></div><div><b data-edit="method-5.b-2">2. Замеры и программа</b><p data-edit="method-5.p-2">Снимем мерки и зафиксируем точку старта — потом по ним будем сверять прогресс. Подберём программу и честно скажем, чего от неё ждать.</p></div><div><b data-edit="method-5.b-3">3. Сам сеанс</b><p data-edit="method-5.p-3">Аппаратный массаж всего тела в специальном костюме. Халат и простыни наши, музыка спокойная. Интенсивность настроим под вас.</p></div><div><b data-edit="method-5.b-4">4. Решение — за вами</b><p data-edit="method-5.p-4">Расскажем, какой курс подошёл бы под вашу цель и сколько это стоит. Захотите подумать — думайте: пробный сеанс ни к чему не обязывает.</p></div></div><a class="flow-next" href="#price" aria-label="Перейти к ценам и подарку"><span aria-hidden="true">↓</span></a></div></article>
   </div>
 </section>
 <!-- ═══ БЛОК 5 · ЦЕНЫ И СЕРТИФИКАТ ═══ -->
 <section class="landing-block price studio-light" id="price" data-landing-block="4" aria-labelledby="price-title">
 
   <div class="wrap">
-    <div class="kicker rv">Первый шаг</div>
-    <h2 class="rv" id="price-title">Цены и подарочный сертификат</h2>
-    <p class="lead rv">Аппаратную коррекцию и эпиляцию можно дополнить уходом за лицом и ручными массажами.</p>
-    <h3 class="block-subtitle rv">Попробуйте — за 500 ₽</h3>
+    <div class="kicker rv" data-edit="price.kicker-1">Первый шаг</div>
+    <h2 class="rv" id="price-title" data-edit="price.rv-1">Цены и подарочный сертификат</h2>
+    <p class="lead rv" data-edit="price.lead-1">Аппаратную коррекцию и эпиляцию можно дополнить уходом за лицом и ручными массажами.</p>
+    <h3 class="block-subtitle rv" data-edit="price.block-subtitle-1">Попробуйте — за 500 ₽</h3>
     <div class="entry-offers rv" aria-label="Предложения для первого визита">
       <a class="gold-cta" data-entry-point="trial_offer" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=trial_offer" target="_blank" rel="noopener">Пробный сеанс — 500 ₽</a>
       <a class="gold-cta" data-entry-point="laser_bikini_offer" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=laser_bikini_offer" target="_blank" rel="noopener">Тотальное бикини — 1 190 ₽</a>
@@ -647,9 +648,9 @@
       <div class="row"><span>Вакуумно-роликовый 30 мин</span><span>2 100 ₽</span></div>
       <div class="row"><span>Липопластика</span><span>4 990 ₽</span></div>
     </div>
-    <p class="note">Цены — из системы онлайн-записи студии. Курс «Невесомость» (10 сеансов) и другие курсовые программы подбираются на консультации — состав и цену зафиксируем до старта.</p>
+    <p class="note" data-edit="price.note-1">Цены — из системы онлайн-записи студии. Курс «Невесомость» (10 сеансов) и другие курсовые программы подбираются на консультации — состав и цену зафиксируем до старта.</p>
     <div class="price-group">
-      <h3 class="block-subtitle rv">Лазерная эпиляция</h3>
+      <h3 class="block-subtitle rv" data-edit="price.block-subtitle-2">Лазерная эпиляция</h3>
       <div class="plist rv">
         <div class="row"><span>Бикини тотальное · действующее предложение</span><span>1 190 ₽</span></div>
         <div class="row"><span>Две зоны на выбор · действующее предложение</span><span>1 390 ₽</span></div>
@@ -684,9 +685,9 @@
           <div class="row"><span>Комбо популярное +</span><span>4 100 ₽</span></div>
           <div class="row"><span>Комбо «Хочу всё!»</span><span>4 990 ₽</span></div>
         </div>
-        <p class="note">Состав комплексов уточняйте на консультации.</p>
+        <p class="note" data-edit="price.note-2">Состав комплексов уточняйте на консультации.</p>
       </details>
-      <p class="note">Цены действуют на дату обновления, актуальные — на консультации.</p>
+      <p class="note" data-edit="price.note-3">Цены действуют на дату обновления, актуальные — на консультации.</p>
     </div>
     <div class="price-group">
       <details class="price-details rv">
@@ -722,9 +723,9 @@
   <div class="certificate block-subsection" id="certificate">
 
   <div class="wrap">
-    <div class="kicker rv">Забота в подарок</div>
-    <h3 class="block-subtitle rv">Подарочный сертификат АВОКАДО</h3>
-    <p class="lead rv">Подарите время для себя и возможность выбрать подходящую процедуру в студии — сертификат распространяется в том числе на лазерную эпиляцию.</p>
+    <div class="kicker rv" data-edit="certificate.kicker-1">Забота в подарок</div>
+    <h3 class="block-subtitle rv" data-edit="certificate.block-subtitle-1">Подарочный сертификат АВОКАДО</h3>
+    <p class="lead rv" data-edit="certificate.lead-1">Подарите время для себя и возможность выбрать подходящую процедуру в студии — сертификат распространяется в том числе на лазерную эпиляцию.</p>
     <div class="certificate-stage rv" aria-label="Подарочный сертификат: лицевая сторона и условия на обороте">
       <div class="certificate-float">
         <div class="certificate-card">
@@ -741,8 +742,8 @@
       <label class="certificate-custom">своя сумма <input type="number" min="1" inputmode="numeric" aria-label="Своя сумма сертификата, рублей"></label>
     </div>
     <p class="certificate-choice rv" aria-live="polite">Выбран сертификат на 3 000 ₽</p>
-    <p class="certificate-validity rv">действует 1 год с даты покупки</p>
-    <a class="certificate-cta rv" data-entry-point="certificate" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=certificate" target="_blank" rel="noopener">Заказать сертификат</a>
+    <p class="certificate-validity rv" data-edit="certificate.certificate-validity-1">действует 1 год с даты покупки</p>
+    <a class="certificate-cta rv" data-entry-point="certificate" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=certificate" target="_blank" rel="noopener" data-edit="certificate.certificate-cta-1">Заказать сертификат</a>
     <a class="flow-next" href="#contacts" aria-label="Выбрать удобный способ связаться"><span aria-hidden="true">↓</span></a>
   </div>
 
@@ -750,46 +751,46 @@
 </section>
 
 <!-- ═══ БЛОК 5 · КОНТАКТЫ ═══ -->
-<section class="landing-block contacts" id="contacts" data-landing-block="5"><div class="wrap"><div class="kicker rv">Связаться со студией</div><h2 class="rv">Контакты</h2><p class="lead rv">АВОКАДО ждёт вас: Иркутск, Красноказачья, 84, 1 этаж.</p><div class="contact-actions rv"><a class="contact-main booking" data-chat-link href="#" target="_blank" rel="noopener">НАШ ЧАТ</a><a class="contact-main chat" data-entry-point="contacts_booking" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=contacts_booking" target="_blank" rel="noopener">Записаться онлайн</a></div><nav class="contact-links rv"><a href="https://2gis.ru/irkutsk/firm/70000001045439507" target="_blank" rel="noopener">2ГИС</a><a href="https://yandex.ru/profile/32740458188" target="_blank" rel="noopener">Яндекс.Карты</a><a href="tel:+79501001059">+7 950 100 1059</a><a href="https://wa.me/79501001059" target="_blank" rel="noopener">WhatsApp</a><a data-chat-link href="#" target="_blank" rel="noopener">Telegram</a><a href="https://vk.com/lasermkt" target="_blank" rel="noopener">ВКонтакте</a></nav><p class="contact-hours rv">Ежедневно, по предварительной записи</p><p class="booking-consent">Нажимая кнопку записи, вы соглашаетесь с <a href="privacy.html">политикой конфиденциальности</a>.</p><a class="flow-next" href="#faq" aria-label="Перейти к ответам на частые вопросы"><span aria-hidden="true">↓</span></a></div></section>
+<section class="landing-block contacts" id="contacts" data-landing-block="5"><div class="wrap"><div class="kicker rv" data-edit="contacts.kicker-1">Связаться со студией</div><h2 class="rv" data-edit="contacts.rv-1">Контакты</h2><p class="lead rv" data-edit="contacts.lead-1">АВОКАДО ждёт вас: Иркутск, Красноказачья, 84, 1 этаж.</p><div class="contact-actions rv"><a class="contact-main booking" data-chat-link href="#" target="_blank" rel="noopener">НАШ ЧАТ</a><a class="contact-main chat" data-entry-point="contacts_booking" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=contacts_booking" target="_blank" rel="noopener" data-edit="contacts.contact-main-1">Записаться онлайн</a></div><nav class="contact-links rv"><a href="https://2gis.ru/irkutsk/firm/70000001045439507" target="_blank" rel="noopener" data-edit="contacts.a-1">2ГИС</a><a href="https://yandex.ru/profile/32740458188" target="_blank" rel="noopener" data-edit="contacts.a-2">Яндекс.Карты</a><a href="tel:+79501001059" data-edit="contacts.a-3">+7 950 100 1059</a><a href="https://wa.me/79501001059" target="_blank" rel="noopener" data-edit="contacts.a-4">WhatsApp</a><a data-chat-link href="#" target="_blank" rel="noopener">Telegram</a><a href="https://vk.com/lasermkt" target="_blank" rel="noopener" data-edit="contacts.a-5">ВКонтакте</a></nav><p class="contact-hours rv" data-edit="contacts.contact-hours-1">Ежедневно, по предварительной записи</p><p class="booking-consent">Нажимая кнопку записи, вы соглашаетесь с <a href="privacy.html" data-edit="contacts.a-6">политикой конфиденциальности</a>.</p><a class="flow-next" href="#faq" aria-label="Перейти к ответам на частые вопросы"><span aria-hidden="true">↓</span></a></div></section>
   <section class="landing-block faq" id="faq" data-landing-block="6">
   <div class="wrap">
-    <div class="kicker rv">Частые вопросы</div>
-    <h3 class="block-subtitle rv">Что обычно спрашивают перед первым визитом</h3>
+    <div class="kicker rv" data-edit="faq.kicker-1">Частые вопросы</div>
+    <h3 class="block-subtitle rv" data-edit="faq.block-subtitle-1">Что обычно спрашивают перед первым визитом</h3>
 
-    <details class="rv"><summary>Сколько стоит аппаратный массаж в Иркутске у вас?</summary>
-      <p>Пробный сеанс аппаратного массажа всего тела — 500 ₽ вместо 2100 ₽, он для первого визита и включает бесплатную консультацию. Дальше: 45 минут — 2100 ₽, 60 минут — 3100 ₽, 90 минут — 4700 ₽. Курсовые программы считаем на консультации: состав и цену фиксируем до старта.</p></details>
+    <details class="rv"><summary data-edit="faq.summary-1">Сколько стоит аппаратный массаж в Иркутске у вас?</summary>
+      <p data-edit="faq.p-1">Пробный сеанс аппаратного массажа всего тела — 500 ₽ вместо 2100 ₽, он для первого визита и включает бесплатную консультацию. Дальше: 45 минут — 2100 ₽, 60 минут — 3100 ₽, 90 минут — 4700 ₽. Курсовые программы считаем на консультации: состав и цену фиксируем до старта.</p></details>
 
-    <details class="rv"><summary>Сколько сеансов нужно, чтобы увидеть результат?</summary>
-      <p>Курсом: обычно это 10 и более сеансов с частотой 1–3 раза в неделю. Замеры делаем на этапах курса, поэтому прогресс видно в сантиметрах, а не «на глаз». Точное количество подберёт специалист после осмотра — оно зависит от зоны и вашей цели.</p></details>
+    <details class="rv"><summary data-edit="faq.summary-2">Сколько сеансов нужно, чтобы увидеть результат?</summary>
+      <p data-edit="faq.p-2">Курсом: обычно это 10 и более сеансов с частотой 1–3 раза в неделю. Замеры делаем на этапах курса, поэтому прогресс видно в сантиметрах, а не «на глаз». Точное количество подберёт специалист после осмотра — оно зависит от зоны и вашей цели.</p></details>
 
-    <details class="rv"><summary>Это больно? Останутся ли синяки?</summary>
-      <p>Процедура проходит в специальном костюме и ощущается как плотный разминающий массаж — не больно. Интенсивность регулируется под вас: если некомфортно, скажите мастеру, и он убавит. Именно поэтому мы предлагаем начать с пробного сеанса за 500 ₽ — чтобы вы почувствовали метод до того, как решаться на курс.</p></details>
+    <details class="rv"><summary data-edit="faq.summary-3">Это больно? Останутся ли синяки?</summary>
+      <p data-edit="faq.p-3">Процедура проходит в специальном костюме и ощущается как плотный разминающий массаж — не больно. Интенсивность регулируется под вас: если некомфортно, скажите мастеру, и он убавит. Именно поэтому мы предлагаем начать с пробного сеанса за 500 ₽ — чтобы вы почувствовали метод до того, как решаться на курс.</p></details>
 
-    <details class="rv"><summary>Нужно ли сидеть на диете и ходить в зал?</summary>
-      <p>Нет, никаких обязательных запретов мы не выдаём. Аппарат работает с подкожной клетчаткой и лимфотоком сам — вы в это время просто лежите. Если вы уже занимаетесь спортом, курс хорошо с ним сочетается, но это не условие.</p></details>
+    <details class="rv"><summary data-edit="faq.summary-4">Нужно ли сидеть на диете и ходить в зал?</summary>
+      <p data-edit="faq.p-4">Нет, никаких обязательных запретов мы не выдаём. Аппарат работает с подкожной клетчаткой и лимфотоком сам — вы в это время просто лежите. Если вы уже занимаетесь спортом, курс хорошо с ним сочетается, но это не условие.</p></details>
 
-    <details class="rv"><summary>Что если я не смогу прийти на сеанс?</summary>
-      <p>Сеанс можно перенести — напишите нам заранее в WhatsApp или Telegram. Мы напоминаем о каждой записи, чтобы курс не рассыпался: доведённый до конца курс — это и есть результат, ради которого вы приходите.</p></details>
+    <details class="rv"><summary data-edit="faq.summary-5">Что если я не смогу прийти на сеанс?</summary>
+      <p data-edit="faq.p-5">Сеанс можно перенести — напишите нам заранее в WhatsApp или Telegram. Мы напоминаем о каждой записи, чтобы курс не рассыпался: доведённый до конца курс — это и есть результат, ради которого вы приходите.</p></details>
 
-    <details class="rv"><summary>Есть ли противопоказания?</summary>
-      <p>Да. Аппаратный массаж не проводится при беременности, варикозной болезни, тромбофлебите, онкологических и острых воспалительных заболеваниях. На консультации обязательно расскажите специалисту о состоянии здоровья — подберём безопасную программу или честно отговорим.</p></details>
+    <details class="rv"><summary data-edit="faq.summary-6">Есть ли противопоказания?</summary>
+      <p data-edit="faq.p-6">Да. Аппаратный массаж не проводится при беременности, варикозной болезни, тромбофлебите, онкологических и острых воспалительных заболеваниях. На консультации обязательно расскажите специалисту о состоянии здоровья — подберём безопасную программу или честно отговорим.</p></details>
 
-    <details class="rv"><summary>Больно ли делать лазерную эпиляцию?</summary>
-      <p>Диодный лазер идёт с охлаждением насадки — ощущается как тёплое покалывание. Большинство клиентов спокойно проходят процедуру без анестезии.</p></details>
+    <details class="rv"><summary data-edit="faq.summary-7">Больно ли делать лазерную эпиляцию?</summary>
+      <p data-edit="faq.p-7">Диодный лазер идёт с охлаждением насадки — ощущается как тёплое покалывание. Большинство клиентов спокойно проходят процедуру без анестезии.</p></details>
 
-    <details class="rv"><summary>Сколько нужно сеансов?</summary>
-      <p>Волос уходит только в фазе роста, поэтому эпиляция всегда курс. Точное количество мастер называет на бесплатной консультации, после осмотра зоны.</p></details>
+    <details class="rv"><summary data-edit="faq.summary-8">Сколько нужно сеансов?</summary>
+      <p data-edit="faq.p-8">Волос уходит только в фазе роста, поэтому эпиляция всегда курс. Точное количество мастер называет на бесплатной консультации, после осмотра зоны.</p></details>
 
-    <details class="rv"><summary>Можно ли совмещать эпиляцию с курсом коррекции фигуры?</summary>
-      <p>Да, это разные процедуры и они не мешают друг другу. Мы составляем общее расписание, чтобы вы приезжали реже.</p></details>
+    <details class="rv"><summary data-edit="faq.summary-9">Можно ли совмещать эпиляцию с курсом коррекции фигуры?</summary>
+      <p data-edit="faq.p-9">Да, это разные процедуры и они не мешают друг другу. Мы составляем общее расписание, чтобы вы приезжали реже.</p></details>
 
-    <details class="rv"><summary>Где вы находитесь и как записаться?</summary>
-      <p>Иркутск, улица Красноказачья, 84 — работаем ежедневно, по предварительной записи. Записаться можно онлайн за минуту, по телефону +7 950 100 1059 или в мессенджерах: WhatsApp, Telegram, ВКонтакте.</p></details>
+    <details class="rv"><summary data-edit="faq.summary-10">Где вы находитесь и как записаться?</summary>
+      <p data-edit="faq.p-10">Иркутск, улица Красноказачья, 84 — работаем ежедневно, по предварительной записи. Записаться можно онлайн за минуту, по телефону +7 950 100 1059 или в мессенджерах: WhatsApp, Telegram, ВКонтакте.</p></details>
 <a class="flow-next" href="#finale" aria-label="Перейти к заключительному разделу"><span aria-hidden="true">↓</span></a>
   </div>
 </section>
-<!-- ═══ БЛОК 7 · ФИНАЛ ═══ --><section class="finale" id="finale" data-landing-block="7"><img class="bgimg" src="assets/hero-poster.jpg" alt="Студия дизайна тела АВОКАДО"><div class="inner"><h2 class="script rv">Позволь себе быть красивой — легко</h2><a class="btn-final gold-cta rv" data-entry-point="finale_cta" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=finale_cta" target="_blank" rel="noopener">Начать с пробного за 500 ₽</a><p class="booking-consent">Нажимая кнопку записи, вы соглашаетесь с <a href="privacy.html">политикой конфиденциальности</a>.</p><a class="flow-next final-arrow" href="#site-footer" aria-label="К информации о студии"><span aria-hidden="true">↓</span></a></div></section>
-<footer id="site-footer">АВОКАДО · студия дизайна тела · Иркутск, ул. Красноказачья, 84 · ежедневно, по предварительной записи<br><a href="tel:+79501001059">+7 950 100 1059</a> · <a href="privacy.html">Политика конфиденциальности</a> · <a href="consent.html">Согласие на обработку персональных данных</a><br>Индивидуальный предприниматель Петрук Татьяна Александровна · ИНН 381497453085 · ОГРНИП 324385000056520</footer><div class="synapse-strip">сайт работает на <a href="https://synapsebusiness.ru" target="_blank" rel="noopener">Synapse Business</a></div><div class="cookie-notice" role="dialog" aria-label="Уведомление о cookie"><span>Сайт использует cookie для корректной работы.</span><button type="button">Хорошо</button></div>
+<!-- ═══ БЛОК 7 · ФИНАЛ ═══ --><section class="finale" id="finale" data-landing-block="7"><img class="bgimg" src="assets/hero-poster.jpg" alt="Студия дизайна тела АВОКАДО"><div class="inner"><h2 class="script rv" data-edit="finale.script-1">Позволь себе быть красивой — легко</h2><a class="btn-final gold-cta rv" data-entry-point="finale_cta" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=finale_cta" target="_blank" rel="noopener" data-edit="finale.btn-final-1">Начать с пробного за 500 ₽</a><p class="booking-consent">Нажимая кнопку записи, вы соглашаетесь с <a href="privacy.html" data-edit="finale.a-1">политикой конфиденциальности</a>.</p><a class="flow-next final-arrow" href="#site-footer" aria-label="К информации о студии"><span aria-hidden="true">↓</span></a></div></section>
+<footer id="site-footer"><span class="footer-copy" data-edit="footer.footer-copy-1">АВОКАДО · студия дизайна тела · Иркутск, ул. Красноказачья, 84 · ежедневно, по предварительной записи</span><br><a href="tel:+79501001059" data-edit="footer.a-1">+7 950 100 1059</a> · <a href="privacy.html" data-edit="footer.a-2">Политика конфиденциальности</a> · <a href="consent.html" data-edit="footer.a-3">Согласие на обработку персональных данных</a><br><span class="footer-legal" data-edit="footer.footer-legal-1">Индивидуальный предприниматель Петрук Татьяна Александровна · ИНН 381497453085 · ОГРНИП 324385000056520</span></footer><div class="synapse-strip">сайт работает на <a href="https://synapsebusiness.ru" target="_blank" rel="noopener">Synapse Business</a></div><div class="cookie-notice" role="dialog" aria-label="Уведомление о cookie"><span>Сайт использует cookie для корректной работы.</span><button type="button">Хорошо</button></div>
 <script>
 (function(){var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;var runway=document.querySelector('.runway-figure');if(runway){if(reduce)runway.classList.add('on');else new IntersectionObserver(function(e){runway.classList.toggle('on',e[0].isIntersecting)},{threshold:.25}).observe(runway)}var method=document.querySelector('.method-scroll');var scenes=[].slice.call(document.querySelectorAll('.method-scene'));function updateScenes(){if(!method)return;var rect=method.getBoundingClientRect(), span=method.offsetHeight-innerHeight;var progress=Math.max(0,Math.min(.999,-rect.top/span));var index=Math.min(scenes.length-1,Math.floor(progress*scenes.length));scenes.forEach(function(scene,i){scene.classList.toggle('active',i===index)})}addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize',updateScenes);updateScenes();var cookie=document.querySelector('.cookie-notice');try{if(localStorage.getItem('avokado_cookie_ok'))cookie.classList.add('hidden')}catch(e){}cookie.querySelector('button').addEventListener('click',function(){cookie.classList.add('hidden');try{localStorage.setItem('avokado_cookie_ok','1')}catch(e){}});var custom=document.querySelector('.certificate-custom input');if(custom)custom.addEventListener('input',function(){var c=document.querySelector('.certificate-choice');if(this.value)c.textContent='Выбран сертификат на '+Number(this.value).toLocaleString('ru-RU')+' ₽'});})();
 </script>
@@ -1163,5 +1164,6 @@
  {"@type":"Question","name":"Где находится студия АВОКАДО и как записаться?","acceptedAnswer":{"@type":"Answer","text":"Иркутск, улица Красноказачья, 84, 1 этаж. Студия работает ежедневно, по предварительной записи. Запись онлайн, по телефону +7 950 100 1059 или в мессенджерах."}}]}
 ]}
 </script>
+<script src="site-apply.js"></script>
 </body>
 </html>
