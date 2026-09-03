@@ -875,7 +875,25 @@
     try { await apiFetch(API + '/restore/' + version, { method: 'POST' }, true); $('#ed-modal').classList.remove('is-open'); await loadData(); setStatus(`Возвращена версия ${version}`, 'ok'); }
     catch (e) { setStatus('Откат не выполнен: ' + e.message, 'error'); alert('Откат не выполнен.\n' + e.message); }
   }
-  async function loadData() { data = await apiFetch(API); dirty = false; saveBtn.textContent = 'Сохранить'; render(); }
+  /* Новые блоки сайта (появились в разметке позже сохранённого документа) подтягиваем из data/site.json на сайте. */
+  async function mergeDefaults(doc) {
+    try {
+      const r = await fetch(SITE + '/data/site.json', { cache: 'no-store' }); if (!r.ok) return false;
+      const def = await r.json(); if (!def || !Array.isArray(def.sections)) return false;
+      const have = new Set(doc.sections.map((x) => x.id)); let added = 0;
+      def.sections.forEach((sec, i) => {
+        if (have.has(sec.id)) return;
+        const prev = def.sections[i - 1]; const at = prev ? doc.sections.findIndex((x) => x.id === prev.id) : -1;
+        doc.sections.splice(at >= 0 ? at + 1 : doc.sections.length, 0, JSON.parse(JSON.stringify(sec))); added += 1;
+      });
+      return added > 0;
+    } catch (e) { return false; }
+  }
+  async function loadData() {
+    data = await apiFetch(API); dirty = false; saveBtn.textContent = 'Сохранить';
+    if (await mergeDefaults(data)) { markDirty(); setStatus('На сайте появились новые блоки — нажмите «Сохранить», чтобы их тексты попали в документ'); }
+    render();
+  }
 
   window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
   document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); save(); } });
