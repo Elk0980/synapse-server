@@ -229,6 +229,78 @@
    }
   },
   {
+   "id": "promo",
+   "title": "Баннер после отзывов: абонемент ALVI + Авокадо",
+   "fields": [
+    {
+     "key": "promo.promo-tagline-1",
+     "label": "Фраза сверху",
+     "value": "Совершенство — там, где есть и то, и другое: <em>красота без боли</em> в Авокадо и <em>отдых и расслабление</em> в ALVI.",
+     "multiline": true
+    },
+    {
+     "key": "promo.promo-brand-1",
+     "label": "Подпись бренда · ALVI",
+     "value": "SPA ALVI · абонемент",
+     "multiline": false
+    },
+    {
+     "key": "promo.promo-title-1",
+     "label": "Заголовок · ALVI",
+     "value": "Абонемент ALVI — ритуалы по одной цене",
+     "multiline": false
+    },
+    {
+     "key": "promo.promo-copy-1",
+     "label": "Текст · ALVI",
+     "value": "Несколько визитов одной покупкой — выгоднее разовых и спокойнее: дата уже выбрана, остаётся только прийти. Подходит для себя и в подарок.",
+     "multiline": true
+    },
+    {
+     "key": "promo.promo-note-1",
+     "label": "Примечание · ALVI",
+     "value": "Условия и варианты абонементов — у администратора",
+     "multiline": false
+    },
+    {
+     "key": "promo.promo-button-1",
+     "label": "Кнопка · ALVI",
+     "value": "Узнать про абонемент",
+     "multiline": false
+    },
+    {
+     "key": "promo.promo-brand-2",
+     "label": "Подпись бренда · Авокадо",
+     "value": "АВОКАДО · студия дизайна тела",
+     "multiline": false
+    },
+    {
+     "key": "promo.promo-title-2",
+     "label": "Заголовок · Авокадо",
+     "value": "Красота без боли: аппаратная коррекция фигуры и лазерная эпиляция",
+     "multiline": false
+    },
+    {
+     "key": "promo.promo-copy-2",
+     "label": "Текст · Авокадо",
+     "value": "Второй салон того же владельца — Красноказачья, 84. Пробный сеанс аппаратного массажа — 500 ₽ вместо 2 100 ₽.",
+     "multiline": true
+    },
+    {
+     "key": "promo.promo-note-2",
+     "label": "Примечание · Авокадо",
+     "value": "5,0 в 2ГИС · 278 отзывов",
+     "multiline": false
+    },
+    {
+     "key": "promo.promo-button-2",
+     "label": "Кнопка · Авокадо",
+     "value": "Открыть сайт Авокадо",
+     "multiline": false
+    }
+   ]
+  },
+  {
    "id": "for-self",
    "title": "Проведи день для себя",
    "fields": [
