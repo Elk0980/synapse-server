@@ -402,6 +402,8 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   const esc = (s) => window.AlviPrice ? AlviPrice.esc(s) : String(s ?? '');
 
+  let sessionAuth = false;
+  let csrfToken = '';
   let data = null;      // текущее состояние документа
   let dirty = false;    // есть несохранённые изменения
   let editing = null;   // id позиции, открытой на редактирование
@@ -601,8 +603,10 @@
     if (prepared.size > 8 * 1024 * 1024) return say('Файл больше 8 МБ даже после уменьшения', true);
     say('Загружаю…');
     try {
-      const key = getKey(false); if (!key) throw new Error('без ключа загрузить нельзя');
-      const r = await fetch(ASSETS, { method: 'POST', headers: { 'X-API-Key': key, 'Content-Type': prepared.type, 'X-Filename': encodeURIComponent(prepared.name) }, body: prepared });
+      const headers = authHeaders({
+        'Content-Type': prepared.type, 'X-Filename': encodeURIComponent(prepared.name)
+      }, true);
+      const r = await fetch(ASSETS, { method: 'POST', headers, credentials: 'same-origin', body: prepared });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { if (r.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} } throw new Error(j.error || 'HTTP ' + r.status); }
       setPhoto(id, j.url);
@@ -727,20 +731,28 @@
     let key = '';
     try { key = sessionStorage.getItem(KEY_STORAGE) || ''; } catch (e) {}
     if (!key || force) {
-      key = prompt('Ключ редактора (CONTENT_API_KEY из .env на сервере). Хранится только в этой вкладке.') || '';
+      key = prompt('Войдите в кабинет Synapse Business ' +
+        '(synapse.synapsebusiness.ru/cabinet.html) или введите ключ владельца') || '';
       key = key.trim();
       try { if (key) sessionStorage.setItem(KEY_STORAGE, key); } catch (e) {}
     }
     return key;
   }
-  async function apiFetch(url, opts = {}, withKey = false) {
-    const headers = { 'Accept': 'application/json', ...(opts.headers || {}) };
-    if (withKey) {
+  function authHeaders(headers = {}, modifying = false) {
+    const result = { ...headers };
+    if (sessionAuth) {
+      if (modifying) result['X-CSRF-Token'] = csrfToken;
+    } else {
       const key = getKey(false);
-      if (!key) throw new Error('Без ключа сохранить нельзя');
-      headers['X-API-Key'] = key;
+      if (!key) throw new Error('Без входа в кабинет или ключа владельца сохранить нельзя');
+      result['X-API-Key'] = key;
     }
-    const r = await fetch(url, { ...opts, headers, cache: 'no-store' });
+    return result;
+  }
+  async function apiFetch(url, opts = {}, withAuth = false) {
+    let headers = { 'Accept': 'application/json', ...(opts.headers || {}) };
+    if (withAuth) headers = authHeaders(headers, opts.method && opts.method !== 'GET');
+    const r = await fetch(url, { ...opts, headers, credentials: 'same-origin', cache: 'no-store' });
     let body = null;
     try { body = await r.json(); } catch (e) {}
     if (!r.ok) {
@@ -749,6 +761,18 @@
       const err = new Error(msg + details); err.status = r.status; throw err;
     }
     return body;
+  }
+  async function initializeAuth() {
+    const w = await fetch(API_BASE + '/content/whoami', { credentials: 'same-origin', cache: 'no-store' });
+    if (w.ok) {
+      const identity = await w.json();
+      sessionAuth = true; csrfToken = identity.csrfToken; return;
+    }
+    if (w.status !== 401) {
+      const body = await w.json().catch(() => ({}));
+      throw new Error(body.error || `HTTP ${w.status}`);
+    }
+    getKey(false);
   }
   async function save() {
     if (!data) return;
@@ -820,7 +844,7 @@
     if (t.dataset.close) return $('#ed-modal').classList.remove('is-open');
     if (t.id === 'ed-save') return save();
     if (t.id === 'ed-history') return showHistory();
-    if (t.id === 'ed-key') { getKey(true); setStatus('Ключ обновлён для этой вкладки'); return; }
+    if (t.id === 'ed-key') { sessionAuth = false; getKey(true); setStatus('Ключ обновлён для этой вкладки'); return; }
   });
   document.addEventListener('submit', (e) => {
     const form = e.target.closest('form[data-form]');
@@ -840,7 +864,7 @@
       $('#ed-content').innerHTML = '<p class="ed-status is-error">Не удалось загрузить price-render.js. Проверьте, что сайт клиента доступен.</p>';
       return;
     }
-    try { await loadData(); setStatus('Готово к работе'); }
+    try { await initializeAuth(); await loadData(); setStatus('Готово к работе'); }
     catch (e) {
       setStatus('Не удалось загрузить прайс: ' + e.message, 'error');
       $('#ed-content').innerHTML = `<p class="ed-status is-error">Не удалось загрузить прайс: ${esc(e.message)}.<br>Сервис content должен быть поднят на сервере (см. ops/content).</p>`;

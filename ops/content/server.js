@@ -17,7 +17,6 @@ const { hashPassword, verifyPassword } = require('./passwords');
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
 const DATABASE_PATH = process.env.DATABASE_PATH || '/data/content.sqlite';
 const API_KEY = (process.env.API_KEY || '').trim();            // ключ владельца (Влад)
-const EDITOR_KEY = (process.env.EDITOR_KEY || '').trim();      // ключ редактора (Татьяна)
 const ASSETS_DIR = process.env.ASSETS_DIR || path.join(path.dirname(DATABASE_PATH), 'assets');
 const MAX_ASSET = 8 * 1024 * 1024;
 const ASSET_TYPES = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
@@ -166,14 +165,10 @@ async function readJson(request) {
   }
 }
 
-/* Возвращает имя автора по ключу: владелец или редактор. */
+/* Возвращает имя автора по ключу владельца или сессии кабинета. */
 function requireAuth(request, site) {
   const given = (request.headers['x-api-key'] || '').toString().trim();
   if (API_KEY && given === API_KEY) return { author: 'system-owner' };
-  if (EDITOR_KEY && given === EDITOR_KEY) {
-    if (site && !['alvi', 'avokado'].includes(site)) fail(403, 'Ключ редактора ограничен ALVI и Авокадо');
-    return { author: 'Татьяна' };
-  }
   let identity;
   if (!given) identity = sessionData(request)?.user;
   if (!identity) fail(401, given ? 'Неверный ключ доступа' : 'Требуется вход в кабинет или ключ доступа');
@@ -319,10 +314,37 @@ function corsHeaders(request) {
 }
 
 function proxyCrm(request, response, url, cors) {
-  const identity = requireSession(request).user;
-  if (identity.role !== 'owner') fail(403, 'CRM временно доступна только владельцу');
+  const initialSession = requireSession(request);
+  const identity = initialSession.user;
+  const readOnly = request.method === 'GET';
+  let session = initialSession;
+  if (identity.role !== 'owner') {
+    if (readOnly && identity.permissions.includes('crm.view')) {
+      session = requirePermission(request, 'crm.view');
+    } else if (readOnly) {
+      session = requirePermission(request, 'analytics.view');
+    } else {
+      session = requirePermission(request, 'crm.edit');
+    }
+  }
+  if (!readOnly) requireCsrf(request, session);
+
+  const crmPath = url.pathname.slice('/content/crm'.length) || '/';
+  const entityPath = /^\/(contacts|companies|legal-entities)(?:\/|$)/.test(crmPath);
+  // Временно изменение CRM-сущностей и их связей оставляем только владельцу.
+  if (!readOnly && entityPath && identity.role !== 'owner') fail(403, 'Изменение сущностей доступно только владельцу');
+
+  const companyScoped = ['/dashboard', '/summary', '/leads', '/leads.csv'].includes(crmPath);
+  if (identity.role !== 'owner' && companyScoped && identity.companyCodes.length) {
+    const requestedCompany = url.searchParams.get('companyCode');
+    if (requestedCompany && !identity.companyCodes.includes(requestedCompany.toLowerCase())) {
+      fail(403, 'Нет доступа к компании');
+    }
+    if (!requestedCompany && identity.companyCodes.length > 1) fail(403, 'Уточните компанию');
+    if (!requestedCompany) url.searchParams.set('companyCode', identity.companyCodes[0]);
+  }
   if (!CRM_API_KEY) fail(503, 'Прокси CRM не настроен');
-  const target = new URL(`${CRM_URL}${url.pathname.slice('/content/crm'.length) || '/'}${url.search}`);
+  const target = new URL(`${CRM_URL}${crmPath}${url.search}`);
   const headers = { ...request.headers, host: target.host, 'x-api-key': CRM_API_KEY };
   delete headers.cookie;
   const upstream = http.request(target, { method: request.method, headers }, (upstreamResponse) => {

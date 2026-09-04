@@ -322,9 +322,28 @@ function date(value, field, fallback) {
 
 function rangeDate(value, field, endOfDay = false) {
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return date(`${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}Z`, field);
+    const [year, month, day] = value.split('-').map(Number);
+    const start = moscowMidnightUtc(year, month, day);
+    return new Date(start.getTime() + (endOfDay ? 24 * 60 * 60 * 1000 - 1 : 0)).toISOString();
   }
   return date(value, field);
+}
+
+const MOSCOW_DATE = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit',
+});
+const MOSCOW_OFFSET = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Europe/Moscow', timeZoneName: 'longOffset',
+});
+
+function moscowMidnightUtc(year, month, day) {
+  const approximate = new Date(Date.UTC(year, month - 1, day));
+  const offsetName = MOSCOW_OFFSET.formatToParts(approximate)
+    .find((part) => part.type === 'timeZoneName').value;
+  const match = offsetName.match(/^GMT([+-])(\d{2}):(\d{2})$/);
+  if (!match) throw new Error('Не удалось определить часовой пояс Europe/Moscow');
+  const offset = (Number(match[2]) * 60 + Number(match[3])) * (match[1] === '+' ? 1 : -1);
+  return new Date(approximate.getTime() - offset * 60 * 1000);
 }
 
 function normalizeContact(contact) {
@@ -594,11 +613,12 @@ function changeStage(row, stage, soldAt) {
 
 function cabinetPeriod(period) {
   const now = new Date();
-  const from = new Date(now);
-  if (period === 'today') from.setUTCHours(0, 0, 0, 0);
-  else if (period === '7d') from.setUTCDate(from.getUTCDate() - 7);
+  const parts = Object.fromEntries(MOSCOW_DATE.formatToParts(now)
+    .filter((part) => part.type !== 'literal').map((part) => [part.type, Number(part.value)]));
+  const from = moscowMidnightUtc(parts.year, parts.month, parts.day);
+  if (period === '7d') from.setUTCDate(from.getUTCDate() - 7);
   else if (period === '30d') from.setUTCDate(from.getUTCDate() - 30);
-  else fail(400, 'Неизвестный период', { allowed: ['today', '7d', '30d'] });
+  else if (period !== 'today') fail(400, 'Неизвестный период', { allowed: ['today', '7d', '30d'] });
   return from.toISOString();
 }
 
@@ -889,6 +909,7 @@ async function route(request, response) {
     const stage = requestedStage ? CABINET_STAGES.get(requestedStage) : null;
     if (requestedStage && !stage) fail(400, 'Неизвестный этап', { allowed: [...CABINET_STAGES.keys()] });
     const source = url.searchParams.get('source');
+    const companyCode = url.searchParams.get('companyCode');
     const clauses = ['created_at >= ?'];
     const params = [from];
     if (to) {
@@ -902,6 +923,10 @@ async function route(request, response) {
     if (source) {
       clauses.push('source = ?');
       params.push(source);
+    }
+    if (companyCode) {
+      clauses.push('company_code = ? COLLATE NOCASE');
+      params.push(companyCode);
     }
     const rows = db.prepare(
       `SELECT * FROM leads WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC, id DESC`
@@ -917,6 +942,7 @@ async function route(request, response) {
     const expenses = totalExpense(from, to, source);
     return send(response, 200, {
       sample: false,
+      companyCode: companyCode || null,
       summary: {
         total: rows.length,
         booked: rows.filter((row) => {
@@ -1121,10 +1147,13 @@ async function route(request, response) {
     const from = rangeDate(url.searchParams.get('from'), 'from');
     const to = rangeDate(url.searchParams.get('to'), 'to', true);
     if (from > to) fail(400, 'Дата «from» не может быть позже «to»');
+    const companyCode = url.searchParams.get('companyCode');
+    const companyClause = companyCode ? ' AND company_code = ? COLLATE NOCASE' : '';
+    const companyParams = companyCode ? [companyCode] : [];
     const rows = db.prepare(`
       SELECT source, stage, sale_amount FROM leads
-      WHERE created_at >= ? AND created_at <= ?
-    `).all(from, to);
+      WHERE created_at >= ? AND created_at <= ?${companyClause}
+    `).all(from, to, ...companyParams);
     const expenseRows = db.prepare(`
       SELECT source, SUM(amount) AS expenses FROM expenses
       WHERE spent_at >= ? AND spent_at <= ? GROUP BY source
