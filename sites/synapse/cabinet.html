@@ -2375,7 +2375,7 @@ window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const byId = (id) => document.getElementById(id);
 
 // Set this to the CRM service origin (without a trailing slash) when it is deployed.
-const CRM_API = "";
+const CRM_API = "/content/crm";
 const CRM_STAGES = Object.freeze([
 { id:"new", label:"Новая" }, { id:"in_progress", label:"В работе" },
 { id:"booked", label:"Записан" }, { id:"visited", label:"Пришёл" },
