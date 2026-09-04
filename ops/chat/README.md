@@ -18,12 +18,18 @@
 | `TELEGRAM_BOT_TOKEN` | Токен Telegram-бота; может быть пустым для тестового режима |
 | `TELEGRAM_WEBHOOK_SECRET` | Секрет заголовка webhook; обязателен для приёма обновлений |
 | `TELEGRAM_OWNER_ID` | Числовой Telegram user id владельца |
+| `TELEGRAM_SILENT_START` | Начало беззвучного интервала по Москве, по умолчанию `22:00` |
+| `TELEGRAM_SILENT_END` | Конец беззвучного интервала по Москве, по умолчанию `09:00` |
 | `CRM_URL` | Полный URL создания заявки, например `http://crm:8080/leads` |
 | `CRM_API_KEY` | Ключ CRM в заголовке `X-API-Key` |
 | `MODEL_API_URL` | Необязательный URL API модели |
 | `MODEL_API_KEY` | Необязательный ключ модели |
 
 Секреты задаются только через окружение и не должны попадать в репозиторий.
+
+Telegram-бот отправляет сообщения без звука в интервале
+`[TELEGRAM_SILENT_START, TELEGRAM_SILENT_END)` по часовому поясу
+`Europe/Moscow`; по умолчанию — с 22:00 до 09:00 МСК.
 
 При создании заявки сервис передаёт CRM атрибуцию в полях `utmSource`, `utmMedium`, `utmCampaign`, `utmContent`, `clientId`, `referrer` и `landingPage`. Значение `utm_term` сохраняется в базе чата, но не отправляется в CRM, поскольку такого поля в CRM нет.
 
