@@ -1,123 +1,97 @@
-# Мини-CRM — сервис заявок
+# Мини-CRM — заявки, контакты, компании и юридические лица
 
-Небольшой JSON API для заявок Synapse Business и основы сквозной аналитики. Он
-хранит карточку лида, переписку, текущий этап и данные продажи. Авторизации в
-сервисе нет: ограничивать доступ нужно на уровне сети или прокси.
+JSON API хранит заявки и аналитику, а также карточки контактов, компаний и юридических лиц. Node.js 24
+использует встроенный `node:sqlite`; внешних зависимостей нет. Все даты — UTC ISO 8601, внешний JSON — camelCase.
+При запуске создаётся только схема: seed, демонстрационные карточки и предполагаемые реквизиты не добавляются.
 
-## Запуск
-
-Нужен Node.js 24 (используется встроенный модуль `node:sqlite`, внешних пакетов
-нет):
+## Запуск и безопасность
 
 ```sh
-mkdir -p data
-PORT=8080 DATABASE_PATH="$PWD/data/crm.sqlite" node ops/crm/server.js
+PORT=8080 DATABASE_PATH="$PWD/data/crm.sqlite" API_KEY='replace-me' node ops/crm/server.js
+node ops/crm/smoke-test.js
 ```
 
-Сервис уже включён в корневой `docker-compose.yml` и собирается из этого
-каталога:
+Кроме публичного `POST /leads`, все маршруты требуют `X-API-Key`. Один общий ключ даёт полный административный
+доступ, включая персональные данные и банковские реквизиты: это **не RBAC**. Будущий UI обязан использовать
+серверный прокси, который проверяет права; ключ нельзя помещать в браузер. Тела запросов и секретные данные сервис
+не журналирует. Пароли, банковские логины, токены, API-ключи, cookie, приватные ключи, коды подтверждения и CVV/CVC
+не являются полями модели и отклоняются.
+
+## Модель
+
+### Контакты
+
+`contacts`: обязательное `name`; необязательные `position`, `phone`, `email`, `messengers`, `links`, `city`,
+`timezone`, `preferredChannel`, `notes`, `birthDate`. Нормализованный телефон используется только внутри базы и не
+уникален. `messengers` принимает до 25 объектов с `type` (`telegram`, `max`, `whatsapp`, `vk`, `phone`, `email`,
+`other`), `label`, `handle`, `url`; обязателен `handle` или HTTP(S)-`url`. `links` содержит `label` и HTTP(S)-`url`.
+Роли человека хранятся только в связях.
+
+### Компании
+
+`companies`: обязательные уникальный `code` и `name`; необязательные `industry`, `city`, `timezone`, `phone`,
+`email`, `websiteUrl`, `socials`, `pipelineStage`, `startDate`, `endDate`, `preferredChannel`, `notes`. Код приводится
+к нижнему регистру и допускает 2–64 символа `a-z`, `0-9`, `_`, `-`. Этапы: `application`, `call`, `kit_ready`,
+`payment`, `active`; по умолчанию этап равен `null`. Ответственный определяется активной связью.
+
+### Юридические лица и ИП
+
+`legalEntities`: обязательные `legalForm` (`ip` или `ooo`) и `name`; необязательные `shortName`, `inn`, `kpp`,
+`ogrn`, `ogrnip`, `phone`, `email`, `legalAddress`, `postalAddress`, `taxSystem`, `bankName`, `bik`,
+`checkingAccount`, `correspondentAccount`, `recipientName`, `notes`. Реквизиты хранятся как TEXT. ИНН содержит 12
+цифр для ИП или 10 для ООО; КПП и БИК — 9, ОГРН — 13, ОГРНИП — 15, счета — 20 цифр. `ogrnip` разрешён только
+для ИП, `ogrn` — только для ООО. Подписанты определяются связями.
+
+Все сущности имеют `id`, `createdAt`, `updatedAt`, `isDeleted`, `deletedAt`.
+
+## Маршруты карточек
+
+Для каждого ресурса доступны:
+
+* `GET /contacts`, `POST /contacts`, `GET|PATCH|DELETE /contacts/:id`, `POST /contacts/:id/restore`;
+* `GET /companies`, `POST /companies`, `GET|PATCH|DELETE /companies/:id`, `POST /companies/:id/restore`;
+* `GET /legal-entities`, `POST /legal-entities`, `GET|PATCH|DELETE /legal-entities/:id`,
+  `POST /legal-entities/:id/restore`.
+
+`POST` отвечает `201` и `Location`. `PATCH` принимает только переданные поля; `null` очищает необязательное поле.
+Списки принимают `q`, `deleted=exclude|include|only`, `limit` (50, максимум 200), `offset`. Фильтры контактов:
+`companyId`, `legalEntityId`, `city`, `preferredChannel`; компаний: `contactId`, `legalEntityId`, `city`,
+`pipelineStage`; юрлиц: `contactId`, `companyId`, `legalForm`. Полная удалённая карточка доступна администратору с
+`?includeDeleted=true`. Списки и вложенные карточки исключают заметки, даты рождения, адреса и банковские реквизиты.
+
+Нейтральный QA-пример:
 
 ```sh
-docker compose up -d crm
+curl -X POST http://localhost:8080/companies \
+  -H 'X-API-Key: replace-me' -H 'Content-Type: application/json' \
+  -d '{"code":"qa_company_a","name":"QA Company A"}'
 ```
 
-Порт 8080 доступен только сервисам внутренней Compose-сети и не публикуется на
-хосте. В контейнере база находится в `/data/crm.sqlite` и сохраняется в именованном
-томе `crm_data`. При первом старте создаётся пустая база без демонстрационных
-записей. Локально путь задаётся переменной `DATABASE_PATH`; порт — переменной
-`PORT` (по умолчанию `8080`).
+## Связи
 
-Все запросы и ответы используют JSON. Даты передаются в ISO 8601, например
-`2026-08-29T12:00:00.000Z`.
+* `PUT|DELETE /contacts/:contactId/companies/:companyId` — `role`, `isResponsible`, `validFrom`, `validTo`, `notes`;
+* `PUT|DELETE /companies/:companyId/legal-entities/:legalEntityId` — `role`, `isPrimary`, даты и `notes`;
+* `PUT|DELETE /contacts/:contactId/legal-entities/:legalEntityId` — `role`, `isSignatory`, `signingBasis`, даты,
+  `notes`.
 
-## Методы
+Для первой связи и повторной активации `role` обязателен. PUT повторно использует ту же строку. На компанию может
+быть только один активный ответственный и одно основное юрлицо; переключение транзакционно. Подписантов может быть
+несколько. DELETE мягко отключает связь и идемпотентен.
 
-### Данные кабинета
+Удаление карточки мягкое и транзакционно отключает её активные связи, но не соседние сущности и не заявки.
+Повторный DELETE сохраняет исходный `deletedAt`. Restore восстанавливает только карточку; связи включаются новым PUT.
+Физический `ON DELETE CASCADE` существует только для защиты junction-таблиц при прямом обслуживании SQLite.
 
-`GET /dashboard?period=today|7d|30d` возвращает сводку, воронку, источники и
-заявки в формате, который использует кабинет. Дополнительные фильтры — `stage`
-(`new`, `in_progress`, `booked`, `visited`, `sale`, `rejected`) и `source`.
-Ответ помечен `sample: true`, пока сервис не подключён к реальным источникам.
+## Заявки и компании
 
-Кабинет обновляет этап или сумму запросом `PATCH /leads/:id` с полем `stage`
-либо `amount` соответственно.
+`POST /leads` принимает необязательный `companyCode`; неизвестная или удалённая компания отклоняется. Поле
+возвращается в `GET /leads`, `GET /leads/:id` и последней колонкой CSV. Доступны фильтр
+`GET /leads?companyCode=qa_company_a` и PATCH с кодом либо `null`. Изменение `companies.code` и каскадное обновление
+заявок выполняются транзакционно. Удаление компании оставляет код у старых заявок для истории.
 
-### Создать заявку
+Дедупликация выполняется по паре `companyCode + normalized_contact`: одинаковый контакт внутри одной компании
+склеивается, в разных компаниях создаёт разные заявки, а непривязанные заявки сравниваются только между собой.
+Старые маршруты сообщений, истории, этапов, продаж, расходов, `/dashboard`, `/summary` и `/leads.csv` сохранены.
 
-`POST /leads`
-
-Обязательны `name` и `contact`. Допустимы `channel`, `source`, `tag`, `page`,
-`firstQuestion` и `comment`. Новая карточка всегда получает этап `новая`.
-
-```sh
-curl -X POST http://localhost:8080/leads -H 'Content-Type: application/json' \
-  -d '{"name":"Анна","contact":"+79990000000","channel":"telegram","source":"Яндекс","tag":"consultation","page":"/audit","firstQuestion":"Сколько стоит аудит?"}'
-```
-
-### Добавить сообщение
-
-`POST /leads/:id/messages`
-
-```sh
-curl -X POST http://localhost:8080/leads/1/messages -H 'Content-Type: application/json' \
-  -d '{"author":"менеджер Ирина","text":"Договорились созвониться завтра"}'
-```
-
-Поля `author` и `text` обязательны.
-
-### Получить список заявок
-
-`GET /leads` возвращает все заявки. Фильтры `stage` и `source` можно применять
-по отдельности или вместе:
-
-```sh
-curl 'http://localhost:8080/leads?stage=в%20работе&source=Яндекс'
-```
-
-### Сменить этап
-
-`PATCH /leads/:id/stage`
-
-```sh
-curl -X PATCH http://localhost:8080/leads/1/stage -H 'Content-Type: application/json' \
-  -d '{"stage":"записан"}'
-```
-
-Фиксированные этапы: `новая`, `в работе`, `записан`, `пришёл`, `продажа`,
-`отказ`.
-
-### Записать продажу
-
-`PATCH /leads/:id/sale` сохраняет неотрицательную сумму и переводит заявку на
-этап `продажа`. `soldAt` необязателен; без него используется текущее время.
-
-```sh
-curl -X PATCH http://localhost:8080/leads/1/sale -H 'Content-Type: application/json' \
-  -d '{"amount":45000,"soldAt":"2026-08-29T12:00:00Z"}'
-```
-
-### Получить сводку
-
-`GET /summary?from=:date&to=:date` группирует созданные за указанный период
-заявки по источнику. Для каждого источника возвращаются: `leads` (все заявки),
-`booked` (текущий этап не ниже `записан`), `visited` (не ниже `пришёл`), `sales`
-и `revenue`. Отказы не учитываются как дошедшие до записи или визита; источник
-без значения отображается как `не указан`.
-
-```sh
-curl 'http://localhost:8080/summary?from=2026-08-01T00:00:00Z&to=2026-08-31T23:59:59Z'
-```
-
-## Как добавить этап
-
-1. Добавьте название в массив `STAGES` в `server.js` в нужной позиции воронки.
-2. Добавьте его в ограничение `CHECK` поля `leads.stage`.
-3. Для уже существующей базы выполните миграцию: SQLite не меняет `CHECK`
-   командой `ALTER COLUMN`, поэтому создайте новую таблицу с новым ограничением,
-   перенесите данные и переименуйте её. Одного изменения кода достаточно только
-   для новой пустой базы.
-4. Если этап меняет смысл метрик, скорректируйте расчёт `/summary` и описание
-   API, затем перезапустите сервис.
-
-Ошибки имеют HTTP-статус `400`, `404`, `413` или `500` и понятное поле `error`;
-для неизвестного этапа ответ также содержит список `details.allowed`.
+Миграции записываются в `schema_migrations`, выполняются транзакционно и повторяемо, не создают бизнес-данных и
+завершаются `PRAGMA foreign_key_check`.
