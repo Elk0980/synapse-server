@@ -22,6 +22,8 @@ const SEED_DIR = process.env.SEED_DIR || path.join(__dirname, 'seed');
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
 const HISTORY_LIMIT = 10;
 const MAX_BODY = 1024 * 1024;
+const SITES = new Set(['alvi', 'avokado', 'palitra']);
+const DOCUMENT_VALIDATORS = { site: validateSite, price: validatePrice };
 const SESSION_TTL = 30 * 24 * 60 * 60;
 const LOGIN_WINDOW = 10 * 60 * 1000;
 const LOGIN_LIMIT = 10;
@@ -252,6 +254,7 @@ function validatePrice(doc) {
       if (ids.has(it.id)) problems.push(`Повторяющийся id ${it.id}`);
       ids.add(it.id);
       if (typeof it.title !== 'string' || !it.title.trim()) problems.push(`Позиция ${it.id}: пустое название`);
+      if (it.oldPrice != null && typeof it.oldPrice !== 'string') problems.push(`Позиция ${it.id}: старая цена должна быть строкой`);
     }
   }
   const showcase = doc.showcase || {};
@@ -270,8 +273,6 @@ function validatePrice(doc) {
   }
   if (problems.length) fail(422, 'Документ не прошёл проверку', problems);
 }
-
-const VALIDATORS = { 'alvi/price': validatePrice, 'alvi/site': validateSite };
 
 function nextVersion(key) {
   const latest = latestStmt.get(key);
@@ -362,6 +363,7 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (parts[0] !== 'content' || parts.length < 3) fail(404, 'Не найдено');
+    if (!SITES.has(parts[1])) fail(404, 'Неизвестный сайт');
 
     // --- файлы (фоны блоков): /content/:site/assets[/:name]
     if (parts[2] === 'assets') {
@@ -420,7 +422,9 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'PUT' && tail.length === 0) {
       const author = requireAuth(request, parts[1]).author;
       const doc = await readJson(request);
-      if (VALIDATORS[key]) VALIDATORS[key](doc);
+      const validator = DOCUMENT_VALIDATORS[parts[2]];
+      if (!validator) fail(404, 'Неизвестный тип документа');
+      validator(doc);
       const saved = saveVersion(key, doc, author);
       return reply(200, { ok: true, key, ...saved });
     }

@@ -494,11 +494,26 @@
 (() => {
   'use strict';
   const params = new URLSearchParams(location.search);
+  const SITES = {
+    alvi: { name: 'ALVI', url: 'https://alvi.synapsebusiness.ru', zones: ['promo', 'hero-0', 'hero-1', 'hero-3', 'hero-5', 'hero-7'], heroes: ['hero-0', 'hero-1', 'hero-3', 'hero-5', 'hero-7'] },
+    avokado: { name: 'Авокадо', url: 'https://avokado.synapsebusiness.ru', zones: ['top', 'pain', 'method-0', 'method-1', 'method-2', 'method-3', 'method-4', 'method-5', 'price', 'certificate', 'contacts', 'finale'], heroes: [] }
+  };
+  const requestedSite = params.get('site') || 'alvi';
+  const siteId = SITES[requestedSite] ? requestedSite : 'alvi';
+  const siteConfig = SITES[siteId];
+  /* Старый ?site=https://… остаётся локальным override; новый явный вариант — ?url=. */
+  const SITE = (params.get('url') || (SITES[requestedSite] ? siteConfig.url : requestedSite)).replace(/\/$/, '');
   const API_BASE = (params.get('api') || '').replace(/\/$/, '');
-  const API = API_BASE + '/content/alvi/site';
-  const ASSETS = API_BASE + '/content/alvi/assets';
-  const SITE = params.get('site') || 'https://alvi.synapsebusiness.ru';
+  const API = API_BASE + '/content/' + siteId + '/site';
+  const ASSETS = API_BASE + '/content/' + siteId + '/assets';
   const SITE_ORIGIN = new URL(SITE).origin;
+  document.title = 'Редактор сайта ' + siteConfig.name + ' — тексты и фоны';
+  document.querySelector('.ed-bar__title').firstChild.nodeValue = 'Редактор сайта ' + siteConfig.name + ' — тексты и фоны';
+  document.querySelector('#ed-frame').title = 'Сайт ' + siteConfig.name + ' — правка на месте';
+  const barLinks = document.querySelectorAll('.ed-bar a');
+  barLinks[0].href = 'price-editor.html?site=' + siteId;
+  barLinks[1].href = SITE + '/';
+  if (siteId !== 'alvi') document.querySelector('#ed-promo').hidden = true;
   const KEY_STORAGE = 'synapse_content_key';
   const FONTS = ['Lora', 'Cormorant Garamond', 'Playfair Display', 'Noto Serif', 'Manrope', 'Montserrat', 'Nunito'];
   const SIZES = [70, 80, 90, 100, 110, 125, 150, 175, 200];
@@ -693,7 +708,7 @@
     </span>`;
   }
   const layoutMode = () => (view.device === 'mobile' ? 'mobile' : 'desktop');
-  const LAYOUT_ZONES = new Set(['promo', 'hero-0', 'hero-1', 'hero-3', 'hero-5', 'hero-7']);
+  const LAYOUT_ZONES = new Set(siteConfig.zones);
   function layoutHtml(f) {
     const sec = sectionOfField(f.key); if (!sec || !LAYOUT_ZONES.has(sec.id)) return '';
     const L = (f.layout || {})[layoutMode()] || {};
