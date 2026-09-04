@@ -239,6 +239,33 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .crm-table th, .crm-table td { padding: 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
 .crm-empty, .crm-error { padding: 20px; border: 1px solid var(--line); border-radius: 12px; }
 .crm-error { color: var(--red); }
+.analytics-grid { display: grid; gap: 18px; }
+.analytics-dates, .expense-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.analytics-dates label, .expense-form label { display: grid; gap: 5px; color: var(--muted); }
+.analytics-dates input, .expense-form input {
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface-soft);
+}
+.analytics-section h2 { margin-top: 0; }
+.funnel { display: grid; gap: 12px; }
+.funnel-row { display: grid; grid-template-columns: minmax(90px, 140px) minmax(120px, 1fr) 88px; gap: 12px; }
+.funnel-track { min-height: 24px; overflow: hidden; border-radius: 7px; background: var(--surface-soft); }
+.funnel-bar { height: 100%; min-width: 2px; border-radius: inherit; background: var(--blue); }
+.funnel-value { text-align: right; }
+.analytics-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
+.analytics-actions a { color: var(--accent); }
+.expense-form { margin-top: 18px; }
+.expense-form label { flex: 1 1 150px; }
+.expense-form button { min-height: 44px; }
+.crm-lead-button { padding: 0; border: 0; color: var(--accent); background: none; cursor: pointer; }
+.lead-details { margin-top: 18px; }
+.lead-details dl { display: grid; grid-template-columns: minmax(130px, 180px) 1fr; gap: 8px 14px; }
+.lead-details dt { color: var(--muted); }
+.lead-details dd { margin: 0; overflow-wrap: anywhere; }
 .tool-frame { display: block; width: 100%; min-height: 70vh; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
 .account-details { display: grid; gap: 14px; margin: 0 0 24px; }
 .account-details div { display: grid; grid-template-columns: 140px 1fr; gap: 12px; }
@@ -294,6 +321,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   h1 { font-size: 2.15rem; }
   .tool-frame { min-height: 72vh; }
   .account-details div { grid-template-columns: 1fr; gap: 2px; }
+  .funnel-row { grid-template-columns: 88px minmax(80px, 1fr) 74px; gap: 7px; }
+  .crm-stat { min-width: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
@@ -334,11 +363,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     </div>
     <p class="no-projects" id="no-projects" role="status" hidden>Для учётной записи не настроены проекты</p>
     <nav class="nav" aria-label="Разделы кабинета">
-      <button class="nav-category" type="button" aria-expanded="false" aria-controls="analytics-menu">Аналитика</button>
+      <button class="nav-category" id="analytics-category" type="button" aria-expanded="false"
+        aria-controls="analytics-menu">Аналитика</button>
       <div class="subnav" id="analytics-menu" hidden>
-        <a class="nav-link" href="#analytics-through" data-view-link="analytics-through">Сквозная аналитика</a>
+        <a class="nav-link" id="analytics-link" href="#analytics-through"
+          data-view-link="analytics-through">Сквозная аналитика</a>
       </div>
-      <a class="nav-link" href="#crm" data-view-link="crm">ЦРМ</a>
+      <a class="nav-link" id="crm-link" href="#crm" data-view-link="crm">ЦРМ</a>
       <button class="nav-category" type="button" aria-expanded="false" aria-controls="site-menu">Сайт</button>
       <div class="subnav" id="site-menu" hidden>
         <a class="nav-link" href="#sites" data-view-link="sites">Сайты</a>
@@ -359,17 +390,52 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   <main class="main" id="main-content" tabindex="-1">
     <div class="content-header"><p id="startup-error" class="startup-error" role="alert" hidden></p></div>
     <section class="view-panel" id="analytics-through-view" data-view="analytics-through">
-      <div class="content-header"><h1>Сквозная аналитика</h1></div><div class="card"><p class="development">В разработке</p></div>
+      <div class="content-header"><h1>Сквозная аналитика</h1></div>
+      <p class="notice">Данные общие для всех проектов: привязка заявок к компаниям появится после задачи
+        crm/tenants</p>
+      <div class="analytics-grid">
+        <div class="card">
+          <div class="crm-toolbar">
+            <div class="crm-periods" id="analytics-periods" aria-label="Период аналитики">
+              <button class="crm-period" type="button" data-analytics-period="today"
+                aria-pressed="true">Сегодня</button>
+              <button class="crm-period" type="button" data-analytics-period="7d"
+                aria-pressed="false">7 дней</button>
+              <button class="crm-period" type="button" data-analytics-period="30d"
+                aria-pressed="false">30 дней</button>
+            </div>
+            <form class="analytics-dates" id="analytics-dates">
+              <label>С<input name="from" type="date" required></label>
+              <label>По<input name="to" type="date" required></label>
+              <button class="plain-button" type="submit">Показать</button>
+            </form>
+          </div>
+          <div id="analytics-content" aria-live="polite"></div>
+        </div>
+        <section class="card analytics-section" id="expenses-section">
+          <h2>Расходы</h2>
+          <div id="expenses-content" aria-live="polite"></div>
+          <form class="expense-form" id="expense-form" hidden>
+            <label>Дата<input name="date" type="date" required></label>
+            <label>Источник<input name="source" required maxlength="120"></label>
+            <label>Сумма<input name="amount" type="number" min="0" step="0.01" required></label>
+            <label>Комментарий<input name="comment" maxlength="500"></label>
+            <button class="plain-button" type="submit">Добавить</button>
+          </form>
+          <p id="expense-result" role="status"></p>
+        </section>
+      </div>
     </section>
     <section class="view-panel" id="crm-view" data-view="crm" hidden>
       <div class="content-header"><h1>ЦРМ</h1></div>
-      <p class="notice">Связь CRM с выбранным проектом — в разработке. Ниже показана текущая общая CRM.</p>
+      <p class="notice">Данные общие для всех проектов: привязка заявок к компаниям появится после задачи
+        crm/tenants</p>
       <div class="card">
         <div class="crm-toolbar">
           <div class="crm-periods" id="crm-periods" aria-label="Период">
             <button class="crm-period" type="button" data-crm-period="today" aria-pressed="true">Сегодня</button>
-            <button class="crm-period" type="button" data-crm-period="week" aria-pressed="false">Неделя</button>
-            <button class="crm-period" type="button" data-crm-period="month" aria-pressed="false">Месяц</button>
+            <button class="crm-period" type="button" data-crm-period="7d" aria-pressed="false">Неделя</button>
+            <button class="crm-period" type="button" data-crm-period="30d" aria-pressed="false">Месяц</button>
           </div>
           <div class="crm-filters"><select class="crm-filter" id="crm-stage-filter" aria-label="Фильтр по этапу"></select><select class="crm-filter" id="crm-source-filter" aria-label="Фильтр по источнику"></select></div>
         </div>
@@ -455,6 +521,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   let selectedProjectId = null;
   let currentView = "analytics-through";
   let crmBound = false;
+  let analyticsBound = false;
   let drawerOpen = false;
 
   const allowedProjectsFor = (profile) => {
@@ -640,10 +707,18 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     } catch (error) { content.textContent = error.message; }
   };
 
-  const validView = (value) => Object.hasOwn(VIEW_TITLES, value);
+  const permittedView = (value) => {
+    if (!identity) return true;
+    if (value === "analytics-through") return identity.permissions.includes("analytics.view");
+    if (value === "crm") return identity.permissions.includes("crm.view");
+    return true;
+  };
+  const defaultView = () => permittedView("analytics-through") ? "analytics-through" :
+    permittedView("crm") ? "crm" : "account";
+  const validView = (value) => Object.hasOwn(VIEW_TITLES, value) && permittedView(value);
   const viewFromHash = () => {
     const value = decodeURIComponent(location.hash.slice(1));
-    return validView(value) ? value : "analytics-through";
+    return validView(value) ? value : defaultView();
   };
   const setCategoryForView = (viewName) => {
     const categoryId = viewName === "analytics-through" ? "analytics-menu" :
@@ -655,7 +730,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     menu.hidden = false;
   };
   const setView = (viewName, focusMain = false) => {
-    currentView = validView(viewName) ? viewName : "analytics-through";
+    currentView = validView(viewName) ? viewName : defaultView();
     document.querySelectorAll("[data-view]").forEach((view) => {
       view.hidden = view.dataset.view !== currentView;
     });
@@ -670,6 +745,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     const active = document.querySelector(`[data-view="${currentView}"]`);
     const frame = active.querySelector("iframe[data-src]");
     if (frame && !frame.getAttribute("src")) frame.src = frame.dataset.src;
+    if (currentView === "analytics-through") loadAnalytics();
     if (currentView === "crm") loadCRM();
     if (focusMain) byId("main-content").focus();
   };
@@ -689,8 +765,17 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     else if (restoreFocus) byId("menu-button").focus();
   };
 
-  const crmAPI = async (path, options = {}) => {
-    const response = await fetch(`${CRM_API}${path}`, {
+  const crmQuery = async (path, params = {}, options = {}) => {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== "" && value !== null && value !== undefined) query.set(key, value);
+    });
+    const url = `${CRM_API}${path}${query.size ? `?${query}` : ""}`;
+    if (options.open) {
+      window.open(url, "_blank", "noopener");
+      return null;
+    }
+    const response = await fetch(url, {
       ...options,
       credentials: "same-origin",
       headers: { "Accept": "application/json", "Content-Type": "application/json", ...(options.headers || {}) }
@@ -699,6 +784,147 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     if (response.status === 204) return null;
     return response.json();
   };
+  const dateValue = (date) => date.toISOString().slice(0, 10);
+  const periodDates = (period) => {
+    const to = new Date();
+    const from = new Date(to);
+    if (period === "today") from.setUTCHours(0, 0, 0, 0);
+    if (period === "7d") from.setUTCDate(from.getUTCDate() - 7);
+    if (period === "30d") from.setUTCDate(from.getUTCDate() - 30);
+    return { from: dateValue(from), to: dateValue(to) };
+  };
+  const formatMoney = (value) => new Intl.NumberFormat("ru-RU", {
+    style: "currency",
+    currency: "RUB",
+    maximumFractionDigits: 2
+  }).format(Number(value) || 0);
+  const formatROMI = (value) => value === null || value === undefined ? "нет расходов" :
+    `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value)}%`;
+
+  const analyticsState = { period: "today", range: periodDates("today") };
+  const funnelLabels = Object.fromEntries(CRM_STAGES.map((stage) => [stage.id, stage.label]));
+  const renderAnalytics = (dashboard, summary, expenses) => {
+    const values = dashboard.summary || {};
+    const funnel = dashboard.funnel || {};
+    const sources = Array.isArray(summary.sources)
+      ? [...summary.sources].sort((left, right) => (right.revenue || 0) - (left.revenue || 0)) : [];
+    const content = byId("analytics-content");
+    const stats = [
+      ["Заявки", values.total || 0],
+      ["Записались", values.booked || 0],
+      ["Пришли", values.visited || 0],
+      ["Продажи", values.sales || 0],
+      ["Выручка", formatMoney(values.revenue)],
+      ["Расходы", formatMoney(values.expenses)],
+      ["ROMI", formatROMI(values.romi)]
+    ];
+    const sourceRows = sources.map((source) => `<tr><td>${escapeHTML(source.source)}</td>
+      <td>${escapeHTML(source.leads)}</td><td>${escapeHTML(source.booked)}</td>
+      <td>${escapeHTML(source.visited)}</td><td>${escapeHTML(source.sales)}</td>
+      <td>${escapeHTML(formatMoney(source.revenue))}</td>
+      <td>${escapeHTML(formatMoney(source.expenses))}</td>
+      <td>${escapeHTML(formatROMI(source.romi))}</td></tr>`).join("");
+    const funnelRows = CRM_STAGES.map((stage) => {
+      const item = funnel[stage.id] || { count: 0, conversion: 0 };
+      const width = Math.max(0, Math.min(100, Number(item.conversion) || 0));
+      return `<div class="funnel-row"><span>${escapeHTML(funnelLabels[stage.id])}</span>
+        <div class="funnel-track"><div class="funnel-bar" style="width:${width}%"></div></div>
+        <span class="funnel-value">${escapeHTML(item.count || 0)} · ${escapeHTML(width)}%</span></div>`;
+    }).join("");
+    content.innerHTML = `${values.total ? "" : '<div class="crm-empty">За период заявок нет</div>'}
+      <div class="crm-summary">${stats.map(([label, value]) => `<div class="crm-stat">
+        <span>${label}</span><strong>${escapeHTML(value)}</strong></div>`).join("")}</div>
+      <section class="analytics-section"><h2>Воронка</h2><div class="funnel">${funnelRows}</div></section>
+      <section class="analytics-section"><div class="analytics-actions"><h2>Источники</h2>
+        <button class="plain-button" id="analytics-csv" type="button">Выгрузить CSV</button></div>
+        ${sourceRows ? `<div class="crm-table-wrap"><table class="crm-table"><thead><tr>
+          <th>Источник</th><th>Заявки</th><th>Записи</th><th>Визиты</th><th>Продажи</th>
+          <th>Выручка</th><th>Расходы</th><th>ROMI</th></tr></thead><tbody>${sourceRows}</tbody></table></div>` :
+          '<div class="crm-empty">Данных по источникам нет</div>'}</section>`;
+    byId("analytics-csv").addEventListener("click", () => crmQuery("/leads.csv", {}, { open: true }));
+    const expenseRows = expenses.map((expense) => `<tr><td>${escapeHTML(expense.spentAt.slice(0, 10))}</td>
+      <td>${escapeHTML(expense.source)}</td><td>${escapeHTML(formatMoney(expense.amount))}</td>
+      <td>${escapeHTML(expense.comment || "—")}</td></tr>`).join("");
+    byId("expenses-content").innerHTML = expenseRows
+      ? `<div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Дата</th><th>Источник</th>
+        <th>Сумма</th><th>Комментарий</th></tr></thead><tbody>${expenseRows}</tbody></table></div>`
+      : '<div class="crm-empty">За период расходов нет</div>';
+  };
+  const loadAnalytics = async () => {
+    if (currentView !== "analytics-through" || !identity.permissions.includes("analytics.view")) return;
+    byId("analytics-content").innerHTML = '<div class="crm-empty">Загрузка аналитики…</div>';
+    const range = analyticsState.range;
+    try {
+      const [dashboard, summary, expensePayload] = await Promise.all([
+        crmQuery("/dashboard", { period: analyticsState.period, ...range }),
+        crmQuery("/summary", range),
+        crmQuery("/expenses", range)
+      ]);
+      renderAnalytics(dashboard, summary, expensePayload.expenses || []);
+    } catch (error) {
+      byId("analytics-content").innerHTML =
+        '<div class="crm-error" role="alert">Не удалось загрузить сквозную аналитику.</div>';
+      byId("expenses-content").replaceChildren();
+    }
+  };
+  const renderAnalyticsControls = () => {
+    const form = byId("analytics-dates");
+    form.elements.from.value = analyticsState.range.from;
+    form.elements.to.value = analyticsState.range.to;
+    byId("expense-form").hidden = !identity.permissions.includes("crm.edit");
+    byId("expense-form").elements.date.value = dateValue(new Date());
+    if (analyticsBound) return;
+    analyticsBound = true;
+    byId("analytics-periods").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-analytics-period]");
+      if (!button) return;
+      analyticsState.period = button.dataset.analyticsPeriod;
+      analyticsState.range = periodDates(analyticsState.period);
+      form.elements.from.value = analyticsState.range.from;
+      form.elements.to.value = analyticsState.range.to;
+      document.querySelectorAll("[data-analytics-period]").forEach((item) => {
+        item.setAttribute("aria-pressed", String(item === button));
+      });
+      loadAnalytics();
+    });
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (form.elements.from.value > form.elements.to.value) {
+        byId("analytics-content").innerHTML =
+          '<div class="crm-error" role="alert">Дата «С» не может быть позже даты «По».</div>';
+        return;
+      }
+      analyticsState.range = { from: form.elements.from.value, to: form.elements.to.value };
+      const days = Math.ceil((new Date() - new Date(`${analyticsState.range.from}T00:00:00Z`)) / 86400000);
+      analyticsState.period = days <= 1 ? "today" : days <= 7 ? "7d" : "30d";
+      document.querySelectorAll("[data-analytics-period]").forEach((item) => {
+        item.setAttribute("aria-pressed", "false");
+      });
+      loadAnalytics();
+    });
+    byId("expense-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const expenseForm = event.currentTarget;
+      try {
+        await crmQuery("/expenses", {}, {
+          method: "POST",
+          body: JSON.stringify({
+            date: expenseForm.elements.date.value,
+            source: expenseForm.elements.source.value,
+            amount: Number(expenseForm.elements.amount.value),
+            comment: expenseForm.elements.comment.value
+          })
+        });
+        byId("expense-result").textContent = "Расход добавлен";
+        expenseForm.elements.amount.value = "";
+        expenseForm.elements.comment.value = "";
+        await loadAnalytics();
+      } catch (error) {
+        byId("expense-result").textContent = "Не удалось добавить расход";
+      }
+    });
+  };
+
   const crmState = { period: "today", stage: "", source: "" };
   const crmStageOptions = (selected) => CRM_STAGES.map((stage) =>
     `<option value="${stage.id}"${stage.id === selected ? " selected" : ""}>${stage.label}</option>`
@@ -707,22 +933,34 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     const leads = Array.isArray(payload.leads) ? payload.leads : [];
     const summary = payload.summary || {};
     const content = byId("crm-content");
+    const editable = identity.permissions.includes("crm.edit");
     content.innerHTML = `
       <div class="crm-summary">
         <div class="crm-stat"><span>Заявки</span><strong>${escapeHTML(summary.total ?? leads.length)}</strong></div>
         <div class="crm-stat"><span>Продажи</span><strong>${escapeHTML(summary.sales ?? "—")}</strong></div>
-        <div class="crm-stat"><span>Выручка</span><strong>${escapeHTML(summary.revenue ?? "—")}</strong></div>
+        <div class="crm-stat"><span>Выручка</span><strong>${escapeHTML(formatMoney(summary.revenue))}</strong></div>
       </div>
-      ${leads.length ? `<div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Дата</th><th>Имя</th><th>Контакт</th><th>Канал</th><th>Источник</th><th>Этап</th><th>Сумма</th></tr></thead><tbody>${leads.map((lead) => `<tr><td>${escapeHTML(lead.date ?? "—")}</td><td>${escapeHTML(lead.name ?? "—")}</td><td>${escapeHTML(lead.contact ?? "—")}</td><td>${escapeHTML(lead.channel ?? "—")}</td><td>${escapeHTML(lead.source ?? "—")}</td><td><select data-crm-stage-id="${escapeHTML(lead.id)}">${crmStageOptions(lead.stage)}</select></td><td><input type="number" min="0" data-crm-amount-id="${escapeHTML(lead.id)}" value="${escapeHTML(lead.amount ?? "")}"></td></tr>`).join("")}</tbody></table></div>` : '<div class="crm-empty">Заявок за период нет</div>'}`;
+      ${leads.length ? `<div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Дата</th>
+        <th>Имя</th><th>Контакт</th><th>Канал</th><th>Источник</th><th>Этап</th><th>Сумма</th>
+        </tr></thead><tbody>${leads.map((lead) => `<tr><td>${escapeHTML(lead.date ?? "—")}</td>
+        <td><button class="crm-lead-button" type="button" data-crm-lead-id="${escapeHTML(lead.id)}">
+        ${escapeHTML(lead.name ?? "—")}</button></td><td>${escapeHTML(lead.contact ?? "—")}</td>
+        <td>${escapeHTML(lead.channel ?? "—")}</td><td>${escapeHTML(lead.source ?? "—")}</td>
+        <td><select data-crm-stage-id="${escapeHTML(lead.id)}"${editable ? "" : " disabled"}>
+        ${crmStageOptions(lead.stage)}</select></td><td><input type="number" min="0"
+        data-crm-amount-id="${escapeHTML(lead.id)}" value="${escapeHTML(lead.amount ?? "")}"
+        ${editable ? "" : "disabled"}></td></tr>`).join("")}</tbody></table></div>` :
+        '<div class="crm-empty">Заявок за период нет</div>'}<div id="crm-lead-details"></div>`;
+    const sources = Array.isArray(payload.sources) ? payload.sources : [];
+    const options = sources.map((source) => `<option value="${escapeHTML(source)}"
+      ${source === crmState.source ? "selected" : ""}>${escapeHTML(source)}</option>`).join("");
+    byId("crm-source-filter").innerHTML = '<option value="">Все источники</option>' + options;
   };
   const loadCRM = async () => {
     if (currentView !== "crm") return;
     byId("crm-content").innerHTML = '<div class="crm-empty">Загрузка CRM…</div>';
-    const query = new URLSearchParams({ period: crmState.period });
-    if (crmState.stage) query.set("stage", crmState.stage);
-    if (crmState.source) query.set("source", crmState.source);
     try {
-      renderCRMData(await crmAPI(`/dashboard?${query}`));
+      renderCRMData(await crmQuery("/dashboard", crmState));
     } catch (error) {
       byId("crm-content").innerHTML = '<div class="crm-error" role="alert">Не удалось загрузить текущую CRM.</div>';
     }
@@ -749,16 +987,45 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       loadCRM();
     });
     byId("crm-content").addEventListener("change", async (event) => {
+      if (!identity.permissions.includes("crm.edit")) return;
       const stageId = event.target.dataset.crmStageId;
       const amountId = event.target.dataset.crmAmountId;
       if (!stageId && !amountId) return;
       const id = stageId || amountId;
       const body = stageId ? { stage: event.target.value } : { amount: Number(event.target.value) };
       try {
-        await crmAPI(`/leads/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) });
+        await crmQuery(`/leads/${encodeURIComponent(id)}`, {}, {
+          method: "PATCH",
+          body: JSON.stringify(body)
+        });
         await loadCRM();
       } catch (error) {
         byId("crm-content").insertAdjacentHTML("afterbegin", '<div class="crm-error" role="alert">Не удалось сохранить изменение CRM.</div>');
+      }
+    });
+    byId("crm-content").addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-crm-lead-id]");
+      if (!button) return;
+      const details = byId("crm-lead-details");
+      details.innerHTML = '<div class="crm-empty">Загрузка карточки…</div>';
+      try {
+        const lead = await crmQuery(`/leads/${encodeURIComponent(button.dataset.crmLeadId)}`);
+        const fields = [
+          ["utmSource", lead.utmSource],
+          ["utmMedium", lead.utmMedium],
+          ["utmCampaign", lead.utmCampaign],
+          ["utmContent", lead.utmContent],
+          ["clientId", lead.clientId],
+          ["referrer", lead.referrer],
+          ["landingPage", lead.landingPage]
+        ].filter((field) => field[1]);
+        const attribution = fields.length ? `<dl>${fields.map(([label, value]) =>
+          `<dt>${label}</dt><dd>${escapeHTML(value)}</dd>`).join("")}</dl>` :
+          "<p>атрибуция не передана</p>";
+        details.innerHTML = `<article class="card lead-details"><h2>${escapeHTML(lead.name)}</h2>
+          <h3>Атрибуция</h3>${attribution}</article>`;
+      } catch (error) {
+        details.innerHTML = '<div class="crm-error" role="alert">Не удалось загрузить карточку заявки.</div>';
       }
     });
   };
@@ -788,8 +1055,14 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         throw new Error("INVALID_IDENTITY");
       }
       identity = profile;
+      identity.permissions = Array.isArray(identity.permissions) ? identity.permissions : [];
       allowedProjects = allowedProjectsFor(identity);
       selectedProjectId = readSelectedProject();
+      byId("analytics-link").hidden = !identity.permissions.includes("analytics.view");
+      byId("analytics-category").hidden = !identity.permissions.includes("analytics.view");
+      byId("analytics-through-view").hidden = !identity.permissions.includes("analytics.view");
+      byId("crm-link").hidden = !identity.permissions.includes("crm.view");
+      byId("crm-view").hidden = !identity.permissions.includes("crm.view");
       byId("accounts-link").hidden = identity.role !== "owner";
       byId("create-site").hidden = !identity.permissions.includes("sites.create");
       const companyFilter = byId("sites-company");
@@ -802,7 +1075,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       });
       renderIdentity();
       renderProjectPicker();
-      renderCRM();
+      if (identity.permissions.includes("analytics.view")) renderAnalyticsControls();
+      if (identity.permissions.includes("crm.view")) renderCRM();
       setView(viewFromHash());
       renderSites();
       renderAccounts();
