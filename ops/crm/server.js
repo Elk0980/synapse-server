@@ -40,6 +40,10 @@ const db = new DatabaseSync(DATABASE_PATH);
 db.exec(`
   PRAGMA foreign_keys = ON;
   PRAGMA journal_mode = WAL;
+  CREATE TABLE IF NOT EXISTS schema_migrations (
+    version INTEGER PRIMARY KEY,
+    applied_at TEXT NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS leads (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     created_at TEXT NOT NULL,
@@ -80,6 +84,109 @@ db.exec(`
   );
 `);
 
+function tableColumns(table) {
+  return new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((column) => column.name));
+}
+
+function migrate(version, migration) {
+  if (db.prepare('SELECT 1 FROM schema_migrations WHERE version = ?').get(version)) return;
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    migration();
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)')
+      .run(version, new Date().toISOString());
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+migrate(1, () => {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS contacts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      is_deleted INTEGER NOT NULL DEFAULT 0 CHECK(is_deleted IN (0, 1)), deleted_at TEXT,
+      name TEXT NOT NULL, position TEXT, phone TEXT, normalized_phone TEXT, email TEXT,
+      messengers TEXT, links TEXT, city TEXT, timezone TEXT, preferred_channel TEXT, notes TEXT,
+      birth_date TEXT
+    );
+    CREATE TABLE IF NOT EXISTS companies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      is_deleted INTEGER NOT NULL DEFAULT 0 CHECK(is_deleted IN (0, 1)), deleted_at TEXT,
+      code TEXT NOT NULL COLLATE NOCASE, name TEXT NOT NULL, industry TEXT, city TEXT, timezone TEXT,
+      phone TEXT, email TEXT, website_url TEXT, socials TEXT, pipeline_stage TEXT,
+      start_date TEXT, end_date TEXT, preferred_channel TEXT, notes TEXT
+    );
+    CREATE TABLE IF NOT EXISTS legal_entities (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      is_deleted INTEGER NOT NULL DEFAULT 0 CHECK(is_deleted IN (0, 1)), deleted_at TEXT,
+      legal_form TEXT NOT NULL CHECK(legal_form IN ('ip', 'ooo')), name TEXT NOT NULL, short_name TEXT,
+      inn TEXT, kpp TEXT, ogrn TEXT, ogrnip TEXT, phone TEXT, email TEXT, legal_address TEXT,
+      postal_address TEXT, tax_system TEXT, bank_name TEXT, bik TEXT, checking_account TEXT,
+      correspondent_account TEXT, recipient_name TEXT, notes TEXT
+    );
+    CREATE TABLE IF NOT EXISTS contact_companies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      is_deleted INTEGER NOT NULL DEFAULT 0 CHECK(is_deleted IN (0, 1)), deleted_at TEXT,
+      contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      role TEXT NOT NULL, is_responsible INTEGER NOT NULL DEFAULT 0 CHECK(is_responsible IN (0, 1)),
+      valid_from TEXT, valid_to TEXT, notes TEXT, UNIQUE(contact_id, company_id)
+    );
+    CREATE TABLE IF NOT EXISTS company_legal_entities (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      is_deleted INTEGER NOT NULL DEFAULT 0 CHECK(is_deleted IN (0, 1)), deleted_at TEXT,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      legal_entity_id INTEGER NOT NULL REFERENCES legal_entities(id) ON DELETE CASCADE,
+      role TEXT NOT NULL, is_primary INTEGER NOT NULL DEFAULT 0 CHECK(is_primary IN (0, 1)),
+      valid_from TEXT, valid_to TEXT, notes TEXT, UNIQUE(company_id, legal_entity_id)
+    );
+    CREATE TABLE IF NOT EXISTS contact_legal_entities (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      is_deleted INTEGER NOT NULL DEFAULT 0 CHECK(is_deleted IN (0, 1)), deleted_at TEXT,
+      contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+      legal_entity_id INTEGER NOT NULL REFERENCES legal_entities(id) ON DELETE CASCADE,
+      role TEXT NOT NULL, is_signatory INTEGER NOT NULL DEFAULT 0 CHECK(is_signatory IN (0, 1)),
+      signing_basis TEXT, valid_from TEXT, valid_to TEXT, notes TEXT,
+      UNIQUE(contact_id, legal_entity_id)
+    );
+  `);
+  const compatibleCompanyColumns = {
+    created_at: 'TEXT', updated_at: 'TEXT', is_deleted: 'INTEGER NOT NULL DEFAULT 0 CHECK(is_deleted IN (0,1))',
+    deleted_at: 'TEXT', code: 'TEXT COLLATE NOCASE', name: 'TEXT', industry: 'TEXT', city: 'TEXT', timezone: 'TEXT',
+    phone: 'TEXT', email: 'TEXT', website_url: 'TEXT', socials: 'TEXT', pipeline_stage: 'TEXT', start_date: 'TEXT',
+    end_date: 'TEXT', preferred_channel: 'TEXT', notes: 'TEXT',
+  };
+  const existingCompanyColumns = tableColumns('companies');
+  for (const [name, type] of Object.entries(compatibleCompanyColumns)) {
+    if (!existingCompanyColumns.has(name)) db.exec(`ALTER TABLE companies ADD COLUMN ${name} ${type}`);
+  }
+  if (!tableColumns('leads').has('company_code')) {
+    db.exec('ALTER TABLE leads ADD COLUMN company_code TEXT COLLATE NOCASE REFERENCES companies(code) ON UPDATE CASCADE ON DELETE RESTRICT');
+  }
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS contacts_deleted_name_idx ON contacts(is_deleted, name);
+    CREATE INDEX IF NOT EXISTS contacts_phone_idx ON contacts(normalized_phone);
+    CREATE UNIQUE INDEX IF NOT EXISTS companies_code_uidx ON companies(code COLLATE NOCASE);
+    CREATE INDEX IF NOT EXISTS companies_search_idx ON companies(is_deleted, name, pipeline_stage);
+    CREATE UNIQUE INDEX IF NOT EXISTS legal_entities_inn_uidx ON legal_entities(inn) WHERE inn IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS legal_entities_ogrn_uidx ON legal_entities(ogrn) WHERE ogrn IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS legal_entities_ogrnip_uidx ON legal_entities(ogrnip) WHERE ogrnip IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS legal_entities_search_idx ON legal_entities(is_deleted, name);
+    CREATE INDEX IF NOT EXISTS contact_companies_company_idx ON contact_companies(company_id);
+    CREATE INDEX IF NOT EXISTS company_legal_entities_legal_idx ON company_legal_entities(legal_entity_id);
+    CREATE INDEX IF NOT EXISTS contact_legal_entities_legal_idx ON contact_legal_entities(legal_entity_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS contact_companies_responsible_uidx
+      ON contact_companies(company_id) WHERE is_deleted = 0 AND is_responsible = 1;
+    CREATE UNIQUE INDEX IF NOT EXISTS company_legal_entities_primary_uidx
+      ON company_legal_entities(company_id) WHERE is_deleted = 0 AND is_primary = 1;
+  `);
+});
+
+const foreignKeyErrors = db.prepare('PRAGMA foreign_key_check').all();
+if (foreignKeyErrors.length) throw new Error('Нарушена ссылочная целостность базы данных');
+
 const attributionColumns = {
   utm_source: 'TEXT',
   utm_medium: 'TEXT',
@@ -99,6 +206,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS leads_source_idx ON leads(source);
   CREATE INDEX IF NOT EXISTS leads_created_at_idx ON leads(created_at);
   CREATE INDEX IF NOT EXISTS leads_normalized_contact_idx ON leads(normalized_contact);
+  CREATE INDEX IF NOT EXISTS leads_company_created_idx ON leads(company_code, created_at);
+  CREATE INDEX IF NOT EXISTS leads_company_stage_created_idx ON leads(company_code, stage, created_at);
+  CREATE INDEX IF NOT EXISTS leads_company_contact_idx ON leads(company_code, normalized_contact);
   CREATE INDEX IF NOT EXISTS messages_lead_id_idx ON messages(lead_id);
   CREATE INDEX IF NOT EXISTS stage_history_lead_id_idx ON stage_history(lead_id);
   CREATE INDEX IF NOT EXISTS expenses_spent_at_idx ON expenses(spent_at);
@@ -112,13 +222,13 @@ for (const row of contactsToNormalize) saveNormalizedContact.run(normalizeContac
 const createLead = db.prepare(`
   INSERT INTO leads (
     created_at, name, contact, normalized_contact, channel, source, tag, page, first_question,
-    stage, comment, utm_source, utm_medium, utm_campaign, utm_content, client_id, referrer, landing_page
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'новая', ?, ?, ?, ?, ?, ?, ?, ?)
+    stage, comment, utm_source, utm_medium, utm_campaign, utm_content, client_id, referrer, landing_page,
+    company_code
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'новая', ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 const getLead = db.prepare('SELECT * FROM leads WHERE id = ?');
-const getLeadByContact = db.prepare(
-  "SELECT * FROM leads WHERE normalized_contact = ? AND normalized_contact != '' ORDER BY id LIMIT 1"
-);
+const getLeadByContact = db.prepare(`SELECT * FROM leads WHERE normalized_contact = ?
+  AND normalized_contact != '' AND company_code IS ? COLLATE NOCASE ORDER BY id LIMIT 1`);
 const getMessage = db.prepare('SELECT * FROM messages WHERE id = ?');
 const getMessages = db.prepare('SELECT * FROM messages WHERE lead_id = ? ORDER BY created_at, id');
 const getStageHistory = db.prepare(
@@ -223,6 +333,181 @@ function normalizeContact(contact) {
   return contact.trim().toLocaleLowerCase('ru');
 }
 
+const ENTITY_CONFIG = {
+  contacts: {
+    path: 'contacts', table: 'contacts', response: 'contacts', required: ['name'],
+    fields: ['name', 'position', 'phone', 'email', 'messengers', 'links', 'city', 'timezone',
+      'preferredChannel', 'notes', 'birthDate'],
+    columns: { preferredChannel: 'preferred_channel', birthDate: 'birth_date' },
+    private: new Set(['notes', 'birthDate']),
+  },
+  companies: {
+    path: 'companies', table: 'companies', response: 'companies', required: ['code', 'name'],
+    fields: ['code', 'name', 'industry', 'city', 'timezone', 'phone', 'email', 'websiteUrl', 'socials',
+      'pipelineStage', 'startDate', 'endDate', 'preferredChannel', 'notes'],
+    columns: { websiteUrl: 'website_url', pipelineStage: 'pipeline_stage', startDate: 'start_date',
+      endDate: 'end_date', preferredChannel: 'preferred_channel' },
+    private: new Set(['notes']),
+  },
+  legalEntities: {
+    path: 'legal-entities', table: 'legal_entities', response: 'legalEntities', required: ['legalForm', 'name'],
+    fields: ['legalForm', 'name', 'shortName', 'inn', 'kpp', 'ogrn', 'ogrnip', 'phone', 'email',
+      'legalAddress', 'postalAddress', 'taxSystem', 'bankName', 'bik', 'checkingAccount',
+      'correspondentAccount', 'recipientName', 'notes'],
+    columns: { legalForm: 'legal_form', shortName: 'short_name', legalAddress: 'legal_address',
+      postalAddress: 'postal_address', taxSystem: 'tax_system', bankName: 'bank_name',
+      checkingAccount: 'checking_account', correspondentAccount: 'correspondent_account',
+      recipientName: 'recipient_name' },
+    private: new Set(['legalAddress', 'postalAddress', 'taxSystem', 'bankName', 'bik', 'checkingAccount',
+      'correspondentAccount', 'recipientName', 'notes']),
+  },
+};
+const SYSTEM_FIELDS = new Set(['id', 'createdAt', 'updatedAt', 'isDeleted', 'deletedAt']);
+const SECRET_PATTERN = /(password|token|api.?key|secret|cookie|private.?key|cvv|cvc|login|код.?подтверж)/i;
+const PIPELINE_STAGES = new Set(['application', 'call', 'kit_ready', 'payment', 'active']);
+const MESSENGER_TYPES = new Set(['telegram', 'max', 'whatsapp', 'vk', 'phone', 'email', 'other']);
+const JSON_FIELDS = new Set(['messengers', 'links', 'socials']);
+
+function entityId(value) {
+  const id = Number(value);
+  if (!Number.isSafeInteger(id) || id < 1) fail(400, 'Некорректный идентификатор', { code: 'VALIDATION_ERROR' });
+  return id;
+}
+function column(config, field) {
+  return config.columns[field] || field.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+}
+function checkedString(value, field, nullable = true) {
+  if (value === null && nullable) return null;
+  if (typeof value !== 'string') fail(400, `Поле «${field}» должно быть строкой`,
+    { code: 'VALIDATION_ERROR', field });
+  const result = value.trim();
+  if (!result && !nullable) fail(400, `Поле «${field}» не может быть пустым`,
+    { code: 'VALIDATION_ERROR', field });
+  if (result.length > 2000) fail(400, `Поле «${field}» слишком длинное`,
+    { code: 'VALIDATION_ERROR', field });
+  return result || null;
+}
+function validUrl(value, field) {
+  const result = checkedString(value, field, false);
+  let parsed;
+  try { parsed = new URL(result); } catch { fail(400, `Поле «${field}» содержит некорректную ссылку`,
+    { code: 'VALIDATION_ERROR', field }); }
+  if (!['http:', 'https:'].includes(parsed.protocol)) fail(400, `Поле «${field}» допускает только HTTP(S)`,
+    { code: 'VALIDATION_ERROR', field });
+  return result;
+}
+function validDay(value, field) {
+  const result = checkedString(value, field, false);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(result)) fail(400, `Поле «${field}» должно иметь формат YYYY-MM-DD`,
+    { code: 'VALIDATION_ERROR', field });
+  const parsed = new Date(`${result}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.valueOf()) || parsed.toISOString().slice(0, 10) !== result) {
+    fail(400, `Поле «${field}» содержит невозможную дату`, { code: 'VALIDATION_ERROR', field });
+  }
+  return result;
+}
+function validateArray(value, field) {
+  if (value === null) return null;
+  if (!Array.isArray(value) || value.length > 25) fail(400, `Поле «${field}» должно быть массивом до 25 элементов`,
+    { code: 'VALIDATION_ERROR', field });
+  const values = value.map((item) => {
+    if (!item || Array.isArray(item) || typeof item !== 'object') fail(400, `Элемент «${field}» должен быть объектом`,
+      { code: 'VALIDATION_ERROR', field });
+    const allowed = field === 'links' ? ['label', 'url'] : ['type', 'label', 'handle', 'url'];
+    if (Object.keys(item).some((key) => !allowed.includes(key))) fail(400, `Неизвестное поле в «${field}»`,
+      { code: 'VALIDATION_ERROR', field });
+    const out = {};
+    for (const key of allowed) if (item[key] !== undefined) {
+      out[key] = key === 'url' && item[key] !== null ? validUrl(item[key], `${field}.${key}`) :
+        checkedString(item[key], `${field}.${key}`);
+    }
+    if (field === 'messengers') {
+      if (!MESSENGER_TYPES.has(out.type)) fail(400, 'Неизвестный тип мессенджера',
+        { code: 'VALIDATION_ERROR', field });
+      if (!out.handle && !out.url) fail(400, 'У мессенджера нужен handle или url',
+        { code: 'VALIDATION_ERROR', field });
+    }
+    if (field === 'links' && !out.url) fail(400, 'У ссылки нужен url', { code: 'VALIDATION_ERROR', field });
+    return out;
+  });
+  return JSON.stringify(values);
+}
+function validateEntity(config, body, patch = false, current = null) {
+  const keys = Object.keys(body);
+  if (!keys.length) fail(400, 'Пустой объект нельзя изменить', { code: 'VALIDATION_ERROR' });
+  for (const key of keys) {
+    if (SYSTEM_FIELDS.has(key) || SECRET_PATTERN.test(key) || !config.fields.includes(key)) {
+      fail(400, `Неизвестное или запрещённое поле «${key}»`, { code: 'VALIDATION_ERROR', field: key });
+    }
+  }
+  const values = {};
+  for (const field of config.fields) {
+    if (!(field in body)) continue;
+    if (config.required.includes(field) && (body[field] === null || body[field] === '')) {
+      fail(400, `Поле «${field}» нельзя очистить`, { code: 'VALIDATION_ERROR', field });
+    }
+    let value = JSON_FIELDS.has(field) ? validateArray(body[field], field) : checkedString(body[field], field,
+      !config.required.includes(field));
+    if (field === 'code' && value !== null) {
+      value = value.toLowerCase();
+      if (!/^[a-z0-9_-]{2,64}$/.test(value)) fail(400, 'Некорректный код компании',
+        { code: 'VALIDATION_ERROR', field });
+    }
+    if (field === 'legalForm' && !['ip', 'ooo'].includes(value)) fail(400, 'legalForm должен быть ip или ooo',
+      { code: 'VALIDATION_ERROR', field });
+    if (field === 'pipelineStage' && value !== null && !PIPELINE_STAGES.has(value)) {
+      fail(400, 'Неизвестный этап компании', { code: 'VALIDATION_ERROR', field });
+    }
+    if (field === 'timezone' && value !== null) {
+      try { new Intl.DateTimeFormat('ru', { timeZone: value }); } catch {
+        fail(400, 'Некорректный часовой пояс IANA', { code: 'VALIDATION_ERROR', field });
+      }
+    }
+    if (['birthDate', 'startDate', 'endDate'].includes(field) && value !== null) value = validDay(value, field);
+    if (['websiteUrl'].includes(field) && value !== null) value = validUrl(value, field);
+    values[field] = value;
+  }
+  if (!patch) for (const field of config.required) if (!(field in values)) fail(400, `Поле «${field}» обязательно`,
+    { code: 'VALIDATION_ERROR', field });
+  if (config.table === 'legal_entities') {
+    const form = values.legalForm ?? current?.legal_form;
+    const all = { ...current, ...Object.fromEntries(Object.entries(values).map(([key, value]) => [column(config, key), value])) };
+    const lengths = { kpp: 9, ogrn: 13, ogrnip: 15, bik: 9, checking_account: 20,
+      correspondent_account: 20 };
+    if (all.inn && !new RegExp(`^\\d{${form === 'ip' ? 12 : 10}}$`).test(all.inn)) {
+      fail(400, 'ИНН имеет неверную длину', { code: 'VALIDATION_ERROR', field: 'inn' });
+    }
+    for (const [field, length] of Object.entries(lengths)) if (all[field] && !new RegExp(`^\\d{${length}}$`).test(all[field])) {
+      fail(400, `Поле «${field}» должно содержать ${length} цифр`, { code: 'VALIDATION_ERROR', field });
+    }
+    if (form === 'ip' && all.ogrn) fail(400, 'ОГРН несовместим с ИП', { code: 'VALIDATION_ERROR', field: 'ogrn' });
+    if (form === 'ooo' && all.ogrnip) fail(400, 'ОГРНИП несовместим с ООО',
+      { code: 'VALIDATION_ERROR', field: 'ogrnip' });
+  }
+  return values;
+}
+function serializeEntity(config, row, brief = false) {
+  const result = { id: row.id, createdAt: row.created_at, updatedAt: row.updated_at,
+    isDeleted: Boolean(row.is_deleted), deletedAt: row.deleted_at };
+  for (const field of config.fields) {
+    if (brief && config.private.has(field)) continue;
+    const value = row[column(config, field)];
+    result[field] = JSON_FIELDS.has(field) && value ? JSON.parse(value) : value;
+  }
+  return result;
+}
+function entityRow(config, id, includeDeleted = false) {
+  const row = db.prepare(`SELECT * FROM ${config.table} WHERE id = ?`).get(id);
+  if (!row || (row.is_deleted && !includeDeleted)) fail(404, 'Карточка не найдена', { code: 'NOT_FOUND' });
+  return row;
+}
+function conflict(error) {
+  if (String(error.message).includes('UNIQUE constraint failed')) {
+    fail(409, 'Значение уже используется', { code: 'UNIQUE_CONFLICT' });
+  }
+  throw error;
+}
+
 function serializeLead(row) {
   return {
     id: row.id,
@@ -245,6 +530,7 @@ function serializeLead(row) {
     clientId: row.client_id,
     referrer: row.referrer,
     landingPage: row.landing_page,
+    companyCode: row.company_code,
   };
 }
 
@@ -259,6 +545,7 @@ function serializeCabinetLead(row) {
     tag: row.tag,
     stage: CABINET_STAGE_IDS.get(row.stage),
     amount: row.sale_amount,
+    companyCode: row.company_code,
   };
 }
 
@@ -339,7 +626,7 @@ function corsHeaders(request) {
   if (!origin || (!ALLOWED_ORIGINS.has('*') && !ALLOWED_ORIGINS.has(origin))) return {};
   return {
     'access-control-allow-origin': origin,
-    'access-control-allow-methods': 'GET, POST, PATCH, OPTIONS',
+    'access-control-allow-methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
     'access-control-allow-headers': 'Content-Type, X-API-Key',
     vary: 'Origin',
   };
@@ -364,6 +651,217 @@ function csvCell(value) {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
+function relationRows(kind, id) {
+  if (kind === 'contacts') return {
+    companies: db.prepare(`SELECT c.*, r.role, r.is_responsible, r.valid_from, r.valid_to, r.notes relation_notes
+      FROM contact_companies r JOIN companies c ON c.id=r.company_id
+      WHERE r.contact_id=? AND r.is_deleted=0 AND c.is_deleted=0`).all(id).map((row) => ({
+        ...serializeEntity(ENTITY_CONFIG.companies, row, true), relation: relationData(row, 'is_responsible') })),
+    legalEntities: db.prepare(`SELECT l.*, r.role, r.is_signatory, r.signing_basis, r.valid_from, r.valid_to,
+      r.notes relation_notes FROM contact_legal_entities r JOIN legal_entities l ON l.id=r.legal_entity_id
+      WHERE r.contact_id=? AND r.is_deleted=0 AND l.is_deleted=0`).all(id).map((row) => ({
+        ...serializeEntity(ENTITY_CONFIG.legalEntities, row, true),
+        relation: relationData(row, 'is_signatory', 'signing_basis') })),
+  };
+  if (kind === 'companies') {
+    const contacts = db.prepare(`SELECT c.*, r.role, r.is_responsible, r.valid_from, r.valid_to, r.notes relation_notes
+      FROM contact_companies r JOIN contacts c ON c.id=r.contact_id
+      WHERE r.company_id=? AND r.is_deleted=0 AND c.is_deleted=0`).all(id).map((row) => ({
+        ...serializeEntity(ENTITY_CONFIG.contacts, row, true), relation: relationData(row, 'is_responsible') }));
+    const legalEntities = db.prepare(`SELECT l.*, r.role, r.is_primary, r.valid_from, r.valid_to, r.notes relation_notes
+      FROM company_legal_entities r JOIN legal_entities l ON l.id=r.legal_entity_id
+      WHERE r.company_id=? AND r.is_deleted=0 AND l.is_deleted=0`).all(id).map((row) => ({
+        ...serializeEntity(ENTITY_CONFIG.legalEntities, row, true), relation: relationData(row, 'is_primary') }));
+    const code = db.prepare('SELECT code FROM companies WHERE id=?').get(id).code;
+    const leadRows = db.prepare('SELECT stage, COUNT(*) count FROM leads WHERE company_code=? GROUP BY stage').all(code);
+    return { contacts, responsibleContact: contacts.find((item) => item.relation.isResponsible) || null,
+      legalEntities, primaryLegalEntity: legalEntities.find((item) => item.relation.isPrimary) || null,
+      leadsCount: leadRows.reduce((sum, row) => sum + row.count, 0),
+      leadsByStage: Object.fromEntries(leadRows.map((row) => [row.stage, row.count])) };
+  }
+  return {
+    companies: db.prepare(`SELECT c.*, r.role, r.is_primary, r.valid_from, r.valid_to, r.notes relation_notes
+      FROM company_legal_entities r JOIN companies c ON c.id=r.company_id
+      WHERE r.legal_entity_id=? AND r.is_deleted=0 AND c.is_deleted=0`).all(id).map((row) => ({
+        ...serializeEntity(ENTITY_CONFIG.companies, row, true), relation: relationData(row, 'is_primary') })),
+    contacts: db.prepare(`SELECT c.*, r.role, r.is_signatory, r.signing_basis, r.valid_from, r.valid_to,
+      r.notes relation_notes FROM contact_legal_entities r JOIN contacts c ON c.id=r.contact_id
+      WHERE r.legal_entity_id=? AND r.is_deleted=0 AND c.is_deleted=0`).all(id).map((row) => ({
+        ...serializeEntity(ENTITY_CONFIG.contacts, row, true),
+        relation: relationData(row, 'is_signatory', 'signing_basis') })),
+  };
+}
+function relationData(row, booleanColumn, extraColumn) {
+  const boolName = { is_responsible: 'isResponsible', is_primary: 'isPrimary', is_signatory: 'isSignatory' }[booleanColumn];
+  return { role: row.role, [boolName]: Boolean(row[booleanColumn]),
+    ...(extraColumn ? { signingBasis: row[extraColumn] } : {}), validFrom: row.valid_from,
+    validTo: row.valid_to, notes: row.relation_notes };
+}
+function listQuery(config, url) {
+  const deleted = url.searchParams.get('deleted') || 'exclude';
+  if (!['exclude', 'include', 'only'].includes(deleted)) fail(400, 'Некорректный deleted',
+    { code: 'VALIDATION_ERROR', field: 'deleted' });
+  const limit = Number(url.searchParams.get('limit') || 50);
+  const offset = Number(url.searchParams.get('offset') || 0);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 200 || !Number.isInteger(offset) || offset < 0) {
+    fail(400, 'Некорректная пагинация', { code: 'VALIDATION_ERROR' });
+  }
+  const clauses = deleted === 'exclude' ? ['e.is_deleted=0'] : deleted === 'only' ? ['e.is_deleted=1'] : [];
+  const params = [];
+  const q = url.searchParams.get('q');
+  if (q) { clauses.push('(e.name LIKE ? OR ' + (config.table === 'companies' ? 'e.code LIKE ?' : 'e.email LIKE ?') + ')');
+    params.push(`%${q}%`, `%${q}%`); }
+  const simple = config.table === 'contacts' ? { city: 'city', preferredChannel: 'preferred_channel' } :
+    config.table === 'companies' ? { city: 'city', pipelineStage: 'pipeline_stage' } : { legalForm: 'legal_form' };
+  for (const [query, col] of Object.entries(simple)) if (url.searchParams.has(query)) {
+    clauses.push(`e.${col}=?`); params.push(url.searchParams.get(query));
+  }
+  const relationFilters = config.table === 'contacts' ? { companyId: ['contact_companies', 'contact_id', 'company_id'],
+    legalEntityId: ['contact_legal_entities', 'contact_id', 'legal_entity_id'] } : config.table === 'companies' ?
+    { contactId: ['contact_companies', 'company_id', 'contact_id'],
+      legalEntityId: ['company_legal_entities', 'company_id', 'legal_entity_id'] } :
+    { contactId: ['contact_legal_entities', 'legal_entity_id', 'contact_id'],
+      companyId: ['company_legal_entities', 'legal_entity_id', 'company_id'] };
+  for (const [query, [table, own, other]] of Object.entries(relationFilters)) if (url.searchParams.has(query)) {
+    clauses.push(`EXISTS(SELECT 1 FROM ${table} r WHERE r.${own}=e.id AND r.${other}=? AND r.is_deleted=0)`);
+    params.push(entityId(url.searchParams.get(query)));
+  }
+  const where = clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '';
+  const total = db.prepare(`SELECT COUNT(*) total FROM ${config.table} e${where}`).get(...params).total;
+  const rows = db.prepare(`SELECT e.* FROM ${config.table} e${where} ORDER BY e.name, e.id LIMIT ? OFFSET ?`)
+    .all(...params, limit, offset);
+  return { rows, pagination: { limit, offset, total } };
+}
+async function handleEntityRoutes(request, response, url, cors) {
+  for (const [kind, config] of Object.entries(ENTITY_CONFIG)) {
+    if (url.pathname === `/${config.path}` && request.method === 'GET') {
+      const result = listQuery(config, url);
+      send(response, 200, { [config.response]: result.rows.map((row) => serializeEntity(config, row, true)),
+        pagination: result.pagination }, cors); return true;
+    }
+    if (url.pathname === `/${config.path}` && request.method === 'POST') {
+      const body = await readJson(request); const values = validateEntity(config, body); const now = new Date().toISOString();
+      const entries = Object.entries(values); const cols = entries.map(([field]) => column(config, field));
+      if (config.table === 'contacts' && values.phone !== undefined) { cols.push('normalized_phone');
+        entries.push(['normalizedPhone', values.phone ? normalizeContact(values.phone) : null]); }
+      try {
+        const result = db.prepare(`INSERT INTO ${config.table} (created_at,updated_at,${cols.join(',')})
+          VALUES (?,?,${cols.map(() => '?').join(',')})`).run(now, now, ...entries.map(([, value]) => value));
+        const id = Number(result.lastInsertRowid); send(response, 201, serializeEntity(config, entityRow(config, id)),
+          { ...cors, Location: `/${config.path}/${id}` }); return true;
+      } catch (error) { conflict(error); }
+    }
+    const match = url.pathname.match(new RegExp(`^/${config.path}/(\\d+)$`));
+    if (match && request.method === 'GET') {
+      const id = entityId(match[1]); const row = entityRow(config, id, url.searchParams.get('includeDeleted') === 'true');
+      send(response, 200, { ...serializeEntity(config, row), ...relationRows(kind, id) }, cors); return true;
+    }
+    if (match && request.method === 'PATCH') {
+      const id = entityId(match[1]); const row = entityRow(config, id, true);
+      if (row.is_deleted) fail(409, 'Сначала восстановите удалённую карточку', { code: 'DELETED_ENTITY' });
+      const values = validateEntity(config, await readJson(request), true, row); const entries = Object.entries(values);
+      const assignments = entries.map(([field]) => `${column(config, field)}=?`);
+      const parameters = entries.map(([, value]) => value);
+      if (config.table === 'contacts' && values.phone !== undefined) { assignments.push('normalized_phone=?');
+        parameters.push(values.phone ? normalizeContact(values.phone) : null); }
+      const now = new Date().toISOString();
+      const run = () => db.prepare(`UPDATE ${config.table} SET ${assignments.join(',')},updated_at=? WHERE id=?`)
+        .run(...parameters, now, id);
+      try {
+        if (config.table === 'companies' && values.code !== undefined) { db.exec('BEGIN IMMEDIATE');
+          try { run(); db.exec('COMMIT'); } catch (error) { db.exec('ROLLBACK'); throw error; } } else run();
+      } catch (error) { conflict(error); }
+      send(response, 200, serializeEntity(config, entityRow(config, id)), cors); return true;
+    }
+    if (match && request.method === 'DELETE') {
+      const id = entityId(match[1]); const row = entityRow(config, id, true);
+      if (!row.is_deleted) { const now = new Date().toISOString(); db.exec('BEGIN IMMEDIATE'); try {
+        db.prepare(`UPDATE ${config.table} SET is_deleted=1,deleted_at=?,updated_at=? WHERE id=?`).run(now, now, id);
+        const updates = config.table === 'contacts' ? [['contact_companies','contact_id'],['contact_legal_entities','contact_id']] :
+          config.table === 'companies' ? [['contact_companies','company_id'],['company_legal_entities','company_id']] :
+            [['company_legal_entities','legal_entity_id'],['contact_legal_entities','legal_entity_id']];
+        for (const [table, col] of updates) db.prepare(`UPDATE ${table} SET is_deleted=1,deleted_at=?,updated_at=?
+          WHERE ${col}=? AND is_deleted=0`).run(now, now, id); db.exec('COMMIT');
+      } catch (error) { db.exec('ROLLBACK'); throw error; } }
+      const deleted = entityRow(config, id, true); send(response, 200,
+        { id, isDeleted: true, deletedAt: deleted.deleted_at }, cors); return true;
+    }
+    const restore = url.pathname.match(new RegExp(`^/${config.path}/(\\d+)/restore$`));
+    if (restore && request.method === 'POST') { const id = entityId(restore[1]); entityRow(config, id, true);
+      try { db.prepare(`UPDATE ${config.table} SET is_deleted=0,deleted_at=NULL,updated_at=? WHERE id=?`)
+        .run(new Date().toISOString(), id); } catch (error) { conflict(error); }
+      send(response, 200, serializeEntity(config, entityRow(config, id)), cors); return true; }
+  }
+  return false;
+}
+
+const RELATIONS = [
+  { regex: /^\/contacts\/(\d+)\/companies\/(\d+)$/, table: 'contact_companies', left: 'contacts',
+    right: 'companies', leftCol: 'contact_id', rightCol: 'company_id', bool: 'is_responsible', boolJson: 'isResponsible' },
+  { regex: /^\/companies\/(\d+)\/legal-entities\/(\d+)$/, table: 'company_legal_entities', left: 'companies',
+    right: 'legalEntities', leftCol: 'company_id', rightCol: 'legal_entity_id', bool: 'is_primary', boolJson: 'isPrimary' },
+  { regex: /^\/contacts\/(\d+)\/legal-entities\/(\d+)$/, table: 'contact_legal_entities', left: 'contacts',
+    right: 'legalEntities', leftCol: 'contact_id', rightCol: 'legal_entity_id', bool: 'is_signatory',
+    boolJson: 'isSignatory', extra: 'signing_basis', extraJson: 'signingBasis' },
+];
+async function handleRelationRoutes(request, response, url, cors) {
+  for (const relation of RELATIONS) {
+    const match = url.pathname.match(relation.regex); if (!match) continue;
+    const leftId = entityId(match[1]); const rightId = entityId(match[2]);
+    const left = entityRow(ENTITY_CONFIG[relation.left], leftId, true);
+    const right = entityRow(ENTITY_CONFIG[relation.right], rightId, true);
+    if (request.method === 'PUT') {
+      if (left.is_deleted || right.is_deleted) fail(409, 'Нельзя связать удалённую карточку',
+        { code: 'DELETED_ENTITY' });
+      const body = await readJson(request); const allowed = ['role', relation.boolJson, relation.extraJson,
+        'validFrom', 'validTo', 'notes'].filter(Boolean);
+      if (Object.keys(body).some((key) => !allowed.includes(key))) fail(400, 'Неизвестное поле связи',
+        { code: 'VALIDATION_ERROR' });
+      if (body[relation.boolJson] !== undefined && typeof body[relation.boolJson] !== 'boolean') {
+        fail(400, `Поле «${relation.boolJson}» должно быть boolean`, { code: 'VALIDATION_ERROR' });
+      }
+      const old = db.prepare(`SELECT * FROM ${relation.table} WHERE ${relation.leftCol}=? AND ${relation.rightCol}=?`)
+        .get(leftId, rightId);
+      if ((!old || old.is_deleted) && !body.role) fail(400, 'Для новой связи поле «role» обязательно',
+        { code: 'VALIDATION_ERROR', field: 'role' });
+      const values = { role: body.role === undefined ? old.role : checkedString(body.role, 'role', false),
+        flag: body[relation.boolJson] === undefined ? Boolean(old?.[relation.bool]) : body[relation.boolJson],
+        extra: relation.extra ? (body[relation.extraJson] === undefined ? old?.[relation.extra] || null :
+          checkedString(body[relation.extraJson], relation.extraJson)) : null,
+        validFrom: body.validFrom === undefined ? old?.valid_from || null : body.validFrom === null ? null :
+          date(body.validFrom, 'validFrom'), validTo: body.validTo === undefined ? old?.valid_to || null :
+          body.validTo === null ? null : date(body.validTo, 'validTo'),
+        notes: body.notes === undefined ? old?.notes || null : checkedString(body.notes, 'notes') };
+      const now = new Date().toISOString(); db.exec('BEGIN IMMEDIATE'); try {
+        if (values.flag && relation.bool !== 'is_signatory') db.prepare(`UPDATE ${relation.table}
+          SET ${relation.bool}=0,updated_at=? WHERE ${relation.left === 'contacts' ? relation.rightCol : relation.leftCol}=?
+          AND is_deleted=0`).run(now, relation.left === 'contacts' ? rightId : leftId);
+        if (old) db.prepare(`UPDATE ${relation.table} SET role=?,${relation.bool}=?,${relation.extra ? `${relation.extra}=?,` : ''}
+          valid_from=?,valid_to=?,notes=?,is_deleted=0,deleted_at=NULL,updated_at=? WHERE id=?`)
+          .run(values.role, Number(values.flag), ...(relation.extra ? [values.extra] : []), values.validFrom, values.validTo,
+            values.notes, now, old.id);
+        else db.prepare(`INSERT INTO ${relation.table} (created_at,updated_at,${relation.leftCol},${relation.rightCol},role,
+          ${relation.bool},${relation.extra ? `${relation.extra},` : ''}valid_from,valid_to,notes) VALUES (?,?,?,?,?,?,
+          ${relation.extra ? '?,' : ''}?,?,?)`).run(now, now, leftId, rightId, values.role, Number(values.flag),
+            ...(relation.extra ? [values.extra] : []), values.validFrom, values.validTo, values.notes);
+        db.exec('COMMIT');
+      } catch (error) { db.exec('ROLLBACK'); throw error; }
+      send(response, old ? 200 : 201, { role: values.role, [relation.boolJson]: values.flag,
+        ...(relation.extra ? { [relation.extraJson]: values.extra } : {}), validFrom: values.validFrom,
+        validTo: values.validTo, notes: values.notes }, cors); return true;
+    }
+    if (request.method === 'DELETE') {
+      const old = db.prepare(`SELECT * FROM ${relation.table} WHERE ${relation.leftCol}=? AND ${relation.rightCol}=?`)
+        .get(leftId, rightId); if (!old) fail(404, 'Связь не найдена', { code: 'NOT_FOUND' });
+      if (!old.is_deleted) { const now = new Date().toISOString(); db.prepare(`UPDATE ${relation.table}
+        SET is_deleted=1,deleted_at=?,updated_at=? WHERE id=?`).run(now, now, old.id); }
+      const row = db.prepare(`SELECT * FROM ${relation.table} WHERE id=?`).get(old.id);
+      send(response, 200, { id: row.id, isDeleted: true, deletedAt: row.deleted_at }, cors); return true;
+    }
+  }
+  return false;
+}
+
 async function route(request, response) {
   const url = new URL(request.url, 'http://localhost');
   const cors = corsHeaders(request);
@@ -373,6 +871,9 @@ async function route(request, response) {
   }
   takeRateLimit(request);
   if (!(request.method === 'POST' && url.pathname === '/leads')) requireApiKey(request);
+
+  if (await handleRelationRoutes(request, response, url, cors)) return;
+  if (await handleEntityRoutes(request, response, url, cors)) return;
 
   if (request.method === 'GET' && url.pathname === '/dashboard') {
     const customRange = url.searchParams.has('from') || url.searchParams.has('to');
@@ -439,7 +940,14 @@ async function route(request, response) {
     const body = await readJson(request);
     const contact = requiredString(body.contact, 'contact');
     const normalized = normalizeContact(contact);
-    const duplicate = getLeadByContact.get(normalized);
+    const companyCode = body.companyCode === undefined || body.companyCode === null ? null :
+      requiredString(body.companyCode, 'companyCode').toLowerCase();
+    if (companyCode) {
+      const company = db.prepare('SELECT * FROM companies WHERE code = ? COLLATE NOCASE').get(companyCode);
+      if (!company || company.is_deleted) fail(409, 'Активная компания с таким кодом не найдена',
+        { code: 'COMPANY_NOT_ACTIVE', field: 'companyCode' });
+    }
+    const duplicate = getLeadByContact.get(normalized, companyCode);
     if (duplicate) return send(response, 200, { ...serializeLead(duplicate), deduplicated: true }, cors);
     const utmSource = optionalString(body.utmSource, 'utmSource');
     const landingPage = optionalString(body.landingPage, 'landingPage');
@@ -460,7 +968,8 @@ async function route(request, response) {
       optionalString(body.utmContent, 'utmContent'),
       optionalString(body.clientId, 'clientId'),
       optionalString(body.referrer, 'referrer'),
-      landingPage
+      landingPage,
+      companyCode
     );
     const row = getLead.get(Number(result.lastInsertRowid));
     insertStageHistory.run(row.id, row.created_at, null, row.stage);
@@ -481,6 +990,11 @@ async function route(request, response) {
       clauses.push('source = ?');
       params.push(source);
     }
+    if (url.searchParams.has('companyCode')) {
+      const companyCode = url.searchParams.get('companyCode');
+      clauses.push(companyCode === '' ? 'company_code IS NULL' : 'company_code = ? COLLATE NOCASE');
+      if (companyCode !== '') params.push(companyCode);
+    }
     const where = clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '';
     const rows = db.prepare(`SELECT * FROM leads${where} ORDER BY created_at DESC, id DESC`).all(...params);
     return send(response, 200, { leads: rows.map(serializeLead) }, cors);
@@ -490,7 +1004,7 @@ async function route(request, response) {
     const rows = db.prepare('SELECT * FROM leads ORDER BY created_at DESC, id DESC').all();
     const fields = ['id', 'created_at', 'name', 'contact', 'channel', 'source', 'tag', 'page', 'stage',
       'sale_amount', 'sold_at', 'comment', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content',
-      'client_id', 'referrer', 'landing_page'];
+      'client_id', 'referrer', 'landing_page', 'company_code'];
     const csv = [fields.join(','), ...rows.map((row) => fields.map((field) => csvCell(row[field])).join(','))]
       .join('\r\n');
     response.writeHead(200, {
@@ -561,7 +1075,15 @@ async function route(request, response) {
   if (request.method === 'PATCH' && match) {
     const row = existingLead(leadId(match[1]));
     const body = await readJson(request);
-    if (body.stage !== undefined) {
+    if (body.companyCode !== undefined) {
+      const companyCode = body.companyCode === null ? null : requiredString(body.companyCode, 'companyCode').toLowerCase();
+      if (companyCode) {
+        const company = db.prepare('SELECT * FROM companies WHERE code=? COLLATE NOCASE').get(companyCode);
+        if (!company || company.is_deleted) fail(409, 'Активная компания с таким кодом не найдена',
+          { code: 'COMPANY_NOT_ACTIVE', field: 'companyCode' });
+      }
+      db.prepare('UPDATE leads SET company_code=? WHERE id=?').run(companyCode, row.id);
+    } else if (body.stage !== undefined) {
       const stage = CABINET_STAGES.get(body.stage);
       if (!stage) fail(400, 'Неизвестный этап', { allowed: [...CABINET_STAGES.keys()] });
       changeStage(row, stage);
