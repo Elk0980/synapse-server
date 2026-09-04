@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-const crypto = require('node:crypto');
+const { hashPassword } = require('./passwords');
 
 const [login, role] = process.argv.slice(2);
 if (!/^[a-z0-9_-]+$/.test(login || '') || !['owner', 'editor'].includes(role)) {
@@ -28,12 +28,12 @@ process.stdin.on('data', (chunk) => {
     process.stdin.setRawMode(false);
     process.stdin.pause();
     process.stderr.write('\n');
-    if (!password) { console.error('Пароль не может быть пустым.'); process.exit(1); }
-    const salt = crypto.randomBytes(16);
-    crypto.scrypt(password, salt, 32, { N: 16384, r: 8, p: 1 }, (error, hash) => {
-      if (error) throw error;
-      console.log(`${login}:${role}:scrypt$16384$8$1$${salt.toString('base64url')}$${hash.toString('base64url')}`);
-    });
+    try {
+      console.log(`${login}:${role}:${hashPassword(password)}`);
+    } catch (error) {
+      console.error(error.message);
+      process.exit(1);
+    }
     return;
   }
 });
