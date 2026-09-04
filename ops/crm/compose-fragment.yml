@@ -6,6 +6,10 @@ services:
     environment:
       PORT: "8080"
       DATABASE_PATH: /data/crm.sqlite
+      API_KEY: ${CRM_API_KEY}
+      ALLOWED_ORIGINS: ${CRM_ALLOWED_ORIGINS:-}
+      RATE_LIMIT_WINDOW_MS: ${CRM_RATE_LIMIT_WINDOW_MS:-60000}
+      RATE_LIMIT_MAX: ${CRM_RATE_LIMIT_MAX:-60}
     expose:
       - "8080"
     volumes:
