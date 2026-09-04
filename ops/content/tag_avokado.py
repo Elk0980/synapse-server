@@ -29,6 +29,9 @@ s = s.replace('<br>Индивидуальный предприниматель �
 specs = [
     ('top', 'Хиро', r'<section class="hero" id="top"', '</section>', 'assets/hero-poster.jpg'),
     ('pain', 'Сколько раз вы мечтали…', r'<section class="landing-block pain-block[^>]* id="pain"', '</section>', ''),
+    *[(f'pain-frame-{i}', f'Кадр {i} · вопрос', rf'<article class="pain-frame rv" id="pain-frame-{i}"', '</article>', f'assets/{image}')
+      for i, image in enumerate(('obj-01-monday.webp', 'obj-02-diet.webp', 'obj-06-hopeless.webp',
+                                 'obj-04-oversized-clothes.webp', 'obj-05-mirror.webp', 'obj-03-beach.webp'), 1)],
     ('method-intro', 'Метод · липкий подзаголовок', r'<div class="method-intro rv"', '</div>', None),
 ]
 for i, title in enumerate([
@@ -87,6 +90,8 @@ for key, title, pattern, closer, background in specs:
     for tag in ('h1', 'h2', 'h3', 'p', 'summary', 'a', 'button', 'span', 'b', 'div'):
       for match in re.finditer(r'<' + tag + r'(\s[^>]*)?>(.*?)</' + tag + r'>', segment, re.S | re.I):
         attrs, inner = match.group(1) or '', match.group(2)
+        if key == 'pain' and segment.rfind('<article class="pain-frame', 0, match.start()) > segment.rfind('</article>', 0, match.start()):
+            continue
         inner_tags = {x.lower() for x in re.findall(r'<\s*/?\s*([a-zA-Z0-9]+)', inner)}
         if not inner_tags <= {'br', 'em', 'strong', 'b', 'i', 'sup'}:
             continue
@@ -115,7 +120,12 @@ for key, title, pattern, closer, background in specs:
         cls = (re.search(r'class="([^"]*)"', attrs) or [None, tag])[1].split()[0]
         base = re.sub('[^a-z0-9]+', '-', cls.lower()).strip('-') or tag
         counts[base] = counts.get(base, 0) + 1
-        field_key = f'{key}.{base}-{counts[base]}'
+        if key.startswith('pain-frame-'):
+            field_key = f"pain.p-{key.rsplit('-', 1)[1]}"
+        elif key == 'pain' and base == 'p':
+            field_key = 'pain.p-7'
+        else:
+            field_key = f'{key}.{base}-{counts[base]}'
         fields.append({'key': field_key, 'label': label(tag, attrs), 'value': value_of(inner),
                        'multiline': '\n' in value_of(inner) or len(value_of(inner)) > 90})
         edits.append((start + st, start + en, f'<{tag}{attrs} data-edit="{field_key}">{inner}</{tag}>'))
