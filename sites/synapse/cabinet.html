@@ -188,6 +188,8 @@ button { color: inherit; }
 }
 .nav-link:hover, .nav-category:hover { background: rgba(255, 255, 255, 0.05); }
 .nav-link[aria-current="page"] { color: var(--accent); background: rgba(46, 107, 214, 0.2); }
+.nav-link[aria-disabled="true"] { color: var(--muted); opacity: 0.65; cursor: default; }
+.nav-link[aria-disabled="true"]:hover { background: transparent; }
 .nav-category { justify-content: space-between; font-weight: 600; }
 .nav-category::after { content: "⌄"; transition: transform 0.2s; }
 .nav-category[aria-expanded="true"]::after { transform: rotate(180deg); }
@@ -373,8 +375,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <button class="nav-category" type="button" aria-expanded="false" aria-controls="site-menu">Сайт</button>
       <div class="subnav" id="site-menu" hidden>
         <a class="nav-link" href="#sites" data-view-link="sites">Сайты</a>
-        <a class="nav-link" href="#site-editor" data-view-link="site-editor">Редактировать сайт</a>
-        <a class="nav-link" href="#price" data-view-link="price">Прайс</a>
+        <a class="nav-link" id="site-editor-link" href="#site-editor" data-editor-link="site">Редактировать сайт</a>
+        <a class="nav-link" id="price-editor-link" href="#price" data-editor-link="price">Прайс</a>
+        <p class="project-label" id="editor-link-notice" role="status" hidden></p>
       </div>
       <a class="nav-link" href="#chat" data-view-link="chat">Чат</a>
       <a class="nav-link" href="#settings" data-view-link="settings">Настройки</a>
@@ -451,12 +454,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       </div>
       <div id="sites-content" aria-live="polite">Загрузка…</div>
     </section>
-    <section class="view-panel" id="site-editor-view" data-view="site-editor" hidden>
-      <div class="content-header"><h1>Редактировать сайт</h1></div><div class="tool-content" data-tool="site"></div>
-    </section>
-    <section class="view-panel" id="price-view" data-view="price" hidden>
-      <div class="content-header"><h1>Прайс</h1></div><div class="tool-content" data-tool="price"></div>
-    </section>
     <section class="view-panel" id="chat-view" data-view="chat" hidden>
       <div class="content-header"><h1>Чат</h1></div>
       <p class="notice">Связь чата с выбранным проектом — в разработке. В текущем inbox используйте встроенный фильтр компаний.</p>
@@ -495,14 +492,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     "analytics-through": "Сквозная аналитика",
     crm: "ЦРМ",
     sites: "Сайты",
-    "site-editor": "Редактировать сайт",
-    price: "Прайс",
     chat: "Чат",
     settings: "Настройки",
     account: "Аккаунт",
     accounts: "Настройка аккаунтов"
   });
   const CRM_API = "/content/crm";
+  const EDITOR_PROJECTS = Object.freeze(["alvi", "avokado"]);
   const CRM_STAGES = Object.freeze([
     { id: "new", label: "Новая" },
     { id: "in_progress", label: "В работе" },
@@ -577,8 +573,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     byId("mobile-project").textContent = project?.name || "Проекты не настроены";
     byId("project-trigger").disabled = allowedProjects.length === 0;
     byId("no-projects").hidden = allowedProjects.length !== 0;
-    renderTool("site");
-    renderTool("price");
+    updateEditorLinks();
   };
 
   const closeProjectMenu = (restoreFocus = false) => {
@@ -606,31 +601,31 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     closeProjectMenu(true);
   };
 
-  const renderTool = (kind) => {
-    const container = document.querySelector(`[data-tool="${kind}"]`);
-    if (!container) return;
-    const supported = ["alvi", "avokado"].includes(selectedProjectId);
-    const expected = supported ? `${kind}-editor.html?site=${selectedProjectId}` : null;
-    const frame = container.querySelector("iframe");
-    if (!expected) {
-      container.replaceChildren();
-      const card = document.createElement("div");
-      const message = document.createElement("p");
-      card.className = "card";
-      message.className = "development";
-      message.textContent = "В разработке";
-      card.append(message);
-      container.append(card);
-      return;
+  const editorUrl = (kind) => `${kind}-editor.html?site=${encodeURIComponent(selectedProjectId)}`;
+  const showEditorNotice = () => {
+    const notice = byId("editor-link-notice");
+    notice.textContent = "Редактор для этого проекта ещё не заведён";
+    notice.hidden = false;
+  };
+  const updateEditorLinks = () => {
+    const supported = EDITOR_PROJECTS.includes(selectedProjectId);
+    for (const kind of ["site", "price"]) {
+      const link = byId(`${kind}-editor-link`);
+      link.href = supported ? editorUrl(kind) : `#${kind === "site" ? "site-editor" : "price"}`;
+      link.setAttribute("aria-disabled", String(!supported));
     }
-    if (frame?.dataset.src === expected) return;
-    container.replaceChildren();
-    const nextFrame = document.createElement("iframe");
-    nextFrame.className = "tool-frame";
-    nextFrame.dataset.src = expected;
-    nextFrame.title = kind === "site" ? "Редактор сайта выбранного проекта" : "Редактор прайса выбранного проекта";
-    container.append(nextFrame);
-    if (currentView === (kind === "site" ? "site-editor" : "price")) nextFrame.src = expected;
+    if (supported) byId("editor-link-notice").hidden = true;
+  };
+  const redirectEditorHash = () => {
+    const kind = location.hash === "#site-editor" ? "site" : location.hash === "#price" ? "price" : null;
+    if (!kind) return false;
+    if (EDITOR_PROJECTS.includes(selectedProjectId)) {
+      location.replace(editorUrl(kind));
+      return true;
+    }
+    showEditorNotice();
+    history.replaceState(null, "", `#${defaultView()}`);
+    return false;
   };
 
   const apiJson = async (url, options = {}) => {
@@ -722,7 +717,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   };
   const setCategoryForView = (viewName) => {
     const categoryId = viewName === "analytics-through" ? "analytics-menu" :
-      ["sites", "site-editor", "price"].includes(viewName) ? "site-menu" : null;
+      viewName === "sites" ? "site-menu" : null;
     if (!categoryId) return;
     const button = document.querySelector(`[aria-controls="${categoryId}"]`);
     const menu = byId(categoryId);
@@ -1075,6 +1070,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       });
       renderIdentity();
       renderProjectPicker();
+      if (redirectEditorHash()) return;
       if (identity.permissions.includes("analytics.view")) renderAnalyticsControls();
       if (identity.permissions.includes("crm.view")) renderCRM();
       setView(viewFromHash());
@@ -1125,6 +1121,14 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       byId(category.getAttribute("aria-controls")).hidden = expanded;
       return;
     }
+    const editorLink = event.target.closest("[data-editor-link]");
+    if (editorLink) {
+      if (editorLink.getAttribute("aria-disabled") === "true") {
+        event.preventDefault();
+        showEditorNotice();
+      }
+      return;
+    }
     const link = event.target.closest("[data-view-link]");
     if (!link) return;
     event.preventDefault();
@@ -1156,7 +1160,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       setDrawer(false, true);
     }
   });
-  window.addEventListener("hashchange", () => setView(viewFromHash(), true));
+  window.addEventListener("hashchange", () => {
+    if (!redirectEditorHash()) setView(viewFromHash(), true);
+  });
   window.addEventListener("resize", () => {
     if (!window.matchMedia("(max-width: 760px)").matches) {
       byId("main-content").inert = false;
