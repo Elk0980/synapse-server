@@ -158,7 +158,7 @@ ${body}
       const comp = it.composition || (it.items && it.items.length ? it.items.slice(0, 4).join(', ').toLowerCase() + '.' : '');
       if (comp) facts.push(['Состав', comp]);
       if (it.who) facts.push(['Кому', it.who]);
-      const dl = facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
+            const cap = (s) => { const t = String(s == null ? '' : s).trim(); return t ? t.charAt(0).toUpperCase() + t.slice(1) : t; };      const dl = facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(cap(v))}</dd>`).join('');
       const inner = `<h3>${esc(it.card || it.title)}</h3>
             ${it.desc ? `<p>${esc(it.desc)}</p>` : ''}
             <dl class="program-facts">${dl}</dl>`;
