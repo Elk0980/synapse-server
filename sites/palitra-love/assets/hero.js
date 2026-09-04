@@ -7,14 +7,25 @@
   const root = document.documentElement;
   const body = document.body;
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const timedOverlays = [...hero.querySelectorAll('[data-hero-time]')];
+  const timedOverlays = [...hero.querySelectorAll('[data-hero-start]')];
   let phase = 'story';
   let unlocked = false;
   let loadTimer;
 
   const updateOverlays = () => {
+    const currentTime = video.currentTime;
+
     timedOverlays.forEach((overlay) => {
-      const visible = video.currentTime >= Number(overlay.dataset.heroTime || 0);
+      if (phase === 'loop') {
+        const visible = overlay.id === 'hero-brand' || overlay.id === 'hero-scroll';
+        overlay.classList.toggle('is-visible', visible);
+        overlay.setAttribute('aria-hidden', String(!visible));
+        return;
+      }
+
+      const start = Number(overlay.dataset.heroStart);
+      const end = overlay.dataset.heroEnd ? Number(overlay.dataset.heroEnd) : Infinity;
+      const visible = currentTime >= start && currentTime < end;
       overlay.classList.toggle('is-visible', visible);
       overlay.setAttribute('aria-hidden', String(!visible));
     });
@@ -26,18 +37,27 @@
     clearTimeout(loadTimer);
     root.classList.remove('hero-story-locked');
     body.classList.remove('hero-story-locked');
+  };
+
+  const revealFinalFrame = () => {
+    const brand = hero.querySelector('#hero-brand');
+    brand?.classList.add('is-visible');
+    brand?.setAttribute('aria-hidden', 'false');
     scrollHint.classList.add('is-visible');
+    scrollHint.setAttribute('aria-hidden', 'false');
   };
 
   const showFallback = () => {
     video.pause();
     video.style.display = 'none';
+    revealFinalFrame();
     unlock();
   };
 
   const startLoop = () => {
     if (phase !== 'story') return;
     phase = 'loop';
+    revealFinalFrame();
     unlock();
     video.loop = true;
     video.src = '/assets/video/hero-loop.mp4';
@@ -47,6 +67,7 @@
   };
 
   video.addEventListener('timeupdate', updateOverlays);
+  video.addEventListener('seeked', updateOverlays);
   video.addEventListener('ended', startLoop);
   video.addEventListener('error', showFallback);
 
