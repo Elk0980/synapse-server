@@ -368,7 +368,7 @@
   <div class="ed-modal" id="ed-modal"><div class="ed-modal__box" id="ed-modal-box"></div></div>
 
   <script>
-{ const p = new URLSearchParams(location.search); const requested = p.get('site') || 'alvi'; const base = (p.get('url') || (['alvi','avokado'].includes(requested) ? 'https://' + requested + '.synapsebusiness.ru' : requested)).replace(/\/$/, ''); document.write('<script src="' + base + '/price-render.js?v=20260904"><\/script>'); }
+{ const p = new URLSearchParams(location.search); const requested = p.get('site') || 'alvi'; if (['alvi','avokado'].includes(requested)) { const base = ('https://' + requested + '.synapsebusiness.ru').replace(/\/$/, ''); document.write('<script src="' + base + '/price-render.js?v=20260904"><\/script>'); } }
 </script>
   <script>
 (() => {
@@ -379,7 +379,12 @@
     avokado: { name: 'Авокадо', url: 'https://avokado.synapsebusiness.ru', pricePath: '/#price', renderer: 'https://avokado.synapsebusiness.ru/price-render.js?v=20260904' }
   };
   const requestedSite = params.get('site') || 'alvi';
-  const siteId = SITES[requestedSite] ? requestedSite : 'alvi';
+  if (!SITES[requestedSite]) {
+    document.body.innerHTML = '<main style="padding:40px"><h1>Прайс не поддерживается</h1>' +
+      '<p>Неизвестный проект не может быть открыт как ALVI.</p></main>';
+    return;
+  }
+  const siteId = requestedSite;
   const siteConfig = SITES[siteId];
   const SITE = (params.get('url') || (SITES[requestedSite] ? siteConfig.url : requestedSite)).replace(/\/$/, '');
   const API_BASE = (params.get('api') || '').replace(/\/$/, '');

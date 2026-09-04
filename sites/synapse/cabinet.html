@@ -246,6 +246,14 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .account-details dd { margin: 0; overflow-wrap: anywhere; }
 .backdrop { display: none; }
 .no-projects { margin-bottom: 18px; padding: 12px; color: var(--red); }
+.site-toolbar, .site-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.site-grid, .account-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.site-card h2, .account-card h2 { margin-top: 0; }
+.field-stack { display: grid; gap: 8px; }
+.field-stack input, .field-stack select { min-height: 44px; padding: 9px; }
+.danger { background: #8f2934; color: white; }
+.permission-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
+dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18px; padding: 24px; }
 @media (max-width: 760px) {
   .shell { display: block; padding-top: calc(60px + env(safe-area-inset-top)); }
   .mobile-bar {
@@ -326,19 +334,20 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
     </div>
     <p class="no-projects" id="no-projects" role="status" hidden>Для учётной записи не настроены проекты</p>
     <nav class="nav" aria-label="Разделы кабинета">
-      <button class="nav-category" type="button" aria-expanded="true" aria-controls="analytics-menu">Аналитика</button>
-      <div class="subnav" id="analytics-menu">
+      <button class="nav-category" type="button" aria-expanded="false" aria-controls="analytics-menu">Аналитика</button>
+      <div class="subnav" id="analytics-menu" hidden>
         <a class="nav-link" href="#analytics-through" data-view-link="analytics-through">Сквозная аналитика</a>
       </div>
       <a class="nav-link" href="#crm" data-view-link="crm">ЦРМ</a>
-      <button class="nav-category" type="button" aria-expanded="true" aria-controls="site-menu">Сайт</button>
-      <div class="subnav" id="site-menu">
+      <button class="nav-category" type="button" aria-expanded="false" aria-controls="site-menu">Сайт</button>
+      <div class="subnav" id="site-menu" hidden>
         <a class="nav-link" href="#sites" data-view-link="sites">Сайты</a>
         <a class="nav-link" href="#site-editor" data-view-link="site-editor">Редактировать сайт</a>
         <a class="nav-link" href="#price" data-view-link="price">Прайс</a>
       </div>
       <a class="nav-link" href="#chat" data-view-link="chat">Чат</a>
       <a class="nav-link" href="#settings" data-view-link="settings">Настройки</a>
+      <a class="nav-link" id="accounts-link" href="#accounts" data-view-link="accounts" hidden>Настройка аккаунтов</a>
       <a class="nav-link" href="#account" data-view-link="account">Аккаунт</a>
     </nav>
     <div class="sidebar-footer">
@@ -368,7 +377,13 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
       </div>
     </section>
     <section class="view-panel" id="sites-view" data-view="sites" hidden>
-      <div class="content-header"><h1>Сайты</h1></div><div class="card"><p class="development">В разработке</p></div>
+      <div class="content-header"><h1>Сайты</h1></div>
+      <div class="site-toolbar">
+        <select id="sites-company" aria-label="Компания"><option value="">Все компании</option></select>
+        <select id="sites-state" aria-label="Состояние"><option value="">Все</option><option value="active">Активен</option><option value="draft">Черновик</option><option value="published">Опубликован</option></select>
+        <button id="create-site" type="button">Создать сайт</button>
+      </div>
+      <div id="sites-content" aria-live="polite">Загрузка…</div>
     </section>
     <section class="view-panel" id="site-editor-view" data-view="site-editor" hidden>
       <div class="content-header"><h1>Редактировать сайт</h1></div><div class="tool-content" data-tool="site"></div>
@@ -390,20 +405,26 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
         <p class="development">В разработке</p><p><button class="logout" id="account-logout" type="button">Выйти</button></p>
       </div>
     </section>
+    <section class="view-panel" id="accounts-view" data-view="accounts" hidden>
+      <div class="content-header"><h1>Настройка аккаунтов</h1></div>
+      <div class="card"><h2>Создать учётную запись</h2><form id="account-create" class="field-stack">
+        <input name="login" placeholder="login" required pattern="[a-z0-9_-]{1,64}">
+        <input name="displayName" placeholder="Имя" required maxlength="120">
+        <input name="password" type="password" autocomplete="new-password" placeholder="Пароль" required minlength="12">
+        <input name="confirm" type="password" autocomplete="new-password" placeholder="Повторите пароль" required>
+        <button type="submit">Создать</button><p id="account-create-result" role="status"></p>
+      </form></div><div id="accounts-content" class="account-grid" aria-live="polite"></div>
+    </section>
   </main>
 </div>
+<dialog id="site-create-dialog"><form id="site-create-form" class="field-stack">
+  <h2>Создать сайт</h2><input name="name" required maxlength="120" placeholder="Название сайта">
+  <select name="companyCode" required></select><div class="site-actions"><button type="button" data-close-dialog>Отмена</button>
+  <button type="submit">Создать</button></div><p role="alert"></p></form></dialog>
 <script>
 (() => {
   "use strict";
 
-  const PROJECTS = Object.freeze([
-    { id: "synapse-business", name: "Synapse Бизнес" },
-    { id: "taisabai", name: "ТайСабай" },
-    { id: "novyi-etap", name: "НовыйЭтап" },
-    { id: "alvi", name: "Алви" },
-    { id: "avokado", name: "Авокадо" },
-    { id: "palitra-love", name: "Палитра лав" }
-  ]);
   const VIEW_TITLES = Object.freeze({
     "analytics-through": "Сквозная аналитика",
     crm: "ЦРМ",
@@ -412,7 +433,8 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
     price: "Прайс",
     chat: "Чат",
     settings: "Настройки",
-    account: "Аккаунт"
+    account: "Аккаунт",
+    accounts: "Настройка аккаунтов"
   });
   const CRM_API = "/content/crm";
   const CRM_STAGES = Object.freeze([
@@ -436,18 +458,11 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
   let drawerOpen = false;
 
   const allowedProjectsFor = (profile) => {
-    if (profile.login === "vladislav" && profile.role === "owner" &&
-        Array.isArray(profile.sites) && profile.sites.includes("*")) {
-      return [...PROJECTS];
-    }
-    if (profile.login === "tatyana" && profile.role === "editor" && Array.isArray(profile.sites)) {
-      const permitted = new Set(profile.sites);
-      return PROJECTS.filter((project) => ["alvi", "avokado"].includes(project.id) && permitted.has(project.id));
-    }
-    return [];
+    return Array.isArray(profile.companies)
+      ? profile.companies.map((company) => ({ id: company.id, name: company.name })) : [];
   };
 
-  const projectStorageKey = () => `synapse_cabinet_project_v1:${identity.login}`;
+  const projectStorageKey = () => `synapse_cabinet_project_v2:${identity.userId}`;
   const readSelectedProject = () => {
     let saved = null;
     try {
@@ -549,6 +564,80 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
     nextFrame.title = kind === "site" ? "Редактор сайта выбранного проекта" : "Редактор прайса выбранного проекта";
     container.append(nextFrame);
     if (currentView === (kind === "site" ? "site-editor" : "price")) nextFrame.src = expected;
+  };
+
+  const apiJson = async (url, options = {}) => {
+    const response = await fetch(url, { credentials: "same-origin", cache: "no-store", ...options,
+      headers: { "Content-Type": "application/json", ...(options.headers || {}) } });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || "Ошибка сервера");
+    return body;
+  };
+  const renderSites = async () => {
+    const content = byId("sites-content");
+    if (!identity.permissions.includes("sites.view")) {
+      content.textContent = "Нет доступа к каталогу сайтов";
+      return;
+    }
+    content.textContent = "Загрузка…";
+    const query = new URLSearchParams();
+    if (byId("sites-company").value) query.set("companyCode", byId("sites-company").value);
+    if (byId("sites-state").value) query.set("state", byId("sites-state").value);
+    try {
+      const data = await apiJson(`/content/sites?${query}`);
+      content.replaceChildren();
+      if (!data.sites.length) {
+        content.textContent = "Для выбранных компаний сайты ещё не созданы";
+        return;
+      }
+      const grid = document.createElement("div");
+      grid.className = "site-grid";
+      for (const site of data.sites) {
+        const card = document.createElement("article");
+        card.className = "card site-card";
+        card.innerHTML = `<h2>${escapeHTML(site.name)}</h2><p>${escapeHTML(site.company.name)}</p>
+          <p>${site.isActive ? "Активен · " : ""}${site.publicationStatus === "draft" ? "Черновик" : "Опубликован"}</p>`;
+        const actions = document.createElement("div");
+        actions.className = "site-actions";
+        for (const [label, url] of [["Редактировать сайт", site.capabilities.editSite && site.editorUrls.site],
+          ["Прайс", site.capabilities.editPrice && site.editorUrls.price], ["Открыть сайт", site.publicUrl]]) {
+          if (!url) continue;
+          const link = document.createElement("a"); link.href = url; link.textContent = label; actions.append(link);
+        }
+        if (site.capabilities.delete) {
+          const button = document.createElement("button"); button.type = "button"; button.className = "danger";
+          button.textContent = "Удалить"; button.addEventListener("click", async () => {
+            if (prompt(`Введите название сайта «${site.name}» для удаления`) !== site.name) return;
+            await apiJson(`/content/sites/${encodeURIComponent(site.id)}`, {
+              method: "DELETE", headers: { "X-CSRF-Token": identity.csrfToken }
+            });
+            renderSites();
+          });
+          actions.append(button);
+        }
+        card.append(actions); grid.append(card);
+      }
+      content.append(grid);
+    } catch (error) {
+      content.textContent = `${error.message}. Повторите попытку.`;
+    }
+  };
+  const renderAccounts = async () => {
+    if (identity.role !== "owner") return;
+    const content = byId("accounts-content");
+    content.textContent = "Загрузка…";
+    try {
+      const data = await apiJson("/content/admin/accounts");
+      content.replaceChildren();
+      for (const account of data.accounts) {
+        const card = document.createElement("article");
+        card.className = "card account-card";
+        card.innerHTML = `<h2>${escapeHTML(account.displayName)}</h2><p>@${escapeHTML(account.login)} · ${account.role}</p>
+          <p>Компании: ${account.companies.map((item) => escapeHTML(item.name)).join(", ") || "не назначены"}</p>
+          <p>Права: ${account.permissions.map(escapeHTML).join(", ") || "не назначены"}</p>`;
+        content.append(card);
+      }
+    } catch (error) { content.textContent = error.message; }
   };
 
   const validView = (value) => Object.hasOwn(VIEW_TITLES, value);
@@ -701,10 +790,22 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
       identity = profile;
       allowedProjects = allowedProjectsFor(identity);
       selectedProjectId = readSelectedProject();
+      byId("accounts-link").hidden = identity.role !== "owner";
+      byId("create-site").hidden = !identity.permissions.includes("sites.create");
+      const companyFilter = byId("sites-company");
+      const companyCreate = byId("site-create-form").elements.companyCode;
+      companyFilter.querySelectorAll("option:not(:first-child)").forEach((item) => item.remove());
+      companyCreate.replaceChildren();
+      identity.companies.forEach((company) => {
+        companyFilter.add(new Option(company.name, company.id));
+        companyCreate.add(new Option(company.name, company.id));
+      });
       renderIdentity();
       renderProjectPicker();
       renderCRM();
       setView(viewFromHash());
+      renderSites();
+      renderAccounts();
       byId("app").hidden = false;
       byId("auth").hidden = true;
     } catch (error) {
@@ -790,6 +891,39 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
   });
   byId("logout").addEventListener("click", logout);
   byId("account-logout").addEventListener("click", logout);
+  byId("sites-company").addEventListener("change", renderSites);
+  byId("sites-state").addEventListener("change", renderSites);
+  byId("create-site").addEventListener("click", () => {
+    byId("site-create-form").elements.companyCode.value = selectedProjectId || identity.companies[0]?.id || "";
+    byId("site-create-dialog").showModal();
+  });
+  document.querySelector("[data-close-dialog]").addEventListener("click", () => byId("site-create-dialog").close());
+  byId("site-create-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    try {
+      const created = await apiJson("/content/sites", { method: "POST",
+        headers: { "X-CSRF-Token": identity.csrfToken },
+        body: JSON.stringify({ name: form.elements.name.value, companyCode: form.elements.companyCode.value }) });
+      location.href = created.editorUrl;
+    } catch (error) { form.querySelector("[role=alert]").textContent = error.message; }
+  });
+  byId("account-create").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const password = form.elements.password.value;
+    const confirm = form.elements.confirm.value;
+    try {
+      if (password !== confirm) throw new Error("Пароли не совпадают");
+      await apiJson("/content/admin/accounts", { method: "POST",
+        headers: { "X-CSRF-Token": identity.csrfToken }, body: JSON.stringify({
+          login: form.elements.login.value, displayName: form.elements.displayName.value, password
+        }) });
+      byId("account-create-result").textContent = "Учётная запись создана";
+      renderAccounts();
+    } catch (error) { byId("account-create-result").textContent = error.message; }
+    finally { form.elements.password.value = ""; form.elements.confirm.value = ""; }
+  });
   byId("auth-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
@@ -807,7 +941,9 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
           "Неверный логин или пароль");
         return;
       }
-      enterCabinet(await response.json());
+      await response.json();
+      const identityResponse = await fetch("/content/whoami", { credentials: "same-origin", cache: "no-store" });
+      enterCabinet(await identityResponse.json());
     } catch (error) {
       showAuthError("Сервер входа недоступен");
     }

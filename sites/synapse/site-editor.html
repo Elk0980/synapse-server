@@ -494,12 +494,38 @@
 (() => {
   'use strict';
   const params = new URLSearchParams(location.search);
+  const managedSite = params.get('managedSite');
+  if (managedSite && params.get('mode') === 'blank') {
+    document.body.innerHTML = '<main style="max-width:900px;margin:40px auto;padding:24px;font-family:Manrope,sans-serif">' +
+      '<p><a href="cabinet.html#sites">← Сайты</a></p><h1 id="blank-title">Пустой сайт</h1>' +
+      '<p id="blank-company">Загрузка…</p><section style="min-height:55vh;border:2px dashed #73808d;border-radius:20px;' +
+      'display:grid;place-items:center;padding:32px;text-align:center"><p>Пустой сайт. Добавление блоков будет реализовано ' +
+      'на следующем этапе конструктора.</p></section></main>';
+    fetch(`/content/sites/${encodeURIComponent(managedSite)}/document`, {
+      credentials: 'same-origin', cache: 'no-store'
+    }).then(async (response) => {
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || `Ошибка ${response.status}`);
+      if (!Array.isArray(body.document.sections) || body.document.sections.length) throw new Error('Черновик повреждён');
+      document.querySelector('#blank-title').textContent = body.site.name;
+      document.querySelector('#blank-company').textContent = body.site.company.name + ' · Черновик';
+    }).catch((error) => {
+      document.querySelector('#blank-title').textContent = 'Сайт не открыт';
+      document.querySelector('#blank-company').textContent = error.message;
+    });
+    return;
+  }
   const SITES = {
     alvi: { name: 'ALVI', url: 'https://alvi.synapsebusiness.ru', zones: ['promo', 'hero-0', 'hero-1', 'hero-3', 'hero-5', 'hero-7'], heroes: ['hero-0', 'hero-1', 'hero-3', 'hero-5', 'hero-7'] },
     avokado: { name: 'Авокадо', url: 'https://avokado.synapsebusiness.ru', zones: ['top', 'pain', 'method-0', 'method-1', 'method-2', 'method-3', 'method-4', 'method-5', 'price', 'certificate', 'contacts', 'finale'], heroes: [] }
   };
   const requestedSite = params.get('site') || 'alvi';
-  const siteId = SITES[requestedSite] ? requestedSite : 'alvi';
+  if (!SITES[requestedSite]) {
+    document.body.innerHTML = '<main style="padding:40px"><h1>Сайт не поддерживается</h1>' +
+      '<p>Неизвестный проект не может быть открыт в редакторе.</p></main>';
+    return;
+  }
+  const siteId = requestedSite;
   const siteConfig = SITES[siteId];
   /* Старый ?site=https://… остаётся локальным override; новый явный вариант — ?url=. */
   const SITE = (params.get('url') || (SITES[requestedSite] ? siteConfig.url : requestedSite)).replace(/\/$/, '');

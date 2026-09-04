@@ -10,6 +10,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
+const { createAuthStore } = require('./auth-store');
+const { createSiteStore } = require('./site-store');
+const { hashPassword, verifyPassword } = require('./passwords');
 
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
 const DATABASE_PATH = process.env.DATABASE_PATH || '/data/content.sqlite';
@@ -24,11 +27,11 @@ const HISTORY_LIMIT = 10;
 const MAX_BODY = 1024 * 1024;
 const SITES = new Set(['alvi', 'avokado', 'palitra']);
 const DOCUMENT_VALIDATORS = { site: validateSite, price: validatePrice };
+const CONTENT_COMPANIES = { alvi: 'alvi', avokado: 'avokado', palitra: 'palitra-love' };
 const SESSION_TTL = 30 * 24 * 60 * 60;
 const LOGIN_WINDOW = 10 * 60 * 1000;
 const LOGIN_LIMIT = 10;
 const SESSION_SECRET = (process.env.SESSION_SECRET || '').trim() || crypto.randomBytes(32).toString('hex');
-const AUTH_USERS = parseUsers(process.env.AUTH_USERS || '');
 const CRM_URL = (process.env.CRM_URL || 'http://crm:8080').replace(/\/$/, '');
 const CRM_API_KEY = (process.env.CRM_API_KEY || '').trim();
 const loginFailures = new Map();
@@ -37,29 +40,23 @@ if (!(process.env.SESSION_SECRET || '').trim()) {
   console.warn('content: SESSION_SECRET пуст — создан временный секрет, сессии не переживут перезапуск');
 }
 
-function parseUsers(raw) {
-  const users = new Map();
-  for (const item of raw.split(';').filter(Boolean)) {
-    const [login, role, ...hashParts] = item.split(':');
-    const hash = hashParts.join(':');
-    if (/^[a-z0-9_-]+$/.test(login || '') && ['owner', 'editor'].includes(role) && hash) users.set(login, { login, role, hash });
-    else console.warn(`content: некорректная запись AUTH_USERS для ${login || '(пустого login)'}`);
-  }
-  return users;
-}
-
 function publicIdentity(identity) {
-  const editor = identity.role === 'editor';
-  return { author: editor ? 'Татьяна' : 'Влад', login: identity.login, role: identity.role, sites: editor ? ['alvi', 'avokado'] : ['*'] };
+  return {
+    userId: identity.id, login: identity.login, displayName: identity.displayName,
+    author: identity.displayName, role: identity.role, companies: identity.companies,
+    permissions: identity.permissions,
+    sites: identity.companies.map((company) => company.contentSiteId).filter(Boolean),
+  };
 }
 
 function b64url(value) { return Buffer.from(value).toString('base64url'); }
 function signature(payload) { return crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url'); }
 function makeSession(identity) {
-  const payload = b64url(JSON.stringify({ login: identity.login, role: identity.role, exp: Math.floor(Date.now() / 1000) + SESSION_TTL }));
+  const payload = b64url(JSON.stringify({ uid: identity.id, sessionVersion: identity.sessionVersion,
+    exp: Math.floor(Date.now() / 1000) + SESSION_TTL, csrf: crypto.randomBytes(24).toString('base64url') }));
   return `${payload}.${signature(payload)}`;
 }
-function sessionIdentity(request) {
+function sessionData(request) {
   const cookies = Object.fromEntries(String(request.headers.cookie || '').split(';').map((part) => part.trim().split(/=(.*)/s)).filter(([key]) => key));
   const [payload, sig] = String(cookies.synapse_session || '').split('.');
   if (!payload || !sig) return null;
@@ -67,20 +64,11 @@ function sessionIdentity(request) {
   if (sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
   try {
     const token = JSON.parse(Buffer.from(payload, 'base64url').toString());
-    const current = AUTH_USERS.get(token.login);
-    if (!current || current.role !== token.role || token.exp < Math.floor(Date.now() / 1000)) return null;
-    return current;
+    if (token.exp < Math.floor(Date.now() / 1000)) return null;
+    const current = authStore.getById(token.uid);
+    if (!current || current.sessionVersion !== token.sessionVersion) return null;
+    return { user: current, csrf: token.csrf };
   } catch { return null; }
-}
-function verifyPassword(password, encoded) {
-  return new Promise((resolve) => {
-    const [kind, n, r, p, salt, wanted] = String(encoded).split('$');
-    if (kind !== 'scrypt' || !salt || !wanted) return resolve(false);
-    crypto.scrypt(password, Buffer.from(salt, 'base64url'), Buffer.from(wanted, 'base64url').length,
-      { N: Number(n), r: Number(r), p: Number(p), maxmem: 64 * 1024 * 1024 }, (error, actual) => {
-        resolve(!error && actual.length === Buffer.from(wanted, 'base64url').length && crypto.timingSafeEqual(actual, Buffer.from(wanted, 'base64url')));
-      });
-  });
 }
 
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
@@ -92,6 +80,7 @@ if (!API_KEY) {
 
 const db = new DatabaseSync(DATABASE_PATH);
 db.exec(`
+  PRAGMA foreign_keys = ON;
   PRAGMA journal_mode = WAL;
   CREATE TABLE IF NOT EXISTS documents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,6 +93,7 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS documents_key_idx ON documents(key, version DESC);
 `);
+const authStore = createAuthStore(db, process.env.AUTH_USERS || '');
 
 const latestStmt = db.prepare('SELECT * FROM documents WHERE key = ? ORDER BY version DESC LIMIT 1');
 const byVersionStmt = db.prepare('SELECT * FROM documents WHERE key = ? AND version = ?');
@@ -179,12 +169,17 @@ async function readJson(request) {
 /* Возвращает имя автора по ключу: владелец или редактор. */
 function requireAuth(request, site) {
   const given = (request.headers['x-api-key'] || '').toString().trim();
+  if (API_KEY && given === API_KEY) return { author: 'system-owner' };
+  if (EDITOR_KEY && given === EDITOR_KEY) {
+    if (site && !['alvi', 'avokado'].includes(site)) fail(403, 'Ключ редактора ограничен ALVI и Авокадо');
+    return { author: 'Татьяна' };
+  }
   let identity;
-  if (API_KEY && given === API_KEY) identity = { login: 'vladislav', role: 'owner' };
-  else if (EDITOR_KEY && given === EDITOR_KEY) identity = { login: 'tatyana', role: 'editor' };
-  else if (!given) identity = sessionIdentity(request);
+  if (!given) identity = sessionData(request)?.user;
   if (!identity) fail(401, given ? 'Неверный ключ доступа' : 'Требуется вход в кабинет или ключ доступа');
-  if (identity.role === 'editor' && site && !['alvi', 'avokado'].includes(site)) fail(403, 'У вашей учётной записи нет доступа к этому сайту');
+  if (identity.id && site && identity.role !== 'owner' && !identity.companyCodes.includes(CONTENT_COMPANIES[site])) {
+    fail(403, 'У вашей учётной записи нет доступа к этому сайту');
+  }
   return publicIdentity(identity);
 }
 
@@ -287,14 +282,36 @@ function saveVersion(key, doc, author) {
   return { version, updatedAt: now };
 }
 
+const siteStore = createSiteStore(db, authStore, saveVersion);
+
+function requireSession(request) {
+  const session = sessionData(request);
+  if (!session) fail(401, 'Требуется вход в кабинет');
+  return session;
+}
+
+function requirePermission(request, permission, companyCode, obscure = false) {
+  const session = requireSession(request);
+  const user = session.user;
+  if (user.role !== 'owner' && !user.permissions.includes(permission)) fail(403, 'Недостаточно прав');
+  if (companyCode && user.role !== 'owner' && !user.companyCodes.includes(companyCode)) {
+    fail(obscure ? 404 : 403, obscure ? 'Объект не найден' : 'Нет доступа к компании');
+  }
+  return session;
+}
+
+function requireCsrf(request, session) {
+  if (String(request.headers['x-csrf-token'] || '') !== session.csrf) fail(403, 'Некорректный CSRF-токен');
+}
+
 function corsHeaders(request) {
   const origin = request.headers.origin;
   if (!origin) return {};
   if (ALLOWED_ORIGINS.includes('*') || ALLOWED_ORIGINS.includes(origin)) {
     return {
       'access-control-allow-origin': origin,
-      'access-control-allow-methods': 'GET, PUT, POST, OPTIONS',
-      'access-control-allow-headers': 'Content-Type, X-API-Key, X-Author, X-Filename',
+      'access-control-allow-methods': 'GET, PUT, POST, PATCH, DELETE, OPTIONS',
+      'access-control-allow-headers': 'Content-Type, X-API-Key, X-Author, X-Filename, X-CSRF-Token',
       'vary': 'Origin',
     };
   }
@@ -302,8 +319,8 @@ function corsHeaders(request) {
 }
 
 function proxyCrm(request, response, url, cors) {
-  const identity = sessionIdentity(request);
-  if (!identity) fail(401, 'Требуется вход в кабинет');
+  const identity = requireSession(request).user;
+  if (identity.role !== 'owner') fail(403, 'CRM временно доступна только владельцу');
   if (!CRM_API_KEY) fail(503, 'Прокси CRM не настроен');
   const target = new URL(`${CRM_URL}${url.pathname.slice('/content/crm'.length) || '/'}${url.search}`);
   const headers = { ...request.headers, host: target.host, 'x-api-key': CRM_API_KEY };
@@ -343,8 +360,8 @@ const server = http.createServer(async (request, response) => {
       if (failures.length >= LOGIN_LIMIT) fail(429, 'Слишком много попыток, подождите 10 минут');
       const body = await readJson(request);
       const login = String(body.login || '').trim().toLowerCase();
-      const identity = AUTH_USERS.get(login);
-      if (!identity || !(await verifyPassword(String(body.password || ''), identity.hash))) {
+      const identity = authStore.getByLogin(login);
+      if (!identity || !verifyPassword(String(body.password || ''), identity.passwordHash)) {
         failures.push(now); loginFailures.set(ip, failures);
         fail(401, 'Неверный логин или пароль');
       }
@@ -356,10 +373,74 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === 'GET' && url.pathname === '/content/whoami') {
-      return reply(200, requireAuth(request));
+      const session = requireSession(request);
+      return reply(200, { ...publicIdentity(session.user), csrfToken: session.csrf });
     }
     if (request.method === 'GET' && url.pathname === '/health') {
       return reply(200, { ok: true, service: 'content' });
+    }
+
+    if (url.pathname === '/content/admin/accounts' || url.pathname.startsWith('/content/admin/accounts/')) {
+      const session = requireSession(request);
+      if (session.user.role !== 'owner') fail(403, 'Доступно только владельцу');
+      if (request.method !== 'GET') requireCsrf(request, session);
+      const id = Number(parts[3]);
+      if (request.method === 'GET' && parts.length === 3) {
+        return reply(200, { accounts: authStore.list().map(authStore.public) });
+      }
+      if (request.method === 'POST' && parts.length === 3) {
+        const body = await readJson(request);
+        const account = authStore.create(session.user.id, body, hashPassword(body.password));
+        return reply(201, authStore.public(account));
+      }
+      if (request.method === 'PATCH' && parts.length === 4) {
+        return reply(200, authStore.public(authStore.updateProfile(session.user.id, id, await readJson(request))));
+      }
+      if (request.method === 'PUT' && parts[4] === 'password' && parts.length === 5) {
+        const body = await readJson(request);
+        if (Object.keys(body).join(',') !== 'password') fail(400, 'Переданы лишние поля');
+        return reply(200, authStore.public(authStore.updatePassword(session.user.id, id,
+          hashPassword(body.password))));
+      }
+      if (request.method === 'PUT' && parts[4] === 'access' && parts.length === 5) {
+        const body = await readJson(request);
+        if (Object.keys(body).sort().join(',') !== 'companies,permissions') fail(400, 'Переданы лишние поля');
+        return reply(200, authStore.public(authStore.updateAccess(session.user.id, id,
+          body.companies, body.permissions)));
+      }
+      fail(404, 'Пользователь не найден');
+    }
+
+    if (url.pathname === '/content/sites' || url.pathname.startsWith('/content/sites/')) {
+      const id = parts[2] ? decodeURIComponent(parts[2]) : null;
+      if (request.method === 'GET' && id && parts[3] === 'document') {
+        const session = requirePermission(request, 'site_editor.view');
+        const site = siteStore.get(session.user, id);
+        const row = latestStmt.get(`${id}/site`);
+        if (!row) fail(404, 'Документ не найден');
+        return reply(200, { site, document: JSON.parse(row.body) });
+      }
+      const permission = request.method === 'POST' ? 'sites.create'
+        : request.method === 'DELETE' ? 'sites.delete' : 'sites.view';
+      const session = requirePermission(request, permission);
+      if (request.method !== 'GET') requireCsrf(request, session);
+      if (request.method === 'GET' && !id) {
+        return reply(200, { sites: siteStore.list(session.user, {
+          companyCode: url.searchParams.get('companyCode'), state: url.searchParams.get('state'),
+        }) });
+      }
+      if (request.method === 'GET' && id) return reply(200, siteStore.get(session.user, id));
+      if (request.method === 'POST' && !id) {
+        const body = await readJson(request);
+        if (Object.keys(body).sort().join(',') !== 'companyCode,name') fail(400, 'Переданы лишние поля');
+        const created = siteStore.create(session.user, body);
+        return reply(201, { ...created, editorUrl: created.editorUrls.site });
+      }
+      if (request.method === 'DELETE' && id) {
+        siteStore.remove(session.user, id);
+        return reply(200, { ok: true });
+      }
+      fail(404, 'Не найдено');
     }
 
     if (parts[0] !== 'content' || parts.length < 3) fail(404, 'Не найдено');
@@ -382,6 +463,10 @@ const server = http.createServer(async (request, response) => {
         return reply(200, { site, files: list });
       }
       if (request.method === 'POST' && parts.length === 3) {
+        if (!request.headers['x-api-key']) {
+          const session = requirePermission(request, 'site_editor.edit', CONTENT_COMPANIES[site]);
+          requireCsrf(request, session);
+        }
         const author = requireAuth(request, site).author;
         const type = (request.headers['content-type'] || '').split(';')[0].trim();
         if (!ASSET_TYPES[type]) fail(415, 'Допустимы только JPEG, PNG и WebP');
@@ -408,11 +493,19 @@ const server = http.createServer(async (request, response) => {
 
     // GET /content/:site/:doc/history
     if (request.method === 'GET' && tail[0] === 'history' && tail.length === 1) {
+      if (!request.headers['x-api-key']) {
+        requirePermission(request, parts[2] === 'price' ? 'price.view' : 'site_editor.view',
+          CONTENT_COMPANIES[parts[1]]);
+      }
       return reply(200, { key, versions: historyStmt.all(key, HISTORY_LIMIT) });
     }
 
     // GET /content/:site/:doc/version/:n
     if (request.method === 'GET' && tail[0] === 'version' && tail.length === 2) {
+      if (!request.headers['x-api-key']) {
+        requirePermission(request, parts[2] === 'price' ? 'price.view' : 'site_editor.view',
+          CONTENT_COMPANIES[parts[1]]);
+      }
       const row = byVersionStmt.get(key, Number.parseInt(tail[1], 10));
       if (!row) fail(404, 'Версия не найдена');
       return reply(200, row.body);
@@ -420,6 +513,11 @@ const server = http.createServer(async (request, response) => {
 
     // PUT /content/:site/:doc — новая версия (по ключу)
     if (request.method === 'PUT' && tail.length === 0) {
+      if (!request.headers['x-api-key']) {
+        const session = requirePermission(request,
+          parts[2] === 'price' ? 'price.edit' : 'site_editor.edit', CONTENT_COMPANIES[parts[1]]);
+        requireCsrf(request, session);
+      }
       const author = requireAuth(request, parts[1]).author;
       const doc = await readJson(request);
       const validator = DOCUMENT_VALIDATORS[parts[2]];
@@ -431,6 +529,11 @@ const server = http.createServer(async (request, response) => {
 
     // POST /content/:site/:doc/restore/:n — откат (по ключу)
     if (request.method === 'POST' && tail[0] === 'restore' && tail.length === 2) {
+      if (!request.headers['x-api-key']) {
+        const session = requirePermission(request,
+          parts[2] === 'price' ? 'price.edit' : 'site_editor.edit', CONTENT_COMPANIES[parts[1]]);
+        requireCsrf(request, session);
+      }
       const author = requireAuth(request, parts[1]).author;
       const row = byVersionStmt.get(key, Number.parseInt(tail[1], 10));
       if (!row) fail(404, 'Версия не найдена');
