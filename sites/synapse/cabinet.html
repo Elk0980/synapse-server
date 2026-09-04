@@ -326,6 +326,38 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   .funnel-row { grid-template-columns: 88px minmax(80px, 1fr) 74px; gap: 7px; }
   .crm-stat { min-width: 0; }
 }
+
+.crm-entity-toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+.crm-entity-toolbar input, .crm-entity-toolbar select, .crm-form input, .crm-form select,
+.crm-form textarea {
+  min-height: 44px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface-soft);
+}
+.crm-entity-toolbar input { flex: 1 1 220px; }
+.crm-row { cursor: pointer; }
+.crm-row:hover { background: rgba(159, 212, 255, 0.07); }
+.crm-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+.crm-details { display: grid; gap: 8px; }
+.crm-details div { display: grid; grid-template-columns: minmax(140px, 220px) 1fr; gap: 12px; }
+.crm-details dt { color: var(--muted); }
+.crm-details dd { margin: 0; overflow-wrap: anywhere; }
+.crm-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.crm-form label { display: grid; gap: 5px; color: var(--muted); }
+.crm-form textarea { min-height: 100px; resize: vertical; }
+.crm-form .wide, .crm-relations { grid-column: 1 / -1; }
+.crm-repeat-row { display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 8px; margin-bottom: 8px; }
+.crm-relations { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
+.crm-relation { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 8px 0; }
+.crm-relation a { color: var(--accent); }
+@media (max-width: 760px) {
+  .crm-form { grid-template-columns: 1fr; }
+  .crm-details div { grid-template-columns: 1fr; gap: 2px; }
+  .crm-repeat-row { grid-template-columns: 1fr; }
+}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }
@@ -371,7 +403,14 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         <a class="nav-link" id="analytics-link" href="#analytics-through"
           data-view-link="analytics-through">Сквозная аналитика</a>
       </div>
-      <a class="nav-link" id="crm-link" href="#crm" data-view-link="crm">ЦРМ</a>
+      <button class="nav-category" id="crm-category" type="button" aria-expanded="false"
+        aria-controls="crm-menu">ЦРМ</button>
+      <div class="subnav" id="crm-menu" hidden>
+        <a class="nav-link" id="crm-link" href="#crm" data-view-link="crm">Заявки</a>
+        <a class="nav-link" href="#crm-contacts" data-view-link="crm-contacts">Контакты</a>
+        <a class="nav-link" href="#crm-companies" data-view-link="crm-companies">Компании</a>
+        <a class="nav-link" href="#crm-legal" data-view-link="crm-legal">Юрлица</a>
+      </div>
       <button class="nav-category" type="button" aria-expanded="false" aria-controls="site-menu">Сайт</button>
       <div class="subnav" id="site-menu" hidden>
         <a class="nav-link" href="#sites" data-view-link="sites">Сайты</a>
@@ -449,6 +488,18 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         <div id="crm-content" aria-live="polite"></div>
       </div>
     </section>
+    <section class="view-panel" id="crm-contacts-view" data-view="crm-contacts" hidden>
+      <div class="content-header"><h1>Контакты</h1></div>
+      <div class="card"><div id="crm-contacts-content" aria-live="polite"></div></div>
+    </section>
+    <section class="view-panel" id="crm-companies-view" data-view="crm-companies" hidden>
+      <div class="content-header"><h1>Компании</h1></div>
+      <div class="card"><div id="crm-companies-content" aria-live="polite"></div></div>
+    </section>
+    <section class="view-panel" id="crm-legal-view" data-view="crm-legal" hidden>
+      <div class="content-header"><h1>Юрлица</h1></div>
+      <div class="card"><div id="crm-legal-content" aria-live="polite"></div></div>
+    </section>
     <section class="view-panel" id="sites-view" data-view="sites" hidden>
       <div class="content-header"><h1>Сайты</h1></div>
       <div class="site-toolbar">
@@ -502,7 +553,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 
   const VIEW_TITLES = Object.freeze({
     "analytics-through": "Сквозная аналитика",
-    crm: "ЦРМ",
+    crm: "Заявки",
+    "crm-contacts": "Контакты",
+    "crm-companies": "Компании",
+    "crm-legal": "Юрлица",
     sites: "Сайты",
     chat: "Чат",
     autoposting: "Автопостинг",
@@ -728,10 +782,14 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     } catch (error) { content.textContent = error.message; }
   };
 
+  const hasPermission = (permission) => identity?.role === "owner" ||
+    identity?.permissions.includes(permission);
   const permittedView = (value) => {
     if (!identity) return true;
     if (value === "analytics-through") return identity.permissions.includes("analytics.view");
-    if (value === "crm") return identity.permissions.includes("crm.view");
+    if (value === "crm" || value.startsWith("crm-")) {
+      return hasPermission("crm.view");
+    }
     if (value === "autoposting") {
       return identity.role === "owner" || identity.permissions.includes("autoposting.view");
     }
@@ -744,12 +802,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     permittedView("crm") ? "crm" : "account";
   const validView = (value) => Object.hasOwn(VIEW_TITLES, value) && permittedView(value);
   const viewFromHash = () => {
-    const value = decodeURIComponent(location.hash.slice(1));
+    const value = decodeURIComponent(location.hash.slice(1)).split("/")[0];
     return validView(value) ? value : defaultView();
   };
   const setCategoryForView = (viewName) => {
     const categoryId = viewName === "analytics-through" ? "analytics-menu" :
-      viewName === "sites" ? "site-menu" : null;
+      viewName === "sites" ? "site-menu" : viewName === "crm" || viewName.startsWith("crm-")
+        ? "crm-menu" : null;
     if (!categoryId) return;
     const button = document.querySelector(`[aria-controls="${categoryId}"]`);
     const menu = byId(categoryId);
@@ -774,6 +833,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     if (frame && !frame.getAttribute("src")) frame.src = frame.dataset.src;
     if (currentView === "analytics-through") loadAnalytics();
     if (currentView === "crm") loadCRM();
+    if (currentView.startsWith("crm-") && currentView !== "crm") renderCrmEntityRoute();
     if (focusMain) byId("main-content").focus();
   };
   const navigate = (viewName) => {
@@ -807,9 +867,460 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       credentials: "same-origin",
       headers: { "Accept": "application/json", "Content-Type": "application/json", ...(options.headers || {}) }
     });
-    if (!response.ok) throw new Error(`CRM_HTTP_${response.status}`);
-    if (response.status === 204) return null;
-    return response.json();
+    const body = response.status === 204 ? null : await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body?.error || `CRM_HTTP_${response.status}`);
+    return body;
+  };
+  const ENTITY_STAGES = Object.freeze({
+    application: "Заявка",
+    call: "Созвон",
+    kit_ready: "Комплект собран",
+    payment: "Оплата",
+    active: "Активен"
+  });
+  const CRM_ENTITIES = Object.freeze({
+    "crm-contacts": {
+      path: "contacts",
+      key: "contacts",
+      title: "Контакты",
+      required: ["name"],
+      columns: ["name", "position", "phone", "email", "city", "preferredChannel"],
+      labels: {
+        name: "Имя",
+        position: "Должность",
+        phone: "Телефон",
+        email: "Email",
+        city: "Город",
+        timezone: "Часовой пояс",
+        preferredChannel: "Предпочтительный канал",
+        notes: "Заметки",
+        birthDate: "Дата рождения"
+      },
+      arrays: { messengers: "Мессенджеры", links: "Ссылки" },
+      relations: [
+        { key: "companies", view: "crm-companies", path: "companies", flag: "isResponsible",
+          flagLabel: "Ответственный" },
+        { key: "legalEntities", view: "crm-legal", path: "legal-entities", flag: "isSignatory",
+          flagLabel: "Подписант", signing: true }
+      ],
+      companyFilter: true
+    },
+    "crm-companies": {
+      path: "companies",
+      key: "companies",
+      title: "Компании",
+      required: ["code", "name"],
+      columns: ["code", "name", "industry", "city", "pipelineStage"],
+      labels: {
+        code: "Код",
+        name: "Название",
+        industry: "Отрасль",
+        city: "Город",
+        timezone: "Часовой пояс",
+        phone: "Телефон",
+        email: "Email",
+        websiteUrl: "Сайт",
+        pipelineStage: "Этап",
+        startDate: "Дата начала",
+        endDate: "Дата окончания",
+        preferredChannel: "Предпочтительный канал",
+        notes: "Заметки"
+      },
+      arrays: { socials: "Соцсети" },
+      relations: [
+        { key: "contacts", view: "crm-contacts", path: "contacts", flag: "isResponsible",
+          flagLabel: "Ответственный", reverse: true },
+        { key: "legalEntities", view: "crm-legal", path: "legal-entities", flag: "isPrimary",
+          flagLabel: "Основное" }
+      ],
+      stageFilter: true
+    },
+    "crm-legal": {
+      path: "legal-entities",
+      key: "legalEntities",
+      title: "Юрлица",
+      required: ["legalForm", "name"],
+      columns: ["legalForm", "name", "inn", "registration"],
+      labels: {
+        legalForm: "Форма",
+        name: "Название",
+        shortName: "Краткое название",
+        inn: "ИНН",
+        kpp: "КПП",
+        ogrn: "ОГРН",
+        ogrnip: "ОГРНИП",
+        phone: "Телефон",
+        email: "Email",
+        legalAddress: "Юридический адрес",
+        postalAddress: "Почтовый адрес",
+        taxSystem: "Система налогообложения",
+        bankName: "Банк",
+        bik: "БИК",
+        checkingAccount: "Расчётный счёт",
+        correspondentAccount: "Корреспондентский счёт",
+        recipientName: "Получатель",
+        notes: "Заметки"
+      },
+      private: ["legalAddress", "postalAddress", "taxSystem", "bankName", "bik", "checkingAccount",
+        "correspondentAccount", "recipientName"],
+      relations: [
+        { key: "contacts", view: "crm-contacts", path: "contacts", flag: "isSignatory",
+          flagLabel: "Подписант", signing: true, reverse: true },
+        { key: "companies", view: "crm-companies", path: "companies", flag: "isPrimary",
+          flagLabel: "Основное", reverse: true }
+      ],
+      companyFilter: true
+    }
+  });
+  const entityStates = {};
+  const canEditCRM = () => hasPermission("crm.edit");
+  const entityValue = (field, value) => {
+    if (field === "legalForm") return value === "ip" ? "ИП" : value === "ooo" ? "ООО" : value;
+    if (field === "pipelineStage") return ENTITY_STAGES[value] || value;
+    return value;
+  };
+  const entityName = (record) => record.name || record.shortName || record.code || `#${record.id}`;
+  const entityState = (view) => entityStates[view] ||= {
+    q: "", companyId: "", pipelineStage: "", deleted: "exclude", offset: 0, records: [], companies: []
+  };
+  const entityHashParts = () => decodeURIComponent(location.hash.slice(1)).split("/");
+  const csrfOptions = (method, body) => ({
+    method,
+    headers: { "X-CSRF-Token": identity.csrfToken },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) })
+  });
+  const loadEntityCompanies = async (state) => {
+    if (state.companies.length) return;
+    const data = await crmQuery("/companies", { limit: 200, deleted: "exclude" });
+    state.companies = data.companies || [];
+  };
+  const renderCrmEntityRoute = async () => {
+    const [view, route] = entityHashParts();
+    const config = CRM_ENTITIES[view];
+    const content = byId(`${view}-content`);
+    content.textContent = "Загрузка…";
+    try {
+      if (route === "new") await renderEntityForm(view, null);
+      else if (route) await renderEntityCard(view, route);
+      else await renderEntityList(view, true);
+    } catch (error) {
+      content.innerHTML = `<p class="crm-error" role="alert">${escapeHTML(error.message)}</p>`;
+    }
+  };
+  const renderEntityList = async (view, reset = false) => {
+    const config = CRM_ENTITIES[view];
+    const state = entityState(view);
+    const content = byId(`${view}-content`);
+    if (reset) {
+      state.offset = 0;
+      state.records = [];
+    }
+    if (config.companyFilter) await loadEntityCompanies(state);
+    const params = {
+      q: state.q,
+      companyId: state.companyId,
+      pipelineStage: state.pipelineStage,
+      deleted: state.deleted,
+      limit: 50,
+      offset: state.offset
+    };
+    const data = await crmQuery(`/${config.path}`, params);
+    state.records.push(...(data[config.key] || []));
+    const companyOptions = state.companies.map((company) => {
+      const selected = String(company.id) === state.companyId ? " selected" : "";
+      return `<option value="${escapeHTML(company.id)}"${selected}>${escapeHTML(entityName(company))}</option>`;
+    }).join("");
+    const stageOptions = Object.entries(ENTITY_STAGES).map(([id, label]) => {
+      const selected = id === state.pipelineStage ? " selected" : "";
+      return `<option value="${id}"${selected}>${label}</option>`;
+    }).join("");
+    const columns = config.columns.map((field) => `<th>${escapeHTML(config.labels[field] || "ОГРН / ОГРНИП")}</th>`)
+      .join("");
+    const rows = state.records.map((record) => {
+      const cells = config.columns.map((field) => {
+        const value = field === "registration" ? record.ogrn || record.ogrnip : record[field];
+        return `<td>${escapeHTML(entityValue(field, value) || "—")}</td>`;
+      }).join("");
+      return `<tr class="crm-row" tabindex="0" data-entity-id="${escapeHTML(record.id)}">${cells}</tr>`;
+    }).join("");
+    content.innerHTML = `<div class="crm-entity-toolbar">
+      <input type="search" data-entity-search value="${escapeHTML(state.q)}" placeholder="Поиск" aria-label="Поиск">
+      ${config.companyFilter ? `<select data-company-filter aria-label="Фильтр по компании">
+        <option value="">Все компании</option>${companyOptions}</select>` : ""}
+      ${config.stageFilter ? `<select data-stage-filter aria-label="Фильтр по этапу">
+        <option value="">Все этапы</option>${stageOptions}</select>` : ""}
+      <label><input type="checkbox" data-deleted-filter${state.deleted === "include" ? " checked" : ""}>
+        Показывать удалённые</label>
+      ${canEditCRM() ? `<button class="plain-button" type="button" data-entity-add>Добавить</button>` : ""}
+    </div><div class="crm-table-wrap"><table class="crm-table"><thead><tr>${columns}</tr></thead>
+      <tbody>${rows}</tbody></table></div>
+      ${state.records.length ? "" : '<p class="crm-empty">Записей нет</p>'}
+      ${state.records.length < (data.pagination?.total || 0)
+        ? '<button class="plain-button" type="button" data-entity-more>Показать ещё</button>' : ""}`;
+    bindEntityList(view);
+  };
+  const bindEntityList = (view) => {
+    const content = byId(`${view}-content`);
+    const state = entityState(view);
+    let timer;
+    content.querySelector("[data-entity-search]").addEventListener("input", (event) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        state.q = event.target.value.trim();
+        renderEntityList(view, true);
+      }, 300);
+    });
+    content.querySelector("[data-company-filter]")?.addEventListener("change", (event) => {
+      state.companyId = event.target.value;
+      renderEntityList(view, true);
+    });
+    content.querySelector("[data-stage-filter]")?.addEventListener("change", (event) => {
+      state.pipelineStage = event.target.value;
+      renderEntityList(view, true);
+    });
+    content.querySelector("[data-deleted-filter]").addEventListener("change", (event) => {
+      state.deleted = event.target.checked ? "include" : "exclude";
+      renderEntityList(view, true);
+    });
+    content.querySelector("[data-entity-add]")?.addEventListener("click", () => navigateEntity(view, "new"));
+    content.querySelector("[data-entity-more]")?.addEventListener("click", () => {
+      state.offset += 50;
+      renderEntityList(view);
+    });
+    content.querySelectorAll("[data-entity-id]").forEach((row) => {
+      row.addEventListener("click", () => navigateEntity(view, row.dataset.entityId));
+      row.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") navigateEntity(view, row.dataset.entityId);
+      });
+    });
+  };
+  const navigateEntity = (view, route = "") => {
+    location.hash = `${view}${route ? `/${encodeURIComponent(route)}` : ""}`;
+  };
+  const detailsMarkup = (config, record, fields) => fields.filter((field) => {
+    return record[field] !== null && record[field] !== undefined && record[field] !== "";
+  }).map((field) => `<div><dt>${escapeHTML(config.labels[field])}</dt>
+    <dd>${escapeHTML(entityValue(field, record[field]))}</dd></div>`).join("");
+  const renderEntityCard = async (view, id) => {
+    const config = CRM_ENTITIES[view];
+    const record = await crmQuery(`/${config.path}/${encodeURIComponent(id)}`, { includeDeleted: true });
+    const content = byId(`${view}-content`);
+    const publicFields = Object.keys(config.labels).filter((field) => !config.private?.includes(field));
+    const privateFields = config.private || [];
+    const arrayDetails = Object.entries(config.arrays || {}).map(([field, label]) => {
+      if (!record[field]?.length) return "";
+      const values = record[field].map((item) => item.url || item.handle || "").filter(Boolean).join(", ");
+      return `<div><dt>${label}</dt><dd>${escapeHTML(values)}</dd></div>`;
+    }).join("");
+    content.innerHTML = `<button class="plain-button" type="button" data-entity-back>← К списку</button>
+      <h2>${escapeHTML(entityName(record))}</h2><dl class="crm-details">
+      ${detailsMarkup(config, record, publicFields)}${arrayDetails}</dl>
+      ${view === "crm-legal" && canEditCRM() && privateFields.some((field) => record[field])
+        ? `<h3>Реквизиты</h3><dl class="crm-details">${detailsMarkup(config, record, privateFields)}</dl>` : ""}
+      <div class="crm-actions">${cardActions(record)}</div>
+      ${view === "crm-companies" ? '<p data-company-leads>Заявки: загрузка…</p>' : ""}
+      <section class="crm-relations"><h3>Связи</h3><div data-relations></div></section>`;
+    content.querySelector("[data-entity-back]").addEventListener("click", () => navigateEntity(view));
+    bindCardActions(view, record);
+    renderRelations(view, record);
+    if (view === "crm-companies") loadCompanyLeadCount(record);
+  };
+  const cardActions = (record) => {
+    if (!canEditCRM()) return "";
+    const deleted = Boolean(record.deletedAt || record.isDeleted || record.deleted);
+    return deleted ? '<button class="plain-button" type="button" data-restore>Восстановить</button>' :
+      '<button class="plain-button" type="button" data-edit>Изменить</button>' +
+      '<button class="danger" type="button" data-delete>Удалить</button>';
+  };
+  const bindCardActions = (view, record) => {
+    const config = CRM_ENTITIES[view];
+    const content = byId(`${view}-content`);
+    content.querySelector("[data-edit]")?.addEventListener("click", () => renderEntityForm(view, record));
+    content.querySelector("[data-delete]")?.addEventListener("click", async () => {
+      if (prompt(`Введите название «${entityName(record)}» для удаления`) !== entityName(record)) return;
+      await crmQuery(`/${config.path}/${record.id}`, {}, csrfOptions("DELETE"));
+      renderEntityCard(view, record.id);
+    });
+    content.querySelector("[data-restore]")?.addEventListener("click", async () => {
+      await crmQuery(`/${config.path}/${record.id}/restore`, {}, csrfOptions("POST"));
+      renderEntityCard(view, record.id);
+    });
+  };
+  const loadCompanyLeadCount = async (company) => {
+    const target = byId("crm-companies-content").querySelector("[data-company-leads]");
+    try {
+      const data = await crmQuery("/leads", { companyCode: company.code });
+      const leads = Array.isArray(data) ? data : data.leads || [];
+      target.textContent = `Заявки: ${data.total ?? leads.length}`;
+    } catch (error) {
+      target.textContent = `Заявки: ${error.message}`;
+    }
+  };
+  const fieldInput = (config, field, value = "") => {
+    const required = config.required.includes(field) ? " required" : "";
+    const hint = field === "code" ? '<small>Как поддомен: alvi, palitra-love</small>' : "";
+    if (field === "notes") {
+      return `<label class="wide">${config.labels[field]}<textarea name="${field}"${required}>
+        ${escapeHTML(value)}</textarea></label>`;
+    }
+    if (field === "legalForm") {
+      return `<label>${config.labels[field]} *<select name="${field}" required>
+        <option value="">Выберите</option><option value="ip"${value === "ip" ? " selected" : ""}>ИП</option>
+        <option value="ooo"${value === "ooo" ? " selected" : ""}>ООО</option></select></label>`;
+    }
+    if (field === "pipelineStage") {
+      const options = Object.entries(ENTITY_STAGES).map(([id, label]) =>
+        `<option value="${id}"${value === id ? " selected" : ""}>${label}</option>`).join("");
+      return `<label>${config.labels[field]}<select name="${field}"><option value=""></option>
+        ${options}</select></label>`;
+    }
+    const type = field.toLowerCase().includes("date") ? "date" : field === "email" ? "email" :
+      field.toLowerCase().includes("url") ? "url" : "text";
+    const pattern = field === "code" ? ' pattern="[A-Za-z0-9-]+"' : "";
+    return `<label>${config.labels[field]}${required ? " *" : ""}<input type="${type}" name="${field}"
+      value="${escapeHTML(value)}"${required}${pattern}>${hint}</label>`;
+  };
+  const repeatMarkup = (field, label, rows = []) => `<fieldset class="wide" data-repeat="${field}">
+    <legend>${label}</legend><div data-repeat-rows>${rows.map((row) => repeatRow(row)).join("")}</div>
+    <button type="button" data-repeat-add>Добавить строку</button></fieldset>`;
+  const repeatRow = (row = {}) => `<div class="crm-repeat-row"><input data-part="type" placeholder="Тип"
+    value="${escapeHTML(row.type || "")}"><input data-part="label" placeholder="Подпись"
+    value="${escapeHTML(row.label || "")}"><input data-part="value" placeholder="Handle или URL"
+    value="${escapeHTML(row.handle || row.url || "")}"><button type="button" data-repeat-remove>Удалить</button></div>`;
+  const renderEntityForm = async (view, record) => {
+    const config = CRM_ENTITIES[view];
+    const content = byId(`${view}-content`);
+    const fields = Object.keys(config.labels);
+    const controls = fields.map((field) => fieldInput(config, field, record?.[field] ?? "")).join("");
+    const repeats = Object.entries(config.arrays || {}).map(([field, label]) =>
+      repeatMarkup(field, label, record?.[field] || [])).join("");
+    content.innerHTML = `<button class="plain-button" type="button" data-form-cancel>← Отмена</button>
+      <h2>${record ? "Изменить" : "Добавить"}</h2><form class="crm-form">${controls}${repeats}
+      <div class="crm-actions wide"><button class="plain-button" type="submit">Сохранить</button></div>
+      <p class="crm-error wide" role="alert" hidden></p></form>`;
+    const form = content.querySelector("form");
+    content.querySelector("[data-form-cancel]").addEventListener("click", () => {
+      if (record) renderEntityCard(view, record.id);
+      else navigateEntity(view);
+    });
+    content.querySelectorAll("[data-repeat]").forEach((fieldset) => {
+      fieldset.addEventListener("click", (event) => {
+        if (event.target.matches("[data-repeat-add]")) {
+          fieldset.querySelector("[data-repeat-rows]").insertAdjacentHTML("beforeend", repeatRow());
+        }
+        if (event.target.matches("[data-repeat-remove]")) event.target.closest(".crm-repeat-row").remove();
+      });
+    });
+    form.addEventListener("submit", (event) => saveEntityForm(event, view, record));
+  };
+  const formPayload = (form, config) => {
+    const payload = {};
+    Object.keys(config.labels).forEach((field) => {
+      payload[field] = form.elements[field].value.trim() || null;
+    });
+    form.querySelectorAll("[data-repeat]").forEach((fieldset) => {
+      const field = fieldset.dataset.repeat;
+      payload[field] = [...fieldset.querySelectorAll(".crm-repeat-row")].map((row) => {
+        const type = row.querySelector('[data-part="type"]').value.trim();
+        const label = row.querySelector('[data-part="label"]').value.trim();
+        const value = row.querySelector('[data-part="value"]').value.trim();
+        const key = field === "links" || /^https?:/.test(value) ? "url" : "handle";
+        return field === "links" ? { label, url: value } : { type, label, [key]: value };
+      }).filter((row) => row.url || row.handle);
+    });
+    return payload;
+  };
+  const saveEntityForm = async (event, view, record) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const config = CRM_ENTITIES[view];
+    const error = form.querySelector("[role=alert]");
+    try {
+      const payload = formPayload(form, config);
+      const body = record ? Object.fromEntries(Object.entries(payload).filter(([key, value]) =>
+        JSON.stringify(value) !== JSON.stringify(record[key] ?? null))) : payload;
+      const path = record ? `/${config.path}/${record.id}` : `/${config.path}`;
+      if (record && !Object.keys(body).length) {
+        renderEntityCard(view, record.id);
+        return;
+      }
+      const saved = await crmQuery(path, {}, csrfOptions(record ? "PATCH" : "POST", body));
+      navigateEntity(view, saved?.id || record.id);
+    } catch (failure) {
+      error.textContent = failure.message;
+      error.hidden = false;
+    }
+  };
+  const relationEndpoint = (view, record, relation, targetId) => {
+    const config = CRM_ENTITIES[view];
+    if (relation.reverse) {
+      return `/${relation.path}/${targetId}/${config.path}/${record.id}`;
+    }
+    return `/${config.path}/${record.id}/${relation.path}/${targetId}`;
+  };
+  const renderRelations = (view, record) => {
+    const config = CRM_ENTITIES[view];
+    const target = byId(`${view}-content`).querySelector("[data-relations]");
+    target.innerHTML = config.relations.map((relation, index) => {
+      const rows = (record[relation.key] || []).map((linked) => {
+        const details = linked.relation || {};
+        const flag = details[relation.flag] ? ` · ${relation.flagLabel}` : "";
+        return `<div class="crm-relation"><a href="#${relation.view}/${encodeURIComponent(linked.id)}">
+          ${escapeHTML(entityName(linked))}</a><span>${escapeHTML(details.role || "")}${flag}</span>
+          ${canEditCRM() ? `<button type="button" data-unlink="${index}" data-target-id="${linked.id}">
+            Отвязать</button>` : ""}</div>`;
+      }).join("");
+      return `<div><h4>${escapeHTML(CRM_ENTITIES[relation.view].title)}</h4>${rows || "Связей нет"}
+        ${canEditCRM() ? `<button type="button" data-link="${index}">Связать</button>` : ""}</div>`;
+    }).join("");
+    target.querySelectorAll("[data-link]").forEach((button) => button.addEventListener("click", () => {
+      renderRelationForm(view, record, config.relations[Number(button.dataset.link)]);
+    }));
+    target.querySelectorAll("[data-unlink]").forEach((button) => button.addEventListener("click", async () => {
+      const relation = config.relations[Number(button.dataset.unlink)];
+      if (!confirm("Отвязать запись?")) return;
+      await crmQuery(relationEndpoint(view, record, relation, button.dataset.targetId), {}, csrfOptions("DELETE"));
+      renderEntityCard(view, record.id);
+    }));
+  };
+  const renderRelationForm = async (view, record, relation) => {
+    const data = await crmQuery(`/${relation.path}`, { limit: 200, deleted: "exclude" });
+    const relatedConfig = CRM_ENTITIES[relation.view];
+    const options = (data[relatedConfig.key] || []).map((item) =>
+      `<option value="${escapeHTML(item.id)}">${escapeHTML(entityName(item))}</option>`).join("");
+    const target = byId(`${view}-content`).querySelector("[data-relations]");
+    target.insertAdjacentHTML("afterbegin", `<form class="crm-form" data-relation-form>
+      <label>Запись *<select name="targetId" required><option value="">Выберите</option>${options}</select></label>
+      <label>Роль *<input name="role" required></label>
+      <label><span>${relation.flagLabel}</span><input name="flag" type="checkbox"></label>
+      ${relation.signing ? '<label>Основание подписи<input name="signingBasis"></label>' : ""}
+      <label>Действует с<input name="validFrom" type="date"></label>
+      <label>Действует до<input name="validTo" type="date"></label>
+      <label class="wide">Заметка<textarea name="notes"></textarea></label>
+      <div class="crm-actions wide"><button type="submit">Сохранить связь</button></div>
+      <p class="crm-error wide" role="alert" hidden></p></form>`);
+    const form = target.querySelector("[data-relation-form]");
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const values = new FormData(form);
+      const payload = {
+        role: values.get("role").trim(),
+        [relation.flag]: form.elements.flag.checked,
+        validFrom: values.get("validFrom") || null,
+        validTo: values.get("validTo") || null,
+        notes: values.get("notes").trim() || null
+      };
+      if (relation.signing) payload.signingBasis = values.get("signingBasis").trim() || null;
+      try {
+        const endpoint = relationEndpoint(view, record, relation, values.get("targetId"));
+        await crmQuery(endpoint, {}, csrfOptions("PUT", payload));
+        renderEntityCard(view, record.id);
+      } catch (failure) {
+        const error = form.querySelector("[role=alert]");
+        error.textContent = failure.message;
+        error.hidden = false;
+      }
+    });
   };
   const dateValue = (date) => date.toISOString().slice(0, 10);
   const periodDates = (period) => {
@@ -1088,8 +1599,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       byId("analytics-link").hidden = !identity.permissions.includes("analytics.view");
       byId("analytics-category").hidden = !identity.permissions.includes("analytics.view");
       byId("analytics-through-view").hidden = !identity.permissions.includes("analytics.view");
-      byId("crm-link").hidden = !identity.permissions.includes("crm.view");
-      byId("crm-view").hidden = !identity.permissions.includes("crm.view");
+      byId("crm-category").hidden = !hasPermission("crm.view");
+      byId("crm-menu").querySelectorAll("[data-view-link]").forEach((link) => {
+        link.hidden = !hasPermission("crm.view");
+      });
       byId("autoposting-link").hidden = !permittedView("autoposting");
       byId("autoposting-view").hidden = !permittedView("autoposting");
       byId("content-factory-link").hidden = !permittedView("content-factory");
@@ -1108,7 +1621,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       renderProjectPicker();
       if (redirectEditorHash()) return;
       if (identity.permissions.includes("analytics.view")) renderAnalyticsControls();
-      if (identity.permissions.includes("crm.view")) renderCRM();
+      if (hasPermission("crm.view")) renderCRM();
       setView(viewFromHash());
       renderSites();
       renderAccounts();
