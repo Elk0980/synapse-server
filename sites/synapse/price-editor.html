@@ -367,15 +367,29 @@
 
   <div class="ed-modal" id="ed-modal"><div class="ed-modal__box" id="ed-modal-box"></div></div>
 
-  <script src="https://alvi.synapsebusiness.ru/price-render.js?v=20260903b"></script>
+  <script>
+{ const p = new URLSearchParams(location.search); const requested = p.get('site') || 'alvi'; const base = (p.get('url') || (['alvi','avokado'].includes(requested) ? 'https://' + requested + '.synapsebusiness.ru' : requested)).replace(/\/$/, ''); document.write('<script src="' + base + '/price-render.js?v=20260904"><\/script>'); }
+</script>
   <script>
 (() => {
   'use strict';
   const params = new URLSearchParams(location.search);
+  const SITES = {
+    alvi: { name: 'ALVI', url: 'https://alvi.synapsebusiness.ru', pricePath: '/price.html', renderer: 'https://alvi.synapsebusiness.ru/price-render.js?v=20260904' },
+    avokado: { name: 'Авокадо', url: 'https://avokado.synapsebusiness.ru', pricePath: '/#price', renderer: 'https://avokado.synapsebusiness.ru/price-render.js?v=20260904' }
+  };
+  const requestedSite = params.get('site') || 'alvi';
+  const siteId = SITES[requestedSite] ? requestedSite : 'alvi';
+  const siteConfig = SITES[siteId];
+  const SITE = (params.get('url') || (SITES[requestedSite] ? siteConfig.url : requestedSite)).replace(/\/$/, '');
   const API_BASE = (params.get('api') || '').replace(/\/$/, '');
-  const API = API_BASE + '/content/alvi/price';
-  const ASSETS = API_BASE + '/content/alvi/assets';
-  const SITE = (params.get('site') || 'https://alvi.synapsebusiness.ru').replace(/\/$/, '');
+  const API = API_BASE + '/content/' + siteId + '/price';
+  const ASSETS = API_BASE + '/content/' + siteId + '/assets';
+  document.title = 'Редактор прайса ' + siteConfig.name;
+  document.querySelector('.ed-bar__title').firstChild.nodeValue = 'Редактор прайса ' + siteConfig.name;
+  const barLinks = document.querySelectorAll('.ed-bar a');
+  barLinks[0].href = 'site-editor.html?site=' + siteId;
+  barLinks[1].href = SITE + siteConfig.pricePath;
   const imgUrl = (p) => !p ? '' : (/^https?:/.test(p) ? p : p.startsWith('/api/assets/') ? ASSETS + p.slice('/api/assets'.length) : SITE + (p.startsWith('/') ? p : '/' + p));
   const KEY_STORAGE = 'synapse_content_key';
   const MAX_PER_CATEGORY = 8;
@@ -509,6 +523,7 @@
       <label class="is-wide">Название в прайсе<input name="title" value="${esc(it.title)}" required></label>
       <label>Название на главной<input name="card" value="${esc(it.card || '')}"><small>коротко, без кавычек</small></label>
       <label>Цена<input name="price" value="${esc(it.price || '')}"></label>
+      <label>Старая цена<input name="oldPrice" value="${esc(it.oldPrice || '')}"></label>
       <label>Длительность<input name="duration" value="${esc(it.duration || '')}"></label>
       <label>Кому подходит (главная)<input name="who" value="${esc(it.who || '')}"></label>
       <label class="is-wide">Описание для главной<input name="desc" value="${esc(it.desc || '')}"></label>
@@ -538,7 +553,7 @@
     if (!f) return;
     const fd = new FormData(form);
     const it = f.it;
-    for (const k of ['title', 'card', 'price', 'duration', 'who', 'desc', 'composition', 'photo']) {
+    for (const k of ['title', 'card', 'price', 'oldPrice', 'duration', 'who', 'desc', 'composition', 'photo']) {
       if (fd.has(k)) it[k] = String(fd.get(k)).trim();
     }
     if (fd.has('items')) it.items = String(fd.get('items')).split('\n').map((s) => s.trim()).filter(Boolean);
@@ -603,7 +618,7 @@
   function addItem(catId) {
     const cat = data.categories.find((c) => c.id === catId);
     if (!cat) return;
-    const it = { id: newId(cat), title: 'Новая позиция', card: '', desc: '', composition: '', who: '', duration: '', price: '' };
+    const it = { id: newId(cat), title: 'Новая позиция', card: '', desc: '', composition: '', who: '', duration: '', price: '', oldPrice: '' };
     if (cat.kind !== 'table') it.items = [];
     cat.items.push(it);
     editing = it.id; markDirty(); render();
@@ -816,8 +831,8 @@
 
   (async () => {
     if (!window.AlviPrice) {
-      setStatus('Не загрузился рендер прайса (price-render.js с сайта ALVI)', 'error');
-      $('#ed-content').innerHTML = '<p class="ed-status is-error">Не удалось загрузить price-render.js с alvi.synapsebusiness.ru. Проверьте, что сайт ALVI доступен.</p>';
+      setStatus('Не загрузился рендер прайса (price-render.js с сайта ' + siteConfig.name + ')', 'error');
+      $('#ed-content').innerHTML = '<p class="ed-status is-error">Не удалось загрузить price-render.js. Проверьте, что сайт клиента доступен.</p>';
       return;
     }
     try { await loadData(); setStatus('Готово к работе'); }

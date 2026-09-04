@@ -38,6 +38,32 @@ synapsebusiness.ru, www.synapsebusiness.ru {
 # --- Клиент: Авокадо (студия дизайна тела, Иркутск) -------------------------
 avokado.synapsebusiness.ru {
   root * /srv/sites/avokado
+  @price {
+    path /api/price
+    method GET
+  }
+  handle @price {
+    rewrite * /content/avokado/price
+    reverse_proxy content:8080
+  }
+  @site {
+    path /api/site
+    method GET
+  }
+  handle @site {
+    rewrite * /content/avokado/site
+    reverse_proxy content:8080
+  }
+  @assets {
+    path /api/assets/*
+    method GET
+  }
+  handle @assets {
+    uri replace /api/assets/ /content/avokado/assets/
+    reverse_proxy content:8080
+  }
+  @sitedata path /data/*
+  header @sitedata Access-Control-Allow-Origin https://synapse.synapsebusiness.ru
   import static
 }
 

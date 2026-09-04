@@ -1830,6 +1830,7 @@ data-view-target="admin"
 </button>
 <button type="button" id="site-tab" role="tab" aria-selected="false" aria-controls="site-view" data-view-target="site" hidden>Сайт</button>
 <button type="button" id="price-tab" role="tab" aria-selected="false" aria-controls="price-view" data-view-target="price" hidden>Прайс</button>
+<label class="context-pill" for="editor-client">Клиент <select id="editor-client" aria-label="Клиент редакторов"><option value="alvi">ALVI</option><option value="avokado">Авокадо</option></select></label>
 <button type="button" id="chat-tab" role="tab" aria-selected="false" aria-controls="chat-view" data-view-target="chat" hidden>Чат</button>
 </div>
 
@@ -2042,10 +2043,10 @@ hidden
 </section>
 </section>
 <section class="view-panel tool-view" id="site-view" role="tabpanel" aria-labelledby="site-tab" data-view="site" hidden>
-<iframe class="tool-frame" data-src="site-editor.html" title="Редактор сайта ALVI"></iframe>
+<iframe class="tool-frame" data-src="site-editor.html?site=alvi" title="Редактор сайта выбранного клиента"></iframe>
 </section>
 <section class="view-panel tool-view" id="price-view" role="tabpanel" aria-labelledby="price-tab" data-view="price" hidden>
-<iframe class="tool-frame" data-src="price-editor.html" title="Редактор прайса ALVI"></iframe>
+<iframe class="tool-frame" data-src="price-editor.html?site=alvi" title="Редактор прайса выбранного клиента"></iframe>
 </section>
 <section class="view-panel tool-view" id="chat-view" role="tabpanel" aria-labelledby="chat-tab" data-view="chat" hidden>
 <iframe class="tool-frame" data-src="https://chat.synapsebusiness.ru/" title="Чат"></iframe>
@@ -2226,7 +2227,7 @@ crm: "QA"
 {
 name: "Avokado",
 type: "Студия для женщин",
-edit: { label: "Редактировать сайт → Тексты и фоны", href: "site-editor-avokado.html" },
+edit: { label: "Редактировать сайт → Прайс", href: "price-editor.html?site=avokado" }, edit2: { label: "Редактировать сайт → Тексты и фоны", href: "site-editor.html?site=avokado" },
 directions: "Основной сайт · заявки",
 website: "QA",
 sources: "НЕ ПОДКЛЮЧЁН",
@@ -2877,6 +2878,16 @@ showToast();
 };
 
 const VIEW_TITLES = { cabinet: "Кабинет", admin: "Админка", site: "Сайт — редактор", price: "Прайс — редактор", chat: "Чат" };
+
+const editorClient = byId("editor-client");
+editorClient.addEventListener("change", () => {
+  ["site", "price"].forEach((kind) => {
+    const frame = document.querySelector(`#${kind}-view iframe`);
+    const next = `${kind}-editor.html?site=${editorClient.value}`;
+    frame.dataset.src = next;
+    if (frame.getAttribute("src")) frame.src = next;
+  });
+});
 const setView = (viewName, shouldScroll) => {
 const isCabinet = viewName === "cabinet";
 

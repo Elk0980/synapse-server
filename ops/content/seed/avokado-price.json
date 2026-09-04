@@ -1,0 +1,419 @@
+{
+  "version": 1,
+  "updatedAt": "2026-09-04T00:00:00.000Z",
+  "links": {
+    "book": "https://n396010.yclients.com/company/375899/personal/menu",
+    "chat": "https://wa.me/79501001059"
+  },
+  "blocks": {
+    "self": {
+      "title": "Авокадо",
+      "max": 8
+    },
+    "two": {
+      "title": "Для двоих",
+      "max": 8
+    }
+  },
+  "showcase": {
+    "self": [
+      "first-1"
+    ],
+    "two": []
+  },
+  "categories": [
+    {
+      "id": "first-visit",
+      "title": "Первый визит",
+      "kind": "programs",
+      "block": "self",
+      "items": [
+        {
+          "id": "first-1",
+          "title": "ТУРБО-массаж всего тела · 60 мин",
+          "card": "Лучший первый шаг · экономия 1 600 ₽",
+          "duration": "60 мин",
+          "price": "500 ₽",
+          "oldPrice": "2 100 ₽",
+          "desc": "Что входит: осмотр и консультация специалиста, подбор программы под вашу цель, полный сеанс аппаратного массажа всего тела, замеры на старте. Халат и простыни — наши.",
+          "composition": "Цена действует только на первый визит. Ни к чему не обязывает.",
+          "who": "",
+          "items": []
+        },
+        {
+          "id": "first-2",
+          "title": "LPG-массаж всего тела · 45 мин",
+          "card": "Акция первого визита",
+          "duration": "45 мин",
+          "price": "990 ₽",
+          "oldPrice": "2 100 ₽",
+          "desc": "Знакомство с вакуумно-роликовым массажем — в специальном костюме, комфортно, без синяков.",
+          "composition": "",
+          "who": "",
+          "items": []
+        },
+        {
+          "id": "first-3",
+          "title": "Ручной массаж · 60 мин",
+          "card": "Акция первого визита",
+          "duration": "60 мин",
+          "price": "1 650 ₽",
+          "oldPrice": "2 500 ₽",
+          "desc": "Спа-ритуал с эфирными маслами — если хочется начать с рук мастера, а не с аппарата.",
+          "composition": "",
+          "who": "",
+          "items": []
+        }
+      ]
+    },
+    {
+      "id": "apparat",
+      "title": "Аппаратный массаж",
+      "kind": "table",
+      "block": "self",
+      "head": [
+        "Услуга",
+        "Длительность",
+        "Цена"
+      ],
+      "items": [
+        {
+          "id": "apparat-1",
+          "title": "Аппаратный массаж 45 мин",
+          "duration": "",
+          "price": "2 100 ₽"
+        },
+        {
+          "id": "apparat-2",
+          "title": "Аппаратный массаж 60 мин",
+          "duration": "",
+          "price": "3 100 ₽"
+        },
+        {
+          "id": "apparat-3",
+          "title": "Аппаратный массаж 90 мин",
+          "duration": "",
+          "price": "4 700 ₽"
+        },
+        {
+          "id": "apparat-4",
+          "title": "Вакуумно-роликовый 30 мин",
+          "duration": "",
+          "price": "2 100 ₽"
+        },
+        {
+          "id": "apparat-5",
+          "title": "Липопластика",
+          "duration": "",
+          "price": "4 990 ₽"
+        }
+      ]
+    },
+    {
+      "id": "laser-offers",
+      "title": "Лазерная эпиляция · предложения",
+      "kind": "table",
+      "block": "self",
+      "head": [
+        "Услуга",
+        "Длительность",
+        "Цена"
+      ],
+      "items": [
+        {
+          "id": "laser-offers-1",
+          "title": "Бикини тотальное · действующее предложение",
+          "duration": "",
+          "price": "1 190 ₽"
+        },
+        {
+          "id": "laser-offers-2",
+          "title": "Две зоны на выбор · действующее предложение",
+          "duration": "",
+          "price": "1 390 ₽"
+        },
+        {
+          "id": "laser-offers-3",
+          "title": "Три зоны на выбор · действующее предложение",
+          "duration": "",
+          "price": "1 990 ₽"
+        },
+        {
+          "id": "laser-offers-4",
+          "title": "Четыре зоны на выбор · действующее предложение",
+          "duration": "",
+          "price": "2 390 ₽"
+        },
+        {
+          "id": "laser-offers-5",
+          "title": "Консультация · действующее предложение",
+          "duration": "",
+          "price": "бесплатно"
+        }
+      ]
+    },
+    {
+      "id": "laser-zones",
+      "title": "Отдельные зоны",
+      "kind": "table",
+      "block": "self",
+      "head": [
+        "Услуга",
+        "Длительность",
+        "Цена"
+      ],
+      "items": [
+        {
+          "id": "laser-zones-1",
+          "title": "Верхняя губа",
+          "duration": "",
+          "price": "500 ₽"
+        },
+        {
+          "id": "laser-zones-2",
+          "title": "Подмышечные впадины",
+          "duration": "",
+          "price": "600 ₽"
+        },
+        {
+          "id": "laser-zones-3",
+          "title": "Бикини классическое",
+          "duration": "",
+          "price": "900 ₽"
+        },
+        {
+          "id": "laser-zones-4",
+          "title": "Бикини тотальное",
+          "duration": "",
+          "price": "1 800 ₽"
+        },
+        {
+          "id": "laser-zones-5",
+          "title": "Предплечья",
+          "duration": "",
+          "price": "1 100 ₽"
+        },
+        {
+          "id": "laser-zones-6",
+          "title": "Руки выше локтя",
+          "duration": "",
+          "price": "1 100 ₽"
+        },
+        {
+          "id": "laser-zones-7",
+          "title": "Руки полностью",
+          "duration": "",
+          "price": "1 500 ₽"
+        },
+        {
+          "id": "laser-zones-8",
+          "title": "Бёдра (с коленом)",
+          "duration": "",
+          "price": "1 900 ₽"
+        },
+        {
+          "id": "laser-zones-9",
+          "title": "Голени (с коленом, подъёмом стопы, пальцами)",
+          "duration": "",
+          "price": "1 800 ₽"
+        },
+        {
+          "id": "laser-zones-10",
+          "title": "Ноги полностью",
+          "duration": "",
+          "price": "2 990 ₽"
+        }
+      ]
+    },
+    {
+      "id": "laser-combo",
+      "title": "Комбо",
+      "kind": "table",
+      "block": "self",
+      "head": [
+        "Услуга",
+        "Длительность",
+        "Цена"
+      ],
+      "items": [
+        {
+          "id": "laser-combo-1",
+          "title": "Мини 1",
+          "duration": "",
+          "price": "2 190 ₽"
+        },
+        {
+          "id": "laser-combo-2",
+          "title": "Мини 2",
+          "duration": "",
+          "price": "2 690 ₽"
+        },
+        {
+          "id": "laser-combo-3",
+          "title": "Мини 3",
+          "duration": "",
+          "price": "2 100 ₽"
+        },
+        {
+          "id": "laser-combo-4",
+          "title": "Мини-3+",
+          "duration": "",
+          "price": "3 190 ₽"
+        },
+        {
+          "id": "laser-combo-5",
+          "title": "Ручки",
+          "duration": "",
+          "price": "1 800 ₽"
+        },
+        {
+          "id": "laser-combo-6",
+          "title": "Комбо популярное",
+          "duration": "",
+          "price": "3 100 ₽"
+        },
+        {
+          "id": "laser-combo-7",
+          "title": "Комбо популярное +",
+          "duration": "",
+          "price": "4 100 ₽"
+        },
+        {
+          "id": "laser-combo-8",
+          "title": "Комбо «Хочу всё!»",
+          "duration": "",
+          "price": "4 990 ₽"
+        }
+      ]
+    },
+    {
+      "id": "face",
+      "title": "Уход за лицом",
+      "kind": "table",
+      "block": "self",
+      "head": [
+        "Услуга",
+        "Длительность",
+        "Цена"
+      ],
+      "items": [
+        {
+          "id": "face-1",
+          "title": "RF-лифтинг лица",
+          "duration": "",
+          "price": "1 150 ₽"
+        },
+        {
+          "id": "face-2",
+          "title": "RF-лифтинг лица + шея",
+          "duration": "",
+          "price": "1 350 ₽"
+        },
+        {
+          "id": "face-3",
+          "title": "RF-лифтинг лица + шея + декольте",
+          "duration": "",
+          "price": "1 550 ₽"
+        },
+        {
+          "id": "face-4",
+          "title": "Альгинатная маска",
+          "duration": "",
+          "price": "390 ₽"
+        },
+        {
+          "id": "face-5",
+          "title": "Лифтинг-маска",
+          "duration": "",
+          "price": "200 ₽"
+        },
+        {
+          "id": "face-6",
+          "title": "Буккальный массаж",
+          "duration": "",
+          "price": "2 800 ₽"
+        },
+        {
+          "id": "face-7",
+          "title": "Хиропластический массаж лица",
+          "duration": "",
+          "price": "2 800 ₽"
+        },
+        {
+          "id": "face-8",
+          "title": "Скульптурирующий массаж лица",
+          "duration": "",
+          "price": "2 800 ₽"
+        }
+      ]
+    },
+    {
+      "id": "manual",
+      "title": "Ручные массажи",
+      "kind": "table",
+      "block": "self",
+      "head": [
+        "Услуга",
+        "Длительность",
+        "Цена"
+      ],
+      "items": [
+        {
+          "id": "manual-1",
+          "title": "Классический массаж тела",
+          "duration": "",
+          "price": "2 500 ₽"
+        },
+        {
+          "id": "manual-2",
+          "title": "Расслабляющий массаж тела",
+          "duration": "",
+          "price": "2 700–3 300 ₽"
+        },
+        {
+          "id": "manual-3",
+          "title": "Миофасциальный массаж тела",
+          "duration": "",
+          "price": "3 500 ₽"
+        },
+        {
+          "id": "manual-4",
+          "title": "Гемолимфодренажный массаж тела",
+          "duration": "",
+          "price": "3 000 ₽"
+        },
+        {
+          "id": "manual-5",
+          "title": "Классический массаж спины",
+          "duration": "",
+          "price": "1 900 ₽"
+        },
+        {
+          "id": "manual-6",
+          "title": "Расслабляющий массаж спины",
+          "duration": "",
+          "price": "2 300 ₽"
+        },
+        {
+          "id": "manual-7",
+          "title": "Миофасциальный массаж спины",
+          "duration": "",
+          "price": "2 600 ₽"
+        },
+        {
+          "id": "manual-8",
+          "title": "Классический массаж ШВЗ",
+          "duration": "",
+          "price": "1 200 ₽"
+        },
+        {
+          "id": "manual-9",
+          "title": "Миофасциальный массаж ШВЗ",
+          "duration": "",
+          "price": "1 600 ₽"
+        }
+      ]
+    }
+  ],
+  "certificates": {}
+}
