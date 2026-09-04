@@ -5,192 +5,79 @@ const crypto = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 const { URL } = require('node:url');
 
-// Тексты сценария собраны здесь, чтобы их можно было менять без поиска по коду.
 const SCRIPT = {
   greeting: 'Здравствуйте! Я Хью, ассистент Synapse Business. Как я могу к вам обращаться и какой у вас вопрос?',
-  askName: 'Спасибо! Подскажите, пожалуйста, как к вам обращаться?',
-  askPhone: 'Чтобы специалист мог точно ответить, оставьте, пожалуйста, номер телефона.',
-  askQuestion: 'Спасибо! Опишите, пожалуйста, ваш вопрос — я передам его специалисту.',
-  accepted: 'Спасибо! Я передал вопрос специалисту. Он свяжется с вами по указанному номеру.',
+  askName: 'Спасибо! Подскажите, пожалуйста, как к вам обращаться?', askPhone: 'Чтобы специалист мог точно ответить, оставьте, пожалуйста, номер телефона.',
+  askQuestion: 'Спасибо! Опишите, пожалуйста, ваш вопрос — я передам его специалисту.', accepted: 'Спасибо! Я передал вопрос специалисту. Он свяжется с вами по указанному номеру.',
   unknown: 'Я не буду придумывать цены или обещания: на этот вопрос точно ответит специалист. Оставьте, пожалуйста, номер телефона для связи.',
 };
-
-const MODEL_SYSTEM_PROMPT = `Ты — русскоязычный ассистент Synapse Business. Отвечай кратко и доброжелательно. Твоя цель — узнать вопрос посетителя, его имя и номер телефона. Никогда не выдумывай цены, сроки, гарантии или обещания. Если точного ответа нет, честно скажи, что ответит специалист, и попроси номер телефона. Не утверждай, что заявка создана, если система этого не сообщала.`;
-
+const MODEL_SYSTEM_PROMPT = 'Ты — русскоязычный ассистент Synapse Business. Отвечай кратко и доброжелательно. Твоя цель — узнать вопрос посетителя, его имя и номер телефона. Никогда не выдумывай цены, сроки, гарантии или обещания. Если точного ответа нет, честно скажи, что ответит специалист, и попроси номер телефона.';
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
 const DATABASE_PATH = process.env.DATABASE_PATH || '/data/chat.sqlite';
 const API_KEY = process.env.API_KEY || '';
-const CRM_URL = process.env.CRM_URL || '';
-const CRM_API_KEY = process.env.CRM_API_KEY || '';
-const MODEL_API_URL = process.env.MODEL_API_URL || '';
-const MODEL_API_KEY = process.env.MODEL_API_KEY || '';
-const ALLOWED_ORIGINS = new Set((process.env.ALLOWED_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean));
-const UTM_FIELDS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
-
+const CHAT_ADMIN_KEY = process.env.CHAT_ADMIN_KEY || '';
+const CRM_URL = process.env.CRM_URL || ''; const CRM_API_KEY = process.env.CRM_API_KEY || '';
+const MODEL_API_URL = process.env.MODEL_API_URL || ''; const MODEL_API_KEY = process.env.MODEL_API_KEY || '';
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || '';
+const TELEGRAM_OWNER_ID = String(process.env.TELEGRAM_OWNER_ID || '');
+const ALLOWED_ORIGINS = new Set((process.env.ALLOWED_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean));
+const COMPANIES = new Set(['alvi', 'avokado', 'palitra', 'synapse']);
 if (!API_KEY.trim()) throw new Error('API_KEY не должен быть пустым');
-if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('PORT должен быть целым числом от 1 до 65535');
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('Некорректный PORT');
 
 const db = new DatabaseSync(DATABASE_PATH);
-db.exec(`
-  PRAGMA foreign_keys = ON;
-  PRAGMA journal_mode = WAL;
-  CREATE TABLE IF NOT EXISTS conversations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    site TEXT,
-    page TEXT,
-    utm_source TEXT,
-    utm_medium TEXT,
-    utm_campaign TEXT,
-    utm_term TEXT,
-    utm_content TEXT,
-    referrer TEXT,
-    client_id TEXT,
-    visitor_key TEXT NOT NULL,
-    lead_id INTEGER,
-    status TEXT NOT NULL DEFAULT 'open'
-  );
-  CREATE TABLE IF NOT EXISTS messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-    created_at TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('visitor', 'assistant', 'operator')),
-    text TEXT NOT NULL
-  );
-  CREATE INDEX IF NOT EXISTS conversations_updated_idx ON conversations(updated_at);
-  CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages(conversation_id, id);
-`);
+db.exec(`PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL;
+CREATE TABLE IF NOT EXISTS conversations (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, site TEXT, page TEXT, utm_source TEXT, utm_medium TEXT, utm_campaign TEXT, utm_term TEXT, utm_content TEXT, referrer TEXT, client_id TEXT, visitor_key TEXT NOT NULL, lead_id INTEGER, status TEXT NOT NULL DEFAULT 'open');
+CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, created_at TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('visitor','assistant','operator')), text TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS conversations_updated_idx ON conversations(updated_at); CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages(conversation_id,id);`);
+function addColumn(table, name, definition) { if (!db.prepare(`PRAGMA table_info(${table})`).all().some(c => c.name === name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`); }
+addColumn('conversations', 'company', "TEXT NOT NULL DEFAULT 'synapse'"); addColumn('conversations', 'channel', "TEXT NOT NULL DEFAULT 'web'");
+addColumn('conversations', 'external_chat_id', 'TEXT'); addColumn('conversations', 'title', 'TEXT'); addColumn('conversations', 'unread_count', 'INTEGER NOT NULL DEFAULT 0'); addColumn('conversations', 'last_message_at', 'TEXT');
+addColumn('messages', 'author_type', 'TEXT'); addColumn('messages', 'author_name', 'TEXT'); addColumn('messages', 'external_message_id', 'TEXT');
+db.exec("UPDATE messages SET author_type=CASE role WHEN 'operator' THEN 'owner' ELSE role END WHERE author_type IS NULL; UPDATE conversations SET last_message_at=updated_at WHERE last_message_at IS NULL;");
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS conversations_telegram_chat_idx ON conversations(external_chat_id) WHERE channel=\'telegram\'; CREATE UNIQUE INDEX IF NOT EXISTS messages_external_idx ON messages(conversation_id,external_message_id) WHERE external_message_id IS NOT NULL;');
 
-const insertConversation = db.prepare(`INSERT INTO conversations
-  (created_at, updated_at, site, page, utm_source, utm_medium, utm_campaign, utm_term, utm_content, referrer, client_id, visitor_key)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-const getConversation = db.prepare('SELECT * FROM conversations WHERE id = ?');
-const insertMessage = db.prepare('INSERT INTO messages (conversation_id, created_at, role, text) VALUES (?, ?, ?, ?)');
-const getMessages = db.prepare('SELECT id, created_at, role, text FROM messages WHERE conversation_id = ? ORDER BY id');
-const touchConversation = db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?');
-const saveLead = db.prepare("UPDATE conversations SET lead_id = ?, status = 'lead', updated_at = ? WHERE id = ?");
-const visitorLimits = new Map();
-const ipLimits = new Map();
+const getConversation = db.prepare('SELECT * FROM conversations WHERE id=?');
+const getMessages = db.prepare('SELECT id,created_at,role,text,author_type,author_name,external_message_id FROM messages WHERE conversation_id=? ORDER BY id');
+const insertWebConversation = db.prepare(`INSERT INTO conversations(created_at,updated_at,last_message_at,site,page,utm_source,utm_medium,utm_campaign,utm_term,utm_content,referrer,client_id,visitor_key,title) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+const insertMessage = db.prepare('INSERT INTO messages(conversation_id,created_at,role,text,author_type,author_name,external_message_id) VALUES(?,?,?,?,?,?,?)');
+const visitorLimits = new Map(); const ipLimits = new Map(); const notifications = new Map();
 
-function send(response, status, payload, origin) {
-  const body = JSON.stringify(payload);
-  response.writeHead(status, {
-    'content-type': 'application/json; charset=utf-8',
-    'content-length': Buffer.byteLength(body),
-    ...(origin ? { 'access-control-allow-origin': origin, vary: 'Origin' } : {}),
-  });
-  response.end(body);
-}
+function send(res, status, payload, origin) { const body=JSON.stringify(payload); res.writeHead(status, {'content-type':'application/json; charset=utf-8','content-length':Buffer.byteLength(body),...(origin?{'access-control-allow-origin':origin,vary:'Origin'}:{})}); res.end(body); }
+function fail(status,message){const e=new Error(message);e.status=status;throw e;}
+function optionalString(value,field,max=4000){if(value===undefined||value===null||value==='')return null;if(typeof value!=='string')fail(400,`Поле «${field}» должно быть строкой`);return value.trim().slice(0,max)||null;}
+async function readJson(req){const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>1024*1024)fail(413,'Тело запроса не должно превышать 1 МБ');chunks.push(chunk);}try{const value=JSON.parse(Buffer.concat(chunks).toString('utf8'));if(!value||Array.isArray(value)||typeof value!=='object')fail(400,'Тело запроса должно быть JSON-объектом');return value;}catch(e){if(e.status)throw e;fail(400,'Некорректный JSON');}}
+function id(value){const result=Number(value);if(!Number.isSafeInteger(result)||result<1)fail(400,'Некорректный идентификатор диалога');return result;}
+function existing(value){const row=getConversation.get(value);if(!row)fail(404,'Диалог не найден');return row;}
+function hash(token){return crypto.createHash('sha256').update(token).digest('hex');}
+function requireVisitor(req,row){const token=req.headers.authorization?.replace(/^Bearer\s+/i,'')||req.headers['x-visitor-token'];if(!token||hash(String(token))!==row.visitor_key)fail(401,'Неверный токен посетителя');}
+function requireAdmin(req){if(!CHAT_ADMIN_KEY||req.headers['x-api-key']!==CHAT_ADMIN_KEY)fail(401,'Неверный ключ владельца');}
+function requireOperator(req){if(req.headers['x-api-key']!==API_KEY)fail(401,'Неверный API-ключ');}
+function takeLimit(map,key,max,windowMs){const now=Date.now();const recent=(map.get(key)||[]).filter(t=>t>now-windowMs);if(recent.length>=max)fail(429,'Слишком много сообщений. Попробуйте позже.');recent.push(now);map.set(key,recent);}
+function serializeMessage(m){return{id:m.id,createdAt:m.created_at,role:m.role,text:m.text,authorType:m.author_type||m.role,authorName:m.author_name,externalMessageId:m.external_message_id};}
+function serialize(row){return{id:row.id,createdAt:row.created_at,updatedAt:row.updated_at,company:row.company,channel:row.channel,externalChatId:row.external_chat_id,title:row.title,unreadCount:row.unread_count,lastMessageAt:row.last_message_at,site:row.site,page:row.page,leadId:row.lead_id,status:row.status,messages:getMessages.all(row.id).map(serializeMessage)};}
+function addMessage(conversationId,type,text,name=null,externalId=null,unread=false){const now=new Date().toISOString();const role=type==='owner'?'operator':(type==='system'?'assistant':type);try{insertMessage.run(conversationId,now,role,text,type,name,externalId);}catch(e){if(String(e.message).includes('UNIQUE'))return false;throw e;}db.prepare('UPDATE conversations SET updated_at=?,last_message_at=?,unread_count=unread_count+? WHERE id=?').run(now,now,unread?1:0,conversationId);return true;}
+function contactData(items){const texts=items.filter(i=>(i.author_type||i.role)==='visitor').map(i=>i.text),joined=texts.join('\n');const phone=joined.match(/(?:\+?7|8)?[\s(.-]*\d{3}[\s).-]*\d{3}[\s.-]*\d{2}[\s.-]*\d{2}/)?.[0]?.trim()||null;const explicit=joined.match(/(?:меня зовут|я)\s+([А-ЯЁ][а-яё-]{1,30})/i)?.[1];const shortName=texts.find(t=>/^[А-ЯЁ][а-яё-]{1,30}$/i.test(t.trim()))?.trim();return{name:explicit||shortName||null,phone,firstQuestion:texts.find(t=>t!==shortName&&t!==phone)||null};}
+async function telegram(method,payload){if(!TELEGRAM_BOT_TOKEN)return{ok:false,skipped:true,description:'не отправлено в Telegram: токен не задан'};try{const response=await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});const body=await response.json();if(!response.ok||!body.ok)throw new Error(body.description||`HTTP ${response.status}`);return body;}catch(e){console.error('Ошибка Telegram:',e);return{ok:false,description:`не отправлено в Telegram: ${e.message}`};}}
+async function notifyOwner(row,text){if(!TELEGRAM_OWNER_ID||!TELEGRAM_BOT_TOKEN)return;const last=notifications.get(row.id)||0;if(Date.now()-last<60000)return;notifications.set(row.id,Date.now());await telegram('sendMessage',{chat_id:TELEGRAM_OWNER_ID,text:`Новое сообщение · ${row.company} · ${text.replace(/\s+/g,' ').slice(0,80)}`});}
+async function createLead(row,data){if(!CRM_URL||!CRM_API_KEY)return false;const response=await fetch(CRM_URL,{method:'POST',headers:{'content-type':'application/json','x-api-key':CRM_API_KEY},body:JSON.stringify({name:data.name,contact:data.phone,channel:'chat',utmSource:row.utm_source,utmMedium:row.utm_medium,utmCampaign:row.utm_campaign,utmContent:row.utm_content,clientId:row.client_id,referrer:row.referrer,landingPage:row.page,firstQuestion:data.firstQuestion})});if(!response.ok)throw new Error(`CRM вернула HTTP ${response.status}`);const lead=await response.json();if(!lead.id)throw new Error('CRM не вернула id заявки');db.prepare("UPDATE conversations SET lead_id=?,status='lead' WHERE id=?").run(lead.id,row.id);return true;}
+async function assistantReply(row){const all=getMessages.all(row.id),data=contactData(all);let lead=false;if(!row.lead_id&&data.name&&data.phone&&data.firstQuestion)try{lead=await createLead(row,data);}catch(e){console.error(e);}if(lead)return SCRIPT.accepted;if(MODEL_API_URL&&MODEL_API_KEY)try{const response=await fetch(MODEL_API_URL,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${MODEL_API_KEY}`},body:JSON.stringify({messages:[{role:'system',content:MODEL_SYSTEM_PROMPT},...all.map(m=>({role:(m.author_type||m.role)==='visitor'?'user':'assistant',content:m.text}))]})});if(response.ok){const body=await response.json();const text=body.choices?.[0]?.message?.content||body.reply||body.output;if(typeof text==='string'&&text.trim())return text.trim();}}catch(e){console.error(e);}return !data.name?SCRIPT.askName:!data.phone?SCRIPT.askPhone:!data.firstQuestion?SCRIPT.askQuestion:SCRIPT.unknown;}
 
-function fail(status, message) { const error = new Error(message); error.status = status; throw error; }
-function optionalString(value, field) {
-  if (value === undefined || value === null || value === '') return null;
-  if (typeof value !== 'string') fail(400, `Поле «${field}» должно быть строкой`);
-  return value.trim().slice(0, 4000) || null;
-}
-async function readJson(request) {
-  const chunks = []; let size = 0;
-  for await (const chunk of request) { size += chunk.length; if (size > 1024 * 1024) fail(413, 'Тело запроса не должно превышать 1 МБ'); chunks.push(chunk); }
-  try { const value = JSON.parse(Buffer.concat(chunks).toString('utf8')); if (!value || Array.isArray(value) || typeof value !== 'object') fail(400, 'Тело запроса должно быть JSON-объектом'); return value; }
-  catch (error) { if (error.status) throw error; fail(400, 'Некорректный JSON'); }
-}
-function conversationId(value) { const id = Number(value); if (!Number.isSafeInteger(id) || id < 1) fail(400, 'Некорректный идентификатор диалога'); return id; }
-function existingConversation(id) { const row = getConversation.get(id); if (!row) fail(404, 'Диалог не найден'); return row; }
-function hashToken(token) { return crypto.createHash('sha256').update(token).digest('hex'); }
-function requireVisitor(request, row) {
-  const token = request.headers.authorization?.replace(/^Bearer\s+/i, '') || request.headers['x-visitor-token'];
-  if (!token || hashToken(String(token)) !== row.visitor_key) fail(401, 'Неверный токен посетителя');
-}
-function requireOperator(request) { if (request.headers['x-api-key'] !== API_KEY) fail(401, 'Неверный API-ключ'); }
-function clientIp(request) { return String(request.headers['x-forwarded-for'] || request.socket.remoteAddress || '').split(',')[0].trim(); }
-function takeLimit(map, key, maximum, windowMs) {
-  const now = Date.now(); const recent = (map.get(key) || []).filter(time => time > now - windowMs);
-  if (recent.length >= maximum) fail(429, 'Слишком много сообщений. Попробуйте позже.');
-  recent.push(now); map.set(key, recent);
-}
-function serialize(row) {
-  return { id: row.id, createdAt: row.created_at, updatedAt: row.updated_at, site: row.site, page: row.page,
-    utmSource: row.utm_source, utmMedium: row.utm_medium, utmCampaign: row.utm_campaign,
-    utmTerm: row.utm_term, utmContent: row.utm_content, referrer: row.referrer,
-    clientId: row.client_id, leadId: row.lead_id, status: row.status, messages: getMessages.all(row.id) };
-}
-function contactData(messages) {
-  const texts = messages.filter(item => item.role === 'visitor').map(item => item.text);
-  const joined = texts.join('\n');
-  const phone = joined.match(/(?:\+?7|8)?[\s(.-]*\d{3}[\s).-]*\d{3}[\s.-]*\d{2}[\s.-]*\d{2}/)?.[0]?.trim() || null;
-  const explicit = joined.match(/(?:меня зовут|я)\s+([А-ЯЁ][а-яё-]{1,30})/i)?.[1];
-  const shortName = texts.find(text => /^[А-ЯЁ][а-яё-]{1,30}$/i.test(text.trim()))?.trim();
-  const firstQuestion = texts.find(text => text !== shortName && text !== phone && !/^(?:меня зовут|я)\s+[А-ЯЁ][а-яё-]{1,30}[.!]?$/i.test(text.trim())) || null;
-  return { name: explicit || shortName || null, phone, firstQuestion };
-}
-async function createLead(row, data) {
-  if (!CRM_URL || !CRM_API_KEY) { console.error('CRM_URL или CRM_API_KEY не настроены: заявка не создана'); return false; }
-  const payload = { name: data.name, contact: data.phone, channel: 'chat',
-    utmSource: row.utm_source, utmMedium: row.utm_medium, utmCampaign: row.utm_campaign,
-    utmContent: row.utm_content, clientId: row.client_id, referrer: row.referrer,
-    landingPage: row.page, source: row.utm_source, firstQuestion: data.firstQuestion };
-  const response = await fetch(CRM_URL, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': CRM_API_KEY }, body: JSON.stringify(payload) });
-  if (!response.ok) throw new Error(`CRM вернула HTTP ${response.status}`);
-  const lead = await response.json();
-  if (!lead.id) throw new Error('CRM не вернула id заявки');
-  saveLead.run(lead.id, new Date().toISOString(), row.id); return true;
-}
-function scriptedReply(data, leadCreated) {
-  if (leadCreated) return SCRIPT.accepted;
-  if (!data.name) return SCRIPT.askName;
-  if (!data.phone) return SCRIPT.askPhone;
-  if (!data.firstQuestion) return SCRIPT.askQuestion;
-  return SCRIPT.unknown;
-}
-async function modelReply(messages) {
-  const response = await fetch(MODEL_API_URL, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${MODEL_API_KEY}` },
-    body: JSON.stringify({ messages: [{ role: 'system', content: MODEL_SYSTEM_PROMPT }, ...messages.map(item => ({ role: item.role === 'visitor' ? 'user' : 'assistant', content: item.text }))] }) });
-  if (!response.ok) throw new Error(`Модель вернула HTTP ${response.status}`);
-  const body = await response.json(); const text = body.choices?.[0]?.message?.content || body.reply || body.output;
-  if (typeof text !== 'string' || !text.trim()) throw new Error('Модель вернула пустой ответ');
-  return text.trim();
-}
+async function handleWebhook(req,res,origin){if(!TELEGRAM_WEBHOOK_SECRET||req.headers['x-telegram-bot-api-secret-token']!==TELEGRAM_WEBHOOK_SECRET)fail(401,'Неверный секрет webhook');const update=await readJson(req);const message=update.message||update.edited_message;if(!message||!['group','supergroup'].includes(message.chat?.type))return send(res,200,{ok:true,ignored:true},origin);const chatId=String(message.chat.id),now=new Date().toISOString();let row=db.prepare("SELECT * FROM conversations WHERE channel='telegram' AND external_chat_id=?").get(chatId);if(!row){const result=db.prepare("INSERT INTO conversations(created_at,updated_at,last_message_at,visitor_key,company,channel,external_chat_id,title) VALUES(?,?,?,?,'synapse','telegram',?,?)").run(now,now,now,hash(crypto.randomBytes(32).toString('hex')),chatId,optionalString(message.chat.title,'title',250)||`Telegram ${chatId}`);row=getConversation.get(Number(result.lastInsertRowid));}const text=message.text||message.caption;if(!text)return send(res,200,{ok:true,ignored:true},origin);const fromOwner=String(message.from?.id||'')===TELEGRAM_OWNER_ID;const fromBot=Boolean(message.from?.is_bot);const command=text.match(/^\/company(?:@\w+)?\s+(\w+)/i);if(command&&fromOwner){const company=command[1].toLowerCase();if(!COMPANIES.has(company))fail(400,'Неизвестная компания');db.prepare('UPDATE conversations SET company=? WHERE id=?').run(company,row.id);row=getConversation.get(row.id);await telegram('sendMessage',{chat_id:chatId,text:`Компания: ${company}`,reply_to_message_id:message.message_id});}const authorType=(fromOwner||fromBot)?'owner':'visitor';const added=addMessage(row.id,authorType,text,[message.from?.first_name,message.from?.last_name].filter(Boolean).join(' ')||message.from?.username||null,String(message.message_id),!fromOwner&&!fromBot);if(added&&!fromOwner&&!fromBot)await notifyOwner(getConversation.get(row.id),text);return send(res,200,{ok:true,conversationId:row.id,company:getConversation.get(row.id).company},origin);}
 
-async function route(request, response, origin) {
-  const url = new URL(request.url, 'http://localhost');
-  if (request.method === 'POST' && url.pathname === '/conversations') {
-    const body = await readJson(request); const token = crypto.randomBytes(32).toString('base64url'); const now = new Date().toISOString();
-    const values = [now, now, optionalString(body.site, 'site'), optionalString(body.page, 'page'), ...UTM_FIELDS.map(field => optionalString(body[field] ?? body[field.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())], field)), optionalString(body.referrer, 'referrer'), optionalString(body.client_id ?? body.clientId, 'client_id'), hashToken(token)];
-    const result = insertConversation.run(...values); const id = Number(result.lastInsertRowid);
-    insertMessage.run(id, now, 'assistant', SCRIPT.greeting);
-    return send(response, 201, { id, visitorToken: token, reply: SCRIPT.greeting }, origin);
-  }
-  if (request.method === 'GET' && url.pathname === '/conversations') {
-    requireOperator(request); const rows = db.prepare('SELECT * FROM conversations ORDER BY updated_at DESC, id DESC LIMIT 500').all();
-    return send(response, 200, { conversations: rows.map(serialize) }, origin);
-  }
-  let match = url.pathname.match(/^\/conversations\/(\d+)$/);
-  if (request.method === 'GET' && match) { const row = existingConversation(conversationId(match[1])); if (request.headers['x-api-key'] !== API_KEY) requireVisitor(request, row); return send(response, 200, serialize(row), origin); }
-  match = url.pathname.match(/^\/conversations\/(\d+)\/messages$/);
-  if (request.method === 'POST' && match) {
-    const row = existingConversation(conversationId(match[1])); requireVisitor(request, row);
-    takeLimit(visitorLimits, row.id, 20, 60 * 1000); takeLimit(ipLimits, clientIp(request), 60, 60 * 60 * 1000);
-    const body = await readJson(request); const text = optionalString(body.text, 'text'); if (!text) fail(400, 'Поле «text» обязательно');
-    let now = new Date().toISOString(); insertMessage.run(row.id, now, 'visitor', text); touchConversation.run(now, row.id);
-    const all = getMessages.all(row.id); const data = contactData(all); let leadCreated = false;
-    if (!row.lead_id && data.name && data.phone && data.firstQuestion) { try { leadCreated = await createLead(row, data); } catch (error) { console.error('Не удалось создать заявку в CRM:', error); } }
-    let reply = scriptedReply(data, leadCreated);
-    if (MODEL_API_URL && MODEL_API_KEY && !leadCreated) { try { reply = await modelReply(all); } catch (error) { console.error('Ошибка модели, используется сценарий:', error); } }
-    now = new Date().toISOString(); insertMessage.run(row.id, now, 'assistant', reply); touchConversation.run(now, row.id);
-    return send(response, 201, { reply, conversation: serialize(getConversation.get(row.id)) }, origin);
-  }
-  match = url.pathname.match(/^\/conversations\/(\d+)\/operator$/);
-  if (request.method === 'POST' && match) { requireOperator(request); const row = existingConversation(conversationId(match[1])); const body = await readJson(request); const text = optionalString(body.text, 'text'); if (!text) fail(400, 'Поле «text» обязательно'); const now = new Date().toISOString(); insertMessage.run(row.id, now, 'operator', text); touchConversation.run(now, row.id); return send(response, 201, serialize(getConversation.get(row.id)), origin); }
-  fail(404, 'Метод или адрес не найден');
-}
+async function route(req,res,origin){const url=new URL(req.url,'http://localhost');
+  if(req.method==='POST'&&url.pathname==='/telegram/webhook')return handleWebhook(req,res,origin);
+  if(req.method==='POST'&&url.pathname==='/conversations'){const b=await readJson(req),token=crypto.randomBytes(32).toString('base64url'),now=new Date().toISOString(),utm=['utm_source','utm_medium','utm_campaign','utm_term','utm_content'].map(f=>optionalString(b[f]??b[f.replace(/_([a-z])/g,(_,l)=>l.toUpperCase())],f));const result=insertWebConversation.run(now,now,now,optionalString(b.site,'site'),optionalString(b.page,'page'),...utm,optionalString(b.referrer,'referrer'),optionalString(b.client_id??b.clientId,'client_id'),hash(token),'Чат с посетителем');const conversationId=Number(result.lastInsertRowid);addMessage(conversationId,'assistant',SCRIPT.greeting,'Хью');return send(res,201,{id:conversationId,visitorToken:token,reply:SCRIPT.greeting},origin);}
+  if(req.method==='GET'&&url.pathname==='/admin/conversations'){requireAdmin(req);const company=url.searchParams.get('company');if(company&&!COMPANIES.has(company))fail(400,'Неизвестная компания');const rows=db.prepare(`SELECT c.*,m.text last_message,m.author_type last_author_type FROM conversations c LEFT JOIN messages m ON m.id=(SELECT id FROM messages WHERE conversation_id=c.id ORDER BY id DESC LIMIT 1) ${company?'WHERE c.company=?':''} ORDER BY c.last_message_at DESC,c.id DESC LIMIT 500`).all(...(company?[company]:[]));return send(res,200,{conversations:rows.map(r=>({id:r.id,company:r.company,channel:r.channel,title:r.title||`Диалог ${r.id}`,unreadCount:r.unread_count,lastMessageAt:r.last_message_at,lastMessage:r.last_message,lastAuthorType:r.last_author_type}))},origin);}
+  let match=url.pathname.match(/^\/admin\/conversations\/(\d+)\/messages$/);if(match&&req.method==='GET'){requireAdmin(req);const row=existing(id(match[1]));return send(res,200,{conversation:serialize(row),messages:getMessages.all(row.id).map(serializeMessage)},origin);}if(match&&req.method==='POST'){requireAdmin(req);const row=existing(id(match[1])),b=await readJson(req),text=optionalString(b.text,'text');if(!text)fail(400,'Поле «text» обязательно');addMessage(row.id,'owner',text,'Владислав');let delivery={ok:true};if(row.channel==='telegram')delivery=await telegram('sendMessage',{chat_id:row.external_chat_id,text});return send(res,201,{message:serializeMessage(getMessages.all(row.id).at(-1)),delivery},origin);}
+  match=url.pathname.match(/^\/admin\/conversations\/(\d+)\/read$/);if(match&&req.method==='POST'){requireAdmin(req);const row=existing(id(match[1]));db.prepare('UPDATE conversations SET unread_count=0 WHERE id=?').run(row.id);return send(res,200,{ok:true},origin);}
+  if(req.method==='GET'&&url.pathname==='/conversations'){requireOperator(req);return send(res,200,{conversations:db.prepare('SELECT * FROM conversations ORDER BY updated_at DESC LIMIT 500').all().map(serialize)},origin);}
+  match=url.pathname.match(/^\/conversations\/(\d+)$/);if(req.method==='PATCH'&&match){requireAdmin(req);const row=existing(id(match[1])),b=await readJson(req),company=optionalString(b.company,'company',20)?.toLowerCase();if(!COMPANIES.has(company))fail(400,'Неизвестная компания');db.prepare('UPDATE conversations SET company=?,updated_at=? WHERE id=?').run(company,new Date().toISOString(),row.id);return send(res,200,serialize(getConversation.get(row.id)),origin);}
+  match=url.pathname.match(/^\/conversations\/(\d+)$/);if(req.method==='GET'&&match){const row=existing(id(match[1]));if(req.headers['x-api-key']!==API_KEY)requireVisitor(req,row);return send(res,200,serialize(row),origin);}
+  match=url.pathname.match(/^\/conversations\/(\d+)\/messages$/);if(req.method==='POST'&&match){const row=existing(id(match[1]));requireVisitor(req,row);takeLimit(visitorLimits,row.id,20,60000);takeLimit(ipLimits,String(req.headers['x-forwarded-for']||req.socket.remoteAddress).split(',')[0],60,3600000);const b=await readJson(req),text=optionalString(b.text,'text');if(!text)fail(400,'Поле «text» обязательно');addMessage(row.id,'visitor',text,null,null,true);await notifyOwner(getConversation.get(row.id),text);const reply=await assistantReply(row);addMessage(row.id,'assistant',reply,'Хью');return send(res,201,{reply,conversation:serialize(getConversation.get(row.id))},origin);}
+  match=url.pathname.match(/^\/conversations\/(\d+)\/operator$/);if(req.method==='POST'&&match){requireOperator(req);const row=existing(id(match[1])),b=await readJson(req),text=optionalString(b.text,'text');if(!text)fail(400,'Поле «text» обязательно');addMessage(row.id,'owner',text,'Оператор');return send(res,201,serialize(getConversation.get(row.id)),origin);}fail(404,'Метод или адрес не найден');}
 
-const server = http.createServer((request, response) => {
-  const origin = request.headers.origin;
-  if (origin && !ALLOWED_ORIGINS.has(origin)) return send(response, 403, { error: 'Источник запроса не разрешён' });
-  if (request.method === 'OPTIONS') { response.writeHead(204, { ...(origin ? { 'access-control-allow-origin': origin, vary: 'Origin' } : {}), 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'Content-Type, Authorization, X-Visitor-Token, X-API-Key', 'access-control-max-age': '86400' }); return response.end(); }
-  route(request, response, origin).catch(error => { console.error(error); send(response, error.status || 500, { error: error.status ? error.message : 'Внутренняя ошибка сервиса' }, origin); });
-});
-server.listen(PORT, () => console.log(`Чат слушает порт ${PORT}; база: ${DATABASE_PATH}`));
-function shutdown() { server.close(() => { db.close(); process.exit(0); }); }
-process.on('SIGTERM', shutdown); process.on('SIGINT', shutdown);
+const server=http.createServer((req,res)=>{const origin=req.headers.origin;if(origin&&!ALLOWED_ORIGINS.has(origin))return send(res,403,{error:'Источник запроса не разрешён'});if(req.method==='OPTIONS'){res.writeHead(204,{...(origin?{'access-control-allow-origin':origin,vary:'Origin'}:{}),'access-control-allow-methods':'GET, POST, PATCH, OPTIONS','access-control-allow-headers':'Content-Type, Authorization, X-Visitor-Token, X-API-Key, X-Telegram-Bot-Api-Secret-Token'});return res.end();}route(req,res,origin).catch(e=>{console.error(e);send(res,e.status||500,{error:e.status?e.message:'Внутренняя ошибка сервиса'},origin);});});
+server.listen(PORT,()=>console.log(`Чат слушает порт ${PORT}; база: ${DATABASE_PATH}`));
+function shutdown(){server.close(()=>{db.close();process.exit(0);});}process.on('SIGTERM',shutdown);process.on('SIGINT',shutdown);

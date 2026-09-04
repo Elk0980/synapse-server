@@ -20,7 +20,7 @@
     .benefits{padding:14px max(18px,calc((100vw - 960px)/2));display:grid;grid-template-columns:repeat(3,1fr);gap:10px;border-bottom:1px solid var(--line)}
     .metric{min-width:0;background:var(--panel);border:1px solid #252c35;border-radius:10px;padding:11px 14px}.metric-label{color:var(--muted);font-size:12px}.metric-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.metric-value{font-size:19px;font-weight:700}.dev-label,.sample{font-size:10px;line-height:1;border:1px solid var(--warn);color:#e3b341;border-radius:10px;padding:4px 6px;text-transform:uppercase;letter-spacing:.04em}
     main{width:min(760px,100%);min-height:0;margin:0 auto;display:grid;grid-template-rows:1fr auto}
-    .messages{overflow-y:auto;padding:28px 18px 14px;scroll-behavior:smooth}.message{display:flex;gap:10px;margin-bottom:18px;max-width:82%}.message.user{margin-left:auto;justify-content:flex-end}.avatar{flex:0 0 30px;height:30px;border-radius:9px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:12px;font-weight:800}.bubble{background:var(--panel);border:1px solid var(--line);border-radius:4px 14px 14px;padding:11px 14px;white-space:pre-wrap;overflow-wrap:anywhere}.user .bubble{background:#1f6feb;color:#fff;border-color:#1f6feb;border-radius:14px 4px 14px 14px}.system-message{margin:4px auto 18px;width:fit-content;max-width:90%;padding:8px 12px;color:var(--muted);background:#161b2288;border:1px dashed var(--line);border-radius:8px;text-align:center;font-size:12px}
+    .messages{overflow-y:auto;padding:28px 18px 14px;scroll-behavior:smooth}.message{display:flex;gap:10px;margin-bottom:18px;max-width:82%}.message.user{margin-left:auto;justify-content:flex-end}.avatar{flex:0 0 30px;height:30px;border-radius:9px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:12px;font-weight:800}.bubble{background:var(--panel);border:1px solid var(--line);border-radius:4px 14px 14px;padding:11px 14px;white-space:pre-wrap;overflow-wrap:anywhere}.user .bubble{background:#1f6feb;color:#fff;border-color:#1f6feb;border-radius:14px 4px 14px 14px}.message.failed .bubble{border-color:#f85149}.retry{display:block;margin:6px 0 0 auto;border:0;background:transparent;color:#fff;text-decoration:underline;cursor:pointer;font-size:12px}.system-message{margin:4px auto 18px;width:fit-content;max-width:90%;padding:8px 12px;color:var(--muted);background:#161b2288;border:1px dashed var(--line);border-radius:8px;text-align:center;font-size:12px}
     .composer{padding:12px 18px 20px;background:linear-gradient(transparent,var(--bg) 22%)}.composer-box{display:flex;gap:10px;align-items:flex-end;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:9px}.composer-box:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px #58a6ff1f}textarea{display:block;width:100%;max-height:140px;min-height:40px;resize:none;border:0;outline:0;background:transparent;color:var(--text);padding:9px 8px;line-height:1.45}textarea::placeholder{color:#6e7681}.send{width:40px;height:40px;flex:0 0 40px;border:0;border-radius:10px;background:var(--accent);color:#081526;cursor:pointer;font-size:19px;font-weight:bold}.send:disabled{opacity:.4;cursor:default}.hint{padding:6px 4px 0;color:var(--muted);font-size:11px;text-align:center}
     .backdrop{position:fixed;inset:0;background:#0009;opacity:0;visibility:hidden;transition:.2s;z-index:10}.backdrop.open{opacity:1;visibility:visible}.drawer{position:absolute;right:0;top:0;height:100%;width:min(440px,100%);background:var(--bg);border-left:1px solid var(--line);box-shadow:var(--shadow);transform:translateX(100%);transition:.25s;display:grid;grid-template-rows:auto 1fr}.open .drawer{transform:none}.drawer-head{display:flex;justify-content:space-between;align-items:center;padding:19px 20px;border-bottom:1px solid var(--line)}.drawer-head h2{margin:0;font-size:19px}.close{border:0;background:transparent;color:var(--muted);font-size:26px;cursor:pointer}.task-content{overflow:auto;padding:8px 20px 30px}.task-section h3{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:22px 0 10px}.task-card{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:14px;margin-bottom:10px}.task-title{display:flex;justify-content:space-between;gap:8px;font-weight:650;margin-bottom:10px}.task-info{display:grid;grid-template-columns:120px 1fr;gap:5px;color:var(--muted);font-size:12px}.task-info b{color:#b1bac4;font-weight:500}.task-card a{color:var(--accent)}.empty,.load-error{color:var(--muted);font-size:13px}.load-error{padding:20px}
     @media(max-width:600px){header{height:58px}.benefits{padding:10px;gap:6px}.metric{padding:9px 8px}.metric-label{font-size:10px}.metric-value{font-size:16px}.dev-label{font-size:8px}.messages{padding-top:18px}.message{max-width:92%}.brand small{display:none}.hint{display:none}.composer{padding-bottom:max(10px,env(safe-area-inset-bottom))}}
@@ -52,7 +52,7 @@
     function loadHistory() {
       try {
         const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-        if (Array.isArray(saved)) return saved.filter(item => item && ['assistant','user','system'].includes(item.role) && typeof item.text === 'string');
+        if (Array.isArray(saved)) return saved.filter(item => item && ['assistant','user'].includes(item.role) && typeof item.text === 'string');
       } catch (_) {}
       return [{ role: 'assistant', text: INTRO }];
     }
@@ -68,9 +68,10 @@
         if (item.role === 'system') {
           const notice = document.createElement('div'); notice.className = 'system-message'; notice.textContent = item.text; messages.append(notice); return;
         }
-        const row = document.createElement('div'); row.className = `message ${item.role}`;
+        const row = document.createElement('div'); row.className = `message ${item.role}${item.failed ? ' failed' : ''}`;
         const bubble = document.createElement('div'); bubble.className = 'bubble'; bubble.textContent = item.text;
         if (item.role === 'assistant') { const avatar = document.createElement('div'); avatar.className = 'avatar'; avatar.textContent = 'Х'; avatar.setAttribute('aria-hidden','true'); row.append(avatar); }
+        if (item.failed) { const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'retry'; retry.textContent = 'Повторить'; retry.onclick = () => retryMessage(item); bubble.append(retry); }
         row.append(bubble); messages.append(row);
       });
       messages.scrollTop = messages.scrollHeight;
@@ -89,23 +90,24 @@
       if (!Number.isInteger(data.id) || typeof data.visitorToken !== 'string') throw new Error('Некорректный ответ сервиса');
       session = { id: data.id, token: data.visitorToken }; saveSession();
     }
-    document.getElementById('chatForm').addEventListener('submit', async event => {
-      event.preventDefault(); const text = input.value.trim(); if (!text) return;
-      sending = true; history.push({ role: 'user', text }); saveHistory();
-      input.value = ''; resizeInput(); renderMessages();
+    async function sendMessage(item) {
+      sending = true; item.failed = false; saveHistory(); renderMessages(); resizeInput();
       try {
         if (!session) await startConversation();
-        const response = await fetch(`${CHAT_API_URL}/conversations/${session.id}/messages`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${session.token}` }, body: JSON.stringify({ text }) });
+        const request = () => fetch(`${CHAT_API_URL}/conversations/${session.id}/messages`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${session.token}` }, body: JSON.stringify({ text: item.text }) });
+        let response = await request();
+        if (response.status === 401 || response.status === 404) { session = null; localStorage.removeItem(SESSION_KEY); await startConversation(); response = await request(); }
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         if (typeof data.reply !== 'string' || !data.reply.trim()) throw new Error('Пустой ответ сервиса');
         history.push({ role: 'assistant', text: data.reply.trim() });
-      } catch (error) {
-        console.error('Чат недоступен:', error);
-        history.push({ role: 'system', text: 'Не удалось отправить сообщение: сервис чата сейчас недоступен. Попробуйте ещё раз позже.' });
-      } finally {
-        sending = false; saveHistory(); renderMessages(); resizeInput(); input.focus();
-      }
+      } catch (error) { console.error('Чат недоступен:', error); item.failed = true; }
+      finally { sending = false; saveHistory(); renderMessages(); resizeInput(); input.focus(); }
+    }
+    function retryMessage(item) { if (!sending) sendMessage(item); }
+    document.getElementById('chatForm').addEventListener('submit', async event => {
+      event.preventDefault(); const text = input.value.trim(); if (!text || sending) return;
+      const item = { role: 'user', text }; history.push(item); input.value = ''; await sendMessage(item);
     });
     input.addEventListener('input', resizeInput);
     input.addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); document.getElementById('chatForm').requestSubmit(); } });
@@ -143,7 +145,25 @@
       const list = Array.isArray(data.tasks) ? data.tasks : []; const content = document.getElementById('taskContent'); content.textContent = '';
       content.append(renderTaskSection('В работе', list.filter(task => task.status === 'in_progress')), renderTaskSection('Выполнено', list.filter(task => task.status === 'completed')));
     }).catch(() => { document.getElementById('taskContent').innerHTML = '<p class="load-error">Не удалось загрузить задачи. Обновите страницу.</p>'; });
-    renderMessages(); resizeInput(); saveHistory();
+    async function validateSession() {
+      if (!session) return;
+      try { const response = await fetch(`${CHAT_API_URL}/conversations/${session.id}`, { headers: { authorization: `Bearer ${session.token}` } }); if (response.status === 401 || response.status === 404) { session = null; localStorage.removeItem(SESSION_KEY); } }
+      catch (error) { console.warn('Не удалось проверить сохранённый диалог:', error); }
+    }
+    async function pollOwnerReplies() {
+      if (!session || sending) return;
+      try {
+        const response = await fetch(`${CHAT_API_URL}/conversations/${session.id}`, { headers: { authorization: `Bearer ${session.token}` } });
+        if (response.status === 401 || response.status === 404) { session = null; localStorage.removeItem(SESSION_KEY); return; }
+        if (!response.ok) return;
+        const data = await response.json();
+        (data.messages || []).filter(item => item.authorType === 'owner').forEach(item => {
+          if (!history.some(saved => saved.remoteId === item.id)) history.push({ role: 'assistant', text: item.text, remoteId: item.id });
+        });
+        saveHistory(); renderMessages();
+      } catch (_) {}
+    }
+    renderMessages(); resizeInput(); saveHistory(); validateSession(); setInterval(pollOwnerReplies, 5000);
   </script>
 </body>
 </html>

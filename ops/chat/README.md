@@ -13,11 +13,15 @@
 | `PORT` | Порт, по умолчанию `8080` |
 | `DATABASE_PATH` | SQLite-файл, по умолчанию `/data/chat.sqlite` |
 | `API_KEY` | Обязательный ключ операторских методов; при пустом значении сервис не запускается |
+| `CHAT_ADMIN_KEY` | Ключ интерфейса владельца (`X-API-Key`) |
 | `ALLOWED_ORIGINS` | Разрешённые CORS-origin через запятую |
 | `CRM_URL` | Полный URL создания заявки, например `http://crm:8080/leads` |
 | `CRM_API_KEY` | Ключ CRM в заголовке `X-API-Key` |
 | `MODEL_API_URL` | Необязательный URL API модели |
 | `MODEL_API_KEY` | Необязательный ключ модели |
+| `TELEGRAM_BOT_TOKEN` | Токен Telegram-бота; при пустом значении ответы сохраняются, но не отправляются |
+| `TELEGRAM_WEBHOOK_SECRET` | Секрет заголовка webhook; webhook отключён при пустом значении |
+| `TELEGRAM_OWNER_ID` | Telegram user id Владислава для команды `/company` и уведомлений |
 
 Секреты задаются только через окружение и не должны попадать в репозиторий.
 
@@ -30,6 +34,26 @@
 * `GET /conversations/:id` — получить диалог целиком. Доступен посетителю с его токеном или оператору с `X-API-Key`.
 * `GET /conversations` — последние диалоги оператора; нужен `X-API-Key`.
 * `POST /conversations/:id/operator` — добавить операторское сообщение `{ "text": "..." }`; нужен `X-API-Key`.
+* `GET /admin/conversations[?company=alvi]` — список входящих владельца.
+* `GET|POST /admin/conversations/:id/messages` — история и ответ владельца.
+* `POST /admin/conversations/:id/read` — сбросить счётчик непрочитанных.
+* `PATCH /conversations/:id` с `{ "company": "palitra" }` — изменить компанию.
+
+Административные маршруты требуют `X-API-Key: <CHAT_ADMIN_KEY>`. Интерфейс находится по адресу `/inbox`, хранит ключ только в `localStorage` браузера и обновляется раз в пять секунд.
+
+## Telegram-мост
+
+Добавьте бота администратором в группу. Первое групповое сообщение автоматически создаёт Telegram-диалог. Владислав может привязать его командой `/company alvi`, `/company avokado` или `/company palitra`; команда принимается только от `TELEGRAM_OWNER_ID`.
+
+Webhook регистрируется один раз вручную после задания переменных окружения:
+
+```sh
+curl -fsS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+  -H 'Content-Type: application/json' \
+  --data "{\"url\":\"https://chat.synapsebusiness.ru/telegram/webhook\",\"secret_token\":\"${TELEGRAM_WEBHOOK_SECRET}\",\"allowed_updates\":[\"message\",\"edited_message\"]}"
+```
+
+Проверить регистрацию можно методом `getWebhookInfo`. Токен и секрет нельзя помещать в командную историю или репозиторий на общем компьютере. Входящий webhook обязательно проверяется по `X-Telegram-Bot-Api-Secret-Token`. При новых сообщениях клиентов бот уведомляет `TELEGRAM_OWNER_ID` не чаще одного раза в минуту на диалог.
 
 Для браузера реализован `OPTIONS`. Посетитель ограничен 20 сообщениями на диалог в минуту и 60 запросами на IP в час.
 
