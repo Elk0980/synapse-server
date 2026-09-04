@@ -464,6 +464,7 @@
           <button class="ed-btn" type="button" id="ed-view-screen" title="Как в браузере: прокрутка внутри, анимация первого экрана">Экран</button>
           <button class="ed-btn" type="button" id="ed-hand" title="Двигать холст мышью поверх сайта (или держите пробел)">✋ Рука</button>
           <button class="ed-btn" type="button" id="ed-panel-open" title="Показать панель настроек">Панель</button>
+          <button class="ed-btn" type="button" id="ed-promo" title="Баннер после отзывов: открыть и править тексты, шрифты, размеры">🎁 Баннер</button>
         </span>
       </div>
       <div class="ed-stage" id="ed-stage">
@@ -812,6 +813,11 @@
     if (t.id === 'ed-hand') { view.hand = !view.hand; applyView(false); return; }
     if (t.id === 'ed-panel-open') { renderInspector(); openPanel(); return; }
     if (t.id === 'ed-panel-close') return closePanel();
+    if (t.id === 'ed-promo') {
+      selectedSection = 'promo'; selectedKey = null; renderInspector(); openPanel();
+      if (frameReady) frame.contentWindow.postMessage({ type: 'alvi-edit-scroll-section', sectionId: 'promo' }, SITE_ORIGIN);
+      return;
+    }
   });
 
   async function upload(secId, file) {
