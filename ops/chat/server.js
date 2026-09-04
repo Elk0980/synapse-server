@@ -4,6 +4,10 @@ const http = require("node:http");
 const crypto = require("node:crypto");
 const { DatabaseSync } = require("node:sqlite");
 const { URL } = require("node:url");
+const {
+  parseQuietHours,
+  prepareTelegramPayload,
+} = require("./quiet-hours");
 
 const SCRIPT = {
   greeting:
@@ -34,6 +38,7 @@ const MODEL_API_KEY = process.env.MODEL_API_KEY || "";
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || "";
 const TELEGRAM_OWNER_ID = process.env.TELEGRAM_OWNER_ID || "";
+const TELEGRAM_QUIET_HOURS = parseQuietHours(process.env);
 const ALLOWED_ORIGINS = new Set(
   (process.env.ALLOWED_ORIGINS || "")
     .split(",")
@@ -350,12 +355,18 @@ async function modelReply(messages) {
 async function telegramRequest(method, payload) {
   if (!TELEGRAM_BOT_TOKEN)
     return { ok: false, warning: "не отправлено в Telegram: токен не задан" };
+  const preparedPayload = prepareTelegramPayload(
+    method,
+    payload,
+    new Date(),
+    TELEGRAM_QUIET_HOURS,
+  );
   const response = await fetch(
     `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(preparedPayload),
     },
   );
   const body = await response.json();
