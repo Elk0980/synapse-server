@@ -8,7 +8,6 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-const crypto = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
@@ -22,68 +21,12 @@ const SEED_DIR = process.env.SEED_DIR || path.join(__dirname, 'seed');
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
 const HISTORY_LIMIT = 10;
 const MAX_BODY = 1024 * 1024;
-const SESSION_TTL = 30 * 24 * 60 * 60;
-const LOGIN_WINDOW = 10 * 60 * 1000;
-const LOGIN_LIMIT = 10;
-const SESSION_SECRET = (process.env.SESSION_SECRET || '').trim() || crypto.randomBytes(32).toString('hex');
-const AUTH_USERS = parseUsers(process.env.AUTH_USERS || '');
-const loginFailures = new Map();
-
-if (!(process.env.SESSION_SECRET || '').trim()) {
-  console.warn('content: SESSION_SECRET пуст — создан временный секрет, сессии не переживут перезапуск');
-}
-
-function parseUsers(raw) {
-  const users = new Map();
-  for (const item of raw.split(';').filter(Boolean)) {
-    const [login, role, ...hashParts] = item.split(':');
-    const hash = hashParts.join(':');
-    if (/^[a-z0-9_-]+$/.test(login || '') && ['owner', 'editor'].includes(role) && hash) users.set(login, { login, role, hash });
-    else console.warn(`content: некорректная запись AUTH_USERS для ${login || '(пустого login)'}`);
-  }
-  return users;
-}
-
-function publicIdentity(identity) {
-  const editor = identity.role === 'editor';
-  return { author: editor ? 'Татьяна' : 'Влад', login: identity.login, role: identity.role, sites: editor ? ['alvi', 'avokado'] : ['*'] };
-}
-
-function b64url(value) { return Buffer.from(value).toString('base64url'); }
-function signature(payload) { return crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url'); }
-function makeSession(identity) {
-  const payload = b64url(JSON.stringify({ login: identity.login, role: identity.role, exp: Math.floor(Date.now() / 1000) + SESSION_TTL }));
-  return `${payload}.${signature(payload)}`;
-}
-function sessionIdentity(request) {
-  const cookies = Object.fromEntries(String(request.headers.cookie || '').split(';').map((part) => part.trim().split(/=(.*)/s)).filter(([key]) => key));
-  const [payload, sig] = String(cookies.synapse_session || '').split('.');
-  if (!payload || !sig) return null;
-  const expected = signature(payload);
-  if (sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
-  try {
-    const token = JSON.parse(Buffer.from(payload, 'base64url').toString());
-    const current = AUTH_USERS.get(token.login);
-    if (!current || current.role !== token.role || token.exp < Math.floor(Date.now() / 1000)) return null;
-    return current;
-  } catch { return null; }
-}
-function verifyPassword(password, encoded) {
-  return new Promise((resolve) => {
-    const [kind, n, r, p, salt, wanted] = String(encoded).split('$');
-    if (kind !== 'scrypt' || !salt || !wanted) return resolve(false);
-    crypto.scrypt(password, Buffer.from(salt, 'base64url'), Buffer.from(wanted, 'base64url').length,
-      { N: Number(n), r: Number(r), p: Number(p), maxmem: 64 * 1024 * 1024 }, (error, actual) => {
-        resolve(!error && actual.length === Buffer.from(wanted, 'base64url').length && crypto.timingSafeEqual(actual, Buffer.from(wanted, 'base64url')));
-      });
-  });
-}
 
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
   throw new Error('PORT должен быть целым числом от 1 до 65535');
 }
 if (!API_KEY) {
-  console.warn('content: API_KEY пуст — запасной вход по ключу владельца отключён');
+  console.warn('content: API_KEY пуст — запись отключена, доступно только чтение');
 }
 
 const db = new DatabaseSync(DATABASE_PATH);
@@ -173,15 +116,12 @@ async function readJson(request) {
 }
 
 /* Возвращает имя автора по ключу: владелец или редактор. */
-function requireAuth(request, site) {
+function requireKey(request) {
+  if (!API_KEY && !EDITOR_KEY) fail(503, 'Запись отключена: на сервере не задан CONTENT_API_KEY');
   const given = (request.headers['x-api-key'] || '').toString().trim();
-  let identity;
-  if (API_KEY && given === API_KEY) identity = { login: 'vladislav', role: 'owner' };
-  else if (EDITOR_KEY && given === EDITOR_KEY) identity = { login: 'tatyana', role: 'editor' };
-  else if (!given) identity = sessionIdentity(request);
-  if (!identity) fail(401, given ? 'Неверный ключ доступа' : 'Требуется вход в кабинет или ключ доступа');
-  if (identity.role === 'editor' && site && !['alvi', 'avokado'].includes(site)) fail(403, 'У вашей учётной записи нет доступа к этому сайту');
-  return publicIdentity(identity);
+  if (API_KEY && given === API_KEY) return 'Влад';
+  if (EDITOR_KEY && given === EDITOR_KEY) return 'Татьяна';
+  fail(401, 'Неверный ключ доступа');
 }
 
 /* Проверка документа сайта: секции с id, поля key/value — строки, фон — объект. */
@@ -198,6 +138,9 @@ function validateSite(doc) {
       if (typeof f.value !== 'string') problems.push(`Поле ${f.key}: значение должно быть строкой`);
       if (f.value && f.value.length > 4000) problems.push(`Поле ${f.key}: длиннее 4000 символов`);
       if (/<\s*(script|iframe|object|style)/i.test(f.value || '')) problems.push(`Поле ${f.key}: недопустимая разметка`);
+      if (f.href != null && !/^(https?:\/\/|mailto:|tel:|#|\/|[\w-]+\.html)/i.test(String(f.href))) problems.push(`Поле ${f.key}: недопустимая ссылка`);
+      if (f.src != null && f.src !== '' && !/^(img\/|\/api\/assets\/|https:\/\/)[\w\-./%]+$/.test(String(f.src))) problems.push(`Поле ${f.key}: недопустимый путь к картинке`);
+      if (f.layout != null && typeof f.layout !== 'object') problems.push(`Поле ${f.key}: layout должен быть объектом`);
       if (f.style != null) {
         if (typeof f.style !== 'object') problems.push(`Поле ${f.key}: style должен быть объектом`);
         else {
@@ -266,7 +209,7 @@ function validatePrice(doc) {
   if (problems.length) fail(422, 'Документ не прошёл проверку', problems);
 }
 
-const VALIDATORS = { 'alvi/price': validatePrice, 'alvi/site': validateSite, 'avokado/site': validateSite };
+const VALIDATORS = { 'alvi/price': validatePrice, 'alvi/site': validateSite };
 
 function nextVersion(key) {
   const latest = latestStmt.get(key);
@@ -306,27 +249,9 @@ const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
     const parts = url.pathname.split('/').filter(Boolean);
 
-    if (request.method === 'POST' && url.pathname === '/content/login') {
-      const ip = String(request.headers['x-forwarded-for'] || request.socket.remoteAddress || '').split(',')[0].trim();
-      const now = Date.now();
-      const failures = (loginFailures.get(ip) || []).filter((time) => now - time < LOGIN_WINDOW);
-      if (failures.length >= LOGIN_LIMIT) fail(429, 'Слишком много попыток, подождите 10 минут');
-      const body = await readJson(request);
-      const login = String(body.login || '').trim().toLowerCase();
-      const identity = AUTH_USERS.get(login);
-      if (!identity || !(await verifyPassword(String(body.password || ''), identity.hash))) {
-        failures.push(now); loginFailures.set(ip, failures);
-        fail(401, 'Неверный логин или пароль');
-      }
-      loginFailures.delete(ip);
-      return reply(200, publicIdentity(identity), { 'set-cookie': `synapse_session=${makeSession(identity)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL}` });
-    }
-    if (request.method === 'POST' && url.pathname === '/content/logout') {
-      return reply(200, { ok: true }, { 'set-cookie': 'synapse_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0' });
-    }
-
     if (request.method === 'GET' && url.pathname === '/content/whoami') {
-      return reply(200, requireAuth(request));
+      const author = requireKey(request);
+      return reply(200, { ok: true, author });
     }
     if (request.method === 'GET' && url.pathname === '/health') {
       return reply(200, { ok: true, service: 'content' });
@@ -351,7 +276,7 @@ const server = http.createServer(async (request, response) => {
         return reply(200, { site, files: list });
       }
       if (request.method === 'POST' && parts.length === 3) {
-        const author = requireAuth(request, site).author;
+        const author = requireKey(request);
         const type = (request.headers['content-type'] || '').split(';')[0].trim();
         if (!ASSET_TYPES[type]) fail(415, 'Допустимы только JPEG, PNG и WebP');
         const body = await readRaw(request, MAX_ASSET);
@@ -389,7 +314,7 @@ const server = http.createServer(async (request, response) => {
 
     // PUT /content/:site/:doc — новая версия (по ключу)
     if (request.method === 'PUT' && tail.length === 0) {
-      const author = requireAuth(request, parts[1]).author;
+      const author = requireKey(request);
       const doc = await readJson(request);
       if (VALIDATORS[key]) VALIDATORS[key](doc);
       const saved = saveVersion(key, doc, author);
@@ -398,7 +323,7 @@ const server = http.createServer(async (request, response) => {
 
     // POST /content/:site/:doc/restore/:n — откат (по ключу)
     if (request.method === 'POST' && tail[0] === 'restore' && tail.length === 2) {
-      const author = requireAuth(request, parts[1]).author;
+      const author = requireKey(request);
       const row = byVersionStmt.get(key, Number.parseInt(tail[1], 10));
       if (!row) fail(404, 'Версия не найдена');
       const saved = saveVersion(key, JSON.parse(row.body), `${author} (откат к ${row.version})`);
