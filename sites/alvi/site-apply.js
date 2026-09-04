@@ -45,18 +45,64 @@
     }
   }
   let lastDoc = null;
-  function applyFields(doc) {
-    lastDoc = doc;
+  const EDIT_MODE = new URLSearchParams(location.search).get('edit') === '1' && window.parent !== window;
+
+  /* ---------- Объекты и расположение (мини-конструктор: баннер и сцены первого экрана) ---------- */
+  const ZONES = { 'promo-head': '.promo__head', 'promo-alvi': '.promo__half--alvi', 'promo-avokado': '.promo__half--avokado' };
+  function zoneEl(zone) {
+    if (ZONES[zone]) return document.querySelector(ZONES[zone]);
+    const m = /^hero-(\d)$/.exec(zone || '');
+    if (m) return document.querySelector(`.hero-scene[data-scene="${m[1]}"] .hero-scene__content`);
+    return null;
+  }
+  const safeHref = (h) => /^(https?:\/\/|mailto:|tel:|#|\/|[\w-]+\.html)/i.test(h || '') ? h : '#';
+  const safeSrc = (u) => /^(img\/|\/api\/assets\/|https:\/\/)[\w\-./%]+$/.test(u || '') ? u : '';
+  /* Добавленный в редакторе объект: создаём элемент в своей зоне, если его ещё нет на странице. */
+  function ensureExtra(f) {
+    let el = document.querySelector(`[data-edit="${CSS.escape(f.key)}"]`);
+    if (el) return el;
+    const zone = zoneEl(f.zone); if (!zone) return null;
+    const inHero = /^hero-/.test(f.zone || '');
+    if (f.kind === 'button') { el = document.createElement('a'); el.className = (inHero ? 'button' : 'price-all__button promo__button') + ' x-extra x-extra--button'; el.target = '_blank'; el.rel = 'noopener'; }
+    else if (f.kind === 'image') { el = document.createElement('img'); el.className = 'x-extra x-extra--image'; el.alt = ''; el.loading = 'lazy'; }
+    else { el = document.createElement('p'); el.className = (inHero ? 'scene-copy' : 'promo__copy') + ' x-extra x-extra--text'; }
+    el.setAttribute('data-edit', f.key); el.dataset.extra = '1';
+    zone.appendChild(el);
+    return el;
+  }
+  const layoutMode = () => (window.innerWidth < 900 ? 'mobile' : 'desktop');
+  function applyLayout(el, f) {
+    const L = (f.layout || {})[layoutMode()] || {};
+    el.style.transform = (L.x || L.y) ? `translate(${Number(L.x) || 0}px, ${Number(L.y) || 0}px)` : '';
+    el.style.width = L.w ? Math.max(40, Number(L.w)) + 'px' : '';
+    el.style.maxWidth = L.w ? 'none' : '';
+    el.style.textAlign = L.align || '';
+    if (f.kind === 'image') { el.style.borderRadius = L.radius != null ? Number(L.radius) + 'px' : ''; el.style.display = f.hidden && !EDIT_MODE ? 'none' : 'block'; }
+    else el.style.display = f.hidden && !EDIT_MODE ? 'none' : '';
+    if (EDIT_MODE) el.classList.toggle('is-hidden-field', !!f.hidden);
+  }
+  function fieldMap(doc) {
     const map = new Map();
     for (const sec of doc.sections || []) for (const f of sec.fields || []) map.set(f.key, f);
+    return map;
+  }
+  function applyFields(doc, skipKey) {
+    lastDoc = doc;
+    const map = fieldMap(doc);
     loadFonts([...map.values()].map((f) => f.style && f.style.font).filter(Boolean));
+    // объекты, добавленные в редакторе
+    for (const f of map.values()) if (f.added) ensureExtra(f);
+    // объекты, удалённые в редакторе
+    document.querySelectorAll('[data-edit][data-extra]').forEach((el) => { if (!map.has(el.getAttribute('data-edit'))) el.remove(); });
     document.querySelectorAll('[data-edit]').forEach((el) => {
       const key = el.getAttribute('data-edit');
       if (!map.has(key)) return;
       const f = map.get(key);
-      const html = rich(f.value);
-      if (el.innerHTML.trim() !== html) el.innerHTML = html;
+      if (f.kind === 'image') { const src = safeSrc(f.src); if (el.getAttribute('src') !== src) el.setAttribute('src', src); }
+      else if (key !== skipKey) { const html = rich(f.value); if (el.innerHTML.trim() !== html) el.innerHTML = html; }
+      if (f.kind === 'button' && el.tagName === 'A') el.setAttribute('href', safeHref(f.href));
       applyStyle(el, f.style);
+      applyLayout(el, f);
     });
   }
   /* Размер считается от текущего размера на экране — при смене ширины окна пересчитываем. */
@@ -104,7 +150,6 @@
   /* ================= Режим правки «как в Тильде» =================
      Включается, когда страница открыта внутри редактора кабинета (iframe с ?edit=1).
      Тексты правятся прямо на странице, изменения уходят родителю через postMessage. */
-  const EDIT_MODE = new URLSearchParams(location.search).get('edit') === '1' && window.parent !== window;
   const PARENT_ORIGINS = ['https://synapse.synapsebusiness.ru', 'http://localhost:8125', 'http://127.0.0.1:8125'];
   let parentOrigin = null;
   const post = (msg) => { if (parentOrigin) window.parent.postMessage(msg, parentOrigin); };
@@ -148,14 +193,53 @@
     try { document.execCommand('defaultParagraphSeparator', false, 'br'); } catch (e) {}
 
     let current = null;
+    /* Ручки: ✥ — двигать объект (сдвиг сохраняется отдельно для десктопа и телефона), ↔ — ширина. */
+    const hMove = document.createElement('div'); hMove.className = 'x-handle'; hMove.title = 'Перетащить (Alt + стрелки — по 1 px)'; hMove.textContent = '✥';
+    const hSize = document.createElement('div'); hSize.className = 'x-handle x-handle--size'; hSize.title = 'Ширина'; hSize.textContent = '↔';
+    document.body.appendChild(hMove); document.body.appendChild(hSize);
+    window.placeHandles = () => {
+      if (!current || !document.body.contains(current)) { hMove.classList.remove('is-on'); hSize.classList.remove('is-on'); return; }
+      const r = current.getBoundingClientRect();
+      hMove.style.left = (r.left - 12) + 'px'; hMove.style.top = (r.top - 12) + 'px'; hMove.classList.add('is-on');
+      hSize.style.left = (r.right - 6) + 'px'; hSize.style.top = (r.top + r.height / 2 - 14) + 'px'; hSize.classList.add('is-on');
+    };
+    const placeHandles = window.placeHandles;
+    window.addEventListener('scroll', placeHandles, true); window.addEventListener('resize', placeHandles);
+    const fieldOf = (el) => lastDoc && fieldMap(lastDoc).get(el.getAttribute('data-edit'));
+    const layoutOf = (f) => { f.layout = f.layout || {}; const m = layoutMode(); f.layout[m] = f.layout[m] || {}; return f.layout[m]; };
+    const commitLayout = (f) => { applyLayout(current, f); placeHandles(); post({ type: 'alvi-edit-layout', key: f.key, layout: f.layout }); };
+    let drag = null;
+    hMove.addEventListener('pointerdown', (e) => {
+      if (!current) return; const f = fieldOf(current); if (!f) return;
+      const L = layoutOf(f); drag = { f, L, sx: e.clientX, sy: e.clientY, x0: Number(L.x) || 0, y0: Number(L.y) || 0, id: e.pointerId };
+      hMove.setPointerCapture(e.pointerId); e.preventDefault();
+    });
+    hMove.addEventListener('pointermove', (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      drag.L.x = Math.round(drag.x0 + e.clientX - drag.sx); drag.L.y = Math.round(drag.y0 + e.clientY - drag.sy);
+      applyLayout(current, drag.f); placeHandles();
+    });
+    hMove.addEventListener('pointerup', (e) => { if (drag && e.pointerId === drag.id) { const f = drag.f; drag = null; commitLayout(f); } });
+    let size = null;
+    hSize.addEventListener('pointerdown', (e) => {
+      if (!current) return; const f = fieldOf(current); if (!f) return;
+      const L = layoutOf(f); size = { f, L, sx: e.clientX, w0: current.getBoundingClientRect().width, id: e.pointerId };
+      hSize.setPointerCapture(e.pointerId); e.preventDefault();
+    });
+    hSize.addEventListener('pointermove', (e) => {
+      if (!size || e.pointerId !== size.id) return;
+      size.L.w = Math.max(40, Math.round(size.w0 + e.clientX - size.sx));
+      applyLayout(current, size.f); placeHandles();
+    });
+    hSize.addEventListener('pointerup', (e) => { if (size && e.pointerId === size.id) { const f = size.f; size = null; commitLayout(f); } });
     const select = (el) => {
       if (current && current !== el) { current.classList.remove('is-editing'); current.removeAttribute('contenteditable'); }
       current = el;
       el.classList.add('is-editing');
-      el.setAttribute('contenteditable', 'true');
-      try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
+      if (el.tagName !== 'IMG') { el.setAttribute('contenteditable', 'true'); try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); } }
       const section = el.closest('section[id], footer, .floating-cta, article[data-scene], .promo');
       const r = el.getBoundingClientRect();
+      setTimeout(placeHandles, 30);
       post({ type: 'alvi-edit-select', rect: { top: r.top + window.scrollY, left: r.left + window.scrollX, width: r.width, height: r.height }, key: el.getAttribute('data-edit'), sectionId: section ? (section.id || (section.dataset.scene != null ? 'hero-' + section.dataset.scene : section.className.split(' ')[0])) : null });
     };
     document.addEventListener('click', (e) => {
@@ -163,6 +247,8 @@
       if (el) { e.preventDefault(); e.stopPropagation(); if (current !== el) select(el); return; }
       // клик по ссылке/кнопке вне редактируемого текста — не переходим
       if (e.target.closest('a, button, label')) { e.preventDefault(); }
+      if (e.target.closest('.x-handle')) return;
+      if (current) { current.classList.remove('is-editing'); current.removeAttribute('contenteditable'); current = null; placeHandles(); }
       const section = e.target.closest('section[id], .promo__panel');
       document.querySelectorAll('.is-edit-target').forEach((x) => x.classList.remove('is-edit-target'));
       if (section) { section.classList.add('is-edit-target'); post({ type: 'alvi-edit-section', sectionId: section.id || 'promo' }); }
@@ -174,7 +260,15 @@
     });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && current) { current.blur(); }
+      if (e.altKey && current && /^Arrow(Left|Right|Up|Down)$/.test(e.key)) {
+        const f = fieldOf(current); if (!f) return; e.preventDefault();
+        const L = layoutOf(f); const step = e.shiftKey ? 10 : 1;
+        if (e.key === 'ArrowLeft') L.x = (Number(L.x) || 0) - step; if (e.key === 'ArrowRight') L.x = (Number(L.x) || 0) + step;
+        if (e.key === 'ArrowUp') L.y = (Number(L.y) || 0) - step; if (e.key === 'ArrowDown') L.y = (Number(L.y) || 0) + step;
+        commitLayout(f);
+      }
     });
+    document.addEventListener('input', () => setTimeout(placeHandles, 0));
     document.addEventListener('paste', (e) => {
       const el = e.target.closest && e.target.closest('[data-edit]');
       if (!el) return;
@@ -191,19 +285,9 @@
         setTimeout(() => { lastH = 0; reportHeight(); }, 100);
         // не трогаем элемент, который сейчас редактируется, чтобы не сбить курсор
         const editingKey = current && current.getAttribute('data-edit');
-        const doc = m.doc;
-        lastDoc = doc;
-        const map = new Map();
-        for (const sec of doc.sections || []) for (const f of sec.fields || []) map.set(f.key, f);
-        loadFonts([...map.values()].map((f) => f.style && f.style.font).filter(Boolean));
-        document.querySelectorAll('[data-edit]').forEach((el) => {
-          const key = el.getAttribute('data-edit');
-          if (!map.has(key)) return;
-          const f = map.get(key);
-          if (key !== editingKey) { const html = rich(f.value); if (el.innerHTML.trim() !== html) el.innerHTML = html; }
-          applyStyle(el, f.style);
-        });
-        applyBackgrounds(doc);
+        applyFields(m.doc, editingKey);
+        applyBackgrounds(m.doc);
+        placeHandles();
       }
       if (m.type === 'alvi-edit-view') {
         document.documentElement.classList.toggle('edit-full', !!m.full);

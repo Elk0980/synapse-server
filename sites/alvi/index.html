@@ -2118,6 +2118,10 @@
       .promo__title { font-size: 1.3rem; }
       .promo__button { min-width: 0; width: 100%; }
     }
+    /* Объекты, добавленные в кабинете (мини-конструктор) */
+    .x-extra--button { align-self: flex-start; }
+    .x-extra--image { display: block; max-width: 100%; height: auto; border-radius: 0.6rem; }
+    .hero-scene__content .x-extra--text { margin-top: 0.8rem; }
     /* В редакторе «вся страница» баннер лежит обычным блоком после отзывов, чтобы его тексты можно было править на месте. */
     html.edit-full .promo { display: block; position: static; padding: 2rem clamp(1rem, 4vw, 3rem); background: transparent; backdrop-filter: none; }
     html.edit-full .promo__panel { animation: none; margin: 0 auto; max-height: none; }
@@ -3670,7 +3674,7 @@
       io.observe(trust);
     })();
   </script>
-<script src="site-apply.js?v=20260903c" defer></script>
+<script src="site-apply.js?v=20260904a" defer></script>
 <script src="price-render.js?v=20260903b" defer></script>
 <script>
   // Витрины «Проведи день для себя» и «Один ритм на двоих» берутся из data/price.json
