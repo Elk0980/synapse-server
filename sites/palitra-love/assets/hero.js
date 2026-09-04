@@ -10,7 +10,8 @@
   const timedOverlays = [...hero.querySelectorAll('[data-hero-start]')];
   let phase = 'story';
   let unlocked = false;
-  let loadTimer;
+  let metadataTimer;
+  let playbackTimer;
 
   const updateOverlays = () => {
     const currentTime = video.currentTime;
@@ -34,7 +35,8 @@
   const unlock = () => {
     if (unlocked) return;
     unlocked = true;
-    clearTimeout(loadTimer);
+    clearTimeout(metadataTimer);
+    clearTimeout(playbackTimer);
     root.classList.remove('hero-story-locked');
     body.classList.remove('hero-story-locked');
   };
@@ -78,9 +80,31 @@
 
   root.classList.add('hero-story-locked');
   body.classList.add('hero-story-locked');
-  loadTimer = window.setTimeout(showFallback, 4000);
+  const startPlaybackTimer = () => {
+    if (document.hidden || playbackTimer) return;
+    playbackTimer = window.setTimeout(showFallback, 6000);
+  };
+
+  const metadataLoaded = () => {
+    clearTimeout(metadataTimer);
+    if (document.hidden) {
+      document.addEventListener('visibilitychange', startPlaybackTimer, {once: true});
+    } else {
+      startPlaybackTimer();
+    }
+  };
+
+  metadataTimer = window.setTimeout(showFallback, 8000);
+  if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+    metadataLoaded();
+  } else {
+    video.addEventListener('loadedmetadata', metadataLoaded, {once: true});
+  }
 
   const playback = video.play();
   if (playback && playback.catch) playback.catch(showFallback);
-  video.addEventListener('playing', () => clearTimeout(loadTimer), {once: true});
+  video.addEventListener('playing', () => {
+    clearTimeout(playbackTimer);
+    document.removeEventListener('visibilitychange', startPlaybackTimer);
+  }, {once: true});
 })();
