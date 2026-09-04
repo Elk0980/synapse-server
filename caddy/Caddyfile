@@ -38,23 +38,6 @@ synapsebusiness.ru, www.synapsebusiness.ru {
 # --- Клиент: Авокадо (студия дизайна тела, Иркутск) -------------------------
 avokado.synapsebusiness.ru {
   root * /srv/sites/avokado
-  # Тексты, фоны и загруженные картинки главной доступны снаружи только на чтение.
-  @avokado_site {
-    path /api/site
-    method GET
-  }
-  handle @avokado_site {
-    rewrite * /content/avokado/site
-    reverse_proxy content:8080
-  }
-  @avokado_assets {
-    path /api/assets/*
-    method GET
-  }
-  handle @avokado_assets {
-    uri replace /api/assets/ /content/avokado/assets/
-    reverse_proxy content:8080
-  }
   import static
 }
 
@@ -94,6 +77,9 @@ alvi.synapsebusiness.ru {
     uri replace /api/assets/ /content/alvi/assets/
     reverse_proxy content:8080
   }
+  # Редактор в кабинете читает исходные тексты блоков (data/site.json) с этого домена.
+  @sitedata path /data/*
+  header @sitedata Access-Control-Allow-Origin https://synapse.synapsebusiness.ru
   import draft
   import static
   handle_errors {
