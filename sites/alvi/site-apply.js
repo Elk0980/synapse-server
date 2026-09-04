@@ -168,7 +168,9 @@
   function enableEditMode() {
     const style = document.createElement('style');
     style.textContent = `
-      [data-edit] { outline: 1px dashed rgba(227,212,167,0.45); outline-offset: 3px; cursor: text; transition: outline-color 120ms; min-width: 1ch; }
+      [data-edit] { outline: 1px dashed rgba(227,212,167,0.45); outline-offset: 3px; cursor: move; transition: outline-color 120ms; min-width: 1ch; }
+      [data-edit][contenteditable="true"] { cursor: text; }
+      body.x-dragging, body.x-dragging * { cursor: grabbing !important; user-select: none; }
       [data-edit]:hover { outline-color: rgba(227,212,167,0.95); outline-style: solid; }
       [data-edit].is-editing { outline: 2px solid #e3d4a7; outline-offset: 4px; box-shadow: 0 0 0 6px rgba(227,212,167,0.15); }
       [data-edit][contenteditable]:focus { outline: 2px solid #e3d4a7; }
@@ -207,7 +209,7 @@
     window.addEventListener('scroll', placeHandles, true); window.addEventListener('resize', placeHandles);
     const fieldOf = (el) => lastDoc && fieldMap(lastDoc).get(el.getAttribute('data-edit'));
     const layoutOf = (f) => { f.layout = f.layout || {}; const m = layoutMode(); f.layout[m] = f.layout[m] || {}; return f.layout[m]; };
-    const commitLayout = (f) => { applyLayout(current, f); placeHandles(); post({ type: 'alvi-edit-layout', key: f.key, layout: f.layout }); };
+    const commitLayout = (f) => { const el = document.querySelector(`[data-edit="${CSS.escape(f.key)}"]`); if (el) applyLayout(el, f); placeHandles(); post({ type: 'alvi-edit-layout', key: f.key, layout: f.layout }); };
     let drag = null;
     hMove.addEventListener('pointerdown', (e) => {
       if (!current) return; const f = fieldOf(current); if (!f) return;
@@ -232,19 +234,52 @@
       applyLayout(current, size.f); placeHandles();
     });
     hSize.addEventListener('pointerup', (e) => { if (size && e.pointerId === size.id) { const f = size.f; size = null; commitLayout(f); } });
-    const select = (el) => {
+    const select = (el, opts = {}) => {
       if (current && current !== el) { current.classList.remove('is-editing'); current.removeAttribute('contenteditable'); }
       current = el;
       el.classList.add('is-editing');
-      if (el.tagName !== 'IMG') { el.setAttribute('contenteditable', 'true'); try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); } }
+      if (opts.edit && el.tagName !== 'IMG') { el.setAttribute('contenteditable', 'true'); try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); } }
+      else if (!opts.keepEdit) el.removeAttribute('contenteditable');
       const section = el.closest('section[id], footer, .floating-cta, article[data-scene], .promo');
       const r = el.getBoundingClientRect();
       setTimeout(placeHandles, 30);
       post({ type: 'alvi-edit-select', rect: { top: r.top + window.scrollY, left: r.left + window.scrollX, width: r.width, height: r.height }, key: el.getAttribute('data-edit'), sectionId: section ? (section.id || (section.dataset.scene != null ? 'hero-' + section.dataset.scene : section.className.split(' ')[0])) : null });
     };
+    /* Как в Тильде: клик — выбрать, потянуть курсором — переместить, двойной клик — править текст. */
+    let press = null;
+    document.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      if (e.target.closest('.x-handle')) return;
+      const el = e.target.closest('[data-edit]'); if (!el) return;
+      if (el === current && el.getAttribute('contenteditable') === 'true') return; // внутри текста — обычное выделение
+      const f = fieldOf(el); if (!f) return;
+      const L = layoutOf(f);
+      press = { el, f, L, sx: e.clientX, sy: e.clientY, x0: Number(L.x) || 0, y0: Number(L.y) || 0, moved: false, id: e.pointerId };
+      e.preventDefault();
+    }, true);
+    document.addEventListener('pointermove', (e) => {
+      if (!press || e.pointerId !== press.id) return;
+      const dx = e.clientX - press.sx, dy = e.clientY - press.sy;
+      if (!press.moved && Math.hypot(dx, dy) < 4) return;
+      if (!press.moved) { press.moved = true; if (current !== press.el) select(press.el); document.body.classList.add('x-dragging'); }
+      press.L.x = Math.round(press.x0 + dx); press.L.y = Math.round(press.y0 + dy);
+      applyLayout(press.el, press.f); placeHandles();
+    }, true);
+    const endPress = (e) => {
+      if (!press || (e && e.pointerId !== press.id)) return;
+      const p = press; press = null; document.body.classList.remove('x-dragging');
+      if (p.moved) { commitLayout(p.f); return; }
+      select(p.el);
+    };
+    document.addEventListener('pointerup', endPress, true);
+    document.addEventListener('pointercancel', endPress, true);
+    document.addEventListener('dblclick', (e) => {
+      const el = e.target.closest('[data-edit]'); if (!el) return;
+      e.preventDefault(); select(el, { edit: true });
+    }, true);
     document.addEventListener('click', (e) => {
       const el = e.target.closest('[data-edit]');
-      if (el) { e.preventDefault(); e.stopPropagation(); if (current !== el) select(el); return; }
+      if (el) { e.preventDefault(); e.stopPropagation(); return; }
       // клик по ссылке/кнопке вне редактируемого текста — не переходим
       if (e.target.closest('a, button, label')) { e.preventDefault(); }
       if (e.target.closest('.x-handle')) return;
@@ -296,7 +331,7 @@
       }
       if (m.type === 'alvi-edit-scroll' && m.key) {
         const el = document.querySelector(`[data-edit="${CSS.escape(m.key)}"]`);
-        if (el) { if (!document.documentElement.classList.contains('edit-full')) el.scrollIntoView({ block: 'center' }); select(el); }
+        if (el) { if (!document.documentElement.classList.contains('edit-full')) el.scrollIntoView({ block: 'center' }); select(el, { edit: true }); }
       }
       if (m.type === 'alvi-edit-scroll-section' && m.sectionId) {
         const el = document.getElementById(m.sectionId);
