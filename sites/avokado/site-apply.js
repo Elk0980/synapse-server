@@ -191,7 +191,18 @@
       html.edit-full .scroll-cue, html.edit-full .intro-skip { display: none !important; }
       html.edit-full .hero__chrome { position: absolute !important; top: 0; margin: 0 !important; }
       html.edit-full .floating-cta { position: absolute !important; }
-      html.edit-full .hero-scene .hero-scene__content { opacity: 1 !important; transform: none !important; }`;
+      html.edit-full .hero-scene .hero-scene__content { opacity: 1 !important; transform: none !important; }
+      /* В iframe с неподвижным окном sticky-сцены «Метода» должны идти подряд. */
+      html.edit-full .method-scroll { height: auto !important; }
+      html.edit-full .method-intro { position: relative !important; top: auto !important; transform: none !important; }
+      html.edit-full .method-sticky { position: relative !important; top: auto !important; height: auto !important; overflow: visible !important; }
+      html.edit-full .method-scene { position: relative !important; inset: auto !important; min-height: 42rem !important; opacity: 1 !important; transform: none !important; pointer-events: auto !important; }
+      html.edit-full .method-scene .scene-copy { opacity: 1 !important; visibility: visible !important; transform: none !important; }
+      html.edit-full .method-heroine { max-height: 42rem !important; }
+      @media (max-width: 820px) {
+        html.edit-full .method-scene { min-height: 36rem !important; }
+        html.edit-full .method-heroine { max-height: 34rem !important; }
+      }`;
     document.head.appendChild(style);
     try { document.execCommand('defaultParagraphSeparator', false, 'br'); } catch (e) {}
 
@@ -351,6 +362,13 @@
         }
       }
     });
+    /* Колесо внутри iframe не всплывает к редактору. В режиме всей страницы
+       передаём дельту холсту; в режиме «Экран» остаётся нативная прокрутка. */
+    window.addEventListener('wheel', (e) => {
+      if (!document.documentElement.classList.contains('edit-full') || e.ctrlKey || e.metaKey) return;
+      post({ type: 'alvi-edit-wheel', deltaX: e.deltaX, deltaY: e.deltaY, shiftKey: e.shiftKey });
+      e.preventDefault();
+    }, { passive: false });
     /* Высота страницы — родителю, чтобы холст показал её целиком */
     let lastH = 0;
     function reportHeight() {
