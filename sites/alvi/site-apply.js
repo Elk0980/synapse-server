@@ -298,7 +298,7 @@
       post({ type: 'alvi-edit-change', key: el.getAttribute('data-edit'), value: htmlToValue(el) });
     });
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && current) { current.blur(); }
+      if (e.key === 'Escape' && current) { current.blur(); current.removeAttribute('contenteditable'); placeHandles(); }
       if (e.altKey && current && /^Arrow(Left|Right|Up|Down)$/.test(e.key)) {
         const f = fieldOf(current); if (!f) return; e.preventDefault();
         const L = layoutOf(f); const step = e.shiftKey ? 10 : 1;
@@ -335,7 +335,7 @@
       }
       if (m.type === 'alvi-edit-scroll' && m.key) {
         const el = document.querySelector(`[data-edit="${CSS.escape(m.key)}"]`);
-        if (el) { if (!document.documentElement.classList.contains('edit-full')) el.scrollIntoView({ block: 'center' }); select(el, { edit: true }); }
+        if (el) { if (!document.documentElement.classList.contains('edit-full')) el.scrollIntoView({ block: 'center' }); select(el, { edit: !!m.edit }); }
       }
       if (m.type === 'alvi-edit-scroll-section' && m.sectionId) {
         const el = document.getElementById(m.sectionId);
