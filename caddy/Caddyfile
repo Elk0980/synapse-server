@@ -120,8 +120,9 @@ board.synapsebusiness.ru {
 # --- Чат -------------------------------------------------------------------
 chat.synapsebusiness.ru {
   root * /srv/sites/chat
-  @chat_api path /conversations /conversations/*
+  @chat_api path /conversations /conversations/* /admin/* /telegram/webhook
   reverse_proxy @chat_api chat:8080
+  rewrite /inbox /inbox.html
   import draft
   import static
 }
