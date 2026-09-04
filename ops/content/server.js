@@ -14,6 +14,7 @@ const PORT = Number.parseInt(process.env.PORT || '8080', 10);
 const DATABASE_PATH = process.env.DATABASE_PATH || '/data/content.sqlite';
 const API_KEY = (process.env.API_KEY || '').trim();            // ключ владельца (Влад)
 const EDITOR_KEY = (process.env.EDITOR_KEY || '').trim();      // ключ редактора (Татьяна)
+const PALITRA_KEY = (process.env.CONTENT_KEY_PALITRA || '').trim(); // отдельный ключ Palitra Love
 const ASSETS_DIR = process.env.ASSETS_DIR || path.join(path.dirname(DATABASE_PATH), 'assets');
 const MAX_ASSET = 8 * 1024 * 1024;
 const ASSET_TYPES = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
@@ -118,7 +119,13 @@ async function readJson(request) {
 }
 
 /* Возвращает имя автора по ключу: владелец или редактор. */
-function requireKey(request) {
+function requireKey(request, site) {
+  if (site === 'palitra') {
+    if (!PALITRA_KEY) fail(503, 'Запись Palitra Love отключена: на сервере не задан CONTENT_KEY_PALITRA');
+    const given = (request.headers['x-api-key'] || '').toString().trim();
+    if (given === PALITRA_KEY) return 'Palitra Love';
+    fail(401, 'Неверный ключ доступа');
+  }
   if (!API_KEY && !EDITOR_KEY) fail(503, 'Запись отключена: на сервере не задан CONTENT_API_KEY');
   const given = (request.headers['x-api-key'] || '').toString().trim();
   if (API_KEY && given === API_KEY) return 'Влад';
@@ -278,7 +285,7 @@ const server = http.createServer(async (request, response) => {
         return reply(200, { site, files: list });
       }
       if (request.method === 'POST' && parts.length === 3) {
-        const author = requireKey(request);
+        const author = requireKey(request, site);
         const type = (request.headers['content-type'] || '').split(';')[0].trim();
         if (!ASSET_TYPES[type]) fail(415, 'Допустимы только JPEG, PNG и WebP');
         const body = await readRaw(request, MAX_ASSET);
@@ -316,7 +323,7 @@ const server = http.createServer(async (request, response) => {
 
     // PUT /content/:site/:doc — новая версия (по ключу)
     if (request.method === 'PUT' && tail.length === 0) {
-      const author = requireKey(request);
+      const author = requireKey(request, parts[1]);
       const doc = await readJson(request);
       const validator = DOCUMENT_VALIDATORS[parts[2]];
       if (!validator) fail(404, 'Неизвестный тип документа');
@@ -327,7 +334,7 @@ const server = http.createServer(async (request, response) => {
 
     // POST /content/:site/:doc/restore/:n — откат (по ключу)
     if (request.method === 'POST' && tail[0] === 'restore' && tail.length === 2) {
-      const author = requireKey(request);
+      const author = requireKey(request, parts[1]);
       const row = byVersionStmt.get(key, Number.parseInt(tail[1], 10));
       if (!row) fail(404, 'Версия не найдена');
       const saved = saveVersion(key, JSON.parse(row.body), `${author} (откат к ${row.version})`);
