@@ -3,3053 +3,830 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0B0908">
+<meta name="theme-color" content="#0b0908">
 <meta name="color-scheme" content="dark">
 <title>Кабинет — Synapse Business</title>
-
-<script>
-document.documentElement.classList.replace("no-js", "js");
-
-// Apply saved visibility before the stylesheet and page content are parsed.
-// This prevents hidden dashboard blocks from appearing for a frame on load.
-(function () {
-const storageKey = "synapse_cabinet_layout_v1";
-const blockIds = [
-"money", "money-chart-invested", "money-chart-received", "money-chart-romi",
-"funnel", "sources", "dialogs", "crm", "projects", "integrations", "activity"
-];
-
-try {
-const savedLayout = JSON.parse(localStorage.getItem(storageKey) || "{}");
-const hiddenIds = blockIds.filter((id) => savedLayout[id] === false);
-
-if (hiddenIds.length) {
-const style = document.createElement("style");
-style.id = "cabinet-layout-style";
-style.textContent = hiddenIds
-.map((id) => `[data-block-id="${id}"]{display:none!important}`)
-.join("");
-document.head.appendChild(style);
-}
-} catch (error) {
-// An unavailable or malformed localStorage value should not break the cabinet.
-}
-})();
-</script>
-
+<script>document.documentElement.classList.replace("no-js", "js");</script>
 <style>
 :root {
---bg: #0B0908;
---surface: #12100F;
---surface-soft: #181513;
---surface-blue: #0B1F52;
---text: #F4F0EB;
---muted: #B9AFA7;
---accent: #9FD4FF;
---sapphire: #2E6BD6;
---sapphire-deep: #0B1F52;
---green: #79DCB6;
---amber: #F0C980;
---red: #FF9C9C;
---line: rgba(244, 240, 235, 0.11);
---line-blue: rgba(159, 212, 255, 0.2);
---glass: rgba(255, 255, 255, 0.055);
---shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
---radius-xl: 30px;
---radius-lg: 23px;
---radius-md: 17px;
---content: 1320px;
+  --bg: #0b0908;
+  --surface: #12100f;
+  --surface-soft: #181513;
+  --text: #f4f0eb;
+  --muted: #b9afa7;
+  --accent: #9fd4ff;
+  --blue: #2e6bd6;
+  --green: #79dcb6;
+  --red: #ff9c9c;
+  --line: rgba(244, 240, 235, 0.12);
+  --sidebar: 280px;
 }
-
-*,
-*::before,
-*::after {
-box-sizing: border-box;
-}
-
-html {
-min-width: 0;
-background: var(--bg);
-scroll-behavior: smooth;
-}
-
+* { box-sizing: border-box; }
+html { min-width: 0; background: var(--bg); }
 body {
-min-width: 0;
-min-height: 100vh;
-margin: 0;
-overflow-x: hidden;
-color: var(--text);
-background:
-radial-gradient(circle at 82% -10%, rgba(46, 107, 214, 0.16), transparent 34rem),
-radial-gradient(circle at -10% 60%, rgba(11, 31, 82, 0.35), transparent 40rem),
-var(--bg);
-font-family: "Segoe UI", Arial, sans-serif;
-font-size: 16px;
-line-height: 1.5;
-text-rendering: optimizeLegibility;
-isolation: isolate;
+  min-width: 0;
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+  color: var(--text);
+  background: radial-gradient(circle at 85% 0, rgba(46, 107, 214, 0.15), transparent 35rem), var(--bg);
+  font-family: "Segoe UI", Arial, sans-serif;
+  line-height: 1.5;
 }
-
-@supports (overflow: clip) {
-body {
-overflow-x: clip;
-}
-}
-
-button,
-a,
-select {
-font: inherit;
-}
-
-button,
-a {
--webkit-tap-highlight-color: transparent;
-}
-
-button {
-color: inherit;
-}
-
-a {
-color: inherit;
-}
-
-h1,
-h2,
-h3,
-p {
-margin-top: 0;
-}
-
-h1,
-h2,
-h3 {
-font-family: Georgia, "Times New Roman", serif;
-font-weight: 400;
-}
-
-[hidden] {
-display: none !important;
-}
-
-::selection {
-color: #06101D;
-background: var(--accent);
-}
-
-
-.auth{position:fixed;z-index:200;inset:0;display:grid;place-items:center;
- padding:24px;background:radial-gradient(circle at 70% 10%,rgba(46,107,214,.22),transparent 40rem),rgba(11,9,8,.98);
- backdrop-filter:blur(6px)}
-.auth[hidden]{display:none}
-.auth-card{width:min(100%,420px);padding:clamp(26px,4vw,38px);
- border:1px solid rgba(159,212,255,.16);border-radius:28px;
- background:linear-gradient(145deg,rgba(255,255,255,.04),rgba(255,255,255,.012));
- box-shadow:var(--shadow)}
-.auth-head{display:flex;gap:13px;align-items:center;margin-bottom:26px}
-.auth-head strong{display:block;font-size:.78rem;letter-spacing:.15em;text-transform:uppercase}
-.auth-head span{display:block;margin-top:3px;color:var(--muted);font-size:.76rem}
-.auth-field{display:block;margin-bottom:14px}
-.auth-field span{display:block;margin-bottom:7px;color:var(--muted);font-size:.72rem;letter-spacing:.06em}
-.auth-field input{width:100%;min-height:50px;padding:12px 16px;border-radius:16px;
- border:1px solid rgba(244,240,235,.13);background:rgba(11,9,8,.55);color:var(--text);
- font:inherit;font-size:.95rem;transition:border-color .2s,box-shadow .2s}
-.auth-field input:focus{outline:none;border-color:rgba(159,212,255,.6);
- box-shadow:0 0 0 3px rgba(159,212,255,.12)}
-.auth-submit{width:100%;min-height:54px;margin-top:8px;border-color:rgba(159,212,255,.46);
- background:linear-gradient(135deg,rgba(46,107,214,.58),rgba(11,31,82,.7));font-size:.9rem;cursor:pointer}
-.auth-error{margin:14px 0 0;color:#FF9C9C;font-size:.8rem}
-.auth-note{margin:22px 0 0;color:var(--muted);font-size:.72rem;line-height:1.6}
-
-.ambient {
-position: fixed;
-z-index: -2;
-inset: 0;
-overflow: hidden;
-pointer-events: none;
-}
-
-.ambient::before,
-.ambient::after {
-position: absolute;
-width: 38rem;
-height: 38rem;
-border-radius: 50%;
-content: "";
-opacity: 0.12;
-filter: blur(110px);
-}
-
-.ambient::before {
-top: -20rem;
-right: -12rem;
-background: var(--accent);
-}
-
-.ambient::after {
-bottom: -22rem;
-left: -17rem;
-background: var(--sapphire);
-}
-
-.grain {
-position: fixed;
-z-index: -1;
-inset: 0;
-pointer-events: none;
-opacity: 0.14;
-background-image:
-repeating-linear-gradient(
-0deg,
-rgba(255, 255, 255, 0.015) 0,
-rgba(255, 255, 255, 0.015) 1px,
-transparent 1px,
-transparent 4px
-);
-mix-blend-mode: soft-light;
-}
-
+body.drawer-open { overflow: hidden; }
+button, input, select { font: inherit; }
+button { color: inherit; }
+[hidden] { display: none !important; }
 .skip-link {
-position: fixed;
-z-index: 100;
-top: 10px;
-left: 10px;
-padding: 10px 16px;
-border-radius: 999px;
-color: var(--bg);
-background: var(--accent);
-transform: translateY(-160%);
-transition: transform 180ms ease;
+  position: fixed;
+  z-index: 1000;
+  top: 8px;
+  left: 8px;
+  padding: 10px 16px;
+  transform: translateY(-150%);
+  border-radius: 10px;
+  color: #06101d;
+  background: var(--accent);
+}
+.skip-link:focus { transform: none; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.auth {
+  position: fixed;
+  z-index: 900;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+}
+.auth-card {
+  width: min(100%, 420px);
+  padding: 32px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--surface);
+}
+.auth-head { display: flex; gap: 12px; align-items: center; margin-bottom: 24px; }
+.core-logo, .project-mark, .account-avatar {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--accent);
+  background: var(--surface-soft);
+  font-weight: 700;
+}
+.auth-head strong, .auth-head span { display: block; }
+.auth-head span, .auth-note, .muted { color: var(--muted); }
+.auth-field { display: block; margin-bottom: 14px; }
+.auth-field span { display: block; margin-bottom: 6px; color: var(--muted); }
+.auth-field input {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  background: var(--bg);
+}
+.auth-submit, .logout, .plain-button {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid rgba(159, 212, 255, 0.4);
+  border-radius: 12px;
+  background: rgba(46, 107, 214, 0.2);
+  cursor: pointer;
+}
+.auth-submit { width: 100%; }
+.auth-error, .startup-error { color: var(--red); }
+.shell { display: grid; min-height: 100vh; grid-template-columns: var(--sidebar) minmax(0, 1fr); }
+.sidebar {
+  position: sticky;
+  z-index: 30;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  width: var(--sidebar);
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  padding: 22px 16px max(18px, env(safe-area-inset-bottom));
+  border-right: 1px solid var(--line);
+  background: rgba(18, 16, 15, 0.98);
+}
+.sidebar-brand { display: flex; gap: 12px; align-items: center; margin: 0 8px 24px; }
+.sidebar-brand strong, .sidebar-brand span { display: block; }
+.sidebar-brand span { color: var(--muted); font-size: 0.8rem; }
+.project-picker { position: relative; margin-bottom: 20px; }
+.project-label { margin: 0 8px 7px; color: var(--muted); font-size: 0.78rem; }
+.project-trigger {
+  display: grid;
+  width: 100%;
+  min-height: 58px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: var(--text);
+  background: var(--surface-soft);
+  text-align: left;
+  cursor: pointer;
+  grid-template-columns: 40px minmax(0, 1fr) 24px;
+  gap: 9px;
+  align-items: center;
+}
+.project-name { overflow-wrap: anywhere; }
+.project-chevron { text-align: center; transition: transform 0.2s; }
+.project-trigger[aria-expanded="true"] .project-chevron { transform: rotate(180deg); }
+.project-menu {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 100%;
+  max-height: min(430px, 60vh);
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #201c19;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+}
+.project-option {
+  display: grid;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+}
+.project-option:hover, .project-option[aria-checked="true"] { background: rgba(159, 212, 255, 0.12); }
+.project-option .project-mark { width: 36px; height: 36px; }
+.nav { display: grid; gap: 4px; }
+.nav-link, .nav-category {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.nav-link:hover, .nav-category:hover { background: rgba(255, 255, 255, 0.05); }
+.nav-link[aria-current="page"] { color: var(--accent); background: rgba(46, 107, 214, 0.2); }
+.nav-category { justify-content: space-between; font-weight: 600; }
+.nav-category::after { content: "⌄"; transition: transform 0.2s; }
+.nav-category[aria-expanded="true"]::after { transform: rotate(180deg); }
+.subnav { display: grid; gap: 3px; padding: 2px 0 5px 14px; }
+.sidebar-footer { display: grid; gap: 8px; margin-top: auto; padding-top: 22px; }
+.account-summary { display: flex; gap: 10px; align-items: center; padding: 8px; }
+.account-summary strong, .account-summary span { display: block; overflow-wrap: anywhere; }
+.account-summary span { color: var(--muted); font-size: 0.8rem; }
+.mobile-bar { display: none; }
+.main { min-width: 0; padding: clamp(24px, 4vw, 56px); }
+.content-header { margin-bottom: 26px; }
+.content-header p { margin: 5px 0 0; color: var(--muted); }
+.view-panel { width: min(100%, 1180px); }
+h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(2rem, 4vw, 3.4rem); font-weight: 400; }
+.card {
+  padding: clamp(20px, 3vw, 30px);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(18, 16, 15, 0.9);
+}
+.development { margin: 0; color: var(--muted); font-size: 1.05rem; }
+.notice {
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  color: var(--muted);
+  background: rgba(159, 212, 255, 0.07);
+}
+.crm-toolbar { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; margin-bottom: 18px; }
+.crm-periods, .crm-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.crm-period, .crm-filter {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface-soft);
+}
+.crm-period { cursor: pointer; }
+.crm-period[aria-pressed="true"] { border-color: var(--accent); }
+.crm-summary { display: grid; margin: 16px 0; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.crm-stat { padding: 14px; border: 1px solid var(--line); border-radius: 12px; }
+.crm-stat span, .crm-stat strong { display: block; }
+.crm-stat span { color: var(--muted); font-size: 0.85rem; }
+.crm-stat strong { margin-top: 5px; font-size: 1.35rem; }
+.crm-table-wrap { max-width: 100%; overflow-x: auto; }
+.crm-table { width: 100%; border-collapse: collapse; }
+.crm-table th, .crm-table td { padding: 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.crm-empty, .crm-error { padding: 20px; border: 1px solid var(--line); border-radius: 12px; }
+.crm-error { color: var(--red); }
+.tool-frame { display: block; width: 100%; min-height: 70vh; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.account-details { display: grid; gap: 14px; margin: 0 0 24px; }
+.account-details div { display: grid; grid-template-columns: 140px 1fr; gap: 12px; }
+.account-details dt { color: var(--muted); }
+.account-details dd { margin: 0; overflow-wrap: anywhere; }
+.backdrop { display: none; }
+.no-projects { margin-bottom: 18px; padding: 12px; color: var(--red); }
+@media (max-width: 760px) {
+  .shell { display: block; padding-top: calc(60px + env(safe-area-inset-top)); }
+  .mobile-bar {
+    position: fixed;
+    z-index: 35;
+    top: 0;
+    right: 0;
+    left: 0;
+    display: grid;
+    min-height: calc(60px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 12px 0;
+    border-bottom: 1px solid var(--line);
+    background: rgba(18, 16, 15, 0.98);
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+  }
+  .menu-button { width: 44px; height: 44px; border: 0; border-radius: 10px; background: var(--surface-soft); cursor: pointer; }
+  .mobile-context { min-width: 0; }
+  .mobile-context strong, .mobile-context span { display: block; overflow-wrap: anywhere; }
+  .mobile-context strong { font-size: 0.9rem; }
+  .mobile-context span { color: var(--muted); font-size: 0.75rem; }
+  .sidebar {
+    position: fixed;
+    z-index: 45;
+    inset: 0 auto 0 0;
+    width: min(88vw, 300px);
+    height: 100vh;
+    height: 100dvh;
+    padding-top: max(18px, env(safe-area-inset-top));
+    transform: translateX(-105%);
+    transition: transform 0.2s ease;
+  }
+  .sidebar.is-open { transform: none; }
+  .backdrop { position: fixed; z-index: 40; inset: 0; display: block; border: 0; background: rgba(0, 0, 0, 0.68); }
+  .main { padding: 24px 16px 40px; }
+  .content-header { margin-bottom: 20px; }
+  h1 { font-size: 2.15rem; }
+  .tool-frame { min-height: 72vh; }
+  .account-details div { grid-template-columns: 1fr; gap: 2px; }
 }
-
-.skip-link:focus {
-transform: translateY(0);
-}
-
-
-.back-pill{position:relative;display:inline-flex;gap:8px;align-items:center;flex:0 0 auto;
- min-height:40px;padding:9px 15px;border-radius:999px;text-decoration:none;
- border:1px solid rgba(159,212,255,.28);color:var(--text);
- background:linear-gradient(135deg,rgba(159,212,255,.12),rgba(255,255,255,.025));
- box-shadow:inset 0 1px 0 rgba(255,255,255,.09);font-size:.74rem;white-space:nowrap;
- transition:border-color .2s,background-color .2s,transform .2s}
-.back-pill svg{width:15px;height:15px;flex:0 0 auto;transition:transform .2s}
-.back-pill:hover{border-color:rgba(159,212,255,.75);background-color:rgba(159,212,255,.1);
- transform:translateY(-1px)}
-.back-pill:hover svg{transform:translateX(-3px)}
-.back-pill .back-word{display:inline}
-@media (max-width:520px){.back-pill{padding:9px 12px}.back-pill .back-word{display:none}}
-
-.topbar {
-position: sticky;
-z-index: 50;
-top: 0;
-padding:
-max(12px, env(safe-area-inset-top))
-max(18px, env(safe-area-inset-right))
-10px
-max(18px, env(safe-area-inset-left));
-background: linear-gradient(180deg, rgba(11, 9, 8, 0.98), rgba(11, 9, 8, 0.75), transparent);
-pointer-events: none;
-}
-
-.topbar-inner {
-display: grid;
-grid-template-columns: minmax(170px, 1fr) auto auto auto minmax(150px, 1fr);
-gap: 20px;
-align-items: center;
-width: min(100%, var(--content));
-min-width: 0;
-min-height: 64px;
-margin-inline: auto;
-padding: 8px 10px 8px 17px;
-border: 1px solid rgba(244, 240, 235, 0.1);
-border-radius: 999px;
-background: rgba(18, 16, 15, 0.78);
-box-shadow: 0 16px 55px rgba(0, 0, 0, 0.28);
-backdrop-filter: blur(20px);
--webkit-backdrop-filter: blur(20px);
-pointer-events: auto;
-}
-
-.brand {
-display: inline-flex;
-min-width: 0;
-gap: 12px;
-align-items: center;
-text-decoration: none;
-}
-
-.core-logo {
-position: relative;
-display: grid;
-width: 38px;
-height: 38px;
-flex: 0 0 auto;
-place-items: center;
-border: 1px solid rgba(159, 212, 255, 0.42);
-border-radius: 50%;
-color: var(--accent);
-background:
-radial-gradient(circle at 45% 38%, rgba(244, 240, 235, 0.78) 0 3%, transparent 4%),
-radial-gradient(circle, rgba(46, 107, 214, 0.65), rgba(11, 31, 82, 0.85));
-box-shadow:
-inset 0 0 20px rgba(159, 212, 255, 0.2),
-0 0 25px rgba(46, 107, 214, 0.25);
-font-family: Georgia, serif;
-font-size: 1rem;
-}
-
-.core-logo::before,
-.core-logo::after {
-position: absolute;
-top: 50%;
-left: 50%;
-width: 68%;
-height: 1px;
-content: "";
-background: linear-gradient(90deg, transparent, rgba(159, 212, 255, 0.72), transparent);
-transform-origin: center;
-}
-
-.core-logo::before {
-transform: translate(-50%, -50%) rotate(42deg);
-}
-
-.core-logo::after {
-transform: translate(-50%, -50%) rotate(-42deg);
-}
-
-.brand-copy {
-min-width: 0;
-}
-
-.brand-copy strong,
-.brand-copy span {
-display: block;
-overflow: hidden;
-text-overflow: ellipsis;
-white-space: nowrap;
-}
-
-.brand-copy strong {
-font-size: 0.75rem;
-letter-spacing: 0.15em;
-text-transform: uppercase;
-}
-
-.brand-copy span {
-margin-top: 2px;
-color: var(--muted);
-font-size: 0.72rem;
-}
-
-.view-switcher {
-display: grid;
-grid-template-columns: repeat(2, minmax(0, 1fr));
-gap: 4px;
-min-width: 250px;
-padding: 4px;
-border: 1px solid rgba(244, 240, 235, 0.1);
-border-radius: 999px;
-background: rgba(255, 255, 255, 0.025);
-}
-
-.view-switcher button {
-position: relative;
-min-height: 42px;
-overflow: hidden;
-padding: 9px 18px;
-border: 1px solid transparent;
-border-radius: 999px;
-color: var(--muted);
-background: transparent;
-cursor: pointer;
-transition:
-color 200ms ease,
-border-color 200ms ease,
-background-color 200ms ease,
-box-shadow 200ms ease;
-}
-
-.view-switcher button[aria-selected="true"] {
-border-color: rgba(159, 212, 255, 0.3);
-color: var(--text);
-background:
-linear-gradient(135deg, rgba(46, 107, 214, 0.42), rgba(11, 31, 82, 0.6));
-box-shadow:
-inset 0 1px 0 rgba(255, 255, 255, 0.12),
-0 0 25px rgba(159, 212, 255, 0.09);
-}
-
-.account {
-display: flex;
-min-width: 0;
-gap: 10px;
-align-items: center;
-justify-content: flex-end;
-}
-
-.account-copy {
-min-width: 0;
-text-align: right;
-}
-
-.account-copy strong,
-.account-copy span {
-display: block;
-overflow: hidden;
-text-overflow: ellipsis;
-white-space: nowrap;
-}
-
-.account-copy strong {
-font-size: 0.82rem;
-}
-
-.account-copy span {
-color: var(--muted);
-font-size: 0.7rem;
-}
-
-.account-avatar {
-display: grid;
-width: 38px;
-height: 38px;
-flex: 0 0 auto;
-place-items: center;
-border: 1px solid rgba(159, 212, 255, 0.28);
-border-radius: 50%;
-color: var(--accent);
-background: rgba(159, 212, 255, 0.08);
-font-family: Georgia, serif;
-}
-
-.layout-button {
-display: inline-flex;
-min-height: 42px;
-align-items: center;
-justify-content: center;
-padding: 9px 16px;
-border: 1px solid rgba(159, 212, 255, 0.28);
-border-radius: 999px;
-color: var(--text);
-background: rgba(159, 212, 255, 0.07);
-cursor: pointer;
-font-size: 0.74rem;
-white-space: nowrap;
-}
-
-.layout-button:hover,
-.layout-button:focus-visible {
-border-color: rgba(159, 212, 255, 0.72);
-outline: none;
-background: rgba(159, 212, 255, 0.13);
-}
-
-.layout-panel {
-position: fixed;
-z-index: 180;
-inset: 0;
-display: grid;
-justify-items: end;
-background: rgba(5, 4, 4, 0.66);
-backdrop-filter: blur(7px);
-}
-
-.layout-panel-card {
-display: flex;
-width: min(100%, 430px);
-height: 100%;
-flex-direction: column;
-padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
-border-left: 1px solid var(--line-blue);
-background: var(--surface);
-box-shadow: -24px 0 70px rgba(0, 0, 0, 0.46);
-}
-
-.layout-panel-head {
-display: flex;
-gap: 20px;
-align-items: flex-start;
-justify-content: space-between;
-margin-bottom: 22px;
-}
-
-.layout-panel-head h2 { margin-bottom: 5px; font-size: 1.8rem; }
-.layout-panel-head p { margin-bottom: 0; color: var(--muted); font-size: 0.78rem; }
-.layout-close { width: 42px; flex: 0 0 auto; padding: 0; font-size: 1.35rem; }
-.layout-options { overflow-y: auto; border-top: 1px solid var(--line); }
-.layout-option {
-display: flex;
-gap: 18px;
-align-items: center;
-justify-content: space-between;
-padding: 15px 2px;
-border-bottom: 1px solid var(--line);
-cursor: pointer;
-}
-.layout-option span:first-child { font-size: 0.88rem; }
-.layout-switch {
-position: relative;
-width: 44px;
-height: 24px;
-flex: 0 0 auto;
-appearance: none;
-border: 1px solid rgba(244, 240, 235, 0.22);
-border-radius: 999px;
-background: rgba(255, 255, 255, 0.08);
-cursor: pointer;
-transition: background-color 180ms ease, border-color 180ms ease;
-}
-.layout-switch::after {
-position: absolute;
-top: 3px;
-left: 3px;
-width: 16px;
-height: 16px;
-border-radius: 50%;
-content: "";
-background: var(--muted);
-transition: transform 180ms ease, background-color 180ms ease;
-}
-.layout-switch:checked { border-color: var(--sapphire); background: var(--sapphire); }
-.layout-switch:checked::after { background: white; transform: translateX(20px); }
-.layout-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.layout-reset { width: 100%; margin-top: auto; padding: 13px 18px; }
-body.layout-panel-open { overflow: hidden; }
-
-.app-shell {
-width: min(100%, var(--content));
-min-width: 0;
-margin-inline: auto;
-padding:
-20px
-max(24px, env(safe-area-inset-right))
-max(70px, env(safe-area-inset-bottom))
-max(24px, env(safe-area-inset-left));
-}
-
-.demo-banner {
-display: flex;
-gap: 10px;
-align-items: center;
-margin-bottom: 26px;
-padding: 12px 16px;
-border: 1px solid rgba(240, 201, 128, 0.2);
-border-radius: 16px;
-color: var(--muted);
-background: rgba(240, 201, 128, 0.045);
-font-size: 0.8rem;
-}
-
-.demo-banner strong {
-flex: 0 0 auto;
-padding: 4px 8px;
-border: 1px solid rgba(240, 201, 128, 0.3);
-border-radius: 999px;
-color: var(--amber);
-font-size: 0.61rem;
-letter-spacing: 0.13em;
-}
-
-.view-panel {
-min-width: 0;
-animation: view-enter 420ms ease both;
-}
-.tool-view { margin: 0 -24px; }
-.tool-frame { width: 100%; height: calc(100vh - 92px); min-height: 640px; border: 0; border-radius: 18px; background: #0b1510; display: block; }
-.view-switcher.has-tools { grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); min-width: 420px; }
-.view-switcher.has-tools button { white-space: nowrap; padding-left: 10px; padding-right: 10px; }
-@media (max-width: 900px) { .view-switcher.has-tools { min-width: 0; } .tool-view { margin: 0 -12px; } }
-.tool-note { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
-
-.page-heading {
-display: flex;
-gap: 30px;
-align-items: flex-end;
-justify-content: space-between;
-margin-bottom: 28px;
-}
-
-.eyebrow {
-display: inline-flex;
-gap: 9px;
-align-items: center;
-margin: 0 0 14px;
-color: var(--accent);
-font-size: 0.7rem;
-font-weight: 700;
-letter-spacing: 0.17em;
-text-transform: uppercase;
-}
-
-.eyebrow::before {
-width: 24px;
-height: 1px;
-content: "";
-background: currentColor;
-box-shadow: 0 0 10px currentColor;
-}
-
-.page-heading h1 {
-max-width: 820px;
-margin-bottom: 12px;
-font-size: clamp(2.6rem, 5vw, 5rem);
-line-height: 0.98;
-letter-spacing: -0.045em;
-text-wrap: balance;
-}
-
-.page-heading p {
-max-width: 720px;
-margin-bottom: 0;
-color: var(--muted);
-font-size: 1rem;
-}
-
-.context-pill {
-display: inline-flex;
-flex: 0 0 auto;
-gap: 9px;
-align-items: center;
-padding: 11px 15px;
-border: 1px solid var(--line-blue);
-border-radius: 999px;
-color: var(--accent);
-background: rgba(159, 212, 255, 0.055);
-font-size: 0.76rem;
-white-space: nowrap;
-}
-
-.context-pill::before {
-width: 7px;
-height: 7px;
-border-radius: 50%;
-content: "";
-background: var(--accent);
-box-shadow: 0 0 12px rgba(159, 212, 255, 0.7);
-}
-
-.dashboard-section {
-min-width: 0;
-margin-top: 18px;
-padding: clamp(22px, 3vw, 34px);
-overflow: hidden;
-border: 1px solid var(--line);
-border-radius: var(--radius-xl);
-background:
-linear-gradient(145deg, rgba(255, 255, 255, 0.034), rgba(255, 255, 255, 0.012));
-box-shadow: var(--shadow);
-}
-
-.section-head {
-display: flex;
-gap: 24px;
-align-items: flex-end;
-justify-content: space-between;
-margin-bottom: 24px;
-}
-
-.section-kicker {
-margin-bottom: 7px;
-color: var(--accent);
-font-size: 0.65rem;
-font-weight: 700;
-letter-spacing: 0.15em;
-text-transform: uppercase;
-}
-
-.section-head h2 {
-margin-bottom: 0;
-font-size: clamp(1.7rem, 3vw, 2.55rem);
-line-height: 1.05;
-letter-spacing: -0.03em;
-}
-
-.section-description {
-max-width: 470px;
-margin-bottom: 0;
-color: var(--muted);
-font-size: 0.84rem;
-text-align: right;
-}
-
-.sample-badge {
-display: inline-flex;
-min-height: 18px;
-align-items: center;
-justify-content: center;
-padding: 2px 6px;
-border: 1px solid rgba(240, 201, 128, 0.3);
-border-radius: 999px;
-color: var(--amber);
-background: rgba(240, 201, 128, 0.065);
-font-family: "Segoe UI", Arial, sans-serif;
-font-size: 0.51rem;
-font-weight: 700;
-letter-spacing: 0.1em;
-line-height: 1;
-vertical-align: middle;
-white-space: nowrap;
-}
-
-.money-grid {
-display: grid;
-grid-template-columns: repeat(3, minmax(0, 1fr));
-gap: 14px;
-}
-
-.money-card {
-position: relative;
-min-width: 0;
-min-height: 194px;
-padding: 23px;
-overflow: hidden;
-border: 1px solid var(--line);
-border-radius: var(--radius-lg);
-background:
-radial-gradient(circle at 100% 0%, rgba(159, 212, 255, 0.08), transparent 44%),
-rgba(11, 9, 8, 0.38);
-}
-
-.money-card::after {
-position: absolute;
-top: -42px;
-right: -42px;
-width: 110px;
-height: 110px;
-border: 1px solid rgba(159, 212, 255, 0.08);
-border-radius: 50%;
-content: "";
-}
-
-.metric-label {
-margin-bottom: 16px;
-color: var(--muted);
-font-size: 0.79rem;
-}
-
-.metric-line {
-position: relative;
-z-index: 1;
-display: flex;
-flex-wrap: wrap;
-gap: 9px;
-align-items: center;
-}
-
-.metric-value {
-font-family: Georgia, "Times New Roman", serif;
-font-size: clamp(1.8rem, 3.3vw, 2.8rem);
-line-height: 1;
-letter-spacing: -0.04em;
-}
-
-.sparkline {
-position: absolute;
-right: 18px;
-bottom: 16px;
-left: 18px;
-width: calc(100% - 36px);
-height: 66px;
-overflow: visible;
-}
-
-.sparkline-grid {
-stroke: rgba(244, 240, 235, 0.065);
-stroke-width: 1;
-vector-effect: non-scaling-stroke;
-}
-
-.sparkline-line {
-fill: none;
-stroke-width: 2.2;
-stroke-linecap: round;
-stroke-linejoin: round;
-vector-effect: non-scaling-stroke;
-}
-
-.funnel-track {
-display: grid;
-grid-template-columns: repeat(5, minmax(0, 1fr));
-gap: 10px;
-min-width: 0;
-}
-
-.funnel-step {
-position: relative;
-display: flex;
-min-width: 0;
-min-height: 176px;
-flex-direction: column;
-align-items: stretch;
-padding: 20px;
-overflow: hidden;
-border: 1px solid var(--line);
-border-radius: 21px;
-color: var(--text);
-background: rgba(11, 9, 8, 0.38);
-text-align: left;
-cursor: pointer;
-transition:
-transform 200ms ease,
-border-color 200ms ease,
-background-color 200ms ease,
-box-shadow 200ms ease;
-}
-
-.funnel-step::after {
-position: absolute;
-right: -15px;
-bottom: -40px;
-width: 95px;
-height: 95px;
-border-radius: 50%;
-content: "";
-background: rgba(46, 107, 214, 0.13);
-filter: blur(6px);
-}
-
-.funnel-step[aria-expanded="true"] {
-border-color: rgba(159, 212, 255, 0.48);
-background:
-linear-gradient(145deg, rgba(46, 107, 214, 0.18), rgba(11, 31, 82, 0.28));
-box-shadow:
-inset 0 1px 0 rgba(255, 255, 255, 0.08),
-0 0 28px rgba(159, 212, 255, 0.08);
-}
-
-.step-label {
-display: block;
-min-height: 44px;
-margin-bottom: 18px;
-font-family: Georgia, "Times New Roman", serif;
-font-size: 1.04rem;
-line-height: 1.18;
-}
-
-.step-value-line {
-display: flex;
-flex-wrap: wrap;
-gap: 6px;
-align-items: center;
-margin-top: auto;
-}
-
-.step-value {
-font-size: 1.22rem;
-font-weight: 650;
-}
-
-.step-unit {
-display: block;
-margin-top: 6px;
-color: var(--muted);
-font-size: 0.68rem;
-}
-
-.step-open {
-position: absolute;
-top: 18px;
-right: 17px;
-display: grid;
-width: 24px;
-height: 24px;
-place-items: center;
-border: 1px solid rgba(159, 212, 255, 0.18);
-border-radius: 50%;
-color: var(--accent);
-font-size: 0.8rem;
-}
-
-.loss-panel {
-display: grid;
-grid-template-columns: minmax(180px, 0.42fr) minmax(0, 1fr);
-gap: 28px;
-margin-top: 14px;
-padding: 24px;
-border: 1px solid rgba(159, 212, 255, 0.19);
-border-radius: 21px;
-background:
-linear-gradient(135deg, rgba(11, 31, 82, 0.48), rgba(159, 212, 255, 0.035));
-}
-
-.loss-panel-label {
-margin-bottom: 7px;
-color: var(--accent);
-font-size: 0.65rem;
-font-weight: 700;
-letter-spacing: 0.15em;
-text-transform: uppercase;
-}
-
-.loss-panel h3 {
-margin-bottom: 0;
-font-size: 1.45rem;
-line-height: 1.15;
-}
-
-.loss-list {
-display: grid;
-gap: 10px;
-margin: 0;
-padding: 0;
-list-style: none;
-}
-
-.loss-list li {
-position: relative;
-padding: 12px 14px 12px 38px;
-border: 1px solid rgba(244, 240, 235, 0.08);
-border-radius: 14px;
-color: var(--muted);
-background: rgba(11, 9, 8, 0.25);
-font-size: 0.86rem;
-}
-
-.loss-list li::before {
-position: absolute;
-top: 50%;
-left: 15px;
-width: 8px;
-height: 8px;
-border: 1px solid var(--accent);
-border-radius: 50%;
-content: "";
-transform: translateY(-50%);
-box-shadow: 0 0 10px rgba(159, 212, 255, 0.35);
-}
-
-.source-grid {
-display: grid;
-grid-template-columns: repeat(3, minmax(0, 1fr));
-gap: 12px;
-}
-
-.source-card {
-min-width: 0;
-padding: 18px;
-border: 1px solid var(--line);
-border-radius: 19px;
-background: rgba(11, 9, 8, 0.32);
-transition:
-transform 200ms ease,
-border-color 200ms ease;
-}
-
-.source-top {
-display: flex;
-gap: 12px;
-align-items: center;
-justify-content: space-between;
-margin-bottom: 20px;
-}
-
-.source-identity {
-display: flex;
-min-width: 0;
-gap: 10px;
-align-items: center;
-}
-
-.source-icon,
-.integration-icon {
-display: grid;
-width: 37px;
-height: 37px;
-flex: 0 0 auto;
-place-items: center;
-border: 1px solid rgba(159, 212, 255, 0.18);
-border-radius: 13px;
-color: var(--accent);
-background: rgba(159, 212, 255, 0.06);
-font-size: 0.65rem;
-font-weight: 750;
-letter-spacing: 0.04em;
-}
-
-.source-name {
-overflow: hidden;
-font-size: 0.88rem;
-font-weight: 650;
-text-overflow: ellipsis;
-white-space: nowrap;
-}
-
-.status-badge {
-display: inline-flex;
-flex: 0 0 auto;
-align-items: center;
-padding: 5px 8px;
-border: 1px solid currentColor;
-border-radius: 999px;
-font-size: 0.54rem;
-font-weight: 750;
-letter-spacing: 0.08em;
-line-height: 1;
-text-transform: uppercase;
-white-space: nowrap;
-}
-
-.status-live {
-color: var(--green);
-background: rgba(121, 220, 182, 0.055);
-}
-
-.status-qa {
-color: var(--amber);
-background: rgba(240, 201, 128, 0.055);
-}
-
-.status-off {
-color: var(--muted);
-background: rgba(185, 175, 167, 0.04);
-}
-
-.source-metric {
-display: flex;
-flex-wrap: wrap;
-gap: 7px;
-align-items: center;
-}
-
-.source-metric strong {
-font-family: Georgia, "Times New Roman", serif;
-font-size: 1.55rem;
-font-weight: 400;
-line-height: 1;
-}
-
-.source-caption {
-margin: 7px 0 0;
-color: var(--muted);
-font-size: 0.69rem;
-}
-
-.dialog-list {
-display: grid;
-gap: 9px;
-}
-
-.dialog-row {
-display: grid;
-grid-template-columns: minmax(170px, 0.58fr) minmax(240px, 1.5fr) auto;
-gap: 18px;
-align-items: center;
-min-width: 0;
-padding: 15px 17px;
-border: 1px solid var(--line);
-border-radius: 17px;
-background: rgba(11, 9, 8, 0.3);
-}
-
-.dialog-person {
-display: flex;
-min-width: 0;
-gap: 11px;
-align-items: center;
-}
-
-.dialog-avatar {
-display: grid;
-width: 38px;
-height: 38px;
-flex: 0 0 auto;
-place-items: center;
-border: 1px solid rgba(159, 212, 255, 0.18);
-border-radius: 50%;
-color: var(--accent);
-background: rgba(46, 107, 214, 0.12);
-font-family: Georgia, serif;
-font-size: 0.8rem;
-}
-
-.dialog-name {
-display: block;
-overflow: hidden;
-margin-bottom: 3px;
-font-size: 0.86rem;
-font-weight: 650;
-text-overflow: ellipsis;
-white-space: nowrap;
-}
-
-.channel-label {
-color: var(--muted);
-font-size: 0.66rem;
-}
-
-.dialog-message {
-min-width: 0;
-overflow: hidden;
-margin-bottom: 0;
-color: var(--muted);
-font-size: 0.82rem;
-text-overflow: ellipsis;
-white-space: nowrap;
-}
-
-.lead-status {
-justify-self: end;
-padding: 7px 10px;
-border: 1px solid rgba(159, 212, 255, 0.16);
-border-radius: 999px;
-color: var(--accent);
-background: rgba(159, 212, 255, 0.045);
-font-size: 0.62rem;
-white-space: nowrap;
-}
-
-.crm-toolbar {
-display: flex;
-gap: 12px;
-align-items: center;
-justify-content: space-between;
-margin-bottom: 18px;
-}
-
-.crm-periods { display: flex; flex-wrap: wrap; gap: 8px; }
-.crm-period,
-.crm-filter,
-.crm-table select,
-.crm-table input {
-min-height: 44px;
-border: 1px solid var(--line-blue);
-border-radius: 13px;
-color: var(--text);
-background: rgba(11, 9, 8, .72);
-font: inherit;
-}
-.crm-period { padding: 9px 15px; cursor: pointer; }
-.crm-period[aria-pressed="true"] { border-color: var(--accent); background: rgba(46,107,214,.3); }
-.crm-filters { display: flex; flex-wrap: wrap; gap: 8px; }
-.crm-filter { min-width: 150px; padding: 8px 34px 8px 12px; }
-.crm-summary { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:11px; margin-bottom:18px; }
-.crm-summary-card { padding:17px; border:1px solid var(--line); border-radius:17px; background:rgba(255,255,255,.025); }
-.crm-summary-card span { display:block; min-height:2.4em; color:var(--muted); font-size:.7rem; }
-.crm-summary-card strong { display:block; margin-top:6px; font-size:1.2rem; }
-.crm-no-data { display:block; margin-top:3px; color:var(--muted); font-size:.62rem; font-weight:400; }
-.crm-strip {
-display: grid;
-grid-template-columns: repeat(6, minmax(0, 1fr));
-gap: 11px;
-margin-bottom:18px;
-}
-
-.crm-stage {
-position: relative;
-min-width: 0;
-padding: 20px;
-border: 1px solid var(--line);
-border-radius: 19px;
-background:
-linear-gradient(145deg, rgba(159, 212, 255, 0.045), rgba(11, 9, 8, 0.35));
-}
-
-.crm-stage:not(:last-child)::after {
-position: absolute;
-z-index: 2;
-top: 50%;
-right: -9px;
-display: grid;
-width: 18px;
-height: 18px;
-place-items: center;
-border: 1px solid rgba(159, 212, 255, 0.19);
-border-radius: 50%;
-color: var(--accent);
-background: var(--surface);
-content: "›";
-font-size: 0.85rem;
-transform: translateY(-50%);
-}
-
-.crm-stage h3 {
-margin-bottom: 19px;
-font-size: 1.22rem;
-}
-
-.crm-data-row {
-display: flex;
-flex-wrap: wrap;
-gap: 6px;
-align-items: center;
-margin-top: 9px;
-}
-
-.crm-data-row strong {
-font-size: 0.94rem;
-}
-
-.crm-data-label {
-width: 100%;
-color: var(--muted);
-font-size: 0.64rem;
-}
-
-.crm-table-wrap { overflow-x:auto; border:1px solid var(--line); border-radius:19px; }
-.crm-table { width:100%; min-width:1050px; border-collapse:collapse; font-size:.78rem; }
-.crm-table th,.crm-table td { padding:12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; }
-.crm-table th { color:var(--muted); font-size:.65rem; font-weight:500; letter-spacing:.04em; }
-.crm-table tbody tr:last-child td { border-bottom:0; }
-.crm-table select { width:145px; padding:7px; }
-.crm-table input { width:125px; padding:7px 10px; }
-.crm-empty { padding:34px 20px; border:1px dashed var(--line-blue); border-radius:19px; color:var(--muted); text-align:center; }
-.crm-empty strong { display:block; margin-bottom:6px; color:var(--text); font-family:Georgia,"Times New Roman",serif; font-size:1.15rem; font-weight:400; }
-.project-table {
-overflow: hidden;
-border: 1px solid var(--line);
-border-radius: 21px;
-background: rgba(11, 9, 8, 0.25);
-}
-
-.project-row {
-display: grid;
-grid-template-columns:
-minmax(170px, 0.8fr)
-minmax(230px, 1.35fr)
-minmax(110px, 0.55fr)
-minmax(110px, 0.55fr)
-minmax(110px, 0.55fr);
-gap: 18px;
-align-items: center;
-min-width: 0;
-padding: 18px 20px;
-}
-
-.project-row + .project-row {
-border-top: 1px solid var(--line);
-}
-
-.project-edit-link { display: inline-block; margin-top: 6px; font-size: 13px; color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(159,212,255,0.4); }
-.project-edit-link:hover { border-bottom-color: var(--accent); }
-.project-row-header {
-min-height: 48px;
-color: var(--muted);
-background: rgba(255, 255, 255, 0.025);
-font-size: 0.62rem;
-font-weight: 700;
-letter-spacing: 0.11em;
-text-transform: uppercase;
-}
-
-.project-name {
-display: block;
-margin-bottom: 3px;
-font-family: Georgia, "Times New Roman", serif;
-font-size: 1.08rem;
-}
-
-.project-type {
-color: var(--muted);
-font-size: 0.66rem;
-}
-
-.project-directions {
-margin-bottom: 0;
-color: var(--muted);
-font-size: 0.78rem;
-overflow-wrap: anywhere;
-}
-
-.project-cell {
-min-width: 0;
-}
-
-.project-cell-label {
-display: none;
-margin-bottom: 6px;
-color: var(--muted);
-font-size: 0.59rem;
-font-weight: 700;
-letter-spacing: 0.09em;
-text-transform: uppercase;
-}
-
-.admin-sample-line {
-display: flex;
-gap: 7px;
-align-items: center;
-margin-top: 7px;
-color: var(--muted);
-font-size: 0.62rem;
-}
-
-.integration-grid {
-display: grid;
-grid-template-columns: repeat(2, minmax(0, 1fr));
-gap: 11px;
-}
-
-.integration-card {
-display: grid;
-grid-template-columns: auto minmax(0, 1fr) auto;
-gap: 15px;
-align-items: center;
-min-width: 0;
-padding: 17px;
-border: 1px solid var(--line);
-border-radius: 19px;
-background: rgba(11, 9, 8, 0.3);
-}
-
-.integration-copy {
-min-width: 0;
-}
-
-.integration-copy strong {
-display: block;
-margin-bottom: 4px;
-font-size: 0.87rem;
-}
-
-.integration-copy p {
-margin-bottom: 8px;
-color: var(--muted);
-font-size: 0.7rem;
-}
-
-.integration-status-line {
-display: flex;
-flex-wrap: wrap;
-gap: 6px;
-align-items: center;
-}
-
-.glass-pill {
-position: relative;
-display: inline-flex;
-min-height: 42px;
-gap: 8px;
-align-items: center;
-justify-content: center;
-overflow: hidden;
-padding: 9px 15px;
-border: 1px solid rgba(159, 212, 255, 0.25);
-border-radius: 999px;
-color: var(--text);
-background:
-linear-gradient(135deg, rgba(159, 212, 255, 0.1), rgba(255, 255, 255, 0.025));
-box-shadow:
-inset 0 1px 0 rgba(255, 255, 255, 0.09),
-0 9px 28px rgba(0, 0, 0, 0.2);
-font-size: 0.72rem;
-text-decoration: none;
-white-space: nowrap;
-transition:
-transform 200ms ease,
-border-color 200ms ease,
-box-shadow 200ms ease;
-isolation: isolate;
-}
-
-.glass-pill::before {
-position: absolute;
-z-index: -1;
-top: -90%;
-left: -65%;
-width: 32%;
-height: 280%;
-content: "";
-background: linear-gradient(
-90deg,
-transparent,
-rgba(255, 255, 255, 0.64),
-transparent
-);
-transform: rotate(17deg) translateX(-280%);
-transition: transform 650ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.activity-list {
-display: grid;
-gap: 8px;
-}
-
-.activity-row {
-display: grid;
-grid-template-columns: minmax(108px, auto) 30px minmax(0, 1fr);
-gap: 14px;
-align-items: start;
-min-width: 0;
-padding: 14px 16px;
-border: 1px solid var(--line);
-border-radius: 16px;
-background: rgba(11, 9, 8, 0.27);
-}
-
-.activity-time {
-display: flex;
-flex-wrap: wrap;
-gap: 6px;
-align-items: center;
-color: var(--muted);
-font-size: 0.69rem;
-}
-
-.activity-node {
-position: relative;
-display: grid;
-width: 25px;
-height: 25px;
-place-items: center;
-border: 1px solid rgba(159, 212, 255, 0.22);
-border-radius: 50%;
-color: var(--accent);
-background: rgba(159, 212, 255, 0.055);
-font-size: 0.64rem;
-}
-
-.activity-copy {
-min-width: 0;
-}
-
-.activity-copy strong {
-display: block;
-margin-bottom: 4px;
-font-size: 0.82rem;
-}
-
-.activity-copy p {
-margin-bottom: 0;
-color: var(--muted);
-font-size: 0.72rem;
-overflow-wrap: anywhere;
-}
-
-.toast {
-position: fixed;
-z-index: 100;
-right: max(20px, env(safe-area-inset-right));
-bottom: max(20px, env(safe-area-inset-bottom));
-max-width: min(360px, calc(100% - 40px));
-padding: 14px 17px;
-border: 1px solid rgba(159, 212, 255, 0.28);
-border-radius: 17px;
-color: var(--text);
-background: rgba(11, 31, 82, 0.94);
-box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
-font-size: 0.8rem;
-opacity: 0;
-pointer-events: none;
-transform: translateY(18px);
-transition:
-opacity 200ms ease,
-transform 200ms ease;
-backdrop-filter: blur(15px);
--webkit-backdrop-filter: blur(15px);
-}
-
-.toast.is-visible {
-opacity: 1;
-transform: translateY(0);
-}
-
-button:focus-visible,
-a:focus-visible {
-outline: 2px solid var(--accent);
-outline-offset: 3px;
-}
-
-@keyframes view-enter {
-from {
-opacity: 0;
-transform: translateY(12px);
-}
-
-to {
-opacity: 1;
-transform: translateY(0);
-}
-}
-
-@media (hover: hover) {
-.view-switcher button:hover {
-color: var(--text);
-border-color: rgba(159, 212, 255, 0.18);
-}
-
-.funnel-step:hover {
-z-index: 2;
-border-color: rgba(159, 212, 255, 0.32);
-transform: translateY(-3px);
-}
-
-.source-card:hover {
-border-color: rgba(159, 212, 255, 0.25);
-transform: translateY(-3px);
-}
-
-.glass-pill:hover {
-border-color: rgba(159, 212, 255, 0.76);
-box-shadow:
-inset 0 1px 0 rgba(255, 255, 255, 0.14),
-0 0 28px rgba(159, 212, 255, 0.16),
-0 15px 35px rgba(0, 0, 0, 0.3);
-transform: translateY(-2px);
-}
-
-.glass-pill:hover::before {
-transform: rotate(17deg) translateX(650%);
-}
-}
-
-@media (max-width: 1050px) {
-.topbar-inner {
-grid-template-columns: minmax(140px, 1fr) auto auto auto minmax(90px, 1fr);
-}
-
-.money-grid {
-grid-template-columns: 1fr;
-}
-
-.money-card {
-min-height: 170px;
-}
-
-.source-grid {
-grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.funnel-track {
-grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.funnel-step:last-child {
-grid-column: 1 / -1;
-}
-
-.project-row {
-grid-template-columns:
-minmax(140px, 0.75fr)
-minmax(190px, 1.1fr)
-repeat(3, minmax(95px, 0.5fr));
-}
-}
-
-@media (max-width: 780px) {
-.topbar-inner {
-grid-template-columns: 1fr auto auto auto;
-border-radius: 27px;
-}
-
-.view-switcher {
-grid-column: 1 / -1;
-grid-row: 2;
-width: 100%;
-min-width: 0;
-}
-
-.account-copy {
-display: none;
-}
-
-.page-heading,
-.section-head {
-align-items: flex-start;
-flex-direction: column;
-}
-
-.section-description {
-max-width: none;
-text-align: left;
-}
-
-.context-pill {
-align-self: flex-start;
-}
-
-.loss-panel {
-grid-template-columns: 1fr;
-}
-
-.dialog-row {
-grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.dialog-message {
-grid-column: 1 / -1;
-grid-row: 2;
-white-space: normal;
-}
-
-.lead-status {
-grid-column: 2;
-grid-row: 1;
-}
-
-.crm-strip {
-grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.crm-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
-.crm-toolbar { align-items:stretch; flex-direction:column; }
-
-.crm-stage:not(:last-child)::after {
-display: none;
-}
-
-.project-row-header {
-display: none;
-}
-
-.project-row {
-grid-template-columns: repeat(3, minmax(0, 1fr));
-gap: 15px;
-padding: 22px;
-}
-
-.project-cell-main,
-.project-cell-directions {
-grid-column: 1 / -1;
-}
-
-.project-cell-label {
-display: block;
-}
-
-.integration-grid {
-grid-template-columns: 1fr;
-}
-}
-
-@media (max-width: 560px) {
-.topbar {
-padding-right: 12px;
-padding-left: 12px;
-}
-
-.topbar-inner {
-gap: 10px;
-padding: 9px;
-}
-
-.brand-copy {
-display: none;
-}
-
-.layout-button { padding-inline: 12px; }
-
-.layout-panel-card {
-width: 100%;
-padding-right: max(18px, env(safe-area-inset-right));
-padding-left: max(18px, env(safe-area-inset-left));
-border-left: 0;
-}
-
-.app-shell {
-padding-top: 13px;
-padding-right: max(14px, env(safe-area-inset-right));
-padding-left: max(14px, env(safe-area-inset-left));
-}
-
-.demo-banner {
-align-items: flex-start;
-}
-
-.page-heading {
-margin-bottom: 22px;
-}
-
-.page-heading h1 {
-font-size: clamp(2.45rem, 13vw, 3.45rem);
-}
-
-.dashboard-section {
-padding: 19px;
-border-radius: 24px;
-}
-
-.money-card {
-padding: 20px;
-}
-
-.funnel-track,
-.source-grid,
-.crm-strip {
-grid-template-columns: 1fr;
-}
-
-.crm-summary { grid-template-columns:1fr; }
-.crm-periods { display:grid; grid-template-columns:repeat(3,1fr); }
-.crm-period { padding-inline:8px; }
-.crm-filter { width:100%; }
-
-.funnel-step:last-child {
-grid-column: auto;
-}
-
-.funnel-step {
-min-height: 145px;
-}
-
-.loss-panel {
-padding: 19px;
-}
-
-.source-top {
-align-items: flex-start;
-}
-
-.dialog-row {
-grid-template-columns: 1fr;
-gap: 10px;
-}
-
-.lead-status {
-grid-column: 1;
-grid-row: auto;
-justify-self: start;
-}
-
-.dialog-message {
-grid-column: 1;
-grid-row: auto;
-}
-
-.project-row {
-grid-template-columns: 1fr;
-}
-
-.project-cell,
-.project-cell-main,
-.project-cell-directions {
-grid-column: 1;
-}
-
-.integration-card {
-grid-template-columns: auto minmax(0, 1fr);
-}
-
-.integration-card .glass-pill {
-grid-column: 1 / -1;
-width: 100%;
-}
-
-.activity-row {
-grid-template-columns: auto minmax(0, 1fr);
-}
-
-.activity-time {
-grid-column: 1 / -1;
-}
-
-.activity-node {
-grid-column: 1;
-}
-
-.activity-copy {
-grid-column: 2;
-}
-}
-
 @media (prefers-reduced-motion: reduce) {
-html {
-scroll-behavior: auto;
-}
-
-*,
-*::before,
-*::after {
-scroll-behavior: auto !important;
-animation-duration: 0.01ms !important;
-animation-iteration-count: 1 !important;
-transition-duration: 0.01ms !important;
-transition-delay: 0ms !important;
-}
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }
 </style>
 </head>
-
 <body>
 <div class="auth" id="auth">
-<div class="auth-card">
-<div class="auth-head">
-<span class="core-logo" aria-hidden="true">S</span>
-<div>
-<strong>Synapse Business</strong>
-<span>Вход в личный кабинет</span>
+  <div class="auth-card">
+    <div class="auth-head">
+      <span class="core-logo" aria-hidden="true">S</span>
+      <div><strong>Synapse Business</strong><span>Вход в личный кабинет</span></div>
+    </div>
+    <form id="auth-form" autocomplete="off">
+      <label class="auth-field"><span>Логин</span><input id="auth-login" name="login" autocomplete="username" required></label>
+      <label class="auth-field"><span>Пароль</span><input id="auth-pass" type="password" name="pass" autocomplete="current-password" required></label>
+      <button class="auth-submit" type="submit">Войти</button>
+      <p class="auth-error" id="auth-error" role="alert" hidden>Неверный логин или пароль</p>
+    </form>
+  </div>
 </div>
-</div>
-<form id="auth-form" autocomplete="off">
-<label class="auth-field">
-<span>Логин</span>
-<input id="auth-login" type="text" name="login" autocapitalize="none" spellcheck="false" required>
-</label>
-<label class="auth-field">
-<span>Пароль</span>
-<input id="auth-pass" type="password" name="pass" required>
-</label>
-<button class="glass-pill auth-submit" type="submit">Войти</button>
-<p class="auth-error" id="auth-error" role="alert" hidden>Неверный логин или пароль</p>
-</form>
-<p class="auth-note">
-Демонстрационный контур. Данные внутри — демонстрационные и помечены SAMPLE.
-</p>
-</div>
-</div>
-
 <a class="skip-link" href="#main-content">Перейти к содержимому</a>
-
-<div class="ambient" aria-hidden="true"></div>
-<div class="grain" aria-hidden="true"></div>
-
-<header class="topbar">
-<div class="topbar-inner">
-<a class="brand" href="https://claude.ai/code/artifact/be1a8924-bcce-4a07-b4e7-15f8e59fcf07" aria-label="Synapse Business">
-<span class="core-logo" aria-hidden="true">S</span>
-<span class="brand-copy">
-<strong>Synapse Business</strong>
-<span>Центр управления бизнесом</span>
-</span>
-</a>
-
-<a class="back-pill" href="https://claude.ai/code/artifact/be1a8924-bcce-4a07-b4e7-15f8e59fcf07"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M19 12H5m0 0 6-6m-6 6 6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="back-word">К Синапсу</span></a>
-<div class="view-switcher" role="tablist" aria-label="Режим кабинета">
-<button
-type="button"
-id="cabinet-tab"
-role="tab"
-aria-selected="true"
-aria-controls="cabinet-view"
-data-view-target="cabinet"
->
-Кабинет
-</button>
-<button
-type="button"
-id="admin-tab"
-role="tab"
-aria-selected="false"
-aria-controls="admin-view"
-data-view-target="admin"
->
-Админка
-</button>
-<button type="button" id="site-tab" role="tab" aria-selected="false" aria-controls="site-view" data-view-target="site" hidden>Сайт</button>
-<button type="button" id="price-tab" role="tab" aria-selected="false" aria-controls="price-view" data-view-target="price" hidden>Прайс</button>
-<label class="context-pill" for="editor-client">Клиент <select id="editor-client" aria-label="Клиент редакторов"><option value="alvi">ALVI</option><option value="avokado">Авокадо</option></select></label>
-<button type="button" id="chat-tab" role="tab" aria-selected="false" aria-controls="chat-view" data-view-target="chat" hidden>Чат</button>
+<div class="shell" id="app" hidden>
+  <div class="mobile-bar">
+    <button class="menu-button" id="menu-button" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Открыть меню">☰</button>
+    <div class="mobile-context"><strong id="mobile-title">Сквозная аналитика</strong><span id="mobile-project"></span></div>
+  </div>
+  <aside class="sidebar" id="sidebar" aria-label="Меню кабинета">
+    <div class="sidebar-brand"><span class="core-logo" aria-hidden="true">S</span><div><strong>Synapse Business</strong><span>Личный кабинет</span></div></div>
+    <div class="project-picker">
+      <p class="project-label">Проект</p>
+      <button class="project-trigger" id="project-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="project-menu">
+        <span class="project-mark" id="project-mark" aria-hidden="true"></span>
+        <span class="project-name" id="project-name"></span>
+        <span class="project-chevron" aria-hidden="true">⌄</span>
+      </button>
+      <div class="project-menu" id="project-menu" role="menu" aria-label="Выбор проекта" hidden></div>
+    </div>
+    <p class="no-projects" id="no-projects" role="status" hidden>Для учётной записи не настроены проекты</p>
+    <nav class="nav" aria-label="Разделы кабинета">
+      <button class="nav-category" type="button" aria-expanded="true" aria-controls="analytics-menu">Аналитика</button>
+      <div class="subnav" id="analytics-menu">
+        <a class="nav-link" href="#analytics-through" data-view-link="analytics-through">Сквозная аналитика</a>
+      </div>
+      <a class="nav-link" href="#crm" data-view-link="crm">ЦРМ</a>
+      <button class="nav-category" type="button" aria-expanded="true" aria-controls="site-menu">Сайт</button>
+      <div class="subnav" id="site-menu">
+        <a class="nav-link" href="#sites" data-view-link="sites">Сайты</a>
+        <a class="nav-link" href="#site-editor" data-view-link="site-editor">Редактировать сайт</a>
+        <a class="nav-link" href="#price" data-view-link="price">Прайс</a>
+      </div>
+      <a class="nav-link" href="#chat" data-view-link="chat">Чат</a>
+      <a class="nav-link" href="#settings" data-view-link="settings">Настройки</a>
+      <a class="nav-link" href="#account" data-view-link="account">Аккаунт</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="account-summary"><span class="account-avatar" id="account-avatar" aria-hidden="true"></span><div><strong id="account-name"></strong><span id="account-role"></span></div></div>
+      <button class="logout" id="logout" type="button">Выйти</button>
+    </div>
+  </aside>
+  <button class="backdrop" id="backdrop" type="button" aria-label="Закрыть меню" hidden></button>
+  <main class="main" id="main-content" tabindex="-1">
+    <div class="content-header"><p id="startup-error" class="startup-error" role="alert" hidden></p></div>
+    <section class="view-panel" id="analytics-through-view" data-view="analytics-through">
+      <div class="content-header"><h1>Сквозная аналитика</h1></div><div class="card"><p class="development">В разработке</p></div>
+    </section>
+    <section class="view-panel" id="crm-view" data-view="crm" hidden>
+      <div class="content-header"><h1>ЦРМ</h1></div>
+      <p class="notice">Связь CRM с выбранным проектом — в разработке. Ниже показана текущая общая CRM.</p>
+      <div class="card">
+        <div class="crm-toolbar">
+          <div class="crm-periods" id="crm-periods" aria-label="Период">
+            <button class="crm-period" type="button" data-crm-period="today" aria-pressed="true">Сегодня</button>
+            <button class="crm-period" type="button" data-crm-period="week" aria-pressed="false">Неделя</button>
+            <button class="crm-period" type="button" data-crm-period="month" aria-pressed="false">Месяц</button>
+          </div>
+          <div class="crm-filters"><select class="crm-filter" id="crm-stage-filter" aria-label="Фильтр по этапу"></select><select class="crm-filter" id="crm-source-filter" aria-label="Фильтр по источнику"></select></div>
+        </div>
+        <div id="crm-content" aria-live="polite"></div>
+      </div>
+    </section>
+    <section class="view-panel" id="sites-view" data-view="sites" hidden>
+      <div class="content-header"><h1>Сайты</h1></div><div class="card"><p class="development">В разработке</p></div>
+    </section>
+    <section class="view-panel" id="site-editor-view" data-view="site-editor" hidden>
+      <div class="content-header"><h1>Редактировать сайт</h1></div><div class="tool-content" data-tool="site"></div>
+    </section>
+    <section class="view-panel" id="price-view" data-view="price" hidden>
+      <div class="content-header"><h1>Прайс</h1></div><div class="tool-content" data-tool="price"></div>
+    </section>
+    <section class="view-panel" id="chat-view" data-view="chat" hidden>
+      <div class="content-header"><h1>Чат</h1></div>
+      <p class="notice">Связь чата с выбранным проектом — в разработке. В текущем inbox используйте встроенный фильтр компаний.</p>
+      <iframe class="tool-frame" data-src="https://chat.synapsebusiness.ru/" title="Чат"></iframe>
+    </section>
+    <section class="view-panel" id="settings-view" data-view="settings" hidden>
+      <div class="content-header"><h1>Настройки</h1></div><div class="card"><p class="development">В разработке</p></div>
+    </section>
+    <section class="view-panel" id="account-view" data-view="account" hidden>
+      <div class="content-header"><h1>Аккаунт</h1></div><div class="card">
+        <dl class="account-details"><div><dt>Имя</dt><dd id="account-detail-name"></dd></div><div><dt>Роль</dt><dd id="account-detail-role"></dd></div></dl>
+        <p class="development">В разработке</p><p><button class="logout" id="account-logout" type="button">Выйти</button></p>
+      </div>
+    </section>
+  </main>
 </div>
-
-<button
-class="layout-button"
-id="layout-open"
-type="button"
-aria-haspopup="dialog"
-aria-controls="layout-panel"
->
-Настроить кабинет
-</button>
-
-<div class="account">
-<span class="account-copy">
-<strong id="account-name"></strong>
-<span id="account-business"></span>
-</span>
-<span class="account-avatar" id="account-avatar" aria-hidden="true"></span>
-<button class="glass-pill" id="logout" type="button">Выйти</button>
-</div>
-</div>
-</header>
-
-<main class="app-shell" id="main-content">
-<aside class="demo-banner">
-<strong>DEMO</strong>
-<span>
-Все показатели, статусы, диалоги и действия системы ниже являются
-демонстрационным набором. Каждая числовая величина отмечена бейджем SAMPLE.
-</span>
-</aside>
-
-<section
-class="view-panel"
-id="cabinet-view"
-role="tabpanel"
-aria-labelledby="cabinet-tab"
-data-view="cabinet"
->
-<header class="page-heading">
-<div>
-<p class="eyebrow">Кабинет владельца</p>
-<h1>Ваш бизнес — в одной картине</h1>
-<p>
-Деньги, путь клиента, источники, диалоги и продажи TaiSabai
-собраны в одном рабочем контуре.
-</p>
-</div>
-<span class="context-pill">TaiSabai · тестовый период</span>
-</header>
-
-<section class="dashboard-section" aria-labelledby="money-title" data-block-id="money">
-<div class="section-head">
-<div>
-<p class="section-kicker">Экономика</p>
-<h2 id="money-title">Деньги</h2>
-</div>
-<p class="section-description">
-Сводка вложений, полученной выручки и возврата маркетинговых инвестиций.
-</p>
-</div>
-<div class="money-grid" id="money-grid"></div>
-</section>
-
-<section class="dashboard-section" aria-labelledby="funnel-title" data-block-id="funnel">
-<div class="section-head">
-<div>
-<p class="section-kicker">Путь клиента</p>
-<h2 id="funnel-title">Воронка</h2>
-</div>
-<p class="section-description">
-Нажмите на ступень, чтобы увидеть возможные точки потери.
-</p>
-</div>
-
-<div class="funnel-track" id="funnel-track"></div>
-
-<div
-class="loss-panel"
-id="loss-panel"
-aria-live="polite"
-aria-labelledby="loss-panel-title"
->
-<div>
-<p class="loss-panel-label">Где теряем</p>
-<h3 id="loss-panel-title"></h3>
-</div>
-<ul class="loss-list" id="loss-list"></ul>
-</div>
-</section>
-
-<section class="dashboard-section" aria-labelledby="sources-title" data-block-id="sources">
-<div class="section-head">
-<div>
-<p class="section-kicker">Привлечение</p>
-<h2 id="sources-title">Источники</h2>
-</div>
-<p class="section-description">
-Площадки, их демонстрационный статус и переходы в контур TaiSabai.
-</p>
-</div>
-<div class="source-grid" id="source-grid"></div>
-</section>
-
-<section class="dashboard-section" aria-labelledby="dialogs-title" data-block-id="dialogs">
-<div class="section-head">
-<div>
-<p class="section-kicker">Коммуникации</p>
-<h2 id="dialogs-title">Последние диалоги</h2>
-</div>
-<p class="section-description">
-Единый список обращений независимо от канала, из которого пришёл человек.
-</p>
-</div>
-<div class="dialog-list" id="dialog-list"></div>
-</section>
-
-<section class="dashboard-section" aria-labelledby="crm-title" data-block-id="crm">
-<div class="section-head">
-<div>
-<p class="section-kicker">Продажи</p>
-<h2 id="crm-title">CRM</h2>
-</div>
-<p class="section-description">
-Воронка заявок и выручка по данным сервиса CRM.
-</p>
-</div>
-<div class="crm-toolbar">
-<div class="crm-periods" id="crm-periods" aria-label="Период">
-<button class="crm-period" type="button" data-crm-period="today" aria-pressed="true">Сегодня</button>
-<button class="crm-period" type="button" data-crm-period="week" aria-pressed="false">Неделя</button>
-<button class="crm-period" type="button" data-crm-period="month" aria-pressed="false">Месяц</button>
-</div>
-<div class="crm-filters">
-<select class="crm-filter" id="crm-stage-filter" aria-label="Фильтр по этапу"></select>
-<select class="crm-filter" id="crm-source-filter" aria-label="Фильтр по источнику"></select>
-</div>
-</div>
-<div id="crm-content" aria-live="polite"></div>
-</section>
-</section>
-
-<section
-class="view-panel"
-id="admin-view"
-role="tabpanel"
-aria-labelledby="admin-tab"
-data-view="admin"
-hidden
->
-<header class="page-heading">
-<div>
-<p class="eyebrow">Агентский контур</p>
-<h1>Админка Synapse Business</h1>
-<p>
-Проекты, интеграции и журнал действий системы без перехода
-между отдельными кабинетами.
-</p>
-</div>
-<span class="context-pill">Портфель проектов</span>
-</header>
-
-<section class="dashboard-section" aria-labelledby="projects-title" data-block-id="projects">
-<div class="section-head">
-<div>
-<p class="section-kicker">Управление портфелем</p>
-<h2 id="projects-title">Проекты</h2>
-</div>
-<p class="section-description">
-Состояние сайта, источников и CRM по каждому бизнесу.
-</p>
-</div>
-
-<div class="project-table" id="project-table">
-<div class="project-row project-row-header" aria-hidden="true">
-<span>Проект</span>
-<span>Направления</span>
-<span>Сайт</span>
-<span>Источники</span>
-<span>CRM</span>
-</div>
-</div>
-</section>
-
-<section class="dashboard-section" aria-labelledby="integrations-title" data-block-id="integrations">
-<div class="section-head">
-<div>
-<p class="section-kicker">Подключения</p>
-<h2 id="integrations-title">Интеграции</h2>
-</div>
-<p class="section-description">
-Кнопки подключения являются заглушками и не отправляют внешние запросы.
-</p>
-</div>
-<div class="integration-grid" id="integration-grid"></div>
-</section>
-
-<section class="dashboard-section" aria-labelledby="activity-title" data-block-id="activity">
-<div class="section-head">
-<div>
-<p class="section-kicker">Журнал</p>
-<h2 id="activity-title">Что сделала система</h2>
-</div>
-<p class="section-description">
-Последовательная история демонстрационных действий Synapse.
-</p>
-</div>
-<div class="activity-list" id="activity-list"></div>
-</section>
-</section>
-<section class="view-panel tool-view" id="site-view" role="tabpanel" aria-labelledby="site-tab" data-view="site" hidden>
-<iframe class="tool-frame" data-src="site-editor.html?site=alvi" title="Редактор сайта выбранного клиента"></iframe>
-</section>
-<section class="view-panel tool-view" id="price-view" role="tabpanel" aria-labelledby="price-tab" data-view="price" hidden>
-<iframe class="tool-frame" data-src="price-editor.html?site=alvi" title="Редактор прайса выбранного клиента"></iframe>
-</section>
-<section class="view-panel tool-view" id="chat-view" role="tabpanel" aria-labelledby="chat-tab" data-view="chat" hidden>
-<iframe class="tool-frame" data-src="https://chat.synapsebusiness.ru/" title="Чат"></iframe>
-</section>
-</main>
-
-<div class="layout-panel" id="layout-panel" role="dialog" aria-modal="true" aria-labelledby="layout-title" hidden>
-<div class="layout-panel-card">
-<div class="layout-panel-head">
-<div>
-<h2 id="layout-title">Настроить кабинет</h2>
-<p>Выберите блоки и диаграммы, которые хотите видеть.</p>
-</div>
-<button class="layout-button layout-close" id="layout-close" type="button" aria-label="Закрыть настройки">×</button>
-</div>
-<div class="layout-options" id="layout-options"></div>
-<button class="layout-button layout-reset" id="layout-reset" type="button">Сбросить по умолчанию</button>
-</div>
-</div>
-
-<div class="toast" id="toast" role="status" aria-live="polite">
-Подключение отключено в демонстрационном файле.
-</div>
-
 <script>
-const DATA_TAISABAI = Object.freeze({
-account: {
-owner: "Владислав",
-business: "TaiSabai",
-role: "Владелец"
-},
-
-money: [
-{
-label: "Вложено",
-value: 186400,
-format: "currency",
-color: "#FF9C9C",
-sparkline: [18, 24, 22, 29, 27, 33, 38, 36]
-},
-{
-label: "Получено",
-value: 412000,
-format: "currency",
-color: "#9FD4FF",
-sparkline: [24, 29, 37, 35, 48, 58, 69, 82]
-},
-{
-label: "ROMI",
-value: 121,
-format: "percent",
-color: "#79DCB6",
-sparkline: [17, 23, 31, 45, 52, 68, 91, 121]
-}
-],
-
-funnel: [
-{
-id: "cold",
-name: "Холодная аудитория",
-value: 84200,
-unit: "контактов с контентом",
-losses: [
-"Не для каждого охватного материала задан следующий шаг.",
-"Часть площадок ещё не передаёт события в общий контур."
-]
-},
-{
-id: "search",
-name: "Поиск и геосервисы",
-value: 6190,
-unit: "переходов из поиска",
-losses: [
-"Карточки и посадочные страницы отвечают не на все поисковые намерения.",
-"Для части геосервисов требуется закончить настройку источников."
-]
-},
-{
-id: "interest",
-name: "Горячий интерес",
-value: 1240,
-unit: "заинтересованных посетителей",
-losses: [
-"Не все посетители доходят до понятного предложения связаться.",
-"Некоторым направлениям не хватает отдельного сценария выбора."
-]
-},
-{
-id: "dialogs",
-name: "Диалоги",
-value: 186,
-unit: "начатых обращений",
-losses: [
-"После первой фразы не всегда сразу зафиксирован следующий шаг.",
-"Часть обращений требует более быстрой квалификации потребности."
-]
-},
-{
-id: "sales",
-name: "CRM и продажи",
-value: 42,
-unit: "активных возможностей",
-losses: [
-"Не у каждой возможности заполнены бюджет и срок решения.",
-"Зависшие сделки требуют автоматического напоминания ответственному."
-]
-}
-],
-
-sources: [
-{ name: "Instagram", icon: "IG", status: "LIVE", transitions: 4280 },
-{ name: "TikTok", icon: "TT", status: "QA", transitions: 3110 },
-{ name: "Telegram", icon: "TG", status: "LIVE", transitions: 948 },
-{ name: "YouTube", icon: "YT", status: "LIVE", transitions: 804 },
-{ name: "VK", icon: "VK", status: "НЕ ПОДКЛЮЧЁН", transitions: 0 },
-{ name: "Яндекс", icon: "Я", status: "QA", transitions: 1510 },
-{ name: "Google", icon: "G", status: "НЕ ПОДКЛЮЧЁН", transitions: 0 },
-{ name: "2ГИС", icon: "2Г", status: "QA", transitions: 623 },
-{ name: "Avito", icon: "A", status: "НЕ ПОДКЛЮЧЁН", transitions: 0 }
-],
-
-dialogs: [
-{
-name: "Анна М.",
-initials: "АМ",
-channel: "Telegram",
-message: "Хотим приехать осенью и понять бюджет отдыха.",
-status: "Новый"
-},
-{
-name: "Михаил К.",
-initials: "МК",
-channel: "Instagram",
-message: "Подскажите, с чего начать подготовку к переезду?",
-status: "Квалификация"
-},
-{
-name: "Екатерина",
-initials: "Е",
-channel: "Telegram",
-message: "Интересует квартира для жизни и возможной аренды.",
-status: "Предложение"
-},
-{
-name: "Дмитрий С.",
-initials: "ДС",
-channel: "YouTube",
-message: "Посмотрел обзор, хочу обсудить программу поездки.",
-status: "В работе"
-},
-{
-name: "Ольга П.",
-initials: "ОП",
-channel: "Яндекс",
-message: "Нужна консультация по выбору района в Паттайе.",
-status: "Следующий шаг"
-}
-],
-
-projects: [
-{
-name: "TaiSabai",
-type: "Туризм и переезд",
-directions: "Отдых · Переезд · Недвижимость",
-website: "LIVE",
-sources: "QA",
-crm: "LIVE"
-},
-{
-name: "ALVI",
-type: "Спа и массаж",
-edit: { label: "Редактировать сайт → Прайс", href: "price-editor.html" }, edit2: { label: "Редактировать сайт → Тексты и фоны", href: "site-editor.html" },
-directions: "Основной сайт · воронки услуг",
-website: "LIVE",
-sources: "QA",
-crm: "QA"
-},
-{
-name: "Avokado",
-type: "Студия для женщин",
-edit: { label: "Редактировать сайт → Прайс", href: "price-editor.html?site=avokado" }, edit2: { label: "Редактировать сайт → Тексты и фоны", href: "site-editor.html?site=avokado" },
-directions: "Основной сайт · заявки",
-website: "QA",
-sources: "НЕ ПОДКЛЮЧЁН",
-crm: "QA"
-}
-],
-
-integrations: [
-{
-name: "Telegram",
-icon: "TG",
-purpose: "Диалоги, заявки и рабочие уведомления",
-status: "LIVE"
-},
-{
-name: "Instagram",
-icon: "IG",
-purpose: "Источники трафика и обращения",
-status: "QA"
-},
-{
-name: "Яндекс",
-icon: "Я",
-purpose: "Поиск, реклама и аналитические события",
-status: "QA"
-},
-{
-name: "Google",
-icon: "G",
-purpose: "Поиск, реклама и аналитика",
-status: "НЕ ПОДКЛЮЧЁН"
-},
-{
-name: "2ГИС",
-icon: "2Г",
-purpose: "Геосервис и переходы в воронку",
-status: "QA"
-},
-{
-name: "Avito",
-icon: "A",
-purpose: "Объявления, обращения и атрибуция",
-status: "НЕ ПОДКЛЮЧЁН"
-}
-],
-
-activity: [
-{
-time: "09:42",
-action: "Сопоставила заявку с источником",
-detail: "Обращение из Instagram добавлено в демонстрационный путь клиента."
-},
-{
-time: "09:18",
-action: "Создала карточку лида",
-detail: "Диалог из Telegram передан в демонстрационный CRM-контур."
-},
-{
-time: "08:54",
-action: "Пометила интеграцию для проверки",
-detail: "Статус Яндекса переведён в QA внутри демонстрационного набора."
-},
-{
-time: "08:31",
-action: "Обновила статус сделки",
-detail: "Возможность перемещена на этап «Оплата»."
-},
-{
-time: "08:07",
-action: "Проверила состояние сайта",
-detail: "Демонстрационный проект ALVI отмечен статусом LIVE."
-},
-{
-time: "07:45",
-action: "Сформировала сводку потерь",
-detail: "В кабинете обновлены точки внимания по ступеням воронки."
-}
-]
-});
-
-const DATA_ALVI = Object.freeze({
-account: { owner: "ALVI", business: "ALVI", role: "Спа и массаж" },
-money: [
-{ label: "Вложено", value: 74300, format: "currency", color: "#FF9C9C", sparkline: [12,15,14,19,17,21,24,23] },
-{ label: "Получено", value: 196000, format: "currency", color: "#9FD4FF", sparkline: [16,19,24,26,31,38,44,52] },
-{ label: "ROMI", value: 164, format: "percent", color: "#79DCB6", sparkline: [22,31,44,58,77,98,131,164] }
-],
-funnel: [
-{ id:"cold", name:"Холодная аудитория", value:21800, unit:"контактов с контентом",
-losses:["Часть постов не ведёт к записи на процедуру.","ВКонтакте пока не передаёт события в общий контур."] },
-{ id:"search", name:"Поиск и геосервисы", value:3940, unit:"переходов из поиска",
-losses:["Карточки на картах заполнены не полностью.","Часть запросов о ценах остаётся без ответа на странице."] },
-{ id:"interest", name:"Горячий интерес", value:870, unit:"заинтересованных посетителей",
-losses:["Не у всех услуг есть понятная кнопка записи.","Прайс виден не с первого экрана."] },
-{ id:"dialogs", name:"Диалоги", value:214, unit:"начатых обращений",
-losses:["Часть обращений приходит в нерабочее время.","Не для каждого диалога зафиксирован следующий шаг."] },
-{ id:"sales", name:"CRM и продажи", value:96, unit:"активных записей",
-losses:["Повторные визиты не отслеживаются как отдельная воронка.","Отменённые записи не возвращаются в работу."] }
-],
-sources: [
-{ name:"Instagram", icon:"IG", status:"QA", transitions:1870 },
-{ name:"TikTok", icon:"TT", status:"НЕ ПОДКЛЮЧЁН", transitions:0 },
-{ name:"Telegram", icon:"TG", status:"LIVE", transitions:612 },
-{ name:"YouTube", icon:"YT", status:"НЕ ПОДКЛЮЧЁН", transitions:0 },
-{ name:"VK", icon:"VK", status:"QA", transitions:980 },
-{ name:"Яндекс", icon:"Я", status:"LIVE", transitions:2140 },
-{ name:"Google", icon:"G", status:"НЕ ПОДКЛЮЧЁН", transitions:0 },
-{ name:"2ГИС", icon:"2Г", status:"LIVE", transitions:1560 },
-{ name:"Avito", icon:"A", status:"НЕ ПОДКЛЮЧЁН", transitions:0 }
-],
-dialogs: [
-{ name:"Ирина В.", initials:"ИВ", channel:"Яндекс", message:"Хочу записаться на массаж спины в выходные.", status:"Новый" },
-{ name:"Светлана", initials:"С", channel:"2ГИС", message:"Подскажите цену на спа-программу для двоих.", status:"Квалификация" },
-{ name:"Марина К.", initials:"МК", channel:"Telegram", message:"Можно перенести запись на другой день?", status:"В работе" },
-{ name:"Алексей", initials:"А", channel:"Instagram", message:"Есть подарочные сертификаты?", status:"Предложение" },
-{ name:"Ольга Д.", initials:"ОД", channel:"Яндекс", message:"Приду с подругой, нужны два места подряд.", status:"Следующий шаг" }
-],
-projects: [
-{
-name: "ALVI",
-type: "Спа и массаж",
-directions: "Основной сайт · прайс · витрины главной",
-website: "LIVE",
-sources: "QA",
-crm: "QA",
-edit: { label: "Редактировать сайт → Прайс", href: "price-editor.html" }, edit2: { label: "Редактировать сайт → Тексты и фоны", href: "site-editor.html" }
-}
-], integrations: [], activity: []
-});
-
-const PROFILES = {
-"vladislav": { data: DATA_TAISABAI, admin: true, label: "Владислав Ксензов · владелец" },
-"tatyana": { data: DATA_ALVI, admin: false, label: "Татьяна · ALVI", owner: "Татьяна" }
-};
-
 (() => {
-"use strict";
-
-let DATA = DATA_TAISABAI;
-
-const numberFormatter = new Intl.NumberFormat("ru-RU");
-const reducedMotion =
-typeof window.matchMedia === "function" &&
-window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-const byId = (id) => document.getElementById(id);
-
-// Set this to the CRM service origin (without a trailing slash) when it is deployed.
-const CRM_API = "/content/crm";
-const CRM_STAGES = Object.freeze([
-{ id:"new", label:"Новая" }, { id:"in_progress", label:"В работе" },
-{ id:"booked", label:"Записан" }, { id:"visited", label:"Пришёл" },
-{ id:"sale", label:"Продажа" }, { id:"rejected", label:"Отказ" }
-]);
-
-// Every CRM data request, including edits, goes through this function.
-const crmAPI = async (path, options = {}) => {
-if (!CRM_API) throw new Error("CRM_NOT_CONNECTED");
-const response = await fetch(`${CRM_API.replace(/\/$/, "")}${path}`, {
-...options,
-headers: { "Accept":"application/json", "Content-Type":"application/json", ...(options.headers || {}) }
-});
-if (!response.ok) throw new Error(`CRM_HTTP_${response.status}`);
-if (response.status === 204) return null;
-return response.json();
-};
-
-const LAYOUT_STORAGE_KEY = "synapse_cabinet_layout_v1";
-const CABINET_BLOCKS = [
-{ id: "money", label: "Деньги" },
-{ id: "money-chart-invested", label: "Диаграмма: Вложено" },
-{ id: "money-chart-received", label: "Диаграмма: Получено" },
-{ id: "money-chart-romi", label: "Диаграмма: ROMI" },
-{ id: "funnel", label: "Воронка" },
-{ id: "sources", label: "Источники" },
-{ id: "dialogs", label: "Последние диалоги" },
-{ id: "crm", label: "CRM" },
-{ id: "projects", label: "Проекты" },
-{ id: "integrations", label: "Интеграции" },
-{ id: "activity", label: "Что сделала система" }
-];
-
-const readLayout = () => {
-try {
-const value = JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY) || "{}");
-return value && typeof value === "object" ? value : {};
-} catch (error) {
-return {};
-}
-};
-
-let cabinetLayout = readLayout();
-
-const applyLayout = () => {
-let style = byId("cabinet-layout-style");
-
-if (!style) {
-style = document.createElement("style");
-style.id = "cabinet-layout-style";
-document.head.appendChild(style);
-}
-
-style.textContent = CABINET_BLOCKS
-.filter((block) => cabinetLayout[block.id] === false)
-.map((block) => `[data-block-id="${block.id}"]{display:none!important}`)
-.join("");
-};
-
-const saveLayout = () => {
-try {
-localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(cabinetLayout));
-} catch (error) {
-// Visibility still works for this session when storage is unavailable.
-}
-};
-
-const syncLayoutControls = () => {
-document.querySelectorAll("[data-layout-toggle]").forEach((toggle) => {
-toggle.checked = cabinetLayout[toggle.dataset.layoutToggle] !== false;
-});
-};
-
-const bindLayoutPanel = () => {
-const panel = byId("layout-panel");
-const openButton = byId("layout-open");
-const closeButton = byId("layout-close");
-const options = byId("layout-options");
-
-options.innerHTML = CABINET_BLOCKS.map((block) => `
-<label class="layout-option">
-<span>${escapeHTML(block.label)}</span>
-<input class="layout-switch" type="checkbox" data-layout-toggle="${block.id}">
-</label>
-`).join("");
-
-const closePanel = () => {
-panel.hidden = true;
-document.body.classList.remove("layout-panel-open");
-openButton.setAttribute("aria-expanded", "false");
-openButton.focus();
-};
-
-const openPanel = () => {
-syncLayoutControls();
-panel.hidden = false;
-document.body.classList.add("layout-panel-open");
-openButton.setAttribute("aria-expanded", "true");
-closeButton.focus();
-};
-
-openButton.setAttribute("aria-expanded", "false");
-openButton.addEventListener("click", openPanel);
-closeButton.addEventListener("click", closePanel);
-panel.addEventListener("click", (event) => {
-if (event.target === panel) closePanel();
-});
-panel.addEventListener("keydown", (event) => {
-if (event.key === "Escape") closePanel();
-});
-options.addEventListener("change", (event) => {
-const toggle = event.target.closest("[data-layout-toggle]");
-if (!toggle) return;
-cabinetLayout[toggle.dataset.layoutToggle] = toggle.checked;
-saveLayout();
-applyLayout();
-});
-byId("layout-reset").addEventListener("click", () => {
-cabinetLayout = {};
-try {
-localStorage.removeItem(LAYOUT_STORAGE_KEY);
-} catch (error) {
-// Reset the current page even when storage is unavailable.
-}
-applyLayout();
-syncLayoutControls();
-});
-};
-
-const escapeHTML = (value) =>
-String(value)
-.replaceAll("&", "&amp;")
-.replaceAll("<", "&lt;")
-.replaceAll(">", "&gt;")
-.replaceAll('"', "&quot;")
-.replaceAll("'", "&#039;");
-
-const sampleBadge = () =>
-'<span class="sample-badge" aria-label="Демонстрационное значение">SAMPLE</span>';
-
-const formatNumber = (value) => numberFormatter.format(value);
-
-const formatCurrency = (value) =>
-`${numberFormatter.format(value)} ₽`;
-
-const formatMetric = (metric) => {
-if (metric.format === "currency") {
-return formatCurrency(metric.value);
-}
-
-if (metric.format === "percent") {
-return `${formatNumber(metric.value)}%`;
-}
-
-return formatNumber(metric.value);
-};
-
-const statusClass = (status) => {
-if (status === "LIVE") return "status-live";
-if (status === "QA") return "status-qa";
-return "status-off";
-};
-
-const statusBadge = (status) =>
-`<span class="status-badge ${statusClass(status)}">${escapeHTML(status)}</span>`;
-
-const makeSparkline = (values, color, index, label) => {
-const width = 260;
-const height = 64;
-const padding = 4;
-const minimum = Math.min(...values);
-const maximum = Math.max(...values);
-const range = Math.max(maximum - minimum, 1);
-const denominator = Math.max(values.length - 1, 1);
-
-const points = values.map((value, pointIndex) => {
-const x = (pointIndex / denominator) * width;
-const normalized = (value - minimum) / range;
-const y = height - padding - normalized * (height - padding * 2);
-return `${x.toFixed(2)},${y.toFixed(2)}`;
-});
-
-const areaPoints = `0,${height} ${points.join(" ")} ${width},${height}`;
-const gradientId = `spark-gradient-${index}`;
-
-return `
-<svg
-class="sparkline"
-data-block-id="money-chart-${["invested", "received", "romi"][index]}"
-viewBox="0 0 ${width} ${height}"
-preserveAspectRatio="none"
-role="img"
-aria-label="Демонстрационная динамика: ${escapeHTML(label)}"
->
-<title>Демонстрационная динамика: ${escapeHTML(label)}</title>
-<defs>
-<linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
-<stop offset="0%" stop-color="${color}" stop-opacity="0.24"></stop>
-<stop offset="100%" stop-color="${color}" stop-opacity="0"></stop>
-</linearGradient>
-</defs>
-<path class="sparkline-grid" d="M0 20 H260 M0 42 H260"></path>
-<polygon points="${areaPoints}" fill="url(#${gradientId})"></polygon>
-<polyline
-class="sparkline-line"
-points="${points.join(" ")}"
-stroke="${color}"
-></polyline>
-</svg>
-`;
-};
-
-const renderIdentity = () => {
-byId("account-name").textContent = DATA.account.owner;
-byId("account-business").textContent =
-`${DATA.account.business} · ${DATA.account.role}`;
-byId("account-avatar").textContent =
-DATA.account.owner.trim().charAt(0).toUpperCase();
-};
-
-const renderMoney = () => {
-byId("money-grid").innerHTML = DATA.money.map((metric, index) => `
-<article class="money-card">
-<p class="metric-label">${escapeHTML(metric.label)}</p>
-<div class="metric-line">
-<strong class="metric-value" style="color:${metric.color}">
-${escapeHTML(formatMetric(metric))}
-</strong>
-${sampleBadge()}
-</div>
-${makeSparkline(
-metric.sparkline,
-metric.color,
-index,
-metric.label
-)}
-</article>
-`).join("");
-};
-
-let activeFunnelIndex = 0;
-
-const renderLossPanel = () => {
-const activeStage = DATA.funnel[activeFunnelIndex];
-
-byId("loss-panel-title").textContent = activeStage.name;
-byId("loss-list").innerHTML = activeStage.losses
-.map((loss) => `<li>${escapeHTML(loss)}</li>`)
-.join("");
-
-document.querySelectorAll("[data-funnel-index]").forEach((button) => {
-const isActive =
-Number(button.dataset.funnelIndex) === activeFunnelIndex;
-button.setAttribute("aria-expanded", String(isActive));
-});
-};
-
-const renderFunnel = () => {
-byId("funnel-track").innerHTML = DATA.funnel.map((stage, index) => `
-<button
-class="funnel-step"
-type="button"
-data-funnel-index="${index}"
-aria-expanded="${index === activeFunnelIndex}"
-aria-controls="loss-panel"
->
-<span class="step-open" aria-hidden="true">＋</span>
-<span class="step-label">${escapeHTML(stage.name)}</span>
-<span class="step-value-line">
-<strong class="step-value">${escapeHTML(formatNumber(stage.value))}</strong>
-${sampleBadge()}
-</span>
-<span class="step-unit">${escapeHTML(stage.unit)}</span>
-</button>
-`).join("");
-
-byId("funnel-track").addEventListener("click", (event) => {
-const button = event.target.closest("[data-funnel-index]");
-if (!button) return;
-
-activeFunnelIndex = Number(button.dataset.funnelIndex);
-renderLossPanel();
-});
-
-renderLossPanel();
-};
-
-const renderSources = () => {
-byId("source-grid").innerHTML = DATA.sources.map((source) => `
-<article class="source-card">
-<div class="source-top">
-<div class="source-identity">
-<span class="source-icon" aria-hidden="true">${escapeHTML(source.icon)}</span>
-<span class="source-name">${escapeHTML(source.name)}</span>
-</div>
-${statusBadge(source.status)}
-</div>
-<div class="source-metric">
-<strong>${escapeHTML(formatNumber(source.transitions))}</strong>
-${sampleBadge()}
-</div>
-<p class="source-caption">переходов</p>
-</article>
-`).join("");
-};
-
-const renderDialogs = () => {
-byId("dialog-list").innerHTML = DATA.dialogs.map((dialog) => `
-<article class="dialog-row">
-<div class="dialog-person">
-<span class="dialog-avatar" aria-hidden="true">
-${escapeHTML(dialog.initials)}
-</span>
-<span>
-<strong class="dialog-name">${escapeHTML(dialog.name)}</strong>
-<span class="channel-label">${escapeHTML(dialog.channel)}</span>
-</span>
-</div>
-<p class="dialog-message">«${escapeHTML(dialog.message)}»</p>
-<span class="lead-status">${escapeHTML(dialog.status)}</span>
-</article>
-`).join("");
-};
-
-let crmState = { period:"today", stage:"", source:"" };
-const crmMissing = () => '<strong>—<small class="crm-no-data">нет данных</small></strong>';
-const crmMetric = (value, currency = false) =>
-(value === null || value === undefined) ? crmMissing() :
-`<strong>${escapeHTML(currency ? formatCurrency(value) : formatNumber(value))}</strong>`;
-const crmStageOptions = (selected) => CRM_STAGES.map((stage) =>
-`<option value="${stage.id}" ${stage.id === selected ? "selected" : ""}>${stage.label}</option>`).join("");
-
-const showCRMPlaceholder = (message = "Сервис заявок ещё не подключён") => {
-byId("crm-content").innerHTML = `<div class="crm-empty"><strong>${escapeHTML(message)}</strong><span>Здесь появятся реальные заявки после подключения сервиса.</span></div>`;
-};
-
-const renderCRMData = (payload) => {
-const summary = payload?.summary || {};
-const funnel = payload?.funnel || {};
-const leads = Array.isArray(payload?.leads) ? payload.leads : [];
-const sources = Array.isArray(payload?.sources) ? payload.sources : [];
-byId("crm-source-filter").innerHTML = '<option value="">Все источники</option>' + sources.map((source) => {
-const value = typeof source === "string" ? source : source?.id;
-const label = typeof source === "string" ? source : (source?.name || source?.id);
-return value == null ? "" : `<option value="${escapeHTML(value)}" ${String(value) === crmState.source ? "selected" : ""}>${escapeHTML(label)}</option>`;
-}).join("");
-const cards = [["Заявок за период","total"],["Дошло до записи","booked"],["Дошло до визита","visited"],["Продаж","sales"],["Выручка","revenue"]];
-byId("crm-content").innerHTML = `
-<div class="crm-summary">${cards.map(([label,key]) => `<article class="crm-summary-card"><span>${label}</span>${crmMetric(summary[key], key === "revenue")}</article>`).join("")}</div>
-<div class="crm-strip">${CRM_STAGES.map((stage) => {
-const item = funnel[stage.id] || {};
-return `<article class="crm-stage"><h3>${stage.label}</h3><div class="crm-data-row"><span class="crm-data-label">Количество</span>${crmMetric(item.count)}</div><div class="crm-data-row"><span class="crm-data-label">Переход</span>${item.conversion === null || item.conversion === undefined ? crmMissing() : `<strong>${escapeHTML(formatNumber(item.conversion))}%</strong>`}</div></article>`;
-}).join("")}</div>
-${leads.length ? `<div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Дата</th><th>Имя</th><th>Контакт</th><th>Канал</th><th>Источник</th><th>Метка</th><th>Этап</th><th>Сумма</th></tr></thead><tbody>${leads.map((lead) => `<tr><td>${escapeHTML(lead.date ?? "—")}</td><td>${escapeHTML(lead.name ?? "—")}</td><td>${escapeHTML(lead.contact ?? "—")}</td><td>${escapeHTML(lead.channel ?? "—")}</td><td>${escapeHTML(lead.source ?? "—")}</td><td>${escapeHTML(lead.tag ?? "—")}</td><td><select data-crm-stage-id="${escapeHTML(lead.id)}" aria-label="Этап заявки ${escapeHTML(lead.name ?? lead.id)}">${crmStageOptions(lead.stage)}</select></td><td><input type="number" min="0" step="1" inputmode="decimal" data-crm-amount-id="${escapeHTML(lead.id)}" value="${escapeHTML(lead.amount ?? "")}" placeholder="—" aria-label="Сумма продажи"></td></tr>`).join("")}</tbody></table></div>` : '<div class="crm-empty"><strong>Заявок за период нет</strong><span>Измените период или фильтры.</span></div>'}`;
-};
-
-const loadCRM = async () => {
-showCRMPlaceholder("Загрузка заявок…");
-try {
-const query = new URLSearchParams({ period:crmState.period });
-if (crmState.stage) query.set("stage", crmState.stage);
-if (crmState.source) query.set("source", crmState.source);
-renderCRMData(await crmAPI(`/dashboard?${query}`));
-} catch (error) { showCRMPlaceholder(); }
-};
-
-const renderCRM = () => {
-byId("crm-stage-filter").innerHTML = '<option value="">Все этапы</option>' + crmStageOptions("");
-byId("crm-periods").addEventListener("click", (event) => {
-const button = event.target.closest("[data-crm-period]"); if (!button) return;
-crmState.period = button.dataset.crmPeriod;
-byId("crm-periods").querySelectorAll("button").forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
-loadCRM();
-});
-byId("crm-stage-filter").addEventListener("change", (event) => { crmState.stage = event.target.value; loadCRM(); });
-byId("crm-source-filter").addEventListener("change", (event) => { crmState.source = event.target.value; loadCRM(); });
-byId("crm-content").addEventListener("change", async (event) => {
-const stageId = event.target.dataset.crmStageId;
-const amountId = event.target.dataset.crmAmountId;
-if (!stageId && !amountId) return;
-const id = stageId || amountId;
-const body = stageId ? { stage:event.target.value } : { amount:event.target.value === "" ? null : Number(event.target.value) };
-event.target.disabled = true;
-try { await crmAPI(`/leads/${encodeURIComponent(id)}`, { method:"PATCH", body:JSON.stringify(body) }); await loadCRM(); }
-catch (error) { event.target.disabled = false; showCRMPlaceholder(); }
-});
-loadCRM();
-};
-
-const renderProjects = () => {
-const table = byId("project-table");
-
-table.insertAdjacentHTML(
-"beforeend",
-DATA.projects.map((project) => `
-<article class="project-row">
-<div class="project-cell project-cell-main">
-<span class="project-cell-label">Проект</span>
-<strong class="project-name">${escapeHTML(project.name)}</strong>
-<span class="project-type">${escapeHTML(project.type)}</span>
-</div>
-
-<div class="project-cell project-cell-directions">
-<span class="project-cell-label">Направления</span>
-<p class="project-directions">${escapeHTML(project.directions)}</p>
-</div>
-
-<div class="project-cell">
-<span class="project-cell-label">Сайт</span>
-${statusBadge(project.website)}
-<span class="admin-sample-line">${sampleBadge()} демо-статус</span>
-${project.edit ? `<a class="project-edit-link" href="${escapeHTML(project.edit.href)}">${escapeHTML(project.edit.label)}</a>` : ""}
-${project.edit2 ? `<a class="project-edit-link" href="${escapeHTML(project.edit2.href)}">${escapeHTML(project.edit2.label)}</a>` : ""}
-</div>
-
-<div class="project-cell">
-<span class="project-cell-label">Источники</span>
-${statusBadge(project.sources)}
-<span class="admin-sample-line">${sampleBadge()} демо-статус</span>
-</div>
-
-<div class="project-cell">
-<span class="project-cell-label">CRM</span>
-${statusBadge(project.crm)}
-<span class="admin-sample-line">${sampleBadge()} демо-статус</span>
-</div>
-</article>
-`).join("")
-);
-};
-
-const renderIntegrations = () => {
-byId("integration-grid").innerHTML = DATA.integrations.map((integration) => `
-<article class="integration-card">
-<span class="integration-icon" aria-hidden="true">
-${escapeHTML(integration.icon)}
-</span>
-
-<div class="integration-copy">
-<strong>${escapeHTML(integration.name)}</strong>
-<p>${escapeHTML(integration.purpose)}</p>
-<div class="integration-status-line">
-${statusBadge(integration.status)}
-${sampleBadge()}
-</div>
-</div>
-
-<a
-class="glass-pill"
-href="#"
-data-integration-action
-aria-label="Подключить ${escapeHTML(integration.name)}"
->
-Подключить
-</a>
-</article>
-`).join("");
-};
-
-const renderActivity = () => {
-byId("activity-list").innerHTML = DATA.activity.map((item) => `
-<article class="activity-row">
-<div class="activity-time">
-<time>${escapeHTML(item.time)}</time>
-${sampleBadge()}
-</div>
-<span class="activity-node" aria-hidden="true">S</span>
-<div class="activity-copy">
-<strong>${escapeHTML(item.action)}</strong>
-<p>${escapeHTML(item.detail)}</p>
-</div>
-</article>
-`).join("");
-};
-
-let toastTimer = null;
-
-const showToast = () => {
-const toast = byId("toast");
-toast.classList.add("is-visible");
-
-if (toastTimer !== null) {
-window.clearTimeout(toastTimer);
-}
-
-toastTimer = window.setTimeout(() => {
-toast.classList.remove("is-visible");
-}, 2600);
-};
-
-const bindIntegrationPlaceholders = () => {
-byId("integration-grid").addEventListener("click", (event) => {
-const action = event.target.closest("[data-integration-action]");
-if (!action) return;
-
-event.preventDefault();
-showToast();
-});
-};
-
-const VIEW_TITLES = { cabinet: "Кабинет", admin: "Админка", site: "Сайт — редактор", price: "Прайс — редактор", chat: "Чат" };
-
-const editorClient = byId("editor-client");
-editorClient.addEventListener("change", () => {
-  ["site", "price"].forEach((kind) => {
-    const frame = document.querySelector(`#${kind}-view iframe`);
-    const next = `${kind}-editor.html?site=${editorClient.value}`;
-    frame.dataset.src = next;
-    if (frame.getAttribute("src")) frame.src = next;
+  "use strict";
+
+  const PROJECTS = Object.freeze([
+    { id: "synapse-business", name: "Synapse Бизнес" },
+    { id: "taisabai", name: "ТайСабай" },
+    { id: "novyi-etap", name: "НовыйЭтап" },
+    { id: "alvi", name: "Алви" },
+    { id: "avokado", name: "Авокадо" },
+    { id: "palitra-love", name: "Палитра лав" }
+  ]);
+  const VIEW_TITLES = Object.freeze({
+    "analytics-through": "Сквозная аналитика",
+    crm: "ЦРМ",
+    sites: "Сайты",
+    "site-editor": "Редактировать сайт",
+    price: "Прайс",
+    chat: "Чат",
+    settings: "Настройки",
+    account: "Аккаунт"
   });
-});
-const setView = (viewName, shouldScroll) => {
-const isCabinet = viewName === "cabinet";
+  const CRM_API = "/content/crm";
+  const CRM_STAGES = Object.freeze([
+    { id: "new", label: "Новая" },
+    { id: "in_progress", label: "В работе" },
+    { id: "booked", label: "Записан" },
+    { id: "visited", label: "Пришёл" },
+    { id: "sale", label: "Продажа" },
+    { id: "rejected", label: "Отказ" }
+  ]);
+  const byId = (id) => document.getElementById(id);
+  const escapeHTML = (value) => String(value).replace(/[&<>'"]/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;"
+  })[character]);
 
-document.querySelectorAll(".view-panel[data-view]").forEach((panel) => {
-const on = panel.dataset.view === viewName;
-panel.hidden = !on;
-if (on) {
-const frame = panel.querySelector("iframe[data-src]");
-if (frame && !frame.src) frame.src = frame.dataset.src;
-}
-});
-document.querySelector(".demo-banner").hidden = !isCabinet && viewName !== "admin";
+  let identity = null;
+  let allowedProjects = [];
+  let selectedProjectId = null;
+  let currentView = "analytics-through";
+  let crmBound = false;
+  let drawerOpen = false;
 
-document.querySelectorAll("[data-view-target]").forEach((button) => {
-const isActive = button.dataset.viewTarget === viewName;
-button.setAttribute("aria-selected", String(isActive));
-button.tabIndex = isActive ? 0 : -1;
-});
+  const allowedProjectsFor = (profile) => {
+    if (profile.login === "vladislav" && profile.role === "owner" &&
+        Array.isArray(profile.sites) && profile.sites.includes("*")) {
+      return [...PROJECTS];
+    }
+    if (profile.login === "tatyana" && profile.role === "editor" && Array.isArray(profile.sites)) {
+      const permitted = new Set(profile.sites);
+      return PROJECTS.filter((project) => ["alvi", "avokado"].includes(project.id) && permitted.has(project.id));
+    }
+    return [];
+  };
 
-document.title = (VIEW_TITLES[viewName] || "Кабинет") + " — Synapse Business";
+  const projectStorageKey = () => `synapse_cabinet_project_v1:${identity.login}`;
+  const readSelectedProject = () => {
+    let saved = null;
+    try {
+      saved = localStorage.getItem(projectStorageKey());
+    } catch (error) {
+      saved = null;
+    }
+    return allowedProjects.some((project) => project.id === saved) ? saved : allowedProjects[0]?.id || null;
+  };
+  const saveSelectedProject = () => {
+    if (!selectedProjectId) return;
+    try {
+      localStorage.setItem(projectStorageKey(), selectedProjectId);
+    } catch (error) {
+      // The selected project remains available in memory for this session.
+    }
+  };
+  const selectedProject = () => allowedProjects.find((project) => project.id === selectedProjectId) || null;
+  const setProjectText = (element, project) => {
+    element.textContent = project ? project.name.charAt(0) : "—";
+  };
 
-if (shouldScroll) {
-window.scrollTo({
-top: 0,
-behavior: reducedMotion ? "auto" : "smooth"
-});
-}
-};
+  const renderProjectPicker = () => {
+    const menu = byId("project-menu");
+    const project = selectedProject();
+    menu.replaceChildren();
+    allowedProjects.forEach((item) => {
+      const button = document.createElement("button");
+      const mark = document.createElement("span");
+      const name = document.createElement("span");
+      button.type = "button";
+      button.className = "project-option";
+      button.dataset.projectId = item.id;
+      button.setAttribute("role", "menuitemradio");
+      button.setAttribute("aria-checked", String(item.id === selectedProjectId));
+      mark.className = "project-mark";
+      mark.setAttribute("aria-hidden", "true");
+      setProjectText(mark, item);
+      name.textContent = item.name;
+      button.append(mark, name);
+      menu.append(button);
+    });
+    byId("project-name").textContent = project?.name || "Проекты не настроены";
+    setProjectText(byId("project-mark"), project);
+    byId("mobile-project").textContent = project?.name || "Проекты не настроены";
+    byId("project-trigger").disabled = allowedProjects.length === 0;
+    byId("no-projects").hidden = allowedProjects.length !== 0;
+    renderTool("site");
+    renderTool("price");
+  };
 
-const bindViewSwitcher = () => {
-const switcher = document.querySelector(".view-switcher");
-const buttons = Array.from(
-switcher.querySelectorAll("[data-view-target]")
-);
+  const closeProjectMenu = (restoreFocus = false) => {
+    const trigger = byId("project-trigger");
+    byId("project-menu").hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+    if (restoreFocus) trigger.focus();
+  };
+  const openProjectMenu = () => {
+    if (!allowedProjects.length) return;
+    byId("project-menu").hidden = false;
+    byId("project-trigger").setAttribute("aria-expanded", "true");
+    const selected = byId("project-menu").querySelector('[aria-checked="true"]');
+    (selected || byId("project-menu").querySelector("button"))?.focus();
+  };
+  const toggleProjectMenu = () => {
+    if (byId("project-menu").hidden) openProjectMenu();
+    else closeProjectMenu(true);
+  };
+  const chooseProject = (projectId) => {
+    if (!allowedProjects.some((project) => project.id === projectId)) return;
+    selectedProjectId = projectId;
+    saveSelectedProject();
+    renderProjectPicker();
+    closeProjectMenu(true);
+  };
 
-switcher.addEventListener("click", (event) => {
-const button = event.target.closest("[data-view-target]");
-if (!button) return;
+  const renderTool = (kind) => {
+    const container = document.querySelector(`[data-tool="${kind}"]`);
+    if (!container) return;
+    const supported = ["alvi", "avokado"].includes(selectedProjectId);
+    const expected = supported ? `${kind}-editor.html?site=${selectedProjectId}` : null;
+    const frame = container.querySelector("iframe");
+    if (!expected) {
+      container.replaceChildren();
+      const card = document.createElement("div");
+      const message = document.createElement("p");
+      card.className = "card";
+      message.className = "development";
+      message.textContent = "В разработке";
+      card.append(message);
+      container.append(card);
+      return;
+    }
+    if (frame?.dataset.src === expected) return;
+    container.replaceChildren();
+    const nextFrame = document.createElement("iframe");
+    nextFrame.className = "tool-frame";
+    nextFrame.dataset.src = expected;
+    nextFrame.title = kind === "site" ? "Редактор сайта выбранного проекта" : "Редактор прайса выбранного проекта";
+    container.append(nextFrame);
+    if (currentView === (kind === "site" ? "site-editor" : "price")) nextFrame.src = expected;
+  };
 
-setView(button.dataset.viewTarget, true);
-});
+  const validView = (value) => Object.hasOwn(VIEW_TITLES, value);
+  const viewFromHash = () => {
+    const value = decodeURIComponent(location.hash.slice(1));
+    return validView(value) ? value : "analytics-through";
+  };
+  const setCategoryForView = (viewName) => {
+    const categoryId = viewName === "analytics-through" ? "analytics-menu" :
+      ["sites", "site-editor", "price"].includes(viewName) ? "site-menu" : null;
+    if (!categoryId) return;
+    const button = document.querySelector(`[aria-controls="${categoryId}"]`);
+    const menu = byId(categoryId);
+    button.setAttribute("aria-expanded", "true");
+    menu.hidden = false;
+  };
+  const setView = (viewName, focusMain = false) => {
+    currentView = validView(viewName) ? viewName : "analytics-through";
+    document.querySelectorAll("[data-view]").forEach((view) => {
+      view.hidden = view.dataset.view !== currentView;
+    });
+    document.querySelectorAll("[data-view-link]").forEach((link) => {
+      if (link.dataset.viewLink === currentView) link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
+    });
+    setCategoryForView(currentView);
+    const title = VIEW_TITLES[currentView];
+    byId("mobile-title").textContent = title;
+    document.title = `${title} — Synapse Business`;
+    const active = document.querySelector(`[data-view="${currentView}"]`);
+    const frame = active.querySelector("iframe[data-src]");
+    if (frame && !frame.getAttribute("src")) frame.src = frame.dataset.src;
+    if (currentView === "crm") loadCRM();
+    if (focusMain) byId("main-content").focus();
+  };
+  const navigate = (viewName) => {
+    if (viewFromHash() === viewName && location.hash) setView(viewName, true);
+    else location.hash = viewName;
+  };
 
-switcher.addEventListener("keydown", (event) => {
-if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
-return;
-}
+  const setDrawer = (open, restoreFocus = false) => {
+    drawerOpen = open;
+    byId("sidebar").classList.toggle("is-open", open);
+    byId("backdrop").hidden = !open;
+    byId("menu-button").setAttribute("aria-expanded", String(open));
+    document.body.classList.toggle("drawer-open", open);
+    if (window.matchMedia("(max-width: 760px)").matches) byId("main-content").inert = open;
+    if (open) byId("sidebar").querySelector("button:not([disabled]), a[href]")?.focus();
+    else if (restoreFocus) byId("menu-button").focus();
+  };
 
-event.preventDefault();
+  const crmAPI = async (path, options = {}) => {
+    const response = await fetch(`${CRM_API}${path}`, {
+      ...options,
+      credentials: "same-origin",
+      headers: { "Accept": "application/json", "Content-Type": "application/json", ...(options.headers || {}) }
+    });
+    if (!response.ok) throw new Error(`CRM_HTTP_${response.status}`);
+    if (response.status === 204) return null;
+    return response.json();
+  };
+  const crmState = { period: "today", stage: "", source: "" };
+  const crmStageOptions = (selected) => CRM_STAGES.map((stage) =>
+    `<option value="${stage.id}"${stage.id === selected ? " selected" : ""}>${stage.label}</option>`
+  ).join("");
+  const renderCRMData = (payload) => {
+    const leads = Array.isArray(payload.leads) ? payload.leads : [];
+    const summary = payload.summary || {};
+    const content = byId("crm-content");
+    content.innerHTML = `
+      <div class="crm-summary">
+        <div class="crm-stat"><span>Заявки</span><strong>${escapeHTML(summary.total ?? leads.length)}</strong></div>
+        <div class="crm-stat"><span>Продажи</span><strong>${escapeHTML(summary.sales ?? "—")}</strong></div>
+        <div class="crm-stat"><span>Выручка</span><strong>${escapeHTML(summary.revenue ?? "—")}</strong></div>
+      </div>
+      ${leads.length ? `<div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Дата</th><th>Имя</th><th>Контакт</th><th>Канал</th><th>Источник</th><th>Этап</th><th>Сумма</th></tr></thead><tbody>${leads.map((lead) => `<tr><td>${escapeHTML(lead.date ?? "—")}</td><td>${escapeHTML(lead.name ?? "—")}</td><td>${escapeHTML(lead.contact ?? "—")}</td><td>${escapeHTML(lead.channel ?? "—")}</td><td>${escapeHTML(lead.source ?? "—")}</td><td><select data-crm-stage-id="${escapeHTML(lead.id)}">${crmStageOptions(lead.stage)}</select></td><td><input type="number" min="0" data-crm-amount-id="${escapeHTML(lead.id)}" value="${escapeHTML(lead.amount ?? "")}"></td></tr>`).join("")}</tbody></table></div>` : '<div class="crm-empty">Заявок за период нет</div>'}`;
+  };
+  const loadCRM = async () => {
+    if (currentView !== "crm") return;
+    byId("crm-content").innerHTML = '<div class="crm-empty">Загрузка CRM…</div>';
+    const query = new URLSearchParams({ period: crmState.period });
+    if (crmState.stage) query.set("stage", crmState.stage);
+    if (crmState.source) query.set("source", crmState.source);
+    try {
+      renderCRMData(await crmAPI(`/dashboard?${query}`));
+    } catch (error) {
+      byId("crm-content").innerHTML = '<div class="crm-error" role="alert">Не удалось загрузить текущую CRM.</div>';
+    }
+  };
+  const renderCRM = () => {
+    byId("crm-stage-filter").innerHTML = '<option value="">Все этапы</option>' + crmStageOptions("");
+    byId("crm-source-filter").innerHTML = '<option value="">Все источники</option>';
+    if (crmBound) return;
+    crmBound = true;
+    byId("crm-periods").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-crm-period]");
+      if (!button) return;
+      crmState.period = button.dataset.crmPeriod;
+      document.querySelectorAll("[data-crm-period]").forEach((item) =>
+        item.setAttribute("aria-pressed", String(item === button)));
+      loadCRM();
+    });
+    byId("crm-stage-filter").addEventListener("change", (event) => {
+      crmState.stage = event.target.value;
+      loadCRM();
+    });
+    byId("crm-source-filter").addEventListener("change", (event) => {
+      crmState.source = event.target.value;
+      loadCRM();
+    });
+    byId("crm-content").addEventListener("change", async (event) => {
+      const stageId = event.target.dataset.crmStageId;
+      const amountId = event.target.dataset.crmAmountId;
+      if (!stageId && !amountId) return;
+      const id = stageId || amountId;
+      const body = stageId ? { stage: event.target.value } : { amount: Number(event.target.value) };
+      try {
+        await crmAPI(`/leads/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) });
+        await loadCRM();
+      } catch (error) {
+        byId("crm-content").insertAdjacentHTML("afterbegin", '<div class="crm-error" role="alert">Не удалось сохранить изменение CRM.</div>');
+      }
+    });
+  };
 
-const currentIndex = buttons.findIndex(
-(button) => button.getAttribute("aria-selected") === "true"
-);
+  const renderIdentity = () => {
+    const name = identity.name || identity.login;
+    const role = identity.role;
+    byId("account-name").textContent = name;
+    byId("account-role").textContent = role;
+    byId("account-avatar").textContent = name.charAt(0).toUpperCase();
+    byId("account-detail-name").textContent = name;
+    byId("account-detail-role").textContent = role;
+  };
+  const showAuthError = (message) => {
+    byId("auth-error").textContent = message;
+    byId("auth-error").hidden = false;
+  };
+  const showStartupError = (message) => {
+    byId("startup-error").textContent = message;
+    byId("startup-error").hidden = false;
+    document.querySelectorAll("[data-view]").forEach((view) => { view.hidden = true; });
+    byId("app").hidden = false;
+  };
+  const enterCabinet = (profile) => {
+    try {
+      if (!profile || typeof profile.login !== "string" || typeof profile.role !== "string") {
+        throw new Error("INVALID_IDENTITY");
+      }
+      identity = profile;
+      allowedProjects = allowedProjectsFor(identity);
+      selectedProjectId = readSelectedProject();
+      renderIdentity();
+      renderProjectPicker();
+      renderCRM();
+      setView(viewFromHash());
+      byId("app").hidden = false;
+      byId("auth").hidden = true;
+    } catch (error) {
+      byId("auth").hidden = true;
+      showStartupError("Не удалось открыть кабинет. Обновите страницу или войдите снова.");
+    }
+  };
+  const logout = async () => {
+    try {
+      await fetch("/content/logout", { method: "POST", credentials: "same-origin" });
+    } catch (error) {
+      // The page reload still returns the user to the server-defined session state.
+    }
+    location.reload();
+  };
 
-const direction = event.key === "ArrowRight" ? 1 : -1;
-const nextIndex =
-(currentIndex + direction + buttons.length) % buttons.length;
-const nextButton = buttons[nextIndex];
+  byId("project-trigger").addEventListener("click", toggleProjectMenu);
+  byId("project-menu").addEventListener("click", (event) => {
+    const option = event.target.closest("[data-project-id]");
+    if (option) chooseProject(option.dataset.projectId);
+  });
+  byId("project-menu").addEventListener("keydown", (event) => {
+    const options = [...byId("project-menu").querySelectorAll("[role='menuitemradio']")];
+    const index = options.indexOf(document.activeElement);
+    let next = null;
+    if (event.key === "ArrowDown") next = options[(index + 1) % options.length];
+    if (event.key === "ArrowUp") next = options[(index - 1 + options.length) % options.length];
+    if (event.key === "Home") next = options[0];
+    if (event.key === "End") next = options.at(-1);
+    if (next) {
+      event.preventDefault();
+      next.focus();
+    }
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".project-picker")) closeProjectMenu();
+  });
+  document.querySelector(".nav").addEventListener("click", (event) => {
+    const category = event.target.closest(".nav-category");
+    if (category) {
+      const expanded = category.getAttribute("aria-expanded") === "true";
+      category.setAttribute("aria-expanded", String(!expanded));
+      byId(category.getAttribute("aria-controls")).hidden = expanded;
+      return;
+    }
+    const link = event.target.closest("[data-view-link]");
+    if (!link) return;
+    event.preventDefault();
+    navigate(link.dataset.viewLink);
+    if (window.matchMedia("(max-width: 760px)").matches) setDrawer(false);
+  });
+  byId("menu-button").addEventListener("click", () => setDrawer(!drawerOpen, drawerOpen));
+  byId("backdrop").addEventListener("click", () => setDrawer(false, true));
+  byId("sidebar").addEventListener("keydown", (event) => {
+    if (event.key !== "Tab" || !drawerOpen) return;
+    const focusable = [...byId("sidebar").querySelectorAll("button:not([disabled]):not([hidden]), a[href]")]
+      .filter((element) => element.offsetParent !== null);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (!byId("project-menu").hidden) {
+      closeProjectMenu(true);
+    } else if (drawerOpen) {
+      setDrawer(false, true);
+    }
+  });
+  window.addEventListener("hashchange", () => setView(viewFromHash(), true));
+  window.addEventListener("resize", () => {
+    if (!window.matchMedia("(max-width: 760px)").matches) {
+      byId("main-content").inert = false;
+      if (drawerOpen) setDrawer(false);
+    }
+  });
+  byId("logout").addEventListener("click", logout);
+  byId("account-logout").addEventListener("click", logout);
+  byId("auth-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const response = await fetch("/content/login", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          login: byId("auth-login").value.trim().toLowerCase(),
+          password: byId("auth-pass").value
+        })
+      });
+      if (!response.ok) {
+        showAuthError(response.status === 429 ? "Слишком много попыток, подождите 10 минут" :
+          "Неверный логин или пароль");
+        return;
+      }
+      enterCabinet(await response.json());
+    } catch (error) {
+      showAuthError("Сервер входа недоступен");
+    }
+  });
 
-nextButton.focus();
-setView(nextButton.dataset.viewTarget, false);
-});
-};
-
-const boot = (profile) => {
-DATA = profile.data;
-renderIdentity();
-
-if (profile.owner) {
-byId("account-name").textContent = profile.owner;
-byId("account-avatar").textContent = profile.owner.charAt(0).toUpperCase();
-}
-
-renderMoney();
-renderFunnel();
-renderSources();
-renderDialogs();
-renderCRM();
-if (profile.admin) {
-renderProjects();
-renderIntegrations();
-renderActivity();
-bindIntegrationPlaceholders();
-} else {
-document.getElementById("admin-tab").hidden = true;
-document.querySelector(".view-switcher").style.gridTemplateColumns = "1fr";
-}
-// Инструменты ALVI: редактор сайта, прайса и чат — для профилей ALVI и владельца
-if (profile.data === DATA_ALVI || profile.admin) {
-["site-tab", "price-tab", "chat-tab"].forEach((id) => { document.getElementById(id).hidden = false; });
-const sw = document.querySelector(".view-switcher");
-sw.classList.add("has-tools");
-sw.style.gridTemplateColumns = "";
-}
-bindViewSwitcher();
-setView("cabinet", false);
-};
-
-const authScreen = byId("auth");
-const authError = byId("auth-error");
-let booted = false;
-
-bindLayoutPanel();
-applyLayout();
-
-const showAuthError = (message) => {
-authError.textContent = message;
-authError.hidden = false;
-};
-const enterCabinet = (identity) => {
-const profile = PROFILES[identity.login];
-if (!profile) { showAuthError("У учётной записи нет профиля кабинета"); return; }
-authError.hidden = true;
-authScreen.hidden = true;
-if (!booted) { boot(profile); booted = true; }
-};
-
-byId("auth-form").addEventListener("submit", async (event) => {
-event.preventDefault();
-try {
-const response = await fetch("/content/login", {
-method: "POST", credentials: "same-origin", headers: { "Content-Type":"application/json" },
-body: JSON.stringify({ login:byId("auth-login").value.trim().toLowerCase(), password:byId("auth-pass").value })
-});
-if (!response.ok) {
-showAuthError(response.status === 429 ? "Слишком много попыток, подождите 10 минут" : "Неверный логин или пароль");
-byId("auth-pass").value = ""; return;
-}
-enterCabinet(await response.json());
-} catch (error) { showAuthError("Сервер входа недоступен"); }
-});
-
-byId("logout").addEventListener("click", async () => {
-try { await fetch("/content/logout", { method:"POST", credentials:"same-origin" }); } catch (error) {}
-location.reload();
-});
-
-(async () => {
-try {
-const response = await fetch("/content/whoami", { credentials:"same-origin", cache:"no-store" });
-if (response.ok) return enterCabinet(await response.json());
-if (response.status !== 401) showAuthError("Сервер входа недоступен");
-} catch (error) { showAuthError("Сервер входа недоступен"); }
-byId("auth-login").focus();
-})();
-})();
-</script>
-<script>
-(function(){
-if('scrollRestoration' in history){ history.scrollRestoration='manual'; }
-function toTop(){ window.scrollTo(0,0);
- if(document.documentElement) document.documentElement.scrollTop=0;
- if(document.body) document.body.scrollTop=0; }
-toTop();
-addEventListener('load',function(){ toTop(); setTimeout(toTop,0); });
-addEventListener('pageshow',function(e){ if(e.persisted) toTop(); });
+  (async () => {
+    try {
+      const response = await fetch("/content/whoami", { credentials: "same-origin", cache: "no-store" });
+      if (response.ok) {
+        enterCabinet(await response.json());
+        return;
+      }
+      if (response.status !== 401) showAuthError("Сервер входа недоступен");
+    } catch (error) {
+      showAuthError("Сервер входа недоступен");
+    }
+    byId("auth-login").focus();
+  })();
 })();
 </script>
 </body>
 </html>
-<!--
-TODO:
-- Отсутствуют.
-- Ссылки кнопок «Подключить» намеренно оставлены заглушками # согласно ТЗ.
-- Все неподтверждённые показатели, статусы, диалоги и действия находятся в объекте DATA и обозначены как SAMPLE.
--->
