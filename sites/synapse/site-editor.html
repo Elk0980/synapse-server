@@ -553,6 +553,10 @@
       renderInspector(); openPanel(); revealRect(m.rect);
     }
     if (m.type === 'alvi-edit-rect') revealRect(m.rect, true);
+    if (m.type === 'alvi-edit-layout' && m.key) {
+      const f = findField(m.key);
+      if (f) { f.layout = m.layout || {}; markDirty(); if (selectedKey === m.key) syncLayoutInputs(f); }
+    }
     if (m.type === 'alvi-edit-section' && m.sectionId) {
       if (sectionOf(m.sectionId)) { selectedSection = m.sectionId; selectedKey = null; renderInspector(); openPanel(); }
     }
@@ -620,7 +624,7 @@
     if (changed) applyView(false);
   }
   canvas.addEventListener('scroll', () => { canvas.scrollTop = 0; canvas.scrollLeft = 0; });
-  function setDevice(name) { if (!DEVICES[name]) return; view.device = name; childHeight = 0; applyView(true); pushView(); }
+  function setDevice(name) { if (!DEVICES[name]) return; view.device = name; childHeight = 0; applyView(true); pushView(); if (mode === 'visual') renderInspector(); }
   function setFull(on) { view.full = !!on; childHeight = 0; applyView(true); pushView(); }
 
   /* панель поверх холста */
@@ -688,15 +692,73 @@
       <select class="ed-select ed-select--mini" data-style-size="${esc(f.key)}">${sizeOpts}</select>
     </span>`;
   }
+  const layoutMode = () => (view.device === 'mobile' ? 'mobile' : 'desktop');
+  const LAYOUT_ZONES = new Set(['promo', 'hero-0', 'hero-1', 'hero-3', 'hero-5', 'hero-7']);
+  function layoutHtml(f) {
+    const sec = sectionOfField(f.key); if (!sec || !LAYOUT_ZONES.has(sec.id)) return '';
+    const L = (f.layout || {})[layoutMode()] || {};
+    const modeLabel = layoutMode() === 'mobile' ? 'телефон' : 'десктоп и планшет';
+    const objectTools = f.added ? `
+        ${f.kind === 'button' ? `<label class="is-wide">Ссылка кнопки<input data-x-href="${esc(f.key)}" value="${esc(f.href || '')}" placeholder="https://… или #gift"></label>` : ''}
+        ${f.kind === 'image' ? `<div class="ed-lay__img"><span class="ed-bg__preview ${f.src ? '' : 'ed-bg__preview--empty'}" style="${f.src ? `background-image:url('${esc(imgUrl(f.src))}')` : ''}">${f.src ? '' : 'нет картинки'}</span><label class="ed-btn ed-btn--small">Загрузить<input type="file" accept="image/jpeg,image/png,image/webp" data-x-upload="${esc(f.key)}" hidden></label></div>` : ''}
+        <button class="ed-btn ed-btn--small ed-btn--danger" type="button" data-x-del="${esc(f.key)}">Удалить объект</button>` : '';
+    return `<div class="ed-lay" data-lay="${esc(f.key)}">
+      <div class="ed-field__label">Расположение · ${modeLabel} <small>(тяните ✥ на странице или введите числа)</small></div>
+      <div class="ed-lay__grid">
+        <label>Сдвиг →<input type="number" data-lay="x" value="${esc(L.x ?? '')}" placeholder="0"></label>
+        <label>Сдвиг ↓<input type="number" data-lay="y" value="${esc(L.y ?? '')}" placeholder="0"></label>
+        <label>Ширина, px<input type="number" data-lay="w" value="${esc(L.w ?? '')}" placeholder="авто"></label>
+        <label>Выравнивание<select class="ed-select ed-select--mini" data-lay="align"><option value="" ${!L.align ? 'selected' : ''}>как на сайте</option><option value="left" ${L.align === 'left' ? 'selected' : ''}>слева</option><option value="center" ${L.align === 'center' ? 'selected' : ''}>по центру</option><option value="right" ${L.align === 'right' ? 'selected' : ''}>справа</option></select></label>
+      </div>
+      <div class="ed-lay__tools">
+        <button class="ed-btn ed-btn--small" type="button" data-lay-hide="${esc(f.key)}">${f.hidden ? 'Показать' : 'Скрыть'}</button>
+        <button class="ed-btn ed-btn--small ed-btn--ghost" type="button" data-lay-reset="${esc(f.key)}">Сбросить положение</button>
+        ${objectTools}
+      </div>
+    </div>`;
+  }
+  function syncLayoutInputs(f) {
+    const box = document.querySelector(`[data-lay="${CSS.escape(f.key)}"]`); if (!box) return;
+    const L = (f.layout || {})[layoutMode()] || {};
+    for (const k of ['x', 'y', 'w', 'align']) { const i = box.querySelector(`[data-lay="${k}"]`); if (i && document.activeElement !== i) i.value = L[k] ?? ''; }
+  }
   function fieldHtml(f, opts = {}) {
     const st = f.style || {};
     const lines = (f.value || '').split('\n').length;
     const rows = Math.min(10, Math.max(lines, Math.ceil((f.value || '').length / 60), 2));
+    const isImage = f.kind === 'image';
     return `<div class="ed-field" data-field-box="${esc(f.key)}">
-      <div class="ed-field__head"><span class="ed-field__label">${esc(f.label)}${opts.showSection ? ` <small>· ${esc(sectionOfField(f.key)?.title || '')}</small>` : ''}</span>${styleControls(f)}</div>
-      <textarea data-field="${esc(f.key)}" rows="${rows}" style="${st.font ? `font-family:'${st.font}', serif;` : ''}">${esc(f.value)}</textarea>
-      <small class="ed-status">Enter — перенос строки на сайте. Можно &lt;em&gt;курсив&lt;/em&gt; и &lt;strong&gt;жирный&lt;/strong&gt;.</small>
+      <div class="ed-field__head"><span class="ed-field__label">${esc(f.label)}${opts.showSection ? ` <small>· ${esc(sectionOfField(f.key)?.title || '')}</small>` : ''}</span>${isImage ? '' : styleControls(f)}</div>
+      ${isImage ? '' : `<textarea data-field="${esc(f.key)}" rows="${rows}" style="${st.font ? `font-family:'${st.font}', serif;` : ''}">${esc(f.value)}</textarea>
+      <small class="ed-status">Enter — перенос строки на сайте. Можно &lt;em&gt;курсив&lt;/em&gt; и &lt;strong&gt;жирный&lt;/strong&gt;.</small>`}
+      ${layoutHtml(f)}
     </div>`;
+  }
+  /* Панель «＋ объект» для баннера и сцен первого экрана */
+  function addObjectHtml(sec) {
+    if (!sec || !LAYOUT_ZONES.has(sec.id)) return '';
+    const zones = sec.id === 'promo'
+      ? [['promo-alvi', 'ALVI (слева)'], ['promo-avokado', 'Авокадо (справа)'], ['promo-head', 'шапка баннера']]
+      : [[sec.id, 'эта сцена']];
+    return `<div class="ed-insp__block ed-add-obj">
+      <div class="ed-field__label">Добавить объект</div>
+      <select class="ed-select" id="ed-obj-zone">${zones.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>
+      <div class="ed-add" style="margin-top:.5rem"><button class="ed-btn ed-btn--small" type="button" data-add-obj="text">＋ Текст</button><button class="ed-btn ed-btn--small" type="button" data-add-obj="button">＋ Кнопка</button><button class="ed-btn ed-btn--small" type="button" data-add-obj="image">＋ Картинка</button></div>
+      <small class="ed-status">Новый объект появляется внизу зоны; дальше его можно тянуть ✥ и менять ширину ↔ прямо на странице.</small>
+    </div>`;
+  }
+  function addObject(kind) {
+    const sec = selectedSection ? sectionOf(selectedSection) : null; if (!sec) return;
+    const zone = $('#ed-obj-zone')?.value || (sec.id === 'promo' ? 'promo-alvi' : sec.id);
+    const id = 'x-' + Date.now().toString(36);
+    const f = { key: `${sec.id}.${id}`, kind, zone, added: true, multiline: kind === 'text',
+      label: kind === 'button' ? 'Кнопка (добавлена)' : kind === 'image' ? 'Картинка (добавлена)' : 'Текст (добавлен)',
+      value: kind === 'button' ? 'Новая кнопка' : kind === 'image' ? '' : 'Новый текст — нажмите, чтобы изменить' };
+    if (kind === 'button') f.href = data.links?.chat || '#';
+    if (kind === 'image') f.src = '';
+    sec.fields = sec.fields || []; sec.fields.push(f);
+    selectedKey = f.key; markDirty(); renderInspector(); pushDoc();
+    setTimeout(() => { if (frameReady) frame.contentWindow.postMessage({ type: 'alvi-edit-scroll', key: f.key }, SITE_ORIGIN); }, 150);
   }
   function backgroundHtml(sec) {
     const bg = sec.background;
@@ -735,7 +797,8 @@
         <div class="ed-field__label">Текст</div>
         ${f ? fieldHtml(f) : '<p class="ed-status">Нажмите на любой текст на странице, чтобы править его здесь или прямо на месте.</p>'}
         ${sec && !f && (sec.fields || []).length ? `<div class="ed-insp__list">${(sec.fields || []).map((x) => `<button class="ed-btn ed-btn--small ed-btn--ghost" type="button" data-pick="${esc(x.key)}">${esc(x.label)}: ${esc((x.value || '').slice(0, 28))}…</button>`).join('')}</div>` : ''}
-      </div>`;
+      </div>
+      ${addObjectHtml(sec)}`;
   }
 
   /* ---------- режим списком (все поля) ---------- */
@@ -775,6 +838,14 @@
       if (!f.style.font && (!f.style.size || f.style.size === 100)) delete f.style;
       markDirty(); pushDoc(); return;
     }
+    if (t.dataset.lay && t.closest('[data-lay]')) {
+      const key = t.closest('.ed-lay').dataset.lay; const f = findField(key); if (!f) return;
+      f.layout = f.layout || {}; const m = layoutMode(); f.layout[m] = f.layout[m] || {};
+      const v = t.value === '' ? undefined : (t.dataset.lay === 'align' ? t.value : Number(t.value));
+      if (v === undefined || v === '') delete f.layout[m][t.dataset.lay]; else f.layout[m][t.dataset.lay] = v;
+      markDirty(); pushDoc(); return;
+    }
+    if (t.dataset.xHref) { const f = findField(t.dataset.xHref); if (f) { f.href = t.value.trim(); markDirty(); pushDoc(); } return; }
     if (t.dataset.opacity) {
       const sec = sectionOf(t.dataset.opacity); if (!sec || !sec.background) return;
       sec.background.opacity = Number(t.value);
@@ -786,6 +857,12 @@
   document.addEventListener('change', async (e) => {
     const t = e.target;
     if (t.dataset.upload && t.files && t.files[0]) { const file = t.files[0]; await upload(t.dataset.upload, file); t.value = ''; return; }
+    if (t.dataset.xUpload && t.files && t.files[0]) {
+      const f = findField(t.dataset.xUpload); const file = t.files[0]; t.value = '';
+      if (!f) return;
+      const url = await uploadFile(file); if (url) { f.src = url; markDirty(); renderInspector(); pushDoc(); }
+      return;
+    }
     if (t.id === 'ed-sec-select') {
       selectedSection = t.value || null; selectedKey = null; renderInspector();
       if (frameReady && selectedSection && !selectedSection.startsWith('hero')) frame.contentWindow.postMessage({ type: 'alvi-edit-scroll-section', sectionId: selectedSection }, SITE_ORIGIN);
@@ -795,6 +872,14 @@
     const t = e.target.closest('button, a');
     if (!t) return;
     if (t.dataset.bgReset) { const sec = sectionOf(t.dataset.bgReset); if (sec && sec.background) { sec.background.image = null; sec.background.opacity = null; markDirty(); render(); } return; }
+    if (t.dataset.layHide) { const f = findField(t.dataset.layHide); if (f) { f.hidden = !f.hidden; markDirty(); renderInspector(); pushDoc(); } return; }
+    if (t.dataset.layReset) { const f = findField(t.dataset.layReset); if (f) { delete f.layout; markDirty(); renderInspector(); pushDoc(); } return; }
+    if (t.dataset.xDel) {
+      const f = findField(t.dataset.xDel); const sec = f && sectionOfField(f.key);
+      if (sec && confirm('Удалить этот объект с сайта?')) { sec.fields = sec.fields.filter((x) => x.key !== f.key); selectedKey = null; markDirty(); renderInspector(); pushDoc(); }
+      return;
+    }
+    if (t.dataset.addObj) return addObject(t.dataset.addObj);
     if (t.dataset.pick) { selectedKey = t.dataset.pick; renderInspector(); if (frameReady) frame.contentWindow.postMessage({ type: 'alvi-edit-scroll', key: selectedKey }, SITE_ORIGIN); return; }
     if (t.dataset.restore) return restore(t.dataset.restore);
     if (t.dataset.close) return $('#ed-modal').classList.remove('is-open');
@@ -820,6 +905,19 @@
     }
   });
 
+  async function uploadFile(file) {
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { setStatus('Нужен JPEG, PNG или WebP', 'error'); return null; }
+    if (file.size > 8 * 1024 * 1024) { setStatus('Файл больше 8 МБ', 'error'); return null; }
+    setStatus('Загружаю картинку…');
+    try {
+      const key = getKey(false); if (!key) throw new Error('Без ключа загрузить нельзя');
+      const r = await fetch(ASSETS, { method: 'POST', headers: { 'X-API-Key': key, 'Content-Type': file.type, 'X-Filename': encodeURIComponent(file.name) }, body: file });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { if (r.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} } throw new Error(j.error || 'HTTP ' + r.status); }
+      setStatus('Картинка загружена — не забудьте «Сохранить»', 'ok');
+      return j.url;
+    } catch (err) { setStatus('Не загружено: ' + err.message, 'error'); return null; }
+  }
   async function upload(secId, file) {
     const sec = sectionOf(secId); if (!sec || !sec.background) return;
     if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return setStatus('Нужен JPEG, PNG или WebP', 'error');
