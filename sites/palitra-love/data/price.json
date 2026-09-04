@@ -1,0 +1,171 @@
+{
+  "version": 1,
+  "updatedAt": "2026-09-04T00:00:00Z",
+  "links": {
+    "book": "https://t.me/palitralovee",
+    "chat": "https://t.me/palitralovee"
+  },
+  "blocks": {
+    "self": {
+      "title": "Популярные позиции",
+      "max": 8
+    },
+    "two": {
+      "title": "Подборки",
+      "max": 8
+    }
+  },
+  "showcase": {
+    "self": [],
+    "two": []
+  },
+  "categories": [
+    {
+      "id": "vypiska",
+      "title": "Выписка из роддома",
+      "kind": "programs",
+      "block": "self",
+      "items": [
+        {
+          "id": "vypiska-1",
+          "title": "Выписка мальчика",
+          "price": "9 270 руб.",
+          "note": "Цена на момент публикации, актуальную подтверждаем при заказе",
+          "photo": "/assets/img/vypiska-malchik.jpg"
+        }
+      ]
+    },
+    {
+      "id": "dr-detyam",
+      "title": "День рождения ребёнка",
+      "kind": "programs",
+      "block": "self",
+      "items": [
+        {
+          "id": "dr-detyam-1",
+          "title": "Шары на день рождения деток",
+          "price": "5 540 руб.",
+          "note": "Цена на момент публикации, актуальную подтверждаем при заказе",
+          "photo": "/assets/img/shary-dr-detok.jpg"
+        },
+        {
+          "id": "dr-detyam-2",
+          "title": "Шары для деток",
+          "price": "8 390 руб.",
+          "note": "Цена на момент публикации, актуальную подтверждаем при заказе",
+          "photo": "/assets/img/shary-detkam.jpg"
+        }
+      ]
+    },
+    {
+      "id": "dr-muzhchine",
+      "title": "День рождения мужчине",
+      "kind": "programs",
+      "block": "self",
+      "items": [
+        {
+          "id": "dr-muzhchine-1",
+          "title": "Дембель 2026",
+          "price": "4 990 руб.",
+          "note": "Цена на момент публикации, актуальную подтверждаем при заказе",
+          "photo": "/assets/img/dembel.jpg"
+        },
+        {
+          "id": "dr-muzhchine-2",
+          "title": "Мужской сет на день рождения",
+          "price": "7 990 руб.",
+          "note": "Цена на момент публикации, актуальную подтверждаем при заказе",
+          "photo": "/assets/img/muzhskoy-set.jpg",
+          "desc": "сердце с фото и надписью + 20 шаров на атласной ленте"
+        }
+      ]
+    },
+    {
+      "id": "dr-zhenschine",
+      "title": "День рождения женщине",
+      "kind": "programs",
+      "block": "self",
+      "items": []
+    },
+    {
+      "id": "bukety",
+      "title": "Букеты",
+      "kind": "programs",
+      "block": "self",
+      "items": [
+        {
+          "id": "bukety-1",
+          "title": "Хризантема в нежно-персиковом",
+          "price": "3 290 руб.",
+          "note": "Цена на момент публикации, актуальную подтверждаем при заказе",
+          "photo": "/assets/img/hrizantema.jpg"
+        },
+        {
+          "id": "bukety-2",
+          "title": "Белые гортензии",
+          "price": "4 590 руб.",
+          "note": "Цена на момент публикации, актуальную подтверждаем при заказе",
+          "photo": "/assets/img/gortenzii.jpg"
+        }
+      ]
+    },
+    {
+      "id": "korziny",
+      "title": "Корзины и композиции",
+      "kind": "programs",
+      "block": "self",
+      "items": [
+        {
+          "id": "korziny-1",
+          "title": "Корзина с розой Вегги",
+          "price": "9 990 руб.",
+          "note": "Цена на момент публикации, актуальную подтверждаем при заказе",
+          "photo": "/assets/img/korzina-vegg.jpg"
+        },
+        {
+          "id": "korziny-2",
+          "title": "Летняя корзина ромашек",
+          "price": "10 990 руб.",
+          "note": "Цена на момент публикации, актуальную подтверждаем при заказе",
+          "photo": "/assets/img/letnyaya-korzina.jpg"
+        }
+      ]
+    },
+    {
+      "id": "dofaminovye",
+      "title": "Дофаминовые шары",
+      "kind": "programs",
+      "block": "self",
+      "items": [
+        {
+          "id": "dofaminovye-1",
+          "title": "Дофаминовые шарики",
+          "price": "6 290 руб.",
+          "note": "Цена на момент публикации, актуальную подтверждаем при заказе",
+          "photo": "/assets/img/dofaminovye.jpg"
+        }
+      ]
+    },
+    {
+      "id": "giganty",
+      "title": "Шары-гиганты и цифры",
+      "kind": "programs",
+      "block": "self",
+      "items": []
+    },
+    {
+      "id": "devichnik",
+      "title": "Девичник",
+      "kind": "programs",
+      "block": "self",
+      "items": []
+    },
+    {
+      "id": "prochee",
+      "title": "Другие поводы",
+      "kind": "programs",
+      "block": "self",
+      "items": []
+    }
+  ]
+}

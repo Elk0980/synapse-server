@@ -129,6 +129,22 @@ chat.synapsebusiness.ru {
 # --- Palitra Love: магазин цветов и воздушных шаров (черновик) -------------
 palitra-love.synapsebusiness.ru {
   root * /srv/sites/palitra-love
+  @palitra_price {
+    path /api/price
+    method GET
+  }
+  handle @palitra_price {
+    rewrite * /content/palitra/price
+    reverse_proxy content:8080
+  }
+  @palitra_assets {
+    path /api/assets/*
+    method GET
+  }
+  handle @palitra_assets {
+    uri replace /api/assets/ /content/palitra/assets/
+    reverse_proxy content:8080
+  }
   import draft
   try_files {path} {path}/index.html /index.html
   import static

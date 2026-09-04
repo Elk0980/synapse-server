@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Редактор прайса Palitra Love — кабинет Synapse</title>
+  <meta name="robots" content="noindex, nofollow">
+  <style>
+    :root {
+      --bg: #f5f5f7; --ink: #1a1a1a; --ink-dim: #454b52; --ink-faint: #6a737d;
+      --gold: #3b5b7a; --gold-soft: #3b5b7a; --green-deep: #3b5b7a;
+      --line: rgba(255, 255, 255, 0.16);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0; color: var(--ink); background: var(--bg);
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 1rem; line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; }
+
+    .page-water { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+    .page-water__video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .page-water__veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10, 18, 13, 0.6) 0%, rgba(10, 18, 13, 0.68) 100%); }
+
+    .price-header {
+      position: relative; z-index: 2;
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+      padding: clamp(1rem, 2.5vw, 1.75rem) clamp(1.25rem, 4vw, 3rem);
+      background: #ffffff;
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--line);
+    }
+    .price-header img { display: block; height: 3.2rem; width: auto; }
+    .price-header__back {
+      display: inline-flex; align-items: center; min-height: 2.6rem; padding: 0.55rem 1rem;
+      font-size: 0.78rem; letter-spacing: 0.09em; text-transform: uppercase; text-decoration: none;
+      border: 1px solid var(--line); border-radius: 999px; background: rgba(255, 255, 255, 0.08);
+      color: var(--ink);
+    }
+    .price-header__back:hover { border-color: rgba(255, 255, 255, 0.6); background: rgba(255, 253, 248, 0.9); color: #12211a; }
+
+    .price-intro {
+      position: relative; z-index: 2;
+      padding: clamp(2rem, 5vw, 3.5rem) clamp(1.25rem, 4vw, 3rem) 0;
+    }
+    .price-intro h1 {
+      margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-weight: 400;
+      font-size: clamp(2rem, 4.5vw, 3.4rem); line-height: 1.12; text-wrap: balance;
+    }
+    .price-intro p { margin: 0.9rem 0 0; max-width: 44rem; color: var(--ink-dim); }
+
+    .price-layout {
+      position: relative; z-index: 2;
+      display: grid; grid-template-columns: minmax(0, 17rem) minmax(0, 1fr);
+      gap: clamp(1.5rem, 3vw, 3rem); align-items: start;
+      padding: clamp(1.5rem, 4vw, 3rem) clamp(1.25rem, 4vw, 3rem) clamp(4rem, 8vw, 6rem);
+    }
+
+    .pnav {
+      position: sticky; top: 1.25rem;
+      max-height: calc(100vh - 2.5rem); overflow: auto; overscroll-behavior: contain;
+      padding: 1.1rem 1rem; border: 1px solid var(--line); border-radius: 1.25rem;
+      background: #ffffff;
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    }
+    .pnav ul { margin: 0; padding: 0; list-style: none; }
+    .pnav > ul > li + li { margin-top: 0.85rem; }
+    .pnav__top {
+      display: block; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 1.05rem; line-height: 1.3;
+      text-decoration: none; color: var(--ink);
+    }
+    .pnav__top:hover, .pnav__top.is-active { color: var(--gold); }
+    .pnav__sub { display: none; margin: 0.45rem 0 0; padding-left: 0.85rem; border-left: 1px solid var(--line); }
+    .pnav li.is-open > .pnav__sub { display: block; }
+    .pnav li.has-sub > .pnav__top { position: relative; padding-right: 1.4rem; }
+    .pnav li.has-sub > .pnav__top::after {
+      content: ""; position: absolute; right: 0.35rem; top: 0.45em;
+      width: 0.45em; height: 0.45em; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+      transform: rotate(45deg); transition: transform 200ms ease; opacity: 0.7;
+    }
+    .pnav li.has-sub.is-open > .pnav__top::after { transform: rotate(225deg); top: 0.6em; }
+    .pnav__sub li + li { margin-top: 0.3rem; }
+    .pnav__sub a {
+      display: block; padding: 0.12rem 0; color: var(--ink-dim);
+      font-size: 0.86rem; line-height: 1.4; text-decoration: none;
+    }
+    .pnav__sub a:hover, .pnav__sub a.is-active { color: var(--gold); }
+
+    .pnav-toggle { display: none; }
+
+    .price-layout > * { min-width: 0; }
+    .price-content { min-width: 0; }
+    .ps { min-width: 0; scroll-margin-top: 1.5rem; }
+    .pc { min-width: 0; }
+    .ps + .ps { margin-top: clamp(2.5rem, 5vw, 4rem); }
+
+    /* Анимированные смайлики заголовков: конверт у сертификатов, подарок у акций */
+    .ps__emoji { display: inline-block; transform-origin: 50% 80%; will-change: transform; }
+    .ps__emoji--cert { animation: emojiWave 3.2s ease-in-out infinite; }
+    .ps__emoji--promo { animation: emojiGift 2.6s ease-in-out infinite; }
+    @keyframes emojiWave { 0%, 100% { transform: rotate(-8deg) translateY(0); } 25% { transform: rotate(8deg) translateY(-2px); } 50% { transform: rotate(-6deg) translateY(0); } 75% { transform: rotate(6deg) translateY(-1px); } }
+    @keyframes emojiGift { 0%, 55%, 100% { transform: translateY(0) scale(1); } 15% { transform: translateY(-6px) scale(1.08) rotate(-6deg); } 30% { transform: translateY(0) scale(1) rotate(4deg); } 42% { transform: translateY(-3px) scale(1.04) rotate(-2deg); } }
+    @media (prefers-reduced-motion: reduce) { .ps__emoji { animation: none; } }
+    .ps__title {
+      margin: 0 0 1.4rem; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-weight: 400;
+      font-size: clamp(1.6rem, 3vw, 2.4rem); line-height: 1.2;
+    }
+    .cert-photo { margin: 0 0 1.4rem; }
+    .cert-photo img { display: block; width: min(100%, 24rem); height: auto; border-radius: 1rem; border: 1px solid var(--line); }
+    @media (min-width: 62rem) {
+      .cert-photo { float: right; margin: 0 0 1rem 1.5rem; }
+      .cert-photo img { width: 17rem; }
+      #s8::after { content: ""; display: block; clear: both; }
+    }
+    .pc { position: relative; }
+    .pc__badge { position: absolute; top: 1rem; right: 1.1rem; color: var(--gold); font-size: 0.78rem; letter-spacing: 0.04em; }
+    .pt__star { color: var(--gold); margin-right: 0.35rem; }
+    .ps__note { margin: 0 0 1.2rem; color: var(--ink-dim); font-size: 0.92rem; }
+
+    .pc {
+      scroll-margin-top: 1.5rem;
+      padding: clamp(1.25rem, 2.4vw, 1.9rem);
+      border: 1px solid var(--line); border-radius: 1.25rem;
+      background: #ffffff;
+      backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+    }
+    .pc + .pc { margin-top: 1rem; }
+    .pc__title {
+      margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-weight: 400;
+      font-size: clamp(1.25rem, 2.2vw, 1.65rem); line-height: 1.25;
+    }
+    .pc__list { margin: 0.9rem 0 0; padding-left: 1.1rem; color: var(--ink-dim); }
+    .pc__list li { margin: 0.18rem 0; }
+    .pc__meta {
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.6rem 1.5rem;
+      margin: 1.1rem 0 0; padding-top: 0.9rem; border-top: 1px solid var(--line);
+    }
+    .pc__dur { color: var(--ink-faint); font-size: 0.9rem; }
+    .pc__price { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 1.5rem; color: var(--gold); }
+    .pc__actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.1rem; }
+    .pc__actions--section { margin-top: 1.4rem; }
+    .pc__button {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-height: 2.75rem; padding: 0.7rem 1.2rem;
+      font-size: 0.78rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+      text-decoration: none; border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 999px;
+      color: var(--ink); background: rgba(255, 255, 255, 0.08);
+      transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease;
+    }
+    .pc__button--main { color: #12211a; border-color: rgba(227, 212, 167, 0.9); background: var(--gold); }
+    .pc__button:hover { border-color: rgba(255, 255, 255, 0.7); color: #12211a; background: rgba(255, 253, 248, 0.9); }
+    .pc__button--main:hover { color: #12211a; background: #f0e4c4; }
+
+    .pt-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 1.25rem;
+      background: #ffffff; backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+    .pt { width: 100%; border-collapse: collapse; min-width: 30rem; }
+    .pt th, .pt td { padding: 0.85rem clamp(0.85rem, 1.6vw, 1.4rem); text-align: left; }
+    .pt th { color: var(--ink-faint); font-size: 0.74rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; }
+    .pt tbody tr + tr td { border-top: 1px solid var(--line); }
+    .pt__price { white-space: nowrap; font-weight: 600; color: var(--gold); }
+
+    .cert { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; }
+    .cert__card {
+      padding: clamp(1.25rem, 2.4vw, 1.9rem); border: 1px solid var(--line); border-radius: 1.25rem;
+      background: #ffffff; backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+    }
+    .cert__card p { margin: 0.7rem 0 0; color: var(--ink-dim); }
+
+    .site-footer {
+      position: relative; z-index: 2;
+      padding: clamp(2.5rem, 5vw, 4rem) clamp(1.25rem, 4vw, 3rem);
+      color: rgba(255, 253, 248, 0.78); background: #1b2a1e;
+      font-size: 0.86rem; line-height: 1.7;
+    }
+    .site-footer__inner { width: min(100%, 75rem); margin-inline: auto; }
+    .site-footer p { margin: 0; }
+    .site-footer__brand { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 1.3rem; color: #1a1a1a; margin-bottom: 0.6rem; }
+    .site-footer__links { margin-top: 0.6rem; display: flex; flex-wrap: wrap; gap: 0.4rem 1.4rem; }
+    .site-footer__links a { color: rgba(255, 253, 248, 0.9); }
+
+    .floating-cta {
+      position: fixed; right: clamp(0.85rem, 2.2vw, 2.4rem); bottom: clamp(0.85rem, 2.2vw, 2rem);
+      z-index: 60; display: grid; gap: 0.4rem; justify-items: center; pointer-events: none;
+    }
+    .floating-cta__row { display: flex; gap: 0.55rem; pointer-events: auto; }
+    .floating-cta { transition: opacity 300ms ease, transform 300ms ease; }
+    .floating-cta.is-hidden { opacity: 0; transform: translateY(0.75rem); }
+    .floating-cta.is-hidden .floating-cta__row { pointer-events: none; }
+    .floating-cta__button {
+      position: relative; display: inline-flex; align-items: center; justify-content: center;
+      overflow: hidden; min-width: 11.5rem; min-height: 2.9rem; padding: 0.75rem 1.1rem;
+      color: rgba(255, 253, 248, 0.96); font-size: 0.82rem; font-weight: 600; letter-spacing: 0.035em;
+      text-align: center; text-decoration: none;
+      border: 1px solid rgba(255, 255, 255, 0.32); border-radius: 999px;
+      background: linear-gradient(135deg, rgba(46, 70, 51, 0.72) 0%, rgba(18, 30, 22, 0.66) 45%, rgba(46, 70, 51, 0.72) 100%);
+      backdrop-filter: blur(12px) saturate(140%); -webkit-backdrop-filter: blur(12px) saturate(140%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 12px 32px rgba(4, 12, 8, 0.4);
+    }
+    .floating-cta__button::after {
+      content: ""; position: absolute; inset: -20% -40%;
+      background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.45) 50%, transparent 62%);
+      transform: translateX(-130%); animation: glassSheen 6s ease-in-out infinite; pointer-events: none;
+    }
+    @keyframes glassSheen { 0%, 70% { transform: translateX(-130%); } 100% { transform: translateX(130%); } }
+    .floating-cta__note {
+      margin: 0; padding: 0.15rem 0.6rem; color: rgba(255, 253, 248, 0.9); font-size: 0.66rem;
+      letter-spacing: 0.05em; border-radius: 999px; background: rgba(12, 22, 16, 0.55);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); pointer-events: none;
+    }
+
+    @media (max-width: 62rem) {
+      .price-layout { grid-template-columns: 1fr; }
+      .pnav { position: static; max-height: none; }
+      .pnav > ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.7rem; }
+      .pnav > ul > li + li { margin-top: 0; }
+    }
+
+    @media (max-width: 34rem) {
+      .floating-cta { left: clamp(0.85rem, 2.2vw, 2.4rem); justify-items: stretch; }
+      .floating-cta__row { justify-content: center; }
+      .floating-cta__button { min-width: 0; flex: 1 1 0; padding: 0.7rem 0.6rem; font-size: 0.74rem; }
+      .pc__button { width: 100%; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .page-water__video { display: none; }
+      .floating-cta__button::after { animation: none; opacity: 0; }
+    }
+
+    /* Нейтральное оформление редактора Palitra Love. */
+    :root { --bg:#f5f5f7; --ink:#1a1a1a; --ink-dim:#454b52; --ink-faint:#6a737d; --gold:#3b5b7a; --gold-soft:#3b5b7a; --green-deep:#3b5b7a; --line:#d8dce1; }
+    body { background:#f5f5f7; color:#1a1a1a; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+    .page-water { display:none; }
+    .ed-bar,.pnav,.pc,.pt-wrap,.cert__card,.ed-showcase__item { background:#fff; backdrop-filter:none; -webkit-backdrop-filter:none; }
+    .ed-bar { color:#1a1a1a; border-color:#d8dce1; }
+    .ed-btn { color:#1a1a1a; background:#fff; border-color:#b9c0c8; }
+    .ed-btn--main { color:#fff; background:#3b5b7a; border-color:#3b5b7a; }
+    .ed-btn--ghost:hover,.ed-btn:hover { color:#fff; background:#3b5b7a; border-color:#3b5b7a; }
+    .ed-btn--danger { color:#8b2d35; }
+    .price-layout,.ps__title,.pc__title,.pnav__top,.ed-bar__title,.ed-showcase__num,.ed-modal__box h3 { font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+    .ed-modal { background:rgba(20,28,36,.45); }
+    .ed-modal__box { background:#fff; color:#1a1a1a; }
+    .ed-input,.ed-select,.ed-form input,.ed-form textarea { color:#1a1a1a; background:#fff; border-color:#b9c0c8; }
+  </style>
+  <style>
+    /* --- Надстройка редактора поверх стилей прайса --- */
+    .ed-bar {
+      position: sticky; top: 0; z-index: 50;
+      display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem;
+      padding: 0.7rem clamp(1rem, 3vw, 2.5rem);
+      background: rgba(9, 17, 12, 0.88); border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    }
+    .ed-bar__title { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 1.05rem; margin-right: auto; }
+    .ed-bar__title small { display: block; font-size: 0.78rem; color: var(--ink-faint); }
+    .ed-btn {
+      display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer;
+      min-height: 2.4rem; padding: 0.45rem 1rem; border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.32); color: var(--ink); background: rgba(46,70,51,0.55);
+      font: inherit; font-size: 0.86rem; letter-spacing: 0.02em;
+    }
+    .ed-btn:hover { border-color: rgba(255,255,255,0.6); }
+    .ed-btn--main { background: var(--gold); color: #17220f; border-color: transparent; font-weight: 600; }
+    .ed-btn--main:disabled { opacity: 0.55; cursor: default; }
+    .ed-btn--ghost { background: transparent; }
+    .ed-btn--small { min-height: 1.9rem; padding: 0.2rem 0.7rem; font-size: 0.78rem; }
+    .ed-btn--danger { border-color: rgba(220,120,110,0.5); color: #f3c2bb; }
+    .ed-status { font-size: 0.86rem; color: var(--ink-dim); max-width: 34rem; }
+    .ed-bar > .ed-status { flex: 1 1 10rem; text-align: right; font-size: 0.8rem; }
+    .ed-status.is-error { color: #f3c2bb; }
+    .ed-status.is-ok { color: var(--gold); }
+    .ed-dirty { display: inline-block; width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--gold); margin-left: 0.4rem; vertical-align: middle; }
+
+    .ed-star {
+      position: absolute; top: 0.9rem; right: 1rem; z-index: 2;
+      width: 2.2rem; height: 2.2rem; border-radius: 50%; border: 1px solid rgba(255,255,255,0.18);
+      background: #ffffff; color: rgba(255,255,255,0.45); font-size: 1.2rem; line-height: 1;
+      cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+      transition: color 150ms, transform 150ms, border-color 150ms;
+    }
+    .ed-star:hover { transform: scale(1.08); border-color: rgba(255,255,255,0.4); }
+    .ed-star.is-on { color: #3b5b7a; border-color: rgba(227,212,167,0.6); text-shadow: 0 0 10px rgba(227,212,167,0.5); }
+    .ed-star--row { position: static; width: 1.7rem; height: 1.7rem; font-size: 0.95rem; margin-right: 0.45rem; vertical-align: middle; }
+    .ed-star.is-shake { animation: edShake 300ms ease; }
+    @keyframes edShake { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+
+    .ed-count { font-size: 0.78rem; color: var(--ink-faint); margin-left: 0.6rem; letter-spacing: 0.04em; vertical-align: middle; white-space: nowrap; }
+    .ed-count.is-full { color: var(--gold); }
+    .pnav { top: 5.4rem !important; max-height: calc(100vh - 6.6rem) !important; }
+    .pnav .pnav__top { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; padding-right: 0 !important; }
+    .pnav .ed-count { margin: 0; }
+    .pnav li.has-sub > .pnav__top::after { display: none; }
+    .ps, .pc, .pt tr { scroll-margin-top: 5.6rem; }
+    .pt td .ed-form { grid-template-columns: 1fr 1fr; }
+    .ed-hint { display: block; margin: 0.25rem 0 0.75rem; font-size: 0.8rem; color: #f3c2bb; }
+
+    .ed-row-tools { display: inline-flex; gap: 0.3rem; margin-left: 0.5rem; vertical-align: middle; }
+    .pc__tools { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+    .ed-section-tools { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0 0; }
+    .ed-title-tools { display: inline-flex; gap: 0.3rem; margin-left: 0.6rem; vertical-align: middle; }
+
+    .ed-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem 1rem; margin-top: 0.8rem; }
+    .ed-form label { display: grid; gap: 0.25rem; font-size: 0.78rem; color: var(--ink-faint); letter-spacing: 0.03em; }
+    .ed-form label.is-wide { grid-column: 1 / -1; }
+    .ed-form input, .ed-form textarea, .ed-select {
+      font: inherit; font-size: 0.92rem; color: var(--ink); padding: 0.55rem 0.7rem;
+      border: 1px solid var(--line); border-radius: 0.6rem; background: #f5f5f7;
+    }
+    .ed-form textarea { min-height: 5.5rem; resize: vertical; }
+    .ed-form input:focus, .ed-form textarea:focus { outline: 1px solid var(--gold); }
+    .ed-form__actions { grid-column: 1 / -1; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .ed-form small { color: var(--ink-faint); font-size: 0.74rem; }
+
+    .ed-showcase { display: grid; gap: 0.55rem; margin: 0.5rem 0 1rem; }
+    .ed-showcase__item {
+      display: flex; align-items: center; gap: 0.7rem; padding: 0.6rem 0.8rem;
+      border: 1px solid var(--line); border-radius: 0.8rem; background: #ffffff;
+    }
+    .ed-showcase__num { width: 1.4rem; color: var(--gold); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .ed-showcase__name { flex: 1 1 auto; min-width: 0; }
+    .ed-showcase__name small { display: block; color: var(--ink-faint); font-size: 0.76rem; }
+    .ed-showcase__empty { color: var(--ink-faint); font-size: 0.9rem; }
+    .ed-add { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    .ed-select { min-width: 16rem; max-width: 100%; }
+
+    .ed-modal { position: fixed; inset: 0; z-index: 80; display: none; align-items: center; justify-content: center; background: rgba(4,10,6,0.7); padding: 1rem; }
+    .ed-modal.is-open { display: flex; }
+    .ed-modal__box { width: min(34rem, 100%); max-height: 85vh; overflow: auto; padding: 1.3rem; border-radius: 1rem; border: 1px solid var(--line); background: #ffffff; }
+    .ed-modal__box h3 { margin: 0 0 0.8rem; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-weight: 400; }
+    .ed-modal__list { display: grid; gap: 0.4rem; margin: 0 0 1rem; padding: 0; list-style: none; }
+    .ed-modal__list li { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.6rem; border: 1px solid var(--line); border-radius: 0.6rem; font-size: 0.86rem; }
+    .ed-modal__list li span { flex: 1 1 auto; }
+    .ed-modal input { width: 100%; }
+    .ed-preview { position: fixed; right: 1rem; bottom: 1rem; z-index: 60; }
+    .ed-photo { display: grid; gap: 0.35rem; }
+    .ed-photo .ed-field__label { font-size: 0.78rem; color: var(--ink-faint); letter-spacing: 0.03em; }
+    .ed-photo__row { display: flex; gap: 0.9rem; align-items: flex-start; flex-wrap: wrap; }
+    .ed-photo__preview { width: 11rem; aspect-ratio: 4 / 3; border-radius: 0.7rem; border: 1px solid var(--line); background: #f5f5f7 center / cover no-repeat; flex: 0 0 auto; }
+    .ed-photo__preview.is-empty { display: flex; align-items: center; justify-content: center; color: var(--ink-faint); font-size: 0.82rem; }
+    .ed-photo__tools { display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-start; flex: 1 1 12rem; }
+    .ed-photo__tools .ed-btn input[type=file] { display: none; }
+    .ed-photo__tools small { font-size: 0.76rem; }
+    @media (max-width: 62rem) {
+      .ed-form { grid-template-columns: 1fr; }
+      .pnav .ed-count { float: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="ed-bar">
+    <div class="ed-bar__title">Редактор прайса Palitra Love<small id="ed-sub">загрузка…</small></div>
+    <span class="ed-status" id="ed-status"></span>
+    <button class="ed-btn ed-btn--ghost" id="ed-history" type="button">История</button>
+    <button class="ed-btn ed-btn--ghost" id="ed-key" type="button">Ключ</button>
+    <a class="ed-btn ed-btn--ghost" href="https://palitra-love.synapsebusiness.ru/price.html" id="ed-open-price" target="_blank" rel="noopener">Открыть прайс ↗</a>
+    <button class="ed-btn ed-btn--main" id="ed-save" type="button">Сохранить</button>
+  </div>
+
+  <div class="price-layout">
+    <nav class="pnav" aria-label="Разделы прайса">
+      <ul id="ed-nav"></ul>
+    </nav>
+    <div class="price-content" id="ed-content">
+      <p class="ed-status">Загружаю прайс…</p>
+    </div>
+  </div>
+
+  <div class="ed-modal" id="ed-modal"><div class="ed-modal__box" id="ed-modal-box"></div></div>
+
+  <script src="price-render-palitra.js"></script>
+  <script>
+(() => {
+  'use strict';
+  const params = new URLSearchParams(location.search);
+  const API_BASE = (params.get('api') || '').replace(/\/$/, '');
+  const API = API_BASE + '/content/palitra/price';
+  const ASSETS = API_BASE + '/content/palitra/assets';
+  const SITE = (params.get('site') || 'https://palitra-love.synapsebusiness.ru').replace(/\/$/, '');
+  const imgUrl = (p) => !p ? '' : (/^https?:/.test(p) ? p : p.startsWith('/api/assets/') ? ASSETS + p.slice('/api/assets'.length) : SITE + (p.startsWith('/') ? p : '/' + p));
+  const KEY_STORAGE = 'synapse_content_key';
+  const openPrice = document.getElementById('ed-open-price');
+  if (openPrice) openPrice.href = SITE + '/price.html';
+  const MAX_PER_CATEGORY = 8;
+
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const esc = (s) => window.PalitraPrice ? PalitraPrice.esc(s) : String(s ?? '');
+
+  let data = null;      // текущее состояние документа
+  let dirty = false;    // есть несохранённые изменения
+  let editing = null;   // id позиции, открытой на редактирование
+  let editingCat = null;
+
+  const statusEl = $('#ed-status');
+  const subEl = $('#ed-sub');
+  const saveBtn = $('#ed-save');
+
+  function setStatus(text, kind) {
+    statusEl.textContent = text;
+    statusEl.className = 'ed-status' + (kind ? ' is-' + kind : '');
+  }
+  function markDirty() {
+    dirty = true;
+    saveBtn.textContent = 'Сохранить •';
+    setStatus('Есть несохранённые изменения');
+  }
+  function blockMax(block) { return Number(data.blocks?.[block]?.max) || 8; }
+  function blockTitle(block) { return data.blocks?.[block]?.title || block; }
+  function showcase(block) { return (data.showcase[block] ||= []); }
+  function inShowcase(id) { return showcase('self').includes(id) || showcase('two').includes(id); }
+  function catOf(id) { return PalitraPrice.findItem(data, id)?.cat; }
+  function popularCount(cat) { return cat.items.filter((it) => inShowcase(it.id)).length; }
+
+  /* --- звёзды --- */
+  function toggleStar(id, btn) {
+    const found = PalitraPrice.findItem(data, id);
+    if (!found) return;
+    const { cat, it } = found;
+    const block = cat.block || 'self';
+    if (inShowcase(id)) {
+      for (const b of ['self', 'two']) data.showcase[b] = showcase(b).filter((x) => x !== id);
+      markDirty(); render(); return;
+    }
+    if (popularCount(cat) >= MAX_PER_CATEGORY) {
+      return refuse(btn, cat.id, `В разделе уже выбрано ${MAX_PER_CATEGORY} позиций — снимите звезду с другой`);
+    }
+    if (showcase(block).length >= blockMax(block)) {
+      return refuse(btn, cat.id, `В блоке «${blockTitle(block)}» на главной уже ${blockMax(block)} позиций — уберите одну в списке блока`);
+    }
+    showcase(block).push(id);
+    markDirty(); render();
+  }
+  function refuse(btn, catId, message) {
+    if (btn) { btn.classList.add('is-shake'); setTimeout(() => btn.classList.remove('is-shake'), 350); }
+    const sec = document.querySelector(`[data-cat="${catId}"] .ps__title`);
+    if (sec) {
+      let hint = sec.parentElement.querySelector('.ed-hint');
+      if (!hint) { hint = document.createElement('span'); hint.className = 'ed-hint'; sec.after(hint); }
+      hint.textContent = message;
+      setTimeout(() => hint.remove(), 4000);
+    }
+    setStatus(message, 'error');
+  }
+
+  /* --- витрины (псевдо-разделы) --- */
+  function moveShowcase(block, idx, delta) {
+    const list = showcase(block);
+    const j = idx + delta;
+    if (j < 0 || j >= list.length) return;
+    [list[idx], list[j]] = [list[j], list[idx]];
+    markDirty(); render();
+  }
+  function removeShowcase(block, idx) {
+    showcase(block).splice(idx, 1);
+    markDirty(); render();
+  }
+  function addShowcase(block, id) {
+    if (!id) return;
+    const found = PalitraPrice.findItem(data, id);
+    if (!found) return;
+    if (inShowcase(id)) return setStatus('Эта позиция уже отмечена', 'error');
+    if (showcase(block).length >= blockMax(block)) return setStatus(`В блоке уже ${blockMax(block)} позиций`, 'error');
+    if (popularCount(found.cat) >= MAX_PER_CATEGORY) return setStatus(`В разделе «${found.cat.title}» уже ${MAX_PER_CATEGORY} популярных`, 'error');
+    showcase(block).push(id);
+    markDirty(); render();
+  }
+  function renderShowcaseSection(block) {
+    const list = showcase(block);
+    const max = blockMax(block);
+    const rows = list.map((id, i) => {
+      const f = PalitraPrice.findItem(data, id);
+      const name = f ? (f.it.card || f.it.title) : id;
+      const sub = f ? `${f.cat.title} · ${f.it.price || ''}` : 'позиция не найдена';
+      return `<div class="ed-showcase__item" data-block="${block}" data-idx="${i}">
+        <span class="ed-showcase__num">${i + 1}</span>
+        <span class="ed-showcase__name">${esc(name)}<small>${esc(sub)}</small></span>
+        <button class="ed-btn ed-btn--small" type="button" data-act="up" title="Выше">↑</button>
+        <button class="ed-btn ed-btn--small" type="button" data-act="down" title="Ниже">↓</button>
+        <button class="ed-btn ed-btn--small ed-btn--danger" type="button" data-act="remove" title="Убрать с главной">✕</button>
+      </div>`;
+    }).join('');
+    const options = data.categories.flatMap((cat) => cat.items
+      .filter((it) => !inShowcase(it.id))
+      .map((it) => `<option value="${esc(it.id)}">${esc(cat.title)} — ${esc(it.card || it.title)}</option>`)).join('');
+    const full = list.length >= max;
+    return `<section class="ps" id="block-${block}" data-block="${block}">
+      <h2 class="ps__title">${esc(blockTitle(block))}<span class="ed-count${full ? ' is-full' : ''}">${list.length} / ${max}</span></h2>
+      <p class="ps__note">Эти позиции показываются на главной в блоке «${esc(blockTitle(block))}» в таком порядке. Звезда в разделах прайса добавляет позицию сюда.</p>
+      <div class="ed-showcase">${rows || '<p class="ed-showcase__empty">Пока пусто — отметьте позиции звездой или добавьте ниже.</p>'}</div>
+      <div class="ed-add">
+        <select class="ed-select" data-add-select="${block}"><option value="">— выбрать позицию —</option>${options}</select>
+        <button class="ed-btn ed-btn--small" type="button" data-add-btn="${block}" ${full ? 'disabled' : ''}>Добавить</button>
+      </div>
+    </section>`;
+  }
+
+  /* --- редактирование позиций --- */
+  function starHtml(it, row) {
+    const on = inShowcase(it.id);
+    return `<button class="ed-star${row ? ' ed-star--row' : ''}${on ? ' is-on' : ''}" type="button" data-star="${esc(it.id)}" title="${on ? 'Убрать из популярных' : 'Отметить популярной'}" aria-pressed="${on}">${on ? '★' : '☆'}</button>`;
+  }
+  function editHtml(it, row) {
+    if (editing === it.id) return formHtml(it);
+    const btns = `<button class="ed-btn ed-btn--small" type="button" data-edit="${esc(it.id)}">Изменить</button>
+      <button class="ed-btn ed-btn--small ed-btn--danger" type="button" data-del="${esc(it.id)}">Удалить</button>`;
+    return row ? `<span class="ed-row-tools">${btns}</span>` : `<div class="pc__tools">${btns}</div>`;
+  }
+  function formHtml(it) {
+    const cat = catOf(it.id);
+    const isTable = cat && cat.kind === 'table';
+    return `<form class="ed-form" data-form="${esc(it.id)}">
+      <label class="is-wide">Название в прайсе<input name="title" value="${esc(it.title)}" required></label>
+      <label>Название на главной<input name="card" value="${esc(it.card || '')}"><small>коротко, без кавычек</small></label>
+      <label>Цена<input name="price" value="${esc(it.price || '')}"></label>
+      <label>Длительность<input name="duration" value="${esc(it.duration || '')}"></label>
+      <label>Кому подходит (главная)<input name="who" value="${esc(it.who || '')}"></label>
+      <label class="is-wide">Описание для главной<input name="desc" value="${esc(it.desc || '')}"></label>
+      <label class="is-wide">Состав одной строкой (главная)<input name="composition" value="${esc(it.composition || '')}"><small>если пусто — берутся первые пункты состава</small></label>
+      <div class="is-wide ed-photo" data-photo-box="${esc(it.id)}">
+        <span class="ed-field__label">Фото на фоне карточки (главная)</span>
+        <input type="hidden" name="photo" value="${esc(it.photo || '')}">
+        <div class="ed-photo__row">
+          <div class="ed-photo__preview ${it.photo ? '' : 'is-empty'}" style="${it.photo ? `background-image:url('${esc(imgUrl(it.photo))}')` : ''}">${it.photo ? '' : 'без фото'}</div>
+          <div class="ed-photo__tools">
+            <label class="ed-btn ed-btn--small">Загрузить фото<input type="file" accept="image/jpeg,image/png,image/webp" data-photo-upload="${esc(it.id)}" hidden></label>
+            <button class="ed-btn ed-btn--small ed-btn--danger" type="button" data-photo-clear="${esc(it.id)}" ${it.photo ? '' : 'disabled'}>Убрать</button>
+            <small class="ed-status" data-photo-status="${esc(it.id)}">JPEG, PNG или WebP; большие снимки уменьшаются до 1600 px сами.</small>
+          </div>
+        </div>
+      </div>
+      ${isTable ? '' : `<label class="is-wide">Состав программы — по одному пункту в строке<textarea name="items">${esc((it.items || []).join('\n'))}</textarea></label>`}
+      <div class="ed-form__actions">
+        <button class="ed-btn ed-btn--main ed-btn--small" type="submit">Готово</button>
+        <button class="ed-btn ed-btn--small" type="button" data-cancel="1">Отмена</button>
+      </div>
+    </form>`;
+  }
+  function applyForm(form) {
+    const id = form.dataset.form;
+    const f = PalitraPrice.findItem(data, id);
+    if (!f) return;
+    const fd = new FormData(form);
+    const it = f.it;
+    for (const k of ['title', 'card', 'price', 'duration', 'who', 'desc', 'composition', 'photo']) {
+      if (fd.has(k)) it[k] = String(fd.get(k)).trim();
+    }
+    if (fd.has('items')) it.items = String(fd.get('items')).split('\n').map((s) => s.trim()).filter(Boolean);
+    editing = null; markDirty(); render();
+  }
+  /* ---------- фото карточки: загрузка с компьютера ---------- */
+  function photoBox(id) { return document.querySelector(`[data-photo-box="${CSS.escape(id)}"]`); }
+  function setPhoto(id, url) {
+    const box = photoBox(id); if (!box) return;
+    box.querySelector('input[name="photo"]').value = url || '';
+    const pv = box.querySelector('.ed-photo__preview');
+    pv.classList.toggle('is-empty', !url); pv.textContent = url ? '' : 'без фото';
+    pv.style.backgroundImage = url ? `url('${imgUrl(url).replace(/'/g, '%27')}')` : '';
+    box.querySelector('[data-photo-clear]').disabled = !url;
+  }
+  /* Уменьшаем до 1600 px по длинной стороне прямо в браузере (без увеличения), чтобы не грузить сайт тяжёлыми файлами. */
+  function shrinkImage(file) {
+    return new Promise((resolve) => {
+      if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return resolve(null);
+      const img = new Image(); const src = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(src);
+        const max = 1600, k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+        if (k === 1 && file.size < 1.5 * 1024 * 1024) return resolve(file);
+        const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        const type = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+        c.toBlob((b) => resolve(b ? new File([b], file.name.replace(/\.[^.]+$/, '') + (type === 'image/png' ? '.png' : '.jpg'), { type }) : file), type, 0.86);
+      };
+      img.onerror = () => { URL.revokeObjectURL(src); resolve(file); };
+      img.src = src;
+    });
+  }
+  async function uploadPhoto(id, file) {
+    const st = document.querySelector(`[data-photo-status="${CSS.escape(id)}"]`);
+    const say = (t, bad) => { if (st) { st.textContent = t; st.className = 'ed-status' + (bad ? ' is-error' : ''); } };
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return say('Нужен JPEG, PNG или WebP', true);
+    say('Готовлю снимок…');
+    const prepared = await shrinkImage(file) || file;
+    if (prepared.size > 8 * 1024 * 1024) return say('Файл больше 8 МБ даже после уменьшения', true);
+    say('Загружаю…');
+    try {
+      const key = getKey(false); if (!key) throw new Error('без ключа загрузить нельзя');
+      const r = await fetch(ASSETS, { method: 'POST', headers: { 'X-API-Key': key, 'Content-Type': prepared.type, 'X-Filename': encodeURIComponent(prepared.name) }, body: prepared });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { if (r.status === 401) { try { localStorage.removeItem(KEY_STORAGE); } catch (x) {} } throw new Error(j.error || 'HTTP ' + r.status); }
+      setPhoto(id, j.url);
+      say('Фото загружено — нажмите «Готово», затем «Сохранить».');
+    } catch (e) { say('Не загружено: ' + e.message, true); }
+  }
+  document.addEventListener('change', (e) => {
+    const t = e.target;
+    if (t.dataset.photoUpload && t.files && t.files[0]) { const f = t.files[0]; uploadPhoto(t.dataset.photoUpload, f); t.value = ''; }
+  });
+
+  function newId(cat) {
+    const used = new Set(data.categories.flatMap((c) => c.items.map((i) => i.id)).concat(data.categories.map((c) => c.id)));
+    let n = cat.items.length + 1;
+    while (used.has(`${cat.id}-${n}`)) n += 1;
+    return `${cat.id}-${n}`;
+  }
+  function addItem(catId) {
+    const cat = data.categories.find((c) => c.id === catId);
+    if (!cat) return;
+    const it = { id: newId(cat), title: 'Новая позиция', card: '', desc: '', composition: '', who: '', duration: '', price: '' };
+    if (cat.kind !== 'table') it.items = [];
+    cat.items.push(it);
+    editing = it.id; markDirty(); render();
+    document.getElementById(it.id)?.scrollIntoView({ block: 'center' });
+  }
+  function deleteItem(id) {
+    const f = PalitraPrice.findItem(data, id);
+    if (!f) return;
+    if (!confirm(`Удалить «${f.it.title}» из прайса?`)) return;
+    f.cat.items = f.cat.items.filter((x) => x.id !== id);
+    for (const b of ['self', 'two']) data.showcase[b] = showcase(b).filter((x) => x !== id);
+    markDirty(); render();
+  }
+  function addCategory() {
+    const title = prompt('Название нового раздела');
+    if (!title) return;
+    const kind = confirm('Раздел с карточками программ? (Отмена — таблица «услуга · время · цена»)') ? 'programs' : 'table';
+    let n = data.categories.length + 1;
+    const ids = new Set(data.categories.map((c) => c.id).concat(['s8'])); // s8 занят сертификатами на странице прайса
+    while (ids.has(`s${n}`)) n += 1;
+    const cat = { id: `s${n}`, title: title.trim(), kind, block: 'self', items: [] };
+    if (kind === 'table') cat.head = ['Услуга', 'Длительность', 'Цена'];
+    data.categories.push(cat);
+    markDirty(); render();
+    document.getElementById(cat.id)?.scrollIntoView();
+  }
+  function addPromoCategory() {
+    if (data.categories.some((c) => PalitraPrice.isPromoCat(c))) return;
+    const cat = { id: 'promo', title: 'Акции', kind: 'programs', block: 'self', items: [] };
+    data.categories.unshift(cat);
+    markDirty(); render();
+    document.getElementById('promo')?.scrollIntoView();
+  }
+  function renameCategory(catId) {
+    const cat = data.categories.find((c) => c.id === catId);
+    if (!cat) return;
+    const t = prompt('Название раздела', cat.title);
+    if (t && t.trim() && t.trim() !== cat.title) { cat.title = t.trim(); markDirty(); render(); }
+  }
+  function setCategoryBlock(catId, block) {
+    const cat = data.categories.find((c) => c.id === catId);
+    if (!cat || cat.block === block) return;
+    cat.block = block; markDirty(); render();
+  }
+  function deleteCategory(catId) {
+    const cat = data.categories.find((c) => c.id === catId);
+    if (!cat) return;
+    if (cat.items.length && !confirm(`Удалить раздел «${cat.title}» вместе с ${cat.items.length} позициями?`)) return;
+    data.categories = data.categories.filter((c) => c.id !== catId);
+    const ids = new Set(cat.items.map((i) => i.id));
+    for (const b of ['self', 'two']) data.showcase[b] = showcase(b).filter((x) => !ids.has(x));
+    markDirty(); render();
+  }
+  function titleExtra(cat) {
+    const n = popularCount(cat);
+    return `<span class="ed-count${n >= MAX_PER_CATEGORY ? ' is-full' : ''}" title="Популярных в разделе">★ ${n} / ${MAX_PER_CATEGORY}</span>
+      <span class="ed-title-tools">
+        <button class="ed-btn ed-btn--small ed-btn--ghost" type="button" data-rename="${esc(cat.id)}" title="Переименовать">✎</button>
+        <button class="ed-btn ed-btn--small ed-btn--ghost ed-btn--danger" type="button" data-delcat="${esc(cat.id)}" title="Удалить раздел">✕</button>
+      </span>`;
+  }
+  function sectionTools(cat) {
+    return `<div class="ed-section-tools">
+      <button class="ed-btn ed-btn--small" type="button" data-additem="${esc(cat.id)}">+ Добавить позицию</button>
+      <label class="ed-status">Звёзды этого раздела идут в блок:
+        <select class="ed-select" data-block-select="${esc(cat.id)}" style="min-width:auto;margin-left:.4rem">
+          <option value="self" ${cat.block === 'two' ? '' : 'selected'}>${esc(blockTitle('self'))}</option>
+          <option value="two" ${cat.block === 'two' ? 'selected' : ''}>${esc(blockTitle('two'))}</option>
+        </select></label>
+    </div>`;
+  }
+
+  /* --- рендер всего --- */
+  function render() {
+    const y = window.scrollY;
+    const nav = $('#ed-nav');
+    const content = $('#ed-content');
+    const prefix = ['self', 'two'].map((b) => {
+      const n = showcase(b).length; const max = blockMax(b);
+      return `<li><a class="pnav__top" href="#block-${b}">${esc(blockTitle(b))}<span class="ed-count${n >= max ? ' is-full' : ''}">${n} / ${max}</span></a></li>`;
+    }).join('\n');
+    nav.innerHTML = PalitraPrice.renderNav(data, { prefix, noCertificates: true }) +
+      `<li><button class="ed-btn ed-btn--small" type="button" id="ed-addcat" style="margin-top:.6rem">+ Новый раздел</button></li>`;
+    // счётчики популярных в меню
+    for (const cat of data.categories) {
+      const a = nav.querySelector(`a[href="#${cat.id}"]`);
+      if (a) a.insertAdjacentHTML('beforeend', `<span class="ed-count">★ ${popularCount(cat)}</span>`);
+    }
+    content.innerHTML = renderShowcaseSection('self') + renderShowcaseSection('two') +
+      PalitraPrice.renderSections(data, {
+        editor: true, noCertificates: true, starHtml, editHtml, titleExtra,
+        addCardHtml: sectionTools, addRowHtml: sectionTools,
+        promoPlaceholderHtml: () => `<div class="ed-section-tools"><button class="ed-btn ed-btn--small ed-btn--main" type="button" data-addpromo="1">Создать раздел «Акции» и наполнить</button><small class="ed-status">Пока раздела нет — на сайте показывается эта заглушка без условий.</small></div>`,
+      });
+    subEl.textContent = `версия ${data.version || '—'} · обновлено ${data.updatedAt ? new Date(data.updatedAt).toLocaleString('ru-RU') : '—'}` + (dirty ? ' · не сохранено' : '');
+    window.scrollTo(0, y);
+  }
+
+  /* --- ключ, сохранение, история --- */
+  function getKey(force) {
+    let key = '';
+    try { key = localStorage.getItem(KEY_STORAGE) || ''; } catch (e) {}
+    if (!key || force) {
+      key = prompt('Ключ редактора (CONTENT_KEY_PALITRA из .env на сервере). Хранится в этом браузере.') || '';
+      key = key.trim();
+      try { if (key) localStorage.setItem(KEY_STORAGE, key); } catch (e) {}
+    }
+    return key;
+  }
+  async function apiFetch(url, opts = {}, withKey = false) {
+    const headers = { 'Accept': 'application/json', ...(opts.headers || {}) };
+    if (withKey) {
+      const key = getKey(false);
+      if (!key) throw new Error('Без ключа сохранить нельзя');
+      headers['X-API-Key'] = key;
+    }
+    const r = await fetch(url, { ...opts, headers, cache: 'no-store' });
+    let body = null;
+    try { body = await r.json(); } catch (e) {}
+    if (!r.ok) {
+      const msg = body?.error || `HTTP ${r.status}`;
+      const details = Array.isArray(body?.details) ? '\n— ' + body.details.join('\n— ') : '';
+      const err = new Error(msg + details); err.status = r.status; throw err;
+    }
+    return body;
+  }
+  async function save() {
+    if (!data) return;
+    saveBtn.disabled = true; setStatus('Сохраняю…');
+    try {
+      const res = await apiFetch(API, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }, true);
+      data.version = res.version; data.updatedAt = res.updatedAt; dirty = false;
+      saveBtn.textContent = 'Сохранить';
+      const t = new Date(res.updatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      setStatus(`Сохранено ${t} · версия ${res.version}. На сайте появится сразу.`, 'ok');
+      render();
+    } catch (e) {
+      if (e.status === 401) { try { localStorage.removeItem(KEY_STORAGE); } catch (x) {} }
+      setStatus('Не сохранено: ' + e.message, 'error');
+      alert('Не сохранено.\n' + e.message);
+    } finally { saveBtn.disabled = false; }
+  }
+  async function showHistory() {
+    const box = $('#ed-modal-box'); const modal = $('#ed-modal');
+    box.innerHTML = '<h3>История версий</h3><p class="ed-status">Загружаю…</p>';
+    modal.classList.add('is-open');
+    try {
+      const h = await apiFetch(API + '/history');
+      const li = (h.versions || []).map((v) => `<li><span>версия ${v.version} · ${new Date(v.created_at).toLocaleString('ru-RU')} · ${esc(v.author || '')}</span>
+        <button class="ed-btn ed-btn--small" type="button" data-restore="${v.version}">Вернуть</button></li>`).join('');
+      box.innerHTML = `<h3>История версий</h3><ul class="ed-modal__list">${li || '<li>пусто</li>'}</ul>
+        <button class="ed-btn ed-btn--small" type="button" data-close="1">Закрыть</button>`;
+    } catch (e) {
+      box.innerHTML = `<h3>История версий</h3><p class="ed-status is-error">${esc(e.message)}</p><button class="ed-btn ed-btn--small" type="button" data-close="1">Закрыть</button>`;
+    }
+  }
+  async function restore(version) {
+    if (!confirm(`Вернуть версию ${version}? Текущее состояние станет новой версией истории.`)) return;
+    try {
+      await apiFetch(API + '/restore/' + version, { method: 'POST' }, true);
+      $('#ed-modal').classList.remove('is-open');
+      await loadData(); setStatus(`Возвращена версия ${version}`, 'ok');
+    } catch (e) { setStatus('Откат не выполнен: ' + e.message, 'error'); alert('Откат не выполнен.\n' + e.message); }
+  }
+  async function loadData() {
+    const d = await apiFetch(API);
+    data = d; data.showcase ||= { self: [], two: [] }; dirty = false; editing = null;
+    saveBtn.textContent = 'Сохранить';
+    render();
+  }
+
+  /* --- события --- */
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('button, a');
+    if (!t) return;
+    if (t.dataset.star) return toggleStar(t.dataset.star, t);
+    if (t.dataset.edit) { editing = t.dataset.edit; render(); return; }
+    if (t.dataset.cancel) { editing = null; render(); return; }
+    if (t.dataset.photoClear) { setPhoto(t.dataset.photoClear, ''); return; }
+    if (t.dataset.del) return deleteItem(t.dataset.del);
+    if (t.dataset.additem) return addItem(t.dataset.additem);
+    if (t.dataset.rename) return renameCategory(t.dataset.rename);
+    if (t.dataset.delcat) return deleteCategory(t.dataset.delcat);
+    if (t.id === 'ed-addcat') return addCategory();
+    if (t.dataset.addpromo) return addPromoCategory();
+    if (t.dataset.addBtn) { const sel = document.querySelector(`select[data-add-select="${t.dataset.addBtn}"]`); return addShowcase(t.dataset.addBtn, sel?.value); }
+    if (t.dataset.act) {
+      const row = t.closest('.ed-showcase__item'); const block = row.dataset.block; const idx = Number(row.dataset.idx);
+      if (t.dataset.act === 'up') return moveShowcase(block, idx, -1);
+      if (t.dataset.act === 'down') return moveShowcase(block, idx, 1);
+      if (t.dataset.act === 'remove') return removeShowcase(block, idx);
+    }
+    if (t.dataset.restore) return restore(t.dataset.restore);
+    if (t.dataset.close) return $('#ed-modal').classList.remove('is-open');
+    if (t.id === 'ed-save') return save();
+    if (t.id === 'ed-history') return showHistory();
+    if (t.id === 'ed-key') { getKey(true); setStatus('Ключ обновлён для этой вкладки'); return; }
+  });
+  document.addEventListener('submit', (e) => {
+    const form = e.target.closest('form[data-form]');
+    if (!form) return;
+    e.preventDefault(); applyForm(form);
+  });
+  document.addEventListener('change', (e) => {
+    const sel = e.target.closest('select[data-block-select]');
+    if (sel) setCategoryBlock(sel.dataset.blockSelect, sel.value);
+  });
+  window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+  document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); save(); } });
+
+  (async () => {
+    if (!window.PalitraPrice) {
+      setStatus('Не загрузился рендер прайса (price-render.js с сайта Palitra Love)', 'error');
+      $('#ed-content').innerHTML = '<p class="ed-status is-error">Не удалось загрузить price-render.js с palitra-love.synapsebusiness.ru. Проверьте, что сайт Palitra Love доступен.</p>';
+      return;
+    }
+    try { await loadData(); setStatus('Готово к работе'); }
+    catch (e) {
+      setStatus('Не удалось загрузить прайс: ' + e.message, 'error');
+      $('#ed-content').innerHTML = `<p class="ed-status is-error">Не удалось загрузить прайс: ${esc(e.message)}.<br>Сервис content должен быть поднят на сервере (см. ops/content).</p>`;
+    }
+  })();
+})();
+
+  </script>
+</body>
+</html>
