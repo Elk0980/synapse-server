@@ -3694,5 +3694,10 @@
     else window.addEventListener('load', run, { once: true });
   })();
 </script>
+    <style>/* Единый вид карточек витрины: панель текста занимает всю высоту карточки */
+        .after-hero .program-card--photo { display: flex; }
+        .after-hero .program-card--photo .program-card__body { flex: 1 1 auto; display: flex; flex-direction: column; }
+        .after-hero .program-card--photo .program-facts { margin-top: 1.1rem; }
+      </style>
 </body>
 </html>
