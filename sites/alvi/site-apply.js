@@ -247,6 +247,10 @@
     };
     /* Как в Тильде: клик — выбрать, потянуть курсором — переместить, двойной клик — править текст. */
     let press = null;
+    /* Ссылки и картинки браузер тянет как «перетаскивание ссылки» — отключаем, иначе объект не переносится. */
+    document.addEventListener('dragstart', (e) => { if (e.target.closest && e.target.closest('[data-edit], .promo, .hero-scene')) e.preventDefault(); }, true);
+    const noNativeDrag = () => document.querySelectorAll('[data-edit], [data-edit] *, .promo a, .promo img').forEach((n) => { n.setAttribute('draggable', 'false'); });
+    noNativeDrag(); new MutationObserver(noNativeDrag).observe(document.body, { childList: true, subtree: true });
     document.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       if (e.target.closest('.x-handle')) return;
