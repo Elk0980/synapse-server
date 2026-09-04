@@ -210,6 +210,13 @@ function date(value, field, fallback) {
   return new Date(value).toISOString();
 }
 
+function rangeDate(value, field, endOfDay = false) {
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return date(`${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}Z`, field);
+  }
+  return date(value, field);
+}
+
 function normalizeContact(contact) {
   const digits = contact.replace(/\D/g, '');
   if (digits.length >= 7) return digits.length === 11 && digits[0] === '8' ? `7${digits.slice(1)}` : digits;
@@ -368,13 +375,25 @@ async function route(request, response) {
   if (!(request.method === 'POST' && url.pathname === '/leads')) requireApiKey(request);
 
   if (request.method === 'GET' && url.pathname === '/dashboard') {
-    const from = cabinetPeriod(url.searchParams.get('period') || 'today');
+    const customRange = url.searchParams.has('from') || url.searchParams.has('to');
+    if (customRange && (!url.searchParams.has('from') || !url.searchParams.has('to'))) {
+      fail(400, 'Для диапазона нужны обе даты: «from» и «to»');
+    }
+    const from = customRange
+      ? rangeDate(url.searchParams.get('from'), 'from')
+      : cabinetPeriod(url.searchParams.get('period') || 'today');
+    const to = customRange ? rangeDate(url.searchParams.get('to'), 'to', true) : null;
+    if (to && from > to) fail(400, 'Дата «from» не может быть позже «to»');
     const requestedStage = url.searchParams.get('stage');
     const stage = requestedStage ? CABINET_STAGES.get(requestedStage) : null;
     if (requestedStage && !stage) fail(400, 'Неизвестный этап', { allowed: [...CABINET_STAGES.keys()] });
     const source = url.searchParams.get('source');
     const clauses = ['created_at >= ?'];
     const params = [from];
+    if (to) {
+      clauses.push('created_at <= ?');
+      params.push(to);
+    }
     if (stage) {
       clauses.push('stage = ?');
       params.push(stage);
@@ -394,7 +413,7 @@ async function route(request, response) {
       return [id, { count, conversion: rows.length ? Math.round((count / rows.length) * 100) : 0 }];
     }));
     const revenue = rows.reduce((total, row) => total + (row.sale_amount || 0), 0);
-    const expenses = totalExpense(from, null, source);
+    const expenses = totalExpense(from, to, source);
     return send(response, 200, {
       sample: false,
       summary: {
@@ -498,8 +517,8 @@ async function route(request, response) {
   }
 
   if (request.method === 'GET' && url.pathname === '/expenses') {
-    const from = url.searchParams.has('from') ? date(url.searchParams.get('from'), 'from') : null;
-    const to = url.searchParams.has('to') ? date(url.searchParams.get('to'), 'to') : null;
+    const from = url.searchParams.has('from') ? rangeDate(url.searchParams.get('from'), 'from') : null;
+    const to = url.searchParams.has('to') ? rangeDate(url.searchParams.get('to'), 'to', true) : null;
     if (from && to && from > to) fail(400, 'Дата «from» не может быть позже «to»');
     const clauses = [];
     const params = [];
@@ -577,8 +596,8 @@ async function route(request, response) {
   }
 
   if (request.method === 'GET' && url.pathname === '/summary') {
-    const from = date(url.searchParams.get('from'), 'from');
-    const to = date(url.searchParams.get('to'), 'to');
+    const from = rangeDate(url.searchParams.get('from'), 'from');
+    const to = rangeDate(url.searchParams.get('to'), 'to', true);
     if (from > to) fail(400, 'Дата «from» не может быть позже «to»');
     const rows = db.prepare(`
       SELECT source, stage, sale_amount FROM leads
