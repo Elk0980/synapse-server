@@ -545,7 +545,7 @@
   window.addEventListener('message', (e) => {
     if (e.origin !== SITE_ORIGIN) return;
     const m = e.data || {};
-    if (m.type === 'alvi-edit-ready') { frameReady = true; pushDoc(); pushView(); const hint = $('#ed-frame-hint'); if (hint) { hint.textContent = 'Клик — выбрать объект, потянуть курсором — переместить, двойной клик — править текст; ↔ у края — ширина. Холст двигается за пустое поле или с зажатым пробелом; масштаб — Ctrl + колесо.'; setTimeout(() => hint.remove(), 9000); } }
+    if (m.type === 'alvi-edit-ready') { frameReady = true; pushDoc(); pushView(); const hint = $('#ed-frame-hint'); if (hint) { hint.textContent = 'Клик — выбрать объект, потянуть курсором — переместить, двойной клик — править текст (Esc — выйти из текста); ↔ у края — ширина. Холст двигается за пустое поле или с зажатым пробелом; масштаб — Ctrl + колесо.'; setTimeout(() => hint.remove(), 9000); } }
     if (m.type === 'alvi-edit-height' && m.height) { const h = Math.min(30000, Math.round(m.height)); if (Math.abs(h - childHeight) > 4) { childHeight = h; applyView(false); } }
     if (m.type === 'alvi-edit-select' && m.key) {
       selectedKey = m.key;
