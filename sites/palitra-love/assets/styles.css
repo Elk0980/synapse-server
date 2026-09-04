@@ -23,11 +23,11 @@ html.hero-story-locked,body.hero-story-locked{overflow:hidden;overscroll-behavio
 .hero video{position:absolute;z-index:1;inset:0;display:block;width:100%;height:100%;object-fit:cover}
 .hero-overlay{position:absolute;z-index:2;opacity:0;pointer-events:none;transition:opacity .3s ease}
 .hero-overlay.is-visible{opacity:1}
-#hero-sms{top:31%;left:63.5%;width:13.5%;padding:clamp(4px,.6vw,10px);border-radius:clamp(5px,.7vw,12px);background:#fff;color:var(--ink);box-shadow:0 2px 10px #0002;font-size:clamp(5px,.78vw,12px);font-weight:700;line-height:1.25;transform:rotate(-2deg)}
-#hero-offer{top:10%;left:6%;width:min(38%,520px);padding:clamp(10px,1.5vw,24px);border:1px solid rgba(255,255,255,.38);border-radius:3px;background:rgba(23,60,43,.88);box-shadow:0 8px 30px #0003;color:#fff}
+#hero-sms{top:37%;left:46%;width:10.5%;max-height:18%;box-sizing:border-box;overflow:hidden;padding:clamp(3px,.45vw,7px);border-radius:clamp(5px,.7vw,12px);background:#fff;color:var(--ink);box-shadow:0 2px 10px #0002;font-size:clamp(4px,.58vw,9px);font-weight:700;line-height:1.2;transform:rotate(-2deg)}
+#hero-offer{top:10%;left:6%;width:min(34%,460px);padding:clamp(10px,1.5vw,24px);border:1px solid rgba(255,255,255,.38);border-radius:3px;background:rgba(23,60,43,.88);box-shadow:0 8px 30px #0003;color:#fff}
 #hero-offer strong,#hero-offer span{display:block}#hero-offer strong{font:700 clamp(12px,2vw,30px)/1.1 Georgia,serif}#hero-offer span{margin-top:clamp(4px,.7vw,10px);font-size:clamp(7px,1.05vw,16px);line-height:1.3}
 #hero-logo-balloon,#hero-qr{display:none!important}
-#hero-brand{top:52%;left:68%;width:clamp(110px,28%,430px);transform:translate(-50%,-50%);transition-duration:.6s}
+#hero-brand{top:55%;left:70%;width:clamp(110px,26%,380px);transform:translate(-50%,-50%);transition-duration:.6s}
 #hero-brand img{display:block;width:100%;height:auto}
 #hero-scroll{z-index:3;left:50%;bottom:clamp(8px,2vw,24px);display:flex;min-width:clamp(92px,10vw,144px);align-items:center;justify-content:center;gap:clamp(4px,.5vw,8px);padding:clamp(5px,.55vw,8px) clamp(8px,1vw,14px);border:1px solid rgba(255,255,255,.72);border-radius:999px;color:#fff;text-decoration:none;background:rgba(13,33,24,.55);transform:translateX(-50%);font-size:clamp(8px,.85vw,13px);line-height:1;white-space:nowrap}
 #hero-scroll.is-visible{pointer-events:auto}#hero-scroll span{font-size:clamp(15px,1.8vw,28px);line-height:1;animation:hero-scroll-pulse 1.8s ease-in-out infinite}#hero-scroll small{font:inherit}
