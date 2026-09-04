@@ -127,7 +127,8 @@
       [data-edit]:hover { outline-color: rgba(227,212,167,0.95); outline-style: solid; }
       [data-edit].is-editing { outline: 2px solid #e3d4a7; outline-offset: 4px; box-shadow: 0 0 0 6px rgba(227,212,167,0.15); }
       [data-edit][contenteditable]:focus { outline: 2px solid #e3d4a7; }
-      .content-section.is-edit-target, #trust.is-edit-target { box-shadow: inset 0 0 0 3px rgba(227,212,167,0.7); }
+      .content-section.is-edit-target, #trust.is-edit-target, .promo__panel.is-edit-target { box-shadow: inset 0 0 0 3px rgba(227,212,167,0.7); }
+      .promo.is-open { z-index: 70; }
       .floating-cta { pointer-events: none; opacity: 0.35; }
       .cookie-notice { display: none !important; }
       html { scroll-behavior: smooth; }
@@ -153,7 +154,7 @@
       el.classList.add('is-editing');
       el.setAttribute('contenteditable', 'true');
       try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
-      const section = el.closest('section[id], footer, .floating-cta, article[data-scene]');
+      const section = el.closest('section[id], footer, .floating-cta, article[data-scene], .promo');
       const r = el.getBoundingClientRect();
       post({ type: 'alvi-edit-select', rect: { top: r.top + window.scrollY, left: r.left + window.scrollX, width: r.width, height: r.height }, key: el.getAttribute('data-edit'), sectionId: section ? (section.id || (section.dataset.scene != null ? 'hero-' + section.dataset.scene : section.className.split(' ')[0])) : null });
     };
@@ -162,9 +163,9 @@
       if (el) { e.preventDefault(); e.stopPropagation(); if (current !== el) select(el); return; }
       // клик по ссылке/кнопке вне редактируемого текста — не переходим
       if (e.target.closest('a, button, label')) { e.preventDefault(); }
-      const section = e.target.closest('section[id]');
+      const section = e.target.closest('section[id], .promo__panel');
       document.querySelectorAll('.is-edit-target').forEach((x) => x.classList.remove('is-edit-target'));
-      if (section) { section.classList.add('is-edit-target'); post({ type: 'alvi-edit-section', sectionId: section.id }); }
+      if (section) { section.classList.add('is-edit-target'); post({ type: 'alvi-edit-section', sectionId: section.id || 'promo' }); }
     }, true);
     document.addEventListener('input', (e) => {
       const el = e.target.closest && e.target.closest('[data-edit]');
@@ -215,6 +216,10 @@
       }
       if (m.type === 'alvi-edit-scroll-section' && m.sectionId) {
         const el = document.getElementById(m.sectionId);
+        if (m.sectionId === 'promo' && el) {
+          // баннер: в режиме «вся страница» он лежит блоком, в режиме «экран» — всплывает
+          if (!document.documentElement.classList.contains('edit-full') && window.alviPromoOpen) window.alviPromoOpen();
+        }
         if (el) {
           if (!document.documentElement.classList.contains('edit-full')) el.scrollIntoView({ block: 'start' });
           const r = el.getBoundingClientRect();
