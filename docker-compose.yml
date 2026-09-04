@@ -24,6 +24,8 @@ services:
       DATABASE_PATH: /data/crm.sqlite
       API_KEY: ${CRM_API_KEY}
       ALLOWED_ORIGINS: ${CRM_ALLOWED_ORIGINS:-}
+      RATE_LIMIT_WINDOW_MS: ${CRM_RATE_LIMIT_WINDOW_MS:-60000}
+      RATE_LIMIT_MAX: ${CRM_RATE_LIMIT_MAX:-120}
     expose:
       - "8080"
     volumes:
@@ -37,7 +39,11 @@ services:
       PORT: "8080"
       DATABASE_PATH: /data/chat.sqlite
       API_KEY: ${CHAT_API_KEY}
+      CHAT_ADMIN_KEY: ${CHAT_ADMIN_KEY}
       ALLOWED_ORIGINS: ${CHAT_ALLOWED_ORIGINS:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET}
+      TELEGRAM_OWNER_ID: ${TELEGRAM_OWNER_ID:-}
       CRM_URL: http://crm:8080/leads
       CRM_API_KEY: ${CRM_API_KEY}
       MODEL_API_URL: ${MODEL_API_URL:-}
@@ -59,6 +65,8 @@ services:
       CONTENT_KEY_PALITRA: ${CONTENT_KEY_PALITRA:-}
       SESSION_SECRET: ${SESSION_SECRET:-}
       AUTH_USERS: ${AUTH_USERS:-}
+      CRM_URL: http://crm:8080
+      CRM_API_KEY: ${CRM_API_KEY}
       ALLOWED_ORIGINS: ${CONTENT_ALLOWED_ORIGINS:-}
     expose:
       - "8080"

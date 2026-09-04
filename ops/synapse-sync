@@ -54,6 +54,8 @@ fi
 chmod 600 "$ENV_FILE"
 ensure_secret CRM_API_KEY
 ensure_secret CHAT_API_KEY
+ensure_secret CHAT_ADMIN_KEY
+ensure_secret TELEGRAM_WEBHOOK_SECRET
 ensure_secret CONTENT_API_KEY
 ensure_secret CONTENT_EDITOR_KEY
 ensure_secret SESSION_SECRET
