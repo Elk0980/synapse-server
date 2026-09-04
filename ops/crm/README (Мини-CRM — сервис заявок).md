@@ -1,8 +1,8 @@
 # Мини-CRM — сервис заявок
 
 Небольшой JSON API для заявок Synapse Business и основы сквозной аналитики. Он
-хранит карточку лида, переписку, текущий этап и данные продажи. Авторизации в
-сервисе нет: ограничивать доступ нужно на уровне сети или прокси.
+хранит карточку лида, переписку, историю этапов, расходы и данные продажи. Все
+методы, кроме публичного `POST /leads`, требуют заголовок `X-API-Key`.
 
 ## Запуск
 
@@ -11,7 +11,7 @@
 
 ```sh
 mkdir -p data
-PORT=8080 DATABASE_PATH="$PWD/data/crm.sqlite" node ops/crm/server.js
+PORT=8080 DATABASE_PATH="$PWD/data/crm.sqlite" API_KEY="локальный-ключ" node ops/crm/server.js
 ```
 
 Сервис уже включён в корневой `docker-compose.yml` и собирается из этого
@@ -25,7 +25,9 @@ docker compose up -d crm
 хосте. В контейнере база находится в `/data/crm.sqlite` и сохраняется в именованном
 томе `crm_data`. При первом старте создаётся пустая база без демонстрационных
 записей. Локально путь задаётся переменной `DATABASE_PATH`; порт — переменной
-`PORT` (по умолчанию `8080`).
+`PORT` (по умолчанию `8080`). Обязательный ключ задаётся в `API_KEY`; CORS — списком
+источников через запятую в `ALLOWED_ORIGINS`; rate limit — переменными
+`RATE_LIMIT_WINDOW_MS` и `RATE_LIMIT_MAX`.
 
 Все запросы и ответы используют JSON. Даты передаются в ISO 8601, например
 `2026-08-29T12:00:00.000Z`.
@@ -47,12 +49,18 @@ docker compose up -d crm
 `POST /leads`
 
 Обязательны `name` и `contact`. Допустимы `channel`, `source`, `tag`, `page`,
-`firstQuestion` и `comment`. Новая карточка всегда получает этап `новая`.
+`firstQuestion`, `comment`, `utmSource`, `utmMedium`, `utmCampaign`, `utmContent`,
+`clientId`, `referrer` и `landingPage`. Повторный контакт возвращает существующую
+заявку с `deduplicated: true`. Новая карточка всегда получает этап `новая`.
 
 ```sh
 curl -X POST http://localhost:8080/leads -H 'Content-Type: application/json' \
   -d '{"name":"Анна","contact":"+79990000000","channel":"telegram","source":"Яндекс","tag":"consultation","page":"/audit","firstQuestion":"Сколько стоит аудит?"}'
 ```
+
+### Карточка, история и сообщения
+
+`GET /leads/:id` возвращает карточку вместе с `messages` и `stageHistory`.
 
 ### Добавить сообщение
 
@@ -96,12 +104,17 @@ curl -X PATCH http://localhost:8080/leads/1/sale -H 'Content-Type: application/j
   -d '{"amount":45000,"soldAt":"2026-08-29T12:00:00Z"}'
 ```
 
+### CSV и расходы
+
+`GET /leads.csv` выгружает заявки в CSV. `POST /expenses` записывает расход, а
+`GET /expenses?from=:date&to=:date` возвращает расходы периода.
+
 ### Получить сводку
 
 `GET /summary?from=:date&to=:date` группирует созданные за указанный период
 заявки по источнику. Для каждого источника возвращаются: `leads` (все заявки),
 `booked` (текущий этап не ниже `записан`), `visited` (не ниже `пришёл`), `sales`
-и `revenue`. Отказы не учитываются как дошедшие до записи или визита; источник
+`revenue`, `expenses` и `romi`. При нулевых расходах `romi` равен `null`. Отказы не учитываются как дошедшие до записи или визита; источник
 без значения отображается как `не указан`.
 
 ```sh

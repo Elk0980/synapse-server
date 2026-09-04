@@ -8,6 +8,7 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
@@ -21,6 +22,45 @@ const SEED_DIR = process.env.SEED_DIR || path.join(__dirname, 'seed');
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
 const HISTORY_LIMIT = 10;
 const MAX_BODY = 1024 * 1024;
+const SESSION_SECRET = (process.env.SESSION_SECRET || '').trim() || crypto.randomBytes(32).toString('hex');
+const AUTH_USERS = parseUsers(process.env.AUTH_USERS || '');
+const CRM_URL = (process.env.CRM_URL || 'http://crm:8080').replace(/\/$/, '');
+const CRM_API_KEY = (process.env.CRM_API_KEY || '').trim();
+
+function parseUsers(raw) {
+  const users = new Map();
+  for (const item of raw.split(';').filter(Boolean)) {
+    const [login, role, ...hashParts] = item.split(':');
+    const hash = hashParts.join(':');
+    if (/^[a-z0-9_-]+$/.test(login || '') && ['owner', 'editor'].includes(role) && hash) {
+      users.set(login, { login, role, hash });
+    }
+  }
+  return users;
+}
+
+function signature(payload) {
+  return crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+}
+
+function sessionIdentity(request) {
+  const cookies = Object.fromEntries(
+    String(request.headers.cookie || '').split(';')
+      .map((part) => part.trim().split(/=(.*)/s)).filter(([key]) => key)
+  );
+  const [payload, sig] = String(cookies.synapse_session || '').split('.');
+  if (!payload || !sig) return null;
+  const expected = signature(payload);
+  if (sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
+  try {
+    const token = JSON.parse(Buffer.from(payload, 'base64url').toString());
+    const current = AUTH_USERS.get(token.login);
+    if (!current || current.role !== token.role || token.exp < Math.floor(Date.now() / 1000)) return null;
+    return current;
+  } catch {
+    return null;
+  }
+}
 
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
   throw new Error('PORT должен быть целым числом от 1 до 65535');
@@ -173,6 +213,31 @@ async function readRaw(request, limit) {
   return Buffer.concat(chunks);
 }
 
+async function proxyCRM(request, response, url, cors) {
+  if (!sessionIdentity(request)) fail(401, 'Требуется вход в кабинет');
+  if (!CRM_API_KEY) fail(503, 'CRM_API_KEY не настроен в сервисе content');
+
+  const targetPath = url.pathname.slice('/content/crm'.length) || '/';
+  const body = ['GET', 'HEAD'].includes(request.method) ? undefined : await readRaw(request, MAX_BODY);
+  const upstream = await fetch(`${CRM_URL}${targetPath}${url.search}`, {
+    method: request.method,
+    headers: {
+      accept: request.headers.accept || 'application/json',
+      'content-type': request.headers['content-type'] || 'application/json',
+      'x-api-key': CRM_API_KEY,
+    },
+    body,
+  });
+  const payload = Buffer.from(await upstream.arrayBuffer());
+  response.writeHead(upstream.status, {
+    ...cors,
+    'cache-control': 'no-store',
+    'content-type': upstream.headers.get('content-type') || 'application/octet-stream',
+    'content-length': payload.length,
+  });
+  response.end(payload);
+}
+
 /* Проверка прайса: лимиты «не больше 8», уникальные id, ссылки витрины на существующие позиции. */
 function validatePrice(doc) {
   const problems = [];
@@ -248,6 +313,10 @@ const server = http.createServer(async (request, response) => {
     }
     const url = new URL(request.url, 'http://localhost');
     const parts = url.pathname.split('/').filter(Boolean);
+
+    if (url.pathname === '/content/crm' || url.pathname.startsWith('/content/crm/')) {
+      return await proxyCRM(request, response, url, cors);
+    }
 
     if (request.method === 'GET' && url.pathname === '/content/whoami') {
       const author = requireKey(request);
