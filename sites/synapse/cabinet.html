@@ -380,6 +380,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         <p class="project-label" id="editor-link-notice" role="status" hidden></p>
       </div>
       <a class="nav-link" href="#chat" data-view-link="chat">Чат</a>
+      <a class="nav-link" id="autoposting-link" href="#autoposting"
+        data-view-link="autoposting">Автопостинг</a>
+      <a class="nav-link" id="content-factory-link" href="#content-factory"
+        data-view-link="content-factory">Контент завод</a>
       <a class="nav-link" href="#settings" data-view-link="settings">Настройки</a>
       <a class="nav-link" id="accounts-link" href="#accounts" data-view-link="accounts" hidden>Настройка аккаунтов</a>
       <a class="nav-link" href="#account" data-view-link="account">Аккаунт</a>
@@ -459,6 +463,14 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <p class="notice">Связь чата с выбранным проектом — в разработке. В текущем inbox используйте встроенный фильтр компаний.</p>
       <iframe class="tool-frame" data-src="https://chat.synapsebusiness.ru/" title="Чат"></iframe>
     </section>
+    <section class="view-panel" id="autoposting-view" data-view="autoposting" hidden>
+      <div class="content-header"><h1>Автопостинг</h1></div>
+      <div class="card"><p class="development">В разработке</p></div>
+    </section>
+    <section class="view-panel" id="content-factory-view" data-view="content-factory" hidden>
+      <div class="content-header"><h1>Контент завод</h1></div>
+      <div class="card"><p class="development">В разработке</p></div>
+    </section>
     <section class="view-panel" id="settings-view" data-view="settings" hidden>
       <div class="content-header"><h1>Настройки</h1></div><div class="card"><p class="development">В разработке</p></div>
     </section>
@@ -493,6 +505,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     crm: "ЦРМ",
     sites: "Сайты",
     chat: "Чат",
+    autoposting: "Автопостинг",
+    "content-factory": "Контент завод",
     settings: "Настройки",
     account: "Аккаунт",
     accounts: "Настройка аккаунтов"
@@ -613,6 +627,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       const link = byId(`${kind}-editor-link`);
       link.href = supported ? editorUrl(kind) : `#${kind === "site" ? "site-editor" : "price"}`;
       link.setAttribute("aria-disabled", String(!supported));
+      if (supported) {
+        link.target = "_blank";
+        link.rel = "noopener";
+      } else {
+        link.removeAttribute("target");
+        link.removeAttribute("rel");
+      }
     }
     if (supported) byId("editor-link-notice").hidden = true;
   };
@@ -664,7 +685,12 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         for (const [label, url] of [["Редактировать сайт", site.capabilities.editSite && site.editorUrls.site],
           ["Прайс", site.capabilities.editPrice && site.editorUrls.price], ["Открыть сайт", site.publicUrl]]) {
           if (!url) continue;
-          const link = document.createElement("a"); link.href = url; link.textContent = label; actions.append(link);
+          const link = document.createElement("a");
+          link.href = url;
+          link.target = "_blank";
+          link.rel = "noopener";
+          link.textContent = label;
+          actions.append(link);
         }
         if (site.capabilities.delete) {
           const button = document.createElement("button"); button.type = "button"; button.className = "danger";
@@ -706,6 +732,12 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     if (!identity) return true;
     if (value === "analytics-through") return identity.permissions.includes("analytics.view");
     if (value === "crm") return identity.permissions.includes("crm.view");
+    if (value === "autoposting") {
+      return identity.role === "owner" || identity.permissions.includes("autoposting.view");
+    }
+    if (value === "content-factory") {
+      return identity.role === "owner" || identity.permissions.includes("content-factory.view");
+    }
     return true;
   };
   const defaultView = () => permittedView("analytics-through") ? "analytics-through" :
@@ -1058,6 +1090,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       byId("analytics-through-view").hidden = !identity.permissions.includes("analytics.view");
       byId("crm-link").hidden = !identity.permissions.includes("crm.view");
       byId("crm-view").hidden = !identity.permissions.includes("crm.view");
+      byId("autoposting-link").hidden = !permittedView("autoposting");
+      byId("autoposting-view").hidden = !permittedView("autoposting");
+      byId("content-factory-link").hidden = !permittedView("content-factory");
+      byId("content-factory-view").hidden = !permittedView("content-factory");
       byId("accounts-link").hidden = identity.role !== "owner";
       byId("create-site").hidden = !identity.permissions.includes("sites.create");
       const companyFilter = byId("sites-company");
