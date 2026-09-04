@@ -9,7 +9,7 @@
   }[c]));
 
   /* Фото карточек по умолчанию — пока позиции в базе без поля photo (задаётся в редакторе). */
-    const DEFAULT_PHOTOS = { 's4-1': 'img/card-s4-1.jpg', 's2-2': 'img/card-s2-2.jpg', 's1-1': 'img/card-s1-1.jpg', 's1-2': 'img/card-s1-2.jpg', 's1-3': 'img/card-s1-3.jpg', 's1-4': 'img/card-s1-4.jpg', 's1-5': 'img/card-s1-5.jpg', 's1-6': 'img/card-s1-6.jpg', 's1-7': 'img/card-s1-7.jpg', 's1-9': 'img/card-s1-9.jpg', 's1-11': 'img/card-s1-11.jpg' };
+      const DEFAULT_PHOTOS = { 's4-1': 'img/card-s4-1.jpg', 's2-2': 'img/card-s2-2.jpg', 's1-1': 'img/card-s1-1.jpg', 's1-2': 'img/card-s1-2.jpg', 's1-3': 'img/card-s1-3.jpg', 's1-4': 'img/card-s1-4.jpg', 's1-5': 'img/card-s1-5.jpg', 's1-6': 'img/card-s1-6.jpg', 's1-7': 'img/card-s1-7.jpg', 's1-9': 'img/card-s1-9.jpg', 's1-11': 'img/card-s1-11.jpg', 's2-1': 'img/card-s2-1.jpg', 's2-3': 'img/card-s2-3.jpg' };
   const photoOf = (it) => it.photo || DEFAULT_PHOTOS[it.id] || '';
   /* Смайлики разделов: у сертификатов — конверт, у акций — подарок. В заголовках они анимированы (класс ps__emoji). */
   const stripEmoji = (t) => String(t || '').replace(/^[\p{Extended_Pictographic}\uFE0F\u200D\s]+/u, '').trim();
