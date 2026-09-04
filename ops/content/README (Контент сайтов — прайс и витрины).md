@@ -1,7 +1,7 @@
 # Контент сайтов — сервис `content`
 
-Хранит JSON-документы сайтов с историей версий. Сейчас один документ —
-`alvi/price`: прайс ALVI и витрины главной («Проведи день для себя», «Один ритм
+Хранит JSON-документы сайтов с историей версий. Среди документов — `alvi/price` и
+`palitra/price`. Первый содержит прайс ALVI и витрины главной («Проведи день для себя», «Один ритм
 на двоих»). Редактируется в кабинете Synapse: `synapse.synapsebusiness.ru/price-editor.html`.
 
 Node 24, встроенный `node:sqlite`, внешних пакетов нет. База — `/data/content.sqlite`
@@ -82,3 +82,21 @@ node ops/content/make-password.js tatyana editor
 Старые `X-API-Key` (`CONTENT_API_KEY` и `CONTENT_EDITOR_KEY`) продолжают работать
 для автоматики и как запасной вход редакторов. Cookie не требуется передавать
 кросс-доменным клиентам, а CORS не включает `Access-Control-Allow-Credentials`.
+
+## Прайс Palitra Love
+
+Документ `palitra/price` создаётся из `seed/palitra-price.json`. Редактор находится по адресу
+`synapse.synapsebusiness.ru/price-editor-palitra.html`, а публичная страница использует
+`GET /content/palitra/price` (на домене клиента — `GET /api/price`). История версий и откат
+работают по тем же путям, что у ALVI, с префиксом `/content/palitra/price`.
+
+Файлы Palitra Love загружаются через `POST /content/palitra/assets` и читаются через
+`GET /content/palitra/assets/<имя>`. Для записи прайса и загрузки файлов используется отдельный
+ключ `CONTENT_KEY_PALITRA`. В серверный `.env` нужно добавить пустой заранее не заполняемый в
+репозитории слот:
+
+```dotenv
+CONTENT_KEY_PALITRA=
+```
+
+Ключ ALVI (`CONTENT_API_KEY`/`CONTENT_EDITOR_KEY`) для маршрутов Palitra Love не подходит.

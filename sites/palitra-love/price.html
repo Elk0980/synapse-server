@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Прайс — Palitra Love</title>
+  <meta name="description" content="Прайс Palitra Love на цветы, букеты и воздушные шары.">
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="canonical" href="https://palitra-love.synapsebusiness.ru/price.html">
+  <link rel="icon" href="/assets/img/logo-mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <style>
+    .price-hero{padding:64px 0 42px;background:var(--green);color:#fff}.price-hero h1{margin:0 0 14px}.price-hero p{max-width:680px;margin:0;color:#eef1e8}
+    .price-layout{display:grid;grid-template-columns:minmax(210px,280px) minmax(0,1fr);gap:42px;align-items:start;padding-top:54px;padding-bottom:72px}
+    .pnav{position:sticky;top:92px;padding:20px;border:1px solid var(--line);background:#fff}.pnav ul{display:grid;gap:12px;margin:0;padding:0;list-style:none}.pnav a{text-decoration:none;color:var(--muted)}.pnav a:hover,.pnav a.is-active{color:var(--green);font-weight:700}
+    .ps{padding:0;scroll-margin-top:100px}.ps+.ps{margin-top:62px}.ps__title{font-size:clamp(27px,3vw,40px)}.price-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+    .price-card{overflow:hidden;padding:0;background:#fff;border:1px solid var(--line)}.price-card__photo{display:block;width:100%;aspect-ratio:4/3;object-fit:cover}.price-card__body{display:flex;min-height:270px;flex-direction:column;padding:22px}.price-card h3{margin:0 0 12px}.price-card__description{margin:0 0 14px;color:var(--muted)}.price-card .pc__price{margin:auto 0 4px;font-size:25px;font-weight:800}.price-card .note{margin:0 0 18px}.price-card__button{text-align:center}
+    .price-error{padding:32px;border:1px solid var(--line);background:#fff}
+    @media(max-width:800px){.price-layout{grid-template-columns:1fr;padding-top:34px}.pnav{position:static}.pnav ul{display:flex;overflow:auto;padding-bottom:6px}.pnav li{flex:0 0 auto}.price-grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body data-page="price">
+  <header><nav><div class="brand-lockup"><a class="brand" href="/"><img src="/assets/img/logo-dark.svg" alt="Palitra Love" width="200" height="65"></a></div><button class="menu" type="button" data-menu-toggle aria-expanded="false" aria-controls="mobile-navigation">Меню</button><div class="navlinks" id="mobile-navigation"><button class="menu-close" type="button" data-menu-close aria-label="Закрыть меню">×</button><a href="/catalog">Каталог</a><a href="/catalog/bukety">Цветы</a><a href="/catalog/shary">Шары</a><a href="/vypiska">Выписка</a><a href="/den-rozhdeniya">День рождения</a><a href="/price.html">Прайс</a><a href="/dostavka-i-oplata">Доставка</a></div><button class="cart-button" data-cart-open>Корзина · <span data-cart-count>0</span></button></nav></header>
+  <main>
+    <section class="price-hero"><div class="wrap"><p class="eyebrow">Цветы и воздушные шары</p><h1>Прайс Palitra Love</h1><p>Выберите готовый вариант или оставьте заявку — соберём оформление под Ваш повод.</p></div></section>
+    <div class="wrap price-layout"><nav class="pnav" aria-label="Категории прайса"><ul id="price-nav"></ul></nav><div id="price-content"><p>Загружаем прайс…</p></div></div>
+  </main>
+  <footer class="footer"><div class="wrap two"><div><img class="footer-logo" src="/assets/img/logo-light.svg" alt="Palitra Love" width="200" height="65"><p>Цветы и воздушные шары</p><p>Ежедневно 09:00–21:00<br><a href="tel:+79998281010">+7 999 828-10-10</a></p></div><div><p>Подольск, ул. Генерала Стрельбицкого, 3, 2 этаж<br>Москва, ONLINE STORE м. Аннино</p><p><a href="/oferta">Оферта</a> · <a href="/privacy">Политика</a> · <a href="/vozvrat">Возврат</a></p></div></div></footer>
+  <aside class="cart hidden" aria-label="Корзина"><button data-cart-close>Закрыть</button><h2>Корзина</h2><div data-cart-items></div><h3>Итого: <span data-total></span></h3><form><label>Имя<input name="name" required></label><label>Телефон<input name="phone" type="tel" required></label><label>Комментарий<textarea name="comment"></textarea></label><label class="consent"><input type="checkbox" name="consent" required> Согласен(на) на обработку персональных данных по <a href="/privacy">политике</a></label><button>Создать заказ</button></form></aside>
+  <script src="/config.js"></script><script src="/assets/app.js"></script><script src="/price-render.js"></script>
+  <script>
+    (async function () {
+      const data = await PalitraPrice.load(['/api/price', '/data/price.json']);
+      const nav = document.getElementById('price-nav');
+      const content = document.getElementById('price-content');
+      if (!data) { content.innerHTML = '<p class="price-error">Не удалось загрузить прайс. Напишите нам — поможем подобрать вариант.</p>'; return; }
+      nav.innerHTML = PalitraPrice.renderNav(data);
+      content.innerHTML = PalitraPrice.renderSections(data);
+      const links = [...nav.querySelectorAll('a')];
+      const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+        const link = links.find((item) => item.hash === '#' + entry.target.id);
+        if (link) link.classList.toggle('is-active', entry.isIntersecting);
+      }), { rootMargin: '-15% 0px -70%', threshold: 0 });
+      content.querySelectorAll('.ps').forEach((section) => observer.observe(section));
+    }());
+  </script>
+</body>
+</html>
