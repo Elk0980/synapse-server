@@ -5,6 +5,8 @@ const SbCabinet = window.SbCabinet = window.SbCabinet || {};
 let ctx, byId, escapeHTML, crmQuery, csrfOptions, hasPermission, navigate;
 let initialized = false;
 const api = {};
+const companyScope = () => ({ companyCode: ctx.selectedProjectId });
+const scoped = (params = {}) => ({ ...params, ...companyScope() });
 const init = (context) => {
 ctx = context;
 ({ byId, escapeHTML, crmQuery, csrfOptions, hasPermission, navigate } = context);
@@ -131,7 +133,7 @@ const entityHashParts = () => {
 };
 const loadEntityCompanies = async (state) => {
   if (state.companies.length) return;
-  const data = await crmQuery("/companies", { limit: 200, deleted: "exclude" });
+  const data = await crmQuery("/companies", scoped({ limit: 200, deleted: "exclude" }));
   state.companies = data.companies || [];
 };
 const setContactProjectFilter = (state) => {
@@ -186,7 +188,7 @@ const renderEntityList = async (view, reset = false) => {
     limit: 50,
     offset: state.offset
   };
-  const data = await crmQuery(`/${config.path}`, params);
+  const data = await crmQuery(`/${config.path}`, scoped(params));
   state.records.push(...(data[config.key] || []));
   const pageRecords = data[config.key] || [];
   const companyOptions = state.companies.map((company) => {
@@ -225,7 +227,10 @@ const renderEntityList = async (view, reset = false) => {
     return `<tr class="crm-row${deleted ? " is-deleted" : ""}" tabindex="0"
       data-entity-id="${escapeHTML(record.id)}">${cells}</tr>`;
   }).join("");
-  content.innerHTML = `<div class="crm-entity-toolbar">
+  const selectedCompany = state.companies.find((company) =>
+    company.code?.toLowerCase() === ctx.selectedProjectId?.toLowerCase());
+  content.innerHTML = `<p class="crm-project-company">Компания: ${escapeHTML(selectedCompany?.name || ctx.selectedProjectId)}</p>
+    <div class="crm-entity-toolbar">
     <input type="search" data-entity-search value="${escapeHTML(state.q)}" placeholder="Поиск" aria-label="Поиск">
     ${config.companyFilter ? `<select data-company-filter aria-label="Фильтр по компании">
       <option value="">Все компании</option>${companyOptions}</select>` : ""}
@@ -295,7 +300,7 @@ const entitySubtitle = (view, record) => {
 };
 const renderEntityCard = async (view, id) => {
   const config = CRM_ENTITIES[view];
-  const record = await crmQuery(`/${config.path}/${encodeURIComponent(id)}`, { includeDeleted: true });
+  const record = await crmQuery(`/${config.path}/${encodeURIComponent(id)}`, scoped({ includeDeleted: true }));
   const content = byId(`${view}-content`);
   const publicFields = Object.keys(config.labels).filter((field) => !config.private?.includes(field));
   const privateFields = config.private || [];
@@ -338,7 +343,7 @@ const bindCardActions = (view, record) => {
   content.querySelector("[data-delete]")?.addEventListener("click", async () => {
     if (prompt(`Введите название «${entityName(record)}» для удаления`) !== entityName(record)) return;
     try {
-      await crmQuery(`/${config.path}/${record.id}`, {}, csrfOptions("DELETE"));
+      await crmQuery(`/${config.path}/${record.id}`, companyScope(), csrfOptions("DELETE"));
       renderEntityCard(view, record.id);
     } catch (error) {
       content.querySelector("[data-card-status]").textContent = error.message;
@@ -346,7 +351,7 @@ const bindCardActions = (view, record) => {
   });
   content.querySelector("[data-restore]")?.addEventListener("click", async () => {
     try {
-      await crmQuery(`/${config.path}/${record.id}/restore`, {}, csrfOptions("POST"));
+      await crmQuery(`/${config.path}/${record.id}/restore`, companyScope(), csrfOptions("POST"));
       renderEntityCard(view, record.id);
     } catch (error) {
       content.querySelector("[data-card-status]").textContent = error.message;
@@ -466,7 +471,7 @@ const saveEntityForm = async (event, view, record) => {
       renderEntityCard(view, record.id);
       return;
     }
-    const saved = await crmQuery(path, {}, csrfOptions(record ? "PATCH" : "POST", body));
+    const saved = await crmQuery(path, companyScope(), csrfOptions(record ? "PATCH" : "POST", body));
     const id = saved?.id || record?.id;
     if (record) {
       await renderEntityCard(view, id);
@@ -527,7 +532,7 @@ const renderRelations = (view, record) => {
     if (!confirm("Отвязать запись?")) return;
     try {
       const endpoint = relationEndpoint(view, record, relation, button.dataset.targetId);
-      await crmQuery(endpoint, {}, csrfOptions("DELETE"));
+      await crmQuery(endpoint, companyScope(), csrfOptions("DELETE"));
       renderEntityCard(view, record.id);
     } catch (error) {
       content.querySelector("[data-card-status]").textContent = error.message;
@@ -535,7 +540,7 @@ const renderRelations = (view, record) => {
   }));
 };
 const renderRelationForm = async (view, record, relation) => {
-  const data = await crmQuery(`/${relation.path}`, { limit: 200, deleted: "exclude" });
+  const data = await crmQuery(`/${relation.path}`, scoped({ limit: 200, deleted: "exclude" }));
   const relatedConfig = CRM_ENTITIES[relation.view];
   const options = (data[relatedConfig.key] || []).map((item) =>
     `<option value="${escapeHTML(item.id)}">${escapeHTML(entityName(item))}</option>`).join("");
@@ -564,7 +569,7 @@ const renderRelationForm = async (view, record, relation) => {
     if (relation.signing) payload.signingBasis = values.get("signingBasis").trim() || null;
     try {
       const endpoint = relationEndpoint(view, record, relation, values.get("targetId"));
-      await crmQuery(endpoint, {}, csrfOptions("PUT", payload));
+      await crmQuery(endpoint, companyScope(), csrfOptions("PUT", payload));
       renderEntityCard(view, record.id);
     } catch (failure) {
       const error = form.querySelector("[role=alert]");
@@ -573,7 +578,17 @@ const renderRelationForm = async (view, record, relation) => {
     }
   });
 };
-Object.assign(api, { renderCrmEntityRoute, applyContactProjectFilter });
+const reloadCompanyScope = () => {
+  Object.values(entityStates).forEach((state) => {
+    state.companies = [];
+    state.companyId = "";
+    state.projectId = null;
+  });
+  const { parts: [view, route] } = entityHashParts();
+  if (!route) history.replaceState(null, "", `#${view}`);
+  api.renderCrmEntityRoute();
+};
+Object.assign(api, { renderCrmEntityRoute, applyContactProjectFilter, reloadCompanyScope });
 };
 
 SbCabinet.registerView("clients", {
@@ -591,7 +606,7 @@ render(container, context) {
 },
 onProjectChange(context) {
   init(context);
-  api.applyContactProjectFilter();
+  api.reloadCompanyScope();
 },
 });
 SbCabinet.registerView("crm-companies", {
@@ -600,12 +615,20 @@ render(container, context) {
   init(context);
   api.renderCrmEntityRoute();
 },
+onProjectChange(context) {
+  init(context);
+  api.reloadCompanyScope();
+},
 });
 SbCabinet.registerView("crm-legal", {
 title: "Юрлица",
 render(container, context) {
   init(context);
   api.renderCrmEntityRoute();
+},
+onProjectChange(context) {
+  init(context);
+  api.reloadCompanyScope();
 },
 });
 })();

@@ -104,6 +104,32 @@ async function main() {
     signingBasis: 'QA basis' })).status, 201);
   const c2l = `/companies/${company.body.id}/legal-entities/${legal.body.id}`;
   assert.equal((await request('PUT', c2l, { role: 'QA payer', isPrimary: true })).status, 201);
+  const contactB = await request('POST', '/contacts', { name: 'QA Contact B' });
+  assert.equal((await request('PUT', `/contacts/${contactB.body.id}/companies/${companyB.body.id}`,
+    { role: 'QA B' })).status, 201);
+  assert.equal((await request('PUT', `/companies/${companyB.body.id}/legal-entities/${legalB.body.id}`,
+    { role: 'QA B legal' })).status, 201);
+  const scopedContacts = await request('GET', `/contacts?companyCode=${company.body.code.toUpperCase()}`);
+  assert.deepEqual(scopedContacts.body.contacts.map((item) => item.id), [contact.body.id]);
+  assert.equal((await request('GET',
+    `/contacts/${contactB.body.id}?companyCode=${company.body.code}`)).status, 404);
+  assert.deepEqual((await request('GET', `/legal-entities?companyCode=${company.body.code}`))
+    .body.legalEntities.map((item) => item.id), [legal.body.id]);
+  assert.equal((await request('GET',
+    `/legal-entities/${legalB.body.id}?companyCode=${company.body.code}`)).status, 404);
+  const scopedContact = await request('POST', `/contacts?companyCode=${company.body.code}`,
+    { name: 'QA Scoped Contact' });
+  assert.equal(scopedContact.status, 201);
+  const scopedLegal = await request('POST', `/legal-entities?companyCode=${company.body.code}`,
+    { legalForm: 'ip', name: 'QA Scoped Legal' });
+  assert.equal(scopedLegal.status, 201);
+  assert.equal(inspect((db) => db.prepare(`SELECT COUNT(*) count FROM contact_companies
+    WHERE contact_id=? AND company_id=? AND is_deleted=0`).get(scopedContact.body.id, company.body.id).count), 1);
+  assert.equal(inspect((db) => db.prepare(`SELECT COUNT(*) count FROM company_legal_entities
+    WHERE legal_entity_id=? AND company_id=? AND is_deleted=0`).get(scopedLegal.body.id, company.body.id).count), 1);
+  const scopedCompanies = await request('GET', `/companies?companyCode=${company.body.code.toUpperCase()}`);
+  assert.deepEqual(scopedCompanies.body.companies.map((item) => item.id), [company.body.id]);
+  console.log('COMPANY_DATABASE_SCOPE=PASS AUTO_RELATIONS=PASS');
   const card = await request('GET', `/companies/${company.body.id}`);
   assert.equal(card.body.contacts[0].relation.role, 'QA changed');
   assert.equal(card.body.primaryLegalEntity.id, legal.body.id);
