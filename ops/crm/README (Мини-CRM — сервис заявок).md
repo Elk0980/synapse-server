@@ -11,11 +11,11 @@ PORT=8080 DATABASE_PATH="$PWD/data/crm.sqlite" API_KEY='replace-me' node ops/crm
 node ops/crm/smoke-test.js
 ```
 
-Кроме публичного `POST /leads`, все маршруты требуют `X-API-Key`. Один общий ключ даёт полный административный
-доступ, включая персональные данные и банковские реквизиты: это **не RBAC**. Будущий UI обязан использовать
-серверный прокси, который проверяет права; ключ нельзя помещать в браузер. Тела запросов и секретные данные сервис
-не журналирует. Пароли, банковские логины, токены, API-ключи, cookie, приватные ключи, коды подтверждения и CVV/CVC
-не являются полями модели и отклоняются.
+Кроме публичных `POST /leads` и `POST /events`, все маршруты требуют `X-API-Key`. Один общий ключ даёт полный
+административный доступ, включая персональные данные и банковские реквизиты: это **не RBAC**. Будущий UI обязан
+использовать серверный прокси, который проверяет права; ключ нельзя помещать в браузер. Тела запросов и секретные
+данные сервис не журналирует. Пароли, банковские логины, токены, API-ключи, cookie, приватные ключи, коды
+подтверждения и CVV/CVC не являются полями модели и отклоняются.
 
 ## Модель
 
@@ -96,6 +96,52 @@ curl -X POST http://localhost:8080/companies \
 Миграции записываются в `schema_migrations`, выполняются транзакционно и повторяемо, не создают бизнес-данных и
 завершаются `PRAGMA foreign_key_check`.
 
+## События с сайтов
+
+Публичный `POST /events` принимает визиты и клики с разрешённых CORS-источников. Обязательны `type`
+(`visit` или `click`) и код активной компании `companyCode`. Поддерживаются `clientId`, `page`, `landingPage`,
+`referrer`, поля `utmSource` … `utmTerm`, `source`, `target`, `label` и ISO-время `ts`. Ответ всегда содержит только
+`{"ok":true}` с кодом 202. Повторный визит одного `clientId` на ту же страницу в течение 30 минут не записывается.
+IP хранится только как SHA-256 от IP и серверной соли `API_KEY`; User-Agent сокращается до 60 символов.
+
+```sh
+curl -X POST http://localhost:8080/events -H 'Content-Type: application/json' \
+  -d '{"type":"visit","companyCode":"qa_company_a","clientId":"browser-123",
+"page":"/contacts","referrer":"https://2gis.ru/moscow"}'
+
+curl -X POST http://localhost:8080/events -H 'Content-Type: application/json' \
+  -d '{"type":"click","companyCode":"qa_company_a","clientId":"browser-123",
+"page":"/contacts","target":"phone","label":"Позвонить"}'
+```
+
+`deriveSource({ utmSource, referrer })` сначала нормализует `utmSource` в нижний регистр. Без UTM он распознаёт
+2ГИС, Яндекс, Google, Instagram, VK, Telegram и WhatsApp по хосту referrer. Пустой referrer даёт `direct`, прочий
+домен — его host без `www.`. Для заявки referrer используется только при отсутствии `source` и `utmSource`;
+`direct` в `leads.source` не записывается.
+
+## Внешняя статистика площадок
+
+`POST /external-stats` с ключом принимает источник, компанию, примечание и дневные строки. Все поля строки, кроме
+`date`, являются числовыми метриками со свободными именами. Повторная отправка пары источник + компания + дата
+перезаписывает снимок. `GET /external-stats` поддерживает фильтры `source`, `companyCode`, `from` и `to`.
+
+```sh
+curl -X POST http://localhost:8080/external-stats \
+  -H 'X-API-Key: replace-me' -H 'Content-Type: application/json' \
+  -d '{"source":"2gis","companyCode":"qa_company_a","rows":[
+{"date":"2026-09-05","pageViews":42,"calls":3,"routes":5}],"note":"daily import"}'
+
+curl 'http://localhost:8080/external-stats?source=2gis&companyCode=qa_company_a&from=2026-09-01&to=2026-09-05' \
+  -H 'X-API-Key: replace-me'
+```
+
+`/dashboard` в `sources` отдаёт полный список имён источников из заявок, событий и внешних
+снимков; список не ограничивается выбранным периодом или фильтром `source`. `/summary` в `sources` отдаёт
+те же объекты статистики, что и в `sourceStats`. В `sourceStats` для каждого источника за период
+возвращаются показатели заявок и продаж, уникальные визиты, количество кликов, `clicksByTarget`, сумма метрик
+`external` и время последнего снимка `externalCapturedAt`. Пустой источник заявки объединяется с событиями
+`direct`. Общие показатели также содержат `visits` и `clicks`.
+
 ## Задачи
 
 `tasks` — план работ по проектам и очередь входящих поручений. Обязательное поле `title` содержит от 1 до 200
@@ -120,6 +166,5 @@ curl -X POST http://localhost:8080/companies \
 ```sh
 curl -X POST http://localhost:8080/tasks \
   -H 'X-API-Key: replace-me' -H 'Content-Type: application/json' \
-  -d '{"title":"Разобрать обращение","companyCode":"qa_company_a","source":"chat",\
-"sourceRef":"chat:conversation:12:message:345","assigneeRole":"marketer"}'
+  -d '{"title":"Разобрать обращение","source":"chat","sourceRef":"chat:12:345"}'
 ```
