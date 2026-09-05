@@ -106,7 +106,7 @@
           source: firstTouch.source || 'direct',
           target: target || '',
           label: safeLabel.replace(/\s+/g, ' ').trim().slice(0, 60),
-          ts: Date.now()
+          ts: new Date().toISOString()
         };
         var body = JSON.stringify(event);
         if (navigator.sendBeacon && navigator.sendBeacon('/track', new Blob([body], {
