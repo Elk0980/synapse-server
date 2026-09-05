@@ -1279,33 +1279,40 @@
       filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.55));
     }
 
-    .contacts-logo__base,
-    .contacts-logo .p {
+    .contacts-logo__base {
       position: absolute;
       display: block;
       height: auto;
-    }
-
-    .contacts-logo__base {
       inset: 0;
       width: 100%;
     }
 
-    .contacts-logo .p {
+    .contacts-gust {
+      position: absolute;
+      animation: contacts-gust 12s cubic-bezier(.4, 0, .2, 1) var(--gd) infinite;
+    }
+
+    .contacts-gust > .contacts-layer {
+      display: block;
+      width: 100%;
       animation: sway var(--d) ease-in-out var(--o) infinite;
     }
+
+    .wind-A { filter: url(#alvi-windA); }
+    .wind-B { filter: url(#alvi-windB); }
+    .wind-C { filter: url(#alvi-windC); }
 
     .contacts-logo__sheen {
       position: absolute;
       inset: 0;
       pointer-events: none;
-      -webkit-mask: url(img/logo3d/logo3d-base.webp) center/100% 100% no-repeat;
-      mask: url(img/logo3d/logo3d-base.webp) center/100% 100% no-repeat;
+      -webkit-mask: url(img/logo3d-v2/logo3d-base.webp) center/100% 100% no-repeat;
+      mask: url(img/logo3d-v2/logo3d-base.webp) center/100% 100% no-repeat;
       background: linear-gradient(115deg, transparent 30%, rgba(255, 248, 225, 0.55) 48%, rgba(255, 248, 225, 0.75) 50%, rgba(255, 248, 225, 0.55) 52%, transparent 70%);
       background-size: 260% 100%;
       mix-blend-mode: soft-light;
       opacity: 0.9;
-      animation: contacts-sheen 11s ease-in-out -3s infinite;
+      animation: contacts-sheen 12s ease-in-out 0s infinite;
     }
 
     @keyframes sway {
@@ -1314,9 +1321,19 @@
       100% { transform: rotate(calc(var(--a) * -1)); }
     }
 
+    @keyframes contacts-gust {
+      0%, 52% { transform: rotate(0); }
+      58% { transform: rotate(var(--ga)); }
+      64% { transform: rotate(calc(var(--ga) * -.55)); }
+      70% { transform: rotate(calc(var(--ga) * .35)); }
+      77% { transform: rotate(calc(var(--ga) * -.18)); }
+      85% { transform: rotate(calc(var(--ga) * .07)); }
+      100% { transform: rotate(0); }
+    }
+
     @keyframes contacts-sheen {
-      0% { background-position: 120% 0; }
-      45% { background-position: -60% 0; }
+      0%, 50% { background-position: 120% 0; }
+      72% { background-position: -60% 0; }
       100% { background-position: -60% 0; }
     }
 
@@ -1766,6 +1783,12 @@
       #contacts *::after {
         animation: none !important;
         transition: none !important;
+      }
+
+      .contacts-gust,
+      .contacts-layer {
+        animation: none !important;
+        filter: none !important;
       }
     }
   
@@ -2835,20 +2858,27 @@
     <!-- ВЫБРАНО БЕЗ OWNER'А: текстовый «Блок 10. Футер» разделён на
          контактную секцию и семантический footer, чтобы выполнить критерий 11 блоков. -->
     <section class="content-section content-section--alt" id="contacts" data-after-block="10">
+      <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <defs>
+          <filter id="alvi-windA" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.010 0.024" numOctaves="2" seed="3" result="n"><animate attributeName="baseFrequency" values="0.010 0.024;0.013 0.030;0.010 0.024" dur="7s" repeatCount="indefinite"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" xChannelSelector="R" yChannelSelector="G" scale="3"><animate attributeName="scale" values="3;3;14;7;10;5;3" keyTimes="0;.52;.58;.64;.70;.80;1" dur="12s" repeatCount="indefinite"/></feDisplacementMap></filter>
+          <filter id="alvi-windB" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.014 0.030" numOctaves="2" seed="7" result="n"><animate attributeName="baseFrequency" values="0.014 0.030;0.018 0.036;0.014 0.030" dur="5.5s" repeatCount="indefinite"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" xChannelSelector="R" yChannelSelector="G" scale="2"><animate attributeName="scale" values="2;2;11;5;8;4;2" keyTimes="0;.55;.61;.67;.73;.83;1" dur="12s" repeatCount="indefinite"/></feDisplacementMap></filter>
+          <filter id="alvi-windC" x="-8%" y="-8%" width="116%" height="116%"><feTurbulence type="fractalNoise" baseFrequency="0.030 0.030" numOctaves="1" seed="11" result="n"><animate attributeName="baseFrequency" values="0.030;0.036;0.030" dur="4.5s" repeatCount="indefinite"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" xChannelSelector="R" yChannelSelector="G" scale="1.5"><animate attributeName="scale" values="1.5;1.5;6;3;4.5;2.5;1.5" keyTimes="0;.56;.62;.68;.74;.84;1" dur="12s" repeatCount="indefinite"/></feDisplacementMap></filter>
+        </defs>
+      </svg>
       <video class="contacts-water" autoplay muted loop playsinline aria-hidden="true">
         <source src="img/water-loop.webm" type="video/webm">
       </video>
       <div class="content-shell contacts-content">
         <div class="contacts-logo">
-          <img class="contacts-logo__base" src="img/logo3d/logo3d-base.webp" alt="Объёмная эмблема ALVI">
-          <img class="p" src="img/logo3d/twig-1.webp" alt="" aria-hidden="true" style="left:8.887%;top:6.641%;width:37.500%;transform-origin:106.5% 16.9%;--d:8.4s;--o:-2.9s;--a:0.9deg">
-          <img class="p" src="img/logo3d/twig-2.webp" alt="" aria-hidden="true" style="left:55.273%;top:16.113%;width:32.910%;transform-origin:-10.7% -12%;--d:7.6s;--o:-4.1s;--a:1.2deg">
-          <img class="p" src="img/logo3d/twig-3.webp" alt="" aria-hidden="true" style="left:53.711%;top:57.422%;width:33.984%;transform-origin:14.4% 85.9%;--d:9.6s;--o:-1.7s;--a:1.0deg">
-          <img class="p" src="img/logo3d/twig-4.webp" alt="" aria-hidden="true" style="left:11.523%;top:57.520%;width:12.305%;transform-origin:33.3% 100%;--d:6.4s;--o:-0.9s;--a:1.1deg">
-          <img class="p" src="img/logo3d/pompon3d-1.webp" alt="" aria-hidden="true" style="left:58.203%;top:6.934%;width:19.336%;transform-origin:48% -11.1%;--d:7.2s;--o:-1.1s;--a:1.7deg">
-          <img class="p" src="img/logo3d/pompon3d-2.webp" alt="" aria-hidden="true" style="left:5.762%;top:64.355%;width:20.117%;transform-origin:44.2% -5.3%;--d:8.6s;--o:-3.4s;--a:1.4deg">
-          <img class="p" src="img/logo3d/pompon3d-3.webp" alt="" aria-hidden="true" style="left:16.699%;top:73.145%;width:19.727%;transform-origin:50% 4.5%;--d:6.8s;--o:-2.2s;--a:1.6deg">
-          <img class="p" src="img/logo3d/pompon3d-4.webp" alt="" aria-hidden="true" style="left:30.762%;top:77.930%;width:18.555%;transform-origin:50% -5.9%;--d:9.2s;--o:-0.6s;--a:1.3deg">
+          <img class="contacts-logo__base" src="img/logo3d-v2/logo3d-base.webp" alt="Объёмная эмблема ALVI">
+          <div class="contacts-gust" style="left:5.176%;top:6.934%;width:46.191%;transform-origin:94.5% 15.9%;--gd:0s;--ga:3.9deg"><img class="contacts-layer wind-A" src="img/logo3d-v2/twig-1.webp" alt="" aria-hidden="true" style="transform-origin:94.5% 15.9%;--d:8.4s;--o:-2.9s;--a:0.9deg"></div>
+          <div class="contacts-gust" style="left:55.762%;top:14.258%;width:32.715%;transform-origin:-6.9% -0.3%;--gd:0.9s;--ga:4.2deg"><img class="contacts-layer wind-B" src="img/logo3d-v2/twig-2.webp" alt="" aria-hidden="true" style="transform-origin:-6.9% -0.3%;--d:7.6s;--o:-4.1s;--a:1.2deg"></div>
+          <div class="contacts-gust" style="left:55.176%;top:57.715%;width:32.520%;transform-origin:3.9% 89.3%;--gd:0.8s;--ga:7deg"><img class="contacts-layer wind-A" src="img/logo3d-v2/twig-3.webp" alt="" aria-hidden="true" style="transform-origin:3.9% 89.3%;--d:9.6s;--o:-1.7s;--a:2.2deg"></div>
+          <div class="contacts-gust" style="left:6.543%;top:41.699%;width:17.383%;transform-origin:52.2% 95.3%;--gd:0.25s;--ga:4.5deg"><img class="contacts-layer wind-B" src="img/logo3d-v2/twig-4.webp" alt="" aria-hidden="true" style="transform-origin:52.2% 95.3%;--d:6.4s;--o:-0.9s;--a:1.1deg"></div>
+          <div class="contacts-gust" style="left:56.641%;top:5.078%;width:20.996%;transform-origin:51.6% -6.4%;--gd:1.0s;--ga:5.1deg"><img class="contacts-layer wind-C" src="img/logo3d-v2/pompon3d-1.webp" alt="" aria-hidden="true" style="transform-origin:51.6% -6.4%;--d:7.2s;--o:-1.1s;--a:1.7deg"></div>
+          <div class="contacts-gust" style="left:3.516%;top:61.230%;width:23.730%;transform-origin:46.9% 2.8%;--gd:0.35s;--ga:6.0deg"><img class="contacts-layer wind-C" src="img/logo3d-v2/pompon3d-2.webp" alt="" aria-hidden="true" style="transform-origin:46.9% 2.8%;--d:8.6s;--o:-3.4s;--a:1.4deg"></div>
+          <div class="contacts-gust" style="left:15.332%;top:71.680%;width:22.461%;transform-origin:50.0% 4.5%;--gd:0.5s;--ga:5.4deg"><img class="contacts-layer wind-C" src="img/logo3d-v2/pompon3d-3.webp" alt="" aria-hidden="true" style="transform-origin:50.0% 4.5%;--d:6.8s;--o:-2.2s;--a:1.6deg"></div>
+          <div class="contacts-gust" style="left:28.906%;top:76.855%;width:21.191%;transform-origin:52.5% -6.2%;--gd:0.65s;--ga:4.8deg"><img class="contacts-layer wind-C" src="img/logo3d-v2/pompon3d-4.webp" alt="" aria-hidden="true" style="transform-origin:52.5% -6.2%;--d:9.2s;--o:-0.6s;--a:1.3deg"></div>
           <div class="contacts-logo__sheen" aria-hidden="true"></div>
         </div>
         <h2 class="contacts-title" data-edit="contacts.content-title-1">SPA-студия ALVI</h2>
