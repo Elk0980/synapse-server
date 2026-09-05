@@ -86,3 +86,22 @@
 .analytics-legal { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line); }
 .analytics-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
 .analytics-actions a { color: var(--accent); }
+
+@media (max-width: 760px) {
+  .analytics-funnel { grid-template-columns: 128px minmax(0, 1fr); column-gap: 8px; row-gap: 24px; }
+  .funnel-shape { min-height: 136px; padding: 6px; }
+  .funnel-shape-label {
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 4px);
+    color: var(--text);
+    font-size: 0.72rem;
+    white-space: nowrap;
+    transform: translateX(-50%);
+  }
+  .funnel-card { padding: 11px; }
+  .analytics-finance { grid-template-columns: 1fr; }
+  .platform-panel { width: calc(100vw - 64px); }
+  .analytics-source-table { min-width: 1040px; table-layout: auto; }
+  .analytics-source-table th, .analytics-source-table td { white-space: nowrap; }
+}
