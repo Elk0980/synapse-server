@@ -2,11 +2,12 @@
 "use strict";
 
 const SbCabinet = window.SbCabinet = window.SbCabinet || {};
-let selectedProjectId, byId, escapeHTML, crmQuery, csrfOptions, scopeParams, navigate;
+let ctx, byId, escapeHTML, crmQuery, csrfOptions, scopeParams, navigate;
 let initialized = false;
 const api = {};
 const init = (context) => {
-  ({ selectedProjectId, byId, escapeHTML, crmQuery, csrfOptions, scopeParams, navigate } = context);
+  ctx = context;
+  ({ byId, escapeHTML, crmQuery, csrfOptions, scopeParams, navigate } = context);
   if (initialized) return;
   initialized = true;
 
@@ -259,7 +260,7 @@ const init = (context) => {
     const form = byId("task-create-form");
     await loadTaskCompanies();
     form.querySelector("[data-task-company]").innerHTML = taskCompanyOptions(
-      selectedProjectId === "synapse-business" ? "" : selectedProjectId
+      ctx.selectedProjectId === "synapse-business" ? "" : ctx.selectedProjectId
     );
     form.querySelector("[data-task-role]").innerHTML = taskOptions(TASK_ROLES, "synapse");
     form.querySelector("[data-task-priority]").innerHTML = taskOptions(TASK_PRIORITIES, "normal");

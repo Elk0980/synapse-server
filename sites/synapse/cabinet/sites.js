@@ -2,11 +2,12 @@
 "use strict";
 
 const SbCabinet = window.SbCabinet = window.SbCabinet || {};
-let identity, selectedProjectId, byId, escapeHTML, apiJson;
+let ctx, identity, byId, escapeHTML, apiJson;
 let initialized = false;
 const api = {};
 const init = (context) => {
-  ({ identity, selectedProjectId, byId, escapeHTML, apiJson } = context);
+  ctx = context;
+  ({ identity, byId, escapeHTML, apiJson } = context);
   if (initialized) return;
   initialized = true;
 
@@ -70,7 +71,7 @@ const init = (context) => {
   byId("sites-state").addEventListener("change", renderSites);
   byId("create-site").addEventListener("click", () => {
     byId("site-create-form").elements.companyCode.value =
-      selectedProjectId || identity.companies[0]?.id || "";
+      ctx.selectedProjectId || identity.companies[0]?.id || "";
     byId("site-create-dialog").showModal();
   });
   document.querySelector("[data-close-dialog]").addEventListener("click", () => {
@@ -98,6 +99,9 @@ const init = (context) => {
 SbCabinet.registerView("sites", {
   title: "Сайты",
   render(container, context) {
+    init(context);
+  },
+  initialize(context) {
     init(context);
     api.renderSites();
   },

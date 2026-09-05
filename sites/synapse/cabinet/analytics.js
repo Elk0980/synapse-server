@@ -34,13 +34,13 @@ const ANALYTICS_PLATFORMS = SbCabinet.ANALYTICS_PLATFORMS = [
 ];
 
 let ctx;
-let identity, selectedProjectId, byId, escapeHTML, crmQuery, csrfOptions, scopeParams;
+let identity, byId, escapeHTML, crmQuery, csrfOptions, scopeParams;
 let formatMoney, formatROMI, periodDates, dateValue;
 let initialized = false;
 const api = {};
 const init = (context) => {
 ctx = context;
-({ identity, selectedProjectId, byId, escapeHTML, crmQuery, csrfOptions, scopeParams } = context);
+({ identity, byId, escapeHTML, crmQuery, csrfOptions, scopeParams } = context);
 ({ formatMoney, formatROMI, periodDates, dateValue } = context);
 if (initialized) return;
 initialized = true;
@@ -122,8 +122,8 @@ const renderPlatformFilter = () => {
     ${allChecked ? "checked" : ""}><strong>Все площадки</strong></label>${options}`;
   byId("platform-trigger").textContent = allChecked ? "Все площадки" : `Выбрано: ${analyticsState.selected.size}`;
 };
-const funnelProjectLabel = () => selectedProjectId === "synapse-business" ? "онлайн-созвон" :
-  ["alvi", "avokado"].includes(selectedProjectId) ? "запись на визит" : "заявка";
+const funnelProjectLabel = () => ctx.selectedProjectId === "synapse-business" ? "онлайн-созвон" :
+  ["alvi", "avokado"].includes(ctx.selectedProjectId) ? "запись на визит" : "заявка";
 const renderAnalytics = (dashboard, summary, expenses) => {
   analyticsState.payload = { dashboard, summary, expenses };
   const stats = Array.isArray(dashboard.sourceStats) ? dashboard.sourceStats : [];
@@ -150,7 +150,7 @@ const renderAnalytics = (dashboard, summary, expenses) => {
   const sales = total("sales");
   const revenue = total("revenue");
   const values = { ...(dashboard.summary || {}), ...dashboard };
-  const expensesUnavailable = selectedProjectId !== "synapse-business" &&
+  const expensesUnavailable = ctx.selectedProjectId !== "synapse-business" &&
     (values.expenses === null || dashboard.expensesScope || summary.expensesScope);
   const financeExpenses = expensesUnavailable ? null : allSelected ? values.expenses : total("expenses");
   const financeRevenue = allSelected ? values.revenue : revenue;
@@ -252,7 +252,7 @@ const renderAnalytics = (dashboard, summary, expenses) => {
   byId("analytics-csv").addEventListener("click", () => {
     crmQuery("/leads.csv", { ...analyticsState.range, ...scopeParams() }, { open: true });
   });
-  const scopedExpenses = selectedProjectId !== "synapse-business";
+  const scopedExpenses = ctx.selectedProjectId !== "synapse-business";
   byId("expenses-section").querySelector("h2").hidden = scopedExpenses;
   byId("expense-form").hidden = scopedExpenses || !identity.permissions.includes("crm.edit");
   byId("expense-result").hidden = scopedExpenses;
@@ -277,7 +277,7 @@ const loadAnalytics = async () => {
     const [dashboard, summary, expensePayload] = await Promise.all([
       crmQuery("/dashboard", { period: analyticsState.period, ...range, ...scopeParams() }),
       crmQuery("/summary", { ...range, ...scopeParams() }),
-      selectedProjectId === "synapse-business" ? crmQuery("/expenses", range) : { expenses: [] }
+      ctx.selectedProjectId === "synapse-business" ? crmQuery("/expenses", range) : { expenses: [] }
     ]);
     renderAnalytics(dashboard, summary, expensePayload.expenses || []);
   } catch (error) {

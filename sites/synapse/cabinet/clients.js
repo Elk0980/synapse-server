@@ -2,11 +2,12 @@
 "use strict";
 
 const SbCabinet = window.SbCabinet = window.SbCabinet || {};
-let selectedProjectId, byId, escapeHTML, crmQuery, csrfOptions, hasPermission, navigate;
+let ctx, byId, escapeHTML, crmQuery, csrfOptions, hasPermission, navigate;
 let initialized = false;
 const api = {};
 const init = (context) => {
-({ selectedProjectId, byId, escapeHTML, crmQuery, csrfOptions, hasPermission, navigate } = context);
+ctx = context;
+({ byId, escapeHTML, crmQuery, csrfOptions, hasPermission, navigate } = context);
 if (initialized) return;
 initialized = true;
 
@@ -134,10 +135,10 @@ const loadEntityCompanies = async (state) => {
   state.companies = data.companies || [];
 };
 const setContactProjectFilter = (state) => {
-  if (state.projectId === selectedProjectId) return;
-  const company = state.companies.find((item) => item.code?.toLowerCase() === selectedProjectId);
-  state.companyId = selectedProjectId === "synapse-business" ? "" : String(company?.id || "");
-  state.projectId = selectedProjectId;
+  if (state.projectId === ctx.selectedProjectId) return;
+  const company = state.companies.find((item) => item.code?.toLowerCase() === ctx.selectedProjectId);
+  state.companyId = ctx.selectedProjectId === "synapse-business" ? "" : String(company?.id || "");
+  state.projectId = ctx.selectedProjectId;
 };
 const applyContactProjectFilter = async () => {
   const state = entityState("crm-contacts");
@@ -154,7 +155,7 @@ const renderCrmEntityRoute = async () => {
     const state = entityState(view);
     state.companyId = params.get("companyId") || "";
     if (view === "crm-contacts") {
-      state.projectId = params.has("companyId") ? selectedProjectId : null;
+      state.projectId = params.has("companyId") ? ctx.selectedProjectId : null;
     }
   }
   const content = byId(`${view}-content`);
@@ -255,7 +256,7 @@ const bindEntityList = (view) => {
   });
   content.querySelector("[data-company-filter]")?.addEventListener("change", (event) => {
     state.companyId = event.target.value;
-    state.projectId = selectedProjectId;
+    state.projectId = ctx.selectedProjectId;
     const query = state.companyId ? `?companyId=${encodeURIComponent(state.companyId)}` : "";
     history.replaceState(null, "", `#${view}${query}`);
     renderEntityList(view, true);

@@ -1041,7 +1041,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   };
   const cabinetContext = () => ({
     identity,
-    selectedProjectId,
+    get selectedProjectId() { return selectedProjectId; },
     get currentView() { return currentView; },
     byId,
     escapeHTML,
@@ -1195,16 +1195,15 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       renderProjectPicker();
       if (redirectEditorHash()) return;
       const context = cabinetContext();
-      const initialView = viewFromHash();
       registeredViews.home.render(byId("home-view"), context);
       registeredViews.tasks.updateSummary(context);
       if (identity.permissions.includes("analytics.view")) {
         registeredViews["analytics-through"].initialize(context);
       }
       if (hasPermission("crm.view")) registeredViews.crm.initialize(context);
-      setView(initialView);
-      if (initialView !== "sites") registeredViews.sites.render(byId("sites-view"), context);
-      if (initialView !== "accounts") registeredViews.accounts.render(byId("accounts-view"), context);
+      setView(viewFromHash());
+      registeredViews.sites.initialize(context);
+      registeredViews.accounts.initialize(context);
       byId("app").hidden = false;
       byId("auth").hidden = true;
     } catch (error) {

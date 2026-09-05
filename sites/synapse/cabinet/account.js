@@ -66,6 +66,9 @@ SbCabinet.registerView("accounts", {
   title: "Настройка аккаунтов",
   render(container, context) {
     init(context);
+  },
+  initialize(context) {
+    init(context);
     api.renderAccounts();
   },
 });
