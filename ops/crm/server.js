@@ -261,6 +261,46 @@ migrate(3, () => {
   `);
 });
 
+migrate(4, () => {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pipeline_stages (
+      id INTEGER PRIMARY KEY,
+      code TEXT UNIQUE NOT NULL,
+      label TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      is_final INTEGER DEFAULT 0,
+      kind TEXT CHECK(kind IN ('open', 'won', 'lost')) DEFAULT 'open',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+  const stages = [
+    ['new', 'Новый', 'open'],
+    ['in_progress', 'В работе', 'open'],
+    ['payment', 'Оплата', 'open'],
+    ['repeat', 'Повторная продажа', 'won'],
+    ['rejected', 'Отказ', 'lost'],
+  ];
+  const now = new Date().toISOString();
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO pipeline_stages (code, label, position, is_final, kind, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  stages.forEach(([code, label, kind], position) => {
+    insert.run(code, label, position, Number(kind !== 'open'), kind, now, now);
+  });
+  db.exec(`
+    UPDATE companies SET pipeline_stage = CASE pipeline_stage
+      WHEN 'application' THEN 'new'
+      WHEN 'call' THEN 'in_progress'
+      WHEN 'kit_ready' THEN 'in_progress'
+      WHEN 'active' THEN 'repeat'
+      ELSE pipeline_stage
+    END
+    WHERE pipeline_stage IN ('application', 'call', 'kit_ready', 'active');
+  `);
+});
+
 const foreignKeyErrors = db.prepare('PRAGMA foreign_key_check').all();
 if (foreignKeyErrors.length) throw new Error('Нарушена ссылочная целостность базы данных');
 
@@ -519,7 +559,6 @@ const ENTITY_CONFIG = {
 };
 const SYSTEM_FIELDS = new Set(['id', 'createdAt', 'updatedAt', 'isDeleted', 'deletedAt']);
 const SECRET_PATTERN = /(password|token|api.?key|secret|cookie|private.?key|cvv|cvc|login|код.?подтверж)/i;
-const PIPELINE_STAGES = new Set(['application', 'call', 'kit_ready', 'payment', 'active']);
 const MESSENGER_TYPES = new Set(['telegram', 'max', 'whatsapp', 'vk', 'phone', 'email', 'other']);
 const JSON_FIELDS = new Set(['messengers', 'links', 'socials']);
 
@@ -662,8 +701,10 @@ function validateEntity(config, body, patch = false, current = null) {
     }
     if (field === 'legalForm' && !['ip', 'ooo'].includes(value)) fail(400, 'legalForm должен быть ip или ooo',
       { code: 'VALIDATION_ERROR', field });
-    if (field === 'pipelineStage' && value !== null && !PIPELINE_STAGES.has(value)) {
-      fail(400, 'Неизвестный этап компании', { code: 'VALIDATION_ERROR', field });
+    if (field === 'pipelineStage' && value !== null) {
+      if (!db.prepare('SELECT 1 FROM pipeline_stages WHERE code = ?').get(value)) {
+        fail(400, 'Неизвестный этап компании', { code: 'VALIDATION_ERROR', field });
+      }
     }
     if (field === 'timezone' && value !== null) {
       try { new Intl.DateTimeFormat('ru', { timeZone: value }); } catch {
@@ -1251,6 +1292,133 @@ async function handleRelationRoutes(request, response, url, cors) {
   return false;
 }
 
+function pipelineStages() {
+  return db.prepare('SELECT id, code, label, position, kind FROM pipeline_stages ORDER BY position, id').all();
+}
+
+function pipelineStageCode(label, reservedCodes) {
+  const letters = {
+    а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'yo', ж: 'zh', з: 'z', и: 'i', й: 'y',
+    к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f',
+    х: 'kh', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'shch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+  };
+  const slug = label.toLowerCase().replace(/[а-яё]/g, (letter) => letters[letter])
+    .normalize('NFKD').replace(/\p{M}/gu, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'stage';
+  let code = slug;
+  let suffix = 2;
+  while (reservedCodes.has(code)) {
+    code = `${slug}-${suffix}`;
+    suffix += 1;
+  }
+  reservedCodes.add(code);
+  return code;
+}
+
+function replacePipelineStages(body) {
+  if (Object.keys(body).some((key) => key !== 'stages') || !Array.isArray(body.stages) ||
+      body.stages.length < 1 || body.stages.length > 12) {
+    fail(400, 'Воронка должна содержать от 1 до 12 этапов', { code: 'VALIDATION_ERROR', field: 'stages' });
+  }
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const current = pipelineStages();
+    const currentCodes = new Set(current.map((stage) => stage.code));
+    const reservedCodes = new Set(currentCodes);
+    const keptCodes = new Set();
+    const stages = body.stages.map((stage, position) => {
+      const field = `stages.${position}`;
+      if (!stage || typeof stage !== 'object' || Array.isArray(stage) ||
+          Object.keys(stage).some((key) => !['code', 'label', 'kind'].includes(key))) {
+        fail(400, 'Некорректный объект этапа', { code: 'VALIDATION_ERROR', field });
+      }
+      const label = typeof stage.label === 'string' ? stage.label.trim() : '';
+      if (!label || Array.from(label).length > 40) {
+        fail(400, 'Название этапа должно содержать от 1 до 40 символов',
+          { code: 'VALIDATION_ERROR', field: `${field}.label` });
+      }
+      if (!['open', 'won', 'lost'].includes(stage.kind)) {
+        fail(400, 'Тип этапа должен быть open, won или lost',
+          { code: 'VALIDATION_ERROR', field: `${field}.kind` });
+      }
+      let code;
+      if (Object.hasOwn(stage, 'code')) {
+        if (typeof stage.code !== 'string' || !currentCodes.has(stage.code)) {
+          fail(400, 'Неизвестный код этапа', { code: 'VALIDATION_ERROR', field: `${field}.code` });
+        }
+        code = stage.code;
+        if (keptCodes.has(code)) {
+          fail(400, 'Код этапа не должен повторяться', { code: 'VALIDATION_ERROR', field: `${field}.code` });
+        }
+      } else {
+        code = pipelineStageCode(label, reservedCodes);
+      }
+      keptCodes.add(code);
+      return { code, label, kind: stage.kind, position };
+    });
+    const removed = current.filter((stage) => !keptCodes.has(stage.code));
+    const companyCount = db.prepare('SELECT COUNT(*) count FROM companies WHERE pipeline_stage = ?');
+    for (const stage of removed) {
+      const count = companyCount.get(stage.code).count;
+      if (count) {
+        fail(409, `В этапе «${stage.label}» есть ${count} компаний — сначала перенесите их`,
+          { code: 'PIPELINE_STAGE_IN_USE', stageCode: stage.code, count });
+      }
+    }
+    const now = new Date().toISOString();
+    const update = db.prepare(`
+      UPDATE pipeline_stages SET label = ?, position = ?, kind = ?, is_final = ?, updated_at = ? WHERE code = ?
+    `);
+    const insert = db.prepare(`
+      INSERT INTO pipeline_stages (code, label, position, kind, is_final, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const stage of stages) {
+      const { code, label, position, kind } = stage;
+      const isFinal = Number(kind !== 'open');
+      if (currentCodes.has(code)) {
+        update.run(label, position, kind, isFinal, now, code);
+      } else {
+        insert.run(code, label, position, kind, isFinal, now, now);
+      }
+    }
+    const remove = db.prepare('DELETE FROM pipeline_stages WHERE code = ?');
+    for (const stage of removed) remove.run(stage.code);
+    db.exec('COMMIT');
+    return { stages: pipelineStages() };
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+function companyOverview(id) {
+  const row = entityRow(ENTITY_CONFIG.companies, id);
+  const { contacts, legalEntities } = relationRows('companies', id);
+  const tasks = db.prepare(`
+    SELECT id, title, status, due_date FROM tasks
+    WHERE company_code = ? COLLATE NOCASE AND is_deleted = 0 AND status NOT IN ('done', 'cancelled')
+    ORDER BY created_at DESC, id DESC LIMIT 20
+  `).all(row.code).map((task) => ({
+    id: task.id, title: task.title, status: task.status, dueDate: task.due_date,
+  }));
+  const total = db.prepare('SELECT COUNT(*) count FROM leads WHERE company_code = ? COLLATE NOCASE')
+    .get(row.code).count;
+  const last = db.prepare(`
+    SELECT id, created_at, name, stage, source FROM leads WHERE company_code = ? COLLATE NOCASE
+    ORDER BY created_at DESC, id DESC LIMIT 5
+  `).all(row.code).map((lead) => ({
+    id: lead.id, createdAt: lead.created_at, name: lead.name, stage: lead.stage, source: lead.source,
+  }));
+  return {
+    company: serializeEntity(ENTITY_CONFIG.companies, row),
+    contacts,
+    legalEntities,
+    tasks,
+    leads: { total, last },
+    stageHistory: [],
+  };
+}
+
 function taskSummary(url) {
   const companyCode = url.searchParams.get('companyCode');
   const clauses = ['is_deleted = 0'];
@@ -1291,6 +1459,17 @@ async function route(request, response) {
   const publicPost = request.method === 'POST' && ['/leads', '/events'].includes(url.pathname);
   if (!publicPost) requireApiKey(request);
 
+  if (request.method === 'GET' && url.pathname === '/pipeline-stages') {
+    return send(response, 200, { stages: pipelineStages() }, cors);
+  }
+  if (request.method === 'PUT' && url.pathname === '/pipeline-stages') {
+    const body = await readJson(request);
+    return send(response, 200, replacePipelineStages(body), cors);
+  }
+  const overviewMatch = url.pathname.match(/^\/companies\/(\d+)\/overview$/);
+  if (request.method === 'GET' && overviewMatch) {
+    return send(response, 200, companyOverview(entityId(overviewMatch[1])), cors);
+  }
   if (await handleRelationRoutes(request, response, url, cors)) return;
   if (request.method === 'GET' && url.pathname === '/tasks/summary') {
     return send(response, 200, taskSummary(url), cors);

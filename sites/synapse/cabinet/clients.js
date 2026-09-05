@@ -11,13 +11,18 @@ ctx = context;
 if (initialized) return;
 initialized = true;
 
-const ENTITY_STAGES = Object.freeze({
-  application: "Заявка",
-  call: "Созвон",
-  kit_ready: "Комплект собран",
-  payment: "Оплата",
-  active: "Активен"
-});
+const entityStages = () => SbCabinet.pipelineStages.stages || [];
+const entityStageOptions = (value = "") => {
+  const stages = entityStages();
+  const options = stages.map(({ code, label }) => {
+    const selected = value === code ? " selected" : "";
+    return `<option value="${escapeHTML(code)}"${selected}>${escapeHTML(label)}</option>`;
+  });
+  if (value && !stages.some((stage) => stage.code === value)) {
+    options.push(`<option value="${escapeHTML(value)}" selected>${escapeHTML(value)} (неизвестный этап)</option>`);
+  }
+  return options.join("");
+};
 const CRM_ENTITIES = Object.freeze({
   "crm-contacts": {
     path: "contacts",
@@ -116,7 +121,7 @@ const entityStates = {};
 const canEditCRM = () => hasPermission("crm.edit");
 const entityValue = (field, value) => {
   if (field === "legalForm") return value === "ip" ? "ИП" : value === "ooo" ? "ООО" : value;
-  if (field === "pipelineStage") return ENTITY_STAGES[value] || value;
+  if (field === "pipelineStage") return entityStages().find((stage) => stage.code === value)?.label || value;
   return value;
 };
 const entityName = (record) => record.name || record.shortName || record.code || `#${record.id}`;
@@ -212,6 +217,7 @@ const renderCrmEntityRoute = async () => {
 };
 const renderEntityList = async (view, reset = false) => {
   const config = CRM_ENTITIES[view];
+  if (config.stageFilter) await SbCabinet.pipelineStages.load(crmQuery);
   const state = entityState(view);
   const content = byId(`${view}-content`);
   if (reset) {
@@ -235,9 +241,9 @@ const renderEntityList = async (view, reset = false) => {
     const selected = String(company.id) === state.companyId ? " selected" : "";
     return `<option value="${escapeHTML(company.id)}"${selected}>${escapeHTML(entityName(company))}</option>`;
   }).join("");
-  const stageOptions = Object.entries(ENTITY_STAGES).map(([id, label]) => {
+  const stageOptions = entityStages().map(({ code: id, label }) => {
     const selected = id === state.pipelineStage ? " selected" : "";
-    return `<option value="${id}"${selected}>${label}</option>`;
+    return `<option value="${escapeHTML(id)}"${selected}>${escapeHTML(label)}</option>`;
   }).join("");
   const visibleFields = selectedFields(view);
   const detailFields = visibleFields.filter((field) => field !== "name");
@@ -381,6 +387,7 @@ const entitySubtitle = (view, record) => {
 };
 const renderEntityCard = async (view, id) => {
   const config = CRM_ENTITIES[view];
+  if (config.stageFilter) await SbCabinet.pipelineStages.load(crmQuery);
   const record = await crmQuery(`/${config.path}/${encodeURIComponent(id)}`, { includeDeleted: true });
   const content = byId(`${view}-content`);
   const publicFields = Object.keys(config.labels).filter((field) => !config.private?.includes(field));
@@ -462,10 +469,8 @@ const fieldInput = (config, field, value = "") => {
       <option value="ooo"${value === "ooo" ? " selected" : ""}>ООО</option></select></label>`;
   }
   if (field === "pipelineStage") {
-    const options = Object.entries(ENTITY_STAGES).map(([id, label]) =>
-      `<option value="${id}"${value === id ? " selected" : ""}>${label}</option>`).join("");
     return `<label>${config.labels[field]}<select name="${field}"><option value=""></option>
-      ${options}</select></label>`;
+      ${entityStageOptions(value)}</select></label>`;
   }
   const type = field.toLowerCase().includes("date") ? "date" : field === "email" ? "email" :
     field.toLowerCase().includes("url") ? "url" : "text";
@@ -488,6 +493,7 @@ const repeatRow = (row = {}, field = "") => `<div class="crm-repeat-row">${field
   value="${escapeHTML(row.handle || row.url || "")}"><button type="button" data-repeat-remove>Удалить</button></div>`;
 const renderEntityForm = async (view, record) => {
   const config = CRM_ENTITIES[view];
+  if (config.stageFilter) await SbCabinet.pipelineStages.load(crmQuery);
   const content = byId(`${view}-content`);
   const fields = Object.keys(config.labels);
   const controls = fields.map((field) => fieldInput(config, field, record?.[field] ?? "")).join("");
