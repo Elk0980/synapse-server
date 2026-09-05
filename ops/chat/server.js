@@ -517,7 +517,7 @@ async function handleWebhook(request, response, origin) {
     );
   }
   const author = telegramAuthor(message);
-  if (text.startsWith("/") && !/^\/(?:task|задача)(?:@\w+)?\b/iu.test(text)) {
+  if (text.startsWith("/") && !/^\/(?:task|задача)(?:@\w+)?(?=\s|:|$)/iu.test(text)) {
     return send(response, 200, { ok: true }, origin);
   }
   let taskText = text;
