@@ -1,6 +1,12 @@
 .platform-status-list {
   display: grid;
   gap: 18px;
+  min-width: 0;
+}
+
+.platform-status-group,
+.platform-status-item {
+  min-width: 0;
 }
 
 .platform-status-group h2 {
@@ -39,9 +45,12 @@
   background: var(--surface, #fff);
   border: 1px solid var(--line);
   border-radius: 12px;
+  box-sizing: border-box;
   margin: 4px 0 14px;
   max-width: 100%;
+  min-width: 0;
   padding: 16px;
+  width: 100%;
 }
 
 .manual-stats-form p {
@@ -49,8 +58,8 @@
 }
 
 .manual-days-scroll {
-  max-width: 100%;
   overflow-x: auto;
+  width: 100%;
 }
 
 .manual-days-table {

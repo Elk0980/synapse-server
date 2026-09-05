@@ -25,10 +25,16 @@ const formatDate = (value, year = true) => {
     ...(year ? { year: "numeric" } : {})
   }).format(new Date(`${String(value).slice(0, 10)}T00:00:00`));
 };
+const dateValue = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 const recentDates = () => Array.from({ length: 7 }, (_, offset) => {
   const date = new Date();
   date.setDate(date.getDate() - offset);
-  return date.toISOString().slice(0, 10);
+  return dateValue(date);
 });
 const projectLabel = () => byId("project-name")?.textContent || ctx.selectedProjectId || "—";
 const isEditable = () => identity.permissions.includes("crm.edit");
@@ -43,12 +49,12 @@ const metricInputs = (date) => METRICS.map(([key, label]) => `<td>
   <input type="number" min="0" step="any" name="${key}" aria-label="${label}, ${date}">
   <small class="existing-value" data-existing="${key}"></small>
   </td>`).join("");
-const dayRow = (date = new Date().toISOString().slice(0, 10)) => `<tr>
+const dayRow = (date = dateValue(new Date())) => `<tr>
   <td><input type="date" name="date" value="${escapeHTML(date)}" required></td>
   ${metricInputs(date)}
   <td><button class="plain-button remove-day" type="button" aria-label="Удалить день">×</button></td>
   </tr>`;
-const manualForm = (platform) => `<form class="manual-stats-form" data-platform="${platform.id}">
+const manualForm = (platform) => `<form class="manual-stats-form" data-platform="${platform.id}" novalidate>
   <p class="manual-project"><strong>Проект:</strong> ${escapeHTML(projectLabel())}
   <small>Чтобы изменить, переключите проект слева</small></p>
   <p><strong>Источник:</strong> ${escapeHTML(platform.codes[0])}</p>
@@ -93,6 +99,12 @@ const formRange = (form) => {
   const dates = [...form.querySelectorAll('[name="date"]')].map((input) => input.value).filter(Boolean).sort();
   return dates.length ? { from: dates[0], to: dates.at(-1) } : null;
 };
+const nextFreeDate = (form) => {
+  const dates = [...form.querySelectorAll('[name="date"]')].map((input) => input.value).filter(Boolean).sort();
+  const date = dates.length ? new Date(`${dates[0]}T00:00:00`) : new Date();
+  if (dates.length) date.setDate(date.getDate() - 1);
+  return dateValue(date);
+};
 const clearExisting = (form) => form.querySelectorAll(".existing-value").forEach((item) => {
   item.textContent = "";
 });
@@ -132,13 +144,23 @@ const formRows = (form) => [...form.querySelectorAll("tbody tr")].map((row) => {
 }).filter((row) => METRICS.some(([key]) => Object.hasOwn(row, key)));
 const saveForm = async (form) => {
   const result = form.querySelector(".manual-result");
-  const rows = formRows(form);
   result.textContent = "";
+  if (!form.reportValidity()) {
+    const negative = [...form.querySelectorAll('input[type="number"]')].some((input) => input.valueAsNumber < 0);
+    if (negative) result.textContent = "Значения должны быть не меньше 0";
+    return;
+  }
+  const dates = [...form.querySelectorAll('[name="date"]')].map((input) => input.value);
+  const duplicate = dates.find((date, index) => dates.indexOf(date) !== index);
+  if (duplicate) {
+    result.textContent = `Дата ${formatDate(duplicate, false)} повторяется`;
+    return;
+  }
+  const rows = formRows(form);
   if (!rows.length) {
     result.textContent = "Введите хотя бы одно число.";
     return;
   }
-  if (!form.reportValidity()) return;
   const platform = platformFor(form.dataset.platform);
   const button = form.querySelector('[type="submit"]');
   button.disabled = true;
@@ -192,7 +214,7 @@ const bindEvents = () => {
     const form = event.target.closest(".manual-stats-form");
     if (!form) return;
     if (event.target.closest(".add-day")) {
-      form.querySelector("tbody").insertAdjacentHTML("beforeend", dayRow());
+      form.querySelector("tbody").insertAdjacentHTML("beforeend", dayRow(nextFreeDate(form)));
       loadExisting(form);
     }
     if (event.target.closest(".remove-day")) {
