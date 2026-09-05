@@ -128,7 +128,12 @@ const fieldStorageKey = (view) => {
   return `synapse_cabinet_client_fields:${ctx.identity.userId}:${view}`;
 };
 const availableFields = (config) => {
-  const fields = Object.keys(config.labels);
+  const labelFields = Object.keys(config.labels);
+  const registrationIndex = labelFields.indexOf("ogrn");
+  const fields = registrationIndex < 0 ? labelFields : labelFields.flatMap((field) => {
+    if (field === "ogrn") return ["registration"];
+    return field === "ogrnip" ? [] : [field];
+  });
   const arrays = Object.keys(config.arrays || {});
   const relations = config.relations.map((relation) => relation.key);
   return [...fields, ...arrays, ...relations].filter((field) => {
@@ -138,9 +143,7 @@ const availableFields = (config) => {
 const selectedFields = (view) => {
   const config = CRM_ENTITIES[view];
   const available = availableFields(config);
-  const defaults = config.columns.flatMap((field) => {
-    return field === "registration" ? ["ogrn", "ogrnip"] : [field];
-  });
+  const defaults = config.columns;
   let stored;
   try {
     stored = JSON.parse(localStorage.getItem(fieldStorageKey(view)));
@@ -237,13 +240,14 @@ const renderEntityList = async (view, reset = false) => {
     return `<option value="${id}"${selected}>${label}</option>`;
   }).join("");
   const visibleFields = selectedFields(view);
+  const detailFields = visibleFields.filter((field) => field !== "name");
   const fieldOptions = availableFields(config).map((field) => {
     const checked = visibleFields.includes(field) ? " checked" : "";
     return `<label><input type="checkbox" value="${escapeHTML(field)}" data-card-field${checked}>
       <span>${escapeHTML(fieldLabel(config, field))}</span></label>`;
   }).join("");
   const cards = state.records.map((record) => {
-    const details = visibleFields.map((field) => {
+    const details = detailFields.map((field) => {
       const shown = listFieldValue(config, record, field);
       return `<div class="client-card-field"><dt>${escapeHTML(fieldLabel(config, field))}</dt>
         <dd class="${shown ? "" : "crm-muted"}">${escapeHTML(shown || "—")}</dd></div>`;
@@ -255,7 +259,8 @@ const renderEntityList = async (view, reset = false) => {
       <div class="client-card-actions"><button class="plain-button" type="button" data-open>Открыть</button>
       ${listCardAction(record)}</div></header><dl>${details}</dl></article>`;
   }).join("");
-  content.innerHTML = `<div class="client-list-layout"><details class="client-tools" open>
+  const toolsOpen = window.matchMedia("(min-width: 761px)").matches ? " open" : "";
+  content.innerHTML = `<div class="client-list-layout"><details class="client-tools"${toolsOpen}>
     <summary>Поля карточки и фильтры</summary><div class="client-tools-body">
     <fieldset class="client-field-picker"><legend>Поля карточки</legend>${fieldOptions}</fieldset>
     <button class="plain-button" type="button" data-fields-reset>Сбросить</button>
@@ -270,6 +275,7 @@ const renderEntityList = async (view, reset = false) => {
     ${canEditCRM() ? `<button class="plain-button" type="button" data-entity-add>Добавить</button>` : ""}
     </div></div></details><div class="client-list"><p class="crm-list-count">Показано ${state.records.length} из
     ${data.pagination?.total ?? pageRecords.length}</p>${cards}
+    <p class="crm-error client-list-error" data-list-status role="alert" hidden></p>
     ${state.records.length ? "" : '<p class="crm-empty">пока пусто</p>'}
     ${state.records.length < (data.pagination?.total || 0)
       ? '<button class="plain-button" type="button" data-entity-more>Показать ещё</button>' : ""}
@@ -350,8 +356,14 @@ const bindListActions = (view) => {
         prompt(`Введите название «${entityName(record)}» для удаления`) !== entityName(record)) return;
       const suffix = button.matches("[data-list-restore]") ? "/restore" : "";
       const method = suffix ? "POST" : "DELETE";
-      await crmQuery(`/${config.path}/${record.id}${suffix}`, {}, csrfOptions(method));
-      renderEntityList(view, true);
+      try {
+        await crmQuery(`/${config.path}/${record.id}${suffix}`, {}, csrfOptions(method));
+        renderEntityList(view, true);
+      } catch (error) {
+        const status = content.querySelector("[data-list-status]");
+        status.textContent = error.message;
+        status.hidden = false;
+      }
     });
   });
 };
