@@ -106,11 +106,11 @@ IP хранится только как SHA-256 от IP и серверной с
 
 ```sh
 curl -X POST http://localhost:8080/events -H 'Content-Type: application/json' \
-  -d '{"type":"visit","companyCode":"qa_company_a","clientId":"browser-123",\
+  -d '{"type":"visit","companyCode":"qa_company_a","clientId":"browser-123",
 "page":"/contacts","referrer":"https://2gis.ru/moscow"}'
 
 curl -X POST http://localhost:8080/events -H 'Content-Type: application/json' \
-  -d '{"type":"click","companyCode":"qa_company_a","clientId":"browser-123",\
+  -d '{"type":"click","companyCode":"qa_company_a","clientId":"browser-123",
 "page":"/contacts","target":"phone","label":"Позвонить"}'
 ```
 
@@ -128,16 +128,18 @@ curl -X POST http://localhost:8080/events -H 'Content-Type: application/json' \
 ```sh
 curl -X POST http://localhost:8080/external-stats \
   -H 'X-API-Key: replace-me' -H 'Content-Type: application/json' \
-  -d '{"source":"2gis","companyCode":"qa_company_a","rows":[\
+  -d '{"source":"2gis","companyCode":"qa_company_a","rows":[
 {"date":"2026-09-05","pageViews":42,"calls":3,"routes":5}],"note":"daily import"}'
 
 curl 'http://localhost:8080/external-stats?source=2gis&companyCode=qa_company_a&from=2026-09-01&to=2026-09-05' \
   -H 'X-API-Key: replace-me'
 ```
 
-`/dashboard` и `/summary` объединяют источники заявок, событий и внешних снимков. Для каждого источника они отдают
-уникальные визиты, количество кликов, `clicksByTarget`, сумму метрик `external` и время последнего снимка
-`externalCapturedAt`. Общие показатели также содержат `visits` и `clicks`.
+`/dashboard` и `/summary` в `sources` отдают полный список источников из заявок, событий и внешних снимков.
+Список не ограничивается выбранным периодом или фильтром `source`. В `sourceStats` для каждого источника за период
+возвращаются показатели заявок и продаж, уникальные визиты, количество кликов, `clicksByTarget`, сумма метрик
+`external` и время последнего снимка `externalCapturedAt`. Пустой источник заявки объединяется с событиями
+`direct`. Общие показатели также содержат `visits` и `clicks`.
 
 ## Задачи
 
