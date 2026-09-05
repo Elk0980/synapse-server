@@ -124,6 +124,48 @@ const entityState = (view) => entityStates[view] ||= {
   q: "", companyId: "", pipelineStage: "", deleted: "exclude", offset: 0, records: [], companies: [],
   projectId: null
 };
+const fieldStorageKey = (view) => {
+  return `synapse_cabinet_client_fields:${ctx.identity.userId}:${view}`;
+};
+const availableFields = (config) => {
+  const labelFields = Object.keys(config.labels);
+  const registrationIndex = labelFields.indexOf("ogrn");
+  const fields = registrationIndex < 0 ? labelFields : labelFields.flatMap((field) => {
+    if (field === "ogrn") return ["registration"];
+    return field === "ogrnip" ? [] : [field];
+  });
+  const arrays = Object.keys(config.arrays || {});
+  const relations = config.relations.map((relation) => relation.key);
+  return [...fields, ...arrays, ...relations].filter((field) => {
+    return !config.private?.includes(field) || canEditCRM();
+  });
+};
+const selectedFields = (view) => {
+  const config = CRM_ENTITIES[view];
+  const available = availableFields(config);
+  const defaults = config.columns;
+  let stored;
+  try {
+    stored = JSON.parse(localStorage.getItem(fieldStorageKey(view)));
+  } catch (error) {
+    stored = null;
+  }
+  const selected = Array.isArray(stored) ? stored : defaults;
+  return selected.filter((field) => available.includes(field));
+};
+const fieldLabel = (config, field) => {
+  const relation = config.relations.find((item) => item.key === field);
+  return config.labels[field] || config.arrays?.[field] || relation?.countLabel || "ОГРН / ОГРНИП";
+};
+const listFieldValue = (config, record, field) => {
+  if (field === "registration") return record.ogrn || record.ogrnip;
+  if (config.arrays?.[field]) {
+    return (record[field] || []).map((item) => item.label || item.url || item.handle).filter(Boolean).join(", ");
+  }
+  const relation = config.relations.find((item) => item.key === field);
+  if (relation) return String((record[field] || []).length);
+  return entityValue(field, record[field]);
+};
 const entityHashParts = () => {
   const hash = decodeURIComponent(location.hash.slice(1));
   const [path, query = ""] = hash.split("?");
@@ -197,35 +239,32 @@ const renderEntityList = async (view, reset = false) => {
     const selected = id === state.pipelineStage ? " selected" : "";
     return `<option value="${id}"${selected}>${label}</option>`;
   }).join("");
-  let visibleColumns = [...config.columns];
-  if (view === "crm-contacts") {
-    const hasCompanies = state.records.some((record) => record.companies?.length);
-    visibleColumns = ["name", "phone", ...(hasCompanies ? ["companies"] : ["preferredChannel", "city"]),
-      ...(state.records.some((record) => record.email) ? ["email"] : []),
-      ...(state.records.some((record) => record.position) ? ["position"] : [])];
-  }
-  const columns = visibleColumns.map((field) => {
-    const label = field === "companies" ? "Компании" : config.labels[field] || "ОГРН / ОГРНИП";
-    const type = field === "name" ? "crm-grow" : "crm-compact";
-    return `<th class="${type}">${escapeHTML(label)}</th>`;
-  })
-    .join("");
-  const rows = state.records.map((record) => {
-    const cells = visibleColumns.map((field) => {
-      let value = field === "registration" ? record.ogrn || record.ogrnip : record[field];
-      if (field === "companies") value = record.companies.map(entityName).join(", ");
-      const shown = entityValue(field, value);
-      const type = field === "name" ? "crm-grow" : "crm-compact";
-      const title = shown ? ` title="${escapeHTML(shown)}"` : "";
-      const deleted = field === "name" && (record.deletedAt || record.isDeleted || record.deleted)
-        ? ' <span class="crm-deleted-mark">удалено</span>' : "";
-      return `<td class="${type}${shown ? "" : " crm-muted"}"${title}>${escapeHTML(shown || "—")}${deleted}</td>`;
-    }).join("");
-    const deleted = record.deletedAt || record.isDeleted || record.deleted;
-    return `<tr class="crm-row${deleted ? " is-deleted" : ""}" tabindex="0"
-      data-entity-id="${escapeHTML(record.id)}">${cells}</tr>`;
+  const visibleFields = selectedFields(view);
+  const detailFields = visibleFields.filter((field) => field !== "name");
+  const fieldOptions = availableFields(config).map((field) => {
+    const checked = visibleFields.includes(field) ? " checked" : "";
+    return `<label><input type="checkbox" value="${escapeHTML(field)}" data-card-field${checked}>
+      <span>${escapeHTML(fieldLabel(config, field))}</span></label>`;
   }).join("");
-  content.innerHTML = `<div class="crm-entity-toolbar">
+  const cards = state.records.map((record) => {
+    const details = detailFields.map((field) => {
+      const shown = listFieldValue(config, record, field);
+      return `<div class="client-card-field"><dt>${escapeHTML(fieldLabel(config, field))}</dt>
+        <dd class="${shown ? "" : "crm-muted"}">${escapeHTML(shown || "—")}</dd></div>`;
+    }).join("");
+    const deleted = Boolean(record.deletedAt || record.isDeleted || record.deleted);
+    return `<article class="client-card${deleted ? " is-deleted" : ""}" tabindex="0"
+      data-entity-id="${escapeHTML(record.id)}"><header><h2>${escapeHTML(entityName(record))}
+      ${deleted ? '<span class="crm-deleted-mark">удалено</span>' : ""}</h2>
+      <div class="client-card-actions"><button class="plain-button" type="button" data-open>Открыть</button>
+      ${listCardAction(record)}</div></header><dl>${details}</dl></article>`;
+  }).join("");
+  const toolsOpen = window.matchMedia("(min-width: 761px)").matches ? " open" : "";
+  content.innerHTML = `<div class="client-list-layout"><details class="client-tools"${toolsOpen}>
+    <summary>Поля карточки и фильтры</summary><div class="client-tools-body">
+    <fieldset class="client-field-picker"><legend>Поля карточки</legend>${fieldOptions}</fieldset>
+    <button class="plain-button" type="button" data-fields-reset>Сбросить</button>
+    <div class="crm-entity-toolbar">
     <input type="search" data-entity-search value="${escapeHTML(state.q)}" placeholder="Поиск" aria-label="Поиск">
     ${config.companyFilter ? `<select data-company-filter aria-label="Фильтр по компании">
       <option value="">Все компании</option>${companyOptions}</select>` : ""}
@@ -234,19 +273,30 @@ const renderEntityList = async (view, reset = false) => {
     <label class="crm-filter-check"><input type="checkbox" data-deleted-filter
       ${state.deleted === "include" ? "checked" : ""}>Показывать удалённые</label>
     ${canEditCRM() ? `<button class="plain-button" type="button" data-entity-add>Добавить</button>` : ""}
-  </div><p class="crm-list-count">Показано ${state.records.length} из
-    ${data.pagination?.total ?? pageRecords.length}</p>
-    <div class="crm-table-wrap"><table class="crm-table crm-entity-table"><thead><tr>${columns}</tr></thead>
-    <tbody>${rows}</tbody></table></div>
-    ${state.records.length ? "" : '<p class="crm-empty">Записей нет</p>'}
+    </div></div></details><div class="client-list"><p class="crm-list-count">Показано ${state.records.length} из
+    ${data.pagination?.total ?? pageRecords.length}</p>${cards}
+    <p class="crm-error client-list-error" data-list-status role="alert" hidden></p>
+    ${state.records.length ? "" : '<p class="crm-empty">пока пусто</p>'}
     ${state.records.length < (data.pagination?.total || 0)
-      ? '<button class="plain-button" type="button" data-entity-more>Показать ещё</button>' : ""}`;
+      ? '<button class="plain-button" type="button" data-entity-more>Показать ещё</button>' : ""}
+    </div></div>`;
   bindEntityList(view);
 };
 const bindEntityList = (view) => {
   const content = byId(`${view}-content`);
   const state = entityState(view);
   let timer;
+  content.querySelectorAll("[data-card-field]").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      const fields = [...content.querySelectorAll("[data-card-field]:checked")].map((item) => item.value);
+      localStorage.setItem(fieldStorageKey(view), JSON.stringify(fields));
+      renderEntityList(view, true);
+    });
+  });
+  content.querySelector("[data-fields-reset]").addEventListener("click", () => {
+    localStorage.removeItem(fieldStorageKey(view));
+    renderEntityList(view, true);
+  });
   content.querySelector("[data-entity-search]").addEventListener("input", (event) => {
     clearTimeout(timer);
     timer = setTimeout(() => {
@@ -274,10 +324,46 @@ const bindEntityList = (view) => {
     state.offset += 50;
     renderEntityList(view);
   });
-  content.querySelectorAll("[data-entity-id]").forEach((row) => {
-    row.addEventListener("click", () => navigateEntity(view, row.dataset.entityId));
-    row.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") navigateEntity(view, row.dataset.entityId);
+  content.querySelectorAll("[data-entity-id]").forEach((card) => {
+    card.addEventListener("click", () => navigateEntity(view, card.dataset.entityId));
+    card.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") navigateEntity(view, card.dataset.entityId);
+    });
+  });
+  bindListActions(view);
+};
+const listCardAction = (record) => {
+  if (!canEditCRM()) return "";
+  const deleted = Boolean(record.deletedAt || record.isDeleted || record.deleted);
+  return deleted ? '<button class="plain-button" type="button" data-list-restore>Восстановить</button>' :
+    '<button class="danger" type="button" data-list-delete>Удалить</button>';
+};
+const bindListActions = (view) => {
+  const config = CRM_ENTITIES[view];
+  const content = byId(`${view}-content`);
+  content.querySelectorAll("[data-open]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      navigateEntity(view, button.closest("[data-entity-id]").dataset.entityId);
+    });
+  });
+  content.querySelectorAll("[data-list-delete], [data-list-restore]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const card = button.closest("[data-entity-id]");
+      const record = entityState(view).records.find((item) => String(item.id) === card.dataset.entityId);
+      if (button.matches("[data-list-delete]") &&
+        prompt(`Введите название «${entityName(record)}» для удаления`) !== entityName(record)) return;
+      const suffix = button.matches("[data-list-restore]") ? "/restore" : "";
+      const method = suffix ? "POST" : "DELETE";
+      try {
+        await crmQuery(`/${config.path}/${record.id}${suffix}`, {}, csrfOptions(method));
+        renderEntityList(view, true);
+      } catch (error) {
+        const status = content.querySelector("[data-list-status]");
+        status.textContent = error.message;
+        status.hidden = false;
+      }
     });
   });
 };
