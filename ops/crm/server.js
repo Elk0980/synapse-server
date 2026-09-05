@@ -322,9 +322,28 @@ function date(value, field, fallback) {
 
 function rangeDate(value, field, endOfDay = false) {
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return date(`${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}Z`, field);
+    const [year, month, day] = value.split('-').map(Number);
+    const start = moscowMidnightUtc(year, month, day);
+    return new Date(start.getTime() + (endOfDay ? 24 * 60 * 60 * 1000 - 1 : 0)).toISOString();
   }
   return date(value, field);
+}
+
+const MOSCOW_DATE = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit',
+});
+const MOSCOW_OFFSET = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Europe/Moscow', timeZoneName: 'longOffset',
+});
+
+function moscowMidnightUtc(year, month, day) {
+  const approximate = new Date(Date.UTC(year, month - 1, day));
+  const offsetName = MOSCOW_OFFSET.formatToParts(approximate)
+    .find((part) => part.type === 'timeZoneName').value;
+  const match = offsetName.match(/^GMT([+-])(\d{2}):(\d{2})$/);
+  if (!match) throw new Error('Не удалось определить часовой пояс Europe/Moscow');
+  const offset = (Number(match[2]) * 60 + Number(match[3])) * (match[1] === '+' ? 1 : -1);
+  return new Date(approximate.getTime() - offset * 60 * 1000);
 }
 
 function normalizeContact(contact) {
@@ -594,11 +613,12 @@ function changeStage(row, stage, soldAt) {
 
 function cabinetPeriod(period) {
   const now = new Date();
-  const from = new Date(now);
-  if (period === 'today') from.setUTCHours(0, 0, 0, 0);
-  else if (period === '7d') from.setUTCDate(from.getUTCDate() - 7);
+  const parts = Object.fromEntries(MOSCOW_DATE.formatToParts(now)
+    .filter((part) => part.type !== 'literal').map((part) => [part.type, Number(part.value)]));
+  const from = moscowMidnightUtc(parts.year, parts.month, parts.day);
+  if (period === '7d') from.setUTCDate(from.getUTCDate() - 7);
   else if (period === '30d') from.setUTCDate(from.getUTCDate() - 30);
-  else fail(400, 'Неизвестный период', { allowed: ['today', '7d', '30d'] });
+  else if (period !== 'today') fail(400, 'Неизвестный период', { allowed: ['today', '7d', '30d'] });
   return from.toISOString();
 }
 
@@ -889,6 +909,7 @@ async function route(request, response) {
     const stage = requestedStage ? CABINET_STAGES.get(requestedStage) : null;
     if (requestedStage && !stage) fail(400, 'Неизвестный этап', { allowed: [...CABINET_STAGES.keys()] });
     const source = url.searchParams.get('source');
+    const companyCode = url.searchParams.get('companyCode');
     const clauses = ['created_at >= ?'];
     const params = [from];
     if (to) {
@@ -903,20 +924,27 @@ async function route(request, response) {
       clauses.push('source = ?');
       params.push(source);
     }
+    if (companyCode) {
+      clauses.push('company_code = ? COLLATE NOCASE');
+      params.push(companyCode);
+    }
     const rows = db.prepare(
       `SELECT * FROM leads WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC, id DESC`
     ).all(...params);
+    const sourceCompanyClause = companyCode ? ' AND company_code = ? COLLATE NOCASE' : '';
     const allSources = db.prepare(
-      "SELECT DISTINCT source FROM leads WHERE source IS NOT NULL AND source != '' ORDER BY source"
-    ).all();
+      `SELECT DISTINCT source FROM leads WHERE source IS NOT NULL AND source != ''${sourceCompanyClause}
+      ORDER BY source`
+    ).all(...(companyCode ? [companyCode] : []));
     const funnel = Object.fromEntries([...CABINET_STAGES].map(([id, name]) => {
       const count = rows.filter((row) => row.stage === name).length;
       return [id, { count, conversion: rows.length ? Math.round((count / rows.length) * 100) : 0 }];
     }));
     const revenue = rows.reduce((total, row) => total + (row.sale_amount || 0), 0);
-    const expenses = totalExpense(from, to, source);
+    const expenses = companyCode ? null : totalExpense(from, to, source);
     return send(response, 200, {
       sample: false,
+      companyCode: companyCode || null,
       summary: {
         total: rows.length,
         booked: rows.filter((row) => {
@@ -928,11 +956,12 @@ async function route(request, response) {
         sales: rows.filter((row) => row.stage === 'продажа').length,
         revenue,
         expenses,
-        romi: romi(revenue, expenses),
+        romi: companyCode ? null : romi(revenue, expenses),
       },
       funnel,
       leads: rows.map(serializeCabinetLead),
       sources: allSources.map((row) => row.source),
+      ...(companyCode ? { expensesScope: 'global_unavailable' } : {}),
     }, cors);
   }
 
@@ -1001,7 +1030,10 @@ async function route(request, response) {
   }
 
   if (request.method === 'GET' && url.pathname === '/leads.csv') {
-    const rows = db.prepare('SELECT * FROM leads ORDER BY created_at DESC, id DESC').all();
+    const companyCode = url.searchParams.get('companyCode');
+    const companyClause = companyCode ? ' WHERE company_code = ? COLLATE NOCASE' : '';
+    const rows = db.prepare(`SELECT * FROM leads${companyClause} ORDER BY created_at DESC, id DESC`)
+      .all(...(companyCode ? [companyCode] : []));
     const fields = ['id', 'created_at', 'name', 'contact', 'channel', 'source', 'tag', 'page', 'stage',
       'sale_amount', 'sold_at', 'comment', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content',
       'client_id', 'referrer', 'landing_page', 'company_code'];
@@ -1031,6 +1063,9 @@ async function route(request, response) {
   }
 
   if (request.method === 'GET' && url.pathname === '/expenses') {
+    if (url.searchParams.has('companyCode')) {
+      return send(response, 200, { expenses: [], expensesScope: 'global_unavailable' }, cors);
+    }
     const from = url.searchParams.has('from') ? rangeDate(url.searchParams.get('from'), 'from') : null;
     const to = url.searchParams.has('to') ? rangeDate(url.searchParams.get('to'), 'to', true) : null;
     if (from && to && from > to) fail(400, 'Дата «from» не может быть позже «to»');
@@ -1121,11 +1156,14 @@ async function route(request, response) {
     const from = rangeDate(url.searchParams.get('from'), 'from');
     const to = rangeDate(url.searchParams.get('to'), 'to', true);
     if (from > to) fail(400, 'Дата «from» не может быть позже «to»');
+    const companyCode = url.searchParams.get('companyCode');
+    const companyClause = companyCode ? ' AND company_code = ? COLLATE NOCASE' : '';
+    const companyParams = companyCode ? [companyCode] : [];
     const rows = db.prepare(`
       SELECT source, stage, sale_amount FROM leads
-      WHERE created_at >= ? AND created_at <= ?
-    `).all(from, to);
-    const expenseRows = db.prepare(`
+      WHERE created_at >= ? AND created_at <= ?${companyClause}
+    `).all(from, to, ...companyParams);
+    const expenseRows = companyCode ? [] : db.prepare(`
       SELECT source, SUM(amount) AS expenses FROM expenses
       WHERE spent_at >= ? AND spent_at <= ? GROUP BY source
     `).all(from, to);
@@ -1140,7 +1178,7 @@ async function route(request, response) {
           visited: 0,
           sales: 0,
           revenue: 0,
-          expenses: 0,
+          expenses: companyCode ? null : 0,
           romi: null,
         });
       }
@@ -1156,11 +1194,16 @@ async function route(request, response) {
       if (row.sale_amount !== null) group.revenue += row.sale_amount;
     }
     for (const row of expenseRows) groupFor(row.source).expenses = row.expenses;
-    for (const group of groups.values()) group.romi = romi(group.revenue, group.expenses);
+    if (!companyCode) {
+      for (const group of groups.values()) group.romi = romi(group.revenue, group.expenses);
+    }
     const sources = [...groups.values()].sort((a, b) => a.source.localeCompare(b.source, 'ru'));
     const revenue = sources.reduce((sum, group) => sum + group.revenue, 0);
-    const expenses = sources.reduce((sum, group) => sum + group.expenses, 0);
-    return send(response, 200, { from, to, revenue, expenses, romi: romi(revenue, expenses), sources }, cors);
+    const expenses = companyCode ? null : sources.reduce((sum, group) => sum + group.expenses, 0);
+    return send(response, 200, {
+      from, to, revenue, expenses, romi: companyCode ? null : romi(revenue, expenses), sources,
+      ...(companyCode ? { expensesScope: 'global_unavailable' } : {}),
+    }, cors);
   }
 
   fail(404, 'Метод или адрес не найден');

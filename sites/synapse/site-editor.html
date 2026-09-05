@@ -550,6 +550,8 @@
   let data = null;
   let dirty = false;
   let author = '';
+  let sessionAuth = false;
+  let csrfToken = '';
   let mode = 'visual';          // visual | list
   let selectedKey = null;       // выбранное поле
   let selectedSection = null;   // выбранная секция (для фона)
@@ -931,7 +933,7 @@
     if (t.dataset.close) return $('#ed-modal').classList.remove('is-open');
     if (t.id === 'ed-save') return save();
     if (t.id === 'ed-history') return showHistory();
-    if (t.id === 'ed-key') { getKey(true); whoami(); return; }
+    if (t.id === 'ed-key') { sessionAuth = false; getKey(true); whoami(); return; }
     if (t.id === 'ed-mode-visual') { mode = 'visual'; render(); return; }
     if (t.id === 'ed-mode-list') { mode = 'list'; render(); return; }
     if (t.id === 'ed-reload-frame') { frameReady = false; frame.src = frame.src; return; }
@@ -956,8 +958,8 @@
     if (file.size > 8 * 1024 * 1024) { setStatus('Файл больше 8 МБ', 'error'); return null; }
     setStatus('Загружаю картинку…');
     try {
-      const key = getKey(false); if (!key) throw new Error('Без ключа загрузить нельзя');
-      const r = await fetch(ASSETS, { method: 'POST', headers: { 'X-API-Key': key, 'Content-Type': file.type, 'X-Filename': encodeURIComponent(file.name) }, body: file });
+      const headers = authHeaders({ 'Content-Type': file.type, 'X-Filename': encodeURIComponent(file.name) }, true);
+      const r = await fetch(ASSETS, { method: 'POST', headers, credentials: 'same-origin', body: file });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { if (r.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} } throw new Error(j.error || 'HTTP ' + r.status); }
       setStatus('Картинка загружена — не забудьте «Сохранить»', 'ok');
@@ -970,8 +972,8 @@
     if (file.size > 8 * 1024 * 1024) return setStatus('Файл больше 8 МБ', 'error');
     setStatus('Загружаю картинку…');
     try {
-      const key = getKey(false); if (!key) throw new Error('Без ключа загрузить нельзя');
-      const r = await fetch(ASSETS, { method: 'POST', headers: { 'X-API-Key': key, 'Content-Type': file.type, 'X-Filename': encodeURIComponent(file.name) }, body: file });
+      const headers = authHeaders({ 'Content-Type': file.type, 'X-Filename': encodeURIComponent(file.name) }, true);
+      const r = await fetch(ASSETS, { method: 'POST', headers, credentials: 'same-origin', body: file });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { if (r.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} } throw new Error(j.error || 'HTTP ' + r.status); }
       sec.background.image = j.url;
@@ -985,15 +987,27 @@
     let key = '';
     try { key = sessionStorage.getItem(KEY_STORAGE) || ''; } catch (e) {}
     if (!key || force) {
-      key = (prompt('Ключ редактора. Хранится только в этой вкладке.') || '').trim();
+      key = (prompt('Войдите в кабинет Synapse Business ' +
+        '(synapse.synapsebusiness.ru/cabinet.html) или введите ключ владельца') || '').trim();
       try { if (key) sessionStorage.setItem(KEY_STORAGE, key); } catch (e) {}
     }
     return key;
   }
-  async function apiFetch(url, opts = {}, withKey = false) {
-    const headers = { 'Accept': 'application/json', ...(opts.headers || {}) };
-    if (withKey) { const key = getKey(false); if (!key) throw new Error('Без ключа сохранить нельзя'); headers['X-API-Key'] = key; }
-    const r = await fetch(url, { ...opts, headers, cache: 'no-store' });
+  function authHeaders(headers = {}, modifying = false) {
+    const result = { ...headers };
+    if (sessionAuth) {
+      if (modifying) result['X-CSRF-Token'] = csrfToken;
+    } else {
+      const key = getKey(false);
+      if (!key) throw new Error('Без входа в кабинет или ключа владельца сохранить нельзя');
+      result['X-API-Key'] = key;
+    }
+    return result;
+  }
+  async function apiFetch(url, opts = {}, withAuth = false) {
+    let headers = { 'Accept': 'application/json', ...(opts.headers || {}) };
+    if (withAuth) headers = authHeaders(headers, opts.method && opts.method !== 'GET');
+    const r = await fetch(url, { ...opts, headers, credentials: 'same-origin', cache: 'no-store' });
     let body = null; try { body = await r.json(); } catch (e) {}
     if (!r.ok) {
       const msg = body?.error || `HTTP ${r.status}`;
@@ -1003,7 +1017,23 @@
     return body;
   }
   async function whoami() {
-    try { let key = ''; try { key = sessionStorage.getItem(KEY_STORAGE) || ''; } catch (e) {} if (!key) return; const w = await fetch(API_BASE + '/content/whoami', { headers: { 'X-API-Key': key } }); if (w.ok) { author = (await w.json()).author; renderSub(); } } catch (e) {}
+    if (!sessionAuth) { author = 'system-owner'; renderSub(); return false; }
+    const w = await fetch(API_BASE + '/content/whoami', { credentials: 'same-origin', cache: 'no-store' });
+    if (!w.ok) return false;
+    const identity = await w.json();
+    author = identity.author; csrfToken = identity.csrfToken; renderSub(); return true;
+  }
+  async function initializeAuth() {
+    const w = await fetch(API_BASE + '/content/whoami', { credentials: 'same-origin', cache: 'no-store' });
+    if (w.ok) {
+      const identity = await w.json();
+      sessionAuth = true; csrfToken = identity.csrfToken; author = identity.author; renderSub(); return;
+    }
+    if (w.status !== 401) {
+      const body = await w.json().catch(() => ({}));
+      throw new Error(body.error || `HTTP ${w.status}`);
+    }
+    getKey(false);
   }
   async function save() {
     if (!data) return;
@@ -1058,7 +1088,7 @@
 
   (async () => {
     frame.src = SITE + '/?edit=1&v=' + Date.now();
-    try { await loadData(); await whoami(); setStatus('Готово к работе'); }
+    try { await initializeAuth(); await loadData(); await whoami(); setStatus('Готово к работе'); }
     catch (e) { setStatus('Не удалось загрузить тексты сайта: ' + e.message, 'error'); $('#ed-inspector').innerHTML = `<p class="ed-status is-error">Не удалось загрузить: ${esc(e.message)}</p>`; }
   })();
 })();
