@@ -41,7 +41,7 @@ const init = (context) => {
   };
   const loadTaskCompanies = async () => {
     if (taskState.companies.length) return;
-    const data = await crmQuery("/companies", { limit: 200, deleted: "exclude" });
+    const data = await crmQuery("/companies", { ...scopeParams(), limit: 200, deleted: "exclude" });
     taskState.companies = data.companies || [];
   };
   const taskCompanyOptions = (selected = "") => {
@@ -142,7 +142,7 @@ const init = (context) => {
     }
   };
   const updateTaskStatus = async (id, status) => {
-    await crmQuery(`/tasks/${encodeURIComponent(id)}`, {}, csrfOptions("PATCH", { status }));
+    await crmQuery(`/tasks/${encodeURIComponent(id)}`, scopeParams(), csrfOptions("PATCH", { status }));
     await renderTaskList();
   };
   const bindTaskList = () => {
@@ -214,7 +214,7 @@ const init = (context) => {
     content.textContent = "Загрузка…";
     try {
       await loadTaskCompanies();
-      const task = await crmQuery(`/tasks/${encodeURIComponent(id)}`);
+      const task = await crmQuery(`/tasks/${encodeURIComponent(id)}`, scopeParams());
       const source = task.source !== "manual" ? `<section class="tasks-source"><h3>Откуда</h3>
         <p>${escapeHTML(TASK_SOURCES[task.source] || task.source)} · ${escapeHTML(task.sourceAuthor || "—")}</p>
         <p>${escapeHTML(task.sourceRef || "—")}</p><p>${escapeHTML(task.createdAt || "—")}</p></section>` : "";
@@ -229,7 +229,8 @@ const init = (context) => {
         event.preventDefault();
         const result = form.querySelector("[data-task-result]");
         try {
-          await crmQuery(`/tasks/${encodeURIComponent(task.id)}`, {}, csrfOptions("PATCH", taskPayload(form)));
+          await crmQuery(`/tasks/${encodeURIComponent(task.id)}`, scopeParams(),
+            csrfOptions("PATCH", taskPayload(form)));
           result.textContent = "Сохранено";
           await loadTasksSummary();
         } catch (error) {
@@ -239,7 +240,7 @@ const init = (context) => {
       form.querySelector("[data-task-delete]").addEventListener("click", async () => {
         if (prompt(`Введите название «${task.title}» для удаления`) !== task.title) return;
         try {
-          await crmQuery(`/tasks/${encodeURIComponent(task.id)}`, {}, csrfOptions("DELETE"));
+          await crmQuery(`/tasks/${encodeURIComponent(task.id)}`, scopeParams(), csrfOptions("DELETE"));
           await loadTasksSummary();
           navigate("tasks");
         } catch (error) {
@@ -280,7 +281,7 @@ const init = (context) => {
     const form = event.currentTarget;
     const error = form.querySelector("[role=alert]");
     try {
-      const created = await crmQuery("/tasks", {}, csrfOptions("POST", {
+      const created = await crmQuery("/tasks", scopeParams(), csrfOptions("POST", {
         ...taskPayload(form),
         source: "manual",
         sourceRef: "",

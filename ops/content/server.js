@@ -360,9 +360,20 @@ async function proxyCrm(request, response, url, cors) {
   if (!readOnly) requireCsrf(request, session);
 
   const crmPath = url.pathname.slice('/content/crm'.length) || '/';
-  const entityPath = /^\/(contacts|companies|legal-entities)(?:\/|$)/.test(crmPath);
-  // Временно только владелец записывает CRM-сущности и расходы, а также меняет компанию заявки.
-  if (!readOnly && entityPath && identity.role !== 'owner') fail(403, 'Изменение сущностей доступно только владельцу');
+  const clientDatabasePath = /^\/(?:contacts|companies|legal-entities|tasks)(?:\/|$)/.test(crmPath);
+  const companyOverview = /^\/companies\/\d+\/overview$/.test(crmPath);
+  const ownerOnlyPipelinePath = /^\/(?:pipeline-stages|pipelines|pipeline-rules)(?:\/|$)/.test(crmPath) ||
+    /^\/companies\/\d+\/(?:overview|pipeline|service)(?:\/|$)/.test(crmPath);
+  if (ownerOnlyPipelinePath && identity.role !== 'owner') {
+    fail(403, 'Воронка и сервисные поля доступны только владельцу');
+  }
+  if (identity.role !== 'owner' && clientDatabasePath && !companyOverview) {
+    const requestedCompany = url.searchParams.get('companyCode');
+    if (!requestedCompany) fail(400, 'Уточните компанию');
+    if (!identity.companyCodes.some(
+      (code) => code.toLowerCase() === requestedCompany.toLowerCase()
+    )) fail(403, 'Нет доступа к компании');
+  }
 
   const companyScoped = /^\/(?:leads(?:\/|\.|$)|dashboard(?:\/|$)|summary(?:\/|$)|expenses(?:\/|$))/.test(crmPath);
   if (identity.role !== 'owner' && companyScoped) {
@@ -379,6 +390,16 @@ async function proxyCrm(request, response, url, cors) {
   }
   const leadMatch = crmPath.match(/^\/leads\/(\d+)(?:\/|$)/);
   let requestBody = null;
+  const companyWrite = (request.method === 'POST' && crmPath === '/companies') ||
+    (request.method === 'PATCH' && /^\/companies\/\d+$/.test(crmPath));
+  if (identity.role !== 'owner' && companyWrite) {
+    requestBody = await readRequestBody(request);
+    let body;
+    try { body = JSON.parse(requestBody.toString('utf8')); } catch { fail(400, 'Некорректный JSON'); }
+    if (body && typeof body === 'object' && Object.hasOwn(body, 'pipelineStage')) {
+      fail(403, 'Воронка и сервисные поля доступны только владельцу');
+    }
+  }
   if (identity.role !== 'owner' && leadMatch) {
     const leadCompany = await crmLeadCompany(leadMatch[1]);
     const allowed = leadCompany && identity.companyCodes.some((code) => {

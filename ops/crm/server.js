@@ -1158,16 +1158,43 @@ function csvCell(value) {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
-function relationRows(kind, id) {
+function scopedCompany(companyCode) {
+  if (companyCode === null) return null;
+  const company = db.prepare(
+    'SELECT * FROM companies WHERE code = ? COLLATE NOCASE AND is_deleted = 0'
+  ).get(companyCode);
+  if (!company) fail(404, 'Компания не найдена', { code: 'NOT_FOUND' });
+  return company;
+}
+
+function entityInCompany(config, id, company) {
+  if (!company) return;
+  let found;
+  if (config.table === 'tasks') found = db.prepare(
+    'SELECT 1 FROM tasks WHERE id=? AND company_code=? COLLATE NOCASE'
+  ).get(id, company.code);
+  if (config.table === 'companies') found = id === company.id;
+  if (config.table === 'contacts') found = db.prepare(`SELECT 1 FROM contact_companies
+    WHERE contact_id=? AND company_id=? AND is_deleted=0`).get(id, company.id);
+  if (config.table === 'legal_entities') found = db.prepare(`SELECT 1 FROM company_legal_entities
+    WHERE legal_entity_id=? AND company_id=? AND is_deleted=0`).get(id, company.id);
+  if (!found) fail(404, 'Карточка не найдена', { code: 'NOT_FOUND' });
+}
+
+function relationRows(kind, id, company) {
   if (kind === 'tasks') return {};
   if (kind === 'contacts') return {
     companies: db.prepare(`SELECT c.*, r.role, r.is_responsible, r.valid_from, r.valid_to, r.notes relation_notes
       FROM contact_companies r JOIN companies c ON c.id=r.company_id
-      WHERE r.contact_id=? AND r.is_deleted=0 AND c.is_deleted=0`).all(id).map((row) => ({
+      WHERE r.contact_id=? AND r.is_deleted=0 AND c.is_deleted=0
+      ${company ? 'AND c.id=?' : ''}`).all(id, ...(company ? [company.id] : [])).map((row) => ({
         ...serializeEntity(ENTITY_CONFIG.companies, row, true), relation: relationData(row, 'is_responsible') })),
     legalEntities: db.prepare(`SELECT l.*, r.role, r.is_signatory, r.signing_basis, r.valid_from, r.valid_to,
       r.notes relation_notes FROM contact_legal_entities r JOIN legal_entities l ON l.id=r.legal_entity_id
-      WHERE r.contact_id=? AND r.is_deleted=0 AND l.is_deleted=0`).all(id).map((row) => ({
+      WHERE r.contact_id=? AND r.is_deleted=0 AND l.is_deleted=0
+      ${company ? `AND EXISTS(SELECT 1 FROM company_legal_entities scope
+        WHERE scope.legal_entity_id=l.id AND scope.company_id=? AND scope.is_deleted=0)` : ''}`)
+      .all(id, ...(company ? [company.id] : [])).map((row) => ({
         ...serializeEntity(ENTITY_CONFIG.legalEntities, row, true),
         relation: relationData(row, 'is_signatory', 'signing_basis') })),
   };
@@ -1192,11 +1219,15 @@ function relationRows(kind, id) {
   return {
     companies: db.prepare(`SELECT c.*, r.role, r.is_primary, r.valid_from, r.valid_to, r.notes relation_notes
       FROM company_legal_entities r JOIN companies c ON c.id=r.company_id
-      WHERE r.legal_entity_id=? AND r.is_deleted=0 AND c.is_deleted=0`).all(id).map((row) => ({
+      WHERE r.legal_entity_id=? AND r.is_deleted=0 AND c.is_deleted=0
+      ${company ? 'AND c.id=?' : ''}`).all(id, ...(company ? [company.id] : [])).map((row) => ({
         ...serializeEntity(ENTITY_CONFIG.companies, row, true), relation: relationData(row, 'is_primary') })),
     contacts: db.prepare(`SELECT c.*, r.role, r.is_signatory, r.signing_basis, r.valid_from, r.valid_to,
       r.notes relation_notes FROM contact_legal_entities r JOIN contacts c ON c.id=r.contact_id
-      WHERE r.legal_entity_id=? AND r.is_deleted=0 AND c.is_deleted=0`).all(id).map((row) => ({
+      WHERE r.legal_entity_id=? AND r.is_deleted=0 AND c.is_deleted=0
+      ${company ? `AND EXISTS(SELECT 1 FROM contact_companies scope
+        WHERE scope.contact_id=c.id AND scope.company_id=? AND scope.is_deleted=0)` : ''}`)
+      .all(id, ...(company ? [company.id] : [])).map((row) => ({
         ...serializeEntity(ENTITY_CONFIG.contacts, row, true),
         relation: relationData(row, 'is_signatory', 'signing_basis') })),
   };
@@ -1257,6 +1288,25 @@ function listQuery(config, url) {
   }
   const clauses = deleted === 'exclude' ? ['e.is_deleted=0'] : deleted === 'only' ? ['e.is_deleted=1'] : [];
   const params = [];
+  const companyCode = url.searchParams.get('companyCode');
+  if (companyCode !== null) {
+    if (config.table === 'companies') {
+      clauses.push('e.code = ? COLLATE NOCASE');
+      params.push(companyCode);
+    } else if (config.table === 'contacts') {
+      clauses.push(`EXISTS(SELECT 1 FROM contact_companies scope
+        JOIN companies company ON company.id=scope.company_id
+        WHERE scope.contact_id=e.id AND scope.is_deleted=0 AND company.is_deleted=0
+          AND company.code=? COLLATE NOCASE)`);
+      params.push(companyCode);
+    } else if (config.table === 'legal_entities') {
+      clauses.push(`EXISTS(SELECT 1 FROM company_legal_entities scope
+        JOIN companies company ON company.id=scope.company_id
+        WHERE scope.legal_entity_id=e.id AND scope.is_deleted=0 AND company.is_deleted=0
+          AND company.code=? COLLATE NOCASE)`);
+      params.push(companyCode);
+    }
+  }
   const q = url.searchParams.get('q');
   if (q) {
     const alternate = config.table === 'companies' ? 'e.code LIKE ?' : 'e.email LIKE ?';
@@ -1285,6 +1335,7 @@ function listQuery(config, url) {
 }
 async function handleEntityRoutes(request, response, url, cors) {
   for (const [kind, config] of Object.entries(ENTITY_CONFIG)) {
+    const company = scopedCompany(url.searchParams.get('companyCode'));
     if (url.pathname === `/${config.path}` && request.method === 'GET') {
       const result = listQuery(config, url);
       send(response, 200, { [config.response]: result.rows.map((row) => serializeEntity(config, row, true)),
@@ -1292,8 +1343,12 @@ async function handleEntityRoutes(request, response, url, cors) {
     }
     if (url.pathname === `/${config.path}` && request.method === 'POST') {
       const body = await readJson(request); let values = validateEntity(config, body);
+      if (company && config.table === 'companies' && values.code !== company.code.toLowerCase()) {
+        fail(403, 'Нельзя создать другую компанию в выбранном контексте');
+      }
       if (config.table === 'tasks') {
         values = { ...config.defaults, ...values };
+        if (company) values.companyCode = company.code.toLowerCase();
         if (values.sourceRef) {
           const duplicate = db.prepare(
             'SELECT * FROM tasks WHERE source_ref = ? AND is_deleted = 0 ORDER BY id LIMIT 1'
@@ -1320,6 +1375,14 @@ async function handleEntityRoutes(request, response, url, cors) {
           return id;
         };
         const id = config.table === 'companies' ? pipelineTransaction(insert) : insert();
+        if (company && ['contacts', 'legal_entities'].includes(config.table)) {
+          const relation = config.table === 'contacts'
+            ? ['contact_companies', 'contact_id', 'сотрудник']
+            : ['company_legal_entities', 'legal_entity_id', 'юрлицо компании'];
+          db.prepare(`INSERT INTO ${relation[0]}
+            (created_at,updated_at,${relation[1]},company_id,role) VALUES (?,?,?,?,?)`)
+            .run(now, now, id, company.id, relation[2]);
+        }
         send(response, 201, serializeEntity(config, entityRow(config, id)),
           { ...cors, Location: `/${config.path}/${id}` }); return true;
       } catch (error) { conflict(error); }
@@ -1329,13 +1392,19 @@ async function handleEntityRoutes(request, response, url, cors) {
       const id = entityId(match[1]);
       const includeDeleted = url.searchParams.get('includeDeleted') === 'true';
       const row = entityRow(config, id, includeDeleted);
-      send(response, 200, { ...serializeEntity(config, row), ...relationRows(kind, id) }, cors); return true;
+      entityInCompany(config, id, company);
+      send(response, 200, { ...serializeEntity(config, row), ...relationRows(kind, id, company) }, cors); return true;
     }
     if (match && request.method === 'PATCH') {
       const id = entityId(match[1]); const row = entityRow(config, id, true);
+      entityInCompany(config, id, company);
       if (row.is_deleted) fail(409, 'Сначала восстановите удалённую карточку', { code: 'DELETED_ENTITY' });
       const body = await readJson(request);
       const values = validateEntity(config, body, true, row); const entries = Object.entries(values);
+      if (company && config.table === 'tasks' && values.companyCode !== undefined &&
+          values.companyCode !== company.code.toLowerCase()) {
+        fail(403, 'Нельзя перенести задачу из выбранной компании');
+      }
       const assignments = entries.map(([field]) => `${column(config, field)}=?`);
       const parameters = entries.map(([, value]) => value);
       if (config.table === 'contacts' && values.phone !== undefined) { assignments.push('normalized_phone=?');
@@ -1357,6 +1426,7 @@ async function handleEntityRoutes(request, response, url, cors) {
     }
     if (match && request.method === 'DELETE') {
       const id = entityId(match[1]); const row = entityRow(config, id, true);
+      entityInCompany(config, id, company);
       if (!row.is_deleted) { const now = new Date().toISOString(); db.exec('BEGIN IMMEDIATE'); try {
         db.prepare(`UPDATE ${config.table} SET is_deleted=1,deleted_at=?,updated_at=? WHERE id=?`).run(now, now, id);
         const updates = config.table === 'tasks' ? [] : config.table === 'contacts' ?
@@ -1372,6 +1442,7 @@ async function handleEntityRoutes(request, response, url, cors) {
     }
     const restore = url.pathname.match(new RegExp(`^/${config.path}/(\\d+)/restore$`));
     if (restore && request.method === 'POST') { const id = entityId(restore[1]); entityRow(config, id, true);
+      entityInCompany(config, id, company);
       try { db.prepare(`UPDATE ${config.table} SET is_deleted=0,deleted_at=NULL,updated_at=? WHERE id=?`)
         .run(new Date().toISOString(), id); } catch (error) { conflict(error); }
       send(response, 200, serializeEntity(config, entityRow(config, id)), cors); return true; }
@@ -1391,11 +1462,14 @@ const RELATIONS = [
     boolJson: 'isSignatory', extra: 'signing_basis', extraJson: 'signingBasis' },
 ];
 async function handleRelationRoutes(request, response, url, cors) {
+  const company = scopedCompany(url.searchParams.get('companyCode'));
   for (const relation of RELATIONS) {
     const match = url.pathname.match(relation.regex); if (!match) continue;
     const leftId = entityId(match[1]); const rightId = entityId(match[2]);
     const left = entityRow(ENTITY_CONFIG[relation.left], leftId, true);
     const right = entityRow(ENTITY_CONFIG[relation.right], rightId, true);
+    entityInCompany(ENTITY_CONFIG[relation.left], leftId, company);
+    entityInCompany(ENTITY_CONFIG[relation.right], rightId, company);
     if (request.method === 'PUT') {
       if (left.is_deleted || right.is_deleted) fail(409, 'Нельзя связать удалённую карточку',
         { code: 'DELETED_ENTITY' });
