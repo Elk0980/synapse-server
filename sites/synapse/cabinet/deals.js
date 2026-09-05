@@ -26,33 +26,20 @@
     }
   };
   const tabs = {
-    overview: "Обзор",
-    contacts: "Контакты",
-    tasks: "Задачи",
-    leads: "Лиды",
-    chat: "Чат",
-    technology: "Дерево технологии"
+    overview: "Обзор", service: "Сервис", contacts: "Контакты", tasks: "Задачи", leads: "Лиды",
+    chat: "Чат", technology: "Дерево технологии"
   };
   const kinds = { open: "открытый", won: "выигрыш", lost: "отказ" };
   const companyForms = { one: "компания", few: "компании", many: "компаний", other: "компании" };
   const companyPlural = new Intl.PluralRules("ru");
   const companyCount = (count) => `${count} ${companyForms[companyPlural.select(count)]}`;
   const taskStatuses = { inbox: "Входящие", planned: "Запланирована", in_progress: "В работе" };
+  const ruleDefaults = { silentDays: 14, renewalDays: 10, rejectedReturnMonths: 3, churnedReturnMonths: 6 };
   const state = {
-    stages: [],
-    companies: [],
-    byCompany: {},
-    summaryLoaded: false,
-    total: 0,
-    pending: new Set(),
-    loading: false,
-    saving: false,
-    refreshRequested: false,
-    draft: [],
-    overview: null,
-    tab: "overview",
-    loadVersion: 0,
-    drawerVersion: 0
+    pipeline: "sale", pipelines: [], stages: [], stageLists: {}, companies: [], byCompany: {},
+    summaryLoaded: false, total: 0, pending: new Set(), loading: false, saving: false,
+    refreshRequested: false, draft: [], drafts: {}, settingsPipeline: "sale", settingsVersion: 0,
+    overview: null, tab: "overview", loadVersion: 0, drawerVersion: 0, reasonMove: null
   };
   let ctx;
   let initialized = false;
@@ -67,38 +54,78 @@
     const parsed = new Date(value);
     return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString("ru-RU");
   };
-  const companyStage = (company) => company.pipelineStage || state.stages[0]?.code;
-  const stageCount = (code) => state.companies.filter((company) => companyStage(company) === code).length;
+  const money = (value) => value === null || value === undefined || value === ""
+    ? "—" : `${new Intl.NumberFormat("ru-RU").format(Number(value))} ₽/мес`;
+  const companyStage = (company, pipeline = state.pipeline, stages = state.stages) => {
+    return company.pipelines?.[pipeline]?.stage || (pipeline === "sale"
+      ? company.pipelineStage || stages[0]?.code : null);
+  };
+  const stageCount = (code) => state.companies.filter((company) => {
+    return companyStage(company, state.settingsPipeline, state.draft) === code;
+  }).length;
   const empty = () => '<p class="muted">пока пусто</p>';
   const status = (message = "") => {
     byId("deals-error").textContent = message;
     byId("deals-error").hidden = !message;
   };
+  const busy = () => state.loading || state.saving || state.pending.size > 0;
   const configureButton = () => {
-    const button = byId("deals-configure");
-    button.disabled = !canEdit() || !state.stages.length || state.loading || state.pending.size > 0 || state.saving;
-    button.title = canEdit() ? "" : "нет прав";
+    byId("deals-configure").disabled = !canEdit() || !state.stages.length || busy();
+    byId("deals-configure").title = canEdit() ? "" : "нет прав";
+    byId("deals-refresh").disabled = busy();
+    byId("deals-pipelines").querySelectorAll("button").forEach((button) => { button.disabled = busy(); });
+    byId("deals-enroll").disabled = !canEdit() || busy() || !byId("deals-enroll-company").value;
+  };
+  const loadStages = async (pipeline) => {
+    const stages = pipeline === "sale" ? await pipelineStages.load(query, true)
+      : (await query("/pipeline-stages", { pipeline })).stages;
+    state.stageLists[pipeline] = stages || [];
+    return stages || [];
+  };
+  const renderPipelines = () => {
+    byId("deals-pipelines").innerHTML = state.pipelines.map((pipeline) => {
+      return `<button class="plain-button" type="button" role="tab" data-pipeline-code="${html(pipeline.code)}"
+        aria-selected="${pipeline.code === state.pipeline}" aria-controls="deals-board">
+        ${html(pipeline.label)}</button>`;
+    }).join("");
+    const candidates = state.companies.filter((company) => !company.pipelines?.[state.pipeline]?.stage);
+    byId("deals-enroll-fields").hidden = state.pipeline === "sale" || !canEdit();
+    const options = candidates.map((company) => {
+      return `<option value="${html(company.id)}">${html(company.name)}</option>`;
+    }).join("");
+    byId("deals-enroll-company").innerHTML = '<option value="">Выберите компанию</option>' + options;
+    byId("deals-enroll-company").disabled = !candidates.length || busy();
+    configureButton();
   };
   const companyCard = (company) => {
     const pending = state.pending.has(String(company.id));
-    const editable = canEdit() && !pending;
+    const editable = canEdit() && !pending && !state.saving;
     const draggable = editable && !window.matchMedia("(max-width: 760px)").matches;
     const current = companyStage(company);
     const options = state.stages.map((stage) => {
-      const selected = stage.code === current ? " selected" : "";
-      return `<option value="${html(stage.code)}"${selected}>${html(stage.label)}</option>`;
+      return `<option value="${html(stage.code)}"${stage.code === current ? " selected" : ""}>
+        ${html(stage.label)}</option>`;
     }).join("");
-    const summary = state.byCompany[String(company.code).toLowerCase()];
-    const tasks = state.summaryLoaded ? summary?.open || 0 : "—";
+    const tasks = state.summaryLoaded ? state.byCompany[String(company.code).toLowerCase()]?.open || 0 : "—";
+    const service = company.service || {};
+    const attention = state.pipeline === "service" && ["risk", "renewal"].includes(current)
+      || state.stages.find((stage) => stage.code === current)?.attention;
+    const serviceInfo = state.pipeline === "service" ? `
+      <span class="deals-company-meta">Оплачено до: ${html(date(service.paidUntil))}</span>
+      <span class="deals-company-meta">${html(money(service.monthlyAmount))}</span>
+      <span class="deals-company-meta">Последнее касание: ${html(date(service.lastTouchAt))}</span>
+      <span class="deals-company-meta">Следующее касание: ${html(date(service.nextTouchAt))}</span>
+      <span class="deals-company-meta">Ответственный: ${html(service.clientOwnerContact?.name || "—")}</span>` :
+      `<span class="deals-company-meta">Начало: ${html(date(company.startDate))}</span>`;
     return `<article class="deals-company" data-company-id="${html(company.id)}"
       draggable="${draggable}" aria-busy="${pending}">
       <button class="deals-company-open" type="button" data-company-open${pending ? " disabled" : ""}
         aria-label="Компания: ${html(company.name)}">
         <strong>${html(company.name)}</strong><span class="deals-company-code">${html(company.code)}</span>
+        ${attention ? '<span class="deals-attention">требует внимания</span>' : ""}
         <span>${html(company.city || "Город не указан")}</span>
         <span>${html(company.industry || "Отрасль не указана")}</span>
-        <span class="deals-company-meta">Открытых задач: ${html(tasks)}</span>
-        <span class="deals-company-meta">Начало: ${html(date(company.startDate))}</span>
+        <span class="deals-company-meta">Открытых задач: ${html(tasks)}</span>${serviceInfo}
       </button>
       <label class="deals-stage-select">Этап<select data-deals-stage
         aria-label="Этап компании ${html(company.name)}"${editable ? "" : " disabled"}
@@ -106,26 +133,25 @@
     </article>`;
   };
   const renderBoard = () => {
+    let visible = 0;
     byId("deals-board").innerHTML = state.stages.map((stage) => {
       const companies = state.companies.filter((company) => companyStage(company) === stage.code);
+      visible += companies.length;
       const cards = companies.map(companyCard).join("");
       return `<section class="card deals-column" data-stage-code="${html(stage.code)}"
         data-stage-kind="${html(stage.kind)}" aria-label="${html(stage.label)}">
         <header class="deals-column-heading"><h2>${html(stage.label)}</h2>
         <span class="deals-count" aria-label="Компаний: ${companies.length}">${companies.length}</span></header>
-        <div class="deals-column-cards">${cards || '<p class="muted deals-empty">нет компаний</p>'}</div>
+        <div class="deals-column-cards">${cards || '<p class="muted deals-empty">пока пусто</p>'}</div>
       </section>`;
     }).join("");
-    const count = companyCount(state.companies.length);
     byId("deals-count").textContent = state.total > state.companies.length
-      ? `На доске: ${count}. Всего: ${companyCount(state.total)}.` : count;
-    configureButton();
+      ? `На доске: ${companyCount(visible)}. Загружено ${companyCount(state.companies.length)} из ${state.total}.`
+      : companyCount(visible);
+    renderPipelines();
   };
   const loadBoard = async (preserveError = false) => {
-    if (state.pending.size || state.saving) {
-      state.refreshRequested = true;
-      return;
-    }
+    if (state.pending.size || state.saving) { state.refreshRequested = true; return; }
     if (state.loading) return;
     state.refreshRequested = false;
     const version = ++state.loadVersion;
@@ -135,16 +161,16 @@
     byId("deals-board").setAttribute("aria-busy", "true");
     byId("deals-count").textContent = "Загрузка…";
     try {
-      const results = await Promise.allSettled([
-        pipelineStages.load(query, true),
-        query("/companies", { limit: 200, deleted: "exclude" }),
-        query("/tasks/summary")
+      state.pipelines = (await query("/pipelines")).pipelines || [];
+      if (!state.pipelines.some((pipeline) => pipeline.code === state.pipeline)) {
+        state.pipeline = state.pipelines[0]?.code || "sale";
+      }
+      state.stages = await loadStages(state.pipeline);
+      const [companies, summary] = await Promise.allSettled([
+        query("/companies", { limit: 200, deleted: "exclude" }), query("/tasks/summary")
       ]);
       if (version !== state.loadVersion) return;
-      const [stages, companies, summary] = results;
-      if (stages.status === "rejected") throw stages.reason;
       if (companies.status === "rejected") throw companies.reason;
-      state.stages = stages.value || [];
       state.companies = companies.value.companies || [];
       state.total = companies.value.pagination?.total ?? state.companies.length;
       state.summaryLoaded = summary.status === "fulfilled";
@@ -162,7 +188,7 @@
       if (version === state.loadVersion) {
         state.loading = false;
         byId("deals-board").setAttribute("aria-busy", "false");
-        configureButton();
+        renderPipelines();
       }
     }
   };
@@ -172,26 +198,48 @@
       loadBoard(true);
     }
   };
-  const moveCompany = async (id, stageCode) => {
+  const replaceCompany = (company) => {
+    const index = state.companies.findIndex((item) => String(item.id) === String(company.id));
+    if (index !== -1) state.companies[index] = company;
+    if (String(state.overview?.company.id) === String(company.id)) state.overview.company = company;
+  };
+  const moveCompany = async (id, stageCode, reason) => {
     const company = state.companies.find((item) => String(item.id) === String(id));
-    if (!canEdit() || !company || state.pending.has(String(id)) || state.saving || state.loading) return;
-    if (!state.stages.some((stage) => stage.code === stageCode)) return;
+    if (!canEdit() || !company || busy() || !state.stages.some((stage) => stage.code === stageCode)) return;
     if (companyStage(company) === stageCode) return;
-    const previous = company.pipelineStage;
+    const pipeline = state.pipeline;
+    const previous = structuredClone(company);
     state.pending.add(String(id));
-    company.pipelineStage = stageCode;
+    company.pipelines ||= {};
+    company.pipelines[pipeline] = { stage: stageCode, enteredAt: new Date().toISOString() };
+    if (pipeline === "sale") company.pipelineStage = stageCode;
     status();
     renderBoard();
     try {
-      await query(`/companies/${encodeURIComponent(id)}`, {}, ctx.csrfOptions("PATCH", { pipelineStage: stageCode }));
+      const body = { pipeline, stageCode, ...(reason ? { reason } : {}) };
+      const saved = await query(`/companies/${encodeURIComponent(id)}/pipeline`, {}, ctx.csrfOptions("PATCH", body));
+      replaceCompany(saved.company);
     } catch (error) {
-      company.pipelineStage = previous;
+      replaceCompany(previous);
       status(error.message);
     } finally {
       state.pending.delete(String(id));
       renderBoard();
       finishMutation();
     }
+  };
+  const requestMove = (id, stageCode) => {
+    const company = state.companies.find((item) => String(item.id) === String(id));
+    if (!company || !canEdit() || busy()) { renderBoard(); return; }
+    if (["rejected", "churned"].includes(stageCode) && companyStage(company) !== stageCode) {
+      renderBoard();
+      state.reasonMove = { id, stageCode };
+      byId("deals-reason-text").value = "";
+      byId("deals-reason").showModal();
+      byId("deals-reason-text").focus();
+      return;
+    }
+    moveCompany(id, stageCode);
   };
   const clearDrag = () => {
     draggedId = null;
@@ -207,14 +255,11 @@
     });
     board.addEventListener("change", (event) => {
       if (!event.target.matches("[data-deals-stage]")) return;
-      moveCompany(event.target.closest("[data-company-id]").dataset.companyId, event.target.value);
+      requestMove(event.target.closest("[data-company-id]").dataset.companyId, event.target.value);
     });
     board.addEventListener("dragstart", (event) => {
       const card = event.target.closest("[data-company-id]");
-      if (!card || card.draggable !== true || !canEdit() || state.loading) {
-        event.preventDefault();
-        return;
-      }
+      if (!card || card.draggable !== true || !canEdit() || busy()) { event.preventDefault(); return; }
       draggedId = card.dataset.companyId;
       event.dataTransfer.setData("text/plain", draggedId);
       event.dataTransfer.effectAllowed = "move";
@@ -237,18 +282,42 @@
       event.preventDefault();
       const id = draggedId;
       clearDrag();
-      moveCompany(id, column.dataset.stageCode);
+      requestMove(id, column.dataset.stageCode);
     });
     board.addEventListener("dragend", clearDrag);
+    byId("deals-pipelines").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-pipeline-code]");
+      if (!button || busy() || button.dataset.pipelineCode === state.pipeline) return;
+      state.pipeline = button.dataset.pipelineCode;
+      byId("deals-board").innerHTML = "";
+      loadBoard();
+    });
+    byId("deals-enroll-company").addEventListener("change", configureButton);
+    byId("deals-enroll").addEventListener("click", () => {
+      const id = byId("deals-enroll-company").value;
+      if (id && state.stages[0]) requestMove(id, state.stages[0].code);
+    });
+    byId("deals-reason-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const reason = byId("deals-reason-text").value.trim();
+      if (!reason || !state.reasonMove) return;
+      const { id, stageCode } = state.reasonMove;
+      byId("deals-reason").close();
+      moveCompany(id, stageCode, reason);
+    });
+    byId("deals-reason").addEventListener("close", () => { state.reasonMove = null; renderBoard(); });
   };
   const stageRow = (stage, index) => {
     const count = stage.code ? stageCount(stage.code) : 0;
+    const system = state.stageLists[state.settingsPipeline]?.find((item) => item.code === stage.code)?.system;
     const options = Object.entries(kinds).map(([kind, label]) => {
       return `<option value="${kind}"${kind === stage.kind ? " selected" : ""}>${label}</option>`;
     }).join("");
     return `<div class="deals-stage-row" data-stage-index="${index}">
       <label>Название<input data-stage-label required maxlength="40" value="${html(stage.label)}"></label>
       <label>Тип<select data-stage-kind>${options}</select></label>
+      <label class="deals-check"><input type="checkbox" data-stage-attention${stage.attention ? " checked" : ""}>
+        Требует внимания</label>
       <div class="deals-stage-actions">
         <button class="plain-button" type="button" data-stage-up${index === 0 ? " disabled" : ""}
           aria-label="Поднять этап ${html(stage.label)}">↑</button>
@@ -256,48 +325,160 @@
           ${index === state.draft.length - 1 ? "disabled" : ""}
           aria-label="Опустить этап ${html(stage.label)}">↓</button>
         <button class="plain-button" type="button" data-stage-delete
-          ${count || state.draft.length === 1 ? "disabled" : ""}>Удалить</button>
+          ${count || system || state.draft.length === 1 ? "disabled" : ""}
+          ${system ? 'title="Этап нужен для правил воронки"' : ""}>Удалить</button>
         <span class="muted">${companyCount(count)}</span>
       </div>
     </div>`;
-  };
-  const renderSettings = () => {
-    byId("deals-stage-rows").innerHTML = state.draft.map(stageRow).join("");
-    byId("deals-stage-add").disabled = state.draft.length >= 12;
   };
   const readDraft = () => {
     byId("deals-stage-rows").querySelectorAll("[data-stage-index]").forEach((row, index) => {
       state.draft[index].label = row.querySelector("[data-stage-label]").value;
       state.draft[index].kind = row.querySelector("[data-stage-kind]").value;
+      state.draft[index].attention = row.querySelector("[data-stage-attention]").checked;
     });
+    state.drafts[state.settingsPipeline] = state.draft;
   };
-  const openSettings = () => {
-    if (!canEdit() || state.loading || state.pending.size || !state.stages.length) return;
-    state.draft = state.stages.map(({ code, label, kind }) => ({ code, label, kind }));
+  const renderSettings = () => {
+    byId("deals-stage-rows").innerHTML = state.draft.map(stageRow).join("");
+    byId("deals-stage-add").disabled = state.draft.length >= 12;
+    byId("deals-settings-pipeline").innerHTML = state.pipelines.map((pipeline) => {
+      return `<option value="${html(pipeline.code)}"${pipeline.code === state.settingsPipeline ? " selected" : ""}>
+        ${html(pipeline.label)}</option>`;
+    }).join("");
+    const index = state.pipelines.findIndex((pipeline) => pipeline.code === state.settingsPipeline);
+    byId("deals-pipeline-label").value = state.pipelines[index]?.label || "";
+    byId("deals-pipeline-up").disabled = index <= 0;
+    byId("deals-pipeline-down").disabled = index === state.pipelines.length - 1;
+  };
+  const settingsStages = async (pipeline) => {
+    const version = ++state.settingsVersion;
+    state.saving = true;
+    byId("deals-settings-fields").disabled = true;
     byId("deals-settings-error").textContent = "";
+    try {
+      const stages = await loadStages(pipeline);
+      const companies = await query("/companies", { limit: 200, deleted: "exclude" });
+      if (version !== state.settingsVersion) return;
+      state.companies = companies.companies || [];
+      state.settingsPipeline = pipeline;
+      state.draft = state.drafts[pipeline] || stages.map(({ code, label, kind, attention }) => {
+        return { code, label, kind, attention: Boolean(attention) };
+      });
+      if (pipeline === state.pipeline) state.stages = stages;
+      renderSettings();
+      renderBoard();
+    } catch (error) {
+      byId("deals-settings-error").textContent = error.message;
+      byId("deals-settings-pipeline").value = state.settingsPipeline;
+    } finally {
+      state.saving = false;
+      byId("deals-settings-fields").disabled = false;
+      finishMutation();
+    }
+  };
+  const openSettings = async () => {
+    if (!canEdit() || busy() || !state.stages.length) return;
+    state.settingsPipeline = state.pipeline;
+    state.drafts = {};
+    state.draft = state.stages.map(({ code, label, kind, attention }) => {
+      return { code, label, kind, attention: Boolean(attention) };
+    });
+    state.rulesLoaded = false;
+    byId("deals-settings-error").textContent = "";
+    byId("deals-new-pipeline-label").value = "";
     renderSettings();
     byId("deals-settings").showModal();
+    state.saving = true;
+    byId("deals-settings-fields").disabled = true;
+    try {
+      const { rules } = await query("/pipeline-rules");
+      state.rulesLoaded = true;
+      Object.entries({ ...ruleDefaults, ...rules }).forEach(([key, value]) => {
+        if (byId("deals-settings-form").elements[key]) byId("deals-settings-form").elements[key].value = value;
+      });
+    } catch (error) {
+      byId("deals-settings-error").textContent = error.message;
+    } finally {
+      state.saving = false;
+      byId("deals-settings-fields").disabled = false;
+      finishMutation();
+    }
+  };
+  const savePipelines = async (action) => {
+    if (!canEdit() || state.saving) return;
+    readDraft();
+    const pipelines = state.pipelines.map(({ code, label }) => ({ code, label }));
+    const index = pipelines.findIndex((pipeline) => pipeline.code === state.settingsPipeline);
+    if (action === "add") {
+      const label = byId("deals-new-pipeline-label").value.trim();
+      if (!label) { byId("deals-settings-error").textContent = "Введите название новой воронки"; return; }
+      pipelines.push({ label });
+    } else if (action === "rename") {
+      const label = byId("deals-pipeline-label").value.trim();
+      if (!label) { byId("deals-settings-error").textContent = "Введите название воронки"; return; }
+      pipelines[index].label = label;
+    } else {
+      const other = index + (action === "up" ? -1 : 1);
+      if (other < 0 || other >= pipelines.length) return;
+      [pipelines[index], pipelines[other]] = [pipelines[other], pipelines[index]];
+    }
+    state.saving = true;
+    byId("deals-settings-fields").disabled = true;
+    byId("deals-settings-error").textContent = "";
+    try {
+      const saved = await query("/pipelines", {}, ctx.csrfOptions("PUT", { pipelines }));
+      state.pipelines = saved.pipelines;
+      renderPipelines();
+      renderSettings();
+      byId("deals-new-pipeline-label").value = "";
+    } catch (error) {
+      byId("deals-settings-error").textContent = error.message;
+    } finally {
+      state.saving = false;
+      byId("deals-settings-fields").disabled = false;
+      finishMutation();
+    }
   };
   const saveSettings = async (event) => {
     event.preventDefault();
     if (!canEdit() || state.saving) return;
     readDraft();
-    const stages = state.draft.map((stage) => ({ ...stage, label: stage.label.trim() }));
     const error = byId("deals-settings-error");
-    if (stages.some((stage) => !stage.label || [...stage.label].length > 40)) {
+    if (!state.rulesLoaded) { error.textContent = "Откройте настройки повторно, чтобы загрузить правила"; return; }
+    const drafts = Object.entries(state.drafts).map(([pipeline, stages]) => {
+      return [pipeline, stages.map((stage) => ({ ...stage, label: stage.label.trim() }))];
+    });
+    if (drafts.some(([, stages]) => stages.some((stage) => !stage.label || [...stage.label].length > 40))) {
       error.textContent = "Название этапа должно содержать от 1 до 40 символов";
       return;
     }
+    const rules = Object.fromEntries(Object.keys(ruleDefaults).map((key) => {
+      return [key, Number(byId("deals-settings-form").elements[key].value)];
+    }));
     error.textContent = "";
     state.saving = true;
     byId("deals-settings-fields").disabled = true;
     try {
-      const saved = await query("/pipeline-stages", {}, ctx.csrfOptions("PUT", { stages }));
-      state.stages = pipelineStages.replace(saved.stages);
+      for (const [pipeline, stages] of drafts) {
+        const saved = await query("/pipeline-stages", { pipeline }, ctx.csrfOptions("PUT", { stages }));
+        state.stageLists[pipeline] = saved.stages;
+        if (pipeline === "sale") pipelineStages.replace(saved.stages);
+        if (pipeline === state.pipeline) state.stages = saved.stages;
+        state.drafts[pipeline] = saved.stages.map(({ code, label, kind, attention }) => {
+          return { code, label, kind, attention: Boolean(attention) };
+        });
+        if (pipeline === state.settingsPipeline) state.draft = state.drafts[pipeline];
+      }
+      state.draft = state.drafts[state.settingsPipeline];
+      await query("/pipeline-rules", {}, ctx.csrfOptions("PUT", { rules }));
       renderBoard();
       byId("deals-settings").close();
+      state.refreshRequested = true;
     } catch (failure) {
       error.textContent = failure.message;
+      renderSettings();
+      renderBoard();
     } finally {
       state.saving = false;
       byId("deals-settings-fields").disabled = false;
@@ -307,10 +488,17 @@
   const bindSettings = () => {
     byId("deals-configure").addEventListener("click", openSettings);
     byId("deals-settings-form").addEventListener("submit", saveSettings);
+    byId("deals-settings-pipeline").addEventListener("change", (event) => {
+      readDraft();
+      settingsStages(event.target.value);
+    });
+    for (const action of ["add", "rename", "up", "down"]) {
+      byId(`deals-pipeline-${action}`).addEventListener("click", () => savePipelines(action));
+    }
     byId("deals-stage-add").addEventListener("click", () => {
       if (state.draft.length >= 12 || state.saving) return;
       readDraft();
-      state.draft.push({ label: "", kind: "open" });
+      state.draft.push({ label: "", kind: "open", attention: false });
       renderSettings();
       byId("deals-stage-rows").lastElementChild.querySelector("input").focus();
     });
@@ -320,9 +508,8 @@
       if (!row || !button || button.disabled || state.saving) return;
       readDraft();
       const index = Number(row.dataset.stageIndex);
-      if (button.hasAttribute("data-stage-delete")) {
-        state.draft.splice(index, 1);
-      } else {
+      if (button.hasAttribute("data-stage-delete")) state.draft.splice(index, 1);
+      else {
         const other = index + (button.hasAttribute("data-stage-up") ? -1 : 1);
         [state.draft[index], state.draft[other]] = [state.draft[other], state.draft[index]];
       }
@@ -339,7 +526,7 @@
     return `<dl class="crm-details">${rows}</dl>`;
   };
   const overviewMarkup = () => {
-    const company = state.overview.company;
+    const company = { ...state.overview.company, pipelineStage: companyStage(state.overview.company) };
     const fields = {
       code: "Код",
       pipelineStage: "Этап",
@@ -386,6 +573,99 @@
     }).join("");
     return `<p>Всего лидов: ${html(leads.total)}</p>${rows ? `<ul class="deals-detail-list">${rows}</ul>` : empty()}`;
   };
+  const localDateTime = (value) => {
+    if (!value) return "";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "";
+    const pad = (number) => String(number).padStart(2, "0");
+    return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}`
+      + `T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
+  };
+  const historyMarkup = () => {
+    const history = state.overview.stageHistory || [];
+    const rows = history.map((entry) => {
+      const pipeline = state.pipelines.find((item) => item.code === entry.pipelineCode);
+      const stages = state.stageLists[entry.pipelineCode] || [];
+      const label = (code) => stages.find((stage) => stage.code === code)?.label || code || "—";
+      const actor = typeof entry.by === "object" ? entry.by?.name || entry.by?.login
+        : ({ auto: "Автоматически", user: "Пользователь" }[entry.by] || entry.by);
+      const at = entry.at ? new Date(entry.at).toLocaleString("ru-RU") : "—";
+      return `<li><strong>${html(pipeline?.label || entry.pipelineCode || "Этап")}</strong>
+        <p>${html(label(entry.fromCode))} → ${html(label(entry.toCode))}</p>
+        <p class="muted">${html(at)}${actor ? ` · ${html(actor)}` : ""}</p>
+        ${entry.reason ? `<p>Причина: ${html(entry.reason)}</p>` : ""}</li>`;
+    }).join("");
+    return `<h3>История переходов</h3>${rows ? `<ul class="deals-detail-list">${rows}</ul>` : empty()}`;
+  };
+  const serviceMarkup = () => {
+    const service = state.overview.company.service || {};
+    const contacts = [...(state.overview.contacts || [])];
+    if (service.clientOwnerContact && !contacts.some((contact) => contact.id === service.clientOwnerContact.id)) {
+      contacts.push(service.clientOwnerContact);
+    }
+    if (service.clientOwnerContactId && !contacts.some((contact) => contact.id === service.clientOwnerContactId)) {
+      contacts.push({ id: service.clientOwnerContactId,
+        name: `Контакт #${service.clientOwnerContactId} (недоступен)` });
+    }
+    const ownerOptions = contacts.map((contact) => {
+      return `<option value="${html(contact.id)}"
+        ${String(contact.id) === String(service.clientOwnerContactId) ? "selected" : ""}>
+        ${html(contact.name)}</option>`;
+    }).join("");
+    const noValues = ["paidUntil", "monthlyAmount", "lastTouchAt", "nextTouchAt", "clientOwnerContactId"]
+      .every((key) => service[key] === null || service[key] === undefined || service[key] === "");
+    return `${noValues ? empty() : ""}<form class="crm-form deals-service-form" data-service-form>
+      <fieldset class="deals-service-fields"${canEdit() ? "" : ' disabled title="нет прав"'}>
+        <label>Оплачено до<input type="date" name="paidUntil" value="${html(service.paidUntil?.slice(0, 10) || "")}">
+        </label><label>Ежемесячная оплата, ₽<input type="number" min="0" step="0.01" name="monthlyAmount"
+          value="${html(service.monthlyAmount ?? "")}"></label>
+        <label>Последнее касание<input type="datetime-local" name="lastTouchAt"
+          value="${html(localDateTime(service.lastTouchAt))}"></label>
+        <label>Следующее касание<input type="datetime-local" name="nextTouchAt"
+          value="${html(localDateTime(service.nextTouchAt))}"></label>
+        <label class="wide">Ответственный контакт<select name="clientOwnerContactId"><option value="">Не выбран</option>
+          ${ownerOptions}</select></label>
+        ${canEdit() ? '<button class="plain-button" type="submit">Сохранить сервис</button>' : ""}
+      </fieldset><p class="crm-error wide" role="alert" data-service-error></p>
+      <p class="muted wide" role="status" data-service-status></p></form>${historyMarkup()}`;
+  };
+  const saveService = async (event) => {
+    if (!event.target.matches("[data-service-form]")) return;
+    event.preventDefault();
+    if (!canEdit() || !state.overview || state.saving || state.pending.size) return;
+    const form = event.target;
+    const company = state.overview.company;
+    const previous = company.service || {};
+    const body = {};
+    for (const key of ["paidUntil", "monthlyAmount", "lastTouchAt", "nextTouchAt", "clientOwnerContactId"]) {
+      const input = form.elements[key].value;
+      const current = key === "paidUntil" ? previous[key]?.slice(0, 10) || ""
+        : key.endsWith("TouchAt") ? localDateTime(previous[key]) : String(previous[key] ?? "");
+      if (input === current) continue;
+      body[key] = !input ? null : ["monthlyAmount", "clientOwnerContactId"].includes(key) ? Number(input)
+        : key.endsWith("TouchAt") ? new Date(input).toISOString() : input;
+    }
+    if (!Object.keys(body).length) { form.querySelector("[data-service-status]").textContent = "Сохранено"; return; }
+    state.pending.add(String(company.id));
+    form.querySelector("fieldset").disabled = true;
+    form.querySelector("[data-service-error]").textContent = "";
+    configureButton();
+    try {
+      const saved = await query(`/companies/${encodeURIComponent(company.id)}/service`, {},
+        ctx.csrfOptions("PATCH", body));
+      replaceCompany(saved.company);
+      if (form.isConnected) form.querySelector("[data-service-status]").textContent = "Сохранено";
+      renderBoard();
+    } catch (error) {
+      if (form.isConnected) form.querySelector("[data-service-error]").textContent = error.message;
+    } finally {
+      state.pending.delete(String(company.id));
+      if (form.isConnected) form.querySelector("fieldset").disabled = false;
+      renderBoard();
+      finishMutation();
+    }
+  };
+
   const renderDrawerTab = () => {
     byId("deals-drawer-tabs").querySelectorAll("[data-deals-tab]").forEach((button) => {
       const selected = button.dataset.dealsTab === state.tab;
@@ -395,7 +675,8 @@
     const panel = byId("deals-drawer-content");
     panel.setAttribute("aria-labelledby", `deals-tab-${state.tab}`);
     if (!state.overview) return;
-    const renderers = { overview: overviewMarkup, contacts: contactsMarkup, tasks: tasksMarkup, leads: leadsMarkup };
+    const renderers = { overview: overviewMarkup, service: serviceMarkup, contacts: contactsMarkup,
+      tasks: tasksMarkup, leads: leadsMarkup };
     if (renderers[state.tab]) panel.innerHTML = renderers[state.tab]();
     else if (state.tab === "chat") panel.innerHTML = '<p class="muted">в разработке</p>';
     else panel.innerHTML = '<p class="muted">в разработке (описание ожидается от Owner’а)</p>';
@@ -489,6 +770,7 @@
       renderDrawerTab();
       byId(`deals-tab-${state.tab}`).focus();
     });
+    byId("deals-drawer-content").addEventListener("submit", saveService);
     byId("deals-drawer-content").addEventListener("click", (event) => {
       if (event.target.closest("[data-open-company]")) openCompanyInClients();
     });
@@ -507,7 +789,7 @@
     byId("deals-refresh").addEventListener("click", () => {
       loadBoard();
     });
-    for (const id of ["deals-settings", "deals-drawer"]) {
+    for (const id of ["deals-settings", "deals-drawer", "deals-reason"]) {
       const dialog = byId(id);
       dialog.querySelectorAll("[data-deals-close]").forEach((button) => {
         button.addEventListener("click", () => dialog.close());
@@ -526,6 +808,7 @@
       if (location.hash.split(/[/?]/)[0] === "#deals") return;
       byId("deals-settings").close();
       byId("deals-drawer").close();
+      byId("deals-reason").close();
     });
     window.matchMedia("(max-width: 760px)").addEventListener("change", () => {
       if (state.stages.length) renderBoard();

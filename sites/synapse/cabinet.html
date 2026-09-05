@@ -598,10 +598,15 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       </aside><div class="home-grid" id="home-widgets"></div></div>
     </section>
     <section class="view-panel" id="deals-view" data-view="deals" hidden>
-      <div class="content-header"><h1>Сделки</h1><p>Воронка компаний Synapse Business</p></div>
+      <div class="content-header"><h1>Сделки</h1><p>Воронки компаний Synapse Business</p></div>
+      <div id="deals-pipelines" class="deals-pipelines" role="tablist" aria-label="Воронки компаний"></div>
       <div class="crm-actions">
         <button class="plain-button" type="button" id="deals-configure" disabled>Настроить воронку</button>
         <button class="plain-button" type="button" id="deals-refresh">Обновить</button>
+      </div>
+      <div id="deals-enroll-fields" class="deals-enroll" hidden>
+        <label>Добавить компанию<select id="deals-enroll-company" aria-label="Компания для воронки"></select></label>
+        <button class="plain-button" type="button" id="deals-enroll" disabled>Добавить в воронку</button>
       </div>
       <p id="deals-count" class="muted" role="status"></p>
       <p id="deals-error" class="crm-error" role="alert" hidden></p>
@@ -612,14 +617,48 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
             <div class="deals-dialog-heading"><h2 id="deals-settings-title">Настроить воронку</h2>
               <button class="plain-button" type="button" data-deals-close aria-label="Закрыть настройки">✕</button>
             </div>
-            <p class="muted">От 1 до 12 этапов. Чтобы удалить этап, сначала перенесите его компании.</p>
-            <div id="deals-stage-rows"></div>
-            <div class="deals-settings-footer">
-              <button class="plain-button" type="button" id="deals-stage-add" data-stage-add>Добавить этап</button>
-              <button class="plain-button" type="submit">Сохранить</button>
+            <div class="deals-pipeline-settings">
+              <label>Воронка<select id="deals-settings-pipeline"></select></label>
+              <label>Название воронки<input id="deals-pipeline-label" maxlength="40"></label>
+              <div class="crm-actions">
+                <button class="plain-button" type="button" id="deals-pipeline-rename">Сохранить название</button>
+                <button class="plain-button" type="button" id="deals-pipeline-up" aria-label="Воронка левее">←</button>
+                <button class="plain-button" type="button" id="deals-pipeline-down"
+                  aria-label="Воронка правее">→</button>
+              </div>
+              <label>Новая воронка<input id="deals-new-pipeline-label" maxlength="40"></label>
+              <button class="plain-button" type="button" id="deals-pipeline-add">Добавить воронку</button>
             </div>
+            <h3>Этапы</h3>
+            <p class="muted">От 1 до 12 этапов. Для удаления дополнительного этапа перенесите его компании.</p>
+            <div id="deals-stage-rows"></div>
+            <button class="plain-button" type="button" id="deals-stage-add" data-stage-add>Добавить этап</button>
+            <h3>Правила переходов</h3>
+            <div class="deals-rules">
+              <label>Без касания, дней<input type="number" name="silentDays"
+                min="1" max="3650" step="1" value="14" required>
+              </label><label>До окончания оплаты, дней<input type="number" name="renewalDays"
+                min="1" max="3650" step="1" value="10" required></label>
+              <label>Возврат после отказа, месяцев<input type="number" name="rejectedReturnMonths"
+                min="1" max="120" step="1" value="3" required></label>
+              <label>Возврат ушедшего, месяцев<input type="number" name="churnedReturnMonths"
+                min="1" max="120" step="1" value="6" required></label>
+            </div>
+            <div class="deals-settings-footer"><button class="plain-button" type="submit">Сохранить</button></div>
           </fieldset>
           <p id="deals-settings-error" class="crm-error" role="alert"></p>
+        </form>
+      </dialog>
+      <dialog id="deals-reason" class="deals-dialog deals-reason" aria-labelledby="deals-reason-title">
+        <form id="deals-reason-form" class="crm-form">
+          <div class="deals-dialog-heading"><h2 id="deals-reason-title">Причина перехода</h2>
+            <button class="plain-button" type="button" data-deals-close aria-label="Закрыть причину">✕</button>
+          </div>
+          <label>Причина<textarea id="deals-reason-text" name="reason" required maxlength="2000"></textarea></label>
+          <div class="crm-actions">
+            <button class="plain-button" type="button" data-deals-close>Отмена</button>
+            <button class="plain-button" type="submit">Переместить</button>
+          </div>
         </form>
       </dialog>
       <dialog id="deals-drawer" class="deals-dialog deals-drawer" aria-labelledby="deals-drawer-title">

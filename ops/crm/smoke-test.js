@@ -56,18 +56,43 @@ function inspect(callback) {
   try { return callback(db); } finally { db.close(); }
 }
 function stageInput(stages) {
-  return stages.map(({ code, label, kind }) => ({ code, label, kind }));
+  return stages.map(({ code, label, kind, attention }) => ({ code, label, kind, attention }));
 }
 async function verifyPipelineSettings(company) {
+  const pipelines = await request('GET', '/pipelines');
+  assert.equal(pipelines.status, 200);
+  assert.deepEqual(pipelines.body.pipelines.map((pipeline) => pipeline.code), ['sale', 'service']);
+  const pipelineInput = pipelines.body.pipelines.map(({ code, label }) => ({ code, label })).reverse();
+  pipelineInput[0].label = 'QA Сопровождение';
+  pipelineInput.push({ label: 'QA Воронка' }, { label: 'QA Воронка' });
+  const savedPipelines = await request('PUT', '/pipelines', { pipelines: pipelineInput });
+  assert.equal(savedPipelines.status, 200);
+  assert.deepEqual(savedPipelines.body.pipelines.slice(0, 2).map((pipeline) => pipeline.code), ['service', 'sale']);
+  assert.equal(savedPipelines.body.pipelines[0].label, 'QA Сопровождение');
+  assert.equal(savedPipelines.body.pipelines[0].id, pipelines.body.pipelines[1].id);
+  assert.notEqual(savedPipelines.body.pipelines[2].code, savedPipelines.body.pipelines[3].code);
+  for (const invalid of [[], [{ code: 'missing', label: 'QA' }], [{ label: '' }]]) {
+    assert.equal((await request('PUT', '/pipelines', { pipelines: invalid })).status, 400);
+  }
+  assert.deepEqual((await request('GET', '/pipelines')).body, savedPipelines.body);
   const initial = await request('GET', '/pipeline-stages');
   assert.equal(initial.status, 200);
-  assert.deepEqual(stageInput(initial.body.stages), [
+  assert.deepEqual(initial.body, (await request('GET', '/pipeline-stages?pipeline=sale')).body);
+  assert.deepEqual(initial.body.stages.map(({ code, label, kind }) => ({ code, label, kind })), [
     { code: 'new', label: 'Новый', kind: 'open' },
-    { code: 'in_progress', label: 'В работе', kind: 'open' },
-    { code: 'payment', label: 'Оплата', kind: 'open' },
-    { code: 'repeat', label: 'Повторная продажа', kind: 'won' },
+    { code: 'contact', label: 'Контакт', kind: 'open' },
+    { code: 'meeting', label: 'Встреча', kind: 'open' },
+    { code: 'pilot', label: 'Пилот', kind: 'open' },
+    { code: 'paid', label: 'Оплата', kind: 'won' },
     { code: 'rejected', label: 'Отказ', kind: 'lost' },
   ]);
+  const service = await request('GET', '/pipeline-stages?pipeline=service');
+  assert.equal(service.status, 200);
+  assert.deepEqual(service.body.stages.map((stage) => stage.code),
+    ['onboarding', 'active', 'renewal', 'upsell', 'risk', 'churned']);
+  assert.equal(Boolean(service.body.stages.find((stage) => stage.code === 'risk').attention), true);
+  assert.equal(service.body.stages.find((stage) => stage.code === 'churned').kind, 'lost');
+  assert.equal((await request('GET', '/pipeline-stages?pipeline=missing')).status, 400);
   for (const invalid of [
     [], Array.from({ length: 13 }, () => ({ label: 'QA', kind: 'open' })),
     [{ label: '', kind: 'open' }], [{ label: 'x'.repeat(41), kind: 'open' }],
@@ -82,13 +107,13 @@ async function verifyPipelineSettings(company) {
   changed.push({ label: 'Новый этап', kind: 'open' }, { label: 'Новый этап', kind: 'won' });
   const saved = await request('PUT', '/pipeline-stages', { stages: changed });
   assert.equal(saved.status, 200);
-  assert.equal(saved.body.stages.length, 7);
-  assert.deepEqual(saved.body.stages.slice(0, 5).map((stage) => stage.code), changed.slice(0, 5)
+  assert.equal(saved.body.stages.length, 8);
+  assert.deepEqual(saved.body.stages.slice(0, 6).map((stage) => stage.code), changed.slice(0, 6)
     .map((stage) => stage.code));
-  const renamed = saved.body.stages.find((stage) => stage.code === 'in_progress');
+  const renamed = saved.body.stages.find((stage) => stage.code === 'contact');
   assert.equal(renamed.label, 'Переговоры');
-  assert.equal(renamed.id, initial.body.stages.find((stage) => stage.code === 'in_progress').id);
-  const added = saved.body.stages.slice(5);
+  assert.equal(renamed.id, initial.body.stages.find((stage) => stage.code === 'contact').id);
+  const added = saved.body.stages.slice(6);
   assert.match(added[0].code, /^[a-z0-9_-]+$/);
   assert.notEqual(added[0].code, added[1].code);
   assert.deepEqual(added.map((stage) => stage.kind), ['open', 'won']);
@@ -98,8 +123,9 @@ async function verifyPipelineSettings(company) {
   const moved = await request('PATCH', `/companies/${company.id}`, { pipelineStage: added[0].code });
   assert.equal(moved.status, 200);
   assert.equal(moved.body.pipelineStage, added[0].code);
+  assert.equal(moved.body.pipelines.sale.stage, added[0].code);
   assert.equal((await request('GET', `/companies/${company.id}`)).body.pipelineStage, added[0].code);
-  for (const pipelineStage of ['application', 'missing']) {
+  for (const pipelineStage of ['application', 'missing', 'active']) {
     assert.equal((await request('PATCH', `/companies/${company.id}`, { pipelineStage })).status, 400);
   }
   const removal = stageInput(saved.body.stages.filter((stage) => stage.code !== added[0].code));
@@ -113,6 +139,18 @@ async function verifyPipelineSettings(company) {
   assert.equal(restored.status, 200);
   assert.deepEqual(stageInput(restored.body.stages), stageInput(initial.body.stages));
   assert.equal((await request('PATCH', `/companies/${company.id}`, { pipelineStage: added[0].code })).status, 400);
+  assert.deepEqual((await request('GET', '/pipeline-stages?pipeline=service')).body, service.body);
+  const serviceChanged = stageInput(service.body.stages);
+  serviceChanged.find((stage) => stage.code === 'risk').attention = false;
+  serviceChanged[0].label = 'QA Внедрение';
+  const savedService = await request('PUT', '/pipeline-stages?pipeline=service', { stages: serviceChanged });
+  assert.equal(savedService.status, 200);
+  assert.equal(Boolean(savedService.body.stages.find((stage) => stage.code === 'risk').attention), false);
+  assert.deepEqual((await request('GET', '/pipeline-stages?pipeline=sale')).body, restored.body);
+  assert.equal((await request('PUT', '/pipeline-stages?pipeline=service', {
+    stages: stageInput(service.body.stages),
+  })).status, 200);
+  console.log('PIPELINES_SETTINGS=PASS PIPELINE_SCOPE=PASS PIPELINE_ATTENTION=PASS');
   console.log('PIPELINE_SETTINGS=PASS PIPELINE_VALIDATION=PASS PIPELINE_DELETE_CONFLICT=PASS COMPANY_MOVE=PASS');
 }
 async function verifyCompanyOverview(company, companyB, contact, legal, lead, taskInbox, taskUrgent) {
@@ -158,7 +196,9 @@ async function verifyCompanyOverview(company, companyB, contact, legal, lead, ta
   assert.equal(overview.body.tasks.find((item) => item.id === taskUrgent.id).dueDate, '2030-01-02');
   assert.equal(overview.body.leads.total, 1);
   assert.equal(overview.body.leads.last[0].id, lead.id);
-  assert.deepEqual(overview.body.stageHistory, []);
+  assert.ok(overview.body.stageHistory.length >= 2);
+  assert.ok(overview.body.stageHistory.every((entry) => entry.pipelineCode === 'sale'));
+  assert.ok(overview.body.stageHistory.some((entry) => entry.toCode === 'new'));
   const extraTasks = [];
   for (let index = 0; index < 23; index += 1) {
     const task = await request('POST', '/tasks', {
@@ -190,46 +230,348 @@ async function verifyCompanyOverview(company, companyB, contact, legal, lead, ta
   }
   console.log('COMPANY_OVERVIEW=PASS OVERVIEW_SCOPE=PASS OVERVIEW_LIMITS=PASS');
 }
+async function createPipelineCompany(code, pipelineStage = 'new') {
+  const created = await request('POST', '/companies', { code, name: `QA ${code}`, pipelineStage });
+  assert.equal(created.status, 201);
+  return created.body;
+}
+async function movePipeline(company, pipeline, stageCode, reason) {
+  const moved = await request('PATCH', `/companies/${company.id}/pipeline`, { pipeline, stageCode, reason });
+  assert.equal(moved.status, 200, JSON.stringify(moved.body));
+  assert.equal(moved.body.company.pipelines[pipeline].stage, stageCode);
+  return moved.body.company;
+}
+function dateOffset(days) {
+  return new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+}
+function backdateStage(company, pipeline, months) {
+  const enteredAt = new Date();
+  enteredAt.setUTCMonth(enteredAt.getUTCMonth() - months);
+  inspect((db) => {
+    db.prepare(`UPDATE company_pipeline_state SET entered_at=? WHERE company_id=?
+      AND pipeline_id=(SELECT id FROM pipelines WHERE code=?)`).run(enteredAt.toISOString(), company.id, pipeline);
+  });
+}
+async function verifyPipelineCompanies(contact) {
+  const company = await createPipelineCompany('qa_pipeline_company');
+  assert.equal(company.pipelines.sale.stage, 'new');
+  assert.ok(Number.isFinite(Date.parse(company.pipelines.sale.enteredAt)));
+  const pipelinePath = `/companies/${company.id}/pipeline`;
+  const servicePath = `/companies/${company.id}/service`;
+  for (const pathname of [pipelinePath, servicePath]) {
+    assert.equal((await request('PATCH', pathname, {}, null)).status, 401);
+    assert.equal((await request('PATCH', pathname, {}, 'wrong')).status, 401);
+  }
+  for (const invalid of [
+    {}, { pipeline: 'missing', stageCode: 'new' }, { pipeline: 'sale', stageCode: 'active' },
+    { pipeline: 'service', stageCode: 'paid' }, { pipeline: 'sale', stageCode: 'missing' },
+    { pipeline: 'sale', stageCode: 'rejected' }, { pipeline: 'service', stageCode: 'churned', reason: ' ' },
+    { pipeline: 'sale', stageCode: 'contact', unknown: true },
+  ]) {
+    assert.equal((await request('PATCH', pipelinePath, invalid)).status, 400);
+  }
+  assert.equal((await request('PATCH', `/companies/${company.id}`, { pipelineStage: 'rejected' })).status, 400);
+  const paid = await movePipeline(company, 'sale', 'paid');
+  assert.equal(paid.pipelineStage, 'paid');
+  assert.equal(paid.pipelines.service.stage, 'onboarding');
+  const active = await movePipeline(company, 'service', 'active');
+  assert.equal(active.pipelines.sale.stage, 'paid');
+  assert.equal(active.pipelineStage, 'paid');
+  await movePipeline(company, 'sale', 'contact');
+  await movePipeline(company, 'sale', 'paid');
+  assert.equal((await request('GET', `/companies/${company.id}`)).body.pipelines.service.stage, 'active');
+  const paidOnCreate = await createPipelineCompany('qa_pipeline_paid_create', 'paid');
+  assert.equal(paidOnCreate.pipelines.service.stage, 'onboarding');
+  const legacy = await createPipelineCompany('qa_pipeline_legacy_patch');
+  const legacyPaid = await request('PATCH', `/companies/${legacy.id}`, { pipelineStage: 'paid' });
+  assert.equal(legacyPaid.status, 200);
+  assert.equal(legacyPaid.body.pipelines.sale.stage, 'paid');
+  assert.equal(legacyPaid.body.pipelines.service.stage, 'onboarding');
+  const legacyRejected = await request('PATCH', `/companies/${legacy.id}`, {
+    pipelineStage: 'rejected', reason: 'QA Причина старого маршрута',
+  });
+  assert.equal(legacyRejected.status, 200);
+  assert.equal(legacyRejected.body.pipelines.sale.stage, 'rejected');
+  const service = {
+    paidUntil: dateOffset(60), monthlyAmount: 12345.67, lastTouchAt: new Date().toISOString(),
+    nextTouchAt: `${dateOffset(7)}T12:00:00.000Z`, clientOwnerContactId: contact.id,
+  };
+  const saved = await request('PATCH', servicePath, service);
+  assert.equal(saved.status, 200);
+  for (const [key, value] of Object.entries(service)) assert.equal(saved.body.company.service[key], value);
+  assert.deepEqual(saved.body.company.service.clientOwnerContact, { id: contact.id, name: contact.name });
+  inspect((db) => {
+    db.exec('PRAGMA foreign_keys=ON');
+    assert.throws(() => db.prepare('UPDATE company_service SET client_owner_contact_id=? WHERE company_id=?')
+      .run(999999999, company.id), /FOREIGN KEY constraint failed/);
+    assert.throws(() => db.prepare(`UPDATE company_pipeline_state SET stage_code='onboarding'
+      WHERE company_id=? AND pipeline_id=(SELECT id FROM pipelines WHERE code='sale')`).run(company.id),
+    /FOREIGN KEY constraint failed/);
+  });
+  const listed = await request('GET', `/companies?q=${company.code}`);
+  const listedCompany = listed.body.companies.find((item) => item.id === company.id);
+  assert.deepEqual(listedCompany.service, saved.body.company.service);
+  assert.deepEqual(listedCompany.pipelines, saved.body.company.pipelines);
+  assert.deepEqual((await request('GET', `/companies/${company.id}/overview`)).body.company.service,
+    saved.body.company.service);
+  for (const invalid of [
+    {}, { monthlyAmount: -1 }, { monthlyAmount: '10' }, { paidUntil: '2030-02-30' },
+    { lastTouchAt: 'not a date' }, { nextTouchAt: '2030-02-30' }, { clientOwnerContactId: 999999999 },
+    { clientOwnerContactId: -1 }, { clientOwnerContactId: contact.id, unknown: true },
+  ]) {
+    assert.equal((await request('PATCH', servicePath, invalid)).status, 400);
+  }
+  const staleOwner = await request('POST', '/contacts', { name: 'QA Deleted client owner' });
+  assert.equal(staleOwner.status, 201);
+  assert.equal((await request('DELETE', `/contacts/${staleOwner.body.id}`)).status, 200);
+  assert.equal((await request('PATCH', servicePath, { clientOwnerContactId: staleOwner.body.id })).status, 400);
+  const cleared = await request('PATCH', servicePath, {
+    paidUntil: null, monthlyAmount: null, lastTouchAt: null, nextTouchAt: null, clientOwnerContactId: null,
+  });
+  assert.equal(cleared.status, 200);
+  assert.ok(Object.values(cleared.body.company.service).every((value) => value === null));
+  await movePipeline(company, 'sale', 'rejected', 'QA Отложенный бюджет');
+  await movePipeline(company, 'service', 'churned', 'QA Завершён проект');
+  const overview = await request('GET', `/companies/${company.id}/overview`);
+  const history = overview.body.stageHistory;
+  assert.ok(history.some((entry) => entry.pipelineCode === 'sale' && entry.fromCode === 'new'
+    && entry.toCode === 'paid' && entry.by === 'user'));
+  assert.ok(history.some((entry) => entry.pipelineCode === 'service' && entry.toCode === 'onboarding'
+    && entry.by === 'auto'));
+  assert.ok(history.some((entry) => entry.pipelineCode === 'sale' && entry.toCode === 'rejected'
+    && entry.reason === 'QA Отложенный бюджет'));
+  assert.ok(history.some((entry) => entry.pipelineCode === 'service' && entry.toCode === 'churned'
+    && entry.reason === 'QA Завершён проект'));
+  for (const entry of history) assert.ok(Number.isFinite(Date.parse(entry.at)));
+  const historyLength = history.length;
+  await movePipeline(company, 'service', 'churned', 'QA Завершён проект');
+  assert.equal((await request('GET', `/companies/${company.id}/overview`)).body.stageHistory.length, historyLength);
+  inspect((db) => {
+    assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+  });
+  console.log('COMPANY_PIPELINES=PASS SERVICE_FIELDS=PASS PIPELINE_REASONS=PASS PIPELINE_HISTORY=PASS');
+}
+async function verifyPipelineAutomation() {
+  const defaults = await request('GET', '/pipeline-rules');
+  assert.equal(defaults.status, 200);
+  assert.deepEqual(defaults.body.rules, {
+    silentDays: 14, renewalDays: 10, rejectedReturnMonths: 3, churnedReturnMonths: 6,
+  });
+  assert.equal((await request('PUT', '/pipeline-rules', defaults.body, null)).status, 401);
+  for (const rules of [
+    {}, { ...defaults.body.rules, silentDays: 0 }, { ...defaults.body.rules, silentDays: 1.5 },
+    { ...defaults.body.rules, renewalDays: 3651 }, { ...defaults.body.rules, rejectedReturnMonths: 121 },
+    { ...defaults.body.rules, churnedReturnMonths: '6' }, { ...defaults.body.rules, unknown: 2 },
+  ]) {
+    assert.equal((await request('PUT', '/pipeline-rules', { rules })).status, 400);
+  }
+  const rules = { silentDays: 10, renewalDays: 14, rejectedReturnMonths: 2, churnedReturnMonths: 3 };
+  assert.equal((await request('PUT', '/pipeline-rules', { rules })).status, 200);
+  assert.deepEqual((await request('GET', '/pipeline-rules')).body.rules, rules);
+  const risk = await createPipelineCompany('qa_auto_risk', 'paid');
+  const renewal = await createPipelineCompany('qa_auto_renewal', 'paid');
+  const untouched = await createPipelineCompany('qa_auto_untouched', 'paid');
+  for (const company of [risk, renewal, untouched]) await movePipeline(company, 'service', 'active');
+  assert.equal((await request('PATCH', `/companies/${risk.id}/service`, {
+    paidUntil: dateOffset(5), lastTouchAt: `${dateOffset(-30)}T12:00:00.000Z`,
+  })).status, 200);
+  assert.equal((await request('PATCH', `/companies/${renewal.id}/service`, {
+    paidUntil: dateOffset(5), lastTouchAt: new Date().toISOString(),
+  })).status, 200);
+  assert.equal((await request('GET', '/pipeline-stages?pipeline=service')).status, 200);
+  for (const [company, stage] of [[risk, 'risk'], [renewal, 'renewal'], [untouched, 'active']]) {
+    const overview = await request('GET', `/companies/${company.id}/overview`);
+    assert.equal(overview.body.company.pipelines.service.stage, stage);
+    if (stage !== 'active') {
+      assert.ok(overview.body.stageHistory.some((entry) => entry.pipelineCode === 'service'
+        && entry.fromCode === 'active' && entry.toCode === stage && entry.by === 'auto'));
+    }
+  }
+  const rejected = await createPipelineCompany('qa_auto_rejected');
+  await movePipeline(rejected, 'sale', 'rejected', 'QA Позже');
+  const churned = await createPipelineCompany('qa_auto_churned', 'paid');
+  await movePipeline(churned, 'service', 'churned', 'QA Пауза');
+  const returnTasks = async (company) => {
+    const tasks = await request('GET', `/tasks?companyCode=${company.code}&source=pipeline`);
+    assert.equal(tasks.status, 200);
+    return tasks.body.tasks;
+  };
+  assert.equal((await request('GET', '/pipeline-stages')).status, 200);
+  for (const company of [rejected, churned]) assert.equal((await returnTasks(company)).length, 0);
+  backdateStage(rejected, 'sale', 4);
+  backdateStage(churned, 'service', 5);
+  assert.equal((await request('GET', '/pipeline-stages')).status, 200);
+  for (const company of [rejected, churned]) {
+    const tasks = await returnTasks(company);
+    assert.equal(tasks.length, 1);
+    assert.equal(tasks[0].title, `Вернуться к ${company.name}`);
+    assert.equal(tasks[0].assigneeRole, 'owner');
+    assert.equal(tasks[0].source, 'pipeline');
+    assert.equal((await request('PATCH', `/tasks/${tasks[0].id}`, { status: 'done' })).status, 200);
+  }
+  assert.equal((await request('GET', '/pipeline-stages')).status, 200);
+  await stop();
+  await start();
+  assert.equal((await request('GET', '/pipeline-stages?pipeline=service')).status, 200);
+  assert.deepEqual((await request('GET', '/pipeline-rules')).body.rules, rules);
+  for (const company of [rejected, churned]) assert.equal((await returnTasks(company)).length, 1);
+  await movePipeline(rejected, 'sale', 'contact');
+  await movePipeline(rejected, 'sale', 'rejected', 'QA Следующая попытка');
+  backdateStage(rejected, 'sale', 4);
+  assert.equal((await request('GET', '/pipeline-stages')).status, 200);
+  assert.equal((await returnTasks(rejected)).length, 2);
+  assert.equal((await returnTasks(churned)).length, 1);
+  assert.equal((await request('PUT', '/pipeline-rules', defaults.body)).status, 200);
+  console.log('PIPELINE_RULES=PASS AUTO_RISK_PRIORITY=PASS AUTO_RENEWAL=PASS RETURN_TASK_DEDUP=PASS');
+}
 async function verifyPipelineMigration() {
   await stop();
+  databasePath = path.join(directory, 'legacy-v4.sqlite');
+  await start();
+  await stop();
   const cases = [
-    ['application', 'new'], ['call', 'in_progress'], ['kit_ready', 'in_progress'],
-    ['payment', 'payment'], ['active', 'repeat'], [null, null],
+    ['new', 'new'], ['in_progress', 'contact'], ['payment', 'paid'],
+    ['repeat', 'paid'], ['rejected', 'rejected'], [null, null], ['qa_custom', 'qa_custom'],
+    ['contact', ''], ['meeting', ''], ['pilot', ''], ['paid', ''], ['contact-2', 'contact-2'],
+    ['qa_extra', 'qa_extra'],
   ];
+  const migratedCodes = Object.fromEntries(cases);
+  const collidingCodes = ['contact', 'meeting', 'pilot', 'paid'];
   inspect((db) => {
+    db.exec(`
+      DROP TABLE company_stage_history;
+      DROP TABLE company_pipeline_state;
+      DROP TABLE company_service;
+      DROP TABLE pipeline_rules;
+      DROP TABLE pipeline_stages;
+      DROP TABLE pipelines;
+      DELETE FROM schema_migrations WHERE version = 5;
+      CREATE TABLE pipeline_stages (
+        id INTEGER PRIMARY KEY, code TEXT UNIQUE NOT NULL, label TEXT NOT NULL, position INTEGER NOT NULL,
+        is_final INTEGER DEFAULT 0, kind TEXT CHECK(kind IN ('open','won','lost')) DEFAULT 'open',
+        created_at TEXT, updated_at TEXT
+      );
+      DROP TABLE tasks;
+      CREATE TABLE tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        is_deleted INTEGER NOT NULL DEFAULT 0, deleted_at TEXT, title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '', company_code TEXT NOT NULL DEFAULT '',
+        assignee_role TEXT NOT NULL DEFAULT 'synapse', assignee_name TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'inbox', priority TEXT NOT NULL DEFAULT 'normal',
+        due_date TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT 'manual'
+          CHECK(source IN ('manual','chat','telegram')), source_ref TEXT NOT NULL DEFAULT '',
+        source_author TEXT NOT NULL DEFAULT '', created_by TEXT NOT NULL DEFAULT ''
+      );
+    `);
+    const insertStage = db.prepare(`INSERT INTO pipeline_stages
+      (code, label, position, kind, is_final, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+    const stages = [
+      ['new', 'Новый', 'won'], ['in_progress', 'В работе', 'open'], ['payment', 'Оплата', 'open'],
+      ['repeat', 'Повторная продажа', 'won'], ['rejected', 'Отказ', 'open'], ['qa_custom', 'Особый этап', 'open'],
+      ['contact', 'QA Custom contact', 'lost'], ['meeting', 'QA Custom meeting', 'won'],
+      ['pilot', 'QA Custom pilot', 'open'], ['paid', 'QA Custom paid', 'open'],
+      ['contact-2', 'QA Existing suffix', 'open'],
+      ['qa_extra', 'QA Twelfth stage', 'open'],
+    ];
+    for (const [position, [code, label, kind]] of stages.entries()) {
+      insertStage.run(code, label, position, kind, kind === 'open' ? 0 : 1, '2026-01-01', '2026-01-01');
+    }
     const insert = db.prepare(`INSERT INTO companies (created_at, updated_at, code, name, pipeline_stage)
       VALUES (?, ?, ?, ?, ?)`);
     for (const [old] of cases) {
-      insert.run('2026-01-01', '2026-01-01', `qa_legacy_${old}`, `Legacy ${old}`, old);
+      const now = new Date().toISOString();
+      insert.run(now, now, `qa_legacy_${old}`, `Legacy ${old}`, old);
     }
-    db.exec('DROP TABLE pipeline_stages; DELETE FROM schema_migrations WHERE version = 4');
+    db.prepare(`INSERT INTO tasks (created_at, updated_at, title, company_code, source, source_ref,
+      description, assignee_role, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run('2026-01-01', '2026-01-02', 'Legacy task', 'qa_legacy_repeat', 'chat',
+        'qa:legacy:task', 'Сохранить описание', 'owner', '2030-01-02');
   });
   await start();
   inspect((db) => {
-    for (const [old, expected] of cases) {
-      assert.equal(db.prepare('SELECT pipeline_stage FROM companies WHERE code=?')
-        .get(`qa_legacy_${old}`).pipeline_stage, expected);
+    for (const code of collidingCodes) {
+      const stage = db.prepare(`SELECT s.code, s.kind FROM pipeline_stages s
+        JOIN pipelines p ON p.id=s.pipeline_id WHERE p.code='sale' AND s.label=?`).get(`QA Custom ${code}`);
+      assert.ok(stage, `Сохранён пользовательский этап ${code}`);
+      assert.notEqual(stage.code, code);
+      if (code === 'contact') assert.notEqual(stage.code, 'contact-2');
+      assert.equal(stage.kind, code === 'contact' ? 'lost' : code === 'meeting' ? 'won' : 'open');
+      migratedCodes[code] = stage.code;
     }
-    assert.equal(db.prepare('SELECT COUNT(*) count FROM pipeline_stages').get().count, 5);
+    for (const [old] of cases) {
+      assert.equal(db.prepare('SELECT pipeline_stage FROM companies WHERE code=?')
+        .get(`qa_legacy_${old}`).pipeline_stage, migratedCodes[old]);
+    }
+    assert.equal(db.prepare('SELECT COUNT(*) count FROM pipelines').get().count, 2);
     assert.equal(db.prepare('SELECT COUNT(*) count FROM schema_migrations WHERE version=4').get().count, 1);
+    assert.equal(db.prepare('SELECT COUNT(*) count FROM schema_migrations WHERE version=5').get().count, 1);
+    for (const [code, kind] of [['new', 'won'], ['rejected', 'open']]) {
+      assert.equal(db.prepare(`SELECT s.kind FROM pipeline_stages s JOIN pipelines p ON p.id=s.pipeline_id
+        WHERE p.code='sale' AND s.code=?`).get(code).kind, kind);
+    }
     assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+    const oldTask = db.prepare('SELECT * FROM tasks WHERE source_ref=?').get('qa:legacy:task');
+    assert.equal(oldTask.title, 'Legacy task');
+    assert.equal(oldTask.description, 'Сохранить описание');
+    assert.equal(oldTask.source, 'chat');
+    assert.equal(oldTask.assignee_role, 'owner');
+    assert.equal(oldTask.due_date, '2030-01-02');
   });
+  const migrated = (await request('GET', '/companies?limit=200')).body.companies;
+  const repeated = migrated.find((company) => company.code === 'qa_legacy_repeat');
+  assert.equal(repeated.pipelines.sale.stage, 'paid');
+  assert.equal(repeated.pipelines.service.stage, 'active');
+  const nullStage = migrated.find((company) => company.code === 'qa_legacy_null');
+  assert.equal(nullStage.pipelineStage, null);
+  assert.equal(nullStage.pipelines.sale, undefined);
+  const customCompany = migrated.find((company) => company.code === 'qa_legacy_qa_custom');
+  assert.equal(customCompany.pipelines.sale.stage, 'qa_custom');
+  for (const code of collidingCodes) {
+    const company = migrated.find((item) => item.code === `qa_legacy_${code}`);
+    assert.equal(company.pipelines.sale.stage, migratedCodes[code]);
+  }
+  const payment = migrated.find((company) => company.code === 'qa_legacy_payment');
+  assert.equal(payment.pipelines.service, undefined);
+  const paymentOverview = (await request('GET', `/companies/${payment.id}/overview`)).body;
+  const saleHistoryCount = paymentOverview.stageHistory.filter((entry) => entry.pipelineCode === 'sale').length;
+  const paidAgain = await request('PATCH', `/companies/${payment.id}`, { pipelineStage: 'paid' });
+  assert.equal(paidAgain.status, 200);
+  assert.equal(paidAgain.body.pipelines.service.stage, 'onboarding');
+  const afterPaid = (await request('GET', `/companies/${payment.id}/overview`)).body;
+  assert.equal(afterPaid.stageHistory.filter((entry) => entry.pipelineCode === 'sale').length, saleHistoryCount);
+  const pipelineTask = await request('POST', '/tasks', {
+    title: 'QA Migrated pipeline task', companyCode: repeated.code, source: 'pipeline',
+  });
+  assert.equal(pipelineTask.status, 201);
+  assert.equal(pipelineTask.body.source, 'pipeline');
   const defaults = (await request('GET', '/pipeline-stages')).body.stages;
-  const custom = stageInput(defaults.filter((stage) => stage.code !== 'rejected'));
+  assert.equal(defaults.length, 13);
+  assert.equal(defaults.find((stage) => stage.code === 'qa_custom').label, 'Особый этап');
+  const custom = stageInput(defaults);
   custom[0].label = 'Новый контакт';
-  custom.push({ label: 'После миграции', kind: 'open' });
+  assert.equal((await request('PUT', '/pipeline-stages', {
+    stages: [...custom, { label: 'Не увеличивать превышение', kind: 'open' }],
+  })).status, 400);
   const saved = await request('PUT', '/pipeline-stages', { stages: custom });
   assert.equal(saved.status, 200);
   await stop();
   await start();
   assert.deepEqual((await request('GET', '/pipeline-stages')).body, saved.body);
   inspect((db) => {
-    for (const [old, expected] of cases) {
+    for (const [old] of cases) {
       assert.equal(db.prepare('SELECT pipeline_stage FROM companies WHERE code=?')
-        .get(`qa_legacy_${old}`).pipeline_stage, expected);
+        .get(`qa_legacy_${old}`).pipeline_stage, migratedCodes[old]);
+    }
+    assert.equal(db.prepare('SELECT COUNT(*) count FROM tasks').get().count, 2);
+    for (const [code, kind] of [['new', 'won'], ['rejected', 'open']]) {
+      assert.equal(db.prepare(`SELECT s.kind FROM pipeline_stages s JOIN pipelines p ON p.id=s.pipeline_id
+        WHERE p.code='sale' AND s.code=?`).get(code).kind, kind);
     }
   });
-  console.log('PIPELINE_LEGACY_MIGRATION=PASS PIPELINE_NULL_PRESERVED=PASS PIPELINE_RESTART=PASS');
+  console.log('PIPELINE_V4_MIGRATION=PASS PIPELINE_NULL_PRESERVED=PASS PIPELINE_CUSTOM_PRESERVED=PASS');
+  console.log('PIPELINE_CODE_COLLISIONS=PASS MIGRATED_PAID_ONBOARDING=PASS MIGRATED_STAGE_LIMIT=PASS');
+  console.log('MIGRATED_CUSTOM_KINDS=PASS');
+  console.log('PIPELINE_RESTART=PASS LEGACY_TASKS_PRESERVED=PASS TASK_PIPELINE_SOURCE=PASS');
 }
 async function main() {
   directory = await mkdtemp(path.join(tmpdir(), 'crm-smoke-'));
@@ -245,11 +587,13 @@ async function main() {
   });
   console.log('MIGRATION_EMPTY=PASS NO_SEED=PASS');
 
-  for (const pathname of ['/contacts', '/companies', '/legal-entities', '/pipeline-stages']) {
+  for (const pathname of ['/contacts', '/companies', '/legal-entities', '/pipeline-stages',
+    '/pipelines', '/pipeline-rules']) {
     assert.equal((await request('GET', pathname, undefined, null)).status, 401);
     assert.equal((await request('GET', pathname, undefined, 'wrong')).status, 401);
   }
   assert.equal((await request('PUT', '/pipeline-stages', { stages: [] }, null)).status, 401);
+  assert.equal((await request('PUT', '/pipelines', { pipelines: [] }, null)).status, 401);
   const contact = await request('POST', '/contacts', { name: 'QA Contact A', city: 'QA City',
     phone: '+7 999 000-00-00', messengers: [{ type: 'telegram', label: 'QA', handle: 'qa', url: null }],
     links: [{ label: 'QA', url: 'https://example.test/contact' }], birthDate: '2000-02-29', notes: 'QA notes' });
@@ -361,6 +705,8 @@ async function main() {
   console.log('TASKS_SUMMARY=PASS TASKS_VALIDATION=PASS');
   await verifyCompanyOverview(company.body, companyB.body, contact.body, legal.body,
     leadA.body, taskInbox.body, taskUrgent.body);
+  await verifyPipelineCompanies(contact.body);
+  await verifyPipelineAutomation();
 
   const deleted = await request('DELETE', `/companies/${company.body.id}`);
   assert.equal(deleted.status, 200);
