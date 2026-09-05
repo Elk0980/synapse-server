@@ -238,10 +238,10 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .crm-stat strong { margin-top: 5px; font-size: 1.35rem; }
 .crm-table-wrap { width: 100%; max-width: 100%; overflow-x: auto; }
 .crm-table { width: 100%; border-collapse: collapse; }
-.crm-entity-table { table-layout: fixed; }
 .crm-table th, .crm-table td { padding: 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
-.crm-table .crm-grow { width: auto; overflow: hidden; text-overflow: ellipsis; }
-.crm-table .crm-compact { width: 1%; }
+.crm-table .crm-grow { width: 100%; }
+.crm-table td.crm-grow { max-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.crm-table .crm-compact { white-space: nowrap; }
 .crm-table .crm-muted { color: var(--muted); }
 .crm-table .crm-action-cell { width: 94px; text-align: right; }
 .crm-table .crm-action-cell button { width: 84px; padding: 7px 9px; }
@@ -347,8 +347,21 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 }
 .crm-entity-toolbar input, .crm-entity-toolbar select, .crm-entity-toolbar button { height: 40px; min-height: 40px; }
 .crm-entity-toolbar input { min-width: 0; flex: 1 1 220px; }
-.crm-filter-check { display: inline-flex; gap: 8px; align-items: center; white-space: nowrap; }
-.crm-filter-check input { width: auto; height: auto; }
+.crm-filter-check {
+  display: inline-flex;
+  height: 40px;
+  min-height: 40px;
+  gap: 8px;
+  align-items: center;
+  white-space: nowrap;
+}
+.crm-filter-check input {
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+}
 .crm-entity-toolbar [data-entity-add] { margin-left: auto; }
 .crm-row { cursor: pointer; }
 .crm-row:hover { background: rgba(159, 212, 255, 0.07); }
@@ -379,9 +392,16 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 @media (max-width: 760px) {
   .crm-entity-toolbar { flex-direction: column; align-items: stretch; }
   .crm-entity-toolbar input, .crm-entity-toolbar select, .crm-entity-toolbar button { width: 100%; }
+  .crm-entity-toolbar input[type="search"] { flex: none; width: 100%; }
   .crm-entity-toolbar [data-entity-add] { margin-left: 0; }
-  .crm-filter-check { height: 40px; }
-  .crm-filter-check input { width: auto; }
+  .crm-filter-check { height: auto; min-height: 0; padding: 0; }
+  .crm-filter-check input {
+    width: 16px;
+    height: 16px;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+  }
   .crm-card-header { flex-direction: column; }
   .crm-card-header .crm-actions { width: 100%; }
   .crm-form { grid-template-columns: 1fr; }
@@ -1566,15 +1586,12 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       event.preventDefault();
       const expenseForm = event.currentTarget;
       try {
-        await crmQuery("/expenses", {}, {
-          method: "POST",
-          body: JSON.stringify({
-            date: expenseForm.elements.date.value,
-            source: expenseForm.elements.source.value,
-            amount: Number(expenseForm.elements.amount.value),
-            comment: expenseForm.elements.comment.value
-          })
-        });
+        await crmQuery("/expenses", {}, csrfOptions("POST", {
+          date: expenseForm.elements.date.value,
+          source: expenseForm.elements.source.value,
+          amount: Number(expenseForm.elements.amount.value),
+          comment: expenseForm.elements.comment.value
+        }));
         byId("expense-result").textContent = "Расход добавлен";
         expenseForm.elements.amount.value = "";
         expenseForm.elements.comment.value = "";
@@ -1654,10 +1671,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       const id = stageId || amountId;
       const body = stageId ? { stage: event.target.value } : { amount: Number(event.target.value) };
       try {
-        await crmQuery(`/leads/${encodeURIComponent(id)}`, {}, {
-          method: "PATCH",
-          body: JSON.stringify(body)
-        });
+        await crmQuery(`/leads/${encodeURIComponent(id)}`, {}, csrfOptions("PATCH", body));
         await loadCRM();
       } catch (error) {
         byId("crm-content").insertAdjacentHTML("afterbegin", '<div class="crm-error" role="alert">Не удалось сохранить изменение CRM.</div>');
