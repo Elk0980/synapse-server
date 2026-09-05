@@ -326,6 +326,7 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .analytics-funnel { display: grid; grid-template-columns: minmax(190px, 0.8fr) minmax(280px, 1.2fr); gap: 12px; }
 .funnel-step { display: contents; }
 .funnel-shape {
+  position: relative;
   align-self: stretch;
   min-height: 112px;
   margin-inline: auto;
@@ -443,8 +444,17 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   h1 { font-size: 2.15rem; }
   .tool-frame { min-height: 72vh; }
   .account-details div { grid-template-columns: 1fr; gap: 2px; }
-  .analytics-funnel { grid-template-columns: minmax(92px, 0.55fr) minmax(190px, 1.45fr); gap: 8px; }
-  .funnel-shape { min-height: 136px; padding: 6px; font-size: 0.72rem; overflow-wrap: anywhere; }
+  .analytics-funnel { grid-template-columns: 128px minmax(0, 1fr); column-gap: 8px; row-gap: 24px; }
+  .funnel-shape { min-height: 136px; padding: 6px; }
+  .funnel-shape-label {
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 4px);
+    color: var(--text);
+    font-size: 0.72rem;
+    white-space: nowrap;
+    transform: translateX(-50%);
+  }
   .funnel-card { padding: 11px; }
   .analytics-finance { grid-template-columns: 1fr; }
   .platform-panel { width: calc(100vw - 64px); }
@@ -2019,7 +2029,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       note: "источник этапа «Потенциал»", codes: ["wordstat"] },
     { group: "Геоконтекст и карты", id: "2gis", label: "2ГИС", codes: ["2gis"] },
     { group: "Геоконтекст и карты", id: "yandex-maps", label: "Яндекс Карты",
-      codes: ["yandex-maps", "yandex-business"] },
+      codes: ["yandex-maps"] },
     { group: "Геоконтекст и карты", id: "google-maps", label: "Google Maps", codes: ["google-maps"] },
     { group: "Классифайды", id: "avito", label: "Авито", codes: ["avito", "avito-ads"] },
     { group: "Поиск и бренд", id: "yandex", label: "Яндекс Поиск", codes: ["yandex"] },
@@ -2117,14 +2127,14 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     }));
     const platforms = [...selectedPlatforms(), ...unknownPlatforms]
       .map((platform) => aggregatePlatform(platform, stats));
-    platforms.sort((left, right) => Number(left.platform.isUnknown) - Number(right.platform.isUnknown) ||
+    platforms.sort((left, right) => (left.platform.isUnknown ? 1 : 0) -
+      (right.platform.isUnknown ? 1 : 0) ||
       Number(right.hasExternal) - Number(left.hasExternal) ||
       ANALYTICS_PLATFORMS.indexOf(left.platform) - ANALYTICS_PLATFORMS.indexOf(right.platform));
-    const selectedAggregate = allSelected
-      ? aggregatePlatform({ codes: [...new Set(stats.map((row) => String(row.source || "").toLowerCase()))] }, stats)
-      : null;
-    const total = (key) => allSelected
-      ? selectedAggregate[key] : optionalSum(platforms.map((platform) => platform[key]));
+    const selectedCodes = selectedPlatforms().flatMap((platform) => platform.codes);
+    const aggregateCodes = allSelected ? [...selectedCodes, ...unknownCodes] : selectedCodes;
+    const selectedAggregate = aggregatePlatform({ codes: [...new Set(aggregateCodes)] }, stats);
+    const total = (key) => selectedAggregate[key];
     const pageViews = total("pageViews");
     const funnelClicks = total("funnelClicks");
     const warmup = optionalSum([total("clicks"), total("leads")]);
@@ -2174,7 +2184,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         return `<div><dt>${escapeHTML(platform.platform.label)}</dt><dd>${formatMetric(value)}</dd></div>`;
       }).join("");
       return `<div class="funnel-step"><button class="funnel-shape" type="button" style="width:${width}%"
-        data-funnel-step="${step.id}" aria-expanded="false">${escapeHTML(step.label)}</button>
+        data-funnel-step="${step.id}" aria-expanded="false"><span class="funnel-shape-label">
+        ${escapeHTML(step.label)}</span></button>
         <article class="funnel-card"><div class="funnel-card-head"><h3>${escapeHTML(step.label)}</h3>
         ${step.value === null ? "" : `<strong class="funnel-number">${formatMetric(step.value)}</strong>`}</div>
         <div class="funnel-conversion">Конверсия из предыдущей ступени: ${conversion}</div>
