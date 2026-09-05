@@ -138,7 +138,9 @@ test('events, external snapshots, attribution and analytics work together', asyn
   const summary = await request(
     'GET', '/summary?companyCode=analytics_co&from=2026-09-05&to=2026-09-05'
   );
-  assert.deepEqual(summary.body.sources, ['2gis', 'direct', 'outside', 'yandex']);
+  assert.equal(summary.body.sources[0].source, '2gis');
+  assert.equal(summary.body.sources[0].leads, 1);
+  assert.equal(summary.body.sources[0].visits, 1);
   assert.equal(summary.body.sourceStats.find((row) => row.source === 'direct').leads, 1);
   const counts = new DatabaseSync(databasePath);
   assert.equal(counts.prepare('SELECT COUNT(*) count FROM events').get().count, 3);
