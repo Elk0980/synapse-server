@@ -288,6 +288,7 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .crm-empty, .crm-error { padding: 20px; border: 1px solid var(--line); border-radius: 12px; }
 .crm-error { color: var(--red); }
 .analytics-grid { display: grid; gap: 18px; }
+.analytics-grid > .card { min-width: 0; }
 .analytics-dates, .expense-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
 .analytics-dates label, .expense-form label { display: grid; gap: 5px; color: var(--muted); }
 .analytics-dates input, .expense-form input {
@@ -298,12 +299,80 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
   color: var(--text);
   background: var(--surface-soft);
 }
+.analytics-section { margin-top: 26px; }
 .analytics-section h2 { margin-top: 0; }
-.funnel { display: grid; gap: 12px; }
-.funnel-row { display: grid; grid-template-columns: minmax(90px, 140px) minmax(120px, 1fr) 88px; gap: 12px; }
-.funnel-track { min-height: 24px; overflow: hidden; border-radius: 7px; background: var(--surface-soft); }
-.funnel-bar { height: 100%; min-width: 2px; border-radius: inherit; background: var(--blue); }
-.funnel-value { text-align: right; }
+.platform-filter { position: relative; min-width: min(100%, 280px); }
+.platform-trigger { display: flex; width: 100%; justify-content: space-between; }
+.platform-trigger::after { content: "⌄"; }
+.platform-trigger[aria-expanded="true"]::after { transform: rotate(180deg); }
+.platform-panel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  left: 0;
+  width: min(420px, calc(100vw - 64px));
+  max-height: min(620px, 70vh);
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #201c19;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+}
+.platform-option { display: flex; gap: 9px; align-items: flex-start; padding: 6px; cursor: pointer; }
+.platform-option input { flex: 0 0 auto; width: 17px; height: 17px; margin-top: 3px; accent-color: var(--accent); }
+.platform-group { margin: 13px 6px 4px; color: var(--muted); font-size: 0.78rem; text-transform: uppercase; }
+.platform-footnote { margin: 9px 0 0; color: var(--muted); font-size: 0.76rem; }
+.analytics-funnel { display: grid; grid-template-columns: minmax(190px, 0.8fr) minmax(280px, 1.2fr); gap: 12px; }
+.funnel-step { display: contents; }
+.funnel-shape {
+  position: relative;
+  align-self: stretch;
+  min-height: 112px;
+  margin-inline: auto;
+  border: 0;
+  border-radius: 10px;
+  color: var(--text);
+  background: linear-gradient(115deg, rgba(46, 107, 214, 0.88), rgba(159, 212, 255, 0.42));
+  cursor: pointer;
+}
+.funnel-card {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-soft);
+}
+.funnel-card-head { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; }
+.funnel-card h3 { margin: 0; font-size: 1rem; }
+.funnel-number { font-size: 1.45rem; }
+.funnel-conversion, .funnel-note, .funnel-breakdown { color: var(--muted); font-size: 0.82rem; }
+.data-mark {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 7px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.data-mark::before { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); content: ""; }
+.data-mark[data-kind="live"]::before { background: var(--green); }
+.data-mark[data-kind="snapshot"]::before { background: var(--accent); }
+.data-mark[data-kind="manual"]::before { background: #ffd37d; }
+.funnel-detail { grid-column: 1 / -1; margin: -4px 0 4px; padding: 12px; border-left: 2px solid var(--accent); }
+.funnel-detail-list { display: grid; margin: 0; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 7px; }
+.funnel-detail-list div { display: flex; gap: 8px; justify-content: space-between; }
+.funnel-detail-list dt { color: var(--muted); }
+.funnel-detail-list dd { margin: 0; }
+.analytics-finance { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 18px; }
+.analytics-source-table { table-layout: fixed; font-size: 0.72rem; }
+.analytics-source-table th, .analytics-source-table td { padding: 8px 6px; }
+.analytics-source-table th, .analytics-source-table td { white-space: normal; overflow-wrap: anywhere; }
+.analytics-source-table th:first-child { width: 14%; }
+.analytics-source-table th:last-child { width: 15%; }
+.analytics-source-table .data-mark { margin-top: 0; white-space: normal; }
+.analytics-details { margin-top: 24px; }
+.analytics-details > summary { padding: 16px 0; cursor: pointer; font-size: 1.05rem; font-weight: 700; }
+.analytics-legal { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line); }
 .analytics-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
 .analytics-actions a { color: var(--accent); }
 .expense-form { margin-top: 18px; }
@@ -375,7 +444,22 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   h1 { font-size: 2.15rem; }
   .tool-frame { min-height: 72vh; }
   .account-details div { grid-template-columns: 1fr; gap: 2px; }
-  .funnel-row { grid-template-columns: 88px minmax(80px, 1fr) 74px; gap: 7px; }
+  .analytics-funnel { grid-template-columns: 128px minmax(0, 1fr); column-gap: 8px; row-gap: 24px; }
+  .funnel-shape { min-height: 136px; padding: 6px; }
+  .funnel-shape-label {
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 4px);
+    color: var(--text);
+    font-size: 0.72rem;
+    white-space: nowrap;
+    transform: translateX(-50%);
+  }
+  .funnel-card { padding: 11px; }
+  .analytics-finance { grid-template-columns: 1fr; }
+  .platform-panel { width: calc(100vw - 64px); }
+  .analytics-source-table { min-width: 1040px; table-layout: auto; }
+  .analytics-source-table th, .analytics-source-table td { white-space: nowrap; }
   .crm-stat { min-width: 0; }
 }
 
@@ -560,6 +644,11 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <div class="analytics-grid">
         <div class="card">
           <div class="crm-toolbar">
+            <div class="platform-filter" id="platform-filter">
+              <button class="plain-button platform-trigger" id="platform-trigger" type="button"
+                aria-expanded="false" aria-controls="platform-panel">Все площадки</button>
+              <div class="platform-panel" id="platform-panel" hidden></div>
+            </div>
             <div class="crm-periods" id="analytics-periods" aria-label="Период аналитики">
               <button class="crm-period" type="button" data-analytics-period="today"
                 aria-pressed="true">Сегодня</button>
@@ -574,20 +663,28 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
               <button class="plain-button" type="submit">Показать</button>
             </form>
           </div>
+          <p class="platform-footnote">* Instagram и Facebook принадлежат Meta Platforms Inc., признанной
+            экстремистской организацией; её деятельность запрещена на территории Российской Федерации.</p>
           <div id="analytics-content" aria-live="polite"></div>
+          <details class="analytics-details">
+            <summary>Подробно: заявки и расходы</summary>
+            <div id="analytics-legacy"></div>
+            <section class="analytics-section" id="expenses-section">
+              <h2>Расходы</h2>
+              <div id="expenses-content" aria-live="polite"></div>
+              <form class="expense-form" id="expense-form" hidden>
+                <label>Дата<input name="date" type="date" required></label>
+                <label>Источник<input name="source" required maxlength="120"></label>
+                <label>Сумма<input name="amount" type="number" min="0" step="0.01" required></label>
+                <label>Комментарий<input name="comment" maxlength="500"></label>
+                <button class="plain-button" type="submit">Добавить</button>
+              </form>
+              <p id="expense-result" role="status"></p>
+            </section>
+          </details>
+          <p class="platform-footnote analytics-legal">* Instagram и Facebook принадлежат Meta Platforms Inc.,
+            признанной экстремистской организацией; её деятельность запрещена на территории Российской Федерации.</p>
         </div>
-        <section class="card analytics-section" id="expenses-section">
-          <h2>Расходы</h2>
-          <div id="expenses-content" aria-live="polite"></div>
-          <form class="expense-form" id="expense-form" hidden>
-            <label>Дата<input name="date" type="date" required></label>
-            <label>Источник<input name="source" required maxlength="120"></label>
-            <label>Сумма<input name="amount" type="number" min="0" step="0.01" required></label>
-            <label>Комментарий<input name="comment" maxlength="500"></label>
-            <button class="plain-button" type="submit">Добавить</button>
-          </form>
-          <p id="expense-result" role="status"></p>
-        </section>
       </div>
     </section>
     <section class="view-panel" id="crm-view" data-view="crm" hidden>
@@ -1910,51 +2007,239 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const formatROMI = (value) => value === null || value === undefined ? "нет расходов" :
     `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value)}%`;
 
-  const analyticsState = { period: "today", range: periodDates("today") };
-  const funnelLabels = Object.fromEntries(CRM_STAGES.map((stage) => [stage.id, stage.label]));
+  const ANALYTICS_PLATFORMS = [
+    { group: "Соцсети", id: "instagram", label: "Instagram*", codes: ["instagram"] },
+    { group: "Соцсети", id: "vk", label: "ВКонтакте", codes: ["vk", "vk-ads"] },
+    { group: "Соцсети", id: "youtube", label: "YouTube", codes: ["youtube"] },
+    { group: "Соцсети", id: "tiktok", label: "TikTok", codes: ["tiktok"] },
+    { group: "Соцсети", id: "ok", label: "Одноклассники", codes: ["ok", "odnoklassniki"] },
+    { group: "Соцсети", id: "dzen", label: "Дзен", codes: ["dzen"] },
+    { group: "Мессенджеры: боты и каналы", id: "telegram", label: "Telegram",
+      codes: ["telegram", "telegram-ads"] },
+    { group: "Мессенджеры: боты и каналы", id: "whatsapp", label: "WhatsApp*", codes: ["whatsapp"] },
+    { group: "Мессенджеры: боты и каналы", id: "max", label: "MAX", codes: ["max"] },
+    { group: "Яндекс Директ", id: "yandex-direct", label: "Поисковая реклама", codes: ["yandex-direct"] },
+    { group: "Яндекс Директ", id: "yandex-rsya", label: "РСЯ", codes: ["yandex-rsya"] },
+    { group: "Яндекс Директ", id: "yandex-master", label: "Мастер кампаний", codes: ["yandex-master"] },
+    { group: "Яндекс Директ", id: "yandex-product", label: "Товарная кампания", codes: ["yandex-product"] },
+    { group: "Яндекс Директ", id: "yandex-display", label: "Медийная", codes: ["yandex-display"] },
+    { group: "Яндекс Директ", id: "yandex-business", label: "Яндекс Бизнес (Рекламная подписка)",
+      codes: ["yandex-business"] },
+    { group: "Яндекс Директ", id: "wordstat", label: "Яндекс Вордстат",
+      note: "источник этапа «Потенциал»", codes: ["wordstat"] },
+    { group: "Геоконтекст и карты", id: "2gis", label: "2ГИС", codes: ["2gis"] },
+    { group: "Геоконтекст и карты", id: "yandex-maps", label: "Яндекс Карты",
+      codes: ["yandex-maps"] },
+    { group: "Геоконтекст и карты", id: "google-maps", label: "Google Maps", codes: ["google-maps"] },
+    { group: "Классифайды", id: "avito", label: "Авито", codes: ["avito", "avito-ads"] },
+    { group: "Поиск и бренд", id: "yandex", label: "Яндекс Поиск", codes: ["yandex"] },
+    { group: "Поиск и бренд", id: "google", label: "Google Поиск", codes: ["google"] },
+    { group: "Поиск и бренд", id: "brand", label: "Брендовые запросы (сарафанное радио)", codes: ["brand"] },
+    { group: "", id: "direct", label: "Прямые заходы", codes: ["direct"] }
+  ];
+  const analyticsState = {
+    period: "today",
+    range: periodDates("today"),
+    selected: new Set(ANALYTICS_PLATFORMS.map((platform) => platform.id)),
+    payload: null
+  };
+  const optionalSum = (values) => values.some((value) => value !== null && value !== undefined)
+    ? values.reduce((sum, value) => sum + (Number(value) || 0), 0) : null;
+  const formatMetric = (value) => value === null || value === undefined ? "—" :
+    new Intl.NumberFormat("ru-RU").format(Number(value));
+  const sourceStatsFor = (platform, stats) => stats.filter((row) =>
+    platform.codes.includes(String(row.source || "").toLowerCase())
+  );
+  const selectedPlatforms = () => ANALYTICS_PLATFORMS.filter((platform) =>
+    analyticsState.selected.has(platform.id)
+  );
+  const aggregatePlatform = (platform, stats) => {
+    const rows = sourceStatsFor(platform, stats);
+    const externals = rows.filter((row) => row.external);
+    const externalValue = (key) => optionalSum(externals.map((row) => row.external?.[key]));
+    const externalClicks = optionalSum(externals.flatMap((row) => [
+      row.external?.siteClicks,
+      row.external?.calls,
+      row.external?.routes,
+      row.external?.messengerClicks
+    ]));
+    const visits = optionalSum(rows.map((row) => row.visits));
+    return {
+      platform,
+      rows,
+      pageViews: externalValue("pageViews"),
+      externalClicks,
+      visits,
+      funnelClicks: optionalSum([externalClicks, visits]),
+      clicks: optionalSum(rows.map((row) => row.clicks)),
+      leads: optionalSum(rows.map((row) => row.leads)),
+      booked: optionalSum(rows.map((row) => row.booked)),
+      visited: optionalSum(rows.map((row) => row.visited)),
+      sales: optionalSum(rows.map((row) => row.sales)),
+      revenue: optionalSum(rows.map((row) => row.revenue)),
+      expenses: optionalSum(rows.map((row) => row.expenses)),
+      romi: rows.length ? optionalSum(rows.map((row) => row.romi)) : null,
+      capturedAt: externals.map((row) => row.externalCapturedAt).filter(Boolean).sort().at(-1) || null,
+      hasExternal: externals.length > 0
+    };
+  };
+  const snapshotDate = (value) => value ? new Intl.DateTimeFormat("ru-RU", {
+    dateStyle: "short"
+  }).format(new Date(value)) : "";
+  const dataMark = (kind, date) => {
+    const labels = {
+      live: "LIVE",
+      snapshot: `СНИМОК${date ? ` от ${snapshotDate(date)}` : ""}`,
+      mixed: `LIVE + СНИМОК${date ? ` от ${snapshotDate(date)}` : ""}`,
+      manual: "РУЧНОЙ ВВОД",
+      none: "НЕТ ДАННЫХ"
+    };
+    return `<span class="data-mark" data-kind="${kind}">${labels[kind]}</span>`;
+  };
+  const renderPlatformFilter = () => {
+    const panel = byId("platform-panel");
+    let group = null;
+    const options = ANALYTICS_PLATFORMS.map((platform) => {
+      const heading = platform.group && platform.group !== group
+        ? `<div class="platform-group">${escapeHTML(platform.group)}</div>` : "";
+      group = platform.group || group;
+      return `${heading}<label class="platform-option"><input type="checkbox" value="${platform.id}"
+        ${analyticsState.selected.has(platform.id) ? "checked" : ""}>
+        <span>${escapeHTML(platform.label)}${platform.note
+          ? `<small class="muted"> — ${escapeHTML(platform.note)}</small>` : ""}</span></label>`;
+    }).join("");
+    const allChecked = analyticsState.selected.size === ANALYTICS_PLATFORMS.length;
+    panel.innerHTML = `<label class="platform-option"><input type="checkbox" value="all"
+      ${allChecked ? "checked" : ""}><strong>Все площадки</strong></label>${options}`;
+    byId("platform-trigger").textContent = allChecked ? "Все площадки" : `Выбрано: ${analyticsState.selected.size}`;
+  };
+  const funnelProjectLabel = () => selectedProjectId === "synapse-business" ? "онлайн-созвон" :
+    ["alvi", "avokado"].includes(selectedProjectId) ? "запись на визит" : "заявка";
   const renderAnalytics = (dashboard, summary, expenses) => {
-    const values = dashboard.summary || {};
+    analyticsState.payload = { dashboard, summary, expenses };
+    const stats = Array.isArray(dashboard.sourceStats) ? dashboard.sourceStats : [];
+    const allSelected = analyticsState.selected.size === ANALYTICS_PLATFORMS.length;
+    const knownCodes = new Set(ANALYTICS_PLATFORMS.flatMap((platform) => platform.codes));
+    const unknownCodes = allSelected ? [...new Set(stats.map((row) => String(row.source || "").toLowerCase())
+      .filter((code) => !knownCodes.has(code)))] : [];
+    const unknownPlatforms = unknownCodes.map((code) => ({
+      group: "", id: `other-${code}`, label: `Прочие: ${code || "без кода"}`, codes: [code], isUnknown: true
+    }));
+    const platforms = [...selectedPlatforms(), ...unknownPlatforms]
+      .map((platform) => aggregatePlatform(platform, stats));
+    platforms.sort((left, right) => (left.platform.isUnknown ? 1 : 0) -
+      (right.platform.isUnknown ? 1 : 0) ||
+      Number(right.hasExternal) - Number(left.hasExternal) ||
+      ANALYTICS_PLATFORMS.indexOf(left.platform) - ANALYTICS_PLATFORMS.indexOf(right.platform));
+    const selectedCodes = selectedPlatforms().flatMap((platform) => platform.codes);
+    const aggregateCodes = allSelected ? [...selectedCodes, ...unknownCodes] : selectedCodes;
+    const selectedAggregate = aggregatePlatform({ codes: [...new Set(aggregateCodes)] }, stats);
+    const total = (key) => selectedAggregate[key];
+    const pageViews = total("pageViews");
+    const funnelClicks = total("funnelClicks");
+    const warmup = optionalSum([total("clicks"), total("leads")]);
+    const sales = total("sales");
+    const revenue = total("revenue");
+    const values = { ...(dashboard.summary || {}), ...dashboard };
     const expensesUnavailable = selectedProjectId !== "synapse-business" &&
       (values.expenses === null || dashboard.expensesScope || summary.expensesScope);
-    const funnel = dashboard.funnel || {};
-    const sources = Array.isArray(summary.sources)
-      ? [...summary.sources].sort((left, right) => (right.revenue || 0) - (left.revenue || 0)) : [];
-    const content = byId("analytics-content");
-    const stats = [
-      ["Заявки", values.total || 0],
-      ["Записались", values.booked || 0],
-      ["Пришли", values.visited || 0],
-      ["Продажи", values.sales || 0],
-      ["Выручка", formatMoney(values.revenue)],
-      ["Расходы", expensesUnavailable ? "по компании не ведутся" : formatMoney(values.expenses)],
-      ["ROMI", expensesUnavailable ? "по компании не ведутся" : formatROMI(values.romi)]
+    const financeExpenses = expensesUnavailable ? null : allSelected ? values.expenses : total("expenses");
+    const financeRevenue = allSelected ? values.revenue : revenue;
+    const financeRomi = expensesUnavailable ? null : allSelected ? values.romi :
+      financeRevenue === null || financeRevenue === undefined || financeExpenses === null || !financeExpenses
+        ? null : (financeRevenue - financeExpenses) / financeExpenses * 100;
+    const financeUnavailable = expensesUnavailable || (!allSelected && financeExpenses === null);
+    const newestCapture = platforms.map((platform) => platform.capturedAt).filter(Boolean).sort().at(-1);
+    const funnel = [
+      {
+        id: "potential",
+        label: "Потенциал",
+        value: null,
+        kind: "none",
+        note: "поиски по целевым запросам и конкуренты — ручной ввод, появится в «Рекламных площадках»"
+      },
+      { id: "views", label: "Показы", value: pageViews, kind: pageViews === null ? "none" : "snapshot",
+        date: newestCapture, note: "переходы на карточку площадки" },
+      { id: "clicks", label: "Клики", value: funnelClicks, kind: funnelClicks === null ? "none" :
+        total("externalClicks") !== null && total("visits") !== null ? "mixed" :
+          total("externalClicks") !== null ? "snapshot" : "live", date: newestCapture,
+        note: `карточки: ${formatMetric(total("externalClicks"))} · сайт: ${formatMetric(total("visits"))}` },
+      { id: "warmup", label: "Прогрев", value: warmup, kind: warmup === null ? "none" : "live",
+        note: `ключевой этап проекта: ${funnelProjectLabel()}` },
+      { id: "deal", label: "Сделка", value: sales, kind: sales === null ? "none" : "live",
+        note: `выручка: ${financeRevenue === null || financeRevenue === undefined
+          ? "—" : formatMoney(financeRevenue)} · повторные: нет данных` }
     ];
-    const sourceRows = sources.map((source) => {
-      const sourceExpensesUnavailable = expensesUnavailable || source.expenses === null;
-      return `<tr><td>${escapeHTML(source.source)}</td>
-        <td>${escapeHTML(source.leads)}</td><td>${escapeHTML(source.booked)}</td>
-        <td>${escapeHTML(source.visited)}</td><td>${escapeHTML(source.sales)}</td>
-        <td>${escapeHTML(formatMoney(source.revenue))}</td>
-        <td>${escapeHTML(sourceExpensesUnavailable ? "—" : formatMoney(source.expenses))}</td>
-        <td>${escapeHTML(sourceExpensesUnavailable ? "—" : formatROMI(source.romi))}</td></tr>`;
+    const numeric = funnel.map((step) => step.value).filter((value) => value !== null);
+    const maximum = Math.max(...numeric, 1);
+    const funnelRows = funnel.map((step, index) => {
+      const previous = funnel[index - 1]?.value;
+      const conversion = step.value !== null && previous > 0
+        ? `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(step.value / previous * 100)}%` : "—";
+      const width = step.value === null ? 28 : Math.max(28, step.value / maximum * 100);
+      const details = platforms.map((platform) => {
+        const key = { views: "pageViews", clicks: "funnelClicks", warmup: "clicks", deal: "sales" }[step.id];
+        let value = key ? platform[key] : null;
+        if (step.id === "warmup") value = optionalSum([platform.clicks, platform.leads]);
+        return `<div><dt>${escapeHTML(platform.platform.label)}</dt><dd>${formatMetric(value)}</dd></div>`;
+      }).join("");
+      return `<div class="funnel-step"><button class="funnel-shape" type="button" style="width:${width}%"
+        data-funnel-step="${step.id}" aria-expanded="false"><span class="funnel-shape-label">
+        ${escapeHTML(step.label)}</span></button>
+        <article class="funnel-card"><div class="funnel-card-head"><h3>${escapeHTML(step.label)}</h3>
+        ${step.value === null ? "" : `<strong class="funnel-number">${formatMetric(step.value)}</strong>`}</div>
+        <div class="funnel-conversion">Конверсия из предыдущей ступени: ${conversion}</div>
+        <div class="funnel-note">${escapeHTML(step.note)}</div>${dataMark(step.kind, step.date)}</article>
+        <div class="funnel-detail" data-funnel-detail="${step.id}" hidden>
+        <dl class="funnel-detail-list">${details}</dl></div></div>`;
     }).join("");
-    const funnelRows = CRM_STAGES.map((stage) => {
-      const item = funnel[stage.id] || { count: 0, conversion: 0 };
-      const width = Math.max(0, Math.min(100, Number(item.conversion) || 0));
-      return `<div class="funnel-row"><span>${escapeHTML(funnelLabels[stage.id])}</span>
-        <div class="funnel-track"><div class="funnel-bar" style="width:${width}%"></div></div>
-        <span class="funnel-value">${escapeHTML(item.count || 0)} · ${escapeHTML(width)}%</span></div>`;
+    const tableRows = platforms.map((platform) => {
+      const noExpenses = expensesUnavailable || platform.expenses === null;
+      const kind = platform.hasExternal ? "snapshot" : platform.rows.length ? "live" : "none";
+      const clickTargets = platform.rows.flatMap((row) => Object.entries(row.clicksByTarget || {}))
+        .map(([target, count]) => `${target}: ${count}`).join(" · ");
+      return `<tr><td>${escapeHTML(platform.platform.label)}</td><td>${formatMetric(platform.pageViews)}</td>
+        <td>${formatMetric(platform.funnelClicks)}</td><td title="${escapeHTML(clickTargets || "Нет разбивки")}">
+        ${formatMetric(platform.clicks)}</td><td>${formatMetric(platform.leads)}</td>
+        <td>${formatMetric(platform.sales)}</td>
+        <td>${platform.revenue === null ? "—" : formatMoney(platform.revenue)}</td>
+        <td>${noExpenses ? "—" : formatMoney(platform.expenses)}</td>
+        <td>${noExpenses ? "—" : formatROMI(platform.romi)}</td><td>${dataMark(kind, platform.capturedAt)}</td></tr>`;
     }).join("");
-    content.innerHTML = `${values.total ? "" : '<div class="crm-empty">За период заявок нет</div>'}
-      <div class="crm-summary">${stats.map(([label, value]) => `<div class="crm-stat">
-        <span>${label}</span><strong>${escapeHTML(value)}</strong></div>`).join("")}</div>
-      <section class="analytics-section"><h2>Воронка</h2><div class="funnel">${funnelRows}</div></section>
-      <section class="analytics-section"><div class="analytics-actions"><h2>Источники</h2>
-        <button class="plain-button" id="analytics-csv" type="button">Выгрузить CSV</button></div>
-        ${sourceRows ? `<div class="crm-table-wrap"><table class="crm-table"><thead><tr>
-          <th>Источник</th><th>Заявки</th><th>Записи</th><th>Визиты</th><th>Продажи</th>
-          <th>Выручка</th><th>Расходы</th><th>ROMI</th></tr></thead><tbody>${sourceRows}</tbody></table></div>` :
-          '<div class="crm-empty">Данных по источникам нет</div>'}</section>`;
+    byId("analytics-content").innerHTML = `<section class="analytics-section"><h2>Воронка</h2>
+      <div class="analytics-funnel">${funnelRows}</div><div class="analytics-finance">
+      <div class="crm-stat"><span>Расходы</span><strong>${financeUnavailable
+        ? "по компании не ведутся" : financeExpenses === null ? "—" : formatMoney(financeExpenses)}</strong></div>
+      <div class="crm-stat"><span>Выручка</span><strong>${financeRevenue === null || financeRevenue === undefined
+        ? "—" : formatMoney(financeRevenue)}</strong></div>
+      <div class="crm-stat"><span>ROMI</span><strong>${financeUnavailable
+        ? "по компании не ведутся" : formatROMI(financeRomi)}</strong></div></div></section>
+      <section class="analytics-section"><h2>Площадки</h2><div class="crm-table-wrap">
+      <table class="crm-table analytics-source-table"><thead><tr><th>Площадка</th><th>Показы</th><th>Клики</th>
+      <th>Обращения</th><th>Заявки</th><th>Продажи</th><th>Выручка</th><th>Расходы</th><th>ROMI</th>
+      <th>Данные</th></tr></thead><tbody>${tableRows}</tbody></table></div></section>`;
+    byId("analytics-content").querySelectorAll("[data-funnel-step]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const detail = byId("analytics-content").querySelector(`[data-funnel-detail="${button.dataset.funnelStep}"]`);
+        detail.hidden = !detail.hidden;
+        button.setAttribute("aria-expanded", String(!detail.hidden));
+      });
+    });
+    const legacySources = Array.isArray(summary.sources) ? summary.sources : [];
+    byId("analytics-legacy").innerHTML = `<div class="crm-summary">
+      <div class="crm-stat"><span>Заявки</span><strong>${formatMetric(values.total)}</strong></div>
+      <div class="crm-stat"><span>Записались</span><strong>${formatMetric(values.booked)}</strong></div>
+      <div class="crm-stat"><span>Пришли</span><strong>${formatMetric(values.visited)}</strong></div>
+      <div class="crm-stat"><span>Продажи</span><strong>${formatMetric(values.sales)}</strong></div></div>
+      <div class="analytics-actions"><h2>Заявки по источникам</h2>
+      <button class="plain-button" id="analytics-csv" type="button">Выгрузить CSV</button></div>
+      ${legacySources.length ? `<div class="crm-table-wrap"><table class="crm-table"><thead><tr>
+      <th>Источник</th><th>Заявки</th><th>Записи</th><th>Визиты</th><th>Продажи</th><th>Выручка</th>
+      </tr></thead><tbody>${legacySources.map((source) => `<tr><td>${escapeHTML(source.source)}</td>
+      <td>${formatMetric(source.leads)}</td><td>${formatMetric(source.booked)}</td>
+      <td>${formatMetric(source.visited)}</td>
+      <td>${formatMetric(source.sales)}</td><td>${source.revenue === null ? "—" : formatMoney(source.revenue)}</td>
+      </tr>`).join("")}</tbody></table></div>` : '<div class="crm-empty">Данных по источникам нет</div>'}`;
     byId("analytics-csv").addEventListener("click", () => {
       crmQuery("/leads.csv", { ...analyticsState.range, ...scopeParams() }, { open: true });
     });
@@ -1994,12 +2279,42 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   };
   const renderAnalyticsControls = () => {
     const form = byId("analytics-dates");
+    renderPlatformFilter();
     form.elements.from.value = analyticsState.range.from;
     form.elements.to.value = analyticsState.range.to;
     byId("expense-form").hidden = !identity.permissions.includes("crm.edit");
     byId("expense-form").elements.date.value = dateValue(new Date());
     if (analyticsBound) return;
     analyticsBound = true;
+    byId("platform-trigger").addEventListener("click", () => {
+      const trigger = byId("platform-trigger");
+      const panel = byId("platform-panel");
+      panel.hidden = !panel.hidden;
+      trigger.setAttribute("aria-expanded", String(!panel.hidden));
+    });
+    byId("platform-panel").addEventListener("change", (event) => {
+      if (event.target.value === "all") {
+        analyticsState.selected = event.target.checked
+          ? new Set(ANALYTICS_PLATFORMS.map((platform) => platform.id)) : new Set();
+      } else if (event.target.checked) {
+        analyticsState.selected.add(event.target.value);
+      } else {
+        analyticsState.selected.delete(event.target.value);
+      }
+      renderPlatformFilter();
+      if (analyticsState.payload) {
+        renderAnalytics(
+          analyticsState.payload.dashboard,
+          analyticsState.payload.summary,
+          analyticsState.payload.expenses
+        );
+      }
+    });
+    document.addEventListener("click", (event) => {
+      if (event.target.closest("#platform-filter")) return;
+      byId("platform-panel").hidden = true;
+      byId("platform-trigger").setAttribute("aria-expanded", "false");
+    });
     byId("analytics-periods").addEventListener("click", (event) => {
       const button = event.target.closest("[data-analytics-period]");
       if (!button) return;
@@ -2286,7 +2601,11 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
-    if (!byId("project-menu").hidden) {
+    if (!byId("platform-panel").hidden) {
+      byId("platform-panel").hidden = true;
+      byId("platform-trigger").setAttribute("aria-expanded", "false");
+      byId("platform-trigger").focus();
+    } else if (!byId("project-menu").hidden) {
       closeProjectMenu(true);
     } else if (drawerOpen) {
       setDrawer(false, true);
