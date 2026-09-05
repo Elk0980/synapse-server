@@ -36,6 +36,13 @@ const recentDates = () => Array.from({ length: 7 }, (_, offset) => {
   date.setDate(date.getDate() - offset);
   return dateValue(date);
 });
+const dayWord = (count) => {
+  const lastTwo = count % 100;
+  if (lastTwo >= 11 && lastTwo <= 14) return "дней";
+  if (count % 10 === 1) return "день";
+  if (count % 10 >= 2 && count % 10 <= 4) return "дня";
+  return "дней";
+};
 const projectLabel = () => byId("project-name")?.textContent || ctx.selectedProjectId || "—";
 const isEditable = () => identity.permissions.includes("crm.edit");
 const platformFor = (id) => SbCabinet.ANALYTICS_PLATFORMS.find((item) => item.id === id);
@@ -172,10 +179,15 @@ const saveForm = async (form) => {
       note: form.elements.note.value
     }));
     const dates = (saved.dates || rows.map((row) => row.date)).slice().sort();
-    result.textContent = `Сохранено: ${saved.upserted ?? rows.length} дней, ` +
+    const savedCount = saved.upserted ?? rows.length;
+    result.textContent = `Сохранено: ${savedCount} ${dayWord(savedCount)}, ` +
       `${formatDate(dates[0], false)}–${formatDate(dates.at(-1), false)}`;
-    await refreshDashboard(false);
-    await loadExisting(form);
+    form.reset();
+    try {
+      await refreshDashboard(false);
+    } catch (error) {
+      // The statistics are saved even if refreshing platform statuses fails.
+    }
   } catch (error) {
     result.textContent = error.message;
   } finally {
