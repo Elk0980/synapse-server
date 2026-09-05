@@ -8,6 +8,7 @@ const {
   parseQuietHours,
   prepareTelegramPayload,
 } = require("./quiet-hours");
+const { detectTask } = require("./task-intake");
 
 const SCRIPT = {
   greeting:
@@ -32,6 +33,8 @@ const DATABASE_PATH = process.env.DATABASE_PATH || "/data/chat.sqlite";
 const API_KEY = process.env.API_KEY || "";
 const ADMIN_KEY = process.env.CHAT_ADMIN_KEY || "";
 const CRM_URL = process.env.CRM_URL || "";
+const CRM_TASKS_URL =
+  process.env.CRM_TASKS_URL || CRM_URL.replace(/\/leads\/?$/, "/tasks");
 const CRM_API_KEY = process.env.CRM_API_KEY || "";
 const MODEL_API_URL = process.env.MODEL_API_URL || "";
 const MODEL_API_KEY = process.env.MODEL_API_KEY || "";
@@ -92,6 +95,8 @@ addColumn("conversations", "last_message_at TEXT");
 addColumn("messages", "author_type TEXT");
 addColumn("messages", "author_name TEXT");
 addColumn("messages", "external_message_id TEXT");
+addColumn("messages", "task_status TEXT NOT NULL DEFAULT ''");
+addColumn("messages", "task_id INTEGER");
 db.exec(`
   UPDATE messages SET author_type = CASE role WHEN 'operator' THEN 'owner' ELSE role END
     WHERE author_type IS NULL;
@@ -118,7 +123,13 @@ const insertMessage = db.prepare(`INSERT INTO messages
   VALUES (?, ?, ?, ?, ?, ?, ?)`);
 const getMessages =
   db.prepare(`SELECT id, created_at, role, text, author_type, author_name,
-  external_message_id FROM messages WHERE conversation_id = ? ORDER BY id`);
+  external_message_id, task_status, task_id
+  FROM messages WHERE conversation_id = ? ORDER BY id`);
+const getTelegramMessage = db.prepare(`SELECT * FROM messages
+  WHERE conversation_id = ? AND external_message_id = ? ORDER BY id DESC LIMIT 1`);
+const updateTask = db.prepare(
+  "UPDATE messages SET task_status = ?, task_id = ? WHERE id = ?",
+);
 const updateActivity =
   db.prepare(`UPDATE conversations SET updated_at = ?, last_message_at = ?,
   unread_count = unread_count + ? WHERE id = ?`);
@@ -258,7 +269,7 @@ function addMessage(
       : authorType === "system"
         ? "assistant"
         : authorType;
-  insertMessage.run(
+  const result = insertMessage.run(
     row.id,
     now,
     role,
@@ -268,7 +279,61 @@ function addMessage(
     externalMessageId,
   );
   updateActivity.run(now, now, unread ? 1 : 0, row.id);
-  return now;
+  return Number(result.lastInsertRowid);
+}
+
+function taskCompany(company) {
+  if (company === "palitra") return "palitra-love";
+  return company === "synapse" ? "" : company;
+}
+
+async function createTask(row, messageRow, detected, details) {
+  if (!CRM_TASKS_URL || !CRM_API_KEY) {
+    throw new Error("CRM_TASKS_URL или CRM_API_KEY не настроены");
+  }
+  const response = await fetch(CRM_TASKS_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": CRM_API_KEY },
+    body: JSON.stringify({
+      title: detected.title,
+      description: details.description,
+      companyCode: taskCompany(row.company),
+      assigneeRole: "synapse",
+      status: "inbox",
+      priority: detected.priority,
+      source: details.source,
+      sourceRef: details.sourceRef,
+      sourceAuthor: details.authorName,
+      createdBy: "chat-intake",
+    }),
+  });
+  if (!response.ok) throw new Error(`CRM вернула HTTP ${response.status}`);
+  const body = await response.json();
+  const taskId = body.task?.id;
+  if (!taskId) throw new Error("CRM не вернула id задачи");
+  updateTask.run(body.duplicate ? "duplicate" : "created", taskId, messageRow.id);
+  return taskId;
+}
+
+async function intakeTelegramTask(row, messageRow, detected, details) {
+  let taskId;
+  try {
+    taskId = await createTask(row, messageRow, detected, details);
+  } catch (error) {
+    updateTask.run("failed", null, messageRow.id);
+    console.error("Не удалось создать задачу в CRM:", error.message);
+    return;
+  }
+  if (detected.kind === "explicit") {
+    try {
+      await telegramRequest("sendMessage", {
+        chat_id: row.external_chat_id,
+        text: `Записал в задачи #${taskId}`,
+      });
+    } catch (error) {
+      console.error("Не удалось подтвердить задачу в Telegram:", error.message);
+    }
+  }
 }
 
 function contactData(messages) {
@@ -428,7 +493,7 @@ async function handleWebhook(request, response, origin) {
   }
   const text = message.text || message.caption;
   if (!text) return send(response, 200, { ok: true }, origin);
-  if (text.startsWith("/")) {
+  if (/^\/company(?:@\w+)?\b/i.test(text)) {
     const company = text
       .match(/^\/company(?:@\w+)?\s+(alvi|avokado|palitra)\s*$/i)?.[1]
       ?.toLowerCase();
@@ -452,15 +517,60 @@ async function handleWebhook(request, response, origin) {
     );
   }
   const author = telegramAuthor(message);
-  addMessage(
-    row,
-    text,
-    author.type,
-    author.name,
+  if (text.startsWith("/") && !/^\/(?:task|задача)(?:@\w+)?(?=\s|:|$)/iu.test(text)) {
+    return send(response, 200, { ok: true }, origin);
+  }
+  let taskText = text;
+  let taskMessageId = String(message.message_id);
+  let taskAuthor = author;
+  let detected = detectTask(text, { authorType: author.type, channel: "telegram" });
+  const replyCommand = /^\/(?:task|задача)(?:@\w+)?\s*$/iu.test(text);
+  const repliedAuthor = message.reply_to_message
+    ? telegramAuthor(message.reply_to_message)
+    : null;
+  if (
+    replyCommand &&
+    author.type === "owner" &&
+    repliedAuthor?.type !== "owner"
+  ) {
+    const replied = message.reply_to_message;
+    taskText = replied.text || replied.caption || "";
+    taskMessageId = String(replied.message_id);
+    taskAuthor = repliedAuthor;
+    detected = {
+      kind: "explicit",
+      title: taskText.split(/\r?\n/, 1)[0].trim().slice(0, 200),
+      priority: /срочно/iu.test(taskText) ? "urgent" : "normal",
+    };
+  }
+  const existingMessage = getTelegramMessage.get(
+    row.id,
     String(message.message_id),
-    author.type !== "owner",
   );
-  if (author.type !== "owner")
+  const insertedId = existingMessage
+    ? existingMessage.id
+    : addMessage(
+        row,
+        text,
+        author.type,
+        author.name,
+        String(message.message_id),
+        author.type !== "owner",
+      );
+  let taskMessage = existingMessage || { id: insertedId };
+  if (replyCommand && message.reply_to_message) {
+    taskMessage = getTelegramMessage.get(row.id, taskMessageId) || taskMessage;
+  }
+  if (detected.kind && detected.title) {
+    await intakeTelegramTask(row, taskMessage, detected, {
+      text: taskText,
+      description: `${taskText}\nГруппа: ${row.title}`,
+      source: "telegram",
+      sourceRef: `telegram:chat:${row.external_chat_id}:msg:${taskMessageId}`,
+      authorName: taskAuthor.name,
+    });
+  }
+  if (!existingMessage && author.type !== "owner")
     await notifyOwner(getConversation.get(row.id), text);
   return send(response, 200, { ok: true }, origin);
 }
@@ -508,7 +618,21 @@ async function adminRoutes(request, response, url, origin) {
     const body = await readJson(request);
     const text = optionalString(body.text, "text");
     if (!text) fail(400, "Поле «text» обязательно");
-    addMessage(row, text, "owner", "Владислав");
+    const messageId = addMessage(row, text, "owner", "Владислав");
+    const detected = detectTask(text, { authorType: "owner", channel: "web" });
+    if (detected.kind && detected.title) {
+      try {
+        await createTask(row, { id: messageId }, detected, {
+          description: `${text}\nДиалог: ${row.title || row.site || row.id}`,
+          source: "chat",
+          sourceRef: `chat:conversation:${row.id}:msg:${messageId}`,
+          authorName: "Владислав",
+        });
+      } catch (error) {
+        updateTask.run("failed", null, messageId);
+        console.error("Не удалось создать задачу в CRM:", error.message);
+      }
+    }
     let delivery = { ok: true };
     if (row.channel === "telegram") {
       try {
