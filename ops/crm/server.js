@@ -1,12 +1,14 @@
 'use strict';
 
 const http = require('node:http');
+const { createHash } = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 const { URL } = require('node:url');
 
+const IS_MAIN = require.main === module;
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
-const DATABASE_PATH = process.env.DATABASE_PATH || '/data/crm.sqlite';
-const API_KEY = (process.env.API_KEY || '').trim();
+const DATABASE_PATH = process.env.DATABASE_PATH || (IS_MAIN ? '/data/crm.sqlite' : ':memory:');
+const API_KEY = (process.env.API_KEY || (IS_MAIN ? '' : 'module-test-key')).trim();
 const ALLOWED_ORIGINS = new Set(
   (process.env.ALLOWED_ORIGINS || '').split(',').map((value) => value.trim()).filter(Boolean)
 );
@@ -216,6 +218,49 @@ migrate(2, () => {
   `);
 });
 
+migrate(3, () => {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('visit', 'click')),
+      company_code TEXT NOT NULL COLLATE NOCASE REFERENCES companies(code)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+      client_id TEXT,
+      page TEXT,
+      landing_page TEXT,
+      referrer TEXT,
+      utm_source TEXT,
+      utm_medium TEXT,
+      utm_campaign TEXT,
+      utm_content TEXT,
+      utm_term TEXT,
+      source TEXT NOT NULL,
+      target TEXT,
+      label TEXT,
+      ip_hash TEXT NOT NULL,
+      ua_short TEXT
+    );
+    CREATE INDEX IF NOT EXISTS events_company_created_idx ON events(company_code, created_at);
+    CREATE INDEX IF NOT EXISTS events_source_idx ON events(source);
+    CREATE INDEX IF NOT EXISTS events_client_id_idx ON events(client_id);
+    CREATE TABLE IF NOT EXISTS external_stats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source TEXT NOT NULL,
+      company_code TEXT NOT NULL COLLATE NOCASE REFERENCES companies(code)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+      date TEXT NOT NULL,
+      metrics TEXT NOT NULL,
+      captured_at TEXT NOT NULL,
+      note TEXT,
+      UNIQUE(source, company_code, date)
+    );
+    CREATE INDEX IF NOT EXISTS external_stats_company_date_idx
+      ON external_stats(company_code, date);
+    CREATE INDEX IF NOT EXISTS external_stats_source_idx ON external_stats(source);
+  `);
+});
+
 const foreignKeyErrors = db.prepare('PRAGMA foreign_key_check').all();
 if (foreignKeyErrors.length) throw new Error('Нарушена ссылочная целостность базы данных');
 
@@ -224,6 +269,7 @@ const attributionColumns = {
   utm_medium: 'TEXT',
   utm_campaign: 'TEXT',
   utm_content: 'TEXT',
+  utm_term: 'TEXT',
   client_id: 'TEXT',
   referrer: 'TEXT',
   landing_page: 'TEXT',
@@ -254,9 +300,9 @@ for (const row of contactsToNormalize) saveNormalizedContact.run(normalizeContac
 const createLead = db.prepare(`
   INSERT INTO leads (
     created_at, name, contact, normalized_contact, channel, source, tag, page, first_question,
-    stage, comment, utm_source, utm_medium, utm_campaign, utm_content, client_id, referrer, landing_page,
-    company_code
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'новая', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    stage, comment, utm_source, utm_medium, utm_campaign, utm_content, utm_term, client_id,
+    referrer, landing_page, company_code
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'новая', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 const getLead = db.prepare('SELECT * FROM leads WHERE id = ?');
 const getLeadByContact = db.prepare(`SELECT * FROM leads WHERE normalized_contact = ?
@@ -279,6 +325,18 @@ const updateSale = db.prepare(
 const insertExpense = db.prepare(
   'INSERT INTO expenses (created_at, spent_at, source, amount, comment) VALUES (?, ?, ?, ?, ?)'
 );
+const insertEvent = db.prepare(`
+  INSERT INTO events (
+    created_at, type, company_code, client_id, page, landing_page, referrer, utm_source,
+    utm_medium, utm_campaign, utm_content, utm_term, source, target, label, ip_hash, ua_short
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+const upsertExternalStat = db.prepare(`
+  INSERT INTO external_stats (source, company_code, date, metrics, captured_at, note)
+  VALUES (?, ?, ?, ?, ?, ?)
+  ON CONFLICT(source, company_code, date) DO UPDATE SET
+    metrics=excluded.metrics, captured_at=excluded.captured_at, note=excluded.note
+`);
 
 function send(response, status, payload, headers) {
   const body = JSON.stringify(payload);
@@ -329,6 +387,14 @@ function optionalString(value, field) {
   if (value === undefined || value === null || value === '') return null;
   if (typeof value !== 'string') fail(400, `Поле «${field}» должно быть строкой`);
   return value.trim() || null;
+}
+
+function limitedString(value, field, required = false, limit = 500) {
+  const result = required ? requiredString(value, field) : optionalString(value, field);
+  if (result && result.length > limit) {
+    fail(400, `Поле «${field}» не должно превышать ${limit} символов`);
+  }
+  return result;
 }
 
 function nonNegativeNumber(value, field) {
@@ -382,6 +448,32 @@ function normalizeContact(contact) {
   const digits = contact.replace(/\D/g, '');
   if (digits.length >= 7) return digits.length === 11 && digits[0] === '8' ? `7${digits.slice(1)}` : digits;
   return contact.trim().toLocaleLowerCase('ru');
+}
+
+function deriveSource({ utmSource, referrer } = {}) {
+  const utm = typeof utmSource === 'string' ? utmSource.trim().toLowerCase() : '';
+  if (utm) return utm;
+  if (typeof referrer !== 'string' || !referrer.trim()) return 'direct';
+  let hostname;
+  try {
+    const value = referrer.trim();
+    hostname = new URL(value.includes('://') ? value : `https://${value}`).hostname.toLowerCase();
+  } catch {
+    return 'direct';
+  }
+  const host = hostname.replace(/^www\./, '').replace(/\.$/, '');
+  if (/^(?:.+\.)?2gis\./.test(host)) return '2gis';
+  if (/^(?:.+\.)?yandex\./.test(host) || host === 'ya.ru') return 'yandex';
+  if (/^(?:.+\.)?google\./.test(host)) return 'google';
+  if (host === 'instagram.com' || host.endsWith('.instagram.com')) return 'instagram';
+  if (host === 'vk.com' || host.endsWith('.vk.com') || host === 'vk.ru' || host.endsWith('.vk.ru')) {
+    return 'vk';
+  }
+  if (host === 't.me' || host.endsWith('.t.me') || /^telegram\.[^.]+$/.test(host)) return 'telegram';
+  if (host === 'wa.me' || host.endsWith('.wa.me') || /^whatsapp\.[^.]+$/.test(host)) {
+    return 'whatsapp';
+  }
+  return host || 'direct';
 }
 
 const ENTITY_CONFIG = {
@@ -642,6 +734,7 @@ function serializeLead(row) {
     utmMedium: row.utm_medium,
     utmCampaign: row.utm_campaign,
     utmContent: row.utm_content,
+    utmTerm: row.utm_term,
     clientId: row.client_id,
     referrer: row.referrer,
     landingPage: row.landing_page,
@@ -735,6 +828,105 @@ function totalExpense(from, to, source) {
 
 function romi(revenue, expense) {
   return expense === 0 ? null : ((revenue - expense) / expense) * 100;
+}
+
+function activeCompanyCode(value) {
+  const code = limitedString(value, 'companyCode', true).toLowerCase();
+  const company = db.prepare('SELECT is_deleted FROM companies WHERE code=? COLLATE NOCASE').get(code);
+  if (!company || company.is_deleted) {
+    fail(400, 'Активная компания с таким кодом не найдена', {
+      code: 'COMPANY_NOT_ACTIVE', field: 'companyCode',
+    });
+  }
+  return code;
+}
+
+function requestIpHash(request) {
+  const ip = String(request.headers['x-forwarded-for'] || request.socket.remoteAddress || '')
+    .split(',')[0].trim();
+  return createHash('sha256').update(`${ip}${API_KEY}`).digest('hex');
+}
+
+function analyticsData(from, to, companyCode, selectedSource, leadRows = []) {
+  const groups = new Map();
+  const groupFor = (source) => {
+    const key = source || 'не указан';
+    if (!groups.has(key)) {
+      groups.set(key, {
+        source: key, leads: 0, booked: 0, visited: 0, sales: 0, revenue: 0,
+        expenses: companyCode ? null : 0, romi: null, visits: 0, clicks: 0,
+        clicksByTarget: {}, external: null, externalCapturedAt: null,
+      });
+    }
+    return groups.get(key);
+  };
+  for (const row of leadRows) {
+    const group = groupFor(row.source);
+    group.leads += 1;
+    const rank = STAGE_RANK.get(row.stage);
+    if (row.stage !== 'отказ' && rank >= STAGE_RANK.get('записан')) group.booked += 1;
+    if (row.stage !== 'отказ' && rank >= STAGE_RANK.get('пришёл')) group.visited += 1;
+    if (row.stage === 'продажа') group.sales += 1;
+    if (row.sale_amount !== null) group.revenue += row.sale_amount;
+  }
+  const filters = ['created_at >= ?'];
+  const params = [from];
+  if (to) {
+    filters.push('created_at <= ?');
+    params.push(to);
+  }
+  if (companyCode) {
+    filters.push('company_code = ? COLLATE NOCASE');
+    params.push(companyCode);
+  }
+  if (selectedSource) {
+    filters.push('source = ?');
+    params.push(selectedSource);
+  }
+  const eventRows = db.prepare(`
+    SELECT source, type, target, client_id FROM events WHERE ${filters.join(' AND ')}
+  `).all(...params);
+  const visitors = new Map();
+  for (const row of eventRows) {
+    const group = groupFor(row.source);
+    if (row.type === 'visit' && row.client_id) {
+      if (!visitors.has(group.source)) visitors.set(group.source, new Set());
+      visitors.get(group.source).add(row.client_id);
+    }
+    if (row.type === 'click') {
+      group.clicks += 1;
+      const target = row.target || 'unknown';
+      group.clicksByTarget[target] = (group.clicksByTarget[target] || 0) + 1;
+    }
+  }
+  for (const [source, clients] of visitors) groupFor(source).visits = clients.size;
+  const dateFrom = MOSCOW_DATE.format(new Date(from));
+  const dateTo = MOSCOW_DATE.format(to ? new Date(to) : new Date());
+  const externalFilters = ['date >= ?', 'date <= ?'];
+  const externalParams = [dateFrom, dateTo];
+  if (companyCode) {
+    externalFilters.push('company_code = ? COLLATE NOCASE');
+    externalParams.push(companyCode);
+  }
+  if (selectedSource) {
+    externalFilters.push('source = ?');
+    externalParams.push(selectedSource);
+  }
+  const externalRows = db.prepare(`
+    SELECT source, metrics, captured_at FROM external_stats
+    WHERE ${externalFilters.join(' AND ')}
+  `).all(...externalParams);
+  for (const row of externalRows) {
+    const group = groupFor(row.source);
+    group.external ||= {};
+    for (const [key, value] of Object.entries(JSON.parse(row.metrics))) {
+      group.external[key] = (group.external[key] || 0) + value;
+    }
+    if (!group.externalCapturedAt || row.captured_at > group.externalCapturedAt) {
+      group.externalCapturedAt = row.captured_at;
+    }
+  }
+  return { groups, groupFor };
 }
 
 function corsHeaders(request) {
@@ -1082,13 +1274,128 @@ async function route(request, response) {
     return response.end();
   }
   takeRateLimit(request);
-  if (!(request.method === 'POST' && url.pathname === '/leads')) requireApiKey(request);
+  const publicPost = request.method === 'POST' && ['/leads', '/events'].includes(url.pathname);
+  if (!publicPost) requireApiKey(request);
 
   if (await handleRelationRoutes(request, response, url, cors)) return;
   if (request.method === 'GET' && url.pathname === '/tasks/summary') {
     return send(response, 200, taskSummary(url), cors);
   }
   if (await handleEntityRoutes(request, response, url, cors)) return;
+
+  if (request.method === 'POST' && url.pathname === '/events') {
+    const body = await readJson(request);
+    const type = limitedString(body.type, 'type', true);
+    if (!['visit', 'click'].includes(type)) {
+      fail(400, 'Поле «type» должно быть равно visit или click');
+    }
+    const companyCode = activeCompanyCode(body.companyCode);
+    const fields = {};
+    for (const field of ['clientId', 'page', 'landingPage', 'referrer', 'utmSource', 'utmMedium',
+      'utmCampaign', 'utmContent', 'utmTerm', 'source', 'target', 'label']) {
+      fields[field] = limitedString(body[field], field);
+    }
+    const createdAt = body.ts === undefined ? new Date().toISOString() :
+      date(limitedString(body.ts, 'ts', true), 'ts');
+    const derived = deriveSource({ utmSource: fields.utmSource, referrer: fields.referrer });
+    const source = (['direct', 'unknown'].includes(derived) && fields.source
+      ? fields.source.toLowerCase() : derived);
+    if (type === 'visit' && fields.clientId) {
+      const duplicate = db.prepare(`
+        SELECT 1 FROM events WHERE type='visit' AND company_code=? COLLATE NOCASE
+          AND client_id=? AND page IS ? AND created_at>=? AND created_at<=? LIMIT 1
+      `).get(companyCode, fields.clientId, fields.page,
+        new Date(new Date(createdAt).getTime() - 30 * 60 * 1000).toISOString(),
+        new Date(new Date(createdAt).getTime() + 30 * 60 * 1000).toISOString());
+      if (duplicate) return send(response, 202, { ok: true }, cors);
+    }
+    const userAgent = String(request.headers['user-agent'] || '').slice(0, 60) || null;
+    insertEvent.run(
+      createdAt, type, companyCode, fields.clientId, fields.page, fields.landingPage,
+      fields.referrer, fields.utmSource, fields.utmMedium, fields.utmCampaign,
+      fields.utmContent, fields.utmTerm, source, fields.target, fields.label,
+      requestIpHash(request), userAgent
+    );
+    return send(response, 202, { ok: true }, cors);
+  }
+
+  if (request.method === 'POST' && url.pathname === '/external-stats') {
+    const body = await readJson(request);
+    const source = limitedString(body.source, 'source', true).toLowerCase();
+    const companyCode = activeCompanyCode(body.companyCode);
+    const note = limitedString(body.note, 'note');
+    if (!Array.isArray(body.rows) || body.rows.length === 0) {
+      fail(400, 'Поле «rows» должно быть непустым массивом');
+    }
+    const rows = body.rows.map((row, index) => {
+      if (!row || Array.isArray(row) || typeof row !== 'object') {
+        fail(400, `Строка rows[${index}] должна быть объектом`);
+      }
+      const day = validDay(row.date, `rows[${index}].date`);
+      const metrics = {};
+      for (const [key, value] of Object.entries(row)) {
+        if (key === 'date') continue;
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          fail(400, `Метрика «${key}» должна быть числом`);
+        }
+        metrics[key] = value;
+      }
+      return { day, metrics };
+    });
+    const capturedAt = new Date().toISOString();
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      for (const row of rows) {
+        upsertExternalStat.run(
+          source, companyCode, row.day, JSON.stringify(row.metrics), capturedAt, note
+        );
+      }
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+    const dates = rows.map((row) => row.day).sort();
+    return send(response, 200, {
+      ok: true, upserted: rows.length, source, companyCode,
+      dates: [dates[0], dates[dates.length - 1]],
+    }, cors);
+  }
+
+  if (request.method === 'GET' && url.pathname === '/external-stats') {
+    const clauses = [];
+    const params = [];
+    let fromDay = null;
+    let toDay = null;
+    if (url.searchParams.has('source')) {
+      clauses.push('source = ?');
+      params.push(limitedString(url.searchParams.get('source'), 'source', true).toLowerCase());
+    }
+    if (url.searchParams.has('companyCode')) {
+      clauses.push('company_code = ? COLLATE NOCASE');
+      params.push(limitedString(url.searchParams.get('companyCode'), 'companyCode', true).toLowerCase());
+    }
+    for (const [parameter, operator] of [['from', '>='], ['to', '<=']]) {
+      if (!url.searchParams.has(parameter)) continue;
+      clauses.push(`date ${operator} ?`);
+      const day = validDay(url.searchParams.get(parameter), parameter);
+      if (parameter === 'from') fromDay = day;
+      else toDay = day;
+      params.push(day);
+    }
+    if (fromDay && toDay && fromDay > toDay) fail(400, 'Дата «from» не может быть позже «to»');
+    const where = clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '';
+    const rows = db.prepare(`
+      SELECT * FROM external_stats${where} ORDER BY date, source, company_code
+    `).all(...params).map((row) => ({
+      id: row.id, source: row.source, companyCode: row.company_code, date: row.date,
+      metrics: JSON.parse(row.metrics), capturedAt: row.captured_at, note: row.note,
+    }));
+    const capturedAt = rows.reduce((latest, row) => {
+      return !latest || row.capturedAt > latest ? row.capturedAt : latest;
+    }, null);
+    return send(response, 200, { rows, capturedAt }, cors);
+  }
 
   if (request.method === 'GET' && url.pathname === '/dashboard') {
     const customRange = url.searchParams.has('from') || url.searchParams.has('to');
@@ -1126,11 +1433,29 @@ async function route(request, response) {
     const rows = db.prepare(
       `SELECT * FROM leads WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC, id DESC`
     ).all(...params);
-    const sourceCompanyClause = companyCode ? ' AND company_code = ? COLLATE NOCASE' : '';
-    const allSources = db.prepare(
-      `SELECT DISTINCT source FROM leads WHERE source IS NOT NULL AND source != ''${sourceCompanyClause}
-      ORDER BY source`
-    ).all(...(companyCode ? [companyCode] : []));
+    const analytics = analyticsData(from, to, companyCode, source, rows);
+    if (!companyCode) {
+      const expenseFilters = ['spent_at >= ?'];
+      const expenseParams = [from];
+      if (to) {
+        expenseFilters.push('spent_at <= ?');
+        expenseParams.push(to);
+      }
+      if (source) {
+        expenseFilters.push('source = ?');
+        expenseParams.push(source);
+      }
+      const expenseRows = db.prepare(`
+        SELECT source, SUM(amount) expenses FROM expenses
+        WHERE ${expenseFilters.join(' AND ')} GROUP BY source
+      `).all(...expenseParams);
+      for (const row of expenseRows) analytics.groupFor(row.source).expenses = row.expenses;
+      for (const group of analytics.groups.values()) {
+        group.romi = romi(group.revenue, group.expenses);
+      }
+    }
+    const sources = [...analytics.groups.values()]
+      .sort((a, b) => a.source.localeCompare(b.source, 'ru'));
     const funnel = Object.fromEntries([...CABINET_STAGES].map(([id, name]) => {
       const count = rows.filter((row) => row.stage === name).length;
       return [id, { count, conversion: rows.length ? Math.round((count / rows.length) * 100) : 0 }];
@@ -1152,10 +1477,12 @@ async function route(request, response) {
         revenue,
         expenses,
         romi: companyCode ? null : romi(revenue, expenses),
+        visits: sources.reduce((sum, item) => sum + item.visits, 0),
+        clicks: sources.reduce((sum, item) => sum + item.clicks, 0),
       },
       funnel,
       leads: rows.map(serializeCabinetLead),
-      sources: allSources.map((row) => row.source),
+      sources,
       ...(companyCode ? { expensesScope: 'global_unavailable' } : {}),
     }, cors);
   }
@@ -1174,6 +1501,10 @@ async function route(request, response) {
     const duplicate = getLeadByContact.get(normalized, companyCode);
     if (duplicate) return send(response, 200, { ...serializeLead(duplicate), deduplicated: true }, cors);
     const utmSource = optionalString(body.utmSource, 'utmSource');
+    const referrer = optionalString(body.referrer, 'referrer');
+    const sourceInput = optionalString(body.source, 'source');
+    const derived = deriveSource({ utmSource, referrer });
+    const source = sourceInput || (utmSource ? derived : (derived === 'direct' ? null : derived));
     const landingPage = optionalString(body.landingPage, 'landingPage');
     const result = createLead.run(
       new Date().toISOString(),
@@ -1181,7 +1512,7 @@ async function route(request, response) {
       contact,
       normalized,
       optionalString(body.channel, 'channel'),
-      optionalString(body.source, 'source') || utmSource,
+      source,
       optionalString(body.tag, 'tag'),
       optionalString(body.page, 'page') || landingPage,
       optionalString(body.firstQuestion, 'firstQuestion'),
@@ -1190,8 +1521,9 @@ async function route(request, response) {
       optionalString(body.utmMedium, 'utmMedium'),
       optionalString(body.utmCampaign, 'utmCampaign'),
       optionalString(body.utmContent, 'utmContent'),
+      optionalString(body.utmTerm, 'utmTerm'),
       optionalString(body.clientId, 'clientId'),
-      optionalString(body.referrer, 'referrer'),
+      referrer,
       landingPage,
       companyCode
     );
@@ -1231,7 +1563,7 @@ async function route(request, response) {
       .all(...(companyCode ? [companyCode] : []));
     const fields = ['id', 'created_at', 'name', 'contact', 'channel', 'source', 'tag', 'page', 'stage',
       'sale_amount', 'sold_at', 'comment', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content',
-      'client_id', 'referrer', 'landing_page', 'company_code'];
+      'utm_term', 'client_id', 'referrer', 'landing_page', 'company_code'];
     const csv = [fields.join(','), ...rows.map((row) => fields.map((field) => csvCell(row[field])).join(','))]
       .join('\r\n');
     response.writeHead(200, {
@@ -1363,41 +1695,19 @@ async function route(request, response) {
       SELECT source, SUM(amount) AS expenses FROM expenses
       WHERE spent_at >= ? AND spent_at <= ? GROUP BY source
     `).all(from, to);
-    const groups = new Map();
-    const groupFor = (source) => {
-      const key = source || 'не указан';
-      if (!groups.has(key)) {
-        groups.set(key, {
-          source: key,
-          leads: 0,
-          booked: 0,
-          visited: 0,
-          sales: 0,
-          revenue: 0,
-          expenses: companyCode ? null : 0,
-          romi: null,
-        });
-      }
-      return groups.get(key);
-    };
-    for (const row of rows) {
-      const group = groupFor(row.source);
-      group.leads += 1;
-      const rank = STAGE_RANK.get(row.stage);
-      if (row.stage !== 'отказ' && rank >= STAGE_RANK.get('записан')) group.booked += 1;
-      if (row.stage !== 'отказ' && rank >= STAGE_RANK.get('пришёл')) group.visited += 1;
-      if (row.stage === 'продажа') group.sales += 1;
-      if (row.sale_amount !== null) group.revenue += row.sale_amount;
-    }
-    for (const row of expenseRows) groupFor(row.source).expenses = row.expenses;
+    const analytics = analyticsData(from, to, companyCode, null, rows);
+    for (const row of expenseRows) analytics.groupFor(row.source).expenses = row.expenses;
     if (!companyCode) {
-      for (const group of groups.values()) group.romi = romi(group.revenue, group.expenses);
+      for (const group of analytics.groups.values()) group.romi = romi(group.revenue, group.expenses);
     }
-    const sources = [...groups.values()].sort((a, b) => a.source.localeCompare(b.source, 'ru'));
+    const sources = [...analytics.groups.values()]
+      .sort((a, b) => a.source.localeCompare(b.source, 'ru'));
     const revenue = sources.reduce((sum, group) => sum + group.revenue, 0);
     const expenses = companyCode ? null : sources.reduce((sum, group) => sum + group.expenses, 0);
     return send(response, 200, {
       from, to, revenue, expenses, romi: companyCode ? null : romi(revenue, expenses), sources,
+      visits: sources.reduce((sum, group) => sum + group.visits, 0),
+      clicks: sources.reduce((sum, group) => sum + group.clicks, 0),
       ...(companyCode ? { expensesScope: 'global_unavailable' } : {}),
     }, cors);
   }
@@ -1415,9 +1725,11 @@ const server = http.createServer((request, response) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Мини-CRM слушает порт ${PORT}; база: ${DATABASE_PATH}`);
-});
+if (IS_MAIN) {
+  server.listen(PORT, () => {
+    console.log(`Мини-CRM слушает порт ${PORT}; база: ${DATABASE_PATH}`);
+  });
+}
 
 function shutdown() {
   server.close(() => {
@@ -1425,6 +1737,8 @@ function shutdown() {
     process.exit(0);
   });
 }
+
+module.exports = { deriveSource };
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
