@@ -47,6 +47,9 @@
       if (utmSource) return utmSource.toLowerCase();
       var host = hostOf(referrer);
       if (!host) return 'direct';
+      if (host === 'org.telegram.messenger') return 'telegram';
+      if (host === 'com.whatsapp') return 'whatsapp';
+      if (host === 'com.vkontakte.android') return 'vk';
       if (/(^|\.)2gis\./.test(host)) return '2gis';
       if (/(^|\.)yandex\./.test(host)) return 'yandex';
       if (/(^|\.)google\./.test(host)) return 'google';
@@ -87,6 +90,7 @@
 
     function send(type, target, label) {
       try {
+        var safeLabel = target === 'phone' ? 'Телефон' : (label || '').replace(/\d{6,}/g, '');
         var event = {
           type: type,
           companyCode: companyCode,
@@ -101,7 +105,7 @@
           utmTerm: firstTouch.utmTerm || '',
           source: firstTouch.source || 'direct',
           target: target || '',
-          label: (label || '').replace(/\s+/g, ' ').trim().slice(0, 60),
+          label: safeLabel.replace(/\s+/g, ' ').trim().slice(0, 60),
           ts: Date.now()
         };
         var body = JSON.stringify(event);
