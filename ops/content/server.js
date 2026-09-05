@@ -313,11 +313,41 @@ function corsHeaders(request) {
   return {};
 }
 
-function proxyCrm(request, response, url, cors) {
+async function readRequestBody(request) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > MAX_BODY) fail(413, 'Документ не должен превышать 1 МБ');
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
+async function crmLeadCompany(id) {
+  let upstreamResponse;
+  try {
+    upstreamResponse = await fetch(`${CRM_URL}/leads/${id}`, { headers: { 'x-api-key': CRM_API_KEY } });
+  } catch (error) {
+    console.error('content: ошибка проверки заявки CRM:', error);
+    fail(502, 'CRM недоступна');
+  }
+  if (!upstreamResponse.ok) fail(404, 'Заявка не найдена');
+  try {
+    return (await upstreamResponse.json()).companyCode;
+  } catch {
+    fail(502, 'Некорректный ответ CRM');
+  }
+}
+
+async function proxyCrm(request, response, url, cors) {
   const initialSession = requireSession(request);
   const identity = initialSession.user;
   const readOnly = request.method === 'GET';
   let session = initialSession;
+  if (identity.role !== 'owner' && identity.companyCodes.length === 0) {
+    fail(403, 'Аккаунту не назначена компания');
+  }
   if (identity.role !== 'owner') {
     if (readOnly && identity.permissions.includes('crm.view')) {
       session = requirePermission(request, 'crm.view');
@@ -331,11 +361,11 @@ function proxyCrm(request, response, url, cors) {
 
   const crmPath = url.pathname.slice('/content/crm'.length) || '/';
   const entityPath = /^\/(contacts|companies|legal-entities)(?:\/|$)/.test(crmPath);
-  // Временно изменение CRM-сущностей и их связей оставляем только владельцу.
+  // Временно только владелец записывает CRM-сущности и расходы, а также меняет компанию заявки.
   if (!readOnly && entityPath && identity.role !== 'owner') fail(403, 'Изменение сущностей доступно только владельцу');
 
-  const companyScoped = ['/dashboard', '/summary', '/leads', '/leads.csv'].includes(crmPath);
-  if (identity.role !== 'owner' && companyScoped && identity.companyCodes.length) {
+  const companyScoped = /^\/(?:leads(?:\/|\.|$)|dashboard(?:\/|$)|summary(?:\/|$)|expenses(?:\/|$))/.test(crmPath);
+  if (identity.role !== 'owner' && companyScoped) {
     const requestedCompany = url.searchParams.get('companyCode');
     if (requestedCompany && !identity.companyCodes.includes(requestedCompany.toLowerCase())) {
       fail(403, 'Нет доступа к компании');
@@ -344,9 +374,30 @@ function proxyCrm(request, response, url, cors) {
     if (!requestedCompany) url.searchParams.set('companyCode', identity.companyCodes[0]);
   }
   if (!CRM_API_KEY) fail(503, 'Прокси CRM не настроен');
+  if (identity.role !== 'owner' && crmPath === '/expenses' && request.method !== 'GET') {
+    fail(403, 'Расходы вносит владелец');
+  }
+  const leadMatch = crmPath.match(/^\/leads\/(\d+)(?:\/|$)/);
+  let requestBody = null;
+  if (identity.role !== 'owner' && leadMatch) {
+    const leadCompany = await crmLeadCompany(leadMatch[1]);
+    const allowed = leadCompany && identity.companyCodes.some((code) => {
+      return code.toLowerCase() === leadCompany.toLowerCase();
+    });
+    if (!allowed) fail(404, 'Заявка не найдена');
+    if (request.method === 'PATCH' && crmPath === `/leads/${leadMatch[1]}`) {
+      requestBody = await readRequestBody(request);
+      let body;
+      try { body = JSON.parse(requestBody.toString('utf8')); } catch { fail(400, 'Некорректный JSON'); }
+      if (body && typeof body === 'object' && Object.hasOwn(body, 'companyCode')) {
+        fail(403, 'Смена компании доступна только владельцу');
+      }
+    }
+  }
   const target = new URL(`${CRM_URL}${crmPath}${url.search}`);
   const headers = { ...request.headers, host: target.host, 'x-api-key': CRM_API_KEY };
   delete headers.cookie;
+  if (requestBody) headers['content-length'] = requestBody.length;
   const upstream = http.request(target, { method: request.method, headers }, (upstreamResponse) => {
     const responseHeaders = { ...upstreamResponse.headers, ...cors };
     response.writeHead(upstreamResponse.statusCode || 502, responseHeaders);
@@ -357,7 +408,8 @@ function proxyCrm(request, response, url, cors) {
     if (!response.headersSent) send(response, 502, { error: 'CRM недоступна' }, cors);
     else response.destroy(error);
   });
-  request.pipe(upstream);
+  if (requestBody) upstream.end(requestBody);
+  else request.pipe(upstream);
 }
 
 const server = http.createServer(async (request, response) => {
@@ -372,7 +424,7 @@ const server = http.createServer(async (request, response) => {
     const parts = url.pathname.split('/').filter(Boolean);
 
     if (url.pathname === '/content/crm' || url.pathname.startsWith('/content/crm/')) {
-      return proxyCrm(request, response, url, cors);
+      return await proxyCrm(request, response, url, cors);
     }
 
     if (request.method === 'POST' && url.pathname === '/content/login') {
