@@ -238,7 +238,9 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .crm-stat strong { margin-top: 5px; font-size: 1.35rem; }
 .crm-table-wrap { width: 100%; max-width: 100%; overflow-x: auto; }
 .crm-table { width: 100%; border-collapse: collapse; }
-.crm-table th, .crm-table td { padding: 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.crm-table th, .crm-table td {
+  padding: 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap;
+}
 .crm-table .crm-grow { width: 100%; }
 .crm-table td.crm-grow { max-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .crm-table .crm-compact { white-space: nowrap; }
@@ -302,7 +304,10 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .lead-details dl { display: grid; grid-template-columns: minmax(130px, 180px) 1fr; gap: 8px 14px; }
 .lead-details dt { color: var(--muted); }
 .lead-details dd { margin: 0; overflow-wrap: anywhere; }
-.tool-frame { display: block; width: 100%; min-height: 70vh; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.tool-frame {
+  display: block; width: 100%; min-height: 70vh; border: 1px solid var(--line); border-radius: 16px;
+  background: var(--surface);
+}
 .account-details { display: grid; gap: 14px; margin: 0 0 24px; }
 .account-details div { display: grid; grid-template-columns: 140px 1fr; gap: 12px; }
 .account-details dt { color: var(--muted); }
@@ -334,7 +339,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     gap: 10px;
     align-items: center;
   }
-  .menu-button { width: 44px; height: 44px; border: 0; border-radius: 10px; background: var(--surface-soft); cursor: pointer; }
+  .menu-button {
+    width: 44px; height: 44px; border: 0; border-radius: 10px; background: var(--surface-soft);
+    cursor: pointer;
+  }
   .mobile-context { min-width: 0; }
   .mobile-context strong, .mobile-context span { display: block; overflow-wrap: anywhere; }
   .mobile-context strong { font-size: 0.9rem; }
@@ -448,8 +456,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <div><strong>Synapse Business</strong><span>Вход в личный кабинет</span></div>
     </div>
     <form id="auth-form" autocomplete="off">
-      <label class="auth-field"><span>Логин</span><input id="auth-login" name="login" autocomplete="username" required></label>
-      <label class="auth-field"><span>Пароль</span><input id="auth-pass" type="password" name="pass" autocomplete="current-password" required></label>
+      <label class="auth-field"><span>Логин</span>
+        <input id="auth-login" name="login" autocomplete="username" required></label>
+      <label class="auth-field"><span>Пароль</span>
+        <input id="auth-pass" type="password" name="pass" autocomplete="current-password" required></label>
       <button class="auth-submit" type="submit">Войти</button>
       <p class="auth-error" id="auth-error" role="alert" hidden>Неверный логин или пароль</p>
     </form>
@@ -458,14 +468,18 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 <a class="skip-link" href="#main-content">Перейти к содержимому</a>
 <div class="shell" id="app" hidden>
   <div class="mobile-bar">
-    <button class="menu-button" id="menu-button" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Открыть меню">☰</button>
-    <div class="mobile-context"><strong id="mobile-title">Сквозная аналитика</strong><span id="mobile-project"></span></div>
+    <button class="menu-button" id="menu-button" type="button" aria-controls="sidebar" aria-expanded="false"
+      aria-label="Открыть меню">☰</button>
+    <div class="mobile-context"><strong id="mobile-title">Сквозная аналитика</strong>
+      <span id="mobile-project"></span></div>
   </div>
   <aside class="sidebar" id="sidebar" aria-label="Меню кабинета">
-    <div class="sidebar-brand"><span class="core-logo" aria-hidden="true">S</span><div><strong>Synapse Business</strong><span>Личный кабинет</span></div></div>
+    <div class="sidebar-brand"><span class="core-logo" aria-hidden="true">S</span><div>
+      <strong>Synapse Business</strong><span>Личный кабинет</span></div></div>
     <div class="project-picker">
       <p class="project-label">Проект</p>
-      <button class="project-trigger" id="project-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="project-menu">
+      <button class="project-trigger" id="project-trigger" type="button" aria-haspopup="menu"
+        aria-expanded="false" aria-controls="project-menu">
         <span class="project-mark" id="project-mark" aria-hidden="true"></span>
         <span class="project-name" id="project-name"></span>
         <span class="project-chevron" aria-hidden="true">⌄</span>
@@ -505,7 +519,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <a class="nav-link" href="#account" data-view-link="account">Аккаунт</a>
     </nav>
     <div class="sidebar-footer">
-      <div class="account-summary"><span class="account-avatar" id="account-avatar" aria-hidden="true"></span><div><strong id="account-name"></strong><span id="account-role"></span></div></div>
+      <div class="account-summary"><span class="account-avatar" id="account-avatar" aria-hidden="true"></span>
+        <div><strong id="account-name"></strong><span id="account-role"></span></div></div>
       <button class="logout" id="logout" type="button">Выйти</button>
     </div>
   </aside>
@@ -514,8 +529,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     <div class="content-header"><p id="startup-error" class="startup-error" role="alert" hidden></p></div>
     <section class="view-panel" id="analytics-through-view" data-view="analytics-through">
       <div class="content-header"><h1>Сквозная аналитика</h1></div>
-      <p class="notice">Данные общие для всех проектов: привязка заявок к компаниям появится после задачи
-        crm/tenants</p>
+      <p class="notice" id="analytics-project-context"></p>
       <div class="analytics-grid">
         <div class="card">
           <div class="crm-toolbar">
@@ -551,8 +565,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     </section>
     <section class="view-panel" id="crm-view" data-view="crm" hidden>
       <div class="content-header"><h1>ЦРМ</h1></div>
-      <p class="notice">Данные общие для всех проектов: привязка заявок к компаниям появится после задачи
-        crm/tenants</p>
+      <p class="notice" id="crm-project-context"></p>
       <div class="card">
         <div class="crm-toolbar">
           <div class="crm-periods" id="crm-periods" aria-label="Период">
@@ -560,7 +573,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
             <button class="crm-period" type="button" data-crm-period="7d" aria-pressed="false">Неделя</button>
             <button class="crm-period" type="button" data-crm-period="30d" aria-pressed="false">Месяц</button>
           </div>
-          <div class="crm-filters"><select class="crm-filter" id="crm-stage-filter" aria-label="Фильтр по этапу"></select><select class="crm-filter" id="crm-source-filter" aria-label="Фильтр по источнику"></select></div>
+          <div class="crm-filters">
+            <select class="crm-filter" id="crm-stage-filter" aria-label="Фильтр по этапу"></select>
+            <select class="crm-filter" id="crm-source-filter" aria-label="Фильтр по источнику"></select>
+          </div>
         </div>
         <div id="crm-content" aria-live="polite"></div>
       </div>
@@ -581,14 +597,17 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <div class="content-header"><h1>Сайты</h1></div>
       <div class="site-toolbar">
         <select id="sites-company" aria-label="Компания"><option value="">Все компании</option></select>
-        <select id="sites-state" aria-label="Состояние"><option value="">Все</option><option value="active">Активен</option><option value="draft">Черновик</option><option value="published">Опубликован</option></select>
+        <select id="sites-state" aria-label="Состояние"><option value="">Все</option>
+          <option value="active">Активен</option><option value="draft">Черновик</option>
+          <option value="published">Опубликован</option></select>
         <button id="create-site" type="button">Создать сайт</button>
       </div>
       <div id="sites-content" aria-live="polite">Загрузка…</div>
     </section>
     <section class="view-panel" id="chat-view" data-view="chat" hidden>
       <div class="content-header"><h1>Чат</h1></div>
-      <p class="notice">Связь чата с выбранным проектом — в разработке. В текущем inbox используйте встроенный фильтр компаний.</p>
+      <p class="notice">Связь чата с выбранным проектом — в разработке. В текущем inbox используйте встроенный
+        фильтр компаний.</p>
       <iframe class="tool-frame" data-src="https://chat.synapsebusiness.ru/" title="Чат"></iframe>
     </section>
     <section class="view-panel" id="autoposting-view" data-view="autoposting" hidden>
@@ -600,12 +619,15 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <div class="card"><p class="development">В разработке</p></div>
     </section>
     <section class="view-panel" id="settings-view" data-view="settings" hidden>
-      <div class="content-header"><h1>Настройки</h1></div><div class="card"><p class="development">В разработке</p></div>
+      <div class="content-header"><h1>Настройки</h1></div>
+      <div class="card"><p class="development">В разработке</p></div>
     </section>
     <section class="view-panel" id="account-view" data-view="account" hidden>
       <div class="content-header"><h1>Аккаунт</h1></div><div class="card">
-        <dl class="account-details"><div><dt>Имя</dt><dd id="account-detail-name"></dd></div><div><dt>Роль</dt><dd id="account-detail-role"></dd></div></dl>
-        <p class="development">В разработке</p><p><button class="logout" id="account-logout" type="button">Выйти</button></p>
+        <dl class="account-details"><div><dt>Имя</dt><dd id="account-detail-name"></dd></div>
+          <div><dt>Роль</dt><dd id="account-detail-role"></dd></div></dl>
+        <p class="development">В разработке</p>
+        <p><button class="logout" id="account-logout" type="button">Выйти</button></p>
       </div>
     </section>
     <section class="view-panel" id="accounts-view" data-view="accounts" hidden>
@@ -622,7 +644,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 </div>
 <dialog id="site-create-dialog"><form id="site-create-form" class="field-stack">
   <h2>Создать сайт</h2><input name="name" required maxlength="120" placeholder="Название сайта">
-  <select name="companyCode" required></select><div class="site-actions"><button type="button" data-close-dialog>Отмена</button>
+  <select name="companyCode" required></select><div class="site-actions">
+    <button type="button" data-close-dialog>Отмена</button>
   <button type="submit">Создать</button></div><p role="alert"></p></form></dialog>
 <script>
 (() => {
@@ -689,6 +712,16 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     }
   };
   const selectedProject = () => allowedProjects.find((project) => project.id === selectedProjectId) || null;
+  const scopeParams = () => selectedProjectId === "synapse-business"
+    ? {}
+    : { companyCode: selectedProjectId };
+  const projectContext = () => selectedProjectId === "synapse-business"
+    ? "Все проекты"
+    : selectedProject()?.name || selectedProjectId;
+  const renderProjectContexts = () => {
+    byId("analytics-project-context").textContent = `Проект: ${projectContext()}`;
+    byId("crm-project-context").textContent = `Проект: ${projectContext()}`;
+  };
   const setProjectText = (element, project) => {
     element.textContent = project ? project.name.charAt(0) : "—";
   };
@@ -718,6 +751,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     byId("mobile-project").textContent = project?.name || "Проекты не настроены";
     byId("project-trigger").disabled = allowedProjects.length === 0;
     byId("no-projects").hidden = allowedProjects.length !== 0;
+    renderProjectContexts();
     updateEditorLinks();
   };
 
@@ -744,6 +778,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     saveSelectedProject();
     renderProjectPicker();
     closeProjectMenu(true);
+    if (currentView === "analytics-through") loadAnalytics();
+    if (currentView === "crm") loadCRM();
+    if (currentView === "crm-contacts") applyContactProjectFilter();
   };
 
   const editorUrl = (kind) => `${kind}-editor.html?site=${encodeURIComponent(selectedProjectId)}`;
@@ -810,7 +847,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         const card = document.createElement("article");
         card.className = "card site-card";
         card.innerHTML = `<h2>${escapeHTML(site.name)}</h2><p>${escapeHTML(site.company.name)}</p>
-          <p>${site.isActive ? "Активен · " : ""}${site.publicationStatus === "draft" ? "Черновик" : "Опубликован"}</p>`;
+          <p>${site.isActive ? "Активен · " : ""}
+          ${site.publicationStatus === "draft" ? "Черновик" : "Опубликован"}</p>`;
         const actions = document.createElement("div");
         actions.className = "site-actions";
         for (const [label, url] of [["Редактировать сайт", site.capabilities.editSite && site.editorUrls.site],
@@ -851,7 +889,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       for (const account of data.accounts) {
         const card = document.createElement("article");
         card.className = "card account-card";
-        card.innerHTML = `<h2>${escapeHTML(account.displayName)}</h2><p>@${escapeHTML(account.login)} · ${account.role}</p>
+        card.innerHTML = `<h2>${escapeHTML(account.displayName)}</h2>
+          <p>@${escapeHTML(account.login)} · ${account.role}</p>
           <p>Компании: ${account.companies.map((item) => escapeHTML(item.name)).join(", ") || "не назначены"}</p>
           <p>Права: ${account.permissions.map(escapeHTML).join(", ") || "не назначены"}</p>`;
         content.append(card);
@@ -1058,7 +1097,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   };
   const entityName = (record) => record.name || record.shortName || record.code || `#${record.id}`;
   const entityState = (view) => entityStates[view] ||= {
-    q: "", companyId: "", pipelineStage: "", deleted: "exclude", offset: 0, records: [], companies: []
+    q: "", companyId: "", pipelineStage: "", deleted: "exclude", offset: 0, records: [], companies: [],
+    projectId: null
   };
   const entityHashParts = () => {
     const hash = decodeURIComponent(location.hash.slice(1));
@@ -1074,6 +1114,20 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     if (state.companies.length) return;
     const data = await crmQuery("/companies", { limit: 200, deleted: "exclude" });
     state.companies = data.companies || [];
+  };
+  const setContactProjectFilter = (state) => {
+    if (state.projectId === selectedProjectId) return;
+    const company = state.companies.find((item) => item.code?.toLowerCase() === selectedProjectId);
+    state.companyId = selectedProjectId === "synapse-business" ? "" : String(company?.id || "");
+    state.projectId = selectedProjectId;
+  };
+  const applyContactProjectFilter = async () => {
+    const state = entityState("crm-contacts");
+    await loadEntityCompanies(state);
+    setContactProjectFilter(state);
+    const query = state.companyId ? `?companyId=${encodeURIComponent(state.companyId)}` : "";
+    history.replaceState(null, "", `#crm-contacts${query}`);
+    await renderEntityList("crm-contacts", true);
   };
   const renderCrmEntityRoute = async () => {
     const { parts: [view, route], params } = entityHashParts();
@@ -1098,6 +1152,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       state.records = [];
     }
     if (config.companyFilter) await loadEntityCompanies(state);
+    if (view === "crm-contacts") setContactProjectFilter(state);
     const params = {
       q: state.q,
       companyId: state.companyId,
@@ -1176,6 +1231,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     });
     content.querySelector("[data-company-filter]")?.addEventListener("change", (event) => {
       state.companyId = event.target.value;
+      state.projectId = selectedProjectId;
       const query = state.companyId ? `?companyId=${encodeURIComponent(state.companyId)}` : "";
       history.replaceState(null, "", `#${view}${query}`);
       renderEntityList(view, true);
@@ -1513,6 +1569,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const funnelLabels = Object.fromEntries(CRM_STAGES.map((stage) => [stage.id, stage.label]));
   const renderAnalytics = (dashboard, summary, expenses) => {
     const values = dashboard.summary || {};
+    const expensesUnavailable = selectedProjectId !== "synapse-business" &&
+      (values.expenses === null || dashboard.expensesScope || summary.expensesScope);
     const funnel = dashboard.funnel || {};
     const sources = Array.isArray(summary.sources)
       ? [...summary.sources].sort((left, right) => (right.revenue || 0) - (left.revenue || 0)) : [];
@@ -1523,8 +1581,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       ["Пришли", values.visited || 0],
       ["Продажи", values.sales || 0],
       ["Выручка", formatMoney(values.revenue)],
-      ["Расходы", formatMoney(values.expenses)],
-      ["ROMI", formatROMI(values.romi)]
+      ["Расходы", expensesUnavailable ? "по компании не ведутся" : formatMoney(values.expenses)],
+      ["ROMI", expensesUnavailable ? "по компании не ведутся" : formatROMI(values.romi)]
     ];
     const sourceRows = sources.map((source) => `<tr><td>${escapeHTML(source.source)}</td>
       <td>${escapeHTML(source.leads)}</td><td>${escapeHTML(source.booked)}</td>
@@ -1549,7 +1607,18 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
           <th>Источник</th><th>Заявки</th><th>Записи</th><th>Визиты</th><th>Продажи</th>
           <th>Выручка</th><th>Расходы</th><th>ROMI</th></tr></thead><tbody>${sourceRows}</tbody></table></div>` :
           '<div class="crm-empty">Данных по источникам нет</div>'}</section>`;
-    byId("analytics-csv").addEventListener("click", () => crmQuery("/leads.csv", {}, { open: true }));
+    byId("analytics-csv").addEventListener("click", () => {
+      crmQuery("/leads.csv", { ...analyticsState.range, ...scopeParams() }, { open: true });
+    });
+    const scopedExpenses = selectedProjectId !== "synapse-business";
+    byId("expenses-section").querySelector("h2").hidden = scopedExpenses;
+    byId("expense-form").hidden = scopedExpenses || !identity.permissions.includes("crm.edit");
+    byId("expense-result").hidden = scopedExpenses;
+    if (scopedExpenses) {
+      byId("expenses-content").innerHTML =
+        '<p class="notice">Расходы ведутся по всему бизнесу: выберите проект «Synapse Бизнес»</p>';
+      return;
+    }
     const expenseRows = expenses.map((expense) => `<tr><td>${escapeHTML(expense.spentAt.slice(0, 10))}</td>
       <td>${escapeHTML(expense.source)}</td><td>${escapeHTML(formatMoney(expense.amount))}</td>
       <td>${escapeHTML(expense.comment || "—")}</td></tr>`).join("");
@@ -1564,9 +1633,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     const range = analyticsState.range;
     try {
       const [dashboard, summary, expensePayload] = await Promise.all([
-        crmQuery("/dashboard", { period: analyticsState.period, ...range }),
-        crmQuery("/summary", range),
-        crmQuery("/expenses", range)
+        crmQuery("/dashboard", { period: analyticsState.period, ...range, ...scopeParams() }),
+        crmQuery("/summary", { ...range, ...scopeParams() }),
+        selectedProjectId === "synapse-business" ? crmQuery("/expenses", range) : { expenses: [] }
       ]);
       renderAnalytics(dashboard, summary, expensePayload.expenses || []);
     } catch (error) {
@@ -1665,7 +1734,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     if (currentView !== "crm") return;
     byId("crm-content").innerHTML = '<div class="crm-empty">Загрузка CRM…</div>';
     try {
-      renderCRMData(await crmQuery("/dashboard", crmState));
+      renderCRMData(await crmQuery("/dashboard", { ...crmState, ...scopeParams() }));
     } catch (error) {
       byId("crm-content").innerHTML = '<div class="crm-error" role="alert">Не удалось загрузить текущую CRM.</div>';
     }
@@ -1702,7 +1771,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         await crmQuery(`/leads/${encodeURIComponent(id)}`, {}, csrfOptions("PATCH", body));
         await loadCRM();
       } catch (error) {
-        byId("crm-content").insertAdjacentHTML("afterbegin", '<div class="crm-error" role="alert">Не удалось сохранить изменение CRM.</div>');
+        byId("crm-content").insertAdjacentHTML("afterbegin",
+          '<div class="crm-error" role="alert">Не удалось сохранить изменение CRM.</div>');
       }
     });
     byId("crm-content").addEventListener("click", async (event) => {
