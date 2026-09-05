@@ -3699,5 +3699,71 @@
         .after-hero .program-card--photo .program-card__body { flex: 1 1 auto; display: flex; flex-direction: column; }
         .after-hero .program-card--photo .program-facts { margin-top: 1.1rem; }
       </style>
+  <style>/* Отзыв в хиро кликабельный; итог квиза выглядит как карточка услуги с фото */
+    .hero-review { cursor: pointer; transition: transform 200ms, border-color 200ms; }
+    .hero-review:hover, .hero-review:focus-visible { transform: translateY(-2px); outline: none; }
+    .quiz-result { position: relative; overflow: hidden; padding: 0.95rem; min-height: 26rem; display: flex; flex-direction: column; justify-content: flex-end; background: #1b241d; border: 1px solid rgba(255,255,255,.18); border-radius: 1.25rem; color: var(--ink); }
+    .quiz-result::before, .quiz-result::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
+    .quiz-result::before { z-index: 0; background-image: var(--card-photo); background-size: cover; background-position: center 45%; filter: saturate(1.08); }
+    .quiz-result::after { z-index: 1; background: linear-gradient(rgba(8,16,12,.14) 0%, rgba(8,16,12,.08) 55%, rgba(8,16,12,.30) 100%); }
+    .quiz-result__body { position: relative; z-index: 2; padding: clamp(1.2rem, 2.4vw, 1.9rem); border-radius: .95rem; background: linear-gradient(rgba(6,13,9,.80) 0%, rgba(6,13,9,.64) 100%); backdrop-filter: blur(4px); }
+    .quiz-result h3 { margin: 0; font-family: Lora, Georgia, serif; font-weight: 400; line-height: 1.2; font-size: clamp(1.6rem, 3vw, 2.3rem); color: var(--ink); }
+    .quiz-result p { margin: .85rem 0 0; color: var(--ink-dim); line-height: 1.65; }
+  </style>
+  <script>
+  (function () {
+    var REVIEWS = "https://yandex.ru/maps/org/alvi/132486598882/reviews/";
+    document.querySelectorAll(".hero-review").forEach(function (q) {
+      if (q.dataset.reviewLink) return;
+      q.dataset.reviewLink = "1";
+      q.setAttribute("role", "link");
+      q.setAttribute("tabindex", "0");
+      q.title = "Открыть отзывы на Яндекс Картах";
+      var go = function () { window.open(REVIEWS, "_blank", "noopener"); };
+      q.addEventListener("click", go);
+      q.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+    });
+
+    var box = document.getElementById("quiz-result");
+    if (!box) return;
+    var titleEl = document.getElementById("quiz-result-title");
+    var copyEl = document.getElementById("quiz-result-copy");
+    if (titleEl && copyEl && !box.querySelector(".quiz-result__body")) {
+      var body = document.createElement("div");
+      body.className = "quiz-result__body";
+      box.appendChild(body);
+      body.appendChild(titleEl);
+      body.appendChild(copyEl);
+    }
+    var items = null;
+    var loadItems = function () {
+      if (items) return Promise.resolve(items);
+      var take = function (d) {
+        items = [];
+        (d.categories || []).forEach(function (c) { (c.items || []).forEach(function (it) { items.push(it); }); });
+        return items;
+      };
+      return fetch("/api/price").then(function (r) { if (!r.ok) throw 0; return r.json(); })
+        .catch(function () { return fetch("data/price.json").then(function (x) { return x.json(); }); })
+        .then(take).catch(function () { items = []; return items; });
+    };
+    var norm = function (v) { return String(v || "").replace(/[«»"]/g, "").split("—")[0].trim().toLowerCase(); };
+    var apply = function () {
+      if (box.hidden) return;
+      var t = norm(titleEl && titleEl.textContent);
+      if (!t) return;
+      loadItems().then(function (list) {
+        var hit = null;
+        for (var i = 0; i < list.length; i++) { if (norm(list[i].title) === t) { hit = list[i]; break; } }
+        if (!hit) { for (var j = 0; j < list.length; j++) { var n = norm(list[j].title); if (n && t.indexOf(n) === 0) { hit = list[j]; break; } } }
+        if (!hit) return;
+        var photo = hit.photo || ("img/card-" + hit.id + ".jpg");
+        box.style.setProperty("--card-photo", "url(" + JSON.stringify(photo) + ")");
+      });
+    };
+    new MutationObserver(apply).observe(box, { attributes: true, childList: true, subtree: true, characterData: true });
+    apply();
+  })();
+  </script>
 </body>
 </html>
