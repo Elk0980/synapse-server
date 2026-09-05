@@ -1132,7 +1132,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const renderCrmEntityRoute = async () => {
     const { parts: [view, route], params } = entityHashParts();
     const config = CRM_ENTITIES[view];
-    if (!route && config.companyFilter) entityState(view).companyId = params.get("companyId") || "";
+    if (!route && config.companyFilter) {
+      const state = entityState(view);
+      state.companyId = params.get("companyId") || "";
+      if (view === "crm-contacts") {
+        state.projectId = params.has("companyId") ? selectedProjectId : null;
+      }
+    }
     const content = byId(`${view}-content`);
     content.textContent = "Загрузка…";
     try {
@@ -1584,12 +1590,15 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       ["Расходы", expensesUnavailable ? "по компании не ведутся" : formatMoney(values.expenses)],
       ["ROMI", expensesUnavailable ? "по компании не ведутся" : formatROMI(values.romi)]
     ];
-    const sourceRows = sources.map((source) => `<tr><td>${escapeHTML(source.source)}</td>
-      <td>${escapeHTML(source.leads)}</td><td>${escapeHTML(source.booked)}</td>
-      <td>${escapeHTML(source.visited)}</td><td>${escapeHTML(source.sales)}</td>
-      <td>${escapeHTML(formatMoney(source.revenue))}</td>
-      <td>${escapeHTML(formatMoney(source.expenses))}</td>
-      <td>${escapeHTML(formatROMI(source.romi))}</td></tr>`).join("");
+    const sourceRows = sources.map((source) => {
+      const sourceExpensesUnavailable = expensesUnavailable || source.expenses === null;
+      return `<tr><td>${escapeHTML(source.source)}</td>
+        <td>${escapeHTML(source.leads)}</td><td>${escapeHTML(source.booked)}</td>
+        <td>${escapeHTML(source.visited)}</td><td>${escapeHTML(source.sales)}</td>
+        <td>${escapeHTML(formatMoney(source.revenue))}</td>
+        <td>${escapeHTML(sourceExpensesUnavailable ? "—" : formatMoney(source.expenses))}</td>
+        <td>${escapeHTML(sourceExpensesUnavailable ? "—" : formatROMI(source.romi))}</td></tr>`;
+    }).join("");
     const funnelRows = CRM_STAGES.map((stage) => {
       const item = funnel[stage.id] || { count: 0, conversion: 0 };
       const width = Math.max(0, Math.min(100, Number(item.conversion) || 0));
