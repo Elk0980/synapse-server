@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#0b0908">
 <meta name="color-scheme" content="dark">
 <title>Кабинет — Synapse Business</title>
+<link rel="stylesheet" href="cabinet/clients.css">
 <script>document.documentElement.classList.replace("no-js", "js");</script>
 <style>
 :root {
@@ -721,14 +722,29 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     </section>
     <section class="view-panel" id="crm-contacts-view" data-view="crm-contacts" hidden>
       <div class="content-header"><h1>Контрагенты</h1></div>
+      <nav class="crm-periods client-tabs" aria-label="Раздел базы клиентов">
+        <a class="crm-period" href="#crm-legal">Юрлица</a>
+        <a class="crm-period" href="#crm-contacts" aria-current="page">Контрагенты</a>
+        <a class="crm-period" href="#crm-companies">Компании</a>
+      </nav>
       <div class="card"><div id="crm-contacts-content" aria-live="polite"></div></div>
     </section>
     <section class="view-panel" id="crm-companies-view" data-view="crm-companies" hidden>
       <div class="content-header"><h1>Компании</h1></div>
+      <nav class="crm-periods client-tabs" aria-label="Раздел базы клиентов">
+        <a class="crm-period" href="#crm-legal">Юрлица</a>
+        <a class="crm-period" href="#crm-contacts">Контрагенты</a>
+        <a class="crm-period" href="#crm-companies" aria-current="page">Компании</a>
+      </nav>
       <div class="card"><div id="crm-companies-content" aria-live="polite"></div></div>
     </section>
     <section class="view-panel" id="crm-legal-view" data-view="crm-legal" hidden>
       <div class="content-header"><h1>Юрлица</h1></div>
+      <nav class="crm-periods client-tabs" aria-label="Раздел базы клиентов">
+        <a class="crm-period" href="#crm-legal" aria-current="page">Юрлица</a>
+        <a class="crm-period" href="#crm-contacts">Контрагенты</a>
+        <a class="crm-period" href="#crm-companies">Компании</a>
+      </nav>
       <div class="card"><div id="crm-legal-content" aria-live="polite"></div></div>
     </section>
     <section class="view-panel" id="tasks-view" data-view="tasks" hidden>
