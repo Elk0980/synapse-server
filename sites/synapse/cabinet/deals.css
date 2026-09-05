@@ -1,6 +1,6 @@
 .deals-board {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 175px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
   gap: 12px;
   align-items: start;
 }
@@ -257,5 +257,118 @@
   }
   .deals-dialog-heading h2 {
     font-size: 1.1rem;
+  }
+}
+.deals-pipelines {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.deals-pipelines [aria-selected="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--surface-soft);
+}
+.deals-enroll {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin-top: 20px;
+}
+.deals-enroll[hidden] {
+  display: none;
+}
+.deals-enroll label {
+  display: grid;
+  gap: 8px;
+  flex: 1 1 240px;
+  min-width: 0;
+  max-width: 420px;
+}
+.deals-enroll select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--text);
+  background: var(--surface);
+}
+.deals-attention {
+  justify-self: start;
+  padding: 3px 6px;
+  border: 1px solid #a87838;
+  border-radius: 6px;
+  color: #f1c27c;
+  font-size: 0.74rem;
+}
+.deals-pipeline-settings,
+.deals-rules,
+.deals-service-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.deals-pipeline-settings {
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+}
+.deals-pipeline-settings .crm-actions {
+  grid-column: 1 / -1;
+}
+.deals-pipeline-settings > button {
+  align-self: end;
+}
+.deals-rules label,
+.deals-pipeline-settings label,
+.deals-service-fields label {
+  min-width: 0;
+}
+.deals-rules input,
+.deals-pipeline-settings input,
+.deals-pipeline-settings select,
+.deals-service-fields input,
+.deals-service-fields select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.deals-service-fields {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.deals-service-form {
+  display: block;
+}
+.deals-stage-row .deals-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  grid-column: 1 / -1;
+}
+.deals-stage-row .deals-check input {
+  width: auto;
+}
+.deals-reason {
+  width: 480px;
+}
+.deals-reason .crm-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.deals-reason textarea {
+  min-height: 110px;
+  width: 100%;
+  min-width: 0;
+}
+@media (max-width: 760px) {
+  .deals-pipeline-settings,
+  .deals-rules,
+  .deals-service-fields {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

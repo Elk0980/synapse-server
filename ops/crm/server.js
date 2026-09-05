@@ -301,6 +301,147 @@ migrate(4, () => {
   `);
 });
 
+const PIPELINE_DEFAULTS = {
+  sale: [
+    ['new', 'Новый', 'open'], ['contact', 'Контакт', 'open'], ['meeting', 'Встреча', 'open'],
+    ['pilot', 'Пилот', 'open'], ['paid', 'Оплата', 'won'], ['rejected', 'Отказ', 'lost'],
+  ],
+  service: [
+    ['onboarding', 'Внедрение', 'open'], ['active', 'Активен', 'open'], ['renewal', 'Продление', 'open'],
+    ['upsell', 'Доп. продажа', 'open'], ['risk', 'Риск ухода', 'open', true], ['churned', 'Ушёл', 'lost'],
+  ],
+};
+
+migrate(5, () => {
+  const previousStages = db.prepare('SELECT * FROM pipeline_stages ORDER BY position, id').all();
+  db.exec(`
+    CREATE TABLE pipelines (
+      id INTEGER PRIMARY KEY, code TEXT UNIQUE NOT NULL, label TEXT NOT NULL, position INTEGER NOT NULL,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    );
+    ALTER TABLE pipeline_stages RENAME TO pipeline_stages_legacy;
+    CREATE TABLE pipeline_stages (
+      id INTEGER PRIMARY KEY, pipeline_id INTEGER NOT NULL REFERENCES pipelines(id), code TEXT NOT NULL,
+      label TEXT NOT NULL, position INTEGER NOT NULL, is_final INTEGER NOT NULL DEFAULT 0,
+      kind TEXT NOT NULL DEFAULT 'open' CHECK(kind IN ('open', 'won', 'lost')),
+      attention INTEGER NOT NULL DEFAULT 0 CHECK(attention IN (0, 1)),
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(pipeline_id, code)
+    );
+    CREATE TABLE company_pipeline_state (
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      pipeline_id INTEGER NOT NULL REFERENCES pipelines(id), stage_code TEXT NOT NULL,
+      entered_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      return_task_created INTEGER NOT NULL DEFAULT 0 CHECK(return_task_created IN (0, 1)),
+      PRIMARY KEY(company_id, pipeline_id),
+      FOREIGN KEY(pipeline_id, stage_code) REFERENCES pipeline_stages(pipeline_id, code)
+    );
+    CREATE TABLE company_stage_history (
+      id INTEGER PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      pipeline_code TEXT NOT NULL, from_code TEXT, to_code TEXT, at TEXT NOT NULL,
+      by TEXT NOT NULL CHECK(by IN ('auto', 'user')), reason TEXT
+    );
+    CREATE INDEX company_stage_history_company_idx ON company_stage_history(company_id, at, id);
+    CREATE TABLE company_service (
+      company_id INTEGER PRIMARY KEY REFERENCES companies(id) ON DELETE CASCADE, paid_until DATE,
+      monthly_amount REAL CHECK(monthly_amount IS NULL OR monthly_amount >= 0),
+      last_touch_at TEXT, next_touch_at TEXT, client_owner_contact_id INTEGER REFERENCES contacts(id)
+    );
+    CREATE TABLE pipeline_rules (
+      id INTEGER PRIMARY KEY CHECK(id = 1), silent_days INTEGER NOT NULL, renewal_days INTEGER NOT NULL,
+      rejected_return_months INTEGER NOT NULL, churned_return_months INTEGER NOT NULL
+    );
+    INSERT INTO pipeline_rules VALUES (1, 14, 10, 3, 6);
+  `);
+  const now = new Date().toISOString();
+  const insertPipeline = db.prepare(`
+    INSERT INTO pipelines (code, label, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
+  `);
+  insertPipeline.run('sale', 'Продажа', 0, now, now);
+  insertPipeline.run('service', 'Сервис', 1, now, now);
+  const pipelineIds = Object.fromEntries(db.prepare('SELECT id, code FROM pipelines').all()
+    .map((pipeline) => [pipeline.code, pipeline.id]));
+  const legacyCodes = new Map([['in_progress', 'contact'], ['payment', 'paid'], ['repeat', 'paid']]);
+  const legacyKinds = new Map([['new', 'open'], ['in_progress', 'open'], ['payment', 'open'],
+    ['repeat', 'won'], ['rejected', 'lost']]);
+  const newCodes = new Set(['contact', 'meeting', 'pilot', 'paid']);
+  const reservedCodes = new Set([...previousStages.map((stage) => stage.code),
+    ...PIPELINE_DEFAULTS.sale.map((stage) => stage[0])]);
+  const renamedCodes = new Map();
+  for (const stage of previousStages) {
+    if (newCodes.has(stage.code)) renamedCodes.set(stage.code, pipelineStageCode(stage.code, reservedCodes));
+  }
+  const migratedCode = (code) => renamedCodes.get(code) || legacyCodes.get(code) || code;
+  const saleStages = [];
+  for (const previous of previousStages) {
+    const code = migratedCode(previous.code);
+    if (saleStages.some((stage) => stage.code === code)) continue;
+    const defaults = PIPELINE_DEFAULTS.sale.find((stage) => stage[0] === code);
+    const oldLabel = previous.code === 'in_progress' ? 'В работе' :
+      previous.code === 'repeat' ? 'Повторная продажа' : null;
+    const kind = defaults && previous.kind === legacyKinds.get(previous.code) ? defaults[2] : previous.kind;
+    saleStages.push({ code, label: defaults && previous.label === oldLabel ? defaults[1] : previous.label,
+      kind, attention: false });
+  }
+  for (const [index, [code, label, kind]] of PIPELINE_DEFAULTS.sale.entries()) {
+    if (saleStages.some((stage) => stage.code === code)) continue;
+    const following = new Set(PIPELINE_DEFAULTS.sale.slice(index + 1).map((stage) => stage[0]));
+    const position = saleStages.findIndex((stage) => following.has(stage.code));
+    saleStages.splice(position < 0 ? saleStages.length : position, 0, { code, label, kind, attention: false });
+  }
+  const companies = db.prepare('SELECT id, pipeline_stage FROM companies').all();
+  for (const company of companies) {
+    const code = migratedCode(company.pipeline_stage);
+    if (code && !saleStages.some((stage) => stage.code === code)) {
+      saleStages.push({ code, label: code, kind: 'open', attention: false });
+    }
+  }
+  const insertStage = db.prepare(`
+    INSERT INTO pipeline_stages
+      (pipeline_id, code, label, position, kind, is_final, attention, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const serviceStages = PIPELINE_DEFAULTS.service.map(([code, label, kind, attention = false]) =>
+    ({ code, label, kind, attention }));
+  for (const [pipeline, stages] of [['sale', saleStages], ['service', serviceStages]]) {
+    stages.forEach((stage, position) => insertStage.run(pipelineIds[pipeline], stage.code, stage.label,
+      position, stage.kind, Number(stage.kind !== 'open'), Number(stage.attention), now, now));
+  }
+  const insertState = db.prepare(`
+    INSERT INTO company_pipeline_state (company_id, pipeline_id, stage_code, entered_at, updated_at)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  const insertHistory = db.prepare(`
+    INSERT INTO company_stage_history (company_id, pipeline_code, from_code, to_code, at, by, reason)
+    VALUES (?, ?, NULL, ?, ?, 'auto', 'Миграция воронок')
+  `);
+  for (const company of companies) {
+    if (company.pipeline_stage === null) continue;
+    const code = migratedCode(company.pipeline_stage);
+    insertState.run(company.id, pipelineIds.sale, code, now, now);
+    insertHistory.run(company.id, 'sale', code, now);
+    db.prepare('UPDATE companies SET pipeline_stage = ? WHERE id = ?').run(code, company.id);
+    if (company.pipeline_stage === 'repeat') {
+      insertState.run(company.id, pipelineIds.service, 'active', now, now);
+      insertHistory.run(company.id, 'service', 'active', now);
+    }
+  }
+  db.exec('DROP TABLE pipeline_stages_legacy');
+  const taskObjects = db.prepare(`
+    SELECT sql FROM sqlite_master WHERE tbl_name = 'tasks' AND type IN ('index', 'trigger') AND sql IS NOT NULL
+  `).all();
+  const taskSequence = db.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'tasks'").get()?.seq || 0;
+  const taskSchema = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tasks'").get().sql;
+  const expanded = taskSchema.replace(/CHECK\s*\(\s*source\s+IN\s*\(([^)]*)\)\s*\)/i,
+    (_, sources) => `CHECK(source IN (${sources}, 'pipeline'))`);
+  if (expanded === taskSchema) throw new Error('Не удалось расширить допустимые источники задач');
+  db.exec(expanded.replace(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?["`]?tasks["`]?/i, 'CREATE TABLE tasks_v5'));
+  const taskColumns = [...tableColumns('tasks')].map((name) => `"${name}"`).join(',');
+  db.exec(`INSERT INTO tasks_v5 (${taskColumns}) SELECT ${taskColumns} FROM tasks;
+    DROP TABLE tasks; ALTER TABLE tasks_v5 RENAME TO tasks;`);
+  db.prepare("UPDATE sqlite_sequence SET seq = MAX(seq, ?) WHERE name = 'tasks'").run(taskSequence);
+  for (const object of taskObjects) db.exec(object.sql);
+});
+
 const foreignKeyErrors = db.prepare('PRAGMA foreign_key_check').all();
 if (foreignKeyErrors.length) throw new Error('Нарушена ссылочная целостность базы данных');
 
@@ -630,7 +771,7 @@ const TASK_ENUMS = {
   assigneeRole: new Set(['owner', 'admin', 'marketer', 'synapse']),
   status: new Set(['inbox', 'planned', 'in_progress', 'done', 'cancelled']),
   priority: new Set(['low', 'normal', 'high', 'urgent']),
-  source: new Set(['manual', 'chat', 'telegram']),
+  source: new Set(['manual', 'chat', 'telegram', 'pipeline']),
 };
 
 function validateTask(body, patch) {
@@ -682,6 +823,7 @@ function validateEntity(config, body, patch = false, current = null) {
   const keys = Object.keys(body);
   if (!keys.length) fail(400, 'Пустой объект нельзя изменить', { code: 'VALIDATION_ERROR' });
   for (const key of keys) {
+    if (config.table === 'companies' && key === 'reason' && Object.hasOwn(body, 'pipelineStage')) continue;
     if (SYSTEM_FIELDS.has(key) || SECRET_PATTERN.test(key) || !config.fields.includes(key)) {
       fail(400, `Неизвестное или запрещённое поле «${key}»`, { code: 'VALIDATION_ERROR', field: key });
     }
@@ -702,7 +844,8 @@ function validateEntity(config, body, patch = false, current = null) {
     if (field === 'legalForm' && !['ip', 'ooo'].includes(value)) fail(400, 'legalForm должен быть ip или ooo',
       { code: 'VALIDATION_ERROR', field });
     if (field === 'pipelineStage' && value !== null) {
-      if (!db.prepare('SELECT 1 FROM pipeline_stages WHERE code = ?').get(value)) {
+      if (!db.prepare(`SELECT 1 FROM pipeline_stages s JOIN pipelines p ON p.id = s.pipeline_id
+        WHERE p.code = 'sale' AND s.code = ?`).get(value)) {
         fail(400, 'Неизвестный этап компании', { code: 'VALIDATION_ERROR', field });
       }
     }
@@ -744,6 +887,7 @@ function serializeEntity(config, row, brief = false) {
     const value = row[column(config, field)];
     result[field] = JSON_FIELDS.has(field) && value ? JSON.parse(value) : value;
   }
+  if (config.table === 'companies') Object.assign(result, companyPipelineDetails(row.id));
   return result;
 }
 function entityRow(config, id, includeDeleted = false) {
@@ -1165,9 +1309,18 @@ async function handleEntityRoutes(request, response, url, cors) {
       if (config.table === 'contacts' && values.phone !== undefined) { cols.push('normalized_phone');
         entries.push(['normalizedPhone', values.phone ? normalizeContact(values.phone) : null]); }
       try {
-        const result = db.prepare(`INSERT INTO ${config.table} (created_at,updated_at,${cols.join(',')})
-          VALUES (?,?,${cols.map(() => '?').join(',')})`).run(now, now, ...entries.map(([, value]) => value));
-        const id = Number(result.lastInsertRowid); send(response, 201, serializeEntity(config, entityRow(config, id)),
+        const insert = () => {
+          const result = db.prepare(`INSERT INTO ${config.table} (created_at,updated_at,${cols.join(',')})
+            VALUES (?,?,${cols.map(() => '?').join(',')})`).run(now, now, ...entries.map(([, value]) => value));
+          const id = Number(result.lastInsertRowid);
+          if (config.table === 'companies' && values.pipelineStage !== undefined) {
+            changeCompanyPipeline(entityRow(config, id), pipelineRow('sale'), values.pipelineStage,
+              body.reason, 'user', now);
+          }
+          return id;
+        };
+        const id = config.table === 'companies' ? pipelineTransaction(insert) : insert();
+        send(response, 201, serializeEntity(config, entityRow(config, id)),
           { ...cors, Location: `/${config.path}/${id}` }); return true;
       } catch (error) { conflict(error); }
     }
@@ -1181,7 +1334,8 @@ async function handleEntityRoutes(request, response, url, cors) {
     if (match && request.method === 'PATCH') {
       const id = entityId(match[1]); const row = entityRow(config, id, true);
       if (row.is_deleted) fail(409, 'Сначала восстановите удалённую карточку', { code: 'DELETED_ENTITY' });
-      const values = validateEntity(config, await readJson(request), true, row); const entries = Object.entries(values);
+      const body = await readJson(request);
+      const values = validateEntity(config, body, true, row); const entries = Object.entries(values);
       const assignments = entries.map(([field]) => `${column(config, field)}=?`);
       const parameters = entries.map(([, value]) => value);
       if (config.table === 'contacts' && values.phone !== undefined) { assignments.push('normalized_phone=?');
@@ -1190,8 +1344,14 @@ async function handleEntityRoutes(request, response, url, cors) {
       const run = () => db.prepare(`UPDATE ${config.table} SET ${assignments.join(',')},updated_at=? WHERE id=?`)
         .run(...parameters, now, id);
       try {
-        if (config.table === 'companies' && values.code !== undefined) { db.exec('BEGIN IMMEDIATE');
-          try { run(); db.exec('COMMIT'); } catch (error) { db.exec('ROLLBACK'); throw error; } } else run();
+        if (config.table === 'companies') {
+          pipelineTransaction(() => {
+            run();
+            if (values.pipelineStage !== undefined) {
+              changeCompanyPipeline(row, pipelineRow('sale'), values.pipelineStage, body.reason, 'user', now);
+            }
+          });
+        } else run();
       } catch (error) { conflict(error); }
       send(response, 200, serializeEntity(config, entityRow(config, id)), cors); return true;
     }
@@ -1292,8 +1452,233 @@ async function handleRelationRoutes(request, response, url, cors) {
   return false;
 }
 
-function pipelineStages() {
-  return db.prepare('SELECT id, code, label, position, kind FROM pipeline_stages ORDER BY position, id').all();
+function pipelineList() {
+  return db.prepare('SELECT id, code, label, position FROM pipelines ORDER BY position, id').all();
+}
+
+function pipelineRow(code = 'sale') {
+  const pipeline = typeof code === 'string' && db.prepare('SELECT * FROM pipelines WHERE code = ?').get(code);
+  if (!pipeline) fail(400, 'Неизвестная воронка', { code: 'VALIDATION_ERROR', field: 'pipeline' });
+  return pipeline;
+}
+
+function pipelineStages(code = 'sale') {
+  const pipeline = pipelineRow(code);
+  const defaults = Object.hasOwn(PIPELINE_DEFAULTS, code) ? PIPELINE_DEFAULTS[code] : [];
+  const systemCodes = new Set(defaults.map((stage) => stage[0]));
+  return db.prepare(`SELECT id, code, label, position, kind, attention FROM pipeline_stages
+    WHERE pipeline_id = ? ORDER BY position, id`).all(pipeline.id).map((stage) =>
+    ({ ...stage, attention: Boolean(stage.attention), system: systemCodes.has(stage.code) }));
+}
+
+function pipelineTransaction(action) {
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const result = action();
+    db.exec('COMMIT');
+    return result;
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+function companyPipelineDetails(companyId) {
+  const states = db.prepare(`SELECT p.code, s.stage_code, s.entered_at FROM company_pipeline_state s
+    JOIN pipelines p ON p.id = s.pipeline_id WHERE s.company_id = ? ORDER BY p.position, p.id`).all(companyId);
+  const service = db.prepare(`SELECT s.*, c.id owner_id, c.name owner_name FROM company_service s
+    LEFT JOIN contacts c ON c.id = s.client_owner_contact_id AND c.is_deleted = 0
+    WHERE s.company_id = ?`).get(companyId);
+  return {
+    pipelines: Object.fromEntries(states.map((state) => [state.code,
+      { stage: state.stage_code, enteredAt: state.entered_at }])),
+    service: {
+      paidUntil: service?.paid_until ?? null, monthlyAmount: service?.monthly_amount ?? null,
+      lastTouchAt: service?.last_touch_at ?? null, nextTouchAt: service?.next_touch_at ?? null,
+      clientOwnerContactId: service?.client_owner_contact_id ?? null,
+      clientOwnerContact: service?.owner_id ? { id: service.owner_id, name: service.owner_name } : null,
+    },
+  };
+}
+
+function ensureServiceOnboarding(company, now) {
+  const service = pipelineRow('service');
+  if (!db.prepare('SELECT 1 FROM company_pipeline_state WHERE company_id = ? AND pipeline_id = ?')
+    .get(company.id, service.id)) {
+    changeCompanyPipeline(company, service, 'onboarding', 'Оплата в воронке продажи', 'auto', now);
+  }
+}
+
+function changeCompanyPipeline(company, pipeline, stageCode, reason, by = 'user', now = new Date().toISOString()) {
+  const old = db.prepare('SELECT * FROM company_pipeline_state WHERE company_id = ? AND pipeline_id = ?')
+    .get(company.id, pipeline.id);
+  const cleanReason = reason === undefined ? null : checkedString(reason, 'reason');
+  if (stageCode !== null && !db.prepare('SELECT 1 FROM pipeline_stages WHERE pipeline_id = ? AND code = ?')
+    .get(pipeline.id, stageCode)) {
+    fail(400, 'Этап не принадлежит выбранной воронке', { code: 'VALIDATION_ERROR', field: 'stageCode' });
+  }
+  if ((old?.stage_code ?? null) === stageCode) {
+    if (pipeline.code === 'sale' && stageCode === 'paid') ensureServiceOnboarding(company, now);
+    return false;
+  }
+  const needsReason = pipeline.code === 'sale' && stageCode === 'rejected' ||
+    pipeline.code === 'service' && stageCode === 'churned';
+  if (needsReason && !cleanReason) {
+    fail(400, 'Укажите причину отказа или ухода', { code: 'VALIDATION_ERROR', field: 'reason' });
+  }
+  if (stageCode === null) {
+    db.prepare('DELETE FROM company_pipeline_state WHERE company_id = ? AND pipeline_id = ?')
+      .run(company.id, pipeline.id);
+  } else {
+    db.prepare(`INSERT INTO company_pipeline_state
+      (company_id, pipeline_id, stage_code, entered_at, updated_at, return_task_created) VALUES (?, ?, ?, ?, ?, 0)
+      ON CONFLICT(company_id, pipeline_id) DO UPDATE SET stage_code = excluded.stage_code,
+        entered_at = excluded.entered_at, updated_at = excluded.updated_at, return_task_created = 0`)
+      .run(company.id, pipeline.id, stageCode, now, now);
+  }
+  db.prepare(`INSERT INTO company_stage_history (company_id, pipeline_code, from_code, to_code, at, by, reason)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`).run(company.id, pipeline.code, old?.stage_code ?? null,
+      stageCode, now, by, cleanReason);
+  if (pipeline.code === 'sale') {
+    db.prepare('UPDATE companies SET pipeline_stage = ?, updated_at = ? WHERE id = ?').run(stageCode, now, company.id);
+  } else {
+    db.prepare('UPDATE companies SET updated_at = ? WHERE id = ?').run(now, company.id);
+  }
+  if (pipeline.code === 'sale' && stageCode === 'paid') {
+    ensureServiceOnboarding(company, now);
+  }
+  return true;
+}
+
+function moveCompanyPipeline(id, body) {
+  if (Object.keys(body).some((key) => !['pipeline', 'stageCode', 'reason'].includes(key))) {
+    fail(400, 'Неизвестное поле перехода', { code: 'VALIDATION_ERROR' });
+  }
+  const pipeline = pipelineRow(body.pipeline ?? 'sale');
+  const stageCode = checkedString(body.stageCode, 'stageCode', false);
+  return pipelineTransaction(() => {
+    const company = entityRow(ENTITY_CONFIG.companies, id);
+    changeCompanyPipeline(company, pipeline, stageCode, body.reason);
+    return { company: serializeEntity(ENTITY_CONFIG.companies, entityRow(ENTITY_CONFIG.companies, id)) };
+  });
+}
+
+function serviceTimestamp(value, field) {
+  if (typeof value !== 'string') fail(400, 'Ожидалась дата ISO 8601', { code: 'VALIDATION_ERROR', field });
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return `${validDay(value, field)}T00:00:00.000Z`;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) {
+    fail(400, 'Дата должна содержать часовой пояс', { code: 'VALIDATION_ERROR', field });
+  }
+  validDay(value.slice(0, 10), field);
+  return date(value, field);
+}
+
+function patchCompanyService(id, body) {
+  const fields = { paidUntil: 'paid_until', monthlyAmount: 'monthly_amount', lastTouchAt: 'last_touch_at',
+    nextTouchAt: 'next_touch_at', clientOwnerContactId: 'client_owner_contact_id' };
+  const entries = Object.entries(body);
+  if (!entries.length || entries.some(([key]) => !Object.hasOwn(fields, key))) {
+    fail(400, 'Некорректные поля сопровождения', { code: 'VALIDATION_ERROR' });
+  }
+  const values = entries.map(([field, value]) => {
+    if (value === null) return [fields[field], null];
+    if (field === 'monthlyAmount') {
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+        fail(400, 'Сумма должна быть неотрицательным числом', { code: 'VALIDATION_ERROR', field });
+      }
+    } else if (field === 'clientOwnerContactId') {
+      if (!Number.isSafeInteger(value) || value < 1 ||
+          !db.prepare('SELECT 1 FROM contacts WHERE id = ? AND is_deleted = 0').get(value)) {
+        fail(400, 'Ответственный контакт не найден', { code: 'VALIDATION_ERROR', field });
+      }
+    } else if (field === 'paidUntil') value = validDay(value, field);
+    else value = serviceTimestamp(value, field);
+    return [fields[field], value];
+  });
+  return pipelineTransaction(() => {
+    entityRow(ENTITY_CONFIG.companies, id);
+    db.prepare('INSERT OR IGNORE INTO company_service (company_id) VALUES (?)').run(id);
+    db.prepare(`UPDATE company_service SET ${values.map(([field]) => `${field} = ?`).join(',')} WHERE company_id = ?`)
+      .run(...values.map(([, value]) => value), id);
+    db.prepare('UPDATE companies SET updated_at = ? WHERE id = ?').run(new Date().toISOString(), id);
+    return { company: serializeEntity(ENTITY_CONFIG.companies, entityRow(ENTITY_CONFIG.companies, id)) };
+  });
+}
+
+function pipelineRules() {
+  const row = db.prepare('SELECT * FROM pipeline_rules WHERE id = 1').get();
+  return { silentDays: row.silent_days, renewalDays: row.renewal_days,
+    rejectedReturnMonths: row.rejected_return_months, churnedReturnMonths: row.churned_return_months };
+}
+
+function replacePipelineRules(body) {
+  const rules = body.rules;
+  const allowed = ['silentDays', 'renewalDays', 'rejectedReturnMonths', 'churnedReturnMonths'];
+  if (Object.keys(body).some((key) => key !== 'rules') || !rules || Array.isArray(rules) ||
+      typeof rules !== 'object' || Object.keys(rules).length !== allowed.length ||
+      Object.keys(rules).some((key) => !allowed.includes(key))) {
+    fail(400, 'Ожидались четыре правила воронок', { code: 'VALIDATION_ERROR', field: 'rules' });
+  }
+  for (const field of allowed) {
+    const max = field.endsWith('Months') ? 120 : 3650;
+    if (!Number.isInteger(rules[field]) || rules[field] < 1 || rules[field] > max) {
+      fail(400, `Правило «${field}» должно быть целым числом от 1 до ${max}`,
+        { code: 'VALIDATION_ERROR', field });
+    }
+  }
+  db.prepare(`UPDATE pipeline_rules SET silent_days = ?, renewal_days = ?,
+    rejected_return_months = ?, churned_return_months = ? WHERE id = 1`).run(...allowed.map((field) => rules[field]));
+  return { rules: pipelineRules() };
+}
+
+function addUtcMonths(value, months) {
+  const source = new Date(value);
+  const target = new Date(source);
+  target.setUTCDate(1);
+  target.setUTCMonth(target.getUTCMonth() + months);
+  const last = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(source.getUTCDate(), last));
+  return target.getTime();
+}
+
+function applyPipelineRules() {
+  return pipelineTransaction(() => {
+    const rules = pipelineRules();
+    const now = new Date();
+    const at = now.toISOString();
+    const day = Date.parse(`${at.slice(0, 10)}T00:00:00.000Z`);
+    const service = pipelineRow('service');
+    const active = db.prepare(`SELECT c.*, s.last_touch_at, s.paid_until FROM company_pipeline_state state
+      JOIN companies c ON c.id = state.company_id LEFT JOIN company_service s ON s.company_id = c.id
+      WHERE state.pipeline_id = ? AND state.stage_code = 'active' AND c.is_deleted = 0`).all(service.id);
+    for (const company of active) {
+      if (company.last_touch_at && now.getTime() - Date.parse(company.last_touch_at) > rules.silentDays * 86400000) {
+        changeCompanyPipeline(company, service, 'risk', `Нет касаний более ${rules.silentDays} дней`, 'auto', at);
+      } else if (company.paid_until &&
+          (Date.parse(`${company.paid_until}T00:00:00.000Z`) - day) / 86400000 < rules.renewalDays) {
+        changeCompanyPipeline(company, service, 'renewal', `До оплаты менее ${rules.renewalDays} дней`, 'auto', at);
+      }
+    }
+    const returns = db.prepare(`SELECT c.*, state.pipeline_id, state.stage_code, state.entered_at, p.code pipeline_code
+      FROM company_pipeline_state state JOIN companies c ON c.id = state.company_id
+      JOIN pipelines p ON p.id = state.pipeline_id WHERE c.is_deleted = 0 AND state.return_task_created = 0
+      AND ((p.code = 'sale' AND state.stage_code = 'rejected') OR
+        (p.code = 'service' AND state.stage_code = 'churned'))`)
+      .all();
+    for (const company of returns) {
+      const months = company.pipeline_code === 'sale' ? rules.rejectedReturnMonths : rules.churnedReturnMonths;
+      if (now.getTime() < addUtcMonths(company.entered_at, months)) continue;
+      const history = db.prepare(`SELECT id FROM company_stage_history WHERE company_id = ? AND pipeline_code = ?
+        ORDER BY id DESC LIMIT 1`).get(company.id, company.pipeline_code);
+      const sourceRef = `pipeline:${company.pipeline_code}:${company.id}:${history?.id || company.entered_at}`;
+      db.prepare(`INSERT INTO tasks (created_at, updated_at, title, company_code, assignee_role, source, source_ref,
+        description, created_by) VALUES (?, ?, ?, ?, 'owner', 'pipeline', ?, ?, 'auto')`)
+        .run(at, at, `Вернуться к ${company.name}`, company.code, sourceRef,
+          `Вернуться к компании после этапа «${company.stage_code}» (${months} мес.)`);
+      db.prepare(`UPDATE company_pipeline_state SET return_task_created = 1, updated_at = ?
+        WHERE company_id = ? AND pipeline_id = ?`).run(at, company.id, company.pipeline_id);
+    }
+  });
 }
 
 function pipelineStageCode(label, reservedCodes) {
@@ -1314,21 +1699,69 @@ function pipelineStageCode(label, reservedCodes) {
   return code;
 }
 
-function replacePipelineStages(body) {
+function replacePipelines(body) {
+  if (Object.keys(body).some((key) => key !== 'pipelines') || !Array.isArray(body.pipelines) ||
+      body.pipelines.length < 2 || body.pipelines.length > 12) {
+    fail(400, 'Ожидался список от 2 до 12 воронок', { code: 'VALIDATION_ERROR', field: 'pipelines' });
+  }
+  return pipelineTransaction(() => {
+    const current = pipelineList();
+    const codes = new Set(current.map((pipeline) => pipeline.code));
+    const reserved = new Set(codes);
+    const seen = new Set();
+    const pipelines = body.pipelines.map((pipeline, position) => {
+      if (!pipeline || Array.isArray(pipeline) || typeof pipeline !== 'object' ||
+          Object.keys(pipeline).some((key) => !['code', 'label'].includes(key))) {
+        fail(400, 'Некорректная воронка', { code: 'VALIDATION_ERROR', field: `pipelines.${position}` });
+      }
+      const label = checkedString(pipeline.label, 'label', false);
+      if ([...label].length > 40) fail(400, 'Название воронки длиннее 40 символов', { code: 'VALIDATION_ERROR' });
+      let code;
+      if (Object.hasOwn(pipeline, 'code')) {
+        if (typeof pipeline.code !== 'string' || !codes.has(pipeline.code) || seen.has(pipeline.code)) {
+          fail(400, 'Неизвестный или повторный код воронки', { code: 'VALIDATION_ERROR', field: 'code' });
+        }
+        code = pipeline.code;
+      } else code = pipelineStageCode(label, reserved);
+      seen.add(code);
+      return { code, label, position };
+    });
+    if (current.some((pipeline) => !seen.has(pipeline.code))) {
+      fail(400, 'Удаление воронок не поддерживается', { code: 'VALIDATION_ERROR', field: 'pipelines' });
+    }
+    const now = new Date().toISOString();
+    for (const pipeline of pipelines) {
+      if (codes.has(pipeline.code)) {
+        db.prepare('UPDATE pipelines SET label = ?, position = ?, updated_at = ? WHERE code = ?')
+          .run(pipeline.label, pipeline.position, now, pipeline.code);
+      } else {
+        const created = db.prepare(`INSERT INTO pipelines (code, label, position, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?)`).run(pipeline.code, pipeline.label, pipeline.position, now, now);
+        db.prepare(`INSERT INTO pipeline_stages (pipeline_id, code, label, position, kind, created_at, updated_at)
+          VALUES (?, 'new', 'Новый', 0, 'open', ?, ?)`).run(created.lastInsertRowid, now, now);
+      }
+    }
+    return { pipelines: pipelineList() };
+  });
+}
+
+function replacePipelineStages(body, pipelineCode = 'sale') {
+  const pipeline = pipelineRow(pipelineCode);
+  const current = pipelineStages(pipelineCode);
+  const limit = Math.max(12, current.length);
   if (Object.keys(body).some((key) => key !== 'stages') || !Array.isArray(body.stages) ||
-      body.stages.length < 1 || body.stages.length > 12) {
-    fail(400, 'Воронка должна содержать от 1 до 12 этапов', { code: 'VALIDATION_ERROR', field: 'stages' });
+      body.stages.length < 1 || body.stages.length > limit) {
+    fail(400, `Воронка должна содержать от 1 до ${limit} этапов`, { code: 'VALIDATION_ERROR', field: 'stages' });
   }
   db.exec('BEGIN IMMEDIATE');
   try {
-    const current = pipelineStages();
     const currentCodes = new Set(current.map((stage) => stage.code));
     const reservedCodes = new Set(currentCodes);
     const keptCodes = new Set();
     const stages = body.stages.map((stage, position) => {
       const field = `stages.${position}`;
       if (!stage || typeof stage !== 'object' || Array.isArray(stage) ||
-          Object.keys(stage).some((key) => !['code', 'label', 'kind'].includes(key))) {
+          Object.keys(stage).some((key) => !['code', 'label', 'kind', 'attention'].includes(key))) {
         fail(400, 'Некорректный объект этапа', { code: 'VALIDATION_ERROR', field });
       }
       const label = typeof stage.label === 'string' ? stage.label.trim() : '';
@@ -1352,13 +1785,20 @@ function replacePipelineStages(body) {
       } else {
         code = pipelineStageCode(label, reservedCodes);
       }
+      if (stage.attention !== undefined && ![true, false, 0, 1].includes(stage.attention)) {
+        fail(400, 'attention должен быть boolean', { code: 'VALIDATION_ERROR', field: `${field}.attention` });
+      }
+      const attention = stage.attention ?? current.find((item) => item.code === code)?.attention ?? false;
       keptCodes.add(code);
-      return { code, label, kind: stage.kind, position };
+      return { code, label, kind: stage.kind, position, attention: Boolean(attention) };
     });
     const removed = current.filter((stage) => !keptCodes.has(stage.code));
-    const companyCount = db.prepare('SELECT COUNT(*) count FROM companies WHERE pipeline_stage = ?');
+    const companyCount = db.prepare(`SELECT COUNT(*) count FROM company_pipeline_state
+      WHERE pipeline_id = ? AND stage_code = ?`);
     for (const stage of removed) {
-      const count = companyCount.get(stage.code).count;
+      if (stage.system) fail(400, 'Этап нужен для правил воронки и не может быть удалён',
+        { code: 'PIPELINE_SYSTEM_STAGE', stageCode: stage.code });
+      const count = companyCount.get(pipeline.id, stage.code).count;
       if (count) {
         fail(409, `В этапе «${stage.label}» есть ${count} компаний — сначала перенесите их`,
           { code: 'PIPELINE_STAGE_IN_USE', stageCode: stage.code, count });
@@ -1366,25 +1806,27 @@ function replacePipelineStages(body) {
     }
     const now = new Date().toISOString();
     const update = db.prepare(`
-      UPDATE pipeline_stages SET label = ?, position = ?, kind = ?, is_final = ?, updated_at = ? WHERE code = ?
+      UPDATE pipeline_stages SET label = ?, position = ?, kind = ?, is_final = ?, attention = ?, updated_at = ?
+      WHERE pipeline_id = ? AND code = ?
     `);
     const insert = db.prepare(`
-      INSERT INTO pipeline_stages (code, label, position, kind, is_final, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO pipeline_stages
+        (code, label, position, kind, is_final, attention, created_at, updated_at, pipeline_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const stage of stages) {
-      const { code, label, position, kind } = stage;
+      const { code, label, position, kind, attention } = stage;
       const isFinal = Number(kind !== 'open');
       if (currentCodes.has(code)) {
-        update.run(label, position, kind, isFinal, now, code);
+        update.run(label, position, kind, isFinal, Number(attention), now, pipeline.id, code);
       } else {
-        insert.run(code, label, position, kind, isFinal, now, now);
+        insert.run(code, label, position, kind, isFinal, Number(attention), now, now, pipeline.id);
       }
     }
-    const remove = db.prepare('DELETE FROM pipeline_stages WHERE code = ?');
-    for (const stage of removed) remove.run(stage.code);
+    const remove = db.prepare('DELETE FROM pipeline_stages WHERE pipeline_id = ? AND code = ?');
+    for (const stage of removed) remove.run(pipeline.id, stage.code);
     db.exec('COMMIT');
-    return { stages: pipelineStages() };
+    return { stages: pipelineStages(pipelineCode) };
   } catch (error) {
     db.exec('ROLLBACK');
     throw error;
@@ -1415,7 +1857,8 @@ function companyOverview(id) {
     legalEntities,
     tasks,
     leads: { total, last },
-    stageHistory: [],
+    stageHistory: db.prepare(`SELECT id, pipeline_code pipelineCode, from_code fromCode, to_code toCode, at, by, reason
+      FROM company_stage_history WHERE company_id = ? ORDER BY at DESC, id DESC`).all(id),
   };
 }
 
@@ -1459,12 +1902,34 @@ async function route(request, response) {
   const publicPost = request.method === 'POST' && ['/leads', '/events'].includes(url.pathname);
   if (!publicPost) requireApiKey(request);
 
+  if (request.method === 'GET' && url.pathname === '/pipelines') {
+    return send(response, 200, { pipelines: pipelineList() }, cors);
+  }
+  if (request.method === 'PUT' && url.pathname === '/pipelines') {
+    return send(response, 200, replacePipelines(await readJson(request)), cors);
+  }
+  if (request.method === 'GET' && url.pathname === '/pipeline-rules') {
+    return send(response, 200, { rules: pipelineRules() }, cors);
+  }
+  if (request.method === 'PUT' && url.pathname === '/pipeline-rules') {
+    return send(response, 200, replacePipelineRules(await readJson(request)), cors);
+  }
   if (request.method === 'GET' && url.pathname === '/pipeline-stages') {
-    return send(response, 200, { stages: pipelineStages() }, cors);
+    const pipeline = pipelineRow(url.searchParams.get('pipeline') ?? 'sale');
+    applyPipelineRules();
+    return send(response, 200, { stages: pipelineStages(pipeline.code) }, cors);
   }
   if (request.method === 'PUT' && url.pathname === '/pipeline-stages') {
     const body = await readJson(request);
-    return send(response, 200, replacePipelineStages(body), cors);
+    return send(response, 200, replacePipelineStages(body, url.searchParams.get('pipeline') ?? 'sale'), cors);
+  }
+  const pipelineMatch = url.pathname.match(/^\/companies\/(\d+)\/pipeline$/);
+  if (request.method === 'PATCH' && pipelineMatch) {
+    return send(response, 200, moveCompanyPipeline(entityId(pipelineMatch[1]), await readJson(request)), cors);
+  }
+  const serviceMatch = url.pathname.match(/^\/companies\/(\d+)\/service$/);
+  if (request.method === 'PATCH' && serviceMatch) {
+    return send(response, 200, patchCompanyService(entityId(serviceMatch[1]), await readJson(request)), cors);
   }
   const overviewMatch = url.pathname.match(/^\/companies\/(\d+)\/overview$/);
   if (request.method === 'GET' && overviewMatch) {
@@ -1922,6 +2387,12 @@ const server = http.createServer((request, response) => {
   });
 });
 
+const pipelineRulesTimer = IS_MAIN ? setInterval(() => {
+  try { applyPipelineRules(); } catch (error) { console.error('Ошибка правил воронок:', error); }
+}, 60 * 60 * 1000) : null;
+pipelineRulesTimer?.unref();
+server.on('close', () => clearInterval(pipelineRulesTimer));
+
 if (IS_MAIN) {
   server.listen(PORT, () => {
     console.log(`Мини-CRM слушает порт ${PORT}; база: ${DATABASE_PATH}`);
@@ -1929,6 +2400,7 @@ if (IS_MAIN) {
 }
 
 function shutdown() {
+  clearInterval(pipelineRulesTimer);
   server.close(() => {
     db.close();
     process.exit(0);
