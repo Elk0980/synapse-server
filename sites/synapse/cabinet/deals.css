@@ -193,15 +193,21 @@
   max-height: 100dvh;
   margin: 0;
   padding-bottom: max(24px, env(safe-area-inset-bottom));
+  overflow-x: hidden;
   border-radius: 18px 0 0 18px;
 }
 .deals-drawer-tabs {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
+  width: 100%;
+  max-width: 100%;
   margin-bottom: 20px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
 }
 .deals-drawer-tabs button {
+  flex: 0 0 auto;
   padding: 8px 12px;
   font-size: 0.85rem;
 }
