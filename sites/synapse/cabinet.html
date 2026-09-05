@@ -495,7 +495,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }
 </style>
-<link rel="stylesheet" href="cabinet/deals.css">
 </head>
 <body>
 <div class="auth" id="auth">
@@ -838,7 +837,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   };
   const cabinetAssets = ["home", "tasks", "leads", "deals", "clients", "chat", "analytics",
     "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account"];
-  const cabinetStyles = ["analytics", "ad-platforms"];
+  const cabinetStyles = ["analytics", "ad-platforms", "deals"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join(""));

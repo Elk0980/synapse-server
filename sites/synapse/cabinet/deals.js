@@ -2,6 +2,29 @@
   "use strict";
 
   const cabinet = window.SbCabinet = window.SbCabinet || {};
+  const pipelineStages = cabinet.pipelineStages ||= {
+    stages: null,
+    pending: null,
+    version: 0,
+    replace(stages) {
+      this.stages = stages;
+      this.version += 1;
+      return stages;
+    },
+    load(crmQuery, refresh = false) {
+      if (this.stages && !refresh) return Promise.resolve(this.stages);
+      if (this.pending) return this.pending;
+      const version = this.version;
+      const request = crmQuery("/pipeline-stages").then(({ stages }) => {
+        if (version === this.version) this.replace(stages);
+        return this.stages;
+      }).finally(() => {
+        if (this.pending === request) this.pending = null;
+      });
+      this.pending = request;
+      return request;
+    }
+  };
   const tabs = {
     overview: "Обзор",
     contacts: "Контакты",
@@ -11,6 +34,9 @@
     technology: "Дерево технологии"
   };
   const kinds = { open: "открытый", won: "выигрыш", lost: "отказ" };
+  const companyForms = { one: "компания", few: "компании", many: "компаний", other: "компании" };
+  const companyPlural = new Intl.PluralRules("ru");
+  const companyCount = (count) => `${count} ${companyForms[companyPlural.select(count)]}`;
   const taskStatuses = { inbox: "Входящие", planned: "Запланирована", in_progress: "В работе" };
   const state = {
     stages: [],
@@ -90,9 +116,9 @@
         <div class="deals-column-cards">${cards || '<p class="muted deals-empty">нет компаний</p>'}</div>
       </section>`;
     }).join("");
-    const count = `${state.companies.length} компаний`;
+    const count = companyCount(state.companies.length);
     byId("deals-count").textContent = state.total > state.companies.length
-      ? `Показано ${state.companies.length} из ${state.total} компаний` : count;
+      ? `На доске: ${count}. Всего: ${companyCount(state.total)}.` : count;
     configureButton();
   };
   const loadBoard = async (preserveError = false) => {
@@ -110,7 +136,7 @@
     byId("deals-count").textContent = "Загрузка…";
     try {
       const results = await Promise.allSettled([
-        query("/pipeline-stages"),
+        pipelineStages.load(query, true),
         query("/companies", { limit: 200, deleted: "exclude" }),
         query("/tasks/summary")
       ]);
@@ -118,7 +144,7 @@
       const [stages, companies, summary] = results;
       if (stages.status === "rejected") throw stages.reason;
       if (companies.status === "rejected") throw companies.reason;
-      state.stages = stages.value.stages || [];
+      state.stages = stages.value || [];
       state.companies = companies.value.companies || [];
       state.total = companies.value.pagination?.total ?? state.companies.length;
       state.summaryLoaded = summary.status === "fulfilled";
@@ -231,7 +257,7 @@
           aria-label="Опустить этап ${html(stage.label)}">↓</button>
         <button class="plain-button" type="button" data-stage-delete
           ${count || state.draft.length === 1 ? "disabled" : ""}>Удалить</button>
-        <span class="muted">${count} компаний</span>
+        <span class="muted">${companyCount(count)}</span>
       </div>
     </div>`;
   };
@@ -267,7 +293,7 @@
     byId("deals-settings-fields").disabled = true;
     try {
       const saved = await query("/pipeline-stages", {}, ctx.csrfOptions("PUT", { stages }));
-      state.stages = saved.stages;
+      state.stages = pipelineStages.replace(saved.stages);
       renderBoard();
       byId("deals-settings").close();
     } catch (failure) {
