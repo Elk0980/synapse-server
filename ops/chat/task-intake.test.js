@@ -49,6 +49,10 @@ test("ordinary question is not a task", () => {
 
 test("marker must be a complete token", () => {
   assert.equal(detectTask("задачами займёмся позже", telegramVisitor).kind, null);
+  assert.equal(
+    detectTask("Задача выполнена, спасибо всем", telegramVisitor).kind,
+    null,
+  );
 });
 
 test("short request is not a task", () => {
