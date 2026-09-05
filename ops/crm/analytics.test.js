@@ -21,7 +21,9 @@ test('deriveSource normalizes UTM and known referrer hosts', () => {
     [{ referrer: 'https://vk.ru/a' }, 'vk'],
     [{ referrer: 'https://t.me/a' }, 'telegram'],
     [{ referrer: 'https://telegram.org/a' }, 'telegram'],
+    [{ referrer: 'https://web.telegram.org/a' }, 'telegram'],
     [{ referrer: 'https://wa.me/123' }, 'whatsapp'],
+    [{ referrer: 'https://api.whatsapp.com/send' }, 'whatsapp'],
     [{ referrer: 'https://www.example.test/a' }, 'example.test'],
     [{ referrer: '' }, 'direct'],
   ];
@@ -81,6 +83,9 @@ test('events, external snapshots, attribution and analytics work together', asyn
     ...visit, type: 'click', target: 'phone', ts: '2026-09-05T10:05:00Z',
   }, false)).status, 202);
   assert.equal((await request('POST', '/events', {
+    ...visit, clientId: 'direct-visitor', referrer: '', ts: '2026-09-05T10:10:00Z',
+  }, false)).status, 202);
+  assert.equal((await request('POST', '/events', {
     ...visit, companyCode: 'missing',
   }, false)).status, 400);
   const stats = {
@@ -95,6 +100,9 @@ test('events, external snapshots, attribution and analytics work together', asyn
   );
   assert.equal(external.body.rows.length, 1);
   assert.equal(external.body.rows[0].metrics.pageViews, 12);
+  assert.equal((await request('POST', '/external-stats', {
+    source: 'outside', companyCode: 'analytics_co', rows: [{ date: '2026-08-01', views: 1 }],
+  })).body.upserted, 1);
   const leadFromReferrer = await request('POST', '/leads', {
     name: 'Referrer Lead', contact: '+70000000001', companyCode: 'analytics_co',
     referrer: 'https://2gis.ru/a',
@@ -105,16 +113,37 @@ test('events, external snapshots, attribution and analytics work together', asyn
     utmSource: 'Yandex',
   }, false);
   assert.equal(leadFromUtm.body.source, 'yandex');
+  const directLead = await request('POST', '/leads', {
+    name: 'Direct Lead', contact: '+70000000003', companyCode: 'analytics_co',
+  }, false);
+  assert.equal(directLead.body.source, null);
   const dashboard = await request(
     'GET', '/dashboard?companyCode=analytics_co&from=2026-09-05&to=2026-09-05'
   );
-  const source = dashboard.body.sources.find((row) => row.source === '2gis');
+  assert.deepEqual(dashboard.body.sources, ['2gis', 'direct', 'outside', 'yandex']);
+  const source = dashboard.body.sourceStats.find((row) => row.source === '2gis');
   assert.equal(source.visits, 1);
   assert.equal(source.clicks, 1);
   assert.equal(source.clicksByTarget.phone, 1);
   assert.deepEqual(source.external, { pageViews: 12, calls: 2 });
+  const direct = dashboard.body.sourceStats.find((row) => row.source === 'direct');
+  assert.equal(direct.leads, 1);
+  assert.equal(direct.visits, 1);
+  assert.equal(dashboard.body.sourceStats.filter((row) => row.source === 'direct').length, 1);
+  const filtered = await request(
+    'GET', '/dashboard?companyCode=analytics_co&source=yandex&from=2026-09-05&to=2026-09-05'
+  );
+  assert.deepEqual(filtered.body.sources, ['2gis', 'direct', 'outside', 'yandex']);
+  assert.deepEqual(filtered.body.sourceStats.map((row) => row.source), ['yandex']);
+  const summary = await request(
+    'GET', '/summary?companyCode=analytics_co&from=2026-09-05&to=2026-09-05'
+  );
+  assert.equal(summary.body.sources[0].source, '2gis');
+  assert.equal(summary.body.sources[0].leads, 1);
+  assert.equal(summary.body.sources[0].visits, 1);
+  assert.equal(summary.body.sourceStats.find((row) => row.source === 'direct').leads, 1);
   const counts = new DatabaseSync(databasePath);
-  assert.equal(counts.prepare('SELECT COUNT(*) count FROM events').get().count, 2);
-  assert.equal(counts.prepare('SELECT COUNT(*) count FROM external_stats').get().count, 1);
+  assert.equal(counts.prepare('SELECT COUNT(*) count FROM events').get().count, 3);
+  assert.equal(counts.prepare('SELECT COUNT(*) count FROM external_stats').get().count, 2);
   counts.close();
 });

@@ -469,8 +469,10 @@ function deriveSource({ utmSource, referrer } = {}) {
   if (host === 'vk.com' || host.endsWith('.vk.com') || host === 'vk.ru' || host.endsWith('.vk.ru')) {
     return 'vk';
   }
-  if (host === 't.me' || host.endsWith('.t.me') || /^telegram\.[^.]+$/.test(host)) return 'telegram';
-  if (host === 'wa.me' || host.endsWith('.wa.me') || /^whatsapp\.[^.]+$/.test(host)) {
+  if (host === 't.me' || host.endsWith('.t.me') || host.startsWith('telegram.') ||
+      host.includes('.telegram.')) return 'telegram';
+  if (host === 'wa.me' || host.endsWith('.wa.me') || host.startsWith('whatsapp.') ||
+      host.includes('.whatsapp.')) {
     return 'whatsapp';
   }
   return host || 'direct';
@@ -850,7 +852,7 @@ function requestIpHash(request) {
 function analyticsData(from, to, companyCode, selectedSource, leadRows = []) {
   const groups = new Map();
   const groupFor = (source) => {
-    const key = source || 'не указан';
+    const key = source || 'direct';
     if (!groups.has(key)) {
       groups.set(key, {
         source: key, leads: 0, booked: 0, visited: 0, sales: 0, revenue: 0,
@@ -927,6 +929,18 @@ function analyticsData(from, to, companyCode, selectedSource, leadRows = []) {
     }
   }
   return { groups, groupFor };
+}
+
+function analyticsSources(companyCode) {
+  const companyFilter = companyCode ? ' WHERE company_code = ? COLLATE NOCASE' : '';
+  const params = companyCode ? [companyCode, companyCode, companyCode] : [];
+  return db.prepare(`
+    SELECT DISTINCT source FROM (
+      SELECT source FROM leads${companyFilter}
+      UNION ALL SELECT source FROM events${companyFilter}
+      UNION ALL SELECT source FROM external_stats${companyFilter}
+    ) WHERE source IS NOT NULL AND source != '' ORDER BY source
+  `).all(...params).map((row) => row.source);
 }
 
 function corsHeaders(request) {
@@ -1454,8 +1468,9 @@ async function route(request, response) {
         group.romi = romi(group.revenue, group.expenses);
       }
     }
-    const sources = [...analytics.groups.values()]
+    const sourceStats = [...analytics.groups.values()]
       .sort((a, b) => a.source.localeCompare(b.source, 'ru'));
+    const sources = analyticsSources(companyCode);
     const funnel = Object.fromEntries([...CABINET_STAGES].map(([id, name]) => {
       const count = rows.filter((row) => row.stage === name).length;
       return [id, { count, conversion: rows.length ? Math.round((count / rows.length) * 100) : 0 }];
@@ -1477,12 +1492,13 @@ async function route(request, response) {
         revenue,
         expenses,
         romi: companyCode ? null : romi(revenue, expenses),
-        visits: sources.reduce((sum, item) => sum + item.visits, 0),
-        clicks: sources.reduce((sum, item) => sum + item.clicks, 0),
+        visits: sourceStats.reduce((sum, item) => sum + item.visits, 0),
+        clicks: sourceStats.reduce((sum, item) => sum + item.clicks, 0),
       },
       funnel,
       leads: rows.map(serializeCabinetLead),
       sources,
+      sourceStats,
       ...(companyCode ? { expensesScope: 'global_unavailable' } : {}),
     }, cors);
   }
@@ -1700,14 +1716,16 @@ async function route(request, response) {
     if (!companyCode) {
       for (const group of analytics.groups.values()) group.romi = romi(group.revenue, group.expenses);
     }
-    const sources = [...analytics.groups.values()]
+    const sourceStats = [...analytics.groups.values()]
       .sort((a, b) => a.source.localeCompare(b.source, 'ru'));
-    const revenue = sources.reduce((sum, group) => sum + group.revenue, 0);
-    const expenses = companyCode ? null : sources.reduce((sum, group) => sum + group.expenses, 0);
+    const revenue = sourceStats.reduce((sum, group) => sum + group.revenue, 0);
+    const expenses = companyCode ? null : sourceStats.reduce((sum, group) => sum + group.expenses, 0);
     return send(response, 200, {
-      from, to, revenue, expenses, romi: companyCode ? null : romi(revenue, expenses), sources,
-      visits: sources.reduce((sum, group) => sum + group.visits, 0),
-      clicks: sources.reduce((sum, group) => sum + group.clicks, 0),
+      from, to, revenue, expenses, romi: companyCode ? null : romi(revenue, expenses),
+      sources: sourceStats,
+      sourceStats,
+      visits: sourceStats.reduce((sum, group) => sum + group.visits, 0),
+      clicks: sourceStats.reduce((sum, group) => sum + group.clicks, 0),
       ...(companyCode ? { expensesScope: 'global_unavailable' } : {}),
     }, cors);
   }
