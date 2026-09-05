@@ -495,6 +495,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }
 </style>
+<link rel="stylesheet" href="cabinet/deals.css">
 </head>
 <body>
 <div class="auth" id="auth">
@@ -597,17 +598,37 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       </div>
     </section>
     <section class="view-panel" id="deals-view" data-view="deals" hidden>
-      <div class="content-header"><h1>Сделки</h1></div>
-      <div class="placeholder-head"><span class="development-badge">в разработке</span>
-        <button class="plain-button" type="button" disabled title="в разработке">Настроить воронку</button>
+      <div class="content-header"><h1>Сделки</h1><p>Воронка компаний Synapse Business</p></div>
+      <div class="crm-actions">
+        <button class="plain-button" type="button" id="deals-configure" disabled>Настроить воронку</button>
+        <button class="plain-button" type="button" id="deals-refresh">Обновить</button>
       </div>
-      <div class="kanban-grid">
-        <div class="card"><h2>Новый</h2><p class="muted">нет сделок</p></div>
-        <div class="card"><h2>В работе</h2><p class="muted">нет сделок</p></div>
-        <div class="card"><h2>Оплата</h2><p class="muted">нет сделок</p></div>
-        <div class="card"><h2>Повторная продажа</h2><p class="muted">нет сделок</p></div>
-        <div class="card"><h2>Отказ</h2><p class="muted">нет сделок</p></div>
-      </div>
+      <p id="deals-count" class="muted" role="status"></p>
+      <p id="deals-error" class="crm-error" role="alert" hidden></p>
+      <div id="deals-board" class="deals-board" aria-label="Воронка компаний" aria-busy="false"></div>
+      <dialog id="deals-settings" class="deals-dialog deals-settings" aria-labelledby="deals-settings-title">
+        <form id="deals-settings-form" class="crm-form">
+          <fieldset id="deals-settings-fields">
+            <div class="deals-dialog-heading"><h2 id="deals-settings-title">Настроить воронку</h2>
+              <button class="plain-button" type="button" data-deals-close aria-label="Закрыть настройки">✕</button>
+            </div>
+            <p class="muted">От 1 до 12 этапов. Чтобы удалить этап, сначала перенесите его компании.</p>
+            <div id="deals-stage-rows"></div>
+            <div class="deals-settings-footer">
+              <button class="plain-button" type="button" id="deals-stage-add" data-stage-add>Добавить этап</button>
+              <button class="plain-button" type="submit">Сохранить</button>
+            </div>
+          </fieldset>
+          <p id="deals-settings-error" class="crm-error" role="alert"></p>
+        </form>
+      </dialog>
+      <dialog id="deals-drawer" class="deals-dialog deals-drawer" aria-labelledby="deals-drawer-title">
+        <div class="deals-dialog-heading"><h2 id="deals-drawer-title">Компания</h2>
+          <button class="plain-button" type="button" data-deals-close aria-label="Закрыть компанию">✕</button>
+        </div>
+        <div id="deals-drawer-tabs" class="deals-drawer-tabs" role="tablist" aria-label="Работа с компанией"></div>
+        <div id="deals-drawer-content" role="tabpanel" tabindex="0" aria-live="polite"></div>
+      </dialog>
     </section>
     <section class="view-panel" id="clients-view" data-view="clients" hidden>
       <div class="content-header"><h1>База клиентов</h1></div>
