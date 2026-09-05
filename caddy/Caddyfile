@@ -134,6 +134,8 @@ alvi.synapsebusiness.ru {
 # --- Synapse Business: сайт-презентация -------------------------------------
 synapse.synapsebusiness.ru {
   root * /srv/sites/synapse
+  @cabinet path /cabinet.html /cabinet/*
+  header @cabinet Cache-Control "no-cache, must-revalidate"
   # cabinet.html uses same-origin /dashboard and /leads requests for CRM.
   # CRM теперь сам проверяет X-API-Key и без него отвечает 401.
   @crm path /dashboard /leads /leads/*
