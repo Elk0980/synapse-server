@@ -401,6 +401,44 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .danger { background: #8f2934; color: white; }
 .permission-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
 dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18px; padding: 24px; }
+.home-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr); gap: 16px; }
+.widget-settings { display: grid; align-content: start; gap: 10px; }
+.widget-settings h2 { display: flex; gap: 8px; align-items: center; margin-top: 0; }
+.widget-settings h2 span {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  cursor: help;
+  font-size: 0.8rem;
+}
+.widget-option { display: flex; gap: 9px; align-items: center; padding: 7px 0; }
+.widget-option input { width: 18px; height: 18px; accent-color: var(--accent); }
+.placeholder-head { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; margin-bottom: 18px; }
+.development-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.kanban-grid { display: grid; grid-template-columns: repeat(5, minmax(150px, 1fr)); gap: 12px; overflow-x: auto; }
+.kanban-grid .card { min-height: 180px; padding: 18px; }
+.kanban-grid h2 { margin-top: 0; font-size: 1rem; }
+.kanban-grid-three { grid-template-columns: repeat(3, minmax(180px, 1fr)); }
+.client-tabs { margin-bottom: 18px; }
+.client-tabs a { color: var(--text); text-decoration: none; }
+.client-tabs a[aria-current="page"] { border-color: var(--accent); color: var(--accent); }
+.platform-status-list { display: grid; gap: 18px; }
+.platform-status-group h2 { margin: 0 0 8px; color: var(--muted); font-size: 0.85rem; }
+.platform-status-row { display: flex; gap: 12px; justify-content: space-between; padding: 8px 0; }
+.platform-status-row + .platform-status-row { border-top: 1px solid var(--line); }
+.platform-status { color: var(--muted); white-space: nowrap; }
+.platform-status.is-connected { color: var(--green); }
 @media (max-width: 760px) {
   .shell { display: block; padding-top: calc(60px + env(safe-area-inset-top)); }
   .mobile-bar {
@@ -461,6 +499,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   .analytics-source-table { min-width: 1040px; table-layout: auto; }
   .analytics-source-table th, .analytics-source-table td { white-space: nowrap; }
   .crm-stat { min-width: 0; }
+  .home-grid { grid-template-columns: 1fr; }
+  .kanban-grid { margin-right: -16px; padding-right: 16px; }
 }
 
 .crm-entity-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 18px; }
@@ -596,23 +636,28 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     </div>
     <p class="no-projects" id="no-projects" role="status" hidden>Для учётной записи не настроены проекты</p>
     <nav class="nav" aria-label="Разделы кабинета">
+      <a class="nav-link" href="#home" data-view-link="home">Главная</a>
+      <a class="nav-link" id="tasks-link" href="#tasks" data-view-link="tasks">
+        Задачи <span class="nav-badge" id="tasks-badge" hidden></span>
+      </a>
+      <button class="nav-category" id="crm-category" type="button" aria-expanded="false"
+        aria-controls="crm-menu">CRM</button>
+      <div class="subnav" id="crm-menu" hidden>
+        <a class="nav-link" id="crm-link" href="#crm" data-view-link="crm">Лиды</a>
+        <a class="nav-link" href="#deals" data-view-link="deals">Сделки</a>
+        <a class="nav-link" id="clients-link" href="#clients" data-view-link="clients">База клиентов</a>
+        <a class="nav-link" href="#chat" data-view-link="chat">Чат</a>
+      </div>
       <button class="nav-category" id="analytics-category" type="button" aria-expanded="false"
         aria-controls="analytics-menu">Аналитика</button>
       <div class="subnav" id="analytics-menu" hidden>
         <a class="nav-link" id="analytics-link" href="#analytics-through"
           data-view-link="analytics-through">Сквозная аналитика</a>
+        <a class="nav-link" href="#ad-platforms" data-view-link="ad-platforms">Рекламные площадки</a>
+        <a class="nav-link" href="#hypotheses" data-view-link="hypotheses">Доска гипотез</a>
+        <a class="nav-link" href="#competitors" data-view-link="competitors">Конкуренты</a>
+        <a class="nav-link" href="#calltracking" data-view-link="calltracking">Колтрекинг</a>
       </div>
-      <button class="nav-category" id="crm-category" type="button" aria-expanded="false"
-        aria-controls="crm-menu">ЦРМ</button>
-      <div class="subnav" id="crm-menu" hidden>
-        <a class="nav-link" id="crm-link" href="#crm" data-view-link="crm">Заявки</a>
-        <a class="nav-link" href="#crm-contacts" data-view-link="crm-contacts">Контакты</a>
-        <a class="nav-link" href="#crm-companies" data-view-link="crm-companies">Компании</a>
-        <a class="nav-link" href="#crm-legal" data-view-link="crm-legal">Юрлица</a>
-      </div>
-      <a class="nav-link" id="tasks-link" href="#tasks" data-view-link="tasks">
-        Задачи <span class="nav-badge" id="tasks-badge" hidden></span>
-      </a>
       <button class="nav-category" type="button" aria-expanded="false" aria-controls="site-menu">Сайт</button>
       <div class="subnav" id="site-menu" hidden>
         <a class="nav-link" href="#sites" data-view-link="sites">Сайты</a>
@@ -620,7 +665,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         <a class="nav-link" id="price-editor-link" href="#price" data-editor-link="price">Прайс</a>
         <p class="project-label" id="editor-link-notice" role="status" hidden></p>
       </div>
-      <a class="nav-link" href="#chat" data-view-link="chat">Чат</a>
       <a class="nav-link" id="autoposting-link" href="#autoposting"
         data-view-link="autoposting">Автопостинг</a>
       <a class="nav-link" id="content-factory-link" href="#content-factory"
@@ -638,6 +682,42 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   <button class="backdrop" id="backdrop" type="button" aria-label="Закрыть меню" hidden></button>
   <main class="main" id="main-content" tabindex="-1">
     <div class="content-header"><p id="startup-error" class="startup-error" role="alert" hidden></p></div>
+    <section class="view-panel" id="home-view" data-view="home" hidden>
+      <div class="content-header"><h1>Главная</h1></div>
+      <p class="notice">Настраиваемые виджеты — в разработке</p>
+      <div class="home-grid">
+        <div class="card"><h2>Будущие виджеты</h2><ul>
+          <li>Заявки за период</li><li>Задачи в работе</li><li>Выручка</li><li>ROMI</li>
+          <li>Последние диалоги</li>
+        </ul></div>
+        <aside class="card widget-settings"><h2>Настройки виджетов
+          <span title="Настройки сохраняются только для текущего пользователя">?</span></h2>
+          <div id="home-widget-options"></div>
+        </aside>
+      </div>
+    </section>
+    <section class="view-panel" id="deals-view" data-view="deals" hidden>
+      <div class="content-header"><h1>Сделки</h1></div>
+      <div class="placeholder-head"><span class="development-badge">в разработке</span>
+        <button class="plain-button" type="button" disabled title="в разработке">Настроить воронку</button>
+      </div>
+      <div class="kanban-grid">
+        <div class="card"><h2>Новый</h2><p class="muted">нет сделок</p></div>
+        <div class="card"><h2>В работе</h2><p class="muted">нет сделок</p></div>
+        <div class="card"><h2>Оплата</h2><p class="muted">нет сделок</p></div>
+        <div class="card"><h2>Повторная продажа</h2><p class="muted">нет сделок</p></div>
+        <div class="card"><h2>Отказ</h2><p class="muted">нет сделок</p></div>
+      </div>
+    </section>
+    <section class="view-panel" id="clients-view" data-view="clients" hidden>
+      <div class="content-header"><h1>База клиентов</h1></div>
+      <div class="crm-periods client-tabs" id="client-tabs" aria-label="Раздел базы клиентов">
+        <a class="crm-period" href="#crm-legal" data-client-view="crm-legal">Юрлица</a>
+        <a class="crm-period" href="#crm-contacts" data-client-view="crm-contacts">Контрагенты</a>
+        <a class="crm-period" href="#crm-companies" data-client-view="crm-companies">Компании</a>
+      </div>
+      <div class="card"><p>Выберите раздел базы клиентов.</p></div>
+    </section>
     <section class="view-panel" id="analytics-through-view" data-view="analytics-through">
       <div class="content-header"><h1>Сквозная аналитика</h1></div>
       <p class="notice" id="analytics-project-context"></p>
@@ -687,8 +767,42 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         </div>
       </div>
     </section>
+    <section class="view-panel" id="ad-platforms-view" data-view="ad-platforms" hidden>
+      <div class="content-header"><h1>Рекламные площадки</h1></div>
+      <div class="placeholder-head"><span class="development-badge">в разработке</span>
+        <button class="plain-button" type="button" disabled title="в разработке">Ввести данные вручную</button>
+      </div>
+      <div class="card" id="ad-platforms-content" aria-live="polite"></div>
+      <p class="platform-footnote">* Instagram и Facebook принадлежат Meta Platforms Inc., признанной
+        экстремистской организацией; её деятельность запрещена на территории Российской Федерации.</p>
+    </section>
+    <section class="view-panel" id="hypotheses-view" data-view="hypotheses" hidden>
+      <div class="content-header"><h1>Доска гипотез</h1></div>
+      <div class="placeholder-head"><span class="development-badge">в разработке</span>
+        <button class="plain-button" type="button" disabled title="в разработке">Добавить гипотезу</button>
+      </div>
+      <div class="kanban-grid kanban-grid-three">
+        <div class="card"><h2>Идея</h2></div><div class="card"><h2>Проверяем</h2></div>
+        <div class="card"><h2>Итог</h2></div>
+      </div>
+    </section>
+    <section class="view-panel" id="competitors-view" data-view="competitors" hidden>
+      <div class="content-header"><h1>Конкуренты</h1></div>
+      <div class="placeholder-head"><span class="development-badge">в разработке</span>
+        <button class="plain-button" type="button" disabled title="в разработке">Добавить</button>
+      </div>
+      <div class="card crm-table-wrap"><table class="crm-table"><thead><tr><th>Конкурент</th>
+        <th>Площадки</th><th>Рекламируется</th><th>Заметки</th></tr></thead><tbody></tbody></table></div>
+    </section>
+    <section class="view-panel" id="calltracking-view" data-view="calltracking" hidden>
+      <div class="content-header"><h1>Колтрекинг</h1></div>
+      <span class="development-badge">в разработке</span>
+      <p class="notice">Подмена номеров и учёт звонков по источникам — в разработке</p>
+      <div class="card crm-table-wrap"><table class="crm-table"><thead><tr><th>Площадка</th>
+        <th>Номер</th><th>Звонков за период</th></tr></thead><tbody></tbody></table></div>
+    </section>
     <section class="view-panel" id="crm-view" data-view="crm" hidden>
-      <div class="content-header"><h1>ЦРМ</h1></div>
+      <div class="content-header"><h1>Лиды</h1></div>
       <p class="notice" id="crm-project-context"></p>
       <div class="card">
         <div class="crm-toolbar">
@@ -799,14 +913,21 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   "use strict";
 
   const VIEW_TITLES = Object.freeze({
-    "analytics-through": "Сквозная аналитика",
-    crm: "Заявки",
-    "crm-contacts": "Контакты",
+    home: "Главная",
+    tasks: "Задачи",
+    crm: "Лиды",
+    deals: "Сделки",
+    clients: "База клиентов",
+    "crm-contacts": "Контрагенты",
     "crm-companies": "Компании",
     "crm-legal": "Юрлица",
-    tasks: "Задачи",
-    sites: "Сайты",
     chat: "Чат",
+    "analytics-through": "Сквозная аналитика",
+    "ad-platforms": "Рекламные площадки",
+    hypotheses: "Доска гипотез",
+    competitors: "Конкуренты",
+    calltracking: "Колтрекинг",
+    sites: "Сайты",
     autoposting: "Автопостинг",
     "content-factory": "Контент завод",
     settings: "Настройки",
@@ -831,7 +952,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   let identity = null;
   let allowedProjects = [];
   let selectedProjectId = null;
-  let currentView = "analytics-through";
+  let currentView = "home";
   let crmBound = false;
   let analyticsBound = false;
   let drawerOpen = false;
@@ -928,6 +1049,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     renderProjectPicker();
     closeProjectMenu(true);
     if (currentView === "analytics-through") loadAnalytics();
+    if (currentView === "ad-platforms") loadAdPlatforms();
     if (currentView === "crm") loadCRM();
     if (currentView === "crm-contacts") applyContactProjectFilter();
     loadTasksSummary();
@@ -1053,8 +1175,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     identity?.permissions.includes(permission);
   const permittedView = (value) => {
     if (!identity) return true;
-    if (value === "analytics-through") return identity.permissions.includes("analytics.view");
-    if (value === "crm" || value.startsWith("crm-")) {
+    if (["analytics-through", "ad-platforms", "hypotheses", "competitors", "calltracking"].includes(value)) {
+      return identity.permissions.includes("analytics.view");
+    }
+    if (["crm", "deals", "clients"].includes(value) || value.startsWith("crm-")) {
       return hasPermission("crm.view");
     }
     if (value === "autoposting") {
@@ -1065,16 +1189,17 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     }
     return true;
   };
-  const defaultView = () => permittedView("analytics-through") ? "analytics-through" :
-    permittedView("crm") ? "crm" : "account";
+  const defaultView = () => "home";
   const validView = (value) => Object.hasOwn(VIEW_TITLES, value) && permittedView(value);
   const viewFromHash = () => {
     const value = decodeURIComponent(location.hash.slice(1)).split(/[/?]/)[0];
     return validView(value) ? value : defaultView();
   };
   const setCategoryForView = (viewName) => {
-    const categoryId = viewName === "analytics-through" ? "analytics-menu" :
-      viewName === "sites" ? "site-menu" : viewName === "crm" || viewName.startsWith("crm-")
+    const analyticsViews = ["analytics-through", "ad-platforms", "hypotheses", "competitors", "calltracking"];
+    const crmViews = ["crm", "deals", "clients", "chat"];
+    const categoryId = analyticsViews.includes(viewName) ? "analytics-menu" :
+      viewName === "sites" ? "site-menu" : crmViews.includes(viewName) || viewName.startsWith("crm-")
         ? "crm-menu" : null;
     if (!categoryId) return;
     const button = document.querySelector(`[aria-controls="${categoryId}"]`);
@@ -1088,9 +1213,19 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       view.hidden = view.dataset.view !== currentView;
     });
     document.querySelectorAll("[data-view-link]").forEach((link) => {
-      if (link.dataset.viewLink === currentView) link.setAttribute("aria-current", "page");
+      const clientRoute = currentView.startsWith("crm-") && link.dataset.viewLink === "clients";
+      if (link.dataset.viewLink === currentView || clientRoute) link.setAttribute("aria-current", "page");
       else link.removeAttribute("aria-current");
     });
+    document.querySelectorAll("[data-client-view]").forEach((link) => {
+      if (link.dataset.clientView === currentView) link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
+    });
+    const clientView = currentView === "clients" || currentView.startsWith("crm-");
+    if (clientView) {
+      const target = byId(`${currentView}-view`).querySelector(".content-header");
+      target.insertAdjacentElement("afterend", byId("client-tabs"));
+    }
     setCategoryForView(currentView);
     const title = VIEW_TITLES[currentView];
     byId("mobile-title").textContent = title;
@@ -1099,6 +1234,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     const frame = active.querySelector("iframe[data-src]");
     if (frame && !frame.getAttribute("src")) frame.src = frame.dataset.src;
     if (currentView === "analytics-through") loadAnalytics();
+    if (currentView === "ad-platforms") loadAdPlatforms();
     if (currentView === "crm") loadCRM();
     if (currentView.startsWith("crm-") && currentView !== "crm") renderCrmEntityRoute();
     if (currentView === "tasks") renderTasksRoute();
@@ -2007,6 +2143,44 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const formatROMI = (value) => value === null || value === undefined ? "нет расходов" :
     `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value)}%`;
 
+  const HOME_WIDGETS = Object.freeze([
+    ["leads", "Заявки за период"],
+    ["tasks", "Задачи в работе"],
+    ["revenue", "Выручка"],
+    ["romi", "ROMI"],
+    ["dialogs", "Последние диалоги"]
+  ]);
+  const homeWidgetsStorageKey = () => `synapse_cabinet_home_widgets:${identity.userId}`;
+  const readHomeWidgets = () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(homeWidgetsStorageKey()));
+      return saved && typeof saved === "object" ? saved : {};
+    } catch (error) {
+      return {};
+    }
+  };
+  const saveHomeWidgets = (settings) => {
+    try {
+      localStorage.setItem(homeWidgetsStorageKey(), JSON.stringify(settings));
+    } catch (error) {
+      // The widget choices remain available until this page is closed.
+    }
+  };
+  const renderHomeWidgetSettings = () => {
+    const settings = readHomeWidgets();
+    const content = byId("home-widget-options");
+    content.innerHTML = HOME_WIDGETS.map(([id, label]) => `<label class="widget-option">
+      <input type="checkbox" value="${id}" ${settings[id] !== false ? "checked" : ""}>
+      <span>${label}</span></label>`).join("");
+    content.addEventListener("change", () => {
+      const next = {};
+      content.querySelectorAll("input").forEach((input) => {
+        next[input.value] = input.checked;
+      });
+      saveHomeWidgets(next);
+    });
+  };
+
   const ANALYTICS_PLATFORMS = [
     { group: "Соцсети", id: "instagram", label: "Instagram*", codes: ["instagram"] },
     { group: "Соцсети", id: "vk", label: "ВКонтакте", codes: ["vk", "vk-ads"] },
@@ -2043,6 +2217,42 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     selected: new Set(ANALYTICS_PLATFORMS.map((platform) => platform.id)),
     payload: null
   };
+  const renderAdPlatforms = (dashboard = null) => {
+    const stats = Array.isArray(dashboard?.sourceStats) ? dashboard.sourceStats : [];
+    const has2gisExternal = stats.some((source) => {
+      return String(source.source || "").toLowerCase() === "2gis" && Boolean(source.external);
+    });
+    let currentGroup = null;
+    const groups = [];
+    for (const platform of ANALYTICS_PLATFORMS) {
+      if (platform.group !== currentGroup) {
+        currentGroup = platform.group;
+        groups.push({ label: currentGroup, platforms: [] });
+      }
+      groups.at(-1).platforms.push(platform);
+    }
+    byId("ad-platforms-content").innerHTML = `<div class="platform-status-list">${groups.map((group) => {
+      const heading = group.label ? `<h2>${escapeHTML(group.label)}</h2>` : "";
+      const rows = group.platforms.map((platform) => {
+        const connected = platform.id === "2gis" && has2gisExternal;
+        return `<div class="platform-status-row"><span>${escapeHTML(platform.label)}</span>
+          <span class="platform-status${connected ? " is-connected" : ""}">
+          ${connected ? "подключено" : "не подключено"}</span></div>`;
+      }).join("");
+      return `<section class="platform-status-group">${heading}${rows}</section>`;
+    }).join("")}</div>`;
+  };
+  const loadAdPlatforms = async () => {
+    if (currentView !== "ad-platforms" || !identity.permissions.includes("analytics.view")) return;
+    renderAdPlatforms();
+    try {
+      const dashboard = await crmQuery("/dashboard", { period: "30d", ...scopeParams() });
+      if (currentView === "ad-platforms") renderAdPlatforms(dashboard);
+    } catch (error) {
+      // Connection statuses remain conservative when dashboard data is unavailable.
+    }
+  };
+
   const optionalSum = (values) => values.some((value) => value !== null && value !== undefined)
     ? values.reduce((sum, value) => sum + (Number(value) || 0), 0) : null;
   const formatMetric = (value) => value === null || value === undefined ? "—" :
@@ -2496,9 +2706,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       byId("analytics-link").hidden = !identity.permissions.includes("analytics.view");
       byId("analytics-category").hidden = !identity.permissions.includes("analytics.view");
       byId("analytics-through-view").hidden = !identity.permissions.includes("analytics.view");
-      byId("crm-category").hidden = !hasPermission("crm.view");
+      byId("crm-category").hidden = false;
       byId("crm-menu").querySelectorAll("[data-view-link]").forEach((link) => {
-        link.hidden = !hasPermission("crm.view");
+        link.hidden = link.dataset.viewLink !== "chat" && !hasPermission("crm.view");
       });
       byId("autoposting-link").hidden = !permittedView("autoposting");
       byId("autoposting-view").hidden = !permittedView("autoposting");
@@ -2515,6 +2725,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         companyCreate.add(new Option(company.name, company.id));
       });
       renderIdentity();
+      renderHomeWidgetSettings();
       renderProjectPicker();
       loadTasksSummary();
       if (redirectEditorHash()) return;
