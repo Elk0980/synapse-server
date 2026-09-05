@@ -1,0 +1,6 @@
+.platform-status-list { display: grid; gap: 18px; }
+.platform-status-group h2 { margin: 0 0 8px; color: var(--muted); font-size: 0.85rem; }
+.platform-status-row { display: flex; gap: 12px; justify-content: space-between; padding: 8px 0; }
+.platform-status-row + .platform-status-row { border-top: 1px solid var(--line); }
+.platform-status { color: var(--muted); white-space: nowrap; }
+.platform-status.is-connected { color: var(--green); }

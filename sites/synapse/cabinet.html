@@ -101,6 +101,7 @@ button { color: inherit; }
   cursor: pointer;
 }
 .auth-submit { width: 100%; }
+.plain-button:disabled { opacity: 0.5; cursor: not-allowed; }
 .auth-error, .startup-error { color: var(--red); }
 .shell { display: grid; min-height: 100vh; grid-template-columns: var(--sidebar) minmax(0, 1fr); }
 .sidebar {
@@ -287,94 +288,6 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .crm-deleted-mark { color: var(--muted); font-size: 0.8rem; }
 .crm-empty, .crm-error { padding: 20px; border: 1px solid var(--line); border-radius: 12px; }
 .crm-error { color: var(--red); }
-.analytics-grid { display: grid; gap: 18px; }
-.analytics-grid > .card { min-width: 0; }
-.analytics-dates, .expense-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
-.analytics-dates label, .expense-form label { display: grid; gap: 5px; color: var(--muted); }
-.analytics-dates input, .expense-form input {
-  min-height: 44px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  color: var(--text);
-  background: var(--surface-soft);
-}
-.analytics-section { margin-top: 26px; }
-.analytics-section h2 { margin-top: 0; }
-.platform-filter { position: relative; min-width: min(100%, 280px); }
-.platform-trigger { display: flex; width: 100%; justify-content: space-between; }
-.platform-trigger::after { content: "⌄"; }
-.platform-trigger[aria-expanded="true"]::after { transform: rotate(180deg); }
-.platform-panel {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 8px);
-  left: 0;
-  width: min(420px, calc(100vw - 64px));
-  max-height: min(620px, 70vh);
-  overflow-y: auto;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: #201c19;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
-}
-.platform-option { display: flex; gap: 9px; align-items: flex-start; padding: 6px; cursor: pointer; }
-.platform-option input { flex: 0 0 auto; width: 17px; height: 17px; margin-top: 3px; accent-color: var(--accent); }
-.platform-group { margin: 13px 6px 4px; color: var(--muted); font-size: 0.78rem; text-transform: uppercase; }
-.platform-footnote { margin: 9px 0 0; color: var(--muted); font-size: 0.76rem; }
-.analytics-funnel { display: grid; grid-template-columns: minmax(190px, 0.8fr) minmax(280px, 1.2fr); gap: 12px; }
-.funnel-step { display: contents; }
-.funnel-shape {
-  position: relative;
-  align-self: stretch;
-  min-height: 112px;
-  margin-inline: auto;
-  border: 0;
-  border-radius: 10px;
-  color: var(--text);
-  background: linear-gradient(115deg, rgba(46, 107, 214, 0.88), rgba(159, 212, 255, 0.42));
-  cursor: pointer;
-}
-.funnel-card {
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface-soft);
-}
-.funnel-card-head { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; }
-.funnel-card h3 { margin: 0; font-size: 1rem; }
-.funnel-number { font-size: 1.45rem; }
-.funnel-conversion, .funnel-note, .funnel-breakdown { color: var(--muted); font-size: 0.82rem; }
-.data-mark {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-  margin-top: 7px;
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-.data-mark::before { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); content: ""; }
-.data-mark[data-kind="live"]::before { background: var(--green); }
-.data-mark[data-kind="snapshot"]::before { background: var(--accent); }
-.data-mark[data-kind="manual"]::before { background: #ffd37d; }
-.funnel-detail { grid-column: 1 / -1; margin: -4px 0 4px; padding: 12px; border-left: 2px solid var(--accent); }
-.funnel-detail-list { display: grid; margin: 0; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 7px; }
-.funnel-detail-list div { display: flex; gap: 8px; justify-content: space-between; }
-.funnel-detail-list dt { color: var(--muted); }
-.funnel-detail-list dd { margin: 0; }
-.analytics-finance { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 18px; }
-.analytics-source-table { table-layout: fixed; font-size: 0.72rem; }
-.analytics-source-table th, .analytics-source-table td { padding: 8px 6px; }
-.analytics-source-table th, .analytics-source-table td { white-space: normal; overflow-wrap: anywhere; }
-.analytics-source-table th:first-child { width: 14%; }
-.analytics-source-table th:last-child { width: 15%; }
-.analytics-source-table .data-mark { margin-top: 0; white-space: normal; }
-.analytics-details { margin-top: 24px; }
-.analytics-details > summary { padding: 16px 0; cursor: pointer; font-size: 1.05rem; font-weight: 700; }
-.analytics-legal { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line); }
-.analytics-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
-.analytics-actions a { color: var(--accent); }
 .expense-form { margin-top: 18px; }
 .expense-form label { flex: 1 1 150px; }
 .expense-form button { min-height: 44px; }
@@ -433,12 +346,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 .client-tabs { margin-bottom: 18px; }
 .client-tabs a { color: var(--text); text-decoration: none; }
 .client-tabs a[aria-current="page"] { border-color: var(--accent); color: var(--accent); }
-.platform-status-list { display: grid; gap: 18px; }
-.platform-status-group h2 { margin: 0 0 8px; color: var(--muted); font-size: 0.85rem; }
-.platform-status-row { display: flex; gap: 12px; justify-content: space-between; padding: 8px 0; }
-.platform-status-row + .platform-status-row { border-top: 1px solid var(--line); }
-.platform-status { color: var(--muted); white-space: nowrap; }
-.platform-status.is-connected { color: var(--green); }
 @media (max-width: 760px) {
   .shell { display: block; padding-top: calc(60px + env(safe-area-inset-top)); }
   .mobile-bar {
@@ -482,8 +389,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   h1 { font-size: 2.15rem; }
   .tool-frame { min-height: 72vh; }
   .account-details div { grid-template-columns: 1fr; gap: 2px; }
-  .analytics-funnel { grid-template-columns: 128px minmax(0, 1fr); column-gap: 8px; row-gap: 24px; }
-  .funnel-shape { min-height: 136px; padding: 6px; }
   .funnel-shape-label {
     position: absolute;
     left: 50%;
@@ -493,11 +398,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     white-space: nowrap;
     transform: translateX(-50%);
   }
-  .funnel-card { padding: 11px; }
-  .analytics-finance { grid-template-columns: 1fr; }
-  .platform-panel { width: calc(100vw - 64px); }
-  .analytics-source-table { min-width: 1040px; table-layout: auto; }
-  .analytics-source-table th, .analytics-source-table td { white-space: nowrap; }
   .crm-stat { min-width: 0; }
   .home-grid { grid-template-columns: 1fr; }
   .kanban-grid { margin-right: -16px; padding-right: 16px; }
@@ -820,7 +720,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       </div>
     </section>
     <section class="view-panel" id="crm-contacts-view" data-view="crm-contacts" hidden>
-      <div class="content-header"><h1>Контакты</h1></div>
+      <div class="content-header"><h1>Контрагенты</h1></div>
       <div class="card"><div id="crm-contacts-content" aria-live="polite"></div></div>
     </section>
     <section class="view-panel" id="crm-companies-view" data-view="crm-companies" hidden>
@@ -909,8 +809,34 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
+  window.SB_CABINET_ASSET_VERSION = "20260905";
+  window.SbCabinet = window.SbCabinet || {};
+  window.SbCabinet.views = window.SbCabinet.views || {};
+  window.SbCabinet.registerView ||= (name, definition) => {
+    window.SbCabinet.views[name] = definition;
+  };
+  const cabinetAssets = ["home", "tasks", "leads", "deals", "clients", "chat", "analytics",
+    "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account"];
+  const cabinetStyles = ["analytics", "ad-platforms"];
+  document.write(cabinetStyles.map((asset) =>
+    `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
+  ).join(""));
+  document.write(cabinetAssets.map((asset) =>
+    `<script src="cabinet/${asset}.js?v=${window.SB_CABINET_ASSET_VERSION}"><\/script>`
+  ).join(""));
+</script>
+<script>
 (() => {
   "use strict";
+  const SbCabinet = window.SbCabinet = window.SbCabinet || {};
+  const registeredViews = SbCabinet.views = SbCabinet.views || {};
+  const apiJson = async (url, options = {}) => {
+    const response = await fetch(url, { credentials: "same-origin", cache: "no-store", ...options,
+      headers: { "Content-Type": "application/json", ...(options.headers || {}) } });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || "Ошибка сервера");
+    return body;
+  };
 
   const VIEW_TITLES = Object.freeze({
     home: "Главная",
@@ -936,14 +862,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   });
   const CRM_API = "/content/crm";
   const EDITOR_PROJECTS = Object.freeze(["alvi", "avokado"]);
-  const CRM_STAGES = Object.freeze([
-    { id: "new", label: "Новая" },
-    { id: "in_progress", label: "В работе" },
-    { id: "booked", label: "Записан" },
-    { id: "visited", label: "Пришёл" },
-    { id: "sale", label: "Продажа" },
-    { id: "rejected", label: "Отказ" }
-  ]);
   const byId = (id) => document.getElementById(id);
   const escapeHTML = (value) => String(value).replace(/[&<>'"]/g, (character) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;"
@@ -953,8 +871,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   let allowedProjects = [];
   let selectedProjectId = null;
   let currentView = "home";
-  let crmBound = false;
-  let analyticsBound = false;
   let drawerOpen = false;
 
   const allowedProjectsFor = (profile) => {
@@ -1048,12 +964,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     saveSelectedProject();
     renderProjectPicker();
     closeProjectMenu(true);
-    if (currentView === "analytics-through") loadAnalytics();
-    if (currentView === "ad-platforms") loadAdPlatforms();
-    if (currentView === "crm") loadCRM();
-    if (currentView === "crm-contacts") applyContactProjectFilter();
-    loadTasksSummary();
-    if (currentView === "tasks") renderTasksRoute();
+    const context = cabinetContext();
+    registeredViews[currentView]?.onProjectChange?.(context);
+    if (currentView !== "tasks") registeredViews.tasks?.updateSummary?.(context);
   };
 
   const editorUrl = (kind) => `${kind}-editor.html?site=${encodeURIComponent(selectedProjectId)}`;
@@ -1088,87 +1001,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     showEditorNotice();
     history.replaceState(null, "", `#${defaultView()}`);
     return false;
-  };
-
-  const apiJson = async (url, options = {}) => {
-    const response = await fetch(url, { credentials: "same-origin", cache: "no-store", ...options,
-      headers: { "Content-Type": "application/json", ...(options.headers || {}) } });
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body.error || "Ошибка сервера");
-    return body;
-  };
-  const renderSites = async () => {
-    const content = byId("sites-content");
-    if (!identity.permissions.includes("sites.view")) {
-      content.textContent = "Нет доступа к каталогу сайтов";
-      return;
-    }
-    content.textContent = "Загрузка…";
-    const query = new URLSearchParams();
-    if (byId("sites-company").value) query.set("companyCode", byId("sites-company").value);
-    if (byId("sites-state").value) query.set("state", byId("sites-state").value);
-    try {
-      const data = await apiJson(`/content/sites?${query}`);
-      content.replaceChildren();
-      if (!data.sites.length) {
-        content.textContent = "Для выбранных компаний сайты ещё не созданы";
-        return;
-      }
-      const grid = document.createElement("div");
-      grid.className = "site-grid";
-      for (const site of data.sites) {
-        const card = document.createElement("article");
-        card.className = "card site-card";
-        card.innerHTML = `<h2>${escapeHTML(site.name)}</h2><p>${escapeHTML(site.company.name)}</p>
-          <p>${site.isActive ? "Активен · " : ""}
-          ${site.publicationStatus === "draft" ? "Черновик" : "Опубликован"}</p>`;
-        const actions = document.createElement("div");
-        actions.className = "site-actions";
-        for (const [label, url] of [["Редактировать сайт", site.capabilities.editSite && site.editorUrls.site],
-          ["Прайс", site.capabilities.editPrice && site.editorUrls.price], ["Открыть сайт", site.publicUrl]]) {
-          if (!url) continue;
-          const link = document.createElement("a");
-          link.href = url;
-          link.target = "_blank";
-          link.rel = "noopener";
-          link.textContent = label;
-          actions.append(link);
-        }
-        if (site.capabilities.delete) {
-          const button = document.createElement("button"); button.type = "button"; button.className = "danger";
-          button.textContent = "Удалить"; button.addEventListener("click", async () => {
-            if (prompt(`Введите название сайта «${site.name}» для удаления`) !== site.name) return;
-            await apiJson(`/content/sites/${encodeURIComponent(site.id)}`, {
-              method: "DELETE", headers: { "X-CSRF-Token": identity.csrfToken }
-            });
-            renderSites();
-          });
-          actions.append(button);
-        }
-        card.append(actions); grid.append(card);
-      }
-      content.append(grid);
-    } catch (error) {
-      content.textContent = `${error.message}. Повторите попытку.`;
-    }
-  };
-  const renderAccounts = async () => {
-    if (identity.role !== "owner") return;
-    const content = byId("accounts-content");
-    content.textContent = "Загрузка…";
-    try {
-      const data = await apiJson("/content/admin/accounts");
-      content.replaceChildren();
-      for (const account of data.accounts) {
-        const card = document.createElement("article");
-        card.className = "card account-card";
-        card.innerHTML = `<h2>${escapeHTML(account.displayName)}</h2>
-          <p>@${escapeHTML(account.login)} · ${account.role}</p>
-          <p>Компании: ${account.companies.map((item) => escapeHTML(item.name)).join(", ") || "не назначены"}</p>
-          <p>Права: ${account.permissions.map(escapeHTML).join(", ") || "не назначены"}</p>`;
-        content.append(card);
-      }
-    } catch (error) { content.textContent = error.message; }
   };
 
   const hasPermission = (permission) => identity?.role === "owner" ||
@@ -1207,6 +1039,23 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     button.setAttribute("aria-expanded", "true");
     menu.hidden = false;
   };
+  const cabinetContext = () => ({
+    identity,
+    get selectedProjectId() { return selectedProjectId; },
+    get currentView() { return currentView; },
+    byId,
+    escapeHTML,
+    crmQuery,
+    csrfOptions,
+    scopeParams,
+    hasPermission,
+    navigate,
+    apiJson,
+    formatMoney,
+    formatROMI,
+    periodDates,
+    dateValue
+  });
   const setView = (viewName, focusMain = false) => {
     currentView = validView(viewName) ? viewName : defaultView();
     document.querySelectorAll("[data-view]").forEach((view) => {
@@ -1233,11 +1082,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     const active = document.querySelector(`[data-view="${currentView}"]`);
     const frame = active.querySelector("iframe[data-src]");
     if (frame && !frame.getAttribute("src")) frame.src = frame.dataset.src;
-    if (currentView === "analytics-through") loadAnalytics();
-    if (currentView === "ad-platforms") loadAdPlatforms();
-    if (currentView === "crm") loadCRM();
-    if (currentView.startsWith("crm-") && currentView !== "crm") renderCrmEntityRoute();
-    if (currentView === "tasks") renderTasksRoute();
+    registeredViews[currentView]?.render(active, cabinetContext());
     if (focusMain) byId("main-content").focus();
   };
   const navigate = (viewName) => {
@@ -1275,857 +1120,11 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     if (!response.ok) throw new Error(body?.error || `CRM_HTTP_${response.status}`);
     return body;
   };
-  const TASK_ROLES = Object.freeze({
-    owner: "Собственник",
-    admin: "Администратор",
-    marketer: "Маркетолог",
-    synapse: "Synapse"
-  });
-  const TASK_STATUSES = Object.freeze({
-    inbox: "Входящие",
-    planned: "Запланировано",
-    in_progress: "В работе",
-    done: "Сделано",
-    cancelled: "Отменено"
-  });
-  const TASK_PRIORITIES = Object.freeze({
-    low: "Низкий",
-    normal: "Обычный",
-    high: "Высокий",
-    urgent: "Срочный"
-  });
-  const TASK_SOURCES = Object.freeze({ manual: "Вручную", chat: "Чат", telegram: "Telegram" });
-  const taskState = { status: "", assigneeRole: "", source: "", q: "", companies: [] };
-  const taskOptions = (values, selected = "") => Object.entries(values).map(([value, label]) => {
-    return `<option value="${value}"${value === selected ? " selected" : ""}>${label}</option>`;
-  }).join("");
-  const taskCompanyName = (code) => {
-    if (!code) return "Synapse";
-    return taskState.companies.find((company) => company.code === code)?.name || code;
-  };
-  const loadTaskCompanies = async () => {
-    if (taskState.companies.length) return;
-    const data = await crmQuery("/companies", { limit: 200, deleted: "exclude" });
-    taskState.companies = data.companies || [];
-  };
-  const taskCompanyOptions = (selected = "") => {
-    const options = taskState.companies.map((company) => {
-      const value = company.code || "";
-      return `<option value="${escapeHTML(value)}"${value === selected ? " selected" : ""}>` +
-        `${escapeHTML(company.name || value)}</option>`;
-    }).join("");
-    return `<option value=""${selected ? "" : " selected"}>Synapse (все проекты)</option>${options}`;
-  };
-  const loadTasksSummary = async () => {
-    try {
-      const summary = await crmQuery("/tasks/summary", scopeParams());
-      const badge = byId("tasks-badge");
-      badge.textContent = summary.inbox || "";
-      badge.hidden = !summary.inbox;
-      return summary;
-    } catch (error) {
-      byId("tasks-badge").hidden = true;
-      return null;
-    }
-  };
-  const taskStatusTabs = (summary = {}) => {
-    const tabs = [
-      ["inbox", "Входящие", summary.inbox],
-      ["planned", "Запланировано", summary.planned],
-      ["in_progress", "В работе", summary.inProgress],
-      ["done", "Сделано", summary.done],
-      ["", "Все", Object.values(summary).filter(Number.isFinite).reduce((total, value) => total + value, 0)]
-    ];
-    return tabs.map(([value, label, count]) => `<button type="button" data-task-status-tab="${value}"
-      aria-pressed="${String(taskState.status === value)}">${label} · ${count || 0}</button>`).join("");
-  };
-  const taskDueMarkup = (task) => {
-    if (!task.dueDate) return '<span class="crm-muted">—</span>';
-    const overdue = !["done", "cancelled"].includes(task.status) &&
-      task.dueDate < new Date().toISOString().slice(0, 10);
-    return `<span class="${overdue ? "tasks-overdue" : ""}">${escapeHTML(task.dueDate)}</span>`;
-  };
-  const taskActionsMarkup = (task) => {
-    if (task.status === "inbox") {
-      return `<div class="tasks-actions"><button type="button" data-task-quick="planned"
-        data-task-id="${escapeHTML(task.id)}">Запланировать</button><button class="danger" type="button"
-        data-task-quick="cancelled" data-task-id="${escapeHTML(task.id)}">Отклонить</button></div>`;
-    }
-    return `<select data-task-quick data-task-id="${escapeHTML(task.id)}" aria-label="Изменить статус">
-      ${taskOptions(TASK_STATUSES, task.status)}</select>`;
-  };
-  const renderTaskList = async () => {
-    const content = byId("tasks-content");
-    content.textContent = "Загрузка…";
-    try {
-      await loadTaskCompanies();
-      const [data, summary] = await Promise.all([
-        crmQuery("/tasks", {
-          ...scopeParams(),
-          status: taskState.status,
-          assigneeRole: taskState.assigneeRole,
-          source: taskState.source,
-          q: taskState.q,
-          limit: 100,
-          offset: 0
-        }),
-        loadTasksSummary()
-      ]);
-      const tasks = data.tasks || [];
-      const rows = tasks.map((task) => {
-        const source = task.source !== "manual"
-          ? `<small>${escapeHTML(task.sourceAuthor || "—")} · ${TASK_SOURCES[task.source] || task.source}</small>`
-          : "";
-        return `<tr class="crm-row" tabindex="0" data-task-row="${escapeHTML(task.id)}">
-          <td class="crm-grow"><span class="tasks-title"><strong>${escapeHTML(task.title)}</strong>${source}</span></td>
-          <td class="crm-compact">${escapeHTML(taskCompanyName(task.companyCode))}</td>
-          <td class="crm-compact"><span class="tasks-assignee">${TASK_ROLES[task.assigneeRole] || task.assigneeRole}
-          ${task.assigneeName ? `<small>${escapeHTML(task.assigneeName)}</small>` : ""}</span></td>
-          <td class="crm-compact"><span class="tasks-priority" data-priority="${escapeHTML(task.priority)}">
-          ${TASK_PRIORITIES[task.priority] || task.priority}</span></td>
-          <td class="crm-compact">${taskDueMarkup(task)}</td>
-          <td class="crm-compact">${TASK_STATUSES[task.status] || task.status}</td>
-          <td class="crm-compact">${taskActionsMarkup(task)}</td></tr>`;
-      }).join("");
-      content.innerHTML = `<div class="tasks-status-tabs" aria-label="Статус задачи">
-        ${taskStatusTabs(summary || {})}</div><div class="crm-entity-toolbar">
-        <select data-task-role-filter aria-label="Роль исполнителя"><option value="">Все исполнители</option>
-        ${taskOptions(TASK_ROLES, taskState.assigneeRole)}</select>
-        <select data-task-source-filter aria-label="Источник"><option value="">Все источники</option>
-        ${taskOptions(TASK_SOURCES, taskState.source)}</select>
-        <input type="search" data-task-search value="${escapeHTML(taskState.q)}" placeholder="Поиск"
-          aria-label="Поиск задач"><button class="plain-button" type="button" data-task-add>Добавить</button>
-        </div><p class="crm-list-count">Показано ${tasks.length} из ${data.pagination?.total ?? tasks.length}</p>
-        <div class="crm-table-wrap"><table class="crm-table crm-entity-table"><thead><tr>
-        <th class="crm-grow">Задача</th><th>Проект</th><th>Исполнитель</th><th>Приоритет</th><th>Срок</th>
-        <th>Статус</th><th>Действия</th></tr></thead><tbody>${rows}</tbody></table></div>
-        ${tasks.length ? "" : '<p class="crm-empty">Задач нет</p>'}`;
-      bindTaskList();
-    } catch (error) {
-      content.innerHTML = `<p class="crm-error" role="alert">${escapeHTML(error.message)}</p>`;
-    }
-  };
-  const updateTaskStatus = async (id, status) => {
-    await crmQuery(`/tasks/${encodeURIComponent(id)}`, {}, csrfOptions("PATCH", { status }));
-    await renderTaskList();
-  };
-  const bindTaskList = () => {
-    const content = byId("tasks-content");
-    content.querySelectorAll("[data-task-status-tab]").forEach((button) => {
-      button.addEventListener("click", () => {
-        taskState.status = button.dataset.taskStatusTab;
-        renderTaskList();
-      });
-    });
-    content.querySelector("[data-task-role-filter]").addEventListener("change", (event) => {
-      taskState.assigneeRole = event.target.value;
-      renderTaskList();
-    });
-    content.querySelector("[data-task-source-filter]").addEventListener("change", (event) => {
-      taskState.source = event.target.value;
-      renderTaskList();
-    });
-    let timer;
-    content.querySelector("[data-task-search]").addEventListener("input", (event) => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        taskState.q = event.target.value.trim();
-        renderTaskList();
-      }, 300);
-    });
-    content.querySelector("[data-task-add]").addEventListener("click", openTaskCreate);
-    content.querySelectorAll("[data-task-row]").forEach((row) => {
-      row.addEventListener("click", (event) => {
-        if (!event.target.closest("button, select")) navigate("tasks/" + row.dataset.taskRow);
-      });
-      row.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") navigate("tasks/" + row.dataset.taskRow);
-      });
-    });
-    content.querySelectorAll("button[data-task-quick]").forEach((button) => {
-      button.addEventListener("click", () => updateTaskStatus(button.dataset.taskId, button.dataset.taskQuick));
-    });
-    content.querySelectorAll("select[data-task-quick]").forEach((select) => {
-      select.addEventListener("change", () => updateTaskStatus(select.dataset.taskId, select.value));
-    });
-  };
-  const taskFormMarkup = (task) => `<form class="crm-form" data-task-form>
-    <label class="wide">Название *<input name="title" required maxlength="300"
-      value="${escapeHTML(task.title || "")}"></label>
-    <label class="wide">Описание<textarea name="description">${escapeHTML(task.description || "")}</textarea></label>
-    <label>Проект<select name="companyCode">${taskCompanyOptions(task.companyCode || "")}</select></label>
-    <label>Исполнитель<select name="assigneeRole">${taskOptions(TASK_ROLES, task.assigneeRole)}</select></label>
-    <label>Имя исполнителя<input name="assigneeName" maxlength="200"
-      value="${escapeHTML(task.assigneeName || "")}"></label>
-    <label>Приоритет<select name="priority">${taskOptions(TASK_PRIORITIES, task.priority)}</select></label>
-    <label>Срок<input name="dueDate" type="date" value="${escapeHTML(task.dueDate || "")}"></label>
-    <label>Статус<select name="status">${taskOptions(TASK_STATUSES, task.status)}</select></label>
-    <div class="crm-actions wide"><button class="plain-button" type="submit">Сохранить</button>
-      <button class="danger" type="button" data-task-delete>Удалить</button></div>
-    <p class="crm-card-status wide" data-task-result role="status"></p></form>`;
-  const taskPayload = (form) => ({
-    title: form.elements.title.value.trim(),
-    description: form.elements.description.value.trim(),
-    companyCode: form.elements.companyCode.value,
-    assigneeRole: form.elements.assigneeRole.value,
-    assigneeName: form.elements.assigneeName.value.trim(),
-    priority: form.elements.priority.value,
-    dueDate: form.elements.dueDate.value,
-    status: form.elements.status.value
-  });
-  const renderTaskCard = async (id) => {
-    const content = byId("tasks-content");
-    content.textContent = "Загрузка…";
-    try {
-      await loadTaskCompanies();
-      const task = await crmQuery(`/tasks/${encodeURIComponent(id)}`);
-      const source = task.source !== "manual" ? `<section class="tasks-source"><h3>Откуда</h3>
-        <p>${escapeHTML(TASK_SOURCES[task.source] || task.source)} · ${escapeHTML(task.sourceAuthor || "—")}</p>
-        <p>${escapeHTML(task.sourceRef || "—")}</p><p>${escapeHTML(task.createdAt || "—")}</p></section>` : "";
-      content.innerHTML = `<a class="crm-card-back" href="#tasks" data-task-back>← К списку</a>
-        <header class="crm-card-header"><h2>${escapeHTML(task.title)}</h2></header>${source}${taskFormMarkup(task)}`;
-      content.querySelector("[data-task-back]").addEventListener("click", (event) => {
-        event.preventDefault();
-        navigate("tasks");
-      });
-      const form = content.querySelector("[data-task-form]");
-      form.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        const result = form.querySelector("[data-task-result]");
-        try {
-          await crmQuery(`/tasks/${encodeURIComponent(task.id)}`, {}, csrfOptions("PATCH", taskPayload(form)));
-          result.textContent = "Сохранено";
-          await loadTasksSummary();
-        } catch (error) {
-          result.textContent = error.message;
-        }
-      });
-      form.querySelector("[data-task-delete]").addEventListener("click", async () => {
-        if (prompt(`Введите название «${task.title}» для удаления`) !== task.title) return;
-        try {
-          await crmQuery(`/tasks/${encodeURIComponent(task.id)}`, {}, csrfOptions("DELETE"));
-          await loadTasksSummary();
-          navigate("tasks");
-        } catch (error) {
-          form.querySelector("[data-task-result]").textContent = error.message;
-        }
-      });
-    } catch (error) {
-      content.innerHTML = `<p class="crm-error" role="alert">${escapeHTML(error.message)}</p>`;
-    }
-  };
-  const renderTasksRoute = () => {
-    const parts = decodeURIComponent(location.hash.slice(1)).split(/[/?]/);
-    if (parts[1]) renderTaskCard(parts[1]);
-    else renderTaskList();
-  };
-  const openTaskCreate = async () => {
-    const dialog = byId("task-create-dialog");
-    const form = byId("task-create-form");
-    await loadTaskCompanies();
-    form.querySelector("[data-task-company]").innerHTML = taskCompanyOptions(
-      selectedProjectId === "synapse-business" ? "" : selectedProjectId
-    );
-    form.querySelector("[data-task-role]").innerHTML = taskOptions(TASK_ROLES, "synapse");
-    form.querySelector("[data-task-priority]").innerHTML = taskOptions(TASK_PRIORITIES, "normal");
-    form.querySelector("[data-task-status]").innerHTML = taskOptions(TASK_STATUSES, "planned");
-    form.elements.title.value = "";
-    form.elements.description.value = "";
-    form.elements.assigneeName.value = "";
-    form.elements.dueDate.value = "";
-    form.querySelector("[role=alert]").hidden = true;
-    dialog.showModal();
-  };
-  byId("task-create-dialog").querySelector("[data-task-create-close]").addEventListener("click", () => {
-    byId("task-create-dialog").close();
-  });
-  byId("task-create-form").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const error = form.querySelector("[role=alert]");
-    try {
-      const created = await crmQuery("/tasks", {}, csrfOptions("POST", {
-        ...taskPayload(form),
-        source: "manual",
-        sourceRef: "",
-        sourceAuthor: ""
-      }));
-      byId("task-create-dialog").close();
-      await loadTasksSummary();
-      if (created?.id) navigate(`tasks/${created.id}`);
-      else renderTaskList();
-    } catch (failure) {
-      error.textContent = failure.message;
-      error.hidden = false;
-    }
-  });
-  const ENTITY_STAGES = Object.freeze({
-    application: "Заявка",
-    call: "Созвон",
-    kit_ready: "Комплект собран",
-    payment: "Оплата",
-    active: "Активен"
-  });
-  const CRM_ENTITIES = Object.freeze({
-    "crm-contacts": {
-      path: "contacts",
-      key: "contacts",
-      title: "Контакты",
-      required: ["name"],
-      columns: ["name", "position", "phone", "email", "city", "preferredChannel"],
-      labels: {
-        name: "Имя",
-        position: "Должность",
-        phone: "Телефон",
-        email: "Email",
-        city: "Город",
-        timezone: "Часовой пояс",
-        preferredChannel: "Предпочтительный канал",
-        notes: "Заметки",
-        birthDate: "Дата рождения"
-      },
-      arrays: { messengers: "Мессенджеры", links: "Ссылки" },
-      relations: [
-        { key: "companies", countLabel: "Компаний", view: "crm-companies", path: "companies", flag: "isResponsible",
-          flagLabel: "Ответственный" },
-        { key: "legalEntities", countLabel: "Юрлиц", view: "crm-legal", path: "legal-entities", flag: "isSignatory",
-          flagLabel: "Подписант", signing: true }
-      ],
-      companyFilter: true
-    },
-    "crm-companies": {
-      path: "companies",
-      key: "companies",
-      title: "Компании",
-      required: ["code", "name"],
-      columns: ["code", "name", "industry", "city", "pipelineStage"],
-      labels: {
-        code: "Код",
-        name: "Название",
-        industry: "Отрасль",
-        city: "Город",
-        timezone: "Часовой пояс",
-        phone: "Телефон",
-        email: "Email",
-        websiteUrl: "Сайт",
-        pipelineStage: "Этап",
-        startDate: "Дата начала",
-        endDate: "Дата окончания",
-        preferredChannel: "Предпочтительный канал",
-        notes: "Заметки"
-      },
-      arrays: { socials: "Соцсети" },
-      relations: [
-        { key: "contacts", countLabel: "Контактов", view: "crm-contacts", path: "contacts", flag: "isResponsible",
-          flagLabel: "Ответственный", reverse: true },
-        { key: "legalEntities", countLabel: "Юрлиц", view: "crm-legal", path: "legal-entities", flag: "isPrimary",
-          flagLabel: "Основное" }
-      ],
-      stageFilter: true
-    },
-    "crm-legal": {
-      path: "legal-entities",
-      key: "legalEntities",
-      title: "Юрлица",
-      required: ["legalForm", "name"],
-      columns: ["legalForm", "name", "inn", "registration"],
-      labels: {
-        legalForm: "Форма",
-        name: "Название",
-        shortName: "Краткое название",
-        inn: "ИНН",
-        kpp: "КПП",
-        ogrn: "ОГРН",
-        ogrnip: "ОГРНИП",
-        phone: "Телефон",
-        email: "Email",
-        legalAddress: "Юридический адрес",
-        postalAddress: "Почтовый адрес",
-        taxSystem: "Система налогообложения",
-        bankName: "Банк",
-        bik: "БИК",
-        checkingAccount: "Расчётный счёт",
-        correspondentAccount: "Корреспондентский счёт",
-        recipientName: "Получатель",
-        notes: "Заметки"
-      },
-      private: ["legalAddress", "postalAddress", "taxSystem", "bankName", "bik", "checkingAccount",
-        "correspondentAccount", "recipientName"],
-      relations: [
-        { key: "contacts", countLabel: "Контактов", view: "crm-contacts", path: "contacts", flag: "isSignatory",
-          flagLabel: "Подписант", signing: true, reverse: true },
-        { key: "companies", countLabel: "Компаний", view: "crm-companies", path: "companies", flag: "isPrimary",
-          flagLabel: "Основное", reverse: true }
-      ],
-      companyFilter: true
-    }
-  });
-  const entityStates = {};
-  const canEditCRM = () => hasPermission("crm.edit");
-  const entityValue = (field, value) => {
-    if (field === "legalForm") return value === "ip" ? "ИП" : value === "ooo" ? "ООО" : value;
-    if (field === "pipelineStage") return ENTITY_STAGES[value] || value;
-    return value;
-  };
-  const entityName = (record) => record.name || record.shortName || record.code || `#${record.id}`;
-  const entityState = (view) => entityStates[view] ||= {
-    q: "", companyId: "", pipelineStage: "", deleted: "exclude", offset: 0, records: [], companies: [],
-    projectId: null
-  };
-  const entityHashParts = () => {
-    const hash = decodeURIComponent(location.hash.slice(1));
-    const [path, query = ""] = hash.split("?");
-    return { parts: path.split("/"), params: new URLSearchParams(query) };
-  };
   const csrfOptions = (method, body) => ({
     method,
     headers: { "X-CSRF-Token": identity.csrfToken },
     ...(body === undefined ? {} : { body: JSON.stringify(body) })
   });
-  const loadEntityCompanies = async (state) => {
-    if (state.companies.length) return;
-    const data = await crmQuery("/companies", { limit: 200, deleted: "exclude" });
-    state.companies = data.companies || [];
-  };
-  const setContactProjectFilter = (state) => {
-    if (state.projectId === selectedProjectId) return;
-    const company = state.companies.find((item) => item.code?.toLowerCase() === selectedProjectId);
-    state.companyId = selectedProjectId === "synapse-business" ? "" : String(company?.id || "");
-    state.projectId = selectedProjectId;
-  };
-  const applyContactProjectFilter = async () => {
-    const state = entityState("crm-contacts");
-    await loadEntityCompanies(state);
-    setContactProjectFilter(state);
-    const query = state.companyId ? `?companyId=${encodeURIComponent(state.companyId)}` : "";
-    history.replaceState(null, "", `#crm-contacts${query}`);
-    await renderEntityList("crm-contacts", true);
-  };
-  const renderCrmEntityRoute = async () => {
-    const { parts: [view, route], params } = entityHashParts();
-    const config = CRM_ENTITIES[view];
-    if (!route && config.companyFilter) {
-      const state = entityState(view);
-      state.companyId = params.get("companyId") || "";
-      if (view === "crm-contacts") {
-        state.projectId = params.has("companyId") ? selectedProjectId : null;
-      }
-    }
-    const content = byId(`${view}-content`);
-    content.textContent = "Загрузка…";
-    try {
-      if (route === "new") await renderEntityForm(view, null);
-      else if (route) await renderEntityCard(view, route);
-      else await renderEntityList(view, true);
-    } catch (error) {
-      content.innerHTML = `<p class="crm-error" role="alert">${escapeHTML(error.message)}</p>`;
-    }
-  };
-  const renderEntityList = async (view, reset = false) => {
-    const config = CRM_ENTITIES[view];
-    const state = entityState(view);
-    const content = byId(`${view}-content`);
-    if (reset) {
-      state.offset = 0;
-      state.records = [];
-    }
-    if (config.companyFilter) await loadEntityCompanies(state);
-    if (view === "crm-contacts") setContactProjectFilter(state);
-    const params = {
-      q: state.q,
-      companyId: state.companyId,
-      pipelineStage: state.pipelineStage,
-      deleted: state.deleted,
-      limit: 50,
-      offset: state.offset
-    };
-    const data = await crmQuery(`/${config.path}`, params);
-    state.records.push(...(data[config.key] || []));
-    const pageRecords = data[config.key] || [];
-    const companyOptions = state.companies.map((company) => {
-      const selected = String(company.id) === state.companyId ? " selected" : "";
-      return `<option value="${escapeHTML(company.id)}"${selected}>${escapeHTML(entityName(company))}</option>`;
-    }).join("");
-    const stageOptions = Object.entries(ENTITY_STAGES).map(([id, label]) => {
-      const selected = id === state.pipelineStage ? " selected" : "";
-      return `<option value="${id}"${selected}>${label}</option>`;
-    }).join("");
-    let visibleColumns = [...config.columns];
-    if (view === "crm-contacts") {
-      const hasCompanies = state.records.some((record) => record.companies?.length);
-      visibleColumns = ["name", "phone", ...(hasCompanies ? ["companies"] : ["preferredChannel", "city"]),
-        ...(state.records.some((record) => record.email) ? ["email"] : []),
-        ...(state.records.some((record) => record.position) ? ["position"] : [])];
-    }
-    const columns = visibleColumns.map((field) => {
-      const label = field === "companies" ? "Компании" : config.labels[field] || "ОГРН / ОГРНИП";
-      const type = field === "name" ? "crm-grow" : "crm-compact";
-      return `<th class="${type}">${escapeHTML(label)}</th>`;
-    })
-      .join("");
-    const rows = state.records.map((record) => {
-      const cells = visibleColumns.map((field) => {
-        let value = field === "registration" ? record.ogrn || record.ogrnip : record[field];
-        if (field === "companies") value = record.companies.map(entityName).join(", ");
-        const shown = entityValue(field, value);
-        const type = field === "name" ? "crm-grow" : "crm-compact";
-        const title = shown ? ` title="${escapeHTML(shown)}"` : "";
-        const deleted = field === "name" && (record.deletedAt || record.isDeleted || record.deleted)
-          ? ' <span class="crm-deleted-mark">удалено</span>' : "";
-        return `<td class="${type}${shown ? "" : " crm-muted"}"${title}>${escapeHTML(shown || "—")}${deleted}</td>`;
-      }).join("");
-      const deleted = record.deletedAt || record.isDeleted || record.deleted;
-      return `<tr class="crm-row${deleted ? " is-deleted" : ""}" tabindex="0"
-        data-entity-id="${escapeHTML(record.id)}">${cells}</tr>`;
-    }).join("");
-    content.innerHTML = `<div class="crm-entity-toolbar">
-      <input type="search" data-entity-search value="${escapeHTML(state.q)}" placeholder="Поиск" aria-label="Поиск">
-      ${config.companyFilter ? `<select data-company-filter aria-label="Фильтр по компании">
-        <option value="">Все компании</option>${companyOptions}</select>` : ""}
-      ${config.stageFilter ? `<select data-stage-filter aria-label="Фильтр по этапу">
-        <option value="">Все этапы</option>${stageOptions}</select>` : ""}
-      <label class="crm-filter-check"><input type="checkbox" data-deleted-filter
-        ${state.deleted === "include" ? "checked" : ""}>Показывать удалённые</label>
-      ${canEditCRM() ? `<button class="plain-button" type="button" data-entity-add>Добавить</button>` : ""}
-    </div><p class="crm-list-count">Показано ${state.records.length} из
-      ${data.pagination?.total ?? pageRecords.length}</p>
-      <div class="crm-table-wrap"><table class="crm-table crm-entity-table"><thead><tr>${columns}</tr></thead>
-      <tbody>${rows}</tbody></table></div>
-      ${state.records.length ? "" : '<p class="crm-empty">Записей нет</p>'}
-      ${state.records.length < (data.pagination?.total || 0)
-        ? '<button class="plain-button" type="button" data-entity-more>Показать ещё</button>' : ""}`;
-    bindEntityList(view);
-  };
-  const bindEntityList = (view) => {
-    const content = byId(`${view}-content`);
-    const state = entityState(view);
-    let timer;
-    content.querySelector("[data-entity-search]").addEventListener("input", (event) => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        state.q = event.target.value.trim();
-        renderEntityList(view, true);
-      }, 300);
-    });
-    content.querySelector("[data-company-filter]")?.addEventListener("change", (event) => {
-      state.companyId = event.target.value;
-      state.projectId = selectedProjectId;
-      const query = state.companyId ? `?companyId=${encodeURIComponent(state.companyId)}` : "";
-      history.replaceState(null, "", `#${view}${query}`);
-      renderEntityList(view, true);
-    });
-    content.querySelector("[data-stage-filter]")?.addEventListener("change", (event) => {
-      state.pipelineStage = event.target.value;
-      renderEntityList(view, true);
-    });
-    content.querySelector("[data-deleted-filter]").addEventListener("change", (event) => {
-      state.deleted = event.target.checked ? "include" : "exclude";
-      renderEntityList(view, true);
-    });
-    content.querySelector("[data-entity-add]")?.addEventListener("click", () => navigateEntity(view, "new"));
-    content.querySelector("[data-entity-more]")?.addEventListener("click", () => {
-      state.offset += 50;
-      renderEntityList(view);
-    });
-    content.querySelectorAll("[data-entity-id]").forEach((row) => {
-      row.addEventListener("click", () => navigateEntity(view, row.dataset.entityId));
-      row.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") navigateEntity(view, row.dataset.entityId);
-      });
-    });
-  };
-  const navigateEntity = (view, route = "") => {
-    location.hash = `${view}${route ? `/${encodeURIComponent(route)}` : ""}`;
-  };
-  const detailsMarkup = (config, record, fields) => fields.filter((field) => {
-    return record[field] !== null && record[field] !== undefined && record[field] !== "";
-  }).map((field) => `<div><dt>${escapeHTML(config.labels[field])}</dt>
-    <dd>${escapeHTML(entityValue(field, record[field]))}</dd></div>`).join("");
-  const entitySubtitle = (view, record) => {
-    if (view === "crm-contacts") return record.phone || "";
-    if (view === "crm-companies") return record.code || "";
-    return [entityValue("legalForm", record.legalForm), record.inn].filter(Boolean).join(" · ");
-  };
-  const renderEntityCard = async (view, id) => {
-    const config = CRM_ENTITIES[view];
-    const record = await crmQuery(`/${config.path}/${encodeURIComponent(id)}`, { includeDeleted: true });
-    const content = byId(`${view}-content`);
-    const publicFields = Object.keys(config.labels).filter((field) => !config.private?.includes(field));
-    const privateFields = config.private || [];
-    const arrayDetails = Object.entries(config.arrays || {}).map(([field, label]) => {
-      if (!record[field]?.length) return "";
-      const values = record[field].map((item) => [item.type, item.label, item.url || item.handle]
-        .filter(Boolean).join(" · ")).filter(Boolean).join(", ");
-      return `<div><dt>${label}</dt><dd>${escapeHTML(values)}</dd></div>`;
-    }).join("");
-    content.innerHTML = `<a class="crm-card-back" href="#${view}" data-entity-back>← К списку</a>
-      <header class="crm-card-header"><div><h2>${escapeHTML(entityName(record))}</h2>
-      <p class="crm-card-subtitle">${escapeHTML(entitySubtitle(view, record))}</p></div>
-      <div class="crm-actions">${cardActions(record)}</div></header>
-      <p class="crm-card-status" data-card-status role="status"></p><dl class="crm-details">
-      ${detailsMarkup(config, record, publicFields)}${arrayDetails}</dl>
-      ${view === "crm-legal" && canEditCRM() && privateFields.some((field) => record[field])
-        ? `<section class="card"><h3>Реквизиты</h3><dl class="crm-details">
-          ${detailsMarkup(config, record, privateFields)}</dl></section>` : ""}
-      ${view === "crm-companies" ? '<p data-company-leads>Заявки: загрузка…</p>' : ""}
-      <section class="crm-relations"><h3>Связи</h3><div data-relations></div></section>`;
-    content.querySelector("[data-entity-back]").addEventListener("click", (event) => {
-      event.preventDefault();
-      navigateEntity(view);
-    });
-    bindCardActions(view, record);
-    renderRelations(view, record);
-    if (view === "crm-companies") loadCompanyLeadCount(record);
-  };
-  const cardActions = (record) => {
-    if (!canEditCRM()) return "";
-    const deleted = Boolean(record.deletedAt || record.isDeleted || record.deleted);
-    return deleted ? '<button class="plain-button" type="button" data-restore>Восстановить</button>' :
-      '<button class="plain-button" type="button" data-edit>Изменить</button>' +
-      '<button class="danger" type="button" data-delete>Удалить</button>';
-  };
-  const bindCardActions = (view, record) => {
-    const config = CRM_ENTITIES[view];
-    const content = byId(`${view}-content`);
-    content.querySelector("[data-edit]")?.addEventListener("click", () => renderEntityForm(view, record));
-    content.querySelector("[data-delete]")?.addEventListener("click", async () => {
-      if (prompt(`Введите название «${entityName(record)}» для удаления`) !== entityName(record)) return;
-      try {
-        await crmQuery(`/${config.path}/${record.id}`, {}, csrfOptions("DELETE"));
-        renderEntityCard(view, record.id);
-      } catch (error) {
-        content.querySelector("[data-card-status]").textContent = error.message;
-      }
-    });
-    content.querySelector("[data-restore]")?.addEventListener("click", async () => {
-      try {
-        await crmQuery(`/${config.path}/${record.id}/restore`, {}, csrfOptions("POST"));
-        renderEntityCard(view, record.id);
-      } catch (error) {
-        content.querySelector("[data-card-status]").textContent = error.message;
-      }
-    });
-  };
-  const loadCompanyLeadCount = async (company) => {
-    const target = byId("crm-companies-content").querySelector("[data-company-leads]");
-    try {
-      const data = await crmQuery("/leads", { companyCode: company.code });
-      const leads = Array.isArray(data) ? data : data.leads || [];
-      target.textContent = `Заявки: ${data.total ?? leads.length}`;
-    } catch (error) {
-      target.textContent = `Заявки: ${error.message}`;
-    }
-  };
-  const fieldInput = (config, field, value = "") => {
-    const required = config.required.includes(field) ? " required" : "";
-    const hint = field === "code" ? '<small>Как поддомен: alvi, palitra-love</small>' : "";
-    if (field === "notes") {
-      return `<label class="wide">${config.labels[field]}<textarea name="${field}"${required}>${
-        escapeHTML(value)}</textarea></label>`;
-    }
-    if (field === "legalForm") {
-      return `<label>${config.labels[field]} *<select name="${field}" required>
-        <option value="">Выберите</option><option value="ip"${value === "ip" ? " selected" : ""}>ИП</option>
-        <option value="ooo"${value === "ooo" ? " selected" : ""}>ООО</option></select></label>`;
-    }
-    if (field === "pipelineStage") {
-      const options = Object.entries(ENTITY_STAGES).map(([id, label]) =>
-        `<option value="${id}"${value === id ? " selected" : ""}>${label}</option>`).join("");
-      return `<label>${config.labels[field]}<select name="${field}"><option value=""></option>
-        ${options}</select></label>`;
-    }
-    const type = field.toLowerCase().includes("date") ? "date" : field === "email" ? "email" :
-      field.toLowerCase().includes("url") ? "url" : "text";
-    const pattern = field === "code" ? ' pattern="[A-Za-z0-9-]+"' : "";
-    return `<label>${config.labels[field]}${required ? " *" : ""}<input type="${type}" name="${field}"
-      value="${escapeHTML(value)}"${required}${pattern}>${hint}</label>`;
-  };
-  const repeatMarkup = (field, label, rows = []) => `<fieldset class="wide" data-repeat="${field}">
-    <legend>${label}</legend><div data-repeat-rows>${rows.map((row) => repeatRow(row, field)).join("")}</div>
-    <button type="button" data-repeat-add>Добавить строку</button></fieldset>`;
-  const repeatTypes = Object.entries({ telegram: "Telegram", max: "MAX", whatsapp: "WhatsApp", vk: "VK",
-    phone: "Телефон", email: "Email", other: "Другое" });
-  const repeatRow = (row = {}, field = "") => `<div class="crm-repeat-row">${field === "links"
-    ? '<input data-part="type" type="hidden" value="">'
-    : `<select data-part="type" aria-label="Тип">
-    <option value="">Тип</option>${repeatTypes.map(([value, label]) => `<option value="${value}"
-      ${row.type === value ? "selected" : ""}>${label}</option>`).join("")}</select>`}
-    <input data-part="label" placeholder="Подпись"
-    value="${escapeHTML(row.label || "")}"><input data-part="value" placeholder="Handle или URL"
-    value="${escapeHTML(row.handle || row.url || "")}"><button type="button" data-repeat-remove>Удалить</button></div>`;
-  const renderEntityForm = async (view, record) => {
-    const config = CRM_ENTITIES[view];
-    const content = byId(`${view}-content`);
-    const fields = Object.keys(config.labels);
-    const controls = fields.map((field) => fieldInput(config, field, record?.[field] ?? "")).join("");
-    const repeats = Object.entries(config.arrays || {}).map(([field, label]) =>
-      repeatMarkup(field, label, record?.[field] || [])).join("");
-    content.innerHTML = `<button class="plain-button" type="button" data-form-cancel>← Отмена</button>
-      <h2>${record ? "Изменить" : "Добавить"}</h2><form class="crm-form">${controls}${repeats}
-      <div class="crm-actions wide"><button class="plain-button" type="submit">Сохранить</button></div>
-      <p class="crm-error wide" role="alert" hidden></p></form>`;
-    const form = content.querySelector("form");
-    content.querySelector("[data-form-cancel]").addEventListener("click", () => {
-      if (record) renderEntityCard(view, record.id);
-      else navigateEntity(view);
-    });
-    content.querySelectorAll("[data-repeat]").forEach((fieldset) => {
-      fieldset.addEventListener("click", (event) => {
-        if (event.target.matches("[data-repeat-add]")) {
-          const field = fieldset.dataset.repeat;
-          fieldset.querySelector("[data-repeat-rows]").insertAdjacentHTML("beforeend", repeatRow({}, field));
-        }
-        if (event.target.matches("[data-repeat-remove]")) event.target.closest(".crm-repeat-row").remove();
-      });
-    });
-    form.addEventListener("submit", (event) => saveEntityForm(event, view, record));
-  };
-  const formPayload = (form, config) => {
-    const payload = {};
-    Object.keys(config.labels).forEach((field) => {
-      payload[field] = form.elements[field].value.trim() || null;
-    });
-    form.querySelectorAll("[data-repeat]").forEach((fieldset) => {
-      const field = fieldset.dataset.repeat;
-      payload[field] = [...fieldset.querySelectorAll(".crm-repeat-row")].map((row) => {
-        const type = row.querySelector('[data-part="type"]').value.trim();
-        const label = row.querySelector('[data-part="label"]').value.trim();
-        const value = row.querySelector('[data-part="value"]').value.trim();
-        const key = field === "links" || /^https?:/.test(value) ? "url" : "handle";
-        return field === "links" ? { label, url: value } : { type, label, [key]: value };
-      }).filter((row) => row.url || row.handle);
-    });
-    return payload;
-  };
-  const normalizeRepeat = (rows = []) => rows.map((row) => {
-    const value = row.url || row.handle || "";
-    const normalized = { ...(row.type ? { type: row.type } : {}), ...(row.label ? { label: row.label } : {}) };
-    return { ...normalized, [row.url !== undefined || /^https?:/.test(value) ? "url" : "handle"]: value };
-  }).filter((row) => row.url || row.handle);
-  const saveEntityForm = async (event, view, record) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const config = CRM_ENTITIES[view];
-    const error = form.querySelector("[role=alert]");
-    try {
-      const payload = formPayload(form, config);
-      const body = record ? Object.fromEntries(Object.entries(payload).filter(([key, value]) => {
-        const current = config.arrays?.[key] ? normalizeRepeat(record[key]) : record[key] ?? null;
-        const next = config.arrays?.[key] ? normalizeRepeat(value) : value;
-        return JSON.stringify(next) !== JSON.stringify(current);
-      })) : payload;
-      const path = record ? `/${config.path}/${record.id}` : `/${config.path}`;
-      if (record && !Object.keys(body).length) {
-        renderEntityCard(view, record.id);
-        return;
-      }
-      const saved = await crmQuery(path, {}, csrfOptions(record ? "PATCH" : "POST", body));
-      const id = saved?.id || record?.id;
-      if (record) {
-        await renderEntityCard(view, id);
-        byId(`${view}-content`).querySelector("[data-card-status]").textContent = "Сохранено";
-      } else {
-        navigateEntity(view, id);
-      }
-    } catch (failure) {
-      error.textContent = failure.message;
-      error.hidden = false;
-    }
-  };
-  const relationEndpoint = (view, record, relation, targetId) => {
-    const config = CRM_ENTITIES[view];
-    if (relation.reverse) {
-      return `/${relation.path}/${targetId}/${config.path}/${record.id}`;
-    }
-    return `/${config.path}/${record.id}/${relation.path}/${targetId}`;
-  };
-  const renderRelations = (view, record) => {
-    const config = CRM_ENTITIES[view];
-    const content = byId(`${view}-content`);
-    const target = content.querySelector("[data-relations]");
-    target.innerHTML = config.relations.map((relation, index) => {
-      const linkedRecords = record[relation.key] || [];
-      const rows = linkedRecords.slice(0, 20).map((linked) => {
-        const details = linked.relation || {};
-        const note = details.notes || "";
-        const shownNote = note.length > 60 ? `${note.slice(0, 60)}…` : note;
-        return `<tr><td class="crm-grow"><a href="#${relation.view}/${encodeURIComponent(linked.id)}"
-          title="${escapeHTML(entityName(linked))}">${escapeHTML(entityName(linked))}</a></td>
-          <td class="crm-compact${details.role ? "" : " crm-muted"}">${escapeHTML(details.role || "—")}</td>
-          <td class="crm-compact">${details[relation.flag] ? escapeHTML(relation.flagLabel) : ""}</td>
-          <td class="crm-grow${note ? "" : " crm-muted"}" title="${escapeHTML(note)}">
-          ${escapeHTML(shownNote || "—")}</td>${canEditCRM() ? `<td class="crm-action-cell">
-          <button class="danger" type="button" data-unlink="${index}"
-          data-target-id="${escapeHTML(linked.id)}">Отвязать</button></td>` : ""}</tr>`;
-      }).join("");
-      const more = view === "crm-companies" && CRM_ENTITIES[relation.view].companyFilter;
-      const moreLink = more && linkedRecords.length > 20
-        ? `<a class="crm-relation-more" href="#${relation.view}?companyId=${encodeURIComponent(record.id)}">
-          Показать все ${CRM_ENTITIES[relation.view].title.toLowerCase()} компании →</a>` : "";
-      return `<section class="crm-relation-group"><div class="crm-relation-head">
-        <h4>${relation.countLabel}: ${linkedRecords.length}</h4>${canEditCRM()
-          ? `<button class="plain-button" type="button" data-link="${index}">Связать</button>` : ""}</div>
-        ${rows ? `<div class="crm-table-wrap"><table class="crm-table crm-entity-table"><thead><tr>
-          <th class="crm-grow">Имя</th>
-          <th class="crm-compact">Роль</th><th class="crm-compact">Отметка</th>
-          <th class="crm-grow">Заметка</th>${canEditCRM() ? '<th class="crm-action-cell"></th>' : ""}
-          </tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="crm-muted">Связей нет</p>'}${moreLink}
-        </section>`;
-    }).join("");
-    target.querySelectorAll("[data-link]").forEach((button) => button.addEventListener("click", () => {
-      renderRelationForm(view, record, config.relations[Number(button.dataset.link)]);
-    }));
-    target.querySelectorAll("[data-unlink]").forEach((button) => button.addEventListener("click", async () => {
-      const relation = config.relations[Number(button.dataset.unlink)];
-      if (!confirm("Отвязать запись?")) return;
-      try {
-        const endpoint = relationEndpoint(view, record, relation, button.dataset.targetId);
-        await crmQuery(endpoint, {}, csrfOptions("DELETE"));
-        renderEntityCard(view, record.id);
-      } catch (error) {
-        content.querySelector("[data-card-status]").textContent = error.message;
-      }
-    }));
-  };
-  const renderRelationForm = async (view, record, relation) => {
-    const data = await crmQuery(`/${relation.path}`, { limit: 200, deleted: "exclude" });
-    const relatedConfig = CRM_ENTITIES[relation.view];
-    const options = (data[relatedConfig.key] || []).map((item) =>
-      `<option value="${escapeHTML(item.id)}">${escapeHTML(entityName(item))}</option>`).join("");
-    const target = byId(`${view}-content`).querySelector("[data-relations]");
-    target.insertAdjacentHTML("afterbegin", `<form class="crm-form" data-relation-form>
-      <label>Запись *<select name="targetId" required><option value="">Выберите</option>${options}</select></label>
-      <label>Роль *<input name="role" required></label>
-      <label><span>${relation.flagLabel}</span><input name="flag" type="checkbox"></label>
-      ${relation.signing ? '<label>Основание подписи<input name="signingBasis"></label>' : ""}
-      <label>Действует с<input name="validFrom" type="date"></label>
-      <label>Действует до<input name="validTo" type="date"></label>
-      <label class="wide">Заметка<textarea name="notes"></textarea></label>
-      <div class="crm-actions wide"><button type="submit">Сохранить связь</button></div>
-      <p class="crm-error wide" role="alert" hidden></p></form>`);
-    const form = target.querySelector("[data-relation-form]");
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const values = new FormData(form);
-      const payload = {
-        role: values.get("role").trim(),
-        [relation.flag]: form.elements.flag.checked,
-        validFrom: values.get("validFrom") || null,
-        validTo: values.get("validTo") || null,
-        notes: values.get("notes").trim() || null
-      };
-      if (relation.signing) payload.signingBasis = values.get("signingBasis").trim() || null;
-      try {
-        const endpoint = relationEndpoint(view, record, relation, values.get("targetId"));
-        await crmQuery(endpoint, {}, csrfOptions("PUT", payload));
-        renderEntityCard(view, record.id);
-      } catch (failure) {
-        const error = form.querySelector("[role=alert]");
-        error.textContent = failure.message;
-        error.hidden = false;
-      }
-    });
-  };
   const dateValue = (date) => date.toISOString().slice(0, 10);
   const periodDates = (period) => {
     const to = new Date();
@@ -2142,538 +1141,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   }).format(Number(value) || 0);
   const formatROMI = (value) => value === null || value === undefined ? "нет расходов" :
     `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value)}%`;
-
-  const HOME_WIDGETS = Object.freeze([
-    ["leads", "Заявки за период"],
-    ["tasks", "Задачи в работе"],
-    ["revenue", "Выручка"],
-    ["romi", "ROMI"],
-    ["dialogs", "Последние диалоги"]
-  ]);
-  const homeWidgetsStorageKey = () => `synapse_cabinet_home_widgets:${identity.userId}`;
-  const readHomeWidgets = () => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(homeWidgetsStorageKey()));
-      return saved && typeof saved === "object" ? saved : {};
-    } catch (error) {
-      return {};
-    }
-  };
-  const saveHomeWidgets = (settings) => {
-    try {
-      localStorage.setItem(homeWidgetsStorageKey(), JSON.stringify(settings));
-    } catch (error) {
-      // The widget choices remain available until this page is closed.
-    }
-  };
-  const renderHomeWidgetSettings = () => {
-    const settings = readHomeWidgets();
-    const content = byId("home-widget-options");
-    content.innerHTML = HOME_WIDGETS.map(([id, label]) => `<label class="widget-option">
-      <input type="checkbox" value="${id}" ${settings[id] !== false ? "checked" : ""}>
-      <span>${label}</span></label>`).join("");
-    content.addEventListener("change", () => {
-      const next = {};
-      content.querySelectorAll("input").forEach((input) => {
-        next[input.value] = input.checked;
-      });
-      saveHomeWidgets(next);
-    });
-  };
-
-  const ANALYTICS_PLATFORMS = [
-    { group: "Соцсети", id: "instagram", label: "Instagram*", codes: ["instagram"] },
-    { group: "Соцсети", id: "vk", label: "ВКонтакте", codes: ["vk", "vk-ads"] },
-    { group: "Соцсети", id: "youtube", label: "YouTube", codes: ["youtube"] },
-    { group: "Соцсети", id: "tiktok", label: "TikTok", codes: ["tiktok"] },
-    { group: "Соцсети", id: "ok", label: "Одноклассники", codes: ["ok", "odnoklassniki"] },
-    { group: "Соцсети", id: "dzen", label: "Дзен", codes: ["dzen"] },
-    { group: "Мессенджеры: боты и каналы", id: "telegram", label: "Telegram",
-      codes: ["telegram", "telegram-ads"] },
-    { group: "Мессенджеры: боты и каналы", id: "whatsapp", label: "WhatsApp*", codes: ["whatsapp"] },
-    { group: "Мессенджеры: боты и каналы", id: "max", label: "MAX", codes: ["max"] },
-    { group: "Яндекс Директ", id: "yandex-direct", label: "Поисковая реклама", codes: ["yandex-direct"] },
-    { group: "Яндекс Директ", id: "yandex-rsya", label: "РСЯ", codes: ["yandex-rsya"] },
-    { group: "Яндекс Директ", id: "yandex-master", label: "Мастер кампаний", codes: ["yandex-master"] },
-    { group: "Яндекс Директ", id: "yandex-product", label: "Товарная кампания", codes: ["yandex-product"] },
-    { group: "Яндекс Директ", id: "yandex-display", label: "Медийная", codes: ["yandex-display"] },
-    { group: "Яндекс Директ", id: "yandex-business", label: "Яндекс Бизнес (Рекламная подписка)",
-      codes: ["yandex-business"] },
-    { group: "Яндекс Директ", id: "wordstat", label: "Яндекс Вордстат",
-      note: "источник этапа «Потенциал»", codes: ["wordstat"] },
-    { group: "Геоконтекст и карты", id: "2gis", label: "2ГИС", codes: ["2gis"] },
-    { group: "Геоконтекст и карты", id: "yandex-maps", label: "Яндекс Карты",
-      codes: ["yandex-maps"] },
-    { group: "Геоконтекст и карты", id: "google-maps", label: "Google Maps", codes: ["google-maps"] },
-    { group: "Классифайды", id: "avito", label: "Авито", codes: ["avito", "avito-ads"] },
-    { group: "Поиск и бренд", id: "yandex", label: "Яндекс Поиск", codes: ["yandex"] },
-    { group: "Поиск и бренд", id: "google", label: "Google Поиск", codes: ["google"] },
-    { group: "Поиск и бренд", id: "brand", label: "Брендовые запросы (сарафанное радио)", codes: ["brand"] },
-    { group: "", id: "direct", label: "Прямые заходы", codes: ["direct"] }
-  ];
-  const analyticsState = {
-    period: "today",
-    range: periodDates("today"),
-    selected: new Set(ANALYTICS_PLATFORMS.map((platform) => platform.id)),
-    payload: null
-  };
-  const renderAdPlatforms = (dashboard = null) => {
-    const stats = Array.isArray(dashboard?.sourceStats) ? dashboard.sourceStats : [];
-    const has2gisExternal = stats.some((source) => {
-      return String(source.source || "").toLowerCase() === "2gis" && Boolean(source.external);
-    });
-    let currentGroup = null;
-    const groups = [];
-    for (const platform of ANALYTICS_PLATFORMS) {
-      if (platform.group !== currentGroup) {
-        currentGroup = platform.group;
-        groups.push({ label: currentGroup, platforms: [] });
-      }
-      groups.at(-1).platforms.push(platform);
-    }
-    byId("ad-platforms-content").innerHTML = `<div class="platform-status-list">${groups.map((group) => {
-      const heading = group.label ? `<h2>${escapeHTML(group.label)}</h2>` : "";
-      const rows = group.platforms.map((platform) => {
-        const connected = platform.id === "2gis" && has2gisExternal;
-        return `<div class="platform-status-row"><span>${escapeHTML(platform.label)}</span>
-          <span class="platform-status${connected ? " is-connected" : ""}">
-          ${connected ? "подключено" : "не подключено"}</span></div>`;
-      }).join("");
-      return `<section class="platform-status-group">${heading}${rows}</section>`;
-    }).join("")}</div>`;
-  };
-  const loadAdPlatforms = async () => {
-    if (currentView !== "ad-platforms" || !identity.permissions.includes("analytics.view")) return;
-    renderAdPlatforms();
-    try {
-      const dashboard = await crmQuery("/dashboard", { period: "30d", ...scopeParams() });
-      if (currentView === "ad-platforms") renderAdPlatforms(dashboard);
-    } catch (error) {
-      // Connection statuses remain conservative when dashboard data is unavailable.
-    }
-  };
-
-  const optionalSum = (values) => values.some((value) => value !== null && value !== undefined)
-    ? values.reduce((sum, value) => sum + (Number(value) || 0), 0) : null;
-  const formatMetric = (value) => value === null || value === undefined ? "—" :
-    new Intl.NumberFormat("ru-RU").format(Number(value));
-  const sourceStatsFor = (platform, stats) => stats.filter((row) =>
-    platform.codes.includes(String(row.source || "").toLowerCase())
-  );
-  const selectedPlatforms = () => ANALYTICS_PLATFORMS.filter((platform) =>
-    analyticsState.selected.has(platform.id)
-  );
-  const aggregatePlatform = (platform, stats) => {
-    const rows = sourceStatsFor(platform, stats);
-    const externals = rows.filter((row) => row.external);
-    const externalValue = (key) => optionalSum(externals.map((row) => row.external?.[key]));
-    const externalClicks = optionalSum(externals.flatMap((row) => [
-      row.external?.siteClicks,
-      row.external?.calls,
-      row.external?.routes,
-      row.external?.messengerClicks
-    ]));
-    const visits = optionalSum(rows.map((row) => row.visits));
-    return {
-      platform,
-      rows,
-      pageViews: externalValue("pageViews"),
-      externalClicks,
-      visits,
-      funnelClicks: optionalSum([externalClicks, visits]),
-      clicks: optionalSum(rows.map((row) => row.clicks)),
-      leads: optionalSum(rows.map((row) => row.leads)),
-      booked: optionalSum(rows.map((row) => row.booked)),
-      visited: optionalSum(rows.map((row) => row.visited)),
-      sales: optionalSum(rows.map((row) => row.sales)),
-      revenue: optionalSum(rows.map((row) => row.revenue)),
-      expenses: optionalSum(rows.map((row) => row.expenses)),
-      romi: rows.length ? optionalSum(rows.map((row) => row.romi)) : null,
-      capturedAt: externals.map((row) => row.externalCapturedAt).filter(Boolean).sort().at(-1) || null,
-      hasExternal: externals.length > 0
-    };
-  };
-  const snapshotDate = (value) => value ? new Intl.DateTimeFormat("ru-RU", {
-    dateStyle: "short"
-  }).format(new Date(value)) : "";
-  const dataMark = (kind, date) => {
-    const labels = {
-      live: "LIVE",
-      snapshot: `СНИМОК${date ? ` от ${snapshotDate(date)}` : ""}`,
-      mixed: `LIVE + СНИМОК${date ? ` от ${snapshotDate(date)}` : ""}`,
-      manual: "РУЧНОЙ ВВОД",
-      none: "НЕТ ДАННЫХ"
-    };
-    return `<span class="data-mark" data-kind="${kind}">${labels[kind]}</span>`;
-  };
-  const renderPlatformFilter = () => {
-    const panel = byId("platform-panel");
-    let group = null;
-    const options = ANALYTICS_PLATFORMS.map((platform) => {
-      const heading = platform.group && platform.group !== group
-        ? `<div class="platform-group">${escapeHTML(platform.group)}</div>` : "";
-      group = platform.group || group;
-      return `${heading}<label class="platform-option"><input type="checkbox" value="${platform.id}"
-        ${analyticsState.selected.has(platform.id) ? "checked" : ""}>
-        <span>${escapeHTML(platform.label)}${platform.note
-          ? `<small class="muted"> — ${escapeHTML(platform.note)}</small>` : ""}</span></label>`;
-    }).join("");
-    const allChecked = analyticsState.selected.size === ANALYTICS_PLATFORMS.length;
-    panel.innerHTML = `<label class="platform-option"><input type="checkbox" value="all"
-      ${allChecked ? "checked" : ""}><strong>Все площадки</strong></label>${options}`;
-    byId("platform-trigger").textContent = allChecked ? "Все площадки" : `Выбрано: ${analyticsState.selected.size}`;
-  };
-  const funnelProjectLabel = () => selectedProjectId === "synapse-business" ? "онлайн-созвон" :
-    ["alvi", "avokado"].includes(selectedProjectId) ? "запись на визит" : "заявка";
-  const renderAnalytics = (dashboard, summary, expenses) => {
-    analyticsState.payload = { dashboard, summary, expenses };
-    const stats = Array.isArray(dashboard.sourceStats) ? dashboard.sourceStats : [];
-    const allSelected = analyticsState.selected.size === ANALYTICS_PLATFORMS.length;
-    const knownCodes = new Set(ANALYTICS_PLATFORMS.flatMap((platform) => platform.codes));
-    const unknownCodes = allSelected ? [...new Set(stats.map((row) => String(row.source || "").toLowerCase())
-      .filter((code) => !knownCodes.has(code)))] : [];
-    const unknownPlatforms = unknownCodes.map((code) => ({
-      group: "", id: `other-${code}`, label: `Прочие: ${code || "без кода"}`, codes: [code], isUnknown: true
-    }));
-    const platforms = [...selectedPlatforms(), ...unknownPlatforms]
-      .map((platform) => aggregatePlatform(platform, stats));
-    platforms.sort((left, right) => (left.platform.isUnknown ? 1 : 0) -
-      (right.platform.isUnknown ? 1 : 0) ||
-      Number(right.hasExternal) - Number(left.hasExternal) ||
-      ANALYTICS_PLATFORMS.indexOf(left.platform) - ANALYTICS_PLATFORMS.indexOf(right.platform));
-    const selectedCodes = selectedPlatforms().flatMap((platform) => platform.codes);
-    const aggregateCodes = allSelected ? [...selectedCodes, ...unknownCodes] : selectedCodes;
-    const selectedAggregate = aggregatePlatform({ codes: [...new Set(aggregateCodes)] }, stats);
-    const total = (key) => selectedAggregate[key];
-    const pageViews = total("pageViews");
-    const funnelClicks = total("funnelClicks");
-    const warmup = optionalSum([total("clicks"), total("leads")]);
-    const sales = total("sales");
-    const revenue = total("revenue");
-    const values = { ...(dashboard.summary || {}), ...dashboard };
-    const expensesUnavailable = selectedProjectId !== "synapse-business" &&
-      (values.expenses === null || dashboard.expensesScope || summary.expensesScope);
-    const financeExpenses = expensesUnavailable ? null : allSelected ? values.expenses : total("expenses");
-    const financeRevenue = allSelected ? values.revenue : revenue;
-    const financeRomi = expensesUnavailable ? null : allSelected ? values.romi :
-      financeRevenue === null || financeRevenue === undefined || financeExpenses === null || !financeExpenses
-        ? null : (financeRevenue - financeExpenses) / financeExpenses * 100;
-    const financeUnavailable = expensesUnavailable || (!allSelected && financeExpenses === null);
-    const newestCapture = platforms.map((platform) => platform.capturedAt).filter(Boolean).sort().at(-1);
-    const funnel = [
-      {
-        id: "potential",
-        label: "Потенциал",
-        value: null,
-        kind: "none",
-        note: "поиски по целевым запросам и конкуренты — ручной ввод, появится в «Рекламных площадках»"
-      },
-      { id: "views", label: "Показы", value: pageViews, kind: pageViews === null ? "none" : "snapshot",
-        date: newestCapture, note: "переходы на карточку площадки" },
-      { id: "clicks", label: "Клики", value: funnelClicks, kind: funnelClicks === null ? "none" :
-        total("externalClicks") !== null && total("visits") !== null ? "mixed" :
-          total("externalClicks") !== null ? "snapshot" : "live", date: newestCapture,
-        note: `карточки: ${formatMetric(total("externalClicks"))} · сайт: ${formatMetric(total("visits"))}` },
-      { id: "warmup", label: "Прогрев", value: warmup, kind: warmup === null ? "none" : "live",
-        note: `ключевой этап проекта: ${funnelProjectLabel()}` },
-      { id: "deal", label: "Сделка", value: sales, kind: sales === null ? "none" : "live",
-        note: `выручка: ${financeRevenue === null || financeRevenue === undefined
-          ? "—" : formatMoney(financeRevenue)} · повторные: нет данных` }
-    ];
-    const numeric = funnel.map((step) => step.value).filter((value) => value !== null);
-    const maximum = Math.max(...numeric, 1);
-    const funnelRows = funnel.map((step, index) => {
-      const previous = funnel[index - 1]?.value;
-      const conversion = step.value !== null && previous > 0
-        ? `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(step.value / previous * 100)}%` : "—";
-      const width = step.value === null ? 28 : Math.max(28, step.value / maximum * 100);
-      const details = platforms.map((platform) => {
-        const key = { views: "pageViews", clicks: "funnelClicks", warmup: "clicks", deal: "sales" }[step.id];
-        let value = key ? platform[key] : null;
-        if (step.id === "warmup") value = optionalSum([platform.clicks, platform.leads]);
-        return `<div><dt>${escapeHTML(platform.platform.label)}</dt><dd>${formatMetric(value)}</dd></div>`;
-      }).join("");
-      return `<div class="funnel-step"><button class="funnel-shape" type="button" style="width:${width}%"
-        data-funnel-step="${step.id}" aria-expanded="false"><span class="funnel-shape-label">
-        ${escapeHTML(step.label)}</span></button>
-        <article class="funnel-card"><div class="funnel-card-head"><h3>${escapeHTML(step.label)}</h3>
-        ${step.value === null ? "" : `<strong class="funnel-number">${formatMetric(step.value)}</strong>`}</div>
-        <div class="funnel-conversion">Конверсия из предыдущей ступени: ${conversion}</div>
-        <div class="funnel-note">${escapeHTML(step.note)}</div>${dataMark(step.kind, step.date)}</article>
-        <div class="funnel-detail" data-funnel-detail="${step.id}" hidden>
-        <dl class="funnel-detail-list">${details}</dl></div></div>`;
-    }).join("");
-    const tableRows = platforms.map((platform) => {
-      const noExpenses = expensesUnavailable || platform.expenses === null;
-      const kind = platform.hasExternal ? "snapshot" : platform.rows.length ? "live" : "none";
-      const clickTargets = platform.rows.flatMap((row) => Object.entries(row.clicksByTarget || {}))
-        .map(([target, count]) => `${target}: ${count}`).join(" · ");
-      return `<tr><td>${escapeHTML(platform.platform.label)}</td><td>${formatMetric(platform.pageViews)}</td>
-        <td>${formatMetric(platform.funnelClicks)}</td><td title="${escapeHTML(clickTargets || "Нет разбивки")}">
-        ${formatMetric(platform.clicks)}</td><td>${formatMetric(platform.leads)}</td>
-        <td>${formatMetric(platform.sales)}</td>
-        <td>${platform.revenue === null ? "—" : formatMoney(platform.revenue)}</td>
-        <td>${noExpenses ? "—" : formatMoney(platform.expenses)}</td>
-        <td>${noExpenses ? "—" : formatROMI(platform.romi)}</td><td>${dataMark(kind, platform.capturedAt)}</td></tr>`;
-    }).join("");
-    byId("analytics-content").innerHTML = `<section class="analytics-section"><h2>Воронка</h2>
-      <div class="analytics-funnel">${funnelRows}</div><div class="analytics-finance">
-      <div class="crm-stat"><span>Расходы</span><strong>${financeUnavailable
-        ? "по компании не ведутся" : financeExpenses === null ? "—" : formatMoney(financeExpenses)}</strong></div>
-      <div class="crm-stat"><span>Выручка</span><strong>${financeRevenue === null || financeRevenue === undefined
-        ? "—" : formatMoney(financeRevenue)}</strong></div>
-      <div class="crm-stat"><span>ROMI</span><strong>${financeUnavailable
-        ? "по компании не ведутся" : formatROMI(financeRomi)}</strong></div></div></section>
-      <section class="analytics-section"><h2>Площадки</h2><div class="crm-table-wrap">
-      <table class="crm-table analytics-source-table"><thead><tr><th>Площадка</th><th>Показы</th><th>Клики</th>
-      <th>Обращения</th><th>Заявки</th><th>Продажи</th><th>Выручка</th><th>Расходы</th><th>ROMI</th>
-      <th>Данные</th></tr></thead><tbody>${tableRows}</tbody></table></div></section>`;
-    byId("analytics-content").querySelectorAll("[data-funnel-step]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const detail = byId("analytics-content").querySelector(`[data-funnel-detail="${button.dataset.funnelStep}"]`);
-        detail.hidden = !detail.hidden;
-        button.setAttribute("aria-expanded", String(!detail.hidden));
-      });
-    });
-    const legacySources = Array.isArray(summary.sources) ? summary.sources : [];
-    byId("analytics-legacy").innerHTML = `<div class="crm-summary">
-      <div class="crm-stat"><span>Заявки</span><strong>${formatMetric(values.total)}</strong></div>
-      <div class="crm-stat"><span>Записались</span><strong>${formatMetric(values.booked)}</strong></div>
-      <div class="crm-stat"><span>Пришли</span><strong>${formatMetric(values.visited)}</strong></div>
-      <div class="crm-stat"><span>Продажи</span><strong>${formatMetric(values.sales)}</strong></div></div>
-      <div class="analytics-actions"><h2>Заявки по источникам</h2>
-      <button class="plain-button" id="analytics-csv" type="button">Выгрузить CSV</button></div>
-      ${legacySources.length ? `<div class="crm-table-wrap"><table class="crm-table"><thead><tr>
-      <th>Источник</th><th>Заявки</th><th>Записи</th><th>Визиты</th><th>Продажи</th><th>Выручка</th>
-      </tr></thead><tbody>${legacySources.map((source) => `<tr><td>${escapeHTML(source.source)}</td>
-      <td>${formatMetric(source.leads)}</td><td>${formatMetric(source.booked)}</td>
-      <td>${formatMetric(source.visited)}</td>
-      <td>${formatMetric(source.sales)}</td><td>${source.revenue === null ? "—" : formatMoney(source.revenue)}</td>
-      </tr>`).join("")}</tbody></table></div>` : '<div class="crm-empty">Данных по источникам нет</div>'}`;
-    byId("analytics-csv").addEventListener("click", () => {
-      crmQuery("/leads.csv", { ...analyticsState.range, ...scopeParams() }, { open: true });
-    });
-    const scopedExpenses = selectedProjectId !== "synapse-business";
-    byId("expenses-section").querySelector("h2").hidden = scopedExpenses;
-    byId("expense-form").hidden = scopedExpenses || !identity.permissions.includes("crm.edit");
-    byId("expense-result").hidden = scopedExpenses;
-    if (scopedExpenses) {
-      byId("expenses-content").innerHTML =
-        '<p class="notice">Расходы ведутся по всему бизнесу: выберите проект «Synapse Бизнес»</p>';
-      return;
-    }
-    const expenseRows = expenses.map((expense) => `<tr><td>${escapeHTML(expense.spentAt.slice(0, 10))}</td>
-      <td>${escapeHTML(expense.source)}</td><td>${escapeHTML(formatMoney(expense.amount))}</td>
-      <td>${escapeHTML(expense.comment || "—")}</td></tr>`).join("");
-    byId("expenses-content").innerHTML = expenseRows
-      ? `<div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Дата</th><th>Источник</th>
-        <th>Сумма</th><th>Комментарий</th></tr></thead><tbody>${expenseRows}</tbody></table></div>`
-      : '<div class="crm-empty">За период расходов нет</div>';
-  };
-  const loadAnalytics = async () => {
-    if (currentView !== "analytics-through" || !identity.permissions.includes("analytics.view")) return;
-    byId("analytics-content").innerHTML = '<div class="crm-empty">Загрузка аналитики…</div>';
-    const range = analyticsState.range;
-    try {
-      const [dashboard, summary, expensePayload] = await Promise.all([
-        crmQuery("/dashboard", { period: analyticsState.period, ...range, ...scopeParams() }),
-        crmQuery("/summary", { ...range, ...scopeParams() }),
-        selectedProjectId === "synapse-business" ? crmQuery("/expenses", range) : { expenses: [] }
-      ]);
-      renderAnalytics(dashboard, summary, expensePayload.expenses || []);
-    } catch (error) {
-      byId("analytics-content").innerHTML =
-        '<div class="crm-error" role="alert">Не удалось загрузить сквозную аналитику.</div>';
-      byId("expenses-content").replaceChildren();
-    }
-  };
-  const renderAnalyticsControls = () => {
-    const form = byId("analytics-dates");
-    renderPlatformFilter();
-    form.elements.from.value = analyticsState.range.from;
-    form.elements.to.value = analyticsState.range.to;
-    byId("expense-form").hidden = !identity.permissions.includes("crm.edit");
-    byId("expense-form").elements.date.value = dateValue(new Date());
-    if (analyticsBound) return;
-    analyticsBound = true;
-    byId("platform-trigger").addEventListener("click", () => {
-      const trigger = byId("platform-trigger");
-      const panel = byId("platform-panel");
-      panel.hidden = !panel.hidden;
-      trigger.setAttribute("aria-expanded", String(!panel.hidden));
-    });
-    byId("platform-panel").addEventListener("change", (event) => {
-      if (event.target.value === "all") {
-        analyticsState.selected = event.target.checked
-          ? new Set(ANALYTICS_PLATFORMS.map((platform) => platform.id)) : new Set();
-      } else if (event.target.checked) {
-        analyticsState.selected.add(event.target.value);
-      } else {
-        analyticsState.selected.delete(event.target.value);
-      }
-      renderPlatformFilter();
-      if (analyticsState.payload) {
-        renderAnalytics(
-          analyticsState.payload.dashboard,
-          analyticsState.payload.summary,
-          analyticsState.payload.expenses
-        );
-      }
-    });
-    document.addEventListener("click", (event) => {
-      if (event.target.closest("#platform-filter")) return;
-      byId("platform-panel").hidden = true;
-      byId("platform-trigger").setAttribute("aria-expanded", "false");
-    });
-    byId("analytics-periods").addEventListener("click", (event) => {
-      const button = event.target.closest("[data-analytics-period]");
-      if (!button) return;
-      analyticsState.period = button.dataset.analyticsPeriod;
-      analyticsState.range = periodDates(analyticsState.period);
-      form.elements.from.value = analyticsState.range.from;
-      form.elements.to.value = analyticsState.range.to;
-      document.querySelectorAll("[data-analytics-period]").forEach((item) => {
-        item.setAttribute("aria-pressed", String(item === button));
-      });
-      loadAnalytics();
-    });
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      if (form.elements.from.value > form.elements.to.value) {
-        byId("analytics-content").innerHTML =
-          '<div class="crm-error" role="alert">Дата «С» не может быть позже даты «По».</div>';
-        return;
-      }
-      analyticsState.range = { from: form.elements.from.value, to: form.elements.to.value };
-      const days = Math.ceil((new Date() - new Date(`${analyticsState.range.from}T00:00:00Z`)) / 86400000);
-      analyticsState.period = days <= 1 ? "today" : days <= 7 ? "7d" : "30d";
-      document.querySelectorAll("[data-analytics-period]").forEach((item) => {
-        item.setAttribute("aria-pressed", "false");
-      });
-      loadAnalytics();
-    });
-    byId("expense-form").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const expenseForm = event.currentTarget;
-      try {
-        await crmQuery("/expenses", {}, csrfOptions("POST", {
-          date: expenseForm.elements.date.value,
-          source: expenseForm.elements.source.value,
-          amount: Number(expenseForm.elements.amount.value),
-          comment: expenseForm.elements.comment.value
-        }));
-        byId("expense-result").textContent = "Расход добавлен";
-        expenseForm.elements.amount.value = "";
-        expenseForm.elements.comment.value = "";
-        await loadAnalytics();
-      } catch (error) {
-        byId("expense-result").textContent = "Не удалось добавить расход";
-      }
-    });
-  };
-
-  const crmState = { period: "today", stage: "", source: "" };
-  const crmStageOptions = (selected) => CRM_STAGES.map((stage) =>
-    `<option value="${stage.id}"${stage.id === selected ? " selected" : ""}>${stage.label}</option>`
-  ).join("");
-  const renderCRMData = (payload) => {
-    const leads = Array.isArray(payload.leads) ? payload.leads : [];
-    const summary = payload.summary || {};
-    const content = byId("crm-content");
-    const editable = identity.permissions.includes("crm.edit");
-    content.innerHTML = `
-      <div class="crm-summary">
-        <div class="crm-stat"><span>Заявки</span><strong>${escapeHTML(summary.total ?? leads.length)}</strong></div>
-        <div class="crm-stat"><span>Продажи</span><strong>${escapeHTML(summary.sales ?? "—")}</strong></div>
-        <div class="crm-stat"><span>Выручка</span><strong>${escapeHTML(formatMoney(summary.revenue))}</strong></div>
-      </div>
-      ${leads.length ? `<div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Дата</th>
-        <th>Имя</th><th>Контакт</th><th>Канал</th><th>Источник</th><th>Этап</th><th>Сумма</th>
-        </tr></thead><tbody>${leads.map((lead) => `<tr><td>${escapeHTML(lead.date ?? "—")}</td>
-        <td><button class="crm-lead-button" type="button" data-crm-lead-id="${escapeHTML(lead.id)}">
-        ${escapeHTML(lead.name ?? "—")}</button></td><td>${escapeHTML(lead.contact ?? "—")}</td>
-        <td>${escapeHTML(lead.channel ?? "—")}</td><td>${escapeHTML(lead.source ?? "—")}</td>
-        <td><select data-crm-stage-id="${escapeHTML(lead.id)}"${editable ? "" : " disabled"}>
-        ${crmStageOptions(lead.stage)}</select></td><td><input type="number" min="0"
-        data-crm-amount-id="${escapeHTML(lead.id)}" value="${escapeHTML(lead.amount ?? "")}"
-        ${editable ? "" : "disabled"}></td></tr>`).join("")}</tbody></table></div>` :
-        '<div class="crm-empty">Заявок за период нет</div>'}<div id="crm-lead-details"></div>`;
-    const sources = Array.isArray(payload.sources) ? payload.sources : [];
-    const options = sources.map((source) => `<option value="${escapeHTML(source)}"
-      ${source === crmState.source ? "selected" : ""}>${escapeHTML(source)}</option>`).join("");
-    byId("crm-source-filter").innerHTML = '<option value="">Все источники</option>' + options;
-  };
-  const loadCRM = async () => {
-    if (currentView !== "crm") return;
-    byId("crm-content").innerHTML = '<div class="crm-empty">Загрузка CRM…</div>';
-    try {
-      renderCRMData(await crmQuery("/dashboard", { ...crmState, ...scopeParams() }));
-    } catch (error) {
-      byId("crm-content").innerHTML = '<div class="crm-error" role="alert">Не удалось загрузить текущую CRM.</div>';
-    }
-  };
-  const renderCRM = () => {
-    byId("crm-stage-filter").innerHTML = '<option value="">Все этапы</option>' + crmStageOptions("");
-    byId("crm-source-filter").innerHTML = '<option value="">Все источники</option>';
-    if (crmBound) return;
-    crmBound = true;
-    byId("crm-periods").addEventListener("click", (event) => {
-      const button = event.target.closest("[data-crm-period]");
-      if (!button) return;
-      crmState.period = button.dataset.crmPeriod;
-      document.querySelectorAll("[data-crm-period]").forEach((item) =>
-        item.setAttribute("aria-pressed", String(item === button)));
-      loadCRM();
-    });
-    byId("crm-stage-filter").addEventListener("change", (event) => {
-      crmState.stage = event.target.value;
-      loadCRM();
-    });
-    byId("crm-source-filter").addEventListener("change", (event) => {
-      crmState.source = event.target.value;
-      loadCRM();
-    });
-    byId("crm-content").addEventListener("change", async (event) => {
-      if (!identity.permissions.includes("crm.edit")) return;
-      const stageId = event.target.dataset.crmStageId;
-      const amountId = event.target.dataset.crmAmountId;
-      if (!stageId && !amountId) return;
-      const id = stageId || amountId;
-      const body = stageId ? { stage: event.target.value } : { amount: Number(event.target.value) };
-      try {
-        await crmQuery(`/leads/${encodeURIComponent(id)}`, {}, csrfOptions("PATCH", body));
-        await loadCRM();
-      } catch (error) {
-        byId("crm-content").insertAdjacentHTML("afterbegin",
-          '<div class="crm-error" role="alert">Не удалось сохранить изменение CRM.</div>');
-      }
-    });
-    byId("crm-content").addEventListener("click", async (event) => {
-      const button = event.target.closest("[data-crm-lead-id]");
-      if (!button) return;
-      const details = byId("crm-lead-details");
-      details.innerHTML = '<div class="crm-empty">Загрузка карточки…</div>';
-      try {
-        const lead = await crmQuery(`/leads/${encodeURIComponent(button.dataset.crmLeadId)}`);
-        const fields = [
-          ["utmSource", lead.utmSource],
-          ["utmMedium", lead.utmMedium],
-          ["utmCampaign", lead.utmCampaign],
-          ["utmContent", lead.utmContent],
-          ["clientId", lead.clientId],
-          ["referrer", lead.referrer],
-          ["landingPage", lead.landingPage]
-        ].filter((field) => field[1]);
-        const attribution = fields.length ? `<dl>${fields.map(([label, value]) =>
-          `<dt>${label}</dt><dd>${escapeHTML(value)}</dd>`).join("")}</dl>` :
-          "<p>атрибуция не передана</p>";
-        details.innerHTML = `<article class="card lead-details"><h2>${escapeHTML(lead.name)}</h2>
-          <h3>Атрибуция</h3>${attribution}</article>`;
-      } catch (error) {
-        details.innerHTML = '<div class="crm-error" role="alert">Не удалось загрузить карточку заявки.</div>';
-      }
-    });
-  };
 
   const renderIdentity = () => {
     const name = identity.name || identity.login;
@@ -2725,15 +1192,18 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         companyCreate.add(new Option(company.name, company.id));
       });
       renderIdentity();
-      renderHomeWidgetSettings();
       renderProjectPicker();
-      loadTasksSummary();
       if (redirectEditorHash()) return;
-      if (identity.permissions.includes("analytics.view")) renderAnalyticsControls();
-      if (hasPermission("crm.view")) renderCRM();
+      const context = cabinetContext();
+      registeredViews.home.render(byId("home-view"), context);
+      registeredViews.tasks.updateSummary(context);
+      if (identity.permissions.includes("analytics.view")) {
+        registeredViews["analytics-through"].initialize(context);
+      }
+      if (hasPermission("crm.view")) registeredViews.crm.initialize(context);
       setView(viewFromHash());
-      renderSites();
-      renderAccounts();
+      registeredViews.sites.initialize(context);
+      registeredViews.accounts.initialize(context);
       byId("app").hidden = false;
       byId("auth").hidden = true;
     } catch (error) {
@@ -2833,39 +1303,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   });
   byId("logout").addEventListener("click", logout);
   byId("account-logout").addEventListener("click", logout);
-  byId("sites-company").addEventListener("change", renderSites);
-  byId("sites-state").addEventListener("change", renderSites);
-  byId("create-site").addEventListener("click", () => {
-    byId("site-create-form").elements.companyCode.value = selectedProjectId || identity.companies[0]?.id || "";
-    byId("site-create-dialog").showModal();
-  });
-  document.querySelector("[data-close-dialog]").addEventListener("click", () => byId("site-create-dialog").close());
-  byId("site-create-form").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    try {
-      const created = await apiJson("/content/sites", { method: "POST",
-        headers: { "X-CSRF-Token": identity.csrfToken },
-        body: JSON.stringify({ name: form.elements.name.value, companyCode: form.elements.companyCode.value }) });
-      location.href = created.editorUrl;
-    } catch (error) { form.querySelector("[role=alert]").textContent = error.message; }
-  });
-  byId("account-create").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const password = form.elements.password.value;
-    const confirm = form.elements.confirm.value;
-    try {
-      if (password !== confirm) throw new Error("Пароли не совпадают");
-      await apiJson("/content/admin/accounts", { method: "POST",
-        headers: { "X-CSRF-Token": identity.csrfToken }, body: JSON.stringify({
-          login: form.elements.login.value, displayName: form.elements.displayName.value, password
-        }) });
-      byId("account-create-result").textContent = "Учётная запись создана";
-      renderAccounts();
-    } catch (error) { byId("account-create-result").textContent = error.message; }
-    finally { form.elements.password.value = ""; form.elements.confirm.value = ""; }
-  });
   byId("auth-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
