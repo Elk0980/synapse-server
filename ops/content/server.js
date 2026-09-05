@@ -362,16 +362,15 @@ async function proxyCrm(request, response, url, cors) {
   const crmPath = url.pathname.slice('/content/crm'.length) || '/';
   const clientDatabasePath = /^\/(?:contacts|companies|legal-entities|tasks)(?:\/|$)/.test(crmPath);
   const companyOverview = /^\/companies\/\d+\/overview$/.test(crmPath);
-  if (crmPath === '/pipeline-stages' && identity.role !== 'owner') {
-    fail(403, 'Воронка доступна только владельцу');
+  const ownerOnlyPipelinePath = /^\/(?:pipeline-stages|pipelines|pipeline-rules)(?:\/|$)/.test(crmPath) ||
+    /^\/companies\/\d+\/(?:overview|pipeline-stage|service-fields)(?:\/|$)/.test(crmPath);
+  if (ownerOnlyPipelinePath && identity.role !== 'owner') {
+    fail(403, 'Воронка и сервисные поля доступны только владельцу');
   }
-  if (companyOverview && identity.role !== 'owner') {
-    fail(403, 'Обзор компании доступен только владельцу');
-  }
-  if (clientDatabasePath && !companyOverview) {
+  if (identity.role !== 'owner' && clientDatabasePath && !companyOverview) {
     const requestedCompany = url.searchParams.get('companyCode');
     if (!requestedCompany) fail(400, 'Уточните компанию');
-    if (identity.role !== 'owner' && !identity.companyCodes.some(
+    if (!identity.companyCodes.some(
       (code) => code.toLowerCase() === requestedCompany.toLowerCase()
     )) fail(403, 'Нет доступа к компании');
   }

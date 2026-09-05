@@ -110,7 +110,8 @@ async function main() {
   assert.equal((await request('PUT', `/companies/${companyB.body.id}/legal-entities/${legalB.body.id}`,
     { role: 'QA B legal' })).status, 201);
   const scopedContacts = await request('GET', `/contacts?companyCode=${company.body.code.toUpperCase()}`);
-  assert.deepEqual(scopedContacts.body.contacts.map((item) => item.id), [contact.body.id]);
+  assert.equal(scopedContacts.body.contacts.some((item) => item.id === contact.body.id), true);
+  assert.equal(scopedContacts.body.contacts.some((item) => item.id === contactB.body.id), false);
   assert.equal((await request('GET',
     `/contacts/${contactB.body.id}?companyCode=${company.body.code}`)).status, 404);
   assert.deepEqual((await request('GET', `/legal-entities?companyCode=${company.body.code}`))

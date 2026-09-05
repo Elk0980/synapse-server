@@ -2,14 +2,13 @@
 "use strict";
 
 const SbCabinet = window.SbCabinet = window.SbCabinet || {};
-let ctx, byId, escapeHTML, crmQuery, csrfOptions, hasPermission, navigate;
+let ctx, identity, byId, escapeHTML, crmQuery, csrfOptions, scopeParams, hasPermission, navigate;
 let initialized = false;
 const api = {};
-const companyScope = () => ({ companyCode: ctx.selectedProjectId });
-const scoped = (params = {}) => ({ ...params, ...companyScope() });
+const scoped = (params = {}) => ({ ...params, ...scopeParams() });
 const init = (context) => {
 ctx = context;
-({ byId, escapeHTML, crmQuery, csrfOptions, hasPermission, navigate } = context);
+({ identity, byId, escapeHTML, crmQuery, csrfOptions, scopeParams, hasPermission, navigate } = context);
 if (initialized) return;
 initialized = true;
 
@@ -227,9 +226,13 @@ const renderEntityList = async (view, reset = false) => {
     return `<tr class="crm-row${deleted ? " is-deleted" : ""}" tabindex="0"
       data-entity-id="${escapeHTML(record.id)}">${cells}</tr>`;
   }).join("");
-  const selectedCompany = state.companies.find((company) =>
+  const projectCompany = identity.companies?.find((company) => company.id === ctx.selectedProjectId);
+  const crmCompany = state.companies.find((company) =>
     company.code?.toLowerCase() === ctx.selectedProjectId?.toLowerCase());
-  content.innerHTML = `<p class="crm-project-company">Компания: ${escapeHTML(selectedCompany?.name || ctx.selectedProjectId)}</p>
+  const companyLabel = ctx.selectedProjectId === "synapse-business"
+    ? "Все компании (Synapse Бизнес)"
+    : `Компания: ${projectCompany?.name || crmCompany?.name || ctx.selectedProjectId}`;
+  content.innerHTML = `<p class="crm-project-company">${escapeHTML(companyLabel)}</p>
     <div class="crm-entity-toolbar">
     <input type="search" data-entity-search value="${escapeHTML(state.q)}" placeholder="Поиск" aria-label="Поиск">
     ${config.companyFilter ? `<select data-company-filter aria-label="Фильтр по компании">
@@ -343,7 +346,7 @@ const bindCardActions = (view, record) => {
   content.querySelector("[data-delete]")?.addEventListener("click", async () => {
     if (prompt(`Введите название «${entityName(record)}» для удаления`) !== entityName(record)) return;
     try {
-      await crmQuery(`/${config.path}/${record.id}`, companyScope(), csrfOptions("DELETE"));
+      await crmQuery(`/${config.path}/${record.id}`, scopeParams(), csrfOptions("DELETE"));
       renderEntityCard(view, record.id);
     } catch (error) {
       content.querySelector("[data-card-status]").textContent = error.message;
@@ -351,7 +354,7 @@ const bindCardActions = (view, record) => {
   });
   content.querySelector("[data-restore]")?.addEventListener("click", async () => {
     try {
-      await crmQuery(`/${config.path}/${record.id}/restore`, companyScope(), csrfOptions("POST"));
+      await crmQuery(`/${config.path}/${record.id}/restore`, scopeParams(), csrfOptions("POST"));
       renderEntityCard(view, record.id);
     } catch (error) {
       content.querySelector("[data-card-status]").textContent = error.message;
@@ -471,7 +474,7 @@ const saveEntityForm = async (event, view, record) => {
       renderEntityCard(view, record.id);
       return;
     }
-    const saved = await crmQuery(path, companyScope(), csrfOptions(record ? "PATCH" : "POST", body));
+    const saved = await crmQuery(path, scopeParams(), csrfOptions(record ? "PATCH" : "POST", body));
     const id = saved?.id || record?.id;
     if (record) {
       await renderEntityCard(view, id);
@@ -532,7 +535,7 @@ const renderRelations = (view, record) => {
     if (!confirm("Отвязать запись?")) return;
     try {
       const endpoint = relationEndpoint(view, record, relation, button.dataset.targetId);
-      await crmQuery(endpoint, companyScope(), csrfOptions("DELETE"));
+      await crmQuery(endpoint, scopeParams(), csrfOptions("DELETE"));
       renderEntityCard(view, record.id);
     } catch (error) {
       content.querySelector("[data-card-status]").textContent = error.message;
@@ -569,7 +572,7 @@ const renderRelationForm = async (view, record, relation) => {
     if (relation.signing) payload.signingBasis = values.get("signingBasis").trim() || null;
     try {
       const endpoint = relationEndpoint(view, record, relation, values.get("targetId"));
-      await crmQuery(endpoint, companyScope(), csrfOptions("PUT", payload));
+      await crmQuery(endpoint, scopeParams(), csrfOptions("PUT", payload));
       renderEntityCard(view, record.id);
     } catch (failure) {
       const error = form.querySelector("[role=alert]");
