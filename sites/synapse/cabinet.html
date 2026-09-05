@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#0b0908">
 <meta name="color-scheme" content="dark">
 <title>Кабинет — Synapse Business</title>
+<link rel="stylesheet" href="cabinet/home.css?v=20260905">
 <script>document.documentElement.classList.replace("no-js", "js");</script>
 <style>
 :root {
@@ -583,18 +584,17 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   <main class="main" id="main-content" tabindex="-1">
     <div class="content-header"><p id="startup-error" class="startup-error" role="alert" hidden></p></div>
     <section class="view-panel" id="home-view" data-view="home" hidden>
-      <div class="content-header"><h1>Главная</h1></div>
-      <p class="notice">Настраиваемые виджеты — в разработке</p>
-      <div class="home-grid">
-        <div class="card"><h2>Будущие виджеты</h2><ul>
-          <li>Заявки за период</li><li>Задачи в работе</li><li>Выручка</li><li>ROMI</li>
-          <li>Последние диалоги</li>
-        </ul></div>
-        <aside class="card widget-settings"><h2>Настройки виджетов
-          <span title="Настройки сохраняются только для текущего пользователя">?</span></h2>
-          <div id="home-widget-options"></div>
-        </aside>
+      <div class="content-header home-header"><h1>Главная</h1>
+        <div class="home-tools"><div class="home-periods" id="home-periods" aria-label="Период виджетов">
+          <button class="period-button" type="button" data-home-period="today">Сегодня</button>
+          <button class="period-button" type="button" data-home-period="7d">7 дней</button>
+          <button class="period-button" type="button" data-home-period="30d">30 дней</button>
+        </div><button class="home-settings-trigger" id="home-settings-trigger" type="button"
+          aria-label="Настройки виджетов" aria-controls="home-widget-settings" aria-expanded="false">⚙</button></div>
       </div>
+      <div class="home-settings-layout"><aside class="card widget-settings" id="home-widget-settings" hidden>
+        <h2>Настройки виджетов</h2><div id="home-widget-options"></div>
+      </aside><div class="home-grid" id="home-widgets"></div></div>
     </section>
     <section class="view-panel" id="deals-view" data-view="deals" hidden>
       <div class="content-header"><h1>Сделки</h1></div>
