@@ -12,22 +12,26 @@ const WIDGETS = Object.freeze([
   {
     id: "leads",
     label: "Заявки за период",
-    help: "Сколько обращений пришло с сайта, чата и Telegram за период по выбранному проекту"
+    help: "Сколько обращений пришло с сайта, чата и Telegram за период " +
+      "по выбранному проекту"
   },
   {
     id: "tasks",
     label: "Задачи в работе",
-    help: "Задачи по проекту: входящие ждут разбора, в работе — уже делаются"
+    help: "Задачи по проекту: входящие ждут разбора, " +
+      "в работе — уже делаются"
   },
   {
     id: "revenue",
     label: "Выручка",
-    help: "Выручка по сделкам в CRM со статусом «продажа» за выбранный период"
+    help: "Выручка по сделкам в CRM со статусом «продажа» " +
+      "за выбранный период"
   },
   {
     id: "romi",
     label: "ROMI",
-    help: "Расходы учитываются только на уровне Synapse Business; для проекта добавьте расходы в аналитике"
+    help: "Расходы учитываются только на уровне Synapse Business; " +
+      "для проекта добавьте расходы в аналитике"
   },
   {
     id: "dialogs",
@@ -43,6 +47,7 @@ const PERIODS = Object.freeze([
 let settings = {};
 let requestKey = "";
 let requestPromise = null;
+const payloadCache = new Map();
 
 const storageKey = () => `synapse_cabinet_home_widgets:${identity.userId}`;
 const readSettings = () => {
@@ -61,6 +66,13 @@ const saveSettings = () => {
   }
 };
 const enabled = (id) => settings[id] !== false;
+const hasCRMAccess = () => ctx.hasPermission("crm.view");
+const hasDataAccess = () => hasCRMAccess() || identity.permissions.includes("analytics.view");
+const canLoad = (id) => {
+  if (id === "leads") return hasCRMAccess();
+  if (["tasks", "revenue", "romi"].includes(id)) return hasDataAccess();
+  return true;
+};
 const safeMoney = (value) => {
   if (value === null || value === undefined) return "нет данных";
   if (typeof formatMoney === "function") return formatMoney(value);
@@ -121,7 +133,8 @@ const renderLeads = (result) => {
   const leads = Array.isArray(result.value?.leads) ? result.value.leads.slice(0, 3) : [];
   list.innerHTML = leads.length ? `<ul>${leads.map((lead) => `<li>
     <strong>${escapeHTML(lead.name || "нет данных")}</strong>
-    <span>${escapeHTML(lead.source || "нет данных")} · ${escapeHTML(lead.stage || "нет данных")}</span>
+    <span>${escapeHTML(lead.source || "нет данных")} ·
+    ${escapeHTML(lead.stage || "нет данных")}</span>
     <time>${escapeHTML(dateLabel(lead.date || lead.createdAt))}</time></li>`).join("")}</ul>`
     : '<p class="home-note">нет данных</p>';
 };
@@ -142,29 +155,37 @@ const requestSignature = () => {
   const ids = WIDGETS.filter((widget) => enabled(widget.id)).map((widget) => widget.id).join(",");
   return `${ctx.selectedProjectId}:${settings.period}:${ids}`;
 };
+const renderResults = (results) => {
+  for (const id of ["leads", "revenue", "romi"]) {
+    if (enabled(id) && canLoad(id)) renderDashboardWidget(id, results[0]);
+  }
+  if (canLoad("tasks")) renderTasks(results[1]);
+  if (canLoad("leads")) renderLeads(results[2]);
+};
 const loadWidgets = async () => {
   if (ctx.currentView !== "home") return;
   const key = requestSignature();
+  if (payloadCache.has(key)) {
+    renderResults(payloadCache.get(key));
+    return payloadCache.get(key);
+  }
   if (key === requestKey) return requestPromise;
   requestKey = key;
-  const dashboardNeeded = ["leads", "revenue", "romi"].some(enabled);
+  const dashboardNeeded = ["leads", "revenue", "romi"].some((id) => enabled(id) && canLoad(id));
   const dates = periodDates(settings.period);
   const dashboard = dashboardNeeded
     ? crmQuery("/dashboard", { ...dates, ...scopeParams() })
     : Promise.resolve(null);
-  const tasks = enabled("tasks")
+  const tasks = enabled("tasks") && canLoad("tasks")
     ? crmQuery("/tasks/summary", { ...scopeParams() })
     : Promise.resolve(null);
-  const leads = enabled("leads")
+  const leads = enabled("leads") && canLoad("leads")
     ? crmQuery("/leads", { ...scopeParams(), limit: 3 })
     : Promise.resolve(null);
   requestPromise = Promise.allSettled([dashboard, tasks, leads]).then((results) => {
     if (key !== requestKey) return;
-    for (const id of ["leads", "revenue", "romi"]) {
-      if (enabled(id)) renderDashboardWidget(id, results[0]);
-    }
-    renderTasks(results[1]);
-    renderLeads(results[2]);
+    payloadCache.set(key, results);
+    renderResults(results);
   });
   return requestPromise;
 };
@@ -175,14 +196,17 @@ const renderPeriods = () => {
 };
 const widgetMarkup = (widget) => {
   if (!enabled(widget.id)) return "";
-  const link = widget.id === "leads"
+  const link = widget.id === "leads" && hasCRMAccess()
     ? '<button class="home-link" type="button" data-home-navigate="crm">Все лиды</button>'
     : "";
-  const dialogs = widget.id === "dialogs"
-    ? '<span class="development-badge">в разработке</span><p>Появится после подключения чата к CRM</p>'
-    : '<p class="home-loading">Загрузка…</p>';
+  let content = '<p class="home-loading">Загрузка…</p>';
+  if (!canLoad(widget.id)) content = '<p class="home-note">нет доступа</p>';
+  if (widget.id === "dialogs") {
+    content = '<span class="development-badge">в разработке</span>' +
+      '<p>Появится после подключения чата к CRM</p>';
+  }
   return `<article class="card home-widget" data-home-widget="${widget.id}">
-    <h2>${escapeHTML(widget.label)}</h2><div id="home-widget-${widget.id}">${dialogs}</div>
+    <h2>${escapeHTML(widget.label)}</h2><div id="home-widget-${widget.id}">${content}</div>
     ${widget.id === "leads" ? '<div id="home-leads-list"></div>' : ""}${link}</article>`;
 };
 const renderWidgets = () => {
@@ -206,7 +230,6 @@ const bind = () => {
     if (!button || settings.period === button.dataset.homePeriod) return;
     settings.period = button.dataset.homePeriod;
     saveSettings();
-    requestKey = "";
     renderPeriods();
     renderWidgets();
     loadWidgets();
@@ -215,7 +238,6 @@ const bind = () => {
     if (!event.target.matches('input[type="checkbox"]')) return;
     settings[event.target.value] = event.target.checked;
     saveSettings();
-    requestKey = "";
     renderWidgets();
     loadWidgets();
   });
@@ -246,7 +268,6 @@ SbCabinet.registerView("home", {
   },
   onProjectChange(context) {
     init(context);
-    requestKey = "";
     renderWidgets();
     api.loadWidgets();
   }

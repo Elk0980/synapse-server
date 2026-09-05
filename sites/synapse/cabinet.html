@@ -6,7 +6,6 @@
 <meta name="theme-color" content="#0b0908">
 <meta name="color-scheme" content="dark">
 <title>Кабинет — Synapse Business</title>
-<link rel="stylesheet" href="cabinet/home.css?v=20260905">
 <script>document.documentElement.classList.replace("no-js", "js");</script>
 <style>
 :root {
@@ -585,7 +584,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     <div class="content-header"><p id="startup-error" class="startup-error" role="alert" hidden></p></div>
     <section class="view-panel" id="home-view" data-view="home" hidden>
       <div class="content-header home-header"><h1>Главная</h1>
-        <div class="home-tools"><div class="home-periods" id="home-periods" aria-label="Период виджетов">
+        <div class="home-tools"><div class="home-periods" id="home-periods" role="group"
+          aria-label="Период виджетов">
           <button class="period-button" type="button" data-home-period="today">Сегодня</button>
           <button class="period-button" type="button" data-home-period="7d">7 дней</button>
           <button class="period-button" type="button" data-home-period="30d">30 дней</button>
@@ -817,7 +817,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   };
   const cabinetAssets = ["home", "tasks", "leads", "deals", "clients", "chat", "analytics",
     "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account"];
-  const cabinetStyles = ["analytics", "ad-platforms"];
+  const cabinetStyles = ["analytics", "ad-platforms", "home"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join(""));

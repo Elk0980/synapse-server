@@ -50,7 +50,7 @@
   position: relative;
 }
 
-.home-grid {
+#home-view .home-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
@@ -140,10 +140,11 @@
 
 .widget-settings {
   position: absolute;
-  z-index: 20;
+  z-index: 50;
   top: 0;
   right: 0;
   width: min(360px, 100%);
+  background: var(--surface);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
 }
 
@@ -171,7 +172,7 @@
 }
 
 @media (max-width: 900px) {
-  .home-grid {
+  #home-view .home-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -189,6 +190,12 @@
   .home-periods .period-button {
     flex: 1 1 0;
     padding-inline: 6px;
+  }
+
+  .widget-settings {
+    position: relative;
+    width: 100%;
+    margin-bottom: 16px;
   }
 
   #home-leads-list li {
