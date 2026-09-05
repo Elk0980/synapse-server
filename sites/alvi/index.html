@@ -1276,6 +1276,7 @@
       width: min(50vw, 60vh);
       aspect-ratio: 1;
       flex: 0 0 auto;
+      cursor: pointer;
       filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.55));
     }
 
@@ -1289,7 +1290,11 @@
 
     .contacts-gust {
       position: absolute;
-      animation: contacts-gust 12s cubic-bezier(.4, 0, .2, 1) var(--gd) infinite;
+      animation: contacts-gust 48s cubic-bezier(.4, 0, .2, 1) calc(var(--gd) - 34s) infinite;
+    }
+
+    .contacts-gust.is-gust {
+      animation: contacts-gust-once 6s cubic-bezier(.4, 0, .2, 1) var(--gd) 1;
     }
 
     .contacts-gust > .contacts-layer {
@@ -1312,7 +1317,11 @@
       background-size: 260% 100%;
       mix-blend-mode: soft-light;
       opacity: 0.9;
-      animation: contacts-sheen 12s ease-in-out 0s infinite;
+      animation: contacts-sheen 48s ease-in-out -34s infinite;
+    }
+
+    .contacts-logo__sheen.is-gust {
+      animation: contacts-sheen-once 6s ease-in-out 0s 1;
     }
 
     @keyframes sway {
@@ -1322,18 +1331,34 @@
     }
 
     @keyframes contacts-gust {
-      0%, 52% { transform: rotate(0); }
-      58% { transform: rotate(var(--ga)); }
-      64% { transform: rotate(calc(var(--ga) * -.55)); }
-      70% { transform: rotate(calc(var(--ga) * .35)); }
-      77% { transform: rotate(calc(var(--ga) * -.18)); }
-      85% { transform: rotate(calc(var(--ga) * .07)); }
+      0%, 87% { transform: rotate(0); }
+      88.5% { transform: rotate(var(--ga)); }
+      90% { transform: rotate(calc(var(--ga) * -.55)); }
+      91.5% { transform: rotate(calc(var(--ga) * .35)); }
+      93.25% { transform: rotate(calc(var(--ga) * -.18)); }
+      95.25% { transform: rotate(calc(var(--ga) * .07)); }
       100% { transform: rotate(0); }
     }
 
     @keyframes contacts-sheen {
-      0%, 50% { background-position: 120% 0; }
-      72% { background-position: -60% 0; }
+      0%, 86% { background-position: 120% 0; }
+      92% { background-position: -60% 0; }
+      100% { background-position: -60% 0; }
+    }
+
+    @keyframes contacts-gust-once {
+      0% { transform: rotate(0); }
+      12% { transform: rotate(var(--ga)); }
+      24% { transform: rotate(calc(var(--ga) * -.55)); }
+      36% { transform: rotate(calc(var(--ga) * .35)); }
+      50% { transform: rotate(calc(var(--ga) * -.18)); }
+      66% { transform: rotate(calc(var(--ga) * .07)); }
+      100% { transform: rotate(0); }
+    }
+
+    @keyframes contacts-sheen-once {
+      0% { background-position: 120% 0; }
+      48% { background-position: -60% 0; }
       100% { background-position: -60% 0; }
     }
 
@@ -2860,16 +2885,16 @@
     <section class="content-section content-section--alt" id="contacts" data-after-block="10">
       <svg width="0" height="0" style="position:absolute" aria-hidden="true">
         <defs>
-          <filter id="alvi-windA" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.010 0.024" numOctaves="2" seed="3" result="n"><animate attributeName="baseFrequency" values="0.010 0.024;0.013 0.030;0.010 0.024" dur="7s" repeatCount="indefinite"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" xChannelSelector="R" yChannelSelector="G" scale="3"><animate attributeName="scale" values="3;3;14;7;10;5;3" keyTimes="0;.52;.58;.64;.70;.80;1" dur="12s" repeatCount="indefinite"/></feDisplacementMap></filter>
-          <filter id="alvi-windB" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.014 0.030" numOctaves="2" seed="7" result="n"><animate attributeName="baseFrequency" values="0.014 0.030;0.018 0.036;0.014 0.030" dur="5.5s" repeatCount="indefinite"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" xChannelSelector="R" yChannelSelector="G" scale="2"><animate attributeName="scale" values="2;2;11;5;8;4;2" keyTimes="0;.55;.61;.67;.73;.83;1" dur="12s" repeatCount="indefinite"/></feDisplacementMap></filter>
-          <filter id="alvi-windC" x="-8%" y="-8%" width="116%" height="116%"><feTurbulence type="fractalNoise" baseFrequency="0.030 0.030" numOctaves="1" seed="11" result="n"><animate attributeName="baseFrequency" values="0.030;0.036;0.030" dur="4.5s" repeatCount="indefinite"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" xChannelSelector="R" yChannelSelector="G" scale="1.5"><animate attributeName="scale" values="1.5;1.5;6;3;4.5;2.5;1.5" keyTimes="0;.56;.62;.68;.74;.84;1" dur="12s" repeatCount="indefinite"/></feDisplacementMap></filter>
+          <filter id="alvi-windA" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.010 0.024" numOctaves="2" seed="3" result="n"><animate attributeName="baseFrequency" values="0.010 0.024;0.013 0.030;0.010 0.024" dur="7s" repeatCount="indefinite"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" xChannelSelector="R" yChannelSelector="G" scale="3"><animate attributeName="scale" values="3;3;14;7;10;5;3" keyTimes="0;.87;.885;.90;.915;.94;1" begin="-34s" dur="48s" repeatCount="indefinite"/><animate id="alvi-windA-gust" attributeName="scale" values="3;14;7;10;5;3;3" keyTimes="0;.12;.24;.36;.50;.66;1" begin="indefinite" dur="6s" fill="remove"/></feDisplacementMap></filter>
+          <filter id="alvi-windB" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.014 0.030" numOctaves="2" seed="7" result="n"><animate attributeName="baseFrequency" values="0.014 0.030;0.018 0.036;0.014 0.030" dur="5.5s" repeatCount="indefinite"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" xChannelSelector="R" yChannelSelector="G" scale="2"><animate attributeName="scale" values="2;2;11;5;8;4;2" keyTimes="0;.87;.885;.90;.915;.94;1" begin="-34s" dur="48s" repeatCount="indefinite"/><animate id="alvi-windB-gust" attributeName="scale" values="2;11;5;8;4;2;2" keyTimes="0;.12;.24;.36;.50;.66;1" begin="indefinite" dur="6s" fill="remove"/></feDisplacementMap></filter>
+          <filter id="alvi-windC" x="-8%" y="-8%" width="116%" height="116%"><feTurbulence type="fractalNoise" baseFrequency="0.030 0.030" numOctaves="1" seed="11" result="n"><animate attributeName="baseFrequency" values="0.030;0.036;0.030" dur="4.5s" repeatCount="indefinite"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" xChannelSelector="R" yChannelSelector="G" scale="1.5"><animate attributeName="scale" values="1.5;1.5;6;3;4.5;2.5;1.5" keyTimes="0;.87;.885;.90;.915;.94;1" begin="-34s" dur="48s" repeatCount="indefinite"/><animate id="alvi-windC-gust" attributeName="scale" values="1.5;6;3;4.5;2.5;1.5;1.5" keyTimes="0;.12;.24;.36;.50;.66;1" begin="indefinite" dur="6s" fill="remove"/></feDisplacementMap></filter>
         </defs>
       </svg>
       <video class="contacts-water" autoplay muted loop playsinline aria-hidden="true">
         <source src="img/water-loop.webm" type="video/webm">
       </video>
       <div class="content-shell contacts-content">
-        <div class="contacts-logo">
+        <div class="contacts-logo" tabindex="0" role="button" aria-label="Порыв ветра" title="Нажмите — подует ветер">
           <img class="contacts-logo__base" src="img/logo3d-v2/logo3d-base.webp" alt="Объёмная эмблема ALVI">
           <div class="contacts-gust" style="left:5.176%;top:6.934%;width:46.191%;transform-origin:94.5% 15.9%;--gd:0s;--ga:3.9deg"><img class="contacts-layer wind-A" src="img/logo3d-v2/twig-1.webp" alt="" aria-hidden="true" style="transform-origin:94.5% 15.9%;--d:8.4s;--o:-2.9s;--a:0.9deg"></div>
           <div class="contacts-gust" style="left:55.762%;top:14.258%;width:32.715%;transform-origin:-6.9% -0.3%;--gd:0.9s;--ga:4.2deg"><img class="contacts-layer wind-B" src="img/logo3d-v2/twig-2.webp" alt="" aria-hidden="true" style="transform-origin:-6.9% -0.3%;--d:7.6s;--o:-4.1s;--a:1.2deg"></div>
@@ -2904,6 +2929,46 @@
           </a>
         </nav>
       </div>
+      <script>
+        (() => {
+          const contacts = document.querySelector("#contacts");
+          const logo = contacts?.querySelector(".contacts-logo");
+          const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+          let gustInProgress = false;
+
+          if (!logo) return;
+
+          const startGust = () => {
+            if (gustInProgress || reducedMotion.matches) return;
+
+            const animatedParts = [...contacts.querySelectorAll(".contacts-gust, .contacts-logo__sheen")];
+            gustInProgress = true;
+            animatedParts.forEach((part) => part.classList.add("is-gust"));
+            contacts.querySelectorAll('animate[id$="-gust"]').forEach((animation) => {
+              if (typeof animation.beginElement === "function") animation.beginElement();
+            });
+
+            Promise.all(animatedParts.map((part) => new Promise((resolve) => {
+              const finishPart = (event) => {
+                if (event.target !== part || !event.animationName.endsWith("-once")) return;
+                part.removeEventListener("animationend", finishPart);
+                part.classList.remove("is-gust");
+                resolve();
+              };
+              part.addEventListener("animationend", finishPart);
+            }))).then(() => {
+              gustInProgress = false;
+            });
+          };
+
+          logo.addEventListener("click", startGust);
+          logo.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            startGust();
+          });
+        })();
+      </script>
     </section>
 
     <footer class="site-footer" data-after-block="11">
