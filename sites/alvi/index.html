@@ -3755,7 +3755,7 @@
       loadItems().then(function (list) {
         var hit = null;
         for (var i = 0; i < list.length; i++) { if (norm(list[i].title) === t) { hit = list[i]; break; } }
-        if (!hit) { for (var j = 0; j < list.length; j++) { var n = norm(list[j].title); if (n && t.indexOf(n) === 0) { hit = list[j]; break; } } }
+        if (!hit) { for (var j = 0; j < list.length; j++) { var n = norm(list[j].title); if (n && (n.indexOf(t) !== -1 || t.indexOf(n) !== -1)) { hit = list[j]; break; } } }
         if (!hit) return;
         var photo = hit.photo || ("img/card-" + hit.id + ".jpg");
         box.style.setProperty("--card-photo", "url(" + JSON.stringify(photo) + ")");
