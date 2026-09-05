@@ -1,6 +1,130 @@
-.platform-status-list { display: grid; gap: 18px; }
-.platform-status-group h2 { margin: 0 0 8px; color: var(--muted); font-size: 0.85rem; }
-.platform-status-row { display: flex; gap: 12px; justify-content: space-between; padding: 8px 0; }
-.platform-status-row + .platform-status-row { border-top: 1px solid var(--line); }
-.platform-status { color: var(--muted); white-space: nowrap; }
-.platform-status.is-connected { color: var(--green); }
+.platform-status-list {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.platform-status-group,
+.platform-status-item {
+  min-width: 0;
+}
+
+.platform-status-group h2 {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0 0 8px;
+}
+
+.platform-status-item + .platform-status-item {
+  border-top: 1px solid var(--line);
+}
+
+.platform-status-row {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(140px, 1fr) auto auto;
+  padding: 8px 0;
+}
+
+.platform-status-row > span:first-child small,
+.manual-project small {
+  color: var(--muted);
+  display: block;
+}
+
+.platform-status {
+  color: var(--muted);
+}
+
+.platform-status.is-connected {
+  color: var(--green);
+}
+
+.manual-stats-form {
+  background: var(--surface, #fff);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-sizing: border-box;
+  margin: 4px 0 14px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 16px;
+  width: 100%;
+}
+
+.manual-stats-form p {
+  margin: 0 0 10px;
+}
+
+.manual-days-scroll {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.manual-days-table {
+  border-collapse: collapse;
+  min-width: 900px;
+  width: 100%;
+}
+
+.manual-days-table th,
+.manual-days-table td {
+  padding: 6px 4px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.manual-days-table input {
+  box-sizing: border-box;
+  min-width: 112px;
+  width: 100%;
+}
+
+.existing-value {
+  color: var(--muted);
+  display: block;
+  font-size: 0.72rem;
+  max-width: 112px;
+}
+
+.manual-note {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.manual-note textarea {
+  box-sizing: border-box;
+  min-height: 72px;
+  resize: vertical;
+  width: 100%;
+}
+
+.manual-actions {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.manual-result {
+  color: var(--muted);
+  margin: 0;
+}
+
+@media (max-width: 600px) {
+  .platform-status-row {
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .platform-status-row .manual-open {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .manual-stats-form {
+    padding: 10px;
+  }
+}
