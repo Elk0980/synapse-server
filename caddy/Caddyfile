@@ -38,6 +38,14 @@ synapsebusiness.ru, www.synapsebusiness.ru {
 # --- Клиент: Авокадо (студия дизайна тела, Иркутск) -------------------------
 avokado.synapsebusiness.ru {
   root * /srv/sites/avokado
+  @track {
+    path /track
+    method POST
+  }
+  handle @track {
+    rewrite * /events
+    reverse_proxy crm:8080
+  }
   @price {
     path /api/price
     method GET
@@ -77,6 +85,14 @@ avokado-v2.synapsebusiness.ru {
 # --- Клиент: ALVI (SPA, Иркутск) --------------------------------------------
 alvi.synapsebusiness.ru {
   root * /srv/sites/alvi
+  @track {
+    path /track
+    method POST
+  }
+  handle @track {
+    rewrite * /events
+    reverse_proxy crm:8080
+  }
   # Прайс и витрины главной берутся из сервиса content (только чтение).
   @price {
     path /api/price
