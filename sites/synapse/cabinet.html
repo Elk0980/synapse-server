@@ -288,6 +288,7 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .crm-empty, .crm-error { padding: 20px; border: 1px solid var(--line); border-radius: 12px; }
 .crm-error { color: var(--red); }
 .analytics-grid { display: grid; gap: 18px; }
+.analytics-grid > .card { min-width: 0; }
 .analytics-dates, .expense-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
 .analytics-dates label, .expense-form label { display: grid; gap: 5px; color: var(--muted); }
 .analytics-dates input, .expense-form input {
@@ -365,9 +366,9 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .analytics-source-table { table-layout: fixed; font-size: 0.72rem; }
 .analytics-source-table th, .analytics-source-table td { padding: 8px 6px; }
 .analytics-source-table th, .analytics-source-table td { white-space: normal; overflow-wrap: anywhere; }
-.analytics-source-table th:first-child { width: 16%; }
-.analytics-source-table th:last-child { width: 13%; }
-.analytics-source-table .data-mark { margin-top: 0; white-space: nowrap; }
+.analytics-source-table th:first-child { width: 14%; }
+.analytics-source-table th:last-child { width: 15%; }
+.analytics-source-table .data-mark { margin-top: 0; white-space: normal; }
 .analytics-details { margin-top: 24px; }
 .analytics-details > summary { padding: 16px 0; cursor: pointer; font-size: 1.05rem; font-weight: 700; }
 .analytics-legal { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line); }
@@ -443,7 +444,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   .tool-frame { min-height: 72vh; }
   .account-details div { grid-template-columns: 1fr; gap: 2px; }
   .analytics-funnel { grid-template-columns: minmax(92px, 0.55fr) minmax(190px, 1.45fr); gap: 8px; }
-  .funnel-shape { min-height: 136px; padding: 8px; }
+  .funnel-shape { min-height: 136px; padding: 6px; font-size: 0.72rem; overflow-wrap: anywhere; }
   .funnel-card { padding: 11px; }
   .analytics-finance { grid-template-columns: 1fr; }
   .platform-panel { width: calc(100vw - 64px); }
@@ -2017,7 +2018,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     { group: "Яндекс Директ", id: "wordstat", label: "Яндекс Вордстат",
       note: "источник этапа «Потенциал»", codes: ["wordstat"] },
     { group: "Геоконтекст и карты", id: "2gis", label: "2ГИС", codes: ["2gis"] },
-    { group: "Геоконтекст и карты", id: "yandex-maps", label: "Яндекс Карты", codes: ["yandex-maps"] },
+    { group: "Геоконтекст и карты", id: "yandex-maps", label: "Яндекс Карты",
+      codes: ["yandex-maps", "yandex-business"] },
     { group: "Геоконтекст и карты", id: "google-maps", label: "Google Maps", codes: ["google-maps"] },
     { group: "Классифайды", id: "avito", label: "Авито", codes: ["avito", "avito-ads"] },
     { group: "Поиск и бренд", id: "yandex", label: "Яндекс Поиск", codes: ["yandex"] },
@@ -2067,17 +2069,18 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       revenue: optionalSum(rows.map((row) => row.revenue)),
       expenses: optionalSum(rows.map((row) => row.expenses)),
       romi: rows.length ? optionalSum(rows.map((row) => row.romi)) : null,
-      capturedAt: externals.map((row) => row.externalCapturedAt).filter(Boolean).sort().at(-1) || null
+      capturedAt: externals.map((row) => row.externalCapturedAt).filter(Boolean).sort().at(-1) || null,
+      hasExternal: externals.length > 0
     };
   };
   const snapshotDate = (value) => value ? new Intl.DateTimeFormat("ru-RU", {
-    dateStyle: "short",
-    timeStyle: "short"
+    dateStyle: "short"
   }).format(new Date(value)) : "";
   const dataMark = (kind, date) => {
     const labels = {
       live: "LIVE",
       snapshot: `СНИМОК${date ? ` от ${snapshotDate(date)}` : ""}`,
+      mixed: `LIVE + СНИМОК${date ? ` от ${snapshotDate(date)}` : ""}`,
       manual: "РУЧНОЙ ВВОД",
       none: "НЕТ ДАННЫХ"
     };
@@ -2105,20 +2108,37 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const renderAnalytics = (dashboard, summary, expenses) => {
     analyticsState.payload = { dashboard, summary, expenses };
     const stats = Array.isArray(dashboard.sourceStats) ? dashboard.sourceStats : [];
-    const platforms = selectedPlatforms().map((platform) => aggregatePlatform(platform, stats));
-    platforms.sort((left, right) => Number(Boolean(right.capturedAt)) - Number(Boolean(left.capturedAt)) ||
+    const allSelected = analyticsState.selected.size === ANALYTICS_PLATFORMS.length;
+    const knownCodes = new Set(ANALYTICS_PLATFORMS.flatMap((platform) => platform.codes));
+    const unknownCodes = allSelected ? [...new Set(stats.map((row) => String(row.source || "").toLowerCase())
+      .filter((code) => !knownCodes.has(code)))] : [];
+    const unknownPlatforms = unknownCodes.map((code) => ({
+      group: "", id: `other-${code}`, label: `Прочие: ${code || "без кода"}`, codes: [code], isUnknown: true
+    }));
+    const platforms = [...selectedPlatforms(), ...unknownPlatforms]
+      .map((platform) => aggregatePlatform(platform, stats));
+    platforms.sort((left, right) => Number(left.platform.isUnknown) - Number(right.platform.isUnknown) ||
+      Number(right.hasExternal) - Number(left.hasExternal) ||
       ANALYTICS_PLATFORMS.indexOf(left.platform) - ANALYTICS_PLATFORMS.indexOf(right.platform));
-    const total = (key) => optionalSum(platforms.map((platform) => platform[key]));
+    const selectedAggregate = allSelected
+      ? aggregatePlatform({ codes: [...new Set(stats.map((row) => String(row.source || "").toLowerCase()))] }, stats)
+      : null;
+    const total = (key) => allSelected
+      ? selectedAggregate[key] : optionalSum(platforms.map((platform) => platform[key]));
     const pageViews = total("pageViews");
     const funnelClicks = total("funnelClicks");
     const warmup = optionalSum([total("clicks"), total("leads")]);
     const sales = total("sales");
     const revenue = total("revenue");
     const values = { ...(dashboard.summary || {}), ...dashboard };
-    const expensesUnavailable = values.expenses === null || dashboard.expensesScope || summary.expensesScope;
-    const financeExpenses = expensesUnavailable ? null : total("expenses") ?? values.expenses;
-    const financeRevenue = revenue ?? values.revenue;
-    const financeRomi = expensesUnavailable ? null : values.romi ?? total("romi");
+    const expensesUnavailable = selectedProjectId !== "synapse-business" &&
+      (values.expenses === null || dashboard.expensesScope || summary.expensesScope);
+    const financeExpenses = expensesUnavailable ? null : allSelected ? values.expenses : total("expenses");
+    const financeRevenue = allSelected ? values.revenue : revenue;
+    const financeRomi = expensesUnavailable ? null : allSelected ? values.romi :
+      financeRevenue === null || financeRevenue === undefined || financeExpenses === null || !financeExpenses
+        ? null : (financeRevenue - financeExpenses) / financeExpenses * 100;
+    const financeUnavailable = expensesUnavailable || (!allSelected && financeExpenses === null);
     const newestCapture = platforms.map((platform) => platform.capturedAt).filter(Boolean).sort().at(-1);
     const funnel = [
       {
@@ -2130,7 +2150,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       },
       { id: "views", label: "Показы", value: pageViews, kind: pageViews === null ? "none" : "snapshot",
         date: newestCapture, note: "переходы на карточку площадки" },
-      { id: "clicks", label: "Клики", value: funnelClicks, kind: funnelClicks === null ? "none" : "live",
+      { id: "clicks", label: "Клики", value: funnelClicks, kind: funnelClicks === null ? "none" :
+        total("externalClicks") !== null && total("visits") !== null ? "mixed" :
+          total("externalClicks") !== null ? "snapshot" : "live", date: newestCapture,
         note: `карточки: ${formatMetric(total("externalClicks"))} · сайт: ${formatMetric(total("visits"))}` },
       { id: "warmup", label: "Прогрев", value: warmup, kind: warmup === null ? "none" : "live",
         note: `ключевой этап проекта: ${funnelProjectLabel()}` },
@@ -2142,7 +2164,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     const maximum = Math.max(...numeric, 1);
     const funnelRows = funnel.map((step, index) => {
       const previous = funnel[index - 1]?.value;
-      const conversion = step.value !== null && previous > 0 ? `${formatMetric(step.value / previous * 100)}%` : "—";
+      const conversion = step.value !== null && previous > 0
+        ? `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(step.value / previous * 100)}%` : "—";
       const width = step.value === null ? 28 : Math.max(28, step.value / maximum * 100);
       const details = platforms.map((platform) => {
         const key = { views: "pageViews", clicks: "funnelClicks", warmup: "clicks", deal: "sales" }[step.id];
@@ -2161,7 +2184,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     }).join("");
     const tableRows = platforms.map((platform) => {
       const noExpenses = expensesUnavailable || platform.expenses === null;
-      const kind = platform.capturedAt ? "snapshot" : platform.rows.length ? "live" : "none";
+      const kind = platform.hasExternal ? "snapshot" : platform.rows.length ? "live" : "none";
       const clickTargets = platform.rows.flatMap((row) => Object.entries(row.clicksByTarget || {}))
         .map(([target, count]) => `${target}: ${count}`).join(" · ");
       return `<tr><td>${escapeHTML(platform.platform.label)}</td><td>${formatMetric(platform.pageViews)}</td>
@@ -2174,11 +2197,11 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     }).join("");
     byId("analytics-content").innerHTML = `<section class="analytics-section"><h2>Воронка</h2>
       <div class="analytics-funnel">${funnelRows}</div><div class="analytics-finance">
-      <div class="crm-stat"><span>Расходы</span><strong>${expensesUnavailable
+      <div class="crm-stat"><span>Расходы</span><strong>${financeUnavailable
         ? "по компании не ведутся" : financeExpenses === null ? "—" : formatMoney(financeExpenses)}</strong></div>
       <div class="crm-stat"><span>Выручка</span><strong>${financeRevenue === null || financeRevenue === undefined
         ? "—" : formatMoney(financeRevenue)}</strong></div>
-      <div class="crm-stat"><span>ROMI</span><strong>${expensesUnavailable
+      <div class="crm-stat"><span>ROMI</span><strong>${financeUnavailable
         ? "по компании не ведутся" : formatROMI(financeRomi)}</strong></div></div></section>
       <section class="analytics-section"><h2>Площадки</h2><div class="crm-table-wrap">
       <table class="crm-table analytics-source-table"><thead><tr><th>Площадка</th><th>Показы</th><th>Клики</th>
@@ -2567,7 +2590,11 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
-    if (!byId("project-menu").hidden) {
+    if (!byId("platform-panel").hidden) {
+      byId("platform-panel").hidden = true;
+      byId("platform-trigger").setAttribute("aria-expanded", "false");
+      byId("platform-trigger").focus();
+    } else if (!byId("project-menu").hidden) {
       closeProjectMenu(true);
     } else if (drawerOpen) {
       setDrawer(false, true);
