@@ -95,3 +95,31 @@ curl -X POST http://localhost:8080/companies \
 
 Миграции записываются в `schema_migrations`, выполняются транзакционно и повторяемо, не создают бизнес-данных и
 завершаются `PRAGMA foreign_key_check`.
+
+## Задачи
+
+`tasks` — план работ по проектам и очередь входящих поручений. Обязательное поле `title` содержит от 1 до 200
+символов. Поля `description`, `assigneeName`, `sourceRef`, `sourceAuthor` и `createdBy` — строки. `companyCode`
+равен пустой строке для общих задач Synapse либо коду существующей активной компании; код сохраняется в нижнем
+регистре. `dueDate` — дата `YYYY-MM-DD` или пустая строка.
+
+Допустимые значения:
+
+* `assigneeRole`: `owner`, `admin`, `marketer`, `synapse` (по умолчанию);
+* `status`: `inbox` (по умолчанию), `planned`, `in_progress`, `done`, `cancelled`;
+* `priority`: `low`, `normal` (по умолчанию), `high`, `urgent`;
+* `source`: `manual` (по умолчанию), `chat`, `telegram`.
+
+Доступны `GET|POST /tasks` и `GET|PATCH|DELETE /tasks/:id`. Список поддерживает общие параметры `deleted`,
+`limit`, `offset`, а также фильтры `companyCode`, `status`, `assigneeRole`, `source` и поиск `q` по названию,
+описанию и автору источника. Задачи сортируются по входящему статусу, приоритету, сроку и времени создания.
+`POST` с непустым `sourceRef` активной задачи идемпотентен: возвращает существующую задачу с HTTP 200 и
+`duplicate: true`. `GET /tasks/summary` возвращает общие счётчики и `byCompany`; параметр `companyCode` ограничивает
+выборку. Удаление мягкое.
+
+```sh
+curl -X POST http://localhost:8080/tasks \
+  -H 'X-API-Key: replace-me' -H 'Content-Type: application/json' \
+  -d '{"title":"Разобрать обращение","companyCode":"qa_company_a","source":"chat",\
+"sourceRef":"chat:conversation:12:message:345","assigneeRole":"marketer"}'
+```

@@ -36,7 +36,12 @@ async function start() {
   child.stderr.on('data', (chunk) => { errors += chunk; });
   for (let attempt = 0; attempt < 100; attempt += 1) {
     if (child.exitCode !== null) throw new Error(`CRM завершилась при старте: ${errors}`);
-    try { await fetch(`http://127.0.0.1:${port}/contacts`); return; } catch { await new Promise((r) => setTimeout(r, 25)); }
+    try {
+      await fetch(`http://127.0.0.1:${port}/contacts`);
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
   }
   throw new Error('CRM не запустилась');
 }
@@ -123,6 +128,60 @@ async function main() {
   assert.equal((await request('GET', `/leads?companyCode=${company.body.code}`)).body.leads.length, 1);
   console.log('LEAD_COMPANY_LINK=PASS COMPANY_SCOPED_DEDUP=PASS');
 
+  const taskInbox = await request('POST', '/tasks', {
+    title: 'QA Inbox', companyCode: company.body.code, priority: 'low', source: 'chat',
+    sourceRef: 'chat:conversation:12:message:345', sourceAuthor: 'QA Author',
+  });
+  const taskUrgent = await request('POST', '/tasks', {
+    title: 'QA Urgent', companyCode: company.body.code.toUpperCase(), status: 'planned',
+    priority: 'urgent', dueDate: '2030-01-02', assigneeRole: 'marketer',
+  });
+  const taskHigh = await request('POST', '/tasks', {
+    title: 'QA High', companyCode: company.body.code, status: 'planned', priority: 'high',
+    dueDate: '2030-01-01', description: 'needle task',
+  });
+  assert.equal(taskInbox.status, 201);
+  assert.equal(taskInbox.body.companyCode, company.body.code);
+  assert.equal(taskUrgent.status, 201);
+  assert.equal(taskHigh.status, 201);
+  const duplicate = await request('POST', '/tasks', {
+    title: 'Must not be created', sourceRef: 'chat:conversation:12:message:345',
+  });
+  assert.equal(duplicate.status, 200);
+  assert.equal(duplicate.body.duplicate, true);
+  assert.equal(duplicate.body.id, taskInbox.body.id);
+  const tasks = await request('GET', `/tasks?companyCode=${company.body.code.toUpperCase()}`);
+  assert.equal(tasks.body.pagination.total, 3);
+  assert.deepEqual(tasks.body.tasks.map((task) => task.id),
+    [taskInbox.body.id, taskUrgent.body.id, taskHigh.body.id]);
+  assert.equal((await request('GET', '/tasks?status=planned&assigneeRole=marketer'))
+    .body.pagination.total, 1);
+  assert.equal((await request('GET', '/tasks?source=chat&q=author')).body.pagination.total, 1);
+  const patchedTask = await request('PATCH', `/tasks/${taskInbox.body.id}`, {
+    status: 'in_progress',
+  });
+  assert.equal(patchedTask.body.status, 'in_progress');
+  const summary = await request('GET', `/tasks/summary?companyCode=${company.body.code}`);
+  assert.deepEqual(summary.body, {
+    inbox: 0, planned: 2, inProgress: 1, done: 0,
+    byCompany: { [company.body.code]: { inbox: 0, open: 3 } },
+  });
+  assert.equal((await request('DELETE', `/tasks/${taskHigh.body.id}`)).status, 200);
+  const deletedTasks = await request('GET', '/tasks?deleted=only');
+  assert.equal(deletedTasks.body.pagination.total, 1);
+  assert.equal(deletedTasks.body.tasks[0].id, taskHigh.body.id);
+  for (const invalid of [
+    { title: '' }, { title: 'x'.repeat(201) }, { title: 'QA', status: 'bad' },
+    { title: 'QA', assigneeRole: 'bad' }, { title: 'QA', priority: 'bad' },
+    { title: 'QA', dueDate: '2030-02-30' }, { title: 'QA', companyCode: 'missing' },
+  ]) {
+    const response = await request('POST', '/tasks', invalid);
+    assert.equal(response.status, 400);
+    assert.match(response.body.error, /[А-Яа-яЁё]/);
+  }
+  console.log('TASKS_CRUD=PASS TASKS_FILTER_SORT=PASS TASKS_IDEMPOTENCY=PASS');
+  console.log('TASKS_SUMMARY=PASS TASKS_VALIDATION=PASS');
+
   const deleted = await request('DELETE', `/companies/${company.body.id}`);
   assert.equal(deleted.status, 200);
   const deletedAgain = await request('DELETE', `/companies/${company.body.id}`);
@@ -148,16 +207,26 @@ async function main() {
   await stop();
   const counts = inspect((db) => ({ migrations: db.prepare('SELECT COUNT(*) count FROM schema_migrations').get().count,
     contacts: db.prepare('SELECT COUNT(*) count FROM contacts').get().count }));
+  inspect((db) => {
+    db.exec('DROP TABLE tasks; DELETE FROM schema_migrations WHERE version = 2');
+  });
   await start(); await stop(); await start(); await stop();
-  inspect((db) => { assert.equal(db.prepare('SELECT COUNT(*) count FROM schema_migrations').get().count, counts.migrations);
-    assert.equal(db.prepare('SELECT COUNT(*) count FROM contacts').get().count, counts.contacts); });
+  inspect((db) => {
+    assert.equal(db.prepare('SELECT COUNT(*) count FROM schema_migrations').get().count, counts.migrations);
+    assert.equal(db.prepare('SELECT COUNT(*) count FROM contacts').get().count, counts.contacts);
+    assert.ok(db.prepare('SELECT COUNT(*) count FROM leads').get().count > 0);
+    assert.ok(db.prepare('SELECT 1 FROM tasks').get() === undefined);
+  });
   console.log('MIGRATION_REPEAT=PASS LEGACY_DATA_PRESERVED=PASS');
 
   inspect((db) => {
     db.exec('PRAGMA foreign_keys=ON');
     const before = db.prepare('SELECT COUNT(*) count FROM legal_entities').get().count;
     db.prepare('DELETE FROM contacts WHERE id=?').run(contact.body.id);
-    assert.equal(db.prepare('SELECT COUNT(*) count FROM contact_companies WHERE contact_id=?').get(contact.body.id).count, 0);
+    const relations = db.prepare(
+      'SELECT COUNT(*) count FROM contact_companies WHERE contact_id=?'
+    ).get(contact.body.id).count;
+    assert.equal(relations, 0);
     assert.equal(db.prepare('SELECT COUNT(*) count FROM legal_entities').get().count, before);
   });
   console.log('JUNCTION_CASCADE=PASS');
