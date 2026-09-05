@@ -135,8 +135,9 @@ curl 'http://localhost:8080/external-stats?source=2gis&companyCode=qa_company_a&
   -H 'X-API-Key: replace-me'
 ```
 
-`/dashboard` и `/summary` в `sources` отдают полный список источников из заявок, событий и внешних снимков.
-Список не ограничивается выбранным периодом или фильтром `source`. В `sourceStats` для каждого источника за период
+`/dashboard` в `sources` отдаёт полный список имён источников из заявок, событий и внешних
+снимков; список не ограничивается выбранным периодом или фильтром `source`. `/summary` в `sources` отдаёт
+те же объекты статистики, что и в `sourceStats`. В `sourceStats` для каждого источника за период
 возвращаются показатели заявок и продаж, уникальные визиты, количество кликов, `clicksByTarget`, сумма метрик
 `external` и время последнего снимка `externalCapturedAt`. Пустой источник заявки объединяется с событиями
 `direct`. Общие показатели также содержат `visits` и `clicks`.
@@ -165,6 +166,5 @@ curl 'http://localhost:8080/external-stats?source=2gis&companyCode=qa_company_a&
 ```sh
 curl -X POST http://localhost:8080/tasks \
   -H 'X-API-Key: replace-me' -H 'Content-Type: application/json' \
-  -d '{"title":"Разобрать обращение","companyCode":"qa_company_a","source":"chat",\
-"sourceRef":"chat:conversation:12:message:345","assigneeRole":"marketer"}'
+  -d '{"title":"Разобрать обращение","source":"chat","sourceRef":"chat:12:345"}'
 ```

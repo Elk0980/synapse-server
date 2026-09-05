@@ -1718,11 +1718,12 @@ async function route(request, response) {
     }
     const sourceStats = [...analytics.groups.values()]
       .sort((a, b) => a.source.localeCompare(b.source, 'ru'));
-    const sources = analyticsSources(companyCode);
     const revenue = sourceStats.reduce((sum, group) => sum + group.revenue, 0);
     const expenses = companyCode ? null : sourceStats.reduce((sum, group) => sum + group.expenses, 0);
     return send(response, 200, {
-      from, to, revenue, expenses, romi: companyCode ? null : romi(revenue, expenses), sources, sourceStats,
+      from, to, revenue, expenses, romi: companyCode ? null : romi(revenue, expenses),
+      sources: sourceStats,
+      sourceStats,
       visits: sourceStats.reduce((sum, group) => sum + group.visits, 0),
       clicks: sourceStats.reduce((sum, group) => sum + group.clicks, 0),
       ...(companyCode ? { expensesScope: 'global_unavailable' } : {}),
