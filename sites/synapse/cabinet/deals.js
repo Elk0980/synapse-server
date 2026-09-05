@@ -72,7 +72,9 @@
   const configureButton = () => {
     byId("deals-configure").disabled = !canEdit() || !state.stages.length || busy();
     byId("deals-configure").title = canEdit() ? "" : "нет прав";
-    byId("deals-refresh").disabled = busy();
+    const refreshButton = byId("deals-refresh");
+    refreshButton.disabled = busy();
+    refreshButton.textContent = state.loading ? "Обновляю…" : "Обновить";
     byId("deals-pipelines").querySelectorAll("button").forEach((button) => { button.disabled = busy(); });
     byId("deals-enroll").disabled = !canEdit() || busy() || !byId("deals-enroll-company").value;
   };
@@ -110,13 +112,18 @@
     const service = company.service || {};
     const attention = state.pipeline === "service" && ["risk", "renewal"].includes(current)
       || state.stages.find((stage) => stage.code === current)?.attention;
-    const serviceInfo = state.pipeline === "service" ? `
-      <span class="deals-company-meta">Оплачено до: ${html(date(service.paidUntil))}</span>
-      <span class="deals-company-meta">${html(money(service.monthlyAmount))}</span>
-      <span class="deals-company-meta">Последнее касание: ${html(date(service.lastTouchAt))}</span>
-      <span class="deals-company-meta">Следующее касание: ${html(date(service.nextTouchAt))}</span>
-      <span class="deals-company-meta">Ответственный: ${html(service.clientOwnerContact?.name || "—")}</span>` :
-      `<span class="deals-company-meta">Начало: ${html(date(company.startDate))}</span>`;
+    const hasServiceInfo = [service.paidUntil, service.monthlyAmount, service.lastTouchAt, service.nextTouchAt,
+      service.clientOwnerContactId, service.clientOwnerContact?.name]
+      .some((value) => value !== null && value !== undefined && value !== "");
+    const serviceInfo = state.pipeline === "service"
+      ? hasServiceInfo ? `
+        <span class="deals-company-meta">Оплачено до: ${html(date(service.paidUntil))}</span>
+        <span class="deals-company-meta">${html(money(service.monthlyAmount))}</span>
+        <span class="deals-company-meta">Последнее касание: ${html(date(service.lastTouchAt))}</span>
+        <span class="deals-company-meta">Следующее касание: ${html(date(service.nextTouchAt))}</span>
+        <span class="deals-company-meta">Ответственный: ${html(service.clientOwnerContact?.name || "—")}</span>`
+        : '<span class="deals-company-meta">Сервисные поля не заполнены</span>'
+      : `<span class="deals-company-meta">Начало: ${html(date(company.startDate))}</span>`;
     return `<article class="deals-company" data-company-id="${html(company.id)}"
       draggable="${draggable}" aria-busy="${pending}">
       <button class="deals-company-open" type="button" data-company-open${pending ? " disabled" : ""}
@@ -141,7 +148,7 @@
       return `<section class="card deals-column" data-stage-code="${html(stage.code)}"
         data-stage-kind="${html(stage.kind)}" aria-label="${html(stage.label)}">
         <header class="deals-column-heading"><h2>${html(stage.label)}</h2>
-        <span class="deals-count" aria-label="Компаний: ${companies.length}">${companies.length}</span></header>
+        <span class="deals-count" aria-label="${companyCount(companies.length)}">${companies.length}</span></header>
         <div class="deals-column-cards">${cards || '<p class="muted deals-empty">пока пусто</p>'}</div>
       </section>`;
     }).join("");
@@ -155,6 +162,7 @@
     if (state.loading) return;
     state.refreshRequested = false;
     const version = ++state.loadVersion;
+    const selectedCompanyId = state.overview?.company.id;
     state.loading = true;
     configureButton();
     if (!preserveError) status();
@@ -172,6 +180,10 @@
       if (version !== state.loadVersion) return;
       if (companies.status === "rejected") throw companies.reason;
       state.companies = companies.value.companies || [];
+      const selectedCompany = state.companies.find((company) => {
+        return String(company.id) === String(selectedCompanyId);
+      });
+      if (selectedCompany && state.overview) state.overview.company = selectedCompany;
       state.total = companies.value.pagination?.total ?? state.companies.length;
       state.summaryLoaded = summary.status === "fulfilled";
       state.byCompany = Object.fromEntries(Object.entries(summary.value?.byCompany || {}).map(([code, value]) => {
@@ -179,6 +191,7 @@
       }));
       if (!state.stages.length) throw new Error("Воронка не содержит этапов");
       renderBoard();
+      if (selectedCompany && byId("deals-drawer").open) renderDrawerTab();
       if (!state.summaryLoaded) status(`Счётчики задач недоступны: ${summary.reason.message}`);
     } catch (error) {
       if (version !== state.loadVersion) return;
