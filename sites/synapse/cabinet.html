@@ -812,7 +812,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   window.SB_CABINET_ASSET_VERSION = "20260905";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
-  window.SbCabinet.registerView = (name, definition) => {
+  window.SbCabinet.registerView ||= (name, definition) => {
     window.SbCabinet.views[name] = definition;
   };
   const cabinetAssets = ["home", "tasks", "leads", "deals", "clients", "chat", "analytics",
@@ -830,9 +830,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   "use strict";
   const SbCabinet = window.SbCabinet = window.SbCabinet || {};
   const registeredViews = SbCabinet.views = SbCabinet.views || {};
-  SbCabinet.registerView = (name, definition) => {
-    registeredViews[name] = definition;
-  };
   const apiJson = async (url, options = {}) => {
     const response = await fetch(url, { credentials: "same-origin", cache: "no-store", ...options,
       headers: { "Content-Type": "application/json", ...(options.headers || {}) } });
@@ -865,14 +862,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   });
   const CRM_API = "/content/crm";
   const EDITOR_PROJECTS = Object.freeze(["alvi", "avokado"]);
-  const CRM_STAGES = Object.freeze([
-    { id: "new", label: "Новая" },
-    { id: "in_progress", label: "В работе" },
-    { id: "booked", label: "Записан" },
-    { id: "visited", label: "Пришёл" },
-    { id: "sale", label: "Продажа" },
-    { id: "rejected", label: "Отказ" }
-  ]);
   const byId = (id) => document.getElementById(id);
   const escapeHTML = (value) => String(value).replace(/[&<>'"]/g, (character) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;"
@@ -882,8 +871,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   let allowedProjects = [];
   let selectedProjectId = null;
   let currentView = "home";
-  let crmBound = false;
-  let analyticsBound = false;
   let drawerOpen = false;
 
   const allowedProjectsFor = (profile) => {
@@ -978,7 +965,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     renderProjectPicker();
     closeProjectMenu(true);
     const context = cabinetContext();
-    Object.values(registeredViews).forEach((view) => view.onProjectChange?.(context));
+    registeredViews[currentView]?.onProjectChange?.(context);
+    if (currentView !== "tasks") registeredViews.tasks?.updateSummary?.(context);
   };
 
   const editorUrl = (kind) => `${kind}-editor.html?site=${encodeURIComponent(selectedProjectId)}`;
@@ -1054,7 +1042,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const cabinetContext = () => ({
     identity,
     selectedProjectId,
-    currentView,
+    get currentView() { return currentView; },
     byId,
     escapeHTML,
     crmQuery,
@@ -1207,15 +1195,16 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       renderProjectPicker();
       if (redirectEditorHash()) return;
       const context = cabinetContext();
+      const initialView = viewFromHash();
       registeredViews.home.render(byId("home-view"), context);
-      registeredViews.tasks.onProjectChange(context);
+      registeredViews.tasks.updateSummary(context);
       if (identity.permissions.includes("analytics.view")) {
-        registeredViews["analytics-through"].render(byId("analytics-through-view"), context);
+        registeredViews["analytics-through"].initialize(context);
       }
-      if (hasPermission("crm.view")) registeredViews.crm.render(byId("crm-view"), context);
-      registeredViews.sites.render(byId("sites-view"), context);
-      registeredViews.accounts.render(byId("accounts-view"), context);
-      setView(viewFromHash());
+      if (hasPermission("crm.view")) registeredViews.crm.initialize(context);
+      setView(initialView);
+      if (initialView !== "sites") registeredViews.sites.render(byId("sites-view"), context);
+      if (initialView !== "accounts") registeredViews.accounts.render(byId("accounts-view"), context);
       byId("app").hidden = false;
       byId("auth").hidden = true;
     } catch (error) {
