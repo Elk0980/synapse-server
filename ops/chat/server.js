@@ -283,7 +283,7 @@ function addMessage(
 }
 
 function taskCompany(company) {
-  if (["alvi", "avokado", "palitra"].includes(company)) return "palitra-love";
+  if (company === "palitra") return "palitra-love";
   return company === "synapse" ? "" : company;
 }
 
@@ -620,7 +620,7 @@ async function adminRoutes(request, response, url, origin) {
     if (!text) fail(400, "Поле «text» обязательно");
     const messageId = addMessage(row, text, "owner", "Владислав");
     const detected = detectTask(text, { authorType: "owner", channel: "web" });
-    if (detected.kind) {
+    if (detected.kind && detected.title) {
       try {
         await createTask(row, { id: messageId }, detected, {
           description: `${text}\nДиалог: ${row.title || row.site || row.id}`,

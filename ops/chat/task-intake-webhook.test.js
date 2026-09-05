@@ -112,7 +112,7 @@ test("Telegram webhook creates idempotent tasks and survives CRM errors", async 
     from: { id: 22, first_name: "Анна" },
   };
   assert.equal((await webhook(explicitMessage)).status, 200);
-  assert.equal(crmRequests[0].companyCode, "palitra-love");
+  assert.equal(crmRequests[0].companyCode, "alvi");
   assert.equal(crmRequests[0].sourceRef, "telegram:chat:-10:msg:2");
   assert.equal(crmRequests[0].sourceAuthor, "Анна");
   assert.equal(crmRequests[0].priority, "urgent");
@@ -151,6 +151,25 @@ test("Telegram webhook creates idempotent tasks and survives CRM errors", async 
   });
   assert.equal(crmRequests.at(-1).sourceRef, "telegram:chat:-10:msg:3");
   assert.equal(crmRequests.at(-1).sourceAuthor, "Иван");
+
+  for (const [company, companyCode, messageId] of [
+    ["avokado", "avokado", 31],
+    ["palitra", "palitra-love", 33],
+  ]) {
+    await webhook({
+      ...base,
+      message_id: messageId,
+      text: `/company ${company}`,
+      from: { id: 1, first_name: "Владислав" },
+    });
+    await webhook({
+      ...base,
+      message_id: messageId + 1,
+      text: `#задача Проверить код ${company}`,
+      from: { id: 22, first_name: "Анна" },
+    });
+    assert.equal(crmRequests.at(-1).companyCode, companyCode);
+  }
 
   assert.equal(
     (await webhook({
@@ -195,4 +214,17 @@ test("Telegram webhook creates idempotent tasks and survives CRM errors", async 
   assert.equal(adminReply.status, 201);
   assert.equal(crmRequests.at(-1).source, "chat");
   assert.match(crmRequests.at(-1).sourceRef, /^chat:conversation:2:msg:\d+$/);
+
+  const requestCount = crmRequests.length;
+  const emptyAdminTask = await jsonRequest(
+    `http://127.0.0.1:${chatPort}/admin/conversations/` +
+      `${webConversation.body.id}/messages`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": "admin-test" },
+      body: JSON.stringify({ text: "#задача" }),
+    },
+  );
+  assert.equal(emptyAdminTask.status, 201);
+  assert.equal(crmRequests.length, requestCount);
 });

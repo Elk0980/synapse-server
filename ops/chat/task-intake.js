@@ -7,8 +7,12 @@ const REQUEST_PATTERN = new RegExp(
     "давайте|прошу|срочно|не работает|не открывается)",
   "iu",
 );
-const EXPLICIT_PATTERN =
-  /^(?:#задача|задача|\/(?:task|задача))(?:@\w+)?(?=\s|:|$)\s*:?[\s\u00a0]*/iu;
+const EXPLICIT_PATTERN = new RegExp(
+  "^(?:#задача(?=\\s|:|$)\\s*:?|задача:|" +
+    "\\/(?:task|задача)(?:@\\w+)?(?=\\s|:|$)\\s*:?)" +
+    "[\\s\\u00a0]*",
+  "iu",
+);
 
 function oneLine(text, maximum) {
   return text.split(/\r?\n/, 1)[0].replace(/\s+/gu, " ").trim().slice(0, maximum);
