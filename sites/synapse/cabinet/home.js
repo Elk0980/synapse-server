@@ -23,7 +23,7 @@ const WIDGETS = Object.freeze([
   },
   {
     id: "revenue",
-    label: "Выручка",
+    label: "Выручка за период",
     help: "Выручка по сделкам в CRM со статусом «продажа» " +
       "за выбранный период"
   },
@@ -47,7 +47,9 @@ const PERIODS = Object.freeze([
 let settings = {};
 let requestKey = "";
 let requestPromise = null;
-const payloadCache = new Map();
+let activeProjectId;
+const DASHBOARD_CACHE_TTL = 60 * 1000;
+const dashboardCache = new Map();
 
 const storageKey = () => `synapse_cabinet_home_widgets:${identity.userId}`;
 const readSettings = () => {
@@ -99,7 +101,7 @@ const setWidgetContent = (id, markup) => {
   if (content) content.innerHTML = markup;
 };
 const dashboardResult = (result) => {
-  const dashboard = result.value || {};
+  const dashboard = result.value && typeof result.value === "object" ? result.value : {};
   return { ...dashboard, ...(dashboard.summary || {}) };
 };
 const renderDashboardWidget = (id, result) => {
@@ -116,11 +118,11 @@ const renderDashboardWidget = (id, result) => {
       <p class="home-note">по сделкам в CRM со статусом «продажа»</p>`);
   }
   if (id === "romi") {
-    const unavailable = values.expensesScope === "global_unavailable" || values.romi === null ||
-      values.romi === undefined;
-    const value = unavailable ? "нет данных о расходах" : `${metric(values.romi)}%`;
-    setWidgetContent(id, `<strong class="home-metric ${unavailable ? "home-metric-text" : ""}">
-      ${escapeHTML(value)}</strong>${unavailable ? `<p class="home-note">${escapeHTML(WIDGETS[3].help)}</p>` : ""}`);
+    const noExpenses = values.expenses === 0;
+    const noData = values.romi === null || values.romi === undefined;
+    const value = noExpenses ? "нет расходов" : noData ? "нет данных" : `${metric(values.romi)}%`;
+    setWidgetContent(id, `<strong class="home-metric ${noExpenses || noData ? "home-metric-text" : ""}">
+      ${escapeHTML(value)}</strong>`);
   }
 };
 const renderLeads = (result) => {
@@ -155,6 +157,18 @@ const requestSignature = () => {
   const ids = WIDGETS.filter((widget) => enabled(widget.id)).map((widget) => widget.id).join(",");
   return `${ctx.selectedProjectId}:${settings.period}:${ids}`;
 };
+const dashboardCacheKey = () => `${ctx.selectedProjectId}:${settings.period}`;
+const loadDashboard = (dates) => {
+  const key = dashboardCacheKey();
+  const cached = dashboardCache.get(key);
+  if (cached && Date.now() - cached.createdAt < DASHBOARD_CACHE_TTL) return cached.promise;
+  const promise = crmQuery("/dashboard", { ...dates, ...scopeParams() });
+  dashboardCache.set(key, { createdAt: Date.now(), promise });
+  promise.catch(() => {
+    if (dashboardCache.get(key)?.promise === promise) dashboardCache.delete(key);
+  });
+  return promise;
+};
 const renderResults = (results) => {
   for (const id of ["leads", "revenue", "romi"]) {
     if (enabled(id) && canLoad(id)) renderDashboardWidget(id, results[0]);
@@ -165,16 +179,12 @@ const renderResults = (results) => {
 const loadWidgets = async () => {
   if (ctx.currentView !== "home") return;
   const key = requestSignature();
-  if (payloadCache.has(key)) {
-    renderResults(payloadCache.get(key));
-    return payloadCache.get(key);
-  }
   if (key === requestKey) return requestPromise;
   requestKey = key;
   const dashboardNeeded = ["leads", "revenue", "romi"].some((id) => enabled(id) && canLoad(id));
   const dates = periodDates(settings.period);
   const dashboard = dashboardNeeded
-    ? crmQuery("/dashboard", { ...dates, ...scopeParams() })
+    ? loadDashboard(dates)
     : Promise.resolve(null);
   const tasks = enabled("tasks") && canLoad("tasks")
     ? crmQuery("/tasks/summary", { ...scopeParams() })
@@ -182,11 +192,16 @@ const loadWidgets = async () => {
   const leads = enabled("leads") && canLoad("leads")
     ? crmQuery("/leads", { ...scopeParams(), limit: 3 })
     : Promise.resolve(null);
-  requestPromise = Promise.allSettled([dashboard, tasks, leads]).then((results) => {
+  const promise = Promise.allSettled([dashboard, tasks, leads]).then((results) => {
     if (key !== requestKey) return;
-    payloadCache.set(key, results);
     renderResults(results);
+  }).finally(() => {
+    if (requestPromise === promise) {
+      requestKey = "";
+      requestPromise = null;
+    }
   });
+  requestPromise = promise;
   return requestPromise;
 };
 const renderPeriods = () => {
@@ -202,8 +217,7 @@ const widgetMarkup = (widget) => {
   let content = '<p class="home-loading">Загрузка…</p>';
   if (!canLoad(widget.id)) content = '<p class="home-note">нет доступа</p>';
   if (widget.id === "dialogs") {
-    content = '<span class="development-badge">в разработке</span>' +
-      '<p>Появится после подключения чата к CRM</p>';
+    content = '<p class="home-note">Появится после подключения чата к CRM</p>';
   }
   return `<article class="card home-widget" data-home-widget="${widget.id}">
     <h2>${escapeHTML(widget.label)}</h2><div id="home-widget-${widget.id}">${content}</div>
@@ -252,6 +266,7 @@ const init = (context) => {
   formatMoney = context.formatMoney;
   if (initialized) return;
   initialized = true;
+  activeProjectId = ctx.selectedProjectId;
   settings = readSettings();
   if (!PERIODS.some(([id]) => id === settings.period)) settings.period = "today";
   bind();
@@ -268,6 +283,12 @@ SbCabinet.registerView("home", {
   },
   onProjectChange(context) {
     init(context);
+    if (activeProjectId !== ctx.selectedProjectId) {
+      activeProjectId = ctx.selectedProjectId;
+      dashboardCache.clear();
+      requestKey = "";
+      requestPromise = null;
+    }
     renderWidgets();
     api.loadWidgets();
   }
