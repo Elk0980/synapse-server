@@ -874,7 +874,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   };
   const cabinetAssets = ["home", "tasks", "leads", "deals", "clients", "chat", "analytics",
     "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account"];
-  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home"];
+  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join(""));
