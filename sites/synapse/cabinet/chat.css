@@ -1,0 +1,212 @@
+.cabinet-chat {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  min-height: 520px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.chat-list {
+  min-width: 0;
+  border-right: 1px solid var(--line);
+}
+.chat-list-title {
+  margin: 0;
+  padding: 18px;
+  border-bottom: 1px solid var(--line);
+  font-size: 1rem;
+}
+.chat-dialogs,
+.chat-messages {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.chat-dialogs {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.chat-dialog {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 18px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  overflow-wrap: anywhere;
+  background: transparent;
+  cursor: pointer;
+}
+.chat-dialog:hover,
+.chat-dialog[aria-pressed="true"] {
+  background: var(--surface-soft);
+}
+.chat-dialog[aria-pressed="true"] {
+  box-shadow: inset 3px 0 var(--accent);
+}
+.chat-dialog:focus-visible {
+  outline-offset: -3px;
+}
+.chat-dialog-source,
+.chat-dialog-time,
+.chat-message-meta,
+.chat-message-author,
+.chat-conversation-header p,
+.chat-crm-link span,
+.chat-lead-fields dt {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.chat-stage {
+  justify-self: start;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 0.8rem;
+}
+.chat-conversation {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.chat-conversation-header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.chat-conversation-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.chat-conversation-header p {
+  margin: 4px 0 0;
+}
+.chat-back {
+  display: none;
+}
+.chat-messages {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 60vh;
+  min-height: 240px;
+  padding: 24px;
+  overflow-y: auto;
+}
+.chat-message {
+  align-self: flex-start;
+  width: fit-content;
+  max-width: 90%;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+  background: var(--surface-soft);
+}
+.chat-message-outgoing {
+  align-self: flex-end;
+  border-color: rgba(159, 212, 255, 0.35);
+  background: rgba(46, 107, 214, 0.12);
+}
+.chat-message-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  justify-content: space-between;
+}
+.chat-message-author {
+  margin: 4px 0 0;
+}
+.chat-message-text {
+  margin: 10px 0 0;
+  white-space: pre-wrap;
+}
+.chat-crm-link {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-top: 1px solid var(--line);
+}
+.chat-crm-link span,
+.chat-crm-link strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.chat-state {
+  margin: 0;
+  padding: 24px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.chat-conversation > .chat-state {
+  margin: auto;
+  text-align: center;
+}
+.chat-error {
+  color: var(--red);
+}
+.chat-retry {
+  margin: 0 24px 24px;
+}
+.chat-show-lead > :not(.chat-lead-card) {
+  display: none;
+}
+.chat-lead-card {
+  padding: 24px;
+  overflow-wrap: anywhere;
+}
+.chat-lead-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin: 24px 0;
+}
+.chat-lead-fields dd {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+}
+.chat-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+@media (max-width: 760px) {
+  .cabinet-chat {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 360px;
+  }
+  .chat-list {
+    border-right: 0;
+  }
+  .cabinet-chat:not(.is-conversation) .chat-conversation,
+  .cabinet-chat.is-conversation .chat-list {
+    display: none;
+  }
+  .chat-back {
+    display: block;
+    flex-shrink: 0;
+  }
+  .chat-conversation-header,
+  .chat-messages,
+  .chat-crm-link {
+    padding: 16px;
+  }
+  .chat-message {
+    max-width: 100%;
+  }
+  .chat-crm-link .plain-button {
+    width: 100%;
+  }
+  .chat-lead-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
