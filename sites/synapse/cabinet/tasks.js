@@ -30,8 +30,41 @@ const init = (context) => {
     high: "Высокий",
     urgent: "Срочный"
   });
-  const TASK_SOURCES = Object.freeze({ manual: "Вручную", chat: "Чат", telegram: "Telegram" });
-  const taskState = { status: "", assigneeRole: "", source: "", q: "", companies: [] };
+  const TASK_SOURCES = Object.freeze({ manual: "Вручную", chat: "Чат", telegram: "Telegram", pipeline: "Воронка" });
+  const TASK_PIPELINES = Object.freeze({ sale: "Продажа", service: "Сервис" });
+  const FILTER_KEYS = ["status", "companyCode", "pipeline", "assigneeRole", "source", "q"];
+  const taskState = {
+    status: "", companyCode: "", pipeline: "", assigneeRole: "", source: "", q: "",
+    companies: [], companiesScope: null
+  };
+  let renderVersion = 0;
+  let searchTimer;
+  const isBusinessProject = () => ctx.selectedProjectId === "synapse-business";
+  const taskRoute = (id = "") => {
+    const params = new URLSearchParams();
+    FILTER_KEYS.forEach((key) => {
+      if (key === "companyCode" && !isBusinessProject()) return;
+      if (taskState[key]) params.set(key, taskState[key]);
+    });
+    const query = params.toString();
+    return `tasks${id ? `/${encodeURIComponent(id)}` : ""}${query ? `?${query}` : ""}`;
+  };
+  const saveTaskFilters = () => {
+    clearTimeout(searchTimer);
+    const hash = `#${taskRoute()}`;
+    if (location.hash === hash) renderTaskList();
+    else location.hash = hash;
+  };
+  const readTaskFilters = (query) => {
+    const params = new URLSearchParams(query);
+    const allowed = { status: TASK_STATUSES, pipeline: TASK_PIPELINES, assigneeRole: TASK_ROLES, source: TASK_SOURCES };
+    FILTER_KEYS.forEach((key) => {
+      const value = (params.get(key) || "").trim();
+      taskState[key] = allowed[key] && !Object.hasOwn(allowed[key], value) ? "" : value;
+    });
+    taskState.companyCode = taskState.companyCode.toLowerCase();
+    if (!isBusinessProject()) taskState.companyCode = "";
+  };
   const taskOptions = (values, selected = "") => Object.entries(values).map(([value, label]) => {
     return `<option value="${value}"${value === selected ? " selected" : ""}>${label}</option>`;
   }).join("");
@@ -40,26 +73,41 @@ const init = (context) => {
     return taskState.companies.find((company) => company.code === code)?.name || code;
   };
   const loadTaskCompanies = async () => {
-    if (taskState.companies.length) return;
-    const data = await crmQuery("/companies", { ...scopeParams(), limit: 200, deleted: "exclude" });
-    taskState.companies = data.companies || [];
+    const scope = scopeParams();
+    const companyCode = scope.companyCode || "";
+    if (taskState.companiesScope === companyCode) return;
+    const companies = [];
+    let total;
+    do {
+      const data = await crmQuery("/companies", { ...scope, limit: 200, offset: companies.length, deleted: "exclude" });
+      if ((scopeParams().companyCode || "") !== companyCode) return;
+      const page = data.companies || [];
+      companies.push(...page);
+      total = data.pagination?.total ?? companies.length;
+      if (!page.length) break;
+    } while (companies.length < total);
+    taskState.companies = companies;
+    taskState.companiesScope = companyCode;
   };
-  const taskCompanyOptions = (selected = "") => {
+  const taskCompanyOptions = (selected = "", emptyLabel = "Synapse (все проекты)") => {
     const options = taskState.companies.map((company) => {
       const value = company.code || "";
       return `<option value="${escapeHTML(value)}"${value === selected ? " selected" : ""}>` +
         `${escapeHTML(company.name || value)}</option>`;
     }).join("");
-    return `<option value=""${selected ? "" : " selected"}>Synapse (все проекты)</option>${options}`;
+    return `<option value=""${selected ? "" : " selected"}>${escapeHTML(emptyLabel)}</option>${options}`;
   };
   const loadTasksSummary = async () => {
+    const scope = scopeParams();
     try {
-      const summary = await crmQuery("/tasks/summary", scopeParams());
+      const summary = await crmQuery("/tasks/summary", scope);
+      if ((scopeParams().companyCode || "") !== (scope.companyCode || "")) return null;
       const badge = byId("tasks-badge");
       badge.textContent = summary.inbox || "";
       badge.hidden = !summary.inbox;
       return summary;
     } catch (error) {
+      if ((scopeParams().companyCode || "") !== (scope.companyCode || "")) return null;
       byId("tasks-badge").hidden = true;
       return null;
     }
@@ -68,9 +116,9 @@ const init = (context) => {
     const tabs = [
       ["inbox", "Входящие", summary.inbox],
       ["planned", "Запланировано", summary.planned],
-      ["in_progress", "В работе", summary.inProgress],
+      ["in_progress", "В работе", summary.in_progress],
       ["done", "Сделано", summary.done],
-      ["", "Все", Object.values(summary).filter(Number.isFinite).reduce((total, value) => total + value, 0)]
+      ["", "Все", summary.total]
     ];
     return tabs.map(([value, label, count]) => `<button type="button" data-task-status-tab="${value}"
       aria-pressed="${String(taskState.status === value)}">${label} · ${count || 0}</button>`).join("");
@@ -91,29 +139,49 @@ const init = (context) => {
       ${taskOptions(TASK_STATUSES, task.status)}</select>`;
   };
   const renderTaskList = async () => {
+    const version = ++renderVersion;
+    const filters = { ...taskState };
+    const scope = scopeParams();
+    const businessProject = isBusinessProject();
     const content = byId("tasks-content");
     content.textContent = "Загрузка…";
     try {
-      await loadTaskCompanies();
-      const [data, summary] = await Promise.all([
-        crmQuery("/tasks", {
-          ...scopeParams(),
-          status: taskState.status,
-          assigneeRole: taskState.assigneeRole,
-          source: taskState.source,
-          q: taskState.q,
-          limit: 100,
-          offset: 0
-        }),
-        loadTasksSummary()
-      ]);
-      const tasks = data.tasks || [];
+      await Promise.all([loadTaskCompanies(), loadTasksSummary()]);
+      if (version !== renderVersion) return;
+      const params = {
+        companyCode: businessProject ? filters.companyCode : "",
+        ...scope,
+        assigneeRole: filters.assigneeRole,
+        source: filters.source,
+        q: filters.q,
+        limit: 200
+      };
+      const records = [];
+      let total;
+      do {
+        const data = await crmQuery("/tasks", { ...params, offset: records.length });
+        if (version !== renderVersion) return;
+        const page = data.tasks || [];
+        records.push(...page);
+        total = data.pagination?.total ?? records.length;
+        if (!page.length) break;
+      } while (records.length < total);
+      const filtered = records.filter((task) => {
+        const pipeline = task.source === "pipeline" && /^pipeline:(sale|service):/.exec(task.sourceRef || "")?.[1];
+        return !filters.pipeline || pipeline === filters.pipeline;
+      });
+      const summary = { inbox: 0, planned: 0, in_progress: 0, done: 0, total: filtered.length };
+      filtered.forEach((task) => {
+        if (Object.hasOwn(TASK_STATUSES, task.status)) summary[task.status] = (summary[task.status] || 0) + 1;
+      });
+      const tasks = filtered.filter((task) => !filters.status || task.status === filters.status);
       const rows = tasks.map((task) => {
         const source = task.source !== "manual"
           ? `<small>${escapeHTML(task.sourceAuthor || "—")} · ${TASK_SOURCES[task.source] || task.source}</small>`
           : "";
         return `<tr class="crm-row" tabindex="0" data-task-row="${escapeHTML(task.id)}">
-          <td class="crm-grow"><span class="tasks-title"><strong>${escapeHTML(task.title)}</strong>${source}</span></td>
+          <td class="crm-grow"><span class="tasks-title"><strong>${escapeHTML(task.title)}</strong>
+          ${source}</span></td>
           <td class="crm-compact">${escapeHTML(taskCompanyName(task.companyCode))}</td>
           <td class="crm-compact"><span class="tasks-assignee">${TASK_ROLES[task.assigneeRole] || task.assigneeRole}
           ${task.assigneeName ? `<small>${escapeHTML(task.assigneeName)}</small>` : ""}</span></td>
@@ -124,20 +192,25 @@ const init = (context) => {
           <td class="crm-compact">${taskActionsMarkup(task)}</td></tr>`;
       }).join("");
       content.innerHTML = `<div class="tasks-status-tabs" aria-label="Статус задачи">
-        ${taskStatusTabs(summary || {})}</div><div class="crm-entity-toolbar">
+        ${taskStatusTabs(summary)}</div><div class="crm-entity-toolbar" style="flex-wrap: wrap">
+        ${businessProject ? `<select data-task-company-filter aria-label="Компания">
+        ${taskCompanyOptions(filters.companyCode, "Все компании")}</select>` : ""}
+        <select data-task-pipeline-filter aria-label="Воронка"><option value="">Все воронки</option>
+        ${taskOptions(TASK_PIPELINES, filters.pipeline)}</select>
         <select data-task-role-filter aria-label="Роль исполнителя"><option value="">Все исполнители</option>
         ${taskOptions(TASK_ROLES, taskState.assigneeRole)}</select>
         <select data-task-source-filter aria-label="Источник"><option value="">Все источники</option>
         ${taskOptions(TASK_SOURCES, taskState.source)}</select>
         <input type="search" data-task-search value="${escapeHTML(taskState.q)}" placeholder="Поиск"
           aria-label="Поиск задач"><button class="plain-button" type="button" data-task-add>Добавить</button>
-        </div><p class="crm-list-count">Показано ${tasks.length} из ${data.pagination?.total ?? tasks.length}</p>
+        </div><p class="crm-list-count">Показано ${tasks.length} из ${tasks.length}</p>
         <div class="crm-table-wrap"><table class="crm-table crm-entity-table"><thead><tr>
         <th class="crm-grow">Задача</th><th>Проект</th><th>Исполнитель</th><th>Приоритет</th><th>Срок</th>
         <th>Статус</th><th>Действия</th></tr></thead><tbody>${rows}</tbody></table></div>
-        ${tasks.length ? "" : '<p class="crm-empty">Задач нет</p>'}`;
+        ${tasks.length ? "" : '<p class="crm-empty">Задач по этим фильтрам нет</p>'}`;
       bindTaskList();
     } catch (error) {
+      if (version !== renderVersion) return;
       content.innerHTML = `<p class="crm-error" role="alert">${escapeHTML(error.message)}</p>`;
     }
   };
@@ -150,32 +223,35 @@ const init = (context) => {
     content.querySelectorAll("[data-task-status-tab]").forEach((button) => {
       button.addEventListener("click", () => {
         taskState.status = button.dataset.taskStatusTab;
-        renderTaskList();
+        saveTaskFilters();
       });
     });
-    content.querySelector("[data-task-role-filter]").addEventListener("change", (event) => {
-      taskState.assigneeRole = event.target.value;
-      renderTaskList();
+    const selectors = {
+      companyCode: "company", pipeline: "pipeline", assigneeRole: "role", source: "source"
+    };
+    Object.entries(selectors).forEach(([key, selector]) => {
+      content.querySelector(`[data-task-${selector}-filter]`)?.addEventListener("change", (event) => {
+        taskState[key] = event.target.value;
+        saveTaskFilters();
+      });
     });
-    content.querySelector("[data-task-source-filter]").addEventListener("change", (event) => {
-      taskState.source = event.target.value;
-      renderTaskList();
-    });
-    let timer;
     content.querySelector("[data-task-search]").addEventListener("input", (event) => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        taskState.q = event.target.value.trim();
-        renderTaskList();
+      clearTimeout(searchTimer);
+      taskState.q = event.target.value.trim();
+      const hash = location.hash;
+      searchTimer = setTimeout(() => {
+        if (ctx.currentView === "tasks" && location.hash === hash) saveTaskFilters();
       }, 300);
     });
     content.querySelector("[data-task-add]").addEventListener("click", openTaskCreate);
     content.querySelectorAll("[data-task-row]").forEach((row) => {
       row.addEventListener("click", (event) => {
-        if (!event.target.closest("button, select")) navigate("tasks/" + row.dataset.taskRow);
+        if (!event.target.closest("button, select")) navigate(taskRoute(row.dataset.taskRow));
       });
       row.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") navigate("tasks/" + row.dataset.taskRow);
+        if (event.key === "Enter" && !event.target.closest("button, select")) {
+          navigate(taskRoute(row.dataset.taskRow));
+        }
       });
     });
     content.querySelectorAll("button[data-task-quick]").forEach((button) => {
@@ -210,19 +286,23 @@ const init = (context) => {
     status: form.elements.status.value
   });
   const renderTaskCard = async (id) => {
+    const version = ++renderVersion;
+    const scope = scopeParams();
     const content = byId("tasks-content");
     content.textContent = "Загрузка…";
     try {
       await loadTaskCompanies();
-      const task = await crmQuery(`/tasks/${encodeURIComponent(id)}`, scopeParams());
+      if (version !== renderVersion) return;
+      const task = await crmQuery(`/tasks/${encodeURIComponent(id)}`, scope);
+      if (version !== renderVersion) return;
       const source = task.source !== "manual" ? `<section class="tasks-source"><h3>Откуда</h3>
         <p>${escapeHTML(TASK_SOURCES[task.source] || task.source)} · ${escapeHTML(task.sourceAuthor || "—")}</p>
         <p>${escapeHTML(task.sourceRef || "—")}</p><p>${escapeHTML(task.createdAt || "—")}</p></section>` : "";
-      content.innerHTML = `<a class="crm-card-back" href="#tasks" data-task-back>← К списку</a>
+      content.innerHTML = `<a class="crm-card-back" href="#${escapeHTML(taskRoute())}" data-task-back>← К списку</a>
         <header class="crm-card-header"><h2>${escapeHTML(task.title)}</h2></header>${source}${taskFormMarkup(task)}`;
       content.querySelector("[data-task-back]").addEventListener("click", (event) => {
         event.preventDefault();
-        navigate("tasks");
+        navigate(taskRoute());
       });
       const form = content.querySelector("[data-task-form]");
       form.addEventListener("submit", async (event) => {
@@ -242,18 +322,26 @@ const init = (context) => {
         try {
           await crmQuery(`/tasks/${encodeURIComponent(task.id)}`, scopeParams(), csrfOptions("DELETE"));
           await loadTasksSummary();
-          navigate("tasks");
+          navigate(taskRoute());
         } catch (error) {
           form.querySelector("[data-task-result]").textContent = error.message;
         }
       });
     } catch (error) {
+      if (version !== renderVersion) return;
       content.innerHTML = `<p class="crm-error" role="alert">${escapeHTML(error.message)}</p>`;
     }
   };
   const renderTasksRoute = () => {
-    const parts = decodeURIComponent(location.hash.slice(1)).split(/[/?]/);
-    if (parts[1]) renderTaskCard(parts[1]);
+    clearTimeout(searchTimer);
+    const hash = location.hash.slice(1);
+    const queryIndex = hash.indexOf("?");
+    const route = queryIndex < 0 ? hash : hash.slice(0, queryIndex);
+    readTaskFilters(queryIndex < 0 ? "" : hash.slice(queryIndex + 1));
+    const id = decodeURIComponent(route.split("/")[1] || "");
+    const canonical = `#${taskRoute(id)}`;
+    if (location.hash !== canonical) history.replaceState(null, "", canonical);
+    if (id) renderTaskCard(id);
     else renderTaskList();
   };
   const openTaskCreate = async () => {
@@ -289,7 +377,7 @@ const init = (context) => {
       }));
       byId("task-create-dialog").close();
       await loadTasksSummary();
-      if (created?.id) navigate(`tasks/${created.id}`);
+      if (created?.id) navigate(taskRoute(created.id));
       else renderTaskList();
     } catch (failure) {
       error.textContent = failure.message;
