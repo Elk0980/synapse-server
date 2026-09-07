@@ -9,7 +9,15 @@
   }[c]));
 
   /* Фото карточек по умолчанию — пока позиции в базе без поля photo (задаётся в редакторе). */
-  const DEFAULT_PHOTOS = { 's4-1': 'img/card-s4-1.jpg', 's4-2': 'img/card-s4-2.jpg', 's4-3': 'img/card-s4-3.jpg', 's2-1': 'img/card-s2-1.jpg', 's2-2': 'img/card-s2-2.jpg', 's2-3': 'img/card-s2-3.jpg', 's2-4': 'img/card-s2-4.jpg', 's2-5': 'img/card-s2-5.jpg', 's2-6': 'img/card-s2-6.jpg', 's3-1': 'img/card-s3-1.jpg', 's3-2': 'img/card-s3-2.jpg', 's3-3': 'img/card-s3-3.jpg', 's1-1': 'img/card-s1-1.jpg', 's1-2': 'img/card-s1-2.jpg', 's1-3': 'img/card-s1-3.jpg', 's1-4': 'img/card-s1-4.jpg', 's1-5': 'img/card-s1-5.jpg', 's1-6': 'img/card-s1-6.jpg', 's1-7': 'img/card-s1-7.jpg', 's1-8': 'img/card-s1-8.jpg', 's1-9': 'img/card-s1-9.jpg', 's1-10': 'img/card-s1-10.jpg', 's1-11': 'img/card-s1-11.jpg' };
+  const DEFAULT_PHOTOS = {
+    's1-1': 'img/card-s1-1.jpg', 's1-2': 'img/card-s1-2.jpg', 's1-3': 'img/card-s1-3.jpg', 's1-4': 'img/card-s1-4.jpg', 's1-5': 'img/card-s1-5.jpg', 's1-6': 'img/card-s1-6.jpg', 's1-7': 'img/card-s1-7.jpg', 's1-8': 'img/card-s1-8.jpg', 's1-9': 'img/card-s1-9.jpg', 's1-10': 'img/card-s1-10.jpg', 's1-11': 'img/card-s1-11.jpg',
+    's2-1': 'img/card-s2-1.jpg', 's2-2': 'img/card-s2-2.jpg', 's2-3': 'img/card-s2-3.jpg', 's2-4': 'img/card-s2-4.jpg', 's2-5': 'img/card-s2-5.jpg', 's2-6': 'img/card-s2-6.jpg',
+    's3-1': 'img/card-s3-1.jpg', 's3-2': 'img/card-s3-2.jpg', 's3-3': 'img/card-s3-3.jpg',
+    's4-1': 'img/card-s4-1.jpg', 's4-2': 'img/card-s4-2.jpg', 's4-3': 'img/card-s4-3.jpg', 's4-4': 'img/card-s4-4.jpg', 's4-5': 'img/card-s4-5.jpg', 's4-6': 'img/card-s4-6.jpg', 's4-7': 'img/card-s4-7.jpg', 's4-8': 'img/card-s4-8.jpg', 's4-9': 'img/card-s4-9.jpg', 's4-10': 'img/card-s4-10.jpg', 's4-11': 'img/card-s4-11.jpg', 's4-12': 'img/card-s4-12.jpg', 's4-13': 'img/card-s4-13.jpg', 's4-14': 'img/card-s4-14.jpg', 's4-15': 'img/card-s4-15.jpg', 's4-16': 'img/card-s4-16.jpg', 's4-17': 'img/card-s4-17.jpg', 's4-18': 'img/card-s4-18.jpg', 's4-19': 'img/card-s4-19.jpg', 's4-20': 'img/card-s4-20.jpg',
+    's5-1': 'img/card-s5-1.jpg', 's5-2': 'img/card-s5-2.jpg', 's5-3': 'img/card-s5-3.jpg', 's5-4': 'img/card-s5-4.jpg',
+    's6-1': 'img/card-s6-1.jpg', 's6-2': 'img/card-s6-2.jpg', 's6-3': 'img/card-s6-3.jpg', 's6-4': 'img/card-s6-4.jpg', 's6-5': 'img/card-s6-5.jpg', 's6-6': 'img/card-s6-6.jpg', 's6-7': 'img/card-s6-7.jpg',
+    's7-1': 'img/card-s7-1.jpg', 's7-2': 'img/card-s7-2.jpg', 's7-3': 'img/card-s7-2.jpg', 's7-4': 'img/card-s7-2.jpg', 's7-5': 'img/card-s7-2.jpg'
+  };
   const photoOf = (it) => it.photo || DEFAULT_PHOTOS[it.id] || '';
   /* Смайлики разделов: у сертификатов — конверт, у акций — подарок. В заголовках они анимированы (класс ps__emoji). */
   const stripEmoji = (t) => String(t || '').replace(/^[\p{Extended_Pictographic}\uFE0F\u200D\s]+/u, '').trim();
@@ -164,7 +172,8 @@ ${body}
             <dl class="program-facts">${dl}</dl>`;
       const photo = photoOf(it);
       if (photo) {
-        return `          <a class="program-card program-card--photo" href="price.html#${esc(anchor)}" style="--card-photo:url('${esc(photo)}')">
+        return `          <a class="program-card program-card--photo" href="price.html#${esc(anchor)}">
+            <img class="program-card__photo" src="${esc(photo)}" alt="${esc(it.title)}" loading="lazy" decoding="async">
             <div class="program-card__body">${inner}</div>
           </a>`;
       }
@@ -187,5 +196,5 @@ ${body}
     return null;
   }
 
-  window.AlviPrice = { esc, load, findItem, isPopular, isPromoCat, renderSections, renderNav, renderShowcase, blockOf: BLOCK_BY_CATEGORY };
+  window.AlviPrice = { esc, load, findItem, isPopular, isPromoCat, photoOf, renderSections, renderNav, renderShowcase, blockOf: BLOCK_BY_CATEGORY };
 })();
