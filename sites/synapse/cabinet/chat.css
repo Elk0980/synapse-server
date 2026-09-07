@@ -74,7 +74,7 @@
 .chat-conversation-header {
   display: flex;
   gap: 12px;
-  align-items: center;
+  align-items: flex-start;
   padding: 18px 24px;
   border-bottom: 1px solid var(--line);
   overflow-wrap: anywhere;
@@ -85,6 +85,39 @@
 }
 .chat-conversation-header p {
   margin: 4px 0 0;
+}
+.chat-conversation-summary {
+  min-width: 0;
+}
+.chat-header-field {
+  margin-top: 12px;
+}
+.chat-header-field > span,
+.chat-empty-value small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.chat-header-field > span {
+  display: block;
+}
+.chat-header-field p {
+  color: inherit;
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+}
+.chat-source p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+}
+.chat-source small,
+.chat-lead-fields dd small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.chat-lead-fields dd small {
+  margin-left: 10px;
 }
 .chat-back {
   display: none;
