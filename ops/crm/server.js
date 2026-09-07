@@ -9,6 +9,7 @@ const IS_MAIN = require.main === module;
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
 const DATABASE_PATH = process.env.DATABASE_PATH || (IS_MAIN ? '/data/crm.sqlite' : ':memory:');
 const API_KEY = (process.env.API_KEY || (IS_MAIN ? '' : 'module-test-key')).trim();
+const STRICT_ORIGIN = /^(?:1|true|yes)$/i.test(process.env.STRICT_ORIGIN || '');
 const ALLOWED_ORIGINS = new Set(
   (process.env.ALLOWED_ORIGINS || '').split(',').map((value) => value.trim()).filter(Boolean)
 );
@@ -1045,6 +1046,49 @@ function activeCompanyCode(value) {
     });
   }
   return code;
+}
+
+function urlHostname(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    return new URL(value.trim()).hostname.toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
+  } catch {
+    return null;
+  }
+}
+
+function companyDomains(company) {
+  const domains = new Set();
+  const add = (value) => {
+    const hostname = urlHostname(value);
+    if (hostname) domains.add(hostname);
+  };
+  add(company.website_url);
+  if (company.socials) {
+    try {
+      const socials = JSON.parse(company.socials);
+      if (Array.isArray(socials)) for (const social of socials) add(social?.url);
+    } catch {
+      // Invalid legacy JSON must not break public submissions.
+    }
+  }
+  return domains;
+}
+
+function checkPublicOrigin(request, company, pathname) {
+  const header = request.headers.origin || request.headers.referer;
+  const originDomain = urlHostname(Array.isArray(header) ? header[0] : header);
+  const domains = companyDomains(company);
+  if (originDomain && domains.has(originDomain)) return;
+  console.warn('[crm] public origin mismatch', JSON.stringify({
+    path: pathname,
+    companyCode: company.code,
+    originDomain,
+    companyDomains: [...domains],
+  }));
+  if (STRICT_ORIGIN) {
+    fail(403, 'Домен запроса не разрешён для компании', { code: 'ORIGIN_MISMATCH' });
+  }
 }
 
 function requestIpHash(request) {
@@ -2128,6 +2172,8 @@ async function route(request, response) {
       fail(400, 'Поле «type» должно быть равно visit или click');
     }
     const companyCode = activeCompanyCode(body.companyCode);
+    const company = db.prepare('SELECT * FROM companies WHERE code=? COLLATE NOCASE').get(companyCode);
+    checkPublicOrigin(request, company, url.pathname);
     const fields = {};
     for (const field of ['clientId', 'page', 'landingPage', 'referrer', 'utmSource', 'utmMedium',
       'utmCampaign', 'utmContent', 'utmTerm', 'source', 'target', 'label']) {
@@ -2337,6 +2383,7 @@ async function route(request, response) {
       const company = db.prepare('SELECT * FROM companies WHERE code = ? COLLATE NOCASE').get(companyCode);
       if (!company || company.is_deleted) fail(409, 'Активная компания с таким кодом не найдена',
         { code: 'COMPANY_NOT_ACTIVE', field: 'companyCode' });
+      checkPublicOrigin(request, company, url.pathname);
     }
     const duplicate = getLeadByContact.get(normalized, companyCode);
     if (duplicate) return send(response, 200, { ...serializeLead(duplicate), deduplicated: true }, cors);
