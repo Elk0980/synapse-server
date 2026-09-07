@@ -2397,6 +2397,8 @@
 </style><script>
 (()=>{let finished=false,revealTimer,safetyTimer;const loader=()=>document.getElementById("page-loader");const finish=()=>{if(finished)return;finished=true;clearTimeout(revealTimer);clearTimeout(safetyTimer);const element=loader();if(!element)return;if(!element.classList.contains("is-visible")){element.style.display="none";return}element.classList.add("is-complete");setTimeout(()=>{element.style.display="none"},250)};revealTimer=setTimeout(()=>{if(!finished)loader()?.classList.add("is-visible")},300);safetyTimer=setTimeout(()=>{finished=true;clearTimeout(revealTimer);const element=loader();if(element)element.style.display="none"},5000);if(document.readyState==="complete")finish();else addEventListener("load",finish,{once:true})})();
 </script>
+  <link rel="stylesheet" href="mobile.css?v=20260907">
+  <script src="mobile-performance.js?v=20260907" defer></script>
 </head>
 <body>
   <div id="page-loader" aria-hidden="true"><img src="img/alvi-logo-full.png" alt="" width="823" height="823"><div id="page-loader-line"></div></div>
@@ -3149,6 +3151,7 @@
           quizResultCopy.textContent = program.copy;
           quizResult.hidden = false;
           quizResult.focus?.({ preventScroll: true });
+          quizResult.scrollIntoView({ behavior: reducedMotionQuery.matches ? "auto" : "smooth", block: "start" });
         });
       }
 
@@ -3890,7 +3893,9 @@
       if (!cta || !footer) return;
       const update = () => {
         const top = footer.getBoundingClientRect().top;
-        cta.classList.toggle('is-hidden', top < window.innerHeight - 40);
+        const contentStarted = matchMedia('(max-width: 56.24rem)').matches
+          && document.querySelector('.after-hero')?.getBoundingClientRect().top < window.innerHeight;
+        cta.classList.toggle('is-hidden', contentStarted || top < window.innerHeight - 40);
       };
       update();
       addEventListener('scroll', update, { passive: true });
@@ -3947,10 +3952,17 @@
       const EDIT = new URLSearchParams(location.search).get("edit") === "1";
       const KEY = "alvi_promo_shown";
       let shown = false;
+      let previousFocus = null;
       try { shown = sessionStorage.getItem(KEY) === "1"; } catch (e) {}
-      const close = () => { promo.classList.remove("is-open"); document.documentElement.classList.remove("promo-open"); };
+      const close = () => {
+        promo.classList.remove("is-open");
+        document.documentElement.classList.remove("promo-open");
+        if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+        else promo.querySelector(".promo__close")?.blur();
+      };
       const open = () => {
         if (promo.classList.contains("is-open")) return;
+        previousFocus = document.activeElement;
         promo.classList.add("is-open"); document.documentElement.classList.add("promo-open");
         try { sessionStorage.setItem(KEY, "1"); } catch (e) {}
         promo.querySelector(".promo__close")?.focus({ preventScroll: true });

@@ -2,12 +2,12 @@
 "use strict";
 
 const SbCabinet = window.SbCabinet = window.SbCabinet || {};
-let ctx, byId, escapeHTML, crmQuery, csrfOptions, scopeParams, navigate;
+let ctx, byId, escapeHTML, crmQuery, csrfOptions, scopeParams, chooseProject, navigate;
 let initialized = false;
 const api = {};
 const init = (context) => {
   ctx = context;
-  ({ byId, escapeHTML, crmQuery, csrfOptions, scopeParams, navigate } = context);
+  ({ byId, escapeHTML, crmQuery, csrfOptions, scopeParams, chooseProject, navigate } = context);
   if (initialized) return;
   initialized = true;
 
@@ -35,7 +35,7 @@ const init = (context) => {
   const FILTER_KEYS = ["status", "companyCode", "pipeline", "assigneeRole", "source", "q"];
   const taskState = {
     status: "", companyCode: "", pipeline: "", assigneeRole: "", source: "", q: "",
-    companies: [], companiesScope: null
+    companies: []
   };
   let renderVersion = 0;
   let searchTimer;
@@ -71,22 +71,26 @@ const init = (context) => {
     if (!code) return "Synapse";
     return taskState.companies.find((company) => company.code === code)?.name || code;
   };
-  const loadTaskCompanies = async () => {
+  const loadTaskCompanies = () => {
+    const companies = Array.isArray(ctx.identity?.companies) ? ctx.identity.companies : [];
+    taskState.companies = companies.map((company) => {
+      const code = typeof company?.id === "string" ? company.id.trim() : "";
+      return { code, name: company?.name || code };
+    }).filter((company) => company.code);
+  };
+  const canTransferTask = () => {
+    return ctx.identity?.role === "owner" && ctx.hasPermission("crm.edit");
+  };
+  const taskCreateScope = (companyCode) => {
+    if (!companyCode) return scopeParams();
+    if (!taskState.companies.some((company) => company.code === companyCode)) {
+      throw new Error("Выбранный проект недоступен");
+    }
+    return { companyCode };
+  };
+  const taskUpdateScope = (companyCode) => {
     const scope = scopeParams();
-    const companyCode = scope.companyCode || "";
-    if (taskState.companiesScope === companyCode) return;
-    const companies = [];
-    let total;
-    do {
-      const data = await crmQuery("/companies", { ...scope, limit: 200, offset: companies.length, deleted: "exclude" });
-      if ((scopeParams().companyCode || "") !== companyCode) return;
-      const page = data.companies || [];
-      companies.push(...page);
-      total = data.pagination?.total ?? companies.length;
-      if (!page.length) break;
-    } while (companies.length < total);
-    taskState.companies = companies;
-    taskState.companiesScope = companyCode;
+    return canTransferTask() && companyCode !== scope.companyCode ? {} : scope;
   };
   const taskCompanyOptions = (selected = "", emptyLabel = "Выберите проект") => {
     const options = taskState.companies.map((company) => {
@@ -260,7 +264,8 @@ const init = (context) => {
     <label class="wide">Название *<input name="title" required maxlength="300"
       value="${escapeHTML(task.title || "")}"></label>
     <label class="wide">Описание<textarea name="description">${escapeHTML(task.description || "")}</textarea></label>
-    <label>Проект<select name="companyCode">${taskCompanyOptions(task.companyCode || "")}</select></label>
+    <label>Проект<select name="companyCode"${canTransferTask() ? "" : " disabled"}>
+      ${taskCompanyOptions(task.companyCode || "")}</select></label>
     <label>Исполнитель<select name="assigneeRole">${taskOptions(TASK_ROLES, task.assigneeRole)}</select></label>
     <label>Имя исполнителя<input name="assigneeName" maxlength="200"
       value="${escapeHTML(task.assigneeName || "")}"></label>
@@ -304,9 +309,16 @@ const init = (context) => {
         event.preventDefault();
         const result = form.querySelector("[data-task-result]");
         try {
-          await crmQuery(`/tasks/${encodeURIComponent(task.id)}`, scopeParams(),
-            csrfOptions("PATCH", taskPayload(form)));
+          const payload = taskPayload(form);
+          await crmQuery(`/tasks/${encodeURIComponent(task.id)}`, taskUpdateScope(payload.companyCode),
+            csrfOptions("PATCH", payload));
+          if (version !== renderVersion || ctx.currentView !== "tasks") return;
           result.textContent = "Сохранено";
+          if (payload.companyCode !== task.companyCode) {
+            if (payload.companyCode) chooseProject(payload.companyCode);
+            else navigate(taskRoute());
+            return;
+          }
           await loadTasksSummary();
         } catch (error) {
           result.textContent = error.message;
@@ -364,16 +376,19 @@ const init = (context) => {
     const form = event.currentTarget;
     const error = form.querySelector("[role=alert]");
     try {
-      const created = await crmQuery("/tasks", scopeParams(), csrfOptions("POST", {
-        ...taskPayload(form),
+      const payload = taskPayload(form);
+      const created = await crmQuery("/tasks", taskCreateScope(payload.companyCode), csrfOptions("POST", {
+        ...payload,
         source: "manual",
         sourceRef: "",
         sourceAuthor: ""
       }));
       byId("task-create-dialog").close();
-      await loadTasksSummary();
+      const projectChanged = payload.companyCode && payload.companyCode !== ctx.selectedProjectId;
+      if (projectChanged) chooseProject(payload.companyCode);
+      else await loadTasksSummary();
       if (created?.id) navigate(taskRoute(created.id));
-      else renderTaskList();
+      else if (!projectChanged) renderTaskList();
     } catch (failure) {
       error.textContent = failure.message;
       error.hidden = false;
