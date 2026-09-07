@@ -765,6 +765,15 @@ async function main() {
   assert.equal(clientCompany.body.ownerScope, company.body.code);
   const scopedCompanies = await request('GET', `/companies?companyCode=${company.body.code.toUpperCase()}`);
   assert.deepEqual(scopedCompanies.body.companies.map((item) => item.id), [clientCompany.body.id]);
+  const scopedClientCard = await request('GET',
+    `/companies/${clientCompany.body.id}/overview?companyCode=${company.body.code}`);
+  assert.equal(scopedClientCard.status, 200);
+  assert.equal(scopedClientCard.body.company.id, clientCompany.body.id);
+  for (const section of ['contacts', 'tasks', 'leads', 'stageHistory']) {
+    assert.ok(Object.hasOwn(scopedClientCard.body, section), `client card contains ${section}`);
+  }
+  assert.equal((await request('GET',
+    `/companies/${companyB.body.id}/overview?companyCode=${company.body.code}`)).status, 404);
   assert.equal((await request('PATCH', `/companies/${company.body.id}?companyCode=${company.body.code}`, {
     name: 'Must stay unchanged',
   })).status, 403);
