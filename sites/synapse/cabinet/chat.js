@@ -51,6 +51,18 @@
   }) : "—";
   const firstValue = (...items) => items.find((item) => String(item ?? "").trim());
   const leadName = (lead) => firstValue(lead.name, lead.contact);
+  const emptyHTML = () => '<span class="chat-empty">— <small>нет данных</small></span>';
+  const reachedBooking = (lead) => {
+    if (!Array.isArray(lead.stageHistory) || !lead.stageHistory.length) return null;
+    const bookingStages = new Set(["записан", "пришёл", "продажа"]);
+    return lead.stageHistory.some((entry) => bookingStages.has(
+      String(entry?.toStage ?? entry).trim().toLowerCase()
+    ));
+  };
+  const reachedBookingHTML = (lead) => {
+    const reached = reachedBooking(lead);
+    return reached === null ? emptyHTML() : escape(reached ? "да" : "нет");
+  };
   const inScope = (lead, scope) => !scope.companyCode ||
     String(lead.companyCode ?? "").toLowerCase() === String(scope.companyCode).toLowerCase();
   const messagesByTime = (messages) => [...messages].sort((a, b) =>
@@ -102,6 +114,7 @@
       </ol>
       <footer class="chat-crm-link">
         <div><span>Этап заявки</span><strong>${escape(lead.stage)}</strong></div>
+        <div><span>Дошло до записи</span><strong>${reachedBookingHTML(lead)}</strong></div>
         ${ctx.hasPermission("crm.view") ? `<button type="button" class="plain-button"
           data-chat-lead="${escape(lead.id)}">
           Открыть карточку заявки
@@ -227,7 +240,8 @@
         ["Этап заявки", lead.stage], ["Создана", dateLabel(lead.createdAt)], ["Комментарий", lead.comment]];
       card.innerHTML = `<h1>Карточка заявки</h1><h2>${escape(leadName(lead))}</h2>
         <dl class="chat-lead-fields">${fields.map(([label, item]) =>
-          `<div><dt>${label}</dt><dd>${escape(item)}</dd></div>`).join("")}</dl>${back}`;
+          `<div><dt>${label}</dt><dd>${escape(item)}</dd></div>`).join("")}
+          <div><dt>Дошло до записи</dt><dd>${reachedBookingHTML(lead)}</dd></div></dl>${back}`;
     } catch (error) {
       if (active()) card.innerHTML = stateHTML(error.message || String(error), true) + back;
     }
