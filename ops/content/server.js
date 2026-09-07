@@ -33,6 +33,8 @@ const LOGIN_LIMIT = 10;
 const SESSION_SECRET = (process.env.SESSION_SECRET || '').trim() || crypto.randomBytes(32).toString('hex');
 const CRM_URL = (process.env.CRM_URL || 'http://crm:8080').replace(/\/$/, '');
 const CRM_API_KEY = (process.env.CRM_API_KEY || '').trim();
+const CHAT_URL = (process.env.CHAT_URL || 'http://chat:8080').replace(/\/$/, '');
+const CHAT_API_KEY = (process.env.CHAT_API_KEY || '').trim();
 const loginFailures = new Map();
 
 if (!(process.env.SESSION_SECRET || '').trim()) {
@@ -459,6 +461,29 @@ async function proxyCrm(request, response, url, cors) {
   else request.pipe(upstream);
 }
 
+async function proxyChat(request, response, url, cors) {
+  const session = requireSession(request);
+  if (session.user.role !== 'owner') fail(403, 'Чат доступен только владельцу');
+  if (request.method !== 'GET') requireCsrf(request, session);
+  if (!CHAT_API_KEY) fail(503, 'Прокси чата не настроен');
+
+  const chatPath = url.pathname.slice('/content/hugh'.length) || '/';
+  const target = new URL(`${CHAT_URL}${chatPath}${url.search}`);
+  const headers = { ...request.headers, host: target.host, 'x-api-key': CHAT_API_KEY };
+  delete headers.cookie;
+  const upstream = http.request(target, { method: request.method, headers }, (upstreamResponse) => {
+    const responseHeaders = { ...upstreamResponse.headers, ...cors };
+    response.writeHead(upstreamResponse.statusCode || 502, responseHeaders);
+    upstreamResponse.pipe(response);
+  });
+  upstream.on('error', (error) => {
+    console.error('content: ошибка прокси чата:', error);
+    if (!response.headersSent) send(response, 502, { error: 'Чат недоступен' }, cors);
+    else response.destroy(error);
+  });
+  request.pipe(upstream);
+}
+
 const server = http.createServer(async (request, response) => {
   const cors = corsHeaders(request);
   const reply = (status, payload, extra) => send(response, status, payload, { ...cors, ...(extra || {}) });
@@ -472,6 +497,9 @@ const server = http.createServer(async (request, response) => {
 
     if (url.pathname === '/content/crm' || url.pathname.startsWith('/content/crm/')) {
       return await proxyCrm(request, response, url, cors);
+    }
+    if (url.pathname === '/content/hugh' || url.pathname.startsWith('/content/hugh/')) {
+      return await proxyChat(request, response, url, cors);
     }
 
     if (request.method === 'POST' && url.pathname === '/content/login') {
