@@ -1,0 +1,99 @@
+/* Mobile-only corrective layer. Desktop styling is intentionally untouched. */
+@media (max-width: 56.24rem) {
+  html, body { max-width: 100%; overflow-x: clip; }
+  body { min-width: 0 !important; font-size: max(15px, 1rem); }
+  main, header, footer, section, article, nav, div, form, fieldset { min-width: 0; }
+  img, video, svg, iframe { max-width: 100%; }
+  p, li, dd, dt, a, h1, h2, h3, address { overflow-wrap: anywhere; word-break: normal; }
+  pre, code, table { max-width: 100%; }
+  pre, .pt-wrap { overflow-x: auto; overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch; }
+
+  /* Standalone/legal pages. */
+  body > header, body > main, body > footer { width: min(calc(100% - 2rem), 46rem); }
+  body > header a, .back, .actions a, button, textarea, input, select { min-height: 44px; }
+  body > header a, .back, .actions a { display: inline-flex; align-items: center; }
+  h1, h2, h3 { hyphens: none; text-wrap: balance; }
+  footer { font-size: max(13px, .85rem); }
+  .details { padding: 1rem; }
+
+  /* Main page: compact first screen and safe persistent actions. */
+  .hero.is-compact-mode .hero__chrome { height: 5.75rem; margin-bottom: -5.75rem; }
+  .hero.is-compact-mode .hero-scene[data-scene="0"] {
+    min-height: 100svh;
+    align-items: flex-start;
+    padding: clamp(5.8rem, 12svh, 6.8rem) 1rem calc(9.5rem + env(safe-area-inset-bottom));
+  }
+  .hero.is-compact-mode .hero-scene[data-scene="0"] .hero-title {
+    max-width: 8ch; margin-bottom: .7rem; font-size: clamp(2.35rem, 11.5vw, 3.2rem); line-height: .98;
+  }
+  .hero-ratings { display: grid; width: min(100%, 22rem); gap: 8px; }
+  .rating-pill { width: 100%; min-height: 44px; padding: .55rem .8rem; font-size: 13px; line-height: 1.25; }
+  .hero__chrome a, .certificate-link, .scenario-link, .button, .content-button,
+  .text-link, .site-footer__links a, .faq-list summary { min-height: 44px; }
+  .floating-cta {
+    right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); left: 12px;
+    max-width: calc(100vw - 24px); gap: 8px;
+  }
+  .floating-cta__row { width: 100%; gap: 8px; }
+  .floating-cta__button { min-width: 0; min-height: 44px; flex: 1 1 0; padding: .65rem .45rem; font-size: 13px; }
+  .floating-cta__note { font-size: 13px; line-height: 1.25; }
+  .after-hero { padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
+
+  /* Photo remains the dominant part of every service/result card. */
+  .after-hero .program-card--photo, body .quiz-result { min-height: 27rem !important; }
+  .after-hero .program-card--photo .program-card__body, .quiz-result__body {
+    flex: 0 0 auto !important; max-height: 55%; overflow-y: auto;
+    background: linear-gradient(180deg, rgba(6,13,9,.62), rgba(6,13,9,.92)) !important;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+  }
+  .program-card--photo::after, body .quiz-result::after {
+    background: linear-gradient(180deg, rgba(8,16,12,.02) 0%, rgba(8,16,12,.04) 48%, rgba(8,16,12,.72) 100%) !important;
+  }
+
+  /* Quiz: large labels, a real checkbox target, and an in-flow result CTA. */
+  .quiz-form { gap: 1rem; margin-top: 1.5rem; }
+  .quiz-question { padding: 1rem; }
+  .quiz-options { gap: 8px; }
+  .quiz-option { min-height: 52px; font-size: 15px; }
+  .quiz-option input { width: 20px; height: 20px; }
+  .form-consent { position: relative; min-height: 44px; align-items: center; font-size: 13px; }
+  .form-consent input { width: 24px; height: 24px; }
+  .quiz-actions, .quiz-actions .content-button { width: 100%; }
+  .quiz-result { scroll-margin-top: 1rem; }
+
+  /* Promo closes with one full-sized target and scrolls without trapping the page. */
+  .promo { padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom)); }
+  .promo__panel { max-height: calc(100svh - max(16px, env(safe-area-inset-top) + env(safe-area-inset-bottom))); overscroll-behavior: contain; }
+  .promo__close { min-width: 44px; min-height: 44px; height: 44px; }
+  .promo__half { min-height: 18rem; }
+  .promo__copy { font-size: 15px; }
+
+  /* Price navigation is a horizontally scrollable row; tables stay internal. */
+  .price-header { gap: 1rem; padding-inline: 1rem; }
+  .price-header > a { min-width: 44px; min-height: 44px; }
+  .price-intro, .price-layout { width: min(calc(100% - 2rem), 75rem); }
+  .pnav { margin-inline: -1rem; padding: .75rem 1rem; overflow-x: auto; overscroll-behavior-inline: contain; }
+  .pnav > ul { display: flex !important; width: max-content; max-width: none; gap: 8px !important; }
+  .pnav > ul > li { width: min(76vw, 18rem); flex: 0 0 auto; }
+  .pnav__top, .pnav__sub a { display: flex; min-height: 44px; align-items: center; padding: .6rem .75rem; }
+  .pnav__sub li + li { margin-top: 8px; }
+  .pc { padding: 1rem; }
+  .pc__meta { align-items: flex-start; gap: .5rem 1rem; }
+  .pc__price { white-space: nowrap; }
+  .pt { min-width: 36rem; }
+  .pt th, .pt td { padding: .8rem .7rem; line-height: 1.45; }
+  .price-page > .floating-cta { position: relative; inset: auto; margin: 1rem auto calc(1rem + env(safe-area-inset-bottom)); width: min(calc(100% - 2rem), 32rem); }
+
+  /* Task board. */
+  #app { width: min(calc(100% - 2rem), 880px); }
+  .task { overflow: hidden; }
+  .task .instruction, .task .why { overflow-wrap: anywhere; }
+  .task button, .task .link, .task textarea { min-height: 44px; font-size: 15px; }
+  .task .actions { gap: 8px; }
+}
+
+@media (max-width: 56.24rem) and (prefers-reduced-motion: reduce) {
+  html:focus-within { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  video { display: none !important; }
+}
