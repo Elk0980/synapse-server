@@ -69,8 +69,8 @@ body[data-page="home"] .cookie button{min-height:44px;padding:8px 16px}
 @media(max-width:1100px){.brand-lockup h1{display:none}}
 @media(min-width:801px) and (max-width:1100px){nav{gap:16px}.navlinks{gap:10px;font-size:14px}}
 @media(max-width:800px){
-  .hero{display:block;height:auto;min-height:0}
-  .hero-shell > .hero{aspect-ratio:16/9}
+  .hero{display:block;height:auto;min-height:0;aspect-ratio:auto}
+  .hero-stage{position:relative;top:auto;left:auto;width:100%;height:auto;aspect-ratio:16/9;transform:none}
   .hero-main{position:relative;top:auto;left:auto;transform:none;width:100%;max-width:none;margin:0;padding:16px;background:#0d2118;border-radius:0}
   #hero-title{font-size:clamp(24px,4.2vw,30px)}
   .hero-subtitle{margin-top:8px;font-size:15px}
