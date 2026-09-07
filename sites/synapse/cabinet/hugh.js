@@ -7,23 +7,23 @@
   let conversation;
   let sending = false;
 
-  const storageKey = () => [
+  const storageKey = (project) => [
     "synapse_hugh_conversation",
     context.identity.userId,
-    context.selectedProjectId
+    project
   ].join(":");
 
-  const savedConversation = () => {
+  const savedConversation = (project) => {
     try {
-      return JSON.parse(localStorage.getItem(storageKey()) || "null");
+      return JSON.parse(localStorage.getItem(storageKey(project)) || "null");
     } catch (error) {
       return null;
     }
   };
 
-  const saveConversation = (value) => {
+  const saveConversation = (project, value) => {
     try {
-      localStorage.setItem(storageKey(), JSON.stringify(value));
+      localStorage.setItem(storageKey(project), JSON.stringify(value));
     } catch (error) {
       // The current conversation remains available until the page is closed.
     }
@@ -89,19 +89,19 @@
     list.querySelector("button").addEventListener("click", retry, { once: true });
   };
 
-  const createConversation = async (signal) => {
-    const project = context.selectedProjectId;
+  const createConversation = async (project, signal) => {
     const result = await request("/conversations", {
       ...unsafeOptions("POST", { site: project, title: `Хью · ${project}` }),
       signal
     });
-    const saved = { id: result.id, token: result.visitorToken };
-    saveConversation(saved);
+    const saved = { id: result.id, token: result.visitorToken, reply: result.reply };
+    saveConversation(project, saved);
     return saved;
   };
 
   const load = async (newContext) => {
     context = newContext;
+    const project = context.selectedProjectId;
     controller?.abort();
     controller = new AbortController();
     conversation = null;
@@ -110,12 +110,14 @@
     context.byId("hugh-messages").textContent = "Загрузка…";
     context.byId("hugh-form").addEventListener("submit", send);
     try {
-      let saved = savedConversation();
-      if (!saved?.id || !saved?.token) saved = await createConversation(controller.signal);
+      let saved = savedConversation(project);
+      if (!saved?.id || !saved?.token) saved = await createConversation(project, controller.signal);
       const result = await request(`/conversations/${encodeURIComponent(saved.id)}`, {
         signal: controller.signal
       });
-      conversation = { ...saved, messages: Array.isArray(result.messages) ? result.messages : [] };
+      const messages = Array.isArray(result.messages) ? result.messages : [];
+      if (saved.reply && !messages.length) messages.push({ role: "assistant", text: saved.reply });
+      conversation = { ...saved, messages };
       showMessages(conversation.messages);
     } catch (error) {
       if (error.name !== "AbortError") showError(error.message, () => load(context));
@@ -124,12 +126,14 @@
 
   const send = async (event) => {
     event.preventDefault();
+    const form = event.currentTarget;
+    const button = form.querySelector("button");
     const input = context.byId("hugh-input");
     const text = input.value.trim();
     if (!text || sending || !conversation) return;
     sending = true;
     input.disabled = true;
-    event.currentTarget.querySelector("button").disabled = true;
+    button.disabled = true;
     try {
       const result = await request(`/conversations/${encodeURIComponent(conversation.id)}/messages`, {
         ...unsafeOptions("POST", { text }, conversation.token),
@@ -143,7 +147,7 @@
     } finally {
       sending = false;
       input.disabled = false;
-      event.currentTarget.querySelector("button").disabled = false;
+      button.disabled = false;
       input.focus();
     }
   };
