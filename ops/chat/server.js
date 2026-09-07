@@ -132,6 +132,7 @@ addColumn("conversations", "external_chat_id TEXT");
 addColumn("conversations", "title TEXT");
 addColumn("conversations", "unread_count INTEGER NOT NULL DEFAULT 0");
 addColumn("conversations", "last_message_at TEXT");
+addColumn("conversations", "owner_mode INTEGER NOT NULL DEFAULT 0");
 addColumn("messages", "author_type TEXT");
 addColumn("messages", "author_name TEXT");
 addColumn("messages", "external_message_id TEXT");
@@ -151,8 +152,8 @@ db.exec(`
 
 const insertWebConversation = db.prepare(`INSERT INTO conversations
   (created_at, updated_at, last_message_at, site, page, utm_source, utm_medium, utm_campaign,
-   utm_term, utm_content, referrer, client_id, visitor_key, title)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+   utm_term, utm_content, referrer, client_id, visitor_key, title, owner_mode)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 const insertTelegramConversation = db.prepare(`INSERT INTO conversations
   (created_at, updated_at, last_message_at, visitor_key, company, channel, external_chat_id, title)
   VALUES (?, ?, ?, '', 'synapse', 'telegram', ?, ?)`);
@@ -167,6 +168,19 @@ const getMessages =
   db.prepare(`SELECT id, created_at, role, text, author_type, author_name,
   external_message_id, task_status, task_id
   FROM messages WHERE conversation_id = ? ORDER BY id`);
+const getPendingOwnerQuestions = db.prepare(`SELECT
+  messages.id, messages.conversation_id, messages.created_at, messages.text
+  FROM messages
+  JOIN conversations ON conversations.id = messages.conversation_id
+  WHERE conversations.owner_mode = 1
+    AND messages.role = 'visitor'
+    AND NOT EXISTS (
+      SELECT 1 FROM messages AS replies
+      WHERE replies.conversation_id = messages.conversation_id
+        AND replies.id > messages.id
+        AND replies.role IN ('assistant', 'operator')
+    )
+  ORDER BY messages.id`);
 const getTelegramMessage = db.prepare(`SELECT * FROM messages
   WHERE conversation_id = ? AND external_message_id = ? ORDER BY id DESC LIMIT 1`);
 const updateTask = db.prepare(
@@ -969,6 +983,16 @@ async function route(request, response, origin) {
   if (request.method === "POST" && url.pathname === "/telegram/webhook") {
     return handleWebhook(request, response, origin);
   }
+  if (request.method === "GET" && url.pathname === "/owner/pending") {
+    requireOperator(request);
+    const pending = getPendingOwnerQuestions.all().map((message) => ({
+      id: message.id,
+      conversationId: message.conversation_id,
+      createdAt: message.created_at,
+      text: message.text,
+    }));
+    return send(response, 200, { pending }, origin);
+  }
   if (request.method === "POST" && url.pathname === "/conversations") {
     const owner = isOwnerRequest(request);
     const body = await readJson(request);
@@ -993,6 +1017,7 @@ async function route(request, response, origin) {
       optionalString(body.client_id ?? body.clientId, "client_id"),
       hashToken(token),
       optionalString(body.title, "title"),
+      owner ? 1 : 0,
     ];
     const result = insertWebConversation.run(...values);
     const id = Number(result.lastInsertRowid);
@@ -1021,7 +1046,7 @@ async function route(request, response, origin) {
   match = url.pathname.match(/^\/conversations\/(\d+)\/messages$/);
   if (request.method === "POST" && match) {
     const row = existingConversation(conversationId(match[1]));
-    const owner = isOwnerRequest(request);
+    const owner = Boolean(row.owner_mode) && isOwnerRequest(request);
     if (!owner) requireVisitor(request, row);
     takeLimit(visitorLimits, row.id, 20, 60_000);
     takeLimit(ipLimits, clientIp(request), 60, 3_600_000);
@@ -1029,26 +1054,27 @@ async function route(request, response, origin) {
     const text = optionalString(body.text, "text");
     if (!text) fail(400, "Поле «text» обязательно");
     addMessage(row, text, "visitor", null, null, true);
-    if (!owner) await notifyOwner(getConversation.get(row.id), text);
+    if (owner) {
+      return send(
+        response,
+        201,
+        { owner: true, conversation: serialize(getConversation.get(row.id)) },
+        origin,
+      );
+    }
+    await notifyOwner(getConversation.get(row.id), text);
     const all = getMessages.all(row.id);
-    const data = owner ? null : contactData(all);
+    const data = contactData(all);
     let leadCreated = false;
-    if (!owner && !row.lead_id && data.name && data.phone && data.firstQuestion) {
+    if (!row.lead_id && data.name && data.phone && data.firstQuestion) {
       try {
         leadCreated = await createLead(row, data);
       } catch (error) {
         console.error("Не удалось создать заявку в CRM:", error.message);
       }
     }
-    let reply = owner ? OWNER_SCRIPT.fallback : scriptedReply(data, leadCreated);
-    if (owner) {
-      try {
-        reply = await ownerSummary(row);
-      } catch (error) {
-        console.error("Не удалось получить сводку из CRM:", error.message);
-        reply = "Нет данных из CRM: не удалось получить сводку по проекту.";
-      }
-    } else if (MODEL_API_URL && MODEL_API_KEY && !leadCreated) {
+    let reply = scriptedReply(data, leadCreated);
+    if (MODEL_API_URL && MODEL_API_KEY && !leadCreated) {
       try {
         reply = await modelReply(all, false);
       } catch (error) {

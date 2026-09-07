@@ -21,23 +21,28 @@ async function request(url, body, headers = {}) {
   return { status: response.status, body: await response.json() };
 }
 
-test("owner mode skips contact intake and leaves the visitor flow unchanged", async (t) => {
+async function get(url, headers = {}) {
+  const response = await fetch(url, { headers });
+  return { status: response.status, body: await response.json() };
+}
+
+test("owner questions stay pending until an operator replies", async (t) => {
   const crmRequests = [];
-  let hasSummaryData = true;
   const crm = http.createServer((request, response) => {
     crmRequests.push({ method: request.method, url: request.url });
     response.writeHead(200, { "content-type": "application/json" });
     if (request.url.startsWith("/dashboard")) {
       return response.end(JSON.stringify({
-        summary: hasSummaryData
-          ? { total: 12, sales: 3, revenue: 125000 }
-          : { total: 0, sales: 0, revenue: 0 },
+        summary: { total: 12, sales: 3, revenue: 125000 },
       }));
     }
     if (request.url.startsWith("/tasks/summary")) {
-      return response.end(JSON.stringify(hasSummaryData
-        ? { inbox: 2, planned: 1, inProgress: 1, done: 5 }
-        : { inbox: 0, planned: 0, inProgress: 0, done: 0 }));
+      return response.end(JSON.stringify({
+        inbox: 2,
+        planned: 1,
+        inProgress: 1,
+        done: 5,
+      }));
     }
     response.statusCode = 404;
     return response.end(JSON.stringify({ error: "not found" }));
@@ -97,20 +102,41 @@ test("owner mode skips contact intake and leaves the visitor flow unchanged", as
   );
   assert.equal(ownerReply.status, 201);
   assert.equal(ownerReply.body.owner, true);
-  assert.match(ownerReply.body.reply, /Заявки: 12/);
-  assert.match(ownerReply.body.reply, /Задачи: 4/);
-  assert.match(ownerReply.body.reply, /Сделки: 3/);
-  assert.match(ownerReply.body.reply, /Выручка: 125.?000 ₽/);
-  assert.deepEqual(crmRequests.map(({ method }) => method), ["GET", "GET"]);
+  assert.equal(ownerReply.body.reply, undefined);
 
-  hasSummaryData = false;
+  const unauthorizedPending = await get(`${base}/owner/pending`);
+  assert.equal(unauthorizedPending.status, 401);
+
+  let pending = await get(`${base}/owner/pending`, ownerHeaders);
+  assert.equal(pending.status, 200);
+  assert.deepEqual(pending.body.pending.map((item) => ({
+    conversationId: item.conversationId,
+    text: item.text,
+  })), [{
+    conversationId: ownerConversation.body.id,
+    text: "Я Владислав, мой телефон +7 999 123-45-67. Нужен план проекта.",
+  }]);
+
   const emptyOwnerReply = await request(
     `${base}/conversations/${ownerConversation.body.id}/messages`,
     { text: "А сейчас?" },
     ownerHeaders,
   );
   assert.equal(emptyOwnerReply.status, 201);
-  assert.equal((emptyOwnerReply.body.reply.match(/нет данных/gi) || []).length, 4);
+  pending = await get(`${base}/owner/pending`, ownerHeaders);
+  assert.deepEqual(pending.body.pending.map(({ text }) => text), [
+    "Я Владислав, мой телефон +7 999 123-45-67. Нужен план проекта.",
+    "А сейчас?",
+  ]);
+
+  const operatorReply = await request(
+    `${base}/conversations/${ownerConversation.body.id}/operator`,
+    { text: "План готов." },
+    ownerHeaders,
+  );
+  assert.equal(operatorReply.status, 201);
+  pending = await get(`${base}/owner/pending`, ownerHeaders);
+  assert.deepEqual(pending.body.pending, []);
 
   const visitorConversation = await request(`${base}/conversations`, {});
   assert.equal(visitorConversation.body.owner, false);
@@ -122,5 +148,5 @@ test("owner mode skips contact intake and leaves the visitor flow unchanged", as
   );
   assert.equal(visitorReply.body.owner, false);
   assert.match(visitorReply.body.reply, /как к вам обращаться/i);
-  assert.equal(crmRequests.length, 4);
+  assert.equal(crmRequests.length, 0);
 });
