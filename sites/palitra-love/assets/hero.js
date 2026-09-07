@@ -1,110 +1,123 @@
 (() => {
   const hero = document.querySelector('.hero');
-  const video = document.getElementById('hero-video');
-  const scrollHint = document.getElementById('hero-scroll');
-  if (!hero || !video || !scrollHint) return;
+  if (!hero) return;
 
+  // Layout depends on the actual header/banner, never on media playback.
   const root = document.documentElement;
-  const body = document.body;
+  const header = document.querySelector('header');
+  const cookie = document.querySelector('.cookie');
+  const content = hero.querySelector('.hero-main');
+  const updateLayout = () => {
+    root.style.setProperty('--header-height', `${header?.getBoundingClientRect().height || 0}px`);
+    root.style.setProperty('--hero-content-height', `${Math.ceil(content?.getBoundingClientRect().height || 0) + 32}px`);
+    const cookieHeight = cookie?.isConnected ? cookie.getBoundingClientRect().height : 0;
+    const bottom = cookieHeight ? parseFloat(getComputedStyle(cookie).bottom) || 0 : 0;
+    root.style.setProperty('--cookie-space', `${cookieHeight ? cookieHeight + bottom + 16 : 0}px`);
+  };
+  updateLayout();
+  window.addEventListener('resize', updateLayout);
+  if ('ResizeObserver' in window) {
+    const observer = new ResizeObserver(updateLayout);
+    if (header) observer.observe(header);
+    if (cookie) observer.observe(cookie);
+    if (content) observer.observe(content);
+  }
+
+  const video = document.getElementById('hero-video');
+  const replay = document.getElementById('hero-replay');
+  const pause = document.getElementById('hero-pause');
+  const status = document.getElementById('hero-video-status');
+  if (!video) return;
+
+  const storySource = video.querySelector('source')?.getAttribute('src');
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const timedOverlays = [...hero.querySelectorAll('[data-hero-start]')];
   let phase = 'story';
-  let unlocked = false;
-  let metadataTimer;
   let playbackTimer;
+  let attempt = 0;
 
   const updateOverlays = () => {
-    const currentTime = video.currentTime;
-
     timedOverlays.forEach((overlay) => {
-      if (phase === 'loop') {
-        const visible = overlay.id === 'hero-brand' || overlay.id === 'hero-scroll';
-        overlay.classList.toggle('is-visible', visible);
-        overlay.setAttribute('aria-hidden', String(!visible));
-        return;
-      }
-
       const start = Number(overlay.dataset.heroStart);
       const end = overlay.dataset.heroEnd ? Number(overlay.dataset.heroEnd) : Infinity;
-      const visible = currentTime >= start && currentTime < end;
+      const visible = phase === 'story'
+        ? video.currentTime >= start && video.currentTime < end
+        : overlay.id === 'hero-brand' || overlay.id === 'hero-scroll';
       overlay.classList.toggle('is-visible', visible);
       overlay.setAttribute('aria-hidden', String(!visible));
+      if (overlay.id === 'hero-scroll') overlay.tabIndex = visible ? 0 : -1;
     });
   };
 
-  const unlock = () => {
-    if (unlocked) return;
-    unlocked = true;
-    clearTimeout(metadataTimer);
+  const showPoster = (failed = false) => {
+    ++attempt;
     clearTimeout(playbackTimer);
-    root.classList.remove('hero-story-locked');
-    body.classList.remove('hero-story-locked');
-  };
-
-  const revealFinalFrame = () => {
-    const brand = hero.querySelector('#hero-brand');
-    brand?.classList.add('is-visible');
-    brand?.setAttribute('aria-hidden', 'false');
-    scrollHint.classList.add('is-visible');
-    scrollHint.setAttribute('aria-hidden', 'false');
-  };
-
-  const showFallback = () => {
     video.pause();
-    video.style.display = 'none';
-    revealFinalFrame();
-    unlock();
+    video.hidden = true;
+    if (pause) pause.hidden = true;
+    if (status) {
+      status.textContent = failed ? 'Видео недоступно. Можно написать в Telegram или оставить заявку.' : '';
+      status.hidden = !failed;
+    }
+    phase = 'poster';
+    updateOverlays();
+  };
+
+  const play = () => {
+    const currentAttempt = ++attempt;
+    clearTimeout(playbackTimer);
+    video.hidden = false;
+    if (status) status.hidden = true;
+    // A rejected autoplay, unavailable file or pending download leaves a usable poster.
+    const failed = () => { if (currentAttempt === attempt) showPoster(true); };
+    playbackTimer = window.setTimeout(failed, 8000);
+    try {
+      const playback = video.play();
+      if (playback?.catch) playback.catch(failed);
+    } catch {
+      failed();
+    }
   };
 
   const startLoop = () => {
     if (phase !== 'story') return;
     phase = 'loop';
-    revealFinalFrame();
-    unlock();
+    updateOverlays();
     video.loop = true;
     video.src = '/assets/video/hero-loop.mp4';
     video.load();
-    const playback = video.play();
-    if (playback && playback.catch) playback.catch(showFallback);
+    play();
   };
 
   video.addEventListener('timeupdate', updateOverlays);
   video.addEventListener('seeked', updateOverlays);
   video.addEventListener('ended', startLoop);
-  video.addEventListener('error', showFallback);
-
-  if (reduceMotion) {
-    showFallback();
-    return;
-  }
-
-  root.classList.add('hero-story-locked');
-  body.classList.add('hero-story-locked');
-  const startPlaybackTimer = () => {
-    if (document.hidden || playbackTimer) return;
-    playbackTimer = window.setTimeout(showFallback, 6000);
-  };
-
-  const metadataLoaded = () => {
-    clearTimeout(metadataTimer);
-    if (document.hidden) {
-      document.addEventListener('visibilitychange', startPlaybackTimer, {once: true});
-    } else {
-      startPlaybackTimer();
-    }
-  };
-
-  metadataTimer = window.setTimeout(showFallback, 8000);
-  if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
-    metadataLoaded();
-  } else {
-    video.addEventListener('loadedmetadata', metadataLoaded, {once: true});
-  }
-
-  const playback = video.play();
-  if (playback && playback.catch) playback.catch(showFallback);
+  video.addEventListener('error', () => showPoster(true));
   video.addEventListener('playing', () => {
     clearTimeout(playbackTimer);
-    document.removeEventListener('visibilitychange', startPlaybackTimer);
-  }, {once: true});
+    if (pause) {
+      pause.hidden = false;
+      pause.textContent = 'Пауза';
+    }
+  });
+  video.addEventListener('pause', () => {
+    clearTimeout(playbackTimer);
+    if (pause) pause.textContent = 'Продолжить';
+  });
+  pause?.addEventListener('click', () => {
+    if (video.paused) play();
+    else video.pause();
+  });
+  replay?.addEventListener('click', () => {
+    phase = 'story';
+    video.loop = false;
+    if (storySource) video.src = storySource;
+    video.load();
+    video.currentTime = 0;
+    updateOverlays();
+    play();
+  });
+
+  if (reduceMotion) showPoster();
+  else play();
 })();
