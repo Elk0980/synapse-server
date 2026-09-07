@@ -6,6 +6,22 @@
   --cabinet-button-height: 44px;
   --cabinet-button-radius: 12px;
   --cabinet-button-padding-inline: 20px;
+  --cabinet-control-height: 44px;
+  --cabinet-control-radius: 12px;
+  --cabinet-control-padding-inline: 12px;
+  --cabinet-control-border: var(--line);
+  --cabinet-focus-width: 3px;
+  --cabinet-focus-offset: 3px;
+  --cabinet-field-text-size: 13px;
+  --cabinet-table-row-height: 52px;
+  --cabinet-table-cell-padding-inline: 12px;
+  --cabinet-table-heading-size: 13px;
+  --cabinet-table-heading-weight: 600;
+  --cabinet-table-heading-color: var(--muted);
+  --cabinet-table-divider: var(--line);
+  --cabinet-border-width: 1px;
+  --cabinet-state-padding: var(--cabinet-card-padding);
+  --cabinet-action-hit-height: 44px;
   --cabinet-card-radius: 16px;
   --cabinet-card-padding: 24px;
   --cabinet-card-padding-mobile: 16px;
@@ -69,6 +85,91 @@ input[type="reset"],
   border-radius: var(--cabinet-button-radius) !important;
 }
 
+input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+select,
+textarea {
+  width: 100%;
+  max-width: 100%;
+  min-height: var(--cabinet-control-height) !important;
+  padding-inline: var(--cabinet-control-padding-inline) !important;
+  border: var(--cabinet-border-width) solid var(--cabinet-control-border) !important;
+  border-radius: var(--cabinet-control-radius) !important;
+  color: var(--text);
+  background: var(--surface-soft);
+  font: inherit;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: var(--cabinet-focus-width) solid var(--accent);
+  outline-offset: var(--cabinet-focus-offset);
+}
+
+label,
+legend,
+[role="alert"] {
+  font-size: var(--cabinet-field-text-size);
+}
+
+.crm-table-wrap,
+.manual-days-scroll {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+th,
+td {
+  height: var(--cabinet-table-row-height);
+  padding-inline: var(--cabinet-table-cell-padding-inline) !important;
+  border-bottom: var(--cabinet-border-width) solid var(--cabinet-table-divider);
+}
+
+th {
+  color: var(--cabinet-table-heading-color);
+  font-size: var(--cabinet-table-heading-size);
+  font-weight: var(--cabinet-table-heading-weight);
+}
+
+input[type="number"],
+.analytics-source-table :is(th, td):nth-child(n + 2):not(:last-child),
+.analytics-details .crm-table :is(th, td):nth-child(n + 2),
+.expense-form + .crm-table-wrap :is(th, td):nth-child(3),
+#crm-content .crm-table :is(th, td):last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.crm-empty,
+.crm-error,
+.deals-empty,
+.chat-state,
+.hugh-error,
+.home-error,
+.home-loading {
+  margin: 0;
+  padding: var(--cabinet-state-padding) !important;
+  border: var(--cabinet-border-width) solid var(--line);
+  border-radius: var(--cabinet-card-radius);
+  font-size: var(--cabinet-font-size);
+}
+
+.site-actions a,
+.analytics-actions a,
+.client-tabs a,
+.crm-table a {
+  display: inline-flex;
+  min-height: var(--cabinet-action-hit-height);
+  align-items: center;
+}
+
 .card,
 .client-card,
 .funnel-card,
@@ -93,6 +194,10 @@ input[type="reset"],
 }
 
 @media (max-width: 480px) {
+  :root {
+    --cabinet-state-padding: var(--cabinet-card-padding-mobile);
+  }
+
   .card,
   .client-card,
   .funnel-card,
@@ -105,4 +210,5 @@ input[type="reset"],
     width: 100%;
     max-width: 100vw;
   }
+
 }
