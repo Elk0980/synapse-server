@@ -72,22 +72,17 @@ const init = (context) => {
     return taskState.companies.find((company) => company.code === code)?.name || code;
   };
   const loadTaskCompanies = () => {
-    taskState.companies = [];
-    const projects = ctx.projects;
-    if (!Array.isArray(projects)) {
-      throw new Error("Не удалось загрузить список проектов. Обновите страницу или войдите снова.");
-    }
-    taskState.companies = projects.map((project) => ({ code: project.id, name: project.name }));
-    if (!taskState.companies.length) {
-      throw new Error("Нет доступных проектов. Обратитесь к администратору.");
-    }
+    const companies = Array.isArray(ctx.identity?.companies) ? ctx.identity.companies : [];
+    taskState.companies = companies.map((company) => {
+      const code = typeof company?.id === "string" ? company.id.trim() : "";
+      return { code, name: company?.name || code };
+    }).filter((company) => company.code);
   };
   const canTransferTask = () => {
     return ctx.identity?.role === "owner" && ctx.hasPermission("crm.edit");
   };
   const taskCreateScope = (companyCode) => {
-    loadTaskCompanies();
-    if (!companyCode) throw new Error("Выберите проект для задачи.");
+    if (!companyCode) return scopeParams();
     if (!taskState.companies.some((company) => company.code === companyCode)) {
       throw new Error("Выбранный проект недоступен");
     }
@@ -356,36 +351,13 @@ const init = (context) => {
     if (id) renderTaskCard(id);
     else renderTaskList();
   };
-  const updateTaskCreateAvailability = () => {
-    const form = byId("task-create-form");
-    const error = form.querySelector("[role=alert]");
-    const submit = form.querySelector('[type="submit"]');
-    try {
-      taskCreateScope(form.elements.companyCode.value);
-      submit.disabled = false;
-      error.hidden = true;
-    } catch (failure) {
-      submit.disabled = true;
-      error.textContent = failure.message;
-      error.hidden = false;
-    }
-  };
-  const openTaskCreate = () => {
+  const openTaskCreate = async () => {
     const dialog = byId("task-create-dialog");
     const form = byId("task-create-form");
-    const company = form.querySelector("[data-task-company]");
-    company.disabled = true;
-    form.querySelector('[type="submit"]').disabled = true;
-    try {
-      loadTaskCompanies();
-      company.innerHTML = taskCompanyOptions(ctx.selectedProjectId);
-      company.disabled = false;
-    } catch (failure) {
-      company.innerHTML = `<option value="">${escapeHTML(
-        failure.message.startsWith("Нет доступных проектов")
-          ? "Нет доступных проектов" : "Не удалось загрузить проекты"
-      )}</option>`;
-    }
+    await loadTaskCompanies();
+    form.querySelector("[data-task-company]").innerHTML = taskCompanyOptions(
+      ctx.selectedProjectId
+    );
     form.querySelector("[data-task-role]").innerHTML = taskOptions(TASK_ROLES, "synapse");
     form.querySelector("[data-task-priority]").innerHTML = taskOptions(TASK_PRIORITIES, "normal");
     form.querySelector("[data-task-status]").innerHTML = taskOptions(TASK_STATUSES, "planned");
@@ -393,13 +365,12 @@ const init = (context) => {
     form.elements.description.value = "";
     form.elements.assigneeName.value = "";
     form.elements.dueDate.value = "";
-    updateTaskCreateAvailability();
+    form.querySelector("[role=alert]").hidden = true;
     dialog.showModal();
   };
   byId("task-create-dialog").querySelector("[data-task-create-close]").addEventListener("click", () => {
     byId("task-create-dialog").close();
   });
-  byId("task-create-form").elements.companyCode.addEventListener("change", updateTaskCreateAvailability);
   byId("task-create-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -419,7 +390,6 @@ const init = (context) => {
       if (created?.id) navigate(taskRoute(created.id));
       else if (!projectChanged) renderTaskList();
     } catch (failure) {
-      updateTaskCreateAvailability();
       error.textContent = failure.message;
       error.hidden = false;
     }
