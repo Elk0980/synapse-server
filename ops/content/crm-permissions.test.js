@@ -160,12 +160,21 @@ test('CRM proxy restricts pipelines to the owner and preserves company-scoped ed
       assert.equal(result.status, 200, `${method} ${pathname}: ${JSON.stringify(result.body)}`);
     }
   });
-  await t.test('editor can edit ordinary company data and create/delete scoped contacts', async () => {
-    const changed = await crm(editor, 'PATCH', `${ownPath}?companyCode=alvi`, { name: 'QA Updated' });
+  await t.test('editor can edit only owned company cards and scoped contacts', async () => {
+    assert.equal((await crm(editor, 'PATCH', `${ownPath}?companyCode=alvi`, {
+      name: 'Forbidden self edit',
+    })).status, 403);
+    assert.equal((await crm(editor, 'DELETE', `${ownPath}?companyCode=alvi`)).status, 403);
+    const supplier = await crm(editor, 'POST', '/companies?companyCode=alvi', {
+      code: 'alvi-supplier', name: 'QA Supplier',
+    });
+    assert.equal(supplier.status, 201);
+    const changed = await crm(editor, 'PATCH',
+      `/companies/${supplier.body.id}?companyCode=alvi`, { name: 'QA Updated' });
     assert.equal(changed.status, 200);
     assert.equal(changed.body.name, 'QA Updated');
     assert.equal((await crm(editor, 'PATCH', `/companies/${other.body.id}?companyCode=alvi`,
-      { name: 'Forbidden' })).status, 404);
+      { name: 'Forbidden' })).status, 403);
     const contact = await crm(editor, 'POST', '/contacts?companyCode=alvi', { name: 'QA Scoped' });
     assert.equal(contact.status, 201);
     assert.equal((await crm(editor, 'GET', `/contacts/${contact.body.id}?companyCode=alvi`)).status, 200);
