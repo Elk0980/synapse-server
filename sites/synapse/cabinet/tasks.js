@@ -39,11 +39,10 @@ const init = (context) => {
   };
   let renderVersion = 0;
   let searchTimer;
-  const isBusinessProject = () => ctx.selectedProjectId === "synapse-business";
   const taskRoute = (id = "") => {
     const params = new URLSearchParams();
     FILTER_KEYS.forEach((key) => {
-      if (key === "companyCode" && !isBusinessProject()) return;
+      if (key === "companyCode") return;
       if (taskState[key]) params.set(key, taskState[key]);
     });
     const query = params.toString();
@@ -63,7 +62,7 @@ const init = (context) => {
       taskState[key] = allowed[key] && !Object.hasOwn(allowed[key], value) ? "" : value;
     });
     taskState.companyCode = taskState.companyCode.toLowerCase();
-    if (!isBusinessProject()) taskState.companyCode = "";
+    taskState.companyCode = "";
   };
   const taskOptions = (values, selected = "") => Object.entries(values).map(([value, label]) => {
     return `<option value="${value}"${value === selected ? " selected" : ""}>${label}</option>`;
@@ -89,7 +88,7 @@ const init = (context) => {
     taskState.companies = companies;
     taskState.companiesScope = companyCode;
   };
-  const taskCompanyOptions = (selected = "", emptyLabel = "Synapse (все проекты)") => {
+  const taskCompanyOptions = (selected = "", emptyLabel = "Выберите проект") => {
     const options = taskState.companies.map((company) => {
       const value = company.code || "";
       return `<option value="${escapeHTML(value)}"${value === selected ? " selected" : ""}>` +
@@ -142,14 +141,12 @@ const init = (context) => {
     const version = ++renderVersion;
     const filters = { ...taskState };
     const scope = scopeParams();
-    const businessProject = isBusinessProject();
     const content = byId("tasks-content");
     content.textContent = "Загрузка…";
     try {
       await Promise.all([loadTaskCompanies(), loadTasksSummary()]);
       if (version !== renderVersion) return;
       const params = {
-        companyCode: businessProject ? filters.companyCode : "",
         ...scope,
         assigneeRole: filters.assigneeRole,
         source: filters.source,
@@ -193,8 +190,6 @@ const init = (context) => {
       }).join("");
       content.innerHTML = `<div class="tasks-status-tabs" aria-label="Статус задачи">
         ${taskStatusTabs(summary)}</div><div class="crm-entity-toolbar" style="flex-wrap: wrap">
-        ${businessProject ? `<select data-task-company-filter aria-label="Компания">
-        ${taskCompanyOptions(filters.companyCode, "Все компании")}</select>` : ""}
         <select data-task-pipeline-filter aria-label="Воронка"><option value="">Все воронки</option>
         ${taskOptions(TASK_PIPELINES, filters.pipeline)}</select>
         <select data-task-role-filter aria-label="Роль исполнителя"><option value="">Все исполнители</option>
@@ -349,7 +344,7 @@ const init = (context) => {
     const form = byId("task-create-form");
     await loadTaskCompanies();
     form.querySelector("[data-task-company]").innerHTML = taskCompanyOptions(
-      ctx.selectedProjectId === "synapse-business" ? "" : ctx.selectedProjectId
+      ctx.selectedProjectId
     );
     form.querySelector("[data-task-role]").innerHTML = taskOptions(TASK_ROLES, "synapse");
     form.querySelector("[data-task-priority]").innerHTML = taskOptions(TASK_PRIORITIES, "normal");
