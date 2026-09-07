@@ -650,7 +650,14 @@ async function main() {
   assert.equal(inspect((db) => db.prepare(`SELECT COUNT(*) count FROM company_legal_entities
     WHERE legal_entity_id=? AND company_id=? AND is_deleted=0`).get(scopedLegal.body.id, company.body.id).count), 1);
   const scopedCompanies = await request('GET', `/companies?companyCode=${company.body.code.toUpperCase()}`);
-  assert.deepEqual(scopedCompanies.body.companies.map((item) => item.id), [company.body.id]);
+  assert.deepEqual(scopedCompanies.body.companies.map((item) => item.id), [companyB.body.id]);
+  const ownerCompany = await request('POST', '/companies', {
+    code: 'synapse-business', name: 'Synapse Business',
+  });
+  assert.equal(ownerCompany.status, 201);
+  const clientCompanies = await request('GET', '/companies?companyCode=synapse-business');
+  assert.deepEqual(clientCompanies.body.companies.map((item) => item.id), [company.body.id, companyB.body.id]);
+  assert.equal(clientCompanies.body.companies.some((item) => item.code === 'synapse-business'), false);
   assert.equal((await request('DELETE',
     `/contacts/${scopedContact.body.id}?companyCode=${company.body.code}`)).status, 200);
   assert.equal((await request('DELETE',

@@ -1291,7 +1291,7 @@ function listQuery(config, url) {
   const companyCode = url.searchParams.get('companyCode');
   if (companyCode !== null) {
     if (config.table === 'companies') {
-      clauses.push('e.code = ? COLLATE NOCASE');
+      clauses.push('e.code != ? COLLATE NOCASE');
       params.push(companyCode);
     } else if (config.table === 'contacts') {
       clauses.push(`EXISTS(SELECT 1 FROM contact_companies scope
