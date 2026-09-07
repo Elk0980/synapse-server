@@ -27,12 +27,20 @@ const SCRIPT = {
     "Я не буду придумывать цены или обещания: на этот вопрос точно ответит специалист. " +
     "Оставьте, пожалуйста, номер телефона для связи.",
 };
+const OWNER_SCRIPT = {
+  greeting: "Здравствуйте! Чем помочь по проекту?",
+  fallback:
+    "Готов помочь по проекту. Опишите задачу или уточните, что нужно сделать.",
+};
 const MODEL_SYSTEM_PROMPT =
   "Ты — русскоязычный ассистент Synapse Business. Отвечай кратко и " +
   "доброжелательно. Узнай вопрос, имя и телефон. Ничего не выдумывай.";
+const OWNER_MODEL_SYSTEM_PROMPT =
+  "Ты — русскоязычный рабочий ассистент владельца Synapse Business. " +
+  "Помогай по проекту кратко, конкретно и по-деловому. Не спрашивай имя или телефон.";
 const PORT = Number.parseInt(process.env.PORT || "8080", 10);
 const DATABASE_PATH = process.env.DATABASE_PATH || "/data/chat.sqlite";
-const API_KEY = process.env.API_KEY || "";
+const API_KEY = process.env.CHAT_API_KEY || process.env.API_KEY || "";
 const ADMIN_KEY = process.env.CHAT_ADMIN_KEY || "";
 const CRM_URL = process.env.CRM_URL || "";
 const CRM_TASKS_URL =
@@ -246,6 +254,10 @@ function requireOperator(request) {
   if (request.headers["x-api-key"] !== API_KEY) fail(401, "Неверный API-ключ");
 }
 
+function isOwnerRequest(request) {
+  return Boolean(API_KEY) && request.headers["x-api-key"] === API_KEY;
+}
+
 function requireAdmin(request) {
   if (!ADMIN_KEY || request.headers["x-api-key"] !== ADMIN_KEY)
     fail(401, "Неверный ключ владельца");
@@ -425,7 +437,7 @@ function scriptedReply(data, leadCreated) {
   return SCRIPT.unknown;
 }
 
-async function modelReply(messages) {
+async function modelReply(messages, owner = false) {
   const response = await fetch(MODEL_API_URL, {
     method: "POST",
     headers: {
@@ -434,7 +446,10 @@ async function modelReply(messages) {
     },
     body: JSON.stringify({
       messages: [
-        { role: "system", content: MODEL_SYSTEM_PROMPT },
+        {
+          role: "system",
+          content: owner ? OWNER_MODEL_SYSTEM_PROMPT : MODEL_SYSTEM_PROMPT,
+        },
         ...messages.map((item) => ({
           role: item.author_type === "visitor" ? "user" : "assistant",
           content: item.text,
@@ -909,6 +924,7 @@ async function route(request, response, origin) {
     return handleWebhook(request, response, origin);
   }
   if (request.method === "POST" && url.pathname === "/conversations") {
+    const owner = isOwnerRequest(request);
     const body = await readJson(request);
     const token = crypto.randomBytes(32).toString("base64url");
     const now = new Date().toISOString();
@@ -934,11 +950,12 @@ async function route(request, response, origin) {
     ];
     const result = insertWebConversation.run(...values);
     const id = Number(result.lastInsertRowid);
-    addMessage(getConversation.get(id), SCRIPT.greeting, "assistant", "Хью");
+    const greeting = owner ? OWNER_SCRIPT.greeting : SCRIPT.greeting;
+    addMessage(getConversation.get(id), greeting, "assistant", "Хью");
     return send(
       response,
       201,
-      { id, visitorToken: token, reply: SCRIPT.greeting },
+      { id, visitorToken: token, reply: greeting, owner },
       origin,
     );
   }
@@ -958,28 +975,29 @@ async function route(request, response, origin) {
   match = url.pathname.match(/^\/conversations\/(\d+)\/messages$/);
   if (request.method === "POST" && match) {
     const row = existingConversation(conversationId(match[1]));
-    requireVisitor(request, row);
+    const owner = isOwnerRequest(request);
+    if (!owner) requireVisitor(request, row);
     takeLimit(visitorLimits, row.id, 20, 60_000);
     takeLimit(ipLimits, clientIp(request), 60, 3_600_000);
     const body = await readJson(request);
     const text = optionalString(body.text, "text");
     if (!text) fail(400, "Поле «text» обязательно");
     addMessage(row, text, "visitor", null, null, true);
-    await notifyOwner(getConversation.get(row.id), text);
+    if (!owner) await notifyOwner(getConversation.get(row.id), text);
     const all = getMessages.all(row.id);
-    const data = contactData(all);
+    const data = owner ? null : contactData(all);
     let leadCreated = false;
-    if (!row.lead_id && data.name && data.phone && data.firstQuestion) {
+    if (!owner && !row.lead_id && data.name && data.phone && data.firstQuestion) {
       try {
         leadCreated = await createLead(row, data);
       } catch (error) {
         console.error("Не удалось создать заявку в CRM:", error.message);
       }
     }
-    let reply = scriptedReply(data, leadCreated);
+    let reply = owner ? OWNER_SCRIPT.fallback : scriptedReply(data, leadCreated);
     if (MODEL_API_URL && MODEL_API_KEY && !leadCreated) {
       try {
-        reply = await modelReply(all);
+        reply = await modelReply(all, owner);
       } catch (error) {
         console.error("Ошибка модели, используется сценарий:", error.message);
       }
@@ -988,7 +1006,7 @@ async function route(request, response, origin) {
     return send(
       response,
       201,
-      { reply, conversation: serialize(getConversation.get(row.id)) },
+      { reply, owner, conversation: serialize(getConversation.get(row.id)) },
       origin,
     );
   }
