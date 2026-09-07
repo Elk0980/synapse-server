@@ -12,7 +12,7 @@
 |---|---|
 | `PORT` | Порт, по умолчанию `8080` |
 | `DATABASE_PATH` | SQLite-файл, по умолчанию `/data/chat.sqlite` |
-| `API_KEY` | Обязательный ключ операторских методов; при пустом значении сервис не запускается |
+| `CHAT_API_KEY` | Ключ режима владельца и операторских методов (`API_KEY` поддерживается для обратной совместимости); при пустом значении сервис не запускается |
 | `CHAT_ADMIN_KEY` | Ключ API интерфейса владельца (`X-API-Key`) |
 | `ALLOWED_ORIGINS` | Разрешённые CORS-origin через запятую |
 | `TELEGRAM_BOT_TOKEN` | Токен Telegram-бота; может быть пустым для тестового режима |
@@ -38,8 +38,8 @@ Telegram-бот отправляет сообщения без звука в и�
 
 ## API
 
-* `POST /conversations` — создать диалог. Принимает `site`, `page`, `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`, `referrer`, `client_id`; возвращает `id`, `visitorToken` и приветствие.
-* `POST /conversations/:id/messages` — отправить `{ "text": "..." }`. Нужен `Authorization: Bearer <visitorToken>` (либо `X-Visitor-Token`). Возвращает настоящий ответ ассистента.
+* `POST /conversations` — создать диалог. Принимает `site`, `page`, `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`, `referrer`, `client_id`; возвращает `id`, `visitorToken`, приветствие и флаг `owner`.
+* `POST /conversations/:id/messages` — отправить `{ "text": "..." }`. Нужен `Authorization: Bearer <visitorToken>` (либо `X-Visitor-Token`). Возвращает настоящий ответ ассистента и флаг `owner`.
 * `GET /conversations/:id` — получить диалог целиком. Доступен посетителю с его токеном или оператору с `X-API-Key`.
 * `GET /conversations` — последние диалоги оператора; нужен `X-API-Key`.
 * `POST /conversations/:id/operator` — добавить операторское сообщение `{ "text": "..." }`; нужен `X-API-Key`.
@@ -56,6 +56,10 @@ Telegram-бот отправляет сообщения без звука в и�
 
 Административные методы используют `CHAT_ADMIN_KEY`. Веб-диалог получает ответы владельца в уже
 существующем `GET /conversations/:id`; интерфейс посетителя может опрашивать этот метод.
+
+Если `POST /conversations` или `POST /conversations/:id/messages` получает заголовок
+`X-API-Key: <CHAT_API_KEY>`, запрос работает в режиме владельца без visitor-токена. В этом режиме
+ассистент общается по-деловому, не запрашивает контактные данные и не создаёт лид в CRM.
 
 Интерфейс владельца находится на `/client-tasks.html` домена чата. Публичная ALVI-доска — на
 `/zadachi.html?t=<token>`. Токен генерируется сервисом как HMAC компании и в API намеренно не
