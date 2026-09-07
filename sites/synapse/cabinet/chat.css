@@ -15,7 +15,6 @@
   margin: 0;
   padding: 18px;
   border-bottom: 1px solid var(--line);
-  font-size: 1rem;
 }
 .chat-dialogs,
 .chat-messages {
@@ -82,7 +81,6 @@
 }
 .chat-conversation-header h2 {
   margin: 0;
-  font-size: 1.1rem;
 }
 .chat-conversation-header p {
   margin: 4px 0 0;

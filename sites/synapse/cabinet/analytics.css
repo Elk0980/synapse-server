@@ -54,7 +54,7 @@
   background: var(--surface-soft);
 }
 .funnel-card-head { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; }
-.funnel-card h3 { margin: 0; font-size: 1rem; }
+.funnel-card h3 { margin: 0; }
 .funnel-number { font-size: 1.45rem; }
 .funnel-conversion, .funnel-note, .funnel-breakdown { color: var(--muted); font-size: 0.82rem; }
 .data-mark {
