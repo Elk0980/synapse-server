@@ -68,6 +68,8 @@ services:
       AUTH_USERS: ${AUTH_USERS:-}
       CRM_URL: http://crm:8080
       CRM_API_KEY: ${CRM_API_KEY}
+      CHAT_URL: http://chat:8080
+      CHAT_API_KEY: ${CHAT_API_KEY}
       ALLOWED_ORIGINS: ${CONTENT_ALLOWED_ORIGINS:-}
     expose:
       - "8080"
