@@ -535,6 +535,48 @@
           "label": "Подпись",
           "value": "Первый шаг",
           "multiline": false
+        },
+        {
+          "key": "price.tag-1",
+          "label": "Плашка ТУРБО-массажа",
+          "value": "Акция первого визита",
+          "multiline": false
+        },
+        {
+          "key": "price.tag-2",
+          "label": "Плашка LPG-массажа",
+          "value": "Акция первого визита",
+          "multiline": false
+        },
+        {
+          "key": "price.tag-3",
+          "label": "Плашка ручного массажа",
+          "value": "Акция первого визита",
+          "multiline": false
+        },
+        {
+          "key": "price.first-visit-saving-1",
+          "label": "Выгода ТУРБО-массажа",
+          "value": "Первый шаг — экономия 1600 ₽",
+          "multiline": false
+        },
+        {
+          "key": "price.first-visit-saving-2",
+          "label": "Выгода LPG-массажа",
+          "value": "Первый шаг — экономия 1110 ₽",
+          "multiline": false
+        },
+        {
+          "key": "price.first-visit-saving-3",
+          "label": "Выгода ручного массажа",
+          "value": "Первый шаг — экономия 850 ₽",
+          "multiline": false
+        },
+        {
+          "key": "price.d-1",
+          "label": "Состав ТУРБО-массажа",
+          "value": "Что входит: осмотр и консультация специалиста, подбор программы под вашу цель, полный сеанс аппаратного ТУРБО-массажа всего тела, замеры на старте. Халат и простыни — наши.",
+          "multiline": true
         }
       ]
     },

@@ -327,6 +327,7 @@
   .studio-light .lead{color:#48584d}
   .studio-light .kicker{color:#7d6636}
   .studio-light .card{background:#ffffff;border-color:#dcdccb}
+  .studio-light .card .tag{background:#0e1410;color:#fff}
   .studio-light .card.hot{border-color:var(--sage);box-shadow:0 20px 50px -30px rgba(147,165,111,.45)}
   .studio-light .card p.d{color:#5a6a5e}
   .studio-light .card .p s{color:#93a196}
@@ -631,22 +632,25 @@
     </div>
     <div class="cards">
       <div class="card hot rv">
-        <div class="tag">Лучший первый шаг · экономия 1 600 ₽</div>
+        <div class="tag" data-edit="price.tag-1">Акция первого визита</div>
         <h3>ТУРБО-массаж всего тела · 60 мин</h3>
         <div class="p">500 ₽ <s>2 100 ₽</s></div>
-        <p class="d">Что входит: осмотр и консультация специалиста, подбор программы под вашу цель, полный сеанс аппаратного массажа всего тела, замеры на старте. Халат и простыни — наши.</p>
+        <p class="d first-visit-saving" style="color:var(--sage-deep);font-weight:700" data-edit="price.first-visit-saving-1">Первый шаг — экономия 1600 ₽</p>
+        <p class="d" data-edit="price.d-1">Что входит: осмотр и консультация специалиста, подбор программы под вашу цель, полный сеанс аппаратного ТУРБО-массажа всего тела, замеры на старте. Халат и простыни — наши.</p>
         <p class="d" style="margin-top:10px;color:var(--brass)">Цена действует только на первый визит. Ни к чему не обязывает.</p>
       </div>
       <div class="card rv">
-        <div class="tag">Акция первого визита</div>
+        <div class="tag" data-edit="price.tag-2">Акция первого визита</div>
         <h3>LPG-массаж всего тела · 45 мин</h3>
         <div class="p">990 ₽ <s>2 100 ₽</s></div>
+        <p class="d first-visit-saving" style="color:var(--sage-deep);font-weight:700" data-edit="price.first-visit-saving-2">Первый шаг — экономия 1110 ₽</p>
         <p class="d">Знакомство с вакуумно-роликовым массажем — в специальном костюме, комфортно, без синяков.</p>
       </div>
       <div class="card rv">
-        <div class="tag">Акция первого визита</div>
+        <div class="tag" data-edit="price.tag-3">Акция первого визита</div>
         <h3>Ручной массаж · 60 мин</h3>
         <div class="p">1 650 ₽ <s>2 500 ₽</s></div>
+        <p class="d first-visit-saving" style="color:var(--sage-deep);font-weight:700" data-edit="price.first-visit-saving-3">Первый шаг — экономия 850 ₽</p>
         <p class="d">Спа-ритуал с эфирными маслами — если хочется начать с рук мастера, а не с аппарата.</p>
       </div>
     </div>
@@ -1197,7 +1201,24 @@
 <script src="price-render.js?v=20260904"></script>
 <script>
 AlviPrice.load(['/api/price']).then(function (price) {
-  if (price) AlviPrice.renderLanding(price, document.getElementById('price'));
+  var priceSection = document.getElementById('price');
+  if (!price || !priceSection) return;
+  AlviPrice.renderLanding(price, priceSection);
+  var savings = ['Первый шаг — экономия 1600 ₽','Первый шаг — экономия 1110 ₽','Первый шаг — экономия 850 ₽'];
+  priceSection.querySelectorAll('.cards .card').forEach(function(card,index){
+    var description = card.querySelector('p.d');
+    var priceLine = card.querySelector('.p');
+    if(index === 0 && description){
+      description.textContent = description.textContent.replace('полный сеанс аппаратного массажа всего тела','полный сеанс аппаратного ТУРБО-массажа всего тела');
+    }
+    if(priceLine && savings[index] && !card.querySelector('.first-visit-saving')){
+      var saving = document.createElement('p');
+      saving.className = 'd first-visit-saving';
+      saving.style.cssText = 'color:var(--sage-deep);font-weight:700';
+      saving.textContent = savings[index];
+      priceLine.insertAdjacentElement('afterend',saving);
+    }
+  });
 });
 </script>
 <script src="site-apply.js?v=20260904"></script>
