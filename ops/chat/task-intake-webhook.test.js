@@ -99,6 +99,37 @@ test("Telegram webhook creates idempotent tasks and survives CRM errors", async 
   const base = { chat: { id: -10, type: "group", title: "Клиенты" } };
   await webhook({
     ...base,
+    message_id: 40,
+    text: "/привязать неизвестно",
+    from: { id: 1, first_name: "Владислав" },
+  });
+  assert.equal(telegramRequests.at(-1).text, "Неизвестная компания. Допустимые: alvi, avokado, palitra");
+  await webhook({
+    ...base,
+    message_id: 41,
+    text: "/привязать alvi",
+    from: { id: 2, first_name: "Не владелец" },
+  });
+  assert.equal(telegramRequests.at(-1).text, "Команда доступна только владельцу Synapse");
+  await webhook({
+    ...base,
+    message_id: 42,
+    text: " /ПРИВЯЗАТЬ@Synapse_SB_Bot   ALVI ",
+    from: { id: 1, first_name: "Владислав" },
+  });
+  assert.equal(
+    telegramRequests.at(-1).text,
+    "Группа привязана: ALVI. Сюда будут приходить задачи и напоминания",
+  );
+  await webhook({
+    ...base,
+    message_id: 43,
+    text: "/привязка",
+    from: { id: 2, first_name: "Клиент" },
+  });
+  assert.equal(telegramRequests.at(-1).text, "Эта группа привязана: ALVI");
+  await webhook({
+    ...base,
     message_id: 1,
     text: "/company alvi",
     from: { id: 1, first_name: "Владислав" },

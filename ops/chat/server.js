@@ -10,6 +10,7 @@ const {
   isQuietTime,
 } = require("./quiet-hours");
 const { detectTask } = require("./task-intake");
+const { bindingError, parseBindingCommand } = require("./telegram-binding");
 
 const SCRIPT = {
   greeting:
@@ -601,15 +602,38 @@ async function handleWebhook(request, response, origin) {
   }
   const text = message.text || message.caption;
   if (!text) return send(response, 200, { ok: true }, origin);
-  const bind = text.match(/^\/привязать(?:@\w+)?\s+(alvi|avokado|palitra)\s*$/iu);
-  if (bind) {
-    const isOwner = String(message.from?.id || "") === String(TELEGRAM_OWNER_ID);
-    if (!isOwner) return send(response, 200, { ok: true }, origin);
-    const company = bind[1].toLowerCase();
+  const bindingCommand = parseBindingCommand(text);
+  if (bindingCommand?.type === "status") {
+    const binding = db.prepare("SELECT company FROM client_chats WHERE chat_id = ?").get(chatId);
+    const reply = binding
+      ? `Эта группа привязана: ${binding.company.toUpperCase()}`
+      : "Эта группа не привязана ни к одной компании";
+    await telegramRequest("sendMessage", { chat_id: chatId, text: reply });
+    return send(response, 200, { ok: true, company: binding?.company || null }, origin);
+  }
+  if (bindingCommand?.type === "bind") {
+    const replyError = bindingError(
+      bindingCommand,
+      TELEGRAM_OWNER_ID,
+      message.from?.id,
+    );
+    if (!TELEGRAM_OWNER_ID.trim()) {
+      console.error("Невозможно привязать Telegram-группу: TELEGRAM_OWNER_ID не настроен");
+    }
+    if (replyError) {
+      await telegramRequest("sendMessage", {
+        chat_id: chatId, text: replyError,
+      });
+      return send(response, 200, { ok: true, company: null }, origin);
+    }
+    const company = bindingCommand.company;
     db.prepare(`INSERT INTO client_chats (company, chat_id, updated_at) VALUES (?, ?, ?)
       ON CONFLICT(company) DO UPDATE SET chat_id=excluded.chat_id, updated_at=excluded.updated_at`)
       .run(company, chatId, new Date().toISOString());
-    await telegramRequest("sendMessage", { chat_id: chatId, text: `Доска задач привязана: ${company}` });
+    await telegramRequest("sendMessage", {
+      chat_id: chatId,
+      text: `Группа привязана: ${company.toUpperCase()}. Сюда будут приходить задачи и напоминания`,
+    });
     return send(response, 200, { ok: true, company }, origin);
   }
   if (/^\/company(?:@\w+)?\b/i.test(text)) {
