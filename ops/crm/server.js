@@ -2331,6 +2331,8 @@ async function route(request, response) {
     const body = await readJson(request);
     const contact = requiredString(body.contact, 'contact');
     const normalized = normalizeContact(contact);
+    const createdAt = body.ts === undefined ? new Date().toISOString() :
+      date(limitedString(body.ts, 'ts', true), 'ts');
     const companyCode = body.companyCode === undefined || body.companyCode === null ? null :
       requiredString(body.companyCode, 'companyCode').toLowerCase();
     if (companyCode) {
@@ -2347,7 +2349,7 @@ async function route(request, response) {
     const source = sourceInput || (utmSource ? derived : (derived === 'direct' ? null : derived));
     const landingPage = optionalString(body.landingPage, 'landingPage');
     const result = createLead.run(
-      new Date().toISOString(),
+      createdAt,
       requiredString(body.name, 'name'),
       contact,
       normalized,
