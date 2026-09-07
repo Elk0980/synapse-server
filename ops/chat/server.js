@@ -45,6 +45,7 @@ const ADMIN_KEY = process.env.CHAT_ADMIN_KEY || "";
 const CRM_URL = process.env.CRM_URL || "";
 const CRM_TASKS_URL =
   process.env.CRM_TASKS_URL || CRM_URL.replace(/\/leads\/?$/, "/tasks");
+const CRM_DASHBOARD_URL = CRM_URL.replace(/\/leads\/?$/, "/dashboard");
 const CRM_API_KEY = process.env.CRM_API_KEY || "";
 const MODEL_API_URL = process.env.MODEL_API_URL || "";
 const MODEL_API_KEY = process.env.MODEL_API_KEY || "";
@@ -427,6 +428,51 @@ async function createLead(row, data) {
   if (!lead.id) throw new Error("CRM не вернула id заявки");
   saveLead.run(lead.id, new Date().toISOString(), row.id);
   return true;
+}
+
+function metric(value, suffix = "") {
+  return Number.isFinite(value) && value > 0
+    ? `${new Intl.NumberFormat("ru-RU").format(value)}${suffix}`
+    : "нет данных";
+}
+
+async function ownerSummary(row) {
+  if (!CRM_DASHBOARD_URL || !CRM_TASKS_URL || !CRM_API_KEY) {
+    return "Нет данных из CRM: подключение к CRM не настроено.";
+  }
+  const companyCode = taskCompany(row.company);
+  const dashboardUrl = new URL(CRM_DASHBOARD_URL);
+  dashboardUrl.searchParams.set("period", "30d");
+  const tasksUrl = new URL(`${CRM_TASKS_URL.replace(/\/$/, "")}/summary`);
+  if (companyCode) {
+    dashboardUrl.searchParams.set("companyCode", companyCode);
+    tasksUrl.searchParams.set("companyCode", companyCode);
+  }
+  const headers = { "x-api-key": CRM_API_KEY };
+  const [dashboardResponse, tasksResponse] = await Promise.all([
+    fetch(dashboardUrl, { headers }),
+    fetch(tasksUrl, { headers }),
+  ]);
+  if (!dashboardResponse.ok || !tasksResponse.ok) {
+    throw new Error(
+      `CRM вернула HTTP ${dashboardResponse.status}/${tasksResponse.status}`,
+    );
+  }
+  const [dashboard, tasks] = await Promise.all([
+    dashboardResponse.json(),
+    tasksResponse.json(),
+  ]);
+  const summary = dashboard.summary || {};
+  const openTasks = [tasks.inbox, tasks.planned, tasks.inProgress]
+    .filter(Number.isFinite)
+    .reduce((total, value) => total + value, 0);
+  return [
+    "Сводка по проекту за последние 30 дней:",
+    `Заявки: ${metric(summary.total)}`,
+    `Задачи: ${metric(openTasks)}`,
+    `Сделки: ${metric(summary.sales)}`,
+    `Выручка: ${metric(summary.revenue, " ₽")}`,
+  ].join("\n");
 }
 
 function scriptedReply(data, leadCreated) {
@@ -995,9 +1041,16 @@ async function route(request, response, origin) {
       }
     }
     let reply = owner ? OWNER_SCRIPT.fallback : scriptedReply(data, leadCreated);
-    if (MODEL_API_URL && MODEL_API_KEY && !leadCreated) {
+    if (owner) {
       try {
-        reply = await modelReply(all, owner);
+        reply = await ownerSummary(row);
+      } catch (error) {
+        console.error("Не удалось получить сводку из CRM:", error.message);
+        reply = "Нет данных из CRM: не удалось получить сводку по проекту.";
+      }
+    } else if (MODEL_API_URL && MODEL_API_KEY && !leadCreated) {
+      try {
+        reply = await modelReply(all, false);
       } catch (error) {
         console.error("Ошибка модели, используется сценарий:", error.message);
       }
