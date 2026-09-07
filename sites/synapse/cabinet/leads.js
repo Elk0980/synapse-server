@@ -21,6 +21,14 @@ const init = (context) => {
     { id: "rejected", label: "Отказ" }
   ]);
   const crmState = { period: "today", stage: "", source: "" };
+  const formatDate = (input) => {
+    if (!String(input ?? "").trim()) return "—";
+    const date = new Date(input);
+    if (Number.isNaN(date.getTime())) return "—";
+    return date.toLocaleString("ru-RU", {
+      day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
+    });
+  };
   let crmBound = false;
   const crmStageOptions = (selected) => CRM_STAGES.map((stage) =>
     `<option value="${stage.id}"${stage.id === selected ? " selected" : ""}>${stage.label}</option>`
@@ -38,7 +46,7 @@ const init = (context) => {
       </div>
       ${leads.length ? `<div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Дата</th>
         <th>Имя</th><th>Контакт</th><th>Канал</th><th>Источник</th><th>Этап</th><th>Сумма</th>
-        </tr></thead><tbody>${leads.map((lead) => `<tr><td>${escapeHTML(lead.date ?? "—")}</td>
+        </tr></thead><tbody>${leads.map((lead) => `<tr><td>${escapeHTML(formatDate(lead.date))}</td>
         <td><button class="crm-lead-button" type="button" data-crm-lead-id="${escapeHTML(lead.id)}">
         ${escapeHTML(lead.name ?? "—")}</button></td><td>${escapeHTML(lead.contact ?? "—")}</td>
         <td>${escapeHTML(lead.channel ?? "—")}</td><td>${escapeHTML(lead.source ?? "—")}</td>
