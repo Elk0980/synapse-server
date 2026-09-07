@@ -85,6 +85,8 @@ avokado-v2.synapsebusiness.ru {
 # --- Клиент: ALVI (SPA, Иркутск) --------------------------------------------
 alvi.synapsebusiness.ru {
   root * /srv/sites/alvi
+  @client_tasks path /t/*
+  reverse_proxy @client_tasks chat:8080
   @track {
     path /track
     method POST
@@ -164,7 +166,7 @@ board.synapsebusiness.ru {
 # --- Чат -------------------------------------------------------------------
 chat.synapsebusiness.ru {
   root * /srv/sites/chat
-  @chat_api path /conversations /conversations/* /admin/* /telegram/webhook
+  @chat_api path /conversations /conversations/* /admin/* /telegram/webhook /client-tasks /client-tasks/* /t/*
   reverse_proxy @chat_api chat:8080
   rewrite /inbox /inbox.html
   import draft

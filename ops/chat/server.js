@@ -7,6 +7,7 @@ const { URL } = require("node:url");
 const {
   parseQuietHours,
   prepareTelegramPayload,
+  isQuietTime,
 } = require("./quiet-hours");
 const { detectTask } = require("./task-intake");
 
@@ -41,6 +42,8 @@ const MODEL_API_KEY = process.env.MODEL_API_KEY || "";
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || "";
 const TELEGRAM_OWNER_ID = process.env.TELEGRAM_OWNER_ID || "";
+const CLIENT_BOARD_SECRET = process.env.CLIENT_BOARD_SECRET || "";
+const CLIENT_BOARD_BASE_URL = (process.env.CLIENT_BOARD_BASE_URL || "https://{company}.synapsebusiness.ru/zadachi.html").trim();
 const TELEGRAM_QUIET_HOURS = parseQuietHours(process.env);
 const ALLOWED_ORIGINS = new Set(
   (process.env.ALLOWED_ORIGINS || "")
@@ -77,6 +80,33 @@ db.exec(`
     conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     created_at TEXT NOT NULL, role TEXT NOT NULL, text TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS client_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company TEXT NOT NULL CHECK(company IN ('alvi','avokado','palitra')),
+    title TEXT NOT NULL, why TEXT NOT NULL, instruction TEXT NOT NULL,
+    link TEXT, due TEXT,
+    status TEXT NOT NULL DEFAULT 'new' CHECK(status IN ('new','in_progress','done','blocked')),
+    blocked_reason TEXT,
+    assignee TEXT NOT NULL DEFAULT 'client' CHECK(assignee IN ('client','owner','team')),
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual','api')),
+    notify_chat_id TEXT, last_notified_at TEXT
+  );
+  CREATE TABLE IF NOT EXISTS client_task_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL REFERENCES client_tasks(id) ON DELETE CASCADE,
+    text TEXT NOT NULL, author TEXT NOT NULL, created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS client_chats (
+    company TEXT PRIMARY KEY CHECK(company IN ('alvi','avokado','palitra')),
+    chat_id TEXT NOT NULL, updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS client_notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER REFERENCES client_tasks(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL, chat_id TEXT NOT NULL, text TEXT NOT NULL,
+    created_at TEXT NOT NULL, sent_at TEXT
+  );
 `);
 
 function addColumn(table, definition) {
@@ -105,6 +135,8 @@ db.exec(`
   CREATE UNIQUE INDEX IF NOT EXISTS conversations_telegram_idx
     ON conversations(channel, external_chat_id) WHERE external_chat_id IS NOT NULL;
   CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages(conversation_id, id);
+  CREATE INDEX IF NOT EXISTS client_tasks_company_idx ON client_tasks(company, status, updated_at);
+  CREATE INDEX IF NOT EXISTS client_notifications_pending_idx ON client_notifications(sent_at, id);
 `);
 
 const insertWebConversation = db.prepare(`INSERT INTO conversations
@@ -440,6 +472,82 @@ async function telegramRequest(method, payload) {
   return body;
 }
 
+const CLIENT_COMPANIES = new Set(["alvi", "avokado", "palitra"]);
+const CLIENT_STATUSES = new Set(["new", "in_progress", "done", "blocked"]);
+const CLIENT_ASSIGNEES = new Set(["client", "owner", "team"]);
+
+function clientToken(company) {
+  return crypto.createHmac("sha256", CLIENT_BOARD_SECRET).update(company).digest("base64url");
+}
+
+function tokenCompany(token) {
+  if (!CLIENT_BOARD_SECRET) fail(503, "Доска временно недоступна");
+  for (const company of CLIENT_COMPANIES) {
+    const expected = clientToken(company);
+    if (token.length === expected.length && crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected))) return company;
+  }
+  fail(401, "Ссылка недействительна");
+}
+
+function boardUrl(company) {
+  const separator = CLIENT_BOARD_BASE_URL.includes("?") ? "&" : "?";
+  return `${CLIENT_BOARD_BASE_URL.replace("{company}", company)}${separator}t=${encodeURIComponent(clientToken(company))}`;
+}
+
+function clientTask(row, includeComments = false) {
+  return {
+    id: row.id, company: row.company, title: row.title, why: row.why,
+    instruction: row.instruction, link: row.link, due: row.due, status: row.status,
+    blocked_reason: row.blocked_reason, assignee: row.assignee,
+    created_at: row.created_at, updated_at: row.updated_at, source: row.source,
+    notify_chat_id: row.notify_chat_id, last_notified_at: row.last_notified_at,
+    ...(includeComments ? { comments: db.prepare("SELECT id, text, author, created_at FROM client_task_comments WHERE task_id = ? ORDER BY id").all(row.id) } : {}),
+  };
+}
+
+function getClientTask(id) {
+  const task = db.prepare("SELECT * FROM client_tasks WHERE id = ?").get(id);
+  if (!task) fail(404, "Задача не найдена");
+  return task;
+}
+
+function taskId(value) {
+  const id = Number(value);
+  if (!Number.isSafeInteger(id) || id < 1) fail(400, "Некорректный идентификатор задачи");
+  return id;
+}
+
+function notificationText(kind, task) {
+  if (kind === "done") return `Спасибо, задача «${task.title}» закрыта.`;
+  if (kind === "reminder") return `Напоминаем о задаче: ${task.title}. Зачем: ${task.why}. Открыть: ${boardUrl(task.company)}`;
+  if (kind === "due") return `Изменён срок задачи «${task.title}»: ${task.due || "без срока"}. Открыть: ${boardUrl(task.company)}`;
+  return `Новая задача для вас: ${task.title}. Зачем: ${task.why}. Открыть: ${boardUrl(task.company)}`;
+}
+
+function enqueueClientNotification(task, kind) {
+  if (!CLIENT_BOARD_SECRET) return;
+  const chatId = task.notify_chat_id || db.prepare("SELECT chat_id FROM client_chats WHERE company = ?").get(task.company)?.chat_id;
+  if (!chatId) return;
+  db.prepare("INSERT INTO client_notifications (task_id, kind, chat_id, text, created_at) VALUES (?, ?, ?, ?, ?)")
+    .run(task.id, kind, chatId, notificationText(kind, task), new Date().toISOString());
+}
+
+async function processClientNotifications() {
+  if (!TELEGRAM_BOT_TOKEN || isQuietTime(new Date(), TELEGRAM_QUIET_HOURS)) return;
+  const stale = db.prepare(`SELECT * FROM client_tasks t WHERE t.status = 'new'
+    AND t.created_at <= ? AND NOT EXISTS (SELECT 1 FROM client_notifications n WHERE n.task_id=t.id AND n.kind='reminder')`).all(new Date(Date.now() - 86400000).toISOString());
+  stale.forEach((task) => enqueueClientNotification(task, "reminder"));
+  const pending = db.prepare("SELECT * FROM client_notifications WHERE sent_at IS NULL ORDER BY id LIMIT 20").all();
+  for (const item of pending) {
+    try {
+      await telegramRequest("sendMessage", { chat_id: item.chat_id, text: item.text });
+      const now = new Date().toISOString();
+      db.prepare("UPDATE client_notifications SET sent_at = ? WHERE id = ?").run(now, item.id);
+      if (item.task_id) db.prepare("UPDATE client_tasks SET last_notified_at = ? WHERE id = ?").run(now, item.task_id);
+    } catch (error) { console.error("Не удалось уведомить клиента:", error.message); }
+  }
+}
+
 async function notifyOwner(row, text) {
   if (!TELEGRAM_OWNER_ID || !TELEGRAM_BOT_TOKEN) return;
   const previous = notificationTimes.get(row.id) || 0;
@@ -493,6 +601,17 @@ async function handleWebhook(request, response, origin) {
   }
   const text = message.text || message.caption;
   if (!text) return send(response, 200, { ok: true }, origin);
+  const bind = text.match(/^\/привязать(?:@\w+)?\s+(alvi|avokado|palitra)\s*$/iu);
+  if (bind) {
+    const isOwner = String(message.from?.id || "") === String(TELEGRAM_OWNER_ID);
+    if (!isOwner) return send(response, 200, { ok: true }, origin);
+    const company = bind[1].toLowerCase();
+    db.prepare(`INSERT INTO client_chats (company, chat_id, updated_at) VALUES (?, ?, ?)
+      ON CONFLICT(company) DO UPDATE SET chat_id=excluded.chat_id, updated_at=excluded.updated_at`)
+      .run(company, chatId, new Date().toISOString());
+    await telegramRequest("sendMessage", { chat_id: chatId, text: `Доска задач привязана: ${company}` });
+    return send(response, 200, { ok: true, company }, origin);
+  }
   if (/^\/company(?:@\w+)?\b/i.test(text)) {
     const company = text
       .match(/^\/company(?:@\w+)?\s+(alvi|avokado|palitra)\s*$/i)?.[1]
@@ -669,8 +788,97 @@ async function adminRoutes(request, response, url, origin) {
   fail(404, "Метод или адрес не найден");
 }
 
+async function clientTaskRoutes(request, response, url, origin) {
+  let match = url.pathname.match(/^\/t\/([^/]+)$/);
+  if (request.method === "GET" && match) {
+    const company = tokenCompany(decodeURIComponent(match[1]));
+    const rows = db.prepare("SELECT * FROM client_tasks WHERE company = ? AND assignee = 'client' ORDER BY status='done', due IS NULL, due, id DESC").all(company);
+    return send(response, 200, { company, tasks: rows.map((row) => clientTask(row, true)) }, origin);
+  }
+  match = url.pathname.match(/^\/t\/([^/]+)\/(\d+)\/status$/);
+  if (request.method === "POST" && match) {
+    const company = tokenCompany(decodeURIComponent(match[1]));
+    const task = getClientTask(taskId(match[2]));
+    if (task.company !== company || task.assignee !== "client") fail(404, "Задача не найдена");
+    const body = await readJson(request);
+    if (!new Set(["done", "blocked"]).has(body.status)) fail(400, "Клиент может выбрать «done» или «blocked»");
+    const comment = optionalString(body.comment, "comment");
+    if (body.status === "blocked" && !comment) fail(400, "Расскажите, что не получилось");
+    const now = new Date().toISOString();
+    db.prepare("UPDATE client_tasks SET status=?, blocked_reason=?, updated_at=? WHERE id=?")
+      .run(body.status, body.status === "blocked" ? comment : null, now, task.id);
+    if (comment) db.prepare("INSERT INTO client_task_comments (task_id,text,author,created_at) VALUES (?,?,?,?)").run(task.id, comment, "client", now);
+    const updated = getClientTask(task.id);
+    if (body.status === "done" && task.status !== "done") enqueueClientNotification(updated, "done");
+    void processClientNotifications();
+    return send(response, 200, { task: clientTask(updated, true) }, origin);
+  }
+  fail(404, "Метод или адрес не найден");
+}
+
+async function clientTaskAdminRoutes(request, response, url, origin) {
+  requireAdmin(request);
+  if (request.method === "GET" && url.pathname === "/client-tasks") {
+    const company = url.searchParams.get("company");
+    if (company && !CLIENT_COMPANIES.has(company)) fail(400, "Неизвестная компания");
+    const rows = company
+      ? db.prepare("SELECT * FROM client_tasks WHERE company=? ORDER BY status='done', id DESC").all(company)
+      : db.prepare("SELECT * FROM client_tasks ORDER BY status='done', id DESC").all();
+    return send(response, 200, { tasks: rows.map((row) => clientTask(row, true)) }, origin);
+  }
+  if (request.method === "POST" && url.pathname === "/client-tasks") {
+    const body = await readJson(request);
+    const company = optionalString(body.company, "company");
+    const title = optionalString(body.title, "title");
+    const why = optionalString(body.why, "why");
+    const instruction = optionalString(body.instruction, "instruction");
+    if (!CLIENT_COMPANIES.has(company) || !title || !why || !instruction) fail(400, "Обязательны company, title, why и instruction");
+    const status = body.status || "new", assignee = body.assignee || "client", source = body.source || "manual";
+    if (!CLIENT_STATUSES.has(status) || !CLIENT_ASSIGNEES.has(assignee) || !new Set(["manual", "api"]).has(source)) fail(400, "Некорректный status, assignee или source");
+    const due = optionalString(body.due, "due");
+    if (due && !/^\d{4}-\d{2}-\d{2}$/.test(due)) fail(400, "Срок должен иметь формат YYYY-MM-DD");
+    const link = optionalString(body.link, "link");
+    if (link && !/^https?:\/\//i.test(link)) fail(400, "Ссылка должна начинаться с http:// или https://");
+    const now = new Date().toISOString();
+    const result = db.prepare(`INSERT INTO client_tasks
+      (company,title,why,instruction,link,due,status,blocked_reason,assignee,created_at,updated_at,source,notify_chat_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(company,title,why,instruction,link,due,status,
+        optionalString(body.blocked_reason,"blocked_reason"),assignee,now,now,source,optionalString(body.notify_chat_id,"notify_chat_id"));
+    const task = getClientTask(Number(result.lastInsertRowid));
+    enqueueClientNotification(task, "new"); void processClientNotifications();
+    return send(response, 201, { task: clientTask(task, true) }, origin);
+  }
+  let match = url.pathname.match(/^\/client-tasks\/(\d+)$/);
+  if (request.method === "PATCH" && match) {
+    const old = getClientTask(taskId(match[1])); const body = await readJson(request);
+    const allowed = ["title","why","instruction","link","due","status","blocked_reason","assignee","notify_chat_id"];
+    const next = { ...old };
+    for (const key of allowed) if (Object.hasOwn(body, key)) next[key] = optionalString(body[key], key);
+    if (!next.title || !next.why || !next.instruction || !CLIENT_STATUSES.has(next.status) || !CLIENT_ASSIGNEES.has(next.assignee)) fail(400, "Некорректные поля задачи");
+    if (next.due && !/^\d{4}-\d{2}-\d{2}$/.test(next.due)) fail(400, "Срок должен иметь формат YYYY-MM-DD");
+    if (next.link && !/^https?:\/\//i.test(next.link)) fail(400, "Ссылка должна начинаться с http:// или https://");
+    db.prepare(`UPDATE client_tasks SET title=?,why=?,instruction=?,link=?,due=?,status=?,blocked_reason=?,assignee=?,notify_chat_id=?,updated_at=? WHERE id=?`)
+      .run(next.title,next.why,next.instruction,next.link,next.due,next.status,next.blocked_reason,next.assignee,next.notify_chat_id,new Date().toISOString(),old.id);
+    const task = getClientTask(old.id);
+    if (old.due !== task.due) enqueueClientNotification(task, "due");
+    if (old.status !== "done" && task.status === "done") enqueueClientNotification(task, "done");
+    void processClientNotifications();
+    return send(response, 200, { task: clientTask(task, true) }, origin);
+  }
+  match = url.pathname.match(/^\/client-tasks\/(\d+)\/comment$/);
+  if (request.method === "POST" && match) {
+    const task = getClientTask(taskId(match[1])); const body = await readJson(request);
+    const comment = optionalString(body.comment || body.text, "comment"); if (!comment) fail(400, "Комментарий обязателен");
+    db.prepare("INSERT INTO client_task_comments (task_id,text,author,created_at) VALUES (?,?,?,?)").run(task.id, comment, "owner", new Date().toISOString());
+    return send(response, 201, { task: clientTask(getClientTask(task.id), true) }, origin);
+  }
+  fail(404, "Метод или адрес не найден");
+}
+
 async function route(request, response, origin) {
   const url = new URL(request.url, "http://localhost");
+  if (url.pathname.startsWith("/t/")) return clientTaskRoutes(request, response, url, origin);
+  if (url.pathname === "/client-tasks" || url.pathname.startsWith("/client-tasks/")) return clientTaskAdminRoutes(request, response, url, origin);
   if (url.pathname.startsWith("/admin/"))
     return adminRoutes(request, response, url, origin);
   if (request.method === "POST" && url.pathname === "/telegram/webhook") {
@@ -829,6 +1037,9 @@ const server = http.createServer((request, response) => {
 server.listen(PORT, () =>
   console.log(`Чат слушает порт ${PORT}; база: ${DATABASE_PATH}`),
 );
+const clientNotificationTimer = setInterval(() => void processClientNotifications(), 60_000);
+clientNotificationTimer.unref();
+void processClientNotifications();
 
 function shutdown() {
   server.close(() => {
