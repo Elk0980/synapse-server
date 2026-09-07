@@ -65,7 +65,8 @@
   const bookedHTML = (lead) => {
     if (!Array.isArray(lead.stageHistory) || !lead.stageHistory.length) return missingHTML();
     const bookedStages = new Set(["записан", "пришёл", "продажа"]);
-    return lead.stageHistory.some((entry) => bookedStages.has(entry?.toStage)) ? "да" : "нет";
+    return lead.stageHistory.some((entry) => [entry?.fromStage, entry?.toStage]
+      .some((stage) => bookedStages.has(String(stage ?? "").trim().toLowerCase()))) ? "да" : "нет";
   };
   const leadDetailsHTML = (lead, className = "") => `<dl class="chat-lead-details${className ? ` ${className}` : ""}">
     <div><dt>Первый вопрос</dt><dd>${fieldValueHTML(lead.firstQuestion)}</dd></div>
