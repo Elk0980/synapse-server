@@ -31,6 +31,11 @@ test('deriveSource normalizes UTM and known referrer hosts', () => {
 });
 
 test('events, external snapshots, attribution and analytics work together', async (context) => {
+  const moscowDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit',
+  });
+  const today = moscowDate.format(new Date());
+  const previousDay = moscowDate.format(new Date(Date.now() - 24 * 60 * 60 * 1000));
   const directory = await mkdtemp(path.join(tmpdir(), 'crm-analytics-'));
   const databasePath = path.join(directory, 'crm.sqlite');
   const apiKey = randomBytes(24).toString('hex');
@@ -75,33 +80,33 @@ test('events, external snapshots, attribution and analytics work together', asyn
   })).status, 201);
   const visit = {
     type: 'visit', companyCode: 'analytics_co', clientId: 'visitor-1',
-    page: '/contacts', referrer: 'https://2gis.ru/moscow', ts: '2026-09-05T10:00:00Z',
+    page: '/contacts', referrer: 'https://2gis.ru/moscow', ts: `${today}T10:00:00Z`,
   };
   assert.equal((await request('POST', '/events', visit, false)).status, 202);
   assert.equal((await request('POST', '/events', visit, false)).status, 202);
   assert.equal((await request('POST', '/events', {
-    ...visit, type: 'click', target: 'phone', ts: '2026-09-05T10:05:00Z',
+    ...visit, type: 'click', target: 'phone', ts: `${today}T10:05:00Z`,
   }, false)).status, 202);
   assert.equal((await request('POST', '/events', {
-    ...visit, clientId: 'direct-visitor', referrer: '', ts: '2026-09-05T10:10:00Z',
+    ...visit, clientId: 'direct-visitor', referrer: '', ts: `${today}T10:10:00Z`,
   }, false)).status, 202);
   assert.equal((await request('POST', '/events', {
     ...visit, companyCode: 'missing',
   }, false)).status, 400);
   const stats = {
     source: '2gis', companyCode: 'analytics_co', note: 'daily import',
-    rows: [{ date: '2026-09-05', pageViews: 10, calls: 2 }],
+    rows: [{ date: today, pageViews: 10, calls: 2 }],
   };
   assert.equal((await request('POST', '/external-stats', stats)).body.upserted, 1);
   stats.rows[0].pageViews = 12;
   await request('POST', '/external-stats', stats);
   const external = await request(
-    'GET', '/external-stats?source=2gis&companyCode=analytics_co&from=2026-09-05&to=2026-09-05'
+    'GET', `/external-stats?source=2gis&companyCode=analytics_co&from=${today}&to=${today}`
   );
   assert.equal(external.body.rows.length, 1);
   assert.equal(external.body.rows[0].metrics.pageViews, 12);
   assert.equal((await request('POST', '/external-stats', {
-    source: 'outside', companyCode: 'analytics_co', rows: [{ date: '2026-08-01', views: 1 }],
+    source: 'outside', companyCode: 'analytics_co', rows: [{ date: previousDay, views: 1 }],
   })).body.upserted, 1);
   const leadFromReferrer = await request('POST', '/leads', {
     name: 'Referrer Lead', contact: '+70000000001', companyCode: 'analytics_co',
@@ -118,7 +123,7 @@ test('events, external snapshots, attribution and analytics work together', asyn
   }, false);
   assert.equal(directLead.body.source, null);
   const dashboard = await request(
-    'GET', '/dashboard?companyCode=analytics_co&from=2026-09-05&to=2026-09-05'
+    'GET', `/dashboard?companyCode=analytics_co&from=${today}&to=${today}`
   );
   assert.deepEqual(dashboard.body.sources, ['2gis', 'direct', 'outside', 'yandex']);
   const source = dashboard.body.sourceStats.find((row) => row.source === '2gis');
@@ -131,12 +136,12 @@ test('events, external snapshots, attribution and analytics work together', asyn
   assert.equal(direct.visits, 1);
   assert.equal(dashboard.body.sourceStats.filter((row) => row.source === 'direct').length, 1);
   const filtered = await request(
-    'GET', '/dashboard?companyCode=analytics_co&source=yandex&from=2026-09-05&to=2026-09-05'
+    'GET', `/dashboard?companyCode=analytics_co&source=yandex&from=${today}&to=${today}`
   );
   assert.deepEqual(filtered.body.sources, ['2gis', 'direct', 'outside', 'yandex']);
   assert.deepEqual(filtered.body.sourceStats.map((row) => row.source), ['yandex']);
   const summary = await request(
-    'GET', '/summary?companyCode=analytics_co&from=2026-09-05&to=2026-09-05'
+    'GET', `/summary?companyCode=analytics_co&from=${today}&to=${today}`
   );
   assert.equal(summary.body.sources[0].source, '2gis');
   assert.equal(summary.body.sources[0].leads, 1);
