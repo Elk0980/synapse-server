@@ -68,8 +68,8 @@
 
 .hugh-compose button,
 .hugh-error button {
-  min-height: 46px;
-  padding-inline: 20px;
+  min-height: var(--cabinet-button-height);
+  padding-inline: var(--cabinet-button-padding-inline);
 }
 
 .hugh-error {
@@ -95,7 +95,7 @@
     width: 100%;
     height: calc(100dvh - 112px);
     min-height: 420px;
-    border-radius: 12px;
+    border-radius: var(--cabinet-card-radius);
   }
 
   .hugh-messages {
@@ -111,7 +111,4 @@
     padding: 10px;
   }
 
-  .hugh-compose button {
-    padding-inline: 12px;
-  }
 }
