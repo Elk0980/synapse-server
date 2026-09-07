@@ -47,42 +47,6 @@
           "multiline": false
         },
         {
-          "key": "pain.p-1",
-          "label": "Текст",
-          "value": "Сколько раз вы обещали себе начать «с понедельника»?",
-          "multiline": false
-        },
-        {
-          "key": "pain.p-2",
-          "label": "Текст",
-          "value": "Сколько диет закончились срывом — и плюс два кило сверху?",
-          "multiline": false
-        },
-        {
-          "key": "pain.p-3",
-          "label": "Текст",
-          "value": "Изнурительные тренировки, брошенные через неделю?",
-          "multiline": false
-        },
-        {
-          "key": "pain.p-4",
-          "label": "Текст",
-          "value": "Платье, которое ждёт, «когда похудею»?",
-          "multiline": false
-        },
-        {
-          "key": "pain.p-5",
-          "label": "Текст",
-          "value": "Фото, где вы себя не узнаёте?",
-          "multiline": false
-        },
-        {
-          "key": "pain.p-6",
-          "label": "Текст",
-          "value": "Лето, к которому опять «не успела»?",
-          "multiline": false
-        },
-        {
           "key": "pain.p-7",
           "label": "Текст",
           "value": "<b>60 дней</b> запретов и приседаний через силу — и сантиметр показывает почти то же самое",
@@ -103,6 +67,108 @@
       ],
       "background": {
         "default": "",
+        "image": null,
+        "opacity": null
+      }
+    },
+    {
+      "id": "pain-frame-1",
+      "title": "Кадр 1 · вопрос",
+      "fields": [
+        {
+          "key": "pain.p-1",
+          "label": "Текст",
+          "value": "Сколько раз вы обещали себе начать «с понедельника»?",
+          "multiline": false
+        }
+      ],
+      "background": {
+        "default": "assets/obj-01-monday.webp",
+        "image": null,
+        "opacity": null
+      }
+    },
+    {
+      "id": "pain-frame-2",
+      "title": "Кадр 2 · вопрос",
+      "fields": [
+        {
+          "key": "pain.p-2",
+          "label": "Текст",
+          "value": "Сколько диет закончились срывом — и плюс два кило сверху?",
+          "multiline": false
+        }
+      ],
+      "background": {
+        "default": "assets/obj-02-diet.webp",
+        "image": null,
+        "opacity": null
+      }
+    },
+    {
+      "id": "pain-frame-3",
+      "title": "Кадр 3 · вопрос",
+      "fields": [
+        {
+          "key": "pain.p-3",
+          "label": "Текст",
+          "value": "Изнурительные тренировки, брошенные через неделю?",
+          "multiline": false
+        }
+      ],
+      "background": {
+        "default": "assets/obj-06-hopeless.webp",
+        "image": null,
+        "opacity": null
+      }
+    },
+    {
+      "id": "pain-frame-4",
+      "title": "Кадр 4 · вопрос",
+      "fields": [
+        {
+          "key": "pain.p-4",
+          "label": "Текст",
+          "value": "Платье, которое ждёт, «когда похудею»?",
+          "multiline": false
+        }
+      ],
+      "background": {
+        "default": "assets/obj-04-oversized-clothes.webp",
+        "image": null,
+        "opacity": null
+      }
+    },
+    {
+      "id": "pain-frame-5",
+      "title": "Кадр 5 · вопрос",
+      "fields": [
+        {
+          "key": "pain.p-5",
+          "label": "Текст",
+          "value": "Фото, где вы себя не узнаёте?",
+          "multiline": false
+        }
+      ],
+      "background": {
+        "default": "assets/obj-05-mirror.webp",
+        "image": null,
+        "opacity": null
+      }
+    },
+    {
+      "id": "pain-frame-6",
+      "title": "Кадр 6 · вопрос",
+      "fields": [
+        {
+          "key": "pain.p-6",
+          "label": "Текст",
+          "value": "Лето, к которому опять «не успела»?",
+          "multiline": false
+        }
+      ],
+      "background": {
+        "default": "assets/obj-03-beach.webp",
         "image": null,
         "opacity": null
       }
@@ -469,18 +535,6 @@
           "label": "Подпись",
           "value": "Первый шаг",
           "multiline": false
-        },
-        {
-          "key": "price.gold-cta-1",
-          "label": "Кнопка первого визита",
-          "value": "Пробный сеанс — 500 ₽",
-          "multiline": false
-        },
-        {
-          "key": "price.gold-cta-2",
-          "label": "Кнопка лазерной эпиляции",
-          "value": "Тотальное бикини — 1 190 ₽",
-          "multiline": false
         }
       ]
     },
@@ -588,18 +642,6 @@
           "key": "contacts.kicker-1",
           "label": "Подпись",
           "value": "Связаться со студией",
-          "multiline": false
-        },
-        {
-          "key": "contacts.contact-main-2",
-          "label": "Кнопка чата",
-          "value": "НАШ ЧАТ",
-          "multiline": false
-        },
-        {
-          "key": "contacts.a-7",
-          "label": "Ссылка",
-          "value": "Telegram",
           "multiline": false
         }
       ]
