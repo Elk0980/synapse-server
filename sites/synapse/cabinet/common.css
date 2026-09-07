@@ -61,7 +61,10 @@ input[type="button"],
 input[type="submit"],
 input[type="reset"],
 .plain-button {
+  box-sizing: border-box;
+  height: var(--cabinet-button-height) !important;
   min-height: var(--cabinet-button-height) !important;
+  max-width: 100%;
   padding-inline: var(--cabinet-button-padding-inline) !important;
   border-radius: var(--cabinet-button-radius) !important;
 }

@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b0908">
 <meta name="color-scheme" content="dark">
 <title>Кабинет — Synapse Business</title>
-<link rel="stylesheet" href="cabinet/clients.css?v=20260907-4">
+<link rel="stylesheet" href="cabinet/clients.css?v=20260907-5">
 <script>document.documentElement.classList.replace("no-js", "js");</script>
 <style>
 :root {
@@ -94,10 +94,7 @@ button { color: inherit; }
   background: var(--bg);
 }
 .auth-submit, .logout, .plain-button {
-  min-height: 44px;
-  padding: 10px 16px;
   border: 1px solid rgba(159, 212, 255, 0.4);
-  border-radius: 12px;
   background: rgba(46, 107, 214, 0.2);
   cursor: pointer;
 }
@@ -222,7 +219,7 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
   border-radius: var(--cabinet-card-radius);
   background: rgba(18, 16, 15, 0.9);
 }
-.development { margin: 0; color: var(--muted); font-size: 1.05rem; }
+.development { margin: 0; color: var(--muted); }
 .notice {
   margin: 0 0 20px;
   padding: 14px 16px;
@@ -234,10 +231,7 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .crm-toolbar { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; margin-bottom: 18px; }
 .crm-periods, .crm-filters { display: flex; flex-wrap: wrap; gap: 8px; }
 .crm-period, .crm-filter {
-  min-height: 44px;
-  padding: 8px 12px;
   border: 1px solid var(--line);
-  border-radius: 10px;
   color: var(--text);
   background: var(--surface-soft);
 }
@@ -291,7 +285,6 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .crm-error { color: var(--red); }
 .expense-form { margin-top: 18px; }
 .expense-form label { flex: 1 1 150px; }
-.expense-form button { min-height: 44px; }
 .crm-lead-button { padding: 0; border: 0; color: var(--accent); background: none; cursor: pointer; }
 .lead-details { margin-top: 18px; }
 .lead-details dl { display: grid; grid-template-columns: minmax(130px, 180px) 1fr; gap: 8px 14px; }
@@ -414,7 +407,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   color: var(--text);
   background: var(--surface-soft);
 }
-.crm-entity-toolbar input, .crm-entity-toolbar select, .crm-entity-toolbar button { height: 40px; min-height: 40px; }
+.crm-entity-toolbar input, .crm-entity-toolbar select { height: 40px; min-height: 40px; }
 .crm-entity-toolbar input { min-width: 0; flex: 1 1 220px; }
 .crm-filter-check {
   display: inline-flex;
@@ -877,7 +870,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260907-4";
+  window.SB_CABINET_ASSET_VERSION = "20260907-5";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
