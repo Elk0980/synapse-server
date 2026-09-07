@@ -45,12 +45,33 @@
   };
   const value = (input) => String(input ?? "").trim() ? String(input) : "—";
   const escape = (input) => ctx.escapeHTML(value(input));
+  const hasValue = (input) => Boolean(String(input ?? "").trim());
+  const missingHTML = () => '<span class="chat-field-missing"><strong>—</strong><small>нет данных</small></span>';
+  const fieldValueHTML = (input) => hasValue(input) ? escape(input) : missingHTML();
   const timestamp = (input) => Date.parse(input) || 0;
   const dateLabel = (input) => timestamp(input) ? new Date(input).toLocaleString("ru-RU", {
     day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
   }) : "—";
   const firstValue = (...items) => items.find((item) => String(item ?? "").trim());
   const leadName = (lead) => firstValue(lead.name, lead.contact);
+  const sourceHTML = (lead) => {
+    const attribution = [["utmSource", lead.utmSource], ["utmCampaign", lead.utmCampaign]]
+      .filter(([, item]) => hasValue(item));
+    if (!hasValue(lead.source) && !attribution.length) return missingHTML();
+    return `<span class="chat-source-value">${hasValue(lead.source) ? escape(lead.source) : ""}
+      ${attribution.length ? `<small>${attribution.map(([label, item]) =>
+        `${label}: ${escape(item)}`).join(" · ")}</small>` : ""}</span>`;
+  };
+  const bookedHTML = (lead) => {
+    if (!Array.isArray(lead.stageHistory) || !lead.stageHistory.length) return missingHTML();
+    const bookedStages = new Set(["записан", "пришёл", "продажа"]);
+    return lead.stageHistory.some((entry) => bookedStages.has(entry?.toStage)) ? "да" : "нет";
+  };
+  const leadDetailsHTML = (lead, className = "") => `<dl class="chat-lead-details${className ? ` ${className}` : ""}">
+    <div><dt>Первый вопрос</dt><dd>${fieldValueHTML(lead.firstQuestion)}</dd></div>
+    <div><dt>Источник перехода</dt><dd>${sourceHTML(lead)}</dd></div>
+    <div><dt>Дошло до записи</dt><dd>${bookedHTML(lead)}</dd></div>
+  </dl>`;
   const inScope = (lead, scope) => !scope.companyCode ||
     String(lead.companyCode ?? "").toLowerCase() === String(scope.companyCode).toLowerCase();
   const messagesByTime = (messages) => [...messages].sort((a, b) =>
@@ -89,6 +110,7 @@
         <button type="button" class="plain-button chat-back" data-chat-back>Назад</button>
         <div><h2 tabindex="-1" data-chat-heading>${escape(leadName(lead))}</h2>
           <p>${escape(firstValue(lead.channel, lead.source))}</p></div>
+        ${leadDetailsHTML(lead, "chat-header-details")}
       </header>
       <ol class="chat-messages" aria-label="Сообщения">
         ${lead.messages.map((message) => {
@@ -102,6 +124,7 @@
       </ol>
       <footer class="chat-crm-link">
         <div><span>Этап заявки</span><strong>${escape(lead.stage)}</strong></div>
+        ${leadDetailsHTML(lead, "chat-footer-details")}
         ${ctx.hasPermission("crm.view") ? `<button type="button" class="plain-button"
           data-chat-lead="${escape(lead.id)}">
           Открыть карточку заявки
@@ -227,7 +250,8 @@
         ["Этап заявки", lead.stage], ["Создана", dateLabel(lead.createdAt)], ["Комментарий", lead.comment]];
       card.innerHTML = `<h1>Карточка заявки</h1><h2>${escape(leadName(lead))}</h2>
         <dl class="chat-lead-fields">${fields.map(([label, item]) =>
-          `<div><dt>${label}</dt><dd>${escape(item)}</dd></div>`).join("")}</dl>${back}`;
+          `<div><dt>${label}</dt><dd>${escape(item)}</dd></div>`).join("")}</dl>
+        ${leadDetailsHTML(lead, "chat-card-details")}${back}`;
     } catch (error) {
       if (active()) card.innerHTML = stateHTML(error.message || String(error), true) + back;
     }
