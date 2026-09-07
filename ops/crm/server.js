@@ -117,6 +117,7 @@ migrate(1, () => {
       id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
       is_deleted INTEGER NOT NULL DEFAULT 0 CHECK(is_deleted IN (0, 1)), deleted_at TEXT,
       code TEXT NOT NULL COLLATE NOCASE, name TEXT NOT NULL, industry TEXT, city TEXT, timezone TEXT,
+      owner_scope TEXT NOT NULL COLLATE NOCASE DEFAULT 'synapse-business',
       phone TEXT, email TEXT, website_url TEXT, socials TEXT, pipeline_stage TEXT,
       start_date TEXT, end_date TEXT, preferred_channel TEXT, notes TEXT
     );
@@ -440,6 +441,19 @@ migrate(5, () => {
     DROP TABLE tasks; ALTER TABLE tasks_v5 RENAME TO tasks;`);
   db.prepare("UPDATE sqlite_sequence SET seq = MAX(seq, ?) WHERE name = 'tasks'").run(taskSequence);
   for (const object of taskObjects) db.exec(object.sql);
+});
+
+migrate(6, () => {
+  if (!tableColumns('companies').has('owner_scope')) {
+    db.exec(`ALTER TABLE companies ADD COLUMN owner_scope TEXT NOT NULL COLLATE NOCASE
+      DEFAULT 'synapse-business'`);
+  }
+  db.exec(`
+    UPDATE companies SET owner_scope = 'synapse-business'
+      WHERE owner_scope IS NULL OR trim(owner_scope) = '';
+    CREATE INDEX IF NOT EXISTS companies_owner_scope_idx
+      ON companies(owner_scope COLLATE NOCASE, is_deleted, name);
+  `);
 });
 
 const foreignKeyErrors = db.prepare('PRAGMA foreign_key_check').all();
@@ -887,7 +901,10 @@ function serializeEntity(config, row, brief = false) {
     const value = row[column(config, field)];
     result[field] = JSON_FIELDS.has(field) && value ? JSON.parse(value) : value;
   }
-  if (config.table === 'companies') Object.assign(result, companyPipelineDetails(row.id));
+  if (config.table === 'companies') {
+    result.ownerScope = row.owner_scope;
+    Object.assign(result, companyPipelineDetails(row.id));
+  }
   return result;
 }
 function entityRow(config, id, includeDeleted = false) {
@@ -1173,7 +1190,8 @@ function entityInCompany(config, id, company) {
   if (config.table === 'tasks') found = db.prepare(
     'SELECT 1 FROM tasks WHERE id=? AND company_code=? COLLATE NOCASE'
   ).get(id, company.code);
-  if (config.table === 'companies') found = id === company.id;
+  if (config.table === 'companies') found = db.prepare(`SELECT 1 FROM companies
+    WHERE id=? AND owner_scope=? COLLATE NOCASE AND code<>? COLLATE NOCASE`).get(id, company.code, company.code);
   if (config.table === 'contacts') found = db.prepare(`SELECT 1 FROM contact_companies
     WHERE contact_id=? AND company_id=? AND is_deleted=0`).get(id, company.id);
   if (config.table === 'legal_entities') found = db.prepare(`SELECT 1 FROM company_legal_entities
@@ -1291,8 +1309,8 @@ function listQuery(config, url) {
   const companyCode = url.searchParams.get('companyCode');
   if (companyCode !== null) {
     if (config.table === 'companies') {
-      clauses.push('e.code = ? COLLATE NOCASE');
-      params.push(companyCode);
+      clauses.push('e.owner_scope = ? COLLATE NOCASE AND e.code <> ? COLLATE NOCASE');
+      params.push(companyCode, companyCode);
     } else if (config.table === 'contacts') {
       clauses.push(`EXISTS(SELECT 1 FROM contact_companies scope
         JOIN companies company ON company.id=scope.company_id
@@ -1343,9 +1361,6 @@ async function handleEntityRoutes(request, response, url, cors) {
     }
     if (url.pathname === `/${config.path}` && request.method === 'POST') {
       const body = await readJson(request); let values = validateEntity(config, body);
-      if (company && config.table === 'companies' && values.code !== company.code.toLowerCase()) {
-        fail(403, 'Нельзя создать другую компанию в выбранном контексте');
-      }
       if (config.table === 'tasks') {
         values = { ...config.defaults, ...values };
         if (company) values.companyCode = company.code.toLowerCase();
@@ -1361,6 +1376,10 @@ async function handleEntityRoutes(request, response, url, cors) {
       }
       const now = new Date().toISOString();
       const entries = Object.entries(values); const cols = entries.map(([field]) => column(config, field));
+      if (config.table === 'companies') {
+        cols.push('owner_scope');
+        entries.push(['ownerScope', company ? company.code.toLowerCase() : 'synapse-business']);
+      }
       if (config.table === 'contacts' && values.phone !== undefined) { cols.push('normalized_phone');
         entries.push(['normalizedPhone', values.phone ? normalizeContact(values.phone) : null]); }
       try {
@@ -1397,6 +1416,9 @@ async function handleEntityRoutes(request, response, url, cors) {
     }
     if (match && request.method === 'PATCH') {
       const id = entityId(match[1]); const row = entityRow(config, id, true);
+      if (company && config.table === 'companies' && row.owner_scope.toLowerCase() !== company.code.toLowerCase()) {
+        fail(403, 'Карточка компании принадлежит другой базе', { code: 'FORBIDDEN' });
+      }
       entityInCompany(config, id, company);
       if (row.is_deleted) fail(409, 'Сначала восстановите удалённую карточку', { code: 'DELETED_ENTITY' });
       const body = await readJson(request);
@@ -1426,19 +1448,42 @@ async function handleEntityRoutes(request, response, url, cors) {
     }
     if (match && request.method === 'DELETE') {
       const id = entityId(match[1]); const row = entityRow(config, id, true);
+      if (company && config.table === 'companies' && row.owner_scope.toLowerCase() !== company.code.toLowerCase()) {
+        fail(403, 'Карточка компании принадлежит другой базе', { code: 'FORBIDDEN' });
+      }
       entityInCompany(config, id, company);
       if (!row.is_deleted) { const now = new Date().toISOString(); db.exec('BEGIN IMMEDIATE'); try {
-        db.prepare(`UPDATE ${config.table} SET is_deleted=1,deleted_at=?,updated_at=? WHERE id=?`).run(now, now, id);
+        const scopedSharedContact = company && config.table === 'contacts';
+        if (!scopedSharedContact) {
+          db.prepare(`UPDATE ${config.table} SET is_deleted=1,deleted_at=?,updated_at=? WHERE id=?`).run(now, now, id);
+        }
         const updates = config.table === 'tasks' ? [] : config.table === 'contacts' ?
           [['contact_companies', 'contact_id'], ['contact_legal_entities', 'contact_id']] :
           config.table === 'companies' ?
             [['contact_companies', 'company_id'], ['company_legal_entities', 'company_id']] :
             [['company_legal_entities','legal_entity_id'],['contact_legal_entities','legal_entity_id']];
-        for (const [table, col] of updates) db.prepare(`UPDATE ${table} SET is_deleted=1,deleted_at=?,updated_at=?
-          WHERE ${col}=? AND is_deleted=0`).run(now, now, id); db.exec('COMMIT');
+        for (const [table, col] of updates) {
+          if (scopedSharedContact && table === 'contact_companies') {
+            db.prepare(`UPDATE ${table} SET is_deleted=1,deleted_at=?,updated_at=?
+              WHERE ${col}=? AND company_id=? AND is_deleted=0`).run(now, now, id, company.id);
+          } else if (!scopedSharedContact) {
+            db.prepare(`UPDATE ${table} SET is_deleted=1,deleted_at=?,updated_at=?
+              WHERE ${col}=? AND is_deleted=0`).run(now, now, id);
+          }
+        }
+        if (scopedSharedContact) {
+          const remaining = db.prepare(`SELECT 1 FROM contact_companies
+            WHERE contact_id=? AND is_deleted=0 LIMIT 1`).get(id);
+          if (!remaining) {
+            db.prepare(`UPDATE contacts SET is_deleted=1,deleted_at=?,updated_at=? WHERE id=?`).run(now, now, id);
+            db.prepare(`UPDATE contact_legal_entities SET is_deleted=1,deleted_at=?,updated_at=?
+              WHERE contact_id=? AND is_deleted=0`).run(now, now, id);
+          }
+        }
+        db.exec('COMMIT');
       } catch (error) { db.exec('ROLLBACK'); throw error; } }
       const deleted = entityRow(config, id, true); send(response, 200,
-        { id, isDeleted: true, deletedAt: deleted.deleted_at }, cors); return true;
+        { id, isDeleted: Boolean(deleted.is_deleted), deletedAt: deleted.deleted_at }, cors); return true;
     }
     const restore = url.pathname.match(new RegExp(`^/${config.path}/(\\d+)/restore$`));
     if (restore && request.method === 'POST') { const id = entityId(restore[1]); entityRow(config, id, true);

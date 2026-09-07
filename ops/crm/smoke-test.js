@@ -649,13 +649,45 @@ async function main() {
     WHERE contact_id=? AND company_id=? AND is_deleted=0`).get(scopedContact.body.id, company.body.id).count), 1);
   assert.equal(inspect((db) => db.prepare(`SELECT COUNT(*) count FROM company_legal_entities
     WHERE legal_entity_id=? AND company_id=? AND is_deleted=0`).get(scopedLegal.body.id, company.body.id).count), 1);
+  const clientCompany = await request('POST', `/companies?companyCode=${company.body.code}`, {
+    code: 'qa_company_a_supplier', name: 'QA Company A Supplier',
+  });
+  assert.equal(clientCompany.status, 201);
+  assert.equal(clientCompany.body.ownerScope, company.body.code);
   const scopedCompanies = await request('GET', `/companies?companyCode=${company.body.code.toUpperCase()}`);
-  assert.deepEqual(scopedCompanies.body.companies.map((item) => item.id), [company.body.id]);
+  assert.deepEqual(scopedCompanies.body.companies.map((item) => item.id), [clientCompany.body.id]);
+  assert.equal((await request('PATCH', `/companies/${company.body.id}?companyCode=${company.body.code}`, {
+    name: 'Must stay unchanged',
+  })).status, 403);
+  assert.equal((await request('DELETE',
+    `/companies/${company.body.id}?companyCode=${company.body.code}`)).status, 403);
+
+  const sharedContact = await request('POST', '/contacts', { name: 'QA Shared Contact' });
+  assert.equal((await request('PUT', `/contacts/${sharedContact.body.id}/companies/${company.body.id}`,
+    { role: 'QA A' })).status, 201);
+  assert.equal((await request('PUT', `/contacts/${sharedContact.body.id}/companies/${companyB.body.id}`,
+    { role: 'QA B' })).status, 201);
+  assert.equal((await request('DELETE',
+    `/contacts/${sharedContact.body.id}?companyCode=${company.body.code}`)).status, 200);
+  assert.equal((await request('GET',
+    `/contacts/${sharedContact.body.id}?companyCode=${companyB.body.code}`)).status, 200);
+  assert.equal((await request('GET',
+    `/contacts/${sharedContact.body.id}?companyCode=${company.body.code}`)).status, 404);
+
+  const synapseRelationCount = inspect((db) => db.prepare(`SELECT COUNT(*) count FROM contact_companies
+    WHERE company_id IN (?, ?) AND is_deleted=0`).get(company.body.id, companyB.body.id).count);
+  assert.equal((await request('DELETE',
+    `/companies/${clientCompany.body.id}?companyCode=${company.body.code}`)).status, 200);
+  assert.equal(inspect((db) => db.prepare(`SELECT COUNT(*) count FROM contact_companies
+    WHERE company_id IN (?, ?) AND is_deleted=0`).get(company.body.id, companyB.body.id).count),
+  synapseRelationCount);
+  assert.equal((await request('GET', `/companies/${companyB.body.id}`)).status, 200);
   assert.equal((await request('DELETE',
     `/contacts/${scopedContact.body.id}?companyCode=${company.body.code}`)).status, 200);
   assert.equal((await request('DELETE',
     `/legal-entities/${scopedLegal.body.id}?companyCode=${company.body.code}`)).status, 200);
   console.log('COMPANY_DATABASE_SCOPE=PASS AUTO_RELATIONS=PASS');
+  console.log('CROSS_PROJECT_CONTACT_DELETE=PASS CLIENT_COMPANY_DELETE_ISOLATION=PASS');
   const card = await request('GET', `/companies/${company.body.id}`);
   assert.equal(card.body.contacts[0].relation.role, 'QA changed');
   assert.equal(card.body.primaryLegalEntity.id, legal.body.id);

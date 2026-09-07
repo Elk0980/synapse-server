@@ -266,7 +266,7 @@ const renderEntityList = async (view, reset = false) => {
       data-entity-id="${escapeHTML(record.id)}"><header><h2>${escapeHTML(entityName(record))}
       ${deleted ? '<span class="crm-deleted-mark">удалено</span>' : ""}</h2>
       <div class="client-card-actions"><button class="plain-button" type="button" data-open>Открыть</button>
-      ${listCardAction(record)}</div></header><dl>${details}</dl></article>`;
+      ${listCardAction(view, record)}</div></header><dl>${details}</dl></article>`;
   }).join("");
   const projectCompany = identity.companies?.find((company) => company.id === ctx.selectedProjectId);
   const crmCompany = state.companies.find((company) =>
@@ -348,8 +348,12 @@ const bindEntityList = (view) => {
   });
   bindListActions(view);
 };
-const listCardAction = (record) => {
-  if (!canEditCRM()) return "";
+const companyOwnedByProject = (view, record) => {
+  return view !== "crm-companies" || identity.role === "owner" ||
+    record.ownerScope?.toLowerCase() === ctx.selectedProjectId?.toLowerCase();
+};
+const listCardAction = (view, record) => {
+  if (!canEditCRM() || !companyOwnedByProject(view, record)) return "";
   const deleted = Boolean(record.deletedAt || record.isDeleted || record.deleted);
   return deleted ? '<button class="plain-button" type="button" data-list-restore>Восстановить</button>' :
     '<button class="danger" type="button" data-list-delete>Удалить</button>';
@@ -411,7 +415,7 @@ const renderEntityCard = async (view, id) => {
   content.innerHTML = `<a class="crm-card-back" href="#${view}" data-entity-back>← К списку</a>
     <header class="crm-card-header"><div><h2>${escapeHTML(entityName(record))}</h2>
     <p class="crm-card-subtitle">${escapeHTML(entitySubtitle(view, record))}</p></div>
-    <div class="crm-actions">${cardActions(record)}</div></header>
+    <div class="crm-actions">${cardActions(view, record)}</div></header>
     <p class="crm-card-status" data-card-status role="status"></p><dl class="crm-details">
     ${detailsMarkup(config, record, publicFields)}${arrayDetails}</dl>
     ${view === "crm-legal" && canEditCRM() && privateFields.some((field) => record[field])
@@ -427,8 +431,8 @@ const renderEntityCard = async (view, id) => {
   renderRelations(view, record);
   if (view === "crm-companies") loadCompanyLeadCount(record);
 };
-const cardActions = (record) => {
-  if (!canEditCRM()) return "";
+const cardActions = (view, record) => {
+  if (!canEditCRM() || !companyOwnedByProject(view, record)) return "";
   const deleted = Boolean(record.deletedAt || record.isDeleted || record.deleted);
   return deleted ? '<button class="plain-button" type="button" data-restore>Восстановить</button>' :
     '<button class="plain-button" type="button" data-edit>Изменить</button>' +

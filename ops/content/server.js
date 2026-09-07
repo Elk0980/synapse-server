@@ -340,6 +340,24 @@ async function crmLeadCompany(id) {
   }
 }
 
+async function crmCompanyOwnerScope(id) {
+  let upstreamResponse;
+  try {
+    upstreamResponse = await fetch(`${CRM_URL}/companies/${id}?includeDeleted=true`, {
+      headers: { 'x-api-key': CRM_API_KEY },
+    });
+  } catch (error) {
+    console.error('content: ошибка проверки владельца карточки CRM:', error);
+    fail(502, 'CRM недоступна');
+  }
+  if (!upstreamResponse.ok) fail(404, 'Компания не найдена');
+  try {
+    return (await upstreamResponse.json()).ownerScope;
+  } catch {
+    fail(502, 'Некорректный ответ CRM');
+  }
+}
+
 async function proxyCrm(request, response, url, cors) {
   const initialSession = requireSession(request);
   const identity = initialSession.user;
@@ -398,6 +416,14 @@ async function proxyCrm(request, response, url, cors) {
     try { body = JSON.parse(requestBody.toString('utf8')); } catch { fail(400, 'Некорректный JSON'); }
     if (body && typeof body === 'object' && Object.hasOwn(body, 'pipelineStage')) {
       fail(403, 'Воронка и сервисные поля доступны только владельцу');
+    }
+  }
+  const companyMutation = crmPath.match(/^\/companies\/(\d+)$/);
+  if (identity.role !== 'owner' && companyMutation && ['PATCH', 'DELETE'].includes(request.method)) {
+    const ownerScope = await crmCompanyOwnerScope(companyMutation[1]);
+    const requestedCompany = url.searchParams.get('companyCode');
+    if (!requestedCompany || ownerScope?.toLowerCase() !== requestedCompany.toLowerCase()) {
+      fail(403, 'Карточка компании принадлежит другой базе');
     }
   }
   if (identity.role !== 'owner' && leadMatch) {
