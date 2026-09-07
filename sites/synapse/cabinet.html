@@ -822,7 +822,16 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     </section>
     <section class="view-panel" id="settings-view" data-view="settings" hidden>
       <div class="content-header"><h1>Настройки</h1></div>
-      <div class="card"><p class="development">В разработке</p></div>
+      <div class="card settings-hugh" id="settings-hugh" hidden>
+        <div><h2>Хью</h2><p>Выберите источник для каждой роли. Настройки хранятся на сервере.</p></div>
+        <form id="hugh-settings-form">
+          <label><span>Владелец</span><select name="owner"></select></label>
+          <label><span>Клиент</span><select name="client"></select></label>
+          <label><span>Посетитель сайта</span><select name="visitor"></select></label>
+          <div class="settings-actions"><button class="plain-button" type="submit">Сохранить</button>
+            <p id="hugh-settings-status" role="status"></p></div>
+        </form>
+      </div>
     </section>
     <section class="view-panel" id="account-view" data-view="account" hidden>
       <div class="content-header"><h1>Аккаунт</h1></div><div class="card">
@@ -868,7 +877,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260907";
+  window.SB_CABINET_ASSET_VERSION = "20260907-1";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
@@ -876,7 +885,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   };
   const cabinetAssets = ["home", "tasks", "leads", "deals", "clients", "chat", "hugh", "analytics",
     "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account"];
-  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat", "hugh"];
+  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat", "hugh", "settings"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join(""));
