@@ -863,7 +863,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     <h2 class="wide">Добавить задачу</h2>
     <label class="wide">Название *<input name="title" required maxlength="300"></label>
     <label class="wide">Описание<textarea name="description"></textarea></label>
-    <label>Проект<select name="companyCode" data-task-company></select></label>
+    <label>Проект<select name="companyCode" data-task-company required disabled>
+      <option value="">Список проектов ещё не загружен</option>
+    </select></label>
     <label>Исполнитель<select name="assigneeRole" data-task-role></select></label>
     <label>Имя исполнителя<input name="assigneeName" maxlength="200"></label>
     <label>Приоритет<select name="priority" data-task-priority></select></label>
@@ -871,13 +873,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     <label>Статус<select name="status" data-task-status></select></label>
     <div class="crm-actions wide">
       <button type="button" data-task-create-close>Отмена</button>
-      <button class="plain-button" type="submit">Создать</button>
+      <button class="plain-button" type="submit" disabled>Создать</button>
     </div>
     <p class="crm-error wide" role="alert" hidden></p>
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260907-3";
+  window.SB_CABINET_ASSET_VERSION = "20260907-task-projects2";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
@@ -944,7 +946,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 
   const allowedProjectsFor = (profile) => {
     return Array.isArray(profile.companies)
-      ? profile.companies.map((company) => ({ id: company.id, name: company.name })) : [];
+      ? profile.companies.map((company) => {
+        const id = typeof company?.id === "string" ? company.id.trim() : "";
+        return { id, name: company?.name || id };
+      }).filter((company) => company.id) : [];
   };
 
   const projectStorageKey = () => `synapse_cabinet_project_v2:${identity.userId}`;
@@ -1113,6 +1118,12 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   };
   const cabinetContext = () => ({
     identity,
+    get projects() {
+      if (!Array.isArray(identity?.companies)) {
+        throw new Error("Не удалось загрузить список проектов. Обновите страницу или войдите снова.");
+      }
+      return allowedProjects;
+    },
     get selectedProjectId() { return selectedProjectId; },
     get currentView() { return currentView; },
     byId,
