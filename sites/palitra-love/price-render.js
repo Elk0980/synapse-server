@@ -25,8 +25,10 @@
     const description = item.desc ? `<p class="price-card__description">${esc(item.desc)}</p>` : '';
     const note = item.note ? `<p class="note">${esc(item.note)}</p>` : '';
     const star = editor ? opts.starHtml(item) : '';
-    const edit = editor ? opts.editHtml(item) : `<a class="button price-card__button" href="/#zayavka">Заказать под Ваш повод</a>`;
-    return `<article class="pc price-card" id="${esc(item.id)}" data-id="${esc(item.id)}">${star}${photo}<div class="price-card__body"><h3 class="pc__title">${esc(item.title)}</h3>${description}<p class="pc__price">${esc(item.price)}</p>${note}${edit}</div></article>`;
+    const edit = editor ? opts.editHtml(item) : `<a class="button outline price-card__button" href="/#zayavka">Заказать под Ваш повод</a>`;
+    const price = `<p class="pc__price">${esc(item.price)}</p>`;
+    const purchase = editor ? price : `<div class="product-purchase">${price}<a class="button product-telegram" href="https://t.me/palitralovee" target="_blank" rel="noopener">Написать в Telegram</a></div>`;
+    return `<article class="pc price-card" id="${esc(item.id)}" data-id="${esc(item.id)}">${star}${photo}<div class="price-card__body"><h3 class="pc__title">${esc(item.title)}</h3>${description}${purchase}${note}${edit}</div></article>`;
   }
   function renderSections(data, opts = {}) {
     return (data.categories || []).filter((cat) => opts.editor || (cat.items || []).length).map((cat) => {
