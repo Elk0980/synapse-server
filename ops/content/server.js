@@ -376,6 +376,8 @@ async function proxyCrm(request, response, url, cors) {
   const initialSession = requireSession(request);
   const identity = initialSession.user;
   const readOnly = request.method === 'GET';
+  const crmPath = url.pathname.slice('/content/crm'.length) || '/';
+  const analyticsPath = new Set(['/dashboard', '/summary', '/external-stats']).has(crmPath);
   let session = initialSession;
   if (identity.role !== 'owner' && identity.companyCodes.length === 0) {
     fail(403, 'Аккаунту не назначена компания');
@@ -383,15 +385,16 @@ async function proxyCrm(request, response, url, cors) {
   if (identity.role !== 'owner') {
     if (readOnly && identity.permissions.includes('crm.view')) {
       session = requirePermission(request, 'crm.view');
-    } else if (readOnly) {
+    } else if (readOnly && analyticsPath) {
       session = requirePermission(request, 'analytics.view');
+    } else if (readOnly) {
+      fail(403, 'Нет доступа к CRM');
     } else {
       session = requirePermission(request, 'crm.edit');
     }
   }
   if (!readOnly) requireCsrf(request, session);
 
-  const crmPath = url.pathname.slice('/content/crm'.length) || '/';
   const clientDatabasePath = /^\/(?:contacts|companies|legal-entities|tasks)(?:\/|$)/.test(crmPath);
   const companyOverview = /^\/companies\/\d+\/overview$/.test(crmPath);
   const ownerOnlyPipelinePath = /^\/(?:pipeline-stages|pipelines|pipeline-rules)(?:\/|$)/.test(crmPath) ||

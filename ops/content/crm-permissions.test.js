@@ -115,6 +115,11 @@ test('CRM proxy restricts pipelines to the owner and preserves company-scoped ed
   assert.equal(other.status, 201);
   assert.equal(own.status, 201);
   assert.equal(own.body.id, 2);
+  await t.test('analytics-only access is limited to analytics routes', async () => {
+    assert.equal((await crm(viewer, 'GET', '/dashboard')).status, 200);
+    assert.equal((await crm(viewer, 'GET', '/contacts')).status, 403);
+    assert.equal((await crm(viewer, 'GET', '/tasks')).status, 403);
+  });
   await t.test('task transfers require crm.edit and access to both projects', async () => {
     const task = await crm(owner, 'POST', '/tasks', { title: 'QA Transfer', companyCode: 'alvi' });
     assert.equal(task.status, 201, JSON.stringify(task.body));
