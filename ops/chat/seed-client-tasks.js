@@ -7,6 +7,7 @@ const path = require("node:path");
 const apiKey = process.env.CHAT_ADMIN_KEY || "";
 const baseUrl = process.env.CHAT_INTERNAL_URL || `http://127.0.0.1:${process.env.PORT || "8080"}`;
 const seedPath = path.join(__dirname, "seed-client-tasks.json");
+const dryRun = process.argv.includes("--dry-run");
 
 async function request(method, pathname, body) {
   const response = await fetch(`${baseUrl}${pathname}`, {
@@ -21,7 +22,19 @@ async function request(method, pathname, body) {
 
 async function main() {
   if (!apiKey) throw new Error("CHAT_ADMIN_KEY не задан в окружении контейнера");
-  const tasks = JSON.parse(await readFile(seedPath, "utf8"));
+  let seed;
+  try {
+    seed = await readFile(seedPath, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      throw new Error(
+        `Файл с задачами не найден: ${seedPath}. ` +
+        "Создайте его рядом со скриптом, скопировав seed-client-tasks.example.json в seed-client-tasks.json.",
+      );
+    }
+    throw error;
+  }
+  const tasks = JSON.parse(seed);
   if (!Array.isArray(tasks)) throw new Error("seed-client-tasks.json должен содержать массив");
   const current = (await request("GET", "/client-tasks")).tasks;
   const byKey = new Map(current.map((task) => [`${task.company}\0${task.title}`, task]));
@@ -33,12 +46,14 @@ async function main() {
     };
     const existing = byKey.get(`${item.company}\0${item.title}`);
     if (existing) {
-      await request("PATCH", `/client-tasks/${existing.id}`, payload);
-      console.log(`обновлено: ${item.company} — ${item.title}`);
+      if (!dryRun) await request("PATCH", `/client-tasks/${existing.id}`, payload);
+      console.log(`${dryRun ? "будет обновлено" : "обновлено"}: ${item.company} — ${item.title}`);
     } else {
-      const created = await request("POST", "/client-tasks", payload);
-      byKey.set(`${item.company}\0${item.title}`, created.task);
-      console.log(`создано: ${item.company} — ${item.title}`);
+      if (!dryRun) {
+        const created = await request("POST", "/client-tasks", payload);
+        byKey.set(`${item.company}\0${item.title}`, created.task);
+      }
+      console.log(`${dryRun ? "будет создано" : "создано"}: ${item.company} — ${item.title}`);
     }
   }
 }
