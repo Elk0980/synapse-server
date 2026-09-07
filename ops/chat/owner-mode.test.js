@@ -26,10 +26,15 @@ async function get(url, headers = {}) {
   return { status: response.status, body: await response.json() };
 }
 
-test("owner questions stay pending until an operator replies", async (t) => {
+test("owner receives a CRM summary without creating a lead", async (t) => {
   const crmRequests = [];
+  let crmAvailable = true;
   const crm = http.createServer((request, response) => {
     crmRequests.push({ method: request.method, url: request.url });
+    if (!crmAvailable) {
+      response.writeHead(503, { "content-type": "application/json" });
+      return response.end(JSON.stringify({ error: "CRM unavailable 503" }));
+    }
     response.writeHead(200, { "content-type": "application/json" });
     if (request.url.startsWith("/dashboard")) {
       return response.end(JSON.stringify({
@@ -102,39 +107,36 @@ test("owner questions stay pending until an operator replies", async (t) => {
   );
   assert.equal(ownerReply.status, 201);
   assert.equal(ownerReply.body.owner, true);
-  assert.equal(ownerReply.body.reply, undefined);
+  assert.equal(
+    ownerReply.body.reply,
+    "Сводка по проекту за последние 30 дней:\n" +
+      "Заявки: 12\nЗадачи: 4\nСделки: 3\nВыручка: 125\u00a0000 ₽",
+  );
+  assert.deepEqual(crmRequests.map(({ method, url }) => ({ method, url })), [
+    { method: "GET", url: "/dashboard?period=30d" },
+    { method: "GET", url: "/tasks/summary" },
+  ]);
 
   const unauthorizedPending = await get(`${base}/owner/pending`);
   assert.equal(unauthorizedPending.status, 401);
 
   let pending = await get(`${base}/owner/pending`, ownerHeaders);
   assert.equal(pending.status, 200);
-  assert.deepEqual(pending.body.pending.map((item) => ({
-    conversationId: item.conversationId,
-    text: item.text,
-  })), [{
-    conversationId: ownerConversation.body.id,
-    text: "Я Владислав, мой телефон +7 999 123-45-67. Нужен план проекта.",
-  }]);
+  assert.deepEqual(pending.body.pending, []);
 
-  const emptyOwnerReply = await request(
+  crmAvailable = false;
+  const unavailableOwnerReply = await request(
     `${base}/conversations/${ownerConversation.body.id}/messages`,
     { text: "А сейчас?" },
     ownerHeaders,
   );
-  assert.equal(emptyOwnerReply.status, 201);
-  pending = await get(`${base}/owner/pending`, ownerHeaders);
-  assert.deepEqual(pending.body.pending.map(({ text }) => text), [
-    "Я Владислав, мой телефон +7 999 123-45-67. Нужен план проекта.",
-    "А сейчас?",
-  ]);
-
-  const operatorReply = await request(
-    `${base}/conversations/${ownerConversation.body.id}/operator`,
-    { text: "План готов." },
-    ownerHeaders,
+  assert.equal(unavailableOwnerReply.status, 201);
+  assert.equal(unavailableOwnerReply.body.owner, true);
+  assert.equal(
+    unavailableOwnerReply.body.reply,
+    "Нет данных из CRM: не удалось получить сводку по проекту.",
   );
-  assert.equal(operatorReply.status, 201);
+  assert.doesNotMatch(unavailableOwnerReply.body.reply, /\d/);
   pending = await get(`${base}/owner/pending`, ownerHeaders);
   assert.deepEqual(pending.body.pending, []);
 
@@ -148,5 +150,5 @@ test("owner questions stay pending until an operator replies", async (t) => {
   );
   assert.equal(visitorReply.body.owner, false);
   assert.match(visitorReply.body.reply, /как к вам обращаться/i);
-  assert.equal(crmRequests.length, 0);
+  assert.equal(crmRequests.filter(({ method }) => method === "POST").length, 0);
 });

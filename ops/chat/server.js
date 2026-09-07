@@ -1054,27 +1054,26 @@ async function route(request, response, origin) {
     const text = optionalString(body.text, "text");
     if (!text) fail(400, "Поле «text» обязательно");
     addMessage(row, text, "visitor", null, null, true);
-    if (owner) {
-      return send(
-        response,
-        201,
-        { owner: true, conversation: serialize(getConversation.get(row.id)) },
-        origin,
-      );
-    }
-    await notifyOwner(getConversation.get(row.id), text);
+    if (!owner) await notifyOwner(getConversation.get(row.id), text);
     const all = getMessages.all(row.id);
-    const data = contactData(all);
+    const data = owner ? null : contactData(all);
     let leadCreated = false;
-    if (!row.lead_id && data.name && data.phone && data.firstQuestion) {
+    if (!owner && !row.lead_id && data.name && data.phone && data.firstQuestion) {
       try {
         leadCreated = await createLead(row, data);
       } catch (error) {
         console.error("Не удалось создать заявку в CRM:", error.message);
       }
     }
-    let reply = scriptedReply(data, leadCreated);
-    if (MODEL_API_URL && MODEL_API_KEY && !leadCreated) {
+    let reply = owner ? OWNER_SCRIPT.fallback : scriptedReply(data, leadCreated);
+    if (owner) {
+      try {
+        reply = await ownerSummary(row);
+      } catch (error) {
+        console.error("Не удалось получить сводку из CRM:", error.message);
+        reply = "Нет данных из CRM: не удалось получить сводку по проекту.";
+      }
+    } else if (MODEL_API_URL && MODEL_API_KEY && !leadCreated) {
       try {
         reply = await modelReply(all, false);
       } catch (error) {
