@@ -12,6 +12,7 @@ const crypto = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 const { createAuthStore } = require('./auth-store');
 const { createSiteStore } = require('./site-store');
+const { createHughSettingsStore } = require('./hugh-settings-store');
 const { hashPassword, verifyPassword } = require('./passwords');
 
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
@@ -95,6 +96,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS documents_key_idx ON documents(key, version DESC);
 `);
 const authStore = createAuthStore(db, process.env.AUTH_USERS || '');
+const hughSettingsStore = createHughSettingsStore(db);
 
 const latestStmt = db.prepare('SELECT * FROM documents WHERE key = ? ORDER BY version DESC LIMIT 1');
 const byVersionStmt = db.prepare('SELECT * FROM documents WHERE key = ? AND version = ?');
@@ -499,6 +501,18 @@ const server = http.createServer(async (request, response) => {
 
     if (url.pathname === '/content/crm' || url.pathname.startsWith('/content/crm/')) {
       return await proxyCrm(request, response, url, cors);
+    }
+    if (url.pathname === '/content/admin/hugh-settings') {
+      const session = requireSession(request);
+      if (session.user.role !== 'owner') fail(403, 'Доступно только владельцу');
+      if (request.method === 'GET') return reply(200, hughSettingsStore.get());
+      if (request.method === 'PUT') {
+        requireCsrf(request, session);
+        const body = await readJson(request);
+        if (Object.keys(body).join(',') !== 'settings') fail(400, 'Переданы лишние поля');
+        return reply(200, hughSettingsStore.save(body.settings, session.user.id));
+      }
+      fail(405, 'Метод не поддерживается');
     }
     if (url.pathname === '/content/hugh' || url.pathname.startsWith('/content/hugh/')) {
       return await proxyChat(request, response, url, cors);
