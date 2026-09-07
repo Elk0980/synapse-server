@@ -6,7 +6,7 @@
   const root = document.documentElement;
   const header = document.querySelector('header');
   const cookie = document.querySelector('.cookie');
-  const content = hero.querySelector('.hero-main');
+  const content = document.querySelector('.hero-main');
   const updateLayout = () => {
     root.style.setProperty('--header-height', `${header?.getBoundingClientRect().height || 0}px`);
     root.style.setProperty('--hero-content-height', `${Math.ceil(content?.getBoundingClientRect().height || 0) + 32}px`);
@@ -49,13 +49,17 @@
     });
   };
 
-  const showPoster = (failed = false) => {
+  // Autoplay policy and a pending download are not evidence of a broken video.
+  const hasMediaError = () => Boolean(video.error) || video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE;
+
+  const showPoster = () => {
     ++attempt;
     clearTimeout(playbackTimer);
     video.pause();
     video.hidden = true;
     if (pause) pause.hidden = true;
     if (status) {
+      const failed = hasMediaError();
       status.textContent = failed ? 'Видео недоступно. Можно написать в Telegram или оставить заявку.' : '';
       status.hidden = !failed;
     }
@@ -67,15 +71,19 @@
     const currentAttempt = ++attempt;
     clearTimeout(playbackTimer);
     video.hidden = false;
-    if (status) status.hidden = true;
-    // A rejected autoplay, unavailable file or pending download leaves a usable poster.
-    const failed = () => { if (currentAttempt === attempt) showPoster(true); };
-    playbackTimer = window.setTimeout(failed, 8000);
+    if (status) {
+      status.textContent = '';
+      status.hidden = true;
+    }
+    // A play() rejection or timeout returns to the poster. Only media state can
+    // justify an error message; the existing replay button permits a user gesture.
+    const fallback = () => { if (currentAttempt === attempt) showPoster(); };
+    playbackTimer = window.setTimeout(fallback, 8000);
     try {
       const playback = video.play();
-      if (playback?.catch) playback.catch(failed);
+      if (playback?.catch) playback.catch(fallback);
     } catch {
-      failed();
+      fallback();
     }
   };
 
@@ -92,7 +100,7 @@
   video.addEventListener('timeupdate', updateOverlays);
   video.addEventListener('seeked', updateOverlays);
   video.addEventListener('ended', startLoop);
-  video.addEventListener('error', () => showPoster(true));
+  video.addEventListener('error', showPoster);
   video.addEventListener('playing', () => {
     clearTimeout(playbackTimer);
     if (pause) {

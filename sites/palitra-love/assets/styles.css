@@ -24,10 +24,11 @@ body[data-page="home"]{padding-bottom:var(--cookie-space,0px)}
 body[data-page="home"] #page-loader{display:none!important}
 body[data-page="home"] [hidden]{display:none!important}
 body[data-page="home"] #zayavka,body[data-page="home"] #hero-content{scroll-margin-top:calc(var(--header-height,0px) + 16px)}
+.hero-shell{position:relative;padding:0;background:#0d2118;color:#fff;isolation:isolate}
 .hero{position:relative;display:flex;align-items:center;width:100%;height:min(56.25vw,calc(100svh - var(--header-height,0px) - var(--cookie-space,0px)));min-height:var(--hero-content-height,420px);padding:0;overflow:clip;background:#0d2118;color:#fff;isolation:isolate}
-.hero-stage{position:absolute;top:50%;left:50%;height:100%;aspect-ratio:16/9;background:#0d2118 url('/assets/video/hero-poster.jpg') center/cover no-repeat;transform:translate(-50%,-50%);overflow:hidden}
+.hero-stage{position:absolute;top:50%;left:50%;height:max(100%,56.25vw);aspect-ratio:16/9;background:#0d2118 url('/assets/video/hero-poster.jpg') center/cover no-repeat;transform:translate(-50%,-50%);overflow:hidden}
 .hero-stage video{position:absolute;z-index:1;inset:0;display:block;width:100%;height:100%;object-fit:cover}
-.hero-main{position:relative;z-index:4;width:44%;max-width:640px;margin-left:3%;padding:24px;background:rgba(13,33,24,.92);border-radius:4px}
+.hero-main{position:absolute;top:50%;left:3%;transform:translateY(-50%);z-index:4;width:44%;max-width:640px;margin:0;padding:24px;background:rgba(13,33,24,.92);border-radius:4px}
 #hero-title{margin:0;font:700 clamp(26px,2.7vw,46px)/1.12 Georgia,serif;text-wrap:pretty}
 .hero-subtitle{margin:12px 0 0;font-size:17px;line-height:1.4}
 .hero-actions{display:grid;gap:8px;max-width:360px;margin-top:18px}
@@ -37,7 +38,7 @@ body[data-page="home"] #zayavka,body[data-page="home"] #hero-content{scroll-marg
 .hero-playback{display:flex;align-items:center;flex-wrap:wrap;gap:0 12px;margin-top:8px}
 .hero-playback button{min-height:44px;padding:8px 0;background:transparent;color:#fff;font:400 14px/1.3 Arial,sans-serif;text-align:left;text-decoration:underline;text-underline-offset:4px}
 .hero-video-status{margin:4px 0 0;font-size:14px;line-height:1.3}
-.hero :focus-visible,.contact-actions a:focus-visible{outline:3px solid #b8c97d;outline-offset:4px}
+.hero-shell :focus-visible,.contact-actions a:focus-visible{outline:3px solid #b8c97d;outline-offset:4px}
 .hero-overlay{position:absolute;z-index:2;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .3s ease}
 .hero-overlay.is-visible{opacity:1;visibility:visible}
 /* Story captions stay in the right half, separate from the permanent offer. */
@@ -68,9 +69,9 @@ body[data-page="home"] .cookie button{min-height:44px;padding:8px 16px}
 @media(max-width:1100px){.brand-lockup h1{display:none}}
 @media(min-width:801px) and (max-width:1100px){nav{gap:16px}.navlinks{gap:10px;font-size:14px}}
 @media(max-width:800px){
-  .hero{display:block;height:auto;min-height:0}
+  .hero{display:block;height:auto;min-height:0;aspect-ratio:auto}
   .hero-stage{position:relative;top:auto;left:auto;width:100%;height:auto;aspect-ratio:16/9;transform:none}
-  .hero-main{width:100%;max-width:none;margin:0;padding:16px;background:#0d2118;border-radius:0}
+  .hero-main{position:relative;top:auto;left:auto;transform:none;width:100%;max-width:none;margin:0;padding:16px;background:#0d2118;border-radius:0}
   #hero-title{font-size:clamp(24px,4.2vw,30px)}
   .hero-subtitle{margin-top:8px;font-size:15px}
   .hero-actions{max-width:none;margin-top:14px}
