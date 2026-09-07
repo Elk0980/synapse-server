@@ -35,6 +35,7 @@ const CRM_URL = (process.env.CRM_URL || 'http://crm:8080').replace(/\/$/, '');
 const CRM_API_KEY = (process.env.CRM_API_KEY || '').trim();
 const CHAT_URL = (process.env.CHAT_URL || 'http://chat:8080').replace(/\/$/, '');
 const CHAT_API_KEY = (process.env.CHAT_API_KEY || '').trim();
+const CRM_IDENTITY_HEADER = 'x-synapse-crm-identity';
 const loginFailures = new Map();
 
 if (!(process.env.SESSION_SECRET || '').trim()) {
@@ -48,6 +49,15 @@ function publicIdentity(identity) {
     permissions: identity.permissions,
     sites: identity.companies.map((company) => company.contentSiteId).filter(Boolean),
   };
+}
+
+function crmIdentityHeader(identity) {
+  return Buffer.from(JSON.stringify({
+    v: 1,
+    userId: identity.id,
+    permissions: identity.permissions,
+    companyCodes: identity.companyCodes,
+  })).toString('base64url');
 }
 
 function b64url(value) { return Buffer.from(value).toString('base64url'); }
@@ -446,6 +456,9 @@ async function proxyCrm(request, response, url, cors) {
   const target = new URL(`${CRM_URL}${crmPath}${url.search}`);
   const headers = { ...request.headers, host: target.host, 'x-api-key': CRM_API_KEY };
   delete headers.cookie;
+  // CRM accepts this header as trusted context, so caller-supplied claims must never pass through.
+  delete headers[CRM_IDENTITY_HEADER];
+  headers[CRM_IDENTITY_HEADER] = crmIdentityHeader(identity);
   if (requestBody) headers['content-length'] = requestBody.length;
   const upstream = http.request(target, { method: request.method, headers }, (upstreamResponse) => {
     const responseHeaders = { ...upstreamResponse.headers, ...cors };

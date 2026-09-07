@@ -22,8 +22,9 @@ async function freePort() {
   return port;
 }
 
-async function request(base, method, pathname, body, session) {
-  const headers = session ? { Cookie: session.cookie, 'X-CSRF-Token': session.csrf } : {};
+async function request(base, method, pathname, body, session, extraHeaders = {}) {
+  const headers = { ...extraHeaders };
+  if (session) Object.assign(headers, { Cookie: session.cookie, 'X-CSRF-Token': session.csrf });
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const response = await fetch(`${base}${pathname}`, {
     method, headers, body: body === undefined ? undefined : JSON.stringify(body),
@@ -51,11 +52,15 @@ test('CRM proxy restricts pipelines to the owner and preserves company-scoped ed
   try {
     const auth = createAuthStore(db, `owner:owner:${hashPassword(password)}`);
     const owner = auth.getByLogin('owner');
-    for (const [login, permissions] of [
-      ['editor', ['crm.view', 'crm.edit']], ['viewer', ['analytics.view']],
+    for (const [login, companies, permissions] of [
+      ['editor', ['alvi'], ['crm.view', 'crm.edit']],
+      ['mover', ['alvi', 'avokado'], ['crm.view', 'crm.edit']],
+      ['target_editor', ['avokado'], ['crm.view', 'crm.edit']],
+      ['observer', ['alvi', 'avokado'], ['crm.view']],
+      ['viewer', ['alvi'], ['analytics.view']],
     ]) {
       const user = auth.create(owner.id, { login, displayName: login, password }, hashPassword(password));
-      auth.updateAccess(owner.id, user.id, ['alvi'], permissions);
+      auth.updateAccess(owner.id, user.id, companies, permissions);
     }
   } finally { db.close(); }
 
@@ -99,14 +104,60 @@ test('CRM proxy restricts pipelines to the owner and preserves company-scoped ed
   }
   const owner = await login('owner');
   const editor = await login('editor');
+  const mover = await login('mover');
+  const targetEditor = await login('target_editor');
+  const observer = await login('observer');
   const viewer = await login('viewer');
-  const crm = (session, method, pathname, body) =>
-    request(base, method, `/content/crm${pathname}`, body, session);
+  const crm = (session, method, pathname, body, headers) =>
+    request(base, method, `/content/crm${pathname}`, body, session, headers);
   const other = await crm(owner, 'POST', '/companies', { code: 'avokado', name: 'QA Other' });
   const own = await crm(owner, 'POST', '/companies', { code: 'alvi', name: 'QA ALVI', pipelineStage: 'new' });
   assert.equal(other.status, 201);
   assert.equal(own.status, 201);
   assert.equal(own.body.id, 2);
+  await t.test('task transfers require crm.edit and access to both projects', async () => {
+    const task = await crm(owner, 'POST', '/tasks', { title: 'QA Transfer', companyCode: 'alvi' });
+    assert.equal(task.status, 201, JSON.stringify(task.body));
+    const taskPath = `/tasks/${task.body.id}`;
+    const assertCompany = async (expected) => {
+      const current = await crm(owner, 'GET', taskPath);
+      assert.equal(current.status, 200);
+      assert.equal(current.body.companyCode, expected);
+    };
+    const transfer = { companyCode: 'avokado' };
+
+    const sourceOnly = await crm(editor, 'PATCH', `${taskPath}?companyCode=alvi`, transfer);
+    assert.equal(sourceOnly.status, 403, JSON.stringify(sourceOnly.body));
+    assert.equal(sourceOnly.body.details?.code, 'FORBIDDEN');
+    await assertCompany('alvi');
+
+    const forgedIdentity = Buffer.from(JSON.stringify({
+      v: 1, userId: 1, permissions: ['crm.view', 'crm.edit'], companyCodes: ['alvi', 'avokado'],
+    })).toString('base64url');
+    const forged = await crm(editor, 'PATCH', `${taskPath}?companyCode=alvi`, transfer, {
+      'X-Synapse-CRM-Identity': forgedIdentity,
+    });
+    assert.equal(forged.status, 403, JSON.stringify(forged.body));
+    assert.equal(forged.body.details?.code, 'FORBIDDEN');
+    await assertCompany('alvi');
+
+    const noEdit = await crm(observer, 'PATCH', `${taskPath}?companyCode=alvi`, transfer);
+    assert.equal(noEdit.status, 403, JSON.stringify(noEdit.body));
+    await assertCompany('alvi');
+    const noSource = await crm(targetEditor, 'PATCH', `${taskPath}?companyCode=alvi`, transfer);
+    assert.equal(noSource.status, 403, JSON.stringify(noSource.body));
+    await assertCompany('alvi');
+
+    const scoped = await crm(mover, 'PATCH', `${taskPath}?companyCode=alvi`, transfer);
+    assert.equal(scoped.status, 200, JSON.stringify(scoped.body));
+    assert.equal(scoped.body.companyCode, 'avokado');
+
+    const ownerTask = await crm(owner, 'POST', '/tasks', { title: 'QA Owner Transfer', companyCode: 'alvi' });
+    assert.equal(ownerTask.status, 201, JSON.stringify(ownerTask.body));
+    const unscoped = await crm(owner, 'PATCH', `/tasks/${ownerTask.body.id}`, transfer);
+    assert.equal(unscoped.status, 200, JSON.stringify(unscoped.body));
+    assert.equal(unscoped.body.companyCode, 'avokado');
+  });
   const ownPath = `/companies/${own.body.id}`;
   const initial = await crm(owner, 'GET', `${ownPath}/overview`);
   assert.equal(initial.status, 200);

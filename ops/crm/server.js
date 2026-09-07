@@ -14,6 +14,8 @@ const ALLOWED_ORIGINS = new Set(
 );
 const RATE_LIMIT_WINDOW_MS = Number.parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10);
 const RATE_LIMIT_MAX = Number.parseInt(process.env.RATE_LIMIT_MAX || '120', 10);
+const CRM_IDENTITY_HEADER = 'x-synapse-crm-identity';
+const CRM_IDENTITY_MAX_LENGTH = 4096;
 const STAGES = ['новая', 'в работе', 'записан', 'пришёл', 'продажа', 'отказ'];
 const STAGE_RANK = new Map(STAGES.map((stage, index) => [stage, index]));
 const CABINET_STAGES = new Map([
@@ -1170,6 +1172,42 @@ function requireApiKey(request) {
   if (request.headers['x-api-key'] !== API_KEY) fail(401, 'Неверный API-ключ');
 }
 
+function crmIdentity(request) {
+  const encoded = request.headers[CRM_IDENTITY_HEADER];
+  if (typeof encoded !== 'string' || encoded.length < 1 || encoded.length > CRM_IDENTITY_MAX_LENGTH ||
+      !/^[A-Za-z0-9_-]+$/.test(encoded)) return null;
+  let identity;
+  try {
+    const bytes = Buffer.from(encoded, 'base64url');
+    if (bytes.toString('base64url') !== encoded) return null;
+    identity = JSON.parse(bytes.toString('utf8'));
+  } catch {
+    return null;
+  }
+  if (!identity || Array.isArray(identity) || typeof identity !== 'object' || identity.v !== 1 ||
+      !Number.isSafeInteger(identity.userId) || identity.userId < 1 ||
+      Object.keys(identity).sort().join(',') !== 'companyCodes,permissions,userId,v') return null;
+  if (!Array.isArray(identity.permissions) || identity.permissions.length > 100 ||
+      !Array.isArray(identity.companyCodes) || identity.companyCodes.length > 100) return null;
+  if (identity.permissions.some((value) => typeof value !== 'string' || value.length < 1 || value.length > 64) ||
+      new Set(identity.permissions).size !== identity.permissions.length) return null;
+  if (identity.companyCodes.some((value) => typeof value !== 'string' ||
+      !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(value.trim()))) return null;
+  const companyCodes = identity.companyCodes.map((value) => value.trim().toLowerCase());
+  if (new Set(companyCodes).size !== companyCodes.length) return null;
+  return { permissions: new Set(identity.permissions), companyCodes: new Set(companyCodes) };
+}
+
+function requireTaskTransferPermission(request, sourceCompany, targetCompany) {
+  const identity = crmIdentity(request);
+  const source = String(sourceCompany || '').trim().toLowerCase();
+  const target = String(targetCompany || '').trim().toLowerCase();
+  if (!identity?.permissions.has('crm.edit') || !identity.companyCodes.has(source) ||
+      !identity.companyCodes.has(target)) {
+    fail(403, 'Недостаточно прав для переноса задачи между проектами', { code: 'FORBIDDEN' });
+  }
+}
+
 function csvCell(value) {
   const text = value === null || value === undefined ? '' : String(value);
   return `"${text.replace(/"/g, '""')}"`;
@@ -1415,26 +1453,44 @@ async function handleEntityRoutes(request, response, url, cors) {
       send(response, 200, { ...serializeEntity(config, row), ...relationRows(kind, id, company) }, cors); return true;
     }
     if (match && request.method === 'PATCH') {
-      const id = entityId(match[1]); const row = entityRow(config, id, true);
-      if (company && config.table === 'companies' && row.owner_scope.toLowerCase() !== company.code.toLowerCase()) {
-        fail(403, 'Карточка компании принадлежит другой базе', { code: 'FORBIDDEN' });
+      const id = entityId(match[1]);
+      const taskPatch = config.table === 'tasks';
+      let initialRow = null;
+      if (!taskPatch) {
+        initialRow = entityRow(config, id, true);
+        if (company && config.table === 'companies' &&
+            initialRow.owner_scope.toLowerCase() !== company.code.toLowerCase()) {
+          fail(403, 'Карточка компании принадлежит другой базе', { code: 'FORBIDDEN' });
+        }
+        entityInCompany(config, id, company);
+        if (initialRow.is_deleted) {
+          fail(409, 'Сначала восстановите удалённую карточку', { code: 'DELETED_ENTITY' });
+        }
       }
-      entityInCompany(config, id, company);
-      if (row.is_deleted) fail(409, 'Сначала восстановите удалённую карточку', { code: 'DELETED_ENTITY' });
       const body = await readJson(request);
-      const values = validateEntity(config, body, true, row); const entries = Object.entries(values);
-      if (company && config.table === 'tasks' && values.companyCode !== undefined &&
-          values.companyCode !== company.code.toLowerCase()) {
-        fail(403, 'Нельзя перенести задачу из выбранной компании');
-      }
-      const assignments = entries.map(([field]) => `${column(config, field)}=?`);
-      const parameters = entries.map(([, value]) => value);
-      if (config.table === 'contacts' && values.phone !== undefined) { assignments.push('normalized_phone=?');
-        parameters.push(values.phone ? normalizeContact(values.phone) : null); }
-      const now = new Date().toISOString();
-      const run = () => db.prepare(`UPDATE ${config.table} SET ${assignments.join(',')},updated_at=? WHERE id=?`)
-        .run(...parameters, now, id);
-      try {
+      const applyPatch = () => {
+        // Re-read task scope and source after the async body read, inside the same transaction as UPDATE.
+        const patchCompany = taskPatch
+          ? scopedCompany(url.searchParams.get('companyCode')) : company;
+        const row = taskPatch ? entityRow(config, id, true) : initialRow;
+        if (taskPatch) {
+          entityInCompany(config, id, patchCompany);
+          if (row.is_deleted) fail(409, 'Сначала восстановите удалённую карточку', { code: 'DELETED_ENTITY' });
+        }
+        const sourceCompany = String(row.company_code || '').trim().toLowerCase();
+        const requestedCompany = typeof body.companyCode === 'string'
+          ? body.companyCode.trim().toLowerCase() : null;
+        if (taskPatch && requestedCompany !== null && requestedCompany !== sourceCompany) {
+          requireTaskTransferPermission(request, sourceCompany, requestedCompany);
+        }
+        const values = validateEntity(config, body, true, row); const entries = Object.entries(values);
+        const assignments = entries.map(([field]) => `${column(config, field)}=?`);
+        const parameters = entries.map(([, value]) => value);
+        if (config.table === 'contacts' && values.phone !== undefined) { assignments.push('normalized_phone=?');
+          parameters.push(values.phone ? normalizeContact(values.phone) : null); }
+        const now = new Date().toISOString();
+        const run = () => db.prepare(`UPDATE ${config.table} SET ${assignments.join(',')},updated_at=? WHERE id=?`)
+          .run(...parameters, now, id);
         if (config.table === 'companies') {
           pipelineTransaction(() => {
             run();
@@ -1443,8 +1499,13 @@ async function handleEntityRoutes(request, response, url, cors) {
             }
           });
         } else run();
+        return serializeEntity(config, entityRow(config, id));
+      };
+      let result;
+      try {
+        result = taskPatch ? pipelineTransaction(applyPatch) : applyPatch();
       } catch (error) { conflict(error); }
-      send(response, 200, serializeEntity(config, entityRow(config, id)), cors); return true;
+      send(response, 200, result, cors); return true;
     }
     if (match && request.method === 'DELETE') {
       const id = entityId(match[1]); const row = entityRow(config, id, true);
