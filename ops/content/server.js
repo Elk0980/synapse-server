@@ -464,6 +464,7 @@ async function proxyCrm(request, response, url, cors) {
 async function proxyChat(request, response, url, cors) {
   const session = requireSession(request);
   if (session.user.role !== 'owner') fail(403, 'Чат доступен только владельцу');
+  if (request.method !== 'GET') requireCsrf(request, session);
   if (!CHAT_API_KEY) fail(503, 'Прокси чата не настроен');
 
   const chatPath = url.pathname.slice('/content/hugh'.length) || '/';

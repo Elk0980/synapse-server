@@ -75,3 +75,57 @@ test('chat proxy returns 403 for a non-owner', async (t) => {
   });
   assert.equal(response.status, 403);
 });
+
+test('chat proxy returns 403 for an owner POST without a CSRF token', async (t) => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'content-chat-proxy-'));
+  const password = 'QA chat proxy password';
+  const databasePath = path.join(directory, 'content.sqlite');
+
+  const port = await freePort();
+  const child = spawn(process.execPath, [path.join(__dirname, 'server.js')], {
+    env: {
+      ...process.env, PORT: String(port), DATABASE_PATH: databasePath, API_KEY: '',
+      AUTH_USERS: `owner:owner:${hashPassword(password)}`,
+      SEED_DIR: directory, ASSETS_DIR: path.join(directory, 'assets'),
+      SESSION_SECRET: randomBytes(32).toString('hex'), CHAT_API_KEY: randomBytes(24).toString('hex'),
+    },
+    stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true,
+  });
+  t.after(async () => {
+    if (child.exitCode === null && child.signalCode === null) {
+      const exited = once(child, 'exit');
+      child.kill();
+      await exited;
+    }
+    await rm(directory, { recursive: true, force: true });
+  });
+  let errors = '';
+  child.stderr.on('data', (chunk) => { errors += chunk; });
+  const base = `http://127.0.0.1:${port}`;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (child.exitCode !== null) throw new Error(`Service failed: ${errors}`);
+    try {
+      const response = await fetch(`${base}/health`, { signal: AbortSignal.timeout(500) });
+      await response.text();
+      break;
+    } catch {
+      if (attempt === 99) throw new Error(`Service did not start: ${errors}`);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  }
+
+  const login = await fetch(`${base}/content/login`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ login: 'owner', password }),
+  });
+  assert.equal(login.status, 200);
+  const response = await fetch(`${base}/content/hugh/conversations`, {
+    method: 'POST',
+    headers: {
+      cookie: login.headers.get('set-cookie').split(';')[0],
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ message: 'test' }),
+  });
+  assert.equal(response.status, 403);
+});
