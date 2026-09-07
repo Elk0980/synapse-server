@@ -187,7 +187,7 @@ const loadEntityCompanies = async (state) => {
 const setContactProjectFilter = (state) => {
   if (state.projectId === ctx.selectedProjectId) return;
   const company = state.companies.find((item) => item.code?.toLowerCase() === ctx.selectedProjectId);
-  state.companyId = ctx.selectedProjectId === "synapse-business" ? "" : String(company?.id || "");
+  state.companyId = String(company?.id || "");
   state.projectId = ctx.selectedProjectId;
 };
 const applyContactProjectFilter = async () => {
@@ -271,9 +271,7 @@ const renderEntityList = async (view, reset = false) => {
   const projectCompany = identity.companies?.find((company) => company.id === ctx.selectedProjectId);
   const crmCompany = state.companies.find((company) =>
     company.code?.toLowerCase() === ctx.selectedProjectId?.toLowerCase());
-  const companyLabel = ctx.selectedProjectId === "synapse-business"
-    ? "Все компании (Synapse Бизнес)"
-    : `Компания: ${projectCompany?.name || crmCompany?.name || ctx.selectedProjectId}`;
+  const companyLabel = `Компания: ${projectCompany?.name || crmCompany?.name || ctx.selectedProjectId}`;
   const toolsOpen = window.matchMedia("(min-width: 761px)").matches ? " open" : "";
   content.innerHTML = `<p class="crm-project-company">${escapeHTML(companyLabel)}</p>
     <div class="client-list-layout"><details class="client-tools"${toolsOpen}>

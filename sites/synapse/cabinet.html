@@ -954,12 +954,14 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     }
   };
   const selectedProject = () => allowedProjects.find((project) => project.id === selectedProjectId) || null;
-  const scopeParams = () => selectedProjectId === "synapse-business"
-    ? {}
-    : { companyCode: selectedProjectId };
-  const projectContext = () => selectedProjectId === "synapse-business"
-    ? "Все проекты"
-    : selectedProject()?.name || selectedProjectId;
+  const scopeParams = () => {
+    const project = selectedProject();
+    if (!project || typeof project.id !== "string" || !project.id.trim()) {
+      throw new Error("Не удалось определить выбранный проект. Обновите страницу или выберите проект снова.");
+    }
+    return { companyCode: project.id };
+  };
+  const projectContext = () => selectedProject()?.name || "Проект не определён";
   const renderProjectContexts = () => {
     byId("analytics-project-context").textContent = `Проект: ${projectContext()}`;
     byId("crm-project-context").textContent = `Проект: ${projectContext()}`;
@@ -1227,6 +1229,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       identity.permissions = Array.isArray(identity.permissions) ? identity.permissions : [];
       allowedProjects = allowedProjectsFor(identity);
       selectedProjectId = readSelectedProject();
+      scopeParams();
       byId("analytics-link").hidden = !identity.permissions.includes("analytics.view");
       byId("analytics-category").hidden = !identity.permissions.includes("analytics.view");
       byId("analytics-through-view").hidden = !identity.permissions.includes("analytics.view");

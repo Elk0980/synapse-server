@@ -150,8 +150,7 @@ const renderAnalytics = (dashboard, summary, expenses) => {
   const sales = total("sales");
   const revenue = total("revenue");
   const values = { ...(dashboard.summary || {}), ...dashboard };
-  const expensesUnavailable = ctx.selectedProjectId !== "synapse-business" &&
-    (values.expenses === null || dashboard.expensesScope || summary.expensesScope);
+  const expensesUnavailable = values.expenses === null || dashboard.expensesScope || summary.expensesScope;
   const financeExpenses = expensesUnavailable ? null : allSelected ? values.expenses : total("expenses");
   const financeRevenue = allSelected ? values.revenue : revenue;
   const financeRomi = expensesUnavailable ? null : allSelected ? values.romi :
@@ -252,13 +251,12 @@ const renderAnalytics = (dashboard, summary, expenses) => {
   byId("analytics-csv").addEventListener("click", () => {
     crmQuery("/leads.csv", { ...analyticsState.range, ...scopeParams() }, { open: true });
   });
-  const scopedExpenses = ctx.selectedProjectId !== "synapse-business";
-  byId("expenses-section").querySelector("h2").hidden = scopedExpenses;
-  byId("expense-form").hidden = scopedExpenses || !identity.permissions.includes("crm.edit");
-  byId("expense-result").hidden = scopedExpenses;
-  if (scopedExpenses) {
+  byId("expenses-section").querySelector("h2").hidden = false;
+  byId("expense-form").hidden = expensesUnavailable || !identity.permissions.includes("crm.edit");
+  byId("expense-result").hidden = expensesUnavailable;
+  if (expensesUnavailable) {
     byId("expenses-content").innerHTML =
-      '<p class="notice">Расходы ведутся по всему бизнесу: выберите проект «Synapse Бизнес»</p>';
+      '<p class="notice">Расходы по выбранному проекту не ведутся.</p>';
     return;
   }
   const expenseRows = expenses.map((expense) => `<tr><td>${escapeHTML(expense.spentAt.slice(0, 10))}</td>
@@ -277,7 +275,7 @@ const loadAnalytics = async () => {
     const [dashboard, summary, expensePayload] = await Promise.all([
       crmQuery("/dashboard", { period: analyticsState.period, ...range, ...scopeParams() }),
       crmQuery("/summary", { ...range, ...scopeParams() }),
-      ctx.selectedProjectId === "synapse-business" ? crmQuery("/expenses", range) : { expenses: [] }
+      crmQuery("/expenses", { ...range, ...scopeParams() })
     ]);
     renderAnalytics(dashboard, summary, expensePayload.expenses || []);
   } catch (error) {
@@ -355,7 +353,7 @@ const renderAnalyticsControls = () => {
     event.preventDefault();
     const expenseForm = event.currentTarget;
     try {
-      await crmQuery("/expenses", {}, csrfOptions("POST", {
+      await crmQuery("/expenses", scopeParams(), csrfOptions("POST", {
         date: expenseForm.elements.date.value,
         source: expenseForm.elements.source.value,
         amount: Number(expenseForm.elements.amount.value),
