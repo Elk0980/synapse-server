@@ -22,11 +22,25 @@ async function request(url, body, headers = {}) {
 }
 
 test("owner mode skips contact intake and leaves the visitor flow unchanged", async (t) => {
-  let crmRequests = 0;
-  const crm = http.createServer((_request, response) => {
-    crmRequests += 1;
-    response.writeHead(201, { "content-type": "application/json" });
-    response.end(JSON.stringify({ id: crmRequests }));
+  const crmRequests = [];
+  let hasSummaryData = true;
+  const crm = http.createServer((request, response) => {
+    crmRequests.push({ method: request.method, url: request.url });
+    response.writeHead(200, { "content-type": "application/json" });
+    if (request.url.startsWith("/dashboard")) {
+      return response.end(JSON.stringify({
+        summary: hasSummaryData
+          ? { total: 12, sales: 3, revenue: 125000 }
+          : { total: 0, sales: 0, revenue: 0 },
+      }));
+    }
+    if (request.url.startsWith("/tasks/summary")) {
+      return response.end(JSON.stringify(hasSummaryData
+        ? { inbox: 2, planned: 1, inProgress: 1, done: 5 }
+        : { inbox: 0, planned: 0, inProgress: 0, done: 0 }));
+    }
+    response.statusCode = 404;
+    return response.end(JSON.stringify({ error: "not found" }));
   });
   await listen(crm);
 
@@ -83,8 +97,20 @@ test("owner mode skips contact intake and leaves the visitor flow unchanged", as
   );
   assert.equal(ownerReply.status, 201);
   assert.equal(ownerReply.body.owner, true);
-  assert.doesNotMatch(ownerReply.body.reply, /имя|телефон|номер/i);
-  assert.equal(crmRequests, 0);
+  assert.match(ownerReply.body.reply, /Заявки: 12/);
+  assert.match(ownerReply.body.reply, /Задачи: 4/);
+  assert.match(ownerReply.body.reply, /Сделки: 3/);
+  assert.match(ownerReply.body.reply, /Выручка: 125.?000 ₽/);
+  assert.deepEqual(crmRequests.map(({ method }) => method), ["GET", "GET"]);
+
+  hasSummaryData = false;
+  const emptyOwnerReply = await request(
+    `${base}/conversations/${ownerConversation.body.id}/messages`,
+    { text: "А сейчас?" },
+    ownerHeaders,
+  );
+  assert.equal(emptyOwnerReply.status, 201);
+  assert.equal((emptyOwnerReply.body.reply.match(/нет данных/gi) || []).length, 4);
 
   const visitorConversation = await request(`${base}/conversations`, {});
   assert.equal(visitorConversation.body.owner, false);
@@ -96,4 +122,5 @@ test("owner mode skips contact intake and leaves the visitor flow unchanged", as
   );
   assert.equal(visitorReply.body.owner, false);
   assert.match(visitorReply.body.reply, /как к вам обращаться/i);
+  assert.equal(crmRequests.length, 4);
 });
