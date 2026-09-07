@@ -471,6 +471,8 @@ async function proxyChat(request, response, url, cors) {
   const target = new URL(`${CHAT_URL}${chatPath}${url.search}`);
   const headers = { ...request.headers, host: target.host, 'x-api-key': CHAT_API_KEY };
   delete headers.cookie;
+  delete headers.origin;
+  delete headers.referer;
   const upstream = http.request(target, { method: request.method, headers }, (upstreamResponse) => {
     const responseHeaders = { ...upstreamResponse.headers, ...cors };
     response.writeHead(upstreamResponse.statusCode || 502, responseHeaders);
