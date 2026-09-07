@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const http = require('node:http');
 const { spawn } = require('node:child_process');
 const { mkdtemp, rm } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
@@ -15,8 +16,8 @@ let databasePath;
 let apiKey;
 let port;
 
-async function request(method, pathname, body, key = apiKey) {
-  const headers = {};
+async function request(method, pathname, body, key = apiKey, extraHeaders = {}) {
+  const headers = { ...extraHeaders };
   if (key) headers['X-API-Key'] = key;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const response = await fetch(`http://127.0.0.1:${port}${pathname}`, {
@@ -27,6 +28,44 @@ async function request(method, pathname, body, key = apiKey) {
   const text = await response.text();
   const isJson = response.headers.get('content-type')?.includes('application/json');
   return { status: response.status, body: text && isJson ? JSON.parse(text) : text, headers: response.headers };
+}
+function delayedJsonPatch(pathname, body, extraHeaders) {
+  const serialized = JSON.stringify(body);
+  const split = Math.max(1, Math.floor(serialized.length / 2));
+  let finish;
+  const response = new Promise((resolve, reject) => {
+    const upstream = http.request({
+      hostname: '127.0.0.1', port, path: pathname, method: 'PATCH',
+      headers: { ...extraHeaders, 'X-API-Key': apiKey, 'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(serialized) },
+    }, (result) => {
+      const chunks = [];
+      result.on('data', (chunk) => chunks.push(chunk));
+      result.on('end', () => {
+        const payload = Buffer.concat(chunks).toString('utf8');
+        resolve({ status: result.statusCode, body: payload ? JSON.parse(payload) : null });
+      });
+    });
+    upstream.on('error', reject);
+    upstream.write(serialized.slice(0, split));
+    finish = () => {
+      upstream.end(serialized.slice(split));
+      return response;
+    };
+  });
+  return { finish: () => finish() };
+}
+function crmIdentityHeaders(permissions, companyCodes, overrides = {}) {
+  const identity = {
+    v: 1,
+    userId: 1,
+    permissions,
+    companyCodes,
+    ...overrides,
+  };
+  return {
+    'X-Synapse-CRM-Identity': Buffer.from(JSON.stringify(identity)).toString('base64url'),
+  };
 }
 async function start() {
   port = 20000 + Math.floor(Math.random() * 20000);
@@ -229,6 +268,76 @@ async function verifyCompanyOverview(company, companyB, contact, legal, lead, ta
     assert.equal(item.source, 'QA');
   }
   console.log('COMPANY_OVERVIEW=PASS OVERVIEW_SCOPE=PASS OVERVIEW_LIMITS=PASS');
+}
+
+async function verifyTaskTransferAuthorization(task, company, companyB) {
+  const pathname = `/tasks/${task.id}`;
+  const assertCompany = async (expected) => {
+    const current = await request('GET', pathname);
+    assert.equal(current.status, 200);
+    assert.equal(current.body.companyCode, expected);
+  };
+  const deny = async (query, headers) => {
+    const result = await request('PATCH', `${pathname}${query}`, { companyCode: companyB.code }, apiKey, headers);
+    assert.equal(result.status, 403, JSON.stringify(result.body));
+    assert.equal(result.body.details?.code, 'FORBIDDEN');
+    await assertCompany(company.code);
+  };
+
+  await deny('', {});
+  await deny(`?companyCode=${company.code}`, {});
+  await deny('', { 'X-Synapse-CRM-Identity': 'not-base64url!' });
+  await deny('', crmIdentityHeaders(['crm.edit'], [company.code, companyB.code], { v: 2 }));
+  await deny('', crmIdentityHeaders(['crm.view'], [company.code, companyB.code]));
+  await deny('', crmIdentityHeaders(['crm.view', 'crm.edit'], [companyB.code]));
+  await deny('', crmIdentityHeaders(['crm.view', 'crm.edit'], [company.code]));
+  await deny('', crmIdentityHeaders(['crm.view', 'crm.edit'], [company.code, companyB.code], {
+    extra: true,
+  }));
+  for (const companyCode of ['', 'qa_missing_project']) {
+    const invalidTarget = await request('PATCH', pathname, { companyCode }, apiKey,
+      crmIdentityHeaders(['crm.view', 'crm.edit'], [company.code, companyB.code]));
+    assert.equal(invalidTarget.status, 403, JSON.stringify(invalidTarget.body));
+    assert.equal(invalidTarget.body.details?.code, 'FORBIDDEN');
+    await assertCompany(company.code);
+  }
+  const wrongScope = await request('PATCH', `${pathname}?companyCode=${companyB.code}`,
+    { companyCode: companyB.code }, apiKey,
+    crmIdentityHeaders(['crm.view', 'crm.edit'], [company.code, companyB.code]));
+  assert.equal(wrongScope.status, 404, JSON.stringify(wrongScope.body));
+  await assertCompany(company.code);
+
+  const delayed = delayedJsonPatch(pathname, { companyCode: company.code },
+    crmIdentityHeaders(['crm.view', 'crm.edit'], [company.code]));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const concurrent = await request('PATCH', pathname, { companyCode: companyB.code }, apiKey,
+    crmIdentityHeaders(['crm.view', 'crm.edit'], [company.code, companyB.code]));
+  assert.equal(concurrent.status, 200, JSON.stringify(concurrent.body));
+  const stale = await delayed.finish();
+  assert.equal(stale.status, 403, JSON.stringify(stale.body));
+  assert.equal(stale.body.details?.code, 'FORBIDDEN');
+  await assertCompany(companyB.code);
+  const reset = await request('PATCH', pathname, { companyCode: company.code }, apiKey,
+    crmIdentityHeaders(['crm.view', 'crm.edit'], [company.code, companyB.code]));
+  assert.equal(reset.status, 200, JSON.stringify(reset.body));
+
+  const scoped = await request('PATCH', `${pathname}?companyCode=${company.code}`,
+    { companyCode: companyB.code }, apiKey,
+    crmIdentityHeaders(['crm.view', 'crm.edit'], [company.code, companyB.code]));
+  assert.equal(scoped.status, 200, JSON.stringify(scoped.body));
+  assert.equal(scoped.body.companyCode, companyB.code);
+
+  const unscoped = await request('PATCH', pathname, { companyCode: company.code }, apiKey,
+    crmIdentityHeaders(['crm.view', 'crm.edit'], [company.code, companyB.code]));
+  assert.equal(unscoped.status, 200, JSON.stringify(unscoped.body));
+  assert.equal(unscoped.body.companyCode, company.code);
+
+  const unchanged = await request('PATCH', pathname, { companyCode: company.code });
+  assert.equal(unchanged.status, 200, JSON.stringify(unchanged.body));
+  const ordinary = await request('PATCH', pathname, { description: 'QA ordinary update' });
+  assert.equal(ordinary.status, 200, JSON.stringify(ordinary.body));
+  await assertCompany(company.code);
+  console.log('TASK_TRANSFER_AUTH=PASS TASK_TRANSFER_SCOPE_NOT_AUTH=PASS TASK_TRANSFER_STALE_SOURCE=PASS');
 }
 async function createPipelineCompany(code, pipelineStage = 'new') {
   const created = await request('POST', '/companies', { code, name: `QA ${code}`, pipelineStage });
@@ -746,6 +855,7 @@ async function main() {
     status: 'in_progress',
   });
   assert.equal(patchedTask.body.status, 'in_progress');
+  await verifyTaskTransferAuthorization(taskInbox.body, company.body, companyB.body);
   const summary = await request('GET', `/tasks/summary?companyCode=${company.body.code}`);
   assert.deepEqual(summary.body, {
     inbox: 0, planned: 2, inProgress: 1, done: 0,
