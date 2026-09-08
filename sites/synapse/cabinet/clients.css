@@ -10,6 +10,16 @@
   border-color: var(--accent);
 }
 
+.crm-shared-warning {
+  margin: 0;
+  padding: 14px 16px;
+  border: 2px solid #f0a62b;
+  border-radius: 12px;
+  color: var(--text);
+  background: rgba(240, 166, 43, 0.16);
+  font-weight: 700;
+}
+
 .client-list-layout {
   display: grid;
   grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);

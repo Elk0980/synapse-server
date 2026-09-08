@@ -511,8 +511,13 @@ const renderEntityForm = async (view, record) => {
   const controls = fields.map((field) => fieldInput(config, field, record?.[field] ?? "")).join("");
   const repeats = Object.entries(config.arrays || {}).map(([field, label]) =>
     repeatMarkup(field, label, record?.[field] || [])).join("");
+  const sharedWarning = record && ["crm-contacts", "crm-legal"].includes(view) &&
+    record.sharedCompanyCount > 1
+    ? `<p class="crm-shared-warning wide" role="note">Эта карточка используется ещё в ${
+      escapeHTML(record.sharedCompanyCount - 1)} компаниях. Изменения увидят все</p>`
+    : "";
   content.innerHTML = `<button class="plain-button" type="button" data-form-cancel>← Отмена</button>
-    <h2>${record ? "Изменить" : "Добавить"}</h2><form class="crm-form">${controls}${repeats}
+    <h2>${record ? "Изменить" : "Добавить"}</h2><form class="crm-form">${sharedWarning}${controls}${repeats}
     <div class="crm-actions wide"><button class="plain-button" type="submit">Сохранить</button></div>
     <p class="crm-error wide" role="alert" hidden></p></form>`;
   const form = content.querySelector("form");
