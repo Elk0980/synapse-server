@@ -73,6 +73,18 @@ test("private Telegram consents are explicit, auditable and protected", async (t
   await webhook({ message: { message_id: 5, chat: { id: 77, type: "private" }, from, text: "отозвать" } });
   assert.deepEqual(db.prepare("SELECT kind, granted FROM consent_events ORDER BY id DESC LIMIT 2").all().map((row) => ({ ...row })),
     [{ kind: "personal_data", granted: 0 }, { kind: "messages", granted: 0 }]);
+  for (const [messageId, text] of [
+    [6, "/стоп"], [7, "/СТОП@SynapseBot"], [8, "/stop"], [9, "/StOp@synapse_bot"],
+  ]) {
+    await webhook({ message: { message_id: messageId, chat: { id: 77, type: "private" }, from, text } });
+  }
+  assert.equal(db.prepare("SELECT count(*) total FROM consent_events WHERE kind = 'messages' AND granted = 0").get().total, 5);
+  for (const [messageId, text] of [
+    [10, "/отозвать"], [11, "/ОТОЗВАТЬ@SynapseBot"], [12, "/revoke"], [13, "/ReVoKe@synapse_bot"],
+  ]) {
+    await webhook({ message: { message_id: messageId, chat: { id: 77, type: "private" }, from, text } });
+  }
+  assert.equal(db.prepare("SELECT count(*) total FROM consent_events WHERE kind = 'personal_data' AND granted = 0").get().total, 5);
   const denied = await fetch(`http://127.0.0.1:${port}/internal/consents?telegram_id=77`);
   assert.equal(denied.status, 401);
   const allowed = await fetch(`http://127.0.0.1:${port}/internal/consents?phone=${encodeURIComponent("+79990000000")}`,

@@ -745,10 +745,11 @@ async function handlePrivateTelegram(update, response, origin) {
     await showConsentChoices(chatId);
     return send(response, 200, { ok: true }, origin);
   }
-  const command = text.toLocaleLowerCase("ru-RU");
-  const revocation = command === "стоп"
+  const messagesRevocation = /^(?:стоп|\/(?:стоп|stop)(?:@\w+)?)$/iu.test(text);
+  const personalDataRevocation = /^(?:отозвать|\/(?:отозвать|revoke)(?:@\w+)?)$/iu.test(text);
+  const revocation = messagesRevocation
     ? ["messages", "messages_revoked"]
-    : command === "отозвать" ? ["personal_data", "personal_data_revoked"] : null;
+    : personalDataRevocation ? ["personal_data", "personal_data_revoked"] : null;
   if (revocation) {
     const [kind, textKey] = revocation;
     const reply = CONSENT_COPY.texts[textKey];
