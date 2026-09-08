@@ -21,23 +21,33 @@ async function request(url, body, headers = {}) {
   return { status: response.status, body: await response.json() };
 }
 
-test("owner mode skips contact intake and leaves the visitor flow unchanged", async (t) => {
+async function get(url, headers = {}) {
+  const response = await fetch(url, { headers });
+  return { status: response.status, body: await response.json() };
+}
+
+test("owner receives a CRM summary without creating a lead", async (t) => {
   const crmRequests = [];
-  let hasSummaryData = true;
+  let crmAvailable = true;
   const crm = http.createServer((request, response) => {
     crmRequests.push({ method: request.method, url: request.url });
+    if (!crmAvailable) {
+      response.writeHead(503, { "content-type": "application/json" });
+      return response.end(JSON.stringify({ error: "CRM unavailable 503" }));
+    }
     response.writeHead(200, { "content-type": "application/json" });
     if (request.url.startsWith("/dashboard")) {
       return response.end(JSON.stringify({
-        summary: hasSummaryData
-          ? { total: 12, sales: 3, revenue: 125000 }
-          : { total: 0, sales: 0, revenue: 0 },
+        summary: { total: 12, sales: 3, revenue: 125000 },
       }));
     }
     if (request.url.startsWith("/tasks/summary")) {
-      return response.end(JSON.stringify(hasSummaryData
-        ? { inbox: 2, planned: 1, inProgress: 1, done: 5 }
-        : { inbox: 0, planned: 0, inProgress: 0, done: 0 }));
+      return response.end(JSON.stringify({
+        inbox: 2,
+        planned: 1,
+        inProgress: 1,
+        done: 5,
+      }));
     }
     response.statusCode = 404;
     return response.end(JSON.stringify({ error: "not found" }));
@@ -97,20 +107,38 @@ test("owner mode skips contact intake and leaves the visitor flow unchanged", as
   );
   assert.equal(ownerReply.status, 201);
   assert.equal(ownerReply.body.owner, true);
-  assert.match(ownerReply.body.reply, /Заявки: 12/);
-  assert.match(ownerReply.body.reply, /Задачи: 4/);
-  assert.match(ownerReply.body.reply, /Сделки: 3/);
-  assert.match(ownerReply.body.reply, /Выручка: 125.?000 ₽/);
-  assert.deepEqual(crmRequests.map(({ method }) => method), ["GET", "GET"]);
+  assert.equal(
+    ownerReply.body.reply,
+    "Сводка по проекту за последние 30 дней:\n" +
+      "Заявки: 12\nЗадачи: 4\nСделки: 3\nВыручка: 125\u00a0000 ₽",
+  );
+  assert.deepEqual(crmRequests.map(({ method, url }) => ({ method, url })), [
+    { method: "GET", url: "/dashboard?period=30d" },
+    { method: "GET", url: "/tasks/summary" },
+  ]);
 
-  hasSummaryData = false;
-  const emptyOwnerReply = await request(
+  const unauthorizedPending = await get(`${base}/owner/pending`);
+  assert.equal(unauthorizedPending.status, 401);
+
+  let pending = await get(`${base}/owner/pending`, ownerHeaders);
+  assert.equal(pending.status, 200);
+  assert.deepEqual(pending.body.pending, []);
+
+  crmAvailable = false;
+  const unavailableOwnerReply = await request(
     `${base}/conversations/${ownerConversation.body.id}/messages`,
     { text: "А сейчас?" },
     ownerHeaders,
   );
-  assert.equal(emptyOwnerReply.status, 201);
-  assert.equal((emptyOwnerReply.body.reply.match(/нет данных/gi) || []).length, 4);
+  assert.equal(unavailableOwnerReply.status, 201);
+  assert.equal(unavailableOwnerReply.body.owner, true);
+  assert.equal(
+    unavailableOwnerReply.body.reply,
+    "Нет данных из CRM: не удалось получить сводку по проекту.",
+  );
+  assert.doesNotMatch(unavailableOwnerReply.body.reply, /\d/);
+  pending = await get(`${base}/owner/pending`, ownerHeaders);
+  assert.deepEqual(pending.body.pending, []);
 
   const visitorConversation = await request(`${base}/conversations`, {});
   assert.equal(visitorConversation.body.owner, false);
@@ -122,5 +150,5 @@ test("owner mode skips contact intake and leaves the visitor flow unchanged", as
   );
   assert.equal(visitorReply.body.owner, false);
   assert.match(visitorReply.body.reply, /как к вам обращаться/i);
-  assert.equal(crmRequests.length, 4);
+  assert.equal(crmRequests.filter(({ method }) => method === "POST").length, 0);
 });
