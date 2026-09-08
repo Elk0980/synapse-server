@@ -517,7 +517,8 @@
   }
   const SITES = {
     alvi: { name: 'ALVI', url: 'https://alvi.synapsebusiness.ru', zones: ['promo', 'hero-0', 'hero-1', 'hero-3', 'hero-5', 'hero-7'], heroes: ['hero-0', 'hero-1', 'hero-3', 'hero-5', 'hero-7'] },
-    avokado: { name: 'Авокадо', url: 'https://avokado.synapsebusiness.ru', zones: ['top', 'pain', 'method-0', 'method-1', 'method-2', 'method-3', 'method-4', 'method-5', 'price', 'certificate', 'contacts', 'finale'], heroes: [] }
+    avokado: { name: 'Авокадо', url: 'https://avokado.synapsebusiness.ru', zones: ['top', 'pain', 'method-0', 'method-1', 'method-2', 'method-3', 'method-4', 'method-5', 'price', 'certificate', 'contacts', 'finale'], heroes: [] },
+    avokado2: { name: 'Авокадо2', url: 'https://avokado2.synapsebusiness.ru', zones: ['top', 'pain', 'method-0', 'method-1', 'method-2', 'method-3', 'method-4', 'method-5', 'price', 'certificate', 'contacts', 'finale'], heroes: [], priceSite: 'avokado' }
   };
   const requestedSite = params.get('site') || 'alvi';
   if (!SITES[requestedSite]) {
@@ -537,7 +538,7 @@
   document.querySelector('.ed-bar__title').firstChild.nodeValue = 'Редактор сайта ' + siteConfig.name + ' — тексты и фоны';
   document.querySelector('#ed-frame').title = 'Сайт ' + siteConfig.name + ' — правка на месте';
   const barLinks = document.querySelectorAll('.ed-bar a');
-  barLinks[0].href = 'price-editor.html?site=' + siteId;
+  barLinks[0].href = 'price-editor.html?site=' + (siteConfig.priceSite || siteId);
   barLinks[1].href = SITE + '/';
   if (siteId !== 'alvi') document.querySelector('#ed-promo').hidden = true;
   const KEY_STORAGE = 'synapse_content_key';

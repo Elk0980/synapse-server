@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000" role="img" aria-label="Оборот подарочного сертификата студии Авокадо">
+<defs>
+  <linearGradient id="bgb" x1="0" y1="0" x2="0.7" y2="1">
+    <stop offset="0" stop-color="#f7f4ec"/>
+    <stop offset="0.5" stop-color="#f2eee3"/>
+    <stop offset="1" stop-color="#eee9db"/>
+  </linearGradient>
+  <linearGradient id="goldb" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#7d6534"/>
+    <stop offset="0.35" stop-color="#a3853f"/>
+    <stop offset="0.6" stop-color="#b8994e"/>
+    <stop offset="0.85" stop-color="#96793a"/>
+    <stop offset="1" stop-color="#7d6534"/>
+  </linearGradient>
+</defs>
+
+<rect width="1600" height="1000" fill="url(#bgb)"/>
+<rect x="52" y="52" width="1496" height="896" fill="none" stroke="url(#goldb)" stroke-width="1.6" opacity="0.9"/>
+<rect x="68" y="68" width="1464" height="864" fill="none" stroke="#8a6f3f" stroke-width="0.7" opacity="0.3"/>
+
+<g transform="translate(800,150) scale(1.35) translate(-24,-27)">
+  <path d="M25.5 8 C26.5 5 25 2.5 23 2" fill="none" stroke="#8a6f3f" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M24 9.5 C20.4 9.5 15.6 15.6 14.1 22.3 C12.6 29.1 17.3 38 24 38 C30.7 38 35.4 29.1 33.9 22.3 C32.4 15.6 27.6 9.5 24 9.5 Z" fill="none" stroke="#8a6f3f" stroke-width="2.1" stroke-linejoin="round"/>
+  <circle cx="24" cy="27" r="4.6" fill="#8a6f3f"/>
+</g>
+
+<text x="800" y="238" text-anchor="middle" font-family="Manrope, sans-serif" font-size="22" letter-spacing="12" fill="#5d6b52">КАК ВОСПОЛЬЗОВАТЬСЯ</text>
+<line x1="620" y1="268" x2="980" y2="268" stroke="url(#goldb)" stroke-width="1" opacity="0.6"/>
+
+<g font-family="Manrope, sans-serif" fill="#3a4633">
+  <text x="200" y="336" font-size="26" font-weight="600">1</text>
+  <text x="248" y="336" font-size="23">Позвоните или напишите нам, чтобы выбрать удобное время</text>
+
+  <text x="200" y="404" font-size="26" font-weight="600">2</text>
+  <text x="248" y="404" font-size="23">Назовите номер сертификата — он указан на лицевой стороне</text>
+
+  <text x="200" y="472" font-size="26" font-weight="600">3</text>
+  <text x="248" y="472" font-size="23">Приходите за 10 минут до начала: заполним короткую анкету</text>
+</g>
+
+<line x1="200" y1="530" x2="1400" y2="530" stroke="#cfd6c3" stroke-width="1"/>
+
+<text x="200" y="586" font-family="Manrope, sans-serif" font-size="20" letter-spacing="6" fill="#5d6b52">УСЛОВИЯ</text>
+
+<g font-family="Manrope, sans-serif" font-size="19" fill="#5d6b52">
+  <text x="200" y="632">· Сертификат действует 6 месяцев с даты выдачи, если не указан иной срок.</text>
+  <text x="200" y="670">· Обменивается на любые услуги студии в пределах номинала.</text>
+  <text x="200" y="708">· Если услуга дороже номинала — доплачивается разница на месте.</text>
+  <text x="200" y="746">· Денежными средствами не возвращается и на деньги не обменивается.</text>
+  <text x="200" y="784">· Передаётся другому человеку без ограничений.</text>
+  <text x="200" y="822">· Есть противопоказания — перед визитом проконсультируйтесь со специалистом.</text>
+</g>
+
+<line x1="200" y1="866" x2="1400" y2="866" stroke="#cfd6c3" stroke-width="1"/>
+
+<g font-family="Manrope, sans-serif" font-size="17" fill="#6c7a61" letter-spacing="1">
+  <text x="200" y="906">Иркутск, ул. Красноказачья, 84 · ежедневно, по записи</text>
+  <text x="1400" y="906" text-anchor="end">+7 950 100-10-59 · ИП Петрук Т. А.</text>
+</g>
+</svg>

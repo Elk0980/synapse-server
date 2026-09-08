@@ -75,9 +75,43 @@ avokado.synapsebusiness.ru {
   import static
 }
 
-# Место под второй вариант сайта Авокадо.
-avokado-v2.synapsebusiness.ru {
-  root * /srv/sites/avokado-v2
+# --- Клиент: Авокадо2 (экспериментальная копия) -----------------------------
+avokado2.synapsebusiness.ru {
+  root * /srv/sites/avokado2
+  @track {
+    path /track
+    method POST
+  }
+  handle @track {
+    rewrite * /events
+    reverse_proxy crm:8080
+  }
+  @price {
+    path /api/price
+    method GET
+  }
+  handle @price {
+    rewrite * /content/avokado/price
+    reverse_proxy content:8080
+  }
+  @site {
+    path /api/site
+    method GET
+  }
+  handle @site {
+    rewrite * /content/avokado2/site
+    reverse_proxy content:8080
+  }
+  @assets {
+    path /api/assets/*
+    method GET
+  }
+  handle @assets {
+    uri replace /api/assets/ /content/avokado2/assets/
+    reverse_proxy content:8080
+  }
+  @sitedata path /data/*
+  header @sitedata Access-Control-Allow-Origin https://synapse.synapsebusiness.ru
   import draft
   import static
 }
