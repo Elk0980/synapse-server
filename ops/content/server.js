@@ -413,7 +413,7 @@ async function proxyCrm(request, response, url, cors) {
     )) fail(403, 'Нет доступа к компании');
   }
 
-  const companyScoped = /^\/(?:leads(?:\/|\.|$)|dashboard(?:\/|$)|summary(?:\/|$)|expenses(?:\/|$)|tasks\/summary$)/
+  const companyScoped = /^\/(?:leads(?:\/|\.|$)|dashboard(?:\/|$)|summary(?:\/|$)|external-stats(?:\/|$)|expenses(?:\/|$)|tasks\/summary$)/
     .test(crmPath);
   if (identity.role !== 'owner' && companyScoped) {
     const requestedCompany = url.searchParams.get('companyCode');
@@ -429,6 +429,13 @@ async function proxyCrm(request, response, url, cors) {
   }
   const leadMatch = crmPath.match(/^\/leads\/(\d+)(?:\/|$)/);
   let requestBody = null;
+  if (identity.role !== 'owner' && crmPath === '/external-stats' && request.method === 'POST') {
+    requestBody = await readRequestBody(request);
+    let body;
+    try { body = JSON.parse(requestBody.toString('utf8')); } catch { fail(400, 'Некорректный JSON'); }
+    const requestedCompany = typeof body?.companyCode === 'string' ? body.companyCode.toLowerCase() : '';
+    if (!identity.companyCodes.includes(requestedCompany)) fail(403, 'Нет доступа к компании');
+  }
   const companyWrite = (request.method === 'POST' && crmPath === '/companies') ||
     (request.method === 'PATCH' && /^\/companies\/\d+$/.test(crmPath));
   if (identity.role !== 'owner' && companyWrite) {
