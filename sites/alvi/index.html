@@ -33,6 +33,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="actions.css">
 
   <script type="application/ld+json">
   {
@@ -96,7 +97,7 @@
         "name": "Сколько стоит массаж в Иркутске в ALVI?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Расслабляющий массаж и массаж спины — 2 800 ₽, парный массаж — от 5 600 ₽. SPA-программы: «Релакс» — 3 500 ₽, «Душевное расслабление» — 5 600 ₽, «Ароматное погружение» — 6 300 ₽. Программы для двоих — 6 900–17 600 ₽."
+          "text": "Расслабляющий массаж и массаж спины — 2 800 ₽, массаж на двоих — от 5 600 ₽. SPA-программы: «Релакс» — 3 500 ₽, «Душевное расслабление» — 5 600 ₽, «Ароматное погружение» — 6 300 ₽. Программы для двоих — 6 900–17 600 ₽."
         }
       },
       {
@@ -2098,19 +2099,29 @@
       -webkit-backdrop-filter: none;
     }
 
-    .after-hero a.program-card {
-      display: block;
+    .after-hero .program-card {
+      position: relative;
+      display: flex;
+      flex-direction: column;
       color: inherit;
-      text-decoration: none;
       transition: border-color 200ms ease, transform 200ms ease;
     }
 
-    .after-hero a.program-card:hover,
-    .after-hero a.program-card:focus-visible {
+    .after-hero .program-card:hover,
+    .after-hero .program-card:focus-within {
       border-color: rgba(255, 255, 255, 0.4);
       transform: translateY(-2px);
       outline: none;
     }
+
+    .program-card__link,
+    .need-card__link { color: inherit; text-decoration: none; }
+    .program-card__link::after,
+    .need-card__link::after { content: ""; position: absolute; inset: 0; z-index: 2; }
+    .program-card .pc__actions,
+    .need-card .pc__actions,
+    .quiz-result .pc__actions { position: relative; z-index: 3; }
+    .program-card > .pc__actions { margin-top: auto; padding-top: 1.1rem; }
 
     /* Карточка услуги с фотографией на фоне — как карточки блока «Оставьте тревоги» */
     .after-hero .program-card--photo {
@@ -2143,7 +2154,7 @@
       z-index: 1;
       background: linear-gradient(180deg, rgba(8, 16, 12, 0.14) 0%, rgba(8, 16, 12, 0.08) 55%, rgba(8, 16, 12, 0.28) 100%);
     }
-    .after-hero a.program-card--photo:hover .program-card__photo { transform: scale(1.03); }
+    .after-hero .program-card--photo:hover .program-card__photo { transform: scale(1.03); }
     .program-card__body {
       position: relative;
       z-index: 2;
@@ -2530,21 +2541,24 @@
             <p class="scene-copy scene-copy--dark scene-copy--serif" data-edit="hero-7.scene-copy-1">Плечи опущены. Дыхание глубокое. Голова ясная.</p>
             <p class="final-price-line" data-edit="hero-7.final-price-line-1">Массаж от 2 800 ₽ · SPA-ритуалы от 3 500 ₽ · Для двоих от 6 900 ₽</p>
             <div class="final-needs">
-              <a class="need-card" href="#for-self">
-                <span class="need-card__pain" data-edit="hero-7.need-card-pain-1">Не получается расслабиться</span>
+              <article class="need-card">
+                <a class="need-card__link" href="#for-self"><span class="need-card__pain" data-edit="hero-7.need-card-pain-1">Не получается расслабиться</span></a>
                 <span class="need-card__fix" data-edit="hero-7.need-card-fix-1">Массаж и SPA-ритуал для себя · от 2 800 ₽</span>
                 <span class="need-card__proof" data-edit="hero-7.need-card-proof-1">«Уютно, спокойно и очень душевно» — андрей, Яндекс Карты</span>
-              </a>
-              <a class="need-card" href="#for-two">
-                <span class="need-card__pain" data-edit="hero-7.need-card-pain-2">Давно не были вдвоём</span>
+                <div class="pc__actions"><a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a><a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a></div>
+              </article>
+              <article class="need-card">
+                <a class="need-card__link" href="#for-two"><span class="need-card__pain" data-edit="hero-7.need-card-pain-2">Хотите отдохнуть одновременно</span></a>
                 <span class="need-card__fix" data-edit="hero-7.need-card-fix-2">Один кабинет, два мастера · от 6 900 ₽</span>
-                <span class="need-card__proof" data-edit="hero-7.need-card-proof-2">«Свидание удалось» — lil, Яндекс Карты</span>
-              </a>
-              <a class="need-card" href="#gift">
-                <span class="need-card__pain" data-edit="hero-7.need-card-pain-3">Нечего подарить</span>
+                <span class="need-card__proof" data-edit="hero-7.need-card-proof-2">«Качественный массаж, спокойная музыка и вкусный чай» — lil, Яндекс Карты</span>
+                <div class="pc__actions"><a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a><a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a></div>
+              </article>
+              <article class="need-card">
+                <a class="need-card__link" href="#gift"><span class="need-card__pain" data-edit="hero-7.need-card-pain-3">Нечего подарить</span></a>
                 <span class="need-card__fix" data-edit="hero-7.need-card-fix-3">Сертификат на любую программу · доставка бесплатно</span>
                 <span class="need-card__proof" data-edit="hero-7.need-card-proof-3">«Эмоций было через край» — Green_4, Яндекс Карты</span>
-              </a>
+                <div class="pc__actions"><a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a><a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a></div>
+              </article>
             </div>
             <div class="final-actions">
               <a class="button button--dark" href="#quiz" data-edit="hero-7.button-1">Подобрать ритуал за 3 вопроса</a>
@@ -2626,8 +2640,8 @@
         </div>
 
         <div class="program-grid">
-          <a class="program-card" href="price.html#s1-9">
-            <h3>Релакс</h3>
+          <article class="program-card">
+            <h3><a class="program-card__link" href="price.html#s1-9">Релакс</a></h3>
             <p>Мягкая программа для первого знакомства с ALVI.</p>
             <dl class="program-facts">
               <dt>Цена</dt><dd>3 500 ₽</dd>
@@ -2635,10 +2649,14 @@
               <dt>Состав</dt><dd>фитобочка с травами, массаж тела и головы, чайная церемония.</dd>
               <dt>Кому</dt><dd>если давно не были на массаже и хочется просто выдохнуть.</dd>
             </dl>
-          </a>
+            <div class="pc__actions">
+              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+            </div>
+          </article>
 
-          <a class="program-card" href="price.html#s1-1">
-            <h3>Душевное расслабление</h3>
+          <article class="program-card">
+            <h3><a class="program-card__link" href="price.html#s1-1">Душевное расслабление</a></h3>
             <p>Тело, голова и мысли отпускают по очереди.</p>
             <dl class="program-facts">
               <dt>Цена</dt><dd>5 600 ₽</dd>
@@ -2646,10 +2664,14 @@
               <dt>Состав</dt><dd>фитобочка, скраб «Марципан», обёртывание «Шоколад», массаж тела и головы, чай.</dd>
               <dt>Кому</dt><dd>после тяжёлой недели или перед важным событием.</dd>
             </dl>
-          </a>
+            <div class="pc__actions">
+              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+            </div>
+          </article>
 
-          <a class="program-card" href="price.html#s1-7">
-            <h3>Ароматное погружение</h3>
+          <article class="program-card">
+            <h3><a class="program-card__link" href="price.html#s1-7">Ароматное погружение</a></h3>
             <p>Глубокий ритуал с маслами.</p>
             <dl class="program-facts">
               <dt>Цена</dt><dd>6 300 ₽</dd>
@@ -2657,10 +2679,14 @@
               <dt>Состав</dt><dd>фитобочка, скраб «Дикие ягоды», обёртывание «Шоколад», массаж тела с аромамаслами, массаж лица и декольте, чай.</dd>
               <dt>Кому</dt><dd>когда нужно не «отдохнуть», а восстановиться.</dd>
             </dl>
-          </a>
+            <div class="pc__actions">
+              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+            </div>
+          </article>
 
-          <a class="program-card" href="price.html#s4-3">
-            <h3>Расслабляющий массаж</h3>
+          <article class="program-card">
+            <h3><a class="program-card__link" href="price.html#s4-3">Расслабляющий массаж</a></h3>
             <p>Сильные руки, мягкий темп.</p>
             <dl class="program-facts">
               <dt>Цена</dt><dd>2 800 ₽</dd>
@@ -2668,10 +2694,14 @@
               <dt>Состав</dt><dd>расслабляющий массаж всего тела.</dd>
               <dt>Кому</dt><dd>после сидячей работы.</dd>
             </dl>
-          </a>
+            <div class="pc__actions">
+              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+            </div>
+          </article>
 
-          <a class="program-card" href="price.html#s4-2">
-            <h3>Массаж спины и ног</h3>
+          <article class="program-card">
+            <h3><a class="program-card__link" href="price.html#s4-2">Массаж спины и ног</a></h3>
             <p>Работа с тем, что болит к вечеру.</p>
             <dl class="program-facts">
               <dt>Цена</dt><dd>2 800 ₽</dd>
@@ -2679,7 +2709,11 @@
               <dt>Состав</dt><dd>классический массаж спины и ног.</dd>
               <dt>Кому</dt><dd>если ноет поясница или устают ноги.</dd>
             </dl>
-          </a>
+            <div class="pc__actions">
+              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+            </div>
+          </article>
         </div>
         <div class="price-all"><a class="price-all__button" href="price.html">Посмотреть весь прайс</a></div>
 
@@ -2712,41 +2746,59 @@
         </div>
 
         <div class="program-grid">
-          <a class="program-card program-card--photo" href="price.html#s4-1" style="--card-photo:url('img/card-s4-1.jpg')"><div class="program-card__body">
-            <h3>Парный массаж</h3>
-            <p>Вдвоём в одном кабинете. Хороший первый шаг, если SPA-день пока кажется «слишком».</p>
+          <article class="program-card program-card--photo" style="--card-photo:url('img/card-s4-1.jpg')"><div class="program-card__body">
+            <h3><a class="program-card__link" href="price.html#s4-1">Массаж на двоих</a></h3>
+            <p>Два стола в одном кабинете. Хороший первый шаг для знакомства со SPA-программами на двоих.</p>
             <dl class="program-facts"><dt>Цена</dt><dd>от 5 600 ₽</dd><dt>Время</dt><dd>60 / 90 мин</dd></dl>
-          </div></a>
-          <a class="program-card program-card--photo" href="price.html#s2-2" style="--card-photo:url('img/card-s2-2.jpg')"><div class="program-card__body">
-            <h3>Обновление</h3>
-            <p>Парная SPA-программа для первого совместного визита.</p>
+
+            <div class="pc__actions">
+              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+            </div>
+          </div></article>
+          <article class="program-card program-card--photo" style="--card-photo:url('img/card-s2-2.jpg')"><div class="program-card__body">
+            <h3><a class="program-card__link" href="price.html#s2-2">Обновление</a></h3>
+            <p>SPA-программа на двоих для первого совместного визита.</p>
             <dl class="program-facts"><dt>Цена</dt><dd>8 900 ₽</dd><dt>Время</dt><dd>2 ч</dd></dl>
-          </div></a>
-          <a class="program-card" href="price.html#s2-1">
-            <h3>Успокаивающая</h3>
-            <p>Для годовщины или свидания без суеты.</p>
+
+            <div class="pc__actions">
+              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+            </div>
+          </div></article>
+          <article class="program-card">
+            <h3><a class="program-card__link" href="price.html#s2-1">Успокаивающая</a></h3>
+            <p>Для двоих в одном пространстве: процедуры проходят одновременно.</p>
             <dl class="program-facts"><dt>Цена</dt><dd>10 900 ₽</dd><dt>Время</dt><dd>2 ч 30 мин</dd></dl>
-          </a>
-          <a class="program-card" href="price.html#s2-3">
-            <h3>SPA-день</h3>
+            <div class="pc__actions">
+              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+            </div>
+          </article>
+          <article class="program-card">
+            <h3><a class="program-card__link" href="price.html#s2-3">SPA-день</a></h3>
             <p>Программа-путешествие на несколько часов, с чаем и паузами.</p>
             <dl class="program-facts"><dt>Цена</dt><dd>13 600 ₽</dd><dt>Время</dt><dd>3 ч</dd></dl>
-          </a>
+            <div class="pc__actions">
+              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+            </div>
+          </article>
         </div>
         <div class="price-all"><a class="price-all__button" href="price.html">Посмотреть весь прайс</a></div>
 
       
         <div class="proof">
           <blockquote class="proof-card">
-            <p data-edit="for-two.p-1">«Были с парнем на программе „Спа-день“. 3 часа пролетают незаметно, особенно понравился массаж, даже не хотелось уходить.»</p>
+            <p data-edit="for-two.p-1">«На программе „Спа-день“ 3 часа пролетают незаметно, особенно понравился массаж, даже не хотелось уходить.»</p>
             <footer data-edit="for-two.footer-1">Елена Хинтуханова · Яндекс Карты · 3 августа 2025 · ★ 5</footer>
           </blockquote>
           <blockquote class="proof-card">
-            <p data-edit="for-two.p-2">«Ходили с женой на спа-программу для двоих. Очень качественный массаж, учли все пожелания и проработали проблемные зоны. Приятный аромат трав и успокаивающая музыка быстро помогли расслабиться.»</p>
+            <p data-edit="for-two.p-2">«На SPA-программе для двоих был очень качественный массаж: учли все пожелания и проработали проблемные зоны. Приятный аромат трав и успокаивающая музыка быстро помогли расслабиться.»</p>
             <footer data-edit="for-two.footer-2">Денис Котов · Яндекс Карты · 24 января 2025 · ★ 5</footer>
           </blockquote>
           <blockquote class="proof-card">
-            <p data-edit="for-two.p-3">«Был с девушкой на спа-свидании. Спокойная музыка, качественный массаж, после посидели в комнате отдыха со свечами и вкусным чаем. Свидание удалось!»</p>
+            <p data-edit="for-two.p-3">«Спокойная музыка, качественный массаж, после процедур — отдых и вкусный чай.»</p>
             <footer data-edit="for-two.footer-3">lil · Яндекс Карты · 26 июля 2025 · ★ 5</footer>
           </blockquote>
         </div>
@@ -2841,8 +2893,14 @@
           </div>
 
           <section class="quiz-result" id="quiz-result" tabindex="-1" aria-live="polite" aria-atomic="true" hidden>
-            <h3 id="quiz-result-title"></h3>
-            <p id="quiz-result-copy"></p>
+            <div class="quiz-result__body">
+              <h3 id="quiz-result-title"></h3>
+              <p id="quiz-result-copy"></p>
+              <div class="pc__actions">
+                <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+                <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+              </div>
+            </div>
           </section>
         </form>
       </div>
@@ -2854,7 +2912,7 @@
         <div class="faq-list">
           <details>
             <summary data-edit="faq.summary-1">Сколько стоит массаж в Иркутске в ALVI?</summary>
-            <p class="faq-answer" data-edit="faq.faq-answer-1">Расслабляющий массаж и массаж спины — 2 800 ₽, парный массаж — от 5 600 ₽. SPA-программы: «Релакс» — 3 500 ₽, «Душевное расслабление» — 5 600 ₽, «Ароматное погружение» — 6 300 ₽. Программы для двоих — 6 900–17 600 ₽.</p>
+            <p class="faq-answer" data-edit="faq.faq-answer-1">Расслабляющий массаж и массаж спины — 2 800 ₽, массаж на двоих — от 5 600 ₽. SPA-программы: «Релакс» — 3 500 ₽, «Душевное расслабление» — 5 600 ₽, «Ароматное погружение» — 6 300 ₽. Программы для двоих — 6 900–17 600 ₽.</p>
           </details>
           <!-- FAQ о длительности добавить после подтверждения данных. -->
           <details>
@@ -3090,9 +3148,9 @@
         soul: Object.freeze({ title: "Душевное расслабление — 5 600 ₽", copy: "Комплексная SPA-программа. Тело, голова и мысли отпускают по очереди." }),
         aroma: Object.freeze({ title: "Ароматное погружение — 6 300 ₽", copy: "SPA-ритуал с ароматерапией. Глубокий ритуал с маслами." }),
         back: Object.freeze({ title: "Массаж спины и ног — 2 800 ₽", copy: "Прицельный массаж. Работа с тем, что болит к вечеру." }),
-        pair: Object.freeze({ title: "Парный массаж — от 5 600 ₽", copy: "Вдвоём в одном кабинете. Хороший первый шаг, если SPA-день пока кажется «слишком»." }),
-        renewal: Object.freeze({ title: "Обновление — 8 900 ₽", copy: "Парная SPA-программа для первого совместного визита." }),
-        calm: Object.freeze({ title: "Успокаивающая — 10 900 ₽", copy: "Для годовщины или свидания без суеты." }),
+        pair: Object.freeze({ title: "Массаж на двоих — от 5 600 ₽", copy: "Два стола в одном кабинете. Хороший первый шаг для знакомства со SPA-программами на двоих." }),
+        renewal: Object.freeze({ title: "Обновление — 8 900 ₽", copy: "SPA-программа на двоих для первого совместного визита." }),
+        calm: Object.freeze({ title: "Успокаивающая — 10 900 ₽", copy: "Для двоих в одном пространстве: процедуры проходят одновременно." }),
         spaDay: Object.freeze({ title: "SPA-день — 13 600 ₽", copy: "Программа-путешествие на несколько часов, с чаем и паузами." }),
         gift: Object.freeze({ title: "Сертификат ALVI", copy: "На любую программу или сумму. Доставка сертификата по Иркутску бесплатная." })
       });
@@ -3980,7 +4038,7 @@
   </script>
 <script src="site-apply.js?v=20260904d" defer></script>
 <script src="https://synapse.synapsebusiness.ru/track.js?v=20260905" data-company="alvi" defer></script>
-<script src="price-render.js?v=20260907a" defer></script>
+<script src="price-render.js?v=20260908" defer></script>
 <script>
   // Витрины «Проведи день для себя» и «Один ритм на двоих» берутся из data/price.json
   // (редактируется в кабинете Synapse). Если данных нет — остаются карточки из разметки.
