@@ -449,7 +449,11 @@ const renderEntityCard = async (view, id) => {
     ${view === "crm-legal" && canEditCRM() && privateFields.some((field) => record[field])
       ? `<section class="card"><h3>Реквизиты</h3><dl class="crm-details">
         ${detailsMarkup(config, record, privateFields)}</dl></section>` : ""}
-    ${view === "crm-companies" ? '<div data-company-summary><p>Карточка клиента: загрузка…</p></div>' : ""}
+    ${view === "crm-companies" ? `<nav class="company-card-tabs" aria-label="Разделы карточки">
+      <button type="button" class="plain-button" aria-pressed="true" data-company-tab="summary">Обзор</button>
+      <button type="button" class="plain-button" aria-pressed="false" data-company-tab="documents">Документы</button>
+    </nav><div data-company-summary><p>Карточка клиента: загрузка…</p></div>
+    <div data-company-documents hidden><p>Документы: загрузка…</p></div>` : ""}
     <section class="crm-relations"><h3>Связи</h3><div data-relations></div></section>`;
   content.querySelector("[data-entity-back]").addEventListener("click", (event) => {
     event.preventDefault();
@@ -457,7 +461,92 @@ const renderEntityCard = async (view, id) => {
   });
   bindCardActions(view, record);
   renderRelations(view, record);
-  if (view === "crm-companies") loadCompanySummary(record);
+  if (view === "crm-companies") bindCompanyTabs(record);
+};
+
+const documentLabels = { analytics_questionnaire: "Анкета аналитики", brief: "Бриф" };
+const documentStatuses = { not_provided: "Не предоставлен", in_review: "На проверке",
+  accepted: "Принят", needs_changes: "Требует исправлений" };
+const bindCompanyTabs = (company) => {
+  const content = byId("crm-companies-content");
+  const summary = content.querySelector("[data-company-summary]");
+  const documents = content.querySelector("[data-company-documents]");
+  content.querySelectorAll("[data-company-tab]").forEach((button) => button.addEventListener("click", () => {
+    const showDocuments = button.dataset.companyTab === "documents";
+    summary.hidden = showDocuments;
+    documents.hidden = !showDocuments;
+    content.querySelectorAll("[data-company-tab]").forEach((item) =>
+      item.setAttribute("aria-pressed", String(item === button)));
+    if (showDocuments && !documents.dataset.loaded) loadCompanyDocuments(company);
+  }));
+  loadCompanySummary(company);
+};
+const documentCard = (company, document) => {
+  const canEdit = canEditCRM() && companyOwnedByProject("crm-companies", company);
+  const source = document.linkUrl
+    ? `<a href="${escapeHTML(document.linkUrl)}" target="_blank" rel="noopener">Открыть ссылку</a>`
+    : document.fileName ? `<a href="/content/crm/companies/${company.id}/documents/${document.documentType}/file?${
+      new URLSearchParams(scopeParams())}">${escapeHTML(document.fileName)}</a>` : "Не указан";
+  const review = document.reviewedBy
+    ? `${escapeHTML(document.reviewedByName || `#${document.reviewedBy}`)} · ${escapeHTML(
+      new Date(document.reviewedAt).toLocaleString("ru-RU"))}` : "Не проверен";
+  return `<article class="company-document" data-document="${document.documentType}">
+    <header><div><h3>${documentLabels[document.documentType]}</h3>
+      <p><strong>${documentStatuses[document.status]}</strong> · версия ${document.version || "—"}</p></div></header>
+    <dl class="crm-details"><div><dt>Материал</dt><dd>${source}</dd></div>
+      <div><dt>Проверил и когда</dt><dd>${review}</dd></div>
+      ${document.returnComment ? `<div><dt>Причина возврата</dt><dd>${escapeHTML(document.returnComment)}</dd></div>` : ""}</dl>
+    ${canEdit ? `<form class="document-source-form crm-form">
+      <label>Сайт (необязательно)<input type="url" name="websiteUrl" value="${escapeHTML(document.websiteUrl || "")}"></label>
+      <label>Ссылка<input type="url" name="linkUrl" value="${escapeHTML(document.linkUrl || "")}"></label>
+      <label>Или файл<input type="file" name="file"></label>
+      <button class="plain-button" type="submit">Сохранить новую версию</button></form>
+      <div class="crm-actions document-actions">
+        <button type="button" data-document-action="submit">Отправить на проверку</button>
+        <button type="button" data-document-action="accept">Принять</button>
+        <button type="button" data-document-action="return">Вернуть с причиной</button></div>` : ""}
+    <p class="crm-error" role="alert" hidden></p></article>`;
+};
+const loadCompanyDocuments = async (company) => {
+  const target = byId("crm-companies-content").querySelector("[data-company-documents]");
+  try {
+    const data = await crmQuery(`/companies/${company.id}/documents`, scopeParams());
+    target.dataset.loaded = "true";
+    target.innerHTML = `<div class="company-documents">${data.documents.map((item) =>
+      documentCard(company, item)).join("")}</div>`;
+    target.querySelectorAll("[data-document]").forEach((card) => bindDocumentCard(company, card));
+  } catch (error) { target.innerHTML = `<p class="crm-error" role="alert">${escapeHTML(error.message)}</p>`; }
+};
+const bindDocumentCard = (company, card) => {
+  const type = card.dataset.document;
+  const error = card.querySelector("[role=alert]");
+  card.querySelector("form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const form = event.currentTarget;
+      const file = form.elements.file.files[0];
+      if (file && form.elements.linkUrl.value.trim()) throw new Error("Укажите либо ссылку, либо файл");
+      const fileData = file ? await new Promise((resolve, reject) => {
+        const reader = new FileReader(); reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("Не удалось прочитать файл")); reader.readAsDataURL(file);
+      }) : null;
+      await crmQuery(`/companies/${company.id}/documents/${type}`, scopeParams(), csrfOptions("PUT", {
+        websiteUrl: form.elements.websiteUrl.value.trim() || null,
+        linkUrl: form.elements.linkUrl.value.trim() || null, fileName: file?.name || null, fileData
+      }));
+      await loadCompanyDocuments(company);
+    } catch (failure) { error.textContent = failure.message; error.hidden = false; }
+  });
+  card.querySelectorAll("[data-document-action]").forEach((button) => button.addEventListener("click", async () => {
+    try {
+      const action = button.dataset.documentAction;
+      const reason = action === "return" ? prompt("Укажите причину возврата") : null;
+      if (action === "return" && !reason?.trim()) throw new Error("Причина возврата обязательна");
+      await crmQuery(`/companies/${company.id}/documents/${type}/${action}`, scopeParams(),
+        csrfOptions("POST", action === "return" ? { returnComment: reason.trim() } : {}));
+      await loadCompanyDocuments(company);
+    } catch (failure) { error.textContent = failure.message; error.hidden = false; }
+  }));
 };
 const cardActions = (view, record) => {
   if (!canEditCRM() || !companyOwnedByProject(view, record)) return "";

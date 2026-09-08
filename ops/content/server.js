@@ -57,6 +57,7 @@ function crmIdentityHeader(identity) {
   return Buffer.from(JSON.stringify({
     v: 1,
     userId: identity.id,
+    userName: identity.displayName || identity.login,
     permissions: identity.permissions,
     companyCodes: identity.companyCodes,
   })).toString('base64url');
