@@ -43,14 +43,39 @@
     const prefix = opts.prefix || '';
     return prefix + (data.categories || []).filter((cat) => opts.editor || (cat.items || []).length).map((cat) => `<li><a class="pnav__top" href="#${esc(cat.id)}">${esc(cat.title)}</a></li>`).join('\n');
   }
+  const CACHE_KEY = 'palitra-public-price-v1';
+  const validPrice = (data) => data && Array.isArray(data.categories) && data.categories.every((cat) =>
+    cat && typeof cat.id === 'string' && typeof cat.title === 'string' && Array.isArray(cat.items) &&
+    cat.items.every((item) => item && typeof item.id === 'string' && typeof item.title === 'string'));
+  function readCachedPrice() {
+    try {
+      const data = JSON.parse(localStorage.getItem(CACHE_KEY));
+      return validPrice(data) ? data : null;
+    } catch (_) { return null; }
+  }
+  async function fetchPrice(source) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    try {
+      // Public document only: no session, API key or CSRF token leaves this page.
+      const response = await fetch(source, { cache: 'no-store', credentials: 'omit', signal: controller.signal });
+      if (!response.ok) return null;
+      const data = await response.json();
+      return validPrice(data) ? data : null;
+    } catch (_) { return null; }
+    finally { clearTimeout(timeout); }
+  }
   async function load(paths) {
-    for (const source of paths) {
-      try {
-        const response = await fetch(source, { cache: 'no-store' });
-        if (!response.ok) continue;
-        const data = await response.json();
-        if (data && Array.isArray(data.categories)) return data;
-      } catch (_) { /* Переходим к локальному запасному файлу. */ }
+    const cached = readCachedPrice();
+    const latest = await fetchPrice(paths[0]);
+    if (latest) {
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify(latest)); } catch (_) { /* Storage can be disabled. */ }
+      return latest;
+    }
+    if (cached) return cached;
+    for (const source of paths.slice(1)) {
+      const fallback = await fetchPrice(source);
+      if (fallback) return fallback;
     }
     return null;
   }

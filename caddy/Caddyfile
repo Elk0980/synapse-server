@@ -211,7 +211,7 @@ chat.synapsebusiness.ru {
 palitra-love.synapsebusiness.ru {
   root * /srv/sites/palitra-love
   @palitra_price {
-    path /api/price
+    path /api/price /content/palitra/price
     method GET
   }
   handle @palitra_price {
@@ -227,6 +227,9 @@ palitra-love.synapsebusiness.ru {
     reverse_proxy content:8080
   }
   import draft
-  try_files {path} {path}/index.html /index.html
-  import static
+  # Keep SPA fallback inside the final handler: it must not rewrite API requests.
+  handle {
+    try_files {path} {path}/index.html /index.html
+    import static
+  }
 }
