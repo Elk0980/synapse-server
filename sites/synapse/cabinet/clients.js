@@ -503,6 +503,8 @@ const repeatRow = (row = {}, field = "") => `<div class="crm-repeat-row">${field
   <input data-part="label" placeholder="Подпись"
   value="${escapeHTML(row.label || "")}"><input data-part="value" placeholder="Handle или URL"
   value="${escapeHTML(row.handle || row.url || "")}"><button type="button" data-repeat-remove>Удалить</button></div>`;
+const companyPrepositional = (count) =>
+  count % 10 === 1 && count % 100 !== 11 ? "компании" : "компаниях";
 const renderEntityForm = async (view, record) => {
   const config = CRM_ENTITIES[view];
   if (config.stageFilter && identity.role === "owner") await SbCabinet.pipelineStages.load(crmQuery);
@@ -514,7 +516,8 @@ const renderEntityForm = async (view, record) => {
   const sharedWarning = record && ["crm-contacts", "crm-legal"].includes(view) &&
     record.sharedCompanyCount > 1
     ? `<p class="crm-shared-warning wide" role="note">Эта карточка используется ещё в ${
-      escapeHTML(record.sharedCompanyCount - 1)} компаниях. Изменения увидят все</p>`
+      escapeHTML(record.sharedCompanyCount - 1)} ${
+      companyPrepositional(record.sharedCompanyCount - 1)}. Изменения увидят все</p>`
     : "";
   content.innerHTML = `<button class="plain-button" type="button" data-form-cancel>← Отмена</button>
     <h2>${record ? "Изменить" : "Добавить"}</h2><form class="crm-form">${sharedWarning}${controls}${repeats}
