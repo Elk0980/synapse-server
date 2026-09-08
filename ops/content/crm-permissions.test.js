@@ -190,6 +190,25 @@ test('CRM proxy restricts pipelines to the owner and preserves company-scoped ed
       { code: 'alvi', name: 'QA', pipelineStage: 'paid' });
     assert.equal(result.status, 403);
   });
+  await t.test('external statistics are restricted to the assigned company', async () => {
+    const stats = (companyCode, visits) => ({
+      source: 'qa-proxy-permissions', companyCode,
+      rows: [{ date: '2026-09-07', visits }],
+    });
+    assert.equal((await crm(owner, 'POST', '/external-stats', stats('alvi', 11))).status, 200);
+    assert.equal((await crm(owner, 'POST', '/external-stats', stats('avokado', 22))).status, 200);
+
+    const ownStats = await crm(editor, 'GET', '/external-stats');
+    assert.equal(ownStats.status, 200, JSON.stringify(ownStats.body));
+    assert.ok(ownStats.body.rows.length > 0);
+    assert.ok(ownStats.body.rows.every((row) => row.companyCode === 'alvi'));
+
+    const foreignStats = await crm(editor, 'GET', '/external-stats?companyCode=avokado');
+    assert.equal(foreignStats.status, 403, JSON.stringify(foreignStats.body));
+
+    const foreignWrite = await crm(editor, 'POST', '/external-stats', stats('avokado', 33));
+    assert.equal(foreignWrite.status, 403, JSON.stringify(foreignWrite.body));
+  });
   await t.test('company IDs and query variants cannot bypass the owner check', async () => {
     for (const company of [own.body, other.body]) {
       for (const query of ['', '?companyCode=ALVI', '?companyCode=alvi&companyCode=avokado']) {
