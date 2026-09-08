@@ -170,16 +170,22 @@ ${body}
       const inner = `<h3>${esc(it.card || it.title)}</h3>
             ${it.desc ? `<p>${esc(it.desc)}</p>` : ''}
             <dl class="program-facts">${dl}</dl>`;
+      const actions = `<div class="pc__actions">
+              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
+              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+            </div>`;
+      const linkedInner = inner.replace('<h3>', `<h3><a class="program-card__link" href="price.html#${esc(anchor)}">`).replace('</h3>', '</a></h3>');
       const photo = photoOf(it);
       if (photo) {
-        return `          <a class="program-card program-card--photo" href="price.html#${esc(anchor)}">
+        return `          <article class="program-card program-card--photo">
             <img class="program-card__photo" src="${esc(photo)}" alt="${esc(it.title)}" loading="lazy" decoding="async">
-            <div class="program-card__body">${inner}</div>
-          </a>`;
+            <div class="program-card__body">${linkedInner}${actions}</div>
+          </article>`;
       }
-      return `          <a class="program-card" href="price.html#${esc(anchor)}">
-            ${inner}
-          </a>`;
+      return `          <article class="program-card">
+            ${linkedInner}
+            ${actions}
+          </article>`;
     }).join('\n');
   }
 
