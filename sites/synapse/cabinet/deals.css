@@ -103,12 +103,6 @@
 .deals-stage-select select {
   width: 100%;
   min-width: 0;
-  min-height: 44px;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  color: var(--text);
-  background: var(--bg);
 }
 .deals-dialog {
   max-width: calc(100vw - 24px);
@@ -296,11 +290,6 @@
 .deals-enroll select {
   width: 100%;
   min-width: 0;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  color: var(--text);
-  background: var(--surface);
 }
 .deals-attention {
   justify-self: start;
@@ -367,7 +356,6 @@
   grid-template-columns: minmax(0, 1fr);
 }
 .deals-reason textarea {
-  min-height: 110px;
   width: 100%;
   min-width: 0;
 }

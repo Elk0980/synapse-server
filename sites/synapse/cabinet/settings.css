@@ -10,7 +10,7 @@
 .settings-hugh p { margin: 0; color: var(--muted); }
 .settings-hugh form { display: grid; gap: 16px; }
 .settings-hugh label { display: grid; grid-template-columns: 1fr minmax(150px, 190px); gap: 16px; align-items: center; }
-.settings-hugh select { min-height: 44px; padding: 8px 10px; }
+.settings-hugh select { width: 100%; }
 .settings-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: flex-end; }
 .settings-actions p { min-height: 1.3em; }
 

@@ -2,14 +2,6 @@
 .analytics-grid > .card { min-width: 0; }
 .analytics-dates, .expense-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
 .analytics-dates label, .expense-form label { display: grid; gap: 5px; color: var(--muted); }
-.analytics-dates input, .expense-form input {
-  min-height: 44px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  color: var(--text);
-  background: var(--surface-soft);
-}
 .analytics-section { margin-top: 26px; }
 .analytics-section h2 { margin-top: 0; }
 .platform-filter { position: relative; min-width: min(100%, 280px); }
@@ -75,8 +67,7 @@
 .funnel-detail-list dt { color: var(--muted); }
 .funnel-detail-list dd { margin: 0; }
 .analytics-finance { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 18px; }
-.analytics-source-table { table-layout: fixed; font-size: 0.72rem; }
-.analytics-source-table th, .analytics-source-table td { padding: 8px 6px; }
+.analytics-source-table { table-layout: fixed; }
 .analytics-source-table th, .analytics-source-table td { white-space: normal; overflow-wrap: anywhere; }
 .analytics-source-table th:first-child { width: 14%; }
 .analytics-source-table th:last-child { width: 15%; }

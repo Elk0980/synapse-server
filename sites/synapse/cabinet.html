@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b0908">
 <meta name="color-scheme" content="dark">
 <title>Кабинет — Synapse Business</title>
-<link rel="stylesheet" href="cabinet/clients.css?v=20260907-5">
+<link rel="stylesheet" href="cabinet/clients.css?v=20260907-6">
 <script>document.documentElement.classList.replace("no-js", "js");</script>
 <style>
 :root {
@@ -84,15 +84,7 @@ button { color: inherit; }
 .auth-head span, .auth-note, .muted { color: var(--muted); }
 .auth-field { display: block; margin-bottom: 14px; }
 .auth-field span { display: block; margin-bottom: 6px; color: var(--muted); }
-.auth-field input {
-  width: 100%;
-  min-height: 48px;
-  padding: 10px 14px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  color: var(--text);
-  background: var(--bg);
-}
+.auth-field input { width: 100%; }
 .auth-submit, .logout, .plain-button {
   border: 1px solid rgba(159, 212, 255, 0.4);
   background: rgba(46, 107, 214, 0.2);
@@ -244,9 +236,7 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .crm-stat strong { margin-top: 5px; font-size: 1.35rem; }
 .crm-table-wrap { width: 100%; max-width: 100%; overflow-x: auto; }
 .crm-table { width: 100%; border-collapse: collapse; }
-.crm-table th, .crm-table td {
-  padding: 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap;
-}
+.crm-table th, .crm-table td { text-align: left; white-space: nowrap; }
 .crm-table .crm-grow { width: 100%; }
 .crm-table td.crm-grow { max-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .crm-table .crm-compact { white-space: nowrap; }
@@ -304,7 +294,6 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .site-grid, .account-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
 .site-card h2, .account-card h2 { margin-top: 0; }
 .field-stack { display: grid; gap: 8px; }
-.field-stack input, .field-stack select { min-height: 44px; padding: 9px; }
 .danger { background: #8f2934; color: white; }
 .permission-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
 dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18px; padding: 24px; }
@@ -398,16 +387,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 }
 
 .crm-entity-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 18px; }
-.crm-entity-toolbar input, .crm-entity-toolbar select, .crm-form input, .crm-form select,
-.crm-form textarea {
-  min-height: 44px;
-  padding: 9px 11px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  color: var(--text);
-  background: var(--surface-soft);
-}
-.crm-entity-toolbar input, .crm-entity-toolbar select { height: 40px; min-height: 40px; }
 .crm-entity-toolbar input { min-width: 0; flex: 1 1 220px; }
 .crm-filter-check {
   display: inline-flex;
@@ -433,7 +412,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 .tasks-priority { padding: 3px 7px; border-radius: 7px; background: var(--surface-soft); }
 .tasks-priority[data-priority="urgent"], .tasks-overdue { color: var(--red); }
 .tasks-actions { display: flex; gap: 6px; align-items: center; }
-.tasks-actions button, .tasks-actions select { min-height: 34px; padding: 5px 7px; }
 #tasks-content .crm-table { font-size: 0.9rem; }
 #tasks-content .crm-table th:not(.crm-grow), #tasks-content .crm-table td:not(.crm-grow) { width: 1%; }
 #tasks-content .crm-row td { white-space: nowrap; }
@@ -454,7 +432,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 .crm-details dd { margin: 0; overflow-wrap: anywhere; }
 .crm-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .crm-form label { display: grid; gap: 5px; color: var(--muted); }
-.crm-form textarea { min-height: 100px; resize: vertical; }
+.crm-form textarea { resize: vertical; }
 .crm-form .wide, .crm-relations { grid-column: 1 / -1; }
 .crm-repeat-row { display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 8px; margin-bottom: 8px; }
 .crm-relations { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
@@ -870,7 +848,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260907-5";
+  window.SB_CABINET_ASSET_VERSION = "20260907-6";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
