@@ -377,7 +377,9 @@ async function proxyCrm(request, response, url, cors) {
   const identity = initialSession.user;
   const readOnly = request.method === 'GET';
   const crmPath = url.pathname.slice('/content/crm'.length) || '/';
-  const analyticsPath = new Set(['/dashboard', '/summary', '/external-stats']).has(crmPath);
+  const analyticsPath = new Set([
+    '/dashboard', '/summary', '/external-stats', '/expenses', '/tasks/summary',
+  ]).has(crmPath);
   let session = initialSession;
   if (identity.role !== 'owner' && identity.companyCodes.length === 0) {
     fail(403, 'Аккаунту не назначена компания');
@@ -395,7 +397,8 @@ async function proxyCrm(request, response, url, cors) {
   }
   if (!readOnly) requireCsrf(request, session);
 
-  const clientDatabasePath = /^\/(?:contacts|companies|legal-entities|tasks)(?:\/|$)/.test(crmPath);
+  const clientDatabasePath = /^\/(?:contacts|companies|legal-entities|tasks)(?:\/|$)/.test(crmPath) &&
+    crmPath !== '/tasks/summary';
   const companyOverview = /^\/companies\/\d+\/overview$/.test(crmPath);
   const ownerOnlyPipelinePath = /^\/(?:pipeline-stages|pipelines|pipeline-rules)(?:\/|$)/.test(crmPath) ||
     /^\/companies\/\d+\/(?:overview|pipeline|service)(?:\/|$)/.test(crmPath);
@@ -410,7 +413,8 @@ async function proxyCrm(request, response, url, cors) {
     )) fail(403, 'Нет доступа к компании');
   }
 
-  const companyScoped = /^\/(?:leads(?:\/|\.|$)|dashboard(?:\/|$)|summary(?:\/|$)|expenses(?:\/|$))/.test(crmPath);
+  const companyScoped = /^\/(?:leads(?:\/|\.|$)|dashboard(?:\/|$)|summary(?:\/|$)|expenses(?:\/|$)|tasks\/summary$)/
+    .test(crmPath);
   if (identity.role !== 'owner' && companyScoped) {
     const requestedCompany = url.searchParams.get('companyCode');
     if (requestedCompany && !identity.companyCodes.includes(requestedCompany.toLowerCase())) {
