@@ -136,6 +136,24 @@ test("Telegram webhook creates idempotent tasks and survives CRM errors", async 
   });
   telegramRequests.length = 0;
 
+  const requestsBeforeHelp = crmRequests.length;
+  assert.equal(
+    (await webhook({
+      ...base,
+      message_id: 6,
+      text: "  хЬю  ",
+      from: { id: 23, first_name: "Иван" },
+    })).status,
+    200,
+  );
+  assert.equal(crmRequests.length, requestsBeforeHelp);
+  assert.deepEqual(telegramRequests.at(-1), {
+    chat_id: "-10",
+    text: "Опишите задачу одним сообщением — Хью передаст её команде и ответит номером задачи.",
+    reply_parameters: { message_id: 6 },
+  });
+  telegramRequests.length = 0;
+
   const explicitMessage = {
     ...base,
     message_id: 2,
@@ -149,7 +167,9 @@ test("Telegram webhook creates idempotent tasks and survives CRM errors", async 
   assert.equal(crmRequests[0].priority, "urgent");
   assert.ok(
     telegramRequests.some(
-      (request) => request.chat_id === "-10" && request.text === "Записал в задачи #701",
+      (request) => request.chat_id === "-10" &&
+        request.text === "Принял, записал в задачи №701." &&
+        request.reply_parameters.message_id === 2,
     ),
   );
 
@@ -183,6 +203,17 @@ test("Telegram webhook creates idempotent tasks and survives CRM errors", async 
   assert.equal(crmRequests.length, requestCountBeforeReplyCommand + 1);
   assert.equal(crmRequests.at(-1).sourceRef, "telegram:chat:-10:msg:3");
   assert.equal(crmRequests.at(-1).sourceAuthor, "Иван");
+  assert.equal(telegramRequests.at(-1).text, "Принял, записал в задачи №702.");
+  assert.equal(telegramRequests.at(-1).reply_parameters.message_id, 3);
+
+  await webhook({
+    ...base,
+    message_id: 7,
+    text: "Сделайте пожалуйста баннер на главной",
+    from: { id: 23, first_name: "Иван" },
+  });
+  assert.equal(telegramRequests.at(-1).text, "Принял, записал в задачи №703.");
+  assert.equal(telegramRequests.at(-1).reply_parameters.message_id, 7);
 
   const requestCountBeforeTextCommand = crmRequests.length;
   await webhook({
@@ -194,6 +225,7 @@ test("Telegram webhook creates idempotent tasks and survives CRM errors", async 
   assert.equal(crmRequests.length, requestCountBeforeTextCommand + 1);
   assert.equal(crmRequests.at(-1).title, "проверить аналитику");
   assert.equal(crmRequests.at(-1).sourceRef, "telegram:chat:-10:msg:5");
+  assert.equal(telegramRequests.at(-1).reply_parameters.message_id, 5);
 
   for (const [company, companyCode, messageId] of [
     ["avokado", "avokado", 31],
@@ -228,14 +260,21 @@ test("Telegram webhook creates idempotent tasks and survives CRM errors", async 
     { headers: { "x-api-key": "admin-test" } },
   );
   assert.equal(admin.body.messages.at(-1).task_status, "failed");
+  assert.equal(
+    telegramRequests.some((request) => request.reply_parameters?.message_id === 4),
+    false,
+  );
 
+  const requestsBeforeRetry = crmRequests.length;
+  const confirmationsBeforeRetry = telegramRequests.length;
   assert.equal((await webhook(explicitMessage)).status, 200);
-  assert.equal(crmRequests.at(-1).sourceRef, "telegram:chat:-10:msg:2");
+  assert.equal(crmRequests.length, requestsBeforeRetry);
+  assert.equal(telegramRequests.length, confirmationsBeforeRetry);
   const retried = await jsonRequest(
     `http://127.0.0.1:${chatPort}/admin/conversations/1/messages`,
     { headers: { "x-api-key": "admin-test" } },
   );
-  assert.equal(retried.body.messages[0].task_status, "duplicate");
+  assert.equal(retried.body.messages[0].task_status, "created");
 
   const webConversation = await jsonRequest(
     `http://127.0.0.1:${chatPort}/conversations`,

@@ -27,6 +27,8 @@ const SCRIPT = {
   unknown:
     "Я не буду придумывать цены или обещания: на этот вопрос точно ответит специалист. " +
     "Оставьте, пожалуйста, номер телефона для связи.",
+  groupHelp:
+    "Опишите задачу одним сообщением — Хью передаст её команде и ответит номером задачи.",
 };
 const OWNER_SCRIPT = {
   greeting: "Здравствуйте! Чем помочь по проекту?",
@@ -396,15 +398,14 @@ async function intakeTelegramTask(row, messageRow, detected, details) {
     console.error("Не удалось создать задачу в CRM:", error.message);
     return;
   }
-  if (detected.kind === "explicit") {
-    try {
-      await telegramRequest("sendMessage", {
-        chat_id: row.external_chat_id,
-        text: `Записал в задачи #${taskId}`,
-      });
-    } catch (error) {
-      console.error("Не удалось подтвердить задачу в Telegram:", error.message);
-    }
+  try {
+    await telegramRequest("sendMessage", {
+      chat_id: row.external_chat_id,
+      text: `Принял, записал в задачи №${taskId}.`,
+      reply_parameters: { message_id: Number(details.messageId) },
+    });
+  } catch (error) {
+    console.error("Не удалось подтвердить задачу в Telegram:", error.message);
   }
 }
 
@@ -785,6 +786,14 @@ async function handleWebhook(request, response, origin) {
   }
   const text = message.text || message.caption;
   if (!text) return send(response, 200, { ok: true }, origin);
+  if (/^Хью$/iu.test(text.trim())) {
+    await telegramRequest("sendMessage", {
+      chat_id: chatId,
+      text: SCRIPT.groupHelp,
+      reply_parameters: { message_id: Number(message.message_id) },
+    });
+    return send(response, 200, { ok: true }, origin);
+  }
   const bindingCommand = parseBindingCommand(text);
   if (bindingCommand?.type === "status") {
     const binding = db.prepare("SELECT company FROM client_chats WHERE chat_id = ?").get(chatId);
@@ -887,13 +896,14 @@ async function handleWebhook(request, response, origin) {
   if (replyCommand && message.reply_to_message) {
     taskMessage = getTelegramMessage.get(row.id, taskMessageId) || taskMessage;
   }
-  if (detected.kind && detected.title) {
+  if (!existingMessage && detected.kind && detected.title) {
     await intakeTelegramTask(row, taskMessage, detected, {
       text: taskText,
       description: `${taskText}\nГруппа: ${row.title}`,
       source: "telegram",
       sourceRef: `telegram:chat:${row.external_chat_id}:msg:${taskMessageId}`,
       authorName: taskAuthor.name,
+      messageId: taskMessageId,
     });
   }
   if (!existingMessage && author.type !== "owner")
