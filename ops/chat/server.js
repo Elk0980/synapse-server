@@ -653,6 +653,12 @@ function telegramAuthor(message) {
   };
 }
 
+function isConsentRevocationCommand(text) {
+  return /^\/?(?:стоп|отозвать|stop|revoke)(?:@\w+)?$/iu.test(
+    text.trim(),
+  );
+}
+
 async function handleWebhook(request, response, origin) {
   if (
     !TELEGRAM_WEBHOOK_SECRET ||
@@ -663,6 +669,14 @@ async function handleWebhook(request, response, origin) {
   }
   const update = await readJson(request);
   const message = update.message;
+  const text = message?.text || message?.caption;
+  if (
+    message?.chat?.type === "private" &&
+    text &&
+    isConsentRevocationCommand(text)
+  ) {
+    return send(response, 200, { ok: true, consent: "revoked" }, origin);
+  }
   if (!message || !["group", "supergroup"].includes(message.chat?.type)) {
     return send(response, 200, { ok: true }, origin);
   }
@@ -675,7 +689,6 @@ async function handleWebhook(request, response, origin) {
     const result = insertTelegramConversation.run(now, now, now, chatId, title);
     row = getConversation.get(Number(result.lastInsertRowid));
   }
-  const text = message.text || message.caption;
   if (!text) return send(response, 200, { ok: true }, origin);
   const bindingCommand = parseBindingCommand(text);
   if (bindingCommand?.type === "status") {
