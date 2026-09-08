@@ -407,7 +407,7 @@ async function proxyCrm(request, response, url, cors) {
     )) fail(403, 'Нет доступа к компании');
   }
 
-  const companyScoped = /^\/(?:leads(?:\/|\.|$)|dashboard(?:\/|$)|summary(?:\/|$)|expenses(?:\/|$))/.test(crmPath);
+  const companyScoped = /^\/(?:leads(?:\/|\.|$)|dashboard(?:\/|$)|summary(?:\/|$)|expenses(?:\/|$)|external-stats(?:\/|$))/.test(crmPath);
   if (identity.role !== 'owner' && companyScoped) {
     const requestedCompany = url.searchParams.get('companyCode');
     if (requestedCompany && !identity.companyCodes.includes(requestedCompany.toLowerCase())) {
@@ -424,10 +424,15 @@ async function proxyCrm(request, response, url, cors) {
   let requestBody = null;
   const companyWrite = (request.method === 'POST' && crmPath === '/companies') ||
     (request.method === 'PATCH' && /^\/companies\/\d+$/.test(crmPath));
-  if (identity.role !== 'owner' && companyWrite) {
+  const externalStatsWrite = crmPath === '/external-stats' && request.method !== 'GET';
+  if (identity.role !== 'owner' && (companyWrite || externalStatsWrite)) {
     requestBody = await readRequestBody(request);
     let body;
     try { body = JSON.parse(requestBody.toString('utf8')); } catch { fail(400, 'Некорректный JSON'); }
+    if (externalStatsWrite && body && typeof body === 'object' &&
+      !identity.companyCodes.some((code) => code.toLowerCase() === String(body.companyCode || '').toLowerCase())) {
+      fail(403, 'Нет доступа к компании');
+    }
     if (body && typeof body === 'object' && Object.hasOwn(body, 'pipelineStage')) {
       fail(403, 'Воронка и сервисные поля доступны только владельцу');
     }
