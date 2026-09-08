@@ -397,6 +397,36 @@ const entitySubtitle = (view, record) => {
   if (view === "crm-companies") return record.code || "";
   return [entityValue("legalForm", record.legalForm), record.inn].filter(Boolean).join(" · ");
 };
+const companySummaryList = (items, renderItem) => items.length
+  ? `<ul class="client-summary-list">${items.map(renderItem).join("")}</ul>`
+  : '<p class="crm-empty">Нет данных</p>';
+const companySummaryMarkup = (overview) => {
+  const company = overview.company || {};
+  const contacts = overview.contacts || [];
+  const tasks = overview.tasks || [];
+  const leads = overview.leads?.last || [];
+  const pipelines = Object.entries(company.pipelines || {});
+  const stageLabel = (code) => entityStages().find((stage) => stage.code === code)?.label || code;
+  return `<div class="client-summary-grid">
+    <section class="client-summary-section"><h3>Контакты</h3>${companySummaryList(contacts, (contact) =>
+      `<li><strong>${escapeHTML(entityName(contact))}</strong><span>${escapeHTML(
+        [contact.phone, contact.email, contact.relation?.role].filter(Boolean).join(" · ") || "Нет данных")}</span></li>`)}</section>
+    <section class="client-summary-section"><h3>Стадия воронки</h3>${pipelines.length
+      ? companySummaryList(pipelines, ([pipeline, state]) => `<li><strong>${escapeHTML(pipeline)}</strong>
+        <span>${escapeHTML(stageLabel(state.stage) || "Нет данных")}</span></li>`)
+      : '<p class="crm-empty">Нет данных</p>'}</section>
+    <section class="client-summary-section"><h3>Заявки</h3>${companySummaryList(leads, (lead) =>
+      `<li><strong>${escapeHTML(lead.name || `Заявка #${lead.id}`)}</strong>
+      <span>${escapeHTML([lead.stage, lead.source].filter(Boolean).join(" · ") || "Нет данных")}</span></li>`)}</section>
+    <section class="client-summary-section"><h3>Задачи</h3>${companySummaryList(tasks, (task) =>
+      `<li><strong>${escapeHTML(task.title)}</strong><span>${escapeHTML(
+        [task.status, task.dueDate].filter(Boolean).join(" · ") || "Нет данных")}</span></li>`)}</section>
+    <section class="client-summary-section"><h3>Сделки</h3>${pipelines.length
+      ? companySummaryList(pipelines, ([pipeline, state]) => `<li><strong>${escapeHTML(pipeline)}</strong>
+        <span>${escapeHTML(stageLabel(state.stage) || "Нет данных")}</span></li>`)
+      : '<p class="crm-empty">Нет данных</p>'}</section>
+  </div>`;
+};
 const renderEntityCard = async (view, id) => {
   const config = CRM_ENTITIES[view];
   if (config.stageFilter && identity.role === "owner") await SbCabinet.pipelineStages.load(crmQuery);
@@ -419,7 +449,7 @@ const renderEntityCard = async (view, id) => {
     ${view === "crm-legal" && canEditCRM() && privateFields.some((field) => record[field])
       ? `<section class="card"><h3>Реквизиты</h3><dl class="crm-details">
         ${detailsMarkup(config, record, privateFields)}</dl></section>` : ""}
-    ${view === "crm-companies" ? '<p data-company-leads>Заявки: загрузка…</p>' : ""}
+    ${view === "crm-companies" ? '<div data-company-summary><p>Карточка клиента: загрузка…</p></div>' : ""}
     <section class="crm-relations"><h3>Связи</h3><div data-relations></div></section>`;
   content.querySelector("[data-entity-back]").addEventListener("click", (event) => {
     event.preventDefault();
@@ -427,7 +457,7 @@ const renderEntityCard = async (view, id) => {
   });
   bindCardActions(view, record);
   renderRelations(view, record);
-  if (view === "crm-companies") loadCompanyLeadCount(record);
+  if (view === "crm-companies") loadCompanySummary(record);
 };
 const cardActions = (view, record) => {
   if (!canEditCRM() || !companyOwnedByProject(view, record)) return "";
@@ -458,14 +488,13 @@ const bindCardActions = (view, record) => {
     }
   });
 };
-const loadCompanyLeadCount = async (company) => {
-  const target = byId("crm-companies-content").querySelector("[data-company-leads]");
+const loadCompanySummary = async (company) => {
+  const target = byId("crm-companies-content").querySelector("[data-company-summary]");
   try {
-    const data = await crmQuery("/leads", { companyCode: company.code });
-    const leads = Array.isArray(data) ? data : data.leads || [];
-    target.textContent = `Заявки: ${data.total ?? leads.length}`;
+    const overview = await crmQuery(`/companies/${encodeURIComponent(company.id)}/overview`, scopeParams());
+    target.innerHTML = companySummaryMarkup(overview);
   } catch (error) {
-    target.textContent = `Заявки: ${error.message}`;
+    target.innerHTML = `<p class="crm-error" role="alert">${escapeHTML(error.message)}</p>`;
   }
 };
 const fieldInput = (config, field, value = "") => {
@@ -702,7 +731,7 @@ SbCabinet.registerView("clients", {
 title: "База клиентов",
 render(container, context) {
   init(context);
-  navigate("crm-legal");
+  navigate("crm-companies");
 },
 });
 SbCabinet.registerView("crm-contacts", {

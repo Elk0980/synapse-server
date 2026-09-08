@@ -156,6 +156,26 @@
   overflow-wrap: anywhere;
 }
 
+.client-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin: 20px 0;
+}
+
+.client-summary-section {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.client-summary-section h3 { margin: 0 0 10px; }
+.client-summary-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.client-summary-list li { display: grid; gap: 2px; overflow-wrap: anywhere; }
+.client-summary-list span { color: var(--muted); font-size: .9rem; }
+
 @media (max-width: 700px) {
   .client-list-layout {
     grid-template-columns: minmax(0, 1fr);

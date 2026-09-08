@@ -2027,8 +2027,11 @@ function replacePipelineStages(body, pipelineCode = 'sale') {
   }
 }
 
-function companyOverview(id) {
+function companyOverview(id, company = null) {
   const row = entityRow(ENTITY_CONFIG.companies, id);
+  if (company && row.owner_scope.toLowerCase() !== company.code.toLowerCase()) {
+    fail(404, 'Компания не найдена', { code: 'NOT_FOUND' });
+  }
   const { contacts, legalEntities } = relationRows('companies', id);
   const tasks = db.prepare(`
     SELECT id, title, status, due_date FROM tasks
@@ -2127,7 +2130,8 @@ async function route(request, response) {
   }
   const overviewMatch = url.pathname.match(/^\/companies\/(\d+)\/overview$/);
   if (request.method === 'GET' && overviewMatch) {
-    return send(response, 200, companyOverview(entityId(overviewMatch[1])), cors);
+    const company = scopedCompany(url.searchParams.get('companyCode'));
+    return send(response, 200, companyOverview(entityId(overviewMatch[1]), company), cors);
   }
   if (await handleRelationRoutes(request, response, url, cors)) return;
   if (request.method === 'GET' && url.pathname === '/tasks/summary') {
