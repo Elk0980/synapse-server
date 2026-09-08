@@ -117,12 +117,23 @@ test('CRM proxy restricts pipelines to the owner and preserves company-scoped ed
   assert.equal(own.body.id, 2);
   await t.test('analytics-only access is limited to analytics routes', async () => {
     assert.equal((await crm(viewer, 'GET', '/dashboard')).status, 200);
+    assert.equal((await crm(viewer, 'GET', '/summary?from=2026-09-01&to=2026-09-08')).status, 200);
+    assert.equal((await crm(viewer, 'GET', '/external-stats')).status, 200);
     assert.equal((await crm(viewer, 'GET', '/expenses')).status, 200);
     assert.equal((await crm(viewer, 'GET', '/tasks/summary')).status, 200);
     assert.equal((await crm(viewer, 'GET', '/contacts')).status, 403);
     assert.equal((await crm(viewer, 'GET', '/tasks')).status, 403);
     assert.equal((await crm(viewer, 'GET', '/leads')).status, 403);
     assert.equal((await crm(viewer, 'GET', '/companies')).status, 403);
+    assert.equal((await crm(viewer, 'GET', '/legal-entities')).status, 403);
+  });
+  await t.test('external statistics are restricted to assigned companies', async () => {
+    const stats = (companyCode) => ({
+      source: 'qa', companyCode, rows: [{ date: '2026-09-08', views: 1 }],
+    });
+    assert.equal((await crm(editor, 'GET', '/external-stats?companyCode=avokado')).status, 403);
+    assert.equal((await crm(editor, 'POST', '/external-stats', stats('avokado'))).status, 403);
+    assert.equal((await crm(editor, 'POST', '/external-stats', stats('alvi'))).status, 200);
   });
   await t.test('task transfers require crm.edit and access to both projects', async () => {
     const task = await crm(owner, 'POST', '/tasks', { title: 'QA Transfer', companyCode: 'alvi' });
