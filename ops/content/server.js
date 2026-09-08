@@ -376,23 +376,27 @@ async function proxyCrm(request, response, url, cors) {
   const initialSession = requireSession(request);
   const identity = initialSession.user;
   const readOnly = request.method === 'GET';
+  const crmPath = url.pathname.slice('/content/crm'.length) || '/';
+  const analyticsReadPath = new Set([
+    '/dashboard', '/summary', '/external-stats', '/expenses', '/tasks/summary',
+  ]).has(crmPath);
   let session = initialSession;
   if (identity.role !== 'owner' && identity.companyCodes.length === 0) {
     fail(403, 'Аккаунту не назначена компания');
   }
   if (identity.role !== 'owner') {
-    if (readOnly && identity.permissions.includes('crm.view')) {
-      session = requirePermission(request, 'crm.view');
-    } else if (readOnly) {
-      session = requirePermission(request, 'analytics.view');
+    if (readOnly) {
+      const permission = analyticsReadPath && identity.permissions.includes('analytics.view')
+        ? 'analytics.view' : 'crm.view';
+      session = requirePermission(request, permission);
     } else {
       session = requirePermission(request, 'crm.edit');
     }
   }
   if (!readOnly) requireCsrf(request, session);
 
-  const crmPath = url.pathname.slice('/content/crm'.length) || '/';
-  const clientDatabasePath = /^\/(?:contacts|companies|legal-entities|tasks)(?:\/|$)/.test(crmPath);
+  const clientDatabasePath = /^\/(?:contacts|companies|legal-entities|tasks)(?:\/|$)/.test(crmPath) &&
+    crmPath !== '/tasks/summary';
   const companyOverview = /^\/companies\/\d+\/overview$/.test(crmPath);
   const ownerOnlyPipelinePath = /^\/(?:pipeline-stages|pipelines|pipeline-rules)(?:\/|$)/.test(crmPath) ||
     /^\/companies\/\d+\/(?:overview|pipeline|service)(?:\/|$)/.test(crmPath);
@@ -407,7 +411,7 @@ async function proxyCrm(request, response, url, cors) {
     )) fail(403, 'Нет доступа к компании');
   }
 
-  const companyScoped = /^\/(?:leads(?:\/|\.|$)|dashboard(?:\/|$)|summary(?:\/|$)|expenses(?:\/|$)|external-stats(?:\/|$))/.test(crmPath);
+  const companyScoped = /^\/(?:leads(?:\/|\.|$)|dashboard(?:\/|$)|summary(?:\/|$)|expenses(?:\/|$)|external-stats(?:\/|$)|tasks\/summary$)/.test(crmPath);
   if (identity.role !== 'owner' && companyScoped) {
     const requestedCompany = url.searchParams.get('companyCode');
     if (requestedCompany && !identity.companyCodes.includes(requestedCompany.toLowerCase())) {
