@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#0b0908">
 <meta name="color-scheme" content="dark">
 <title>Кабинет — Synapse Business</title>
-<link rel="stylesheet" href="cabinet/common.css?v=20260908-3">
-<link rel="stylesheet" href="cabinet/clients.css?v=20260908-3">
+<link rel="stylesheet" href="cabinet/common.css?v=20260908-4">
+<link rel="stylesheet" href="cabinet/clients.css?v=20260908-4">
 <script>document.documentElement.classList.replace("no-js", "js");</script>
 <style>
 :root {
@@ -575,6 +575,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <a class="nav-link" href="#settings" data-view-link="settings">Настройки</a>
       <a class="nav-link" id="accounts-link" href="#accounts" data-view-link="accounts" hidden>Настройка аккаунтов</a>
       <a class="nav-link" href="#account" data-view-link="account">Аккаунт</a>
+      <a class="nav-link" id="trademarks-link" href="#trademarks" data-view-link="trademarks" hidden>Помощь в регистрации знаков</a>
     </nav>
     <div class="sidebar-footer">
       <div class="account-summary"><span class="account-avatar" id="account-avatar" aria-hidden="true"></span>
@@ -852,6 +853,28 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         <button type="submit">Создать</button><p id="account-create-result" role="status"></p>
       </form></div><div id="accounts-content" class="account-grid" aria-live="polite"></div>
     </section>
+    <section class="view-panel" id="trademarks-view" data-view="trademarks" hidden>
+      <div class="content-header">
+        <div class="trademarks-heading"><h1>Помощь в регистрации знаков</h1>
+          <span class="trademarks-badge">В разработке</span></div>
+      </div>
+      <div class="card">
+        <div data-trademarks-preview>
+          <div class="trademarks-toolbar"><button class="plain-button" type="button"
+            data-trademarks-edit>Редактировать</button></div>
+          <article class="trademarks-document" data-trademarks-document aria-live="polite">Загрузка…</article>
+        </div>
+        <form class="trademarks-form" data-trademarks-form hidden>
+          <label for="trademarks-markdown" class="muted">Текст в формате Markdown</label>
+          <textarea id="trademarks-markdown" data-trademarks-textarea spellcheck="true"></textarea>
+          <div class="trademarks-actions">
+            <button class="plain-button" type="submit">Сохранить</button>
+            <button type="button" data-trademarks-cancel>Отмена</button>
+            <p class="trademarks-status" data-trademarks-status role="status"></p>
+          </div>
+        </form>
+      </div>
+    </section>
   </main>
 </div>
 <dialog id="site-create-dialog"><form id="site-create-form" class="field-stack">
@@ -878,15 +901,15 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260908-3";
+  window.SB_CABINET_ASSET_VERSION = "20260908-4";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
     window.SbCabinet.views[name] = definition;
   };
   const cabinetAssets = ["home", "tasks", "leads", "deals", "clients", "chat", "hugh", "analytics",
-    "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account"];
-  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat", "hugh", "settings"];
+    "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account", "trademarks"];
+  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat", "hugh", "settings", "trademarks"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join(""));
@@ -928,7 +951,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     "content-factory": "Контент завод",
     settings: "Настройки",
     account: "Аккаунт",
-    accounts: "Настройка аккаунтов"
+    accounts: "Настройка аккаунтов",
+    trademarks: "Помощь в регистрации знаков"
   });
   const CRM_API = "/content/crm";
   const EDITOR_PROJECTS = Object.freeze(["alvi", "avokado"]);
@@ -1080,6 +1104,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const permittedView = (value) => {
     if (!identity) return true;
     if (value === "hugh") return identity.role === "owner";
+    if (value === "trademarks") return identity.role === "owner";
     if (["analytics-through", "ad-platforms", "hypotheses", "competitors", "calltracking"].includes(value)) {
       return identity.permissions.includes("analytics.view");
     }
@@ -1258,6 +1283,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       byId("content-factory-view").hidden = !permittedView("content-factory");
       byId("accounts-link").hidden = identity.role !== "owner";
       byId("hugh-link").hidden = identity.role !== "owner";
+      byId("trademarks-link").hidden = identity.role !== "owner";
       byId("create-site").hidden = !identity.permissions.includes("sites.create");
       const companyFilter = byId("sites-company");
       const companyCreate = byId("site-create-form").elements.companyCode;

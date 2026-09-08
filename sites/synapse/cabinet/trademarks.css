@@ -1,0 +1,53 @@
+.trademarks-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.trademarks-badge {
+  padding: 6px 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--cabinet-radius-sm);
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.trademarks-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 18px;
+}
+
+.trademarks-document { overflow-wrap: anywhere; }
+.trademarks-document > :first-child { margin-top: 0; }
+.trademarks-document > :last-child { margin-bottom: 0; }
+.trademarks-document pre { max-width: 100%; overflow-x: auto; white-space: pre-wrap; }
+.trademarks-document a { color: var(--accent); }
+
+.trademarks-form textarea {
+  display: block;
+  width: 100%;
+  min-height: min(55vh, 620px);
+  padding: 14px;
+  resize: vertical;
+}
+
+.trademarks-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.trademarks-status { margin: 0; color: var(--muted); }
+
+@media (max-width: 760px) {
+  .trademarks-toolbar { justify-content: stretch; }
+  .trademarks-toolbar button { width: 100%; }
+  .trademarks-actions button { flex: 1 1 auto; }
+}

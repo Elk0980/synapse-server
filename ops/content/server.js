@@ -27,6 +27,7 @@ const HISTORY_LIMIT = 10;
 const MAX_BODY = 1024 * 1024;
 const SITES = new Set(['alvi', 'avokado', 'avokado2', 'palitra']);
 const DOCUMENT_VALIDATORS = { site: validateSite, price: validatePrice };
+const OWNER_DOCUMENTS = new Map([['synapse-business/trademarks', validateMarkdown]]);
 const CONTENT_COMPANIES = { alvi: 'alvi', avokado: 'avokado', avokado2: 'avokado', palitra: 'palitra-love' };
 const SESSION_TTL = 30 * 24 * 60 * 60;
 const LOGIN_WINDOW = 10 * 60 * 1000;
@@ -122,7 +123,8 @@ function seedDocuments() {
   if (!fs.existsSync(SEED_DIR)) return;
   for (const file of fs.readdirSync(SEED_DIR)) {
     if (!file.endsWith('.json')) continue;
-    const key = file.replace(/\.json$/, '').replace('-', '/');
+    const stem = file.replace(/\.json$/, '');
+    const key = stem === 'synapse-business-trademarks' ? 'synapse-business/trademarks' : stem.replace('-', '/');
     const latest = latestStmt.get(key);
     // Пока документ никто не правил руками (все версии — seed), обновлённый seed из репозитория
     // становится новой версией. После первого сохранения из кабинета seed больше не вмешивается.
@@ -276,6 +278,12 @@ function validatePrice(doc) {
     if (popular.length > 8) problems.push(`Раздел ${cat.id}: отмечено больше 8 популярных (${popular.length})`);
   }
   if (problems.length) fail(422, 'Документ не прошёл проверку', problems);
+}
+
+function validateMarkdown(doc) {
+  if (Object.keys(doc).join(',') !== 'markdown' || typeof doc.markdown !== 'string') {
+    fail(422, 'Markdown-документ должен содержать только строку markdown');
+  }
 }
 
 function nextVersion(key) {
@@ -565,6 +573,25 @@ const server = http.createServer(async (request, response) => {
     }
     if (request.method === 'GET' && url.pathname === '/health') {
       return reply(200, { ok: true, service: 'content' });
+    }
+
+    const ownerDocumentKey = parts.length === 3 ? `${parts[1]}/${parts[2]}` : null;
+    if (ownerDocumentKey && OWNER_DOCUMENTS.has(ownerDocumentKey)) {
+      const session = requireSession(request);
+      if (session.user.role !== 'owner') fail(403, 'Доступно только владельцу');
+      if (request.method === 'GET') {
+        const row = latestStmt.get(ownerDocumentKey);
+        if (!row) fail(404, `Документ ${ownerDocumentKey} не найден`);
+        return reply(200, row.body, { etag: `"${row.version}"` });
+      }
+      if (request.method === 'PUT') {
+        requireCsrf(request, session);
+        const document = await readJson(request);
+        OWNER_DOCUMENTS.get(ownerDocumentKey)(document);
+        return reply(200, { ok: true, key: ownerDocumentKey,
+          ...saveVersion(ownerDocumentKey, document, publicIdentity(session.user).author) });
+      }
+      fail(405, 'Метод не поддерживается');
     }
 
     if (url.pathname === '/content/admin/accounts' || url.pathname.startsWith('/content/admin/accounts/')) {
