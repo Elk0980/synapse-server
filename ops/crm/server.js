@@ -914,6 +914,17 @@ function entityRow(config, id, includeDeleted = false) {
   if (!row || (row.is_deleted && !includeDeleted)) fail(404, 'Карточка не найдена', { code: 'NOT_FOUND' });
   return row;
 }
+function sharedCompanyCount(config, id) {
+  const relation = config.table === 'contacts'
+    ? ['contact_companies', 'contact_id']
+    : config.table === 'legal_entities'
+      ? ['company_legal_entities', 'legal_entity_id']
+      : null;
+  if (!relation) return null;
+  return db.prepare(`SELECT COUNT(DISTINCT r.company_id) count FROM ${relation[0]} r
+    JOIN companies c ON c.id=r.company_id
+    WHERE r.${relation[1]}=? AND r.is_deleted=0 AND c.is_deleted=0`).get(id).count;
+}
 function conflict(error) {
   if (String(error.message).includes('UNIQUE constraint failed')) {
     fail(409, 'Значение уже используется', { code: 'UNIQUE_CONFLICT' });
@@ -1450,7 +1461,10 @@ async function handleEntityRoutes(request, response, url, cors) {
       const includeDeleted = url.searchParams.get('includeDeleted') === 'true';
       const row = entityRow(config, id, includeDeleted);
       entityInCompany(config, id, company);
-      send(response, 200, { ...serializeEntity(config, row), ...relationRows(kind, id, company) }, cors); return true;
+      const sharedCount = sharedCompanyCount(config, id);
+      send(response, 200, { ...serializeEntity(config, row),
+        ...(sharedCount === null ? {} : { sharedCompanyCount: sharedCount }),
+        ...relationRows(kind, id, company) }, cors); return true;
     }
     if (match && request.method === 'PATCH') {
       const id = entityId(match[1]);

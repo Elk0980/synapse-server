@@ -734,6 +734,23 @@ async function main() {
     signingBasis: 'QA basis' })).status, 201);
   const c2l = `/companies/${company.body.id}/legal-entities/${legal.body.id}`;
   assert.equal((await request('PUT', c2l, { role: 'QA payer', isPrimary: true })).status, 201);
+  assert.equal((await request('GET', `/contacts/${contact.body.id}`)).body.sharedCompanyCount, 1);
+  assert.equal((await request('GET', `/legal-entities/${legal.body.id}`)).body.sharedCompanyCount, 1);
+  const secondContactCompany = `/contacts/${contact.body.id}/companies/${companyB.body.id}`;
+  const secondLegalCompany = `/companies/${companyB.body.id}/legal-entities/${legal.body.id}`;
+  assert.equal((await request('PUT', secondContactCompany, { role: 'QA shared' })).status, 201);
+  assert.equal((await request('PUT', secondLegalCompany, { role: 'QA shared' })).status, 201);
+  const scopedSharedContact = await request('GET',
+    `/contacts/${contact.body.id}?companyCode=${company.body.code}`);
+  const scopedSharedLegal = await request('GET',
+    `/legal-entities/${legal.body.id}?companyCode=${company.body.code}`);
+  assert.equal(scopedSharedContact.body.sharedCompanyCount, 2);
+  assert.equal(scopedSharedLegal.body.sharedCompanyCount, 2);
+  assert.equal(scopedSharedContact.body.companies.length, 1);
+  assert.equal(scopedSharedLegal.body.companies.length, 1);
+  assert.equal((await request('DELETE', secondContactCompany)).status, 200);
+  assert.equal((await request('DELETE', secondLegalCompany)).status, 200);
+  console.log('SHARED_COMPANY_COUNT=PASS');
   const contactB = await request('POST', '/contacts', { name: 'QA Contact B' });
   assert.equal((await request('PUT', `/contacts/${contactB.body.id}/companies/${companyB.body.id}`,
     { role: 'QA B' })).status, 201);
