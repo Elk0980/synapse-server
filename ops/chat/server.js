@@ -55,6 +55,7 @@ const MODEL_API_KEY = process.env.MODEL_API_KEY || "";
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || "";
 const TELEGRAM_OWNER_ID = process.env.TELEGRAM_OWNER_ID || "";
+const TELEGRAM_POLLING = process.env.TELEGRAM_POLLING === "1";
 const CLIENT_BOARD_SECRET = process.env.CLIENT_BOARD_SECRET || "";
 const CONSENT_SERVICE_KEY = process.env.CONSENT_SERVICE_KEY || "";
 const CLIENT_BOARD_BASE_URL = (process.env.CLIENT_BOARD_BASE_URL || "https://{company}.synapsebusiness.ru/zadachi.html").trim();
@@ -703,11 +704,11 @@ async function showConsentChoices(chatId) {
   }
 }
 
-async function handlePrivateTelegram(update, response, origin) {
+async function handlePrivateTelegram(update) {
   const callback = update.callback_query;
   if (callback) {
     const match = String(callback.data || "").match(/^consent:(personal_data|messages|terms):(\d+)$/);
-    if (!match) return send(response, 200, { ok: true }, origin);
+    if (!match) return { ok: true };
     const [, kind, rawVersion] = match;
     const version = Number(rawVersion);
     const text = callback.message?.text;
@@ -718,7 +719,7 @@ async function handlePrivateTelegram(update, response, origin) {
       text: saved ? "Согласие сохранено" : "Сначала поделитесь контактом",
       show_alert: !saved,
     });
-    return send(response, 200, { ok: true }, origin);
+    return { ok: true };
   }
   const message = update.message;
   if (!message || message.chat?.type !== "private") return null;
@@ -730,20 +731,20 @@ async function handlePrivateTelegram(update, response, origin) {
       text: "Здравствуйте! Чтобы продолжить, поделитесь номером телефона кнопкой ниже.",
       reply_markup: { keyboard: [[{ text: "Поделиться контактом", request_contact: true }]], resize_keyboard: true, one_time_keyboard: true },
     });
-    return send(response, 200, { ok: true }, origin);
+    return { ok: true };
   }
   if (message.contact) {
     if (String(message.contact.user_id || "") !== String(message.from?.id || "")) {
       await telegramRequest("sendMessage", { chat_id: chatId, text: "Можно отправить только свой контакт кнопкой «Поделиться контактом»." });
-      return send(response, 200, { ok: true }, origin);
+      return { ok: true };
     }
     const phone = String(message.contact.phone_number || "").trim();
-    if (!phone) return send(response, 200, { ok: true }, origin);
+    if (!phone) return { ok: true };
     db.prepare(`INSERT INTO telegram_clients (telegram_id, phone, name, updated_at) VALUES (?, ?, ?, ?)
       ON CONFLICT(telegram_id) DO UPDATE SET phone=excluded.phone, name=excluded.name, updated_at=excluded.updated_at`)
       .run(String(message.from.id), phone, telegramName(message.from), new Date().toISOString());
     await showConsentChoices(chatId);
-    return send(response, 200, { ok: true }, origin);
+    return { ok: true };
   }
   const messagesRevocation = /^(?:стоп|\/(?:стоп|stop)(?:@\w+)?)$/iu.test(text);
   const personalDataRevocation = /^(?:отозвать|\/(?:отозвать|revoke)(?:@\w+)?)$/iu.test(text);
@@ -755,26 +756,18 @@ async function handlePrivateTelegram(update, response, origin) {
     const reply = CONSENT_COPY.texts[textKey];
     const saved = recordConsent(message.from, kind, false, reply);
     await telegramRequest("sendMessage", { chat_id: chatId, text: saved ? reply : "Сначала поделитесь контактом через /start." });
-    return send(response, 200, { ok: true }, origin);
+    return { ok: true };
   }
   // A phone number typed as ordinary text is deliberately ignored.
-  return send(response, 200, { ok: true }, origin);
+  return { ok: true };
 }
 
-async function handleWebhook(request, response, origin) {
-  if (
-    !TELEGRAM_WEBHOOK_SECRET ||
-    request.headers["x-telegram-bot-api-secret-token"] !==
-      TELEGRAM_WEBHOOK_SECRET
-  ) {
-    fail(401, "Неверный секрет Telegram webhook");
-  }
-  const update = await readJson(request);
-  const privateResult = await handlePrivateTelegram(update, response, origin);
+async function handleTelegramUpdate(update) {
+  const privateResult = await handlePrivateTelegram(update);
   if (privateResult !== null) return privateResult;
   const message = update.message;
   if (!message || !["group", "supergroup"].includes(message.chat?.type)) {
-    return send(response, 200, { ok: true }, origin);
+    return { ok: true };
   }
   const chatId = String(message.chat.id);
   let row = getTelegramConversation.get(chatId);
@@ -786,14 +779,14 @@ async function handleWebhook(request, response, origin) {
     row = getConversation.get(Number(result.lastInsertRowid));
   }
   const text = message.text || message.caption;
-  if (!text) return send(response, 200, { ok: true }, origin);
+  if (!text) return { ok: true };
   if (/^Хью$/iu.test(text.trim())) {
     await telegramRequest("sendMessage", {
       chat_id: chatId,
       text: SCRIPT.groupHelp,
       reply_parameters: { message_id: Number(message.message_id) },
     });
-    return send(response, 200, { ok: true }, origin);
+    return { ok: true };
   }
   const bindingCommand = parseBindingCommand(text);
   if (bindingCommand?.type === "status") {
@@ -802,7 +795,7 @@ async function handleWebhook(request, response, origin) {
       ? `Эта группа привязана: ${binding.company.toUpperCase()}`
       : "Эта группа не привязана ни к одной компании";
     await telegramRequest("sendMessage", { chat_id: chatId, text: reply });
-    return send(response, 200, { ok: true, company: binding?.company || null }, origin);
+    return { ok: true, company: binding?.company || null };
   }
   if (bindingCommand?.type === "bind") {
     const replyError = bindingError(
@@ -817,7 +810,7 @@ async function handleWebhook(request, response, origin) {
       await telegramRequest("sendMessage", {
         chat_id: chatId, text: replyError,
       });
-      return send(response, 200, { ok: true, company: null }, origin);
+      return { ok: true, company: null };
     }
     const company = bindingCommand.company;
     db.prepare(`INSERT INTO client_chats (company, chat_id, updated_at) VALUES (?, ?, ?)
@@ -827,7 +820,7 @@ async function handleWebhook(request, response, origin) {
       chat_id: chatId,
       text: `Группа привязана: ${company.toUpperCase()}. Сюда будут приходить задачи и напоминания`,
     });
-    return send(response, 200, { ok: true, company }, origin);
+    return { ok: true, company };
   }
   if (/^\/company(?:@\w+)?\b/i.test(text)) {
     const company = text
@@ -845,16 +838,11 @@ async function handleWebhook(request, response, origin) {
         text: `Компания: ${company}`,
       });
     }
-    return send(
-      response,
-      200,
-      { ok: true, company: company && isOwner ? company : row.company },
-      origin,
-    );
+    return { ok: true, company: company && isOwner ? company : row.company };
   }
   const author = telegramAuthor(message);
   if (text.startsWith("/") && !/^\/(?:task|задача)(?:@\w+)?(?=\s|:|$)/iu.test(text)) {
-    return send(response, 200, { ok: true }, origin);
+    return { ok: true };
   }
   let taskText = text;
   let taskMessageId = String(message.message_id);
@@ -909,7 +897,53 @@ async function handleWebhook(request, response, origin) {
   }
   if (!existingMessage && author.type !== "owner")
     await notifyOwner(getConversation.get(row.id), text);
-  return send(response, 200, { ok: true }, origin);
+  return { ok: true };
+}
+
+async function handleWebhook(request, response, origin) {
+  if (
+    !TELEGRAM_WEBHOOK_SECRET ||
+    request.headers["x-telegram-bot-api-secret-token"] !==
+      TELEGRAM_WEBHOOK_SECRET
+  ) {
+    fail(401, "Неверный секрет Telegram webhook");
+  }
+  const update = await readJson(request);
+  return send(response, 200, await handleTelegramUpdate(update), origin);
+}
+
+function pause(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function pollTelegramUpdates() {
+  try {
+    await telegramRequest("deleteWebhook", {});
+  } catch (error) {
+    console.error("Не удалось удалить Telegram webhook перед опросом:", error.message);
+  }
+
+  let offset;
+  while (true) {
+    try {
+      const result = await telegramRequest("getUpdates", {
+        timeout: 30,
+        ...(offset === undefined ? {} : { offset }),
+      });
+      if (!Array.isArray(result.result)) {
+        throw new Error("Telegram getUpdates вернул некорректный ответ");
+      }
+      for (const update of result.result) {
+        await handleTelegramUpdate(update);
+        if (Number.isSafeInteger(update.update_id)) {
+          offset = update.update_id + 1;
+        }
+      }
+    } catch (error) {
+      console.error("Ошибка Telegram polling:", error.message);
+      await pause(5_000);
+    }
+  }
 }
 
 async function adminRoutes(request, response, url, origin) {
@@ -1300,6 +1334,7 @@ const server = http.createServer((request, response) => {
 server.listen(PORT, () =>
   console.log(`Чат слушает порт ${PORT}; база: ${DATABASE_PATH}`),
 );
+if (TELEGRAM_POLLING) void pollTelegramUpdates();
 const clientNotificationTimer = setInterval(() => void processClientNotifications(), 60_000);
 clientNotificationTimer.unref();
 void processClientNotifications();
