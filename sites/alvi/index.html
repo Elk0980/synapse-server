@@ -80,6 +80,7 @@
     "url": "https://spaalvi.ru",
     "sameAs": [
       "https://2gis.ru/irkutsk/firm/70000001061502048",
+      "https://yandex.ru/maps/org/alvi/132486598882/",
       "https://t.me/spa_stio_alvi",
       "https://vk.com/spa_studio_alvi",
       "https://max.ru/u/f9LHodD0cOIlskq70SXP8wscTW7u6JcnxZXmoxa5hdxjK58JpJDAM7njO68"
@@ -105,7 +106,7 @@
         "name": "Как записаться?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Через Telegram — отвечаем в течение 2 минут. Работаем ежедневно с 09:00 до 22:00 по предварительной записи."
+          "text": "Через Telegram — отвечаем в течение 2 минут. Работаем ежедневно 09:00–22:00, по предварительной записи."
         }
       },
       {
@@ -1392,14 +1393,16 @@
       --float-d: 6.5s;
       --float-o: 0s;
       position: relative;
-      display: grid;
-      width: 3.5rem;
-      height: 3.5rem;
-      place-items: center;
+      display: inline-flex;
+      min-height: 3.5rem;
+      align-items: center;
+      justify-content: center;
+      gap: 0.55rem;
+      padding: 0.55rem 0.9rem;
       overflow: hidden;
       color: #f3ecd9;
       border: 1px solid rgba(255, 255, 255, 0.28);
-      border-radius: 50%;
+      border-radius: 999px;
       background: rgba(255, 255, 255, 0.10);
       box-shadow: inset 0 -8px 18px rgba(0, 0, 0, 0.08), 0 8px 22px rgba(0, 0, 0, 0.2);
       -webkit-backdrop-filter: blur(10px);
@@ -1435,17 +1438,25 @@
       transform: scale(1.06);
     }
 
-    .contacts-link svg {
+    .contacts-link svg,
+    .contacts-link img {
       position: relative;
       z-index: 1;
       width: 1.65rem;
       height: 1.65rem;
+      flex: 0 0 1.65rem;
+      object-fit: contain;
+    }
+
+    .contacts-link svg {
       fill: none;
       stroke: currentColor;
       stroke-linecap: round;
       stroke-linejoin: round;
       stroke-width: 1.7;
     }
+
+    .contacts-link__label { position: relative; z-index: 1; font-size: 0.78rem; font-weight: 700; line-height: 1.15; }
 
     @keyframes water-float {
       0%, 100% { transform: translateY(-3px) rotate(-1.5deg); }
@@ -1474,6 +1485,9 @@
     .site-footer__inner p { margin: 0; }
 
     .site-footer__links { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.35rem 1rem; }
+    .site-footer__services { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.55rem 1rem; }
+    .site-footer__service { display: inline-flex; align-items: center; gap: 0.35rem; }
+    .site-footer__service img { width: 1.25rem; height: 1.25rem; object-fit: contain; }
 
     .site-footer a { color: var(--gold); }
 
@@ -1562,15 +1576,10 @@
         margin-top: clamp(1.6rem, 4vh, 3rem);
       }
 
-      .contacts-link {
-        width: 3rem;
-        height: 3rem;
-      }
+      .contacts-link { min-height: 3rem; padding: 0.45rem 0.7rem; }
 
-      .contacts-link svg {
-        width: 1.4rem;
-        height: 1.4rem;
-      }
+      .contacts-link svg,
+      .contacts-link img { width: 1.4rem; height: 1.4rem; flex-basis: 1.4rem; }
 
       .media-slot {
         min-height: 13rem;
@@ -2565,7 +2574,7 @@
             </div>
             <p class="final-signature">
               <strong data-edit="hero-7.strong-1">ALVI · Верни себе баланс</strong>
-              <span data-edit="hero-7.span-1">Иркутск, Депутатская, 71а · ежедневно с 09:00 до 22:00</span>
+              <span data-edit="hero-7.span-1">Иркутск, Депутатская, 71а · ежедневно 09:00–22:00, по предварительной записи</span>
             </p>
           </div>
         </article>
@@ -2917,7 +2926,7 @@
           <!-- FAQ о длительности добавить после подтверждения данных. -->
           <details>
             <summary data-edit="faq.summary-2">Как записаться?</summary>
-            <p class="faq-answer" data-edit="faq.faq-answer-2">Через Telegram — отвечаем в течение 2 минут. Работаем ежедневно с 09:00 до 22:00 по предварительной записи.</p>
+            <p class="faq-answer" data-edit="faq.faq-answer-2">Через Telegram — отвечаем в течение 2 минут. Работаем ежедневно 09:00–22:00, по предварительной записи.</p>
           </details>
           <details>
             <summary data-edit="faq.summary-3">Где вы находитесь?</summary>
@@ -2969,26 +2978,15 @@
           <div class="contacts-logo__sheen" aria-hidden="true"></div>
         </div>
         <h2 class="contacts-title" data-edit="contacts.content-title-1">SPA-студия ALVI</h2>
-        <p class="contacts-hours" data-edit="contacts.dd-2">Пн–Вс с 09:00 до 22:00 · по предварительной записи</p>
+        <p class="contacts-hours" data-edit="contacts.dd-2">Ежедневно 09:00–22:00, по предварительной записи</p>
         <nav class="contacts-links" aria-label="Связаться с ALVI">
-          <a class="contacts-link" href="https://t.me/+79246180555" target="_blank" rel="noopener" aria-label="Написать в Telegram" title="Написать в Telegram">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 17-7-5 16-4-6-4 3 1-5 8-5-10 8Z"/></svg>
-          </a>
-          <a class="contacts-link" href="https://t.me/spa_stio_alvi" target="_blank" rel="noopener" aria-label="Канал ALVI" title="Канал ALVI">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m2.5 10.5 12-5v13l-12-5Z"/><path d="M14.5 9.5c2.4.8 4 2.2 5 4.5M14.5 6c4.2 1 6.5 3.5 7.5 7.5M5.5 14.7 7 19h3l-1.1-5.7"/></svg>
-          </a>
-          <a class="contacts-link" href="https://vk.com/spa_studio_alvi" target="_blank" rel="noopener" aria-label="Сообщество ВКонтакте" title="Сообщество ВКонтакте">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5h3c.5 4 2.3 6.2 3.8 6.7V7.5h2.8v3.8c1.5-.2 3.1-2.2 3.6-3.8h3c-.4 2.1-2.3 4.2-3.6 5 1.3.7 3.5 2.6 4.1 4.5h-3.3c-.6-1.5-2.1-3.2-3.8-3.4V17h-.4C6.7 17 3.6 13.5 3 7.5Z"/></svg>
-          </a>
-          <a class="contacts-link" href="https://max.ru/u/f9LHodD0cOIlskq70SXP8wscTW7u6JcnxZXmoxa5hdxjK58JpJDAM7njO68" target="_blank" rel="noopener" aria-label="MAX" title="MAX">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M7.5 16V8l4.5 5 4.5-5v8"/></svg>
-          </a>
-          <a class="contacts-link" href="https://2gis.ru/irkutsk/firm/70000001061502048" target="_blank" rel="noopener noreferrer" aria-label="Открыть в 2ГИС" title="Открыть в 2ГИС">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2.4"/></svg>
-          </a>
-          <a class="contacts-link" href="tel:+79246180555" aria-label="Позвонить +7 924 618-05-55" title="Позвонить +7 924 618-05-55">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 3.5 10 7.8 7.8 10c1.3 2.8 3.4 4.9 6.2 6.2l2.2-2.2 4.3 2.8-.7 3.2c-.2.8-.9 1.3-1.7 1.3C9.6 20.8 3.2 14.4 2.7 5.9c0-.8.5-1.5 1.3-1.7Z"/></svg>
-          </a>
+          <a class="contacts-link" href="https://t.me/+79246180555" target="_blank" rel="noopener" aria-label="Telegram — написать для записи" title="Telegram — запись"><img src="img/brands/telegram.svg" alt="" aria-hidden="true"><span class="contacts-link__label">Telegram · запись</span></a>
+          <a class="contacts-link" href="https://t.me/spa_stio_alvi" target="_blank" rel="noopener" aria-label="Telegram-канал ALVI" title="Telegram — канал ALVI"><img src="img/brands/telegram.svg" alt="" aria-hidden="true"><span class="contacts-link__label">Telegram · Канал</span></a>
+          <a class="contacts-link" href="https://vk.com/spa_studio_alvi" target="_blank" rel="noopener" aria-label="Сообщество ALVI во ВКонтакте" title="ВКонтакте"><img src="img/brands/vk.svg" alt="" aria-hidden="true"><span class="contacts-link__label">ВКонтакте</span></a>
+          <a class="contacts-link" href="https://max.ru/u/f9LHodD0cOIlskq70SXP8wscTW7u6JcnxZXmoxa5hdxjK58JpJDAM7njO68" target="_blank" rel="noopener" aria-label="ALVI в MAX" title="MAX"><img src="img/brands/max.svg" alt="" aria-hidden="true"><span class="contacts-link__label">MAX</span></a>
+          <a class="contacts-link" href="https://yandex.ru/maps/org/alvi/132486598882/" target="_blank" rel="noopener noreferrer" aria-label="ALVI на Яндекс Картах" title="Яндекс Карты"><img src="img/brands/yandex-maps.svg" alt="" aria-hidden="true"><span class="contacts-link__label">Яндекс Карты</span></a>
+          <a class="contacts-link" href="https://2gis.ru/irkutsk/firm/70000001061502048" target="_blank" rel="noopener noreferrer" aria-label="ALVI в 2ГИС" title="2ГИС"><img src="img/brands/2gis.svg" alt="" aria-hidden="true"><span class="contacts-link__label">2ГИС</span></a>
+          <a class="contacts-link" href="tel:+79246180555" aria-label="Позвонить +7 924 618-05-55" title="Позвонить +7 924 618-05-55"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 3.5 10 7.8 7.8 10c1.3 2.8 3.4 4.9 6.2 6.2l2.2-2.2 4.3 2.8-.7 3.2c-.2.8-.9 1.3-1.7 1.3C9.6 20.8 3.2 14.4 2.7 5.9c0-.8.5-1.5 1.3-1.7Z"/></svg><span class="contacts-link__label">Позвонить</span></a>
         </nav>
       </div>
       <script>
@@ -3037,7 +3035,15 @@
       <div class="site-footer__inner">
         <p class="site-footer__brand" data-edit="footer.site-footer-brand-1">ALVI SPA</p>
         <p data-edit="footer.p-1">Индивидуальный предприниматель Петрук Татьяна Александровна · ИНН 381497453085 · ОГРНИП 324385000056520</p>
-        <p>Иркутск, Депутатская улица, 71а · ежедневно с 09:00 до 22:00 · <a href="tel:+79246180555" data-edit="footer.a-1">+7 924 618-05-55</a></p>
+        <p>Иркутск, Депутатская улица, 71а · ежедневно 09:00–22:00, по предварительной записи · <a href="tel:+79246180555" data-edit="footer.a-1">+7 924 618-05-55</a></p>
+        <nav class="site-footer__services" aria-label="ALVI в мессенджерах, соцсетях и картах">
+          <a class="site-footer__service" href="https://t.me/+79246180555" target="_blank" rel="noopener" aria-label="Telegram — написать для записи" title="Telegram — запись"><img src="img/brands/telegram.svg" alt="" aria-hidden="true">Запись</a>
+          <a class="site-footer__service" href="https://t.me/spa_stio_alvi" target="_blank" rel="noopener" aria-label="Telegram-канал ALVI" title="Telegram — канал ALVI"><img src="img/brands/telegram.svg" alt="" aria-hidden="true">Канал</a>
+          <a class="site-footer__service" href="https://vk.com/spa_studio_alvi" target="_blank" rel="noopener" aria-label="Сообщество ALVI во ВКонтакте" title="ВКонтакте"><img src="img/brands/vk.svg" alt="" aria-hidden="true">ВКонтакте</a>
+          <a class="site-footer__service" href="https://max.ru/u/f9LHodD0cOIlskq70SXP8wscTW7u6JcnxZXmoxa5hdxjK58JpJDAM7njO68" target="_blank" rel="noopener" aria-label="ALVI в MAX" title="MAX"><img src="img/brands/max.svg" alt="" aria-hidden="true">MAX</a>
+          <a class="site-footer__service" href="https://yandex.ru/maps/org/alvi/132486598882/" target="_blank" rel="noopener noreferrer" aria-label="ALVI на Яндекс Картах" title="Яндекс Карты"><img src="img/brands/yandex-maps.svg" alt="" aria-hidden="true">Яндекс Карты</a>
+          <a class="site-footer__service" href="https://2gis.ru/irkutsk/firm/70000001061502048" target="_blank" rel="noopener noreferrer" aria-label="ALVI в 2ГИС" title="2ГИС"><img src="img/brands/2gis.svg" alt="" aria-hidden="true">2ГИС</a>
+        </nav>
         <p class="site-footer__links"><a href="price.html" data-edit="footer.a-2">Прайс</a><a href="oferta.html" data-edit="footer.a-3">Публичная оферта</a><a href="politika.html" data-edit="footer.a-4">Политика обработки персональных данных</a><a href="soglasie.html" data-edit="footer.a-5">Согласие на обработку персональных данных</a></p>
         <p data-edit="footer.p-2">Есть противопоказания, проконсультируйтесь со специалистом.</p>
       </div>
