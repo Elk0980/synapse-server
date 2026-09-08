@@ -98,6 +98,11 @@ curl -X POST http://localhost:8080/companies \
 
 ## События с сайтов
 
+Для публичных `POST /events` и `POST /leads` домен заголовка `Origin` (либо `Referer`, если `Origin`
+отсутствует) сверяется с доменами из `websiteUrl` и URL в `socials` выбранной компании. Несовпадение или
+отсутствие домена записывается в stderr, но по умолчанию запрос продолжает обрабатываться. Переменная окружения
+`STRICT_ORIGIN=true` включает отклонение таких запросов с кодом 403.
+
 Публичный `POST /events` принимает визиты и клики с разрешённых CORS-источников. Обязательны `type`
 (`visit` или `click`) и код активной компании `companyCode`. Поддерживаются `clientId`, `page`, `landingPage`,
 `referrer`, поля `utmSource` … `utmTerm`, `source`, `target`, `label` и ISO-время `ts`. Ответ всегда содержит только
