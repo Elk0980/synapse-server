@@ -45,6 +45,14 @@ test('session bootstrap and save use same-origin CSRF without keys/storage',asyn
  assert.match(f.d.querySelector('#ed-status').textContent,/Сохранено/);assert.match(f.d.querySelector('#ed-sub').textContent,/версия 2/);assert.deepEqual(f.errors,[]);
  }finally{f.close();}
 });
+test('product photos resolve to the public site while stored paths stay unchanged',async()=>{
+ const f=await fixture();try{
+ const photos=[...f.d.querySelectorAll('#ed-content img[src]')];assert.ok(photos.length);
+ for(const image of photos) assert.ok(image.src.startsWith('https://palitra-love.synapsebusiness.ru/'));
+ f.d.querySelector('#ed-save').click();await f.settle();
+ assert.deepEqual(f.saved().categories,seed.categories);
+ }finally{f.close();}
+});
 test('missing session shows login link and prevents save, retry restores editor',async()=>{
  const f=await fixture(null);try{
  assert.equal(f.d.querySelector('#ed-save').disabled,true);assert.match(f.d.querySelector('#ed-status').textContent,/Войдите в кабинет/);
@@ -86,14 +94,14 @@ test('real local content server accepts saves/history/restore initiated by edito
   await until(async()=>{try{return (await fetch(base+'/health')).ok;}catch{return false;}});
   const login=await fetch(base+'/content/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({login:'owner',password})});assert.equal(login.status,200);
   const cookie=login.headers.get('set-cookie').split(';')[0];
-  const initial=await (await fetch(base+'/content/palitra/price')).json();
+  const initial=await (await fetch(base+'/public-content/palitra/price')).json();
   f=await fixture(profile,(url,opts)=>fetch(base+url,{...opts,headers:{...opts.headers,cookie}}));
   await until(()=>!f.d.querySelector('#ed-save').disabled);
   f.d.querySelector('#ed-save').click();await until(()=>/Сохранено/.test(f.d.querySelector('#ed-status').textContent));
-  const saved=await (await fetch(base+'/content/palitra/price')).json();assert.equal(saved.version,initial.version+1);assert.deepEqual(saved.categories,initial.categories);
+  const saved=await (await fetch(base+'/public-content/palitra/price')).json();assert.equal(saved.version,initial.version+1);assert.deepEqual(saved.categories,initial.categories);
   f.d.querySelector('#ed-history').click();await until(()=>f.d.querySelector('[data-restore="1"]'));
   f.d.querySelector('[data-restore="1"]').click();await until(()=>/Возвращена версия/.test(f.d.querySelector('#ed-status').textContent));
-  const restored=await (await fetch(base+'/content/palitra/price')).json();assert.equal(restored.version,saved.version+1);
+  const restored=await (await fetch(base+'/public-content/palitra/price')).json();assert.equal(restored.version,saved.version+1);
   assert.deepEqual(restored.categories,initial.categories);assert.deepEqual(f.errors,[]);
  }finally{if(f)f.close();if(child.exitCode===null&&child.signalCode===null){child.kill();await once(child,'exit');}fs.rmSync(dir,{recursive:true,force:true});}
 });

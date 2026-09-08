@@ -702,6 +702,9 @@
         addCardHtml: sectionTools, addRowHtml: sectionTools,
         promoPlaceholderHtml: () => `<div class="ed-section-tools"><button class="ed-btn ed-btn--small ed-btn--main" type="button" data-addpromo="1">Создать раздел «Акции» и наполнить</button><small class="ed-status">Пока раздела нет — на сайте показывается эта заглушка без условий.</small></div>`,
       });
+    content.querySelectorAll('img[src]').forEach((image) => {
+      image.src = imgUrl(image.getAttribute('src'));
+    });
     subEl.textContent = `версия ${data.version || '—'} · обновлено ${data.updatedAt ? new Date(data.updatedAt).toLocaleString('ru-RU') : '—'}` + (dirty ? ' · не сохранено' : '');
     window.scrollTo(0, y);
   }

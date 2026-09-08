@@ -51,7 +51,7 @@ avokado.synapsebusiness.ru {
     method GET
   }
   handle @price {
-    rewrite * /content/avokado/price
+    rewrite * /public-content/avokado/price
     reverse_proxy content:8080
   }
   @site {
@@ -59,7 +59,7 @@ avokado.synapsebusiness.ru {
     method GET
   }
   handle @site {
-    rewrite * /content/avokado/site
+    rewrite * /public-content/avokado/site
     reverse_proxy content:8080
   }
   @assets {
@@ -91,7 +91,7 @@ avokado2.synapsebusiness.ru {
     method GET
   }
   handle @price {
-    rewrite * /content/avokado/price
+    rewrite * /public-content/avokado/price
     reverse_proxy content:8080
   }
   @site {
@@ -99,7 +99,7 @@ avokado2.synapsebusiness.ru {
     method GET
   }
   handle @site {
-    rewrite * /content/avokado2/site
+    rewrite * /public-content/avokado2/site
     reverse_proxy content:8080
   }
   @assets {
@@ -135,7 +135,7 @@ alvi.synapsebusiness.ru {
     method GET
   }
   handle @price {
-    rewrite * /content/alvi/price
+    rewrite * /public-content/alvi/price
     reverse_proxy content:8080
   }
   # Тексты и фоны главной (только чтение) и загруженные в кабинете картинки.
@@ -144,7 +144,7 @@ alvi.synapsebusiness.ru {
     method GET
   }
   handle @site {
-    rewrite * /content/alvi/site
+    rewrite * /public-content/alvi/site
     reverse_proxy content:8080
   }
   @assets {
@@ -215,7 +215,7 @@ palitra-love.synapsebusiness.ru {
     method GET
   }
   handle @palitra_price {
-    rewrite * /content/palitra/price
+    rewrite * /public-content/palitra/price
     reverse_proxy content:8080
   }
   @palitra_assets {

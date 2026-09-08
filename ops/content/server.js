@@ -2,7 +2,7 @@
 
 /* Synapse Business — сервис контента сайтов.
    Хранит JSON-документы (например, прайс ALVI) с историей версий.
-   Чтение публичное, запись — по ключу X-API-Key (CONTENT_API_KEY в .env).
+   Кабинет проверяет сессию, проект и права; сайты читают отдельный публичный маршрут.
    Внешних пакетов нет: Node 24, встроенный node:sqlite. */
 
 const http = require('node:http');
@@ -10,7 +10,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
-const { createAuthStore } = require('./auth-store');
+const { createAuthStore, COMPANIES, PERMISSIONS, DEPENDENCIES, PRICE_CLIENT_PRESET } = require('./auth-store');
 const { createSiteStore } = require('./site-store');
 const { createHughSettingsStore } = require('./hugh-settings-store');
 const { hashPassword, verifyPassword } = require('./passwords');
@@ -318,6 +318,14 @@ function requirePermission(request, permission, companyCode, obscure = false) {
   return session;
 }
 
+// Cabinet access never trusts the presence of an API-key header: validate its value.
+function requireContentAccess(request, permission, site, write = false) {
+  if (request.headers['x-api-key']) return requireAuth(request, site);
+  const session = requirePermission(request, permission, CONTENT_COMPANIES[site]);
+  if (write) requireCsrf(request, session);
+  return publicIdentity(session.user);
+}
+
 function requireCsrf(request, session) {
   if (String(request.headers['x-csrf-token'] || '') !== session.csrf) fail(403, 'Некорректный CSRF-токен');
 }
@@ -599,6 +607,10 @@ const server = http.createServer(async (request, response) => {
       const session = requireSession(request);
       if (session.user.role !== 'owner') fail(403, 'Доступно только владельцу');
       if (request.method !== 'GET') requireCsrf(request, session);
+      if (request.method === 'GET' && parts[3] === 'access-options' && parts.length === 4) {
+        return reply(200, { companies: Object.entries(COMPANIES).map(([id, company]) => ({ id, ...company })),
+          permissions: PERMISSIONS, dependencies: DEPENDENCIES, presets: [PRICE_CLIENT_PRESET] });
+      }
       const id = Number(parts[3]);
       if (request.method === 'GET' && parts.length === 3) {
         return reply(200, { accounts: authStore.list().map(authStore.public) });
@@ -658,6 +670,17 @@ const server = http.createServer(async (request, response) => {
       fail(404, 'Не найдено');
     }
 
+    // Only the public-site Caddy handlers rewrite to this GET-only route.
+    // The cabinet proxies /content/*, never /public-content/*.
+    if (parts[0] === 'public-content') {
+      if (request.method !== 'GET' || parts.length !== 3 || !SITES.has(parts[1]) || !Object.hasOwn(DOCUMENT_VALIDATORS, parts[2])) {
+        fail(404, 'Не найдено');
+      }
+      const row = latestStmt.get(`${parts[1]}/${parts[2]}`);
+      if (!row) fail(404, 'Документ не найден');
+      return reply(200, row.body, { etag: `"${row.version}"` });
+    }
+
     if (parts[0] !== 'content' || parts.length < 3) fail(404, 'Не найдено');
     if (!SITES.has(parts[1])) fail(404, 'Неизвестный сайт');
 
@@ -674,15 +697,15 @@ const server = http.createServer(async (request, response) => {
         return fs.createReadStream(file).pipe(response);
       }
       if (request.method === 'GET' && parts.length === 3) {
+        const permission = sessionData(request)?.user.permissions.includes('price.view') ? 'price.view' : 'site_editor.view';
+        requireContentAccess(request, permission, site);
         const list = fs.existsSync(dir) ? fs.readdirSync(dir).map((n) => ({ name: n, url: `/api/assets/${n}`, size: fs.statSync(path.join(dir, n)).size })) : [];
         return reply(200, { site, files: list });
       }
       if (request.method === 'POST' && parts.length === 3) {
-        if (!request.headers['x-api-key']) {
-          const session = requirePermission(request, 'site_editor.edit', CONTENT_COMPANIES[site]);
-          requireCsrf(request, session);
-        }
-        const author = requireAuth(request, site).author;
+        // Price editors can upload product photos without receiving site-editor permissions.
+        const permission = sessionData(request)?.user.permissions.includes('price.edit') ? 'price.edit' : 'site_editor.edit';
+        const author = requireContentAccess(request, permission, site, true).author;
         const type = (request.headers['content-type'] || '').split(';')[0].trim();
         if (!ASSET_TYPES[type]) fail(415, 'Допустимы только JPEG, PNG и WebP');
         const body = await readRaw(request, MAX_ASSET);
@@ -699,8 +722,9 @@ const server = http.createServer(async (request, response) => {
     const key = `${parts[1]}/${parts[2]}`;
     const tail = parts.slice(3);
 
-    // GET /content/:site/:doc — актуальная версия (публично)
+    // GET /content/:site/:doc — документ кабинета проверяет проект и право просмотра
     if (request.method === 'GET' && tail.length === 0) {
+      requireContentAccess(request, parts[2] === 'price' ? 'price.view' : 'site_editor.view', parts[1]);
       const row = latestStmt.get(key);
       if (!row) fail(404, `Документ ${key} не найден`);
       return reply(200, row.body, { etag: `"${row.version}"` });
@@ -708,19 +732,13 @@ const server = http.createServer(async (request, response) => {
 
     // GET /content/:site/:doc/history
     if (request.method === 'GET' && tail[0] === 'history' && tail.length === 1) {
-      if (!request.headers['x-api-key']) {
-        requirePermission(request, parts[2] === 'price' ? 'price.view' : 'site_editor.view',
-          CONTENT_COMPANIES[parts[1]]);
-      }
+      requireContentAccess(request, parts[2] === 'price' ? 'price.view' : 'site_editor.view', parts[1]);
       return reply(200, { key, versions: historyStmt.all(key, HISTORY_LIMIT) });
     }
 
     // GET /content/:site/:doc/version/:n
     if (request.method === 'GET' && tail[0] === 'version' && tail.length === 2) {
-      if (!request.headers['x-api-key']) {
-        requirePermission(request, parts[2] === 'price' ? 'price.view' : 'site_editor.view',
-          CONTENT_COMPANIES[parts[1]]);
-      }
+      requireContentAccess(request, parts[2] === 'price' ? 'price.view' : 'site_editor.view', parts[1]);
       const row = byVersionStmt.get(key, Number.parseInt(tail[1], 10));
       if (!row) fail(404, 'Версия не найдена');
       return reply(200, row.body);
@@ -728,12 +746,8 @@ const server = http.createServer(async (request, response) => {
 
     // PUT /content/:site/:doc — новая версия (по ключу)
     if (request.method === 'PUT' && tail.length === 0) {
-      if (!request.headers['x-api-key']) {
-        const session = requirePermission(request,
-          parts[2] === 'price' ? 'price.edit' : 'site_editor.edit', CONTENT_COMPANIES[parts[1]]);
-        requireCsrf(request, session);
-      }
-      const author = requireAuth(request, parts[1]).author;
+      const author = requireContentAccess(request,
+        parts[2] === 'price' ? 'price.edit' : 'site_editor.edit', parts[1], true).author;
       const doc = await readJson(request);
       const validator = DOCUMENT_VALIDATORS[parts[2]];
       if (!validator) fail(404, 'Неизвестный тип документа');
@@ -744,12 +758,8 @@ const server = http.createServer(async (request, response) => {
 
     // POST /content/:site/:doc/restore/:n — откат (по ключу)
     if (request.method === 'POST' && tail[0] === 'restore' && tail.length === 2) {
-      if (!request.headers['x-api-key']) {
-        const session = requirePermission(request,
-          parts[2] === 'price' ? 'price.edit' : 'site_editor.edit', CONTENT_COMPANIES[parts[1]]);
-        requireCsrf(request, session);
-      }
-      const author = requireAuth(request, parts[1]).author;
+      const author = requireContentAccess(request,
+        parts[2] === 'price' ? 'price.edit' : 'site_editor.edit', parts[1], true).author;
       const row = byVersionStmt.get(key, Number.parseInt(tail[1], 10));
       if (!row) fail(404, 'Версия не найдена');
       const saved = saveVersion(key, JSON.parse(row.body), `${author} (откат к ${row.version})`);
