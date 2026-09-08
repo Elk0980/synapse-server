@@ -128,6 +128,8 @@ const entityValue = (field, value) => {
   return value;
 };
 const entityName = (record) => record.name || record.shortName || record.code || `#${record.id}`;
+const companyPrepositional = (count) => count % 10 === 1 && count % 100 !== 11
+  ? "компании" : "компаниях";
 const entityState = (view) => entityStates[view] ||= {
   q: "", companyId: "", pipelineStage: "", deleted: "exclude", offset: 0, records: [], companies: [],
   projectId: null
@@ -511,8 +513,13 @@ const renderEntityForm = async (view, record) => {
   const controls = fields.map((field) => fieldInput(config, field, record?.[field] ?? "")).join("");
   const repeats = Object.entries(config.arrays || {}).map(([field, label]) =>
     repeatMarkup(field, label, record?.[field] || [])).join("");
+  const otherCompanyCount = Math.max((record?.companies?.length || 0) - 1, 0);
+  const sharedCardWarning = otherCompanyCount
+    ? `<p class="notice">Карточка используется ещё в ${otherCompanyCount} ${
+      companyPrepositional(otherCompanyCount)}.</p>` : "";
   content.innerHTML = `<button class="plain-button" type="button" data-form-cancel>← Отмена</button>
-    <h2>${record ? "Изменить" : "Добавить"}</h2><form class="crm-form">${controls}${repeats}
+    <h2>${record ? "Изменить" : "Добавить"}</h2>${sharedCardWarning}
+    <form class="crm-form">${controls}${repeats}
     <div class="crm-actions wide"><button class="plain-button" type="submit">Сохранить</button></div>
     <p class="crm-error wide" role="alert" hidden></p></form>`;
   const form = content.querySelector("form");
