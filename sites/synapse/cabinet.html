@@ -850,7 +850,16 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         <input name="displayName" placeholder="Имя" required maxlength="120">
         <input name="password" type="password" autocomplete="new-password" placeholder="Пароль" required minlength="12">
         <input name="confirm" type="password" autocomplete="new-password" placeholder="Повторите пароль" required>
-        <button type="submit">Создать</button><p id="account-create-result" role="status"></p>
+        <label>Набор доступа <select id="account-access-preset"><option value="custom">Выбрать вручную</option></select></label>
+        <fieldset id="account-access-fields" disabled>
+          <legend>Доступ к проектам</legend>
+          <div id="account-create-companies">Загрузка проектов…</div>
+          <p>Выбранные права действуют только в отмеченных проектах.</p>
+          <div id="account-create-permissions"></div>
+        </fieldset>
+        <p id="account-access-status" role="status">Список доступа загружается…</p>
+        <button id="account-access-retry" type="button" hidden>Повторить загрузку доступа</button>
+        <button id="account-create-submit" type="submit" disabled>Создать</button><p id="account-create-result" role="status"></p>
       </form></div><div id="accounts-content" class="account-grid" aria-live="polite"></div>
     </section>
     <section class="view-panel" id="trademarks-view" data-view="trademarks" hidden>
@@ -1065,15 +1074,19 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     if (currentView !== "tasks") registeredViews.tasks?.updateSummary?.(context);
   };
 
-  const editorUrl = (kind) => `${kind}-editor.html?site=${encodeURIComponent(selectedProjectId)}`;
+  const editorSupported = (kind) =>
+    (EDITOR_PROJECTS.includes(selectedProjectId) || (kind === "price" && selectedProjectId === "palitra-love")) &&
+    (identity?.role === "owner" || identity?.permissions.includes(kind === "price" ? "price.edit" : "site_editor.edit"));
+  const editorUrl = (kind) => kind === "price" && selectedProjectId === "palitra-love"
+    ? "/price-editor-palitra.html" : `${kind}-editor.html?site=${encodeURIComponent(selectedProjectId)}`;
   const showEditorNotice = () => {
     const notice = byId("editor-link-notice");
-    notice.textContent = "Редактор для этого проекта ещё не заведён";
+    notice.textContent = "Редактор недоступен для этого проекта или у вашей учётной записи нет права редактирования";
     notice.hidden = false;
   };
   const updateEditorLinks = () => {
-    const supported = EDITOR_PROJECTS.includes(selectedProjectId);
     for (const kind of ["site", "price"]) {
+      const supported = editorSupported(kind);
       const link = byId(`${kind}-editor-link`);
       link.href = supported ? editorUrl(kind) : `#${kind === "site" ? "site-editor" : "price"}`;
       link.setAttribute("aria-disabled", String(!supported));
@@ -1085,12 +1098,12 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         link.removeAttribute("rel");
       }
     }
-    if (supported) byId("editor-link-notice").hidden = true;
+    byId("editor-link-notice").hidden = true;
   };
   const redirectEditorHash = () => {
     const kind = location.hash === "#site-editor" ? "site" : location.hash === "#price" ? "price" : null;
     if (!kind) return false;
-    if (EDITOR_PROJECTS.includes(selectedProjectId)) {
+    if (editorSupported(kind)) {
       location.replace(editorUrl(kind));
       return true;
     }

@@ -24,6 +24,8 @@ const DEPENDENCIES = Object.freeze({
   'chat.reply': ['chat.view'],
   'settings.edit': ['settings.view'],
 });
+const PRICE_CLIENT_PRESET = Object.freeze({ id: 'client-price', name: 'Клиент — только свой прайс',
+  singleCompany: true, permissions: ['sites.view', 'price.view', 'price.edit'] });
 const TATYANA_PERMISSIONS = ['sites.view', 'site_editor.view', 'site_editor.edit', 'price.view', 'price.edit'];
 
 function fail(status, message) {
@@ -149,7 +151,7 @@ function createAuthStore(db, authUsers = '') {
         new Set(companies).size !== companies.length || new Set(permissions).size !== permissions.length) {
       fail(400, 'Компании и права должны быть списками без повторов');
     }
-    if (companies.some((code) => !COMPANIES[code])) fail(400, 'Неизвестная компания');
+    if (companies.some((code) => typeof code !== 'string' || !Object.hasOwn(COMPANIES, code))) fail(400, 'Неизвестная компания');
     if (permissions.some((code) => !PERMISSIONS.includes(code))) fail(400, 'Неизвестное право');
     for (const [permission, dependencies] of Object.entries(DEPENDENCIES)) {
       if (permissions.includes(permission) && dependencies.some((item) => !permissions.includes(item))) {
@@ -170,7 +172,10 @@ function createAuthStore(db, authUsers = '') {
     },
     create(actorId, input, passwordHash) {
       const keys = Object.keys(input).sort().join(',');
-      if (keys !== 'displayName,login,password') fail(400, 'Переданы лишние или отсутствуют обязательные поля');
+      if (!['displayName,login,password', 'companies,displayName,login,password,permissions'].includes(keys)) fail(400, 'Переданы лишние или отсутствуют обязательные поля');
+      const companies = input.companies ?? [];
+      const permissions = input.permissions ?? [];
+      validateAccess(companies, permissions);
       if (typeof input.login === 'string' && this.getByLogin(input.login)) fail(409, 'Этот login уже занят');
       if (!/^[a-z0-9_-]{1,64}$/.test(input.login)) fail(400, 'Некорректный login');
       if (typeof input.displayName !== 'string' || !input.displayName.trim() || input.displayName.length > 120) {
@@ -183,7 +188,9 @@ function createAuthStore(db, authUsers = '') {
             (login, display_name, role, password_hash, created_at, updated_at) VALUES (?, ?, 'editor', ?, ?, ?)`)
             .run(input.login, input.displayName.trim(), passwordHash, stamp, stamp);
           const id = Number(result.lastInsertRowid);
-          audit(actorId, id, 'ACCOUNT_CREATED', { login: input.login });
+          for (const code of companies) db.prepare('INSERT INTO auth_user_companies VALUES (?,?)').run(id, code);
+          for (const permission of permissions) db.prepare('INSERT INTO auth_user_permissions VALUES (?,?)').run(id, permission);
+          audit(actorId, id, 'ACCOUNT_CREATED', { login: input.login, companies, permissions });
           return decorate(getUser(id));
         });
       } catch (error) {
@@ -247,4 +254,4 @@ function createAuthStore(db, authUsers = '') {
   };
 }
 
-module.exports = { COMPANIES, DEPENDENCIES, PERMISSIONS, TATYANA_PERMISSIONS, createAuthStore, transaction };
+module.exports = { COMPANIES, DEPENDENCIES, PERMISSIONS, PRICE_CLIENT_PRESET, TATYANA_PERMISSIONS, createAuthStore, transaction };
