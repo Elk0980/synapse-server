@@ -20,6 +20,17 @@
   font-weight: 700;
 }
 
+/* Unified cabinet styling. */
+.crm-toolbar,
+.crm-filters {
+  gap: 12px;
+  padding: var(--cabinet-panel-padding);
+  border: 1px solid var(--line);
+  border-radius: var(--cabinet-radius-md);
+  background: var(--surface);
+}
+
+
 .client-list-layout {
   display: grid;
   grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
@@ -196,4 +207,16 @@
   .client-card dl {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+.crm-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--cabinet-radius-md);
+  background: var(--surface);
+}
+
+.crm-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-soft);
 }

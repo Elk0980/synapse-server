@@ -1,0 +1,86 @@
+:root {
+  --cabinet-nav-height: 72px;
+  --cabinet-radius-sm: 10px;
+  --cabinet-radius-md: 14px;
+  --cabinet-radius-lg: 20px;
+  --cabinet-control-height: 44px;
+  --cabinet-panel-padding: clamp(16px, 2vw, 24px);
+  --cabinet-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
+}
+
+/* Shared cabinet presentation primitives keep every workspace view consistent. */
+.view > header,
+.view-header {
+  min-height: var(--cabinet-nav-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.view h1,
+.view h2,
+.view h3 {
+  margin-top: 0;
+  letter-spacing: -0.02em;
+}
+
+.view button,
+.view input,
+.view select,
+.view textarea,
+dialog button,
+dialog input,
+dialog select,
+dialog textarea {
+  min-height: var(--cabinet-control-height);
+  border-radius: var(--cabinet-radius-sm);
+}
+
+.view input,
+.view select,
+.view textarea,
+dialog input,
+dialog select,
+dialog textarea {
+  border: 1px solid var(--line);
+  color: var(--text);
+  background: var(--surface-soft);
+}
+
+.view button,
+dialog button {
+  transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.view button:not(:disabled):hover,
+dialog button:not(:disabled):hover {
+  border-color: rgba(159, 212, 255, 0.55);
+}
+
+.view button:not(:disabled):active,
+dialog button:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.view-card,
+.crm-card,
+.analytics-card,
+.settings-card {
+  border: 1px solid var(--line);
+  border-radius: var(--cabinet-radius-md);
+  background: var(--surface);
+  box-shadow: var(--cabinet-shadow);
+}
+
+@media (max-width: 760px) {
+  :root { --cabinet-nav-height: 60px; }
+  .view > header,
+  .view-header { align-items: flex-start; flex-direction: column; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view button,
+  dialog button { transition: none; }
+}
