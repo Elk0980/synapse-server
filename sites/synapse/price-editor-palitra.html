@@ -264,6 +264,7 @@
     }
     .ed-btn:hover { border-color: rgba(255,255,255,0.6); }
     .ed-btn--main { background: var(--gold); color: #17220f; border-color: transparent; font-weight: 600; }
+    .ed-bar [hidden] { display: none !important; }
     .ed-btn--main:disabled { opacity: 0.55; cursor: default; }
     .ed-btn--ghost { background: transparent; }
     .ed-btn--small { min-height: 1.9rem; padding: 0.2rem 0.7rem; font-size: 0.78rem; }
@@ -354,9 +355,10 @@
     <div class="ed-bar__title">Редактор прайса Palitra Love<small id="ed-sub">загрузка…</small></div>
     <span class="ed-status" id="ed-status"></span>
     <button class="ed-btn ed-btn--ghost" id="ed-history" type="button">История</button>
-    <button class="ed-btn ed-btn--ghost" id="ed-key" type="button">Ключ</button>
+    <a class="ed-btn ed-btn--ghost" id="ed-login" href="/cabinet.html" target="_blank" rel="noopener" hidden>Войти в кабинет</a>
+    <button class="ed-btn ed-btn--ghost" id="ed-session-retry" type="button" hidden>Проверить вход</button>
     <a class="ed-btn ed-btn--ghost" href="https://palitra-love.synapsebusiness.ru/price.html" id="ed-open-price" target="_blank" rel="noopener">Открыть прайс ↗</a>
-    <button class="ed-btn ed-btn--main" id="ed-save" type="button">Сохранить</button>
+    <button class="ed-btn ed-btn--main" id="ed-save" type="button" disabled>Сохранить</button>
   </div>
 
   <div class="price-layout">
@@ -375,12 +377,11 @@
 (() => {
   'use strict';
   const params = new URLSearchParams(location.search);
-  const API_BASE = (params.get('api') || '').replace(/\/$/, '');
-  const API = API_BASE + '/content/palitra/price';
-  const ASSETS = API_BASE + '/content/palitra/assets';
+  // Session cookies and CSRF are used only on this cabinet's origin.
+  const API = '/content/palitra/price';
+  const ASSETS = '/content/palitra/assets';
   const SITE = (params.get('site') || 'https://palitra-love.synapsebusiness.ru').replace(/\/$/, '');
   const imgUrl = (p) => !p ? '' : (/^https?:/.test(p) ? p : p.startsWith('/api/assets/') ? ASSETS + p.slice('/api/assets'.length) : SITE + (p.startsWith('/') ? p : '/' + p));
-  const KEY_STORAGE = 'synapse_content_key';
   const openPrice = document.getElementById('ed-open-price');
   if (openPrice) openPrice.href = SITE + '/price.html';
   const MAX_PER_CATEGORY = 8;
@@ -388,6 +389,7 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   const esc = (s) => window.PalitraPrice ? PalitraPrice.esc(s) : String(s ?? '');
 
+  let session = null;   // CSRF remains in memory, never in browser storage.
   let data = null;      // текущее состояние документа
   let dirty = false;    // есть несохранённые изменения
   let editing = null;   // id позиции, открытой на редактирование
@@ -586,10 +588,7 @@
     if (prepared.size > 8 * 1024 * 1024) return say('Файл больше 8 МБ даже после уменьшения', true);
     say('Загружаю…');
     try {
-      const key = getKey(false); if (!key) throw new Error('без ключа загрузить нельзя');
-      const r = await fetch(ASSETS, { method: 'POST', headers: { 'X-API-Key': key, 'Content-Type': prepared.type, 'X-Filename': encodeURIComponent(prepared.name) }, body: prepared });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) { if (r.status === 401) { try { localStorage.removeItem(KEY_STORAGE); } catch (x) {} } throw new Error(j.error || 'HTTP ' + r.status); }
+      const j = await apiFetch(ASSETS, { method: 'POST', headers: { 'Content-Type': prepared.type, 'X-Filename': encodeURIComponent(prepared.name) }, body: prepared });
       setPhoto(id, j.url);
       say('Фото загружено — нажмите «Готово», затем «Сохранить».');
     } catch (e) { say('Не загружено: ' + e.message, true); }
@@ -707,49 +706,76 @@
     window.scrollTo(0, y);
   }
 
-  /* --- ключ, сохранение, история --- */
-  function getKey(force) {
-    let key = '';
-    try { key = localStorage.getItem(KEY_STORAGE) || ''; } catch (e) {}
-    if (!key || force) {
-      key = prompt('Ключ редактора (CONTENT_KEY_PALITRA из .env на сервере). Хранится в этом браузере.') || '';
-      key = key.trim();
-      try { if (key) localStorage.setItem(KEY_STORAGE, key); } catch (e) {}
-    }
-    return key;
+  /* --- сессия кабинета, сохранение, история --- */
+  function sessionUnavailable(message) {
+    session = null;
+    saveBtn.disabled = true;
+    $('#ed-login').hidden = false;
+    $('#ed-session-retry').hidden = false;
+    setStatus(message, 'error');
   }
-  async function apiFetch(url, opts = {}, withKey = false) {
+  async function loadSession() {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const r = await fetch('/content/whoami', { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+      const profile = await r.json().catch(() => ({}));
+      if (!r.ok) throw Object.assign(new Error(r.status === 401 ? 'Войдите в кабинет, чтобы редактировать прайс.'
+        : 'Не удалось проверить вход. Повторите попытку.'), { status: r.status });
+      const allowed = profile.role === 'owner' || (profile.permissions?.includes('price.edit') &&
+        profile.companies?.some((company) => company.id === 'palitra-love'));
+      if (!allowed) throw Object.assign(new Error('Нет права редактировать прайс Palitra. Обратитесь к администратору.'), { status: 403 });
+      if (typeof profile.csrfToken !== 'string' || !profile.csrfToken) {
+        throw new Error('Не удалось подтвердить сессию. Войдите в кабинет снова.');
+      }
+      session = profile;
+      $('#ed-login').hidden = true;
+      $('#ed-session-retry').hidden = true;
+      return session;
+    } catch (error) {
+      const message = error.name === 'AbortError' ? 'Проверка входа не отвечает. Повторите попытку.' : error.message;
+      sessionUnavailable(message);
+      throw new Error(message);
+    } finally { clearTimeout(timeout); }
+  }
+  async function apiFetch(url, opts = {}) {
     const headers = { 'Accept': 'application/json', ...(opts.headers || {}) };
-    if (withKey) {
-      const key = getKey(false);
-      if (!key) throw new Error('Без ключа сохранить нельзя');
-      headers['X-API-Key'] = key;
-    }
-    const r = await fetch(url, { ...opts, headers, cache: 'no-store' });
+    const write = !['GET', 'HEAD'].includes((opts.method || 'GET').toUpperCase());
+    if (write || url !== API) await loadSession();
+    if (write) headers['X-CSRF-Token'] = session.csrfToken;
+    const r = await fetch(url, { ...opts, headers, credentials: 'same-origin', cache: 'no-store' });
     let body = null;
     try { body = await r.json(); } catch (e) {}
     if (!r.ok) {
-      const msg = body?.error || `HTTP ${r.status}`;
+      const msg = r.status === 401 ? 'Войдите в кабинет, чтобы продолжить.' : body?.error || `HTTP ${r.status}`;
       const details = Array.isArray(body?.details) ? '\n— ' + body.details.join('\n— ') : '';
+      if (r.status === 401 || r.status === 403) sessionUnavailable(msg);
       const err = new Error(msg + details); err.status = r.status; throw err;
     }
     return body;
+  }
+  async function resumeSession() {
+    try {
+      await loadSession();
+      if (!data) await loadData();
+      saveBtn.disabled = false;
+      setStatus(dirty ? 'Вход подтверждён. Несохранённые изменения сохранены в редакторе.' : 'Готово к работе');
+    } catch (error) { setStatus(error.message, 'error'); }
   }
   async function save() {
     if (!data) return;
     saveBtn.disabled = true; setStatus('Сохраняю…');
     try {
-      const res = await apiFetch(API, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }, true);
+      const res = await apiFetch(API, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
       data.version = res.version; data.updatedAt = res.updatedAt; dirty = false;
       saveBtn.textContent = 'Сохранить';
       const t = new Date(res.updatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
       setStatus(`Сохранено ${t} · версия ${res.version}. На сайте появится сразу.`, 'ok');
       render();
     } catch (e) {
-      if (e.status === 401) { try { localStorage.removeItem(KEY_STORAGE); } catch (x) {} }
       setStatus('Не сохранено: ' + e.message, 'error');
       alert('Не сохранено.\n' + e.message);
-    } finally { saveBtn.disabled = false; }
+    } finally { saveBtn.disabled = !session; }
   }
   async function showHistory() {
     const box = $('#ed-modal-box'); const modal = $('#ed-modal');
@@ -768,7 +794,7 @@
   async function restore(version) {
     if (!confirm(`Вернуть версию ${version}? Текущее состояние станет новой версией истории.`)) return;
     try {
-      await apiFetch(API + '/restore/' + version, { method: 'POST' }, true);
+      await apiFetch(API + '/restore/' + version, { method: 'POST' });
       $('#ed-modal').classList.remove('is-open');
       await loadData(); setStatus(`Возвращена версия ${version}`, 'ok');
     } catch (e) { setStatus('Откат не выполнен: ' + e.message, 'error'); alert('Откат не выполнен.\n' + e.message); }
@@ -805,7 +831,7 @@
     if (t.dataset.close) return $('#ed-modal').classList.remove('is-open');
     if (t.id === 'ed-save') return save();
     if (t.id === 'ed-history') return showHistory();
-    if (t.id === 'ed-key') { getKey(true); setStatus('Ключ обновлён для этой вкладки'); return; }
+    if (t.id === 'ed-session-retry') return resumeSession();
   });
   document.addEventListener('submit', (e) => {
     const form = e.target.closest('form[data-form]');
@@ -825,10 +851,11 @@
       $('#ed-content').innerHTML = '<p class="ed-status is-error">Не удалось загрузить price-render.js с palitra-love.synapsebusiness.ru. Проверьте, что сайт Palitra Love доступен.</p>';
       return;
     }
-    try { await loadData(); setStatus('Готово к работе'); }
+    try { await loadSession(); await loadData(); saveBtn.disabled = false; setStatus('Готово к работе'); }
     catch (e) {
-      setStatus('Не удалось загрузить прайс: ' + e.message, 'error');
-      $('#ed-content').innerHTML = `<p class="ed-status is-error">Не удалось загрузить прайс: ${esc(e.message)}.<br>Сервис content должен быть поднят на сервере (см. ops/content).</p>`;
+      setStatus(e.message, 'error');
+      $('#ed-session-retry').hidden = false;
+      $('#ed-content').innerHTML = `<p class="ed-status is-error">${esc(e.message)}</p><p><a href="/cabinet.html" target="_blank" rel="noopener">Войти в кабинет</a>, затем нажмите «Проверить вход».</p>`;
     }
   })();
 })();
