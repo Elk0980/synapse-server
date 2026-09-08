@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000" role="img" aria-label="Подарочный сертификат SPA-салона ALVI">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="0.7" y2="1">
+    <stop offset="0" stop-color="#f4f0e7"/>
+    <stop offset="0.55" stop-color="#ece8dd"/>
+    <stop offset="1" stop-color="#e4dfd2"/>
+  </linearGradient>
+  <linearGradient id="gold" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#7a6134"/>
+    <stop offset="0.35" stop-color="#9d803f"/>
+    <stop offset="0.6" stop-color="#b39351"/>
+    <stop offset="0.85" stop-color="#8f743a"/>
+    <stop offset="1" stop-color="#7a6134"/>
+  </linearGradient>
+  <radialGradient id="halo" cx="0.5" cy="0.32" r="0.58">
+    <stop offset="0" stop-color="#6f8461" stop-opacity="0.12"/>
+    <stop offset="1" stop-color="#6f8461" stop-opacity="0"/>
+  </radialGradient>
+</defs>
+
+<rect width="1600" height="1000" fill="url(#bg)"/>
+<ellipse cx="800" cy="330" rx="740" ry="430" fill="url(#halo)"/>
+
+<rect x="52" y="52" width="1496" height="896" fill="none" stroke="url(#gold)" stroke-width="1.6" opacity="0.9"/>
+<rect x="68" y="68" width="1464" height="864" fill="none" stroke="#8a6f3d" stroke-width="0.7" opacity="0.3"/>
+
+<!-- декоративная веточка в стиле логотипа салона -->
+<g transform="translate(800,168)" fill="none" stroke="#8a6f3d" stroke-linecap="round">
+  <path d="M0 -52 C0 -20 0 12 0 44" stroke-width="2.2"/>
+  <path d="M0 -34 C-26 -40 -44 -28 -50 -12 C-30 -6 -10 -16 0 -30" stroke-width="1.8"/>
+  <path d="M0 -34 C26 -40 44 -28 50 -12 C30 -6 10 -16 0 -30" stroke-width="1.8"/>
+  <path d="M0 -6 C-22 -12 -38 -2 -44 12 C-26 18 -8 8 0 -4" stroke-width="1.8"/>
+  <path d="M0 -6 C22 -12 38 -2 44 12 C26 18 8 8 0 -4" stroke-width="1.8"/>
+  <circle cx="0" cy="52" r="5" fill="#8a6f3d" stroke="none"/>
+</g>
+
+<!-- название салона -->
+<text x="800" y="300" text-anchor="middle" font-family="Lora, Georgia, 'DejaVu Serif', serif" font-size="76" letter-spacing="22" fill="#2a3027">ALVI</text>
+<text x="800" y="344" text-anchor="middle" font-family="Lora, Georgia, 'DejaVu Serif', serif" font-size="17" letter-spacing="12" fill="#8a6f3d">SPA · МАССАЖ · ИРКУТСК</text>
+
+<line x1="590" y1="392" x2="1010" y2="392" stroke="url(#gold)" stroke-width="1" opacity="0.55"/>
+
+<text x="800" y="476" text-anchor="middle" font-family="Lora, Georgia, 'DejaVu Serif', serif" font-size="26" letter-spacing="15" fill="#5c6753">ПОДАРОЧНЫЙ</text>
+<text x="800" y="566" text-anchor="middle" font-family="Lora, Georgia, 'DejaVu Serif', serif" font-size="88" letter-spacing="6" fill="url(#gold)">СЕРТИФИКАТ</text>
+
+<g font-family="Lora, Georgia, 'DejaVu Serif', serif" fill="#5c6753">
+  <text x="200" y="664" font-size="19" letter-spacing="3">НА</text>
+  <line x1="248" y1="674" x2="1400" y2="674" stroke="#a2ab97" stroke-width="1"/>
+
+  <text x="200" y="756" font-size="19" letter-spacing="3">КОМУ</text>
+  <line x1="292" y1="766" x2="700" y2="766" stroke="#a2ab97" stroke-width="1"/>
+
+  <text x="760" y="756" font-size="19" letter-spacing="3">ДЕЙСТВИТЕЛЕН ДО</text>
+  <line x1="1010" y1="766" x2="1180" y2="766" stroke="#a2ab97" stroke-width="1"/>
+
+  <text x="1230" y="756" font-size="19" letter-spacing="3">№</text>
+  <line x1="1262" y1="766" x2="1400" y2="766" stroke="#a2ab97" stroke-width="1"/>
+</g>
+
+<line x1="200" y1="836" x2="1400" y2="836" stroke="#cdd2c3" stroke-width="1"/>
+
+<g font-family="Lora, Georgia, 'DejaVu Serif', serif" font-size="17" fill="#6a7560" letter-spacing="1">
+  <text x="200" y="878">Иркутск, ул. Депутатская, 71А</text>
+  <text x="200" y="906">ежедневно 09:00–22:00 · по предварительной записи</text>
+  <text x="1400" y="878" text-anchor="end">+7 924 618-05-55</text>
+  <text x="1400" y="906" text-anchor="end">ИП Петрук Т. А. · alvi.synapsebusiness.ru</text>
+</g>
+</svg>
