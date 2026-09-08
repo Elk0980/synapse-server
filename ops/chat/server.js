@@ -2,6 +2,7 @@
 
 const http = require("node:http");
 const crypto = require("node:crypto");
+const CONSENT_COPY = require("./consent-texts.json");
 const { DatabaseSync } = require("node:sqlite");
 const { URL } = require("node:url");
 const {
@@ -53,6 +54,7 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || "";
 const TELEGRAM_OWNER_ID = process.env.TELEGRAM_OWNER_ID || "";
 const CLIENT_BOARD_SECRET = process.env.CLIENT_BOARD_SECRET || "";
+const CONSENT_SERVICE_KEY = process.env.CONSENT_SERVICE_KEY || "";
 const CLIENT_BOARD_BASE_URL = (process.env.CLIENT_BOARD_BASE_URL || "https://{company}.synapsebusiness.ru/zadachi.html").trim();
 const TELEGRAM_QUIET_HOURS = parseQuietHours(process.env);
 const ALLOWED_ORIGINS = new Set(
@@ -117,6 +119,14 @@ db.exec(`
     kind TEXT NOT NULL, chat_id TEXT NOT NULL, text TEXT NOT NULL,
     created_at TEXT NOT NULL, sent_at TEXT
   );
+  CREATE TABLE IF NOT EXISTS telegram_clients (
+    telegram_id TEXT PRIMARY KEY, phone TEXT NOT NULL, name TEXT, updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS consent_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_id TEXT NOT NULL, phone TEXT NOT NULL,
+    name TEXT, created_at TEXT NOT NULL, kind TEXT NOT NULL, granted INTEGER NOT NULL,
+    text TEXT NOT NULL, text_sha256 TEXT NOT NULL, text_version INTEGER NOT NULL
+  );
 `);
 
 function addColumn(table, definition) {
@@ -148,6 +158,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages(conversation_id, id);
   CREATE INDEX IF NOT EXISTS client_tasks_company_idx ON client_tasks(company, status, updated_at);
   CREATE INDEX IF NOT EXISTS client_notifications_pending_idx ON client_notifications(sent_at, id);
+  CREATE INDEX IF NOT EXISTS consent_events_telegram_idx ON consent_events(telegram_id, id);
+  CREATE INDEX IF NOT EXISTS telegram_clients_phone_idx ON telegram_clients(phone);
 `);
 
 const insertWebConversation = db.prepare(`INSERT INTO conversations
@@ -653,6 +665,100 @@ function telegramAuthor(message) {
   };
 }
 
+function telegramName(from) {
+  return [from?.first_name, from?.last_name].filter(Boolean).join(" ") || from?.username || null;
+}
+
+function consentHash(text) {
+  return crypto.createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+function recordConsent(from, kind, granted, text, version = CONSENT_COPY.version) {
+  const telegramId = String(from?.id || "");
+  const client = db.prepare("SELECT phone FROM telegram_clients WHERE telegram_id = ?").get(telegramId);
+  if (!client) return false;
+  db.prepare(`INSERT INTO consent_events
+    (telegram_id, phone, name, created_at, kind, granted, text, text_sha256, text_version)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(telegramId, client.phone, telegramName(from), new Date().toISOString(), kind,
+      granted ? 1 : 0, text, consentHash(text), version);
+  return true;
+}
+
+async function showConsentChoices(chatId) {
+  const labels = {
+    personal_data: "Согласен на обработку данных",
+    messages: "Согласен получать сообщения",
+    terms: "Принимаю условия",
+  };
+  for (const kind of Object.keys(labels)) {
+    await telegramRequest("sendMessage", {
+      chat_id: chatId,
+      text: CONSENT_COPY.texts[kind],
+      reply_markup: { inline_keyboard: [[{
+        text: labels[kind], callback_data: `consent:${kind}:${CONSENT_COPY.version}`,
+      }]] },
+    });
+  }
+}
+
+async function handlePrivateTelegram(update, response, origin) {
+  const callback = update.callback_query;
+  if (callback) {
+    const match = String(callback.data || "").match(/^consent:(personal_data|messages|terms):(\d+)$/);
+    if (!match) return send(response, 200, { ok: true }, origin);
+    const [, kind, rawVersion] = match;
+    const version = Number(rawVersion);
+    const text = callback.message?.text;
+    const valid = version === CONSENT_COPY.version && text === CONSENT_COPY.texts[kind];
+    const saved = valid && recordConsent(callback.from, kind, true, text, version);
+    await telegramRequest("answerCallbackQuery", {
+      callback_query_id: callback.id,
+      text: saved ? "Согласие сохранено" : "Сначала поделитесь контактом",
+      show_alert: !saved,
+    });
+    return send(response, 200, { ok: true }, origin);
+  }
+  const message = update.message;
+  if (!message || message.chat?.type !== "private") return null;
+  const chatId = String(message.chat.id);
+  const text = String(message.text || "").trim();
+  if (/^\/start(?:@\w+)?(?:\s|$)/iu.test(text)) {
+    await telegramRequest("sendMessage", {
+      chat_id: chatId,
+      text: "Здравствуйте! Чтобы продолжить, поделитесь номером телефона кнопкой ниже.",
+      reply_markup: { keyboard: [[{ text: "Поделиться контактом", request_contact: true }]], resize_keyboard: true, one_time_keyboard: true },
+    });
+    return send(response, 200, { ok: true }, origin);
+  }
+  if (message.contact) {
+    if (String(message.contact.user_id || "") !== String(message.from?.id || "")) {
+      await telegramRequest("sendMessage", { chat_id: chatId, text: "Можно отправить только свой контакт кнопкой «Поделиться контактом»." });
+      return send(response, 200, { ok: true }, origin);
+    }
+    const phone = String(message.contact.phone_number || "").trim();
+    if (!phone) return send(response, 200, { ok: true }, origin);
+    db.prepare(`INSERT INTO telegram_clients (telegram_id, phone, name, updated_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT(telegram_id) DO UPDATE SET phone=excluded.phone, name=excluded.name, updated_at=excluded.updated_at`)
+      .run(String(message.from.id), phone, telegramName(message.from), new Date().toISOString());
+    await showConsentChoices(chatId);
+    return send(response, 200, { ok: true }, origin);
+  }
+  const command = text.toLocaleLowerCase("ru-RU");
+  const revocation = command === "стоп"
+    ? ["messages", "messages_revoked"]
+    : command === "отозвать" ? ["personal_data", "personal_data_revoked"] : null;
+  if (revocation) {
+    const [kind, textKey] = revocation;
+    const reply = CONSENT_COPY.texts[textKey];
+    const saved = recordConsent(message.from, kind, false, reply);
+    await telegramRequest("sendMessage", { chat_id: chatId, text: saved ? reply : "Сначала поделитесь контактом через /start." });
+    return send(response, 200, { ok: true }, origin);
+  }
+  // A phone number typed as ordinary text is deliberately ignored.
+  return send(response, 200, { ok: true }, origin);
+}
+
 async function handleWebhook(request, response, origin) {
   if (
     !TELEGRAM_WEBHOOK_SECRET ||
@@ -662,6 +768,8 @@ async function handleWebhook(request, response, origin) {
     fail(401, "Неверный секрет Telegram webhook");
   }
   const update = await readJson(request);
+  const privateResult = await handlePrivateTelegram(update, response, origin);
+  if (privateResult !== null) return privateResult;
   const message = update.message;
   if (!message || !["group", "supergroup"].includes(message.chat?.type)) {
     return send(response, 200, { ok: true }, origin);
@@ -976,6 +1084,30 @@ async function clientTaskAdminRoutes(request, response, url, origin) {
 
 async function route(request, response, origin) {
   const url = new URL(request.url, "http://localhost");
+  if (request.method === "GET" && url.pathname === "/internal/consents") {
+    if (!CONSENT_SERVICE_KEY || request.headers["x-service-key"] !== CONSENT_SERVICE_KEY)
+      fail(401, "Неверный ключ сервиса");
+    const telegramId = url.searchParams.get("telegram_id");
+    const phone = url.searchParams.get("phone");
+    if (!telegramId && !phone) fail(400, "Укажите phone или telegram_id");
+    const clients = telegramId
+      ? db.prepare("SELECT * FROM telegram_clients WHERE telegram_id = ?").all(telegramId)
+      : db.prepare("SELECT * FROM telegram_clients WHERE phone = ?").all(phone);
+    const people = clients.map((client) => {
+      const events = db.prepare("SELECT * FROM consent_events WHERE telegram_id = ? ORDER BY id").all(client.telegram_id);
+      const consents = {};
+      for (const event of events) {
+        consents[event.kind] = {
+          granted: Boolean(event.granted),
+          givenAt: event.granted ? event.created_at : null,
+          changedAt: event.created_at,
+          version: event.text_version,
+        };
+      }
+      return { telegramId: client.telegram_id, phone: client.phone, name: client.name, consents };
+    });
+    return send(response, 200, { clients: people }, origin);
+  }
   if (url.pathname.startsWith("/t/")) return clientTaskRoutes(request, response, url, origin);
   if (url.pathname === "/client-tasks" || url.pathname.startsWith("/client-tasks/")) return clientTaskAdminRoutes(request, response, url, origin);
   if (url.pathname.startsWith("/admin/"))
@@ -1136,7 +1268,7 @@ const server = http.createServer((request, response) => {
         : {}),
       "access-control-allow-methods": "GET, POST, PATCH, OPTIONS",
       "access-control-allow-headers":
-        "Content-Type, Authorization, X-Visitor-Token, X-API-Key",
+        "Content-Type, Authorization, X-Visitor-Token, X-API-Key, X-Service-Key",
       "access-control-max-age": "86400",
     });
     return response.end();
