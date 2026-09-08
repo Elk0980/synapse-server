@@ -18,6 +18,7 @@
 | `TELEGRAM_BOT_TOKEN` | Токен Telegram-бота; может быть пустым для тестового режима |
 | `TELEGRAM_WEBHOOK_SECRET` | Секрет заголовка webhook; обязателен для приёма обновлений |
 | `TELEGRAM_OWNER_ID` | Числовой Telegram user id владельца |
+| `TELEGRAM_POLLING` | `1` включает получение обновлений через long polling; пустое значение или `0` оставляет только webhook |
 | `CLIENT_BOARD_SECRET` | HMAC-секрет подписанных ссылок клиентской доски; при пустом значении `/t/*` отвечает 503 |
 | `CLIENT_BOARD_BASE_URL` | Шаблон URL доски с `{company}`, по умолчанию `https://{company}.synapsebusiness.ru/zadachi.html` |
 | `TELEGRAM_SILENT_START` | Начало беззвучного интервала по Москве, по умолчанию `22:00` |
@@ -84,6 +85,13 @@ curl -fsS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
 Проверить регистрацию можно методом `getWebhookInfo`. Telegram передаёт секрет в заголовке
 `X-Telegram-Bot-Api-Secret-Token`. Если токен не задан, входящие webhook всё равно можно тестировать,
 а ответ владельца сохраняется вместе с системной пометкой о том, что отправка в Telegram не выполнена.
+
+### Long polling
+
+Если Telegram не может подключиться к публичному webhook, задайте `TELEGRAM_POLLING=1` и
+перезапустите сервис. При старте сервис удалит webhook без удаления накопленных обновлений и будет
+получать их методом `getUpdates`. Чтобы вернуться к webhook, задайте `TELEGRAM_POLLING=0` (или
+удалите переменную), перезапустите сервис и снова зарегистрируйте webhook командой выше.
 
 Для уведомлений доски владелец должен один раз выполнить в нужной группе `/привязать alvi`,
 `/привязать avokado` или `/привязать palitra`. Команда принимается только от пользователя с
