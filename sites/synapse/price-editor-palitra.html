@@ -690,7 +690,7 @@
       const n = showcase(b).length; const max = blockMax(b);
       return `<li><a class="pnav__top" href="#block-${b}">${esc(blockTitle(b))}<span class="ed-count${n >= max ? ' is-full' : ''}">${n} / ${max}</span></a></li>`;
     }).join('\n');
-    nav.innerHTML = PalitraPrice.renderNav(data, { prefix, noCertificates: true }) +
+    nav.innerHTML = PalitraPrice.renderNav(data, { prefix, noCertificates: true, editor: true }) +
       `<li><button class="ed-btn ed-btn--small" type="button" id="ed-addcat" style="margin-top:.6rem">+ Новый раздел</button></li>`;
     // счётчики популярных в меню
     for (const cat of data.categories) {
