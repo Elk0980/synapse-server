@@ -61,15 +61,8 @@
 .hugh-compose textarea {
   flex: 1;
   min-width: 0;
-  min-height: 46px;
   max-height: 160px;
   resize: vertical;
-}
-
-.hugh-compose button,
-.hugh-error button {
-  min-height: var(--cabinet-button-height);
-  padding-inline: var(--cabinet-button-padding-inline);
 }
 
 .hugh-error {

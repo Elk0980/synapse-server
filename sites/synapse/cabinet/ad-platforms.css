@@ -69,11 +69,7 @@
 }
 
 .manual-days-table th,
-.manual-days-table td {
-  padding: 6px 4px;
-  text-align: left;
-  vertical-align: top;
-}
+.manual-days-table td { vertical-align: top; }
 
 .manual-days-table input {
   box-sizing: border-box;
@@ -96,7 +92,6 @@
 
 .manual-note textarea {
   box-sizing: border-box;
-  min-height: 72px;
   resize: vertical;
   width: 100%;
 }
