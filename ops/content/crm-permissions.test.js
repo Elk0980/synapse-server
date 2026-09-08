@@ -115,6 +115,27 @@ test('CRM proxy restricts pipelines to the owner and preserves company-scoped ed
   assert.equal(other.status, 201);
   assert.equal(own.status, 201);
   assert.equal(own.body.id, 2);
+  await t.test('analytics-only viewer cannot read client database routes', async () => {
+    for (const pathname of ['/contacts', '/companies', '/legal-entities', '/tasks', '/leads']) {
+      const result = await crm(viewer, 'GET', pathname);
+      assert.equal(result.status, 403, `${pathname}: ${JSON.stringify(result.body)}`);
+    }
+  });
+  await t.test('analytics-only viewer can read analytics routes', async () => {
+    for (const pathname of [
+      '/dashboard', '/summary?from=2026-01-01&to=2026-12-31',
+      '/external-stats', '/expenses', '/tasks/summary',
+    ]) {
+      const result = await crm(viewer, 'GET', pathname);
+      assert.equal(result.status, 200, `${pathname}: ${JSON.stringify(result.body)}`);
+    }
+  });
+  await t.test('CRM editor without analytics permission can load the client dashboard', async () => {
+    for (const pathname of ['/dashboard', '/tasks/summary']) {
+      const result = await crm(editor, 'GET', pathname);
+      assert.equal(result.status, 200, `${pathname}: ${JSON.stringify(result.body)}`);
+    }
+  });
   await t.test('task transfers require crm.edit and access to both projects', async () => {
     const task = await crm(owner, 'POST', '/tasks', { title: 'QA Transfer', companyCode: 'alvi' });
     assert.equal(task.status, 201, JSON.stringify(task.body));
