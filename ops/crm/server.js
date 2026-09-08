@@ -459,6 +459,33 @@ migrate(6, () => {
   `);
 });
 
+migrate(7, () => {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS company_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      website_url TEXT,
+      document_type TEXT NOT NULL CHECK(document_type IN ('analytics_questionnaire', 'brief')),
+      version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0),
+      link_url TEXT,
+      file_name TEXT,
+      file_data TEXT,
+      status TEXT NOT NULL DEFAULT 'not_provided'
+        CHECK(status IN ('not_provided', 'in_review', 'accepted', 'needs_changes')),
+      uploaded_by INTEGER,
+      uploaded_by_name TEXT,
+      reviewed_by INTEGER,
+      reviewed_by_name TEXT,
+      reviewed_at TEXT,
+      return_comment TEXT,
+      updated_at TEXT NOT NULL,
+      UNIQUE(company_id, document_type),
+      CHECK(link_url IS NULL OR file_data IS NULL)
+    );
+    CREATE INDEX IF NOT EXISTS company_documents_company_idx ON company_documents(company_id);
+  `);
+});
+
 const foreignKeyErrors = db.prepare('PRAGMA foreign_key_check').all();
 if (foreignKeyErrors.length) throw new Error('Нарушена ссылочная целостность базы данных');
 
@@ -1241,7 +1268,8 @@ function crmIdentity(request) {
   }
   if (!identity || Array.isArray(identity) || typeof identity !== 'object' || identity.v !== 1 ||
       !Number.isSafeInteger(identity.userId) || identity.userId < 1 ||
-      Object.keys(identity).sort().join(',') !== 'companyCodes,permissions,userId,v') return null;
+      !['companyCodes,permissions,userId,v', 'companyCodes,permissions,userId,userName,v']
+        .includes(Object.keys(identity).sort().join(','))) return null;
   if (!Array.isArray(identity.permissions) || identity.permissions.length > 100 ||
       !Array.isArray(identity.companyCodes) || identity.companyCodes.length > 100) return null;
   if (identity.permissions.some((value) => typeof value !== 'string' || value.length < 1 || value.length > 64) ||
@@ -1250,7 +1278,120 @@ function crmIdentity(request) {
       !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(value.trim()))) return null;
   const companyCodes = identity.companyCodes.map((value) => value.trim().toLowerCase());
   if (new Set(companyCodes).size !== companyCodes.length) return null;
-  return { permissions: new Set(identity.permissions), companyCodes: new Set(companyCodes) };
+  if (identity.userName !== undefined && (typeof identity.userName !== 'string' ||
+      !identity.userName.trim() || identity.userName.length > 200)) return null;
+  return { userId: identity.userId, userName: identity.userName?.trim() || `#${identity.userId}`,
+    permissions: new Set(identity.permissions), companyCodes: new Set(companyCodes) };
+}
+
+const DOCUMENT_TYPES = ['analytics_questionnaire', 'brief'];
+const DOCUMENT_STATUSES = ['not_provided', 'in_review', 'accepted', 'needs_changes'];
+
+function documentContext(request, companyId, permission) {
+  const identity = crmIdentity(request);
+  if (!identity?.permissions.has(permission)) fail(403, 'Недостаточно прав', { code: 'FORBIDDEN' });
+  const company = db.prepare('SELECT id, code FROM companies WHERE id = ? AND is_deleted = 0').get(companyId);
+  if (!company) fail(404, 'Компания не найдена', { code: 'NOT_FOUND' });
+  if (!identity.companyCodes.has(company.code.toLowerCase())) {
+    fail(403, 'Нет доступа к компании', { code: 'FORBIDDEN' });
+  }
+  return { identity, company };
+}
+
+function documentType(value) {
+  if (!DOCUMENT_TYPES.includes(value)) fail(400, 'Неизвестный вид документа');
+  return value;
+}
+
+function serializeDocument(row, companyId, type) {
+  if (!row) return { companyId, documentType: type, version: 0, status: 'not_provided',
+    websiteUrl: null, linkUrl: null, fileName: null, uploadedBy: null, uploadedByName: null,
+    reviewedBy: null, reviewedByName: null, reviewedAt: null, returnComment: null };
+  return { id: row.id, companyId: row.company_id, websiteUrl: row.website_url,
+    documentType: row.document_type, version: row.version, linkUrl: row.link_url,
+    fileName: row.file_name, status: row.status, uploadedBy: row.uploaded_by,
+    uploadedByName: row.uploaded_by_name, reviewedBy: row.reviewed_by,
+    reviewedByName: row.reviewed_by_name, reviewedAt: row.reviewed_at,
+    returnComment: row.return_comment, updatedAt: row.updated_at };
+}
+
+function companyDocuments(request, companyId) {
+  documentContext(request, companyId, 'crm.view');
+  const rows = new Map(db.prepare('SELECT * FROM company_documents WHERE company_id = ?')
+    .all(companyId).map((row) => [row.document_type, row]));
+  return { documents: DOCUMENT_TYPES.map((type) => serializeDocument(rows.get(type), companyId, type)) };
+}
+
+function saveCompanyDocument(request, companyId, type, body) {
+  const { identity } = documentContext(request, companyId, 'crm.edit');
+  const linkUrl = limitedString(body.linkUrl, 'linkUrl', false, 2000);
+  const fileName = limitedString(body.fileName, 'fileName', false, 255);
+  const fileData = limitedString(body.fileData, 'fileData', false, 900000);
+  const websiteUrl = limitedString(body.websiteUrl, 'websiteUrl', false, 2000);
+  if (Boolean(linkUrl) === Boolean(fileData)) fail(400, 'Укажите либо ссылку, либо файл');
+  if (fileData && (!fileName || !/^data:[^;,]+;base64,[A-Za-z0-9+/=]+$/.test(fileData))) {
+    fail(400, 'Некорректный файл');
+  }
+  const existing = db.prepare('SELECT * FROM company_documents WHERE company_id=? AND document_type=?')
+    .get(companyId, type);
+  const version = body.version === undefined ? (existing?.version || 0) + 1 : Number(body.version);
+  if (!Number.isSafeInteger(version) || version < 1 || (existing && version <= existing.version)) {
+    fail(400, 'Версия должна быть целым числом больше предыдущей');
+  }
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO company_documents (company_id, website_url, document_type, version, link_url,
+    file_name, file_data, status, uploaded_by, uploaded_by_name, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'not_provided', ?, ?, ?)
+    ON CONFLICT(company_id, document_type) DO UPDATE SET website_url=excluded.website_url,
+      version=excluded.version, link_url=excluded.link_url, file_name=excluded.file_name,
+      file_data=excluded.file_data, status='not_provided', uploaded_by=excluded.uploaded_by,
+      uploaded_by_name=excluded.uploaded_by_name, reviewed_by=NULL, reviewed_by_name=NULL,
+      reviewed_at=NULL, return_comment=NULL, updated_at=excluded.updated_at`)
+    .run(companyId, websiteUrl, type, version, linkUrl, fileName, fileData, identity.userId,
+      identity.userName, now);
+  return serializeDocument(db.prepare('SELECT * FROM company_documents WHERE company_id=? AND document_type=?')
+    .get(companyId, type));
+}
+
+function transitionCompanyDocument(request, companyId, type, action, body) {
+  const { identity } = documentContext(request, companyId, 'crm.edit');
+  const row = db.prepare('SELECT * FROM company_documents WHERE company_id=? AND document_type=?')
+    .get(companyId, type);
+  if (!row) fail(409, 'Сначала укажите ссылку или файл');
+  const now = new Date().toISOString();
+  if (action === 'submit') {
+    if (!row.link_url && !row.file_data) fail(409, 'Документ не предоставлен');
+    db.prepare(`UPDATE company_documents SET status='in_review', reviewed_by=NULL,
+      reviewed_by_name=NULL, reviewed_at=NULL, return_comment=NULL, updated_at=? WHERE id=?`).run(now, row.id);
+  } else if (action === 'accept') {
+    if (row.status !== 'in_review') fail(409, 'Принять можно только документ на проверке');
+    if (row.uploaded_by === identity.userId) fail(403, 'Загрузивший не может принять свой документ',
+      { code: 'SELF_REVIEW_FORBIDDEN' });
+    db.prepare(`UPDATE company_documents SET status='accepted', reviewed_by=?, reviewed_by_name=?,
+      reviewed_at=?, return_comment=NULL, updated_at=? WHERE id=?`)
+      .run(identity.userId, identity.userName, now, now, row.id);
+  } else if (action === 'return') {
+    if (row.status !== 'in_review') fail(409, 'Вернуть можно только документ на проверке');
+    const comment = limitedString(body.returnComment, 'returnComment', true, 2000);
+    db.prepare(`UPDATE company_documents SET status='needs_changes', reviewed_by=?, reviewed_by_name=?,
+      reviewed_at=?, return_comment=?, updated_at=? WHERE id=?`)
+      .run(identity.userId, identity.userName, now, comment, now, row.id);
+  }
+  return serializeDocument(db.prepare('SELECT * FROM company_documents WHERE id=?').get(row.id));
+}
+
+function downloadCompanyDocument(request, response, companyId, type, cors) {
+  documentContext(request, companyId, 'crm.view');
+  const row = db.prepare('SELECT file_name, file_data FROM company_documents WHERE company_id=? AND document_type=?')
+    .get(companyId, type);
+  if (!row?.file_data) fail(404, 'Файл не найден');
+  const match = row.file_data.match(/^data:([^;,]+);base64,(.+)$/);
+  if (!match) fail(500, 'Файл повреждён');
+  const body = Buffer.from(match[2], 'base64');
+  const safeName = row.file_name.replace(/["\\\r\n]/g, '_');
+  response.writeHead(200, { 'content-type': match[1], 'content-length': body.length,
+    'content-disposition': `attachment; filename="${safeName}"`, ...(cors || {}) });
+  response.end(body);
 }
 
 function requireTaskTransferPermission(request, sourceCompany, targetCompany) {
@@ -2171,6 +2312,30 @@ async function route(request, response) {
   const serviceMatch = url.pathname.match(/^\/companies\/(\d+)\/service$/);
   if (request.method === 'PATCH' && serviceMatch) {
     return send(response, 200, patchCompanyService(entityId(serviceMatch[1]), await readJson(request)), cors);
+  }
+  const documentsMatch = url.pathname.match(/^\/companies\/(\d+)\/documents$/);
+  if (request.method === 'GET' && documentsMatch) {
+    return send(response, 200, companyDocuments(request, entityId(documentsMatch[1])), cors);
+  }
+  const documentMatch = url.pathname.match(
+    /^\/companies\/(\d+)\/documents\/(analytics_questionnaire|brief)(?:\/(submit|accept|return))?$/
+  );
+  if (documentMatch && request.method === 'PUT' && !documentMatch[3]) {
+    const companyId = entityId(documentMatch[1]);
+    return send(response, 200, saveCompanyDocument(request, companyId,
+      documentType(documentMatch[2]), await readJson(request)), cors);
+  }
+  if (documentMatch && request.method === 'POST' && documentMatch[3]) {
+    const companyId = entityId(documentMatch[1]);
+    return send(response, 200, transitionCompanyDocument(request, companyId,
+      documentType(documentMatch[2]), documentMatch[3], await readJson(request)), cors);
+  }
+  const documentFileMatch = url.pathname.match(
+    /^\/companies\/(\d+)\/documents\/(analytics_questionnaire|brief)\/file$/
+  );
+  if (documentFileMatch && request.method === 'GET') {
+    return downloadCompanyDocument(request, response, entityId(documentFileMatch[1]),
+      documentType(documentFileMatch[2]), cors);
   }
   const overviewMatch = url.pathname.match(/^\/companies\/(\d+)\/overview$/);
   if (request.method === 'GET' && overviewMatch) {

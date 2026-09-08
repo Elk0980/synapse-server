@@ -220,3 +220,11 @@
   top: 0;
   background: var(--surface-soft);
 }
+.company-card-tabs { display: flex; gap: 8px; margin: 24px 0 16px; }
+.company-card-tabs [aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.company-documents { display: grid; gap: 16px; }
+.company-document { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-soft); }
+.company-document header h3, .company-document header p { margin: 0; }
+.company-document header { margin-bottom: 14px; }
+.document-source-form { margin-top: 16px; }
+.document-actions { margin-top: 12px; }
