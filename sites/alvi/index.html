@@ -1999,14 +1999,6 @@
     .after-hero .synapse-strip a { color: inherit; text-decoration: none; }
     .after-hero .synapse-strip a:hover { text-decoration: underline; text-underline-offset: 3px; }
 
-    .hero-video-start {
-      min-height: 44px; margin-top: 12px; padding: 10px 16px;
-      border: 1px solid rgba(255,253,248,.55); border-radius: 12px;
-      background: rgba(6,17,11,.68); color: #fffdf8;
-      font: 500 14px/1.4 "Lora", Georgia, serif; cursor: pointer;
-    }
-    .hero-video-start[hidden] { display: none; }
-    .hero-video-start:focus-visible { outline: 2px solid #fffdf8; outline-offset: 4px; }
   </style>
   <style id="page-loader-styles">
 #page-loader{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:#07110c;opacity:0;pointer-events:none;transition:opacity 150ms ease}
@@ -2603,7 +2595,6 @@
               <a class="rating-pill" href="https://2gis.ru/irkutsk/firm/70000001061502048" target="_blank" rel="noopener noreferrer" data-edit="hero-0.rating-pill-1">★ 4,9 · 398 оценок в 2ГИС</a>
               <a class="rating-pill" href="https://yandex.ru/maps/org/alvi/132486598882/" target="_blank" rel="noopener noreferrer" data-edit="hero-0.rating-pill-2">★ 4,9 · 53 оценки на Яндекс Картах</a>
             </div>
-            <button class="hero-video-start" id="hero-video-start" type="button" hidden>Включить видео</button>
 
           </div>
         </article>
@@ -3157,7 +3148,7 @@
   </main>
   <div class="cookie-notice" role="dialog" aria-label="Уведомление о cookie"><span>Сайт использует cookie для корректной работы.</span><button type="button">Хорошо</button></div>
 
-  <script src="hero-idle.js?v=20260909-mobile-only"></script>
+  <script src="hero-idle.js?v=20260910-autoplay"></script>
   <script>
     (() => {
       "use strict";
@@ -3562,7 +3553,6 @@
       // Opening loop follows the visible scene, not the first few pixels of scrolling.
       const idleController = window.AlviHeroIdle?.createResponsive({
         video: idleVideo,
-        button: document.getElementById("hero-video-start"),
         sources: ALVI_MEDIA.idle,
         isIOS,
         isCompactMode: () => compactModeActive,

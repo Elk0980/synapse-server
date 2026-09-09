@@ -1,10 +1,9 @@
-/* Opening video follows the visible scene, with a manual fallback for autoplay. */
+/* Opening video follows the visible scene and recovers during ordinary page interaction. */
 (function (root) {
   "use strict";
 
   function create(options) {
     const video = options.video;
-    const button = options.button;
     const sources = options.sources || {};
     const canPlay = options.canPlay || (() => true);
     const onPlaying = options.onPlaying || (() => {});
@@ -18,31 +17,31 @@
     let sourceIndex = -1;
     let sourceLoaded = false;
     let sourceExhausted = false;
+    let disposed = false;
     let pageHidden = false;
     let autoplayBlocked = false;
     let playing = false;
     let attempt = 0;
     let pendingAttempt = null;
     const listeners = [];
-    function listen(target, type, handler) {
-      target.addEventListener(type, handler);
-      listeners.push(() => target.removeEventListener(type, handler));
+    function listen(target, type, handler, capture = false) {
+      const eventOptions = { capture };
+      target.addEventListener(type, handler, eventOptions);
+      listeners.push(() => target.removeEventListener(type, handler, eventOptions));
     }
 
     video.muted = true;
     video.defaultMuted = true;
     video.playsInline = true;
+    video.controls = false;
+    video.disablePictureInPicture = true;
     video.loop = true;
     video.preload = "auto";
     video.setAttribute("muted", "");
     video.setAttribute("playsinline", "");
 
     function eligible() {
-      return !pageHidden && !doc.hidden && Boolean(canPlay());
-    }
-
-    function updateButton() {
-      if (button) button.hidden = !(eligible() && autoplayBlocked && !sourceExhausted);
+      return !disposed && !pageHidden && !doc.hidden && Boolean(canPlay());
     }
 
     function stopPlayback() {
@@ -52,7 +51,6 @@
       playing = false;
       video.style.opacity = "0";
       if (wasPending || !video.paused) video.pause();
-      if (button) button.hidden = true;
     }
 
     function markPlaying() {
@@ -65,7 +63,6 @@
       playing = true;
       autoplayBlocked = false;
       video.style.opacity = "1";
-      updateButton();
       if (firstPlayingEvent) onPlaying();
     }
 
@@ -75,7 +72,6 @@
       sourceIndex += 1;
       if (sourceIndex >= candidates.length) {
         sourceExhausted = true;
-        updateButton();
         return;
       }
       autoplayBlocked = false;
@@ -93,7 +89,7 @@
       pendingAttempt = currentAttempt;
       let result;
       try {
-        // Keep this call synchronous with a manual click: Safari needs the gesture.
+        // Keep this call inside the ordinary interaction handler: Safari needs the gesture.
         result = video.play();
       } catch (error) {
         rejectPlay(error, currentAttempt);
@@ -122,11 +118,10 @@
         nextSource();
         return;
       }
-      // A denied or interrupted attempt must never leave an unexplained still image.
+      // Keep the existing frame fallback visible until a permitted interaction.
       autoplayBlocked = true;
       playing = false;
       video.style.opacity = "0";
-      updateButton();
     }
 
     function sync() {
@@ -136,7 +131,6 @@
       }
       if (!sourceLoaded && !sourceExhausted) nextSource();
       else if (!autoplayBlocked) requestPlay();
-      updateButton();
     }
 
     listen(video, "playing", markPlaying);
@@ -144,18 +138,19 @@
       if (!sourceLoaded || sourceExhausted) return;
       nextSource();
     });
-    if (button) {
-      button.hidden = true;
-      listen(button, "click", () => {
-        autoplayBlocked = false;
-        sync();
-      });
+    function resumeFromGesture() {
+      if (!eligible() || sourceExhausted || pendingAttempt !== null) return;
+      autoplayBlocked = false;
+      sync();
     }
+    // No player control: a normal tap, click or key press can release autoplay.
+    ["touchend", "click", "keydown"].forEach((type) => listen(doc, type, resumeFromGesture, true));
     listen(doc, "visibilitychange", sync);
     listen(win, "pagehide", () => { pageHidden = true; sync(); });
     listen(win, "pageshow", () => { pageHidden = false; sync(); });
 
     function destroy() {
+      disposed = true;
       listeners.forEach((remove) => remove());
       stopPlayback();
     }
@@ -166,7 +161,6 @@
   // wait for canplay, prefer WebM, retire once beyond 4px, fade before pausing.
   function createDesktop(options) {
     const video = options.video;
-    const button = options.button;
     const sources = options.sources || {};
     const win = video.ownerDocument.defaultView || root;
     const hasUserScrolled = options.hasUserScrolled || (() => false);
@@ -180,7 +174,6 @@
     let candidateIndex = 0;
     let pauseTimer = null;
     let cleanup = () => {};
-    if (button) button.hidden = true;
 
     function nextSource() {
       const candidate = candidates[candidateIndex++];
@@ -224,7 +217,6 @@
       if (pauseTimer !== null) win.clearTimeout(pauseTimer);
       video.style.opacity = "0";
       video.pause();
-      if (button) button.hidden = true;
     }
     return Object.freeze({ sync, destroy });
   }
