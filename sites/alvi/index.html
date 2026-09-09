@@ -2369,6 +2369,9 @@
     .promo .promo__content { display: flex; flex-direction: column; flex: 1; gap: .7rem; max-width: none; padding: 1.4rem 1.6rem; overflow: hidden; }
     .promo .promo__title { font-size: clamp(1.4rem, 2.3vw, 1.9rem); line-height: 1.2; text-shadow: none; }
     .promo .promo__copy { font-size: 1rem; text-shadow: none; }
+    .promo__offer { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem .7rem; margin-block: .5rem; }
+    .promo__price { color: #e3d4a7; font: 600 clamp(1.8rem, 3vw, 2.5rem)/1.15 system-ui, sans-serif; }
+    .promo__was { font-size: 1rem; color: rgba(255, 253, 248, .8); }
     .promo .promo__actions { margin-top: auto; padding-top: .6rem; }
     .promo .promo__button { min-height: 46px; border-radius: .75rem; font: 500 .875rem/1.3 system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
     .promo .promo__button::after { display: none; }
@@ -2653,7 +2656,7 @@
           <div class="promo__content">
           <p class="promo__brand" data-edit="promo.promo-brand-2">АВОКАДО · студия дизайна тела</p>
           <h3 class="promo__title" data-edit="promo.promo-title-2">Пробный аппаратный массаж</h3>
-          <p class="promo__copy" data-edit="promo.promo-copy-2">500 ₽ вместо 2 100 ₽ за пробный сеанс.</p>
+          <p class="promo__copy" data-edit="promo.promo-copy-2"><span class="promo__offer"><strong class="promo__price">500 ₽</strong> <span class="promo__was">вместо 2 100 ₽</span></span>за пробный сеанс.</p>
           <p class="promo__note" data-edit="promo.promo-note-2">Красноказачья, 84 · условия акции — на сайте</p>
           <div class="promo__actions"><span class="price-all__button promo__button" data-edit="promo.promo-button-2">Открыть сайт Авокадо</span></div>
           </div>
@@ -4067,7 +4070,7 @@
       io.observe(trust);
     })();
   </script>
-<script src="site-apply.js?v=20260909a" defer></script>
+<script src="site-apply.js?v=20260910a" defer></script>
 <script src="https://synapse.synapsebusiness.ru/track.js?v=20260905" data-company="alvi" defer></script>
 <script src="price-render.js?v=20260909a" defer></script>
 <script>

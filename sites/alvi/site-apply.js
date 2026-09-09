@@ -99,7 +99,15 @@
       if (!map.has(key)) return;
       const f = map.get(key);
       if (f.kind === 'image') { const src = safeSrc(f.src); if (el.getAttribute('src') !== src) el.setAttribute('src', src); }
-      else if (key !== skipKey) { const html = rich(f.value); if (el.innerHTML.trim() !== html) el.innerHTML = html; }
+      else if (key !== skipKey) {
+        let html = rich(f.value);
+        // Emphasize the actual offer from the cabinet; never hard-code its price.
+        if (!EDIT_MODE && key === 'promo.promo-copy-2') {
+          html = html.replace(/(\d[\d\s\u00a0]*\s*₽)\s+вместо\s+(\d[\d\s\u00a0]*\s*₽)/,
+            '<span class="promo__offer"><strong class="promo__price">$1</strong> <span class="promo__was">вместо $2</span></span>');
+        }
+        if (el.innerHTML.trim() !== html) el.innerHTML = html;
+      }
       if (f.kind === 'button' && el.tagName === 'A') el.setAttribute('href', safeHref(f.href));
       applyStyle(el, f.style);
       applyLayout(el, f);
