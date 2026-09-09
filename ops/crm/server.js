@@ -486,6 +486,12 @@ migrate(7, () => {
   `);
 });
 
+// Owner-approved company display name. IDs, links and legal entities stay intact.
+db.prepare(`UPDATE companies SET name='Palitra', updated_at=?
+  WHERE code IN ('palitra-love', 'palitra')
+    AND name IN ('Палитра лав', 'Палитра Лав', 'Палитра', 'Palitra Love', 'PALITRA LOVE')`)
+  .run(new Date().toISOString());
+
 const foreignKeyErrors = db.prepare('PRAGMA foreign_key_check').all();
 if (foreignKeyErrors.length) throw new Error('Нарушена ссылочная целостность базы данных');
 

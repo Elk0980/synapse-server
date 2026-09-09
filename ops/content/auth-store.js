@@ -8,7 +8,7 @@ const COMPANIES = Object.freeze({
   'novyi-etap': { name: 'НовыйЭтап', contentSiteId: null },
   alvi: { name: 'Алви', contentSiteId: 'alvi' },
   avokado: { name: 'Авокадо', contentSiteId: 'avokado' },
-  'palitra-love': { name: 'Палитра лав', contentSiteId: 'palitra' },
+  'palitra-love': { name: 'Palitra', contentSiteId: 'palitra' },
 });
 const PERMISSIONS = Object.freeze([
   'analytics.view', 'crm.view', 'crm.edit', 'sites.view', 'sites.create', 'sites.delete',

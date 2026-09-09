@@ -1,4 +1,4 @@
-/* Palitra Love: рендер прайса для страницы сайта и редактора Synapse. */
+/* Palitra: рендер прайса для страницы сайта и редактора Synapse. */
 (function () {
   'use strict';
   const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({

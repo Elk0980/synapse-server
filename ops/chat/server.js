@@ -66,6 +66,7 @@ const ALLOWED_ORIGINS = new Set(
     .map((value) => value.trim())
     .filter(Boolean),
 );
+const companyDisplayName = (company) => company === "palitra" ? "Palitra" : company;
 const COMPANIES = new Set(["alvi", "avokado", "palitra", "synapse"]);
 const UTM_FIELDS = [
   "utm_source",
@@ -647,7 +648,7 @@ async function notifyOwner(row, text) {
   try {
     await telegramRequest("sendMessage", {
       chat_id: TELEGRAM_OWNER_ID,
-      text: `Новое сообщение · ${row.company} · ${preview}`,
+      text: `Новое сообщение · ${companyDisplayName(row.company)} · ${preview}`,
     });
   } catch (error) {
     console.error("Не удалось уведомить владельца:", error.message);
@@ -792,7 +793,7 @@ async function handleTelegramUpdate(update) {
   if (bindingCommand?.type === "status") {
     const binding = db.prepare("SELECT company FROM client_chats WHERE chat_id = ?").get(chatId);
     const reply = binding
-      ? `Эта группа привязана: ${binding.company.toUpperCase()}`
+      ? `Эта группа привязана: ${binding.company === "palitra" ? "Palitra" : binding.company.toUpperCase()}`
       : "Эта группа не привязана ни к одной компании";
     await telegramRequest("sendMessage", { chat_id: chatId, text: reply });
     return { ok: true, company: binding?.company || null };
@@ -818,7 +819,7 @@ async function handleTelegramUpdate(update) {
       .run(company, chatId, new Date().toISOString());
     await telegramRequest("sendMessage", {
       chat_id: chatId,
-      text: `Группа привязана: ${company.toUpperCase()}. Сюда будут приходить задачи и напоминания`,
+      text: `Группа привязана: ${company === "palitra" ? "Palitra" : company.toUpperCase()}. Сюда будут приходить задачи и напоминания`,
     });
     return { ok: true, company };
   }
@@ -835,7 +836,7 @@ async function handleTelegramUpdate(update) {
       );
       await telegramRequest("sendMessage", {
         chat_id: chatId,
-        text: `Компания: ${company}`,
+        text: `Компания: ${companyDisplayName(company)}`,
       });
     }
     return { ok: true, company: company && isOwner ? company : row.company };

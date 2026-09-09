@@ -14,7 +14,7 @@ const LEGACY_SITES = [
     '/site-editor.html?site=avokado', '/price-editor.html?site=avokado'],
   ['avokado2', 'avokado', 'Авокадо2', 'published', 'https://avokado2.synapsebusiness.ru/', 'avokado2',
     '/site-editor.html?site=avokado2', '/price-editor.html?site=avokado'],
-  ['palitra-love', 'palitra-love', 'Палитра лав', 'draft',
+  ['palitra-love', 'palitra-love', 'Palitra', 'draft',
     'https://palitra-love.synapsebusiness.ru/', 'palitra', null, '/price-editor-palitra.html'],
 ];
 
@@ -41,6 +41,10 @@ function createSiteStore(db, authStore, saveDocument) {
     const stamp = new Date().toISOString();
     insertLegacy.run(...site, stamp, stamp);
   }
+  // Rename the existing legacy card as well as the bootstrap entry; preserve custom names.
+  db.prepare(`UPDATE managed_sites SET name='Palitra'
+    WHERE id='palitra-love' AND company_code='palitra-love' AND source='legacy'
+      AND name IN ('Палитра лав', 'Палитра Лав', 'Палитра', 'Palitra Love', 'PALITRA LOVE')`).run();
   const visible = (user, row) => user.role === 'owner' || user.companyCodes.includes(row.company_code);
   const output = (user, row) => {
     const can = (permission) => user.role === 'owner' || user.permissions.includes(permission);
