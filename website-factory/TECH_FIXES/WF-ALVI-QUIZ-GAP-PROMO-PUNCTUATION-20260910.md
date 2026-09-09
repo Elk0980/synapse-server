@@ -8,6 +8,7 @@ solution_or_learning: Put spacing inside the cleared answer container; consume o
 project_source: docs/alvi/typography-spacing-20260910.md
 evidence:
   - docs/alvi/qa-typography-spacing-20260910.json
+  - docs/alvi/qa-price-header-spacing-20260910.json
   - docs/alvi/tests/site-copy.test.js
 confidence: HIGH
 reuse_scope: WEBSITE_FACTORY
@@ -18,3 +19,5 @@ status: CANDIDATE
 ---
 
 Observed: 0px gap before the fix; 10px at seven tested widths afterward. Price values still come from the cabinet. Terminal dots disappear; punctuation before a following sentence remains. Transferable guidance is CANDIDATE; no conversion uplift or native-device certification claimed.
+
+Header follow-up: measure actual link boxes, not only image dimensions. A 40px grid track around a 44px link reduced one apparent gap. Matching all three control heights and the first track to 44px produces equal visible spacing. Confirm the candidate preview URL after reloads; baseline measurements are not after-state evidence.

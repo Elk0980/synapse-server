@@ -26,6 +26,14 @@ REGRESSION: five existing site-copy tests pass with added assertions for termina
 LIMITS: viewport simulations in Chromium, not physical Safari or Android; CMS may contain its own layout transforms. Native device behavior and external booking completion are outside this typography change. Existing booking links, program data, photographs and animation logic are unchanged.
 RELEASE: QA complete; prepare PR, merge under standing owner authorization and verify production assets and rendered text.
 
+## Mobile price-header follow-up
+REQUEST: the owner also asked for equal spacing and more restrained typography in the price header. Assumption: this refers to the mobile header discussed immediately before; its three existing functions remain logo/home, «На главную» and «Выбрать ритуал».
+CHANGE: 44px logo and controls, equal 12px gaps and 16px side padding, identical Lora regular 13px button type. Below 360px the gaps and type reduce to 8px and 12px, with 12px side padding. Header stays sticky. These geometry rules apply only below 900px.
+QA: candidate iframe URL verified before measurement. At 320, 360, 375, 390, 430, 768 and 899px all three controls are 44px high; both text controls share font and padding; no page or control overflow. Header is 69px high. At 900 and 1366px the header returns to its existing flex layout, the mobile toggle is hidden and navigation moves out of the header.
+INTERACTION: selecting «Ручные массажи тела» closes the menu and lands the section at 85px, below the sticky header's 69px bottom. The menu remains usable after scrolling; Escape closes it; «На главную» returns to the hero, confirmed through visible page controls. Screenshot of the 390px header inspected.
+EVIDENCE: docs/alvi/qa-price-header-spacing-20260910.json. An earlier measurement accidentally used the baseline iframe and was discarded; only confirmed candidate measurements are included.
+RELEASE: append this change to PR #226 before merge; the public asset version already changes in that PR. Production verification is pending.
+
 ## WEBSITE_PROJECT_LEARNING
 WHAT_WE_WANTED: slight quiz separation and lighter, consistent type.
 WHAT_WE_BUILT: real 10px answer spacing, Lora controls and price, terminal promo punctuation handling.
@@ -34,6 +42,7 @@ WHAT_DID_NOT_WORK: the old margin-top did not produce a visible gap; a flex offe
 WHAT_TOOK_THE_MOST_TIME: source/cascade discovery and browser screenshot timeouts, rather than the patch itself.
 WHAT_WAS_REWORKED / WHY: refreshed stale local baseline pages before editing; screenshot capture retried only after confirming page state.
 WHAT_SHOULD_BE_REUSED: inspect real rendered spacing and the complete CMS-transformed sentence.
+HEADER LEARNING: a grid track must accommodate the full 44px logo link, not just its image. Otherwise the declared grid gap differs from the visible gap. Verify the candidate URL after preview reloads before recording after-state evidence.
 WHAT_SHOULD_NEVER_BE_REPEATED: treating a declared margin as proof of visible spacing; enlarging prices without checking punctuation flow.
 WHAT_SHOULD_BE_AUTOMATED: retain regression coverage for CMS price formatting and immutable source provenance for local QA copies.
 WHAT_WE_STILL_DO_NOT_KNOW: conversion effect and physical-device behavior.
