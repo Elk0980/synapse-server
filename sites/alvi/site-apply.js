@@ -5,6 +5,28 @@
 
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   /* Текст → безопасный HTML: разрешены только em, strong, b, i, sup и перенос строки. */
+  // Migrate known old certificate copy; preserve subsequent cabinet edits.
+  const certificateCopyMigration = {
+  "hero-7.need-card-fix-3": {
+    "old": "Сертификат на любую программу · доставка бесплатно",
+    "value": "Сертификат на любую сумму или программу",
+    "htmlOld": "Сертификат на любую программу · доставка бесплатно"
+  },
+  "gift.content-copy-1": {
+    "old": "Электронный — приходит в мессенджер, дарить можно сразу.\nБумажный — в конверте с лентой; по городу привозим бесплатно, в отдалённые районы — за доплату, стоимость скажем в чате.\nОт 3 500 ₽ до SPA-дня до 17 600 ₽",
+    "value": "Электронный — приходит в мессенджер сразу после оплаты. Дарить можно в тот же день, из любого города.\nБумажный — в конверте с лентой. По Иркутску привозим бесплатно, в отдалённые районы — за доплату, стоимость скажем в чате.\nСертификат оформляется на любую сумму или на конкретную программу из этого прайса.",
+    "htmlOld": "Электронный — приходит в мессенджер, дарить можно сразу.\nБумажный — в конверте с лентой; по городу привозим бесплатно, в отдалённые районы — за доплату, стоимость скажем в чате.\nОт 3 500 ₽ до SPA-дня до 17 600 ₽"
+  },
+  "faq.faq-answer-4": {
+    "old": "Напишите в Telegram: сертификат бывает электронный (приходит в мессенджер) или бумажный в конверте с лентой. Оформляется на любую сумму или конкретную программу, доставка по Иркутску бесплатная.",
+    "value": "Сертификат оформляется на любую сумму или на конкретную программу из прайса. Электронный приходит в мессенджер сразу после оплаты — дарить можно в тот же день, из любого города. Бумажный — в конверте с лентой: по Иркутску привозим бесплатно, в отдалённые районы — за доплату, стоимость скажем в чате.",
+    "htmlOld": "Напишите в Telegram: сертификат бывает электронный (приходит в мессенджер) или бумажный в конверте с лентой. Оформляется на любую сумму или конкретную программу, доставка по Иркутску бесплатная."
+  }
+};
+  function certificateValue(key, value) {
+    const migration = certificateCopyMigration[key];
+    return migration && (value === migration.old || value === migration.htmlOld) ? migration.value : value;
+  }
   function rich(value) {
     let h = esc(value);
     h = h.replace(/&lt;(\/?)(em|strong|b|i|sup)&gt;/g, '<$1$2>');
@@ -48,7 +70,7 @@
   const EDIT_MODE = new URLSearchParams(location.search).get('edit') === '1' && window.parent !== window;
 
   /* ---------- Объекты и расположение (мини-конструктор: баннер и сцены первого экрана) ---------- */
-  const ZONES = { 'promo-head': '.promo__head', 'promo-alvi': '.promo__half--alvi', 'promo-avokado': '.promo__half--avokado' };
+  const ZONES = { 'promo-head': '.promo__head', 'promo-alvi': '.promo__half--alvi .promo__content', 'promo-avokado': '.promo__half--avokado .promo__content' };
   function zoneEl(zone) {
     if (ZONES[zone]) return document.querySelector(ZONES[zone]);
     const m = /^hero-(\d)$/.exec(zone || '');
@@ -99,7 +121,15 @@
       if (!map.has(key)) return;
       const f = map.get(key);
       if (f.kind === 'image') { const src = safeSrc(f.src); if (el.getAttribute('src') !== src) el.setAttribute('src', src); }
-      else if (key !== skipKey) { const html = rich(f.value); if (el.innerHTML.trim() !== html) el.innerHTML = html; }
+      else if (key !== skipKey) {
+        let html = rich(certificateValue(key, f.value));
+        // Emphasize the actual offer from the cabinet; never hard-code its price.
+        if (!EDIT_MODE && key === 'promo.promo-copy-2') {
+          html = html.replace(/(\d[\d\s\u00a0]*\s*₽)\s+вместо\s+(\d[\d\s\u00a0]*\s*₽)/,
+            '<span class="promo__offer"><strong class="promo__price">$1</strong> <span class="promo__was">вместо $2</span></span>');
+        }
+        if (el.innerHTML.trim() !== html) el.innerHTML = html;
+      }
       if (f.kind === 'button' && el.tagName === 'A') el.setAttribute('href', safeHref(f.href));
       applyStyle(el, f.style);
       applyLayout(el, f);
