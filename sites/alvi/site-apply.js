@@ -48,7 +48,7 @@
   const EDIT_MODE = new URLSearchParams(location.search).get('edit') === '1' && window.parent !== window;
 
   /* ---------- Объекты и расположение (мини-конструктор: баннер и сцены первого экрана) ---------- */
-  const ZONES = { 'promo-head': '.promo__head', 'promo-alvi': '.promo__half--alvi', 'promo-avokado': '.promo__half--avokado' };
+  const ZONES = { 'promo-head': '.promo__head', 'promo-alvi': '.promo__half--alvi .promo__content', 'promo-avokado': '.promo__half--avokado .promo__content' };
   function zoneEl(zone) {
     if (ZONES[zone]) return document.querySelector(ZONES[zone]);
     const m = /^hero-(\d)$/.exec(zone || '');

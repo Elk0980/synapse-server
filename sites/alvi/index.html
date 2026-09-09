@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="actions.css">
+  <link rel="stylesheet" href="actions.css?v=20260909a">
 
   <script type="application/ld+json">
   {
@@ -2359,6 +2359,28 @@
       .promo__title { font-size: 1.3rem; }
       .promo__button { min-width: 0; width: 100%; }
     }
+
+    /* Portrait and copy occupy separate rows: text cannot cover a face. */
+    .promo .promo__panel { width: min(1080px, 100%); max-height: calc(100svh - 2rem); overflow: auto; }
+    .promo .promo__half { min-width: 0; min-height: 0; padding: 0; gap: 0; justify-content: flex-start; background-image: none; }
+    .promo .promo__half::before, .promo .promo__half::after { display: none; }
+    .promo .promo__half--avokado { background-color: #221c13; }
+    .promo .promo__portrait { display: block; position: static; max-width: none; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: contain; flex: 0 0 auto; }
+    .promo .promo__content { display: flex; flex-direction: column; flex: 1; gap: .7rem; max-width: none; padding: 1.4rem 1.6rem; overflow: hidden; }
+    .promo .promo__title { font-size: clamp(1.4rem, 2.3vw, 1.9rem); line-height: 1.2; text-shadow: none; }
+    .promo .promo__copy { font-size: 1rem; text-shadow: none; }
+    .promo .promo__actions { margin-top: auto; padding-top: .6rem; }
+    .promo .promo__button { min-height: 46px; border-radius: .75rem; font: 500 .875rem/1.3 system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
+    .promo .promo__button::after { display: none; }
+    .promo .promo__head { min-height: 68px; }
+    .promo .promo__tagline { font-style: normal; }
+    .promo .promo__close { min-height: 44px; }
+    @media (max-width: 899px) {
+      .promo .promo__panel { max-height: calc(100svh - 1.2rem); }
+      .promo .promo__head { padding: 1rem 7rem 1rem 1.1rem; }
+      .promo .promo__content { padding: 1.2rem; }
+    }
+
     /* Объекты, добавленные в кабинете (мини-конструктор) */
     .x-extra--button { align-self: flex-start; }
     .x-extra--image { display: block; max-width: 100%; height: auto; border-radius: 0.6rem; }
@@ -2550,24 +2572,21 @@
             <p class="scene-copy scene-copy--dark scene-copy--serif" data-edit="hero-7.scene-copy-1">Плечи опущены. Дыхание глубокое. Голова ясная.</p>
             <p class="final-price-line" data-edit="hero-7.final-price-line-1">Массаж от 2 800 ₽ · SPA-ритуалы от 3 500 ₽ · Для двоих от 6 900 ₽</p>
             <div class="final-needs">
-              <article class="need-card">
-                <a class="need-card__link" href="#for-self"><span class="need-card__pain" data-edit="hero-7.need-card-pain-1">Не получается расслабиться</span></a>
+              <a class="need-card" href="#for-self">
+                <span class="need-card__pain" data-edit="hero-7.need-card-pain-1">Не получается расслабиться</span>
                 <span class="need-card__fix" data-edit="hero-7.need-card-fix-1">Массаж и SPA-ритуал для себя · от 2 800 ₽</span>
                 <span class="need-card__proof" data-edit="hero-7.need-card-proof-1">«Уютно, спокойно и очень душевно» — андрей, Яндекс Карты</span>
-                <div class="pc__actions"><a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a><a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a></div>
-              </article>
-              <article class="need-card">
-                <a class="need-card__link" href="#for-two"><span class="need-card__pain" data-edit="hero-7.need-card-pain-2">Хотите отдохнуть одновременно</span></a>
+              </a>
+              <a class="need-card" href="#for-two">
+                <span class="need-card__pain" data-edit="hero-7.need-card-pain-2">Давно не были вдвоём</span>
                 <span class="need-card__fix" data-edit="hero-7.need-card-fix-2">Один кабинет, два мастера · от 6 900 ₽</span>
-                <span class="need-card__proof" data-edit="hero-7.need-card-proof-2">«Качественный массаж, спокойная музыка и вкусный чай» — lil, Яндекс Карты</span>
-                <div class="pc__actions"><a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a><a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a></div>
-              </article>
-              <article class="need-card">
-                <a class="need-card__link" href="#gift"><span class="need-card__pain" data-edit="hero-7.need-card-pain-3">Нечего подарить</span></a>
+                <span class="need-card__proof" data-edit="hero-7.need-card-proof-2">«Свидание удалось» — lil, Яндекс Карты</span>
+              </a>
+              <a class="need-card" href="#gift">
+                <span class="need-card__pain" data-edit="hero-7.need-card-pain-3">Нечего подарить</span>
                 <span class="need-card__fix" data-edit="hero-7.need-card-fix-3">Сертификат на любую программу · доставка бесплатно</span>
                 <span class="need-card__proof" data-edit="hero-7.need-card-proof-3">«Эмоций было через край» — Green_4, Яндекс Карты</span>
-                <div class="pc__actions"><a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a><a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a></div>
-              </article>
+              </a>
             </div>
             <div class="final-actions">
               <a class="button button--dark" href="#quiz" data-edit="hero-7.button-1">Подобрать ритуал за 3 вопроса</a>
@@ -2617,21 +2636,27 @@
       <div class="promo__panel">
         <button class="promo__close" type="button" id="promo-close" aria-label="Закрыть"><span>×</span><span>закрыть</span></button>
         <div class="promo__head">
-          <p class="promo__tagline" data-edit="promo.promo-tagline-1">Совершенство — там, где есть и то, и другое: <em>красота без боли</em> в Авокадо и <em>отдых и расслабление</em> в ALVI.</p>
+          <p class="promo__tagline" data-edit="promo.promo-tagline-1">Время для себя · ALVI и АВОКАДО</p>
         </div>
         <div class="promo__half promo__half--alvi">
+          <img class="promo__portrait" src="img/alvi-poster.png" alt="" loading="lazy">
+          <div class="promo__content">
           <p class="promo__brand" data-edit="promo.promo-brand-1">SPA ALVI · абонемент</p>
-          <h3 class="promo__title" data-edit="promo.promo-title-1">Абонемент ALVI — ритуалы по одной цене</h3>
-          <p class="promo__copy" data-edit="promo.promo-copy-1">Несколько визитов одной покупкой — выгоднее разовых и спокойнее: дата уже выбрана, остаётся только прийти. Подходит для себя и в подарок.</p>
+          <h3 class="promo__title" data-edit="promo.promo-title-1">Абонемент ALVI</h3>
+          <p class="promo__copy" data-edit="promo.promo-copy-1">Несколько визитов одной покупкой — время для отдыха в вашем ритме.</p>
           <p class="promo__note" data-edit="promo.promo-note-1">Условия и варианты абонементов — у администратора</p>
           <div class="promo__actions"><a class="price-all__button promo__button" href="https://t.me/+79246180555" target="_blank" rel="noopener" data-edit="promo.promo-button-1">Узнать про абонемент</a></div>
+          </div>
         </div>
         <a class="promo__half promo__half--avokado" href="https://avokado.synapsebusiness.ru/" target="_blank" rel="noopener">
+          <img class="promo__portrait" src="https://avokado.synapsebusiness.ru/assets/hero-poster.jpg" alt="" loading="lazy">
+          <div class="promo__content">
           <p class="promo__brand" data-edit="promo.promo-brand-2">АВОКАДО · студия дизайна тела</p>
-          <h3 class="promo__title" data-edit="promo.promo-title-2">Красота без боли: аппаратная коррекция фигуры и лазерная эпиляция</h3>
-          <p class="promo__copy" data-edit="promo.promo-copy-2">Второй салон того же владельца — Красноказачья, 84. Пробный сеанс аппаратного массажа — 500 ₽ вместо 2 100 ₽.</p>
-          <p class="promo__note" data-edit="promo.promo-note-2">5,0 в 2ГИС · 278 отзывов</p>
+          <h3 class="promo__title" data-edit="promo.promo-title-2">Пробный аппаратный массаж</h3>
+          <p class="promo__copy" data-edit="promo.promo-copy-2">500 ₽ вместо 2 100 ₽ за пробный сеанс.</p>
+          <p class="promo__note" data-edit="promo.promo-note-2">Красноказачья, 84 · условия акции — на сайте</p>
           <div class="promo__actions"><span class="price-all__button promo__button" data-edit="promo.promo-button-2">Открыть сайт Авокадо</span></div>
+          </div>
         </a>
       </div>
     </div>
@@ -2659,8 +2684,8 @@
               <dt>Кому</dt><dd>если давно не были на массаже и хочется просто выдохнуть.</dd>
             </dl>
             <div class="pc__actions">
-              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
-              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться</a>
+              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
             </div>
           </article>
 
@@ -2674,8 +2699,8 @@
               <dt>Кому</dt><dd>после тяжёлой недели или перед важным событием.</dd>
             </dl>
             <div class="pc__actions">
-              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
-              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться</a>
+              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
             </div>
           </article>
 
@@ -2689,8 +2714,8 @@
               <dt>Кому</dt><dd>когда нужно не «отдохнуть», а восстановиться.</dd>
             </dl>
             <div class="pc__actions">
-              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
-              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться</a>
+              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
             </div>
           </article>
 
@@ -2704,8 +2729,8 @@
               <dt>Кому</dt><dd>после сидячей работы.</dd>
             </dl>
             <div class="pc__actions">
-              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
-              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться</a>
+              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
             </div>
           </article>
 
@@ -2719,8 +2744,8 @@
               <dt>Кому</dt><dd>если ноет поясница или устают ноги.</dd>
             </dl>
             <div class="pc__actions">
-              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
-              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться</a>
+              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
             </div>
           </article>
         </div>
@@ -2761,8 +2786,8 @@
             <dl class="program-facts"><dt>Цена</dt><dd>от 5 600 ₽</dd><dt>Время</dt><dd>60 / 90 мин</dd></dl>
 
             <div class="pc__actions">
-              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
-              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться</a>
+              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
             </div>
           </div></article>
           <article class="program-card program-card--photo" style="--card-photo:url('img/card-s2-2.jpg')"><div class="program-card__body">
@@ -2771,8 +2796,8 @@
             <dl class="program-facts"><dt>Цена</dt><dd>8 900 ₽</dd><dt>Время</dt><dd>2 ч</dd></dl>
 
             <div class="pc__actions">
-              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
-              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться</a>
+              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
             </div>
           </div></article>
           <article class="program-card">
@@ -2780,8 +2805,8 @@
             <p>Для двоих в одном пространстве: процедуры проходят одновременно.</p>
             <dl class="program-facts"><dt>Цена</dt><dd>10 900 ₽</dd><dt>Время</dt><dd>2 ч 30 мин</dd></dl>
             <div class="pc__actions">
-              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
-              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться</a>
+              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
             </div>
           </article>
           <article class="program-card">
@@ -2789,8 +2814,8 @@
             <p>Программа-путешествие на несколько часов, с чаем и паузами.</p>
             <dl class="program-facts"><dt>Цена</dt><dd>13 600 ₽</dd><dt>Время</dt><dd>3 ч</dd></dl>
             <div class="pc__actions">
-              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
-              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться</a>
+              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
             </div>
           </article>
         </div>
@@ -2906,8 +2931,8 @@
               <h3 id="quiz-result-title"></h3>
               <p id="quiz-result-copy"></p>
               <div class="pc__actions">
-                <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться онлайн</a>
-                <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Подобрать с администратором</a>
+                <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться</a>
+                <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
               </div>
             </div>
           </section>
@@ -4042,9 +4067,9 @@
       io.observe(trust);
     })();
   </script>
-<script src="site-apply.js?v=20260904d" defer></script>
+<script src="site-apply.js?v=20260909a" defer></script>
 <script src="https://synapse.synapsebusiness.ru/track.js?v=20260905" data-company="alvi" defer></script>
-<script src="price-render.js?v=20260908" defer></script>
+<script src="price-render.js?v=20260909a" defer></script>
 <script>
   // Витрины «Проведи день для себя» и «Один ритм на двоих» берутся из data/price.json
   // (редактируется в кабинете Synapse). Если данных нет — остаются карточки из разметки.
