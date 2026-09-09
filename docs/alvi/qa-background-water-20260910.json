@@ -1,0 +1,137 @@
+[
+  {
+    "classes": "page-water water-surface is-active",
+    "controls": false,
+    "denied": "denied-once",
+    "fallbackAnimation": "alvi-water-drift",
+    "fallbackState": "running",
+    "mode": "denied-before-gesture",
+    "overflow": 0,
+    "sources": [
+      {
+        "src": "https://alvi.synapsebusiness.ru/img/water-loop.mp4",
+        "type": "video/mp4"
+      },
+      {
+        "src": "https://alvi.synapsebusiness.ru/img/water-loop.webm",
+        "type": "video/webm"
+      }
+    ],
+    "transform": "matrix(1.0484, 0, 0, 1.0484, 2.48625, -2.39812)",
+    "videoOpacity": "0",
+    "width": 390
+  },
+  {
+    "classes": "page-water water-surface is-active is-playing",
+    "controls": false,
+    "currentTime": 1.745258,
+    "fallbackState": "paused",
+    "mode": "after-gesture",
+    "paused": false,
+    "readyState": 4,
+    "source": "https://alvi.synapsebusiness.ru/img/water-loop.mp4",
+    "videoOpacity": "1"
+  },
+  {
+    "classes": "page-water water-surface is-active is-playing",
+    "controls": false,
+    "currentTime": 3.046395,
+    "mode": "normal-price",
+    "overflow": 0,
+    "paused": false,
+    "readyState": 4,
+    "videoOpacity": "1",
+    "width": 320
+  },
+  {
+    "classes": "page-water water-surface is-active is-playing",
+    "controls": false,
+    "currentTime": 3.221195,
+    "mode": "normal-price",
+    "overflow": 0,
+    "paused": false,
+    "readyState": 4,
+    "videoOpacity": "1",
+    "width": 390
+  },
+  {
+    "classes": "page-water water-surface is-active is-playing",
+    "controls": false,
+    "currentTime": 3.428414,
+    "mode": "normal-price",
+    "overflow": 0,
+    "paused": false,
+    "readyState": 4,
+    "videoOpacity": "1",
+    "width": 768
+  },
+  {
+    "classes": "page-water water-surface is-active is-playing",
+    "controls": false,
+    "currentTime": 3.75323,
+    "mode": "normal-price",
+    "overflow": 0,
+    "paused": false,
+    "readyState": 4,
+    "videoOpacity": "1",
+    "width": 1366
+  },
+  {
+    "hash": "#contacts",
+    "layers": [
+      {
+        "class": "page-water water-surface is-on is-active is-playing",
+        "controls": false,
+        "opacity": "1",
+        "paused": false,
+        "ready": 4,
+        "time": 8.367165
+      },
+      {
+        "class": "contacts-water water-surface is-active is-playing",
+        "controls": false,
+        "opacity": "1",
+        "paused": false,
+        "ready": 4,
+        "time": 3.512894
+      }
+    ],
+    "mode": "main-contacts-desktop",
+    "overflow": 0,
+    "width": 1366
+  },
+  {
+    "hash": "#contacts",
+    "layers": [
+      {
+        "class": "page-water water-surface is-on is-active is-playing",
+        "controls": false,
+        "opacity": "1",
+        "paused": false,
+        "ready": 4,
+        "time": 5.299139
+      },
+      {
+        "class": "contacts-water water-surface is-active is-playing",
+        "controls": false,
+        "opacity": "1",
+        "paused": false,
+        "ready": 4,
+        "time": 6.814503
+      }
+    ],
+    "mode": "main-contacts-mobile",
+    "overflow": 0,
+    "width": 390
+  },
+  {
+    "classes": "page-water water-surface is-active",
+    "controls": false,
+    "denied": "denied-once",
+    "fallbackState": "running",
+    "mode": "denied-scrolled",
+    "opacity": "0",
+    "scrollY": 1390,
+    "transform": "matrix(1.02825, 0, 0, 1.02825, -1.25283, 1.20842)"
+  }
+]
