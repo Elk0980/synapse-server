@@ -2972,9 +2972,9 @@
           <fieldset class="quiz-question">
             <legend data-edit="quiz.legend-2">Сколько времени есть?</legend>
             <div class="quiz-options">
-              <label class="quiz-option"><input type="radio" name="time" value="hour" required>Час</label>
-              <label class="quiz-option"><input type="radio" name="time" value="few-hours">Два-три часа</label>
-              <label class="quiz-option"><input type="radio" name="time" value="half-day">Полдня</label>
+              <label class="quiz-option"><input type="radio" name="time" value="hour" required>1–1,5 часа</label>
+              <label class="quiz-option"><input type="radio" name="time" value="few-hours">2–3 часа</label>
+              <label class="quiz-option"><input type="radio" name="time" value="half-day">3–4 часа</label>
             </div>
           </fieldset>
 
@@ -3002,7 +3002,7 @@
               <h3 id="quiz-result-title"></h3>
               <p id="quiz-result-copy"></p>
               <div class="pc__actions">
-                <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
+                <a id="quiz-result-action" class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
                 <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
               </div>
             </div>
@@ -3216,6 +3216,7 @@
       const quizResult = document.querySelector("#quiz-result");
       const quizResultTitle = document.querySelector("#quiz-result-title");
       const quizResultCopy = document.querySelector("#quiz-result-copy");
+      const quizResultAction = document.querySelector("#quiz-result-action");
       const compactQuery = window.matchMedia("(max-width: 899px)");
       const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
@@ -3311,6 +3312,13 @@
 
           quizResultTitle.textContent = program.title;
           quizResultCopy.textContent = program.copy;
+          if (quizResultAction) {
+            const isGift = formData.get("recipient") === "gift";
+            quizResultAction.textContent = isGift ? "Оформить сертификат" : "Записаться";
+            quizResultAction.href = isGift
+              ? "https://t.me/+79246180555"
+              : "https://n1070017.yclients.com/";
+          }
           quizResult.hidden = false;
           quizResult.focus?.({ preventScroll: true });
           quizResult.scrollIntoView({ behavior: reducedMotionQuery.matches ? "auto" : "smooth", block: "start" });

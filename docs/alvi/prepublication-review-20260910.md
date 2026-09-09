@@ -20,6 +20,9 @@ OPEN QUESTIONS: report only material factual conflicts discovered during review.
 NEXT_EXACT_ACTION: prepare changes and a QA preview, return screenshots and a findings list; do not merge or publish before owner review.
 
 ## Checkpoints
+OWNER REVIEW ACCEPTED (2026-09-09 UTC / 2026-09-10 Irkutsk): gift result must offer certificate purchase; replace the three time answers with ranges fitting existing recommendations (1–1.5, 2–3, 3–4 hours). Owner personally verified the ALVI YCLIENTS link works. Keep couple SPA minimum 6,900 ₽; ask Tatyana about the cheaper 4,600 ₽ entry. Add owner UTM and client domain/price tasks. Continue final checks and release under the owner's standing pre-advertising publication authorization.
+FOLLOW-UP BUILDER HANDOFF: change only quiz time labels and gift-result action; restore ordinary YCLIENTS booking when selection changes back to a service. Keep program durations, prices, photographs and accepted desktop layout. Verify all 27 recommendation combinations against catalog durations, gift → service action reset, mobile controls and desktop result. Existing domain task must be updated instead of duplicated; task creation is not complete until the service returns actual records.
+
 DISCOVERY / ARCHITECTURE / FUNNELS / WIREFRAME / CONTENT MODEL / DESIGN SYSTEM: scope and comparison baseline captured above. Internal QA preview uses source copies at controlled iframe viewport sizes; no production deployment.
 PAGE DESIGN / IMPLEMENTATION: QA. The mobile header keeps the original logo plus separate «На главную» and «Выбрать ритуал» controls. The menu stays available at deep scroll positions. All four table categories retain actual column labels, including «Стоимость минуты» and «Для одного / для двоих».
 IMPLEMENTATION REVIEW: QA. Browser viewport checks and tests below passed. No merge or production deployment in this iteration.
@@ -58,3 +61,20 @@ The 2-minute response promise is consistent in current FAQ/floating copy, but th
 Owner-facing screenshot gallery contains the prepared mobile header/tables, current gift result on desktop, current one-hour quiz result on mobile, LIVE couple headline, couple price item and the mobile promo. The requested mobile fixes are prepared; the three funnel changes above are not applied. Full raw viewport measurements: qa-viewport-metrics-20260910.json.
 
 NEXT_EXACT_ACTION: Owner reviews this list and confirms whether the 4,600 ₽ couple mini-program is current. Apply accepted funnel changes in a follow-up commit, verify the external booking destination when accessible, then publish only after the requested prepublication review.
+
+## Accepted follow-up — final QA
+
+The findings above describe the initial review and are retained as history. The owner accepted the gift action and requested three broad time choices instead of changing program durations or redesigning results. Implemented: «1–1,5 часа», «2–3 часа», «3–4 часа»; gift → «Оформить сертификат» → existing administrator chat; every subsequent ordinary service result restores «Записаться» → ALVI YCLIENTS.
+
+- 25 Node tests passed, including all 27 gift/service combinations and catalog-duration checks for every non-gift recommendation.
+- Real UI path on the candidate: gift → certificate action and then self → Relax → YCLIENTS. Keyboard focus moves to the result. Desktop gift result visually checked after the render settled; the initial immediately captured frame was stale and excluded from deliverables.
+- Follow-up quiz geometry: 320, 360, 390, 430, 768, 820, 899, 900, 1024, 1366, 1440, 1920 px; no page or option overflow. Booking action height 46px at every checked width. These supplement the earlier five-page / 13-width matrix; unchanged legal pages were not needlessly re-tested.
+- Rechecked all four price tables at 320, 375, 768, 899, 900 and 1366px: no overflow. Sticky header at 390px is 61px tall; the selected body-massage heading settles at y=77.11px. Separate home link returns to index.html. Desktop header remains relative.
+- Owner-confirmed operational fact: n1070017.yclients.com works for the owner. This does not replace a completed transaction in our browser; no booking or personal data submitted.
+- Owner-confirmed minimum couple SPA price: 6,900 ₽. Existing lower «Релакс-мини» 4,600 ₽ left unchanged pending Tatyana's confirmation; its task payload explains the conflict.
+- Three task payloads are ready in launch-tasks-20260910.json: update the existing spaalvi.ru domain task, create the cheaper-program confirmation task, create the owner's YCLIENTS UTM task. STATUS: PREPARED_NOT_WRITTEN, because the current cabinet session reports incorrect credentials. A repository payload is not a live CRM record. No automatic seeding or authentication changes were introduced.
+- Deadline assumption for these tasks: before promotion, provisionally 2026-09-10. Domain ownership / access must be checked before buying another name; no domain purchase is performed.
+
+Release scope: publish this reviewed PR under the owner's standing authorization, then check the production HTML and user-facing navigation/result. Remaining launch dependencies are Tatyana's price decision, domain access and UTM setup. Physical-device Safari/Android testing and external transaction completion remain unverified, as already disclosed.
+
+NEXT_EXACT_ACTION: release the checked site changes; resume actual task creation through the authenticated cabinet after access is restored, deduplicate by project/title and verify returned task records.
