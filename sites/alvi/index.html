@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="actions.css?v=20260909a">
+  <link rel="stylesheet" href="actions.css?v=20260910-type-spacing">
 
   <script type="application/ld+json">
   {
@@ -1151,8 +1151,9 @@
       clear: both; /* после плавающего legend */
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 0.65rem;
-      margin-top: 1.25rem;
+      gap: 0.75rem;
+      margin-top: 0;
+      padding-top: 0.625rem; /* реальный зазор после legend, не схлопывающийся margin */
     }
 
     .quiz-option {
@@ -1183,6 +1184,7 @@
       flex-wrap: wrap;
       gap: 1rem;
       align-items: center;
+      padding-top: 0.25rem;
     }
 
     .quiz-result {
@@ -1965,7 +1967,7 @@
       min-height: 44px; padding: 10px 14px; gap: 8px;
       border: 1px solid rgba(238,242,235,.22); border-radius: 10px;
       background: transparent; box-shadow: none; backdrop-filter: none;
-      color: #eef2eb; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      color: #eef2eb; font-family: "Lora", Georgia, serif;
       transition: border-color .2s, color .2s;
     }
     #contacts .contacts-link::before { display: none; }
@@ -1976,7 +1978,7 @@
     .after-hero .site-footer {
       padding: 28px clamp(20px, 5vw, 64px) 16px;
       background: var(--bg2); color: #bfc5bc;
-      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      font-family: "Lora", Georgia, serif;
       font-size: 13px; line-height: 1.65; letter-spacing: normal;
       border-top: 1px solid rgba(238,242,235,.08);
     }
@@ -1993,7 +1995,7 @@
     /* Shared desktop/mobile icons inherit their link colour; no coloured badges. */
     .contacts-link .service-icon, .site-footer__service .service-icon { display: block; flex-shrink: 0; background: transparent; stroke: none; }
     .after-hero .site-footer__service .service-icon { width: 16px; height: 16px; flex-basis: 16px; }
-    .after-hero .synapse-strip { padding: 0 clamp(20px, 5vw, 64px) 20px; background: var(--bg2); color: #adb5a9; font: 12px/1.6 system-ui, sans-serif; letter-spacing: normal; text-align: center; }
+    .after-hero .synapse-strip { padding: 0 clamp(20px, 5vw, 64px) 20px; background: var(--bg2); color: #adb5a9; font: 12px/1.6 "Lora", Georgia, serif; letter-spacing: normal; text-align: center; }
     .after-hero .synapse-strip a { color: inherit; text-decoration: none; }
     .after-hero .synapse-strip a:hover { text-decoration: underline; text-underline-offset: 3px; }
 
@@ -2001,7 +2003,7 @@
       min-height: 44px; margin-top: 12px; padding: 10px 16px;
       border: 1px solid rgba(255,253,248,.55); border-radius: 12px;
       background: rgba(6,17,11,.68); color: #fffdf8;
-      font: 500 14px/1.4 system-ui, sans-serif; cursor: pointer;
+      font: 500 14px/1.4 "Lora", Georgia, serif; cursor: pointer;
     }
     .hero-video-start[hidden] { display: none; }
     .hero-video-start:focus-visible { outline: 2px solid #fffdf8; outline-offset: 4px; }
@@ -2424,10 +2426,10 @@
     .promo .promo__title { font-size: clamp(1.4rem, 2.3vw, 1.9rem); line-height: 1.2; text-shadow: none; }
     .promo .promo__copy { font-size: 1rem; text-shadow: none; }
     .promo__offer { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem .7rem; margin-block: .5rem; }
-    .promo__price { color: #e3d4a7; font: 600 clamp(1.8rem, 3vw, 2.5rem)/1.15 system-ui, sans-serif; }
+    .promo__price { color: #e3d4a7; font: 400 clamp(1.8rem, 3vw, 2.5rem)/1.15 "Lora", Georgia, serif; }
     .promo__was { font-size: 1rem; color: rgba(255, 253, 248, .8); }
     .promo .promo__actions { margin-top: auto; padding-top: .6rem; }
-    .promo .promo__button { min-height: 46px; border-radius: .75rem; font: 500 .875rem/1.3 system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
+    .promo .promo__button { min-height: 46px; border-radius: .75rem; font: 500 .875rem/1.3 "Lora", Georgia, serif; letter-spacing: 0; text-transform: none; }
     .promo .promo__button::after { display: none; }
     .promo .promo__head { min-height: 68px; }
     .promo .promo__tagline { font-style: normal; }
@@ -2506,8 +2508,8 @@
 </style><script>
 (()=>{let finished=false,revealTimer,safetyTimer;const loader=()=>document.getElementById("page-loader");const finish=()=>{if(finished)return;finished=true;clearTimeout(revealTimer);clearTimeout(safetyTimer);const element=loader();if(!element)return;if(!element.classList.contains("is-visible")){element.style.display="none";return}element.classList.add("is-complete");setTimeout(()=>{element.style.display="none"},250)};revealTimer=setTimeout(()=>{if(!finished)loader()?.classList.add("is-visible")},300);safetyTimer=setTimeout(()=>{finished=true;clearTimeout(revealTimer);const element=loader();if(element)element.style.display="none"},5000);if(document.readyState==="complete")finish();else addEventListener("load",finish,{once:true})})();
 </script>
-  <link rel="stylesheet" href="mobile.css?v=20260909-soft-shadow">
-  <link rel="stylesheet" href="mobile-cards.css?v=20260909-refined">
+  <link rel="stylesheet" href="mobile.css?v=20260910-type-spacing">
+  <link rel="stylesheet" href="mobile-cards.css?v=20260910-type-spacing">
   <script src="mobile-cards.js?v=20260909-two-columns" defer></script>
   <script src="mobile-performance.js?v=20260907" defer></script>
 </head>
@@ -4131,7 +4133,7 @@
       io.observe(trust);
     })();
   </script>
-  <script src="site-apply.js?v=20260909-mobile-only" defer></script>
+  <script src="site-apply.js?v=20260910-type-spacing" defer></script>
 <script src="https://synapse.synapsebusiness.ru/track.js?v=20260905" data-company="alvi" defer></script>
 <script src="price-render.js?v=20260910-booking" defer></script>
 <script>

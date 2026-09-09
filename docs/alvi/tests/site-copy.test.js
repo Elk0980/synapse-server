@@ -67,6 +67,9 @@ test('the current offer amount still comes from the cabinet document', () => {
   assert.match(html, /promo__price\">750 ₽<\/strong>/);
   assert.match(html, /promo__was\">вместо 2 300 ₽<\/span>/);
   assert.doesNotMatch(html, /500 ₽|2 100 ₽/);
+  assert.match(html, /<\/span><\/span>$/); // No punctuation-only line after the price.
+  const [continued] = render([{ key: 'promo.promo-copy-2', value: '750 ₽ вместо 2 300 ₽. Только по записи.' }]);
+  assert.match(continued, /<\/span><\/span>\. Только по записи\.$/);
 });
 
 test('certificate hydration still corrects old delivery terms and preserves later edits', () => {

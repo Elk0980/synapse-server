@@ -1,0 +1,534 @@
+[
+  {
+    "page": "index",
+    "fonts": "loaded",
+    "overflow": 0,
+    "overfull": [],
+    "priceFont": "26px / 29.9px Lora, Georgia, serif",
+    "priceTail": "500 ₽ вместо 2 100 ₽",
+    "quiz": [
+      {
+        "gap": 10,
+        "optionGap": "10px"
+      },
+      {
+        "gap": 10,
+        "optionGap": "10px"
+      },
+      {
+        "gap": 10,
+        "optionGap": "10px"
+      }
+    ],
+    "usable": 305,
+    "width": 320
+  },
+  {
+    "page": "index",
+    "fonts": "loaded",
+    "overflow": 0,
+    "overfull": [],
+    "priceFont": "26px / 29.9px Lora, Georgia, serif",
+    "priceTail": "500 ₽ вместо 2 100 ₽",
+    "quiz": [
+      {
+        "gap": 10,
+        "optionGap": "10px"
+      },
+      {
+        "gap": 10,
+        "optionGap": "10px"
+      },
+      {
+        "gap": 10,
+        "optionGap": "10px"
+      }
+    ],
+    "usable": 375,
+    "width": 390
+  },
+  {
+    "page": "index",
+    "fonts": "loaded",
+    "overflow": 0,
+    "overfull": [],
+    "priceFont": "26px / 29.9px Lora, Georgia, serif",
+    "priceTail": "500 ₽ вместо 2 100 ₽",
+    "quiz": [
+      {
+        "gap": 10,
+        "optionGap": "10px"
+      },
+      {
+        "gap": 10,
+        "optionGap": "10px"
+      },
+      {
+        "gap": 10,
+        "optionGap": "10px"
+      }
+    ],
+    "usable": 753,
+    "width": 768
+  },
+  {
+    "page": "index",
+    "fonts": "loaded",
+    "overflow": 0,
+    "overfull": [],
+    "priceFont": "26px / 29.9px Lora, Georgia, serif",
+    "priceTail": "500 ₽ вместо 2 100 ₽",
+    "quiz": [
+      {
+        "gap": 10,
+        "optionGap": "10px"
+      },
+      {
+        "gap": 10,
+        "optionGap": "10px"
+      },
+      {
+        "gap": 10,
+        "optionGap": "10px"
+      }
+    ],
+    "usable": 884,
+    "width": 899
+  },
+  {
+    "page": "index",
+    "fonts": "loaded",
+    "overflow": 0,
+    "overfull": [],
+    "priceFont": "28.8px / 33.12px Lora, Georgia, serif",
+    "priceTail": "500 ₽ вместо 2 100 ₽",
+    "quiz": [
+      {
+        "gap": 10,
+        "optionGap": "12px"
+      },
+      {
+        "gap": 10,
+        "optionGap": "12px"
+      },
+      {
+        "gap": 10,
+        "optionGap": "12px"
+      }
+    ],
+    "usable": 885,
+    "width": 900
+  },
+  {
+    "page": "index",
+    "fonts": "loaded",
+    "overflow": 0,
+    "overfull": [],
+    "priceFont": "40px / 46px Lora, Georgia, serif",
+    "priceTail": "500 ₽ вместо 2 100 ₽",
+    "quiz": [
+      {
+        "gap": 10,
+        "optionGap": "12px"
+      },
+      {
+        "gap": 10,
+        "optionGap": "12px"
+      },
+      {
+        "gap": 10,
+        "optionGap": "12px"
+      }
+    ],
+    "usable": 1351,
+    "width": 1366
+  },
+  {
+    "page": "index",
+    "fonts": "loaded",
+    "overflow": 0,
+    "overfull": [],
+    "priceFont": "40px / 46px Lora, Georgia, serif",
+    "priceTail": "500 ₽ вместо 2 100 ₽",
+    "quiz": [
+      {
+        "gap": 10,
+        "optionGap": "12px"
+      },
+      {
+        "gap": 10,
+        "optionGap": "12px"
+      },
+      {
+        "gap": 10,
+        "optionGap": "12px"
+      }
+    ],
+    "usable": 1905,
+    "width": 1920
+  },
+  {
+    "page": "banner",
+    "buttons": [
+      {
+        "height": 46,
+        "overflow": 0
+      },
+      {
+        "height": 46,
+        "overflow": 0
+      }
+    ],
+    "close": {
+      "bottom": 125.484375,
+      "height": 44,
+      "left": 204.71875,
+      "right": 300,
+      "top": 81.484375,
+      "width": 95.28125,
+      "x": 204.71875,
+      "y": 81.484375
+    },
+    "copyTail": "500 ₽ вместо 2 100 ₽",
+    "overflow": 0,
+    "priceFont": "26px / 29.9px Lora, Georgia, serif",
+    "weight": "400",
+    "width": 320
+  },
+  {
+    "page": "banner",
+    "buttons": [
+      {
+        "height": 46,
+        "overflow": 0
+      },
+      {
+        "height": 46,
+        "overflow": 0
+      }
+    ],
+    "close": {
+      "bottom": 171.984375,
+      "height": 44,
+      "left": 274.71875,
+      "right": 370,
+      "top": 127.984375,
+      "width": 95.28125,
+      "x": 274.71875,
+      "y": 127.984375
+    },
+    "copyTail": "500 ₽ вместо 2 100 ₽",
+    "overflow": 0,
+    "priceFont": "26px / 29.9px Lora, Georgia, serif",
+    "weight": "400",
+    "width": 390
+  },
+  {
+    "page": "banner",
+    "buttons": [
+      {
+        "height": 46,
+        "overflow": 0
+      },
+      {
+        "height": 46,
+        "overflow": 0
+      }
+    ],
+    "close": {
+      "bottom": 221.265625,
+      "height": 44,
+      "left": 652.71875,
+      "right": 748,
+      "top": 177.265625,
+      "width": 95.28125,
+      "x": 652.71875,
+      "y": 177.265625
+    },
+    "copyTail": "500 ₽ вместо 2 100 ₽",
+    "overflow": 0,
+    "priceFont": "26px / 29.9px Lora, Georgia, serif",
+    "weight": "400",
+    "width": 768
+  },
+  {
+    "page": "banner",
+    "buttons": [
+      {
+        "height": 46,
+        "overflow": 0
+      },
+      {
+        "height": 46,
+        "overflow": 0
+      }
+    ],
+    "close": {
+      "bottom": 132.125,
+      "height": 44,
+      "left": 1102.53125,
+      "right": 1201.90625,
+      "top": 88.125,
+      "width": 99.375,
+      "x": 1102.53125,
+      "y": 88.125
+    },
+    "copyTail": "500 ₽ вместо 2 100 ₽",
+    "overflow": 0,
+    "priceFont": "40px / 46px Lora, Georgia, serif",
+    "weight": "400",
+    "width": 1366
+  },
+  {
+    "page": "price",
+    "overflow": 0,
+    "overfull": [],
+    "tables": [
+      {
+        "overflow": 0,
+        "width": 271
+      },
+      {
+        "overflow": 0,
+        "width": 271
+      },
+      {
+        "overflow": 0,
+        "width": 271
+      },
+      {
+        "overflow": 0,
+        "width": 271
+      }
+    ],
+    "width": 320
+  },
+  {
+    "page": "price",
+    "overflow": 0,
+    "overfull": [],
+    "tables": [
+      {
+        "overflow": 0,
+        "width": 341
+      },
+      {
+        "overflow": 0,
+        "width": 341
+      },
+      {
+        "overflow": 0,
+        "width": 341
+      },
+      {
+        "overflow": 0,
+        "width": 341
+      }
+    ],
+    "width": 390
+  },
+  {
+    "page": "price",
+    "overflow": 0,
+    "overfull": [],
+    "tables": [
+      {
+        "overflow": 0,
+        "width": 719
+      },
+      {
+        "overflow": 0,
+        "width": 719
+      },
+      {
+        "overflow": 0,
+        "width": 719
+      },
+      {
+        "overflow": 0,
+        "width": 719
+      }
+    ],
+    "width": 768
+  },
+  {
+    "page": "price",
+    "overflow": 0,
+    "overfull": [],
+    "tables": [
+      {
+        "overflow": 0,
+        "width": 850
+      },
+      {
+        "overflow": 0,
+        "width": 850
+      },
+      {
+        "overflow": 0,
+        "width": 850
+      },
+      {
+        "overflow": 0,
+        "width": 850
+      }
+    ],
+    "width": 899
+  },
+  {
+    "page": "price",
+    "overflow": 0,
+    "overfull": [],
+    "tables": [
+      {
+        "overflow": 0,
+        "width": 811
+      },
+      {
+        "overflow": 0,
+        "width": 811
+      },
+      {
+        "overflow": 0,
+        "width": 811
+      },
+      {
+        "overflow": 0,
+        "width": 811
+      }
+    ],
+    "width": 900
+  },
+  {
+    "page": "price",
+    "overflow": 0,
+    "overfull": [],
+    "tables": [
+      {
+        "overflow": 0,
+        "width": 507.171875
+      },
+      {
+        "overflow": 0,
+        "width": 480
+      },
+      {
+        "overflow": 0,
+        "width": 480
+      },
+      {
+        "overflow": 0,
+        "width": 480
+      }
+    ],
+    "width": 1366
+  },
+  {
+    "page": "price",
+    "overflow": 0,
+    "overfull": [],
+    "tables": [
+      {
+        "overflow": 0,
+        "width": 510.453125
+      },
+      {
+        "overflow": 0,
+        "width": 480
+      },
+      {
+        "overflow": 0,
+        "width": 480
+      },
+      {
+        "overflow": 0,
+        "width": 480
+      }
+    ],
+    "width": 1920
+  },
+  {
+    "page": "oferta.html",
+    "font": "Lora, Georgia, serif",
+    "overflow": 0,
+    "overfull": [],
+    "width": 320
+  },
+  {
+    "page": "oferta.html",
+    "font": "Lora, Georgia, serif",
+    "overflow": 0,
+    "overfull": [],
+    "width": 768
+  },
+  {
+    "page": "oferta.html",
+    "font": "Lora, Georgia, serif",
+    "overflow": 0,
+    "overfull": [],
+    "width": 1366
+  },
+  {
+    "page": "politika.html",
+    "font": "Lora, Georgia, serif",
+    "overflow": 0,
+    "overfull": [],
+    "width": 320
+  },
+  {
+    "page": "politika.html",
+    "font": "Lora, Georgia, serif",
+    "overflow": 0,
+    "overfull": [],
+    "width": 768
+  },
+  {
+    "page": "politika.html",
+    "font": "Lora, Georgia, serif",
+    "overflow": 0,
+    "overfull": [],
+    "width": 1366
+  },
+  {
+    "page": "soglasie.html",
+    "font": "Lora, Georgia, serif",
+    "overflow": 0,
+    "overfull": [],
+    "width": 320
+  },
+  {
+    "page": "soglasie.html",
+    "font": "Lora, Georgia, serif",
+    "overflow": 0,
+    "overfull": [],
+    "width": 768
+  },
+  {
+    "page": "soglasie.html",
+    "font": "Lora, Georgia, serif",
+    "overflow": 0,
+    "overfull": [],
+    "width": 1366
+  },
+  {
+    "page": "404.html",
+    "font": "Lora, Georgia, serif",
+    "overflow": 0,
+    "overfull": [],
+    "width": 320
+  },
+  {
+    "page": "404.html",
+    "font": "Lora, Georgia, serif",
+    "overflow": 0,
+    "overfull": [],
+    "width": 768
+  },
+  {
+    "page": "404.html",
+    "font": "Lora, Georgia, serif",
+    "overflow": 0,
+    "overfull": [],
+    "width": 1366
+  }
+]
