@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Редактор прайса Palitra Love — кабинет Synapse</title>
+  <title>Редактор прайса Palitra — кабинет Synapse</title>
   <meta name="robots" content="noindex, nofollow">
   <style>
     :root {
@@ -230,7 +230,7 @@
       .floating-cta__button::after { animation: none; opacity: 0; }
     }
 
-    /* Нейтральное оформление редактора Palitra Love. */
+    /* Нейтральное оформление редактора Palitra. */
     :root { --bg:#f5f5f7; --ink:#1a1a1a; --ink-dim:#454b52; --ink-faint:#6a737d; --gold:#3b5b7a; --gold-soft:#3b5b7a; --green-deep:#3b5b7a; --line:#d8dce1; }
     body { background:#f5f5f7; color:#1a1a1a; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
     .page-water { display:none; }
@@ -352,7 +352,7 @@
 </head>
 <body>
   <div class="ed-bar">
-    <div class="ed-bar__title">Редактор прайса Palitra Love<small id="ed-sub">загрузка…</small></div>
+    <div class="ed-bar__title">Редактор прайса Palitra<small id="ed-sub">загрузка…</small></div>
     <span class="ed-status" id="ed-status"></span>
     <button class="ed-btn ed-btn--ghost" id="ed-history" type="button">История</button>
     <a class="ed-btn ed-btn--ghost" id="ed-login" href="/cabinet.html" target="_blank" rel="noopener" hidden>Войти в кабинет</a>
@@ -850,8 +850,8 @@
 
   (async () => {
     if (!window.PalitraPrice) {
-      setStatus('Не загрузился рендер прайса (price-render.js с сайта Palitra Love)', 'error');
-      $('#ed-content').innerHTML = '<p class="ed-status is-error">Не удалось загрузить price-render.js с palitra-love.synapsebusiness.ru. Проверьте, что сайт Palitra Love доступен.</p>';
+      setStatus('Не загрузился рендер прайса (price-render.js с сайта Palitra)', 'error');
+      $('#ed-content').innerHTML = '<p class="ed-status is-error">Не удалось загрузить price-render.js с palitra-love.synapsebusiness.ru. Проверьте, что сайт Palitra доступен.</p>';
       return;
     }
     try { await loadSession(); await loadData(); saveBtn.disabled = false; setStatus('Готово к работе'); }
