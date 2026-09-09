@@ -6,8 +6,17 @@
   if (!nav || !list || !window.matchMedia) return;
 
   const mobile = window.matchMedia('(max-width: 56.24rem)');
+  const header = document.querySelector('.price-page .price-header');
+  const home = document.createComment('price navigation desktop position');
+  nav.before(home);
   let toggle;
   let nextId = 0;
+
+  function measureHeader() {
+    if (mobile.matches && header) {
+      document.documentElement.style.setProperty('--price-header-height', `${Math.ceil(header.getBoundingClientRect().height)}px`);
+    }
+  }
 
   function setOpen(open, returnFocus = false) {
     nav.classList.toggle('is-mobile-open', open);
@@ -23,12 +32,16 @@
 
   function enhance() {
     if (!mobile.matches) return;
+    if (header && nav.parentElement !== header) {
+      header.append(nav);
+      header.classList.add('has-mobile-nav');
+    }
     if (!toggle) {
       if (!list.id) list.id = 'price-mobile-sections';
       toggle = document.createElement('button');
       toggle.type = 'button';
       toggle.className = 'pnav__mobile-toggle';
-      toggle.textContent = 'Выбрать раздел';
+      toggle.textContent = 'Выбрать ритуал';
       toggle.setAttribute('aria-controls', list.id);
       toggle.setAttribute('aria-expanded', 'false');
       toggle.addEventListener('click', () => setOpen(!nav.classList.contains('is-mobile-open')));
@@ -48,6 +61,7 @@
       expand.setAttribute('aria-expanded', 'false');
       item.insertBefore(expand, sub);
     });
+    measureHeader();
   }
 
   nav.addEventListener('click', (event) => {
@@ -88,6 +102,9 @@
       // A control disappearing at the breakpoint must not retain invisible focus.
       const restoreFocus = active && (active === toggle || active.classList.contains('pnav__expand'));
       setOpen(false);
+      home.parentNode.insertBefore(nav, home.nextSibling);
+      if (header) header.classList.remove('has-mobile-nav');
+      document.documentElement.style.removeProperty('--price-header-height');
       if (restoreFocus) {
         const link = active === toggle ? list.querySelector('a') : active.parentElement.querySelector('a');
         if (link) link.focus({ preventScroll: true });
@@ -96,6 +113,11 @@
   };
   if (mobile.addEventListener) mobile.addEventListener('change', onViewportChange);
   else mobile.addListener(onViewportChange);
+
+  document.addEventListener('click', (event) => {
+    if (mobile.matches && !nav.contains(event.target)) setOpen(false);
+  });
+  if (header && window.ResizeObserver) new ResizeObserver(measureHeader).observe(header);
 
   // hydratePrice replaces the list asynchronously; delegated clicks and new controls survive it.
   new MutationObserver(enhance).observe(list, { childList: true, subtree: true });

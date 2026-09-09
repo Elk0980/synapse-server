@@ -1,0 +1,396 @@
+{
+  "quizWidths": [
+    {
+      "actionHeight": 46,
+      "actionWidth": 194.25,
+      "options": [
+        {
+          "overflow": 0,
+          "text": "1–1,5 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "2–3 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "3–4 часа"
+        }
+      ],
+      "overflow": 0,
+      "quizWidth": 265,
+      "width": 320
+    },
+    {
+      "actionHeight": 46,
+      "actionWidth": 234.25,
+      "options": [
+        {
+          "overflow": 0,
+          "text": "1–1,5 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "2–3 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "3–4 часа"
+        }
+      ],
+      "overflow": 0,
+      "quizWidth": 305,
+      "width": 360
+    },
+    {
+      "actionHeight": 46,
+      "actionWidth": 264.25,
+      "options": [
+        {
+          "overflow": 0,
+          "text": "1–1,5 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "2–3 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "3–4 часа"
+        }
+      ],
+      "overflow": 0,
+      "quizWidth": 335,
+      "width": 390
+    },
+    {
+      "actionHeight": 46,
+      "actionWidth": 301.25,
+      "options": [
+        {
+          "overflow": 0,
+          "text": "1–1,5 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "2–3 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "3–4 часа"
+        }
+      ],
+      "overflow": 0,
+      "quizWidth": 372,
+      "width": 430
+    },
+    {
+      "actionHeight": 46,
+      "actionWidth": 203,
+      "options": [
+        {
+          "overflow": 0,
+          "text": "1–1,5 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "2–3 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "3–4 часа"
+        }
+      ],
+      "overflow": 0,
+      "quizWidth": 676.21875,
+      "width": 768
+    },
+    {
+      "actionHeight": 46,
+      "actionWidth": 203,
+      "options": [
+        {
+          "overflow": 0,
+          "text": "1–1,5 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "2–3 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "3–4 часа"
+        }
+      ],
+      "overflow": 0,
+      "quizWidth": 723,
+      "width": 820
+    },
+    {
+      "actionHeight": 46,
+      "actionWidth": 203,
+      "options": [
+        {
+          "overflow": 0,
+          "text": "1–1,5 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "2–3 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "3–4 часа"
+        }
+      ],
+      "overflow": 0,
+      "quizWidth": 794.125,
+      "width": 899
+    },
+    {
+      "actionHeight": 46,
+      "actionWidth": 203,
+      "options": [
+        {
+          "overflow": 0,
+          "text": "1–1,5 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "2–3 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "3–4 часа"
+        }
+      ],
+      "overflow": 0,
+      "quizWidth": 795,
+      "width": 900
+    },
+    {
+      "actionHeight": 46,
+      "actionWidth": 203,
+      "options": [
+        {
+          "overflow": 0,
+          "text": "1–1,5 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "2–3 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "3–4 часа"
+        }
+      ],
+      "overflow": 0,
+      "quizWidth": 832,
+      "width": 1024
+    },
+    {
+      "actionHeight": 46,
+      "actionWidth": 203,
+      "options": [
+        {
+          "overflow": 0,
+          "text": "1–1,5 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "2–3 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "3–4 часа"
+        }
+      ],
+      "overflow": 0,
+      "quizWidth": 832,
+      "width": 1366
+    },
+    {
+      "actionHeight": 46,
+      "actionWidth": 203,
+      "options": [
+        {
+          "overflow": 0,
+          "text": "1–1,5 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "2–3 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "3–4 часа"
+        }
+      ],
+      "overflow": 0,
+      "quizWidth": 832,
+      "width": 1440
+    },
+    {
+      "actionHeight": 46,
+      "actionWidth": 203,
+      "options": [
+        {
+          "overflow": 0,
+          "text": "1–1,5 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "2–3 часа"
+        },
+        {
+          "overflow": 0,
+          "text": "3–4 часа"
+        }
+      ],
+      "overflow": 0,
+      "quizWidth": 832,
+      "width": 1920
+    }
+  ],
+  "priceWidths": [
+    {
+      "headerPosition": "sticky",
+      "overflow": 0,
+      "tables": [
+        {
+          "overflow": 0,
+          "width": 271
+        },
+        {
+          "overflow": 0,
+          "width": 271
+        },
+        {
+          "overflow": 0,
+          "width": 271
+        },
+        {
+          "overflow": 0,
+          "width": 271
+        }
+      ],
+      "width": 320
+    },
+    {
+      "headerPosition": "sticky",
+      "overflow": 0,
+      "tables": [
+        {
+          "overflow": 0,
+          "width": 326
+        },
+        {
+          "overflow": 0,
+          "width": 326
+        },
+        {
+          "overflow": 0,
+          "width": 326
+        },
+        {
+          "overflow": 0,
+          "width": 326
+        }
+      ],
+      "width": 375
+    },
+    {
+      "headerPosition": "sticky",
+      "overflow": 0,
+      "tables": [
+        {
+          "overflow": 0,
+          "width": 719
+        },
+        {
+          "overflow": 0,
+          "width": 719
+        },
+        {
+          "overflow": 0,
+          "width": 719
+        },
+        {
+          "overflow": 0,
+          "width": 719
+        }
+      ],
+      "width": 768
+    },
+    {
+      "headerPosition": "sticky",
+      "overflow": 0,
+      "tables": [
+        {
+          "overflow": 0,
+          "width": 850
+        },
+        {
+          "overflow": 0,
+          "width": 850
+        },
+        {
+          "overflow": 0,
+          "width": 850
+        },
+        {
+          "overflow": 0,
+          "width": 850
+        }
+      ],
+      "width": 899
+    },
+    {
+      "headerPosition": "relative",
+      "overflow": 0,
+      "tables": [
+        {
+          "overflow": 0,
+          "width": 811
+        },
+        {
+          "overflow": 0,
+          "width": 811
+        },
+        {
+          "overflow": 0,
+          "width": 811
+        },
+        {
+          "overflow": 0,
+          "width": 811
+        }
+      ],
+      "width": 900
+    },
+    {
+      "headerPosition": "relative",
+      "overflow": 0,
+      "tables": [
+        {
+          "overflow": 0,
+          "width": 940.03125
+        },
+        {
+          "overflow": 0,
+          "width": 940.03125
+        },
+        {
+          "overflow": 0,
+          "width": 940.03125
+        },
+        {
+          "overflow": 0,
+          "width": 940.03125
+        }
+      ],
+      "width": 1366
+    }
+  ]
+}

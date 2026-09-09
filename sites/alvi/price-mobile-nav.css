@@ -3,6 +3,115 @@
 .pnav__expand { display: none; }
 
 @media (max-width: 56.24rem) {
+  .price-page .price-header {
+    position: sticky;
+    top: 0;
+    z-index: 90;
+    padding: max(.5rem, env(safe-area-inset-top)) .75rem .5rem;
+    background: rgba(9, 17, 12, .92);
+  }
+  .price-page .price-header.has-mobile-nav {
+    display: grid;
+    grid-template-columns: 2.5rem minmax(0, .82fr) minmax(0, 1.18fr);
+    gap: .5rem;
+  }
+  .price-page .price-header.has-mobile-nav img { height: 2.5rem; }
+  .price-page .price-header.has-mobile-nav .price-header__back {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    min-height: 44px;
+    padding: .5rem;
+    font: 500 .75rem/1.3 system-ui, sans-serif;
+    letter-spacing: 0;
+    text-transform: none;
+    text-align: center;
+    background: transparent;
+  }
+  .price-page .price-header.has-mobile-nav > .pnav {
+    flex: 0 1 15rem;
+    width: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .price-page .price-header.has-mobile-nav .pnav.is-mobile-enhanced .pnav__mobile-toggle {
+    min-height: 44px;
+    padding: .6rem .5rem;
+    gap: .35rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font: 500 .8125rem/1.3 system-ui, sans-serif;
+  }
+  .price-page .price-header .pnav.is-mobile-open > ul {
+    position: absolute;
+    inset: calc(100% + .4rem) .75rem auto;
+    width: auto;
+    max-height: calc(100dvh - var(--price-header-height, 4.5rem) - 1.5rem);
+    padding: .5rem .75rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    background: #112017;
+    box-shadow: 0 .6rem 1.5rem rgba(0, 0, 0, .2);
+  }
+  .price-page :is(.ps, .pc, .pt tr) {
+    scroll-margin-top: calc(var(--price-header-height, 4.5rem) + 1rem);
+  }
+
+  /* Every row retains its real cells, with the service above its time and price. */
+  .price-page .pt-wrap { overflow: visible; border-radius: 1rem; }
+  .price-page .pt { display: block; width: 100%; min-width: 0; max-width: 100%; }
+  .price-page .pt thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .price-page .pt tbody { display: block; width: 100%; }
+  .price-page .pt tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: .5rem 1rem;
+    padding: 1rem;
+  }
+  .price-page .pt tbody tr + tr { border-top: 1px solid var(--line); }
+  .price-page .pt tbody td {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font: 400 .875rem/1.5 system-ui, sans-serif;
+  }
+  .price-page .pt tbody tr + tr td { border: 0; }
+  .price-page .pt tbody td:first-child {
+    grid-column: 1 / -1;
+    color: var(--ink);
+    font: 400 1rem/1.4 "Lora", Georgia, serif;
+  }
+  .price-page .pt tbody td:nth-child(2)::before,
+  .price-page .pt tbody td:nth-child(3)::before {
+    display: block;
+    margin-bottom: .15rem;
+    color: var(--ink-faint);
+    font: 400 .75rem/1.4 system-ui, sans-serif;
+  }
+  .price-page .pt tbody td:nth-child(2)::before,
+  .price-page .pt tbody td:nth-child(3)::before { content: attr(data-label); }
+  .price-page .pt tbody td:empty::before { content: none; }
+  .price-page .pt tbody td.pt__price { font-weight: 500; }
+
   .price-page .pnav {
     position: static;
     width: 100%;
