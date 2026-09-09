@@ -9,7 +9,10 @@
   pre, .pt-wrap { overflow-x: auto; overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch; }
 
   /* Standalone/legal pages. */
-  body > header, body > main, body > footer { width: min(calc(100% - 2rem), 46rem); }
+  body > header, body > main, body > footer { width: min(calc(100% - 2rem), 46rem); margin-inline: auto; }
+  .price-page > header, .price-page > main, .price-page > footer { width: 100%; max-width: 100%; margin-inline: 0; }
+  body > main.after-hero { width: 100%; padding-bottom: 0; }
+  .after-hero > section, .after-hero > footer, .after-hero > .synapse-strip { width: 100%; }
   body > header a, .back, .actions a, button, textarea, input, select { min-height: 44px; }
   body > header a, .back, .actions a { display: inline-flex; align-items: center; }
   h1, h2, h3 { hyphens: none; text-wrap: balance; }
@@ -28,6 +31,19 @@
   .hero.is-compact-mode .hero-scene[data-scene="0"] .hero-title {
     max-width: 8ch; margin-bottom: .7rem; font-size: clamp(2.35rem, 11.5vw, 3.2rem); line-height: .98;
   }
+  /* Distinct crops keep faces inside portrait viewports without replacing media. */
+  .hero.is-compact-mode .hero__poster,
+  .hero.is-compact-mode:not(.is-reduced-motion) .hero__idle-video,
+  .hero.is-compact-mode .hero__frame[data-frame="k1"] { object-position: 86% center; }
+  .hero.is-compact-mode .hero__frame[data-frame="k2"] { object-position: 86% center; }
+  .hero.is-compact-mode .hero__frame[data-frame="k3"] { object-position: 100% center; }
+  .hero.is-compact-mode .hero__frame[data-frame="k5"] { object-position: 96% center; }
+  .hero.is-compact-mode .hero__frame[data-frame="k7"] { object-position: 82% center; }
+  .hero.is-compact-mode .hero-scene[data-scene="0"] .hero-scene__content {
+    display: flex; flex-direction: column;
+    min-height: calc(100svh - 15.5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+  .hero.is-compact-mode .hero-scene[data-scene="0"] .hero-ratings { margin-top: auto; padding-top: 1rem; }
   .hero-ratings { display: grid; width: min(100%, 22rem); gap: 8px; }
   .rating-pill { width: 100%; min-height: 44px; padding: .55rem .8rem; font-size: 13px; line-height: 1.25; }
   .hero__chrome a, .certificate-link, .scenario-link, .button, .content-button,
@@ -39,7 +55,7 @@
   .floating-cta__row { width: 100%; gap: 8px; }
   .floating-cta__button { min-width: 0; min-height: 44px; flex: 1 1 0; padding: .65rem .45rem; font-size: 13px; }
   .floating-cta__note { font-size: 13px; line-height: 1.25; }
-  .after-hero { padding-bottom: calc(8rem + env(safe-area-inset-bottom)); }
+  .after-hero { padding-bottom: 0; }
   .after-hero .program-card--photo { padding-top: 8rem; }
   .quiz-result { padding-top: 8rem; }
   .after-hero :is(a, button, input, summary) { scroll-margin-bottom: calc(9rem + env(safe-area-inset-bottom)); }
@@ -67,20 +83,39 @@
   .quiz-result { scroll-margin-top: 1rem; }
   .program-card .pc__actions, .need-card .pc__actions, .quiz-result .pc__actions { width: 100%; }
 
-  /* Promo closes with one full-sized target and scrolls without trapping the page. */
+  /* Header stays outside the scroll area; either offer can be reached. */
   .promo { padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom)); }
-  .promo__panel { max-height: calc(100svh - max(16px, env(safe-area-inset-top) + env(safe-area-inset-bottom))); overscroll-behavior: contain; }
-  .promo__close { min-width: 44px; min-height: 44px; height: 44px; }
-  .promo__half { min-height: 18rem; }
-  .promo__copy { font-size: 15px; }
+  .promo .promo__panel {
+    width: 100%; max-height: calc(100svh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    border-radius: 16px;
+  }
+  .promo .promo__head { min-height: 0; gap: 12px; padding: 12px; }
+  .promo .promo__tagline { font: 500 13px/1.4 system-ui, sans-serif; }
+  .promo .promo__close { min-width: 44px; min-height: 44px; height: auto; padding: 8px 10px; font: 13px/1.4 system-ui, sans-serif; flex: 0 0 auto; }
+  .promo .promo__body { grid-template-columns: minmax(0, 1fr); }
+  .promo .promo__half { display: grid; grid-template-columns: clamp(76px, 24vw, 112px) minmax(0, 1fr); align-items: start; gap: 12px; padding: 14px 12px; }
+  .promo .promo__half + .promo__half { border-top: 1px solid rgba(227,212,167,.2); }
+  .promo .promo__portrait { width: 100%; height: 132px; aspect-ratio: auto; object-fit: cover; object-position: 50% 25%; border-radius: 10px; }
+  .promo .promo__half--alvi .promo__portrait { object-position: 84% center; }
+  .promo .promo__portrait[hidden] { display: none; }
+  .promo .promo__half:has(.promo__portrait[hidden]) { grid-template-columns: 1fr; }
+  .promo .promo__content { min-width: 0; padding: 0; overflow: visible; gap: 8px; }
+  .promo .promo__brand { font-size: 11px; letter-spacing: .08em; }
+  .promo .promo__title { font-size: 20px; line-height: 1.15; }
+  .promo .promo__copy { font-size: 14px; line-height: 1.4; }
+  .promo .promo__note { font-size: 12px; line-height: 1.4; }
+  .promo .promo__button { width: 100%; min-width: 0; padding: 10px 8px; font-size: 13px; }
+  .promo .promo__price { font-size: 26px; }
 
   /* Price navigation is a horizontally scrollable row; tables stay internal. */
   .price-header { gap: 1rem; padding-inline: 1rem; }
   .price-header > a { min-width: 44px; min-height: 44px; }
-  .price-intro, .price-layout { width: min(calc(100% - 2rem), 75rem); }
+  .price-intro, .price-layout { width: 100%; margin-inline: 0; padding-inline: 1rem; }
   .pnav { margin-inline: -1rem; padding: .75rem 1rem; overflow-x: auto; overscroll-behavior-inline: contain; }
   .pnav > ul { display: flex !important; width: max-content; max-width: none; gap: 8px !important; }
-  .pnav > ul > li { width: min(76vw, 18rem); flex: 0 0 auto; }
+  .pnav > ul > li { width: auto; flex: 0 0 auto; margin-top: 0 !important; }
+  .pnav > ul > li.is-open { max-width: min(76vw, 18rem); }
+  .pnav__top { white-space: nowrap; }
   .pnav__top, .pnav__sub a { display: flex; min-height: 44px; align-items: center; padding: .6rem .75rem; }
   .pnav__sub li + li { margin-top: 8px; }
   .pc { padding: 1rem; }
