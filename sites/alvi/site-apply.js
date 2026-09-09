@@ -23,9 +23,8 @@
     "htmlOld": "Напишите в Telegram: сертификат бывает электронный (приходит в мессенджер) или бумажный в конверте с лентой. Оформляется на любую сумму или конкретную программу, доставка по Иркутску бесплатная."
   }
 };
-  // The cabinet still serves these pre-redesign strings. Migrate exact old
-  // values only, so the approved compact banner survives hydration while later
-  // editor changes (including offer amounts and conditions) remain untouched.
+  // Compact copy is a mobile presentation only. Keep the approved desktop and
+  // editor document verbatim; preserve later cabinet edits at every width.
   const promoCopyMigration = {
     'promo.promo-tagline-1': {
       old: 'Совершенство — там, где есть и то, и другое: <em>красота без боли</em> в Авокадо и <em>отдых и расслабление</em> в ALVI.',
@@ -45,7 +44,8 @@
     }
   };
   function publishedValue(key, value) {
-    const migration = certificateCopyMigration[key] || promoCopyMigration[key];
+    const compact = !EDIT_MODE && window.matchMedia('(max-width: 56.24rem)').matches;
+    const migration = certificateCopyMigration[key] || (compact ? promoCopyMigration[key] : null);
     return migration && (value === migration.old || ('htmlOld' in migration && value === migration.htmlOld)) ? migration.value : value;
   }
   function rich(value) {

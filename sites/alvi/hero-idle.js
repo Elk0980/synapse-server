@@ -23,6 +23,11 @@
     let playing = false;
     let attempt = 0;
     let pendingAttempt = null;
+    const listeners = [];
+    function listen(target, type, handler) {
+      target.addEventListener(type, handler);
+      listeners.push(() => target.removeEventListener(type, handler));
+    }
 
     video.muted = true;
     video.defaultMuted = true;
@@ -134,24 +139,111 @@
       updateButton();
     }
 
-    video.addEventListener("playing", markPlaying);
-    video.addEventListener("error", () => {
+    listen(video, "playing", markPlaying);
+    listen(video, "error", () => {
       if (!sourceLoaded || sourceExhausted) return;
       nextSource();
     });
     if (button) {
       button.hidden = true;
-      button.addEventListener("click", () => {
+      listen(button, "click", () => {
         autoplayBlocked = false;
         sync();
       });
     }
-    doc.addEventListener("visibilitychange", sync);
-    win.addEventListener("pagehide", () => { pageHidden = true; sync(); });
-    win.addEventListener("pageshow", () => { pageHidden = false; sync(); });
+    listen(doc, "visibilitychange", sync);
+    listen(win, "pagehide", () => { pageHidden = true; sync(); });
+    listen(win, "pageshow", () => { pageHidden = false; sync(); });
 
-    return Object.freeze({ sync });
+    function destroy() {
+      listeners.forEach((remove) => remove());
+      stopPlayback();
+    }
+    return Object.freeze({ sync, destroy });
   }
 
-  root.AlviHeroIdle = Object.freeze({ create });
+  // Preserve the desktop behavior approved before the mobile revisions:
+  // wait for canplay, prefer WebM, retire once beyond 4px, fade before pausing.
+  function createDesktop(options) {
+    const video = options.video;
+    const button = options.button;
+    const sources = options.sources || {};
+    const win = video.ownerDocument.defaultView || root;
+    const hasUserScrolled = options.hasUserScrolled || (() => false);
+    const scrollY = options.scrollY || (() => win.scrollY || 0);
+    const candidates = [];
+    if (sources.webm && video.canPlayType("video/webm")) candidates.push(sources.webm);
+    if (sources.mp4) candidates.push(sources.mp4);
+    let started = false;
+    let retired = false;
+    let disposed = false;
+    let candidateIndex = 0;
+    let pauseTimer = null;
+    let cleanup = () => {};
+    if (button) button.hidden = true;
+
+    function nextSource() {
+      const candidate = candidates[candidateIndex++];
+      if (!candidate || retired || disposed) return;
+      const onReady = () => {
+        cleanup();
+        if (retired || disposed || hasUserScrolled()) return;
+        video.play().then(() => {
+          if (retired || disposed) return;
+          video.style.opacity = "1";
+          options.onPlaying?.();
+        }).catch(() => { /* Approved desktop keeps the poster on autoplay refusal. */ });
+      };
+      const onError = () => { cleanup(); nextSource(); };
+      cleanup = () => {
+        video.removeEventListener("canplay", onReady);
+        video.removeEventListener("error", onError);
+      };
+      video.addEventListener("canplay", onReady, { once: true });
+      video.addEventListener("error", onError, { once: true });
+      video.src = candidate;
+      video.load();
+    }
+
+    function sync() {
+      if (disposed) return;
+      if (!started) {
+        started = true;
+        if (!hasUserScrolled() && sources.enabled !== false) nextSource();
+      }
+      if (hasUserScrolled() && scrollY() > 4 && !retired) {
+        retired = true;
+        video.style.opacity = "0";
+        pauseTimer = win.setTimeout(() => { try { video.pause(); } catch (_) {} }, 500);
+      }
+    }
+
+    function destroy() {
+      disposed = true;
+      cleanup();
+      if (pauseTimer !== null) win.clearTimeout(pauseTimer);
+      video.style.opacity = "0";
+      video.pause();
+      if (button) button.hidden = true;
+    }
+    return Object.freeze({ sync, destroy });
+  }
+
+  function createResponsive(options) {
+    let compact = null;
+    let controller = null;
+    function sync() {
+      const nextCompact = Boolean(options.isCompactMode());
+      if (nextCompact !== compact) {
+        controller?.destroy();
+        compact = nextCompact;
+        controller = compact ? create(options) : createDesktop(options);
+      }
+      controller.sync();
+    }
+    function destroy() { controller?.destroy(); controller = null; compact = null; }
+    return Object.freeze({ sync, destroy });
+  }
+
+  root.AlviHeroIdle = Object.freeze({ create, createDesktop, createResponsive });
 })(window);

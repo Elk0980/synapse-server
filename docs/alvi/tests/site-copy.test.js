@@ -11,20 +11,25 @@ const script = fs.readFileSync(path.resolve(__dirname, '../../../sites/alvi/site
 const fallback = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../sites/alvi/data/site.json'), 'utf8'));
 const fallbackFields = new Map(fallback.sections.flatMap((section) => section.fields || []).map((field) => [field.key, field.value]));
 
-function render(fields) {
+function renderer(fields, width = 390) {
   const elements = fields.map((field) => ({
     innerHTML: '', style: {}, tagName: 'P',
     getAttribute(name) { return name === 'data-edit' ? field.key : null; }
   }));
-  const window = { innerWidth: 390, addEventListener() {} };
+  const window = { innerWidth: width, matchMedia: () => ({ matches: window.innerWidth <= 899.84 }), addEventListener() {} };
   const document = {
     readyState: 'loading', addEventListener() {},
     querySelectorAll(selector) { return selector === '[data-edit]' ? elements : []; }
   };
   vm.runInNewContext(script, { window, document, location: { search: '' }, URLSearchParams });
-  window.AlviSite.applyFields({ sections: [{ id: 'promo', fields }] });
-  return elements.map((element) => element.innerHTML);
+  return (nextWidth = width) => {
+    window.innerWidth = nextWidth;
+    window.AlviSite.applyFields({ sections: [{ id: 'promo', fields }] });
+    return elements.map((element) => element.innerHTML);
+  };
 }
+
+const render = (fields, width) => renderer(fields, width)();
 
 const oldPromo = [
   ['promo.promo-tagline-1', 'Совершенство — там, где есть и то, и другое: <em>красота без боли</em> в Авокадо и <em>отдых и расслабление</em> в ALVI.', 'Время для себя · ALVI и АВОКАДО'],
@@ -35,7 +40,17 @@ const oldPromo = [
 
 test('hydrating the old cabinet document retains the approved compact banner', () => {
   assert.deepEqual(render(oldPromo.map(([key, value]) => ({ key, value }))), oldPromo.map(([, , expected]) => expected));
-  for (const [key, , expected] of oldPromo) assert.equal(fallbackFields.get(key), expected);
+  for (const [key, original] of oldPromo) assert.equal(fallbackFields.get(key), original);
+});
+
+test('desktop preserves the approved document and mobile copy does not leak across resize', () => {
+  const fields = oldPromo.map(([key, value]) => ({ key, value }));
+  const apply = renderer(fields);
+  const original = fields.map(({ value }) => value);
+  assert.deepEqual(apply(1440), original);
+  assert.deepEqual(apply(390), oldPromo.map(([, , compact]) => compact));
+  assert.deepEqual(apply(900), original);
+  assert.deepEqual(apply(1920), original);
 });
 
 test('later cabinet edits, empty text and unchanged notes remain intact', () => {
