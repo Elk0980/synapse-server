@@ -44,6 +44,12 @@
     min-height: calc(100svh - 15.5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   }
   .hero.is-compact-mode .hero-scene[data-scene="0"] .hero-ratings { margin-top: auto; padding-top: 1rem; }
+  /* Bright final frame: a tight contact shadow plus soft falloff keeps white text legible. */
+  .hero.is-compact-mode .hero-scene--final :is(.scene-title, .scene-copy, .final-price-line, .final-signature, .final-signature strong, .button--dark) {
+    text-shadow: 0 1px 1px rgba(3, 10, 6, .95), 0 2px 5px rgba(3, 10, 6, .9), 0 0 14px rgba(3, 10, 6, .7);
+  }
+  .hero.is-compact-mode .hero-scene--final :is(.scene-copy, .final-price-line, .final-signature) { opacity: 1; }
+  .hero.is-compact-mode .hero-scene--final .button--dark { box-shadow: 0 3px 14px rgba(3, 10, 6, .32); }
   .hero-ratings { display: grid; width: min(100%, 22rem); gap: 8px; }
   .rating-pill { width: 100%; min-height: 44px; padding: .55rem .8rem; font-size: 13px; line-height: 1.25; }
   .hero__chrome a, .certificate-link, .scenario-link, .button, .content-button,
