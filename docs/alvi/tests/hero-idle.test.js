@@ -54,13 +54,11 @@ function fixture({ eligible = true, isIOS = true, plans = [], canPlay, responsiv
       return Promise.resolve();
     }
   });
-  const button = new EventTarget();
   const state = { eligible, compact, scrolled: false, scrollY: 0, onPlayingCalls: 0 };
   vm.runInNewContext(script, { window: win, Promise });
   const factory = responsive ? win.AlviHeroIdle.createResponsive : win.AlviHeroIdle.create;
   const controller = factory({
     video,
-    button,
     isIOS,
     sources: { webm: "video/alvi-idle.webm", mp4: "video/alvi-idle.mp4" },
     canPlay: canPlay || (() => state.eligible),
@@ -69,7 +67,7 @@ function fixture({ eligible = true, isIOS = true, plans = [], canPlay, responsiv
     scrollY: () => state.scrollY,
     onPlaying: () => { state.onPlayingCalls += 1; }
   });
-  return { controller, video, button, win, doc, state, timers };
+  return { controller, video, win, doc, state, timers };
 }
 
 test("iOS starts muted inline MP4 and exposes it only after playback", async () => {
@@ -80,6 +78,8 @@ test("iOS starts muted inline MP4 and exposes it only after playback", async () 
   assert.equal(f.video.muted, true);
   assert.equal(f.video.defaultMuted, true);
   assert.equal(f.video.playsInline, true);
+  assert.equal(f.video.controls, false);
+  assert.equal(f.video.disablePictureInPicture, true);
   assert.equal(f.video.style.opacity, "0");
   assert.equal(f.state.onPlayingCalls, 0);
   // Small scroll/layout notifications while scene 0 is eligible must not cancel loading.
@@ -111,19 +111,71 @@ test("leaving the first scene pauses immediately; returning resumes the same sou
   assert.equal(f.video.loadedSources.length, 1);
 });
 
-test("autoplay denial offers a manual action without repeated automatic attempts", async () => {
+test("autoplay denial recovers on ordinary touch without repeated automatic attempts", async () => {
   const f = fixture({ plans: [() => Promise.reject({ name: "NotAllowedError" })] });
   f.controller.sync();
   await flush();
-  assert.equal(f.button.hidden, false);
   assert.equal(f.video.style.opacity, "0");
   for (let i = 0; i < 5; i += 1) f.controller.sync();
   assert.equal(f.video.playCalls, 1);
-  f.button.dispatchEvent(new Event("click"));
-  // The second play() must run within the click, before any awaited work.
+  f.doc.dispatchEvent(new Event("touchend"));
+  // The second play() must run within the ordinary touch, before any awaited work.
   assert.equal(f.video.playCalls, 2);
   await flush();
-  assert.equal(f.button.hidden, true);
+  assert.equal(f.video.style.opacity, "1");
+});
+
+test("ordinary click and keyboard interactions recover without duplicating a pending attempt", async () => {
+  for (const type of ["click", "keydown"]) {
+    const pending = deferred();
+    const f = fixture({ plans: [() => Promise.reject({ name: "NotAllowedError" }), () => pending.promise] });
+    f.controller.sync();
+    await flush();
+    f.doc.dispatchEvent(new Event(type));
+    assert.equal(f.video.playCalls, 2);
+    f.doc.dispatchEvent(new Event(type));
+    assert.equal(f.video.playCalls, 2);
+    f.video.paused = false;
+    f.video.readyState = 4;
+    pending.resolve();
+    await flush();
+    assert.equal(f.video.style.opacity, "1");
+  }
+});
+
+test("gesture recovery does not play offscreen, in a hidden tab or after destruction", async () => {
+  const f = fixture({ plans: [() => Promise.reject({ name: "NotAllowedError" })] });
+  f.controller.sync();
+  await flush();
+  f.state.eligible = false;
+  f.controller.sync();
+  f.doc.dispatchEvent(new Event("touchend"));
+  assert.equal(f.video.playCalls, 1);
+  f.state.eligible = true;
+  f.doc.hidden = true;
+  f.doc.dispatchEvent(new Event("click"));
+  assert.equal(f.video.playCalls, 1);
+  f.doc.hidden = false;
+  f.controller.destroy();
+  for (const type of ["touchend", "click", "keydown"]) f.doc.dispatchEvent(new Event(type));
+  assert.equal(f.video.playCalls, 1);
+});
+
+test("repeated refusal leaves the fallback, but a later ordinary interaction can recover", async () => {
+  const f = fixture({ plans: [
+    () => Promise.reject({ name: "NotAllowedError" }),
+    () => Promise.reject({ name: "NotAllowedError" })
+  ] });
+  f.controller.sync();
+  await flush();
+  f.doc.dispatchEvent(new Event("touchend"));
+  await flush();
+  assert.equal(f.video.style.opacity, "0");
+  f.controller.sync();
+  assert.equal(f.video.playCalls, 2);
+  f.doc.dispatchEvent(new Event("click"));
+  await flush();
+  assert.equal(f.video.playCalls, 3);
   assert.equal(f.video.style.opacity, "1");
 });
 
@@ -135,7 +187,6 @@ test("an unsupported MP4 advances to WebM, while complete media failure keeps th
   assert.equal(f.video.style.opacity, "1");
   f.video.dispatchEvent(new Event("error"));
   assert.equal(f.video.style.opacity, "0");
-  assert.equal(f.button.hidden, true);
   f.controller.sync();
   assert.equal(f.video.loadedSources.length, 2);
 });
@@ -149,7 +200,6 @@ test("a source error also falls back when the original play promise is still pen
   await flush();
   assert.equal(f.video.src, "video/alvi-idle.webm");
   assert.equal(f.video.style.opacity, "1");
-  assert.equal(f.button.hidden, true);
 });
 
 test("an old play promise cannot hide or pause a newly resumed video", async () => {
@@ -164,7 +214,6 @@ test("an old play promise cannot hide or pause a newly resumed video", async () 
   await flush();
   assert.equal(f.video.paused, false);
   assert.equal(f.video.style.opacity, "1");
-  assert.equal(f.button.hidden, true);
 });
 
 test("visibility and page restoration pause and resume without reloading the source", async () => {
@@ -191,7 +240,6 @@ test("ineligible/reduced-motion state never loads video and can recover when re-
   f.controller.sync();
   assert.equal(f.video.loadedSources.length, 0);
   assert.equal(f.video.playCalls, 0);
-  assert.equal(f.button.hidden, true);
   f.state.eligible = true;
   f.controller.sync();
   await flush();
@@ -266,13 +314,12 @@ test("desktop autoplay denial stays on its poster without a new action or lifecy
   f.controller.sync();
   f.video.dispatchEvent(new Event("canplay"));
   await flush();
-  assert.equal(f.button.hidden, true);
   f.doc.hidden = true;
   f.doc.dispatchEvent(new Event("visibilitychange"));
   f.doc.hidden = false;
   f.doc.dispatchEvent(new Event("visibilitychange"));
   f.win.dispatchEvent(new Event("pageshow"));
-  f.button.dispatchEvent(new Event("click"));
+  f.doc.dispatchEvent(new Event("touchend"));
   f.controller.sync();
   assert.equal(f.video.playCalls, 1);
   assert.equal(f.state.onPlayingCalls, 0);
@@ -334,5 +381,4 @@ test("leaving mobile removes its handlers and stale promises cannot interrupt de
   f.win.dispatchEvent(new Event("pagehide"));
   assert.equal(f.video.paused, false);
   assert.equal(f.video.style.opacity, "1");
-  assert.equal(f.button.hidden, true);
 });
