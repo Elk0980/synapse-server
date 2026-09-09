@@ -1,0 +1,226 @@
+/* Run: node --test docs/alvi/tests/hero-idle.test.js */
+"use strict";
+
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const vm = require("node:vm");
+
+const script = fs.readFileSync(path.resolve(__dirname, "../../../sites/alvi/hero-idle.js"), "utf8");
+const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
+function fixture({ eligible = true, isIOS = true, plans = [], canPlay } = {}) {
+  const win = new EventTarget();
+  const doc = new EventTarget();
+  doc.hidden = false;
+  doc.defaultView = win;
+  const video = new EventTarget();
+  Object.assign(video, {
+    ownerDocument: doc,
+    style: {},
+    paused: true,
+    readyState: 0,
+    playCalls: 0,
+    pauseCalls: 0,
+    loadedSources: [],
+    attributes: {},
+    canPlayType: () => "probably",
+    setAttribute(name, value) { this.attributes[name] = value; },
+    load() {
+      this.loadedSources.push(this.src);
+      this.paused = true;
+      this.readyState = 0;
+    },
+    pause() { this.pauseCalls += 1; this.paused = true; },
+    play() {
+      this.playCalls += 1;
+      const plan = plans.shift();
+      if (plan) return plan(this);
+      this.paused = false;
+      this.readyState = 4;
+      this.dispatchEvent(new Event("playing"));
+      return Promise.resolve();
+    }
+  });
+  const button = new EventTarget();
+  const state = { eligible, onPlayingCalls: 0 };
+  vm.runInNewContext(script, { window: win, Promise });
+  const controller = win.AlviHeroIdle.create({
+    video,
+    button,
+    isIOS,
+    sources: { webm: "video/alvi-idle.webm", mp4: "video/alvi-idle.mp4" },
+    canPlay: canPlay || (() => state.eligible),
+    onPlaying: () => { state.onPlayingCalls += 1; }
+  });
+  return { controller, video, button, win, doc, state };
+}
+
+test("iOS starts muted inline MP4 and exposes it only after playback", async () => {
+  const pending = deferred();
+  const f = fixture({ plans: [() => pending.promise] });
+  f.controller.sync();
+  assert.deepEqual(f.video.loadedSources, ["video/alvi-idle.mp4"]);
+  assert.equal(f.video.muted, true);
+  assert.equal(f.video.defaultMuted, true);
+  assert.equal(f.video.playsInline, true);
+  assert.equal(f.video.style.opacity, "0");
+  assert.equal(f.state.onPlayingCalls, 0);
+  // Small scroll/layout notifications while scene 0 is eligible must not cancel loading.
+  for (let i = 0; i < 10; i += 1) f.controller.sync();
+  assert.equal(f.video.playCalls, 1);
+  f.video.paused = false;
+  f.video.readyState = 4;
+  f.video.dispatchEvent(new Event("playing"));
+  pending.resolve();
+  await flush();
+  assert.equal(f.video.style.opacity, "1");
+  assert.equal(f.state.onPlayingCalls, 1);
+});
+
+test("leaving the first scene pauses immediately; returning resumes the same source", async () => {
+  const f = fixture();
+  f.controller.sync();
+  await flush();
+  f.state.eligible = false;
+  f.controller.sync();
+  assert.equal(f.video.paused, true);
+  assert.equal(f.video.style.opacity, "0");
+  f.state.eligible = true;
+  f.controller.sync();
+  await flush();
+  assert.equal(f.video.paused, false);
+  assert.equal(f.video.style.opacity, "1");
+  assert.equal(f.video.playCalls, 2);
+  assert.equal(f.video.loadedSources.length, 1);
+});
+
+test("autoplay denial offers a manual action without repeated automatic attempts", async () => {
+  const f = fixture({ plans: [() => Promise.reject({ name: "NotAllowedError" })] });
+  f.controller.sync();
+  await flush();
+  assert.equal(f.button.hidden, false);
+  assert.equal(f.video.style.opacity, "0");
+  for (let i = 0; i < 5; i += 1) f.controller.sync();
+  assert.equal(f.video.playCalls, 1);
+  f.button.dispatchEvent(new Event("click"));
+  // The second play() must run within the click, before any awaited work.
+  assert.equal(f.video.playCalls, 2);
+  await flush();
+  assert.equal(f.button.hidden, true);
+  assert.equal(f.video.style.opacity, "1");
+});
+
+test("an unsupported MP4 advances to WebM, while complete media failure keeps the fallback", async () => {
+  const f = fixture({ plans: [() => Promise.reject({ name: "NotSupportedError" })] });
+  f.controller.sync();
+  await flush();
+  assert.deepEqual(f.video.loadedSources, ["video/alvi-idle.mp4", "video/alvi-idle.webm"]);
+  assert.equal(f.video.style.opacity, "1");
+  f.video.dispatchEvent(new Event("error"));
+  assert.equal(f.video.style.opacity, "0");
+  assert.equal(f.button.hidden, true);
+  f.controller.sync();
+  assert.equal(f.video.loadedSources.length, 2);
+});
+
+test("a source error also falls back when the original play promise is still pending", async () => {
+  const pending = deferred();
+  const f = fixture({ plans: [() => pending.promise] });
+  f.controller.sync();
+  f.video.dispatchEvent(new Event("error"));
+  pending.reject({ name: "AbortError" });
+  await flush();
+  assert.equal(f.video.src, "video/alvi-idle.webm");
+  assert.equal(f.video.style.opacity, "1");
+  assert.equal(f.button.hidden, true);
+});
+
+test("an old play promise cannot hide or pause a newly resumed video", async () => {
+  const pending = deferred();
+  const f = fixture({ plans: [() => pending.promise] });
+  f.controller.sync();
+  f.state.eligible = false;
+  f.controller.sync();
+  f.state.eligible = true;
+  f.controller.sync();
+  pending.reject({ name: "NotAllowedError" });
+  await flush();
+  assert.equal(f.video.paused, false);
+  assert.equal(f.video.style.opacity, "1");
+  assert.equal(f.button.hidden, true);
+});
+
+test("visibility and page restoration pause and resume without reloading the source", async () => {
+  const f = fixture();
+  f.controller.sync();
+  await flush();
+  f.doc.hidden = true;
+  f.doc.dispatchEvent(new Event("visibilitychange"));
+  assert.equal(f.video.paused, true);
+  f.doc.hidden = false;
+  f.doc.dispatchEvent(new Event("visibilitychange"));
+  await flush();
+  assert.equal(f.video.paused, false);
+  f.win.dispatchEvent(new Event("pagehide"));
+  assert.equal(f.video.paused, true);
+  f.win.dispatchEvent(new Event("pageshow"));
+  await flush();
+  assert.equal(f.video.paused, false);
+  assert.equal(f.video.loadedSources.length, 1);
+});
+
+test("ineligible/reduced-motion state never loads video and can recover when re-enabled", async () => {
+  const f = fixture({ eligible: false });
+  f.controller.sync();
+  assert.equal(f.video.loadedSources.length, 0);
+  assert.equal(f.video.playCalls, 0);
+  assert.equal(f.button.hidden, true);
+  f.state.eligible = true;
+  f.controller.sync();
+  await flush();
+  assert.equal(f.video.style.opacity, "1");
+  f.state.eligible = false;
+  f.controller.sync();
+  assert.equal(f.video.paused, true);
+  assert.equal(f.video.style.opacity, "0");
+});
+
+test("actual page eligibility keeps the mobile first scene playing after a small scroll", async () => {
+  const html = fs.readFileSync(path.resolve(__dirname, "../../../sites/alvi/index.html"), "utf8");
+  const match = html.match(/canPlay:\s*(\(\)\s*=>[\s\S]*?),\s*onPlaying:\s*hidePoster/);
+  assert.ok(match, "The page must pass its eligibility callback to the controller");
+  const context = {
+    ALVI_MEDIA: { idle: { enabled: true } },
+    reducedMotionQuery: { matches: false },
+    compactModeActive: true,
+    activeCompactSceneId: "0",
+    hasUserScrolled: false
+  };
+  const canPlay = vm.runInNewContext("(" + match[1] + ")", context);
+  const f = fixture({ canPlay });
+  f.controller.sync();
+  await flush();
+  context.hasUserScrolled = true;
+  f.controller.sync();
+  assert.equal(f.video.paused, false);
+  assert.equal(f.video.playCalls, 1);
+  context.activeCompactSceneId = "1";
+  f.controller.sync();
+  assert.equal(f.video.paused, true);
+  context.activeCompactSceneId = "0";
+  f.controller.sync();
+  await flush();
+  assert.equal(f.video.paused, false);
+  context.reducedMotionQuery.matches = true;
+  f.controller.sync();
+  assert.equal(f.video.paused, true);
+});

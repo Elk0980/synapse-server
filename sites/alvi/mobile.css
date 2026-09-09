@@ -17,11 +17,13 @@
   .details { padding: 1rem; }
 
   /* Main page: compact first screen and safe persistent actions. */
-  .hero.is-compact-mode .hero__chrome { height: 5.75rem; margin-bottom: -5.75rem; }
+  .hero.is-compact-mode .hero__chrome { height: auto; margin: 0; gap: 12px; padding: max(12px, env(safe-area-inset-top)) 16px 8px; }
+  .hero.is-compact-mode .brand-mark { width: 64px; min-height: 64px; }
+  .hero.is-compact-mode .certificate-link { padding: 10px 12px; font-size: 12px; }
   .hero.is-compact-mode .hero-scene[data-scene="0"] {
     min-height: 100svh;
     align-items: flex-start;
-    padding: clamp(5.8rem, 12svh, 6.8rem) 1rem calc(9.5rem + env(safe-area-inset-bottom));
+    padding: calc(6rem + env(safe-area-inset-top)) 1rem calc(9.5rem + env(safe-area-inset-bottom));
   }
   .hero.is-compact-mode .hero-scene[data-scene="0"] .hero-title {
     max-width: 8ch; margin-bottom: .7rem; font-size: clamp(2.35rem, 11.5vw, 3.2rem); line-height: .98;
