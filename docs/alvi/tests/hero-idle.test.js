@@ -17,8 +17,12 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-function fixture({ eligible = true, isIOS = true, plans = [], canPlay } = {}) {
+function fixture({ eligible = true, isIOS = true, plans = [], canPlay, responsive = false, compact = true } = {}) {
   const win = new EventTarget();
+  const timers = new Map();
+  let timerId = 0;
+  win.setTimeout = (callback, delay) => { timers.set(++timerId, { callback, delay }); return timerId; };
+  win.clearTimeout = (id) => timers.delete(id);
   const doc = new EventTarget();
   doc.hidden = false;
   doc.defaultView = win;
@@ -51,17 +55,21 @@ function fixture({ eligible = true, isIOS = true, plans = [], canPlay } = {}) {
     }
   });
   const button = new EventTarget();
-  const state = { eligible, onPlayingCalls: 0 };
+  const state = { eligible, compact, scrolled: false, scrollY: 0, onPlayingCalls: 0 };
   vm.runInNewContext(script, { window: win, Promise });
-  const controller = win.AlviHeroIdle.create({
+  const factory = responsive ? win.AlviHeroIdle.createResponsive : win.AlviHeroIdle.create;
+  const controller = factory({
     video,
     button,
     isIOS,
     sources: { webm: "video/alvi-idle.webm", mp4: "video/alvi-idle.mp4" },
     canPlay: canPlay || (() => state.eligible),
+    isCompactMode: () => state.compact,
+    hasUserScrolled: () => state.scrolled,
+    scrollY: () => state.scrollY,
     onPlaying: () => { state.onPlayingCalls += 1; }
   });
-  return { controller, video, button, win, doc, state };
+  return { controller, video, button, win, doc, state, timers };
 }
 
 test("iOS starts muted inline MP4 and exposes it only after playback", async () => {
@@ -223,4 +231,108 @@ test("actual page eligibility keeps the mobile first scene playing after a small
   context.reducedMotionQuery.matches = true;
   f.controller.sync();
   assert.equal(f.video.paused, true);
+});
+
+
+test("approved desktop waits for canplay and preserves the 4px/500ms retirement", async () => {
+  const f = fixture({ responsive: true, compact: false });
+  f.controller.sync();
+  assert.deepEqual(f.video.loadedSources, ["video/alvi-idle.webm"]);
+  assert.equal(f.video.playCalls, 0);
+  f.video.dispatchEvent(new Event("canplay"));
+  await flush();
+  assert.equal(f.video.style.opacity, "1");
+  f.state.scrolled = true;
+  f.state.scrollY = 4;
+  f.controller.sync();
+  assert.equal(f.video.paused, false);
+  assert.equal(f.video.style.opacity, "1");
+  f.state.scrollY = 5;
+  f.controller.sync();
+  assert.equal(f.video.style.opacity, "0");
+  assert.equal(f.video.paused, false);
+  assert.equal(f.timers.size, 1);
+  const timer = [...f.timers.values()][0];
+  assert.equal(timer.delay, 500);
+  timer.callback();
+  assert.equal(f.video.paused, true);
+  f.state.scrollY = 0;
+  f.controller.sync();
+  assert.equal(f.video.playCalls, 1);
+});
+
+test("desktop autoplay denial stays on its poster without a new action or lifecycle retries", async () => {
+  const f = fixture({ responsive: true, compact: false, plans: [() => Promise.reject({ name: "NotAllowedError" })] });
+  f.controller.sync();
+  f.video.dispatchEvent(new Event("canplay"));
+  await flush();
+  assert.equal(f.button.hidden, true);
+  f.doc.hidden = true;
+  f.doc.dispatchEvent(new Event("visibilitychange"));
+  f.doc.hidden = false;
+  f.doc.dispatchEvent(new Event("visibilitychange"));
+  f.win.dispatchEvent(new Event("pageshow"));
+  f.button.dispatchEvent(new Event("click"));
+  f.controller.sync();
+  assert.equal(f.video.playCalls, 1);
+  assert.equal(f.state.onPlayingCalls, 0);
+});
+
+test("desktop falls back to MP4 after a source error and does not start at a scrolled entry", async () => {
+  const f = fixture({ responsive: true, compact: false });
+  f.controller.sync();
+  f.video.dispatchEvent(new Event("error"));
+  assert.deepEqual(f.video.loadedSources, ["video/alvi-idle.webm", "video/alvi-idle.mp4"]);
+  f.video.dispatchEvent(new Event("canplay"));
+  await flush();
+  assert.equal(f.video.style.opacity, "1");
+  const scrolled = fixture({ responsive: true, compact: false });
+  scrolled.state.scrolled = true;
+  scrolled.state.scrollY = 100;
+  scrolled.controller.sync();
+  assert.equal(scrolled.video.loadedSources.length, 0);
+  assert.equal(scrolled.video.playCalls, 0);
+});
+
+test("desktop to mobile switches preserve mobile autoplay recovery and cancel the old fade timer", async () => {
+  const f = fixture({ responsive: true, compact: false });
+  f.controller.sync();
+  f.video.dispatchEvent(new Event("canplay"));
+  await flush();
+  f.state.scrolled = true;
+  f.state.scrollY = 10;
+  f.controller.sync();
+  assert.equal(f.timers.size, 1);
+  f.state.compact = true;
+  f.controller.sync();
+  await flush();
+  assert.equal(f.timers.size, 0);
+  assert.equal(f.video.src, "video/alvi-idle.mp4");
+  assert.equal(f.video.paused, false);
+  f.state.eligible = false;
+  f.controller.sync();
+  assert.equal(f.video.paused, true);
+  f.state.eligible = true;
+  f.controller.sync();
+  await flush();
+  assert.equal(f.video.paused, false);
+});
+
+test("leaving mobile removes its handlers and stale promises cannot interrupt desktop", async () => {
+  const pending = deferred();
+  const f = fixture({ responsive: true, plans: [() => pending.promise] });
+  f.controller.sync();
+  f.state.compact = false;
+  f.controller.sync();
+  f.video.dispatchEvent(new Event("canplay"));
+  await flush();
+  assert.equal(f.video.style.opacity, "1");
+  pending.reject({ name: "NotAllowedError" });
+  await flush();
+  f.doc.hidden = true;
+  f.doc.dispatchEvent(new Event("visibilitychange"));
+  f.win.dispatchEvent(new Event("pagehide"));
+  assert.equal(f.video.paused, false);
+  assert.equal(f.video.style.opacity, "1");
+  assert.equal(f.button.hidden, true);
 });

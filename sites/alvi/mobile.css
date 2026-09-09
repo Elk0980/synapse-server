@@ -31,11 +31,11 @@
   .hero.is-compact-mode .hero-scene[data-scene="0"] .hero-title {
     max-width: 8ch; margin-bottom: .7rem; font-size: clamp(2.35rem, 11.5vw, 3.2rem); line-height: .98;
   }
-  /* Distinct crops keep faces inside portrait viewports without replacing media. */
+  /* The droplet is the mobile focal point; a little of the face may be cropped. */
   .hero.is-compact-mode .hero__poster,
   .hero.is-compact-mode:not(.is-reduced-motion) .hero__idle-video,
-  .hero.is-compact-mode .hero__frame[data-frame="k1"] { object-position: 86% center; }
-  .hero.is-compact-mode .hero__frame[data-frame="k2"] { object-position: 86% center; }
+  .hero.is-compact-mode .hero__frame[data-frame="k1"] { object-position: 62% center; }
+  .hero.is-compact-mode .hero__frame[data-frame="k2"] { object-position: 62% center; }
   .hero.is-compact-mode .hero__frame[data-frame="k3"] { object-position: 100% center; }
   .hero.is-compact-mode .hero__frame[data-frame="k5"] { object-position: 96% center; }
   .hero.is-compact-mode .hero__frame[data-frame="k7"] { object-position: 82% center; }
@@ -138,4 +138,3 @@
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   video { display: none !important; }
 }
-
