@@ -4,6 +4,9 @@
 (function () {
   'use strict';
 
+  // Owner-supplied booking widget. Keep legacy API documents from restoring Telegram.
+  const BOOKING_URL = 'https://n1070017.yclients.com/';
+
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]));
@@ -51,7 +54,7 @@
   }
 
   function actions(data, sectionLevel) {
-    const book = esc(data.links?.book || '#');
+    const book = esc(BOOKING_URL);
     const chat = esc(data.links?.chat || '#');
     return `<div class="pc__actions${sectionLevel ? ' pc__actions--section' : ''}">
             <a class="pc__button pc__button--main" href="${book}" target="_blank" rel="noopener">Записаться</a>
@@ -171,7 +174,7 @@ ${body}
             ${it.desc ? `<p>${esc(it.desc)}</p>` : ''}
             <dl class="program-facts">${dl}</dl>`;
       const actions = `<div class="pc__actions">
-              <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Записаться</a>
+              <a class="pc__button pc__button--main" href="${esc(BOOKING_URL)}" target="_blank" rel="noopener">Записаться</a>
               <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
             </div>`;
       const linkedInner = inner.replace('<h3>', `<h3><a class="program-card__link" href="price.html#${esc(anchor)}">`).replace('</h3>', '</a></h3>');
