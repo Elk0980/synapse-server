@@ -146,7 +146,9 @@
         let html = rich(publishedValue(key, f.value));
         // Emphasize the actual offer from the cabinet; never hard-code its price.
         if (!EDIT_MODE && key === 'promo.promo-copy-2') {
-          html = html.replace(/(\d[\d\s\u00a0]*\s*₽)\s+вместо\s+(\d[\d\s\u00a0]*\s*₽)/,
+          // A terminal sentence dot would sit alone below the flex price row.
+          // Consume only that final dot; keep following sentences and their punctuation.
+          html = html.replace(/(\d[\d\s\u00a0]*\s*₽)\s+вместо\s+(\d[\d\s\u00a0]*\s*₽)(?:\.(?=(?:\s|<br>)*$))?/,
             '<span class="promo__offer"><strong class="promo__price">$1</strong> <span class="promo__was">вместо $2</span></span>');
         }
         if (el.innerHTML.trim() !== html) el.innerHTML = html;

@@ -66,7 +66,7 @@
 
   :is(#for-self, #for-two) .program-grid--compact-ready .program-card h3 {
     min-height: 0;
-    font: 500 clamp(14px, 3.85vw, 16px)/1.3 system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font: 400 clamp(14px, 3.85vw, 16px)/1.3 "Lora", Georgia, serif;
     letter-spacing: 0;
     text-wrap: initial;
     overflow-wrap: anywhere;
@@ -82,7 +82,7 @@
     grid-template-columns: minmax(0, 1fr);
     gap: 1px;
     margin: 8px 0 0;
-    font: 13px/1.35 system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font: 13px/1.35 "Lora", Georgia, serif;
   }
 
   :is(#for-self, #for-two) .program-grid--compact-ready .program-facts dt {

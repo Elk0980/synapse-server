@@ -1,0 +1,349 @@
+{
+  "source": "PR226 candidate with header follow-up",
+  "viewports": [
+    {
+      "class": "price-header has-mobile-nav",
+      "gap": "8px",
+      "grid": "44px 88.3906px 132.609px",
+      "height": 69,
+      "items": [
+        {
+          "font": "16px / 25.6px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "0px",
+          "text": "",
+          "weight": "400",
+          "width": 44,
+          "x": 12,
+          "y": 12
+        },
+        {
+          "font": "12px / 16.8px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "10px 8px",
+          "text": "На главную",
+          "weight": "400",
+          "width": 88.390625,
+          "x": 64,
+          "y": 12
+        },
+        {
+          "font": "12px / 16.8px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "10px 8px",
+          "text": "Выбрать ритуал",
+          "weight": "400",
+          "width": 132.609375,
+          "x": 160.390625,
+          "y": 12
+        }
+      ],
+      "navInHeader": true,
+      "overflow": 0,
+      "padding": "12px",
+      "width": 320
+    },
+    {
+      "class": "price-header has-mobile-nav",
+      "gap": "12px",
+      "grid": "44px 98px 147px",
+      "height": 69,
+      "items": [
+        {
+          "font": "16px / 25.6px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "0px",
+          "text": "",
+          "weight": "400",
+          "width": 44,
+          "x": 16,
+          "y": 12
+        },
+        {
+          "font": "13px / 18.2px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "10px 12px",
+          "text": "На главную",
+          "weight": "400",
+          "width": 98,
+          "x": 72,
+          "y": 12
+        },
+        {
+          "font": "13px / 18.2px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "10px 12px",
+          "text": "Выбрать ритуал",
+          "weight": "400",
+          "width": 147,
+          "x": 182,
+          "y": 12
+        }
+      ],
+      "navInHeader": true,
+      "overflow": 0,
+      "padding": "12px 16px",
+      "width": 360
+    },
+    {
+      "class": "price-header has-mobile-nav",
+      "gap": "12px",
+      "grid": "44px 104px 156px",
+      "height": 69,
+      "items": [
+        {
+          "font": "16px / 25.6px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "0px",
+          "text": "",
+          "weight": "400",
+          "width": 44,
+          "x": 16,
+          "y": 12
+        },
+        {
+          "font": "13px / 18.2px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "10px 12px",
+          "text": "На главную",
+          "weight": "400",
+          "width": 104,
+          "x": 72,
+          "y": 12
+        },
+        {
+          "font": "13px / 18.2px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "10px 12px",
+          "text": "Выбрать ритуал",
+          "weight": "400",
+          "width": 156,
+          "x": 188,
+          "y": 12
+        }
+      ],
+      "navInHeader": true,
+      "overflow": 0,
+      "padding": "12px 16px",
+      "width": 375
+    },
+    {
+      "class": "price-header has-mobile-nav",
+      "gap": "12px",
+      "grid": "44px 110px 165px",
+      "height": 69,
+      "items": [
+        {
+          "font": "16px / 25.6px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "0px",
+          "text": "",
+          "weight": "400",
+          "width": 44,
+          "x": 16,
+          "y": 12
+        },
+        {
+          "font": "13px / 18.2px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "10px 12px",
+          "text": "На главную",
+          "weight": "400",
+          "width": 110,
+          "x": 72,
+          "y": 12
+        },
+        {
+          "font": "13px / 18.2px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "10px 12px",
+          "text": "Выбрать ритуал",
+          "weight": "400",
+          "width": 165,
+          "x": 194,
+          "y": 12
+        }
+      ],
+      "navInHeader": true,
+      "overflow": 0,
+      "padding": "12px 16px",
+      "width": 390
+    },
+    {
+      "class": "price-header has-mobile-nav",
+      "gap": "12px",
+      "grid": "44px 126px 189px",
+      "height": 69,
+      "items": [
+        {
+          "font": "16px / 25.6px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "0px",
+          "text": "",
+          "weight": "400",
+          "width": 44,
+          "x": 16,
+          "y": 12
+        },
+        {
+          "font": "13px / 18.2px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "10px 12px",
+          "text": "На главную",
+          "weight": "400",
+          "width": 126,
+          "x": 72,
+          "y": 12
+        },
+        {
+          "font": "13px / 18.2px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "10px 12px",
+          "text": "Выбрать ритуал",
+          "weight": "400",
+          "width": 189,
+          "x": 210,
+          "y": 12
+        }
+      ],
+      "navInHeader": true,
+      "overflow": 0,
+      "padding": "12px 16px",
+      "width": 430
+    },
+    {
+      "class": "price-header has-mobile-nav",
+      "gap": "12px",
+      "grid": "44px 261.188px 391.812px",
+      "height": 69,
+      "items": [
+        {
+          "font": "16px / 25.6px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "0px",
+          "text": "",
+          "weight": "400",
+          "width": 44,
+          "x": 16,
+          "y": 12
+        },
+        {
+          "font": "13px / 18.2px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "10px 12px",
+          "text": "На главную",
+          "weight": "400",
+          "width": 261.1875,
+          "x": 72,
+          "y": 12
+        },
+        {
+          "font": "13px / 18.2px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "10px 12px",
+          "text": "Выбрать ритуал",
+          "weight": "400",
+          "width": 391.8125,
+          "x": 345.1875,
+          "y": 12
+        }
+      ],
+      "navInHeader": true,
+      "overflow": 0,
+      "padding": "12px 16px",
+      "width": 768
+    },
+    {
+      "class": "price-header has-mobile-nav",
+      "gap": "12px",
+      "grid": "44px 313.594px 470.406px",
+      "height": 69,
+      "items": [
+        {
+          "font": "16px / 25.6px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "0px",
+          "text": "",
+          "weight": "400",
+          "width": 44,
+          "x": 16,
+          "y": 12
+        },
+        {
+          "font": "13px / 18.2px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "10px 12px",
+          "text": "На главную",
+          "weight": "400",
+          "width": 313.59375,
+          "x": 72,
+          "y": 12
+        },
+        {
+          "font": "13px / 18.2px Lora, Georgia, serif",
+          "height": 44,
+          "overflow": 0,
+          "padding": "10px 12px",
+          "text": "Выбрать ритуал",
+          "weight": "400",
+          "width": 470.40625,
+          "x": 397.59375,
+          "y": 12
+        }
+      ],
+      "navInHeader": true,
+      "overflow": 0,
+      "padding": "12px 16px",
+      "width": 899
+    },
+    {
+      "class": "price-header",
+      "display": "flex",
+      "navInHeader": false,
+      "overflow": 0,
+      "padding": "22.5px 36px",
+      "toggleDisplay": "none",
+      "width": 900
+    },
+    {
+      "class": "price-header",
+      "display": "flex",
+      "navInHeader": false,
+      "overflow": 0,
+      "padding": "28px 48px",
+      "toggleDisplay": "none",
+      "width": 1366
+    }
+  ],
+  "interactions": {
+    "expanded": "false",
+    "hash": "#s4",
+    "headerBottom": 69,
+    "headerTop": 0,
+    "homeHref": "index.html",
+    "scrollY": 12714,
+    "targetTop": 85.109375,
+    "escapeClosed": true,
+    "homeReturnedToHero": true
+  }
+}

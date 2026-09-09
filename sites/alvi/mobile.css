@@ -80,7 +80,7 @@
   /* Quiz: large labels, a real checkbox target, and an in-flow result CTA. */
   .quiz-form { gap: 1rem; margin-top: 1.5rem; }
   .quiz-question { padding: 1rem; }
-  .quiz-options { gap: 8px; }
+  .quiz-options { gap: 10px; }
   .quiz-option { min-height: 52px; font-size: 15px; }
   .quiz-option input { width: 20px; height: 20px; }
   .form-consent { position: relative; min-height: 44px; align-items: center; font-size: 13px; }
@@ -96,8 +96,8 @@
     border-radius: 16px;
   }
   .promo .promo__head { min-height: 0; gap: 12px; padding: 12px; }
-  .promo .promo__tagline { font: 500 13px/1.4 system-ui, sans-serif; }
-  .promo .promo__close { min-width: 44px; min-height: 44px; height: auto; padding: 8px 10px; font: 13px/1.4 system-ui, sans-serif; flex: 0 0 auto; }
+  .promo .promo__tagline { font: 500 13px/1.4 "Lora", Georgia, serif; }
+  .promo .promo__close { min-width: 44px; min-height: 44px; height: auto; padding: 8px 10px; font: 13px/1.4 "Lora", Georgia, serif; flex: 0 0 auto; }
   .promo .promo__body { grid-template-columns: minmax(0, 1fr); }
   .promo .promo__half { display: grid; grid-template-columns: clamp(76px, 24vw, 112px) minmax(0, 1fr); align-items: start; gap: 12px; padding: 14px 12px; }
   .promo .promo__half + .promo__half { border-top: 1px solid rgba(227,212,167,.2); }
