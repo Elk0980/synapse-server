@@ -16,3 +16,9 @@ status: CANDIDATE
 ---
 
 Use native detail destinations rather than duplicating service facts in another modal. Keep compact modes scoped to the explicitly requested grids. Related: WF-ALVI-DESKTOP-BASELINE-20260909 and WF-ALVI-SERVICE-ACTIONS-20260909.
+
+## Refinement after owner phone screenshot, 2026-09-09
+
+The two-column layout is now visible on the owner's phone. Owner requests finer typography and smaller buttons: the prior 44px heading reserve and two full framed actions look too heavy. Keep the existing photos/columns and use a 14–16px system heading at weight 500 without reserved height, 13px values with 11px labels, tighter content spacing, a 38px tinted outline booking button and a 32px text-style detail action. The 4px action gap preserves separation. These sizes supersede the initial project-specific 44px action choice at the owner's request; they are not promoted as a universal accessibility standard.
+
+QA: independent cascade review confirms all existing-element changes stay inside the mobile media query and override shared action and late inline card styles. Retain the card's min-height:0!important to prevent the old 27rem mobile minimum returning. No content truncation or data/link/media changes. Real-device visual acceptance of this refinement is pending; desktop/source checks follow publication. Source baseline: 424a4b7faea09fce0b72e5d00aef9feba21bc99e.
