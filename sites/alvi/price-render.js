@@ -81,7 +81,7 @@ ${items}
     const rows = (cat.items || []).map((it) => {
       const star = opts.editor ? opts.starHtml(it, true) : (isPopular(data, it.id) ? ' <span class="pt__star" title="Популярное">★</span>' : '');
       const edit = opts.editor ? opts.editHtml(it, true) : '';
-      return `            <tr id="${esc(it.id)}" data-id="${esc(it.id)}"><td>${star}${esc(it.title)}${edit}</td><td>${esc(it.duration)}</td><td class="pt__price">${esc(it.price)}</td></tr>`;
+      return `            <tr id="${esc(it.id)}" data-id="${esc(it.id)}"><td>${star}${esc(it.title)}${edit}</td><td data-label="${esc(head[1])}">${esc(it.duration)}</td><td class="pt__price" data-label="${esc(head[2])}">${esc(it.price)}</td></tr>`;
     }).join('\n');
     const note = cat.note ? `        <p class="ps__note">${esc(cat.note)}</p>\n` : '';
     return `${note}        <div class="pt-wrap">

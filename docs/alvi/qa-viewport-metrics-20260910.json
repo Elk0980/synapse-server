@@ -1,0 +1,550 @@
+{
+  "price": [
+    {
+      "cellOverflow": 0,
+      "client": 305,
+      "header": "sticky",
+      "navInHeader": "HEADER",
+      "scroll": 305,
+      "tableOverflow": 0,
+      "viewport": 320
+    },
+    {
+      "cellOverflow": 0,
+      "client": 345,
+      "header": "sticky",
+      "navInHeader": "HEADER",
+      "scroll": 345,
+      "tableOverflow": 0,
+      "viewport": 360
+    },
+    {
+      "cellOverflow": 0,
+      "client": 360,
+      "header": "sticky",
+      "navInHeader": "HEADER",
+      "scroll": 360,
+      "tableOverflow": 0,
+      "viewport": 375
+    },
+    {
+      "cellOverflow": 0,
+      "client": 375,
+      "header": "sticky",
+      "navInHeader": "HEADER",
+      "scroll": 375,
+      "tableOverflow": 0,
+      "viewport": 390
+    },
+    {
+      "cellOverflow": 0,
+      "client": 415,
+      "header": "sticky",
+      "navInHeader": "HEADER",
+      "scroll": 415,
+      "tableOverflow": 0,
+      "viewport": 430
+    },
+    {
+      "cellOverflow": 0,
+      "client": 753,
+      "header": "sticky",
+      "navInHeader": "HEADER",
+      "scroll": 753,
+      "tableOverflow": 0,
+      "viewport": 768
+    },
+    {
+      "cellOverflow": 0,
+      "client": 805,
+      "header": "sticky",
+      "navInHeader": "HEADER",
+      "scroll": 805,
+      "tableOverflow": 0,
+      "viewport": 820
+    },
+    {
+      "cellOverflow": 0,
+      "client": 884,
+      "header": "sticky",
+      "navInHeader": "HEADER",
+      "scroll": 884,
+      "tableOverflow": 0,
+      "viewport": 899
+    },
+    {
+      "cellOverflow": 0,
+      "client": 885,
+      "header": "relative",
+      "navInHeader": "HEADER",
+      "scroll": 885,
+      "tableOverflow": 0,
+      "viewport": 900
+    },
+    {
+      "cellOverflow": 0,
+      "client": 1009,
+      "header": "relative",
+      "navInHeader": "DIV",
+      "scroll": 1009,
+      "tableOverflow": 0,
+      "viewport": 1024
+    },
+    {
+      "cellOverflow": 0,
+      "client": 1351,
+      "header": "relative",
+      "navInHeader": "DIV",
+      "scroll": 1351,
+      "tableOverflow": 0,
+      "viewport": 1366
+    },
+    {
+      "cellOverflow": 0,
+      "client": 1425,
+      "header": "relative",
+      "navInHeader": "DIV",
+      "scroll": 1425,
+      "tableOverflow": 0,
+      "viewport": 1440
+    },
+    {
+      "cellOverflow": 0,
+      "client": 1905,
+      "header": "relative",
+      "navInHeader": "DIV",
+      "scroll": 1905,
+      "tableOverflow": 0,
+      "viewport": 1920
+    }
+  ],
+  "main": [
+    {
+      "cards": [],
+      "client": 305,
+      "grid": "127.5px 127.5px",
+      "scroll": 305,
+      "tables": 0,
+      "viewport": 320
+    },
+    {
+      "cards": [],
+      "client": 345,
+      "grid": "147.5px 147.5px",
+      "scroll": 345,
+      "tables": 0,
+      "viewport": 360
+    },
+    {
+      "cards": [],
+      "client": 360,
+      "grid": "155px 155px",
+      "scroll": 360,
+      "tables": 0,
+      "viewport": 375
+    },
+    {
+      "cards": [],
+      "client": 375,
+      "grid": "162.5px 162.5px",
+      "scroll": 375,
+      "tables": 0,
+      "viewport": 390
+    },
+    {
+      "cards": [],
+      "client": 415,
+      "grid": "181px 181px",
+      "scroll": 415,
+      "tables": 0,
+      "viewport": 430
+    },
+    {
+      "cards": [],
+      "client": 753,
+      "grid": "333.109px 333.109px",
+      "scroll": 753,
+      "tables": 0,
+      "viewport": 768
+    },
+    {
+      "cards": [],
+      "client": 805,
+      "grid": "356.5px 356.5px",
+      "scroll": 805,
+      "tables": 0,
+      "viewport": 820
+    },
+    {
+      "cards": [],
+      "client": 884,
+      "grid": "392.062px 392.062px",
+      "scroll": 884,
+      "tables": 0,
+      "viewport": 899
+    },
+    {
+      "cards": [],
+      "client": 885,
+      "grid": "389.5px 389.5px",
+      "scroll": 885,
+      "tables": 0,
+      "viewport": 900
+    },
+    {
+      "cards": [],
+      "client": 1009,
+      "grid": "445.312px 445.312px",
+      "scroll": 1009,
+      "tables": 0,
+      "viewport": 1024
+    },
+    {
+      "cards": [],
+      "client": 1351,
+      "grid": "592px 592px",
+      "scroll": 1351,
+      "tables": 0,
+      "viewport": 1366
+    },
+    {
+      "cards": [],
+      "client": 1425,
+      "grid": "592px 592px",
+      "scroll": 1425,
+      "tables": 0,
+      "viewport": 1440
+    },
+    {
+      "cards": [],
+      "client": 1905,
+      "grid": "592px 592px",
+      "scroll": 1905,
+      "tables": 0,
+      "viewport": 1920
+    }
+  ],
+  "legal": [
+    {
+      "page": "oferta.html",
+      "client": 305,
+      "clippedText": [],
+      "scroll": 305,
+      "tables": 0,
+      "viewport": 320
+    },
+    {
+      "page": "oferta.html",
+      "client": 345,
+      "clippedText": [],
+      "scroll": 345,
+      "tables": 0,
+      "viewport": 360
+    },
+    {
+      "page": "oferta.html",
+      "client": 360,
+      "clippedText": [],
+      "scroll": 360,
+      "tables": 0,
+      "viewport": 375
+    },
+    {
+      "page": "oferta.html",
+      "client": 375,
+      "clippedText": [],
+      "scroll": 375,
+      "tables": 0,
+      "viewport": 390
+    },
+    {
+      "page": "oferta.html",
+      "client": 415,
+      "clippedText": [],
+      "scroll": 415,
+      "tables": 0,
+      "viewport": 430
+    },
+    {
+      "page": "oferta.html",
+      "client": 753,
+      "clippedText": [],
+      "scroll": 753,
+      "tables": 0,
+      "viewport": 768
+    },
+    {
+      "page": "oferta.html",
+      "client": 805,
+      "clippedText": [],
+      "scroll": 805,
+      "tables": 0,
+      "viewport": 820
+    },
+    {
+      "page": "oferta.html",
+      "client": 884,
+      "clippedText": [],
+      "scroll": 884,
+      "tables": 0,
+      "viewport": 899
+    },
+    {
+      "page": "oferta.html",
+      "client": 885,
+      "clippedText": [],
+      "scroll": 885,
+      "tables": 0,
+      "viewport": 900
+    },
+    {
+      "page": "oferta.html",
+      "client": 1009,
+      "clippedText": [],
+      "scroll": 1009,
+      "tables": 0,
+      "viewport": 1024
+    },
+    {
+      "page": "oferta.html",
+      "client": 1351,
+      "clippedText": [],
+      "scroll": 1351,
+      "tables": 0,
+      "viewport": 1366
+    },
+    {
+      "page": "oferta.html",
+      "client": 1425,
+      "clippedText": [],
+      "scroll": 1425,
+      "tables": 0,
+      "viewport": 1440
+    },
+    {
+      "page": "oferta.html",
+      "client": 1905,
+      "clippedText": [],
+      "scroll": 1905,
+      "tables": 0,
+      "viewport": 1920
+    },
+    {
+      "page": "politika.html",
+      "client": 305,
+      "clippedText": [],
+      "scroll": 305,
+      "tables": 0,
+      "viewport": 320
+    },
+    {
+      "page": "politika.html",
+      "client": 345,
+      "clippedText": [],
+      "scroll": 345,
+      "tables": 0,
+      "viewport": 360
+    },
+    {
+      "page": "politika.html",
+      "client": 360,
+      "clippedText": [],
+      "scroll": 360,
+      "tables": 0,
+      "viewport": 375
+    },
+    {
+      "page": "politika.html",
+      "client": 375,
+      "clippedText": [],
+      "scroll": 375,
+      "tables": 0,
+      "viewport": 390
+    },
+    {
+      "page": "politika.html",
+      "client": 415,
+      "clippedText": [],
+      "scroll": 415,
+      "tables": 0,
+      "viewport": 430
+    },
+    {
+      "page": "politika.html",
+      "client": 753,
+      "clippedText": [],
+      "scroll": 753,
+      "tables": 0,
+      "viewport": 768
+    },
+    {
+      "page": "politika.html",
+      "client": 805,
+      "clippedText": [],
+      "scroll": 805,
+      "tables": 0,
+      "viewport": 820
+    },
+    {
+      "page": "politika.html",
+      "client": 884,
+      "clippedText": [],
+      "scroll": 884,
+      "tables": 0,
+      "viewport": 899
+    },
+    {
+      "page": "politika.html",
+      "client": 885,
+      "clippedText": [],
+      "scroll": 885,
+      "tables": 0,
+      "viewport": 900
+    },
+    {
+      "page": "politika.html",
+      "client": 1009,
+      "clippedText": [],
+      "scroll": 1009,
+      "tables": 0,
+      "viewport": 1024
+    },
+    {
+      "page": "politika.html",
+      "client": 1351,
+      "clippedText": [],
+      "scroll": 1351,
+      "tables": 0,
+      "viewport": 1366
+    },
+    {
+      "page": "politika.html",
+      "client": 1425,
+      "clippedText": [],
+      "scroll": 1425,
+      "tables": 0,
+      "viewport": 1440
+    },
+    {
+      "page": "politika.html",
+      "client": 1905,
+      "clippedText": [],
+      "scroll": 1905,
+      "tables": 0,
+      "viewport": 1920
+    },
+    {
+      "page": "soglasie.html",
+      "client": 305,
+      "clippedText": [],
+      "scroll": 305,
+      "tables": 0,
+      "viewport": 320
+    },
+    {
+      "page": "soglasie.html",
+      "client": 345,
+      "clippedText": [],
+      "scroll": 345,
+      "tables": 0,
+      "viewport": 360
+    },
+    {
+      "page": "soglasie.html",
+      "client": 360,
+      "clippedText": [],
+      "scroll": 360,
+      "tables": 0,
+      "viewport": 375
+    },
+    {
+      "page": "soglasie.html",
+      "client": 375,
+      "clippedText": [],
+      "scroll": 375,
+      "tables": 0,
+      "viewport": 390
+    },
+    {
+      "page": "soglasie.html",
+      "client": 415,
+      "clippedText": [],
+      "scroll": 415,
+      "tables": 0,
+      "viewport": 430
+    },
+    {
+      "page": "soglasie.html",
+      "client": 753,
+      "clippedText": [],
+      "scroll": 753,
+      "tables": 0,
+      "viewport": 768
+    },
+    {
+      "page": "soglasie.html",
+      "client": 805,
+      "clippedText": [],
+      "scroll": 805,
+      "tables": 0,
+      "viewport": 820
+    },
+    {
+      "page": "soglasie.html",
+      "client": 884,
+      "clippedText": [],
+      "scroll": 884,
+      "tables": 0,
+      "viewport": 899
+    },
+    {
+      "page": "soglasie.html",
+      "client": 885,
+      "clippedText": [],
+      "scroll": 885,
+      "tables": 0,
+      "viewport": 900
+    },
+    {
+      "page": "soglasie.html",
+      "client": 1009,
+      "clippedText": [],
+      "scroll": 1009,
+      "tables": 0,
+      "viewport": 1024
+    },
+    {
+      "page": "soglasie.html",
+      "client": 1351,
+      "clippedText": [],
+      "scroll": 1351,
+      "tables": 0,
+      "viewport": 1366
+    },
+    {
+      "page": "soglasie.html",
+      "client": 1425,
+      "clippedText": [],
+      "scroll": 1425,
+      "tables": 0,
+      "viewport": 1440
+    },
+    {
+      "page": "soglasie.html",
+      "client": 1905,
+      "clippedText": [],
+      "scroll": 1905,
+      "tables": 0,
+      "viewport": 1920
+    }
+  ],
+  "desktop": {
+    "comparedElements": 148,
+    "differences": 0
+  },
+  "notes": [
+    "Width-only Chromium iframe testing; standard scrollbar reserves 15 CSS pixels.",
+    "900px transition is asynchronous; separately awaited detached header nav and confirmed DIV restoration.",
+    "No real Safari/iOS or Android device verification."
+  ]
+}
