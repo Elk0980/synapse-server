@@ -10,7 +10,8 @@
 
   if (!matchMedia('(max-width: 56.24rem)').matches || (!reducedMotion && !constrainedData)) return;
   document.documentElement.classList.add('mobile-media-paused');
-  document.querySelectorAll('video').forEach((video) => {
+  // Decorative water owns its media/fallback lifecycle and respects the same preferences.
+  document.querySelectorAll('video:not(.water-surface__video)').forEach((video) => {
     video.pause();
     video.autoplay = false;
     video.preload = 'none';

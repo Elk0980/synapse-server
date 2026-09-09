@@ -2510,8 +2510,10 @@
 </script>
   <link rel="stylesheet" href="mobile.css?v=20260910-type-spacing">
   <link rel="stylesheet" href="mobile-cards.css?v=20260910-type-spacing">
+  <link rel="stylesheet" href="background-water.css?v=20260910-water-recovery">
   <script src="mobile-cards.js?v=20260909-two-columns" defer></script>
-  <script src="mobile-performance.js?v=20260907" defer></script>
+  <script src="mobile-performance.js?v=20260910-water-recovery" defer></script>
+  <script src="background-water.js?v=20260910-water-recovery" defer></script>
 </head>
 <body>
   <div id="page-loader" aria-hidden="true"><img src="img/alvi-logo-full.png" alt="" width="823" height="823"><div id="page-loader-line"></div></div>
@@ -2679,11 +2681,12 @@
     </div>
   </section>
 
-  <div class="page-water" aria-hidden="true">
-    <video class="page-water__video" autoplay muted loop playsinline preload="none"
-           poster="img/water-poster.jpg">
-      <source src="img/water-loop.webm" type="video/webm">
+  <div class="page-water water-surface" aria-hidden="true">
+    <div class="water-surface__poster"></div>
+    <video class="page-water__video water-surface__video" muted loop playsinline preload="none"
+           tabindex="-1" disablepictureinpicture poster="img/water-poster.jpg">
       <source src="img/water-loop.mp4" type="video/mp4">
+      <source src="img/water-loop.webm" type="video/webm">
     </video>
     <div class="page-water__veil"></div>
   </div>
@@ -3059,9 +3062,13 @@
           <filter id="alvi-windC" x="-8%" y="-8%" width="116%" height="116%"><feTurbulence type="fractalNoise" baseFrequency="0.030 0.030" numOctaves="1" seed="11" result="n"><animate attributeName="baseFrequency" values="0.030;0.036;0.030" dur="4.5s" repeatCount="indefinite"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" xChannelSelector="R" yChannelSelector="G" scale="1.5"><animate attributeName="scale" values="1.5;1.5;6;3;4.5;2.5;1.5" keyTimes="0;.87;.885;.90;.915;.94;1" begin="-34s" dur="48s" repeatCount="indefinite"/><animate id="alvi-windC-gust" attributeName="scale" values="1.5;6;3;4.5;2.5;1.5;1.5" keyTimes="0;.12;.24;.36;.50;.66;1" begin="indefinite" dur="6s" fill="remove"/></feDisplacementMap></filter>
         </defs>
       </svg>
-      <video class="contacts-water" autoplay muted loop playsinline aria-hidden="true">
-        <source src="img/water-loop.webm" type="video/webm">
-      </video>
+      <div class="contacts-water water-surface" aria-hidden="true">
+        <div class="water-surface__poster"></div>
+        <video class="water-surface__video" muted loop playsinline preload="none" tabindex="-1" disablepictureinpicture>
+          <source src="img/water-loop.mp4" type="video/mp4">
+          <source src="img/water-loop.webm" type="video/webm">
+        </video>
+      </div>
       <div class="content-shell contacts-content">
         <div class="contacts-logo" tabindex="0" role="button" aria-label="Порыв ветра">
           <img class="contacts-logo__base" src="img/logo3d-v2/logo3d-base.webp" alt="Объёмная эмблема ALVI">
@@ -4049,32 +4056,6 @@
     } else {
       initCtaHide();
     }
-  </script>
-
-  <script>
-    (() => {
-      const layer = document.querySelector('.page-water');
-      const video = layer && layer.querySelector('video');
-      const hero = document.querySelector('.hero');
-      if (!layer || !video || !hero) return;
-      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-      const conn = navigator.connection;
-      if (conn && (conn.saveData || /2g/.test(conn.effectiveType || ''))) return;
-      let started = false;
-      const update = () => {
-        const on = window.scrollY > hero.offsetHeight - innerHeight * 1.2;
-        if (on && !started) {
-          started = true;
-          video.preload = 'auto';
-          video.load();
-          video.play().catch(() => {});
-        }
-        layer.classList.toggle('is-on', on);
-      };
-      update();
-      addEventListener('scroll', update, { passive: true });
-      addEventListener('resize', update);
-    })();
   </script>
 
   <div class="floating-cta">

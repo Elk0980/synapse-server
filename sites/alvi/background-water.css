@@ -1,0 +1,33 @@
+/* Decorative water never exposes a paused native video surface. */
+.water-surface { overflow: hidden; }
+.water-surface__poster,
+.water-surface .water-surface__video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.water-surface__poster {
+  inset: -3%;
+  width: 106%;
+  height: 106%;
+  background: url('img/water-poster.jpg') center / cover no-repeat;
+  animation: alvi-water-drift 12s ease-in-out infinite alternate paused;
+}
+.water-surface.is-active:not(.is-playing) > .water-surface__poster { animation-play-state: running; }
+.water-surface .water-surface__video { object-fit: cover; opacity: 0; }
+.water-surface.is-playing > .water-surface__video { opacity: 1; }
+.water-surface.is-playing > .water-surface__poster { opacity: 0; }
+.water-surface__video::-webkit-media-controls,
+.water-surface__video::-webkit-media-controls-enclosure,
+.water-surface__video::-webkit-media-controls-panel,
+.water-surface__video::-webkit-media-controls-start-playback-button { display: none !important; }
+@keyframes alvi-water-drift {
+  from { transform: translate3d(-.7%, .3%, 0) scale(1.02); }
+  to { transform: translate3d(.7%, -.3%, 0) scale(1.05); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .water-surface__poster { animation: none; }
+  .water-surface .water-surface__video { opacity: 0; }
+}
