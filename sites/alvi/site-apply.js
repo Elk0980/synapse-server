@@ -23,9 +23,30 @@
     "htmlOld": "Напишите в Telegram: сертификат бывает электронный (приходит в мессенджер) или бумажный в конверте с лентой. Оформляется на любую сумму или конкретную программу, доставка по Иркутску бесплатная."
   }
 };
-  function certificateValue(key, value) {
-    const migration = certificateCopyMigration[key];
-    return migration && (value === migration.old || value === migration.htmlOld) ? migration.value : value;
+  // The cabinet still serves these pre-redesign strings. Migrate exact old
+  // values only, so the approved compact banner survives hydration while later
+  // editor changes (including offer amounts and conditions) remain untouched.
+  const promoCopyMigration = {
+    'promo.promo-tagline-1': {
+      old: 'Совершенство — там, где есть и то, и другое: <em>красота без боли</em> в Авокадо и <em>отдых и расслабление</em> в ALVI.',
+      value: 'Время для себя · ALVI и АВОКАДО'
+    },
+    'promo.promo-title-1': {
+      old: 'Абонемент ALVI — ритуалы по одной цене',
+      value: 'Абонемент ALVI'
+    },
+    'promo.promo-copy-1': {
+      old: 'Несколько визитов одной покупкой — выгоднее разовых и спокойнее: дата уже выбрана, остаётся только прийти. Подходит для себя и в подарок.',
+      value: 'Несколько визитов одной покупкой — время для отдыха в вашем ритме.'
+    },
+    'promo.promo-title-2': {
+      old: 'Красота без боли: аппаратная коррекция фигуры и лазерная эпиляция',
+      value: 'Пробный аппаратный массаж'
+    }
+  };
+  function publishedValue(key, value) {
+    const migration = certificateCopyMigration[key] || promoCopyMigration[key];
+    return migration && (value === migration.old || ('htmlOld' in migration && value === migration.htmlOld)) ? migration.value : value;
   }
   function rich(value) {
     let h = esc(value);
@@ -122,7 +143,7 @@
       const f = map.get(key);
       if (f.kind === 'image') { const src = safeSrc(f.src); if (el.getAttribute('src') !== src) el.setAttribute('src', src); }
       else if (key !== skipKey) {
-        let html = rich(certificateValue(key, f.value));
+        let html = rich(publishedValue(key, f.value));
         // Emphasize the actual offer from the cabinet; never hard-code its price.
         if (!EDIT_MODE && key === 'promo.promo-copy-2') {
           html = html.replace(/(\d[\d\s\u00a0]*\s*₽)\s+вместо\s+(\d[\d\s\u00a0]*\s*₽)/,
