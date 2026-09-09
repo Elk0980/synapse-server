@@ -1670,6 +1670,11 @@
       display: none;
     }
 
+    .hero.is-compact-mode:not(.is-reduced-motion) .hero__idle-video {
+      display: block;
+      object-position: 70% center;
+    }
+
     .hero.is-compact-mode .hero__poster,
     .hero.is-compact-mode .hero__frame {
       object-position: 70% center;
@@ -2475,7 +2480,7 @@
 </style><script>
 (()=>{let finished=false,revealTimer,safetyTimer;const loader=()=>document.getElementById("page-loader");const finish=()=>{if(finished)return;finished=true;clearTimeout(revealTimer);clearTimeout(safetyTimer);const element=loader();if(!element)return;if(!element.classList.contains("is-visible")){element.style.display="none";return}element.classList.add("is-complete");setTimeout(()=>{element.style.display="none"},250)};revealTimer=setTimeout(()=>{if(!finished)loader()?.classList.add("is-visible")},300);safetyTimer=setTimeout(()=>{finished=true;clearTimeout(revealTimer);const element=loader();if(element)element.style.display="none"},5000);if(document.readyState==="complete")finish();else addEventListener("load",finish,{once:true})})();
 </script>
-  <link rel="stylesheet" href="mobile.css?v=20260907">
+  <link rel="stylesheet" href="mobile.css?v=20260909-mobile-flow">
   <script src="mobile-performance.js?v=20260907" defer></script>
 </head>
 <body>
@@ -3518,7 +3523,7 @@
       }
 
       function setupIdleVideo() {
-        if (!idleVideo || !ALVI_MEDIA.idle.enabled || isCompactMode()) return;
+        if (!idleVideo || !ALVI_MEDIA.idle.enabled || reducedMotionQuery.matches) return;
         if (hasUserScrolled) return;
 
         const candidates = [];
@@ -3533,9 +3538,9 @@
 
           const onReady = () => {
             cleanup();
-            if (idleRetired || hasUserScrolled) return;
+            if (idleRetired || hasUserScrolled || reducedMotionQuery.matches) return;
             idleVideo.play().then(() => {
-              if (idleRetired) return;
+              if (idleRetired || reducedMotionQuery.matches) { idleVideo.pause(); return; }
               idleVideo.style.opacity = "1";
               hidePoster();
             }).catch(() => { /* автоплей запрещён — остаёмся на постере */ });
@@ -3711,7 +3716,9 @@
           video.pause();
           video.style.opacity = "0";
         }
-        retireIdleVideo();
+        // Mobile keeps the muted opening loop; later scenes retain their own frames.
+        if (reducedMotionQuery.matches || hasUserScrolled) retireIdleVideo();
+        else idleRetired = false;
 
         sceneElements.forEach((scene) => {
           scene.style.removeProperty("opacity");
@@ -3750,7 +3757,10 @@
       function syncDisplayMode() {
         if (isCompactMode()) {
           if (!compactModeActive) enterCompactMode();
-          else hero?.classList.toggle("is-reduced-motion", reducedMotionQuery.matches);
+          else {
+            hero?.classList.toggle("is-reduced-motion", reducedMotionQuery.matches);
+            if (reducedMotionQuery.matches) retireIdleVideo();
+          }
           return;
         }
 
@@ -4019,11 +4029,9 @@
       if (!cta || !footer) return;
       const update = () => {
         const top = footer.getBoundingClientRect().top;
-        const contentStarted = matchMedia('(max-width: 56.24rem)').matches
-          && document.querySelector('.after-hero')?.getBoundingClientRect().top < window.innerHeight;
         const contactRect = contacts?.getBoundingClientRect();
         const contactsVisible = contactRect && contactRect.top < window.innerHeight && contactRect.bottom > 0;
-        const hidden = Boolean(contentStarted || contactsVisible || top < window.innerHeight - 40);
+        const hidden = Boolean(contactsVisible || top < window.innerHeight - 40);
         cta.classList.toggle('is-hidden', hidden);
         cta.inert = hidden;
       };
