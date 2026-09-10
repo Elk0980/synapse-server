@@ -106,7 +106,7 @@
         "name": "Как записаться?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Через Telegram — отвечаем в течение 2 минут. Работаем ежедневно 09:00–22:00, по предварительной записи."
+          "text": "Записаться можно через Telegram, MAX или по телефону +7 924 618-05-55. Работаем ежедневно 09:00–22:00 по предварительной записи."
         }
       },
       {
@@ -1995,6 +1995,31 @@
     /* Shared desktop/mobile icons inherit their link colour; no coloured badges. */
     .contacts-link .service-icon, .site-footer__service .service-icon { display: block; flex-shrink: 0; background: transparent; stroke: none; }
     .after-hero .site-footer__service .service-icon { width: 16px; height: 16px; flex-basis: 16px; }
+    .faq-answer a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    .callback-form { width: min(100%, 760px); margin: 30px auto 0; padding: clamp(20px, 3vw, 30px); border: 1px solid rgba(238,242,235,.28); border-radius: 18px; background: rgba(7,17,12,.72); color: #eef2eb; text-align: left; }
+    .callback-form__heading { margin-bottom: 18px; }
+    .callback-form__heading h3 { margin: 0 0 5px; font: 500 clamp(21px, 3vw, 27px)/1.25 "Lora", Georgia, serif; }
+    .callback-form__heading p { margin: 0; color: rgba(238,242,235,.76); }
+    .callback-form__fields { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end; }
+    .callback-form__fields label { display: grid; gap: 6px; font-size: 13px; }
+    .callback-form input { box-sizing: border-box; width: 100%; min-width: 0; height: 48px; padding: 0 13px; border: 1px solid rgba(238,242,235,.38); border-radius: 10px; background: rgba(255,255,255,.08); color: #fff; font: 16px/1.2 "Lora", Georgia, serif; }
+    .callback-form input::placeholder { color: rgba(238,242,235,.56); }
+    .callback-form input:focus-visible { outline: 2px solid #d9c08a; outline-offset: 2px; }
+    .callback-form__fields button, .site-footer__callback { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-height: 48px; padding: 0 20px; border: 1px solid #d9c08a; border-radius: 10px; background: #d9c08a; color: #17251e; font: 600 14px/1.2 "Lora", Georgia, serif; }
+    .callback-form__fields button:disabled { opacity: .45; cursor: not-allowed; }
+    .callback-form__consent { display: flex; gap: 9px; align-items: flex-start; margin-top: 15px; font-size: 12px; line-height: 1.5; }
+    .callback-form__consent input { flex: 0 0 18px; width: 18px; height: 18px; margin-top: 1px; accent-color: #d9c08a; }
+    .callback-form a { color: #eef2eb; }
+    .callback-form__status { min-height: 1.5em; margin: 10px 0 0; font-size: 14px; }
+    .callback-form__status.is-error { color: #ffd0ca; }
+    .callback-form.is-success .callback-form__fields, .callback-form.is-success .callback-form__consent { display: none; }
+    .callback-form.is-success .callback-form__status { font-size: 17px; color: #eef2eb; }
+    .after-hero .site-footer__callback { align-self: flex-start; min-height: 40px; margin: 4px 0; padding: 0 15px; background: transparent; color: #e0e4dc; text-decoration: none; }
+    @media (max-width: 600px) {
+      .callback-form { width: 100%; margin-top: 24px; padding: 18px; }
+      .callback-form__fields { grid-template-columns: minmax(0, 1fr); }
+      .callback-form__fields button { width: 100%; height: 48px; }
+    }
     .after-hero .synapse-strip { padding: 0 clamp(20px, 5vw, 64px) 20px; background: var(--bg2); color: #adb5a9; font: 12px/1.6 "Lora", Georgia, serif; letter-spacing: normal; text-align: center; }
     .after-hero .synapse-strip a { color: inherit; text-decoration: none; }
     .after-hero .synapse-strip a:hover { text-decoration: underline; text-underline-offset: 3px; }
@@ -3018,7 +3043,7 @@
           <!-- FAQ о длительности добавить после подтверждения данных. -->
           <details>
             <summary data-edit="faq.summary-2">Как записаться?</summary>
-            <p class="faq-answer" data-edit="faq.faq-answer-2">Через Telegram — отвечаем в течение 2 минут. Работаем ежедневно 09:00–22:00, по предварительной записи.</p>
+            <p class="faq-answer" data-edit="faq.faq-answer-2">Напишите в <a href="https://t.me/+79246180555" target="_blank" rel="noopener">Telegram</a> или <a href="https://max.ru/u/f9LHodD0cOIlskq70SXP8wscTW7u6JcnxZXmoxa5hdxjK58JpJDAM7njO68" target="_blank" rel="noopener">MAX</a>, либо позвоните по телефону <a href="tel:+79246180555">+7 924 618-05-55</a>. Работаем ежедневно 09:00–22:00 по предварительной записи.</p>
           </details>
           <details>
             <summary data-edit="faq.summary-3">Где вы находитесь?</summary>
@@ -3084,6 +3109,19 @@
           <a class="contacts-link" href="https://2gis.ru/irkutsk/firm/70000001061502048" target="_blank" rel="noopener noreferrer" aria-label="ALVI в 2ГИС" title="2ГИС"><svg class="service-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.6" d="M12 1.5a8 8 0 0 0-8 8c0 5.6 6.9 12.4 7.2 12.7a1.1 1.1 0 0 0 1.6 0c.3-.3 7.2-7.1 7.2-12.7a8 8 0 0 0-8-8Z"/><path fill="currentColor" d="M7.3 8.1c.1-2 1.5-3.2 3.8-3.2 2.2 0 3.6 1.1 3.6 2.9 0 1.4-.7 2.2-2.5 3.2l-1.3.7c-.8.5-1.2.8-1.3 1.3h5.2v2.1H7.2c0-2.3.8-3.5 2.8-4.7l1.5-.9c.7-.4 1-.8 1-1.4 0-.7-.5-1.2-1.5-1.2s-1.5.5-1.6 1.3l-2.1-.1Z"/></svg><span class="contacts-link__label">2ГИС</span></a>
           <a class="contacts-link" href="tel:+79246180555" aria-label="Позвонить +7 924 618-05-55" title="Позвонить +7 924 618-05-55"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 3.5 10 7.8 7.8 10c1.3 2.8 3.4 4.9 6.2 6.2l2.2-2.2 4.3 2.8-.7 3.2c-.2.8-.9 1.3-1.7 1.3C9.6 20.8 3.2 14.4 2.7 5.9c0-.8.5-1.5 1.3-1.7Z"/></svg><span class="contacts-link__label">Позвонить</span></a>
         </nav>
+        <form class="callback-form" id="callback-form" novalidate>
+          <div class="callback-form__heading">
+            <h3>Заказать обратный звонок</h3>
+            <p>Оставьте контакты — администратор ALVI перезвонит вам.</p>
+          </div>
+          <div class="callback-form__fields">
+            <label>Имя<input name="name" autocomplete="name" required maxlength="80" placeholder="Ваше имя"></label>
+            <label>Телефон<input name="phone" type="tel" autocomplete="tel" inputmode="tel" required placeholder="+7 999 123-45-67" aria-describedby="callback-phone-error"></label>
+            <button type="submit" disabled>Перезвоните мне</button>
+          </div>
+          <label class="callback-form__consent"><input name="consent" type="checkbox" required> <span>Я согласен(на) на <a href="politika.html" target="_blank">обработку персональных данных</a></span></label>
+          <p class="callback-form__status" id="callback-phone-error" role="status" aria-live="polite"></p>
+        </form>
       </div>
       <script>
         (() => {
@@ -3132,6 +3170,7 @@
         <p class="site-footer__brand" data-edit="footer.site-footer-brand-1">ALVI SPA</p>
         <p data-edit="footer.p-1">Индивидуальный предприниматель Петрук Татьяна Александровна · ИНН 381497453085 · ОГРНИП 324385000056520</p>
         <p>Иркутск, Депутатская улица, 71а · ежедневно 09:00–22:00, по предварительной записи · <a href="tel:+79246180555" data-edit="footer.a-1">+7 924 618-05-55</a></p>
+        <a class="site-footer__callback" href="#callback-form">Заказать обратный звонок</a>
         <nav class="site-footer__services" aria-label="ALVI в мессенджерах, соцсетях и картах">
           <a class="site-footer__service" href="https://t.me/+79246180555" target="_blank" rel="noopener" aria-label="Telegram — написать для записи" title="Telegram — запись"><svg class="service-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M22.44 2.28a1.5 1.5 0 0 0-1.54-.18L2.3 9.27c-1.27.5-1.25 1.22-.23 1.53l4.77 1.49 1.84 5.72c.22.62.11.87.75.87.49 0 .71-.23.98-.49l2.29-2.22 4.76 3.52c.88.49 1.51.24 1.73-.81l3.14-14.8c.32-1.29-.49-1.88-1.89-1.8ZM8.72 11.95l9.32-5.88c.47-.28.91-.13.55.19l-7.69 6.94-.3 3.2-1.88-4.45Z"/></svg>Запись</a>
           <a class="site-footer__service" href="https://t.me/spa_stio_alvi" target="_blank" rel="noopener" aria-label="Telegram-канал ALVI" title="Telegram — канал ALVI"><svg class="service-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M22.44 2.28a1.5 1.5 0 0 0-1.54-.18L2.3 9.27c-1.27.5-1.25 1.22-.23 1.53l4.77 1.49 1.84 5.72c.22.62.11.87.75.87.49 0 .71-.23.98-.49l2.29-2.22 4.76 3.52c.88.49 1.51.24 1.73-.81l3.14-14.8c.32-1.29-.49-1.88-1.89-1.8ZM8.72 11.95l9.32-5.88c.47-.28.91-.13.55.19l-7.69 6.94-.3 3.2-1.88-4.45Z"/></svg>Канал</a>
@@ -3147,6 +3186,7 @@
     <div class="synapse-strip">сайт работает на <a href="https://synapsebusiness.ru" target="_blank" rel="noopener">Synapse Business</a></div>
   </main>
   <div class="cookie-notice" role="dialog" aria-label="Уведомление о cookie"><span>Сайт использует cookie для корректной работы.</span><button type="button">Хорошо</button></div>
+  <script src="callback.js?v=20260910" defer></script>
 
   <script src="hero-idle.js?v=20260910-autoplay"></script>
   <script>
