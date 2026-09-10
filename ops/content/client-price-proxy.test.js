@@ -18,7 +18,8 @@ test('actual Caddy separates cabinet APIs from each public site, including Palit
   const sites=['palitra-love','alvi','avokado','avokado2','synapse'],ports={};
   for(const site of sites){ports[site]=await port();config+=block(source,site+'.synapsebusiness.ru {')
    .replace(site+'.synapsebusiness.ru {','http://127.0.0.1:'+ports[site]+' {')
-   .replace('/srv/sites/'+site,root+'/sites/'+site).replaceAll('content:8080','127.0.0.1:'+upstreamPort)+'\n';}
+   .replace('/srv/sites/'+site,root+'/sites/'+site).replaceAll('content:8080','127.0.0.1:'+upstreamPort)
+   .replaceAll('crm:8080','127.0.0.1:'+upstreamPort)+'\n';}
   fs.writeFileSync(temp+'/Caddyfile',config);
   child=spawn(process.env.CADDY_BINARY,['run','--config',temp+'/Caddyfile','--adapter','caddyfile'],{stdio:'ignore'});
   const req=(site,uri,opts)=>fetch('http://127.0.0.1:'+ports[site]+uri,opts);
@@ -31,6 +32,7 @@ test('actual Caddy separates cabinet APIs from each public site, including Palit
   }
   assert.equal((await (await req('palitra-love','/content/palitra/price')).json()).route,'/public-content/palitra/price');
   for(const site of ['alvi','avokado','avokado2'])assert.equal((await (await req(site,'/api/site')).json()).route,'/public-content/'+site+'/site');
+  assert.equal((await (await req('alvi','/api/leads',{method:'POST',body:'{}'})).json()).route,'/leads');
   assert.equal((await (await req('synapse','/content/alvi/price')).json()).route,'/content/alvi/price');
   for(const route of ['/public-content/alvi/price','/public-content/palitra/price/history'])assert.equal((await req('synapse',route)).status,404);
   const foreign=await req('palitra-love','/content/alvi/price');assert.ok(!(foreign.headers.get('content-type')||'').includes('application/json'));

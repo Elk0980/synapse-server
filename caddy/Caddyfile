@@ -119,6 +119,15 @@ avokado2.synapsebusiness.ru {
 # --- Клиент: ALVI (SPA, Иркутск) --------------------------------------------
 alvi.synapsebusiness.ru {
   root * /srv/sites/alvi
+  # Формы ALVI создают заявки в общей мини-CRM, как и остальные заявки платформы.
+  @leads {
+    path /api/leads
+    method POST
+  }
+  handle @leads {
+    rewrite * /leads
+    reverse_proxy crm:8080
+  }
   @client_tasks path /t/*
   reverse_proxy @client_tasks chat:8080
   @track {
