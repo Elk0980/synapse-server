@@ -48,6 +48,13 @@ function logAuthorizationDenial(request, error) {
   console.warn(`content: authorization_denied time=${new Date().toISOString()} login=${JSON.stringify(login)} route=${JSON.stringify(route)} reason=${JSON.stringify(reason)}`);
 }
 
+function logAccountMutation(action, actor, target, before, after) {
+  console.log(`content: account_${action} time=${new Date().toISOString()} actor=${JSON.stringify(actor.login)}` +
+    ` target=${JSON.stringify(target.login)} old_companies=${JSON.stringify(before.companyCodes)}` +
+    ` new_companies=${JSON.stringify(after?.companyCodes || [])}` +
+    ` old_permissions=${JSON.stringify(before.permissions)} new_permissions=${JSON.stringify(after?.permissions || [])}`);
+}
+
 if (!(process.env.SESSION_SECRET || '').trim()) {
   console.warn('content: SESSION_SECRET пуст — создан временный секрет, сессии не переживут перезапуск');
 }
@@ -633,7 +640,18 @@ const server = http.createServer(async (request, response) => {
         return reply(201, authStore.public(account));
       }
       if (request.method === 'PATCH' && parts.length === 4) {
-        return reply(200, authStore.public(authStore.updateProfile(session.user.id, id, await readJson(request))));
+        if (session.user.role !== 'owner') fail(403, 'Изменять учётные записи может только администратор');
+        const before = authStore.getById(id);
+        const updated = authStore.updateAccount(session.user.id, id, await readJson(request));
+        logAccountMutation('changed', session.user, before, updated);
+        return reply(200, authStore.public(updated));
+      }
+      if (request.method === 'DELETE' && parts.length === 4) {
+        if (session.user.role !== 'owner') fail(403, 'Удалять учётные записи может только администратор');
+        const before = authStore.getById(id);
+        const removed = authStore.remove(session.user.id, id);
+        logAccountMutation('deleted', session.user, before, null);
+        return reply(200, { ok: true, account: authStore.public(removed) });
       }
       if (request.method === 'PUT' && parts[4] === 'password' && parts.length === 5) {
         const body = await readJson(request);

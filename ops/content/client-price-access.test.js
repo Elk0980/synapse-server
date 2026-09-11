@@ -90,12 +90,16 @@ test('client account creation is atomic and cabinet APIs enforce project + permi
     assert.equal((await req('/public-content/palitra/price/history')).status,404);
     assert.equal((await req('/public-content/palitra/price', null, 'PUT', doc)).status,404);
     // Invalid assignments must not leave behind an account with partially granted access.
-    for (const [companies, permissions] of [[['__proto__'],[]], [['palitra-love'],['price.edit']], [['palitra-love'],['unknown']]]) {
+    for (const [companies, permissions] of [[['__proto__'],[]], [['palitra-love'],['unknown']]]) {
       const r=await req('/content/admin/accounts', owner, 'POST', {login:'qa_invalid', displayName:'QA',
         password:crypto.randomBytes(24).toString('hex'), companies, permissions}); assert.equal(r.status,400);
     }
     const accounts = await (await req('/content/admin/accounts', owner)).json();
     assert.equal(accounts.accounts.some(account=>account.login==='qa_invalid'),false);
+    const dependent = await req('/content/admin/accounts', owner, 'POST', {login:'qa_dependent', displayName:'QA',
+      password:crypto.randomBytes(24).toString('hex'), companies:['palitra-love'], permissions:['price.edit']});
+    assert.equal(dependent.status,201);
+    assert.deepEqual((await dependent.json()).permissions,['price.edit','price.view']);
     // Revocation affects an existing session immediately.
     assert.equal((await req(`/content/admin/accounts/${client.profile.userId}/access`, owner,'PUT',{companies:[],permissions:[]})).status,200);
     assert.equal((await req('/content/palitra/price',client)).status,403);

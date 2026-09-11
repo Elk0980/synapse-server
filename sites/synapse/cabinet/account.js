@@ -11,11 +11,31 @@ const init = (context) => {
   initialized = true;
 
   let accessOptions = null;
+  let accessLoad = null;
   let creating = false;
   const createForm = byId("account-create");
   const selected = (name) => [...createForm.querySelectorAll(`input[name="${name}"]:checked`)].map(input => input.value);
   const presetSelect = byId("account-access-preset");
   const currentPreset = () => accessOptions?.presets.find(preset => preset.id === presetSelect.value);
+  const accessCheckboxes = (name, options, checked, label = value => value) => options.map(value => {
+    const id = typeof value === "string" ? value : value.id;
+    return `<label class="account-access-option"><input type="checkbox" name="${name}" value="${escapeHTML(id)}"${checked.includes(id) ? " checked" : ""}> <span>${escapeHTML(label(value))}</span></label>`;
+  }).join("");
+  const applyDependencies = (form, changed) => {
+    const find = value => [...form.querySelectorAll('input[name="permissions"]')].find(input => input.value === value);
+    if (changed.checked) {
+      for (const dependency of accessOptions.dependencies[changed.value] || []) {
+        const input = find(dependency);
+        if (input && !input.checked) { input.checked = true; applyDependencies(form, input); }
+      }
+    } else {
+      for (const [permission, dependencies] of Object.entries(accessOptions.dependencies)) {
+        if (!dependencies.includes(changed.value)) continue;
+        const input = find(permission);
+        if (input?.checked) { input.checked = false; applyDependencies(form, input); }
+      }
+    }
+  };
   const renderAccess = (companies = [], permissions = []) => {
     const preset = currentPreset();
     byId("account-create-companies").innerHTML = accessOptions.companies.map(company =>
@@ -60,29 +80,22 @@ const init = (context) => {
   });
   byId("account-create-permissions").addEventListener("change", (event) => {
     if (!accessOptions || event.target.name !== "permissions") return;
-    const permissionInput = (value) => [...createForm.querySelectorAll('input[name="permissions"]')]
-      .find(input => input.value === value);
-    if (event.target.checked) {
-      for (const dependency of accessOptions.dependencies[event.target.value] || []) {
-        const input = permissionInput(dependency);
-        if (input) input.checked = true;
-      }
-    } else {
-      for (const [permission, dependencies] of Object.entries(accessOptions.dependencies)) {
-        if (!dependencies.includes(event.target.value)) continue;
-        const input = permissionInput(permission);
-        if (input) input.checked = false;
-      }
-    }
+    applyDependencies(createForm, event.target);
   });
-  byId("account-access-retry").addEventListener("click", loadAccess);
-  loadAccess();
+  byId("account-access-retry").addEventListener("click", async () => {
+    accessLoad = loadAccess();
+    await accessLoad;
+    if (accessOptions) renderAccounts();
+  });
+  accessLoad = loadAccess();
 
   const renderAccounts = async () => {
     if (!identity.permissions.includes("account.view") && identity.role !== "owner") return;
     const content = byId("accounts-content");
     content.textContent = "Загрузка…";
     try {
+      await accessLoad;
+      if (!accessOptions) throw new Error("Не удалось получить список проектов и прав");
       const data = await apiJson("/content/admin/accounts");
       content.replaceChildren();
       for (const account of data.accounts) {
@@ -91,7 +104,69 @@ const init = (context) => {
         card.innerHTML = `<h2>${escapeHTML(account.displayName)}</h2>
           <p>@${escapeHTML(account.login)} · ${account.role}</p>
           <p>Компании: ${account.companies.map((item) => escapeHTML(item.name)).join(", ") || "не назначены"}</p>
-          <p>Права: ${account.permissions.map(escapeHTML).join(", ") || "не назначены"}</p>`;
+          <p>Права: ${account.permissions.map(escapeHTML).join(", ") || "не назначены"}</p>
+          ${identity.role === "owner" ? `<div class="account-card-actions">
+            <button class="plain-button" type="button" data-account-edit>Изменить</button>
+            <button class="danger" type="button" data-account-delete>Удалить</button></div>` : ""}`;
+        card.querySelector("[data-account-edit]")?.addEventListener("click", event => {
+          const existing = card.querySelector(".account-edit-form");
+          if (existing) { existing.remove(); event.currentTarget.textContent = "Изменить"; return; }
+          const form = document.createElement("form");
+          form.className = "account-edit-form";
+          form.innerHTML = `<label class="field-stack"><span>Отображаемое имя</span>
+              <input name="displayName" required maxlength="120" value="${escapeHTML(account.displayName)}"></label>
+            <label class="field-stack"><span>Роль</span><select name="role">
+              <option value="editor"${account.role === "editor" ? " selected" : ""}>editor</option>
+              <option value="owner"${account.role === "owner" ? " selected" : ""}>owner</option></select></label>
+            <fieldset><legend>Компании</legend><div class="account-access-list">${accessCheckboxes("companies", accessOptions.companies,
+              account.companies.map(company => company.id), company => company.name)}</div></fieldset>
+            <fieldset><legend>Права</legend><div class="account-access-list">${accessCheckboxes("permissions", accessOptions.permissions,
+              account.permissions)}</div></fieldset>
+            <button type="submit">Сохранить</button><p role="status"></p>`;
+          form.addEventListener("change", changeEvent => {
+            if (changeEvent.target.name === "permissions") applyDependencies(form, changeEvent.target);
+          });
+          form.addEventListener("submit", async submitEvent => {
+            submitEvent.preventDefault();
+            const submit = form.querySelector('button[type="submit"]'), status = form.querySelector('[role="status"]');
+            submit.disabled = true;
+            try {
+              await apiJson(`/content/admin/accounts/${account.id}`, {
+                method: "PATCH", headers: { "X-CSRF-Token": identity.csrfToken },
+                body: JSON.stringify({ displayName: form.elements.displayName.value, role: form.elements.role.value,
+                  companies: [...form.querySelectorAll('input[name="companies"]:checked')].map(input => input.value),
+                  permissions: [...form.querySelectorAll('input[name="permissions"]:checked')].map(input => input.value) })
+              });
+              await renderAccounts();
+            } catch (error) { status.textContent = error.message; submit.disabled = false; }
+          });
+          card.append(form);
+          event.currentTarget.textContent = "Скрыть";
+        });
+        card.querySelector("[data-account-delete]")?.addEventListener("click", () => {
+          const dialog = document.createElement("dialog");
+          dialog.className = "account-delete-confirm";
+          dialog.innerHTML = `<p>Удалить учётную запись ${escapeHTML(account.login)}? Пользователь потеряет доступ в кабинет.</p>
+            <p role="status"></p><menu><button type="button" data-cancel>Отмена</button>
+            <button class="danger" type="button" data-confirm>Удалить</button></menu>`;
+          const close = () => { dialog.close(); dialog.remove(); };
+          dialog.querySelector("[data-cancel]").addEventListener("click", close);
+          dialog.querySelector("[data-confirm]").addEventListener("click", async event => {
+            event.currentTarget.disabled = true;
+            try {
+              await apiJson(`/content/admin/accounts/${account.id}`, {
+                method: "DELETE", headers: { "X-CSRF-Token": identity.csrfToken }
+              });
+              close();
+              await renderAccounts();
+            } catch (error) {
+              dialog.querySelector('[role="status"]').textContent = error.message;
+              event.currentTarget.disabled = false;
+            }
+          });
+          document.body.append(dialog);
+          dialog.showModal();
+        });
         content.append(card);
       }
     } catch (error) { content.textContent = "Не удалось загрузить: " + error.message; }

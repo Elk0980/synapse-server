@@ -311,6 +311,11 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .site-toolbar, .site-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
 .site-grid, .account-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
 .site-card h2, .account-card h2 { margin-top: 0; }
+.account-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.account-edit-form { display: grid; gap: 12px; margin-top: 16px; }
+.account-edit-form fieldset { min-width: 0; }
+.account-delete-confirm p { overflow-wrap: anywhere; }
+.account-delete-confirm menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; }
 .field-stack { display: grid; gap: 8px; }
 .field-stack input, .field-stack select { min-height: 44px; padding: 9px; }
 .account-access-list {
@@ -343,6 +348,12 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .danger { background: #8f2934; color: white; }
 .permission-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
 dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18px; padding: 24px; }
+@media (max-width: 430px) {
+  .account-grid { grid-template-columns: minmax(0, 1fr); }
+  .account-card { padding: 16px; }
+  .account-card-actions > button { flex: 1 1 120px; }
+  .account-delete-confirm { width: calc(100vw - 24px); padding: 18px; }
+}
 .home-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr); gap: 16px; }
 .widget-settings { display: grid; align-content: start; gap: 10px; }
 .widget-settings h2 { display: flex; gap: 8px; align-items: center; margin-top: 0; }
