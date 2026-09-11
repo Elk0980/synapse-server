@@ -483,6 +483,8 @@ const bindCompanyTabs = (company) => {
 };
 const documentCard = (company, document) => {
   const canEdit = canEditCRM() && companyOwnedByProject("crm-companies", company);
+  const status = document.status === "not_provided" && (document.linkUrl || document.fileName)
+    ? "Предоставлен, не отправлен на проверку" : documentStatuses[document.status];
   const source = document.linkUrl
     ? `<a href="${escapeHTML(document.linkUrl)}" target="_blank" rel="noopener">Открыть ссылку</a>`
     : document.fileName ? `<a href="/content/crm/companies/${company.id}/documents/${document.documentType}/file?${
@@ -492,7 +494,7 @@ const documentCard = (company, document) => {
       new Date(document.reviewedAt).toLocaleString("ru-RU"))}` : "Не проверен";
   return `<article class="company-document" data-document="${document.documentType}">
     <header><div><h3>${documentLabels[document.documentType]}</h3>
-      <p><strong>${documentStatuses[document.status]}</strong> · версия ${document.version || "—"}</p></div></header>
+      <p><strong>${status}</strong> · версия ${document.version || "—"}</p></div></header>
     <dl class="crm-details"><div><dt>Материал</dt><dd>${source}</dd></div>
       <div><dt>Проверил и когда</dt><dd>${review}</dd></div>
       ${document.returnComment ? `<div><dt>Причина возврата</dt><dd>${escapeHTML(document.returnComment)}</dd></div>` : ""}</dl>
