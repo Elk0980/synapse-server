@@ -1,0 +1,357 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found]){display:none!important}</style></head><body>
+<title>Живые блоки ALVI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --ground:#f5f4f0;
+    --panel:#ffffff;
+    --panel-2:#eeeee8;
+    --ink:#23291f;
+    --ink-dim:#5c6656;
+    --ink-faint:#8b9385;
+    --rule:rgba(35,41,31,.14);
+    --hold:#2f5a34;
+    --move:#8a6f3d;
+    --hold-wash:rgba(47,90,52,.07);
+    --move-wash:rgba(138,111,61,.09);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#12160f;
+      --panel:#1b201a;
+      --panel-2:#232a21;
+      --ink:#ecebe3;
+      --ink-dim:#a8b0a2;
+      --ink-faint:#7c857a;
+      --rule:rgba(236,235,227,.16);
+      --hold:#8fbc82;
+      --move:#cfad6d;
+      --hold-wash:rgba(143,188,130,.10);
+      --move-wash:rgba(207,173,109,.12);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#12160f;
+    --panel:#1b201a;
+    --panel-2:#232a21;
+    --ink:#ecebe3;
+    --ink-dim:#a8b0a2;
+    --ink-faint:#7c857a;
+    --rule:rgba(236,235,227,.16);
+    --hold:#8fbc82;
+    --move:#cfad6d;
+    --hold-wash:rgba(143,188,130,.10);
+    --move-wash:rgba(207,173,109,.12);
+  }
+
+  *,*::before,*::after{box-sizing:border-box}
+  body{
+    margin:0;
+    background:var(--ground);
+    color:var(--ink);
+    font-family:"Inter","Segoe UI",Arial,sans-serif;
+    font-size:16px;
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{width:min(100%,54rem);margin-inline:auto;padding:clamp(2rem,5vw,4.5rem) clamp(1.15rem,4vw,2.5rem) 5rem}
+
+  .eyebrow{
+    margin:0 0 1rem;color:var(--ink-faint);
+    font-size:.7rem;font-weight:600;letter-spacing:.2em;text-transform:uppercase;
+  }
+  h1{
+    margin:0;font-family:"Lora",Georgia,serif;font-weight:400;
+    font-size:clamp(2.1rem,5.5vw,3.3rem);line-height:1.05;letter-spacing:-.03em;
+    text-wrap:balance;
+  }
+  .standfirst{
+    max-width:46ch;margin:1.15rem 0 0;color:var(--ink-dim);
+    font-size:clamp(1rem,1.6vw,1.13rem);
+  }
+  h2{
+    margin:0 0 .9rem;font-family:"Lora",Georgia,serif;font-weight:400;
+    font-size:clamp(1.5rem,3vw,2rem);line-height:1.15;letter-spacing:-.02em;
+    text-wrap:balance;
+  }
+  h3{margin:0 0 .5rem;font-size:1rem;font-weight:600;letter-spacing:-.005em}
+  p{margin:0 0 1rem;max-width:65ch}
+  section{margin-top:clamp(2.75rem,6vw,4rem)}
+  .rule{height:1px;background:var(--rule);border:0;margin:0}
+  em{font-style:italic}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;background:var(--panel-2);padding:.1em .35em;border-radius:4px}
+
+  figure{margin:1.75rem 0 0;padding:0}
+  .figframe{
+    overflow-x:auto;padding:1.5rem 1.25rem;
+    background:var(--panel);border:1px solid var(--rule);border-radius:14px;
+  }
+  svg{display:block;max-width:100%;height:auto;margin-inline:auto;color:var(--ink)}
+  figcaption{margin-top:.85rem;color:var(--ink-dim);font-size:.87rem;line-height:1.55;max-width:65ch}
+
+  .key{display:flex;flex-wrap:wrap;gap:1.25rem;margin:1.1rem 0 0;padding:0;list-style:none;font-size:.85rem}
+  .key li{display:flex;align-items:center;gap:.5rem;color:var(--ink-dim)}
+  .chip{width:1.6rem;height:.7rem;border-radius:3px;flex:0 0 auto}
+  .chip--hold{background:var(--hold-wash);border:1.5px solid var(--hold)}
+  .chip--move{background:var(--move-wash);border:1.5px dashed var(--move)}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:1rem;margin-top:1.5rem}
+  .card{padding:1.15rem 1.25rem;background:var(--panel);border:1px solid var(--rule);border-radius:12px}
+  .card p{margin:0;color:var(--ink-dim);font-size:.92rem}
+  .card--hold{border-left:3px solid var(--hold)}
+  .card--move{border-left:3px solid var(--move)}
+
+  table{width:100%;border-collapse:collapse;margin-top:1.4rem;font-size:.93rem;font-variant-numeric:tabular-nums}
+  caption{text-align:left;color:var(--ink-faint);font-size:.8rem;letter-spacing:.02em;padding-bottom:.6rem}
+  th,td{text-align:left;padding:.62rem .7rem;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-weight:600;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}
+  td:nth-child(2),td:nth-child(3),th:nth-child(2),th:nth-child(3){text-align:right;white-space:nowrap}
+  tr:last-child td{border-bottom:0}
+  .win{color:var(--hold);font-weight:600}
+
+  .settled{
+    margin-top:1.5rem;display:grid;gap:.75rem;
+  }
+  .settled div{
+    padding:.9rem 1.1rem;background:var(--panel);border:1px solid var(--rule);
+    border-left:3px solid var(--hold);border-radius:10px;font-size:.93rem;color:var(--ink-dim);
+  }
+  .settled strong{color:var(--ink)}
+
+  .open{
+    margin-top:1.5rem;padding:1.25rem 1.4rem;
+    background:var(--panel);border:1px solid var(--rule);border-left:3px solid var(--move);border-radius:12px;
+  }
+  .open p{margin:.4rem 0 0;color:var(--ink-dim);font-size:.93rem}
+  .rec{
+    display:inline-block;margin-top:.75rem;padding:.28rem .6rem;
+    background:var(--hold-wash);color:var(--hold);
+    border-radius:999px;font-size:.78rem;font-weight:600;
+  }
+
+  ul.plain{margin:1rem 0 0;padding-left:1.15rem;color:var(--ink-dim)}
+  ul.plain li{margin-bottom:.5rem;max-width:63ch}
+  ul.plain li strong{color:var(--ink);font-weight:600}
+
+  .note{margin-top:1.5rem;padding:1.1rem 1.25rem;background:var(--panel-2);border-radius:12px;font-size:.92rem;color:var(--ink-dim)}
+  .note strong{color:var(--ink)}
+  .foot{margin-top:3.5rem;padding-top:1.25rem;border-top:1px solid var(--rule);color:var(--ink-faint);font-size:.83rem}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+
+  <p class="eyebrow">ALVI · архитектура движения · 28.08.2026</p>
+  <h1>Один проезд камеры с остановками</h1>
+  <p class="standfirst">Уточнено Владиславом: это не набор отдельных клипов, а <em>один непрерывный ролик</em>. Пока гость стоит на блоке — камера топчется на месте и кадр зацикливается. Как только он листает — тот же самый проезд продолжается вместе с пальцем. Склейки нет нигде.</p>
+
+  <section>
+    <h2>Схема</h2>
+    <figure>
+      <div class="figframe">
+        <svg viewBox="0 0 660 560" role="img" aria-label="Один непрерывный путь камеры сверху вниз: на остановках он сворачивается в кольцо и повторяется, пока гость стоит, а между остановками идёт прямым отрезком, который продвигается вместе с прокруткой">
+          <defs>
+            <marker id="mv" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="8" markerHeight="7" orient="auto">
+              <polygon points="0,0 10,4 0,8" fill="#8a6f3d"/>
+            </marker>
+            <marker id="hd" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="7" markerHeight="6" orient="auto">
+              <polygon points="0,0 10,4 0,8" fill="#2f5a34"/>
+            </marker>
+          </defs>
+
+          <!-- станция 1 -->
+          <circle cx="180" cy="78" r="40" fill="var(--hold-wash)" stroke="var(--hold)" stroke-width="2"/>
+          <path d="M180 44 A34 34 0 0 1 208 60" fill="none" stroke="var(--hold)" stroke-width="2" marker-end="url(#hd)"/>
+          <text x="180" y="74" font-size="12" font-weight="600" text-anchor="middle" fill="currentColor">кадр</text>
+          <text x="180" y="90" font-size="12" font-weight="600" text-anchor="middle" fill="currentColor">кружит</text>
+
+          <!-- отрезок 1 -->
+          <line x1="180" y1="118" x2="180" y2="188" stroke="var(--move)" stroke-width="2.5" marker-end="url(#mv)"/>
+
+          <!-- станция 2 -->
+          <circle cx="180" cy="238" r="40" fill="var(--hold-wash)" stroke="var(--hold)" stroke-width="2"/>
+          <path d="M180 204 A34 34 0 0 1 208 220" fill="none" stroke="var(--hold)" stroke-width="2" marker-end="url(#hd)"/>
+          <text x="180" y="234" font-size="12" font-weight="600" text-anchor="middle" fill="currentColor">кадр</text>
+          <text x="180" y="250" font-size="12" font-weight="600" text-anchor="middle" fill="currentColor">кружит</text>
+
+          <!-- отрезок 2 -->
+          <line x1="180" y1="278" x2="180" y2="348" stroke="var(--move)" stroke-width="2.5" marker-end="url(#mv)"/>
+
+          <!-- станция 3 -->
+          <circle cx="180" cy="398" r="40" fill="var(--hold-wash)" stroke="var(--hold)" stroke-width="2"/>
+          <path d="M180 364 A34 34 0 0 1 208 380" fill="none" stroke="var(--hold)" stroke-width="2" marker-end="url(#hd)"/>
+          <text x="180" y="394" font-size="12" font-weight="600" text-anchor="middle" fill="currentColor">кадр</text>
+          <text x="180" y="410" font-size="12" font-weight="600" text-anchor="middle" fill="currentColor">кружит</text>
+
+          <!-- продолжение -->
+          <line x1="180" y1="438" x2="180" y2="490" stroke="var(--move)" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#mv)"/>
+          <text x="180" y="516" font-size="11.5" text-anchor="middle" fill="currentColor" opacity=".6">и так до конца страницы</text>
+
+          <!-- левая колонка: состояние гостя -->
+          <text x="96" y="60" font-size="11" text-anchor="end" fill="var(--hold)" font-weight="600">гость стоит</text>
+          <text x="96" y="76" font-size="10.5" text-anchor="end" fill="currentColor" opacity=".62">читает блок</text>
+          <text x="96" y="92" font-size="10.5" text-anchor="end" fill="currentColor" opacity=".62">кадр живёт</text>
+
+          <text x="96" y="150" font-size="11" text-anchor="end" fill="var(--move)" font-weight="600">гость листает</text>
+          <text x="96" y="166" font-size="10.5" text-anchor="end" fill="currentColor" opacity=".62">камера едет</text>
+          <text x="96" y="182" font-size="10.5" text-anchor="end" fill="currentColor" opacity=".62">за пальцем</text>
+
+          <text x="96" y="228" font-size="11" text-anchor="end" fill="var(--hold)" font-weight="600">гость стоит</text>
+          <text x="96" y="310" font-size="11" text-anchor="end" fill="var(--move)" font-weight="600">гость листает</text>
+          <text x="96" y="388" font-size="11" text-anchor="end" fill="var(--hold)" font-weight="600">гость стоит</text>
+
+          <!-- правая колонка: что на экране -->
+          <line x1="228" y1="78" x2="256" y2="78" stroke="currentColor" stroke-width="1" opacity=".3"/>
+          <text x="266" y="70" font-size="12.5" font-weight="600" fill="currentColor">01 · Хиро</text>
+          <text x="266" y="88" font-size="11" fill="currentColor" opacity=".68">«Верни себе баланс», рейтинг, сценарии</text>
+
+          <line x1="228" y1="238" x2="256" y2="238" stroke="currentColor" stroke-width="1" opacity=".3"/>
+          <text x="266" y="230" font-size="12.5" font-weight="600" fill="currentColor">02 · Доверие</text>
+          <text x="266" y="248" font-size="11" fill="currentColor" opacity=".68">4,8 ★ по 398 оценкам в 2ГИС</text>
+
+          <line x1="228" y1="398" x2="256" y2="398" stroke="currentColor" stroke-width="1" opacity=".3"/>
+          <text x="266" y="390" font-size="12.5" font-weight="600" fill="currentColor">03 · Для себя</text>
+          <text x="266" y="408" font-size="11" fill="currentColor" opacity=".68">массаж и SPA от 1 300 ₽</text>
+
+          <text x="266" y="152" font-size="11" fill="var(--move)">проезд 1,2 с — свет теплеет</text>
+          <text x="266" y="312" font-size="11" fill="var(--move)">проезд 1,2 с — камера идёт вглубь</text>
+
+          <!-- нижняя подпись про непрерывность -->
+          <path d="M596 46 L618 46 L618 470 L596 470" fill="none" stroke="currentColor" stroke-width="1.3" opacity=".4"/>
+          <text x="628" y="248" font-size="11.5" fill="currentColor" opacity=".7" transform="rotate(90 628 248)" text-anchor="middle">одна камера · ни одной склейки</text>
+        </svg>
+      </div>
+      <figcaption>Путь камеры не прерывается ни разу. Кольцо — это та же дорога, свёрнутая сама на себя: пока гость не листает, камера наматывает круг и возвращается точно в ту же точку. Прямой отрезок — та же дорога, но проходимая ровно на столько, на сколько прокрутил гость.</figcaption>
+    </figure>
+
+    <ul class="key">
+      <li><span class="chip chip--hold"></span> остановка — кадр зациклен, играет сам</li>
+      <li><span class="chip chip--move"></span> проезд — кадр идёт за скроллом</li>
+    </ul>
+  </section>
+
+  <hr class="rule" style="margin-top:2.75rem">
+
+  <section>
+    <h2>Что ваша формулировка сразу закрыла</h2>
+    <p>Когда это «один ролик», два из трёх моих вчерашних вопросов отвечают на себя сами.</p>
+    <div class="settled">
+      <div><strong>Переход ведётся скроллом, а не играет сам.</strong> Если бы проезд запускался кнопкой и проигрывался в своём темпе, ощущение единой камеры разваливалось бы: гость остановил палец, а картинка едет дальше сама. В модели «один ролик» проезд обязан стоять, когда стоит палец.</div>
+      <div><strong>Хиро — не отдельная история, а начало того же проезда.</strong> Первый экран становится просто первой остановкой. Драматургия «боль → усиление → решение → результат» никуда не девается — она разложена по остановкам, а не заперта в отдельном ролике на 600vh.</div>
+    </div>
+
+    <div class="open">
+      <h3>Остался один открытый вопрос</h3>
+      <p>Сколько остановок делаем. Блоков на странице одиннадцать. Каждая остановка — это отдельный кусок проезда и отдельная генерация, плюс вопрос, не устанет ли глаз от постоянного движения на всей длине страницы.</p>
+      <span class="rec">Предлагаю: шесть остановок, FAQ и контакты — спокойные, без движения</span>
+    </div>
+  </section>
+
+  <hr class="rule" style="margin-top:2.75rem">
+
+  <section>
+    <h2>Что теперь требуется от генерации</h2>
+    <p>Модель «один ролик» ужесточает требование к кадрам. У каждой остановки совпадений теперь не два, а три.</p>
+    <figure>
+      <div class="figframe">
+        <svg viewBox="0 0 660 210" role="img" aria-label="Три совпадения кадров на остановке: первый и последний кадр кольца совпадают между собой, и они же совпадают с кадром, которым заканчивается предыдущий проезд и начинается следующий">
+          <defs>
+            <marker id="a3" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="8" markerHeight="7" orient="auto">
+              <polygon points="0,0 10,4 0,8" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- проезд слева -->
+          <rect x="16" y="56" width="112" height="66" rx="7" fill="var(--move-wash)" stroke="var(--move)" stroke-width="1.5" stroke-dasharray="5 3"/>
+          <text x="72" y="46" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".7">проезд сюда</text>
+          <text x="72" y="86" font-size="11" text-anchor="middle" fill="currentColor">последний</text>
+          <text x="72" y="102" font-size="11" text-anchor="middle" fill="currentColor">кадр</text>
+
+          <text x="150" y="95" font-size="18" text-anchor="middle" fill="var(--hold)">=</text>
+
+          <!-- кольцо -->
+          <circle cx="256" cy="89" r="52" fill="var(--hold-wash)" stroke="var(--hold)" stroke-width="1.8"/>
+          <text x="256" y="40" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".7">остановка</text>
+          <text x="256" y="84" font-size="11" text-anchor="middle" fill="currentColor">первый кадр</text>
+          <text x="256" y="100" font-size="11" text-anchor="middle" fill="currentColor">= последний</text>
+          <text x="256" y="160" font-size="10.5" text-anchor="middle" fill="var(--hold)">кольцо замкнуто само на себя</text>
+
+          <text x="362" y="95" font-size="18" text-anchor="middle" fill="var(--hold)">=</text>
+
+          <!-- проезд справа -->
+          <rect x="388" y="56" width="112" height="66" rx="7" fill="var(--move-wash)" stroke="var(--move)" stroke-width="1.5" stroke-dasharray="5 3"/>
+          <text x="444" y="46" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".7">проезд дальше</text>
+          <text x="444" y="86" font-size="11" text-anchor="middle" fill="currentColor">первый</text>
+          <text x="444" y="102" font-size="11" text-anchor="middle" fill="currentColor">кадр</text>
+
+          <line x1="508" y1="89" x2="544" y2="89" stroke="currentColor" stroke-width="1.4" opacity=".5" marker-end="url(#a3)"/>
+          <text x="596" y="86" font-size="11" text-anchor="middle" fill="currentColor" opacity=".7">к следующей</text>
+          <text x="596" y="102" font-size="11" text-anchor="middle" fill="currentColor" opacity=".7">остановке</text>
+        </svg>
+      </div>
+      <figcaption>Один и тот же кадр в трёх местах: им заканчивается проезд, с него начинается и им же заканчивается кольцо, и с него уходит следующий проезд. Промахнулись — гость увидит рывок ровно на стыке.</figcaption>
+    </figure>
+
+    <div class="note">
+      <strong>Практически это выполнимо, и вот чем:</strong> у нас уже есть семь принятых кадров k1…k7 с замеренной кривой света (32 → 39 → 29 → 88 → 76 → 147). Они и становятся кадрами остановок — их прикладываем генератору картинкой как первый и последний кадр, а не описываем словами. Именно поэтому кольца и проезды нельзя заказывать вразнобой: сначала фиксируем кадры остановок, потом от них генерируем и кольца, и проезды.
+    </div>
+  </section>
+
+  <hr class="rule" style="margin-top:2.75rem">
+
+  <section>
+    <h2>Чем это лучше нынешнего ролика</h2>
+    <table>
+      <caption>Сравнение с тем, что живёт на сайте сейчас</caption>
+      <thead>
+        <tr><th>Показатель</th><th>Сейчас</th><th>По новой схеме</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Качается до первого экрана</td><td>7,4 МБ</td><td class="win">≈0,6 МБ</td></tr>
+        <tr><td>Движение ниже первого экрана</td><td>нет, статика</td><td class="win">на всей странице</td></tr>
+        <tr><td>Если гость просто стоит</td><td>кадр замер</td><td class="win">кадр живёт</td></tr>
+        <tr><td>Суммарный вес всех видео</td><td>7,4 МБ</td><td>≈8,7 МБ</td></tr>
+        <tr><td>Генераций</td><td>1 длинная</td><td>6 колец + 5 проездов</td></tr>
+        <tr><td>Цена одной переделки</td><td>весь ролик заново</td><td class="win">один кусок</td></tr>
+        <tr><td>Если кусок не загрузился</td><td>гаснет весь хиро</td><td class="win">одна остановка на фото</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:1.4rem">Суммарно файлов больше, но <strong>первый экран легчает в двенадцать раз</strong> — а решает именно он. Остальное подтягивается на подходе, пока гость читает предыдущий блок.</p>
+
+    <div class="cards">
+      <div class="card card--hold">
+        <h3>Кольцо</h3>
+        <p>6–8 секунд, играет само, возвращается точно в свою же первую точку. Собирается палиндромом или сшивкой — стык не должен читаться. Вес 0,4–0,6 МБ.</p>
+      </div>
+      <div class="card card--move">
+        <h3>Проезд</h3>
+        <p>1–1,5 секунды, идёт строго за скроллом и встаёт, когда встал палец. Нужны частые ключевые кадры, иначе перемотка будет рваной. Вес 0,2–0,3 МБ.</p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule" style="margin-top:2.75rem">
+
+  <section>
+    <h2>Что меняется в коде</h2>
+    <ul class="plain">
+      <li><strong>Остаётся</strong> привязка <code>currentTime</code> к прокрутке — но теперь не для одного ролика на 600vh, а для каждого проезда на своём участке страницы.</li>
+      <li><strong>Добавляется</strong> переключение «кольцо ↔ проезд»: пока блок стоит в экране — играет кольцо; как только гость тронул скролл — кольцо гасится и кадр отдаётся проезду.</li>
+      <li><strong>Добавляется</strong> наблюдатель пересечений: блок на подходе — грузим его кольцо и проезд перед ним; блок ушёл далеко вверх — освобождаем память.</li>
+      <li><strong>Остаётся</strong> двойной планировщик анимации и правило «только плоские сдвиги и прозрачность» — они уже спасали проект, трогать нельзя.</li>
+      <li><strong>Остаётся</strong> запасной путь: у каждой остановки свой кадр-постер, при любой осечке блок показывает фотографию, текст не меняется.</li>
+      <li><strong>Мобильный</strong> — кольца оставляем, они лёгкие; проезды отключаем, iOS не перематывает видео плавно.</li>
+    </ul>
+
+    <div class="note">
+      <strong>Что нужно от вас, чтобы начать:</strong> ответ на единственный оставшийся вопрос — сколько остановок. После этого фиксирую кадры остановок из k1…k7, собираю задания на кольца и проезды и запускаю генерации параллельно, отдельными чатами, а не очередью.
+    </div>
+  </section>
+
+  <p class="foot">Схема составлена по идее Владислава от 28.08.2026 и уточнена его же формулировкой «один цельный ролик, местами зациклен, местами продолжается со скроллом». Опирается на действующие документы: раскадровка видео-хиро, стандарт материалов, VIDEO_PREFLIGHT. Цифры веса — расчёт по фактическим замерам нынешних файлов ALVI; уточнятся после первой пары кусков.</p>
+
+</div>
+
+</body></html>
