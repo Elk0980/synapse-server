@@ -215,7 +215,7 @@ const renderCrmEntityRoute = async () => {
     else if (route) await renderEntityCard(view, route);
     else await renderEntityList(view, true);
   } catch (error) {
-    content.innerHTML = `<p class="crm-error" role="alert">${escapeHTML(error.message)}</p>`;
+    content.innerHTML = `<p class="crm-error" role="alert">Не удалось загрузить: ${escapeHTML(error.message)}</p>`;
   }
 };
 const renderEntityList = async (view, reset = false) => {

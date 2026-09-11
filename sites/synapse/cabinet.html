@@ -599,7 +599,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         data-view-link="autoposting">Автопостинг</a>
       <a class="nav-link" id="content-factory-link" href="#content-factory"
         data-view-link="content-factory">Контент завод</a>
-      <a class="nav-link" href="#settings" data-view-link="settings">Настройки</a>
+      <a class="nav-link" id="settings-link" href="#settings" data-view-link="settings">Настройки</a>
       <a class="nav-link" id="accounts-link" href="#accounts" data-view-link="accounts" hidden>Настройка аккаунтов</a>
       <a class="nav-link" href="#account" data-view-link="account">Аккаунт</a>
       <a class="nav-link" id="trademarks-link" href="#trademarks" data-view-link="trademarks" hidden>Помощь в регистрации знаков</a>
@@ -889,6 +889,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         <button id="account-create-submit" type="submit" disabled>Создать</button><p id="account-create-result" role="status"></p>
       </form></div><div id="accounts-content" class="account-grid" aria-live="polite"></div>
     </section>
+    <section class="view-panel" id="access-denied-view" data-view="access-denied" hidden>
+      <div class="content-header"><h1>Доступ ограничен</h1></div>
+      <p class="notice" role="alert">У вас нет доступа к этому разделу</p>
+    </section>
     <section class="view-panel" id="trademarks-view" data-view="trademarks" hidden>
       <div class="content-header">
         <div class="trademarks-heading"><h1>Помощь в регистрации знаков</h1>
@@ -958,11 +962,26 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   "use strict";
   const SbCabinet = window.SbCabinet = window.SbCabinet || {};
   const registeredViews = SbCabinet.views = SbCabinet.views || {};
+  const REQUEST_TIMEOUT_MS = 15000;
+  const requestSignal = (signal) => signal
+    ? AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)])
+    : AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  const responseError = (response, body) => {
+    if (response.status === 403) return new Error("Недостаточно прав");
+    return new Error(body?.error || (response.status >= 500 ? "Ошибка сервера, попробуйте позже" : "Ошибка запроса"));
+  };
   const apiJson = async (url, options = {}) => {
-    const response = await fetch(url, { credentials: "same-origin", cache: "no-store", ...options,
+    let response;
+    try {
+      response = await fetch(url, { credentials: "same-origin", cache: "no-store", ...options,
+      signal: requestSignal(options.signal),
       headers: { "Content-Type": "application/json", ...(options.headers || {}) } });
+    } catch (error) {
+      if (error.name === "TimeoutError") throw new Error("Время ожидания истекло (15 секунд)");
+      throw error;
+    }
     const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body.error || "Ошибка сервера");
+    if (!response.ok) throw responseError(response, body);
     return body;
   };
 
@@ -988,6 +1007,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     settings: "Настройки",
     account: "Аккаунт",
     accounts: "Настройка аккаунтов",
+    "access-denied": "Доступ ограничен",
     trademarks: "Помощь в регистрации знаков"
   });
   const CRM_API = "/content/crm";
@@ -1145,6 +1165,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     if (!identity) return true;
     if (value === "hugh") return identity.role === "owner";
     if (value === "trademarks") return identity.role === "owner";
+    if (value === "accounts") return hasPermission("account.view");
+    if (value === "settings") return hasPermission("settings.view");
     if (["analytics-through", "ad-platforms", "hypotheses", "competitors", "calltracking"].includes(value)) {
       return identity.permissions.includes("analytics.view");
     }
@@ -1163,6 +1185,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const validView = (value) => Object.hasOwn(VIEW_TITLES, value) && permittedView(value);
   const viewFromHash = () => {
     const value = decodeURIComponent(location.hash.slice(1)).split(/[/?]/)[0];
+    if (Object.hasOwn(VIEW_TITLES, value) && !permittedView(value)) return "access-denied";
     return validView(value) ? value : defaultView();
   };
   const setCategoryForView = (viewName) => {
@@ -1250,13 +1273,19 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       window.open(url, "_blank", "noopener");
       return null;
     }
-    const response = await fetch(url, {
-      ...options,
+    let response;
+    try {
+      response = await fetch(url, {
+      ...options, signal: requestSignal(options.signal),
       credentials: "same-origin",
       headers: { "Accept": "application/json", "Content-Type": "application/json", ...(options.headers || {}) }
-    });
+      });
+    } catch (error) {
+      if (error.name === "TimeoutError") throw new Error("Время ожидания истекло (15 секунд)");
+      throw error;
+    }
     const body = response.status === 204 ? null : await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body?.error || `CRM_HTTP_${response.status}`);
+    if (!response.ok) throw responseError(response, body);
     return body;
   };
   const csrfOptions = (method, body) => ({
@@ -1321,7 +1350,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       byId("autoposting-view").hidden = !permittedView("autoposting");
       byId("content-factory-link").hidden = !permittedView("content-factory");
       byId("content-factory-view").hidden = !permittedView("content-factory");
-      byId("accounts-link").hidden = identity.role !== "owner";
+      byId("settings-link").hidden = !permittedView("settings");
+      byId("accounts-link").hidden = !hasPermission("account.view");
       byId("hugh-link").hidden = identity.role !== "owner";
       byId("trademarks-link").hidden = identity.role !== "owner";
       byId("create-site").hidden = !identity.permissions.includes("sites.create");
@@ -1345,7 +1375,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       if (hasPermission("crm.view")) registeredViews.crm.initialize(context);
       setView(viewFromHash());
       registeredViews.sites.initialize(context);
-      registeredViews.accounts.initialize(context);
+      if (hasPermission("account.view")) registeredViews.accounts.initialize(context);
       byId("app").hidden = false;
       byId("auth").hidden = true;
     } catch (error) {
@@ -1452,27 +1482,30 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), body: JSON.stringify({
           login: byId("auth-login").value.trim().toLowerCase(),
           password: byId("auth-pass").value
         })
       });
       if (!response.ok) {
-        showAuthError(response.status === 429 ? "Слишком много попыток, подождите 10 минут" :
-          "Неверный логин или пароль");
+        const body = await response.json().catch(() => ({}));
+        const disabled = response.status === 403 && /отключ/i.test(body.error || "");
+        showAuthError(response.status === 401 ? "Неверный логин или пароль" : disabled
+          ? "Учётная запись отключена" : response.status === 429
+            ? "Слишком много попыток, подождите 10 минут" : "Ошибка сервера, попробуйте позже");
         return;
       }
       await response.json();
-      const identityResponse = await fetch("/content/whoami", { credentials: "same-origin", cache: "no-store" });
-      enterCabinet(await identityResponse.json());
+      enterCabinet(await apiJson("/content/whoami"));
     } catch (error) {
-      showAuthError("Сервер входа недоступен");
+      showAuthError("Ошибка сервера, попробуйте позже");
     }
   });
 
   (async () => {
     try {
-      const response = await fetch("/content/whoami", { credentials: "same-origin", cache: "no-store" });
+      const response = await fetch("/content/whoami", { credentials: "same-origin", cache: "no-store",
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
       if (response.ok) {
         enterCabinet(await response.json());
         return;

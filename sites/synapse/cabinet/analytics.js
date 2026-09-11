@@ -280,7 +280,7 @@ const loadAnalytics = async () => {
     renderAnalytics(dashboard, summary, expensePayload.expenses || []);
   } catch (error) {
     byId("analytics-content").innerHTML =
-      '<div class="crm-error" role="alert">Не удалось загрузить сквозную аналитику.</div>';
+      `<div class="crm-error" role="alert">Не удалось загрузить: ${escapeHTML(error.message)}</div>`;
     byId("expenses-content").replaceChildren();
   }
 };

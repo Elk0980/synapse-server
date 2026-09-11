@@ -210,7 +210,7 @@ const init = (context) => {
       bindTaskList();
     } catch (error) {
       if (version !== renderVersion) return;
-      content.innerHTML = `<p class="crm-error" role="alert">${escapeHTML(error.message)}</p>`;
+      content.innerHTML = `<p class="crm-error" role="alert">Не удалось загрузить: ${escapeHTML(error.message)}</p>`;
     }
   };
   const updateTaskStatus = async (id, status) => {
@@ -336,7 +336,7 @@ const init = (context) => {
       });
     } catch (error) {
       if (version !== renderVersion) return;
-      content.innerHTML = `<p class="crm-error" role="alert">${escapeHTML(error.message)}</p>`;
+      content.innerHTML = `<p class="crm-error" role="alert">Не удалось загрузить: ${escapeHTML(error.message)}</p>`;
     }
   };
   const renderTasksRoute = () => {

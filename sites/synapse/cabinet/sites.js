@@ -63,7 +63,7 @@ const init = (context) => {
       }
       content.append(grid);
     } catch (error) {
-      content.textContent = `${error.message}. Повторите попытку.`;
+      content.textContent = `Не удалось загрузить: ${error.message}`;
     }
   };
   Object.assign(api, { renderSites });
