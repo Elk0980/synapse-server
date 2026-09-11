@@ -411,6 +411,24 @@
       will-change: opacity, transform;
     }
 
+    /* Keep the complete opening offer inside the viewport, including on short laptops. */
+    .hero-scene[data-scene="0"] {
+      min-height: 100svh;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+      padding-top: clamp(6.5rem, 14svh, 9rem);
+      padding-bottom: max(3rem, env(safe-area-inset-bottom));
+    }
+
+    .hero-scene[data-scene="0"] .hero-title {
+      font-size: clamp(3.75rem, min(8vw, 15svh), 9rem);
+    }
+
+    .hero-scene[data-scene="0"] .hero-ratings {
+      margin-top: clamp(0.9rem, 2.5svh, 2rem);
+    }
+
     .hero-scene[data-scene="0"] {
       opacity: 1;
       pointer-events: auto;
@@ -2283,16 +2301,14 @@
       .page-water__video { display: none; }
     }
 
-    /* Пара кнопок, закреплённая в правом нижнем углу на всём сайте (правка Owner'а 31.08). */
+    /* Кнопки первого экрана идут вслед за отзывами, а не закрывают фотографию. */
     .floating-cta {
-      position: fixed;
-      right: clamp(0.85rem, 2.2vw, 2.4rem);
-      bottom: clamp(0.85rem, 2.2vw, 2rem);
-      z-index: 60;
+      position: static;
       display: grid;
       gap: 0.4rem;
-      justify-items: center;
-      pointer-events: none;
+      justify-items: start;
+      width: fit-content;
+      margin-top: clamp(1rem, 2.5svh, 1.75rem);
     }
 
     .floating-cta {
@@ -2310,8 +2326,8 @@
 
     .floating-cta__row {
       display: flex;
+      flex-wrap: wrap;
       gap: 0.55rem;
-      pointer-events: auto;
     }
 
     .floating-cta__button,
@@ -2386,7 +2402,7 @@
     }
 
     @media (max-width: 34rem) {
-      .floating-cta { left: clamp(0.85rem, 2.2vw, 2.4rem); justify-items: stretch; }
+      .floating-cta { width: 100%; justify-items: stretch; }
       .floating-cta__row { justify-content: center; }
       .floating-cta__button { min-width: 0; flex: 1 1 0; padding: 0.7rem 0.6rem; font-size: 0.74rem; }
       .floating-cta__note { justify-self: center; }
@@ -2433,13 +2449,19 @@
       .promo__button { min-width: 0; width: 100%; }
     }
 
-    /* Portrait and copy occupy separate rows: text cannot cover a face. */
+    /* Desktop: every half is one image card with a readable bottom overlay. */
     .promo .promo__panel { width: min(1080px, 100%); max-height: calc(100svh - 2rem); overflow: auto; }
-    .promo .promo__half { min-width: 0; min-height: 0; padding: 0; gap: 0; justify-content: flex-start; background-image: none; }
-    .promo .promo__half::before, .promo .promo__half::after { display: none; }
+    .promo .promo__half { min-width: 0; min-height: 0; aspect-ratio: 4 / 3; padding: 0; gap: 0; justify-content: flex-end; overflow: hidden; background-image: none; }
+    .promo .promo__half::before { display: block; z-index: 1; background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, .58) 38%, rgba(0, 0, 0, .75) 100%); }
+    .promo .promo__half::after { z-index: 3; }
     .promo .promo__half--avokado { background-color: #221c13; }
-    .promo .promo__portrait { display: block; position: static; max-width: none; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: contain; flex: 0 0 auto; }
-    .promo .promo__content { display: flex; flex-direction: column; flex: 1; gap: .7rem; max-width: none; padding: 1.4rem 1.6rem; overflow: hidden; }
+    .promo .promo__portrait { display: block; position: absolute; inset: 0; max-width: none; width: 100%; height: 100%; object-fit: cover; }
+    .promo .promo__content { position: relative; z-index: 2; display: flex; flex-direction: column; gap: .7rem; width: 100%; max-width: none; padding: clamp(2rem, 3vw, 2.5rem); color: #fff; }
+    .promo .promo__content .promo__brand,
+    .promo .promo__content .promo__copy,
+    .promo .promo__content .promo__note,
+    .promo .promo__content .promo__price,
+    .promo .promo__content .promo__was { color: #fff; }
     .promo .promo__title { font-size: clamp(1.4rem, 2.3vw, 1.9rem); line-height: 1.2; text-shadow: none; }
     .promo .promo__copy { font-size: 1rem; text-shadow: none; }
     .promo__offer { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem .7rem; margin-block: .5rem; }
@@ -2454,6 +2476,9 @@
     @media (max-width: 899px) {
       .promo .promo__panel { max-height: calc(100svh - 1.2rem); }
       .promo .promo__head { padding: 1rem 7rem 1rem 1.1rem; }
+      .promo .promo__half { aspect-ratio: auto; justify-content: flex-start; overflow: visible; }
+      .promo .promo__half::before, .promo .promo__half::after { display: none; }
+      .promo .promo__portrait { position: static; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: contain; flex: 0 0 auto; }
       .promo .promo__content { padding: 1.2rem; }
     }
     /* Preserve the approved desktop grid; the scroll wrapper only lays out on mobile. */
@@ -2619,6 +2644,14 @@
             <div class="hero-ratings">
               <a class="rating-pill" href="https://2gis.ru/irkutsk/firm/70000001061502048" target="_blank" rel="noopener noreferrer" data-edit="hero-0.rating-pill-1">★ 4,9 · 398 оценок в 2ГИС</a>
               <a class="rating-pill" href="https://yandex.ru/maps/org/alvi/132486598882/" target="_blank" rel="noopener noreferrer" data-edit="hero-0.rating-pill-2">★ 4,9 · 53 оценки на Яндекс Картах</a>
+            </div>
+
+            <div class="floating-cta">
+              <div class="floating-cta__row">
+                <a class="floating-cta__button" href="#quiz" data-edit="floating.floating-cta-button-1">Подобрать ритуал</a>
+                <a class="floating-cta__button" href="#contacts" data-edit="floating.floating-cta-button-2">Связаться с нами</a>
+              </div>
+              <p class="floating-cta__note" data-edit="floating.floating-cta-note-1">отвечаем в течение 2 минут</p>
             </div>
 
           </div>
@@ -4087,15 +4120,6 @@
       initCtaHide();
     }
   </script>
-
-  <div class="floating-cta">
-    <div class="floating-cta__row">
-      <a class="floating-cta__button" href="#quiz" data-edit="floating.floating-cta-button-1">Подобрать ритуал</a>
-      <a class="floating-cta__button" href="#contacts" data-edit="floating.floating-cta-button-2">Связаться с нами</a>
-    </div>
-    <p class="floating-cta__note" data-edit="floating.floating-cta-note-1">отвечаем в течение 2 минут</p>
-  </div>
-
 
   <script>
     /* Баннер после блока отзывов: один показ за визит, закрытие по кнопке, фону и Esc. В режиме правки — не всплывает. */
