@@ -1,0 +1,209 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found]){display:none!important}</style></head><body>
+<title>Сборка Synapse Business</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F2F4F7; --paper:#FFFFFF; --ink:#18212B; --ink2:#4A5665; --mute:#7C8794; --line:#D9DEE5;
+  --accent:#245E7A; --accent-soft:#DDEBF2;
+  --ok:#2E7D4F; --ok-soft:#DCEFE3; --wait:#9A6B12; --wait-soft:#F6EBD2; --block:#A63A3A; --block-soft:#F5DEDE; --unk:#5B6470; --unk-soft:#E4E7EB;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#131A22; --paper:#1B242E; --ink:#E8EDF2; --ink2:#B7C1CC; --mute:#8A96A3; --line:#2C3743;
+    --accent:#7FB6D1; --accent-soft:#1F3745;
+    --ok:#7CC79A; --ok-soft:#1F3A2B; --wait:#E0B45C; --wait-soft:#3E3320; --block:#E08A8A; --block-soft:#452424; --unk:#A9B2BC; --unk-soft:#2A333D;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#131A22; --paper:#1B242E; --ink:#E8EDF2; --ink2:#B7C1CC; --mute:#8A96A3; --line:#2C3743;
+  --accent:#7FB6D1; --accent-soft:#1F3745;
+  --ok:#7CC79A; --ok-soft:#1F3A2B; --wait:#E0B45C; --wait-soft:#3E3320; --block:#E08A8A; --block-soft:#452424; --unk:#A9B2BC; --unk-soft:#2A333D;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Arial,sans-serif;font-size:15px;line-height:1.5;margin:0}
+.wrap{max-width:900px;margin:0 auto;padding:28px 20px 60px}
+h1,h2,h3{font-family:Manrope,"IBM Plex Sans",system-ui,sans-serif;text-wrap:balance;margin:0}
+h1{font-size:28px;font-weight:800;letter-spacing:-.01em}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+.head{display:flex;flex-wrap:wrap;gap:14px 24px;align-items:flex-end;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:18px}
+.status-line{display:flex;flex-wrap:wrap;gap:8px 18px;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;color:var(--ink2);margin-top:14px}
+.status-line b{color:var(--ink);font-weight:500}
+.toggle{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--paper)}
+.toggle button{background:transparent;border:0;padding:8px 14px;font:inherit;font-weight:600;color:var(--mute);cursor:pointer}
+.toggle button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.toggle button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.pill{display:inline-block;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.p-ok{background:var(--ok-soft);color:var(--ok)} .p-wait{background:var(--wait-soft);color:var(--wait)} .p-block{background:var(--block-soft);color:var(--block)} .p-unk{background:var(--unk-soft);color:var(--unk)} .p-acc{background:var(--accent-soft);color:var(--accent)}
+.note{margin-top:18px;padding:12px 16px;border-left:3px solid var(--wait);background:var(--paper);color:var(--ink2);font-size:14px}
+.stages{display:flex;flex-direction:column;gap:12px;margin-top:24px}
+.stage{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+.stage-head{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:baseline}
+.num{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:13px;color:var(--accent);font-weight:500}
+.stage h2{font-size:17px;font-weight:700}
+.goal{color:var(--ink2);margin-top:4px;font-size:14px}
+.sub{margin-top:14px;border-top:1px dashed var(--line);padding-top:10px;display:flex;flex-direction:column;gap:8px}
+body.collapsed .sub{display:none}
+.row{display:grid;grid-template-columns:1fr auto;gap:6px 14px;align-items:baseline;font-size:14px}
+.row .who{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;color:var(--mute);white-space:nowrap}
+.row .done{grid-column:1/-1;color:var(--mute);font-size:13px}
+.row .done::before{content:"готово, когда: ";color:var(--ink2)}
+.qs{margin-top:34px}
+.qs h2{font-size:19px;font-weight:800}
+.q{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px 18px;margin-top:10px}
+.q .t{font-weight:600}
+.q p{margin:6px 0 0;color:var(--ink2);font-size:14px}
+.legend{margin-top:30px;color:var(--mute);font-size:13px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+@media (max-width:560px){.stage-head{grid-template-columns:auto 1fr}.stage-head .pill{grid-column:2}}
+</style>
+
+<div class="wrap">
+  <div class="head">
+    <div>
+      <div class="eyebrow">Чат «Synapse Бизнес» · план работ</div>
+      <h1 style="margin-top:6px">Сборка Synapse Business</h1>
+    </div>
+    <div class="toggle" role="group" aria-label="Вид плана">
+      <button id="btn-short" aria-pressed="false" onclick="setView(true)">Свёрнуто</button>
+      <button id="btn-full" aria-pressed="true" onclick="setView(false)">Развёрнуто</button>
+    </div>
+  </div>
+
+  <div class="status-line">
+    <span>СТАТУС ПЛАНА: <b>УТВЕРЖДЁН Owner'ом 04.09.2026</b></span>
+    <span>ЭТАП: <b>1 · спека CRM Sb (ведёт GPT) · прод ждёт консоли Owner'а</b></span>
+    <span>ГОТОВНОСТЬ: <b>общая 30% · этап 0 ✔ · этап 2 код ✔ прод ⏳ · этап 5 ✔</b></span>
+    <span>ОБНОВЛЕНО: <b>04.09.2026, вечер (Бангкок)</b></span>
+  </div>
+
+  <div class="note" style="border-left-color:var(--ok)">План зафиксирован. Движение строго по этапам; строка статуса выше и метки этапов меняются при каждом шаге. Решения Owner'а, на которых план построен, — внизу страницы.</div>
+
+  <div class="stages">
+
+    <section class="stage">
+      <div class="stage-head">
+        <span class="num">0</span>
+        <div><h2>Ревизия: что реально работает</h2><div class="goal">Одна таблица «код в main / запущено / проверено живьём» по CRM, чату, контенту, кабинету, редакторам — без чужих самоотчётов.</div></div>
+        <span class="pill p-ok">ЗАКРЫТ 04.09</span>
+      </div>
+      <div class="sub">
+        <div class="row"><span>Прочитаны конституция, DIRECTION, доска, журналы, состояние сервисов</span><span class="who">Claude</span><span class="done">✔ записи в AGENT_ACTIVITY_LOG, PROCESS_LOG, доске — 04.09</span></div>
+        <div class="row"><span>Живой замер: ops/crm, ops/chat, ops/content, cabinet.html, site-editor, price-editor — что отвечает и что показывает</span><span class="who">Claude · браузер Owner'а</span><span class="done">обновлён SOSTOYANIE_SERVISOV с датой замера</span></div>
+        <div class="row"><span>Блокер выкладки: анонимный git fetch получает 401 — токен GitHub в /etc/synapse/source.url</span><span class="who">Owner · инструкция от Claude</span><span class="done">журнал synapse-sync без «fetch failed» три прогона подряд</span></div>
+        <div class="row"><span>Ответы Owner'а на 7 вопросов → план утверждён 04.09</span><span class="who">Owner</span><span class="done">✔ статус «УТВЕРЖДЁН», решения записаны в OWNER_DECISIONS</span></div>
+        <div class="row"><span>Замер 04.09 из браузера Owner'а: бэкенд чата LIVE (диалогов за всё время — 3), интерфейс чата залипает на старой ошибке (дефект 30.08 не закрыт); CRM: <b>GET /leads открыт без авторизации</b>, заявок 0, PR #40 с защитой и атрибуцией не слит с 30.08; доска board.synapsebusiness.ru — только примеры, никто не пользуется</span><span class="who">Claude</span><span class="done">✔ записано в SOSTOYANIE_SERVISOV (файл заодно восстановлен на диске — его там не было)</span></div>
+        <div class="row"><span>Owner: «да на слияние» PR #40 (12:00). Конфликт → Codex собрал PR #71 → после приёмки — PR #76 crm/secure-and-sso (читаемый код, прокси /content/crm под сессией кабинета, cabinet.html → /content/crm). <b>Найдена регрессия в main:</b> коммит 87ac219 (10:26) затёр единый вход из PR #68 — восстановлен в #76. <b>PR #76 слит Owner'ом 04.09</b>, QA пройдено независимо в контейнере; старые #40/#71/#72/#73 закрыты</span><span class="who">Codex · приёмка Claude · слияние Owner</span><span class="done">✔ код в main · на боевом появится после визита Owner'а в консоль (git fetch 401)</span></div>
+      </div>
+    </section>
+
+    <section class="stage">
+      <div class="stage-head">
+        <span class="num">1</span>
+        <div><h2>CRM Synapse Business — своя воронка</h2><div class="goal">Sb ведёт своих клиентов в той же CRM на своём сервере, что стоит клиентам: одна система, два уровня. Первой заводится Татьяна (ALVI + Авокадо), затем Дарья и Анна (Палитра).</div></div>
+        <span class="pill p-wait">В РАБОТЕ · спека GPT → Codex</span>
+      </div>
+      <div class="sub">
+        <div class="row"><span>Мульти-арендность в ops/crm: поле «клиент/тенант» у заявок, этапов, расходов; тенант «synapse» — воронка Sb</span><span class="who">Codex</span><span class="done">POST /leads с тенантом, выборка по тенанту, старые данные ALVI не потеряны (миграция)</span></div>
+        <div class="row"><span>Этапы воронки Sb: контакт → встреча → пилот → оплата → продление; цель по каждому клиенту 50 000 бат/мес (подтверждено 04.09)</span><span class="who">Codex</span><span class="done">этапы видны в кабинете admin, цель задаётся на карточке</span></div>
+        <div class="row"><span>Раздел «Мои клиенты» в кабинете Sb (профиль admin): карточки, переписка, история этапов, ROMI</span><span class="who">Codex</span><span class="done">заведены реальные карточки: Татьяна (ALVI, Авокадо), Дарья и Анна (Палитра) — LIVE, не SAMPLE</span></div>
+        <div class="row"><span>Независимая приёмка живым сценарием: заявка → этап → сводка</span><span class="who">Claude</span><span class="done">строка LIVE в SOSTOYANIE_SERVISOV, запись в PROCESS_LOG</span></div>
+      </div>
+    </section>
+
+    <section class="stage">
+      <div class="stage-head">
+        <span class="num">2</span>
+        <div><h2>Чат с клиентами Sb: три чата по компаниям внутри CRM</h2><div class="goal">Переписка с клиентами ведётся через Telegram-бота и веб-чат с Хью, а в CRM Sb ложится как чат компании (ALVI, Авокадо, Палитра): Владислав и операционный директор видят всё в одном месте. Интерфейс — как в Telegram: список чатов слева, диалог справа. MAX отложен (решение 04.09).</div></div>
+        <span class="pill p-wait">КОД ✔ PR #77 · ПРОД ⏳</span>
+      </div>
+      <div class="sub">
+        <div class="row"><span>Telegram-бот Sb: Owner добавляет его в рабочие чаты с Палитрой (и в любые следующие) с правами администратора; бот пишет входящие и исходящие в чат компании; ответ из интерфейса уходит в тот же чат. Задача Codex «chat/sb-inbox» поставлена 04.09 12:03 (мост + inbox как в Telegram + починка дефекта посетительского чата + уведомления)</span><span class="who">Codex — PR #77 chat/sb-inbox-v2 слит 04.09 (QA независимо) · Owner: бот @synapse_sb_bot создан ✔, .env заполнен ✔, осталось: консоль (токен GitHub, synapse-sync), после деплоя setWebhook и замена засвеченных ключей</span><span class="done">сообщение из Telegram видно в карточке Палитры ≤1 мин, ответ из CRM пришёл в Telegram</span></div>
+        <div class="row"><span>MAX — отложен решением Owner'а 04.09 (платформа только для ИП/юрлиц РФ). Татьяна пока через веб-чат с Хью или Telegram, когда удобно ей</span><span class="who">—</span><span class="done">отложено, вернуться после этапа 3</span></div>
+        <div class="row"><span>Интерфейс чатов Sb «как в Telegram»: слева список чатов (компании, непрочитанные, последнее сообщение, поиск), справа диалог; один и тот же экран для веб-чата Хью и для чатов из Telegram-бота; привязка к карточке и этапу воронки; уведомления Владиславу в Telegram</span><span class="who">Codex · макет утверждает Owner</span><span class="done">три чата (ALVI, Авокадо, Палитра) открываются в кабинете admin, история совпадает с мессенджером</span></div>
+        <div class="row"><span>Веб-чат Хью (chat.synapsebusiness.ru) остаётся входом для клиентов без мессенджера; дефект «не восстанавливается после ошибки» исправлен в PR #77 (в main, на боевом после деплоя)</span><span class="who">Codex · приёмка Claude</span><span class="done">ошибка не переживает перезагрузку, есть «Повторить»</span></div>
+        <div class="row"><span>Виджет для сайта салона (уровень 2 по HUE_ASSISTENT): имя, цвета, приветствие из конфигурации клиента; ставится только после выбора имени собственником</span><span class="who">Codex</span><span class="done">виджет на ALVI работает под именем, выбранным Татьяной</span></div>
+      </div>
+    </section>
+
+    <section class="stage">
+      <div class="stage-head">
+        <span class="num">3</span>
+        <div><h2>Комплект клиента: сайт + редактор + CRM + чат из одного шаблона</h2><div class="goal">Новый клиент заводится одной процедурой, редактор и кабинет получают дизайн его сайта, а не собираются заново.</div></div>
+        <span class="pill p-unk">ПЛАН</span>
+      </div>
+      <div class="sub">
+        <div class="row"><span>Разобрать ALVI как эталон: data-edit разметка, data/site.json, site-apply.js, site-editor (сборка build_editors.py), price-editor, документы content — что общее, что клиентское</span><span class="who">Claude</span><span class="done">документ KOMPLEKT_KLIENTA (Комплект клиента) в AI_HANDOFF</span></div>
+        <div class="row"><span>Тема редактора: цвета, шрифты, фон (видео хиро) берутся из theme.json клиента; редактор живёт на домене клиента (/edit), вход — единый пароль клиента (решение 03.09), без входа в ЛК Sb</span><span class="who">Codex</span><span class="done">редактор Авокадо и ALVI собираются из одного шаблона, различаются только темой</span></div>
+        <div class="row"><span>Скрипт new-client в synapse-server: поддомен, Caddy-блок, тенант CRM, конфиг чата, профиль кабинета, seed документов</span><span class="who">Codex</span><span class="done">Палитра или TaiSabai заведены скриптом за один прогон, без ручных правок</span></div>
+        <div class="row"><span>Чек-лист сдачи дополнен: CRM, чат, редактор, вход — обязательные пункты</span><span class="who">Claude</span><span class="done">CHEK_LIST_SDACHI обновлён</span></div>
+      </div>
+    </section>
+
+    <section class="stage">
+      <div class="stage-head">
+        <span class="num">4</span>
+        <div><h2>Единый стиль кабинета Sb</h2><div class="goal">Кабинет, вход, редактор прайса, CRM, чат — один визуальный язык Synapse; редактор сайта — язык клиента.</div></div>
+        <span class="pill p-unk">ПЛАН</span>
+      </div>
+      <div class="sub">
+        <div class="row"><span>Стандарт оформления Sb: токены цвета/типографики/отступов на базе DESIGN_STANDARD, макет вкладок кабинета</span><span class="who">Claude · утверждает Owner</span><span class="done">новый стандарт (решение 04.09: не текущий кабинет) показан и утверждён Owner'ом по макету</span></div>
+        <div class="row"><span>Единый вход (ветка auth/single-login, решение 03.09) — приёмка и перевод кабинета на сессию</span><span class="who">Codex · приёмка Claude</span><span class="done">один пароль открывает кабинет и редакторы; Татьяна — только свои</span></div>
+        <div class="row"><span>Перевод cabinet.html, price-editor, CRM-раздела и chat на токены стандарта</span><span class="who">Codex</span><span class="done">все экраны Sb проходят чек-лист стиля, desktop + 390 px</span></div>
+      </div>
+    </section>
+
+    <section class="stage">
+      <div class="stage-head">
+        <span class="num">5</span>
+        <div><h2>Передача любому ИИ: GPT ведёт систему без Claude</h2><div class="goal">Инструкции, память и карта исполнителей такие, что ChatGPT берёт задачу и доводит её тем же порядком; где не умеет — знает, кому отдать.</div></div>
+        <span class="pill p-ok">ЗАКРЫТ 04.09 · GPT ведёт</span>
+      </div>
+      <div class="sub">
+        <div class="row"><span>Обобщить PEREDACHA_ROLI_SOL в постоянный «Регламент операционного директора Sb» — без привязки к трём дням и к конкретному ИИ; GPT работает через проект в ChatGPT и вправе ставить задачи Codex'у напрямую (решение 04.09)</span><span class="who">Claude</span><span class="done">✔ PEREDACHA_GPT (GPT ведёт Synapse Business — постоянный режим).md на диске и в проекте; чат «Sb — операционное управление» в ChatGPT-проекте «Ai studio» запущен 04.09</span></div>
+        <div class="row"><span>Память доступна без диска Owner'а: автоматическая выгрузка AI_HANDOFF на Google Диск (сейчас расхождение до 5 дней — решение 29.08); DIRECTION перестал обновляться с 14.08</span><span class="who">Codex (скрипт) · разрешение Owner'а получено 04.09</span><span class="done">копия на Диске не старше суток три дня подряд</span></div>
+        <div class="row"><span>Карта исполнителей с заменами (выбор за Claude, решение 04.09): монтаж — склейка, обрезка, кроссфейды, замер яркости кадров → Codex с ffmpeg в облачном окружении; генерация кадров → Gemini; независимая проверка → второй ИИ; действия в браузере → Owner по пошаговой инструкции</span><span class="who">Claude</span><span class="done">RESOURCE_LIMITS_REGISTRY дополнен колонкой «замена»</span></div>
+        <div class="row"><span>Учебная передача: GPT получает реальную задачу этапа 1–3 и доводит её по регламенту, Claude только проверяет</span><span class="who">GPT · проверка Claude</span><span class="done">⏳ первая задача GPT — спека Codex по этапу 1; решение Owner'а 04.09: «дальше всё делает GPT, кроме того, что он в принципе не может» (браузер, диск, монтаж, скриншоты, слияние — Claude)</span></div>
+      </div>
+    </section>
+
+    <section class="stage">
+      <div class="stage-head">
+        <span class="num">6</span>
+        <div><h2>Приёмка и перенос в рабочие чаты</h2><div class="goal">Клиентские чаты (Alvi, Авокадо, Palitra) работают по комплекту, а не по памяти.</div></div>
+        <span class="pill p-unk">ПЛАН</span>
+      </div>
+      <div class="sub">
+        <div class="row"><span>Независимая проверка каждого этапа не тем, кто делал</span><span class="who">Claude / GPT</span><span class="done">статусы LIVE в SOSTOYANIE_SERVISOV</span></div>
+        <div class="row"><span>Стартовые промты клиентских чатов ссылаются на KOMPLEKT_KLIENTA</span><span class="who">Claude</span><span class="done">STARTOVYY_PROMT и PROMT_* обновлены</span></div>
+        <div class="row"><span>Приёмка Owner'ом: заводит следующего клиента сам по инструкции</span><span class="who">Owner</span><span class="done">клиент появился в CRM Sb, сайт открылся, редактор в его дизайне</span></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="qs">
+    <h2>Решения Owner'а 04.09.2026, на которых построен план</h2>
+    <div class="q"><div class="t">Sb — бизнес Владислава, Claude в нём операционный директор.</div><p>CRM и чаты с клиентами Sb живут на нашем сервере в одной CRM с клиентскими; клиенты сейчас: Татьяна (ALVI, Авокадо), Дарья и Анна (Палитра). Порядок заведения: Татьяна → Палитра.</p></div>
+    <div class="q"><div class="t">Чат = там, где клиент.</div><p>С Дарьей и Анной — Telegram; с Татьяной — MAX (Telegram у неё требует VPN). Бот Sb добавляется Owner'ом в рабочие чаты с правами администратора; каждый чат привязывается к компании в CRM.</p></div>
+    <div class="q"><div class="t">Воронка и цель подтверждены.</div><p>Контакт → встреча → пилот → оплата → продление; 50 000 бат/мес с клиента.</p></div>
+    <div class="q"><div class="t">Редактор сайта — на домене клиента, вход по единому паролю.</div><p>Дизайн редактора = дизайн сайта клиента; вход без ЛК Sb — тот же единый пароль из решения 03.09.</p></div>
+    <div class="q"><div class="t">Стиль ЛК Sb — новый стандарт, показать на утверждение до кода.</div></div>
+    <div class="q"><div class="t">Передача GPT — да.</div><p>Автоматическая выгрузка AI_HANDOFF на Google Диск разрешена; GPT вправе ставить задачи Codex'у напрямую; замену для монтажа выбирает Claude. <b>Дополнение (вечер 04.09): «Дальше всё делает GPT, исключение — только то, что он в принципе сделать не способен».</b> За Claude: браузер Owner'а, диск, монтаж, живая приёмка, слияние PR.</p></div>
+    <div class="q"><div class="t">MAX отложен (04.09, второе решение).</div><p>Делаем Telegram-бота и чат с Хью. Интерфейс чатов Sb — «как в Telegram, там всё удобно»: слева окно со списком чатов.</p></div>
+  </div>
+
+  <div class="legend">
+    <span class="pill p-ok">LIVE</span><span class="pill p-wait">В РАБОТЕ</span><span class="pill p-block">БЛОКЕР</span><span class="pill p-unk">ПЛАН / UNKNOWN</span>
+    <span>Статусы — по конституции: чужой самоотчёт = UNKNOWN до проверки.</span>
+  </div>
+</div>
+
+<script>
+function setView(collapsed){
+  document.body.classList.toggle('collapsed',collapsed);
+  document.getElementById('btn-short').setAttribute('aria-pressed',collapsed?'true':'false');
+  document.getElementById('btn-full').setAttribute('aria-pressed',collapsed?'false':'true');
+  try{localStorage.setItem('sb_plan_view',collapsed?'short':'full')}catch(e){}
+}
+try{ if(localStorage.getItem('sb_plan_view')==='short') setView(true); }catch(e){}
+</script>
+
+</body></html>
