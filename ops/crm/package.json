@@ -1,4 +1,7 @@
 {
   "private": true,
-  "main": "smoke-test.js"
+  "main": "smoke-test.js",
+  "dependencies": {
+    "nodemailer": "^7.0.6"
+  }
 }

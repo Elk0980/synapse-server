@@ -19,6 +19,9 @@ services:
     build:
       context: ./ops/crm
     restart: always
+    env_file:
+      - path: .env
+        required: false
     environment:
       PORT: "8080"
       DATABASE_PATH: /data/crm.sqlite
@@ -26,6 +29,13 @@ services:
       ALLOWED_ORIGINS: ${CRM_ALLOWED_ORIGINS:-}
       RATE_LIMIT_WINDOW_MS: ${CRM_RATE_LIMIT_WINDOW_MS:-60000}
       RATE_LIMIT_MAX: ${CRM_RATE_LIMIT_MAX:-120}
+      LEADS_SMTP_HOST: ${LEADS_SMTP_HOST:-smtp.yandex.ru}
+      LEADS_SMTP_PORT: ${LEADS_SMTP_PORT:-465}
+      LEADS_SMTP_USER: ${LEADS_SMTP_USER:-}
+      LEADS_SMTP_PASSWORD: ${LEADS_SMTP_PASSWORD:-}
+      LEADS_MAIL_FROM: ${LEADS_MAIL_FROM:-}
+      LEADS_NOTIFY_EMAIL: ${LEADS_NOTIFY_EMAIL:-}
+      LEADS_NOTIFY_EMAIL_ALVI: ${LEADS_NOTIFY_EMAIL_ALVI:-}
     expose:
       - "8080"
     volumes:

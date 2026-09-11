@@ -4,6 +4,7 @@ const http = require('node:http');
 const { createHash } = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 const { URL } = require('node:url');
+const { createEmailNotifications } = require('./email-notifications');
 
 const IS_MAIN = require.main === module;
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
@@ -29,6 +30,7 @@ const CABINET_STAGES = new Map([
 ]);
 const CABINET_STAGE_IDS = new Map([...CABINET_STAGES].map(([id, stage]) => [stage, id]));
 const rateLimits = new Map();
+const emailNotifications = createEmailNotifications();
 
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
   throw new Error('PORT должен быть целым числом от 1 до 65535');
@@ -2605,7 +2607,11 @@ async function route(request, response) {
     );
     const row = getLead.get(Number(result.lastInsertRowid));
     insertStageHistory.run(row.id, row.created_at, null, row.stage);
-    return send(response, 201, { ...serializeLead(row), deduplicated: false }, cors);
+    send(response, 201, { ...serializeLead(row), deduplicated: false }, cors);
+    emailNotifications.notifyLead(row).catch((error) => {
+      console.error('[crm] lead email notification failed', error);
+    });
+    return;
   }
 
   if (request.method === 'GET' && url.pathname === '/leads') {
