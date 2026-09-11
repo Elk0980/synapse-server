@@ -49,6 +49,11 @@ test("Telegram webhook creates idempotent tasks and survives CRM errors", async 
   await listen(probe);
   const chatPort = probe.address().port;
   await new Promise((resolve) => probe.close(resolve));
+  const quietStartMinutes = (Math.floor(Date.now() / 60_000) + 180 + 720) % 1440;
+  const quietEndMinutes = (quietStartMinutes + 1) % 1440;
+  const formatTime = (minutes) =>
+    `${String(Math.floor(minutes / 60)).padStart(2, "0")}:` +
+    String(minutes % 60).padStart(2, "0");
   const child = spawn(
     process.execPath,
     ["--experimental-sqlite", "-r", "./webhook-test-fetch.js", "server.js"],
@@ -66,6 +71,8 @@ test("Telegram webhook creates idempotent tasks and survives CRM errors", async 
         TELEGRAM_WEBHOOK_SECRET: "hook-test",
         TELEGRAM_OWNER_ID: "1",
         MOCK_TELEGRAM_URL: `http://127.0.0.1:${mockPort}/telegram`,
+        TELEGRAM_SILENT_START: formatTime(quietStartMinutes),
+        TELEGRAM_SILENT_END: formatTime(quietEndMinutes),
       },
       stdio: ["ignore", "pipe", "pipe"],
     },

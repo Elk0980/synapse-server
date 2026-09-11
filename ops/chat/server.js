@@ -935,7 +935,14 @@ async function pollTelegramUpdates() {
         throw new Error("Telegram getUpdates вернул некорректный ответ");
       }
       for (const update of result.result) {
-        await handleTelegramUpdate(update);
+        try {
+          await handleTelegramUpdate(update);
+        } catch (error) {
+          console.error(
+            `Ошибка обработки Telegram update ${update.update_id}:`,
+            error.message,
+          );
+        }
         if (Number.isSafeInteger(update.update_id)) {
           offset = update.update_id + 1;
         }
