@@ -40,8 +40,8 @@
     "@context": "https://schema.org",
     "@type": "HealthAndBeautyBusiness",
     "name": "ALVI SPA",
-    "@id": "https://spaalvi.ru",
-    "url": "https://spaalvi.ru",
+    "@id": "https://alvi.synapsebusiness.ru/#business",
+    "url": "https://alvi.synapsebusiness.ru/",
     "priceRange": "400-17600 ₽",
     "address": {
       "@type": "PostalAddress",
@@ -77,7 +77,6 @@
     },
     "telephone": "+79246180555",
     "email": "mail@spaalvi.ru",
-    "url": "https://spaalvi.ru",
     "sameAs": [
       "https://2gis.ru/irkutsk/firm/70000001061502048",
       "https://yandex.ru/maps/org/alvi/132486598882/",
@@ -1459,6 +1458,8 @@
     }
 
     .contacts-link__label { position: relative; z-index: 1; font-size: 0.78rem; font-weight: 700; line-height: 1.15; }
+    .contacts-link__copy { position: relative; z-index: 1; display: flex; flex-direction: column; }
+    .contacts-link__hint { font-size: 0.68rem; font-weight: 400; line-height: 1.2; opacity: 0.72; }
 
     @keyframes water-float {
       0%, 100% { transform: translateY(-3px) rotate(-1.5deg); }
@@ -1974,6 +1975,7 @@
     #contacts .contacts-link:hover { background: transparent; border-color: rgba(238,242,235,.65); box-shadow: none; transform: none; }
     #contacts .contacts-link:focus-visible { outline: 2px solid #eef2eb; outline-offset: 4px; background: transparent; box-shadow: none; }
     #contacts .contacts-link__label { font-size: 14px; font-weight: 500; line-height: 1.4; }
+    #contacts .contacts-link__hint { font-size: 12px; }
     #contacts .contacts-link img, #contacts .contacts-link svg { width: 22px; height: 22px; flex-basis: 22px; }
     .after-hero .site-footer {
       padding: 28px clamp(20px, 5vw, 64px) 16px;
@@ -3102,12 +3104,12 @@
         <p class="contacts-hours" data-edit="contacts.dd-2">Ежедневно 09:00–22:00, по предварительной записи</p>
         <nav class="contacts-links" aria-label="Связаться с ALVI">
           <a class="contacts-link" href="https://t.me/+79246180555" target="_blank" rel="noopener" aria-label="Telegram — написать для записи" title="Telegram — запись"><svg class="service-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M22.44 2.28a1.5 1.5 0 0 0-1.54-.18L2.3 9.27c-1.27.5-1.25 1.22-.23 1.53l4.77 1.49 1.84 5.72c.22.62.11.87.75.87.49 0 .71-.23.98-.49l2.29-2.22 4.76 3.52c.88.49 1.51.24 1.73-.81l3.14-14.8c.32-1.29-.49-1.88-1.89-1.8ZM8.72 11.95l9.32-5.88c.47-.28.91-.13.55.19l-7.69 6.94-.3 3.2-1.88-4.45Z"/></svg><span class="contacts-link__label">Telegram · запись</span></a>
-          <a class="contacts-link" href="https://t.me/spa_stio_alvi" target="_blank" rel="noopener" aria-label="Telegram-канал ALVI" title="Telegram — канал ALVI"><svg class="service-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M22.44 2.28a1.5 1.5 0 0 0-1.54-.18L2.3 9.27c-1.27.5-1.25 1.22-.23 1.53l4.77 1.49 1.84 5.72c.22.62.11.87.75.87.49 0 .71-.23.98-.49l2.29-2.22 4.76 3.52c.88.49 1.51.24 1.73-.81l3.14-14.8c.32-1.29-.49-1.88-1.89-1.8ZM8.72 11.95l9.32-5.88c.47-.28.91-.13.55.19l-7.69 6.94-.3 3.2-1.88-4.45Z"/></svg><span class="contacts-link__label">Telegram · Канал</span></a>
+          <a class="contacts-link" href="tel:+79246180555" aria-label="Позвонить +7 924 618-05-55" title="Позвонить +7 924 618-05-55"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 3.5 10 7.8 7.8 10c1.3 2.8 3.4 4.9 6.2 6.2l2.2-2.2 4.3 2.8-.7 3.2c-.2.8-.9 1.3-1.7 1.3C9.6 20.8 3.2 14.4 2.7 5.9c0-.8.5-1.5 1.3-1.7Z"/></svg><span class="contacts-link__label">Позвонить</span></a>
+          <a class="contacts-link" href="https://max.ru/u/f9LHodD0cOIlskq70SXP8wscTW7u6JcnxZXmoxa5hdxjK58JpJDAM7njO68" target="_blank" rel="noopener" aria-label="ALVI в MAX" title="MAX"><svg class="service-icon" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><path fill="currentColor" d="M50.7571 0.261719C78.2929 0.261719 99.8857 22.5974 99.8857 50.1474C99.8857 77.6974 77.6071 99.4903 51.0214 99.4903C41.5857 99.4903 37.0143 98.1617 29.65 92.9474C29.1429 92.5903 28.45 92.6831 28.0214 93.1403C22.3571 99.1831 7.85 103.426 7.18571 95.176C7.18571 80.7903 0 71.4474 0 49.876C0 21.5546 23.2214 0.261719 50.7571 0.261719ZM51.5286 24.8117C38.4643 24.126 28.2643 33.1974 26.0143 47.3831C24.15 59.1332 27.45 73.4546 30.2786 74.176C31.4786 74.4832 34.3571 72.276 36.4571 70.2974C36.85 69.926 37.45 69.8617 37.9071 70.1474C41.1786 72.1474 44.8786 73.6474 48.9571 73.8617C62.3714 74.5617 74.2571 64.0617 74.9643 50.6474C75.6643 37.2331 64.9429 25.5046 51.5286 24.8046V24.8117Z"/></svg><span class="contacts-link__copy"><span class="contacts-link__label">MAX</span><span class="contacts-link__hint">нужно приложение MAX</span></span></a>
           <a class="contacts-link" href="https://vk.com/spa_studio_alvi" target="_blank" rel="noopener" aria-label="Сообщество ALVI во ВКонтакте" title="ВКонтакте"><svg class="service-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M5.4 8.1h3c.1 3.1 1.5 4.4 2.6 4.7V8.1h2.8v2.7c1.1-.1 2.3-1.3 2.7-2.7h2.8a7.7 7.7 0 0 1-2.5 4c1.1.6 2.7 2 3.3 3.8H17c-.5-1.3-1.6-2.3-3.2-2.5v2.5h-.3c-4.7 0-7.4-3.2-8.1-7.8Z"/></svg><span class="contacts-link__label">ВКонтакте</span></a>
-          <a class="contacts-link" href="https://max.ru/u/f9LHodD0cOIlskq70SXP8wscTW7u6JcnxZXmoxa5hdxjK58JpJDAM7njO68" target="_blank" rel="noopener" aria-label="ALVI в MAX" title="MAX"><svg class="service-icon" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><path fill="currentColor" d="M50.7571 0.261719C78.2929 0.261719 99.8857 22.5974 99.8857 50.1474C99.8857 77.6974 77.6071 99.4903 51.0214 99.4903C41.5857 99.4903 37.0143 98.1617 29.65 92.9474C29.1429 92.5903 28.45 92.6831 28.0214 93.1403C22.3571 99.1831 7.85 103.426 7.18571 95.176C7.18571 80.7903 0 71.4474 0 49.876C0 21.5546 23.2214 0.261719 50.7571 0.261719ZM51.5286 24.8117C38.4643 24.126 28.2643 33.1974 26.0143 47.3831C24.15 59.1332 27.45 73.4546 30.2786 74.176C31.4786 74.4832 34.3571 72.276 36.4571 70.2974C36.85 69.926 37.45 69.8617 37.9071 70.1474C41.1786 72.1474 44.8786 73.6474 48.9571 73.8617C62.3714 74.5617 74.2571 64.0617 74.9643 50.6474C75.6643 37.2331 64.9429 25.5046 51.5286 24.8046V24.8117Z"/></svg><span class="contacts-link__label">MAX</span></a>
+          <a class="contacts-link" href="https://t.me/spa_stio_alvi" target="_blank" rel="noopener" aria-label="Telegram-канал ALVI" title="Telegram — канал ALVI"><svg class="service-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M22.44 2.28a1.5 1.5 0 0 0-1.54-.18L2.3 9.27c-1.27.5-1.25 1.22-.23 1.53l4.77 1.49 1.84 5.72c.22.62.11.87.75.87.49 0 .71-.23.98-.49l2.29-2.22 4.76 3.52c.88.49 1.51.24 1.73-.81l3.14-14.8c.32-1.29-.49-1.88-1.89-1.8ZM8.72 11.95l9.32-5.88c.47-.28.91-.13.55.19l-7.69 6.94-.3 3.2-1.88-4.45Z"/></svg><span class="contacts-link__label">Telegram · Канал</span></a>
           <a class="contacts-link" href="https://yandex.ru/maps/org/alvi/132486598882/" target="_blank" rel="noopener noreferrer" aria-label="ALVI на Яндекс Картах" title="Яндекс Карты"><svg class="service-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.6" d="M12 1.5a8 8 0 0 0-8 8c0 5.6 6.9 12.4 7.2 12.7a1.1 1.1 0 0 0 1.6 0c.3-.3 7.2-7.1 7.2-12.7a8 8 0 0 0-8-8Z"/><circle cx="12" cy="9.5" r="2.35" fill="none" stroke="currentColor" stroke-width="1.75"/></svg><span class="contacts-link__label">Яндекс Карты</span></a>
           <a class="contacts-link" href="https://2gis.ru/irkutsk/firm/70000001061502048" target="_blank" rel="noopener noreferrer" aria-label="ALVI в 2ГИС" title="2ГИС"><svg class="service-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.6" d="M12 1.5a8 8 0 0 0-8 8c0 5.6 6.9 12.4 7.2 12.7a1.1 1.1 0 0 0 1.6 0c.3-.3 7.2-7.1 7.2-12.7a8 8 0 0 0-8-8Z"/><path fill="currentColor" d="M7.3 8.1c.1-2 1.5-3.2 3.8-3.2 2.2 0 3.6 1.1 3.6 2.9 0 1.4-.7 2.2-2.5 3.2l-1.3.7c-.8.5-1.2.8-1.3 1.3h5.2v2.1H7.2c0-2.3.8-3.5 2.8-4.7l1.5-.9c.7-.4 1-.8 1-1.4 0-.7-.5-1.2-1.5-1.2s-1.5.5-1.6 1.3l-2.1-.1Z"/></svg><span class="contacts-link__label">2ГИС</span></a>
-          <a class="contacts-link" href="tel:+79246180555" aria-label="Позвонить +7 924 618-05-55" title="Позвонить +7 924 618-05-55"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 3.5 10 7.8 7.8 10c1.3 2.8 3.4 4.9 6.2 6.2l2.2-2.2 4.3 2.8-.7 3.2c-.2.8-.9 1.3-1.7 1.3C9.6 20.8 3.2 14.4 2.7 5.9c0-.8.5-1.5 1.3-1.7Z"/></svg><span class="contacts-link__label">Позвонить</span></a>
         </nav>
         <form class="callback-form" id="callback-form" novalidate>
           <div class="callback-form__heading">
