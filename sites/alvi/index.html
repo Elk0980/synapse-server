@@ -3019,14 +3019,7 @@
           </div>
 
           <section class="quiz-result" id="quiz-result" tabindex="-1" aria-live="polite" aria-atomic="true" hidden>
-            <div class="quiz-result__body">
-              <h3 id="quiz-result-title"></h3>
-              <p id="quiz-result-copy"></p>
-              <div class="pc__actions">
-                <a id="quiz-result-action" class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-                <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
-              </div>
-            </div>
+            <div class="quiz-result__grid" id="quiz-result-grid"></div>
           </section>
         </form>
       </div>
@@ -3254,9 +3247,7 @@
       const scrollCue = document.querySelector("#scroll-cue");
       const quizForm = document.querySelector("#spa-quiz");
       const quizResult = document.querySelector("#quiz-result");
-      const quizResultTitle = document.querySelector("#quiz-result-title");
-      const quizResultCopy = document.querySelector("#quiz-result-copy");
-      const quizResultAction = document.querySelector("#quiz-result-action");
+      const quizResultGrid = document.querySelector("#quiz-result-grid");
       const compactQuery = window.matchMedia("(max-width: 899px)");
       const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
@@ -3288,80 +3279,108 @@
         return t * t * (3 - 2 * t);
       };
 
-      const QUIZ_PROGRAMS = Object.freeze({
-        relax: Object.freeze({ title: "Релакс — 3 500 ₽", copy: "SPA-программа с маслами. Мягкая программа для первого знакомства с ALVI." }),
-        soul: Object.freeze({ title: "Душевное расслабление — 5 600 ₽", copy: "Комплексная SPA-программа. Тело, голова и мысли отпускают по очереди." }),
-        aroma: Object.freeze({ title: "Ароматное погружение — 6 300 ₽", copy: "SPA-ритуал с ароматерапией. Глубокий ритуал с маслами." }),
-        back: Object.freeze({ title: "Массаж спины и ног — 2 800 ₽", copy: "Прицельный массаж. Работа с тем, что болит к вечеру." }),
-        pair: Object.freeze({ title: "Массаж на двоих — от 5 600 ₽", copy: "Два стола в одном кабинете. Хороший первый шаг для знакомства со SPA-программами на двоих." }),
-        renewal: Object.freeze({ title: "Обновление — 8 900 ₽", copy: "SPA-программа на двоих для первого совместного визита." }),
-        calm: Object.freeze({ title: "Успокаивающая — 10 900 ₽", copy: "Для двоих в одном пространстве: процедуры проходят одновременно." }),
-        spaDay: Object.freeze({ title: "SPA-день — 13 600 ₽", copy: "Программа-путешествие на несколько часов, с чаем и паузами." }),
-        gift: Object.freeze({ title: "Сертификат ALVI", copy: "Сертификат оформляется на любую сумму или на конкретную программу из прайса. Электронный приходит в мессенджер сразу после оплаты — дарить можно в тот же день, из любого города. Бумажный — в конверте с лентой: по Иркутску привозим бесплатно, в отдалённые районы — за доплату, стоимость скажем в чате." })
+      const DEFAULT_QUIZ_ITEMS = new Set(["s1-1", "s1-7", "s1-9", "s2-1", "s2-2", "s2-3", "s4-1", "s4-2"]);
+
+      // Эта таблица сохраняет прежний лучший результат каждой комбинации. Для второго
+      // результата считаем близость к комбинациям программы по тем же трём ответам.
+      const QUIZ_MATCHES = Object.freeze({
+        "self|hour|tension": "s4-2", "self|hour|restore": "s1-9", "self|hour|together": "s1-9",
+        "self|few-hours|tension": "s1-1", "self|few-hours|restore": "s1-7", "self|few-hours|together": "s1-1",
+        "self|half-day|tension": "s1-7", "self|half-day|restore": "s1-7", "self|half-day|together": "s1-7",
+        "couple|hour|tension": "s4-1", "couple|hour|restore": "s4-1", "couple|hour|together": "s4-1",
+        "couple|few-hours|tension": "s2-2", "couple|few-hours|restore": "s2-1", "couple|few-hours|together": "s2-1",
+        "couple|half-day|tension": "s2-3", "couple|half-day|restore": "s2-3", "couple|half-day|together": "s2-3"
       });
 
-      // ВЫБРАНО БЕЗ OWNER'А: прозрачная таблица результата для всех 27
-      // комбинаций квиза. Она использует только программы и цены из ТЗ.
-      const QUIZ_MATCHES = Object.freeze({
-        "self|hour|tension": "back",
-        "self|hour|restore": "relax",
-        "self|hour|together": "relax",
-        "self|few-hours|tension": "soul",
-        "self|few-hours|restore": "aroma",
-        "self|few-hours|together": "soul",
-        "self|half-day|tension": "aroma",
-        "self|half-day|restore": "aroma",
-        "self|half-day|together": "aroma",
-        "couple|hour|tension": "pair",
-        "couple|hour|restore": "pair",
-        "couple|hour|together": "pair",
-        "couple|few-hours|tension": "renewal",
-        "couple|few-hours|restore": "calm",
-        "couple|few-hours|together": "calm",
-        "couple|half-day|tension": "spaDay",
-        "couple|half-day|restore": "spaDay",
-        "couple|half-day|together": "spaDay",
-        "gift|hour|tension": "gift",
-        "gift|hour|restore": "gift",
-        "gift|hour|together": "gift",
-        "gift|few-hours|tension": "gift",
-        "gift|few-hours|restore": "gift",
-        "gift|few-hours|together": "gift",
-        "gift|half-day|tension": "gift",
-        "gift|half-day|restore": "gift",
-        "gift|half-day|together": "gift"
-      });
+      const quizProfiles = Object.entries(QUIZ_MATCHES).reduce((profiles, [answers, id]) => {
+        (profiles[id] ||= []).push(answers.split("|"));
+        return profiles;
+      }, {});
+
+      function quizScore(candidate, answers) {
+        const profiles = quizProfiles[candidate.item.id];
+        if (profiles) return Math.max(...profiles.map((profile) =>
+          profile.reduce((score, value, index) => score + Number(value === answers[index]), 0)));
+
+        // Новые отмеченные услуги тоже участвуют: назначение берём из раздела,
+        // длительность и приоритет — из уже заполненных полей самой услуги.
+        const duration = String(candidate.item.duration || "");
+        const hours = Number((duration.match(/([\d.,]+)\s*час/) || [])[1]?.replace(",", ".") || 0);
+        const minutes = Number((duration.match(/(\d+)\s*мин/) || [])[1] || 0) + hours * 60;
+        const time = minutes <= 90 ? "hour" : minutes <= 180 ? "few-hours" : "half-day";
+        const text = `${candidate.item.title} ${candidate.item.desc || ""} ${candidate.item.who || ""}`.toLowerCase();
+        const priority = /дво|пар|вместе/.test(text) ? "together"
+          : /бол|спин|напряж|спорт|восстанов/.test(text) ? "tension" : "restore";
+        const recipient = candidate.category.block === "two" ? "couple" : "self";
+        return [recipient, time, priority].reduce((score, value, index) => score + Number(value === answers[index]), 0);
+      }
+
+      function quizPrice(value) {
+        const match = String(value || "").match(/[\d][\d \u00a0]*/);
+        return match ? `от ${match[0].trim()} ₽` : String(value || "");
+      }
+
+      function quizDescription(item) {
+        return item.desc || item.who || item.composition || (Array.isArray(item.items) ? item.items.slice(0, 2).join(", ") : "");
+      }
+
+      async function loadQuizData() {
+        if (window.AlviPrice) return AlviPrice.load(["/api/price", "data/price.json"]);
+        const response = await fetch("/api/price").catch(() => fetch("data/price.json"));
+        if (!response.ok) throw new Error("Не удалось загрузить программы");
+        return response.json();
+      }
+
+      function renderQuizResults(items, links) {
+        const escape = (value) => String(value || "").replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[char]);
+        quizResultGrid.innerHTML = items.map((item, index) => {
+          const photo = window.AlviPrice ? AlviPrice.photoOf(item) : "";
+          return `<article class="quiz-result__card"${photo ? ` style="--card-photo:url(${JSON.stringify(photo)})"` : ""}>
+            <div class="quiz-result__body">
+              <p class="quiz-result__label">${index ? "Тоже подойдёт" : "Лучше всего подходит"}</p>
+              <h3>${escape(item.card || item.title)}</h3>
+              <p class="quiz-result__copy">${escape(quizDescription(item))}</p>
+              <p class="quiz-result__price">${escape(quizPrice(item.price))}</p>
+              <div class="pc__actions">
+                <a class="pc__button pc__button--main" href="${escape(links.book)}" target="_blank" rel="noopener">Записаться</a>
+                <a class="pc__button" href="${escape(links.chat)}" target="_blank" rel="noopener">Помочь с выбором</a>
+              </div>
+            </div>
+          </article>`;
+        }).join("");
+      }
 
       function setupQuiz() {
-        if (!quizForm || !quizResult || !quizResultTitle || !quizResultCopy) return;
-
+        if (!quizForm || !quizResult || !quizResultGrid) return;
         const consent = quizForm.querySelector('[name="personal_data_consent"]');
         const submitButton = quizForm.querySelector('[type="submit"]');
-        const syncConsent = () => {
-          if (submitButton) submitButton.disabled = !consent?.checked;
-        };
+        const syncConsent = () => { if (submitButton) submitButton.disabled = !consent?.checked; };
         consent?.addEventListener("change", syncConsent);
         syncConsent();
 
-        quizForm.addEventListener("submit", (event) => {
+        quizForm.addEventListener("submit", async (event) => {
           event.preventDefault();
           const formData = new FormData(quizForm);
-          const key = [formData.get("recipient"), formData.get("time"), formData.get("priority")].join("|");
-          const program = QUIZ_PROGRAMS[QUIZ_MATCHES[key]];
-          if (!program) return;
-
-          quizResultTitle.textContent = program.title;
-          quizResultCopy.textContent = program.copy;
-          if (quizResultAction) {
-            const isGift = formData.get("recipient") === "gift";
-            quizResultAction.textContent = isGift ? "Оформить сертификат" : "Записаться";
-            quizResultAction.href = isGift
-              ? "https://t.me/+79246180555"
-              : "https://n1070017.yclients.com/";
+          const answers = [formData.get("recipient"), formData.get("time"), formData.get("priority")];
+          submitButton.disabled = true;
+          quizResult.hidden = true;
+          try {
+            const priceData = await loadQuizData();
+            const candidates = [];
+            (priceData.categories || []).forEach((category) => (category.items || []).forEach((item) => {
+              const enabled = item.quizEnabled === true || (item.quizEnabled == null && DEFAULT_QUIZ_ITEMS.has(item.id));
+              if (enabled) candidates.push({ item, category });
+            }));
+            candidates.sort((left, right) => quizScore(right, answers) - quizScore(left, answers));
+            const selected = candidates.slice(0, 2).map(({ item }) => item);
+            if (!selected.length) return;
+            renderQuizResults(selected, priceData.links || { book: "https://n1070017.yclients.com/", chat: "https://t.me/+79246180555" });
+            quizResult.hidden = false;
+            quizResult.focus?.({ preventScroll: true });
+            quizResult.scrollIntoView({ behavior: reducedMotionQuery.matches ? "auto" : "smooth", block: "start" });
+          } finally {
+            syncConsent();
           }
-          quizResult.hidden = false;
-          quizResult.focus?.({ preventScroll: true });
-          quizResult.scrollIntoView({ behavior: reducedMotionQuery.matches ? "auto" : "smooth", block: "start" });
         });
       }
 
@@ -4173,13 +4192,18 @@
   <style>/* Отзыв в хиро кликабельный; итог квиза выглядит как карточка услуги с фото */
     .hero-review { cursor: pointer; transition: transform 200ms, border-color 200ms; }
     .hero-review:hover, .hero-review:focus-visible { transform: translateY(-2px); outline: none; }
-    .quiz-result { position: relative; overflow: hidden; padding: 0.95rem; min-height: 26rem; display: flex; flex-direction: column; justify-content: flex-end; background: #1b241d; border: 1px solid rgba(255,255,255,.18); border-radius: 1.25rem; color: var(--ink); }
-    .quiz-result::before, .quiz-result::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
-    .quiz-result::before { z-index: 0; background-image: var(--card-photo); background-size: cover; background-position: center 45%; filter: saturate(1.08); }
-    .quiz-result::after { z-index: 1; background: linear-gradient(rgba(8,16,12,.14) 0%, rgba(8,16,12,.08) 55%, rgba(8,16,12,.30) 100%); }
-    .quiz-result__body { position: relative; z-index: 2; padding: clamp(1.2rem, 2.4vw, 1.9rem); border-radius: .95rem; background: linear-gradient(rgba(6,13,9,.80) 0%, rgba(6,13,9,.64) 100%); backdrop-filter: blur(4px); }
-    .quiz-result h3 { margin: 0; font-family: Lora, Georgia, serif; font-weight: 400; line-height: 1.2; font-size: clamp(1.6rem, 3vw, 2.3rem); color: var(--ink); }
-    .quiz-result p { margin: .85rem 0 0; color: var(--ink-dim); line-height: 1.65; }
+    .quiz-result { padding: 0; border: 0; background: transparent; color: var(--ink); }
+    .quiz-result__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+    .quiz-result__card { position: relative; overflow: hidden; min-height: 28rem; display: flex; align-items: flex-end; padding: .95rem; border: 1px solid rgba(255,255,255,.18); border-radius: 1.25rem; background: #1b241d; isolation: isolate; }
+    .quiz-result__card::before, .quiz-result__card::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
+    .quiz-result__card::before { z-index: -2; background-image: var(--card-photo); background-size: cover; background-position: center 45%; filter: saturate(1.08); }
+    .quiz-result__card::after { z-index: -1; background: linear-gradient(rgba(8,16,12,.12) 0%, rgba(8,16,12,.08) 40%, rgba(8,16,12,.62) 100%); }
+    .quiz-result__body { width: 100%; padding: clamp(1.2rem, 2.4vw, 1.9rem); border-radius: .95rem; background: linear-gradient(rgba(6,13,9,.84) 0%, rgba(6,13,9,.68) 100%); backdrop-filter: blur(4px); }
+    .quiz-result h3 { margin: .35rem 0 0; font-family: Lora, Georgia, serif; font-weight: 400; line-height: 1.2; font-size: clamp(1.45rem, 2.4vw, 2rem); color: var(--ink); }
+    .quiz-result p { margin: .75rem 0 0; color: var(--ink-dim); line-height: 1.55; }
+    .quiz-result .quiz-result__label { margin: 0; color: var(--gold); font-size: .76rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+    .quiz-result .quiz-result__price { color: var(--gold); font: 400 1.4rem/1.2 Lora, Georgia, serif; }
+    @media (max-width: 44rem) { .quiz-result__grid { grid-template-columns: 1fr; } .quiz-result__card { min-height: 27rem; } }
     /* Выбранный вариант квиза: тёмная подложка с золотой рамкой, а не светлая заливка */
     .after-hero .quiz-option:has(input:checked) { background: rgba(217, 192, 138, 0.14); border-color: rgba(217, 192, 138, 0.85); color: #fffdf8; box-shadow: inset 0 0 0 1px rgba(217, 192, 138, 0.35); }
     .after-hero .quiz-option:has(input:checked):hover { background: rgba(217, 192, 138, 0.22); color: #fffdf8; }
@@ -4199,45 +4223,6 @@
       q.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
     });
 
-    var box = document.getElementById("quiz-result");
-    if (!box) return;
-    var titleEl = document.getElementById("quiz-result-title");
-    var copyEl = document.getElementById("quiz-result-copy");
-    if (titleEl && copyEl && !box.querySelector(".quiz-result__body")) {
-      var body = document.createElement("div");
-      body.className = "quiz-result__body";
-      box.appendChild(body);
-      body.appendChild(titleEl);
-      body.appendChild(copyEl);
-    }
-    var items = null;
-    var loadItems = function () {
-      if (items) return Promise.resolve(items);
-      var take = function (d) {
-        items = [];
-        (d.categories || []).forEach(function (c) { (c.items || []).forEach(function (it) { items.push(it); }); });
-        return items;
-      };
-      return fetch("/api/price").then(function (r) { if (!r.ok) throw 0; return r.json(); })
-        .catch(function () { return fetch("data/price.json").then(function (x) { return x.json(); }); })
-        .then(take).catch(function () { items = []; return items; });
-    };
-    var norm = function (v) { return String(v || "").replace(/[«»"]/g, "").split("—")[0].trim().toLowerCase(); };
-    var apply = function () {
-      if (box.hidden) return;
-      var t = norm(titleEl && titleEl.textContent);
-      if (!t) return;
-      loadItems().then(function (list) {
-        var hit = null;
-        for (var i = 0; i < list.length; i++) { if (norm(list[i].title) === t) { hit = list[i]; break; } }
-        if (!hit) { for (var j = 0; j < list.length; j++) { var n = norm(list[j].title); if (n && (n.indexOf(t) !== -1 || t.indexOf(n) !== -1)) { hit = list[j]; break; } } }
-        if (!hit) return;
-        var photo = AlviPrice.photoOf(hit);
-        box.style.setProperty("--card-photo", "url(" + JSON.stringify(photo) + ")");
-      });
-    };
-    new MutationObserver(apply).observe(box, { attributes: true, childList: true, subtree: true, characterData: true });
-    apply();
   })();
   </script>
 </body>
