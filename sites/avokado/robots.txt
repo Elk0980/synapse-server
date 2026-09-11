@@ -1,3 +1,3 @@
 User-agent: *
 Allow: /
-Sitemap: https://avokado.synapsebusiness.ru/sitemap.xml
+Sitemap: https://avokado38.ru/sitemap.xml

@@ -823,7 +823,7 @@
         {
           "key": "contacts.text-link-7",
           "label": "Ссылка",
-          "value": "mail@spaalvi.ru",
+          "value": "spaalvi@mail.ru",
           "multiline": false
         },
         {
@@ -835,7 +835,7 @@
         {
           "key": "contacts.text-link-8",
           "label": "Ссылка",
-          "value": "spaalvi.ru →",
+          "value": "spaalvi-38.ru →",
           "multiline": false
         }
       ],
