@@ -1108,6 +1108,32 @@
       },{threshold:.05});
       io2.observe(hero);
 
+      // Временный режим проверки нового вступления: null отключает повтор хвоста; для включения заменить на подобранную отметку в секундах.
+      var HERO_TAIL_LOOP_START = null;
+      var hv = document.getElementById('herovid');
+      if(hv && Number.isFinite(HERO_TAIL_LOOP_START)){
+        var loopStart = HERO_TAIL_LOOP_START;
+        var restartLoop = function(){
+          hv.currentTime = loopStart;
+          var p = hv.play();
+          if(p && p.catch){ p.catch(function(){}); }
+        };
+
+        if('requestVideoFrameCallback' in hv){
+          var watchFrame = function(now, metadata){
+            var end = Number.isFinite(hv.duration) ? hv.duration : 15.9166;
+            if(metadata.mediaTime >= end - .04){ restartLoop(); }
+            hv.requestVideoFrameCallback(watchFrame);
+          };
+          hv.requestVideoFrameCallback(watchFrame);
+        }else{
+          hv.addEventListener('timeupdate', function(){
+            var end = Number.isFinite(hv.duration) ? hv.duration : 15.9166;
+            if(hv.currentTime >= end - .15){ restartLoop(); }
+          });
+        }
+        hv.addEventListener('ended', restartLoop);
+      }
     }catch(err){
       document.querySelectorAll('.rv').forEach(function(el){ el.classList.add('on'); });
       document.getElementById('cta').classList.add('on');
