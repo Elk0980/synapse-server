@@ -308,6 +308,13 @@ taisabai.synapsebusiness.ru {
   import static
 }
 
+# --- Черновики сайтов -------------------------------------------------------
+drafts.synapsebusiness.ru {
+  root * /srv/sites/drafts
+  import draft
+  import static
+}
+
 # --- Synapse Business: страница входа (черновик) ----------------------------
 vhod.synapsebusiness.ru {
   root * /srv/sites/vhod
