@@ -66,8 +66,10 @@
     const items = (it.items || []).map((x) => `            <li>${esc(x)}</li>`).join('\n');
     const star = opts.editor ? opts.starHtml(it) : (isPopular(data, it.id) ? '<span class="pc__badge" title="Популярная программа">★ популярное</span>' : '');
     return `        <article class="pc" id="${esc(it.id)}" data-id="${esc(it.id)}">
-          ${star}
-          <h3 class="pc__title">${esc(it.title)}</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">${esc(it.title)}</h3>
+            ${star}
+          </div>
           <ul class="pc__list">
 ${items}
           </ul>

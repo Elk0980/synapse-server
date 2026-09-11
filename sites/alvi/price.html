@@ -129,7 +129,8 @@
       #s8::after { content: ""; display: block; clear: both; }
     }
     .pc { position: relative; }
-    .pc__badge { position: absolute; top: 1rem; right: 1.1rem; color: var(--gold); font-size: 0.78rem; letter-spacing: 0.04em; }
+    .pc__heading { display: flex; align-items: baseline; gap: 12px; }
+    .pc__badge { flex-shrink: 0; color: var(--gold); font-size: 0.78rem; letter-spacing: 0.04em; }
     .pt__star { color: var(--gold); margin-right: 0.35rem; }
     .ps__note { margin: 0 0 1.2rem; color: var(--ink-dim); font-size: 0.92rem; }
 
@@ -142,6 +143,7 @@
     }
     .pc + .pc { margin-top: 1rem; }
     .pc__title {
+      min-width: 0;
       margin: 0; font-family: "Lora", Georgia, serif; font-weight: 400;
       font-size: clamp(1.25rem, 2.2vw, 1.65rem); line-height: 1.25;
     }
@@ -222,6 +224,11 @@
       .floating-cta__row { justify-content: center; }
       .floating-cta__button { min-width: 0; flex: 1 1 0; padding: 0.7rem 0.6rem; font-size: 0.74rem; }
       .pc__button { width: 100%; }
+    }
+
+    @media (max-width: 35rem) {
+      .pc__heading { flex-direction: column; align-items: flex-start; gap: 0.35rem; }
+      .pc__badge { order: -1; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -331,7 +338,9 @@
       <section class="ps" id="s1">
         <h2 class="ps__title">SPA-программы для одного</h2>
         <article class="pc" id="s1-1">
-          <h3 class="pc__title">Программа «Душевное расслабление»</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Душевное расслабление»</h3>
+          </div>
           <ul class="pc__list">
             <li>Парение в фитобочке с лечебными травами</li>
             <li>Скрабирование «Марципан»</li>
@@ -349,7 +358,9 @@
         </article>
 
         <article class="pc" id="s1-2">
-          <h3 class="pc__title">Программа «Здоровая спина»</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Здоровая спина»</h3>
+          </div>
           <ul class="pc__list">
             <li>Фитобочка с лечебными травами</li>
             <li>Обертывание «Лечебно-грязевое»</li>
@@ -368,7 +379,9 @@
         </article>
 
         <article class="pc" id="s1-3">
-          <h3 class="pc__title">Программа «Идеальное тело»</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Идеальное тело»</h3>
+          </div>
           <ul class="pc__list">
             <li>Парение в фитобочке с лечебными травами</li>
             <li>Скрабирование «Антицеллюлитное»</li>
@@ -387,7 +400,9 @@
         </article>
 
         <article class="pc" id="s1-4">
-          <h3 class="pc__title">Программа «Медовое наслаждение»</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Медовое наслаждение»</h3>
+          </div>
           <ul class="pc__list">
             <li>Медовый массаж спины</li>
             <li>Парение в фитобочке с лечебными травами</li>
@@ -407,7 +422,9 @@
         </article>
 
         <article class="pc" id="s1-5">
-          <h3 class="pc__title">Программа «Майами с камнями»</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Майами с камнями»</h3>
+          </div>
           <ul class="pc__list">
             <li>Парение в фитобочке с лечебными травами</li>
             <li>Скрабирование «Кокос»</li>
@@ -427,7 +444,9 @@
         </article>
 
         <article class="pc" id="s1-6">
-          <h3 class="pc__title">Программа «Цитрусовый рай»</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Цитрусовый рай»</h3>
+          </div>
           <ul class="pc__list">
             <li>Парение в фитобочке с лечебными травами</li>
             <li>Скрабирование «Цитрусовое»</li>
@@ -444,7 +463,9 @@
         </article>
 
         <article class="pc" id="s1-7">
-          <h3 class="pc__title">Программа «Ароматное погружение»</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Ароматное погружение»</h3>
+          </div>
           <ul class="pc__list">
             <li>Парение в фитобочке с лечебными травами</li>
             <li>Скрабирование «Дикие ягоды»</li>
@@ -463,7 +484,9 @@
         </article>
 
         <article class="pc" id="s1-8">
-          <h3 class="pc__title">Программа «Для беременных»</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Для беременных»</h3>
+          </div>
           <ul class="pc__list">
             <li>Расслабляющий массаж головы</li>
             <li>Расслабляющий массаж стоп и рук</li>
@@ -480,7 +503,9 @@
         </article>
 
         <article class="pc" id="s1-9">
-          <h3 class="pc__title">Программа «Релакс»</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Релакс»</h3>
+          </div>
           <ul class="pc__list">
             <li>Парение в фитобочке с лечебными травами</li>
             <li>Гигиенический душ</li>
@@ -495,7 +520,9 @@
         </article>
 
         <article class="pc" id="s1-10">
-          <h3 class="pc__title">Программа «Роскошное преображение»</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Роскошное преображение»</h3>
+          </div>
           <ul class="pc__list">
             <li>Парение в фитобочке с лечебными травами</li>
             <li>Скрабирование «Марципан»</li>
@@ -516,7 +543,9 @@
         </article>
 
         <article class="pc" id="s1-11">
-          <h3 class="pc__title">Программа для мужчин «Антистресс»</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа для мужчин «Антистресс»</h3>
+          </div>
           <ul class="pc__list">
             <li>Парение в фитобочке с лечебными травами</li>
             <li>Скрабирование «Хвойное»</li>
@@ -539,7 +568,9 @@
       <section class="ps" id="s2">
         <h2 class="ps__title">SPA-программы для двоих</h2>
         <article class="pc" id="s2-1">
-          <h3 class="pc__title">«Успокаивающая, расслабляющая»</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">«Успокаивающая, расслабляющая»</h3>
+          </div>
           <ul class="pc__list">
             <li>Парение в фитобочке с лечебными травами</li>
             <li>Скрабирование «Марципан»</li>
@@ -557,7 +588,9 @@
         </article>
 
         <article class="pc" id="s2-2">
-          <h3 class="pc__title">«Обновление»</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">«Обновление»</h3>
+          </div>
           <ul class="pc__list">
             <li>Парение в фитобочке с лечебными травами</li>
             <li>Скрабирование «Хвойное»</li>
@@ -573,7 +606,9 @@
         </article>
 
         <article class="pc" id="s2-3">
-          <h3 class="pc__title">«Спа-день»</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">«Спа-день»</h3>
+          </div>
           <ul class="pc__list">
             <li>Парение в фитобочке с лечебными травами</li>
             <li>Скрабирование «Дикие ягоды»</li>
@@ -593,7 +628,9 @@
         </article>
 
         <article class="pc" id="s2-4">
-          <h3 class="pc__title">«Райский отдых»</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">«Райский отдых»</h3>
+          </div>
           <ul class="pc__list">
             <li>Парение в фитобочке с лечебными травами</li>
             <li>Скрабирование «Ягодный джем»</li>
@@ -614,7 +651,9 @@
         </article>
 
         <article class="pc" id="s2-5">
-          <h3 class="pc__title">«Релакс-мини»</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">«Релакс-мини»</h3>
+          </div>
           <ul class="pc__list">
             <li>Парение в фитобочке с лечебными травами</li>
             <li>Гигиенический душ</li>
@@ -629,7 +668,9 @@
         </article>
 
         <article class="pc" id="s2-6">
-          <h3 class="pc__title">«Релакс»</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">«Релакс»</h3>
+          </div>
           <ul class="pc__list">
             <li>Парение в фитобочке с лечебными травами</li>
             <li>Гигиенический душ</li>
@@ -647,7 +688,9 @@
       <section class="ps" id="s3">
         <h2 class="ps__title">SPA-программы для лица</h2>
         <article class="pc" id="s3-1">
-          <h3 class="pc__title">Программа «Свежий взгляд»</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Свежий взгляд»</h3>
+          </div>
           <ul class="pc__list">
             <li>Демакияж (молочко для очищения + патчи)</li>
             <li>Пенка-мусс для лица, шеи и зоны декольте</li>
@@ -663,7 +706,9 @@
         </article>
 
         <article class="pc" id="s3-2">
-          <h3 class="pc__title">Программа «Сияние»</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Сияние»</h3>
+          </div>
           <ul class="pc__list">
             <li>Очищение и тонизирование лица</li>
             <li>Лимфодренажный массаж лица, шеи и зоны декольте</li>
@@ -678,7 +723,9 @@
         </article>
 
         <article class="pc" id="s3-3">
-          <h3 class="pc__title">Программа «Питание»</h3>
+          <div class="pc__heading">
+            <h3 class="pc__title">Программа «Питание»</h3>
+          </div>
           <ul class="pc__list">
             <li>Демакияж (молочко для очищения + патчи)</li>
             <li>Пенка-мусс для лица, шеи и зоны декольте</li>
