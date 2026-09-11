@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="Palitra">
+  <title>Palitra</title>
+  <!-- Compact adaptation of the existing Palitra P mark for the company picker. -->
+  <defs>
+    <radialGradient id="pearl" cx="34%" cy="24%" r="85%">
+      <stop stop-color="#fff8ef"/>
+      <stop offset=".58" stop-color="#f2dfd7"/>
+      <stop offset="1" stop-color="#cba5a0"/>
+    </radialGradient>
+    <linearGradient id="edge" x2="1" y2="1">
+      <stop stop-color="#fff5e4"/>
+      <stop offset=".55" stop-color="#cdaa88"/>
+      <stop offset="1" stop-color="#8f785e"/>
+    </linearGradient>
+  </defs>
+  <circle cx="60" cy="60" r="60" fill="url(#pearl)"/>
+  <circle cx="60" cy="60" r="55" fill="none" stroke="url(#edge)" stroke-width="2"/>
+  <text x="61" y="82" text-anchor="middle" font-family="Georgia,'Times New Roman',serif" font-size="72" fill="#173c2b">P</text>
+</svg>

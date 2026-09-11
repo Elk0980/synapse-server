@@ -536,7 +536,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 }
 </style>
 
-<link rel="stylesheet" href="brand/living-logo.css?v=20260911-1">
+<link rel="stylesheet" href="brand/living-logo.css?v=20260911-projects-1">
 <script defer src="brand/living-logo.js?v=20260911-1"></script>
 <link rel="icon" type="image/png" sizes="32x32" href="brand/hugh-icon-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="brand/hugh-icon-180.png">
@@ -1079,11 +1079,42 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   };
   const setProjectText = (element, project) => {
     const isSynapse = project?.id === "synapse-business";
-    element.classList.toggle("sb-project-logo", isSynapse);
+    const files = new Map([
+      ["taisabai", "brand/project-taisabai.webp"],
+      ["novyi-etap", "brand/project-novyi-etap.webp"],
+      ["alvi", "brand/project-alvi.webp"],
+      ["avokado", "brand/project-avokado.webp"],
+      ["palitra-love", "brand/project-palitra.svg"],
+    ]);
+    const file = files.get(project?.id);
+    const initial = typeof project?.name === "string" ? project.name.trim().charAt(0) || "—" : "—";
+    element.classList.toggle("sb-project-logo", isSynapse || !!file);
     if (isSynapse) {
       element.innerHTML = '<span class="sb-orb" aria-hidden="true"><i class="sb-orb__stone"></i><i class="sb-orb__current"></i><i class="sb-orb__pulse"></i></span>';
+    } else if (file) {
+      const orb = document.createElement("span");
+      orb.className = "sb-orb sb-project-art sb-project-art--" + project.id;
+      orb.setAttribute("aria-hidden", "true");
+      const img = document.createElement("img");
+      img.className = "sb-project-art__image";
+      img.alt = "";
+      img.width = 40;
+      img.height = 40;
+      img.decoding = "async";
+      img.draggable = false;
+      img.addEventListener("error", () => {
+        // A late error from a previous company must never replace the current mark.
+        if (orb.parentNode !== element) return;
+        element.classList.remove("sb-project-logo");
+        element.textContent = initial;
+      }, { once: true });
+      const gleam = document.createElement("i");
+      gleam.className = "sb-project-art__gleam";
+      orb.append(img, gleam);
+      element.replaceChildren(orb);
+      img.src = file;
     } else {
-      element.textContent = project ? project.name.charAt(0) : "—";
+      element.textContent = initial;
     }
   };
 
