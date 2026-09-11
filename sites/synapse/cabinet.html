@@ -535,13 +535,19 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }
 </style>
+
+<link rel="stylesheet" href="brand/living-logo.css?v=20260911-1">
+<script defer src="brand/living-logo.js?v=20260911-1"></script>
+<link rel="icon" type="image/png" sizes="32x32" href="brand/hugh-icon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="brand/hugh-icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-title" content="Synapse Business">
 </head>
 <body>
 <div class="auth" id="auth">
   <div class="auth-card">
     <div class="auth-head">
-      <span class="core-logo" aria-hidden="true">S</span>
-      <div><strong>Synapse Business</strong><span>Вход в личный кабинет</span></div>
+      <div><a class="sb-brand " href="./" aria-label="Synapse Business — главная"><span class="sb-orb" aria-hidden="true"><i class="sb-orb__stone"></i><i class="sb-orb__current"></i><i class="sb-orb__pulse"></i></span><span class="sb-wordmark" aria-hidden="true"></span></a><p class="sb-brand-caption">Вход в личный кабинет</p></div>
     </div>
     <form id="auth-form" autocomplete="off">
       <label class="auth-field"><span>Логин</span>
@@ -560,10 +566,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       aria-label="Открыть меню">☰</button>
     <div class="mobile-context"><strong id="mobile-title">Сквозная аналитика</strong>
       <span id="mobile-project"></span></div>
+    <a class="sb-brand sb-mobile-logo" href="#home" aria-label="Synapse Business — главная кабинета"><span class="sb-orb" aria-hidden="true"><i class="sb-orb__stone"></i><i class="sb-orb__current"></i><i class="sb-orb__pulse"></i></span></a>
   </div>
   <aside class="sidebar" id="sidebar" aria-label="Меню кабинета">
-    <div class="sidebar-brand"><span class="core-logo" aria-hidden="true">S</span><div>
-      <strong>Synapse Business</strong><span>Личный кабинет</span></div></div>
+    <div class="sidebar-brand sb-sidebar-brand"><a class="sb-brand sb-brand--compact" href="./" aria-label="Synapse Business — главная"><span class="sb-orb" aria-hidden="true"><i class="sb-orb__stone"></i><i class="sb-orb__current"></i><i class="sb-orb__pulse"></i></span><span class="sb-wordmark" aria-hidden="true"></span></a><p class="sb-brand-caption">Личный кабинет</p></div>
     <div class="project-picker">
       <p class="project-label">Проект</p>
       <button class="project-trigger" id="project-trigger" type="button" aria-haspopup="menu"
@@ -952,7 +958,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260911-1";
+  window.SB_CABINET_ASSET_VERSION = "20260911-sapphire-1";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
@@ -1072,7 +1078,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     byId("tasks-project-context").textContent = `Проект: ${projectContext()}`;
   };
   const setProjectText = (element, project) => {
-    element.textContent = project ? project.name.charAt(0) : "—";
+    const isSynapse = project?.id === "synapse-business";
+    element.classList.toggle("sb-project-logo", isSynapse);
+    if (isSynapse) {
+      element.innerHTML = '<span class="sb-orb" aria-hidden="true"><i class="sb-orb__stone"></i><i class="sb-orb__current"></i><i class="sb-orb__pulse"></i></span>';
+    } else {
+      element.textContent = project ? project.name.charAt(0) : "—";
+    }
   };
 
   const renderProjectPicker = () => {

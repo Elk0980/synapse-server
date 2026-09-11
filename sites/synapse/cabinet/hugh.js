@@ -69,12 +69,12 @@
     const role = messageRole(message);
     const author = role === "assistant" ? "Хью" : "Вы";
     return `<li class="hugh-message hugh-message-${role}">
-      <span class="hugh-author">${author}</span>
+      <span class="hugh-author sb-hugh-author">${role === "assistant" ? '<span class="sb-orb" aria-hidden="true"><i class="sb-orb__stone"></i><i class="sb-orb__current"></i><i class="sb-orb__pulse"></i></span>' : ""}${author}</span>
       <p>${context.escapeHTML(messageText(message))}</p>
     </li>`;
   }).join("");
 
-  const shellHTML = () => `<div class="content-header"><h1>Хью</h1></div>
+  const shellHTML = () => `<div class="content-header"><div class="sb-hugh-heading"><span class="sb-orb" aria-hidden="true"><i class="sb-orb__stone"></i><i class="sb-orb__current"></i><i class="sb-orb__pulse"></i></span><h1>Хью</h1></div></div>
     <div class="hugh-chat">
       <div class="hugh-messages" id="hugh-messages" role="log" aria-live="polite"></div>
       <form class="hugh-compose" id="hugh-form">
