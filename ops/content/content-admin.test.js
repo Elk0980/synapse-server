@@ -79,15 +79,15 @@ test('login and password changes invalidate sessions', () => {
   assert.equal(verifyPassword('replacement password', nextHash), true);
 });
 
-test('access validation rejects unknown values and dependency gaps atomically', () => {
+test('access validation rejects unknown values and adds permission dependencies atomically', () => {
   const store = createAuthStore(database(), OWNER());
   const owner = store.getByLogin('owner');
   const user = store.create(owner.id, { login: 'user', displayName: 'User', password: 'request-only' },
     hashPassword('new user secure pass'));
   assert.throws(() => store.updateAccess(owner.id, user.id, ['unknown'], []), (error) => error.status === 400);
-  assert.throws(() => store.updateAccess(owner.id, user.id, ['alvi'], ['price.edit']),
-    (error) => error.status === 400);
-  assert.deepEqual(store.getById(user.id).companyCodes, []);
+  store.updateAccess(owner.id, user.id, ['alvi'], ['price.edit']);
+  assert.deepEqual(store.getById(user.id).companyCodes, ['alvi']);
+  assert.deepEqual(store.getById(user.id).permissions, ['price.edit', 'price.view']);
 });
 
 test('owner effective access cannot be reduced', () => {
@@ -95,6 +95,37 @@ test('owner effective access cannot be reduced', () => {
   const owner = store.getByLogin('owner');
   assert.deepEqual(owner.permissions, PERMISSIONS);
   assert.throws(() => store.updateAccess(owner.id, owner.id, [], []), (error) => error.status === 400);
+});
+
+test('account edit preserves password, normalizes access and protects the last owner', () => {
+  const store = createAuthStore(database(), OWNER());
+  const owner = store.getByLogin('owner');
+  const passwordHash = hashPassword('new user secure pass');
+  const user = store.create(owner.id, { login: 'user', displayName: 'User', password: 'request-only' }, passwordHash);
+  const updated = store.updateAccount(owner.id, user.id, {
+    displayName: 'Renamed', role: 'editor', companies: ['alvi'], permissions: ['site_editor.edit'],
+  });
+  assert.equal(updated.displayName, 'Renamed');
+  assert.deepEqual(updated.permissions, ['site_editor.edit', 'site_editor.view']);
+  assert.equal(updated.passwordHash, passwordHash);
+  assert.throws(() => store.updateAccount(owner.id, owner.id, {
+    displayName: 'Owner', role: 'editor', companies: [], permissions: [],
+  }), (error) => error.status === 409 && /последн/.test(error.message));
+});
+
+test('account deletion rejects self and last owner, and records old and new access', () => {
+  const db = database();
+  const store = createAuthStore(db, OWNER());
+  const owner = store.getByLogin('owner');
+  const user = store.create(owner.id, { login: 'user', displayName: 'User', password: 'request-only',
+    companies: ['alvi'], permissions: ['price.view'] }, hashPassword('new user secure pass'));
+  assert.throws(() => store.remove(owner.id, owner.id), (error) => error.status === 409 && /собственн/.test(error.message));
+  store.remove(owner.id, user.id);
+  assert.equal(store.getById(user.id), null);
+  const details = JSON.parse(db.prepare("SELECT details_json FROM auth_audit WHERE action='ACCOUNT_DELETED'").get().details_json);
+  assert.deepEqual(details.old.companies, ['alvi']);
+  assert.deepEqual(details.old.permissions, ['price.view']);
+  assert.deepEqual(details.new, { companies: [], permissions: [] });
 });
 
 test('site registry scopes, filters, creates blank draft and soft-deletes', () => {

@@ -153,11 +153,16 @@ function createAuthStore(db, authUsers = '') {
     }
     if (companies.some((code) => typeof code !== 'string' || !Object.hasOwn(COMPANIES, code))) fail(400, 'Неизвестная компания');
     if (permissions.some((code) => !PERMISSIONS.includes(code))) fail(400, 'Неизвестное право');
-    for (const [permission, dependencies] of Object.entries(DEPENDENCIES)) {
-      if (permissions.includes(permission) && dependencies.some((item) => !permissions.includes(item))) {
-        fail(400, `Право ${permission} требует: ${dependencies.join(', ')}`);
+  };
+  const normalizePermissions = (permissions) => {
+    if (!Array.isArray(permissions)) fail(400, 'Компании и права должны быть списками без повторов');
+    const normalized = [...permissions];
+    for (let index = 0; index < normalized.length; index += 1) {
+      for (const dependency of DEPENDENCIES[normalized[index]] || []) {
+        if (!normalized.includes(dependency)) normalized.push(dependency);
       }
     }
+    return normalized;
   };
   return {
     db,
@@ -174,7 +179,7 @@ function createAuthStore(db, authUsers = '') {
       const keys = Object.keys(input).sort().join(',');
       if (!['displayName,login,password', 'companies,displayName,login,password,permissions'].includes(keys)) fail(400, 'Переданы лишние или отсутствуют обязательные поля');
       const companies = input.companies ?? [];
-      const permissions = input.permissions ?? [];
+      const permissions = normalizePermissions(input.permissions ?? []);
       validateAccess(companies, permissions);
       if (typeof input.login === 'string' && this.getByLogin(input.login)) fail(409, 'Этот login уже занят');
       if (!/^[a-z0-9_-]{1,64}$/.test(input.login)) fail(400, 'Некорректный login');
@@ -234,6 +239,7 @@ function createAuthStore(db, authUsers = '') {
       return decorate(getUser(id));
     },
     updateAccess(actorId, id, companies, permissions) {
+      permissions = normalizePermissions(permissions);
       validateAccess(companies, permissions);
       const current = decorate(getUser(id));
       if (!current) fail(404, 'Пользователь не найден');
@@ -248,6 +254,57 @@ function createAuthStore(db, authUsers = '') {
         db.prepare('UPDATE auth_users SET updated_at=? WHERE id=?').run(now(), id);
         audit(actorId, id, 'ACCESS_CHANGED', { companies, permissions });
         return decorate(getUser(id));
+      });
+    },
+    updateAccount(actorId, id, input) {
+      if (Object.keys(input).sort().join(',') !== 'companies,displayName,permissions,role') {
+        fail(400, 'Переданы лишние или отсутствуют обязательные поля');
+      }
+      if (typeof input.displayName !== 'string' || !input.displayName.trim() || input.displayName.length > 120) {
+        fail(400, 'Некорректное имя');
+      }
+      if (!['owner', 'editor'].includes(input.role)) fail(400, 'Некорректная роль');
+      const permissions = normalizePermissions(input.permissions);
+      validateAccess(input.companies, permissions);
+      const current = decorate(getUser(id));
+      if (!current) fail(404, 'Пользователь не найден');
+      if (current.role === 'owner' && input.role !== 'owner' &&
+          db.prepare("SELECT count(*) AS count FROM auth_users WHERE role='owner'").get().count === 1) {
+        fail(409, 'Нельзя снять роль owner с последней учётной записи владельца');
+      }
+      return transaction(db, () => {
+        db.prepare('UPDATE auth_users SET display_name=?, role=?, updated_at=? WHERE id=?')
+          .run(input.displayName.trim(), input.role, now(), id);
+        db.prepare('DELETE FROM auth_user_companies WHERE user_id=?').run(id);
+        db.prepare('DELETE FROM auth_user_permissions WHERE user_id=?').run(id);
+        for (const code of input.companies) db.prepare('INSERT INTO auth_user_companies VALUES (?,?)').run(id, code);
+        for (const permission of permissions) db.prepare('INSERT INTO auth_user_permissions VALUES (?,?)').run(id, permission);
+        const updated = decorate(getUser(id));
+        audit(actorId, id, 'ACCOUNT_CHANGED', {
+          old: { displayName: current.displayName, role: current.role,
+            companies: current.companyCodes, permissions: current.permissions },
+          new: { displayName: updated.displayName, role: updated.role,
+            companies: updated.companyCodes, permissions: updated.permissions },
+        });
+        return updated;
+      });
+    },
+    remove(actorId, id) {
+      const current = decorate(getUser(id));
+      if (!current) fail(404, 'Пользователь не найден');
+      if (actorId === id) fail(409, 'Нельзя удалить собственную учётную запись');
+      if (current.role === 'owner' &&
+          db.prepare("SELECT count(*) AS count FROM auth_users WHERE role='owner'").get().count === 1) {
+        fail(409, 'Нельзя удалить последнюю учётную запись с ролью owner');
+      }
+      return transaction(db, () => {
+        audit(actorId, id, 'ACCOUNT_DELETED', {
+          login: current.login,
+          old: { role: current.role, companies: current.companyCodes, permissions: current.permissions },
+          new: { companies: [], permissions: [] },
+        });
+        db.prepare('DELETE FROM auth_users WHERE id=?').run(id);
+        return current;
       });
     },
     audit,
