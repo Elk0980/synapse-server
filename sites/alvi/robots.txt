@@ -1,5 +1,4 @@
-# ЗАКРЫТОЕ состояние: чтобы открыть сайт, замените строку «Disallow: /» на «Disallow:»; остальные строки не меняйте.
 User-agent: *
-Disallow: /
+Allow: /
 
-Sitemap: https://alvi.synapsebusiness.ru/sitemap.xml
+Sitemap: https://spaalvi-38.ru/sitemap.xml
