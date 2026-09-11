@@ -110,16 +110,17 @@ test('events, external snapshots, attribution and analytics work together', asyn
   })).body.upserted, 1);
   const leadFromReferrer = await request('POST', '/leads', {
     name: 'Referrer Lead', contact: '+70000000001', companyCode: 'analytics_co',
-    referrer: 'https://2gis.ru/a',
+    referrer: 'https://2gis.ru/a', ts: '2026-09-05T10:15:00Z',
   }, false);
   assert.equal(leadFromReferrer.body.source, '2gis');
   const leadFromUtm = await request('POST', '/leads', {
     name: 'UTM Lead', contact: '+70000000002', companyCode: 'analytics_co',
-    utmSource: 'Yandex',
+    utmSource: 'Yandex', ts: '2026-09-05T10:20:00Z',
   }, false);
   assert.equal(leadFromUtm.body.source, 'yandex');
   const directLead = await request('POST', '/leads', {
     name: 'Direct Lead', contact: '+70000000003', companyCode: 'analytics_co',
+    ts: '2026-09-05T10:25:00Z',
   }, false);
   assert.equal(directLead.body.source, null);
   const dashboard = await request(
