@@ -1,0 +1,104 @@
+/* Approved artwork is a shared sprite: its letterforms are never re-typeset. */
+.sb-brand {
+  --sb-orb-size: 44px;
+  --sb-wordmark-width: 142px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  max-width: 100%;
+  text-decoration: none;
+  vertical-align: middle;
+  pointer-events: auto;
+}
+.sb-brand:focus-visible { outline: 2px solid #9fd4ff; outline-offset: 5px; border-radius: 8px; }
+.sb-orb {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  width: var(--sb-orb-size, 44px);
+  height: var(--sb-orb-size, 44px);
+  aspect-ratio: 1;
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: 50%;
+  background: #020d24;
+  vertical-align: middle;
+}
+.sb-orb > .sb-orb__stone,
+.sb-orb > .sb-orb__current,
+.sb-orb > .sb-orb__pulse {
+  display: block;
+  position: absolute;
+  pointer-events: none;
+  border-radius: 50%;
+  animation-play-state: paused;
+}
+.sb-orb > .sb-orb__stone {
+  inset: 0;
+  /* Crop (265,132,720,720) from the original 1254-square artwork using CSS. */
+  background: url("sapphire-approved.webp") 49.625468% 24.719101% / 174.166667% 174.166667% no-repeat;
+  animation: sb-sapphire-breathe 7s ease-in-out infinite;
+  animation-play-state: paused;
+}
+.sb-orb > .sb-orb__current {
+  inset: 8%;
+  opacity: .12;
+  background: conic-gradient(from 35deg, transparent 0deg 85deg, #84e9ff 112deg, transparent 140deg 260deg, #469aff 295deg, transparent 325deg);
+  -webkit-mask-image: radial-gradient(circle, transparent 6%, #000 28%, #000 58%, transparent 73%);
+  mask-image: radial-gradient(circle, transparent 6%, #000 28%, #000 58%, transparent 73%);
+  mix-blend-mode: screen;
+  animation: sb-sapphire-current 26s linear infinite;
+  animation-play-state: paused;
+}
+.sb-orb > .sb-orb__pulse {
+  inset: 32%;
+  background: radial-gradient(circle, #e5ffff 0%, #76edff 18%, transparent 70%);
+  opacity: .12;
+  mix-blend-mode: screen;
+  animation: sb-sapphire-pulse 4.8s ease-in-out infinite;
+  animation-play-state: paused;
+}
+.sb-wordmark {
+  display: block;
+  width: var(--sb-wordmark-width, 142px);
+  flex: 0 1 var(--sb-wordmark-width, 142px);
+  aspect-ratio: 740 / 224;
+  background: url("sapphire-approved.webp") 50% 86.019417% / 169.459459% 559.821429% no-repeat;
+  mix-blend-mode: screen;
+}
+.sb-orb[data-sb-visible="true"] > * { animation-play-state: running; }
+html.sb-motion-paused .sb-orb > * { animation-play-state: paused; }
+.sb-brand--stacked { flex-direction: column; --sb-orb-size: clamp(120px, 24vw, 170px); --sb-wordmark-width: 250px; gap: 16px; }
+.sb-brand--compact { --sb-orb-size: 36px; --sb-wordmark-width: 124px; gap: 8px; }
+.sb-brand--icon { --sb-orb-size: 34px; }
+.sb-brand--footer { --sb-orb-size: 32px; --sb-wordmark-width: 114px; margin-inline-end: 12px; }
+.sb-directory-brand { display: flex; justify-content: center; margin: 0 0 36px; }
+.sb-sidebar-brand { align-items: flex-start; flex-direction: column; gap: 6px; }
+.sb-brand-caption { color: var(--muted, #b9afa7); font-size: .8rem; margin: 0; }
+.sb-mobile-logo { --sb-orb-size: 34px; justify-self: end; }
+.sb-hugh-heading { display: flex; align-items: center; gap: 12px; }
+.sb-hugh-heading .sb-orb { --sb-orb-size: 48px; }
+.sb-hugh-author { display: inline-flex; align-items: center; gap: 6px; }
+.sb-hugh-author .sb-orb { --sb-orb-size: 22px; }
+.ed-bar > .sb-brand { align-self: center; }
+@keyframes sb-sapphire-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.025); } }
+@keyframes sb-sapphire-current { to { transform: rotate(360deg); } }
+@keyframes sb-sapphire-pulse { 0%, 100% { opacity: .08; transform: scale(.92); } 50% { opacity: .32; transform: scale(1.12); } }
+@media (max-width: 760px) {
+  .mobile-bar:has(.sb-mobile-logo) { grid-template-columns: 44px minmax(0, 1fr) 34px; }
+  .header-inner > .sb-brand { --sb-orb-size: 34px; --sb-wordmark-width: 114px; gap: 7px; }
+  .top > .sb-brand { --sb-orb-size: 32px; --sb-wordmark-width: 116px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sb-orb > * { animation: none !important; }
+  .sb-orb > .sb-orb__current, .sb-orb > .sb-orb__pulse { display: none; }
+}
+@media print {
+  .sb-orb > * { animation: none !important; }
+  .sb-orb > .sb-orb__current, .sb-orb > .sb-orb__pulse { display: none; }
+}
+
+.project-mark.sb-project-logo { border: 0; background: transparent; }
+.project-mark.sb-project-logo > .sb-orb { --sb-orb-size: 100%; }
