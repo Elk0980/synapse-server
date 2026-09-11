@@ -301,6 +301,18 @@
     .ed-form input:focus, .ed-form textarea:focus { outline: 1px solid var(--gold); }
     .ed-form__actions { grid-column: 1 / -1; display: flex; gap: 0.5rem; flex-wrap: wrap; }
     .ed-form small { color: var(--ink-faint); font-size: 0.74rem; }
+    .ed-form .ed-switch {
+      display: flex; grid-column: 1 / -1; grid-template-columns: auto 1fr; align-items: center; gap: 0.7rem;
+      padding: 0.7rem 0.8rem; border: 1px solid var(--line); border-radius: 0.7rem;
+      color: var(--ink); background: rgba(9,17,12,0.3); cursor: pointer;
+    }
+    .ed-switch input { position: absolute; opacity: 0; pointer-events: none; }
+    .ed-switch__track { position: relative; width: 2.8rem; height: 1.5rem; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,.08); transition: 160ms ease; }
+    .ed-switch__track::after { content: ""; position: absolute; top: 0.18rem; left: 0.2rem; width: 1rem; height: 1rem; border-radius: 50%; background: var(--ink-faint); transition: 160ms ease; }
+    .ed-switch input:checked + .ed-switch__track { border-color: var(--gold); background: rgba(227,212,167,.25); }
+    .ed-switch input:checked + .ed-switch__track::after { transform: translateX(1.28rem); background: var(--gold); }
+    .ed-switch input:focus-visible + .ed-switch__track { outline: 2px solid var(--gold); outline-offset: 2px; }
+    .ed-switch__copy { display: grid; gap: 0; }
 
     .ed-showcase { display: grid; gap: 0.55rem; margin: 0.5rem 0 1rem; }
     .ed-showcase__item {
@@ -398,6 +410,7 @@
   const imgUrl = (p) => !p ? '' : (/^https?:/.test(p) ? p : p.startsWith('/api/assets/') ? ASSETS + p.slice('/api/assets'.length) : SITE + (p.startsWith('/') ? p : '/' + p));
   const KEY_STORAGE = 'synapse_content_key';
   const MAX_PER_CATEGORY = 8;
+  const DEFAULT_QUIZ_ITEMS = new Set(['s1-1', 's1-7', 's1-9', 's2-1', 's2-2', 's2-3', 's4-1', 's4-2']);
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const esc = (s) => window.AlviPrice ? AlviPrice.esc(s) : String(s ?? '');
@@ -532,6 +545,11 @@
       <label>Цена<input name="price" value="${esc(it.price || '')}"></label>
       <label>Старая цена<input name="oldPrice" value="${esc(it.oldPrice || '')}"></label>
       <label>Длительность<input name="duration" value="${esc(it.duration || '')}"></label>
+      <label class="ed-switch">
+        <input type="checkbox" name="quizEnabled" ${it.quizEnabled === true || (it.quizEnabled == null && DEFAULT_QUIZ_ITEMS.has(it.id)) ? 'checked' : ''}>
+        <span class="ed-switch__track" aria-hidden="true"></span>
+        <span class="ed-switch__copy">Участвует в подборе (квиз)<small>Квиз предлагает только отмеченные услуги</small></span>
+      </label>
       <label>Кому подходит (главная)<input name="who" value="${esc(it.who || '')}"></label>
       <label class="is-wide">Описание для главной<input name="desc" value="${esc(it.desc || '')}"></label>
       <label class="is-wide">Состав одной строкой (главная)<input name="composition" value="${esc(it.composition || '')}"><small>если пусто — берутся первые пункты состава</small></label>
@@ -563,6 +581,7 @@
     for (const k of ['title', 'card', 'price', 'oldPrice', 'duration', 'who', 'desc', 'composition', 'photo']) {
       if (fd.has(k)) it[k] = String(fd.get(k)).trim();
     }
+    it.quizEnabled = fd.has('quizEnabled');
     if (fd.has('items')) it.items = String(fd.get('items')).split('\n').map((s) => s.trim()).filter(Boolean);
     editing = null; markDirty(); render();
   }

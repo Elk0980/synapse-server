@@ -262,6 +262,7 @@ function validatePrice(doc) {
       ids.add(it.id);
       if (typeof it.title !== 'string' || !it.title.trim()) problems.push(`Позиция ${it.id}: пустое название`);
       if (it.oldPrice != null && typeof it.oldPrice !== 'string') problems.push(`Позиция ${it.id}: старая цена должна быть строкой`);
+      if (it.quizEnabled != null && typeof it.quizEnabled !== 'boolean') problems.push(`Позиция ${it.id}: признак участия в квизе должен быть логическим`);
     }
   }
   const showcase = doc.showcase || {};

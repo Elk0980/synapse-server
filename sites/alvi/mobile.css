@@ -63,17 +63,17 @@
   .floating-cta__note { font-size: 13px; line-height: 1.25; }
   .after-hero { padding-bottom: 0; }
   .after-hero .program-card--photo { padding-top: 8rem; }
-  .quiz-result { padding-top: 8rem; }
+  .quiz-result__card { padding-top: 8rem; }
   .after-hero :is(a, button, input, summary) { scroll-margin-bottom: calc(9rem + env(safe-area-inset-bottom)); }
 
   /* Photo remains the dominant part of every service/result card. */
-  .after-hero .program-card--photo, body .quiz-result { min-height: 27rem !important; }
+  .after-hero .program-card--photo, body .quiz-result__card { min-height: 27rem !important; }
   .after-hero .program-card--photo .program-card__body, .quiz-result__body {
     flex: 0 0 auto !important; max-height: none; overflow: visible;
     background: linear-gradient(180deg, rgba(6,13,9,.62), rgba(6,13,9,.92)) !important;
     backdrop-filter: none; -webkit-backdrop-filter: none;
   }
-  .program-card--photo::after, body .quiz-result::after {
+  .program-card--photo::after, body .quiz-result__card::after {
     background: linear-gradient(180deg, rgba(8,16,12,.02) 0%, rgba(8,16,12,.04) 48%, rgba(8,16,12,.72) 100%) !important;
   }
 
