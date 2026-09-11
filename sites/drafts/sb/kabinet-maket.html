@@ -1,0 +1,2689 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}</style></head><body>
+<title>Кабинет — Synapse Business</title>
+<script>document.documentElement.classList.add("js");</script>
+<style>
+:root {
+--bg: #0B0908;
+--surface: #12100F;
+--surface-soft: #181513;
+--surface-blue: #0B1F52;
+--text: #F4F0EB;
+--muted: #B9AFA7;
+--accent: #9FD4FF;
+--sapphire: #2E6BD6;
+--sapphire-deep: #0B1F52;
+--green: #79DCB6;
+--amber: #F0C980;
+--red: #FF9C9C;
+--line: rgba(244, 240, 235, 0.11);
+--line-blue: rgba(159, 212, 255, 0.2);
+--glass: rgba(255, 255, 255, 0.055);
+--shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
+--radius-xl: 30px;
+--radius-lg: 23px;
+--radius-md: 17px;
+--content: 1320px;
+}
+
+*,
+*::before,
+*::after {
+box-sizing: border-box;
+}
+
+html {
+min-width: 0;
+background: var(--bg);
+scroll-behavior: smooth;
+}
+
+body {
+min-width: 0;
+min-height: 100vh;
+margin: 0;
+overflow-x: hidden;
+color: var(--text);
+background:
+radial-gradient(circle at 82% -10%, rgba(46, 107, 214, 0.16), transparent 34rem),
+radial-gradient(circle at -10% 60%, rgba(11, 31, 82, 0.35), transparent 40rem),
+var(--bg);
+font-family: "Segoe UI", Arial, sans-serif;
+font-size: 16px;
+line-height: 1.5;
+text-rendering: optimizeLegibility;
+isolation: isolate;
+}
+
+@supports (overflow: clip) {
+body {
+overflow-x: clip;
+}
+}
+
+button,
+a,
+select {
+font: inherit;
+}
+
+button,
+a {
+-webkit-tap-highlight-color: transparent;
+}
+
+button {
+color: inherit;
+}
+
+a {
+color: inherit;
+}
+
+h1,
+h2,
+h3,
+p {
+margin-top: 0;
+}
+
+h1,
+h2,
+h3 {
+font-family: Georgia, "Times New Roman", serif;
+font-weight: 400;
+}
+
+[hidden] {
+display: none !important;
+}
+
+::selection {
+color: #06101D;
+background: var(--accent);
+}
+
+
+.auth{position:fixed;z-index:200;inset:0;display:grid;place-items:center;
+ padding:24px;background:radial-gradient(circle at 70% 10%,rgba(46,107,214,.22),transparent 40rem),rgba(11,9,8,.98);
+ backdrop-filter:blur(6px)}
+.auth[hidden]{display:none}
+.auth-card{width:min(100%,420px);padding:clamp(26px,4vw,38px);
+ border:1px solid rgba(159,212,255,.16);border-radius:28px;
+ background:linear-gradient(145deg,rgba(255,255,255,.04),rgba(255,255,255,.012));
+ box-shadow:var(--shadow)}
+.auth-head{display:flex;gap:13px;align-items:center;margin-bottom:26px}
+.auth-head strong{display:block;font-size:.78rem;letter-spacing:.15em;text-transform:uppercase}
+.auth-head span{display:block;margin-top:3px;color:var(--muted);font-size:.76rem}
+.auth-field{display:block;margin-bottom:14px}
+.auth-field span{display:block;margin-bottom:7px;color:var(--muted);font-size:.72rem;letter-spacing:.06em}
+.auth-field input{width:100%;min-height:50px;padding:12px 16px;border-radius:16px;
+ border:1px solid rgba(244,240,235,.13);background:rgba(11,9,8,.55);color:var(--text);
+ font:inherit;font-size:.95rem;transition:border-color .2s,box-shadow .2s}
+.auth-field input:focus{outline:none;border-color:rgba(159,212,255,.6);
+ box-shadow:0 0 0 3px rgba(159,212,255,.12)}
+.auth-submit{width:100%;min-height:54px;margin-top:8px;border-color:rgba(159,212,255,.46);
+ background:linear-gradient(135deg,rgba(46,107,214,.58),rgba(11,31,82,.7));font-size:.9rem;cursor:pointer}
+.auth-error{margin:14px 0 0;color:#FF9C9C;font-size:.8rem}
+.auth-note{margin:22px 0 0;color:var(--muted);font-size:.72rem;line-height:1.6}
+
+.ambient {
+position: fixed;
+z-index: -2;
+inset: 0;
+overflow: hidden;
+pointer-events: none;
+}
+
+.ambient::before,
+.ambient::after {
+position: absolute;
+width: 38rem;
+height: 38rem;
+border-radius: 50%;
+content: "";
+opacity: 0.12;
+filter: blur(110px);
+}
+
+.ambient::before {
+top: -20rem;
+right: -12rem;
+background: var(--accent);
+}
+
+.ambient::after {
+bottom: -22rem;
+left: -17rem;
+background: var(--sapphire);
+}
+
+.grain {
+position: fixed;
+z-index: -1;
+inset: 0;
+pointer-events: none;
+opacity: 0.14;
+background-image:
+repeating-linear-gradient(
+0deg,
+rgba(255, 255, 255, 0.015) 0,
+rgba(255, 255, 255, 0.015) 1px,
+transparent 1px,
+transparent 4px
+);
+mix-blend-mode: soft-light;
+}
+
+.skip-link {
+position: fixed;
+z-index: 100;
+top: 10px;
+left: 10px;
+padding: 10px 16px;
+border-radius: 999px;
+color: var(--bg);
+background: var(--accent);
+transform: translateY(-160%);
+transition: transform 180ms ease;
+}
+
+.skip-link:focus {
+transform: translateY(0);
+}
+
+
+.back-pill{position:relative;display:inline-flex;gap:8px;align-items:center;flex:0 0 auto;
+ min-height:40px;padding:9px 15px;border-radius:999px;text-decoration:none;
+ border:1px solid rgba(159,212,255,.28);color:var(--text);
+ background:linear-gradient(135deg,rgba(159,212,255,.12),rgba(255,255,255,.025));
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.09);font-size:.74rem;white-space:nowrap;
+ transition:border-color .2s,background-color .2s,transform .2s}
+.back-pill svg{width:15px;height:15px;flex:0 0 auto;transition:transform .2s}
+.back-pill:hover{border-color:rgba(159,212,255,.75);background-color:rgba(159,212,255,.1);
+ transform:translateY(-1px)}
+.back-pill:hover svg{transform:translateX(-3px)}
+.back-pill .back-word{display:inline}.bw-short{display:none}@media (max-width:520px){.bw-full{display:none}.bw-short{display:inline}}
+@media (max-width:520px){.back-pill{padding:8px 13px;gap:7px;font-size:13.5px}.back-pill .back-word{display:inline;white-space:nowrap}.back-pill .back-word::after{content:""}}
+
+
+.brand-logo{height:30px;width:auto;display:block;flex:0 0 auto;
+ filter:drop-shadow(0 1px 4px rgba(0,0,0,.5))}
+@media (max-width:520px){.brand-logo{height:24px}}
+
+.topbar {
+position: sticky;
+z-index: 50;
+top: 0;
+padding:
+max(12px, env(safe-area-inset-top))
+max(18px, env(safe-area-inset-right))
+10px
+max(18px, env(safe-area-inset-left));
+background: linear-gradient(180deg, rgba(11, 9, 8, 0.98), rgba(11, 9, 8, 0.75), transparent);
+pointer-events: none;
+}
+
+.topbar-inner {
+display: grid;
+grid-template-columns: minmax(170px, 1fr) auto auto minmax(150px, 1fr);
+gap: 20px;
+align-items: center;
+width: min(100%, var(--content));
+min-width: 0;
+min-height: 64px;
+margin-inline: auto;
+padding: 8px 10px 8px 17px;
+border: 1px solid rgba(244, 240, 235, 0.1);
+border-radius: 999px;
+background: rgba(18, 16, 15, 0.78);
+box-shadow: 0 16px 55px rgba(0, 0, 0, 0.28);
+backdrop-filter: blur(20px);
+-webkit-backdrop-filter: blur(20px);
+pointer-events: auto;
+}
+
+.brand {
+display: inline-flex;
+min-width: 0;
+gap: 12px;
+align-items: center;
+text-decoration: none;
+}
+
+.core-logo {
+position: relative;
+display: grid;
+width: 38px;
+height: 38px;
+flex: 0 0 auto;
+place-items: center;
+border: 1px solid rgba(159, 212, 255, 0.42);
+border-radius: 50%;
+color: var(--accent);
+background:
+radial-gradient(circle at 45% 38%, rgba(244, 240, 235, 0.78) 0 3%, transparent 4%),
+radial-gradient(circle, rgba(46, 107, 214, 0.65), rgba(11, 31, 82, 0.85));
+box-shadow:
+inset 0 0 20px rgba(159, 212, 255, 0.2),
+0 0 25px rgba(46, 107, 214, 0.25);
+font-family: Georgia, serif;
+font-size: 1rem;
+}
+
+.core-logo::before,
+.core-logo::after {
+position: absolute;
+top: 50%;
+left: 50%;
+width: 68%;
+height: 1px;
+content: "";
+background: linear-gradient(90deg, transparent, rgba(159, 212, 255, 0.72), transparent);
+transform-origin: center;
+}
+
+.core-logo::before {
+transform: translate(-50%, -50%) rotate(42deg);
+}
+
+.core-logo::after {
+transform: translate(-50%, -50%) rotate(-42deg);
+}
+
+.brand-copy {
+min-width: 0;
+}
+
+.brand-copy strong,
+.brand-copy span {
+display: block;
+overflow: hidden;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+
+.brand-copy strong {
+font-size: 0.75rem;
+letter-spacing: 0.15em;
+text-transform: uppercase;
+}
+
+.brand-copy span {
+margin-top: 2px;
+color: var(--muted);
+font-size: 0.72rem;
+}
+
+.view-switcher {
+display: grid;
+grid-template-columns: repeat(2, minmax(0, 1fr));
+gap: 4px;
+min-width: 250px;
+padding: 4px;
+border: 1px solid rgba(244, 240, 235, 0.1);
+border-radius: 999px;
+background: rgba(255, 255, 255, 0.025);
+}
+
+.view-switcher button {
+position: relative;
+min-height: 42px;
+overflow: hidden;
+padding: 9px 18px;
+border: 1px solid transparent;
+border-radius: 999px;
+color: var(--muted);
+background: transparent;
+cursor: pointer;
+transition:
+color 200ms ease,
+border-color 200ms ease,
+background-color 200ms ease,
+box-shadow 200ms ease;
+}
+
+.view-switcher button[aria-selected="true"] {
+border-color: rgba(159, 212, 255, 0.3);
+color: var(--text);
+background:
+linear-gradient(135deg, rgba(46, 107, 214, 0.42), rgba(11, 31, 82, 0.6));
+box-shadow:
+inset 0 1px 0 rgba(255, 255, 255, 0.12),
+0 0 25px rgba(159, 212, 255, 0.09);
+}
+
+.account {
+display: flex;
+min-width: 0;
+gap: 10px;
+align-items: center;
+justify-content: flex-end;
+}
+
+.account-copy {
+min-width: 0;
+text-align: right;
+}
+
+.account-copy strong,
+.account-copy span {
+display: block;
+overflow: hidden;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+
+.account-copy strong {
+font-size: 0.82rem;
+}
+
+.account-copy span {
+color: var(--muted);
+font-size: 0.7rem;
+}
+
+.account-avatar {
+display: grid;
+width: 38px;
+height: 38px;
+flex: 0 0 auto;
+place-items: center;
+border: 1px solid rgba(159, 212, 255, 0.28);
+border-radius: 50%;
+color: var(--accent);
+background: rgba(159, 212, 255, 0.08);
+font-family: Georgia, serif;
+}
+
+.app-shell {
+width: min(100%, var(--content));
+min-width: 0;
+margin-inline: auto;
+padding:
+20px
+max(24px, env(safe-area-inset-right))
+max(70px, env(safe-area-inset-bottom))
+max(24px, env(safe-area-inset-left));
+}
+
+.demo-banner {
+display: flex;
+gap: 10px;
+align-items: center;
+margin-bottom: 26px;
+padding: 12px 16px;
+border: 1px solid rgba(240, 201, 128, 0.2);
+border-radius: 16px;
+color: var(--muted);
+background: rgba(240, 201, 128, 0.045);
+font-size: 0.8rem;
+}
+
+.demo-banner strong {
+flex: 0 0 auto;
+padding: 4px 8px;
+border: 1px solid rgba(240, 201, 128, 0.3);
+border-radius: 999px;
+color: var(--amber);
+font-size: 0.61rem;
+letter-spacing: 0.13em;
+}
+
+.view-panel {
+min-width: 0;
+animation: view-enter 420ms ease both;
+}
+
+.page-heading {
+display: flex;
+gap: 30px;
+align-items: flex-end;
+justify-content: space-between;
+margin-bottom: 28px;
+}
+
+.eyebrow {
+display: inline-flex;
+gap: 9px;
+align-items: center;
+margin: 0 0 14px;
+color: var(--accent);
+font-size: 0.7rem;
+font-weight: 700;
+letter-spacing: 0.17em;
+text-transform: uppercase;
+}
+
+.eyebrow::before {
+width: 24px;
+height: 1px;
+content: "";
+background: currentColor;
+box-shadow: 0 0 10px currentColor;
+}
+
+.page-heading h1 {
+max-width: 820px;
+margin-bottom: 12px;
+font-size: clamp(2.6rem, 5vw, 5rem);
+line-height: 0.98;
+letter-spacing: -0.045em;
+text-wrap: balance;
+}
+
+.page-heading p {
+max-width: 720px;
+margin-bottom: 0;
+color: var(--muted);
+font-size: 1rem;
+}
+
+.context-pill {
+display: inline-flex;
+flex: 0 0 auto;
+gap: 9px;
+align-items: center;
+padding: 11px 15px;
+border: 1px solid var(--line-blue);
+border-radius: 999px;
+color: var(--accent);
+background: rgba(159, 212, 255, 0.055);
+font-size: 0.76rem;
+white-space: nowrap;
+}
+
+.context-pill::before {
+width: 7px;
+height: 7px;
+border-radius: 50%;
+content: "";
+background: var(--accent);
+box-shadow: 0 0 12px rgba(159, 212, 255, 0.7);
+}
+
+.dashboard-section {
+min-width: 0;
+margin-top: 18px;
+padding: clamp(22px, 3vw, 34px);
+overflow: hidden;
+border: 1px solid var(--line);
+border-radius: var(--radius-xl);
+background:
+linear-gradient(145deg, rgba(255, 255, 255, 0.034), rgba(255, 255, 255, 0.012));
+box-shadow: var(--shadow);
+}
+
+.section-head {
+display: flex;
+gap: 24px;
+align-items: flex-end;
+justify-content: space-between;
+margin-bottom: 24px;
+}
+
+.section-kicker {
+margin-bottom: 7px;
+color: var(--accent);
+font-size: 0.65rem;
+font-weight: 700;
+letter-spacing: 0.15em;
+text-transform: uppercase;
+}
+
+.section-head h2 {
+margin-bottom: 0;
+font-size: clamp(1.7rem, 3vw, 2.55rem);
+line-height: 1.05;
+letter-spacing: -0.03em;
+}
+
+.section-description {
+max-width: 470px;
+margin-bottom: 0;
+color: var(--muted);
+font-size: 0.84rem;
+text-align: right;
+}
+
+.sample-badge {
+display: inline-flex;
+min-height: 18px;
+align-items: center;
+justify-content: center;
+padding: 2px 6px;
+border: 1px solid rgba(240, 201, 128, 0.3);
+border-radius: 999px;
+color: var(--amber);
+background: rgba(240, 201, 128, 0.065);
+font-family: "Segoe UI", Arial, sans-serif;
+font-size: 0.51rem;
+font-weight: 700;
+letter-spacing: 0.1em;
+line-height: 1;
+vertical-align: middle;
+white-space: nowrap;
+}
+
+.money-grid {
+display: grid;
+grid-template-columns: repeat(3, minmax(0, 1fr));
+gap: 14px;
+}
+
+.money-card {
+position: relative;
+min-width: 0;
+min-height: 194px;
+padding: 23px;
+overflow: hidden;
+border: 1px solid var(--line);
+border-radius: var(--radius-lg);
+background:
+radial-gradient(circle at 100% 0%, rgba(159, 212, 255, 0.08), transparent 44%),
+rgba(11, 9, 8, 0.38);
+}
+
+.money-card::after {
+position: absolute;
+top: -42px;
+right: -42px;
+width: 110px;
+height: 110px;
+border: 1px solid rgba(159, 212, 255, 0.08);
+border-radius: 50%;
+content: "";
+}
+
+.metric-label {
+margin-bottom: 16px;
+color: var(--muted);
+font-size: 0.79rem;
+}
+
+.metric-line {
+position: relative;
+z-index: 1;
+display: flex;
+flex-wrap: wrap;
+gap: 9px;
+align-items: center;
+}
+
+.metric-value {
+font-family: Georgia, "Times New Roman", serif;
+font-size: clamp(1.8rem, 3.3vw, 2.8rem);
+line-height: 1;
+letter-spacing: -0.04em;
+}
+
+.sparkline {
+position: absolute;
+right: 18px;
+bottom: 16px;
+left: 18px;
+width: calc(100% - 36px);
+height: 66px;
+overflow: visible;
+}
+
+.sparkline-grid {
+stroke: rgba(244, 240, 235, 0.065);
+stroke-width: 1;
+vector-effect: non-scaling-stroke;
+}
+
+.sparkline-line {
+fill: none;
+stroke-width: 2.2;
+stroke-linecap: round;
+stroke-linejoin: round;
+vector-effect: non-scaling-stroke;
+}
+
+.funnel-track {
+display: grid;
+grid-template-columns: repeat(5, minmax(0, 1fr));
+gap: 10px;
+min-width: 0;
+}
+
+.funnel-step {
+position: relative;
+display: flex;
+min-width: 0;
+min-height: 176px;
+flex-direction: column;
+align-items: stretch;
+padding: 20px;
+overflow: hidden;
+border: 1px solid var(--line);
+border-radius: 21px;
+color: var(--text);
+background: rgba(11, 9, 8, 0.38);
+text-align: left;
+cursor: pointer;
+transition:
+transform 200ms ease,
+border-color 200ms ease,
+background-color 200ms ease,
+box-shadow 200ms ease;
+}
+
+.funnel-step::after {
+position: absolute;
+right: -15px;
+bottom: -40px;
+width: 95px;
+height: 95px;
+border-radius: 50%;
+content: "";
+background: rgba(46, 107, 214, 0.13);
+filter: blur(6px);
+}
+
+.funnel-step[aria-expanded="true"] {
+border-color: rgba(159, 212, 255, 0.48);
+background:
+linear-gradient(145deg, rgba(46, 107, 214, 0.18), rgba(11, 31, 82, 0.28));
+box-shadow:
+inset 0 1px 0 rgba(255, 255, 255, 0.08),
+0 0 28px rgba(159, 212, 255, 0.08);
+}
+
+.step-label {
+display: block;
+min-height: 44px;
+margin-bottom: 18px;
+font-family: Georgia, "Times New Roman", serif;
+font-size: 1.04rem;
+line-height: 1.18;
+}
+
+.step-value-line {
+display: flex;
+flex-wrap: wrap;
+gap: 6px;
+align-items: center;
+margin-top: auto;
+}
+
+.step-value {
+font-size: 1.22rem;
+font-weight: 650;
+}
+
+.step-unit {
+display: block;
+margin-top: 6px;
+color: var(--muted);
+font-size: 0.68rem;
+}
+
+.step-open {
+position: absolute;
+top: 18px;
+right: 17px;
+display: grid;
+width: 24px;
+height: 24px;
+place-items: center;
+border: 1px solid rgba(159, 212, 255, 0.18);
+border-radius: 50%;
+color: var(--accent);
+font-size: 0.8rem;
+}
+
+.loss-panel {
+display: grid;
+grid-template-columns: minmax(180px, 0.42fr) minmax(0, 1fr);
+gap: 28px;
+margin-top: 14px;
+padding: 24px;
+border: 1px solid rgba(159, 212, 255, 0.19);
+border-radius: 21px;
+background:
+linear-gradient(135deg, rgba(11, 31, 82, 0.48), rgba(159, 212, 255, 0.035));
+}
+
+.loss-panel-label {
+margin-bottom: 7px;
+color: var(--accent);
+font-size: 0.65rem;
+font-weight: 700;
+letter-spacing: 0.15em;
+text-transform: uppercase;
+}
+
+.loss-panel h3 {
+margin-bottom: 0;
+font-size: 1.45rem;
+line-height: 1.15;
+}
+
+.loss-list {
+display: grid;
+gap: 10px;
+margin: 0;
+padding: 0;
+list-style: none;
+}
+
+.loss-list li {
+position: relative;
+padding: 12px 14px 12px 38px;
+border: 1px solid rgba(244, 240, 235, 0.08);
+border-radius: 14px;
+color: var(--muted);
+background: rgba(11, 9, 8, 0.25);
+font-size: 0.86rem;
+}
+
+.loss-list li::before {
+position: absolute;
+top: 50%;
+left: 15px;
+width: 8px;
+height: 8px;
+border: 1px solid var(--accent);
+border-radius: 50%;
+content: "";
+transform: translateY(-50%);
+box-shadow: 0 0 10px rgba(159, 212, 255, 0.35);
+}
+
+.source-grid {
+display: grid;
+grid-template-columns: repeat(3, minmax(0, 1fr));
+gap: 12px;
+}
+
+.source-card {
+min-width: 0;
+padding: 18px;
+border: 1px solid var(--line);
+border-radius: 19px;
+background: rgba(11, 9, 8, 0.32);
+transition:
+transform 200ms ease,
+border-color 200ms ease;
+}
+
+.source-top {
+display: flex;
+gap: 12px;
+align-items: center;
+justify-content: space-between;
+margin-bottom: 20px;
+}
+
+.source-identity {
+display: flex;
+min-width: 0;
+gap: 10px;
+align-items: center;
+}
+
+.source-icon,
+.integration-icon {
+display: grid;
+width: 37px;
+height: 37px;
+flex: 0 0 auto;
+place-items: center;
+border: 1px solid rgba(159, 212, 255, 0.18);
+border-radius: 13px;
+color: var(--accent);
+background: rgba(159, 212, 255, 0.06);
+font-size: 0.65rem;
+font-weight: 750;
+letter-spacing: 0.04em;
+}
+
+.source-name {
+overflow: hidden;
+font-size: 0.88rem;
+font-weight: 650;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+
+.status-badge {
+display: inline-flex;
+flex: 0 0 auto;
+align-items: center;
+padding: 5px 8px;
+border: 1px solid currentColor;
+border-radius: 999px;
+font-size: 0.54rem;
+font-weight: 750;
+letter-spacing: 0.08em;
+line-height: 1;
+text-transform: uppercase;
+white-space: nowrap;
+}
+
+.status-live {
+color: var(--green);
+background: rgba(121, 220, 182, 0.055);
+}
+
+.status-qa {
+color: var(--amber);
+background: rgba(240, 201, 128, 0.055);
+}
+
+.status-off {
+color: var(--muted);
+background: rgba(185, 175, 167, 0.04);
+}
+
+.source-metric {
+display: flex;
+flex-wrap: wrap;
+gap: 7px;
+align-items: center;
+}
+
+.source-metric strong {
+font-family: Georgia, "Times New Roman", serif;
+font-size: 1.55rem;
+font-weight: 400;
+line-height: 1;
+}
+
+.source-caption {
+margin: 7px 0 0;
+color: var(--muted);
+font-size: 0.69rem;
+}
+
+.dialog-list {
+display: grid;
+gap: 9px;
+}
+
+.dialog-row {
+display: grid;
+grid-template-columns: minmax(170px, 0.58fr) minmax(240px, 1.5fr) auto;
+gap: 18px;
+align-items: center;
+min-width: 0;
+padding: 15px 17px;
+border: 1px solid var(--line);
+border-radius: 17px;
+background: rgba(11, 9, 8, 0.3);
+}
+
+.dialog-person {
+display: flex;
+min-width: 0;
+gap: 11px;
+align-items: center;
+}
+
+.dialog-avatar {
+display: grid;
+width: 38px;
+height: 38px;
+flex: 0 0 auto;
+place-items: center;
+border: 1px solid rgba(159, 212, 255, 0.18);
+border-radius: 50%;
+color: var(--accent);
+background: rgba(46, 107, 214, 0.12);
+font-family: Georgia, serif;
+font-size: 0.8rem;
+}
+
+.dialog-name {
+display: block;
+overflow: hidden;
+margin-bottom: 3px;
+font-size: 0.86rem;
+font-weight: 650;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+
+.channel-label {
+color: var(--muted);
+font-size: 0.66rem;
+}
+
+.dialog-message {
+min-width: 0;
+overflow: hidden;
+margin-bottom: 0;
+color: var(--muted);
+font-size: 0.82rem;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+
+.lead-status {
+justify-self: end;
+padding: 7px 10px;
+border: 1px solid rgba(159, 212, 255, 0.16);
+border-radius: 999px;
+color: var(--accent);
+background: rgba(159, 212, 255, 0.045);
+font-size: 0.62rem;
+white-space: nowrap;
+}
+
+.crm-strip {
+display: grid;
+grid-template-columns: repeat(4, minmax(0, 1fr));
+gap: 11px;
+}
+
+.crm-stage {
+position: relative;
+min-width: 0;
+padding: 20px;
+border: 1px solid var(--line);
+border-radius: 19px;
+background:
+linear-gradient(145deg, rgba(159, 212, 255, 0.045), rgba(11, 9, 8, 0.35));
+}
+
+.crm-stage:not(:last-child)::after {
+position: absolute;
+z-index: 2;
+top: 50%;
+right: -9px;
+display: grid;
+width: 18px;
+height: 18px;
+place-items: center;
+border: 1px solid rgba(159, 212, 255, 0.19);
+border-radius: 50%;
+color: var(--accent);
+background: var(--surface);
+content: "›";
+font-size: 0.85rem;
+transform: translateY(-50%);
+}
+
+.crm-stage h3 {
+margin-bottom: 19px;
+font-size: 1.22rem;
+}
+
+.crm-data-row {
+display: flex;
+flex-wrap: wrap;
+gap: 6px;
+align-items: center;
+margin-top: 9px;
+}
+
+.crm-data-row strong {
+font-size: 0.94rem;
+}
+
+.crm-data-label {
+width: 100%;
+color: var(--muted);
+font-size: 0.64rem;
+}
+
+.project-table {
+overflow: hidden;
+border: 1px solid var(--line);
+border-radius: 21px;
+background: rgba(11, 9, 8, 0.25);
+}
+
+.project-row {
+display: grid;
+grid-template-columns:
+minmax(170px, 0.8fr)
+minmax(230px, 1.35fr)
+minmax(110px, 0.55fr)
+minmax(110px, 0.55fr)
+minmax(110px, 0.55fr);
+gap: 18px;
+align-items: center;
+min-width: 0;
+padding: 18px 20px;
+}
+
+.project-row + .project-row {
+border-top: 1px solid var(--line);
+}
+
+.project-row-header {
+min-height: 48px;
+color: var(--muted);
+background: rgba(255, 255, 255, 0.025);
+font-size: 0.62rem;
+font-weight: 700;
+letter-spacing: 0.11em;
+text-transform: uppercase;
+}
+
+.project-name {
+display: block;
+margin-bottom: 3px;
+font-family: Georgia, "Times New Roman", serif;
+font-size: 1.08rem;
+}
+
+.project-type {
+color: var(--muted);
+font-size: 0.66rem;
+}
+
+.project-directions {
+margin-bottom: 0;
+color: var(--muted);
+font-size: 0.78rem;
+overflow-wrap: anywhere;
+}
+
+.project-cell {
+min-width: 0;
+}
+
+.project-cell-label {
+display: none;
+margin-bottom: 6px;
+color: var(--muted);
+font-size: 0.59rem;
+font-weight: 700;
+letter-spacing: 0.09em;
+text-transform: uppercase;
+}
+
+.admin-sample-line {
+display: flex;
+gap: 7px;
+align-items: center;
+margin-top: 7px;
+color: var(--muted);
+font-size: 0.62rem;
+}
+
+.integration-grid {
+display: grid;
+grid-template-columns: repeat(2, minmax(0, 1fr));
+gap: 11px;
+}
+
+.integration-card {
+display: grid;
+grid-template-columns: auto minmax(0, 1fr) auto;
+gap: 15px;
+align-items: center;
+min-width: 0;
+padding: 17px;
+border: 1px solid var(--line);
+border-radius: 19px;
+background: rgba(11, 9, 8, 0.3);
+}
+
+.integration-copy {
+min-width: 0;
+}
+
+.integration-copy strong {
+display: block;
+margin-bottom: 4px;
+font-size: 0.87rem;
+}
+
+.integration-copy p {
+margin-bottom: 8px;
+color: var(--muted);
+font-size: 0.7rem;
+}
+
+.integration-status-line {
+display: flex;
+flex-wrap: wrap;
+gap: 6px;
+align-items: center;
+}
+
+.glass-pill {
+position: relative;
+display: inline-flex;
+min-height: 42px;
+gap: 8px;
+align-items: center;
+justify-content: center;
+overflow: hidden;
+padding: 9px 15px;
+border: 1px solid rgba(159, 212, 255, 0.25);
+border-radius: 999px;
+color: var(--text);
+background:
+linear-gradient(135deg, rgba(159, 212, 255, 0.1), rgba(255, 255, 255, 0.025));
+box-shadow:
+inset 0 1px 0 rgba(255, 255, 255, 0.09),
+0 9px 28px rgba(0, 0, 0, 0.2);
+font-size: 0.72rem;
+text-decoration: none;
+white-space: nowrap;
+transition:
+transform 200ms ease,
+border-color 200ms ease,
+box-shadow 200ms ease;
+isolation: isolate;
+}
+
+.glass-pill::before {
+position: absolute;
+z-index: -1;
+top: -90%;
+left: -65%;
+width: 32%;
+height: 280%;
+content: "";
+background: linear-gradient(
+90deg,
+transparent,
+rgba(255, 255, 255, 0.64),
+transparent
+);
+transform: rotate(17deg) translateX(-280%);
+transition: transform 650ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.activity-list {
+display: grid;
+gap: 8px;
+}
+
+.activity-row {
+display: grid;
+grid-template-columns: minmax(108px, auto) 30px minmax(0, 1fr);
+gap: 14px;
+align-items: start;
+min-width: 0;
+padding: 14px 16px;
+border: 1px solid var(--line);
+border-radius: 16px;
+background: rgba(11, 9, 8, 0.27);
+}
+
+.activity-time {
+display: flex;
+flex-wrap: wrap;
+gap: 6px;
+align-items: center;
+color: var(--muted);
+font-size: 0.69rem;
+}
+
+.activity-node {
+position: relative;
+display: grid;
+width: 25px;
+height: 25px;
+place-items: center;
+border: 1px solid rgba(159, 212, 255, 0.22);
+border-radius: 50%;
+color: var(--accent);
+background: rgba(159, 212, 255, 0.055);
+font-size: 0.64rem;
+}
+
+.activity-copy {
+min-width: 0;
+}
+
+.activity-copy strong {
+display: block;
+margin-bottom: 4px;
+font-size: 0.82rem;
+}
+
+.activity-copy p {
+margin-bottom: 0;
+color: var(--muted);
+font-size: 0.72rem;
+overflow-wrap: anywhere;
+}
+
+.toast {
+position: fixed;
+z-index: 100;
+right: max(20px, env(safe-area-inset-right));
+bottom: max(20px, env(safe-area-inset-bottom));
+max-width: min(360px, calc(100% - 40px));
+padding: 14px 17px;
+border: 1px solid rgba(159, 212, 255, 0.28);
+border-radius: 17px;
+color: var(--text);
+background: rgba(11, 31, 82, 0.94);
+box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+font-size: 0.8rem;
+opacity: 0;
+pointer-events: none;
+transform: translateY(18px);
+transition:
+opacity 200ms ease,
+transform 200ms ease;
+backdrop-filter: blur(15px);
+-webkit-backdrop-filter: blur(15px);
+}
+
+.toast.is-visible {
+opacity: 1;
+transform: translateY(0);
+}
+
+button:focus-visible,
+a:focus-visible {
+outline: 2px solid var(--accent);
+outline-offset: 3px;
+}
+
+@keyframes view-enter {
+from {
+opacity: 0;
+transform: translateY(12px);
+}
+
+to {
+opacity: 1;
+transform: translateY(0);
+}
+}
+
+@media (hover: hover) {
+.view-switcher button:hover {
+color: var(--text);
+border-color: rgba(159, 212, 255, 0.18);
+}
+
+.funnel-step:hover {
+z-index: 2;
+border-color: rgba(159, 212, 255, 0.32);
+transform: translateY(-3px);
+}
+
+.source-card:hover {
+border-color: rgba(159, 212, 255, 0.25);
+transform: translateY(-3px);
+}
+
+.glass-pill:hover {
+border-color: rgba(159, 212, 255, 0.76);
+box-shadow:
+inset 0 1px 0 rgba(255, 255, 255, 0.14),
+0 0 28px rgba(159, 212, 255, 0.16),
+0 15px 35px rgba(0, 0, 0, 0.3);
+transform: translateY(-2px);
+}
+
+.glass-pill:hover::before {
+transform: rotate(17deg) translateX(650%);
+}
+}
+
+@media (max-width: 1050px) {
+.topbar-inner {
+grid-template-columns: minmax(140px, 1fr) auto auto minmax(90px, 1fr);
+}
+
+.money-grid {
+grid-template-columns: 1fr;
+}
+
+.money-card {
+min-height: 170px;
+}
+
+.source-grid {
+grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.funnel-track {
+grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.funnel-step:last-child {
+grid-column: 1 / -1;
+}
+
+.project-row {
+grid-template-columns:
+minmax(140px, 0.75fr)
+minmax(190px, 1.1fr)
+repeat(3, minmax(95px, 0.5fr));
+}
+}
+
+@media (max-width: 780px) {
+.topbar-inner {
+grid-template-columns: 1fr auto auto;
+border-radius: 27px;
+}
+
+.view-switcher {
+grid-column: 1 / -1;
+grid-row: 2;
+width: 100%;
+min-width: 0;
+}
+
+.account-copy {
+display: none;
+}
+
+.page-heading,
+.section-head {
+align-items: flex-start;
+flex-direction: column;
+}
+
+.section-description {
+max-width: none;
+text-align: left;
+}
+
+.context-pill {
+align-self: flex-start;
+}
+
+.loss-panel {
+grid-template-columns: 1fr;
+}
+
+.dialog-row {
+grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.dialog-message {
+grid-column: 1 / -1;
+grid-row: 2;
+white-space: normal;
+}
+
+.lead-status {
+grid-column: 2;
+grid-row: 1;
+}
+
+.crm-strip {
+grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.crm-stage:not(:last-child)::after {
+display: none;
+}
+
+.project-row-header {
+display: none;
+}
+
+.project-row {
+grid-template-columns: repeat(3, minmax(0, 1fr));
+gap: 15px;
+padding: 22px;
+}
+
+.project-cell-main,
+.project-cell-directions {
+grid-column: 1 / -1;
+}
+
+.project-cell-label {
+display: block;
+}
+
+.integration-grid {
+grid-template-columns: 1fr;
+}
+}
+
+@media (max-width: 560px) {
+.topbar {
+padding-right: 12px;
+padding-left: 12px;
+}
+
+.topbar-inner {
+gap: 10px;
+padding: 9px;
+}
+
+.brand-copy {
+display: none;
+}
+
+.app-shell {
+padding-top: 13px;
+padding-right: max(14px, env(safe-area-inset-right));
+padding-left: max(14px, env(safe-area-inset-left));
+}
+
+.demo-banner {
+align-items: flex-start;
+}
+
+.page-heading {
+margin-bottom: 22px;
+}
+
+.page-heading h1 {
+font-size: clamp(2.45rem, 13vw, 3.45rem);
+}
+
+.dashboard-section {
+padding: 19px;
+border-radius: 24px;
+}
+
+.money-card {
+padding: 20px;
+}
+
+.funnel-track,
+.source-grid,
+.crm-strip {
+grid-template-columns: 1fr;
+}
+
+.funnel-step:last-child {
+grid-column: auto;
+}
+
+.funnel-step {
+min-height: 145px;
+}
+
+.loss-panel {
+padding: 19px;
+}
+
+.source-top {
+align-items: flex-start;
+}
+
+.dialog-row {
+grid-template-columns: 1fr;
+gap: 10px;
+}
+
+.lead-status {
+grid-column: 1;
+grid-row: auto;
+justify-self: start;
+}
+
+.dialog-message {
+grid-column: 1;
+grid-row: auto;
+}
+
+.project-row {
+grid-template-columns: 1fr;
+}
+
+.project-cell,
+.project-cell-main,
+.project-cell-directions {
+grid-column: 1;
+}
+
+.integration-card {
+grid-template-columns: auto minmax(0, 1fr);
+}
+
+.integration-card .glass-pill {
+grid-column: 1 / -1;
+width: 100%;
+}
+
+.activity-row {
+grid-template-columns: auto minmax(0, 1fr);
+}
+
+.activity-time {
+grid-column: 1 / -1;
+}
+
+.activity-node {
+grid-column: 1;
+}
+
+.activity-copy {
+grid-column: 2;
+}
+}
+
+@media (prefers-reduced-motion: reduce) {
+html {
+scroll-behavior: auto;
+}
+
+*,
+*::before,
+*::after {
+scroll-behavior: auto !important;
+animation-duration: 0.01ms !important;
+animation-iteration-count: 1 !important;
+transition-duration: 0.01ms !important;
+transition-delay: 0ms !important;
+}
+}
+</style>
+
+<div class="auth" id="auth">
+<div class="auth-card">
+<div class="auth-head">
+<span class="core-logo" aria-hidden="true">S</span>
+<div>
+<strong>Synapse Business</strong>
+<span>Вход в личный кабинет</span>
+</div>
+</div>
+<form id="auth-form" autocomplete="off">
+<label class="auth-field">
+<span>Логин</span>
+<input id="auth-login" type="text" name="login" autocapitalize="none" spellcheck="false" required>
+</label>
+<label class="auth-field">
+<span>Пароль</span>
+<input id="auth-pass" type="password" name="pass" required>
+</label>
+<button class="glass-pill auth-submit" type="submit">Войти</button>
+<p class="auth-error" id="auth-error" role="alert" hidden>Неверный логин или пароль</p>
+</form>
+<p class="auth-note">
+Демонстрационный контур. Данные внутри — демонстрационные и помечены SAMPLE.
+</p>
+</div>
+</div>
+
+<a class="skip-link" href="#main-content">Перейти к содержимому</a>
+
+<div class="ambient" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+
+<header class="topbar">
+<div class="topbar-inner">
+<a class="brand" href="https://claude.ai/code/artifact/be1a8924-bcce-4a07-b4e7-15f8e59fcf07" aria-label="Synapse Business">
+<svg class="brand-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3497 688"><defs><linearGradient id="ldbody" x1="0" y1="0" x2=".25" y2="1">
+      <stop offset="0" stop-color="#2E6BD6"/>
+      <stop offset=".42" stop-color="#16408F"/>
+      <stop offset=".78" stop-color="#0B1F52"/>
+      <stop offset="1" stop-color="#050E26"/>
+    </linearGradient>
+    <linearGradient id="ldrim" x1="0" y1="0" x2=".3" y2="1">
+      <stop offset="0" stop-color="#A8CBFF" stop-opacity=".9"/>
+      <stop offset=".5" stop-color="#7FA8E8" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#050E26" stop-opacity=".95"/>
+    </linearGradient>
+    <filter id="ldsoft" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="7"/>
+    </filter>
+  </defs>
+  <g transform="translate(53.6,500.5) scale(0.6180)">
+    <clipPath id="ldcS"><path d="M57.0 -29.0C131.0 4.0 189.0 17.0 265.0 17.0C444.0 17.0 559.0 -75.0 559.0 -220.0C559.0 -310.0 507.0 -370.0 408.0 -396.0L294.0 -426.0C220.0 -446.0 188.0 -476.0 188.0 -527.0C188.0 -597.0 242.0 -644.0 322.0 -644.0C375.0 -644.0 420.0 -626.0 458.0 -589.0L464.0 -507.0H505.0C505.0 -572.0 510.0 -620.0 519.0 -649.0L514.0 -661.0C447.0 -686.0 395.0 -695.0 329.0 -695.0C162.0 -695.0 64.0 -615.0 64.0 -480.0C64.0 -395.0 115.0 -332.0 210.0 -304.0L350.0 -262.0C406.0 -245.0 433.0 -214.0 433.0 -166.0C433.0 -92.0 369.0 -37.0 283.0 -37.0C215.0 -37.0 151.0 -67.0 119.0 -114.0L112.0 -202.0H72.0C72.0 -127.0 68.0 -86.0 57.0 -29.0Z"/></clipPath>
+    <g clip-path="url(#ldcS)">
+      <rect x="-3" y="-755" width="622" height="832"
+            fill="url(#ldbody)"/>
+      <path d="M57.0 -29.0C131.0 4.0 189.0 17.0 265.0 17.0C444.0 17.0 559.0 -75.0 559.0 -220.0C559.0 -310.0 507.0 -370.0 408.0 -396.0L294.0 -426.0C220.0 -446.0 188.0 -476.0 188.0 -527.0C188.0 -597.0 242.0 -644.0 322.0 -644.0C375.0 -644.0 420.0 -626.0 458.0 -589.0L464.0 -507.0H505.0C505.0 -572.0 510.0 -620.0 519.0 -649.0L514.0 -661.0C447.0 -686.0 395.0 -695.0 329.0 -695.0C162.0 -695.0 64.0 -615.0 64.0 -480.0C64.0 -395.0 115.0 -332.0 210.0 -304.0L350.0 -262.0C406.0 -245.0 433.0 -214.0 433.0 -166.0C433.0 -92.0 369.0 -37.0 283.0 -37.0C215.0 -37.0 151.0 -67.0 119.0 -114.0L112.0 -202.0H72.0C72.0 -127.0 68.0 -86.0 57.0 -29.0Z" fill="none" stroke="#050E26" stroke-width="30" opacity=".5"
+            transform="translate(-6,-7)" filter="url(#ldsoft)"/>
+      <path d="M57.0 -29.0C131.0 4.0 189.0 17.0 265.0 17.0C444.0 17.0 559.0 -75.0 559.0 -220.0C559.0 -310.0 507.0 -370.0 408.0 -396.0L294.0 -426.0C220.0 -446.0 188.0 -476.0 188.0 -527.0C188.0 -597.0 242.0 -644.0 322.0 -644.0C375.0 -644.0 420.0 -626.0 458.0 -589.0L464.0 -507.0H505.0C505.0 -572.0 510.0 -620.0 519.0 -649.0L514.0 -661.0C447.0 -686.0 395.0 -695.0 329.0 -695.0C162.0 -695.0 64.0 -615.0 64.0 -480.0C64.0 -395.0 115.0 -332.0 210.0 -304.0L350.0 -262.0C406.0 -245.0 433.0 -214.0 433.0 -166.0C433.0 -92.0 369.0 -37.0 283.0 -37.0C215.0 -37.0 151.0 -67.0 119.0 -114.0L112.0 -202.0H72.0C72.0 -127.0 68.0 -86.0 57.0 -29.0Z" fill="none" stroke="#A8CBFF" stroke-width="10" opacity=".22"
+            transform="translate(5,6)" filter="url(#ldsoft)"/>
+    </g>
+    <path d="M57.0 -29.0C131.0 4.0 189.0 17.0 265.0 17.0C444.0 17.0 559.0 -75.0 559.0 -220.0C559.0 -310.0 507.0 -370.0 408.0 -396.0L294.0 -426.0C220.0 -446.0 188.0 -476.0 188.0 -527.0C188.0 -597.0 242.0 -644.0 322.0 -644.0C375.0 -644.0 420.0 -626.0 458.0 -589.0L464.0 -507.0H505.0C505.0 -572.0 510.0 -620.0 519.0 -649.0L514.0 -661.0C447.0 -686.0 395.0 -695.0 329.0 -695.0C162.0 -695.0 64.0 -615.0 64.0 -480.0C64.0 -395.0 115.0 -332.0 210.0 -304.0L350.0 -262.0C406.0 -245.0 433.0 -214.0 433.0 -166.0C433.0 -92.0 369.0 -37.0 283.0 -37.0C215.0 -37.0 151.0 -67.0 119.0 -114.0L112.0 -202.0H72.0C72.0 -127.0 68.0 -86.0 57.0 -29.0Z" fill="none" stroke="url(#ldrim)" stroke-width="4" opacity=".9"/>
+  </g>
+  <g transform="translate(394.8,615.0) scale(0.6180)">
+    <clipPath id="ldcB"><path d="M39.0 -644.0 76.0 -641.0C121.0 -637.0 124.0 -631.0 124.0 -543.0V-95.0C124.0 -61.0 119.0 -46.0 104.0 -38.0L72.0 -20.0V3.0C114.0 1.0 156.0 0.0 198.0 0.0C245.0 0.0 293.0 1.0 340.0 3.0C470.0 3.0 611.0 -87.0 611.0 -216.0C611.0 -269.0 591.0 -313.0 556.0 -338.0C520.0 -363.0 486.0 -372.0 406.0 -377.0C490.0 -407.0 519.0 -421.0 550.0 -450.0C574.0 -472.0 588.0 -508.0 588.0 -546.0C588.0 -637.0 525.0 -681.0 399.0 -681.0C335.0 -681.0 271.0 -678.0 207.0 -678.0C151.0 -678.0 95.0 -679.0 39.0 -681.0ZM265.0 -56.0V-348.0H295.0C411.0 -348.0 461.0 -304.0 461.0 -202.0C461.0 -98.0 414.0 -52.0 308.0 -52.0C293.0 -52.0 282.0 -53.0 265.0 -56.0ZM265.0 -400.0V-627.0C289.0 -630.0 304.0 -631.0 323.0 -631.0C404.0 -631.0 440.0 -598.0 440.0 -524.0C440.0 -437.0 396.0 -400.0 295.0 -400.0Z"/></clipPath>
+    <g clip-path="url(#ldcB)">
+      <rect x="-21" y="-741" width="692" height="804"
+            fill="url(#ldbody)"/>
+      <path d="M39.0 -644.0 76.0 -641.0C121.0 -637.0 124.0 -631.0 124.0 -543.0V-95.0C124.0 -61.0 119.0 -46.0 104.0 -38.0L72.0 -20.0V3.0C114.0 1.0 156.0 0.0 198.0 0.0C245.0 0.0 293.0 1.0 340.0 3.0C470.0 3.0 611.0 -87.0 611.0 -216.0C611.0 -269.0 591.0 -313.0 556.0 -338.0C520.0 -363.0 486.0 -372.0 406.0 -377.0C490.0 -407.0 519.0 -421.0 550.0 -450.0C574.0 -472.0 588.0 -508.0 588.0 -546.0C588.0 -637.0 525.0 -681.0 399.0 -681.0C335.0 -681.0 271.0 -678.0 207.0 -678.0C151.0 -678.0 95.0 -679.0 39.0 -681.0ZM265.0 -56.0V-348.0H295.0C411.0 -348.0 461.0 -304.0 461.0 -202.0C461.0 -98.0 414.0 -52.0 308.0 -52.0C293.0 -52.0 282.0 -53.0 265.0 -56.0ZM265.0 -400.0V-627.0C289.0 -630.0 304.0 -631.0 323.0 -631.0C404.0 -631.0 440.0 -598.0 440.0 -524.0C440.0 -437.0 396.0 -400.0 295.0 -400.0Z" fill="none" stroke="#050E26" stroke-width="30" opacity=".5"
+            transform="translate(-6,-7)" filter="url(#ldsoft)"/>
+      <path d="M39.0 -644.0 76.0 -641.0C121.0 -637.0 124.0 -631.0 124.0 -543.0V-95.0C124.0 -61.0 119.0 -46.0 104.0 -38.0L72.0 -20.0V3.0C114.0 1.0 156.0 0.0 198.0 0.0C245.0 0.0 293.0 1.0 340.0 3.0C470.0 3.0 611.0 -87.0 611.0 -216.0C611.0 -269.0 591.0 -313.0 556.0 -338.0C520.0 -363.0 486.0 -372.0 406.0 -377.0C490.0 -407.0 519.0 -421.0 550.0 -450.0C574.0 -472.0 588.0 -508.0 588.0 -546.0C588.0 -637.0 525.0 -681.0 399.0 -681.0C335.0 -681.0 271.0 -678.0 207.0 -678.0C151.0 -678.0 95.0 -679.0 39.0 -681.0ZM265.0 -56.0V-348.0H295.0C411.0 -348.0 461.0 -304.0 461.0 -202.0C461.0 -98.0 414.0 -52.0 308.0 -52.0C293.0 -52.0 282.0 -53.0 265.0 -56.0ZM265.0 -400.0V-627.0C289.0 -630.0 304.0 -631.0 323.0 -631.0C404.0 -631.0 440.0 -598.0 440.0 -524.0C440.0 -437.0 396.0 -400.0 295.0 -400.0Z" fill="none" stroke="#A8CBFF" stroke-width="10" opacity=".22"
+            transform="translate(5,6)" filter="url(#ldsoft)"/>
+    </g>
+    <path d="M39.0 -644.0 76.0 -641.0C121.0 -637.0 124.0 -631.0 124.0 -543.0V-95.0C124.0 -61.0 119.0 -46.0 104.0 -38.0L72.0 -20.0V3.0C114.0 1.0 156.0 0.0 198.0 0.0C245.0 0.0 293.0 1.0 340.0 3.0C470.0 3.0 611.0 -87.0 611.0 -216.0C611.0 -269.0 591.0 -313.0 556.0 -338.0C520.0 -363.0 486.0 -372.0 406.0 -377.0C490.0 -407.0 519.0 -421.0 550.0 -450.0C574.0 -472.0 588.0 -508.0 588.0 -546.0C588.0 -637.0 525.0 -681.0 399.0 -681.0C335.0 -681.0 271.0 -678.0 207.0 -678.0C151.0 -678.0 95.0 -679.0 39.0 -681.0ZM265.0 -56.0V-348.0H295.0C411.0 -348.0 461.0 -304.0 461.0 -202.0C461.0 -98.0 414.0 -52.0 308.0 -52.0C293.0 -52.0 282.0 -53.0 265.0 -56.0ZM265.0 -400.0V-627.0C289.0 -630.0 304.0 -631.0 323.0 -631.0C404.0 -631.0 440.0 -598.0 440.0 -524.0C440.0 -437.0 396.0 -400.0 295.0 -400.0Z" fill="none" stroke="url(#ldrim)" stroke-width="4" opacity=".9"/>
+  </g><g transform="translate(1012.5,409.4) scale(0.1932)"><path d="M57.0 -29.0C131.0 4.0 189.0 17.0 265.0 17.0C444.0 17.0 559.0 -75.0 559.0 -220.0C559.0 -310.0 507.0 -370.0 408.0 -396.0L294.0 -426.0C220.0 -446.0 188.0 -476.0 188.0 -527.0C188.0 -597.0 242.0 -644.0 322.0 -644.0C375.0 -644.0 420.0 -626.0 458.0 -589.0L464.0 -507.0H505.0C505.0 -572.0 510.0 -620.0 519.0 -649.0L514.0 -661.0C447.0 -686.0 395.0 -695.0 329.0 -695.0C162.0 -695.0 64.0 -615.0 64.0 -480.0C64.0 -395.0 115.0 -332.0 210.0 -304.0L350.0 -262.0C406.0 -245.0 433.0 -214.0 433.0 -166.0C433.0 -92.0 369.0 -37.0 283.0 -37.0C215.0 -37.0 151.0 -67.0 119.0 -114.0L112.0 -202.0H72.0C72.0 -127.0 68.0 -86.0 57.0 -29.0Z M786.0 -622.0C837.0 -622.0 862.0 -610.0 916.0 -522.0L1017.0 -359.0C1034.0 -332.0 1045.0 -310.0 1061.0 -274.0V-135.0C1061.0 -46.0 1060.0 -44.0 1013.0 -40.0L976.0 -37.0V3.0C1028.0 1.0 1079.0 0.0 1131.0 0.0C1183.0 0.0 1235.0 1.0 1287.0 3.0V-37.0L1250.0 -40.0C1203.0 -44.0 1202.0 -46.0 1202.0 -135.0V-298.0C1221.0 -341.0 1237.0 -371.0 1255.0 -398.0L1431.0 -659.0V-678.0H1354.0L1166.0 -356.0L1059.0 -559.0C1019.0 -635.0 991.0 -668.0 945.0 -695.0L786.0 -659.0Z M1633.0 3.0C1671.0 1.0 1710.0 0.0 1748.0 0.0C1786.0 0.0 1824.0 1.0 1862.0 3.0V-34.0L1825.0 -37.0C1780.0 -41.0 1777.0 -46.0 1777.0 -135.0V-528.0L2103.0 -136.0L2225.0 3.0L2307.0 16.0L2314.0 12.0L2311.0 -89.0V-543.0C2311.0 -631.0 2314.0 -637.0 2359.0 -641.0L2396.0 -644.0V-681.0C2358.0 -679.0 2320.0 -678.0 2282.0 -678.0C2244.0 -678.0 2205.0 -679.0 2167.0 -681.0V-644.0L2204.0 -641.0C2249.0 -637.0 2252.0 -631.0 2252.0 -543.0V-184.0L1940.0 -548.0C1919.0 -572.0 1901.0 -596.0 1837.0 -681.0C1809.0 -679.0 1781.0 -678.0 1753.0 -678.0C1713.0 -678.0 1673.0 -679.0 1633.0 -681.0V-644.0L1670.0 -641.0C1715.0 -637.0 1718.0 -631.0 1718.0 -543.0V-135.0C1718.0 -47.0 1715.0 -41.0 1670.0 -37.0L1633.0 -34.0Z M2615.0 3.0C2653.0 1.0 2690.0 0.0 2728.0 0.0C2766.0 0.0 2803.0 1.0 2841.0 3.0V-34.0L2791.0 -37.0C2760.0 -39.0 2759.0 -72.0 2767.0 -94.0L2809.0 -206.0H3060.0L3105.0 -92.0C3111.0 -76.0 3118.0 -39.0 3091.0 -37.0L3038.0 -34.0V3.0C3089.0 1.0 3139.0 0.0 3190.0 0.0C3243.0 0.0 3295.0 1.0 3348.0 3.0V-34.0L3324.0 -37.0C3296.0 -41.0 3282.0 -52.0 3269.0 -81.0L3010.0 -686.0H2939.0L2882.0 -535.0L2701.0 -97.0C2685.0 -58.0 2667.0 -39.0 2645.0 -37.0L2615.0 -34.0ZM2833.0 -262.0 2933.0 -516.0 3037.0 -262.0Z M3568.0 3.0C3620.0 1.0 3672.0 0.0 3724.0 0.0C3779.0 0.0 3834.0 1.0 3889.0 3.0V-37.0L3842.0 -40.0C3796.0 -43.0 3794.0 -47.0 3794.0 -135.0V-622.0C3809.0 -628.0 3827.0 -631.0 3854.0 -631.0C3937.0 -631.0 3979.0 -586.0 3979.0 -497.0C3979.0 -417.0 3939.0 -365.0 3876.0 -365.0H3858.0H3840.0V-326.0C3859.0 -323.0 3878.0 -319.0 3898.0 -319.0C4027.0 -319.0 4123.0 -410.0 4123.0 -531.0C4123.0 -631.0 4019.0 -681.0 3934.0 -681.0C3870.0 -681.0 3805.0 -678.0 3741.0 -678.0C3683.0 -678.0 3626.0 -679.0 3568.0 -681.0V-644.0L3605.0 -641.0C3650.0 -637.0 3653.0 -631.0 3653.0 -543.0V-135.0C3653.0 -46.0 3652.0 -44.0 3605.0 -40.0L3568.0 -37.0Z M4357.0 -29.0C4431.0 4.0 4489.0 17.0 4565.0 17.0C4744.0 17.0 4859.0 -75.0 4859.0 -220.0C4859.0 -310.0 4807.0 -370.0 4708.0 -396.0L4594.0 -426.0C4520.0 -446.0 4488.0 -476.0 4488.0 -527.0C4488.0 -597.0 4542.0 -644.0 4622.0 -644.0C4675.0 -644.0 4720.0 -626.0 4758.0 -589.0L4764.0 -507.0H4805.0C4805.0 -572.0 4810.0 -620.0 4819.0 -649.0L4814.0 -661.0C4747.0 -686.0 4695.0 -695.0 4629.0 -695.0C4462.0 -695.0 4364.0 -615.0 4364.0 -480.0C4364.0 -395.0 4415.0 -332.0 4510.0 -304.0L4650.0 -262.0C4706.0 -245.0 4733.0 -214.0 4733.0 -166.0C4733.0 -92.0 4669.0 -37.0 4583.0 -37.0C4515.0 -37.0 4451.0 -67.0 4419.0 -114.0L4412.0 -202.0H4372.0C4372.0 -127.0 4368.0 -86.0 4357.0 -29.0Z M5110.0 -644.0 5147.0 -641.0C5192.0 -637.0 5195.0 -631.0 5195.0 -543.0V-95.0C5195.0 -61.0 5190.0 -46.0 5175.0 -38.0L5143.0 -20.0V3.0C5184.0 1.0 5225.0 0.0 5266.0 0.0C5341.0 0.0 5417.0 3.0 5492.0 3.0C5547.0 3.0 5575.0 3.0 5632.0 0.0L5637.0 -8.0L5648.0 -166.0H5609.0L5586.0 -72.0C5584.0 -64.0 5531.0 -55.0 5485.0 -55.0L5336.0 -58.0V-325.0C5364.0 -327.0 5381.0 -328.0 5403.0 -328.0H5469.0C5507.0 -328.0 5523.0 -317.0 5526.0 -291.0L5532.0 -241.0H5572.0C5570.0 -277.0 5569.0 -313.0 5569.0 -349.0C5569.0 -385.0 5570.0 -420.0 5572.0 -456.0H5532.0L5526.0 -399.0C5524.0 -383.0 5511.0 -378.0 5469.0 -378.0H5403.0C5370.0 -378.0 5356.0 -378.0 5336.0 -380.0V-620.0L5481.0 -623.0C5536.0 -623.0 5578.0 -615.0 5579.0 -604.0L5587.0 -529.0H5623.0L5637.0 -671.0L5631.0 -678.0C5594.0 -680.0 5573.0 -681.0 5536.0 -681.0C5457.0 -681.0 5379.0 -678.0 5300.0 -678.0C5237.0 -678.0 5173.0 -679.0 5110.0 -681.0Z M6421.0 -644.0 6458.0 -641.0C6503.0 -637.0 6506.0 -631.0 6506.0 -543.0V-95.0C6506.0 -61.0 6501.0 -46.0 6486.0 -38.0L6454.0 -20.0V3.0C6496.0 1.0 6538.0 0.0 6580.0 0.0C6627.0 0.0 6675.0 1.0 6722.0 3.0C6852.0 3.0 6993.0 -87.0 6993.0 -216.0C6993.0 -269.0 6973.0 -313.0 6938.0 -338.0C6902.0 -363.0 6868.0 -372.0 6788.0 -377.0C6872.0 -407.0 6901.0 -421.0 6932.0 -450.0C6956.0 -472.0 6970.0 -508.0 6970.0 -546.0C6970.0 -637.0 6907.0 -681.0 6781.0 -681.0C6717.0 -681.0 6653.0 -678.0 6589.0 -678.0C6533.0 -678.0 6477.0 -679.0 6421.0 -681.0ZM6647.0 -56.0V-348.0H6677.0C6793.0 -348.0 6843.0 -304.0 6843.0 -202.0C6843.0 -98.0 6796.0 -52.0 6690.0 -52.0C6675.0 -52.0 6664.0 -53.0 6647.0 -56.0ZM6647.0 -400.0V-627.0C6671.0 -630.0 6686.0 -631.0 6705.0 -631.0C6786.0 -631.0 6822.0 -598.0 6822.0 -524.0C6822.0 -437.0 6778.0 -400.0 6677.0 -400.0Z M7235.0 -644.0 7272.0 -641.0C7317.0 -637.0 7320.0 -631.0 7320.0 -543.0V-177.0C7320.0 -58.0 7428.0 17.0 7600.0 17.0C7792.0 17.0 7884.0 -70.0 7884.0 -251.0V-543.0C7884.0 -631.0 7887.0 -637.0 7932.0 -641.0L7969.0 -644.0V-681.0C7931.0 -679.0 7893.0 -678.0 7855.0 -678.0C7817.0 -678.0 7778.0 -679.0 7740.0 -681.0V-644.0L7777.0 -641.0C7822.0 -637.0 7825.0 -631.0 7825.0 -543.0V-302.0C7825.0 -196.0 7812.0 -143.0 7778.0 -108.0C7750.0 -79.0 7704.0 -65.0 7637.0 -65.0C7569.0 -65.0 7524.0 -80.0 7497.0 -112.0C7470.0 -144.0 7461.0 -191.0 7461.0 -295.0V-543.0C7461.0 -631.0 7464.0 -637.0 7509.0 -641.0L7546.0 -644.0V-681.0C7494.0 -679.0 7442.0 -678.0 7390.0 -678.0C7338.0 -678.0 7287.0 -679.0 7235.0 -681.0Z M8204.0 -29.0C8278.0 4.0 8336.0 17.0 8412.0 17.0C8591.0 17.0 8706.0 -75.0 8706.0 -220.0C8706.0 -310.0 8654.0 -370.0 8555.0 -396.0L8441.0 -426.0C8367.0 -446.0 8335.0 -476.0 8335.0 -527.0C8335.0 -597.0 8389.0 -644.0 8469.0 -644.0C8522.0 -644.0 8567.0 -626.0 8605.0 -589.0L8611.0 -507.0H8652.0C8652.0 -572.0 8657.0 -620.0 8666.0 -649.0L8661.0 -661.0C8594.0 -686.0 8542.0 -695.0 8476.0 -695.0C8309.0 -695.0 8211.0 -615.0 8211.0 -480.0C8211.0 -395.0 8262.0 -332.0 8357.0 -304.0L8497.0 -262.0C8553.0 -245.0 8580.0 -214.0 8580.0 -166.0C8580.0 -92.0 8516.0 -37.0 8430.0 -37.0C8362.0 -37.0 8298.0 -67.0 8266.0 -114.0L8259.0 -202.0H8219.0C8219.0 -127.0 8215.0 -86.0 8204.0 -29.0Z M8957.0 3.0C9009.0 1.0 9060.0 0.0 9112.0 0.0C9164.0 0.0 9216.0 1.0 9268.0 3.0V-37.0L9231.0 -40.0C9184.0 -44.0 9183.0 -46.0 9183.0 -135.0V-543.0C9183.0 -632.0 9184.0 -634.0 9231.0 -638.0L9268.0 -641.0V-681.0C9216.0 -679.0 9164.0 -678.0 9112.0 -678.0C9060.0 -678.0 9009.0 -679.0 8957.0 -681.0V-641.0L8994.0 -638.0C9041.0 -634.0 9042.0 -632.0 9042.0 -543.0V-135.0C9042.0 -46.0 9041.0 -44.0 8994.0 -40.0L8957.0 -37.0Z M9502.0 3.0C9540.0 1.0 9579.0 0.0 9617.0 0.0C9655.0 0.0 9693.0 1.0 9731.0 3.0V-34.0L9694.0 -37.0C9649.0 -41.0 9646.0 -46.0 9646.0 -135.0V-528.0L9972.0 -136.0L10094.0 3.0L10176.0 16.0L10183.0 12.0L10180.0 -89.0V-543.0C10180.0 -631.0 10183.0 -637.0 10228.0 -641.0L10265.0 -644.0V-681.0C10227.0 -679.0 10189.0 -678.0 10151.0 -678.0C10113.0 -678.0 10074.0 -679.0 10036.0 -681.0V-644.0L10073.0 -641.0C10118.0 -637.0 10121.0 -631.0 10121.0 -543.0V-184.0L9809.0 -548.0C9788.0 -572.0 9770.0 -596.0 9706.0 -681.0C9678.0 -679.0 9650.0 -678.0 9622.0 -678.0C9582.0 -678.0 9542.0 -679.0 9502.0 -681.0V-644.0L9539.0 -641.0C9584.0 -637.0 9587.0 -631.0 9587.0 -543.0V-135.0C9587.0 -47.0 9584.0 -41.0 9539.0 -37.0L9502.0 -34.0Z M10499.0 -644.0 10536.0 -641.0C10581.0 -637.0 10584.0 -631.0 10584.0 -543.0V-95.0C10584.0 -61.0 10579.0 -46.0 10564.0 -38.0L10532.0 -20.0V3.0C10573.0 1.0 10614.0 0.0 10655.0 0.0C10730.0 0.0 10806.0 3.0 10881.0 3.0C10936.0 3.0 10964.0 3.0 11021.0 0.0L11026.0 -8.0L11037.0 -166.0H10998.0L10975.0 -72.0C10973.0 -64.0 10920.0 -55.0 10874.0 -55.0L10725.0 -58.0V-325.0C10753.0 -327.0 10770.0 -328.0 10792.0 -328.0H10858.0C10896.0 -328.0 10912.0 -317.0 10915.0 -291.0L10921.0 -241.0H10961.0C10959.0 -277.0 10958.0 -313.0 10958.0 -349.0C10958.0 -385.0 10959.0 -420.0 10961.0 -456.0H10921.0L10915.0 -399.0C10913.0 -383.0 10900.0 -378.0 10858.0 -378.0H10792.0C10759.0 -378.0 10745.0 -378.0 10725.0 -380.0V-620.0L10870.0 -623.0C10925.0 -623.0 10967.0 -615.0 10968.0 -604.0L10976.0 -529.0H11012.0L11026.0 -671.0L11020.0 -678.0C10983.0 -680.0 10962.0 -681.0 10925.0 -681.0C10846.0 -681.0 10768.0 -678.0 10689.0 -678.0C10626.0 -678.0 10562.0 -679.0 10499.0 -681.0Z M11288.0 -29.0C11362.0 4.0 11420.0 17.0 11496.0 17.0C11675.0 17.0 11790.0 -75.0 11790.0 -220.0C11790.0 -310.0 11738.0 -370.0 11639.0 -396.0L11525.0 -426.0C11451.0 -446.0 11419.0 -476.0 11419.0 -527.0C11419.0 -597.0 11473.0 -644.0 11553.0 -644.0C11606.0 -644.0 11651.0 -626.0 11689.0 -589.0L11695.0 -507.0H11736.0C11736.0 -572.0 11741.0 -620.0 11750.0 -649.0L11745.0 -661.0C11678.0 -686.0 11626.0 -695.0 11560.0 -695.0C11393.0 -695.0 11295.0 -615.0 11295.0 -480.0C11295.0 -395.0 11346.0 -332.0 11441.0 -304.0L11581.0 -262.0C11637.0 -245.0 11664.0 -214.0 11664.0 -166.0C11664.0 -92.0 11600.0 -37.0 11514.0 -37.0C11446.0 -37.0 11382.0 -67.0 11350.0 -114.0L11343.0 -202.0H11303.0C11303.0 -127.0 11299.0 -86.0 11288.0 -29.0Z M12059.0 -29.0C12133.0 4.0 12191.0 17.0 12267.0 17.0C12446.0 17.0 12561.0 -75.0 12561.0 -220.0C12561.0 -310.0 12509.0 -370.0 12410.0 -396.0L12296.0 -426.0C12222.0 -446.0 12190.0 -476.0 12190.0 -527.0C12190.0 -597.0 12244.0 -644.0 12324.0 -644.0C12377.0 -644.0 12422.0 -626.0 12460.0 -589.0L12466.0 -507.0H12507.0C12507.0 -572.0 12512.0 -620.0 12521.0 -649.0L12516.0 -661.0C12449.0 -686.0 12397.0 -695.0 12331.0 -695.0C12164.0 -695.0 12066.0 -615.0 12066.0 -480.0C12066.0 -395.0 12117.0 -332.0 12212.0 -304.0L12352.0 -262.0C12408.0 -245.0 12435.0 -214.0 12435.0 -166.0C12435.0 -92.0 12371.0 -37.0 12285.0 -37.0C12217.0 -37.0 12153.0 -67.0 12121.0 -114.0L12114.0 -202.0H12074.0C12074.0 -127.0 12070.0 -86.0 12059.0 -29.0Z" fill="#9DB9E8"/></g></svg>
+</span>
+</a>
+
+<a class="back-pill" href="https://claude.ai/code/artifact/be1a8924-bcce-4a07-b4e7-15f8e59fcf07"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M19 12H5m0 0 6-6m-6 6 6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="back-word"><span class="bw-full">Вернуться в меню</span><span class="bw-short">В меню</span></span></a>
+<div class="view-switcher" role="tablist" aria-label="Режим кабинета">
+<button
+type="button"
+id="cabinet-tab"
+role="tab"
+aria-selected="true"
+aria-controls="cabinet-view"
+data-view-target="cabinet"
+>
+Кабинет
+</button>
+<button
+type="button"
+id="admin-tab"
+role="tab"
+aria-selected="false"
+aria-controls="admin-view"
+data-view-target="admin"
+>
+Админка
+</button>
+</div>
+
+<div class="account">
+<span class="account-copy">
+<strong id="account-name"></strong>
+<span id="account-business"></span>
+</span>
+<span class="account-avatar" id="account-avatar" aria-hidden="true"></span>
+</div>
+</div>
+</header>
+
+<main class="app-shell" id="main-content">
+<aside class="demo-banner">
+<strong>DEMO</strong>
+<span>
+Все показатели, статусы, диалоги и действия системы ниже являются
+демонстрационным набором. Каждая числовая величина отмечена бейджем SAMPLE.
+</span>
+</aside>
+
+<section
+class="view-panel"
+id="cabinet-view"
+role="tabpanel"
+aria-labelledby="cabinet-tab"
+data-view="cabinet"
+>
+<header class="page-heading">
+<div>
+<p class="eyebrow">Кабинет владельца</p>
+<h1>Ваш бизнес — в одной картине</h1>
+<p>
+Деньги, путь клиента, источники, диалоги и продажи TaiSabai
+собраны в одном рабочем контуре.
+</p>
+</div>
+<span class="context-pill">TaiSabai · тестовый период</span>
+</header>
+
+<section class="dashboard-section" aria-labelledby="money-title">
+<div class="section-head">
+<div>
+<p class="section-kicker">Экономика</p>
+<h2 id="money-title">Деньги</h2>
+</div>
+<p class="section-description">
+Сводка вложений, полученной выручки и возврата маркетинговых инвестиций.
+</p>
+</div>
+<div class="money-grid" id="money-grid"></div>
+</section>
+
+<section class="dashboard-section" aria-labelledby="funnel-title">
+<div class="section-head">
+<div>
+<p class="section-kicker">Путь клиента</p>
+<h2 id="funnel-title">Воронка</h2>
+</div>
+<p class="section-description">
+Нажмите на ступень, чтобы увидеть возможные точки потери.
+</p>
+</div>
+
+<div class="funnel-track" id="funnel-track"></div>
+
+<div
+class="loss-panel"
+id="loss-panel"
+aria-live="polite"
+aria-labelledby="loss-panel-title"
+>
+<div>
+<p class="loss-panel-label">Где теряем</p>
+<h3 id="loss-panel-title"></h3>
+</div>
+<ul class="loss-list" id="loss-list"></ul>
+</div>
+</section>
+
+<section class="dashboard-section" aria-labelledby="sources-title">
+<div class="section-head">
+<div>
+<p class="section-kicker">Привлечение</p>
+<h2 id="sources-title">Источники</h2>
+</div>
+<p class="section-description">
+Площадки, их демонстрационный статус и переходы в контур TaiSabai.
+</p>
+</div>
+<div class="source-grid" id="source-grid"></div>
+</section>
+
+<section class="dashboard-section" aria-labelledby="dialogs-title">
+<div class="section-head">
+<div>
+<p class="section-kicker">Коммуникации</p>
+<h2 id="dialogs-title">Последние диалоги</h2>
+</div>
+<p class="section-description">
+Единый список обращений независимо от канала, из которого пришёл человек.
+</p>
+</div>
+<div class="dialog-list" id="dialog-list"></div>
+</section>
+
+<section class="dashboard-section" aria-labelledby="crm-title">
+<div class="section-head">
+<div>
+<p class="section-kicker">Продажи</p>
+<h2 id="crm-title">CRM</h2>
+</div>
+<p class="section-description">
+Состояние клиентской базы от новой заявки до закрытой сделки.
+</p>
+</div>
+<div class="crm-strip" id="crm-strip"></div>
+</section>
+</section>
+
+<section
+class="view-panel"
+id="admin-view"
+role="tabpanel"
+aria-labelledby="admin-tab"
+data-view="admin"
+hidden
+>
+<header class="page-heading">
+<div>
+<p class="eyebrow">Агентский контур</p>
+<h1>Админка Synapse Business</h1>
+<p>
+Проекты, интеграции и журнал действий системы без перехода
+между отдельными кабинетами.
+</p>
+</div>
+<span class="context-pill">Портфель проектов</span>
+</header>
+
+<section class="dashboard-section" aria-labelledby="projects-title">
+<div class="section-head">
+<div>
+<p class="section-kicker">Управление портфелем</p>
+<h2 id="projects-title">Проекты</h2>
+</div>
+<p class="section-description">
+Состояние сайта, источников и CRM по каждому бизнесу.
+</p>
+</div>
+
+<div class="project-table" id="project-table">
+<div class="project-row project-row-header" aria-hidden="true">
+<span>Проект</span>
+<span>Направления</span>
+<span>Сайт</span>
+<span>Источники</span>
+<span>CRM</span>
+</div>
+</div>
+</section>
+
+<section class="dashboard-section" aria-labelledby="integrations-title">
+<div class="section-head">
+<div>
+<p class="section-kicker">Подключения</p>
+<h2 id="integrations-title">Интеграции</h2>
+</div>
+<p class="section-description">
+Кнопки подключения являются заглушками и не отправляют внешние запросы.
+</p>
+</div>
+<div class="integration-grid" id="integration-grid"></div>
+</section>
+
+<section class="dashboard-section" aria-labelledby="activity-title">
+<div class="section-head">
+<div>
+<p class="section-kicker">Журнал</p>
+<h2 id="activity-title">Что сделала система</h2>
+</div>
+<p class="section-description">
+Последовательная история демонстрационных действий Synapse.
+</p>
+</div>
+<div class="activity-list" id="activity-list"></div>
+</section>
+</section>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite">
+Подключение отключено в демонстрационном файле.
+</div>
+
+<script>
+const DATA_TAISABAI = Object.freeze({
+account: {
+owner: "Владислав",
+business: "TaiSabai",
+role: "Владелец"
+},
+
+money: [
+{
+label: "Вложено",
+value: 186400,
+format: "currency",
+color: "#FF9C9C",
+sparkline: [18, 24, 22, 29, 27, 33, 38, 36]
+},
+{
+label: "Получено",
+value: 412000,
+format: "currency",
+color: "#9FD4FF",
+sparkline: [24, 29, 37, 35, 48, 58, 69, 82]
+},
+{
+label: "ROMI",
+value: 121,
+format: "percent",
+color: "#79DCB6",
+sparkline: [17, 23, 31, 45, 52, 68, 91, 121]
+}
+],
+
+funnel: [
+{
+id: "cold",
+name: "Холодная аудитория",
+value: 84200,
+unit: "контактов с контентом",
+losses: [
+"Не для каждого охватного материала задан следующий шаг.",
+"Часть площадок ещё не передаёт события в общий контур."
+]
+},
+{
+id: "search",
+name: "Поиск и геосервисы",
+value: 6190,
+unit: "переходов из поиска",
+losses: [
+"Карточки и посадочные страницы отвечают не на все поисковые намерения.",
+"Для части геосервисов требуется закончить настройку источников."
+]
+},
+{
+id: "interest",
+name: "Горячий интерес",
+value: 1240,
+unit: "заинтересованных посетителей",
+losses: [
+"Не все посетители доходят до понятного предложения связаться.",
+"Некоторым направлениям не хватает отдельного сценария выбора."
+]
+},
+{
+id: "dialogs",
+name: "Диалоги",
+value: 186,
+unit: "начатых обращений",
+losses: [
+"После первой фразы не всегда сразу зафиксирован следующий шаг.",
+"Часть обращений требует более быстрой квалификации потребности."
+]
+},
+{
+id: "sales",
+name: "CRM и продажи",
+value: 42,
+unit: "активных возможностей",
+losses: [
+"Не у каждой возможности заполнены бюджет и срок решения.",
+"Зависшие сделки требуют автоматического напоминания ответственному."
+]
+}
+],
+
+sources: [
+{ name: "Instagram", icon: "IG", status: "LIVE", transitions: 4280 },
+{ name: "TikTok", icon: "TT", status: "QA", transitions: 3110 },
+{ name: "Telegram", icon: "TG", status: "LIVE", transitions: 948 },
+{ name: "YouTube", icon: "YT", status: "LIVE", transitions: 804 },
+{ name: "VK", icon: "VK", status: "НЕ ПОДКЛЮЧЁН", transitions: 0 },
+{ name: "Яндекс", icon: "Я", status: "QA", transitions: 1510 },
+{ name: "Google", icon: "G", status: "НЕ ПОДКЛЮЧЁН", transitions: 0 },
+{ name: "2ГИС", icon: "2Г", status: "QA", transitions: 623 },
+{ name: "Avito", icon: "A", status: "НЕ ПОДКЛЮЧЁН", transitions: 0 }
+],
+
+dialogs: [
+{
+name: "Анна М.",
+initials: "АМ",
+channel: "Telegram",
+message: "Хотим приехать осенью и понять бюджет отдыха.",
+status: "Новый"
+},
+{
+name: "Михаил К.",
+initials: "МК",
+channel: "Instagram",
+message: "Подскажите, с чего начать подготовку к переезду?",
+status: "Квалификация"
+},
+{
+name: "Екатерина",
+initials: "Е",
+channel: "Telegram",
+message: "Интересует квартира для жизни и возможной аренды.",
+status: "Предложение"
+},
+{
+name: "Дмитрий С.",
+initials: "ДС",
+channel: "YouTube",
+message: "Посмотрел обзор, хочу обсудить программу поездки.",
+status: "В работе"
+},
+{
+name: "Ольга П.",
+initials: "ОП",
+channel: "Яндекс",
+message: "Нужна консультация по выбору района в Паттайе.",
+status: "Следующий шаг"
+}
+],
+
+crm: [
+{ name: "Новые", count: 38, amount: 620000 },
+{ name: "В работе", count: 19, amount: 470000 },
+{ name: "Оплата", count: 6, amount: 198000 },
+{ name: "Закрыто", count: 9, amount: 412000 }
+],
+
+projects: [
+{
+name: "TaiSabai",
+type: "Туризм и переезд",
+directions: "Отдых · Переезд · Недвижимость",
+website: "LIVE",
+sources: "QA",
+crm: "LIVE"
+},
+{
+name: "ALVI",
+type: "Спа и массаж",
+directions: "Основной сайт · воронки услуг",
+website: "LIVE",
+sources: "QA",
+crm: "QA"
+},
+{
+name: "Avokado",
+type: "Студия для женщин",
+directions: "Основной сайт · заявки",
+website: "QA",
+sources: "НЕ ПОДКЛЮЧЁН",
+crm: "QA"
+}
+],
+
+integrations: [
+{
+name: "Telegram",
+icon: "TG",
+purpose: "Диалоги, заявки и рабочие уведомления",
+status: "LIVE"
+},
+{
+name: "Instagram",
+icon: "IG",
+purpose: "Источники трафика и обращения",
+status: "QA"
+},
+{
+name: "Яндекс",
+icon: "Я",
+purpose: "Поиск, реклама и аналитические события",
+status: "QA"
+},
+{
+name: "Google",
+icon: "G",
+purpose: "Поиск, реклама и аналитика",
+status: "НЕ ПОДКЛЮЧЁН"
+},
+{
+name: "2ГИС",
+icon: "2Г",
+purpose: "Геосервис и переходы в воронку",
+status: "QA"
+},
+{
+name: "Avito",
+icon: "A",
+purpose: "Объявления, обращения и атрибуция",
+status: "НЕ ПОДКЛЮЧЁН"
+}
+],
+
+activity: [
+{
+time: "09:42",
+action: "Сопоставила заявку с источником",
+detail: "Обращение из Instagram добавлено в демонстрационный путь клиента."
+},
+{
+time: "09:18",
+action: "Создала карточку лида",
+detail: "Диалог из Telegram передан в демонстрационный CRM-контур."
+},
+{
+time: "08:54",
+action: "Пометила интеграцию для проверки",
+detail: "Статус Яндекса переведён в QA внутри демонстрационного набора."
+},
+{
+time: "08:31",
+action: "Обновила статус сделки",
+detail: "Возможность перемещена на этап «Оплата»."
+},
+{
+time: "08:07",
+action: "Проверила состояние сайта",
+detail: "Демонстрационный проект ALVI отмечен статусом LIVE."
+},
+{
+time: "07:45",
+action: "Сформировала сводку потерь",
+detail: "В кабинете обновлены точки внимания по ступеням воронки."
+}
+]
+});
+
+const DATA_ALVI = Object.freeze({
+account: { owner: "ALVI", business: "ALVI", role: "Спа и массаж" },
+money: [
+{ label: "Вложено", value: 74300, format: "currency", color: "#FF9C9C", sparkline: [12,15,14,19,17,21,24,23] },
+{ label: "Получено", value: 196000, format: "currency", color: "#9FD4FF", sparkline: [16,19,24,26,31,38,44,52] },
+{ label: "ROMI", value: 164, format: "percent", color: "#79DCB6", sparkline: [22,31,44,58,77,98,131,164] }
+],
+funnel: [
+{ id:"cold", name:"Холодная аудитория", value:21800, unit:"контактов с контентом",
+losses:["Часть постов не ведёт к записи на процедуру.","ВКонтакте пока не передаёт события в общий контур."] },
+{ id:"search", name:"Поиск и геосервисы", value:3940, unit:"переходов из поиска",
+losses:["Карточки на картах заполнены не полностью.","Часть запросов о ценах остаётся без ответа на странице."] },
+{ id:"interest", name:"Горячий интерес", value:870, unit:"заинтересованных посетителей",
+losses:["Не у всех услуг есть понятная кнопка записи.","Прайс виден не с первого экрана."] },
+{ id:"dialogs", name:"Диалоги", value:214, unit:"начатых обращений",
+losses:["Часть обращений приходит в нерабочее время.","Не для каждого диалога зафиксирован следующий шаг."] },
+{ id:"sales", name:"CRM и продажи", value:96, unit:"активных записей",
+losses:["Повторные визиты не отслеживаются как отдельная воронка.","Отменённые записи не возвращаются в работу."] }
+],
+sources: [
+{ name:"Instagram", icon:"IG", status:"QA", transitions:1870 },
+{ name:"TikTok", icon:"TT", status:"НЕ ПОДКЛЮЧЁН", transitions:0 },
+{ name:"Telegram", icon:"TG", status:"LIVE", transitions:612 },
+{ name:"YouTube", icon:"YT", status:"НЕ ПОДКЛЮЧЁН", transitions:0 },
+{ name:"VK", icon:"VK", status:"QA", transitions:980 },
+{ name:"Яндекс", icon:"Я", status:"LIVE", transitions:2140 },
+{ name:"Google", icon:"G", status:"НЕ ПОДКЛЮЧЁН", transitions:0 },
+{ name:"2ГИС", icon:"2Г", status:"LIVE", transitions:1560 },
+{ name:"Avito", icon:"A", status:"НЕ ПОДКЛЮЧЁН", transitions:0 }
+],
+dialogs: [
+{ name:"Ирина В.", initials:"ИВ", channel:"Яндекс", message:"Хочу записаться на массаж спины в выходные.", status:"Новый" },
+{ name:"Светлана", initials:"С", channel:"2ГИС", message:"Подскажите цену на спа-программу для двоих.", status:"Квалификация" },
+{ name:"Марина К.", initials:"МК", channel:"Telegram", message:"Можно перенести запись на другой день?", status:"В работе" },
+{ name:"Алексей", initials:"А", channel:"Instagram", message:"Есть подарочные сертификаты?", status:"Предложение" },
+{ name:"Ольга Д.", initials:"ОД", channel:"Яндекс", message:"Приду с подругой, нужны два места подряд.", status:"Следующий шаг" }
+],
+crm: [
+{ name:"Новые", count:54, amount:186000 },
+{ name:"В работе", count:31, amount:142000 },
+{ name:"Оплата", count:12, amount:64000 },
+{ name:"Закрыто", count:27, amount:196000 }
+],
+projects: [], integrations: [], activity: []
+});
+
+const PROFILES = {
+"vladislav": { hash: "849d997d799ef43f30cb2560a9c77e31213ab24e81376726276a1acba7671dd0", data: DATA_TAISABAI, admin: true,  label: "Владислав Ксензов · владелец" },
+"taisabai":  { hash: "195b8df123d0efd637593d07379b4361fc1d7b97011e30e53a793608c09d4a48", data: DATA_TAISABAI, admin: false, label: "TaiSabai" },
+"alvi":      { hash: "d8a0c4d5eb483d383ecfadc22d4b065154e3f5bfcfc715b62fc3279da75bb930", data: DATA_ALVI,     admin: false, label: "ALVI" },
+"tatyana":   { hash: "0dabe6cebc46779ca2ed460f2ec86a662ab5eb20c61f8c6cfdff788c9033ce1c", data: DATA_ALVI,     admin: false, label: "Татьяна · ALVI", owner: "Татьяна" }
+};
+
+(() => {
+"use strict";
+
+let DATA = DATA_TAISABAI;
+
+const numberFormatter = new Intl.NumberFormat("ru-RU");
+const reducedMotion =
+typeof window.matchMedia === "function" &&
+window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const byId = (id) => document.getElementById(id);
+
+const escapeHTML = (value) =>
+String(value)
+.replaceAll("&", "&amp;")
+.replaceAll("<", "&lt;")
+.replaceAll(">", "&gt;")
+.replaceAll('"', "&quot;")
+.replaceAll("'", "&#039;");
+
+const sampleBadge = () =>
+'<span class="sample-badge" aria-label="Демонстрационное значение">SAMPLE</span>';
+
+const formatNumber = (value) => numberFormatter.format(value);
+
+const formatCurrency = (value) =>
+`${numberFormatter.format(value)} ₽`;
+
+const formatMetric = (metric) => {
+if (metric.format === "currency") {
+return formatCurrency(metric.value);
+}
+
+if (metric.format === "percent") {
+return `${formatNumber(metric.value)}%`;
+}
+
+return formatNumber(metric.value);
+};
+
+const statusClass = (status) => {
+if (status === "LIVE") return "status-live";
+if (status === "QA") return "status-qa";
+return "status-off";
+};
+
+const statusBadge = (status) =>
+`<span class="status-badge ${statusClass(status)}">${escapeHTML(status)}</span>`;
+
+const makeSparkline = (values, color, index, label) => {
+const width = 260;
+const height = 64;
+const padding = 4;
+const minimum = Math.min(...values);
+const maximum = Math.max(...values);
+const range = Math.max(maximum - minimum, 1);
+const denominator = Math.max(values.length - 1, 1);
+
+const points = values.map((value, pointIndex) => {
+const x = (pointIndex / denominator) * width;
+const normalized = (value - minimum) / range;
+const y = height - padding - normalized * (height - padding * 2);
+return `${x.toFixed(2)},${y.toFixed(2)}`;
+});
+
+const areaPoints = `0,${height} ${points.join(" ")} ${width},${height}`;
+const gradientId = `spark-gradient-${index}`;
+
+return `
+<svg
+class="sparkline"
+viewBox="0 0 ${width} ${height}"
+preserveAspectRatio="none"
+role="img"
+aria-label="Демонстрационная динамика: ${escapeHTML(label)}"
+>
+<title>Демонстрационная динамика: ${escapeHTML(label)}</title>
+<defs>
+<linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0%" stop-color="${color}" stop-opacity="0.24"></stop>
+<stop offset="100%" stop-color="${color}" stop-opacity="0"></stop>
+</linearGradient>
+</defs>
+<path class="sparkline-grid" d="M0 20 H260 M0 42 H260"></path>
+<polygon points="${areaPoints}" fill="url(#${gradientId})"></polygon>
+<polyline
+class="sparkline-line"
+points="${points.join(" ")}"
+stroke="${color}"
+></polyline>
+</svg>
+`;
+};
+
+const renderIdentity = () => {
+byId("account-name").textContent = DATA.account.owner;
+byId("account-business").textContent =
+`${DATA.account.business} · ${DATA.account.role}`;
+byId("account-avatar").textContent =
+DATA.account.owner.trim().charAt(0).toUpperCase();
+};
+
+const renderMoney = () => {
+byId("money-grid").innerHTML = DATA.money.map((metric, index) => `
+<article class="money-card">
+<p class="metric-label">${escapeHTML(metric.label)}</p>
+<div class="metric-line">
+<strong class="metric-value" style="color:${metric.color}">
+${escapeHTML(formatMetric(metric))}
+</strong>
+${sampleBadge()}
+</div>
+${makeSparkline(
+metric.sparkline,
+metric.color,
+index,
+metric.label
+)}
+</article>
+`).join("");
+};
+
+let activeFunnelIndex = 0;
+
+const renderLossPanel = () => {
+const activeStage = DATA.funnel[activeFunnelIndex];
+
+byId("loss-panel-title").textContent = activeStage.name;
+byId("loss-list").innerHTML = activeStage.losses
+.map((loss) => `<li>${escapeHTML(loss)}</li>`)
+.join("");
+
+document.querySelectorAll("[data-funnel-index]").forEach((button) => {
+const isActive =
+Number(button.dataset.funnelIndex) === activeFunnelIndex;
+button.setAttribute("aria-expanded", String(isActive));
+});
+};
+
+const renderFunnel = () => {
+byId("funnel-track").innerHTML = DATA.funnel.map((stage, index) => `
+<button
+class="funnel-step"
+type="button"
+data-funnel-index="${index}"
+aria-expanded="${index === activeFunnelIndex}"
+aria-controls="loss-panel"
+>
+<span class="step-open" aria-hidden="true">＋</span>
+<span class="step-label">${escapeHTML(stage.name)}</span>
+<span class="step-value-line">
+<strong class="step-value">${escapeHTML(formatNumber(stage.value))}</strong>
+${sampleBadge()}
+</span>
+<span class="step-unit">${escapeHTML(stage.unit)}</span>
+</button>
+`).join("");
+
+byId("funnel-track").addEventListener("click", (event) => {
+const button = event.target.closest("[data-funnel-index]");
+if (!button) return;
+
+activeFunnelIndex = Number(button.dataset.funnelIndex);
+renderLossPanel();
+});
+
+renderLossPanel();
+};
+
+const renderSources = () => {
+byId("source-grid").innerHTML = DATA.sources.map((source) => `
+<article class="source-card">
+<div class="source-top">
+<div class="source-identity">
+<span class="source-icon" aria-hidden="true">${escapeHTML(source.icon)}</span>
+<span class="source-name">${escapeHTML(source.name)}</span>
+</div>
+${statusBadge(source.status)}
+</div>
+<div class="source-metric">
+<strong>${escapeHTML(formatNumber(source.transitions))}</strong>
+${sampleBadge()}
+</div>
+<p class="source-caption">переходов</p>
+</article>
+`).join("");
+};
+
+const renderDialogs = () => {
+byId("dialog-list").innerHTML = DATA.dialogs.map((dialog) => `
+<article class="dialog-row">
+<div class="dialog-person">
+<span class="dialog-avatar" aria-hidden="true">
+${escapeHTML(dialog.initials)}
+</span>
+<span>
+<strong class="dialog-name">${escapeHTML(dialog.name)}</strong>
+<span class="channel-label">${escapeHTML(dialog.channel)}</span>
+</span>
+</div>
+<p class="dialog-message">«${escapeHTML(dialog.message)}»</p>
+<span class="lead-status">${escapeHTML(dialog.status)}</span>
+</article>
+`).join("");
+};
+
+const renderCRM = () => {
+byId("crm-strip").innerHTML = DATA.crm.map((stage) => `
+<article class="crm-stage">
+<h3>${escapeHTML(stage.name)}</h3>
+<div class="crm-data-row">
+<span class="crm-data-label">Карточки</span>
+<strong>${escapeHTML(formatNumber(stage.count))}</strong>
+${sampleBadge()}
+</div>
+<div class="crm-data-row">
+<span class="crm-data-label">Сумма</span>
+<strong>${escapeHTML(formatCurrency(stage.amount))}</strong>
+${sampleBadge()}
+</div>
+</article>
+`).join("");
+};
+
+const renderProjects = () => {
+const table = byId("project-table");
+
+table.insertAdjacentHTML(
+"beforeend",
+DATA.projects.map((project) => `
+<article class="project-row">
+<div class="project-cell project-cell-main">
+<span class="project-cell-label">Проект</span>
+<strong class="project-name">${escapeHTML(project.name)}</strong>
+<span class="project-type">${escapeHTML(project.type)}</span>
+</div>
+
+<div class="project-cell project-cell-directions">
+<span class="project-cell-label">Направления</span>
+<p class="project-directions">${escapeHTML(project.directions)}</p>
+</div>
+
+<div class="project-cell">
+<span class="project-cell-label">Сайт</span>
+${statusBadge(project.website)}
+<span class="admin-sample-line">${sampleBadge()} демо-статус</span>
+</div>
+
+<div class="project-cell">
+<span class="project-cell-label">Источники</span>
+${statusBadge(project.sources)}
+<span class="admin-sample-line">${sampleBadge()} демо-статус</span>
+</div>
+
+<div class="project-cell">
+<span class="project-cell-label">CRM</span>
+${statusBadge(project.crm)}
+<span class="admin-sample-line">${sampleBadge()} демо-статус</span>
+</div>
+</article>
+`).join("")
+);
+};
+
+const renderIntegrations = () => {
+byId("integration-grid").innerHTML = DATA.integrations.map((integration) => `
+<article class="integration-card">
+<span class="integration-icon" aria-hidden="true">
+${escapeHTML(integration.icon)}
+</span>
+
+<div class="integration-copy">
+<strong>${escapeHTML(integration.name)}</strong>
+<p>${escapeHTML(integration.purpose)}</p>
+<div class="integration-status-line">
+${statusBadge(integration.status)}
+${sampleBadge()}
+</div>
+</div>
+
+<a
+class="glass-pill"
+href="#"
+data-integration-action
+aria-label="Подключить ${escapeHTML(integration.name)}"
+>
+Подключить
+</a>
+</article>
+`).join("");
+};
+
+const renderActivity = () => {
+byId("activity-list").innerHTML = DATA.activity.map((item) => `
+<article class="activity-row">
+<div class="activity-time">
+<time>${escapeHTML(item.time)}</time>
+${sampleBadge()}
+</div>
+<span class="activity-node" aria-hidden="true">S</span>
+<div class="activity-copy">
+<strong>${escapeHTML(item.action)}</strong>
+<p>${escapeHTML(item.detail)}</p>
+</div>
+</article>
+`).join("");
+};
+
+let toastTimer = null;
+
+const showToast = () => {
+const toast = byId("toast");
+toast.classList.add("is-visible");
+
+if (toastTimer !== null) {
+window.clearTimeout(toastTimer);
+}
+
+toastTimer = window.setTimeout(() => {
+toast.classList.remove("is-visible");
+}, 2600);
+};
+
+const bindIntegrationPlaceholders = () => {
+byId("integration-grid").addEventListener("click", (event) => {
+const action = event.target.closest("[data-integration-action]");
+if (!action) return;
+
+event.preventDefault();
+showToast();
+});
+};
+
+const setView = (viewName, shouldScroll) => {
+const isCabinet = viewName === "cabinet";
+
+byId("cabinet-view").hidden = !isCabinet;
+byId("admin-view").hidden = isCabinet;
+
+document.querySelectorAll("[data-view-target]").forEach((button) => {
+const isActive = button.dataset.viewTarget === viewName;
+button.setAttribute("aria-selected", String(isActive));
+button.tabIndex = isActive ? 0 : -1;
+});
+
+document.title = isCabinet
+? "Кабинет — Synapse Business"
+: "Админка — Synapse Business";
+
+if (shouldScroll) {
+window.scrollTo({
+top: 0,
+behavior: reducedMotion ? "auto" : "smooth"
+});
+}
+};
+
+const bindViewSwitcher = () => {
+const switcher = document.querySelector(".view-switcher");
+const buttons = Array.from(
+switcher.querySelectorAll("[data-view-target]")
+);
+
+switcher.addEventListener("click", (event) => {
+const button = event.target.closest("[data-view-target]");
+if (!button) return;
+
+setView(button.dataset.viewTarget, true);
+});
+
+switcher.addEventListener("keydown", (event) => {
+if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+return;
+}
+
+event.preventDefault();
+
+const currentIndex = buttons.findIndex(
+(button) => button.getAttribute("aria-selected") === "true"
+);
+
+const direction = event.key === "ArrowRight" ? 1 : -1;
+const nextIndex =
+(currentIndex + direction + buttons.length) % buttons.length;
+const nextButton = buttons[nextIndex];
+
+nextButton.focus();
+setView(nextButton.dataset.viewTarget, false);
+});
+};
+
+const boot = (profile) => {
+DATA = profile.data;
+renderIdentity();
+
+if (profile.owner) {
+byId("account-name").textContent = profile.owner;
+byId("account-avatar").textContent = profile.owner.charAt(0).toUpperCase();
+}
+
+renderMoney();
+renderFunnel();
+renderSources();
+renderDialogs();
+renderCRM();
+if (profile.admin) {
+renderProjects();
+renderIntegrations();
+renderActivity();
+bindIntegrationPlaceholders();
+} else {
+document.getElementById("admin-tab").hidden = true;
+document.querySelector(".view-switcher").style.gridTemplateColumns = "1fr";
+}
+bindViewSwitcher();
+setView("cabinet", false);
+};
+
+const sha256fallback = (text) => {
+const K = [];
+const H = [1779033703, 3144134277, 1013904242, 2773480762,
+1359893119, 2600822924, 528734635, 1541459225];
+let n = 2;
+for (let i = 0; i < 64; n += 1) {
+let prime = true;
+for (let f = 2; f * f <= n; f += 1) { if (n % f === 0) { prime = false; break; } }
+if (prime) { K[i] = Math.floor((Math.cbrt(n) % 1) * 4294967296) | 0; i += 1; }
+}
+const bytes = Array.from(new TextEncoder().encode(text));
+const bitLen = bytes.length * 8;
+bytes.push(0x80);
+while (bytes.length % 64 !== 56) bytes.push(0);
+for (let i = 7; i >= 0; i -= 1) bytes.push((bitLen / Math.pow(2, i * 8)) & 255);
+const rr = (x, c) => (x >>> c) | (x << (32 - c));
+for (let b = 0; b < bytes.length; b += 64) {
+const w = new Array(64);
+for (let i = 0; i < 16; i += 1) {
+w[i] = (bytes[b + i * 4] << 24) | (bytes[b + i * 4 + 1] << 16) |
+(bytes[b + i * 4 + 2] << 8) | bytes[b + i * 4 + 3];
+}
+for (let i = 16; i < 64; i += 1) {
+const s0 = rr(w[i - 15], 7) ^ rr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+const s1 = rr(w[i - 2], 17) ^ rr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+}
+let [a, bb, c, d, e, f, g, h] = H;
+for (let i = 0; i < 64; i += 1) {
+const S1 = rr(e, 6) ^ rr(e, 11) ^ rr(e, 25);
+const ch = (e & f) ^ (~e & g);
+const t1 = (h + S1 + ch + K[i] + w[i]) | 0;
+const S0 = rr(a, 2) ^ rr(a, 13) ^ rr(a, 22);
+const mj = (a & bb) ^ (a & c) ^ (bb & c);
+const t2 = (S0 + mj) | 0;
+h = g; g = f; f = e; e = (d + t1) | 0;
+d = c; c = bb; bb = a; a = (t1 + t2) | 0;
+}
+[a, bb, c, d, e, f, g, h].forEach((v, i) => { H[i] = (H[i] + v) | 0; });
+}
+return H.map((v) => (v >>> 0).toString(16).padStart(8, "0")).join("");
+};
+
+const sha256 = async (text) => {
+if (window.crypto && window.crypto.subtle && window.isSecureContext) {
+try {
+const digest = await window.crypto.subtle.digest(
+"SHA-256",
+new TextEncoder().encode(text)
+);
+return Array.from(new Uint8Array(digest))
+.map((b) => b.toString(16).padStart(2, "0"))
+.join("");
+} catch (error) {
+return sha256fallback(text);
+}
+}
+return sha256fallback(text);
+};
+
+const authScreen = byId("auth");
+const authError = byId("auth-error");
+
+byId("auth-form").addEventListener("submit", async (event) => {
+event.preventDefault();
+
+const login = byId("auth-login").value.trim().toLowerCase();
+const pass = byId("auth-pass").value;
+const profile = PROFILES[login];
+let ok = false;
+
+if (profile) {
+try {
+ok = (await sha256(login + ":" + pass)) === profile.hash;
+} catch (error) {
+ok = false;
+}
+}
+
+if (!ok) {
+authError.hidden = false;
+byId("auth-pass").value = "";
+byId("auth-pass").focus();
+return;
+}
+
+authError.hidden = true;
+authScreen.hidden = true;
+boot(profile);
+});
+
+byId("auth-login").focus();
+})();
+</script>
+<script>
+(function(){
+if('scrollRestoration' in history){ history.scrollRestoration='manual'; }
+function toTop(){ window.scrollTo(0,0);
+ if(document.documentElement) document.documentElement.scrollTop=0;
+ if(document.body) document.body.scrollTop=0; }
+toTop();
+addEventListener('load',function(){ toTop(); setTimeout(toTop,0); });
+addEventListener('pageshow',function(e){ if(e.persisted) toTop(); });
+})();
+</script>
+
+
+</body></html>
