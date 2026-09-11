@@ -63,7 +63,8 @@
 .sb-wordmark {
   display: block;
   width: var(--sb-wordmark-width, 142px);
-  flex: 0 1 var(--sb-wordmark-width, 142px);
+  /* Auto basis preserves the artwork ratio in both row and column layouts. */
+  flex: 0 1 auto;
   aspect-ratio: 740 / 224;
   background: url("sapphire-approved.webp") 50% 86.019417% / 169.459459% 559.821429% no-repeat;
   mix-blend-mode: screen;
@@ -102,3 +103,6 @@ html.sb-motion-paused .sb-orb > * { animation-play-state: paused; }
 
 .project-mark.sb-project-logo { border: 0; background: transparent; }
 .project-mark.sb-project-logo > .sb-orb { --sb-orb-size: 100%; }
+
+.hero-core.sb-sphere-art, .core-node.sb-sphere-art { border: 0; background: transparent; }
+.sb-sphere-art > .sb-orb { position: absolute; inset: 0; --sb-orb-size: 100%; }
