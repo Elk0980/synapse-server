@@ -19,12 +19,12 @@ const init = (context) => {
   const renderAccess = (companies = [], permissions = []) => {
     const preset = currentPreset();
     byId("account-create-companies").innerHTML = accessOptions.companies.map(company =>
-      `<label><input type="${preset?.singleCompany ? "radio" : "checkbox"}" name="companies" value="${escapeHTML(company.id)}"${companies.includes(company.id) ? " checked" : ""}> ${escapeHTML(company.name)}</label>`).join("<br>");
+      `<label class="account-access-option"><input type="checkbox" name="companies" value="${escapeHTML(company.id)}"${companies.includes(company.id) ? " checked" : ""}> <span>${escapeHTML(company.name)}</span></label>`).join("");
     byId("account-create-permissions").innerHTML = "<p>Права</p>" + accessOptions.permissions.map(permission =>
-      `<label><input type="checkbox" name="permissions" value="${escapeHTML(permission)}"${permissions.includes(permission) ? " checked" : ""}${preset ? " disabled" : ""}> ${escapeHTML(permission)}</label>`).join("<br>");
+      `<label class="account-access-option"><input type="checkbox" name="permissions" value="${escapeHTML(permission)}"${permissions.includes(permission) ? " checked" : ""}${preset ? " disabled" : ""}> <span>${escapeHTML(permission)}</span></label>`).join("");
     byId("account-access-status").textContent = preset
-      ? "Выберите один проект. Доступ: просмотр сайта, просмотр и редактирование прайса, включая фото позиций. Остальные права не назначаются."
-      : "Отметьте проекты и права. Неотмеченный доступ не назначается. price.edit требует price.view.";
+      ? "Отметьте один или несколько проектов. Набор доступа задаёт только права и не ограничивает выбор проектов."
+      : "Отметьте проекты и права. Неотмеченный доступ не назначается. price.edit требует price.view, site_editor.edit требует site_editor.view.";
   };
   const loadAccess = async () => {
     if (identity.role !== "owner") return;
@@ -54,8 +54,24 @@ const init = (context) => {
     if (!accessOptions) return;
     const preset = currentPreset();
     const companies = selected("companies");
-    renderAccess(preset?.singleCompany && companies.length !== 1 ? [] : companies,
-      preset ? preset.permissions : selected("permissions"));
+    renderAccess(companies, preset ? preset.permissions : selected("permissions"));
+  });
+  byId("account-create-permissions").addEventListener("change", (event) => {
+    if (!accessOptions || event.target.name !== "permissions") return;
+    const permissionInput = (value) => [...createForm.querySelectorAll('input[name="permissions"]')]
+      .find(input => input.value === value);
+    if (event.target.checked) {
+      for (const dependency of accessOptions.dependencies[event.target.value] || []) {
+        const input = permissionInput(dependency);
+        if (input) input.checked = true;
+      }
+    } else {
+      for (const [permission, dependencies] of Object.entries(accessOptions.dependencies)) {
+        if (!dependencies.includes(event.target.value)) continue;
+        const input = permissionInput(permission);
+        if (input) input.checked = false;
+      }
+    }
   });
   byId("account-access-retry").addEventListener("click", loadAccess);
   loadAccess();
@@ -88,7 +104,7 @@ const init = (context) => {
     try {
       if (!accessOptions) throw new Error("Сначала загрузите список проектов и прав");
       const companies = selected("companies"), permissions = selected("permissions");
-      if (currentPreset()?.singleCompany && companies.length !== 1) throw new Error("Выберите ровно один проект для клиента");
+      if (!companies.length) throw new Error("Отметьте хотя бы один проект");
       for (const permission of permissions) {
         const missing = (accessOptions.dependencies[permission] || []).filter(dependency => !permissions.includes(dependency));
         if (missing.length) throw new Error(`${permission} требует: ${missing.join(", ")}`);

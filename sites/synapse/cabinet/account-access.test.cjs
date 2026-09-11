@@ -33,31 +33,37 @@ async function fixture(fail=false) {
   const secret=crypto.randomBytes(24).toString('hex');f.elements.password.value=secret;f.elements.confirm.value=secret;};
  return {w,d,created,errors,settle,fill,ready:async()=>{resolveOptions();await settle();},retry:async()=>{rejectOptions=false;d.querySelector('#account-access-retry').click();await settle();},close:()=>w.close()};
 }
-test('creation waits for options; preset grants exactly one project and three permissions',async()=>{
+test('creation waits for options; preset keeps multiple projects and grants its three permissions',async()=>{
  const f=await fixture();try {
   assert.equal(f.d.querySelector('#account-create-submit').disabled,true);
   await f.ready();assert.equal(f.d.querySelectorAll('[name="companies"]:checked').length,0);
   assert.equal(f.d.querySelectorAll('[name="permissions"]:checked').length,0);
   const preset=f.d.querySelector('#account-access-preset');preset.value='client-price';preset.dispatchEvent(new f.w.Event('change'));
   f.fill();f.d.querySelector('#account-create-submit').click();await f.settle();assert.equal(f.created.length,0);
-  assert.match(f.d.querySelector('#account-create-result').textContent,/ровно один проект/);
-  f.d.querySelector('[name="companies"][value="palitra-love"]').click();f.fill();
+  assert.match(f.d.querySelector('#account-create-result').textContent,/Отметьте хотя бы один проект/);
+  for(const id of ['alvi','avokado'])f.d.querySelector(`[name="companies"][value="${id}"]`).click();
+  preset.value='custom';preset.dispatchEvent(new f.w.Event('change'));
+  assert.deepEqual([...f.d.querySelectorAll('[name="companies"]:checked')].map(item=>item.value),['alvi','avokado']);
+  preset.value='client-price';preset.dispatchEvent(new f.w.Event('change'));f.fill();
   f.d.querySelector('#account-create-submit').click();await f.settle();
-  assert.equal(f.created.length,1);assert.deepEqual(f.created[0].companies,['palitra-love']);
+  assert.equal(f.created.length,1);assert.deepEqual(f.created[0].companies,['alvi','avokado']);
   assert.deepEqual(f.created[0].permissions.sort(),['price.edit','price.view','sites.view']);
   assert.equal(f.d.querySelector('[name="password"]').value,'');assert.equal(f.d.querySelector('[name="confirm"]').value,'');
   assert.equal(f.d.querySelectorAll('[name="companies"]:checked').length,0);
   assert.equal(f.d.querySelectorAll('[name="permissions"]:checked').length,0);assert.deepEqual(f.errors,[]);
  }finally{f.close();}
 });
-test('manual access preserves only checked projects/permissions and dependency errors prevent creation',async()=>{
+test('manual access sends multiple projects and automatically satisfies permission dependencies',async()=>{
  const f=await fixture();try {
   await f.ready();for(const id of ['alvi','avokado'])f.d.querySelector(`[name="companies"][value="${id}"]`).click();
-  f.d.querySelector('[name="permissions"][value="price.edit"]').click();f.fill();
-  f.d.querySelector('#account-create-submit').click();await f.settle();assert.equal(f.created.length,0);
-  f.d.querySelector('[name="permissions"][value="price.view"]').click();f.fill();
+  f.d.querySelector('[name="permissions"][value="price.edit"]').click();
+  assert.equal(f.d.querySelector('[name="permissions"][value="price.view"]').checked,true);
+  f.d.querySelector('[name="permissions"][value="site_editor.edit"]').click();
+  assert.equal(f.d.querySelector('[name="permissions"][value="site_editor.view"]').checked,true);
+  f.d.querySelector('[name="permissions"][value="sites.view"]').click();f.fill();
   f.d.querySelector('#account-create-submit').click();await f.settle();
-  assert.deepEqual(f.created[0].companies,['alvi','avokado']);assert.deepEqual(f.created[0].permissions.sort(),['price.edit','price.view']);
+  assert.deepEqual(f.created[0].companies,['alvi','avokado']);assert.deepEqual(f.created[0].permissions.sort(),
+   ['price.edit','price.view','site_editor.edit','site_editor.view','sites.view']);
  }finally{f.close();}
 });
 test('failed access load stays disabled with visible retry and recovers',async()=>{
