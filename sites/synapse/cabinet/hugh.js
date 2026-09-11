@@ -30,12 +30,21 @@
   };
 
   const request = async (path, options = {}) => {
-    const response = await fetch(`/content/hugh${path}`, {
-      credentials: "same-origin",
-      cache: "no-store",
-      ...options,
-      headers: { "Content-Type": "application/json", ...(options.headers || {}) }
-    });
+    let response;
+    try {
+      response = await fetch(`/content/hugh${path}`, {
+        credentials: "same-origin",
+        cache: "no-store",
+        ...options,
+        signal: options.signal
+          ? AbortSignal.any([options.signal, AbortSignal.timeout(15000)])
+          : AbortSignal.timeout(15000),
+        headers: { "Content-Type": "application/json", ...(options.headers || {}) }
+      });
+    } catch (error) {
+      if (error.name === "TimeoutError") throw new Error("Время ожидания истекло (15 секунд)");
+      throw error;
+    }
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error || "Не удалось связаться с Хью");
     return body;
@@ -120,7 +129,7 @@
       conversation = { ...saved, messages };
       showMessages(conversation.messages);
     } catch (error) {
-      if (error.name !== "AbortError") showError(error.message, () => load(context));
+      if (error.name !== "AbortError") showError(`Не удалось загрузить: ${error.message}`, () => load(context));
     }
   };
 

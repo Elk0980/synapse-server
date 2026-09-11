@@ -52,7 +52,7 @@
         loaded = true;
         showDocument(panel, context);
       } catch (error) {
-        document.textContent = error.message;
+        document.textContent = "Не удалось загрузить: " + error.message;
       }
     }
   });

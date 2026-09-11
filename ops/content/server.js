@@ -40,6 +40,14 @@ const CHAT_API_KEY = (process.env.CHAT_API_KEY || '').trim();
 const CRM_IDENTITY_HEADER = 'x-synapse-crm-identity';
 const loginFailures = new Map();
 
+function logAuthorizationDenial(request, error) {
+  const session = sessionData(request);
+  const login = String(error.login || session?.user?.login || 'неизвестен').replace(/[\r\n\t]/g, ' ');
+  const route = String(request.url || '/').split('?')[0].replace(/[\r\n\t]/g, ' ');
+  const reason = String(error.message || 'Отказано').replace(/[\r\n\t]/g, ' ');
+  console.warn(`content: authorization_denied time=${new Date().toISOString()} login=${JSON.stringify(login)} route=${JSON.stringify(route)} reason=${JSON.stringify(reason)}`);
+}
+
 if (!(process.env.SESSION_SECRET || '').trim()) {
   console.warn('content: SESSION_SECRET пуст — создан временный секрет, сессии не переживут перезапуск');
 }
@@ -568,7 +576,10 @@ const server = http.createServer(async (request, response) => {
       const identity = authStore.getByLogin(login);
       if (!identity || !verifyPassword(String(body.password || ''), identity.passwordHash)) {
         failures.push(now); loginFailures.set(ip, failures);
-        fail(401, 'Неверный логин или пароль');
+        const error = new Error('Неверный логин или пароль');
+        error.status = 401;
+        error.login = login || 'неизвестен';
+        throw error;
       }
       loginFailures.delete(ip);
       return reply(200, publicIdentity(identity), { 'set-cookie': `synapse_session=${makeSession(identity)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL}` });
@@ -606,7 +617,7 @@ const server = http.createServer(async (request, response) => {
 
     if (url.pathname === '/content/admin/accounts' || url.pathname.startsWith('/content/admin/accounts/')) {
       const session = requireSession(request);
-      if (session.user.role !== 'owner') fail(403, 'Доступно только владельцу');
+      if (session.user.role !== 'owner' && !session.user.permissions.includes('account.view')) fail(403, 'Недостаточно прав');
       if (request.method !== 'GET') requireCsrf(request, session);
       if (request.method === 'GET' && parts[3] === 'access-options' && parts.length === 4) {
         return reply(200, { companies: Object.entries(COMPANIES).map(([id, company]) => ({ id, ...company })),
@@ -770,6 +781,7 @@ const server = http.createServer(async (request, response) => {
     fail(404, 'Не найдено');
   } catch (error) {
     const status = error.status || 500;
+    if (status === 401 || status === 403) logAuthorizationDenial(request, error);
     if (status >= 500) console.error(error);
     reply(status, { error: error.message, details: error.details || undefined });
   }

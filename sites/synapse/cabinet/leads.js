@@ -66,7 +66,7 @@ const init = (context) => {
     try {
       renderCRMData(await crmQuery("/dashboard", { ...crmState, ...scopeParams() }));
     } catch (error) {
-      byId("crm-content").innerHTML = '<div class="crm-error" role="alert">Не удалось загрузить текущую CRM.</div>';
+      byId("crm-content").innerHTML = `<div class="crm-error" role="alert">Не удалось загрузить: ${escapeHTML(error.message)}</div>`;
     }
   };
 const renderCRM = () => {
@@ -127,7 +127,7 @@ const renderCRM = () => {
         details.innerHTML = `<article class="card lead-details"><h2>${escapeHTML(lead.name)}</h2>
           <h3>Атрибуция</h3>${attribution}</article>`;
       } catch (error) {
-        details.innerHTML = '<div class="crm-error" role="alert">Не удалось загрузить карточку заявки.</div>';
+        details.innerHTML = `<div class="crm-error" role="alert">Не удалось загрузить: ${escapeHTML(error.message)}</div>`;
       }
     });
   };

@@ -27,7 +27,7 @@ const init = (context) => {
       : "Отметьте проекты и права. Неотмеченный доступ не назначается. price.edit требует price.view.";
   };
   const loadAccess = async () => {
-    if (identity.role !== "owner") return;
+    if (!identity.permissions.includes("account.view") && identity.role !== "owner") return;
     accessOptions = null;
     byId("account-create-submit").disabled = true;
     byId("account-access-fields").disabled = true;
@@ -46,6 +46,8 @@ const init = (context) => {
       presetSelect.disabled = false;
       byId("account-create-submit").disabled = false;
     } catch (error) {
+      byId("account-create-companies").textContent = "Не удалось загрузить: " + error.message;
+      byId("account-create-permissions").textContent = "Не удалось загрузить: " + error.message;
       byId("account-access-status").textContent = "Не удалось загрузить доступ: " + error.message;
       byId("account-access-retry").hidden = false;
     }
@@ -61,7 +63,7 @@ const init = (context) => {
   loadAccess();
 
   const renderAccounts = async () => {
-    if (identity.role !== "owner") return;
+    if (!identity.permissions.includes("account.view") && identity.role !== "owner") return;
     const content = byId("accounts-content");
     content.textContent = "Загрузка…";
     try {
@@ -76,7 +78,7 @@ const init = (context) => {
           <p>Права: ${account.permissions.map(escapeHTML).join(", ") || "не назначены"}</p>`;
         content.append(card);
       }
-    } catch (error) { content.textContent = error.message; }
+    } catch (error) { content.textContent = "Не удалось загрузить: " + error.message; }
   };
   Object.assign(api, { renderAccounts });
   byId("account-create").addEventListener("submit", async (event) => {

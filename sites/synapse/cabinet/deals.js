@@ -196,7 +196,7 @@
     } catch (error) {
       if (version !== state.loadVersion) return;
       status(error.message);
-      byId("deals-count").textContent = "Не удалось загрузить воронку";
+      byId("deals-count").textContent = `Не удалось загрузить: ${error.message}`;
     } finally {
       if (version === state.loadVersion) {
         state.loading = false;
@@ -714,7 +714,7 @@
       renderDrawerTab();
     } catch (error) {
       if (version !== state.drawerVersion) return;
-      byId("deals-drawer-content").innerHTML = `<p class="crm-error" role="alert">${html(error.message)}</p>`;
+      byId("deals-drawer-content").innerHTML = `<p class="crm-error" role="alert">Не удалось загрузить: ${html(error.message)}</p>`;
     } finally {
       if (version === state.drawerVersion) byId("deals-drawer-content").setAttribute("aria-busy", "false");
     }

@@ -30,7 +30,7 @@ const initialize = async (context) => {
       for (const [role, source] of Object.entries(result.settings)) form.elements[role].value = source;
       status.textContent = "";
     } catch (error) {
-      status.textContent = error.message;
+      status.textContent = "Не удалось загрузить: " + error.message;
     } finally {
       setBusy(false);
     }
