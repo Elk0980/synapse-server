@@ -6,6 +6,7 @@ const { COMPANIES, transaction } = require('./auth-store');
 const LEGACY_SITES = [
   ['synapse-business', 'synapse-business', 'Synapse Бизнес', 'draft',
     'https://synapse.synapsebusiness.ru/', null, null, null],
+  ['vhod', 'synapse-business', 'Вход Synapse (черновик)', 'draft', 'https://vhod.synapsebusiness.ru/', null, null, null],
   ['taisabai', 'taisabai', 'ТайСабай', 'draft',
     'https://taisabai.synapsebusiness.ru/', null, null, null],
   ['alvi', 'alvi', 'ALVI', 'draft', 'https://alvi.synapsebusiness.ru/', 'alvi',
