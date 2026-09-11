@@ -313,6 +313,33 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .site-card h2, .account-card h2 { margin-top: 0; }
 .field-stack { display: grid; gap: 8px; }
 .field-stack input, .field-stack select { min-height: 44px; padding: 9px; }
+.account-access-list {
+  display: grid;
+  max-height: 240px;
+  gap: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.account-access-option {
+  display: flex;
+  min-width: 0;
+  min-height: 40px;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 4px;
+  cursor: pointer;
+}
+.account-access-option input {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  min-height: 20px;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 20px;
+  accent-color: var(--accent);
+}
+.account-access-option span { min-width: 0; overflow-wrap: anywhere; }
 .danger { background: #8f2934; color: white; }
 .permission-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
 dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18px; padding: 24px; }
@@ -853,9 +880,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         <label>Набор доступа <select id="account-access-preset"><option value="custom">Выбрать вручную</option></select></label>
         <fieldset id="account-access-fields" disabled>
           <legend>Доступ к проектам</legend>
-          <div id="account-create-companies">Загрузка проектов…</div>
+          <div id="account-create-companies" class="account-access-list">Загрузка проектов…</div>
           <p>Выбранные права действуют только в отмеченных проектах.</p>
-          <div id="account-create-permissions"></div>
+          <div id="account-create-permissions" class="account-access-list"></div>
         </fieldset>
         <p id="account-access-status" role="status">Список доступа загружается…</p>
         <button id="account-access-retry" type="button" hidden>Повторить загрузку доступа</button>
@@ -910,7 +937,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260908-5";
+  window.SB_CABINET_ASSET_VERSION = "20260911-1";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
