@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <title>PROTOTYPE — механика блока болей (Avokado)</title>
 <!--
-  ПРОТОТИП МЕХАНИКИ, версия 6 (модель и четыре круга правок GPT Avokado).
+  ПРОТОТИП МЕХАНИКИ, версия 7 (модель и пять кругов правок GPT Avokado).
   Финальных изображений и текстов болей нет, hero и глобальный видеофон не трогаются.
 
   МОДЕЛЬ
@@ -32,8 +32,10 @@
     уходящая сцена : reveal = 1 — текст не гасится.
     Первая сцена при p = 0 начинается с reveal = 0, а не с 1.
 
-  ПОДКАДРЫ — существуют только внутри своей сцены (её прозрачность к ним и применяется),
-  живут всю её жизнь, без скачков:
+  ПОДКАДРЫ — полноэкранные и ПОЛНОСТЬЮ НЕПРОЗРАЧНЫЕ слои, как будущие кадры болей.
+  Полупрозрачные плашки (alpha 0.16 / 0.26 / 0.38) здесь не годятся: карточная модель
+  «нижний 1, верхний f» на них не работает — итоговая alpha скакала 0.3784 → 0.26
+  и 0.5412 → 0.38. Подкадр существует только внутри своей сцены, живёт всю её жизнь:
     вход своей сцены  : держится первый подкадр (sub-1 = 1)
     HOLD              : subPos = t*(N_sub-1); j = floor(subPos); f = subPos - j.
                         Подкадр j держит opacity 1, подкадр j+1 проявляется ПОВЕРХ него (opacity = f).
@@ -103,22 +105,22 @@
   .scene-2 .scene-art{background:linear-gradient(135deg,var(--s2),#1d1917)}
   .scene-3 .scene-art{background:linear-gradient(135deg,var(--s3),#171c22)}
 
-  /* подкадры второй сцены — существуют только внутри неё */
+  /* подкадры второй сцены: полноэкранные НЕПРОЗРАЧНЫЕ слои — подстановка под будущие кадры */
   .subframe{position:absolute;inset:0;opacity:0;will-change:opacity}
+  .sub-1{background:linear-gradient(135deg,#3a3330,#221d1a)}
+  .sub-2{background:linear-gradient(135deg,#46392c,#272017)}
+  .sub-3{background:linear-gradient(135deg,#53412b,#2f2315)}
+  /* подпись — метка для приёмки, лежит в левой части, в текстовую зону не заходит */
   .subframe .mark{
-    position:absolute;top:50%;left:30%;transform:translate(-50%,-50%);
-    width:min(38vw,300px);aspect-ratio:3/2;border-radius:18px;
-    display:flex;align-items:center;justify-content:center;
-    font:600 18px/1.2 'Manrope',system-ui,sans-serif;color:var(--cream);
-    border:1px solid rgba(239,233,220,.22);
+    position:absolute;top:50%;left:26%;transform:translate(-50%,-50%);
+    font:700 clamp(16px,2.4vw,26px)/1.2 'Manrope',system-ui,sans-serif;
+    color:rgba(239,233,220,.82);letter-spacing:.06em;
   }
-  .sub-1 .mark{background:rgba(216,191,134,.16)}
-  .sub-2 .mark{background:rgba(216,191,134,.26)}
-  .sub-3 .mark{background:rgba(216,191,134,.38)}
 
   /* текст боли: сперва часть картинки, в HOLD — читаемый; всегда справа */
+  /* z-index выше любого подкадра (2/3), иначе полноэкранный подкадр закроет текст */
   .scene-copy{
-    position:relative;z-index:2;width:100%;height:100%;
+    position:relative;z-index:4;width:100%;height:100%;
     display:flex;align-items:center;justify-content:flex-end;
     padding:0 clamp(16px,4vw,48px);
   }
@@ -140,7 +142,7 @@
   @media(max-width:480px){
     .scene-copy{padding:0 16px}
     .scene-copy p{width:38%;font-size:clamp(13px,3.4vw,16px)}
-    .subframe .mark{width:46vw;left:28%}
+    .subframe .mark{left:24%;font-size:clamp(13px,3.6vw,18px)}
   }
 
   /* доступность: без анимации — обычный вертикальный список */
