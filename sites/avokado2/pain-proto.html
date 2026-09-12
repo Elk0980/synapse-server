@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>PROTOTYPE — механика блока болей (Avokado)</title>
+<!--
+  ПРОТОТИП МЕХАНИКИ. Финальных изображений и текстов нет, hero и глобальный видеофон не трогаются.
+
+  РАСЧЁТ SCROLL-ЗОНЫ
+  Сцен: 3. На каждую сцену отведено 100vh прокрутки + 100vh на «залипание» последней.
+  Итог: высота .pain-proto = (3 + 1) * 100vh = 400vh.
+  Липкий кадр: 100svh, поэтому чистая длина прогресса = 400vh - 100svh ≈ 300vh.
+  Доля одной боли в общем прогрессе = 1/3 ≈ 33,33 %.
+  Сцена 2 разбита на 3 подкадра, значит один подкадр = 33,33 / 3 ≈ 11,11 % общего прогресса.
+-->
+<style>
+  :root{
+    --bg:#0e1410;
+    --cream:#efe9dc;
+    --gold:#d8bf86;
+    --s1:#2b3a2f;
+    --s2:#3a3330;
+    --s3:#2f3640;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:auto}
+  body{
+    font-family:'Manrope','Segoe UI',system-ui,sans-serif;
+    background:var(--bg);color:var(--cream);
+    overflow-x:hidden;
+  }
+  .proto-badge{
+    position:fixed;top:0;left:0;right:0;z-index:99;
+    background:#b3341f;color:#fff;text-align:center;
+    font:700 13px/32px 'Manrope',system-ui,sans-serif;letter-spacing:.08em;
+  }
+  .proto-hint{
+    max-width:760px;margin:0 auto;padding:64px 20px 28px;
+    font-size:15px;line-height:1.5;color:rgba(239,233,220,.72);
+  }
+  .proto-hint b{color:var(--cream)}
+  .proto-spacer{height:60vh;display:flex;align-items:center;justify-content:center;
+    color:rgba(239,233,220,.4);font-size:13px;letter-spacing:.1em}
+
+  /* ---- механика ---- */
+  .pain-proto{position:relative;height:400vh}
+  .pain-sticky{
+    position:sticky;top:0;height:100svh;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .pain-scene{
+    position:absolute;inset:0;
+    display:flex;align-items:center;justify-content:center;
+    opacity:0;transform:scale(.94);
+    will-change:opacity,transform;
+    transition:none;
+  }
+  .scene-art{position:absolute;inset:0}
+  .scene-art span{
+    position:absolute;left:5%;bottom:6%;
+    font:700 clamp(48px,9vw,120px)/1 'Manrope',system-ui,sans-serif;
+    color:rgba(239,233,220,.14);letter-spacing:.02em;
+  }
+  .scene-1 .scene-art{background:linear-gradient(135deg,var(--s1),#18211b)}
+  .scene-2 .scene-art{background:linear-gradient(135deg,var(--s2),#1d1917)}
+  .scene-3 .scene-art{background:linear-gradient(135deg,var(--s3),#171c22)}
+
+  /* подкадры второй сцены */
+  .subframe{position:absolute;inset:0;opacity:0;will-change:opacity}
+  .subframe .mark{
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:min(46vw,340px);aspect-ratio:3/2;border-radius:18px;
+    display:flex;align-items:center;justify-content:center;
+    font:600 18px/1.2 'Manrope',system-ui,sans-serif;color:var(--cream);
+    border:1px solid rgba(239,233,220,.22);
+  }
+  .sub-1 .mark{background:rgba(216,191,134,.16)}
+  .sub-2 .mark{background:rgba(216,191,134,.26)}
+  .sub-3 .mark{background:rgba(216,191,134,.38)}
+
+  /* текст боли: сперва часть картинки, потом читаемый */
+  .scene-copy{
+    position:relative;z-index:2;width:min(92%,1100px);
+    display:flex;justify-content:flex-end;padding:0 clamp(16px,4vw,48px);
+  }
+  .scene-copy p{
+    width:min(100%,420px);
+    font:600 clamp(20px,2.4vw,30px)/1.35 'Manrope',system-ui,sans-serif;
+    color:var(--cream);
+    text-shadow:0 2px 24px rgba(8,12,9,.55);
+    opacity:.18;transform:translateY(14px);
+    will-change:opacity,transform;
+  }
+  .scene-progress{
+    position:absolute;left:0;right:0;bottom:18px;z-index:3;
+    text-align:center;font:500 12px/1 'Manrope',system-ui,sans-serif;
+    color:rgba(239,233,220,.45);letter-spacing:.08em;
+  }
+
+  @media(max-width:480px){
+    .scene-copy{justify-content:center;padding:0 20px}
+    .scene-copy p{width:100%;text-align:center;font-size:clamp(17px,4.6vw,21px)}
+    .subframe .mark{width:72vw}
+  }
+
+  /* доступность: без анимации — обычный вертикальный список */
+  @media(prefers-reduced-motion:reduce){
+    .pain-proto{height:auto}
+    .pain-sticky{position:static;height:auto;display:block}
+    .pain-scene{position:static;opacity:1!important;transform:none!important;
+      min-height:60svh;margin-bottom:14px}
+    .scene-art{position:absolute}
+    .subframe{position:static;opacity:1!important;display:none}
+    .subframe.sub-1{display:block}
+    .scene-copy p{opacity:1!important;transform:none!important}
+    .scene-progress{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="proto-badge">PROTOTYPE / MECHANICS ONLY — синтетические сцены, финальных материалов нет</div>
+
+<div class="proto-hint">
+  <p><b>Что здесь проверяется:</b> один липкий кадр, три сцены-боли, уход текущей сцены в глубину
+  и появление следующей поверх, подкадры внутри одной боли (сцена 2 — три подкадра),
+  проявление текста из «части картинки» в читаемый слой.</p>
+  <p style="margin-top:10px">Полная scroll-зона — <b>400vh</b>, чистый прогресс ≈ 300vh,
+  одна боль ≈ <b>33,3 %</b> прогресса, один подкадр сцены 2 ≈ <b>11,1 %</b>.</p>
+</div>
+
+<div class="proto-spacer">ПРОКРУТИТЕ ВНИЗ ↓</div>
+
+<section class="pain-proto" id="painProto">
+  <div class="pain-sticky">
+
+    <article class="pain-scene scene-1" data-scene="0">
+      <div class="scene-art"><span>SLIDE 1</span></div>
+      <div class="scene-copy"><p>Синтетический текст боли номер один — проверка проявления поверх сцены.</p></div>
+    </article>
+
+    <article class="pain-scene scene-2" data-scene="1">
+      <div class="scene-art"><span>SLIDE 2</span></div>
+      <div class="subframe sub-1"><div class="mark">ПОДКАДР 1</div></div>
+      <div class="subframe sub-2"><div class="mark">ПОДКАДР 2</div></div>
+      <div class="subframe sub-3"><div class="mark">ПОДКАДР 3</div></div>
+      <div class="scene-copy"><p>Синтетический текст боли номер два — внутри неё три подкадра без скачка высоты.</p></div>
+    </article>
+
+    <article class="pain-scene scene-3" data-scene="2">
+      <div class="scene-art"><span>SLIDE 3</span></div>
+      <div class="scene-copy"><p>Синтетический текст боли номер три — последняя сцена держится до конца зоны.</p></div>
+    </article>
+
+    <div class="scene-progress" id="progressLabel">PROGRESS 0% · SCENE 1/3</div>
+  </div>
+</section>
+
+<div class="proto-spacer">КОНЕЦ ПРОТОТИПА</div>
+
+<script>
+(function(){
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var root = document.getElementById('painProto');
+  var sticky = root.querySelector('.pain-sticky');
+  var scenes = Array.prototype.slice.call(root.querySelectorAll('.pain-scene'));
+  var subs = Array.prototype.slice.call(root.querySelectorAll('.scene-2 .subframe'));
+  var label = document.getElementById('progressLabel');
+  var N = scenes.length;
+  var ticking = false;
+
+  function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+
+  function render(){
+    ticking = false;
+    if (reduce.matches) return;
+
+    var rect = root.getBoundingClientRect();
+    var travel = root.offsetHeight - sticky.offsetHeight;
+    var p = clamp(-rect.top / (travel || 1), 0, 1);   // 0..1 по всей зоне
+    var pos = p * N;                                   // позиция в «сценах»
+
+    for (var i=0;i<N;i++){
+      var local = clamp(pos - i, -1, 1);              // -1 впереди, 0 в фокусе, 1 позади
+      var el = scenes[i];
+      var opacity, scale;
+      if (local < 0){                                  // ещё не пришла
+        opacity = clamp(1 + local, 0, 1);
+        scale = 1;
+      } else {                                         // уходит в глубину
+        opacity = clamp(1 - local, 0, 1);
+        scale = 1 - 0.06 * local;
+      }
+      if (i === N-1 && pos >= N-1) { opacity = 1; scale = 1; }   // последняя держится
+      el.style.opacity = opacity.toFixed(3);
+      el.style.transform = 'scale(' + scale.toFixed(3) + ')';
+      el.style.zIndex = String(10 + i);
+
+      // текст: из «части картинки» в читаемый
+      var copy = el.querySelector('.scene-copy p');
+      if (copy){
+        var t = clamp(local < 0 ? 1 + local : 1 - local, 0, 1);  // 0..1 «в фокусе»
+        var reveal = clamp((t - 0.35) / 0.45, 0, 1);
+        copy.style.opacity = (0.18 + 0.82 * reveal).toFixed(3);
+        copy.style.transform = 'translateY(' + (14 - 14 * reveal).toFixed(1) + 'px)';
+      }
+    }
+
+    // подкадры второй сцены: её доля прогресса делится на три
+    var inScene2 = clamp(pos - 1, 0, 1);
+    var step = inScene2 * subs.length;
+    for (var k=0;k<subs.length;k++){
+      var d = clamp(1 - Math.abs(step - (k + 0.5)), 0, 1);
+      subs[k].style.opacity = d.toFixed(3);
+    }
+
+    var current = Math.min(N, Math.floor(pos) + 1);
+    label.textContent = 'PROGRESS ' + Math.round(p*100) + '% · SCENE ' + current + '/' + N
+      + (current === 2 ? ' · SUBFRAME ' + Math.min(3, Math.floor(inScene2*3)+1) + '/3' : '');
+  }
+
+  function onScroll(){
+    if (!ticking){ ticking = true; requestAnimationFrame(render); }
+  }
+
+  window.addEventListener('scroll', onScroll, {passive:true});
+  window.addEventListener('resize', onScroll, {passive:true});
+  reduce.addEventListener && reduce.addEventListener('change', function(){
+    if (reduce.matches){
+      scenes.forEach(function(s){ s.style.opacity=''; s.style.transform=''; });
+    } else { onScroll(); }
+  });
+  render();
+})();
+</script>
+</body>
+</html>
