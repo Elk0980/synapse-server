@@ -1279,7 +1279,7 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
-      filter: none;
+      filter: brightness(0.55);
     }
 
     .contacts-content {
@@ -2162,13 +2162,7 @@
     .page-water__veil {
       position: absolute;
       inset: 0;
-      background: radial-gradient(
-        ellipse 70% 78% at 50% 48%,
-        rgba(10, 18, 13, 0.58) 0%,
-        rgba(10, 18, 13, 0.42) 48%,
-        rgba(10, 18, 13, 0.12) 78%,
-        rgba(10, 18, 13, 0) 100%
-      );
+      background: linear-gradient(180deg, rgba(10, 18, 13, 0.6) 0%, rgba(10, 18, 13, 0.66) 100%);
     }
 
     /* Страница после хиро — в тонах блока отзывов: тёмная вода, светлый текст. */
@@ -2194,46 +2188,9 @@
       color: var(--ink);
     }
 
-    .after-hero .content-section,
-    .after-hero .content-section--alt,
-    .after-hero .content-section--panel { background: transparent; }
-
-    /* Локальный контраст повторяет положение текста и растворяется в живом фоне. */
-    .after-hero .content-section::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      z-index: 0;
-      pointer-events: none;
-      background: radial-gradient(
-        ellipse 48% 34% at var(--text-shade-x, 28%) var(--text-shade-y, 18%),
-        rgba(7, 14, 10, var(--text-shade, 0.34)) 0%,
-        rgba(7, 14, 10, var(--text-shade, 0.34)) 34%,
-        rgba(7, 14, 10, 0) 100%
-      );
-    }
-
-    #trust.content-section--panel {
-      --text-shade-x: 50%; --text-shade-y: 50%; --text-shade: 0.34;
-      background: transparent;
-    }
-    #for-self,
-    #for-two { --text-shade-y: 14%; --text-shade: 0.38; }
-    #gift { --text-shade-y: 35%; --text-shade: 0.48; }
-    #space { --text-shade-y: 16%; --text-shade: 0.3; }
-    #quiz,
-    #faq { --text-shade-x: 50%; --text-shade-y: 46%; --text-shade: 0.54; }
-
-    #contacts::before {
-      background: radial-gradient(
-        ellipse 58% 32% at 50% 78%,
-        rgba(7, 14, 10, 0.68) 0%,
-        rgba(7, 14, 10, 0.46) 48%,
-        rgba(7, 14, 10, 0) 100%
-      );
-    }
-
-    #contacts { background: transparent; }
+    .after-hero .content-section { background: rgba(9, 17, 12, 0.26); }
+    .after-hero .content-section--alt { background: rgba(9, 17, 12, 0.36); }
+    .after-hero .content-section--panel { background: rgba(9, 17, 12, 0.3); }
 
     /* Карточки отзывов — без заливки, только тёмно-коричневый контур (правка Owner'а 31.08). */
     .after-hero .proof-card {
