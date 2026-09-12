@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <title>PROTOTYPE — механика блока болей (Avokado)</title>
 <!--
-  ПРОТОТИП МЕХАНИКИ, версия 3 (по модели, заданной GPT Avokado).
+  ПРОТОТИП МЕХАНИКИ, версия 4 (по модели и двум правкам, заданным GPT Avokado).
   Финальных изображений и текстов болей нет, hero и глобальный видеофон не трогаются.
 
   МОДЕЛЬ
@@ -17,11 +17,24 @@
     q 0.65 … 1.00 : одновременно EXIT сцены i и ENTER сцены i+1
     Последняя сцена из HOLD не выходит — держится до конца зоны.
 
+  ТЕКСТ БОЛИ (правка v4)
+    ENTER : reveal = 0 — текст ещё часть картинки (opacity 0.18, сдвиг 14px).
+    HOLD  : reveal = q / 0.25 — проявляется в раннем HOLD и дальше держится на 1.
+    EXIT  : reveal = 1 — уходящая сцена текст не гасит.
+    Первая сцена при p = 0 начинается с reveal = 0, а не с 1.
+
+  ПОДКАДРЫ (правка v4) — живут всю жизнь своей сцены, без скачков:
+    ENTER своей сцены : держится первый подкадр (sub-1 = 1)
+    HOLD              : интерполяция subPos = t*(N_sub-1), opacity = 1 - |subPos - k|
+    EXIT              : держится последний подкадр (sub-3 = 1)
+    На стыках значения совпадают: ENTER→HOLD даёт sub-1 = 1, HOLD→EXIT даёт sub-3 = 1.
+
   ДОЛИ ПРОГРЕССА (N = 3, зона 400vh, липкий кадр 100svh, чистый ход ≈ 300vh)
     одна боль            = 1/3      ≈ 33,3 %
     HOLD одной боли      = 0.65/3   ≈ 21,7 % общего прогресса
     переход между болями = 0.35/3   ≈ 11,7 % общего прогресса
     подкадры сцены 2: пики при t = 0 / 0.5 / 1 внутри её HOLD, то есть каждые ≈ 10,8 %
+    проявление текста  = 0.25/3 ≈ 8,3 % общего прогресса от начала своей сцены
 -->
 <style>
   :root{
@@ -132,8 +145,9 @@
 
 <div class="proto-hint">
   <p><b>Что здесь проверяется:</b> один липкий кадр, три сцены-боли с фазами
-  <b>HOLD → (EXIT + ENTER одновременно)</b>, подкадры внутри HOLD второй сцены,
-  проявление текста из «части картинки» в читаемый слой, удержание последней сцены.</p>
+  <b>HOLD → (EXIT + ENTER одновременно)</b>, подкадры второй сцены без скачков
+  (ENTER держит первый, HOLD интерполирует, EXIT держит последний),
+  проявление текста из «части картинки» в читаемый слой в раннем HOLD, удержание последней сцены.</p>
   <p style="margin-top:10px">Зона — <b>400vh</b>, чистый ход ≈ 300vh. Одна боль ≈ <b>33,3 %</b> прогресса,
   её HOLD ≈ <b>21,7 %</b>, переход между болями ≈ <b>11,7 %</b>, пики подкадров — каждые ≈ <b>10,8 %</b>.</p>
 </div>
@@ -178,6 +192,7 @@
   var N = scenes.length;
   var SUB_SCENE = 1;        // индекс сцены с подкадрами
   var HOLD_END = 0.65;      // граница HOLD внутри сцены
+  var REVEAL_IN = 0.25;     // доля q, за которую текст боли проявляется в HOLD
   var ticking = false;
 
   function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
@@ -210,31 +225,39 @@
     for (var k=0;k<N;k++) apply(scenes[k], 0, 0.94, 0, 10 + k);
 
     if (q <= HOLD_END || isLast){
-      apply(scenes[i], 1, 1, 1, 20);
+      // HOLD: текст проявляется в раннем HOLD и дальше держится на 1
+      apply(scenes[i], 1, 1, clamp(q / REVEAL_IN, 0, 1), 20);
       if (isLast) phase = 'HOLD';
     } else {
       var x = (q - HOLD_END) / (1 - HOLD_END);          // 0..1
-      apply(scenes[i], 1 - x, 1 - 0.06 * x, 1, 20);     // EXIT текущей
-      apply(scenes[i+1], x, 0.94 + 0.06 * x, x, 21);    // ENTER следующей
+      apply(scenes[i], 1 - x, 1 - 0.06 * x, 1, 20);     // EXIT: текст держится
+      apply(scenes[i+1], x, 0.94 + 0.06 * x, 0, 21);    // ENTER: текст ещё часть картинки
     }
 
-    // подкадры: только когда активна сцена SUB_SCENE и она в HOLD
-    var subActive = (i === SUB_SCENE && q <= HOLD_END);
+    // подкадры живут всю жизнь своей сцены: ENTER держит первый, HOLD интерполирует, EXIT держит последний
+    var subState = 'off';
+    if (i === SUB_SCENE) subState = (q <= HOLD_END) ? 'hold' : 'exit';
+    else if (i === SUB_SCENE - 1 && q > HOLD_END) subState = 'enter';
+
     var subIndex = 0;
-    if (subActive){
+    if (subState === 'hold'){
       var t = q / HOLD_END;                       // 0..1 внутри HOLD
       var subPos = t * (subs.length - 1);         // 0..2 — пики точно на подкадрах
       for (var s=0;s<subs.length;s++){
         subs[s].style.opacity = clamp(1 - Math.abs(subPos - s), 0, 1).toFixed(3);
       }
       subIndex = Math.round(subPos) + 1;
+    } else if (subState === 'enter' || subState === 'exit'){
+      var keep = (subState === 'enter') ? 0 : subs.length - 1;
+      for (var j2=0;j2<subs.length;j2++) subs[j2].style.opacity = (j2 === keep) ? '1.000' : '0';
+      subIndex = keep + 1;
     } else {
       for (var j=0;j<subs.length;j++) subs[j].style.opacity = '0';
     }
 
     label.textContent = 'PROGRESS ' + Math.round(p*100) + '% · SCENE ' + (i+1) + '/' + N
       + ' · ' + phase
-      + (subActive ? ' · SUBFRAME ' + subIndex + '/3' : '');
+      + (subIndex ? ' · SUBFRAME ' + subIndex + '/3' : '');
   }
 
   function onScroll(){
