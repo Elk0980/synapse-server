@@ -568,7 +568,7 @@
 <!-- ═══ АКТ 1 · ХИРО «ВЕЧЕР» ═══ -->
 <section class="hero" id="top" data-landing-block="1" aria-labelledby="hero-title">
   <video id="herovid" autoplay muted playsinline preload="auto" poster="/assets/hero-intro-poster.jpg">
-    <source src="/assets/hero-intro.mp4" type="video/mp4">
+    <source src="/assets/hero-intro-loop.mp4" type="video/mp4">
     <!-- Прежний видеофон: раскомментировать эти источники и убрать hero-intro.mp4 для отката.
     <source src="assets/hero-full-web_3.webm" type="video/webm" media="(min-width: 821px)">
     <source src="assets/hero-full-web_3.mp4" type="video/mp4" media="(min-width: 821px)">
@@ -1109,7 +1109,7 @@
       io2.observe(hero);
 
       // Временный режим проверки нового вступления: null отключает повтор хвоста; для включения заменить на подобранную отметку в секундах.
-      var HERO_TAIL_LOOP_START = null;
+      var HERO_TAIL_LOOP_START = 10;
       var hv = document.getElementById('herovid');
       if(hv && Number.isFinite(HERO_TAIL_LOOP_START)){
         var loopStart = HERO_TAIL_LOOP_START;
