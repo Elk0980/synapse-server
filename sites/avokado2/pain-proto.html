@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <title>PROTOTYPE — механика блока болей (Avokado)</title>
 <!--
-  ПРОТОТИП МЕХАНИКИ, версия 4 (по модели и двум правкам, заданным GPT Avokado).
+  ПРОТОТИП МЕХАНИКИ, версия 5 (модель и три круга правок GPT Avokado).
   Финальных изображений и текстов болей нет, hero и глобальный видеофон не трогаются.
 
   МОДЕЛЬ
@@ -14,20 +14,30 @@
     i   = floor(pos)              — текущая сцена
     q   = pos - i                 — прогресс внутри неё, 0..1
     q 0.00 … 0.65 : HOLD сцены i — она одна видна полностью
-    q 0.65 … 1.00 : одновременно EXIT сцены i и ENTER сцены i+1
+    q 0.65 … 1.00 : переход — сцена i остаётся НЕПРОЗРАЧНОЙ и полноразмерной,
+                    поверх неё проявляется сцена i+1 (opacity = x)
     Последняя сцена из HOLD не выходит — держится до конца зоны.
 
-  ТЕКСТ БОЛИ (правка v4)
-    ENTER : reveal = 0 — текст ещё часть картинки (opacity 0.18, сдвиг 14px).
-    HOLD  : reveal = q / 0.25 — проявляется в раннем HOLD и дальше держится на 1.
-    EXIT  : reveal = 1 — уходящая сцена текст не гасит.
+  КОМПОЗИЦИЯ ПЕРЕХОДА (правка v5)
+    Пара opacity 1-x и x НЕ даёт непрозрачного кадра: браузер их не складывает,
+    итоговое покрытие = x + (1-x)^2, при x = 0.5 это 0.75 — четверть фона просвечивает.
+    Поэтому уходящая сцена держит opacity 1, а проявляется только входящая.
+    Масштаба у .pain-scene нет вообще: scale(<1) у элемента inset:0 открывает
+    тёмную рамку по периметру. Глубина живёт на внутреннем слое .scene-art,
+    который всегда увеличен с запасом (overscan 4 %), поэтому края закрыты всегда.
+
+  ТЕКСТ БОЛИ
+    входящая сцена : reveal = 0 — текст ещё часть картинки (opacity 0.18, сдвиг 14px).
+    HOLD           : reveal = q / 0.25 — проявляется в раннем HOLD и дальше держится на 1.
+    уходящая сцена : reveal = 1 — текст не гасится.
     Первая сцена при p = 0 начинается с reveal = 0, а не с 1.
 
-  ПОДКАДРЫ (правка v4) — живут всю жизнь своей сцены, без скачков:
-    ENTER своей сцены : держится первый подкадр (sub-1 = 1)
+  ПОДКАДРЫ — существуют только внутри своей сцены (её прозрачность к ним и применяется),
+  живут всю её жизнь, без скачков:
+    вход своей сцены  : держится первый подкадр (sub-1 = 1)
     HOLD              : интерполяция subPos = t*(N_sub-1), opacity = 1 - |subPos - k|
-    EXIT              : держится последний подкадр (sub-3 = 1)
-    На стыках значения совпадают: ENTER→HOLD даёт sub-1 = 1, HOLD→EXIT даёт sub-3 = 1.
+    уход своей сцены  : держится последний подкадр (sub-3 = 1)
+    На стыках значения совпадают: вход→HOLD даёт sub-1 = 1, HOLD→уход даёт sub-3 = 1.
 
   ДОЛИ ПРОГРЕССА (N = 3, зона 400vh, липкий кадр 100svh, чистый ход ≈ 300vh)
     одна боль            = 1/3      ≈ 33,3 %
@@ -70,13 +80,16 @@
     position:sticky;top:0;height:100svh;overflow:hidden;
     display:flex;align-items:center;justify-content:center;
   }
+  /* у самой сцены НЕТ масштаба: scale(<1) у inset:0 открыл бы тёмную рамку по краям */
   .pain-scene{
     position:absolute;inset:0;
     display:flex;align-items:center;justify-content:center;
-    opacity:0;transform:scale(.94);
-    will-change:opacity,transform;
+    opacity:0;
+    will-change:opacity;
   }
-  .scene-art{position:absolute;inset:0}
+  /* глубина живёт здесь; overscan 4 % — края кадра закрыты при любом масштабе */
+  .scene-art{position:absolute;inset:0;transform:scale(1.04);transform-origin:50% 50%;
+    will-change:transform}
   .scene-art span{
     position:absolute;left:5%;bottom:6%;
     font:700 clamp(48px,9vw,120px)/1 'Manrope',system-ui,sans-serif;
@@ -86,7 +99,7 @@
   .scene-2 .scene-art{background:linear-gradient(135deg,var(--s2),#1d1917)}
   .scene-3 .scene-art{background:linear-gradient(135deg,var(--s3),#171c22)}
 
-  /* подкадры второй сцены — только внутри её HOLD */
+  /* подкадры второй сцены — существуют только внутри неё */
   .subframe{position:absolute;inset:0;opacity:0;will-change:opacity}
   .subframe .mark{
     position:absolute;top:50%;left:30%;transform:translate(-50%,-50%);
@@ -130,9 +143,10 @@
     .pain-proto{height:auto}
     .pain-sticky{position:static;height:auto;display:block;overflow:visible}
     .pain-scene{
-      position:relative;inset:auto;opacity:1!important;transform:none!important;
+      position:relative;inset:auto;opacity:1!important;
       min-height:60svh;margin-bottom:14px;overflow:hidden;
     }
+    .scene-art{transform:none!important}
     .subframe{position:absolute;opacity:1!important;display:none}
     .subframe.sub-1{display:block}
     .scene-copy p{opacity:1!important;transform:none!important}
@@ -145,11 +159,12 @@
 
 <div class="proto-hint">
   <p><b>Что здесь проверяется:</b> один липкий кадр, три сцены-боли с фазами
-  <b>HOLD → (EXIT + ENTER одновременно)</b>, подкадры второй сцены без скачков
-  (ENTER держит первый, HOLD интерполирует, EXIT держит последний),
+  <b>HOLD → переход</b> (уходящая сцена остаётся непрозрачной, поверх проявляется входящая),
+  подкадры второй сцены без скачков (вход держит первый, HOLD интерполирует, уход — последний),
   проявление текста из «части картинки» в читаемый слой в раннем HOLD, удержание последней сцены.</p>
   <p style="margin-top:10px">Зона — <b>400vh</b>, чистый ход ≈ 300vh. Одна боль ≈ <b>33,3 %</b> прогресса,
-  её HOLD ≈ <b>21,7 %</b>, переход между болями ≈ <b>11,7 %</b>, пики подкадров — каждые ≈ <b>10,8 %</b>.</p>
+  её HOLD ≈ <b>21,7 %</b>, переход между болями ≈ <b>11,7 %</b>, пики подкадров — каждые ≈ <b>10,8 %</b>.
+  Кадр ни в одной точке не просвечивает и не открывает рамку по краям.</p>
 </div>
 
 <div class="proto-spacer">ПРОКРУТИТЕ ВНИЗ ↓</div>
@@ -167,7 +182,7 @@
       <div class="subframe sub-1"><div class="mark">ПОДКАДР 1</div></div>
       <div class="subframe sub-2"><div class="mark">ПОДКАДР 2</div></div>
       <div class="subframe sub-3"><div class="mark">ПОДКАДР 3</div></div>
-      <div class="scene-copy"><p>Синтетический текст боли номер два — внутри неё три подкадра, только в фазе HOLD.</p></div>
+      <div class="scene-copy"><p>Синтетический текст боли номер два — внутри неё три подкадра, они живут вместе с ней.</p></div>
     </article>
 
     <article class="pain-scene scene-3" data-scene="2">
@@ -193,14 +208,17 @@
   var SUB_SCENE = 1;        // индекс сцены с подкадрами
   var HOLD_END = 0.65;      // граница HOLD внутри сцены
   var REVEAL_IN = 0.25;     // доля q, за которую текст боли проявляется в HOLD
+  var ART_BASE = 1.04;      // постоянный overscan внутреннего слоя: края кадра всегда закрыты
+  var ART_DEPTH = 0.04;     // добавка глубины для входящей сцены
   var ticking = false;
 
   function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
 
-  function apply(el, opacity, scale, reveal, z){
+  function apply(el, opacity, artScale, reveal, z){
     el.style.opacity = opacity.toFixed(3);
-    el.style.transform = 'scale(' + scale.toFixed(3) + ')';
     el.style.zIndex = String(z);
+    var art = el.querySelector('.scene-art');
+    if (art) art.style.transform = 'scale(' + artScale.toFixed(3) + ')';
     var copy = el.querySelector('.scene-copy p');
     if (copy){
       copy.style.opacity = (0.18 + 0.82 * reveal).toFixed(3);
@@ -218,20 +236,22 @@
     var pos = clamp(p * N, 0, N - 0.0001);
     var i = Math.floor(pos);
     var q = pos - i;
-    var phase = (q <= HOLD_END) ? 'HOLD' : 'EXIT+ENTER';
+    var phase = (q <= HOLD_END) ? 'HOLD' : 'ПЕРЕХОД';
     var isLast = (i === N - 1);
 
-    // все сцены по умолчанию скрыты
-    for (var k=0;k<N;k++) apply(scenes[k], 0, 0.94, 0, 10 + k);
+    // все сцены по умолчанию скрыты; ART_BASE — базовый overscan внутреннего слоя
+    for (var k=0;k<N;k++) apply(scenes[k], 0, ART_BASE, 0, 10 + k);
 
     if (q <= HOLD_END || isLast){
       // HOLD: текст проявляется в раннем HOLD и дальше держится на 1
-      apply(scenes[i], 1, 1, clamp(q / REVEAL_IN, 0, 1), 20);
+      apply(scenes[i], 1, ART_BASE, clamp(q / REVEAL_IN, 0, 1), 20);
       if (isLast) phase = 'HOLD';
     } else {
       var x = (q - HOLD_END) / (1 - HOLD_END);          // 0..1
-      apply(scenes[i], 1 - x, 1 - 0.06 * x, 1, 20);     // EXIT: текст держится
-      apply(scenes[i+1], x, 0.94 + 0.06 * x, 0, 21);    // ENTER: текст ещё часть картинки
+      // уходящая остаётся непрозрачной и полноразмерной — иначе фон просвечивает
+      apply(scenes[i], 1, ART_BASE, 1, 20);
+      // проявляется только входящая; её внутренний слой выходит из глубины, не открывая края
+      apply(scenes[i+1], x, ART_BASE + ART_DEPTH * (1 - x), 0, 21);
     }
 
     // подкадры живут всю жизнь своей сцены: ENTER держит первый, HOLD интерполирует, EXIT держит последний
