@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <title>PROTOTYPE — механика блока болей (Avokado)</title>
 <!--
-  ПРОТОТИП МЕХАНИКИ, версия 5 (модель и три круга правок GPT Avokado).
+  ПРОТОТИП МЕХАНИКИ, версия 6 (модель и четыре круга правок GPT Avokado).
   Финальных изображений и текстов болей нет, hero и глобальный видеофон не трогаются.
 
   МОДЕЛЬ
@@ -35,7 +35,11 @@
   ПОДКАДРЫ — существуют только внутри своей сцены (её прозрачность к ним и применяется),
   живут всю её жизнь, без скачков:
     вход своей сцены  : держится первый подкадр (sub-1 = 1)
-    HOLD              : интерполяция subPos = t*(N_sub-1), opacity = 1 - |subPos - k|
+    HOLD              : subPos = t*(N_sub-1); j = floor(subPos); f = subPos - j.
+                        Подкадр j держит opacity 1, подкадр j+1 проявляется ПОВЕРХ него (opacity = f).
+                        Пара 1-f / f здесь запрещена по той же причине, что и у сцен:
+                        при f = 0.5 это дало бы 0.50 + 0.25 и ещё 0.25 базового слоя —
+                        примесь третьего изображения.
     уход своей сцены  : держится последний подкадр (sub-3 = 1)
     На стыках значения совпадают: вход→HOLD даёт sub-1 = 1, HOLD→уход даёт sub-3 = 1.
 
@@ -126,8 +130,9 @@
     opacity:.18;transform:translateY(14px);
     will-change:opacity,transform;
   }
+  /* z-index должен быть выше сцен (20/21), иначе строка полностью закрыта ими */
   .scene-progress{
-    position:absolute;left:0;right:0;bottom:18px;z-index:3;
+    position:absolute;left:0;right:0;bottom:18px;z-index:30;
     text-align:center;font:500 12px/1 'Manrope',system-ui,sans-serif;
     color:rgba(239,233,220,.45);letter-spacing:.08em;
   }
@@ -260,19 +265,28 @@
     else if (i === SUB_SCENE - 1 && q > HOLD_END) subState = 'enter';
 
     var subIndex = 0;
+    function setSub(k, opacity, z){
+      subs[k].style.opacity = (opacity === 1) ? '1' : opacity.toFixed(3);
+      subs[k].style.zIndex = String(z);
+    }
+    function hideSubs(){ for (var h=0;h<subs.length;h++) setSub(h, 0, 1); }
+
     if (subState === 'hold'){
       var t = q / HOLD_END;                       // 0..1 внутри HOLD
-      var subPos = t * (subs.length - 1);         // 0..2 — пики точно на подкадрах
-      for (var s=0;s<subs.length;s++){
-        subs[s].style.opacity = clamp(1 - Math.abs(subPos - s), 0, 1).toFixed(3);
-      }
-      subIndex = Math.round(subPos) + 1;
+      var subPos = t * (subs.length - 1);         // 0..2
+      var j = Math.min(Math.floor(subPos), subs.length - 1);
+      var f = subPos - j;
+      hideSubs();
+      setSub(j, 1, 2);                            // уходящий подкадр остаётся непрозрачным
+      if (j + 1 < subs.length) setSub(j + 1, f, 3); // входящий проявляется ПОВЕРХ него
+      subIndex = (f > 0.5 ? j + 1 : j) + 1;
     } else if (subState === 'enter' || subState === 'exit'){
       var keep = (subState === 'enter') ? 0 : subs.length - 1;
-      for (var j2=0;j2<subs.length;j2++) subs[j2].style.opacity = (j2 === keep) ? '1.000' : '0';
+      hideSubs();
+      setSub(keep, 1, 2);
       subIndex = keep + 1;
     } else {
-      for (var j=0;j<subs.length;j++) subs[j].style.opacity = '0';
+      hideSubs();
     }
 
     label.textContent = 'PROGRESS ' + Math.round(p*100) + '% · SCENE ' + (i+1) + '/' + N
