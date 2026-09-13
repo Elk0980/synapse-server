@@ -576,7 +576,14 @@
 #pain-story .pain-subframe--close .pain-scene__copy{align-items:flex-end;padding:24px 4.5%}
 #pain-story .pain-subframe--close .pain-scene__text{position:relative;isolation:isolate;width:38%;max-width:420px}
 #pain-story .pain-subframe--close .pain-scene__text p{font-size:clamp(16px,1.4vw,22px)}
-#pain-story .pain-subframe--close .pain-scene__text::before{content:'';position:absolute;inset:-20px;z-index:-1;background:rgba(8,12,9,.86);filter:blur(12px);pointer-events:none}
+@media(min-width:601px){
+  /* The story can grow beyond the prose column; keep each complete 16:9 frame. */
+  #pain-story{width:min(1600px,94vw);margin-left:calc((100% - min(1600px,94vw))/2)}
+  #pain-story .pain-story__title{font-size:clamp(21px,2.1vw,28px)}
+  #pain-story .pain-subframe--close .pain-scene__copy{padding:clamp(24px,4vw,60px) 4.5%;background:linear-gradient(115deg,transparent 45%,rgba(250,232,207,.2) 65%,rgba(250,232,207,.36) 100%)}
+  #pain-story .pain-subframe--close .pain-scene__text{width:38%;max-width:440px}
+  #pain-story .pain-subframe--close .pain-scene__text p{color:#101612;font-size:clamp(24px,2.1vw,32px);font-weight:600;line-height:1.35;text-shadow:none;text-wrap:pretty}
+}
 #pain-story .pain-story__nav{display:none}
 #pain-story.pain-story--enhanced .pain-story__sticky{position:sticky;top:0;height:100svh;display:flex;flex-direction:column;justify-content:center;gap:12px;padding-top:calc(var(--pain-header-height,var(--header-height)) + 12px);padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))}
 #pain-story.pain-story--enhanced .pain-story__title{flex:none;width:100%;margin:0}
@@ -603,7 +610,6 @@
   #pain-story .pain-subframe--close .pain-scene__visual img{object-fit:cover;object-position:center 44%}
   #pain-story .pain-subframe--close .pain-scene__copy{position:relative;inset:auto;padding:16px 6% 22px;display:block}
   #pain-story .pain-subframe--close .pain-scene__text{width:100%;max-width:none}
-  #pain-story .pain-subframe--close .pain-scene__text::before{display:none}
   #pain-story .pain-subframe--close .pain-scene__text p{font-size:clamp(17px,4.8vw,20px);line-height:1.35}
   #pain-story .pain-story__nav{font-size:11px;letter-spacing:.02em}
 }
@@ -665,7 +671,7 @@
 <!-- ═══ БЛОК 2 · БОЛЬ ═══ -->
 <section class="landing-block pain-block act3 pain-has-story" id="pain" data-landing-block="2" aria-labelledby="pain-title">
   <div class="wrap">
-    <div id="pain-story" data-version="avokado2-calendar-story-v2">
+    <div id="pain-story" data-version="avokado2-calendar-story-v3">
       <div class="pain-story__sticky">
         <h2 class="pain-story__title" id="pain-title" data-edit="pain.rv-1">Сколько раз вы мечтали об идеальном теле?</h2>
         <div class="pain-story__stage">
