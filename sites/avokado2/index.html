@@ -60,9 +60,8 @@
   *{margin:0;padding:0;box-sizing:border-box}
   html{scroll-behavior:smooth}
   body{font-family:'Manrope','Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--cream);overflow-x:hidden}
-  .global-video-bg,.global-video-dimmer{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none}
-  .global-video-bg{z-index:0;object-fit:cover;opacity:0}
-  .global-video-bg.is-ready{opacity:1}
+  .global-video-bg,.global-video-dimmer,.global-video-shade{position:fixed;inset:0;width:100%;height:100vh;height:100lvh;pointer-events:none}
+  .global-video-bg{z-index:0;object-fit:cover}
   .global-video-dimmer{z-index:1;background:radial-gradient(ellipse 70% 60% at 50% 48%,rgba(8,12,9,.40) 0%,rgba(8,12,9,.38) 45%,rgba(8,12,9,.26) 75%,rgba(8,12,9,.20) 100%);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}#contacts .wrap,#faq .wrap{background:radial-gradient(ellipse 70% 68% at 50% 45%,rgba(8,12,9,.58) 0%,rgba(8,12,9,.40) 55%,rgba(8,12,9,0) 85%)}.price.studio-light>.wrap{background:radial-gradient(ellipse 75% 70% at 50% 45%,rgba(8,12,9,.44) 0%,rgba(8,12,9,.30) 55%,rgba(8,12,9,0) 85%)}@media(max-width:480px){.global-video-dimmer{background:radial-gradient(ellipse 95% 55% at 50% 48%,rgba(8,12,9,.42) 0%,rgba(8,12,9,.38) 50%,rgba(8,12,9,.22) 100%)}#contacts .wrap,#faq .wrap{background:radial-gradient(ellipse 100% 70% at 50% 45%,rgba(8,12,9,.62) 0%,rgba(8,12,9,.52) 55%,rgba(8,12,9,0) 88%)}.price.studio-light>.wrap{background:radial-gradient(ellipse 100% 72% at 50% 45%,rgba(8,12,9,.54) 0%,rgba(8,12,9,.44) 55%,rgba(8,12,9,0) 88%)}}
   body>header,body>.sticky-cta,body>section,body>footer,body>.synapse-strip,body>.cookie-notice{z-index:2}
   footer,.synapse-strip{position:relative}
@@ -155,7 +154,7 @@
   .js .rv.on{opacity:1;transform:translateY(0)}
 
   /* ---------- АКТ 1 · ХИРО ---------- */
-  .hero{height:100svh;overflow:hidden;background:var(--bg);isolation:isolate}
+  .hero{height:100svh;overflow:hidden;background:transparent;isolation:isolate}
   .hero video,.hero .poster{
     position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
   }
@@ -624,6 +623,23 @@
   #pain-story.pain-story--enhanced .pain-story__nav{display:none}
 }
 
+
+/* One video continues from the intro into the background of the pain story. */
+.global-video-shade{display:none;z-index:1;background:linear-gradient(180deg,rgba(14,20,16,.35) 0%,transparent 28%,transparent 55%,rgba(14,20,16,.55) 80%,rgba(14,20,16,.96) 100%)}
+.hero-flow .global-video-shade{display:block;opacity:calc(1 - var(--hero-flow-progress,0))}
+.hero-flow .global-video-dimmer{opacity:var(--hero-flow-progress,0);backdrop-filter:blur(calc(3px * var(--hero-flow-progress,0)));-webkit-backdrop-filter:blur(calc(3px * var(--hero-flow-progress,0)))}
+.hero-flow #top::after,.hero-flow #top>.section-backdrop{display:none}
+.hero-flow #top .hero-titles{opacity:var(--hero-title-opacity,1);transform:translateY(calc(-18px * var(--hero-flow-progress,0)))}
+.hero-flow #pain{margin-top:-18svh;padding-top:0}
+.hero-flow #pain-story .pain-story__sticky{opacity:var(--hero-pain-entry,0)}
+.hero-flow #pain-story:focus-within .pain-story__sticky{opacity:1}
+.hero-flow--loop #top .t-fade,.hero-flow--loop #top .t-script,.hero-flow--loop #top .t-script-text{animation:none;opacity:1;clip-path:none}
+.hero-flow--loop #top .t-script-line::after{display:none}
+@media(prefers-reduced-motion:reduce){
+  #top .t-fade,#top .t-script,#top .t-script-text{animation:none;opacity:1;clip-path:none}
+  #top .t-script-line::after,#top .t-echo{display:none}
+}
+
 /* Объекты, добавленные визуальным редактором. */
 .x-extra { position:absolute; z-index:8; max-width:100%; }
 .x-extra--text { color:var(--ink, #17352c); }
@@ -635,10 +651,11 @@
 </script>
 </head>
 <body>
-<video class="global-video-bg" id="global-video-bg" autoplay muted playsinline preload="auto" aria-hidden="true">
+<video class="global-video-bg" id="herovid" muted playsinline preload="auto" poster="/assets/hero-intro-poster.jpg" aria-hidden="true">
   <source src="/assets/hero-intro-loop.mp4" type="video/mp4">
 </video>
 <div class="global-video-dimmer" aria-hidden="true"></div>
+<div class="global-video-shade" aria-hidden="true"></div>
 <div id="page-loader" aria-hidden="true"><div class="page-loader-logo">АВ<svg viewBox="0 0 48 54" aria-hidden="true"><path d="M25.5 8 C26.5 5 25 2.5 23 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M24 9.5 C20.4 9.5 15.6 15.6 14.1 22.3 C12.6 29.1 17.3 38 24 38 C30.7 38 35.4 29.1 33.9 22.3 C32.4 15.6 27.6 9.5 24 9.5 Z" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round"/><circle cx="24" cy="27" r="4.6" fill="currentColor"/></svg>КАДО</div><div id="page-loader-line"></div></div>
 
 <header id="hdr">
@@ -650,14 +667,6 @@
 
 <!-- ═══ АКТ 1 · ХИРО «ВЕЧЕР» ═══ -->
 <section class="hero" id="top" data-landing-block="1" aria-labelledby="hero-title">
-  <video id="herovid" autoplay muted playsinline preload="auto" poster="/assets/hero-intro-poster.jpg">
-    <source src="/assets/hero-intro-loop.mp4" type="video/mp4">
-    <!-- Прежний видеофон: раскомментировать эти источники и убрать hero-intro.mp4 для отката.
-    <source src="assets/hero-full-web_3.webm" type="video/webm" media="(min-width: 821px)">
-    <source src="assets/hero-full-web_3.mp4" type="video/mp4" media="(min-width: 821px)">
-    <source src="assets/hero-full-mob_3.mp4" type="video/mp4" media="(max-width: 820px)">
-    -->
-  </video>
   <div class="hero-titles">
     <div class="t-echo script" style="left:8%;top:16%">Авокадо</div>
     <div class="t-echo script" style="right:10%;top:34%;animation-delay:10.6s">уверенность</div>
@@ -671,7 +680,7 @@
 <!-- ═══ БЛОК 2 · БОЛЬ ═══ -->
 <section class="landing-block pain-block act3 pain-has-story" id="pain" data-landing-block="2" aria-labelledby="pain-title">
   <div class="wrap">
-    <div id="pain-story" data-version="avokado2-calendar-story-v3">
+    <div id="pain-story" data-version="avokado2-hero-flow-v1">
       <div class="pain-story__sticky">
         <h2 class="pain-story__title" id="pain-title" data-edit="pain.rv-1">Сколько раз вы мечтали об идеальном теле?</h2>
         <div class="pain-story__stage">
@@ -1198,67 +1207,6 @@
       },{threshold:.05});
       io2.observe(hero);
 
-      // Временный режим проверки нового вступления: null отключает повтор хвоста; для включения заменить на подобранную отметку в секундах.
-      var HERO_TAIL_LOOP_START = 10;
-      var hv = document.getElementById('herovid');
-      if(hv && Number.isFinite(HERO_TAIL_LOOP_START)){
-        var loopStart = HERO_TAIL_LOOP_START;
-        var restartLoop = function(){
-          hv.currentTime = loopStart;
-          var p = hv.play();
-          if(p && p.catch){ p.catch(function(){}); }
-        };
-
-        if('requestVideoFrameCallback' in hv){
-          var watchFrame = function(now, metadata){
-            var end = Number.isFinite(hv.duration) ? hv.duration : 15.9166;
-            if(metadata.mediaTime >= end - .04){ restartLoop(); }
-            hv.requestVideoFrameCallback(watchFrame);
-          };
-          hv.requestVideoFrameCallback(watchFrame);
-        }else{
-          hv.addEventListener('timeupdate', function(){
-            var end = Number.isFinite(hv.duration) ? hv.duration : 15.9166;
-            if(hv.currentTime >= end - .15){ restartLoop(); }
-          });
-        }
-        hv.addEventListener('ended', restartLoop);
-      }
-
-      var GLOBAL_VIDEO_TAIL_LOOP_START = 10;
-      var globalVideo = document.getElementById('global-video-bg');
-      if(globalVideo){
-        var restartGlobalVideo = function(){
-          globalVideo.currentTime = GLOBAL_VIDEO_TAIL_LOOP_START;
-          var playPromise = globalVideo.play();
-          if(playPromise && playPromise.catch){ playPromise.catch(function(){}); }
-        };
-        var startGlobalVideo = function(){
-          globalVideo.addEventListener('seeked', function(){
-            if(globalVideo.currentTime >= GLOBAL_VIDEO_TAIL_LOOP_START - .05){
-              globalVideo.classList.add('is-ready');
-            }
-          }, {once:true});
-          restartGlobalVideo();
-        };
-
-        if(globalVideo.readyState >= 1){ startGlobalVideo(); }
-        else{ globalVideo.addEventListener('loadedmetadata', startGlobalVideo, {once:true}); }
-
-        if('requestVideoFrameCallback' in globalVideo){
-          var watchGlobalFrame = function(now, metadata){
-            var end = Number.isFinite(globalVideo.duration) ? globalVideo.duration : 15.9166;
-            if(metadata.mediaTime >= end - .04){ restartGlobalVideo(); }
-            globalVideo.requestVideoFrameCallback(watchGlobalFrame);
-          };
-          globalVideo.requestVideoFrameCallback(watchGlobalFrame);
-        }
-        globalVideo.addEventListener('timeupdate', function(){
-          var end = Number.isFinite(globalVideo.duration) ? globalVideo.duration : 15.9166;
-          if(globalVideo.currentTime >= end - .15){ restartGlobalVideo(); }
-        });
-        globalVideo.addEventListener('ended', restartGlobalVideo);
-      }
     }catch(err){
       document.querySelectorAll('.rv').forEach(function(el){ el.classList.add('on'); });
       document.getElementById('cta').classList.add('on');
@@ -1266,6 +1214,106 @@
   })();
 </script>
 
+
+
+<script>
+/* AVOKADO2 hero flow: one player, one scroll progress, no wheel/touch interception. */
+(function(){
+  'use strict';
+  var video=document.getElementById('herovid'),hero=document.getElementById('top');
+  if(!video||!hero)return;
+  var body=document.body,reduce=matchMedia('(prefers-reduced-motion: reduce)');
+  var editing=new URLSearchParams(location.search).get('edit')==='1';
+  var LOOP_START=10,enabled=false,tailRequested=false,tailEntered=false;
+  var queued=false,shown=null,lastTime=0,frameId=null;
+  function clamp(x){return Math.max(0,Math.min(1,x))}
+  function ease(x){x=clamp(x);return x*x*(3-2*x)}
+  function play(){
+    if(!enabled||document.hidden)return;
+    var promise=video.play();
+    if(promise&&promise.catch)promise.catch(function(){});
+  }
+  function enterTail(restart){
+    tailRequested=true;
+    body.classList.add('hero-flow--loop');
+    if(video.readyState<1||video.seeking||!Number.isFinite(video.duration))return;
+    var start=video.duration>LOOP_START?LOOP_START:0;
+    try{
+      if(restart||video.currentTime<start)video.currentTime=start;
+      tailEntered=true;
+      play();
+    }catch(e){/* Retry after metadata/seeked; keep the current frame or poster. */}
+  }
+  function watchVideo(){
+    if(!enabled||document.hidden||frameId!==null||!video.requestVideoFrameCallback)return;
+    frameId=video.requestVideoFrameCallback(function(now,metadata){
+      frameId=null;
+      if(!enabled||document.hidden)return;
+      if(!video.seeking&&Number.isFinite(video.duration)&&metadata.mediaTime>=video.duration-.04)enterTail(true);
+      watchVideo();
+    });
+  }
+  function render(now){
+    queued=false;
+    if(!enabled)return;
+    var y=Math.max(0,window.scrollY);
+    if(y>4&&!tailRequested)enterTail(false);
+    var target=clamp(y/Math.max(1,hero.offsetHeight*.85));
+    if(shown===null||target===0){shown=target}
+    else{
+      var dt=lastTime&&now?Math.max(1,Math.min(64,now-lastTime)):16;
+      shown+=(target-shown)*(1-Math.exp(-dt/120));
+      if(Math.abs(target-shown)<.0001)shown=target;
+    }
+    lastTime=now||0;
+    body.style.setProperty('--hero-flow-progress',ease(shown).toFixed(4));
+    body.style.setProperty('--hero-title-opacity',(1-ease(shown/.38)).toFixed(4));
+    body.style.setProperty('--hero-pain-entry',ease((shown-.22)/.60).toFixed(4));
+    if(shown!==target)schedule();
+  }
+  function schedule(){if(enabled&&!queued){queued=true;requestAnimationFrame(render)}}
+  function setup(){
+    enabled=!reduce.matches&&!editing;
+    body.classList.toggle('hero-flow',enabled);
+    shown=null;lastTime=0;
+    if(!enabled){
+      video.pause();
+      if(frameId!==null&&video.cancelVideoFrameCallback)video.cancelVideoFrameCallback(frameId);
+      frameId=null;
+      ['--hero-flow-progress','--hero-title-opacity','--hero-pain-entry'].forEach(function(name){body.style.removeProperty(name)});
+      return;
+    }
+    render();
+    if(tailRequested&&!tailEntered)enterTail(false);
+    play();watchVideo();
+  }
+  video.addEventListener('loadedmetadata',function(){
+    if(!enabled)return;
+    if(tailRequested||window.scrollY>4)enterTail(false);
+    else play();
+    watchVideo();
+  });
+  video.addEventListener('seeked',function(){
+    if(!enabled)return;
+    if(tailRequested&&!tailEntered)enterTail(false);
+    play();
+  });
+  video.addEventListener('ended',function(){if(enabled)enterTail(true)});
+  video.addEventListener('timeupdate',function(){
+    if(enabled&&!video.requestVideoFrameCallback&&!video.seeking&&Number.isFinite(video.duration)&&video.currentTime>=video.duration-.15)enterTail(true);
+  });
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){video.pause()}
+    else{play();watchVideo();schedule()}
+  });
+  addEventListener('scroll',schedule,{passive:true});
+  addEventListener('resize',function(){shown=null;schedule()},{passive:true});
+  addEventListener('pageshow',setup);
+  if(reduce.addEventListener)reduce.addEventListener('change',setup);
+  else if(reduce.addListener)reduce.addListener(setup);
+  setup();
+})();
+</script>
 
 <!-- Источник рейтинга — карточка Яндекс.Карт, сверено 29.08.2026; значение 2ГИС отличается и ждёт решения владельца. -->
 <script type="application/ld+json">
