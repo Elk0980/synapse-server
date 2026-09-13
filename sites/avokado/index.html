@@ -584,6 +584,10 @@
   #pain-story .pain-scene[data-pain="monday"]::after{background:linear-gradient(0deg,rgba(8,12,9,.9),rgba(8,12,9,.72) 27%,transparent 62%)}
   #pain-story .pain-scene__copy{padding:24px 5%;align-items:flex-end;padding-bottom:16%}
   #pain-story .pain-scene__text{width:38%}
+  #pain-story .pain-scene[data-pain="monday"] .pain-scene__text,
+  #pain-story .pain-scene[data-pain="training"] .pain-scene__text{position:relative;isolation:isolate}
+  #pain-story .pain-scene[data-pain="monday"] .pain-scene__text::before,
+  #pain-story .pain-scene[data-pain="training"] .pain-scene__text::before{content:'';position:absolute;inset:-24px;z-index:-1;pointer-events:none;background:rgba(8,12,9,.76);filter:blur(12px)}
   #pain-story .pain-scene__text p{font-size:clamp(14px,3.85vw,19px);line-height:1.45}
   #pain-story .pain-story__nav{font-size:11px;letter-spacing:.02em}
 }
@@ -1352,11 +1356,12 @@ AlviPrice.load(['/api/price']).then(function (price) {
     var index=Math.floor(pos),q=pos-index;
     scenes.forEach(function(s,i){setScene(s,0,1.04,0,10+i)});
     if(q<=HOLD||index===scenes.length-1){
-      setScene(scenes[index],1,1.04,clamp(q/REVEAL),20);
+      // The final caption is fully revealed on entry and owns a full viewport of HOLD.
+      setScene(scenes[index],1,1.04,index===scenes.length-1?1:clamp(q/REVEAL),20);
     }else{
       var x=(q-HOLD)/(1-HOLD);
       setScene(scenes[index],1,1.04,1,20);
-      setScene(scenes[index+1],x,1.08-.04*x,0,21);
+      setScene(scenes[index+1],x,1.08-.04*x,index+1===scenes.length-1?x:0,21);
     }
     var label=String(index+1).padStart(2,'0')+' / '+String(scenes.length).padStart(2,'0');
     if(label!==lastCount){count.textContent=label;lastCount=label}
