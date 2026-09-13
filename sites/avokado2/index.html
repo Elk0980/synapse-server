@@ -563,6 +563,37 @@
 .x-extra--text { color:var(--ink, #17352c); }
 .x-extra--button { display:inline-flex; padding:12px 22px; border-radius:999px; color:#17352c; background:#a7d8c4; border:1px solid #c9a97a; text-decoration:none; }
 .x-extra--image { display:block; height:auto; border-radius:18px; }
+
+/* ---------- БЛОК БОЛЕЙ · ЛИПКАЯ ИСТОРИЯ ---------- */
+.pain-story{position:relative;background:#0e1410;color:var(--cream);overflow:clip}
+.pain-story .pain-sticky{display:block}
+.pain-story .pain-scene{position:relative;min-height:70svh;overflow:hidden}
+.pain-story .scene-visual{position:absolute;inset:0;background:#111813}
+.pain-story .scene-art{position:absolute;inset:0;background-color:#111813;background-position:center;background-size:cover;background-repeat:no-repeat}
+.pain-story .pain-scene:nth-child(1) .scene-art{background-image:url('assets/pain/pain-01.jpg')}
+.pain-story .pain-scene:nth-child(2) .scene-art{background-image:url('assets/pain/pain-02.jpg')}
+.pain-story .pain-scene:nth-child(3) .scene-art{background-image:url('assets/pain/pain-03.jpg')}
+.pain-story .pain-scene:nth-child(4) .scene-art{background-image:url('assets/pain/pain-04.jpg')}
+.pain-story .pain-scene:nth-child(5) .scene-art{background-image:url('assets/pain/pain-05.jpg')}
+.pain-story .pain-scene:nth-child(6) .scene-art{background-image:url('assets/pain/pain-06.jpg')}
+.pain-story .pain-scene:nth-child(7) .scene-art{background-image:url('assets/pain/pain-07.jpg')}
+.pain-story .pain-scene:nth-child(8) .scene-art{background-image:url('assets/pain/pain-08.jpg')}
+.pain-story .scene-copy{position:relative;z-index:4;min-height:70svh;display:flex;align-items:center;justify-content:flex-end;padding-right:max(4vw,16px)}
+.pain-story .scene-copy p{width:min(38vw,420px);max-width:calc(100vw - 32px);font:600 clamp(13px,2.2vw,30px)/1.35 'Manrope',system-ui,sans-serif;color:var(--cream);text-shadow:0 2px 24px rgba(8,12,9,.75)}
+.pain-story.is-enhanced{overflow:visible}
+.pain-story.is-enhanced .pain-sticky{position:sticky;top:0;height:100svh;overflow:hidden}
+.pain-story.is-enhanced .pain-scene{position:absolute;inset:0;min-height:0;display:flex;align-items:center;justify-content:center;opacity:0;will-change:opacity}
+.pain-story.is-enhanced .scene-visual{transform:scale(1.04);transform-origin:50% 50%;will-change:transform}
+.pain-story.is-enhanced .scene-copy{width:100%;height:100%;min-height:0}
+.pain-story.is-enhanced .scene-copy p{opacity:.18;transform:translateY(14px);will-change:opacity,transform}
+@media(prefers-reduced-motion:reduce){
+  .pain-story,.pain-story.is-enhanced{height:auto!important;overflow:clip}
+  .pain-story.is-enhanced .pain-sticky{position:static;height:auto;display:block;overflow:visible}
+  .pain-story.is-enhanced .pain-scene{position:relative;inset:auto;min-height:70svh;opacity:1!important;overflow:hidden}
+  .pain-story.is-enhanced .scene-visual{transform:none!important}
+  .pain-story.is-enhanced .scene-copy{min-height:70svh}
+  .pain-story.is-enhanced .scene-copy p{opacity:1!important;transform:none!important}
+}
 </style>
 <script>
 (()=>{let finished=false,revealTimer,safetyTimer;const loader=()=>document.getElementById("page-loader");const finish=()=>{if(finished)return;finished=true;clearTimeout(revealTimer);clearTimeout(safetyTimer);const element=loader();if(!element)return;if(!element.classList.contains("is-visible")){element.style.display="none";return}element.classList.add("is-complete");setTimeout(()=>{element.style.display="none"},250)};revealTimer=setTimeout(()=>{if(!finished)loader()?.classList.add("is-visible")},300);safetyTimer=setTimeout(()=>{finished=true;clearTimeout(revealTimer);const element=loader();if(element)element.style.display="none"},5000);if(document.readyState==="complete")finish();else addEventListener("load",finish,{once:true})})();
@@ -602,27 +633,101 @@
   </div>
 </section>
 
-<!-- ═══ БЛОК 2 · БОЛЬ ═══ -->
-<section class="landing-block pain-block act3" id="pain" data-landing-block="2" aria-labelledby="pain-title">
-  <div class="wrap">
-    <h2 class="rv" id="pain-title" data-edit="pain.rv-1">Сколько раз вы мечтали об идеальном теле?</h2>
-    <div class="pain-frames">
-      <article class="pain-frame rv" id="pain-frame-1"><img src="assets/obj-01-monday.webp" alt="" width="1920" height="1080" loading="eager" decoding="async"><p data-edit="pain.p-1">Сколько раз вы обещали себе начать «с понедельника»?</p></article>
-      <article class="pain-frame rv" id="pain-frame-2"><img src="assets/obj-02-diet.webp" alt="" width="1920" height="1080" loading="eager" decoding="async"><p data-edit="pain.p-2">Сколько диет закончились срывом — и плюс два кило сверху?</p></article>
-      <article class="pain-frame rv" id="pain-frame-3"><img src="assets/obj-06-hopeless.webp" alt="" width="1920" height="1080" loading="eager" decoding="async"><p data-edit="pain.p-3">Изнурительные тренировки, брошенные через неделю?</p></article>
-      <article class="pain-frame rv" id="pain-frame-4"><img src="assets/obj-04-oversized-clothes.webp" alt="" width="1920" height="1080" loading="lazy" decoding="async"><p data-edit="pain.p-4">Платье, которое ждёт, «когда похудею»?</p></article>
-      <article class="pain-frame rv" id="pain-frame-5"><img src="assets/obj-05-mirror.webp" alt="" width="1920" height="1080" loading="lazy" decoding="async"><p data-edit="pain.p-5">Фото, где вы себя не узнаёте?</p></article>
-      <article class="pain-frame rv" id="pain-frame-6"><img src="assets/obj-03-beach.webp" alt="" width="1920" height="1080" loading="lazy" decoding="async"><p data-edit="pain.p-6">Лето, к которому опять «не успела»?</p></article>
-    </div>
-    <div class="pain-after">
-      <div class="q rv"><p data-edit="pain.p-7"><b>60 дней</b> запретов и приседаний через силу — и сантиметр показывает почти то же самое</p></div>
-      <p class="verdict rv" data-edit="pain.verdict-1">Поэтому я нашла вариант — <b>легче</b>.</p>
-    </div>
-    <div class="pain-quote rv"><p class="quote" data-edit="pain.quote-1">«Я, как и каждая девушка, мечтаю быть красивой, уверенной, с идеальной фигурой. Но в нынешнем темпе жизни <em>не получается держаться</em> диет, тренировок и прочих «очевидных» вещей.
-</p></div>
-    <a class="flow-next" href="#metod" aria-label="Узнайте, какой вариант оказался легче"><span aria-hidden="true">↓</span></a>
+<!-- ═══ БЛОК 2 · БОЛЬ: липкая история ═══ -->
+<section class="pain-story" id="pain" data-landing-block="2" aria-label="Знакомые ситуации">
+  <div class="pain-sticky">
+    <article class="pain-scene" data-scene="0"><div class="scene-visual"><div class="scene-art" role="img" aria-label="Начать с понедельника"></div></div><div class="scene-copy"><p>Сколько раз вы обещали себе начать «с понедельника»</p></div></article>
+    <article class="pain-scene" data-scene="1"><div class="scene-visual"><div class="scene-art" role="img" aria-label="Диета закончилась срывом"></div></div><div class="scene-copy"><p>Сколько диет закончились срывом — и плюс два кило сверху</p></div></article>
+    <article class="pain-scene" data-scene="2"><div class="scene-visual"><div class="scene-art" role="img" aria-label="Изнурительные тренировки"></div></div><div class="scene-copy"><p>Изнурительные тренировки, брошенные через неделю</p></div></article>
+    <article class="pain-scene" data-scene="3"><div class="scene-visual"><div class="scene-art" role="img" aria-label="Раздражение после бритья"></div></div><div class="scene-copy"><p>Сколько раз станок оставлял раздражение и вросшие волосы</p></div></article>
+    <article class="pain-scene" data-scene="4"><div class="scene-visual"><div class="scene-art" role="img" aria-label="Платье ждёт"></div></div><div class="scene-copy"><p>Платье, которое ждёт, «когда похудею»</p></div></article>
+    <article class="pain-scene" data-scene="5"><div class="scene-visual"><div class="scene-art" role="img" aria-label="Неузнаваемое фото"></div></div><div class="scene-copy"><p>Фото, где вы себя не узнаёте</p></div></article>
+    <article class="pain-scene" data-scene="6"><div class="scene-visual"><div class="scene-art" role="img" aria-label="Подготовка к лету"></div></div><div class="scene-copy"><p>Лето, к которому опять «не успела»</p></div></article>
+    <article class="pain-scene" data-scene="7"><div class="scene-visual"><div class="scene-art" role="img" aria-label="Нет времени на себя"></div></div><div class="scene-copy"><p>Сколько раз на себя снова не хватало ни времени, ни сил</p></div></article>
   </div>
 </section>
+<script>
+(function(){
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var root = document.getElementById('pain');
+  var sticky = root.querySelector('.pain-sticky');
+  var scenes = Array.prototype.slice.call(root.querySelectorAll('.pain-scene'));
+  var sceneData = scenes.map(function(scene){
+    return {element:scene,subframes:[],motion:null};
+  });
+  var N = sceneData.length;
+  var HOLD_END = 0.65;
+  var REVEAL_IN = 0.25;
+  var ART_BASE = 1.04;
+  var ART_DEPTH = 0.04;
+  var ticking = false;
+
+  function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+
+  function apply(el, opacity, artScale, reveal, z){
+    el.style.opacity = opacity.toFixed(3);
+    el.style.zIndex = String(z);
+    var visual = el.querySelector('.scene-visual');
+    if(visual) visual.style.transform = 'scale(' + artScale.toFixed(3) + ')';
+    var copy = el.querySelector('.scene-copy p');
+    if(copy){
+      copy.style.opacity = (0.18 + 0.82 * reveal).toFixed(3);
+      copy.style.transform = 'translateY(' + (14 - 14 * reveal).toFixed(1) + 'px)';
+    }
+  }
+
+  function reset(){
+    root.classList.remove('is-enhanced');
+    root.style.height = '';
+    scenes.forEach(function(scene){
+      scene.style.opacity = '';
+      scene.style.zIndex = '';
+      scene.querySelector('.scene-visual').style.transform = '';
+      var copy = scene.querySelector('.scene-copy p');
+      copy.style.opacity = '';
+      copy.style.transform = '';
+    });
+  }
+
+  function enhance(){
+    if(reduce.matches){ reset(); return; }
+    root.style.height = (100 * N) + 'vh';
+    root.classList.add('is-enhanced');
+    render();
+  }
+
+  function render(){
+    ticking = false;
+    if(reduce.matches || !root.classList.contains('is-enhanced')) return;
+    var rect = root.getBoundingClientRect();
+    var travel = root.offsetHeight - sticky.offsetHeight;
+    var progress = clamp(-rect.top / (travel || 1), 0, 1);
+    var pos = clamp(progress * N, 0, N - 0.0001);
+    var index = Math.floor(pos);
+    var sceneProgress = pos - index;
+    var isLast = index === N - 1;
+
+    for(var k=0;k<N;k++) apply(scenes[k],0,ART_BASE,0,10+k);
+    if(sceneProgress <= HOLD_END || isLast){
+      apply(scenes[index],1,ART_BASE,clamp(sceneProgress / REVEAL_IN,0,1),20);
+    }else{
+      var entering = (sceneProgress - HOLD_END) / (1 - HOLD_END);
+      apply(scenes[index],1,ART_BASE,1,20);
+      apply(scenes[index+1],entering,ART_BASE + ART_DEPTH * (1-entering),0,21);
+    }
+  }
+
+  function requestRender(){
+    if(!ticking){ ticking=true; requestAnimationFrame(render); }
+  }
+
+  window.addEventListener('scroll',requestRender,{passive:true});
+  window.addEventListener('resize',requestRender,{passive:true});
+  if(reduce.addEventListener) reduce.addEventListener('change',enhance);
+  else if(reduce.addListener) reduce.addListener(enhance);
+  enhance();
+})();
+</script>
 
 <!-- ═══ БЛОК 3 · МЕТОД: липкая слайдовая история ═══ -->
 <section class="method-block method-scroll" id="metod" data-landing-block="3" aria-labelledby="method-title">
