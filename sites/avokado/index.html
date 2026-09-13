@@ -1332,12 +1332,12 @@ AlviPrice.load(['/api/price']).then(function (price) {
   var enabled=false,queued=false,lastCount='',count=root.querySelector('[data-pain-count]');
   var HOLD=.65,REVEAL=.25;
   function clamp(x){return Math.max(0,Math.min(1,x))}
-  function setScene(scene,alpha,scale,reveal,z){
+  function setScene(scene,alpha,scale,textAlpha,z,textY){
     scene.el.style.opacity=alpha.toFixed(3);
     scene.el.style.zIndex=String(z);
     scene.visual.style.transform='scale('+scale.toFixed(4)+')';
-    scene.text.style.opacity=(.18+.82*reveal).toFixed(3);
-    scene.text.style.transform='translateY('+(14*(1-reveal)).toFixed(2)+'px)';
+    scene.text.style.opacity=textAlpha.toFixed(3);
+    scene.text.style.transform='translateY('+(textY||0).toFixed(2)+'px)';
   }
   function reset(){
     enabled=false;
@@ -1356,12 +1356,15 @@ AlviPrice.load(['/api/price']).then(function (price) {
     var index=Math.floor(pos),q=pos-index;
     scenes.forEach(function(s,i){setScene(s,0,1.04,0,10+i)});
     if(q<=HOLD||index===scenes.length-1){
-      // The final caption is fully revealed on entry and owns a full viewport of HOLD.
-      setScene(scenes[index],1,1.04,index===scenes.length-1?1:clamp(q/REVEAL),20);
+      // Only the first caption reveals during HOLD; later captions finish on ENTER.
+      // The last scene keeps the entire final slot: progress (N-1)/N through 1.
+      var reveal=index===0?clamp(q/REVEAL):1;
+      setScene(scenes[index],1,1.04,.18+.82*reveal,20,14*(1-reveal));
     }else{
       var x=(q-HOLD)/(1-HOLD);
-      setScene(scenes[index],1,1.04,1,20);
-      setScene(scenes[index+1],x,1.08-.04*x,index+1===scenes.length-1?x:0,21);
+      // Images overlap as cards; captions take turns in the same text column.
+      setScene(scenes[index],1,1.04,clamp(1-2*x),20);
+      setScene(scenes[index+1],x,1.08-.04*x,clamp(2*x-1),21);
     }
     var label=String(index+1).padStart(2,'0')+' / '+String(scenes.length).padStart(2,'0');
     if(label!==lastCount){count.textContent=label;lastCount=label}
