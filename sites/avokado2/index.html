@@ -558,6 +558,25 @@
 
 @media(max-width:480px){.pain-block .wrap{padding-inline:4vw}.pain-frames{gap:14px}.pain-frame{height:62vh;min-height:390px}.pain-frame::after{background:linear-gradient(0deg,rgba(8,12,9,.86) 0%,rgba(8,12,9,.5) 35%,transparent 68%)}.pain-frame p{top:auto;right:6%;bottom:8%;width:88%;transform:none;font-size:clamp(15px,4.35vw,18px)}}
 
+/* Pain story: class names are deliberately isolated from the Method scenes. */
+#pain-scenes{position:relative}
+#pain-scenes .pain-scene{--pain-focus:50% center;position:relative;min-height:60svh;overflow:hidden;background:#101612}
+#pain-scenes .pain-scene[data-scene="0"]{--pain-focus:45% center}
+#pain-scenes .pain-scene__visual,#pain-scenes .pain-scene__art{position:absolute;inset:0}
+#pain-scenes .pain-scene__visual{transform:scale(1.04);transform-origin:50% 50%}
+#pain-scenes .pain-scene__art{background:linear-gradient(135deg,#253129,#101612);background-position:var(--pain-focus);background-size:cover}
+#pain-scenes .pain-scene:nth-child(even) .pain-scene__art{background:linear-gradient(135deg,#332f29,#151814)}
+#pain-scenes .pain-scene__copy{position:relative;z-index:4;min-height:60svh;display:flex;align-items:center;justify-content:flex-end;padding:0 clamp(16px,4vw,48px)}
+#pain-scenes .pain-scene__copy p{width:min(38%,420px);font:600 clamp(17px,2.2vw,30px)/1.35 'Manrope',system-ui,sans-serif;color:var(--cream);text-shadow:0 2px 24px rgba(8,12,9,.55)}
+#pain-scenes.pain-scenes--enhanced{height:calc(100vh * (8 + 1))}
+#pain-scenes.pain-scenes--enhanced .pain-scenes__sticky{position:sticky;top:0;height:100svh;overflow:hidden}
+#pain-scenes.pain-scenes--enhanced .pain-scene{position:absolute;inset:0;min-height:0;opacity:0;will-change:opacity}
+#pain-scenes.pain-scenes--enhanced .pain-scene__visual{will-change:transform}
+#pain-scenes.pain-scenes--enhanced .pain-scene__copy{height:100%;min-height:0}
+#pain-scenes.pain-scenes--enhanced .pain-scene__copy p{opacity:.18;transform:translateY(14px);will-change:opacity,transform}
+@media(max-width:480px){#pain-scenes .pain-scene__copy{padding:0 16px}#pain-scenes .pain-scene__copy p{width:46%;font-size:clamp(13px,3.4vw,16px)}}
+@media(prefers-reduced-motion:reduce){#pain-scenes.pain-scenes--enhanced{height:auto}#pain-scenes.pain-scenes--enhanced .pain-scenes__sticky{position:static;height:auto;overflow:visible}#pain-scenes.pain-scenes--enhanced .pain-scene{position:relative;inset:auto;min-height:60svh;opacity:1!important;margin-bottom:14px}#pain-scenes.pain-scenes--enhanced .pain-scene__visual{transform:none!important}#pain-scenes.pain-scenes--enhanced .pain-scene__copy{min-height:60svh}#pain-scenes.pain-scenes--enhanced .pain-scene__copy p{opacity:1!important;transform:none!important}}
+
 /* Объекты, добавленные визуальным редактором. */
 .x-extra { position:absolute; z-index:8; max-width:100%; }
 .x-extra--text { color:var(--ink, #17352c); }
@@ -606,13 +625,17 @@
 <section class="landing-block pain-block act3" id="pain" data-landing-block="2" aria-labelledby="pain-title">
   <div class="wrap">
     <h2 class="rv" id="pain-title" data-edit="pain.rv-1">Сколько раз вы мечтали об идеальном теле?</h2>
-    <div class="pain-frames">
-      <article class="pain-frame rv" id="pain-frame-1"><img src="assets/obj-01-monday.webp" alt="" width="1920" height="1080" loading="eager" decoding="async"><p data-edit="pain.p-1">Сколько раз вы обещали себе начать «с понедельника»?</p></article>
-      <article class="pain-frame rv" id="pain-frame-2"><img src="assets/obj-02-diet.webp" alt="" width="1920" height="1080" loading="eager" decoding="async"><p data-edit="pain.p-2">Сколько диет закончились срывом — и плюс два кило сверху?</p></article>
-      <article class="pain-frame rv" id="pain-frame-3"><img src="assets/obj-06-hopeless.webp" alt="" width="1920" height="1080" loading="eager" decoding="async"><p data-edit="pain.p-3">Изнурительные тренировки, брошенные через неделю?</p></article>
-      <article class="pain-frame rv" id="pain-frame-4"><img src="assets/obj-04-oversized-clothes.webp" alt="" width="1920" height="1080" loading="lazy" decoding="async"><p data-edit="pain.p-4">Платье, которое ждёт, «когда похудею»?</p></article>
-      <article class="pain-frame rv" id="pain-frame-5"><img src="assets/obj-05-mirror.webp" alt="" width="1920" height="1080" loading="lazy" decoding="async"><p data-edit="pain.p-5">Фото, где вы себя не узнаёте?</p></article>
-      <article class="pain-frame rv" id="pain-frame-6"><img src="assets/obj-03-beach.webp" alt="" width="1920" height="1080" loading="lazy" decoding="async"><p data-edit="pain.p-6">Лето, к которому опять «не успела»?</p></article>
+    <div class="pain-scenes" id="pain-scenes">
+      <div class="pain-scenes__sticky">
+        <article class="pain-scene" data-scene="0"><div class="pain-scene__visual"><div class="pain-scene__art"></div></div><div class="pain-scene__copy"><p data-edit="pain.p-1">Сколько раз вы обещали себе начать «с понедельника»?</p></div></article>
+        <article class="pain-scene" data-scene="1"><div class="pain-scene__visual"><div class="pain-scene__art"></div></div><div class="pain-scene__copy"><p data-edit="pain.p-2">Сколько диет закончились срывом — и плюс два кило сверху?</p></div></article>
+        <article class="pain-scene" data-scene="2"><div class="pain-scene__visual"><div class="pain-scene__art"></div></div><div class="pain-scene__copy"><p data-edit="pain.p-3">Изнурительные тренировки, брошенные через неделю?</p></div></article>
+        <article class="pain-scene" data-scene="3"><div class="pain-scene__visual"><div class="pain-scene__art"></div></div><div class="pain-scene__copy"><p data-edit="pain.p-4">Платье, которое ждёт, «когда похудею»?</p></div></article>
+        <article class="pain-scene" data-scene="4"><div class="pain-scene__visual"><div class="pain-scene__art"></div></div><div class="pain-scene__copy"><p data-edit="pain.p-5">Фото, где вы себя не узнаёте?</p></div></article>
+        <article class="pain-scene" data-scene="5"><div class="pain-scene__visual"><div class="pain-scene__art"></div></div><div class="pain-scene__copy"><p data-edit="pain.p-6">Лето, к которому опять «не успела»?</p></div></article>
+        <article class="pain-scene" data-scene="6"><div class="pain-scene__visual"><div class="pain-scene__art"></div></div><div class="pain-scene__copy"><p>Абонемент в спортзал, который снова остался лежать без дела?</p></div></article>
+        <article class="pain-scene" data-scene="7"><div class="pain-scene__visual"><div class="pain-scene__art"></div></div><div class="pain-scene__copy"><p>Усилия, после которых результат всё равно быстро исчезал?</p></div></article>
+      </div>
     </div>
     <div class="pain-after">
       <div class="q rv"><p data-edit="pain.p-7"><b>60 дней</b> запретов и приседаний через силу — и сантиметр показывает почти то же самое</p></div>
@@ -1289,6 +1312,39 @@ AlviPrice.load(['/api/price']).then(function (price) {
 });
 </script>
 <script src="site-apply.js?v=20260904"></script>
+<script>
+(function(){
+  var reduce=window.matchMedia('(prefers-reduced-motion: reduce)');
+  var root=document.getElementById('pain-scenes');
+  if(!root)return;
+  var sticky=root.querySelector('.pain-scenes__sticky');
+  var scenes=Array.prototype.slice.call(root.querySelectorAll('.pain-scene'));
+  var HOLD_END=.65,REVEAL_IN=.25,ART_BASE=1.04,ART_DEPTH=.04,ticking=false;
+  function clamp(v,a,b){return v<a?a:(v>b?b:v)}
+  function apply(el,opacity,scale,reveal,z){
+    el.style.opacity=opacity.toFixed(3);el.style.zIndex=String(z);
+    var visual=el.querySelector('.pain-scene__visual');
+    if(visual)visual.style.transform='scale('+scale.toFixed(3)+')';
+    var copy=el.querySelector('.pain-scene__copy p');
+    if(copy){copy.style.opacity=(.18+.82*reveal).toFixed(3);copy.style.transform='translateY('+(14-14*reveal).toFixed(1)+'px)'}
+  }
+  function render(){
+    ticking=false;if(reduce.matches)return;
+    var travel=root.offsetHeight-sticky.offsetHeight;
+    var progress=clamp(-root.getBoundingClientRect().top/(travel||1),0,1);
+    var position=clamp(progress*scenes.length,0,scenes.length-.0001);
+    var index=Math.floor(position),phase=position-index,last=index===scenes.length-1;
+    scenes.forEach(function(scene,i){apply(scene,0,ART_BASE,0,10+i)});
+    if(phase<=HOLD_END||last){apply(scenes[index],1,ART_BASE,clamp(phase/REVEAL_IN,0,1),20)}
+    else{var x=(phase-HOLD_END)/(1-HOLD_END);apply(scenes[index],1,ART_BASE,1,20);apply(scenes[index+1],x,ART_BASE+ART_DEPTH*(1-x),0,21)}
+  }
+  function schedule(){if(!ticking){ticking=true;requestAnimationFrame(render)}}
+  root.classList.add('pain-scenes--enhanced');
+  addEventListener('scroll',schedule,{passive:true});addEventListener('resize',schedule,{passive:true});
+  if(reduce.addEventListener)reduce.addEventListener('change',function(){if(reduce.matches)scenes.forEach(function(scene){scene.removeAttribute('style')});else schedule()});
+  render();
+})();
+</script>
 <script src="https://synapse.synapsebusiness.ru/track.js?v=20260905" data-company="avokado" defer></script>
 </body>
 </html>
