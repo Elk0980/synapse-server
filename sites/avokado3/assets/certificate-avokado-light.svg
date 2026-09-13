@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000" role="img" aria-label="Подарочный сертификат студии Авокадо">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="0.7" y2="1">
+    <stop offset="0" stop-color="#f7f4ec"/>
+    <stop offset="0.5" stop-color="#f2eee3"/>
+    <stop offset="1" stop-color="#eee9db"/>
+  </linearGradient>
+  <linearGradient id="gold" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#7d6534"/>
+    <stop offset="0.35" stop-color="#a3853f"/>
+    <stop offset="0.6" stop-color="#b8994e"/>
+    <stop offset="0.85" stop-color="#96793a"/>
+    <stop offset="1" stop-color="#7d6534"/>
+  </linearGradient>
+  <radialGradient id="halo" cx="0.5" cy="0.34" r="0.55">
+    <stop offset="0" stop-color="#93a56f" stop-opacity="0.10"/>
+    <stop offset="1" stop-color="#93a56f" stop-opacity="0"/>
+  </radialGradient>
+</defs>
+
+<rect width="1600" height="1000" fill="url(#bg)"/>
+<ellipse cx="800" cy="340" rx="720" ry="420" fill="url(#halo)"/>
+
+<rect x="52" y="52" width="1496" height="896" fill="none" stroke="url(#gold)" stroke-width="1.6" opacity="0.9"/>
+<rect x="68" y="68" width="1464" height="864" fill="none" stroke="#8a6f3f" stroke-width="0.7" opacity="0.3"/>
+
+<!-- фирменный знак: тот же авокадо, что в логотипе сайта -->
+<g transform="translate(800,190) scale(2.05) translate(-24,-27)">
+  <path d="M25.5 8 C26.5 5 25 2.5 23 2" fill="none" stroke="#8a6f3f" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M24 9.5 C20.4 9.5 15.6 15.6 14.1 22.3 C12.6 29.1 17.3 38 24 38 C30.7 38 35.4 29.1 33.9 22.3 C32.4 15.6 27.6 9.5 24 9.5 Z" fill="none" stroke="#8a6f3f" stroke-width="2.1" stroke-linejoin="round"/>
+  <circle cx="24" cy="27" r="4.6" fill="#8a6f3f"/>
+</g>
+
+<!-- логотип: АВ + знак + КАДО, как в шапке сайта -->
+<g transform="translate(800,300)">
+  <text x="-96" y="0" text-anchor="end" font-family="Unbounded, Georgia, serif" font-size="58" letter-spacing="10" fill="#25301f">АВ</text>
+  <g transform="translate(-80,-42) scale(0.86)">
+    <path d="M25.5 8 C26.5 5 25 2.5 23 2" fill="none" stroke="#8a6f3f" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M24 9.5 C20.4 9.5 15.6 15.6 14.1 22.3 C12.6 29.1 17.3 38 24 38 C30.7 38 35.4 29.1 33.9 22.3 C32.4 15.6 27.6 9.5 24 9.5 Z" fill="none" stroke="#8a6f3f" stroke-width="2.1" stroke-linejoin="round"/>
+    <circle cx="24" cy="27" r="4.6" fill="#8a6f3f"/>
+  </g>
+  <text x="-16" y="0" font-family="Unbounded, Georgia, serif" font-size="58" letter-spacing="10" fill="#25301f">КАДО</text>
+  <text x="0" y="40" text-anchor="middle" font-family="Manrope, sans-serif" font-size="16" letter-spacing="11" fill="#8a6f3f">СТУДИЯ ДИЗАЙНА ТЕЛА</text>
+</g>
+
+<line x1="560" y1="392" x2="1040" y2="392" stroke="url(#gold)" stroke-width="1" opacity="0.55"/>
+
+<text x="800" y="480" text-anchor="middle" font-family="Manrope, sans-serif" font-size="28" letter-spacing="14" fill="#5d6b52">ПОДАРОЧНЫЙ</text>
+<text x="800" y="566" text-anchor="middle" font-family="Cormorant, 'Times New Roman', serif" font-size="88" letter-spacing="4" fill="url(#gold)">СЕРТИФИКАТ</text>
+
+<g font-family="Manrope, sans-serif" fill="#5d6b52">
+  <text x="200" y="664" font-size="19" letter-spacing="3">НА</text>
+  <line x1="248" y1="674" x2="1400" y2="674" stroke="#9aa78f" stroke-width="1"/>
+
+  <text x="200" y="756" font-size="19" letter-spacing="3">КОМУ</text>
+  <line x1="290" y1="766" x2="760" y2="766" stroke="#9aa78f" stroke-width="1"/>
+
+  <text x="830" y="756" font-size="19" letter-spacing="3">ДЕЙСТВИТЕЛЕН ДО</text>
+  <line x1="1080" y1="766" x2="1400" y2="766" stroke="#9aa78f" stroke-width="1"/>
+</g>
+
+<line x1="200" y1="836" x2="1400" y2="836" stroke="#cfd6c3" stroke-width="1"/>
+
+<g font-family="Manrope, sans-serif" font-size="17" fill="#6c7a61" letter-spacing="1">
+  <text x="200" y="878">Иркутск, ул. Красноказачья, 84</text>
+  <text x="200" y="906">ежедневно · по предварительной записи</text>
+  <text x="1400" y="878" text-anchor="end">+7 950 100-10-59</text>
+  <text x="1400" y="906" text-anchor="end">ИП Петрук Т. А. · avokado.synapsebusiness.ru</text>
+</g>
+</svg>

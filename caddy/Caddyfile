@@ -167,6 +167,47 @@ avokado2.synapsebusiness.ru {
   import static
 }
 
+# --- Клиент: Авокадо3 (экспериментальная копия) -----------------------------
+avokado3.synapsebusiness.ru {
+  root * /srv/sites/avokado3
+  @track {
+    path /track
+    method POST
+  }
+  handle @track {
+    rewrite * /events
+    reverse_proxy crm:8080
+  }
+  @price {
+    path /api/price
+    method GET
+  }
+  handle @price {
+    rewrite * /public-content/avokado/price
+    reverse_proxy content:8080
+  }
+  @site {
+    path /api/site
+    method GET
+  }
+  handle @site {
+    rewrite * /public-content/avokado3/site
+    reverse_proxy content:8080
+  }
+  @assets {
+    path /api/assets/*
+    method GET
+  }
+  handle @assets {
+    uri replace /api/assets/ /content/avokado3/assets/
+    reverse_proxy content:8080
+  }
+  @sitedata path /data/*
+  header @sitedata Access-Control-Allow-Origin https://synapse.synapsebusiness.ru
+  import draft
+  import static
+}
+
 # --- Клиент: ALVI (SPA, Иркутск) --------------------------------------------
 www.spaalvi-38.ru {
   redir https://spaalvi-38.ru{uri} 301
