@@ -558,9 +558,10 @@
 
 @media(max-width:480px){.pain-block .wrap{padding-inline:4vw}.pain-frames{gap:14px}.pain-frame{height:62vh;min-height:390px}.pain-frame::after{background:linear-gradient(0deg,rgba(8,12,9,.86) 0%,rgba(8,12,9,.5) 35%,transparent 68%)}.pain-frame p{top:auto;right:6%;bottom:8%;width:88%;transform:none;font-size:clamp(15px,4.35vw,18px)}}
 
-/* Avokado2 pain story: native scrolling, isolated from the Method scenes. */
+/* Avokado2 pain story: a persistent heading and three frames for Monday. */
 #pain.pain-has-story{overflow:visible}
 #pain-story{position:relative;--pain-stage-height:clamp(400px,72svh,760px)}
+#pain-story .pain-story__title{max-width:none;margin:0 0 24px;color:var(--cream);font-size:clamp(21px,2.65vw,36px);line-height:1.2;opacity:1;transform:none}
 #pain-story .pain-story__stage{display:grid;gap:24px}
 #pain-story .pain-scene{position:relative;height:var(--pain-stage-height);overflow:hidden;border-radius:20px;background:#101612;isolation:isolate;--pain-focus:50% 50%}
 #pain-story .pain-scene__visual{position:absolute;inset:0;transform-origin:center;transform:scale(1.04)}
@@ -569,31 +570,48 @@
 #pain-story .pain-scene__copy{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:flex-end;padding:32px 5%;margin:0}
 #pain-story .pain-scene__text{width:38%;max-width:420px}
 #pain-story .pain-scene__text p{margin:0;color:var(--cream);font:500 clamp(18px,2.15vw,30px)/1.4 'Manrope',system-ui,sans-serif;text-shadow:0 2px 16px rgba(0,0,0,.45)}
-#pain-story .pain-scene[data-pain="monday"]{--pain-focus:45% 30%}
+#pain-story .pain-scene[data-pain="monday"]{--pain-focus:80% top}
+#pain-story .pain-subframe::after{display:none}
+#pain-story .pain-subframe .pain-scene__visual{transform:none}
+#pain-story .pain-subframe--close .pain-scene__copy{align-items:flex-end;padding:24px 4.5%}
+#pain-story .pain-subframe--close .pain-scene__text{position:relative;isolation:isolate;width:38%;max-width:420px}
+#pain-story .pain-subframe--close .pain-scene__text p{font-size:clamp(16px,1.4vw,22px)}
+#pain-story .pain-subframe--close .pain-scene__text::before{content:'';position:absolute;inset:-20px;z-index:-1;background:rgba(8,12,9,.86);filter:blur(12px);pointer-events:none}
 #pain-story .pain-story__nav{display:none}
-#pain-story.pain-story--enhanced .pain-story__sticky{position:sticky;top:0;height:100svh;display:flex;flex-direction:column;justify-content:center}
-#pain-story.pain-story--enhanced .pain-story__stage{position:relative;display:block;flex:none;height:var(--pain-stage-height);overflow:hidden;border-radius:20px;background:#101612;isolation:isolate}
+#pain-story.pain-story--enhanced .pain-story__sticky{position:sticky;top:0;height:100svh;display:flex;flex-direction:column;justify-content:center;gap:12px;padding-top:calc(var(--pain-header-height,var(--header-height)) + 12px);padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))}
+#pain-story.pain-story--enhanced .pain-story__title{flex:none;width:100%;margin:0}
+#pain-story.pain-story--enhanced .pain-story__stage{position:relative;display:block;flex:none;align-self:center;width:var(--pain-stage-width,100%);max-width:100%;height:var(--pain-stage-height);overflow:hidden;border-radius:20px;background:#101612;isolation:isolate}
 #pain-story.pain-story--enhanced .pain-scene{position:absolute;inset:0;height:100%;opacity:0;will-change:opacity}
 #pain-story.pain-story--enhanced .pain-scene__visual{will-change:transform}
 #pain-story.pain-story--enhanced .pain-scene__text{will-change:transform,opacity}
-#pain-story.pain-story--enhanced .pain-story__nav{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:14px;font-size:12px;letter-spacing:.06em;color:var(--cream)}
+#pain-story.pain-story--enhanced .pain-story__nav{display:flex;flex:none;align-self:center;width:var(--pain-stage-width,100%);max-width:100%;align-items:center;justify-content:space-between;gap:12px;font-size:12px;letter-spacing:.02em;color:var(--cream)}
+#pain-story .pain-story__position{display:flex;flex-wrap:wrap;column-gap:8px;row-gap:2px}
 #pain-story .pain-story__nav a{color:inherit;text-underline-offset:4px;padding:8px 0}
 #pain-story .pain-story__nav a:focus-visible{outline:2px solid var(--cream);outline-offset:5px}
 @media(max-width:600px){
   #pain-story{--pain-stage-height:clamp(400px,76svh,760px)}
   #pain-story .pain-scene{border-radius:16px;--pain-focus:30% center}
-  #pain-story .pain-scene[data-pain="monday"]{--pain-focus:49% top}
+  #pain-story .pain-scene[data-pain="monday"]{--pain-focus:80% top}
   #pain-story .pain-scene::after{background:linear-gradient(90deg,transparent 35%,rgba(8,12,9,.12) 48%,rgba(8,12,9,.8) 69%,rgba(8,12,9,.9))}
   #pain-story .pain-scene[data-pain="monday"]::after{background:linear-gradient(0deg,rgba(8,12,9,.9),rgba(8,12,9,.72) 27%,transparent 62%)}
   #pain-story .pain-scene__copy{padding:24px 5%;align-items:flex-end;padding-bottom:16%}
   #pain-story .pain-scene__text{width:38%}
   #pain-story .pain-scene__text p{font-size:clamp(14px,3.85vw,19px);line-height:1.45}
+  #pain-story .pain-subframe:not(.pain-subframe--close) .pain-scene__visual{height:min(100%,var(--pain-stage-width,92vw));margin-block:auto}
+  #pain-story .pain-subframe--close{display:grid;grid-template-rows:minmax(0,1fr) auto}
+  #pain-story .pain-subframe--close .pain-scene__visual{position:relative;inset:auto;left:-34%;width:210%;height:100%;max-height:calc(var(--pain-stage-width,92vw)*1.181);min-height:0;align-self:center}
+  #pain-story .pain-subframe--close .pain-scene__visual img{object-fit:cover;object-position:center 44%}
+  #pain-story .pain-subframe--close .pain-scene__copy{position:relative;inset:auto;padding:16px 6% 22px;display:block}
+  #pain-story .pain-subframe--close .pain-scene__text{width:100%;max-width:none}
+  #pain-story .pain-subframe--close .pain-scene__text::before{display:none}
+  #pain-story .pain-subframe--close .pain-scene__text p{font-size:clamp(17px,4.8vw,20px);line-height:1.35}
   #pain-story .pain-story__nav{font-size:11px;letter-spacing:.02em}
 }
 @media(prefers-reduced-motion:reduce){
   #pain-story{height:auto!important}
-  #pain-story.pain-story--enhanced .pain-story__sticky{position:static;height:auto;display:block}
-  #pain-story.pain-story--enhanced .pain-story__stage{display:grid;height:auto;overflow:visible;background:none}
+  #pain-story.pain-story--enhanced .pain-story__sticky{position:static;height:auto;display:block;padding:0}
+  #pain-story.pain-story--enhanced .pain-story__title{margin-bottom:24px}
+  #pain-story.pain-story--enhanced .pain-story__stage{display:grid;width:100%;height:auto;overflow:visible;background:none}
   #pain-story.pain-story--enhanced .pain-scene{position:relative;height:var(--pain-stage-height);opacity:1!important}
   #pain-story .pain-scene__visual,#pain-story .pain-scene__text{transform:none!important}
   #pain-story .pain-scene__text{opacity:1!important}
@@ -647,18 +665,20 @@
 <!-- ═══ БЛОК 2 · БОЛЬ ═══ -->
 <section class="landing-block pain-block act3 pain-has-story" id="pain" data-landing-block="2" aria-labelledby="pain-title">
   <div class="wrap">
-    <h2 class="rv" id="pain-title" data-edit="pain.rv-1">Сколько раз вы мечтали об идеальном теле?</h2>
-    <div id="pain-story" data-version="avokado2-pain-live-v1">
+    <div id="pain-story" data-version="avokado2-calendar-story-v2">
       <div class="pain-story__sticky">
+        <h2 class="pain-story__title" id="pain-title" data-edit="pain.rv-1">Сколько раз вы мечтали об идеальном теле?</h2>
         <div class="pain-story__stage">
-          <article class="pain-scene" id="pain-frame-1" data-pain="monday"><div class="pain-scene__visual"><img src="assets/pain/calendar-monday-v1.webp" alt="Календарь: 14 сентября 2026 года, понедельник, обведено. На записке: «Бегать по утрам с понедельника»." width="1672" height="941" loading="eager" decoding="async"></div><div class="pain-scene__copy"><div class="pain-scene__text"><p data-edit="pain.p-1">Сколько раз вы обещали себе начать «с понедельника»?</p></div></div></article>
+          <article class="pain-scene pain-subframe" id="pain-frame-1" data-pain="monday"><div class="pain-scene__visual"><img src="assets/pain/calendar-story-01-room-v2.webp" alt="Залитая тёплым светом комната. На стене календарь сентября 2026 без отметок и записки." width="1672" height="941" loading="eager" decoding="async"></div></article>
+          <article class="pain-scene pain-subframe" id="pain-frame-1-action" data-pain="monday"><div class="pain-scene__visual"><img src="assets/pain/calendar-story-02-promise-v2.webp" alt="Та же комната и ракурс. Светловолосая женщина, спиной к нам, в оливковом спортивном костюме приклеивает записку справа от календаря." width="1672" height="941" loading="eager" decoding="async"></div></article>
+          <article class="pain-scene pain-subframe pain-subframe--close" id="pain-frame-1-detail" data-pain="monday" data-pain-duration="1.5" data-pain-reveal="hold"><div class="pain-scene__visual"><img src="assets/pain/calendar-story-03-calendar-v2.webp" alt="Крупный план того же календаря. Понедельник, 14 сентября 2026, обведён. Справа записка: «Бегать по утрам с понедельника»." width="1672" height="941" loading="eager" decoding="async"></div><div class="pain-scene__copy"><div class="pain-scene__text"><p data-edit="pain.p-1">Сколько раз вы обещали себе начать «с понедельника»?</p></div></div></article>
           <article class="pain-scene" id="pain-frame-2" data-pain="diet"><div class="pain-scene__visual"><img src="assets/obj-02-diet.webp" alt="" width="1920" height="1080" loading="eager" decoding="async"></div><div class="pain-scene__copy"><div class="pain-scene__text"><p data-edit="pain.p-2">Сколько диет закончились срывом — и плюс два кило сверху?</p></div></div></article>
           <article class="pain-scene" id="pain-frame-3" data-pain="training"><div class="pain-scene__visual"><img src="assets/obj-06-hopeless.webp" alt="" width="1920" height="1080" loading="lazy" decoding="async"></div><div class="pain-scene__copy"><div class="pain-scene__text"><p data-edit="pain.p-3">Изнурительные тренировки, брошенные через неделю?</p></div></div></article>
           <article class="pain-scene" id="pain-frame-4" data-pain="dress"><div class="pain-scene__visual"><img src="assets/obj-04-oversized-clothes.webp" alt="" width="1920" height="1080" loading="lazy" decoding="async"></div><div class="pain-scene__copy"><div class="pain-scene__text"><p data-edit="pain.p-4">Платье, которое ждёт, «когда похудею»?</p></div></div></article>
           <article class="pain-scene" id="pain-frame-5" data-pain="photo"><div class="pain-scene__visual"><img src="assets/obj-05-mirror.webp" alt="" width="1920" height="1080" loading="lazy" decoding="async"></div><div class="pain-scene__copy"><div class="pain-scene__text"><p data-edit="pain.p-5">Фото, где вы себя не узнаёте?</p></div></div></article>
           <article class="pain-scene" id="pain-frame-6" data-pain="summer"><div class="pain-scene__visual"><img src="assets/obj-03-beach.webp" alt="" width="1920" height="1080" loading="lazy" decoding="async"></div><div class="pain-scene__copy"><div class="pain-scene__text"><p data-edit="pain.p-6">Лето, к которому опять «не успела»?</p></div></div></article>
         </div>
-        <div class="pain-story__nav"><span aria-hidden="true"><span data-pain-count>01 / 06</span> · Листайте ↓</span><a href="#pain-after">Пропустить истории</a></div>
+        <div class="pain-story__nav"><span class="pain-story__position" aria-hidden="true"><span data-pain-count>01 / 06</span><span data-pain-frame-count>Кадр 1 / 3</span></span><a href="#pain-after">Пропустить истории</a></div>
       </div>
     </div>
     <div class="pain-after" id="pain-after">
@@ -1337,60 +1357,105 @@ AlviPrice.load(['/api/price']).then(function (price) {
 </script>
 <script src="site-apply.js?v=20260904"></script>
 <script>
-/* Each scene owns an opaque base; the next scene covers it. No scroll interception. */
+/* Eight frames, six pains. Opaque cards; captions exchange focus without overlap.
+   Monday has three locked-camera states; its question belongs only to the close-up. */
 (function(){
   'use strict';
   var root=document.getElementById('pain-story');
   if(!root)return;
   var sticky=root.querySelector('.pain-story__sticky');
-  var scenes=Array.from(root.querySelectorAll('.pain-scene')).map(function(el){
-    return {el:el,visual:el.querySelector('.pain-scene__visual'),text:el.querySelector('.pain-scene__text'),subframes:[],motion:null};
+  var title=root.querySelector('.pain-story__title');
+  var nav=root.querySelector('.pain-story__nav');
+  var header=document.getElementById('hdr');
+  var groups=[],total=0;
+  var frames=Array.from(root.querySelectorAll('.pain-scene')).map(function(el){
+    var pain=el.getAttribute('data-pain');
+    if(groups.indexOf(pain)<0)groups.push(pain);
+    var duration=Math.max(1,parseFloat(el.getAttribute('data-pain-duration'))||1);
+    var frame={el:el,visual:el.querySelector('.pain-scene__visual'),text:el.querySelector('.pain-scene__text'),pain:pain,group:groups.indexOf(pain),start:total,duration:duration,scale:el.classList.contains('pain-subframe')?1:1.04,reveal:el.getAttribute('data-pain-reveal')==='hold'};
+    total+=duration;
+    return frame;
+  });
+  frames.forEach(function(frame){
+    var siblings=frames.filter(function(item){return item.pain===frame.pain});
+    frame.number=siblings.indexOf(frame)+1;frame.count=siblings.length;
   });
   var reduce=matchMedia('(prefers-reduced-motion: reduce)');
   var editing=new URLSearchParams(location.search).get('edit')==='1';
-  var enabled=false,queued=false,lastCount='',count=root.querySelector('[data-pain-count]');
-  var HOLD=.65,REVEAL=.25;
+  var enabled=false,queued=false,shown=null,previousTime=0;
+  var count=root.querySelector('[data-pain-count]'),frameCount=root.querySelector('[data-pain-frame-count]');
+  var HOLD=.65,REVEAL=.25,SMOOTH_MS=140;
   function clamp(x){return Math.max(0,Math.min(1,x))}
-  function setScene(scene,alpha,scale,reveal,z){
-    scene.el.style.opacity=alpha.toFixed(3);
-    scene.el.style.zIndex=String(z);
-    scene.visual.style.transform='scale('+scale.toFixed(4)+')';
-    scene.text.style.opacity=(.18+.82*reveal).toFixed(3);
-    scene.text.style.transform='translateY('+(14*(1-reveal)).toFixed(2)+'px)';
+  function ease(x){x=clamp(x);return x*x*(3-2*x)}
+  function setFrame(frame,alpha,scale,textAlpha,z){
+    frame.el.style.opacity=alpha.toFixed(3);
+    frame.el.style.zIndex=String(z);
+    frame.visual.style.transform='scale('+scale.toFixed(4)+')';
+    frame.el.setAttribute('aria-hidden',alpha===0?'true':'false');
+    if(frame.text){
+      frame.text.style.opacity=textAlpha.toFixed(3);
+      frame.text.style.transform='translateY('+(frame.reveal?14*(1-textAlpha):0).toFixed(2)+'px)';
+      frame.text.setAttribute('aria-hidden',textAlpha===0?'true':'false');
+    }
   }
   function reset(){
-    enabled=false;
+    enabled=false;shown=null;previousTime=0;
     root.classList.remove('pain-story--enhanced');
     root.style.height='';
-    scenes.forEach(function(s){
-      s.el.style.opacity='';s.el.style.zIndex='';
-      s.visual.style.transform='';s.text.style.opacity='';s.text.style.transform='';
+    ['--pain-header-height','--pain-stage-height','--pain-stage-width'].forEach(function(name){root.style.removeProperty(name)});
+    frames.forEach(function(frame){
+      frame.el.style.opacity='';frame.el.style.zIndex='';frame.el.removeAttribute('aria-hidden');
+      frame.visual.style.transform='';
+      if(frame.text){frame.text.style.opacity='';frame.text.style.transform='';frame.text.removeAttribute('aria-hidden')}
     });
   }
-  function render(){
+  function render(now){
     queued=false;
     if(!enabled)return;
     var travel=root.offsetHeight-sticky.offsetHeight;
-    var pos=Math.min(clamp(-root.getBoundingClientRect().top/Math.max(1,travel))*scenes.length,scenes.length-.000001);
-    var index=Math.floor(pos),q=pos-index;
-    scenes.forEach(function(s,i){setScene(s,0,1.04,0,10+i)});
-    if(q<=HOLD||index===scenes.length-1){
-      setScene(scenes[index],1,1.04,clamp(q/REVEAL),20);
-    }else{
-      var x=(q-HOLD)/(1-HOLD);
-      setScene(scenes[index],1,1.04,1,20);
-      setScene(scenes[index+1],x,1.08-.04*x,0,21);
+    var top=root.getBoundingClientRect().top;
+    var target=Math.min(clamp(-top/Math.max(1,travel))*total,total-.000001);
+    if(shown===null||top>=0||top<=-travel){shown=target}
+    else{
+      var elapsed=previousTime&&now?Math.max(1,Math.min(64,now-previousTime)):16;
+      shown+=(target-shown)*(1-Math.exp(-elapsed/SMOOTH_MS));
+      if(Math.abs(target-shown)<.0001)shown=target;
     }
-    var label=String(index+1).padStart(2,'0')+' / '+String(scenes.length).padStart(2,'0');
-    if(label!==lastCount){count.textContent=label;lastCount=label}
+    previousTime=now||0;
+    var pos=shown;
+    var index=frames.findIndex(function(frame){return pos<frame.start+frame.duration});
+    var current=frames[index],q=(pos-current.start)/current.duration,focused=current;
+    frames.forEach(function(frame,i){setFrame(frame,0,frame.scale,0,10+i)});
+    if(q<=HOLD||index===frames.length-1){
+      setFrame(current,1,current.scale,current.reveal?ease(q/REVEAL):1,20);
+    }else{
+      var x=ease((q-HOLD)/(1-HOLD)),next=frames[index+1];
+      setFrame(current,1,current.scale,clamp(1-2*x),20);
+      setFrame(next,x,next.scale===1?1:1.08-.04*x,next.reveal?0:clamp(2*x-1),21);
+      if(x>=.5)focused=next;
+    }
+    count.textContent=String(focused.group+1).padStart(2,'0')+' / '+String(groups.length).padStart(2,'0');
+    frameCount.textContent=focused.count>1?'Кадр '+focused.number+' / '+focused.count:'';
+    if(shown!==target)schedule();
   }
   function schedule(){if(enabled&&!queued){queued=true;requestAnimationFrame(render)}}
   function measure(){
-    if(enabled){root.style.height=(sticky.offsetHeight*(scenes.length+1))+'px';schedule()}
+    if(!enabled)return;
+    root.style.setProperty('--pain-header-height',Math.ceil(header?header.getBoundingClientRect().height:0)+'px');
+    var style=getComputedStyle(sticky);
+    var available=sticky.clientHeight-parseFloat(style.paddingTop)-parseFloat(style.paddingBottom)-title.offsetHeight-nav.offsetHeight-2*(parseFloat(style.rowGap)||0);
+    var mobile=matchMedia('(max-width:600px)').matches;
+    var height=Math.max(1,mobile?available:Math.min(available,root.clientWidth*9/16));
+    var width=mobile?root.clientWidth:Math.min(root.clientWidth,height*16/9);
+    root.style.setProperty('--pain-stage-height',height+'px');
+    root.style.setProperty('--pain-stage-width',width+'px');
+    root.style.height=(sticky.offsetHeight*(total+1))+'px';
+    shown=null;previousTime=0;
+    schedule();
   }
   function setup(){
     reset();
-    if(reduce.matches||editing||scenes.length<2)return;
+    if(reduce.matches||editing||frames.length<2)return;
     try{
       root.classList.add('pain-story--enhanced');enabled=true;
       measure();render();
@@ -1402,6 +1467,11 @@ AlviPrice.load(['/api/price']).then(function (price) {
   if(reduce.addEventListener)reduce.addEventListener('change',setup);
   else if(reduce.addListener)reduce.addListener(setup);
   setup();
+  if(document.fonts)document.fonts.ready.then(measure);
+  if(window.ResizeObserver){
+    var observer=new ResizeObserver(measure);
+    [header,title,nav].forEach(function(el){if(el)observer.observe(el)});
+  }
 })();
 </script>
 <script src="https://synapse.synapsebusiness.ru/track.js?v=20260905" data-company="avokado" defer></script>
