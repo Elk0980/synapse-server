@@ -21,6 +21,8 @@ const LEGACY_SITES = [
     '/site-editor.html?site=avokado', '/price-editor.html?site=avokado'],
   ['avokado2', 'avokado', 'Авокадо2', 'published', 'https://avokado2.synapsebusiness.ru/', 'avokado2',
     '/site-editor.html?site=avokado2', '/price-editor.html?site=avokado'],
+  ['avokado3', 'avokado', 'Авокадо3', 'published', 'https://avokado3.synapsebusiness.ru/', 'avokado3',
+    '/site-editor.html?site=avokado3', '/price-editor.html?site=avokado'],
   ['palitra-love', 'palitra-love', 'Palitra', 'draft',
     'https://palitra-love.synapsebusiness.ru/', 'palitra', null, '/price-editor-palitra.html'],
 ];

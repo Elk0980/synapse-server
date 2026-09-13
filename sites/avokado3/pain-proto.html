@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>PROTOTYPE — механика блока болей (Avokado)</title>
+<!--
+  ПРОТОТИП МЕХАНИКИ, версия 11 (модель уточнена по ревью GPT Avokado).
+  Финальных изображений и текстов болей нет, hero и глобальный видеофон не трогаются.
+
+  МОДЕЛЬ
+    pos = progress * N            (N = число сцен)
+    i   = floor(pos)              — текущая сцена
+    q   = pos - i                 — прогресс внутри неё, 0..1
+    q 0.00 … 0.65 : HOLD сцены i — она одна видна полностью
+    q 0.65 … 1.00 : переход — сцена i остаётся НЕПРОЗРАЧНОЙ и полноразмерной,
+                    поверх неё проявляется сцена i+1 (opacity = x)
+    Последняя сцена из HOLD не выходит — держится до конца зоны.
+
+  СТРУКТУРА СЦЕНЫ (правка v8)
+    .pain-scene > .scene-visual (масштабируется: art + все подкадры) + .scene-copy (снаружи, z 4)
+    Масштаб живёт на .scene-visual, а не на .scene-art: во второй сцене art полностью
+    закрыт непрозрачным полноэкранным подкадром, поэтому глубина на art там не видна —
+    переход 1→2 шёл с реальным масштабом 1.00 вместо 1.08→1.04.
+
+  КОМПОЗИЦИЯ ПЕРЕХОДА (правка v5)
+    Пара opacity 1-x и x НЕ даёт непрозрачного кадра: браузер их не складывает,
+    итоговое покрытие = x + (1-x)^2, при x = 0.5 это 0.75 — четверть фона просвечивает.
+    Поэтому уходящая сцена держит opacity 1, а проявляется только входящая.
+    Масштаба у .pain-scene нет вообще: scale(<1) у элемента inset:0 открывает
+    тёмную рамку по периметру. Глубина живёт на обёртке .scene-visual,
+    которая всегда увеличена с запасом (overscan 4 %), поэтому края закрыты всегда.
+
+  ТЕКСТ БОЛИ
+    входящая сцена : reveal = 0 — текст ещё часть картинки (opacity 0.18, сдвиг 14px).
+    HOLD           : reveal = q / 0.25 — проявляется в раннем HOLD и дальше держится на 1.
+    уходящая сцена : reveal = 1 — текст не гасится.
+    Первая сцена при p = 0 начинается с reveal = 0, а не с 1.
+
+  ПОДКАДРЫ — полноэкранные и ПОЛНОСТЬЮ НЕПРОЗРАЧНЫЕ слои, как будущие кадры болей.
+  Полупрозрачные плашки (alpha 0.16 / 0.26 / 0.38) здесь не годятся: карточная модель
+  «нижний 1, верхний f» на них не работает — итоговая alpha скакала 0.3784 → 0.26
+  и 0.5412 → 0.38. Подкадр существует только внутри своей сцены, живёт всю её жизнь:
+    вход своей сцены  : держится первый подкадр (sub-1 = 1)
+    HOLD              : subPos = t*(N_sub-1); j = floor(subPos); f = subPos - j.
+                        Подкадр j держит opacity 1, подкадр j+1 проявляется ПОВЕРХ него (opacity = f).
+                        Пара 1-f / f здесь запрещена по той же причине, что и у сцен:
+                        при f = 0.5 это дало бы 0.50 + 0.25 и ещё 0.25 базового слоя —
+                        примесь третьего изображения.
+    уход своей сцены  : держится последний подкадр (sub-3 = 1)
+    На стыках значения совпадают: вход→HOLD даёт sub-1 = 1, HOLD→уход даёт sub-3 = 1.
+
+  ИЗВЕСТНОЕ ОГРАНИЧЕНИЕ, закрыть ДО production (замечание GPT Avokado, 13.09):
+    без JS зона 400vh остаётся пустой — сцены скрыты (opacity 0) и показывает их только скрипт.
+    Для боевой страницы нужен fallback: сцены видимы по умолчанию, скрипт берёт управление
+    после запуска (progressive enhancement), либо блок не занимает высоту без JS.
+
+  ДОЛИ ПРОГРЕССА (N = 3, зона 400vh, липкий кадр 100svh, чистый ход ≈ 300vh)
+    одна боль            = 1/3      ≈ 33,3 %
+    HOLD одной боли      = 0.65/3   ≈ 21,7 % общего прогресса
+    переход между болями = 0.35/3   ≈ 11,7 % общего прогресса
+    подкадры сцены 2: пики при t = 0 / 0.5 / 1 внутри её HOLD, то есть каждые ≈ 10,8 %
+    проявление текста  = 0.25/3 ≈ 8,3 % общего прогресса от начала своей сцены
+-->
+<style>
+  :root{
+    --bg:#0e1410;
+    --cream:#efe9dc;
+    --gold:#d8bf86;
+    --s1:#2b3a2f;
+    --s2:#3a3330;
+    --s3:#2f3640;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:'Manrope','Segoe UI',system-ui,sans-serif;
+    background:var(--bg);color:var(--cream);
+    overflow-x:hidden;
+  }
+  .proto-badge{
+    position:fixed;top:0;left:0;right:0;z-index:99;
+    background:#b3341f;color:#fff;text-align:center;
+    font:700 13px/32px 'Manrope',system-ui,sans-serif;letter-spacing:.08em;
+  }
+  .proto-hint{
+    max-width:760px;margin:0 auto;padding:64px 20px 28px;
+    font-size:15px;line-height:1.5;color:rgba(239,233,220,.72);
+  }
+  .proto-hint b{color:var(--cream)}
+  .proto-spacer{height:60vh;display:flex;align-items:center;justify-content:center;
+    color:rgba(239,233,220,.4);font-size:13px;letter-spacing:.1em}
+
+  /* ---- механика ---- */
+  .pain-proto{position:relative;height:400vh}
+  .pain-sticky{
+    position:sticky;top:0;height:100svh;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;
+  }
+  /* у самой сцены НЕТ масштаба: scale(<1) у inset:0 открыл бы тёмную рамку по краям */
+  .pain-scene{
+    position:absolute;inset:0;
+    display:flex;align-items:center;justify-content:center;
+    opacity:0;
+    will-change:opacity;
+  }
+  /* глубина живёт здесь; overscan 4 % — края кадра закрыты при любом масштабе.
+     Обёртка содержит и art, и подкадры, поэтому масштаб виден в любой сцене */
+  .scene-visual{position:absolute;inset:0;transform:scale(1.04);transform-origin:50% 50%;
+    will-change:transform}
+  .scene-art{position:absolute;inset:0}
+  .scene-art span{
+    position:absolute;left:5%;bottom:6%;
+    font:700 clamp(48px,9vw,120px)/1 'Manrope',system-ui,sans-serif;
+    color:rgba(239,233,220,.14);letter-spacing:.02em;
+  }
+  .scene-1 .scene-art{background:linear-gradient(135deg,var(--s1),#18211b)}
+  .scene-2 .scene-art{background:linear-gradient(135deg,var(--s2),#1d1917)}
+  .scene-3 .scene-art{background:linear-gradient(135deg,var(--s3),#171c22)}
+
+  /* подкадры второй сцены: полноэкранные НЕПРОЗРАЧНЫЕ слои — подстановка под будущие кадры */
+  .subframe{position:absolute;inset:0;opacity:0;will-change:opacity}
+  .sub-1{background:linear-gradient(135deg,#3a3330,#221d1a)}
+  .sub-2{background:linear-gradient(135deg,#46392c,#272017)}
+  .sub-3{background:linear-gradient(135deg,#53412b,#2f2315)}
+  /* подпись — метка для приёмки, лежит в левой части, в текстовую зону не заходит */
+  .subframe .mark{
+    position:absolute;top:50%;left:26%;transform:translate(-50%,-50%);
+    font:700 clamp(16px,2.4vw,26px)/1.2 'Manrope',system-ui,sans-serif;
+    color:rgba(239,233,220,.82);letter-spacing:.06em;
+  }
+
+  /* текст боли: сперва часть картинки, в HOLD — читаемый; всегда справа */
+  /* z-index выше любого подкадра (2/3), иначе полноэкранный подкадр закроет текст */
+  .scene-copy{
+    position:relative;z-index:4;width:100%;height:100%;
+    display:flex;align-items:center;justify-content:flex-end;
+    padding:0 clamp(16px,4vw,48px);
+  }
+  .scene-copy p{
+    width:min(38%,420px);
+    font:600 clamp(17px,2.2vw,30px)/1.35 'Manrope',system-ui,sans-serif;
+    color:var(--cream);
+    text-shadow:0 2px 24px rgba(8,12,9,.55);
+    opacity:.18;transform:translateY(14px);
+    will-change:opacity,transform;
+  }
+  /* z-index должен быть выше сцен (20/21), иначе строка полностью закрыта ими */
+  .scene-progress{
+    position:absolute;left:0;right:0;bottom:18px;z-index:30;
+    text-align:center;font:600 13px/1.6 'Manrope',system-ui,sans-serif;
+    color:var(--cream);letter-spacing:.08em;
+  }
+  .scene-progress span{background:rgba(8,12,9,.72);padding:6px 12px;border-radius:999px}
+
+  @media(max-width:480px){
+    .scene-copy{padding:0 16px}
+    .scene-copy p{width:38%;font-size:clamp(13px,3.4vw,16px)}
+    .subframe .mark{left:24%;font-size:clamp(13px,3.6vw,18px)}
+  }
+
+  /* доступность: без анимации — обычный вертикальный список */
+  @media(prefers-reduced-motion:reduce){
+    .pain-proto{height:auto}
+    .pain-sticky{position:static;height:auto;display:block;overflow:visible}
+    .pain-scene{
+      position:relative;inset:auto;opacity:1!important;
+      min-height:60svh;margin-bottom:14px;overflow:hidden;
+    }
+    .scene-visual{transform:none!important}
+    .subframe{position:absolute;opacity:1!important;display:none}
+    .subframe.sub-1{display:block}
+    .scene-copy p{opacity:1!important;transform:none!important}
+    .scene-progress{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="proto-badge">PROTOTYPE / MECHANICS ONLY — синтетические сцены, финальных материалов нет</div>
+
+<div class="proto-hint">
+  <p><b>Что здесь проверяется:</b> один липкий кадр, три сцены-боли с фазами
+  <b>HOLD → переход</b> (уходящая сцена остаётся непрозрачной, поверх проявляется входящая),
+  подкадры второй сцены без скачков (вход держит первый, HOLD интерполирует, уход — последний),
+  проявление текста из «части картинки» в читаемый слой в раннем HOLD, удержание последней сцены.</p>
+  <p style="margin-top:10px">Зона — <b>400vh</b>, чистый ход ≈ 300vh. Одна боль ≈ <b>33,3 %</b> прогресса,
+  её HOLD ≈ <b>21,7 %</b>, переход между болями ≈ <b>11,7 %</b>, пики подкадров — каждые ≈ <b>10,8 %</b>.
+  Кадр ни в одной точке не просвечивает и не открывает рамку по краям.</p>
+</div>
+
+<div class="proto-spacer">ПРОКРУТИТЕ ВНИЗ ↓</div>
+
+<section class="pain-proto" id="painProto">
+  <div class="pain-sticky">
+
+    <article class="pain-scene scene-1" data-scene="0">
+      <div class="scene-visual"><div class="scene-art"><span>SLIDE 1</span></div></div>
+      <div class="scene-copy"><p>Синтетический текст боли номер один — проверка проявления поверх сцены.</p></div>
+    </article>
+
+    <article class="pain-scene scene-2" data-scene="1">
+      <div class="scene-visual">
+        <div class="scene-art"><span>SLIDE 2</span></div>
+        <div class="subframe sub-1"><div class="mark">ПОДКАДР 1</div></div>
+        <div class="subframe sub-2"><div class="mark">ПОДКАДР 2</div></div>
+        <div class="subframe sub-3"><div class="mark">ПОДКАДР 3</div></div>
+      </div>
+      <div class="scene-copy"><p>Синтетический текст боли номер два — внутри неё три подкадра, они живут вместе с ней.</p></div>
+    </article>
+
+    <article class="pain-scene scene-3" data-scene="2">
+      <div class="scene-visual"><div class="scene-art"><span>SLIDE 3</span></div></div>
+      <div class="scene-copy"><p>Синтетический текст боли номер три — последняя сцена держится до конца зоны.</p></div>
+    </article>
+
+    <div class="scene-progress"><span id="progressLabel">PROGRESS 0% · SCENE 1/3 · HOLD</span></div>
+  </div>
+</section>
+
+<div class="proto-spacer">КОНЕЦ ПРОТОТИПА</div>
+
+<script>
+(function(){
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var root = document.getElementById('painProto');
+  var sticky = root.querySelector('.pain-sticky');
+  var scenes = Array.prototype.slice.call(root.querySelectorAll('.pain-scene'));
+  var subs = Array.prototype.slice.call(root.querySelectorAll('.scene-2 .subframe'));
+  var label = document.getElementById('progressLabel');
+  var N = scenes.length;
+  var SUB_SCENE = 1;        // индекс сцены с подкадрами
+  var HOLD_END = 0.65;      // граница HOLD внутри сцены
+  var REVEAL_IN = 0.25;     // доля q, за которую текст боли проявляется в HOLD
+  var ART_BASE = 1.04;      // постоянный overscan обёртки .scene-visual: края кадра всегда закрыты
+  var ART_DEPTH = 0.04;     // добавка глубины для входящей сцены
+  var ticking = false;
+
+  function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+
+  function apply(el, opacity, artScale, reveal, z){
+    el.style.opacity = opacity.toFixed(3);
+    el.style.zIndex = String(z);
+    var vis = el.querySelector('.scene-visual');
+    if (vis) vis.style.transform = 'scale(' + artScale.toFixed(3) + ')';
+    var copy = el.querySelector('.scene-copy p');
+    if (copy){
+      copy.style.opacity = (0.18 + 0.82 * reveal).toFixed(3);
+      copy.style.transform = 'translateY(' + (14 - 14 * reveal).toFixed(1) + 'px)';
+    }
+  }
+
+  function render(){
+    ticking = false;
+    if (reduce.matches) return;
+
+    var rect = root.getBoundingClientRect();
+    var travel = root.offsetHeight - sticky.offsetHeight;
+    var p = clamp(-rect.top / (travel || 1), 0, 1);
+    var pos = clamp(p * N, 0, N - 0.0001);
+    var i = Math.floor(pos);
+    var q = pos - i;
+    var phase = (q <= HOLD_END) ? 'HOLD' : 'ПЕРЕХОД';
+    var isLast = (i === N - 1);
+
+    // все сцены по умолчанию скрыты; ART_BASE — базовый overscan внутреннего слоя
+    for (var k=0;k<N;k++) apply(scenes[k], 0, ART_BASE, 0, 10 + k);
+
+    if (q <= HOLD_END || isLast){
+      // HOLD: текст проявляется в раннем HOLD и дальше держится на 1
+      apply(scenes[i], 1, ART_BASE, clamp(q / REVEAL_IN, 0, 1), 20);
+      if (isLast) phase = 'HOLD';
+    } else {
+      var x = (q - HOLD_END) / (1 - HOLD_END);          // 0..1
+      // уходящая остаётся непрозрачной и полноразмерной — иначе фон просвечивает
+      apply(scenes[i], 1, ART_BASE, 1, 20);
+      // проявляется только входящая; её внутренний слой выходит из глубины, не открывая края
+      apply(scenes[i+1], x, ART_BASE + ART_DEPTH * (1 - x), 0, 21);
+    }
+
+    // подкадры живут всю жизнь своей сцены: ENTER держит первый, HOLD интерполирует, EXIT держит последний
+    var subState = 'off';
+    if (i === SUB_SCENE) subState = (q <= HOLD_END) ? 'hold' : 'exit';
+    else if (i === SUB_SCENE - 1 && q > HOLD_END) subState = 'enter';
+
+    var subIndex = 0;
+    function setSub(k, opacity, z){
+      subs[k].style.opacity = (opacity === 1) ? '1' : opacity.toFixed(3);
+      subs[k].style.zIndex = String(z);
+    }
+    function hideSubs(){ for (var h=0;h<subs.length;h++) setSub(h, 0, 1); }
+
+    if (subState === 'hold'){
+      var t = q / HOLD_END;                       // 0..1 внутри HOLD
+      var subPos = t * (subs.length - 1);         // 0..2
+      var j = Math.min(Math.floor(subPos), subs.length - 1);
+      var f = subPos - j;
+      hideSubs();
+      setSub(j, 1, 2);                            // уходящий подкадр остаётся непрозрачным
+      if (j + 1 < subs.length) setSub(j + 1, f, 3); // входящий проявляется ПОВЕРХ него
+      subIndex = (f > 0.5 ? j + 1 : j) + 1;
+    } else if (subState === 'enter' || subState === 'exit'){
+      var keep = (subState === 'enter') ? 0 : subs.length - 1;
+      hideSubs();
+      setSub(keep, 1, 2);
+      subIndex = keep + 1;
+    } else {
+      hideSubs();
+    }
+
+    label.textContent = 'PROGRESS ' + Math.round(p*100) + '% · SCENE ' + (i+1) + '/' + N
+      + ' · ' + phase
+      + (subIndex ? ' · SUBFRAME ' + subIndex + '/3' : '');
+  }
+
+  function onScroll(){
+    if (!ticking){ ticking = true; requestAnimationFrame(render); }
+  }
+
+  window.addEventListener('scroll', onScroll, {passive:true});
+  window.addEventListener('resize', onScroll, {passive:true});
+  if (reduce.addEventListener){
+    reduce.addEventListener('change', function(){
+      if (reduce.matches){
+        scenes.forEach(function(s){ s.style.opacity=''; s.style.transform=''; });
+      } else { onScroll(); }
+    });
+  }
+  render();
+})();
+</script>
+</body>
+</html>
