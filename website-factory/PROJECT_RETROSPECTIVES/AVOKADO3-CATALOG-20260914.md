@@ -79,3 +79,11 @@ WEBSITE_PROJECT_LEARNING:
 TOP_5_TIME_SINKS: content routing discovery; sparse checkout; source editor review; browser timeout/retry; duplicate-anchor correction.
 Timing estimates: discovery 8m, architecture 3m, wireframe 0m (owner reference), design/content 8m, implementation/checks 12m, revision_cycles 1, handoff 2m; approximate, no measured conversion results.
 Next exact action: Publish and verify delivered files; complete visual/editor checks when browser available.
+
+## Mobile revision — 2026-09-14
+Owner requests mobile adaptation after accepting the catalogue.
+FACT: Browser CDP remains unavailable; visual mobile QA UNKNOWN.
+DECISION: At 360–700px use two compact cards with photo above content, visible price/time/actions and native expandable detail text. Below 360px use one column. Full price uses a two-by-two sticky category menu, with matching anchor offsets and readable table widths. Respect bottom safe area around booking button. Slide markup/logic unchanged.
+HYPOTHESIS: Compact cards improve scanning without hiding service details permanently. Test: 320/360/390/430/700px visual overflow, detail toggle, jump to exact service, booking tap. Status: source checks pass; visual/touch checks pending browser recovery.
+Evidence: Existing renderer tests PASS for 48 services, six cards, data updates/removal, unique IDs and unknown durations; JS syntax PASS. No conversion result claimed.
+Next exact action: Publish CSS/renderer revision and verify delivery; request owner phone screenshot if browser remains unavailable.
