@@ -390,13 +390,16 @@
   <script>
 { const p = new URLSearchParams(location.search); const requested = p.get('site') || 'alvi'; if (['alvi','avokado'].includes(requested)) { const base = ('https://' + requested + '.synapsebusiness.ru').replace(/\/$/, ''); document.write('<script src="' + base + '/price-render.js?v=20260904"><\/script>'); } }
 </script>
+<script>
+if(new URLSearchParams(location.search).get('site')==='avokado')document.write('<script src="https://avokado3.synapsebusiness.ru/catalog.js?v=20260914-catalog"><\/script>');
+</script>
   <script>
 (() => {
   'use strict';
   const params = new URLSearchParams(location.search);
   const SITES = {
     alvi: { name: 'ALVI', url: 'https://alvi.synapsebusiness.ru', pricePath: '/price.html', renderer: 'https://alvi.synapsebusiness.ru/price-render.js?v=20260904' },
-    avokado: { name: 'Авокадо', url: 'https://avokado.synapsebusiness.ru', pricePath: '/#price', renderer: 'https://avokado.synapsebusiness.ru/price-render.js?v=20260904' }
+    avokado: { name: 'Авокадо', url: 'https://avokado3.synapsebusiness.ru', pricePath: '/price.html', renderer: 'https://avokado.synapsebusiness.ru/price-render.js?v=20260904' }
   };
   const requestedSite = params.get('site') || 'alvi';
   if (!SITES[requestedSite]) {
@@ -405,6 +408,7 @@
     return;
   }
   const siteId = requestedSite;
+  const isAvokado = siteId === 'avokado';
   const siteConfig = SITES[siteId];
   const SITE = (params.get('url') || (SITES[requestedSite] ? siteConfig.url : requestedSite)).replace(/\/$/, '');
   const API_BASE = (params.get('api') || '').replace(/\/$/, '');
@@ -444,7 +448,7 @@
     setStatus('Есть несохранённые изменения');
   }
   function blockMax(block) { return Number(data.blocks?.[block]?.max) || 8; }
-  function blockTitle(block) { return data.blocks?.[block]?.title || block; }
+  function blockTitle(block) { return isAvokado ? (block === 'self' ? 'Карточки направлений Авокадо' : 'Дополнительные карточки Авокадо') : (data.blocks?.[block]?.title || block); }
   function showcase(block) { return (data.showcase[block] ||= []); }
   function inShowcase(id) { return showcase('self').includes(id) || showcase('two').includes(id); }
   function catOf(id) { return AlviPrice.findItem(data, id)?.cat; }
@@ -553,6 +557,7 @@
       <label>Цена<input name="price" value="${esc(it.price || '')}"></label>
       <label>Старая цена<input name="oldPrice" value="${esc(it.oldPrice || '')}"></label>
       <label>Длительность<input name="duration" value="${esc(it.duration || '')}"></label>
+      ${isAvokado ? `<label>Направление на главной<select name="direction"><option value="">По разделу прайса</option>${[['laser','Лазерная эпиляция'],['apparatus','Аппаратный массаж'],['manual','Ручной массаж и лицо']].map(([v,t])=>`<option value="${v}" ${it.direction===v?'selected':''}>${t}</option>`).join('')}</select></label><label><input type="checkbox" name="promo" ${it.promo?'checked':''}> Специальное предложение</label>` : ''}
       <label class="ed-switch">
         <input type="checkbox" name="quizEnabled" ${it.quizEnabled === true || (it.quizEnabled == null && DEFAULT_QUIZ_ITEMS.has(it.id)) ? 'checked' : ''}>
         <span class="ed-switch__track" aria-hidden="true"></span>
@@ -590,6 +595,7 @@
       if (fd.has(k)) it[k] = String(fd.get(k)).trim();
     }
     it.quizEnabled = fd.has('quizEnabled');
+    if(isAvokado){it.direction=String(fd.get('direction')||'');it.promo=fd.has('promo');}
     if (fd.has('items')) it.items = String(fd.get('items')).split('\n').map((s) => s.trim()).filter(Boolean);
     editing = null; markDirty(); render();
   }
@@ -727,6 +733,22 @@
     </div>`;
   }
 
+  function renderCertificateEditor(){
+    const c=data.certificates||{};
+    return `<section class="ps" id="av-certificate-editor"><h2 class="ps__title">Сертификаты Авокадо</h2><form class="ed-form" data-certificate-form>
+    <label class="is-wide">Заголовок<input name="intro" value="${esc(c.intro||'')}"></label>
+    <label class="is-wide">Описание и условия<textarea name="note">${esc(c.note||'')}</textarea></label>
+    <label>Текст кнопки<input name="button" value="${esc(c.button||'')}"></label>
+    <label>Изображение (адрес)<input name="photo" value="${esc(c.photo||'')}"></label>
+    <button class="ed-btn ed-btn--main" type="submit">Применить к черновику</button><p class="ed-status">После правки нажмите «Сохранить» вверху.</p></form></section>`;
+  }
+  document.addEventListener('submit',function(e){
+    const form=e.target.closest('form[data-certificate-form]');if(!form)return;e.preventDefault();
+    const fd=new FormData(form);data.certificates ||= {};
+    for(const k of ['intro','note','button','photo'])data.certificates[k]=String(fd.get(k)||'').trim();
+    markDirty();render();
+  });
+
   /* --- рендер всего --- */
   function render() {
     const y = window.scrollY;
@@ -743,7 +765,7 @@
       const a = nav.querySelector(`a[href="#${cat.id}"]`);
       if (a) a.insertAdjacentHTML('beforeend', `<span class="ed-count">★ ${popularCount(cat)}</span>`);
     }
-    content.innerHTML = renderShowcaseSection('self') + renderShowcaseSection('two') +
+    content.innerHTML = (isAvokado ? '<p class="ps__note">Карточки распределяются по трём направлениям: лазер, аппаратный массаж, ручной массаж и лицо. Отметьте услуги звездой; порядок меняется стрелками. Направление и промо меняются через «Изменить». Сертификат настраивается ниже.</p>' : '') + renderShowcaseSection('self') + renderShowcaseSection('two') + (isAvokado ? renderCertificateEditor() : '') +
       AlviPrice.renderSections(data, {
         editor: true, noCertificates: true, starHtml, editHtml, titleExtra,
         addCardHtml: sectionTools, addRowHtml: sectionTools,
@@ -841,7 +863,7 @@
   }
   async function loadData() {
     const d = await apiFetch(API);
-    data = d; data.showcase ||= { self: [], two: [] }; dirty = false; editing = null;
+    data = isAvokado && window.AvokadoCatalog ? AvokadoCatalog.prepare(d, await AlviPrice.load(['https://avokado3.synapsebusiness.ru/data/price.json'])) : d; data.showcase ||= { self: [], two: [] }; dirty = false; editing = null;
     saveBtn.textContent = 'Сохранить';
     render();
   }

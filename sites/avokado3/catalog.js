@@ -1,0 +1,32 @@
+/* Avokado: one price document for the service showcase and full catalogue. */
+(function(){
+'use strict';
+const esc=AlviPrice.esc;
+const groups=[
+{id:'laser',title:'Лазерная эпиляция',headline:'Меньше времени на бритьё. Больше — на себя.',intro:'Выберите отдельную зону или несколько зон за один визит. Подходящий вариант и подготовку обсудим перед процедурой.'},
+{id:'apparatus',title:'Аппаратный массаж',headline:'Коррекция фигуры начинается с первого визита.',intro:'Знакомство с процедурой, работа с выбранными зонами и программа под вашу цель.'},
+{id:'manual',title:'Ручной массаж и массаж лица',headline:'Время для себя — в руках мастера.',intro:'Массаж тела или лица: выбирайте подходящую процедуру и обсудите пожелания со специалистом.'}
+];
+function group(cat,it){if(['laser','apparatus','manual'].includes(it.direction))return it.direction;if(cat.id.startsWith('laser'))return 'laser';if(cat.id==='apparat'||(cat.id==='first-visit'&&it.id!=='first-3'))return 'apparatus';return 'manual';}
+function safeUrl(value,fallback){try{const u=new URL(value,location.href);return ['https:','http:','tel:'].includes(u.protocol)?u.href:fallback;}catch(e){return fallback;}}
+function actions(data,id){return `<div class="av-actions"><a class="av-button av-button--gold" data-entry-point="catalog_${esc(id)}" href="${esc(safeUrl(data.links?.book,'#contacts'))}" target="_blank" rel="noopener">Записаться</a><a class="av-button" href="${esc(safeUrl(data.links?.chat,'#contacts'))}" target="_blank" rel="noopener">Помочь с выбором</a></div>`;}
+function card(data,it,full){const photo=it.photo?safeUrl(it.photo,''):'';const facts=[['Цена',it.price||'—'],['Время',it.duration||'—']];if(it.composition)facts.push(['Состав',it.composition]);if(it.who)facts.push(['Кому',it.who]);return `<article class="av-card${photo?' av-card--photo':''}" ${full?`id="${esc(it.id)}"`:''} data-service="${esc(it.id)}">${photo?`<img class="av-card-photo" src="${esc(photo)}" alt="" loading="lazy">`:''}<div class="av-card-body">${it.promo?'<p class="av-tag">Специальное предложение</p>':''}<h3>${full?esc(it.title):`<a href="price.html#${esc(it.id)}">${esc(it.card||it.title)}</a>`}</h3>${it.desc?`<p class="av-description">${esc(it.desc)}</p>`:''}<dl class="av-facts">${facts.map(([k,v])=>`<dt>${k}</dt><dd>${esc(v)}${k==='Цена'&&it.oldPrice?` <s>${esc(it.oldPrice)}</s>`:''}</dd>`).join('')}</dl>${full&&it.items?.length?`<ul>${it.items.map(v=>`<li>${esc(v)}</li>`).join('')}</ul>`:''}${actions(data,it.id)}</div></article>`;}
+function table(data,cat){return `<div class="av-table-wrap"><table class="av-table"><thead><tr><th>Услуга</th><th>Время</th><th>Цена</th></tr></thead><tbody>${cat.items.map(it=>`<tr id="${esc(it.id)}" data-service="${esc(it.id)}"><th scope="row">${esc(it.title)}${it.desc?`<small>${esc(it.desc)}</small>`:''}</th><td>${esc(it.duration||'—')}</td><td>${esc(it.price||'—')}${it.oldPrice?` <s>${esc(it.oldPrice)}</s>`:''}</td></tr>`).join('')}</tbody></table></div>${actions(data,cat.id)}`;}
+function gift(data){const c=data.certificates||{};return `<section class="av-direction av-gift" id="certificate"><div><p class="av-kicker">04 · Сертификаты</p><h2>${esc(c.intro||'Подарите время для себя')}</h2><p class="av-intro">${esc(c.note||'Обсудите номинал и оформление сертификата с администратором студии.')}</p>${(c.types||[]).map(t=>`<h3>${esc(t.title)}</h3><p>${esc(t.text)}</p>`).join('')}<a class="av-button av-button--gold" href="${esc(safeUrl(data.links?.chat,'#contacts'))}" target="_blank" rel="noopener">${esc(c.button||'Обсудить сертификат')}</a></div><img src="${esc(safeUrl(c.photo||'assets/certificate-avokado-light.svg','assets/certificate-avokado-light.svg'))}" alt="Подарочный сертификат Авокадо" loading="lazy"></section>`;}
+function render(data,full){const selected=new Set([...(data.showcase?.self||[]),...(data.showcase?.two||[])]);const output=[];for(const [i,g] of groups.entries()){const cats=(data.categories||[]).map(cat=>({...cat,items:(cat.items||[]).filter(it=>group(cat,it)===g.id)})).filter(cat=>cat.items.length);const all=cats.flatMap(c=>c.items);const items=full?all:[...selected].map(id=>all.find(it=>it.id===id)).filter(Boolean);let body;if(full){body=cats.map(cat=>`<div class="av-category" id="${g.id}-${esc(cat.id)}"><h3 class="av-category-title">${esc(cat.title)}</h3>${cat.kind==='table'?table(data,cat):`<div class="av-grid">${cat.items.map(it=>card(data,it,true)).join('')}</div>`}</div>`).join('');}else{body=`<div class="av-grid">${items.map(it=>card(data,it,false)).join('')}</div><a class="av-price-link" href="price.html#${g.id}">Посмотреть весь прайс — ${esc(g.title.toLowerCase())} →</a>`;}
+output.push(`<section class="av-direction" id="${g.id}"><p class="av-kicker">0${i+1} · ${esc(g.title)}${g.id==='apparatus'?' · коррекция фигуры':''}</p><h2>${full?esc(g.title):esc(g.headline)}</h2><p class="av-intro">${esc(g.intro)}</p>${body}</section>`);}
+return output.join('')+gift(data);}
+function prepare(data,defaults){
+ if(!data)return defaults;if(data.catalogVersion>=2||!defaults)return data;
+ const out=JSON.parse(JSON.stringify(data));
+ const initial=out.version===1&&out.updatedAt==='2026-09-04T00:00:00.000Z'&&out.blocks?.self?.title==='Авокадо'&&JSON.stringify(out.showcase?.self)===JSON.stringify(['first-1'])&&!(out.showcase?.two||[]).length;
+ for(const cat of out.categories||[])for(const it of cat.items||[]){const found=AlviPrice.findItem(defaults,it.id);if(!found)continue;for(const k of ['photo','promo','direction'])if(it[k]===undefined&&found.it[k]!==undefined)it[k]=found.it[k];if(initial&&cat.id==='first-visit')it.card=found.it.card;if(!it.duration&&found.it.duration)it.duration=found.it.duration;}
+ if(initial){out.showcase=defaults.showcase;out.blocks=defaults.blocks;}
+ if(!Object.keys(out.certificates||{}).length)out.certificates=defaults.certificates;
+ out.catalogVersion=2;return out;
+}
+window.AvokadoCatalog={render,group,prepare};
+const target=document.getElementById('av-catalog-content');if(!target)return;
+const full=document.body.hasAttribute('data-full-price');
+Promise.all([AlviPrice.load(['/api/price']),AlviPrice.load(['data/price.json'])]).then(([live,defaults])=>{const data=prepare(live,defaults);if(!data){target.innerHTML='<p class="av-loading">Прайс временно недоступен. <a href="tel:+79331901059">Уточнить у студии</a></p>';return;}target.innerHTML=render(data,full);if(location.hash){const el=document.getElementById(decodeURIComponent(location.hash.slice(1)));if(el&&target.contains(el))el.scrollIntoView();}});
+})();
