@@ -407,6 +407,7 @@
     .sticky-cta>a{flex:1;min-width:0;min-height:52px;padding:10px 12px;line-height:1.35;white-space:normal}
     .sticky-cta.on{transform:translate(-50%,0)}
     .sticky-cta.on.finale-hidden{transform:translate(-50%,18px)}
+    .sticky-cta.on.is-scrolling{transform:translate(-50%,90px);opacity:0;visibility:hidden;pointer-events:none;transition:transform .18s ease,opacity .18s ease}
     .t-slogan{letter-spacing:.18em;font-size:12px}
     .t-slogan{color:#fff1d2;text-shadow:0 2px 10px rgba(0,0,0,.95),0 0 24px rgba(0,0,0,.8)}
 
@@ -1505,5 +1506,6 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
 </script>
 <script src="https://synapse.synapsebusiness.ru/track.js?v=20260905" data-company="avokado" defer></script>
 <script src="contact-route.js?v=20260915-contacts"></script>
+<script src="scroll-controls.js?v=20260915-loop"></script>
 </body>
 </html>
