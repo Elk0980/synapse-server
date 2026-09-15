@@ -50,3 +50,31 @@
   #metod .method-intro-subtitle{display:none}
   #metod .mobile-method-track{justify-content:flex-start}
 }
+
+/* Phones use the document's natural height: every scene and visit step stays visible. */
+@media(max-width:820px), (max-width:1024px) and (max-height:500px){
+  #metod{--mobile-method-flow:1}
+  #metod.method-flow{height:auto!important;min-height:0;padding-block:24px 32px;overflow:visible}
+  #metod.method-flow .method-sticky{position:static;height:auto;min-height:0;margin:0;overflow:visible}
+  #metod.method-flow .method-intro{position:relative;top:auto;width:auto;height:auto;margin:0 16px 8px;border-radius:14px;opacity:1;transform:none}
+  #metod.method-flow.method-leaving .method-intro{visibility:visible}
+  #metod.method-flow .method-scene{position:relative;inset:auto;display:block;height:auto;min-height:0;padding:24px 16px;opacity:1!important;transform:none!important;pointer-events:auto;transition:none;overflow:visible;scroll-margin-top:calc(var(--method-header) + 16px)}
+  #metod.method-flow .method-scene+.method-scene{margin-top:12px}
+  #metod.method-flow .mobile-method-viewport{position:static;inset:auto;display:block;height:auto;min-height:0;overflow:visible}
+  #metod.method-flow .mobile-method-track{height:auto;min-height:0;justify-content:flex-start;transform:none!important}
+  #metod.method-flow .scene-copy{width:100%;margin:0}
+  #metod.method-flow .scene-two{grid-template-columns:minmax(0,1fr);gap:16px}
+  #metod.method-flow.method-paper-ready #method-3 .paper-viewport{position:static;inset:auto;display:block;height:auto;min-height:0;padding:0;overflow:visible;perspective:none}
+  #metod.method-flow.method-paper-ready #method-3 .paper-layout{margin:0;transform:none!important;perspective:none}
+  #metod.method-flow.method-paper-ready #method-3 .paper-sheet{opacity:1!important;transform:none!important;will-change:auto;box-shadow:none}
+  #metod.method-flow.method-paper-ready #method-3 .paper-argument{perspective:none}
+  #metod.method-flow #method-results .results-copy{position:static;inset:auto;width:100%;height:auto;min-height:0;margin:0;gap:12px}
+  #metod.method-flow #method-results .results-rail{flex:none;width:100%;height:clamp(280px,90vw,420px)}
+  #metod.method-flow #method-5.work-steps-ready .work-copy{position:static;inset:auto;width:100%;height:auto;min-height:0;margin:0}
+  #metod.method-flow #method-5 .work-counter{display:none}
+  #metod.method-flow #method-5 .work-pairs{display:grid;grid-template-columns:minmax(0,1fr);gap:28px;flex:none;height:auto;min-height:0;margin:18px 0 0;overflow:visible}
+  #metod.method-flow #method-5 .work-pair{position:relative;inset:auto;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;height:auto;min-height:0;gap:12px;opacity:1!important;transform:none!important;pointer-events:auto}
+  #metod.method-flow #method-5 .work-pair__photo{height:clamp(240px,75vw,420px);max-height:none}
+  #metod.method-flow .flow-next{display:none}
+  #metod.method-flow #method-5.work-steps-ready .flow-next[href="#price"]{display:flex;margin:24px auto 0;visibility:visible!important}
+}

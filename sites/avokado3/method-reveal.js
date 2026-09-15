@@ -104,9 +104,38 @@
     return bottom;
   }
 
+  function setFlowMode(state, flow) {
+    if (state.flow === flow) return flow;
+    state.flow = flow;
+    state.lastIndex = -1;
+    state.measured = false;
+    state.root.classList.toggle('method-flow', flow);
+    if (flow) {
+      state.root.style.removeProperty('height');
+      state.root.classList.remove('method-leaving');
+      state.scenes.forEach(scene => {
+        scene.classList.add('active');
+        scene.setAttribute('aria-hidden', 'false');
+        scene.inert = false;
+      });
+      state.elements.forEach(element => element.setAttribute('aria-hidden', 'false'));
+      state.root.querySelectorAll('.work-pair').forEach(pair => {
+        pair.setAttribute('aria-hidden', 'false');
+        pair.inert = false;
+      });
+      state.root.querySelectorAll('.flow-next').forEach(link => {
+        link.style.removeProperty('visibility');
+        link.inert = false;
+      });
+    }
+    return flow;
+  }
+
   function update(root, scenes) {
     const state = states.get(root) || createState(root, scenes);
     if (!state) return false;
+    const flow = !state.editor && getComputedStyle(root).getPropertyValue('--mobile-method-flow').trim() === '1';
+    if (setFlowMode(state, flow)) return true;
     const height = state.sticky.clientHeight;
     if (!height) return false;
     const unit = height * 5 / 6;
@@ -149,5 +178,5 @@
     if (state.work) state.work.update(frame.workPhase, frame.index === state.work.target, state.reduced.matches);
     return true;
   }
-  return { frameAt, panAt, update };
+  return { frameAt, panAt, setFlowMode, update };
 });
