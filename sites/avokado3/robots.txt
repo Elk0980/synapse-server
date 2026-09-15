@@ -1,3 +1,5 @@
 User-agent: *
-Disallow: /
-Sitemap: https://avokado3.synapsebusiness.ru/sitemap.xml
+Allow: /
+Disallow: /pain-proto.html
+Disallow: /api/
+Sitemap: https://avokado38.ru/sitemap.xml

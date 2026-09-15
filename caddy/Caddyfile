@@ -41,7 +41,7 @@ www.avokado38.ru {
 }
 
 avokado38.ru {
-  root * /srv/sites/avokado
+  root * /srv/sites/avokado3
   @leads {
     path /api/leads
     method POST
@@ -71,7 +71,7 @@ avokado38.ru {
     method GET
   }
   handle @site {
-    rewrite * /public-content/avokado/site
+    rewrite * /public-content/avokado3/site
     reverse_proxy content:8080
   }
   @assets {
@@ -79,7 +79,7 @@ avokado38.ru {
     method GET
   }
   handle @assets {
-    uri replace /api/assets/ /content/avokado/assets/
+    uri replace /api/assets/ /content/avokado3/assets/
     reverse_proxy content:8080
   }
   @sitedata path /data/*
@@ -167,7 +167,7 @@ avokado2.synapsebusiness.ru {
   import static
 }
 
-# --- Клиент: Авокадо3 (экспериментальная копия) -----------------------------
+# --- АВОКАДО 3: служебный адрес основной версии -----------------------------
 avokado3.synapsebusiness.ru {
   root * /srv/sites/avokado3
   @track {

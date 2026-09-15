@@ -17,11 +17,11 @@ const LEGACY_SITES = [
     'https://drafts.synapsebusiness.ru/alvi/', null, null, null],
   ['alvi', 'alvi', 'ALVI', 'draft', 'https://alvi.synapsebusiness.ru/', 'alvi',
     '/site-editor.html?site=alvi', '/price-editor.html?site=alvi'],
-  ['avokado', 'avokado', 'Авокадо', 'published', 'https://avokado.synapsebusiness.ru/', 'avokado',
+  ['avokado', 'avokado', 'АВОКАДО — предыдущая версия', 'published', 'https://avokado.synapsebusiness.ru/', 'avokado',
     '/site-editor.html?site=avokado', '/price-editor.html?site=avokado'],
   ['avokado2', 'avokado', 'Авокадо2', 'published', 'https://avokado2.synapsebusiness.ru/', 'avokado2',
     '/site-editor.html?site=avokado2', '/price-editor.html?site=avokado'],
-  ['avokado3', 'avokado', 'Авокадо3', 'published', 'https://avokado3.synapsebusiness.ru/', 'avokado3',
+  ['avokado3', 'avokado', 'АВОКАДО — основной сайт', 'published', 'https://avokado38.ru/', 'avokado3',
     '/site-editor.html?site=avokado3', '/price-editor.html?site=avokado'],
   ['palitra-love', 'palitra-love', 'Palitra', 'draft',
     'https://palitra-love.synapsebusiness.ru/', 'palitra', null, '/price-editor-palitra.html'],
@@ -54,6 +54,14 @@ function createSiteStore(db, authStore, saveDocument) {
   db.prepare(`UPDATE managed_sites SET name='Palitra'
     WHERE id='palitra-love' AND company_code='palitra-love' AND source='legacy'
       AND name IN ('Палитра лав', 'Палитра Лав', 'Палитра', 'Palitra Love', 'PALITRA LOVE')`).run();
+  // Promote the existing Avokado3 card without replacing editor identities or custom values.
+  const renameAvokado = db.prepare(`UPDATE managed_sites SET name=?
+    WHERE id=? AND company_code='avokado' AND source='legacy' AND name=?`);
+  renameAvokado.run('АВОКАДО — предыдущая версия', 'avokado', 'Авокадо');
+  renameAvokado.run('АВОКАДО — основной сайт', 'avokado3', 'Авокадо3');
+  db.prepare(`UPDATE managed_sites SET public_url='https://avokado38.ru/'
+    WHERE id='avokado3' AND company_code='avokado' AND source='legacy'
+      AND public_url='https://avokado3.synapsebusiness.ru/'`).run();
   const visible = (user, row) => user.role === 'owner' || user.companyCodes.includes(row.company_code);
   const output = (user, row) => {
     const can = (permission) => user.role === 'owner' || user.permissions.includes(permission);
