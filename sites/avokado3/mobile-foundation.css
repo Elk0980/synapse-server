@@ -21,6 +21,7 @@
     overflow-wrap: break-word;
   }
   #pain-story .pain-story__nav { font-size: 12px; line-height: 1.5; }
+  #pain .pain-story__title { font-family: 'Studio Lora', Georgia, serif; font-weight: 400; letter-spacing: 0; }
   #contacts .wrap,
   #faq .wrap { padding-inline: max(16px, env(safe-area-inset-left)); }
   #contacts .lead,
