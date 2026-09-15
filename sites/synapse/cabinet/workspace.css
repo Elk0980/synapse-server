@@ -61,6 +61,10 @@ body { background:var(--bg); font-family:"Segoe UI",system-ui,sans-serif; }
 .client-card dl { gap:10px 24px; }
 .client-card-field dt { font-size:12px; }
 .client-card-actions { flex-wrap:wrap; }
+.contact-company { min-width:0; border:1px solid var(--line); border-radius:12px; padding:16px; display:grid; gap:14px; }
+.contact-company legend { padding:0 7px; font-weight:600; }
+.contact-company > small { color:var(--muted); }
+.contact-company [hidden] { display:none!important; }
 .client-summary-grid { align-items:start; }
 .client-summary-list a { display:block; }
 .company-links-summary { padding-top:16px; border-top:1px solid var(--line); }

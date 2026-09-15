@@ -10,7 +10,7 @@ function setupClient(query = async () => ({id: 42})) {
   const w = dom.window, calls = [], views = {};
   w.SbCabinet = {registerView: (name, descriptor) => views[name] = descriptor, pipelineStages:{stages:[],load:async()=>{}}};
   w.eval(read('clients.js').replace('Object.assign(api, { renderCrmEntityRoute,',
-    'window.testClient = {renderEntityForm, saveEntityForm, companySummaryMarkup}; Object.assign(api, { renderCrmEntityRoute,')
+    'window.testClient = {renderEntityForm, saveEntityForm, companySummaryMarkup, renderRelationForm}; Object.assign(api, { renderCrmEntityRoute,')
     .replace('const renderEntityCard = async (view, id) => {',
       'const renderEntityCard = async () => { document.getElementById("crm-contacts-content").innerHTML = "<p data-card-status></p>"; }; const unusedCard = async (view, id) => {'));
   views.clients.render(null, {identity:{role:'owner'}, selectedProjectId:'alvi', escapeHTML:escape, navigate() {},
@@ -81,6 +81,42 @@ test('every working cabinet view has four setup steps, without invented connecti
   sb.renderModuleGuide(container,'crm-contacts',{escapeHTML:escape,canView:()=>true,hasPermission:()=>false});
   assert.equal(container.querySelector('a'),null,'view-only role does not see a create shortcut');
   dom.window.close();
+});
+
+test('new person and company are submitted together in one POST', async()=>{
+  const {dom,w,calls,api}=setupClient(); await api.renderEntityForm('crm-contacts',null);
+  const form=w.document.querySelector('form');form.elements.name.value='Анна';
+  form.elements.companyMode.value='new';form.elements.companyMode.dispatchEvent(new w.Event('change'));
+  form.elements.newCompanyName.value='Компания Анны';form.elements.newCompanyCity.value='Иркутск';form.elements.companyRole.value='Собственник';
+  await api.saveEntityForm({preventDefault(){},currentTarget:form},'crm-contacts',null);
+  assert.equal(calls.length,1);assert.deepEqual(JSON.parse(calls[0].options.body).companyLink,{newCompany:{name:'Компания Анны',city:'Иркутск'},role:'Собственник'});
+  dom.window.close();
+});
+
+test('repeated company linking opens only one form, including while its options are loading',async()=>{
+  let resolveQuery;
+  const {dom,w,api,calls}=setupClient(()=>new Promise(resolve=>{resolveQuery=resolve;}));
+  w.document.querySelector('#crm-contacts-content').innerHTML='<p data-card-status></p><div data-relations></div>';
+  const relation={path:'companies',key:'companies',view:'crm-companies',flag:'isResponsible',flagLabel:'Ответственный'};
+  const first=api.renderRelationForm('crm-contacts',{id:42},relation);
+  await api.renderRelationForm('crm-contacts',{id:42},relation);assert.equal(calls.length,1);
+  resolveQuery({companies:[{id:7,name:'Компания'}]});await first;
+  const next=api.renderRelationForm('crm-contacts',{id:42},relation);
+  resolveQuery({companies:[{id:7,name:'Компания'}]});await next;
+  assert.equal(w.document.querySelectorAll('[data-relation-form]').length,1);dom.window.close();
+});
+
+test('existing company choice loads scoped options, blocks unfinished search and saves the selected ID',async()=>{
+  const {dom,w,calls,api}=setupClient(async path=>path==='/companies'?{companies:[{id:7,name:'Компания',city:'Иркутск'}]}:{id:42});
+  await api.renderEntityForm('crm-contacts',null);const form=w.document.querySelector('form');form.elements.name.value='Анна';
+  form.elements.companyMode.value='existing';form.elements.companyMode.dispatchEvent(new w.Event('change'));
+  await new Promise(resolve=>w.setTimeout(resolve,0));
+  assert.equal(calls[0].scope.companyCode,'alvi');
+  await api.saveEntityForm({preventDefault(){},currentTarget:form},'crm-contacts',null);
+  assert.equal(calls.length,1);assert.match(form.querySelector('[role=alert]').textContent,/Выберите компанию/);
+  form.elements.companyChoice.value='7';
+  await api.saveEntityForm({preventDefault(){},currentTarget:form},'crm-contacts',null);
+  assert.deepEqual(JSON.parse(calls[1].options.body).companyLink,{companyId:7,role:'Сотрудник'});dom.window.close();
 });
 
 test('a delayed previous client response cannot replace a newly opened create form', async () => {
