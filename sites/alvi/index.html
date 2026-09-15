@@ -2558,7 +2558,6 @@
   <link rel="stylesheet" href="music-player.css?v=20260915-alvi">
   <link rel="stylesheet" href="price-overlay.css?v=20260915-price-flow">
   <link rel="stylesheet" href="responsive-foundation.css?v=20260915-hero-bottom">
-  <link rel="stylesheet" href="hero-playback.css?v=20260915-play-recovery">
   <link rel="stylesheet" href="hero-background.css?v=20260915-fixed">
   <link rel="stylesheet" href="persistent-actions.css?v=20260915-fixed">
   <script src="hero-background.js?v=20260915-fixed" defer></script>
@@ -2658,7 +2657,6 @@
       <div class="hero__scenes">
         <article class="hero-scene" data-scene="0" data-mobile-frame="0" data-range-start="0" data-range-end="0.11">
           <div class="hero-scene__content">
-            <button id="hero-play-button" class="hero-play-button" type="button" hidden>▶ Включить видео</button>
             <h1 class="hero-title" data-edit="hero-0.hero-title-1">Верни себе <em>баланс</em></h1>
 
             <div class="hero-ratings">
@@ -3681,8 +3679,7 @@
         scrollY: () => window.scrollY,
         canPlay: () => ALVI_MEDIA.idle.enabled && !reducedMotionQuery.matches
           && (compactModeActive ? activeCompactSceneId === "0" : !hasUserScrolled),
-        onPlaying: hidePoster,
-        onBlocked: (blocked) => { document.getElementById("hero-play-button").hidden = !blocked; }
+        onPlaying: hidePoster
       });
       function setupIdleVideo() { idleController?.sync(); }
 

@@ -720,7 +720,6 @@ body>#cta{z-index:65}
 <link rel="stylesheet" href="mobile-foundation.css?v=20260915-mobile">
 <link rel="stylesheet" href="mobile-method.css?v=20260915-desktop-fit">
 <link rel="stylesheet" href="method-flow-motion.css?v=20260915-scroll">
-<link rel="stylesheet" href="hero-playback.css?v=20260915-play-recovery">
 <link rel="stylesheet" href="visitor-navigation.css?v=20260915-hero-type">
 <link rel="stylesheet" href="subscription-promo.css?v=20260915-subscriptions">
 </head>
@@ -754,7 +753,6 @@ body>#cta{z-index:65}
     <div class="t-slogan t-fade" data-edit="top.t-slogan-1">УВЕРЕННОСТЬ · СВОБОДА · РЕЗУЛЬТАТ</div>
     <div class="t-script script"><span class="t-script-line"><span class="t-script-text" data-edit="top.t-script-text-1">Быть красивой и уверенной —</span></span><span class="t-script-line"><span class="t-script-text" data-edit="top.t-script-text-2">это мой выбор</span></span></div>
     <div class="hero-shortcuts">
-      <button id="hero-play-button" class="hero-play-button" type="button" hidden>▶ Включить видео</button>
       <p class="hero-service-summary">Аппаратная коррекция фигуры<br>и лазерная эпиляция в Иркутске</p>
       <nav class="hero-directions" aria-label="Выберите направление">
         <a href="#apparatus" data-entry-point="hero_apparatus">Коррекция фигуры</a>
@@ -1231,7 +1229,7 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
   video.addEventListener('error',showPhoto);
   function clamp(x){return Math.max(0,Math.min(1,x))}
   function ease(x){x=clamp(x);return x*x*(3-2*x)}
-  var playback=AvokadoHeroPlayback.create(video,document.getElementById("hero-play-button"),function(){return enabled},showPhoto);
+  var playback=AvokadoHeroPlayback.create(video,null,function(){return enabled},showPhoto);
   function play(){playback.play()}
   function enterTail(restart){
     tailRequested=true;
