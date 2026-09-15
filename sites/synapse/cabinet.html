@@ -561,6 +561,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 </div>
 <a class="skip-link" href="#main-content">Перейти к содержимому</a>
 <div class="shell" id="app" hidden>
+  <nav class="mobile-shortcuts" id="mobile-shortcuts" aria-label="Быстрые разделы">
+    <a href="#home" data-view-link="home">Главная</a><a href="#crm" data-view-link="crm">Заявки</a>
+    <a href="#clients" data-view-link="clients">Клиенты</a><button type="button" id="mobile-more" aria-label="Открыть все разделы">Меню</button>
+  </nav>
   <div class="mobile-bar">
     <button class="menu-button" id="menu-button" type="button" aria-controls="sidebar" aria-expanded="false"
       aria-label="Открыть меню">☰</button>
@@ -590,7 +594,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <button class="nav-category" id="crm-category" type="button" aria-expanded="false"
         aria-controls="crm-menu">CRM</button>
       <div class="subnav" id="crm-menu" hidden>
-        <a class="nav-link" id="crm-link" href="#crm" data-view-link="crm">Лиды</a>
+        <a class="nav-link" id="crm-link" href="#crm" data-view-link="crm">Заявки</a>
         <a class="nav-link" href="#deals" data-view-link="deals">Сделки</a>
         <a class="nav-link" id="clients-link" href="#clients" data-view-link="clients">База клиентов</a>
         <a class="nav-link" href="#chat" data-view-link="chat">Чат</a>
@@ -612,16 +616,22 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         <a class="nav-link" id="price-editor-link" href="#price" data-editor-link="price">Прайс</a>
         <p class="project-label" id="editor-link-notice" role="status" hidden></p>
       </div>
+      <button class="nav-category" type="button" aria-expanded="false" aria-controls="marketing-menu">Продвижение</button>
+      <div class="subnav" id="marketing-menu" hidden>
       <a class="nav-link" id="autoposting-link" href="#autoposting"
         data-view-link="autoposting" hidden>Автопостинг</a>
       <a class="nav-link" id="company-information-link" href="#company-information" data-view-link="company-information" hidden>Актуальность</a>
       <a class="nav-link" id="content-factory-link" href="#content-factory"
         data-view-link="content-factory">Контент завод</a>
       <a class="nav-link" id="campaigns-link" href="#campaigns" data-view-link="campaigns" hidden>Рассылки</a>
+      </div>
+      <button class="nav-category" type="button" aria-expanded="false" aria-controls="management-menu">Управление</button>
+      <div class="subnav" id="management-menu" hidden>
       <a class="nav-link" id="settings-link" href="#settings" data-view-link="settings">Настройки</a>
       <a class="nav-link" id="accounts-link" href="#accounts" data-view-link="accounts" hidden>Настройка аккаунтов</a>
       <a class="nav-link" href="#account" data-view-link="account">Аккаунт</a>
       <a class="nav-link" id="trademarks-link" href="#trademarks" data-view-link="trademarks" hidden>Помощь в регистрации знаков</a>
+          </div>
     </nav>
     <div class="sidebar-footer">
       <div class="account-summary"><span class="account-avatar" id="account-avatar" aria-hidden="true"></span>
@@ -721,9 +731,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     <section class="view-panel" id="clients-view" data-view="clients" hidden>
       <div class="content-header"><h1>База клиентов</h1></div>
       <div class="crm-periods client-tabs" id="client-tabs" aria-label="Раздел базы клиентов">
-        <a class="crm-period" href="#crm-legal" data-client-view="crm-legal">Юрлица</a>
-        <a class="crm-period" href="#crm-contacts" data-client-view="crm-contacts">Контрагенты</a>
+        <a class="crm-period" href="#crm-contacts" data-client-view="crm-contacts">Клиенты и контакты</a>
         <a class="crm-period" href="#crm-companies" data-client-view="crm-companies">Компании</a>
+        <a class="crm-period" href="#crm-legal" data-client-view="crm-legal">Реквизиты</a>
       </div>
       <div class="card"><p>Выберите раздел базы клиентов.</p></div>
     </section>
@@ -808,7 +818,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         <th>Номер</th><th>Звонков за период</th></tr></thead><tbody></tbody></table></div>
     </section>
     <section class="view-panel" id="crm-view" data-view="crm" hidden>
-      <div class="content-header"><h1>Лиды</h1></div>
+      <div class="content-header"><h1>Заявки</h1></div>
       <p class="notice" id="crm-project-context"></p>
       <div class="card">
         <div class="crm-toolbar">
@@ -826,7 +836,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       </div>
     </section>
     <section class="view-panel" id="crm-contacts-view" data-view="crm-contacts" hidden>
-      <div class="content-header"><h1>Контрагенты</h1></div>
+      <div class="content-header"><h1>Клиенты и контакты</h1></div>
       <div class="card"><div id="crm-contacts-content" aria-live="polite"></div></div>
     </section>
     <section class="view-panel" id="crm-companies-view" data-view="crm-companies" hidden>
@@ -989,15 +999,15 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260915-company-publishing";
+  window.SB_CABINET_ASSET_VERSION = "20260916-workspace";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
     window.SbCabinet.views[name] = definition;
   };
   const cabinetAssets = ["home", "tasks", "leads", "deals", "clients", "chat", "hugh", "analytics",
-    "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account", "trademarks", "campaigns", "company-information", "autoposting"];
-  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat", "hugh", "settings", "trademarks", "sites", "campaigns", "company-information", "autoposting"];
+    "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account", "trademarks", "campaigns", "company-information", "autoposting", "module-guide"];
+  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat", "hugh", "settings", "trademarks", "sites", "campaigns", "company-information", "autoposting", "workspace"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join(""));
@@ -1037,10 +1047,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     home: "Главная",
     hugh: "Хью",
     tasks: "Задачи",
-    crm: "Лиды",
+    crm: "Заявки",
     deals: "Сделки",
     clients: "База клиентов",
-    "crm-contacts": "Контрагенты",
+    "crm-contacts": "Клиенты и контакты",
     "crm-companies": "Компании",
     "crm-legal": "Юрлица",
     chat: "Чат",
@@ -1277,7 +1287,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const setCategoryForView = (viewName) => {
     const analyticsViews = ["analytics-through", "ad-platforms", "hypotheses", "competitors", "calltracking"];
     const crmViews = ["crm", "deals", "clients", "chat"];
-    const categoryId = analyticsViews.includes(viewName) ? "analytics-menu" :
+    const categoryId = ["autoposting", "company-information", "content-factory", "campaigns"].includes(viewName) ? "marketing-menu" :
+      ["settings", "accounts", "account", "trademarks"].includes(viewName) ? "management-menu" : analyticsViews.includes(viewName) ? "analytics-menu" :
       viewName === "sites" ? "site-menu" : crmViews.includes(viewName) || viewName.startsWith("crm-")
         ? "crm-menu" : null;
     if (!categoryId) return;
@@ -1297,6 +1308,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     scopeParams,
     chooseProject,
     hasPermission,
+    canView: permittedView,
     navigate,
     apiJson,
     formatMoney,
@@ -1331,7 +1343,11 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     const frame = active.querySelector("iframe[data-src]");
     if (frame && !frame.getAttribute("src")) frame.src = frame.dataset.src;
     registeredViews[currentView]?.render(active, cabinetContext());
-    if (focusMain) byId("main-content").focus();
+    SbCabinet.renderModuleGuide?.(active, currentView, cabinetContext());
+    byId("mobile-shortcuts").querySelectorAll("[data-view-link]").forEach(link => {
+      link.hidden = !permittedView(link.dataset.viewLink);
+    });
+    if (focusMain) { window.scrollTo({top: 0, behavior: "instant"}); byId("main-content").focus({preventScroll: true}); }
   };
   const navigate = (viewName) => {
     if (location.hash === `#${viewName}`) setView(viewName, true);
@@ -1340,9 +1356,11 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 
   const setDrawer = (open, restoreFocus = false) => {
     drawerOpen = open;
+    byId("sidebar").inert = window.matchMedia("(max-width: 760px)").matches && !open;
     byId("sidebar").classList.toggle("is-open", open);
     byId("backdrop").hidden = !open;
     byId("menu-button").setAttribute("aria-expanded", String(open));
+    byId("mobile-shortcuts").inert = open;
     document.body.classList.toggle("drawer-open", open);
     if (window.matchMedia("(max-width: 760px)").matches) byId("main-content").inert = open;
     if (open) byId("sidebar").querySelector("button:not([disabled]), a[href]")?.focus();
@@ -1461,6 +1479,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         registeredViews["analytics-through"].initialize(context);
       }
       if (hasPermission("crm.view")) registeredViews.crm.initialize(context);
+      setDrawer(false);
       setView(viewFromHash());
       registeredViews.sites.initialize(context);
       if (hasPermission("account.view")) registeredViews.accounts.initialize(context);
@@ -1523,6 +1542,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     navigate(link.dataset.viewLink);
     if (window.matchMedia("(max-width: 760px)").matches) setDrawer(false);
   });
+  byId("mobile-more").addEventListener("click", () => setDrawer(true));
   byId("menu-button").addEventListener("click", () => setDrawer(!drawerOpen, drawerOpen));
   byId("backdrop").addEventListener("click", () => setDrawer(false, true));
   byId("sidebar").addEventListener("keydown", (event) => {
@@ -1553,9 +1573,11 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     }
   });
   window.addEventListener("hashchange", () => {
+    if (drawerOpen) setDrawer(false);
     if (!redirectEditorHash()) setView(viewFromHash(), true);
   });
   window.addEventListener("resize", () => {
+    byId("sidebar").inert = window.matchMedia("(max-width: 760px)").matches && !drawerOpen;
     if (!window.matchMedia("(max-width: 760px)").matches) {
       byId("main-content").inert = false;
       if (drawerOpen) setDrawer(false);

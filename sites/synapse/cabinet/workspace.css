@@ -1,0 +1,89 @@
+/* Shared finish for the existing cabinet: readable controls and compact surfaces. */
+:root { --bg:#0d1117; --surface:#151b23; --surface-soft:#1b2430; --text:#edf2f7; --muted:#a7b3c3; --line:#2b3543; --accent:#a8cfff; --sidebar:248px; --cabinet-shadow:none; }
+body { background:var(--bg); font-family:"Segoe UI",system-ui,sans-serif; }
+.sidebar { background:var(--surface); padding:18px 12px; }
+.main { padding:clamp(20px,3vw,40px); }
+.content-header h1, .home-header h1 { font-size:clamp(26px,3vw,36px); letter-spacing:-.035em; }
+.card { border-radius:16px; box-shadow:none; }
+.view-panel button, .view-panel input, .view-panel select, .view-panel textarea { font:inherit; }
+.view-panel button:not(.client-card):not(.home-settings-trigger) { min-height:44px; border:1px solid var(--line); border-radius:10px; padding:9px 14px; color:var(--text); background:var(--surface-soft); cursor:pointer; }
+.view-panel button:disabled { opacity:.55; cursor:not-allowed; }
+.view-panel input:not([type=checkbox]):not([type=radio]), .view-panel select, .view-panel textarea { min-height:44px; max-width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; color:var(--text); background:var(--bg); }
+.view-panel input[type=checkbox], .view-panel input[type=radio] { width:18px; height:18px; min-height:18px; accent-color:var(--accent); }
+.view-panel .primary-action, .view-panel button[type=submit] { background:#a8cfff!important; color:#0d203a!important; border-color:#a8cfff!important; font-weight:600; }
+.view-panel a { color:var(--accent); text-underline-offset:3px; }
+.view-panel .danger { color:#ffa8a8!important; background:transparent!important; }
+.crm-toolbar { padding:0 0 18px; border:0; background:transparent; }
+.crm-filters { padding:0; border:0; background:transparent; }
+.client-list-layout { grid-template-columns:minmax(0,1fr); }
+.client-tools-body { grid-template-columns:minmax(0,1fr) auto; align-items:start; }
+.client-field-picker { grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); }
+.client-tools .crm-entity-toolbar { grid-column:1/-1; display:flex; flex-wrap:wrap; }
+.client-tools .crm-entity-toolbar select { width:auto; }
+.client-list-heading { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:0 0 16px; }
+.client-list-heading input { flex:1 1 260px; min-width:0; }
+.client-list-heading p { margin:0; }
+.client-card { background:var(--surface); padding:18px 20px; }
+.client-card h2 { font-size:19px; }
+.client-card dl { gap:10px 24px; }
+.client-card-field dt { font-size:12px; }
+.client-card-actions { flex-wrap:wrap; }
+.client-summary-grid { align-items:start; }
+.client-summary-list a { display:block; }
+.company-links-summary { padding-top:16px; border-top:1px solid var(--line); }
+.company-links-summary a { font-size:14px; }
+.module-guide { margin:0 0 22px; border:1px solid var(--line); border-radius:12px; background:var(--surface); }
+.module-guide summary { padding:14px 18px; cursor:pointer; font-size:14px; }
+.module-guide-caption { margin-left:14px; color:var(--muted); font-size:12px; }
+.module-guide ol { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:0; padding:0 18px 18px; list-style:none; counter-reset:steps; }
+.module-guide li { counter-increment:steps; padding:14px; border-radius:10px; background:var(--surface-soft); font-size:14px; overflow-wrap:anywhere; }
+.module-guide li::before { content:counter(steps); display:grid; place-items:center; width:26px; height:26px; margin-bottom:12px; border:1px solid var(--line); border-radius:50%; color:var(--accent); }
+.module-guide footer { display:flex; align-items:center; justify-content:space-between; gap:18px; margin:0; padding:0 18px 16px; font-size:13px; }
+.module-guide footer p { max-width:680px; color:var(--muted); margin:0; }
+.module-guide footer a { flex-shrink:0; }
+.mobile-shortcuts { display:none; }
+.lead-details { scroll-margin-top:85px; }
+.lead-details header { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.lead-details dd { margin:0 0 12px; overflow-wrap:anywhere; }
+.lead-details details { margin-top:18px; }
+@media(min-width:761px){
+  #crm-content .crm-table { table-layout:fixed; min-width:0; width:100%; }
+  #crm-content .crm-table th, #crm-content .crm-table td { white-space:normal; overflow-wrap:anywhere; padding:10px 7px; font-size:13px; }
+  #crm-content .crm-table th:nth-child(2) { width:20%; }
+  #crm-content .crm-table input, #crm-content .crm-table select, #crm-content .crm-table button { min-width:0; max-width:100%; width:100%; padding:8px 6px; }
+  #crm-content .crm-table th:nth-child(4), #crm-content .crm-table th:nth-child(5) { width:9%; }
+}
+@media(max-width:1000px){ .module-guide ol{grid-template-columns:repeat(2,minmax(0,1fr));} }
+@media(max-width:760px){
+  .main { padding:20px 14px calc(90px + env(safe-area-inset-bottom)); }
+  .mobile-bar { grid-template-columns:44px minmax(0,1fr) 40px; background:var(--surface); }
+  .mobile-shortcuts { display:flex; position:fixed; bottom:0; left:0; right:0; z-index:36; padding:6px 8px calc(6px + env(safe-area-inset-bottom)); background:var(--surface); border-top:1px solid var(--line); gap:4px; }
+  .mobile-shortcuts a, .mobile-shortcuts button { flex:1; display:grid; place-items:center; min-width:0; min-height:48px; padding:8px 3px; color:var(--muted); font:500 12px/1.2 "Segoe UI",sans-serif; text-decoration:none; border:0; background:transparent; border-radius:9px; }
+  .mobile-shortcuts [aria-current=page] { color:var(--accent); background:#213148; }
+  body.drawer-open .mobile-shortcuts { visibility:hidden; }
+  .card { padding:16px; }
+  .client-list-heading input, .client-list-heading button { width:100%; }
+  .client-tools-body { display:flex; flex-direction:column; align-items:stretch; }
+  .client-field-picker { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .client-card { padding:16px; }
+  .module-guide-caption { display:block; margin:5px 0 0; }
+  .module-guide ol { grid-template-columns:1fr; }
+  .module-guide li { display:flex; align-items:center; gap:12px; }
+  .module-guide li::before { flex:0 0 26px; margin:0; }
+  .module-guide footer { align-items:start; flex-direction:column; }
+  #crm-content .crm-table-wrap { overflow:visible; }
+  #crm-content .crm-table, #crm-content .crm-table tbody { display:block; min-width:0; width:100%; }
+  #crm-content .crm-table thead { display:none; }
+  #crm-content .crm-table tr { display:block; padding:12px; margin:0 0 12px; border:1px solid var(--line); border-radius:12px; background:var(--surface); }
+  #crm-content .crm-table td { display:grid; grid-template-columns:80px minmax(0,1fr); align-items:center; gap:8px; padding:5px 0; border:0; white-space:normal; overflow-wrap:anywhere; }
+  #crm-content .crm-table td::before { content:attr(data-label); color:var(--muted); font-size:12px; }
+  #crm-content .crm-table input, #crm-content .crm-table select { width:100%; min-width:0; }
+  .crm-lead-button { text-align:left; }
+}
+
+.view-panel h1, .view-panel h2, .view-panel h3 { font-family:inherit; }
+.view-panel h1 { font-weight:600; }
+.view-panel .card { background:var(--surface); }
+.client-extra { border-top:1px solid var(--line); margin-top:8px; padding-top:12px; }
+.client-extra summary { cursor:pointer; padding:10px 0; color:var(--muted); }
+.client-extra .crm-form { padding-top:12px; }

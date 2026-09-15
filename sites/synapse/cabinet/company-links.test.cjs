@@ -99,7 +99,8 @@ test('actual save submits all nine company links when an existing company has so
     form.elements.code.value = 'avokado'; form.elements.name.value = 'Авокадо';
     for (const input of form.named) input.value = 'https://example.test/' + input.dataset.companySocial;
     const error = {hidden: true, textContent: ''};
-    form.querySelector = selector => selector === '[role=alert]' ? error : null;
+    const submit = {disabled: false};
+    form.querySelector = selector => selector === '[role=alert]' ? error : submit;
     let prevented = false;
     await page.forms.saveEntityForm({currentTarget: form, preventDefault() { prevented = true; }}, 'crm-companies', record);
     assert.equal(prevented, true);
