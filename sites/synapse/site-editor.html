@@ -1106,8 +1106,11 @@
   async function loadData() {
     data = await apiFetch(API); dirty = false; saveBtn.textContent = 'Сохранить';
     const prepared = window.SubscriptionPromoContent?.upgrade(data, siteId) || data;
-    if (prepared !== data) { data = prepared; markDirty(); }
-    if (await mergeDefaults(data)) { markDirty(); setStatus('На сайте появились новые блоки — нажмите «Сохранить», чтобы их тексты попали в документ'); }
+    const promoUpdated = prepared !== data;
+    if (promoUpdated) { data = prepared; markDirty(); }
+    // This campaign save changes only promo; unrelated historical defaults can
+    // still be merged by an ordinary subsequent editor load.
+    if (!promoUpdated && await mergeDefaults(data)) { markDirty(); setStatus('На сайте появились новые блоки — нажмите «Сохранить», чтобы их тексты попали в документ'); }
     render();
   }
 
