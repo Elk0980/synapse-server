@@ -194,7 +194,7 @@ const initializeEmailSettings = async (context) => {
   const applySettings = (data) => {
     if (!data || typeof data !== "object" || typeof data.passwordConfigured !== "boolean") throw new Error("invalid email settings");
     saved = {
-      provider: ["yandex", "mailru"].includes(data.provider) ? data.provider : "yandex",
+      provider: ["yandex", "mailru", "gmail"].includes(data.provider) ? data.provider : "yandex",
       user: typeof data.user === "string" ? data.user : "",
       alviRecipient: typeof data.alviRecipient === "string" ? data.alviRecipient : "",
       avokadoRecipient: typeof data.avokadoRecipient === "string" ? data.avokadoRecipient : "",
