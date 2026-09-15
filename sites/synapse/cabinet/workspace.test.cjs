@@ -24,6 +24,7 @@ test('new client form submits entered details to the current company and opens t
   const {dom,w,calls,api} = setupClient();
   await api.renderEntityForm('crm-contacts', null);
   const form = w.document.querySelector('form');
+  form.elements.companyMode.value='none';form.elements.companyMode.dispatchEvent(new w.Event('change'));
   form.elements.name.value = 'Анна'; form.elements.phone.value = '+79990000000'; form.elements.notes.value = 'Перезвонить вечером';
   await api.saveEntityForm({preventDefault(){},currentTarget:form}, 'crm-contacts', null);
   assert.equal(calls.length,1); assert.equal(calls[0].path,'/contacts');
@@ -47,7 +48,7 @@ test('failed saves retain the form, display an error and allow retry; concurrent
   let fail;
   const {dom,w,calls,api} = setupClient(()=>new Promise((_,reject)=>{fail=reject;}));
   await api.renderEntityForm('crm-contacts', null);
-  const form = w.document.querySelector('form'); form.elements.name.value='Анна';
+  const form = w.document.querySelector('form'); form.elements.name.value='Анна';form.elements.companyMode.value='none';form.elements.companyMode.dispatchEvent(new w.Event('change'));
   const event = {preventDefault(){}, currentTarget:form};
   const first = api.saveEntityForm(event,'crm-contacts',null);
   await api.saveEntityForm(event,'crm-contacts',null); assert.equal(calls.length,1);
@@ -84,12 +85,13 @@ test('every working cabinet view has four setup steps, without invented connecti
 });
 
 test('new person and company are submitted together in one POST', async()=>{
-  const {dom,w,calls,api}=setupClient(); await api.renderEntityForm('crm-contacts',null);
-  const form=w.document.querySelector('form');form.elements.name.value='Анна';
+  const {dom,w,calls,api}=setupClient(async()=>({id:42,linkedCompanyId:7})); await api.renderEntityForm('crm-contacts',null);
+  const form=w.document.querySelector('form');assert.equal(form.elements.companyMode.value,'new');assert.equal(form.elements.continueToDeal.checked,true);form.elements.name.value='Анна';
   form.elements.companyMode.value='new';form.elements.companyMode.dispatchEvent(new w.Event('change'));
   form.elements.newCompanyName.value='Компания Анны';form.elements.newCompanyCity.value='Иркутск';form.elements.companyRole.value='Собственник';
   await api.saveEntityForm({preventDefault(){},currentTarget:form},'crm-contacts',null);
   assert.equal(calls.length,1);assert.deepEqual(JSON.parse(calls[0].options.body).companyLink,{newCompany:{name:'Компания Анны',city:'Иркутск'},role:'Собственник'});
+  assert.equal(w.location.hash,'#deals/new?companyId=7&contactId=42');
   dom.window.close();
 });
 

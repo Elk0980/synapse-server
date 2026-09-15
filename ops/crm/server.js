@@ -1,3 +1,4 @@
+const {createCommercial}=require('./commercial');
 'use strict';
 
 const http = require('node:http');
@@ -1941,7 +1942,7 @@ function createContactWithCompany(contact, link, scope) {
     const addLink = (companyId,relationRole) => db.prepare('INSERT INTO contact_companies (created_at,updated_at,contact_id,company_id,role) VALUES (?,?,?,?,?)').run(now,now,id,companyId,relationRole);
     if(scope && scope.id !== targetId) addLink(scope.id,'клиент');
     addLink(targetId,role);
-    return {...serializeEntity(config,entityRow(config,id)),...relationRows('contacts',id,scope)};
+    return {...serializeEntity(config,entityRow(config,id)),...relationRows('contacts',id,scope),linkedCompanyId:targetId};
   });
 }
 
@@ -2389,7 +2390,9 @@ function taskSummary(url) {
   return summary;
 }
 
-const dealOrders = createDealOrders({db,fail,getStages:pipelineStages,getPipelines:pipelineList,setStages:(body,pipeline)=>replacePipelineStages(body,pipeline,false)});
+const dealOrders = createDealOrders({db,fail,getStages:pipelineStages,getPipelines:pipelineList,setStages:(body,pipeline)=>replacePipelineStages(body,pipeline,false),getCatalog:()=>commercial.catalog()});
+const commercial=createCommercial({db,fail});
+
 async function route(request, response) {
   const url = new URL(request.url, 'http://localhost');
   const cors = corsHeaders(request);
@@ -2401,16 +2404,30 @@ async function route(request, response) {
   const publicPost = request.method === 'POST' && ['/leads', '/events'].includes(url.pathname);
   if (!publicPost) requireApiKey(request);
 
+  if(url.pathname==='/catalog'||url.pathname==='/finances'||/^\/finances\/\d+$/.test(url.pathname)){
+    const actor=crmIdentity(request);if(actor?.role!=='owner')fail(403,'Коммерческие условия и финансы доступны владельцу');
+    let result;
+    if(url.pathname==='/catalog'&&request.method==='GET')result=commercial.catalog();
+    else if(url.pathname==='/catalog'&&request.method==='PUT')result=commercial.save(await readJson(request));
+    else if(url.pathname==='/finances'&&request.method==='GET'){
+      const today=new Date().toISOString().slice(0,10);result=commercial.finance(url.searchParams.get('companyCode'),url.searchParams.get('from')||today.slice(0,7)+'-01',url.searchParams.get('to')||today,Math.max(0,parseInt(url.searchParams.get('offset')||'0',10)||0));
+    }else if(request.method==='POST'&&url.pathname==='/finances')result=commercial.saveEntry(null,url.searchParams.get('companyCode'),await readJson(request),actor);
+    else if(request.method==='PATCH'&&/^\/finances\/\d+$/.test(url.pathname))result=commercial.saveEntry(entityId(url.pathname.split('/')[2]),url.searchParams.get('companyCode'),await readJson(request),actor);
+    else fail(404,'Раздел не найден');
+    return send(response,200,result,{...cors,'cache-control':'no-store'});
+  }
   if(url.pathname==='/deals' || url.pathname.startsWith('/deals/')) {
     const scope=url.searchParams.get('companyCode');
     if(scope) scopedCompany(scope);
     const pipeline=url.searchParams.get('pipeline')||'sale';pipelineRow(pipeline);
     const match=url.pathname.match(/^\/deals\/(\d+)(?:\/(contacts|print))?$/);
+    const offerMatch=url.pathname.match(/^\/deals\/(\d+)\/offer$/);
     const contactMatch=url.pathname.match(/^\/deals\/(\d+)\/contacts\/(\d+)$/);
     const fileMatch=url.pathname.match(/^\/deals\/(\d+)\/files(?:\/([a-f0-9-]+))?$/);
     const offset=Math.max(0,Math.min(1000000,Number.parseInt(url.searchParams.get('offset')||'0',10)||0));
     let result,status=200;
-    if(url.pathname==='/deals/criteria' && request.method==='GET')result=dealOrders.rules(scope,pipeline);
+    if(offerMatch&&request.method==='POST'){const actor=crmIdentity(request);if(actor?.role!=='owner')fail(403,'Предложения из каталога добавляет владелец');result=dealOrders.offer(entityId(offerMatch[1]),scope,await readJson(request),actor,pipeline);}
+    else if(url.pathname==='/deals/criteria' && request.method==='GET')result=dealOrders.rules(scope,pipeline);
     else if(url.pathname==='/deals/criteria' && request.method==='PUT')result=dealOrders.saveRules(scope,pipeline,await readJson(request),crmIdentity(request));
     else if(fileMatch && !fileMatch[2] && request.method==='POST')result=dealOrders.upload(entityId(fileMatch[1]),scope,await readJson(request,9*1024*1024));
     else if(fileMatch?.[2] && request.method==='GET'){
