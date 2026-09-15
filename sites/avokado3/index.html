@@ -23,7 +23,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Manrope:wght@400;500;700&family=Cormorant:wght@500;600&family=Marck+Script&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Manrope:wght@400;500;600;700&family=Cormorant:wght@500;600&family=Marck+Script&display=swap" rel="stylesheet">
 <script>document.documentElement.classList.add('js');</script>
 <style>
   #page-loader{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:#0e1410;opacity:0;pointer-events:none;transition:opacity 150ms ease}
@@ -714,6 +714,8 @@ body>#cta{z-index:65}
 <link rel="stylesheet" href="work-steps.css?v=20260915-pairs">
 <link rel="stylesheet" href="results-gallery.css?v=20260915-framed">
 <link rel="stylesheet" href="music-player.css?v=20260915">
+<link rel="stylesheet" href="mobile-foundation.css?v=20260915-mobile">
+<link rel="stylesheet" href="mobile-method.css?v=20260915-mobile">
 </head>
 <body>
 <video class="global-video-bg" id="herovid" muted playsinline preload="auto" poster="/assets/hero-intro-poster.jpg" aria-hidden="true">
@@ -923,7 +925,8 @@ body>#cta{z-index:65}
 </dialog>
 <script src="results-gallery.js?v=20260915-framed"></script>
 <script src="work-steps.js?v=20260915-headroom"></script>
-<script src="method-reveal.js?v=20260915-pairs"></script>
+<script src="mobile-method.js?v=20260915-mobile"></script>
+<script src="method-reveal.js?v=20260915-mobile"></script>
 <script>
 (function(){var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;var runway=document.querySelector('.runway-figure');if(runway){if(reduce)runway.classList.add('on');else new IntersectionObserver(function(e){runway.classList.toggle('on',e[0].isIntersecting)},{threshold:.25}).observe(runway)}var method=document.querySelector('.method-scroll');var scenes=[].slice.call(document.querySelectorAll('.method-scene'));function updateScenes(){if(!method)return;if(window.AvokadoMethod && window.AvokadoMethod.update(method,scenes))return;var rect=method.getBoundingClientRect(), span=method.offsetHeight-innerHeight;var progress=Math.max(0,Math.min(.999,-rect.top/span));var index=Math.min(scenes.length-1,Math.floor(progress*scenes.length));scenes.forEach(function(scene,i){scene.classList.toggle('active',i===index)})}function fitMethod(){
 if(!method)return;
@@ -1004,57 +1007,6 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
   })();
 
   // Минимальный JS: reveal-блоки, липкая CTA после хиро, фон шапки, ступени зума.
-
-  // Атрибуция: ловим UTM на входе, храним визит и пробрасываем метки в запись Yclients.
-  // Это закрывает главную дыру Авокадо — потерю источника при записи.
-  (function(){
-    try{
-      var KEY = 'avk_src';
-      var q = new URLSearchParams(location.search);
-      var utmKeys = ['utm_source','utm_medium','utm_campaign','utm_content','utm_term'];
-      var found = {};
-      utmKeys.forEach(function(k){ if(q.get(k)) found[k] = q.get(k); });
-
-      if(Object.keys(found).length){
-        found.first_seen = new Date().toISOString();
-        found.landing = location.pathname;
-        try{ localStorage.setItem(KEY, JSON.stringify(found)); }catch(e){}
-      }
-
-      var stored = {};
-      try{ stored = JSON.parse(localStorage.getItem(KEY) || '{}'); }catch(e){}
-      // если UTM нет — фиксируем реферера как источник
-      if(!stored.utm_source && document.referrer && document.referrer.indexOf(location.host) === -1){
-        try{
-          var host = new URL(document.referrer).hostname.replace('www.','');
-          stored = {utm_source: host, utm_medium: 'referral', first_seen: new Date().toISOString()};
-          localStorage.setItem(KEY, JSON.stringify(stored));
-        }catch(e){}
-      }
-
-      if(stored.utm_source){
-        document.querySelectorAll('a[href*="yclients.com"]').forEach(function(a){
-          try{
-            var u = new URL(a.href);
-            utmKeys.forEach(function(k){ if(stored[k]) u.searchParams.set(k, stored[k]); });
-            // Не смешиваем точки входа: у каждой CTA остаётся собственная метка.
-            if(a.dataset.entryPoint) u.searchParams.set('utm_content', a.dataset.entryPoint);
-            a.href = u.toString();
-          }catch(e){}
-        });
-      }
-
-      // события для будущего подключения к аналитике ЛК Synapse
-      window.dataLayer = window.dataLayer || [];
-      document.querySelectorAll('a[href*="yclients.com"], a[href^="tel:"], a[href*="wa.me"], a[href*="t.me"]').forEach(function(a){
-        a.addEventListener('click', function(){
-          var type = a.href.indexOf('yclients') > -1 ? 'booking_click'
-                   : a.href.indexOf('tel:') === 0 ? 'phone_click' : 'messenger_click';
-          window.dataLayer.push({event: type, source: stored.utm_source || 'direct', label: (a.innerText||'').trim().slice(0,60)});
-        });
-      });
-    }catch(e){}
-  })();
 
   // Однократные сценарии появления для содержательных секций.
   (function(){
@@ -1515,5 +1467,6 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
 <script src="contact-route.js?v=20260915-contacts"></script>
 <script src="scroll-controls.js?v=20260915-all-screens"></script>
 <script src="music-player.js?v=20260915"></script>
+<script src="attribution.js?v=20260915-mobile"></script>
 </body>
 </html>
