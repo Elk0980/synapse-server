@@ -62,7 +62,7 @@ function setup({ width = 390, search = '', sourceVisible = true, sourceHidden = 
   html.append(body); body.append(scene);
   const source = new Element('div', 'floating-cta'), row = new Element('div', 'floating-cta__row');
   source.setAttribute('id', 'original-actions'); source.setAttribute('data-edit', 'original-actions');
-  for (const [href, label] of [['#quiz', 'Подобрать ритуал'], ['#contacts', 'Связаться с нами']]) {
+  for (const [href, label] of [['price.html', 'Программы и цены'], ['#contacts', 'Связаться с нами']]) {
     const link = new Element('a', 'floating-cta__button');
     link.setAttribute('href', href); link.setAttribute('id', href.slice(1) + '-cta'); link.setAttribute('data-edit', href);
     link.textContent = label; row.append(link);
@@ -130,8 +130,8 @@ test('one body-level portal preserves the inline actions and clones links withou
   assert.equal(s.panel.parentElement, s.body); assert.equal(s.panel.tagName, 'NAV');
   assert.equal(s.panel.getAttribute('aria-label'), 'Быстрая запись в ALVI');
   assert.equal(s.panel.children[0].className, 'alvi-persistent-actions__content');
-  assert.deepEqual(s.panel.querySelectorAll('a').map(link => link.getAttribute('href')), ['#quiz', '#contacts']);
-  assert.deepEqual(s.panel.querySelectorAll('a').map(link => link.textContent), ['Подобрать ритуал', 'Связаться с нами']);
+  assert.deepEqual(s.panel.querySelectorAll('a').map(link => link.getAttribute('href')), ['price.html', '#contacts']);
+  assert.deepEqual(s.panel.querySelectorAll('a').map(link => link.textContent), ['Программы и цены', 'Связаться с нами']);
   for (const element of s.panel.querySelectorAll('*')) {
     assert.equal(element.getAttribute('id'), null); assert.equal(element.getAttribute('data-edit'), null);
   }
@@ -202,7 +202,7 @@ test('CMS updates keep a focused CTA link intact and apply the latest source aft
   original.textContent = 'Выбрать SPA'; s.mutate(original, { type: 'childList' });
   original.setAttribute('href', '#for-self'); s.mutate(original, { type: 'attributes', attributeName: 'href' });
   assert.equal(s.panel.querySelectorAll('a')[0], focusedLink);
-  assert.equal(focusedLink.textContent, 'Подобрать ритуал');
+  assert.equal(focusedLink.textContent, 'Программы и цены');
   s.documentEvents.focusout(); s.doc.activeElement = s.panel.querySelectorAll('a')[1]; s.advance(0);
   assert.equal(s.panel.querySelectorAll('a')[0], focusedLink, 'tabbing inside the panel must not replace its controls');
   s.documentEvents.focusout(); s.doc.activeElement = null; s.advance(0);

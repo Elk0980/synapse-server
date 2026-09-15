@@ -10,6 +10,33 @@ const groups=[
 function group(cat,it){if(['laser','apparatus','manual'].includes(it.direction))return it.direction;if(cat.id.startsWith('laser'))return 'laser';if(cat.id==='apparat'||(cat.id==='first-visit'&&it.id!=='first-3'))return 'apparatus';return 'manual';}
 function safeUrl(value,fallback){try{const u=new URL(value,location.href);return ['https:','http:','tel:'].includes(u.protocol)?u.href:fallback;}catch(e){return fallback;}}
 function contactUrl(full){return full?'index.html#contacts':'#contacts';}
+function certificateButton(value){return !value||value==='Обсудить сертификат'?'Выбрать сертификат':value;}
+function backfillCertificateButton(data){
+ if(data?.certificates?.button!=='Обсудить сертификат')return data;
+ return {...data,certificates:{...data.certificates,button:certificateButton(data.certificates.button)}};
+}
+function removeLegacyBuccal(data){
+ let removed=false;
+ const categories=(data.categories||[]).map(cat=>{
+  if(cat.id!=='face')return cat;
+  const items=(cat.items||[]).filter(it=>{
+   if(it.id!=='face-6'||it.title!=='Буккальный массаж')return true;
+   removed=true;return false;
+  });
+  return items.length===(cat.items||[]).length?cat:{...cat,items};
+ });
+ if(!removed)return data;
+ if(!data.showcase)return {...data,categories};
+ const selected=[...(data.showcase.self||[]),...(data.showcase.two||[])];
+ let replace=categories.some(cat=>cat.id==='face'&&cat.items.some(it=>it.id==='face-7'&&it.title==='Хиропластический массаж лица'))&&!selected.includes('face-7');
+ const showcase={...data.showcase};
+ for(const block of ['self','two'])if(Array.isArray(showcase[block]))showcase[block]=showcase[block].flatMap(id=>{
+  if(id!=='face-6')return [id];
+  if(replace){replace=false;return ['face-7'];}
+  return [];
+ });
+ return {...data,categories,showcase};
+}
 function actions(data,id,full){return `<div class="av-actions"><a class="av-button av-button--gold" data-entry-point="catalog_${esc(id)}" href="${esc(safeUrl(data.links?.book,'#contacts'))}" target="_blank" rel="noopener">Записаться</a><a class="av-button" href="${contactUrl(full)}" data-contact-route data-entry-point="catalog_help_${esc(id)}">Помочь с выбором</a></div>`;}
 function card(data,it,full,direction){
 const photo=it.photo?safeUrl(it.photo,''):'';
@@ -36,7 +63,7 @@ function gift(data,full){
   {label:'Обратная сторона · запись и сайт',alt:'Подарочный сертификат Авокадо — обратная сторона с QR-кодами записи и сайта',photo:certificatePhoto(c.backPhoto,'assets/certificate-avokado-back.svg')}
  ];
  const preview=`<div class="av-certificate-preview" aria-label="Сертификат с двух сторон">${sides.map(side=>`<figure class="av-certificate-side"><img src="${esc(side.photo)}" alt="${esc(side.alt)}" loading="lazy"><figcaption><span>${esc(side.label)}</span><a class="av-certificate-open" href="${esc(side.photo)}" target="_blank" rel="noopener" aria-label="Открыть крупно: ${esc(side.label.toLowerCase())}">Открыть крупно <span aria-hidden="true">↗</span></a></figcaption></figure>`).join('')}</div>`;
- return `<section class="av-direction av-gift" id="certificate"><div><p class="av-kicker">04 · Сертификаты</p><h2>${esc(c.intro||'Подарите время для себя')}</h2><p class="av-intro">${esc(c.note||'Обсудите номинал и оформление сертификата с администратором студии.')}</p>${(c.types||[]).map(t=>`<h3>${esc(t.title)}</h3><p>${esc(t.text)}</p>`).join('')}<a class="av-button av-button--gold" href="${contactUrl(full)}" data-contact-route data-entry-point="catalog_certificate">${esc(c.button||'Обсудить сертификат')}</a></div>${preview}</section>`;
+ return `<section class="av-direction av-gift" id="certificate"><div><p class="av-kicker">04 · Сертификаты</p><h2>${esc(c.intro||'Подарите время для себя')}</h2><p class="av-intro">${esc(c.note||'Обсудите номинал и оформление сертификата с администратором студии.')}</p>${(c.types||[]).map(t=>`<h3>${esc(t.title)}</h3><p>${esc(t.text)}</p>`).join('')}<a class="av-button av-button--gold" href="${contactUrl(full)}" data-contact-route data-entry-point="catalog_certificate">${esc(certificateButton(c.button))}</a></div>${preview}</section>`;
 }
 function render(data,full){const selected=new Set([...(data.showcase?.self||[]),...(data.showcase?.two||[])]);const output=[];for(const [i,g] of groups.entries()){const cats=(data.categories||[]).map(cat=>({...cat,items:(cat.items||[]).filter(it=>group(cat,it)===g.id)})).filter(cat=>cat.items.length);const all=cats.flatMap(c=>c.items);const items=full?all:[...selected].map(id=>all.find(it=>it.id===id)).filter(Boolean);let body;if(full){body=cats.map(cat=>`<div class="av-category" id="${g.id}-${esc(cat.id)}"><h3 class="av-category-title">${esc(cat.title)}</h3>${cat.kind==='table'?table(data,cat,g.id):`<div class="av-grid">${cat.items.map(it=>card(data,it,true,g.id)).join('')}</div>`}</div>`).join('');}else{body=`<div class="av-grid">${items.map(it=>card(data,it,false,g.id)).join('')}</div><a class="av-price-link" href="price.html#${g.id}">Посмотреть весь прайс — ${esc(g.title.toLowerCase())} →</a>`;}
 output.push(`<section class="av-direction" id="${g.id}"><p class="av-kicker">0${i+1} · ${esc(g.title)}${g.id==='apparatus'?' · коррекция фигуры':''}</p><h2>${full?esc(g.title):esc(g.headline)}</h2><p class="av-intro">${esc(g.intro)}</p>${body}</section>`);}
@@ -68,7 +95,7 @@ function backfillComboDescriptions(data){
 }
 function prepare(data,defaults){
  const source=data||defaults;if(!source)return source;
- if(source.catalogVersion>=3)return backfillComboDescriptions(source);
+ if(source.catalogVersion>=3)return removeLegacyBuccal(backfillCertificateButton(backfillComboDescriptions(source)));
  const out=JSON.parse(JSON.stringify(source));
  if((out.catalogVersion||0)<2&&defaults){
  const initial=out.version===1&&out.updatedAt==='2026-09-04T00:00:00.000Z'&&out.blocks?.self?.title==='Авокадо'&&JSON.stringify(out.showcase?.self)===JSON.stringify(['first-1'])&&!(out.showcase?.two||[]).length;
@@ -82,7 +109,7 @@ function prepare(data,defaults){
   it.duration='45 мин';
   for(const key of ['title','card'])if(typeof it[key]==='string')it[key]=it[key].replace(/\b\d+\s*мин(?:ут[аы]?)?\.?/gi,'45 мин');
  }
- out.catalogVersion=3;return backfillComboDescriptions(out);
+ out.catalogVersion=3;return removeLegacyBuccal(backfillCertificateButton(backfillComboDescriptions(out)));
 }
 window.AvokadoCatalog={render,group,prepare};
 const target=document.getElementById('av-catalog-content');if(!target)return;

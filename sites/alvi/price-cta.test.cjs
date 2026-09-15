@@ -70,5 +70,5 @@ test('restored keyboard focus at a footer position is preserved during initializ
   assert.equal(page.classes.has('is-hidden'), false);
   assert.equal(page.document.activeElement, page.first);
   assert.match(html, /href="https:\/\/n1070017\.yclients\.com\/"[^>]*>Записаться/);
-  assert.match(html, /href="https:\/\/t\.me\/\+79246180555"[^>]*>Связаться с нами/);
+  assert.match(html, /href="index\.html#contacts"[^>]*>Связаться с нами/);
 });

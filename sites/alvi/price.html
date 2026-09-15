@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script>if (window.parent !== window && new URLSearchParams(location.search).get('embedded') === '1') document.documentElement.classList.add('alvi-price-embedded');</script>
   <title>Прайс ALVI SPA — Иркутск, Депутатская, 71а</title>
   <meta name="description" content="Полный прайс SPA-салона ALVI в Иркутске: SPA-программы для одного и для двоих, программы для лица, ручные массажи, солярий, сертификаты. Депутатская, 71а.">
   <link rel="canonical" href="https://spaalvi-38.ru/price.html">
@@ -242,10 +243,17 @@
   <link rel="stylesheet" href="price-mobile-nav.css?v=20260910-type-spacing">
   <link rel="stylesheet" href="background-water.css?v=20260910-water-recovery">
   <link rel="stylesheet" href="responsive-foundation.css?v=20260915">
+  <style>
+    html.alvi-price-embedded .price-header { display: none; }
+    .price-page :is(.ps, .pc, .pt tr) { scroll-margin-top: var(--alvi-price-anchor-offset, 24px); }
+    @media (max-width: 56.24rem) {
+      :root:not(.alvi-price-embedded) { --alvi-price-anchor-offset: calc(var(--price-header-height, 4.5rem) + 1rem); }
+    }
+  </style>
   <script src="mobile-performance.js?v=20260910-water-recovery" defer></script>
   <script src="background-water.js?v=20260910-water-recovery" defer></script>
 </head>
-<body class="price-page">
+<body class="price-page" data-full-price>
   <div class="page-water water-surface" aria-hidden="true">
     <div class="water-surface__poster"></div>
     <video class="page-water__video water-surface__video" muted loop playsinline preload="none" tabindex="-1" disablepictureinpicture poster="img/water-poster.jpg">
@@ -324,7 +332,7 @@
         </div>
         <p class="ps__note">Сертификат оформляется на любую сумму или на конкретную программу из этого прайса.</p>
         <div class="pc__actions pc__actions--section">
-          <a class="pc__button pc__button--main" href="https://t.me/+79246180555" target="_blank" rel="noopener">Оформить сертификат</a>
+          <a class="pc__button pc__button--main" href="index.html#contacts">Оформить сертификат</a>
         </div>
       </section>
 
@@ -333,7 +341,7 @@
         <p class="ps__note">Действующие акции и специальные предложения меняются по сезону — уточните у администратора, что актуально сейчас.</p>
         <div class="pc__actions pc__actions--section">
           <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-          <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+          <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
         </div>
       </section>
 
@@ -355,7 +363,7 @@
           <p class="pc__meta"><span class="pc__dur">2 часа 30 мин</span><span class="pc__price">5 600 ₽</span></p>
           <div class="pc__actions">
             <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
           </div>
         </article>
 
@@ -376,7 +384,7 @@
           <p class="pc__meta"><span class="pc__dur">2 часа 30 мин</span><span class="pc__price">5 600 ₽</span></p>
           <div class="pc__actions">
             <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
           </div>
         </article>
 
@@ -397,7 +405,7 @@
           <p class="pc__meta"><span class="pc__dur">3 часа</span><span class="pc__price">6 800 ₽</span></p>
           <div class="pc__actions">
             <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
           </div>
         </article>
 
@@ -419,7 +427,7 @@
           <p class="pc__meta"><span class="pc__dur">3 часа</span><span class="pc__price">6 800 ₽</span></p>
           <div class="pc__actions">
             <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
           </div>
         </article>
 
@@ -441,7 +449,7 @@
           <p class="pc__meta"><span class="pc__dur">3 часа</span><span class="pc__price">6 500 ₽</span></p>
           <div class="pc__actions">
             <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
           </div>
         </article>
 
@@ -460,7 +468,7 @@
           <p class="pc__meta"><span class="pc__dur">2 часа</span><span class="pc__price">4 600 ₽</span></p>
           <div class="pc__actions">
             <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
           </div>
         </article>
 
@@ -481,7 +489,7 @@
           <p class="pc__meta"><span class="pc__dur">3 часа</span><span class="pc__price">6 300 ₽</span></p>
           <div class="pc__actions">
             <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
           </div>
         </article>
 
@@ -500,7 +508,7 @@
           <p class="pc__meta"><span class="pc__dur">2 часа</span><span class="pc__price">4 800 ₽</span></p>
           <div class="pc__actions">
             <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
           </div>
         </article>
 
@@ -517,7 +525,7 @@
           <p class="pc__meta"><span class="pc__dur">1 час 30 мин</span><span class="pc__price">3 500 ₽</span></p>
           <div class="pc__actions">
             <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
           </div>
         </article>
 
@@ -540,7 +548,7 @@
           <p class="pc__meta"><span class="pc__dur">4 часа</span><span class="pc__price">8 900 ₽</span></p>
           <div class="pc__actions">
             <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
           </div>
         </article>
 
@@ -562,7 +570,7 @@
           <p class="pc__meta"><span class="pc__dur">4 часа</span><span class="pc__price">8 900 ₽</span></p>
           <div class="pc__actions">
             <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
           </div>
         </article>
       </section>
@@ -585,7 +593,7 @@
           <p class="pc__meta"><span class="pc__dur">2 часа 30 мин</span><span class="pc__price">10 900 ₽</span></p>
           <div class="pc__actions">
             <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
           </div>
         </article>
 
@@ -603,7 +611,7 @@
           <p class="pc__meta"><span class="pc__dur">2 часа</span><span class="pc__price">8 900 ₽</span></p>
           <div class="pc__actions">
             <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
           </div>
         </article>
 
@@ -625,7 +633,7 @@
           <p class="pc__meta"><span class="pc__dur">3 часа</span><span class="pc__price">13 600 ₽</span></p>
           <div class="pc__actions">
             <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
           </div>
         </article>
 
@@ -648,7 +656,7 @@
           <p class="pc__meta"><span class="pc__dur">4 часа</span><span class="pc__price">17 600 ₽</span></p>
           <div class="pc__actions">
             <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
           </div>
         </article>
 
@@ -665,7 +673,7 @@
           <p class="pc__meta"><span class="pc__dur">1 час</span><span class="pc__price">4 600 ₽</span></p>
           <div class="pc__actions">
             <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
           </div>
         </article>
 
@@ -682,7 +690,7 @@
           <p class="pc__meta"><span class="pc__dur">1 час 30 мин</span><span class="pc__price">6 900 ₽</span></p>
           <div class="pc__actions">
             <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
           </div>
         </article>
       </section>
@@ -703,7 +711,7 @@
           <p class="pc__meta"><span class="pc__dur">1 час 20 мин</span><span class="pc__price">3 500 ₽</span></p>
           <div class="pc__actions">
             <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
           </div>
         </article>
 
@@ -720,7 +728,7 @@
           <p class="pc__meta"><span class="pc__dur">1 час 10 мин</span><span class="pc__price">2 900 ₽</span></p>
           <div class="pc__actions">
             <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
           </div>
         </article>
 
@@ -738,7 +746,7 @@
           <p class="pc__meta"><span class="pc__dur">1 час 10 мин</span><span class="pc__price">3 600 ₽</span></p>
           <div class="pc__actions">
             <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-            <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+            <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
           </div>
         </article>
       </section>
@@ -774,7 +782,7 @@
         </div>
         <div class="pc__actions pc__actions--section">
           <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-          <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+          <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
         </div>
       </section>
 
@@ -793,7 +801,7 @@
         </div>
         <div class="pc__actions pc__actions--section">
           <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-          <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+          <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
         </div>
       </section>
 
@@ -816,7 +824,7 @@
         </div>
         <div class="pc__actions pc__actions--section">
           <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-          <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+          <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
         </div>
       </section>
 
@@ -836,7 +844,7 @@
         </div>
         <div class="pc__actions pc__actions--section">
           <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-          <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+          <a class="pc__button" href="index.html#contacts">Помочь с выбором</a>
         </div>
       </section>
     </div>
@@ -855,12 +863,13 @@
   <div class="floating-cta">
     <div class="floating-cta__row">
       <a class="floating-cta__button" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-      <a class="floating-cta__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Связаться с нами</a>
+      <a class="floating-cta__button" href="index.html#contacts">Связаться с нами</a>
     </div>
     <p class="floating-cta__note">отвечаем в течение 2 минут</p>
   </div>
 
   <script src="price-render.js?v=20260910-responsive-tables"></script>
+  <script src="price-navigation.js?v=20260915-price-flow"></script>
   <script>
     // Прайс рендерится из data/price.json (редактируется в кабинете Synapse).
     // Статичная разметка выше — запасной вариант: если данных нет, страница остаётся как есть.
@@ -874,10 +883,7 @@
       nav.innerHTML = AlviPrice.renderNav(data);
       content.innerHTML = AlviPrice.renderSections(data);
       initNav();
-      if (location.hash) {
-        const el = document.getElementById(location.hash.slice(1));
-        if (el) el.scrollIntoView();
-      }
+      document.dispatchEvent(new Event('alvi:price-ready'));
     }
     function initNav() {
       const links = [...document.querySelectorAll('.pnav a')];
@@ -925,6 +931,7 @@
     })();
     hydratePrice();
   </script>
-  <script src="price-mobile-nav.js?v=20260910-sticky-ritual"></script>
+  <script src="price-mobile-nav.js?v=20260915-price-flow"></script>
+  <script src="contact-route.js?v=20260915-price-flow"></script>
 </body>
 </html>
