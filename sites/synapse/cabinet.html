@@ -847,8 +847,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         <select id="sites-state" aria-label="Состояние"><option value="">Все</option>
           <option value="active">Активен</option><option value="draft">Черновик</option>
           <option value="published">Опубликован</option></select>
+        <button id="refresh-sites" type="button">Обновить список</button>
         <button id="create-site" type="button">Создать сайт</button>
       </div>
+      <p id="sites-refresh-status" class="site-refresh-status" role="status"></p>
       <div id="sites-content" aria-live="polite">Загрузка…</div>
     </section>
     <section class="view-panel" id="chat-view" data-view="chat" hidden>
@@ -958,7 +960,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260911-sapphire-1";
+  window.SB_CABINET_ASSET_VERSION = "20260915-published-sites";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
@@ -966,7 +968,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   };
   const cabinetAssets = ["home", "tasks", "leads", "deals", "clients", "chat", "hugh", "analytics",
     "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account", "trademarks"];
-  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat", "hugh", "settings", "trademarks"];
+  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat", "hugh", "settings", "trademarks", "sites"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join(""));
