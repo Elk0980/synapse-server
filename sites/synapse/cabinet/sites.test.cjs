@@ -131,6 +131,8 @@ test('opening the view fetches fresh data each time; initialize does not prefetc
 
 test('an older filter response cannot overwrite the newer result', async () => {
   const f = fixture(); f.initialize();
+  f.context.selectedProjectId='alvi';
+  f.context.chooseProject=code=>{f.context.selectedProjectId=code;f.render();};
   f.byId('sites-company').value = 'alvi'; f.render();
   f.byId('sites-company').value = 'avokado'; f.byId('sites-company').emit('change');
   assert.match(f.requests[0].url, /companyCode=alvi/); assert.match(f.requests[1].url, /companyCode=avokado/);

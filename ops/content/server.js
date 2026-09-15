@@ -429,7 +429,7 @@ async function proxyCrm(request, response, url, cors) {
   if (/^\/(?:email-campaigns|email-subscriptions)(?:\/|$)/.test(crmPath) && identity.role !== 'owner') {
     fail(403, 'Рассылки доступны только владельцу');
   }
-  if (['/email-status', '/email-settings', '/email-settings/check'].includes(crmPath) && identity.role !== 'owner') {
+  if (['/company-email', '/email-status', '/email-settings', '/email-settings/check'].includes(crmPath) && identity.role !== 'owner') {
     fail(403, 'Настройки и диагностика почты доступны только владельцу');
   }
   const analyticsReadPath = new Set([
@@ -503,6 +503,10 @@ async function proxyCrm(request, response, url, cors) {
     if (!requestedCompany || ownerScope?.toLowerCase() !== requestedCompany.toLowerCase()) {
       fail(403, 'Карточка компании принадлежит другой базе');
     }
+  }
+  if (leadMatch && url.searchParams.get('companyCode')) {
+    const leadCompany=await crmLeadCompany(leadMatch[1]);
+    if(leadCompany?.toLowerCase()!==url.searchParams.get('companyCode').toLowerCase()) fail(404,'Заявка не найдена в выбранной компании');
   }
   if (identity.role !== 'owner' && leadMatch) {
     const leadCompany = await crmLeadCompany(leadMatch[1]);

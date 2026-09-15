@@ -35,14 +35,14 @@ async function fixture({provider = 'gmail', role = 'owner', checkError} = {}) {
     if (url === '/content/crm/email-settings') return store.getPublic();
     throw new Error('Unexpected fixture route');
   };
-  await views.settings.render(null, {identity: {role, csrfToken: 'fixture-csrf'}, byId: id => d.getElementById(id), apiJson});
+  await views["system-settings"].render(null, {identity: {role, csrfToken: 'fixture-csrf'}, byId: id => d.getElementById(id), apiJson});
   return {w, d, store, calls, connections, errors,
     field: id => d.getElementById(`email-${id}`),
     settle: async () => {for (let i = 0; i < 5; i++) await tick();},
     close: () => {w.close();db.close();}};
 }
 
-test('actual settings UI loads Google and both existing providers and saves recipient edits without exposing or replacing the password', async () => {
+test('actual settings UI loads Google and both existing providers and preserves company recipients without exposing or replacing the password', async () => {
   for (const provider of ['gmail', 'yandex', 'mailru']) {
     const f = await fixture({provider});
     try {
@@ -51,14 +51,16 @@ test('actual settings UI loads Google and both existing providers and saves reci
       assert.equal(f.field('password').value, '');
       assert.equal(f.field('password').required, false);
       assert.equal(f.connections.length, 0, 'opening settings must not contact SMTP');
-      f.field('alvi-recipient').value = 'updated@example.test';
-      f.field('alvi-recipient').dispatchEvent(new f.w.Event('input', {bubbles:true}));
+      assert.equal(f.field('alvi-recipient'),null);
+      assert.equal(f.field('avokado-recipient'),null);
       f.d.getElementById('email-settings-save').click();await f.settle();
       const saved = f.calls.find(call => call.method === 'PUT');
       assert.ok(saved);
       assert.equal(JSON.parse(saved.body).provider, provider);
       assert.equal(Object.hasOwn(JSON.parse(saved.body), 'password'), false);
-      assert.equal(f.store.getPublic().alviRecipient, 'updated@example.test');
+      assert.equal(f.store.getPublic().alviRecipient, 'alvi@example.test');
+      assert.equal(f.store.getPublic().avokadoRecipient, 'avokado@example.test');
+      assert.equal(Object.hasOwn(JSON.parse(saved.body),'alviRecipient'),false);
       assert.equal(f.store.getEnvironment().LEADS_SMTP_PASSWORD, password);
       assert.equal(f.field('password').value, '');
       assert.equal(f.connections.length, 0);

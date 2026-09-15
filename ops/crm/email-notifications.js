@@ -26,11 +26,18 @@ function notificationError(code, message) {
   return Object.assign(new Error(message), {code});
 }
 
+function companyRecipient(environment, code) {
+  const raw=String(code||'synapse-business').toLowerCase();
+  const company=raw==='synapse'?'synapse-business':raw;
+  if(Object.hasOwn(environment.LEADS_COMPANY_RECIPIENTS||{},company)) return environment.LEADS_COMPANY_RECIPIENTS[company];
+  if(company==='alvi'||company==='avokado') return value(environment,'LEADS_NOTIFY_EMAIL_'+company.toUpperCase());
+  // Legacy unscoped Synapse enquiries keep their destination; unrelated companies never inherit it.
+  return !company || company==='synapse-business' || company==='synapse' ? value(environment,'LEADS_NOTIFY_EMAIL') : '';
+}
 function emailNotificationReady(lead, environment) {
   const company = lead.company_code?.toLowerCase();
-  const recipientKey = company === 'alvi' ? 'LEADS_NOTIFY_EMAIL_ALVI' : company === 'avokado' ? 'LEADS_NOTIFY_EMAIL_AVOKADO' : 'LEADS_NOTIFY_EMAIL';
   return Boolean(value(environment, 'LEADS_SMTP_HOST', 'smtp.yandex.ru') &&
-    value(environment, 'LEADS_SMTP_USER') && value(environment, 'LEADS_SMTP_PASSWORD') && value(environment, recipientKey));
+    value(environment, 'LEADS_SMTP_USER') && value(environment, 'LEADS_SMTP_PASSWORD') && companyRecipient(environment, company));
 }
 
 function createEmailNotifications(environment = process.env, logger = console, createTransport) {
@@ -48,9 +55,6 @@ function createEmailNotifications(environment = process.env, logger = console, c
     throw new Error('LEADS_SMTP_PORT должен быть целым числом от 1 до 65535');
   }
   const from = value(environment, 'LEADS_MAIL_FROM') || user;
-  const notifyEmail = value(environment, 'LEADS_NOTIFY_EMAIL');
-  const notifyEmailAlvi = value(environment, 'LEADS_NOTIFY_EMAIL_ALVI');
-  const notifyEmailAvokado = value(environment, 'LEADS_NOTIFY_EMAIL_AVOKADO');
   const transportFactory = createTransport || require('nodemailer').createTransport;
   const transport = transportFactory({
     host,
@@ -65,8 +69,8 @@ function createEmailNotifications(environment = process.env, logger = console, c
   async function notifyLead(lead, notification = {}) {
     const company = lead.company_code?.toLowerCase();
     // Explicit destinations prevent one studio's enquiries reaching another studio.
-    const recipient = company === 'alvi' ? notifyEmailAlvi : company === 'avokado' ? notifyEmailAvokado : notifyEmail;
-    const brand = company === 'alvi' ? 'ALVI' : company === 'avokado' ? 'АВОКАДО' : 'Synapse';
+    const recipient = companyRecipient(environment, company);
+    const brand = company === 'alvi' ? 'ALVI' : company === 'avokado' ? 'АВОКАДО' : !company || ['synapse','synapse-business'].includes(company) ? 'Synapse' : company;
     if (!recipient) throw notificationError('EMAIL_RECIPIENT_MISSING', 'Не задан адрес получателя уведомления о заявке');
     const fields = [
       ['Имя', lead.name],
@@ -101,4 +105,4 @@ function createEmailNotifications(environment = process.env, logger = console, c
   return { enabled: true, notifyLead, verify: () => transport.verify() };
 }
 
-module.exports = { createEmailNotifications, emailErrorCode, emailNotificationReady };
+module.exports = { createEmailNotifications, emailErrorCode, emailNotificationReady, companyRecipient };

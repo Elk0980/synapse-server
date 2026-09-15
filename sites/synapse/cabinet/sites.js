@@ -26,7 +26,7 @@ const init = (context) => {
     if (refreshButton) refreshButton.disabled = true;
     if (refreshStatus) refreshStatus.textContent = "";
     const query = new URLSearchParams();
-    if (byId("sites-company").value) query.set("companyCode", byId("sites-company").value);
+    query.set("companyCode", ctx.selectedProjectId);
     if (byId("sites-state").value) query.set("state", byId("sites-state").value);
     try {
       const data = await apiJson(`/content/sites?${query}`);
@@ -103,7 +103,7 @@ const init = (context) => {
     }
   };
   Object.assign(api, { renderSites });
-  byId("sites-company").addEventListener("change", renderSites);
+  byId("sites-company").addEventListener("change", () => ctx.chooseProject(byId("sites-company").value));
   byId("sites-state").addEventListener("change", renderSites);
   refreshButton?.addEventListener("click", () => renderSites({ background: true }));
   const refreshVisible = () => {
@@ -144,6 +144,7 @@ SbCabinet.registerView("sites", {
   title: "Сайты",
   render(container, context) {
     init(context);
+    byId("sites-company").value = ctx.selectedProjectId;
     return api.renderSites();
   },
   initialize(context) {

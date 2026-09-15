@@ -23,6 +23,8 @@ function createDealOrders({db,fail,getStages,getPipelines,setStages,getCatalog})
   CREATE TABLE IF NOT EXISTS deal_stage_rules (owner_scope TEXT NOT NULL,pipeline TEXT NOT NULL,stage TEXT NOT NULL,rules TEXT NOT NULL,PRIMARY KEY(owner_scope,pipeline,stage));
   CREATE TABLE IF NOT EXISTS deal_order_events (id INTEGER PRIMARY KEY,deal_id INTEGER NOT NULL REFERENCES deal_orders(id),created_at TEXT NOT NULL,event TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS deal_order_files (id TEXT PRIMARY KEY,deal_id INTEGER NOT NULL REFERENCES deal_orders(id),kind TEXT NOT NULL,name TEXT NOT NULL,mime TEXT NOT NULL,bytes BLOB NOT NULL,created_at TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS deal_participants (deal_id INTEGER NOT NULL REFERENCES deal_orders(id),contact_id INTEGER NOT NULL REFERENCES contacts(id),role TEXT NOT NULL,side TEXT NOT NULL DEFAULT 'client',PRIMARY KEY(deal_id,contact_id));
+  CREATE TABLE IF NOT EXISTS deal_company_pipelines (owner_scope TEXT NOT NULL,pipeline TEXT NOT NULL,label TEXT NOT NULL,stages TEXT NOT NULL,PRIMARY KEY(owner_scope,pipeline));
   CREATE TABLE IF NOT EXISTS deal_orders_meta (key TEXT PRIMARY KEY,value TEXT NOT NULL);`);
   if(!db.prepare("SELECT 1 FROM deal_orders_meta WHERE key='company-migration'").get()) {
     db.exec('BEGIN IMMEDIATE');
@@ -71,8 +73,13 @@ function createDealOrders({db,fail,getStages,getPipelines,setStages,getCatalog})
     return out;
   };
   const total=(data,billing='once')=>Math.round((data.estimate||[]).filter(r=>(r.billing||'once')===billing).reduce((sum,row)=>sum+Math.round(row.price*100)*row.quantity,0))/100;
-  const criterionLabels={contact:'У компании есть контакт',brief:'Заполнены цель и критерии приёмки',estimate:'Есть смета с суммой',contract:'Прикреплён договор',receipt:'Прикреплён чек',modules_ready:'Приобретённые модули проверены и запущены'};
-  const pipelineStages=(scope,pipeline='sale')=>getStages(pipeline).map(s=>{
+  const criterionLabels={contact:'Назначен участник сделки со стороны клиента',brief:'Заполнены цель и критерии приёмки',estimate:'Есть смета с суммой',contract:'Прикреплён договор',receipt:'Прикреплён чек',modules_ready:'Приобретённые модули проверены и запущены'};
+  const baseStages=(scope,pipeline='sale')=>{
+    const stored=db.prepare('SELECT stages FROM deal_company_pipelines WHERE owner_scope=? AND pipeline=?').get(scope||'synapse-business',pipeline);
+    return stored?JSON.parse(stored.stages):getStages(pipeline);
+  };
+  const pipelines=scope=>getPipelines().map(p=>({...p,label:db.prepare('SELECT label FROM deal_company_pipelines WHERE owner_scope=? AND pipeline=?').get(scope||'synapse-business',p.code)?.label||p.label}));
+  const pipelineStages=(scope,pipeline='sale')=>baseStages(scope,pipeline).map(s=>{
     const stored=db.prepare('SELECT rules FROM deal_stage_rules WHERE owner_scope=? AND pipeline=? AND stage=?').get(scope||'synapse-business',pipeline,s.code);
     const defaults=({contact:['contact'],meeting:['contact','brief'],pilot:['brief','estimate'],paid:['contract','receipt'],active:['contract','receipt','modules_ready'],renewal:['brief'],upsell:['brief','estimate']})[s.code]||[];
     const rules=stored?JSON.parse(stored.rules):{required:defaults,manual:[]};
@@ -94,14 +101,27 @@ function createDealOrders({db,fail,getStages,getPipelines,setStages,getCatalog})
   };
   const contacts=(id,scope,q='',offset=0)=>{
     const deal=row(id,scope),pattern=`%${text(q,200)}%`;
-    const where='FROM contacts c JOIN contact_companies r ON r.contact_id=c.id WHERE r.company_id=? AND r.is_deleted=0 AND c.is_deleted=0 AND (c.name LIKE ? OR c.phone LIKE ?)';
-    const args=[deal.company_id,pattern,pattern];
-    const items=db.prepare(`SELECT c.id,c.name,c.phone,c.email,c.messengers,c.links ${where} ORDER BY c.name,c.id LIMIT 30 OFFSET ?`).all(...args,offset).map(c=>({...c,messengers:JSON.parse(c.messengers||'[]'),links:JSON.parse(c.links||'[]')}));
+    const where='FROM contacts c JOIN deal_participants r ON r.contact_id=c.id WHERE r.deal_id=? AND c.is_deleted=0 AND (c.name LIKE ? OR c.phone LIKE ?)';
+    const args=[deal.id,pattern,pattern];
+    const items=db.prepare(`SELECT c.id,c.name,c.phone,c.email,c.messengers,c.links,r.role,r.side ${where} ORDER BY c.name,c.id LIMIT 30 OFFSET ?`).all(...args,offset).map(c=>({...c,messengers:JSON.parse(c.messengers||'[]'),links:JSON.parse(c.links||'[]')}));
     return {contacts:items,total:db.prepare(`SELECT COUNT(*) count ${where}`).get(...args).count};
   };
+  const participantCandidate=(contactId,scope)=>{
+    const found=db.prepare(`SELECT c.id FROM contacts c JOIN contact_companies r ON r.contact_id=c.id JOIN companies base ON base.id=r.company_id WHERE c.id=? AND c.is_deleted=0 AND r.is_deleted=0 AND base.code=? COLLATE NOCASE AND base.is_deleted=0`).get(Number(contactId),scope||'synapse-business');
+    if(!found)fail(404,'Контакт не найден в клиентской базе выбранной компании');
+    return found.id;
+  };
+  const addParticipant=(id,scope,body)=>{
+    row(id,scope);
+    const contactId=participantCandidate(body.contactId,scope),role=text(body.role||'Представитель клиента',120),side=body.side||'client';
+    if(!role||!['client','team'].includes(side))bad('Укажите роль и сторону участника');
+    db.prepare('INSERT INTO deal_participants VALUES (?,?,?,?) ON CONFLICT(deal_id,contact_id) DO UPDATE SET role=excluded.role,side=excluded.side').run(id,contactId,role,side);
+    return contacts(id,scope);
+  };
+  const removeParticipant=(id,scope,contactId)=>{row(id,scope);db.prepare('DELETE FROM deal_participants WHERE deal_id=? AND contact_id=?').run(id,contactId);return contacts(id,scope);};
   const criterionState=(value,scope,pipeline)=>{
     const data=JSON.parse(value.data),files=db.prepare('SELECT kind FROM deal_order_files WHERE deal_id=?').all(value.id);
-    const checks={contact:!!db.prepare('SELECT 1 FROM contact_companies r JOIN contacts c ON c.id=r.contact_id WHERE r.company_id=? AND r.is_deleted=0 AND c.is_deleted=0 LIMIT 1').get(value.company_id),
+    const checks={contact:!!db.prepare("SELECT 1 FROM deal_participants r JOIN contacts c ON c.id=r.contact_id WHERE r.deal_id=? AND r.side='client' AND c.is_deleted=0 LIMIT 1").get(value.id),
       brief:!!(data.brief?.goal?.trim()&&data.brief?.acceptance?.trim()),estimate:total(data)>0||total(data,'monthly')>0,
       contract:files.some(f=>f.kind==='contract'),receipt:files.some(f=>f.kind==='receipt'),
       modules_ready:(data.modules||[]).some(m=>m.purchase==='purchased')&&(data.modules||[]).filter(m=>m.purchase==='purchased').every(m=>['launched','support'].includes(m.stage))};
@@ -110,7 +130,7 @@ function createDealOrders({db,fail,getStages,getPipelines,setStages,getCatalog})
   const detail=(id,scope,pipeline='sale')=>{
     const value=row(id,scope),c=company(value.company_id,scope);
     const people=contacts(id,scope);
-    return {...serialize(value,pipeline),company:{id:c.id,name:c.name,code:c.code,city:c.city},contacts:people.contacts,totalContacts:people.total,stages:criterionState(value,scope,pipeline),pipelines:getPipelines(),
+    return {...serialize(value,pipeline),company:{id:c.id,name:c.name,code:c.code,city:c.city},contacts:people.contacts,totalContacts:people.total,stages:criterionState(value,scope,pipeline),pipelines:pipelines(scope),
       files:db.prepare('SELECT id,kind,name,mime,created_at createdAt FROM deal_order_files WHERE deal_id=? ORDER BY created_at DESC').all(id),history:db.prepare('SELECT created_at createdAt,event FROM deal_order_events WHERE deal_id=? ORDER BY id DESC LIMIT 50').all(id).map(e=>({...JSON.parse(e.event),createdAt:e.createdAt}))};
   };
   const listDeals=(scope,{q='',companyId='',offset=0,pipeline='sale'}={})=>{
@@ -119,19 +139,21 @@ function createDealOrders({db,fail,getStages,getPipelines,setStages,getCatalog})
     if(companyId){conditions.push('d.company_id=?');args.push(Number(companyId));}
     if(q){conditions.push('(d.title LIKE ? OR c.name LIKE ?)');args.push(`%${text(q,200)}%`,`%${text(q,200)}%`);}
     const where=`FROM deal_orders d JOIN companies c ON c.id=d.company_id WHERE c.is_deleted=0 ${conditions.length?'AND '+conditions.join(' AND '):''}`;
-    return {deals:db.prepare(`SELECT d.*,c.name company_name ${where} ORDER BY d.updated_at DESC,d.id DESC LIMIT 50 OFFSET ?`).all(...args,offset).map(r=>serialize(r,pipeline)),total:db.prepare(`SELECT COUNT(*) count ${where}`).get(...args).count,stages:pipelineStages(scope,pipeline),pipelines:getPipelines()};
+    return {deals:db.prepare(`SELECT d.*,c.name company_name ${where} ORDER BY d.updated_at DESC,d.id DESC LIMIT 50 OFFSET ?`).all(...args,offset).map(r=>serialize(r,pipeline)),total:db.prepare(`SELECT COUNT(*) count ${where}`).get(...args).count,stages:pipelineStages(scope,pipeline),pipelines:pipelines(scope)};
   };
   const create=(body,scope)=>{
-    if(!body||Object.keys(body).some(k=>!['companyId','title','requestId'].includes(k)))bad('Неизвестное поле новой сделки');
+    if(!body||Object.keys(body).some(k=>!['companyId','title','requestId','contactId'].includes(k)))bad('Неизвестное поле новой сделки');
     const title=text(body.title,300);if(!title)bad('Укажите название сделки');
     const c=company(Number(body.companyId),scope);
     const owner=scope||c.owner_scope||'synapse-business';
     const requestId=text(body.requestId||randomUUID(),100);
     const old=db.prepare('SELECT id FROM deal_orders WHERE owner_scope=? AND request_id=?').get(owner,requestId);
     if(old)return detail(old.id,scope);
+    if(body.contactId)participantCandidate(body.contactId,scope);
     const now=new Date().toISOString();
-    const first=getStages('sale')[0]?.code||'new';
+    const first=baseStages(scope,'sale')[0]?.code||'new';
     const result=db.prepare('INSERT INTO deal_orders (company_id,owner_scope,title,stage,request_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?)').run(c.id,owner,title,first,requestId,now,now);
+    if(body.contactId)addParticipant(Number(result.lastInsertRowid),scope,{contactId:body.contactId});
     return detail(Number(result.lastInsertRowid),scope);
   };
   const update=(id,body,scope,actor,pipeline='sale',trustedData={})=>{
@@ -140,7 +162,7 @@ function createDealOrders({db,fail,getStages,getPipelines,setStages,getCatalog})
     if(body.version!==old.version)fail(409,'Сделка уже изменена. Обновите карточку перед сохранением.',{code:'CONFLICT'});
     const title=body.title===undefined?old.title:text(body.title,300);if(!title)bad('Укажите название');
     const before=serialize(old,pipeline).stage;
-    const stage=body.stage??before;if(stage!==null&&!getStages(pipeline).some(s=>s.code===stage))bad('Неизвестный этап');
+    const stage=body.stage??before;if(stage!==null&&!baseStages(scope,pipeline).some(s=>s.code===stage))bad('Неизвестный этап');
     const data={...JSON.parse(old.data),...normalize(body.data||{}),...trustedData};
     let event;
     if(stage!==before){
@@ -182,8 +204,19 @@ function createDealOrders({db,fail,getStages,getPipelines,setStages,getCatalog})
       return {...s,required:[...new Set(s.required)],manual:list(s.manual||[],15,v=>text(v,300)).filter(Boolean),steps:list(s.steps||[],20,v=>text(v,500)).filter(Boolean),done:text(s.done||'',500)};
     });
     db.exec('BEGIN IMMEDIATE');try{
-      if(body.label!==undefined){const label=text(body.label,40);if(!label)bad('Укажите название воронки');db.prepare('UPDATE pipelines SET label=?,updated_at=? WHERE code=?').run(label,new Date().toISOString(),pipeline);}
-      const configured=setStages({stages:rows.map(s=>({...('code'in s?{code:s.code}:{}),label:s.label,kind:s.kind,attention:!!s.attention}))},pipeline).stages;
+      const old=baseStages(scope,pipeline), codes=new Set();
+      const configured=rows.map((s,index)=>{
+        const code=s.code||'stage_'+randomUUID().replaceAll('-','').slice(0,12);
+        const label=text(s.label,80);
+        if(!/^[a-z0-9_-]{1,64}$/.test(code)||codes.has(code)||!label||!['open','won','lost'].includes(s.kind))bad('Проверьте название, код и тип этапа');
+        codes.add(code);return {code,label,kind:s.kind,attention:!!s.attention,position:index};
+      });
+      const removed=old.filter(stage=>!codes.has(stage.code));
+      const deals=db.prepare('SELECT stage,data FROM deal_orders WHERE owner_scope=?').all(scope||'synapse-business');
+      for(const stage of removed)if(deals.some(d=>(JSON.parse(d.data).pipelineStates?.[pipeline]||(pipeline==='sale'?d.stage:null))===stage.code))fail(409,'Нельзя удалить этап, пока в нём есть сделки');
+      const label=body.label===undefined?pipelines(scope).find(p=>p.code===pipeline)?.label:text(body.label,40);
+      if(!label)bad('Укажите название воронки');
+      db.prepare('INSERT INTO deal_company_pipelines VALUES (?,?,?,?) ON CONFLICT(owner_scope,pipeline) DO UPDATE SET label=excluded.label,stages=excluded.stages').run(scope||'synapse-business',pipeline,label,JSON.stringify(configured));
       for(let i=0;i<rows.length;i++)db.prepare('INSERT INTO deal_stage_rules VALUES (?,?,?,?) ON CONFLICT(owner_scope,pipeline,stage) DO UPDATE SET rules=excluded.rules').run(scope||'synapse-business',pipeline,configured[i].code,JSON.stringify(rows[i]));
       db.exec('COMMIT');
     }catch(e){db.exec('ROLLBACK');throw e;}
@@ -213,6 +246,6 @@ function createDealOrders({db,fail,getStages,getPipelines,setStages,getCatalog})
     } else bad('Неизвестный документ');
     return `<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${esc(title)} — ${esc(deal.title)}</title><style>body{font:16px/1.5 Arial,sans-serif;max-width:900px;margin:40px auto;padding:20px;color:#17202b}table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid #ccc;padding:12px;text-align:left}p{white-space:pre-wrap}button{padding:12px 20px}@media print{button{display:none}body{margin:0}}</style><button onclick="window.print()">Печать / сохранить PDF</button><h1>${esc(title)}</h1><p>Сделка №${deal.id}: ${esc(deal.title)}<br>Компания: ${esc(deal.company.name)}</p>${content}</html>`;
   };
-  return {list:listDeals,detail,contacts,create,update,offer,print,saveRules,upload,file,rules:(scope,pipeline)=>({label:getPipelines().find(p=>p.code===pipeline)?.label,stages:pipelineStages(scope,pipeline),criterionLabels})};
+  return {list:listDeals,detail,contacts,addParticipant,removeParticipant,create,update,offer,print,saveRules,upload,file,rules:(scope,pipeline)=>({label:pipelines(scope).find(p=>p.code===pipeline)?.label,stages:pipelineStages(scope,pipeline),criterionLabels})};
 }
 module.exports={createDealOrders,STAGES};

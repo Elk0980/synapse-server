@@ -201,12 +201,13 @@ test('key rotation and ciphertext tampering fail closed without deleting data or
   } finally { f.close(); }
 });
 
-test('other companies keep the generic recipient while explicitly disabled studios never fall back to it', async () => {
+test('only Synapse keeps its generic recipient; unrelated companies and disabled studios never inherit it', async () => {
   const f = fixture({LEADS_NOTIFY_EMAIL: 'generic@example.test', LEADS_NOTIFY_EMAIL_ALVI: 'old-alvi@example.test',
     LEADS_NOTIFY_EMAIL_AVOKADO: 'old-avokado@example.test'});
   try {
     f.store.save({...payload, alviRecipient: '', avokadoRecipient: ''});
-    await f.store.notifications.notifyLead({...lead, company_code: 'other'});
+    await assert.rejects(f.store.notifications.notifyLead({...lead, company_code:'other'}),{code:'EMAIL_RECIPIENT_MISSING'});
+    await f.store.notifications.notifyLead({...lead, company_code: 'synapse-business'});
     assert.equal(f.calls.send[0].message.to, 'generic@example.test');
     assert.equal(f.calls.send[0].message.from, payload.user);
     for (const company of ['alvi', 'avokado']) {
@@ -275,4 +276,27 @@ test('a failed database save preserves the prior settings and hides database err
     assert.deepEqual(row(f.db), before);
     assert.equal(f.store.getPublic().user, payload.user);
   } finally { f.close(); }
+});
+
+
+test('company recipient overrides preserve the sender secret and other companies across restart; explicit empty stays disabled', async()=>{
+  const f=fixture({LEADS_NOTIFY_EMAIL:'generic@example.test'});
+  try{
+    f.store.save(payload);
+    const before=f.store.getPublic();
+    f.store.saveCompany('alvi',{recipient:'new-alvi@example.test'});
+    f.store.saveCompany('palitra-love',{recipient:'palitra@example.test'});
+    assert.equal(f.store.getCompany('avokado').recipient,before.avokadoRecipient);
+    assert.equal(f.store.getEnvironment().LEADS_SMTP_PASSWORD,payload.password);
+    assert.equal(f.calls.send.length,0);
+    f.store.save({provider:payload.provider,user:payload.user});
+    assert.equal(f.store.getCompany('alvi').recipient,'new-alvi@example.test');
+    await f.store.notifications.notifyLead({...lead,company_code:'palitra-love'});
+    assert.equal(f.calls.send.at(-1).message.to,'palitra@example.test');
+    f.store.saveCompany('alvi',{recipient:''});
+    await assert.rejects(f.store.notifications.notifyLead({...lead,company_code:'alvi'}),{code:'EMAIL_RECIPIENT_MISSING'});
+    const again=createEmailSettings(f.db,f.options);
+    assert.equal(again.getCompany('alvi').recipient,'');
+    assert.equal(again.getCompany('palitra-love').recipient,'palitra@example.test');
+  }finally{f.close();}
 });

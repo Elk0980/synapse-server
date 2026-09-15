@@ -54,6 +54,8 @@ function createEmailSettings(db, {apiKey, environment = process.env, now = Date.
     singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
     revision INTEGER NOT NULL, encrypted_json TEXT NOT NULL, updated_at TEXT NOT NULL
   )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS company_email_recipients (company_code TEXT PRIMARY KEY, recipient TEXT NOT NULL, updated_at TEXT NOT NULL)`);
+  const recipientRows = () => db.prepare('SELECT company_code, recipient FROM company_email_recipients').all();
   const select = db.prepare('SELECT revision, encrypted_json, updated_at FROM email_settings WHERE singleton = 1');
   const upsert = db.prepare(`INSERT INTO email_settings(singleton,revision,encrypted_json,updated_at) VALUES(1,1,?,?)
     ON CONFLICT(singleton) DO UPDATE SET revision=email_settings.revision+1,
@@ -85,7 +87,7 @@ function createEmailSettings(db, {apiKey, environment = process.env, now = Date.
       return config;
     } finally { key.fill(0); }
   }
-  function readState() {
+  function readBaseState() {
     const row = select.get();
     if (row) {
       const token = `${row.revision}:${row.encrypted_json}`;
@@ -114,6 +116,31 @@ function createEmailSettings(db, {apiKey, environment = process.env, now = Date.
       needsPassword: true // The first cabinet save never silently copies an environment secret.
     }};
   }
+  function readState() {
+    const state = readBaseState(), rows = recipientRows();
+    const recipients = Object.fromEntries(rows.map(row => [row.company_code, row.recipient]));
+    state.environment = {...state.environment, LEADS_COMPANY_RECIPIENTS: recipients};
+    for (const code of ['alvi','avokado']) if (Object.hasOwn(recipients, code)) {
+      state.environment['LEADS_NOTIFY_EMAIL_'+code.toUpperCase()] = recipients[code];
+      state.public[code+'Recipient'] = recipients[code];
+    }
+    state.token += ':'+JSON.stringify(recipients);
+    return state;
+  }
+  function getCompany(code) {
+    const state=readState();
+    const recipient = Object.hasOwn(state.environment.LEADS_COMPANY_RECIPIENTS, code)
+      ? state.environment.LEADS_COMPANY_RECIPIENTS[code]
+      : ['alvi','avokado'].includes(code) ? envValue(state.environment,'LEADS_NOTIFY_EMAIL_'+code.toUpperCase())
+      : code === 'synapse-business' ? envValue(state.environment,'LEADS_NOTIFY_EMAIL') : '';
+    return {companyCode:code, recipient, senderConfigured:Boolean(envValue(state.environment,'LEADS_SMTP_USER') && envValue(state.environment,'LEADS_SMTP_PASSWORD'))};
+  }
+  function saveCompany(code, body) {
+    if(!body || Object.keys(body).some(key=>key!=='recipient') || !Object.hasOwn(body,'recipient')) fail('Укажите получателя выбранной компании');
+    const recipient=mailbox(body.recipient);
+    db.prepare('INSERT INTO company_email_recipients VALUES (?,?,?) ON CONFLICT(company_code) DO UPDATE SET recipient=excluded.recipient,updated_at=excluded.updated_at').run(code,recipient,new Date(now()).toISOString());
+    return getCompany(code);
+  }
   let activeToken, activeNotifier;
   function notifier() {
     const state = readState();
@@ -125,7 +152,9 @@ function createEmailSettings(db, {apiKey, environment = process.env, now = Date.
     return activeNotifier;
   }
   function save(body) {
-    const config = validate(body), previous = readState();
+    const previous = readState();
+    // Sender administration never overwrites company destinations. Legacy full saves remain compatible.
+    const config = validate({...{alviRecipient:previous.public.alviRecipient,avokadoRecipient:previous.public.avokadoRecipient},...body});
     if (!config.password) {
       if (!previous.config || previous.config.provider !== config.provider || previous.config.user !== config.user) {
         fail('Введите пароль приложения для выбранного отправителя');
@@ -149,7 +178,7 @@ function createEmailSettings(db, {apiKey, environment = process.env, now = Date.
       return await current.verify() ? {ok: true} : {ok: false, code: 'SMTP_CONNECTION'};
     } catch (error) { return {ok: false, code: emailErrorCode(error)}; }
   }
-  return {getPublic: () => readState().public, getEnvironment: () => readState().environment, save, check,
+  return {getCompany, saveCompany, getPublic: () => readState().public, getEnvironment: () => readState().environment, save, check,
     notifications: {notifyLead: (lead, notification) => notifier().notifyLead(lead, notification)}};
 }
 

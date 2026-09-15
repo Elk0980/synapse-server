@@ -1514,7 +1514,8 @@ function relationRows(kind, id, company) {
   if (kind === 'companies') {
     const contacts = db.prepare(`SELECT c.*, r.role, r.is_responsible, r.valid_from, r.valid_to, r.notes relation_notes
       FROM contact_companies r JOIN contacts c ON c.id=r.contact_id
-      WHERE r.company_id=? AND r.is_deleted=0 AND c.is_deleted=0`).all(id).map((row) => ({
+      WHERE r.company_id=? AND r.is_deleted=0 AND c.is_deleted=0
+      ${company && company.id!==id ? 'AND EXISTS (SELECT 1 FROM contact_companies base WHERE base.contact_id=c.id AND base.company_id=? AND base.is_deleted=0)' : ''}`).all(id,...(company && company.id!==id?[company.id]:[])).map((row) => ({
         ...serializeEntity(ENTITY_CONFIG.contacts, row, true), relation: relationData(row, 'is_responsible') }));
     const legalEntities = db.prepare(`SELECT l.*, r.role, r.is_primary, r.valid_from, r.valid_to, r.notes relation_notes
       FROM company_legal_entities r JOIN legal_entities l ON l.id=r.legal_entity_id
@@ -1904,7 +1905,7 @@ async function handleRelationRoutes(request, response, url, cors) {
 }
 
 // A person, optional new employer and both scope/business links commit together.
-function createContactWithCompany(contact, link, scope) {
+function createContactWithCompany(contact, link, scope, afterCreate) {
   const config = ENTITY_CONFIG.contacts;
   const values = validateEntity(config,contact);
   if (!link || typeof link !== 'object' || Array.isArray(link) ||
@@ -1942,7 +1943,9 @@ function createContactWithCompany(contact, link, scope) {
     const addLink = (companyId,relationRole) => db.prepare('INSERT INTO contact_companies (created_at,updated_at,contact_id,company_id,role) VALUES (?,?,?,?,?)').run(now,now,id,companyId,relationRole);
     if(scope && scope.id !== targetId) addLink(scope.id,'клиент');
     addLink(targetId,role);
-    return {...serializeEntity(config,entityRow(config,id)),...relationRows('contacts',id,scope),linkedCompanyId:targetId};
+    const result={...serializeEntity(config,entityRow(config,id)),...relationRows('contacts',id,scope),linkedCompanyId:targetId};
+    afterCreate?.(result);
+    return result;
   });
 }
 
@@ -2334,7 +2337,7 @@ function companyOverview(id, company = null) {
   if (company && row.owner_scope.toLowerCase() !== company.code.toLowerCase()) {
     fail(404, 'Компания не найдена', { code: 'NOT_FOUND' });
   }
-  const { contacts, legalEntities } = relationRows('companies', id);
+  const { contacts, legalEntities } = relationRows('companies', id, company);
   const tasks = db.prepare(`
     SELECT id, title, status, due_date FROM tasks
     WHERE company_code = ? COLLATE NOCASE AND is_deleted = 0 AND status NOT IN ('done', 'cancelled')
@@ -2405,6 +2408,7 @@ async function route(request, response) {
   if (!publicPost) requireApiKey(request);
 
   if(url.pathname==='/catalog'||url.pathname==='/finances'||/^\/finances\/\d+$/.test(url.pathname)){
+    if(url.pathname==='/catalog'&&url.searchParams.has('companyCode')&&url.searchParams.get('companyCode')!=='synapse-business')fail(400,'Каталог услуг относится к Synapse Бизнес');
     const actor=crmIdentity(request);if(actor?.role!=='owner')fail(403,'Коммерческие условия и финансы доступны владельцу');
     let result;
     if(url.pathname==='/catalog'&&request.method==='GET')result=commercial.catalog();
@@ -2422,11 +2426,24 @@ async function route(request, response) {
     const pipeline=url.searchParams.get('pipeline')||'sale';pipelineRow(pipeline);
     const match=url.pathname.match(/^\/deals\/(\d+)(?:\/(contacts|print))?$/);
     const offerMatch=url.pathname.match(/^\/deals\/(\d+)\/offer$/);
+    const participantMatch=url.pathname.match(/^\/deals\/(\d+)\/participants(?:\/(\d+))?$/);
     const contactMatch=url.pathname.match(/^\/deals\/(\d+)\/contacts\/(\d+)$/);
     const fileMatch=url.pathname.match(/^\/deals\/(\d+)\/files(?:\/([a-f0-9-]+))?$/);
     const offset=Math.max(0,Math.min(1000000,Number.parseInt(url.searchParams.get('offset')||'0',10)||0));
     let result,status=200;
-    if(offerMatch&&request.method==='POST'){const actor=crmIdentity(request);if(actor?.role!=='owner')fail(403,'Предложения из каталога добавляет владелец');result=dealOrders.offer(entityId(offerMatch[1]),scope,await readJson(request),actor,pipeline);}
+    if(participantMatch&&request.method==='POST'&&!participantMatch[2]){
+      const id=entityId(participantMatch[1]),deal=dealOrders.detail(id,scope),body=await readJson(request);
+      if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>!['newContact','contactId','role','side'].includes(k)))fail(400,'Укажите участника сделки');
+      if(body.newContact){
+        // Creation and membership are atomic; a studio's customer list is never copied into a deal.
+        const base=scopedCompany(scope);if(!base)fail(400,'Выберите компанию');
+        if(body.side && !['client','team'].includes(body.side))fail(400,'Укажите сторону участника');
+        if(body.role && (typeof body.role!=='string'||body.role.length>120||!body.role.trim()))fail(400,'Укажите роль участника');
+        createContactWithCompany(body.newContact,{companyId:body.side==='team'?base.id:deal.companyId,role:body.role||'Представитель клиента'},base,contact=>{result=dealOrders.addParticipant(id,scope,{contactId:contact.id,role:body.role,side:body.side});});
+      }else result=dealOrders.addParticipant(id,scope,body);
+    }
+    else if(participantMatch?.[2]&&request.method==='DELETE')result=dealOrders.removeParticipant(entityId(participantMatch[1]),scope,entityId(participantMatch[2]));
+    else if(offerMatch&&request.method==='POST'){const actor=crmIdentity(request);if(actor?.role!=='owner')fail(403,'Предложения из каталога добавляет владелец');if(scope!=='synapse-business')fail(400,'Каталог Synapse используется в сделках Synapse Бизнес');result=dealOrders.offer(entityId(offerMatch[1]),scope,await readJson(request),actor,pipeline);}
     else if(url.pathname==='/deals/criteria' && request.method==='GET')result=dealOrders.rules(scope,pipeline);
     else if(url.pathname==='/deals/criteria' && request.method==='PUT')result=dealOrders.saveRules(scope,pipeline,await readJson(request),crmIdentity(request));
     else if(fileMatch && !fileMatch[2] && request.method==='POST')result=dealOrders.upload(entityId(fileMatch[1]),scope,await readJson(request,9*1024*1024));
@@ -2444,7 +2461,7 @@ async function route(request, response) {
       response.writeHead(200,{...cors,'content-type':'text/html; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer'});response.end(markup);return;
     } else if(contactMatch && request.method==='PATCH') {
       const deal=dealOrders.detail(entityId(contactMatch[1]),scope),id=entityId(contactMatch[2]);
-      if(!db.prepare('SELECT 1 FROM contact_companies WHERE contact_id=? AND company_id=? AND is_deleted=0').get(id,deal.companyId))fail(404,'Контакт не связан с компанией сделки');
+      if(!db.prepare('SELECT 1 FROM deal_participants WHERE contact_id=? AND deal_id=?').get(id,deal.id))fail(404,'Контакт не является участником сделки');
       const current=entityRow(ENTITY_CONFIG.contacts,id),body=await readJson(request);
       const values=validateEntity(ENTITY_CONFIG.contacts,body,true,current),entries=Object.entries(values);
       if(values.phone!==undefined)entries.push(['normalizedPhone',values.phone?normalizeContact(values.phone):null]);
@@ -2547,6 +2564,15 @@ async function route(request, response) {
     return send(response, 200, companyPublicLinks(company), { ...cors, 'cache-control': 'no-store' });
   }
 
+  if (url.pathname === '/company-email') {
+    const actor=crmIdentity(request); if(actor?.role!=='owner') fail(403,'Настройки почты доступны владельцу');
+    const code=url.searchParams.get('companyCode'); if(!code) fail(400,'Выберите компанию');
+    const company=scopedCompany(code);
+    const settings=request.method==='GET'?emailSettings.getCompany(company.code)
+      : request.method==='PUT'?emailSettings.saveCompany(company.code,await readJson(request)):null;
+    if(!settings) fail(405,'Метод не поддерживается');
+    return send(response,200,{...settings,status:emailDiagnostics.getStatus(company.code)},{...cors,'cache-control':'no-store'});
+  }
   if (url.pathname === '/email-settings') {
     if (request.method === 'GET') return send(response, 200, emailSettings.getPublic(), {...cors, 'cache-control': 'no-store'});
     if (request.method === 'PUT') return send(response, 200, emailSettings.save(await readJson(request)), {...cors, 'cache-control': 'no-store'});

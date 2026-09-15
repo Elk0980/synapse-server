@@ -48,7 +48,7 @@
   const byId = (id) => ctx.byId(id);
   const html = (value) => ctx.escapeHTML(String(value ?? ""));
   const canEdit = () => ctx.hasPermission("crm.edit");
-  const query = (path, params = {}, options = {}) => ctx.crmQuery(path, params, options);
+  const query = (path, params = {}, options = {}) => ctx.crmQuery(path, { ...ctx.scopeParams(), ...params }, options);
   const date = (value) => {
     if (!value) return "—";
     const parsed = new Date(value);
