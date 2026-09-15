@@ -78,7 +78,7 @@ test('saved offer terms remain visible next to the price when mobile details are
   }
 });
 
-test('legacy promotions become 45 minutes without altering regular services or prices', () => {
+test('legacy apparatus and laser promotions remain 45 minutes while the manual trial lasts 60 minutes', () => {
   const legacy = copy(defaults);legacy.catalogVersion = 2;
   item(legacy, 'first-1').duration = '60 мин';item(legacy, 'first-1').title = 'ТУРБО-массаж всего тела · 60 мин';
   item(legacy, 'first-3').duration = '60 мин';item(legacy, 'first-3').title = 'Ручной массаж · 60 мин';
@@ -87,13 +87,13 @@ test('legacy promotions become 45 minutes without altering regular services or p
   const before = JSON.stringify(legacy);
   const prepared = prepare(legacy, defaults);
   assert.equal(JSON.stringify(legacy), before, 'input is not mutated');
-  assert.equal(prepared.catalogVersion, 3);
+  assert.equal(prepared.catalogVersion, 4);
   assert.equal(items(prepared).filter(it => it.promo).length, 8);
-  for (const it of items(prepared).filter(it => it.promo)) assert.equal(it.duration, '45 мин');
+  for (const it of items(prepared).filter(it => it.promo)) assert.equal(it.duration, it.id === 'first-3' ? '60 мин' : '45 мин');
   for (const it of items(legacy).filter(it => !it.promo)) assert.equal(JSON.stringify(item(prepared, it.id)), JSON.stringify(it));
   assert.equal(item(prepared, 'first-1').price, '555 ₽');
   assert.equal(item(prepared, 'first-1').title, 'ТУРБО-массаж всего тела · 45 мин');
-  assert.equal(item(prepared, 'first-3').title, 'Ручной массаж · 45 мин');
+  assert.equal(item(prepared, 'first-3').title, 'Ручной массаж · 60 мин');
 });
 
 test('the correction also works for older API data and without static fallback', () => {
@@ -115,6 +115,105 @@ test('future saved edits survive reloads after the one-time correction', () => {
   item(saved, 'first-1').title = 'Обновлённая процедура · 50 мин';
   assert.equal(prepare(saved, defaults), saved);
   assert.ok(render(prepare(saved, defaults), false).includes('<dd>50 мин</dd>'));
+});
+
+const verifiedMassageTimes = [
+  ['first-3', '60 мин', 'Ручной массаж · 45 мин', '45 мин'],
+  ['apparat-4', '60 мин', 'Вакуумно-роликовый 30 мин', '30 мин'],
+  ['apparat-5', '60 мин', 'Липопластика', ''],
+  ['manual-1', '60 мин', 'Классический массаж тела', ''],
+  ['manual-2', '60–90 мин', 'Расслабляющий массаж тела', ''],
+  ['manual-3', '60 мин', 'Миофасциальный массаж тела', ''],
+  ['manual-4', '60 мин', 'Гемолимфодренажный массаж тела', ''],
+  ['manual-5', '40 мин', 'Классический массаж спины', ''],
+  ['manual-6', '60 мин', 'Расслабляющий массаж спины', ''],
+  ['manual-7', '60 мин', 'Миофасциальный массаж спины', ''],
+  ['manual-8', '30 мин', 'Классический массаж ШВЗ', ''],
+  ['manual-9', '30 мин', 'Миофасциальный массаж ШВЗ', ''],
+];
+const legacyMassage = (version = 3) => {
+  const legacy = copy(defaults);legacy.catalogVersion = version;
+  for (const [id, , title, duration] of verifiedMassageTimes) Object.assign(item(legacy, id), {title, duration});
+  return legacy;
+};
+
+test('confirmed massage times are present in both defaults and seed; unrelated offers and every price stay intact', () => {
+  const seed = JSON.parse(fs.readFileSync(path.join(__dirname, '../../ops/content/seed/avokado-price.json'), 'utf8'));
+  for (const doc of [defaults, seed]) {
+    for (const [id, duration] of verifiedMassageTimes) assert.equal(item(doc, id).duration, duration, id);
+    const prepared = prepare(doc, null);
+    for (const [id, duration] of verifiedMassageTimes) assert.equal(item(prepared, id).duration, duration, id);
+    for (const service of items(doc)) {
+      const next = item(prepared, service.id);
+      if (!next) continue; // The separate, already verified buccal-removal correction still applies to the old seed.
+      assert.equal(next.price, service.price, service.id);
+      assert.equal(next.oldPrice, service.oldPrice, service.id);
+    }
+    assert.equal(item(prepared, 'first-1').duration, '45 мин');
+    assert.equal(item(prepared, 'first-2').duration, '45 мин');
+  }
+});
+
+test('older saved catalogues update exactly the twelve confirmed timings without replacing owner prices or descriptions', () => {
+  for (const version of [undefined, 2, 3]) {
+    const legacy = legacyMassage(version);
+    if (version === undefined) delete legacy.catalogVersion;
+    for (const [index, [id]] of verifiedMassageTimes.entries()) {
+      Object.assign(item(legacy, id), { price: `${2900 + index} ₽`, oldPrice: `${5000 + index} ₽`, desc: `Owner description ${index}` });
+    }
+    const before = JSON.stringify(legacy), prepared = prepare(legacy, null);
+    assert.equal(JSON.stringify(legacy), before, 'migration never mutates the loaded CMS document');
+    assert.equal(prepared.catalogVersion, 4);
+    for (const [id, duration] of verifiedMassageTimes) {
+      const expected = { ...item(legacy, id), duration, title: item(defaults, id).title };
+      assert.equal(JSON.stringify(item(prepared, id)), JSON.stringify(expected), id);
+    }
+    assert.equal(prepare(prepared, defaults), prepared, 'migration runs only once');
+  }
+});
+
+test('custom service identities and timings survive migration; later edits and explicit clears survive reload', () => {
+  for (const alter of [
+    service => { service.title = 'Авторская процедура'; },
+    service => { service.duration = '75 мин'; },
+    service => { service.duration = null; },
+    service => { delete service.duration; },
+    service => { service.id = 'custom-service'; },
+  ]) {
+    for (const [id] of verifiedMassageTimes) {
+      const legacy = legacyMassage(), service = item(legacy, id);
+      alter(service);
+      const expected = JSON.stringify(service);
+      assert.equal(JSON.stringify(item(prepare(legacy, null), service.id)), expected, id);
+    }
+  }
+  const moved = legacyMassage(), manual = moved.categories.find(cat => cat.id === 'manual');
+  manual.id = 'custom-manual';
+  assert.equal(JSON.stringify(prepare(moved, null).categories.find(cat => cat.id === 'custom-manual')), JSON.stringify(manual));
+  const earlier = legacyMassage(2);
+  Object.assign(item(earlier, 'first-3'), {title: 'Массаж по авторской программе', duration: '75 мин'});
+  assert.equal(item(prepare(earlier, null), 'first-3').duration, '75 мин', 'the old 45-minute promo migration must not overwrite the manual trial');
+  const saved = prepare(legacyMassage(), null);
+  for (const [id, , title, duration] of verifiedMassageTimes) Object.assign(item(saved, id), {title, duration});
+  item(saved, 'first-3').duration = '';
+  const before = JSON.stringify(saved);
+  assert.equal(prepare(saved, defaults), saved);
+  assert.equal(JSON.stringify(saved), before, 'owner can restore a former value or clear a migrated duration');
+});
+
+test('updated times and owner prices agree in home cards and the full price tables', () => {
+  const prepared = prepare(legacyMassage(), null), full = render(prepared, true);
+  for (const [id, duration] of verifiedMassageTimes) {
+    const match = full.match(new RegExp(`<(?:article|tr)\\b[^>]*data-service="${id}"[\\s\\S]*?<\\/(?:article|tr)>`));
+    assert.ok(match, id);
+    assert.ok(match[0].includes(duration), `${id}: full price`);
+    assert.ok(match[0].includes(item(prepared, id).price), `${id}: price remains beside the duration`);
+    const selected = {...prepared, showcase:{self:[id],two:[]}};
+    const home = render(selected, false);
+    assert.ok(home.includes(`<dt>Время</dt><dd>${duration}</dd>`), `${id}: home card`);
+  }
+  assert.ok(!full.includes('Ручной массаж · 45 мин'));
+  assert.ok(!full.includes('Вакуумно-роликовый 30 мин'));
 });
 
 // Public Yclients company 375899: service IDs 16141950, 16141952, 16141953,
@@ -157,7 +256,7 @@ test('saved v3 and newer catalogues backfill only empty combo descriptions witho
     item(saved, 'first-1').duration = '50 мин';
     const before = JSON.stringify(saved), prepared = prepare(saved, null);
     assert.equal(JSON.stringify(saved), before, 'input remains intact');
-    assert.equal(prepared.catalogVersion, version);
+    assert.equal(prepared.catalogVersion, Math.max(version, 4));
     for (const service of items(saved)) {
       const found = verifiedCombos.find(([id]) => id === service.id);
       const expected = found ? {...service, desc: found[1]} : service;

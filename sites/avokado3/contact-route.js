@@ -139,6 +139,7 @@
     const destination = doc.getElementById('contacts') ? '#contacts' : 'index.html#contacts';
     function rewrite(anchor) {
       if (anchor.closest('#contacts,[data-contact-choices]')) return;
+      if (anchor.getAttribute('data-company-link')) return;
       if (!isSocial(anchor.getAttribute('href'), location.href)) return;
       anchor.setAttribute('href', destination);
       anchor.removeAttribute('target');

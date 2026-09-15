@@ -46,7 +46,7 @@
     const book = esc(data.links?.book || '#');
     const chat = esc(data.links?.chat || '#');
     return `<div class="pc__actions${sectionLevel ? ' pc__actions--section' : ''}">
-            <a class="pc__button pc__button--main" href="${book}" target="_blank" rel="noopener">Записаться онлайн</a>
+            <a class="pc__button pc__button--main" data-company-link="booking" href="${book}" target="_blank" rel="noopener">Записаться онлайн</a>
             <a class="pc__button" href="${chat}" target="_blank" rel="noopener">Подобрать с администратором</a>
           </div>`;
   }
