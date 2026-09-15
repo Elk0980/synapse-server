@@ -5,6 +5,7 @@ const { createHash } = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 const { URL } = require('node:url');
 const { createEmailNotifications } = require('./email-notifications');
+const { createEmailOutbox } = require('./email-outbox');
 
 const IS_MAIN = require.main === module;
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
@@ -538,6 +539,13 @@ const createLead = db.prepare(`
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'новая', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 const getLead = db.prepare('SELECT * FROM leads WHERE id = ?');
+const emailOutbox = createEmailOutbox(db, emailNotifications);
+function deliverLeadEmails() {
+  return emailOutbox.drain().catch(() => {
+    // Do not expose SMTP responses or contact details in service logs.
+    console.error('[crm] email outbox processing failed code=OUTBOX_PROCESSING');
+  });
+}
 const getLeadByContact = db.prepare(`SELECT * FROM leads WHERE normalized_contact = ?
   AND normalized_contact != '' AND company_code IS ? COLLATE NOCASE ORDER BY id LIMIT 1`);
 const getMessage = db.prepare('SELECT * FROM messages WHERE id = ?');
@@ -2577,40 +2585,52 @@ async function route(request, response) {
       checkPublicOrigin(request, company, url.pathname);
     }
     const duplicate = getLeadByContact.get(normalized, companyCode);
-    if (duplicate) return send(response, 200, { ...serializeLead(duplicate), deduplicated: true }, cors);
+    if (duplicate) {
+      emailOutbox.enqueue(duplicate, {repeated: true});
+      send(response, 200, { ...serializeLead(duplicate), deduplicated: true }, cors);
+      void deliverLeadEmails();
+      return;
+    }
     const utmSource = optionalString(body.utmSource, 'utmSource');
     const referrer = optionalString(body.referrer, 'referrer');
     const sourceInput = optionalString(body.source, 'source');
     const derived = deriveSource({ utmSource, referrer });
     const source = sourceInput || (utmSource ? derived : (derived === 'direct' ? null : derived));
     const landingPage = optionalString(body.landingPage, 'landingPage');
-    const result = createLead.run(
-      new Date().toISOString(),
-      requiredString(body.name, 'name'),
-      contact,
-      normalized,
-      optionalString(body.channel, 'channel'),
-      source,
-      optionalString(body.tag, 'tag'),
-      optionalString(body.page, 'page') || landingPage,
-      optionalString(body.firstQuestion, 'firstQuestion'),
-      optionalString(body.comment, 'comment'),
-      utmSource,
-      optionalString(body.utmMedium, 'utmMedium'),
-      optionalString(body.utmCampaign, 'utmCampaign'),
-      optionalString(body.utmContent, 'utmContent'),
-      optionalString(body.utmTerm, 'utmTerm'),
-      optionalString(body.clientId, 'clientId'),
-      referrer,
-      landingPage,
-      companyCode
-    );
-    const row = getLead.get(Number(result.lastInsertRowid));
-    insertStageHistory.run(row.id, row.created_at, null, row.stage);
+    let row;
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const result = createLead.run(
+        new Date().toISOString(),
+        requiredString(body.name, 'name'),
+        contact,
+        normalized,
+        optionalString(body.channel, 'channel'),
+        source,
+        optionalString(body.tag, 'tag'),
+        optionalString(body.page, 'page') || landingPage,
+        optionalString(body.firstQuestion, 'firstQuestion'),
+        optionalString(body.comment, 'comment'),
+        utmSource,
+        optionalString(body.utmMedium, 'utmMedium'),
+        optionalString(body.utmCampaign, 'utmCampaign'),
+        optionalString(body.utmContent, 'utmContent'),
+        optionalString(body.utmTerm, 'utmTerm'),
+        optionalString(body.clientId, 'clientId'),
+        referrer,
+        landingPage,
+        companyCode
+      );
+      row = getLead.get(Number(result.lastInsertRowid));
+      insertStageHistory.run(row.id, row.created_at, null, row.stage);
+      emailOutbox.enqueue(row);
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
     send(response, 201, { ...serializeLead(row), deduplicated: false }, cors);
-    emailNotifications.notifyLead(row).catch((error) => {
-      console.error('[crm] lead email notification failed', error);
-    });
+    void deliverLeadEmails();
     return;
   }
 
@@ -2813,17 +2833,22 @@ const pipelineRulesTimer = IS_MAIN ? setInterval(() => {
   try { applyPipelineRules(); } catch (error) { console.error('Ошибка правил воронок:', error); }
 }, 60 * 60 * 1000) : null;
 pipelineRulesTimer?.unref();
-server.on('close', () => clearInterval(pipelineRulesTimer));
+const emailOutboxTimer = IS_MAIN ? setInterval(deliverLeadEmails, 15000) : null;
+emailOutboxTimer?.unref();
+server.on('close', () => { clearInterval(pipelineRulesTimer); clearInterval(emailOutboxTimer); });
 
 if (IS_MAIN) {
   server.listen(PORT, () => {
     console.log(`Мини-CRM слушает порт ${PORT}; база: ${DATABASE_PATH}`);
+    void deliverLeadEmails();
   });
 }
 
 function shutdown() {
   clearInterval(pipelineRulesTimer);
-  server.close(() => {
+  clearInterval(emailOutboxTimer);
+  server.close(async () => {
+    await emailOutbox.stop();
     db.close();
     process.exit(0);
   });
