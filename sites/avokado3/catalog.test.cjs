@@ -128,3 +128,63 @@ test('edited content is escaped and an empty certificate has a usable fallback',
   changed.certificates = {};
   assert.ok(render(changed, true).includes('Обсудить сертификат'));
 });
+
+const giftSection = (data, full) => render(data, full).match(/<section class="av-direction av-gift"[\s\S]*?<\/section>/)[0];
+const certificateSides = html => [...html.matchAll(/<figure class="av-certificate-side">[\s\S]*?<\/figure>/g)].map(match => match[0]);
+const imageSource = html => html.match(/<img\b[^>]*src="([^"]+)"/)[1].replaceAll('&amp;', '&');
+
+test('both catalogue pages expose two labelled certificate faces with matching full-size links', () => {
+  for (const full of [false, true]) {
+    const html = giftSection(defaults, full), sides = certificateSides(html);
+    assert.equal(sides.length, 2);
+    assert.ok(sides[0].includes('<span>Лицевая сторона</span>'));
+    assert.ok(sides[1].includes('<span>Обратная сторона · запись и сайт</span>'));
+    const expected = [
+      'https://avokado3.synapsebusiness.ru/assets/certificate-avokado-light.svg?v=20260915-qr',
+      'https://avokado3.synapsebusiness.ru/assets/certificate-avokado-back.svg?v=20260915-qr',
+    ];
+    sides.forEach((side, index) => {
+      assert.equal(imageSource(side), expected[index]);
+      const link = side.match(/<a\b[^>]*class="av-certificate-open"[^>]*>/)[0];
+      assert.equal(link.match(/href="([^"]+)"/)[1].replaceAll('&amp;', '&'), imageSource(side));
+      assert.match(link, /target="_blank"/);
+      assert.match(link, /rel="noopener"/);
+      assert.ok(side.includes('Открыть крупно'));
+      assert.doesNotMatch(side, /<(?:figure|img)\b[^>]*\s(?:hidden(?:\s|=|>)|aria-hidden="true")/, 'neither certificate face depends on a flip or disclosure');
+    });
+    assert.ok(html.includes(defaults.certificates.note));
+    assert.ok(html.includes(defaults.certificates.types[0].text));
+  }
+});
+
+test('custom certificate photos and their URL parameters survive while an absent back uses the new default', () => {
+  const changed = copy(defaults);
+  changed.certificates.photo = 'assets/owner-front.webp?edition=owner&name=gift';
+  changed.certificates.backPhoto = 'https://images.example.test/owner-back.png?v=owner';
+  for (const full of [false, true]) {
+    const sides = certificateSides(giftSection(changed, full));
+    assert.equal(imageSource(sides[0]), 'https://avokado3.synapsebusiness.ru/assets/owner-front.webp?edition=owner&name=gift');
+    assert.equal(imageSource(sides[1]), changed.certificates.backPhoto);
+    assert.ok(!sides.join('').includes('certificate-avokado-'));
+  }
+  delete changed.certificates.backPhoto;
+  assert.ok(imageSource(certificateSides(giftSection(changed, true))[1]).endsWith('/certificate-avokado-back.svg?v=20260915-qr'));
+  changed.certificates.photo = 'assets/certificate-avokado-light.svg?v=old&edition=gift';
+  const refreshed = new URL(imageSource(certificateSides(giftSection(changed, true))[0]));
+  assert.equal(refreshed.searchParams.get('v'), '20260915-qr');
+  assert.equal(refreshed.searchParams.get('edition'), 'gift');
+});
+
+test('empty and unsafe certificate images fall back independently without unsafe enlargement links', () => {
+  for (const value of ['', 'javascript:alert(1)', 'data:image/svg+xml,<svg/>', 'tel:+79331901059', 'file:///private/image.svg', 'https://[']) {
+    const changed = copy(defaults);
+    changed.certificates.photo = value;
+    changed.certificates.backPhoto = value;
+    for (const full of [false, true]) {
+      const sides = certificateSides(giftSection(changed, full));
+      assert.ok(imageSource(sides[0]).endsWith('/certificate-avokado-light.svg?v=20260915-qr'));
+      assert.ok(imageSource(sides[1]).endsWith('/certificate-avokado-back.svg?v=20260915-qr'));
+      assert.doesNotMatch(sides.join(''), /(?:src|href)="(?:javascript|data|tel|file):/i);
+    }
+  }
+});

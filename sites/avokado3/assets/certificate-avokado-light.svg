@@ -48,6 +48,9 @@
 <text x="800" y="480" text-anchor="middle" font-family="Manrope, sans-serif" font-size="28" letter-spacing="14" fill="#5d6b52">ПОДАРОЧНЫЙ</text>
 <text x="800" y="566" text-anchor="middle" font-family="Cormorant, 'Times New Roman', serif" font-size="88" letter-spacing="4" fill="url(#gold)">СЕРТИФИКАТ</text>
 
+<text x="1200" y="620" font-family="Manrope, Arial, sans-serif" font-size="19" fill="#5d6b52">№</text>
+<line x1="1235" y1="625" x2="1400" y2="625" stroke="#9aa78f" stroke-width="1"/>
+
 <g font-family="Manrope, sans-serif" fill="#5d6b52">
   <text x="200" y="664" font-size="19" letter-spacing="3">НА</text>
   <line x1="248" y1="674" x2="1400" y2="674" stroke="#9aa78f" stroke-width="1"/>
@@ -64,7 +67,7 @@
 <g font-family="Manrope, sans-serif" font-size="17" fill="#6c7a61" letter-spacing="1">
   <text x="200" y="878">Иркутск, ул. Красноказачья, 84</text>
   <text x="200" y="906">ежедневно · по предварительной записи</text>
-  <text x="1400" y="878" text-anchor="end">+7 950 100-10-59</text>
-  <text x="1400" y="906" text-anchor="end">ИП Петрук Т. А. · avokado.synapsebusiness.ru</text>
+  <text x="1400" y="878" text-anchor="end">+7 933 190-10-59</text>
+  <text x="1400" y="906" text-anchor="end">ИП Петрук Т. А. · avokado38.ru</text>
 </g>
 </svg>
