@@ -4,6 +4,7 @@
 const SbCabinet = window.SbCabinet = window.SbCabinet || {};
 let ctx, identity, byId, escapeHTML, crmQuery, csrfOptions, scopeParams, hasPermission, navigate;
 let initialized = false;
+let renderVersion = 0;
 const api = {};
 const companyLinkFields = Object.freeze([
   ['two_gis', '2ГИС'], ['yandex_maps', 'Яндекс Карты'], ['max', 'MAX'],
@@ -249,6 +250,8 @@ const applyContactProjectFilter = async () => {
   await renderEntityList("crm-contacts", true);
 };
 const renderCrmEntityRoute = async () => {
+  ++renderVersion;
+  const routeHash = location.hash;
   const { parts: [view, route], params } = entityHashParts();
   const config = CRM_ENTITIES[view];
   if (!route && config.companyFilter) {
@@ -265,10 +268,11 @@ const renderCrmEntityRoute = async () => {
     else if (route) await renderEntityCard(view, route);
     else await renderEntityList(view, true);
   } catch (error) {
-    content.innerHTML = `<p class="crm-error" role="alert">Не удалось загрузить: ${escapeHTML(error.message)}</p>`;
+    if (location.hash === routeHash) content.innerHTML = `<p class="crm-error" role="alert">Не удалось загрузить: ${escapeHTML(error.message)}</p>`;
   }
 };
 const renderEntityList = async (view, reset = false) => {
+  const version = ++renderVersion;
   const config = CRM_ENTITIES[view];
   if (config.stageFilter && identity.role === "owner") await SbCabinet.pipelineStages.load(crmQuery);
   const state = entityState(view);
@@ -288,6 +292,7 @@ const renderEntityList = async (view, reset = false) => {
     offset: state.offset
   };
   const data = await crmQuery(`/${config.path}`, scoped(params));
+  if (version !== renderVersion) return;
   state.records.push(...(data[config.key] || []));
   const pageRecords = data[config.key] || [];
   const companyOptions = state.companies.map((company) => {
@@ -417,11 +422,14 @@ const bindListActions = (view) => {
   content.querySelectorAll("[data-list-edit]").forEach(button => button.addEventListener("click", async event => {
     event.stopPropagation();
     const id = button.closest("[data-entity-id]").dataset.entityId;
+    const version = ++renderVersion;
     button.disabled = true;
     try {
       const record = await crmQuery(`/${config.path}/${encodeURIComponent(id)}`, scopeParams());
+      if (version !== renderVersion) return;
       renderEntityForm(view, record);
     } catch (error) {
+      if (version !== renderVersion) return;
       const status = content.querySelector("[data-list-status]"); status.textContent = error.message; status.hidden = false;
       button.disabled = false;
     }
@@ -485,9 +493,11 @@ const companySummaryMarkup = (overview) => {
   </div>`;
 };
 const renderEntityCard = async (view, id) => {
+  const version = ++renderVersion;
   const config = CRM_ENTITIES[view];
   if (config.stageFilter && identity.role === "owner") await SbCabinet.pipelineStages.load(crmQuery);
   const record = await crmQuery(`/${config.path}/${encodeURIComponent(id)}`, scoped({ includeDeleted: true }));
+  if (version !== renderVersion) return;
   const content = byId(`${view}-content`);
   const publicFields = Object.keys(config.labels).filter((field) => !config.private?.includes(field));
   const privateFields = config.private || [];
@@ -689,9 +699,11 @@ const repeatRow = (row = {}, field = "", index = null) => {
 const companyPrepositional = (count) =>
   count % 10 === 1 && count % 100 !== 11 ? "компании" : "компаниях";
 const renderEntityForm = async (view, record) => {
+  const version = ++renderVersion;
   const config = CRM_ENTITIES[view];
   if (config.stageFilter && identity.role === "owner") await SbCabinet.pipelineStages.load(crmQuery);
   const content = byId(`${view}-content`);
+  if (version !== renderVersion) return;
   const fields = formFields(config);
   const isCompany = view === 'crm-companies';
   const isContact = view === 'crm-contacts';
