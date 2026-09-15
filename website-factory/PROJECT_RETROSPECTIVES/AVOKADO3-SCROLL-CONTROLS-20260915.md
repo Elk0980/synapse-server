@@ -3,7 +3,7 @@ knowledge_id: AVOKADO3-SCROLL-CONTROLS-20260915
 category: PROJECT_RETROSPECTIVES
 project_source: AVOKADO3
 reuse_scope: PROJECT
-source_version_head: 26e6fa3e7f2fec827e8179a3806a406ebabdac5e
+source_version_head: 402cde993ed30cf296d1ffb43e2ddaf1bfbaecb4
 created_at: 2026-09-15
 status: VERIFIED_SOURCE
 ---
@@ -16,6 +16,6 @@ Continuing downward from the document end starts another lap at the top. Wheel, 
 
 Three focused tests pass for idle timing/resizing, footer/anchor navigation and repeated input, touch direction, dialog/input exclusions, and keyboard focus. JavaScript syntax passes. Browser interaction and live mobile appearance remain UNKNOWN because the connected browser is unavailable.
 
-Separate requested portrait replacement is READY / PUBLICATION BLOCKED. The owner supplied the light-sweater explaining-pose image to replace `assets/heroine-sport.png`. It has been inspected and encoded at the same 941 × 1672 dimensions as `heroine-explaining-20260915.webp` (39150 bytes), without cropping. The existing contain layout preserves head and hands. Automatic review rejected its GitHub blob upload because it requires explicit authorization for this personal-photo payload to the public Elk0980/synapse-server destination. The active HTML retains the existing photograph and does not reference the blocked asset. No alternative upload route was attempted.
+Portrait replacement: EXPLICITLY APPROVED / INCLUDED IN RELEASE. The owner supplied the light-sweater explaining-pose image to replace `assets/heroine-sport.png`. It has been inspected and encoded at the same 941 × 1672 dimensions as `heroine-explaining-20260915.webp` (39150 bytes), without cropping. The existing contain layout preserves head and hands, with 24px rounded corners on the portrait. The initial GitHub blob upload was rejected by automatic review, requiring explicit payload/destination authorization. The owner subsequently answered “разрешаю” to the question explicitly naming this light-sweater photograph, the public Elk0980/synapse-server repository and Avokado3. The upload was then accepted (blob d34d58dd8449272df4548a2308586e325344bf81); the page references the new asset. No alternative upload route was used. Browser visual verification remains UNKNOWN.
 
 Learning: implement a repeat-page interaction from continued user input at the end, rather than resetting in a generic scroll handler, so normal anchor navigation and footer controls remain usable.
