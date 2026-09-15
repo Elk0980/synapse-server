@@ -94,3 +94,18 @@ test('shared deployed controller and content helper stay equal across sites and 
   const editor = fs.readFileSync(__dirname + '/../synapse/site-editor.html', 'utf8');
   assert.match(editor, /if \(sec.id === 'promo' && doc.subscriptionPromoRevision\) return/);
 });
+
+test('photo quality update refreshes default assets and preserves owner uploads and deletions', () => {
+  const fields = [
+    { key: 'promo.promo-portrait-1', src: 'img/subscription-alvi-20260915.webp' },
+    { key: 'promo.promo-portrait-2', src: '/api/assets/owner-photo.webp' },
+    { key: 'promo.deleted-photo', src: '', hidden: true }
+  ];
+  const original = { subscriptionPromoRevision: content.REVISION, sections: [{ id: 'promo', fields }] };
+  const updated = content.upgrade(original, 'alvi');
+  assert.equal(updated.sections[0].fields[0].src, 'img/subscription-alvi-20260916-hq.webp');
+  assert.equal(original.sections[0].fields[0].src, 'img/subscription-alvi-20260915.webp');
+  assert.equal(updated.sections[0].fields[1], fields[1]);
+  assert.equal(updated.sections[0].fields[2], fields[2]);
+  assert.equal(content.upgrade(updated, 'alvi'), updated);
+});
