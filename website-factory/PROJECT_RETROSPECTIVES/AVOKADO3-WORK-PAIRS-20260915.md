@@ -35,7 +35,7 @@ ANALYTICS EVENTS: Existing analytics retained; no conversion improvement claimed
 SEO: Existing metadata and index policy retained.
 KNOWN RISKS: Text/image crop on short screens; competing timeline updates; late CMS text changes.
 DO_NOT_CHANGE: Reviews, objections reveal, prices, booking links and other sites.
-OPEN QUESTIONS: Automatic approval review requires explicit permission for these four new photos in the public source repository.
+OPEN QUESTIONS: Visit-photo authorization is now confirmed. The separate Drive-derived results gallery remains blocked by automatic publication review; desktop and mobile visual QA remain unavailable.
 NEXT_EXACT_ACTION: Once approved, upload the four prepared WebP assets, verify the complete source against current main, complete browser QA when available, and publish atomically.
 
 Checkpoint: DISCOVERY / CONTENT MAPPING / HANDOFF complete. Implementation in progress. No live change from this task yet.
@@ -68,3 +68,13 @@ All four photo assignments are configured. WebP files total 409332 bytes, retain
 Auto-review rejected the first new image upload with this reason: the public GitHub upload contains the user's supplied photograph, while earlier approvals named different photos. No alternative transfer or encoding was attempted after this rejection. None of these four images has been uploaded to GitHub, and main is unchanged by this task.
 
 Browser blocker: tab discovery repeatedly timed out. Closing the editor tab reported an active JavaScript prompt. The documented dialog getter and keyboard dismissal did not recover the connection; no visual QA is claimed. Repeated browser failures are SYSTEMIC_PROBLEM; a prompt-aware connection preflight is an AUTOMATION_REQUIRED candidate, not an implemented fix.
+
+
+Checkpoint: VISIT PHOTOS AUTHORIZED / CORE RELEASE PREPARED.
+The owner authorized publication of all current requested changes. All four visit photos were accepted by the GitHub blob upload tool. The core release includes their four byte-verified WebP assets, the paired renderer, and the existing six-scene timeline. The gallery request is deliberately excluded from the live HTML while its photographs remain blocked.
+
+Additional scope: make the photo catalogue surfaces more transparent at every nested level. The catalogue background alpha changes from .82 to .36, photo card base to .16, text panel from .89 to .66, and blur from 9px to 3px. Mobile panel alpha is .56; secondary buttons are translucent. Text retains full opacity, with brighter fact labels. Prices, descriptions and photo framing are unchanged.
+
+Verification: original objection timeline, four visit reading holds, reverse/idle determinism, reduced motion and final hold pass the Node checks. The gallery's seven-scene variant also preserves objection timing, but is not enabled in this release. Browser recovery still fails on the existing editor JavaScript prompt, so desktop rendering, mobile rendering and CMS interaction are UNKNOWN.
+
+Separate blocker: automatic review rejected a Drive-derived example image upload twice, including after metadata confirmed all 14 sources publicly available by link and ownership of the destination repository. No Drive-derived image was published. It requires explicit approval naming the Drive source and public GitHub destination. The complete gallery code is saved separately for review; optimized photo assets are retained privately.
