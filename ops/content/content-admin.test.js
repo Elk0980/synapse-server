@@ -137,7 +137,8 @@ test('site registry scopes, filters, creates blank draft and soft-deletes', () =
   const save = (key, document, author) => db.prepare('INSERT INTO documents VALUES (?,?,?,?,?)')
     .run(key, 1, new Date().toISOString(), author, JSON.stringify(document));
   const sites = createSiteStore(db, auth, save);
-  assert.equal(sites.list(owner, { state: 'published' }).some((site) => site.id === 'avokado'), true);
+  assert.equal(sites.list(owner, { state: 'published' }).some((site) => site.id === 'avokado3'), true);
+  assert.equal(sites.list(owner, { state: 'draft' }).some((site) => site.id === 'avokado'), true);
   assert.equal(sites.list(owner, { state: 'draft' }).some((site) => site.id === 'alvi'), true);
   const created = sites.create(owner, { name: 'Draft', companyCode: 'alvi' });
   assert.equal(created.publicationStatus, 'draft');

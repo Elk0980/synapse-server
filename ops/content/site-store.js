@@ -17,9 +17,9 @@ const LEGACY_SITES = [
     'https://drafts.synapsebusiness.ru/alvi/', null, null, null],
   ['alvi', 'alvi', 'ALVI', 'draft', 'https://alvi.synapsebusiness.ru/', 'alvi',
     '/site-editor.html?site=alvi', '/price-editor.html?site=alvi'],
-  ['avokado', 'avokado', 'АВОКАДО — предыдущая версия', 'published', 'https://avokado.synapsebusiness.ru/', 'avokado',
+  ['avokado', 'avokado', 'АВОКАДО — предыдущая версия', 'draft', 'https://avokado.synapsebusiness.ru/', 'avokado',
     '/site-editor.html?site=avokado', '/price-editor.html?site=avokado'],
-  ['avokado2', 'avokado', 'Авокадо2', 'published', 'https://avokado2.synapsebusiness.ru/', 'avokado2',
+  ['avokado2', 'avokado', 'Авокадо2', 'draft', 'https://avokado2.synapsebusiness.ru/', 'avokado2',
     '/site-editor.html?site=avokado2', '/price-editor.html?site=avokado'],
   ['avokado3', 'avokado', 'АВОКАДО — основной сайт', 'published', 'https://avokado38.ru/', 'avokado3',
     '/site-editor.html?site=avokado3', '/price-editor.html?site=avokado'],
@@ -40,6 +40,9 @@ function createSiteStore(db, authStore, saveDocument) {
       public_url TEXT, content_site_id TEXT, site_editor_url TEXT, price_editor_url TEXT,
       created_by INTEGER REFERENCES auth_users(id), created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL, deleted_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS site_migrations (
+      id TEXT PRIMARY KEY, applied_at TEXT NOT NULL
     );
   `);
   const insertLegacy = db.prepare(`INSERT OR IGNORE INTO managed_sites
@@ -62,6 +65,20 @@ function createSiteStore(db, authStore, saveDocument) {
   db.prepare(`UPDATE managed_sites SET public_url='https://avokado38.ru/'
     WHERE id='avokado3' AND company_code='avokado' AND source='legacy'
       AND public_url='https://avokado3.synapsebusiness.ru/'`).run();
+  // Apply this owner's publication choice once; later manual choices survive restarts.
+  // Record the marker with the updates so a failed migration remains retryable.
+  transaction(db, () => {
+    const migration = 'avokado_publication_20260915';
+    if (db.prepare('SELECT id FROM site_migrations WHERE id=?').get(migration)) return;
+    const publishAvokado = db.prepare(`UPDATE managed_sites SET publication_status=?, updated_at=?
+      WHERE id=? AND company_code='avokado' AND source='legacy' AND deleted_at IS NULL
+        AND publication_status<>?`);
+    const publicationStamp = new Date().toISOString();
+    for (const [id, status] of [['avokado', 'draft'], ['avokado2', 'draft'], ['avokado3', 'published']]) {
+      publishAvokado.run(status, publicationStamp, id, status);
+    }
+    db.prepare('INSERT INTO site_migrations (id, applied_at) VALUES (?, ?)').run(migration, publicationStamp);
+  });
   const visible = (user, row) => user.role === 'owner' || user.companyCodes.includes(row.company_code);
   const output = (user, row) => {
     const can = (permission) => user.role === 'owner' || user.permissions.includes(permission);
