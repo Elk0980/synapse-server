@@ -698,10 +698,21 @@ async function main() {
   console.log('MIGRATION_EMPTY=PASS NO_SEED=PASS');
 
   for (const pathname of ['/contacts', '/companies', '/legal-entities', '/pipeline-stages',
-    '/pipelines', '/pipeline-rules']) {
+    '/pipelines', '/pipeline-rules', '/email-status']) {
     assert.equal((await request('GET', pathname, undefined, null)).status, 401);
     assert.equal((await request('GET', pathname, undefined, 'wrong')).status, 401);
   }
+  const emailStatus = await request('GET', '/email-status');
+  assert.equal(emailStatus.status, 200);
+  assert.equal(emailStatus.headers.get('cache-control'), 'no-store');
+  assert.equal(emailStatus.body.smtp.configured, false);
+  assert.ok(Object.values(emailStatus.body.smtp).every(value => typeof value === 'boolean'));
+  assert.deepEqual(emailStatus.body.companies.map(({code, queued, sending, sent, errors}) =>
+    ({code, queued, sending, sent, errors})), [
+    {code: 'alvi', queued: 0, sending: 0, sent: 0, errors: []},
+    {code: 'avokado', queued: 0, sending: 0, sent: 0, errors: []}
+  ]);
+  assert.ok(emailStatus.body.companies.every(company => typeof company.recipientConfigured === 'boolean'));
   assert.equal((await request('PUT', '/pipeline-stages', { stages: [] }, null)).status, 401);
   assert.equal((await request('PUT', '/pipelines', { pipelines: [] }, null)).status, 401);
   const contact = await request('POST', '/contacts', { name: 'QA Contact A', city: 'QA City',

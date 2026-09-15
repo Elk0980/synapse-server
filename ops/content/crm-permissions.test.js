@@ -87,6 +87,7 @@ test('CRM proxy restricts pipelines to the owner and preserves company-scoped ed
   }
   const crmBase = await start(path.join(__dirname, '../crm/server.js'), {
     DATABASE_PATH: path.join(directory, 'crm.sqlite'), API_KEY: apiKey, RATE_LIMIT_MAX: '10000',
+    LEADS_SMTP_USER: '', LEADS_SMTP_PASSWORD: '', LEADS_NOTIFY_EMAIL_ALVI: '', LEADS_NOTIFY_EMAIL_AVOKADO: '',
   }, '/contacts');
   const base = await start(path.join(__dirname, 'server.js'), {
     DATABASE_PATH: databasePath, API_KEY: '', AUTH_USERS: '', SEED_DIR: directory,
@@ -110,6 +111,20 @@ test('CRM proxy restricts pipelines to the owner and preserves company-scoped ed
   const viewer = await login('viewer');
   const crm = (session, method, pathname, body, headers) =>
     request(base, method, `/content/crm${pathname}`, body, session, headers);
+  await t.test('email diagnostics require an owner session and expose only safe status', async () => {
+    assert.equal((await crm(undefined, 'GET', '/email-status')).status, 401);
+    for (const session of [editor, mover, targetEditor, observer, viewer]) {
+      const result = await crm(session, 'GET', '/email-status');
+      assert.equal(result.status, 403);
+      assert.equal(result.body.error, 'Диагностика почты доступна только владельцу');
+    }
+    const result = await crm(owner, 'GET', '/email-status');
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    assert.equal(result.body.smtp.configured, false);
+    assert.deepEqual(result.body.companies.map((company) => company.code), ['alvi', 'avokado']);
+    assert.ok(result.body.companies.every((company) => company.recipientConfigured === false));
+    assert.match(result.headers.get('cache-control'), /no-store/);
+  });
   const other = await crm(owner, 'POST', '/companies', { code: 'avokado', name: 'QA Other' });
   const own = await crm(owner, 'POST', '/companies', { code: 'alvi', name: 'QA ALVI', pipelineStage: 'new' });
   assert.equal(other.status, 201);

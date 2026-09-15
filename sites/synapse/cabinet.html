@@ -870,6 +870,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     </section>
     <section class="view-panel" id="settings-view" data-view="settings" hidden>
       <div class="content-header"><h1>Настройки</h1></div>
+      <div class="card settings-email" id="settings-email" hidden>
+        <div class="settings-email-header">
+          <div><h2>Почта для заявок</h2><p>Эта проверка не отправляет письма.</p></div>
+          <button class="plain-button" id="email-status-refresh" type="button">Проверить настройки</button>
+        </div>
+        <div id="email-status-result" role="status" aria-live="polite"></div>
+      </div>
       <div class="card settings-hugh" id="settings-hugh" hidden>
         <div><h2>Хью</h2><p>Выберите источник для каждой роли. Настройки хранятся на сервере.</p></div>
         <form id="hugh-settings-form">
@@ -960,7 +967,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260915-published-sites";
+  window.SB_CABINET_ASSET_VERSION = "20260915-email-status";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
