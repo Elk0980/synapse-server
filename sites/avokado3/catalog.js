@@ -7,7 +7,7 @@ const groups=[
 {id:'apparatus',title:'Аппаратный массаж',headline:'Коррекция фигуры начинается с первого визита.',intro:'Знакомство с процедурой, работа с выбранными зонами и программа под вашу цель.'},
 {id:'manual',title:'Ручной массаж и массаж лица',headline:'Время для себя — в руках мастера.',intro:'Массаж тела или лица: выбирайте подходящую процедуру и обсудите пожелания со специалистом.'}
 ];
-function group(cat,it){if(['laser','apparatus','manual'].includes(it.direction))return it.direction;if(cat.id.startsWith('laser'))return 'laser';if(cat.id==='apparat'||(cat.id==='first-visit'&&it.id!=='first-3'))return 'apparatus';return 'manual';}
+function group(cat,it){if(cat.id==='subscriptions')return 'subscriptions';if(['laser','apparatus','manual'].includes(it.direction))return it.direction;if(cat.id.startsWith('laser'))return 'laser';if(cat.id==='apparat'||(cat.id==='first-visit'&&it.id!=='first-3'))return 'apparatus';return 'manual';}
 function safeUrl(value,fallback){try{const u=new URL(value,location.href);return ['https:','http:','tel:'].includes(u.protocol)?u.href:fallback;}catch(e){return fallback;}}
 function contactUrl(full){return full?'index.html#contacts':'#contacts';}
 function certificateButton(value){return !value||value==='Обсудить сертификат'?'Выбрать сертификат':value;}
@@ -63,11 +63,20 @@ function gift(data,full){
   {label:'Обратная сторона · запись и сайт',alt:'Подарочный сертификат Авокадо — обратная сторона с QR-кодами записи и сайта',photo:certificatePhoto(c.backPhoto,'assets/certificate-avokado-back.svg')}
  ];
  const preview=`<div class="av-certificate-preview" aria-label="Сертификат с двух сторон">${sides.map(side=>`<figure class="av-certificate-side"><img src="${esc(side.photo)}" alt="${esc(side.alt)}" loading="lazy"><figcaption><span>${esc(side.label)}</span><a class="av-certificate-open" href="${esc(side.photo)}" target="_blank" rel="noopener" aria-label="Открыть крупно: ${esc(side.label.toLowerCase())}">Открыть крупно <span aria-hidden="true">↗</span></a></figcaption></figure>`).join('')}</div>`;
- return `<section class="av-direction av-gift" id="certificate"><div><p class="av-kicker">04 · Сертификаты</p><h2>${esc(c.intro||'Подарите время для себя')}</h2><p class="av-intro">${esc(c.note||'Обсудите номинал и оформление сертификата с администратором студии.')}</p>${(c.types||[]).map(t=>`<h3>${esc(t.title)}</h3><p>${esc(t.text)}</p>`).join('')}<a class="av-button av-button--gold" href="${contactUrl(full)}" data-contact-route data-entry-point="catalog_certificate">${esc(certificateButton(c.button))}</a></div>${preview}</section>`;
+ return `<section class="av-direction av-gift" id="certificate"><div><p class="av-kicker">${full?'Сертификаты':'04 · Сертификаты'}</p><h2>${esc(c.intro||'Подарите время для себя')}</h2><p class="av-intro">${esc(c.note||'Обсудите номинал и оформление сертификата с администратором студии.')}</p>${(c.types||[]).map(t=>`<h3>${esc(t.title)}</h3><p>${esc(t.text)}</p>`).join('')}<a class="av-button av-button--gold" href="${contactUrl(full)}" data-contact-route data-entry-point="catalog_certificate">${esc(certificateButton(c.button))}</a></div>${preview}</section>`;
+}
+function subscriptions(data){
+ const cat=(data.categories||[]).find(cat=>cat.id==='subscriptions');
+ if(!cat)return '';
+ const cards=(cat.items||[]).map(it=>{
+  const facts=[...(it.price?[['Цена',it.price]]:[]),...(it.duration?[['Посещения и срок',it.duration]]:[])];
+  return `<article class="av-subscription-card" id="${esc(it.id)}" data-subscription="${esc(it.id)}"><h3>${esc(it.title)}</h3>${it.desc?`<p class="av-description">${esc(it.desc)}</p>`:''}${it.composition?`<p class="av-description">${esc(it.composition)}</p>`:''}${it.items?.length?`<ul>${it.items.map(value=>`<li>${esc(value)}</li>`).join('')}</ul>`:''}${facts.length?`<dl class="av-facts">${facts.map(([label,value])=>`<dt>${label}</dt><dd>${esc(value)}${label==='Цена'&&it.oldPrice?` <s>${esc(it.oldPrice)}</s>`:''}</dd>`).join('')}</dl>`:''}<a class="av-button av-button--gold" href="index.html#contacts" data-contact-route data-entry-point="catalog_subscription_${esc(it.id)}">Подобрать абонемент</a></article>`;
+ }).join('');
+ return `<section class="av-direction av-subscriptions" id="subscriptions"><p class="av-kicker">Забота о себе — по плану</p><h2>${esc(cat.title)}</h2>${cat.note?`<p class="av-intro">${esc(cat.note)}</p>`:''}<div class="av-subscription-grid">${cards}</div></section>`;
 }
 function render(data,full){const selected=new Set([...(data.showcase?.self||[]),...(data.showcase?.two||[])]);const output=[];for(const [i,g] of groups.entries()){const cats=(data.categories||[]).map(cat=>({...cat,items:(cat.items||[]).filter(it=>group(cat,it)===g.id)})).filter(cat=>cat.items.length);const all=cats.flatMap(c=>c.items);const items=full?all:[...selected].map(id=>all.find(it=>it.id===id)).filter(Boolean);let body;if(full){body=cats.map(cat=>`<div class="av-category" id="${g.id}-${esc(cat.id)}"><h3 class="av-category-title">${esc(cat.title)}</h3>${cat.kind==='table'?table(data,cat,g.id):`<div class="av-grid">${cat.items.map(it=>card(data,it,true,g.id)).join('')}</div>`}</div>`).join('');}else{body=`<div class="av-grid">${items.map(it=>card(data,it,false,g.id)).join('')}</div><a class="av-price-link" href="price.html#${g.id}">Посмотреть весь прайс — ${esc(g.title.toLowerCase())} →</a>`;}
 output.push(`<section class="av-direction" id="${g.id}"><p class="av-kicker">0${i+1} · ${esc(g.title)}${g.id==='apparatus'?' · коррекция фигуры':''}</p><h2>${full?esc(g.title):esc(g.headline)}</h2><p class="av-intro">${esc(g.intro)}</p>${body}</section>`);}
-return output.join('')+gift(data,full);}
+return full?subscriptions(data)+gift(data,true)+output.join(''):output.join('')+gift(data,false);}
 // Verified against company 375899's public Yclients catalogue on 2026-09-15.
 const laserComboDescriptions={
  'laser-combo-1':['Мини 1','Подмышки + тотальное бикини.'],
@@ -127,9 +136,16 @@ function correctLegacyMassageDurations(data){
  });
  return {...data,categories,catalogVersion:4};
 }
+// Add the owner-requested section once; a saved version 5 keeps edits and removals.
+function addSubscriptions(data){
+ if(data.catalogVersion>=5)return data;
+ const categories=(data.categories||[]).slice();
+ if(!categories.some(cat=>cat.id==='subscriptions'))categories.unshift({id:'subscriptions',title:'Абонементы',kind:'programs',block:'self',items:[{id:'subscriptions-intro',title:'С абонементом дешевле',desc:'Подберём курс под вашу цель. Состав, количество посещений и стоимость обсудим на консультации.',price:'',duration:'',items:[]}]});
+ return {...data,categories,catalogVersion:5};
+}
 function prepare(data,defaults){
  const source=data||defaults;if(!source)return source;
- if(source.catalogVersion>=3)return removeLegacyBuccal(backfillCertificateButton(backfillComboDescriptions(correctLegacyMassageDurations(source))));
+ if(source.catalogVersion>=3)return addSubscriptions(removeLegacyBuccal(backfillCertificateButton(backfillComboDescriptions(correctLegacyMassageDurations(source)))));
  const out=JSON.parse(JSON.stringify(source));
  if((out.catalogVersion||0)<2&&defaults){
  const initial=out.version===1&&out.updatedAt==='2026-09-04T00:00:00.000Z'&&out.blocks?.self?.title==='Авокадо'&&JSON.stringify(out.showcase?.self)===JSON.stringify(['first-1'])&&!(out.showcase?.two||[]).length;
@@ -144,7 +160,7 @@ function prepare(data,defaults){
   it.duration='45 мин';
   for(const key of ['title','card'])if(typeof it[key]==='string')it[key]=it[key].replace(/\b\d+\s*мин(?:ут[аы]?)?\.?/gi,'45 мин');
  }
- out.catalogVersion=3;return removeLegacyBuccal(backfillCertificateButton(backfillComboDescriptions(correctLegacyMassageDurations(out))));
+ out.catalogVersion=3;return addSubscriptions(removeLegacyBuccal(backfillCertificateButton(backfillComboDescriptions(correctLegacyMassageDurations(out)))));
 }
 window.AvokadoCatalog={render,group,prepare};
 const target=document.getElementById('av-catalog-content');if(!target)return;

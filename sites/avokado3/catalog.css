@@ -56,6 +56,13 @@
 @media(max-width:700px){.av-catalog .av-price-link{display:flex;width:100%;padding:14px 18px;font-size:14px;min-height:54px}}
 
 /* Both certificate faces stay visible; each can be enlarged to read and scan. */
+.av-subscription-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:20px}
+.av-subscription-card{min-width:0;padding:clamp(22px,4vw,42px);border:1px solid #dfcd98;border-radius:24px;background:linear-gradient(125deg,rgba(63,67,39,.9),rgba(14,28,19,.93));box-shadow:0 12px 40px #0002;scroll-margin-top:var(--av-anchor-offset,110px)}
+.av-subscription-card h3{font:400 clamp(28px,3vw,40px)/1.2 Georgia,serif;margin:0 0 20px;color:#f7f3e7;overflow-wrap:break-word}
+.av-subscription-card .av-description{max-width:680px;font-size:17px}.av-subscription-card ul{padding-left:22px;line-height:1.7;margin:0 0 24px}
+.av-subscription-card .av-button{min-width:220px;max-width:100%}.av-subscription-card .av-facts{grid-template-columns:minmax(65px,150px) minmax(0,1fr)}
+@media(max-width:700px){.av-subscription-card{padding:24px 20px;border-radius:18px}.av-subscription-card .av-description{font-size:15px}.av-subscription-card .av-button{width:100%;min-width:0;font-size:15px}.av-subscription-card .av-facts{grid-template-columns:1fr}}
+
 .av-certificate-preview{display:grid;gap:16px;width:100%;min-width:0;max-width:560px;align-self:start}
 .av-certificate-side{margin:0;min-width:0}
 .av-certificate-side img{display:block;border:1px solid #dac68a40;border-radius:12px}

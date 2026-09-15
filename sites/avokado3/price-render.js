@@ -27,7 +27,9 @@
     const cats = (data.categories || []).slice();
     const i = cats.findIndex(isPromoCat);
     const promo = i >= 0 ? cats.splice(i, 1)[0] : (opts.noDefaultPromo ? null : DEFAULT_PROMO);
-    return promo ? [promo].concat(cats) : cats;
+    const subscriptionsIndex = cats.findIndex(cat => cat.id === 'subscriptions');
+    const subscriptions = subscriptionsIndex >= 0 ? cats.splice(subscriptionsIndex, 1) : [];
+    return subscriptions.concat(promo ? [promo] : [], cats);
   }
 
   const BLOCK_BY_CATEGORY = (data, categoryId) => {
@@ -57,10 +59,12 @@
     return `        <article class="pc" id="${esc(it.id)}" data-id="${esc(it.id)}">
           ${star}
           <h3 class="pc__title">${esc(it.title)}</h3>
+          ${opts.subscription && it.desc ? `<p class="ps__note">${esc(it.desc)}</p>` : ''}
+          ${opts.subscription && it.composition ? `<p class="ps__note">${esc(it.composition)}</p>` : ''}
           <ul class="pc__list">
 ${items}
           </ul>
-          <p class="pc__meta"><span class="pc__dur">${esc(it.duration)}</span><span class="pc__price">${esc(it.price)}${it.oldPrice ? ` <s>${esc(it.oldPrice)}</s>` : ''}</span></p>
+          ${!opts.subscription || it.duration || it.price ? `<p class="pc__meta"><span class="pc__dur">${esc(it.duration)}</span><span class="pc__price">${esc(it.price)}${it.price && it.oldPrice ? ` <s>${esc(it.oldPrice)}</s>` : ''}</span></p>` : ''}
           ${opts.editor ? opts.editHtml(it) : actions(data, false)}
         </article>`;
   }
@@ -119,7 +123,7 @@ ${types}
       let body;
       if (isDefault) body = `        <p class="ps__note">${esc(cat.note)}</p>\n        ${opts.editor ? (opts.promoPlaceholderHtml ? opts.promoPlaceholderHtml() : '') : actions(data, true)}`;
       else if (cat.kind === 'table') body = tableSection(data, cat, opts);
-      else body = ((cat.items || []).map((it) => programCard(data, it, opts)).join('\n\n') || (cat.note ? `        <p class="ps__note">${esc(cat.note)}</p>` : '')) + (opts.editor && opts.addCardHtml ? opts.addCardHtml(cat) : '');
+      else body = ((cat.items || []).map((it) => programCard(data, it, {...opts, subscription:cat.id === 'subscriptions'})).join('\n\n') || (cat.note ? `        <p class="ps__note">${esc(cat.note)}</p>` : '')) + (opts.editor && opts.addCardHtml ? opts.addCardHtml(cat) : '');
       out.push(`      <section class="ps" id="${esc(cat.id)}" data-cat="${esc(cat.id)}">
         ${title}
 ${body}

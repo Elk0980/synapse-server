@@ -28,6 +28,22 @@
   },
   "categories": [
     {
+      "id": "subscriptions",
+      "title": "Абонементы",
+      "kind": "programs",
+      "block": "self",
+      "items": [
+        {
+          "id": "subscriptions-intro",
+          "title": "С абонементом дешевле",
+          "desc": "Подберём курс под вашу цель. Состав, количество посещений и стоимость обсудим на консультации.",
+          "price": "",
+          "duration": "",
+          "items": []
+        }
+      ]
+    },
+    {
       "id": "first-visit",
       "title": "Первый визит",
       "kind": "programs",
@@ -447,5 +463,5 @@
       }
     ]
   },
-  "catalogVersion": 4
+  "catalogVersion": 5
 }

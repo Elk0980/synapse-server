@@ -710,7 +710,7 @@ body>#cta{z-index:65}
 <script>
 (()=>{let finished=false,revealTimer,safetyTimer;const loader=()=>document.getElementById("page-loader");const finish=()=>{if(finished)return;finished=true;clearTimeout(revealTimer);clearTimeout(safetyTimer);const element=loader();if(!element)return;if(!element.classList.contains("is-visible")){element.style.display="none";return}element.classList.add("is-complete");setTimeout(()=>{element.style.display="none"},250)};revealTimer=setTimeout(()=>{if(!finished)loader()?.classList.add("is-visible")},300);safetyTimer=setTimeout(()=>{finished=true;clearTimeout(revealTimer);const element=loader();if(element)element.style.display="none"},5000);if(document.readyState==="complete")finish();else addEventListener("load",finish,{once:true})})();
 </script>
-<link rel="stylesheet" href="catalog.css?v=20260915-certificate-sides">
+<link rel="stylesheet" href="catalog.css?v=20260915-subscriptions">
 <link rel="stylesheet" href="method-reveal.css?v=20260915-logo-right">
 <link rel="stylesheet" href="work-steps.css?v=20260915-pairs">
 <link rel="stylesheet" href="results-gallery.css?v=20260915-framed">
@@ -720,6 +720,7 @@ body>#cta{z-index:65}
 <link rel="stylesheet" href="mobile-foundation.css?v=20260915-mobile">
 <link rel="stylesheet" href="mobile-method.css?v=20260915-desktop-fit">
 <link rel="stylesheet" href="visitor-navigation.css?v=20260915-callback-clear">
+<link rel="stylesheet" href="subscription-promo.css?v=20260915-subscriptions">
 </head>
 <body data-company-code="avokado">
 <div class="global-photo-bg" aria-hidden="true"></div>
@@ -947,7 +948,8 @@ body>#cta{z-index:65}
   </div>
 </section>
 <!-- ═══ БЛОК 7 · ФИНАЛ ═══ --><section class="finale" id="finale" data-landing-block="7"><img class="bgimg" src="assets/hero-poster.jpg" alt="Студия дизайна тела АВОКАДО"><div class="inner"><h2 class="script rv" data-edit="finale.script-1">Позволь себе быть красивой — легко</h2><a data-company-link="booking" data-company-booking-detail class="btn-final gold-cta rv" data-entry-point="finale_cta" href="https://n396010.yclients.com/company/375899/personal/select-services?o=s19187795&amp;utm_content=finale_cta" target="_blank" rel="noopener" data-edit="finale.btn-final-1">Первый ТУРБО-массаж — 500 ₽</a><p class="booking-consent">Нажимая кнопку записи, вы соглашаетесь с <a href="privacy.html" data-edit="finale.a-1">политикой конфиденциальности</a>.</p><a class="flow-next final-arrow" href="#site-footer" aria-label="К информации о студии"><span aria-hidden="true">↓</span></a></div></section>
-<footer id="site-footer"><span class="footer-copy" data-edit="footer.footer-copy-1">АВОКАДО · студия дизайна тела · Иркутск, ул. Красноказачья, 84 · ежедневно, по предварительной записи</span><br><a href="tel:+79331901059" data-edit="footer.a-1">8-933-190-10-59</a> · <a href="privacy.html" data-edit="footer.a-2">Политика конфиденциальности</a> · <a href="consent.html" data-edit="footer.a-3">Согласие на обработку персональных данных</a><br><span class="footer-legal" data-edit="footer.footer-legal-1">Индивидуальный предприниматель Петрук Татьяна Александровна · ИНН 381497453085 · ОГРНИП 324385000056520</span></footer><div class="synapse-strip">сайт работает на <a href="https://synapsebusiness.ru" target="_blank" rel="noopener">Synapse Business</a></div><div class="cookie-notice" role="dialog" aria-label="Уведомление о cookie"><span>Сайт использует cookie для корректной работы.</span><button type="button">Хорошо</button></div>
+<dialog class="promo subscription-promo" id="promo" aria-label="ALVI и АВОКАДО · время для себя" data-promo-site="avokado3" data-promo-trigger="#method-4"><div class="promo__panel"><div class="promo__head"><p class="promo__tagline" data-edit="promo.promo-tagline-1">Два места, где есть время для себя</p><button class="promo__close" type="button" id="promo-close" aria-label="Закрыть баннер"><span aria-hidden="true">×</span><span>Закрыть</span></button></div><div class="promo__body" tabindex="0" role="region" aria-label="Предложения ALVI и Авокадо"><article class="promo__half promo__half--alvi"><img class="promo__portrait" data-edit="promo.promo-portrait-1" src="img/subscription-alvi-20260915.webp" alt="" loading="lazy" decoding="async"><div class="promo__content"><p class="promo__brand" data-edit="promo.promo-brand-1">SPA ALVI · время восстановиться</p><h3 class="promo__title" data-edit="promo.promo-title-1">Мой способ быть в ресурсе</h3><p class="promo__copy" data-edit="promo.promo-copy-1">В моём ритме важно находить время для себя. SPA-ритуалы ALVI помогают мне расслабиться и снова почувствовать себя в тонусе.</p><p class="promo__note" data-edit="promo.promo-note-1">Выберите свой ритуал — для себя или вдвоём.</p><div class="promo__actions"><a class="promo__button" data-edit="promo.promo-button-1" href="https://spaalvi-38.ru/">Открыть мир ALVI</a></div></div></article><article class="promo__half promo__half--avokado"><img class="promo__portrait" data-edit="promo.promo-portrait-2" src="img/subscription-avokado-20260915.webp" alt="" loading="lazy" decoding="async"><div class="promo__content"><p class="promo__brand" data-edit="promo.promo-brand-2">АВОКАДО · студия дизайна тела</p><h3 class="promo__title" data-edit="promo.promo-title-2">С абонементом дешевле</h3><p class="promo__copy" data-edit="promo.promo-copy-2">Забота о теле — по понятному плану. Подберём процедуры под вашу цель, составим расписание и будем отмечать прогресс вместе.</p><p class="promo__note" data-edit="promo.promo-note-2">Состав, стоимость и условия обсудим до начала курса.</p><div class="promo__actions"><a class="promo__button" data-edit="promo.promo-button-2" href="price.html#subscriptions">Посмотреть абонементы</a></div></div></article></div></div></dialog>
+<footer id="site-footer"><button type="button" class="subscription-promo-opener" data-promo-open hidden>ALVI и Авокадо · время для себя</button><br><span class="footer-copy" data-edit="footer.footer-copy-1">АВОКАДО · студия дизайна тела · Иркутск, ул. Красноказачья, 84 · ежедневно, по предварительной записи</span><br><a href="tel:+79331901059" data-edit="footer.a-1">8-933-190-10-59</a> · <a href="privacy.html" data-edit="footer.a-2">Политика конфиденциальности</a> · <a href="consent.html" data-edit="footer.a-3">Согласие на обработку персональных данных</a><br><span class="footer-legal" data-edit="footer.footer-legal-1">Индивидуальный предприниматель Петрук Татьяна Александровна · ИНН 381497453085 · ОГРНИП 324385000056520</span></footer><div class="synapse-strip">сайт работает на <a href="https://synapsebusiness.ru" target="_blank" rel="noopener">Synapse Business</a></div><div class="cookie-notice" role="dialog" aria-label="Уведомление о cookie"><span>Сайт использует cookie для корректной работы.</span><button type="button">Хорошо</button></div>
 <dialog class="results-dialog" id="results-dialog" aria-labelledby="results-dialog-title">
   <div class="results-dialog-header"><p class="results-dialog-title" id="results-dialog-title">Пример результата</p><button class="results-dialog-close" type="button" data-dialog-close autofocus>Закрыть ×</button></div>
   <div class="results-dialog-image"></div>
@@ -1377,8 +1379,9 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
 ]}
 </script>
 <script src="price-render.js?v=20260915-crm-links"></script>
-<script src="catalog.js?v=20260915-massage-times"></script>
-<script src="site-apply.js?v=20260915-editor-preview"></script>
+<script src="catalog.js?v=20260915-subscriptions"></script>
+<script src="subscription-promo-content.js?v=20260915-subscriptions"></script>
+<script src="site-apply.js?v=20260915-subscriptions"></script>
 <script>
 /* Six scenes, six pains. Opaque cards; captions exchange focus without overlap. */
 (function(){
@@ -1503,6 +1506,7 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
 <script src="contact-route.js?v=20260915-crm-links"></script>
 <script src="scroll-controls.js?v=20260915-callback-clear"></script>
 <script src="music-player.js?v=20260915"></script>
+<script src="subscription-promo.js?v=20260915-subscriptions"></script>
 <script src="price-overlay.js?v=20260915"></script>
 <script src="callback.js?v=20260915-callback"></script>
 <script src="attribution.js?v=20260915-mobile"></script>

@@ -31,29 +31,8 @@
   function publishedHref(key, href) {
     return Object.prototype.hasOwnProperty.call(heroPriceNavigationMigration, key) && href === '#quiz' ? 'price.html' : href;
   }
-  // Compact copy is a mobile presentation only. Keep the approved desktop and
-  // editor document verbatim; preserve later cabinet edits at every width.
-  const promoCopyMigration = {
-    'promo.promo-tagline-1': {
-      old: 'Совершенство — там, где есть и то, и другое: <em>красота без боли</em> в Авокадо и <em>отдых и расслабление</em> в ALVI.',
-      value: 'Время для себя · ALVI и АВОКАДО'
-    },
-    'promo.promo-title-1': {
-      old: 'Абонемент ALVI — ритуалы по одной цене',
-      value: 'Абонемент ALVI'
-    },
-    'promo.promo-copy-1': {
-      old: 'Несколько визитов одной покупкой — выгоднее разовых и спокойнее: дата уже выбрана, остаётся только прийти. Подходит для себя и в подарок.',
-      value: 'Несколько визитов одной покупкой — время для отдыха в вашем ритме.'
-    },
-    'promo.promo-title-2': {
-      old: 'Красота без боли: аппаратная коррекция фигуры и лазерная эпиляция',
-      value: 'Пробный аппаратный массаж'
-    }
-  };
   function publishedValue(key, value) {
-    const compact = !EDIT_MODE && window.matchMedia('(max-width: 56.24rem)').matches;
-    const migration = heroPriceNavigationMigration[key] || certificateCopyMigration[key] || (compact ? promoCopyMigration[key] : null);
+    const migration = heroPriceNavigationMigration[key] || certificateCopyMigration[key];
     return migration && (value === migration.old || ('htmlOld' in migration && value === migration.htmlOld)) ? migration.value : value;
   }
   function rich(value) {
@@ -141,8 +120,19 @@
     return map;
   }
   function applyFields(doc, skipKey) {
+    doc = window.SubscriptionPromoContent?.upgrade(doc, "alvi") || doc;
     lastDoc = doc;
     const map = fieldMap(doc);
+    if (doc.subscriptionPromoRevision) {
+      const removed = !doc.sections.some(sec => sec.id === 'promo');
+      const promo = document.getElementById('promo');
+      if (promo) {
+        promo.hidden = removed;
+        if (removed) window.alviPromoClose?.({ restoreFocus: false });
+        promo.querySelectorAll('[data-edit]').forEach(el => { el.hidden = !map.has(el.getAttribute('data-edit')); });
+      }
+      document.querySelectorAll('[data-promo-open]').forEach(el => { el.hidden = removed; });
+    }
     loadFonts([...map.values()].map((f) => f.style && f.style.font).filter(Boolean));
     // объекты, добавленные в редакторе
     for (const f of map.values()) if (f.added) ensureExtra(f);
@@ -159,13 +149,6 @@
         // to plain text when the editable site document is applied.
         if (!EDIT_MODE && key === 'faq.faq-answer-2') {
           html = 'Напишите в <a data-company-link="telegram" href="https://t.me/+79246180555" target="_blank" rel="noopener">Telegram</a> или <a data-company-link="max" href="https://max.ru/u/f9LHodD0cOIlskq70SXP8wscTW7u6JcnxZXmoxa5hdxjK58JpJDAM7njO68" target="_blank" rel="noopener">MAX</a>, либо позвоните по телефону <a href="tel:+79246180555">+7 924 618-05-55</a>. Работаем ежедневно 09:00–22:00 по предварительной записи.';
-        }
-        // Emphasize the actual offer from the cabinet; never hard-code its price.
-        if (!EDIT_MODE && key === 'promo.promo-copy-2') {
-          // A terminal sentence dot would sit alone below the flex price row.
-          // Consume only that final dot; keep following sentences and their punctuation.
-          html = html.replace(/(\d[\d\s\u00a0]*\s*₽)\s+вместо\s+(\d[\d\s\u00a0]*\s*₽)(?:\.(?=(?:\s|<br>)*$))?/,
-            '<span class="promo__offer"><strong class="promo__price">$1</strong> <span class="promo__was">вместо $2</span></span>');
         }
         if (el.innerHTML.trim() !== html) el.innerHTML = html;
       }

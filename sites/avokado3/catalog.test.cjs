@@ -15,6 +15,51 @@ context.AlviPrice = context.window.AlviPrice;
 vm.runInContext(read('catalog.js'), context);
 const {prepare, render} = context.window.AvokadoCatalog;
 
+test('subscription migration adds the section once and preserves later edits, clears and deletion', () => {
+  for (const version of [2, 3, 4]) {
+    const old = copy(defaults);old.catalogVersion = version;
+    old.categories = old.categories.filter(cat => cat.id !== 'subscriptions');
+    item(old, 'manual-1').price = 'Owner price';
+    old.customData = {keep: true};
+    const before = JSON.stringify(old), updated = prepare(old, null);
+    assert.equal(JSON.stringify(old), before);
+    assert.equal(updated.catalogVersion, 5);
+    assert.equal(updated.categories.filter(cat => cat.id === 'subscriptions').length, 1);
+    assert.equal(item(updated, 'manual-1').price, 'Owner price');
+    assert.equal(JSON.stringify(updated.customData), JSON.stringify(old.customData));
+    const sub = item(updated, 'subscriptions-intro');
+    assert.equal(sub.price, '');assert.equal(sub.duration, '');assert.equal(sub.items.length, 0);
+    sub.title = 'Owner package';sub.desc = '';sub.price = 'Owner price';
+    assert.equal(prepare(updated, defaults), updated);
+    assert.equal(item(prepare(updated, defaults), sub.id).desc, '');
+    updated.categories = updated.categories.filter(cat => cat.id !== 'subscriptions');
+    assert.equal(prepare(updated, defaults).categories.some(cat => cat.id === 'subscriptions'), false);
+    assert.ok(!render(updated, true).includes('id="subscriptions"'));
+  }
+  const existing = copy(defaults);existing.catalogVersion = 4;
+  existing.categories.find(cat => cat.id === 'subscriptions').items = [];
+  assert.equal(prepare(existing, null).categories.find(cat => cat.id === 'subscriptions').items.length, 0);
+});
+
+test('full price starts with subscriptions and certificates; no invented package price or booking action', () => {
+  const html = render(defaults, true), home = render(defaults, false);
+  const sectionIds = [...html.matchAll(/<section\b[^>]*\bid="([^"]+)"/g)].map(match => match[1]);
+  assert.deepEqual(sectionIds, ['subscriptions','certificate','laser','apparatus','manual']);
+  const subscriptions = html.slice(0, html.indexOf('id="certificate"'));
+  assert.ok(subscriptions.includes('С абонементом дешевле'));
+  assert.ok(subscriptions.includes('Подобрать абонемент'));
+  assert.ok(subscriptions.includes('href="index.html#contacts" data-contact-route'));
+  assert.ok(!subscriptions.includes('Записаться'));
+  assert.ok(!subscriptions.includes('₽'));
+  assert.ok(!subscriptions.includes('<dt>Цена</dt>'));
+  assert.ok(!subscriptions.includes('target="_blank"'));
+  assert.ok(!home.includes('data-subscription='), 'subscription cannot fall into the manual direction');
+  const changed = copy(defaults), service = item(changed,'subscriptions-intro');
+  Object.assign(service, {title:'Пакет <владельца>',price:'12 345 ₽',duration:'5 посещений / 2 месяца',composition:'Условия <владельца>',items:['Первый пункт']});
+  const rendered = render(changed,true);
+  for (const text of ['Пакет &lt;владельца&gt;','12 345 ₽','5 посещений / 2 месяца','Условия &lt;владельца&gt;','Первый пункт']) assert.ok(rendered.includes(text), text);
+});
+
 test('help and certificate actions open Contacts on the correct page', () => {
   for (const full of [false,true]) {
     const html=render(defaults,full);
@@ -29,7 +74,7 @@ test('help and certificate actions open Contacts on the correct page', () => {
 
 test('all services and selected cards remain reachable; prices propagate to both pages', () => {
   const home = render(defaults, false), full = render(defaults, true);
-  assert.equal(items(defaults).length, 47);
+  assert.equal(items(defaults).length, 48);
   assert.equal((home.match(/data-service=/g) || []).length, 6);
   assert.equal((full.match(/data-service=/g) || []).length, 47);
   const ids = [...full.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]);
@@ -87,7 +132,7 @@ test('legacy apparatus and laser promotions remain 45 minutes while the manual t
   const before = JSON.stringify(legacy);
   const prepared = prepare(legacy, defaults);
   assert.equal(JSON.stringify(legacy), before, 'input is not mutated');
-  assert.equal(prepared.catalogVersion, 4);
+  assert.equal(prepared.catalogVersion, 5);
   assert.equal(items(prepared).filter(it => it.promo).length, 8);
   for (const it of items(prepared).filter(it => it.promo)) assert.equal(it.duration, it.id === 'first-3' ? '60 мин' : '45 мин');
   for (const it of items(legacy).filter(it => !it.promo)) assert.equal(JSON.stringify(item(prepared, it.id)), JSON.stringify(it));
@@ -163,7 +208,7 @@ test('older saved catalogues update exactly the twelve confirmed timings without
     }
     const before = JSON.stringify(legacy), prepared = prepare(legacy, null);
     assert.equal(JSON.stringify(legacy), before, 'migration never mutates the loaded CMS document');
-    assert.equal(prepared.catalogVersion, 4);
+    assert.equal(prepared.catalogVersion, 5);
     for (const [id, duration] of verifiedMassageTimes) {
       const expected = { ...item(legacy, id), duration, title: item(defaults, id).title };
       assert.equal(JSON.stringify(item(prepared, id)), JSON.stringify(expected), id);
@@ -256,7 +301,7 @@ test('saved v3 and newer catalogues backfill only empty combo descriptions witho
     item(saved, 'first-1').duration = '50 мин';
     const before = JSON.stringify(saved), prepared = prepare(saved, null);
     assert.equal(JSON.stringify(saved), before, 'input remains intact');
-    assert.equal(prepared.catalogVersion, Math.max(version, 4));
+    assert.equal(prepared.catalogVersion, Math.max(version, 5));
     for (const service of items(saved)) {
       const found = verifiedCombos.find(([id]) => id === service.id);
       const expected = found ? {...service, desc: found[1]} : service;

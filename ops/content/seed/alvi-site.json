@@ -230,73 +230,96 @@
   },
   {
    "id": "promo",
-   "title": "Баннер после отзывов: абонемент ALVI + Авокадо",
+   "title": "Баннер · ALVI и АВОКАДО",
+   "revision": "subscription-story-20260915",
    "fields": [
     {
      "key": "promo.promo-tagline-1",
      "label": "Фраза сверху",
-     "value": "Совершенство — там, где есть и то, и другое: <em>красота без боли</em> в Авокадо и <em>отдых и расслабление</em> в ALVI.",
+     "value": "Два места, где есть время для себя",
      "multiline": true
+    },
+    {
+     "key": "promo.promo-portrait-1",
+     "label": "Фото · ALVI",
+     "value": "",
+     "multiline": true,
+     "kind": "image",
+     "src": "img/subscription-alvi-20260915.webp",
+     "zone": "promo-alvi"
     },
     {
      "key": "promo.promo-brand-1",
      "label": "Подпись бренда · ALVI",
-     "value": "SPA ALVI · абонемент",
-     "multiline": false
+     "value": "SPA ALVI · время восстановиться",
+     "multiline": true
     },
     {
      "key": "promo.promo-title-1",
      "label": "Заголовок · ALVI",
-     "value": "Абонемент ALVI — ритуалы по одной цене",
-     "multiline": false
+     "value": "Мой способ быть в ресурсе",
+     "multiline": true
     },
     {
      "key": "promo.promo-copy-1",
      "label": "Текст · ALVI",
-     "value": "Несколько визитов одной покупкой — выгоднее разовых и спокойнее: дата уже выбрана, остаётся только прийти. Подходит для себя и в подарок.",
+     "value": "В моём ритме важно находить время для себя. SPA-ритуалы ALVI помогают мне расслабиться и снова почувствовать себя в тонусе.",
      "multiline": true
     },
     {
      "key": "promo.promo-note-1",
      "label": "Примечание · ALVI",
-     "value": "Условия и варианты абонементов — у администратора",
-     "multiline": false
+     "value": "Выберите свой ритуал — для себя или вдвоём.",
+     "multiline": true
     },
     {
      "key": "promo.promo-button-1",
      "label": "Кнопка · ALVI",
-     "value": "Узнать про абонемент",
-     "multiline": false
+     "value": "Открыть мир ALVI",
+     "multiline": true,
+     "kind": "button",
+     "href": "https://spaalvi-38.ru/"
+    },
+    {
+     "key": "promo.promo-portrait-2",
+     "label": "Фото · Авокадо",
+     "value": "",
+     "multiline": true,
+     "kind": "image",
+     "src": "img/subscription-avokado-20260915.webp",
+     "zone": "promo-avokado"
     },
     {
      "key": "promo.promo-brand-2",
      "label": "Подпись бренда · Авокадо",
      "value": "АВОКАДО · студия дизайна тела",
-     "multiline": false
+     "multiline": true
     },
     {
      "key": "promo.promo-title-2",
      "label": "Заголовок · Авокадо",
-     "value": "Красота без боли: аппаратная коррекция фигуры и лазерная эпиляция",
-     "multiline": false
+     "value": "С абонементом дешевле",
+     "multiline": true
     },
     {
      "key": "promo.promo-copy-2",
      "label": "Текст · Авокадо",
-     "value": "Второй салон того же владельца — Красноказачья, 84. Пробный сеанс аппаратного массажа — 500 ₽ вместо 2 100 ₽.",
+     "value": "Забота о теле — по понятному плану. Подберём процедуры под вашу цель, составим расписание и будем отмечать прогресс вместе.",
      "multiline": true
     },
     {
      "key": "promo.promo-note-2",
      "label": "Примечание · Авокадо",
-     "value": "5,0 в 2ГИС · 278 отзывов",
-     "multiline": false
+     "value": "Состав, стоимость и условия обсудим до начала курса.",
+     "multiline": true
     },
     {
      "key": "promo.promo-button-2",
      "label": "Кнопка · Авокадо",
-     "value": "Открыть сайт Авокадо",
-     "multiline": false
+     "value": "Посмотреть абонементы",
+     "multiline": true,
+     "kind": "button",
+     "href": "https://avokado38.ru/price.html#subscriptions"
     }
    ]
   },
@@ -923,5 +946,6 @@
     }
    ]
   }
- ]
+ ],
+ "subscriptionPromoRevision": "subscription-story-20260915"
 }

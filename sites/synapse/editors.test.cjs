@@ -52,7 +52,7 @@ async function fixture(kind,site,{keyMode=false,seedOverride,defaultsOverride}={
     return response(200,saved);
   };
   if(kind==='price') {
-    w.eval(read(`../${site}/price-render.js`));
+    w.eval(read(`../${site==='avokado'?'avokado3':site}/price-render.js`));
     if(site==='avokado')w.eval(read('../avokado3/catalog.js'));
   }
   w.eval(code);
@@ -139,7 +139,7 @@ test('site defaults add new fields inside existing sections without overwriting 
 
 test('Avokado uploaded price photo saves an absolute asset URL from the price namespace',async()=>{
   const f=await fixture('price','avokado');try{
-    const id=f.seed.categories.find(cat=>cat.items?.length).items[0].id;
+    const id=f.seed.categories.find(cat=>cat.id==='first-visit').items[0].id;
     f.d.querySelector(`[data-edit="${id}"]`).click();
     const upload=f.d.querySelector(`[data-photo-upload="${id}"]`);
     Object.defineProperty(upload,'files',{value:[new f.w.File(['qa'],'test.png',{type:'image/png'})]});
@@ -157,4 +157,39 @@ test('the legacy Avokado editor shortcut opens the current avokado3 site documen
   const html=read('site-editor-avokado.html');
   assert.equal([...html.matchAll(/site-editor\.html\?site=([a-z0-9]+)/g)].length,3);
   assert.ok([...html.matchAll(/site-editor\.html\?site=([a-z0-9]+)/g)].every(match=>match[1]==='avokado3'));
+});
+
+test('Avokado subscription category edits, saves and deletes through the price editor without restoring removed content',async()=>{
+  const old=JSON.parse(read('../avokado3/data/price.json'));
+  old.catalogVersion=4;old.categories=old.categories.filter(cat=>cat.id!=='subscriptions');
+  old.categories.find(cat=>cat.id==='manual').items[0].price='Owner price';
+  const f=await fixture('price','avokado',{seedOverride:old});let saved;
+  try{
+    assert.ok(f.d.querySelector('#subscriptions [data-edit="subscriptions-intro"]'));
+    assert.match(f.d.querySelector('#subscriptions').textContent,/Состав, количество посещений и стоимость/);
+    f.d.querySelector('[data-edit="subscriptions-intro"]').click();
+    const form=f.d.querySelector('form[data-form="subscriptions-intro"]');
+    for(const name of ['direction','promo','quizEnabled','who','photo','card'])assert.equal(form.querySelector(`[name="${name}"]`),null,name);
+    assert.equal(f.d.querySelector('[data-add-select] option[value="subscriptions-intro"]'),null);
+    assert.equal(f.d.querySelector('#subscriptions [data-star]'),null);
+    form.querySelector('[name="title"]').value='Мой абонемент';
+    form.querySelector('[name="desc"]').value='';
+    form.querySelector('[name="price"]').value='9000 ₽';
+    form.querySelector('[name="duration"]').value='4 посещения';
+    form.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));f.save();await f.settle();
+    saved=f.saved();assert.equal(saved.catalogVersion,5);
+    const sub=saved.categories.find(cat=>cat.id==='subscriptions').items[0];
+    assert.equal(sub.title,'Мой абонемент');assert.equal(sub.desc,'');assert.equal(sub.price,'9000 ₽');assert.equal(sub.duration,'4 посещения');
+    assert.equal(saved.categories.find(cat=>cat.id==='manual').items[0].price,'Owner price');
+    assert.deepEqual(f.errors,[]);
+  }finally{f.close();}
+  const next=await fixture('price','avokado',{seedOverride:saved,defaultsOverride:old});let removed;
+  try{
+    assert.match(next.d.querySelector('#subscriptions').textContent,/Мой абонемент/);
+    next.d.querySelector('[data-delcat="subscriptions"]').click();next.save();await next.settle();
+    removed=next.saved();assert.equal(removed.categories.some(cat=>cat.id==='subscriptions'),false);
+    assert.deepEqual(next.errors,[]);
+  }finally{next.close();}
+  const last=await fixture('price','avokado',{seedOverride:removed,defaultsOverride:old});
+  try{assert.equal(last.d.querySelector('#subscriptions'),null);}finally{last.close();}
 });

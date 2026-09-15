@@ -50,6 +50,7 @@
 
   /* ---------- Объекты и расположение (мини-конструктор: баннер и сцены первого экрана) ---------- */
   const ZONES = Object.fromEntries(['top', 'pain', 'method-0', 'method-1', 'method-2', 'method-3', 'method-4', 'method-5', 'price', 'certificate', 'contacts', 'finale'].map((id) => [id, '#' + id]));
+  Object.assign(ZONES, { 'promo-head': '.promo__head', 'promo-alvi': '.promo__half--alvi .promo__content', 'promo-avokado': '.promo__half--avokado .promo__content' });
   function zoneEl(zone) {
     if (ZONES[zone]) return document.querySelector(ZONES[zone]);
     const m = /^hero-(\d)$/.exec(zone || '');
@@ -88,8 +89,19 @@
     return map;
   }
   function applyFields(doc, skipKey) {
+    doc = window.SubscriptionPromoContent?.upgrade(doc, "avokado3") || doc;
     lastDoc = doc;
     const map = fieldMap(doc);
+    if (doc.subscriptionPromoRevision) {
+      const removed = !doc.sections.some(sec => sec.id === 'promo');
+      const promo = document.getElementById('promo');
+      if (promo) {
+        promo.hidden = removed;
+        if (removed) window.alviPromoClose?.({ restoreFocus: false });
+        promo.querySelectorAll('[data-edit]').forEach(el => { el.hidden = !map.has(el.getAttribute('data-edit')); });
+      }
+      document.querySelectorAll('[data-promo-open]').forEach(el => { el.hidden = removed; });
+    }
     loadFonts([...map.values()].map((f) => f.style && f.style.font).filter(Boolean));
     // объекты, добавленные в редакторе
     for (const f of map.values()) if (f.added) ensureExtra(f);
