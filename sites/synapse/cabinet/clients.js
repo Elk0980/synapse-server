@@ -719,6 +719,54 @@ const repeatRow = (row = {}, field = "", index = null) => {
 };
 const companyPrepositional = (count) =>
   count % 10 === 1 && count % 100 !== 11 ? "компании" : "компаниях";
+const contactCompanyMarkup = () => `<fieldset class="wide contact-company"><legend>Компания</legend>
+  <label>Связь с компанией<select name="companyMode"><option value="none">Не указывать</option><option value="existing">Выбрать существующую</option><option value="new">Создать новую компанию</option></select></label>
+  <div class="crm-form" data-company-existing hidden>
+    <label class="wide">Поиск компании<input type="search" name="companySearch" placeholder="Название или город" autocomplete="off"></label>
+    <label class="wide">Компания *<select name="companyChoice" disabled><option value="">Выберите компанию</option></select></label>
+    <p class="wide" data-company-search-status role="status"></p><button type="button" data-company-retry hidden>Повторить поиск</button>
+  </div>
+  <div class="crm-form" data-company-new hidden><label>Название компании *<input name="newCompanyName" disabled></label><label>Город компании<input name="newCompanyCity" disabled></label></div>
+  <label data-company-role hidden>Роль человека в компании *<input name="companyRole" list="contact-company-roles" value="Сотрудник" disabled><datalist id="contact-company-roles"><option value="Собственник"></option><option value="Директор"></option><option value="Сотрудник"></option><option value="Контактное лицо"></option></datalist></label>
+  <small>Человек и его связь с компанией сохранятся вместе. Остальные сведения о компании можно заполнить позже.</small>
+</fieldset>`;
+const bindContactCompany = form => {
+  const mode = form.elements.companyMode;
+  if(!mode) return;
+  let searchVersion=0, timer;
+  const search = async () => {
+    const version=++searchVersion;
+    const select=form.elements.companyChoice, status=form.querySelector('[data-company-search-status]');
+    const selected=select.value;
+    select.disabled=true; status.textContent='Поиск компаний…'; form.querySelector('[data-company-retry]').hidden=true;
+    try {
+      const data=await crmQuery('/companies',scoped({q:form.elements.companySearch.value.trim(),limit:50,deleted:'exclude'}));
+      if(version!==searchVersion || !form.isConnected || mode.value!=='existing')return;
+      const companies=data.companies || [];
+      select.innerHTML='<option value="">Выберите компанию</option>'+companies.map(company=>`<option value="${escapeHTML(company.id)}">${escapeHTML(company.name)}${company.city?' — '+escapeHTML(company.city):''}</option>`).join('');
+      if(companies.some(company=>String(company.id)===selected)) select.value=selected;
+      select.disabled=false;
+      status.textContent=companies.length ? (data.pagination?.total>50?'Показаны первые 50. Уточните название в поиске.':'') : 'Компания не найдена. Уточните поиск или выберите «Создать новую компанию».';
+    } catch(error) {
+      if(version!==searchVersion || !form.isConnected || mode.value!=='existing')return;
+      status.textContent=error.message;form.querySelector('[data-company-retry]').hidden=false;
+    }
+  };
+  mode.addEventListener('change',()=>{
+    ++searchVersion; clearTimeout(timer);
+    for(const [kind,selector] of [['existing','[data-company-existing]'],['new','[data-company-new]']]) {
+      const panel=form.querySelector(selector);panel.hidden=mode.value!==kind;
+      panel.querySelectorAll('input,select').forEach(input=>input.disabled=panel.hidden);
+    }
+    form.elements.companyChoice.required=mode.value==='existing';
+    form.elements.newCompanyName.required=mode.value==='new';
+    const role=form.querySelector('[data-company-role]');role.hidden=mode.value==='none';
+    form.elements.companyRole.disabled=role.hidden;form.elements.companyRole.required=!role.hidden;
+    if(mode.value==='existing') search();
+  });
+  form.elements.companySearch.addEventListener('input',()=>{++searchVersion;clearTimeout(timer);form.elements.companyChoice.disabled=true;timer=setTimeout(search,250);});
+  form.querySelector('[data-company-retry]').addEventListener('click',search);
+};
 const renderEntityForm = async (view, record) => {
   const version = ++renderVersion;
   const config = CRM_ENTITIES[view];
@@ -751,10 +799,11 @@ const renderEntityForm = async (view, record) => {
       companyPrepositional(record.sharedCompanyCount - 1)}. Изменения увидят все</p>`
     : "";
   content.innerHTML = `<button class="plain-button" type="button" data-form-cancel>← Отмена</button>
-    <h2>${record ? "Редактировать карточку" : view === "crm-contacts" ? "Новый клиент" : "Новая карточка"}</h2><p class="muted">Заполните обязательные поля со звёздочкой. Остальные сведения можно добавить позже.</p><form class="crm-form">${sharedWarning}${controls}${companyLinks}${isContact ? `<details class="wide client-extra"><summary>Дополнительные сведения и мессенджеры</summary><div class="crm-form">${additionalContactFields}${repeats}</div></details>` : repeats}
+    <h2>${record ? "Редактировать карточку" : view === "crm-contacts" ? "Новый клиент" : "Новая карточка"}</h2><p class="muted">Заполните обязательные поля со звёздочкой. Остальные сведения можно добавить позже.</p><form class="crm-form">${sharedWarning}${controls}${companyLinks}${isContact && !record ? contactCompanyMarkup() : ''}${isContact ? `<details class="wide client-extra"><summary>Дополнительные сведения и мессенджеры</summary><div class="crm-form">${additionalContactFields}${repeats}</div></details>` : repeats}
     <div class="crm-actions wide"><button class="plain-button" type="submit">Сохранить</button></div>
     <p class="crm-error wide" role="alert" hidden></p></form>`;
   const form = content.querySelector("form");
+  if(isContact && !record) bindContactCompany(form);
   content.querySelector("[data-form-cancel]").addEventListener("click", () => {
     if (record) renderEntityCard(view, record.id);
     else navigateEntity(view);
@@ -811,6 +860,15 @@ const saveEntityForm = async (event, view, record) => {
   error.hidden = true;
   try {
     const payload = formPayload(form, config, record);
+    if (!record && view==='crm-contacts' && form.elements.companyMode?.value!=='none') {
+      const mode=form.elements.companyMode?.value;
+      if(mode==='existing') {
+        if(form.elements.companyChoice.disabled || !form.elements.companyChoice.value) throw new Error('Выберите компанию из результатов поиска.');
+        payload.companyLink={companyId:Number(form.elements.companyChoice.value),role:form.elements.companyRole.value.trim()};
+      } else if(mode==='new') {
+        payload.companyLink={newCompany:{name:form.elements.newCompanyName.value.trim(),city:form.elements.newCompanyCity.value.trim() || null},role:form.elements.companyRole.value.trim()};
+      }
+    }
     const body = record ? Object.fromEntries(Object.entries(payload).filter(([key, value]) => {
       const current = config.arrays?.[key] ? normalizeRepeat(record[key]) : record[key] ?? null;
       const next = config.arrays?.[key] ? normalizeRepeat(value) : value;
@@ -890,13 +948,25 @@ const renderRelations = (view, record) => {
   }));
 };
 const renderRelationForm = async (view, record, relation) => {
-  const data = await crmQuery(`/${relation.path}`, scoped({ limit: 200, deleted: "exclude" }));
+  const initialTarget = byId(`${view}-content`).querySelector('[data-relations]');
+  if (!initialTarget || initialTarget.dataset.loadingRelation==='true') return;
+  initialTarget.dataset.loadingRelation='true';
+  let data;
+  try {
+    data = await crmQuery(`/${relation.path}`, scoped({ limit: 200, deleted: "exclude" }));
+  } catch(error) {
+    if(initialTarget.isConnected) byId(`${view}-content`).querySelector('[data-card-status]').textContent=error.message;
+    return;
+  } finally { delete initialTarget.dataset.loadingRelation; }
+  if(!initialTarget.isConnected) return;
   const relatedConfig = CRM_ENTITIES[relation.view];
   const options = (data[relatedConfig.key] || []).map((item) =>
     `<option value="${escapeHTML(item.id)}">${escapeHTML(entityName(item))}</option>`).join("");
   const target = byId(`${view}-content`).querySelector("[data-relations]");
+  target.querySelectorAll('[data-relation-form]').forEach(form=>form.remove());
+  byId(`${view}-content`).querySelector('[data-card-status]').textContent='';
   target.insertAdjacentHTML("afterbegin", `<form class="crm-form" data-relation-form>
-    <label>Запись *<select name="targetId" required><option value="">Выберите</option>${options}</select></label>
+    <label>${relation.key==='companies'?'Компания':'Запись'} *<select name="targetId" required><option value="">Выберите</option>${options}</select></label>
     <label>Роль *<input name="role" required></label>
     <label><span>${relation.flagLabel}</span><input name="flag" type="checkbox"></label>
     ${relation.signing ? '<label>Основание подписи<input name="signingBasis"></label>' : ""}
@@ -906,8 +976,13 @@ const renderRelationForm = async (view, record, relation) => {
     <div class="crm-actions wide"><button type="submit">Сохранить связь</button></div>
     <p class="crm-error wide" role="alert" hidden></p></form>`);
   const form = target.querySelector("[data-relation-form]");
+  const relationScope = scopeParams();
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const submit = form.querySelector('[type=submit]');
+    if(submit.disabled) return;
+    submit.disabled=true;
+    form.querySelector('[role=alert]').hidden=true;
     const values = new FormData(form);
     const payload = {
       role: values.get("role").trim(),
@@ -919,13 +994,13 @@ const renderRelationForm = async (view, record, relation) => {
     if (relation.signing) payload.signingBasis = values.get("signingBasis").trim() || null;
     try {
       const endpoint = relationEndpoint(view, record, relation, values.get("targetId"));
-      await crmQuery(endpoint, scopeParams(), csrfOptions("PUT", payload));
-      renderEntityCard(view, record.id);
+      await crmQuery(endpoint, relationScope, csrfOptions("PUT", payload));
+      if(form.isConnected) await renderEntityCard(view, record.id);
     } catch (failure) {
       const error = form.querySelector("[role=alert]");
       error.textContent = failure.message;
       error.hidden = false;
-    }
+    } finally { submit.disabled=false; }
   });
 };
 const reloadCompanyScope = () => {

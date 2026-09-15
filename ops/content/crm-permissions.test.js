@@ -387,5 +387,38 @@ test('CRM proxy restricts pipelines to the owner and preserves company-scoped ed
     assert.equal((await crm(editor, 'DELETE', `/contacts/${contact.body.id}?companyCode=alvi`)).status, 200);
     assert.equal((await crm(editor, 'GET', `/contacts/${contact.body.id}?companyCode=alvi`)).status, 404);
   });
+  await t.test('contact creation links an existing or new company atomically within the permitted base', async () => {
+    const created = await crm(editor,'POST','/contacts?companyCode=alvi',{
+      name:'QA Employee with employer', companyLink:{newCompany:{name:'QA Inline Employer',city:'Иркутск'},role:'Директор'}
+    });
+    assert.equal(created.status,201,JSON.stringify(created.body));
+    const employer=created.body.companies.find(c=>c.name==='QA Inline Employer');
+    assert.ok(employer); assert.equal(employer.relation.role,'Директор');
+    const card=await crm(editor,'GET',`/contacts/${created.body.id}?companyCode=alvi`);
+    assert.equal(card.status,200);assert.ok(card.body.companies.some(c=>c.id===employer.id));
+    const existing=await crm(editor,'POST','/contacts?companyCode=alvi',{
+      name:'QA Second employee',companyLink:{companyId:employer.id,role:'Сотрудник'}
+    });
+    assert.equal(existing.status,201);assert.ok(existing.body.companies.some(c=>c.id===employer.id));
+    const sameBase=await crm(editor,'POST','/contacts?companyCode=alvi',{
+      name:'QA Base employee',companyLink:{companyId:own.body.id,role:'Сотрудник'}
+    });
+    assert.equal(sameBase.status,201);
+    assert.equal((await crm(editor,'PUT',`/contacts/${sameBase.body.id}/companies/${own.body.id}?companyCode=alvi`,{role:'Директор'})).status,200);
+    const beforeContacts=(await crm(editor,'GET','/contacts?companyCode=alvi')).body.pagination.total;
+    const beforeCompanies=(await crm(editor,'GET','/companies?companyCode=alvi')).body.pagination.total;
+    for(const companyLink of [
+      {companyId:other.body.id,role:'Сотрудник'},
+      {newCompany:{name:'',city:'Иркутск'},role:'Сотрудник'},
+      {newCompany:{name:'Forbidden field',pipelineStage:'new'},role:'Сотрудник'},
+      {newCompany:{name:'Invalid role'},role:''}
+    ]) {
+      const failed=await crm(editor,'POST','/contacts?companyCode=alvi',{name:'Must not persist',companyLink});
+      assert.ok(failed.status>=400,JSON.stringify(failed.body));
+    }
+    assert.equal((await crm(editor,'GET','/contacts?companyCode=alvi')).body.pagination.total,beforeContacts);
+    assert.equal((await crm(editor,'GET','/companies?companyCode=alvi')).body.pagination.total,beforeCompanies);
+    assert.equal((await crm(observer,'POST','/contacts?companyCode=alvi',{name:'Forbidden',companyLink:{newCompany:{name:'Forbidden'},role:'Сотрудник'}})).status,403);
+  });
   assertNoQueuedOrAttemptedEmail();
 });

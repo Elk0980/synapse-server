@@ -1,7 +1,7 @@
 'use strict';
 
 const http = require('node:http');
-const { createHash } = require('node:crypto');
+const { createHash, randomUUID } = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 const { URL } = require('node:url');
 const { createEmailSettings } = require('./email-settings');
@@ -1498,7 +1498,7 @@ function relationRows(kind, id, company) {
     companies: db.prepare(`SELECT c.*, r.role, r.is_responsible, r.valid_from, r.valid_to, r.notes relation_notes
       FROM contact_companies r JOIN companies c ON c.id=r.company_id
       WHERE r.contact_id=? AND r.is_deleted=0 AND c.is_deleted=0
-      ${company ? 'AND c.id=?' : ''}`).all(id, ...(company ? [company.id] : [])).map((row) => ({
+      ${company ? 'AND (c.id=? OR c.owner_scope=? COLLATE NOCASE)' : ''}`).all(id, ...(company ? [company.id,company.code] : [])).map((row) => ({
         ...serializeEntity(ENTITY_CONFIG.companies, row, true), relation: relationData(row, 'is_responsible') })),
     legalEntities: db.prepare(`SELECT l.*, r.role, r.is_signatory, r.signing_basis, r.valid_from, r.valid_to,
       r.notes relation_notes FROM contact_legal_entities r JOIN legal_entities l ON l.id=r.legal_entity_id
@@ -1653,7 +1653,13 @@ async function handleEntityRoutes(request, response, url, cors) {
         pagination: result.pagination }, cors); return true;
     }
     if (url.pathname === `/${config.path}` && request.method === 'POST') {
-      const body = await readJson(request); let values = validateEntity(config, body);
+      const body = await readJson(request);
+      if (config.table === 'contacts' && body && Object.hasOwn(body,'companyLink')) {
+        const {companyLink, ...contact} = body;
+        const created = createContactWithCompany(contact,companyLink,company);
+        send(response,201,created,{...cors,Location:`/contacts/${created.id}`}); return true;
+      }
+      let values = validateEntity(config, body);
       if (config.table === 'tasks') {
         values = { ...config.defaults, ...values };
         if (company) values.companyCode = company.code.toLowerCase();
@@ -1836,7 +1842,9 @@ async function handleRelationRoutes(request, response, url, cors) {
     const left = entityRow(ENTITY_CONFIG[relation.left], leftId, true);
     const right = entityRow(ENTITY_CONFIG[relation.right], rightId, true);
     entityInCompany(ENTITY_CONFIG[relation.left], leftId, company);
-    entityInCompany(ENTITY_CONFIG[relation.right], rightId, company);
+    if (!(relation.table === 'contact_companies' && company?.id === rightId)) {
+      entityInCompany(ENTITY_CONFIG[relation.right], rightId, company);
+    }
     if (request.method === 'PUT') {
       if (left.is_deleted || right.is_deleted) fail(409, 'Нельзя связать удалённую карточку',
         { code: 'DELETED_ENTITY' });
@@ -1891,6 +1899,49 @@ async function handleRelationRoutes(request, response, url, cors) {
     }
   }
   return false;
+}
+
+// A person, optional new employer and both scope/business links commit together.
+function createContactWithCompany(contact, link, scope) {
+  const config = ENTITY_CONFIG.contacts;
+  const values = validateEntity(config,contact);
+  if (!link || typeof link !== 'object' || Array.isArray(link) ||
+      Object.keys(link).some(key=>!['companyId','newCompany','role'].includes(key)) ||
+      Number(Object.hasOwn(link,'companyId')) + Number(Object.hasOwn(link,'newCompany')) !== 1) {
+    fail(400,'Выберите компанию или заполните новую', {code:'VALIDATION_ERROR'});
+  }
+  const role = checkedString(link.role,'role',false);
+  let targetId, companyValues;
+  if (Object.hasOwn(link,'companyId')) {
+    targetId = entityId(link.companyId);
+    entityRow(ENTITY_CONFIG.companies,targetId);
+    if (scope?.id !== targetId) entityInCompany(ENTITY_CONFIG.companies,targetId,scope);
+  } else {
+    const fresh = link.newCompany;
+    if (!fresh || typeof fresh !== 'object' || Array.isArray(fresh) ||
+        Object.keys(fresh).some(key=>!['name','city'].includes(key))) {
+      fail(400,'Для новой компании укажите название и город', {code:'VALIDATION_ERROR'});
+    }
+    companyValues = validateEntity(ENTITY_CONFIG.companies,{...fresh,code:`crm-${randomUUID()}`});
+  }
+  const now = new Date().toISOString();
+  return pipelineTransaction(()=>{
+    if (companyValues) {
+      const inserted = db.prepare('INSERT INTO companies (created_at,updated_at,code,name,city,owner_scope) VALUES (?,?,?,?,?,?)')
+        .run(now,now,companyValues.code,companyValues.name,companyValues.city || null,scope?.code.toLowerCase() || 'synapse-business');
+      targetId = Number(inserted.lastInsertRowid);
+    }
+    const entries = Object.entries(values);
+    if(values.phone !== undefined) entries.push(['normalizedPhone',values.phone?normalizeContact(values.phone):null]);
+    const cols = entries.map(([field])=>column(config,field));
+    const inserted = db.prepare(`INSERT INTO contacts (created_at,updated_at,${cols.join(',')}) VALUES (?,?,${cols.map(()=>'?').join(',')})`)
+      .run(now,now,...entries.map(([,value])=>value));
+    const id = Number(inserted.lastInsertRowid);
+    const addLink = (companyId,relationRole) => db.prepare('INSERT INTO contact_companies (created_at,updated_at,contact_id,company_id,role) VALUES (?,?,?,?,?)').run(now,now,id,companyId,relationRole);
+    if(scope && scope.id !== targetId) addLink(scope.id,'клиент');
+    addLink(targetId,role);
+    return {...serializeEntity(config,entityRow(config,id)),...relationRows('contacts',id,scope)};
+  });
 }
 
 function pipelineList() {
