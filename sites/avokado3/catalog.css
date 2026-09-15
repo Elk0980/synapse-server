@@ -34,3 +34,6 @@
 }
 @media(max-width:359px){.av-grid{grid-template-columns:1fr}.av-card-photo{aspect-ratio:16/9}.av-card h3{font-size:23px!important}.av-actions{grid-template-columns:1fr 1fr}.av-table th,.av-table td{padding:12px 6px}.av-catalog-nav{padding-inline:12px}}
 @media(hover:none){.av-button:hover{filter:none}}
+
+/* Center the laser slide's three cards without changing card width or slide behavior. */
+@media(min-width:821px){#metod #method-2 .apparatus-grid{grid-template-columns:repeat(3,minmax(0,1fr));width:calc(75% - 4px);margin-inline:auto}}
