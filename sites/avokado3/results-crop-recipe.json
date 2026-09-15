@@ -1,0 +1,322 @@
+{
+  "status": "OWNER_CONFIRMED_ALL_PENDING_CHANGES_AND_PUBLICATION",
+  "output": {
+    "width": 1024,
+    "height": 1024,
+    "gutter": 8,
+    "background": "#101a14",
+    "fit": "contain",
+    "interpolation": "uniform scale only; identical within each pair"
+  },
+  "invariants": [
+    "Do not retouch or generate skin/body pixels",
+    "Keep before/after order and all original views",
+    "Remove in-image text by excluding outside regions",
+    "Keep originals and write versioned copies"
+  ],
+  "images": [
+    {
+      "id": "01",
+      "layout": "original",
+      "regions": [
+        [
+          0,
+          0,
+          1280,
+          1280
+        ]
+      ],
+      "source": "assets/result-01-20260915.webp",
+      "destination": "assets/result-01-clean-20260915.webp",
+      "sourceWidth": 1280,
+      "sourceHeight": 1280
+    },
+    {
+      "id": "02",
+      "layout": "columns",
+      "regions": [
+        [
+          18,
+          18,
+          612,
+          1082
+        ],
+        [
+          650,
+          18,
+          612,
+          1082
+        ]
+      ],
+      "source": "assets/result-02-20260915.webp",
+      "destination": "assets/result-02-clean-20260915.webp",
+      "sourceWidth": 1280,
+      "sourceHeight": 1280
+    },
+    {
+      "id": "03",
+      "layout": "columns",
+      "regions": [
+        [
+          18,
+          18,
+          612,
+          1082
+        ],
+        [
+          650,
+          18,
+          612,
+          1082
+        ]
+      ],
+      "source": "assets/result-03-20260915.webp",
+      "destination": "assets/result-03-clean-20260915.webp",
+      "sourceWidth": 1280,
+      "sourceHeight": 1280
+    },
+    {
+      "id": "04",
+      "layout": "columns",
+      "regions": [
+        [
+          18,
+          18,
+          612,
+          1082
+        ],
+        [
+          650,
+          18,
+          612,
+          1082
+        ]
+      ],
+      "source": "assets/result-04-20260915.webp",
+      "destination": "assets/result-04-clean-20260915.webp",
+      "sourceWidth": 1280,
+      "sourceHeight": 1280
+    },
+    {
+      "id": "05",
+      "layout": "columns",
+      "regions": [
+        [
+          18,
+          18,
+          612,
+          1082
+        ],
+        [
+          650,
+          18,
+          612,
+          1082
+        ]
+      ],
+      "source": "assets/result-05-20260915.webp",
+      "destination": "assets/result-05-clean-20260915.webp",
+      "sourceWidth": 1280,
+      "sourceHeight": 1280
+    },
+    {
+      "id": "06",
+      "layout": "columns",
+      "regions": [
+        [
+          51,
+          36,
+          420,
+          1007
+        ],
+        [
+          482,
+          36,
+          420,
+          1007
+        ]
+      ],
+      "source": "assets/result-06-20260915.webp",
+      "destination": "assets/result-06-clean-20260915.webp",
+      "sourceWidth": 947,
+      "sourceHeight": 1221
+    },
+    {
+      "id": "07",
+      "layout": "rows",
+      "regions": [
+        [
+          98,
+          247,
+          524,
+          282
+        ],
+        [
+          98,
+          732,
+          524,
+          282
+        ]
+      ],
+      "source": "assets/result-07-20260915.webp",
+      "destination": "assets/result-07-clean-20260915.webp",
+      "sourceWidth": 720,
+      "sourceHeight": 1280
+    },
+    {
+      "id": "08",
+      "layout": "columns",
+      "regions": [
+        [
+          3,
+          0,
+          604,
+          1220
+        ],
+        [
+          675,
+          0,
+          604,
+          1220
+        ]
+      ],
+      "source": "assets/result-08-20260915.webp",
+      "destination": "assets/result-08-clean-20260915.webp",
+      "sourceWidth": 1280,
+      "sourceHeight": 1220
+    },
+    {
+      "id": "09",
+      "layout": "columns",
+      "regions": [
+        [
+          0,
+          0,
+          578,
+          1047
+        ],
+        [
+          592,
+          0,
+          578,
+          1047
+        ]
+      ],
+      "source": "assets/result-09-20260915.webp",
+      "destination": "assets/result-09-clean-20260915.webp",
+      "sourceWidth": 1170,
+      "sourceHeight": 1047
+    },
+    {
+      "id": "10",
+      "layout": "columns",
+      "regions": [
+        [
+          2,
+          0,
+          623,
+          1144
+        ],
+        [
+          629,
+          0,
+          623,
+          1144
+        ]
+      ],
+      "source": "assets/result-10-20260915.webp",
+      "destination": "assets/result-10-clean-20260915.webp",
+      "sourceWidth": 1252,
+      "sourceHeight": 1149
+    },
+    {
+      "id": "11",
+      "layout": "columns",
+      "regions": [
+        [
+          13,
+          0,
+          394,
+          565
+        ],
+        [
+          421,
+          0,
+          394,
+          565
+        ]
+      ],
+      "source": "assets/result-11-20260915.webp",
+      "destination": "assets/result-11-clean-20260915.webp",
+      "sourceWidth": 828,
+      "sourceHeight": 592
+    },
+    {
+      "id": "12",
+      "layout": "columns",
+      "regions": [
+        [
+          13,
+          2,
+          391,
+          585
+        ],
+        [
+          423,
+          2,
+          391,
+          585
+        ]
+      ],
+      "source": "assets/result-12-20260915.webp",
+      "destination": "assets/result-12-clean-20260915.webp",
+      "sourceWidth": 828,
+      "sourceHeight": 587
+    },
+    {
+      "id": "13",
+      "layout": "columns",
+      "regions": [
+        [
+          8,
+          19,
+          617,
+          1084
+        ],
+        [
+          643,
+          19,
+          617,
+          1084
+        ]
+      ],
+      "source": "assets/result-13-20260915.webp",
+      "destination": "assets/result-13-clean-20260915.webp",
+      "sourceWidth": 1278,
+      "sourceHeight": 1103
+    },
+    {
+      "id": "14",
+      "layout": "columns",
+      "regions": [
+        [
+          8,
+          27,
+          386,
+          646
+        ],
+        [
+          408,
+          27,
+          386,
+          646
+        ]
+      ],
+      "source": "assets/result-14-20260915.webp",
+      "destination": "assets/result-14-clean-20260915.webp",
+      "sourceWidth": 804,
+      "sourceHeight": 673
+    }
+  ],
+  "presentation": "SVG viewport crops of the existing public source assets; no image upload"
+}

@@ -15,6 +15,18 @@ context.AlviPrice = context.window.AlviPrice;
 vm.runInContext(read('catalog.js'), context);
 const {prepare, render} = context.window.AvokadoCatalog;
 
+test('help and certificate actions open Contacts on the correct page', () => {
+  for (const full of [false,true]) {
+    const html=render(defaults,full);
+    const links=[...html.matchAll(/<a\b[^>]*data-contact-route[^>]*>/g)].map(m=>m[0]);
+    assert.ok(links.length>=7);
+    for(const link of links){
+      assert.equal(link.match(/href="([^"]+)"/)[1],full?'index.html#contacts':'#contacts');
+      assert.ok(!link.includes('target="_blank"'));
+    }
+  }
+});
+
 test('all services and selected cards remain reachable; prices propagate to both pages', () => {
   const home = render(defaults, false), full = render(defaults, true);
   assert.equal(items(defaults).length, 48);

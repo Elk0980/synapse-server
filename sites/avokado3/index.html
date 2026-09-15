@@ -126,14 +126,18 @@
   /* ---------- липкая CTA ---------- */
   .sticky-cta{
     position:fixed;right:32px;bottom:28px;z-index:60;
-    transform:translateY(90px);opacity:0;
+    transform:translateY(90px);opacity:0;visibility:hidden;pointer-events:none;
     transition:transform .45s ease,opacity .45s ease;
-    display:flex;gap:10px;align-items:center;
-    padding:13px 25px;border-radius:999px;
-    font-weight:700;font-size:15px;text-decoration:none;white-space:nowrap;
+    display:flex;gap:10px;align-items:stretch;
+    padding:0;
+    font-weight:700;font-size:15px;
   }
-  .sticky-cta.on{transform:translateY(0);opacity:1}
-  .sticky-cta.on.finale-hidden{transform:translateY(18px);opacity:0;pointer-events:none}
+  .sticky-cta>a{display:flex;align-items:center;justify-content:center;min-height:48px;padding:13px 25px;border-radius:999px;text-decoration:none;white-space:nowrap;text-align:center}
+  .sticky-price{color:#f1dca5;background:rgba(16,26,19,.94);border:1px solid #d8b981;box-shadow:0 8px 28px #0006;backdrop-filter:blur(12px)}
+  .sticky-price:hover{background:#263322;color:#fff2d2}
+  .sticky-cta>a:focus-visible{outline:3px solid #fff3cf;outline-offset:3px}
+  .sticky-cta.on{transform:translateY(0);opacity:1;visibility:visible;pointer-events:auto}
+  .sticky-cta.on.finale-hidden{transform:translateY(18px);opacity:0;visibility:hidden;pointer-events:none}
 
   section{position:relative}
   .section-blend{z-index:2;isolation:isolate}
@@ -399,7 +403,8 @@
     .cards{grid-template-columns:1fr}
     .plist{grid-template-columns:1fr}
     .gg{grid-template-columns:1fr}
-    .sticky-cta{right:auto;left:50%;font-size:13.5px;padding:12px 21px;bottom:14px;transform:translate(-50%,90px)}
+    .sticky-cta{right:auto;left:50%;width:calc(100% - 24px);gap:8px;font-size:12px;padding:0;bottom:calc(14px + env(safe-area-inset-bottom,0px));transform:translate(-50%,90px)}
+    .sticky-cta>a{flex:1;min-width:0;min-height:52px;padding:10px 12px;line-height:1.35;white-space:normal}
     .sticky-cta.on{transform:translate(-50%,0)}
     .sticky-cta.on.finale-hidden{transform:translate(-50%,18px)}
     .t-slogan{letter-spacing:.18em;font-size:12px}
@@ -705,7 +710,7 @@ body>#cta{z-index:65}
 <link rel="stylesheet" href="catalog.css?v=20260915-results-laser">
 <link rel="stylesheet" href="method-reveal.css?v=20260915-logo-right">
 <link rel="stylesheet" href="work-steps.css?v=20260915-pairs">
-<link rel="stylesheet" href="results-gallery.css?v=20260915-results">
+<link rel="stylesheet" href="results-gallery.css?v=20260915-framed">
 </head>
 <body>
 <video class="global-video-bg" id="herovid" muted playsinline preload="auto" poster="/assets/hero-intro-poster.jpg" aria-hidden="true">
@@ -717,10 +722,10 @@ body>#cta{z-index:65}
 
 <header id="hdr">
   <a class="logo" href="#" style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-decoration:none"><span class="wordmark" style="font-size:21px">АВ<svg class="avo-o" viewBox="0 0 48 54" aria-hidden="true"><path d="M25.5 8 C26.5 5 25 2.5 23 2" fill="none" stroke="#d8b981" stroke-width="1.6" stroke-linecap="round"/><path d="M24 9.5 C20.4 9.5 15.6 15.6 14.1 22.3 C12.6 29.1 17.3 38 24 38 C30.7 38 35.4 29.1 33.9 22.3 C32.4 15.6 27.6 9.5 24 9.5 Z" fill="none" stroke="#d8b981" stroke-width="2.1" stroke-linejoin="round"/><circle cx="24" cy="27" r="4.6" fill="#d8b981"/></svg>КАДО</span><span style="font-family:\'Manrope\',sans-serif;font-size:9.5px;letter-spacing:.34em;color:#cfae83;text-transform:uppercase;padding-left:2px">студия дизайна тела</span></a>
-  <a class="head-btn" href="/contacts.html">Написать нам</a>
+  <a class="head-btn" href="#contacts">Написать нам</a>
 </header>
 
-<a class="sticky-cta gold-cta" id="cta" data-entry-point="sticky_cta" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=sticky_cta" target="_blank" rel="noopener" data-edit="cta.sticky-cta-1">Пробный сеанс — 500 ₽</a>
+<nav class="sticky-cta" id="cta" aria-label="Запись и полный прайс"><a class="gold-cta" data-entry-point="sticky_cta" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=sticky_cta" target="_blank" rel="noopener" data-edit="cta.sticky-cta-1">Пробный сеанс — 500 ₽</a><a class="sticky-price" href="price.html" data-entry-point="sticky_price">Посмотреть весь прайс</a></nav>
 
 <!-- ═══ АКТ 1 · ХИРО «ВЕЧЕР» ═══ -->
 <section class="hero" id="top" data-landing-block="1" aria-labelledby="hero-title">
@@ -794,59 +799,59 @@ body>#cta{z-index:65}
         </div>
         <div class="results-rail" tabindex="0" role="region" aria-label="Фотографии до и после. Листайте горизонтально или используйте стрелки.">
         <figure class="results-card" data-result-category="body">
-          <a class="results-photo" href="assets/result-01-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 1"><img src="assets/result-01-20260915.webp" alt="Коррекция фигуры: исходный коллаж до и после, пример 1." width="1280" height="1280" loading="lazy" decoding="async"></a>
+          <a class="results-photo" href="assets/result-01-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 1"><svg xmlns="http://www.w3.org/2000/svg" class="results-comparison" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Коррекция фигуры, пример 1" focusable="false"><rect width="1024" height="1024" fill="#101a14"/><svg x="0" y="0" width="1024" height="1024" viewBox="0 0 1280 1280" overflow="hidden"><image href="assets/result-01-20260915.webp" width="1280" height="1280"/></svg></svg></a>
           <figcaption><span>Коррекция фигуры</span><span>Увеличить ↗</span></figcaption>
         </figure>
         <figure class="results-card" data-result-category="body">
-          <a class="results-photo" href="assets/result-02-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 2"><img src="assets/result-02-20260915.webp" alt="Коррекция фигуры: исходный коллаж до и после, пример 2." width="1280" height="1280" loading="lazy" decoding="async"></a>
+          <a class="results-photo" href="assets/result-02-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 2"><svg xmlns="http://www.w3.org/2000/svg" class="results-comparison" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Коррекция фигуры, пример 2" focusable="false"><rect width="1024" height="1024" fill="#101a14"/><svg x="0" y="62.9346" width="508" height="898.1307" viewBox="18 18 612 1082" overflow="hidden"><image href="assets/result-02-20260915.webp" width="1280" height="1280"/></svg><svg x="516" y="62.9346" width="508" height="898.1307" viewBox="650 18 612 1082" overflow="hidden"><image href="assets/result-02-20260915.webp" width="1280" height="1280"/></svg></svg></a>
           <figcaption><span>Коррекция фигуры</span><span>Увеличить ↗</span></figcaption>
         </figure>
         <figure class="results-card" data-result-category="body">
-          <a class="results-photo" href="assets/result-03-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 3"><img src="assets/result-03-20260915.webp" alt="Коррекция фигуры: исходный коллаж до и после, пример 3." width="1280" height="1280" loading="lazy" decoding="async"></a>
+          <a class="results-photo" href="assets/result-03-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 3"><svg xmlns="http://www.w3.org/2000/svg" class="results-comparison" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Коррекция фигуры, пример 3" focusable="false"><rect width="1024" height="1024" fill="#101a14"/><svg x="0" y="62.9346" width="508" height="898.1307" viewBox="18 18 612 1082" overflow="hidden"><image href="assets/result-03-20260915.webp" width="1280" height="1280"/></svg><svg x="516" y="62.9346" width="508" height="898.1307" viewBox="650 18 612 1082" overflow="hidden"><image href="assets/result-03-20260915.webp" width="1280" height="1280"/></svg></svg></a>
           <figcaption><span>Коррекция фигуры</span><span>Увеличить ↗</span></figcaption>
         </figure>
         <figure class="results-card" data-result-category="body">
-          <a class="results-photo" href="assets/result-04-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 4"><img src="assets/result-04-20260915.webp" alt="Коррекция фигуры: исходный коллаж до и после, пример 4." width="1280" height="1280" loading="lazy" decoding="async"></a>
+          <a class="results-photo" href="assets/result-04-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 4"><svg xmlns="http://www.w3.org/2000/svg" class="results-comparison" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Коррекция фигуры, пример 4" focusable="false"><rect width="1024" height="1024" fill="#101a14"/><svg x="0" y="62.9346" width="508" height="898.1307" viewBox="18 18 612 1082" overflow="hidden"><image href="assets/result-04-20260915.webp" width="1280" height="1280"/></svg><svg x="516" y="62.9346" width="508" height="898.1307" viewBox="650 18 612 1082" overflow="hidden"><image href="assets/result-04-20260915.webp" width="1280" height="1280"/></svg></svg></a>
           <figcaption><span>Коррекция фигуры</span><span>Увеличить ↗</span></figcaption>
         </figure>
         <figure class="results-card" data-result-category="body">
-          <a class="results-photo" href="assets/result-05-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 5"><img src="assets/result-05-20260915.webp" alt="Коррекция фигуры: исходный коллаж до и после, пример 5." width="1280" height="1280" loading="lazy" decoding="async"></a>
+          <a class="results-photo" href="assets/result-05-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 5"><svg xmlns="http://www.w3.org/2000/svg" class="results-comparison" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Коррекция фигуры, пример 5" focusable="false"><rect width="1024" height="1024" fill="#101a14"/><svg x="0" y="62.9346" width="508" height="898.1307" viewBox="18 18 612 1082" overflow="hidden"><image href="assets/result-05-20260915.webp" width="1280" height="1280"/></svg><svg x="516" y="62.9346" width="508" height="898.1307" viewBox="650 18 612 1082" overflow="hidden"><image href="assets/result-05-20260915.webp" width="1280" height="1280"/></svg></svg></a>
           <figcaption><span>Коррекция фигуры</span><span>Увеличить ↗</span></figcaption>
         </figure>
         <figure class="results-card" data-result-category="laser">
-          <a class="results-photo" href="assets/result-06-20260915.webp" aria-label="Увеличить фото: Лазерная эпиляция, пример 6"><img src="assets/result-06-20260915.webp" alt="Лазерная эпиляция: исходный коллаж до и после, пример 6." width="947" height="1221" loading="lazy" decoding="async"></a>
+          <a class="results-photo" href="assets/result-06-20260915.webp" aria-label="Увеличить фото: Лазерная эпиляция, пример 6"><svg xmlns="http://www.w3.org/2000/svg" class="results-comparison" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Лазерная эпиляция, пример 6" focusable="false"><rect width="1024" height="1024" fill="#101a14"/><svg x="40.4548" y="0" width="427.0904" height="1024" viewBox="51 36 420 1007" overflow="hidden"><image href="assets/result-06-20260915.webp" width="947" height="1221"/></svg><svg x="556.4548" y="0" width="427.0904" height="1024" viewBox="482 36 420 1007" overflow="hidden"><image href="assets/result-06-20260915.webp" width="947" height="1221"/></svg></svg></a>
           <figcaption><span>Лазерная эпиляция</span><span>Увеличить ↗</span></figcaption>
         </figure>
         <figure class="results-card" data-result-category="laser">
-          <a class="results-photo" href="assets/result-07-20260915.webp" aria-label="Увеличить фото: Лазерная эпиляция, пример 7"><img src="assets/result-07-20260915.webp" alt="Лазерная эпиляция: исходный коллаж до и после, пример 7." width="720" height="1280" loading="lazy" decoding="async"></a>
+          <a class="results-photo" href="assets/result-07-20260915.webp" aria-label="Увеличить фото: Лазерная эпиляция, пример 7"><svg xmlns="http://www.w3.org/2000/svg" class="results-comparison" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Лазерная эпиляция, пример 7" focusable="false"><rect width="1024" height="1024" fill="#101a14"/><svg x="40.0284" y="0" width="943.9433" height="508" viewBox="98 247 524 282" overflow="hidden"><image href="assets/result-07-20260915.webp" width="720" height="1280"/></svg><svg x="40.0284" y="516" width="943.9433" height="508" viewBox="98 732 524 282" overflow="hidden"><image href="assets/result-07-20260915.webp" width="720" height="1280"/></svg></svg></a>
           <figcaption><span>Лазерная эпиляция</span><span>Увеличить ↗</span></figcaption>
         </figure>
         <figure class="results-card" data-result-category="body">
-          <a class="results-photo" href="assets/result-08-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 8"><img src="assets/result-08-20260915.webp" alt="Коррекция фигуры: исходный коллаж до и после, пример 8." width="1280" height="1220" loading="lazy" decoding="async"></a>
+          <a class="results-photo" href="assets/result-08-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 8"><svg xmlns="http://www.w3.org/2000/svg" class="results-comparison" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Коррекция фигуры, пример 8" focusable="false"><rect width="1024" height="1024" fill="#101a14"/><svg x="0.518" y="0" width="506.9639" height="1024" viewBox="3 0 604 1220" overflow="hidden"><image href="assets/result-08-20260915.webp" width="1280" height="1220"/></svg><svg x="516.518" y="0" width="506.9639" height="1024" viewBox="675 0 604 1220" overflow="hidden"><image href="assets/result-08-20260915.webp" width="1280" height="1220"/></svg></svg></a>
           <figcaption><span>Коррекция фигуры</span><span>Увеличить ↗</span></figcaption>
         </figure>
         <figure class="results-card" data-result-category="body">
-          <a class="results-photo" href="assets/result-09-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 9"><img src="assets/result-09-20260915.webp" alt="Коррекция фигуры: исходный коллаж до и после, пример 9." width="1170" height="1047" loading="lazy" decoding="async"></a>
+          <a class="results-photo" href="assets/result-09-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 9"><svg xmlns="http://www.w3.org/2000/svg" class="results-comparison" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Коррекция фигуры, пример 9" focusable="false"><rect width="1024" height="1024" fill="#101a14"/><svg x="0" y="51.8997" width="508" height="920.2007" viewBox="0 0 578 1047" overflow="hidden"><image href="assets/result-09-20260915.webp" width="1170" height="1047"/></svg><svg x="516" y="51.8997" width="508" height="920.2007" viewBox="592 0 578 1047" overflow="hidden"><image href="assets/result-09-20260915.webp" width="1170" height="1047"/></svg></svg></a>
           <figcaption><span>Коррекция фигуры</span><span>Увеличить ↗</span></figcaption>
         </figure>
         <figure class="results-card" data-result-category="body">
-          <a class="results-photo" href="assets/result-10-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 10"><img src="assets/result-10-20260915.webp" alt="Коррекция фигуры: исходный коллаж до и после, пример 10." width="1252" height="1149" loading="lazy" decoding="async"></a>
+          <a class="results-photo" href="assets/result-10-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 10"><svg xmlns="http://www.w3.org/2000/svg" class="results-comparison" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Коррекция фигуры, пример 10" focusable="false"><rect width="1024" height="1024" fill="#101a14"/><svg x="0" y="45.5859" width="508" height="932.8283" viewBox="2 0 623 1144" overflow="hidden"><image href="assets/result-10-20260915.webp" width="1252" height="1149"/></svg><svg x="516" y="45.5859" width="508" height="932.8283" viewBox="629 0 623 1144" overflow="hidden"><image href="assets/result-10-20260915.webp" width="1252" height="1149"/></svg></svg></a>
           <figcaption><span>Коррекция фигуры</span><span>Увеличить ↗</span></figcaption>
         </figure>
         <figure class="results-card" data-result-category="body">
-          <a class="results-photo" href="assets/result-11-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 11"><img src="assets/result-11-20260915.webp" alt="Коррекция фигуры: исходный коллаж до и после, пример 11." width="828" height="592" loading="lazy" decoding="async"></a>
+          <a class="results-photo" href="assets/result-11-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 11"><svg xmlns="http://www.w3.org/2000/svg" class="results-comparison" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Коррекция фигуры, пример 11" focusable="false"><rect width="1024" height="1024" fill="#101a14"/><svg x="0" y="147.7614" width="508" height="728.4772" viewBox="13 0 394 565" overflow="hidden"><image href="assets/result-11-20260915.webp" width="828" height="592"/></svg><svg x="516" y="147.7614" width="508" height="728.4772" viewBox="421 0 394 565" overflow="hidden"><image href="assets/result-11-20260915.webp" width="828" height="592"/></svg></svg></a>
           <figcaption><span>Коррекция фигуры</span><span>Увеличить ↗</span></figcaption>
         </figure>
         <figure class="results-card" data-result-category="body">
-          <a class="results-photo" href="assets/result-12-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 12"><img src="assets/result-12-20260915.webp" alt="Коррекция фигуры: исходный коллаж до и после, пример 12." width="828" height="587" loading="lazy" decoding="async"></a>
+          <a class="results-photo" href="assets/result-12-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 12"><svg xmlns="http://www.w3.org/2000/svg" class="results-comparison" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Коррекция фигуры, пример 12" focusable="false"><rect width="1024" height="1024" fill="#101a14"/><svg x="0" y="131.9744" width="508" height="760.0512" viewBox="13 2 391 585" overflow="hidden"><image href="assets/result-12-20260915.webp" width="828" height="587"/></svg><svg x="516" y="131.9744" width="508" height="760.0512" viewBox="423 2 391 585" overflow="hidden"><image href="assets/result-12-20260915.webp" width="828" height="587"/></svg></svg></a>
           <figcaption><span>Коррекция фигуры</span><span>Увеличить ↗</span></figcaption>
         </figure>
         <figure class="results-card" data-result-category="body">
-          <a class="results-photo" href="assets/result-13-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 13"><img src="assets/result-13-20260915.webp" alt="Коррекция фигуры: исходный коллаж до и после, пример 13." width="1278" height="1103" loading="lazy" decoding="async"></a>
+          <a class="results-photo" href="assets/result-13-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 13"><svg xmlns="http://www.w3.org/2000/svg" class="results-comparison" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Коррекция фигуры, пример 13" focusable="false"><rect width="1024" height="1024" fill="#101a14"/><svg x="0" y="65.7504" width="508" height="892.4992" viewBox="8 19 617 1084" overflow="hidden"><image href="assets/result-13-20260915.webp" width="1278" height="1103"/></svg><svg x="516" y="65.7504" width="508" height="892.4992" viewBox="643 19 617 1084" overflow="hidden"><image href="assets/result-13-20260915.webp" width="1278" height="1103"/></svg></svg></a>
           <figcaption><span>Коррекция фигуры</span><span>Увеличить ↗</span></figcaption>
         </figure>
         <figure class="results-card" data-result-category="body">
-          <a class="results-photo" href="assets/result-14-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 14"><img src="assets/result-14-20260915.webp" alt="Коррекция фигуры: исходный коллаж до и после, пример 14." width="804" height="673" loading="lazy" decoding="async"></a>
+          <a class="results-photo" href="assets/result-14-20260915.webp" aria-label="Увеличить фото: Коррекция фигуры, пример 14"><svg xmlns="http://www.w3.org/2000/svg" class="results-comparison" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Коррекция фигуры, пример 14" focusable="false"><rect width="1024" height="1024" fill="#101a14"/><svg x="0" y="86.9119" width="508" height="850.1762" viewBox="8 27 386 646" overflow="hidden"><image href="assets/result-14-20260915.webp" width="804" height="673"/></svg><svg x="516" y="86.9119" width="508" height="850.1762" viewBox="408 27 386 646" overflow="hidden"><image href="assets/result-14-20260915.webp" width="804" height="673"/></svg></svg></a>
           <figcaption><span>Коррекция фигуры</span><span>Увеличить ↗</span></figcaption>
         </figure>
         </div>
@@ -863,7 +868,7 @@ body>#cta{z-index:65}
 </section>
 
 <!-- ═══ БЛОК 5 · КОНТАКТЫ ═══ -->
-<section class="landing-block contacts" id="contacts" data-landing-block="5"><div class="wrap"><div class="kicker rv" data-edit="contacts.kicker-1">Связаться со студией</div><h2 class="rv" data-edit="contacts.rv-1">Контакты</h2><p class="lead rv" data-edit="contacts.lead-1">АВОКАДО ждёт вас: Иркутск, Красноказачья, 84, 1 этаж.</p><div class="contact-actions rv"><a class="contact-main chat" data-entry-point="contacts_booking" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=contacts_booking" target="_blank" rel="noopener" data-edit="contacts.contact-main-1">Записаться онлайн</a></div><nav class="contact-links rv"><a href="https://2gis.ru/irkutsk/firm/70000001045439507" target="_blank" rel="noopener" data-edit="contacts.a-1">2ГИС</a><a href="https://yandex.ru/profile/32740458188" target="_blank" rel="noopener" data-edit="contacts.a-2">Яндекс.Карты</a><a href="tel:+79331901059" data-edit="contacts.a-3">8-933-190-10-59</a><a href="https://vk.com/lasermkt" target="_blank" rel="noopener" data-edit="contacts.a-5">ВКонтакте</a></nav><p class="contact-hours rv" data-edit="contacts.contact-hours-1">Ежедневно, по предварительной записи</p><p class="booking-consent">Нажимая кнопку записи, вы соглашаетесь с <a href="privacy.html" data-edit="contacts.a-6">политикой конфиденциальности</a>.</p><a class="flow-next" href="#faq" aria-label="Перейти к ответам на частые вопросы"><span aria-hidden="true">↓</span></a></div></section>
+<section class="landing-block contacts" id="contacts" data-landing-block="5"><div class="wrap"><div class="kicker rv" data-edit="contacts.kicker-1">Связаться со студией</div><h2 class="rv" data-edit="contacts.rv-1">Контакты</h2><p class="lead rv" data-edit="contacts.lead-1">АВОКАДО ждёт вас: Иркутск, Красноказачья, 84, 1 этаж.</p><div class="contact-actions rv"><a class="contact-main chat" data-entry-point="contacts_booking" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=contacts_booking" target="_blank" rel="noopener" data-edit="contacts.contact-main-1">Записаться онлайн</a><a class="contact-main chat" href="https://wa.me/79501001059" target="_blank" rel="noopener" data-entry-point="contacts_whatsapp">WhatsApp</a><a class="contact-main chat" href="https://t.me/avocado_studio38" target="_blank" rel="noopener" data-entry-point="contacts_telegram">Telegram</a><a class="contact-main chat" data-entry-point="contacts_vk" href="https://vk.com/lasermkt" target="_blank" rel="noopener" data-edit="contacts.a-5">ВКонтакте</a></div><nav class="contact-links rv"><a href="https://2gis.ru/irkutsk/firm/70000001045439507" target="_blank" rel="noopener" data-edit="contacts.a-1">2ГИС</a><a href="https://yandex.ru/profile/32740458188" target="_blank" rel="noopener" data-edit="contacts.a-2">Яндекс.Карты</a><a href="tel:+79331901059" data-edit="contacts.a-3">8-933-190-10-59</a></nav><p class="contact-hours rv" data-edit="contacts.contact-hours-1">Ежедневно, по предварительной записи</p><p class="booking-consent">Нажимая кнопку записи, вы соглашаетесь с <a href="privacy.html" data-edit="contacts.a-6">политикой конфиденциальности</a>.</p><a class="flow-next" href="#faq" aria-label="Перейти к ответам на частые вопросы"><span aria-hidden="true">↓</span></a></div></section>
   <section class="landing-block faq" id="faq" data-landing-block="6">
   <div class="wrap">
     <div class="kicker rv" data-edit="faq.kicker-1">Частые вопросы</div>
@@ -905,11 +910,11 @@ body>#cta{z-index:65}
 <footer id="site-footer"><span class="footer-copy" data-edit="footer.footer-copy-1">АВОКАДО · студия дизайна тела · Иркутск, ул. Красноказачья, 84 · ежедневно, по предварительной записи</span><br><a href="tel:+79331901059" data-edit="footer.a-1">8-933-190-10-59</a> · <a href="privacy.html" data-edit="footer.a-2">Политика конфиденциальности</a> · <a href="consent.html" data-edit="footer.a-3">Согласие на обработку персональных данных</a><br><span class="footer-legal" data-edit="footer.footer-legal-1">Индивидуальный предприниматель Петрук Татьяна Александровна · ИНН 381497453085 · ОГРНИП 324385000056520</span></footer><div class="synapse-strip">сайт работает на <a href="https://synapsebusiness.ru" target="_blank" rel="noopener">Synapse Business</a></div><div class="cookie-notice" role="dialog" aria-label="Уведомление о cookie"><span>Сайт использует cookie для корректной работы.</span><button type="button">Хорошо</button></div>
 <dialog class="results-dialog" id="results-dialog" aria-labelledby="results-dialog-title">
   <div class="results-dialog-header"><p class="results-dialog-title" id="results-dialog-title">Пример результата</p><button class="results-dialog-close" type="button" data-dialog-close autofocus>Закрыть ×</button></div>
-  <img class="results-dialog-image" alt="">
+  <div class="results-dialog-image"></div>
   <div class="results-dialog-footer"><button type="button" data-dialog-previous aria-label="Предыдущее фото">←</button><span class="results-dialog-count" aria-live="polite"></span><button type="button" data-dialog-next aria-label="Следующее фото">→</button></div>
 </dialog>
-<script src="results-gallery.js?v=20260915-results"></script>
-<script src="work-steps.js?v=20260915-pairs"></script>
+<script src="results-gallery.js?v=20260915-framed"></script>
+<script src="work-steps.js?v=20260915-headroom"></script>
 <script src="method-reveal.js?v=20260915-pairs"></script>
 <script>
 (function(){var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;var runway=document.querySelector('.runway-figure');if(runway){if(reduce)runway.classList.add('on');else new IntersectionObserver(function(e){runway.classList.toggle('on',e[0].isIntersecting)},{threshold:.25}).observe(runway)}var method=document.querySelector('.method-scroll');var scenes=[].slice.call(document.querySelectorAll('.method-scene'));function updateScenes(){if(!method)return;if(window.AvokadoMethod && window.AvokadoMethod.update(method,scenes))return;var rect=method.getBoundingClientRect(), span=method.offsetHeight-innerHeight;var progress=Math.max(0,Math.min(.999,-rect.top/span));var index=Math.min(scenes.length-1,Math.floor(progress*scenes.length));scenes.forEach(function(scene,i){scene.classList.toggle('active',i===index)})}function fitMethod(){
@@ -1376,7 +1381,7 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
 ]}
 </script>
 <script src="price-render.js?v=20260914-catalog"></script>
-<script src="catalog.js?v=20260915-results-laser"></script>
+<script src="catalog.js?v=20260915-contacts"></script>
 <script src="site-apply.js?v=20260904"></script>
 <script>
 /* Six scenes, six pains. Opaque cards; captions exchange focus without overlap. */
@@ -1499,5 +1504,6 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
 })();
 </script>
 <script src="https://synapse.synapsebusiness.ru/track.js?v=20260905" data-company="avokado" defer></script>
+<script src="contact-route.js?v=20260915-contacts"></script>
 </body>
 </html>

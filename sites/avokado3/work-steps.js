@@ -12,7 +12,7 @@
     { src: 'assets/work-introduction-20260915.webp', alt: 'Специалист беседует с клиенткой перед процедурой.', focus: '50% 26%', width: 1365, height: 2048 },
     { src: 'assets/work-assessment-20260915.webp', alt: 'Руки специалиста на животе клиентки во время осмотра.', focus: '50% 47%', width: 1365, height: 2048 },
     { src: 'assets/work-treatment-20260915.webp', alt: 'Специалист проводит аппаратную процедуру в области живота.', focus: '50% 48%', width: 1365, height: 2048 },
-    { src: 'assets/work-decision-20260915.webp', alt: 'Женщина в чёрном платье у открытой двери студии.', focus: '35% 50%', width: 1672, height: 941 }
+    { src: 'assets/work-decision-20260915.webp', alt: 'Женщина в чёрном платье у открытой двери студии.', focus: '35% 0%', width: 1672, height: 941 }
   ];
 
   function framesAt(phase, count, reduced) {

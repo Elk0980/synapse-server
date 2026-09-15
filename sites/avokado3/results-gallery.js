@@ -1,4 +1,4 @@
-/* Owner-supplied comparisons: whole photographs, manual browsing, no autoplay. */
+/* Owner-supplied comparisons: equal crop scale, manual browsing, no autoplay. */
 (function () {
   'use strict';
   const scene = document.getElementById('method-results');
@@ -75,9 +75,8 @@
 
   function renderModal() {
     const card = visible[modalIndex];
-    const source = card.querySelector('img');
-    dialogImage.src = card.querySelector('a').href;
-    dialogImage.alt = source.alt;
+    const source = card.querySelector('.results-comparison, img');
+    dialogImage.replaceChildren(source.cloneNode(true));
     dialogTitle.textContent = card.querySelector('figcaption span').textContent;
     dialogCount.textContent = (modalIndex + 1) + ' / ' + visible.length;
     dialogPrevious.disabled = modalIndex === 0;
