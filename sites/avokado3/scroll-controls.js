@@ -9,14 +9,16 @@
  function start(win,doc){
   const panel=doc.getElementById('cta');
   const mobile=win.matchMedia('(max-width:820px)');
-  const actionSections=[doc.getElementById('price'),doc.getElementById('contacts')].filter(Boolean);
+  const callback=doc.getElementById('callback');
+  const actionSections=[doc.getElementById('price'),doc.getElementById('contacts'),callback].filter(Boolean);
   const sectionVisibility=new Map(actionSections.map(section=>[section,false]));
   let sectionObserver=null;
   function updateContentActions(){
    if(!panel)return;
    const focused=doc.activeElement&&panel.contains(doc.activeElement);
    const hasVisibleActions=[...sectionVisibility.values()].some(Boolean);
-   panel.classList.toggle('content-actions-visible',mobile.matches&&hasVisibleActions&&!focused);
+   const formVisible=callback&&sectionVisibility.get(callback);
+   panel.classList.toggle('content-actions-visible',Boolean((mobile.matches&&hasVisibleActions||formVisible)&&!focused));
   }
   function measureActionSections(){
    actionSections.forEach(section=>{

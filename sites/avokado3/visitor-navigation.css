@@ -2,6 +2,8 @@
 #top{z-index:3;pointer-events:none}
 body>#hdr{z-index:80}
 body>#cta{z-index:70}
+/* Keep the callback fields and consent clear on every screen size. */
+body>#cta.content-actions-visible{opacity:0;visibility:hidden;pointer-events:none;transform:translateY(90px);transition:none}
 body>.cookie-notice{z-index:100}
 #top .hero-titles{padding:80px 20px 4svh}
 #top .hero-shortcuts{pointer-events:auto;width:min(480px,100%);margin-top:22px;color:#f6f1e5;text-shadow:0 2px 12px #000}
@@ -14,7 +16,7 @@ body>.cookie-notice{z-index:100}
 #top .t-hint{margin-top:12px}
 @media(max-width:820px){
   /* Service cards and contacts already provide actions without covering their content. */
-  body>#cta.content-actions-visible{opacity:0;visibility:hidden;pointer-events:none;transform:translate(-50%,90px);transition:none}
+  body>#cta.content-actions-visible{transform:translate(-50%,90px)}
   #top.hero{min-height:500px}
   #top .hero-titles{padding:76px 16px max(24px,4svh)}
   #top .t-script{margin-top:14px;font-size:25px}
