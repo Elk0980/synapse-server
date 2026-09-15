@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="index, follow">
 <title>Написать нам — АВОКАДО · Иркутск</title><link rel="canonical" href="https://avokado38.ru/contacts.html">
-<meta name="description" content="Все способы связаться со студией АВОКАДО: онлайн-запись, Telegram, WhatsApp, VK, телефон, карты.">
+<meta name="description" content="Все способы связаться со студией АВОКАДО: обратный звонок, онлайн-запись, Telegram, WhatsApp, VK, телефон, карты.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Manrope:wght@400;500;600;700&family=Cormorant:wght@500;600&display=swap" rel="stylesheet">
@@ -32,7 +32,8 @@
   .wordmark .avo-o{height:1.05em;width:auto;align-self:center;margin:0 .06em;transform:translateY(.08em)}
   .wm-sub{display:block;font-family:'Manrope',sans-serif;font-size:.32em;letter-spacing:.46em;color:#c2a878;text-transform:uppercase;margin-top:.35em;text-align:center}
 </style>
-<link rel="stylesheet" href="mobile-foundation.css?v=20260915-mobile"></head>
+<link rel="stylesheet" href="mobile-foundation.css?v=20260915-mobile">
+<link rel="stylesheet" href="callback.css?v=20260915-callback"></head>
 <body class="av-contact-page">
 <header>
   <a class="logo wordmark" href="index.html" style="font-size:21px">АВ<svg class="avo-o" viewBox="0 0 48 54" aria-hidden="true"><path d="M25.5 8 C26.5 5 25 2.5 23 2" fill="none" stroke="#d8b981" stroke-width="1.6" stroke-linecap="round"/><path d="M24 9.5 C20.4 9.5 15.6 15.6 14.1 22.3 C12.6 29.1 17.3 38 24 38 C30.7 38 35.4 29.1 33.9 22.3 C32.4 15.6 27.6 9.5 24 9.5 Z" fill="none" stroke="#d8b981" stroke-width="2.1" stroke-linejoin="round"/><circle cx="24" cy="27" r="4.6" fill="#d8b981"/></svg>КАДО</a>
@@ -40,12 +41,29 @@
 </header>
 <main>
   <h1>Написать нам</h1>
-  <p class="sub">Выберите, как удобнее: запись онлайн занимает меньше минуты, в мессенджерах отвечаем в рабочие часы — ежедневно с 09:00 до 21:00.</p>
+  <p class="sub">Закажите обратный звонок, запишитесь онлайн или напишите нам. В мессенджерах отвечаем в рабочие часы — ежедневно с 09:00 до 21:00.</p>
+
+  <section class="av-callback" id="callback" aria-labelledby="callback-heading">
+    <h2 id="callback-heading">Заказать обратный звонок</h2>
+    <p class="av-callback-intro">Оставьте номер — администратор свяжется с вами.</p>
+    <form data-callback-form aria-labelledby="callback-heading" action="/api/leads" method="post" hidden>
+      <fieldset>
+        <label for="callback-name">Ваше имя<input id="callback-name" name="name" type="text" autocomplete="name" maxlength="80" required></label>
+        <label for="callback-contact">Телефон<input id="callback-contact" name="contact" type="tel" inputmode="tel" autocomplete="tel" maxlength="32" required></label>
+        <label class="av-callback-wide" for="callback-comment">Комментарий · необязательно<textarea id="callback-comment" name="comment" rows="3" maxlength="1000"></textarea></label>
+        <label class="av-callback-consent av-callback-wide" for="callback-consent"><input id="callback-consent" name="consent" type="checkbox" required><span>Я даю <a href="consent.html" target="_blank" rel="noopener">согласие на обработку персональных данных</a> и ознакомлен(а) с <a href="privacy.html" target="_blank" rel="noopener">политикой конфиденциальности</a>.</span></label>
+      </fieldset>
+      <button type="submit">Заказать обратный звонок</button>
+      <p data-callback-status role="status" aria-live="polite" aria-atomic="true" tabindex="-1"></p>
+    </form>
+    <noscript><p>Чтобы отправить заявку здесь, включите JavaScript или позвоните в студию.</p></noscript>
+    <p class="av-callback-phone">Можно связаться по телефону: <a href="tel:+79331901059">8-933-190-10-59</a> или <a href="#messengers">написать нам</a>.</p>
+  </section>
 
   <div class="group">Запись</div>
   <a class="link hot" href="https://n396010.yclients.com/company/375899/personal/menu" target="_blank" rel="noopener"><span>Записаться онлайн</span><span>Yclients</span></a>
 
-  <div class="group">Мессенджеры и соцсети</div>
+  <div class="group" id="messengers">Мессенджеры и соцсети</div>
   <a class="link" href="https://wa.me/79501001059" target="_blank" rel="noopener"><span>WhatsApp</span><span>+7 950 100 1059</span></a>
   <a class="link" href="https://t.me/avocado_studio38" target="_blank" rel="noopener"><span>Telegram</span><span>@avocado_studio38</span></a>
   <a class="link" href="https://vk.com/lasermkt" target="_blank" rel="noopener"><span>ВКонтакте</span><span>vk.com/lasermkt</span></a>
@@ -62,5 +80,6 @@
     Иркутск, ул. Красноказачья, 84 · ежедневно 09:00–21:00
   </div>
 </main>
-<script src="attribution.js?v=20260915-mobile"></script></body>
+<script src="attribution.js?v=20260915-mobile"></script>
+<script src="callback.js?v=20260915-callback"></script></body>
 </html>

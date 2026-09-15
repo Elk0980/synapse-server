@@ -256,48 +256,56 @@
         {
           "id": "laser-combo-1",
           "title": "Мини 1",
+          "desc": "Подмышки + тотальное бикини.",
           "duration": "",
           "price": "2 190 ₽"
         },
         {
           "id": "laser-combo-2",
           "title": "Мини 2",
+          "desc": "Голени + тотальное бикини.",
           "duration": "",
           "price": "2 690 ₽"
         },
         {
           "id": "laser-combo-3",
           "title": "Мини 3",
+          "desc": "Голени + подмышки.",
           "duration": "",
           "price": "2 100 ₽"
         },
         {
           "id": "laser-combo-4",
           "title": "Мини-3+",
+          "desc": "Подмышки + ноги полностью.",
           "duration": "",
           "price": "3 190 ₽"
         },
         {
           "id": "laser-combo-5",
           "title": "Ручки",
+          "desc": "Руки полностью + подмышки.",
           "duration": "",
           "price": "1 800 ₽"
         },
         {
           "id": "laser-combo-6",
           "title": "Комбо популярное",
+          "desc": "Подмышки + голени + тотальное бикини.",
           "duration": "",
           "price": "3 100 ₽"
         },
         {
           "id": "laser-combo-7",
           "title": "Комбо популярное +",
+          "desc": "Подмышки + ноги полностью + тотальное бикини.",
           "duration": "",
           "price": "4 100 ₽"
         },
         {
           "id": "laser-combo-8",
           "title": "Комбо «Хочу всё!»",
+          "desc": "Безлимит по зонам.",
           "duration": "",
           "price": "4 990 ₽"
         }

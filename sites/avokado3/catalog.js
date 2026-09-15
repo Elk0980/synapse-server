@@ -41,8 +41,34 @@ function gift(data,full){
 function render(data,full){const selected=new Set([...(data.showcase?.self||[]),...(data.showcase?.two||[])]);const output=[];for(const [i,g] of groups.entries()){const cats=(data.categories||[]).map(cat=>({...cat,items:(cat.items||[]).filter(it=>group(cat,it)===g.id)})).filter(cat=>cat.items.length);const all=cats.flatMap(c=>c.items);const items=full?all:[...selected].map(id=>all.find(it=>it.id===id)).filter(Boolean);let body;if(full){body=cats.map(cat=>`<div class="av-category" id="${g.id}-${esc(cat.id)}"><h3 class="av-category-title">${esc(cat.title)}</h3>${cat.kind==='table'?table(data,cat,g.id):`<div class="av-grid">${cat.items.map(it=>card(data,it,true,g.id)).join('')}</div>`}</div>`).join('');}else{body=`<div class="av-grid">${items.map(it=>card(data,it,false,g.id)).join('')}</div><a class="av-price-link" href="price.html#${g.id}">Посмотреть весь прайс — ${esc(g.title.toLowerCase())} →</a>`;}
 output.push(`<section class="av-direction" id="${g.id}"><p class="av-kicker">0${i+1} · ${esc(g.title)}${g.id==='apparatus'?' · коррекция фигуры':''}</p><h2>${full?esc(g.title):esc(g.headline)}</h2><p class="av-intro">${esc(g.intro)}</p>${body}</section>`);}
 return output.join('')+gift(data,full);}
+// Verified against company 375899's public Yclients catalogue on 2026-09-15.
+const laserComboDescriptions={
+ 'laser-combo-1':['Мини 1','Подмышки + тотальное бикини.'],
+ 'laser-combo-2':['Мини 2','Голени + тотальное бикини.'],
+ 'laser-combo-3':['Мини 3','Голени + подмышки.'],
+ 'laser-combo-4':['Мини-3+','Подмышки + ноги полностью.'],
+ 'laser-combo-5':['Ручки','Руки полностью + подмышки.'],
+ 'laser-combo-6':['Комбо популярное','Подмышки + голени + тотальное бикини.'],
+ 'laser-combo-7':['Комбо популярное +','Подмышки + ноги полностью + тотальное бикини.'],
+ 'laser-combo-8':['Комбо «Хочу всё!»','Безлимит по зонам.']
+};
+function backfillComboDescriptions(data){
+ let changed=false;
+ const categories=(data.categories||[]).map(cat=>{
+  if(cat.id!=='laser-combo')return cat;
+  let categoryChanged=false;
+  const items=(cat.items||[]).map(it=>{
+   const verified=laserComboDescriptions[it.id];
+   if(!verified||it.title!==verified[0]||!(it.desc==null||(typeof it.desc==='string'&&!it.desc.trim())))return it;
+   changed=categoryChanged=true;return {...it,desc:verified[1]};
+  });
+  return categoryChanged?{...cat,items}:cat;
+ });
+ return changed?{...data,categories}:data;
+}
 function prepare(data,defaults){
- const source=data||defaults;if(!source||source.catalogVersion>=3)return source;
+ const source=data||defaults;if(!source)return source;
+ if(source.catalogVersion>=3)return backfillComboDescriptions(source);
  const out=JSON.parse(JSON.stringify(source));
  if((out.catalogVersion||0)<2&&defaults){
  const initial=out.version===1&&out.updatedAt==='2026-09-04T00:00:00.000Z'&&out.blocks?.self?.title==='Авокадо'&&JSON.stringify(out.showcase?.self)===JSON.stringify(['first-1'])&&!(out.showcase?.two||[]).length;
@@ -56,7 +82,7 @@ function prepare(data,defaults){
   it.duration='45 мин';
   for(const key of ['title','card'])if(typeof it[key]==='string')it[key]=it[key].replace(/\b\d+\s*мин(?:ут[аы]?)?\.?/gi,'45 мин');
  }
- out.catalogVersion=3;return out;
+ out.catalogVersion=3;return backfillComboDescriptions(out);
 }
 window.AvokadoCatalog={render,group,prepare};
 const target=document.getElementById('av-catalog-content');if(!target)return;

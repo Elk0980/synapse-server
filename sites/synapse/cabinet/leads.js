@@ -124,7 +124,9 @@ const renderCRM = () => {
         const attribution = fields.length ? `<dl>${fields.map(([label, value]) =>
           `<dt>${label}</dt><dd>${escapeHTML(value)}</dd>`).join("")}</dl>` :
           "<p>атрибуция не передана</p>";
+        const comment = String(lead.comment ?? "").trim();
         details.innerHTML = `<article class="card lead-details"><h2>${escapeHTML(lead.name)}</h2>
+          ${comment ? `<h3>Комментарий к заявке</h3><p style="white-space:pre-wrap;overflow-wrap:anywhere">${escapeHTML(comment)}</p>` : ""}
           <h3>Атрибуция</h3>${attribution}</article>`;
       } catch (error) {
         details.innerHTML = `<div class="crm-error" role="alert">Не удалось загрузить: ${escapeHTML(error.message)}</div>`;

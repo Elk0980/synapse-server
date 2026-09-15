@@ -1,0 +1,10 @@
+html.av-price-open,html.av-price-open body{overflow:hidden}
+.av-price-dialog{position:fixed;inset:0;margin:0;padding:0;border:0;width:100%;max-width:none;height:100vh;height:100dvh;max-height:none;background:#0e1410;color:#efe9dc;overflow:hidden}
+.av-price-dialog[open]{display:flex;flex-direction:column}
+.av-price-dialog::backdrop{background:#0e1410}
+.av-price-dialog__bar{display:flex;align-items:center;gap:12px;flex:none;padding:10px max(16px,env(safe-area-inset-right)) 10px max(16px,env(safe-area-inset-left));padding-top:max(10px,env(safe-area-inset-top));border-bottom:1px solid #d8b98145;background:#0e1410}
+.av-price-dialog__title{margin-right:auto;font:500 14px/1.4 Manrope,Arial,sans-serif}
+.av-price-dialog__close{min-height:44px;border:1px solid #d8b98188;border-radius:999px;padding:8px 15px;background:transparent;color:#e1d29c;font:500 14px/1.3 Manrope,Arial,sans-serif;cursor:pointer}
+.av-price-dialog__close:focus-visible{outline:3px solid #fff0c8;outline-offset:3px}
+.av-price-dialog__frame{display:block;border:0;flex:1 1 auto;min-height:0;width:100%;background:#0e1410}
+@media(max-width:380px){.av-price-dialog__bar{gap:8px}.av-price-dialog__title{font-size:12px}.av-price-dialog__close{font-size:12px;padding-inline:10px}}

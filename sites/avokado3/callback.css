@@ -1,0 +1,22 @@
+.av-callback{max-width:720px;margin:36px auto;padding:28px;background:#142018;border:1px solid #546047;border-radius:20px;text-align:left;color:#efe9dc;font:400 16px/1.6 'Manrope','Segoe UI',sans-serif;scroll-margin-top:110px}
+.av-callback h2,.av-callback h3{font:700 clamp(23px,4vw,28px)/1.3 'Manrope','Segoe UI',sans-serif;letter-spacing:-.02em;margin:0 0 10px;color:#f4e3bd}
+.av-callback .av-callback-intro{margin:0 0 22px;font:400 16px/1.6 'Manrope',sans-serif;color:#d1d8c7}
+.av-callback form[hidden]{display:none!important}
+.av-callback fieldset{min-width:0;margin:0;padding:0;border:0;display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.av-callback label{display:flex;flex-direction:column;gap:7px;min-width:0;font:500 16px/1.5 'Manrope',sans-serif}
+.av-callback input:not([type="checkbox"]),.av-callback textarea{box-sizing:border-box;width:100%;min-width:0;min-height:48px;border:1px solid #778168;border-radius:10px;background:#0b140e;color:#f4efe4;padding:12px;font:400 16px/1.5 'Manrope',sans-serif}
+.av-callback textarea{min-height:110px;resize:vertical}
+.av-callback .av-callback-wide{grid-column:1/-1}
+.av-callback .av-callback-consent{display:grid;grid-template-columns:24px minmax(0,1fr);gap:12px;align-items:start;font-size:14px;line-height:1.6;min-height:48px;padding-block:4px;cursor:pointer}
+.av-callback input[type="checkbox"]{width:22px;height:22px;margin:3px 0 0;accent-color:#d8b981;cursor:pointer}
+.av-callback a{color:#f1d698;text-decoration:underline;text-underline-offset:3px}
+.av-callback button{min-height:48px;max-width:100%;margin-top:20px;padding:12px 24px;border:1px solid #ead299;border-radius:12px;background:#dec181;color:#192113;font:700 16px/1.5 'Manrope',sans-serif;cursor:pointer}
+.av-callback button:disabled{opacity:.65;cursor:wait}
+.av-callback input:focus-visible,.av-callback textarea:focus-visible,.av-callback button:focus-visible,.av-callback a:focus-visible{outline:3px solid #efdb9d;outline-offset:3px}
+.av-callback [data-callback-status]{font-size:15px;line-height:1.6;margin-top:14px;overflow-wrap:anywhere}
+.av-callback [data-callback-status]:empty{margin:0}
+.av-callback [data-state="success"]{color:#d8efb2}
+.av-callback [data-state="error"]{color:#ffd4bd}
+.av-callback .av-callback-phone{margin:18px 0 0;font-size:14px;line-height:1.6;color:#cbd4c0}
+.av-callback .av-callback-phone a{display:inline-block;min-height:44px;padding-block:10px;white-space:nowrap}
+@media(max-width:600px){.av-callback{padding:22px 16px;margin:28px 0;border-radius:16px}.av-callback fieldset{grid-template-columns:minmax(0,1fr);gap:16px}.av-callback button{width:100%}.av-callback h2,.av-callback h3{font-size:24px}}

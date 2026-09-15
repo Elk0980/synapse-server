@@ -63,3 +63,7 @@ body.av-price-page{--av-shell-height:80px;--av-anchor-offset:104px;background:#0
  .av-shell-back{white-space:normal;max-width:145px;padding:8px 10px;font-size:11px;text-align:center}
 }
 @media(prefers-reduced-motion:reduce){.av-page-backdrop video{display:none}html{scroll-behavior:auto}}
+
+.av-price-embedded .av-shell-header{display:none}
+.av-price-embedded body.av-price-page{--av-shell-height:0px;--av-anchor-offset:68px}
+.av-price-intro .av-price-callback{margin-top:18px}
