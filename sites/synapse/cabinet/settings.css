@@ -14,8 +14,30 @@
 .settings-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: flex-end; }
 .settings-actions p { min-height: 1.3em; }
 
+#settings-email { width: min(100%, 880px); margin-top: 28px; }
+#settings-email[hidden] { display: none; }
+#settings-email h2 { margin: 0 0 12px; }
+.settings-email-header { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: center; justify-content: space-between; }
+.settings-email-header p { margin: 0; color: var(--muted); line-height: 1.6; }
+#email-status-refresh { min-height: 44px; padding: 10px 16px; }
+#email-status-refresh:disabled { cursor: wait; }
+#email-status-result { margin-top: 20px; line-height: 1.6; overflow-wrap: break-word; }
+#email-status-result h3 { margin: 0 0 8px; font-size: 18px; }
+#email-status-result p { margin: 8px 0; }
+.email-status-note { color: var(--muted); font-size: 14px; }
+.email-status-companies { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-block: 20px; }
+.email-status-company { min-width: 0; padding: 18px; border: 1px solid var(--line, #d3d7d2); border-radius: 12px; }
+.email-status-company h4 { margin: 0 0 8px; font-size: 17px; }
+.email-status-counts { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; margin: 18px 0; }
+.email-status-counts dt { min-width: 0; }
+.email-status-counts dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.email-status-errors-title { font-weight: 600; }
+.email-status-errors { margin: 8px 0; padding-left: 20px; font-size: 14px; }
+.email-status-errors li + li { margin-top: 6px; }
+
 @media (max-width: 760px) {
   .settings-hugh { grid-template-columns: 1fr; gap: 24px; }
   .settings-hugh label { grid-template-columns: 1fr; gap: 7px; }
   .settings-hugh select { width: 100%; }
+  .email-status-companies { grid-template-columns: minmax(0, 1fr); }
 }

@@ -6,6 +6,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { URL } = require('node:url');
 const { createEmailNotifications } = require('./email-notifications');
 const { createEmailOutbox } = require('./email-outbox');
+const { createEmailDiagnostics } = require('./email-diagnostics');
 
 const IS_MAIN = require.main === module;
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
@@ -540,6 +541,7 @@ const createLead = db.prepare(`
 `);
 const getLead = db.prepare('SELECT * FROM leads WHERE id = ?');
 const emailOutbox = createEmailOutbox(db, emailNotifications);
+const emailDiagnostics = createEmailDiagnostics(db);
 function deliverLeadEmails() {
   return emailOutbox.drain().catch(() => {
     // Do not expose SMTP responses or contact details in service logs.
@@ -2299,6 +2301,10 @@ async function route(request, response) {
   takeRateLimit(request);
   const publicPost = request.method === 'POST' && ['/leads', '/events'].includes(url.pathname);
   if (!publicPost) requireApiKey(request);
+
+  if (request.method === 'GET' && url.pathname === '/email-status') {
+    return send(response, 200, emailDiagnostics.getStatus(), {...cors, 'cache-control': 'no-store'});
+  }
 
   if (request.method === 'GET' && url.pathname === '/pipelines') {
     return send(response, 200, { pipelines: pipelineList() }, cors);
