@@ -85,3 +85,20 @@
   }
   .hero.is-compact-mode .scroll-cue { display: none; }
 }
+
+/* Keep the opening offer together at the bottom of the phone's first screen. */
+@media (max-width: 56.24rem), (max-height: 500px) and (orientation: landscape) {
+  .hero.is-compact-mode .hero-scene[data-scene="0"] {
+    justify-content: flex-end;
+    padding-top: calc(6rem + env(safe-area-inset-top));
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  }
+  .hero.is-compact-mode .hero-scene[data-scene="0"] .hero-scene__content {
+    min-height: 0;
+  }
+  .hero.is-compact-mode .hero-scene[data-scene="0"] .hero-ratings {
+    margin-top: 16px;
+    padding-top: 0;
+  }
+  .hero.is-compact-mode .scroll-cue { display: none; }
+}
