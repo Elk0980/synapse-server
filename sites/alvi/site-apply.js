@@ -19,7 +19,7 @@
   },
   "faq.faq-answer-4": {
     "old": "Напишите в Telegram: сертификат бывает электронный (приходит в мессенджер) или бумажный в конверте с лентой. Оформляется на любую сумму или конкретную программу, доставка по Иркутску бесплатная.",
-    "value": "Сертификат оформляется на любую сумму или на конкретную программу из прайса. Электронный приходит в мессенджер сразу после оплаты — дарить можно в тот же день, из любого города. Бумажный — в конверте с лентой: по Иркутску привозим бесплатно, в отдалённые районы — за доплату, стоимость скажем в чате.",
+    "value": "Выберите сертификат на любую сумму или конкретную программу и свяжитесь с администратором. Электронный сертификат отправляется в мессенджер после оплаты; бумажный оформляется в конверте с лентой. По Иркутску доставка бесплатная, в отдалённые районы — за доплату. До оплаты уточните срок действия, способ получения и условия использования.",
     "htmlOld": "Напишите в Telegram: сертификат бывает электронный (приходит в мессенджер) или бумажный в конверте с лентой. Оформляется на любую сумму или конкретную программу, доставка по Иркутску бесплатная."
   }
 };
@@ -145,11 +145,6 @@
       if (f.kind === 'image') { const src = safeSrc(f.src); if (el.getAttribute('src') !== src) el.setAttribute('src', src); }
       else if (key !== skipKey) {
         let html = rich(publishedValue(key, f.value));
-        // This answer contains actionable contact links, so it must not be reduced
-        // to plain text when the editable site document is applied.
-        if (!EDIT_MODE && key === 'faq.faq-answer-2') {
-          html = 'Напишите в <a data-company-link="telegram" href="https://t.me/+79246180555" target="_blank" rel="noopener">Telegram</a> или <a data-company-link="max" href="https://max.ru/u/f9LHodD0cOIlskq70SXP8wscTW7u6JcnxZXmoxa5hdxjK58JpJDAM7njO68" target="_blank" rel="noopener">MAX</a>, либо позвоните по телефону <a href="tel:+79246180555">+7 924 618-05-55</a>. Работаем ежедневно 09:00–22:00 по предварительной записи.';
-        }
         if (el.innerHTML.trim() !== html) el.innerHTML = html;
       }
       if (f.kind === 'button' && el.tagName === 'A') el.setAttribute('href', safeHref(publishedHref(key, f.href)));
