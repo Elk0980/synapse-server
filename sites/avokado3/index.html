@@ -703,7 +703,7 @@ body>#cta{z-index:65}
 (()=>{let finished=false,revealTimer,safetyTimer;const loader=()=>document.getElementById("page-loader");const finish=()=>{if(finished)return;finished=true;clearTimeout(revealTimer);clearTimeout(safetyTimer);const element=loader();if(!element)return;if(!element.classList.contains("is-visible")){element.style.display="none";return}element.classList.add("is-complete");setTimeout(()=>{element.style.display="none"},250)};revealTimer=setTimeout(()=>{if(!finished)loader()?.classList.add("is-visible")},300);safetyTimer=setTimeout(()=>{finished=true;clearTimeout(revealTimer);const element=loader();if(element)element.style.display="none"},5000);if(document.readyState==="complete")finish();else addEventListener("load",finish,{once:true})})();
 </script>
 <link rel="stylesheet" href="catalog.css?v=20260915-centered">
-<link rel="stylesheet" href="method-reveal.css?v=20260915-paper">
+<link rel="stylesheet" href="method-reveal.css?v=20260915-reviews">
 </head>
 <body>
 <video class="global-video-bg" id="herovid" muted playsinline preload="auto" poster="/assets/hero-intro-poster.jpg" aria-hidden="true">
