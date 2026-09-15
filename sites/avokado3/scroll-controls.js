@@ -9,6 +9,35 @@
  function start(win,doc){
   const panel=doc.getElementById('cta');
   const mobile=win.matchMedia('(max-width:820px)');
+  const actionSections=[doc.getElementById('price'),doc.getElementById('contacts')].filter(Boolean);
+  const sectionVisibility=new Map(actionSections.map(section=>[section,false]));
+  let sectionObserver=null;
+  function updateContentActions(){
+   if(!panel)return;
+   const focused=doc.activeElement&&panel.contains(doc.activeElement);
+   const hasVisibleActions=[...sectionVisibility.values()].some(Boolean);
+   panel.classList.toggle('content-actions-visible',mobile.matches&&hasVisibleActions&&!focused);
+  }
+  function measureActionSections(){
+   actionSections.forEach(section=>{
+    const bounds=section.getBoundingClientRect();
+    sectionVisibility.set(section,bounds.bottom>0&&bounds.top<win.innerHeight);
+   });
+   updateContentActions();
+  }
+  if(panel){
+   if(typeof win.IntersectionObserver==='function'){
+    sectionObserver=new win.IntersectionObserver(entries=>{
+     entries.forEach(entry=>{if(sectionVisibility.has(entry.target))sectionVisibility.set(entry.target,entry.isIntersecting);});
+     updateContentActions();
+    },{threshold:0});
+    actionSections.forEach(section=>sectionObserver.observe(section));
+   }
+   panel.addEventListener('focusin',updateContentActions);
+   // focusout can run before activeElement points to the next control.
+   panel.addEventListener('focusout',()=>win.setTimeout(updateContentActions,0));
+   measureActionSections();
+  }
   let idleTimer=0,lastY=win.scrollY,lockUntil=0,touch=null,pendingTouchLoop=false;
   function reveal(){if(panel)panel.classList.remove('is-scrolling');}
   function moving(){
@@ -18,6 +47,7 @@
    idleTimer=win.setTimeout(reveal,220);
   }
   function scroll(){
+   if(!sectionObserver)measureActionSections();
    if(Math.abs(win.scrollY-lastY)<1)return;
    lastY=win.scrollY;moving();
   }
@@ -69,13 +99,14 @@
    if(['ArrowDown','PageDown',' '].includes(event.key))restart(event);
   }
   win.addEventListener('scroll',scroll,{passive:true});
+  win.addEventListener('resize',measureActionSections,{passive:true});
   win.addEventListener('wheel',wheel,{passive:false});
   win.addEventListener('touchstart',touchStart,{passive:true});
   win.addEventListener('touchmove',touchMove,{passive:true});
   win.addEventListener('touchend',touchEnd,{passive:true});
   win.addEventListener('touchcancel',()=>{touch=null;pendingTouchLoop=false;},{passive:true});
   win.addEventListener('keydown',key);
-  mobile.addEventListener('change',()=>{win.clearTimeout(idleTimer);reveal();});
+  mobile.addEventListener('change',()=>{win.clearTimeout(idleTimer);reveal();measureActionSections();});
  }
  return {start};
 });
