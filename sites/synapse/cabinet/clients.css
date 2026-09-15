@@ -2,6 +2,15 @@
   margin-bottom: 18px;
 }
 
+.crm-company-links{min-width:0;margin:4px 0;padding:16px;border:1px solid var(--line);border-radius:12px}
+.crm-company-links legend{padding:0 6px;font-weight:600;color:var(--text)}
+.crm-company-links>p{margin:0 0 14px;line-height:1.5}
+.crm-company-link-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.crm-company-link-fields label,.crm-company-link-fields input{min-width:0}
+.company-links-summary a{overflow-wrap:anywhere;text-underline-offset:3px}
+.crm-form [data-repeat] button{color:var(--text);background:var(--surface-soft);border:1px solid var(--line);padding:9px 11px}
+@media(max-width:760px){.crm-company-link-fields{grid-template-columns:minmax(0,1fr)}}
+
 .client-tabs a {
   text-decoration: none;
 }

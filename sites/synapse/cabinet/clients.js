@@ -5,6 +5,56 @@ const SbCabinet = window.SbCabinet = window.SbCabinet || {};
 let ctx, identity, byId, escapeHTML, crmQuery, csrfOptions, scopeParams, hasPermission, navigate;
 let initialized = false;
 const api = {};
+const companyLinkFields = Object.freeze([
+  ['two_gis', '2ГИС'], ['yandex_maps', 'Яндекс Карты'], ['max', 'MAX'],
+  ['telegram', 'Telegram для записи'], ['telegram_channel', 'Telegram-канал'],
+  ['whatsapp', 'WhatsApp'], ['vk', 'VK'], ['booking', 'Онлайн-запись']
+]);
+const companyLinkUrl = value => {
+  try {
+    const url = new URL(String(value || '').trim());
+    return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? url.href : '';
+  } catch (_) { return ''; }
+};
+const companyLinkSplit = (rows = []) => {
+  const selected = new Map(), additional = [];
+  const known = new Set(companyLinkFields.map(([type]) => type));
+  rows.forEach((row, index) => {
+    if (known.has(row.type) && companyLinkUrl(row.url) && !selected.has(row.type)) selected.set(row.type, {row, index});
+    else additional.push({row, index});
+  });
+  return {selected, additional};
+};
+const companyLinkMerge = (named, additional, original = []) => {
+  const entries = additional.slice();
+  for (const input of named) {
+    const value = String(input.value || '').trim();
+    if (!value) continue;
+    const definition = companyLinkFields.find(([type]) => type === input.type);
+    if (!definition) continue;
+    if (!companyLinkUrl(value)) throw Error(`${definition[1]}: укажите полную ссылку https://…`);
+    const existing = Number.isInteger(input.index) && input.index >= 0 ? original[input.index] : null;
+    const row = {...existing, type: input.type, url: value};
+    entries.push({row, index: existing ? input.index : null});
+  }
+  return entries.map((entry, order) => ({...entry, order})).sort((a, b) =>
+    (a.index ?? Infinity) - (b.index ?? Infinity) || a.order - b.order).map(entry => entry.row);
+};
+const companyLinkAnchor = (value, escape) => {
+  const href = companyLinkUrl(value);
+  return href ? `<a href="${escape(href)}" target="_blank" rel="noopener noreferrer">${escape(value)}</a>` : escape(value);
+};
+const companyLinkSummary = (company, escape) => {
+  const rows = Array.isArray(company.socials) ? company.socials : [];
+  if (!rows.length) return '';
+  const labels = new Map(companyLinkFields);
+  return `<dl class="crm-details company-links-summary">${rows.map(row => {
+    const label = [labels.get(row.type) || row.type, row.label].filter(Boolean).join(' · ') || 'Ссылка';
+    return `<div><dt>${escape(label)}</dt><dd>${companyLinkAnchor(row.url || row.handle || '', escape)}</dd></div>`;
+  }).join('')}</dl>`;
+};
+SbCabinet.companyLinksUI = {fields: companyLinkFields, url: companyLinkUrl, split: companyLinkSplit,
+  merge: companyLinkMerge, anchor: companyLinkAnchor, summary: companyLinkSummary};
 const scoped = (params = {}) => ({ ...params, ...scopeParams() });
 const init = (context) => {
 ctx = context;
@@ -391,7 +441,7 @@ const navigateEntity = (view, route = "") => {
 const detailsMarkup = (config, record, fields) => fields.filter((field) => {
   return record[field] !== null && record[field] !== undefined && record[field] !== "";
 }).map((field) => `<div><dt>${escapeHTML(config.labels[field])}</dt>
-  <dd>${escapeHTML(entityValue(field, record[field]))}</dd></div>`).join("");
+  <dd>${field === "websiteUrl" ? companyLinkAnchor(record[field], escapeHTML) : escapeHTML(entityValue(field, record[field]))}</dd></div>`).join("");
 const entitySubtitle = (view, record) => {
   if (view === "crm-contacts") return record.phone || "";
   if (view === "crm-companies") return record.code || "";
@@ -435,6 +485,7 @@ const renderEntityCard = async (view, id) => {
   const publicFields = Object.keys(config.labels).filter((field) => !config.private?.includes(field));
   const privateFields = config.private || [];
   const arrayDetails = Object.entries(config.arrays || {}).map(([field, label]) => {
+    if (view === "crm-companies" && field === "socials") return '';
     if (!record[field]?.length) return "";
     const values = record[field].map((item) => [item.type, item.label, item.url || item.handle]
       .filter(Boolean).join(" · ")).filter(Boolean).join(", ");
@@ -446,6 +497,7 @@ const renderEntityCard = async (view, id) => {
     <div class="crm-actions">${cardActions(view, record)}</div></header>
     <p class="crm-card-status" data-card-status role="status"></p><dl class="crm-details">
     ${detailsMarkup(config, record, publicFields)}${arrayDetails}</dl>
+    ${view === "crm-companies" ? companyLinkSummary(record, escapeHTML) : ''}
     ${view === "crm-legal" && canEditCRM() && privateFields.some((field) => record[field])
       ? `<section class="card"><h3>Реквизиты</h3><dl class="crm-details">
         ${detailsMarkup(config, record, privateFields)}</dl></section>` : ""}
@@ -610,19 +662,23 @@ const fieldInput = (config, field, value = "") => {
   return `<label>${config.labels[field]}${required ? " *" : ""}<input type="${type}" name="${field}"
     value="${escapeHTML(value)}"${required}${pattern}>${hint}</label>`;
 };
-const repeatMarkup = (field, label, rows = []) => `<fieldset class="wide" data-repeat="${field}">
-  <legend>${label}</legend><div data-repeat-rows>${rows.map((row) => repeatRow(row, field)).join("")}</div>
+const repeatMarkup = (field, label, rows = [], indexes = []) => `<fieldset class="wide" data-repeat="${field}">
+  <legend>${label}</legend><div data-repeat-rows>${rows.map((row, index) => repeatRow(row, field, indexes[index] ?? index)).join("")}</div>
   <button type="button" data-repeat-add>Добавить строку</button></fieldset>`;
 const repeatTypes = Object.entries({ telegram: "Telegram", max: "MAX", whatsapp: "WhatsApp", vk: "VK",
   phone: "Телефон", email: "Email", other: "Другое" });
-const repeatRow = (row = {}, field = "") => `<div class="crm-repeat-row">${field === "links"
+const repeatRow = (row = {}, field = "", index = null) => {
+  const choices = field === "socials" ? [...new Map([...repeatTypes, ...companyLinkFields])] : repeatTypes;
+  const types = row.type && !choices.some(([type]) => type === row.type) ? [...choices, [row.type, row.type]] : choices;
+  return `<div class="crm-repeat-row"${index !== null ? ` data-original-index="${index}"` : ''}>${field === "links"
   ? '<input data-part="type" type="hidden" value="">'
   : `<select data-part="type" aria-label="Тип">
-  <option value="">Тип</option>${repeatTypes.map(([value, label]) => `<option value="${value}"
-    ${row.type === value ? "selected" : ""}>${label}</option>`).join("")}</select>`}
+  <option value="">Тип</option>${types.map(([value, label]) => `<option value="${escapeHTML(value)}"
+    ${row.type === value ? "selected" : ""}>${escapeHTML(label)}</option>`).join("")}</select>`}
   <input data-part="label" placeholder="Подпись"
   value="${escapeHTML(row.label || "")}"><input data-part="value" placeholder="Handle или URL"
-  value="${escapeHTML(row.handle || row.url || "")}"><button type="button" data-repeat-remove>Удалить</button></div>`;
+  value="${escapeHTML(row.url || row.handle || "")}"><button type="button" data-repeat-remove>Удалить</button></div>`;
+};
 const companyPrepositional = (count) =>
   count % 10 === 1 && count % 100 !== 11 ? "компании" : "компаниях";
 const renderEntityForm = async (view, record) => {
@@ -630,9 +686,21 @@ const renderEntityForm = async (view, record) => {
   if (config.stageFilter && identity.role === "owner") await SbCabinet.pipelineStages.load(crmQuery);
   const content = byId(`${view}-content`);
   const fields = formFields(config);
-  const controls = fields.map((field) => fieldInput(config, field, record?.[field] ?? "")).join("");
-  const repeats = Object.entries(config.arrays || {}).map(([field, label]) =>
-    repeatMarkup(field, label, record?.[field] || [])).join("");
+  const isCompany = view === 'crm-companies';
+  const controls = fields.filter(field => !isCompany || field !== 'websiteUrl').map((field) => fieldInput(config, field, record?.[field] ?? "")).join("");
+  const socialRows = companyLinkSplit(record?.socials || []);
+  const fixedLink = ([type, label]) => {
+    const selected = socialRows.selected.get(type);
+    return `<label>${label}<input type="url" data-company-social="${type}" data-original-index="${selected?.index ?? ''}"
+      placeholder="https://…" value="${escapeHTML(selected?.row.url || '')}"></label>`;
+  };
+  const companyLinks = isCompany ? `<fieldset class="wide crm-company-links"><legend>Публичные ссылки компании</legend>
+    <p class="muted">Все поля необязательны. Сначала проверьте организацию в 2ГИС по названию и адресу, затем добавьте подтверждённые ссылки.</p>
+    <div class="crm-company-link-fields">${fixedLink(companyLinkFields[0])}${fieldInput(config, 'websiteUrl', record?.websiteUrl || '')}
+      ${companyLinkFields.slice(1).map(fixedLink).join('')}</div></fieldset>` : '';
+  const repeats = Object.entries(config.arrays || {}).map(([field, label]) => isCompany && field === 'socials'
+    ? repeatMarkup(field, 'Дополнительные ссылки и контакты', socialRows.additional.map(item => item.row), socialRows.additional.map(item => item.index))
+    : repeatMarkup(field, label, record?.[field] || [])).join("");
   const sharedWarning = record && ["crm-contacts", "crm-legal"].includes(view) &&
     record.sharedCompanyCount > 1
     ? `<p class="crm-shared-warning wide" role="note">Эта карточка используется ещё в ${
@@ -640,7 +708,7 @@ const renderEntityForm = async (view, record) => {
       companyPrepositional(record.sharedCompanyCount - 1)}. Изменения увидят все</p>`
     : "";
   content.innerHTML = `<button class="plain-button" type="button" data-form-cancel>← Отмена</button>
-    <h2>${record ? "Изменить" : "Добавить"}</h2><form class="crm-form">${sharedWarning}${controls}${repeats}
+    <h2>${record ? "Изменить" : "Добавить"}</h2><form class="crm-form">${sharedWarning}${controls}${companyLinks}${repeats}
     <div class="crm-actions wide"><button class="plain-button" type="submit">Сохранить</button></div>
     <p class="crm-error wide" role="alert" hidden></p></form>`;
   const form = content.querySelector("form");
@@ -659,20 +727,28 @@ const renderEntityForm = async (view, record) => {
   });
   form.addEventListener("submit", (event) => saveEntityForm(event, view, record));
 };
-const formPayload = (form, config) => {
+const formPayload = (form, config, record) => {
   const payload = {};
   formFields(config).forEach((field) => {
     payload[field] = form.elements[field].value.trim() || null;
   });
   form.querySelectorAll("[data-repeat]").forEach((fieldset) => {
     const field = fieldset.dataset.repeat;
-    payload[field] = [...fieldset.querySelectorAll(".crm-repeat-row")].map((row) => {
+    const rows = [...fieldset.querySelectorAll(".crm-repeat-row")].map((row) => {
       const type = row.querySelector('[data-part="type"]').value.trim();
       const label = row.querySelector('[data-part="label"]').value.trim();
       const value = row.querySelector('[data-part="value"]').value.trim();
       const key = field === "links" || /^https?:/.test(value) ? "url" : "handle";
-      return field === "links" ? { label, url: value } : { type, label, [key]: value };
-    }).filter((row) => row.url || row.handle);
+      const index = /^\d+$/.test(row.dataset.originalIndex || '') ? Number(row.dataset.originalIndex) : null;
+      const original = field === 'socials' && config.key === 'companies' && index !== null ? record?.socials?.[index] : null;
+      const next = field === "links" ? {label, url: value} : {...original, type, label, [key]: value};
+      if (key === 'url') delete next.handle; else delete next.url;
+      return {row: next, index};
+    }).filter(({row}) => row.url || row.handle);
+    payload[field] = field === 'socials' && config.key === 'companies' ? companyLinkMerge(
+      [...form.querySelectorAll('[data-company-social]')].map(input => ({type: input.dataset.companySocial,
+        value: input.value, index: /^\d+$/.test(input.dataset.originalIndex) ? Number(input.dataset.originalIndex) : null})),
+      rows, record?.socials || []) : rows.map(({row}) => row);
   });
   return payload;
 };
@@ -687,7 +763,7 @@ const saveEntityForm = async (event, view, record) => {
   const config = CRM_ENTITIES[view];
   const error = form.querySelector("[role=alert]");
   try {
-    const payload = formPayload(form, config);
+    const payload = formPayload(form, config, record);
     const body = record ? Object.fromEntries(Object.entries(payload).filter(([key, value]) => {
       const current = config.arrays?.[key] ? normalizeRepeat(record[key]) : record[key] ?? null;
       const next = config.arrays?.[key] ? normalizeRepeat(value) : value;

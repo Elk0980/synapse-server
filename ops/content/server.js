@@ -14,6 +14,7 @@ const { createAuthStore, COMPANIES, PERMISSIONS, DEPENDENCIES, PRICE_CLIENT_PRES
 const { createSiteStore } = require('./site-store');
 const { createHughSettingsStore } = require('./hugh-settings-store');
 const { hashPassword, verifyPassword } = require('./passwords');
+const { createCompanyLinksReader } = require('./company-links-reader');
 
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
 const DATABASE_PATH = process.env.DATABASE_PATH || '/data/content.sqlite';
@@ -35,6 +36,7 @@ const LOGIN_LIMIT = 10;
 const SESSION_SECRET = (process.env.SESSION_SECRET || '').trim() || crypto.randomBytes(32).toString('hex');
 const CRM_URL = (process.env.CRM_URL || 'http://crm:8080').replace(/\/$/, '');
 const CRM_API_KEY = (process.env.CRM_API_KEY || '').trim();
+const readCompanyLinks = createCompanyLinksReader({crmUrl: CRM_URL, apiKey: CRM_API_KEY, companies: CONTENT_COMPANIES});
 const CHAT_URL = (process.env.CHAT_URL || 'http://chat:8080').replace(/\/$/, '');
 const CHAT_API_KEY = (process.env.CHAT_API_KEY || '').trim();
 const CRM_IDENTITY_HEADER = 'x-synapse-crm-identity';
@@ -701,6 +703,12 @@ const server = http.createServer(async (request, response) => {
         return reply(200, { ok: true });
       }
       fail(404, 'Не найдено');
+    }
+
+    // A site's Caddy route selects its company; client query parameters cannot change it.
+    if (parts[0] === 'public-company-links') {
+      if (request.method !== 'GET' || parts.length !== 2 || !SITES.has(parts[1])) fail(404, 'Не найдено');
+      return reply(200, await readCompanyLinks(parts[1]), {'cache-control': 'no-store'});
     }
 
     // Only the public-site Caddy handlers rewrite to this GET-only route.
