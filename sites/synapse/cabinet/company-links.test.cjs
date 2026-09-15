@@ -121,7 +121,7 @@ test('actual save submits all nine company links when an existing company has so
       assert.equal(record.socials, null, 'save does not mutate the loaded nullable record');
       assert.deepEqual(page.renderedCards, [{view: 'crm-companies', id: 42}]);
       assert.equal(page.status.textContent, 'Сохранено');
-    } else assert.equal(page.location.hash, 'crm-companies/42');
+    } else assert.equal(page.location.hash, 'deals/new?companyId=42');
   }
 });
 

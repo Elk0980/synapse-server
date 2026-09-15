@@ -12,7 +12,7 @@ const STAGES = [
 ];
 const MODULE_STAGES=['not_started','access','configuration','testing','launched','support'];
 const esc = value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function createDealOrders({db,fail,getStages,getPipelines,setStages}) {
+function createDealOrders({db,fail,getStages,getPipelines,setStages,getCatalog}) {
   db.exec(`CREATE TABLE IF NOT EXISTS deal_orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT, company_id INTEGER NOT NULL REFERENCES companies(id),
     owner_scope TEXT NOT NULL, title TEXT NOT NULL, stage TEXT NOT NULL DEFAULT 'new',
@@ -57,10 +57,10 @@ function createDealOrders({db,fail,getStages,getPipelines,setStages}) {
     if('checks'in body){out.checks={};for(const[k,v]of Object.entries(body.checks||{})){if(!/^manual-[a-f0-9]{16}$/.test(k)||typeof v!=='boolean')bad('Неизвестный критерий');out.checks[k]=v;}}
     if('brief'in body)out.brief=stringFields(body.brief,['goal','audience','problem','scope','constraints','acceptance','owner','deadline']);
     if('metrics'in body)out.metrics=list(body.metrics,30,v=>({...stringFields(v,['name','baseline','target','current','unit','due','source']),due:day(v.due)}));
-    if('estimate'in body)out.estimate=list(body.estimate,100,v=>({name:text(v.name,300),quantity:num(v.quantity,1e6),price:num(v.price)}));
+    if('estimate'in body)out.estimate=list(body.estimate,100,v=>({name:text(v.name,300),quantity:num(v.quantity,1e6),price:num(v.price),billing:v.billing==='monthly'?'monthly':'once'}));
     if('modules'in body)out.modules=list(body.modules,40,v=>{
       if(!MODULE_STAGES.includes(v.stage)||!['planned','purchased'].includes(v.purchase))bad('Неизвестный статус модуля');
-      return {name:text(v.name,150),purchase:v.purchase,stage:v.stage,owner:text(v.owner||'',200),due:day(v.due),notes:text(v.notes||'')};
+      return {productId:text(v.productId||'',100),name:text(v.name,150),purchase:v.purchase,stage:v.stage,owner:text(v.owner||'',200),due:day(v.due),notes:text(v.notes||'')};
     });
     if('documents'in body)out.documents=list(body.documents,50,v=>({title:text(v.title,300),url:url(v.url),status:text(v.status||'Черновик',100)}));
     if('invoices'in body)out.invoices=list(body.invoices,50,v=>{
@@ -70,7 +70,7 @@ function createDealOrders({db,fail,getStages,getPipelines,setStages}) {
     });
     return out;
   };
-  const total=data=>Math.round((data.estimate||[]).reduce((sum,row)=>sum+Math.round(row.price*100)*row.quantity,0))/100;
+  const total=(data,billing='once')=>Math.round((data.estimate||[]).filter(r=>(r.billing||'once')===billing).reduce((sum,row)=>sum+Math.round(row.price*100)*row.quantity,0))/100;
   const criterionLabels={contact:'У компании есть контакт',brief:'Заполнены цель и критерии приёмки',estimate:'Есть смета с суммой',contract:'Прикреплён договор',receipt:'Прикреплён чек',modules_ready:'Приобретённые модули проверены и запущены'};
   const pipelineStages=(scope,pipeline='sale')=>getStages(pipeline).map(s=>{
     const stored=db.prepare('SELECT rules FROM deal_stage_rules WHERE owner_scope=? AND pipeline=? AND stage=?').get(scope||'synapse-business',pipeline,s.code);
@@ -81,7 +81,7 @@ function createDealOrders({db,fail,getStages,getPipelines,setStages}) {
     return {...s,color:rules.color||'#8ab4f8',steps:rules.steps||guide?.steps||['Уточнить задачу клиента','Выполнить обязательные критерии этапа','Согласовать следующий шаг'],done:rules.done||guide?.done||'Выполнены обязательные критерии',rules,
       criteria:[...rules.required.map(type=>({id:type,type,label:criterionLabels[type]})),...rules.manual.map(label=>({id:'manual-'+createHash('sha256').update(pipeline+':'+s.code+':'+label).digest('hex').slice(0,16),type:'manual',label}))]};
   });
-  const serialize=(row,pipeline='sale')=>{const data=JSON.parse(row.data);return {id:row.id,companyId:row.company_id,companyName:row.company_name,title:row.title,...data,pipeline,stage:data.pipelineStates?.[pipeline]||(pipeline==='sale'?row.stage:null),total:total(data),version:row.version,createdAt:row.created_at,updatedAt:row.updated_at};};
+  const serialize=(row,pipeline='sale')=>{const data=JSON.parse(row.data);return {id:row.id,companyId:row.company_id,companyName:row.company_name,title:row.title,...data,pipeline,stage:data.pipelineStates?.[pipeline]||(pipeline==='sale'?row.stage:null),total:total(data),monthlyTotal:total(data,'monthly'),version:row.version,createdAt:row.created_at,updatedAt:row.updated_at};};
   const company=(id,scope)=>{
     const row=db.prepare('SELECT * FROM companies WHERE id=? AND is_deleted=0').get(id);
     if(!row || (scope && row.code.toLowerCase()!==scope.toLowerCase() && row.owner_scope.toLowerCase()!==scope.toLowerCase()))fail(404,'Компания недоступна');
@@ -102,7 +102,7 @@ function createDealOrders({db,fail,getStages,getPipelines,setStages}) {
   const criterionState=(value,scope,pipeline)=>{
     const data=JSON.parse(value.data),files=db.prepare('SELECT kind FROM deal_order_files WHERE deal_id=?').all(value.id);
     const checks={contact:!!db.prepare('SELECT 1 FROM contact_companies r JOIN contacts c ON c.id=r.contact_id WHERE r.company_id=? AND r.is_deleted=0 AND c.is_deleted=0 LIMIT 1').get(value.company_id),
-      brief:!!(data.brief?.goal?.trim()&&data.brief?.acceptance?.trim()),estimate:total(data)>0,
+      brief:!!(data.brief?.goal?.trim()&&data.brief?.acceptance?.trim()),estimate:total(data)>0||total(data,'monthly')>0,
       contract:files.some(f=>f.kind==='contract'),receipt:files.some(f=>f.kind==='receipt'),
       modules_ready:(data.modules||[]).some(m=>m.purchase==='purchased')&&(data.modules||[]).filter(m=>m.purchase==='purchased').every(m=>['launched','support'].includes(m.stage))};
     return pipelineStages(scope,pipeline).map(s=>({...s,criteria:s.criteria.map(c=>({...c,met:c.type==='manual'?data.checks?.[c.id]===true:checks[c.type]===true}))}));
@@ -134,14 +134,14 @@ function createDealOrders({db,fail,getStages,getPipelines,setStages}) {
     const result=db.prepare('INSERT INTO deal_orders (company_id,owner_scope,title,stage,request_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?)').run(c.id,owner,title,first,requestId,now,now);
     return detail(Number(result.lastInsertRowid),scope);
   };
-  const update=(id,body,scope,actor,pipeline='sale')=>{
+  const update=(id,body,scope,actor,pipeline='sale',trustedData={})=>{
     const old=row(id,scope);
     if(!body||Object.keys(body).some(k=>!['version','title','stage','data','override'].includes(k)))bad('Неизвестное поле изменения сделки');
     if(body.version!==old.version)fail(409,'Сделка уже изменена. Обновите карточку перед сохранением.',{code:'CONFLICT'});
     const title=body.title===undefined?old.title:text(body.title,300);if(!title)bad('Укажите название');
     const before=serialize(old,pipeline).stage;
     const stage=body.stage??before;if(stage!==null&&!getStages(pipeline).some(s=>s.code===stage))bad('Неизвестный этап');
-    const data={...JSON.parse(old.data),...normalize(body.data||{})};
+    const data={...JSON.parse(old.data),...normalize(body.data||{}),...trustedData};
     let event;
     if(stage!==before){
       const missing=criterionState({...old,data:JSON.stringify(data)},scope,pipeline).find(s=>s.code===stage).criteria.filter(c=>!c.met);
@@ -157,6 +157,20 @@ function createDealOrders({db,fail,getStages,getPipelines,setStages}) {
       db.exec('COMMIT');
     }catch(e){db.exec('ROLLBACK');throw e;}
     return detail(id,scope,pipeline);
+  };
+  const offer=(id,scope,body,actor,pipeline)=>{
+    const current=detail(id,scope,pipeline),catalog=getCatalog();let products,estimate,label,terms;
+    if(body.type==='package'){
+      const pack=catalog.packages.find(p=>p.id===body.itemId);if(!pack||pack.status!=='available')bad('Пакет не готов к предложению');
+      products=pack.lines.map(l=>catalog.products.find(p=>p.id===l.productId));label=pack.name;terms=pack.terms;
+      estimate=[{name:label+' — разовая часть',quantity:1,price:pack.priceOnce,billing:'once'},{name:label+' — ежемесячная часть',quantity:1,price:pack.priceMonthly,billing:'monthly'}].filter(r=>r.price>0);
+    }else if(body.type==='product'){
+      const product=catalog.products.find(p=>p.id===body.itemId);if(!product||product.status!=='available'||product.price===null)bad('Модуль пока не готов к предложению');products=[product];label=product.name;terms=product.term+'; '+product.support;estimate=[{name:product.name,quantity:1,price:product.price,billing:product.billing}];
+    }else bad('Выберите модуль или пакет');
+    const available=new Set([...products.map(p=>p.id),...(current.modules||[]).filter(m=>m.purchase==='purchased').map(m=>m.productId||catalog.products.find(p=>p.name===m.name)?.id)]);
+    const missing=products.flatMap(p=>p.dependencies).filter(key=>!available.has(key));if(missing.length)bad('Сначала добавьте обязательные модули: '+[...new Set(missing)].map(key=>catalog.products.find(p=>p.id===key)?.name||key).join(', '));
+    const modules=[...(current.modules||[])];for(const p of products)if(!modules.some(m=>m.productId===p.id||m.name===p.name))modules.push({productId:p.id,name:p.name,purchase:'planned',stage:'not_started',owner:'',due:'',notes:p.delivery+'\n'+p.steps.map((step,i)=>(i+1)+'. '+step).join('\n')});
+    return update(id,{version:body.version,data:{estimate,modules}},scope,actor,pipeline,{offer:{type:body.type,itemId:body.itemId,label,terms,catalogVersion:catalog.version,createdAt:new Date().toISOString()}});
   };
   const saveRules=(scope,pipeline,body,actor)=>{
     if(actor?.role!=='owner')fail(403,'Критерии настраивает владелец');
@@ -189,8 +203,8 @@ function createDealOrders({db,fail,getStages,getPipelines,setStages}) {
   const print=(id,scope,kind,invoiceId)=>{
     const deal=detail(id,scope),money=v=>new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB'}).format(v||0);
     let title,content;
-    const rows=(deal.estimate||[]).map(r=>`<tr><td>${esc(r.name)}</td><td>${r.quantity}</td><td>${money(r.price)}</td><td>${money(r.price*r.quantity)}</td></tr>`).join('');
-    if(kind==='estimate'){title='Смета';content=`<table><tr><th>Работы / услуги</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr>${rows}</table><h2>Итого: ${money(deal.total)}</h2><p>Налоги и условия оплаты согласуются отдельно.</p>`;}
+    const rows=(deal.estimate||[]).map(r=>`<tr><td>${esc(r.name)}</td><td>${r.quantity}</td><td>${money(r.price)}</td><td>${money(r.price*r.quantity)}${r.billing==='monthly'?' / мес':''}</td></tr>`).join('');
+    if(kind==='estimate'){title='Смета';content=`<table><tr><th>Работы / услуги</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr>${rows}</table><h2>Разово: ${money(deal.total)} · Ежемесячно: ${money(deal.monthlyTotal)}</h2><p>Налоги и условия оплаты согласуются отдельно.</p>`;}
     else if(kind==='brief'){title='Бриф';content=Object.entries(deal.brief||{}).map(([k,v])=>`<h3>${esc(({goal:'Цель',audience:'Аудитория',problem:'Задача',scope:'Состав работ',constraints:'Ограничения',acceptance:'Критерии приёмки',owner:'Ответственный',deadline:'Срок'})[k]||k)}</h3><p>${esc(v)}</p>`).join('');}
     else if(kind==='invoice'){
       const inv=(deal.invoices||[]).find(v=>v.id===invoiceId);if(!inv)fail(404,'Счёт не найден');
@@ -199,6 +213,6 @@ function createDealOrders({db,fail,getStages,getPipelines,setStages}) {
     } else bad('Неизвестный документ');
     return `<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${esc(title)} — ${esc(deal.title)}</title><style>body{font:16px/1.5 Arial,sans-serif;max-width:900px;margin:40px auto;padding:20px;color:#17202b}table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid #ccc;padding:12px;text-align:left}p{white-space:pre-wrap}button{padding:12px 20px}@media print{button{display:none}body{margin:0}}</style><button onclick="window.print()">Печать / сохранить PDF</button><h1>${esc(title)}</h1><p>Сделка №${deal.id}: ${esc(deal.title)}<br>Компания: ${esc(deal.company.name)}</p>${content}</html>`;
   };
-  return {list:listDeals,detail,contacts,create,update,print,saveRules,upload,file,rules:(scope,pipeline)=>({label:getPipelines().find(p=>p.code===pipeline)?.label,stages:pipelineStages(scope,pipeline),criterionLabels})};
+  return {list:listDeals,detail,contacts,create,update,offer,print,saveRules,upload,file,rules:(scope,pipeline)=>({label:getPipelines().find(p=>p.code===pipeline)?.label,stages:pipelineStages(scope,pipeline),criterionLabels})};
 }
 module.exports={createDealOrders,STAGES};

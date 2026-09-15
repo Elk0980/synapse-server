@@ -450,5 +450,19 @@ test('CRM proxy restricts pipelines to the owner and preserves company-scoped ed
     const remove=saved.body.stages.filter(s=>s.code!==custom.code).map(s=>({...rows.find(r=>r.code===s.code),code:s.code}));
     assert.equal((await crm(owner,'PUT','/deals/criteria?companyCode=alvi',{stages:remove})).status,409);
   });
+
+  await t.test('commercial catalog and finance are owner-only; proposals preserve billing and module dependencies',async()=>{
+    for(const session of [editor,observer,viewer])for(const path of ['/catalog','/finances?companyCode=alvi'])assert.equal((await crm(session,'GET',path)).status,403);
+    const c=await crm(owner,'GET','/catalog');assert.equal(c.status,200);assert.equal(c.body.packages.find(p=>p.id==='partners').priceMonthly,50000);
+    const company=await crm(owner,'POST','/companies?companyCode=alvi',{code:'qa-commercial',name:'QA Commercial'});assert.equal(company.status,201);
+    let d=(await crm(owner,'POST','/deals?companyCode=alvi',{companyId:company.body.id,title:'QA Catalog'})).body;
+    const path=`/deals/${d.id}/offer?companyCode=alvi`;
+    assert.equal((await crm(editor,'POST',path,{version:d.version,type:'package',itemId:'partners'})).status,403);
+    assert.equal((await crm(owner,'POST',path,{version:d.version,type:'product',itemId:'autoposting'})).status,400);
+    const result=await crm(owner,'POST',path,{version:d.version,type:'package',itemId:'partners'});assert.equal(result.status,200,JSON.stringify(result.body));d=result.body;assert.equal(d.total,0);assert.equal(d.monthlyTotal,50000);assert.equal(d.modules.length,4);assert.ok(d.modules.every(m=>m.purchase==='planned'));assert.equal(d.offer.label,'Партнёры');
+    const f=await crm(owner,'POST','/finances?companyCode=alvi',{requestId:'qa-finance',type:'income',state:'planned',date:'2026-09-16',amount:50000,category:'Партнёры',dealId:d.id});assert.equal(f.status,200,JSON.stringify(f.body));
+    const finance=await crm(owner,'GET','/finances?companyCode=alvi&from=2026-09-01&to=2026-09-30');assert.equal(finance.body.totals.income,0);assert.equal(finance.body.totals.plannedIncome,50000);
+    const leak=await crm(owner,'PATCH',`/finances/${f.body.id}?companyCode=avokado`,{version:1});assert.equal(leak.status,404);
+  });
   assertNoQueuedOrAttemptedEmail();
 });

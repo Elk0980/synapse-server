@@ -625,6 +625,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         data-view-link="content-factory">Контент завод</a>
       <a class="nav-link" id="campaigns-link" href="#campaigns" data-view-link="campaigns" hidden>Рассылки</a>
       </div>
+      <button class="nav-category" id="finance-category" type="button" aria-expanded="false" aria-controls="finance-menu" hidden>Финансы</button>
+      <div class="subnav" id="finance-menu" hidden><a class="nav-link" href="#finance" data-view-link="finance">Доходы и расходы</a><a class="nav-link" href="#catalog" data-view-link="catalog">Модули и пакеты</a></div>
       <button class="nav-category" type="button" aria-expanded="false" aria-controls="management-menu">Управление</button>
       <div class="subnav" id="management-menu" hidden>
       <a class="nav-link" id="settings-link" href="#settings" data-view-link="settings">Настройки</a>
@@ -881,6 +883,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <div class="card"><p class="development">В разработке</p></div>
     </section>
     <section class="view-panel" id="campaigns-view" data-view="campaigns" hidden></section>
+    <section class="view-panel" id="catalog-view" data-view="catalog" hidden></section>
+    <section class="view-panel" id="finance-view" data-view="finance" hidden></section>
     <section class="view-panel" id="settings-view" data-view="settings" hidden>
       <div class="content-header"><h1>Настройки</h1></div>
       <div class="card settings-email" id="settings-email" hidden>
@@ -1001,15 +1005,15 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260916-deal-orders";
+  window.SB_CABINET_ASSET_VERSION = "20260916-commercial";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
     window.SbCabinet.views[name] = definition;
   };
   const cabinetAssets = ["home", "tasks", "leads", "deals", "clients", "chat", "hugh", "analytics",
-    "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account", "trademarks", "campaigns", "company-information", "autoposting", "module-guide", "menu-preferences", "deal-orders"];
-  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat", "hugh", "settings", "trademarks", "sites", "campaigns", "company-information", "autoposting", "workspace", "deal-orders"];
+    "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account", "trademarks", "campaigns", "company-information", "autoposting", "module-guide", "menu-preferences", "deal-orders", "commercial"];
+  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat", "hugh", "settings", "trademarks", "sites", "campaigns", "company-information", "autoposting", "workspace", "deal-orders", "commercial"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join(""));
@@ -1051,6 +1055,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     tasks: "Задачи",
     crm: "Заявки",
     deals: "Сделки",
+    catalog: "Модули и пакеты",
+    finance: "Финансы",
     clients: "База клиентов",
     "crm-contacts": "Клиенты и контакты",
     "crm-companies": "Компании",
@@ -1261,6 +1267,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const hasPermission = (permission) => identity?.role === "owner" ||
     identity?.permissions.includes(permission);
   const permittedView = (value) => {
+    if (["catalog", "finance"].includes(value)) return identity?.role === "owner";
     if (["company-information", "autoposting"].includes(value)) return identity?.role === "owner" || identity?.permissions?.includes(value + ".view");
     if (value === "campaigns") return identity?.role === "owner";
     if (!identity) return true;
@@ -1289,7 +1296,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const setCategoryForView = (viewName) => {
     const analyticsViews = ["analytics-through", "ad-platforms", "hypotheses", "competitors", "calltracking"];
     const crmViews = ["crm", "deals", "clients", "chat"];
-    const categoryId = ["autoposting", "company-information", "content-factory", "campaigns"].includes(viewName) ? "marketing-menu" :
+    const categoryId = ["catalog","finance"].includes(viewName) ? "finance-menu" : ["autoposting", "company-information", "content-factory", "campaigns"].includes(viewName) ? "marketing-menu" :
       ["settings", "accounts", "account", "trademarks"].includes(viewName) ? "management-menu" : analyticsViews.includes(viewName) ? "analytics-menu" :
       viewName === "sites" ? "site-menu" : crmViews.includes(viewName) || viewName.startsWith("crm-")
         ? "crm-menu" : null;
@@ -1449,6 +1456,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       byId("analytics-category").hidden = !identity.permissions.includes("analytics.view");
       byId("analytics-through-view").hidden = !identity.permissions.includes("analytics.view");
       byId("crm-category").hidden = false;
+      byId("finance-category").hidden = identity.role !== "owner";
       byId("crm-menu").querySelectorAll("[data-view-link]").forEach((link) => {
         link.hidden = link.dataset.viewLink !== "chat" && !hasPermission("crm.view");
       });

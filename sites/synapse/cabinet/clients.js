@@ -720,7 +720,7 @@ const repeatRow = (row = {}, field = "", index = null) => {
 const companyPrepositional = (count) =>
   count % 10 === 1 && count % 100 !== 11 ? "компании" : "компаниях";
 const contactCompanyMarkup = () => `<fieldset class="wide contact-company"><legend>Компания</legend>
-  <label>Связь с компанией<select name="companyMode"><option value="none">Не указывать</option><option value="existing">Выбрать существующую</option><option value="new">Создать новую компанию</option></select></label>
+  <label>Связь с компанией<select name="companyMode"><option value="none">Без компании — частное лицо</option><option value="existing">Выбрать существующую</option><option value="new" selected>Создать новую компанию</option></select></label>
   <div class="crm-form" data-company-existing hidden>
     <label class="wide">Поиск компании<input type="search" name="companySearch" placeholder="Название или город" autocomplete="off"></label>
     <label class="wide">Компания *<select name="companyChoice" disabled><option value="">Выберите компанию</option></select></label>
@@ -728,6 +728,7 @@ const contactCompanyMarkup = () => `<fieldset class="wide contact-company"><lege
   </div>
   <div class="crm-form" data-company-new hidden><label>Название компании *<input name="newCompanyName" disabled></label><label>Город компании<input name="newCompanyCity" disabled></label></div>
   <label data-company-role hidden>Роль человека в компании *<input name="companyRole" list="contact-company-roles" value="Сотрудник" disabled><datalist id="contact-company-roles"><option value="Собственник"></option><option value="Директор"></option><option value="Сотрудник"></option><option value="Контактное лицо"></option></datalist></label>
+  <label class="wide"><input type="checkbox" name="continueToDeal" checked>После сохранения открыть новую сделку</label><p class="wide muted">1. Контакт → 2. Компания → 3. Сделка. Компания и контакт будут подставлены автоматически.</p>
   <small>Человек и его связь с компанией сохранятся вместе. Остальные сведения о компании можно заполнить позже.</small>
 </fieldset>`;
 const bindContactCompany = form => {
@@ -766,6 +767,7 @@ const bindContactCompany = form => {
   });
   form.elements.companySearch.addEventListener('input',()=>{++searchVersion;clearTimeout(timer);form.elements.companyChoice.disabled=true;timer=setTimeout(search,250);});
   form.querySelector('[data-company-retry]').addEventListener('click',search);
+  mode.dispatchEvent(new Event('change'));
 };
 const renderEntityForm = async (view, record) => {
   const version = ++renderVersion;
@@ -866,6 +868,7 @@ const saveEntityForm = async (event, view, record) => {
         if(form.elements.companyChoice.disabled || !form.elements.companyChoice.value) throw new Error('Выберите компанию из результатов поиска.');
         payload.companyLink={companyId:Number(form.elements.companyChoice.value),role:form.elements.companyRole.value.trim()};
       } else if(mode==='new') {
+        if(!form.elements.newCompanyName.value.trim())throw new Error('Укажите название компании или выберите существующую.');
         payload.companyLink={newCompany:{name:form.elements.newCompanyName.value.trim(),city:form.elements.newCompanyCity.value.trim() || null},role:form.elements.companyRole.value.trim()};
       }
     }
@@ -885,7 +888,10 @@ const saveEntityForm = async (event, view, record) => {
       await renderEntityCard(view, id);
       byId(`${view}-content`).querySelector("[data-card-status]").textContent = "Сохранено";
     } else {
-      navigateEntity(view, id);
+      const companyId=saved.linkedCompanyId||payload.companyLink?.companyId;
+      if(view==='crm-contacts'&&companyId&&form.elements.continueToDeal?.checked)location.hash=`deals/new?companyId=${companyId}&contactId=${id}`;
+      else if(view==='crm-companies')location.hash=`deals/new?companyId=${id}`;
+      else navigateEntity(view, id);
     }
   } catch (failure) {
     error.textContent = failure.message;

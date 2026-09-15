@@ -47,27 +47,28 @@
   }
   function renderList(data){
     const list=root.querySelector('[data-orders-list]');
-    list.innerHTML=`<p class="muted">Сделок: ${data.total}${data.total>50?' · показаны первые 50, уточните поиск':''}</p><div class="orders-grid">${data.deals.map(d=>`<article class="card order-card" data-order-id="${d.id}"><div class="order-card-heading"><a href="#deals/${d.id}"><strong>№${d.id} · ${h(d.title)}</strong></a>${stageSelect(d.stage)}</div><p>${h(d.companyName)}</p><strong>${money(d.total)}</strong><p>${h(d.nextAction||'Следующий шаг не указан')}${d.nextDate?' · '+h(d.nextDate):''}</p><small>${(d.modules||[]).filter(m=>m.purchase==='purchased').length} приобретённых модулей</small></article>`).join('')||'<div class="card"><h2>Пока нет сделок</h2><p>Создайте отдельную сделку на каждую задачу или заказ клиента.</p></div>'}</div>`;
+    list.innerHTML=`<p class="muted">Сделок: ${data.total}${data.total>50?' · показаны первые 50, уточните поиск':''}</p><div class="orders-grid">${data.deals.map(d=>`<article class="card order-card" data-order-id="${d.id}"><div class="order-card-heading"><a href="#deals/${d.id}"><strong>№${d.id} · ${h(d.title)}</strong></a>${stageSelect(d.stage)}</div><p>${h(d.companyName)}</p><strong>${money(d.total)} разово${d.monthlyTotal?' · '+money(d.monthlyTotal)+'/мес':''}</strong><p>${h(d.nextAction||'Следующий шаг не указан')}${d.nextDate?' · '+h(d.nextDate):''}</p><small>${(d.modules||[]).filter(m=>m.purchase==='purchased').length} приобретённых модулей</small></article>`).join('')||'<div class="card"><h2>Пока нет сделок</h2><p>Создайте отдельную сделку на каждую задачу или заказ клиента.</p></div>'}</div>`;
     list.querySelectorAll('[data-order-stage]').forEach(select=>select.onchange=async()=>{
       const current=data.deals.find(d=>String(d.id)===select.closest('[data-order-id]').dataset.orderId),target=select.value;select.value=current.stage||'';
       await transition(current,target,loadList);
     });
   }
-  function showCreate(){
+  function showCreate(prefill={}){
     const dialog=document.createElement('dialog');dialog.className='menu-settings order-create';dialog.setAttribute('aria-label','Новая сделка');
     dialog.innerHTML=`<form><header><h2>Новая сделка</h2><button type="button" data-close aria-label="Закрыть">×</button></header><div class="crm-form">${field('title','Название сделки *')}<label>Поиск компании<input name="q" type="search" placeholder="Название или город"></label><label>Компания *<select name="companyId" required disabled><option value="">Выберите компанию</option></select></label><p data-options-status role="status"></p><a href="#crm-companies/new" data-create-company>Добавить компанию в CRM</a><button type="submit" class="primary-action">Создать сделку</button><p class="crm-error" role="alert"></p></div></form>`;
     document.body.append(dialog);dialog.showModal();dialog.querySelector('[name=title]').required=true;
     const form=dialog.querySelector('form'),requestId=crypto.randomUUID();let request=0,timer;
     const close=()=>{dialog.close();dialog.remove();};dialog.querySelector('[data-close]').onclick=close;dialog.addEventListener('cancel',()=>dialog.remove());
     dialog.querySelector('[data-create-company]').onclick=close;
-    const load=async()=>{const v=++request;form.elements.companyId.disabled=true;const status=dialog.querySelector('[data-options-status]');status.textContent='Поиск компаний…';try{const result=await query('/companies',{q:form.elements.q.value,limit:50,deleted:'exclude'});if(v!==request||!dialog.isConnected)return;form.elements.companyId.innerHTML='<option value="">Выберите компанию</option>'+result.companies.map(c=>`<option value="${c.id}">${h(c.name)}${c.city?' — '+h(c.city):''}</option>`).join('');form.elements.companyId.disabled=false;status.textContent=result.companies.length?'':'Компания не найдена';}catch(e){status.textContent=e.message;}};
+    const load=async()=>{const v=++request;form.elements.companyId.disabled=true;const status=dialog.querySelector('[data-options-status]');status.textContent='Поиск компаний…';try{const result=prefill.companyId&&!form.elements.q.value?{companies:[await query(`/companies/${prefill.companyId}`)]}:await query('/companies',{q:form.elements.q.value,limit:50,deleted:'exclude'});if(v!==request||!dialog.isConnected)return;form.elements.companyId.innerHTML='<option value="">Выберите компанию</option>'+result.companies.map(c=>`<option value="${c.id}">${h(c.name)}${c.city?' — '+h(c.city):''}</option>`).join('');if(prefill.companyId&&result.companies.some(c=>String(c.id)===String(prefill.companyId))){form.elements.companyId.value=String(prefill.companyId);const company=result.companies.find(c=>String(c.id)===String(prefill.companyId));if(!form.elements.title.value)form.elements.title.value='Новая сделка — '+company.name;}form.elements.companyId.disabled=false;status.textContent=result.companies.length?'':'Компания не найдена';}catch(e){status.textContent=e.message;}};
     form.elements.q.oninput=()=>{++request;clearTimeout(timer);timer=setTimeout(load,250);};load();
     form.onsubmit=async event=>{event.preventDefault();const button=form.querySelector('[type=submit]');if(button.disabled)return;if(form.elements.companyId.disabled||!form.elements.companyId.value)return;button.disabled=true;try{const created=await query('/deals',{},ctx.csrfOptions('POST',{title:form.elements.title.value,companyId:Number(form.elements.companyId.value),requestId}));close();location.hash=`deals/${created.id}`;}catch(e){form.querySelector('[role=alert]').textContent=e.message;button.disabled=false;}};
   }
   const metricCards=()=>`<div class="order-metrics">${(deal.metrics||[]).map(m=>`<article><h3>${h(m.name)}</h3><strong>${h(m.current||'—')} ${h(m.unit)}</strong><p>Цель: ${h(m.target||'—')} · Было: ${h(m.baseline||'—')}</p><small>${h(m.due||'Срок не указан')}${m.source?' · '+h(m.source):''}</small></article>`).join('')||'<p class="muted">Заполните ожидания и показатели в брифе — они появятся здесь.</p>'}</div>`;
   function overview(){
     const stage=stages.find(s=>s.code===deal.stage);
-    return `<div class="order-summary"><div><small>Смета</small><strong>${money(deal.total)}</strong></div><div><small>Оплачено по отметкам менеджера</small><strong>${money((deal.invoices||[]).filter(i=>i.status==='paid').reduce((s,i)=>s+i.amount,0))}</strong></div><div><small>Запущено приобретённых модулей</small><strong>${(deal.modules||[]).filter(m=>m.purchase==='purchased'&&['launched','support'].includes(m.stage)).length} / ${(deal.modules||[]).filter(m=>m.purchase==='purchased').length}</strong></div></div>
+    return `<div class="order-summary"><div><small>Смета разово</small><strong>${money(deal.total)}</strong></div><div><small>Ежемесячно</small><strong>${money(deal.monthlyTotal)}</strong></div><div><small>Оплачено по отметкам менеджера</small><strong>${money((deal.invoices||[]).filter(i=>i.status==='paid').reduce((s,i)=>s+i.amount,0))}</strong></div><div><small>Запущено приобретённых модулей</small><strong>${(deal.modules||[]).filter(m=>m.purchase==='purchased'&&['launched','support'].includes(m.stage)).length} / ${(deal.modules||[]).filter(m=>m.purchase==='purchased').length}</strong></div></div>
+    ${nextStep()}
     <h2>Ожидания и результат</h2><p>${h(deal.brief?.goal||'Цель ещё не сформулирована')}</p>${metricCards()}
     <section class="order-stage-guide"><h2>${h(stage?.label)}: как вести клиента дальше</h2><ol>${(stage?.steps||[]).map(s=>`<li>${h(s)}</li>`).join('')}</ol><p><b>Готовность к следующему этапу:</b> ${h(stage?.done)}</p></section>
     <form data-order-form="overview" class="crm-form">${field('title','Название сделки',deal.title)}${field('description','Основная информация',deal.description,'textarea')}${field('nextAction','Следующий шаг',deal.nextAction)}${field('nextDate','Дата следующего шага',deal.nextDate,'date')}${field('stageNote','План и результат текущего этапа',deal.stageNotes?.[pipeline+':'+deal.stage],'textarea')}<div>${saveButton()}</div></form>
@@ -75,20 +76,20 @@
   }
   const schemas={
     metrics:[['name','Показатель'],['baseline','Исходное'],['target','Цель'],['current','Сейчас'],['unit','Единица'],['due','Срок','date'],['source','Источник проверки']],
-    estimate:[['name','Работы / услуги'],['quantity','Количество','number'],['price','Цена, ₽','number']],
+    estimate:[['name','Работы / услуги'],['quantity','Количество','number'],['price','Цена, ₽','number'],['billing','Период',{once:'Разово',monthly:'Ежемесячно'}]],
     modules:[['name','Модуль'],['purchase','Покупка',purchases],['stage','Внедрение',moduleStages],['owner','Ответственный'],['due','Срок','date'],['notes','Что осталось сделать','textarea']],
     documents:[['title','Название'],['url','Ссылка на документ','url'],['status','Статус']],
     invoices:[['number','Номер счёта'],['amount','Сумма, ₽','number'],['date','Дата','date'],['due','Оплатить до','date'],['status','Статус',invoiceStatuses],['seller','Исполнитель и платёжные реквизиты','textarea'],['buyer','Заказчик и реквизиты','textarea'],['purpose','Назначение платежа','textarea'],['notes','Условия, налоги и примечания','textarea']]
   };
   function rowMarkup(kind,row){
-    return `<fieldset class="order-edit-row" data-row data-row-id="${h(row.id||'')}">${schemas[kind].map(([key,label,type])=>`<label>${h(label)}${typeof type==='object'?`<select data-field="${key}"${disabled()}>${options(type,row[key])}</select>`:type==='textarea'?`<textarea data-field="${key}"${disabled()}>${h(row[key])}</textarea>`:`<input data-field="${key}" type="${type||'text'}" value="${h(row[key])}"${type==='number'?' min="0" step="0.01"':''}${disabled()}>`}</label>`).join('')}${editable()?'<button type="button" data-remove-row>Убрать строку</button>':''}${kind==='invoices'&&row.id&&(deal.invoices||[]).some(i=>i.id===row.id)?`<a href="${h(printLink('invoice',row.id))}" target="_blank" rel="noopener">Открыть счёт / PDF</a>`:''}${kind==='documents'&&safeUrl(row.url)?`<a href="${h(row.url)}" target="_blank" rel="noopener">Открыть документ</a>`:''}</fieldset>`;
+    return `<fieldset class="order-edit-row" data-row data-row-id="${h(row.id||'')}" data-product-id="${h(row.productId||'')}">${schemas[kind].map(([key,label,type])=>`<label>${h(label)}${typeof type==='object'?`<select data-field="${key}"${disabled()}>${options(type,row[key])}</select>`:type==='textarea'?`<textarea data-field="${key}"${disabled()}>${h(row[key])}</textarea>`:`<input data-field="${key}" type="${type||'text'}" value="${h(row[key])}"${type==='number'?' min="0" step="0.01"':''}${disabled()}>`}</label>`).join('')}${editable()?'<button type="button" data-remove-row>Убрать строку</button>':''}${kind==='invoices'&&row.id&&(deal.invoices||[]).some(i=>i.id===row.id)?`<a href="${h(printLink('invoice',row.id))}" target="_blank" rel="noopener">Открыть счёт / PDF</a>`:''}${kind==='documents'&&safeUrl(row.url)?`<a href="${h(row.url)}" target="_blank" rel="noopener">Открыть документ</a>`:''}</fieldset>`;
   }
   function rows(kind){return `<div data-rows="${kind}">${(deal[kind]||[]).map(r=>rowMarkup(kind,r)).join('')}</div>${editable()?`<button type="button" data-add-row="${kind}">Добавить ${({metrics:'показатель',estimate:'позицию',modules:'модуль',documents:'документ',invoices:'счёт'})[kind]}</button>`:''}`;}
   function formContent(){
     if(tab==='overview')return overview();
     if(tab==='brief')return `<form class="crm-form" data-order-form="brief">${Object.entries(briefFields).map(([key,label])=>field(key,label,deal.brief?.[key],'textarea')).join('')}<section class="wide"><h2>Показатели успеха</h2><p>Зафиксируйте исходное значение, цель и способ проверки. Текущие значения вводятся вручную.</p>${rows('metrics')}</section><div>${saveButton()}</div></form>`;
     const intro={estimate:'Смета относится только к этой сделке. Укажите состав работ, количество и цену.',modules:'Отмечайте приобретённые модули и фактический этап внедрения. Эти отметки не заменяют проверку подключения.',documents:'Добавляйте ссылки на договоры, материалы и закрывающие документы с нужными правами доступа.',invoices:'Счета создаются как черновики. Заполните реквизиты и условия перед передачей клиенту. Оплату отмечает менеджер после проверки.'}[tab];
-    return `<p>${intro}</p>${tab==='estimate'?`<p><strong>Итого: ${money(deal.total)}</strong> · <a href="${h(printLink('estimate'))}" target="_blank" rel="noopener">Смета / PDF</a></p>`:''}${tab==='documents'?`<div class="order-toolbar"><a href="${h(printLink('brief'))}" target="_blank" rel="noopener">Сформировать бриф / PDF</a><a href="${h(printLink('estimate'))}" target="_blank" rel="noopener">Сформировать смету / PDF</a></div>${fileSection()}`:''}<form data-order-form="${tab}">${rows(tab)}<div class="order-save">${saveButton()}</div></form>`;
+    return `<p>${intro}</p>${tab==='estimate'?`<p><strong>Разово: ${money(deal.total)} · Ежемесячно: ${money(deal.monthlyTotal)}</strong> · <a href="${h(printLink('estimate'))}" target="_blank" rel="noopener">Смета / PDF</a></p>`:''}${tab==='documents'?`<div class="order-toolbar"><a href="${h(printLink('brief'))}" target="_blank" rel="noopener">Сформировать бриф / PDF</a><a href="${h(printLink('estimate'))}" target="_blank" rel="noopener">Сформировать смету / PDF</a></div>${fileSection()}`:''}<form data-order-form="${tab}">${rows(tab)}<div class="order-save">${saveButton()}</div></form>`;
   }
   function safeUrl(value){try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password?u.href:'';}catch{return '';}}
   function contactIcons(c){
@@ -123,10 +124,12 @@
     let timer;root.querySelector('[data-contact-search]').oninput=e=>{contactSearch=e.target.value;contactPage=0;clearTimeout(timer);timer=setTimeout(loadContacts,250);};
     bindForm();
     bindUpload();
+    root.querySelector('[data-pick-offer]')?.addEventListener('click',pickOffer);
+    root.querySelector('[data-next-tab]')?.addEventListener('click',e=>root.querySelector(`[data-order-tab="${e.target.dataset.nextTab}"]`).click());
   }
   function collectRows(form,kind){return [...form.querySelectorAll(`[data-rows="${kind}"] [data-row]`)].map(row=>{
     const value={};row.querySelectorAll('[data-field]').forEach(input=>value[input.dataset.field]=input.type==='number'?Number(input.value):input.value);
-    if(kind==='invoices')value.id=row.dataset.rowId||crypto.randomUUID();return value;
+    if(kind==='modules')value.productId=row.dataset.productId||'';if(kind==='invoices')value.id=row.dataset.rowId||crypto.randomUUID();return value;
   });}
   function bindForm(){
     const form=root.querySelector('[data-order-form]');if(!form)return;
@@ -140,6 +143,24 @@
     };
   }
 
+
+  function nextStep(){
+    let text,target;
+    if(!deal.brief?.goal||!deal.brief?.acceptance){text='Уточните задачу клиента и критерии результата: это основа предложения.';target='brief';}
+    else if(!deal.estimate?.length){text='Соберите предложение из каталога или заполните смету под задачу клиента.';target='estimate';}
+    else if(!deal.files?.some(f=>f.kind==='contract')||!deal.files?.some(f=>f.kind==='receipt')){text='Согласуйте предложение. До успешного заключения сделки прикрепите договор и подтверждение оплаты.';target='documents';}
+    else{text='Проверьте внедрение приобретённых модулей и сравните показатели с ожиданиями клиента.';target='modules';}
+    const names=(deal.modules||[]).map(m=>(m.productId||m.name).toLowerCase());let growth='После демонстрации результата сравните текущий набор услуг с пакетами «Отдел Маркетинга» и «Партнёры».';
+    if(names.some(n=>n==='website'||n.includes('сайт'))&&!names.some(n=>n==='analytics'||n.includes('аналитик')))growth='Следующее предложение: покажите клиенту ЛК и сквозную аналитику — как измерять заявки с сайта и потери при обработке.';
+    else if(names.some(n=>n==='analytics'||n.includes('аналитик'))&&!names.some(n=>n==='autoposting'||n.includes('автопост')))growth='Следующее предложение: контент-план и автопостинг с измерением результата через подключённую аналитику.';
+    return `<section class="order-stage-guide"><h2>Следующий шаг</h2><p>${h(text)}</p><button type="button" data-next-tab="${target}">Открыть нужный раздел</button><p>${h(growth)}</p>${deal.offer?`<p><strong>Предложение: ${h(deal.offer.label)}</strong><br>${h(deal.offer.terms)}</p>`:''}${ctx.identity.role==='owner'?'<button type="button" data-pick-offer>Выбрать модуль или пакет</button> <a href="#catalog">Настроить прайс →</a>':''}</section>`;
+  }
+  async function pickOffer(){
+    if(root.querySelector('[data-order-form]')?.dataset.dirty==='true'){error('Сначала сохраните изменения в карточке.');return;}
+    try{const catalog=await query('/catalog'),items=[...catalog.products.filter(p=>p.status==='available'&&p.price!==null).map(p=>({value:'product:'+p.id,label:p.name,detail:`От ${money(p.price)}${p.billing==='monthly'?' / мес':' разово'}. ${p.delivery}. ${p.term}. ${p.support}`})),...catalog.packages.filter(p=>p.status==='available').map(p=>({value:'package:'+p.id,label:p.name,detail:`${money(p.priceOnce)} разово + ${money(p.priceMonthly)} / мес. ${p.terms}`}))];
+      const d=modal('Предложение из каталога',`<form><label>Модуль или пакет<select name="item">${items.map(p=>`<option value="${h(p.value)}">${h(p.label)}</option>`).join('')}</select></label><p data-offer-description></p><p>Смета этой сделки будет заменена выбранным предложением. Модули добавятся как планируемые. Для индивидуальной цены после выбора отредактируйте смету.</p><button type="submit">Применить предложение и заменить смету</button><p role="alert"></p></form>`),f=d.querySelector('form');const show=()=>f.querySelector('[data-offer-description]').textContent=items.find(i=>i.value===f.elements.item.value)?.detail||'';f.elements.item.onchange=show;show();f.onsubmit=async e=>{e.preventDefault();const b=f.querySelector('button');if(b.disabled)return;b.disabled=true;try{const [type,itemId]=f.elements.item.value.split(':');deal=await query(`/deals/${deal.id}/offer`,{},ctx.csrfOptions('POST',{type,itemId,version:deal.version}));stages=deal.stages;d.close();d.remove();renderDetail()}catch(err){f.querySelector('[role=alert]').textContent=err.message;b.disabled=false}};
+    }catch(e){error(e.message)}
+  }
   function modal(title,content){
     const d=document.createElement('dialog');d.className='menu-settings order-dialog';d.innerHTML=`<header><h2>${h(title)}</h2><button type="button" data-close aria-label="Закрыть">×</button></header>${content}`;document.body.append(d);d.showModal();d.querySelector('[data-close]').onclick=()=>{d.close();d.remove();};d.addEventListener('cancel',()=>d.remove());return d;
   }
@@ -171,7 +192,7 @@
       if(legacy){++generation;cabinet.legacyDeals.render(container,context);return;}
       const match=location.hash.match(/^#deals\/(\d+)$/);
       if(!ctx.hasPermission('crm.view')){root.textContent='Нет доступа к сделкам';return;}
-      if(!match){await loadList();return;}
+      if(!match){await loadList();if(location.hash.startsWith('#deals/new')){const params=new URLSearchParams(location.hash.split('?')[1]||'');showCreate({companyId:params.get('companyId')});}return;}
       const version=++generation;root.innerHTML=header()+'<p>Загрузка сделки…</p>';tab='overview';
       try{const data=await query(`/deals/${match[1]}`);if(version!==generation)return;deal=data;stages=data.stages;renderDetail();}catch(e){if(version===generation)error(e.message);}
     }
