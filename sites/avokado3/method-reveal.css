@@ -20,8 +20,12 @@
 @media(prefers-reduced-motion:reduce){#metod.method-paper-ready #method-3 .paper-sheet{transform:none;box-shadow:none;will-change:auto}}
 
 /* Owner-provided photographs behind the two review cards. */
-#metod #method-4 .rating-grid a{background-size:cover;background-position:center;background-repeat:no-repeat;isolation:isolate;text-shadow:0 2px 12px rgba(0,0,0,.65)}
-#metod #method-4 .rating-grid a[href*="2gis.ru"]{background-image:linear-gradient(90deg,rgba(6,16,10,.88),rgba(6,16,10,.30)),url("assets/review-entrance-20260915.png")}
-#metod #method-4 .rating-grid a[href*="yandex.ru"]{background-image:linear-gradient(90deg,rgba(6,16,10,.88),rgba(6,16,10,.30)),url("assets/review-sign-20260915.png")}
+#metod #method-4 .rating-grid a{position:relative;overflow:hidden;background-size:cover;background-position:center;background-repeat:no-repeat;isolation:isolate;text-shadow:0 2px 12px rgba(0,0,0,.65)}
+#metod #method-4 .rating-grid a[href*="2gis.ru"]{background-image:linear-gradient(90deg,rgba(6,16,10,.76),rgba(6,16,10,.12)),url("assets/review-entrance-20260915.png")}
+/* Keep the complete wordmark in its own photo area, beside the score and label. */
+#metod #method-4 .rating-grid a[href*="yandex.ru"]{background-image:none;background-color:#202a1f}
+#metod #method-4 .rating-grid a[href*="yandex.ru"]::before{content:"";position:absolute;inset:0 0 0 48%;z-index:-1;background:url("assets/review-sign-20260915.png") center/cover no-repeat;mask-image:linear-gradient(90deg,transparent,#000 18%);-webkit-mask-image:linear-gradient(90deg,transparent,#000 18%);pointer-events:none}
+#metod #method-4 .rating-grid a[href*="yandex.ru"]>b,#metod #method-4 .rating-grid a[href*="yandex.ru"]>span{width:48%;max-width:48%;overflow-wrap:normal}
+#metod #method-4 .rating-grid a[href*="yandex.ru"]>span{font-size:clamp(13px,1.2vw,16px);line-height:1.5}
 #metod #method-4 .rating-grid b{color:#e7edcd}
 #metod #method-4 .rating-grid span{color:#fff6e6;font-weight:500}
