@@ -322,21 +322,20 @@ const renderEntityList = async (view, reset = false) => {
   const crmCompany = state.companies.find((company) =>
     company.code?.toLowerCase() === ctx.selectedProjectId?.toLowerCase());
   const companyLabel = `Компания: ${projectCompany?.name || crmCompany?.name || ctx.selectedProjectId}`;
-  const toolsOpen = window.matchMedia("(min-width: 761px)").matches ? " open" : "";
-  content.innerHTML = `<p class="crm-project-company">${escapeHTML(companyLabel)}</p>
+  const toolsOpen = "";
+  content.innerHTML = `<div class="client-list-heading"><input type="search" data-entity-search value="${escapeHTML(state.q)}" placeholder="Поиск по имени, телефону или почте" aria-label="Поиск">
+    ${canEditCRM() ? `<button class="primary-action" type="button" data-entity-add>${view === "crm-contacts" ? "Добавить клиента" : view === "crm-companies" ? "Добавить компанию" : "Добавить юрлицо"}</button>` : ""}</div>
     <div class="client-list-layout"><details class="client-tools"${toolsOpen}>
     <summary>Поля карточки и фильтры</summary><div class="client-tools-body">
     <fieldset class="client-field-picker"><legend>Поля карточки</legend>${fieldOptions}</fieldset>
     <button class="plain-button" type="button" data-fields-reset>Сбросить</button>
     <div class="crm-entity-toolbar">
-    <input type="search" data-entity-search value="${escapeHTML(state.q)}" placeholder="Поиск" aria-label="Поиск">
     ${config.companyFilter ? `<select data-company-filter aria-label="Фильтр по компании">
       <option value="">Все компании</option>${companyOptions}</select>` : ""}
     ${config.stageFilter && identity.role === "owner" ? `<select data-stage-filter aria-label="Фильтр по этапу">
       <option value="">Все этапы</option>${stageOptions}</select>` : ""}
     <label class="crm-filter-check"><input type="checkbox" data-deleted-filter
       ${state.deleted === "include" ? "checked" : ""}>Показывать удалённые</label>
-    ${canEditCRM() ? `<button class="plain-button" type="button" data-entity-add>Добавить</button>` : ""}
     </div></div></details><div class="client-list"><p class="crm-list-count">Показано ${state.records.length} из
     ${data.pagination?.total ?? pageRecords.length}</p>${cards}
     <p class="crm-error client-list-error" data-list-status role="alert" hidden></p>
@@ -391,7 +390,7 @@ const bindEntityList = (view) => {
   content.querySelectorAll("[data-entity-id]").forEach((card) => {
     card.addEventListener("click", () => navigateEntity(view, card.dataset.entityId));
     card.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") navigateEntity(view, card.dataset.entityId);
+      if (event.target === card && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); navigateEntity(view, card.dataset.entityId); }
     });
   });
   bindListActions(view);
@@ -404,7 +403,7 @@ const listCardAction = (view, record) => {
   if (!canEditCRM() || !companyOwnedByProject(view, record)) return "";
   const deleted = Boolean(record.deletedAt || record.isDeleted || record.deleted);
   return deleted ? '<button class="plain-button" type="button" data-list-restore>Восстановить</button>' :
-    '<button class="danger" type="button" data-list-delete>Удалить</button>';
+    '<button class="plain-button" type="button" data-list-edit>Редактировать</button>';
 };
 const bindListActions = (view) => {
   const config = CRM_ENTITIES[view];
@@ -415,6 +414,18 @@ const bindListActions = (view) => {
       navigateEntity(view, button.closest("[data-entity-id]").dataset.entityId);
     });
   });
+  content.querySelectorAll("[data-list-edit]").forEach(button => button.addEventListener("click", async event => {
+    event.stopPropagation();
+    const id = button.closest("[data-entity-id]").dataset.entityId;
+    button.disabled = true;
+    try {
+      const record = await crmQuery(`/${config.path}/${encodeURIComponent(id)}`, scopeParams());
+      renderEntityForm(view, record);
+    } catch (error) {
+      const status = content.querySelector("[data-list-status]"); status.textContent = error.message; status.hidden = false;
+      button.disabled = false;
+    }
+  }));
   content.querySelectorAll("[data-list-delete], [data-list-restore]").forEach((button) => {
     button.addEventListener("click", async (event) => {
       event.stopPropagation();
@@ -448,7 +459,7 @@ const entitySubtitle = (view, record) => {
   return [entityValue("legalForm", record.legalForm), record.inn].filter(Boolean).join(" · ");
 };
 const companySummaryList = (items, renderItem) => items.length
-  ? `<ul class="client-summary-list">${items.map(renderItem).join("")}</ul>`
+  ? `<ul class="client-summary-list">${items.slice(0, 5).map(renderItem).join("")}</ul>`
   : '<p class="crm-empty">Нет данных</p>';
 const companySummaryMarkup = (overview) => {
   const company = overview.company || {};
@@ -458,9 +469,9 @@ const companySummaryMarkup = (overview) => {
   const pipelines = Object.entries(company.pipelines || {});
   const stageLabel = (code) => entityStages().find((stage) => stage.code === code)?.label || code;
   return `<div class="client-summary-grid">
-    <section class="client-summary-section"><h3>Контакты</h3>${companySummaryList(contacts, (contact) =>
+    <section class="client-summary-section"><h3>Контакты · ${contacts.length}</h3>${companySummaryList(contacts, (contact) =>
       `<li><strong>${escapeHTML(entityName(contact))}</strong><span>${escapeHTML(
-        [contact.phone, contact.email, contact.relation?.role].filter(Boolean).join(" · ") || "Нет данных")}</span></li>`)}</section>
+        [contact.phone, contact.email, contact.relation?.role].filter(Boolean).join(" · ") || "Нет данных")}</span><a href="#crm-contacts/${encodeURIComponent(contact.id)}">Открыть карточку</a></li>`)}<a href="#crm-contacts?companyId=${encodeURIComponent(company.id)}">Все контакты компании →</a></section>
     <section class="client-summary-section"><h3>Стадия воронки</h3>${pipelines.length
       ? companySummaryList(pipelines, ([pipeline, state]) => `<li><strong>${escapeHTML(pipeline)}</strong>
         <span>${escapeHTML(stageLabel(state.stage) || "Нет данных")}</span></li>`)
@@ -471,10 +482,6 @@ const companySummaryMarkup = (overview) => {
     <section class="client-summary-section"><h3>Задачи</h3>${companySummaryList(tasks, (task) =>
       `<li><strong>${escapeHTML(task.title)}</strong><span>${escapeHTML(
         [task.status, task.dueDate].filter(Boolean).join(" · ") || "Нет данных")}</span></li>`)}</section>
-    <section class="client-summary-section"><h3>Сделки</h3>${pipelines.length
-      ? companySummaryList(pipelines, ([pipeline, state]) => `<li><strong>${escapeHTML(pipeline)}</strong>
-        <span>${escapeHTML(stageLabel(state.stage) || "Нет данных")}</span></li>`)
-      : '<p class="crm-empty">Нет данных</p>'}</section>
   </div>`;
 };
 const renderEntityCard = async (view, id) => {
@@ -606,7 +613,7 @@ const cardActions = (view, record) => {
   if (!canEditCRM() || !companyOwnedByProject(view, record)) return "";
   const deleted = Boolean(record.deletedAt || record.isDeleted || record.deleted);
   return deleted ? '<button class="plain-button" type="button" data-restore>Восстановить</button>' :
-    '<button class="plain-button" type="button" data-edit>Изменить</button>' +
+    '<button class="plain-button" type="button" data-edit>Редактировать</button>' +
     '<button class="danger" type="button" data-delete>Удалить</button>';
 };
 const bindCardActions = (view, record) => {
@@ -687,7 +694,10 @@ const renderEntityForm = async (view, record) => {
   const content = byId(`${view}-content`);
   const fields = formFields(config);
   const isCompany = view === 'crm-companies';
-  const controls = fields.filter(field => !isCompany || field !== 'websiteUrl').map((field) => fieldInput(config, field, record?.[field] ?? "")).join("");
+  const isContact = view === 'crm-contacts';
+  const basicContactFields = ['name', 'phone', 'email', 'notes'];
+  const controls = fields.filter(field => (!isCompany || field !== 'websiteUrl') && (!isContact || basicContactFields.includes(field))).map((field) => fieldInput(config, field, record?.[field] ?? "")).join("");
+  const additionalContactFields = isContact ? fields.filter(field => !basicContactFields.includes(field)).map(field => fieldInput(config, field, record?.[field] ?? '')).join('') : '';
   const socialRows = companyLinkSplit(record?.socials || []);
   const fixedLink = ([type, label]) => {
     const selected = socialRows.selected.get(type);
@@ -708,7 +718,7 @@ const renderEntityForm = async (view, record) => {
       companyPrepositional(record.sharedCompanyCount - 1)}. Изменения увидят все</p>`
     : "";
   content.innerHTML = `<button class="plain-button" type="button" data-form-cancel>← Отмена</button>
-    <h2>${record ? "Изменить" : "Добавить"}</h2><form class="crm-form">${sharedWarning}${controls}${companyLinks}${repeats}
+    <h2>${record ? "Редактировать карточку" : view === "crm-contacts" ? "Новый клиент" : "Новая карточка"}</h2><p class="muted">Заполните обязательные поля со звёздочкой. Остальные сведения можно добавить позже.</p><form class="crm-form">${sharedWarning}${controls}${companyLinks}${isContact ? `<details class="wide client-extra"><summary>Дополнительные сведения и мессенджеры</summary><div class="crm-form">${additionalContactFields}${repeats}</div></details>` : repeats}
     <div class="crm-actions wide"><button class="plain-button" type="submit">Сохранить</button></div>
     <p class="crm-error wide" role="alert" hidden></p></form>`;
   const form = content.querySelector("form");
@@ -762,6 +772,10 @@ const saveEntityForm = async (event, view, record) => {
   const form = event.currentTarget;
   const config = CRM_ENTITIES[view];
   const error = form.querySelector("[role=alert]");
+  const submit = form.querySelector("[type=submit]");
+  if (submit.disabled) return;
+  submit.disabled = true;
+  error.hidden = true;
   try {
     const payload = formPayload(form, config, record);
     const body = record ? Object.fromEntries(Object.entries(payload).filter(([key, value]) => {
@@ -785,7 +799,7 @@ const saveEntityForm = async (event, view, record) => {
   } catch (failure) {
     error.textContent = failure.message;
     error.hidden = false;
-  }
+  } finally { submit.disabled = false; }
 };
 const relationEndpoint = (view, record, relation, targetId) => {
   const config = CRM_ENTITIES[view];
@@ -898,11 +912,11 @@ SbCabinet.registerView("clients", {
 title: "База клиентов",
 render(container, context) {
   init(context);
-  navigate("crm-companies");
+  navigate("crm-contacts");
 },
 });
 SbCabinet.registerView("crm-contacts", {
-title: "Контрагенты",
+title: "Клиенты и контакты",
 render(container, context) {
   init(context);
   api.renderCrmEntityRoute();

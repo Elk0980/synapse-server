@@ -46,12 +46,12 @@ const init = (context) => {
       </div>
       ${leads.length ? `<div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Дата</th>
         <th>Имя</th><th>Контакт</th><th>Канал</th><th>Источник</th><th>Этап</th><th>Сумма</th>
-        </tr></thead><tbody>${leads.map((lead) => `<tr><td>${escapeHTML(formatDate(lead.date))}</td>
-        <td><button class="crm-lead-button" type="button" data-crm-lead-id="${escapeHTML(lead.id)}">
-        ${escapeHTML(lead.name ?? "—")}</button></td><td>${escapeHTML(lead.contact ?? "—")}</td>
-        <td>${escapeHTML(lead.channel ?? "—")}</td><td>${escapeHTML(lead.source ?? "—")}</td>
-        <td><select data-crm-stage-id="${escapeHTML(lead.id)}"${editable ? "" : " disabled"}>
-        ${crmStageOptions(lead.stage)}</select></td><td><input type="number" min="0"
+        </tr></thead><tbody>${leads.map((lead) => `<tr><td data-label="Дата">${escapeHTML(formatDate(lead.date))}</td>
+        <td data-label="Клиент"><button class="crm-lead-button" type="button" data-crm-lead-id="${escapeHTML(lead.id)}">
+        ${escapeHTML(lead.name ?? "—")}</button></td><td data-label="Контакт">${escapeHTML(lead.contact ?? "—")}</td>
+        <td data-label="Канал">${escapeHTML(lead.channel ?? "—")}</td><td data-label="Источник">${escapeHTML(lead.source ?? "—")}</td>
+        <td data-label="Этап"><select aria-label="Этап заявки" data-crm-stage-id="${escapeHTML(lead.id)}"${editable ? "" : " disabled"}>
+        ${crmStageOptions(lead.stage)}</select></td><td data-label="Сумма"><input aria-label="Сумма сделки" type="number" min="0"
         data-crm-amount-id="${escapeHTML(lead.id)}" value="${escapeHTML(lead.amount ?? "")}"
         ${editable ? "" : "disabled"}></td></tr>`).join("")}</tbody></table></div>` :
         '<div class="crm-empty">Заявок за период нет</div>'}<div id="crm-lead-details"></div>`;
@@ -125,9 +125,11 @@ const renderCRM = () => {
           `<dt>${label}</dt><dd>${escapeHTML(value)}</dd>`).join("")}</dl>` :
           "<p>атрибуция не передана</p>";
         const comment = String(lead.comment ?? "").trim();
-        details.innerHTML = `<article class="card lead-details"><h2>${escapeHTML(lead.name)}</h2>
+        details.innerHTML = `<article class="card lead-details" tabindex="-1"><h2>${escapeHTML(lead.name || "Заявка")}</h2><p>${escapeHTML(lead.contact || "Контакт не указан")}</p>
           ${comment ? `<h3>Комментарий к заявке</h3><p style="white-space:pre-wrap;overflow-wrap:anywhere">${escapeHTML(comment)}</p>` : ""}
-          <h3>Атрибуция</h3>${attribution}</article>`;
+          <details><summary>Источник и рекламные метки</summary>${attribution}</details></article>`;
+        details.querySelector?.("article")?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+        details.querySelector?.("article")?.focus?.({ preventScroll: true });
       } catch (error) {
         details.innerHTML = `<div class="crm-error" role="alert">Не удалось загрузить: ${escapeHTML(error.message)}</div>`;
       }
