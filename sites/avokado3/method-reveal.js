@@ -9,21 +9,26 @@
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const settle = value => 1 - Math.pow(1 - clamp(value, 0, 1), 3);
 
-  // Normal slides keep their former scroll distance. Only the target is extended.
-  function frameAt(offset, unit, count, target, beats) {
+  // Normal slides keep their former scroll distance; paired visit steps extend only their own scene.
+  function frameAt(offset, unit, count, target, beats, sequence) {
     const safeUnit = Math.max(1, unit);
     const targetWeight = (beats + 0.8) / 1.36;
-    const total = count - 1 + targetWeight;
+    const paired = sequence && Number.isInteger(sequence.target) && sequence.target >= 0 &&
+      sequence.target < count && sequence.target !== target && sequence.count > 0 && sequence.unitSpan > 0;
+    const pairWeight = paired ? sequence.count * sequence.unitSpan : 1;
+    const total = count - 1 + targetWeight + (paired ? pairWeight - 1 : 0);
     let cursor = clamp(offset / safeUnit, 0, total - 0.00001);
     let index = 0;
     for (; index < count - 1; index++) {
-      const weight = index === target ? targetWeight : 1;
+      const weight = index === target ? targetWeight : paired && index === sequence.target ? pairWeight : 1;
       if (cursor < weight) break;
       cursor -= weight;
     }
     const phase = index < target ? 0 : index > target ? beats + 0.8 : cursor * 1.36;
     const reveals = Array.from({ length: beats }, (_, i) => settle((phase - i) / 0.55));
-    return { index, phase, reveals, totalUnits: total };
+    const frame = { index, phase, reveals, totalUnits: total };
+    if (paired) frame.workPhase = index < sequence.target ? 0 : index > sequence.target ? sequence.count : cursor / sequence.unitSpan;
+    return frame;
   }
 
   // On a short screen keep the newly revealed text above the booking button.
@@ -63,13 +68,15 @@
       wrapper.append(p);
       return wrapper;
     });
+    const editor = new URLSearchParams(location.search).get('edit') === '1';
     const state = {
       root, scenes, scene, copy, panels, viewport, sticky,
       elements: [panels[0], panels[1], ...arguments_],
       focus: [panels[0], heading, ...arguments_],
       target: scenes.indexOf(scene), lastIndex: -1, measured: false,
       reduced: matchMedia('(prefers-reduced-motion: reduce)'),
-      editor: new URLSearchParams(location.search).get('edit') === '1'
+      editor,
+      work: !editor && window.AvokadoWorkSteps ? window.AvokadoWorkSteps.create(root, scenes) : null
     };
     if (state.target < 0) return null;
     states.set(root, state);
@@ -101,10 +108,10 @@
     const height = state.sticky.clientHeight;
     if (!height) return false;
     const unit = height * 5 / 6;
-    const plan = frameAt(0, unit, scenes.length, state.target, state.elements.length);
+    const plan = frameAt(0, unit, scenes.length, state.target, state.elements.length, state.work);
     const desiredHeight = Math.ceil(height + unit * plan.totalUnits);
     if (root.style.height !== desiredHeight + 'px') root.style.height = desiredHeight + 'px';
-    const frame = frameAt(-root.getBoundingClientRect().top, unit, scenes.length, state.target, state.elements.length);
+    const frame = frameAt(-root.getBoundingClientRect().top, unit, scenes.length, state.target, state.elements.length, state.work);
     if (state.lastIndex !== frame.index) {
       scenes.forEach((scene, i) => {
         scene.classList.toggle('active', i === frame.index);
@@ -133,6 +140,7 @@
     }
     const pan = panAt(frame, state.bottoms, state.available, state.copyHeight);
     state.copy.style.setProperty('--paper-pan', -pan.toFixed(2) + 'px');
+    if (state.work) state.work.update(frame.workPhase, frame.index === state.work.target, state.reduced.matches);
     return true;
   }
   return { frameAt, panAt, update };
