@@ -4,7 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
 const { once } = require('node:events');
-const { mkdtemp, rm } = require('node:fs/promises');
+const { mkdtemp, rm, writeFile } = require('node:fs/promises');
+const { existsSync } = require('node:fs');
 const net = require('node:net');
 const { tmpdir } = require('node:os');
 const path = require('node:path');
@@ -24,7 +25,10 @@ async function freePort() {
 
 async function request(base, method, pathname, body, session, extraHeaders = {}) {
   const headers = { ...extraHeaders };
-  if (session) Object.assign(headers, { Cookie: session.cookie, 'X-CSRF-Token': session.csrf });
+  if (session) {
+    headers.Cookie = session.cookie;
+    if (session.csrf !== undefined) headers['X-CSRF-Token'] = session.csrf;
+  }
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const response = await fetch(`${base}${pathname}`, {
     method, headers, body: body === undefined ? undefined : JSON.stringify(body),
@@ -65,9 +69,29 @@ test('CRM proxy restricts pipelines to the owner and preserves company-scoped ed
   } finally { db.close(); }
 
   const apiKey = randomBytes(24).toString('hex');
-  async function start(file, env, healthPath) {
+  const outboundMarker = path.join(directory, 'unexpected-outbound.txt');
+  const outboundGuard = path.join(directory, 'deny-outbound.cjs');
+  // The real CRM still handles local HTTP requests. Any outgoing SMTP/DNS attempt
+  // fails before reaching the network, without recording credentials or addresses.
+  await writeFile(outboundGuard, `
+    'use strict';
+    const fs = require('node:fs');
+    function blocked() {
+      fs.appendFileSync(${JSON.stringify(outboundMarker)}, 'outbound attempted\\n');
+      throw Object.assign(new Error('Outbound network disabled in permission test'), { code: 'QA_OUTBOUND_BLOCKED' });
+    }
+    require('node:net').Socket.prototype.connect = blocked;
+    require('node:tls').connect = blocked;
+    const dns = require('node:dns');
+    for (const method of ['lookup', 'resolve', 'resolve4', 'resolve6', 'resolveMx']) {
+      dns[method] = blocked;
+      if (dns.promises[method]) dns.promises[method] = blocked;
+      if (dns.Resolver.prototype[method]) dns.Resolver.prototype[method] = blocked;
+    }
+  `);
+  async function start(file, env, healthPath, preload) {
     const port = await freePort();
-    const child = spawn(process.execPath, [file], {
+    const child = spawn(process.execPath, [...(preload ? ['--require', preload] : []), file], {
       env: { ...process.env, ...env, PORT: String(port) },
       stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true,
     });
@@ -85,10 +109,13 @@ test('CRM proxy restricts pipelines to the owner and preserves company-scoped ed
     }
     throw new Error(`Service did not start: ${errors}`);
   }
+  const crmDatabasePath = path.join(directory, 'crm.sqlite');
   const crmBase = await start(path.join(__dirname, '../crm/server.js'), {
-    DATABASE_PATH: path.join(directory, 'crm.sqlite'), API_KEY: apiKey, RATE_LIMIT_MAX: '10000',
-    LEADS_SMTP_USER: '', LEADS_SMTP_PASSWORD: '', LEADS_NOTIFY_EMAIL_ALVI: '', LEADS_NOTIFY_EMAIL_AVOKADO: '',
-  }, '/contacts');
+    DATABASE_PATH: crmDatabasePath, API_KEY: apiKey, RATE_LIMIT_MAX: '10000',
+    LEADS_SMTP_HOST: 'smtp.yandex.ru', LEADS_SMTP_PORT: '465', LEADS_MAIL_FROM: '',
+    LEADS_SMTP_USER: '', LEADS_SMTP_PASSWORD: '', LEADS_NOTIFY_EMAIL: '',
+    LEADS_NOTIFY_EMAIL_ALVI: '', LEADS_NOTIFY_EMAIL_AVOKADO: '',
+  }, '/contacts', outboundGuard);
   const base = await start(path.join(__dirname, 'server.js'), {
     DATABASE_PATH: databasePath, API_KEY: '', AUTH_USERS: '', SEED_DIR: directory,
     ASSETS_DIR: path.join(directory, 'assets'), SESSION_SECRET: randomBytes(32).toString('hex'),
@@ -116,7 +143,7 @@ test('CRM proxy restricts pipelines to the owner and preserves company-scoped ed
     for (const session of [editor, mover, targetEditor, observer, viewer]) {
       const result = await crm(session, 'GET', '/email-status');
       assert.equal(result.status, 403);
-      assert.equal(result.body.error, 'Диагностика почты доступна только владельцу');
+      assert.equal(result.body.error, 'Настройки и диагностика почты доступны только владельцу');
     }
     const result = await crm(owner, 'GET', '/email-status');
     assert.equal(result.status, 200, JSON.stringify(result.body));
@@ -124,6 +151,79 @@ test('CRM proxy restricts pipelines to the owner and preserves company-scoped ed
     assert.deepEqual(result.body.companies.map((company) => company.code), ['alvi', 'avokado']);
     assert.ok(result.body.companies.every((company) => company.recipientConfigured === false));
     assert.match(result.headers.get('cache-control'), /no-store/);
+  });
+  const qaEmailSettings = {
+    provider: 'mailru', user: 'qa@example.test', password: 'QA_SENTINEL_SMTP_PASSWORD_NOT_A_REAL_CREDENTIAL',
+    alviRecipient: 'alvi@example.test', avokadoRecipient: 'avokado@example.test',
+  };
+  function assertSafeEmailSettings(result) {
+    assert.equal(result.status, 200);
+    assert.deepEqual(Object.keys(result.body).sort(), [
+      'provider', 'user', 'alviRecipient', 'avokadoRecipient', 'passwordConfigured',
+      'source', 'updatedAt', 'needsPassword',
+    ].sort());
+    assert.equal(typeof result.body.passwordConfigured, 'boolean');
+    assert.equal(typeof result.body.needsPassword, 'boolean');
+    assert.ok(!JSON.stringify(result.body).includes(qaEmailSettings.password));
+    assert.match(result.headers.get('cache-control'), /no-store/);
+  }
+  function assertNoQueuedOrAttemptedEmail() {
+    const crmDb = new DatabaseSync(crmDatabasePath, { readOnly: true });
+    try {
+      assert.equal(crmDb.prepare('SELECT COUNT(*) AS count FROM lead_email_outbox').get().count, 0);
+    } finally { crmDb.close(); }
+    assert.equal(existsSync(outboundMarker), false, 'CRM attempted an outbound connection');
+  }
+  await t.test('mail settings and connection checks reject unauthenticated and every non-owner role', async () => {
+    for (const [method, pathname, body] of [
+      ['GET', '/email-settings'],
+      ['PUT', '/email-settings', qaEmailSettings],
+      ['POST', '/email-settings/check', {}],
+    ]) {
+      assert.equal((await crm(undefined, method, pathname, body)).status, 401, `${method} ${pathname}`);
+      for (const session of [editor, mover, targetEditor, observer, viewer]) {
+        const result = await crm(session, method, pathname, body);
+        assert.equal(result.status, 403, `${method} ${pathname}`);
+        assert.equal(result.body.error, 'Настройки и диагностика почты доступны только владельцу');
+      }
+    }
+    assertNoQueuedOrAttemptedEmail();
+  });
+  await t.test('owner GET exposes safe mail settings and rejected CSRF writes leave them unchanged', async () => {
+    const before = await crm(owner, 'GET', '/email-settings');
+    assertSafeEmailSettings(before);
+    assert.equal(before.body.passwordConfigured, false);
+    assert.equal(before.body.user, '');
+    assert.equal(before.body.alviRecipient, '');
+    assert.equal(before.body.avokadoRecipient, '');
+    for (const session of [
+      { cookie: owner.cookie },
+      { cookie: owner.cookie, csrf: 'invalid-csrf-token' },
+    ]) {
+      const result = await crm(session, 'PUT', '/email-settings', qaEmailSettings);
+      assert.equal(result.status, 403);
+      assert.equal(result.body.error, 'Некорректный CSRF-токен');
+      const after = await crm(owner, 'GET', '/email-settings');
+      assertSafeEmailSettings(after);
+      assert.deepEqual(after.body, before.body);
+    }
+    assertNoQueuedOrAttemptedEmail();
+  });
+  await t.test('owner can save sentinel mail settings with CSRF without opening a connection or exposing the password', async () => {
+    assertNoQueuedOrAttemptedEmail();
+    const saved = await crm(owner, 'PUT', '/email-settings', qaEmailSettings);
+    assertSafeEmailSettings(saved);
+    assert.equal(saved.body.provider, 'mailru');
+    assert.equal(saved.body.user, qaEmailSettings.user);
+    assert.equal(saved.body.alviRecipient, qaEmailSettings.alviRecipient);
+    assert.equal(saved.body.avokadoRecipient, qaEmailSettings.avokadoRecipient);
+    assert.equal(saved.body.passwordConfigured, true);
+    assert.equal(saved.body.needsPassword, false);
+    assert.equal(saved.body.source, 'cabinet');
+    const current = await crm(owner, 'GET', '/email-settings');
+    assertSafeEmailSettings(current);
+    assert.deepEqual(current.body, saved.body);
+    assertNoQueuedOrAttemptedEmail();
   });
   const other = await crm(owner, 'POST', '/companies', { code: 'avokado', name: 'QA Other' });
   const own = await crm(owner, 'POST', '/companies', { code: 'alvi', name: 'QA ALVI', pipelineStage: 'new' });
@@ -287,4 +387,5 @@ test('CRM proxy restricts pipelines to the owner and preserves company-scoped ed
     assert.equal((await crm(editor, 'DELETE', `/contacts/${contact.body.id}?companyCode=alvi`)).status, 200);
     assert.equal((await crm(editor, 'GET', `/contacts/${contact.body.id}?companyCode=alvi`)).status, 404);
   });
+  assertNoQueuedOrAttemptedEmail();
 });

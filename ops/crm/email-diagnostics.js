@@ -8,19 +8,22 @@ const ERROR_CODES = new Set([
 const value = (environment, name, fallback = '') =>
   (environment[name] === undefined ? fallback : environment[name]).trim();
 
-function createEmailDiagnostics(db, {environment = process.env, now = Date.now} = {}) {
-  // Match the effective startup configuration used by createEmailNotifications.
-  // No transport is constructed and no connection or delivery is attempted here.
-  const host = Boolean(value(environment, 'LEADS_SMTP_HOST', 'smtp.yandex.ru'));
-  const portNumber = Number.parseInt(value(environment, 'LEADS_SMTP_PORT', '465'), 10);
-  const port = Number.isInteger(portNumber) && portNumber >= 1 && portNumber <= 65535;
-  const user = Boolean(value(environment, 'LEADS_SMTP_USER'));
-  const password = Boolean(value(environment, 'LEADS_SMTP_PASSWORD'));
-  const from = Boolean(value(environment, 'LEADS_MAIL_FROM') || value(environment, 'LEADS_SMTP_USER'));
-  const smtp = {host, port, user, password, from, configured: host && port && user && password};
-  const recipients = {
-    alvi: Boolean(value(environment, 'LEADS_NOTIFY_EMAIL_ALVI')),
-    avokado: Boolean(value(environment, 'LEADS_NOTIFY_EMAIL_AVOKADO')),
+function createEmailDiagnostics(db, {environment = process.env, getEnvironment = () => environment, now = Date.now} = {}) {
+  // Read the currently effective settings without constructing a transport.
+  const configFlags = () => {
+    const environment = getEnvironment();
+    const host = Boolean(value(environment, 'LEADS_SMTP_HOST', 'smtp.yandex.ru'));
+    const portNumber = Number.parseInt(value(environment, 'LEADS_SMTP_PORT', '465'), 10);
+    const port = Number.isInteger(portNumber) && portNumber >= 1 && portNumber <= 65535;
+    const user = Boolean(value(environment, 'LEADS_SMTP_USER'));
+    const password = Boolean(value(environment, 'LEADS_SMTP_PASSWORD'));
+    const from = Boolean(value(environment, 'LEADS_MAIL_FROM') || value(environment, 'LEADS_SMTP_USER'));
+    const smtp = {host, port, user, password, from, configured: host && port && user && password};
+    const recipients = {
+      alvi: Boolean(value(environment, 'LEADS_NOTIFY_EMAIL_ALVI')),
+      avokado: Boolean(value(environment, 'LEADS_NOTIFY_EMAIL_AVOKADO')),
+    };
+    return {smtp, recipients};
   };
   const counts = db.prepare(`SELECT lower(leads.company_code) AS company,
     outbox.status, outbox.last_error_code AS error, COUNT(*) AS count
@@ -29,6 +32,7 @@ function createEmailDiagnostics(db, {environment = process.env, now = Date.now} 
     GROUP BY lower(leads.company_code), outbox.status, outbox.last_error_code`);
 
   function getStatus() {
+    const {smtp, recipients} = configFlags();
     const companies = ['alvi', 'avokado'].map(code => ({code,
       recipientConfigured: recipients[code], queued: 0, sending: 0, sent: 0, errors: []}));
     const errors = new Map(companies.map(company => [company.code, new Map()]));

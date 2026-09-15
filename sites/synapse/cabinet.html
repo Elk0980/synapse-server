@@ -875,6 +875,26 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
           <div><h2>Почта для заявок</h2><p>Эта проверка не отправляет письма.</p></div>
           <button class="plain-button" id="email-status-refresh" type="button">Проверить настройки</button>
         </div>
+        <form id="email-settings-form" class="email-settings-form" autocomplete="off">
+          <p class="email-settings-intro">Подключите почту, с которой будут приходить уведомления о заявках.</p>
+          <label><span>Почтовый сервис отправителя</span><select id="email-provider" name="provider" required>
+            <option value="yandex">Яндекс Почта</option><option value="mailru">Mail — mail.ru, bk.ru, list.ru, inbox.ru</option>
+          </select></label>
+          <label><span>Адрес отправителя</span><input id="email-user" name="user" type="email" maxlength="254" required autocomplete="off" placeholder="name@example.ru"></label>
+          <label class="email-settings-wide"><span>Пароль приложения для отправки почты</span><input id="email-password" name="password" type="password" maxlength="512" autocomplete="new-password" aria-describedby="email-password-help">
+            <small id="email-password-help">Введите отдельный пароль приложения из настроек почты. Оставьте поле пустым, чтобы сохранить уже подключённый пароль. При смене отправителя введите новый.</small>
+            <small>Инструкции: <a href="https://help.mail.ru/mail/faq/password/external/" target="_blank" rel="noopener noreferrer">Mail</a> · <a href="https://www.yandex.ru/support/yandex-360/customers/mail/ru/mail-clients/others" target="_blank" rel="noopener noreferrer">Яндекс Почта</a>.</small>
+          </label>
+          <label><span>Получатель заявок АЛВИ</span><input id="email-alvi-recipient" name="alviRecipient" type="email" maxlength="254" autocomplete="off" placeholder="Почта студии"></label>
+          <label><span>Получатель заявок Авокадо</span><input id="email-avokado-recipient" name="avokadoRecipient" type="email" maxlength="254" autocomplete="off" placeholder="Почта студии"></label>
+          <p class="email-settings-wide email-status-note">Пустой адрес получателя отключает отправку для этой студии. После сохранения эти настройки используются для новых заявок и писем, ожидающих отправки.</p>
+          <div class="settings-actions email-settings-wide">
+            <button class="plain-button" id="email-settings-save" type="submit">Сохранить настройки почты</button>
+            <button class="plain-button" id="email-settings-check" type="button">Проверить подключение</button>
+          </div>
+          <p class="email-settings-wide email-status-note">Проверка подключения использует сохранённые настройки и не отправляет письма.</p>
+          <p id="email-settings-status" class="email-settings-wide" role="status" aria-live="polite"></p>
+        </form>
         <div id="email-status-result" role="status" aria-live="polite"></div>
       </div>
       <div class="card settings-hugh" id="settings-hugh" hidden>
@@ -967,7 +987,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260915-email-status";
+  window.SB_CABINET_ASSET_VERSION = "20260915-email-settings";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {

@@ -3,6 +3,8 @@
 const cabinet = window.SbCabinet = window.SbCabinet || {};
 let initialized = false;
 let emailInitialized = false;
+let emailSettingsInitialized = false;
+let refreshEmailStatus = async () => {};
 
 const SOURCES = [
   ["subscription", "Подписка"],
@@ -131,31 +133,168 @@ const initializeEmail = async (context) => {
   block.hidden = false;
   refresh.type = "button";
   refresh.textContent = "Проверить настройки";
-  let loading = false;
-  const load = async () => {
-    if (loading) return;
-    loading = true;
-    refresh.disabled = true;
-    result.setAttribute("aria-busy", "true");
-    result.textContent = "Проверяем настройки и состояние отправки…";
-    try {
-      const data = await context.apiJson("/content/crm/email-status");
-      if (!data || typeof data !== "object" || !data.smtp) throw new Error("invalid email status");
-      renderEmailStatus(result, data);
-    } catch (_) {
-      // Server error text may contain addresses or other private diagnostics.
-      result.textContent = "Не удалось проверить настройки. Попробуйте ещё раз позже.";
-    } finally {
-      loading = false;
-      refresh.disabled = false;
-      result.setAttribute("aria-busy", "false");
-    }
+  let pending = null;
+  const load = () => {
+    if (pending) return pending;
+    pending = (async () => {
+      refresh.disabled = true;
+      result.setAttribute("aria-busy", "true");
+      result.textContent = "Проверяем настройки и состояние отправки…";
+      try {
+        const data = await context.apiJson("/content/crm/email-status");
+        if (!data || typeof data !== "object" || !data.smtp) throw new Error("invalid email status");
+        renderEmailStatus(result, data);
+      } catch (_) {
+        // Server error text may contain addresses or other private diagnostics.
+        result.textContent = "Не удалось проверить настройки. Попробуйте ещё раз позже.";
+      } finally {
+        pending = null;
+        refresh.disabled = false;
+        result.setAttribute("aria-busy", "false");
+      }
+    })();
+    return pending;
+  };
+  refreshEmailStatus = async () => {
+    // Finish any older read before refreshing after a settings change.
+    if (pending) await pending;
+    await load();
   };
   refresh.addEventListener("click", load);
   await load();
 };
 
+const initializeEmailSettings = async (context) => {
+  if (emailSettingsInitialized || context.identity.role !== "owner") return;
+  const form = context.byId("email-settings-form");
+  const provider = context.byId("email-provider");
+  const user = context.byId("email-user");
+  const password = context.byId("email-password");
+  const alviRecipient = context.byId("email-alvi-recipient");
+  const avokadoRecipient = context.byId("email-avokado-recipient");
+  const save = context.byId("email-settings-save");
+  const check = context.byId("email-settings-check");
+  const status = context.byId("email-settings-status");
+  if (![form, provider, user, password, alviRecipient, avokadoRecipient, save, check, status].every(Boolean)) return;
+  emailSettingsInitialized = true;
+  let saved = null;
+  let busy = false;
+  const fields = [provider, user, password, alviRecipient, avokadoRecipient];
+  const current = () => ({ provider: provider.value, user: user.value.trim(),
+    alviRecipient: alviRecipient.value.trim(), avokadoRecipient: avokadoRecipient.value.trim() });
+  const needsPassword = () => !saved || saved.needsPassword || !saved.passwordConfigured
+    || provider.value !== saved.provider || user.value.trim() !== saved.user.trim();
+  const isDirty = () => !saved || Boolean(password.value) || Object.entries(current()).some(([key, value]) => value !== saved[key]);
+  const setBusy = (value) => {
+    busy = value;
+    for (const control of [...fields, save, check]) control.disabled = value;
+    form.setAttribute("aria-busy", String(value));
+    status.setAttribute("aria-busy", String(value));
+  };
+  const applySettings = (data) => {
+    if (!data || typeof data !== "object" || typeof data.passwordConfigured !== "boolean") throw new Error("invalid email settings");
+    saved = {
+      provider: ["yandex", "mailru"].includes(data.provider) ? data.provider : "yandex",
+      user: typeof data.user === "string" ? data.user : "",
+      alviRecipient: typeof data.alviRecipient === "string" ? data.alviRecipient : "",
+      avokadoRecipient: typeof data.avokadoRecipient === "string" ? data.avokadoRecipient : "",
+      passwordConfigured: data.passwordConfigured,
+      needsPassword: data.needsPassword === true,
+      source: ["environment", "cabinet"].includes(data.source) ? data.source : "none"
+    };
+    for (const [control, key] of [[provider, "provider"], [user, "user"], [alviRecipient, "alviRecipient"], [avokadoRecipient, "avokadoRecipient"]]) control.value = saved[key];
+    password.value = "";
+    password.required = needsPassword();
+  };
+  const initialMessage = () => {
+    if (saved.source === "cabinet" && saved.needsPassword) return "Не удалось восстановить сохранённые настройки. Введите адреса и пароль приложения заново.";
+    const source = saved.source === "environment" ? "Загружены настройки сервера."
+      : saved.source === "cabinet" ? "Загружены настройки, сохранённые в кабинете." : "Почта ещё не настроена.";
+    return source + (saved.passwordConfigured && !saved.needsPassword
+      ? " Пароль приложения уже задан; для сохранения оставьте его поле пустым."
+      : " Введите пароль приложения для отправителя.");
+  };
+  const mutationOptions = (method, body) => ({ method,
+    headers: { "X-CSRF-Token": context.identity.csrfToken },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+
+  for (const field of fields) field.addEventListener("input", () => {
+    if (busy) return;
+    password.required = needsPassword();
+    status.textContent = isDirty()
+      ? "Изменения ещё не сохранены. Проверка подключения использует последние сохранённые настройки."
+      : initialMessage();
+  });
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (busy || !saved) return;
+    password.required = needsPassword();
+    if (password.required && !password.value) {
+      status.textContent = "Введите пароль приложения. При смене почтового сервиса или отправителя нужен новый пароль.";
+      password.focus();
+      return;
+    }
+    if (!form.reportValidity()) return;
+    const payload = current();
+    if (password.value) payload.password = password.value;
+    const options = mutationOptions("PUT", payload);
+    // Keep the password only in the request, never in the form after submission.
+    password.value = "";
+    delete payload.password;
+    setBusy(true);
+    status.textContent = "Сохраняем настройки почты…";
+    try {
+      await context.apiJson("/content/crm/email-settings", options);
+      saved = { ...saved, ...payload, passwordConfigured: true, needsPassword: false, source: "cabinet" };
+      password.required = needsPassword();
+      let refreshed = true;
+      try { applySettings(await context.apiJson("/content/crm/email-settings")); }
+      catch (_) { refreshed = false; }
+      await refreshEmailStatus();
+      status.textContent = refreshed
+        ? "Настройки почты сохранены. Теперь можно проверить подключение."
+        : "Настройки сохранены, но обновить сведения не удалось. Обновите страницу перед проверкой подключения.";
+    } catch (_) {
+      status.textContent = "Не удалось сохранить настройки. Пароль очищен — при повторной попытке введите его заново, если меняли.";
+    } finally {
+      password.value = "";
+      password.required = needsPassword();
+      setBusy(false);
+    }
+  });
+  check.addEventListener("click", async () => {
+    if (busy || !saved) return;
+    setBusy(true);
+    status.textContent = "Проверяем подключение по сохранённым настройкам…";
+    try {
+      const result = await context.apiJson("/content/crm/email-settings/check", mutationOptions("POST"));
+      status.textContent = result?.ok === true
+        ? "Подключение по сохранённым настройкам подтверждено. Эта проверка не отправляет письма."
+        : (Object.hasOwn(EMAIL_ERRORS, result?.code) ? EMAIL_ERRORS[result.code] : "Не удалось подтвердить подключение")
+          + ". Проверены сохранённые настройки. Эта проверка не отправляет письма.";
+    } catch (_) {
+      status.textContent = "Не удалось выполнить проверку подключения. Попробуйте позже. Эта проверка не отправляет письма.";
+    } finally {
+      if (isDirty()) status.textContent += " Изменения в форме ещё не сохранены.";
+      setBusy(false);
+    }
+  });
+  check.type = "button";
+  check.textContent = "Проверить подключение";
+  setBusy(true);
+  status.textContent = "Загружаем настройки почты…";
+  try {
+    applySettings(await context.apiJson("/content/crm/email-settings"));
+    status.textContent = initialMessage();
+  } catch (_) {
+    status.textContent = "Не удалось загрузить настройки почты. Обновите страницу и попробуйте ещё раз.";
+  } finally {
+    setBusy(false);
+    if (!saved) for (const control of [...fields, save, check]) control.disabled = true;
+  }
+};
+
 cabinet.registerView("settings", { title: "Настройки", render: (_, context) => Promise.all([
-  initialize(context), initializeEmail(context)
+  initialize(context), initializeEmail(context), initializeEmailSettings(context)
 ]) });
 })();

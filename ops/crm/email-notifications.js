@@ -32,7 +32,7 @@ function createEmailNotifications(environment = process.env, logger = console, c
   const password = value(environment, 'LEADS_SMTP_PASSWORD');
   if (!host || !user || !password) {
     logger.info('email notifications disabled');
-    return { enabled: false, notifyLead: () => Promise.resolve(false) };
+    return { enabled: false, notifyLead: () => Promise.resolve(false), verify: () => Promise.resolve(false) };
   }
 
   const portText = value(environment, 'LEADS_SMTP_PORT', '465');
@@ -91,7 +91,7 @@ function createEmailNotifications(environment = process.env, logger = console, c
     return true;
   }
 
-  return { enabled: true, notifyLead };
+  return { enabled: true, notifyLead, verify: () => transport.verify() };
 }
 
 module.exports = { createEmailNotifications, emailErrorCode };
