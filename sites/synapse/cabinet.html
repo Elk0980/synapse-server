@@ -613,7 +613,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         <p class="project-label" id="editor-link-notice" role="status" hidden></p>
       </div>
       <a class="nav-link" id="autoposting-link" href="#autoposting"
-        data-view-link="autoposting">Автопостинг</a>
+        data-view-link="autoposting" hidden>Автопостинг</a>
+      <a class="nav-link" id="company-information-link" href="#company-information" data-view-link="company-information" hidden>Актуальность</a>
       <a class="nav-link" id="content-factory-link" href="#content-factory"
         data-view-link="content-factory">Контент завод</a>
       <a class="nav-link" id="campaigns-link" href="#campaigns" data-view-link="campaigns" hidden>Рассылки</a>
@@ -861,10 +862,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <iframe class="tool-frame" data-src="https://chat.synapsebusiness.ru/" title="Чат"></iframe>
     </section>
     <section class="view-panel" id="hugh-view" data-view="hugh" hidden></section>
-    <section class="view-panel" id="autoposting-view" data-view="autoposting" hidden>
-      <div class="content-header"><h1>Автопостинг</h1></div>
-      <div class="card"><p class="development">В разработке</p></div>
-    </section>
+    <section class="view-panel" id="autoposting-view" data-view="autoposting" hidden></section>
+    <section class="view-panel" id="company-information-view" data-view="company-information" hidden></section>
     <section class="view-panel" id="content-factory-view" data-view="content-factory" hidden>
       <div class="content-header"><h1>Контент завод</h1></div>
       <div class="card"><p class="development">В разработке</p></div>
@@ -990,15 +989,15 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260915-email-campaigns";
+  window.SB_CABINET_ASSET_VERSION = "20260915-company-publishing";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
     window.SbCabinet.views[name] = definition;
   };
   const cabinetAssets = ["home", "tasks", "leads", "deals", "clients", "chat", "hugh", "analytics",
-    "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account", "trademarks", "campaigns"];
-  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat", "hugh", "settings", "trademarks", "sites", "campaigns"];
+    "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account", "trademarks", "campaigns", "company-information", "autoposting"];
+  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat", "hugh", "settings", "trademarks", "sites", "campaigns", "company-information", "autoposting"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join(""));
@@ -1052,6 +1051,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     calltracking: "Колтрекинг",
     sites: "Сайты",
     autoposting: "Автопостинг",
+    "company-information": "Актуальность",
     "content-factory": "Контент завод",
     settings: "Настройки",
     campaigns: "Рассылки",
@@ -1249,6 +1249,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const hasPermission = (permission) => identity?.role === "owner" ||
     identity?.permissions.includes(permission);
   const permittedView = (value) => {
+    if (["company-information", "autoposting"].includes(value)) return identity?.role === "owner" || identity?.permissions?.includes(value + ".view");
     if (value === "campaigns") return identity?.role === "owner";
     if (!identity) return true;
     if (value === "hugh") return identity.role === "owner";
@@ -1260,9 +1261,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     }
     if (["crm", "deals", "clients"].includes(value) || value.startsWith("crm-")) {
       return hasPermission("crm.view");
-    }
-    if (value === "autoposting") {
-      return identity.role === "owner" || identity.permissions.includes("autoposting.view");
     }
     if (value === "content-factory") {
       return identity.role === "owner" || identity.permissions.includes("content-factory.view");
@@ -1435,6 +1433,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         link.hidden = link.dataset.viewLink !== "chat" && !hasPermission("crm.view");
       });
       byId("autoposting-link").hidden = !permittedView("autoposting");
+      byId("company-information-link").hidden = !permittedView("company-information");
       byId("autoposting-view").hidden = !permittedView("autoposting");
       byId("content-factory-link").hidden = !permittedView("content-factory");
       byId("content-factory-view").hidden = !permittedView("content-factory");
