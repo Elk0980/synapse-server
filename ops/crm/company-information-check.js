@@ -107,7 +107,8 @@ function createCompanyInformationCheck({readPage=readPublicPage, now=Date.now}={
             evidence:values.length?`Опубликованные контакты: ${values.join(' · ')}`:'Поле не удалось прочитать из открытой страницы.'};
         });
         return {...base,url:page.url || link.url,fields,status:fields.some(field=>field.status==='differs')?'differences':'partial',
-          message:'Проверены доступные контакты. Услуги, цены, акции и изображения требуют отдельной сверки; общий статус «Актуально» не присвоен.'};
+          message:fields.length ? 'Проверены доступные контакты. Услуги, цены, акции и изображения требуют отдельной сверки; общий статус «Актуально» не присвоен.' :
+            'Страница доступна. В данных компании ещё нет контактов для сравнения. Заполните телефон, email, адрес или часы работы и повторите сверку.'};
       } catch {return {...base,status:'unavailable',message:'Не удалось прочитать открытую страницу. Данные в ЛК сохранены; требуется проверка площадки.'};}
     })));
     return {checks:output};

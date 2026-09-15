@@ -95,3 +95,10 @@ test('unreadable pages and missing fields are not treated as accurate',async()=>
   const unavailable=await createCompanyInformationCheck({readPage:async()=>{throw Error('private detail');}})({profile});
   assert.equal(unavailable.checks[0].status,'unavailable');assert.ok(!JSON.stringify(unavailable).includes('private detail'));
 });
+
+test('a readable page with no owner contacts asks to fill the reference instead of claiming a comparison',async()=>{
+  const result=await createCompanyInformationCheck({readPage:async()=>({html:'<a href="tel:+79000000000">Call</a>'})})({profile:{websiteUrl:'https://example.com'}});
+  assert.deepEqual(result.checks[0].fields,[]);
+  assert.match(result.checks[0].message,/ещё нет контактов для сравнения/);
+  assert.doesNotMatch(result.checks[0].message,/Проверены доступные контакты/);
+});
