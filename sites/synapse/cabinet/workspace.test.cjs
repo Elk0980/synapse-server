@@ -82,3 +82,21 @@ test('every working cabinet view has four setup steps, without invented connecti
   assert.equal(container.querySelector('a'),null,'view-only role does not see a create shortcut');
   dom.window.close();
 });
+
+test('a delayed previous client response cannot replace a newly opened create form', async () => {
+  const dom=new JSDOM('<div id="crm-contacts-content"></div>',{url:'https://example.test/#crm-contacts',runScripts:'outside-only'});
+  const w=dom.window, views={}; let finish;
+  w.SbCabinet={registerView:(name,view)=>views[name]=view};
+  w.eval(read('clients.js').replace('Object.assign(api, { renderCrmEntityRoute,',
+    'window.testRace={renderEntityCard,renderEntityForm}; Object.assign(api, { renderCrmEntityRoute,'));
+  views.clients.render(null,{identity:{role:'owner'},hasPermission:()=>true,navigate(){},escapeHTML:escape,
+    byId:id=>w.document.getElementById(id),scopeParams:()=>({companyCode:'alvi'}),
+    crmQuery:()=>new Promise(resolve=>{finish=resolve;})});
+  const oldCard=w.testRace.renderEntityCard('crm-contacts',42);
+  await w.testRace.renderEntityForm('crm-contacts',null);
+  w.document.querySelector('input[name=name]').value='Не терять введённое имя';
+  finish({id:42,name:'Предыдущий клиент'}); await oldCard;
+  assert.equal(w.document.querySelector('h2').textContent,'Новый клиент');
+  assert.equal(w.document.querySelector('input[name=name]').value,'Не терять введённое имя');
+  dom.window.close();
+});
