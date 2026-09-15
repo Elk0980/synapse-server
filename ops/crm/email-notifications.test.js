@@ -44,13 +44,13 @@ test('ALVI notification uses its recipient and only populated lead fields', asyn
   }]);
 });
 
-test('non-ALVI notification uses the common recipient', async () => {
+test('Synapse notification uses its legacy recipient', async () => {
   const sent = [];
   const notifications = createEmailNotifications({
     LEADS_SMTP_USER: 'crm@example.test', LEADS_SMTP_PASSWORD: 'test-password', LEADS_NOTIFY_EMAIL: 'default@example.test',
     LEADS_NOTIFY_EMAIL_ALVI: 'owner@example.test',
   }, console, () => ({ sendMail: async (message) => sent.push(message) }));
-  await notifications.notifyLead({ company_code: 'other', name: 'Иван', contact: 'ivan@example.test',
+  await notifications.notifyLead({ company_code: 'synapse-business', name: 'Иван', contact: 'ivan@example.test',
     created_at: '2026-09-11T00:00:00.000Z' });
   assert.equal(sent[0].to, 'default@example.test');
   assert.equal(sent[0].subject, 'Новая заявка с сайта Synapse — Иван');

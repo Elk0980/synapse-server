@@ -1,4 +1,5 @@
 'use strict';
+const {companyRecipient}=require('./email-notifications');
 
 const ERROR_CODES = new Set([
   'SMTP_NOT_CONFIGURED', 'EMAIL_RECIPIENT_MISSING', 'EMAIL_RECIPIENT_REJECTED',
@@ -28,15 +29,15 @@ function createEmailDiagnostics(db, {environment = process.env, getEnvironment =
   const counts = db.prepare(`SELECT lower(leads.company_code) AS company,
     outbox.status, outbox.last_error_code AS error, COUNT(*) AS count
     FROM lead_email_outbox AS outbox JOIN leads ON leads.id = outbox.lead_id
-    WHERE lower(leads.company_code) IN ('alvi', 'avokado')
+    WHERE (? IS NULL AND lower(leads.company_code) IN ('alvi', 'avokado')) OR lower(leads.company_code) = ?
     GROUP BY lower(leads.company_code), outbox.status, outbox.last_error_code`);
 
-  function getStatus() {
+  function getStatus(scope = null) {
     const {smtp, recipients} = configFlags();
-    const companies = ['alvi', 'avokado'].map(code => ({code,
-      recipientConfigured: recipients[code], queued: 0, sending: 0, sent: 0, errors: []}));
+    const companies = (scope ? [scope] : ['alvi', 'avokado']).map(code => ({code,
+      recipientConfigured: Boolean(companyRecipient(getEnvironment(),code)), queued: 0, sending: 0, sent: 0, errors: []}));
     const errors = new Map(companies.map(company => [company.code, new Map()]));
-    for (const row of counts.all()) {
+    for (const row of counts.all(scope,scope)) {
       const company = companies.find(item => item.code === row.company);
       const field = {pending: 'queued', sending: 'sending', sent: 'sent'}[row.status];
       if (field) company[field] += row.count;

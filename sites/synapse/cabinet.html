@@ -629,7 +629,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <div class="subnav" id="finance-menu" hidden><a class="nav-link" href="#finance" data-view-link="finance">Доходы и расходы</a><a class="nav-link" href="#catalog" data-view-link="catalog">Модули и пакеты</a></div>
       <button class="nav-category" type="button" aria-expanded="false" aria-controls="management-menu">Управление</button>
       <div class="subnav" id="management-menu" hidden>
-      <a class="nav-link" id="settings-link" href="#settings" data-view-link="settings">Настройки</a>
+      <a class="nav-link" id="settings-link" href="#settings" data-view-link="settings">Настройки компании</a>
+      <a class="nav-link" id="system-settings-link" href="#system-settings" data-view-link="system-settings" hidden>Настройки системы</a>
       <a class="nav-link" id="accounts-link" href="#accounts" data-view-link="accounts" hidden>Настройка аккаунтов</a>
       <a class="nav-link" href="#account" data-view-link="account">Аккаунт</a>
       <a class="nav-link" id="trademarks-link" href="#trademarks" data-view-link="trademarks" hidden>Помощь в регистрации знаков</a>
@@ -644,6 +645,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   <button class="backdrop" id="backdrop" type="button" aria-label="Закрыть меню" hidden></button>
   <main class="main" id="main-content" tabindex="-1">
     <div class="content-header"><p id="startup-error" class="startup-error" role="alert" hidden></p></div>
+    <div class="workspace-scope" id="workspace-scope"><strong></strong><button type="button" id="workspace-change-company">Сменить компанию</button></div>
     <section class="view-panel" id="home-view" data-view="home" hidden>
       <div class="content-header home-header"><h1>Главная</h1>
         <div class="home-tools"><div class="home-periods" id="home-periods" role="group"
@@ -885,15 +887,16 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     <section class="view-panel" id="campaigns-view" data-view="campaigns" hidden></section>
     <section class="view-panel" id="catalog-view" data-view="catalog" hidden></section>
     <section class="view-panel" id="finance-view" data-view="finance" hidden></section>
-    <section class="view-panel" id="settings-view" data-view="settings" hidden>
-      <div class="content-header"><h1>Настройки</h1></div>
+    <section class="view-panel" id="settings-view" data-view="settings" hidden></section>
+    <section class="view-panel" id="system-settings-view" data-view="system-settings" hidden>
+      <div class="content-header"><h1>Настройки системы</h1></div>
       <div class="card settings-email" id="settings-email" hidden>
         <div class="settings-email-header">
-          <div><h2>Почта для заявок</h2><p>Эта проверка не отправляет письма.</p></div>
+          <div><h2>Общий отправитель уведомлений</h2><p>Эта проверка не отправляет письма.</p></div>
           <button class="plain-button" id="email-status-refresh" type="button">Проверить настройки</button>
         </div>
         <form id="email-settings-form" class="email-settings-form" autocomplete="off">
-          <p class="email-settings-intro">Подключите почту, с которой будут приходить уведомления о заявках.</p>
+          <p class="email-settings-intro">Этот отправитель обслуживает компании Synapse. Получатель и очередь заявок настраиваются отдельно в каждой компании → Настройки компании.</p>
           <label><span>Почтовый сервис отправителя</span><select id="email-provider" name="provider" required>
             <option value="yandex">Яндекс Почта</option><option value="mailru">Mail — mail.ru, bk.ru, list.ru, inbox.ru</option><option value="gmail">Google Workspace / Gmail</option>
           </select></label>
@@ -903,9 +906,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
             <small>Для Google включите двухэтапную аутентификацию и создайте пароль приложения. Введите его без пробелов; обычный пароль Google не подходит.</small>
             <small>Инструкции: <a href="https://help.mail.ru/mail/faq/password/external/" target="_blank" rel="noopener noreferrer">Mail</a> · <a href="https://www.yandex.ru/support/yandex-360/customers/mail/ru/mail-clients/others" target="_blank" rel="noopener noreferrer">Яндекс Почта</a> · <a href="https://support.google.com/accounts/answer/185833?hl=ru" target="_blank" rel="noopener noreferrer">Google Workspace / Gmail</a>.</small>
           </label>
-          <label><span>Получатель заявок АЛВИ</span><input id="email-alvi-recipient" name="alviRecipient" type="email" maxlength="254" autocomplete="off" placeholder="Почта студии"></label>
-          <label><span>Получатель заявок Авокадо</span><input id="email-avokado-recipient" name="avokadoRecipient" type="email" maxlength="254" autocomplete="off" placeholder="Почта студии"></label>
-          <p class="email-settings-wide email-status-note">Пустой адрес получателя отключает отправку для этой студии. После сохранения эти настройки используются для новых заявок и писем, ожидающих отправки.</p>
+          <p class="email-settings-wide email-status-note">Изменение отправителя применяется ко всем компаниям, использующим общую отправку. Получатели компаний при этом не меняются.</p>
           <div class="settings-actions email-settings-wide">
             <button class="plain-button" id="email-settings-save" type="submit">Сохранить настройки почты</button>
             <button class="plain-button" id="email-settings-check" type="button">Проверить подключение</button>
@@ -1005,7 +1006,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260916-commercial";
+  window.SB_CABINET_ASSET_VERSION = "20260916-company-scope";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
@@ -1071,7 +1072,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     autoposting: "Автопостинг",
     "company-information": "Актуальность",
     "content-factory": "Контент завод",
-    settings: "Настройки",
+    settings: "Настройки компании",
+    "system-settings": "Настройки системы",
     campaigns: "Рассылки",
     account: "Аккаунт",
     accounts: "Настройка аккаунтов",
@@ -1123,6 +1125,18 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     return { companyCode: project.id };
   };
   const projectContext = () => selectedProject()?.name || "Проект не определён";
+  const SYSTEM_VIEWS = new Set(['system-settings','accounts','trademarks']);
+  const renderScopeBanner = () => {
+    const el=byId('workspace-scope');
+    el.dataset.scope=SYSTEM_VIEWS.has(currentView)?'system':currentView==='account'?'personal':'company';
+    const caption=currentView==='trademarks'?'Общая справочная инструкция Synapse'
+      : SYSTEM_VIEWS.has(currentView)?'Управление всей системой · все компании'
+      : currentView==='account'?'Личный аккаунт · '+(identity?.displayName||identity?.login||'')
+      : 'Компания: '+projectContext();
+    el.querySelector('strong').textContent=caption;
+    el.querySelector('button').hidden=SYSTEM_VIEWS.has(currentView)||currentView==='account';
+    document.title=VIEW_TITLES[currentView]+' — '+(SYSTEM_VIEWS.has(currentView)?'Система Synapse':projectContext());
+  };
   const renderProjectContexts = () => {
     byId("analytics-project-context").textContent = `Проект: ${projectContext()}`;
     byId("crm-project-context").textContent = `Проект: ${projectContext()}`;
@@ -1196,8 +1210,16 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     byId("no-projects").hidden = allowedProjects.length !== 0;
     renderProjectContexts();
     updateEditorLinks();
+    renderScopeBanner();
   };
 
+  byId('workspace-change-company').addEventListener('click',event=>{
+    event.stopPropagation();
+    if(window.matchMedia('(max-width: 760px)').matches)setDrawer(true);
+    else if(document.body.classList.contains('menu-collapsed'))document.querySelector('[data-menu-fold]')?.click();
+    byId('sidebar').scrollTop=0;
+    openProjectMenu();
+  });
   const closeProjectMenu = (restoreFocus = false) => {
     const trigger = byId("project-trigger");
     byId("project-menu").hidden = true;
@@ -1217,12 +1239,20 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   };
   const chooseProject = (projectId) => {
     if (!allowedProjects.some((project) => project.id === projectId)) return;
+    if (projectId === selectedProjectId) return;
+    document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
     selectedProjectId = projectId;
     saveSelectedProject();
     renderProjectPicker();
     closeProjectMenu(true);
+    if(window.matchMedia("(max-width: 760px)").matches)setDrawer(false);
     const context = cabinetContext();
-    registeredViews[currentView]?.onProjectChange?.(context);
+    // Entity IDs and unfinished forms belong to the previous company.
+    history.replaceState(null, '', '#'+currentView);
+    const view=registeredViews[currentView];
+    if(view?.onProjectChange) view.onProjectChange(context);
+    else view?.render(document.querySelector(`[data-view="${currentView}"]`),context);
+    SbCabinet.renderModuleGuide?.(document.querySelector(`[data-view="${currentView}"]`),currentView,context);
     if (currentView !== "tasks") registeredViews.tasks?.updateSummary?.(context);
   };
 
@@ -1267,7 +1297,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const hasPermission = (permission) => identity?.role === "owner" ||
     identity?.permissions.includes(permission);
   const permittedView = (value) => {
-    if (["catalog", "finance"].includes(value)) return identity?.role === "owner";
+    if (["system-settings", "catalog", "finance"].includes(value)) return identity?.role === "owner";
     if (["company-information", "autoposting"].includes(value)) return identity?.role === "owner" || identity?.permissions?.includes(value + ".view");
     if (value === "campaigns") return identity?.role === "owner";
     if (!identity) return true;
@@ -1297,7 +1327,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     const analyticsViews = ["analytics-through", "ad-platforms", "hypotheses", "competitors", "calltracking"];
     const crmViews = ["crm", "deals", "clients", "chat"];
     const categoryId = ["catalog","finance"].includes(viewName) ? "finance-menu" : ["autoposting", "company-information", "content-factory", "campaigns"].includes(viewName) ? "marketing-menu" :
-      ["settings", "accounts", "account", "trademarks"].includes(viewName) ? "management-menu" : analyticsViews.includes(viewName) ? "analytics-menu" :
+      ["settings", "system-settings", "accounts", "account", "trademarks"].includes(viewName) ? "management-menu" : analyticsViews.includes(viewName) ? "analytics-menu" :
       viewName === "sites" ? "site-menu" : crmViews.includes(viewName) || viewName.startsWith("crm-")
         ? "crm-menu" : null;
     if (!categoryId) return;
@@ -1347,7 +1377,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     setCategoryForView(currentView);
     const title = VIEW_TITLES[currentView];
     byId("mobile-title").textContent = title;
-    document.title = `${title} — Synapse Business`;
+    renderScopeBanner();
     const active = document.querySelector(`[data-view="${currentView}"]`);
     const frame = active.querySelector("iframe[data-src]");
     if (frame && !frame.getAttribute("src")) frame.src = frame.dataset.src;
@@ -1377,6 +1407,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   };
 
   const crmQuery = async (path, params = {}, options = {}) => {
+    const companyAtStart=selectedProjectId;
+    const scopedPath=/^\/(?:contacts|companies|legal-entities|tasks|deals|finances|leads|dashboard|summary|expenses|external-stats)(?:[/.]|$)/.test(path);
+    if(scopedPath)params={...scopeParams(),...params};
     const query = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
       if (value !== "" && value !== null && value !== undefined) query.set(key, value);
@@ -1398,6 +1431,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       throw error;
     }
     const body = response.status === 204 ? null : await response.json().catch(() => ({}));
+    if(scopedPath && companyAtStart!==selectedProjectId) throw new Error("Компания изменена. Откройте раздел заново.");
     if (!response.ok) throw responseError(response, body);
     return body;
   };
@@ -1472,6 +1506,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       byId("trademarks-link").hidden = identity.role !== "owner";
       byId("create-site").hidden = !identity.permissions.includes("sites.create");
       const companyFilter = byId("sites-company");
+      companyFilter.replaceChildren();
       const companyCreate = byId("site-create-form").elements.companyCode;
       companyFilter.querySelectorAll("option:not(:first-child)").forEach((item) => item.remove());
       companyCreate.replaceChildren();
@@ -1479,6 +1514,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         companyFilter.add(new Option(company.name, company.id));
         companyCreate.add(new Option(company.name, company.id));
       });
+      byId("system-settings-link").hidden = identity.role !== "owner";
       renderIdentity();
       renderProjectPicker();
       if (redirectEditorHash()) return;

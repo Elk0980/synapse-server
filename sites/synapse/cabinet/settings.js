@@ -89,7 +89,7 @@ const renderEmailStatus = (container, result) => {
     ? "Настройки отправителя заполнены" : "Отправитель не настроен"));
   if (missing.length) nodes.push(emailNode("p", "Не хватает: " + missing.join(", ") + "."));
   const companies = emailNode("div", undefined, "email-status-companies");
-  for (const [code, label] of [["alvi", "АЛВИ"], ["avokado", "Авокадо"]]) {
+  for (const {code, name: label = code} of (result.companies || [])) {
     const company = (Array.isArray(result.companies) ? result.companies : []).find((item) => item?.code === code);
     const card = emailNode("section", undefined, "email-status-company");
     card.append(emailNode("h4", label));
@@ -143,7 +143,7 @@ const initializeEmail = async (context) => {
       try {
         const data = await context.apiJson("/content/crm/email-status");
         if (!data || typeof data !== "object" || !data.smtp) throw new Error("invalid email status");
-        renderEmailStatus(result, data);
+        renderEmailStatus(result, {...data, companies: []});
       } catch (_) {
         // Server error text may contain addresses or other private diagnostics.
         result.textContent = "Не удалось проверить настройки. Попробуйте ещё раз позже.";
@@ -170,18 +170,15 @@ const initializeEmailSettings = async (context) => {
   const provider = context.byId("email-provider");
   const user = context.byId("email-user");
   const password = context.byId("email-password");
-  const alviRecipient = context.byId("email-alvi-recipient");
-  const avokadoRecipient = context.byId("email-avokado-recipient");
   const save = context.byId("email-settings-save");
   const check = context.byId("email-settings-check");
   const status = context.byId("email-settings-status");
-  if (![form, provider, user, password, alviRecipient, avokadoRecipient, save, check, status].every(Boolean)) return;
+  if (![form, provider, user, password, save, check, status].every(Boolean)) return;
   emailSettingsInitialized = true;
   let saved = null;
   let busy = false;
-  const fields = [provider, user, password, alviRecipient, avokadoRecipient];
-  const current = () => ({ provider: provider.value, user: user.value.trim(),
-    alviRecipient: alviRecipient.value.trim(), avokadoRecipient: avokadoRecipient.value.trim() });
+  const fields = [provider, user, password];
+  const current = () => ({ provider: provider.value, user: user.value.trim() });
   const needsPassword = () => !saved || saved.needsPassword || !saved.passwordConfigured
     || provider.value !== saved.provider || user.value.trim() !== saved.user.trim();
   const isDirty = () => !saved || Boolean(password.value) || Object.entries(current()).some(([key, value]) => value !== saved[key]);
@@ -202,7 +199,7 @@ const initializeEmailSettings = async (context) => {
       needsPassword: data.needsPassword === true,
       source: ["environment", "cabinet"].includes(data.source) ? data.source : "none"
     };
-    for (const [control, key] of [[provider, "provider"], [user, "user"], [alviRecipient, "alviRecipient"], [avokadoRecipient, "avokadoRecipient"]]) control.value = saved[key];
+    for (const [control, key] of [[provider, "provider"], [user, "user"]]) control.value = saved[key];
     password.value = "";
     password.required = needsPassword();
   };
@@ -294,7 +291,24 @@ const initializeEmailSettings = async (context) => {
   }
 };
 
-cabinet.registerView("settings", { title: "Настройки", render: (_, context) => Promise.all([
+cabinet.registerView("system-settings", { title: "Настройки системы", render: (_, context) => Promise.all([
   initialize(context), initializeEmail(context), initializeEmailSettings(context)
 ]) });
+let companyVersion=0;
+cabinet.registerView('settings', {title:'Настройки компании', async render(container,context) {
+  const version=++companyVersion, code=context.selectedProjectId;
+  const name=context.identity.companies?.find(c=>c.id===code)?.name||code;
+  const h=context.escapeHTML;
+  container.innerHTML=`<div class="content-header"><h1>Настройки компании</h1></div><div class="card"><h2>${h(name)}</h2><p>Контакты, ссылки и сведения принадлежат только этой компании.</p><a href="#company-information">Информация и площадки компании →</a></div>`;
+  if(context.identity.role!=='owner')return;
+  const card=document.createElement('section');card.className='card settings-email';
+  card.innerHTML='<h2>Получатель заявок</h2><p>На этот адрес приходят уведомления только выбранной компании. Пустое поле отключает её уведомления.</p><form class="field-stack"><label>Почта компании<input name="recipient" type="email" maxlength="254" autocomplete="off"></label><button type="submit" disabled>Сохранить получателя</button><p role="status">Загрузка…</p></form><div data-company-email-status></div><p><a href="#system-settings">Общий отправитель — настройки системы →</a></p>';
+  container.append(card);
+  const form=card.querySelector('form'), status=form.querySelector('[role=status]'), button=form.querySelector('button');
+  const path='/content/crm/company-email?companyCode='+encodeURIComponent(code);
+  const current=()=>version===companyVersion&&context.selectedProjectId===code&&card.isConnected;
+  const apply=data=>{if(!current())return;form.elements.recipient.value=data.recipient||'';renderEmailStatus(card.querySelector('[data-company-email-status]'),{...data.status,companies:(data.status?.companies||[]).map(c=>({...c,name}))});};
+  form.onsubmit=async event=>{event.preventDefault();if(!current()||button.disabled)return;button.disabled=true;status.textContent='Сохранение…';try{const data=await context.apiJson(path,{method:'PUT',headers:{'X-CSRF-Token':context.identity.csrfToken},body:JSON.stringify({recipient:form.elements.recipient.value.trim()})});if(!current())return;apply(data);status.textContent='Получатель сохранён для '+name+'.';}catch(error){if(current())status.textContent='Не удалось сохранить получателя.';}finally{if(current())button.disabled=false;}};
+  try{const data=await context.apiJson(path);if(!current())return;apply(data);button.disabled=false;status.textContent=data.senderConfigured?'Общий отправитель подключён.':'Общий отправитель пока не подключён.';}catch(error){if(current())status.textContent='Не удалось загрузить настройки компании.';}
+}});
 })();
