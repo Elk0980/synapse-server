@@ -717,6 +717,7 @@ body>#cta{z-index:65}
 <link rel="stylesheet" href="mobile-foundation.css?v=20260915-mobile">
 <link rel="stylesheet" href="mobile-method.css?v=20260915-visitor">
 <link rel="stylesheet" href="visitor-navigation.css?v=20260915-visitor">
+<link rel="stylesheet" href="callback.css?v=20260915">
 </head>
 <body>
 <video class="global-video-bg" id="herovid" muted playsinline preload="auto" poster="/assets/hero-intro-poster.jpg" aria-hidden="true">
@@ -887,7 +888,23 @@ body>#cta{z-index:65}
 </section>
 
 <!-- ═══ БЛОК 5 · КОНТАКТЫ ═══ -->
-<section class="landing-block contacts" id="contacts" data-landing-block="5"><div class="wrap"><div class="kicker rv" data-edit="contacts.kicker-1">Связаться со студией</div><h2 class="rv" data-edit="contacts.rv-1">Контакты</h2><p class="lead rv" data-edit="contacts.lead-1">АВОКАДО ждёт вас: Иркутск, Красноказачья, 84, 1 этаж.</p><div class="contact-actions rv"><a class="contact-main chat" data-entry-point="contacts_booking" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=contacts_booking" target="_blank" rel="noopener" data-edit="contacts.contact-main-1">Записаться онлайн</a><a class="contact-main chat" href="https://wa.me/79501001059" target="_blank" rel="noopener" data-entry-point="contacts_whatsapp">WhatsApp</a><a class="contact-main chat" href="https://t.me/avocado_studio38" target="_blank" rel="noopener" data-entry-point="contacts_telegram">Telegram</a><a class="contact-main chat" data-entry-point="contacts_vk" href="https://vk.com/lasermkt" target="_blank" rel="noopener" data-edit="contacts.a-5">ВКонтакте</a></div><nav class="contact-links rv"><a href="https://2gis.ru/irkutsk/firm/70000001045439507" target="_blank" rel="noopener" data-edit="contacts.a-1">2ГИС</a><a href="https://yandex.ru/profile/32740458188" target="_blank" rel="noopener" data-edit="contacts.a-2">Яндекс.Карты</a><a href="tel:+79331901059" data-edit="contacts.a-3">8-933-190-10-59</a></nav><p class="contact-hours rv" data-edit="contacts.contact-hours-1">Ежедневно, по предварительной записи</p><p class="booking-consent">Нажимая кнопку записи, вы соглашаетесь с <a href="privacy.html" data-edit="contacts.a-6">политикой конфиденциальности</a>.</p><a class="flow-next" href="#faq" aria-label="Перейти к ответам на частые вопросы"><span aria-hidden="true">↓</span></a></div></section>
+<section class="landing-block contacts" id="contacts" data-landing-block="5"><div class="wrap"><div class="kicker rv" data-edit="contacts.kicker-1">Связаться со студией</div><h2 class="rv" data-edit="contacts.rv-1">Контакты</h2><p class="lead rv" data-edit="contacts.lead-1">АВОКАДО ждёт вас: Иркутск, Красноказачья, 84, 1 этаж.</p><div class="contact-actions rv"><a class="contact-main chat" data-entry-point="contacts_booking" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=contacts_booking" target="_blank" rel="noopener" data-edit="contacts.contact-main-1">Записаться онлайн</a><a class="contact-main chat" href="https://wa.me/79501001059" target="_blank" rel="noopener" data-entry-point="contacts_whatsapp">WhatsApp</a><a class="contact-main chat" href="https://t.me/avocado_studio38" target="_blank" rel="noopener" data-entry-point="contacts_telegram">Telegram</a><a class="contact-main chat" data-entry-point="contacts_vk" href="https://vk.com/lasermkt" target="_blank" rel="noopener" data-edit="contacts.a-5">ВКонтакте</a></div><nav class="contact-links rv"><a href="https://2gis.ru/irkutsk/firm/70000001045439507" target="_blank" rel="noopener" data-edit="contacts.a-1">2ГИС</a><a href="https://yandex.ru/profile/32740458188" target="_blank" rel="noopener" data-edit="contacts.a-2">Яндекс.Карты</a><a href="tel:+79331901059" data-edit="contacts.a-3">8-933-190-10-59</a></nav><p class="contact-hours rv" data-edit="contacts.contact-hours-1">Ежедневно, по предварительной записи</p><p class="booking-consent">Нажимая кнопку записи, вы соглашаетесь с <a href="privacy.html" data-edit="contacts.a-6">политикой конфиденциальности</a>.</p><div class="av-callback" aria-labelledby="callback-heading">
+  <h3 id="callback-heading">Оставить заявку</h3>
+  <p class="av-callback-intro">Оставьте номер — администратор свяжется с вами.</p>
+  <form data-callback-form aria-labelledby="callback-heading" action="/api/leads" method="post" hidden>
+    <fieldset>
+      <label for="callback-name">Ваше имя<input id="callback-name" name="name" type="text" autocomplete="name" maxlength="80" required></label>
+      <label for="callback-contact">Телефон<input id="callback-contact" name="contact" type="tel" inputmode="tel" autocomplete="tel" maxlength="32" required></label>
+      <label class="av-callback-wide" for="callback-comment">Комментарий · необязательно<textarea id="callback-comment" name="comment" rows="3" maxlength="1000"></textarea></label>
+      <label class="av-callback-consent av-callback-wide" for="callback-consent"><input id="callback-consent" name="consent" type="checkbox" required><span>Я даю <a href="consent.html" target="_blank" rel="noopener">согласие на обработку персональных данных</a> и ознакомлен(а) с <a href="privacy.html" target="_blank" rel="noopener">политикой конфиденциальности</a>.</span></label>
+    </fieldset>
+    <button type="submit">Оставить заявку</button>
+    <p data-callback-status role="status" aria-live="polite" aria-atomic="true" tabindex="-1"></p>
+  </form>
+  <noscript><p>Чтобы отправить заявку здесь, включите JavaScript или позвоните в студию.</p></noscript>
+  <p class="av-callback-phone">Можно связаться по телефону: <a href="tel:+79331901059">8-933-190-10-59</a></p>
+</div>
+<a class="flow-next" href="#faq" aria-label="Перейти к ответам на частые вопросы"><span aria-hidden="true">↓</span></a></div></section>
   <section class="landing-block faq" id="faq" data-landing-block="6">
   <div class="wrap">
     <div class="kicker rv" data-edit="faq.kicker-1">Частые вопросы</div>
@@ -1477,5 +1494,6 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
 <script src="scroll-controls.js?v=20260915-all-screens"></script>
 <script src="music-player.js?v=20260915"></script>
 <script src="attribution.js?v=20260915-mobile"></script>
+<script src="callback.js?v=20260915"></script>
 </body>
 </html>

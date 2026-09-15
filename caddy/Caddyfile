@@ -170,6 +170,14 @@ avokado2.synapsebusiness.ru {
 # --- АВОКАДО 3: служебный адрес основной версии -----------------------------
 avokado3.synapsebusiness.ru {
   root * /srv/sites/avokado3
+  @leads {
+    path /api/leads
+    method POST
+  }
+  handle @leads {
+    rewrite * /leads
+    reverse_proxy crm:8080
+  }
   @track {
     path /track
     method POST
