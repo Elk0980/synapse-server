@@ -432,6 +432,8 @@ if(new URLSearchParams(location.search).get('site')==='avokado')document.write('
   let csrfToken = '';
   let data = null;      // текущее состояние документа
   let dirty = false;    // есть несохранённые изменения
+  let editRevision = 0;
+  let saving = false;
   let editing = null;   // id позиции, открытой на редактирование
   let editingCat = null;
 
@@ -444,6 +446,7 @@ if(new URLSearchParams(location.search).get('site')==='avokado')document.write('
     statusEl.className = 'ed-status' + (kind ? ' is-' + kind : '');
   }
   function markDirty() {
+    editRevision += 1;
     dirty = true;
     saveBtn.textContent = 'Сохранить •';
     setStatus('Есть несохранённые изменения');
@@ -643,7 +646,9 @@ if(new URLSearchParams(location.search).get('site')==='avokado')document.write('
       const r = await fetch(ASSETS, { method: 'POST', headers, credentials: 'same-origin', body: prepared });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { if (r.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} } throw new Error(j.error || 'HTTP ' + r.status); }
-      setPhoto(id, j.url);
+      // The shared Avokado price uploads to /content/avokado/assets, while
+      // avokado3's /api/assets belongs to its separate site document.
+      setPhoto(id, new URL(imgUrl(j.url), location.href).href);
       say('Фото загружено — нажмите «Готово», затем «Сохранить».');
     } catch (e) { say('Не загружено: ' + e.message, true); }
   }
@@ -772,8 +777,11 @@ if(new URLSearchParams(location.search).get('site')==='avokado')document.write('
         addCardHtml: sectionTools, addRowHtml: sectionTools,
         promoPlaceholderHtml: () => `<div class="ed-section-tools"><button class="ed-btn ed-btn--small ed-btn--main" type="button" data-addpromo="1">Создать раздел «Акции» и наполнить</button><small class="ed-status">Пока раздела нет — на сайте показывается эта заглушка без условий.</small></div>`,
       });
-    subEl.textContent = `версия ${data.version || '—'} · обновлено ${data.updatedAt ? new Date(data.updatedAt).toLocaleString('ru-RU') : '—'}` + (dirty ? ' · не сохранено' : '');
+    renderSub();
     window.scrollTo(0, y);
+  }
+  function renderSub() {
+    subEl.textContent = `версия ${data.version || '—'} · обновлено ${data.updatedAt ? new Date(data.updatedAt).toLocaleString('ru-RU') : '—'}` + (dirty ? ' · не сохранено' : '');
   }
 
   /* --- ключ, сохранение, история --- */
@@ -799,7 +807,7 @@ if(new URLSearchParams(location.search).get('site')==='avokado')document.write('
     }
     return result;
   }
-  async function apiFetch(url, opts = {}, withAuth = false) {
+  async function apiFetch(url, opts = {}, withAuth = true) {
     let headers = { 'Accept': 'application/json', ...(opts.headers || {}) };
     if (withAuth) headers = authHeaders(headers, opts.method && opts.method !== 'GET');
     const r = await fetch(url, { ...opts, headers, credentials: 'same-origin', cache: 'no-store' });
@@ -825,20 +833,23 @@ if(new URLSearchParams(location.search).get('site')==='avokado')document.write('
     getKey(false);
   }
   async function save() {
-    if (!data) return;
+    if (!data || saving) return;
+    saving = true;
+    const revision = editRevision;
     saveBtn.disabled = true; setStatus('Сохраняю…');
     try {
       const res = await apiFetch(API, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }, true);
-      data.version = res.version; data.updatedAt = res.updatedAt; dirty = false;
-      saveBtn.textContent = 'Сохранить';
+      data.version = res.version; data.updatedAt = res.updatedAt; dirty = editRevision !== revision;
+      saveBtn.textContent = dirty ? 'Сохранить •' : 'Сохранить';
       const t = new Date(res.updatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-      setStatus(`Сохранено ${t} · версия ${res.version}. На сайте появится сразу.`, 'ok');
-      render();
+      setStatus(dirty ? `Сохранена версия ${res.version}. Есть новые несохранённые изменения.` : `Сохранено ${t} · версия ${res.version}. На сайте появится сразу.`, dirty ? '' : 'ok');
+      // Keep an open form and any text being typed while the request was in flight.
+      renderSub();
     } catch (e) {
       if (e.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} }
       setStatus('Не сохранено: ' + e.message, 'error');
       alert('Не сохранено.\n' + e.message);
-    } finally { saveBtn.disabled = false; }
+    } finally { saving = false; saveBtn.disabled = false; }
   }
   async function showHistory() {
     const box = $('#ed-modal-box'); const modal = $('#ed-modal');
