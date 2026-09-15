@@ -1,0 +1,22 @@
+.flow-height-probe{position:absolute;top:0;left:0;height:100svh;width:0;visibility:hidden;pointer-events:none}
+#metod.method-flow.flow-motion .flow-reveal{opacity:var(--flow-reveal,1)!important}
+#metod.method-flow.flow-motion #method-3 .paper-questions,
+#metod.method-flow.flow-motion #method-3 .paper-argument{opacity:var(--flow-reveal,1)!important}
+/* All four cards share one natural-height grid cell. Its tallest card sets the stage size. */
+#metod.method-flow #method-5.flow-work-measure .work-pairs{display:grid;grid-template-columns:minmax(0,1fr);gap:0;height:auto;overflow:visible;margin:12px 0}
+#metod.method-flow #method-5.flow-work-measure .work-pair{grid-area:1/1;align-self:start;min-height:0}
+#metod.method-flow #method-5.flow-work-measure .work-pair__photo{height:260px;max-height:none;aspect-ratio:auto}
+#metod.method-flow #method-5.flow-work-slider .work-copy{position:sticky;top:var(--flow-work-top);height:auto;min-height:0}
+#metod.method-flow #method-5.flow-work-slider .work-counter{display:block}
+#metod.method-flow #method-5.flow-work-slider .work-pair{opacity:var(--work-opacity,0)!important;transform:translateY(var(--work-y,0px))!important;pointer-events:none}
+#metod.method-flow #method-5.flow-work-slider .work-pair.is-current{pointer-events:auto}
+#metod.method-flow #method-5.flow-work-slider .flow-next{visibility:hidden!important}
+#metod.method-flow #method-5.flow-work-slider:has(.work-pair[data-step="4"].is-current) .flow-next{visibility:visible!important}
+@media(max-width:820px){
+ #metod.method-flow #method-5.flow-work-measure .work-pair__photo{height:170px}
+ #metod.method-flow #method-5.flow-work-measure .work-pair__copy{padding:14px 16px}
+ #metod.method-flow #method-5.flow-work-measure .work-pair__copy>p{font-size:15px;line-height:1.5}
+ #metod.method-flow #method-5.flow-work-measure .work-heading h2{margin-block:6px 10px}
+ #metod.method-flow #method-5.flow-work-measure .flow-next{margin:8px auto 0}
+}
+@media(prefers-reduced-motion:reduce){#metod.method-flow.flow-motion .flow-reveal{opacity:1!important}}
