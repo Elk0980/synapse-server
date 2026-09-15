@@ -23,6 +23,14 @@
     "htmlOld": "Напишите в Telegram: сертификат бывает электронный (приходит в мессенджер) или бумажный в конверте с лентой. Оформляется на любую сумму или конкретную программу, доставка по Иркутску бесплатная."
   }
 };
+  // These two legacy quiz actions now open prices; later owner edits remain intact.
+  const heroPriceNavigationMigration = {
+    'floating.floating-cta-button-1': {old: 'Подобрать ритуал', value: 'Программы и цены'},
+    'hero-7.button-1': {old: 'Подобрать ритуал за 3 вопроса', value: 'Программы и цены'}
+  };
+  function publishedHref(key, href) {
+    return Object.prototype.hasOwnProperty.call(heroPriceNavigationMigration, key) && href === '#quiz' ? 'price.html' : href;
+  }
   // Compact copy is a mobile presentation only. Keep the approved desktop and
   // editor document verbatim; preserve later cabinet edits at every width.
   const promoCopyMigration = {
@@ -45,7 +53,7 @@
   };
   function publishedValue(key, value) {
     const compact = !EDIT_MODE && window.matchMedia('(max-width: 56.24rem)').matches;
-    const migration = certificateCopyMigration[key] || (compact ? promoCopyMigration[key] : null);
+    const migration = heroPriceNavigationMigration[key] || certificateCopyMigration[key] || (compact ? promoCopyMigration[key] : null);
     return migration && (value === migration.old || ('htmlOld' in migration && value === migration.htmlOld)) ? migration.value : value;
   }
   function rich(value) {
@@ -161,7 +169,7 @@
         }
         if (el.innerHTML.trim() !== html) el.innerHTML = html;
       }
-      if (f.kind === 'button' && el.tagName === 'A') el.setAttribute('href', safeHref(f.href));
+      if (f.kind === 'button' && el.tagName === 'A') el.setAttribute('href', safeHref(publishedHref(key, f.href)));
       applyStyle(el, f.style);
       applyLayout(el, f);
     });

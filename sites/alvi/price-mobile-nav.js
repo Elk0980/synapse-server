@@ -6,6 +6,7 @@
   if (!nav || !list || !window.matchMedia) return;
 
   const mobile = window.matchMedia('(max-width: 56.24rem)');
+  const embedded = document.documentElement.classList.contains('alvi-price-embedded');
   const header = document.querySelector('.price-page .price-header');
   const home = document.createComment('price navigation desktop position');
   nav.before(home);
@@ -13,7 +14,7 @@
   let nextId = 0;
 
   function measureHeader() {
-    if (mobile.matches && header) {
+    if (mobile.matches && header && !embedded) {
       document.documentElement.style.setProperty('--price-header-height', `${Math.ceil(header.getBoundingClientRect().height)}px`);
     }
   }
@@ -32,7 +33,7 @@
 
   function enhance() {
     if (!mobile.matches) return;
-    if (header && nav.parentElement !== header) {
+    if (header && !embedded && nav.parentElement !== header) {
       header.append(nav);
       header.classList.add('has-mobile-nav');
     }
@@ -65,7 +66,7 @@
   }
 
   nav.addEventListener('click', (event) => {
-    if (!mobile.matches) return;
+    if (!mobile.matches || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     const expand = event.target.closest('.pnav__expand');
     if (expand && nav.contains(expand)) {
       const item = expand.parentElement;
@@ -81,7 +82,8 @@
     const link = event.target.closest('a[href^="#"]');
     if (!link || !nav.contains(link)) return;
     setOpen(false);
-    // Move keyboard focus out of the now-collapsed list; the native anchor scrolls.
+    // Close even when the embedding page handled navigation in its capture listener.
+    // Move focus out of the now-collapsed list without starting a second scroll.
     const destination = document.getElementById(link.hash.slice(1));
     if (destination) {
       if (!destination.hasAttribute('tabindex')) destination.setAttribute('tabindex', '-1');

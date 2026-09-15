@@ -601,6 +601,14 @@
           "label": "Ссылка",
           "value": "Telegram",
           "multiline": false
+        },
+        {
+          "key": "contacts.max-1",
+          "kind": "button",
+          "label": "Ссылка MAX",
+          "value": "MAX",
+          "href": "https://max.ru/u/f9LHodD0cOJPwmtne6DjlsTtJCf0TXbqHy8SKoBcO2WRmifpI1GHsPMbugM",
+          "multiline": false
         }
       ]
     },

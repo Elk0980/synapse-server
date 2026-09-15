@@ -2556,6 +2556,7 @@
   <link rel="stylesheet" href="mobile-cards.css?v=20260910-type-spacing">
   <link rel="stylesheet" href="background-water.css?v=20260910-water-recovery">
   <link rel="stylesheet" href="music-player.css?v=20260915-alvi">
+  <link rel="stylesheet" href="price-overlay.css?v=20260915-price-flow">
   <link rel="stylesheet" href="responsive-foundation.css?v=20260915-hero-bottom">
   <link rel="stylesheet" href="hero-background.css?v=20260915-fixed">
   <link rel="stylesheet" href="persistent-actions.css?v=20260915-fixed">
@@ -2565,6 +2566,8 @@
   <script src="mobile-performance.js?v=20260910-water-recovery" defer></script>
   <script src="background-water.js?v=20260910-water-recovery" defer></script>
   <script src="music-player.js?v=20260915-alvi" defer></script>
+  <script src="contact-route.js?v=20260915-price-flow" defer></script>
+  <script src="price-overlay.js?v=20260915-price-flow" defer></script>
   <script src="scroll-controls.js?v=20260915-alvi" defer></script>
 </head>
 <body>
@@ -2662,7 +2665,7 @@
 
             <div class="floating-cta">
               <div class="floating-cta__row">
-                <a class="floating-cta__button" href="#quiz" data-edit="floating.floating-cta-button-1">Подобрать ритуал</a>
+                <a class="floating-cta__button" href="price.html" data-edit="floating.floating-cta-button-1">Программы и цены</a>
                 <a class="floating-cta__button" href="#contacts" data-edit="floating.floating-cta-button-2">Связаться с нами</a>
               </div>
               <p class="floating-cta__note" data-edit="floating.floating-cta-note-1">отвечаем в течение 2 минут</p>
@@ -2725,7 +2728,7 @@
               </a>
             </div>
             <div class="final-actions">
-              <a class="button button--dark" href="#quiz" data-edit="hero-7.button-1">Подобрать ритуал за 3 вопроса</a>
+              <a class="button button--dark" href="price.html" data-edit="hero-7.button-1">Программы и цены</a>
             </div>
             <p class="final-signature">
               <strong data-edit="hero-7.strong-1">ALVI · Верни себе баланс</strong>
@@ -2824,7 +2827,7 @@
             </dl>
             <div class="pc__actions">
               <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+              <a class="pc__button" href="#contacts">Помочь с выбором</a>
             </div>
           </article>
 
@@ -2839,7 +2842,7 @@
             </dl>
             <div class="pc__actions">
               <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+              <a class="pc__button" href="#contacts">Помочь с выбором</a>
             </div>
           </article>
 
@@ -2854,7 +2857,7 @@
             </dl>
             <div class="pc__actions">
               <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+              <a class="pc__button" href="#contacts">Помочь с выбором</a>
             </div>
           </article>
 
@@ -2869,7 +2872,7 @@
             </dl>
             <div class="pc__actions">
               <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+              <a class="pc__button" href="#contacts">Помочь с выбором</a>
             </div>
           </article>
 
@@ -2884,7 +2887,7 @@
             </dl>
             <div class="pc__actions">
               <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+              <a class="pc__button" href="#contacts">Помочь с выбором</a>
             </div>
           </article>
         </div>
@@ -2926,7 +2929,7 @@
 
             <div class="pc__actions">
               <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+              <a class="pc__button" href="#contacts">Помочь с выбором</a>
             </div>
           </div></article>
           <article class="program-card program-card--photo" style="--card-photo:url('img/card-s2-2.jpg')"><div class="program-card__body">
@@ -2936,7 +2939,7 @@
 
             <div class="pc__actions">
               <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+              <a class="pc__button" href="#contacts">Помочь с выбором</a>
             </div>
           </div></article>
           <article class="program-card">
@@ -2945,7 +2948,7 @@
             <dl class="program-facts"><dt>Цена</dt><dd>10 900 ₽</dd><dt>Время</dt><dd>2 ч 30 мин</dd></dl>
             <div class="pc__actions">
               <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+              <a class="pc__button" href="#contacts">Помочь с выбором</a>
             </div>
           </article>
           <article class="program-card">
@@ -2954,7 +2957,7 @@
             <dl class="program-facts"><dt>Цена</dt><dd>13 600 ₽</dd><dt>Время</dt><dd>3 ч</dd></dl>
             <div class="pc__actions">
               <a class="pc__button pc__button--main" href="https://n1070017.yclients.com/" target="_blank" rel="noopener">Записаться</a>
-              <a class="pc__button" href="https://t.me/+79246180555" target="_blank" rel="noopener">Помочь с выбором</a>
+              <a class="pc__button" href="#contacts">Помочь с выбором</a>
             </div>
           </article>
         </div>
@@ -4222,7 +4225,7 @@
         else promo.querySelector(".promo__close")?.blur();
       };
       const open = () => {
-        if (promo.classList.contains("is-open")) return;
+        if (promo.classList.contains("is-open") || document.querySelector('.alvi-price-dialog[open]')) return;
         previousFocus = document.activeElement;
         if (panelBody) panelBody.scrollTop = 0;
         promo.classList.add("is-open"); document.documentElement.classList.add("promo-open");
@@ -4245,6 +4248,7 @@
       });
       document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
       window.alviPromoOpen = open;
+      window.alviPromoClose = close;
       if (EDIT || shown || !("IntersectionObserver" in window)) return;
       const io = new IntersectionObserver((entries) => {
         if (entries.some((x) => x.isIntersecting)) { io.disconnect(); setTimeout(open, 350); }
@@ -4252,7 +4256,7 @@
       io.observe(trust);
     })();
   </script>
-  <script src="site-apply.js?v=20260915-editor-preview" defer></script>
+  <script src="site-apply.js?v=20260915-hero-price" defer></script>
 <script src="https://synapse.synapsebusiness.ru/track.js?v=20260905" data-company="alvi" defer></script>
 <script src="price-render.js?v=20260910-booking" defer></script>
 <script>

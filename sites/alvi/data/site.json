@@ -170,7 +170,7 @@
         {
           "key": "hero-7.button-1",
           "label": "Ссылка",
-          "value": "Подобрать ритуал за 3 вопроса",
+          "value": "Программы и цены",
           "multiline": false
         },
         {
@@ -906,7 +906,7 @@
         {
           "key": "floating.floating-cta-button-1",
           "label": "Плавающая кнопка",
-          "value": "Подобрать ритуал",
+          "value": "Программы и цены",
           "multiline": false
         },
         {

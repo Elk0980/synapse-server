@@ -12,7 +12,7 @@ function setup({edit=false,hasContacts=true}={}){
  const body={};
  const promo={classList:classList(promoClasses),querySelector:s=>s==='.promo__body'?body:closeButton,querySelectorAll:()=>[],addEventListener:(name,fn)=>events['promo:'+name]=fn};
  const contacts={setAttribute(){},focus(){order.push('contacts-focus');},scrollIntoView(){assert.equal(promoClasses.has('is-open'),false);assert.equal(rootClasses.has('promo-open'),false);order.push('contacts-scroll');}};
- const document={activeElement:previous,documentElement:{classList:classList(rootClasses)},getElementById:id=>({promo,trust:{},contacts:hasContacts?contacts:null}[id]),addEventListener:(name,fn)=>events[name]=fn};
+ const document={activeElement:previous,documentElement:{classList:classList(rootClasses)},getElementById:id=>({promo,trust:{},contacts:hasContacts?contacts:null}[id]),querySelector(){return this.priceOpen?{}:null;},addEventListener:(name,fn)=>events[name]=fn};
  const location={search:edit?'?edit=1':'',hash:'#after-hero'};
  const history={state:{keep:true},pushState(state,_,hash){this.calls=(this.calls||0)+1;assert.deepEqual(state,{keep:true});location.hash=hash;}};
  const window={};
@@ -20,7 +20,7 @@ function setup({edit=false,hasContacts=true}={}){
  const click=(hash='#contacts',options={})=>{
   const e={target:{closest:()=>hash==='#contacts'?{}:null},button:0,preventDefault(){this.defaultPrevented=true;},...options};events['promo:click'](e);return e;
  };
- return {events,order,rootClasses,promoClasses,location,history,window,click};
+ return {events,order,rootClasses,promoClasses,location,history,window,document,click};
 }
 test('subscription action closes the popup and unlocks the page before focusing and scrolling to contacts',()=>{
  const s=setup();s.window.alviPromoOpen();s.order.length=0;
@@ -39,4 +39,9 @@ test('normal closing restores focus; modified clicks and external destinations k
 test('editor links and a missing contact section are not intercepted; repeated contact entry does not add history',()=>{
  for(const options of [{edit:true},{hasContacts:false}]){const s=setup(options);s.window.alviPromoOpen();assert.equal(s.click().defaultPrevented,undefined);}
  const s=setup();s.location.hash='#contacts';s.window.alviPromoOpen();s.click();assert.equal(s.history.calls,undefined);
+});
+test('a delayed promo cannot open behind the full price dialog and closing for price navigation does not restore stale focus',()=>{
+ const s=setup();s.document.priceOpen=true;s.window.alviPromoOpen();assert.equal(s.promoClasses.has('is-open'),false);
+ s.document.priceOpen=false;s.window.alviPromoOpen();s.order.length=0;s.window.alviPromoClose({restoreFocus:false});
+ assert.equal(s.rootClasses.has('promo-open'),false);assert.deepEqual(s.order,['close-blur']);
 });

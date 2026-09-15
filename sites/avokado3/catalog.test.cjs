@@ -29,9 +29,9 @@ test('help and certificate actions open Contacts on the correct page', () => {
 
 test('all services and selected cards remain reachable; prices propagate to both pages', () => {
   const home = render(defaults, false), full = render(defaults, true);
-  assert.equal(items(defaults).length, 48);
+  assert.equal(items(defaults).length, 47);
   assert.equal((home.match(/data-service=/g) || []).length, 6);
-  assert.equal((full.match(/data-service=/g) || []).length, 48);
+  assert.equal((full.match(/data-service=/g) || []).length, 47);
   const ids = [...full.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]);
   assert.equal(ids.length, new Set(ids).size);
   for (const group of ['laser','apparatus','manual','certificate']) assert.ok(ids.includes(group));
@@ -193,7 +193,73 @@ test('edited content is escaped and an empty certificate has a usable fallback',
     assert.ok(!html.includes('<img src=x'));
   }
   changed.certificates = {};
-  assert.ok(render(changed, true).includes('Обсудить сертификат'));
+  assert.ok(render(changed, true).includes('Выбрать сертификат'));
+});
+
+test('certificate action uses the approved label in defaults, legacy API documents and renderer fallback', () => {
+  assert.equal(defaults.certificates.button, 'Выбрать сертификат');
+  const legacy = copy(defaults); legacy.certificates.button = 'Обсудить сертификат';
+  legacy.certificates.note = 'Сохранённые условия владельца';
+  const before = JSON.stringify(legacy), prepared = prepare(legacy, null);
+  assert.equal(JSON.stringify(legacy), before, 'legacy API input is not mutated');
+  assert.equal(prepared.certificates.button, 'Выбрать сертификат');
+  assert.equal(prepared.certificates.note, legacy.certificates.note);
+  assert.equal(prepared.categories, legacy.categories, 'service names and prices remain untouched');
+  for (const full of [false, true]) {
+    assert.match(giftSection(legacy, full), /data-entry-point="catalog_certificate">Выбрать сертификат<\/a>/);
+    assert.ok(!giftSection(prepared, full).includes('Обсудить сертификат'));
+  }
+  for (const button of ['Подарить SPA', 'Выбрать <свой> подарок']) {
+    const edited = copy(defaults); edited.certificates.button = button;
+    assert.equal(prepare(edited, defaults), edited, 'later custom captions are preserved');
+    assert.ok(giftSection(edited, true).includes(context.AlviPrice.esc(button)));
+  }
+});
+
+function legacyWithBuccal(){
+  const legacy=copy(defaults),face=legacy.categories.find(cat=>cat.id==='face');
+  face.items.splice(5,0,{id:'face-6',title:'Буккальный массаж',duration:'',price:'2 800 ₽'});
+  legacy.showcase.self=legacy.showcase.self.map(id=>id==='face-7'?'face-6':id);
+  return legacy;
+}
+
+test('only the former buccal service is removed and its showcase slot uses the existing chiroplastic massage',()=>{
+  assert.equal(item(defaults,'face-6'),undefined);
+  assert.equal(items(defaults).filter(it=>it.id==='face-7').length,1);
+  assert.equal(item(defaults,'face-7').price,'2 800 ₽');
+  for(const version of [2,3,4]){
+    const legacy=legacyWithBuccal();legacy.catalogVersion=version;
+    item(legacy,'face-7').price='Цена владельца';
+    const before=JSON.stringify(legacy),prepared=prepare(legacy,null);
+    assert.equal(JSON.stringify(legacy),before);
+    assert.equal(item(prepared,'face-6'),undefined);
+    assert.equal(item(prepared,'face-7').price,'Цена владельца');
+    assert.deepEqual([...prepared.showcase.self],[...legacy.showcase.self.map(id=>id==='face-6'?'face-7':id)]);
+    assert.equal(items(prepared).filter(it=>it.id==='face-7').length,1);
+    for(const it of items(legacy).filter(it=>it.id!=='face-6'))assert.deepEqual(JSON.parse(JSON.stringify(item(prepared,it.id))),it);
+    for(const full of [false,true]){
+      const html=render(prepared,full);
+      assert.ok(!html.includes('Буккальный массаж'));assert.ok(html.includes('Хиропластический массаж лица'));
+    }
+  }
+  assert.ok(!read('index.html').includes('"name":"Буккальный массаж"'),'search metadata matches the public catalogue');
+});
+
+test('buccal removal preserves owner-renamed services, other IDs and categories without duplicating a selected replacement',()=>{
+  for(const change of [
+    doc=>{item(doc,'face-6').title='Новая услуга владельца';},
+    doc=>{item(doc,'face-6').id='owner-face';doc.showcase.self=doc.showcase.self.filter(id=>id!=='face-6');},
+    doc=>{doc.categories.find(cat=>cat.id==='face').id='owner-category';},
+  ]){
+    const doc=legacyWithBuccal();change(doc);assert.equal(prepare(doc,defaults),doc);
+  }
+  const alreadySelected=legacyWithBuccal();alreadySelected.showcase.two=['face-7'];
+  const prepared=prepare(alreadySelected,null);
+  assert.ok(!prepared.showcase.self.includes('face-6'));assert.ok(!prepared.showcase.self.includes('face-7'));
+  assert.deepEqual([...prepared.showcase.two],['face-7']);
+  const renamedReplacement=legacyWithBuccal();item(renamedReplacement,'face-7').title='Услуга владельца';
+  const renamed=prepare(renamedReplacement,null);
+  assert.ok(!renamed.showcase.self.includes('face-7'));assert.equal(item(renamed,'face-7').title,'Услуга владельца');
 });
 
 const giftSection = (data, full) => render(data, full).match(/<section class="av-direction av-gift"[\s\S]*?<\/section>/)[0];
