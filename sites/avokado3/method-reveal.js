@@ -81,6 +81,7 @@
       mobileSlides: !editor && window.AvokadoMobileSlides ? window.AvokadoMobileSlides.create(root, scenes) : null
     };
     if (state.target < 0) return null;
+    state.flowMotion = window.AvokadoFlowMotion ? window.AvokadoFlowMotion.create(root, state.work) : null;
     states.set(root, state);
     root.classList.add('method-paper-ready');
     state.reduced.addEventListener('change', () => update(root, scenes));
@@ -135,7 +136,11 @@
     const state = states.get(root) || createState(root, scenes);
     if (!state) return false;
     const flow = !state.editor && getComputedStyle(root).getPropertyValue('--mobile-method-flow').trim() === '1';
-    if (setFlowMode(state, flow)) return true;
+    if (setFlowMode(state, flow)) {
+      if (state.flowMotion) state.flowMotion.update(state.reduced.matches);
+      return true;
+    }
+    if (state.flowMotion) state.flowMotion.reset();
     const height = state.sticky.clientHeight;
     if (!height) return false;
     const unit = height * 5 / 6;
