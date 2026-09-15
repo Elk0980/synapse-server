@@ -660,6 +660,27 @@ const loadCompanySummary = async (company) => {
 const fieldInput = (config, field, value = "") => {
   const required = config.required.includes(field) ? " required" : "";
   const hint = field === "code" ? '<small>Как поддомен: alvi, palitra-love</small>' : "";
+  if (field === "timezone" || field === "preferredChannel") {
+    const zones = [
+      ["Europe/Kaliningrad", "Калининград"], ["Europe/Moscow", "Москва, Санкт-Петербург"],
+      ["Europe/Samara", "Самара"], ["Asia/Yekaterinburg", "Екатеринбург"],
+      ["Asia/Omsk", "Омск"], ["Asia/Krasnoyarsk", "Красноярск"], ["Asia/Novosibirsk", "Новосибирск"],
+      ["Asia/Irkutsk", "Иркутск, Улан-Удэ"], ["Asia/Yakutsk", "Якутск"], ["Asia/Chita", "Чита"],
+      ["Asia/Vladivostok", "Владивосток, Хабаровск"], ["Asia/Magadan", "Магадан"], ["Asia/Sakhalin", "Южно-Сахалинск"],
+      ["Asia/Kamchatka", "Петропавловск-Камчатский"], ["Asia/Anadyr", "Анадырь"], ["Asia/Bangkok", "Бангкок"],
+      ["UTC", "Всемирное время"]
+    ];
+    const choices = field === "timezone" ? zones : [
+      ["Telegram", "Телеграм"], ["MAX", "Макс"], ["WhatsApp", "Ватсап"],
+      ["ВКонтакте", "VK"], ["Телефон", "Звонок"], ["Email", "Электронная почта"], ["SMS", "СМС"]
+    ];
+    const listId = `crm-${config.path}-${field}-options`;
+    const placeholder = field === "timezone" ? "Начните вводить город или часовой пояс" : "Найдите или выберите канал";
+    return `<label>${config.labels[field]}<input type="text" name="${field}" list="${listId}"
+      value="${escapeHTML(value)}" placeholder="${placeholder}" autocomplete="off"${required}>
+      <datalist id="${listId}">${choices.map(([key, label]) => `<option value="${escapeHTML(key)}" label="${escapeHTML(label)}"></option>`).join("")}</datalist>
+      <small>${field === "timezone" ? "Поиск по городу: например, Иркутск → Asia/Irkutsk. Можно указать другой пояс." : "Выберите из подсказок или укажите свой вариант."}</small></label>`;
+  }
   if (field === "notes") {
     return `<label class="wide">${config.labels[field]}<textarea name="${field}"${required}>${
       escapeHTML(value)}</textarea></label>`;
