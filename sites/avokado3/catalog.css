@@ -54,3 +54,13 @@
 .av-catalog .av-price-link:hover{filter:brightness(1.08);box-shadow:0 8px 28px rgba(0,0,0,.28)}
 .av-catalog .av-price-link:focus-visible{outline:3px solid #fff0c8;outline-offset:4px}
 @media(max-width:700px){.av-catalog .av-price-link{display:flex;width:100%;padding:14px 18px;font-size:14px;min-height:54px}}
+
+/* Both certificate faces stay visible; each can be enlarged to read and scan. */
+.av-certificate-preview{display:grid;gap:16px;width:100%;min-width:0;max-width:560px;align-self:start}
+.av-certificate-side{margin:0;min-width:0}
+.av-certificate-side img{display:block;border:1px solid #dac68a40;border-radius:12px}
+.av-certificate-side figcaption{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0 12px;padding:4px 0 0;color:#dedccc;font:400 12px/1.5 Manrope,Arial,sans-serif}
+.av-certificate-open{display:inline-flex;align-items:center;gap:5px;min-height:44px;color:#e1d29c;font-weight:500;text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
+.av-certificate-open:hover{color:#fff0c8}
+.av-certificate-open:focus-visible{outline:3px solid #ecd781;outline-offset:3px;border-radius:3px}
+@media(max-width:700px){.av-gift>.av-certificate-preview{grid-row:1;max-width:520px;margin-inline:auto;gap:12px}.av-certificate-side figcaption{font-size:12px}}
