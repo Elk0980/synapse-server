@@ -55,6 +55,7 @@ async function fixture(kind,site,{keyMode=false,seedOverride,defaultsOverride}={
     w.eval(read(`../${site==='avokado'?'avokado3':site}/price-render.js`));
     if(site==='avokado')w.eval(read('../avokado3/catalog.js'));
   }
+  if(kind==='site')w.eval(read('subscription-promo-content.js'));
   w.eval(code);
   const settle=async()=>{for(let i=0;i<8;i++)await tick();};
   await settle();
@@ -119,6 +120,37 @@ for(const site of ['alvi','avokado'])test(`price ${site}: an applied edit during
     assert.equal(f.saved().categories.flatMap(cat=>cat.items).find(it=>it.id===item.id).title,'Still typing');
     assert.deepEqual(f.errors,[]);
   }finally{f.close();}
+});
+
+test('site banner migration saves only the campaign and defers unrelated historical defaults',async()=>{
+  const defaults=JSON.parse(read('../avokado3/data/site.json'));
+  const baseline=structuredClone(defaults);
+  // These ten keys were absent in the production document read before PR299.
+  const absent=new Set(['pain.p-1','pain.p-2','pain.p-3','pain.p-4','pain.p-5','pain.p-6','price.gold-cta-1','price.gold-cta-2','contacts.contact-main-2','contacts.a-7']);
+  assert.equal(defaults.sections.flatMap(section=>section.fields||[]).filter(field=>absent.has(field.key)).length,10);
+  delete baseline.subscriptionPromoRevision;
+  baseline.sections=baseline.sections.filter(section=>section.id!=='promo');
+  baseline.sections.forEach(section=>{section.fields=(section.fields||[]).filter(field=>!absent.has(field.key));});
+  const before=structuredClone(baseline.sections);
+  const f=await fixture('site','avokado3',{seedOverride:baseline,defaultsOverride:defaults});
+  let saved;
+  try{
+    assert.equal(f.calls.some(call=>call.url.endsWith('/data/site.json')),false,'campaign migration must not fetch unrelated fallback fields');
+    f.save();await f.settle();saved=f.saved();
+    assert.deepEqual(saved.sections.filter(section=>section.id!=='promo'),before,'all unrelated sections remain unchanged in the actual PUT');
+    assert.ok(saved.sections.some(section=>section.id==='promo'));
+    assert.equal(saved.subscriptionPromoRevision,'subscription-story-20260915');
+    assert.ok(saved.sections.flatMap(section=>section.fields||[]).every(field=>!absent.has(field.key)));
+    assert.deepEqual(f.errors,[]);
+  }finally{f.close();}
+  const ordinary=await fixture('site','avokado3',{seedOverride:saved,defaultsOverride:defaults});
+  try{
+    assert.ok(ordinary.calls.some(call=>call.url.endsWith('/data/site.json')),'subsequent ordinary loads retain existing merge behavior');
+    ordinary.save();await ordinary.settle();
+    const keys=new Set(ordinary.saved().sections.flatMap(section=>section.fields||[]).map(field=>field.key));
+    for(const field of defaults.sections.flatMap(section=>section.fields||[]).filter(field=>absent.has(field.key)))assert.ok(keys.has(field.key),field.key);
+    assert.deepEqual(ordinary.errors,[]);
+  }finally{ordinary.close();}
 });
 
 test('site defaults add new fields inside existing sections without overwriting client copy, style or hidden state',async()=>{
