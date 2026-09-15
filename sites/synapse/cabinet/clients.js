@@ -752,7 +752,7 @@ const formPayload = (form, config, record) => {
   });
   return payload;
 };
-const normalizeRepeat = (rows = []) => rows.map((row) => {
+const normalizeRepeat = (rows) => (Array.isArray(rows) ? rows : []).map((row) => {
   const value = row.url || row.handle || "";
   const normalized = { ...(row.type ? { type: row.type } : {}), ...(row.label ? { label: row.label } : {}) };
   return { ...normalized, [row.url !== undefined || /^https?:/.test(value) ? "url" : "handle"]: value };
