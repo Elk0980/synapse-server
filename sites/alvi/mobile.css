@@ -31,10 +31,15 @@
   .hero.is-compact-mode .hero-scene[data-scene="0"] .hero-title {
     max-width: 8ch; margin-bottom: .7rem; font-size: clamp(2.35rem, 11.5vw, 3.2rem); line-height: .98;
   }
-  /* The droplet is the mobile focal point; a little of the face may be cropped. */
+  /* Fit the heroine's face on narrow screens and blend the opening into the text area. */
   .hero.is-compact-mode .hero__poster,
   .hero.is-compact-mode:not(.is-reduced-motion) .hero__idle-video,
-  .hero.is-compact-mode .hero__frame[data-frame="k1"] { object-position: 62% center; }
+  .hero.is-compact-mode .hero__frame[data-frame="k1"] {
+    height: 78%;
+    object-position: 86% center;
+    -webkit-mask-image: linear-gradient(#000 0%, #000 72%, transparent 100%);
+    mask-image: linear-gradient(#000 0%, #000 72%, transparent 100%);
+  }
   .hero.is-compact-mode .hero__frame[data-frame="k2"] { object-position: 62% center; }
   .hero.is-compact-mode .hero__frame[data-frame="k3"] { object-position: 100% center; }
   .hero.is-compact-mode .hero__frame[data-frame="k5"] { object-position: 96% center; }

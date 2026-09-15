@@ -7,6 +7,7 @@
     const sources = options.sources || {};
     const canPlay = options.canPlay || (() => true);
     const onPlaying = options.onPlaying || (() => {});
+    const onBlocked = options.onBlocked || (() => {});
     const doc = video.ownerDocument;
     const win = doc.defaultView || root;
     const formats = options.isIOS ? ["mp4", "webm"] : ["webm", "mp4"];
@@ -49,6 +50,7 @@
       attempt += 1;
       pendingAttempt = null;
       playing = false;
+      onBlocked(false);
       video.style.opacity = "0";
       if (wasPending || !video.paused) video.pause();
     }
@@ -62,6 +64,7 @@
       const firstPlayingEvent = !playing;
       playing = true;
       autoplayBlocked = false;
+      onBlocked(false);
       video.style.opacity = "1";
       if (firstPlayingEvent) onPlaying();
     }
@@ -120,6 +123,7 @@
       }
       // Keep the existing frame fallback visible until a permitted interaction.
       autoplayBlocked = true;
+      onBlocked(error?.name === "NotAllowedError");
       playing = false;
       video.style.opacity = "0";
     }
@@ -131,6 +135,7 @@
       }
       if (!sourceLoaded && !sourceExhausted) nextSource();
       else if (!autoplayBlocked) requestPlay();
+      else onBlocked(true);
     }
 
     listen(video, "playing", markPlaying);
@@ -143,7 +148,7 @@
       autoplayBlocked = false;
       sync();
     }
-    // No player control: a normal tap, click or key press can release autoplay.
+    // The visible play button and ordinary page taps both retain Safari's user gesture.
     ["touchend", "click", "keydown"].forEach((type) => listen(doc, type, resumeFromGesture, true));
     listen(doc, "visibilitychange", sync);
     listen(win, "pagehide", () => { pageHidden = true; sync(); });
@@ -174,6 +179,31 @@
     let candidateIndex = 0;
     let pauseTimer = null;
     let cleanup = () => {};
+    let pending = false;
+    const doc = video.ownerDocument;
+    video.muted = true;
+    video.defaultMuted = true;
+    video.playsInline = true;
+    function requestPlay() {
+      if (retired || disposed || doc.hidden || hasUserScrolled() || pending || video.readyState < 2
+        || (options.canPlay && !options.canPlay())) return;
+      if (!video.paused) return;
+      pending = true;
+      let result;
+      try { result = video.play(); } catch (error) { result = Promise.reject(error); }
+      Promise.resolve(result).then(() => {
+        pending = false;
+        if (retired || disposed || doc.hidden) { video.pause(); return; }
+        video.style.opacity = "1";
+        options.onBlocked?.(false);
+        options.onPlaying?.();
+      }, (error) => {
+        pending = false;
+        if (!retired && !disposed) options.onBlocked?.(error?.name === "NotAllowedError");
+      });
+    }
+    const gestures = ["touchend", "click", "keydown"];
+    gestures.forEach(type => doc.addEventListener(type, requestPlay, true));
 
     function nextSource() {
       const candidate = candidates[candidateIndex++];
@@ -181,11 +211,7 @@
       const onReady = () => {
         cleanup();
         if (retired || disposed || hasUserScrolled()) return;
-        video.play().then(() => {
-          if (retired || disposed) return;
-          video.style.opacity = "1";
-          options.onPlaying?.();
-        }).catch(() => { /* Approved desktop keeps the poster on autoplay refusal. */ });
+        requestPlay();
       };
       const onError = () => { cleanup(); nextSource(); };
       cleanup = () => {
@@ -206,6 +232,7 @@
       }
       if (hasUserScrolled() && scrollY() > 4 && !retired) {
         retired = true;
+        options.onBlocked?.(false);
         video.style.opacity = "0";
         pauseTimer = win.setTimeout(() => { try { video.pause(); } catch (_) {} }, 500);
       }
@@ -213,6 +240,8 @@
 
     function destroy() {
       disposed = true;
+      gestures.forEach(type => doc.removeEventListener(type, requestPlay, true));
+      options.onBlocked?.(false);
       cleanup();
       if (pauseTimer !== null) win.clearTimeout(pauseTimer);
       video.style.opacity = "0";

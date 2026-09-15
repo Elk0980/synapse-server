@@ -2552,12 +2552,13 @@
 </style><script>
 (()=>{let finished=false,revealTimer,safetyTimer;const loader=()=>document.getElementById("page-loader");const finish=()=>{if(finished)return;finished=true;clearTimeout(revealTimer);clearTimeout(safetyTimer);const element=loader();if(!element)return;if(!element.classList.contains("is-visible")){element.style.display="none";return}element.classList.add("is-complete");setTimeout(()=>{element.style.display="none"},250)};revealTimer=setTimeout(()=>{if(!finished)loader()?.classList.add("is-visible")},300);safetyTimer=setTimeout(()=>{finished=true;clearTimeout(revealTimer);const element=loader();if(element)element.style.display="none"},5000);if(document.readyState==="complete")finish();else addEventListener("load",finish,{once:true})})();
 </script>
-  <link rel="stylesheet" href="mobile.css?v=20260910-type-spacing">
+  <link rel="stylesheet" href="mobile.css?v=20260915-face-fit">
   <link rel="stylesheet" href="mobile-cards.css?v=20260910-type-spacing">
   <link rel="stylesheet" href="background-water.css?v=20260910-water-recovery">
   <link rel="stylesheet" href="music-player.css?v=20260915-alvi">
   <link rel="stylesheet" href="price-overlay.css?v=20260915-price-flow">
   <link rel="stylesheet" href="responsive-foundation.css?v=20260915-hero-bottom">
+  <link rel="stylesheet" href="hero-playback.css?v=20260915-play-recovery">
   <link rel="stylesheet" href="hero-background.css?v=20260915-fixed">
   <link rel="stylesheet" href="persistent-actions.css?v=20260915-fixed">
   <script src="hero-background.js?v=20260915-fixed" defer></script>
@@ -2657,6 +2658,7 @@
       <div class="hero__scenes">
         <article class="hero-scene" data-scene="0" data-mobile-frame="0" data-range-start="0" data-range-end="0.11">
           <div class="hero-scene__content">
+            <button id="hero-play-button" class="hero-play-button" type="button" hidden>▶ Включить видео</button>
             <h1 class="hero-title" data-edit="hero-0.hero-title-1">Верни себе <em>баланс</em></h1>
 
             <div class="hero-ratings">
@@ -3203,7 +3205,7 @@
   <div class="cookie-notice" role="dialog" aria-label="Уведомление о cookie"><span>Сайт использует cookie для корректной работы.</span><button type="button">Хорошо</button></div>
   <script src="callback.js?v=20260915-confirmed" defer></script>
 
-  <script src="hero-idle.js?v=20260910-autoplay"></script>
+  <script src="hero-idle.js?v=20260915-play-recovery"></script>
   <script>
     (() => {
       "use strict";
@@ -3679,7 +3681,8 @@
         scrollY: () => window.scrollY,
         canPlay: () => ALVI_MEDIA.idle.enabled && !reducedMotionQuery.matches
           && (compactModeActive ? activeCompactSceneId === "0" : !hasUserScrolled),
-        onPlaying: hidePoster
+        onPlaying: hidePoster,
+        onBlocked: (blocked) => { document.getElementById("hero-play-button").hidden = !blocked; }
       });
       function setupIdleVideo() { idleController?.sync(); }
 

@@ -38,6 +38,10 @@ function fixture({ eligible = true, isIOS = true, plans = [], canPlay, responsiv
     attributes: {},
     canPlayType: () => "probably",
     setAttribute(name, value) { this.attributes[name] = value; },
+    dispatchEvent(event) {
+      if (event.type === 'canplay') this.readyState = 4;
+      return EventTarget.prototype.dispatchEvent.call(this, event);
+    },
     load() {
       this.loadedSources.push(this.src);
       this.paused = true;
@@ -54,7 +58,7 @@ function fixture({ eligible = true, isIOS = true, plans = [], canPlay, responsiv
       return Promise.resolve();
     }
   });
-  const state = { eligible, compact, scrolled: false, scrollY: 0, onPlayingCalls: 0 };
+  const state = { eligible, compact, scrolled: false, scrollY: 0, onPlayingCalls: 0, blocked: false };
   vm.runInNewContext(script, { window: win, Promise });
   const factory = responsive ? win.AlviHeroIdle.createResponsive : win.AlviHeroIdle.create;
   const controller = factory({
@@ -65,7 +69,8 @@ function fixture({ eligible = true, isIOS = true, plans = [], canPlay, responsiv
     isCompactMode: () => state.compact,
     hasUserScrolled: () => state.scrolled,
     scrollY: () => state.scrollY,
-    onPlaying: () => { state.onPlayingCalls += 1; }
+    onPlaying: () => { state.onPlayingCalls += 1; },
+    onBlocked: (value) => { state.blocked = value; }
   });
   return { controller, video, win, doc, state, timers };
 }
@@ -118,11 +123,13 @@ test("autoplay denial recovers on ordinary touch without repeated automatic atte
   assert.equal(f.video.style.opacity, "0");
   for (let i = 0; i < 5; i += 1) f.controller.sync();
   assert.equal(f.video.playCalls, 1);
+  assert.equal(f.state.blocked, true);
   f.doc.dispatchEvent(new Event("touchend"));
   // The second play() must run within the ordinary touch, before any awaited work.
   assert.equal(f.video.playCalls, 2);
   await flush();
   assert.equal(f.video.style.opacity, "1");
+  assert.equal(f.state.blocked, false);
 });
 
 test("ordinary click and keyboard interactions recover without duplicating a pending attempt", async () => {
@@ -309,7 +316,7 @@ test("approved desktop waits for canplay and preserves the 4px/500ms retirement"
   assert.equal(f.video.playCalls, 1);
 });
 
-test("desktop autoplay denial stays on its poster without a new action or lifecycle retries", async () => {
+test("desktop autoplay denial waits for a gesture, then hides the play prompt", async () => {
   const f = fixture({ responsive: true, compact: false, plans: [() => Promise.reject({ name: "NotAllowedError" })] });
   f.controller.sync();
   f.video.dispatchEvent(new Event("canplay"));
@@ -319,10 +326,14 @@ test("desktop autoplay denial stays on its poster without a new action or lifecy
   f.doc.hidden = false;
   f.doc.dispatchEvent(new Event("visibilitychange"));
   f.win.dispatchEvent(new Event("pageshow"));
-  f.doc.dispatchEvent(new Event("touchend"));
-  f.controller.sync();
   assert.equal(f.video.playCalls, 1);
-  assert.equal(f.state.onPlayingCalls, 0);
+  assert.equal(f.state.blocked, true);
+  f.doc.dispatchEvent(new Event("touchend"));
+  await flush();
+  f.controller.sync();
+  assert.equal(f.video.playCalls, 2);
+  assert.equal(f.state.onPlayingCalls, 1);
+  assert.equal(f.state.blocked, false);
 });
 
 test("desktop falls back to MP4 after a source error and does not start at a scrolled entry", async () => {
