@@ -93,6 +93,8 @@ async function stop() {
 }
 function inspect(callback) {
   const db = new DatabaseSync(databasePath);
+  // The live queue can briefly hold the WAL write lock while the test installs a trigger.
+  db.exec('PRAGMA busy_timeout = 5000');
   try { return callback(db); } finally { db.close(); }
 }
 function stageInput(stages) {

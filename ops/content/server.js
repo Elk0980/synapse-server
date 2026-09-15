@@ -15,6 +15,7 @@ const { createSiteStore } = require('./site-store');
 const { createHughSettingsStore } = require('./hugh-settings-store');
 const { hashPassword, verifyPassword } = require('./passwords');
 const { createCompanyLinksReader } = require('./company-links-reader');
+const { createEmailUnsubscribeProxy, TOKEN: EMAIL_UNSUBSCRIBE_TOKEN } = require('./email-unsubscribe-proxy');
 
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
 const DATABASE_PATH = process.env.DATABASE_PATH || '/data/content.sqlite';
@@ -37,6 +38,7 @@ const SESSION_SECRET = (process.env.SESSION_SECRET || '').trim() || crypto.rando
 const CRM_URL = (process.env.CRM_URL || 'http://crm:8080').replace(/\/$/, '');
 const CRM_API_KEY = (process.env.CRM_API_KEY || '').trim();
 const readCompanyLinks = createCompanyLinksReader({crmUrl: CRM_URL, apiKey: CRM_API_KEY, companies: CONTENT_COMPANIES});
+const publicEmailUnsubscribe = createEmailUnsubscribeProxy({crmUrl: CRM_URL, apiKey: CRM_API_KEY});
 const CHAT_URL = (process.env.CHAT_URL || 'http://chat:8080').replace(/\/$/, '');
 const CHAT_API_KEY = (process.env.CHAT_API_KEY || '').trim();
 const CRM_IDENTITY_HEADER = 'x-synapse-crm-identity';
@@ -412,6 +414,9 @@ async function proxyCrm(request, response, url, cors) {
   const identity = initialSession.user;
   const readOnly = request.method === 'GET';
   const crmPath = url.pathname.slice('/content/crm'.length) || '/';
+  if (/^\/(?:email-campaigns|email-subscriptions)(?:\/|$)/.test(crmPath) && identity.role !== 'owner') {
+    fail(403, 'Рассылки доступны только владельцу');
+  }
   if (['/email-status', '/email-settings', '/email-settings/check'].includes(crmPath) && identity.role !== 'owner') {
     fail(403, 'Настройки и диагностика почты доступны только владельцу');
   }
@@ -703,6 +708,34 @@ const server = http.createServer(async (request, response) => {
         return reply(200, { ok: true });
       }
       fail(404, 'Не найдено');
+    }
+
+    // Capability link for recipients: no browser session or private CRM fields are forwarded.
+    if (parts[0] === 'public-email-unsubscribe') {
+      let result;
+      try {
+        if (parts.length !== 2 || !EMAIL_UNSUBSCRIBE_TOKEN.test(parts[1]) || !['GET', 'POST'].includes(request.method)) fail(404, 'Ссылка не найдена');
+        const chunks = [];
+        let size = 0;
+        for await (const chunk of request) {
+          size += chunk.length;
+          if (size > 1024) fail(413, 'Слишком большой запрос');
+          chunks.push(chunk);
+        }
+        result = await publicEmailUnsubscribe({token: parts[1], method: request.method, body: Buffer.concat(chunks).toString('utf8')});
+      } catch (error) {
+        const status = [404, 413, 502, 503].includes(error.status) ? error.status : 502;
+        const message = status === 404 ? 'Ссылка отписки не найдена или недействительна.'
+          : status === 413 ? 'Не удалось обработать запрос. Откройте ссылку из письма ещё раз.'
+            : 'Отписка временно недоступна. Попробуйте позже.';
+        result = {status, html: `<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Отписка</title><main><h1>Отписка от рассылки</h1><p>${message}</p></main></html>`};
+      }
+      response.writeHead(result.status, {
+        'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store',
+        'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff',
+        'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+      });
+      return response.end(result.html);
     }
 
     // A site's Caddy route selects its company; client query parameters cannot change it.

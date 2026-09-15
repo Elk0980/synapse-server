@@ -6,6 +6,10 @@ const { DatabaseSync } = require('node:sqlite');
 const { URL } = require('node:url');
 const { createEmailSettings } = require('./email-settings');
 const { createEmailOutbox } = require('./email-outbox');
+const { emailNotificationReady } = require('./email-notifications');
+const { createEmailSendLimit } = require('./email-send-limit');
+const { createCampaignTransport } = require('./email-campaign-transport');
+const { createEmailCampaigns, TOKEN: EMAIL_UNSUBSCRIBE_TOKEN } = require('./email-campaigns');
 const { createEmailDiagnostics } = require('./email-diagnostics');
 const { companyPublicLinks } = require('./company-links');
 
@@ -47,6 +51,7 @@ if (!Number.isInteger(RATE_LIMIT_MAX) || RATE_LIMIT_MAX < 1) {
 
 const db = new DatabaseSync(DATABASE_PATH);
 db.exec(`
+  PRAGMA busy_timeout = 5000;
   PRAGMA foreign_keys = ON;
   PRAGMA journal_mode = WAL;
   CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -541,13 +546,29 @@ const createLead = db.prepare(`
 `);
 const getLead = db.prepare('SELECT * FROM leads WHERE id = ?');
 const emailSettings = createEmailSettings(db, {apiKey: API_KEY});
-const emailOutbox = createEmailOutbox(db, emailSettings.notifications);
+const emailSendLimit = createEmailSendLimit(db, {dailyCap: process.env.CRM_MAIL_DAILY_CAP || 100});
+function notificationReady(lead) {
+  return emailNotificationReady(lead, emailSettings.getEnvironment());
+}
+const emailOutbox = createEmailOutbox(db, emailSettings.notifications, {
+  acquireSlot: lead => !notificationReady(lead) || emailSendLimit.acquire().ok,
+});
+const campaignTransport = createCampaignTransport({getEnvironment: emailSettings.getEnvironment});
+const emailCampaigns = createEmailCampaigns(db, {transport: campaignTransport, limiter: emailSendLimit,
+  publicBaseUrl: process.env.CRM_EMAIL_PUBLIC_BASE_URL || 'https://synapse.synapsebusiness.ru',
+  hasPriorityWork: () => db.prepare(`SELECT leads.company_code FROM lead_email_outbox queue JOIN leads ON leads.id=queue.lead_id
+    WHERE queue.status='sending' OR (queue.status='pending' AND queue.next_attempt_at<=?)`).all(new Date().toISOString()).some(notificationReady),
+});
 const emailDiagnostics = createEmailDiagnostics(db, {getEnvironment: emailSettings.getEnvironment});
 function deliverLeadEmails() {
   return emailOutbox.drain().catch(() => {
     // Do not expose SMTP responses or contact details in service logs.
     console.error('[crm] email outbox processing failed code=OUTBOX_PROCESSING');
   });
+}
+async function deliverQueuedEmails() {
+  await deliverLeadEmails();
+  await emailCampaigns.drain().catch(() => console.error('[crm] campaign processing failed code=CAMPAIGN_PROCESSING'));
 }
 const getLeadByContact = db.prepare(`SELECT * FROM leads WHERE normalized_contact = ?
   AND normalized_contact != '' AND company_code IS ? COLLATE NOCASE ORDER BY id LIMIT 1`);
@@ -2303,6 +2324,50 @@ async function route(request, response) {
   const publicPost = request.method === 'POST' && ['/leads', '/events'].includes(url.pathname);
   if (!publicPost) requireApiKey(request);
 
+  // Owner/session/CSRF checks are enforced by the existing content-service bridge.
+  // Company selection is mandatory here as well, and IDs never cross company scopes.
+  if (/^\/email-campaigns(?:\/|$)/.test(url.pathname) || url.pathname === '/email-subscriptions') {
+    const code = url.searchParams.get('companyCode');
+    const actorId = crmIdentity(request)?.userId || null;
+    let result, status = 200;
+    if (url.pathname === '/email-subscriptions') {
+      if (request.method === 'GET') result = emailCampaigns.subscriptions(code);
+      else if (request.method === 'PUT') result = emailCampaigns.subscribe(code, await readJson(request), actorId);
+      else fail(405, 'Метод не поддерживается');
+    } else {
+      const match = /^\/email-campaigns(?:\/(\d+)(?:\/(preview|launch|pause))?)?$/.exec(url.pathname);
+      if (!match) fail(404, 'Адрес не найден');
+      const [, id, action] = match;
+      if (!id && request.method === 'GET') result = emailCampaigns.list(code);
+      else if (!id && request.method === 'POST') { result = emailCampaigns.create(code, await readJson(request), actorId); status = 201; }
+      else if (id && !action && request.method === 'GET') result = emailCampaigns.get(id, code);
+      else if (id && !action && request.method === 'PATCH') result = emailCampaigns.update(id, code, await readJson(request));
+      else if (id && action === 'preview' && request.method === 'GET') result = emailCampaigns.preview(id, code);
+      else if (id && action === 'launch' && request.method === 'POST') result = emailCampaigns.launch(id, code, await readJson(request));
+      else if (id && action === 'pause' && request.method === 'POST') result = emailCampaigns.pause(id, code);
+      else fail(405, 'Метод не поддерживается');
+    }
+    return send(response, status, result, {...cors, 'cache-control': 'no-store'});
+  }
+  if (url.pathname.startsWith('/email-unsubscribe/')) {
+    if (!['GET', 'POST'].includes(request.method)) fail(405, 'Метод не поддерживается');
+    const token = url.pathname.slice('/email-unsubscribe/'.length);
+    const state = EMAIL_UNSUBSCRIBE_TOKEN.test(token) ? emailCampaigns.unsubscribe(token, request.method === 'POST') : {valid: false};
+    const title = !state.valid ? 'Ссылка недействительна' : state.unsubscribed ? 'Вы отписались от рассылки' : 'Отписка от рассылки';
+    const description = !state.valid ? 'Откройте ссылку отписки из полученного письма.' : state.unsubscribed ? 'Настройка сохранена. Новые рассылки этой компании отправляться не будут.' : 'Нажмите кнопку, чтобы больше не получать рассылки этой компании. Открытие этой страницы само по себе ничего не меняет.';
+    const form = state.valid && !state.unsubscribed ? '<form method="post"><button type="submit">Отписаться</button></form>' : '';
+    const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><style>
+      *{box-sizing:border-box}body{margin:0;padding:48px 20px;background:#f4f7f5;color:#192b24;font:17px/1.6 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+      main{max-width:640px;margin:0 auto;padding:32px;background:#fff;border:1px solid #dce6e0;border-radius:20px}
+      h1{margin:0 0 16px;font-size:clamp(26px,6vw,36px);line-height:1.2;overflow-wrap:anywhere}p{margin:0;color:#46594f}form{margin-top:28px}
+      button{min-height:48px;width:100%;padding:12px 20px;border:0;border-radius:12px;background:#20583d;color:#fff;font:inherit;font-weight:600;cursor:pointer}
+      button:hover{background:#17432e}button:focus-visible{outline:3px solid #c49b46;outline-offset:4px}@media(max-width:480px){body{padding:24px 16px}main{padding:24px 20px}}
+      </style></head><body><main><h1>${title}</h1><p>${description}</p>${form}</main></body></html>`;
+    response.writeHead(state.valid ? 200 : 404, {'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store',
+      'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff'});
+    return response.end(html);
+  }
+
   // The content service maps each public host to a known company. This internal
   // route still requires the CRM key and never serializes a full company card.
   if (url.pathname.startsWith('/company-links/')) {
@@ -2865,22 +2930,23 @@ const pipelineRulesTimer = IS_MAIN ? setInterval(() => {
   try { applyPipelineRules(); } catch (error) { console.error('Ошибка правил воронок:', error); }
 }, 60 * 60 * 1000) : null;
 pipelineRulesTimer?.unref();
-const emailOutboxTimer = IS_MAIN ? setInterval(deliverLeadEmails, 15000) : null;
+const emailOutboxTimer = IS_MAIN ? setInterval(deliverQueuedEmails, 2000) : null;
 emailOutboxTimer?.unref();
 server.on('close', () => { clearInterval(pipelineRulesTimer); clearInterval(emailOutboxTimer); });
 
 if (IS_MAIN) {
   server.listen(PORT, () => {
     console.log(`Мини-CRM слушает порт ${PORT}; база: ${DATABASE_PATH}`);
-    void deliverLeadEmails();
+    void deliverQueuedEmails();
   });
 }
 
 function shutdown() {
   clearInterval(pipelineRulesTimer);
   clearInterval(emailOutboxTimer);
+  const emailWorkersStopped = Promise.all([emailOutbox.stop(), emailCampaigns.stop()]);
   server.close(async () => {
-    await emailOutbox.stop();
+    await emailWorkersStopped;
     db.close();
     process.exit(0);
   });

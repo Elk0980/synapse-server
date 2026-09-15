@@ -4,7 +4,7 @@ const {emailErrorCode} = require('./email-notifications');
 const RETRY_DELAYS = [30000, 120000, 600000, 1800000, 3600000];
 const LEASE_MS = 120000;
 
-function createEmailOutbox(db, notifications, {logger = console, now = Date.now} = {}) {
+function createEmailOutbox(db, notifications, {logger = console, now = Date.now, acquireSlot = () => true} = {}) {
   // Only explicit submissions are enqueued. Existing leads are never batch mailed.
   db.exec(`
     CREATE TABLE IF NOT EXISTS lead_email_outbox (
@@ -50,11 +50,13 @@ function createEmailOutbox(db, notifications, {logger = console, now = Date.now}
     const expired = new Date(now() - LEASE_MS).toISOString();
     for (const row of due.all(time, expired)) {
       if (stopped) break;
+      const lead = leadById.get(row.lead_id);
+      if (!lead) continue;
+      // A shared quota refusal is not an SMTP attempt and must not consume a lease.
+      if (!acquireSlot(lead)) break;
       const attemptAt = new Date(now()).toISOString();
       const claimed = claim.get(attemptAt, row.lead_id, time, expired);
       if (!claimed) continue;
-      const lead = leadById.get(row.lead_id);
-      if (!lead) continue; // FK deletion removes the queue row with its lead.
       try {
         const delivered = await notifications.notifyLead(lead, {
           messageId: `<synapse-lead-${row.lead_id}@synapsebusiness.ru>`,
