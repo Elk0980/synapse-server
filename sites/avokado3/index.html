@@ -719,6 +719,7 @@ body>#cta{z-index:65}
 <link rel="stylesheet" href="callback.css?v=20260915-callback">
 <link rel="stylesheet" href="mobile-foundation.css?v=20260915-mobile">
 <link rel="stylesheet" href="mobile-method.css?v=20260915-desktop-fit">
+<link rel="stylesheet" href="hero-playback.css?v=20260915-play-recovery">
 <link rel="stylesheet" href="visitor-navigation.css?v=20260915-hero-type">
 <link rel="stylesheet" href="subscription-promo.css?v=20260915-subscriptions">
 </head>
@@ -752,6 +753,7 @@ body>#cta{z-index:65}
     <div class="t-slogan t-fade" data-edit="top.t-slogan-1">УВЕРЕННОСТЬ · СВОБОДА · РЕЗУЛЬТАТ</div>
     <div class="t-script script"><span class="t-script-line"><span class="t-script-text" data-edit="top.t-script-text-1">Быть красивой и уверенной —</span></span><span class="t-script-line"><span class="t-script-text" data-edit="top.t-script-text-2">это мой выбор</span></span></div>
     <div class="hero-shortcuts">
+      <button id="hero-play-button" class="hero-play-button" type="button" hidden>▶ Включить видео</button>
       <p class="hero-service-summary">Аппаратная коррекция фигуры<br>и лазерная эпиляция в Иркутске</p>
       <nav class="hero-directions" aria-label="Выберите направление">
         <a href="#apparatus" data-entry-point="hero_apparatus">Коррекция фигуры</a>
@@ -1207,6 +1209,7 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
 
 
 
+<script src="hero-playback.js?v=20260915-play-recovery"></script>
 <script>
 /* AVOKADO2 hero flow: one player, one scroll progress, no wheel/touch interception. */
 (function(){
@@ -1226,11 +1229,8 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
   video.addEventListener('error',showPhoto);
   function clamp(x){return Math.max(0,Math.min(1,x))}
   function ease(x){x=clamp(x);return x*x*(3-2*x)}
-  function play(){
-    if(!enabled||document.hidden)return;
-    var promise=video.play();
-    if(promise&&promise.catch)promise.catch(showPhoto);
-  }
+  var playback=AvokadoHeroPlayback.create(video,document.getElementById("hero-play-button"),function(){return enabled},showPhoto);
+  function play(){playback.play()}
   function enterTail(restart){
     tailRequested=true;
     body.classList.add('hero-flow--loop');
@@ -1275,6 +1275,7 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
     body.classList.toggle('hero-flow',enabled);
     shown=null;lastTime=0;
     if(!enabled){
+      playback.cancel();
       video.pause();
       if(frameId!==null&&video.cancelVideoFrameCallback)video.cancelVideoFrameCallback(frameId);
       frameId=null;
@@ -1301,7 +1302,7 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
     if(enabled&&!video.requestVideoFrameCallback&&!video.seeking&&Number.isFinite(video.duration)&&video.currentTime>=video.duration-.15)enterTail(true);
   });
   document.addEventListener('visibilitychange',function(){
-    if(document.hidden){video.pause()}
+    if(document.hidden){playback.cancel();video.pause()}
     else{play();watchVideo();schedule()}
   });
   addEventListener('scroll',schedule,{passive:true});
