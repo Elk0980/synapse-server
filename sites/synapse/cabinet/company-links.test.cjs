@@ -6,17 +6,22 @@ const source = fs.readFileSync(require.resolve('./clients.js'), 'utf8');
 const escape = value => String(value ?? '').replace(/[&<>"']/g,
   c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 const plain = value => JSON.parse(JSON.stringify(value));
-function setup() {
+function setup({query} = {}) {
+  const requests = [], renderedCards = [], status = {textContent: ''}, location = {hash: ''};
   const views = {}, content = {innerHTML: '', querySelectorAll: () => [],
-    querySelector: () => ({addEventListener() {}})};
+    querySelector: selector => selector === '[data-card-status]' ? status : {addEventListener() {}}};
   const window = {SbCabinet: {registerView: (name, view) => views[name] = view,
-    pipelineStages: {stages: [], load: async () => {}}}};
+    pipelineStages: {stages: [], load: async () => {}}}, testSavedCard: (view, id) => renderedCards.push({view, id})};
   const instrumented = source.replace('Object.assign(api, { renderCrmEntityRoute,',
-    'window.testForms = {formPayload, repeatRow, renderEntityForm, normalizeRepeat, config: CRM_ENTITIES["crm-companies"]}; Object.assign(api, { renderCrmEntityRoute,');
-  vm.runInNewContext(instrumented, {window, URL});
+    'window.testForms = {formPayload, saveEntityForm, repeatRow, renderEntityForm, normalizeRepeat, config: CRM_ENTITIES["crm-companies"]}; Object.assign(api, { renderCrmEntityRoute,')
+    .replace('const renderEntityCard = async (view, id) => {',
+      'const renderEntityCard = async (view, id) => window.testSavedCard(view, id); const originalRenderEntityCard = async (view, id) => {');
+  vm.runInNewContext(instrumented, {window, URL, location});
   views.clients.render(null, {identity: {role: 'owner'}, escapeHTML: escape, navigate() {},
-    hasPermission: () => true, scopeParams: () => ({}), byId: () => content});
-  return {ui: window.SbCabinet.companyLinksUI, forms: window.testForms, content};
+    hasPermission: () => true, scopeParams: () => ({companyId: 7}), byId: () => content,
+    crmQuery: async (path, params, options) => { requests.push({path, params, options}); return query ? query(path, params, options) : {id: 42}; },
+    csrfOptions: (method, body) => ({method, headers: {'X-CSRF-Token': 'test-token'}, body: JSON.stringify(body)})});
+  return {ui: window.SbCabinet.companyLinksUI, forms: window.testForms, content, requests, renderedCards, status, location};
 }
 const rows = [
   {type: 'telegram', label: 'Главный чат', url: 'https://t.me/studio'},
@@ -84,6 +89,53 @@ test('empty optional fields add no rows and clearing one primary URL keeps unrel
   const result = forms.formPayload(form, forms.config, {socials: rows}).socials;
   assert.equal(result.length, 5);
   assert.ok(result.some(row => row.url === 'https://t.me/second'));
+});
+
+test('actual save submits all nine company links when an existing company has socials:null, and also supports creation', async () => {
+  for (const existing of [true, false]) {
+    const page = setup();
+    const record = existing ? {id: 42, code: 'avokado', name: 'Авокадо', socials: null, websiteUrl: null} : undefined;
+    const form = formFor(page.ui, page.forms.config);
+    form.elements.code.value = 'avokado'; form.elements.name.value = 'Авокадо';
+    for (const input of form.named) input.value = 'https://example.test/' + input.dataset.companySocial;
+    const error = {hidden: true, textContent: ''};
+    form.querySelector = selector => selector === '[role=alert]' ? error : null;
+    let prevented = false;
+    await page.forms.saveEntityForm({currentTarget: form, preventDefault() { prevented = true; }}, 'crm-companies', record);
+    assert.equal(prevented, true);
+    assert.equal(error.hidden, true, error.textContent);
+    assert.equal(page.requests.length, 1, 'submit must reach the HTTP boundary');
+    const request = page.requests[0], body = JSON.parse(request.options.body);
+    assert.equal(request.path, existing ? '/companies/42' : '/companies');
+    assert.equal(request.options.method, existing ? 'PATCH' : 'POST');
+    assert.equal(request.options.headers['X-CSRF-Token'], 'test-token');
+    assert.deepEqual(plain(request.params), {companyId: 7});
+    assert.equal(body.websiteUrl, 'https://studio.test/');
+    assert.equal(body.socials.length, 8);
+    assert.deepEqual(body.socials.map(row => row.type), plain(page.ui.fields.map(([type]) => type)));
+    for (const row of body.socials) assert.equal(row.url, 'https://example.test/' + row.type);
+    if (existing) {
+      assert.equal('code' in body, false, 'PATCH excludes unchanged company fields');
+      assert.equal('name' in body, false);
+      assert.equal(record.socials, null, 'save does not mutate the loaded nullable record');
+      assert.deepEqual(page.renderedCards, [{view: 'crm-companies', id: 42}]);
+      assert.equal(page.status.textContent, 'Сохранено');
+    } else assert.equal(page.location.hash, 'crm-companies/42');
+  }
+});
+
+test('actual save treats null, omitted and empty social arrays as unchanged when the form remains empty', async () => {
+  for (const socials of [null, undefined, []]) {
+    const page = setup();
+    const record = {id: 42, code: 'avokado', name: 'Авокадо', socials, websiteUrl: 'https://studio.test/'};
+    const form = formFor(page.ui, page.forms.config);
+    form.elements.code.value = record.code; form.elements.name.value = record.name;
+    const error = {hidden: true, textContent: ''}; form.querySelector = () => error;
+    await page.forms.saveEntityForm({currentTarget: form, preventDefault() {}}, 'crm-companies', record);
+    assert.equal(error.hidden, true, error.textContent);
+    assert.equal(page.requests.length, 0, 'normalization must not create an empty PATCH');
+    assert.deepEqual(page.renderedCards, [{view: 'crm-companies', id: 42}]);
+  }
 });
 
 test('fixed links reject unsafe schemes, incomplete addresses and embedded credentials', () => {
