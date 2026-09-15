@@ -64,9 +64,9 @@ test('later cabinet edits, empty text and unchanged notes remain intact', () => 
 
 test('the current offer amount still comes from the cabinet document', () => {
   const [html] = render([{ key: 'promo.promo-copy-2', value: 'Пробный сеанс — 750 ₽ вместо 2 300 ₽.' }]);
-  assert.match(html, /promo__price\">750 ₽<\/strong>/);
-  assert.match(html, /promo__was\">вместо 2 300 ₽<\/span>/);
-  assert.doesNotMatch(html, /500 ₽|2 100 ₽/);
+  assert.match(html, /promo__price\">750\u00a0₽<\/strong>/);
+  assert.match(html, /promo__was\">вместо 2\u00a0300\u00a0₽<\/span>/);
+  assert.doesNotMatch(html, /500[ \u00a0]₽|2[ \u00a0]100[ \u00a0]₽/);
   assert.match(html, /<\/span><\/span>$/); // No punctuation-only line after the price.
   const [continued] = render([{ key: 'promo.promo-copy-2', value: '750 ₽ вместо 2 300 ₽. Только по записи.' }]);
   assert.match(continued, /<\/span><\/span>\. Только по записи\.$/);

@@ -30,8 +30,12 @@ test('legacy API booking links cannot restore Telegram in price or showcase acti
   const cert = links(window.AlviPrice.renderSections(legacy), legacy.certificates.button || 'Оформить сертификат');
   assert.deepEqual(cert, [chat]);
 });
-test('static main, quiz and price actions work with JavaScript unavailable', () => {
-  for (const name of ['index.html', 'price.html']) checkBookings(fs.readFileSync(path.join(root, name), 'utf8'));
+test('static main and price actions work with JavaScript unavailable', () => {
+  // Runtime templates are exercised by quiz-flow.test.js, not static HTML checks.
+  for (const name of ['index.html', 'price.html']) {
+    const html = fs.readFileSync(path.join(root, name), 'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
+    checkBookings(html);
+  }
   assert.equal(data.links.book, booking);
   assert.equal(data.links.chat, chat);
 });

@@ -1,0 +1,87 @@
+/* Readable Lora text and comfortable controls on the landing page and full price list. */
+.after-hero .site-footer__service,
+.after-hero .site-footer__callback,
+.price-page .price-header__back { min-height: 44px; }
+
+@media (max-width: 56.24rem) {
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+  /* Keep photographs in their existing flow; give the text and actions enough space. */
+  :is(#for-self, #for-two) .program-grid--compact-ready { gap: 20px; }
+  :is(#for-self, #for-two) .program-grid--compact-ready > .program-card:not(.program-card--photo),
+  :is(#for-self, #for-two) .program-grid--compact-ready .program-card__body { padding: 18px 16px; }
+  :is(#for-self, #for-two) .program-grid--compact-ready .program-card h3 {
+    font-size: clamp(20px, 3.5vw, 24px);
+    line-height: 1.35;
+    overflow-wrap: break-word;
+    text-wrap: balance;
+  }
+  :is(#for-self, #for-two) .program-grid--compact-ready .program-facts {
+    margin-top: 16px;
+    gap: 4px;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  :is(#for-self, #for-two) .program-grid--compact-ready .program-facts dt { font-size: 14px; }
+  :is(#for-self, #for-two) .program-grid--compact-ready .program-facts dd { margin-bottom: 8px; }
+  :is(#for-self, #for-two) .program-grid--compact-ready .pc__actions { gap: 8px; padding-top: 14px; }
+  :is(#for-self, #for-two) .program-grid--compact-ready .pc__button {
+    min-height: 48px;
+    padding: 11px 12px;
+    font-size: 16px;
+    line-height: 1.4;
+  }
+  :is(#for-self, #for-two) .program-grid--compact-ready .program-card__details { min-height: 44px; }
+  .pc__button { min-height: 48px; font-size: 16px; line-height: 1.4; }
+
+  #contacts .contacts-link { min-height: 48px; padding: 12px 14px; }
+  #contacts .contacts-link__label { font-size: 16px; line-height: 1.4; }
+  #contacts .contacts-link__hint { font-size: 13px; line-height: 1.5; opacity: 1; }
+  .callback-form__fields label { font-size: 16px; line-height: 1.5; }
+  .callback-form__fields button { font-size: 16px; line-height: 1.4; }
+  .callback-form__consent { min-height: 44px; font-size: 14px; line-height: 1.6; }
+  .callback-form__consent input { min-height: 24px; width: 24px; height: 24px; flex-basis: 24px; }
+  .quiz-option { font-size: 16px; line-height: 1.5; }
+  .form-consent { font-size: 14px; line-height: 1.6; }
+  .cookie-notice { font-size: 14px; line-height: 1.5; gap: 12px; padding-inline: 16px; }
+  .cookie-notice button { min-height: 44px; font: 500 14px/1.4 "Lora", Georgia, serif; }
+
+  /* Existing mobile price rows retain their service/time/price layout and labels. */
+  .price-page .pc { padding: 20px 16px; }
+  .price-page .pc__title { font-size: 23px; line-height: 1.35; overflow-wrap: break-word; }
+  .price-page .pc__list { font-size: 16px; line-height: 1.6; }
+  .price-page .pc__dur { font-size: 15px; }
+  .price-page .pt tbody td { font-size: 16px; line-height: 1.5; }
+  .price-page .pt tbody td:first-child { font-size: 17px; line-height: 1.5; overflow-wrap: break-word; }
+  .price-page .pt tbody td:nth-child(2)::before,
+  .price-page .pt tbody td:nth-child(3)::before { font-size: 13px; line-height: 1.5; }
+}
+
+@media (max-width: 600px) {
+  :is(#for-self, #for-two) .program-grid--compact-ready,
+  .after-hero .space-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Compact hero scenes are in normal flow, so long content stays scrollable in landscape. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .hero.is-compact-mode .hero-scene { padding-block: 4rem; }
+  .hero.is-compact-mode .hero-scene[data-scene="0"] {
+    padding-top: calc(6rem + env(safe-area-inset-top));
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+  }
+  .hero.is-compact-mode .hero-scene[data-scene="0"] .hero-scene__content { min-height: 0; }
+  .hero.is-compact-mode .hero-scene[data-scene="0"] .hero-title {
+    max-width: 14ch;
+    font-size: clamp(32px, 6vw, 44px);
+    line-height: 1.1;
+  }
+  .hero.is-compact-mode .scene-title { font-size: clamp(30px, 5vw, 40px); line-height: 1.15; }
+  .hero.is-compact-mode .hero-scene[data-scene="0"] .hero-ratings {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    margin-top: 16px;
+    padding-top: 0;
+  }
+  .hero.is-compact-mode .scroll-cue { display: none; }
+}

@@ -15,7 +15,7 @@ const LEGACY_SITES = [
     'https://drafts.synapsebusiness.ru/avokado/', null, null, null],
   ['drafts-alvi', 'alvi', 'Черновики ALVI', 'draft',
     'https://drafts.synapsebusiness.ru/alvi/', null, null, null],
-  ['alvi', 'alvi', 'ALVI', 'draft', 'https://alvi.synapsebusiness.ru/', 'alvi',
+  ['alvi', 'alvi', 'АЛВИ — основной сайт', 'published', 'https://spaalvi-38.ru/', 'alvi',
     '/site-editor.html?site=alvi', '/price-editor.html?site=alvi'],
   ['avokado', 'avokado', 'АВОКАДО — предыдущая версия', 'draft', 'https://avokado.synapsebusiness.ru/', 'avokado',
     '/site-editor.html?site=avokado', '/price-editor.html?site=avokado'],
@@ -77,6 +77,21 @@ function createSiteStore(db, authStore, saveDocument) {
     for (const [id, status] of [['avokado', 'draft'], ['avokado2', 'draft'], ['avokado3', 'published']]) {
       publishAvokado.run(status, publicationStamp, id, status);
     }
+    db.prepare('INSERT INTO site_migrations (id, applied_at) VALUES (?, ?)').run(migration, publicationStamp);
+  });
+  // Publish the existing ALVI identity once; keep its editors, activity and saved content.
+  // The marker covers name and URL too, so later owner edits are never reset on startup.
+  transaction(db, () => {
+    const migration = 'alvi_publication_20260915';
+    if (db.prepare('SELECT id FROM site_migrations WHERE id=?').get(migration)) return;
+    const publicationStamp = new Date().toISOString();
+    db.prepare(`UPDATE managed_sites SET
+      name=CASE WHEN name IN ('ALVI','АЛВИ') THEN 'АЛВИ — основной сайт' ELSE name END,
+      public_url=CASE WHEN public_url='https://alvi.synapsebusiness.ru/' THEN 'https://spaalvi-38.ru/' ELSE public_url END,
+      publication_status='published', updated_at=?
+      WHERE id='alvi' AND company_code='alvi' AND source='legacy' AND deleted_at IS NULL
+        AND (publication_status<>'published' OR name IN ('ALVI','АЛВИ')
+          OR public_url='https://alvi.synapsebusiness.ru/')`).run(publicationStamp);
     db.prepare('INSERT INTO site_migrations (id, applied_at) VALUES (?, ?)').run(migration, publicationStamp);
   });
   const visible = (user, row) => user.role === 'owner' || user.companyCodes.includes(row.company_code);
