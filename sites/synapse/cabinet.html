@@ -999,14 +999,14 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260916-search-fields";
+  window.SB_CABINET_ASSET_VERSION = "20260916-menu";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
     window.SbCabinet.views[name] = definition;
   };
   const cabinetAssets = ["home", "tasks", "leads", "deals", "clients", "chat", "hugh", "analytics",
-    "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account", "trademarks", "campaigns", "company-information", "autoposting", "module-guide"];
+    "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account", "trademarks", "campaigns", "company-information", "autoposting", "module-guide", "menu-preferences"];
   const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat", "hugh", "settings", "trademarks", "sites", "campaigns", "company-information", "autoposting", "workspace"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
@@ -1480,6 +1480,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       }
       if (hasPermission("crm.view")) registeredViews.crm.initialize(context);
       setDrawer(false);
+      SbCabinet.initMenuPreferences?.({identity, setDrawer});
       setView(viewFromHash());
       registeredViews.sites.initialize(context);
       if (hasPermission("account.view")) registeredViews.accounts.initialize(context);
@@ -1562,6 +1563,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
+    if (document.querySelector('.menu-settings[open]')) return;
     if (!byId("platform-panel").hidden) {
       byId("platform-panel").hidden = true;
       byId("platform-trigger").setAttribute("aria-expanded", "false");
