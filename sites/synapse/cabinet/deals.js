@@ -534,7 +534,8 @@
       let value = record[key];
       if (key.endsWith("Date")) value = date(value);
       if (key === "pipelineStage") value = state.stages.find((stage) => stage.code === value)?.label || value;
-      return `<div><dt>${html(label)}</dt><dd>${html(value || "—")}</dd></div>`;
+      return `<div><dt>${html(label)}</dt><dd>${key === 'websiteUrl' && value && cabinet.companyLinksUI
+        ? cabinet.companyLinksUI.anchor(value, html) : html(value || "—")}</dd></div>`;
     }).join("");
     return `<dl class="crm-details">${rows}</dl>`;
   };
@@ -557,7 +558,7 @@
     const legal = (state.overview.legalEntities || []).map((entity) => {
       return `<li>${html(entity.name || entity.shortName)}${entity.inn ? ` · ИНН ${html(entity.inn)}` : ""}</li>`;
     }).join("");
-    return `${details(company, fields)}
+    return `${details(company, fields)}${cabinet.companyLinksUI?.summary(company, html) || ''}
       <button class="plain-button" type="button" data-open-company>Открыть в базе клиентов</button>
       <h3>Юридические лица</h3>${legal ? `<ul>${legal}</ul>` : empty()}`;
   };

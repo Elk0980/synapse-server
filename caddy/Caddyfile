@@ -42,6 +42,14 @@ www.avokado38.ru {
 
 avokado38.ru {
   root * /srv/sites/avokado3
+  @company_links {
+    path /api/company-links
+    method GET
+  }
+  handle @company_links {
+    rewrite * /public-company-links/avokado3
+    reverse_proxy content:8080
+  }
   @leads {
     path /api/leads
     method POST
@@ -89,6 +97,14 @@ avokado38.ru {
 
 avokado.synapsebusiness.ru {
   root * /srv/sites/avokado
+  @company_links {
+    path /api/company-links
+    method GET
+  }
+  handle @company_links {
+    rewrite * /public-company-links/avokado
+    reverse_proxy content:8080
+  }
   @track {
     path /track
     method POST
@@ -129,6 +145,14 @@ avokado.synapsebusiness.ru {
 # --- Клиент: Авокадо2 (экспериментальная копия) -----------------------------
 avokado2.synapsebusiness.ru {
   root * /srv/sites/avokado2
+  @company_links {
+    path /api/company-links
+    method GET
+  }
+  handle @company_links {
+    rewrite * /public-company-links/avokado2
+    reverse_proxy content:8080
+  }
   @track {
     path /track
     method POST
@@ -170,6 +194,14 @@ avokado2.synapsebusiness.ru {
 # --- АВОКАДО 3: служебный адрес основной версии -----------------------------
 avokado3.synapsebusiness.ru {
   root * /srv/sites/avokado3
+  @company_links {
+    path /api/company-links
+    method GET
+  }
+  handle @company_links {
+    rewrite * /public-company-links/avokado3
+    reverse_proxy content:8080
+  }
   @track {
     path /track
     method POST
@@ -215,6 +247,14 @@ www.spaalvi-38.ru {
 
 spaalvi-38.ru {
   root * /srv/sites/alvi
+  @company_links {
+    path /api/company-links
+    method GET
+  }
+  handle @company_links {
+    rewrite * /public-company-links/alvi
+    reverse_proxy content:8080
+  }
   @leads {
     path /api/leads
     method POST
@@ -269,6 +309,14 @@ spaalvi-38.ru {
 
 alvi.synapsebusiness.ru {
   root * /srv/sites/alvi
+  @company_links {
+    path /api/company-links
+    method GET
+  }
+  handle @company_links {
+    rewrite * /public-company-links/alvi
+    reverse_proxy content:8080
+  }
   # Формы ALVI создают заявки в общей мини-CRM, как и остальные заявки платформы.
   @leads {
     path /api/leads
@@ -383,6 +431,14 @@ chat.synapsebusiness.ru {
 # --- Palitra Love: магазин цветов и воздушных шаров (черновик) -------------
 palitra-love.synapsebusiness.ru {
   root * /srv/sites/palitra-love
+  @company_links {
+    path /api/company-links
+    method GET
+  }
+  handle @company_links {
+    rewrite * /public-company-links/palitra
+    reverse_proxy content:8080
+  }
   @palitra_price {
     path /api/price /content/palitra/price
     method GET

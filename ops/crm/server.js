@@ -7,6 +7,7 @@ const { URL } = require('node:url');
 const { createEmailSettings } = require('./email-settings');
 const { createEmailOutbox } = require('./email-outbox');
 const { createEmailDiagnostics } = require('./email-diagnostics');
+const { companyPublicLinks } = require('./company-links');
 
 const IS_MAIN = require.main === module;
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
@@ -2301,6 +2302,21 @@ async function route(request, response) {
   takeRateLimit(request);
   const publicPost = request.method === 'POST' && ['/leads', '/events'].includes(url.pathname);
   if (!publicPost) requireApiKey(request);
+
+  // The content service maps each public host to a known company. This internal
+  // route still requires the CRM key and never serializes a full company card.
+  if (url.pathname.startsWith('/company-links/')) {
+    if (request.method !== 'GET') fail(405, 'Метод не поддерживается');
+    const code = url.pathname.slice('/company-links/'.length).toLowerCase();
+    if (!/^[a-z0-9_-]{2,64}$/.test(code)) {
+      fail(400, 'Некорректный код компании', { code: 'VALIDATION_ERROR', field: 'companyCode' });
+    }
+    const company = db.prepare(
+      'SELECT code, website_url, socials FROM companies WHERE code = ? COLLATE NOCASE AND is_deleted = 0'
+    ).get(code);
+    if (!company) fail(404, 'Компания не найдена', { code: 'NOT_FOUND' });
+    return send(response, 200, companyPublicLinks(company), { ...cors, 'cache-control': 'no-store' });
+  }
 
   if (url.pathname === '/email-settings') {
     if (request.method === 'GET') return send(response, 200, emailSettings.getPublic(), {...cors, 'cache-control': 'no-store'});
