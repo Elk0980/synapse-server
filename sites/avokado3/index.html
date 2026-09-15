@@ -138,6 +138,7 @@
   .sticky-cta>a:focus-visible{outline:3px solid #fff3cf;outline-offset:3px}
   .sticky-cta.on{transform:translateY(0);opacity:1;visibility:visible;pointer-events:auto}
   .sticky-cta.on.finale-hidden{transform:translateY(18px);opacity:0;visibility:hidden;pointer-events:none}
+  .sticky-cta.on.is-scrolling{transform:translateY(90px);opacity:0;visibility:hidden;pointer-events:none;transition:transform .18s ease,opacity .18s ease}
 
   section{position:relative}
   .section-blend{z-index:2;isolation:isolate}
@@ -1506,6 +1507,6 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
 </script>
 <script src="https://synapse.synapsebusiness.ru/track.js?v=20260905" data-company="avokado" defer></script>
 <script src="contact-route.js?v=20260915-contacts"></script>
-<script src="scroll-controls.js?v=20260915-loop"></script>
+<script src="scroll-controls.js?v=20260915-all-screens"></script>
 </body>
 </html>

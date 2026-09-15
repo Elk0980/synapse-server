@@ -1,4 +1,4 @@
-/* Mobile action visibility and an intentional next lap after the page end. */
+/* Fixed action visibility and an intentional next lap after the page end. */
 (function(root,factory){
  'use strict';
  const api=factory();
@@ -13,7 +13,8 @@
   function reveal(){if(panel)panel.classList.remove('is-scrolling');}
   function moving(){
    win.clearTimeout(idleTimer);
-   if(panel&&mobile.matches&&!panel.contains(doc.activeElement))panel.classList.add('is-scrolling');
+   const keyboardFocus=panel&&doc.activeElement&&panel.contains(doc.activeElement)&&doc.activeElement.matches(':focus-visible');
+   if(panel&&!keyboardFocus)panel.classList.add('is-scrolling');
    idleTimer=win.setTimeout(reveal,220);
   }
   function scroll(){

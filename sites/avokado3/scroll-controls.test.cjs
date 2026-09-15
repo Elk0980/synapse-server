@@ -11,12 +11,12 @@ function setup(isMobile=true){
  const advance=ms=>{clock+=ms;for(const [n,t]of timers)if(t.time<=clock){timers.delete(n);t.fn();}};
  start(win,doc);return {win,doc,classes,emit,advance,media,top};
 }
-test('mobile actions hide throughout movement and return 220ms after the last movement; desktop stays visible',()=>{
+test('phone and desktop actions hide throughout movement and return 220ms after the last movement',()=>{
  const s=setup();s.win.scrollY=100;s.emit('scroll');assert.ok(s.classes.has('is-scrolling'));
  s.advance(150);s.win.scrollY=200;s.emit('scroll');s.advance(219);assert.ok(s.classes.has('is-scrolling'));
  s.advance(1);assert.ok(!s.classes.has('is-scrolling'));
  s.win.scrollY=300;s.emit('scroll');s.media.matches=false;s.media.change();assert.ok(!s.classes.has('is-scrolling'));
- s.win.scrollY=400;s.emit('scroll');assert.ok(!s.classes.has('is-scrolling'));
+ s.win.scrollY=400;s.emit('scroll');assert.ok(s.classes.has('is-scrolling'));s.advance(220);assert.ok(!s.classes.has('is-scrolling'));
 });
 test('footer arrival and anchor navigation stay put; continued downward input starts the next lap',()=>{
  const s=setup();s.win.scrollY=4200;s.emit('scroll');s.advance(1000);assert.equal(s.win.calls,undefined);
