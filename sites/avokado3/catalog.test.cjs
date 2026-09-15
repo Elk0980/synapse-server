@@ -57,6 +57,27 @@ test('laser duration is hidden in cards and tables; massage keeps it', () => {
   }
 });
 
+test('saved offer terms remain visible next to the price when mobile details are closed', () => {
+  for (const full of [false, true]) {
+    const trialCard = data => render(data, full).match(/<article\b[^>]*data-service="first-1"[\s\S]*?<\/article>/)[0];
+    const html = trialCard(defaults);
+    const terms = item(defaults, 'first-1').composition;
+    const visible = html.replace(/<details\b[\s\S]*?<\/details>/g, '');
+    assert.ok(visible.includes(terms), 'first-visit condition survives collapsed details');
+    assert.ok(visible.indexOf('500 ₽') < visible.indexOf(terms), 'condition follows its price');
+    assert.equal(html.split(terms).length - 1, 1, 'no repeated condition inside details');
+    const changed = copy(defaults);
+    item(changed, 'first-1').composition = 'Условия владельца <акция>';
+    item(changed, 'first-1').price = '777 ₽';
+    const updated = trialCard(changed);
+    assert.ok(updated.includes('Условия владельца &lt;акция&gt;'));
+    assert.ok(updated.includes('777 ₽'));
+    assert.ok(!updated.includes(terms), 'does not replace saved terms with hardcoded first-visit copy');
+    item(changed, 'first-1').composition = '';
+    assert.ok(!trialCard(changed).includes('av-offer-terms'), 'owner can remove the field');
+  }
+});
+
 test('legacy promotions become 45 minutes without altering regular services or prices', () => {
   const legacy = copy(defaults);legacy.catalogVersion = 2;
   item(legacy, 'first-1').duration = '60 мин';item(legacy, 'first-1').title = 'ТУРБО-массаж всего тела · 60 мин';

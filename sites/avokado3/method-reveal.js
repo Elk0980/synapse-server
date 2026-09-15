@@ -114,7 +114,9 @@
     const plan = frameAt(0, unit, scenes.length, state.target, state.elements.length, state.work, slideWeights);
     const desiredHeight = Math.ceil(height + unit * plan.totalUnits);
     if (root.style.height !== desiredHeight + 'px') root.style.height = desiredHeight + 'px';
-    const frame = frameAt(-root.getBoundingClientRect().top, unit, scenes.length, state.target, state.elements.length, state.work, slideWeights);
+    const bounds = root.getBoundingClientRect();
+    root.classList.toggle('method-leaving', bounds.bottom < height);
+    const frame = frameAt(-bounds.top, unit, scenes.length, state.target, state.elements.length, state.work, slideWeights);
     if (state.mobileSlides) state.mobileSlides.update(frame);
     if (state.lastIndex !== frame.index) {
       scenes.forEach((scene, i) => {
