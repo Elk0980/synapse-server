@@ -42,3 +42,12 @@
 /* Transparent surfaces throughout the photo catalogue; type keeps full opacity. */
 .av-catalog .av-facts dt,.av-catalog .av-facts s{color:#e0dccb}
 .av-catalog .av-button:not(.av-button--gold){background:rgba(18,30,22,.38)}
+
+/* Laser price tables contain only service and price. */
+.av-table--no-duration th:first-child{width:72%}.av-table--no-duration th:last-child{width:28%}
+
+/* A visible price action for each service direction. */
+.av-catalog .av-price-link{display:inline-flex;align-items:center;justify-content:center;gap:14px;min-height:54px;max-width:100%;padding:15px 24px;border:1px solid #ecd5a0;border-radius:999px;background:linear-gradient(135deg,#f0ddaa,#d6b676);color:#172014;text-decoration:none;font:600 15px/1.45 Manrope,sans-serif;box-shadow:0 7px 22px rgba(0,0,0,.22);text-align:center}
+.av-catalog .av-price-link:hover{filter:brightness(1.08);box-shadow:0 8px 28px rgba(0,0,0,.28)}
+.av-catalog .av-price-link:focus-visible{outline:3px solid #fff0c8;outline-offset:4px}
+@media(max-width:700px){.av-catalog .av-price-link{display:flex;width:100%;padding:14px 18px;font-size:14px;min-height:54px}}

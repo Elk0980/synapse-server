@@ -1,0 +1,59 @@
+.avokado-editor{--bg:#0e1410;--ink:#efe9dc;--ink-dim:#d9d4c4;--ink-faint:#c7c1ad;--gold:#dfc58d;--line:rgba(216,185,129,.26);--av-editor-bar-height:150px;background:#0e1410;font-family:Manrope,'Segoe UI',sans-serif}
+.avokado-editor .page-water{background:#0e1410 url('https://avokado3.synapsebusiness.ru/assets/hero-intro-poster.jpg') center/cover no-repeat}
+.avokado-editor .page-water__veil{background:linear-gradient(180deg,rgba(10,17,12,.52),rgba(10,17,12,.66));backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+.avokado-editor .ed-bar{position:sticky;top:0;padding:12px clamp(16px,3vw,40px);gap:10px 14px;background:rgba(14,20,16,.88);border-color:var(--line)}
+.avokado-editor .ed-bar>.sb-brand{display:none}
+.av-editor-heading{display:flex;align-items:center;gap:22px;flex:1 1 300px;min-width:0;order:0}
+.avokado-editor .ed-bar__title{font:500 15px/1.4 Manrope,sans-serif;min-width:0;margin:0}
+.avokado-editor .ed-bar__title small{font:400 11px/1.5 Manrope,sans-serif;margin-top:4px;color:#d2c9b4}
+.av-editor-brand{display:inline-flex;flex-direction:column;gap:4px;text-decoration:none;flex:none;color:#d8b981}
+.av-editor-brand__word{display:flex;align-items:center;font:500 27px/1 Cormorant,Georgia,serif;letter-spacing:.21em}
+.av-editor-brand svg{width:.75em;height:1em;margin-right:.19em}
+.av-editor-brand__sub{font:500 8px/1.4 Manrope,sans-serif;letter-spacing:.3em;text-transform:uppercase}
+.avokado-editor .av-editor-back{order:1;white-space:nowrap;min-height:44px;border-color:#d8b981;color:#f0dcaf}
+.avokado-editor #ed-save{order:2;min-height:44px;padding-inline:24px;box-shadow:0 5px 18px #0003}
+.av-editor-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;flex:1 1 100%;order:3;min-width:0}
+.avokado-editor .ed-btn{font-family:Manrope,sans-serif;min-height:40px;font-size:13px;line-height:1.35;text-decoration:none}
+.avokado-editor .av-editor-actions .ed-btn{padding:8px 13px;background:rgba(18,29,21,.46)}
+.avokado-editor .ed-bar>.ed-status{order:4;flex-basis:100%;max-width:none;text-align:left;font-size:12px;line-height:1.4}
+.avokado-editor .ed-bar>.ed-status:empty{display:none}
+.avokado-editor .price-layout{grid-template-columns:235px minmax(0,1fr);gap:30px;padding:26px clamp(16px,3vw,40px) 70px}
+.avokado-editor .pnav{top:calc(var(--av-editor-bar-height) + 16px)!important;max-height:calc(100dvh - var(--av-editor-bar-height) - 32px)!important;background:rgba(14,24,17,.68)}
+.avokado-editor .pnav__top{font-family:Manrope,sans-serif;font-size:14px;line-height:1.5}
+.avokado-editor .pnav__sub a{font-size:12px}
+.avokado-editor .ps,.avokado-editor .pc{scroll-margin-top:calc(var(--av-editor-bar-height) + 20px)}
+.avokado-editor .ps__title{font:400 clamp(27px,3vw,38px)/1.2 Georgia,serif}
+.avokado-editor .pc__title,.avokado-editor .ed-modal__box h3{font-family:Georgia,serif;font-weight:400}
+.avokado-editor .pc,.avokado-editor .pt-wrap,.avokado-editor .cert__card{background:rgba(14,24,17,.64);border-color:var(--line)}
+.avokado-editor .ed-form label,.avokado-editor .ed-field__label{font:500 13px/1.45 Manrope,sans-serif;color:#ded6c1;letter-spacing:0}
+.avokado-editor .ed-form input:not([type=checkbox]):not([type=range]),.avokado-editor .ed-form textarea,.avokado-editor .ed-field input:not([type=range]),.avokado-editor .ed-field textarea,.avokado-editor .ed-select,.avokado-editor .ed-form select{min-height:44px;padding:10px 12px;font:400 15px/1.5 Manrope,sans-serif;border:1px solid #d8b98166;background:rgba(8,15,10,.72);color:#fff7e8;border-radius:10px;max-width:100%}
+.avokado-editor .ed-select{min-width:0}
+.avokado-editor .ed-form input:focus-visible,.avokado-editor .ed-form textarea:focus-visible,.avokado-editor .ed-select:focus-visible,.avokado-editor .ed-btn:focus-visible,.av-editor-brand:focus-visible{outline:2px solid #f0d18b;outline-offset:3px}
+.avokado-editor .ed-canvas{background-color:rgba(10,19,14,.56);background-image:radial-gradient(rgba(227,212,167,.16) 1px,transparent 1.2px);height:calc(100dvh - var(--av-editor-bar-height))!important;min-height:260px}
+.avokado-editor .ed-tools{max-height:140px;overflow:auto;align-items:flex-start}
+.avokado-editor .ed-tools .ed-btn{min-height:34px;font-size:12px}
+.avokado-editor .ed-panel{background:rgba(12,21,15,.94);border-color:#d8b98166}
+.avokado-editor .ed-panel__close{width:40px;min-height:40px}
+@media(max-width:980px){
+ .avokado-editor .price-layout{grid-template-columns:1fr;gap:20px}
+ .avokado-editor .pnav{position:relative;top:auto!important;max-height:40dvh!important;overflow:auto}
+ .avokado-editor .pnav>ul{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+}
+@media(max-width:700px){
+ .avokado-editor .ed-bar{padding:10px 14px;gap:8px}
+ .av-editor-heading{flex-basis:100%;gap:16px}
+ .av-editor-brand__word{font-size:23px}.av-editor-brand__sub{font-size:7px}
+ .avokado-editor .ed-bar__title{font-size:12px;flex:1}
+ .avokado-editor .ed-bar__title small{font-size:10px}
+ .avokado-editor .av-editor-back{flex:1;justify-content:center;font-size:12px}
+ .avokado-editor #ed-save{flex:1;justify-content:center}
+ .av-editor-actions{flex-wrap:nowrap;overflow-x:auto;padding-bottom:3px;scrollbar-width:thin}
+ .av-editor-actions>*{flex:none}.avokado-editor .av-editor-actions .ed-btn{white-space:nowrap;font-size:11px;min-height:38px;padding:7px 11px}
+ .avokado-editor .price-layout{padding:20px 14px 48px}
+ .avokado-editor .ed-form{grid-template-columns:1fr;gap:12px}
+ .avokado-editor .ed-form input:not([type=checkbox]),.avokado-editor .ed-form textarea,.avokado-editor .ed-field input,.avokado-editor .ed-field textarea{font-size:16px}
+ .avokado-editor .ed-bar>.ed-status{font-size:11px}
+ .avokado-editor .pt{min-width:28rem}
+ .avokado-editor .ed-photo__preview{width:min(100%,220px)}
+ .avokado-editor .ed-frame-hint{font-size:10px;line-height:1.4;bottom:8px;max-width:calc(100% - 24px)}
+}

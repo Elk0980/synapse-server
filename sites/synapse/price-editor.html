@@ -355,6 +355,7 @@
 <link rel="apple-touch-icon" sizes="180x180" href="brand/hugh-icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="apple-mobile-web-app-title" content="Synapse Business">
+<script defer src="avokado-editor-theme.js?v=20260915-brand"></script>
 </head>
 <body>
   <div class="page-water is-on" aria-hidden="true">
@@ -391,7 +392,7 @@
 { const p = new URLSearchParams(location.search); const requested = p.get('site') || 'alvi'; if (['alvi','avokado'].includes(requested)) { const base = ('https://' + requested + '.synapsebusiness.ru').replace(/\/$/, ''); document.write('<script src="' + base + '/price-render.js?v=20260904"><\/script>'); } }
 </script>
 <script>
-if(new URLSearchParams(location.search).get('site')==='avokado')document.write('<script src="https://avokado3.synapsebusiness.ru/catalog.js?v=20260914-mobile"><\/script>');
+if(new URLSearchParams(location.search).get('site')==='avokado')document.write('<script src="https://avokado3.synapsebusiness.ru/catalog.js?v=20260915-results-laser"><\/script>');
 </script>
   <script>
 (() => {
@@ -417,7 +418,7 @@ if(new URLSearchParams(location.search).get('site')==='avokado')document.write('
   document.title = 'Редактор прайса ' + siteConfig.name;
   document.querySelector('.ed-bar__title').firstChild.nodeValue = 'Редактор прайса ' + siteConfig.name;
   const barLinks = document.querySelectorAll('.ed-bar a');
-  barLinks[0].href = 'site-editor.html?site=' + siteId;
+  barLinks[0].href = 'site-editor.html?site=' + (isAvokado ? 'avokado3' : siteId);
   barLinks[1].href = SITE + siteConfig.pricePath;
   const imgUrl = (p) => !p ? '' : (/^https?:/.test(p) ? p : p.startsWith('/api/assets/') ? ASSETS + p.slice('/api/assets'.length) : SITE + (p.startsWith('/') ? p : '/' + p));
   const KEY_STORAGE = 'synapse_content_key';
@@ -924,3 +925,4 @@ if(new URLSearchParams(location.search).get('site')==='avokado')document.write('
   </script>
 </body>
 </html>
+

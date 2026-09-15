@@ -78,3 +78,6 @@ Additional scope: make the photo catalogue surfaces more transparent at every ne
 Verification: original objection timeline, four visit reading holds, reverse/idle determinism, reduced motion and final hold pass the Node checks. The gallery's seven-scene variant also preserves objection timing, but is not enabled in this release. Browser recovery still fails on the existing editor JavaScript prompt, so desktop rendering, mobile rendering and CMS interaction are UNKNOWN.
 
 Separate blocker: automatic review rejected a Drive-derived example image upload twice, including after metadata confirmed all 14 sources publicly available by link and ownership of the destination repository. No Drive-derived image was published. It requires explicit approval naming the Drive source and public GitHub destination. The complete gallery code is saved separately for review; optimized photo assets are retained privately.
+
+
+Follow-up: the owner explicitly approved the 14 Drive-derived images for the named public repository and Avokado3. The separate gallery blocker is resolved. The gallery release extends the scene list before reviews and preserves all four visit reading holds. Desktop/mobile visual QA remains unconfirmed.

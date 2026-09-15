@@ -702,7 +702,7 @@ body>#cta{z-index:65}
 <script>
 (()=>{let finished=false,revealTimer,safetyTimer;const loader=()=>document.getElementById("page-loader");const finish=()=>{if(finished)return;finished=true;clearTimeout(revealTimer);clearTimeout(safetyTimer);const element=loader();if(!element)return;if(!element.classList.contains("is-visible")){element.style.display="none";return}element.classList.add("is-complete");setTimeout(()=>{element.style.display="none"},250)};revealTimer=setTimeout(()=>{if(!finished)loader()?.classList.add("is-visible")},300);safetyTimer=setTimeout(()=>{finished=true;clearTimeout(revealTimer);const element=loader();if(element)element.style.display="none"},5000);if(document.readyState==="complete")finish();else addEventListener("load",finish,{once:true})})();
 </script>
-<link rel="stylesheet" href="catalog.css?v=20260915-glass">
+<link rel="stylesheet" href="catalog.css?v=20260915-results-laser">
 <link rel="stylesheet" href="method-reveal.css?v=20260915-logo-right">
 <link rel="stylesheet" href="work-steps.css?v=20260915-pairs">
 <link rel="stylesheet" href="results-gallery.css?v=20260915-results">
@@ -1321,7 +1321,7 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
  "aggregateRating":{"@type":"AggregateRating","ratingValue":"5.0","reviewCount":"121","bestRating":"5"},
  "sameAs":["https://vk.com/lasermkt","https://2gis.ru/irkutsk/firm/70000001045439507","https://yandex.ru/profile/32740458188"],
  "hasOfferCatalog":{"@type":"OfferCatalog","name":"Услуги студии","itemListElement":[
-  {"@type":"Offer","name":"Пробный ТУРБО-массаж всего тела, 60 мин","price":"500","priceCurrency":"RUB"},
+  {"@type":"Offer","name":"Пробный ТУРБО-массаж всего тела, 45 мин","price":"500","priceCurrency":"RUB"},
   {"@type":"Offer","name":"LPG-массаж всего тела, 45 мин","price":"990","priceCurrency":"RUB"},
   {"@type":"Offer","name":"Аппаратный массаж, 45 мин","price":"2100","priceCurrency":"RUB"},
   {"@type":"Offer","name":"Аппаратный массаж, 60 мин","price":"3100","priceCurrency":"RUB"},
@@ -1376,7 +1376,7 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
 ]}
 </script>
 <script src="price-render.js?v=20260914-catalog"></script>
-<script src="catalog.js?v=20260914-mobile"></script>
+<script src="catalog.js?v=20260915-results-laser"></script>
 <script src="site-apply.js?v=20260904"></script>
 <script>
 /* Six scenes, six pains. Opaque cards; captions exchange focus without overlap. */
@@ -1501,4 +1501,3 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
 <script src="https://synapse.synapsebusiness.ru/track.js?v=20260905" data-company="avokado" defer></script>
 </body>
 </html>
-
