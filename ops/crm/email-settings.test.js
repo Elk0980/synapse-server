@@ -52,6 +52,64 @@ test('save encrypts the full configuration and returns only the public contract 
   } finally { f.close(); }
 });
 
+test('Google Workspace and Gmail save without a connection and verify through the fixed Gmail TLS endpoint', async () => {
+  for (const user of ['notifications@synapsebusiness.test', 'fixture.sender@gmail.com']) {
+    const f = fixture({LEADS_SMTP_HOST: 'smtp.mail.ru', LEADS_SMTP_USER: 'old@example.test',
+      LEADS_SMTP_PASSWORD: 'OLD_SENTINEL_PASSWORD'});
+    try {
+      f.db.exec('CREATE TABLE leads (id INTEGER PRIMARY KEY, company_code TEXT)');
+      createEmailOutbox(f.db, f.store.notifications);
+      const diagnostics = createEmailDiagnostics(f.db, {getEnvironment: f.store.getEnvironment});
+      const saved = f.store.save({...payload, provider: 'gmail', user});
+      assert.equal(saved.provider, 'gmail');
+      assert.equal(saved.user, user);
+      assert.equal(saved.source, 'cabinet');
+      assert.equal(saved.passwordConfigured, true);
+      assert.equal(saved.needsPassword, false);
+      assert.doesNotMatch(JSON.stringify(saved), /password"|SENTINEL|encrypted|ciphertext/);
+      assert.equal(JSON.stringify(row(f.db)).includes(payload.password), false);
+      assert.deepEqual(f.calls, {construct: [], verify: [], send: []});
+      assert.equal(diagnostics.getStatus().smtp.configured, true);
+      assert.deepEqual(diagnostics.getStatus().companies.map(company => company.recipientConfigured), [true, true]);
+      const reopened = createEmailSettings(f.db, f.options);
+      assert.deepEqual(reopened.getPublic(), saved);
+      assert.deepEqual(await reopened.check(), {ok: true});
+      assert.deepEqual(f.calls.construct[0], {host: 'smtp.gmail.com', port: 465, secure: true,
+        auth: {user, pass: payload.password}, connectionTimeout: 15000, greetingTimeout: 15000, socketTimeout: 30000});
+      assert.equal(f.calls.verify.length, 1);
+      assert.equal(f.calls.send.length, 0, 'connection check must never send a message');
+      assert.equal(reopened.getEnvironment().LEADS_MAIL_FROM, user);
+    } finally { f.close(); }
+  }
+});
+
+test('existing Gmail environment is recognized; Google changes still require a new app password and reject custom endpoints', () => {
+  const f = fixture({LEADS_SMTP_HOST: 'smtp.gmail.com', LEADS_SMTP_PORT: '465',
+    LEADS_SMTP_USER: 'workspace@example.test', LEADS_SMTP_PASSWORD: 'ENV_SENTINEL_PASSWORD'});
+  try {
+    const initial = f.store.getPublic();
+    assert.equal(initial.provider, 'gmail');
+    assert.equal(initial.source, 'environment');
+    assert.equal(initial.needsPassword, true);
+    const gmail = {...payload, provider: 'gmail', user: 'workspace@example.test'};
+    assert.throws(() => f.store.save({...gmail, password: ''}), isBadInput);
+    f.store.save(gmail);
+    const saved = f.store.getPublic();
+    for (const change of [
+      {host: 'smtp-relay.gmail.com'}, {port: 587}, {provider: 'smtp.gmail.com'},
+      {provider: 'google'}, {user: 'other@example.test', password: ''}, {provider: 'mailru', password: ''},
+      {provider: 'yandex', password: ''}, {user: 'user@example.test\r\nBcc: private@example.test'},
+    ]) {
+      assert.throws(() => f.store.save({...gmail, ...change}), isBadInput);
+      assert.deepEqual(f.store.getPublic(), saved);
+    }
+    f.store.save({...gmail, password: '', alviRecipient: ''});
+    assert.equal(f.store.getPublic().alviRecipient, '');
+    assert.equal(f.store.getEnvironment().LEADS_SMTP_PASSWORD, payload.password);
+    assert.deepEqual(f.calls, {construct: [], verify: [], send: []});
+  } finally { f.close(); }
+});
+
 test('input rejects unknown fields, arbitrary providers, address lists, injection and excessive values', () => {
   const f = fixture();
   try {
@@ -176,11 +234,11 @@ test('check verifies only the fixed TLS endpoint, with existing timeouts, and ne
 });
 
 test('verification failures return only a safe diagnostic code', async () => {
-  for (const [code, expected] of [['EAUTH', 'SMTP_AUTH'], ['ETIMEDOUT', 'SMTP_CONNECTION'], ['SENTINEL_UNKNOWN', 'SMTP_SEND_FAILED']]) {
+  for (const provider of ['mailru', 'gmail']) for (const [code, expected] of [['EAUTH', 'SMTP_AUTH'], ['ETIMEDOUT', 'SMTP_CONNECTION'], ['SENTINEL_UNKNOWN', 'SMTP_SEND_FAILED']]) {
     const f = fixture({}, () => ({async verify() { throw Object.assign(new Error('SENTINEL_PASSWORD PRIVATE_RESPONSE'), {code}); },
       sendMail() { assert.fail('check must never send mail'); }}));
     try {
-      f.store.save(payload);
+      f.store.save({...payload, provider});
       const result = await f.store.check();
       assert.deepEqual(result, {ok: false, code: expected});
       assert.doesNotMatch(JSON.stringify(result), /SENTINEL|PRIVATE_RESPONSE/);

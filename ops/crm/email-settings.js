@@ -2,7 +2,7 @@
 
 const crypto = require('node:crypto');
 const {createEmailNotifications, emailErrorCode} = require('./email-notifications');
-const PROVIDERS = Object.freeze({yandex: 'smtp.yandex.ru', mailru: 'smtp.mail.ru'});
+const PROVIDERS = Object.freeze({yandex: 'smtp.yandex.ru', mailru: 'smtp.mail.ru', gmail: 'smtp.gmail.com'});
 const PURPOSE = Buffer.from('synapse/crm/email-settings/v1');
 const FIELDS = ['provider', 'user', 'password', 'alviRecipient', 'avokadoRecipient'];
 const envValue = (env, name, fallback = '') => (env[name] === undefined ? fallback : env[name]).trim();
@@ -26,7 +26,7 @@ function validate(body) {
       FIELDS.filter(key => key !== 'password').some(key => !Object.hasOwn(body, key))) {
     fail('Переданы некорректные поля настроек почты');
   }
-  if (typeof body.provider !== 'string' || !Object.hasOwn(PROVIDERS, body.provider.trim())) fail('Выберите Яндекс или Mail.ru');
+  if (typeof body.provider !== 'string' || !Object.hasOwn(PROVIDERS, body.provider.trim())) fail('Выберите Яндекс, Mail.ru или Google Workspace / Gmail');
   const config = {provider: body.provider.trim(), user: mailbox(body.user, true),
     alviRecipient: mailbox(body.alviRecipient), avokadoRecipient: mailbox(body.avokadoRecipient)};
   if (Object.hasOwn(body, 'password') && (typeof body.password !== 'string' || body.password.length > 512 || /[\r\n\x00]/.test(body.password))) {
@@ -141,7 +141,7 @@ function createEmailSettings(db, {apiKey, environment = process.env, now = Date.
   async function check() {
     try {
       const state = readState();
-      // The owner-facing check supports only the two fixed TLS endpoints.
+      // The owner-facing check supports only the fixed provider TLS endpoints.
       if (!Object.values(PROVIDERS).includes(envValue(state.environment, 'LEADS_SMTP_HOST', 'smtp.yandex.ru')) ||
           envValue(state.environment, 'LEADS_SMTP_PORT', '465') !== '465') return {ok: false, code: 'SMTP_NOT_CONFIGURED'};
       const current = notifier();

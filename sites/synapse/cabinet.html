@@ -878,12 +878,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         <form id="email-settings-form" class="email-settings-form" autocomplete="off">
           <p class="email-settings-intro">Подключите почту, с которой будут приходить уведомления о заявках.</p>
           <label><span>Почтовый сервис отправителя</span><select id="email-provider" name="provider" required>
-            <option value="yandex">Яндекс Почта</option><option value="mailru">Mail — mail.ru, bk.ru, list.ru, inbox.ru</option>
+            <option value="yandex">Яндекс Почта</option><option value="mailru">Mail — mail.ru, bk.ru, list.ru, inbox.ru</option><option value="gmail">Google Workspace / Gmail</option>
           </select></label>
           <label><span>Адрес отправителя</span><input id="email-user" name="user" type="email" maxlength="254" required autocomplete="off" placeholder="name@example.ru"></label>
           <label class="email-settings-wide"><span>Пароль приложения для отправки почты</span><input id="email-password" name="password" type="password" maxlength="512" autocomplete="new-password" aria-describedby="email-password-help">
             <small id="email-password-help">Введите отдельный пароль приложения из настроек почты. Оставьте поле пустым, чтобы сохранить уже подключённый пароль. При смене отправителя введите новый.</small>
-            <small>Инструкции: <a href="https://help.mail.ru/mail/faq/password/external/" target="_blank" rel="noopener noreferrer">Mail</a> · <a href="https://www.yandex.ru/support/yandex-360/customers/mail/ru/mail-clients/others" target="_blank" rel="noopener noreferrer">Яндекс Почта</a>.</small>
+            <small>Для Google включите двухэтапную аутентификацию и создайте пароль приложения. Введите его без пробелов; обычный пароль Google не подходит.</small>
+            <small>Инструкции: <a href="https://help.mail.ru/mail/faq/password/external/" target="_blank" rel="noopener noreferrer">Mail</a> · <a href="https://www.yandex.ru/support/yandex-360/customers/mail/ru/mail-clients/others" target="_blank" rel="noopener noreferrer">Яндекс Почта</a> · <a href="https://support.google.com/accounts/answer/185833?hl=ru" target="_blank" rel="noopener noreferrer">Google Workspace / Gmail</a>.</small>
           </label>
           <label><span>Получатель заявок АЛВИ</span><input id="email-alvi-recipient" name="alviRecipient" type="email" maxlength="254" autocomplete="off" placeholder="Почта студии"></label>
           <label><span>Получатель заявок Авокадо</span><input id="email-avokado-recipient" name="avokadoRecipient" type="email" maxlength="254" autocomplete="off" placeholder="Почта студии"></label>
@@ -987,7 +988,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260915-company-links-null";
+  window.SB_CABINET_ASSET_VERSION = "20260915-google-workspace-mail";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
