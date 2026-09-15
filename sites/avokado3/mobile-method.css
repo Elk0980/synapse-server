@@ -5,6 +5,7 @@
   #metod .method-sticky{margin-top:calc(-1 * var(--method-banner))}
   #metod .method-intro{min-height:0;padding:10px 16px;background:#101a14;font:700 15px/1.35 'Manrope',sans-serif;letter-spacing:0;text-align:left}
   #metod .method-intro.on{letter-spacing:0}
+  #metod.method-leaving .method-intro{visibility:hidden}
   #metod .method-intro-subtitle{margin-top:3px;font:400 12px/1.4 'Manrope',sans-serif;color:#c7cebd}
   #metod .method-scene{padding-inline:16px}
   #metod .mobile-method-viewport{position:absolute;z-index:2;inset:calc(var(--method-header) + var(--method-banner) + 16px) 16px var(--method-bottom);display:block;overflow:hidden}

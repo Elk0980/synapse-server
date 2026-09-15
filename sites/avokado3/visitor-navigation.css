@@ -1,0 +1,29 @@
+/* Visitors can choose a service without scrolling through the studio story. */
+#top{z-index:3;pointer-events:none}
+body>#hdr{z-index:80}
+body>#cta{z-index:70}
+body>.cookie-notice{z-index:100}
+#top .hero-titles{padding:80px 20px 4svh}
+#top .hero-shortcuts{pointer-events:auto;width:min(480px,100%);margin-top:22px;color:#f6f1e5;text-shadow:0 2px 12px #000}
+#top .hero-service-summary{font:500 16px/1.5 'Manrope',sans-serif;letter-spacing:0;margin:0 0 16px}
+#top .hero-directions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#top .hero-directions a{display:flex;align-items:center;justify-content:center;min-height:48px;padding:12px 14px;background:rgba(16,26,19,.94);border:1px solid #d8b981;border-radius:14px;color:#f4dfb2;font:600 14px/1.4 'Manrope',sans-serif;text-decoration:none;text-shadow:none}
+#top .hero-directions a:hover{background:#263322}
+#top .hero-all-prices{display:inline-flex;align-items:center;min-height:44px;margin-top:4px;font:600 14px/1.4 'Manrope',sans-serif;text-underline-offset:4px}
+#top .hero-shortcuts a:focus-visible{outline:3px solid #efdb9d;outline-offset:4px}
+#top .t-hint{margin-top:12px}
+@media(max-width:820px){
+  #top.hero{min-height:500px}
+  #top .hero-titles{padding:76px 16px max(24px,4svh)}
+  #top .t-script{margin-top:14px;font-size:25px}
+  #top .t-slogan{font-size:11px;letter-spacing:.1em}
+  #top .hero-shortcuts{margin-top:18px}
+  #top .hero-service-summary{font-size:15px;line-height:1.5}
+  #top .hero-directions a{padding:10px 8px;font-size:13px}
+  #top .t-hint{font-size:10px}
+}
+@media(max-height:650px){
+  #top.hero{min-height:400px}
+  #top .t-script,#top .t-slogan{display:none}
+  #top .hero-titles{padding-bottom:24px}
+}
