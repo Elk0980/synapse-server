@@ -6,7 +6,7 @@ function setup(isMobile=true,{intersectionObserver=true,initialSection}={}){
  const panelEvents={};
  const panel={classList:{add:x=>classes.add(x),remove:x=>classes.delete(x),toggle:(x,on)=>on?classes.add(x):classes.delete(x)},contains:element=>element===panel||Boolean(element?.inPanel),addEventListener:(name,fn)=>panelEvents[name]=fn,emit:name=>panelEvents[name]?.()};
  const top={setAttribute(){},focus(){this.focused=true;}};
- const sections=Object.fromEntries(['price','contacts'].map(id=>[id,{id,bounds:initialSection===id?{top:100,bottom:900}:{top:900,bottom:1300},getBoundingClientRect(){return this.bounds;}}]));
+ const sections=Object.fromEntries(['price','contacts','callback'].map(id=>[id,{id,bounds:initialSection===id?{top:100,bottom:900}:{top:900,bottom:1300},getBoundingClientRect(){return this.bounds;}}]));
  const doc={activeElement:null,scrollingElement:{scrollHeight:5000},querySelector(){return this.modal?{}:null;},getElementById:id=>({cta:panel,top,...sections}[id])||null};
  const win={scrollY:0,innerHeight:800,matchMedia:()=>media,performance:{now:()=>clock},location:{pathname:'/index.html',search:'?v=release',hash:'#contacts'},history:{state:{keep:1},replaceState(state,_,url){this.updated={state,url};}},addEventListener:(name,fn)=>events[name]=fn,clearTimeout:n=>timers.delete(n),setTimeout:(fn,ms)=>{timers.set(++id,{fn,time:clock+ms});return id;},scrollTo(pos){this.scrollY=pos.top;this.calls=(this.calls||0)+1;}};
  let observer;
@@ -47,7 +47,7 @@ test('touch continuation loops on release; dialogs, inputs and upward gestures k
 });
 
 test('mobile hides floating actions while catalog or contacts is visible and restores them after both leave',()=>{
- const s=setup();assert.deepEqual(s.observer.observed,[s.sections.price,s.sections.contacts]);
+ const s=setup();assert.deepEqual(s.observer.observed,[s.sections.price,s.sections.contacts,s.sections.callback]);
  assert.equal(s.classes.has('content-actions-visible'),false);
  s.classes.add('on');s.classes.add('finale-hidden');
  s.intersect('price',true);assert.equal(s.classes.has('content-actions-visible'),true);
@@ -65,6 +65,26 @@ test('media changes use current section geometry, and desktop keeps floating act
  s.sections.price.bounds={top:900,bottom:1300};s.sections.contacts.bounds={top:900,bottom:1300};
  s.media.matches=true;s.media.change();assert.equal(s.classes.has('content-actions-visible'),false,'stale observer records must not hide actions after resize');
  s.sections.contacts.bounds={top:100,bottom:900};s.media.change();assert.equal(s.classes.has('content-actions-visible'),true);
+});
+
+test('desktop callback fields stay clear while the form is visible, with keyboard focus preserved',()=>{
+ const s=setup(false);s.intersect('contacts',true);
+ assert.equal(s.classes.has('content-actions-visible'),false);
+ s.intersect('callback',true);assert.equal(s.classes.has('content-actions-visible'),true);
+ s.doc.activeElement={inPanel:true,matches:()=>true};s.panel.emit('focusin');
+ assert.equal(s.classes.has('content-actions-visible'),false);
+ s.doc.activeElement=null;s.panel.emit('focusout');s.advance(0);
+ assert.equal(s.classes.has('content-actions-visible'),true);
+ s.intersect('callback',false);assert.equal(s.classes.has('content-actions-visible'),false,'desktop actions return even when contacts remain visible');
+});
+
+test('a direct desktop callback entry hides actions without IntersectionObserver and restores them on exit',()=>{
+ const s=setup(false,{intersectionObserver:false,initialSection:'callback'});
+ assert.equal(s.classes.has('content-actions-visible'),true);
+ s.sections.callback.bounds={top:-500,bottom:0};s.emit('scroll');
+ assert.equal(s.classes.has('content-actions-visible'),false);
+ s.sections.callback.bounds={top:799,bottom:1300};s.emit('resize');
+ assert.equal(s.classes.has('content-actions-visible'),true);
 });
 
 test('focus inside floating actions prevents hiding until focus moves outside the panel',()=>{
