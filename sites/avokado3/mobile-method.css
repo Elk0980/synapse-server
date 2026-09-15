@@ -1,6 +1,11 @@
 /* Wrappers preserve the desktop composition. Mobile content pans within clear bounds. */
 .mobile-method-viewport,.mobile-method-track{display:contents}
 @media(max-width:820px), (max-width:1024px) and (max-height:500px){
+  /* A separate photo survives blocked autoplay and video loading on phones. */
+  .global-photo-bg{display:block;position:fixed;inset:0;z-index:0;height:100vh;height:100lvh;pointer-events:none;background:#0e1410 url('assets/hero-intro-poster.jpg') center/cover no-repeat}
+  .hero-flow--loop .global-photo-bg{background-image:url('assets/hero-intro-lastframe.jpg')}
+  .global-video-bg{opacity:0}
+  .hero-video-ready .global-video-bg{opacity:1}
   #metod{--mobile-method-scroll:1;--method-bottom:calc(84px + env(safe-area-inset-bottom,0px));scroll-margin-top:0}
   #metod .method-sticky{margin-top:calc(-1 * var(--method-banner))}
   #metod .method-intro{min-height:0;padding:10px 16px;background:#101a14;font:700 15px/1.35 'Manrope',sans-serif;letter-spacing:0;text-align:left}
@@ -15,6 +20,10 @@
   #metod .scene-copy h3{font:700 20px/1.3 'Manrope',sans-serif}
   #metod .scene-number{font-size:12px}
   #metod #method-0 .scene-copy{order:0;width:100%;padding:18px}
+  #metod #method-0 .scene-copy,
+  #metod .scene-two>div,
+  #metod .method-steps>div,
+  #metod #method-5 .work-pair__copy{background:rgba(14,20,16,.64);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
   #metod .method-heroine{order:1;position:relative;height:230px;width:auto;max-width:100%;align-self:center;right:auto;bottom:auto;margin:0}
   #metod .apparatus-grid,#metod #method-2 .apparatus-grid{grid-template-columns:1fr;width:100%;gap:12px;margin:18px 0 0}
   #metod .apparatus-grid figure{position:relative;display:block;min-height:138px;overflow:hidden;border-radius:16px}

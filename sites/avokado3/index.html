@@ -62,6 +62,7 @@
   body{font-family:'Manrope','Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--cream);overflow-x:hidden}
   .global-video-bg,.global-video-dimmer,.global-video-shade{position:fixed;inset:0;width:100%;height:100vh;height:100lvh;pointer-events:none}
   .global-video-bg{z-index:0;object-fit:cover}
+  .global-photo-bg{display:none}
   .global-video-dimmer{z-index:1;background:radial-gradient(ellipse 70% 60% at 50% 48%,rgba(8,12,9,.40) 0%,rgba(8,12,9,.38) 45%,rgba(8,12,9,.26) 75%,rgba(8,12,9,.20) 100%);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}#contacts .wrap,#faq .wrap{background:radial-gradient(ellipse 70% 68% at 50% 45%,rgba(8,12,9,.58) 0%,rgba(8,12,9,.40) 55%,rgba(8,12,9,0) 85%)}.price.studio-light>.wrap{background:radial-gradient(ellipse 75% 70% at 50% 45%,rgba(8,12,9,.44) 0%,rgba(8,12,9,.30) 55%,rgba(8,12,9,0) 85%)}@media(max-width:480px){.global-video-dimmer{background:radial-gradient(ellipse 95% 55% at 50% 48%,rgba(8,12,9,.42) 0%,rgba(8,12,9,.38) 50%,rgba(8,12,9,.22) 100%)}#contacts .wrap,#faq .wrap{background:radial-gradient(ellipse 100% 70% at 50% 45%,rgba(8,12,9,.62) 0%,rgba(8,12,9,.52) 55%,rgba(8,12,9,0) 88%)}.price.studio-light>.wrap{background:radial-gradient(ellipse 100% 72% at 50% 45%,rgba(8,12,9,.54) 0%,rgba(8,12,9,.44) 55%,rgba(8,12,9,0) 88%)}}
   body>header,body>.sticky-cta,body>section,body>footer,body>.synapse-strip,body>.cookie-notice{z-index:2}
   footer,.synapse-strip{position:relative}
@@ -715,10 +716,11 @@ body>#cta{z-index:65}
 <link rel="stylesheet" href="results-gallery.css?v=20260915-framed">
 <link rel="stylesheet" href="music-player.css?v=20260915">
 <link rel="stylesheet" href="mobile-foundation.css?v=20260915-mobile">
-<link rel="stylesheet" href="mobile-method.css?v=20260915-visitor">
+<link rel="stylesheet" href="mobile-method.css?v=20260915-photo-background">
 <link rel="stylesheet" href="visitor-navigation.css?v=20260915-visitor">
 </head>
 <body>
+<div class="global-photo-bg" aria-hidden="true"></div>
 <video class="global-video-bg" id="herovid" muted playsinline preload="auto" poster="/assets/hero-intro-poster.jpg" aria-hidden="true">
   <source src="/assets/hero-intro-loop.mp4" type="video/mp4">
 </video>
@@ -1194,12 +1196,19 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
   var editing=new URLSearchParams(location.search).get('edit')==='1';
   var LOOP_START=10,enabled=false,tailRequested=false,tailEntered=false;
   var queued=false,shown=null,lastTime=0,frameId=null;
+  function showVideo(){body.classList.add('hero-video-ready')}
+  function showPhoto(){body.classList.remove('hero-video-ready')}
+  video.addEventListener('playing',function(){
+    if(video.requestVideoFrameCallback)video.requestVideoFrameCallback(showVideo);
+    else showVideo();
+  });
+  video.addEventListener('error',showPhoto);
   function clamp(x){return Math.max(0,Math.min(1,x))}
   function ease(x){x=clamp(x);return x*x*(3-2*x)}
   function play(){
     if(!enabled||document.hidden)return;
     var promise=video.play();
-    if(promise&&promise.catch)promise.catch(function(){});
+    if(promise&&promise.catch)promise.catch(showPhoto);
   }
   function enterTail(restart){
     tailRequested=true;
