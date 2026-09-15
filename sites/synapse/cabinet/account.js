@@ -5,6 +5,12 @@ const SbCabinet = window.SbCabinet = window.SbCabinet || {};
 let identity, byId, escapeHTML, apiJson;
 let initialized = false;
 const api = {};
+const permissionLabel = value => ({
+  'company-information.view': 'Актуальность — просмотр данных компании',
+  'company-information.edit': 'Актуальность — заполнение и проверка данных',
+  'autoposting.view': 'Автопостинг — просмотр материалов и плана',
+  'autoposting.edit': 'Автопостинг — материалы, каналы и публикации'
+})[value] || value;
 const init = (context) => {
   ({ identity, byId, escapeHTML, apiJson } = context);
   if (initialized) return;
@@ -17,7 +23,7 @@ const init = (context) => {
   const selected = (name) => [...createForm.querySelectorAll(`input[name="${name}"]:checked`)].map(input => input.value);
   const presetSelect = byId("account-access-preset");
   const currentPreset = () => accessOptions?.presets.find(preset => preset.id === presetSelect.value);
-  const accessCheckboxes = (name, options, checked, label = value => value) => options.map(value => {
+  const accessCheckboxes = (name, options, checked, label = permissionLabel) => options.map(value => {
     const id = typeof value === "string" ? value : value.id;
     return `<label class="account-access-option"><input type="checkbox" name="${name}" value="${escapeHTML(id)}"${checked.includes(id) ? " checked" : ""}> <span>${escapeHTML(label(value))}</span></label>`;
   }).join("");
@@ -41,13 +47,13 @@ const init = (context) => {
     byId("account-create-companies").innerHTML = accessOptions.companies.map(company =>
       `<label class="account-access-option"><input type="checkbox" name="companies" value="${escapeHTML(company.id)}"${companies.includes(company.id) ? " checked" : ""}> <span>${escapeHTML(company.name)}</span></label>`).join("");
     byId("account-create-permissions").innerHTML = "<p>Права</p>" + accessOptions.permissions.map(permission =>
-      `<label class="account-access-option"><input type="checkbox" name="permissions" value="${escapeHTML(permission)}"${permissions.includes(permission) ? " checked" : ""}${preset ? " disabled" : ""}> <span>${escapeHTML(permission)}</span></label>`).join("");
+      `<label class="account-access-option"><input type="checkbox" name="permissions" value="${escapeHTML(permission)}"${permissions.includes(permission) ? " checked" : ""}${preset ? " disabled" : ""}> <span>${escapeHTML(permissionLabel(permission))}</span></label>`).join("");
     byId("account-access-status").textContent = preset
       ? "Отметьте один или несколько проектов. Набор доступа задаёт только права и не ограничивает выбор проектов."
       : "Отметьте проекты и права. Неотмеченный доступ не назначается. price.edit требует price.view, site_editor.edit требует site_editor.view.";
   };
   const loadAccess = async () => {
-    if (!identity.permissions.includes("account.view") && identity.role !== "owner") return;
+    if (identity.role !== "owner" && !identity.permissions?.includes("account.view")) return;
     accessOptions = null;
     byId("account-create-submit").disabled = true;
     byId("account-access-fields").disabled = true;
@@ -90,7 +96,7 @@ const init = (context) => {
   accessLoad = loadAccess();
 
   const renderAccounts = async () => {
-    if (!identity.permissions.includes("account.view") && identity.role !== "owner") return;
+    if (identity.role !== "owner" && !identity.permissions?.includes("account.view")) return;
     const content = byId("accounts-content");
     content.textContent = "Загрузка…";
     try {

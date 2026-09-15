@@ -12,6 +12,10 @@ const { createCampaignTransport } = require('./email-campaign-transport');
 const { createEmailCampaigns, TOKEN: EMAIL_UNSUBSCRIBE_TOKEN } = require('./email-campaigns');
 const { createEmailDiagnostics } = require('./email-diagnostics');
 const { companyPublicLinks } = require('./company-links');
+const { createCompanyInformation } = require('./company-information');
+const { createAutoposting } = require('./autoposting');
+const { createAutopostingTransport } = require('./autoposting-transport');
+const { createCompanyInformationCheck } = require('./company-information-check');
 
 const IS_MAIN = require.main === module;
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
@@ -560,6 +564,9 @@ const emailCampaigns = createEmailCampaigns(db, {transport: campaignTransport, l
     WHERE queue.status='sending' OR (queue.status='pending' AND queue.next_attempt_at<=?)`).all(new Date().toISOString()).some(notificationReady),
 });
 const emailDiagnostics = createEmailDiagnostics(db, {getEnvironment: emailSettings.getEnvironment});
+const companyInformation = createCompanyInformation(db, {check: createCompanyInformationCheck()});
+const autopostingTransport = createAutopostingTransport(db, {apiKey: API_KEY});
+const autoposting = createAutoposting(db, {information: companyInformation, transport: autopostingTransport});
 function deliverLeadEmails() {
   return emailOutbox.drain().catch(() => {
     // Do not expose SMTP responses or contact details in service logs.
@@ -1308,7 +1315,8 @@ function crmIdentity(request) {
   }
   if (!identity || Array.isArray(identity) || typeof identity !== 'object' || identity.v !== 1 ||
       !Number.isSafeInteger(identity.userId) || identity.userId < 1 ||
-      !['companyCodes,permissions,userId,v', 'companyCodes,permissions,userId,userName,v']
+      !['companyCodes,permissions,userId,v', 'companyCodes,permissions,userId,userName,v',
+        'companyCodes,permissions,role,userId,v', 'companyCodes,permissions,role,userId,userName,v']
         .includes(Object.keys(identity).sort().join(','))) return null;
   if (!Array.isArray(identity.permissions) || identity.permissions.length > 100 ||
       !Array.isArray(identity.companyCodes) || identity.companyCodes.length > 100) return null;
@@ -1320,8 +1328,19 @@ function crmIdentity(request) {
   if (new Set(companyCodes).size !== companyCodes.length) return null;
   if (identity.userName !== undefined && (typeof identity.userName !== 'string' ||
       !identity.userName.trim() || identity.userName.length > 200)) return null;
-  return { userId: identity.userId, userName: identity.userName?.trim() || `#${identity.userId}`,
+  if (identity.role !== undefined && !['owner','editor'].includes(identity.role)) return null;
+  return { userId: identity.userId, userName: identity.userName?.trim() || `#${identity.userId}`, role: identity.role || 'editor',
     permissions: new Set(identity.permissions), companyCodes: new Set(companyCodes) };
+}
+
+function companyModuleContext(request, code, permission) {
+  const identity = crmIdentity(request);
+  if (!identity || (identity.role !== 'owner' && !identity.permissions.has(permission))) fail(403, 'Недостаточно прав', {code:'FORBIDDEN'});
+  if (typeof code !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400, 'Выберите компанию');
+  if (identity.role !== 'owner' && !identity.companyCodes.has(code.toLowerCase())) fail(403, 'Нет доступа к компании', {code:'FORBIDDEN'});
+  const row = db.prepare('SELECT id,code FROM companies WHERE code=? COLLATE NOCASE AND is_deleted=0').get(code);
+  if (!row) fail(404, 'Компания не найдена', {code:'NOT_FOUND'});
+  return {identity,company:row};
 }
 
 const DOCUMENT_TYPES = ['analytics_questionnaire', 'brief'];
@@ -1676,6 +1695,7 @@ async function handleEntityRoutes(request, response, url, cors) {
             (created_at,updated_at,${relation[1]},company_id,role) VALUES (?,?,?,?,?)`)
             .run(now, now, id, company.id, relation[2]);
         }
+        if (config.table === 'companies') companyInformation.get(entityRow(config,id).code);
         send(response, 201, serializeEntity(config, entityRow(config, id)),
           { ...cors, Location: `/${config.path}/${id}` }); return true;
       } catch (error) { conflict(error); }
@@ -1707,6 +1727,7 @@ async function handleEntityRoutes(request, response, url, cors) {
         }
       }
       const body = await readJson(request);
+      if (config.table === 'companies') companyInformation.get(initialRow.code);
       const applyPatch = () => {
         // Re-read task scope and source after the async body read, inside the same transaction as UPDATE.
         const patchCompany = taskPatch
@@ -1744,6 +1765,7 @@ async function handleEntityRoutes(request, response, url, cors) {
       try {
         result = taskPatch ? pipelineTransaction(applyPatch) : applyPatch();
       } catch (error) { conflict(error); }
+      if (config.table === 'companies') autoposting.invalidate(entityRow(config,id).code);
       send(response, 200, result, cors); return true;
     }
     if (match && request.method === 'DELETE') {
@@ -2323,6 +2345,40 @@ async function route(request, response) {
   takeRateLimit(request);
   const publicPost = request.method === 'POST' && ['/leads', '/events'].includes(url.pathname);
   if (!publicPost) requireApiKey(request);
+
+  if (url.pathname === '/company-information' || url.pathname === '/company-information/check') {
+    const permission = request.method === 'GET' ? 'company-information.view' : 'company-information.edit';
+    const {identity,company} = companyModuleContext(request,url.searchParams.get('companyCode'),permission);
+    let result;
+    if (url.pathname === '/company-information' && request.method === 'GET') result = companyInformation.get(company.code);
+    else if (url.pathname === '/company-information' && request.method === 'PUT') {
+      result = companyInformation.save(company.code,await readJson(request),identity.userId);
+      autoposting.invalidate(company.code);
+    } else if (url.pathname === '/company-information/check' && request.method === 'POST') result = await companyInformation.check(company.code);
+    else fail(405,'Метод не поддерживается');
+    return send(response,200,result,{...cors,'cache-control':'no-store'});
+  }
+  if (/^\/autoposting(?:\/|$)/.test(url.pathname)) {
+    const permission = request.method !== 'GET' ? 'autoposting.edit' : 'autoposting.view';
+    const {identity,company} = companyModuleContext(request,url.searchParams.get('companyCode'),permission);
+    const code=company.code;let result,status=200;
+    if (url.pathname === '/autoposting/settings' && request.method === 'GET') result=await autopostingTransport.getSettings(code);
+    else if (url.pathname === '/autoposting/settings' && request.method === 'PUT') result=await autopostingTransport.saveSettings(code,await readJson(request));
+    else if (/^\/autoposting\/settings\/[^/]+\/check$/.test(url.pathname) && request.method === 'POST') result=await autopostingTransport.checkChannel(code,url.pathname.split('/')[3]);
+    else {
+      const match=/^\/autoposting\/posts(?:\/(\d+)(?:\/(schedule|cancel))?)?$/.exec(url.pathname);
+      if (!match) fail(404,'Адрес не найден');
+      const [,id,action]=match;
+      if (!id && request.method==='GET') result=autoposting.list(code);
+      else if (!id && request.method==='POST') {result=autoposting.create(code,await readJson(request),identity.userId);status=201;}
+      else if (id && !action && request.method==='GET') result=autoposting.get(id,code);
+      else if (id && !action && request.method==='PATCH') result=autoposting.update(id,code,await readJson(request));
+      else if (id && action==='schedule' && request.method==='POST') result=await autoposting.schedule(id,code,await readJson(request));
+      else if (id && action==='cancel' && request.method==='POST') result=autoposting.cancel(id,code,await readJson(request));
+      else fail(405,'Метод не поддерживается');
+    }
+    return send(response,status,result,{...cors,'cache-control':'no-store'});
+  }
 
   // Owner/session/CSRF checks are enforced by the existing content-service bridge.
   // Company selection is mandatory here as well, and IDs never cross company scopes.
@@ -2932,19 +2988,23 @@ const pipelineRulesTimer = IS_MAIN ? setInterval(() => {
 pipelineRulesTimer?.unref();
 const emailOutboxTimer = IS_MAIN ? setInterval(deliverQueuedEmails, 2000) : null;
 emailOutboxTimer?.unref();
-server.on('close', () => { clearInterval(pipelineRulesTimer); clearInterval(emailOutboxTimer); });
+const autopostingTimer = IS_MAIN ? setInterval(() => {void autoposting.drain().catch(() => console.error('[crm] autoposting worker failed'));},30000) : null;
+autopostingTimer?.unref();
+server.on('close', () => { clearInterval(pipelineRulesTimer); clearInterval(emailOutboxTimer); clearInterval(autopostingTimer); });
 
 if (IS_MAIN) {
   server.listen(PORT, () => {
     console.log(`Мини-CRM слушает порт ${PORT}; база: ${DATABASE_PATH}`);
     void deliverQueuedEmails();
+    void autoposting.drain().catch(() => console.error('[crm] autoposting worker failed'));
   });
 }
 
 function shutdown() {
   clearInterval(pipelineRulesTimer);
   clearInterval(emailOutboxTimer);
-  const emailWorkersStopped = Promise.all([emailOutbox.stop(), emailCampaigns.stop()]);
+  clearInterval(autopostingTimer);
+  const emailWorkersStopped = Promise.all([emailOutbox.stop(), emailCampaigns.stop(), autoposting.stop()]);
   server.close(async () => {
     await emailWorkersStopped;
     db.close();
