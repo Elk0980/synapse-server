@@ -51,8 +51,8 @@
   #metod .mobile-method-track{justify-content:flex-start}
 }
 
-/* Phones use the document's natural height: every scene and visit step stays visible. */
-@media(max-width:820px), (max-width:1024px) and (max-height:500px){
+/* Phones and short desktop windows use natural height instead of clipped scenes. */
+@media(max-width:820px), (max-height:800px){
   #metod{--mobile-method-flow:1}
   #metod.method-flow{height:auto!important;min-height:0;padding-block:24px 32px;overflow:visible}
   #metod.method-flow .method-sticky{position:static;height:auto;min-height:0;margin:0;overflow:visible}
@@ -77,4 +77,23 @@
   #metod.method-flow #method-5 .work-pair__photo{height:clamp(240px,75vw,420px);max-height:none}
   #metod.method-flow .flow-next{display:none}
   #metod.method-flow #method-5.work-steps-ready .flow-next[href="#price"]{display:flex;margin:24px auto 0;visibility:visible!important}
+}
+
+/* Short desktop windows keep the two-column composition and complete card edges. */
+@media(min-width:821px) and (max-height:800px){
+  #metod.method-flow .method-scene{padding:36px 5vw}
+  #metod.method-flow .method-intro{max-width:1100px;margin:0 auto 12px}
+  #metod.method-flow .mobile-method-viewport,
+  #metod.method-flow .scene-copy,
+  #metod.method-flow #method-results .results-copy,
+  #metod.method-flow #method-5.work-steps-ready .work-copy{width:100%;max-width:1100px;margin-inline:auto}
+  #metod.method-flow .scene-two{grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);gap:24px}
+  #metod.method-flow.method-paper-ready #method-3 .paper-layout{margin-inline:auto}
+  #metod.method-flow #method-0 .mobile-method-track{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,.6fr);gap:32px;align-items:center}
+  #metod.method-flow #method-0 .scene-copy{width:100%;margin:0}
+  #metod.method-flow .method-heroine{position:static;height:360px;max-height:none;max-width:100%;grid-column:2;grid-row:1;justify-self:center}
+  #metod.method-flow #method-5 .work-pairs{gap:36px}
+  #metod.method-flow #method-5 .work-pair{grid-template-columns:minmax(0,1.08fr) minmax(0,1fr);grid-template-rows:auto;gap:clamp(20px,3vw,40px);align-items:center}
+  #metod.method-flow #method-5 .work-pair__photo{height:clamp(280px,34vw,420px)}
+  #metod.method-flow #method-5 .work-pair[data-step="4"] .work-pair__photo{height:auto;aspect-ratio:1672/941}
 }

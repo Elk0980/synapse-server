@@ -8,8 +8,21 @@ const vm = require('node:vm');
 
 // The fixture supplies only DOM structure and measurements. All scene, paper and
 // photograph state changes run through the production modules in a fresh window.
-function fixture({ flow = false, stickyHeight = 600 } = {}) {
-  const geometry = { flow, stickyHeight, paperViewportHeight: 400, copyHeight: 800, measurementReads: 0 };
+function flowAtViewport(width, height) {
+  // Read the production CSS switch, so these viewport cases also cover its media query.
+  const css = fs.readFileSync(path.join(__dirname, 'mobile-method.css'), 'utf8');
+  const query = css.match(/@media([^{}]+)\{\s*#metod\{--mobile-method-flow:1\}/)?.[1];
+  assert.ok(query, 'the natural-flow switch must have a media query');
+  return query.split(',').some(clause => {
+    const conditions = [...clause.matchAll(/\((min|max)-(width|height)\s*:\s*(\d+)px\)/g)];
+    assert.ok(conditions.length, 'each clause must specify viewport dimensions');
+    return conditions.every(([, bound, dimension, limit]) => bound === 'max'
+      ? ({width,height}[dimension] <= Number(limit)) : ({width,height}[dimension] >= Number(limit)));
+  });
+}
+
+function fixture({ flow = false, stickyHeight = 600, width = 1280, height = 575 } = {}) {
+  const geometry = { flow, stickyHeight, width, height, paperViewportHeight: 400, copyHeight: 800, measurementReads: 0 };
   function style() {
     const properties = Object.create(null);
     return new Proxy({
@@ -146,7 +159,7 @@ function fixture({ flow = false, stickyHeight = 600 } = {}) {
     matchMedia: () => ({ matches: false, addEventListener() {} }),
     getComputedStyle: () => ({
       getPropertyValue(name) {
-        if (name === '--mobile-method-flow') return geometry.flow ? '1' : '0';
+        if (name === '--mobile-method-flow') return (geometry.flow ?? flowAtViewport(geometry.width, geometry.height)) ? '1' : '0';
         if (['--paper-style-ready', '--work-steps-style-ready'].includes(name)) return '1';
         return '0';
       },
@@ -198,6 +211,20 @@ test('mobile first render exposes seven scenes, all paper text and all four visi
   assert.equal(f.update(), true);
   assertFlowVisible(f);
   assert.equal(f.geometry.measurementReads, 0, 'natural flow does not need the desktop panning geometry');
+});
+
+test('short desktop media exposes every card and paper panel, while tall desktop restores animation and mobile stays in flow', () => {
+  const f = fixture({flow:null,width:1280,height:575,stickyHeight:575});
+  f.update();assertFlowVisible(f);
+  for (const height of [800,575]) {
+    f.geometry.height=height;f.update();assertFlowVisible(f);
+  }
+  f.geometry.height=801;f.geometry.stickyHeight=801;f.update();
+  assert.equal(f.root.classList.contains('method-flow'),false);
+  assert.match(f.root.style.height,/^\d+px$/);assertOnlyScene(f,0);
+  f.geometry.width=1918;f.geometry.height=860;f.update();
+  assert.equal(f.root.classList.contains('method-flow'),false);
+  f.geometry.width=390;f.geometry.height=844;f.update();assertFlowVisible(f);
 });
 
 test('desktop to mobile to the same desktop visit frame restores exclusive scene and photo-pair access', () => {
