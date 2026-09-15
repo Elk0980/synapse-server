@@ -70,7 +70,8 @@ function crmIdentityHeaders(permissions, companyCodes, overrides = {}) {
 async function start() {
   port = 20000 + Math.floor(Math.random() * 20000);
   child = spawn(process.execPath, [serverFile], { env: { ...process.env, PORT: String(port),
-    DATABASE_PATH: databasePath, API_KEY: apiKey, RATE_LIMIT_MAX: '10000' }, stdio: ['ignore', 'ignore', 'pipe'] });
+    DATABASE_PATH: databasePath, API_KEY: apiKey, RATE_LIMIT_MAX: '10000',
+    LEADS_SMTP_HOST: '', LEADS_SMTP_USER: '', LEADS_SMTP_PASSWORD: '' }, stdio: ['ignore', 'ignore', 'pipe'] });
   let errors = '';
   child.stderr.on('data', (chunk) => { errors += chunk; });
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -843,6 +844,24 @@ async function main() {
   const leadB = await request('POST', '/leads', { name: 'QA Lead B', contact: '+79990000002',
     companyCode: companyB.body.code }, null);
   assert.equal(leadA.status, 201); assert.equal(leadADupe.body.deduplicated, true); assert.equal(leadB.status, 201);
+  inspect((db) => {
+    for (const lead of [publicLead, leadA, leadB]) {
+      const rows = db.prepare('SELECT * FROM lead_email_outbox WHERE lead_id = ?').all(lead.body.id);
+      assert.equal(rows.length, 1, 'one durable notification per created/deduplicated lead');
+      assert.equal(rows[0].status, 'pending', 'disabled SMTP does not discard the notification');
+    }
+  });
+  console.log('EMAIL_OUTBOX_DURABLE=PASS EMAIL_DEDUP=PASS SMTP_NETWORK_DISABLED=PASS');
+  const leadsBeforeOutboxError = inspect(db => db.prepare('SELECT COUNT(*) AS count FROM leads').get().count);
+  inspect(db => db.exec("CREATE TRIGGER qa_outbox_error BEFORE INSERT ON lead_email_outbox BEGIN SELECT RAISE(ABORT,'QA outbox unavailable'); END"));
+  try {
+    const failedLead = await request('POST', '/leads', {name: 'QA Atomic Lead', contact: '+79990000998'}, null);
+    assert.equal(failedLead.status, 500);
+    assert.equal(inspect(db => db.prepare('SELECT COUNT(*) AS count FROM leads').get().count), leadsBeforeOutboxError);
+  } finally {
+    inspect(db => db.exec('DROP TRIGGER qa_outbox_error'));
+  }
+  console.log('EMAIL_OUTBOX_ATOMIC_WITH_LEAD=PASS');
   assert.equal((await request('PATCH', `/leads/${leadA.body.id}`, { companyCode: null })).status, 200);
   assert.equal((await request('PATCH', `/leads/${leadA.body.id}`, { companyCode: company.body.code })).status, 200);
   assert.equal((await request('GET', `/leads?companyCode=${company.body.code}`)).body.leads.length, 1);
