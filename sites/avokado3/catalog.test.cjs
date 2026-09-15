@@ -117,6 +117,73 @@ test('future saved edits survive reloads after the one-time correction', () => {
   assert.ok(render(prepare(saved, defaults), false).includes('<dd>50 мин</dd>'));
 });
 
+// Public Yclients company 375899: service IDs 16141950, 16141952, 16141953,
+// 16141954, 16141957, 16141955, 16141956, 16141958 (2026-09-15).
+const verifiedCombos = [
+  ['laser-combo-1', 'Подмышки + тотальное бикини.'],
+  ['laser-combo-2', 'Голени + тотальное бикини.'],
+  ['laser-combo-3', 'Голени + подмышки.'],
+  ['laser-combo-4', 'Подмышки + ноги полностью.'],
+  ['laser-combo-5', 'Руки полностью + подмышки.'],
+  ['laser-combo-6', 'Подмышки + голени + тотальное бикини.'],
+  ['laser-combo-7', 'Подмышки + ноги полностью + тотальное бикини.'],
+  ['laser-combo-8', 'Безлимит по зонам.'],
+];
+
+test('all eight verified combo descriptions sit with table names and follow selected home cards', () => {
+  const selected = copy(defaults);
+  selected.showcase = {self: verifiedCombos.map(([id]) => id), two: []};
+  const full = render(selected, true), home = render(selected, false);
+  for (const [id, desc] of verifiedCombos) {
+    const service = item(defaults, id);
+    assert.equal(service.desc, desc, id);
+    const row = full.match(new RegExp(`<tr\\b[^>]*data-service="${id}"[\\s\\S]*?<\\/tr>`))[0];
+    assert.ok(row.includes(`${service.title}<small>${desc}</small></th>`), `${id}: description belongs to the service name`);
+    assert.ok(row.includes(`<td>${service.price}</td>`), `${id}: price is unchanged`);
+    const card = home.match(new RegExp(`<article\\b[^>]*data-service="${id}"[\\s\\S]*?<\\/article>`))[0];
+    assert.ok(card.includes(`<p class="av-description">${desc}</p>`), `${id}: same description on the home showcase`);
+  }
+});
+
+test('saved v3 and newer catalogues backfill only empty combo descriptions without static fallback or input mutation', () => {
+  for (const version of [3, 4]) {
+    const saved = copy(defaults); saved.catalogVersion = version;
+    for (const [index, [id]] of verifiedCombos.entries()) {
+      const service = item(saved, id);
+      if (index % 4 === 0) delete service.desc;
+      else service.desc = [null, '', ' \n\t'][index % 4 - 1];
+      service.price = `${700 + index} ₽`;
+    }
+    item(saved, 'first-1').duration = '50 мин';
+    const before = JSON.stringify(saved), prepared = prepare(saved, null);
+    assert.equal(JSON.stringify(saved), before, 'input remains intact');
+    assert.equal(prepared.catalogVersion, version);
+    for (const service of items(saved)) {
+      const found = verifiedCombos.find(([id]) => id === service.id);
+      const expected = found ? {...service, desc: found[1]} : service;
+      assert.equal(JSON.stringify(item(prepared, service.id)), JSON.stringify(expected), service.id);
+    }
+    assert.equal(prepare(prepared, defaults), prepared, 'completed backfill does not rewrite future reloads');
+  }
+});
+
+test('combo backfill respects owner descriptions, renamed services, custom IDs and other categories', () => {
+  const saved = copy(defaults);
+  item(saved, 'laser-combo-1').desc = 'Мой состав <текст владельца>';
+  item(saved, 'laser-combo-2').title = 'Мой новый комплекс';
+  item(saved, 'laser-combo-2').desc = '';
+  item(saved, 'laser-combo-3').id = 'owner-combo';
+  item(saved, 'owner-combo').desc = '';
+  const moved = item(saved, 'laser-combo-4');
+  moved.desc = '';
+  saved.categories.find(cat => cat.id === 'laser-combo').items = saved.categories.find(cat => cat.id === 'laser-combo').items.filter(service => service !== moved);
+  saved.categories.push({id: 'owner-category', title: 'Мой раздел', kind: 'table', block: 'self', items: [moved]});
+  assert.equal(prepare(saved, defaults), saved, 'no matching empty standard service needs backfill');
+  const html = render(prepare(saved, defaults), true);
+  assert.ok(html.includes('Мой состав &lt;текст владельца&gt;'));
+  assert.ok(!html.includes(verifiedCombos[0][1]));
+});
+
 test('edited content is escaped and an empty certificate has a usable fallback', () => {
   const changed = copy(defaults);item(changed, 'first-1').title = '<img src=x onerror=alert(1)>';
   item(changed, 'first-1').card = '<img src=x onerror=alert(1)>';
