@@ -10,23 +10,24 @@
   const settle = value => 1 - Math.pow(1 - clamp(value, 0, 1), 3);
 
   // Normal slides keep their former scroll distance; paired visit steps extend only their own scene.
-  function frameAt(offset, unit, count, target, beats, sequence) {
+  function frameAt(offset, unit, count, target, beats, sequence, slideWeights = []) {
     const safeUnit = Math.max(1, unit);
     const targetWeight = (beats + 0.8) / 1.36;
     const paired = sequence && Number.isInteger(sequence.target) && sequence.target >= 0 &&
       sequence.target < count && sequence.target !== target && sequence.count > 0 && sequence.unitSpan > 0;
     const pairWeight = paired ? sequence.count * sequence.unitSpan : 1;
-    const total = count - 1 + targetWeight + (paired ? pairWeight - 1 : 0);
+    const weights = Array.from({ length: count }, (_, i) => i === target ? targetWeight : paired && i === sequence.target ? pairWeight : Math.max(1, Number(slideWeights[i]) || 1));
+    const total = weights.reduce((sum, weight) => sum + weight, 0);
     let cursor = clamp(offset / safeUnit, 0, total - 0.00001);
     let index = 0;
     for (; index < count - 1; index++) {
-      const weight = index === target ? targetWeight : paired && index === sequence.target ? pairWeight : 1;
+      const weight = weights[index];
       if (cursor < weight) break;
       cursor -= weight;
     }
     const phase = index < target ? 0 : index > target ? beats + 0.8 : cursor * 1.36;
     const reveals = Array.from({ length: beats }, (_, i) => settle((phase - i) / 0.55));
-    const frame = { index, phase, reveals, totalUnits: total };
+    const frame = { index, phase, reveals, totalUnits: total, slideProgress: cursor / weights[index] };
     if (paired) frame.workPhase = index < sequence.target ? 0 : index > sequence.target ? sequence.count : cursor / sequence.unitSpan;
     return frame;
   }
@@ -76,7 +77,8 @@
       target: scenes.indexOf(scene), lastIndex: -1, measured: false,
       reduced: matchMedia('(prefers-reduced-motion: reduce)'),
       editor,
-      work: !editor && window.AvokadoWorkSteps ? window.AvokadoWorkSteps.create(root, scenes) : null
+      work: !editor && window.AvokadoWorkSteps ? window.AvokadoWorkSteps.create(root, scenes) : null,
+      mobileSlides: !editor && window.AvokadoMobileSlides ? window.AvokadoMobileSlides.create(root, scenes) : null
     };
     if (state.target < 0) return null;
     states.set(root, state);
@@ -108,10 +110,12 @@
     const height = state.sticky.clientHeight;
     if (!height) return false;
     const unit = height * 5 / 6;
-    const plan = frameAt(0, unit, scenes.length, state.target, state.elements.length, state.work);
+    const slideWeights = state.mobileSlides ? state.mobileSlides.measure(unit) : [];
+    const plan = frameAt(0, unit, scenes.length, state.target, state.elements.length, state.work, slideWeights);
     const desiredHeight = Math.ceil(height + unit * plan.totalUnits);
     if (root.style.height !== desiredHeight + 'px') root.style.height = desiredHeight + 'px';
-    const frame = frameAt(-root.getBoundingClientRect().top, unit, scenes.length, state.target, state.elements.length, state.work);
+    const frame = frameAt(-root.getBoundingClientRect().top, unit, scenes.length, state.target, state.elements.length, state.work, slideWeights);
+    if (state.mobileSlides) state.mobileSlides.update(frame);
     if (state.lastIndex !== frame.index) {
       scenes.forEach((scene, i) => {
         scene.classList.toggle('active', i === frame.index);
