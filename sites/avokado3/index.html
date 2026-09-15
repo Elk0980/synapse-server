@@ -716,7 +716,7 @@ body>#cta{z-index:65}
 <link rel="stylesheet" href="results-gallery.css?v=20260915-framed">
 <link rel="stylesheet" href="music-player.css?v=20260915">
 <link rel="stylesheet" href="mobile-foundation.css?v=20260915-mobile">
-<link rel="stylesheet" href="mobile-method.css?v=20260915-photo-background">
+<link rel="stylesheet" href="mobile-method.css?v=20260915-natural-scroll">
 <link rel="stylesheet" href="visitor-navigation.css?v=20260915-visitor">
 </head>
 <body>
@@ -937,7 +937,7 @@ body>#cta{z-index:65}
 <script src="results-gallery.js?v=20260915-framed"></script>
 <script src="work-steps.js?v=20260915-headroom"></script>
 <script src="mobile-method.js?v=20260915-mobile"></script>
-<script src="method-reveal.js?v=20260915-visitor"></script>
+<script src="method-reveal.js?v=20260915-natural-scroll"></script>
 <script>
 (function(){var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;var runway=document.querySelector('.runway-figure');if(runway){if(reduce)runway.classList.add('on');else new IntersectionObserver(function(e){runway.classList.toggle('on',e[0].isIntersecting)},{threshold:.25}).observe(runway)}var method=document.querySelector('.method-scroll');var scenes=[].slice.call(document.querySelectorAll('.method-scene'));function updateScenes(){if(!method)return;if(window.AvokadoMethod && window.AvokadoMethod.update(method,scenes))return;var rect=method.getBoundingClientRect(), span=method.offsetHeight-innerHeight;var progress=Math.max(0,Math.min(.999,-rect.top/span));var index=Math.min(scenes.length-1,Math.floor(progress*scenes.length));scenes.forEach(function(scene,i){scene.classList.toggle('active',i===index)})}function fitMethod(){
 if(!method)return;
