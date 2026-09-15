@@ -153,6 +153,7 @@
      Тексты правятся прямо на странице, изменения уходят родителю через postMessage. */
   const PARENT_ORIGINS = ['https://synapse.synapsebusiness.ru', 'http://localhost:8125', 'http://127.0.0.1:8125'];
   let parentOrigin = null;
+  let editorDocumentReceived = false;
   const post = (msg) => { if (parentOrigin) window.parent.postMessage(msg, parentOrigin); };
 
   /* innerHTML контентeditable → текст с разрешёнными тегами и переносами строк. */
@@ -333,9 +334,10 @@
       parentOrigin = e.origin;
       const m = e.data || {};
       if (m.type === 'alvi-edit-doc' && m.doc) {
+        editorDocumentReceived = true;
         setTimeout(() => { lastH = 0; reportHeight(); }, 100);
         // не трогаем элемент, который сейчас редактируется, чтобы не сбить курсор
-        const editingKey = current && current.getAttribute('data-edit');
+        const editingKey = current && current.getAttribute('contenteditable') === 'true' ? current.getAttribute('data-edit') : null;
         applyFields(m.doc, editingKey);
         applyBackgrounds(m.doc);
         placeHandles();
@@ -389,7 +391,8 @@
 
   const run = async () => {
     const doc = await load();
-    if (!doc) return;
+    // The editor draft takes precedence over a slower initial public document.
+    if (!doc || editorDocumentReceived) return;
     applyFields(doc);
     applyBackgrounds(doc);
   };

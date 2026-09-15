@@ -189,7 +189,7 @@
     }
     .floating-cta__row { display: flex; gap: 0.55rem; pointer-events: auto; }
     .floating-cta { transition: opacity 300ms ease, transform 300ms ease; }
-    .floating-cta.is-hidden { opacity: 0; transform: translateY(0.75rem); }
+    .floating-cta.is-hidden { opacity: 0; visibility: hidden; transform: translateY(0.75rem); }
     .floating-cta.is-hidden .floating-cta__row { pointer-events: none; }
     .floating-cta__button {
       position: relative; display: inline-flex; align-items: center; justify-content: center;
@@ -910,10 +910,18 @@
       const cta = document.querySelector('.floating-cta');
       const footer = document.querySelector('.site-footer');
       if (!cta || !footer) return;
-      const update = () => cta.classList.toggle('is-hidden', footer.getBoundingClientRect().top < window.innerHeight - 40);
+      const update = () => {
+        // Keep a focused action visible until keyboard focus leaves the group.
+        const hidden = footer.getBoundingClientRect().top < window.innerHeight - 40 && !cta.contains(document.activeElement);
+        cta.classList.toggle('is-hidden', hidden);
+        cta.inert = hidden;
+        cta.setAttribute('aria-hidden', String(hidden));
+      };
       update();
       addEventListener('scroll', update, { passive: true });
       addEventListener('resize', update);
+      cta.addEventListener('focusin', update);
+      cta.addEventListener('focusout', () => setTimeout(update, 0));
     })();
     hydratePrice();
   </script>

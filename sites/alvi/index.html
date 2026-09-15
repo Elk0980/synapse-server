@@ -2783,7 +2783,7 @@
           <h3 class="promo__title" data-edit="promo.promo-title-1">Абонемент ALVI</h3>
           <p class="promo__copy" data-edit="promo.promo-copy-1">Несколько визитов одной покупкой — время для отдыха в вашем ритме.</p>
           <p class="promo__note" data-edit="promo.promo-note-1">Условия и варианты абонементов — у администратора</p>
-          <div class="promo__actions"><a class="price-all__button promo__button" href="https://t.me/+79246180555" target="_blank" rel="noopener" data-edit="promo.promo-button-1">Узнать про абонемент</a></div>
+          <div class="promo__actions"><a class="price-all__button promo__button" href="#contacts" data-edit="promo.promo-button-1">Узнать про абонемент</a></div>
           </div>
         </div>
         <a class="promo__half promo__half--avokado" href="https://avokado38.ru/" target="_blank" rel="noopener">
@@ -3226,7 +3226,7 @@
     <div class="synapse-strip">сайт работает на <a href="https://synapsebusiness.ru" target="_blank" rel="noopener">Synapse Business</a></div>
   </main>
   <div class="cookie-notice" role="dialog" aria-label="Уведомление о cookie"><span>Сайт использует cookie для корректной работы.</span><button type="button">Хорошо</button></div>
-  <script src="callback.js?v=20260910" defer></script>
+  <script src="callback.js?v=20260915-confirmed" defer></script>
 
   <script src="hero-idle.js?v=20260910-autoplay"></script>
   <script>
@@ -4214,10 +4214,11 @@
       let shown = false;
       let previousFocus = null;
       try { shown = sessionStorage.getItem(KEY) === "1"; } catch (e) {}
-      const close = () => {
+      const close = ({ restoreFocus = true } = {}) => {
+        if (!promo.classList.contains("is-open")) return;
         promo.classList.remove("is-open");
         document.documentElement.classList.remove("promo-open");
-        if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+        if (restoreFocus && previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
         else promo.querySelector(".promo__close")?.blur();
       };
       const open = () => {
@@ -4229,7 +4230,19 @@
         promo.querySelector(".promo__close")?.focus({ preventScroll: true });
       };
       promo.querySelector("#promo-close")?.addEventListener("click", close);
-      promo.addEventListener("click", (e) => { if (e.target === promo) close(); });
+      promo.addEventListener("click", (e) => {
+        if (e.target === promo) close();
+        const link = e.target.closest?.('a[href="#contacts"]');
+        if (EDIT || !link || e.defaultPrevented || e.button > 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+        const contacts = document.getElementById("contacts");
+        if (!contacts) return;
+        e.preventDefault();
+        close({ restoreFocus: false });
+        if (location.hash !== "#contacts") history.pushState(history.state, "", "#contacts");
+        contacts.setAttribute("tabindex", "-1");
+        contacts.focus({ preventScroll: true });
+        contacts.scrollIntoView({ behavior: "instant", block: "start" });
+      });
       document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
       window.alviPromoOpen = open;
       if (EDIT || shown || !("IntersectionObserver" in window)) return;
@@ -4239,7 +4252,7 @@
       io.observe(trust);
     })();
   </script>
-  <script src="site-apply.js?v=20260915-money-spacing" defer></script>
+  <script src="site-apply.js?v=20260915-editor-preview" defer></script>
 <script src="https://synapse.synapsebusiness.ru/track.js?v=20260905" data-company="alvi" defer></script>
 <script src="price-render.js?v=20260910-booking" defer></script>
 <script>

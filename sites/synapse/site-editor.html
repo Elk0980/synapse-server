@@ -560,6 +560,8 @@
 
   let data = null;
   let dirty = false;
+  let editRevision = 0;
+  let saving = false;
   let author = '';
   let sessionAuth = false;
   let csrfToken = '';
@@ -580,7 +582,7 @@
   const frame = $('#ed-frame');
 
   function setStatus(text, kind) { statusEl.textContent = text; statusEl.className = 'ed-status' + (kind ? ' is-' + kind : ''); }
-  function markDirty() { dirty = true; saveBtn.textContent = 'Сохранить •'; setStatus('Есть несохранённые изменения'); renderSub(); }
+  function markDirty() { editRevision += 1; dirty = true; saveBtn.textContent = 'Сохранить •'; setStatus('Есть несохранённые изменения'); renderSub(); }
   function imgUrl(p) { if (!p) return ''; if (/^https?:/.test(p)) return p; return SITE + (p.startsWith('/') ? p : '/' + p); }
   function findField(key) { for (const s of data.sections) for (const f of s.fields || []) if (f.key === key) return f; return null; }
   function sectionOfField(key) { return data.sections.find((s) => (s.fields || []).some((f) => f.key === key)); }
@@ -1015,7 +1017,7 @@
     }
     return result;
   }
-  async function apiFetch(url, opts = {}, withAuth = false) {
+  async function apiFetch(url, opts = {}, withAuth = true) {
     let headers = { 'Accept': 'application/json', ...(opts.headers || {}) };
     if (withAuth) headers = authHeaders(headers, opts.method && opts.method !== 'GET');
     const r = await fetch(url, { ...opts, headers, credentials: 'same-origin', cache: 'no-store' });
@@ -1047,18 +1049,20 @@
     getKey(false);
   }
   async function save() {
-    if (!data) return;
+    if (!data || saving) return;
+    saving = true;
+    const revision = editRevision;
     saveBtn.disabled = true; setStatus('Сохраняю…');
     try {
       const res = await apiFetch(API, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }, true);
-      data.version = res.version; data.updatedAt = res.updatedAt; dirty = false; saveBtn.textContent = 'Сохранить';
-      await whoami();
-      setStatus(`Сохранено ${new Date(res.updatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · версия ${res.version}. Уже на сайте.`, 'ok');
+      data.version = res.version; data.updatedAt = res.updatedAt; dirty = editRevision !== revision;
+      saveBtn.textContent = dirty ? 'Сохранить •' : 'Сохранить';
+      setStatus(dirty ? `Сохранена версия ${res.version}. Есть новые несохранённые изменения.` : `Сохранено ${new Date(res.updatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · версия ${res.version}. Уже на сайте.`, dirty ? '' : 'ok');
       renderSub();
     } catch (e) {
       if (e.status === 401) { try { sessionStorage.removeItem(KEY_STORAGE); } catch (x) {} }
       setStatus('Не сохранено: ' + e.message, 'error'); alert('Не сохранено.\n' + e.message);
-    } finally { saveBtn.disabled = false; }
+    } finally { saving = false; saveBtn.disabled = false; }
   }
   async function showHistory() {
     const box = $('#ed-modal-box'); const modal = $('#ed-modal');
@@ -1081,9 +1085,18 @@
       const def = await r.json(); if (!def || !Array.isArray(def.sections)) return false;
       const have = new Set(doc.sections.map((x) => x.id)); let added = 0;
       def.sections.forEach((sec, i) => {
-        if (have.has(sec.id)) return;
+        if (have.has(sec.id)) {
+          const existing = doc.sections.find((item) => item.id === sec.id);
+          existing.fields ||= [];
+          const keys = new Set(existing.fields.map((field) => field.key));
+          for (const field of sec.fields || []) {
+            if (keys.has(field.key)) continue;
+            existing.fields.push(JSON.parse(JSON.stringify(field))); keys.add(field.key); added += 1;
+          }
+          return;
+        }
         const prev = def.sections[i - 1]; const at = prev ? doc.sections.findIndex((x) => x.id === prev.id) : -1;
-        doc.sections.splice(at >= 0 ? at + 1 : doc.sections.length, 0, JSON.parse(JSON.stringify(sec))); added += 1;
+        doc.sections.splice(at >= 0 ? at + 1 : doc.sections.length, 0, JSON.parse(JSON.stringify(sec))); have.add(sec.id); added += 1;
       });
       return added > 0;
     } catch (e) { return false; }
