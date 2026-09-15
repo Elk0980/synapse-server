@@ -4,7 +4,7 @@ const http = require('node:http');
 const { createHash } = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 const { URL } = require('node:url');
-const { createEmailNotifications } = require('./email-notifications');
+const { createEmailSettings } = require('./email-settings');
 const { createEmailOutbox } = require('./email-outbox');
 const { createEmailDiagnostics } = require('./email-diagnostics');
 
@@ -32,7 +32,6 @@ const CABINET_STAGES = new Map([
 ]);
 const CABINET_STAGE_IDS = new Map([...CABINET_STAGES].map(([id, stage]) => [stage, id]));
 const rateLimits = new Map();
-const emailNotifications = createEmailNotifications();
 
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
   throw new Error('PORT должен быть целым числом от 1 до 65535');
@@ -540,8 +539,9 @@ const createLead = db.prepare(`
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'новая', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 const getLead = db.prepare('SELECT * FROM leads WHERE id = ?');
-const emailOutbox = createEmailOutbox(db, emailNotifications);
-const emailDiagnostics = createEmailDiagnostics(db);
+const emailSettings = createEmailSettings(db, {apiKey: API_KEY});
+const emailOutbox = createEmailOutbox(db, emailSettings.notifications);
+const emailDiagnostics = createEmailDiagnostics(db, {getEnvironment: emailSettings.getEnvironment});
 function deliverLeadEmails() {
   return emailOutbox.drain().catch(() => {
     // Do not expose SMTP responses or contact details in service logs.
@@ -2301,6 +2301,16 @@ async function route(request, response) {
   takeRateLimit(request);
   const publicPost = request.method === 'POST' && ['/leads', '/events'].includes(url.pathname);
   if (!publicPost) requireApiKey(request);
+
+  if (url.pathname === '/email-settings') {
+    if (request.method === 'GET') return send(response, 200, emailSettings.getPublic(), {...cors, 'cache-control': 'no-store'});
+    if (request.method === 'PUT') return send(response, 200, emailSettings.save(await readJson(request)), {...cors, 'cache-control': 'no-store'});
+    fail(405, 'Метод не поддерживается');
+  }
+  if (url.pathname === '/email-settings/check') {
+    if (request.method !== 'POST') fail(405, 'Метод не поддерживается');
+    return send(response, 200, await emailSettings.check(), {...cors, 'cache-control': 'no-store'});
+  }
 
   if (request.method === 'GET' && url.pathname === '/email-status') {
     return send(response, 200, emailDiagnostics.getStatus(), {...cors, 'cache-control': 'no-store'});

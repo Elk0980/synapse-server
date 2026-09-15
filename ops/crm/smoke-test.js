@@ -698,7 +698,7 @@ async function main() {
   console.log('MIGRATION_EMPTY=PASS NO_SEED=PASS');
 
   for (const pathname of ['/contacts', '/companies', '/legal-entities', '/pipeline-stages',
-    '/pipelines', '/pipeline-rules', '/email-status']) {
+    '/pipelines', '/pipeline-rules', '/email-status', '/email-settings']) {
     assert.equal((await request('GET', pathname, undefined, null)).status, 401);
     assert.equal((await request('GET', pathname, undefined, 'wrong')).status, 401);
   }
@@ -713,6 +713,19 @@ async function main() {
     {code: 'avokado', queued: 0, sending: 0, sent: 0, errors: []}
   ]);
   assert.ok(emailStatus.body.companies.every(company => typeof company.recipientConfigured === 'boolean'));
+  for (const key of [null, 'wrong']) {
+    assert.equal((await request('PUT', '/email-settings', {}, key)).status, 401);
+    assert.equal((await request('POST', '/email-settings/check', {}, key)).status, 401);
+  }
+  const mailSettings = await request('GET', '/email-settings');
+  assert.equal(mailSettings.status, 200);
+  assert.equal(mailSettings.headers.get('cache-control'), 'no-store');
+  assert.equal(mailSettings.body.passwordConfigured, false);
+  assert.equal(mailSettings.body.needsPassword, true);
+  assert.deepEqual(Object.keys(mailSettings.body).sort(), ['provider', 'user', 'alviRecipient',
+    'avokadoRecipient', 'passwordConfigured', 'source', 'updatedAt', 'needsPassword'].sort());
+  assert.equal((await request('PUT', '/email-settings', {provider: 'localhost'})).status, 400);
+  assert.deepEqual((await request('POST', '/email-settings/check', {})).body, {ok: false, code: 'SMTP_NOT_CONFIGURED'});
   assert.equal((await request('PUT', '/pipeline-stages', { stages: [] }, null)).status, 401);
   assert.equal((await request('PUT', '/pipelines', { pipelines: [] }, null)).status, 401);
   const contact = await request('POST', '/contacts', { name: 'QA Contact A', city: 'QA City',

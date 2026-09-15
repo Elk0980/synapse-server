@@ -410,8 +410,8 @@ async function proxyCrm(request, response, url, cors) {
   const identity = initialSession.user;
   const readOnly = request.method === 'GET';
   const crmPath = url.pathname.slice('/content/crm'.length) || '/';
-  if (crmPath === '/email-status' && identity.role !== 'owner') {
-    fail(403, 'Диагностика почты доступна только владельцу');
+  if (['/email-status', '/email-settings', '/email-settings/check'].includes(crmPath) && identity.role !== 'owner') {
+    fail(403, 'Настройки и диагностика почты доступны только владельцу');
   }
   const analyticsReadPath = new Set([
     '/dashboard', '/summary', '/external-stats', '/expenses', '/tasks/summary',
