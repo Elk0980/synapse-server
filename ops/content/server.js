@@ -449,7 +449,7 @@ async function proxyCrm(request, response, url, cors) {
   }
   if (!readOnly) requireCsrf(request, session);
 
-  const clientDatabasePath = /^\/(?:contacts|companies|legal-entities|tasks)(?:\/|$)/.test(crmPath) &&
+  const clientDatabasePath = /^\/(?:contacts|companies|legal-entities|tasks|deals)(?:\/|$)/.test(crmPath) &&
     crmPath !== '/tasks/summary';
   const companyOverview = /^\/companies\/\d+\/overview$/.test(crmPath);
   const ownerOnlyPipelinePath = /^\/(?:pipeline-stages|pipelines|pipeline-rules)(?:\/|$)/.test(crmPath) ||

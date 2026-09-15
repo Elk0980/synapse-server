@@ -829,11 +829,12 @@
     });
   };
 
-  cabinet.registerView("deals", {
+  cabinet.legacyDeals = {
     title: "Сделки",
     render(container, context) {
       init(context);
       if (ctx.hasPermission("crm.view")) loadBoard();
     }
-  });
+  };
+  cabinet.registerView("deals", cabinet.legacyDeals);
 })();
