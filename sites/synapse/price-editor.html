@@ -389,10 +389,10 @@
   <div class="ed-modal" id="ed-modal"><div class="ed-modal__box" id="ed-modal-box"></div></div>
 
   <script>
-{ const p = new URLSearchParams(location.search); const requested = p.get('site') || 'alvi'; if (['alvi','avokado'].includes(requested)) { const base = ('https://' + requested + '.synapsebusiness.ru').replace(/\/$/, ''); document.write('<script src="' + base + '/price-render.js?v=20260904"><\/script>'); } }
+{ const p = new URLSearchParams(location.search); const requested = p.get('site') || 'alvi'; if (['alvi','avokado'].includes(requested)) { const base = 'https://' + (requested === 'avokado' ? 'avokado3' : requested) + '.synapsebusiness.ru'; document.write('<script src="' + base + '/price-render.js?v=20260915-subscriptions"><\/script>'); } }
 </script>
 <script>
-if(new URLSearchParams(location.search).get('site')==='avokado')document.write('<script src="https://avokado3.synapsebusiness.ru/catalog.js?v=20260915-massage-times"><\/script>');
+if(new URLSearchParams(location.search).get('site')==='avokado')document.write('<script src="https://avokado3.synapsebusiness.ru/catalog.js?v=20260915-subscriptions"><\/script>');
 </script>
   <script>
 (() => {
@@ -526,7 +526,7 @@ if(new URLSearchParams(location.search).get('site')==='avokado')document.write('
         <button class="ed-btn ed-btn--small ed-btn--danger" type="button" data-act="remove" title="Убрать с главной">✕</button>
       </div>`;
     }).join('');
-    const options = data.categories.flatMap((cat) => cat.items
+    const options = data.categories.filter(cat => !isAvokado || cat.id !== 'subscriptions').flatMap((cat) => cat.items
       .filter((it) => !inShowcase(it.id))
       .map((it) => `<option value="${esc(it.id)}">${esc(cat.title)} — ${esc(it.card || it.title)}</option>`)).join('');
     const full = list.length >= max;
@@ -543,6 +543,7 @@ if(new URLSearchParams(location.search).get('site')==='avokado')document.write('
 
   /* --- редактирование позиций --- */
   function starHtml(it, row) {
+    if (isAvokado && catOf(it.id)?.id === 'subscriptions') return '';
     const on = inShowcase(it.id);
     return `<button class="ed-star${row ? ' ed-star--row' : ''}${on ? ' is-on' : ''}" type="button" data-star="${esc(it.id)}" title="${on ? 'Убрать из популярных' : 'Отметить популярной'}" aria-pressed="${on}">${on ? '★' : '☆'}</button>`;
   }
@@ -555,22 +556,23 @@ if(new URLSearchParams(location.search).get('site')==='avokado')document.write('
   function formHtml(it) {
     const cat = catOf(it.id);
     const isTable = cat && cat.kind === 'table';
+    const isSubscription = isAvokado && cat?.id === 'subscriptions';
     return `<form class="ed-form" data-form="${esc(it.id)}">
       <label class="is-wide">Название в прайсе<input name="title" value="${esc(it.title)}" required></label>
-      <label>Название на главной<input name="card" value="${esc(it.card || '')}"><small>коротко, без кавычек</small></label>
+      ${isSubscription ? '' : `<label>Название на главной<input name="card" value="${esc(it.card || '')}"><small>коротко, без кавычек</small></label>`}
       <label>Цена<input name="price" value="${esc(it.price || '')}"></label>
       <label>Старая цена<input name="oldPrice" value="${esc(it.oldPrice || '')}"></label>
-      <label>Длительность<input name="duration" value="${esc(it.duration || '')}"></label>
-      ${isAvokado ? `<label>Направление на главной<select name="direction"><option value="">По разделу прайса</option>${[['laser','Лазерная эпиляция'],['apparatus','Аппаратный массаж'],['manual','Ручной массаж и лицо']].map(([v,t])=>`<option value="${v}" ${it.direction===v?'selected':''}>${t}</option>`).join('')}</select></label><label><input type="checkbox" name="promo" ${it.promo?'checked':''}> Специальное предложение</label>` : ''}
-      <label class="ed-switch">
+      <label>${isSubscription ? 'Посещения и срок действия' : 'Длительность'}<input name="duration" value="${esc(it.duration || '')}"></label>
+      ${isAvokado && !isSubscription ? `<label>Направление на главной<select name="direction"><option value="">По разделу прайса</option>${[['laser','Лазерная эпиляция'],['apparatus','Аппаратный массаж'],['manual','Ручной массаж и лицо']].map(([v,t])=>`<option value="${v}" ${it.direction===v?'selected':''}>${t}</option>`).join('')}</select></label><label><input type="checkbox" name="promo" ${it.promo?'checked':''}> Специальное предложение</label>` : ''}
+      ${isSubscription ? '' : `<label class="ed-switch">
         <input type="checkbox" name="quizEnabled" ${it.quizEnabled === true || (it.quizEnabled == null && DEFAULT_QUIZ_ITEMS.has(it.id)) ? 'checked' : ''}>
         <span class="ed-switch__track" aria-hidden="true"></span>
         <span class="ed-switch__copy">Участвует в подборе (квиз)<small>Квиз предлагает только отмеченные услуги</small></span>
       </label>
-      <label>Кому подходит (главная)<input name="who" value="${esc(it.who || '')}"></label>
-      <label class="is-wide">Описание для главной<input name="desc" value="${esc(it.desc || '')}"></label>
-      <label class="is-wide">Состав одной строкой (главная)<input name="composition" value="${esc(it.composition || '')}"><small>если пусто — берутся первые пункты состава</small></label>
-      <div class="is-wide ed-photo" data-photo-box="${esc(it.id)}">
+      <label>Кому подходит (главная)<input name="who" value="${esc(it.who || '')}"></label>`}
+      <label class="is-wide">${isSubscription ? 'Описание абонемента' : 'Описание для главной'}<input name="desc" value="${esc(it.desc || '')}"></label>
+      <label class="is-wide">${isSubscription ? 'Состав и условия' : 'Состав одной строкой (главная)'}<input name="composition" value="${esc(it.composition || '')}"><small>${isSubscription ? 'Укажите только согласованные условия' : 'если пусто — берутся первые пункты состава'}</small></label>
+      ${isSubscription ? '' : `<div class="is-wide ed-photo" data-photo-box="${esc(it.id)}">
         <span class="ed-field__label">Фото на фоне карточки (главная)</span>
         <input type="hidden" name="photo" value="${esc(it.photo || '')}">
         <div class="ed-photo__row">
@@ -581,7 +583,7 @@ if(new URLSearchParams(location.search).get('site')==='avokado')document.write('
             <small class="ed-status" data-photo-status="${esc(it.id)}">JPEG, PNG или WebP; большие снимки уменьшаются до 1600 px сами.</small>
           </div>
         </div>
-      </div>
+      </div>`}
       ${isTable ? '' : `<label class="is-wide">Состав программы — по одному пункту в строке<textarea name="items">${esc((it.items || []).join('\n'))}</textarea></label>`}
       <div class="ed-form__actions">
         <button class="ed-btn ed-btn--main ed-btn--small" type="submit">Готово</button>
@@ -598,8 +600,9 @@ if(new URLSearchParams(location.search).get('site')==='avokado')document.write('
     for (const k of ['title', 'card', 'price', 'oldPrice', 'duration', 'who', 'desc', 'composition', 'photo']) {
       if (fd.has(k)) it[k] = String(fd.get(k)).trim();
     }
-    it.quizEnabled = fd.has('quizEnabled');
-    if(isAvokado){it.direction=String(fd.get('direction')||'');it.promo=fd.has('promo');}
+    const isSubscription=isAvokado&&f.cat.id==='subscriptions';
+    if(!isSubscription)it.quizEnabled = fd.has('quizEnabled');
+    if(isAvokado&&!isSubscription){it.direction=String(fd.get('direction')||'');it.promo=fd.has('promo');}
     if (fd.has('items')) it.items = String(fd.get('items')).split('\n').map((s) => s.trim()).filter(Boolean);
     editing = null; markDirty(); render();
   }
@@ -722,13 +725,14 @@ if(new URLSearchParams(location.search).get('site')==='avokado')document.write('
   }
   function titleExtra(cat) {
     const n = popularCount(cat);
-    return `<span class="ed-count${n >= MAX_PER_CATEGORY ? ' is-full' : ''}" title="Популярных в разделе">★ ${n} / ${MAX_PER_CATEGORY}</span>
+    return `${isAvokado&&cat.id==='subscriptions'?'':`<span class="ed-count${n >= MAX_PER_CATEGORY ? ' is-full' : ''}" title="Популярных в разделе">★ ${n} / ${MAX_PER_CATEGORY}</span>`}
       <span class="ed-title-tools">
         <button class="ed-btn ed-btn--small ed-btn--ghost" type="button" data-rename="${esc(cat.id)}" title="Переименовать">✎</button>
         <button class="ed-btn ed-btn--small ed-btn--ghost ed-btn--danger" type="button" data-delcat="${esc(cat.id)}" title="Удалить раздел">✕</button>
       </span>`;
   }
   function sectionTools(cat) {
+    if(isAvokado&&cat.id==='subscriptions')return `<div class="ed-section-tools"><button class="ed-btn ed-btn--small" type="button" data-additem="subscriptions">+ Добавить абонемент</button><small class="ed-status">Абонементы показываются в начале полного прайса. Цена, состав и сроки — из карточки.</small></div>`;
     return `<div class="ed-section-tools">
       <button class="ed-btn ed-btn--small" type="button" data-additem="${esc(cat.id)}">+ Добавить позицию</button>
       <label class="ed-status">Звёзды этого раздела идут в блок:
@@ -768,10 +772,11 @@ if(new URLSearchParams(location.search).get('site')==='avokado')document.write('
       `<li><button class="ed-btn ed-btn--small" type="button" id="ed-addcat" style="margin-top:.6rem">+ Новый раздел</button></li>`;
     // счётчики популярных в меню
     for (const cat of data.categories) {
+      if(isAvokado&&cat.id==='subscriptions')continue;
       const a = nav.querySelector(`a[href="#${cat.id}"]`);
       if (a) a.insertAdjacentHTML('beforeend', `<span class="ed-count">★ ${popularCount(cat)}</span>`);
     }
-    content.innerHTML = (isAvokado ? '<p class="ps__note">Карточки распределяются по трём направлениям: лазер, аппаратный массаж, ручной массаж и лицо. Отметьте услуги звездой; порядок меняется стрелками. Направление и промо меняются через «Изменить». Сертификат настраивается ниже.</p>' : '') + renderShowcaseSection('self') + renderShowcaseSection('two') + (isAvokado ? renderCertificateEditor() : '') +
+    content.innerHTML = (isAvokado ? '<p class="ps__note">Абонементы и сертификаты открывают полный прайс. Условия абонементов меняются в разделе «Абонементы»: оставьте цену пустой, пока она не согласована. Остальные карточки распределяются по трём направлениям: лазер, аппаратный массаж, ручной массаж и лицо. Отметьте услуги звездой; порядок меняется стрелками. Направление и промо меняются через «Изменить».</p>' : '') + renderShowcaseSection('self') + renderShowcaseSection('two') + (isAvokado ? renderCertificateEditor() : '') +
       AlviPrice.renderSections(data, {
         editor: true, noCertificates: true, starHtml, editHtml, titleExtra,
         addCardHtml: sectionTools, addRowHtml: sectionTools,

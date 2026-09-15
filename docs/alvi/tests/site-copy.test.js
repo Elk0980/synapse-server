@@ -8,10 +8,12 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const script = fs.readFileSync(path.resolve(__dirname, '../../../sites/alvi/site-apply.js'), 'utf8');
+const promoHelper = fs.readFileSync(path.resolve(__dirname, '../../../sites/alvi/subscription-promo-content.js'), 'utf8');
+const promoContent = require('../../../sites/alvi/subscription-promo-content.js');
 const fallback = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../sites/alvi/data/site.json'), 'utf8'));
 const fallbackFields = new Map(fallback.sections.flatMap((section) => section.fields || []).map((field) => [field.key, field.value]));
 
-function renderer(fields, width = 390, { edit = false } = {}) {
+function renderer(fields, width = 390, { edit = false, legacy = false } = {}) {
   const elements = fields.map((field) => ({
     innerHTML: '', style: {}, tagName: field.kind === 'button' ? 'A' : 'P', attributes: {}, classList: { toggle() {} },
     getAttribute(name) { return name === 'data-edit' ? field.key : this.attributes[name] ?? null; },
@@ -20,13 +22,15 @@ function renderer(fields, width = 390, { edit = false } = {}) {
   const window = { innerWidth: width, matchMedia: () => ({ matches: window.innerWidth <= 899.84 }), addEventListener() {} };
   window.parent = edit ? {} : window;
   const document = {
-    readyState: 'loading', addEventListener() {},
+    readyState: 'loading', addEventListener() {}, getElementById() { return null; },
     querySelectorAll(selector) { return selector === '[data-edit]' ? elements : []; }
   };
-  vm.runInNewContext(script, { window, document, location: { search: edit ? '?edit=1' : '' }, URLSearchParams });
+  const context = vm.createContext({ window, document, location: { search: edit ? '?edit=1' : '' }, URLSearchParams });
+  vm.runInContext(promoHelper, context);
+  vm.runInContext(script, context);
   const apply = (nextWidth = width) => {
     window.innerWidth = nextWidth;
-    window.AlviSite.applyFields({ sections: [{ id: 'promo', fields }] });
+    window.AlviSite.applyFields({ sections: [{ id: 'promo', fields }], ...(!legacy && { subscriptionPromoRevision: promoContent.REVISION }) });
     return elements.map((element) => element.innerHTML);
   };
   apply.elements = elements;
@@ -42,17 +46,25 @@ const oldPromo = [
   ['promo.promo-title-2', 'Красота без боли: аппаратная коррекция фигуры и лазерная эпиляция', 'Пробный аппаратный массаж']
 ];
 
-test('hydrating the old cabinet document retains the approved compact banner', () => {
-  assert.deepEqual(render(oldPromo.map(([key, value]) => ({ key, value }))), oldPromo.map(([, , expected]) => expected));
-  for (const [key, original] of oldPromo) assert.equal(fallbackFields.get(key), original);
+test('the old cabinet banner upgrades to the new owner-requested story in public and editor views', () => {
+  const fields = oldPromo.map(([key, value]) => ({ key, value }));
+  const expected = fields.map(field => fallbackFields.get(field.key));
+  for (const edit of [false, true]) {
+    const apply = renderer(fields, 390, { edit, legacy: true });
+    assert.deepEqual(apply(), expected);
+    assert.deepEqual(apply(1440), expected);
+  }
+  assert.deepEqual(fields.map(field => field.value), oldPromo.map(([, value]) => value), 'hydration does not mutate the supplied source');
+  assert.equal(fallbackFields.get('promo.promo-title-1'), 'Мой способ быть в ресурсе');
+  assert.equal(fallbackFields.get('promo.promo-title-2'), 'С абонементом дешевле');
 });
 
-test('desktop preserves the approved document and mobile copy does not leak across resize', () => {
+test('after this revision even restored legacy phrases remain owner text across desktop and mobile', () => {
   const fields = oldPromo.map(([key, value]) => ({ key, value }));
   const apply = renderer(fields);
   const original = fields.map(({ value }) => value);
   assert.deepEqual(apply(1440), original);
-  assert.deepEqual(apply(390), oldPromo.map(([, , compact]) => compact));
+  assert.deepEqual(apply(390), original);
   assert.deepEqual(apply(900), original);
   assert.deepEqual(apply(1920), original);
 });
@@ -66,14 +78,12 @@ test('later cabinet edits, empty text and unchanged notes remain intact', () => 
   assert.deepEqual(render(fields), fields.map((field) => field.value));
 });
 
-test('the current offer amount still comes from the cabinet document', () => {
+test('later owner-entered amounts remain exact and are not converted to the old trial-offer template', () => {
   const [html] = render([{ key: 'promo.promo-copy-2', value: 'Пробный сеанс — 750 ₽ вместо 2 300 ₽.' }]);
-  assert.match(html, /promo__price\">750\u00a0₽<\/strong>/);
-  assert.match(html, /promo__was\">вместо 2\u00a0300\u00a0₽<\/span>/);
+  assert.equal(html, 'Пробный сеанс — 750\u00a0₽ вместо 2\u00a0300\u00a0₽.');
   assert.doesNotMatch(html, /500[ \u00a0]₽|2[ \u00a0]100[ \u00a0]₽/);
-  assert.match(html, /<\/span><\/span>$/); // No punctuation-only line after the price.
   const [continued] = render([{ key: 'promo.promo-copy-2', value: '750 ₽ вместо 2 300 ₽. Только по записи.' }]);
-  assert.match(continued, /<\/span><\/span>\. Только по записи\.$/);
+  assert.equal(continued, '750\u00a0₽ вместо 2\u00a0300\u00a0₽. Только по записи.');
 });
 
 test('certificate hydration still corrects old delivery terms and preserves later edits', () => {

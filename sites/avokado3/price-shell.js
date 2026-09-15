@@ -29,7 +29,9 @@
     nav.querySelectorAll('.av-price-subnav').forEach(el => el.remove());
     nav.querySelectorAll('[data-price-group]').forEach(li => {
       const group = document.getElementById(li.dataset.priceGroup);
+      li.hidden = !group;
       if (!group) return;
+      if (li.dataset.priceGroup === 'subscriptions') li.querySelector('a').textContent = group.querySelector('h2').textContent;
       const categories = group.querySelectorAll('.av-category');
       if (!categories.length) return;
       const list = document.createElement('ul');

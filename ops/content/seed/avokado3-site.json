@@ -910,6 +910,102 @@
           "multiline": false
         }
       ]
+    },
+    {
+      "id": "promo",
+      "title": "Баннер · ALVI и АВОКАДО",
+      "revision": "subscription-story-20260915",
+      "fields": [
+        {
+          "key": "promo.promo-tagline-1",
+          "label": "Фраза сверху",
+          "value": "Два места, где есть время для себя",
+          "multiline": true
+        },
+        {
+          "key": "promo.promo-portrait-1",
+          "label": "Фото · ALVI",
+          "value": "",
+          "multiline": true,
+          "kind": "image",
+          "src": "img/subscription-alvi-20260915.webp",
+          "zone": "promo-alvi"
+        },
+        {
+          "key": "promo.promo-brand-1",
+          "label": "Подпись бренда · ALVI",
+          "value": "SPA ALVI · время восстановиться",
+          "multiline": true
+        },
+        {
+          "key": "promo.promo-title-1",
+          "label": "Заголовок · ALVI",
+          "value": "Мой способ быть в ресурсе",
+          "multiline": true
+        },
+        {
+          "key": "promo.promo-copy-1",
+          "label": "Текст · ALVI",
+          "value": "В моём ритме важно находить время для себя. SPA-ритуалы ALVI помогают мне расслабиться и снова почувствовать себя в тонусе.",
+          "multiline": true
+        },
+        {
+          "key": "promo.promo-note-1",
+          "label": "Примечание · ALVI",
+          "value": "Выберите свой ритуал — для себя или вдвоём.",
+          "multiline": true
+        },
+        {
+          "key": "promo.promo-button-1",
+          "label": "Кнопка · ALVI",
+          "value": "Открыть мир ALVI",
+          "multiline": true,
+          "kind": "button",
+          "href": "https://spaalvi-38.ru/"
+        },
+        {
+          "key": "promo.promo-portrait-2",
+          "label": "Фото · Авокадо",
+          "value": "",
+          "multiline": true,
+          "kind": "image",
+          "src": "img/subscription-avokado-20260915.webp",
+          "zone": "promo-avokado"
+        },
+        {
+          "key": "promo.promo-brand-2",
+          "label": "Подпись бренда · Авокадо",
+          "value": "АВОКАДО · студия дизайна тела",
+          "multiline": true
+        },
+        {
+          "key": "promo.promo-title-2",
+          "label": "Заголовок · Авокадо",
+          "value": "С абонементом дешевле",
+          "multiline": true
+        },
+        {
+          "key": "promo.promo-copy-2",
+          "label": "Текст · Авокадо",
+          "value": "Забота о теле — по понятному плану. Подберём процедуры под вашу цель, составим расписание и будем отмечать прогресс вместе.",
+          "multiline": true
+        },
+        {
+          "key": "promo.promo-note-2",
+          "label": "Примечание · Авокадо",
+          "value": "Состав, стоимость и условия обсудим до начала курса.",
+          "multiline": true
+        },
+        {
+          "key": "promo.promo-button-2",
+          "label": "Кнопка · Авокадо",
+          "value": "Посмотреть абонементы",
+          "multiline": true,
+          "kind": "button",
+          "href": "price.html#subscriptions"
+        }
+      ]
     }
-  ]
+  ],
+  "subscriptionPromoRevision": "subscription-story-20260915"
 }
