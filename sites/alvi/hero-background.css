@@ -1,0 +1,24 @@
+/* The compact background lives outside the scrolling hero and Safari's clipping ancestors. */
+#hero.has-fixed-background { z-index: 2; }
+#hero.has-fixed-background .hero__sticky { overflow: visible; background: transparent; }
+#hero.has-fixed-background .hero__scenes { margin-top: 0; }
+.hero.alvi-hero-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100vh;
+  height: 100lvh;
+  min-height: 0;
+  overflow: hidden;
+  pointer-events: none;
+  visibility: hidden;
+  clip-path: inset(var(--alvi-hero-clip-top, 0px) 0 var(--alvi-hero-clip-bottom, 0px) 0);
+}
+.hero.alvi-hero-backdrop.is-visible { visibility: visible; }
+.hero.alvi-hero-backdrop .hero__media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
