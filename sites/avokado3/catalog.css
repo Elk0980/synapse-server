@@ -17,7 +17,7 @@
  .av-card-body{flex:1;width:100%;padding:14px 12px;border-radius:0;background:rgba(19,32,23,.56);backdrop-filter:none;-webkit-backdrop-filter:none}
  .av-card h3{font:400 19px/1.25 Georgia,serif!important;margin-bottom:14px!important;overflow-wrap:break-word}
  .av-tag{font-size:9px;line-height:1.5;margin-bottom:10px;letter-spacing:.03em}
- .av-facts--primary{margin-bottom:12px;gap:2px}.av-facts--primary dd{font-size:15px;line-height:1.4}.av-facts--primary s{display:block;font-size:12px;margin-top:6px;margin-inline-start:0}
+ .av-facts--primary{margin-bottom:12px;gap:2px}.av-facts--primary dd{font-size:15px;line-height:1.4}.av-facts--primary s{font-size:12px}
  .av-card-details{margin:0 0 12px}.av-card-details summary{font-size:12px;min-height:44px;border-top:1px solid #e1d29c30}.av-description{font-size:14px;line-height:1.55;margin-bottom:12px}
  .av-actions{gap:8px;padding-top:8px}.av-button{font-size:13px;min-height:46px;border-radius:11px;padding:10px 6px;overflow-wrap:break-word}
  .av-price-link{display:block;margin-top:20px;padding:12px 0;font-size:14px;min-height:44px}
@@ -40,6 +40,9 @@
 
 
 /* Transparent surfaces throughout the photo catalogue; type keeps full opacity. */
+.av-facts .av-price-pair{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}
+.av-facts .av-price-current{white-space:nowrap}
+.av-facts .av-price-pair>s{display:inline;margin:0;white-space:nowrap}
 .av-catalog .av-facts dt,.av-catalog .av-facts s{color:#e0dccb}
 .av-catalog .av-button:not(.av-button--gold){background:rgba(18,30,22,.38)}
 
