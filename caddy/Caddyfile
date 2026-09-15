@@ -377,6 +377,14 @@ alvi.synapsebusiness.ru {
 # --- Synapse Business: сайт-презентация -------------------------------------
 synapse.synapsebusiness.ru {
   root * /srv/sites/synapse
+  @email_unsubscribe {
+    path_regexp email_unsubscribe ^/email-unsubscribe/[A-Za-z0-9_-]{43}$
+    method GET POST
+  }
+  handle @email_unsubscribe {
+    uri replace /email-unsubscribe/ /public-email-unsubscribe/
+    reverse_proxy content:8080
+  }
   @cabinet path /cabinet.html /cabinet/*
   header @cabinet Cache-Control "no-cache, must-revalidate"
   # cabinet.html uses same-origin /dashboard and /leads requests for CRM.

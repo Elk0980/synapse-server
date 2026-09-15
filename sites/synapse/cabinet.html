@@ -616,6 +616,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         data-view-link="autoposting">Автопостинг</a>
       <a class="nav-link" id="content-factory-link" href="#content-factory"
         data-view-link="content-factory">Контент завод</a>
+      <a class="nav-link" id="campaigns-link" href="#campaigns" data-view-link="campaigns" hidden>Рассылки</a>
       <a class="nav-link" id="settings-link" href="#settings" data-view-link="settings">Настройки</a>
       <a class="nav-link" id="accounts-link" href="#accounts" data-view-link="accounts" hidden>Настройка аккаунтов</a>
       <a class="nav-link" href="#account" data-view-link="account">Аккаунт</a>
@@ -868,6 +869,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <div class="content-header"><h1>Контент завод</h1></div>
       <div class="card"><p class="development">В разработке</p></div>
     </section>
+    <section class="view-panel" id="campaigns-view" data-view="campaigns" hidden></section>
     <section class="view-panel" id="settings-view" data-view="settings" hidden>
       <div class="content-header"><h1>Настройки</h1></div>
       <div class="card settings-email" id="settings-email" hidden>
@@ -988,15 +990,15 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260915-google-workspace-mail";
+  window.SB_CABINET_ASSET_VERSION = "20260915-email-campaigns";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
     window.SbCabinet.views[name] = definition;
   };
   const cabinetAssets = ["home", "tasks", "leads", "deals", "clients", "chat", "hugh", "analytics",
-    "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account", "trademarks"];
-  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat", "hugh", "settings", "trademarks", "sites"];
+    "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account", "trademarks", "campaigns"];
+  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat", "hugh", "settings", "trademarks", "sites", "campaigns"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join(""));
@@ -1052,6 +1054,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     autoposting: "Автопостинг",
     "content-factory": "Контент завод",
     settings: "Настройки",
+    campaigns: "Рассылки",
     account: "Аккаунт",
     accounts: "Настройка аккаунтов",
     "access-denied": "Доступ ограничен",
@@ -1246,6 +1249,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const hasPermission = (permission) => identity?.role === "owner" ||
     identity?.permissions.includes(permission);
   const permittedView = (value) => {
+    if (value === "campaigns") return identity?.role === "owner";
     if (!identity) return true;
     if (value === "hugh") return identity.role === "owner";
     if (value === "trademarks") return identity.role === "owner";
@@ -1435,6 +1439,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       byId("content-factory-link").hidden = !permittedView("content-factory");
       byId("content-factory-view").hidden = !permittedView("content-factory");
       byId("settings-link").hidden = !permittedView("settings");
+      byId("campaigns-link").hidden = !permittedView("campaigns");
       byId("accounts-link").hidden = !hasPermission("account.view");
       byId("hugh-link").hidden = identity.role !== "owner";
       byId("trademarks-link").hidden = identity.role !== "owner";

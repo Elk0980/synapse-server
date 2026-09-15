@@ -26,6 +26,13 @@ function notificationError(code, message) {
   return Object.assign(new Error(message), {code});
 }
 
+function emailNotificationReady(lead, environment) {
+  const company = lead.company_code?.toLowerCase();
+  const recipientKey = company === 'alvi' ? 'LEADS_NOTIFY_EMAIL_ALVI' : company === 'avokado' ? 'LEADS_NOTIFY_EMAIL_AVOKADO' : 'LEADS_NOTIFY_EMAIL';
+  return Boolean(value(environment, 'LEADS_SMTP_HOST', 'smtp.yandex.ru') &&
+    value(environment, 'LEADS_SMTP_USER') && value(environment, 'LEADS_SMTP_PASSWORD') && value(environment, recipientKey));
+}
+
 function createEmailNotifications(environment = process.env, logger = console, createTransport) {
   const host = value(environment, 'LEADS_SMTP_HOST', 'smtp.yandex.ru');
   const user = value(environment, 'LEADS_SMTP_USER');
@@ -94,4 +101,4 @@ function createEmailNotifications(environment = process.env, logger = console, c
   return { enabled: true, notifyLead, verify: () => transport.verify() };
 }
 
-module.exports = { createEmailNotifications, emailErrorCode };
+module.exports = { createEmailNotifications, emailErrorCode, emailNotificationReady };
