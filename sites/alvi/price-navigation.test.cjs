@@ -257,7 +257,7 @@ test('price bootstrap embeds only a real iframe, preserves standalone header and
       document: {documentElement: {classList: {add: name => classes.add(name)}}}});
     assert.equal(classes.has('alvi-price-embedded'), expected);
   }
-  assert.match(html, /<body class="price-page" data-full-price>/);
+  assert.match(html, /<body class="price-page" data-full-price(?:\s[^>]*)?>/);
   assert.match(html, /html\.alvi-price-embedded \.price-header\s*\{\s*display:\s*none/);
   assert.ok(html.indexOf('price-navigation.js?v=20260915-price-flow') < html.indexOf('async function hydratePrice'));
   assert.match(html, /document\.dispatchEvent\(new Event\('alvi:price-ready'\)\)/);

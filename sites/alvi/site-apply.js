@@ -158,7 +158,7 @@
         // This answer contains actionable contact links, so it must not be reduced
         // to plain text when the editable site document is applied.
         if (!EDIT_MODE && key === 'faq.faq-answer-2') {
-          html = 'Напишите в <a href="https://t.me/+79246180555" target="_blank" rel="noopener">Telegram</a> или <a href="https://max.ru/u/f9LHodD0cOIlskq70SXP8wscTW7u6JcnxZXmoxa5hdxjK58JpJDAM7njO68" target="_blank" rel="noopener">MAX</a>, либо позвоните по телефону <a href="tel:+79246180555">+7 924 618-05-55</a>. Работаем ежедневно 09:00–22:00 по предварительной записи.';
+          html = 'Напишите в <a data-company-link="telegram" href="https://t.me/+79246180555" target="_blank" rel="noopener">Telegram</a> или <a data-company-link="max" href="https://max.ru/u/f9LHodD0cOIlskq70SXP8wscTW7u6JcnxZXmoxa5hdxjK58JpJDAM7njO68" target="_blank" rel="noopener">MAX</a>, либо позвоните по телефону <a href="tel:+79246180555">+7 924 618-05-55</a>. Работаем ежедневно 09:00–22:00 по предварительной записи.';
         }
         // Emphasize the actual offer from the cabinet; never hard-code its price.
         if (!EDIT_MODE && key === 'promo.promo-copy-2') {
