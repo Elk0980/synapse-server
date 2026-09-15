@@ -1,0 +1,20 @@
+.header-actions{display:flex;align-items:center;gap:12px;flex:none}
+.music-toggle{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:8px 12px;border:1px solid rgba(217,184,124,.5);border-radius:999px;background:rgba(14,20,16,.6);color:var(--cream);font:500 12px 'Manrope',sans-serif;white-space:nowrap;cursor:pointer;transition:background .2s,border-color .2s}
+.music-toggle[hidden]{display:none}
+.music-toggle svg{width:16px;height:16px;flex:none}
+.music-toggle:hover{background:rgba(217,184,124,.15);border-color:var(--gold)}
+.music-toggle:focus-visible,.header-actions .head-btn:focus-visible{outline:3px solid #fff3cf;outline-offset:3px}
+.music-toggle[aria-pressed="true"]{color:var(--gold);border-color:var(--gold)}
+.music-toggle[aria-pressed="true"] .music-toggle-slash{display:none}
+.music-toggle[data-state="loading"]{opacity:.75}
+@media(max-width:620px){
+ #hdr{gap:8px;min-height:58px}
+ #hdr .logo{flex:none}
+ #hdr .logo>span:last-child{display:none}
+ .header-actions{gap:6px}
+ .header-actions .head-btn{padding:7px 10px;font-size:11px;min-height:44px}
+ .head-contact-tail{display:none}
+ .music-toggle{padding:7px 9px;font-size:11px;gap:4px}
+ .music-toggle svg{width:14px;height:14px}
+}
+@media(prefers-reduced-motion:reduce){.music-toggle{transition:none}}

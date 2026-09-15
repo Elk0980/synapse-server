@@ -6,20 +6,20 @@
 <title>Аппаратная коррекция фигуры и лазерная эпиляция в Иркутске — АВОКАДО | Пробный сеанс 500 ₽</title>
 <meta name="description" content="Аппаратная коррекция фигуры и лазерная эпиляция в Иркутске: вакуумно-роликовый массаж, кавитация, RF-лифтинг и диодный лазер WINGDERM. Студия дизайна тела АВОКАДО на Красноказачьей, 84. Пробный сеанс всего тела — 500 ₽ вместо 2100 ₽.">
 <meta name="keywords" content="аппаратный массаж Иркутск, LPG массаж Иркутск, коррекция фигуры Иркутск, лазерная эпиляция Иркутск, антицеллюлитный массаж, RF-лифтинг, кавитация, студия дизайна тела">
-<link rel="canonical" href="https://avokado3.synapsebusiness.ru/">
+<link rel="canonical" href="https://avokado38.ru/">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#0f1a12">
-<meta name="robots" content="noindex, nofollow">
+<meta name="robots" content="index, follow">
 <meta name="geo.region" content="RU-IRK"><meta name="geo.placename" content="Иркутск">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="АВОКАДО — студия дизайна тела">
 <meta property="og:locale" content="ru_RU">
-<meta property="og:url" content="https://avokado3.synapsebusiness.ru/">
+<meta property="og:url" content="https://avokado38.ru/">
 <meta property="og:title" content="Аппаратный массаж и коррекция фигуры в Иркутске — студия АВОКАДО. Пробный сеанс 500 ₽">
 <meta property="og:description" content="Коррекция фигуры курсом на аппарате BeautySib, лазерная эпиляция, RF-лифтинг. Рейтинг 5,0 на 2ГИС и Яндексе. Красноказачья, 84.">
-<meta property="og:image" content="assets/hero-poster.jpg">
+<meta property="og:image" content="https://avokado38.ru/assets/hero-poster.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -713,6 +713,7 @@ body>#cta{z-index:65}
 <link rel="stylesheet" href="method-reveal.css?v=20260915-logo-right">
 <link rel="stylesheet" href="work-steps.css?v=20260915-pairs">
 <link rel="stylesheet" href="results-gallery.css?v=20260915-framed">
+<link rel="stylesheet" href="music-player.css?v=20260915">
 </head>
 <body>
 <video class="global-video-bg" id="herovid" muted playsinline preload="auto" poster="/assets/hero-intro-poster.jpg" aria-hidden="true">
@@ -724,8 +725,13 @@ body>#cta{z-index:65}
 
 <header id="hdr">
   <a class="logo" href="#" style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-decoration:none"><span class="wordmark" style="font-size:21px">АВ<svg class="avo-o" viewBox="0 0 48 54" aria-hidden="true"><path d="M25.5 8 C26.5 5 25 2.5 23 2" fill="none" stroke="#d8b981" stroke-width="1.6" stroke-linecap="round"/><path d="M24 9.5 C20.4 9.5 15.6 15.6 14.1 22.3 C12.6 29.1 17.3 38 24 38 C30.7 38 35.4 29.1 33.9 22.3 C32.4 15.6 27.6 9.5 24 9.5 Z" fill="none" stroke="#d8b981" stroke-width="2.1" stroke-linejoin="round"/><circle cx="24" cy="27" r="4.6" fill="#d8b981"/></svg>КАДО</span><span style="font-family:\'Manrope\',sans-serif;font-size:9.5px;letter-spacing:.34em;color:#cfae83;text-transform:uppercase;padding-left:2px">студия дизайна тела</span></a>
-  <a class="head-btn" href="#contacts">Написать нам</a>
+  <div class="header-actions">
+    <button class="music-toggle" id="music-toggle" type="button" aria-label="Фоновая музыка" aria-pressed="false" aria-controls="background-music" title="Включить музыку" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2.5"/><ellipse cx="17" cy="16" rx="3" ry="2.5"/><path class="music-toggle-slash" d="M3 3l18 18"/></svg><span>Музыка</span></button>
+    <a class="head-btn" href="#contacts" aria-label="Написать нам">Написать<span class="head-contact-tail"> нам</span></a>
+  </div>
 </header>
+<audio id="background-music" src="assets/soundsurfer-money-297670.mp3" preload="none" loop hidden aria-hidden="true"></audio>
+<p class="visually-hidden" id="music-status" role="status" aria-live="polite"></p>
 
 <nav class="sticky-cta" id="cta" aria-label="Запись и полный прайс"><a class="gold-cta" data-entry-point="sticky_cta" href="https://n396010.yclients.com/company/375899/personal/menu?utm_content=sticky_cta" target="_blank" rel="noopener" data-edit="cta.sticky-cta-1">Пробный сеанс — 500 ₽</a><a class="sticky-price" href="price.html" data-entry-point="sticky_price">Посмотреть весь прайс</a></nav>
 
@@ -1319,9 +1325,9 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
 <!-- Источник рейтинга — карточка Яндекс.Карт, сверено 29.08.2026; значение 2ГИС отличается и ждёт решения владельца. -->
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[
-{"@type":["HealthAndBeautyBusiness","LocalBusiness"],"@id":"https://avokado3.synapsebusiness.ru/#studio",
+{"@type":["HealthAndBeautyBusiness","LocalBusiness"],"@id":"https://avokado38.ru/#studio",
  "name":"АВОКАДО — студия дизайна тела","description":"Студия дизайна тела в Иркутске: аппаратный вакуумно-роликовый массаж, коррекция фигуры курсом, кавитация, RF-лифтинг, лазерная эпиляция, ручной массаж.",
- "logo":"https://avokado3.synapsebusiness.ru/icon-512.png","image":"https://avokado3.synapsebusiness.ru/icon-512.png",
+ "logo":"https://avokado38.ru/icon-512.png","image":"https://avokado38.ru/icon-512.png",
  "address":{"@type":"PostalAddress","streetAddress":"улица Красноказачья, 84","addressLocality":"Иркутск","addressRegion":"Иркутская область","addressCountry":"RU"},
  "telephone":"+79331901059","priceRange":"₽₽","slogan":"Аппаратный массаж и коррекция фигуры в Иркутске",
  "additionalProperty":{"@type":"PropertyValue","name":"Режим работы","value":"Ежедневно, по предварительной записи"},
@@ -1369,7 +1375,7 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
   {"@type":"Offer","name":"Классический массаж ШВЗ","price":"1200","priceCurrency":"RUB"},
   {"@type":"Offer","name":"Миофасциальный массаж ШВЗ","price":"1600","priceCurrency":"RUB"},
   {"@type":"AggregateOffer","name":"Расслабляющий массаж тела","lowPrice":"2700","highPrice":"3300","priceCurrency":"RUB"}]}},
-{"@type":"FAQPage","@id":"https://avokado3.synapsebusiness.ru/#faq","mainEntity":[
+{"@type":"FAQPage","@id":"https://avokado38.ru/#faq","mainEntity":[
  {"@type":"Question","name":"Сколько стоит аппаратный массаж в Иркутске?","acceptedAnswer":{"@type":"Answer","text":"Пробный сеанс аппаратного массажа всего тела — 500 ₽ вместо 2100 ₽, включая бесплатную консультацию. Далее: 45 минут — 2100 ₽, 60 минут — 3100 ₽, 90 минут — 4700 ₽."}},
  {"@type":"Question","name":"Сколько сеансов нужно, чтобы увидеть результат?","acceptedAnswer":{"@type":"Answer","text":"Аппаратный массаж работает курсом: обычно 10 и более сеансов с частотой 1–3 раза в неделю. Замеры делаются на этапах курса, прогресс виден в сантиметрах."}},
  {"@type":"Question","name":"Аппаратный массаж — это больно?","acceptedAnswer":{"@type":"Answer","text":"Нет. Процедура проходит в специальном костюме и ощущается как плотный разминающий массаж, интенсивность регулируется под клиента."}},
@@ -1508,5 +1514,6 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
 <script src="https://synapse.synapsebusiness.ru/track.js?v=20260905" data-company="avokado" defer></script>
 <script src="contact-route.js?v=20260915-contacts"></script>
 <script src="scroll-controls.js?v=20260915-all-screens"></script>
+<script src="music-player.js?v=20260915"></script>
 </body>
 </html>
