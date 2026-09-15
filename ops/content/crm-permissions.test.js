@@ -420,5 +420,35 @@ test('CRM proxy restricts pipelines to the owner and preserves company-scoped ed
     assert.equal((await crm(editor,'GET','/companies?companyCode=alvi')).body.pagination.total,beforeCompanies);
     assert.equal((await crm(observer,'POST','/contacts?companyCode=alvi',{name:'Forbidden',companyLink:{newCompany:{name:'Forbidden'},role:'Сотрудник'}})).status,403);
   });
+
+  await t.test('deal gates, evidence, owner override and configurable stages',async()=>{
+    const company=await crm(editor,'POST','/companies?companyCode=alvi',{code:'qa-orders-customer',name:'Orders customer'});
+    assert.equal(company.status,201);
+    const create=()=>crm(editor,'POST','/deals?companyCode=alvi',{companyId:company.body.id,title:'Implementation',requestId:'qa-order-1'});
+    let result=await create();assert.equal(result.status,201,JSON.stringify(result.body));let d=result.body;
+    assert.equal((await create()).body.id,d.id);
+    const second=await crm(editor,'POST','/deals?companyCode=alvi',{companyId:company.body.id,title:'Second order'});assert.notEqual(second.body.id,d.id);
+    const path=`/deals/${d.id}?companyCode=alvi`;
+    assert.equal((await crm(targetEditor,'GET',`/deals/${d.id}?companyCode=avokado`)).status,404);
+    assert.equal((await crm(observer,'PATCH',path,{version:d.version,title:'Forbidden'})).status,403);
+    assert.equal((await crm(editor,'PATCH',path,{version:d.version,stage:'paid'})).status,409);
+    assert.equal((await crm(editor,'PATCH',path,{version:d.version,stage:'paid',override:{accepted:true,reason:'Test exception'}})).status,403);
+    result=await crm(owner,'PATCH',path,{version:d.version,stage:'paid',override:{accepted:true,reason:'Owner approved exception'}});
+    assert.equal(result.status,200,JSON.stringify(result.body));assert.equal(result.body.history[0].override,true);assert.equal(result.body.history[0].missing.length,2);
+    d=second.body;const secondPath=`/deals/${d.id}?companyCode=alvi`;
+    for(const kind of ['contract','receipt'])assert.equal((await crm(editor,'POST',`/deals/${d.id}/files?companyCode=alvi`,{kind,name:kind+'.pdf',mime:'application/pdf',base64:Buffer.from('%PDF-1.4 QA').toString('base64')})).status,200);
+    result=await crm(editor,'PATCH',secondPath,{version:d.version,stage:'paid'});assert.equal(result.status,200,JSON.stringify(result.body));
+    assert.equal((await crm(editor,'PATCH',secondPath,{version:d.version,title:'Stale'})).status,409);
+    const config=await crm(owner,'GET','/deals/criteria?companyCode=alvi');assert.equal(config.status,200);
+    const rows=config.body.stages.map(s=>({code:s.code,label:s.label,kind:s.kind,attention:!!s.attention,color:'#44aa99',required:s.rules.required,manual:s.rules.manual,steps:['Позвонить клиенту'],done:'Согласован следующий шаг'}));
+    rows[0].label='Новый запрос';rows.push({label:'Проверка результата',kind:'open',color:'#ddbb44',required:[],manual:['Клиент подтвердил результат'],steps:['Проверить результат'],done:'Согласовано'});
+    assert.equal((await crm(editor,'PUT','/deals/criteria?companyCode=alvi',{stages:rows})).status,403);
+    const saved=await crm(owner,'PUT','/deals/criteria?companyCode=alvi',{stages:rows});assert.equal(saved.status,200,JSON.stringify(saved.body));assert.equal(saved.body.stages[0].color,'#44aa99');assert.equal(saved.body.stages[0].label,'Новый запрос');
+    const custom=saved.body.stages.at(-1),fresh=result.body;
+    assert.equal((await crm(editor,'PATCH',secondPath,{version:fresh.version,stage:custom.code})).status,409);
+    result=await crm(editor,'PATCH',secondPath,{version:fresh.version,stage:custom.code,data:{checks:{[custom.criteria[0].id]:true}}});assert.equal(result.status,200,JSON.stringify(result.body));
+    const remove=saved.body.stages.filter(s=>s.code!==custom.code).map(s=>({...rows.find(r=>r.code===s.code),code:s.code}));
+    assert.equal((await crm(owner,'PUT','/deals/criteria?companyCode=alvi',{stages:remove})).status,409);
+  });
   assertNoQueuedOrAttemptedEmail();
 });

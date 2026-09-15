@@ -657,6 +657,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       </aside><div class="home-grid" id="home-widgets"></div></div>
     </section>
     <section class="view-panel" id="deals-view" data-view="deals" hidden>
+      <div id="order-workspace"></div><div id="deals-legacy" hidden>
       <div class="content-header"><h1>Сделки</h1><p>Воронки компаний Synapse Business</p></div>
       <div id="deals-pipelines" class="deals-pipelines" role="tablist" aria-label="Воронки компаний"></div>
       <div class="crm-actions">
@@ -727,6 +728,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         <div id="deals-drawer-tabs" class="deals-drawer-tabs" role="tablist" aria-label="Работа с компанией"></div>
         <div id="deals-drawer-content" role="tabpanel" tabindex="0" aria-live="polite"></div>
       </dialog>
+      </div>
     </section>
     <section class="view-panel" id="clients-view" data-view="clients" hidden>
       <div class="content-header"><h1>База клиентов</h1></div>
@@ -999,15 +1001,15 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260916-contact-company";
+  window.SB_CABINET_ASSET_VERSION = "20260916-deal-orders";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
     window.SbCabinet.views[name] = definition;
   };
   const cabinetAssets = ["home", "tasks", "leads", "deals", "clients", "chat", "hugh", "analytics",
-    "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account", "trademarks", "campaigns", "company-information", "autoposting", "module-guide", "menu-preferences"];
-  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat", "hugh", "settings", "trademarks", "sites", "campaigns", "company-information", "autoposting", "workspace"];
+    "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account", "trademarks", "campaigns", "company-information", "autoposting", "module-guide", "menu-preferences", "deal-orders"];
+  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat", "hugh", "settings", "trademarks", "sites", "campaigns", "company-information", "autoposting", "workspace", "deal-orders"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join(""));

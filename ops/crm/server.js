@@ -16,6 +16,7 @@ const { createCompanyInformation } = require('./company-information');
 const { createAutoposting } = require('./autoposting');
 const { createAutopostingTransport } = require('./autoposting-transport');
 const { createCompanyInformationCheck } = require('./company-information-check');
+const { createDealOrders } = require('./deal-orders');
 
 const IS_MAIN = require.main === module;
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
@@ -627,12 +628,12 @@ function fail(status, message, details) {
   throw error;
 }
 
-async function readJson(request) {
+async function readJson(request, maxBytes = 1024 * 1024) {
   const chunks = [];
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > 1024 * 1024) fail(413, 'Тело запроса не должно превышать 1 МБ');
+    if (size > maxBytes) fail(413, 'Превышен допустимый размер запроса');
     chunks.push(chunk);
   }
   if (chunks.length === 0) fail(400, 'Ожидалось тело запроса в формате JSON');
@@ -2237,7 +2238,7 @@ function replacePipelines(body) {
   });
 }
 
-function replacePipelineStages(body, pipelineCode = 'sale') {
+function replacePipelineStages(body, pipelineCode = 'sale', ownTransaction = true) {
   const pipeline = pipelineRow(pipelineCode);
   const current = pipelineStages(pipelineCode);
   const limit = Math.max(12, current.length);
@@ -2245,7 +2246,7 @@ function replacePipelineStages(body, pipelineCode = 'sale') {
       body.stages.length < 1 || body.stages.length > limit) {
     fail(400, `Воронка должна содержать от 1 до ${limit} этапов`, { code: 'VALIDATION_ERROR', field: 'stages' });
   }
-  db.exec('BEGIN IMMEDIATE');
+  if (ownTransaction) db.exec('BEGIN IMMEDIATE');
   try {
     const currentCodes = new Set(current.map((stage) => stage.code));
     const reservedCodes = new Set(currentCodes);
@@ -2290,6 +2291,8 @@ function replacePipelineStages(body, pipelineCode = 'sale') {
     for (const stage of removed) {
       if (stage.system) fail(400, 'Этап нужен для правил воронки и не может быть удалён',
         { code: 'PIPELINE_SYSTEM_STAGE', stageCode: stage.code });
+      const dealCount = db.prepare('SELECT data,stage FROM deal_orders').all().filter(d => (JSON.parse(d.data).pipelineStates?.[pipelineCode] || (pipelineCode === 'sale' ? d.stage : null)) === stage.code).length;
+      if (dealCount) fail(409, 'В этапе есть сделки — сначала перенесите их', {code:'PIPELINE_STAGE_IN_USE'});
       const count = companyCount.get(pipeline.id, stage.code).count;
       if (count) {
         fail(409, `В этапе «${stage.label}» есть ${count} компаний — сначала перенесите их`,
@@ -2317,10 +2320,10 @@ function replacePipelineStages(body, pipelineCode = 'sale') {
     }
     const remove = db.prepare('DELETE FROM pipeline_stages WHERE pipeline_id = ? AND code = ?');
     for (const stage of removed) remove.run(pipeline.id, stage.code);
-    db.exec('COMMIT');
+    if (ownTransaction) db.exec('COMMIT');
     return { stages: pipelineStages(pipelineCode) };
   } catch (error) {
-    db.exec('ROLLBACK');
+    if (ownTransaction) db.exec('ROLLBACK');
     throw error;
   }
 }
@@ -2386,6 +2389,7 @@ function taskSummary(url) {
   return summary;
 }
 
+const dealOrders = createDealOrders({db,fail,getStages:pipelineStages,getPipelines:pipelineList,setStages:(body,pipeline)=>replacePipelineStages(body,pipeline,false)});
 async function route(request, response) {
   const url = new URL(request.url, 'http://localhost');
   const cors = corsHeaders(request);
@@ -2396,6 +2400,42 @@ async function route(request, response) {
   takeRateLimit(request);
   const publicPost = request.method === 'POST' && ['/leads', '/events'].includes(url.pathname);
   if (!publicPost) requireApiKey(request);
+
+  if(url.pathname==='/deals' || url.pathname.startsWith('/deals/')) {
+    const scope=url.searchParams.get('companyCode');
+    if(scope) scopedCompany(scope);
+    const pipeline=url.searchParams.get('pipeline')||'sale';pipelineRow(pipeline);
+    const match=url.pathname.match(/^\/deals\/(\d+)(?:\/(contacts|print))?$/);
+    const contactMatch=url.pathname.match(/^\/deals\/(\d+)\/contacts\/(\d+)$/);
+    const fileMatch=url.pathname.match(/^\/deals\/(\d+)\/files(?:\/([a-f0-9-]+))?$/);
+    const offset=Math.max(0,Math.min(1000000,Number.parseInt(url.searchParams.get('offset')||'0',10)||0));
+    let result,status=200;
+    if(url.pathname==='/deals/criteria' && request.method==='GET')result=dealOrders.rules(scope,pipeline);
+    else if(url.pathname==='/deals/criteria' && request.method==='PUT')result=dealOrders.saveRules(scope,pipeline,await readJson(request),crmIdentity(request));
+    else if(fileMatch && !fileMatch[2] && request.method==='POST')result=dealOrders.upload(entityId(fileMatch[1]),scope,await readJson(request,9*1024*1024));
+    else if(fileMatch?.[2] && request.method==='GET'){
+      const file=dealOrders.file(entityId(fileMatch[1]),scope,fileMatch[2]);
+      response.writeHead(200,{...cors,'content-type':file.mime,'content-disposition':`attachment; filename="document"; filename*=UTF-8''${encodeURIComponent(file.name)}`,'cache-control':'no-store','x-content-type-options':'nosniff'});response.end(Buffer.from(file.bytes));return;
+    }
+    else if(url.pathname==='/deals' && request.method==='GET') result=dealOrders.list(scope,{q:url.searchParams.get('q')||'',companyId:url.searchParams.get('companyId')||'',offset,pipeline});
+    else if(url.pathname==='/deals' && request.method==='POST'){result=dealOrders.create(await readJson(request),scope);status=201;}
+    else if(match && !match[2] && request.method==='GET')result=dealOrders.detail(entityId(match[1]),scope,pipeline);
+    else if(match && !match[2] && request.method==='PATCH')result=dealOrders.update(entityId(match[1]),await readJson(request),scope,crmIdentity(request),pipeline);
+    else if(match?.[2]==='contacts' && request.method==='GET')result=dealOrders.contacts(entityId(match[1]),scope,url.searchParams.get('q')||'',offset);
+    else if(match?.[2]==='print' && request.method==='GET'){
+      const markup=dealOrders.print(entityId(match[1]),scope,url.searchParams.get('kind'),url.searchParams.get('invoiceId'));
+      response.writeHead(200,{...cors,'content-type':'text/html; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer'});response.end(markup);return;
+    } else if(contactMatch && request.method==='PATCH') {
+      const deal=dealOrders.detail(entityId(contactMatch[1]),scope),id=entityId(contactMatch[2]);
+      if(!db.prepare('SELECT 1 FROM contact_companies WHERE contact_id=? AND company_id=? AND is_deleted=0').get(id,deal.companyId))fail(404,'Контакт не связан с компанией сделки');
+      const current=entityRow(ENTITY_CONFIG.contacts,id),body=await readJson(request);
+      const values=validateEntity(ENTITY_CONFIG.contacts,body,true,current),entries=Object.entries(values);
+      if(values.phone!==undefined)entries.push(['normalizedPhone',values.phone?normalizeContact(values.phone):null]);
+      db.prepare(`UPDATE contacts SET ${entries.map(([field])=>`${column(ENTITY_CONFIG.contacts,field)}=?`).join(',')},updated_at=? WHERE id=?`).run(...entries.map(([,value])=>value),new Date().toISOString(),id);
+      result=serializeEntity(ENTITY_CONFIG.contacts,entityRow(ENTITY_CONFIG.contacts,id));
+    } else fail(404,'Раздел сделки не найден');
+    return send(response,status,result,{...cors,'cache-control':'no-store'});
+  }
 
   if (url.pathname === '/company-information' || url.pathname === '/company-information/check') {
     const permission = request.method === 'GET' ? 'company-information.view' : 'company-information.edit';
