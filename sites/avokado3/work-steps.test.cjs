@@ -36,4 +36,21 @@ for (let phase = 0; phase <= 4; phase += .013) {
   assert(reduced.every(pair => pair.y === 0 && pair.scale === 1));
 }
 assert.equal(framesAt(extended(1e8).workPhase, 4, false)[3].opacity, 1, 'last pair stays visible until price');
+// The new examples scene goes before reviews; stable IDs keep the existing objection timing.
+const withExamples = x => frameAt(x, 1000, 7, 3, 6, { ...sequence, target: 6 });
+for (let x = -500; x < 8000; x += 41) {
+  const before = extended(x), after = withExamples(x);
+  assert.equal(after.index, before.index);
+  assert.equal(after.phase, before.phase);
+  assert.deepEqual(after.reveals, before.reveals);
+}
+assert.equal(withExamples(8500).index, 4, 'examples are before reviews');
+assert.equal(withExamples(9500).index, 5, 'reviews are before the visit');
+assert.equal(withExamples(0).totalUnits, 14.6);
+for (let step = 0; step < 4; step++) {
+  const frame = withExamples(10000 + (step + .5) * 1150);
+  assert.equal(frame.index, 6);
+  assert.equal(framesAt(frame.workPhase, 4, false)[step].opacity, 1);
+}
+assert.equal(framesAt(withExamples(1e8).workPhase, 4, false)[3].opacity, 1);
 console.log('PASS: earlier scene timing, four reading holds, synchronized pair states, reverse/idle, nonempty transitions, reduced motion and final hold');
