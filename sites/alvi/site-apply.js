@@ -51,6 +51,9 @@
   function rich(value) {
     let h = esc(value);
     h = h.replace(/&lt;(\/?)(em|strong|b|i|sup)&gt;/g, '<$1$2>');
+    // Keep each displayed ruble amount together; editor/source text stays verbatim.
+    if (!EDIT_MODE) h = h.replace(/\d[\d \u00a0]*(?:[\/–-][ \u00a0]*\d[\d \u00a0]*)*₽/g,
+      amount => amount.replace(/(\d)[ \u00a0]+(?=\d|₽)/g, '$1\u00a0'));
     return h.replace(/\n/g, '<br>');
   }
 
