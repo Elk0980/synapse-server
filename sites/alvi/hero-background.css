@@ -22,3 +22,6 @@
   width: 100%;
   height: 100%;
 }
+
+/* Safari overscroll and the space under composited media use the same dark canvas. */
+html:has(#hero), body:has(> #hero) { background-color: #07110c; }

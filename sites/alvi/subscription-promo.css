@@ -53,3 +53,5 @@ html.edit-full .promo.subscription-promo { display:block; position:static; heigh
 html.edit-full .promo.subscription-promo .promo__panel { margin:auto; max-height:none; }
 html.edit-full .promo.subscription-promo .promo__body { overflow:visible; }
 html.edit-full .promo.subscription-promo .promo__close { display:none; }
+
+.promo.subscription-promo .promo__half--alvi .promo__portrait { object-position: 76% center; }

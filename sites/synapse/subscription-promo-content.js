@@ -10,7 +10,7 @@
     const field = (key, label, value, extra = {}) => ({ key: 'promo.' + key, label, value, multiline: true, ...extra });
     return { id: 'promo', title: 'Баннер · ALVI и АВОКАДО', revision: REVISION, fields: [
       field('promo-tagline-1', 'Фраза сверху', 'Два места, где есть время для себя'),
-      field('promo-portrait-1', 'Фото · ALVI', '', { kind: 'image', src: 'img/subscription-alvi-20260916-hq.webp', zone: 'promo-alvi' }),
+      field('promo-portrait-1', 'Фото · ALVI', '', { kind: 'image', src: 'img/alvi-poster.png', zone: 'promo-alvi' }),
       field('promo-brand-1', 'Подпись бренда · ALVI', 'SPA ALVI · время восстановиться'),
       field('promo-title-1', 'Заголовок · ALVI', 'Мой способ быть в ресурсе'),
       field('promo-copy-1', 'Текст · ALVI', 'В моём ритме важно находить время для себя. SPA-ритуалы ALVI помогают мне расслабиться и снова почувствовать себя в тонусе.'),
@@ -32,6 +32,14 @@
       doc = { ...doc, sections: doc.sections.map(section => section.id !== 'promo' ? section : {
         ...section, fields: section.fields.map(field => defaultPhoto(field)
           ? { ...field, src: field.src.replace('-20260915.webp', '-20260916-hq.webp') } : field)
+      }) };
+    }
+    // Restore only the known default ALVI portraits; never overwrite owner uploads.
+    if (doc.sections.some(s => s.id === 'promo' && s.fields?.some(f =>
+      f.key === 'promo.promo-portrait-1' && /^img\/subscription-alvi-202609(?:15|16-hq)\.webp$/.test(f.src || '')))) {
+      doc = { ...doc, sections: doc.sections.map(s => s.id !== 'promo' ? s : {
+        ...s, fields: s.fields.map(f => f.key === 'promo.promo-portrait-1' && /^img\/subscription-alvi-202609(?:15|16-hq)\.webp$/.test(f.src || '')
+          ? { ...f, src: 'img/alvi-poster.png' } : f)
       }) };
     }
     // Keep intentional deletions made after this one-time revision.
