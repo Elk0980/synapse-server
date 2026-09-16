@@ -103,7 +103,7 @@ test('photo quality update refreshes default assets and preserves owner uploads 
   ];
   const original = { subscriptionPromoRevision: content.REVISION, sections: [{ id: 'promo', fields }] };
   const updated = content.upgrade(original, 'alvi');
-  assert.equal(updated.sections[0].fields[0].src, 'img/subscription-alvi-20260916-hq.webp');
+  assert.equal(updated.sections[0].fields[0].src, 'img/alvi-poster.png');
   assert.equal(original.sections[0].fields[0].src, 'img/subscription-alvi-20260915.webp');
   assert.equal(updated.sections[0].fields[1], fields[1]);
   assert.equal(updated.sections[0].fields[2], fields[2]);
