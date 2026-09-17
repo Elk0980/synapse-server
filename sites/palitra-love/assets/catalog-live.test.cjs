@@ -34,9 +34,16 @@ test('live catalog renders saved items in the actual catalog page and keeps filt
   });
   dom.window.PALITRA_CONFIG = { SITE_URL: dom.window.location.origin };
   dom.window.eval(fs.readFileSync(path.join(__dirname, 'app.js'), 'utf8'));
-  dom.window.PalitraPrice = { load: async () => data };
+  // Настоящий общий рендер карточек; только загрузка прайса подменена.
+  dom.window.eval(fs.readFileSync(path.join(__dirname, '../price-render.js'), 'utf8'));
+  dom.window.PalitraPrice.load = async () => data;
   await mount(dom.window);
-  assert.equal(dom.window.document.querySelectorAll('[data-products] .card').length, 3);
+  const cards = dom.window.document.querySelectorAll('[data-products] .card');
+  assert.equal(cards.length, 3);
+  assert.ok([...cards].every((node) => node.classList.contains('price-card') && node.querySelector('.product-media') && node.querySelector('.product-footer .product-purchase .price') && node.querySelector('[data-add][data-id]')), 'карточки каталога построены общим рендером с кнопкой корзины');
+  assert.equal(cards[1].querySelector('.price').dataset.priceKnown, 'false');
+  assert.equal(cards[1].querySelector('.price').textContent, 'Цена уточняется');
+  assert.ok(cards[2].querySelector('.product-media--empty'), 'небезопасное фото заменено заглушкой');
   dom.window.document.querySelector('[data-filter="bukety"]').click();
   assert.equal(dom.window.document.querySelectorAll('[data-products] .card:not(.hidden)').length, 1);
   const savedSchema = JSON.parse(dom.window.document.getElementById('palitra-catalog-schema').textContent);

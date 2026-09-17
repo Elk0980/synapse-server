@@ -301,6 +301,8 @@ cabinet.registerView('settings', {title:'Настройки компании', a
   const h=context.escapeHTML;
   container.innerHTML=`<div class="content-header"><h1>Настройки компании</h1></div><div class="card"><h2>${h(name)}</h2><p>Контакты, ссылки и сведения принадлежат только этой компании.</p><a href="#company-information">Информация и площадки компании →</a></div>`;
   if(context.identity.role!=='owner')return;
+  // Заявки с сайта ведутся только для Palitra: получатель в Telegram и повтор уведомлений — отдельный вид.
+  if(code==='palitra-love')container.insertAdjacentHTML('beforeend','<div class="card"><h2>Заявки с сайта</h2><p>Корзина и форма сайта сохраняют заявки на сервере; уведомления уходят получателю в Telegram.</p><a href="#site-orders">Заявки с сайта и получатель уведомлений →</a></div>');
   const card=document.createElement('section');card.className='card settings-email';
   card.innerHTML='<h2>Получатель заявок</h2><p>На этот адрес приходят уведомления только выбранной компании. Пустое поле отключает её уведомления.</p><form class="field-stack"><label>Почта компании<input name="recipient" type="email" maxlength="254" autocomplete="off"></label><button type="submit" disabled>Сохранить получателя</button><p role="status">Загрузка…</p></form><div data-company-email-status></div><p><a href="#system-settings">Общий отправитель — настройки системы →</a></p>';
   container.append(card);

@@ -10,6 +10,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { COMPANIES } = require('./auth-store');
 const { createLocalWorker } = require('./project-chat-local-worker');
+const { createSiteOrders } = require('./site-orders');
 const { createProjectChatMiniApp } = require('./project-chat-miniapp');
 
 const MAX_ATTACHMENT = 8 * 1024 * 1024;
@@ -47,7 +48,8 @@ const integer = (value, optional = false) => {
 const shortText = (value, max) => String(value ?? '').replace(/[\r\n\t]+/g, ' ').slice(0, max);
 
 function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl = '', chatApiKey = '',
-  requireSession, requireCsrf, sendJson, readBody, localWorker: localConfig = {}, miniApp: miniConfig = {},
+  requireSession, requireCsrf, sendJson, readBody, localWorker: localConfig = {}, siteOrders: ordersConfig = {},
+  miniApp: miniConfig = {},
   fetchImpl = (...args) => globalThis.fetch(...args), statusTtl = RUNTIME_STATUS_TTL }) {
   const storage = path.resolve(assetsDir, 'project-chat');
   fs.mkdirSync(storage, { recursive: true });
@@ -123,6 +125,8 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     insertMessage: (args) => insertMessage(args), buildPayload: (job) => buildPayload(job),
     retryAfterSeconds, limitMessage, cleanText, messageLimit: MESSAGE_LIMIT, aiAttempts: AI_ATTEMPTS });
   const serverScope = localWorker.scope.exclude, localCodes = localWorker.scope.params;
+  /* Заявки с сайта: свой outbox (order:<n>) доставляется тем же мостом через pendingTelegram/acknowledgeTelegram. */
+  const siteOrders = createSiteOrders({ db, tx, priceReader: () => null, ...ordersConfig });
   /* Telegram Mini App: вход по подписи Telegram и узкая сессия участника для этой комнаты.
      Членство проверяется теми же assigned/isMember, что и в кабинете. */
   const miniApp = createProjectChatMiniApp({ db, authStore, ...miniConfig, tx, sendJson,
@@ -428,6 +432,8 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       const jobs = db.prepare(`SELECT o.* FROM project_chat_outbox o JOIN project_chat_rooms r ON r.company_code=o.company_code
         WHERE o.status='pending' AND o.next_attempt_at<=? AND o.chat_id=r.telegram_chat_id ORDER BY o.id LIMIT 1`).all(stamp());
       for (const job of jobs) db.prepare(`UPDATE project_chat_outbox SET status='sending',claimed_at=?,attempts=attempts+1 WHERE id=?`).run(stamp(), job.id);
+      // Комната идёт первой; заявки с сайта берутся той же транзакцией и тем же лимитом «одно задание».
+      if (!jobs.length) return siteOrders.pendingTelegram();
       return jobs.map(j => {
         const m = db.prepare('SELECT * FROM project_chat_messages WHERE id=?').get(j.message_id);
         const view = messageJSON(m);
@@ -438,6 +444,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     });
   }
   function acknowledgeTelegram(jobId, result = {}) {
+    if (siteOrders.isOrderJob(jobId)) return siteOrders.acknowledge(jobId, result);
     const job = db.prepare('SELECT * FROM project_chat_outbox WHERE id=?').get(integer(jobId));
     if (!job) fail(404, 'Отправка не найдена');
     if (job.status === 'sent') return { ok: true, status: 'sent' };
@@ -799,7 +806,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   }
   function stopWorker() { clearInterval(timer); timer = null; }
   const bridge = { getBinding, migrateBinding, receiveTelegram, storeAttachment, readAttachment, pendingTelegram, acknowledgeTelegram };
-  return { handle, bridge, ...bridge, snapshot, listMessages, requeueAI, runtimeStatus, processAIJobs, startWorker, stopWorker, localWorker, miniApp };
+  return { handle, bridge, ...bridge, snapshot, listMessages, requeueAI, runtimeStatus, processAIJobs, startWorker, stopWorker, localWorker, siteOrders, miniApp };
 }
 
 module.exports = { createProjectChat, MAX_ATTACHMENT, MESSAGE_PAGE };

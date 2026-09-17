@@ -14,6 +14,7 @@ const { createAuthStore, COMPANIES, PERMISSIONS, DEPENDENCIES, PRICE_CLIENT_PRES
 const { createSiteStore } = require('./site-store');
 const { createHughSettingsStore } = require('./hugh-settings-store');
 const { createProjectChat } = require('./project-chat');
+const { clientIp, originOf } = require('./site-orders');
 const { hashPassword, verifyPassword } = require('./passwords');
 const { createCompanyLinksReader } = require('./company-links-reader');
 const { createEmailUnsubscribeProxy, TOKEN: EMAIL_UNSUBSCRIBE_TOKEN } = require('./email-unsubscribe-proxy');
@@ -161,9 +162,16 @@ db.exec(`
 `);
 const authStore = createAuthStore(db, process.env.AUTH_USERS || '');
 const hughSettingsStore = createHughSettingsStore(db);
+// Заявки с сайта принимаются только для Palitra: сайт задаёт Caddy, список Origin — точный allowlist.
+const ORDER_SITES = { palitra: { companyCode: CONTENT_COMPANIES.palitra, title: 'Palitra',
+  origins: (process.env.PALITRA_ORDER_ORIGINS || 'https://palitra-love.synapsebusiness.ru').split(',').map((s) => s.trim()).filter(Boolean) } };
+const ORDER_BODY_LIMIT = 32 * 1024;
 const projectChat = createProjectChat({ db, authStore, assetsDir: ASSETS_DIR,
   runnerUrl: HUGH_RUNTIME_URL, chatUrl: CHAT_URL, chatApiKey: CHAT_API_KEY,
   localWorker: { keySha256: HUGH_LOCAL_WORKER_KEY_SHA256, companies: HUGH_LOCAL_WORKER_COMPANIES },
+  // Соль для хеша IP выводится из секрета сессий: сам IP не хранится, отдельного секрета не нужно.
+  siteOrders: { sites: ORDER_SITES, priceReader: (site) => latestStmt.get(`${site}/price`)?.body ?? null,
+    ipSalt: crypto.createHash('sha256').update(`site-orders-ip:${SESSION_SECRET}`).digest('hex') },
   miniApp: { botId: TELEGRAM_BOT_ID, sessionSecret: SESSION_SECRET },
   requireSession, requireCsrf, sendJson: send, readBody: readJson });
 for (const issue of [...projectChat.localWorker.issues, ...projectChat.miniApp.issues]) console.warn(`content: ${issue}`);
@@ -943,8 +951,41 @@ const server = http.createServer(async (request, response) => {
       return reply(200, row.body, { etag: `"${row.version}"` });
     }
 
+    // Заявка с сайта: только Caddy-маршрут Palitra переписывает сюда POST /api/orders. Без cookie и ключей.
+    if (parts[0] === 'public-orders') {
+      if (request.method !== 'POST' || parts.length !== 2 || !Object.hasOwn(ORDER_SITES, parts[1])) fail(404, 'Не найдено');
+      if (!/^application\/json\b/i.test(String(request.headers['content-type'] || ''))) fail(415, 'Ожидался JSON');
+      let body;
+      try { body = JSON.parse((await readRaw(request, ORDER_BODY_LIMIT)).toString('utf8')); } catch (error) { if (error.status === 413) throw error; fail(400, 'Некорректный JSON'); }
+      try {
+        const result = projectChat.siteOrders.submit({ site: parts[1], body, origin: originOf(request), ip: clientIp(request) });
+        return reply(result.status, result.body, { 'cache-control': 'no-store' });
+      } catch (error) {
+        if (![400, 403, 409, 429, 503].includes(error.status)) throw error;
+        return reply(error.status, { ok: false, code: error.code || 'VALIDATION', error: error.message, ...(error.itemId ? { itemId: error.itemId } : {}) },
+          { 'cache-control': 'no-store', ...(error.status === 429 ? { 'retry-after': '600' } : {}) });
+      }
+    }
+
     if (parts[0] !== 'content' || parts.length < 3) fail(404, 'Не найдено');
     if (!SITES.has(parts[1])) fail(404, 'Неизвестный сайт');
+
+    // --- заявки с сайта в ЛК: только владелец, только сайт Palitra; мутации с CSRF.
+    if (parts[2] === 'orders' || parts[2] === 'order-recipient') {
+      const session = requireSession(request);
+      if (session.user.role !== 'owner') fail(403, 'Доступно только владельцу');
+      if (request.method !== 'GET') requireCsrf(request, session);
+      const orders = projectChat.siteOrders, site = parts[1];
+      const headers = { 'cache-control': 'no-store' };
+      if (parts[2] === 'orders' && parts.length === 3 && request.method === 'GET') {
+        return reply(200, orders.listOrders(site, { limit: url.searchParams.get('limit'), beforeId: url.searchParams.get('beforeId') }), headers);
+      }
+      if (parts[2] === 'orders' && parts.length === 5 && parts[4] === 'renotify' && request.method === 'POST') return reply(202, orders.renotify(site, parts[3]), headers);
+      if (parts[2] === 'order-recipient' && parts.length === 3 && request.method === 'GET') return reply(200, orders.recipientStatus(site), headers);
+      if (parts[2] === 'order-recipient' && parts.length === 3 && request.method === 'PUT') return reply(200, orders.setRecipient(site, await readJson(request)), headers);
+      if (parts[2] === 'order-recipient' && parts.length === 4 && parts[3] === 'test' && request.method === 'POST') return reply(202, orders.testRecipient(site), headers);
+      fail(404, 'Не найдено');
+    }
 
     // --- файлы (фоны блоков): /content/:site/assets[/:name]
     if (parts[2] === 'assets') {

@@ -208,6 +208,25 @@ test('такт моста берёт задания по одному и под�
   assert.equal(calls.content.filter((c) => c.route === '/outbox').length, 3, 'пустой ответ останавливает опрос');
 });
 
+test('заявка с сайта: строковый id order:<n> доставляется в личный чат, подтверждается тем же id и не повторяется после неизвестного результата', async () => {
+  const orderJob = (id) => ({ id, text: 'Заявка №7 · Palitra', companyCode: 'palitra-love', chatId: '123456789', authorName: 'Заявка с сайта', authorType: 'system', attachments: [] });
+  const { bridge, calls } = setup({ jobs: [orderJob('order:7')] });
+  await bridge.tick();
+  const sent = calls.telegram.filter((c) => c.method === 'sendMessage');
+  assert.equal(sent.length, 1);
+  assert.deepEqual(JSON.parse(sent[0].body), { chat_id: '123456789', text: 'Заявка с сайта\nЗаявка №7 · Palitra' });
+  const acknowledged = calls.content.filter((c) => c.route === '/acknowledge');
+  assert.deepEqual(acknowledged.map((c) => [c.body.jobId, c.body.ok, c.body.externalMessageIds]), [['order:7', true, ['500']]], 'id остаётся строкой');
+  // Обрыв после отправки: результат неизвестен, подтверждение говорит об этом, второй отправки нет.
+  const broken = setup({ jobs: [orderJob('order:8')], telegram: () => ({ broken: true }) });
+  await broken.bridge.tick();
+  await broken.bridge.tick();
+  assert.equal(broken.calls.telegram.filter((c) => c.method === 'sendMessage').length, 1);
+  const uncertain = broken.calls.content.filter((c) => c.route === '/acknowledge');
+  assert.equal(uncertain.length, 1);
+  assert.deepEqual([uncertain[0].body.jobId, uncertain[0].body.ok, uncertain[0].body.uncertain], ['order:8', false, true]);
+});
+
 test('недоступность комнаты не теряет входящие: событие ждёт сколько нужно', async () => {
   let offline = true;
   const { db, bridge, calls } = setup({ rooms: ROOMS,
