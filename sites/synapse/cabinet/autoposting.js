@@ -100,7 +100,12 @@ function create(container, context) {
     get("autoposting-company").disabled=busy||!companies.length;
     const canEdit=edit()&&(!post||EDITABLE.has(post.status))&&!post?.deliveries?.some(item=>["published","publishing","needs_review"].includes(item.status));
     form.querySelectorAll("input,textarea,select,button").forEach(node=>{node.disabled=busy||!settings||!canEdit;});
-    get("autoposting-channels").querySelectorAll("input,select,button").forEach(node=>{node.disabled=busy||!edit()||(ctx.identity?.role!=='owner'&&node.closest('[data-owner-connection]')&&!node.matches('[data-check-channel]'));});
+    get("autoposting-channels").querySelectorAll("input,select,button").forEach(node=>{
+      const card=node.closest('[data-channel]');
+      const needsProfile=node.matches('[data-channel-field="enabled"]')&&card.querySelector('[data-channel-field="provider"]').value==='onlypult'&&!card.querySelector('[data-channel-field="target"]').value.trim();
+      if(needsProfile)node.checked=false;
+      node.disabled=busy||!edit()||needsProfile||(ctx.identity?.role!=='owner'&&node.closest('[data-owner-connection]')&&!node.matches('[data-check-channel]'));
+    });
     get("autoposting-preview").disabled=busy||!post||dirty();
     get("autoposting-schedule").disabled=busy||!edit()||!readyToSchedule();
     get("autoposting-cancel").hidden=!post||!["scheduled","publishing"].includes(post.status);
@@ -153,6 +158,7 @@ function create(container, context) {
         ${onlypult?`<label>Профиль этой компании<select data-channel-field="target"><option value="">Сначала загрузите профили</option>${values.target&&!profiles.some(p=>p.id===values.target)?`<option value="${esc(values.target)}" selected>Сохранённый профиль ${esc(values.target)}</option>`:''}${profiles.map(p=>`<option value="${esc(p.id)}"${String(values.target)===p.id?' selected':''}>${esc(p.name)} · ${esc(p.id)}${p.status==='active'?'':' · требует подключения'}</option>`).join('')}</select></label><button class="plain-button" type="button" data-load-profiles="${esc(channel.id)}">Загрузить профили Onlypult</button>`:`<label>${channel.platform==="vk"?"ID сообщества (число или clubNNN)":"Канал (@name или -100…)"}<input data-channel-field="target" value="${esc(values.target||"")}" maxlength="200"></label>`}
         <label>${onlypult?"Ключ Onlypult для подключения":channel.platform==="vk"?"Новый ключ пользователя с правом wall":"Новый токен бота — администратора канала"}<input data-channel-field="token" type="password" autocomplete="new-password" maxlength="4096"></label>
         <label class="autoposting-checkbox"><input data-channel-field="enabled" type="checkbox"${values.enabled?" checked":""}>Разрешить автоматическую отправку</label>
+        ${onlypult?'<p class="autoposting-note">Отправку можно разрешить после выбора профиля.</p>':''}
         <div class="autoposting-actions"><button class="plain-button" type="submit">Сохранить подключение</button><button class="plain-button" type="button" data-check-channel="${esc(channel.id)}">Проверить доступ</button></div></form>`;
     }).join("");
     get("autoposting-planning").innerHTML=PLANNING.map(([id,title])=>{const url=safeUrl(socials.find(item=>item.type===id)?.url);return `<div><strong>${title}</strong><p>Планирование материалов. Автоматическая отправка не подключена.</p>${url?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Открыть страницу компании</a>`:"<span class=autoposting-note>Ссылка компании не указана.</span>"}</div>`;}).join("");
@@ -263,7 +269,10 @@ function create(container, context) {
   get("autoposting-month").addEventListener("change",()=>{const value=get("autoposting-month").value;if(/^\d{4}-\d{2}$/.test(value)){month=value;selectedDate="";renderCalendar();controls();}});
   get("autoposting-all").addEventListener("click",()=>{selectedDate="";renderCalendar();controls();});
   get("autoposting-calendar").addEventListener("click",event=>{const button=event.target.closest("[data-calendar-date]");if(button){selectedDate=button.dataset.calendarDate;renderCalendar();controls();}});
-  const channelValues=node=>({provider:node.querySelector('[data-channel-field="provider"]').value,name:node.querySelector('[data-channel-field="name"]').value,target:node.querySelector('[data-channel-field="target"]').value,enabled:node.querySelector('[data-channel-field="enabled"]').checked});
+  const channelValues=node=>{
+    const provider=node.querySelector('[data-channel-field="provider"]').value,target=node.querySelector('[data-channel-field="target"]').value;
+    return {provider,name:node.querySelector('[data-channel-field="name"]').value,target,enabled:!(provider==='onlypult'&&!target.trim())&&node.querySelector('[data-channel-field="enabled"]').checked};
+  };
   get("autoposting-channels").addEventListener("input",event=>{
     const node=event.target.closest("[data-channel]");if(!node||event.target.type==="password")return;
     const channel=channels().find(item=>item.id===node.dataset.channel);channelDrafts.set(companyCode+":"+channel.id,{revision:channel.revision,values:channelValues(node)});
@@ -273,16 +282,19 @@ function create(container, context) {
     const channel=channels().find(item=>item.id===node.dataset.channel),values=channelValues(node);
     if(event.target.dataset.channelField==='provider'){values.target='';values.enabled=false;providerProfiles.delete(companyCode+':'+channel.id);}
     channelDrafts.set(companyCode+':'+channel.id,{revision:channel.revision,values});
-    if(event.target.dataset.channelField==='provider'){renderChannels();controls();message('Способ подключения изменён. Введите новый ключ и сохраните подключение.');}
+    if(event.target.dataset.channelField==='provider'){renderChannels();message('Способ подключения изменён. Введите новый ключ и сохраните подключение.');}
+    controls();
   });
   get("autoposting-channels").addEventListener("submit",event=>{
     const node=event.target.closest("[data-channel]");if(!node)return;event.preventDefault();if(busy||!edit()||!node.reportValidity())return;
     const channel=channels().find(item=>item.id===node.dataset.channel), input=node.querySelector('[data-channel-field="token"]'), token=input.value.trim();
-    if(ctx.identity?.role!=='owner'&&(channel.provider==='onlypult'||channelValues(node).provider==='onlypult')){input.value='';message('Onlypult подключает владелец Synapse.');return;}
+    if(ctx.identity?.role!=='owner'&&(channel.provider==='onlypult'||channelValues(node).provider==='onlypult')){message('Onlypult подключает владелец Synapse.');return;}
     const payload={id:channel.id,platform:channel.platform,...channelValues(node),revision:channelDrafts.get(companyCode+":"+channel.id)?.revision??channel.revision,...(token?{token}:{})};
-    void run(async current=>{try{await request("/autoposting/settings","PUT",{channels:[payload]});}finally{input.value="";}if(!current())return;
-      channelDrafts.delete(companyCode+":"+channel.id);const refreshed=await request("/autoposting/settings");if(!current())return;settings=refreshed;renderChannels();invalidate();message("Подключение сохранено. Проверьте доступ к каналу перед публикацией.");
-    },"Сохраняем подключение…","Не удалось сохранить подключение. Новый ключ очищен; при необходимости введите его снова.");
+    void run(async current=>{const result=await request("/autoposting/settings","PUT",{channels:[payload]});input.value="";if(!current())return;
+      channelDrafts.delete(companyCode+":"+channel.id);settings=result;renderChannels();invalidate();
+      const keySaved=channels().find(item=>item.id===channel.id)?.tokenConfigured;
+      message(payload.provider==='onlypult'&&!payload.target.trim()?(keySaved?"Ключ сохранён. Загрузите профили и выберите сообщество или канал.":"Настройки сохранены. Вставьте ключ Onlypult и сохраните подключение."):"Подключение сохранено. Проверьте доступ к каналу перед публикацией.");
+    },"Сохраняем подключение…","Не удалось сохранить подключение. Введённый ключ остаётся в поле; проверьте настройки и повторите сохранение.");
   });
   get("autoposting-channels").addEventListener("click",event=>{
     const profilesButton=event.target.closest('[data-load-profiles]');
