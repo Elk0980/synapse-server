@@ -25,10 +25,13 @@
   const q = (state, selector) => state.root?.querySelector(selector) || null;
   const request = async (state, suffix = "", options = {}, absolute = false) => {
     if (!active(state)) throw new DOMException("Запрос отменён", "AbortError");
+    // timeoutMs — наш параметр, а не поле fetch: запрос входа ждёт дольше обычного,
+    // потому что сервер выдаёт код устройства не мгновенно.
+    const { timeoutMs, ...init } = options;
     const response = await fetch(absolute ? suffix : state.base + suffix, {
-      credentials: "same-origin", cache: "no-store", ...options,
-      signal: AbortSignal.any([state.controller.signal, AbortSignal.timeout(options.body instanceof Blob ? 45000 : 20000)]),
-      headers: { "Content-Type": "application/json", ...(options.method && options.method !== "GET" ? { "X-CSRF-Token": state.ctx.identity.csrfToken } : {}), ...options.headers }
+      credentials: "same-origin", cache: "no-store", ...init,
+      signal: AbortSignal.any([state.controller.signal, AbortSignal.timeout(timeoutMs || (init.body instanceof Blob ? 45000 : 20000))]),
+      headers: { "Content-Type": "application/json", ...(init.method && init.method !== "GET" ? { "X-CSRF-Token": state.ctx.identity.csrfToken } : {}), ...init.headers }
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -397,25 +400,39 @@
     }
   };
   // The backend owns the login flow, but the cabinet only ever offers the official device page.
-  const CODEX_LOGIN = "https://auth.openai.com/codex/device";
   const loginLink = value => {
     try {
       const url = new URL(value);
       return url.origin === "https://auth.openai.com" && url.pathname.replace(/\/+$/, "") === "/codex/device" ? url.href : "";
     } catch (_) { return ""; }
   };
+  // Код устройства выдаётся ровно в этом виде (device-login.js). Чужая строка кодом не считается.
+  const deviceCode = value => /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(String(value ?? "")) ? String(value) : "";
+  const CONNECT_HINT = "Нажмите «Подключить подписку»: сервер откроет вход и выдаст ссылку с кодом подтверждения.";
   const runtimeHTML = data => {
     const model = data.model ? ` Модель: ${escape(data.model)}.` : "";
-    if (data.connected === true && data.authenticated === true) return `Подписка Codex подключена к серверу.${model}`;
-    const url = loginLink(data.loginUrl);
-    if (data.state === "login_required" || url) {
-      return `<p>Откройте официальную страницу входа Codex и подтвердите подключение подписки.</p>${url
-        ? `<a href="${escape(url)}" target="_blank" rel="noopener">Войти в Codex</a>`
-        : `<p class="pc-error">Сервер не передал ожидаемую ссылку ${escape(CODEX_LOGIN)}. Откройте её самостоятельно и повторите проверку.</p>`}${data.userCode ? `<p>Код: <strong>${escape(data.userCode)}</strong></p>` : ""}`;
+    // Пояснение сервера приходит без завершающей точки: дописываем, чтобы соседние фразы не слиплись.
+    const detail = data.error ? ` ${escape(String(data.error).replace(/\s*[.;:!?]+$/, ""))}.` : "";
+    // Вход выполнен — это ещё не «готово»: при исчерпанной квоте сервер оставляет
+    // connected и authenticated истинными, но состояние уже не connected. Вход при этом
+    // не сломан, поэтому подключать подписку заново здесь не предлагается.
+    if (data.connected === true && data.authenticated === true) {
+      return data.state === "connected"
+        ? `Подписка Codex подключена к серверу.${model}`
+        : `Подписка Codex подключена, но ответы сейчас недоступны.${detail}${model} Переписка, файлы и задачи проекта работают.`;
+    }
+    const url = loginLink(data.loginUrl), code = deviceCode(data.userCode);
+    // Подтверждать вход есть чем только при паре «проверенная ссылка + код»: одна страница
+    // без кода бесполезна, а код без официальной ссылки вести никуда нельзя.
+    if (url && code) {
+      return `<p>Откройте официальную страницу входа Codex и подтвердите подключение подписки этим кодом.</p><a href="${escape(url)}" target="_blank" rel="noopener">Войти в Codex</a><p>Код: <strong>${escape(code)}</strong></p>`;
+    }
+    if (data.state === "login_required" || url || data.userCode) {
+      return `Подписка Codex пока не подключена. ${CONNECT_HINT}`;
     }
     if (data.state === "connecting") return "Подключение к Codex…";
-    if (data.state === "unavailable") return `Сервис ответов Хью сейчас недоступен. Общая переписка, файлы и задачи работают.${data.error ? ` ${escape(String(data.error))}` : ""}`;
-    return `Подписка Codex пока не подключена. Общая переписка и задачи доступны.${data.error ? ` ${escape(String(data.error))}` : ""}`;
+    if (data.state === "unavailable") return `Сервис ответов Хью сейчас недоступен. Общая переписка, файлы и задачи работают.${detail}`;
+    return `Подписка Codex пока не подключена. Общая переписка и задачи доступны.${detail} ${CONNECT_HINT}`;
   };
   const settingsDialog = async state => {
     if (!isOwner(state)) return;
@@ -427,9 +444,18 @@
       const buttons = dialog.querySelectorAll("[data-pc-login],[data-pc-runtime-check]");
       buttons.forEach(button => { button.disabled = true; });
       try {
-        const data = await request(state, "/content/project-chat-runtime/" + (login ? "login" : "status"), login ? { method: "POST", body: "{}" } : {}, true);
+        // Вход ждёт дольше проверки: сервер сначала запрашивает код устройства.
+        const data = await request(state, "/content/project-chat-runtime/" + (login ? "login" : "status"), login ? { method: "POST", body: "{}", timeoutMs: 40000 } : {}, true);
         if (live(state, view) && dialog.isConnected) dialog.querySelector("[data-pc-runtime]").innerHTML = runtimeHTML(data);
-      } catch (error) { if (live(state, view) && dialog.isConnected && error.name !== "AbortError") dialog.querySelector("[data-pc-runtime]").textContent = "Не удалось проверить подключение Codex. Повторите проверку."; }
+      } catch (error) {
+        // Сорвавшийся запрос — это про связь сервера с Codex, а не про учётную запись владельца.
+        // Ни причины «региона», ни требования входить снова и снова здесь быть не должно.
+        if (live(state, view) && dialog.isConnected && error.name !== "AbortError") {
+          dialog.querySelector("[data-pc-runtime]").textContent = login
+            ? "Не удалось начать подключение: запрос к Codex не прошёл. Обычно это временный сбой связи — повторите попытку через минуту."
+            : "Не удалось проверить подключение Codex: запрос не прошёл. Обычно это временный сбой связи — повторите проверку.";
+        }
+      }
       finally { buttons.forEach(button => { button.disabled = false; }); }
     };
     dialog.querySelector("[data-pc-login]").onclick = () => runtime(true);

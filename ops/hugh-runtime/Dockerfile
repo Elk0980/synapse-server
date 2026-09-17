@@ -7,6 +7,17 @@ ARG NPM_REGISTRY=https://registry.npmjs.org/
 # Пусто — выбирается первый согласованный слаг из встроенного набора (см. model-catalog.js).
 ARG HUGH_MODEL_SLUG=
 
+# Доверенные корневые сертификаты ставятся явно официальным пакетом Debian. На проде в
+# контейнере не оказалось /etc/ssl/certs/ca-certificates.crt, и клиент Codex не смог
+# проверить цепочку: account/login/start падал на «error sending request» к auth.openai.com.
+# Полагаться на то, что базовый образ принесёт хранилище с собой, нельзя — ставим сами.
+# Проверка сертификатов при этом остаётся включённой: ни NODE_TLS_REJECT_UNAUTHORIZED,
+# ни --insecure, ни подменённого хранилища здесь нет и быть не должно.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && update-ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
 # Точная закреплённая версия. Сборка падает, если бинарь отрапортовал другую.
 RUN npm config set registry "${NPM_REGISTRY}" \
  && npm install -g "@openai/codex@${CODEX_VERSION}" \
@@ -39,6 +50,11 @@ RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin hugh \
  && chmod 0755 /workspace
 
 USER hugh
+
+# Шаг 0. Хранилище корневых сертификатов обязано быть на месте и читаться рабочим
+# пользователем: именно от него зависит проверка TLS при входе в подписку. Файл разбирается
+# по-настоящему (X509), пустой или повреждённый набор останавливает сборку.
+RUN node test-support/check-ca-bundle.js
 
 # Шаг 1. Доверенный каталог моделей из официального встроенного набора самого бинаря.
 # Ни сети, ни авторизации: cli/src/main.rs:2383 отдаёт bundled_models_response.

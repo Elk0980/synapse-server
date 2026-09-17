@@ -687,8 +687,92 @@ test('произвольная ссылка входа не предлагает
   const runtime = harness.d.querySelector('[data-pc-runtime]');
   assert.equal(runtime.querySelector('a'), null);
   assert.doesNotMatch(runtime.innerHTML, /login\.example\.test/);
-  assert.match(runtime.textContent, /https:\/\/auth\.openai\.com\/codex\/device/);
-  assert.match(runtime.textContent, /Код: WXYZ-9999/);
+  // Без проверенной ссылки подтверждать нечем: код в одиночку никуда не ведёт и не показывается.
+  assert.doesNotMatch(runtime.textContent, /WXYZ-9999/);
+  assert.match(runtime.textContent, /Нажмите «Подключить подписку»/);
+  harness.w.close();
+});
+
+test('до нажатия «Подключить подписку» владельцу не обещают ссылку и не просят открыть её вручную', async () => {
+  let started = false;
+  const harness = boot({
+    routes: {
+      'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ messages: [] }) }),
+      // Обычное состояние покоя рантайма: вход нужен, но код ещё не запрашивали.
+      'GET /content/project-chat-runtime/status': () => ({ body: started
+        ? { connected: false, authenticated: false, provider: 'codex', state: 'login_required', loginUrl: 'https://auth.openai.com/codex/device', userCode: 'QRST-5678' }
+        : { connected: false, authenticated: false, provider: 'codex', state: 'login_required', loginUrl: null, userCode: null, error: 'Нужен вход в подписку ChatGPT' } }),
+      'POST /content/project-chat-runtime/login': () => { started = true; return { body: { connected: false, authenticated: false, provider: 'codex', state: 'login_required', loginUrl: 'https://auth.openai.com/codex/device', userCode: 'QRST-5678' } }; }
+    }
+  });
+  await mount(harness);
+  harness.click('[data-pc-settings]');
+  await settle();
+  const { d } = harness;
+  const idle = d.querySelector('[data-pc-runtime]');
+  assert.equal(idle.querySelector('a'), null);
+  assert.doesNotMatch(idle.textContent, /не передал|Откройте официальную страницу/);
+  assert.match(idle.textContent, /Нажмите «Подключить подписку»/);
+
+  // Ссылка и код появляются только вместе и только после запроса входа.
+  harness.click('[data-pc-login]');
+  await settle();
+  const pending = d.querySelector('[data-pc-runtime]');
+  assert.equal(pending.querySelector('a').href, 'https://auth.openai.com/codex/device');
+  assert.match(pending.textContent, /Код: QRST-5678/);
+  assert.match(pending.textContent, /Откройте официальную страницу входа Codex/);
+  assert.equal(d.querySelector('[data-pc-login]').disabled, false);
+  // Вход уходит POST с пустым телом: ссылок и кодов клиент не придумывает.
+  const loginCall = harness.calls.find((call) => call.url.includes('/project-chat-runtime/login'));
+  assert.equal(loginCall.method, 'POST');
+  assert.equal(loginCall.body, '{}');
+  harness.w.close();
+});
+
+test('сорвавшийся запрос входа объясняется связью, а не учётной записью владельца', async () => {
+  const harness = boot({
+    routes: {
+      'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ messages: [] }) }),
+      'GET /content/project-chat-runtime/status': () => ({ body: { connected: false, authenticated: false, provider: 'codex', state: 'login_required', loginUrl: null, userCode: null } }),
+      'POST /content/project-chat-runtime/login': () => new Error('соединение оборвалось')
+    }
+  });
+  await mount(harness);
+  harness.click('[data-pc-settings]');
+  await settle();
+  const { d } = harness;
+  harness.click('[data-pc-login]');
+  await settle();
+  const runtime = d.querySelector('[data-pc-runtime]');
+  assert.match(runtime.textContent, /временный сбой связи/);
+  assert.match(runtime.textContent, /повторите попытку/i);
+  // Ни «региона», ни предложения входить снова и снова, ни сырого текста ошибки.
+  assert.doesNotMatch(runtime.textContent, /регион|страна|VPN|соединение оборвалось/i);
+  assert.equal(runtime.querySelector('a'), null);
+  // Кнопки возвращаются в рабочее состояние: повтор возможен без переоткрытия настроек.
+  assert.equal(d.querySelector('[data-pc-login]').disabled, false);
+  assert.equal(d.querySelector('[data-pc-runtime-check]').disabled, false);
+  harness.w.close();
+});
+
+test('исчерпанная квота подписки не выдаётся в настройках за готовность к ответам', async () => {
+  const harness = boot({
+    routes: {
+      'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ messages: [] }) }),
+      // Так отвечает рантайм при лимите: вход не тронут, но состояние уже не connected.
+      'GET /content/project-chat-runtime/status': () => ({ body: { connected: true, authenticated: true, provider: 'codex', model: 'gpt-5-codex', state: 'unavailable', error: 'Лимит подписки исчерпан, ответ будет позже' } })
+    }
+  });
+  await mount(harness);
+  harness.click('[data-pc-settings]');
+  await settle();
+  const runtime = harness.d.querySelector('[data-pc-runtime]');
+  assert.doesNotMatch(runtime.textContent, /Подписка Codex подключена к серверу/);
+  assert.match(runtime.textContent, /ответы сейчас недоступны/);
+  assert.match(runtime.textContent, /Лимит подписки исчерпан, ответ будет позже/);
+  // Вход не сломан: повторно подключать подписку не предлагаем.
+  assert.equal(runtime.querySelector('a'), null);
+  assert.doesNotMatch(runtime.textContent, /Нажмите «Подключить подписку»/);
   harness.w.close();
 });
 

@@ -64,8 +64,20 @@ services:
       MODEL_API_URL: ${MODEL_API_URL:-}
       MODEL_API_KEY: ${MODEL_API_KEY:-}
       PROJECT_CONTENT_URL: http://content:8080
+      # Операционные флаги Node для этого сервиса, а не учётные данные. По умолчанию пусто —
+      # поведение прежнее. Чем это заполняют на проде, описано в ops/chat/README.md.
+      NODE_OPTIONS: ${CHAT_NODE_OPTIONS:-}
     expose:
       - "8080"
+    # Две сети: прежняя общая (по ней chat ходит к crm и content, а Caddy — к chat) и
+    # отдельная исходящая. priority задаёт только порядок подключения сетей, маршрут по
+    # умолчанию им не выбирается. Связь с crm и content идёт напрямую по общей сети, а
+    # исходящий IPv4 остаётся через NAT — обе сети это обеспечивают одинаково.
+    networks:
+      default:
+        priority: 100
+      telegram_egress:
+        priority: 10
     volumes:
       - chat_data:/data
 
@@ -125,6 +137,24 @@ services:
     volumes:
       - hugh_runtime_data:/data
       - hugh_runtime_workspace:/workspace:ro
+
+# Сети проекта. Общая сеть объявлена явно и без параметров: её состав и поведение
+# остаются прежними для всех сервисов, включая caddy, crm, content и hugh-runtime.
+#
+# telegram_egress — отдельная исходящая сеть, подключённая только к chat. Она нужна там,
+# где api.telegram.org недоступен по IPv4 с хоста, но отвечает по IPv6: двойной стек
+# в этой сети даёт контейнеру маршрут IPv6 наружу, не трогая остальные сервисы.
+# Выключатель по умолчанию false, то есть сеть создаётся обычной IPv4-сетью и текущее
+# поведение сохраняется. Значение задаётся ровно как true или false.
+# При true Docker сам выдаёт префикс ULA (docs.docker.com/engine/daemon/ipv6/), а режим
+# шлюза nat выпускает эти адреса наружу через NAT — публичный префикс на хосте не нужен.
+# Параметр режима шлюза бездействует, пока IPv6 в сети выключен.
+networks:
+  default:
+  telegram_egress:
+    enable_ipv6: ${CHAT_IPV6_ENABLED:-false}
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv6: nat
 
 volumes:
   caddy_data:
