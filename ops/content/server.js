@@ -460,10 +460,10 @@ async function proxyCrm(request, response, url, cors) {
   }
   if (/^\/(catalog|finances)(?:\/|$)/.test(crmPath) && identity.role !== 'owner') fail(403,'Коммерческие условия и финансы доступны владельцу');
   const companyModule = /^\/(company-information|autoposting)(?:\/|$)/.exec(crmPath)?.[1];
-  if (/^\/studio-journey(?:\/|$)/.test(crmPath)) {
+  if (/^\/(?:studio-journey|reviews|platform-demand)(?:\/|$)/.test(crmPath)) {
     const code=url.searchParams.get('companyCode');
     if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400,'Выберите компанию');
-    if(identity.role!=='owner')requirePermission(request,readOnly?'crm.view':'crm.edit',code);
+    if(identity.role!=='owner')requirePermission(request,readOnly?(crmPath.startsWith('/platform-demand')?'analytics.view':'crm.view'):'crm.edit',code);
   }
   if (/^\/autoposting\/settings\/[^/]+\/profiles$/.test(crmPath) && identity.role!=='owner') {
     fail(403,'Профили общего аккаунта публикаций настраивает владелец');
@@ -481,7 +481,7 @@ async function proxyCrm(request, response, url, cors) {
   if (['/company-email', '/email-status', '/email-settings', '/email-settings/check'].includes(crmPath) && identity.role !== 'owner') {
     fail(403, 'Настройки и диагностика почты доступны только владельцу');
   }
-  const analyticsReadPath = new Set([
+  const analyticsReadPath = /^\/platform-demand(?:\/|$)/.test(crmPath) || new Set([
     '/dashboard', '/summary', '/external-stats', '/expenses', '/tasks/summary',
   ]).has(crmPath);
   let session = initialSession;

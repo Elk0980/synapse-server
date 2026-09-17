@@ -20,6 +20,10 @@ const { createStudioJourney, createStudioJourneyHandler } = require('./studio-jo
 const { createStudioContentPlan } = require('./studio-content-plan');
 const { createVkCommunity } = require('./vk-community');
 const { createVkCommunityHandler } = require('./vk-community-http');
+const { createReviews } = require('./reviews');
+const { createReviewsHandler } = require('./reviews-http');
+const { createPlatformDemand } = require('./platform-demand');
+const { createPlatformDemandHandler } = require('./platform-demand-http');
 const { createCompanyInformationCheck } = require('./company-information-check');
 const { createDealOrders } = require('./deal-orders');
 
@@ -578,6 +582,10 @@ const studioContentPlan = createStudioContentPlan(db,{autoposting,information:co
 const handleStudioJourney = createStudioJourneyHandler({journey:studioJourney,companyModuleContext,readJson,send});
 const vkCommunity = createVkCommunity(db,{apiKey:API_KEY});
 const handleVkCommunity = createVkCommunityHandler({community:vkCommunity,companyModuleContext,readJson,send});
+const reviews = createReviews(db);
+const handleReviews = createReviewsHandler({reviews,companyModuleContext,readJson,send});
+const platformDemand = createPlatformDemand(db);
+const handlePlatformDemand = createPlatformDemandHandler({demand:platformDemand,companyModuleContext,readJson,send});
 function deliverLeadEmails() {
   return emailOutbox.drain().catch(() => {
     // Do not expose SMTP responses or contact details in service logs.
@@ -2482,6 +2490,8 @@ async function route(request, response) {
 
   if (await handleStudioJourney(request,response,url,cors)) return;
   if (await handleVkCommunity(request,response,url,cors)) return;
+  if (await handleReviews(request,response,url,cors)) return;
+  if (await handlePlatformDemand(request,response,url,cors)) return;
   if (url.pathname === '/company-information' || url.pathname === '/company-information/check') {
     const permission = request.method === 'GET' ? 'company-information.view' : 'company-information.edit';
     const {identity,company} = companyModuleContext(request,url.searchParams.get('companyCode'),permission);

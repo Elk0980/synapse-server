@@ -55,6 +55,7 @@ function create(container, context) {
     <div class="company-information-toolbar"><label for="information-company">Компания</label><select id="information-company">${companies.map(item => `<option value="${esc(item.code)}">${esc(item.name)}</option>`).join("")}</select>
       <button class="plain-button" id="information-refresh" type="button">Обновить сведения</button></div>
     <p id="information-status" role="status" aria-live="polite"></p>
+    <section class="card" id="information-platform-links" hidden><h3>Сохранённые страницы компании и кабинеты</h3><p>Страница компании видна клиентам. Кабинет площадки откроется отдельно; вход и права проверяются на самой площадке.</p><ul id="information-platform-link-list"></ul></section>
     <form id="information-form"><section class="card information-fields" aria-label="Основные сведения">
     ${FIELDS.map(([key,label,max,type]) => `<label for="information-${key}">${label}<span class="information-field-state" data-field-state="${key}"></span>${type === "textarea" ? `<textarea id="information-${key}" maxlength="${max}" rows="${key === "description" ? 5 : 2}"></textarea>` : `<input id="information-${key}" type="${type || "text"}" maxlength="${max}"${key === "name" ? " required" : ""}${key === "timezone" ? ' placeholder="Asia/Irkutsk"' : ""}>`}</label>`).join("")}
     </section>
@@ -123,6 +124,9 @@ function create(container, context) {
   };
   const render = (data, draft) => {
     form.hidden=false;
+    const links = cabinet.platformLinks?.companyLinks({companyCode,record:data}) || "";
+    get("information-platform-link-list").innerHTML = links;
+    get("information-platform-links").hidden = !links;
     saved = copy(draft?.saved || data);
     const profile = saved.profile || {};
     FIELDS.forEach(([key]) => {get("information-" + key).value = String(profile[key] ?? "");
@@ -136,6 +140,7 @@ function create(container, context) {
   const load = async code => {
     stash(); get("information-photo").value=""; companyCode = code; const version = ++epoch;
     saved = null; busy = true; form.hidden=true; get("information-company").value = code; updateControls();
+    get("information-platform-link-list").replaceChildren(); get("information-platform-links").hidden = true;
     if (!code) {busy=false; status("Нет доступных компаний."); updateControls(); return;}
     status("Загружаем подтверждённые сведения…");
     try {

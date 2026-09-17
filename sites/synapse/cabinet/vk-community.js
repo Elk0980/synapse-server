@@ -48,6 +48,7 @@
       node('connection').textContent = settings?.connected ? 'Сообщения: доступ подтверждён' : settings?.configured ? 'Сообщения: требуется проверка доступа' : 'Сообщения: не подключены';
       node('checked').textContent = settings?.checkedAt ? 'Последняя проверка: ' + new Date(settings.checkedAt).toLocaleString('ru-RU') : 'Проверка ещё не выполнена.';
       node('community-name').textContent = settings?.group?.name || 'Выберите сообщество этой компании';
+      node('platform-links').innerHTML = [cabinet.platformLinks?.vkCommunityLink({companyCode,record:settings}), cabinet.platformLinks?.cabinetLink('vk')].filter(Boolean).join(' · ');
       node('step-key').dataset.complete = String(!!settings?.configured);
       node('step-check').dataset.complete = String(!!settings?.connected);
     };
@@ -71,7 +72,7 @@
         <a class="card" href="#analytics-through"><strong>Результат</strong><span>Переходы, заявки и этапы CRM</span><small>Визиты и покупки отмечает администратор →</small></a>
         <a class="card" href="#company-information"><strong>Оформление и сведения</strong><span>Эталонные данные компании</span><small>Изменения ВК пока применяются отдельно →</small></a>
       </div>
-      <section class="card vk-setup"><h3 id="vk-connection">Сообщения: не подключены</h3><p id="vk-community-name"></p>
+      <section class="card vk-setup"><h3 id="vk-connection">Сообщения: не подключены</h3><p id="vk-community-name"></p><p id="vk-platform-links"></p>
         <ol class="vk-steps"><li id="vk-step-key">Сохранить ID и ключ сообщества</li><li id="vk-step-check">Проверить доступ к сообщениям</li><li>Получить диалоги</li><li>Открыть диалог и отправить согласованный ответ</li></ol>
         <details id="vk-setup-details"><summary>Настроить сообщения сообщества</summary>
           <p>В управлении сообществом ВК включите сообщения. В разделе работы с API создайте ключ с доступом к сообщениям и информации сообщества. Вставьте его здесь. Ключ Onlypult используется отдельно, для публикаций.</p>
