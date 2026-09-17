@@ -441,6 +441,11 @@ async function proxyCrm(request, response, url, cors) {
   const identity = initialSession.user;
   const readOnly = request.method === 'GET';
   const crmPath = url.pathname.slice('/content/crm'.length) || '/';
+  if (/^\/vk-community(?:\/|$)/.test(crmPath)) {
+    if (identity.role !== 'owner') fail(403,'Подключение и сообщения ВК доступны владельцу');
+    const code = url.searchParams.get('companyCode');
+    if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400,'Выберите компанию');
+  }
   if (/^\/(catalog|finances)(?:\/|$)/.test(crmPath) && identity.role !== 'owner') fail(403,'Коммерческие условия и финансы доступны владельцу');
   const companyModule = /^\/(company-information|autoposting)(?:\/|$)/.exec(crmPath)?.[1];
   if (/^\/studio-journey(?:\/|$)/.test(crmPath)) {
