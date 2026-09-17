@@ -16,6 +16,7 @@ on:
       - 'ops/content/**'
       - 'ops/dev/**'
       - 'ops/hugh-runtime/**'
+      - 'ops/local-hugh/**'
       - 'ops/synapse-sync'
       - 'ops/synapse-sync.test.js'
       - 'sites/synapse/cabinet/**'
@@ -28,6 +29,7 @@ on:
       - 'ops/content/**'
       - 'ops/dev/**'
       - 'ops/hugh-runtime/**'
+      - 'ops/local-hugh/**'
       - 'ops/synapse-sync'
       - 'ops/synapse-sync.test.js'
       - 'sites/synapse/cabinet/**'
@@ -75,6 +77,12 @@ jobs:
       - name: Тесты приватного рантайма Hugh
         timeout-minutes: 10
         run: node --test ops/hugh-runtime/*.test.js
+
+      # Локальный Windows-обработчик: офлайн-тесты с поддельным транспортом и рантаймом,
+      # настоящие SQLite во временном каталоге. Сеть и подписка не нужны.
+      - name: Тесты локального обработчика Хью
+        timeout-minutes: 10
+        run: node --test ops/local-hugh/*.test.js
 
       - name: Тесты сервиса контента
         timeout-minutes: 10

@@ -1,0 +1,16 @@
+{
+  "name": "synapse-local-hugh",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Локальный Windows-обработчик ответов Хью: исходящий HTTPS к серверу Sb, direct HughRuntime, без входящих портов",
+  "license": "UNLICENSED",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js",
+    "test": "node --test *.test.js"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "dependencies": {}
+}

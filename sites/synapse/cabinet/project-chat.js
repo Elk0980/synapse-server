@@ -4,6 +4,10 @@
   const statuses = { todo: "Новая", in_progress: "В работе", done: "Готово", blocked: "Нужна помощь" };
   const delivery = { local: "В чате проекта", pending: "Ожидает отправки в Telegram", sending: "Отправляется в Telegram…", sent: "Отправлено в Telegram", error: "Не отправлено в Telegram", uncertain: "Доставка в Telegram уточняется" };
   const TITLE_LIMIT = 200, PAGE = 100;
+  // Локальный обработчик отдаёт ссылку и код входа не сразу: команда уходит на компьютер Хью.
+  const LOGIN_POLL_MS = 3000, LOGIN_POLLS = 40;
+  // Ответ ИИ помечается всегда одинаково: участники видят, что пишет бот, а не Влад.
+  const AI_BADGE = "ИИ · бизнес-ассистент Синапс Бизнес";
   let current;
   const list = value => Array.isArray(value) ? value : [];
   const escape = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -138,6 +142,8 @@
     const ai = aiInfo(state);
     if (!ai.connected) {
       const reason = !ai.configured ? "Автоматические ответы Хью пока не подключены."
+        : ai.runtimeState === "offline" ? "Компьютер Хью сейчас не на связи: вопросы к нему ждут его возвращения."
+        : ai.runtimeState === "login_pending" ? "Хью ждёт, пока владелец подтвердит вход."
         : ai.runtimeState === "connecting" ? "Хью подключается к подписке Codex…"
         : ai.runtimeState === "login_required" ? "Хью ждёт подтверждения входа владельцем."
         : ai.runtimeState === "unavailable" ? "Сервис ответов Хью сейчас недоступен."
@@ -171,7 +177,9 @@
   };
   const aiNoteHTML = (message, ai) => {
     if (["pending", "queued", "running"].includes(message.aiStatus)) {
-      return !ai.connected ? '<small class="pc-muted">Ответ Хью появится после подключения подписки.</small>'
+      return !ai.connected ? (ai.runtimeState === "offline"
+        ? '<small class="pc-muted">Ответ Хью появится, когда его компьютер снова будет на связи. Вопрос сохранён.</small>'
+        : '<small class="pc-muted">Ответ Хью появится после подключения подписки.</small>')
         : ai.limited ? '<small class="pc-muted">Ответ Хью отложен до снятия ограничения подписки. Вопрос сохранён.</small>'
         : '<small class="pc-muted">Хью готовит ответ…</small>';
     }
@@ -181,7 +189,7 @@
   const messagesHTML = state => {
     const ai = aiInfo(state), reply = canReply(state);
     return timeline(state).map(message => `<li class="pc-message${message.authorType === "assistant" ? " pc-message-ai" : ""}" data-message-id="${escape(message.id)}">
-    <div class="pc-message-meta"><strong>${escape(message.authorName || (message.authorType === "assistant" ? "Хью" : "Участник"))}</strong><time datetime="${escape(message.createdAt)}">${escape(date(message.createdAt))}</time>${message.authorType === "telegram" ? '<span>Telegram</span>' : ""}</div>
+    <div class="pc-message-meta"><strong>${escape(message.authorName || (message.authorType === "assistant" ? "Хью" : "Участник"))}</strong>${message.authorType === "assistant" ? `<span class="pc-ai-badge">${AI_BADGE}</span>` : ""}<time datetime="${escape(message.createdAt)}">${escape(date(message.createdAt))}</time>${message.authorType === "telegram" ? '<span>Telegram</span>' : ""}</div>
     ${message.text ? `<p class="pc-message-text">${escape(message.text)}</p>` : ""}
     ${list(message.attachments).length ? `<div class="pc-attachments">${message.attachments.map(attachmentHTML).join("")}</div>` : ""}
     <div class="pc-message-footer"><small${message.deliveryStatus === "error" ? ' class="pc-error"' : ""}>${escape(delivery[message.deliveryStatus] || "")}</small>${reply ? `<button type="button" data-pc-message-task="${escape(message.id)}">В задачу</button>` : ""}</div>
@@ -193,7 +201,7 @@
     const data = state.data, root = state.root, history = q(state, "[data-pc-messages]");
     if (!history) return;
     const ai = aiInfo(state);
-    const signature = JSON.stringify([timeline(state), data.access?.canReply, ai.connected, ai.limited]);
+    const signature = JSON.stringify([timeline(state), data.access?.canReply, ai.connected, ai.limited, ai.runtimeState]);
     if (signature !== state.messageSignature) {
       const follow = !state.messageSignature || history.scrollHeight - history.scrollTop - history.clientHeight < 100;
       const previous = history.scrollTop;
@@ -244,6 +252,7 @@
     state.draft = "";
     state.loadingOlder = false;
     clearTimeout(state.timer);
+    clearTimeout(state.loginTimer);
     state.root.querySelectorAll("dialog").forEach(dialog => dialog.remove());
     const compose = q(state, "[data-pc-compose]");
     if (compose) {
@@ -322,7 +331,7 @@
     dialog.className = "pc-dialog";
     dialog.innerHTML = `<header><h2>${escape(title)}</h2><button type="button" data-pc-close aria-label="Закрыть">×</button></header>${body}`;
     state.root.append(dialog);
-    dialog.querySelector("[data-pc-close]").onclick = () => { dialog.close(); dialog.remove(); };
+    dialog.querySelector("[data-pc-close]").onclick = () => { clearTimeout(state.loginTimer); dialog.close(); dialog.remove(); };
     dialog.addEventListener("close", () => dialog.remove());
     dialog.showModal();
     return dialog;
@@ -414,7 +423,30 @@
     const text = String(value ?? "").replace(/\s*[.;:!?]+$/, "").trim();
     return text ? `${text}.` : "";
   };
+  const LOCAL_HINT = "Нажмите «Подключить подписку»: команда уйдёт на компьютер Хью, а ссылка с кодом появится здесь.";
+  // Локальный обработчик: подписка живёт на компьютере владельца, а не на сервере. Выключенный
+  // компьютер — это ожидание, а не поломка, и просить подключить подписку заново в этот момент нельзя.
+  const localRuntimeHTML = data => {
+    const model = data.model ? ` Модель: ${escape(data.model)}.` : "";
+    const detail = data.error ? ` ${escape(sentence(data.error))}` : "";
+    const seen = data.lastSeen ? ` Последний сигнал: ${escape(date(data.lastSeen))}.` : " Сигналов от него ещё не было.";
+    if (data.state === "offline") {
+      return `Компьютер Хью сейчас не на связи.${seen}${data.loginPending ? " Команда входа сохранена и выполнится после его возвращения." : ""} Переписка, файлы и задачи проекта работают; вопросы к Хью ждут.`;
+    }
+    const url = loginLink(data.loginUrl), code = deviceCode(data.userCode);
+    if (url && code) {
+      return `<p>Откройте официальную страницу входа Codex и подтвердите подключение подписки этим кодом.</p><a href="${escape(url)}" target="_blank" rel="noopener">Войти в Codex</a><p>Код: <strong>${escape(code)}</strong></p>${data.expiresAt ? `<p class="pc-muted">Код действует до ${escape(date(data.expiresAt))}.</p>` : ""}`;
+    }
+    if (data.state === "login_pending") return "Запрос входа передан компьютеру Хью. Ссылка и код появятся здесь через несколько секунд…";
+    if (data.connected === true && data.authenticated === true) {
+      return data.state === "connected"
+        ? `Подписка Codex подключена на компьютере Хью.${model}`
+        : `Подписка Codex подключена на компьютере Хью, но ответы сейчас недоступны.${detail}${model} Переписка, файлы и задачи проекта работают.`;
+    }
+    return `Подписка Codex на компьютере Хью пока не подключена.${detail} ${LOCAL_HINT}`;
+  };
   const runtimeHTML = data => {
+    if (data.local === true) return localRuntimeHTML(data);
     const model = data.model ? ` Модель: ${escape(data.model)}.` : "";
     const detail = data.error ? ` ${escape(sentence(data.error))}` : "";
     // Вход выполнен — это ещё не «готово»: при исчерпанной квоте сервер оставляет
@@ -444,31 +476,56 @@
     const room = state.data.room || {};
     const dialog = modal(state, "Настройки чата", `<form class="pc-fields"><label>Когда отвечает Хью<select name="replyMode"><option value="addressed"${room.replyMode !== "delegate" ? " selected" : ""}>По обращению</option><option value="delegate"${room.replyMode === "delegate" ? " selected" : ""}>Заменять Влада</option></select></label><p class="pc-muted">В режиме «По обращению» начните сообщение с «Хью». В режиме замены Хью участвует в обсуждении проекта.</p><label>Telegram-группа<input name="telegramChatId" inputmode="numeric" placeholder="Например, -1001234567890" value="${escape(room.telegramChatId || "")}"></label><p class="pc-muted">Укажите ID рабочей группы, куда добавлен бот. Пустое поле отключает дублирование.</p><p class="pc-muted">Кто читает группу, решает Telegram. Список участников кабинета на это не влияет: удаление участника здесь не удаляет его из группы.</p><button type="submit">Сохранить настройки</button><p role="alert"></p></form><section class="pc-runtime"><h3>Ответы Хью через Codex</h3><div data-pc-runtime role="status">Проверяем подключение…</div><div class="pc-toolbar"><button type="button" data-pc-login>Подключить подписку</button><button type="button" data-pc-runtime-check>Проверить</button></div><p class="pc-muted">Наличие настроек ещё не означает подключение. Хью отвечает только при подтверждённом входе; недоступный источник не считается подключённым.</p></section>`);
     formSave(state, dialog, form => write(state, "/settings", "PATCH", { replyMode: form.elements.replyMode.value, telegramChatId: form.elements.telegramChatId.value.trim() }));
-    const runtime = async login => {
+    // Опрос входа живёт не дольше диалога: закрытие окна снимает таймер.
+    dialog.addEventListener("close", () => clearTimeout(state.loginTimer));
+    // Компания уходит в запросе: для компании с локальным обработчиком сервер отвечает из его состояния.
+    const statusPath = "/content/project-chat-runtime/status?companyCode=" + encodeURIComponent(state.company);
+    const show = data => {
+      dialog.querySelector("[data-pc-runtime]").innerHTML = runtimeHTML(data);
+      // Локальный обработчик присылает ссылку и код следующим опросом: ждём, пока команда в работе.
+      if (data.local === true && data.state === "login_pending" && state.loginPolls < LOGIN_POLLS) {
+        state.loginTimer = setTimeout(() => { if (live(state, view) && dialog.isConnected) runtime(false, true); }, LOGIN_POLL_MS);
+      }
+    };
+    const runtime = async (login, quiet = false) => {
       const buttons = dialog.querySelectorAll("[data-pc-login],[data-pc-runtime-check]");
-      buttons.forEach(button => { button.disabled = true; });
+      if (!quiet) buttons.forEach(button => { button.disabled = true; });
+      clearTimeout(state.loginTimer);
       try {
         // Вход ждёт дольше проверки: сервер сначала запрашивает код устройства.
-        const data = await request(state, "/content/project-chat-runtime/" + (login ? "login" : "status"), login ? { method: "POST", body: "{}", timeoutMs: 40000 } : {}, true);
-        if (live(state, view) && dialog.isConnected) dialog.querySelector("[data-pc-runtime]").innerHTML = runtimeHTML(data);
+        const data = await request(state, login ? "/content/project-chat-runtime/login" : statusPath,
+          login ? { method: "POST", body: JSON.stringify({ companyCode: state.company }), timeoutMs: 40000 } : {}, true);
+        if (!live(state, view) || !dialog.isConnected) return;
+        state.loginPolls = quiet ? state.loginPolls + 1 : 0;
+        show(data);
       } catch (error) {
+        if (error.name === "AbortError" || !live(state, view)) return;
+        // Сессия или роль отозваны: код входа и опрос исчезают вместе с диалогом и комнатой.
+        if (denied(error)) { revoke(state, error.message); return; }
+        if (!dialog.isConnected) return;
+        if (login && !Number.isInteger(error.status)) {
+          // Потерянный ответ на запрос входа не доказывает, что команда не создана: сначала спрашиваем состояние.
+          let data = null;
+          try { data = await request(state, statusPath, {}, true); } catch (_) { data = null; }
+          if (!live(state, view) || !dialog.isConnected) return;
+          if (data && data.local === true && (data.state === "login_pending" || deviceCode(data.userCode))) { state.loginPolls = 0; show(data); return; }
+        }
         // Пояснение сервера уже очищено и локализовано — показываем его как есть, не заменяя
         // догадкой. Если ответа не было вовсе, причина неизвестна, и так и говорим: выдавать
         // «временный сбой сети» за установленный факт нельзя, как и рассуждать про регион
         // или учётную запись владельца.
-        if (live(state, view) && dialog.isConnected && error.name !== "AbortError") {
-          const head = login ? "Подключение не начато" : "Проверка не удалась";
-          const again = login ? "Повторите попытку." : "Повторите проверку.";
-          const reported = Number.isInteger(error.status) ? sentence(error.message) : "";
-          dialog.querySelector("[data-pc-runtime]").textContent = reported
-            ? `${head}. ${reported} ${again}`
-            : `${head}: ответ от сервера не получен, причина неизвестна. ${again}`;
-        }
+        const head = login ? "Подключение не начато" : "Проверка не удалась";
+        const again = login ? "Повторите попытку." : "Повторите проверку.";
+        const reported = Number.isInteger(error.status) ? sentence(error.message) : "";
+        dialog.querySelector("[data-pc-runtime]").textContent = reported
+          ? `${head}. ${reported} ${again}`
+          : `${head}: ответ от сервера не получен, причина неизвестна. ${again}`;
       }
-      finally { buttons.forEach(button => { button.disabled = false; }); }
+      finally { if (!quiet) buttons.forEach(button => { button.disabled = false; }); }
     };
     dialog.querySelector("[data-pc-login]").onclick = () => runtime(true);
     dialog.querySelector("[data-pc-runtime-check]").onclick = () => runtime(false);
+    state.loginPolls = 0;
     await runtime(false);
   };
   const retryAI = async (state, view) => {
@@ -563,6 +620,7 @@
     const view = state.view;
     state.readSequence++;
     clearTimeout(state.timer);
+    clearTimeout(state.loginTimer);
     state.root.querySelectorAll("dialog").forEach(dialog => dialog.remove());
     state.root.querySelectorAll("[data-pc-mode]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.pcMode === mode)));
     if (mode === "private") {
@@ -592,7 +650,7 @@
     schedule(state, view);
   };
   const mount = async (_, ctx) => {
-    if (current) { current.controller.abort(); clearTimeout(current.timer); }
+    if (current) { current.controller.abort(); clearTimeout(current.timer); clearTimeout(current.loginTimer); }
     cabinet.privateHugh?.stop();
     const root = ctx.byId("hugh-view");
     const state = current = { ctx, root, company: ctx.selectedProjectId, base: "/content/project-chat/" + encodeURIComponent(ctx.selectedProjectId), controller: new AbortController(), mode: "shared", view: 0, readSequence: 0, attachments: [], history: [], seen: new Map(), loadedOlder: false, hasMore: false, cursor: null, loadingOlder: false, busy: false, attempt: null, draft: "", revoked: false };

@@ -199,6 +199,8 @@ test('такт моста берёт задания по одному и под�
   const base = { companyCode: 'palitra-love', chatId: '-1001', authorName: 'Хью', authorType: 'assistant', attachments: [] };
   const { bridge, calls } = setup({ rooms: ROOMS, jobs: [{ id: 31, text: 'Первый', ...base }, { id: 32, text: 'Второй', ...base }] });
   await bridge.tick();
+  // Ответ ИИ уходит в группу с постоянной подписью бота, а не под именем человека.
+  assert.ok(JSON.parse(calls.telegram[0].body).text.startsWith('Хью, бизнес-ассистент Синапс Бизнес (ИИ)\nПервый'));
   const acknowledged = calls.content.filter((c) => c.route === '/acknowledge');
   assert.deepEqual(acknowledged.map((c) => c.body.jobId), [31, 32]);
   assert.equal(acknowledged[0].body.ok, true);
