@@ -57,6 +57,8 @@ const HUGH_RUNTIME_URL = (process.env.HUGH_RUNTIME_URL || 'http://hugh-runtime:8
 // Локальный обработчик Хью на компьютере владельца: хеш его ключа и компании, обслуживаемые только им.
 const HUGH_LOCAL_WORKER_KEY_SHA256 = (process.env.HUGH_LOCAL_WORKER_KEY_SHA256 || '').trim();
 const HUGH_LOCAL_WORKER_COMPANIES = (process.env.HUGH_LOCAL_WORKER_COMPANIES || '').split(',').map((s) => s.trim()).filter(Boolean);
+// Telegram Mini App чата проекта: несекретный числовой ID бота для проверки подписи Telegram. Пусто — вход отключён.
+const TELEGRAM_BOT_ID = (process.env.TELEGRAM_BOT_ID || '').trim();
 const CRM_IDENTITY_HEADER = 'x-synapse-crm-identity';
 const loginFailures = new Map();
 
@@ -170,8 +172,9 @@ const projectChat = createProjectChat({ db, authStore, assetsDir: ASSETS_DIR,
   // Соль для хеша IP выводится из секрета сессий: сам IP не хранится, отдельного секрета не нужно.
   siteOrders: { sites: ORDER_SITES, priceReader: (site) => latestStmt.get(`${site}/price`)?.body ?? null,
     ipSalt: crypto.createHash('sha256').update(`site-orders-ip:${SESSION_SECRET}`).digest('hex') },
+  miniApp: { botId: TELEGRAM_BOT_ID, sessionSecret: SESSION_SECRET },
   requireSession, requireCsrf, sendJson: send, readBody: readJson });
-for (const issue of projectChat.localWorker.issues) console.warn(`content: ${issue}`);
+for (const issue of [...projectChat.localWorker.issues, ...projectChat.miniApp.issues]) console.warn(`content: ${issue}`);
 
 const latestStmt = db.prepare('SELECT * FROM documents WHERE key = ? ORDER BY version DESC LIMIT 1');
 const byVersionStmt = db.prepare('SELECT * FROM documents WHERE key = ? AND version = ?');
@@ -465,10 +468,10 @@ async function proxyCrm(request, response, url, cors) {
   }
   if (/^\/(catalog|finances)(?:\/|$)/.test(crmPath) && identity.role !== 'owner') fail(403,'Коммерческие условия и финансы доступны владельцу');
   const companyModule = /^\/(company-information|autoposting)(?:\/|$)/.exec(crmPath)?.[1];
-  if (/^\/studio-journey(?:\/|$)/.test(crmPath)) {
+  if (/^\/(?:studio-journey|reviews|platform-demand)(?:\/|$)/.test(crmPath)) {
     const code=url.searchParams.get('companyCode');
     if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400,'Выберите компанию');
-    if(identity.role!=='owner')requirePermission(request,readOnly?'crm.view':'crm.edit',code);
+    if(identity.role!=='owner')requirePermission(request,readOnly?(crmPath.startsWith('/platform-demand')?'analytics.view':'crm.view'):'crm.edit',code);
   }
   if (/^\/autoposting\/settings\/[^/]+\/profiles$/.test(crmPath) && identity.role!=='owner') {
     fail(403,'Профили общего аккаунта публикаций настраивает владелец');
@@ -486,7 +489,7 @@ async function proxyCrm(request, response, url, cors) {
   if (['/company-email', '/email-status', '/email-settings', '/email-settings/check'].includes(crmPath) && identity.role !== 'owner') {
     fail(403, 'Настройки и диагностика почты доступны только владельцу');
   }
-  const analyticsReadPath = new Set([
+  const analyticsReadPath = /^\/platform-demand(?:\/|$)/.test(crmPath) || new Set([
     '/dashboard', '/summary', '/external-stats', '/expenses', '/tasks/summary',
   ]).has(crmPath);
   let session = initialSession;
@@ -637,6 +640,11 @@ const server = http.createServer(async (request, response) => {
     // Локальный обработчик Хью: свой ключ, проверка до чтения тела, только известные маршруты.
     if (url.pathname.startsWith('/content/project-chat-worker/')) {
       await projectChat.localWorker.handle(request, response, url);
+      return;
+    }
+    // Вход в чат проекта из Telegram Mini App: без cookie кабинета, по подписи Telegram.
+    if (url.pathname === '/content/project-chat-miniapp/session') {
+      await projectChat.miniApp.handle(request, response, url);
       return;
     }
     if (url.pathname.startsWith('/content/internal/project-chat/')) {

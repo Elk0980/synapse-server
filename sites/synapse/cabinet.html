@@ -605,6 +605,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         <a class="nav-link" id="analytics-link" href="#analytics-through"
           data-view-link="analytics-through">Сквозная аналитика</a>
         <a class="nav-link" href="#ad-platforms" data-view-link="ad-platforms">Рекламные площадки</a>
+        <a class="nav-link" id="platform-demand-link" href="#platform-demand" data-view-link="platform-demand">Потенциал 2ГИС</a>
         <a class="nav-link" href="#hypotheses" data-view-link="hypotheses">Доска гипотез</a>
         <a class="nav-link" href="#competitors" data-view-link="competitors">Конкуренты</a>
         <a class="nav-link" href="#calltracking" data-view-link="calltracking">Колтрекинг</a>
@@ -622,6 +623,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         data-view-link="autoposting" hidden>Автопостинг</a>
       <a class="nav-link" id="company-information-link" href="#company-information" data-view-link="company-information" hidden>Актуальность</a>
       <a class="nav-link" id="vk-community-link" href="#vk-community" data-view-link="vk-community" hidden>ВКонтакте</a>
+      <a class="nav-link" id="reviews-link" href="#reviews" data-view-link="reviews" hidden>Отзывы</a>
       <a class="nav-link" id="content-factory-link" href="#content-factory"
         data-view-link="content-factory">Контент завод</a>
       <a class="nav-link" id="campaigns-link" href="#campaigns" data-view-link="campaigns" hidden>Рассылки</a>
@@ -800,6 +802,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <p class="platform-footnote">* Instagram и Facebook принадлежат Meta Platforms Inc., признанной
         экстремистской организацией; её деятельность запрещена на территории Российской Федерации.</p>
     </section>
+    <section class="view-panel" id="platform-demand-view" data-view="platform-demand" hidden></section>
     <section class="view-panel" id="hypotheses-view" data-view="hypotheses" hidden>
       <div class="content-header"><h1>Доска гипотез</h1></div>
       <div class="placeholder-head"><span class="development-badge">в разработке</span>
@@ -883,6 +886,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     <section class="view-panel" id="autoposting-view" data-view="autoposting" hidden></section>
     <section class="view-panel" id="company-information-view" data-view="company-information" hidden></section>
     <section class="view-panel" id="vk-community-view" data-view="vk-community" hidden></section>
+    <section class="view-panel" id="reviews-view" data-view="reviews" hidden></section>
     <section class="view-panel" id="content-factory-view" data-view="content-factory" hidden>
       <div class="content-header"><h1>Контент завод</h1></div>
       <div class="card"><p class="development">В разработке</p></div>
@@ -1010,7 +1014,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260917-project-chat-vk-community";
+  window.SB_CABINET_ASSET_VERSION = "20260917-platform-demand-rubrics";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
@@ -1018,9 +1022,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   };
   // project-chat.js загружается после hugh.js: общий чат проекта регистрирует вид «hugh»,
   // а hugh.js оставляет только личную переписку владельца.
-  const cabinetAssets = ["home", "tasks", "company-information", "studio-journey", "leads", "deals", "clients", "chat", "hugh", "project-chat", "analytics",
-    "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "site-orders", "account", "trademarks", "campaigns", "autoposting", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
-  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat", "hugh", "project-chat", "settings", "site-orders", "trademarks", "sites", "campaigns", "company-information", "autoposting", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial"];
+  const cabinetAssets = ["platform-links", "home", "tasks", "company-information", "reviews", "studio-journey", "leads", "deals", "clients", "chat", "hugh", "project-chat", "analytics",
+    "ad-platforms", "platform-demand", "hypotheses", "competitors", "calltracking", "sites", "settings", "site-orders", "account", "trademarks", "campaigns", "autoposting", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
+  const cabinetStyles = ["reviews", "analytics", "ad-platforms", "platform-demand", "deals", "home", "chat", "hugh", "project-chat", "settings", "site-orders", "trademarks", "sites", "campaigns", "company-information", "autoposting", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join(""));
@@ -1073,6 +1077,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     chat: "Чат",
     "analytics-through": "Сквозная аналитика",
     "ad-platforms": "Рекламные площадки",
+    "platform-demand": "Потенциал 2ГИС",
     hypotheses: "Доска гипотез",
     competitors: "Конкуренты",
     calltracking: "Колтрекинг",
@@ -1080,6 +1085,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     autoposting: "Автопостинг",
     "company-information": "Актуальность",
     "vk-community": "ВКонтакте",
+    "reviews": "Отзывы",
     "content-factory": "Контент завод",
     settings: "Настройки компании",
     "site-orders": "Заявки с сайта",
@@ -1317,10 +1323,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     if (value === "trademarks") return identity.role === "owner";
     if (value === "accounts") return hasPermission("account.view");
     if (value === "settings") return hasPermission("settings.view");
-    if (["analytics-through", "ad-platforms", "hypotheses", "competitors", "calltracking"].includes(value)) {
+    if (["analytics-through", "ad-platforms", "platform-demand", "hypotheses", "competitors", "calltracking"].includes(value)) {
       return identity.permissions.includes("analytics.view");
     }
-    if (["crm", "deals", "clients"].includes(value) || value.startsWith("crm-")) {
+    if (["reviews", "crm", "deals", "clients"].includes(value) || value.startsWith("crm-")) {
       return hasPermission("crm.view");
     }
     if (value === "content-factory") {
@@ -1336,9 +1342,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     return validView(value) ? value : defaultView();
   };
   const setCategoryForView = (viewName) => {
-    const analyticsViews = ["analytics-through", "ad-platforms", "hypotheses", "competitors", "calltracking"];
+    const analyticsViews = ["analytics-through", "ad-platforms", "platform-demand", "hypotheses", "competitors", "calltracking"];
     const crmViews = ["crm", "deals", "clients", "chat"];
-    const categoryId = ["catalog","finance"].includes(viewName) ? "finance-menu" : ["autoposting", "company-information", "content-factory", "campaigns", "vk-community"].includes(viewName) ? "marketing-menu" :
+    const categoryId = ["catalog","finance"].includes(viewName) ? "finance-menu" : ["reviews", "autoposting", "company-information", "content-factory", "campaigns", "vk-community"].includes(viewName) ? "marketing-menu" :
       ["settings", "site-orders", "system-settings", "accounts", "account", "trademarks"].includes(viewName) ? "management-menu" : analyticsViews.includes(viewName) ? "analytics-menu" :
       viewName === "sites" ? "site-menu" : crmViews.includes(viewName) || viewName.startsWith("crm-")
         ? "crm-menu" : null;
@@ -1509,6 +1515,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       byId("autoposting-link").hidden = !permittedView("autoposting");
       byId("company-information-link").hidden = !permittedView("company-information");
       byId("vk-community-link").hidden = !permittedView("vk-community");
+      byId("reviews-link").hidden = !permittedView("reviews");
       byId("autoposting-view").hidden = !permittedView("autoposting");
       byId("content-factory-link").hidden = !permittedView("content-factory");
       byId("content-factory-view").hidden = !permittedView("content-factory");

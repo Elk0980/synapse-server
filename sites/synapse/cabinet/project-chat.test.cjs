@@ -116,6 +116,107 @@ const boot = (options = {}) => {
 
 const mount = async (harness) => { await harness.views.hugh.render(harness.d.getElementById('hugh-view'), harness.ctx); await settle(); };
 
+test('хост Mini App: заголовок вместо cookie и CSRF, вложения через защищённый blob, освобождение при смене проекта и отзыве', async () => {
+  const harness = boot({ role: 'member', clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ access: { canReply: true, owner: false }, messages: [
+      message({ id: 'm1', text: 'Смотри', attachments: [{ id: 'a1', name: 'стена.jpg', mime: 'image/jpeg', url: '/content/project-chat/palitra-love/attachments/a1' }, { id: 'a2', name: 'смета.pdf', mime: 'application/pdf', url: '/content/project-chat/palitra-love/attachments/a2' }] }),
+      message({ id: 'm2', authorType: 'assistant', authorName: 'Хью', text: 'Принято' })
+    ] }) }),
+    'POST /content/project-chat/palitra-love/messages': () => ({ body: { ok: true } }),
+    'GET /content/project-chat/alvi': () => ({ body: snapshot({ access: { canReply: true, owner: false }, messages: [] }) })
+  } });
+  const { w, d } = harness;
+  const created = [], revoked = [], fetched = [], revokedMessages = [];
+  w.URL.createObjectURL = () => { const url = `blob:asset-${created.length + 1}`; created.push(url); return url; };
+  w.URL.revokeObjectURL = (url) => revoked.push(url);
+  harness.ctx.identity.csrfToken = '';
+  harness.ctx.authHeaders = () => ({ Authorization: 'Bearer room.token' });
+  harness.ctx.fetchAsset = async (url) => { fetched.push(url); return new w.Blob(['bytes']); };
+  harness.ctx.onRevoked = (message) => revokedMessages.push(message);
+  await mount(harness);
+  await settle();
+  const room = harness.calls.find((call) => call.url.endsWith('/content/project-chat/palitra-love'));
+  assert.equal(room.headers.Authorization, 'Bearer room.token');
+  // Файлы не запрашиваются картинкой или ссылкой с адресом сервера: только защищённым запросом хоста.
+  assert.deepEqual(fetched, ['https://synapse.synapsebusiness.ru/content/project-chat/palitra-love/attachments/a1', 'https://synapse.synapsebusiness.ru/content/project-chat/palitra-love/attachments/a2']);
+  const image = d.querySelector('[data-pc-asset$="/a1"]'), pdf = d.querySelector('[data-pc-asset$="/a2"]');
+  assert.equal(image.querySelector('img').getAttribute('src'), 'blob:asset-1');
+  assert.equal(image.getAttribute('href'), 'blob:asset-1');
+  assert.equal(pdf.getAttribute('href'), 'blob:asset-2');
+  assert.equal(pdf.querySelector('img'), null);
+  assert.equal(d.querySelector('[data-pc-asset-state]'), null, 'после загрузки пометка «Загружаем…» снята');
+  assert.ok(!d.body.innerHTML.includes('room.token'), 'токен не попадает в разметку');
+  assert.equal(d.querySelector('.pc-ai-badge').textContent, 'ИИ · бизнес-ассистент Синапс Бизнес');
+  assert.equal(d.querySelector('[data-pc-mode="private"]'), null);
+  assert.equal(d.querySelector('[data-pc-settings]').hidden, true);
+  d.querySelector('[data-pc-compose] textarea').value = 'Из Telegram';
+  harness.submit('[data-pc-compose]');
+  await settle();
+  const post = harness.calls.find((call) => call.method === 'POST');
+  assert.equal(post.headers.Authorization, 'Bearer room.token');
+  assert.equal(post.headers['X-CSRF-Token'], undefined);
+  // Смена проекта освобождает blob-адреса прежней комнаты; поздний ответ не создаёт новых.
+  harness.scope.company = 'alvi';
+  await harness.views.hugh.onProjectChange(harness.ctx);
+  await settle();
+  assert.deepEqual(revoked, ['blob:asset-1', 'blob:asset-2']);
+  assert.equal(created.length, 2);
+  // Отзыв доступа: сообщение хоста — про Telegram, а не про вход в кабинет.
+  harness.ctx.identity.csrfToken = '';
+  const alviRoute = harness.calls.length;
+  harness.w.fetch = () => Promise.resolve({ ok: false, status: 401, json: async () => ({ error: 'Сессия чата истекла' }) });
+  d.querySelector('[data-pc-compose] textarea').value = 'Ещё';
+  harness.submit('[data-pc-compose]');
+  await settle();
+  assert.ok(harness.calls.length >= alviRoute);
+  assert.match(revokedMessages.at(-1) || '', /снова откройте чат из Telegram/);
+  assert.equal(d.querySelector('[data-pc-compose]').hidden, true);
+  // Явное снятие вида хостом: опрос комнаты больше не запланирован, повторный вызов безопасен.
+  assert.equal(typeof harness.views.hugh.unmount, 'function');
+  harness.views.hugh.unmount();
+  harness.views.hugh.unmount();
+  assert.deepEqual(harness.clock.pending().filter((delay) => delay === 5000), []);
+  harness.w.close();
+});
+
+test('владелец привязывает код Telegram только к участнику комнаты и может отвязать', async () => {
+  const posts = [], deletes = [];
+  let links = { links: [], pending: [{ code: 'K7M2PQ', firstName: 'Дарья', createdAt: '2026-09-17T09:00:00.000Z', expiresAt: '2026-09-17T09:15:00.000Z' }] };
+  const harness = boot({ routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ messages: [] }) }),
+    'GET /content/project-chat/palitra-love/candidates': () => ({ body: { candidates: [member(1, 'Влад'), member(2, 'Дарья')] } }),
+    'GET /content/project-chat/palitra-love/telegram-links': () => ({ body: links }),
+    'POST /content/project-chat/palitra-love/telegram-links': (call) => { posts.push(JSON.parse(call.body)); links = { links: [{ telegramUserId: '5001', userId: 2, displayName: 'Дарья', linkedAt: '2026-09-17T09:01:00.000Z' }], pending: [] }; return { status: 201, body: links }; },
+    'DELETE /content/project-chat/palitra-love/telegram-links/5001': (call) => { deletes.push(call); links = { links: [], pending: [] }; return { body: links }; }
+  } });
+  await mount(harness);
+  harness.click('[data-pc-edit-members]');
+  await settle();
+  const { d } = harness;
+  const section = d.querySelector('[data-pc-tg-links]');
+  assert.match(section.textContent, /Ожидают привязки/);
+  assert.match(section.textContent, /Дарья · код K7M2PQ/);
+  // Без выбора участника привязка не отправляется.
+  harness.click('[data-pc-tg-link="K7M2PQ"]');
+  await settle();
+  assert.equal(posts.length, 0);
+  assert.match(d.querySelector('[data-pc-tg-alert]').textContent, /Выберите участника/);
+  const select = d.querySelector('[data-pc-tg-user="K7M2PQ"]');
+  assert.deepEqual([...select.options].map((o) => o.value), ['', '1', '2'], 'только участники комнаты');
+  select.value = '2';
+  harness.click('[data-pc-tg-link="K7M2PQ"]');
+  await settle();
+  assert.deepEqual(posts, [{ linkCode: 'K7M2PQ', userId: 2 }]);
+  assert.match(section.textContent, /Привязаны/);
+  assert.match(section.textContent, /Дарья · Telegram ID 5001/);
+  harness.click('[data-pc-tg-unlink="5001"]');
+  await settle();
+  assert.equal(deletes.length, 1);
+  assert.equal(deletes[0].headers['X-CSRF-Token'], 'csrf-token');
+  assert.match(section.textContent, /никто не ждёт привязки/);
+  harness.w.close();
+});
+
 test('общая переписка экранирует имена, тексты и файлы, показывает фото и честную отметку доставки', async () => {
   const harness = boot({
     routes: {

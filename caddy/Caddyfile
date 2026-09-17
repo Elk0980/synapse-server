@@ -387,6 +387,15 @@ synapse.synapsebusiness.ru {
   }
   @cabinet path /cabinet.html /cabinet/*
   header @cabinet Cache-Control "no-cache, must-revalidate"
+  # Telegram Mini App чата проекта: страница открывается внутри клиентов Telegram (мобильный WebView —
+  # верхний уровень, Telegram Web — iframe с web.telegram.org). Только эта страница разрешает такие
+  # рамки и внешний скрипт telegram.org; остальные страницы домена не затрагиваются.
+  @miniapp path /miniapp.html
+  header @miniapp {
+    Cache-Control "no-cache, must-revalidate"
+    X-Robots-Tag "noindex, nofollow"
+    Content-Security-Policy "default-src 'none'; script-src 'self' https://telegram.org; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors https://web.telegram.org https://webk.telegram.org https://webz.telegram.org"
+  }
   # cabinet.html uses same-origin /dashboard and /leads requests for CRM.
   # CRM теперь сам проверяет X-API-Key и без него отвечает 401.
   @crm path /dashboard /leads /leads/*

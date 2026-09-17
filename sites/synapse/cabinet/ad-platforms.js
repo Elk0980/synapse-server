@@ -132,11 +132,13 @@ const renderAdPlatforms = (dashboard = dashboardState) => {
         dashboardStatus === "loading" ? "Загружаем…" : dashboardStatus === "error" ? "Данные недоступны" : "Нет ручного снимка";
       const disabled = isEditable() ? "" : ' disabled title="нет прав"';
       const form = openPlatformId === platform.id ? manualForm(platform) : "";
+      const externalLinks = [SbCabinet.platformLinks?.cabinetLink(platform.id),
+        platform.id === "vk" ? SbCabinet.platformLinks?.cabinetLink("vk_ads") : ""].filter(Boolean).join(" · ");
       return `<div class="platform-status-item"><div class="platform-status-row">
         <span>${escapeHTML(platform.label)}${platform.note ? `<small>${escapeHTML(platform.note)}</small>` : ""}</span>
         <span class="platform-status">${status}</span>
         <button class="plain-button manual-open" type="button" data-platform="${platform.id}"${disabled}>
-        Ввести данные вручную</button></div>${form}</div>`;
+        Ввести данные вручную</button></div>${externalLinks ? `<p>${externalLinks}</p>` : ""}${form}</div>`;
     }).join("");
     return `<section class="platform-status-group">${heading}${rows}</section>`;
   }).join("")}</div>`;
