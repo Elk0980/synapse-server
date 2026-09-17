@@ -24,6 +24,9 @@ const { createReviews } = require('./reviews');
 const { createReviewsHandler } = require('./reviews-http');
 const { createPlatformDemand } = require('./platform-demand');
 const { createPlatformDemandHandler } = require('./platform-demand-http');
+const { createSocialStats } = require('./social-stats');
+const { createSocialAdapters } = require('./social-adapters');
+const { createSocialStatsHandler } = require('./social-stats-http');
 const { createCompanyInformationCheck } = require('./company-information-check');
 const { createDealOrders } = require('./deal-orders');
 
@@ -586,6 +589,8 @@ const reviews = createReviews(db);
 const handleReviews = createReviewsHandler({reviews,companyModuleContext,readJson,send});
 const platformDemand = createPlatformDemand(db);
 const handlePlatformDemand = createPlatformDemandHandler({demand:platformDemand,companyModuleContext,readJson,send});
+const socialStats = createSocialStats(db, {adapters: createSocialAdapters({transport: autopostingTransport})});
+const handleSocialStats = createSocialStatsHandler({stats: socialStats, companyModuleContext, readJson, send});
 function deliverLeadEmails() {
   return emailOutbox.drain().catch(() => {
     // Do not expose SMTP responses or contact details in service logs.
@@ -2492,6 +2497,7 @@ async function route(request, response) {
   if (await handleVkCommunity(request,response,url,cors)) return;
   if (await handleReviews(request,response,url,cors)) return;
   if (await handlePlatformDemand(request,response,url,cors)) return;
+  if (await handleSocialStats(request,response,url,cors)) return;
   if (url.pathname === '/company-information' || url.pathname === '/company-information/check') {
     const permission = request.method === 'GET' ? 'company-information.view' : 'company-information.edit';
     const {identity,company} = companyModuleContext(request,url.searchParams.get('companyCode'),permission);
@@ -3184,6 +3190,11 @@ const server = http.createServer((request, response) => {
   });
 });
 
+// Ежедневный сбор статистики соцсетей: раз в 10 минут проверяется, чей локальный день ещё не собран (idempotent).
+const socialStatsTimer = IS_MAIN ? setInterval(() => {
+  socialStats.collectDue().catch((error) => console.error('Ошибка сбора статистики соцсетей:', error?.code || error?.message));
+}, 10 * 60 * 1000) : null;
+if (socialStatsTimer) socialStatsTimer.unref();
 const pipelineRulesTimer = IS_MAIN ? setInterval(() => {
   try { applyPipelineRules(); } catch (error) { console.error('Ошибка правил воронок:', error); }
 }, 60 * 60 * 1000) : null;

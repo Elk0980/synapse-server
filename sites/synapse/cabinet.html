@@ -630,6 +630,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
           data-view-link="analytics-through">Сквозная аналитика</a>
         <a class="nav-link" href="#ad-platforms" data-view-link="ad-platforms">Рекламные площадки</a>
         <a class="nav-link" id="platform-demand-link" href="#platform-demand" data-view-link="platform-demand">Потенциал 2ГИС</a>
+        <a class="nav-link" id="social-stats-link" href="#social-stats" data-view-link="social-stats">Соцсети</a>
         <a class="nav-link" href="#hypotheses" data-view-link="hypotheses">Доска гипотез</a>
         <a class="nav-link" href="#competitors" data-view-link="competitors">Конкуренты</a>
         <a class="nav-link" href="#calltracking" data-view-link="calltracking">Колтрекинг</a>
@@ -827,6 +828,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         экстремистской организацией; её деятельность запрещена на территории Российской Федерации.</p>
     </section>
     <section class="view-panel" id="platform-demand-view" data-view="platform-demand" hidden></section>
+    <section class="view-panel" id="social-stats-view" data-view="social-stats" hidden></section>
     <section class="view-panel" id="hypotheses-view" data-view="hypotheses" hidden>
       <div class="content-header"><h1>Доска гипотез</h1></div>
       <div class="placeholder-head"><span class="development-badge">в разработке</span>
@@ -1038,7 +1040,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260918-content-plan-mobile";
+  window.SB_CABINET_ASSET_VERSION = "20260918-social-stats";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
@@ -1047,8 +1049,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   // project-chat.js загружается после hugh.js: общий чат проекта регистрирует вид «hugh»,
   // а hugh.js оставляет только личную переписку владельца.
   const cabinetAssets = ["platform-links", "home", "tasks", "company-information", "reviews", "studio-journey", "leads", "deals", "clients", "chat", "hugh", "project-chat", "analytics",
-    "ad-platforms", "platform-demand", "hypotheses", "competitors", "calltracking", "sites", "settings", "site-orders", "account", "trademarks", "campaigns", "autoposting", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
-  const cabinetStyles = ["reviews", "analytics", "ad-platforms", "platform-demand", "deals", "home", "chat", "hugh", "project-chat", "settings", "site-orders", "trademarks", "sites", "campaigns", "company-information", "autoposting", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial"];
+    "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking", "sites", "settings", "site-orders", "account", "trademarks", "campaigns", "autoposting", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
+  const cabinetStyles = ["reviews", "analytics", "ad-platforms", "platform-demand", "social-stats", "deals", "home", "chat", "hugh", "project-chat", "settings", "site-orders", "trademarks", "sites", "campaigns", "company-information", "autoposting", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join(""));
@@ -1102,6 +1104,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     "analytics-through": "Сквозная аналитика",
     "ad-platforms": "Рекламные площадки",
     "platform-demand": "Потенциал 2ГИС",
+    "social-stats": "Соцсети",
     hypotheses: "Доска гипотез",
     competitors: "Конкуренты",
     calltracking: "Колтрекинг",
@@ -1347,7 +1350,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     if (value === "trademarks") return identity.role === "owner";
     if (value === "accounts") return hasPermission("account.view");
     if (value === "settings") return hasPermission("settings.view");
-    if (["analytics-through", "ad-platforms", "platform-demand", "hypotheses", "competitors", "calltracking"].includes(value)) {
+    if (["analytics-through", "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking"].includes(value)) {
       return identity.permissions.includes("analytics.view");
     }
     if (["reviews", "crm", "deals", "clients"].includes(value) || value.startsWith("crm-")) {
@@ -1366,7 +1369,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     return validView(value) ? value : defaultView();
   };
   const setCategoryForView = (viewName) => {
-    const analyticsViews = ["analytics-through", "ad-platforms", "platform-demand", "hypotheses", "competitors", "calltracking"];
+    const analyticsViews = ["analytics-through", "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking"];
     const crmViews = ["crm", "deals", "clients", "chat"];
     const categoryId = ["catalog","finance"].includes(viewName) ? "finance-menu" : ["reviews", "autoposting", "company-information", "content-factory", "campaigns", "vk-community"].includes(viewName) ? "marketing-menu" :
       ["settings", "site-orders", "system-settings", "accounts", "account", "trademarks"].includes(viewName) ? "management-menu" : analyticsViews.includes(viewName) ? "analytics-menu" :

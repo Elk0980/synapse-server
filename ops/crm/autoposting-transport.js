@@ -243,7 +243,13 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
     if (row.provider !== 'direct') return {provider: row.provider, unsupported: true};
     return {provider: 'direct', target: row.target, result: await call(row, method, params)};
   }
-  return {getSettings,saveSettings,checkChannel,listProfiles,publish,reconcile,readStats};
+  /* Отпечаток сохранённого подключения без секретов: по нему сбор статистики отбрасывает ответ, пришедший после смены токена/цели. */
+  function connectionRevision(code, id) {
+    const current = company(code), row = rowFor(current.code, id);
+    if (!row || !row.encrypted_token) return null;
+    return {revision: row.revision, target: row.target || '', provider: row.provider || 'direct'};
+  }
+  return {getSettings,saveSettings,checkChannel,listProfiles,publish,reconcile,readStats,connectionRevision};
 }
 
 module.exports = {createAutopostingTransport,PLATFORMS,publicUrl};
