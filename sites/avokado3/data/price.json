@@ -341,31 +341,31 @@
         {
           "id": "face-1",
           "title": "RF-лифтинг лица",
-          "duration": "",
+          "duration": "30 мин",
           "price": "1 150 ₽"
         },
         {
           "id": "face-2",
           "title": "RF-лифтинг лица + шея",
-          "duration": "",
+          "duration": "45 мин",
           "price": "1 350 ₽"
         },
         {
           "id": "face-3",
           "title": "RF-лифтинг лица + шея + декольте",
-          "duration": "",
+          "duration": "60 мин",
           "price": "1 550 ₽"
         },
         {
           "id": "face-4",
           "title": "Альгинатная маска",
-          "duration": "",
+          "duration": "20 мин",
           "price": "390 ₽"
         },
         {
           "id": "face-5",
           "title": "Лифтинг-маска",
-          "duration": "",
+          "duration": "15 мин",
           "price": "200 ₽"
         },
         {
@@ -377,7 +377,7 @@
         {
           "id": "face-8",
           "title": "Скульптурирующий массаж лица",
-          "duration": "",
+          "duration": "60 мин",
           "price": "2 800 ₽"
         }
       ]

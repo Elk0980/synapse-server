@@ -33,7 +33,7 @@
   .wm-sub{display:block;font-family:'Manrope',sans-serif;font-size:.32em;letter-spacing:.46em;color:#c2a878;text-transform:uppercase;margin-top:.35em;text-align:center}
 </style>
 <link rel="stylesheet" href="mobile-foundation.css?v=20260915-mobile">
-<link rel="stylesheet" href="callback.css?v=20260915-callback"></head>
+<link rel="stylesheet" href="callback.css?v=20260917-comment"></head>
 <body class="av-contact-page" data-company-code="avokado">
 <header>
   <a class="logo wordmark" href="index.html" style="font-size:21px">АВ<svg class="avo-o" viewBox="0 0 48 54" aria-hidden="true"><path d="M25.5 8 C26.5 5 25 2.5 23 2" fill="none" stroke="#d8b981" stroke-width="1.6" stroke-linecap="round"/><path d="M24 9.5 C20.4 9.5 15.6 15.6 14.1 22.3 C12.6 29.1 17.3 38 24 38 C30.7 38 35.4 29.1 33.9 22.3 C32.4 15.6 27.6 9.5 24 9.5 Z" fill="none" stroke="#d8b981" stroke-width="2.1" stroke-linejoin="round"/><circle cx="24" cy="27" r="4.6" fill="#d8b981"/></svg>КАДО</a>
@@ -50,7 +50,8 @@
       <fieldset>
         <label for="callback-name">Ваше имя<input id="callback-name" name="name" type="text" autocomplete="name" maxlength="80" required></label>
         <label for="callback-contact">Телефон<input id="callback-contact" name="contact" type="tel" inputmode="tel" autocomplete="tel" maxlength="32" required></label>
-        <label class="av-callback-wide" for="callback-comment">Комментарий · необязательно<textarea id="callback-comment" name="comment" rows="3" maxlength="1000"></textarea></label>
+        <label class="av-callback-comment-toggle av-callback-wide"><input name="addComment" type="checkbox" aria-controls="callback-comment-field" aria-expanded="false"><span>Добавить комментарий</span></label>
+        <label class="av-callback-comment av-callback-wide" id="callback-comment-field" for="callback-comment" hidden>Комментарий · необязательно<textarea id="callback-comment" name="comment" rows="2" maxlength="1000" disabled></textarea></label>
         <label class="av-callback-consent av-callback-wide" for="callback-consent"><input id="callback-consent" name="consent" type="checkbox" required><span>Я даю <a href="consent.html" target="_blank" rel="noopener">согласие на обработку персональных данных</a> и ознакомлен(а) с <a href="privacy.html" target="_blank" rel="noopener">политикой конфиденциальности</a>.</span></label>
       </fieldset>
       <button type="submit">Заказать обратный звонок</button>
@@ -82,6 +83,6 @@
   </div>
 </main>
 <script src="attribution.js?v=20260915-mobile"></script>
-<script src="callback.js?v=20260915-callback"></script><script src="https://synapse.synapsebusiness.ru/company-links.js?v=20260915-crm-links"></script>
+<script src="callback.js?v=20260917-comment"></script><script src="https://synapse.synapsebusiness.ru/company-links.js?v=20260915-crm-links"></script>
 </body>
 </html>

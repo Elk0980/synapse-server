@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const {JSDOM} = require('jsdom');
 const {campaign, payload, send, bind} = require('./callback.js');
 const location = new URL('https://avokado38.ru/contacts.html');
 const values = {name: '  Анна  ', contact: '+7 (933) 190-10-59', comment: 'После 17:00', consent: true};
@@ -165,4 +167,95 @@ test('rate limits, offline failures and unconfirmed responses preserve every ent
     assert.match(fixture.status.textContent, /позвоните/);
     assert.match(fixture.status.textContent, /сохранены в форме/);
   }
+});
+
+const settle = () => new Promise(resolve => setImmediate(resolve));
+function commentFixture(page, fetch) {
+  const html = fs.readFileSync(__dirname + '/' + page, 'utf8');
+  const markup = html.match(/<form data-callback-form[\s\S]*?<\/form>/)?.[0];
+  assert.ok(markup, page + ' must contain its actual callback form');
+  const dom = new JSDOM(markup, {url: 'https://avokado38.ru/' + page, runScripts: 'outside-only'});
+  const win = dom.window, form = win.document.querySelector('form'), controls = form.elements;
+  win.fetch = fetch; bind(win, form);
+  controls.name.value = values.name; controls.contact.value = values.contact; controls.consent.checked = true;
+  return {dom, form, controls, field: form.querySelector('.av-callback-comment'),
+    toggle() {controls.addComment.click();},
+    async submit() {form.dispatchEvent(new win.Event('submit', {bubbles: true, cancelable: true})); await settle();},
+    close() {win.close();}
+  };
+}
+
+test('both public forms start with a compact disabled comment hidden behind the accessible optional checkbox', () => {
+  for (const page of ['index.html', 'contacts.html']) {
+    let calls = 0; const f = commentFixture(page, () => {calls++;});
+    try {
+      assert.equal(f.controls.comment.rows, 2); assert.equal(f.controls.comment.required, false);
+      assert.equal(f.controls.addComment.checked, false); assert.equal(f.field.hidden, true); assert.equal(f.controls.comment.disabled, true);
+      assert.equal(f.controls.addComment.getAttribute('aria-controls'), f.field.id);
+      assert.equal(f.controls.addComment.getAttribute('aria-expanded'), 'false');
+      f.toggle(); assert.equal(f.field.hidden, false); assert.equal(f.controls.comment.disabled, false);
+      assert.equal(f.controls.addComment.getAttribute('aria-expanded'), 'true');
+      assert.equal(f.dom.window.document.activeElement, f.controls.comment);
+      assert.equal(calls, 0);
+    } finally {f.close();}
+  }
+});
+
+test('enabled multiline comment is sent and CRM acceptance collapses and clears the comment on both pages', async () => {
+  for (const page of ['index.html', 'contacts.html']) {
+    let body;
+    const f = commentFixture(page, async(url, options) => {body = JSON.parse(options.body); return {ok: true, status: 201, json: async() => ({id: 42})};});
+    try {
+      f.toggle(); f.controls.comment.value = '  Интересует процедура.\nУдобно после 18:00.  '; await f.submit();
+      assert.equal(body.comment, 'Интересует процедура.\nУдобно после 18:00.'); assert.equal(body.companyCode, 'avokado');
+      assert.equal(Object.hasOwn(body, 'addComment'), false);
+      assert.equal(f.controls.addComment.checked, false); assert.equal(f.controls.comment.value, '');
+      assert.equal(f.controls.comment.disabled, true); assert.equal(f.field.hidden, true);
+      assert.equal(f.controls.addComment.getAttribute('aria-expanded'), 'false'); assert.equal(f.controls.consent.checked, false);
+      assert.match(f.form.querySelector('[data-callback-status]').textContent, /^Заявка сохранена/);
+    } finally {f.close();}
+  }
+});
+
+test('unchecking the comment excludes its old text and old validation error from the submitted callback', async () => {
+  let body, calls = 0;
+  const f = commentFixture('index.html', async(url, options) => {calls++; body = JSON.parse(options.body); return {ok: true, status: 201, json: async() => ({id: 42})};});
+  try {
+    f.toggle(); f.controls.comment.value = 'я'.repeat(1001); await f.submit();
+    assert.equal(calls, 0); assert.equal(f.controls.comment.validity.customError, true);
+    f.toggle(); assert.equal(f.controls.comment.value.length, 1001); assert.equal(f.controls.comment.disabled, true);
+    assert.equal(f.controls.comment.validity.customError, false); await f.submit();
+    assert.equal(calls, 1); assert.equal(body.comment, ''); assert.ok(!JSON.stringify(body).includes('я'.repeat(1001)));
+  } finally {f.close();}
+});
+
+test('failed and duplicate requests keep the selected comment; a later unchecked retry sends none of that text', async () => {
+  for (const duplicate of [false, true]) {
+    const bodies = [];
+    const f = commentFixture('contacts.html', async(url, options) => {
+      bodies.push(JSON.parse(options.body));
+      if (!duplicate) throw Error('offline');
+      return {ok: true, status: 200, json: async() => ({id: 42, deduplicated: true})};
+    });
+    try {
+      f.toggle(); f.controls.comment.value = 'Перезвонить после 18:00'; await f.submit();
+      assert.equal(f.controls.comment.value, 'Перезвонить после 18:00'); assert.equal(f.controls.addComment.checked, true);
+      assert.equal(f.field.hidden, false); assert.equal(f.controls.comment.disabled, false);
+      assert.equal(f.controls.consent.checked, true);
+      assert.equal(f.form.querySelector('[data-callback-status]').dataset.state, duplicate ? 'existing' : 'error');
+      f.toggle(); await f.submit();
+      assert.equal(bodies[0].comment, 'Перезвонить после 18:00'); assert.equal(bodies[1].comment, '');
+      assert.equal(f.controls.comment.value, 'Перезвонить после 18:00'); assert.equal(f.field.hidden, true);
+    } finally {f.close();}
+  }
+});
+
+test('native form reset restores the collapsed comment after resetting checkbox defaults', async () => {
+  const f = commentFixture('index.html', () => assert.fail('reset must never submit'));
+  try {
+    f.toggle(); f.controls.comment.value = 'Old draft'; f.form.reset(); await settle();
+    assert.equal(f.controls.addComment.checked, false); assert.equal(f.controls.comment.value, '');
+    assert.equal(f.controls.comment.disabled, true); assert.equal(f.field.hidden, true);
+    assert.equal(f.controls.addComment.getAttribute('aria-expanded'), 'false');
+  } finally {f.close();}
 });
