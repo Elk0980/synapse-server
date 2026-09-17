@@ -34,6 +34,13 @@
 .autoposting-issues { color:var(--red,#ff9c9c); }
 .autoposting-view :disabled { opacity:.6; cursor:not-allowed; }
 .autoposting-sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+.vk-connection-state { font-weight:600; color:var(--accent,#9fd4ff); }
+.vk-connection-steps { padding-left:24px; }
+.vk-connection-steps li { padding:8px 0 8px 6px; }
+.vk-connection-steps p { margin:6px 0 0; }
+.vk-connection-guide a { overflow-wrap:anywhere; }
+.vk-connection-help { margin-top:16px; border-top:1px solid var(--line,#34404d); padding-top:12px; }
+.vk-connection-help summary { cursor:pointer; min-height:44px; padding:10px 0; }
 @media(max-width:900px) { .autoposting-editor-grid,.autoposting-channel-grid { grid-template-columns:minmax(0,1fr); } }
 @media(max-width:600px) {
   .autoposting-view .card { padding:18px; }
