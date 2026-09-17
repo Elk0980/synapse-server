@@ -109,3 +109,47 @@ for(const action of ['cancel','profile','stop'])test(`${action} during awaited c
     assert.equal(f.api.get(p.id,'alvi').status,'needs_review');
   }
 });
+
+test('Onlypult accepted job survives restart, reconciles by GET only and never appears published without a social link',async t=>{
+ const f=fixture(t),p=f.draft(['telegram','vk']);let checks=0;
+ f.setSend(async({channelId})=>channelId==='telegram'?{externalId:'tg-1',status:'published',url:'https://t.me/example/1'}:
+  {provider:'onlypult',providerPostId:'op-job-1',providerStatus:'scheduled',status:'needs_review',errorCode:'PROVIDER_PENDING'});
+ f.transport.reconcile=async input=>{checks++;assert.equal(input.providerPostId,'op-job-1');assert.equal(input.channelId,'vk');assert.equal(input.channelRevision,1);
+  return {provider:'onlypult',providerPostId:'op-job-1',providerStatus:'published',status:'needs_review',errorCode:'PROVIDER_LINK_UNAVAILABLE'};};
+ await f.schedule(p);f.advance(60000);await f.api.drain();let result=f.api.get(p.id,'alvi');
+ assert.equal(f.calls.length,2);assert.equal(result.status,'needs_review');assert.deepEqual(result.deliveries.map(d=>d.status),['published','needs_review']);
+ assert.equal(result.deliveries[1].providerPostId,'op-job-1');assert.equal(result.deliveries[1].externalId,null);assert.equal(result.deliveries[1].url,null);
+ await f.api.drain();assert.equal(checks,0);f.advance(60000);await createAutoposting(f.db,f.options).drain();
+ result=f.api.get(p.id,'alvi');assert.equal(checks,1);assert.equal(f.calls.length,2);assert.equal(result.status,'needs_review');
+ assert.equal(result.deliveries[1].providerStatus,'published');assert.equal(result.lastErrorCode,'PROVIDER_LINK_UNAVAILABLE');
+ await assert.rejects(f.api.schedule(p.id,'alvi',{revision:result.revision,scheduledAt:'2026-09-16T00:00:00Z'}),e=>e.details.code==='PUBLICATION_REVIEW_REQUIRED');
+ assert.throws(()=>f.api.update(p.id,'alvi',{revision:result.revision,text:'Resend'}),e=>e.details.code==='PUBLICATION_REVIEW_REQUIRED');
+ f.advance(60000);await f.api.drain();assert.equal(checks,1,'terminal provider status does not need repeated automatic polling');
+});
+
+test('manual reconciliation is company scoped, preserves receipt on read failure, and cannot cause duplicate posts',async t=>{
+ const f=fixture(t),p=f.draft();f.setSend(async()=>({provider:'onlypult',providerPostId:'job-9',providerStatus:'scheduled',status:'needs_review',errorCode:'PROVIDER_PENDING'}));
+ await f.schedule(p);f.advance(60000);await f.api.drain();const result=f.api.get(p.id,'alvi');
+ let checks=0;f.transport.reconcile=async()=>{checks++;throw Error('PRIVATE_PROVIDER_RESPONSE');};
+ await assert.rejects(f.api.reconcile(p.id,'avokado',{revision:result.revision}),e=>e.status===404);
+ await assert.rejects(f.api.reconcile(p.id,'alvi',{revision:0}),e=>e.status===409||e.status===400);
+ const checked=await f.api.reconcile(p.id,'alvi',{revision:result.revision});assert.equal(checks,1);assert.equal(f.calls.length,1);
+ assert.equal(checked.deliveries[0].providerPostId,'job-9');assert.equal(checked.deliveries[0].errorCode,'PROVIDER_CHECK_FAILED');
+ assert.doesNotMatch(JSON.stringify(checked),/PRIVATE/);assert.equal(checked.status,'needs_review');
+});
+
+test('unspecified provider queued status must not be converted to published merely because it has an ID',async t=>{
+ const f=fixture(t),p=f.draft();f.setSend(async()=>({status:'scheduled',externalId:'provider-job-not-social-post'}));
+ await f.schedule(p);f.advance(60000);await f.api.drain();const result=f.api.get(p.id,'alvi');
+ assert.equal(result.status,'needs_review');assert.equal(result.deliveries[0].externalId,null);
+});
+
+test('provider preflight callback rejects cancellation or canonical edits before the submission',async t=>{
+ for(const action of ['cancel','profile']){
+  const f=fixture(t),p=f.draft();f.setSend(async input=>{
+   if(action==='cancel'){const current=f.api.get(p.id,'alvi');f.api.cancel(p.id,'alvi',{revision:current.revision});}
+   else {const current=f.information.get('alvi');f.information.save('alvi',{revision:current.revision,profile:{description:'New facts'}});}
+   assert.throws(input.beforePublish,e=>e.ambiguous===false);throw Object.assign(Error('Cancelled before provider POST'),{ambiguous:false});
+  });await f.schedule(p);f.advance(60000);await f.api.drain();assert.notEqual(f.api.get(p.id,'alvi').status,'published');
+ }
+});

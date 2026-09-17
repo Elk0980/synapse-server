@@ -16,6 +16,8 @@ const { companyPublicLinks } = require('./company-links');
 const { createCompanyInformation } = require('./company-information');
 const { createAutoposting } = require('./autoposting');
 const { createAutopostingTransport } = require('./autoposting-transport');
+const { createStudioJourney, createStudioJourneyHandler } = require('./studio-journey');
+const { createStudioContentPlan } = require('./studio-content-plan');
 const { createCompanyInformationCheck } = require('./company-information-check');
 const { createDealOrders } = require('./deal-orders');
 
@@ -569,6 +571,9 @@ const emailDiagnostics = createEmailDiagnostics(db, {getEnvironment: emailSettin
 const companyInformation = createCompanyInformation(db, {check: createCompanyInformationCheck()});
 const autopostingTransport = createAutopostingTransport(db, {apiKey: API_KEY});
 const autoposting = createAutoposting(db, {information: companyInformation, transport: autopostingTransport});
+const studioJourney = createStudioJourney(db);
+const studioContentPlan = createStudioContentPlan(db,{autoposting,information:companyInformation});
+const handleStudioJourney = createStudioJourneyHandler({journey:studioJourney,companyModuleContext,readJson,send});
 function deliverLeadEmails() {
   return emailOutbox.drain().catch(() => {
     // Do not expose SMTP responses or contact details in service logs.
@@ -2471,6 +2476,7 @@ async function route(request, response) {
     return send(response,status,result,{...cors,'cache-control':'no-store'});
   }
 
+  if (await handleStudioJourney(request,response,url,cors)) return;
   if (url.pathname === '/company-information' || url.pathname === '/company-information/check') {
     const permission = request.method === 'GET' ? 'company-information.view' : 'company-information.edit';
     const {identity,company} = companyModuleContext(request,url.searchParams.get('companyCode'),permission);
@@ -2484,14 +2490,28 @@ async function route(request, response) {
     return send(response,200,result,{...cors,'cache-control':'no-store'});
   }
   if (/^\/autoposting(?:\/|$)/.test(url.pathname)) {
-    const permission = request.method !== 'GET' ? 'autoposting.edit' : 'autoposting.view';
+    const permission = request.method !== 'GET' || url.pathname.endsWith('/profiles') ? 'autoposting.edit' : 'autoposting.view';
     const {identity,company} = companyModuleContext(request,url.searchParams.get('companyCode'),permission);
     const code=company.code;let result,status=200;
     if (url.pathname === '/autoposting/settings' && request.method === 'GET') result=await autopostingTransport.getSettings(code);
-    else if (url.pathname === '/autoposting/settings' && request.method === 'PUT') result=await autopostingTransport.saveSettings(code,await readJson(request));
+    else if (url.pathname === '/autoposting/settings' && request.method === 'PUT') {
+      const body=await readJson(request);
+      if(identity.role!=='owner'&&Array.isArray(body?.channels)){
+        const current=await autopostingTransport.getSettings(code);
+        if(body.channels.some(channel=>channel?.provider==='onlypult'||current.channels.some(saved=>saved.id===channel?.id&&saved.provider==='onlypult')))
+          fail(403,'Подключение Onlypult и выбор профиля настраивает владелец');
+      }
+      result=await autopostingTransport.saveSettings(code,body);
+    }
     else if (/^\/autoposting\/settings\/[^/]+\/check$/.test(url.pathname) && request.method === 'POST') result=await autopostingTransport.checkChannel(code,url.pathname.split('/')[3]);
+    else if (/^\/autoposting\/settings\/[^/]+\/profiles$/.test(url.pathname) && request.method === 'GET') {
+      if(identity.role!=='owner')fail(403,'Профили общего аккаунта публикаций настраивает владелец');
+      result=await autopostingTransport.listProfiles(code,url.pathname.split('/')[3]);
+    }
+    else if (url.pathname === '/autoposting/starter-plan' && request.method === 'GET') result=studioContentPlan.get(code);
+    else if (url.pathname === '/autoposting/starter-plan' && request.method === 'POST') {result=studioContentPlan.import(code,await readJson(request),identity.userId);status=result.created?201:200;}
     else {
-      const match=/^\/autoposting\/posts(?:\/(\d+)(?:\/(schedule|cancel))?)?$/.exec(url.pathname);
+      const match=/^\/autoposting\/posts(?:\/(\d+)(?:\/(schedule|cancel|reconcile))?)?$/.exec(url.pathname);
       if (!match) fail(404,'Адрес не найден');
       const [,id,action]=match;
       if (!id && request.method==='GET') result=autoposting.list(code);
@@ -2500,6 +2520,7 @@ async function route(request, response) {
       else if (id && !action && request.method==='PATCH') result=autoposting.update(id,code,await readJson(request));
       else if (id && action==='schedule' && request.method==='POST') result=await autoposting.schedule(id,code,await readJson(request));
       else if (id && action==='cancel' && request.method==='POST') result=autoposting.cancel(id,code,await readJson(request));
+      else if (id && action==='reconcile' && request.method==='POST') result=await autoposting.reconcile(id,code,await readJson(request));
       else fail(405,'Метод не поддерживается');
     }
     return send(response,status,result,{...cors,'cache-control':'no-store'});
@@ -2836,6 +2857,7 @@ async function route(request, response) {
     return send(response, 200, {
       sample: false,
       companyCode: companyCode || null,
+      range: {from,to},
       summary: {
         total: rows.length,
         booked: rows.filter((row) => {

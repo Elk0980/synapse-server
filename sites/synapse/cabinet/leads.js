@@ -30,19 +30,22 @@ const init = (context) => {
     });
   };
   let crmBound = false;
+  let loadEpoch = 0, cardEpoch = 0, crmRange = null;
   const crmStageOptions = (selected) => CRM_STAGES.map((stage) =>
     `<option value="${stage.id}"${stage.id === selected ? " selected" : ""}>${stage.label}</option>`
   ).join("");
   const renderCRMData = (payload) => {
     const leads = Array.isArray(payload.leads) ? payload.leads : [];
     const summary = payload.summary || {};
+    crmRange = payload.range || null;
     const content = byId("crm-content");
     const editable = identity.permissions.includes("crm.edit");
     content.innerHTML = `
+      <section id="crm-journey-summary" class="studio-journey"></section>
       <div class="crm-summary">
         <div class="crm-stat"><span>Заявки</span><strong>${escapeHTML(summary.total ?? leads.length)}</strong></div>
-        <div class="crm-stat"><span>Продажи</span><strong>${escapeHTML(summary.sales ?? "—")}</strong></div>
-        <div class="crm-stat"><span>Выручка</span><strong>${escapeHTML(formatMoney(summary.revenue))}</strong></div>
+        <div class="crm-stat"><span>Старые отметки продаж</span><strong>${escapeHTML(summary.sales ?? "—")}</strong></div>
+        <div class="crm-stat"><span>Сумма по старым отметкам</span><strong>${escapeHTML(formatMoney(summary.revenue))}</strong></div>
       </div>
       ${leads.length ? `<div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Дата</th>
         <th>Имя</th><th>Контакт</th><th>Канал</th><th>Источник</th><th>Этап</th><th>Сумма</th>
@@ -59,13 +62,19 @@ const init = (context) => {
     const options = sources.map((source) => `<option value="${escapeHTML(source)}"
       ${source === crmState.source ? "selected" : ""}>${escapeHTML(source)}</option>`).join("");
     byId("crm-source-filter").innerHTML = '<option value="">Все источники</option>' + options;
+    if (SbCabinet.studioJourney) void SbCabinet.studioJourney.mountSummary(byId("crm-journey-summary"), ctx, {period:crmState.period,source:crmState.source,range:crmRange});
   };
   const loadCRM = async () => {
     if (ctx.currentView !== "crm") return;
+    const epoch = ++loadEpoch;
+    cardEpoch++;
     byId("crm-content").innerHTML = '<div class="crm-empty">Загрузка CRM…</div>';
     try {
-      renderCRMData(await crmQuery("/dashboard", { ...crmState, ...scopeParams() }));
+      const result = await crmQuery("/dashboard", { ...crmState, ...scopeParams() });
+      if (epoch !== loadEpoch) return;
+      renderCRMData(result);
     } catch (error) {
+      if (epoch !== loadEpoch) return;
       byId("crm-content").innerHTML = `<div class="crm-error" role="alert">Не удалось загрузить: ${escapeHTML(error.message)}</div>`;
     }
   };
@@ -108,10 +117,13 @@ const renderCRM = () => {
     byId("crm-content").addEventListener("click", async (event) => {
       const button = event.target.closest("[data-crm-lead-id]");
       if (!button) return;
+      const epoch = ++cardEpoch;
+      const companyAtStart = ctx.selectedProjectId;
       const details = byId("crm-lead-details");
       details.innerHTML = '<div class="crm-empty">Загрузка карточки…</div>';
       try {
         const lead = await crmQuery(`/leads/${encodeURIComponent(button.dataset.crmLeadId)}`);
+        if (epoch !== cardEpoch || ctx.selectedProjectId !== companyAtStart) return;
         const fields = [
           ["utmSource", lead.utmSource],
           ["utmMedium", lead.utmMedium],
@@ -127,10 +139,16 @@ const renderCRM = () => {
         const comment = String(lead.comment ?? "").trim();
         details.innerHTML = `<article class="card lead-details" tabindex="-1"><h2>${escapeHTML(lead.name || "Заявка")}</h2><p>${escapeHTML(lead.contact || "Контакт не указан")}</p>
           ${comment ? `<h3>Комментарий к заявке</h3><p style="white-space:pre-wrap;overflow-wrap:anywhere">${escapeHTML(comment)}</p>` : ""}
-          <details><summary>Источник и рекламные метки</summary>${attribution}</details></article>`;
+          <details><summary>Источник и рекламные метки</summary>${attribution}</details><section class="studio-journey" data-studio-journey-card></section></article>`;
+        const journeyNode = details.querySelector?.('[data-studio-journey-card]');
+        if (journeyNode && SbCabinet.studioJourney) void SbCabinet.studioJourney.mountCard(journeyNode, ctx, button.dataset.crmLeadId, {onChange:()=>{
+          const summary = byId('crm-journey-summary');
+          if(summary) void SbCabinet.studioJourney.mountSummary(summary,ctx,{period:crmState.period,source:crmState.source,range:crmRange});
+        }});
         details.querySelector?.("article")?.scrollIntoView?.({ block: "start", behavior: "smooth" });
         details.querySelector?.("article")?.focus?.({ preventScroll: true });
       } catch (error) {
+        if (epoch !== cardEpoch || ctx.selectedProjectId !== companyAtStart) return;
         details.innerHTML = `<div class="crm-error" role="alert">Не удалось загрузить: ${escapeHTML(error.message)}</div>`;
       }
     });

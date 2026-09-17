@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const {createOnlypultProvider} = require('./onlypult-provider');
 const PLATFORMS = Object.freeze({
   telegram: {name: 'Telegram', maxText: 4096, maxMedia: 10, mediaMode: 'photos', maxCaption: 1024},
   vk: {name: 'ВКонтакте', maxText: 15000, maxMedia: 1, mediaMode: 'link'},
@@ -24,6 +25,9 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
     status TEXT NOT NULL, checked_at TEXT, updated_at TEXT NOT NULL,
     PRIMARY KEY(company_code,id)
   )`);
+  const columns = new Set(db.prepare('PRAGMA table_info(autoposting_channels)').all().map(row => row.name));
+  if (!columns.has('provider')) db.exec("ALTER TABLE autoposting_channels ADD COLUMN provider TEXT NOT NULL DEFAULT 'direct'");
+  if (!columns.has('profile_display_name')) db.exec('ALTER TABLE autoposting_channels ADD COLUMN profile_display_name TEXT');
   function company(code) {
     if (typeof code !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail('Выберите компанию');
     const row = db.prepare('SELECT code,timezone FROM companies WHERE code=? COLLATE NOCASE AND is_deleted=0').get(code);
@@ -60,10 +64,11 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
       const row = rowFor(current.code, id);
       let hasToken = false;
       if (row) try {hasToken = Boolean(tokenFor(row));} catch {}
-      return {id, platform: id, name: row?.name || caps.name, target: row?.target || '', enabled: Boolean(row?.enabled),
+      return {id, platform: id, provider: row?.provider || 'direct', name: row?.name || caps.name, target: row?.target || '', enabled: Boolean(row?.enabled),
         connected: Boolean(row && hasToken && row.checked_revision === row.revision && row.status === 'connected'),
         tokenConfigured: hasToken, revision: row?.revision || 0, status: row?.status || 'not_configured',
-        checkedAt: row?.checked_at || null, caps};
+        checkedAt: row?.checked_at || null, profileDisplayName: row?.profile_display_name || null,
+        caps: row?.provider === 'onlypult' ? {...caps, maxMedia: 10, mediaMode: 'photos'} : caps};
     })};
   }
   function saveSettings(code, body) {
@@ -75,28 +80,32 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
     const configs = body.channels.map(input => {
       if (!input || !Object.hasOwn(PLATFORMS, input.id) || (input.platform && input.platform !== input.id)) fail('Площадка не поддерживается');
       const previous = rowFor(current.code, input.id);
+      const provider = input.provider === undefined ? (previous?.provider || 'direct') : input.provider;
+      if (!['direct','onlypult'].includes(provider)) fail('Способ подключения не поддерживается');
       if (input.revision !== (previous?.revision || 0)) fail('Подключение изменилось. Обновите настройки', 409);
       if (input.name !== undefined && typeof input.name !== 'string') fail('Проверьте название площадки');
       const name = input.name?.trim() || PLATFORMS[input.id].name;
       if (name.length > 120 || typeof input.enabled !== 'boolean' || typeof input.target !== 'string') fail('Проверьте настройки площадки');
       let target = input.target.trim();
-      if (input.id === 'telegram' && !/^(@[A-Za-z][A-Za-z0-9_]{4,31}|-100\d{5,16})$/.test(target)) fail('Укажите @имя канала Telegram или его ID -100…');
-      if (input.id === 'vk') {
+      if (provider === 'onlypult' && !(target === '' && !input.enabled) && !/^[A-Za-z0-9_-]{1,100}$/.test(target)) fail('Выберите профиль Onlypult');
+      if (provider === 'direct' && input.id === 'telegram' && !/^(@[A-Za-z][A-Za-z0-9_]{4,31}|-100\d{5,16})$/.test(target)) fail('Укажите @имя канала Telegram или его ID -100…');
+      if (provider === 'direct' && input.id === 'vk') {
         target = target.replace(/^(?:https:\/\/(?:www\.)?vk\.com\/)?(?:club|public)/, '').replace(/\/$/, '');
         if (!/^[1-9]\d{0,14}$/.test(target)) fail('Укажите числовой ID сообщества ВКонтакте');
       }
       if (input.token !== undefined && (typeof input.token !== 'string' || input.token.length > 2048 || /[\s\x00]/.test(input.token))) fail('Проверьте ключ доступа');
-      const token = input.token || (previous ? tokenFor(previous) : '');
+      const token = input.token || (previous && previous.provider === provider ? tokenFor(previous) : '');
       if (!token) fail('Введите ключ доступа для этой площадки');
-      if (input.id === 'telegram' && !/^\d{5,16}:[A-Za-z0-9_-]{20,}$/.test(token)) fail('Проверьте токен бота Telegram');
-      return {id: input.id, name, target, token, enabled: input.enabled};
+      if (provider === 'direct' && input.id === 'telegram' && !/^\d{5,16}:[A-Za-z0-9_-]{20,}$/.test(token)) fail('Проверьте токен бота Telegram');
+      if (provider === 'onlypult' && !/^op_[a-fA-F0-9]{64}$/.test(token)) fail('Проверьте ключ API Onlypult');
+      return {id: input.id, provider, name, target, token, enabled: input.enabled};
     });
       for (const config of configs) db.prepare(`INSERT INTO autoposting_channels
-        (company_code,id,name,target,enabled,encrypted_token,revision,status,updated_at) VALUES(?,?,?,?,?,?,1,'needs_check',?)
+        (company_code,id,name,target,enabled,encrypted_token,revision,status,updated_at,provider) VALUES(?,?,?,?,?,?,1,'needs_check',?,?)
         ON CONFLICT(company_code,id) DO UPDATE SET name=excluded.name,target=excluded.target,enabled=excluded.enabled,
           encrypted_token=excluded.encrypted_token,revision=autoposting_channels.revision+1,checked_revision=NULL,
-          status='needs_check',checked_at=NULL,updated_at=excluded.updated_at`).run(current.code,config.id,config.name,
-            config.target,Number(config.enabled),crypt(current.code,config.id,config.token),new Date(now()).toISOString());
+          status='needs_check',checked_at=NULL,profile_display_name=NULL,provider=excluded.provider,updated_at=excluded.updated_at`).run(current.code,config.id,config.name,
+            config.target,Number(config.enabled),crypt(current.code,config.id,config.token),new Date(now()).toISOString(),config.provider);
       db.exec('COMMIT');
     } catch (error) {db.exec('ROLLBACK'); throw error;}
     return getSettings(current.code);
@@ -147,12 +156,22 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
     if (telegram ? data.ok !== true || !Object.hasOwn(data,'result') : !Object.hasOwn(data,'response')) throw failure('RESPONSE_UNCERTAIN', publishing);
     return telegram ? data.result : data.response;
   }
+  const onlypult = createOnlypultProvider({failure, readResponse, fetchImpl, tokenFor});
+  async function listProfiles(code, id) {
+    const current = company(code), row = rowFor(current.code,id);
+    if (!row || row.provider !== 'onlypult') fail('Сначала сохраните ключ Onlypult для этой площадки');
+    const profiles = await onlypult.listProfiles(row);
+    if (rowFor(current.code,id)?.revision !== row.revision) throw failure('SETTINGS_CHANGED');
+    return {companyCode: current.code, channelId: id, revision: row.revision, profiles};
+  }
   async function checkChannel(code, id) {
     const current = company(code), row = rowFor(current.code, id);
     if (!row) fail('Сначала сохраните подключение');
-    let status = 'connected', errorCode = null;
+    let status = 'connected', errorCode = null, profileDisplayName = null;
     try {
-      if (id === 'telegram') {
+      if (row.provider === 'onlypult') {
+        profileDisplayName = (await onlypult.check(row)).name;
+      } else if (id === 'telegram') {
         const bot = await call(row, 'getMe', {});
         const chat = await call(row, 'getChat', {chat_id: row.target});
         if (chat?.type !== 'channel') throw failure('CHANNEL_REQUIRED');
@@ -166,17 +185,28 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
         if (String(group?.id) !== row.target || group.is_admin !== 1 || group.can_post !== 1) throw failure('ADMIN_REQUIRED');
       }
     } catch (error) {status = 'error'; errorCode = error.code || 'CHECK_FAILED';}
-    const changed = db.prepare(`UPDATE autoposting_channels SET status=?,checked_revision=?,checked_at=?
+    const changed = db.prepare(`UPDATE autoposting_channels SET status=?,checked_revision=?,checked_at=?,profile_display_name=?
       WHERE company_code=? AND id=? AND revision=?`).run(status,status === 'connected' ? row.revision : null,
-        new Date(now()).toISOString(),current.code,id,row.revision).changes;
+        new Date(now()).toISOString(),profileDisplayName,current.code,id,row.revision).changes;
     return {...getSettings(current.code), ok: Boolean(changed && status === 'connected'), code: changed ? errorCode : 'SETTINGS_CHANGED'};
   }
-  async function publish({companyCode, post, channelId}) {
+  async function publish({companyCode, post, channelId, channelRevision, beforePublish}) {
     const current = company(companyCode), row = rowFor(current.code, channelId);
     if (!row || !row.enabled || row.status !== 'connected' || row.checked_revision !== row.revision) throw failure('CONNECTION_MISSING');
-    const caps = PLATFORMS[channelId], text = String(post.text || ''), media = post.mediaUrls || [];
+    if (channelRevision !== undefined && row.revision !== channelRevision) throw failure('CHANNEL_CHANGED');
+    const caps = row.provider === 'onlypult' ? {...PLATFORMS[channelId],maxMedia:10} : PLATFORMS[channelId], text = String(post.text || ''), media = post.mediaUrls || [];
     if (!text.trim() || text.length > caps.maxText || !Array.isArray(media) || media.length > caps.maxMedia ||
         media.some(url => !publicUrl(url)) || (channelId === 'telegram' && media.length && text.length > caps.maxCaption)) throw failure('CONTENT_LIMIT');
+    if (row.provider === 'onlypult') {
+      // No provider POST retry: Onlypult's public contract has no idempotency key.
+      // Guard every awaited preflight against owner changes before the first POST.
+      const guard = () => {
+        const latest = rowFor(current.code,channelId);
+        if (!latest || latest.revision !== row.revision || !latest.enabled || latest.status !== 'connected') throw failure('SETTINGS_CHANGED');
+        if (beforePublish) beforePublish();
+      };
+      return onlypult.publish(row,{...post,text,mediaUrls:media},guard);
+    }
     if (channelId === 'telegram') {
       const result = media.length > 1 ? await call(row, 'sendMediaGroup', {chat_id: row.target,
         media: media.map((url,index) => ({type: 'photo', media: url, ...(index ? {} : {caption: text})}))}, true) :
@@ -196,7 +226,14 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
     const id = `-${row.target}_${result.post_id}`;
     return {id, externalId: id, url: `https://vk.com/wall${id}`, status: 'published'};
   }
-  return {getSettings,saveSettings,checkChannel,publish};
+  async function reconcile({companyCode,channelId,channelRevision,providerPostId}) {
+    const current = company(companyCode), row = rowFor(current.code,channelId);
+    if (!row || row.provider !== 'onlypult' || row.revision !== channelRevision) throw failure('CHANNEL_CHANGED');
+    const result = await onlypult.reconcile(row,providerPostId);
+    if (rowFor(current.code,channelId)?.revision !== row.revision) throw failure('CHANNEL_CHANGED');
+    return result;
+  }
+  return {getSettings,saveSettings,checkChannel,listProfiles,publish,reconcile};
 }
 
 module.exports = {createAutopostingTransport,PLATFORMS,publicUrl};

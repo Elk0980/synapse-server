@@ -13,6 +13,7 @@ const ERRORS = {PROFILE_CHANGED:"Изменились данные компан�
   AUTH_FAILED:"Площадка не приняла ключ доступа. Проверьте подключение канала.",PROVIDER_AUTH:"Площадка не приняла ключ доступа.",
   RATE_LIMITED:"Площадка ограничила частоту запросов. Повторите позже.",PUBLISH_FAILED:"Площадка не подтвердила публикацию.",
   MEDIA_UNSUPPORTED:"Этот материал не поддерживается выбранной площадкой."};
+Object.assign(ERRORS,{PROVIDER_PENDING:"Сервис принял задание. Ожидаем результат публикации.",PROVIDER_LINK_UNAVAILABLE:"Сервис сообщил о публикации. Проверьте запись в сообществе: ссылка пока не подтверждена.",PROVIDER_FAILED:"Сервис не смог опубликовать материал. Проверьте подробности в его кабинете.",PROVIDER_CHECK_FAILED:"Не удалось проверить результат. Проверьте подключение и повторите проверку статуса."});
 const EDITABLE = new Set(["draft","needs_review","failed","cancelled"]);
 const PLANNING = [["two_gis","2ГИС"],["yandex_maps","Яндекс Карты"],["max","MAX"]];
 const CONNECTION_ERRORS = {
@@ -23,12 +24,13 @@ const CONNECTION_ERRORS = {
   TOKEN_UNREADABLE:"Сохранённый ключ недоступен. Обратитесь к администратору Synapse.",
   SETTINGS_CHANGED:"Настройки изменились во время проверки. Обновите статусы перед повторной проверкой."
 };
+Object.assign(CONNECTION_ERRORS,{PROFILE_NOT_FOUND:"Этот профиль не найден в Onlypult. Обновите список и выберите нужное сообщество.",PROFILE_PLATFORM_MISMATCH:"Выбран профиль другой площадки. Выберите сообщество ВК или канал Telegram соответственно.",PROFILE_INACTIVE:"Подключение профиля в Onlypult требует обновления. Откройте его кабинет.",PROVIDER_AUTH:"Onlypult не принял ключ. Проверьте ключ и пробный период.",PROVIDER_NOT_CONFIGURED:"Сначала сохраните ключ Onlypult для выбранной компании."});
 let controller;
 function create(container, context) {
   const time = cabinet.companyTime;
-  let ctx=context, companyCode="", settings=null, information=null, posts=[], post=null, busy=false, epoch=0, baseline=null, reviewed=null;
+  let ctx=context, companyCode="", settings=null, information=null, starterPlan=null, posts=[], post=null, busy=false, epoch=0, baseline=null, reviewed=null;
   let selectedDate="", month="";
-  const drafts=new Map(), selections=new Map(), channelDrafts=new Map();
+  const drafts=new Map(), selections=new Map(), channelDrafts=new Map(), providerProfiles=new Map();
   const companies=(ctx.identity.companies||[]).map(item=>({code:String(item.id),name:item.name||item.id}));
   container.classList.add("autoposting-view");
   container.innerHTML=`<h2>Автопостинг</h2><p>Подготовьте материал, проверьте его и поставьте в план. Постановка в план разрешает автоматическую публикацию в указанное время.</p>
@@ -36,16 +38,17 @@ function create(container, context) {
     <p id="autoposting-status" role="status" aria-live="polite"></p>
     <section class="card vk-connection-guide" id="vk-connection-guide" aria-labelledby="vk-connection-title"></section>
     <details class="card autoposting-connections"><summary>Подключение площадок</summary><p class="autoposting-note">Пустой ключ сохраняет прежний. Новый ключ применяется только кнопкой сохранения; после изменения канала проверьте доступ. Проверка не публикует посты.</p><div id="autoposting-channels" class="autoposting-channel-grid"></div><div id="autoposting-planning" class="autoposting-planning"></div></details>
+    <section class="card autoposting-starter" id="autoposting-starter-plan" hidden></section>
     <section class="card autoposting-calendar-section"><h3>Календарь публикаций</h3><p id="autoposting-calendar-zone" class="autoposting-note"></p><div class="autoposting-toolbar"><button class="plain-button" id="autoposting-prev" type="button" aria-label="Предыдущий месяц">←</button><label for="autoposting-month" class="autoposting-sr-only">Месяц календаря</label><input type="month" id="autoposting-month"><button class="plain-button" id="autoposting-next" type="button" aria-label="Следующий месяц">→</button><button class="plain-button" id="autoposting-all" type="button">Все даты</button></div><div id="autoposting-calendar" class="autoposting-calendar"></div><div id="autoposting-posts"></div></section>
     <div class="autoposting-editor-grid"><section class="card"><h3>Материал</h3><label for="autoposting-select">Открыть материал</label><select id="autoposting-select"><option value="">Новый черновик</option></select><p id="autoposting-post-state"></p><p id="autoposting-post-error" role="status" hidden></p><div id="autoposting-deliveries"></div>
     <form id="autoposting-form"><label>Название в кабинете<input id="autoposting-title" maxlength="200" required></label><label>Текст публикации<textarea id="autoposting-text" rows="9" maxlength="20000" required></textarea></label>
     <label>Материалы по ссылкам<textarea id="autoposting-media" rows="3" placeholder="https://example.com/photo.jpg"></textarea></label>
-    <label>Фото с устройства<input id="autoposting-photo" type="file" accept="image/jpeg,image/png,image/webp"></label><button class="plain-button" id="autoposting-upload" type="button">Загрузить фото</button><p class="autoposting-note">Фото JPEG, PNG или WebP до 10 МБ. Одна открытая HTTP(S)-ссылка на строку, до 10. Telegram: изображения; ВКонтакте: одна ссылка как вложение, без загрузки фотографии.</p>
+    <label>Фото с устройства<input id="autoposting-photo" type="file" accept="image/jpeg,image/png,image/webp"></label><button class="plain-button" id="autoposting-upload" type="button">Загрузить фото</button><p class="autoposting-note">Фото JPEG, PNG или WebP до 10 МБ. До 10 открытых HTTP(S)-ссылок, каждая с новой строки. Для фотографий во ВКонтакте выберите подключение Onlypult. Прямое подключение ВКонтакте поддерживает текст и одну ссылку.</p>
     <fieldset id="autoposting-platforms"><legend>Куда опубликовать</legend></fieldset>
     <div class="autoposting-date-fields"><label>Дата и время<input id="autoposting-date" type="datetime-local"></label><label>Часовой пояс<input id="autoposting-timezone" maxlength="80" required placeholder="Asia/Irkutsk"></label></div>
     <p class="autoposting-note">Время относится к указанному часовому поясу, а не настройкам компьютера. Черновик можно сохранить без даты и подключённого канала.</p>
     <button class="plain-button" id="autoposting-save" type="submit">Сохранить черновик</button><p id="autoposting-form-status" aria-live="off"></p></form>
-    <div class="autoposting-actions"><button class="plain-button" id="autoposting-preview" type="button">Предпросмотр</button><button class="plain-button" id="autoposting-cancel" type="button" hidden>Снять с публикации</button></div></section>
+    <div class="autoposting-actions"><button class="plain-button" id="autoposting-preview" type="button">Предпросмотр</button><button class="plain-button" id="autoposting-cancel" type="button" hidden>Снять с публикации</button><button class="plain-button" id="autoposting-reconcile" type="button" hidden>Проверить результат в сервисе</button></div></section>
     <section class="card autoposting-preview-section" aria-labelledby="autoposting-preview-title"><h3 id="autoposting-preview-title" tabindex="-1">Проверка перед публикацией</h3><div id="autoposting-preview-content"><p>Сохраните материал и откройте предпросмотр.</p></div><button class="plain-button" id="autoposting-schedule" type="button" disabled>Поставить в план</button><p class="autoposting-note">После постановки в план материал отправляется автоматически. Уже начатую публикацию площадка может завершить после отмены.</p></section></div>`;
   const get=id=>container.querySelector("#"+id), form=get("autoposting-form");
   const edit=()=>permitted(ctx,"edit"), zone=()=>information?.profile?.timezone||settings?.timezone||"UTC";
@@ -97,18 +100,21 @@ function create(container, context) {
     get("autoposting-company").disabled=busy||!companies.length;
     const canEdit=edit()&&(!post||EDITABLE.has(post.status))&&!post?.deliveries?.some(item=>["published","publishing","needs_review"].includes(item.status));
     form.querySelectorAll("input,textarea,select,button").forEach(node=>{node.disabled=busy||!settings||!canEdit;});
-    get("autoposting-channels").querySelectorAll("input,button").forEach(node=>{node.disabled=busy||!edit();});
+    get("autoposting-channels").querySelectorAll("input,select,button").forEach(node=>{node.disabled=busy||!edit()||(ctx.identity?.role!=='owner'&&node.closest('[data-owner-connection]')&&!node.matches('[data-check-channel]'));});
     get("autoposting-preview").disabled=busy||!post||dirty();
     get("autoposting-schedule").disabled=busy||!edit()||!readyToSchedule();
     get("autoposting-cancel").hidden=!post||!["scheduled","publishing"].includes(post.status);
     get("autoposting-cancel").disabled=busy||!edit();
+    get("autoposting-reconcile").hidden=!post?.deliveries?.some(item=>item.providerPostId);
+    get("autoposting-reconcile").disabled=busy||!edit();
+    const importButton=get('autoposting-import-plan');if(importButton)importButton.disabled=busy||!edit()||Boolean(starterPlan?.imports?.[get('autoposting-plan-platform').value]);
   };
   const invalidate=()=>{reviewed=null;get("autoposting-preview-content").innerHTML="<p>Предпросмотр не выполнен или устарел. Сохраните изменения и проверьте материал заново.</p>";controls();};
   const renderState=()=>{
     get("autoposting-post-state").textContent=post?STATUS[post.status]||"Статус неизвестен":"Новый черновик";
     const node=get("autoposting-post-error");node.hidden=!post?.lastErrorCode;
     node.textContent=post?.lastErrorCode?(ERRORS[post.lastErrorCode]||"Не удалось подтвердить публикацию. Проверьте подключение и данные компании."):"";
-    get("autoposting-deliveries").innerHTML=(post?.deliveries||[]).map(item=>`<p>${esc(channels().find(channel=>channel.id===item.channelId)?.name||item.channelId)}: ${esc(STATUS[item.status]||{pending:"Ожидает отправки"}[item.status]||"Требуется проверка")}${safeUrl(item.url)?` · <a href="${esc(safeUrl(item.url))}" target="_blank" rel="noopener noreferrer">Открыть публикацию</a>`:""}</p>`).join("");
+    get("autoposting-deliveries").innerHTML=(post?.deliveries||[]).map(item=>`<p>${esc(channels().find(channel=>channel.id===item.channelId)?.name||item.channelId)}: ${esc(STATUS[item.status]||{pending:"Ожидает отправки"}[item.status]||"Требуется проверка")}${item.errorCode&&ERRORS[item.errorCode]?` · ${esc(ERRORS[item.errorCode])}`:""}${safeUrl(item.url)?` · <a href="${esc(safeUrl(item.url))}" target="_blank" rel="noopener noreferrer">Открыть публикацию</a>`:""}</p>`).join("");
   };
   const renderPost=()=>{
     get("autoposting-platforms").innerHTML='<legend>Куда опубликовать</legend>'+channels().map(channel=>`<label class="autoposting-checkbox"><input type="checkbox" value="${esc(channel.id)}">${esc(channel.name||channel.platform)} — ${channel.connected&&channel.enabled?"подключён":"требуется подключение"}</label>`).join("");
@@ -129,20 +135,23 @@ function create(container, context) {
       <p class="vk-connection-state">${vk?.connected?"Доступ проверен" : saved?"Подключение сохранено — доступ требует проверки":"Подключение не настроено"}${vk?.enabled?" · автоматическая отправка разрешена":" · автоматическая отправка выключена"}</p>
       <ol class="vk-connection-steps">
         <li><strong>Сообщество компании</strong><p>${communityUrl?`Ссылка сохранена в карточке ${esc(companyName)}: <a href="${esc(communityUrl)}" target="_blank" rel="noopener noreferrer">${esc(communityUrl)}</a>`:'Добавьте ссылку на сообщество в разделе «Данные компании».'} Ссылка сама по себе не подтверждает права доступа.</p></li>
-        <li><strong>Разрешение на публикации</strong><p>${saved?"Ключ сохранён. Его значение не отображается в кабинете.":"Авторизация через кнопку ВК в Synapse пока не настроена. Администратору Synapse нужно зарегистрировать или найти приложение и подтвердить доступный способ выдачи разрешения на публикации. Сейчас получать ключ вручную не требуется."}</p></li>
+        <li><strong>Разрешение на публикации</strong><p>${vk?.provider==='onlypult'?"Сообщество подключается в Onlypult. Здесь сохраняется отдельный ключ сервиса и выбирается точный профиль компании.":saved?"Ключ сохранён. Его значение не отображается в кабинете.":"Авторизация через кнопку ВК в Synapse пока не настроена. Можно выбрать Onlypult в подключении площадок ниже. Для прямого подключения администратору Synapse нужно подтвердить доступный способ выдачи разрешения на публикации."}</p></li>
         <li><strong>Проверка выбранного сообщества</strong><p>${vk?.connected?"Права на сохранённое сообщество проверены. Изменение подключения потребует повторной проверки.":"После настройки доступа проверяется право публиковать именно в выбранном сообществе. Проверка не создаёт пост."}</p></li>
         <li><strong>Первый материал</strong><p>Сохраните черновик, проверьте предпросмотр и поставьте конкретный материал в план. Подключение канала само по себе не создаёт публикации.</p></li>
       </ol>
-      <p class="autoposting-note">Сейчас поддерживаются текст и одна ссылка. Загрузка фото в ВК, изменение обложки, меню и описания сообщества, чтение сообщений и управление рекламой этим подключением не выполняются.</p>
+      <p class="autoposting-note">${vk?.provider==='onlypult'?'Выбран Onlypult: тексты и изображения отправляются через подключённый профиль. Принятое задание ещё не означает опубликованную запись.':'Прямое подключение поддерживает текст и одну ссылку. Для публикаций с фото можно выбрать Onlypult ниже.'} Изменение обложки, меню и описания сообщества, чтение сообщений и управление рекламой этим подключением не выполняются.</p>
       <a href="#company-information">Данные компании</a>
       <details class="vk-connection-help"><summary>Что потребуется от владельца</summary><p>Когда официальный способ авторизации будет настроен, владелец подтвердит доступ к нужному сообществу в ВК. Пароль ВК и ключи не нужно отправлять в переписку. Передача владения сообществом не требуется.</p><p>Если у администратора уже есть совместимый ключ пользователя с правом wall, ниже доступны ручные настройки существующего подключения. Обычный ключ сообщества не подходит текущему модулю.</p></details>`;
     get("autoposting-channels").innerHTML=channels().map(channel=>{
       const values=channelDrafts.get(companyCode+":"+channel.id)?.values||channel;
-      return `<form class="autoposting-channel" data-channel="${esc(channel.id)}"><h3>${esc(channel.platform==="vk"?"ВКонтакте — ручное подключение":"Telegram")}</h3><p>${channel.connected?"Доступ подтверждён":"Доступ не подтверждён"}${channel.enabled?" · включён":" · выключен"}</p>
-        ${channel.platform==="vk"?'<p class="autoposting-note">Для администратора с уже выданным совместимым доступом. Эти поля не создают приложение ВК и не выдают разрешения.</p>':''}
+      const onlypult=values.provider==='onlypult', profiles=providerProfiles.get(companyCode+":"+channel.id)||[];
+      return `<form class="autoposting-channel" data-channel="${esc(channel.id)}"${onlypult?' data-owner-connection':''}><h3>${esc(channel.platform==="vk"?"ВКонтакте":"Telegram")}</h3><p>${channel.connected?"Доступ подтверждён":"Доступ не подтверждён"}${channel.enabled?" · включён":" · выключен"}</p>
+        ${ctx.identity?.role!=='owner'?'<p class="autoposting-note">Onlypult подключает владелец Synapse. После подключения здесь можно готовить и планировать публикации своей компании.</p>':''}
+        <label>Способ подключения<select data-channel-field="provider"><option value="direct"${!onlypult?' selected':''}>Напрямую</option><option value="onlypult"${onlypult?' selected':''}${ctx.identity?.role!=='owner'?' disabled':''}>Через Onlypult</option></select></label>
+        ${onlypult?'<p class="autoposting-note">Подключите сообщество в Onlypult. Сохраните его ключ здесь, загрузите список профилей и выберите профиль этой компании.</p><a href="https://app.ru.onlypult.com/" target="_blank" rel="noopener noreferrer">Открыть Onlypult</a>':channel.platform==="vk"?'<p class="autoposting-note">Для администратора с уже выданным совместимым доступом. Эти поля не создают приложение ВК и не выдают разрешения.</p>':''}
         <label>Название канала<input data-channel-field="name" value="${esc(values.name||"")}" maxlength="200" required></label>
-        <label>${channel.platform==="vk"?"ID сообщества (число или clubNNN)":"Канал (@name или -100…)"}<input data-channel-field="target" value="${esc(values.target||"")}" maxlength="200"></label>
-        <label>${channel.platform==="vk"?"Новый ключ пользователя с правом wall":"Новый токен бота — администратора канала"}<input data-channel-field="token" type="password" autocomplete="new-password" maxlength="4096"></label>
+        ${onlypult?`<label>Профиль этой компании<select data-channel-field="target"><option value="">Сначала загрузите профили</option>${values.target&&!profiles.some(p=>p.id===values.target)?`<option value="${esc(values.target)}" selected>Сохранённый профиль ${esc(values.target)}</option>`:''}${profiles.map(p=>`<option value="${esc(p.id)}"${String(values.target)===p.id?' selected':''}>${esc(p.name)} · ${esc(p.id)}${p.status==='active'?'':' · требует подключения'}</option>`).join('')}</select></label><button class="plain-button" type="button" data-load-profiles="${esc(channel.id)}">Загрузить профили Onlypult</button>`:`<label>${channel.platform==="vk"?"ID сообщества (число или clubNNN)":"Канал (@name или -100…)"}<input data-channel-field="target" value="${esc(values.target||"")}" maxlength="200"></label>`}
+        <label>${onlypult?"Ключ Onlypult для подключения":channel.platform==="vk"?"Новый ключ пользователя с правом wall":"Новый токен бота — администратора канала"}<input data-channel-field="token" type="password" autocomplete="new-password" maxlength="4096"></label>
         <label class="autoposting-checkbox"><input data-channel-field="enabled" type="checkbox"${values.enabled?" checked":""}>Разрешить автоматическую отправку</label>
         <div class="autoposting-actions"><button class="plain-button" type="submit">Сохранить подключение</button><button class="plain-button" type="button" data-check-channel="${esc(channel.id)}">Проверить доступ</button></div></form>`;
     }).join("");
@@ -165,6 +174,24 @@ function create(container, context) {
     get("autoposting-select").innerHTML='<option value="">Новый черновик</option>'+posts.map(item=>`<option value="${esc(item.id)}">${esc(item.title)} — ${esc(STATUS[item.status]||"Статус неизвестен")}</option>`).join("");
     get("autoposting-select").value=post?String(post.id):"";renderCalendar();
   };
+  const renderStarterPlan=()=>{
+    const node=get('autoposting-starter-plan');node.hidden=!starterPlan?.available;
+    if(!starterPlan?.available){node.replaceChildren();return;}
+    node.innerHTML=`<h3>Недельный план · ${esc(companies.find(c=>c.code===companyCode)?.name||companyCode)}</h3><p>${esc(starterPlan.reviewNote||'Проверьте сведения компании и материалы перед публикацией.')}</p>
+      <details><summary>Темы и материалы на 7 дней</summary><ol>${(starterPlan.topics||[]).map(item=>`<li><strong>${esc(item.title)}</strong><p>${esc(item.goal)}</p><p class="autoposting-note">${esc(typeof item.mediaBrief==='string'?item.mediaBrief:item.mediaBrief?.description||'Подберите фото компании')} · День ${Number(item.dayOffset)+1}, ${esc(item.localTime)} · ${esc(starterPlan.timezone)}</p></li>`).join('')}</ol></details>
+      <div class="autoposting-toolbar"><label>Версия текстов для площадки<select id="autoposting-plan-platform"><option value="vk">ВКонтакте</option><option value="telegram">Telegram</option></select></label><button type="button" class="plain-button" id="autoposting-import-plan">Добавить 7 черновиков</button></div>
+      <p class="autoposting-note">Добавляются только тексты со ссылками для выбранной площадки. Фото, дату и канал публикации выберите в каждом материале. Автоматическая отправка не включается.</p><p id="autoposting-plan-state" role="status"></p>`;
+    const refresh=()=>{get('autoposting-plan-state').textContent=starterPlan.imports?.[get('autoposting-plan-platform').value]?'Эти черновики уже добавлены. Они доступны в календаре и списке материалов.':'';controls();};
+    get('autoposting-plan-platform').addEventListener('change',refresh);refresh();
+    get('autoposting-import-plan').addEventListener('click',()=>{
+      if(busy||!edit())return;const platform=get('autoposting-plan-platform').value;
+      void run(async current=>{await request('/autoposting/starter-plan','POST',{platform,profileRevision:information.revision});if(!current())return;
+        const result=await Promise.all([request('/autoposting/starter-plan'),request('/autoposting/posts')]);if(!current())return;
+        if(result[0].companyCode!==companyCode||result[1].companyCode!==companyCode)throw Error('Wrong company');
+        starterPlan=result[0];posts=result[1].posts;renderList();renderStarterPlan();message('7 черновиков добавлены. Проверьте тексты и выберите фотографии перед постановкой в план.');
+      },'Добавляем черновики…','Не удалось подтвердить добавление. Обновите статусы: повтор не создаст второй комплект.');
+    });
+  };
   const run=async(operation,pending,failure)=>{
     if(busy||!settings)return;const version=epoch;busy=true;controls();message(pending);
     try{await operation(()=>version===epoch);}catch(_){if(version===epoch)message(failure);}
@@ -173,16 +200,16 @@ function create(container, context) {
   const selectPost=id=>{stash();post=posts.find(item=>String(item.id)===String(id))||null;selections.set(companyCode,post?.id||null);renderPost();get("autoposting-select").value=post?String(post.id):"";};
   const load=async(code,refresh=false)=>{
     stash();get("autoposting-photo").value="";get("autoposting-channels").querySelectorAll('input[type="password"]').forEach(node=>{node.value="";});
-    companyCode=code;const version=++epoch;busy=true;settings=null;information=null;post=null;get("autoposting-company").value=code;
+    companyCode=code;const version=++epoch;busy=true;settings=null;information=null;starterPlan=null;post=null;get("autoposting-company").value=code;renderStarterPlan();
     get("vk-connection-guide").innerHTML='<h3 id="vk-connection-title">Подключение ВКонтакте</h3><p>Загружаем настройки выбранной компании…</p>';controls();
     if(!code){busy=false;get("vk-connection-guide").textContent="Выберите доступную компанию.";message("Нет доступных компаний.");controls();return;}
     message("Загружаем материалы и подключения…");
-    try{const result=await Promise.all([request("/autoposting/settings"),request("/autoposting/posts"),request("/company-information")]);if(version!==epoch)return;
-      if(result[1].companyCode!==code||result[2].companyCode!==code)throw Error("Wrong company");
-      [settings,,information]=result;posts=Array.isArray(result[1].posts)?result[1].posts:[];
+    try{const result=await Promise.all([request("/autoposting/settings"),request("/autoposting/posts"),request("/company-information"),request('/autoposting/starter-plan')]);if(version!==epoch)return;
+      if(result[1].companyCode!==code||result[2].companyCode!==code||result[3].companyCode!==code)throw Error("Wrong company");
+      [settings,,information,starterPlan]=result;posts=Array.isArray(result[1].posts)?result[1].posts:[];
       month=refresh&&month?month:time.toLocal(new Date().toISOString(),zone()).slice(0,7);selectedDate="";
       post=posts.find(item=>item.id===selections.get(code))||null;
-      renderChannels();renderList();renderPost();message(edit()?"Черновики не публикуются до постановки в план.":"Доступ только для просмотра.");
+      renderChannels();renderList();renderPost();renderStarterPlan();message(edit()?"Черновики не публикуются до постановки в план.":"Доступ только для просмотра.");
     }catch(_){if(version===epoch){get("vk-connection-guide").textContent="Не удалось получить статус подключения выбранной компании. Обновите статусы.";message("Не удалось загрузить автопостинг. Ввод сохранён в текущем окне; повторите обновление.");}}
     finally{if(version===epoch){busy=false;controls();}}
   };
@@ -215,6 +242,12 @@ function create(container, context) {
     void run(async current=>{const result=await request("/autoposting/posts/"+encodeURIComponent(post.id)+"/cancel","POST",{revision:post.revision});if(!current())return;post=result;posts=posts.map(item=>item.id===result.id?result:item);renderList();renderPost();message("Материал снят с очереди. Уже начатую публикацию площадка может завершить.");
     },"Отменяем публикацию…","Не удалось подтвердить отмену. Обновите статусы.");
   });
+  get('autoposting-reconcile').addEventListener('click',()=>{
+    if(busy||!edit()||!post?.deliveries?.some(item=>item.providerPostId))return;
+    void run(async current=>{const result=await request('/autoposting/posts/'+encodeURIComponent(post.id)+'/reconcile','POST',{revision:post.revision});if(!current())return;
+      post=result;posts=posts.map(item=>item.id===result.id?result:item);renderList();renderPost();message(result.deliveries?.some(item=>item.errorCode==='PROVIDER_CHECK_FAILED')?'Не удалось проверить результат. Повторная отправка не выполнялась.':'Статус проверен. Повторная отправка не выполнялась.');
+    },'Проверяем результат…','Не удалось проверить результат. Повторная отправка не выполнялась.');
+  });
   get("autoposting-company").addEventListener("change",()=>{const code=get("autoposting-company").value;if(ctx.chooseProject)ctx.chooseProject(code);else void load(code);});
   get("autoposting-upload").addEventListener("click",()=>{
     if(busy||!edit()||!settings||(post&&!EDITABLE.has(post.status)))return;const file=get("autoposting-photo").files?.[0];
@@ -230,20 +263,37 @@ function create(container, context) {
   get("autoposting-month").addEventListener("change",()=>{const value=get("autoposting-month").value;if(/^\d{4}-\d{2}$/.test(value)){month=value;selectedDate="";renderCalendar();controls();}});
   get("autoposting-all").addEventListener("click",()=>{selectedDate="";renderCalendar();controls();});
   get("autoposting-calendar").addEventListener("click",event=>{const button=event.target.closest("[data-calendar-date]");if(button){selectedDate=button.dataset.calendarDate;renderCalendar();controls();}});
-  const channelValues=node=>({name:node.querySelector('[data-channel-field="name"]').value,target:node.querySelector('[data-channel-field="target"]').value,enabled:node.querySelector('[data-channel-field="enabled"]').checked});
+  const channelValues=node=>({provider:node.querySelector('[data-channel-field="provider"]').value,name:node.querySelector('[data-channel-field="name"]').value,target:node.querySelector('[data-channel-field="target"]').value,enabled:node.querySelector('[data-channel-field="enabled"]').checked});
   get("autoposting-channels").addEventListener("input",event=>{
     const node=event.target.closest("[data-channel]");if(!node||event.target.type==="password")return;
     const channel=channels().find(item=>item.id===node.dataset.channel);channelDrafts.set(companyCode+":"+channel.id,{revision:channel.revision,values:channelValues(node)});
   });
+  get("autoposting-channels").addEventListener("change",event=>{
+    const node=event.target.closest('[data-channel]');if(!node||busy||!edit())return;
+    const channel=channels().find(item=>item.id===node.dataset.channel),values=channelValues(node);
+    if(event.target.dataset.channelField==='provider'){values.target='';values.enabled=false;providerProfiles.delete(companyCode+':'+channel.id);}
+    channelDrafts.set(companyCode+':'+channel.id,{revision:channel.revision,values});
+    if(event.target.dataset.channelField==='provider'){renderChannels();controls();message('Способ подключения изменён. Введите новый ключ и сохраните подключение.');}
+  });
   get("autoposting-channels").addEventListener("submit",event=>{
     const node=event.target.closest("[data-channel]");if(!node)return;event.preventDefault();if(busy||!edit()||!node.reportValidity())return;
     const channel=channels().find(item=>item.id===node.dataset.channel), input=node.querySelector('[data-channel-field="token"]'), token=input.value.trim();
+    if(ctx.identity?.role!=='owner'&&(channel.provider==='onlypult'||channelValues(node).provider==='onlypult')){input.value='';message('Onlypult подключает владелец Synapse.');return;}
     const payload={id:channel.id,platform:channel.platform,...channelValues(node),revision:channelDrafts.get(companyCode+":"+channel.id)?.revision??channel.revision,...(token?{token}:{})};
     void run(async current=>{try{await request("/autoposting/settings","PUT",{channels:[payload]});}finally{input.value="";}if(!current())return;
       channelDrafts.delete(companyCode+":"+channel.id);const refreshed=await request("/autoposting/settings");if(!current())return;settings=refreshed;renderChannels();invalidate();message("Подключение сохранено. Проверьте доступ к каналу перед публикацией.");
     },"Сохраняем подключение…","Не удалось сохранить подключение. Новый ключ очищен; при необходимости введите его снова.");
   });
   get("autoposting-channels").addEventListener("click",event=>{
+    const profilesButton=event.target.closest('[data-load-profiles]');
+    if(profilesButton){
+      if(busy||!edit()||ctx.identity?.role!=='owner')return;const channel=channels().find(item=>item.id===profilesButton.dataset.loadProfiles),node=profilesButton.closest('[data-channel]');
+      if(channel.provider!=='onlypult'||!channel.tokenConfigured||channelDrafts.has(companyCode+':'+channel.id)||node.querySelector('[data-channel-field="token"]').value){message('Сначала сохраните ключ Onlypult. Профиль можно выбрать после загрузки списка.');return;}
+      void run(async current=>{const result=await request('/autoposting/settings/'+encodeURIComponent(channel.id)+'/profiles');if(!current())return;
+        if(result.companyCode!==companyCode||!Array.isArray(result.profiles))throw Error('Wrong company');
+        providerProfiles.set(companyCode+':'+channel.id,result.profiles);renderChannels();message(result.profiles.length?'Выберите профиль этой компании, сохраните и проверьте доступ.':'В Onlypult нет подходящих профилей. Подключите нужное сообщество или канал.');
+      },'Загружаем профили…','Не удалось загрузить профили. Проверьте сохранённый ключ Onlypult.');return;
+    }
     const button=event.target.closest("[data-check-channel]");if(!button||busy||!edit())return;
     const node=button.closest("[data-channel]"), channel=channels().find(item=>item.id===button.dataset.checkChannel);
     if(channelDrafts.has(companyCode+":"+channel.id)||node.querySelector('[data-channel-field="token"]').value){message("Сначала сохраните изменения подключения. Проверка использует сохранённые данные.");return;}

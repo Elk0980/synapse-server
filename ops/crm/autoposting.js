@@ -19,6 +19,10 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
     status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','publishing','published','failed','needs_review','cancelled')),
     external_id TEXT,url TEXT,error_code TEXT,started_at INTEGER,finished_at TEXT,
     PRIMARY KEY(post_id,channel_id));`);
+  const deliveryColumns=new Set(db.prepare('PRAGMA table_info(autoposting_deliveries)').all().map(row=>row.name));
+  for(const column of ['provider_post_id','provider_status','provider_checked_at']){
+    if(!deliveryColumns.has(column))db.exec(`ALTER TABLE autoposting_deliveries ADD COLUMN ${column} TEXT`);
+  }
   const iso=()=>new Date(now()).toISOString();
   function transaction(work){db.exec('BEGIN IMMEDIATE');try{const result=work();db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');throw error;}}
   function rowFor(id,code) {
@@ -31,7 +35,8 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
     return {id:row.id,companyCode:owner.code.toLowerCase(),revision:row.revision,status:row.status,title:row.title,text:row.text,
       mediaUrls:JSON.parse(row.media_urls),platformIds:JSON.parse(row.platform_ids),scheduledAt:row.scheduled_at,timezone:row.timezone,
       profileRevision:row.profile_revision,createdAt:row.created_at,updatedAt:row.updated_at,lastErrorCode:row.last_error_code,
-      deliveries:db.prepare(`SELECT channel_id channelId,status,external_id externalId,url,error_code errorCode,finished_at finishedAt
+      deliveries:db.prepare(`SELECT channel_id channelId,status,external_id externalId,url,error_code errorCode,finished_at finishedAt,
+        provider_post_id providerPostId,provider_status providerStatus,provider_checked_at providerCheckedAt
         FROM autoposting_deliveries WHERE post_id=? ORDER BY channel_id`).all(row.id)};
   }
   function invalidate(code) {
@@ -121,8 +126,41 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
     db.prepare("UPDATE autoposting_posts SET status='needs_review',last_error_code=?,revision=revision+1,updated_at=? WHERE id=? AND status IN ('publishing','scheduled')")
       .run(code,iso(),id);
   }
+  async function reconcile(id,code,body) {
+    object(body,['revision']);revision(body.revision);
+    const {row}=rowFor(id,code);
+    if(row.revision!==body.revision)fail(409,'Публикация уже изменена','REVISION_CONFLICT');
+    const deliveries=db.prepare("SELECT * FROM autoposting_deliveries WHERE post_id=? AND provider_post_id IS NOT NULL AND status='needs_review'").all(row.id);
+    if(!transport.reconcile||!deliveries.length)fail(409,'Нет принятого задания, которое можно проверить без повторной отправки','PROVIDER_POST_REQUIRED');
+    for(const delivery of deliveries)await reconcileDelivery(row.id,code,delivery);
+    return get(id,code);
+  }
+  async function reconcileDelivery(postId,code,delivery) {
+    let result;
+    try {
+      result=await transport.reconcile({companyCode:code,channelId:delivery.channel_id,
+        channelRevision:delivery.channel_revision,providerPostId:delivery.provider_post_id});
+      if(!result||result.providerPostId!==delivery.provider_post_id||!['draft','scheduled','published','failed'].includes(result.providerStatus))throw Error('Invalid provider receipt');
+    } catch {
+      // A failed GET never permits a second POST and cannot erase the known job ID.
+      db.prepare("UPDATE autoposting_deliveries SET provider_checked_at=?,error_code='PROVIDER_CHECK_FAILED' WHERE post_id=? AND channel_id=? AND provider_post_id=? AND status='needs_review'")
+        .run(iso(),postId,delivery.channel_id,delivery.provider_post_id);return;
+    }
+    db.prepare("UPDATE autoposting_deliveries SET provider_status=?,provider_checked_at=?,error_code=? WHERE post_id=? AND channel_id=? AND provider_post_id=? AND status='needs_review'")
+      .run(result.providerStatus,iso(),result.errorCode||'PROVIDER_PENDING',postId,delivery.channel_id,delivery.provider_post_id);
+    db.prepare("UPDATE autoposting_posts SET last_error_code=?,revision=revision+1,updated_at=? WHERE id=? AND status='needs_review'")
+      .run(result.errorCode||'PROVIDER_PENDING',iso(),postId);
+  }
   let stopped=false,running=null;
   async function processDue() {
+    // Poll only known pending jobs. Unknown/timeout attempts cannot be reconciled by guessing text.
+    if(transport.reconcile&&!stopped){
+      const pending=db.prepare(`SELECT d.*,c.code FROM autoposting_deliveries d JOIN autoposting_posts p ON p.id=d.post_id
+        JOIN companies c ON c.id=p.company_id WHERE c.is_deleted=0 AND d.status='needs_review'
+        AND d.provider_post_id IS NOT NULL AND d.provider_status IN ('draft','scheduled')
+        AND (d.provider_checked_at IS NULL OR d.provider_checked_at<=?) LIMIT 5`).all(new Date(now()-60000).toISOString());
+      for(const delivery of pending){if(stopped)return;await reconcileDelivery(delivery.post_id,delivery.code,delivery);}
+    }
     // An expired attempt may already exist externally. Never resend it automatically.
     db.prepare("UPDATE autoposting_deliveries SET status='needs_review',error_code='PUBLICATION_UNCERTAIN' WHERE status='publishing' AND started_at<=?").run(now()-LEASE_MS);
     db.prepare("UPDATE autoposting_posts SET status='needs_review',last_error_code='PUBLICATION_UNCERTAIN',revision=revision+1,updated_at=? WHERE status='publishing' AND publishing_at<=?").run(iso(),now()-LEASE_MS);
@@ -154,8 +192,20 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
       if(information.get(due.code).revision!==due.profile_revision){review(due.id,'PROFILE_CHANGED');return;}
       if(!db.prepare("UPDATE autoposting_deliveries SET status='publishing',started_at=? WHERE post_id=? AND channel_id=? AND status='pending'").run(now(),due.id,delivery.channel_id).changes)continue;
       try{
-        const result=await transport.publish({companyCode:due.code.toLowerCase(),channelId:delivery.channel_id,
-          post:{...dto(due,company(db,due.code)),idempotencyKey:`synapse-post-${due.id}-${delivery.channel_id}`}});
+        const result=await transport.publish({companyCode:due.code.toLowerCase(),channelId:delivery.channel_id,channelRevision:delivery.channel_revision,
+          post:{...dto(due,company(db,due.code)),idempotencyKey:`synapse-post-${due.id}-${delivery.channel_id}`},
+          beforePublish:()=>{
+            const active=db.prepare('SELECT status,lease FROM autoposting_posts WHERE id=?').get(due.id);
+            if(stopped||active?.status!=='publishing'||active.lease!==lease||information.get(due.code).revision!==due.profile_revision)
+              throw Object.assign(Error('Publication changed before provider submission'),{ambiguous:false});
+          }});
+        if(result?.provider==='onlypult'){
+          if(typeof result.providerPostId!=='string'||!result.providerPostId||!['draft','scheduled','published','failed'].includes(result.providerStatus))throw Error('Invalid provider receipt');
+          db.prepare(`UPDATE autoposting_deliveries SET status='needs_review',provider_post_id=?,provider_status=?,provider_checked_at=?,error_code=?
+            WHERE post_id=? AND channel_id=? AND status='publishing'`).run(result.providerPostId,result.providerStatus,iso(),result.errorCode||'PROVIDER_PENDING',due.id,delivery.channel_id);
+          continue;
+        }
+        if(result?.status&&result.status!=='published')throw Error('Publication still pending');
         if(!result||typeof result.externalId!=='string'||!result.externalId)throw Error('Unconfirmed publication');
         db.prepare("UPDATE autoposting_deliveries SET status='published',external_id=?,url=?,finished_at=?,error_code=NULL WHERE post_id=? AND channel_id=? AND status='publishing'")
           .run(result.externalId.slice(0,500),result.url?url(result.url):null,iso(),due.id,delivery.channel_id);
@@ -169,11 +219,15 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
         logger.warn(`[crm] autoposting code=${code}`);return;
       }
     }
+    db.prepare(`UPDATE autoposting_posts SET status='needs_review',last_error_code=COALESCE((SELECT error_code FROM autoposting_deliveries
+      WHERE post_id=? AND status='needs_review' LIMIT 1),'PROVIDER_PENDING'),revision=revision+1,updated_at=?
+      WHERE id=? AND status='publishing' AND lease=? AND EXISTS(SELECT 1 FROM autoposting_deliveries WHERE post_id=? AND status='needs_review')`)
+      .run(due.id,iso(),due.id,lease,due.id);
     db.prepare("UPDATE autoposting_posts SET status='published',last_error_code=NULL,revision=revision+1,updated_at=? WHERE id=? AND status='publishing' AND lease=? AND NOT EXISTS(SELECT 1 FROM autoposting_deliveries WHERE post_id=? AND status<>'published')")
       .run(iso(),due.id,lease,due.id);
   }
   function drain(){if(stopped)return Promise.resolve();if(!running)running=processDue().finally(()=>running=null);return running;}
   function stop(){stopped=true;return running||Promise.resolve();}
-  return {get,list,create,update,schedule,cancel,drain,stop,invalidate};
+  return {get,list,create,update,schedule,cancel,reconcile,drain,stop,invalidate};
 }
 module.exports={createAutoposting,LEASE_MS};
