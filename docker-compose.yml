@@ -101,6 +101,8 @@ services:
       # Локальный обработчик Хью на компьютере владельца: хеш его ключа и компании, которые он обслуживает.
       HUGH_LOCAL_WORKER_KEY_SHA256: ${HUGH_LOCAL_WORKER_KEY_SHA256:-}
       HUGH_LOCAL_WORKER_COMPANIES: ${HUGH_LOCAL_WORKER_COMPANIES:-}
+      # Числовой ID бота (не секрет) для входа в чат проекта из Telegram Mini App. Токен бота сюда не передаётся.
+      TELEGRAM_BOT_ID: ${TELEGRAM_BOT_ID:-}
       ALLOWED_ORIGINS: ${CONTENT_ALLOWED_ORIGINS:-}
     expose:
       - "8080"

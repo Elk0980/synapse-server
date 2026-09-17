@@ -10,6 +10,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { COMPANIES } = require('./auth-store');
 const { createLocalWorker } = require('./project-chat-local-worker');
+const { createProjectChatMiniApp } = require('./project-chat-miniapp');
 
 const MAX_ATTACHMENT = 8 * 1024 * 1024;
 const MESSAGE_PAGE = 100;
@@ -46,7 +47,7 @@ const integer = (value, optional = false) => {
 const shortText = (value, max) => String(value ?? '').replace(/[\r\n\t]+/g, ' ').slice(0, max);
 
 function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl = '', chatApiKey = '',
-  requireSession, requireCsrf, sendJson, readBody, localWorker: localConfig = {},
+  requireSession, requireCsrf, sendJson, readBody, localWorker: localConfig = {}, miniApp: miniConfig = {},
   fetchImpl = (...args) => globalThis.fetch(...args), statusTtl = RUNTIME_STATUS_TTL }) {
   const storage = path.resolve(assetsDir, 'project-chat');
   fs.mkdirSync(storage, { recursive: true });
@@ -122,6 +123,10 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     insertMessage: (args) => insertMessage(args), buildPayload: (job) => buildPayload(job),
     retryAfterSeconds, limitMessage, cleanText, messageLimit: MESSAGE_LIMIT, aiAttempts: AI_ATTEMPTS });
   const serverScope = localWorker.scope.exclude, localCodes = localWorker.scope.params;
+  /* Telegram Mini App: вход по подписи Telegram и узкая сессия участника для этой комнаты.
+     Членство проверяется теми же assigned/isMember, что и в кабинете. */
+  const miniApp = createProjectChatMiniApp({ db, authStore, ...miniConfig, tx, sendJson,
+    assigned: (user, code) => assigned(user, code), isMember: (user, code) => isMember(user, code) });
   function validCompany(code) {
     if (!Object.hasOwn(COMPANIES, code)) fail(404, 'Проект не найден');
     return code;
@@ -147,6 +152,16 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   }
   function access(request, code, write = false, ownerOnly = false) {
     validCompany(code);
+    // Room-сессия Mini App: членство — по настоящему аккаунту, права — всегда участника,
+    // владельческие маршруты закрыты даже владельцу. Cookie кабинета при этом не читается,
+    // поэтому поддельный или отозванный токен не получает запасного входа через неё.
+    const room = miniApp.roomSession(request);
+    if (room) {
+      if (ownerOnly) fail(403, 'Это действие доступно только в кабинете владельца');
+      if (!assigned(room.user, code) || !isMember(room.user, code)) fail(403, 'Нет доступа к чату проекта');
+      ensureRoom(code);
+      return { ...room.user, role: 'member', roomSession: true };
+    }
     const session = requireSession(request);
     // Перечитываем учётную запись на каждый запрос: отзыв доступа действует и на выданные сессии.
     const user = authStore.getById(session.user.id);
@@ -487,11 +502,19 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     if (!match) return false;
     const code = match[1], suffix = match[2], method = request.method;
     const write = !['GET', 'HEAD'].includes(method);
-    const user = access(request, code, write, ['/members', '/candidates', '/settings', '/retry-ai'].includes(suffix));
+    const user = access(request, code, write, /^\/(?:members|candidates|settings|retry-ai|telegram-links(?:\/\d{1,20})?)$/.test(suffix));
     const reply = (status, data) => { sendJson(response, status, data, { 'cache-control': 'no-store' }); return true; };
     const page = { before: url.searchParams.get('before'), limit: url.searchParams.get('limit') };
     if (!suffix && method === 'GET') return reply(200, await snapshot(code, user, page));
     if (suffix === '/messages' && method === 'GET') return reply(200, listMessages(code, page));
+    // Привязки Telegram участников этой комнаты: только владелец из кабинета, только к действующему участнику.
+    if (suffix === '/telegram-links' && method === 'GET') return reply(200, miniApp.listLinks(code));
+    if (suffix === '/telegram-links' && method === 'POST') {
+      const body = await readBody(request); access(request, code, true, true);
+      return reply(201, miniApp.createLink(code, body, user));
+    }
+    const unlink = suffix.match(/^\/telegram-links\/(\d{1,20})$/);
+    if (unlink && method === 'DELETE') { access(request, code, true, true); return reply(200, miniApp.deleteLink(code, unlink[1])); }
     if (suffix === '/candidates' && method === 'GET') {
       return reply(200, { candidates: authStore.list().filter(u => assigned(u, code)).map(memberJSON) });
     }
@@ -776,7 +799,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   }
   function stopWorker() { clearInterval(timer); timer = null; }
   const bridge = { getBinding, migrateBinding, receiveTelegram, storeAttachment, readAttachment, pendingTelegram, acknowledgeTelegram };
-  return { handle, bridge, ...bridge, snapshot, listMessages, requeueAI, runtimeStatus, processAIJobs, startWorker, stopWorker, localWorker };
+  return { handle, bridge, ...bridge, snapshot, listMessages, requeueAI, runtimeStatus, processAIJobs, startWorker, stopWorker, localWorker, miniApp };
 }
 
 module.exports = { createProjectChat, MAX_ATTACHMENT, MESSAGE_PAGE };

@@ -1,0 +1,23 @@
+/* Telegram Mini App чата проекта: значения по умолчанию для переменных project-chat.css,
+   которые в кабинете задаёт common.css; тема Telegram переопределяет их через miniapp-host.js. */
+:root{--surface:#ffffff;--surface-soft:#f3f5f8;--text:#111318;--muted:#6b7280;--accent:#2f7de1;--line:#e2e6ec;--red:#d64545;--ma-viewport:100dvh;--ma-safe-top:0px;--ma-safe-right:0px;--ma-safe-bottom:0px;--ma-safe-left:0px}
+:root[data-theme=dark]{--surface:#171c24;--surface-soft:#1f2630;--text:#eef1f5;--muted:#9aa4b2;--accent:#9fd4ff;--line:#2c3540;--red:#f18383}
+html,body{margin:0;background:var(--surface);color:var(--text);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+.ma{box-sizing:border-box;min-height:var(--ma-viewport);padding:calc(var(--ma-safe-top) + 8px) calc(var(--ma-safe-right) + 10px) calc(var(--ma-safe-bottom) + 8px) calc(var(--ma-safe-left) + 10px);max-width:960px;margin:0 auto}
+.ma-screen{padding:24px 6px;max-width:520px;margin:0 auto}
+.ma-screen h1{font-size:1.25rem;margin:0 0 14px}
+.ma-screen p{margin:10px 0;line-height:1.5}
+.ma-muted{color:var(--muted);font-size:.9rem}
+.ma-code{font-size:2rem;font-weight:700;letter-spacing:.18em;padding:14px 18px;border:1px dashed var(--line);border-radius:12px;text-align:center;background:var(--surface-soft);user-select:all;-webkit-user-select:all}
+.ma-list{list-style:none;padding:0;margin:0;display:grid;gap:10px}
+.ma-button{min-height:44px;width:100%;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface-soft);color:inherit;font:inherit;cursor:pointer}
+/* Комната: шапка и вкладки кабинета в Telegram не нужны, высота ленты идёт от окна Telegram. */
+.ma-room .content-header h1{font-size:1.1rem;margin:4px 0 8px}
+.ma-room .pc-tabs{display:none}
+.ma-room .pc-notice{margin:4px 0}
+.ma-room .pc-layout{grid-template-columns:minmax(0,1fr);gap:12px}
+.ma-room .pc-conversation{height:calc(var(--ma-viewport) - var(--ma-safe-top) - var(--ma-safe-bottom) - 96px);min-height:360px}
+.ma-room .pc-project{width:auto}
+.ma-room .pc-message{max-width:100%;box-sizing:border-box}
+.ma-room .pc-compose textarea{font-size:16px}
+.ma-room .pc-dialog{width:min(560px,calc(100vw - 20px));max-height:calc(var(--ma-viewport) - 24px)}
