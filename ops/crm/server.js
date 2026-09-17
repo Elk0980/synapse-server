@@ -18,6 +18,8 @@ const { createAutoposting } = require('./autoposting');
 const { createAutopostingTransport } = require('./autoposting-transport');
 const { createStudioJourney, createStudioJourneyHandler } = require('./studio-journey');
 const { createStudioContentPlan } = require('./studio-content-plan');
+const { createVkCommunity } = require('./vk-community');
+const { createVkCommunityHandler } = require('./vk-community-http');
 const { createCompanyInformationCheck } = require('./company-information-check');
 const { createDealOrders } = require('./deal-orders');
 
@@ -574,6 +576,8 @@ const autoposting = createAutoposting(db, {information: companyInformation, tran
 const studioJourney = createStudioJourney(db);
 const studioContentPlan = createStudioContentPlan(db,{autoposting,information:companyInformation});
 const handleStudioJourney = createStudioJourneyHandler({journey:studioJourney,companyModuleContext,readJson,send});
+const vkCommunity = createVkCommunity(db,{apiKey:API_KEY});
+const handleVkCommunity = createVkCommunityHandler({community:vkCommunity,companyModuleContext,readJson,send});
 function deliverLeadEmails() {
   return emailOutbox.drain().catch(() => {
     // Do not expose SMTP responses or contact details in service logs.
@@ -2477,6 +2481,7 @@ async function route(request, response) {
   }
 
   if (await handleStudioJourney(request,response,url,cors)) return;
+  if (await handleVkCommunity(request,response,url,cors)) return;
   if (url.pathname === '/company-information' || url.pathname === '/company-information/check') {
     const permission = request.method === 'GET' ? 'company-information.view' : 'company-information.edit';
     const {identity,company} = companyModuleContext(request,url.searchParams.get('companyCode'),permission);
