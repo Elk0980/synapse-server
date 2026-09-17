@@ -160,9 +160,9 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
   async function listProfiles(code, id) {
     const current = company(code), row = rowFor(current.code,id);
     if (!row || row.provider !== 'onlypult') fail('Сначала сохраните ключ Onlypult для этой площадки');
-    const profiles = await onlypult.listProfiles(row);
+    const {profiles,diagnostics} = await onlypult.inspectProfiles(row);
     if (rowFor(current.code,id)?.revision !== row.revision) throw failure('SETTINGS_CHANGED');
-    return {companyCode: current.code, channelId: id, revision: row.revision, profiles};
+    return {companyCode: current.code, channelId: id, revision: row.revision, profiles,diagnostics};
   }
   async function checkChannel(code, id) {
     const current = company(code), row = rowFor(current.code, id);

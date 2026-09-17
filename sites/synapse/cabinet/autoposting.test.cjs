@@ -197,6 +197,79 @@ test('Onlypult setup does not claim a saved key unless the settings response con
  }finally{f.close();}
 });
 
+test('Onlypult empty profile diagnostics distinguish no profiles from unmatched platforms and use Russian count forms',async()=>{
+ for(const [total,expected] of [[0,'не вернул профилей для этого ключа'],[1,'вернул 1 профиль,'],[2,'вернул 2 профиля,'],[5,'вернул 5 профилей,'],[11,'вернул 11 профилей,'],[21,'вернул 21 профиль,']]){
+  const f=await fixture({override:call=>call.path.endsWith('/profiles')?{companyCode:call.code,profiles:[],diagnostics:{totalProfiles:total,platformCounts:total?[{platform:'vk_variant',count:total}]:[]}}:undefined});
+  try{await connectOnlypultKey(f);card(f).querySelector('[data-load-profiles]').click();await f.settle();
+   const status=f.node('autoposting-status').textContent;assert.ok(status.includes(expected),status);
+   if(total){assert.match(status,/для ВКонтакте подходящих профилей не найдено/);assert.ok(status.includes('Обозначения площадок: vk_variant — '+total));assert.doesNotMatch(status,/не вернул профилей для этого ключа/);}
+   else assert.doesNotMatch(status,/Обозначения площадок/);
+   assert.equal(card(f).querySelector('[data-channel-field=target]').options.length,1);assert.equal(card(f).querySelector('[data-channel-field=enabled]').disabled,true);
+   assert.equal(f.calls.filter(call=>call.path.endsWith('/profiles')).length,1);assert.equal(f.calls.some(call=>call.path.endsWith('/schedule')),false);
+  }finally{f.close();}
+ }
+});
+
+test('Onlypult empty Telegram results show the returned platform counts for the requested channel',async()=>{
+ const f=await fixture({override:call=>call.path.endsWith('/profiles')?{companyCode:call.code,profiles:[],diagnostics:{totalProfiles:3,platformCounts:[{platform:'vk',count:2},{platform:'unknown',count:1}]}}:undefined});
+ try{channelInput(f,'provider','onlypult',{id:'telegram'});channelInput(f,'token','op_'+'c'.repeat(64),{id:'telegram',event:'input'});card(f,'telegram').querySelector('button[type=submit]').click();await f.settle();
+  card(f,'telegram').querySelector('[data-load-profiles]').click();await f.settle();
+  assert.match(f.node('autoposting-status').textContent,/вернул 3 профиля, но для Telegram подходящих профилей не найдено/);
+  assert.match(f.node('autoposting-status').textContent,/vk — 2, unknown — 1/);
+  assert.equal(f.calls.at(-1).path,'/content/crm/autoposting/settings/telegram/profiles');
+ }finally{f.close();}
+});
+
+test('Onlypult missing or invalid diagnostics keep an empty response message neutral',async()=>{
+ for(const diagnostics of [undefined,{totalProfiles:'0'},{totalProfiles:-1},{totalProfiles:1001}]){
+  const f=await fixture({override:call=>call.path.endsWith('/profiles')?{companyCode:call.code,profiles:[],diagnostics}:undefined});
+  try{await connectOnlypultKey(f);card(f).querySelector('[data-load-profiles]').click();await f.settle();
+   assert.match(f.node('autoposting-status').textContent,/В ответе Onlypult нет подходящих профилей/);
+   assert.doesNotMatch(f.node('autoposting-status').textContent,/не вернул профилей для этого ключа|вернул 0|В Onlypult нет/);
+   assert.equal(card(f).querySelector('[data-profile-diagnostics]').hidden,true);
+  }finally{f.close();}
+ }
+});
+
+test('Onlypult technical diagnostics show only safe shape types and field names and clear on company switch',async()=>{
+ const diagnostics={totalProfiles:2,platformCounts:[{platform:'vk',count:2}],profileShapes:[{idType:'number',nameType:'string',statusType:'number',platformType:'undefined',count:1,fieldNames:['id','name','status','network_type']}],otherShapesCount:1};
+ let release;const f=await fixture({override:call=>call.path.endsWith('/profiles')?{companyCode:call.code,profiles:[],diagnostics}:call.code==='avokado'&&call.path.endsWith('/posts')?new Promise(resolve=>{release=resolve;}):undefined});
+ try{await connectOnlypultKey(f);card(f).querySelector('[data-load-profiles]').click();await f.settle();
+  const details=card(f).querySelector('[data-profile-diagnostics]');assert.equal(details.hidden,false);assert.equal(details.open,false);
+  assert.match(details.textContent,/Технические сведения профилей/);assert.match(details.textContent,/id: number; name: string; status: number; platform: undefined/);
+  assert.match(details.textContent,/Поля: id, name, status, network_type/);assert.match(details.textContent,/Профили с другой структурой: 1/);
+  assert.equal(details.querySelectorAll('input,button').length,0);
+  const switching=f.views.autoposting.onProjectChange({...f.ctx,selectedProjectId:'avokado'});await f.settle();
+  assert.equal(f.d.body.textContent.includes('network_type'),false);assert.equal(f.node('autoposting-channels').querySelector('[data-profile-diagnostics]'),null);
+  release({companyCode:'avokado',posts:[]});await switching;
+  assert.equal(f.d.body.textContent.includes('network_type'),false);assert.equal(f.node('autoposting-company').value,'avokado');
+ }finally{f.close();}
+});
+
+test('Onlypult malicious diagnostics never render markup or raw profile values',async()=>{
+ const diagnostics={totalProfiles:1,platformCounts:[{platform:'<img src=x onerror=alert(1)>',count:1},{platform:'vk',count:'<script>attack</script>'}],profileShapes:[
+  {idType:'number',nameType:'string',statusType:'null',platformType:'undefined',count:1,fieldNames:['network_type','<img src=x>','op_'+'d'.repeat(64)],id:'RAW_PRIVATE_ID',name:'RAW_PRIVATE_NAME',status:'RAW_PRIVATE_STATUS'},
+  {idType:'<script>attack</script>',nameType:'string',statusType:'number',platformType:'string',count:1}
+ ],raw:'RAW_SECRET',otherShapesCount:'<script>attack</script>'};
+ const f=await fixture({override:call=>call.path.endsWith('/profiles')?{companyCode:call.code,profiles:[],diagnostics}:undefined});
+ try{await connectOnlypultKey(f);card(f).querySelector('[data-load-profiles]').click();await f.settle();
+  assert.match(f.node('autoposting-status').textContent,/unknown — 1/);assert.equal(card(f).querySelectorAll('img,script').length,0);
+  const details=card(f).querySelector('[data-profile-diagnostics]');assert.equal(details.hidden,false);assert.match(details.textContent,/Поля: network_type/);
+  assert.doesNotMatch(f.d.body.textContent,/RAW_PRIVATE|RAW_SECRET|<img|<script>|onerror|op_d{64}/);assert.equal(details.querySelectorAll('p').length,1);
+  assert.equal(f.w.localStorage.length,0);assert.equal(f.w.sessionStorage.length,0);
+  await f.views.autoposting.render(f.node('view'),{...f.ctx,identity:{...f.ctx.identity,role:'editor',permissions:['autoposting.view','autoposting.edit']}});
+  assert.equal(card(f).querySelector('[data-profile-diagnostics]'),null);
+ }finally{f.close();}
+});
+
+test('Onlypult nonempty profiles keep the selection flow without showing diagnostics',async()=>{
+ const f=await fixture({override:call=>call.path.endsWith('/profiles')?{companyCode:call.code,profiles:[{id:'alvi-vk',name:'Profile',platform:'vk',status:'active'}],diagnostics:{totalProfiles:1,platformCounts:[{platform:'vk',count:1}],profileShapes:[{idType:'string',nameType:'string',statusType:'string',platformType:'string',count:1}]}}:undefined});
+ try{await connectOnlypultKey(f);card(f).querySelector('[data-load-profiles]').click();await f.settle();
+  assert.equal(f.node('autoposting-status').textContent,'Выберите профиль этой компании, сохраните и проверьте доступ.');assert.equal(card(f).querySelector('[data-profile-diagnostics]').hidden,true);
+  channelInput(f,'target','alvi-vk');assert.equal(card(f).querySelector('[data-channel-field=enabled]').disabled,false);
+ }finally{f.close();}
+});
+
 test('Onlypult profile labels are escaped and a response for another company cannot populate the selector',async()=>{
  let wrong=true;const f=await fixture({override:call=>call.path.endsWith('/profiles')?{companyCode:wrong?'avokado':call.code,profiles:[{id:'exact-vk-id',name:'<img src=x onerror=alert(1)>',platform:'vk',status:'active'}]}:undefined});
  try{await connectOnlypultKey(f);card(f).querySelector('[data-load-profiles]').click();await f.settle();
