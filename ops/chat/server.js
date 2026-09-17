@@ -12,6 +12,7 @@ const {
 } = require("./quiet-hours");
 const { detectTask } = require("./task-intake");
 const { bindingError, parseBindingCommand } = require("./telegram-binding");
+const { createProjectChatBridge } = require("./project-chat-bridge");
 
 const SCRIPT = {
   greeting:
@@ -56,6 +57,7 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || "";
 const TELEGRAM_OWNER_ID = process.env.TELEGRAM_OWNER_ID || "";
 const TELEGRAM_POLLING = process.env.TELEGRAM_POLLING === "1";
+const PROJECT_CONTENT_URL = (process.env.PROJECT_CONTENT_URL || "").replace(/\/$/, "");
 const CLIENT_BOARD_SECRET = process.env.CLIENT_BOARD_SECRET || "";
 const CONSENT_SERVICE_KEY = process.env.CONSENT_SERVICE_KEY || "";
 const CLIENT_BOARD_BASE_URL = (process.env.CLIENT_BOARD_BASE_URL || "https://{company}.synapsebusiness.ru/zadachi.html").trim();
@@ -763,7 +765,7 @@ async function handlePrivateTelegram(update) {
   return { ok: true };
 }
 
-async function handleTelegramUpdate(update) {
+async function handleLegacyTelegramUpdate(update) {
   const privateResult = await handlePrivateTelegram(update);
   if (privateResult !== null) return privateResult;
   const message = update.message;
@@ -901,6 +903,18 @@ async function handleTelegramUpdate(update) {
   return { ok: true };
 }
 
+const projectBridge = createProjectChatBridge({
+  db, contentUrl: PROJECT_CONTENT_URL, apiKey: API_KEY,
+  telegramToken: TELEGRAM_BOT_TOKEN, legacyHandler: handleLegacyTelegramUpdate,
+  // Тихие часы у общего чата проекта те же, что у остальных уведомлений бота.
+  quietHours: TELEGRAM_QUIET_HOURS,
+});
+
+async function handleTelegramUpdate(update) {
+  if (projectBridge.enqueue(update)) return { ok: true, queued: true };
+  return handleLegacyTelegramUpdate(update);
+}
+
 async function handleWebhook(request, response, origin) {
   if (
     !TELEGRAM_WEBHOOK_SECRET ||
@@ -924,7 +938,7 @@ async function pollTelegramUpdates() {
     console.error("Не удалось удалить Telegram webhook перед опросом:", error.message);
   }
 
-  let offset;
+  let offset = projectBridge.getOffset();
   while (true) {
     try {
       const result = await telegramRequest("getUpdates", {
@@ -942,9 +956,13 @@ async function pollTelegramUpdates() {
             `Ошибка обработки Telegram update ${update.update_id}:`,
             error.message,
           );
+          // Do not acknowledge a failed update to Telegram. Group updates are
+          // acknowledged only after the durable project inbox accepted them.
+          break;
         }
         if (Number.isSafeInteger(update.update_id)) {
           offset = update.update_id + 1;
+          projectBridge.saveOffset(offset);
         }
       }
     } catch (error) {
@@ -956,6 +974,22 @@ async function pollTelegramUpdates() {
 
 async function adminRoutes(request, response, url, origin) {
   requireAdmin(request);
+  // Диагностика общего чата проекта: отклонённые комнатой события Telegram и их ручной возврат.
+  if (request.method === "GET" && url.pathname === "/admin/project-chat/inbox") {
+    return send(response, 200, {
+      failed: projectBridge.failedInbox().map((row) => ({
+        updateId: Number(row.update_id), attempts: Number(row.attempts), error: row.error || "",
+      })),
+      // Отправки с известным исходом, который ещё не принят комнатой.
+      pendingAcks: projectBridge.pendingAcks(),
+    }, origin);
+  }
+  if (request.method === "POST" && url.pathname === "/admin/project-chat/inbox/retry") {
+    const body = await readJson(request);
+    const updateId = Number(body.updateId);
+    if (!Number.isSafeInteger(updateId)) fail(400, "Некорректный номер Telegram-события");
+    return send(response, 200, projectBridge.retryInbox(updateId), origin);
+  }
   if (request.method === "GET" && url.pathname === "/admin/conversations") {
     const company = url.searchParams.get("company");
     if (company && !COMPANIES.has(company)) fail(400, "Неизвестная компания");
@@ -1343,11 +1377,14 @@ server.listen(PORT, () =>
   console.log(`Чат слушает порт ${PORT}; база: ${DATABASE_PATH}`),
 );
 if (TELEGRAM_POLLING) void pollTelegramUpdates();
+if (PROJECT_CONTENT_URL && API_KEY) projectBridge.start();
+else console.warn("Мост общего чата проекта выключен: нужны PROJECT_CONTENT_URL и CHAT_API_KEY");
 const clientNotificationTimer = setInterval(() => void processClientNotifications(), 60_000);
 clientNotificationTimer.unref();
 void processClientNotifications();
 
 function shutdown() {
+  projectBridge.stop();
   server.close(() => {
     db.close();
     process.exit(0);

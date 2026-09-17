@@ -1,0 +1,120 @@
+name: project-chat-check
+
+# Проверка общего чата Хью: тесты сервисов и кабинета, сборка приватного рантайма
+# вместе с настоящим доказательством изоляции инструментов, разбор docker compose.
+#
+# Никакого развёртывания, никаких обращений к подписке и внешним моделям.
+# В сборке используется локальный mock-провайдер на loopback и тестовый ключ,
+# настоящие секреты сюда не попадают: значения ниже — заведомые заглушки.
+
+on:
+  push:
+    paths:
+      - 'ops/chat/**'
+      - 'ops/content/**'
+      - 'ops/dev/**'
+      - 'ops/hugh-runtime/**'
+      - 'sites/synapse/cabinet/**'
+      - 'sites/synapse/cabinet.html'
+      - 'docker-compose.yml'
+      - '.github/workflows/project-chat-check.yml'
+  pull_request:
+    paths:
+      - 'ops/chat/**'
+      - 'ops/content/**'
+      - 'ops/dev/**'
+      - 'ops/hugh-runtime/**'
+      - 'sites/synapse/cabinet/**'
+      - 'sites/synapse/cabinet.html'
+      - 'docker-compose.yml'
+      - '.github/workflows/project-chat-check.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: project-chat-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Получить исходники
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # jsdom ставится во временный каталог: файлы зависимостей проекта не меняются.
+      - name: Подготовить jsdom для тестов интерфейса
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/testdeps"
+          npm install --prefix "$RUNNER_TEMP/testdeps" --no-audit --no-fund --loglevel=error jsdom
+          echo "NODE_PATH=$RUNNER_TEMP/testdeps/node_modules" >> "$GITHUB_ENV"
+
+      - name: Проверить, что файлы зависимостей проекта не изменились
+        run: git diff --exit-code --stat
+
+      # Пути перечисляются явными шаблонами. Каталог в качестве аргумента не годится:
+      # для ops/hugh-runtime Node берёт main из package.json и запускает сам сервис.
+      - name: Тесты приватного рантайма Hugh
+        timeout-minutes: 10
+        run: node --test ops/hugh-runtime/*.test.js
+
+      - name: Тесты сервиса контента
+        timeout-minutes: 10
+        run: node --test ops/content/*.test.js
+
+      - name: Тесты чат-сервиса
+        timeout-minutes: 10
+        run: node --test ops/chat/*.test.js
+
+      # Только кабинет: здесь лежат тесты Хью, оболочки и интеграции VK, затронутые общим чатом.
+      # Тесты в корне sites/synapse относятся к редакторам публичных сайтов и к чату отношения
+      # не имеют; на них есть два расхождения, воспроизводимые на origin/main до этой ветки,
+      # поэтому они в область проверки общего чата не входят и здесь не правятся.
+      - name: Тесты кабинета
+        timeout-minutes: 10
+        run: node --test sites/synapse/cabinet/*.test.cjs
+
+      - name: Тесты предпросмотра общего чата
+        timeout-minutes: 5
+        run: node --test ops/dev/project-chat-preview.test.cjs
+
+      # Сборка образа сама собирает доверенный каталог моделей из встроенного набора
+      # закреплённого бинаря и прогоняет проверку изоляции с локальным mock-провайдером.
+      # Непройденная проверка останавливает сборку — значит, и эту задачу.
+      - name: Собрать образ рантайма с доказательством изоляции
+        timeout-minutes: 20
+        run: docker build --progress=plain --tag hugh-runtime:check ops/hugh-runtime
+
+      - name: Убедиться, что доказательство попало в образ
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint node hugh-runtime:check -e "const p = require('/app/build/tool-isolation-proof.json'); const c = require('/app/build/restricted-models.json'); if (p.observedTools.length !== 0) throw new Error('tools не пуст'); if (p.injectedToolCallsExecuted !== false) throw new Error('инъекция выполнилась'); if (p.canaryIntact !== true) throw new Error('канарейка повреждена'); if (c.models.length !== 1) throw new Error('в каталоге не одна модель'); console.log('proof ok', p.codexVersion, c.models[0].slug, p.fingerprint);"
+
+      - name: Убедиться, что доказательство неизменяемо для рабочего пользователя
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint node hugh-runtime:check -e "const fs = require('fs'); let blocked = false; try { fs.writeFileSync('/app/build/tool-isolation-proof.json', 'x'); } catch (error) { blocked = true; console.log('неизменяемо:', error.code); } if (!blocked) throw new Error('доказательство перезаписывается рабочим пользователем');"
+
+      # Только разбор файла: ничего не запускается и не публикуется.
+      - name: Разобрать docker compose
+        timeout-minutes: 3
+        env:
+          CHAT_API_KEY: ci-dummy-chat-key
+          CHAT_ADMIN_KEY: ci-dummy-chat-admin-key
+          CRM_API_KEY: ci-dummy-crm-key
+          CONTENT_API_KEY: ci-dummy-content-key
+          TELEGRAM_WEBHOOK_SECRET: ci-dummy-telegram-secret
+        run: docker compose config --quiet

@@ -1,0 +1,4 @@
+*.test.js
+README.md
+node_modules/
+build/

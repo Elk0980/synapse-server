@@ -13,6 +13,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { createAuthStore, COMPANIES, PERMISSIONS, DEPENDENCIES, PRICE_CLIENT_PRESET } = require('./auth-store');
 const { createSiteStore } = require('./site-store');
 const { createHughSettingsStore } = require('./hugh-settings-store');
+const { createProjectChat } = require('./project-chat');
 const { hashPassword, verifyPassword } = require('./passwords');
 const { createCompanyLinksReader } = require('./company-links-reader');
 const { createEmailUnsubscribeProxy, TOKEN: EMAIL_UNSUBSCRIBE_TOKEN } = require('./email-unsubscribe-proxy');
@@ -43,8 +44,28 @@ const readCompanyLinks = createCompanyLinksReader({crmUrl: CRM_URL, apiKey: CRM_
 const publicEmailUnsubscribe = createEmailUnsubscribeProxy({crmUrl: CRM_URL, apiKey: CRM_API_KEY});
 const CHAT_URL = (process.env.CHAT_URL || 'http://chat:8080').replace(/\/$/, '');
 const CHAT_API_KEY = (process.env.CHAT_API_KEY || '').trim();
+const HUGH_RUNTIME_URL = (process.env.HUGH_RUNTIME_URL || 'http://hugh-runtime:8080').replace(/\/$/, '');
 const CRM_IDENTITY_HEADER = 'x-synapse-crm-identity';
 const loginFailures = new Map();
+
+/* Ответ службы Хью для кабинета: только известные поля и короткие строки,
+   без произвольного текста стороннего сервера и без ключей. */
+function sanitizeRuntime(payload) {
+  const data = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+  const text = (value, limit) => String(value ?? '').replace(/[\r\n\t]+/g, ' ').slice(0, limit);
+  const link = String(data.loginUrl || data.verificationUrl || '');
+  return {
+    connected: data.connected === true,
+    authenticated: data.authenticated === true,
+    configured: true,
+    state: text(data.state, 40) || 'unknown',
+    provider: text(data.provider, 40) || 'codex',
+    model: text(data.model, 60),
+    loginUrl: /^https:\/\/(?:[\w-]+\.)*(?:openai|chatgpt)\.com\/[^\s"'<>]*$/.test(link) && link.length <= 300 ? link : '',
+    userCode: /^[A-Za-z0-9-]{1,32}$/.test(String(data.userCode || '')) ? String(data.userCode) : '',
+    error: text(data.error, 200),
+  };
+}
 
 function logAuthorizationDenial(request, error) {
   const session = sessionData(request);
@@ -131,6 +152,9 @@ db.exec(`
 `);
 const authStore = createAuthStore(db, process.env.AUTH_USERS || '');
 const hughSettingsStore = createHughSettingsStore(db);
+const projectChat = createProjectChat({ db, authStore, assetsDir: ASSETS_DIR,
+  runnerUrl: HUGH_RUNTIME_URL, chatUrl: CHAT_URL, chatApiKey: CHAT_API_KEY,
+  requireSession, requireCsrf, sendJson: send, readBody: readJson });
 
 const latestStmt = db.prepare('SELECT * FROM documents WHERE key = ? ORDER BY version DESC LIMIT 1');
 const byVersionStmt = db.prepare('SELECT * FROM documents WHERE key = ? AND version = ?');
@@ -360,7 +384,7 @@ function corsHeaders(request) {
     return {
       'access-control-allow-origin': origin,
       'access-control-allow-methods': 'GET, PUT, POST, PATCH, DELETE, OPTIONS',
-      'access-control-allow-headers': 'Content-Type, X-API-Key, X-Author, X-Filename, X-CSRF-Token',
+      'access-control-allow-headers': 'Content-Type, X-API-Key, X-Author, X-Filename, X-File-Name, X-CSRF-Token',
       'vary': 'Origin',
     };
   }
@@ -592,6 +616,64 @@ const server = http.createServer(async (request, response) => {
     }
     const url = new URL(request.url, 'http://localhost');
     const parts = url.pathname.split('/').filter(Boolean);
+
+    if (url.pathname.startsWith('/content/internal/project-chat/')) {
+      const supplied = String(request.headers['x-api-key'] || '');
+      if (!CHAT_API_KEY || Buffer.byteLength(supplied) !== Buffer.byteLength(CHAT_API_KEY) ||
+          !crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(CHAT_API_KEY))) fail(401,'Нет доступа');
+      const route = url.pathname.slice('/content/internal/project-chat'.length);
+      if (route === '/binding' && request.method === 'GET') {
+        return reply(200,{room:projectChat.bridge.getBinding(url.searchParams.get('chatId'))});
+      }
+      if (route === '/outbox' && request.method === 'GET') return reply(200,{jobs:projectChat.bridge.pendingTelegram()});
+      if (route === '/attachment' && request.method === 'GET') {
+        const file = projectChat.bridge.readAttachment(url.searchParams.get('id'),url.searchParams.get('companyCode'));
+        return reply(200,{name:file.name,mime:file.mime,base64:file.bytes.toString('base64')});
+      }
+      if (route === '/migrate' && request.method === 'POST') {
+        const body=await readJson(request);
+        return reply(200,projectChat.bridge.migrateBinding({chatId:body.chatId,newChatId:body.newChatId}));
+      }
+      if (route === '/receive' && request.method === 'POST') {
+        let body;
+        try { body=JSON.parse((await readRaw(request,12*1024*1024)).toString('utf8')); } catch { fail(400,'Некорректное событие'); }
+        const chatId=String(body.chatId || ''), messageId=String(body.messageId || '');
+        if (!/^-?\d+$/.test(chatId) || !/^\d+$/.test(messageId)) fail(400,'Некорректное событие');
+        const incoming=body.files || [];
+        if(!Array.isArray(incoming) || incoming.length>1) fail(400,'Слишком много вложений');
+        // Квитанция, вложения и сообщение сохраняются одной транзакцией внутри модуля комнаты.
+        const files=incoming.map(file=>{
+          if(typeof file.base64!=='string' || file.base64.length>11200000) fail(413,'Файл слишком большой');
+          return {name:file.name,mime:file.mime,bytes:Buffer.from(file.base64,'base64')};
+        });
+        return reply(200,projectChat.bridge.receiveTelegram({chatId,messageId,authorId:body.authorId,
+          authorName:body.authorName,text:body.text,files}));
+      }
+      if (route === '/acknowledge' && request.method === 'POST') {
+        const body=await readJson(request);
+        projectChat.bridge.acknowledgeTelegram(body.jobId,body);
+        return reply(200,{ok:true});
+      }
+      fail(404,'Маршрут не найден');
+    }
+    if (url.pathname.startsWith('/content/project-chat-runtime/')) {
+      const session=requireSession(request);
+      if(session.user.role!=='owner') fail(403,'Доступно только владельцу');
+      const route=url.pathname.slice('/content/project-chat-runtime'.length);
+      if(!((route==='/status' && request.method==='GET') || (route==='/login' && request.method==='POST'))) fail(404,'Маршрут не найден');
+      if(request.method==='POST') requireCsrf(request,session);
+      if(!CHAT_API_KEY) return reply(503,{state:'unconfigured',connected:false,configured:false,provider:'codex',
+        error:'Служба Хью не настроена'},{'cache-control':'no-store'});
+      try {
+        const upstream=await fetch(`${HUGH_RUNTIME_URL}${route}`,{method:request.method,
+          headers:{'content-type':'application/json','x-api-key':CHAT_API_KEY,authorization:`Bearer ${CHAT_API_KEY}`},
+          ...(request.method==='POST'?{body:'{}'}:{}),signal:AbortSignal.timeout(12000)});
+        // Наружу отдаём только известные поля: чужой ответ по этому адресу не станет эхом в кабинете.
+        return reply(upstream.status,sanitizeRuntime(await upstream.json().catch(()=>null)),{'cache-control':'no-store'});
+      } catch { return reply(503,{state:'unavailable',connected:false,configured:true,provider:'codex',
+        error:'Подключение Хью пока недоступно'},{'cache-control':'no-store'}); }
+    }
+    if (await projectChat.handle(request,response,url)) return;
 
     if (url.pathname === '/content/crm' || url.pathname.startsWith('/content/crm/')) {
       return await proxyCrm(request, response, url, cors);
@@ -917,4 +999,16 @@ const server = http.createServer(async (request, response) => {
 
 server.listen(PORT, () => {
   console.log(`content: слушает порт ${PORT}, база ${DATABASE_PATH}`);
+  projectChat.startWorker();
 });
+
+function shutdownContent() {
+  projectChat.stopWorker();
+  server.close(() => {
+    db.close();
+    process.exit(0);
+  });
+}
+
+process.on('SIGTERM', shutdownContent);
+process.on('SIGINT', shutdownContent);
