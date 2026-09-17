@@ -1,0 +1,30 @@
+.site-orders { display: grid; gap: 24px; width: min(100%, 960px); }
+.site-orders h2 { margin: 0 0 12px; }
+.site-orders__warning { margin: 0 0 12px; padding: 12px 14px; border-radius: 10px; background: #fff3e0; color: #7a4a00; font-weight: 600; }
+.site-orders__warning[hidden] { display: none; }
+[data-recipient-summary][data-state="missing"] { color: #8a2e2e; font-weight: 600; }
+[data-recipient-summary][data-state="verified"] { color: #2f6b3a; font-weight: 600; }
+.site-orders__form { display: grid; gap: 14px; margin-top: 14px; }
+.site-orders__form label { display: grid; gap: 6px; font-size: 15px; }
+.site-orders__form input { min-height: 44px; padding: 8px 12px; font: inherit; max-width: 420px; }
+.site-orders__actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.site-orders__actions button { min-height: 44px; }
+.site-orders__actions button[hidden] { display: none; }
+.site-orders__form [role="status"] { margin: 0; min-height: 1.4em; }
+.site-orders__hint { margin: 12px 0 0; color: var(--muted, #6b6f6a); font-size: 14px; line-height: 1.5; }
+.site-order { padding: 14px 0; border-top: 1px solid var(--line, #d3d7d2); display: grid; gap: 6px; }
+.site-order:first-child { border-top: 0; padding-top: 0; }
+.site-order__head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.site-order__status { padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; background: #eef0ec; }
+.site-order__status--notified { background: #e3f3e6; color: #2f6b3a; }
+.site-order__status--uncertain { background: #fff3e0; color: #7a4a00; }
+.site-order__status--failed { background: #fbe4e4; color: #8a2e2e; }
+.site-order__items { margin: 0; padding-left: 18px; }
+.site-order__total, .site-order__comment, .site-order__notify, .site-order__contact { margin: 0; }
+.site-order__notify { color: var(--muted, #6b6f6a); font-size: 14px; }
+.site-order__comment { white-space: pre-wrap; overflow-wrap: anywhere; }
+.site-order__renotify { justify-self: start; min-height: 40px; }
+.site-orders__more { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: 16px; }
+.site-orders__more button { min-height: 44px; }
+.site-orders__more button[hidden] { display: none; }
+.site-orders__more p { margin: 0; color: var(--muted, #6b6f6a); font-size: 14px; }

@@ -27,15 +27,20 @@
       tags: [...new Set([category.id, ...(aliases[category.id] || [])])]
     }))).filter(item => !selected || item.tags.includes(selected));
   }
-  function card(item) {
+  /* Карточка каталога — та же карточка прайса (price-render.js), с тегами раздела для фильтра.
+     Небезопасные адреса фото отбрасываются до рендера: остаётся заглушка. */
+  function card(item, render) {
+    const draw = typeof render === 'function' ? render : fallbackCard;
+    return draw({ ...item, photo: safeImage(item.photo) }, { extraClass: 'card', tags: item.tags });
+  }
+  /* Запасная разметка на случай отсутствия price-render.js: та же структура и классы. */
+  function fallbackCard(item, opts) {
     const image = safeImage(item.photo);
-    return `<article class="card" id="${esc(item.id)}" data-cat="${esc(item.tags.join(' '))}">
-      ${image ? `<img class="photo" src="${esc(image)}" alt="${esc(item.title)}" loading="lazy" decoding="async" width="800" height="1000">` : ''}
-      <div><h3>${esc(item.title)}</h3>${item.desc ? `<p>${esc(item.desc)}</p>` : ''}
-      <div class="product-purchase"><p class="price">${esc(item.price || 'Цена уточняется')}</p>
-      <a class="button product-telegram" href="https://t.me/palitralovee" target="_blank" rel="noopener">Написать в Telegram</a></div>
-      ${item.note ? `<p class="note">${esc(item.note)}</p>` : ''}
-      <a class="button outline" href="/#zayavka">Заказать под Ваш повод</a></div></article>`;
+    const priceText = String(item.price ?? '').trim();
+    const media = image
+      ? `<div class="product-media"><img class="price-card__photo photo" src="${esc(image)}" alt="${esc(item.title)}" loading="lazy" decoding="async" width="800" height="1000"></div>`
+      : '<div class="product-media product-media--empty" aria-hidden="true"><img src="/assets/img/logo-mark.svg" alt="" width="64" height="64" loading="lazy"></div>';
+    return `<article class="pc price-card product-card${opts.extraClass ? ' ' + esc(opts.extraClass) : ''}" id="${esc(item.id)}" data-id="${esc(item.id)}"${opts.tags ? ` data-cat="${esc(opts.tags.join(' '))}"` : ''}>${media}<div class="price-card__body"><h3 class="pc__title">${esc(item.title)}</h3>${item.desc ? `<p class="price-card__description">${esc(item.desc)}</p>` : ''}${item.note ? `<p class="note">${esc(item.note)}</p>` : ''}<div class="product-footer"><div class="product-purchase"><p class="pc__price price" data-price-known="${priceText ? 'true' : 'false'}">${priceText ? esc(priceText) : 'Цена уточняется'}</p><button class="button product-add" type="button" data-add data-id="${esc(item.id)}" data-title="${esc(item.title)}">В корзину</button></div><p class="product-links"><a class="product-telegram" href="https://t.me/palitralovee" target="_blank" rel="noopener">Канал в Telegram</a><a class="price-card__button" href="/#zayavka">Заказать под Ваш повод</a></p></div></div></article>`;
   }
   function schema(list, origin, pathname) {
     return { '@context': 'https://schema.org', '@type': 'ItemList', name: 'Каталог Palitra',
@@ -62,7 +67,8 @@
     const data = await win.PalitraPrice.load(['/api/price', '/data/price.json']);
     if (!data) return; // Keep the existing fallback if the service is unavailable.
     const list = entries(data, win.location.pathname);
-    container.innerHTML = list.length ? list.map(card).join('') : '<p>В этом разделе пока нет товаров.</p>';
+    const render = win.PalitraPrice.productCard;
+    container.innerHTML = list.length ? list.map(item => card(item, render)).join('') : '<p>В этом разделе пока нет товаров.</p>';
     doc.querySelectorAll('script[type="application/ld+json"]').forEach(script => {
       try { script.textContent = JSON.stringify(removeProductLists(JSON.parse(script.textContent))); } catch (_) {}
     });
@@ -84,5 +90,5 @@
     });
     updateSchema();
   }
-  return { entries, card, schema, removeProductLists, mount };
+  return { entries, card, fallbackCard, schema, removeProductLists, mount };
 }));

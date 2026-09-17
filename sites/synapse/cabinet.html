@@ -631,6 +631,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <button class="nav-category" type="button" aria-expanded="false" aria-controls="management-menu">Управление</button>
       <div class="subnav" id="management-menu" hidden>
       <a class="nav-link" id="settings-link" href="#settings" data-view-link="settings">Настройки компании</a>
+      <a class="nav-link" id="site-orders-link" href="#site-orders" data-view-link="site-orders" hidden>Заявки с сайта</a>
       <a class="nav-link" id="system-settings-link" href="#system-settings" data-view-link="system-settings" hidden>Настройки системы</a>
       <a class="nav-link" id="accounts-link" href="#accounts" data-view-link="accounts" hidden>Настройка аккаунтов</a>
       <a class="nav-link" href="#account" data-view-link="account">Аккаунт</a>
@@ -890,6 +891,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     <section class="view-panel" id="catalog-view" data-view="catalog" hidden></section>
     <section class="view-panel" id="finance-view" data-view="finance" hidden></section>
     <section class="view-panel" id="settings-view" data-view="settings" hidden></section>
+    <section class="view-panel" id="site-orders-view" data-view="site-orders" hidden></section>
     <section class="view-panel" id="system-settings-view" data-view="system-settings" hidden>
       <div class="content-header"><h1>Настройки системы</h1></div>
       <div class="card settings-email" id="settings-email" hidden>
@@ -1017,8 +1019,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   // project-chat.js загружается после hugh.js: общий чат проекта регистрирует вид «hugh»,
   // а hugh.js оставляет только личную переписку владельца.
   const cabinetAssets = ["home", "tasks", "company-information", "studio-journey", "leads", "deals", "clients", "chat", "hugh", "project-chat", "analytics",
-    "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "account", "trademarks", "campaigns", "autoposting", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
-  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat", "hugh", "project-chat", "settings", "trademarks", "sites", "campaigns", "company-information", "autoposting", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial"];
+    "ad-platforms", "hypotheses", "competitors", "calltracking", "sites", "settings", "site-orders", "account", "trademarks", "campaigns", "autoposting", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
+  const cabinetStyles = ["analytics", "ad-platforms", "deals", "home", "chat", "hugh", "project-chat", "settings", "site-orders", "trademarks", "sites", "campaigns", "company-information", "autoposting", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join(""));
@@ -1080,6 +1082,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     "vk-community": "ВКонтакте",
     "content-factory": "Контент завод",
     settings: "Настройки компании",
+    "site-orders": "Заявки с сайта",
     "system-settings": "Настройки системы",
     campaigns: "Рассылки",
     account: "Аккаунт",
@@ -1304,7 +1307,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const hasPermission = (permission) => identity?.role === "owner" ||
     identity?.permissions.includes(permission);
   const permittedView = (value) => {
-    if (["system-settings", "catalog", "finance", "vk-community"].includes(value)) return identity?.role === "owner";
+    if (["system-settings", "catalog", "finance", "vk-community", "site-orders"].includes(value)) return identity?.role === "owner";
     if (["company-information", "autoposting"].includes(value)) return identity?.role === "owner" || identity?.permissions?.includes(value + ".view");
     if (value === "campaigns") return identity?.role === "owner";
     if (!identity) return true;
@@ -1336,7 +1339,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     const analyticsViews = ["analytics-through", "ad-platforms", "hypotheses", "competitors", "calltracking"];
     const crmViews = ["crm", "deals", "clients", "chat"];
     const categoryId = ["catalog","finance"].includes(viewName) ? "finance-menu" : ["autoposting", "company-information", "content-factory", "campaigns", "vk-community"].includes(viewName) ? "marketing-menu" :
-      ["settings", "system-settings", "accounts", "account", "trademarks"].includes(viewName) ? "management-menu" : analyticsViews.includes(viewName) ? "analytics-menu" :
+      ["settings", "site-orders", "system-settings", "accounts", "account", "trademarks"].includes(viewName) ? "management-menu" : analyticsViews.includes(viewName) ? "analytics-menu" :
       viewName === "sites" ? "site-menu" : crmViews.includes(viewName) || viewName.startsWith("crm-")
         ? "crm-menu" : null;
     if (!categoryId) return;
@@ -1510,6 +1513,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       byId("content-factory-link").hidden = !permittedView("content-factory");
       byId("content-factory-view").hidden = !permittedView("content-factory");
       byId("settings-link").hidden = !permittedView("settings");
+      byId("site-orders-link").hidden = !permittedView("site-orders");
       byId("campaigns-link").hidden = !permittedView("campaigns");
       byId("accounts-link").hidden = !hasPermission("account.view");
       byId("hugh-link").hidden = !permittedView("hugh");

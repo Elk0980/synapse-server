@@ -463,6 +463,15 @@ palitra-love.synapsebusiness.ru {
     uri replace /api/assets/ /content/palitra/assets/
     reverse_proxy content:8080
   }
+  # Заявка с сайта (корзина и форма): сайт задаёт Caddy, клиент компанию не выбирает.
+  @orders {
+    path /api/orders
+    method POST
+  }
+  handle @orders {
+    rewrite * /public-orders/palitra
+    reverse_proxy content:8080
+  }
   import draft
   # Keep SPA fallback inside the final handler: it must not rewrite API requests.
   handle {
