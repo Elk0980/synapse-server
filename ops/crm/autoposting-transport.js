@@ -233,7 +233,17 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
     if (rowFor(current.code,channelId)?.revision !== row.revision) throw failure('CHANNEL_CHANGED');
     return result;
   }
-  return {getSettings,saveSettings,checkChannel,listProfiles,publish,reconcile};
+  /* Чтение статистики теми же сохранёнными ключами: только белый список методов только для чтения.
+     Ничего не публикует; ключ наружу не выходит. Возвращает null, если канал не настроен. */
+  const STATS_METHODS = Object.freeze({telegram: ['getChatMemberCount', 'getChat'], vk: ['stats.get', 'groups.getById', 'wall.get']});
+  async function readStats(code, id, method, params = {}) {
+    const current = company(code), row = rowFor(current.code, id);
+    if (!row || !row.encrypted_token) return null;
+    if (!STATS_METHODS[id]?.includes(method)) throw new Error('Метод статистики не разрешён');
+    if (row.provider !== 'direct') return {provider: row.provider, unsupported: true};
+    return {provider: 'direct', target: row.target, result: await call(row, method, params)};
+  }
+  return {getSettings,saveSettings,checkChannel,listProfiles,publish,reconcile,readStats};
 }
 
 module.exports = {createAutopostingTransport,PLATFORMS,publicUrl};

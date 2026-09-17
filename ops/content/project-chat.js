@@ -10,6 +10,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { COMPANIES } = require('./auth-store');
 const { createHughFallback } = require('./hugh-fallback');
+const hughCommands = require('./hugh-commands');
 const { createLocalWorker } = require('./project-chat-local-worker');
 const { createSiteOrders } = require('./site-orders');
 const { createProjectChatMiniApp } = require('./project-chat-miniapp');
@@ -51,7 +52,8 @@ const shortText = (value, max) => String(value ?? '').replace(/[\r\n\t]+/g, ' ')
 function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl = '', chatApiKey = '',
   requireSession, requireCsrf, sendJson, readBody, localWorker: localConfig = {}, siteOrders: ordersConfig = {},
   miniApp: miniConfig = {},
-  fetchImpl = (...args) => globalThis.fetch(...args), statusTtl = RUNTIME_STATUS_TTL, fallback: fallbackConfig = {} }) {
+  fetchImpl = (...args) => globalThis.fetch(...args), statusTtl = RUNTIME_STATUS_TTL, fallback: fallbackConfig = {},
+  crmUrl = '', crmApiKey = '', botUsername = '', cabinetUrl = '' }) {
   const storage = path.resolve(assetsDir, 'project-chat');
   fs.mkdirSync(storage, { recursive: true });
   db.exec(`
@@ -100,6 +102,11 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at TEXT NOT NULL, error TEXT NOT NULL DEFAULT '',
       reply_message_id INTEGER REFERENCES project_chat_messages(id), provider TEXT, model TEXT,
       payload TEXT
+    );
+    CREATE TABLE IF NOT EXISTS project_chat_command_replies (
+      chat_id TEXT NOT NULL, message_id TEXT NOT NULL, company_code TEXT NOT NULL, command TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','done')), reply_message_id INTEGER, created_at TEXT NOT NULL,
+      PRIMARY KEY(chat_id, message_id)
     );
     CREATE TABLE IF NOT EXISTS project_telegram_receipts (
       chat_id TEXT NOT NULL, message_id TEXT NOT NULL, result TEXT NOT NULL,
@@ -319,21 +326,22 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       return id;
     });
   }
-  function enqueue(code, messageId, text, type, incoming = false) {
+  function enqueue(code, messageId, text, type, incoming = false, addressed = false, skipAi = false) {
     const room = ensureRoom(code), now = stamp();
     if (!incoming && room.telegram_chat_id) db.prepare(`INSERT INTO project_chat_outbox
       (company_code,message_id,chat_id,next_attempt_at) VALUES(?,?,?,?)`).run(code, messageId, room.telegram_chat_id, now);
-    const aiJob = type !== 'assistant' && (room.reply_mode === 'delegate' || /(?:^|[^\p{L}\p{N}_])(?:Хью|Hugh)(?:$|[^\p{L}\p{N}_])/iu.test(text));
+    // Ответ модели ставится по обращению: имя, ответ боту или @упоминание (addressed) либо режим «Заменять Влада».
+    const aiJob = type !== 'assistant' && !skipAi && (room.reply_mode === 'delegate' || addressed || /(?:^|[^\p{L}\p{N}_])(?:Хью|Hugh)(?:$|[^\p{L}\p{N}_])/iu.test(text));
     if (aiJob) db.prepare(`INSERT INTO project_chat_ai_jobs(company_code,message_id,next_attempt_at) VALUES(?,?,?)`).run(code, messageId, now);
     localWorker.noteMessage(code, messageId, type, aiJob);
   }
   function insertMessage({ code, authorId, authorName, authorType, text, ids = [], clientId = null,
-    chatId = null, externalId = null, incoming = false }) {
+    chatId = null, externalId = null, incoming = false, addressed = false, skipAi = false }) {
     const id = Number(db.prepare(`INSERT INTO project_chat_messages
       (company_code,author_id,author_name,author_type,text,created_at,client_message_id,external_chat_id,external_message_id)
       VALUES(?,?,?,?,?,?,?,?,?)`).run(code, authorId, authorName, authorType, text, stamp(), clientId, chatId, externalId).lastInsertRowid);
     for (const attachmentId of ids) db.prepare('UPDATE project_chat_attachments SET message_id=? WHERE id=? AND company_code=?').run(id, attachmentId, code);
-    enqueue(code, id, text, authorType, incoming);
+    enqueue(code, id, text, authorType, incoming, addressed, skipAi);
     return db.prepare('SELECT * FROM project_chat_messages WHERE id=?').get(id);
   }
 
@@ -401,7 +409,64 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
 
   /* Приём из Telegram. Квитанция, вложения и сообщение сохраняются одной транзакцией:
      повторная доставка того же update не создаёт ни второго сообщения, ни осиротевших вложений. */
-  function receiveTelegram({ chatId, messageId, authorId, authorName, text = '', files = [], attachmentIds = [], isBot = false }) {
+  /* Сводка плана из CRM для /plan: только служебные поля карточек, без подписей и метаданных. */
+  async function planSummary(code) {
+    if (!crmUrl || !crmApiKey) return { error: 'CRM не настроена' };
+    try {
+      const response = await fetchImpl(`${crmUrl.replace(/\/$/, '')}/autoposting/plan-summary?companyCode=${encodeURIComponent(code)}`,
+        { headers: { 'x-api-key': crmApiKey, accept: 'application/json' }, signal: AbortSignal.timeout(5000) });
+      if (!response.ok) return { error: `CRM ответила HTTP ${response.status}` };
+      const data = await response.json();
+      if (!data || data.companyCode !== code || !Array.isArray(data.items)) return { error: 'некорректный ответ CRM' };
+      return data;
+    } catch { return { error: 'CRM не отвечает' }; }
+  }
+  async function commandStatus(code) {
+    const primary = localWorker.isLocal(code) ? localWorker.ownerStatus(code, { detailed: false }) : await runtimeStatus();
+    const count = (...statuses) => db.prepare(`SELECT count(*) AS n FROM project_chat_ai_jobs WHERE company_code=? AND reply_message_id IS NULL AND status IN (${statuses.map(() => '?').join(',')})`).get(code, ...statuses).n;
+    return { primary, fallback: fallback.status(), queue: { waiting: count('pending', 'running', 'blocked'), failed: db.prepare(`SELECT count(*) AS n FROM project_chat_ai_jobs WHERE company_code=? AND reply_message_id IS NULL AND status='error'`).get(code).n } };
+  }
+  /* Команда из группы: входящее сообщение и ожидающая запись ответа сохраняются одной транзакцией; ответ детерминированный
+     (без модели) или /idea через очередь. Сбой между входящим и ответом лечится повтором того же update: ожидающая запись
+     доводится до ответа ровно один раз. */
+  async function receiveCommand({ chatId, messageId, authorId, authorName, text, command }) {
+    const room = getBinding(chatId);
+    if (!room) fail(404, 'Telegram-группа не привязана к проекту');
+    const parsed = hughCommands.parseCommand(text, botUsername);
+    if (!parsed) fail(400, 'Неизвестная команда');
+    const chat = String(chatId), external = String(messageId);
+    const stored = tx(() => {
+      const value = receiveTelegram({ chatId, messageId, authorId, authorName, text, addressed: parsed.name === 'idea', skipAi: parsed.name !== 'idea' });
+      db.prepare(`INSERT OR IGNORE INTO project_chat_command_replies(chat_id,message_id,company_code,command,created_at) VALUES(?,?,?,?,?)`)
+        .run(chat, external, room.companyCode, parsed.name, stamp());
+      return value;
+    });
+    const pending = db.prepare('SELECT * FROM project_chat_command_replies WHERE chat_id=? AND message_id=?').get(chat, external);
+    if (!pending || pending.state === 'done') return { ...stored, command: parsed.name, replied: false, replyMessageId: pending?.reply_message_id ?? null };
+    const code = room.companyCode, title = room.title || code;
+    let replyText = '';
+    if (parsed.name === 'hugh' || parsed.name === 'help') replyText = hughCommands.menuText(title);
+    else if (parsed.name === 'content') replyText = hughCommands.contentText(title, cabinetUrl);
+    else if (parsed.name === 'plan') replyText = hughCommands.planText(title, await planSummary(code));
+    else if (parsed.name === 'status') replyText = hughCommands.statusText(title, await commandStatus(code));
+    else if (parsed.name === 'idea') {
+      // Задание уже стоит в очереди (addressed). Если сейчас ни один путь не доступен — честное подтверждение приёма.
+      const state = await commandStatus(code);
+      const primaryUsable = state.primary.local ? !state.primary.offline : state.primary.connected && !state.primary.limited;
+      if (!primaryUsable && !fallback.available().length) replyText = hughCommands.ideaPendingText();
+    }
+    // Ответ и отметка «сделано» — одной транзакцией; параллельный повтор увидит done и второй ответ не вставит.
+    const outcome = tx(() => {
+      const fresh = db.prepare('SELECT state FROM project_chat_command_replies WHERE chat_id=? AND message_id=?').get(chat, external);
+      if (!fresh || fresh.state === 'done') return null;
+      let reply = null;
+      if (replyText) reply = insertMessage({ code, authorId: 'hugh', authorName: 'Хью', authorType: 'assistant', text: cleanText(replyText, MESSAGE_LIMIT) });
+      db.prepare(`UPDATE project_chat_command_replies SET state='done',reply_message_id=? WHERE chat_id=? AND message_id=?`).run(reply?.id ?? null, chat, external);
+      return reply;
+    });
+    return { ...stored, command: parsed.name, replied: Boolean(outcome), ...(outcome ? { reply: messageJSON(outcome) } : {}) };
+  }
+  function receiveTelegram({ chatId, messageId, authorId, authorName, text = '', files = [], attachmentIds = [], isBot = false, addressed = false, skipAi = false }) {
     const room = getBinding(chatId);
     if (!room) fail(404, 'Telegram-группа не привязана к проекту');
     const external = String(messageId), chat = String(chatId);
@@ -422,7 +487,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
         if (!body && !ids.length) fail(400, 'Сообщение должно содержать текст или вложение');
         const row = insertMessage({ code: room.companyCode, authorId: `telegram:${String(authorId || '')}`,
           authorName: cleanText(String(authorName || 'Участник Telegram'), 200), authorType: isBot ? 'assistant' : 'telegram',
-          text: body, ids, chatId: chat, externalId: external, incoming: true });
+          text: body, ids, chatId: chat, externalId: external, incoming: true, addressed: Boolean(addressed), skipAi: Boolean(skipAi) });
         const value = { message: messageJSON(row), duplicate: false };
         db.prepare('INSERT INTO project_telegram_receipts(chat_id,message_id,result) VALUES(?,?,?)')
           .run(chat, external, JSON.stringify(value));
@@ -682,8 +747,10 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   /* Один раз собранный и проверенный запрос: дальше он хранится и повторяется без изменений. */
   function buildPayload(job) {
     const context = aiContext(job.company_code, job.message_id);
+    const source = db.prepare('SELECT text FROM project_chat_messages WHERE id=?').get(job.message_id);
+    const idea = hughCommands.parseCommand(source?.text || '', botUsername)?.name === 'idea';
     const body = { jobId: `project-chat:${job.id}`, companyCode: job.company_code,
-      messages: context.messages, system: `${SYSTEM}\n\n${context.project}` };
+      messages: context.messages, system: `${SYSTEM}\n\n${context.project}${idea ? `\n\n${hughCommands.IDEA_INSTRUCTION}` : ''}` };
     if (!body.messages.length) fail(500, 'История проекта пуста: запрос к Хью не собран');
     if (body.messages.some(m => !['user', 'assistant'].includes(m.role) || typeof m.content !== 'string' || !m.content)) {
       fail(500, 'Некорректная история проекта: запрос к Хью не собран');
@@ -888,7 +955,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     timer = setInterval(() => { void processAIJobs().catch(() => {}); }, 3000); timer.unref();
   }
   function stopWorker() { clearInterval(timer); timer = null; }
-  const bridge = { getBinding, migrateBinding, receiveTelegram, storeAttachment, readAttachment, pendingTelegram, acknowledgeTelegram };
+  const bridge = { getBinding, migrateBinding, receiveTelegram, receiveCommand, storeAttachment, readAttachment, pendingTelegram, acknowledgeTelegram };
   return { handle, bridge, ...bridge, snapshot, listMessages, requeueAI, runtimeStatus, processAIJobs, startWorker, stopWorker, localWorker, siteOrders, miniApp, fallback };
 }
 

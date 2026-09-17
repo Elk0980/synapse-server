@@ -906,6 +906,8 @@ async function handleLegacyTelegramUpdate(update) {
 const projectBridge = createProjectChatBridge({
   db, contentUrl: PROJECT_CONTENT_URL, apiKey: API_KEY,
   telegramToken: TELEGRAM_BOT_TOKEN, legacyHandler: handleLegacyTelegramUpdate,
+  // Имя бота без @ (не секрет): нужно, чтобы отличать @упоминание Хью от чужих ботов.
+  botUsername: (process.env.TELEGRAM_BOT_USERNAME || '').trim().replace(/^@/, ''),
   // Тихие часы у общего чата проекта те же, что у остальных уведомлений бота.
   quietHours: TELEGRAM_QUIET_HOURS,
 });

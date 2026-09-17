@@ -17,7 +17,7 @@ const json = (payload, status = 200) => ({ ok: status < 400, status, json: async
 
 function setup({ rooms = {}, jobs = [], files = {}, telegram = () => ({ result: { message_id: 500 } }),
   contentUrl = CONTENT, apiKey = 'secret', content = null, now = () => new Date('2026-09-17T12:00:00Z'),
-  db = new DatabaseSync(':memory:') } = {}) {
+  db = new DatabaseSync(':memory:'), botUsername = '', telegramToken = 'bot-token' } = {}) {
   const calls = { content: [], telegram: [], legacy: [], files: 0 };
   const fetchImpl = async (url, options = {}) => {
     const target = String(url);
@@ -48,9 +48,9 @@ function setup({ rooms = {}, jobs = [], files = {}, telegram = () => ({ result: 
     if (route.startsWith('/acknowledge')) return json({ ok: true });
     return json({ error: 'нет маршрута' }, 404);
   };
-  const bridge = createProjectChatBridge({ db, contentUrl, apiKey, telegramToken: 'bot-token',
+  const bridge = createProjectChatBridge({ db, contentUrl, apiKey, telegramToken,
     legacyHandler: async (update) => { calls.legacy.push(update); }, fetchImpl,
-    quietHours: parseQuietHours({}), now });
+    quietHours: parseQuietHours({}), now, botUsername });
   return { db, bridge, calls };
 }
 
@@ -449,4 +449,34 @@ test('offset Telegram переживает перезапуск процесса
   bridge.saveOffset(120);
   bridge.saveOffset(121);
   assert.equal(bridge.getOffset(), 121);
+});
+
+test('команды Хью уходят в комнату с пометкой command тем же маршрутом /receive; прочие команды — прежнему обработчику; ответ боту и @упоминание помечаются как обращение', async () => {
+  const { bridge, calls } = setup({ rooms: ROOMS, botUsername: 'synapse_sb_bot' });
+  await bridge.receive(groupUpdate(1, { text: '/plan' }));
+  await bridge.receive(groupUpdate(2, { text: '/idea@synapse_sb_bot про утро' }));
+  await bridge.receive(groupUpdate(3, { text: '/bind 123' }));
+  await bridge.receive(groupUpdate(4, { text: 'ок', reply_to_message: { message_id: 3, from: { id: 1, is_bot: true, username: 'synapse_sb_bot' } } }));
+  await bridge.receive(groupUpdate(5, { text: '@synapse_sb_bot что дальше?', entities: [{ type: 'mention', offset: 0, length: 15 }] }));
+  await bridge.receive(groupUpdate(6, { text: '@other_bot привет', entities: [{ type: 'mention', offset: 0, length: 10 }] }));
+  await bridge.receive(groupUpdate(7, { text: '/help@other_bot' }));
+  await bridge.receive(groupUpdate(8, { text: 'ок', reply_to_message: { message_id: 3, from: { id: 2, is_bot: true, username: 'other_bot' } } }));
+  const received = calls.content.filter((c) => c.route === '/receive').map((c) => c.body);
+  assert.deepEqual(received.map((b) => [b.command || null, b.addressed || false]), [['plan', false], ['idea', false], [null, true], [null, true], [null, false], [null, false]],
+    'команда чужому боту не уходит в комнату; ответ чужому боту — не обращение');
+  assert.equal(received[0].text, '/plan'); assert.equal(received[1].authorName, 'Дарья');
+  assert.equal(calls.legacy.length, 1); assert.equal(calls.legacy[0].message.text, '/bind 123');
+  assert.equal(calls.telegram.length, 0, 'мост сам ничего не отправляет: ответы идут через исходящую очередь комнаты');
+});
+
+test('без известного имени бота адресованные команды не принимаются (fail-closed), а ответ нашему боту узнаётся по id из токена', async () => {
+  const { bridge, calls } = setup({ rooms: ROOMS });
+  await bridge.receive(groupUpdate(1, { text: '/plan@somebot' }));
+  await bridge.receive(groupUpdate(2, { text: '/plan' }));
+  assert.deepEqual(calls.content.filter((c) => c.route === '/receive').map((c) => c.body.command), ['plan']);
+  assert.equal(calls.legacy.length, 0);
+  const withToken = setup({ rooms: ROOMS, telegramToken: '123456:ABC-token' });
+  await withToken.bridge.receive(groupUpdate(3, { text: 'да', reply_to_message: { message_id: 1, from: { id: 123456, is_bot: true } } }));
+  await withToken.bridge.receive(groupUpdate(4, { text: 'да', reply_to_message: { message_id: 1, from: { id: 999, is_bot: true } } }));
+  assert.deepEqual(withToken.calls.content.filter((c) => c.route === '/receive').map((c) => c.body.addressed), [true, false]);
 });

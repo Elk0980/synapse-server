@@ -177,6 +177,9 @@ const projectChat = createProjectChat({ db, authStore, assetsDir: ASSETS_DIR,
   siteOrders: { sites: ORDER_SITES, priceReader: (site) => latestStmt.get(`${site}/price`)?.body ?? null,
     ipSalt: crypto.createHash('sha256').update(`site-orders-ip:${SESSION_SECRET}`).digest('hex') },
   miniApp: { botId: TELEGRAM_BOT_ID, sessionSecret: SESSION_SECRET },
+  // Команды Хью в группах: сводка плана берётся из CRM тем же служебным ключом; имя бота — не секрет.
+  crmUrl: CRM_URL, crmApiKey: CRM_API_KEY, botUsername: (process.env.TELEGRAM_BOT_USERNAME || '').trim().replace(/^@/, ''),
+  cabinetUrl: (process.env.CABINET_PUBLIC_URL || 'https://synapse.synapsebusiness.ru/cabinet.html').trim(),
   requireSession, requireCsrf, sendJson: send, readBody: readJson });
 for (const issue of [...projectChat.localWorker.issues, ...projectChat.miniApp.issues]) console.warn(`content: ${issue}`);
 
@@ -478,6 +481,7 @@ async function proxyCrm(request, response, url, cors) {
     if(identity.role!=='owner')requirePermission(request,readOnly?(crmPath.startsWith('/platform-demand')?'analytics.view':'crm.view'):'crm.edit',code);
   }
   if (/^\/autoposting\/posts\/\d+\/(?:approve|reject)$/.test(crmPath) && identity.role!=='owner') fail(403,'Согласовывать и отклонять публикации может только владелец');
+  if (crmPath==='/autoposting/plan-summary') fail(404,'Адрес не найден');
   if (/^\/autoposting\/settings\/[^/]+\/profiles$/.test(crmPath) && identity.role!=='owner') {
     fail(403,'Профили общего аккаунта публикаций настраивает владелец');
   }
@@ -681,8 +685,12 @@ const server = http.createServer(async (request, response) => {
           if(typeof file.base64!=='string' || file.base64.length>11200000) fail(413,'Файл слишком большой');
           return {name:file.name,mime:file.mime,bytes:Buffer.from(file.base64,'base64')};
         });
+        if (body.command) {
+          if (files.length) fail(400,'Команда без вложений');
+          return reply(200,await projectChat.bridge.receiveCommand({chatId,messageId,authorId:body.authorId,authorName:body.authorName,text:body.text,command:body.command}));
+        }
         return reply(200,projectChat.bridge.receiveTelegram({chatId,messageId,authorId:body.authorId,
-          authorName:body.authorName,text:body.text,files}));
+          authorName:body.authorName,text:body.text,files,addressed:body.addressed===true}));
       }
       if (route === '/acknowledge' && request.method === 'POST') {
         const body=await readJson(request);

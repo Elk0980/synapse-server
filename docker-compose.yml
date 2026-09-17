@@ -52,6 +52,7 @@ services:
       API_KEY: ${CHAT_API_KEY}
       CHAT_ADMIN_KEY: ${CHAT_ADMIN_KEY}
       ALLOWED_ORIGINS: ${CHAT_ALLOWED_ORIGINS:-}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET}
       TELEGRAM_OWNER_ID: ${TELEGRAM_OWNER_ID:-}
@@ -117,6 +118,9 @@ services:
       HUGH_ACK_WHEN_UNAVAILABLE: ${HUGH_ACK_WHEN_UNAVAILABLE:-0}
       # Лимит видео для очереди контента (байты); пусто = 60 МБ по умолчанию сервиса.
       MAX_PUBLISHING_VIDEO_BYTES: ${MAX_PUBLISHING_VIDEO_BYTES:-}
+      # Команды Хью в группах: имя бота без @ (не секрет) для @упоминаний, публичный адрес кабинета для /content.
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+      CABINET_PUBLIC_URL: ${CABINET_PUBLIC_URL:-}
       ALLOWED_ORIGINS: ${CONTENT_ALLOWED_ORIGINS:-}
     expose:
       - "8080"
