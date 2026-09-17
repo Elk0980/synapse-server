@@ -153,3 +153,97 @@ test('provider preflight callback rejects cancellation or canonical edits before
   });await f.schedule(p);f.advance(60000);await f.api.drain();assert.notEqual(f.api.get(p.id,'alvi').status,'published');
  }
 });
+
+test('очередь контента: карточка дня с подписями пяти площадок, версия и одобрение именно этой версии; правка снимает одобрение; неготовое не одобряется и не планируется',async t=>{
+  const f=fixture(t);
+  const base={title:'Д1 — Атмосфера утра',text:'Утро',mediaUrls:[],platformIds:['telegram'],dayKey:'D1',origin:'gemini-video',
+    captions:{instagram:'Утро в Таиланде',tiktok:'Утро',youtube_shorts:'Утро на побережье',vk:'Утро в Таиланде.',telegram:'Утро'},
+    scheduledAt:new Date(Date.parse('2026-09-15T00:00:00Z')+3600000).toISOString(),timezone:'Asia/Irkutsk',profileRevision:f.information.get('alvi').revision};
+  const card=f.api.create('alvi',base,7);
+  assert.equal(card.dayKey,'D1');assert.equal(card.approval.approved,false);assert.equal(card.readiness.ready,false);assert.match(card.readiness.issues[0],/Нет материала/);
+  await assert.rejects(f.api.schedule(card.id,'alvi',{revision:card.revision}),e=>e.details.code==='APPROVAL_REQUIRED','неготовое и неодобренное не планируется');
+  assert.throws(()=>f.api.approve(card.id,'alvi',{revision:card.revision,approved:true},{userId:1,userName:'Влад'}),e=>e.details.code==='NOT_READY');
+  const withVideo=f.api.update(card.id,'alvi',{revision:card.revision,mediaUrls:['https://cdn.example.test/d1.mp4']});
+  assert.equal(withVideo.readiness.ready,true);assert.equal(withVideo.readiness.mediaKind,'video');
+  await assert.rejects(f.api.schedule(withVideo.id,'alvi',{revision:withVideo.revision}),e=>e.details.code==='APPROVAL_REQUIRED');
+  assert.throws(()=>f.api.approve(withVideo.id,'avokado',{revision:withVideo.revision,approved:true}),e=>e.status===404,'чужая компания не одобряет');
+  assert.throws(()=>f.api.approve(withVideo.id,'alvi',{revision:withVideo.revision-1,approved:true}),e=>e.details.code==='REVISION_CONFLICT');
+  const approved=f.api.approve(withVideo.id,'alvi',{revision:withVideo.revision,approved:true},{userId:1,userName:'Влад'});
+  assert.equal(approved.approval.approved,true);assert.equal(approved.approval.approvedRevision,withVideo.contentRevision);assert.equal(approved.approval.approvedByName,'Влад');
+  assert.equal(approved.status,'draft','одобрение не планирует и не публикует');await f.api.drain();assert.equal(f.calls.length,0);
+  const edited=f.api.update(approved.id,'alvi',{revision:approved.revision,captions:{...base.captions,telegram:'Утро (правка)'}});
+  assert.equal(edited.approval.approved,false);assert.equal(edited.approval.stale,true,'изменение текста снимает одобрение');
+  assert.throws(()=>f.api.update(edited.id,'alvi',{revision:edited.revision,captions:{telegram:'x'.repeat(1025)}}),e=>e.status===400);
+  assert.throws(()=>f.api.update(edited.id,'alvi',{revision:edited.revision,captions:{facebook:'нет'}}),e=>e.status===400);
+  assert.throws(()=>f.api.update(edited.id,'alvi',{revision:edited.revision,dayKey:'D9'}),e=>e.status===400);
+  const unapproved=f.api.approve(edited.id,'alvi',{revision:edited.revision,approved:false});assert.equal(unapproved.approval.approvedRevision,null);
+  const again=f.api.approve(unapproved.id,'alvi',{revision:unapproved.revision,approved:true},{userId:1,userName:'Влад'});
+  const planned=await f.api.schedule(again.id,'alvi',{revision:again.revision});
+  assert.equal(planned.status,'scheduled','одобренная версия ставится в план; отправка — только по расписанию и только в подключённые каналы');
+  await f.api.drain();assert.equal(f.calls.length,0,'до времени публикации ничего не отправлено');
+});
+test('импорт пакета создаёт только черновики без одобрения, не выдумывает медиа и не дублирует карточки при повторе',async t=>{
+  const f=fixture(t);
+  const items=[{dayKey:'D1',title:'Д1',captions:{telegram:'Один'},mediaUrls:['https://cdn.example.test/d1.mp4']},{dayKey:'D2',title:'Д2',captions:{vk:'Два'}},{dayKey:'D3',title:'Д3',text:'Три'}];
+  const first=f.api.importPackage('alvi',{items},7);
+  assert.equal(first.created.length,3);assert.ok(first.created.every(c=>c.status==='draft'&&c.approval.approved===false&&c.origin==='import'));
+  assert.equal(first.created[0].readiness.ready,true);assert.equal(first.created[1].readiness.ready,false);
+  const repeat=f.api.importPackage('alvi',{items},7);assert.equal(repeat.created.length,0);assert.equal(repeat.skipped.length,3);
+  assert.equal(f.api.list('alvi').posts.length,3);assert.equal(f.api.list('avokado').posts.length,0);
+  assert.throws(()=>f.api.importPackage('alvi',{items:[{dayKey:'D1',captions:{}}]}),e=>e.status===400,'без названия');
+  assert.throws(()=>f.api.importPackage('alvi',{items:[{title:'x',mediaUrls:['ftp://bad']}]}),e=>e.status===400,'ссылка не HTTP(S)');
+  await f.api.drain();assert.equal(f.calls.length,0,'импорт ничего не публикует');
+});
+test('импорт пакета schemaVersion 1 (синтетический пакет той же схемы, что у владельца): день числом, подписи-объекты, YouTube title+text, хеш ролика из пакета; companyCode пакета не выбирает компанию; хеш загруженного файла сверяется',async t=>{
+  const f=fixture(t);
+  const pkg=JSON.parse(require('node:fs').readFileSync(__dirname+'/fixtures-content-package.json','utf8'));
+  assert.equal(pkg.companyCode,null);assert.equal(pkg.items[0].approval.approved,false);
+  const result=f.api.importPackage('alvi',pkg,7);
+  assert.equal(result.created.length,2);assert.equal(result.mediaPending.length,2,'публичных URL нет — карточки ждут загрузки видео');
+  assert.equal(result.mediaPending[0].file,'media/day1-final.mp4');assert.equal(result.mediaPending[0].sha256,pkg.items[0].media.sha256);
+  const d1=result.created[0];
+  assert.equal(d1.dayKey,'D1');assert.equal(d1.title,'День первый');assert.equal(d1.externalId,'fixture-day1-v1');assert.match(d1.origin,/Synthetic fixture/);
+  assert.equal(d1.captions.instagram,pkg.items[0].captions.instagram.text);assert.equal(d1.captions.youtube_shorts,'Заголовок YouTube, день первый\n\nОписание YouTube, день первый.');
+  assert.deepEqual(Object.keys(d1.captions).sort(),['instagram','telegram','tiktok','vk','youtube_shorts']);
+  assert.equal(d1.approval.approved,false,'одобрение из пакета не переносится');assert.equal(d1.status,'draft');assert.equal(d1.readiness.ready,false);
+  assert.equal(f.api.importPackage('alvi',pkg,7).created.length,0,'повтор по externalId не создаёт дублей');
+  assert.throws(()=>f.api.importPackage('alvi',{...pkg,companyCode:'avokado'}),e=>e.details.code==='COMPANY_MISMATCH');
+  assert.throws(()=>f.api.approve(d1.id,'alvi',{revision:d1.revision,approved:true},{userId:1}),e=>e.details.code==='NOT_READY');
+  // загрузили не тот файл: хеш отличается
+  const wrong=f.api.update(d1.id,'alvi',{revision:d1.revision,mediaUrls:['https://synapse.synapsebusiness.ru/content/publishing-assets/alvi/'+'a'.repeat(32)+'.mp4'],mediaSha256:'b'.repeat(64)});
+  assert.equal(wrong.readiness.ready,false);assert.match(wrong.readiness.issues[0],/не совпадает/);
+  // ссылка без хеша — не сверено, не готово
+  const unchecked=f.api.update(wrong.id,'alvi',{revision:wrong.revision,mediaUrls:['https://cdn.example.test/other.mp4']});
+  assert.equal(unchecked.mediaSha256,'');assert.match(unchecked.readiness.issues[0],/не сверен/);
+  // тот самый ролик: хеш совпал — готов к одобрению, но не опубликован
+  const right=f.api.update(unchecked.id,'alvi',{revision:unchecked.revision,mediaUrls:['https://synapse.synapsebusiness.ru/content/publishing-assets/alvi/'+'c'.repeat(32)+'.mp4'],mediaSha256:pkg.items[0].media.sha256});
+  assert.equal(right.readiness.ready,true);assert.equal(right.readiness.mediaKind,'video');
+  const ok=f.api.approve(right.id,'alvi',{revision:right.revision,approved:true},{userId:1,userName:'Влад'});assert.equal(ok.approval.approved,true);
+  await f.api.drain();assert.equal(f.calls.length,0);
+  // правка подписи снимает одобрение, хеш при неизменных ссылках сохраняется
+  const edited=f.api.update(ok.id,'alvi',{revision:ok.revision,captions:{...ok.captions,tiktok:'Правка'}});
+  assert.equal(edited.approval.approved,false);assert.equal(edited.mediaSha256,pkg.items[0].media.sha256);
+});
+
+test('одобрение переживает технические переходы (план), а отзыв останавливает ещё не начатую отправку: approve→schedule→revoke→drain = 0 отправок; отзыв между каналами прерывает остальные',async t=>{
+  const f=fixture(t);let clock=Date.parse('2026-09-15T00:00:00Z');const advance=ms=>{clock+=ms;f.advance(ms);};
+  const make=()=>f.api.create('alvi',{title:'Д1',text:'Утро',mediaUrls:['https://cdn.example.test/d1.mp4'],platformIds:['telegram','vk'],dayKey:'D1',captions:{telegram:'ТГ',vk:'ВК'},
+    scheduledAt:new Date(clock+60000).toISOString(),timezone:'Asia/Irkutsk',profileRevision:f.information.get('alvi').revision},7);
+  let card=make();
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true},{userId:1,userName:'Влад'});
+  const planned=await f.api.schedule(card.id,'alvi',{revision:card.revision});
+  assert.equal(planned.status,'scheduled');assert.equal(planned.approval.approved,true,'постановка в план не снимает одобрение');assert.equal(planned.contentRevision,card.contentRevision);
+  const revoked=f.api.approve(planned.id,'alvi',{revision:planned.revision,approved:false},{userId:1});
+  assert.equal(revoked.approval.approved,false);assert.equal(revoked.status,'draft');assert.equal(revoked.lastErrorCode,'APPROVAL_REVOKED');assert.ok(revoked.deliveries.every(d=>d.status==='cancelled'));
+  advance(60000);await f.api.drain();await f.api.drain();assert.equal(f.calls.length,0,'отозванное не уходит');
+  // прямая порча: одобрение снято в базе после планирования (например, из другого процесса) — обработчик проверяет перед захватом
+  let again=make();again=f.api.approve(again.id,'alvi',{revision:again.revision,approved:true},{userId:1});again=await f.api.schedule(again.id,'alvi',{revision:again.revision});
+  f.db.prepare('UPDATE autoposting_posts SET approved_revision=NULL WHERE id=?').run(again.id);
+  advance(60000);await f.api.drain();assert.equal(f.calls.length,0);assert.equal(f.api.get(again.id,'alvi').status,'needs_review');assert.equal(f.api.get(again.id,'alvi').lastErrorCode,'APPROVAL_REVOKED');
+  // отзыв между каналами: первый канал отправлен, второй — нет
+  let third=make();third=f.api.approve(third.id,'alvi',{revision:third.revision,approved:true},{userId:1});third=await f.api.schedule(third.id,'alvi',{revision:third.revision});
+  f.setSend(async input=>{f.db.prepare('UPDATE autoposting_posts SET approved_revision=NULL WHERE id=?').run(third.id);return {externalId:'first-'+input.channelId,url:'https://example.test/p'};});
+  advance(60000);await f.api.drain();await f.api.drain();
+  assert.equal(f.calls.length,1,'после отзыва второй канал не отправлен');assert.equal(f.calls[0].post.text,'ТГ','подпись площадки заменяет общий текст');
+  const result=f.api.get(third.id,'alvi');assert.equal(result.status,'needs_review');assert.deepEqual(result.deliveries.map(d=>d.status).sort(),['cancelled','published']);
+});

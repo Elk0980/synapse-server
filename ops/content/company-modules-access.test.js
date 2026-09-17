@@ -141,3 +141,29 @@ test('publishing photo uploads require an assigned editor and CSRF; opaque publi
   for(const suffix of ['../auth.sqlite','%2e%2e%2fcontent.sqlite','a'.repeat(32)+'.html','a'.repeat(32)+'.png'])assert.equal((await raw('GET','/content/publishing-assets/alvi/'+suffix)).status,404);
   assert.equal(existsSync(f.marker),false);
 });
+
+test('video uploads accept only real MP4/WebM containers under the video limit, return sha256 for package verification and stream with byte ranges',async t=>{
+  const f=await fixture(t),{owner,posting_editor,viewer}=f.sessions;
+  async function raw(method,pathname,bytes,session,type,headers={}){
+    const response=await fetch(f.base+pathname,{method,headers:{...headers,...(session?{cookie:session.cookie,'x-csrf-token':session.csrf}:{}),...(bytes?{'content-type':type}:{})},body:bytes,signal:AbortSignal.timeout(6000)});
+    const data=Buffer.from(await response.arrayBuffer());return {status:response.status,headers:response.headers,data,body:response.headers.get('content-type')?.includes('json')?JSON.parse(data.toString()):null};
+  }
+  const upload='/content/publishing-assets?companyCode=alvi';
+  const mp4=Buffer.concat([Buffer.from([0,0,0,0x18]),Buffer.from('ftypmp42'),Buffer.alloc(4096,7)]);
+  const webm=Buffer.concat([Buffer.from([0x1a,0x45,0xdf,0xa3]),Buffer.alloc(64,1)]);
+  assert.equal((await raw('POST',upload,mp4,viewer,'video/mp4')).status,403);
+  assert.equal((await raw('POST',upload,Buffer.from('not a video at all, just text'),posting_editor,'video/mp4')).status,415,'сигнатура контейнера обязательна');
+  assert.equal((await raw('POST',upload,mp4,posting_editor,'video/quicktime')).status,415);
+  const oversized=Buffer.alloc(60*1024*1024+1);mp4.copy(oversized);
+  assert.equal((await raw('POST',upload,oversized,posting_editor,'video/mp4')).status,413);
+  const result=await raw('POST',upload,mp4,posting_editor,'video/mp4');assert.equal(result.status,201,JSON.stringify(result.body));
+  assert.equal(result.body.type,'video/mp4');assert.equal(result.body.size,mp4.length);
+  assert.equal(result.body.sha256,require('node:crypto').createHash('sha256').update(mp4).digest('hex'));
+  const url=new URL(result.body.url);assert.match(url.pathname,/^\/content\/publishing-assets\/alvi\/[a-f0-9]{32}\.mp4$/);
+  const full=await raw('GET',url.pathname);assert.equal(full.status,200);assert.equal(full.headers.get('content-type'),'video/mp4');assert.equal(full.headers.get('accept-ranges'),'bytes');assert.deepEqual(full.data,mp4);
+  const part=await raw('GET',url.pathname,undefined,null,undefined,{range:'bytes=8-15'});assert.equal(part.status,206);assert.equal(part.headers.get('content-range'),`bytes 8-15/${mp4.length}`);assert.deepEqual(part.data,mp4.subarray(8,16));
+  const tail=await raw('GET',url.pathname,undefined,null,undefined,{range:'bytes=-4'});assert.equal(tail.status,206);assert.deepEqual(tail.data,mp4.subarray(mp4.length-4));
+  assert.equal((await raw('GET',url.pathname,undefined,null,undefined,{range:`bytes=${mp4.length+5}-`})).status,416);
+  const second=await raw('POST',upload,webm,owner,'video/webm');assert.equal(second.status,201);assert.match(new URL(second.body.url).pathname,/\.webm$/);
+  assert.equal((await raw('GET',new URL(second.body.url).pathname.replace('/alvi/','/avokado/'))).status,404);
+});

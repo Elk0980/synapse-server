@@ -48,9 +48,12 @@ async function fixture({role='owner',permissions=[],override,entries=[],starter=
       }
       if(call.path.endsWith('/check'))return {ok:true};
       if(call.path==='/content/crm/autoposting/posts'){if(call.method==='POST'){const item={id:posts.length+1,companyCode:code,revision:1,status:'draft',deliveries:[],...JSON.parse(options.body)};posts.push(item);return clone(item);}return {companyCode:code,posts:clone(posts.filter(item=>item.companyCode===code))};}
-      const match=call.path.match(/\/posts\/(\d+)(?:\/(schedule|cancel|reconcile))?$/);assert.ok(match,call.path);const item=posts.find(item=>item.id===Number(match[1])&&item.companyCode===code),body=JSON.parse(options.body);assert.ok(item);assert.equal(body.revision,item.revision);
+      if(call.path==='/content/crm/autoposting/import'){const body=JSON.parse(options.body);const created=[],skipped=[];for(const entry of body.items){const dup=posts.find(p=>p.companyCode===code&&p.dayKey===entry.dayKey&&p.title===entry.title);if(dup){skipped.push({id:dup.id});continue;}
+          const item={id:posts.length+1,companyCode:code,revision:1,status:'draft',deliveries:[],text:'',mediaUrls:[],captions:{},platformIds:[],origin:'import',...entry,readiness:{ready:Boolean(entry.mediaUrls?.length),issues:entry.mediaUrls?.length?[]:['Нет материала'],mediaKind:entry.mediaUrls?.length?'video':'none'},approval:{approved:false,approvedRevision:null,stale:false}};posts.push(item);created.push(clone(item));}return {companyCode:code,created,skipped};}
+      const match=call.path.match(/\/posts\/(\d+)(?:\/(schedule|cancel|reconcile|approve))?$/);assert.ok(match,call.path);const item=posts.find(item=>item.id===Number(match[1])&&item.companyCode===code),body=JSON.parse(options.body);assert.ok(item);assert.equal(body.revision,item.revision);
+      if(match[2]==='approve'){assert.equal(ctx.identity.role,'owner');if(body.approved&&item.readiness&&!item.readiness.ready)throw Object.assign(Error('NOT_READY'),{status:409});item.approval=body.approved?{approved:true,approvedRevision:item.revision,approvedAt:'2026-09-18T01:00:00.000Z',approvedByName:'Влад',stale:false}:{approved:false,approvedRevision:null,stale:false};return clone(item);}
       if(match[2]==='reconcile'){item.lastErrorCode='PROVIDER_LINK_UNAVAILABLE';for(const delivery of item.deliveries)if(delivery.providerPostId){delivery.providerStatus='published';delivery.errorCode='PROVIDER_LINK_UNAVAILABLE';}}
-      else if(match[2])item.status=match[2]==='schedule'?'scheduled':'cancelled';else Object.assign(item,body);item.revision++;return clone(item);
+      else if(match[2])item.status=match[2]==='schedule'?'scheduled':'cancelled';else {Object.assign(item,body);if(item.approval?.approved)item.approval={approved:false,approvedRevision:item.approval.approvedRevision,stale:true};item.readiness={ready:Boolean(item.mediaUrls?.length)&&Boolean(item.text||Object.keys(item.captions||{}).length),issues:item.mediaUrls?.length?[]:['Нет материала'],mediaKind:(item.mediaUrls||[]).some(u=>/\.mp4/.test(u))?'video':item.mediaUrls?.length?'image':'none'};}item.revision++;return clone(item);
     }};
   await views.autoposting.render(d.getElementById('view'),ctx);
   const f={w,d,ctx,views,calls,posts,configs,plans,node:id=>d.getElementById(id),settle:async()=>{for(let i=0;i<8;i++)await tick();},set(id,value,type='input'){const node=f.node(id);node.value=value;node.dispatchEvent(new w.Event(type,{bubbles:true}));},async click(id){f.node(id).click();await f.settle();},close:()=>w.close()};return f;
@@ -378,4 +381,66 @@ test('a successful HTTP response with a failed provider status check does not cl
   assert.equal(f.node('autoposting-save').disabled,true);assert.equal(f.node('autoposting-schedule').disabled,true);
   assert.equal(f.calls.filter(c=>c.method!=='GET').length,1);assert.equal(f.node('autoposting-deliveries').querySelectorAll('a').length,0);
  }finally{f.close();}
+});
+
+test('очередь контента: карточка дня с видео и подписями пяти площадок, одобрение версии владельцем, снятие при правке, импорт пакета без публикации',async()=>{
+  const f=await fixture();try{
+    fill(f,{media:'https://cdn.example.test/d1.mp4'});f.set('autoposting-day','D1','change');f.set('autoposting-origin','видео Gemini, без надписи ИИ');
+    assert.ok(f.node('autoposting-media-preview').querySelector('video[controls]'),'видео показывается плеером ещё до сохранения');
+    const caption=f.d.querySelector('[data-caption="telegram"]');caption.value='Утро на побережье';caption.dispatchEvent(new f.w.Event('input',{bubbles:true}));
+    assert.match(f.d.querySelector('[data-caption-count="telegram"]').textContent,/17 \/ 1024/);
+    await f.click('autoposting-save');const create=JSON.parse(f.calls.find(call=>call.method==='POST').options.body);
+    assert.equal(create.dayKey,'D1');assert.deepEqual(create.captions,{telegram:'Утро на побережье'});assert.equal(create.origin,'видео Gemini, без надписи ИИ');
+    // сервер вернул карточку без readiness — дополним как сервер
+    Object.assign(f.posts[0],{readiness:{ready:true,issues:[],mediaKind:'video'},approval:{approved:false,approvedRevision:null,stale:false}});
+    await f.click('autoposting-refresh');f.node('autoposting-select').value='1';f.node('autoposting-select').dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();
+    assert.match(f.node('autoposting-queue').textContent,/D1/);assert.match(f.node('autoposting-queue').textContent,/не одобрено/);
+    const approve=f.node('autoposting-approve');assert.ok(approve);assert.equal(approve.checked,false,'галочка по умолчанию снята');assert.equal(approve.disabled,false);
+    await f.click('autoposting-preview');assert.match(f.node('autoposting-preview-content').textContent,/Instagram \/ Reels/);assert.match(f.node('autoposting-preview-content').textContent,/YouTube Shorts/);assert.match(f.node('autoposting-preview-content').textContent,/Telegram · 17 \/ 1024/);
+    assert.ok(f.node('autoposting-preview-content').querySelector('video'));
+    assert.match(f.node('autoposting-preview-content').textContent,/TikTok[^]*вариант подготовлен, доставка не подключена/);assert.doesNotMatch(f.node('autoposting-preview-content').textContent,/Telegram · 17 \/ 1024 · вариант подготовлен/);
+    assert.match(f.d.querySelector('.autoposting-queue-section').textContent,/доставка не подключена и не заявляется/);
+    assert.equal(f.node('autoposting-schedule').disabled,true,'без одобрения в план не ставится');
+    approve.checked=true;approve.dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();
+    const approveCall=f.calls.find(call=>call.path.endsWith('/approve'));assert.ok(approveCall);assert.deepEqual(JSON.parse(approveCall.options.body),{revision:1,approved:true});
+    assert.match(f.node('autoposting-approval').textContent,/Одобрено Влад/);assert.match(f.node('autoposting-queue').textContent,/одобрено/);
+    assert.equal(f.calls.filter(call=>call.path.endsWith('/schedule')).length,0,'одобрение не публикует и не планирует');
+    // правка текста → сохранение → одобрение снято
+    f.set('autoposting-text','Новый текст');await f.click('autoposting-save');
+    assert.match(f.node('autoposting-approval').textContent,/Прежнее одобрение относилось к версии 1/);assert.equal(f.node('autoposting-approve').checked,false);
+    // импорт пакета
+    f.set('autoposting-import-json',JSON.stringify({items:[{dayKey:'D2',title:'Д2',captions:{vk:'Два'},mediaUrls:['https://cdn.example.test/d2.mp4']},{dayKey:'D3',title:'Д3',captions:{tiktok:'Три'}}]}));
+    await f.click('autoposting-import');assert.match(f.node('autoposting-import-state').textContent,/Создано черновиков: 2, пропущено как дубли: 0/);
+    assert.match(f.node('autoposting-queue').textContent,/D2/);assert.match(f.node('autoposting-queue').textContent,/D3[^]*без материала/);
+    await f.click('autoposting-import');assert.match(f.node('autoposting-import-state').textContent,/Создано черновиков: 0, пропущено как дубли: 2/);
+    assert.ok(f.calls.every(call=>!call.path.endsWith('/schedule')),'ни одной публикации');
+  }finally{f.close();}
+});
+test('очередь контента: редактор без роли владельца видит одобрение только для чтения и не может его изменить',async()=>{
+  const entries=[{id:1,companyCode:'alvi',title:'Д1',text:'Текст',revision:3,status:'draft',mediaUrls:['https://cdn.example.test/d1.mp4'],captions:{instagram:'IG'},dayKey:'D1',platformIds:[],scheduledAt:null,timezone:'Asia/Irkutsk',profileRevision:2,deliveries:[],readiness:{ready:true,issues:[],mediaKind:'video'},approval:{approved:true,approvedRevision:3,approvedByName:'Влад',approvedAt:'2026-09-18T01:00:00.000Z',stale:false}}];
+  const f=await fixture({role:'marketer',permissions:['autoposting.view','autoposting.edit'],entries});try{
+    f.node('autoposting-select').value='1';f.node('autoposting-select').dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();
+    const approve=f.node('autoposting-approve');assert.ok(approve);assert.equal(approve.checked,true);assert.equal(approve.disabled,true);assert.match(f.node('autoposting-approval').textContent,/Одобряет владелец кабинета/);
+    approve.dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();assert.equal(f.calls.filter(call=>call.path.endsWith('/approve')).length,0);
+  }finally{f.close();}
+});
+test('видео с устройства загружается через тот же маршрут, хеш сверяется с пакетом: чужой файл помечается, ролик из пакета — «совпадает»',async()=>{
+  const expected='04d2a7ab26e9ae214863f49fb4eceb15f662844f65be3edcccdd0e93fbfb3a3b';
+  const entries=[{id:1,companyCode:'alvi',title:'Это ТайСабай',text:'',revision:1,status:'draft',mediaUrls:[],captions:{instagram:'IG',tiktok:'TT',youtube_shorts:'YT',vk:'VK',telegram:'TG'},dayKey:'D1',origin:'Gemini Omni',platformIds:[],scheduledAt:null,timezone:'Asia/Bangkok',profileRevision:2,deliveries:[],
+    expectedMediaSha256:expected,expectedMediaFile:'media/day1-final.mp4',mediaSha256:'',readiness:{ready:false,issues:['Нет материала'],mediaKind:'none'},approval:{approved:false,approvedRevision:null,stale:false}}];
+  let uploadSha='f'.repeat(64);
+  const f=await fixture({entries,override:async call=>{if(call.path==='/content/publishing-assets')return {url:'https://synapse.synapsebusiness.ru/content/publishing-assets/alvi/'+'c'.repeat(32)+'.mp4',size:100,type:'video/mp4',sha256:uploadSha};}});
+  try{
+    f.node('autoposting-select').value='1';f.node('autoposting-select').dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();
+    assert.match(f.node('autoposting-media-check').textContent,/Ожидается ролик из пакета media\/day1-final\.mp4/);assert.match(f.node('autoposting-queue').textContent,/ролик из пакета не сверен/);
+    assert.equal(f.node('autoposting-approve').disabled,true,'без материала одобрить нельзя');
+    const video=new f.w.File(['fixture-video'],'other.mp4',{type:'video/mp4'});Object.defineProperty(f.node('autoposting-photo'),'files',{value:[video],configurable:true});
+    await f.click('autoposting-upload');const call=f.calls.find(call=>call.path.includes('publishing-assets'));assert.equal(call.options.headers['Content-Type'],'video/mp4');
+    assert.match(f.node('autoposting-media').value,/\.mp4$/);assert.ok(f.node('autoposting-media-preview').querySelector('video'));
+    assert.match(f.node('autoposting-media-check').textContent,/не совпадает/);assert.match(f.node('autoposting-form-status').textContent,/не тот ролик/);
+    uploadSha=expected;Object.defineProperty(f.node('autoposting-photo'),'files',{value:[new f.w.File(['real'],'day1-final.mp4',{type:'video/mp4'})],configurable:true});
+    await f.click('autoposting-upload');assert.match(f.node('autoposting-media-check').textContent,/совпадает с пакетом/);
+    await f.click('autoposting-save');const patch=f.calls.filter(call=>call.method==='PATCH').at(-1);assert.equal(JSON.parse(patch.options.body).mediaSha256,expected);
+    assert.equal(f.calls.some(call=>call.path.endsWith('/schedule')||call.path.endsWith('/approve')),false);
+  }finally{f.close();}
 });

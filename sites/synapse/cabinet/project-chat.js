@@ -139,8 +139,17 @@
     const reason = String(value ?? "").replace(/\s+/g, " ").trim();
     return !reason || /https?:\/\/|www\.|[A-Z0-9]{4}-[A-Z0-9]{4}/i.test(reason) ? "" : reason.slice(0, 200);
   };
+  // Резервные провайдеры: показываем только факт настройки и живой ответ, без адресов и ключей.
+  const fallbackText = ai => {
+    const fb = ai.fallback;
+    if (!fb || !fb.configured) return "";
+    const live = fb.providers.filter(p => p.live).length, cooling = fb.providers.filter(p => p.cooling).length;
+    return ` Резерв ответов: ${fb.providers.length} провайдер(а), доступно ${fb.available}` +
+      (live ? `, живой ответ получен от ${live}` : ", живой ответ ещё не подтверждён") + (cooling ? `, на паузе ${cooling}` : "") + ".";
+  };
   const aiSummary = state => {
     const ai = aiInfo(state);
+    const reserve = fallbackText(ai);
     if (!ai.connected) {
       const reason = !ai.configured ? "Автоматические ответы Хью пока не подключены."
         : ai.runtimeState === "offline" ? "Компьютер Хью сейчас не на связи: вопросы к нему ждут его возвращения."
@@ -149,7 +158,7 @@
         : ai.runtimeState === "login_required" ? "Хью ждёт подтверждения входа владельцем."
         : ai.runtimeState === "unavailable" ? "Сервис ответов Хью сейчас недоступен."
         : "Хью пока не подключён.";
-      return `${reason} Переписка, файлы и задачи проекта работают.${ai.queued ? ` Ожидают ответа: ${ai.queued}.` : ""}`;
+      return `${reason}${reserve} Переписка, файлы и задачи проекта работают.${ai.queued ? ` Ожидают ответа: ${ai.queued}.` : ""}`;
     }
     const waiting = Number(ai.queued) || 0, failed = Number(ai.failed) || 0;
     if (ai.limited) {
@@ -163,7 +172,8 @@
         failed ? `Не удалось ответить: ${failed}.` : "",
         waiting || failed
           ? "Сохранённые вопросы Хью обработает автоматически, когда ограничение снимется."
-          : "Переписка, файлы и задачи проекта работают."
+          : "Переписка, файлы и задачи проекта работают.",
+        reserve.trim()
       ].filter(Boolean).join(" ");
     }
     const parts = [state.data?.room?.replyMode === "delegate" ? "Хью заменяет Влада в обсуждении." : "Хью отвечает по обращению."];

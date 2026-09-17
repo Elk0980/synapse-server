@@ -2526,9 +2526,20 @@ async function route(request, response) {
     else if (url.pathname === '/autoposting/starter-plan' && request.method === 'GET') result=studioContentPlan.get(code);
     else if (url.pathname === '/autoposting/starter-plan' && request.method === 'POST') {result=studioContentPlan.import(code,await readJson(request),identity.userId);status=result.created?201:200;}
     else {
-      const match=/^\/autoposting\/posts(?:\/(\d+)(?:\/(schedule|cancel|reconcile))?)?$/.exec(url.pathname);
+      const match=/^\/autoposting\/posts(?:\/(\d+)(?:\/(schedule|cancel|reconcile|approve))?)?$/.exec(url.pathname);
+      if (url.pathname==='/autoposting/import' && request.method==='POST') {
+        result=autoposting.importPackage(code,await readJson(request),identity.userId);status=result.created.length?201:200;
+        return send(response,status,result,{...cors,'cache-control':'no-store'});
+      }
       if (!match) fail(404,'Адрес не найден');
       const [,id,action]=match;
+      // Одобрение версии — решение владельца кабинета; права редактора недостаточно.
+      if (action==='approve') {
+        if (request.method!=='POST') fail(405,'Метод не поддерживается');
+        if (identity.role!=='owner') fail(403,'Одобрять публикации может только владелец',{code:'FORBIDDEN'});
+        result=autoposting.approve(id,code,await readJson(request),identity);
+        return send(response,status,result,{...cors,'cache-control':'no-store'});
+      }
       if (!id && request.method==='GET') result=autoposting.list(code);
       else if (!id && request.method==='POST') {result=autoposting.create(code,await readJson(request),identity.userId);status=201;}
       else if (id && !action && request.method==='GET') result=autoposting.get(id,code);

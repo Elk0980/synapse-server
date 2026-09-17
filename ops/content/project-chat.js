@@ -9,6 +9,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { COMPANIES } = require('./auth-store');
+const { createHughFallback } = require('./hugh-fallback');
 const { createLocalWorker } = require('./project-chat-local-worker');
 const { createSiteOrders } = require('./site-orders');
 const { createProjectChatMiniApp } = require('./project-chat-miniapp');
@@ -50,7 +51,7 @@ const shortText = (value, max) => String(value ?? '').replace(/[\r\n\t]+/g, ' ')
 function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl = '', chatApiKey = '',
   requireSession, requireCsrf, sendJson, readBody, localWorker: localConfig = {}, siteOrders: ordersConfig = {},
   miniApp: miniConfig = {},
-  fetchImpl = (...args) => globalThis.fetch(...args), statusTtl = RUNTIME_STATUS_TTL }) {
+  fetchImpl = (...args) => globalThis.fetch(...args), statusTtl = RUNTIME_STATUS_TTL, fallback: fallbackConfig = {} }) {
   const storage = path.resolve(assetsDir, 'project-chat');
   fs.mkdirSync(storage, { recursive: true });
   db.exec(`
@@ -127,6 +128,13 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   const serverScope = localWorker.scope.exclude, localCodes = localWorker.scope.params;
   /* Заявки с сайта: свой outbox (order:<n>) доставляется тем же мостом через pendingTelegram/acknowledgeTelegram. */
   const siteOrders = createSiteOrders({ db, tx, priceReader: () => null, ...ordersConfig });
+  /* Резервные провайдеры: OpenAI-совместимые API из окружения сервера. Ни один ключ не добавляется кодом;
+     без настроенных провайдеров поведение прежнее. Компании локального обработчика сервер берёт только
+     через резерв и только когда компьютер не на связи дольше HUGH_FALLBACK_LOCAL_OFFLINE_MINUTES (0 — никогда). */
+  const fallback = createHughFallback({ db, env: fallbackConfig.env || process.env, fetchImpl, messageLimit: MESSAGE_LIMIT });
+  const localOfflineMinutes = Number.parseInt((fallbackConfig.env || process.env).HUGH_FALLBACK_LOCAL_OFFLINE_MINUTES || '0', 10) || 0;
+  // Подтверждение приёма включается вместе с резервом или явно HUGH_ACK_WHEN_UNAVAILABLE=1; иначе поведение прежнее.
+  const ackEnabled = fallback.providers.length > 0 || (fallbackConfig.env || process.env).HUGH_ACK_WHEN_UNAVAILABLE === '1';
   /* Telegram Mini App: вход по подписи Telegram и узкая сессия участника для этой комнаты.
      Членство проверяется теми же assigned/isMember, что и в кабинете. */
   const miniApp = createProjectChatMiniApp({ db, authStore, ...miniConfig, tx, sendJson,
@@ -296,6 +304,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
         limited: runtime.limited, retryAfter: runtime.retryAfter,
         // Подробности подключения (ссылка входа, код) видит только владелец.
         runtimeError: user.role === 'owner' ? runtime.error : '',
+        fallback: fallbackSummary(user),
         queued: count('pending', 'running', 'blocked'),
         waiting: count('blocked'), waitingReason: waiting[0]?.error || (runtime.local && runtime.offline && count('pending', 'running') > 0
           ? 'Компьютер Хью сейчас не на связи: ответ отправится после его возвращения' : ''), failed: count('error'),
@@ -703,31 +712,100 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     }
     return seconds || RETRY_AFTER_DEFAULT;
   }
+  function fallbackSummary(user) {
+    const status = fallback.status();
+    return { configured: status.configured, available: fallback.available().length,
+      providers: status.providers.map((p) => ({ name: p.name, model: p.model, cooling: p.cooling, live: p.live, lastSuccessAt: p.lastSuccessAt,
+        ...(user?.role === 'owner' ? { lastError: p.lastError, cooldownUntil: p.cooldownUntil } : {}) })),
+      issues: user?.role === 'owner' ? status.issues : [] };
+  }
+  /* Честное подтверждение приёма, когда ни основной путь, ни резерв не доступны: одно на компанию за 30 минут,
+     только для вопросов, которые ждут ответа. Не обещает выполненных действий. */
+  function acknowledgePending(codesFilter = '', params = []) {
+    if (!ackEnabled) return;
+    const waiting = db.prepare(`SELECT DISTINCT company_code FROM project_chat_ai_jobs WHERE reply_message_id IS NULL
+      AND status IN ('pending','running','blocked','error') AND attempts<?${codesFilter}`).all(AI_ATTEMPTS, ...params);
+    for (const { company_code: code } of waiting) {
+      if (!fallback.ackDue(code)) continue;
+      tx(() => { insertMessage({ code, authorId: 'hugh', authorName: 'Хью', authorType: 'assistant', text: fallback.ACK_TEXT }); fallback.markAck(code); });
+    }
+  }
+  function storeReply(job, answer) {
+    tx(() => {
+      const existing = db.prepare('SELECT reply_message_id FROM project_chat_ai_jobs WHERE id=?').get(job.id);
+      if (existing.reply_message_id) return;
+      const row = insertMessage({ code: job.company_code, authorId: 'hugh', authorName: 'Хью', authorType: 'assistant', text: answer.text });
+      db.prepare(`UPDATE project_chat_ai_jobs SET status='done',error='',reply_message_id=?,provider=?,model=? WHERE id=?`)
+        .run(row.id, shortText(answer.provider, 100), shortText(answer.model, 100), job.id);
+    });
+  }
+  async function runtimeReply(payload) {
+    const result = await fetchImpl(`${runnerUrl.replace(/\/$/, '')}/reply`, { method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${chatApiKey}`, 'x-api-key': chatApiKey },
+      // Идентификатор задания стабилен: повтор после перезапуска отдаёт тот же кэшированный ответ.
+      body: payload,
+      signal: AbortSignal.timeout(90000) });
+    if (result.status === 409) {
+      // Служба уже принимала этот jobId с другим содержимым: сам себя такой конфликт не исправит.
+      throw Object.assign(new Error('Служба Хью отклонила повтор: запрос этого задания уже отличался. Нужна проверка владельцем'), { terminal: true });
+    }
+    if (result.status === 429) {
+      // Лимит подписки: вход сохранён, ответ придёт сам. Попытка не расходуется.
+      const delay = await limitDelay(result);
+      throw Object.assign(new Error(limitMessage(delay)), { limited: true, delay });
+    }
+    if ([401, 403, 503].includes(result.status)) {
+      throw Object.assign(new Error('Хью пока не подключён: ответ отправится после подключения'), { blocked: true });
+    }
+    if (!result.ok) throw new Error(`Сервис ИИ недоступен (HTTP ${result.status})`);
+    const answer = await result.json(), text = cleanText(answer?.text ?? '', MESSAGE_LIMIT);
+    if (!text) throw new Error('Сервис ИИ вернул пустой ответ');
+    return { text, provider: answer.provider, model: answer.model };
+  }
+  /* Компании локального обработчика: сервер подхватывает их вопросы через резерв только при долгом офлайне
+     компьютера и держит аренду, чтобы вернувшийся обработчик не ответил второй раз. */
+  function localTakeoverCodes() {
+    if (!localOfflineMinutes || !localWorker.companies.length || !fallback.available().length) return [];
+    const stats = localWorker.stats();
+    if (!stats.offline) return [];
+    const seen = stats.lastSeen ? Date.parse(stats.lastSeen) : 0;
+    return Date.now() - seen >= localOfflineMinutes * 60000 ? localWorker.companies : [];
+  }
   let aiBusy = false, timer = null;
   async function processAIJobs() {
     if (aiBusy) return;
     aiBusy = true;
     try {
       const runtime = await runtimeStatus();
-      if (!runtime.connected) {
-        // Вопрос ждёт подключения и не тратит попытки: иначе он станет неотвечаемым до входа владельца.
-        db.prepare(`UPDATE project_chat_ai_jobs SET status='blocked',error=?,next_attempt_at=?
-          WHERE status IN ('pending','running') AND reply_message_id IS NULL${serverScope}`)
-          .run(runtime.configured ? 'Хью пока не подключён: ответ отправится после подключения' : 'Служба Хью не настроена',
-            new Date(Date.now() + 30000).toISOString(), ...localCodes);
-        return;
-      }
-      if (runtime.limited) {
-        // Лимит подписки общий для службы: ждём молча и не тратим попытки, вопрос не сгорает.
-        holdJobs(limitMessage(runtime.retryAfter), runtime.retryAfter);
+      let runtimeUsable = runtime.connected && !runtime.limited;
+      const reserve = fallback.available().length > 0;
+      if (!runtimeUsable && !reserve) {
+        if (!runtime.connected) {
+          // Вопрос ждёт подключения и не тратит попытки: иначе он станет неотвечаемым до входа владельца.
+          db.prepare(`UPDATE project_chat_ai_jobs SET status='blocked',error=?,next_attempt_at=?
+            WHERE status IN ('pending','running') AND reply_message_id IS NULL${serverScope}`)
+            .run(runtime.configured ? 'Хью пока не подключён: ответ отправится после подключения' : 'Служба Хью не настроена',
+              new Date(Date.now() + 30000).toISOString(), ...localCodes);
+        } else {
+          // Лимит подписки общий для службы: ждём молча и не тратим попытки, вопрос не сгорает.
+          holdJobs(limitMessage(runtime.retryAfter), runtime.retryAfter);
+        }
+        acknowledgePending(serverScope, localCodes);
         return;
       }
       // Ожидавшие подключения задания возвращаются в очередь с нулём попыток, но не чаще паузы ожидания.
       db.prepare(`UPDATE project_chat_ai_jobs SET status='pending',attempts=0,error='',next_attempt_at=?
         WHERE status='blocked' AND reply_message_id IS NULL AND next_attempt_at<=?${serverScope}`).run(stamp(), stamp(), ...localCodes);
-      const jobs = db.prepare(`SELECT * FROM project_chat_ai_jobs WHERE status IN ('pending','error') AND attempts<?
-        AND reply_message_id IS NULL AND next_attempt_at<=?${serverScope} ORDER BY id LIMIT 5`).all(AI_ATTEMPTS, stamp(), ...localCodes);
+      const takeover = localTakeoverCodes();
+      // Подхват локальных компаний: свободные задания и зависшие после сбоя сервера (running с истёкшей серверной арендой).
+      const takeoverScope = takeover.length ? ` OR (company_code IN (${takeover.map(() => '?').join(',')})
+        AND (status IN ('pending','error','blocked') OR (status='running' AND boot_id='server'))
+        AND (lease_expires_at IS NULL OR lease_expires_at<?))` : '';
+      const jobs = db.prepare(`SELECT * FROM project_chat_ai_jobs WHERE reply_message_id IS NULL AND attempts<? AND next_attempt_at<=?
+        AND ((status IN ('pending','error')${serverScope})${takeoverScope}) ORDER BY id LIMIT 5`)
+        .all(AI_ATTEMPTS, stamp(), ...localCodes, ...(takeover.length ? [...takeover, stamp()] : []));
       for (const job of jobs) {
+        const isTakeover = takeover.includes(job.company_code);
         let payload;
         try {
           // Payload собирается и проверяется только при первой отправке и дальше повторяется дословно:
@@ -738,59 +816,61 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
             .run(AI_ATTEMPTS, shortText(error.message || 'Не удалось собрать запрос к Хью', 200), stamp(), job.id);
           continue;
         }
-        db.prepare(`UPDATE project_chat_ai_jobs SET status='running',attempts=attempts+1,payload=? WHERE id=?`).run(payload, job.id);
+        if (isTakeover) {
+          // Аренда сервера на время резервного ответа: локальный обработчик это задание не возьмёт.
+          // Срок покрывает таймауты всех провайдеров и продлевается перед каждым обращением.
+          const taken = db.prepare(`UPDATE project_chat_ai_jobs SET status='running',attempts=attempts+1,payload=?,lease_token='server-fallback',
+            lease_expires_at=?,boot_id='server' WHERE id=? AND reply_message_id IS NULL AND (lease_expires_at IS NULL OR lease_expires_at<?)`)
+            .run(payload, new Date(Date.now() + fallback.leaseMs()).toISOString(), job.id, stamp());
+          if (!taken.changes) continue;
+        } else {
+          db.prepare(`UPDATE project_chat_ai_jobs SET status='running',attempts=attempts+1,payload=? WHERE id=?`).run(payload, job.id);
+        }
         try {
-          const result = await fetchImpl(`${runnerUrl.replace(/\/$/, '')}/reply`, { method: 'POST',
-            headers: { 'content-type': 'application/json', authorization: `Bearer ${chatApiKey}`, 'x-api-key': chatApiKey },
-            // Идентификатор задания стабилен: повтор после перезапуска отдаёт тот же кэшированный ответ.
-            body: payload,
-            signal: AbortSignal.timeout(90000) });
-          if (result.status === 409) {
-            // Служба уже принимала этот jobId с другим содержимым: сам себя такой конфликт не исправит.
-            throw Object.assign(new Error('Служба Хью отклонила повтор: запрос этого задания уже отличался. Нужна проверка владельцем'), { terminal: true });
+          let answer = null, primaryError = null;
+          if (runtimeUsable && !isTakeover) {
+            try { answer = await runtimeReply(payload); }
+            catch (error) {
+              if (error.terminal) throw error;
+              primaryError = error;
+              // Лимит или отключение основной подписки: остальным заданиям этого прохода основной путь не предлагаем.
+              if (error.limited || error.blocked) { runtimeUsable = false; statusCache = { at: 0, value: null, inflight: null }; }
+            }
           }
-          if (result.status === 429) {
-            // Лимит подписки: вход сохранён, ответ придёт сам. Попытка не расходуется.
-            const delay = await limitDelay(result);
-            throw Object.assign(new Error(limitMessage(delay)), { limited: true, delay });
+          if (!answer && fallback.available().length) {
+            const renew = isTakeover ? () => db.prepare(`UPDATE project_chat_ai_jobs SET lease_expires_at=? WHERE id=? AND lease_token='server-fallback' AND reply_message_id IS NULL`)
+              .run(new Date(Date.now() + fallback.leaseMs()).toISOString(), job.id) : null;
+            try { answer = await fallback.reply(payload, { beforeAttempt: renew }); }
+            catch (error) { if (!error.allUnavailable) throw error; primaryError = error; }
           }
-          if ([401, 403, 503].includes(result.status)) {
-            throw Object.assign(new Error('Хью пока не подключён: ответ отправится после подключения'), { blocked: true });
+          if (!answer) {
+            // Резерв настроен, но сейчас никто не ответил: вопрос ждёт устойчиво, попытки не сгорают.
+            if (fallback.providers.length) throw Object.assign(new Error(primaryError?.allUnavailable ? primaryError.message : 'Основной путь и резерв сейчас недоступны: вопрос ждёт в очереди'),
+              { allUnavailable: true, delay: primaryError?.delay || 60 });
+            throw primaryError || Object.assign(new Error('Резервные провайдеры не настроены'), { allUnavailable: true, delay: 60 });
           }
-          if (!result.ok) throw new Error(`Сервис ИИ недоступен (HTTP ${result.status})`);
-          const answer = await result.json(), text = cleanText(answer?.text ?? '', MESSAGE_LIMIT);
-          if (!text) throw new Error('Сервис ИИ вернул пустой ответ');
-          tx(() => {
-            const existing = db.prepare('SELECT reply_message_id FROM project_chat_ai_jobs WHERE id=?').get(job.id);
-            if (existing.reply_message_id) return;
-            const row = insertMessage({ code: job.company_code, authorId: 'hugh', authorName: 'Хью', authorType: 'assistant', text });
-            db.prepare(`UPDATE project_chat_ai_jobs SET status='done',error='',reply_message_id=?,provider=?,model=? WHERE id=?`)
-              .run(row.id, shortText(answer.provider, 100), shortText(answer.model, 100), job.id);
-          });
+          storeReply(job, answer);
         } catch (error) {
           const message = shortText(error.message || 'ИИ недоступен', 200);
-          if (error.limited) {
-            // Возвращаем счётчик попыток к значению до обращения: ограничение не должно сжигать вопрос.
-            const until = new Date(Date.now() + error.delay * 1000).toISOString();
-            db.prepare(`UPDATE project_chat_ai_jobs SET status='blocked',attempts=?,error=?,next_attempt_at=?
-              WHERE id=? AND reply_message_id IS NULL`).run(job.attempts, message, until, job.id);
-            holdJobs(message, error.delay);
-            statusCache = { at: 0, value: null, inflight: null };
-            break;
-          }
-          if (error.blocked) {
-            db.prepare(`UPDATE project_chat_ai_jobs SET status='blocked',error=?,next_attempt_at=? WHERE id=? AND reply_message_id IS NULL`)
-              .run(message, new Date(Date.now() + 30000).toISOString(), job.id);
-            statusCache = { at: 0, value: null, inflight: null };
-            break;
-          }
           if (error.terminal) {
             // Столкновение входных данных: автоповтор его не разрешит, нужен владелец.
-            db.prepare(`UPDATE project_chat_ai_jobs SET status='error',attempts=?,error=?,next_attempt_at=? WHERE id=? AND reply_message_id IS NULL`)
+            db.prepare(`UPDATE project_chat_ai_jobs SET status='error',attempts=?,error=?,next_attempt_at=?,lease_token=NULL,lease_expires_at=NULL WHERE id=? AND reply_message_id IS NULL`)
               .run(AI_ATTEMPTS, message, stamp(), job.id);
             continue;
           }
-          db.prepare(`UPDATE project_chat_ai_jobs SET status='error',error=?,next_attempt_at=? WHERE id=? AND reply_message_id IS NULL`)
+          if (error.limited || error.blocked || error.allUnavailable) {
+            // Возвращаем счётчик попыток к значению до обращения: ограничение не должно сжигать вопрос.
+            const delay = error.delay || 30;
+            const until = new Date(Date.now() + delay * 1000).toISOString();
+            db.prepare(`UPDATE project_chat_ai_jobs SET status='blocked',attempts=?,error=?,next_attempt_at=?,lease_token=NULL,lease_expires_at=NULL
+              WHERE id=? AND reply_message_id IS NULL`).run(job.attempts, message, until, job.id);
+            if (error.limited) holdJobs(message, delay);
+            // Ни один путь не ответил и резерв весь на паузе: честно подтверждаем приём (не чаще раза в 30 минут на компанию).
+            if (error.allUnavailable && !fallback.available().length) { acknowledgePending(serverScope, localCodes); if (!runtimeUsable) break; }
+            else if (!runtimeUsable && !fallback.available().length) { acknowledgePending(serverScope, localCodes); break; }
+            continue;
+          }
+          db.prepare(`UPDATE project_chat_ai_jobs SET status='error',error=?,next_attempt_at=?,lease_token=NULL,lease_expires_at=NULL WHERE id=? AND reply_message_id IS NULL`)
             .run(message, new Date(Date.now() + 30000 * (job.attempts + 1)).toISOString(), job.id);
         }
       }
@@ -801,12 +881,15 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     // Прерванное задание возвращается в очередь: ответ не задвоится — вставка и отметка done в одной транзакции.
     // Задания local companies живут по аренде и при перезапуске сервера не трогаются.
     db.prepare(`UPDATE project_chat_ai_jobs SET status='pending' WHERE status='running' AND reply_message_id IS NULL${serverScope}`).run(...localCodes);
+    // Задания локальных компаний, которые сервер вёл резервом в момент сбоя, возвращаются в очередь без второго ответа.
+    db.prepare(`UPDATE project_chat_ai_jobs SET status='pending',lease_token=NULL,lease_expires_at=NULL,boot_id=NULL WHERE status='running' AND boot_id='server' AND reply_message_id IS NULL`).run();
+    db.prepare(`UPDATE project_chat_ai_jobs SET status='done' WHERE status='running' AND boot_id='server' AND reply_message_id IS NOT NULL`).run();
     db.prepare(`UPDATE project_chat_ai_jobs SET status='done' WHERE status='running' AND reply_message_id IS NOT NULL${serverScope}`).run(...localCodes);
     timer = setInterval(() => { void processAIJobs().catch(() => {}); }, 3000); timer.unref();
   }
   function stopWorker() { clearInterval(timer); timer = null; }
   const bridge = { getBinding, migrateBinding, receiveTelegram, storeAttachment, readAttachment, pendingTelegram, acknowledgeTelegram };
-  return { handle, bridge, ...bridge, snapshot, listMessages, requeueAI, runtimeStatus, processAIJobs, startWorker, stopWorker, localWorker, siteOrders, miniApp };
+  return { handle, bridge, ...bridge, snapshot, listMessages, requeueAI, runtimeStatus, processAIJobs, startWorker, stopWorker, localWorker, siteOrders, miniApp, fallback };
 }
 
 module.exports = { createProjectChat, MAX_ATTACHMENT, MESSAGE_PAGE };

@@ -1,0 +1,114 @@
+{
+ "schemaVersion": 1,
+ "project": "Fixture project",
+ "companyCode": null,
+ "companyCodeNote": "Resolve from authenticated company selection; do not infer from display name",
+ "packageId": "fixture-three-days",
+ "publicationEnabled": false,
+ "music": {
+  "note": "synthetic"
+ },
+ "editorialAssistance": null,
+ "importState": null,
+ "platformDeliveryState": null,
+ "items": [
+  {
+   "id": "fixture-day1-v1",
+   "day": 1,
+   "title": "День первый",
+   "revision": 1,
+   "status": "ready_for_review",
+   "approval": {
+    "approved": false,
+    "approvedAt": null,
+    "approvedBy": null
+   },
+   "scheduledAt": null,
+   "timezone": "Asia/Bangkok",
+   "durationSeconds": 10,
+   "width": 720,
+   "height": 1280,
+   "media": {
+    "file": "media/day1-final.mp4",
+    "poster": "media/day1-poster.jpg",
+    "sha256": "53ed88c925907984e34d2afc4a4fcfcda94fde0ad32c7999ec46a77cee817658",
+    "publicUrl": null,
+    "origin": "Synthetic fixture: generated test video, not real footage",
+    "sourceUrl": null
+   },
+   "captions": {
+    "instagram": {
+     "text": "Подпись для Instagram, день первый.",
+     "account": "@fixture"
+    },
+    "tiktok": {
+     "text": "Короткая подпись TikTok.",
+     "account": "@fixture"
+    },
+    "vk": {
+     "text": "Подпись для ВКонтакте, день первый.",
+     "account": "club000"
+    },
+    "telegram": {
+     "text": "Подпись для Telegram, день первый.",
+     "account": "@fixture"
+    },
+    "youtube": {
+     "title": "Заголовок YouTube, день первый",
+     "text": "Описание YouTube, день первый.",
+     "account": "@fixture"
+    }
+   },
+   "cta": null
+  },
+  {
+   "id": "fixture-day2-v1",
+   "day": 2,
+   "title": "День второй",
+   "revision": 1,
+   "status": "ready_for_review",
+   "approval": {
+    "approved": false,
+    "approvedAt": null,
+    "approvedBy": null
+   },
+   "scheduledAt": null,
+   "timezone": "Asia/Bangkok",
+   "durationSeconds": 10,
+   "width": 720,
+   "height": 1280,
+   "media": {
+    "file": "media/day2-final.mp4",
+    "poster": "media/day2-poster.jpg",
+    "sha256": "ef72fb5e87aa97cc108868ed46d20e1053205935eda7c23be61dda8ba3dacde4",
+    "publicUrl": null,
+    "origin": "Synthetic fixture: generated test video, not real footage",
+    "sourceUrl": null
+   },
+   "captions": {
+    "instagram": {
+     "text": "Подпись для Instagram, день второй.",
+     "account": "@fixture"
+    },
+    "tiktok": {
+     "text": "Короткая подпись TikTok, два.",
+     "account": "@fixture"
+    },
+    "vk": {
+     "text": "Подпись для ВКонтакте, день второй.",
+     "account": "club000"
+    },
+    "telegram": {
+     "text": "Подпись для Telegram, день второй.",
+     "account": "@fixture"
+    },
+    "youtube": {
+     "title": "Заголовок YouTube, день второй",
+     "text": "Описание YouTube, день второй.",
+     "account": "@fixture"
+    }
+   },
+   "cta": null
+  }
+ ]
+}

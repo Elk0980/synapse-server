@@ -24,12 +24,14 @@ const toUTC = (value, zone) => {
 };
 cabinet.companyTime = {validZone,toLocal,toUTC};
 const imageUrl=value=>{try{const url=new URL(value);return url.protocol==="https:"&&!url.username&&!url.password&&!/[\u0000-\u0020\u007f]/.test(value)?url.href:null;}catch(_){return null;}};
-cabinet.companyAssets={imageUrl,async upload(ctx,companyCode,file){
-  if(!file||!["image/jpeg","image/png","image/webp"].includes(file.type)||file.size>10*1024*1024||!file.size)throw Error("INVALID_PHOTO");
+const VIDEO_TYPES=["video/mp4","video/webm"],VIDEO_LIMIT=60*1024*1024;
+cabinet.companyAssets={imageUrl,async upload(ctx,companyCode,file,{details=false}={}){
+  const video=file&&VIDEO_TYPES.includes(file.type);
+  if(!file||!(["image/jpeg","image/png","image/webp"].includes(file.type)||video)||file.size>(video?VIDEO_LIMIT:10*1024*1024)||!file.size)throw Error(video?"INVALID_VIDEO":"INVALID_PHOTO");
   const options=ctx.csrfOptions("POST");
   const result=await ctx.apiJson("/content/publishing-assets?companyCode="+encodeURIComponent(companyCode),{...options,body:file,
     headers:{...options.headers,"Content-Type":file.type,"X-Filename":encodeURIComponent(file.name)}});
-  if(!imageUrl(result?.url))throw Error("INVALID_ASSET_URL");return result.url;
+  if(!imageUrl(result?.url))throw Error("INVALID_ASSET_URL");return details?{url:result.url,sha256:typeof result.sha256==="string"?result.sha256:"",size:result.size,type:result.type}:result.url;
 }};
 const FIELDS = [
   ["name", "Название компании", 200], ["city", "Город", 200], ["timezone", "Часовой пояс", 80],
