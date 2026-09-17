@@ -183,14 +183,14 @@ const init = (context) => {
         return `<tr class="crm-row" tabindex="0" data-task-row="${escapeHTML(task.id)}">
           <td class="crm-grow"><span class="tasks-title"><strong>${escapeHTML(task.title)}</strong>
           ${source}</span></td>
-          <td class="crm-compact">${escapeHTML(taskCompanyName(task.companyCode))}</td>
-          <td class="crm-compact"><span class="tasks-assignee">${TASK_ROLES[task.assigneeRole] || task.assigneeRole}
+          <td class="crm-compact" data-label="Проект">${escapeHTML(taskCompanyName(task.companyCode))}</td>
+          <td class="crm-compact" data-label="Исполнитель"><span class="tasks-assignee">${TASK_ROLES[task.assigneeRole] || task.assigneeRole}
           ${task.assigneeName ? `<small>${escapeHTML(task.assigneeName)}</small>` : ""}</span></td>
-          <td class="crm-compact"><span class="tasks-priority" data-priority="${escapeHTML(task.priority)}">
+          <td class="crm-compact" data-label="Приоритет"><span class="tasks-priority" data-priority="${escapeHTML(task.priority)}">
           ${TASK_PRIORITIES[task.priority] || task.priority}</span></td>
-          <td class="crm-compact">${taskDueMarkup(task)}</td>
-          <td class="crm-compact">${TASK_STATUSES[task.status] || task.status}</td>
-          <td class="crm-compact">${taskActionsMarkup(task)}</td></tr>`;
+          <td class="crm-compact" data-label="Срок">${taskDueMarkup(task)}</td>
+          <td class="crm-compact" data-label="Статус">${TASK_STATUSES[task.status] || task.status}</td>
+          <td class="crm-compact" data-label="Действия">${taskActionsMarkup(task)}</td></tr>`;
       }).join("");
       content.innerHTML = `<div class="tasks-status-tabs" aria-label="Статус задачи">
         ${taskStatusTabs(summary)}</div><div class="crm-entity-toolbar" style="flex-wrap: wrap">

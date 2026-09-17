@@ -63,3 +63,37 @@
 .autoposting-queue-card[data-approved="yes"] { border-color:var(--accent,#7fd); }
 .autoposting-queue-card button { text-align:left; }
 @media (max-width:760px) { .autoposting-video { max-width:100%; } }
+/* Контент-план: фильтры, порядок, бейджи согласования, отклонение */
+.autoposting-queue-filters { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:8px 0 12px; }
+.autoposting-queue-filters label { display:grid; gap:4px; font-size:0.85rem; }
+.autoposting-queue-head { display:flex; gap:8px; align-items:flex-start; justify-content:space-between; }
+.autoposting-queue-head > button { flex:1 1 auto; min-height:44px; text-align:left; white-space:normal; }
+.autoposting-queue-order { display:flex; gap:6px; flex:none; }
+.autoposting-queue-order button { width:44px; min-height:44px; padding:0; font-size:1.1rem; }
+.autoposting-badge { display:inline-block; padding:2px 8px; border:1px solid var(--line,#333); border-radius:999px; font-size:0.78rem; margin:2px 4px 2px 0; }
+.autoposting-badge[data-review="approved"], .autoposting-queue-card[data-review="approved"] { border-color:var(--accent,#7fd); }
+.autoposting-badge[data-review="rejected"] { border-color:var(--red,#ff9c9c); color:var(--red,#ff9c9c); }
+.autoposting-badge[data-review="pending"] { border-style:dashed; }
+.autoposting-reject { display:grid; gap:8px; margin-top:10px; }
+.autoposting-reject textarea { width:100%; }
+.autoposting-meta textarea { width:100%; }
+.autoposting-history ul { padding-left:18px; }
+.autoposting-history li { margin:4px 0; overflow-wrap:anywhere; }
+/* Телефон 360–430px: одна колонка, без горизонтального скролла, крупные цели нажатия */
+@media (max-width:430px) {
+  .autoposting-view { overflow-x:hidden; }
+  .autoposting-editor-grid,.autoposting-channel-grid,.autoposting-date-fields,.autoposting-queue-filters { grid-template-columns:minmax(0,1fr); gap:12px; }
+  .autoposting-toolbar,.autoposting-actions { flex-direction:column; align-items:stretch; }
+  .autoposting-toolbar > select,.autoposting-toolbar > button,.autoposting-actions > button,.autoposting-view .plain-button,.autoposting-view button[type="submit"] { width:100%; min-height:44px; }
+  .autoposting-view input,.autoposting-view select,.autoposting-view textarea { width:100%; min-height:44px; box-sizing:border-box; }
+  .autoposting-view textarea { min-height:72px; }
+  .autoposting-video { max-width:100%; max-height:60vh; }
+  .autoposting-thumbnail { width:100%; height:auto; }
+  .autoposting-calendar { gap:2px; }
+  .autoposting-calendar button { min-height:40px; padding:2px; font-size:0.85rem; }
+  .autoposting-queue-card { padding:12px; }
+  .autoposting-queue-head { flex-wrap:wrap; }
+  .autoposting-queue-order { width:100%; justify-content:flex-end; }
+  .autoposting-platform-previews pre,.autoposting-preview-section pre { font-size:0.85rem; }
+  .autoposting-view a,.autoposting-view span { overflow-wrap:anywhere; }
+}

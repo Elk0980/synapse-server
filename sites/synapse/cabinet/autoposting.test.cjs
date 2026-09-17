@@ -394,7 +394,7 @@ test('очередь контента: карточка дня с видео и 
     // сервер вернул карточку без readiness — дополним как сервер
     Object.assign(f.posts[0],{readiness:{ready:true,issues:[],mediaKind:'video'},approval:{approved:false,approvedRevision:null,stale:false}});
     await f.click('autoposting-refresh');f.node('autoposting-select').value='1';f.node('autoposting-select').dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();
-    assert.match(f.node('autoposting-queue').textContent,/D1/);assert.match(f.node('autoposting-queue').textContent,/не одобрено/);
+    assert.match(f.node('autoposting-queue').textContent,/D1/);assert.match(f.node('autoposting-queue').textContent,/не согласовано/);
     const approve=f.node('autoposting-approve');assert.ok(approve);assert.equal(approve.checked,false,'галочка по умолчанию снята');assert.equal(approve.disabled,false);
     await f.click('autoposting-preview');assert.match(f.node('autoposting-preview-content').textContent,/Instagram \/ Reels/);assert.match(f.node('autoposting-preview-content').textContent,/YouTube Shorts/);assert.match(f.node('autoposting-preview-content').textContent,/Telegram · 17 \/ 1024/);
     assert.ok(f.node('autoposting-preview-content').querySelector('video'));
@@ -403,11 +403,11 @@ test('очередь контента: карточка дня с видео и 
     assert.equal(f.node('autoposting-schedule').disabled,true,'без одобрения в план не ставится');
     approve.checked=true;approve.dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();
     const approveCall=f.calls.find(call=>call.path.endsWith('/approve'));assert.ok(approveCall);assert.deepEqual(JSON.parse(approveCall.options.body),{revision:1,approved:true});
-    assert.match(f.node('autoposting-approval').textContent,/Одобрено Влад/);assert.match(f.node('autoposting-queue').textContent,/одобрено/);
+    assert.match(f.node('autoposting-approval').textContent,/Согласовано Влад/);assert.match(f.node('autoposting-queue').textContent,/согласовано/);
     assert.equal(f.calls.filter(call=>call.path.endsWith('/schedule')).length,0,'одобрение не публикует и не планирует');
     // правка текста → сохранение → одобрение снято
     f.set('autoposting-text','Новый текст');await f.click('autoposting-save');
-    assert.match(f.node('autoposting-approval').textContent,/Прежнее одобрение относилось к версии 1/);assert.equal(f.node('autoposting-approve').checked,false);
+    assert.match(f.node('autoposting-approval').textContent,/Прежнее согласование относилось к версии содержимого 1/);assert.equal(f.node('autoposting-approve').checked,false);
     // импорт пакета
     f.set('autoposting-import-json',JSON.stringify({items:[{dayKey:'D2',title:'Д2',captions:{vk:'Два'},mediaUrls:['https://cdn.example.test/d2.mp4']},{dayKey:'D3',title:'Д3',captions:{tiktok:'Три'}}]}));
     await f.click('autoposting-import');assert.match(f.node('autoposting-import-state').textContent,/Создано черновиков: 2, пропущено как дубли: 0/);
@@ -420,7 +420,7 @@ test('очередь контента: редактор без роли влад
   const entries=[{id:1,companyCode:'alvi',title:'Д1',text:'Текст',revision:3,status:'draft',mediaUrls:['https://cdn.example.test/d1.mp4'],captions:{instagram:'IG'},dayKey:'D1',platformIds:[],scheduledAt:null,timezone:'Asia/Irkutsk',profileRevision:2,deliveries:[],readiness:{ready:true,issues:[],mediaKind:'video'},approval:{approved:true,approvedRevision:3,approvedByName:'Влад',approvedAt:'2026-09-18T01:00:00.000Z',stale:false}}];
   const f=await fixture({role:'marketer',permissions:['autoposting.view','autoposting.edit'],entries});try{
     f.node('autoposting-select').value='1';f.node('autoposting-select').dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();
-    const approve=f.node('autoposting-approve');assert.ok(approve);assert.equal(approve.checked,true);assert.equal(approve.disabled,true);assert.match(f.node('autoposting-approval').textContent,/Одобряет владелец кабинета/);
+    const approve=f.node('autoposting-approve');assert.ok(approve);assert.equal(approve.checked,true);assert.equal(approve.disabled,true);assert.match(f.node('autoposting-approval').textContent,/Согласует владелец кабинета/);
     approve.dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();assert.equal(f.calls.filter(call=>call.path.endsWith('/approve')).length,0);
   }finally{f.close();}
 });
@@ -442,5 +442,56 @@ test('видео с устройства загружается через то�
     await f.click('autoposting-upload');assert.match(f.node('autoposting-media-check').textContent,/совпадает с пакетом/);
     await f.click('autoposting-save');const patch=f.calls.filter(call=>call.method==='PATCH').at(-1);assert.equal(JSON.parse(patch.options.body).mediaSha256,expected);
     assert.equal(f.calls.some(call=>call.path.endsWith('/schedule')||call.path.endsWith('/approve')),false);
+  }finally{f.close();}
+});
+test('контент-план в ЛК: метаданные сохраняются отдельно от подписи, фильтры по роли/формату/согласованию/площадке, порядок вверх/вниз уходит на сервер, отклонение требует комментарий и показывает причину без разметки',async()=>{
+  const card=(id,dayKey,extra={})=>({id,companyCode:'alvi',title:'Карточка '+dayKey,text:'',revision:1,contentRevision:1,status:'draft',mediaUrls:['https://cdn.example.test/'+dayKey+'.mp4'],captions:{telegram:'ТГ '+dayKey},dayKey,platformIds:[],scheduledAt:null,timezone:'Asia/Bangkok',profileRevision:2,deliveries:[],sortOrder:id,
+    readiness:{ready:true,issues:[],mediaKind:'video'},approval:{approved:false,approvedRevision:null,stale:false},review:{state:'pending',comment:''},history:[],meta:{format:'reel',role:'reach',audience:'',hook:'Море сразу',idea:'',hughNote:'',metrics:'',methodSource:''},...extra});
+  const entries=[card(1,'D1'),card(2,'D2',{meta:{format:'story',role:'sale',hook:''},captions:{vk:'ВК'}}),card(3,'D3')];
+  let orderCalls=[];
+  const f=await fixture({entries,override:async call=>{
+    if(call.path==='/content/crm/autoposting/order'){const ids=JSON.parse(call.options.body).ids;orderCalls.push(ids);const sorted=ids.map((id,i)=>({...f.posts.find(p=>p.id===id),sortOrder:i+1}));return {companyCode:call.code,posts:sorted};}
+    if(/\/posts\/\d+\/reject$/.test(call.path)){const body=JSON.parse(call.options.body);const item=f.posts.find(p=>p.id===1);assert.ok(body.comment);item.review={state:'rejected',comment:body.comment,byName:'Влад',at:'2026-09-18T01:00:00.000Z'};item.revision++;item.history=[{action:'rejected',contentRevision:1,comment:body.comment,actorName:'Влад',createdAt:'2026-09-18T01:00:00.000Z'}];return clone(item);}
+    if(/\/posts\/\d+\/submit-review$/.test(call.path)){const item=f.posts.find(p=>p.id===1);item.review={state:'pending',comment:''};item.revision++;return clone(item);}
+  }});
+  try{
+    const queue=()=>f.node('autoposting-queue');
+    assert.match(queue().textContent,/Карточка D1[^]*Карточка D2[^]*Карточка D3/);assert.match(queue().textContent,/На согласовании/);assert.match(queue().textContent,/Хук: Море сразу/);
+    // фильтры
+    const filter=(name,value)=>{const node=queue().querySelector(`[data-queue-filter="${name}"]`);node.value=value;node.dispatchEvent(new f.w.Event('change',{bubbles:true}));};
+    filter('role','sale');assert.doesNotMatch(queue().textContent,/Карточка D1/);assert.match(queue().textContent,/Карточка D2/);
+    filter('role','');filter('platform','vk');assert.match(queue().textContent,/Карточка D2/);assert.doesNotMatch(queue().textContent,/Карточка D3/);filter('platform','');
+    filter('format','reel');assert.doesNotMatch(queue().textContent,/Карточка D2/);filter('format','');
+    // порядок: D3 вверх → сервер получает полный список
+    const up=queue().querySelector('[data-post-id="3"] [data-move="up"]');assert.ok(up);assert.ok(!up.disabled);up.click();await f.settle();
+    assert.deepEqual(orderCalls,[[1,3,2]]);assert.match(queue().textContent,/Карточка D1[^]*Карточка D3[^]*Карточка D2/);
+    assert.ok(queue().querySelector('[data-post-id="1"] [data-move="up"]').disabled,'первую выше не сдвинуть');
+    // открыть карточку: метаданные в форме, отклонение с обязательным комментарием
+    f.node('autoposting-select').value='1';f.node('autoposting-select').dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();
+    assert.equal(f.node('autoposting-format').value,'reel');assert.equal(f.node('autoposting-role').value,'reach');assert.equal(f.d.querySelector('[data-meta="hook"]').value,'Море сразу');
+    const rejectForm=f.node('autoposting-reject-form');assert.ok(rejectForm,'владелец видит форму отклонения');
+    rejectForm.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));await f.settle();
+    assert.equal(f.calls.filter(c=>c.path.endsWith('/reject')).length,0,'без комментария запрос не уходит');assert.match(f.node('autoposting-form-status').textContent,/нужен комментарий/);
+    f.node('autoposting-reject-comment').value='<img src=x onerror=alert(1)> слишком прямой хук';rejectForm.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));await f.settle();
+    assert.equal(f.calls.filter(c=>c.path.endsWith('/reject')).length,1);
+    const reason=f.d.querySelector('[data-review-comment]');assert.ok(reason);assert.match(reason.textContent,/слишком прямой хук/);assert.equal(reason.querySelector('img'),null,'комментарий экранирован');
+    assert.match(f.node('autoposting-approval').textContent,/Отклонено \(Влад/);assert.match(f.node('autoposting-approval').textContent,/История согласования \(1\)/);
+    // отправить на согласование снова
+    f.node('autoposting-submit-review').click();await f.settle();assert.equal(f.calls.filter(c=>c.path.endsWith('/submit-review')).length,1);assert.match(f.node('autoposting-approval').textContent,/На согласовании/);
+    // сохранение с метаданными: поля уходят отдельно от подписей
+    f.set('autoposting-role','affection','change');f.d.querySelector('[data-meta="methodSource"]').value='Курс (гипотеза автора)';f.d.querySelector('[data-meta="methodSource"]').dispatchEvent(new f.w.Event('input',{bubbles:true}));
+    await f.click('autoposting-save');const patch=JSON.parse(f.calls.filter(c=>c.method==='PATCH').at(-1).options.body);
+    assert.equal(patch.role,'affection');assert.equal(patch.methodSource,'Курс (гипотеза автора)');assert.deepEqual(patch.captions,{telegram:'ТГ D1'});assert.ok(!JSON.stringify(patch.captions).includes('Море'));
+    assert.equal(f.calls.some(c=>c.path.endsWith('/schedule')||c.path.endsWith('/approve')),false,'ничего не запланировано и не согласовано автоматически');
+  }finally{f.close();}
+});
+test('контент-план: редактор не видит отклонения, но может двигать порядок и отправлять на согласование',async()=>{
+  const entries=[{id:1,companyCode:'alvi',title:'Д1',text:'',revision:1,contentRevision:1,status:'draft',mediaUrls:['https://cdn.example.test/d1.mp4'],captions:{telegram:'ТГ'},dayKey:'D1',platformIds:[],scheduledAt:null,timezone:'Asia/Bangkok',profileRevision:2,deliveries:[],sortOrder:1,readiness:{ready:true,issues:[],mediaKind:'video'},approval:{approved:false,approvedRevision:null,stale:false},review:{state:'draft',comment:''},history:[],meta:{}},
+    {id:2,companyCode:'alvi',title:'Д2',text:'',revision:1,contentRevision:1,status:'draft',mediaUrls:[],captions:{vk:'ВК'},dayKey:'D2',platformIds:[],scheduledAt:null,timezone:'Asia/Bangkok',profileRevision:2,deliveries:[],sortOrder:2,readiness:{ready:false,issues:['Нет материала'],mediaKind:'none'},approval:{approved:false,approvedRevision:null,stale:false},review:{state:'draft',comment:''},history:[],meta:{}}];
+  const f=await fixture({role:'marketer',permissions:['autoposting.view','autoposting.edit'],entries,override:async call=>{if(call.path==='/content/crm/autoposting/order')return {companyCode:call.code,posts:clone(f.posts)};}});
+  try{
+    f.node('autoposting-select').value='1';f.node('autoposting-select').dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();
+    assert.equal(f.node('autoposting-reject-form'),null);assert.ok(f.node('autoposting-submit-review'));assert.equal(f.node('autoposting-approve').disabled,true);
+    assert.ok(!f.node('autoposting-queue').querySelector('[data-post-id="1"] [data-move="down"]').disabled);
   }finally{f.close();}
 });

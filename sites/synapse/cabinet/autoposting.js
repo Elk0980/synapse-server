@@ -20,6 +20,12 @@ const PLANNING = [["two_gis","2ГИС"],["yandex_maps","Яндекс Карты"
 const CAPTIONS = [["instagram","Instagram / Reels",2200],["tiktok","TikTok",2200],["youtube_shorts","YouTube Shorts",5000],["vk","ВКонтакте",15000],["telegram","Telegram",1024]];
 // Доставка подключена только для каналов Telegram/ВКонтакте из настроек; остальные площадки — подготовленные варианты подписей.
 const DELIVERY_CONNECTED = new Set(["vk","telegram"]);
+// Контент-план: формат и роль независимы; метаданные видны только в ЛК и не входят в подписи.
+const FORMATS = [["post","Пост"],["story","Сторис"],["reel","Reels / Shorts / клип"],["carousel","Карусель"]];
+const ROLES = [["reach","Охватный"],["affection","На влюбление"],["sale","На продажу"]];
+const REVIEW = {draft:"Черновик",pending:"На согласовании",approved:"Согласовано",rejected:"Отклонено"};
+const META_TEXT = [["audience","Аудитория (для кого снимаем)",500],["hook","Хук — первые 3 секунды",500],["idea","Идея / сценарий (одна мысль)",4000],["hughNote","Комментарий Хью: почему может сработать",2000],["metrics","Что измеряем (удержание, репосты, сохранения)",1000],["methodSource","Источник методики",300]];
+const HISTORY_LABEL = {submitted:"отправлено на согласование",approved:"согласовано",rejected:"отклонено",revoked:"согласование снято",edited:"правка",reordered:"порядок изменён",rescheduled:"плановая дата изменена"};
 const DAYS = ["","D1","D2","D3","D4","D5","D6","D7"];
 const isVideo = url => /\.(mp4|webm|mov|m4v)(?:[?#].*)?$/i.test(url);
 const mediaPreview = urls => (urls||[]).map(url=>{const safe=safeUrl(url);if(!safe)return "<li>Некорректная ссылка на материал</li>";
@@ -73,6 +79,9 @@ function create(container, context) {
     <label>Материалы по ссылкам<textarea id="autoposting-media" rows="3" placeholder="https://example.com/video.mp4"></textarea></label><ul id="autoposting-media-preview" class="autoposting-media-preview"></ul>
     <details class="autoposting-captions"><summary>Подписи площадок (5)</summary><p class="autoposting-note">Пустая подпись означает: для площадки используется общий текст. Лимиты: ${CAPTIONS.map(([,l,n])=>`${l} — ${n}`).join(", ")}.</p>${CAPTIONS.map(([id,label,limit])=>`<label>${label}<textarea data-caption="${id}" rows="3" maxlength="${limit}"></textarea><span class="autoposting-note" data-caption-count="${id}"></span></label>`).join("")}</details>
     <label>Фото или видео с устройства<input id="autoposting-photo" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"></label><button class="plain-button" id="autoposting-upload" type="button">Загрузить файл</button><input type="hidden" id="autoposting-media-sha"><p id="autoposting-media-check" class="autoposting-note"></p><p class="autoposting-note">Фото JPEG, PNG или WebP до 10 МБ; видео MP4 или WebM до 60 МБ. До 10 открытых HTTP(S)-ссылок, каждая с новой строки. Для фотографий во ВКонтакте выберите подключение Onlypult. Прямое подключение ВКонтакте поддерживает текст и одну ссылку.</p>
+    <details class="autoposting-meta"><summary>Контент-план: формат, роль, идея</summary><p class="autoposting-note">Служебные поля плана. В публичную подпись не попадают. Роль не зависит от формата.</p>
+    <div class="autoposting-date-fields"><label>Формат<select id="autoposting-format"><option value="">—</option>${FORMATS.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></label><label>Роль<select id="autoposting-role"><option value="">—</option>${ROLES.map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select></label></div>
+    ${META_TEXT.map(([id,label,limit])=>`<label>${label}<textarea data-meta="${id}" rows="${id==="idea"?4:2}" maxlength="${limit}"></textarea></label>`).join("")}</details>
     <fieldset id="autoposting-platforms"><legend>Куда опубликовать</legend></fieldset>
     <div class="autoposting-date-fields"><label>Дата и время<input id="autoposting-date" type="datetime-local"></label><label>Часовой пояс<input id="autoposting-timezone" maxlength="80" required placeholder="Asia/Irkutsk"></label></div>
     <p class="autoposting-note">Время относится к указанному часовому поясу, а не настройкам компьютера. Черновик можно сохранить без даты и подключённого канала.</p>
@@ -96,6 +105,7 @@ function create(container, context) {
   const raw=()=>({title:get("autoposting-title").value,text:get("autoposting-text").value,media:get("autoposting-media").value,
     date:get("autoposting-date").value,timezone:get("autoposting-timezone").value,dayKey:get("autoposting-day").value,origin:get("autoposting-origin").value,mediaSha256:get("autoposting-media-sha").value,
     captions:Object.fromEntries(CAPTIONS.map(([id])=>[id,container.querySelector(`[data-caption="${id}"]`).value])),
+    meta:{format:get("autoposting-format").value,role:get("autoposting-role").value,...Object.fromEntries(META_TEXT.map(([id])=>[id,container.querySelector(`[data-meta="${id}"]`).value]))},
     platformIds:[...get("autoposting-platforms").querySelectorAll("input:checked")].map(node=>node.value)});
   const key=()=>companyCode+":"+(post?.id||"new");
   const dirty=()=>JSON.stringify(raw())!==JSON.stringify(baseline);
@@ -104,6 +114,8 @@ function create(container, context) {
     for(const name of ["title","text","media","date","timezone","origin"])get("autoposting-"+name).value=values[name]??"";
     get("autoposting-day").value=DAYS.includes(values.dayKey)?values.dayKey:"";get("autoposting-media-sha").value=values.mediaSha256||"";renderMediaCheck();
     for(const [id] of CAPTIONS)container.querySelector(`[data-caption="${id}"]`).value=values.captions?.[id]??"";
+    get("autoposting-format").value=values.meta?.format||"";get("autoposting-role").value=values.meta?.role||"";
+    for(const [id] of META_TEXT)container.querySelector(`[data-meta="${id}"]`).value=values.meta?.[id]??"";
     renderMediaPreview();
     get("autoposting-platforms").querySelectorAll("input").forEach(node=>{node.checked=(values.platformIds||[]).includes(node.value);});
   };
@@ -114,7 +126,8 @@ function create(container, context) {
     let scheduledAt=null;
     try {if(values.date)scheduledAt=time.toUTC(values.date,values.timezone);}catch(_){throw Error("Выбранное местное время не существует или неоднозначно. Укажите другое время.");}
     const captions={};for(const [id,,limit] of CAPTIONS){const value=(values.captions[id]||"").trim();if(value.length>limit)throw Error(`Подпись ${CAPTIONS.find(c=>c[0]===id)[1]} длиннее ${limit} символов.`);if(value)captions[id]=value;}
-    return {title:values.title.trim(),text:values.text.trim(),mediaUrls,platformIds:values.platformIds,scheduledAt,timezone:values.timezone,profileRevision:information.revision,dayKey:values.dayKey,origin:values.origin.trim(),captions,mediaSha256:values.mediaSha256||""};
+    const metaOut={format:values.meta.format||"",role:values.meta.role||""};for(const [id] of META_TEXT)metaOut[id]=(values.meta[id]||"").trim();
+    return {title:values.title.trim(),text:values.text.trim(),mediaUrls,platformIds:values.platformIds,scheduledAt,timezone:values.timezone,profileRevision:information.revision,dayKey:values.dayKey,origin:values.origin.trim(),captions,mediaSha256:values.mediaSha256||"",...metaOut};
   };
   const problems=()=>{
     const result=[];let data;
@@ -154,6 +167,8 @@ function create(container, context) {
     });
     get("autoposting-preview").disabled=busy||!post||dirty();
     const approve=get("autoposting-approve");if(approve)approve.disabled=busy||ctx.identity?.role!=="owner"||!post||dirty()||!post.readiness?.ready;
+    container.querySelectorAll("[data-move][data-edge]").forEach(node=>{node.disabled=true;});
+    const submitReview=get("autoposting-submit-review");if(submitReview)submitReview.disabled=busy||!edit()||!post||dirty();
     const importButton2=get("autoposting-import");if(importButton2)importButton2.disabled=busy||!edit()||!settings;get("autoposting-import-json").disabled=busy||!edit()||!settings;
     for(const [id,,limit] of CAPTIONS){const node=container.querySelector(`[data-caption-count="${id}"]`);const len=container.querySelector(`[data-caption="${id}"]`).value.length;node.textContent=`${len} / ${limit}`;node.classList.toggle("autoposting-over",len>limit);}
     get("autoposting-schedule").disabled=busy||!edit()||!readyToSchedule();
@@ -174,9 +189,29 @@ function create(container, context) {
   const renderApproval=()=>{
     const node=get("autoposting-approval");if(!post){node.innerHTML="";return;}
     const a=post.approval||{},r=post.readiness||{ready:false,issues:[]},owner=ctx.identity?.role==="owner";
-    node.innerHTML=`<p>Версия ${esc(post.revision)} · ${r.ready?"материал готов к одобрению":"материал не готов: "+esc((r.issues||[]).join("; "))}</p>
-      <label class="autoposting-checkbox"><input type="checkbox" id="autoposting-approve"${a.approved?" checked":""}${owner?"":" disabled"}>Одобрено публиковать (версия ${esc(post.revision)})</label>
-      <p class="autoposting-note">${a.approved?`Одобрено ${esc(a.approvedByName||"владельцем")}${a.approvedAt?" · "+esc(time.toLocal(a.approvedAt,zone()).replace("T"," ")):""}. Одобрение не запускает публикацию.`:a.stale?`Прежнее одобрение относилось к версии ${esc(a.approvedRevision)} и снято после изменения.`:"Не одобрено. Одобрение ставит только владелец после проверки предпросмотра."}${owner?"":" Одобряет владелец кабинета."}</p>`;
+    const rv=post.review||{state:"draft"},canEdit=edit()&&!busy;
+    const historyItems=(post.history||[]).slice(0,10).map(h=>`<li>${esc(HISTORY_LABEL[h.action]||h.action)} · содержимое v${esc(h.contentRevision)} · ${esc(h.actorName||"—")} · ${esc(time.toLocal(h.createdAt,zone()).replace("T"," "))}${h.comment?` — ${esc(h.comment)}`:""}</li>`).join("");
+    node.innerHTML=`<p>Версия ${esc(post.revision)} · содержимое v${esc(post.contentRevision||"")} · <strong data-review-state="${esc(rv.state)}">${esc(REVIEW[rv.state]||rv.state)}</strong>${rv.byName?` (${esc(rv.byName)}${rv.at?", "+esc(time.toLocal(rv.at,zone()).replace("T"," ")):""})`:""}</p>
+      ${rv.state==="rejected"&&rv.comment?`<p class="autoposting-issues" data-review-comment>Причина отклонения: ${esc(rv.comment)}</p>`:""}
+      <p>${r.ready?"Материал готов к согласованию":"Материал не готов: "+esc((r.issues||[]).join("; "))}</p>
+      ${rv.state!=="pending"&&!a.approved&&isQueueCard(post)?`<button class="plain-button" type="button" id="autoposting-submit-review"${canEdit?"":" disabled"}>Отправить на согласование</button>`:""}
+      <label class="autoposting-checkbox"><input type="checkbox" id="autoposting-approve"${a.approved?" checked":""}${owner?"":" disabled"}>Одобрено публиковать (содержимое v${esc(post.contentRevision||"")})</label>
+      <p class="autoposting-note">${a.approved?`Согласовано ${esc(a.approvedByName||"владельцем")}${a.approvedAt?" · "+esc(time.toLocal(a.approvedAt,zone()).replace("T"," ")):""}. Согласование не запускает публикацию; плановая дата — тоже. Отправка начинается только кнопкой «Поставить в план».`:a.stale?`Прежнее согласование относилось к версии содержимого ${esc(a.approvedRevision)} и снято после правки.`:"Не согласовано. Согласует владелец после проверки предпросмотра."}${owner?"":" Согласует владелец кабинета."}</p>
+      ${owner?`<form id="autoposting-reject-form" class="autoposting-reject"><label>Отклонить с комментарием (обязателен)<textarea id="autoposting-reject-comment" rows="2" maxlength="2000" required></textarea></label><button class="danger" type="submit"${post.status==="publishing"||post.status==="published"?" disabled":""}>Отклонить</button></form>`:""}
+      ${historyItems?`<details class="autoposting-history"><summary>История согласования (${post.history.length})</summary><ul>${historyItems}</ul></details>`:""}`;
+    get("autoposting-submit-review")?.addEventListener("click",()=>{
+      if(busy||!post||dirty())return;
+      void run(async current=>{const result=await request("/autoposting/posts/"+encodeURIComponent(post.id)+"/submit-review","POST",{revision:post.revision});if(!current())return;
+        post=result;posts=posts.map(item=>item.id===result.id?result:item);renderList();renderApproval();controls();message("Карточка отправлена на согласование.");
+      },"Отправляем на согласование…","Не удалось отправить на согласование. Обновите статусы.");
+    });
+    get("autoposting-reject-form")?.addEventListener("submit",event=>{
+      event.preventDefault();const comment=get("autoposting-reject-comment").value.trim();
+      if(!comment){message("Для отклонения нужен комментарий.");return;}if(busy||!post||dirty()||!owner)return;
+      void run(async current=>{const result=await request("/autoposting/posts/"+encodeURIComponent(post.id)+"/reject","POST",{revision:post.revision,comment});if(!current())return;
+        post=result;posts=posts.map(item=>item.id===result.id?result:item);renderList();renderApproval();controls();message("Карточка отклонена с комментарием. Отправка не выполнялась.");
+      },"Сохраняем отклонение…","Не удалось сохранить отклонение. Версия могла измениться.");
+    });
     get("autoposting-approve").addEventListener("change",event=>{
       const approved=event.target.checked;if(busy||!post||dirty()||!owner){event.target.checked=!approved;return;}
       void run(async current=>{const result=await request("/autoposting/posts/"+encodeURIComponent(post.id)+"/approve","POST",{revision:post.revision,approved});if(!current())return;
@@ -184,11 +219,32 @@ function create(container, context) {
       },approved?"Сохраняем одобрение…":"Снимаем одобрение…","Не удалось сохранить одобрение. Обновите статусы: версия могла измениться.");
     });
   };
+  const queueFilter={role:"",format:"",review:"",platform:""};
+  const queueCards=()=>posts.filter(isQueueCard).slice().sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)||a.id-b.id);
   const renderQueue=()=>{
-    const cards=posts.filter(isQueueCard).slice().sort((a,b)=>(a.dayKey||"D9").localeCompare(b.dayKey||"D9")||a.id-b.id);
-    get("autoposting-queue").innerHTML=cards.length?`<ul class="autoposting-queue-list">${cards.map(item=>`<li class="autoposting-queue-card" data-approved="${item.approval?.approved?"yes":"no"}"><button class="plain-button" type="button" data-open-post="${esc(item.id)}"><strong>${esc(item.dayKey||"—")}</strong> ${esc(item.title||"Без названия")}</button>
-      <span>${item.readiness?.mediaKind==="video"?"видео":item.readiness?.mediaKind==="image"?"изображение":"без материала"} · версия ${esc(item.revision)} · ${item.approval?.approved?"одобрено":item.approval?.stale?"одобрение снято после правки":"не одобрено"} · ${esc(STATUS[item.status]||"Статус неизвестен")}${item.scheduledAt?" · "+esc(time.toLocal(item.scheduledAt,item.timezone||zone()).replace("T"," "))+" "+esc(item.timezone||zone()):""}</span>
-      <span class="autoposting-note">Площадки: ${CAPTIONS.filter(([id])=>item.captions?.[id]).map(([,l])=>esc(l)).join(", ")||"общий текст"}${item.origin?" · "+esc(item.origin):""}${item.expectedMediaSha256?(item.mediaSha256===item.expectedMediaSha256?" · ролик сверен с пакетом":" · ролик из пакета не сверен"):""}</span></li>`).join("")}</ul>`:"<p>Карточек очереди контента пока нет. Добавьте день карточки в материале или импортируйте пакет.</p>";
+    const all=queueCards();
+    const cards=all.filter(item=>(!queueFilter.role||item.meta?.role===queueFilter.role)&&(!queueFilter.format||item.meta?.format===queueFilter.format)
+      &&(!queueFilter.review||(item.review?.state||"draft")===queueFilter.review)&&(!queueFilter.platform||Boolean(item.captions?.[queueFilter.platform])));
+    const option=(list,selected)=>list.map(([v,l])=>`<option value="${v}"${selected===v?" selected":""}>${l}</option>`).join("");
+    const filters=`<div class="autoposting-queue-filters"><label>Роль<select data-queue-filter="role"><option value="">Все</option>${option(ROLES,queueFilter.role)}</select></label>
+      <label>Формат<select data-queue-filter="format"><option value="">Все</option>${option(FORMATS,queueFilter.format)}</select></label>
+      <label>Согласование<select data-queue-filter="review"><option value="">Все</option>${option(Object.entries(REVIEW),queueFilter.review)}</select></label>
+      <label>Площадка<select data-queue-filter="platform"><option value="">Все</option>${option(CAPTIONS.map(([v,l])=>[v,l]),queueFilter.platform)}</select></label></div>`;
+    get("autoposting-queue").innerHTML=filters+(cards.length?`<ul class="autoposting-queue-list">${cards.map((item,index)=>`<li class="autoposting-queue-card" data-approved="${item.approval?.approved?"yes":"no"}" data-review="${esc(item.review?.state||"draft")}" data-post-id="${esc(item.id)}">
+      <div class="autoposting-queue-head"><button class="plain-button" type="button" data-open-post="${esc(item.id)}"><strong>${esc(item.dayKey||"—")}</strong> ${esc(item.title||"Без названия")}</button>
+        <span class="autoposting-queue-order"><button type="button" data-move="up" data-post-id="${esc(item.id)}" aria-label="Выше"${index===0||!edit()?" disabled data-edge":""}>↑</button><button type="button" data-move="down" data-post-id="${esc(item.id)}" aria-label="Ниже"${index===cards.length-1||!edit()?" disabled data-edge":""}>↓</button></span></div>
+      <span><span class="autoposting-badge" data-review="${esc(item.review?.state||"draft")}">${esc(REVIEW[item.review?.state]||"Черновик")}</span> ${item.meta?.role?`<span class="autoposting-badge">${esc(ROLES.find(r=>r[0]===item.meta.role)?.[1]||item.meta.role)}</span>`:""} ${item.meta?.format?`<span class="autoposting-badge">${esc(FORMATS.find(r=>r[0]===item.meta.format)?.[1]||item.meta.format)}</span>`:""}</span>
+      <span>${item.readiness?.mediaKind==="video"?"видео":item.readiness?.mediaKind==="image"?"изображение":"без материала"} · содержимое v${esc(item.contentRevision||"")} · ${item.approval?.approved?"согласовано":item.approval?.stale?"согласование снято после правки":"не согласовано"} · ${esc(STATUS[item.status]||"Статус неизвестен")}${item.scheduledAt?" · план "+esc(time.toLocal(item.scheduledAt,item.timezone||zone()).replace("T"," "))+" "+esc(item.timezone||zone()):" · дата не задана"}</span>
+      ${item.meta?.hook?`<span class="autoposting-note">Хук: ${esc(item.meta.hook)}</span>`:""}
+      <span class="autoposting-note">Площадки: ${CAPTIONS.filter(([id])=>item.captions?.[id]).map(([,l])=>esc(l)).join(", ")||"общий текст"}${item.origin?" · "+esc(item.origin):""}${item.expectedMediaSha256?(item.mediaSha256===item.expectedMediaSha256?" · ролик сверен с пакетом":" · ролик из пакета не сверен"):""}</span></li>`).join("")}</ul>`:"<p>Карточек по этим фильтрам нет. Добавьте день карточки в материале или импортируйте пакет.</p>");
+    get("autoposting-queue").querySelectorAll("[data-queue-filter]").forEach(node=>node.addEventListener("change",()=>{queueFilter[node.dataset.queueFilter]=node.value;renderQueue();}));
+    get("autoposting-queue").querySelectorAll("[data-move]").forEach(button=>button.addEventListener("click",()=>{
+      if(busy||!edit())return;const id=Number(button.dataset.postId),ids=all.map(item=>item.id),i=ids.indexOf(id),j=button.dataset.move==="up"?i-1:i+1;
+      if(i<0||j<0||j>=ids.length)return;[ids[i],ids[j]]=[ids[j],ids[i]];
+      void run(async current=>{const result=await request("/autoposting/order","PUT",{ids});if(!current())return;if(result.companyCode!==companyCode)throw Error("Wrong company");
+        posts=Array.isArray(result.posts)?result.posts:posts;if(post)post=posts.find(item=>item.id===post.id)||post;renderList();message("Порядок плана сохранён.");
+      },"Сохраняем порядок…","Не удалось сохранить порядок. Обновите статусы.");
+    }));
   };
   const renderState=()=>{
     renderApproval();
@@ -200,7 +256,7 @@ function create(container, context) {
   const renderPost=()=>{
     get("autoposting-platforms").innerHTML='<legend>Куда опубликовать</legend>'+channels().map(channel=>`<label class="autoposting-checkbox"><input type="checkbox" value="${esc(channel.id)}">${esc(channel.name||channel.platform)} — ${channel.connected&&channel.enabled?"подключён":"требуется подключение"}</label>`).join("");
     const timezone=post?.timezone||zone();
-    const values={title:post?.title||"",text:post?.text||"",media:(post?.mediaUrls||[]).join("\n"),date:time.toLocal(post?.scheduledAt,timezone),timezone,platformIds:post?.platformIds||[],dayKey:post?.dayKey||"",origin:post?.origin||"",captions:post?.captions||{},mediaSha256:post?.mediaSha256||""};
+    const values={title:post?.title||"",text:post?.text||"",media:(post?.mediaUrls||[]).join("\n"),date:time.toLocal(post?.scheduledAt,timezone),timezone,platformIds:post?.platformIds||[],dayKey:post?.dayKey||"",origin:post?.origin||"",captions:post?.captions||{},mediaSha256:post?.mediaSha256||"",meta:post?.meta||{}};
     setRaw(values);baseline=raw();
     const draft=drafts.get(key());if(draft){post=draft.post;baseline=draft.baseline;setRaw(draft.raw);}
     renderState();invalidate();
