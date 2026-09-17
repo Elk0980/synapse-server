@@ -398,6 +398,8 @@ test('очередь контента: карточка дня с видео и 
     const approve=f.node('autoposting-approve');assert.ok(approve);assert.equal(approve.checked,false,'галочка по умолчанию снята');assert.equal(approve.disabled,false);
     await f.click('autoposting-preview');assert.match(f.node('autoposting-preview-content').textContent,/Instagram \/ Reels/);assert.match(f.node('autoposting-preview-content').textContent,/YouTube Shorts/);assert.match(f.node('autoposting-preview-content').textContent,/Telegram · 17 \/ 1024/);
     assert.ok(f.node('autoposting-preview-content').querySelector('video'));
+    assert.match(f.node('autoposting-preview-content').textContent,/TikTok[^]*вариант подготовлен, доставка не подключена/);assert.doesNotMatch(f.node('autoposting-preview-content').textContent,/Telegram · 17 \/ 1024 · вариант подготовлен/);
+    assert.match(f.d.querySelector('.autoposting-queue-section').textContent,/доставка не подключена и не заявляется/);
     assert.equal(f.node('autoposting-schedule').disabled,true,'без одобрения в план не ставится');
     approve.checked=true;approve.dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();
     const approveCall=f.calls.find(call=>call.path.endsWith('/approve'));assert.ok(approveCall);assert.deepEqual(JSON.parse(approveCall.options.body),{revision:1,approved:true});
