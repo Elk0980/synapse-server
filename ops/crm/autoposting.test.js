@@ -194,3 +194,33 @@ test('импорт пакета создаёт только черновики �
   assert.throws(()=>f.api.importPackage('alvi',{items:[{title:'x',mediaUrls:['ftp://bad']}]}),e=>e.status===400,'ссылка не HTTP(S)');
   await f.api.drain();assert.equal(f.calls.length,0,'импорт ничего не публикует');
 });
+test('импорт пакета schemaVersion 1 (синтетический пакет той же схемы, что у владельца): день числом, подписи-объекты, YouTube title+text, хеш ролика из пакета; companyCode пакета не выбирает компанию; хеш загруженного файла сверяется',async t=>{
+  const f=fixture(t);
+  const pkg=JSON.parse(require('node:fs').readFileSync(__dirname+'/fixtures-content-package.json','utf8'));
+  assert.equal(pkg.companyCode,null);assert.equal(pkg.items[0].approval.approved,false);
+  const result=f.api.importPackage('alvi',pkg,7);
+  assert.equal(result.created.length,2);assert.equal(result.mediaPending.length,2,'публичных URL нет — карточки ждут загрузки видео');
+  assert.equal(result.mediaPending[0].file,'media/day1-final.mp4');assert.equal(result.mediaPending[0].sha256,pkg.items[0].media.sha256);
+  const d1=result.created[0];
+  assert.equal(d1.dayKey,'D1');assert.equal(d1.title,'День первый');assert.equal(d1.externalId,'fixture-day1-v1');assert.match(d1.origin,/Synthetic fixture/);
+  assert.equal(d1.captions.instagram,pkg.items[0].captions.instagram.text);assert.equal(d1.captions.youtube_shorts,'Заголовок YouTube, день первый\n\nОписание YouTube, день первый.');
+  assert.deepEqual(Object.keys(d1.captions).sort(),['instagram','telegram','tiktok','vk','youtube_shorts']);
+  assert.equal(d1.approval.approved,false,'одобрение из пакета не переносится');assert.equal(d1.status,'draft');assert.equal(d1.readiness.ready,false);
+  assert.equal(f.api.importPackage('alvi',pkg,7).created.length,0,'повтор по externalId не создаёт дублей');
+  assert.throws(()=>f.api.importPackage('alvi',{...pkg,companyCode:'avokado'}),e=>e.details.code==='COMPANY_MISMATCH');
+  assert.throws(()=>f.api.approve(d1.id,'alvi',{revision:d1.revision,approved:true},{userId:1}),e=>e.details.code==='NOT_READY');
+  // загрузили не тот файл: хеш отличается
+  const wrong=f.api.update(d1.id,'alvi',{revision:d1.revision,mediaUrls:['https://synapse.synapsebusiness.ru/content/publishing-assets/alvi/'+'a'.repeat(32)+'.mp4'],mediaSha256:'b'.repeat(64)});
+  assert.equal(wrong.readiness.ready,false);assert.match(wrong.readiness.issues[0],/не совпадает/);
+  // ссылка без хеша — не сверено, не готово
+  const unchecked=f.api.update(wrong.id,'alvi',{revision:wrong.revision,mediaUrls:['https://cdn.example.test/other.mp4']});
+  assert.equal(unchecked.mediaSha256,'');assert.match(unchecked.readiness.issues[0],/не сверен/);
+  // тот самый ролик: хеш совпал — готов к одобрению, но не опубликован
+  const right=f.api.update(unchecked.id,'alvi',{revision:unchecked.revision,mediaUrls:['https://synapse.synapsebusiness.ru/content/publishing-assets/alvi/'+'c'.repeat(32)+'.mp4'],mediaSha256:pkg.items[0].media.sha256});
+  assert.equal(right.readiness.ready,true);assert.equal(right.readiness.mediaKind,'video');
+  const ok=f.api.approve(right.id,'alvi',{revision:right.revision,approved:true},{userId:1,userName:'Влад'});assert.equal(ok.approval.approved,true);
+  await f.api.drain();assert.equal(f.calls.length,0);
+  // правка подписи снимает одобрение, хеш при неизменных ссылках сохраняется
+  const edited=f.api.update(ok.id,'alvi',{revision:ok.revision,captions:{...ok.captions,tiktok:'Правка'}});
+  assert.equal(edited.approval.approved,false);assert.equal(edited.mediaSha256,pkg.items[0].media.sha256);
+});

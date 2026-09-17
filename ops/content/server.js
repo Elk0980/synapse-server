@@ -26,8 +26,12 @@ const API_KEY = (process.env.API_KEY || '').trim();            // ключ вл�
 const ASSETS_DIR = process.env.ASSETS_DIR || path.join(path.dirname(DATABASE_PATH), 'assets');
 const MAX_ASSET = 8 * 1024 * 1024;
 const MAX_PUBLISHING_ASSET = 10 * 1024 * 1024;
+// Видео для очереди контента: вертикальные ролики до 60 МБ. Проверяется контейнер по сигнатуре, не по расширению.
+const MAX_PUBLISHING_VIDEO = Number.parseInt(process.env.MAX_PUBLISHING_VIDEO_BYTES || '', 10) || 60 * 1024 * 1024;
 const PUBLISHING_ASSET_ORIGIN = 'https://synapse.synapsebusiness.ru';
-const ASSET_TYPES = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
+const ASSET_TYPES = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'video/mp4': '.mp4', 'video/webm': '.webm' };
+const VIDEO_TYPES = new Set(['video/mp4', 'video/webm']);
+const ASSET_MIME = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp', mp4: 'video/mp4', webm: 'video/webm' };
 const SEED_DIR = process.env.SEED_DIR || path.join(__dirname, 'seed');
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
 const HISTORY_LIMIT = 10;
@@ -783,30 +787,47 @@ const server = http.createServer(async (request, response) => {
       }
       requireCsrf(request, session);
       const type = String(request.headers['content-type'] || '').split(';')[0].trim();
-      if (!Object.hasOwn(ASSET_TYPES,type)) fail(415, 'Допустимы фотографии JPEG, PNG и WebP');
-      const bytes = await readRaw(request, MAX_PUBLISHING_ASSET);
+      if (!Object.hasOwn(ASSET_TYPES,type)) fail(415, 'Допустимы фотографии JPEG, PNG, WebP и видео MP4, WebM');
+      const video = VIDEO_TYPES.has(type);
+      const bytes = await readRaw(request, video ? MAX_PUBLISHING_VIDEO : MAX_PUBLISHING_ASSET);
       const valid = type === 'image/jpeg' ? bytes.length >= 4 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255 :
         type === 'image/png' ? bytes.length >= 24 && bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])) :
-          bytes.length >= 16 && bytes.toString('ascii',0,4) === 'RIFF' && bytes.toString('ascii',8,12) === 'WEBP';
-      if (!valid) fail(415, 'Файл не соответствует выбранному формату фотографии');
+        type === 'image/webp' ? bytes.length >= 16 && bytes.toString('ascii',0,4) === 'RIFF' && bytes.toString('ascii',8,12) === 'WEBP' :
+        type === 'video/mp4' ? bytes.length >= 12 && bytes.toString('ascii',4,8) === 'ftyp' :
+          bytes.length >= 4 && bytes.subarray(0,4).equals(Buffer.from([0x1a,0x45,0xdf,0xa3]));
+      if (!valid) fail(415, video ? 'Файл не соответствует выбранному формату видео' : 'Файл не соответствует выбранному формату фотографии');
       const name = crypto.randomBytes(16).toString('hex') + ASSET_TYPES[type];
       const directory = path.join(ASSETS_DIR,'publishing',code);
       fs.mkdirSync(directory,{recursive:true});
       fs.writeFileSync(path.join(directory,name),bytes,{flag:'wx'});
-      return reply(201,{url:`${PUBLISHING_ASSET_ORIGIN}/content/publishing-assets/${code}/${name}`,size:bytes.length,type});
+      // Хеш нужен, чтобы сверить загруженный ролик с пакетом материалов, а не принять заглушку за готовое видео.
+      const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+      return reply(201,{url:`${PUBLISHING_ASSET_ORIGIN}/content/publishing-assets/${code}/${name}`,size:bytes.length,type,sha256});
     }
     if (url.pathname.startsWith('/content/publishing-assets/')) {
       if (!['GET','HEAD'].includes(request.method)) fail(405, 'Метод не поддерживается');
-      const match = /^\/content\/publishing-assets\/([a-z0-9_-]{1,64})\/([a-f0-9]{32}\.(jpg|png|webp))$/.exec(url.pathname);
-      if (!match || !Object.hasOwn(COMPANIES,match[1])) fail(404,'Фото не найдено');
+      const match = /^\/content\/publishing-assets\/([a-z0-9_-]{1,64})\/([a-f0-9]{32}\.(jpg|png|webp|mp4|webm))$/.exec(url.pathname);
+      if (!match || !Object.hasOwn(COMPANIES,match[1])) fail(404,'Материал не найден');
       const file = path.join(ASSETS_DIR,'publishing',match[1],match[2]);
-      if (!fs.existsSync(file)) fail(404,'Фото не найдено');
-      response.writeHead(200,{'content-type':match[3] === 'jpg' ? 'image/jpeg' : `image/${match[3]}`,
-        'content-length':fs.statSync(file).size,'cache-control':'public, max-age=31536000, immutable',
-        'x-content-type-options':'nosniff','content-security-policy':"default-src 'none'; sandbox",
-        'content-disposition':`inline; filename="${match[2]}"`});
+      if (!fs.existsSync(file)) fail(404,'Материал не найден');
+      const size = fs.statSync(file).size;
+      const headers = {'content-type':ASSET_MIME[match[3]],'cache-control':'public, max-age=31536000, immutable','accept-ranges':'bytes',
+        'x-content-type-options':'nosniff','content-security-policy':"default-src 'none'; sandbox",'content-disposition':`inline; filename="${match[2]}"`};
+      // Диапазоны нужны плееру: без них перемотка и предпросмотр видео в браузере не работают.
+      const range = /^bytes=(\d*)-(\d*)$/.exec(String(request.headers.range || ''));
+      let start = 0, end = size - 1, status = 200;
+      if (range && VIDEO_TYPES.has(headers['content-type'])) {
+        start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2] || 0));
+        end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : end;
+        if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= size) {
+          response.writeHead(416, {'content-range':`bytes */${size}`}); return response.end();
+        }
+        status = 206; headers['content-range'] = `bytes ${start}-${end}/${size}`;
+      }
+      headers['content-length'] = end - start + 1;
+      response.writeHead(status, headers);
       if (request.method === 'HEAD') return response.end();
-      const stream = fs.createReadStream(file); stream.on('error',()=>response.destroy());
+      const stream = fs.createReadStream(file, {start, end}); stream.on('error',()=>response.destroy());
       response.on('close',()=>stream.destroy()); return stream.pipe(response);
     }
 

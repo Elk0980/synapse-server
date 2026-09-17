@@ -422,3 +422,23 @@ test('очередь контента: редактор без роли влад
     approve.dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();assert.equal(f.calls.filter(call=>call.path.endsWith('/approve')).length,0);
   }finally{f.close();}
 });
+test('видео с устройства загружается через тот же маршрут, хеш сверяется с пакетом: чужой файл помечается, ролик из пакета — «совпадает»',async()=>{
+  const expected='04d2a7ab26e9ae214863f49fb4eceb15f662844f65be3edcccdd0e93fbfb3a3b';
+  const entries=[{id:1,companyCode:'alvi',title:'Это ТайСабай',text:'',revision:1,status:'draft',mediaUrls:[],captions:{instagram:'IG',tiktok:'TT',youtube_shorts:'YT',vk:'VK',telegram:'TG'},dayKey:'D1',origin:'Gemini Omni',platformIds:[],scheduledAt:null,timezone:'Asia/Bangkok',profileRevision:2,deliveries:[],
+    expectedMediaSha256:expected,expectedMediaFile:'media/day1-final.mp4',mediaSha256:'',readiness:{ready:false,issues:['Нет материала'],mediaKind:'none'},approval:{approved:false,approvedRevision:null,stale:false}}];
+  let uploadSha='f'.repeat(64);
+  const f=await fixture({entries,override:async call=>{if(call.path==='/content/publishing-assets')return {url:'https://synapse.synapsebusiness.ru/content/publishing-assets/alvi/'+'c'.repeat(32)+'.mp4',size:100,type:'video/mp4',sha256:uploadSha};}});
+  try{
+    f.node('autoposting-select').value='1';f.node('autoposting-select').dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();
+    assert.match(f.node('autoposting-media-check').textContent,/Ожидается ролик из пакета media\/day1-final\.mp4/);assert.match(f.node('autoposting-queue').textContent,/ролик из пакета не сверен/);
+    assert.equal(f.node('autoposting-approve').disabled,true,'без материала одобрить нельзя');
+    const video=new f.w.File(['fixture-video'],'other.mp4',{type:'video/mp4'});Object.defineProperty(f.node('autoposting-photo'),'files',{value:[video],configurable:true});
+    await f.click('autoposting-upload');const call=f.calls.find(call=>call.path.includes('publishing-assets'));assert.equal(call.options.headers['Content-Type'],'video/mp4');
+    assert.match(f.node('autoposting-media').value,/\.mp4$/);assert.ok(f.node('autoposting-media-preview').querySelector('video'));
+    assert.match(f.node('autoposting-media-check').textContent,/не совпадает/);assert.match(f.node('autoposting-form-status').textContent,/не тот ролик/);
+    uploadSha=expected;Object.defineProperty(f.node('autoposting-photo'),'files',{value:[new f.w.File(['real'],'day1-final.mp4',{type:'video/mp4'})],configurable:true});
+    await f.click('autoposting-upload');assert.match(f.node('autoposting-media-check').textContent,/совпадает с пакетом/);
+    await f.click('autoposting-save');const patch=f.calls.filter(call=>call.method==='PATCH').at(-1);assert.equal(JSON.parse(patch.options.body).mediaSha256,expected);
+    assert.equal(f.calls.some(call=>call.path.endsWith('/schedule')||call.path.endsWith('/approve')),false);
+  }finally{f.close();}
+});
