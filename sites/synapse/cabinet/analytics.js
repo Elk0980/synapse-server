@@ -52,6 +52,56 @@ const analyticsState = {
   selected: new Set(ANALYTICS_PLATFORMS.map((platform) => platform.id)),
   payload: null
 };
+const shortDay = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? value.split("-").reverse().join(".") : "—";
+const shortRange = (range) => range ? `${shortDay(range.from)}–${shortDay(range.to)}` : "—";
+const GRANULARITY_LABELS = { month: "целые месяцы", week: "целые недели", day: "дни", period: "периоды снимка" };
+const GRANULARITY_PARTIAL_LABELS = { month: "по месяцам снимка", week: "по неделям снимка", day: "по дням снимка", period: "периоды снимка" };
+// «Целые месяцы» пишется только когда ни один из периодов не помечен неполным; иначе — фактическая
+// детализация с явной неполнотой, чтобы подпись не противоречила данным.
+const granularityLabel = (list, partial = false) => {
+  const unique = [...new Set(list || [])];
+  const table = partial ? GRANULARITY_PARTIAL_LABELS : GRANULARITY_LABELS;
+  const label = unique.length === 1 && table[unique[0]] ? table[unique[0]] : "периоды снимка";
+  return partial ? `${label}, есть неполный период` : label;
+};
+// Ступень «Потенциал» строится только из снимка «Спрос по рубрикам» 2ГИС за выбранную компанию.
+// Строки снимка берутся целиком и только внутри запрошенного периода, без пропорций; покрытие
+// описывается точными отрезками. Конверсия в «Показы» из этой ступени не считается никогда:
+// поиски по рубрикам и переходы на карточку — показатели с разным составом, напрямую не сопоставимые.
+const potentialStep = (potential, requested) => {
+  const base = { id: "potential", label: "Потенциал", value: null, kind: "none", date: null,
+    noConversionFrom: "показатели напрямую не сопоставимы", breakdown: null, note: "" };
+  const source = "источник — поиски по рубрикам 2ГИС";
+  if (!analyticsState.selected.has("2gis")) return { ...base, note: `${source}; площадка 2ГИС не выбрана в фильтре` };
+  if (!potential || potential.error) return { ...base, note: `${source}; снимок сейчас недоступен — повторите загрузку` };
+  if (!potential.available) return { ...base, note: `${source}; снимок не загружен — добавьте его в разделе «Потенциал 2ГИС»` };
+  const suggestion = potential.suggested
+    ? ` Ближайший доступный диапазон снимка (${granularityLabel(potential.suggested.granularities, potential.suggested.partial)}): ${shortRange(potential.suggested)}.` : "";
+  const available = `в снимке: ${shortRange(potential.availablePeriod)}`;
+  if (!potential.covered) {
+    return { ...base, note: `${source}; за ${shortRange(requested)} нет ни одного целого периода снимка (${available}).${suggestion}` };
+  }
+  const uncovered = (potential.uncovered || []).map(shortRange).join(", ");
+  const partialPeriods = (potential.periods || []).filter((period) => period.partial)
+    .map((period) => shortRange({ from: period.periodStart, to: period.periodEnd })).join(", ");
+  const coverage = potential.complete ? `покрыт целиком, ${granularityLabel(potential.granularities, potential.partial)}`
+    : `покрыто ${shortRange(potential.covered)}${uncovered ? `, не покрыто: ${uncovered}` : ""}`;
+  const partial = partialPeriods ? `; неполный период снимка: ${partialPeriods}` : "";
+  const missing = (potential.missingCategories || []).length
+    ? `; в части периодов нет рубрик: ${potential.missingCategories.join(", ")} — итог по ним неизвестен` : "";
+  const overlap = "; рубрики могут пересекаться, это не уникальные люди";
+  const names = potential.unclassifiedCategories || [];
+  const unclassified = names.length ? `не назначено ${names.length}: ${names.join(", ")}` : "все рубрики назначены";
+  const breakdown = { all: potential.totals.all, target: potential.totals.target, nonTarget: potential.totals.nonTarget,
+    unclassified: potential.totals.unclassified };
+  if (potential.totals.target === null) {
+    return { ...base, kind: "snapshot", date: potential.capturedAt, breakdown,
+      note: `${source}; целевой спрос не считается (${unclassified}${missing ? missing.slice(1) : ""}). ` +
+        `Всего по рубрикам: ${formatMetric(potential.totals.all)}; ${coverage}${partial}${overlap}. Назначьте рубрики в «Потенциал 2ГИС».${suggestion}` };
+  }
+  return { ...base, value: potential.totals.target, kind: "snapshot", date: potential.capturedAt, breakdown,
+    note: `${source}, только целевые рубрики; всего по рубрикам: ${formatMetric(potential.totals.all)}; ${unclassified}; ${coverage}${partial}${missing}${overlap}.${suggestion}` };
+};
 const optionalSum = (values) => values.some((value) => value !== null && value !== undefined)
   ? values.reduce((sum, value) => sum + (Number(value) || 0), 0) : null;
 const formatMetric = (value) => value === null || value === undefined ? "—" :
@@ -124,8 +174,8 @@ const renderPlatformFilter = () => {
 };
 const funnelProjectLabel = () => ctx.selectedProjectId === "synapse-business" ? "онлайн-созвон" :
   ["alvi", "avokado"].includes(ctx.selectedProjectId) ? "запись на визит" : "заявка";
-const renderAnalytics = (dashboard, summary, expenses) => {
-  analyticsState.payload = { dashboard, summary, expenses };
+const renderAnalytics = (dashboard, summary, expenses, potential = null, owner = analyticsState.payload?.owner) => {
+  analyticsState.payload = { dashboard, summary, expenses, potential, owner };
   const stats = Array.isArray(dashboard.sourceStats) ? dashboard.sourceStats : [];
   const allSelected = analyticsState.selected.size === ANALYTICS_PLATFORMS.length;
   const knownCodes = new Set(ANALYTICS_PLATFORMS.flatMap((platform) => platform.codes));
@@ -159,13 +209,7 @@ const renderAnalytics = (dashboard, summary, expenses) => {
   const financeUnavailable = expensesUnavailable || (!allSelected && financeExpenses === null);
   const newestCapture = platforms.map((platform) => platform.capturedAt).filter(Boolean).sort().at(-1);
   const funnel = [
-    {
-      id: "potential",
-      label: "Потенциал",
-      value: null,
-      kind: "none",
-      note: "поиски по целевым запросам и конкуренты — ручной ввод, появится в «Рекламных площадках»"
-    },
+    potentialStep(potential, analyticsState.range),
     { id: "views", label: "Показы", value: pageViews, kind: pageViews === null ? "none" : "snapshot",
       date: newestCapture, note: "переходы на карточку площадки" },
     { id: "clicks", label: "Клики", value: funnelClicks, kind: funnelClicks === null ? "none" :
@@ -181,14 +225,24 @@ const renderAnalytics = (dashboard, summary, expenses) => {
   const numeric = funnel.map((step) => step.value).filter((value) => value !== null);
   const maximum = Math.max(...numeric, 1);
   const funnelRows = funnel.map((step, index) => {
-    const previous = funnel[index - 1]?.value;
-    const conversion = step.value !== null && previous > 0
-      ? `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(step.value / previous * 100)}%` : "—";
+    const previousStep = funnel[index - 1];
+    const previous = previousStep?.value;
+    // Переход из ступени с noConversionFrom (потенциал → показы) процентом не выражается.
+    const conversion = previousStep?.noConversionFrom ? `— (${previousStep.noConversionFrom})`
+      : step.value !== null && previous > 0
+        ? `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(step.value / previous * 100)}%` : "—";
     const width = step.value === null ? 28 : Math.max(28, step.value / maximum * 100);
     const details = platforms.map((platform) => {
       const key = { views: "pageViews", clicks: "funnelClicks", warmup: "clicks", deal: "sales" }[step.id];
       let value = key ? platform[key] : null;
       if (step.id === "warmup") value = optionalSum([platform.clicks, platform.leads]);
+      if (step.id === "potential") {
+        if (platform.platform.id !== "2gis" || !step.breakdown) return `<div><dt>${escapeHTML(platform.platform.label)}</dt><dd>—</dd></div>`;
+        return `<div><dt>2ГИС: целевые рубрики</dt><dd>${formatMetric(step.breakdown.target)}</dd></div>
+          <div><dt>2ГИС: нецелевые</dt><dd>${formatMetric(step.breakdown.nonTarget)}</dd></div>
+          <div><dt>2ГИС: не назначено</dt><dd>${formatMetric(step.breakdown.unclassified)}</dd></div>
+          <div><dt>2ГИС: все рубрики</dt><dd>${formatMetric(step.breakdown.all)}</dd></div>`;
+      }
       return `<div><dt>${escapeHTML(platform.platform.label)}</dt><dd>${formatMetric(value)}</dd></div>`;
     }).join("");
     return `<div class="funnel-step"><button class="funnel-shape" type="button" style="width:${width}%"
@@ -267,18 +321,42 @@ const renderAnalytics = (dashboard, summary, expenses) => {
       <th>Сумма</th><th>Комментарий</th></tr></thead><tbody>${expenseRows}</tbody></table></div>`
     : '<div class="crm-empty">За период расходов нет</div>';
 };
+// Каждая загрузка получает монотонный номер и снимок компании/периода. Ответ (успешный или ошибочный)
+// применяется, только если он всё ещё последний и относится к текущим компании и периоду: старый ответ
+// той же компании за другой период или после переключения A→B→A не перезапишет новый.
+let analyticsRequestId = 0;
+const sameScope = (owner) => owner && owner.companyCode === scopeParams().companyCode &&
+  owner.from === analyticsState.range.from && owner.to === analyticsState.range.to;
 const loadAnalytics = async () => {
   if (ctx.currentView !== "analytics-through" || !identity.permissions.includes("analytics.view")) return;
+  const requestId = ++analyticsRequestId;
+  analyticsState.payload = null;
   byId("analytics-content").innerHTML = '<div class="crm-empty">Загрузка аналитики…</div>';
-  const range = analyticsState.range;
+  const range = { ...analyticsState.range };
+  let owner;
   try {
-    const [dashboard, summary, expensePayload] = await Promise.all([
-      crmQuery("/dashboard", { period: analyticsState.period, ...range, ...scopeParams() }),
-      crmQuery("/summary", { ...range, ...scopeParams() }),
-      crmQuery("/expenses", { ...range, ...scopeParams() })
-    ]);
-    renderAnalytics(dashboard, summary, expensePayload.expenses || []);
+    owner = { ...scopeParams(), ...range };
   } catch (error) {
+    byId("analytics-content").innerHTML = `<div class="crm-error" role="alert">${escapeHTML(error.message)}</div>`;
+    return;
+  }
+  const current = () => requestId === analyticsRequestId && sameScope(owner);
+  const scope = { companyCode: owner.companyCode };
+  try {
+    const [dashboard, summary, expensePayload, potential] = await Promise.all([
+      crmQuery("/dashboard", { period: analyticsState.period, ...range, ...scope }),
+      crmQuery("/summary", { ...range, ...scope }),
+      crmQuery("/expenses", { ...range, ...scope }),
+      // Снимок 2ГИС не должен ломать всю аналитику: ошибка запроса показывается только в ступени «Потенциал».
+      crmQuery("/platform-demand/potential", { ...range, ...scope })
+        .then((result) => result?.company?.code === scope.companyCode &&
+          result?.requested?.from === range.from && result?.requested?.to === range.to ? result : { error: true })
+        .catch(() => ({ error: true }))
+    ]);
+    if (!current()) return;
+    renderAnalytics(dashboard, summary, expensePayload.expenses || [], potential, owner);
+  } catch (error) {
+    if (!current()) return;
     byId("analytics-content").innerHTML =
       `<div class="crm-error" role="alert">Не удалось загрузить: ${escapeHTML(error.message)}</div>`;
     byId("expenses-content").replaceChildren();
@@ -309,11 +387,14 @@ const renderAnalyticsControls = () => {
       analyticsState.selected.delete(event.target.value);
     }
     renderPlatformFilter();
-    if (analyticsState.payload) {
+    // Перерисовка из кеша только если кеш принадлежит текущим компании и периоду; иначе ждём загрузку.
+    if (analyticsState.payload && sameScope(analyticsState.payload.owner)) {
       renderAnalytics(
         analyticsState.payload.dashboard,
         analyticsState.payload.summary,
-        analyticsState.payload.expenses
+        analyticsState.payload.expenses,
+        analyticsState.payload.potential,
+        analyticsState.payload.owner
       );
     }
   });
