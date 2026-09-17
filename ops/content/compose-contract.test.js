@@ -39,7 +39,7 @@ test('content получает все переменные резерва Хью
   const env = envOf(block);
   const expected = ['HUGH_FALLBACK_PROVIDERS', 'HUGH_FALLBACK_OPENROUTER_URL', 'HUGH_FALLBACK_OPENROUTER_KEY', 'HUGH_FALLBACK_OPENROUTER_MODEL', 'HUGH_FALLBACK_OPENROUTER_TIMEOUT_MS',
     'HUGH_FALLBACK_DEEPSEEK_URL', 'HUGH_FALLBACK_DEEPSEEK_KEY', 'HUGH_FALLBACK_DEEPSEEK_MODEL', 'HUGH_FALLBACK_DEEPSEEK_TIMEOUT_MS',
-    'HUGH_FALLBACK_LOCAL_OFFLINE_MINUTES', 'HUGH_ACK_WHEN_UNAVAILABLE', 'MAX_PUBLISHING_VIDEO_BYTES'];
+    'HUGH_FALLBACK_LOCAL_OFFLINE_MINUTES', 'HUGH_ACK_WHEN_UNAVAILABLE', 'MAX_PUBLISHING_VIDEO_BYTES', 'TELEGRAM_BOT_USERNAME', 'CABINET_PUBLIC_URL'];
   for (const name of expected) {
     assert.ok(Object.hasOwn(env, name), `не проброшена ${name}`);
     assert.match(env[name], new RegExp(`^\\$\\{${name}:-[^}]*\\}$`), `${name} должна браться из .env сервера с пустым/безопасным значением по умолчанию`);
@@ -56,4 +56,12 @@ test('content получает все переменные резерва Хью
   const example = fs.readFileSync(path.join(__dirname, '..', '..', '.env.example'), 'utf8');
   for (const name of expected.filter((n) => n.startsWith('HUGH_'))) assert.ok(example.includes(`${name}=`) || name.endsWith('_TIMEOUT_MS'), `${name} должна быть в .env.example`);
   assert.ok(!/HUGH_FALLBACK_[A-Z]+_KEY=\S/.test(example), 'в .env.example нет значений ключей');
+});
+
+test('chat получает имя бота для команд Хью явным перечнем, токен бота в content не пробрасывается', () => {
+  const chat = envOf(serviceBlock('chat'));
+  assert.equal(chat.TELEGRAM_BOT_USERNAME, '${TELEGRAM_BOT_USERNAME:-}');
+  assert.ok(Object.hasOwn(chat, 'TELEGRAM_BOT_TOKEN'));
+  const content = envOf(serviceBlock('content'));
+  assert.ok(!Object.hasOwn(content, 'TELEGRAM_BOT_TOKEN'));
 });

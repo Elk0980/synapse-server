@@ -17,7 +17,8 @@ const clean = (value, max) => String(value ?? '').replace(/[\r\n\t]+/g, ' ').sli
 // Ответ ИИ в группе подписывается всегда одинаково: участники видят, что пишет бот, а не Влад.
 const AI_SIGNATURE = 'Хью, бизнес-ассистент Синапс Бизнес (ИИ)';
 
-function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacyHandler,
+function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacyHandler, botUsername = '',
+  botId = /^\d+:/.test(String(telegramToken || '')) ? String(telegramToken).split(':')[0] : '',
   fetchImpl = (...args) => fetch(...args), quietHours = parseQuietHours(process.env), now = () => new Date() }) {
   db.exec(`CREATE TABLE IF NOT EXISTS project_telegram_inbox (
     update_id INTEGER PRIMARY KEY, body TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending',
@@ -138,8 +139,25 @@ function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacy
       return;
     }
     if (!room) return legacyHandler(update);
-    // Команды администратора остаются у прежнего обработчика и не сохраняются как сообщения проекта.
+    // Команды Хью (/hugh /plan /content /idea /status /help) идут в комнату проекта тем же путём;
+    // остальные команды администратора остаются у прежнего обработчика и не сохраняются как сообщения проекта.
+    const hughCommand = /^\s*\/(hugh|plan|content|idea|status|help)(?:@([A-Za-z0-9_]{1,64}))?(?:\s|$)/u.exec(message.text || '');
+    if (hughCommand) {
+      // Команда с адресатом: только нашему боту. Имя бота неизвестно — адресованные команды не принимаем (fail-closed),
+      // чтобы комната не отвергала их 400 и обновление не крутилось в очереди.
+      if (hughCommand[2] && (!botUsername || hughCommand[2].toLowerCase() !== botUsername.toLowerCase())) return;
+      await content('/receive', { chatId: String(message.chat.id), messageId: String(message.message_id),
+        authorId: String(message.from?.id || ''), authorName: [message.from?.first_name, message.from?.last_name].filter(Boolean).join(' ') || 'Участник Telegram',
+        text: message.text, command: hughCommand[1] });
+      return;
+    }
     if (/^\s*\//u.test(message.text || '')) return legacyHandler(update);
+    // Адресовано боту: ответ на его сообщение или @упоминание — комната решает, ставить ли вопрос модели.
+    // Ответ именно нашему боту: по id из токена или по имени; ответы чужим ботам — не обращение.
+    const repliedTo = message.reply_to_message?.from;
+    const replyToBot = Boolean(repliedTo?.is_bot && ((botId && String(repliedTo.id) === botId) || (botUsername && String(repliedTo.username || '').toLowerCase() === botUsername.toLowerCase())));
+    const mentions = (message.entities || []).filter((e) => e.type === 'mention').map((e) => String(message.text || '').slice(e.offset, e.offset + e.length));
+    const addressed = replyToBot || (botUsername && mentions.some((m) => m.replace(/^@/, '').toLowerCase() === botUsername.toLowerCase()));
     const { files, note } = await attachment(message);
     const text = [message.text || message.caption || '', note].filter(Boolean).join('\n');
     if (!text && !files.length) return;
@@ -147,7 +165,7 @@ function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacy
       chatId: String(message.chat.id), messageId: String(message.message_id),
       authorId: String(message.from?.id || message.sender_chat?.id || ''),
       authorName: [message.from?.first_name, message.from?.last_name].filter(Boolean).join(' ') || message.sender_chat?.title || 'Участник Telegram',
-      text, files,
+      text, files, addressed: Boolean(addressed),
     };
     try {
       await content('/receive', event);

@@ -2504,6 +2504,17 @@ async function route(request, response) {
     else fail(405,'Метод не поддерживается');
     return send(response,200,result,{...cors,'cache-control':'no-store'});
   }
+  // Служебная сводка плана для команд Хью в Telegram: только по ключу сервиса, без подписей и метаданных карточек.
+  if (url.pathname === '/autoposting/plan-summary' && request.method === 'GET') {
+    const code = url.searchParams.get('companyCode');
+    if (typeof code !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400, 'Выберите компанию');
+    const company = db.prepare('SELECT code FROM companies WHERE code=? COLLATE NOCASE AND is_deleted=0').get(code);
+    if (!company) fail(404, 'Компания не найдена', { code: 'NOT_FOUND' });
+    const items = autoposting.list(company.code).posts.filter((p) => p.dayKey || Object.keys(p.captions || {}).length).map((p) => ({
+      id: p.id, dayKey: p.dayKey, title: p.title, reviewState: p.review?.state || 'draft', status: p.status,
+      scheduledAt: p.scheduledAt, timezone: p.timezone, mediaKind: p.readiness?.mediaKind || 'none' }));
+    return send(response, 200, { companyCode: company.code.toLowerCase(), items }, { ...cors, 'cache-control': 'no-store' });
+  }
   if (/^\/autoposting(?:\/|$)/.test(url.pathname)) {
     const permission = request.method !== 'GET' || url.pathname.endsWith('/profiles') ? 'autoposting.edit' : 'autoposting.view';
     const {identity,company} = companyModuleContext(request,url.searchParams.get('companyCode'),permission);
