@@ -409,10 +409,14 @@
   // Код устройства выдаётся ровно в этом виде (device-login.js). Чужая строка кодом не считается.
   const deviceCode = value => /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(String(value ?? "")) ? String(value) : "";
   const CONNECT_HINT = "Нажмите «Подключить подписку»: сервер откроет вход и выдаст ссылку с кодом подтверждения.";
+  // Пояснение сервера приходит без завершающей точки: дописываем, чтобы соседние фразы не слиплись.
+  const sentence = value => {
+    const text = String(value ?? "").replace(/\s*[.;:!?]+$/, "").trim();
+    return text ? `${text}.` : "";
+  };
   const runtimeHTML = data => {
     const model = data.model ? ` Модель: ${escape(data.model)}.` : "";
-    // Пояснение сервера приходит без завершающей точки: дописываем, чтобы соседние фразы не слиплись.
-    const detail = data.error ? ` ${escape(String(data.error).replace(/\s*[.;:!?]+$/, ""))}.` : "";
+    const detail = data.error ? ` ${escape(sentence(data.error))}` : "";
     // Вход выполнен — это ещё не «готово»: при исчерпанной квоте сервер оставляет
     // connected и authenticated истинными, но состояние уже не connected. Вход при этом
     // не сломан, поэтому подключать подписку заново здесь не предлагается.
@@ -448,12 +452,17 @@
         const data = await request(state, "/content/project-chat-runtime/" + (login ? "login" : "status"), login ? { method: "POST", body: "{}", timeoutMs: 40000 } : {}, true);
         if (live(state, view) && dialog.isConnected) dialog.querySelector("[data-pc-runtime]").innerHTML = runtimeHTML(data);
       } catch (error) {
-        // Сорвавшийся запрос — это про связь сервера с Codex, а не про учётную запись владельца.
-        // Ни причины «региона», ни требования входить снова и снова здесь быть не должно.
+        // Пояснение сервера уже очищено и локализовано — показываем его как есть, не заменяя
+        // догадкой. Если ответа не было вовсе, причина неизвестна, и так и говорим: выдавать
+        // «временный сбой сети» за установленный факт нельзя, как и рассуждать про регион
+        // или учётную запись владельца.
         if (live(state, view) && dialog.isConnected && error.name !== "AbortError") {
-          dialog.querySelector("[data-pc-runtime]").textContent = login
-            ? "Не удалось начать подключение: запрос к Codex не прошёл. Обычно это временный сбой связи — повторите попытку через минуту."
-            : "Не удалось проверить подключение Codex: запрос не прошёл. Обычно это временный сбой связи — повторите проверку.";
+          const head = login ? "Подключение не начато" : "Проверка не удалась";
+          const again = login ? "Повторите попытку." : "Повторите проверку.";
+          const reported = Number.isInteger(error.status) ? sentence(error.message) : "";
+          dialog.querySelector("[data-pc-runtime]").textContent = reported
+            ? `${head}. ${reported} ${again}`
+            : `${head}: ответ от сервера не получен, причина неизвестна. ${again}`;
         }
       }
       finally { buttons.forEach(button => { button.disabled = false; }); }

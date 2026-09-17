@@ -29,6 +29,7 @@ const {
   matchLoginCompleted,
   parseAccount,
 } = require('./device-login');
+const {classifyLoginFailure, formatLoginDiagnostics, loginFailureMessage} = require('./login-diagnostics');
 const {buildDeveloperInstructions, buildTurnInput} = require('./prompt');
 const {capOutput} = require('./limits');
 const {RuntimeError, unavailable} = require('./errors');
@@ -597,9 +598,15 @@ class HughRuntime {
     let result;
     try {
       result = await client.request('account/login/start', {type: 'chatgptDeviceCode'}, {timeoutMs: 30_000});
-    } catch {
+    } catch (error) {
+      /* Причина сводится к категории из закрытого набора и к числам (login-diagnostics.js).
+         Сырое сообщение Codex не журналируется и наружу не уходит: в нём бывают адрес с
+         параметрами, код устройства и токен. Раньше здесь терялось вообще всё, и прод
+         показывал только LOGIN_FAILED без единого признака причины. */
+      const detail = classifyLoginFailure(error);
+      this.logger.error(`hugh-runtime: login_start_failed ${formatLoginDiagnostics(detail)}`);
       this.login = {status: 'failed', loginId: null, verificationUrl: null, userCode: null, expiresAt: null, reason: 'login_start_failed'};
-      throw unavailable('LOGIN_FAILED', 'Не удалось начать вход в подписку');
+      throw unavailable('LOGIN_FAILED', loginFailureMessage(detail));
     }
     const parsed = parseDeviceLoginResponse(result);
     if (!parsed.ok) {
