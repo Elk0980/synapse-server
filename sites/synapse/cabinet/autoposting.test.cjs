@@ -3,6 +3,31 @@ const {JSDOM}=require('jsdom');
 const scripts=['company-information.js','autoposting.js'].map(file=>fs.readFileSync(require.resolve('./'+file),'utf8'));
 const clone=value=>JSON.parse(JSON.stringify(value)),tick=()=>new Promise(resolve=>setImmediate(resolve));
 const channels=()=>[{id:'telegram',platform:'telegram',name:'Telegram',target:'@fixture',revision:1,enabled:true,connected:true,caps:{maxText:4096,maxMedia:10}},{id:'vk',platform:'vk',name:'ВКонтакте',target:'club1',revision:1,enabled:true,connected:true,caps:{maxText:15000,maxMedia:1,mediaMode:'link'}}];
+test('VK setup separates company reference from verified access and performs no writes',async()=>{
+ const f=await fixture({override:call=>{
+  if(call.path.endsWith('/company-information'))return {companyCode:call.code,revision:2,profile:{socials:[{type:'vk',url:'https://vk.ru/'+call.code}]}};
+  if(call.path.endsWith('/autoposting/settings'))return {channels:[{id:'vk',platform:'vk',connected:false,enabled:false,tokenConfigured:false,revision:0}]};
+ }});try{
+  const guide=f.node('vk-connection-guide');assert.match(guide.textContent,/ВКонтакте · АЛВИ/);assert.match(guide.textContent,/Авторизация через кнопку ВК в Synapse пока не настроена/);
+  assert.equal(guide.querySelector('a').href,'https://vk.ru/alvi');assert.ok(f.calls.every(c=>c.method==='GET'));
+  f.set('autoposting-company','avokado','change');assert.ok(!guide.textContent.includes('https://vk.ru/alvi'));await f.settle();
+  assert.match(guide.textContent,/ВКонтакте · Авокадо/);assert.equal(guide.querySelector('a').href,'https://vk.ru/avokado');
+  assert.ok(!guide.querySelector('input[type=password]'));assert.ok(f.calls.every(c=>c.method==='GET'));
+ }finally{f.close();}
+});
+test('VK setup does not turn a lookalike host into the community link',async()=>{
+ const f=await fixture({override:call=>call.path.endsWith('/company-information')?{companyCode:call.code,revision:2,profile:{socials:[{type:'vk',url:'https://vk.ru.attacker.example/group'}]}}:undefined});
+ try{assert.equal(f.node('vk-connection-guide').querySelector('a[target=_blank]'),null);assert.match(f.node('vk-connection-guide').textContent,/Доступ проверен/);}finally{f.close();}
+});
+test('company selector delegates to cabinet workspace switch when available',async()=>{
+ const f=await fixture();try{let chosen;f.ctx.chooseProject=code=>{chosen=code;};f.set('autoposting-company','avokado','change');assert.equal(chosen,'avokado');
+  await f.views.autoposting.onProjectChange({...f.ctx,selectedProjectId:'avokado'});assert.match(f.node('vk-connection-guide').textContent,/ВКонтакте · Авокадо/);
+ }finally{f.close();}
+});
+test('VK access failure explains missing permission without exposing provider text',async()=>{
+ const f=await fixture({override:call=>call.path.endsWith('/check')?{ok:false,code:'WALL_PERMISSION_REQUIRED',error:'RAW_SECRET'}:undefined});
+ try{f.node('autoposting-channels').querySelector('[data-check-channel=vk]').click();await f.settle();assert.match(f.node('autoposting-status').textContent,/разрешение wall/);assert.ok(!f.d.body.textContent.includes('RAW_SECRET'));}finally{f.close();}
+});
 async function fixture({role='owner',permissions=[],override,entries=[]}={}){
   const dom=new JSDOM('<section id="view"></section>',{url:'https://cabinet.test/',runScripts:'outside-only'}),w=dom.window,d=w.document,views={},calls=[],posts=clone(entries),configs={alvi:{channels:channels(),timezone:'Asia/Irkutsk'},avokado:{channels:channels(),timezone:'Asia/Irkutsk'}};
   w.SbCabinet={registerView:(name,view)=>{views[name]=view;}};scripts.forEach(source=>w.eval(source));

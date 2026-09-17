@@ -15,6 +15,14 @@ const ERRORS = {PROFILE_CHANGED:"Изменились данные компан�
   MEDIA_UNSUPPORTED:"Этот материал не поддерживается выбранной площадкой."};
 const EDITABLE = new Set(["draft","needs_review","failed","cancelled"]);
 const PLANNING = [["two_gis","2ГИС"],["yandex_maps","Яндекс Карты"],["max","MAX"]];
+const CONNECTION_ERRORS = {
+  WALL_PERMISSION_REQUIRED:"Ключ не даёт права публиковать записи. Требуется разрешение wall у приложения ВК.",
+  ADMIN_REQUIRED:"Не подтверждены права на выбранное сообщество. Проверьте его ID и права пользователя, которому выдан ключ.",
+  ACCESS_DENIED:"ВК не принял доступ. Ключ мог истечь или не иметь необходимых разрешений.",
+  CONNECTION_UNCERTAIN:"Площадка не ответила вовремя. Статус подключения не подтверждён.",
+  TOKEN_UNREADABLE:"Сохранённый ключ недоступен. Обратитесь к администратору Synapse.",
+  SETTINGS_CHANGED:"Настройки изменились во время проверки. Обновите статусы перед повторной проверкой."
+};
 let controller;
 function create(container, context) {
   const time = cabinet.companyTime;
@@ -26,6 +34,7 @@ function create(container, context) {
   container.innerHTML=`<h2>Автопостинг</h2><p>Подготовьте материал, проверьте его и поставьте в план. Постановка в план разрешает автоматическую публикацию в указанное время.</p>
     <div class="autoposting-toolbar"><label for="autoposting-company">Компания</label><select id="autoposting-company">${companies.map(item=>`<option value="${esc(item.code)}">${esc(item.name)}</option>`).join("")}</select><button class="plain-button" id="autoposting-refresh" type="button">Обновить статусы</button><a href="#company-information">Данные компании</a></div>
     <p id="autoposting-status" role="status" aria-live="polite"></p>
+    <section class="card vk-connection-guide" id="vk-connection-guide" aria-labelledby="vk-connection-title"></section>
     <details class="card autoposting-connections"><summary>Подключение площадок</summary><p class="autoposting-note">Пустой ключ сохраняет прежний. Новый ключ применяется только кнопкой сохранения; после изменения канала проверьте доступ. Проверка не публикует посты.</p><div id="autoposting-channels" class="autoposting-channel-grid"></div><div id="autoposting-planning" class="autoposting-planning"></div></details>
     <section class="card autoposting-calendar-section"><h3>Календарь публикаций</h3><p id="autoposting-calendar-zone" class="autoposting-note"></p><div class="autoposting-toolbar"><button class="plain-button" id="autoposting-prev" type="button" aria-label="Предыдущий месяц">←</button><label for="autoposting-month" class="autoposting-sr-only">Месяц календаря</label><input type="month" id="autoposting-month"><button class="plain-button" id="autoposting-next" type="button" aria-label="Следующий месяц">→</button><button class="plain-button" id="autoposting-all" type="button">Все даты</button></div><div id="autoposting-calendar" class="autoposting-calendar"></div><div id="autoposting-posts"></div></section>
     <div class="autoposting-editor-grid"><section class="card"><h3>Материал</h3><label for="autoposting-select">Открыть материал</label><select id="autoposting-select"><option value="">Новый черновик</option></select><p id="autoposting-post-state"></p><p id="autoposting-post-error" role="status" hidden></p><div id="autoposting-deliveries"></div>
@@ -110,16 +119,33 @@ function create(container, context) {
     renderState();invalidate();
   };
   const renderChannels=()=>{
+    const vk=channels().find(channel=>channel.id==="vk");
+    const socials=Array.isArray(information?.profile?.socials)?information.profile.socials:[];
+    const candidate=safeUrl(socials.find(item=>item.type==="vk")?.url);
+    const communityUrl=candidate&&["vk.com","www.vk.com","vk.ru","www.vk.ru"].includes(new URL(candidate).hostname)?candidate:null;
+    const companyName=companies.find(item=>item.code===companyCode)?.name||companyCode;
+    const saved=Boolean(vk?.tokenConfigured||vk?.connected);
+    get("vk-connection-guide").innerHTML=`<h3 id="vk-connection-title">ВКонтакте · ${esc(companyName)}</h3>
+      <p class="vk-connection-state">${vk?.connected?"Доступ проверен" : saved?"Подключение сохранено — доступ требует проверки":"Подключение не настроено"}${vk?.enabled?" · автоматическая отправка разрешена":" · автоматическая отправка выключена"}</p>
+      <ol class="vk-connection-steps">
+        <li><strong>Сообщество компании</strong><p>${communityUrl?`Ссылка сохранена в карточке ${esc(companyName)}: <a href="${esc(communityUrl)}" target="_blank" rel="noopener noreferrer">${esc(communityUrl)}</a>`:'Добавьте ссылку на сообщество в разделе «Данные компании».'} Ссылка сама по себе не подтверждает права доступа.</p></li>
+        <li><strong>Разрешение на публикации</strong><p>${saved?"Ключ сохранён. Его значение не отображается в кабинете.":"Авторизация через кнопку ВК в Synapse пока не настроена. Администратору Synapse нужно зарегистрировать или найти приложение и подтвердить доступный способ выдачи разрешения на публикации. Сейчас получать ключ вручную не требуется."}</p></li>
+        <li><strong>Проверка выбранного сообщества</strong><p>${vk?.connected?"Права на сохранённое сообщество проверены. Изменение подключения потребует повторной проверки.":"После настройки доступа проверяется право публиковать именно в выбранном сообществе. Проверка не создаёт пост."}</p></li>
+        <li><strong>Первый материал</strong><p>Сохраните черновик, проверьте предпросмотр и поставьте конкретный материал в план. Подключение канала само по себе не создаёт публикации.</p></li>
+      </ol>
+      <p class="autoposting-note">Сейчас поддерживаются текст и одна ссылка. Загрузка фото в ВК, изменение обложки, меню и описания сообщества, чтение сообщений и управление рекламой этим подключением не выполняются.</p>
+      <a href="#company-information">Данные компании</a>
+      <details class="vk-connection-help"><summary>Что потребуется от владельца</summary><p>Когда официальный способ авторизации будет настроен, владелец подтвердит доступ к нужному сообществу в ВК. Пароль ВК и ключи не нужно отправлять в переписку. Передача владения сообществом не требуется.</p><p>Если у администратора уже есть совместимый ключ пользователя с правом wall, ниже доступны ручные настройки существующего подключения. Обычный ключ сообщества не подходит текущему модулю.</p></details>`;
     get("autoposting-channels").innerHTML=channels().map(channel=>{
       const values=channelDrafts.get(companyCode+":"+channel.id)?.values||channel;
-      return `<form class="autoposting-channel" data-channel="${esc(channel.id)}"><h3>${esc(channel.platform==="vk"?"ВКонтакте":"Telegram")}</h3><p>${channel.connected?"Доступ подтверждён":"Доступ не подтверждён"}${channel.enabled?" · включён":" · выключен"}</p>
+      return `<form class="autoposting-channel" data-channel="${esc(channel.id)}"><h3>${esc(channel.platform==="vk"?"ВКонтакте — ручное подключение":"Telegram")}</h3><p>${channel.connected?"Доступ подтверждён":"Доступ не подтверждён"}${channel.enabled?" · включён":" · выключен"}</p>
+        ${channel.platform==="vk"?'<p class="autoposting-note">Для администратора с уже выданным совместимым доступом. Эти поля не создают приложение ВК и не выдают разрешения.</p>':''}
         <label>Название канала<input data-channel-field="name" value="${esc(values.name||"")}" maxlength="200" required></label>
         <label>${channel.platform==="vk"?"ID сообщества (число или clubNNN)":"Канал (@name или -100…)"}<input data-channel-field="target" value="${esc(values.target||"")}" maxlength="200"></label>
         <label>${channel.platform==="vk"?"Новый ключ пользователя с правом wall":"Новый токен бота — администратора канала"}<input data-channel-field="token" type="password" autocomplete="new-password" maxlength="4096"></label>
         <label class="autoposting-checkbox"><input data-channel-field="enabled" type="checkbox"${values.enabled?" checked":""}>Разрешить автоматическую отправку</label>
         <div class="autoposting-actions"><button class="plain-button" type="submit">Сохранить подключение</button><button class="plain-button" type="button" data-check-channel="${esc(channel.id)}">Проверить доступ</button></div></form>`;
     }).join("");
-    const socials=Array.isArray(information?.profile?.socials)?information.profile.socials:[];
     get("autoposting-planning").innerHTML=PLANNING.map(([id,title])=>{const url=safeUrl(socials.find(item=>item.type===id)?.url);return `<div><strong>${title}</strong><p>Планирование материалов. Автоматическая отправка не подключена.</p>${url?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Открыть страницу компании</a>`:"<span class=autoposting-note>Ссылка компании не указана.</span>"}</div>`;}).join("");
   };
   const localDay=item=>time.toLocal(item.scheduledAt,zone()).slice(0,10);
@@ -147,8 +173,9 @@ function create(container, context) {
   const selectPost=id=>{stash();post=posts.find(item=>String(item.id)===String(id))||null;selections.set(companyCode,post?.id||null);renderPost();get("autoposting-select").value=post?String(post.id):"";};
   const load=async(code,refresh=false)=>{
     stash();get("autoposting-photo").value="";get("autoposting-channels").querySelectorAll('input[type="password"]').forEach(node=>{node.value="";});
-    companyCode=code;const version=++epoch;busy=true;settings=null;information=null;post=null;get("autoposting-company").value=code;controls();
-    if(!code){busy=false;message("Нет доступных компаний.");controls();return;}
+    companyCode=code;const version=++epoch;busy=true;settings=null;information=null;post=null;get("autoposting-company").value=code;
+    get("vk-connection-guide").innerHTML='<h3 id="vk-connection-title">Подключение ВКонтакте</h3><p>Загружаем настройки выбранной компании…</p>';controls();
+    if(!code){busy=false;get("vk-connection-guide").textContent="Выберите доступную компанию.";message("Нет доступных компаний.");controls();return;}
     message("Загружаем материалы и подключения…");
     try{const result=await Promise.all([request("/autoposting/settings"),request("/autoposting/posts"),request("/company-information")]);if(version!==epoch)return;
       if(result[1].companyCode!==code||result[2].companyCode!==code)throw Error("Wrong company");
@@ -156,7 +183,7 @@ function create(container, context) {
       month=refresh&&month?month:time.toLocal(new Date().toISOString(),zone()).slice(0,7);selectedDate="";
       post=posts.find(item=>item.id===selections.get(code))||null;
       renderChannels();renderList();renderPost();message(edit()?"Черновики не публикуются до постановки в план.":"Доступ только для просмотра.");
-    }catch(_){if(version===epoch)message("Не удалось загрузить автопостинг. Ввод сохранён в текущем окне; повторите обновление.");}
+    }catch(_){if(version===epoch){get("vk-connection-guide").textContent="Не удалось получить статус подключения выбранной компании. Обновите статусы.";message("Не удалось загрузить автопостинг. Ввод сохранён в текущем окне; повторите обновление.");}}
     finally{if(version===epoch){busy=false;controls();}}
   };
   form.addEventListener("input",()=>{stash();invalidate();});form.addEventListener("change",()=>{stash();invalidate();});
@@ -188,7 +215,7 @@ function create(container, context) {
     void run(async current=>{const result=await request("/autoposting/posts/"+encodeURIComponent(post.id)+"/cancel","POST",{revision:post.revision});if(!current())return;post=result;posts=posts.map(item=>item.id===result.id?result:item);renderList();renderPost();message("Материал снят с очереди. Уже начатую публикацию площадка может завершить.");
     },"Отменяем публикацию…","Не удалось подтвердить отмену. Обновите статусы.");
   });
-  get("autoposting-company").addEventListener("change",()=>{void load(get("autoposting-company").value);});
+  get("autoposting-company").addEventListener("change",()=>{const code=get("autoposting-company").value;if(ctx.chooseProject)ctx.chooseProject(code);else void load(code);});
   get("autoposting-upload").addEventListener("click",()=>{
     if(busy||!edit()||!settings||(post&&!EDITABLE.has(post.status)))return;const file=get("autoposting-photo").files?.[0];
     if(!file){message("Выберите фото с устройства.");return;}
@@ -221,7 +248,7 @@ function create(container, context) {
     const node=button.closest("[data-channel]"), channel=channels().find(item=>item.id===button.dataset.checkChannel);
     if(channelDrafts.has(companyCode+":"+channel.id)||node.querySelector('[data-channel-field="token"]').value){message("Сначала сохраните изменения подключения. Проверка использует сохранённые данные.");return;}
     void run(async current=>{const result=await request("/autoposting/settings/"+encodeURIComponent(channel.id)+"/check","POST",{});if(!current())return;const refreshed=await request("/autoposting/settings");if(!current())return;settings=refreshed;
-      renderChannels();invalidate();message(result.ok===true?"Доступ к каналу подтверждён. Проверка не публикует посты.":"Не удалось подтвердить доступ. Проверьте ключ и права в настройках площадки.");
+      renderChannels();invalidate();message(result.ok===true?"Доступ к каналу подтверждён. Проверка не публикует посты.":CONNECTION_ERRORS[result.code]||"Не удалось подтвердить доступ. Проверьте ключ и права в настройках площадки.");
     },"Проверяем доступ без публикации…","Не удалось проверить канал. Посты этой проверкой не публикуются.");
   });
   const code=companies.find(item=>item.code===ctx.selectedProjectId)?.code||companies[0]?.code||"";
