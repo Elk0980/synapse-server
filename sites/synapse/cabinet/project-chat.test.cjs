@@ -121,13 +121,18 @@ test('общая переписка экранирует имена, текст�
     routes: {
       'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ messages: [
         message({ id: 'm1', authorName: '<img src=x onerror="alert(1)">', text: 'Смотри <script>alert(2)</script>', deliveryStatus: 'sending', attachments: [{ id: 'a1', name: 'фото "стена".jpg', mime: 'image/jpeg', url: '/content/project-chat/palitra-love/attachments/a1' }] }),
-        message({ id: 'm2', authorType: 'telegram', authorName: 'Дарья', text: 'Готово', deliveryStatus: 'sent', attachments: [{ id: 'a2', name: 'видео.mp4', mime: 'video/mp4', url: null, note: 'файл слишком большой для кабинета' }] })
+        message({ id: 'm2', authorType: 'telegram', authorName: 'Дарья', text: 'Готово', deliveryStatus: 'sent', attachments: [{ id: 'a2', name: 'видео.mp4', mime: 'video/mp4', url: null, note: 'файл слишком большой для кабинета' }] }),
+        message({ id: 'm3', authorType: 'assistant', authorName: 'Хью', text: 'Принято' })
       ] }) })
     }
   });
   await mount(harness);
   const { d } = harness;
-  assert.deepEqual(ids(harness.dom), ['m1', 'm2']);
+  assert.deepEqual(ids(harness.dom), ['m1', 'm2', 'm3']);
+  // Ответ ИИ помечен явно и всегда одинаково; людей пометка не касается.
+  assert.equal(d.querySelectorAll('.pc-ai-badge').length, 1);
+  assert.equal(d.querySelector('[data-message-id="m3"] .pc-ai-badge').textContent, 'ИИ · бизнес-ассистент Синапс Бизнес');
+  assert.equal(d.querySelector('[data-message-id="m1"] .pc-ai-badge'), null);
   assert.equal(d.querySelector('.pc-message-meta strong').textContent, '<img src=x onerror="alert(1)">');
   assert.equal(d.querySelectorAll('script').length, 0);
   assert.match(d.querySelector('.pc-message-text').textContent, /<script>alert\(2\)<\/script>/);
@@ -722,10 +727,146 @@ test('до нажатия «Подключить подписку» владел
   assert.match(pending.textContent, /Код: QRST-5678/);
   assert.match(pending.textContent, /Откройте официальную страницу входа Codex/);
   assert.equal(d.querySelector('[data-pc-login]').disabled, false);
-  // Вход уходит POST с пустым телом: ссылок и кодов клиент не придумывает.
+  // Вход уходит POST только с кодом компании: ссылок и кодов клиент не придумывает.
   const loginCall = harness.calls.find((call) => call.url.includes('/project-chat-runtime/login'));
   assert.equal(loginCall.method, 'POST');
-  assert.equal(loginCall.body, '{}');
+  assert.deepEqual(JSON.parse(loginCall.body), { companyCode: 'palitra-love' });
+  // Проверка состояния тоже указывает компанию: сервер выбирает по ней локальный или серверный путь.
+  const statusCall = harness.calls.find((call) => call.url.includes('/project-chat-runtime/status'));
+  assert.equal(new harness.w.URL(statusCall.url, ORIGIN).searchParams.get('companyCode'), 'palitra-love');
+  harness.w.close();
+});
+
+test('компания с локальным обработчиком: выключенный компьютер показывается честно, вопросы ждут', async () => {
+  const harness = boot({
+    routes: { 'GET /content/project-chat/palitra-love': () => ({ body: snapshot({
+      room: { replyMode: 'delegate', telegramChatId: '' },
+      ai: { configured: true, connected: false, runtimeState: 'offline', local: true, offline: true, lastSeen: '2026-09-17T08:00:00.000Z', queued: 1, waiting: 0, failed: 0,
+        waitingReason: 'Компьютер Хью сейчас не на связи: ответ отправится после его возвращения' },
+      messages: [message({ id: 'm1', text: 'Хью, посчитай смету', aiStatus: 'pending' })]
+    }) }),
+      'GET /content/project-chat-runtime/status': () => ({ body: { configured: true, local: true, offline: true, lastSeen: '2026-09-17T08:00:00.000Z',
+        connected: false, authenticated: false, state: 'offline', provider: 'codex', model: '', loginPending: false, loginUrl: '', userCode: '',
+        error: 'Компьютер Хью не на связи' } }) }
+  });
+  await mount(harness);
+  const summary = text(harness.dom, '[data-pc-ai]');
+  assert.match(summary, /Компьютер Хью сейчас не на связи/);
+  assert.match(summary, /Ожидают ответа: 1/);
+  assert.doesNotMatch(summary, /заменяет Влада|не подключены|недоступен/);
+  assert.match(harness.d.body.textContent, /когда его компьютер снова будет на связи/);
+  assert.doesNotMatch(harness.d.body.textContent, /Хью готовит ответ|после подключения подписки/);
+  assert.equal(harness.d.querySelector('[data-pc-retry-ai]').hidden, true);
+  assert.equal(harness.d.querySelector('[data-pc-compose]').hidden, false);
+  harness.click('[data-pc-settings]');
+  await settle();
+  const runtime = harness.d.querySelector('[data-pc-runtime]');
+  assert.match(runtime.textContent, /Компьютер Хью сейчас не на связи\. Последний сигнал: /);
+  assert.match(runtime.textContent, /вопросы к Хью ждут/);
+  // Выключенный компьютер — не сломанный вход: подключать подписку заново не просим.
+  assert.doesNotMatch(runtime.textContent, /Нажмите «Подключить подписку»/);
+  assert.equal(runtime.querySelector('a'), null);
+  harness.w.close();
+});
+
+test('вход на компьютере Хью: команда принимается 202, кабинет опрашивает состояние и показывает код, когда он пришёл', async () => {
+  const statusCalls = [];
+  let phase = 'idle';
+  const status = () => {
+    statusCalls.push(phase);
+    if (phase === 'idle') return { local: true, configured: true, state: 'login_required', connected: false, authenticated: false, offline: false, loginPending: false, loginUrl: '', userCode: '', error: 'Нужен вход владельца в подписку на компьютере Хью' };
+    if (phase === 'pending') return { local: true, configured: true, state: 'login_pending', connected: false, authenticated: false, offline: false, loginPending: true, loginUrl: '', userCode: '', error: 'Команда входа передана компьютеру Хью, ждём ссылку и код' };
+    return { local: true, configured: true, state: 'login_required', connected: false, authenticated: false, offline: false, loginPending: false, loginUrl: 'https://auth.openai.com/codex/device', userCode: 'QRST-5678', expiresAt: '2026-09-17T09:15:00.000Z', error: 'Подтвердите вход по коду на официальной странице Codex' };
+  };
+  const harness = boot({
+    clock: true,
+    routes: {
+      'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ messages: [], ai: { configured: true, connected: false, runtimeState: 'login_required', local: true, offline: false, queued: 0, failed: 0 } }) }),
+      'GET /content/project-chat-runtime/status': () => ({ body: status() }),
+      // Сервер команду сохранил, но ответ на POST до кабинета не дошёл: команда от этого не исчезла.
+      'POST /content/project-chat-runtime/login': (call) => { assert.deepEqual(JSON.parse(call.body), { companyCode: 'palitra-love' }); phase = 'pending'; return new Error('соединение оборвалось'); }
+    }
+  });
+  await mount(harness);
+  harness.click('[data-pc-settings]');
+  await settle();
+  const { d } = harness;
+  assert.match(d.querySelector('[data-pc-runtime]').textContent, /Подписка Codex на компьютере Хью пока не подключена/);
+  assert.match(d.querySelector('[data-pc-runtime]').textContent, /команда уйдёт на компьютер Хью/);
+  assert.equal(harness.clock.pending().filter((delay) => delay === 3000).length, 0, 'в покое опроса входа нет');
+
+  harness.click('[data-pc-login]');
+  await settle();
+  assert.match(d.querySelector('[data-pc-runtime]').textContent, /Запрос входа передан компьютеру Хью/);
+  assert.doesNotMatch(d.querySelector('[data-pc-runtime]').textContent, /Подключение не начато/, 'потерянный ответ не выдаётся за отсутствие команды');
+  assert.equal(d.querySelector('[data-pc-runtime] a'), null);
+  assert.equal(d.querySelector('[data-pc-login]').disabled, false);
+  assert.deepEqual(harness.clock.pending().filter((delay) => delay === 3000), [3000], 'после 202 запланирован опрос входа');
+
+  // Компьютер ещё не ответил: опрос продолжается, кнопки не блокируются.
+  await harness.clock.fire(3000);
+  await settle();
+  assert.match(d.querySelector('[data-pc-runtime]').textContent, /Запрос входа передан/);
+  assert.deepEqual(harness.clock.pending().filter((delay) => delay === 3000), [3000]);
+  assert.equal(d.querySelector('[data-pc-runtime-check]').disabled, false);
+
+  // Код пришёл: показываем официальную ссылку и код, опрос останавливается.
+  phase = 'code';
+  await harness.clock.fire(3000);
+  await settle();
+  const runtime = d.querySelector('[data-pc-runtime]');
+  assert.equal(runtime.querySelector('a').href, 'https://auth.openai.com/codex/device');
+  assert.match(runtime.textContent, /Код: QRST-5678/);
+  assert.match(runtime.textContent, /Код действует до/);
+  assert.deepEqual(harness.clock.pending().filter((delay) => delay === 3000), [], 'после кода опрос не планируется');
+  assert.deepEqual(statusCalls, ['idle', 'pending', 'pending', 'code']);
+  // Обычный опрос переписки при этом не пострадал.
+  assert.ok(harness.clock.pending().includes(5000));
+  harness.w.close();
+});
+
+test('закрытие настроек и отозванная сессия останавливают опрос входа и убирают код', async () => {
+  let phase = 'pending';
+  const base = { local: true, configured: true, connected: false, authenticated: false, offline: false };
+  const status = () => (phase === 'gone' ? { status: 401, body: { error: 'Требуется вход в кабинет' } }
+    : phase === 'pending' ? { body: { ...base, state: 'login_pending', loginPending: true, loginUrl: '', userCode: '' } }
+      : { body: { ...base, state: 'login_required', loginPending: false, loginUrl: 'https://auth.openai.com/codex/device', userCode: 'QRST-5678' } });
+  const harness = boot({
+    clock: true,
+    routes: {
+      'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ messages: [message({ text: 'Секретная смета' })], ai: { configured: true, connected: false, runtimeState: 'login_pending', local: true, offline: false, queued: 0, failed: 0 } }) }),
+      'GET /content/project-chat-runtime/status': () => status()
+    }
+  });
+  await mount(harness);
+  assert.match(text(harness.dom, '[data-pc-ai]'), /ждёт, пока владелец подтвердит вход/);
+  // Пока команда только ожидает, опрос идёт и без нажатия; закрытие диалога его снимает.
+  harness.click('[data-pc-settings]');
+  await settle();
+  assert.deepEqual(harness.clock.pending().filter((delay) => delay === 3000), [3000], 'ожидающая команда входа опрашивается');
+  harness.click('dialog [data-pc-close]');
+  await settle();
+  assert.equal(harness.d.querySelector('dialog'), null);
+  assert.deepEqual(harness.clock.pending().filter((delay) => delay === 3000), [], 'закрытый диалог не опрашивает вход');
+  assert.ok(harness.clock.pending().includes(5000));
+
+  // Сессия отозвана во время опроса: код и диалог исчезают, опрос и комната закрываются.
+  phase = 'code';
+  harness.click('[data-pc-settings]');
+  await settle();
+  assert.match(harness.d.querySelector('[data-pc-runtime]').textContent, /Код: QRST-5678/);
+  phase = 'pending';
+  harness.click('[data-pc-runtime-check]');
+  await settle();
+  assert.deepEqual(harness.clock.pending().filter((delay) => delay === 3000), [3000]);
+  phase = 'gone';
+  await harness.clock.fire(3000);
+  await settle();
+  assert.equal(harness.d.querySelector('dialog'), null, 'диалог с кодом закрыт');
+  assert.doesNotMatch(harness.d.body.textContent, /QRST-5678|Секретная смета/);
+  assert.deepEqual(harness.clock.pending().filter((delay) => delay === 3000), [], 'опрос входа остановлен');
+  assert.match(text(harness.dom, '[data-pc-notice]'), /Сессия завершена/);
+  assert.equal(harness.d.querySelector('[data-pc-compose]').hidden, true);
   harness.w.close();
 });
 

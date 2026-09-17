@@ -14,6 +14,8 @@ const TERMINAL_STATUS = new Set([400, 404, 409, 413, 415, 422]);
 // Вложение не принято по содержимому: текст сообщения всё равно должен дойти.
 const FILE_REJECTED = new Set([413, 415]);
 const clean = (value, max) => String(value ?? '').replace(/[\r\n\t]+/g, ' ').slice(0, max);
+// Ответ ИИ в группе подписывается всегда одинаково: участники видят, что пишет бот, а не Влад.
+const AI_SIGNATURE = 'Хью, бизнес-ассистент Синапс Бизнес (ИИ)';
 
 function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacyHandler,
   fetchImpl = (...args) => fetch(...args), quietHours = parseQuietHours(process.env), now = () => new Date() }) {
@@ -158,7 +160,7 @@ function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacy
     }
   }
   async function delivery(job) {
-    const prefix = `${job.authorName || (job.authorType === 'assistant' ? 'Хью' : 'Участник')}\n`;
+    const prefix = `${job.authorType === 'assistant' ? AI_SIGNATURE : (job.authorName || 'Участник')}\n`;
     const full = prefix + (job.text || '');
     const parts = [];
     if ((job.text || '').trim() || !job.attachments?.length) {
@@ -333,4 +335,4 @@ function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacy
     stop() { clearInterval(timer); },
   };
 }
-module.exports = { createProjectChatBridge };
+module.exports = { createProjectChatBridge, AI_SIGNATURE };

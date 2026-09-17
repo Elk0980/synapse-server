@@ -53,6 +53,9 @@ const publicEmailUnsubscribe = createEmailUnsubscribeProxy({crmUrl: CRM_URL, api
 const CHAT_URL = (process.env.CHAT_URL || 'http://chat:8080').replace(/\/$/, '');
 const CHAT_API_KEY = (process.env.CHAT_API_KEY || '').trim();
 const HUGH_RUNTIME_URL = (process.env.HUGH_RUNTIME_URL || 'http://hugh-runtime:8080').replace(/\/$/, '');
+// Локальный обработчик Хью на компьютере владельца: хеш его ключа и компании, обслуживаемые только им.
+const HUGH_LOCAL_WORKER_KEY_SHA256 = (process.env.HUGH_LOCAL_WORKER_KEY_SHA256 || '').trim();
+const HUGH_LOCAL_WORKER_COMPANIES = (process.env.HUGH_LOCAL_WORKER_COMPANIES || '').split(',').map((s) => s.trim()).filter(Boolean);
 const CRM_IDENTITY_HEADER = 'x-synapse-crm-identity';
 const loginFailures = new Map();
 
@@ -158,7 +161,9 @@ const authStore = createAuthStore(db, process.env.AUTH_USERS || '');
 const hughSettingsStore = createHughSettingsStore(db);
 const projectChat = createProjectChat({ db, authStore, assetsDir: ASSETS_DIR,
   runnerUrl: HUGH_RUNTIME_URL, chatUrl: CHAT_URL, chatApiKey: CHAT_API_KEY,
+  localWorker: { keySha256: HUGH_LOCAL_WORKER_KEY_SHA256, companies: HUGH_LOCAL_WORKER_COMPANIES },
   requireSession, requireCsrf, sendJson: send, readBody: readJson });
+for (const issue of projectChat.localWorker.issues) console.warn(`content: ${issue}`);
 
 const latestStmt = db.prepare('SELECT * FROM documents WHERE key = ? ORDER BY version DESC LIMIT 1');
 const byVersionStmt = db.prepare('SELECT * FROM documents WHERE key = ? AND version = ?');
@@ -621,6 +626,11 @@ const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
     const parts = url.pathname.split('/').filter(Boolean);
 
+    // Локальный обработчик Хью: свой ключ, проверка до чтения тела, только известные маршруты.
+    if (url.pathname.startsWith('/content/project-chat-worker/')) {
+      await projectChat.localWorker.handle(request, response, url);
+      return;
+    }
     if (url.pathname.startsWith('/content/internal/project-chat/')) {
       const supplied = String(request.headers['x-api-key'] || '');
       if (!CHAT_API_KEY || Buffer.byteLength(supplied) !== Buffer.byteLength(CHAT_API_KEY) ||
@@ -666,6 +676,21 @@ const server = http.createServer(async (request, response) => {
       const route=url.pathname.slice('/content/project-chat-runtime'.length);
       if(!((route==='/status' && request.method==='GET') || (route==='/login' && request.method==='POST'))) fail(404,'Маршрут не найден');
       if(request.method==='POST') requireCsrf(request,session);
+      // Компания задаёт путь: её локальный обработчик отвечает сам, до проверки общего ключа службы.
+      // Сессия, роль и CSRF уже проверены; тело читается только после этого.
+      let companyCode='';
+      if(request.method==='POST'){
+        const raw=(await readRaw(request,4096)).toString('utf8').trim();
+        let body={};
+        if(raw){ try { body=JSON.parse(raw); } catch { fail(400,'Некорректный JSON'); } }
+        companyCode=String(body?.companyCode ?? '');
+      } else companyCode=String(url.searchParams.get('companyCode') ?? '');
+      if(companyCode && !/^[a-z0-9_-]{1,40}$/.test(companyCode)) fail(400,'Некорректный код компании');
+      if(companyCode && projectChat.localWorker.isLocal(companyCode)){
+        if(route==='/status') return reply(200,projectChat.localWorker.ownerStatus(companyCode),{'cache-control':'no-store'});
+        const login=projectChat.localWorker.requestLogin(companyCode);
+        return reply(login.accepted?202:200,login.status,{'cache-control':'no-store'});
+      }
       if(!CHAT_API_KEY) return reply(503,{state:'unconfigured',connected:false,configured:false,provider:'codex',
         error:'Служба Хью не настроена'},{'cache-control':'no-store'});
       try {

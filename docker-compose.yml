@@ -98,6 +98,9 @@ services:
       CHAT_URL: http://chat:8080
       CHAT_API_KEY: ${CHAT_API_KEY}
       HUGH_RUNTIME_URL: http://hugh-runtime:8080
+      # Локальный обработчик Хью на компьютере владельца: хеш его ключа и компании, которые он обслуживает.
+      HUGH_LOCAL_WORKER_KEY_SHA256: ${HUGH_LOCAL_WORKER_KEY_SHA256:-}
+      HUGH_LOCAL_WORKER_COMPANIES: ${HUGH_LOCAL_WORKER_COMPANIES:-}
       ALLOWED_ORIGINS: ${CONTENT_ALLOWED_ORIGINS:-}
     expose:
       - "8080"
