@@ -2,10 +2,17 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const vm = require('node:vm');
 const { JSDOM, VirtualConsole } = require('jsdom');
 const source = fs.readFileSync(__dirname + '/vk-community.js', 'utf8');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const SECRET = 'FIXTURE_PRIVATE_VK_TOKEN';
+function shellResponseError() {
+  const shell = fs.readFileSync(__dirname + '/../cabinet.html', 'utf8');
+  const match = shell.match(/const responseError = \(response, body\) => \{[\s\S]*?\n  \};(?=\s*const apiJson)/);
+  assert.ok(match, 'test must execute the actual shell responseError implementation');
+  return vm.runInNewContext(match[0] + '\nresponseError;');
+}
 const settings = (companyCode = 'avokado', extra = {}) => ({ companyCode, groupId: companyCode === 'avokado' ? '12345' : '67890', revision: 1,
   configured: true, tokenConfigured: true, connected: true, status: 'connected', checkedAt: '2026-09-17T12:00:00Z', errorCode: null,
   group: { id: '12345', name: companyCode === 'avokado' ? 'Авокадо ВК' : 'АЛВИ ВК', screenName: 'fixture' }, ...extra });
@@ -76,6 +83,36 @@ test('save sends only an explicit secret input with CSRF and clears it afterward
     assert.equal(f.node('sync').disabled, true); assert.equal(f.calls.length, 3); assert.match(f.node('status').textContent, /Теперь проверьте доступ/);
     f.submit('settings-form'); await tick(); assert.equal(Object.hasOwn(f.calls.at(-1).body, 'communityToken'), false);
   } finally { f.close(); }
+});
+
+test('actual shell HTTP 409 keeps SETTINGS_CHANGED for the UI and retains the unsaved secret in its input', async () => {
+  const responseError = shellResponseError();
+  const f = fixture({ override: async call => {
+    if (call.method !== 'PUT' || !call.path.endsWith('/settings')) return;
+    const response = new Response(JSON.stringify({ error: 'Подключение изменилось. Обновите страницу', code: 'SETTINGS_CHANGED' }), {
+      status: 409, headers: { 'content-type': 'application/json' }
+    });
+    throw responseError(response, await response.json());
+  } });
+  try {
+    await f.mount(); f.input('token', SECRET); f.submit('settings-form'); await tick();
+    assert.match(f.node('status').textContent, /Подключение изменилось\. Обновите раздел/);
+    assert.equal(f.node('token').value, SECRET, 'failed save must preserve the value for the owner');
+    assert.equal(f.node('token').type, 'password'); assert.equal(f.node('save').disabled, false);
+    assert.equal(f.node('check').disabled, true); assert.equal(f.node('sync').disabled, true);
+    assert.doesNotMatch(f.container.textContent + f.container.innerHTML, new RegExp(SECRET));
+    assert.equal(f.calls.length, 3, 'failed save must not check, sync or retry by itself');
+  } finally { f.close(); }
+});
+
+test('actual shell keeps 403 wording generic and ignores invalid error codes', () => {
+  const responseError = shellResponseError();
+  const forbidden = responseError(new Response('', { status: 403 }), { error: SECRET, code: 'FORBIDDEN' });
+  assert.equal(forbidden.message, 'Недостаточно прав'); assert.equal(forbidden.code, 'FORBIDDEN');
+  for (const invalid of [null, 5, '', 'settings_changed', 'SETTINGS_CHANGED<script>', 'A'.repeat(65)]) {
+    const error = responseError(new Response('', { status: 409 }), { error: 'Ошибка запроса', code: invalid });
+    assert.equal(Object.hasOwn(error, 'code'), false);
+  }
 });
 
 test('manual check, sync and history are separate explicit actions; remote text renders as text and read never sends', async () => {

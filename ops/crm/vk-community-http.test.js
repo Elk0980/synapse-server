@@ -12,7 +12,7 @@ function fixture() {
   return{identity:req.identity,company:{code:code.toLowerCase()}};
  },readJson:async req=>{reads++;return req.body;},send:(response,status,body,headers)=>responses.push({status,body,headers})});
  const request=(method,path,body,role='owner')=>handler({method,body,...(role?{identity:{role}}:{})},{},new URL('https://fixture.test'+path),{'x-fixture-cors':'yes'});
- return{calls,responses,request,get reads(){return reads;}};
+ return{calls,responses,request,community,get reads(){return reads;}};
 }
 const routes=[['GET','settings','getSettings'],['PUT','settings','saveSettings'],['POST','check','checkConnection'],['POST','conversations','syncConversations'],['POST','history','syncHistory'],['POST','reply','reply']];
 
@@ -37,4 +37,16 @@ test('unsupported methods and unrelated paths never invoke a connector',async()=
 test('malformed JSON body shapes fail as 400 without connector calls',async()=>{
  const f=fixture();for(const [method,path]of routes.filter(item=>['settings','conversations','history','reply'].includes(item[1])&&item[0]!=='GET'))for(const value of [null,[],true,1,'not an object'])await assert.rejects(f.request(method,`/vk-community/${path}?companyCode=avokado`,value),e=>e.status===400);
  assert.equal(f.calls.length,0);
+});
+test('only known connector errors receive static safe HTTP code and message; unknown failures remain for server handling',async()=>{
+ const f=fixture();
+ for(const [code,status]of [['SETTINGS_CHANGED',409],['REPLY_DENIED',502],['ACCESS_DENIED',502]]) {
+  f.community.reply=async()=>{throw Object.assign(Error('PRIVATE RAW PROVIDER PAYLOAD'),{status,code,details:{private:'PRIVATE RAW PROVIDER PAYLOAD'}});};
+  assert.equal(await f.request('POST','/vk-community/reply?companyCode=avokado',{}),true);
+  const response=f.responses.at(-1);assert.equal(response.status,status);assert.equal(response.body.code,code);assert.equal(response.headers['cache-control'],'no-store');
+  assert.deepEqual(Object.keys(response.body).sort(),['code','error']);assert.doesNotMatch(JSON.stringify(response),/PRIVATE RAW PROVIDER PAYLOAD/);
+ }
+ const unexpected=Object.assign(Error('Unexpected failure'),{status:400,code:'UNKNOWN_CODE'});
+ f.community.reply=()=>{throw unexpected;};
+ await assert.rejects(f.request('POST','/vk-community/reply?companyCode=avokado',{}),error=>error===unexpected);
 });

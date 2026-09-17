@@ -7,7 +7,7 @@ async function freePort(){const server=net.createServer();await new Promise(reso
 
 test('real content→CRM VK routes enforce owner, company, CSRF, safe DTOs and explicit scoped replies',{timeout:30000},async t=>{
  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'vk-community-http-')),children=[];
- const contentDb=path.join(directory,'content.sqlite'),crmDb=path.join(directory,'crm.sqlite'),marker=path.join(directory,'fixture-methods.jsonl');
+ const contentDb=path.join(directory,'content.sqlite'),crmDb=path.join(directory,'crm.sqlite'),marker=path.join(directory,'fixture-methods.jsonl'),denyReplyMarker=path.join(directory,'deny-reply-fixture');
  const token='FIXTURE_VK_TOKEN_NOT_REAL',password='Local-only-fixture-password',key=randomBytes(32).toString('hex');
  t.after(async()=>{
   for(const child of children.reverse())if(child.exitCode===null&&child.signalCode===null){const exited=once(child,'exit');child.kill();await exited;}
@@ -28,7 +28,7 @@ test('real content→CRM VK routes enforce owner, company, CSRF, safe DTOs and e
   const method=url.split('/').pop(),params=Object.fromEntries(new URLSearchParams(options.body));
   const group=params.group_id,peer=group==='12345'?101:202;
   fs.appendFileSync(${JSON.stringify(marker)},JSON.stringify({method,groupId:group||null,peerId:params.peer_id||params.peer_ids||null})+'\\n');
-  const conversation={peer:{id:peer,type:'user'},can_write:{allowed:true}};
+  const conversation={peer:{id:peer,type:'user'},can_write:{allowed:!fs.existsSync(${JSON.stringify(denyReplyMarker)})}};
   const message={id:77,peer_id:peer,from_id:peer,text:group==='12345'?'AVOKADO MESSAGE':'ALVI PRIVATE MESSAGE',date:1789640000,out:0};
   const payload={
    'groups.getTokenPermissions':{mask:4096,permissions:[{name:'messages',setting:1}]},
@@ -73,6 +73,9 @@ test('real content→CRM VK routes enforce owner, company, CSRF, safe DTOs and e
   assert.ok(!JSON.stringify(saved.body).includes(token));assert.ok(!JSON.stringify(saved.body).includes('encrypted_token'));
  }
  assert.deepEqual(await calls(),[],'saving credentials never checks or sends');
+ const stale=await through('owner','/vk-community/settings?companyCode=avokado',{method:'PUT',body:{revision:0,groupId:'12345',communityToken:''}});
+ assert.equal(stale.status,409);assert.equal(stale.body.code,'SETTINGS_CHANGED');assert.match(stale.body.error,/Подключение изменилось/);assert.match(stale.headers.get('cache-control'),/no-store/);
+ assert.deepEqual(Object.keys(stale.body).sort(),['code','error']);assert.ok(!JSON.stringify(stale.body).includes(token));
  for(const companyCode of ['avokado','alvi']) {
   const checked=await through('owner',`/vk-community/check?companyCode=${companyCode}`,{method:'POST',body:{}});assert.equal(checked.status,200);assert.equal(checked.body.ok,true);
   const list=await through('owner',`/vk-community/conversations?companyCode=${companyCode}`,{method:'POST',body:{revision:1,count:30}});assert.equal(list.status,200);assert.equal(list.body.companyCode,companyCode);assert.equal(list.body.items[0].peerId,companyCode==='avokado'?101:202);
@@ -86,6 +89,11 @@ test('real content→CRM VK routes enforce owner, company, CSRF, safe DTOs and e
  const history=await through('owner','/vk-community/history?companyCode=avokado',{method:'POST',body:{revision:1,peerId:101}});assert.equal(history.status,200);assert.equal(history.body.items[0].text,'AVOKADO MESSAGE');
  const body={revision:1,peerId:101,text:'Explicit fixture reply',requestId:'fixture_reply_0001'};
  const blocked=await through('owner','/vk-community/reply?companyCode=avokado',{method:'POST',body,headers:{'x-csrf-token':''}});assert.equal(blocked.status,403);assert.equal((await calls()).filter(c=>c.method==='messages.send').length,0);
+ await fs.writeFile(denyReplyMarker,'fixture');
+ const denied=await through('owner','/vk-community/reply?companyCode=avokado',{method:'POST',body});
+ assert.equal(denied.status,502);assert.equal(denied.body.code,'REPLY_DENIED');assert.match(denied.body.error,/не разрешает ответ/);assert.match(denied.headers.get('cache-control'),/no-store/);
+ assert.deepEqual(Object.keys(denied.body).sort(),['code','error']);assert.equal((await calls()).filter(c=>c.method==='messages.send').length,0);
+ await fs.unlink(denyReplyMarker);
  const sent=await through('owner','/vk-community/reply?companyCode=avokado',{method:'POST',body});assert.equal(sent.status,200);assert.equal(sent.body.status,'sent');assert.equal(sent.body.companyCode,'avokado');
  const repeated=await through('owner','/vk-community/reply?companyCode=avokado',{method:'POST',body});assert.deepEqual(repeated.body,sent.body);
  const sends=(await calls()).filter(c=>c.method==='messages.send');assert.deepEqual(sends,[{method:'messages.send',groupId:'12345',peerId:'101'}]);

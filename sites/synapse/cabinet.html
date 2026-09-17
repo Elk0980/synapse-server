@@ -1034,8 +1034,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     ? AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)])
     : AbortSignal.timeout(REQUEST_TIMEOUT_MS);
   const responseError = (response, body) => {
-    if (response.status === 403) return new Error("Недостаточно прав");
-    return new Error(body?.error || (response.status >= 500 ? "Ошибка сервера, попробуйте позже" : "Ошибка запроса"));
+    const error = new Error(response.status === 403 ? "Недостаточно прав" : body?.error || (response.status >= 500 ? "Ошибка сервера, попробуйте позже" : "Ошибка запроса"));
+    if (typeof body?.code === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(body.code)) error.code = body.code;
+    return error;
   };
   const apiJson = async (url, options = {}) => {
     let response;
