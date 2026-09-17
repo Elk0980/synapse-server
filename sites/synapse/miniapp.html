@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>Чат проекта — Synapse Business</title>
+  <link rel="stylesheet" href="cabinet/project-chat.css">
+  <link rel="stylesheet" href="cabinet/miniapp.css">
+  <!-- Официальный скрипт Telegram: даёт initData, тему, safe areas и BackButton. Вне Telegram он не мешает. -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- Хост объявляет SbCabinet.registerView, затем общий чат регистрирует свой вид; запуск — после загрузки обоих. -->
+  <script defer src="cabinet/miniapp-host.js"></script>
+  <script defer src="cabinet/project-chat.js"></script>
+</head>
+<body>
+  <main id="miniapp" class="ma" aria-live="polite">
+    <section class="ma-screen"><p class="ma-muted">Загружаем чат проекта…</p></section>
+  </main>
+</body>
+</html>

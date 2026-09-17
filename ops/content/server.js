@@ -56,6 +56,8 @@ const HUGH_RUNTIME_URL = (process.env.HUGH_RUNTIME_URL || 'http://hugh-runtime:8
 // Локальный обработчик Хью на компьютере владельца: хеш его ключа и компании, обслуживаемые только им.
 const HUGH_LOCAL_WORKER_KEY_SHA256 = (process.env.HUGH_LOCAL_WORKER_KEY_SHA256 || '').trim();
 const HUGH_LOCAL_WORKER_COMPANIES = (process.env.HUGH_LOCAL_WORKER_COMPANIES || '').split(',').map((s) => s.trim()).filter(Boolean);
+// Telegram Mini App чата проекта: несекретный числовой ID бота для проверки подписи Telegram. Пусто — вход отключён.
+const TELEGRAM_BOT_ID = (process.env.TELEGRAM_BOT_ID || '').trim();
 const CRM_IDENTITY_HEADER = 'x-synapse-crm-identity';
 const loginFailures = new Map();
 
@@ -162,8 +164,9 @@ const hughSettingsStore = createHughSettingsStore(db);
 const projectChat = createProjectChat({ db, authStore, assetsDir: ASSETS_DIR,
   runnerUrl: HUGH_RUNTIME_URL, chatUrl: CHAT_URL, chatApiKey: CHAT_API_KEY,
   localWorker: { keySha256: HUGH_LOCAL_WORKER_KEY_SHA256, companies: HUGH_LOCAL_WORKER_COMPANIES },
+  miniApp: { botId: TELEGRAM_BOT_ID, sessionSecret: SESSION_SECRET },
   requireSession, requireCsrf, sendJson: send, readBody: readJson });
-for (const issue of projectChat.localWorker.issues) console.warn(`content: ${issue}`);
+for (const issue of [...projectChat.localWorker.issues, ...projectChat.miniApp.issues]) console.warn(`content: ${issue}`);
 
 const latestStmt = db.prepare('SELECT * FROM documents WHERE key = ? ORDER BY version DESC LIMIT 1');
 const byVersionStmt = db.prepare('SELECT * FROM documents WHERE key = ? AND version = ?');
@@ -629,6 +632,11 @@ const server = http.createServer(async (request, response) => {
     // Локальный обработчик Хью: свой ключ, проверка до чтения тела, только известные маршруты.
     if (url.pathname.startsWith('/content/project-chat-worker/')) {
       await projectChat.localWorker.handle(request, response, url);
+      return;
+    }
+    // Вход в чат проекта из Telegram Mini App: без cookie кабинета, по подписи Telegram.
+    if (url.pathname === '/content/project-chat-miniapp/session') {
+      await projectChat.miniApp.handle(request, response, url);
       return;
     }
     if (url.pathname.startsWith('/content/internal/project-chat/')) {

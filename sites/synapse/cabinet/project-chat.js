@@ -35,12 +35,13 @@
     const response = await fetch(absolute ? suffix : state.base + suffix, {
       credentials: "same-origin", cache: "no-store", ...init,
       signal: AbortSignal.any([state.controller.signal, AbortSignal.timeout(timeoutMs || (init.body instanceof Blob ? 45000 : 20000))]),
-      headers: { "Content-Type": "application/json", ...(init.method && init.method !== "GET" ? { "X-CSRF-Token": state.ctx.identity.csrfToken } : {}), ...init.headers }
+      // Хост Mini App подписывает запросы своим заголовком вместо cookie и CSRF-токена кабинета.
+      headers: { "Content-Type": "application/json", ...(init.method && init.method !== "GET" && state.ctx.identity.csrfToken ? { "X-CSRF-Token": state.ctx.identity.csrfToken } : {}), ...(state.ctx.authHeaders?.() || {}), ...init.headers }
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       const error = new Error(response.status === 403 ? "Доступ к чату проекта не назначен. Владелец проекта может добавить вас в участники."
-        : response.status === 401 ? "Сессия завершена. Войдите в кабинет заново."
+        : response.status === 401 ? (state.ctx.authHeaders ? "Сессия чата истекла. Закройте и снова откройте чат из Telegram." : "Сессия завершена. Войдите в кабинет заново.")
         : data.error || "Не удалось выполнить запрос. Попробуйте ещё раз.");
       error.status = response.status;
       throw error;
@@ -170,10 +171,51 @@
     if (failed) parts.push(`Не удалось ответить: ${failed}.`);
     return parts.join(" ");
   };
-  const attachmentHTML = attachment => {
+  const attachmentHTML = (attachment, state) => {
     const url = assetUrl(attachment.url);
     if (!url) return `<span class="pc-attachment-missing pc-muted">${escape(attachment.name || "Файл")} · ${escape(attachment.note || "файл доступен только в Telegram")}</span>`;
-    return `<a class="pc-attachment" href="${escape(url)}" target="_blank" rel="noopener">${/^image\/(jpeg|png|webp|gif)$/i.test(attachment.mime || "") ? `<img src="${escape(url)}" alt="${escape(attachment.name || "Фотография")}" loading="lazy">` : ""}<span>${escape(attachment.name || "Открыть файл")}</span></a>`;
+    const image = /^image\/(jpeg|png|webp|gif)$/i.test(attachment.mime || "");
+    if (state?.ctx.fetchAsset) {
+      // Хост без cookie (Mini App): картинка и ссылка не могут нести заголовок, поэтому файл
+      // читается защищённым запросом, а сюда попадает уже локальный blob-адрес (см. hydrateAssets).
+      return `<a class="pc-attachment pc-attachment-protected" data-pc-asset="${escape(url)}" data-pc-asset-name="${escape(attachment.name || (image ? "Фотография" : "Файл"))}">${image ? `<img alt="${escape(attachment.name || "Фотография")}">` : ""}<span>${escape(attachment.name || "Открыть файл")}</span><small class="pc-muted" data-pc-asset-state>Загружаем…</small></a>`;
+    }
+    return `<a class="pc-attachment" href="${escape(url)}" target="_blank" rel="noopener">${image ? `<img src="${escape(url)}" alt="${escape(attachment.name || "Фотография")}" loading="lazy">` : ""}<span>${escape(attachment.name || "Открыть файл")}</span></a>`;
+  };
+  // Blob-адреса живут не дольше комнаты: смена компании, отзыв доступа и переход на личную
+  // вкладку освобождают их, чтобы память и чужие файлы не оставались в странице.
+  const releaseAssets = state => {
+    for (const entry of (state.assets || new Map()).values()) { try { URL.revokeObjectURL(entry.objectUrl); } catch (_) { /* уже освобождён */ } }
+    state.assets = new Map();
+  };
+  const hydrateAssets = (state, view) => {
+    if (!state.ctx.fetchAsset) return;
+    state.assets ||= new Map();
+    const assets = state.assets;
+    for (const node of state.root.querySelectorAll("[data-pc-asset]:not([data-pc-asset-ready])")) {
+      node.setAttribute("data-pc-asset-ready", "");
+      const url = node.dataset.pcAsset;
+      const apply = entry => {
+        const img = node.querySelector("img");
+        if (img) img.src = entry.objectUrl;
+        node.href = entry.objectUrl;
+        node.target = "_blank";
+        node.rel = "noopener";
+        node.querySelector("[data-pc-asset-state]")?.remove();
+      };
+      const cached = assets.get(url);
+      if (cached) { apply(cached); continue; }
+      Promise.resolve().then(() => state.ctx.fetchAsset(url)).then(blob => {
+        // Поздний ответ после смены комнаты не создаёт адрес, который некому освободить.
+        if (!live(state, view) || state.assets !== assets) return;
+        const entry = { objectUrl: URL.createObjectURL(blob), name: node.dataset.pcAssetName || "" };
+        assets.set(url, entry);
+        if (node.isConnected) apply(entry);
+      }).catch(() => {
+        const status = node.querySelector("[data-pc-asset-state]");
+        if (status) status.textContent = "Не удалось загрузить файл";
+      });
+    }
   };
   const aiNoteHTML = (message, ai) => {
     if (["pending", "queued", "running"].includes(message.aiStatus)) {
@@ -191,7 +233,7 @@
     return timeline(state).map(message => `<li class="pc-message${message.authorType === "assistant" ? " pc-message-ai" : ""}" data-message-id="${escape(message.id)}">
     <div class="pc-message-meta"><strong>${escape(message.authorName || (message.authorType === "assistant" ? "Хью" : "Участник"))}</strong>${message.authorType === "assistant" ? `<span class="pc-ai-badge">${AI_BADGE}</span>` : ""}<time datetime="${escape(message.createdAt)}">${escape(date(message.createdAt))}</time>${message.authorType === "telegram" ? '<span>Telegram</span>' : ""}</div>
     ${message.text ? `<p class="pc-message-text">${escape(message.text)}</p>` : ""}
-    ${list(message.attachments).length ? `<div class="pc-attachments">${message.attachments.map(attachmentHTML).join("")}</div>` : ""}
+    ${list(message.attachments).length ? `<div class="pc-attachments">${message.attachments.map(attachment => attachmentHTML(attachment, state)).join("")}</div>` : ""}
     <div class="pc-message-footer"><small${message.deliveryStatus === "error" ? ' class="pc-error"' : ""}>${escape(delivery[message.deliveryStatus] || "")}</small>${reply ? `<button type="button" data-pc-message-task="${escape(message.id)}">В задачу</button>` : ""}</div>
     ${aiNoteHTML(message, ai)}
   </li>`).join("") || '<li class="pc-empty">Здесь будет общая переписка участников проекта.</li>';
@@ -208,6 +250,7 @@
       history.innerHTML = messagesHTML(state);
       history.scrollTop = follow ? history.scrollHeight : previous;
       state.messageSignature = signature;
+      hydrateAssets(state, view);
     }
     const older = q(state, "[data-pc-older]");
     if (older) { older.hidden = !state.hasMore || !state.cursor; older.disabled = state.loadingOlder; }
@@ -253,6 +296,7 @@
     state.loadingOlder = false;
     clearTimeout(state.timer);
     clearTimeout(state.loginTimer);
+    releaseAssets(state);
     state.root.querySelectorAll("dialog").forEach(dialog => dialog.remove());
     const compose = q(state, "[data-pc-compose]");
     if (compose) {
@@ -268,6 +312,8 @@
     if (pending) pending.innerHTML = "";
     clearHistory(state, message);
     notice(state, message, true);
+    // Хост Mini App показывает свой экран повторного открытия вместо кабинетного текста.
+    state.ctx.onRevoked?.(message);
   };
   const refresh = async (state, view) => {
     if (!live(state, view)) return;
@@ -393,6 +439,44 @@
       formSave(state, editor, form => write(state, `/stages/${stage.id}`, "PATCH", { title: form.elements.title.value.trim().slice(0, TITLE_LIMIT) }));
     }; });
   };
+  // Привязки Telegram участников этой комнаты: ожидающие коды и уже привязанные аккаунты.
+  // Привязать можно только к действующему участнику — список берётся из состава комнаты.
+  const telegramLinks = async (state, dialog, view) => {
+    const body = dialog.querySelector("[data-pc-tg-body]"), alertNode = dialog.querySelector("[data-pc-tg-alert]");
+    const render = data => {
+      if (!live(state, view) || !dialog.isConnected) return;
+      const members = list(state.data?.members).map(member => [member.userId, member.displayName]);
+      const pending = list(data.pending), links = list(data.links);
+      body.innerHTML = `${pending.length ? `<p>Ожидают привязки:</p><ul class="pc-stage-list">${pending.map(item => `<li><span>${escape(item.firstName)} · код <strong>${escape(item.code)}</strong></span><span class="pc-tg-actions"><select data-pc-tg-user="${escape(item.code)}" aria-label="Аккаунт участника для кода ${escape(item.code)}">${options(members, "", "Выберите участника")}</select><button type="button" data-pc-tg-link="${escape(item.code)}">Привязать</button></span></li>`).join("")}</ul>` : '<p class="pc-muted">Сейчас никто не ждёт привязки.</p>'}${links.length ? `<p>Привязаны:</p><ul class="pc-stage-list">${links.map(item => `<li><span>${escape(item.displayName)} · Telegram ID ${escape(item.telegramUserId)}</span><button type="button" data-pc-tg-unlink="${escape(item.telegramUserId)}">Отвязать</button></li>`).join("")}</ul>` : ""}`;
+    };
+    const load = async () => render(await request(state, "/telegram-links"));
+    body.onclick = async event => {
+      const button = event.target.closest("button[data-pc-tg-link],button[data-pc-tg-unlink]");
+      if (!button || !live(state, view)) return;
+      alertNode.textContent = "";
+      button.disabled = true;
+      try {
+        if (button.dataset.pcTgLink) {
+          const userId = Number(dialog.querySelector(`[data-pc-tg-user="${button.dataset.pcTgLink}"]`)?.value);
+          if (!userId) throw new Error("Выберите участника, чей это Telegram");
+          render(await write(state, "/telegram-links", "POST", { linkCode: button.dataset.pcTgLink, userId }));
+        } else {
+          render(await request(state, `/telegram-links/${encodeURIComponent(button.dataset.pcTgUnlink)}`, { method: "DELETE" }));
+        }
+      } catch (error) {
+        if (!live(state, view) || error.name === "AbortError") return;
+        if (denied(error)) { revoke(state, error.message); return; }
+        if (dialog.isConnected) alertNode.textContent = error.message;
+        button.disabled = false;
+      }
+    };
+    try { await load(); }
+    catch (error) {
+      if (!live(state, view) || error.name === "AbortError") return;
+      if (denied(error)) { revoke(state, error.message); return; }
+      if (dialog.isConnected) body.textContent = "Не удалось загрузить привязки Telegram.";
+    }
+  };
   const membersDialog = async state => {
     if (!isOwner(state)) return;
     const view = state.view;
@@ -400,8 +484,9 @@
       const data = await request(state, "/candidates");
       if (!live(state, view)) return;
       const selected = new Set(list(state.data.members).map(member => String(member.userId)));
-      const dialog = modal(state, "Участники проекта", `<form class="pc-fields"><p>Участники видят всю переписку и фотографии этого проекта.</p><p class="pc-muted">Это доступ только в кабинете. Состав Telegram-группы задаётся в самом Telegram: если убрать человека здесь, он продолжит читать группу, пока его не удалят там.</p>${list(data.candidates).map(member => `<label class="pc-check"><input type="checkbox" name="userIds" value="${escape(member.userId)}"${selected.has(String(member.userId)) ? " checked" : ""}>${escape(member.displayName)}</label>`).join("") || '<p>Нет учётных записей с доступом к этой компании.</p>'}<button type="submit">Сохранить участников</button><p role="alert"></p></form>`);
+      const dialog = modal(state, "Участники проекта", `<form class="pc-fields"><p>Участники видят всю переписку и фотографии этого проекта.</p><p class="pc-muted">Это доступ только в кабинете. Состав Telegram-группы задаётся в самом Telegram: если убрать человека здесь, он продолжит читать группу, пока его не удалят там.</p>${list(data.candidates).map(member => `<label class="pc-check"><input type="checkbox" name="userIds" value="${escape(member.userId)}"${selected.has(String(member.userId)) ? " checked" : ""}>${escape(member.displayName)}</label>`).join("") || '<p>Нет учётных записей с доступом к этой компании.</p>'}<button type="submit">Сохранить участников</button><p role="alert"></p></form><section class="pc-tg-links" data-pc-tg-links><h3>Чат проекта в Telegram</h3><p class="pc-muted">Участник открывает чат проекта в Telegram и видит код. Выберите здесь, чей это аккаунт, и нажмите «Привязать». Без привязки доступа из Telegram нет.</p><div data-pc-tg-body>Загружаем…</div><p role="alert" data-pc-tg-alert></p></section>`);
       formSave(state, dialog, form => write(state, "/members", "PUT", { userIds: [...form.querySelectorAll('[name="userIds"]:checked')].map(input => Number(input.value)) }));
+      telegramLinks(state, dialog, view);
     } catch (error) {
       if (!live(state, view) || error.name === "AbortError") return;
       if (denied(error)) revoke(state, error.message);
@@ -621,6 +706,7 @@
     state.readSequence++;
     clearTimeout(state.timer);
     clearTimeout(state.loginTimer);
+    releaseAssets(state);
     state.root.querySelectorAll("dialog").forEach(dialog => dialog.remove());
     state.root.querySelectorAll("[data-pc-mode]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.pcMode === mode)));
     if (mode === "private") {
@@ -650,7 +736,7 @@
     schedule(state, view);
   };
   const mount = async (_, ctx) => {
-    if (current) { current.controller.abort(); clearTimeout(current.timer); clearTimeout(current.loginTimer); }
+    if (current) { current.controller.abort(); clearTimeout(current.timer); clearTimeout(current.loginTimer); releaseAssets(current); }
     cabinet.privateHugh?.stop();
     const root = ctx.byId("hugh-view");
     const state = current = { ctx, root, company: ctx.selectedProjectId, base: "/content/project-chat/" + encodeURIComponent(ctx.selectedProjectId), controller: new AbortController(), mode: "shared", view: 0, readSequence: 0, attachments: [], history: [], seen: new Map(), loadedOlder: false, hasMore: false, cursor: null, loadingOlder: false, busy: false, attempt: null, draft: "", revoked: false };
@@ -675,5 +761,15 @@
     };
     await switchMode(state, "shared");
   };
-  cabinet.registerView("hugh", { title: "Хью", render: mount, onProjectChange: ctx => mount(null, ctx) });
+  // Хост без постоянной страницы (Mini App) снимает вид явно: опрос, blob-адреса, диалоги и поздние ответы.
+  const unmount = () => {
+    if (!current) return;
+    current.controller.abort();
+    clearTimeout(current.timer);
+    clearTimeout(current.loginTimer);
+    releaseAssets(current);
+    current.root?.querySelectorAll("dialog").forEach(dialog => dialog.remove());
+    current = null;
+  };
+  cabinet.registerView("hugh", { title: "Хью", render: mount, onProjectChange: ctx => mount(null, ctx), unmount });
 })();
