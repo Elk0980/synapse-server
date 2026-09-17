@@ -10,6 +10,7 @@ const assert = require('node:assert/strict');
 
 const {
   CATEGORIES,
+  REASONS,
   classifyLoginFailure,
   formatLoginDiagnostics,
   loginFailureMessage,
@@ -116,6 +117,22 @@ const CASES = [
     category: 'http',
     upstreamStatus: 503,
   },
+  // Дословная формулировка входа по коду устройства из закреплённого 0.154:
+  // login/src/device_code_auth.rs вместе с обёрткой app-server/account_processor.rs.
+  {
+    name: 'отказ входа по коду устройства с кодом 403',
+    error: rpc('failed to request device code: device code request failed with status 403 Forbidden'),
+    category: 'http',
+    upstreamStatus: 403,
+  },
+  {
+    name: 'вход по коду устройства не включён: числа нет и выдумывать его нельзя',
+    error: rpc('failed to request device code: device code login is not enabled for this Codex server.' +
+      ' Use the browser login or verify the server URL.'),
+    category: 'unknown',
+    upstreamStatus: null,
+    reason: 'device_login_unavailable',
+  },
 ];
 
 test('категории определяются по настоящим формулировкам клиента Codex', () => {
@@ -123,8 +140,10 @@ test('категории определяются по настоящим фор
     const detail = classifyLoginFailure(item.error);
     assert.equal(detail.category, item.category, item.name);
     assert.equal(detail.upstreamStatus, item.upstreamStatus, item.name);
+    assert.equal(detail.reason, item.reason ?? null, item.name);
     assert.equal(detail.rpcCode, -32603, item.name);
     assert.ok(CATEGORIES.includes(detail.category));
+    assert.ok(detail.reason === null || REASONS.includes(detail.reason));
   }
 });
 
@@ -137,8 +156,9 @@ test('ни один засеянный секрет не попадает ни �
       assert.ok(!line.includes(seed), `${item.name}: ${name} утёк в журнал`);
       assert.ok(!message.includes(seed), `${item.name}: ${name} утёк в текст`);
     }
-    // Сильнее, чем поиск конкретных строк: в журнале только имя категории и числа.
-    assert.match(line, /^category=(?:tls|dns|transport|http|timeout|unknown)(?: upstreamStatus=\d{3})?(?: rpcCode=-?\d+)?$/,
+    // Сильнее, чем поиск конкретных строк: в журнале только имя категории, признак из
+    // закрытого набора и числа.
+    assert.match(line, /^category=(?:tls|dns|transport|http|timeout|unknown)(?: upstreamStatus=\d{3})?(?: reason=device_login_unavailable)?(?: rpcCode=-?\d+)?$/,
       `${item.name}: посторонние данные в строке журнала «${line}»`);
     // В тексте нет латиницы: она бывает только в сообщении Codex, а оно никуда не переносится.
     assert.doesNotMatch(message, /[A-Za-z]/, `${item.name}: латиница в тексте «${message}»`);
@@ -152,16 +172,16 @@ test('служебные исходы клиента различаются, н�
   const timeout = new Error('app-server не ответил вовремя');
   timeout.rpcCode = 'timeout';
   const timedOut = classifyLoginFailure(timeout);
-  assert.deepEqual(timedOut, {category: 'timeout', upstreamStatus: null, rpcCode: null});
+  assert.deepEqual(timedOut, {category: 'timeout', upstreamStatus: null, reason: null, rpcCode: null});
   assert.equal(formatLoginDiagnostics(timedOut), 'category=timeout');
 
   const gone = new Error('app-server завершился');
   gone.rpcCode = 'process_exit';
-  assert.deepEqual(classifyLoginFailure(gone), {category: 'transport', upstreamStatus: null, rpcCode: null});
+  assert.deepEqual(classifyLoginFailure(gone), {category: 'transport', upstreamStatus: null, reason: null, rpcCode: null});
 
   // Ошибка без полей RPC вообще: причина неизвестна, и это так и называется.
   const bare = classifyLoginFailure(new Error('нет полей'));
-  assert.deepEqual(bare, {category: 'unknown', upstreamStatus: null, rpcCode: null});
+  assert.deepEqual(bare, {category: 'unknown', upstreamStatus: null, reason: null, rpcCode: null});
   assert.equal(classifyLoginFailure(null).category, 'unknown');
   assert.equal(formatLoginDiagnostics(bare), 'category=unknown');
 });
@@ -171,7 +191,9 @@ test('кодом ответа считается только названное
   assert.equal(upstreamStatusOf('status code: 404'), 404);
   assert.equal(upstreamStatusOf('returned 502 while connecting'), 502);
   assert.equal(upstreamStatusOf('HTTP status client error (429 Too Many Requests)'), 429);
+  assert.equal(upstreamStatusOf('device code request failed with status 403 Forbidden'), 403);
   for (const text of [
+    'device code login is not enabled for this Codex server. Use the browser login or verify the server URL.',
     'tcp connect error: Connection timed out (os error 110)',
     'failed after 30000 ms',
     'status: 42',
@@ -194,7 +216,32 @@ test('адрес, строка запроса и тело ответа не пр
   assert.equal(upstreamStatusOf('request failed; response body: status: 418'), null);
   // Отказ TLS остаётся отказом TLS, даже если рядом в адресе есть похожее на код число.
   const tls = classifyLoginFailure(rpc('error sending request for url (https://a.example/x?status=429): invalid peer certificate'));
-  assert.deepEqual(tls, {category: 'tls', upstreamStatus: null, rpcCode: -32603});
+  assert.deepEqual(tls, {category: 'tls', upstreamStatus: null, reason: null, rpcCode: -32603});
+});
+
+/* Дословные формулировки закреплённого 0.154: login/src/device_code_auth.rs и обёртка
+   app-server/account_processor.rs. Разбирается ровно то, что прислал Codex: число берётся
+   только там, где оно названо, а где Codex заменил число объяснением — число не выдумывается. */
+test('отказ входа по коду устройства: код 403 распознан, отсутствующий код не выдуман', () => {
+  const forbidden = classifyLoginFailure(
+    rpc('failed to request device code: device code request failed with status 403 Forbidden'),
+  );
+  assert.deepEqual(forbidden, {category: 'http', upstreamStatus: 403, reason: null, rpcCode: -32603});
+  assert.equal(formatLoginDiagnostics(forbidden), 'category=http upstreamStatus=403 rpcCode=-32603');
+  assert.equal(loginFailureMessage(forbidden), 'Сервис входа ответил кодом 403');
+
+  const unavailable = classifyLoginFailure(
+    rpc('failed to request device code: device code login is not enabled for this Codex server.' +
+      ' Use the browser login or verify the server URL.'),
+  );
+  // Числа в сообщении нет, и подставлять сюда 404 нельзя: путь не подтверждён.
+  assert.deepEqual(unavailable, {category: 'unknown', upstreamStatus: null, reason: 'device_login_unavailable', rpcCode: -32603});
+  assert.equal(formatLoginDiagnostics(unavailable), 'category=unknown reason=device_login_unavailable rpcCode=-32603');
+  const message = loginFailureMessage(unavailable);
+  assert.equal(message, 'Вход по коду устройства на этом сервере не включён');
+  assert.doesNotMatch(message, /[A-Za-z0-9]/, 'ни латиницы, ни выдуманного кода в тексте быть не должно');
+  // Признак берётся только из закрытого набора: свободного текста в журнале не появляется.
+  assert.deepEqual(REASONS, ['device_login_unavailable']);
 });
 
 test('неизвестная причина не подменяется утверждением о временном сбое сети', () => {
