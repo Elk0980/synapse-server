@@ -475,10 +475,11 @@ async function proxyCrm(request, response, url, cors) {
   }
   if (/^\/(catalog|finances)(?:\/|$)/.test(crmPath) && identity.role !== 'owner') fail(403,'Коммерческие условия и финансы доступны владельцу');
   const companyModule = /^\/(company-information|autoposting)(?:\/|$)/.exec(crmPath)?.[1];
-  if (/^\/(?:studio-journey|reviews|platform-demand)(?:\/|$)/.test(crmPath)) {
+  if (/^\/(?:studio-journey|reviews|platform-demand|social-stats)(?:\/|$)/.test(crmPath)) {
     const code=url.searchParams.get('companyCode');
     if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400,'Выберите компанию');
-    if(identity.role!=='owner')requirePermission(request,readOnly?(crmPath.startsWith('/platform-demand')?'analytics.view':'crm.view'):'crm.edit',code);
+    if(identity.role!=='owner')requirePermission(request,readOnly?(/^\/(?:platform-demand|social-stats)/.test(crmPath)?'analytics.view':'crm.view'):'crm.edit',code);
+    if (/^\/social-stats\/(?:accounts|import)$/.test(crmPath) && !readOnly && identity.role!=='owner') fail(403,'Настройки аккаунтов и ручной импорт доступны владельцу');
   }
   if (/^\/autoposting\/posts\/\d+\/(?:approve|reject)$/.test(crmPath) && identity.role!=='owner') fail(403,'Согласовывать и отклонять публикации может только владелец');
   if (crmPath==='/autoposting/plan-summary') fail(404,'Адрес не найден');
@@ -498,7 +499,7 @@ async function proxyCrm(request, response, url, cors) {
   if (['/company-email', '/email-status', '/email-settings', '/email-settings/check'].includes(crmPath) && identity.role !== 'owner') {
     fail(403, 'Настройки и диагностика почты доступны только владельцу');
   }
-  const analyticsReadPath = /^\/platform-demand(?:\/|$)/.test(crmPath) || new Set([
+  const analyticsReadPath = /^\/(?:platform-demand|social-stats)(?:\/|$)/.test(crmPath) || new Set([
     '/dashboard', '/summary', '/external-stats', '/expenses', '/tasks/summary',
   ]).has(crmPath);
   let session = initialSession;
