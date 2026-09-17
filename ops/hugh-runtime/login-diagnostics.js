@@ -10,7 +10,7 @@
    дочернего процесса, адреса, тела ответов, код устройства, идентификаторы и токены.
    Сообщение только сопоставляется с образцами — ни одна его часть не переносится в вывод.
    Единственные данные на выходе: имя категории, числовой код ответа сервиса входа (если он
-   действительно был) и числовой код JSON-RPC.
+   действительно был), признак из закрытого набора (`REASONS`) и числовой код JSON-RPC.
 
    Категории:
      tls       — соединение не прошло проверку сертификата или рукопожатие;
@@ -80,11 +80,26 @@ const HTTP_STATUS_PATTERNS = [
   /\bhttp\/\d(?:\.\d)?\s+(\d{3})\b/i,
   /\bhttp\s+status\s+(?:client|server)\s+error\s*\(\s*(\d{3})\b/i,
   /\bunexpected\s+status(?:\s+code)?:?\s+(\d{3})\b/i,
+  // Формулировка самого входа по коду устройства: «device code request failed with status 403
+  // Forbidden», обёрнутая в «failed to request device code: …». Участвует в общем правиле
+  // самой ранней формулировки и работает уже по очищенному тексту.
+  /\bfailed\s+with\s+status\s+(\d{3})\b/i,
   /\bstatus\s+code:?\s*(\d{3})\b/i,
   /\bstatus:\s*(\d{3})\b/i,
   /\bresponded\s+with\s+(?:status:?\s*)?(\d{3})\b/i,
   /\breturned\s+(?:http\s+)?(\d{3})\b/i,
 ];
+
+/* Отдельный случай: при недоступном входе по коду устройства сам Codex заменяет числовой код
+   объяснением («device code login is not enabled for this Codex server…»). Числа в сообщении
+   нет, придумывать его нельзя — поэтому категория остаётся unknown, а известный признак
+   отдаётся отдельным полем из закрытого набора. */
+const REASONS = Object.freeze(['device_login_unavailable']);
+const DEVICE_LOGIN_UNAVAILABLE = /\bdevice\s+code\s+login\s+is\s+not\s+enabled\b/i;
+
+const REASON_MESSAGES = Object.freeze({
+  device_login_unavailable: 'Вход по коду устройства на этом сервере не включён',
+});
 
 /* Части сообщения, которые к формулировке отказа не относятся и потому не просматриваются:
    адрес вместе со строкой запроса и всё, что идёт после начала тела ответа. Без этого
@@ -141,6 +156,7 @@ function classifyLoginFailure(error) {
   // мог бы задать категорию словом из своего пути или параметра.
   const text = scannableText(raw);
   const status = leadingStatus(text);
+  const reason = DEVICE_LOGIN_UNAVAILABLE.test(text) ? 'device_login_unavailable' : null;
 
   let category;
   if (sentinel) category = sentinel;
@@ -156,13 +172,15 @@ function classifyLoginFailure(error) {
   else category = 'unknown';
 
   // Число отдаётся только вместе с категорией http: смешивать признаки нельзя.
-  return {category, upstreamStatus: category === 'http' ? status : null, rpcCode};
+  return {category, upstreamStatus: category === 'http' ? status : null, reason, rpcCode};
 }
 
-/* Строка для журнала: только имя категории и числа. Любой другой символ здесь — ошибка. */
+/* Строка для журнала: имя категории, известный признак из закрытого набора и числа.
+   Любой другой символ здесь — ошибка. */
 function formatLoginDiagnostics(detail) {
   const parts = [`category=${CATEGORIES.includes(detail.category) ? detail.category : 'unknown'}`];
   if (Number.isInteger(detail.upstreamStatus)) parts.push(`upstreamStatus=${detail.upstreamStatus}`);
+  if (REASONS.includes(detail.reason)) parts.push(`reason=${detail.reason}`);
   if (Number.isInteger(detail.rpcCode)) parts.push(`rpcCode=${detail.rpcCode}`);
   return parts.join(' ');
 }
@@ -174,11 +192,15 @@ function loginFailureMessage(detail) {
   if (detail.category === 'http' && Number.isInteger(detail.upstreamStatus)) {
     return `Сервис входа ответил кодом ${detail.upstreamStatus}`;
   }
+  // Известный признак объясняет причину точнее, чем «не определена», и при этом ничего
+  // не домысливает: это пересказ того, что назвал сам Codex.
+  if (REASONS.includes(detail.reason)) return REASON_MESSAGES[detail.reason];
   return MESSAGES[detail.category] || MESSAGES.unknown;
 }
 
 module.exports = {
   CATEGORIES,
+  REASONS,
   classifyLoginFailure,
   formatLoginDiagnostics,
   loginFailureMessage,
