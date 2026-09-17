@@ -110,6 +110,72 @@ test('подозрительная ссылка входа отклоняетс�
   assert.equal(status.userCode, null);
 });
 
+/* Продовый случай: вход не начался, а наружу уходило только LOGIN_FAILED без признака причины.
+   Теперь причина сводится к категории и числам, но ни один символ сообщения Codex наружу
+   и в журнал не попадает — поэтому в сообщение засеяны адрес с токеном и код устройства. */
+test('несостоявшийся вход называет категорию причины и не выносит наружу ни слова от Codex', async (t) => {
+  const canary = 'sk-канарейка-777';
+  const seeded = `error sending request for url (https://auth.openai.com/api/accounts/deviceauth/usercode?token=${canary}):` +
+    ' error trying to connect: tcp connect error: Connection timed out (os error 110)';
+  const logs = [];
+  const logger = {log: (m) => logs.push(m), warn: (m) => logs.push(m), error: (m) => logs.push(m)};
+  const harness = createRuntime({
+    logger,
+    scenario: happyScenario({
+      account: {account: null, requiresOpenaiAuth: true},
+      loginStart: {error: {code: -32603, message: seeded}},
+    }),
+  });
+  t.after(() => harness.cleanup());
+
+  await assert.rejects(harness.runtime.startLogin(), (error) => {
+    // 503 здесь — ответ самого рантайма. Никакого кода сервиса входа не было, поэтому
+    // в тексте нет ни одного числа: спутать одно с другим не с чем.
+    assert.equal(error.status, 503);
+    assert.equal(error.code, 'LOGIN_FAILED');
+    assert.equal(error.message, 'Соединение с сервисом входа не установлено');
+    assert.doesNotMatch(error.message, /\d/);
+    assert.deepEqual(error.toPublic(), {error: 'Соединение с сервисом входа не установлено', errorCode: 'LOGIN_FAILED'});
+    return true;
+  });
+
+  const journal = logs.join('\n');
+  assert.match(journal, /login_start_failed category=transport rpcCode=-32603/);
+  for (const secret of [canary, 'auth.openai.com', 'usercode', 'os error', 'tcp']) {
+    assert.ok(!journal.includes(secret), `в журнале не должно быть «${secret}»`);
+  }
+  // Вход не считается начатым: ни ссылки, ни кода наружу.
+  const status = harness.runtime.statusSnapshot();
+  assert.equal(status.loginUrl, null);
+  assert.equal(status.userCode, null);
+  assert.equal(status.state, 'login_required');
+});
+
+test('код ответа сервиса входа не путается с кодом ответа самого рантайма', async (t) => {
+  const logs = [];
+  const logger = {log: (m) => logs.push(m), warn: (m) => logs.push(m), error: (m) => logs.push(m)};
+  const harness = createRuntime({
+    logger,
+    scenario: happyScenario({
+      account: {account: null, requiresOpenaiAuth: true},
+      loginStart: {error: {code: -32603, message: 'request failed: unexpected status 503 Service Unavailable, loginId=login-9'}},
+    }),
+  });
+  t.after(() => harness.cleanup());
+
+  await assert.rejects(harness.runtime.startLogin(), (error) => {
+    // Внешний ответ рантайма — 503 и LOGIN_FAILED; 503 сервиса входа назван отдельно и словами.
+    assert.equal(error.status, 503);
+    assert.equal(error.code, 'LOGIN_FAILED');
+    assert.equal(error.message, 'Сервис входа ответил кодом 503');
+    return true;
+  });
+  const journal = logs.join('\n');
+  assert.match(journal, /login_start_failed category=http upstreamStatus=503 rpcCode=-32603/);
+  assert.ok(!journal.includes('login-9'), 'идентификатор входа в журнал не попадает');
+  assert.ok(!journal.includes('Service Unavailable'), 'текст ответа в журнал не попадает');
+});
+
 test('успешное уведомление подтверждается повторным чтением учётной записи', async (t) => {
   const scenario = happyScenario({account: {account: null, requiresOpenaiAuth: true}});
   scenario.methods['account/login/start'].after = [

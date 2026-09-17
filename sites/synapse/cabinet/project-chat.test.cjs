@@ -729,7 +729,7 @@ test('до нажатия «Подключить подписку» владел
   harness.w.close();
 });
 
-test('сорвавшийся запрос входа объясняется связью, а не учётной записью владельца', async () => {
+test('запрос входа без ответа сервера: причина названа неизвестной, а не «временным сбоем сети»', async () => {
   const harness = boot({
     routes: {
       'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ messages: [] }) }),
@@ -744,14 +744,39 @@ test('сорвавшийся запрос входа объясняется св
   harness.click('[data-pc-login]');
   await settle();
   const runtime = d.querySelector('[data-pc-runtime]');
-  assert.match(runtime.textContent, /временный сбой связи/);
-  assert.match(runtime.textContent, /повторите попытку/i);
-  // Ни «региона», ни предложения входить снова и снова, ни сырого текста ошибки.
-  assert.doesNotMatch(runtime.textContent, /регион|страна|VPN|соединение оборвалось/i);
+  assert.match(runtime.textContent, /Подключение не начато/);
+  assert.match(runtime.textContent, /причина неизвестна/);
+  assert.match(runtime.textContent, /Повторите попытку/);
+  // Ни догадки про временный сбой, ни «региона», ни сырого текста ошибки браузера.
+  assert.doesNotMatch(runtime.textContent, /временн|регион|страна|VPN|соединение оборвалось/i);
   assert.equal(runtime.querySelector('a'), null);
   // Кнопки возвращаются в рабочее состояние: повтор возможен без переоткрытия настроек.
   assert.equal(d.querySelector('[data-pc-login]').disabled, false);
   assert.equal(d.querySelector('[data-pc-runtime-check]').disabled, false);
+  harness.w.close();
+});
+
+test('названная сервером причина входа показывается как есть и не подменяется догадкой', async () => {
+  const harness = boot({
+    routes: {
+      'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ messages: [] }) }),
+      'GET /content/project-chat-runtime/status': () => ({ body: { connected: false, authenticated: false, provider: 'codex', state: 'login_required', loginUrl: null, userCode: null } }),
+      // Так отвечает прокси, когда рантайм не смог начать вход: свой код ответа 503,
+      // а причина — отдельным нейтральным пояснением (может называть код сервиса входа).
+      'POST /content/project-chat-runtime/login': () => ({ status: 503,
+        body: { connected: false, authenticated: false, configured: true, provider: 'codex', state: 'unknown', error: 'Сервис входа ответил кодом 503' } })
+    }
+  });
+  await mount(harness);
+  harness.click('[data-pc-settings]');
+  await settle();
+  const { d } = harness;
+  harness.click('[data-pc-login]');
+  await settle();
+  const runtime = d.querySelector('[data-pc-runtime]');
+  assert.equal(runtime.textContent, 'Подключение не начато. Сервис входа ответил кодом 503. Повторите попытку.');
+  assert.doesNotMatch(runtime.textContent, /временн|регион|страна|VPN/i);
+  assert.equal(d.querySelector('[data-pc-login]').disabled, false);
   harness.w.close();
 });
 
