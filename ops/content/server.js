@@ -669,9 +669,12 @@ const server = http.createServer(async (request, response) => {
       if(!CHAT_API_KEY) return reply(503,{state:'unconfigured',connected:false,configured:false,provider:'codex',
         error:'Служба Хью не настроена'},{'cache-control':'no-store'});
       try {
+        // /login внутри рантайма ждёт ответ account/login/start до 30 с. Прокси обязан пережить
+        // это ожидание, иначе владелец видит сетевую ошибку вместо выданных ссылки и кода.
+        // Быстрый /status остаётся на прежней границе: он не должен держать вкладку.
         const upstream=await fetch(`${HUGH_RUNTIME_URL}${route}`,{method:request.method,
           headers:{'content-type':'application/json','x-api-key':CHAT_API_KEY,authorization:`Bearer ${CHAT_API_KEY}`},
-          ...(request.method==='POST'?{body:'{}'}:{}),signal:AbortSignal.timeout(12000)});
+          ...(request.method==='POST'?{body:'{}'}:{}),signal:AbortSignal.timeout(route==='/login'?35000:12000)});
         // Наружу отдаём только известные поля: чужой ответ по этому адресу не станет эхом в кабинете.
         return reply(upstream.status,sanitizeRuntime(await upstream.json().catch(()=>null)),{'cache-control':'no-store'});
       } catch { return reply(503,{state:'unavailable',connected:false,configured:true,provider:'codex',

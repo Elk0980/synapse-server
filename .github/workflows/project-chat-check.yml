@@ -134,6 +134,18 @@ jobs:
             docker run --rm --entrypoint node "$image" -e "const p = require('/app/build/tool-isolation-proof.json'); const c = require('/app/build/restricted-models.json'); if (p.observedTools.length !== 0) throw new Error('tools не пуст'); if (p.injectedToolCallsExecuted !== false) throw new Error('инъекция выполнилась'); if (p.canaryIntact !== true) throw new Error('канарейка повреждена'); if (c.models.length !== 1) throw new Error('в каталоге не одна модель'); console.log('proof ok', p.codexVersion, c.models[0].slug, p.fingerprint);"
           done
 
+      # Без доверенных корней вход в подписку падает на TLS ещё до сети: именно это
+      # и случилось на проде. Проверка идёт от рабочего пользователя образа и разбирает
+      # сертификаты по-настоящему — «файл существует» здесь недостаточно.
+      - name: Убедиться, что в образах есть доверенные корневые сертификаты
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          for image in hugh-runtime:check hugh-runtime:restrictive; do
+            echo "== $image"
+            docker run --rm --entrypoint node "$image" /app/test-support/check-ca-bundle.js
+          done
+
       - name: Убедиться, что доказательство неизменяемо для рабочего пользователя
         timeout-minutes: 5
         run: |
@@ -154,7 +166,10 @@ jobs:
             docker run --rm --entrypoint node "$image" -e "const fs = require('fs'); const files = ['/app/package.json', '/app/server.js', '/app/runtime.js', '/app/model-catalog.js', '/app/test-support/build-restricted-catalog.js']; for (const file of files) { fs.accessSync(file, fs.constants.R_OK); const mode = fs.statSync(file).mode & 0o777; if (mode !== 0o644) throw new Error(file + ' имеет права ' + mode.toString(8)); } for (const dir of ['/app', '/app/test-support']) { fs.readdirSync(dir); const stat = fs.statSync(dir); if ((stat.mode & 0o777) !== 0o755) throw new Error(dir + ' имеет права ' + (stat.mode & 0o777).toString(8)); if (stat.uid !== 0) throw new Error(dir + ' больше не принадлежит root'); } let blocked = false; try { fs.writeFileSync('/app/package.json', 'x'); } catch (error) { blocked = true; } if (!blocked) throw new Error('рабочий пользователь может переписать /app/package.json'); console.log('app permissions ok');"
           done
 
-      # Только разбор файла: ничего не запускается и не публикуется.
+      # Только разбор файла: ничего не запускается, не создаётся и не публикуется.
+      # Разбор идёт дважды: со значениями по умолчанию (исходящая сеть chat без IPv6)
+      # и с включённым выключателем — чтобы схема включённого варианта проверялась здесь,
+      # а не на проде в момент переключения.
       - name: Разобрать docker compose
         timeout-minutes: 3
         env:
@@ -163,4 +178,9 @@ jobs:
           CRM_API_KEY: ci-dummy-crm-key
           CONTENT_API_KEY: ci-dummy-content-key
           TELEGRAM_WEBHOOK_SECRET: ci-dummy-telegram-secret
-        run: docker compose config --quiet
+        run: |
+          set -euo pipefail
+          docker compose config --quiet
+          CHAT_IPV6_ENABLED=true \
+          CHAT_NODE_OPTIONS='--dns-result-order=ipv6first --no-network-family-autoselection' \
+            docker compose config --quiet

@@ -210,7 +210,9 @@ const runtimeStatus = (fixture) => {
   const mode = fixture.preview.ai;
   if (mode === 'connected') return { connected: true, authenticated: true, provider: 'codex', model: 'gpt-5-codex (образец)', state: 'connected' };
   if (mode === 'login_required') {
-    return { connected: false, authenticated: false, provider: 'codex', state: 'login_required', loginUrl: 'https://auth.openai.com/codex/device', userCode: 'ОБРАЗЕЦ-1234' };
+    // Код образца соблюдает настоящий формат ABCD-1234: кабинет показывает экран
+    // подтверждения только при проверенной паре «ссылка + код».
+    return { connected: false, authenticated: false, provider: 'codex', state: 'login_required', loginUrl: 'https://auth.openai.com/codex/device', userCode: 'DEMO-1234' };
   }
   if (mode === 'unavailable') return { connected: false, authenticated: false, provider: 'codex', state: 'unavailable', error: 'Образец: служба ответов не отвечает.' };
   return { connected: false, authenticated: false, provider: 'codex', state: 'unavailable', error: 'Образец: подписка не настроена.' };
