@@ -4,6 +4,7 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install --omit=dev
 COPY *.js ./
+COPY studio-content-plan-data.json ./
 
 EXPOSE 8080
 CMD ["node", "server.js"]

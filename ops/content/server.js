@@ -419,6 +419,14 @@ async function proxyCrm(request, response, url, cors) {
   const crmPath = url.pathname.slice('/content/crm'.length) || '/';
   if (/^\/(catalog|finances)(?:\/|$)/.test(crmPath) && identity.role !== 'owner') fail(403,'Коммерческие условия и финансы доступны владельцу');
   const companyModule = /^\/(company-information|autoposting)(?:\/|$)/.exec(crmPath)?.[1];
+  if (/^\/studio-journey(?:\/|$)/.test(crmPath)) {
+    const code=url.searchParams.get('companyCode');
+    if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400,'Выберите компанию');
+    if(identity.role!=='owner')requirePermission(request,readOnly?'crm.view':'crm.edit',code);
+  }
+  if (/^\/autoposting\/settings\/[^/]+\/profiles$/.test(crmPath) && identity.role!=='owner') {
+    fail(403,'Профили общего аккаунта публикаций настраивает владелец');
+  }
   if (companyModule) {
     const code = url.searchParams.get('companyCode');
     if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400, 'Выберите компанию');

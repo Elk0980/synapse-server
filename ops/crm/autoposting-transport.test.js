@@ -188,3 +188,90 @@ test('timeout remains active while reading the response body and cancels the rea
  f.setHandler(()=>({ok:true,body:new ReadableStream({start(){queueMicrotask(()=>controller.abort())},cancel(){cancelled=true}})}));
  await assert.rejects(f.publish(),safeFailure('CONNECTION_UNCERTAIN',true));assert.equal(cancelled,true);
 });
+
+const OP_TOKEN='op_'+'a'.repeat(64);
+function onlypultFixture(t){
+ const f=fixture(t),calls=[];let custom;
+ const profiles=[{id:'alvi-vk',name:'ALVI',platform:'vkontakte',status:'active',username:'@alvi',private:'PRIVATE_PROVIDER_RESPONSE'},
+   {id:'avokado-vk',name:'Авокадо',platform:'vkontakte',status:'active'},
+   {id:'alvi-tg',name:'ALVI Telegram',platform:'telegram',status:'active'}];
+ const replies={'/profiles':profiles,'/account':{timezone:'Asia/Irkutsk',plan_active:true},'/posts/limits':{platform:{limits:{text:{charLimit:15000},media:{maxCount:10}}}},
+   '/posts':{id:'job-123',status:'scheduled',profile_ids:['alvi-vk']},'/posts/job-123':{id:'job-123',status:'published',profile_ids:['alvi-vk']}};
+ const api=createAutopostingTransport(f.db,{...f.options,fetchImpl:async(url,options)=>{
+   const parsed=new URL(url);assert.equal(parsed.origin,'https://api.onlypult.com');assert.ok(parsed.pathname.startsWith('/v1/'));
+   assert.equal(options.headers.authorization,`Bearer ${OP_TOKEN}`);assert.equal(options.redirect,'error');
+   assert.ok(options.signal instanceof AbortSignal);const path=parsed.pathname.slice(3),body=options.body?JSON.parse(options.body):null;
+   const request={path,body,options};calls.push(request);return custom?custom(request):wire({data:replies[path]});
+ }});
+ const save=(changes={},code='alvi')=>api.saveSettings(code,{channels:[channel('vk',0,{provider:'onlypult',target:'alvi-vk',token:OP_TOKEN,...changes})]});
+ const publish=()=>api.publish({companyCode:'alvi',channelId:'vk',post:{id:9,text:'Owner approved text',mediaUrls:[]}});
+ return {...f,api,calls,profiles,replies,save,publish,setHandler:value=>custom=value};
+}
+
+test('Onlypult key can be saved before profile selection and stays scoped, encrypted and unreadable in public DTOs',async t=>{
+ const f=onlypultFixture(t);f.save({target:'',enabled:false});
+ assert.equal(f.calls.length,0);const saved=f.api.getSettings('alvi').channels.find(c=>c.id==='vk');
+ assert.equal(saved.provider,'onlypult');assert.equal(saved.connected,false);assert.equal(saved.tokenConfigured,true);
+ assert.ok(!JSON.stringify(saved).includes(OP_TOKEN));assert.ok(!f.db.prepare('SELECT encrypted_token FROM autoposting_channels').get().encrypted_token.includes(OP_TOKEN));
+ assert.equal((await f.api.checkChannel('alvi','vk')).code,'PROFILE_REQUIRED');assert.equal(f.calls.length,0);
+ const listing=await f.api.listProfiles('alvi','vk');assert.deepEqual(listing.profiles.map(p=>p.id),['alvi-vk','avokado-vk']);
+ assert.ok(!JSON.stringify(listing).includes('PRIVATE_PROVIDER_RESPONSE'));assert.equal(listing.revision,1);
+ assert.equal(f.calls[0].options.method,'GET');assert.equal(f.calls[0].body,null);
+ await assert.rejects(f.api.listProfiles('avokado','vk'),e=>e.status===400);
+ assert.throws(()=>f.save({revision:1,target:'',enabled:true}),e=>e.status===400);
+ assert.throws(()=>f.save({revision:1,provider:'direct',target:'1234',token:''}),e=>e.status===400);
+});
+
+test('Onlypult check requires an exact active profile on the selected platform and remembers its display name',async t=>{
+ for(const [target,status,expected]of[['alvi-vk','active',null],['alvi-vk','expired','PROFILE_INACTIVE'],['alvi-tg','active','PROFILE_NOT_FOUND'],['unknown','active','PROFILE_NOT_FOUND']]){
+  const f=onlypultFixture(t);f.profiles[0].status=status;f.save({target});const result=await f.api.checkChannel('alvi','vk');
+  assert.equal(result.ok,expected===null);assert.equal(result.code,expected);
+  assert.equal(result.channels.find(c=>c.id==='vk').profileDisplayName,expected?null:'ALVI');
+  assert.ok(f.calls.every(c=>c.path==='/profiles'&&c.options.method==='GET'));
+ }
+});
+
+test('Onlypult profile list and connection checks reject results from settings changed during an await',async t=>{
+ const f=onlypultFixture(t);f.save();let release;
+ f.setHandler(()=>new Promise(resolve=>release=()=>resolve(wire({data:f.profiles}))));
+ const checking=f.api.checkChannel('alvi','vk');f.save({revision:1,token:'',target:'avokado-vk'});release();
+ const result=await checking;assert.equal(result.code,'SETTINGS_CHANGED');assert.equal(result.ok,false);
+ const listing=f.api.listProfiles('alvi','vk');f.save({revision:2,token:'',target:'alvi-vk'});release();
+ await assert.rejects(listing,safeFailure('SETTINGS_CHANGED',false));
+});
+
+test('Onlypult creates only for the frozen profile; provider IDs or published flags are never reported as a live social post',async t=>{
+ const f=onlypultFixture(t);f.save();assert.equal((await f.api.checkChannel('alvi','vk')).ok,true);
+ for(const status of ['scheduled','published','failed']){
+  f.replies['/posts']={id:'job-123',status,profile_ids:['alvi-vk'],url:'https://vk.com/wall-999_9',private:OP_TOKEN};
+  const result=await f.publish();assert.equal(result.status,'needs_review');assert.equal(result.providerPostId,'job-123');
+  assert.equal(result.providerStatus,status);assert.equal(result.externalId,undefined);assert.equal(result.url,undefined);
+  assert.ok(!JSON.stringify(result).includes(OP_TOKEN));
+  assert.deepEqual(f.calls.at(-1).body,{profile_ids:['alvi-vk'],content:'Owner approved text',publish_now:true});
+ }
+ const before=f.calls.length,result=await f.api.reconcile({companyCode:'alvi',channelId:'vk',channelRevision:1,providerPostId:'job-123'});
+ assert.equal(result.errorCode,'PROVIDER_LINK_UNAVAILABLE');assert.equal(f.calls.length,before+1);assert.equal(f.calls.at(-1).options.method,'GET');
+ await assert.rejects(f.api.reconcile({companyCode:'alvi',channelId:'vk',channelRevision:2,providerPostId:'job-123'}),safeFailure('CHANNEL_CHANGED',false));
+});
+
+test('Onlypult refuses malformed, mismatched or uncertain create receipts and never includes provider secrets in errors',async t=>{
+ const f=onlypultFixture(t);f.save();await f.api.checkChannel('alvi','vk');
+ for(const data of [{id:'job-123',status:'scheduled',profile_ids:['avokado-vk']},{id:'job-123',status:'scheduled',profile_ids:['alvi-vk','avokado-vk']},{status:'published'},{}]){
+  f.replies['/posts']=data;await assert.rejects(f.publish(),safeFailure('RESPONSE_UNCERTAIN',true));
+ }
+ f.setHandler(({path})=>{if(path==='/posts')throw Error('PRIVATE_PROVIDER_RESPONSE '+OP_TOKEN);return wire({data:f.replies[path]});});
+ await assert.rejects(f.publish(),safeFailure('CONNECTION_UNCERTAIN',true));
+ f.setHandler(({path})=>path==='/posts'?wire({error:{code:'validation_error',message:OP_TOKEN,retryable:false}},422):wire({data:f.replies[path]}));
+ await assert.rejects(f.publish(),safeFailure('PLATFORM_REJECTED',false));
+});
+
+test('Onlypult preflight guards owner edits and plan/content limits before any mutation',async t=>{
+ for(const change of ['settings','plan','limit','owner']){
+  const f=onlypultFixture(t);f.save();await f.api.checkChannel('alvi','vk');
+  if(change==='plan')f.replies['/account'].plan_active=false;
+  if(change==='limit')f.replies['/posts/limits'].platform.limits.text.charLimit=1;
+  if(change==='settings')f.setHandler(({path})=>{if(path==='/posts/limits')f.save({revision:1,token:'',target:'avokado-vk'});return wire({data:f.replies[path]});});
+  const promise=change==='owner'?f.api.publish({companyCode:'alvi',channelId:'vk',post:{text:'Owner text',mediaUrls:[]},beforePublish:()=>{throw Object.assign(Error('Changed'),{ambiguous:false});}}):f.publish();
+  await assert.rejects(promise);assert.equal(f.calls.some(c=>c.options.method==='POST'),false);
+ }
+});
