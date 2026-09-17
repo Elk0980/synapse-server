@@ -15,6 +15,8 @@ let initialized = false;
 let dashboardState = null;
 let openPlatformId = null;
 let existingRequest = 0;
+let dashboardRequest = 0;
+let dashboardStatus = "loading";
 const api = {};
 
 const formatDate = (value, year = true) => {
@@ -45,13 +47,16 @@ const dayWord = (count) => {
 };
 const projectLabel = () => byId("project-name")?.textContent || ctx.selectedProjectId || "—";
 const isEditable = () => identity.permissions.includes("crm.edit");
+const isCurrentCompany = (companyCode) => ctx.currentView === "ad-platforms" &&
+  ctx.selectedProjectId === companyCode && identity.permissions.includes("analytics.view");
+const isCurrentForm = (form) => form?.isConnected && isCurrentCompany(form.dataset.companyCode);
 const platformFor = (id) => SbCabinet.ANALYTICS_PLATFORMS.find((item) => item.id === id);
 const hasNumbers = (value) => value && typeof value === "object" &&
   Object.values(value).some((item) => typeof item === "number" && Number.isFinite(item));
-const connectedAt = (platform, stats) => stats.filter((row) => {
+const snapshotRows = (platform, stats) => stats.filter((row) => {
   const source = String(row.source || "").toLowerCase();
   return platform.codes.includes(source) && hasNumbers(row.external);
-}).map((row) => row.externalCapturedAt).filter(Boolean).sort().at(-1) || null;
+});
 const metricInputs = (date) => METRICS.map(([key, label]) => `<td>
   <input type="number" min="0" step="any" name="${key}" aria-label="${label}, ${date}">
   <small class="existing-value" data-existing="${key}"></small>
@@ -61,10 +66,13 @@ const dayRow = (date = dateValue(new Date())) => `<tr>
   ${metricInputs(date)}
   <td><button class="plain-button remove-day" type="button" aria-label="Удалить день">×</button></td>
   </tr>`;
-const manualForm = (platform) => `<form class="manual-stats-form" data-platform="${platform.id}" novalidate>
+const manualForm = (platform) => `<form class="manual-stats-form" data-platform="${platform.id}"
+  data-company-code="${escapeHTML(ctx.selectedProjectId)}" novalidate>
   <p class="manual-project"><strong>Проект:</strong> ${escapeHTML(projectLabel())}
   <small>Чтобы изменить, переключите проект слева</small></p>
   <p><strong>Источник:</strong> ${escapeHTML(platform.codes[0])}</p>
+  <p>Ручной снимок из отчёта площадки. Укажите фактические значения за каждый день;
+  неизвестные поля оставьте пустыми. Сохранение не подключает рекламный кабинет.</p>
   <div class="manual-days-scroll"><table class="manual-days-table">
   <thead><tr><th>Дата</th>${METRICS.map(([, label]) => `<th>${label}</th>`).join("")}<th></th></tr></thead>
   <tbody>${recentDates().map(dayRow).join("")}</tbody></table></div>
@@ -74,6 +82,31 @@ const manualForm = (platform) => `<form class="manual-stats-form" data-platform=
   <div class="manual-actions"><button class="primary-button" type="submit">Сохранить</button>
   <p class="manual-result" role="status"></p></div>
   </form>`;
+const companyOverview = () => `<section class="card" aria-label="Путь клиента из рекламы">
+  <h2>Реклама компании ${escapeHTML(projectLabel())}</h2>
+  <p><strong>Объявление → заявка → запись → визит → абонемент</strong></p>
+  <p>Заявки и этапы работы с клиентом смотрите в CRM выбранной компании.
+  Запись, визит и покупку абонемента отмечайте по факту; переход по рекламе сам по себе их не подтверждает.</p>
+  <p>${identity.permissions.includes("crm.view") ? '<a href="#crm">Открыть заявки и записи</a> · ' : ""}
+  <a href="#analytics-through">Открыть сквозную аналитику</a></p>
+  <details><summary>Как подготовить рекламу ВКонтакте</summary>
+    <ol>
+      <li>Проверьте сайт, предложение и контакты именно этой компании.
+      Объявления и бюджет настраиваются в <a href="https://ads.vk.com/" target="_blank" rel="noopener noreferrer">VK Рекламе</a>.</li>
+      <li>Добавьте к ссылке на сайт метки: <code>utm_source=vk</code>,
+      <code>utm_medium=paid_social</code> и <code>utm_campaign</code> с названием кампании.
+      Для разных объявлений используйте разные <code>utm_content</code>.
+      Метки добавляются после «?» и разделяются «&amp;»; не помещайте в них телефоны и имена клиентов.</li>
+      <li>Проверьте путь от рекламной ссылки до формы сайта. После получения реальной заявки
+      сверяйте её источник в CRM, затем отмечайте запись и результат визита.</li>
+      <li>Пока переносите показатели из отчёта площадки через «Ввести данные вручную».
+      Сравнивайте одинаковые даты в отчёте и сквозной аналитике.</li>
+    </ol>
+    <p><strong>Автоматическая загрузка статистики VK пока не реализована.</strong>
+    Для неё нужны доступ к API своего рекламного кабинета и отдельная настройка интеграции в Synapse.
+    Подключение сообщества VK для публикаций этого не заменяет. Поля для ключей появятся вместе с работающей интеграцией.</p>
+  </details>
+  </section>`;
 const renderAdPlatforms = (dashboard = dashboardState) => {
   const stats = Array.isArray(dashboard?.sourceStats) ? dashboard.sourceStats : [];
   let currentGroup = null;
@@ -85,16 +118,23 @@ const renderAdPlatforms = (dashboard = dashboardState) => {
     }
     groups.at(-1).platforms.push(platform);
   }
-  byId("ad-platforms-content").innerHTML = `<div class="platform-status-list">${groups.map((group) => {
+  const notice = dashboardStatus === "loading" ? "Загружаем ручные снимки выбранной компании…" :
+    dashboardStatus === "error" ? "Не удалось загрузить ручные снимки. Повторите загрузку; это не означает, что данных нет." :
+    "Показаны ручные снимки за последние 30 дней. Пустой статус означает отсутствие снимка за этот период, а не нулевой результат рекламы.";
+  byId("ad-platforms-content").innerHTML = `<div class="platform-status-list">${companyOverview()}
+  <p role="status">${notice}${dashboardStatus === "error" ? ' <button class="plain-button retry-platforms" type="button">Повторить загрузку</button>' : ""}</p>
+  ${groups.map((group) => {
     const heading = group.label ? `<h2>${escapeHTML(group.label)}</h2>` : "";
     const rows = group.platforms.map((platform) => {
-      const capturedAt = connectedAt(platform, stats);
-      const status = capturedAt ? `подключено (снимок от ${formatDate(capturedAt)})` : "не подключено";
+      const rows = snapshotRows(platform, stats);
+      const capturedAt = rows.map((row) => row.externalCapturedAt).filter(Boolean).sort().at(-1);
+      const status = rows.length ? `Ручной снимок${capturedAt ? ` от ${formatDate(capturedAt)}` : " · дата не указана"}` :
+        dashboardStatus === "loading" ? "Загружаем…" : dashboardStatus === "error" ? "Данные недоступны" : "Нет ручного снимка";
       const disabled = isEditable() ? "" : ' disabled title="нет прав"';
       const form = openPlatformId === platform.id ? manualForm(platform) : "";
       return `<div class="platform-status-item"><div class="platform-status-row">
         <span>${escapeHTML(platform.label)}${platform.note ? `<small>${escapeHTML(platform.note)}</small>` : ""}</span>
-        <span class="platform-status${capturedAt ? " is-connected" : ""}">${status}</span>
+        <span class="platform-status">${status}</span>
         <button class="plain-button manual-open" type="button" data-platform="${platform.id}"${disabled}>
         Ввести данные вручную</button></div>${form}</div>`;
     }).join("");
@@ -116,6 +156,7 @@ const clearExisting = (form) => form.querySelectorAll(".existing-value").forEach
   item.textContent = "";
 });
 const loadExisting = async (form) => {
+  if (!isCurrentForm(form)) return;
   const range = formRange(form);
   const platform = platformFor(form.dataset.platform);
   if (!range || !platform || !ctx.selectedProjectId) return;
@@ -124,10 +165,10 @@ const loadExisting = async (form) => {
   try {
     const data = await crmQuery("/external-stats", {
       source: platform.codes[0],
-      companyCode: ctx.selectedProjectId,
+      companyCode: form.dataset.companyCode,
       ...range
     });
-    if (request !== existingRequest || !form.isConnected) return;
+    if (request !== existingRequest || !isCurrentForm(form)) return;
     const rows = new Map((data.rows || []).map((row) => [row.date, row.metrics || {}]));
     form.querySelectorAll("tbody tr").forEach((row) => {
       const metrics = rows.get(row.querySelector('[name="date"]').value);
@@ -138,7 +179,7 @@ const loadExisting = async (form) => {
       });
     });
   } catch (error) {
-    form.querySelector(".manual-result").textContent = error.message;
+    if (request === existingRequest && isCurrentForm(form)) form.querySelector(".manual-result").textContent = error.message;
   }
 };
 const formRows = (form) => [...form.querySelectorAll("tbody tr")].map((row) => {
@@ -150,6 +191,7 @@ const formRows = (form) => [...form.querySelectorAll("tbody tr")].map((row) => {
   return result;
 }).filter((row) => METRICS.some(([key]) => Object.hasOwn(row, key)));
 const saveForm = async (form) => {
+  if (!isEditable() || !isCurrentForm(form)) return;
   const result = form.querySelector(".manual-result");
   result.textContent = "";
   if (!form.reportValidity()) {
@@ -174,10 +216,11 @@ const saveForm = async (form) => {
   try {
     const saved = await crmQuery("/external-stats", {}, csrfOptions("POST", {
       source: platform.codes[0],
-      companyCode: ctx.selectedProjectId,
+      companyCode: form.dataset.companyCode,
       rows,
       note: form.elements.note.value
     }));
+    if (!isCurrentForm(form)) return;
     const dates = (saved.dates || rows.map((row) => row.date)).slice().sort();
     const savedCount = saved.upserted ?? rows.length;
     result.textContent = `Сохранено: ${savedCount} ${dayWord(savedCount)}, ` +
@@ -189,36 +232,52 @@ const saveForm = async (form) => {
       // The statistics are saved even if refreshing platform statuses fails.
     }
   } catch (error) {
-    result.textContent = error.message;
+    if (isCurrentForm(form)) result.textContent = error.message;
   } finally {
     button.disabled = false;
   }
 };
 const refreshDashboard = async (render = true) => {
-  dashboardState = await crmQuery("/dashboard", { ...periodDates("30d"), ...scopeParams() });
-  if (render && ctx.currentView === "ad-platforms") renderAdPlatforms();
-  if (!render && openPlatformId) {
-    const message = byId("ad-platforms-content").querySelector(".manual-result").textContent;
+  const companyCode = ctx.selectedProjectId;
+  const request = ++dashboardRequest;
+  const form = byId("ad-platforms-content").querySelector(".manual-stats-form");
+  try {
+    const data = await crmQuery("/dashboard", { ...periodDates("30d"), ...scopeParams() });
+    if (request !== dashboardRequest || !isCurrentCompany(companyCode)) return;
+    dashboardState = data;
+    dashboardStatus = "ready";
+  } catch (error) {
+    if (request !== dashboardRequest || !isCurrentCompany(companyCode)) return;
+    dashboardStatus = "error";
+  }
+  if (render) renderAdPlatforms();
+  if (!render && isCurrentForm(form) && form === byId("ad-platforms-content").querySelector(".manual-stats-form")) {
+    const message = form.querySelector(".manual-result").textContent;
     renderAdPlatforms();
     byId("ad-platforms-content").querySelector(".manual-result").textContent = message;
   }
 };
 const loadAdPlatforms = async () => {
-  if (ctx.currentView !== "ad-platforms" || !identity.permissions.includes("analytics.view")) return;
+  ++dashboardRequest;
+  ++existingRequest;
   dashboardState = null;
+  dashboardStatus = "loading";
   openPlatformId = null;
-  renderAdPlatforms();
-  try {
-    await refreshDashboard();
-  } catch (error) {
-    // Connection statuses remain conservative when dashboard data is unavailable.
+  if (ctx.currentView !== "ad-platforms") return;
+  if (!identity.permissions.includes("analytics.view") || !ctx.selectedProjectId) {
+    byId("ad-platforms-content").textContent = identity.permissions.includes("analytics.view")
+      ? "Выберите компанию, чтобы открыть её рекламные площадки." : "Нет доступа к рекламным площадкам.";
+    return;
   }
+  renderAdPlatforms();
+  await refreshDashboard();
 };
 const bindEvents = () => {
   const content = byId("ad-platforms-content");
   content.addEventListener("click", (event) => {
+    if (event.target.closest(".retry-platforms")) { loadAdPlatforms(); return; }
     const open = event.target.closest(".manual-open");
-    if (open && !open.disabled) {
+    if (open && !open.disabled && isEditable() && isCurrentCompany(ctx.selectedProjectId)) {
       openPlatformId = openPlatformId === open.dataset.platform ? null : open.dataset.platform;
       renderAdPlatforms();
       return;
