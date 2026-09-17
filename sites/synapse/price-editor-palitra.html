@@ -244,6 +244,8 @@
     .ed-modal { background:rgba(20,28,36,.45); }
     .ed-modal__box { background:#fff; color:#1a1a1a; }
     .ed-input,.ed-select,.ed-form input,.ed-form textarea { color:#1a1a1a; background:#fff; border-color:#b9c0c8; }
+    .ed-import-actions { display: flex; gap: 0.7rem; flex-wrap: wrap; margin-top: 1rem; }
+    #ed-import-summary, #ed-import-progress { overflow-wrap: anywhere; }
   </style>
   <style>
     /* --- Надстройка редактора поверх стилей прайса --- */
@@ -363,6 +365,8 @@
     <div class="ed-bar__title">Редактор прайса Palitra<small id="ed-sub">загрузка…</small></div>
     <span class="ed-status" id="ed-status"></span>
     <button class="ed-btn ed-btn--ghost" id="ed-history" type="button">История</button>
+    <button class="ed-btn ed-btn--ghost" id="ed-import" type="button">Загрузить товары</button>
+    <input type="file" id="ed-import-file" accept="application/json,.json" hidden>
     <a class="ed-btn ed-btn--ghost" id="ed-login" href="/cabinet.html" target="_blank" rel="noopener" hidden>Войти в кабинет</a>
     <button class="ed-btn ed-btn--ghost" id="ed-session-retry" type="button" hidden>Проверить вход</button>
     <a class="ed-btn ed-btn--ghost" href="https://palitra-love.synapsebusiness.ru/price.html" id="ed-open-price" target="_blank" rel="noopener">Открыть прайс ↗</a>
@@ -381,6 +385,7 @@
   <div class="ed-modal" id="ed-modal"><div class="ed-modal__box" id="ed-modal-box"></div></div>
 
   <script src="price-render-palitra.js"></script>
+  <script src="palitra-catalog-import.js?v=20260917-1"></script>
   <script>
 (() => {
   'use strict';
@@ -402,6 +407,7 @@
   let dirty = false;    // есть несохранённые изменения
   let editing = null;   // id позиции, открытой на редактирование
   let editingCat = null;
+  let importBusy = false;
 
   const statusEl = $('#ed-status');
   const subEl = $('#ed-sub');
@@ -774,7 +780,7 @@
     } catch (error) { setStatus(error.message, 'error'); }
   }
   async function save() {
-    if (!data) return;
+    if (!data || importBusy) return;
     saveBtn.disabled = true; setStatus('Сохраняю…');
     try {
       const res = await apiFetch(API, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
@@ -819,6 +825,7 @@
 
   /* --- события --- */
   document.addEventListener('click', (e) => {
+    if (importBusy && !e.target.closest('#ed-import-modal')) return;
     const t = e.target.closest('button, a');
     if (!t) return;
     if (t.dataset.star) return toggleStar(t.dataset.star, t);
@@ -853,8 +860,20 @@
     const sel = e.target.closest('select[data-block-select]');
     if (sel) setCategoryBlock(sel.dataset.blockSelect, sel.value);
   });
-  window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+  window.addEventListener('beforeunload', (e) => { if (dirty || importBusy) { e.preventDefault(); e.returnValue = ''; } });
   document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); save(); } });
+
+  if (window.PalitraCatalogImport) window.PalitraCatalogImport.attach({
+    apiFetch,
+    getState: () => ({ session, data, dirty, editing: editing || editingCat }),
+    setBusy(value) {
+      importBusy = value;
+      document.querySelector('.price-layout').inert = value;
+      document.querySelector('.ed-bar').inert = value;
+    },
+    refresh: loadData,
+    setStatus,
+  });
 
   (async () => {
     if (!window.PalitraPrice) {
