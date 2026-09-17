@@ -28,16 +28,34 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
     if (!data || typeof data !== 'object' || !Object.hasOwn(data,'data')) throw failure('RESPONSE_UNCERTAIN',mutation);
     return data.data;
   }
-  async function listProfiles(row) {
+  async function inspectProfiles(row) {
     const profiles = await request(row,'GET','/profiles');
     if (!Array.isArray(profiles) || profiles.length > 1000) throw failure('RESPONSE_UNCERTAIN');
-    return profiles.filter(profile => profile?.platform === PLATFORM[row.id]).map(profile => {
+    const counts = new Map(), shapes = new Map();
+    let otherShapesCount = 0;
+    const fieldType = value => value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
+    for (const profile of profiles) {
+      const platform = typeof profile?.platform === 'string' && /^[a-z][a-z0-9_-]{0,39}$/.test(profile.platform) ? profile.platform : 'unknown';
+      counts.set(platform,(counts.get(platform) || 0) + 1);
+      const shape = {idType:fieldType(profile?.id),nameType:fieldType(profile?.name),statusType:fieldType(profile?.status),platformType:fieldType(profile?.platform)};
+      if (profile?.platform === undefined) shape.fieldNames = profile && typeof profile === 'object' && !Array.isArray(profile)
+        ? Object.keys(profile).filter(key => /^[a-z_]{1,30}$/.test(key)).sort().slice(0,20) : [];
+      const key = JSON.stringify(shape), previous = shapes.get(key);
+      if (previous) previous.count++;
+      else if (shapes.size < 20) shapes.set(key,{...shape,count:1});
+      else otherShapesCount++;
+    }
+    const matching = profiles.filter(profile => profile?.platform === PLATFORM[row.id]).map(profile => {
       if (!id(profile.id) || typeof profile.name !== 'string' || typeof profile.status !== 'string') throw failure('RESPONSE_UNCERTAIN');
       // Never return raw provider objects (credentials/private fields may be added later).
       return {id:profile.id,name:profile.name.slice(0,200),platform:row.id,status:profile.status.slice(0,60),
         username:typeof profile.username === 'string' ? profile.username.slice(0,120) : null};
     });
+    return {profiles:matching,diagnostics:{totalProfiles:profiles.length,
+      platformCounts:Array.from(counts,([platform,count]) => ({platform,count})).sort((a,b) => a.platform.localeCompare(b.platform)),
+      profileShapes:Array.from(shapes.values()),otherShapesCount}};
   }
+  async function listProfiles(row) {return (await inspectProfiles(row)).profiles;}
   async function check(row) {
     if (!id(row.target)) throw failure('PROFILE_REQUIRED');
     const profiles = await listProfiles(row), matches = profiles.filter(profile => profile.id === row.target);
@@ -67,6 +85,6 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
     if (!id(providerPostId) || !id(row.target)) throw failure('PROVIDER_POST_REQUIRED');
     return receipt(await request(row,'GET',`/posts/${encodeURIComponent(providerPostId)}`),row,providerPostId);
   }
-  return {listProfiles,check,publish,reconcile};
+  return {listProfiles,inspectProfiles,check,publish,reconcile};
 }
 module.exports = {createOnlypultProvider};

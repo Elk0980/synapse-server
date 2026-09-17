@@ -25,6 +25,23 @@ const CONNECTION_ERRORS = {
   SETTINGS_CHANGED:"Настройки изменились во время проверки. Обновите статусы перед повторной проверкой."
 };
 Object.assign(CONNECTION_ERRORS,{PROFILE_NOT_FOUND:"Этот профиль не найден в Onlypult. Обновите список и выберите нужное сообщество.",PROFILE_PLATFORM_MISMATCH:"Выбран профиль другой площадки. Выберите сообщество ВК или канал Telegram соответственно.",PROFILE_INACTIVE:"Подключение профиля в Onlypult требует обновления. Откройте его кабинет.",PROVIDER_AUTH:"Onlypult не принял ключ. Проверьте ключ и пробный период.",PROVIDER_NOT_CONFIGURED:"Сначала сохраните ключ Onlypult для выбранной компании."});
+const emptyProfilesMessage=(channel,diagnostics)=>{
+  const total=diagnostics?.totalProfiles;
+  if(!Number.isSafeInteger(total)||total<0||total>1000)return "В ответе Onlypult нет подходящих профилей. Проверьте подключение нужного сообщества или канала в сервисе.";
+  if(total===0)return "Onlypult не вернул профилей для этого ключа. Проверьте ключ и подключение профилей в Onlypult.";
+  const remainder=total%100,ending=remainder>=11&&remainder<=14?'профилей':total%10===1?'профиль':total%10>=2&&total%10<=4?'профиля':'профилей';
+  const counts=Array.isArray(diagnostics.platformCounts)?diagnostics.platformCounts.filter(item=>Number.isSafeInteger(item?.count)&&item.count>0&&item.count<=total).map(item=>`${typeof item.platform==='string'&&/^[a-z][a-z0-9_-]{0,39}$/.test(item.platform)?item.platform:'unknown'} — ${item.count}`):[];
+  return `Onlypult вернул ${total} ${ending}, но для ${channel.platform==='vk'?'ВКонтакте':'Telegram'} подходящих профилей не найдено.${counts.length?' Обозначения площадок: '+counts.join(', ')+'.':''}`;
+};
+const profileShapeLines=diagnostics=>{
+  const types=new Set(['undefined','null','array','string','number','boolean','object']);
+  const lines=(Array.isArray(diagnostics?.profileShapes)?diagnostics.profileShapes:[]).slice(0,20).filter(item=>Number.isSafeInteger(item?.count)&&item.count>0&&item.count<=1000&&['idType','nameType','statusType','platformType'].every(key=>types.has(item[key]))).map(item=>{
+    const fields=item.platformType==='undefined'&&Array.isArray(item.fieldNames)?item.fieldNames.filter(name=>typeof name==='string'&&/^[a-z_]{1,30}$/.test(name)).slice(0,20):[];
+    return `Профилей: ${item.count}. id: ${item.idType}; name: ${item.nameType}; status: ${item.statusType}; platform: ${item.platformType}.${fields.length?' Поля: '+fields.join(', ')+'.':''}`;
+  });
+  if(Number.isSafeInteger(diagnostics?.otherShapesCount)&&diagnostics.otherShapesCount>0&&diagnostics.otherShapesCount<=1000)lines.push(`Профили с другой структурой: ${diagnostics.otherShapesCount}.`);
+  return lines;
+};
 let controller;
 function create(container, context) {
   const time = cabinet.companyTime;
@@ -56,6 +73,12 @@ function create(container, context) {
   const endpoint=path=>"/content/crm"+path+"?companyCode="+encodeURIComponent(companyCode);
   const request=(path,method,body)=>ctx.apiJson(endpoint(path),method?ctx.csrfOptions(method,body):undefined);
   const message=text=>{get("autoposting-status").textContent=text;get("autoposting-form-status").textContent=text;};
+  const renderProfileDiagnostics=(channel,diagnostics)=>{
+    if(ctx.identity?.role!=='owner')return;
+    const card=[...get('autoposting-channels').querySelectorAll('[data-channel]')].find(node=>node.dataset.channel===channel.id),details=card?.querySelector('[data-profile-diagnostics]');
+    if(!details)return;const lines=profileShapeLines(diagnostics),content=details.querySelector('[data-profile-diagnostics-content]');
+    content.replaceChildren();for(const line of lines){const paragraph=document.createElement('p');paragraph.textContent=line;content.append(paragraph);}details.hidden=!lines.length;
+  };
   const raw=()=>({title:get("autoposting-title").value,text:get("autoposting-text").value,media:get("autoposting-media").value,
     date:get("autoposting-date").value,timezone:get("autoposting-timezone").value,
     platformIds:[...get("autoposting-platforms").querySelectorAll("input:checked")].map(node=>node.value)});
@@ -96,6 +119,7 @@ function create(container, context) {
   const readyToSchedule=()=>post&&EDITABLE.has(post.status)&&!dirty()&&reviewed===post.revision&&!problems().length;
   const controls=()=>{
     container.setAttribute("aria-busy",String(busy));
+    if(ctx.identity?.role!=='owner')get('autoposting-channels').querySelectorAll('[data-profile-diagnostics]').forEach(node=>node.remove());
     container.querySelectorAll("input,textarea,select,button").forEach(node=>{node.disabled=busy||!settings;});
     get("autoposting-company").disabled=busy||!companies.length;
     const canEdit=edit()&&(!post||EDITABLE.has(post.status))&&!post?.deliveries?.some(item=>["published","publishing","needs_review"].includes(item.status));
@@ -159,7 +183,7 @@ function create(container, context) {
         <label>${onlypult?"Ключ Onlypult для подключения":channel.platform==="vk"?"Новый ключ пользователя с правом wall":"Новый токен бота — администратора канала"}<input data-channel-field="token" type="password" autocomplete="new-password" maxlength="4096"></label>
         <label class="autoposting-checkbox"><input data-channel-field="enabled" type="checkbox"${values.enabled?" checked":""}>Разрешить автоматическую отправку</label>
         ${onlypult?'<p class="autoposting-note">Отправку можно разрешить после выбора профиля.</p>':''}
-        <div class="autoposting-actions"><button class="plain-button" type="submit">Сохранить подключение</button><button class="plain-button" type="button" data-check-channel="${esc(channel.id)}">Проверить доступ</button></div></form>`;
+        <div class="autoposting-actions"><button class="plain-button" type="submit">Сохранить подключение</button><button class="plain-button" type="button" data-check-channel="${esc(channel.id)}">Проверить доступ</button></div>${onlypult&&ctx.identity?.role==='owner'?'<details data-profile-diagnostics hidden><summary>Технические сведения профилей</summary><div data-profile-diagnostics-content></div></details>':''}</form>`;
     }).join("");
     get("autoposting-planning").innerHTML=PLANNING.map(([id,title])=>{const url=safeUrl(socials.find(item=>item.type===id)?.url);return `<div><strong>${title}</strong><p>Планирование материалов. Автоматическая отправка не подключена.</p>${url?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Открыть страницу компании</a>`:"<span class=autoposting-note>Ссылка компании не указана.</span>"}</div>`;}).join("");
   };
@@ -206,6 +230,7 @@ function create(container, context) {
   const selectPost=id=>{stash();post=posts.find(item=>String(item.id)===String(id))||null;selections.set(companyCode,post?.id||null);renderPost();get("autoposting-select").value=post?String(post.id):"";};
   const load=async(code,refresh=false)=>{
     stash();get("autoposting-photo").value="";get("autoposting-channels").querySelectorAll('input[type="password"]').forEach(node=>{node.value="";});
+    get('autoposting-channels').querySelectorAll('[data-profile-diagnostics]').forEach(node=>node.remove());
     companyCode=code;const version=++epoch;busy=true;settings=null;information=null;starterPlan=null;post=null;get("autoposting-company").value=code;renderStarterPlan();
     get("vk-connection-guide").innerHTML='<h3 id="vk-connection-title">Подключение ВКонтакте</h3><p>Загружаем настройки выбранной компании…</p>';controls();
     if(!code){busy=false;get("vk-connection-guide").textContent="Выберите доступную компанию.";message("Нет доступных компаний.");controls();return;}
@@ -303,7 +328,7 @@ function create(container, context) {
       if(channel.provider!=='onlypult'||!channel.tokenConfigured||channelDrafts.has(companyCode+':'+channel.id)||node.querySelector('[data-channel-field="token"]').value){message('Сначала сохраните ключ Onlypult. Профиль можно выбрать после загрузки списка.');return;}
       void run(async current=>{const result=await request('/autoposting/settings/'+encodeURIComponent(channel.id)+'/profiles');if(!current())return;
         if(result.companyCode!==companyCode||!Array.isArray(result.profiles))throw Error('Wrong company');
-        providerProfiles.set(companyCode+':'+channel.id,result.profiles);renderChannels();message(result.profiles.length?'Выберите профиль этой компании, сохраните и проверьте доступ.':'В Onlypult нет подходящих профилей. Подключите нужное сообщество или канал.');
+        providerProfiles.set(companyCode+':'+channel.id,result.profiles);renderChannels();if(!result.profiles.length)renderProfileDiagnostics(channel,result.diagnostics);message(result.profiles.length?'Выберите профиль этой компании, сохраните и проверьте доступ.':emptyProfilesMessage(channel,result.diagnostics));
       },'Загружаем профили…','Не удалось загрузить профили. Проверьте сохранённый ключ Onlypult.');return;
     }
     const button=event.target.closest("[data-check-channel]");if(!button||busy||!edit())return;

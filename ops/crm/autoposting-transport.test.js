@@ -215,11 +215,49 @@ test('Onlypult key can be saved before profile selection and stays scoped, encry
  assert.ok(!JSON.stringify(saved).includes(OP_TOKEN));assert.ok(!f.db.prepare('SELECT encrypted_token FROM autoposting_channels').get().encrypted_token.includes(OP_TOKEN));
  assert.equal((await f.api.checkChannel('alvi','vk')).code,'PROFILE_REQUIRED');assert.equal(f.calls.length,0);
  const listing=await f.api.listProfiles('alvi','vk');assert.deepEqual(listing.profiles.map(p=>p.id),['alvi-vk','avokado-vk']);
+ assert.deepEqual(listing.diagnostics,{totalProfiles:3,platformCounts:[{platform:'telegram',count:1},{platform:'vkontakte',count:2}],
+   profileShapes:[{idType:'string',nameType:'string',statusType:'string',platformType:'string',count:3}],otherShapesCount:0});
  assert.ok(!JSON.stringify(listing).includes('PRIVATE_PROVIDER_RESPONSE'));assert.equal(listing.revision,1);
  assert.equal(f.calls[0].options.method,'GET');assert.equal(f.calls[0].body,null);
  await assert.rejects(f.api.listProfiles('avokado','vk'),e=>e.status===400);
  assert.throws(()=>f.save({revision:1,target:'',enabled:true}),e=>e.status===400);
  assert.throws(()=>f.save({revision:1,provider:'direct',target:'1234',token:''}),e=>e.status===400);
+});
+
+test('Onlypult profile diagnostics distinguish an empty account from undocumented platform values without accepting aliases',async t=>{
+ const f=onlypultFixture(t);f.save({target:'',enabled:false});f.replies['/profiles']=[];
+ const empty=await f.api.listProfiles('alvi','vk');assert.deepEqual(empty.profiles,[]);
+ assert.deepEqual(empty.diagnostics,{totalProfiles:0,platformCounts:[],profileShapes:[],otherShapesCount:0});
+ f.replies['/profiles']=[{id:1863190,name:'PRIVATE_NAME',platform:'vk',status:'active',email:'private@example.test'}];
+ const unsupported=await f.api.listProfiles('alvi','vk');assert.deepEqual(unsupported.profiles,[]);
+ assert.equal(unsupported.companyCode,'alvi');assert.equal(unsupported.channelId,'vk');assert.equal(unsupported.revision,1);
+ assert.deepEqual(unsupported.diagnostics,{totalProfiles:1,platformCounts:[{platform:'vk',count:1}],
+   profileShapes:[{idType:'number',nameType:'string',statusType:'string',platformType:'string',count:1}],otherShapesCount:0});
+ assert.doesNotMatch(JSON.stringify(unsupported),/PRIVATE_NAME|private@example|1863190/);
+ assert.equal(f.calls.length,2);assert.ok(f.calls.every(c=>c.options.method==='GET'&&c.path==='/profiles'&&c.body===null));
+});
+
+test('Onlypult diagnostics expose only bounded platform labels and field types, never private provider payloads',async t=>{
+ const f=onlypultFixture(t);f.save({target:'',enabled:false});
+ const privateProfile={id:1863190,name:'PRIVATE_NAME',status:{token:OP_TOKEN},username:'PRIVATE_USERNAME',email:'private@example.test',access_token:OP_TOKEN,'<private-field>':'PRIVATE_VALUE'};
+ f.replies['/profiles']=[privateProfile,{...privateProfile,platform:'<img src=x onerror=alert(1)>'},{...privateProfile,platform:OP_TOKEN},
+   {...privateProfile,platform:{private:OP_TOKEN}},{...privateProfile,platform:'vk'},null];
+ const result=await f.api.listProfiles('alvi','vk');assert.deepEqual(result.profiles,[]);
+ assert.deepEqual(result.diagnostics.platformCounts,[{platform:'unknown',count:5},{platform:'vk',count:1}]);
+ const missing=result.diagnostics.profileShapes.find(s=>s.idType==='number'&&s.platformType==='undefined');
+ assert.deepEqual(missing,{idType:'number',nameType:'string',statusType:'object',platformType:'undefined',fieldNames:['access_token','email','id','name','status','username'],count:1});
+ assert.doesNotMatch(JSON.stringify(result),/PRIVATE_|private@example|1863190|onerror|<private-field>|op_a{64}/);
+ assert.equal(f.calls.length,1);
+});
+
+test('Onlypult field-shape diagnostics cap distinct groups and field-name samples',async t=>{
+ const f=onlypultFixture(t);f.save({target:'',enabled:false});
+ f.replies['/profiles']=Array.from({length:24},(_,i)=>({[String.fromCharCode(97+i)]:'PRIVATE_VALUE'}));
+ const result=await f.api.listProfiles('alvi','vk');assert.equal(result.diagnostics.totalProfiles,24);
+ assert.equal(result.diagnostics.profileShapes.length,20);assert.equal(result.diagnostics.otherShapesCount,4);
+ f.replies['/profiles']=[Object.fromEntries(Array.from({length:26},(_,i)=>[String.fromCharCode(97+i),'PRIVATE_VALUE']))];
+ const bounded=await f.api.listProfiles('alvi','vk');assert.equal(bounded.diagnostics.profileShapes[0].fieldNames.length,20);
+ assert.doesNotMatch(JSON.stringify(bounded),/PRIVATE_VALUE/);
 });
 
 test('Onlypult check requires an exact active profile on the selected platform and remembers its display name',async t=>{
