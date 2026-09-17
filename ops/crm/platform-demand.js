@@ -61,10 +61,19 @@ function createPlatformDemand(db,{now=()=>Date.now()}={}) {
       .all(code,settings.organization_id,settings.organization_name,settings.city):[];
   }
   function classes(code) {return db.prepare('SELECT category_key,category,classification,reason FROM platform_demand_categories WHERE company_code=? ORDER BY category').all(code);}
-  function categoryDto(code,datasets=[]) {
-    const rows=classes(code),known=new Set(rows.map(row=>row.category_key));
-    for(const dataset of datasets)for(const row of JSON.parse(dataset.rows_json))if(!aggregate(row.category)&&!known.has(norm(row.category))){
-      rows.push({category_key:norm(row.category),category:row.category,classification:'unclassified',reason:''});known.add(norm(row.category));}
+  // Поисковые фразы отчёта «Доли поисковых запросов» — не рубрики: они не классифицируются и не ожидаются
+  // в количественном спросе. Фраза, которая встречается и как рубрика rubric_demand (например «Массажист»),
+  // остаётся обычной рубрикой. Считается по всей истории снимков текущей организации.
+  function shareOnlyKeys(code,settings) {
+    const rubric=new Set(),share=new Set();
+    for(const row of rawRows(code,settings))for(const item of JSON.parse(row.rows_json)){if(aggregate(item.category))continue;(row.report_kind==='rubric_demand'?rubric:share).add(norm(item.category));}
+    return new Set([...share].filter(key=>!rubric.has(key)));
+  }
+  function rubricClasses(code,settings) {const excluded=shareOnlyKeys(code,settings);return classes(code).filter(row=>!excluded.has(row.category_key));}
+  function categoryDto(code,datasets=[],settings=settingsRow(code)) {
+    const rows=rubricClasses(code,settings),known=new Set(rows.map(row=>row.category_key));
+    for(const dataset of datasets){if(dataset.report_kind!=='rubric_demand')continue;for(const row of JSON.parse(dataset.rows_json))if(!aggregate(row.category)&&!known.has(norm(row.category))){
+      rows.push({category_key:norm(row.category),category:row.category,classification:'unclassified',reason:''});known.add(norm(row.category));}}
     return {revision:db.prepare('SELECT revision FROM platform_demand_category_state WHERE company_code=?').get(code)?.revision??0,
       items:rows.map(({category,classification,reason})=>({category,classification,reason})).sort((a,b)=>a.category.localeCompare(b.category,'ru'))};
   }
@@ -75,7 +84,7 @@ function createPlatformDemand(db,{now=()=>Date.now()}={}) {
       sourceHashKind:'structured-report-sha256',importedBy:row.actor_id?{userId:row.actor_id,name:row.actor_name}:null,
       lastCheckedAt:db.prepare('SELECT MAX(captured_at) AS latest FROM platform_demand_checks WHERE dataset_id=? AND company_code=?').get(row.id,row.company_code).latest||row.captured_at};
     if(withRows){const mapping=new Map(classes(row.company_code).map(item=>[item.category_key,item.classification]));
-      out.rows=JSON.parse(row.rows_json).map(item=>({...item,isAggregate:aggregate(item.category),classification:aggregate(item.category)?'unclassified':mapping.get(norm(item.category))||'unclassified'}));}
+      out.rows=JSON.parse(row.rows_json).map(item=>({...item,isAggregate:aggregate(item.category),classification:aggregate(item.category)||item.metric!=='searches'?'unclassified':mapping.get(norm(item.category))||'unclassified'}));}
     return out;
   }
   function summary(datasets) {
@@ -94,7 +103,7 @@ function createPlatformDemand(db,{now=()=>Date.now()}={}) {
     const current=company(code),settings=settingsRow(current.code),history=rawRows(current.code,settings),seen=new Set(),latest=[];
     for(const row of history)if(!seen.has(row.report_kind)){seen.add(row.report_kind);latest.push(row);}
     const datasets=latest.map(row=>datasetDto(row));
-    return {company:{code:current.code,name:current.name},settings:settingsDto(settings),datasets,categories:categoryDto(current.code,latest),
+    return {company:{code:current.code,name:current.name},settings:settingsDto(settings),datasets,categories:categoryDto(current.code,latest,settings),
       summary:summary(datasets),history:history.slice(0,20).map(row=>datasetDto(row,false)),historyTotal:history.length};
   }
   function getDataset(code,id) {
@@ -151,6 +160,7 @@ function createPlatformDemand(db,{now=()=>Date.now()}={}) {
     });
     return transact(()=>{
       const old=db.prepare('SELECT revision FROM platform_demand_category_state WHERE company_code=?').get(current.code)?.revision??0;if(old!==body.revision)fail('REVISION_CONFLICT',409);
+      const excluded=shareOnlyKeys(current.code,settingsRow(current.code));if(items.some(row=>excluded.has(row.key)))fail();
       for(const row of items)db.prepare(`INSERT INTO platform_demand_categories(company_code,category_key,category,classification,reason) VALUES(?,?,?,?,?)
         ON CONFLICT(company_code,category_key) DO UPDATE SET category=excluded.category,classification=excluded.classification,reason=excluded.reason`).run(current.code,row.key,row.category,row.classification,row.reason);
       db.prepare('INSERT INTO platform_demand_category_state(company_code,revision) VALUES(?,1) ON CONFLICT(company_code) DO UPDATE SET revision=revision+1').run(current.code);
@@ -193,7 +203,7 @@ function createPlatformDemand(db,{now=()=>Date.now()}={}) {
     // делает целевой итог периода неизвестным, а не нулём.
     const names=new Map(),expected={target:new Set(),nonTarget:new Set(),unclassified:new Set()};
     const bucketOf=classification=>classification==='target'?expected.target:classification==='non_target'?expected.nonTarget:expected.unclassified;
-    for(const saved of classes(current.code)){names.set(saved.category_key,saved.category);bucketOf(saved.classification).add(saved.category_key);}
+    for(const saved of rubricClasses(current.code,settings)){names.set(saved.category_key,saved.category);bucketOf(saved.classification).add(saved.category_key);}
     for(const item of chosen)for(const row of item.rows)if(!row.isAggregate){const key=norm(row.category);if(!names.has(key))names.set(key,row.category);bucketOf(row.classification).add(key);}
     const periods=chosen.map(item=>{
       const present=new Set(item.rows.filter(row=>!row.isAggregate).map(row=>norm(row.category)));

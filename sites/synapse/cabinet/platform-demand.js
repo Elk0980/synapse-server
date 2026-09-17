@@ -97,7 +97,8 @@
     }
     function drawReport(){get('report').innerHTML=dataset?details(dataset):'<p>Для этой организации отчётов пока нет. Пустой список не означает нулевой спрос.</p>';}
     function drawCategories() {
-      const names=[...new Map([...(data.categories?.items||[]),...(dataset?.rows||[])].filter(row=>!aggregate(row)).map(row=>[categoryKey(row.category),row.category])).values()];
+      const rubricRows=dataset?.reportKind==='rubric_demand'?(dataset.rows||[]).filter(row=>row.metric==='searches'):[];// поисковые фразы search_share — не рубрики
+      const names=[...new Map([...(data.categories?.items||[]),...rubricRows].filter(row=>!aggregate(row)).map(row=>[categoryKey(row.category),row.category])).values()];
       get('category').innerHTML='<option value="">Выберите рубрику</option>'+names.map(name=>`<option>${esc(name)}</option>`).join('');get('classification').value='unclassified';get('reason').value='';controls();
     }
     function draw() {

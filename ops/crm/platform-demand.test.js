@@ -162,3 +162,35 @@ test('potential keeps every period from history, lets the latest correction win,
  assert.throws(()=>f.api.potential('avokado','2026-08-31','2026-08-01'),err('VALIDATION_ERROR'));assert.throws(()=>f.api.potential('avokado','2026-8-1','2026-08-31'),err('VALIDATION_ERROR'));
  assert.throws(()=>f.api.potential('deleted','2026-08-01','2026-08-31'),err('NOT_FOUND',404));
 });
+
+test('search-share phrases are never rubrics: not offered, not saveable, old assignments ignored; a phrase that is also a rubric stays a rubric; a saved missing rubric still blocks',t=>{
+ const f=fixture(t);f.configure();
+ const rubric=[{periodStart:'2026-08-01',periodEnd:'2026-08-31',category:'Все рубрики',metric:'searches',value:90676,partial:false},
+   {periodStart:'2026-08-01',periodEnd:'2026-08-31',category:'Массажист',metric:'searches',value:46561,partial:false},
+   {periodStart:'2026-08-01',periodEnd:'2026-08-31',category:'Эпиляция',metric:'searches',value:39608,partial:false}];
+ const share=[{periodStart:'2026-08-01',periodEnd:'2026-08-31',category:'авокадо',metric:'share_percent',value:29.3,partial:false},
+   {periodStart:'2026-08-01',periodEnd:'2026-08-31',category:'массажист',metric:'share_percent',value:2.1,partial:false},
+   {periodStart:'2026-08-01',periodEnd:'2026-08-31',category:'прочее',metric:'share_percent',value:24.1,partial:false}];
+ f.import({rows:rubric});f.import({reportKind:'search_share',rows:share});
+ // Предлагаются только рубрики количественного отчёта; фразы «авокадо» и «прочее» не предлагаются, «Массажист» — рубрика.
+ const offered=f.api.get('avokado').categories.items.map(item=>item.category);
+ assert.deepEqual(offered,['Массажист','Эпиляция']);
+ const shareRows=f.api.get('avokado').datasets.find(item=>item.reportKind==='search_share').rows;assert.ok(shareRows.every(row=>row.classification==='unclassified'));
+ // Сохранить фразу нельзя — ни одна строка пакета не записывается.
+ assert.throws(()=>f.api.saveCategories('avokado',{revision:0,items:[{category:'Массажист',classification:'target',reason:''},{category:'авокадо',classification:'target',reason:''}]},f.actor),err('VALIDATION_ERROR'));
+ assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM platform_demand_categories').get().n,0);
+ f.api.saveCategories('avokado',{revision:0,items:[{category:'Массажист',classification:'target',reason:''},{category:'массажист',classification:'target',reason:''}].slice(0,1)},f.actor);
+ assert.equal(f.api.potential('avokado','2026-08-01','2026-08-31').totals.target,46561);
+ // Старое назначение фразы (записано до правила) игнорируется: не ожидается, не предлагается, полнота не страдает.
+ f.db.prepare('INSERT INTO platform_demand_categories(company_code,category_key,category,classification,reason) VALUES(?,?,?,?,?)').run('avokado','авокадо','авокадо','target','старое');
+ const p=f.api.potential('avokado','2026-08-01','2026-08-31');
+ assert.equal(p.totals.target,46561);assert.equal(p.complete,true);assert.deepEqual(p.missingCategories,[]);
+ assert.deepEqual(f.api.get('avokado').categories.items.map(item=>item.category),['Массажист','Эпиляция']);
+ // Фраза, совпадающая с рубрикой другой компании, у этой компании остаётся фразой: изоляция по организации.
+ f.configure('alvi');f.import({rows:[{periodStart:'2026-08-01',periodEnd:'2026-08-31',category:'авокадо',metric:'searches',value:5,partial:false}]},'alvi');
+ assert.deepEqual(f.api.get('alvi').categories.items.map(item=>item.category),['авокадо']);
+ assert.deepEqual(f.api.get('avokado').categories.items.map(item=>item.category),['Массажист','Эпиляция']);
+ // Настоящая отсутствующая рубрика по-прежнему блокирует.
+ f.api.saveCategories('avokado',{revision:1,items:[{category:'SPA',classification:'target',reason:''}]},f.actor);
+ const spa=f.api.potential('avokado','2026-08-01','2026-08-31');assert.equal(spa.totals.target,null);assert.equal(spa.complete,false);assert.deepEqual(spa.missingCategories,['SPA']);
+});

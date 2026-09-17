@@ -130,3 +130,18 @@ test('the reviewed UI import is accepted by the actual backend in memory; aggreg
     const wrong=clone(report);wrong.rows[0].isAggregate=true;preview(f,wrong);assert.equal(f.node('preview').hidden,true);
   }finally{f.close();db.close();}
 });
+
+test('search-share phrases are never offered as rubrics: only server categories and rubric_demand rows fill the classification select',async()=>{
+  const f=fixture();try{
+    const share={...snapshot('alvi','search_share'),id:'alvi-share',rows:[
+      {periodStart:'2026-09-01',periodEnd:'2026-09-16',category:'авокадо',metric:'share_percent',value:29.3,partial:true},
+      {periodStart:'2026-09-01',periodEnd:'2026-09-16',category:'прочее',metric:'share_percent',value:24.1,partial:true}]};
+    f.data.alvi.history.push(share);f.data.alvi.categories.items=[{category:'Эпиляция',classification:'unclassified',reason:''}];
+    await f.render();
+    const options=()=>[...f.node('category').options].filter(option=>option.value).map(option=>option.textContent);
+    assert.deepEqual(options(),['Эпиляция','Массаж'],'rubric snapshot: server rubrics plus quantitative rows');
+    f.set('dataset','alvi-share','change');await f.settle();
+    assert.deepEqual(options(),['Эпиляция'],'share snapshot adds no phrases');
+    assert.doesNotMatch(f.node('category').innerHTML,/авокадо|прочее/);
+  }finally{f.close();}
+});
