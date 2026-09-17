@@ -531,6 +531,30 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   .crm-form { grid-template-columns: 1fr; }
   .crm-repeat-row { grid-template-columns: 1fr; }
 }
+/* Телефон 360–430px: карточки вместо тесной таблицы, кнопки не меньше 44px, без горизонтального скролла страницы. */
+@media (max-width: 430px) {
+  html, body { overflow-x: hidden; }
+  .main { padding: 16px 12px 40px; }
+  h1 { font-size: 1.6rem; }
+  .content-header { gap: 10px; }
+  .main button, .main .plain-button, .main select, .main input:not([type="checkbox"]):not([type="radio"]):not([type="file"]) { min-height: 44px; }
+  .tasks-actions { flex-wrap: wrap; }
+  .tasks-actions button, .tasks-actions select { min-height: 44px; flex: 1 1 120px; }
+  .crm-table-wrap { overflow-x: visible; }
+  .crm-entity-table, #tasks-content .crm-table { display: block; min-width: 0; }
+  .crm-entity-table thead, #tasks-content .crm-table thead { display: none; }
+  .crm-entity-table tbody, .crm-entity-table tr, .crm-entity-table td,
+  #tasks-content .crm-table tbody, #tasks-content .crm-table tr, #tasks-content .crm-table td { display: block; width: auto !important; white-space: normal !important; }
+  .crm-entity-table tr, #tasks-content .crm-table tr { margin: 0 0 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft); }
+  .crm-entity-table td, #tasks-content .crm-table td { padding: 4px 0; border: 0; }
+  .crm-entity-table td[data-label]::before, #tasks-content .crm-table td[data-label]::before { content: attr(data-label) ": "; color: var(--muted); font-size: 0.8rem; }
+  .crm-entity-table td:empty { display: none; }
+  .kanban-grid { grid-template-columns: 1fr; margin: 0; padding: 0; overflow: visible; }
+  .kanban-grid-three { grid-template-columns: 1fr; }
+  .main pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .main img, .main video, .main iframe { max-width: 100%; }
+  .tool-frame { min-height: 60vh; }
+}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }
@@ -1014,7 +1038,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260918-content-queue";
+  window.SB_CABINET_ASSET_VERSION = "20260918-content-plan-mobile";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {

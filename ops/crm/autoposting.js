@@ -3,7 +3,26 @@
 const {company,fail,object,text,timezone,utcDate,revision,url}=require('./company-information');
 const {randomUUID}=require('node:crypto');
 const LEASE_MS=120000;
-const EDITABLE=['title','text','mediaUrls','platformIds','scheduledAt','timezone','profileRevision','dayKey','captions','origin','mediaSha256'];
+const META_FIELDS=['format','role','audience','hook','idea','hughNote','metrics','methodSource'];
+const EDITABLE=['title','text','mediaUrls','platformIds','scheduledAt','timezone','profileRevision','dayKey','captions','origin','mediaSha256',...META_FIELDS];
+/* Метаданные контент-плана: формат и роль независимы; ни одно поле не попадает в публичную подпись.
+   Роли — из процесса «привлечение → доверие → обращение»; источник методики — текст (название курса/принципа), не ссылка. */
+const FORMATS=Object.freeze({post:'Пост',story:'Сторис',reel:'Reels / Shorts / клип',carousel:'Карусель'});
+const ROLES=Object.freeze({reach:'Охватный',affection:'На влюбление',sale:'На продажу'});
+const REVIEW_STATES=Object.freeze({draft:'Черновик',pending:'На согласовании',approved:'Согласовано',rejected:'Отклонено'});
+const META_LIMITS=Object.freeze({audience:500,hook:500,idea:4000,hughNote:2000,metrics:1000,methodSource:300});
+function meta(value) {
+  if(value===null||value===undefined)return {};
+  if(!value||typeof value!=='object'||Array.isArray(value))fail(400,'Метаданные карточки должны быть объектом');
+  const out={};
+  for(const [key,item]of Object.entries(value)){
+    if(!META_FIELDS.includes(key))fail(400,`Неизвестное поле метаданных «${key}»`);
+    if(key==='format'){if(item!==''&&item!==null&&!Object.hasOwn(FORMATS,item))fail(400,'Формат: post, story, reel или carousel');out.format=item||'';}
+    else if(key==='role'){if(item!==''&&item!==null&&!Object.hasOwn(ROLES,item))fail(400,'Роль: reach, affection или sale');out.role=item||'';}
+    else out[key]=text(item??'',META_LIMITS[key]);
+  }
+  return out;
+}
 const sha256=value=>{if(value===null||value===undefined||value==='')return '';if(typeof value!=='string'||!/^[a-f0-9]{64}$/i.test(value))fail(400,'Хеш SHA-256 должен быть 64 шестнадцатеричных символа');return value.toLowerCase();};
 /* Очередь контента: пять площадок с лимитами подписей, карточки дней (D1…D7), версия и одобрение конкретной версии.
    Одобрение — только фиксация решения владельца; публикацию оно не запускает. */
@@ -42,15 +61,25 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   for(const [column,type]of [['day_key',"TEXT NOT NULL DEFAULT ''"],['captions',"TEXT NOT NULL DEFAULT '{}'"],['origin',"TEXT NOT NULL DEFAULT ''"],
     ['approved_revision','INTEGER'],['approved_at','TEXT'],['approved_by','INTEGER'],['approved_by_name','TEXT'],
     ['media_sha256',"TEXT NOT NULL DEFAULT ''"],['expected_media_sha256',"TEXT NOT NULL DEFAULT ''"],['expected_media_file',"TEXT NOT NULL DEFAULT ''"],['external_id',"TEXT NOT NULL DEFAULT ''"],
-    ['content_revision','INTEGER NOT NULL DEFAULT 1']]){
+    ['content_revision','INTEGER NOT NULL DEFAULT 1'],['meta',"TEXT NOT NULL DEFAULT '{}'"],['sort_order','INTEGER NOT NULL DEFAULT 0'],
+    ['review_state',"TEXT NOT NULL DEFAULT 'draft'"],['review_comment',"TEXT NOT NULL DEFAULT ''"],['review_by_name','TEXT'],['review_at','TEXT']]){
     if(!postColumns.has(column))db.exec(`ALTER TABLE autoposting_posts ADD COLUMN ${column} ${type}`);
   }
+  db.exec(`CREATE TABLE IF NOT EXISTS autoposting_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,post_id INTEGER NOT NULL REFERENCES autoposting_posts(id),company_id INTEGER NOT NULL,
+    action TEXT NOT NULL CHECK(action IN ('submitted','approved','rejected','revoked','edited','reordered','rescheduled')),
+    content_revision INTEGER NOT NULL,comment TEXT NOT NULL DEFAULT '',actor_id INTEGER,actor_name TEXT,created_at TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS autoposting_reviews_post_idx ON autoposting_reviews(post_id,id);`);
   const deliveryColumns=new Set(db.prepare('PRAGMA table_info(autoposting_deliveries)').all().map(row=>row.name));
   for(const column of ['provider_post_id','provider_status','provider_checked_at']){
     if(!deliveryColumns.has(column))db.exec(`ALTER TABLE autoposting_deliveries ADD COLUMN ${column} TEXT`);
   }
   const iso=()=>new Date(now()).toISOString();
   function transaction(work){db.exec('BEGIN IMMEDIATE');try{const result=work();db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');throw error;}}
+  const history=(row,action,comment,actor={})=>db.prepare('INSERT INTO autoposting_reviews(post_id,company_id,action,content_revision,comment,actor_id,actor_name,created_at) VALUES(?,?,?,?,?,?,?,?)')
+    .run(row.id,row.company_id,action,row.content_revision??1,comment||'',actor.userId??null,actor.userName??null,iso());
+  const historyDto=id=>db.prepare('SELECT action,content_revision contentRevision,comment,actor_name actorName,created_at createdAt FROM autoposting_reviews WHERE post_id=? ORDER BY id DESC LIMIT 30').all(id);
+  const metaOf=row=>{const m=JSON.parse(row.meta||'{}');return Object.fromEntries(META_FIELDS.map(k=>[k,m[k]??'']));};
   function rowFor(id,code) {
     const owner=company(db,code);
     if(!Number.isSafeInteger(Number(id))||Number(id)<1)fail(404,'Публикация не найдена','NOT_FOUND');
@@ -82,6 +111,8 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
       mediaUrls:JSON.parse(row.media_urls),platformIds:JSON.parse(row.platform_ids),scheduledAt:row.scheduled_at,timezone:row.timezone,
       dayKey:row.day_key||'',captions:JSON.parse(row.captions||'{}'),origin:row.origin||'',readiness:readiness(row),approval:approvalDto(row),
       mediaSha256:row.media_sha256||'',expectedMediaSha256:row.expected_media_sha256||'',expectedMediaFile:row.expected_media_file||'',externalId:row.external_id||'',
+      meta:metaOf(row),sortOrder:row.sort_order||0,review:{state:row.review_state||'draft',stateLabel:REVIEW_STATES[row.review_state||'draft'],comment:row.review_comment||'',byName:row.review_by_name||null,at:row.review_at||null},
+      history:historyDto(row.id),labels:{formats:FORMATS,roles:ROLES,reviewStates:REVIEW_STATES},
       captionLimits:Object.fromEntries(Object.entries(CAPTION_PLATFORMS).map(([k,v])=>[k,v.limit])),
       profileRevision:row.profile_revision,createdAt:row.created_at,updatedAt:row.updated_at,lastErrorCode:row.last_error_code,
       deliveries:db.prepare(`SELECT channel_id channelId,status,external_id externalId,url,error_code errorCode,finished_at finishedAt,
@@ -97,7 +128,7 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   function get(id,code) {invalidate(code);const {row,owner}=rowFor(id,code);return dto(row,owner);}
   function list(code) {
     invalidate(code);const owner=company(db,code);
-    return {companyCode:owner.code.toLowerCase(),posts:db.prepare('SELECT * FROM autoposting_posts WHERE company_id=? ORDER BY created_at DESC,id DESC LIMIT 200').all(owner.id).map(row=>dto(row,owner))};
+    return {companyCode:owner.code.toLowerCase(),posts:db.prepare('SELECT * FROM autoposting_posts WHERE company_id=? ORDER BY sort_order ASC,created_at DESC,id DESC LIMIT 200').all(owner.id).map(row=>dto(row,owner))};
   }
   function normalized(patch,defaults) {
     const result={...defaults};
@@ -110,6 +141,7 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
       else if(key==='captions')result[key]=captions(value);
       else if(key==='origin')result[key]=text(value??'',200);
       else if(key==='mediaSha256')result[key]=sha256(value);
+      else if(META_FIELDS.includes(key))result.meta={...(result.meta||{}),...meta({[key]:value})};
       else if(key==='mediaUrls'){
         if(!Array.isArray(value)||value.length>10)fail(400,'Допускается не более 10 материалов');result[key]=value.map(url);
       }else if(key==='platformIds'){
@@ -121,13 +153,14 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   }
   function create(code,body,actorId=null) {
     object(body,EDITABLE);const owner=company(db,code),current=information.get(code);
-    const data=normalized(body,{title:'',text:'',mediaUrls:[],platformIds:[],scheduledAt:null,timezone:current.profile.timezone||'UTC',profileRevision:current.revision,dayKey:'',captions:{},origin:'',mediaSha256:''});
+    const data=normalized(body,{title:'',text:'',mediaUrls:[],platformIds:[],scheduledAt:null,timezone:current.profile.timezone||'UTC',profileRevision:current.revision,dayKey:'',captions:{},origin:'',mediaSha256:'',meta:{}});
     if(data.profileRevision!==current.revision)fail(409,'Данные компании изменились','PROFILE_CHANGED');
-    const time=iso(),id=db.prepare(`INSERT INTO autoposting_posts(company_id,title,text,media_urls,platform_ids,scheduled_at,timezone,profile_revision,created_at,updated_at,created_by,day_key,captions,origin,media_sha256)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(owner.id,data.title,data.text,JSON.stringify(data.mediaUrls),JSON.stringify(data.platformIds),data.scheduledAt,data.timezone,data.profileRevision,time,time,actorId,data.dayKey,JSON.stringify(data.captions),data.origin,data.mediaSha256).lastInsertRowid;
+    const time=iso(),order=(db.prepare('SELECT COALESCE(MAX(sort_order),0) m FROM autoposting_posts WHERE company_id=?').get(owner.id).m||0)+1;
+    const id=db.prepare(`INSERT INTO autoposting_posts(company_id,title,text,media_urls,platform_ids,scheduled_at,timezone,profile_revision,created_at,updated_at,created_by,day_key,captions,origin,media_sha256,meta,sort_order)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(owner.id,data.title,data.text,JSON.stringify(data.mediaUrls),JSON.stringify(data.platformIds),data.scheduledAt,data.timezone,data.profileRevision,time,time,actorId,data.dayKey,JSON.stringify(data.captions),data.origin,data.mediaSha256,JSON.stringify(data.meta||{}),order).lastInsertRowid;
     return get(Number(id),code);
   }
-  function update(id,code,body) {
+  function update(id,code,body,actor={}) {
     object(body,['revision',...EDITABLE]);revision(body.revision);const current=invalidate(code);
     transaction(()=>{
       const {row,owner}=rowFor(id,code);
@@ -139,10 +172,21 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
       // Любое изменение текста, подписей или материала создаёт новую версию: прежнее одобрение к ней не относится.
       // Смена ссылок на материал обнуляет хеш, если клиент не передал новый: старая сверка к новому файлу не относится.
       const mediaSha=Object.hasOwn(body,'mediaSha256')?data.mediaSha256:(JSON.stringify(data.mediaUrls)===row.media_urls?row.media_sha256:'');
-      db.prepare(`UPDATE autoposting_posts SET title=?,text=?,media_urls=?,platform_ids=?,scheduled_at=?,timezone=?,profile_revision=?,day_key=?,captions=?,origin=?,media_sha256=?,
-        status='draft',revision=revision+1,content_revision=content_revision+1,updated_at=?,last_error_code=NULL WHERE id=?`)
-        .run(data.title,data.text,JSON.stringify(data.mediaUrls),JSON.stringify(data.platformIds),data.scheduledAt,data.timezone,data.profileRevision,data.dayKey,JSON.stringify(data.captions),data.origin,mediaSha,iso(),row.id);
+      const nextMeta=JSON.stringify({...metaOf(row),...(data.meta||{})});
+      // Содержимое = текст, подписи, материал, день, происхождение, метаданные. Плановая дата и часовой пояс — не содержимое:
+      // их смена не сбрасывает согласование и не активирует отправку (запланированная карточка при этом возвращается в черновик).
+      const contentChanged=data.title!==row.title||data.text!==row.text||JSON.stringify(data.mediaUrls)!==row.media_urls||data.dayKey!==(row.day_key||'')
+        ||JSON.stringify(data.captions)!==(row.captions||'{}')||data.origin!==(row.origin||'')||mediaSha!==(row.media_sha256||'')||nextMeta!==JSON.stringify(metaOf(row));
+      const queue=isQueueCard(row)||isQueueCard({day_key:data.dayKey,captions:JSON.stringify(data.captions)});
+      const nextReview=contentChanged?(queue?'pending':'draft'):row.review_state||'draft';
+      db.prepare(`UPDATE autoposting_posts SET title=?,text=?,media_urls=?,platform_ids=?,scheduled_at=?,timezone=?,profile_revision=?,day_key=?,captions=?,origin=?,media_sha256=?,meta=?,
+        status='draft',revision=revision+1,content_revision=content_revision+?,review_state=?,review_comment=CASE WHEN ? THEN '' ELSE review_comment END,updated_at=?,last_error_code=NULL WHERE id=?`)
+        .run(data.title,data.text,JSON.stringify(data.mediaUrls),JSON.stringify(data.platformIds),data.scheduledAt,data.timezone,data.profileRevision,data.dayKey,JSON.stringify(data.captions),data.origin,mediaSha,nextMeta,
+          contentChanged?1:0,nextReview,contentChanged?1:0,iso(),row.id);
       db.prepare('DELETE FROM autoposting_deliveries WHERE post_id=?').run(row.id);
+      const fresh=db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(row.id);
+      if(contentChanged)history(fresh,'edited',queue?'Возвращено на согласование после правки':'',actor);
+      else if(data.scheduledAt!==row.scheduled_at||data.timezone!==row.timezone)history(fresh,'rescheduled',`План: ${data.scheduledAt||'—'} ${data.timezone}`,actor);
     });return get(id,code);
   }
   async function schedule(id,code,body) {
@@ -172,7 +216,7 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   }
   /* Одобрение конкретной версии владельцем. Не публикует, не планирует; снятие галочки убирает одобрение. */
   function approve(id,code,body,actor={}) {
-    object(body,['revision','approved']);revision(body.revision);
+    object(body,['revision','approved','comment']);revision(body.revision);
     if(typeof body.approved!=='boolean')fail(400,'Укажите approved: true или false');
     return transaction(()=>{
       const {row,owner}=rowFor(id,code);
@@ -181,14 +225,16 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
         const state=readiness(row);
         if(!state.ready)fail(409,`Материал не готов: ${state.issues.join('; ')}`,'NOT_READY');
         if(['publishing','published'].includes(row.status))fail(409,'Публикацию уже отправляют или опубликовали','POST_STATE');
-        db.prepare('UPDATE autoposting_posts SET approved_revision=?,approved_at=?,approved_by=?,approved_by_name=?,revision=revision+1,updated_at=? WHERE id=?')
-          .run(row.content_revision,iso(),actor.userId??null,actor.userName??null,iso(),row.id);
+        db.prepare(`UPDATE autoposting_posts SET approved_revision=?,approved_at=?,approved_by=?,approved_by_name=?,review_state='approved',review_comment='',review_by_name=?,review_at=?,revision=revision+1,updated_at=? WHERE id=?`)
+          .run(row.content_revision,iso(),actor.userId??null,actor.userName??null,actor.userName??null,iso(),iso(),row.id);
+        history(row,'approved',text(body.comment??'',2000),actor);
       }else{
         // Отзыв одобрения останавливает ещё не начатую отправку: запланированная карточка возвращается в черновик.
         if(row.status==='publishing')fail(409,'Отправка уже началась: дождитесь результата, затем снимите с публикации','POST_STATE');
         db.prepare("UPDATE autoposting_deliveries SET status='cancelled' WHERE post_id=? AND status='pending'").run(row.id);
-        db.prepare(`UPDATE autoposting_posts SET approved_revision=NULL,approved_at=NULL,approved_by=NULL,approved_by_name=NULL,revision=revision+1,updated_at=?,
-          status=CASE WHEN status='scheduled' THEN 'draft' ELSE status END,last_error_code=CASE WHEN status='scheduled' THEN 'APPROVAL_REVOKED' ELSE last_error_code END WHERE id=?`).run(iso(),row.id);
+        db.prepare(`UPDATE autoposting_posts SET approved_revision=NULL,approved_at=NULL,approved_by=NULL,approved_by_name=NULL,review_state='pending',review_by_name=?,review_at=?,revision=revision+1,updated_at=?,
+          status=CASE WHEN status='scheduled' THEN 'draft' ELSE status END,last_error_code=CASE WHEN status='scheduled' THEN 'APPROVAL_REVOKED' ELSE last_error_code END WHERE id=?`).run(actor.userName??null,iso(),iso(),row.id);
+        history(row,'revoked',text(body.comment??'',2000),actor);
       }
       return dto(db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(row.id),owner);
     });
@@ -198,8 +244,9 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   /* Пакет материалов (schemaVersion 1, как готовит владелец): день числом, подписи объектами {text,account}, YouTube {title,text},
      media {file, poster, sha256, publicUrl, origin}. Приводится к карточке; одобрение пакета игнорируется — одобряет только владелец в ЛК. */
   function packageItem(item) {
-    object(item,['id','day','title','revision','status','approval','scheduledAt','timezone','durationSeconds','width','height','media','captions','cta','dayKey','text','mediaUrls','origin','platformIds']);
+    object(item,['id','day','title','revision','status','approval','scheduledAt','timezone','durationSeconds','width','height','media','captions','cta','dayKey','text','mediaUrls','origin','platformIds','meta']);
     const out={};
+    if(item.meta!==undefined&&item.meta!==null)Object.assign(out,meta(item.meta));
     if(item.dayKey!==undefined)out.dayKey=item.dayKey;
     else if(item.day!==undefined){if(!Number.isInteger(item.day)||item.day<1||item.day>7)fail(400,'День пакета должен быть числом от 1 до 7');out.dayKey='D'+item.day;}
     out.title=item.title;
@@ -240,20 +287,66 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
       const created=[],skipped=[],mediaPending=[];
       for(const raw of body.items){
         const item=packageItem(raw);
-        const data=normalized(item,{title:'',text:'',mediaUrls:[],platformIds:[],scheduledAt:null,timezone:current.profile.timezone||'UTC',profileRevision:current.revision,dayKey:'',captions:{},origin:'import',mediaSha256:''});
+        const data=normalized(item,{title:'',text:'',mediaUrls:[],platformIds:[],scheduledAt:null,timezone:current.profile.timezone||'UTC',profileRevision:current.revision,dayKey:'',captions:{},origin:'import',mediaSha256:'',meta:{}});
         if(!data.title)fail(400,'У карточки пакета нет названия');
         const expectedSha=item.expectedMediaSha256||'',expectedFile=item.expectedMediaFile||'',externalId=item.externalId||'';
         const duplicate=(externalId&&db.prepare("SELECT id FROM autoposting_posts WHERE company_id=? AND external_id=? AND status<>'cancelled' ORDER BY id LIMIT 1").get(owner.id,externalId))
           ||db.prepare("SELECT id FROM autoposting_posts WHERE company_id=? AND day_key=? AND title=? AND status<>'cancelled' ORDER BY id LIMIT 1").get(owner.id,data.dayKey,data.title);
         if(duplicate){skipped.push({id:duplicate.id,dayKey:data.dayKey,title:data.title,externalId});continue;}
-        const time=iso(),id=db.prepare(`INSERT INTO autoposting_posts(company_id,title,text,media_urls,platform_ids,scheduled_at,timezone,profile_revision,created_at,updated_at,created_by,day_key,captions,origin,expected_media_sha256,expected_media_file,external_id)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(owner.id,data.title,data.text,JSON.stringify(data.mediaUrls),JSON.stringify(data.platformIds),data.scheduledAt,data.timezone,data.profileRevision,time,time,actorId,data.dayKey,JSON.stringify(data.captions),data.origin||'import',expectedSha,expectedFile,externalId).lastInsertRowid;
+        const time=iso(),order=(db.prepare('SELECT COALESCE(MAX(sort_order),0) m FROM autoposting_posts WHERE company_id=?').get(owner.id).m||0)+1;
+        const id=db.prepare(`INSERT INTO autoposting_posts(company_id,title,text,media_urls,platform_ids,scheduled_at,timezone,profile_revision,created_at,updated_at,created_by,day_key,captions,origin,expected_media_sha256,expected_media_file,external_id,meta,sort_order,review_state)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft')`).run(owner.id,data.title,data.text,JSON.stringify(data.mediaUrls),JSON.stringify(data.platformIds),data.scheduledAt,data.timezone,data.profileRevision,time,time,actorId,data.dayKey,JSON.stringify(data.captions),data.origin||'import',expectedSha,expectedFile,externalId,JSON.stringify(data.meta||{}),order).lastInsertRowid;
         const view=dto(db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(id),owner);
         created.push(view);
         if(!data.mediaUrls.length)mediaPending.push({id:view.id,dayKey:view.dayKey,title:view.title,file:expectedFile,sha256:expectedSha});
       }
       return {created,skipped,mediaPending,companyCode:owner.code.toLowerCase(),approved:0,published:0};
     });
+  }
+  /* Отклонение — только владелец, комментарий обязателен; автор, время и текст сохраняются в истории и на карточке.
+     Запланированная карточка при отклонении снимается с плана. */
+  function reject(id,code,body,actor={}) {
+    object(body,['revision','comment']);revision(body.revision);
+    const comment=text(body.comment,2000,true);
+    return transaction(()=>{
+      const {row,owner}=rowFor(id,code);
+      if(row.revision!==body.revision)fail(409,'Публикация уже изменена','REVISION_CONFLICT');
+      if(['publishing','published'].includes(row.status))fail(409,'Публикацию уже отправляют или опубликовали','POST_STATE');
+      db.prepare("UPDATE autoposting_deliveries SET status='cancelled' WHERE post_id=? AND status='pending'").run(row.id);
+      db.prepare(`UPDATE autoposting_posts SET approved_revision=NULL,approved_at=NULL,approved_by=NULL,approved_by_name=NULL,review_state='rejected',review_comment=?,review_by_name=?,review_at=?,
+        revision=revision+1,updated_at=?,status=CASE WHEN status='scheduled' THEN 'draft' ELSE status END,last_error_code=CASE WHEN status='scheduled' THEN 'APPROVAL_REVOKED' ELSE last_error_code END WHERE id=?`)
+        .run(comment,actor.userName??null,iso(),iso(),row.id);
+      history(row,'rejected',comment,actor);
+      return dto(db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(row.id),owner);
+    });
+  }
+  /* Отправить на согласование вручную (например, импортированную карточку без правок). */
+  function submitReview(id,code,body,actor={}) {
+    object(body,['revision']);revision(body.revision);
+    return transaction(()=>{
+      const {row,owner}=rowFor(id,code);
+      if(row.revision!==body.revision)fail(409,'Публикация уже изменена','REVISION_CONFLICT');
+      if(isApproved(row))fail(409,'Эта версия уже согласована','POST_STATE');
+      db.prepare("UPDATE autoposting_posts SET review_state='pending',revision=revision+1,updated_at=? WHERE id=?").run(iso(),row.id);
+      history(row,'submitted','',actor);
+      return dto(db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(row.id),owner);
+    });
+  }
+  /* Порядок в плане: полный список идентификаторов компании; чужие и неизвестные отклоняются, пропущенные уходят в конец. */
+  function reorder(code,body,actor={}) {
+    object(body,['ids']);
+    if(!Array.isArray(body.ids)||body.ids.length>200||body.ids.some(v=>!Number.isSafeInteger(v)||v<1))fail(400,'Передайте список идентификаторов карточек');
+    if(new Set(body.ids).size!==body.ids.length)fail(400,'Карточка указана дважды');
+    const owner=company(db,code);invalidate(code);
+    transaction(()=>{
+      const rows=db.prepare('SELECT id,sort_order FROM autoposting_posts WHERE company_id=? ORDER BY sort_order ASC,created_at DESC,id DESC').all(owner.id),known=new Set(rows.map(r=>r.id));
+      for(const id of body.ids)if(!known.has(id))fail(404,'Карточка не найдена в выбранной компании','NOT_FOUND');
+      const ordered=[...body.ids,...rows.map(r=>r.id).filter(id=>!body.ids.includes(id))];
+      const stmt=db.prepare('UPDATE autoposting_posts SET sort_order=?,updated_at=? WHERE id=? AND company_id=?');
+      ordered.forEach((id,index)=>stmt.run(index+1,iso(),id,owner.id));
+      const first=db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(body.ids[0]);if(first)history(first,'reordered',`Порядок: ${ordered.join(',')}`.slice(0,500),actor);
+    });
+    return list(code);
   }
   function cancel(id,code,body) {
     object(body,['revision']);revision(body.revision);
@@ -377,6 +470,6 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   }
   function drain(){if(stopped)return Promise.resolve();if(!running)running=processDue().finally(()=>running=null);return running;}
   function stop(){stopped=true;return running||Promise.resolve();}
-  return {get,list,create,update,schedule,cancel,reconcile,drain,stop,invalidate,approve,importPackage};
+  return {get,list,create,update,schedule,cancel,reconcile,drain,stop,invalidate,approve,reject,submitReview,reorder,importPackage};
 }
-module.exports={createAutoposting,LEASE_MS,CAPTION_PLATFORMS};
+module.exports={createAutoposting,LEASE_MS,CAPTION_PLATFORMS,FORMATS,ROLES,REVIEW_STATES,META_FIELDS};

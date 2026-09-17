@@ -247,3 +247,60 @@ test('одобрение переживает технические перех�
   assert.equal(f.calls.length,1,'после отзыва второй канал не отправлен');assert.equal(f.calls[0].post.text,'ТГ','подпись площадки заменяет общий текст');
   const result=f.api.get(third.id,'alvi');assert.equal(result.status,'needs_review');assert.deepEqual(result.deliveries.map(d=>d.status).sort(),['cancelled','published']);
 });
+
+test('контент-план: метаданные не попадают в подпись; правка возвращает на согласование; отклонение требует комментарий и пишет автора/время/историю; смена плановой даты не активирует отправку и не снимает согласование',async t=>{
+  const f=fixture(t);const owner={userId:1,userName:'Влад'},editor={userId:2,userName:'Редактор'};
+  const start=Date.parse('2026-09-15T00:00:00Z');
+  let card=f.api.create('alvi',{title:'Д1',text:'Утро',mediaUrls:['https://cdn.example.test/d1.mp4'],platformIds:['telegram'],dayKey:'D1',captions:{telegram:'ТГ'},
+    format:'reel',role:'reach',audience:'Люди, мечтающие о Таиланде',hook:'Море в первые 3 секунды',idea:'Атмосфера утра',hughNote:'Тихий хук без обещаний может удержать',metrics:'Удержание, репосты',methodSource:'Курс «Аудитория через короткий контент» (гипотеза автора)',
+    scheduledAt:new Date(start+3600000).toISOString(),timezone:'Asia/Irkutsk',profileRevision:f.information.get('alvi').revision},7);
+  assert.equal(card.meta.format,'reel');assert.equal(card.meta.role,'reach');assert.equal(card.review.state,'draft');
+  assert.throws(()=>f.api.create('alvi',{title:'x',format:'poem',profileRevision:f.information.get('alvi').revision}),e=>e.status===400);
+  assert.throws(()=>f.api.create('alvi',{title:'x',role:'viral',profileRevision:f.information.get('alvi').revision}),e=>e.status===400);
+  // отправить на согласование → согласовать
+  card=f.api.submitReview(card.id,'alvi',{revision:card.revision},editor);assert.equal(card.review.state,'pending');
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true},owner);assert.equal(card.review.state,'approved');assert.equal(card.approval.approved,true);
+  // смена плановой даты/пояса: согласование сохраняется, отправка не активируется
+  card=f.api.update(card.id,'alvi',{revision:card.revision,scheduledAt:new Date(start+7200000).toISOString(),timezone:'Asia/Bangkok'},editor);
+  assert.equal(card.approval.approved,true);assert.equal(card.review.state,'approved');assert.equal(card.status,'draft');assert.equal(card.timezone,'Asia/Bangkok');
+  assert.equal(card.history[0].action,'rescheduled');assert.equal(card.history[0].actorName,'Редактор');
+  f.advance(7200000);await f.api.drain();assert.equal(f.calls.length,0,'плановая дата без явной постановки в план ничего не отправляет');
+  // правка подписи → снова на согласовании, одобрение снято
+  card=f.api.update(card.id,'alvi',{revision:card.revision,captions:{telegram:'ТГ v2'}},editor);
+  assert.equal(card.review.state,'pending');assert.equal(card.approval.approved,false);assert.equal(card.history[0].action,'edited');
+  // правка метаданных — тоже содержимое (новая версия), но в подпись не попадает
+  card=f.api.update(card.id,'alvi',{revision:card.revision,hook:'<script>alert(1)</script> новый хук'},editor);
+  assert.equal(card.meta.hook,'<script>alert(1)</script> новый хук','хранится как текст, экранирует интерфейс');
+  assert.ok(!JSON.stringify(card.captions).includes('хук')&&!card.text.includes('хук'),'метаданные не в подписи');
+  // отклонение: без комментария нельзя; с комментарием — автор, время, история; чужая компания — 404
+  assert.throws(()=>f.api.reject(card.id,'alvi',{revision:card.revision,comment:'   '},owner),e=>e.status===400);
+  assert.throws(()=>f.api.reject(card.id,'avokado',{revision:card.revision,comment:'нет'},owner),e=>e.status===404);
+  card=f.api.reject(card.id,'alvi',{revision:card.revision,comment:'Хук слишком прямой <b>'},owner);
+  assert.equal(card.review.state,'rejected');assert.equal(card.review.comment,'Хук слишком прямой <b>');assert.equal(card.review.byName,'Влад');assert.ok(card.review.at);
+  assert.deepEqual(card.history.slice(0,1).map(h=>[h.action,h.actorName,h.comment]),[['rejected','Влад','Хук слишком прямой <b>']]);
+  assert.throws(()=>f.api.reject(card.id,'alvi',{revision:card.revision-1,comment:'старая'},owner),e=>e.details.code==='REVISION_CONFLICT');
+  // после правки — снова на согласовании, комментарий отклонения очищен, но остался в истории
+  card=f.api.update(card.id,'alvi',{revision:card.revision,captions:{telegram:'ТГ v3'}},editor);
+  assert.equal(card.review.state,'pending');assert.equal(card.review.comment,'');assert.ok(card.history.some(h=>h.action==='rejected'));
+  // отклонение запланированной снимает с плана
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true},owner);
+  card=await f.api.schedule(card.id,'alvi',{revision:card.revision,scheduledAt:new Date(start+7200000+60000).toISOString()});assert.equal(card.status,'scheduled');
+  card=f.api.reject(card.id,'alvi',{revision:card.revision,comment:'Отложим'},owner);assert.equal(card.status,'draft');assert.equal(card.lastErrorCode,'APPROVAL_REVOKED');
+  f.advance(120000);await f.api.drain();assert.equal(f.calls.length,0);
+});
+test('порядок плана хранится на сервере: полный список, чужие/неизвестные id отклоняются, пропущенные уходят в конец; список выдаётся по порядку',async t=>{
+  const f=fixture(t);const rev=()=>f.information.get('alvi').revision;
+  const a=f.api.create('alvi',{title:'A',profileRevision:rev()},7),b=f.api.create('alvi',{title:'B',profileRevision:rev()},7),c=f.api.create('alvi',{title:'C',profileRevision:rev()},7);
+  const other=f.api.create('avokado',{title:'X',profileRevision:f.information.get('avokado').revision},7);
+  assert.deepEqual(f.api.list('alvi').posts.map(p=>p.title),['A','B','C']);
+  assert.throws(()=>f.api.reorder('alvi',{ids:[c.id,other.id]}),e=>e.status===404);
+  assert.throws(()=>f.api.reorder('alvi',{ids:[c.id,c.id]}),e=>e.status===400);
+  const result=f.api.reorder('alvi',{ids:[c.id,a.id]},{userId:1,userName:'Влад'});
+  assert.deepEqual(result.posts.map(p=>p.title),['C','A','B']);assert.deepEqual(f.api.list('alvi').posts.map(p=>p.sortOrder),[1,2,3]);
+  assert.deepEqual(f.api.list('avokado').posts.map(p=>p.title),['X'],'порядок другой компании не тронут');
+  assert.equal(f.api.get(c.id,'alvi').history[0].action,'reordered');
+  // импорт пакета с метаданными
+  const imported=f.api.importPackage('alvi',{items:[{dayKey:'D2',title:'Д2',captions:{vk:'Два'},meta:{format:'reel',role:'affection',hook:'Хук',methodSource:'Курс'}}]},7);
+  assert.equal(imported.created[0].meta.role,'affection');assert.equal(imported.created[0].review.state,'draft');assert.equal(imported.created[0].sortOrder,4,'после переупорядочивания трёх карточек новая встаёт в конец');
+  assert.throws(()=>f.api.importPackage('alvi',{items:[{title:'Плохо',meta:{role:'viral'}}]}),e=>e.status===400);
+});

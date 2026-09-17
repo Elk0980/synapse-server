@@ -2526,7 +2526,11 @@ async function route(request, response) {
     else if (url.pathname === '/autoposting/starter-plan' && request.method === 'GET') result=studioContentPlan.get(code);
     else if (url.pathname === '/autoposting/starter-plan' && request.method === 'POST') {result=studioContentPlan.import(code,await readJson(request),identity.userId);status=result.created?201:200;}
     else {
-      const match=/^\/autoposting\/posts(?:\/(\d+)(?:\/(schedule|cancel|reconcile|approve))?)?$/.exec(url.pathname);
+      const match=/^\/autoposting\/posts(?:\/(\d+)(?:\/(schedule|cancel|reconcile|approve|reject|submit-review))?)?$/.exec(url.pathname);
+      if (url.pathname==='/autoposting/order' && request.method==='PUT') {
+        result=autoposting.reorder(code,await readJson(request),identity);
+        return send(response,status,result,{...cors,'cache-control':'no-store'});
+      }
       if (url.pathname==='/autoposting/import' && request.method==='POST') {
         result=autoposting.importPackage(code,await readJson(request),identity.userId);status=result.created.length?201:200;
         return send(response,status,result,{...cors,'cache-control':'no-store'});
@@ -2534,16 +2538,21 @@ async function route(request, response) {
       if (!match) fail(404,'Адрес не найден');
       const [,id,action]=match;
       // Одобрение версии — решение владельца кабинета; права редактора недостаточно.
-      if (action==='approve') {
+      if (action==='approve' || action==='reject') {
         if (request.method!=='POST') fail(405,'Метод не поддерживается');
-        if (identity.role!=='owner') fail(403,'Одобрять публикации может только владелец',{code:'FORBIDDEN'});
-        result=autoposting.approve(id,code,await readJson(request),identity);
+        if (identity.role!=='owner') fail(403,'Согласовывать и отклонять публикации может только владелец',{code:'FORBIDDEN'});
+        result=action==='approve'?autoposting.approve(id,code,await readJson(request),identity):autoposting.reject(id,code,await readJson(request),identity);
+        return send(response,status,result,{...cors,'cache-control':'no-store'});
+      }
+      if (action==='submit-review') {
+        if (request.method!=='POST') fail(405,'Метод не поддерживается');
+        result=autoposting.submitReview(id,code,await readJson(request),identity);
         return send(response,status,result,{...cors,'cache-control':'no-store'});
       }
       if (!id && request.method==='GET') result=autoposting.list(code);
       else if (!id && request.method==='POST') {result=autoposting.create(code,await readJson(request),identity.userId);status=201;}
       else if (id && !action && request.method==='GET') result=autoposting.get(id,code);
-      else if (id && !action && request.method==='PATCH') result=autoposting.update(id,code,await readJson(request));
+      else if (id && !action && request.method==='PATCH') result=autoposting.update(id,code,await readJson(request),identity);
       else if (id && action==='schedule' && request.method==='POST') result=await autoposting.schedule(id,code,await readJson(request));
       else if (id && action==='cancel' && request.method==='POST') result=autoposting.cancel(id,code,await readJson(request));
       else if (id && action==='reconcile' && request.method==='POST') result=await autoposting.reconcile(id,code,await readJson(request));
