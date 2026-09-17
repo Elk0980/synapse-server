@@ -127,13 +127,13 @@ function writeScenario(directory, scenario) {
 
 /* Каждому запуску процесса можно дать свой сценарий: так проверяется восстановление
    после перезапуска app-server. Последний сценарий используется для всех дальнейших запусков. */
-function fakeClientFactory({scenarioPaths, recordPath, captured}) {
+function fakeClientFactory({scenarioPaths, recordPath, captured, clients}) {
   let started = 0;
   return (config) => {
     const scenarioPath = scenarioPaths[Math.min(started, scenarioPaths.length - 1)];
     started += 1;
     if (captured) captured.push(config);
-    return new AppServerClient({
+    const client = new AppServerClient({
       executable: process.execPath,
       args: [FAKE_APP_SERVER],
       cwd: config.cwd,
@@ -144,6 +144,9 @@ function fakeClientFactory({scenarioPaths, recordPath, captured}) {
       },
       requestTimeoutMs: 5000,
     });
+    // Ссылки сохраняются, чтобы тесты могли проверить, что прежний процесс закрыт.
+    if (clients) clients.push(client);
+    return client;
   };
 }
 
@@ -176,6 +179,7 @@ function createRuntime(options = {}) {
   const scenarioPaths = scenarios.map((scenario) => writeScenario(dir, scenario));
   const recordPath = path.join(dir, 'received.jsonl');
   const captured = [];
+  const clients = [];
   const store = createJobStore(path.join(dir, 'state.sqlite'));
   const runtime = new HughRuntime({
     executable: '/usr/local/bin/codex',
@@ -188,7 +192,7 @@ function createRuntime(options = {}) {
     loginTimeoutMs: options.loginTimeoutMs || 60_000,
     // Поддельный app-server не читает каталог; отдельный тест проверяет требование прода.
     requireCatalog: false,
-    clientFactory: fakeClientFactory({scenarioPaths, recordPath, captured}),
+    clientFactory: fakeClientFactory({scenarioPaths, recordPath, captured, clients}),
     ...options.runtimeOptions,
   });
   runtime.prepare();
@@ -204,6 +208,7 @@ function createRuntime(options = {}) {
     proofPath,
     recordPath,
     captured,
+    clients,
     received: () =>
       fs
         .readFileSync(recordPath, 'utf8')

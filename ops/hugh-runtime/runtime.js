@@ -46,6 +46,9 @@ const VERSION_PATTERN = /\b(\d+\.\d+\.\d+)\b/;
 
 /* Сколько ждать до следующей попытки, когда подписка ответила отказом по лимиту.
    Точное время берётся из снимка rate limits, если он есть и правдоподобен. */
+/* Исходы #finishTurn, после которых ход точно не идёт и процесс можно переиспользовать. */
+const TURN_SETTLED_OUTCOMES = new Set(['turn_completed', 'turn_not_started', 'client_gone']);
+
 const DEFAULT_RATE_LIMIT_WAIT_SECONDS = 300;
 const DEFAULT_OVERLOAD_WAIT_SECONDS = 30;
 const MAX_LIMIT_WAIT_SECONDS = 6 * 3600;
@@ -731,6 +734,7 @@ class HughRuntime {
         timer,
         settled: false,
         poisoned: null,
+        turnStartSent: false,
         turnFinished: null,
         finished,
         resolveFinished,
@@ -741,15 +745,26 @@ class HughRuntime {
     completion.catch(() => {});
 
     try {
-      const started = await client.request(
-        'turn/start',
-        {
-          ...TURN_PARAMS_TEMPLATE,
-          threadId,
-          input: buildTurnInput(payload.messages),
-        },
-        {timeoutMs: this.jobTimeoutMs},
-      );
+      // Отмечаем ДО отправки: как только запрос ушёл в stdin, ход может уже идти,
+      // даже если ответ с идентификатором потеряется или не придёт вовремя.
+      job.turnStartSent = true;
+      let started;
+      try {
+        started = await client.request(
+          'turn/start',
+          {
+            ...TURN_PARAMS_TEMPLATE,
+            threadId,
+            input: buildTurnInput(payload.messages),
+          },
+          {timeoutMs: this.jobTimeoutMs},
+        );
+      } catch (error) {
+        // Явный отказ app-server (числовой код JSON-RPC) означает, что ход не начинался.
+        // Таймаут и падение процесса такого не означают — там ход мог стартовать.
+        if (typeof error.rpcCode === 'number') job.turnStartSent = false;
+        throw error;
+      }
       if (started && started.turn && started.turn.id) job.turnId = started.turn.id;
       const turn = await completion;
       // Уведомление о запрещённом инструменте может прийти в том же куске stdout, что и
@@ -774,19 +789,25 @@ class HughRuntime {
     } finally {
       clearTimeout(job.timer);
       // Нельзя освобождать рантайм, пока прежний ход может продолжать тратить квоту.
-      const confirmed = await this.#finishTurn(job, client);
+      const outcome = await this.#finishTurn(job, client);
       this.activeJob = null;
-      if (!confirmed) await this.#restartClient('turn_interrupt_unconfirmed');
+      if (!TURN_SETTLED_OUTCOMES.has(outcome)) await this.#restartClient(outcome);
     }
   }
 
-  /* Доводит ход до подтверждённого конца: либо уже пришёл turn/completed, либо посылаем
-     turn/interrupt и ограниченно ждём подтверждения. Неподтверждённый ход — повод убить
-     процесс целиком, а не начинать следующее задание рядом с ним. */
+  /* Доводит ход до подтверждённого конца. Возвращает код исхода: значения из
+     TURN_SETTLED_OUTCOMES означают, что ход точно не идёт, любые другие — что процесс
+     нужно убить целиком, а не начинать следующее задание рядом с возможным живым ходом. */
   async #finishTurn(job, client) {
-    if (job.turnFinished) return true;
-    if (!job.turnId) return true; // ход не начинался
-    if (!client || !client.running) return true; // процесса уже нет, чужой ход не продолжится
+    if (job.turnFinished) return 'turn_completed';
+    if (!job.turnStartSent) return 'turn_not_started';
+    if (!client || !client.running) return 'client_gone'; // процесса нет — ход не продолжится
+    if (!job.turnId) {
+      // turn/start уже ушёл, а идентификатор так и не вернулся: ход может идти прямо сейчас,
+      // а прервать его точечно нечем — turn/interrupt требует turnId.
+      this.logger.error('hugh-runtime: turn_id_unknown_after_start');
+      return 'turn_id_unknown';
+    }
     try {
       await client.request(
         'turn/interrupt',
@@ -796,10 +817,10 @@ class HughRuntime {
     } catch (error) {
       this.logger.warn(`hugh-runtime: turn_interrupt_failed code=${JSON.stringify(error.rpcCode || 'error')}`);
     }
-    const outcome = await Promise.race([job.finished, delay(this.interruptGraceMs).then(() => null)]);
-    if (outcome) return true;
+    const confirmed = await Promise.race([job.finished, delay(this.interruptGraceMs).then(() => null)]);
+    if (confirmed) return 'turn_completed';
     this.logger.error('hugh-runtime: turn_interrupt_unconfirmed');
-    return false;
+    return 'turn_interrupt_unconfirmed';
   }
 
   /* Полная остановка процесса с ожиданием закрытия: следующее задание получит новый app-server. */

@@ -376,6 +376,44 @@ test('неподтверждённое прерывание убивает app-s
   assert.equal(harness.captured.length, 2, 'следующее задание получило новый app-server');
 });
 
+test('потерянный ответ turn/start не считается «ход не начинался»', async (t) => {
+  // turn/start ушёл, ответа и уведомлений нет: идентификатора хода у нас не будет,
+  // но ход на стороне подписки мог уже начаться. Точечно прервать его нечем,
+  // поэтому единственный честный выход — закрыть процесс до следующего задания.
+  const lost = happyScenario();
+  lost.methods['turn/start'] = {noResponse: true};
+  const harness = createRuntime({
+    ...IMPATIENT,
+    scenarios: [lost, happyScenario({replyText: 'Ответ после перезапуска.'})],
+  });
+  t.after(() => harness.cleanup());
+
+  await assert.rejects(harness.runtime.reply(payload()));
+  assert.equal(harness.clients.length, 1);
+  assert.equal(harness.clients[0].running, false, 'прежний процесс закрыт до снятия занятости');
+  assert.equal(harness.runtime.client, null);
+  assert.equal(harness.runtime.busy, false);
+  // Прерывание не посылалось: идентификатора хода не было.
+  assert.equal(harness.received().filter((message) => message.method === 'turn/interrupt').length, 0);
+
+  const result = await harness.runtime.reply(payload({jobId: 'job-2'}));
+  assert.equal(result.text, 'Ответ после перезапуска.');
+  assert.equal(harness.clients.length, 2, 'следующее задание получило новый процесс');
+});
+
+test('явный отказ app-server на turn/start не приводит к перезапуску', async (t) => {
+  // Числовой код JSON-RPC — это подтверждение, что ход не начинался: процесс можно оставить.
+  const rejected = happyScenario();
+  rejected.methods['turn/start'] = {error: {code: -32602, message: 'invalid params'}};
+  const harness = createRuntime({...IMPATIENT, scenario: rejected});
+  t.after(() => harness.cleanup());
+
+  await assert.rejects(harness.runtime.reply(payload()));
+  assert.equal(harness.clients.length, 1);
+  assert.equal(harness.clients[0].running, true, 'процесс переиспользуется');
+  assert.equal(harness.runtime.busy, false);
+});
+
 test('второе задание не начинается, пока первое не довело ход до конца', async (t) => {
   const harness = createRuntime({
     ...IMPATIENT,
