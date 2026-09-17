@@ -19,6 +19,20 @@ RUN npm ci --omit=dev
 COPY *.js ./
 COPY test-support ./test-support
 
+# COPY сохраняет права файлов из контекста сборки. На сервере рабочая копия создаётся
+# автовыкладкой, и если git работал под umask 077, файлы приходят с правами 0600, а
+# каталоги — 0700. После USER hugh такой /app недоступен даже на чтение: Node падает на
+# «Cannot read package config /app/package.json: permission denied» ещё до первой строки.
+#
+# Приводим к предсказуемым правам ровно то, что скопировали из контекста. Владельцем
+# остаётся root, право записи остаётся только у root — открывается только чтение и обход.
+# node_modules намеренно не трогаем: его создал npm внутри образа, и там есть исполняемые
+# файлы, которым нельзя снимать бит выполнения.
+RUN chmod 0755 /app /app/test-support \
+ && chmod 0644 /app/package.json /app/package-lock.json /app/*.js \
+ && find /app/test-support -type d -exec chmod 0755 {} + \
+ && find /app/test-support -type f -exec chmod 0644 {} +
+
 RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin hugh \
  && mkdir -p /workspace /data /app/build \
  && chown -R hugh:hugh /workspace /data /app/build \

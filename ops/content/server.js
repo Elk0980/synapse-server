@@ -17,6 +17,7 @@ const { createProjectChat } = require('./project-chat');
 const { hashPassword, verifyPassword } = require('./passwords');
 const { createCompanyLinksReader } = require('./company-links-reader');
 const { createEmailUnsubscribeProxy, TOKEN: EMAIL_UNSUBSCRIBE_TOKEN } = require('./email-unsubscribe-proxy');
+const { resolveSessionSecret } = require('./session-secret');
 
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
 const DATABASE_PATH = process.env.DATABASE_PATH || '/data/content.sqlite';
@@ -37,7 +38,14 @@ const CONTENT_COMPANIES = { alvi: 'alvi', avokado: 'avokado', avokado2: 'avokado
 const SESSION_TTL = 30 * 24 * 60 * 60;
 const LOGIN_WINDOW = 10 * 60 * 1000;
 const LOGIN_LIMIT = 10;
-const SESSION_SECRET = (process.env.SESSION_SECRET || '').trim() || crypto.randomBytes(32).toString('hex');
+// Ключ подписи сессий: переменная окружения главнее, иначе постоянный приватный файл рядом с базой.
+const SESSION_SECRET = resolveSessionSecret({
+  envSecret: process.env.SESSION_SECRET,
+  databasePath: DATABASE_PATH,
+  onEvent: (event, { file }) => console.warn(event === 'created'
+    ? `content: SESSION_SECRET не задан — создан постоянный ключ подписи сессий ${file}; потребуется один повторный вход`
+    : `content: SESSION_SECRET не задан — используется сохранённый ключ подписи сессий ${file}`),
+}).secret;
 const CRM_URL = (process.env.CRM_URL || 'http://crm:8080').replace(/\/$/, '');
 const CRM_API_KEY = (process.env.CRM_API_KEY || '').trim();
 const readCompanyLinks = createCompanyLinksReader({crmUrl: CRM_URL, apiKey: CRM_API_KEY, companies: CONTENT_COMPANIES});
@@ -80,10 +88,6 @@ function logAccountMutation(action, actor, target, before, after) {
     ` target=${JSON.stringify(target.login)} old_companies=${JSON.stringify(before.companyCodes)}` +
     ` new_companies=${JSON.stringify(after?.companyCodes || [])}` +
     ` old_permissions=${JSON.stringify(before.permissions)} new_permissions=${JSON.stringify(after?.permissions || [])}`);
-}
-
-if (!(process.env.SESSION_SECRET || '').trim()) {
-  console.warn('content: SESSION_SECRET пуст — создан временный секрет, сессии не переживут перезапуск');
 }
 
 function publicIdentity(identity) {
