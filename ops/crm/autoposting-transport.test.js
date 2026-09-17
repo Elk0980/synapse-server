@@ -224,14 +224,14 @@ test('Onlypult key can be saved before profile selection and stays scoped, encry
  assert.throws(()=>f.save({revision:1,provider:'direct',target:'1234',token:''}),e=>e.status===400);
 });
 
-test('Onlypult profile diagnostics distinguish an empty account from undocumented platform values without accepting aliases',async t=>{
+test('Onlypult profile diagnostics distinguish an empty account from unknown platform values without accepting them',async t=>{
  const f=onlypultFixture(t);f.save({target:'',enabled:false});f.replies['/profiles']=[];
  const empty=await f.api.listProfiles('alvi','vk');assert.deepEqual(empty.profiles,[]);
  assert.deepEqual(empty.diagnostics,{totalProfiles:0,platformCounts:[],profileShapes:[],otherShapesCount:0});
- f.replies['/profiles']=[{id:1863190,name:'PRIVATE_NAME',platform:'vk',status:'active',email:'private@example.test'}];
+ f.replies['/profiles']=[{id:1863190,name:'PRIVATE_NAME',platform:'vk_future',status:'active',email:'private@example.test'}];
  const unsupported=await f.api.listProfiles('alvi','vk');assert.deepEqual(unsupported.profiles,[]);
  assert.equal(unsupported.companyCode,'alvi');assert.equal(unsupported.channelId,'vk');assert.equal(unsupported.revision,1);
- assert.deepEqual(unsupported.diagnostics,{totalProfiles:1,platformCounts:[{platform:'vk',count:1}],
+ assert.deepEqual(unsupported.diagnostics,{totalProfiles:1,platformCounts:[{platform:'vk_future',count:1}],
    profileShapes:[{idType:'number',nameType:'string',statusType:'string',platformType:'string',count:1}],otherShapesCount:0});
  assert.doesNotMatch(JSON.stringify(unsupported),/PRIVATE_NAME|private@example|1863190/);
  assert.equal(f.calls.length,2);assert.ok(f.calls.every(c=>c.options.method==='GET'&&c.path==='/profiles'&&c.body===null));
@@ -241,9 +241,9 @@ test('Onlypult diagnostics expose only bounded platform labels and field types, 
  const f=onlypultFixture(t);f.save({target:'',enabled:false});
  const privateProfile={id:1863190,name:'PRIVATE_NAME',status:{token:OP_TOKEN},username:'PRIVATE_USERNAME',email:'private@example.test',access_token:OP_TOKEN,'<private-field>':'PRIVATE_VALUE'};
  f.replies['/profiles']=[privateProfile,{...privateProfile,platform:'<img src=x onerror=alert(1)>'},{...privateProfile,platform:OP_TOKEN},
-   {...privateProfile,platform:{private:OP_TOKEN}},{...privateProfile,platform:'vk'},null];
+   {...privateProfile,platform:{private:OP_TOKEN}},{...privateProfile,platform:'vk_future'},null];
  const result=await f.api.listProfiles('alvi','vk');assert.deepEqual(result.profiles,[]);
- assert.deepEqual(result.diagnostics.platformCounts,[{platform:'unknown',count:5},{platform:'vk',count:1}]);
+ assert.deepEqual(result.diagnostics.platformCounts,[{platform:'unknown',count:5},{platform:'vk_future',count:1}]);
  const missing=result.diagnostics.profileShapes.find(s=>s.idType==='number'&&s.platformType==='undefined');
  assert.deepEqual(missing,{idType:'number',nameType:'string',statusType:'object',platformType:'undefined',fieldNames:['access_token','email','id','name','status','username'],count:1});
  assert.doesNotMatch(JSON.stringify(result),/PRIVATE_|private@example|1863190|onerror|<private-field>|op_a{64}/);
@@ -266,6 +266,39 @@ test('Onlypult check requires an exact active profile on the selected platform a
   assert.equal(result.ok,expected===null);assert.equal(result.code,expected);
   assert.equal(result.channels.find(c=>c.id==='vk').profileDisplayName,expected?null:'ALVI');
   assert.ok(f.calls.every(c=>c.path==='/profiles'&&c.options.method==='GET'));
+ }
+});
+
+test('Onlypult accepts the observed vk alias with the same exact-profile, active-status and public-field rules',async t=>{
+ const f=onlypultFixture(t);f.save();f.profiles[0].platform='vk';
+ const listing=await f.api.listProfiles('alvi','vk');
+ assert.deepEqual(listing.profiles[0],{id:'alvi-vk',name:'ALVI',platform:'vk',status:'active',username:'@alvi'});
+ assert.deepEqual(listing.profiles.map(p=>p.id),['alvi-vk','avokado-vk']);assert.doesNotMatch(JSON.stringify(listing),/PRIVATE_PROVIDER_RESPONSE/);
+ assert.equal((await f.api.checkChannel('alvi','vk')).ok,true);
+ f.profiles[0].status='expired';assert.equal((await f.api.checkChannel('alvi','vk')).code,'PROFILE_INACTIVE');
+ f.profiles[0].status='active';f.profiles[0].id='another-vk';assert.equal((await f.api.checkChannel('alvi','vk')).code,'PROFILE_NOT_FOUND');
+ assert.ok(f.calls.every(c=>c.options.method==='GET'&&c.path==='/profiles'));
+});
+
+test('Onlypult VK alias does not accept case variants, unknown platforms or Telegram profiles',async t=>{
+ const f=onlypultFixture(t);f.save();
+ for(const platform of ['VK','Vkontakte','vk_future','unknown','telegram']){
+  f.replies['/profiles']=[{id:'alvi-vk',name:'ALVI',platform,status:'active'}];
+  assert.deepEqual((await f.api.listProfiles('alvi','vk')).profiles,[]);
+  assert.equal((await f.api.checkChannel('alvi','vk')).code,'PROFILE_NOT_FOUND');
+ }
+ f.api.saveSettings('alvi',{channels:[channel('telegram',0,{provider:'onlypult',target:'alvi-tg',token:OP_TOKEN})]});
+ f.replies['/profiles']=[{id:'alvi-tg',name:'Telegram',platform:'telegram',status:'active'},
+   {id:'other-vk',name:'VK',platform:'vk',status:'active'},{id:'wrong-case',name:'Wrong case',platform:'Telegram',status:'active'}];
+ assert.deepEqual((await f.api.listProfiles('alvi','telegram')).profiles.map(p=>p.id),['alvi-tg']);
+ assert.equal((await f.api.checkChannel('alvi','telegram')).ok,true);
+});
+
+test('Onlypult vk alias preserves strict ID, name and status validation',async t=>{
+ const f=onlypultFixture(t);f.save();
+ for(const patch of [{id:1863190},{name:null},{status:null}]){
+  f.replies['/profiles']=[{id:'alvi-vk',name:'ALVI',platform:'vk',status:'active',...patch}];
+  await assert.rejects(f.api.listProfiles('alvi','vk'),safeFailure('RESPONSE_UNCERTAIN',false));
  }
 });
 

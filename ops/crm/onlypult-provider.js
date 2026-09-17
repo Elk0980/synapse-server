@@ -4,7 +4,8 @@
 // Post has id/status/profile_ids; its schema DOES NOT document a published URL.
 // A provider status alone must therefore never become Synapse "published".
 const BASE = 'https://api.onlypult.com/v1';
-const PLATFORM = {vk:'vkontakte',telegram:'telegram'};
+// Onlypult's live response on 2026-09-17 uses "vk"; OpenAPI documents "vkontakte".
+const PLATFORM = {vk:['vkontakte','vk'],telegram:['telegram']};
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value);
 function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
   async function request(row,method,path,body) {
@@ -45,7 +46,7 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
       else if (shapes.size < 20) shapes.set(key,{...shape,count:1});
       else otherShapesCount++;
     }
-    const matching = profiles.filter(profile => profile?.platform === PLATFORM[row.id]).map(profile => {
+    const matching = profiles.filter(profile => PLATFORM[row.id]?.includes(profile?.platform)).map(profile => {
       if (!id(profile.id) || typeof profile.name !== 'string' || typeof profile.status !== 'string') throw failure('RESPONSE_UNCERTAIN');
       // Never return raw provider objects (credentials/private fields may be added later).
       return {id:profile.id,name:profile.name.slice(0,200),platform:row.id,status:profile.status.slice(0,60),
