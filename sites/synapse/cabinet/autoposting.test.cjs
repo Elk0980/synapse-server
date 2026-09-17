@@ -81,12 +81,14 @@ test('Telegram media caption and VK link caps block scheduling; preview escapes 
     assert.equal(f.node('autoposting-preview-content').querySelector('script'),null);assert.match(f.node('autoposting-preview-content').textContent,/не больше 1/);
   }finally{f.close();}
 });
-test('settings saves only the edited card, omits blank token, clears new token even on failure, and check never publishes',async()=>{
+test('settings saves only the edited card, omits blank token, retains a failed key for retry, and check never publishes',async()=>{
   let fail=false;const f=await fixture({override:call=>{if(fail&&call.method==='PUT')throw Error('RAW_SECRET');}});try{
     let form=f.node('autoposting-channels').querySelector('[data-channel=telegram]');form.querySelector('button[type=submit]').click();await f.settle();const first=f.calls.find(call=>call.method==='PUT'),body=JSON.parse(first.options.body);
     assert.equal(body.channels.length,1);assert.equal(body.channels[0].id,'telegram');assert.equal(body.channels[0].revision,1);assert.equal('token' in body.channels[0],false);
     form=f.node('autoposting-channels').querySelector('[data-channel=telegram]');form.querySelector('[data-check-channel]').click();await f.settle();assert.ok(f.calls.some(call=>call.path.endsWith('/check')));assert.equal(f.calls.some(call=>call.path.endsWith('/schedule')),false);
-    fail=true;form=f.node('autoposting-channels').querySelector('[data-channel=telegram]');const token=form.querySelector('[type=password]');token.value='NEW_TEST_SECRET';form.querySelector('button[type=submit]').click();await f.settle();assert.equal(token.value,'');assert.doesNotMatch(f.d.body.textContent,/RAW_SECRET|NEW_TEST_SECRET/);
+    fail=true;form=f.node('autoposting-channels').querySelector('[data-channel=telegram]');const token=form.querySelector('[type=password]');token.value='NEW_TEST_SECRET';form.querySelector('button[type=submit]').click();await f.settle();assert.equal(token.value,'NEW_TEST_SECRET');assert.doesNotMatch(f.d.body.textContent,/RAW_SECRET|NEW_TEST_SECRET/);
+    fail=false;form.querySelector('button[type=submit]').click();await f.settle();assert.equal(JSON.parse(f.calls.filter(call=>call.method==='PUT').at(-1).options.body).channels[0].token,'NEW_TEST_SECRET');
+    assert.equal(token.value,'');assert.equal(f.node('autoposting-channels').querySelector('[data-channel=telegram] [type=password]').value,'');
   }finally{f.close();}
 });
 test('company switch preserves unfinished draft fields but clears credentials and ignores stale responses',async()=>{
@@ -142,10 +144,13 @@ test('Onlypult setup saves a disabled empty target, lists profiles read-only, th
   await connectOnlypultKey(f);const first=f.calls.find(c=>c.method==='PUT'),body=JSON.parse(first.options.body).channels[0];
   assert.equal(first.code,'alvi');assert.equal(body.provider,'onlypult');assert.equal(body.target,'');assert.equal(body.enabled,false);
   assert.equal(body.revision,1);assert.equal(body.token,'op_'+'a'.repeat(64));assert.equal(card(f).querySelector('[type=password]').value,'');
+  assert.match(f.node('autoposting-status').textContent,/Ключ сохранён.*Загрузите профили/);
+  assert.equal(card(f).querySelector('[data-channel-field=enabled]').disabled,true);
   const before=f.calls.length;card(f).querySelector('[data-load-profiles]').click();await f.settle();
   assert.equal(f.calls.length,before+1);const listing=f.calls.at(-1);assert.equal(listing.path,'/content/crm/autoposting/settings/vk/profiles');assert.equal(listing.method,'GET');assert.equal(listing.code,'alvi');assert.equal(listing.options.body,undefined);
   const select=card(f).querySelector('[data-channel-field=target]');assert.equal(select.tagName,'SELECT');assert.ok([...select.options].some(o=>o.value==='alvi-vk'));
-  channelInput(f,'target','alvi-vk');channelInput(f,'enabled',true);
+  assert.equal(card(f).querySelector('[data-channel-field=enabled]').disabled,true);
+  channelInput(f,'target','alvi-vk');assert.equal(card(f).querySelector('[data-channel-field=enabled]').disabled,false);channelInput(f,'enabled',true);
   const checkCount=f.calls.length;card(f).querySelector('[data-check-channel]').click();await f.settle();assert.equal(f.calls.length,checkCount);
   card(f).querySelector('button[type=submit]').click();await f.settle();const second=f.calls.filter(c=>c.method==='PUT').at(-1),saved=JSON.parse(second.options.body).channels[0];
   assert.equal(saved.target,'alvi-vk');assert.equal(saved.enabled,true);assert.equal(saved.revision,2);assert.equal('token' in saved,false);
@@ -153,6 +158,42 @@ test('Onlypult setup saves a disabled empty target, lists profiles read-only, th
   card(f).querySelector('[data-check-channel]').click();await f.settle();
   assert.ok(f.calls.some(c=>c.path==='/content/crm/autoposting/settings/vk/check'&&c.method==='POST'&&c.code==='alvi'));
   assert.equal(f.calls.some(c=>c.path.includes('/posts')&&c.method!=='GET'),false);
+ }finally{f.close();}
+});
+
+test('Onlypult first save ignores a checked send flag without a profile and a rejected key remains available for retry',async()=>{
+ let reject=true;const f=await fixture({override:call=>{if(reject&&call.method==='PUT')throw Error('RAW_PROVIDER_REJECTION');}});
+ try{
+  channelInput(f,'provider','onlypult');const enabled=card(f).querySelector('[data-channel-field=enabled]');
+  assert.equal(enabled.disabled,true);enabled.click();assert.equal(enabled.checked,false);
+  const token=channelInput(f,'token','op_'+'b'.repeat(64),{event:'input'});
+  // A stale or restored checkbox must not prevent saving the key before profile selection.
+  enabled.checked=true;card(f).querySelector('button[type=submit]').click();await f.settle();
+  const rejected=JSON.parse(f.calls.find(c=>c.method==='PUT').options.body).channels[0];
+  assert.equal(rejected.target,'');assert.equal(rejected.enabled,false);assert.equal(enabled.checked,false);
+  assert.equal(token.value,'op_'+'b'.repeat(64));assert.equal(token.type,'password');assert.equal(token.disabled,false);
+  assert.equal(f.configs.alvi.channels.find(c=>c.id==='vk').provider,'direct');
+  assert.match(f.node('autoposting-status').textContent,/ключ остаётся в поле/);
+  assert.doesNotMatch(f.d.body.textContent,/RAW_PROVIDER_REJECTION|op_b{64}/);assert.equal(f.w.localStorage.length,0);assert.equal(f.w.sessionStorage.length,0);
+  card(f).querySelector('[data-load-profiles]').click();await f.settle();assert.equal(f.calls.some(c=>c.path.endsWith('/profiles')),false);
+  reject=false;card(f).querySelector('button[type=submit]').click();await f.settle();
+  assert.equal(token.value,'');assert.equal(card(f).querySelector('[type=password]').value,'');
+  assert.equal(f.configs.alvi.channels.find(c=>c.id==='vk').provider,'onlypult');assert.equal(f.configs.alvi.channels.find(c=>c.id==='vk').enabled,false);
+  assert.match(f.node('autoposting-status').textContent,/Ключ сохранён/);
+  card(f).querySelector('[data-load-profiles]').click();await f.settle();
+  channelInput(f,'target','alvi-vk');assert.equal(card(f).querySelector('[data-channel-field=enabled]').disabled,false);
+  channelInput(f,'enabled',true);channelInput(f,'target','');
+  assert.equal(card(f).querySelector('[data-channel-field=enabled]').disabled,true);assert.equal(card(f).querySelector('[data-channel-field=enabled]').checked,false);
+  assert.equal(f.calls.some(c=>c.path.includes('/posts')&&c.method!=='GET'),false);
+ }finally{f.close();}
+});
+
+test('Onlypult setup does not claim a saved key unless the settings response confirms it',async()=>{
+ const f=await fixture({override:call=>call.method==='PUT'?{companyCode:call.code,channels:[{...channels()[1],provider:'onlypult',target:'',enabled:false,tokenConfigured:false,connected:false,revision:2}]}:undefined});
+ try{
+  await connectOnlypultKey(f);assert.doesNotMatch(f.node('autoposting-status').textContent,/Ключ сохранён/);
+  assert.match(f.node('autoposting-status').textContent,/Вставьте ключ Onlypult/);
+  card(f).querySelector('[data-load-profiles]').click();await f.settle();assert.equal(f.calls.some(c=>c.path.endsWith('/profiles')),false);
  }finally{f.close();}
 });
 
