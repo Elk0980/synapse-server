@@ -151,3 +151,45 @@ test('компания локального обработчика: сервер
   assert.deepEqual(t.replies('palitra-love'), []);
   assert.equal(t.jobs()[0].status, 'pending');
 });
+
+test('основной путь падает (500/таймаут) и все резервы отказали: вопрос остаётся устойчиво в очереди, попытки не сгорают при повторных проходах; после восстановления отвечается один раз',async()=>{
+  let providerState={openrouter:{status:503},deepseek:{timeout:true}};
+  const s=setup({runtime:{connected:true,authenticated:true,state:'ready'},reply:()=>({status:500}),
+    providers:{openrouter:()=>providerState.openrouter,deepseek:()=>providerState.deepseek}});
+  await s.say('Хью, срочный вопрос','m1');
+  for(let i=0;i<5;i++){s.db.prepare("UPDATE project_chat_ai_jobs SET next_attempt_at='2000-01-01T00:00:00.000Z'").run();s.db.prepare('UPDATE project_chat_provider_state SET cooldown_until=NULL').run();await s.chat.processAIJobs();}
+  const job=s.jobs()[0];
+  assert.equal(job.status,'blocked',job.error);assert.equal(job.attempts,0,'попытки не сгорели');assert.equal(job.reply_message_id,null);assert.match(job.error,/ждёт в очереди/);
+  assert.equal(s.replies().filter(t=>t===ACK_TEXT).length,1,'одно подтверждение приёма');
+  providerState={openrouter:{text:'Наконец ответ'},deepseek:{timeout:true}};
+  s.db.prepare("UPDATE project_chat_ai_jobs SET next_attempt_at='2000-01-01T00:00:00.000Z'").run();s.db.prepare('UPDATE project_chat_provider_state SET cooldown_until=NULL').run();
+  await s.chat.processAIJobs();await s.chat.processAIJobs();
+  assert.deepEqual(s.replies().filter(t=>t!==ACK_TEXT),['Наконец ответ']);assert.equal(s.jobs()[0].status,'done');
+});
+
+test('подхват локальной компании: серверная аренда покрывает таймауты провайдеров и продлевается; зависшее после сбоя running восстанавливается без второго ответа',async()=>{
+  const env={...ENV,HUGH_FALLBACK_LOCAL_OFFLINE_MINUTES:'10',HUGH_FALLBACK_OPENROUTER_TIMEOUT_MS:'90000',HUGH_FALLBACK_DEEPSEEK_TIMEOUT_MS:'90000'};
+  const leases=[];
+  const s=setup({runtime:{connected:false},providers:{openrouter:(calls)=>{leases.push(s.db.prepare("SELECT lease_expires_at FROM project_chat_ai_jobs WHERE id=1").get().lease_expires_at);return {status:503};},deepseek:{text:'Резерв B'}},env,localCompanies:['palitra-love']});
+  assert.equal(s.chat.fallback.leaseMs(),90000*2+30000,'аренда = сумма таймаутов + запас');
+  s.db.prepare(`INSERT INTO project_chat_local_worker(id,boot_id,last_seen_at,status) VALUES(1,'boot',?,'{}')`).run(new Date(Date.now()-30*60000).toISOString());
+  await s.say('Хью, вопрос','m1','palitra-love');
+  await s.chat.processAIJobs();
+  assert.deepEqual(s.replies('palitra-love'),['Резерв B']);
+  assert.ok(leases.length>=1&&Date.parse(leases[0])-Date.now()>=90000*2,'аренда при первом обращении длиннее суммы таймаутов');
+  // сбой сервера посреди подхвата: running, boot_id=server, аренда истекла, ответа нет → берётся заново, без дубля
+  await s.say('Хью, второй вопрос','m2','palitra-love');
+  const second=s.jobs()[1];
+  s.db.prepare("UPDATE project_chat_ai_jobs SET status='running',boot_id='server',lease_token='server-fallback',lease_expires_at=?,attempts=1 WHERE id=?").run(new Date(Date.now()-1000).toISOString(),second.id);
+  await s.chat.processAIJobs();
+  assert.deepEqual(s.replies('palitra-love'),['Резерв B','Резерв B']);assert.equal(s.jobs()[1].status,'done');
+  // пока серверная аренда действует, повторный проход задание не трогает и не дублирует
+  await s.say('Хью, третий','m3','palitra-love');const third=s.jobs()[2];
+  s.db.prepare("UPDATE project_chat_ai_jobs SET status='running',boot_id='server',lease_token='server-fallback',lease_expires_at=? WHERE id=?").run(new Date(Date.now()+60000).toISOString(),third.id);
+  await s.chat.processAIJobs();assert.equal(s.jobs()[2].status,'running');assert.equal(s.replies('palitra-love').length,2);
+  // перезапуск сервера возвращает такие задания в очередь; уже отвеченное закрывается
+  s.db.prepare("UPDATE project_chat_ai_jobs SET reply_message_id=(SELECT id FROM project_chat_messages WHERE author_type='assistant' LIMIT 1) WHERE id=?").run(second.id);
+  s.db.prepare("UPDATE project_chat_ai_jobs SET status='running',boot_id='server' WHERE id=?").run(second.id);
+  s.chat.startWorker();s.chat.stopWorker();
+  assert.equal(s.jobs()[2].status,'pending');assert.equal(s.jobs()[2].lease_token,null);assert.equal(s.jobs()[1].status,'done');
+});

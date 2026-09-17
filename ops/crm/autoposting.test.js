@@ -169,7 +169,7 @@ test('очередь контента: карточка дня с подпися
   assert.throws(()=>f.api.approve(withVideo.id,'avokado',{revision:withVideo.revision,approved:true}),e=>e.status===404,'чужая компания не одобряет');
   assert.throws(()=>f.api.approve(withVideo.id,'alvi',{revision:withVideo.revision-1,approved:true}),e=>e.details.code==='REVISION_CONFLICT');
   const approved=f.api.approve(withVideo.id,'alvi',{revision:withVideo.revision,approved:true},{userId:1,userName:'Влад'});
-  assert.equal(approved.approval.approved,true);assert.equal(approved.approval.approvedRevision,withVideo.revision);assert.equal(approved.approval.approvedByName,'Влад');
+  assert.equal(approved.approval.approved,true);assert.equal(approved.approval.approvedRevision,withVideo.contentRevision);assert.equal(approved.approval.approvedByName,'Влад');
   assert.equal(approved.status,'draft','одобрение не планирует и не публикует');await f.api.drain();assert.equal(f.calls.length,0);
   const edited=f.api.update(approved.id,'alvi',{revision:approved.revision,captions:{...base.captions,telegram:'Утро (правка)'}});
   assert.equal(edited.approval.approved,false);assert.equal(edited.approval.stale,true,'изменение текста снимает одобрение');
@@ -223,4 +223,27 @@ test('импорт пакета schemaVersion 1 (синтетический па
   // правка подписи снимает одобрение, хеш при неизменных ссылках сохраняется
   const edited=f.api.update(ok.id,'alvi',{revision:ok.revision,captions:{...ok.captions,tiktok:'Правка'}});
   assert.equal(edited.approval.approved,false);assert.equal(edited.mediaSha256,pkg.items[0].media.sha256);
+});
+
+test('одобрение переживает технические переходы (план), а отзыв останавливает ещё не начатую отправку: approve→schedule→revoke→drain = 0 отправок; отзыв между каналами прерывает остальные',async t=>{
+  const f=fixture(t);let clock=Date.parse('2026-09-15T00:00:00Z');const advance=ms=>{clock+=ms;f.advance(ms);};
+  const make=()=>f.api.create('alvi',{title:'Д1',text:'Утро',mediaUrls:['https://cdn.example.test/d1.mp4'],platformIds:['telegram','vk'],dayKey:'D1',captions:{telegram:'ТГ',vk:'ВК'},
+    scheduledAt:new Date(clock+60000).toISOString(),timezone:'Asia/Irkutsk',profileRevision:f.information.get('alvi').revision},7);
+  let card=make();
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true},{userId:1,userName:'Влад'});
+  const planned=await f.api.schedule(card.id,'alvi',{revision:card.revision});
+  assert.equal(planned.status,'scheduled');assert.equal(planned.approval.approved,true,'постановка в план не снимает одобрение');assert.equal(planned.contentRevision,card.contentRevision);
+  const revoked=f.api.approve(planned.id,'alvi',{revision:planned.revision,approved:false},{userId:1});
+  assert.equal(revoked.approval.approved,false);assert.equal(revoked.status,'draft');assert.equal(revoked.lastErrorCode,'APPROVAL_REVOKED');assert.ok(revoked.deliveries.every(d=>d.status==='cancelled'));
+  advance(60000);await f.api.drain();await f.api.drain();assert.equal(f.calls.length,0,'отозванное не уходит');
+  // прямая порча: одобрение снято в базе после планирования (например, из другого процесса) — обработчик проверяет перед захватом
+  let again=make();again=f.api.approve(again.id,'alvi',{revision:again.revision,approved:true},{userId:1});again=await f.api.schedule(again.id,'alvi',{revision:again.revision});
+  f.db.prepare('UPDATE autoposting_posts SET approved_revision=NULL WHERE id=?').run(again.id);
+  advance(60000);await f.api.drain();assert.equal(f.calls.length,0);assert.equal(f.api.get(again.id,'alvi').status,'needs_review');assert.equal(f.api.get(again.id,'alvi').lastErrorCode,'APPROVAL_REVOKED');
+  // отзыв между каналами: первый канал отправлен, второй — нет
+  let third=make();third=f.api.approve(third.id,'alvi',{revision:third.revision,approved:true},{userId:1});third=await f.api.schedule(third.id,'alvi',{revision:third.revision});
+  f.setSend(async input=>{f.db.prepare('UPDATE autoposting_posts SET approved_revision=NULL WHERE id=?').run(third.id);return {externalId:'first-'+input.channelId,url:'https://example.test/p'};});
+  advance(60000);await f.api.drain();await f.api.drain();
+  assert.equal(f.calls.length,1,'после отзыва второй канал не отправлен');assert.equal(f.calls[0].post.text,'ТГ','подпись площадки заменяет общий текст');
+  const result=f.api.get(third.id,'alvi');assert.equal(result.status,'needs_review');assert.deepEqual(result.deliveries.map(d=>d.status).sort(),['cancelled','published']);
 });

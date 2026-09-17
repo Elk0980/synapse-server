@@ -90,8 +90,9 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
     return { text, provider: provider.name, model: shortText(data?.model || provider.model, 100) };
   }
   /* Пробует доступных провайдеров по порядку; исчерпание всех — не ошибка задания, а ожидание. */
-  async function reply(payload) {
+  async function reply(payload, { beforeAttempt = null } = {}) {
     for (const provider of available()) {
+      if (beforeAttempt) beforeAttempt(provider);
       const result = await callProvider(provider, payload);
       if (result) return result;
     }
@@ -113,6 +114,8 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
         live: Boolean(r.last_success_at) };
     }) };
   }
-  return { providers: providers.map((p) => ({ name: p.name, model: p.model })), issues, available, reply, status, ackDue, markAck, ACK_TEXT };
+  // Аренда серверного подхвата: сумма таймаутов провайдеров плюс запас — чтобы она не истекла посреди последовательных попыток.
+  const leaseMs = () => providers.reduce((total, p) => total + p.timeoutMs, 0) + 30000;
+  return { providers: providers.map((p) => ({ name: p.name, model: p.model })), issues, available, reply, status, ackDue, markAck, leaseMs, ACK_TEXT };
 }
 module.exports = { createHughFallback, readProviders, ACK_TEXT };

@@ -797,7 +797,9 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       db.prepare(`UPDATE project_chat_ai_jobs SET status='pending',attempts=0,error='',next_attempt_at=?
         WHERE status='blocked' AND reply_message_id IS NULL AND next_attempt_at<=?${serverScope}`).run(stamp(), stamp(), ...localCodes);
       const takeover = localTakeoverCodes();
-      const takeoverScope = takeover.length ? ` OR (company_code IN (${takeover.map(() => '?').join(',')}) AND status IN ('pending','error','blocked')
+      // Подхват локальных компаний: свободные задания и зависшие после сбоя сервера (running с истёкшей серверной арендой).
+      const takeoverScope = takeover.length ? ` OR (company_code IN (${takeover.map(() => '?').join(',')})
+        AND (status IN ('pending','error','blocked') OR (status='running' AND boot_id='server'))
         AND (lease_expires_at IS NULL OR lease_expires_at<?))` : '';
       const jobs = db.prepare(`SELECT * FROM project_chat_ai_jobs WHERE reply_message_id IS NULL AND attempts<? AND next_attempt_at<=?
         AND ((status IN ('pending','error')${serverScope})${takeoverScope}) ORDER BY id LIMIT 5`)
@@ -816,9 +818,10 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
         }
         if (isTakeover) {
           // Аренда сервера на время резервного ответа: локальный обработчик это задание не возьмёт.
+          // Срок покрывает таймауты всех провайдеров и продлевается перед каждым обращением.
           const taken = db.prepare(`UPDATE project_chat_ai_jobs SET status='running',attempts=attempts+1,payload=?,lease_token='server-fallback',
             lease_expires_at=?,boot_id='server' WHERE id=? AND reply_message_id IS NULL AND (lease_expires_at IS NULL OR lease_expires_at<?)`)
-            .run(payload, new Date(Date.now() + 120000).toISOString(), job.id, stamp());
+            .run(payload, new Date(Date.now() + fallback.leaseMs()).toISOString(), job.id, stamp());
           if (!taken.changes) continue;
         } else {
           db.prepare(`UPDATE project_chat_ai_jobs SET status='running',attempts=attempts+1,payload=? WHERE id=?`).run(payload, job.id);
@@ -835,10 +838,17 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
             }
           }
           if (!answer && fallback.available().length) {
-            try { answer = await fallback.reply(payload); }
-            catch (error) { if (!error.allUnavailable) throw error; primaryError = primaryError || error; }
+            const renew = isTakeover ? () => db.prepare(`UPDATE project_chat_ai_jobs SET lease_expires_at=? WHERE id=? AND lease_token='server-fallback' AND reply_message_id IS NULL`)
+              .run(new Date(Date.now() + fallback.leaseMs()).toISOString(), job.id) : null;
+            try { answer = await fallback.reply(payload, { beforeAttempt: renew }); }
+            catch (error) { if (!error.allUnavailable) throw error; primaryError = error; }
           }
-          if (!answer) throw primaryError || Object.assign(new Error('Резервные провайдеры недоступны: вопрос ждёт в очереди'), { allUnavailable: true, delay: 60 });
+          if (!answer) {
+            // Резерв настроен, но сейчас никто не ответил: вопрос ждёт устойчиво, попытки не сгорают.
+            if (fallback.providers.length) throw Object.assign(new Error(primaryError?.allUnavailable ? primaryError.message : 'Основной путь и резерв сейчас недоступны: вопрос ждёт в очереди'),
+              { allUnavailable: true, delay: primaryError?.delay || 60 });
+            throw primaryError || Object.assign(new Error('Резервные провайдеры не настроены'), { allUnavailable: true, delay: 60 });
+          }
           storeReply(job, answer);
         } catch (error) {
           const message = shortText(error.message || 'ИИ недоступен', 200);
@@ -855,7 +865,9 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
             db.prepare(`UPDATE project_chat_ai_jobs SET status='blocked',attempts=?,error=?,next_attempt_at=?,lease_token=NULL,lease_expires_at=NULL
               WHERE id=? AND reply_message_id IS NULL`).run(job.attempts, message, until, job.id);
             if (error.limited) holdJobs(message, delay);
-            if (!runtimeUsable && !fallback.available().length) { acknowledgePending(serverScope, localCodes); break; }
+            // Ни один путь не ответил и резерв весь на паузе: честно подтверждаем приём (не чаще раза в 30 минут на компанию).
+            if (error.allUnavailable && !fallback.available().length) { acknowledgePending(serverScope, localCodes); if (!runtimeUsable) break; }
+            else if (!runtimeUsable && !fallback.available().length) { acknowledgePending(serverScope, localCodes); break; }
             continue;
           }
           db.prepare(`UPDATE project_chat_ai_jobs SET status='error',error=?,next_attempt_at=?,lease_token=NULL,lease_expires_at=NULL WHERE id=? AND reply_message_id IS NULL`)
@@ -869,6 +881,9 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     // Прерванное задание возвращается в очередь: ответ не задвоится — вставка и отметка done в одной транзакции.
     // Задания local companies живут по аренде и при перезапуске сервера не трогаются.
     db.prepare(`UPDATE project_chat_ai_jobs SET status='pending' WHERE status='running' AND reply_message_id IS NULL${serverScope}`).run(...localCodes);
+    // Задания локальных компаний, которые сервер вёл резервом в момент сбоя, возвращаются в очередь без второго ответа.
+    db.prepare(`UPDATE project_chat_ai_jobs SET status='pending',lease_token=NULL,lease_expires_at=NULL,boot_id=NULL WHERE status='running' AND boot_id='server' AND reply_message_id IS NULL`).run();
+    db.prepare(`UPDATE project_chat_ai_jobs SET status='done' WHERE status='running' AND boot_id='server' AND reply_message_id IS NOT NULL`).run();
     db.prepare(`UPDATE project_chat_ai_jobs SET status='done' WHERE status='running' AND reply_message_id IS NOT NULL${serverScope}`).run(...localCodes);
     timer = setInterval(() => { void processAIJobs().catch(() => {}); }, 3000); timer.unref();
   }
