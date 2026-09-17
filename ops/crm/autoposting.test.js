@@ -153,3 +153,44 @@ test('provider preflight callback rejects cancellation or canonical edits before
   });await f.schedule(p);f.advance(60000);await f.api.drain();assert.notEqual(f.api.get(p.id,'alvi').status,'published');
  }
 });
+
+test('очередь контента: карточка дня с подписями пяти площадок, версия и одобрение именно этой версии; правка снимает одобрение; неготовое не одобряется и не планируется',async t=>{
+  const f=fixture(t);
+  const base={title:'Д1 — Атмосфера утра',text:'Утро',mediaUrls:[],platformIds:['telegram'],dayKey:'D1',origin:'gemini-video',
+    captions:{instagram:'Утро в Таиланде',tiktok:'Утро',youtube_shorts:'Утро на побережье',vk:'Утро в Таиланде.',telegram:'Утро'},
+    scheduledAt:new Date(Date.parse('2026-09-15T00:00:00Z')+3600000).toISOString(),timezone:'Asia/Irkutsk',profileRevision:f.information.get('alvi').revision};
+  const card=f.api.create('alvi',base,7);
+  assert.equal(card.dayKey,'D1');assert.equal(card.approval.approved,false);assert.equal(card.readiness.ready,false);assert.match(card.readiness.issues[0],/Нет материала/);
+  await assert.rejects(f.api.schedule(card.id,'alvi',{revision:card.revision}),e=>e.details.code==='APPROVAL_REQUIRED','неготовое и неодобренное не планируется');
+  assert.throws(()=>f.api.approve(card.id,'alvi',{revision:card.revision,approved:true},{userId:1,userName:'Влад'}),e=>e.details.code==='NOT_READY');
+  const withVideo=f.api.update(card.id,'alvi',{revision:card.revision,mediaUrls:['https://cdn.example.test/d1.mp4']});
+  assert.equal(withVideo.readiness.ready,true);assert.equal(withVideo.readiness.mediaKind,'video');
+  await assert.rejects(f.api.schedule(withVideo.id,'alvi',{revision:withVideo.revision}),e=>e.details.code==='APPROVAL_REQUIRED');
+  assert.throws(()=>f.api.approve(withVideo.id,'avokado',{revision:withVideo.revision,approved:true}),e=>e.status===404,'чужая компания не одобряет');
+  assert.throws(()=>f.api.approve(withVideo.id,'alvi',{revision:withVideo.revision-1,approved:true}),e=>e.details.code==='REVISION_CONFLICT');
+  const approved=f.api.approve(withVideo.id,'alvi',{revision:withVideo.revision,approved:true},{userId:1,userName:'Влад'});
+  assert.equal(approved.approval.approved,true);assert.equal(approved.approval.approvedRevision,withVideo.revision);assert.equal(approved.approval.approvedByName,'Влад');
+  assert.equal(approved.status,'draft','одобрение не планирует и не публикует');await f.api.drain();assert.equal(f.calls.length,0);
+  const edited=f.api.update(approved.id,'alvi',{revision:approved.revision,captions:{...base.captions,telegram:'Утро (правка)'}});
+  assert.equal(edited.approval.approved,false);assert.equal(edited.approval.stale,true,'изменение текста снимает одобрение');
+  assert.throws(()=>f.api.update(edited.id,'alvi',{revision:edited.revision,captions:{telegram:'x'.repeat(1025)}}),e=>e.status===400);
+  assert.throws(()=>f.api.update(edited.id,'alvi',{revision:edited.revision,captions:{facebook:'нет'}}),e=>e.status===400);
+  assert.throws(()=>f.api.update(edited.id,'alvi',{revision:edited.revision,dayKey:'D9'}),e=>e.status===400);
+  const unapproved=f.api.approve(edited.id,'alvi',{revision:edited.revision,approved:false});assert.equal(unapproved.approval.approvedRevision,null);
+  const again=f.api.approve(unapproved.id,'alvi',{revision:unapproved.revision,approved:true},{userId:1,userName:'Влад'});
+  const planned=await f.api.schedule(again.id,'alvi',{revision:again.revision});
+  assert.equal(planned.status,'scheduled','одобренная версия ставится в план; отправка — только по расписанию и только в подключённые каналы');
+  await f.api.drain();assert.equal(f.calls.length,0,'до времени публикации ничего не отправлено');
+});
+test('импорт пакета создаёт только черновики без одобрения, не выдумывает медиа и не дублирует карточки при повторе',async t=>{
+  const f=fixture(t);
+  const items=[{dayKey:'D1',title:'Д1',captions:{telegram:'Один'},mediaUrls:['https://cdn.example.test/d1.mp4']},{dayKey:'D2',title:'Д2',captions:{vk:'Два'}},{dayKey:'D3',title:'Д3',text:'Три'}];
+  const first=f.api.importPackage('alvi',{items},7);
+  assert.equal(first.created.length,3);assert.ok(first.created.every(c=>c.status==='draft'&&c.approval.approved===false&&c.origin==='import'));
+  assert.equal(first.created[0].readiness.ready,true);assert.equal(first.created[1].readiness.ready,false);
+  const repeat=f.api.importPackage('alvi',{items},7);assert.equal(repeat.created.length,0);assert.equal(repeat.skipped.length,3);
+  assert.equal(f.api.list('alvi').posts.length,3);assert.equal(f.api.list('avokado').posts.length,0);
+  assert.throws(()=>f.api.importPackage('alvi',{items:[{dayKey:'D1',captions:{}}]}),e=>e.status===400,'без названия');
+  assert.throws(()=>f.api.importPackage('alvi',{items:[{title:'x',mediaUrls:['ftp://bad']}]}),e=>e.status===400,'ссылка не HTTP(S)');
+  await f.api.drain();assert.equal(f.calls.length,0,'импорт ничего не публикует');
+});

@@ -473,6 +473,7 @@ async function proxyCrm(request, response, url, cors) {
     if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400,'Выберите компанию');
     if(identity.role!=='owner')requirePermission(request,readOnly?(crmPath.startsWith('/platform-demand')?'analytics.view':'crm.view'):'crm.edit',code);
   }
+  if (/^\/autoposting\/posts\/\d+\/approve$/.test(crmPath) && identity.role!=='owner') fail(403,'Одобрять публикации может только владелец');
   if (/^\/autoposting\/settings\/[^/]+\/profiles$/.test(crmPath) && identity.role!=='owner') {
     fail(403,'Профили общего аккаунта публикаций настраивает владелец');
   }

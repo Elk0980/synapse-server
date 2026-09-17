@@ -49,3 +49,17 @@
   .autoposting-channel { padding:14px; }
   .autoposting-actions > button { flex:1 1 180px; }
 }
+/* Очередь контента: видеопревью, подписи площадок, одобрение версии */
+.autoposting-video { display:block; width:100%; max-width:320px; max-height:420px; border-radius:8px; margin:8px 0; background:#000; }
+.autoposting-media-preview { list-style:none; padding:0; margin:6px 0; display:grid; gap:8px; }
+.autoposting-media-preview a { word-break:break-all; font-size:0.85rem; }
+.autoposting-captions textarea { width:100%; min-height:64px; }
+.autoposting-over { color:var(--red,#ff9c9c); }
+.autoposting-platform-previews { display:grid; gap:6px; margin:10px 0; }
+.autoposting-platform-previews pre { white-space:pre-wrap; overflow-wrap:anywhere; }
+.autoposting-approval { margin:10px 0; padding:10px; border:1px solid var(--line,#333); border-radius:10px; }
+.autoposting-queue-list { list-style:none; padding:0; margin:0; display:grid; gap:10px; }
+.autoposting-queue-card { display:grid; gap:4px; padding:10px; border:1px solid var(--line,#333); border-radius:10px; }
+.autoposting-queue-card[data-approved="yes"] { border-color:var(--accent,#7fd); }
+.autoposting-queue-card button { text-align:left; }
+@media (max-width:760px) { .autoposting-video { max-width:100%; } }
