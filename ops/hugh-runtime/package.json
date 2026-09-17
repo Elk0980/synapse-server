@@ -1,0 +1,21 @@
+{
+  "name": "synapse-hugh-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Приватный рантайм Hugh на подписке ChatGPT поверх закреплённого Codex app-server",
+  "license": "UNLICENSED",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test *.test.js"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "dependencies": {},
+  "codex": {
+    "pinnedVersion": "0.154.0",
+    "registry": "https://registry.npmjs.org/",
+    "integrity": "sha512-FV/x1OHXYv/ifjf3mXj9ThTTAWcUZN6cGIRQRhRxkKNOPuImu1WW0c8ev1vUkE9XGH90dEnYG1tBjIkxRikg0w=="
+  }
+}
