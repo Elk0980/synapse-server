@@ -1967,25 +1967,31 @@
     .callback-form__heading { margin-bottom: 18px; }
     .callback-form__heading h3 { margin: 0 0 5px; font: 500 clamp(21px, 3vw, 27px)/1.25 "Lora", Georgia, serif; }
     .callback-form__heading p { margin: 0; color: rgba(238,242,235,.76); }
-    .callback-form__fields { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end; }
+    .callback-form__fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: end; }
     .callback-form__fields label { display: grid; gap: 6px; font-size: 13px; }
     .callback-form input { box-sizing: border-box; width: 100%; min-width: 0; height: 48px; padding: 0 13px; border: 1px solid rgba(238,242,235,.38); border-radius: 10px; background: rgba(255,255,255,.08); color: #fff; font: 16px/1.2 "Lora", Georgia, serif; }
-    .callback-form input::placeholder { color: rgba(238,242,235,.56); }
-    .callback-form input:focus-visible { outline: 2px solid #d9c08a; outline-offset: 2px; }
-    .callback-form__fields button, .site-footer__callback { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-height: 48px; padding: 0 20px; border: 1px solid #d9c08a; border-radius: 10px; background: #d9c08a; color: #17251e; font: 600 14px/1.2 "Lora", Georgia, serif; }
-    .callback-form__fields button:disabled { opacity: .45; cursor: not-allowed; }
+    .callback-form__comment { display: grid; gap: 6px; margin-top: 14px; font-size: 13px; }
+    .callback-form textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 80px; padding: 12px 13px; border: 1px solid rgba(238,242,235,.38); border-radius: 10px; background: rgba(255,255,255,.08); color: #fff; font: 16px/1.5 "Lora", Georgia, serif; resize: vertical; }
+    .callback-form__comment[hidden] { display: none; }
+    .callback-form__comment-toggle { display: flex; gap: 9px; align-items: center; margin-top: 14px; font-size: 13px; cursor: pointer; }
+    .callback-form__comment-toggle input { flex: 0 0 18px; width: 18px; height: 18px; margin: 0; accent-color: #d9c08a; }
+    .callback-form input::placeholder, .callback-form textarea::placeholder { color: rgba(238,242,235,.56); }
+    .callback-form input:focus-visible, .callback-form textarea:focus-visible { outline: 2px solid #d9c08a; outline-offset: 2px; }
+    .callback-form__submit, .site-footer__callback { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-height: 48px; padding: 0 20px; border: 1px solid #d9c08a; border-radius: 10px; background: #d9c08a; color: #17251e; font: 600 14px/1.2 "Lora", Georgia, serif; }
+    .callback-form__submit { margin-top: 16px; }
+    .callback-form__submit:disabled { opacity: .45; cursor: not-allowed; }
     .callback-form__consent { display: flex; gap: 9px; align-items: flex-start; margin-top: 15px; font-size: 12px; line-height: 1.5; }
     .callback-form__consent input { flex: 0 0 18px; width: 18px; height: 18px; margin-top: 1px; accent-color: #d9c08a; }
     .callback-form a { color: #eef2eb; }
     .callback-form__status { min-height: 1.5em; margin: 10px 0 0; font-size: 14px; }
     .callback-form__status.is-error { color: #ffd0ca; }
-    .callback-form.is-success .callback-form__fields, .callback-form.is-success .callback-form__consent { display: none; }
+    .callback-form.is-success .callback-form__fields, .callback-form.is-success .callback-form__comment-toggle, .callback-form.is-success .callback-form__comment, .callback-form.is-success .callback-form__consent, .callback-form.is-success .callback-form__submit { display: none; }
     .callback-form.is-success .callback-form__status { font-size: 17px; color: #eef2eb; }
     .after-hero .site-footer__callback { align-self: flex-start; min-height: 40px; margin: 4px 0; padding: 0 15px; background: transparent; color: #e0e4dc; text-decoration: none; }
     @media (max-width: 600px) {
       .callback-form { width: 100%; margin-top: 24px; padding: 18px; }
       .callback-form__fields { grid-template-columns: minmax(0, 1fr); }
-      .callback-form__fields button { width: 100%; height: 48px; }
+      .callback-form__submit { width: 100%; height: 48px; }
     }
     .after-hero .synapse-strip { padding: 0 clamp(20px, 5vw, 64px) 20px; background: var(--bg2); color: #adb5a9; font: 12px/1.6 "Lora", Georgia, serif; letter-spacing: normal; text-align: center; }
     .after-hero .synapse-strip a { color: inherit; text-decoration: none; }
@@ -3084,9 +3090,11 @@
           <div class="callback-form__fields">
             <label>Имя<input name="name" autocomplete="name" required maxlength="80" placeholder="Ваше имя"></label>
             <label>Телефон<input name="phone" type="tel" autocomplete="tel" inputmode="tel" required placeholder="+7 999 123-45-67" aria-describedby="callback-phone-error"></label>
-            <button type="submit" disabled>Перезвоните мне</button>
           </div>
+          <label class="callback-form__comment-toggle"><input name="addComment" type="checkbox" aria-controls="callback-comment-field" aria-expanded="false"> <span>Добавить комментарий</span></label>
+          <label class="callback-form__comment" id="callback-comment-field" hidden>Комментарий — необязательно<textarea name="comment" rows="2" maxlength="1000" placeholder="Какая программа вас интересует или когда удобно перезвонить" aria-describedby="callback-phone-error" disabled></textarea></label>
           <label class="callback-form__consent"><input name="consent" type="checkbox" required> <span>Я согласен(на) на <a href="politika.html" target="_blank">обработку персональных данных</a></span></label>
+          <button class="callback-form__submit" type="submit" disabled>Перезвоните мне</button>
           <p class="callback-form__status" id="callback-phone-error" role="status" aria-live="polite"></p>
         </form>
       </div>
@@ -3154,7 +3162,7 @@
     <div class="synapse-strip">сайт работает на <a href="https://synapsebusiness.ru" target="_blank" rel="noopener">Synapse Business</a></div>
   </main>
   <div class="cookie-notice" role="dialog" aria-label="Уведомление о cookie"><span>Сайт использует cookie для корректной работы.</span><button type="button">Хорошо</button></div>
-  <script src="callback.js?v=20260915-confirmed" defer></script>
+  <script src="callback.js?v=20260917-comment" defer></script>
 
   <script src="hero-idle.js?v=20260915-play-recovery"></script>
   <script>

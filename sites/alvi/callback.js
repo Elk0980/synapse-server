@@ -5,6 +5,9 @@
   if (!form) return;
   const name = form.elements.name;
   const phone = form.elements.phone;
+  const comment = form.elements.comment;
+  const addComment = form.elements.addComment;
+  const commentField = form.querySelector('.callback-form__comment');
   const consent = form.elements.consent;
   const submit = form.querySelector('[type="submit"]');
   const status = form.querySelector('.callback-form__status');
@@ -16,10 +19,16 @@
   };
   const update = () => {
     submit.disabled = pending || completed || !consent.checked || !name.value.trim() || !validPhone(phone.value);
-    for (const field of [name, phone, consent]) field.disabled = pending;
+    for (const field of [name, phone, addComment, consent].filter(Boolean)) field.disabled = pending;
+    if (comment) comment.disabled = pending || Boolean(addComment && !addComment.checked);
+    if (commentField && addComment) {
+      commentField.hidden = !addComment.checked;
+      addComment.setAttribute('aria-expanded', String(addComment.checked));
+    }
   };
 
   form.addEventListener('input', update);
+  addComment?.addEventListener('change', () => {update();if(addComment.checked)comment?.focus();});
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (pending || completed) return;
@@ -38,6 +47,13 @@
       return;
     }
     phone.removeAttribute('aria-invalid');
+    const commentText = !addComment || addComment.checked ? String(comment?.value || '').trim() : '';
+    if (commentText.length > 1000) {
+      status.textContent = 'Сократите комментарий до 1000 символов.';
+      status.classList.add('is-error');
+      comment.focus();
+      return;
+    }
     pending = true;
     update();
     form.setAttribute('aria-busy', 'true');
@@ -47,7 +63,7 @@
       name: name.value.trim(), contact: phone.value.trim(), companyCode: 'alvi',
       channel: 'Обратный звонок', source: query.get('utm_source') || 'Сайт ALVI',
       tag: 'callback', page: location.pathname, landingPage: location.href,
-      referrer: document.referrer || undefined, comment: 'Просьба перезвонить клиенту'
+      referrer: document.referrer || undefined, comment: commentText || 'Просьба перезвонить клиенту'
     };
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
