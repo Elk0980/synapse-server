@@ -63,6 +63,7 @@ services:
       CRM_API_KEY: ${CRM_API_KEY}
       MODEL_API_URL: ${MODEL_API_URL:-}
       MODEL_API_KEY: ${MODEL_API_KEY:-}
+      PROJECT_CONTENT_URL: http://content:8080
     expose:
       - "8080"
     volumes:
@@ -84,11 +85,46 @@ services:
       CRM_API_KEY: ${CRM_API_KEY}
       CHAT_URL: http://chat:8080
       CHAT_API_KEY: ${CHAT_API_KEY}
+      HUGH_RUNTIME_URL: http://hugh-runtime:8080
       ALLOWED_ORIGINS: ${CONTENT_ALLOWED_ORIGINS:-}
     expose:
       - "8080"
     volumes:
       - content_data:/data
+
+  # Приватный рантайм Hugh на подписке ChatGPT. Порта на хосте нет, репозиторий не смонтирован,
+  # корневая файловая система только для чтения, /data — единственный записываемый том.
+  # CHAT_API_KEY нужен только родительскому процессу Node: дочерний Codex окружение не наследует.
+  hugh-runtime:
+    build:
+      context: ./ops/hugh-runtime
+    restart: always
+    environment:
+      PORT: "8080"
+      CHAT_API_KEY: ${CHAT_API_KEY}
+      DATABASE_PATH: /data/state/hugh-runtime.sqlite
+      CODEX_HOME: /data/codex
+      HUGH_WORKSPACE: /workspace
+      HUGH_CODEX_BINARY: /usr/local/bin/codex
+      # Каталог моделей и доказательство изоляции создаются при сборке образа
+      # и лежат в неизменяемом /app/build — переопределять их не нужно.
+      HUGH_MODEL: ${HUGH_MODEL:-}
+      HUGH_JOB_TIMEOUT_MS: ${HUGH_JOB_TIMEOUT_MS:-120000}
+      HUGH_JOB_RETENTION_HOURS: ${HUGH_JOB_RETENTION_HOURS:-72}
+      HUGH_INTERRUPT_GRACE_MS: ${HUGH_INTERRUPT_GRACE_MS:-15000}
+      HOME: /tmp
+    expose:
+      - "8080"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=64m
+    volumes:
+      - hugh_runtime_data:/data
+      - hugh_runtime_workspace:/workspace:ro
 
 volumes:
   caddy_data:
@@ -96,3 +132,5 @@ volumes:
   crm_data:
   chat_data:
   content_data:
+  hugh_runtime_data:
+  hugh_runtime_workspace:

@@ -6,6 +6,14 @@
   let controller;
   let conversation;
   let sending = false;
+  // The shared project chat can replace this panel at any moment. Every load and send
+  // carries the generation it started in, so a late answer never writes into a gone view.
+  let generation = 0;
+  const outdated = (run) => run !== generation || !context;
+  const panelNode = (id) => {
+    const node = context?.byId(id);
+    return node && node.isConnected ? node : null;
+  };
 
   const storageKey = (project) => [
     "synapse_hugh_conversation",
@@ -85,13 +93,15 @@
     </div>`;
 
   const showMessages = (messages) => {
-    const list = context.byId("hugh-messages");
+    const list = panelNode("hugh-messages");
+    if (!list) return;
     list.innerHTML = `<ul>${messagesHTML(messages)}</ul>`;
     list.scrollTop = list.scrollHeight;
   };
 
   const showError = (message, retry) => {
-    const list = context.byId("hugh-messages");
+    const list = panelNode("hugh-messages");
+    if (!list) return;
     list.innerHTML = `<div class="hugh-error" role="alert">
       <p>${context.escapeHTML(message)}</p><button type="button">Повторить</button>
     </div>`;
@@ -109,36 +119,43 @@
   };
 
   const load = async (newContext) => {
+    const run = ++generation;
     context = newContext;
     const project = context.selectedProjectId;
     controller?.abort();
     controller = new AbortController();
     conversation = null;
     const panel = context.byId("hugh-view");
+    if (!panel) return;
     panel.innerHTML = shellHTML();
-    context.byId("hugh-messages").textContent = "Загрузка…";
-    context.byId("hugh-form").addEventListener("submit", send);
+    const messagesNode = panelNode("hugh-messages");
+    if (messagesNode) messagesNode.textContent = "Загрузка…";
+    panelNode("hugh-form")?.addEventListener("submit", send);
     try {
       let saved = savedConversation(project);
       if (!saved?.id || !saved?.token) saved = await createConversation(project, controller.signal);
+      if (outdated(run)) return;
       const result = await request(`/conversations/${encodeURIComponent(saved.id)}`, {
         signal: controller.signal
       });
+      if (outdated(run)) return;
       const messages = Array.isArray(result.messages) ? result.messages : [];
       if (saved.reply && !messages.length) messages.push({ role: "assistant", text: saved.reply });
       conversation = { ...saved, messages };
       showMessages(conversation.messages);
     } catch (error) {
-      if (error.name !== "AbortError") showError(`Не удалось загрузить: ${error.message}`, () => load(context));
+      if (outdated(run) || error.name === "AbortError") return;
+      showError(`Не удалось загрузить: ${error.message}`, () => load(context));
     }
   };
 
   const send = async (event) => {
     event.preventDefault();
+    const run = generation;
     const form = event.currentTarget;
     const button = form.querySelector("button");
-    const input = context.byId("hugh-input");
-    const text = input.value.trim();
+    const input = panelNode("hugh-input");
+    const text = input ? input.value.trim() : "";
     if (!text || sending || !conversation) return;
     sending = true;
     input.disabled = true;
@@ -148,18 +165,23 @@
         ...unsafeOptions("POST", { text }, conversation.token),
         signal: controller.signal
       });
+      if (outdated(run) || !conversation) return;
       conversation.messages.push({ role: "owner", text }, { role: "assistant", text: result.reply });
       input.value = "";
       showMessages(conversation.messages);
     } catch (error) {
-      if (error.name !== "AbortError") showError(error.message, () => load(context));
+      if (outdated(run) || error.name === "AbortError") return;
+      showError(error.message, () => load(context));
     } finally {
       sending = false;
       input.disabled = false;
       button.disabled = false;
-      input.focus();
+      if (!outdated(run) && input.isConnected) input.focus();
     }
   };
 
-  cabinet.registerView("hugh", { title: "Хью", render: (_, ctx) => load(ctx), onProjectChange: load });
+  cabinet.privateHugh = {
+    render: load,
+    stop() { generation += 1; controller?.abort(); conversation = null; }
+  };
 })();
