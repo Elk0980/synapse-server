@@ -2,6 +2,8 @@ name: project-chat-check
 
 # Проверка общего чата Хью: тесты сервисов и кабинета, сборка приватного рантайма
 # вместе с настоящим доказательством изоляции инструментов, разбор docker compose.
+# Образ собирается дважды: из обычного контекста и из контекста с правами umask 077,
+# как его оставляет автовыкладка на сервере.
 #
 # Никакого развёртывания, никаких обращений к подписке и внешним моделям.
 # В сборке используется локальный mock-провайдер на loopback и тестовый ключ,
@@ -14,6 +16,8 @@ on:
       - 'ops/content/**'
       - 'ops/dev/**'
       - 'ops/hugh-runtime/**'
+      - 'ops/synapse-sync'
+      - 'ops/synapse-sync.test.js'
       - 'sites/synapse/cabinet/**'
       - 'sites/synapse/cabinet.html'
       - 'docker-compose.yml'
@@ -24,6 +28,8 @@ on:
       - 'ops/content/**'
       - 'ops/dev/**'
       - 'ops/hugh-runtime/**'
+      - 'ops/synapse-sync'
+      - 'ops/synapse-sync.test.js'
       - 'sites/synapse/cabinet/**'
       - 'sites/synapse/cabinet.html'
       - 'docker-compose.yml'
@@ -39,7 +45,8 @@ concurrency:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    # Две сборки образа: обычная и из контекста с правами umask 077.
+    timeout-minutes: 50
     steps:
       - name: Получить исходники
         uses: actions/checkout@v4
@@ -89,6 +96,11 @@ jobs:
         timeout-minutes: 5
         run: node --test ops/dev/project-chat-preview.test.cjs
 
+      # Заглушки git и docker в PATH: ни сети, ни контейнеров, ни развёртывания.
+      - name: Тесты повтора автовыкладки
+        timeout-minutes: 5
+        run: node --test ops/synapse-sync.test.js
+
       # Сборка образа сама собирает доверенный каталог моделей из встроенного набора
       # закреплённого бинаря и прогоняет проверку изоляции с локальным mock-провайдером.
       # Непройденная проверка останавливает сборку — значит, и эту задачу.
@@ -96,17 +108,51 @@ jobs:
         timeout-minutes: 20
         run: docker build --progress=plain --tag hugh-runtime:check ops/hugh-runtime
 
-      - name: Убедиться, что доказательство попало в образ
-        timeout-minutes: 3
+      # Воспроизведение продовой поломки: автовыкладка раскладывала рабочую копию под
+      # umask 077, COPY уносил права 0600/0700 в образ, и сборка падала после USER hugh
+      # на «Cannot read package config /app/package.json». Контекст с такими же правами
+      # обязан собираться и давать то же доказательство.
+      - name: Собрать образ из контекста с правами umask 077
+        timeout-minutes: 20
         run: |
           set -euo pipefail
-          docker run --rm --entrypoint node hugh-runtime:check -e "const p = require('/app/build/tool-isolation-proof.json'); const c = require('/app/build/restricted-models.json'); if (p.observedTools.length !== 0) throw new Error('tools не пуст'); if (p.injectedToolCallsExecuted !== false) throw new Error('инъекция выполнилась'); if (p.canaryIntact !== true) throw new Error('канарейка повреждена'); if (c.models.length !== 1) throw new Error('в каталоге не одна модель'); console.log('proof ok', p.codexVersion, c.models[0].slug, p.fingerprint);"
+          context="$RUNNER_TEMP/restrictive-context"
+          rm -rf "$context"
+          mkdir -p "$context"
+          cp -a ops/hugh-runtime/. "$context/"
+          find "$context" -type d -exec chmod 0700 {} +
+          find "$context" -type f -exec chmod 0600 {} +
+          test "$(stat -c '%a' "$context/package.json")" = 600
+          docker build --progress=plain --tag hugh-runtime:restrictive "$context"
+
+      - name: Убедиться, что доказательство попало в оба образа
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          for image in hugh-runtime:check hugh-runtime:restrictive; do
+            echo "== $image"
+            docker run --rm --entrypoint node "$image" -e "const p = require('/app/build/tool-isolation-proof.json'); const c = require('/app/build/restricted-models.json'); if (p.observedTools.length !== 0) throw new Error('tools не пуст'); if (p.injectedToolCallsExecuted !== false) throw new Error('инъекция выполнилась'); if (p.canaryIntact !== true) throw new Error('канарейка повреждена'); if (c.models.length !== 1) throw new Error('в каталоге не одна модель'); console.log('proof ok', p.codexVersion, c.models[0].slug, p.fingerprint);"
+          done
 
       - name: Убедиться, что доказательство неизменяемо для рабочего пользователя
-        timeout-minutes: 3
+        timeout-minutes: 5
         run: |
           set -euo pipefail
-          docker run --rm --entrypoint node hugh-runtime:check -e "const fs = require('fs'); let blocked = false; try { fs.writeFileSync('/app/build/tool-isolation-proof.json', 'x'); } catch (error) { blocked = true; console.log('неизменяемо:', error.code); } if (!blocked) throw new Error('доказательство перезаписывается рабочим пользователем');"
+          for image in hugh-runtime:check hugh-runtime:restrictive; do
+            echo "== $image"
+            docker run --rm --entrypoint node "$image" -e "const fs = require('fs'); let blocked = false; try { fs.writeFileSync('/app/build/tool-isolation-proof.json', 'x'); } catch (error) { blocked = true; console.log('неизменяемо:', error.code); } if (!blocked) throw new Error('доказательство перезаписывается рабочим пользователем');"
+          done
+
+      # Права приложения проверяются от имени рабочего пользователя: читать можно,
+      # писать нельзя, владельцем остаётся root.
+      - name: Убедиться, что рабочий пользователь читает /app и не может его изменить
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          for image in hugh-runtime:check hugh-runtime:restrictive; do
+            echo "== $image"
+            docker run --rm --entrypoint node "$image" -e "const fs = require('fs'); const files = ['/app/package.json', '/app/server.js', '/app/runtime.js', '/app/model-catalog.js', '/app/test-support/build-restricted-catalog.js']; for (const file of files) { fs.accessSync(file, fs.constants.R_OK); const mode = fs.statSync(file).mode & 0o777; if (mode !== 0o644) throw new Error(file + ' имеет права ' + mode.toString(8)); } for (const dir of ['/app', '/app/test-support']) { fs.readdirSync(dir); const stat = fs.statSync(dir); if ((stat.mode & 0o777) !== 0o755) throw new Error(dir + ' имеет права ' + (stat.mode & 0o777).toString(8)); if (stat.uid !== 0) throw new Error(dir + ' больше не принадлежит root'); } let blocked = false; try { fs.writeFileSync('/app/package.json', 'x'); } catch (error) { blocked = true; } if (!blocked) throw new Error('рабочий пользователь может переписать /app/package.json'); console.log('app permissions ok');"
+          done
 
       # Только разбор файла: ничего не запускается и не публикуется.
       - name: Разобрать docker compose
