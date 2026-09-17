@@ -715,7 +715,7 @@ body>#cta{z-index:65}
 <link rel="stylesheet" href="results-gallery.css?v=20260915-framed">
 <link rel="stylesheet" href="music-player.css?v=20260915">
 <link rel="stylesheet" href="price-overlay.css?v=20260915">
-<link rel="stylesheet" href="callback.css?v=20260915-callback">
+<link rel="stylesheet" href="callback.css?v=20260917-comment">
 <link rel="stylesheet" href="mobile-foundation.css?v=20260916-story-type">
 <link rel="stylesheet" href="mobile-method.css?v=20260915-desktop-fit">
 <link rel="stylesheet" href="method-flow-motion.css?v=20260915-scroll">
@@ -903,7 +903,8 @@ body>#cta{z-index:65}
       <fieldset>
         <label for="callback-name">Ваше имя<input id="callback-name" name="name" type="text" autocomplete="name" maxlength="80" required></label>
         <label for="callback-contact">Телефон<input id="callback-contact" name="contact" type="tel" inputmode="tel" autocomplete="tel" maxlength="32" required></label>
-        <label class="av-callback-wide" for="callback-comment">Комментарий · необязательно<textarea id="callback-comment" name="comment" rows="3" maxlength="1000"></textarea></label>
+        <label class="av-callback-comment-toggle av-callback-wide"><input name="addComment" type="checkbox" aria-controls="callback-comment-field" aria-expanded="false"><span>Добавить комментарий</span></label>
+        <label class="av-callback-comment av-callback-wide" id="callback-comment-field" for="callback-comment" hidden>Комментарий · необязательно<textarea id="callback-comment" name="comment" rows="2" maxlength="1000" disabled></textarea></label>
         <label class="av-callback-consent av-callback-wide" for="callback-consent"><input id="callback-consent" name="consent" type="checkbox" required><span>Я даю <a href="consent.html" target="_blank" rel="noopener">согласие на обработку персональных данных</a> и ознакомлен(а) с <a href="privacy.html" target="_blank" rel="noopener">политикой конфиденциальности</a>.</span></label>
       </fieldset>
       <button type="submit">Заказать обратный звонок</button>
@@ -1489,7 +1490,7 @@ addEventListener('scroll',updateScenes,{passive:true});addEventListener('resize'
 <script src="music-player.js?v=20260915"></script>
 <script src="subscription-promo.js?v=20260915-subscriptions"></script>
 <script src="price-overlay.js?v=20260915"></script>
-<script src="callback.js?v=20260915-callback"></script>
+<script src="callback.js?v=20260917-comment"></script>
 <script src="attribution.js?v=20260915-mobile"></script>
 <script src="https://synapse.synapsebusiness.ru/company-links.js?v=20260915-crm-links"></script>
 </body>

@@ -73,12 +73,28 @@
     const submit = form.querySelector('[type="submit"]');
     const fieldset = form.querySelector('fieldset');
     const status = form.querySelector('[data-callback-status]');
+    const addComment = controls.namedItem('addComment');
+    const comment = controls.namedItem('comment');
+    const commentField = addComment ? form.querySelector('.av-callback-comment') : null;
     let pending = false;
+    function updateComment() {
+      if (!addComment) return;
+      comment.disabled = pending || !addComment.checked;
+      if (commentField) commentField.hidden = !addComment.checked;
+      addComment.setAttribute('aria-expanded', String(addComment.checked));
+      if (!addComment.checked) comment.setCustomValidity('');
+    }
     function message(text, state) {
       status.textContent = text;
       status.dataset.state = state;
     }
     form.hidden = false;
+    updateComment();
+    addComment?.addEventListener('change', () => {
+      updateComment();
+      if (addComment.checked) comment.focus();
+    });
+    form.addEventListener('reset', () => Promise.resolve().then(updateComment));
     for (const name of ['name', 'contact', 'comment', 'consent']) {
       controls.namedItem(name).addEventListener('input', () => controls.namedItem(name).setCustomValidity(''));
     }
@@ -90,7 +106,7 @@
         let storage;
         try { storage = win.localStorage; } catch (_) {}
         body = payload({name: controls.namedItem('name').value, contact: controls.namedItem('contact').value,
-          comment: controls.namedItem('comment').value, consent: controls.namedItem('consent').checked}, win.location, storage);
+          comment: !addComment || addComment.checked ? comment.value : '', consent: controls.namedItem('consent').checked}, win.location, storage);
       } catch (error) {
         if (error.field) {
           controls.namedItem(error.field).setCustomValidity(error.message);
@@ -100,6 +116,7 @@
       }
       if (!form.reportValidity()) return;
       pending = true;
+      updateComment();
       fieldset.disabled = true;
       submit.disabled = true;
       submit.textContent = 'Отправляем…';
@@ -118,6 +135,7 @@
       } finally {
         pending = false;
         fieldset.disabled = false;
+        updateComment();
         submit.disabled = false;
         submit.textContent = 'Заказать обратный звонок';
         form.setAttribute('aria-busy', 'false');

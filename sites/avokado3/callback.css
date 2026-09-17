@@ -5,7 +5,10 @@
 .av-callback fieldset{min-width:0;margin:0;padding:0;border:0;display:grid;grid-template-columns:1fr 1fr;gap:18px}
 .av-callback label{display:flex;flex-direction:column;gap:7px;min-width:0;font:500 16px/1.5 'Manrope',sans-serif}
 .av-callback input:not([type="checkbox"]),.av-callback textarea{box-sizing:border-box;width:100%;min-width:0;min-height:48px;border:1px solid #778168;border-radius:10px;background:#0b140e;color:#f4efe4;padding:12px;font:400 16px/1.5 'Manrope',sans-serif}
-.av-callback textarea{min-height:110px;resize:vertical}
+.av-callback textarea{min-height:80px;resize:vertical}
+.av-callback .av-callback-comment[hidden]{display:none!important}
+.av-callback .av-callback-comment-toggle{display:grid;grid-template-columns:24px minmax(0,1fr);gap:12px;align-items:center;min-height:44px;cursor:pointer}
+.av-callback .av-callback-comment-toggle input{margin:0}
 .av-callback .av-callback-wide{grid-column:1/-1}
 .av-callback .av-callback-consent{display:grid;grid-template-columns:24px minmax(0,1fr);gap:12px;align-items:start;font-size:14px;line-height:1.6;min-height:48px;padding-block:4px;cursor:pointer}
 .av-callback input[type="checkbox"]{width:22px;height:22px;margin:3px 0 0;accent-color:#d8b981;cursor:pointer}
