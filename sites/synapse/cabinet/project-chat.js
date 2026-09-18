@@ -150,6 +150,13 @@
   const aiSummary = state => {
     const ai = aiInfo(state);
     const reserve = fallbackText(ai);
+    if (ai.mode === "trusted-agent" && (!ai.connected || ai.limited)) {
+      const reason = ai.offline || ai.runtimeState === "offline"
+        ? "Внешний исполнитель Хью сейчас не на связи."
+        : ai.limited ? "Ответы внешнего исполнителя Хью временно ограничены."
+        : "Внешний исполнитель Хью пока не готов отвечать.";
+      return `${reason}${reserve} Переписка, файлы и задачи проекта работают.${ai.queued ? ` Ожидают ответа: ${ai.queued}.` : ""}`;
+    }
     if (!ai.connected) {
       const reason = !ai.configured ? "Автоматические ответы Хью пока не подключены."
         : ai.runtimeState === "offline" ? "Компьютер Хью сейчас не на связи: вопросы к нему ждут его возвращения."
@@ -229,6 +236,9 @@
   };
   const aiNoteHTML = (message, ai) => {
     if (["pending", "queued", "running"].includes(message.aiStatus)) {
+      if (ai.mode === "trusted-agent" && (!ai.connected || ai.limited)) {
+        return '<small class="pc-muted">Вопрос сохранён. Ответ Хью ожидает готовности внешнего исполнителя.</small>';
+      }
       return !ai.connected ? (ai.runtimeState === "offline"
         ? '<small class="pc-muted">Ответ Хью появится, когда его компьютер снова будет на связи. Вопрос сохранён.</small>'
         : '<small class="pc-muted">Ответ Хью появится после подключения подписки.</small>')
@@ -253,7 +263,7 @@
     const data = state.data, root = state.root, history = q(state, "[data-pc-messages]");
     if (!history) return;
     const ai = aiInfo(state);
-    const signature = JSON.stringify([timeline(state), data.access?.canReply, ai.connected, ai.limited, ai.runtimeState]);
+    const signature = JSON.stringify([timeline(state), data.access?.canReply, ai.connected, ai.limited, ai.runtimeState, ai.mode]);
     if (signature !== state.messageSignature) {
       const follow = !state.messageSignature || history.scrollHeight - history.scrollTop - history.clientHeight < 100;
       const previous = history.scrollTop;

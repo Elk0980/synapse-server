@@ -830,6 +830,29 @@ test('внешний ИИ: готовность без фиктивного вх
   harness.w.close();
 });
 
+test('общая лента внешнего ИИ: ожидание без обещания входа в подписку и обновление при смене режима', async () => {
+  let ai = { configured: true, connected: false, runtimeState: 'unavailable', queued: 1, mode: 'isolated-codex' };
+  const harness = boot({ clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ ai, messages: [message({ aiStatus: 'pending' })] }) })
+  } });
+  await mount(harness);
+  assert.match(harness.d.querySelector('[data-pc-messages]').textContent, /после подключения подписки/);
+  // Меняется только режим: лента тоже обязана перерисоваться.
+  ai = { ...ai, mode: 'trusted-agent' };
+  await harness.clock.fire(5000);
+  await settle();
+  assert.match(text(harness.dom, '[data-pc-ai]'), /Внешний исполнитель Хью пока не готов отвечать/);
+  assert.match(text(harness.dom, '[data-pc-ai]'), /Ожидают ответа: 1/);
+  assert.match(harness.d.querySelector('[data-pc-messages]').textContent, /ожидает готовности внешнего исполнителя/);
+  assert.doesNotMatch(harness.d.body.textContent, /после подключения подписки/);
+  ai = { ...ai, limited: true, runtimeState: 'limited' };
+  await harness.clock.fire(5000);
+  await settle();
+  assert.match(text(harness.dom, '[data-pc-ai]'), /временно ограничены/);
+  assert.doesNotMatch(harness.d.body.textContent, /Хью готовит ответ/);
+  harness.w.close();
+});
+
 test('произвольная ссылка входа не предлагается вместо официальной страницы Codex', async () => {
   const harness = boot({
     routes: {
