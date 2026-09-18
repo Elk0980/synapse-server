@@ -14,6 +14,13 @@
 .social-runs li { margin:4px 0; overflow-wrap:anywhere; }
 .social-days td { white-space:normal; font-size:0.85rem; vertical-align:top; }
 .social-account { display:grid; gap:8px; }
+.social-posts td { vertical-align:top; }
+.social-posts .social-note { margin:4px 0 0; }
+.social-badge { display:inline-block; padding:2px 8px; border:1px solid var(--accent,#7fd); border-radius:999px; font-size:0.8rem; }
+.social-conflict { display:inline-block; padding:2px 8px; border:1px solid var(--red,#ff9c9c); border-radius:999px; font-size:0.8rem; }
+.social-ids { margin-top:6px; font-size:0.85rem; }
+.social-ids summary { color:var(--muted,#999); cursor:pointer; }
+.social-ids ul { padding-left:18px; margin:4px 0 0; overflow-wrap:anywhere; }
 @media (max-width:430px) {
   .social-toolbar { flex-direction:column; align-items:stretch; }
   .social-toolbar input, .social-toolbar button { width:100%; min-height:44px; }

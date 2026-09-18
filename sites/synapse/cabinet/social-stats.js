@@ -13,6 +13,12 @@
   const RUN = { ok: 'собрано', partial: 'собрано частично', missing_access: 'нет доступа', unsupported: 'не поддерживается', failed: 'ошибка сбора' };
   const KIND = { organic: 'органика', paid: 'реклама', mixed: 'смешано', unknown: 'не размечено' };
   const PROVIDER = { direct: 'прямой API', onlypult: 'Onlypult (временно)', manual: 'ручной ввод' };
+  /* Подписи источника записи в атрибуции: ручной ввод не называется сбором по API, подтверждение владельца — тем более. */
+  const POST_SOURCE = { direct: 'Прямой API площадки', onlypult: 'Onlypult (временно)', manual: 'Ручной ввод, не сбор по API' };
+  const CONFIDENCE = { utm: 'UTM-метка', url: 'URL поста' };
+  /* В интерфейс уходят только деловые http(s)-ссылки: адрес с иной схемой (javascript:, data:) или с пробелами и кавычками ссылкой не становится. */
+  const safeUrl = value => { const raw = String(value ?? '').trim(); return /^https?:\/\/[^\s<>"']+$/i.test(raw) ? raw : ''; };
+  const link = (url, text, extra = '') => { const href = safeUrl(url); return href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer"${extra}>${esc(text)}</a>` : esc(text); };
   const allowed = (ctx, write = false) => ctx.identity?.role === 'owner' || (!write && ctx.identity?.permissions?.includes('analytics.view'));
   const isoDay = (offset = 0) => { const d = new Date(Date.now() + offset * 86400000); return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d); };
   let requestId = 0;
@@ -21,7 +27,7 @@
   function render(container, ctx) {
     if (!allowed(ctx)) { container.replaceChildren(); return; }
     const owner = ctx.identity?.role === 'owner';
-    container.innerHTML = `<div class="content-header"><h1>Соцсети</h1><p>Ежедневные снимки по площадкам ТайСабай и связь с обращениями CRM. Данных нет — показываем «—», не ноль. Часовой пояс: Asia/Bangkok.</p></div>
+    container.innerHTML = `<div class="content-header"><h1>Соцсети</h1><p>Ежедневные снимки по площадкам выбранной компании и связь с обращениями CRM. Данных нет — показываем «—», не ноль. Часовой пояс: Asia/Bangkok.</p></div>
       <div class="card social-toolbar"><label>С <input type="date" id="social-from" value="${esc(state.from)}"></label><label>По <input type="date" id="social-to" value="${esc(state.to)}"></label>
         <button type="button" class="plain-button" id="social-refresh">Показать</button></div>
       <div id="social-content" aria-live="polite"><p>Загрузка…</p></div>
@@ -81,11 +87,46 @@
     return `<section class="social-aggregate card"><h2>Агрегат соцсетей</h2><dl class="social-metrics"><div><dt>Просмотры (сумма площадок)</dt><dd>${num(agg.views)}</dd></div><div><dt>Показы</dt><dd>${num(agg.impressions)}</dd></div><div><dt>Реакции</dt><dd>${num(agg.likes)}</dd></div><div><dt>Комментарии</dt><dd>${num(agg.comments)}</dd></div><div><dt>Репосты</dt><dd>${num(agg.shares)}</dd></div><div><dt>Уникальный охват</dt><dd>—</dd></div></dl><p class="social-note">${esc(agg.reachNote || '')}</p></section>
       <div class="social-grid">${cards}</div>
       <section class="card"><h2>По дням</h2>${dayRows ? `<div class="crm-table-wrap"><table class="crm-table crm-entity-table social-days"><thead><tr><th>День</th>${PLATFORMS.map(p => `<th>${esc(data.platforms[p].label)}</th>`).join('')}</tr></thead><tbody>${dayRows}</tbody></table></div>` : '<p>За выбранный период снимков нет.</p>'}</section>
-      <section class="card social-crm"><h2>Атрибуция CRM</h2><p class="social-note">${esc(crm.note || '')}</p>
-      ${crm.posts.length ? `<div class="crm-table-wrap"><table class="crm-table crm-entity-table"><thead><tr><th>Площадка</th><th>Пост</th><th>contentId</th><th>Обращения</th><th>Продажи</th><th>Выручка</th><th>Основание</th></tr></thead><tbody>${crm.posts.map(p => `<tr><td data-label="Площадка">${esc(p.platform)}</td><td data-label="Пост">${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener noreferrer">${esc(p.platformPostId)}</a>` : esc(p.platformPostId)}</td><td data-label="contentId">${esc(p.contentId || '—')}</td><td data-label="Обращения">${num(p.leads)}</td><td data-label="Продажи">${num(p.sales)}</td><td data-label="Выручка">${num(p.revenue)}</td><td data-label="Основание">${p.confidence === 'utm' ? 'UTM-метка' : p.confidence === 'url' ? 'URL поста' : 'неизвестно'}</td></tr>`).join('')}</tbody></table></div>` : '<p>Опубликованных постов с привязкой пока нет: атрибуция неизвестна.</p>'}
-      ${(crm.byContent || []).length ? `<h3>По контенту без однозначной площадки</h3><p class="social-note">Метка указывает на контент, но не на конкретный пост: считается один раз, ни одному посту не приписано.</p><ul>${crm.byContent.map(g => `<li>contentId ${esc(g.contentId || g.url)} (${g.platforms.map(esc).join(', ')}): обращений ${num(g.leads)}, продаж ${num(g.sales)}, выручка ${num(g.revenue)}</li>`).join('')}</ul>` : ''}
-      <h3>Обращения по источникам за период</h3>${crm.bySource.length ? `<ul>${crm.bySource.map(s => `<li>${esc(s.source)}: обращений ${num(s.leads)}, продаж ${num(s.sales)}, выручка ${num(s.revenue)}</li>`).join('')}</ul>` : '<p>Обращений за период нет.</p>'}</section>
+      ${crmMarkup(crm)}
       <section class="card"><h2>Журнал сборов</h2>${data.runs?.length ? `<ul class="social-runs">${data.runs.slice(0, 15).map(r => `<li>${esc(day(r.date))} · ${esc(data.platforms[r.platform]?.label || r.platform)} · ${esc(PROVIDER[r.provider] || r.provider)} · <strong>${esc(RUN[r.status] || r.status)}</strong> · строк ${num(r.rows)} · ${esc(stamp(r.finished_at || r.started_at))}${r.error ? ` · ${esc(r.error)}` : ''}${r.missing?.length ? ` · недостаёт: ${esc(r.missing.join('; '))}` : ''}</li>`).join('')}</ul>` : '<p>Сборов ещё не было.</p>'}</section>`;
+  }
+  /* Запись выхода: собранный пост (stored), собранный пост с подтверждением владельца (stored_with_receipt) или только подтверждение
+     (external_receipt). Подтверждение — ссылка и время выхода от владельца, поэтому провайдером сбора оно не подписывается, а ручной
+     ввод не выдаётся за API. Служебная ссылка receipt:<id> в основной поток не выносится: она видна в «Исходных идентификаторах». */
+  function originCell(post) {
+    if (post.provenance === 'external_receipt') return `<strong class="social-badge">Подтверждено вручную</strong><p class="social-note">Ссылка и время выхода записаны владельцем. Показателей площадки у такой записи нет, и подтверждение не подключает сбор просмотров.</p>`;
+    const provider = post.provider ? esc(POST_SOURCE[post.provider] || post.provider) : post.sources > 1 ? 'Источники с разными провайдерами' : '—';
+    return `${provider}${post.provenance === 'stored_with_receipt' ? '<br><strong class="social-badge">Подтверждено вручную</strong>' : ''}${post.sources > 1 ? `<p class="social-note">Один адрес публикации, источников записи: ${num(post.sources)}.</p>` : ''}`;
+  }
+  function postCell(post) {
+    if (post.provenance === 'external_receipt') return safeUrl(post.url) ? link(post.url, 'Открыть публикацию') : 'Ссылка подтверждения непригодна для перехода';
+    return link(post.url, post.platformPostId || '—');
+  }
+  function materialCell(post) {
+    const candidates = post.contentIdCandidates || [];
+    if (!candidates.length) return esc(post.contentId || '—');
+    return `<strong class="social-conflict">Спорная связь с материалом</strong><p class="social-note">Метка UTM по этой записи не приписывается ни одному материалу: к какому из них относится обращение — неизвестно.</p>
+      <details class="social-ids"><summary>Материалы-кандидаты</summary><ul>${candidates.map(c => `<li>${esc(c)}</li>`).join('')}</ul>${post.contentId ? `<p class="social-note">В записи сохранён материал ${esc(post.contentId)} — значение собранного поста; спор оно не решает.</p>` : ''}</details>`;
+  }
+  function identifiersCell(post) {
+    const rows = [...(post.identities || []).map(i => `<li>Источник: ${esc(i.platformPostId || '—')} · ${esc(POST_SOURCE[i.provider] || i.provider || '—')}${i.contentId ? ` · материал ${esc(i.contentId)}` : ''}</li>`),
+      ...(post.receipts || []).map(r => `<li>Подтверждение: ${esc(r.referenceId || '—')}${r.publishedAt ? ` · ${esc(stamp(r.publishedAt))}` : ''}${safeUrl(r.url) ? ` · ${link(r.url, 'ссылка')}` : ''}${r.contentId ? ` · материал ${esc(r.contentId)}` : ''}</li>`)];
+    return rows.length ? `<details class="social-ids"><summary>Исходные идентификаторы</summary><ul>${rows.join('')}</ul></details>` : '';
+  }
+  /* Ноль обращений показывается только там, где искать было по чему (ссылка или материал). Без связи это UNKNOWN — «—», не ноль. */
+  const linked = (post, value) => (post.attribution === 'unknown' ? '—' : num(value));
+  function crmMarkup(crm) {
+    const posts = crm.posts || [], receipts = crm.receipts;
+    return `<section class="card social-crm"><h2>Атрибуция CRM</h2><p class="social-note">${esc(crm.note || '')}</p>
+      <p class="social-note">Строки ниже — зафиксированные в CRM обращения с однозначной связью (адрес публикации в переходе или метка материала). Ноль означает, что таких обращений не зафиксировано, а не что в соцсетях не обращались: переписка в директе, комментарии и звонки без метки сюда не попадают.</p>
+      <p class="social-note">Подтверждение публикации — доказательство выхода материала, а не сбор по API: показателей площадки у него нет, сбор просмотров им не подключается, и нули вместо неизвестных чисел не ставятся.</p>
+      ${receipts ? `<p class="social-note">Подтверждений прочитано: ${num(receipts.projected)} · объединено с собранными постами: ${num(receipts.merged)} · только подтверждение: ${num(receipts.receiptOnly)}${receipts.skipped ? ` · площадка вне аналитики: ${num(receipts.skipped)}` : ''}</p>` : ''}
+      ${posts.length ? `<div class="crm-table-wrap"><table class="crm-table crm-entity-table social-posts"><thead><tr><th>Площадка</th><th>Публикация</th><th>Материал</th><th>Обращения</th><th>Продажи</th><th>Выручка</th><th>Как записано</th><th>Основание связи</th></tr></thead><tbody>${posts.map(p => `<tr data-provenance="${esc(p.provenance || 'stored')}"><td data-label="Площадка">${esc(p.platform)}</td>
+        <td data-label="Публикация">${postCell(p)}${identifiersCell(p)}</td><td data-label="Материал">${materialCell(p)}</td>
+        <td data-label="Обращения">${linked(p, p.leads)}</td><td data-label="Продажи">${linked(p, p.sales)}</td><td data-label="Выручка">${linked(p, p.revenue)}</td>
+        <td data-label="Как записано">${originCell(p)}</td><td data-label="Основание связи">${esc(CONFIDENCE[p.confidence] || 'однозначной связи нет')}</td></tr>`).join('')}</tbody></table></div>` : '<p>Записей публикаций со связью пока нет: атрибуция неизвестна. Это не значит, что обращений в соцсетях не было.</p>'}
+      ${(crm.byContent || []).length ? `<h3>По контенту без однозначной площадки</h3><p class="social-note">Метка указывает на контент, но не на конкретный пост: считается один раз, ни одному посту не приписано.</p><ul>${crm.byContent.map(g => `<li>материал ${esc(g.contentId || g.url)} (${g.platforms.map(esc).join(', ')}): обращений ${num(g.leads)}, продаж ${num(g.sales)}, выручка ${num(g.revenue)}</li>`).join('')}</ul>` : ''}
+      <h3>Обращения по источникам за период</h3>${(crm.bySource || []).length ? `<ul>${crm.bySource.map(s => `<li>${esc(s.source)}: обращений ${num(s.leads)}, продаж ${num(s.sales)}, выручка ${num(s.revenue)}</li>`).join('')}</ul>` : '<p>Обращений с зафиксированным источником за период нет.</p>'}</section>`;
   }
   function bind(container, ctx, data, load) {
     container.querySelectorAll('[data-collect]').forEach(button => button.addEventListener('click', async () => {
