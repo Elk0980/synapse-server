@@ -2543,7 +2543,7 @@ async function route(request, response) {
     else if (url.pathname === '/autoposting/starter-plan' && request.method === 'GET') result=studioContentPlan.get(code);
     else if (url.pathname === '/autoposting/starter-plan' && request.method === 'POST') {result=studioContentPlan.import(code,await readJson(request),identity.userId);status=result.created?201:200;}
     else {
-      const match=/^\/autoposting\/posts(?:\/(\d+)(?:\/(schedule|cancel|reconcile|approve|reject|submit-review))?)?$/.exec(url.pathname);
+      const match=/^\/autoposting\/posts(?:\/(\d+)(?:\/(schedule|cancel|reconcile|approve|reject|submit-review|receipts))?)?$/.exec(url.pathname);
       if (url.pathname==='/autoposting/order' && request.method==='PUT') {
         result=autoposting.reorder(code,await readJson(request),identity);
         return send(response,status,result,{...cors,'cache-control':'no-store'});
@@ -2560,6 +2560,13 @@ async function route(request, response) {
         if (identity.role!=='owner') fail(403,'Согласовывать и отклонять публикации может только владелец',{code:'FORBIDDEN'});
         result=action==='approve'?autoposting.approve(id,code,await readJson(request),identity):autoposting.reject(id,code,await readJson(request),identity);
         return send(response,status,result,{...cors,'cache-control':'no-store'});
+      }
+      // Подтверждение внешней публикации — свидетельство владельца, а не отправка: провайдер не вызывается.
+      if (action==='receipts') {
+        if (request.method!=='POST') fail(405,'Метод не поддерживается');
+        if (identity.role!=='owner') fail(403,'Отмечать публикацию вне кабинета может только владелец',{code:'FORBIDDEN'});
+        const receipt=autoposting.recordReceipt(id,code,await readJson(request),identity);
+        return send(response,receipt.created?201:200,receipt.post,{...cors,'cache-control':'no-store'});
       }
       if (action==='submit-review') {
         if (request.method!=='POST') fail(405,'Метод не поддерживается');

@@ -13,7 +13,7 @@ const ERRORS = {PROFILE_CHANGED:"Изменились данные компан�
   AUTH_FAILED:"Площадка не приняла ключ доступа. Проверьте подключение канала.",PROVIDER_AUTH:"Площадка не приняла ключ доступа.",
   RATE_LIMITED:"Площадка ограничила частоту запросов. Повторите позже.",PUBLISH_FAILED:"Площадка не подтвердила публикацию.",
   MEDIA_UNSUPPORTED:"Этот материал не поддерживается выбранной площадкой."};
-Object.assign(ERRORS,{PROVIDER_PENDING:"Сервис принял задание. Ожидаем результат публикации.",PROVIDER_LINK_UNAVAILABLE:"Сервис сообщил о публикации. Проверьте запись в сообществе: ссылка пока не подтверждена.",PROVIDER_FAILED:"Сервис не смог опубликовать материал. Проверьте подробности в его кабинете.",PROVIDER_CHECK_FAILED:"Не удалось проверить результат. Проверьте подключение и повторите проверку статуса."});
+Object.assign(ERRORS,{EXTERNAL_PUBLICATION_RECORDED:"Площадка отмечена как опубликованная вне кабинета — отправка не выполнялась. Повторная отправка создала бы дубликат записи.",PROVIDER_PENDING:"Сервис принял задание. Ожидаем результат публикации.",PROVIDER_LINK_UNAVAILABLE:"Сервис сообщил о публикации. Проверьте запись в сообществе: ссылка пока не подтверждена.",PROVIDER_FAILED:"Сервис не смог опубликовать материал. Проверьте подробности в его кабинете.",PROVIDER_CHECK_FAILED:"Не удалось проверить результат. Проверьте подключение и повторите проверку статуса."});
 const EDITABLE = new Set(["draft","needs_review","failed","cancelled"]);
 const PLANNING = [["two_gis","2ГИС"],["yandex_maps","Яндекс Карты"],["max","MAX"]];
 // Очередь контента: пять площадок с лимитами подписей (совпадают с сервером), карточки дней и одобрение конкретной версии.
@@ -32,6 +32,37 @@ const mediaPreview = urls => (urls||[]).map(url=>{const safe=safeUrl(url);if(!sa
   const player=isVideo(safe)?`<video class="autoposting-video" controls preload="metadata" playsinline src="${esc(safe)}"></video>`:cabinet.companyAssets?.imageUrl?.(url)||/\.(jpe?g|png|webp|gif)(?:[?#].*)?$/i.test(safe)?`<img class="autoposting-thumbnail" src="${esc(safe)}" alt="Материал публикации" loading="lazy">`:"";
   return `<li>${player}<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a></li>`;}).join("");
 const isQueueCard = item => Boolean(item?.dayKey||Object.keys(item?.captions||{}).length);
+// Подтверждение внешней публикации: доказательство уже вышедшей записи. Та же проверка формата, что на сервере
+// (ops/crm/autoposting.js): https, домен площадки, путь адреса записи, никаких учётных данных, порта, части после «#»
+// и лишних параметров; значение разрешённого параметра сверяется с форматом. Применяется и до отправки, и при выводе.
+const RECEIPT_FORMATS = {
+  instagram:{hosts:["instagram.com","www.instagram.com"],forms:[{path:/^\/(?:[A-Za-z0-9._]{1,30}\/)?(?:p|reel|reels|tv)\/[A-Za-z0-9_-]{5,40}\/?$/,query:{}}]},
+  tiktok:{hosts:["tiktok.com","www.tiktok.com"],forms:[{path:/^\/@[A-Za-z0-9._]{1,30}\/(?:video|photo)\/\d{5,30}\/?$/,query:{}}]},
+  youtube_shorts:{hosts:["youtube.com","www.youtube.com","m.youtube.com"],
+    forms:[{path:/^\/shorts\/[A-Za-z0-9_-]{5,20}\/?$/,query:{}},{path:/^\/watch$/,query:{v:/^[A-Za-z0-9_-]{5,20}$/}}]},
+  vk:{hosts:["vk.com","www.vk.com","m.vk.com","vk.ru","www.vk.ru"],
+    forms:[{path:/^\/(?:wall|video|clip|photo)-?\d{1,20}_\d{1,20}\/?$/,query:{}},
+      {path:/^\/[A-Za-z0-9._]{2,40}\/?$/,query:{w:/^(?:wall|video|clip|photo)-?\d{1,20}_\d{1,20}$/}}]},
+  telegram:{hosts:["t.me","telegram.me"],forms:[{path:/^\/(?:c\/\d{1,20}\/\d{1,20}|[A-Za-z0-9_]{4,32}\/\d{1,20})\/?$/,query:{}}]},
+};
+const safeReceiptUrl = (platform,value) => {
+  const spec=RECEIPT_FORMATS[platform];
+  if(!spec||typeof value!=="string")return null;
+  const raw=value.trim();
+  if(!raw||raw.length>500||/[\u0000-\u0020\u007f-\u009f<>"'`\\]/.test(raw))return null;
+  let url;
+  try {url=new URL(raw);}catch(_){return null;}
+  if(url.protocol!=="https:"||url.username||url.password||url.port||url.hash)return null;
+  if(!spec.hosts.includes(url.hostname.toLowerCase()))return null;
+  const keys=[...url.searchParams.keys()];
+  if(new Set(keys).size!==keys.length)return null;
+  const form=spec.forms.find(item=>item.path.test(url.pathname)&&keys.length===Object.keys(item.query).length
+    &&Object.entries(item.query).every(([key,pattern])=>pattern.test(url.searchParams.get(key)??"")));
+  return form?url.href:null;
+};
+const receiptsOf = item => Array.isArray(item?.externalReceipts)?item.externalReceipts:[];
+const receiptPlatforms = item => new Set(receiptsOf(item).map(receipt=>receipt.platform));
+const platformLabel = id => CAPTIONS.find(item=>item[0]===id)?.[1]||id;
 const CONNECTION_ERRORS = {
   WALL_PERMISSION_REQUIRED:"Ключ не даёт права публиковать записи. Требуется разрешение wall у приложения ВК.",
   ADMIN_REQUIRED:"Не подтверждены права на выбранное сообщество. Проверьте его ID и права пользователя, которому выдан ключ.",
@@ -87,7 +118,7 @@ function create(container, context) {
     <p class="autoposting-note">Время относится к указанному часовому поясу, а не настройкам компьютера. Черновик можно сохранить без даты и подключённого канала.</p>
     <button class="plain-button" id="autoposting-save" type="submit">Сохранить черновик</button><p id="autoposting-form-status" aria-live="off"></p></form>
     <div class="autoposting-actions"><button class="plain-button" id="autoposting-preview" type="button">Предпросмотр</button><button class="plain-button" id="autoposting-cancel" type="button" hidden>Снять с публикации</button><button class="plain-button" id="autoposting-reconcile" type="button" hidden>Проверить результат в сервисе</button></div></section>
-    <section class="card autoposting-preview-section" aria-labelledby="autoposting-preview-title"><h3 id="autoposting-preview-title" tabindex="-1">Проверка перед публикацией</h3><div id="autoposting-preview-content"><p>Сохраните материал и откройте предпросмотр.</p></div><div id="autoposting-approval" class="autoposting-approval"></div><button class="plain-button" id="autoposting-schedule" type="button" disabled>Поставить в план</button><p class="autoposting-note">После постановки в план материал отправляется автоматически. Уже начатую публикацию площадка может завершить после отмены.</p></section></div>
+    <section class="card autoposting-preview-section" aria-labelledby="autoposting-preview-title"><h3 id="autoposting-preview-title" tabindex="-1">Проверка перед публикацией</h3><div id="autoposting-preview-content"><p>Сохраните материал и откройте предпросмотр.</p></div><div id="autoposting-approval" class="autoposting-approval"></div><div id="autoposting-receipts" class="autoposting-receipts"></div><button class="plain-button" id="autoposting-schedule" type="button" disabled>Поставить в план</button><p class="autoposting-note">После постановки в план материал отправляется автоматически. Уже начатую публикацию площадка может завершить после отмены.</p></section></div>
     <section class="card autoposting-queue-section"><h3>Очередь контента</h3><p class="autoposting-note">Карточки дней с подписями пяти площадок. Одобрение относится к конкретной версии: правка текста или материала снимает его. Галочки по умолчанию сняты; сохранение и одобрение ничего не публикуют. Instagram / Reels, TikTok и YouTube Shorts здесь — подготовленные варианты подписей: их доставка не подключена и не заявляется; автоматическая отправка возможна только в подключённые каналы Telegram и ВКонтакте после постановки в план.</p><div id="autoposting-queue"></div>
     <details class="autoposting-import"><summary>Импорт пакета карточек</summary><p class="autoposting-note">JSON вида {"items":[{"dayKey":"D1","title":"…","mediaUrls":["https://…/d1.mp4"],"captions":{"instagram":"…","tiktok":"…","youtube_shorts":"…","vk":"…","telegram":"…"},"origin":"видео Gemini"}]}. Создаются только черновики без одобрения; отсутствующее видео не подставляется. Повтор пакета не создаёт дубли.</p><textarea id="autoposting-import-json" rows="6"></textarea><button class="plain-button" id="autoposting-import" type="button">Импортировать черновики</button><p id="autoposting-import-state" role="status"></p></details></section>`;
   const get=id=>container.querySelector("#"+id), form=get("autoposting-form");
@@ -139,8 +170,11 @@ function create(container, context) {
     if(post&&post.profileRevision!==information.revision)result.push("Данные компании изменились. Проверьте текст и сохраните его заново.");
     if(post?.deliveries?.some(item=>["published","publishing","needs_review"].includes(item.status)))result.push("Материал уже отправлялся на площадку. Проверьте опубликованное вручную: автоматический повтор может создать дубль.");
     if(post&&isQueueCard(post)&&!post.approval?.approved)result.push("Карточка очереди контента не одобрена владельцем для этой версии.");
+    const marked=receiptPlatforms(post);
     for(const id of data.platformIds){
       const channel=channels().find(item=>item.id===id);
+      // Площадка с подтверждением внешней публикации повторно не отправляется: сервер откажет, и дубликат не нужен.
+      if(marked.has(channel?.platform||id))result.push(`${channel?.name||id}: площадка отмечена как опубликованная вне ЛК. Повторная отправка создаст дубликат.`);
       if(!channel?.connected||!channel.enabled){result.push((channel?.name||id)+": включите канал и проверьте доступ.");continue;}
       const maxText=channel.platform==="telegram"&&data.mediaUrls.length?1024:(channel.caps?.maxText|| (channel.platform==="vk"?15000:4096));
       const maxMedia=Number.isSafeInteger(channel.caps?.maxMedia)?channel.caps.maxMedia:(channel.platform==="vk"?1:10);
@@ -219,6 +253,50 @@ function create(container, context) {
       },approved?"Сохраняем одобрение…":"Снимаем одобрение…","Не удалось сохранить одобрение. Обновите статусы: версия могла измениться.");
     });
   };
+  // Публикации вне кабинета: отдельный список доказательств. Кабинет не отправлял их и не заявляет,
+  // что опубликована текущая версия содержимого — у каждой ссылки показана её собственная ревизия.
+  const renderReceipts=()=>{
+    const node=get("autoposting-receipts");if(!post){node.replaceChildren();return;}
+    const list=receiptsOf(post),owner=ctx.identity?.role==="owner",timezone=post.timezone||zone();
+    const local=value=>{try{return time.toLocal(value,timezone).replace("T"," ");}catch(_){return "";}};
+    const rows=list.map(item=>{
+      const link=safeReceiptUrl(item.platform,item.url);
+      return `<li data-receipt="${esc(item.platform)}"${item.stale?" data-receipt-stale":""}>
+        <span><strong>${esc(platformLabel(item.platform))}</strong> · Опубликовано вне ЛК${link?` · <a href="${esc(link)}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Открыть публикацию</a>`:" · ссылку не удалось распознать"}</span>
+        <span class="autoposting-note">${esc(local(item.publishedAt))} · содержимое v${esc(item.contentRevision)} · отметил ${esc(item.recordedByName||"владелец")}${item.recordedAt?", "+esc(local(item.recordedAt)):""}</span>
+        ${item.stale?`<span class="autoposting-issues" data-receipt-stale-note>Подтверждена публикация версии содержимого v${esc(item.contentRevision)}. Публикация текущей версии v${esc(post.contentRevision||"")} не подтверждена.</span>`:""}
+        ${item.note?`<span class="autoposting-note">${esc(item.note)}</span>`:""}</li>`;
+    }).join("");
+    node.innerHTML=`<h4>Публикации вне кабинета</h4>
+      <p class="autoposting-note">Отметка фиксирует уже вышедшую запись: кабинет ничего не отправляет, согласование не меняется. Отмеченную площадку нельзя отправить из плана повторно.</p>
+      <p class="autoposting-note">Отметка не отменяет отправку, уже переданную площадке: если доставка началась, отсутствие дубля не гарантировано — проверьте её результат ниже.</p>
+      ${rows?`<ul class="autoposting-receipt-list">${rows}</ul>`:"<p>Публикаций вне кабинета не отмечено.</p>"}
+      ${owner?`<form id="autoposting-receipt-form" class="autoposting-receipt-form">
+        <p class="autoposting-note">Ссылка — только обычный https-адрес самой записи: без логина, пароля, порта, части после «#» и лишних параметров. Короткие ссылки (vm.tiktok.com, youtu.be) не принимаются.</p>
+        <p class="autoposting-issues" data-receipt-warning>Перед сохранением: отметка навсегда заблокирует повторную отправку этой площадки для карточки и в текущем интерфейсе не отзывается.</p>
+        <label>Площадка<select id="autoposting-receipt-platform">${CAPTIONS.map(([id,label])=>`<option value="${esc(id)}">${esc(label)}</option>`).join("")}</select></label>
+        <label>Ссылка на публикацию<input id="autoposting-receipt-url" maxlength="500" placeholder="https://t.me/channel/123" required></label>
+        <label>Когда опубликовано · ${esc(timezone)}<input id="autoposting-receipt-date" type="datetime-local" required></label>
+        <label>Примечание (необязательно)<input id="autoposting-receipt-note" maxlength="500"></label>
+        <button class="plain-button" type="submit">Отметить как опубликованное вне ЛК (содержимое v${esc(post.contentRevision||"")})</button></form>`
+        :'<p class="autoposting-note">Отмечает публикацию вне кабинета владелец.</p>'}`;
+    get("autoposting-receipt-form")?.addEventListener("submit",event=>{
+      event.preventDefault();if(busy||!post||ctx.identity?.role!=="owner")return;
+      const platform=get("autoposting-receipt-platform").value,url=get("autoposting-receipt-url").value.trim();
+      const when=get("autoposting-receipt-date").value,note=get("autoposting-receipt-note").value.trim(),card=post;
+      if(!safeReceiptUrl(platform,url)){message("Укажите обычный https-адрес записи выбранной площадки: без логина, пароля, порта, части после «#» и лишних параметров.");return;}
+      let publishedAt=null;
+      try{if(when)publishedAt=time.toUTC(when,timezone);}catch(_){publishedAt=null;}
+      if(!publishedAt){message("Укажите существующее местное время публикации.");return;}
+      if(Date.parse(publishedAt)>Date.now()){message("Дата публикации в будущем: запланированная запись ещё не опубликована.");return;}
+      void run(async current=>{
+        const result=await request("/autoposting/posts/"+encodeURIComponent(card.id)+"/receipts","POST",{platform,url,publishedAt,contentRevision:card.contentRevision,note});
+        if(!current())return;
+        post=result;posts=posts.map(item=>item.id===result.id?result:item);renderList();renderState();controls();
+        message("Публикация отмечена как вышедшая вне кабинета. Кабинет ничего не отправлял и согласование не менял.");
+      },"Сохраняем подтверждение публикации…","Не удалось сохранить подтверждение. Проверьте ссылку и версию содержимого: карточку могли изменить.");
+    });
+  };
   const queueFilter={role:"",format:"",review:"",platform:""};
   const queueCards=()=>posts.filter(isQueueCard).slice().sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)||a.id-b.id);
   const renderQueue=()=>{
@@ -236,7 +314,8 @@ function create(container, context) {
       <span><span class="autoposting-badge" data-review="${esc(item.review?.state||"draft")}">${esc(REVIEW[item.review?.state]||"Черновик")}</span> ${item.meta?.role?`<span class="autoposting-badge">${esc(ROLES.find(r=>r[0]===item.meta.role)?.[1]||item.meta.role)}</span>`:""} ${item.meta?.format?`<span class="autoposting-badge">${esc(FORMATS.find(r=>r[0]===item.meta.format)?.[1]||item.meta.format)}</span>`:""}</span>
       <span>${item.readiness?.mediaKind==="video"?"видео":item.readiness?.mediaKind==="image"?"изображение":"без материала"} · содержимое v${esc(item.contentRevision||"")} · ${item.approval?.approved?"согласовано":item.approval?.stale?"согласование снято после правки":"не согласовано"} · ${esc(STATUS[item.status]||"Статус неизвестен")}${item.scheduledAt?" · план "+esc(time.toLocal(item.scheduledAt,item.timezone||zone()).replace("T"," "))+" "+esc(item.timezone||zone()):" · дата не задана"}</span>
       ${item.meta?.hook?`<span class="autoposting-note">Хук: ${esc(item.meta.hook)}</span>`:""}
-      <span class="autoposting-note">Площадки: ${CAPTIONS.filter(([id])=>item.captions?.[id]).map(([,l])=>esc(l)).join(", ")||"общий текст"}${item.origin?" · "+esc(item.origin):""}${item.expectedMediaSha256?(item.mediaSha256===item.expectedMediaSha256?" · ролик сверен с пакетом":" · ролик из пакета не сверен"):""}</span></li>`).join("")}</ul>`:"<p>Карточек по этим фильтрам нет. Добавьте день карточки в материале или импортируйте пакет.</p>");
+      <span class="autoposting-note">Площадки: ${CAPTIONS.filter(([id])=>item.captions?.[id]).map(([,l])=>esc(l)).join(", ")||"общий текст"}${item.origin?" · "+esc(item.origin):""}${item.expectedMediaSha256?(item.mediaSha256===item.expectedMediaSha256?" · ролик сверен с пакетом":" · ролик из пакета не сверен"):""}</span>
+      ${receiptsOf(item).length?`<span class="autoposting-note" data-receipt-summary>Опубликовано вне ЛК: ${[...receiptPlatforms(item)].map(id=>esc(platformLabel(id))).join(", ")}${receiptsOf(item).some(receipt=>receipt.stale)?" (публикация текущей версии содержимого не подтверждена)":""}</span>`:""}</li>`).join("")}</ul>`:"<p>Карточек по этим фильтрам нет. Добавьте день карточки в материале или импортируйте пакет.</p>");
     get("autoposting-queue").querySelectorAll("[data-queue-filter]").forEach(node=>node.addEventListener("change",()=>{queueFilter[node.dataset.queueFilter]=node.value;renderQueue();}));
     get("autoposting-queue").querySelectorAll("[data-move]").forEach(button=>button.addEventListener("click",()=>{
       if(busy||!edit())return;const id=Number(button.dataset.postId),ids=all.map(item=>item.id),i=ids.indexOf(id),j=button.dataset.move==="up"?i-1:i+1;
@@ -247,7 +326,7 @@ function create(container, context) {
     }));
   };
   const renderState=()=>{
-    renderApproval();
+    renderApproval();renderReceipts();
     get("autoposting-post-state").textContent=post?STATUS[post.status]||"Статус неизвестен":"Новый черновик";
     const node=get("autoposting-post-error");node.hidden=!post?.lastErrorCode;
     node.textContent=post?.lastErrorCode?(ERRORS[post.lastErrorCode]||"Не удалось подтвердить публикацию. Проверьте подключение и данные компании."):"";

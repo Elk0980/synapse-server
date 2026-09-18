@@ -288,6 +288,111 @@ test('контент-план: метаданные не попадают в п�
   card=f.api.reject(card.id,'alvi',{revision:card.revision,comment:'Отложим'},owner);assert.equal(card.status,'draft');assert.equal(card.lastErrorCode,'APPROVAL_REVOKED');
   f.advance(120000);await f.api.drain();assert.equal(f.calls.length,0);
 });
+test('подтверждение внешней публикации: отдельная запись владельца, ссылки проверяются, повтор идемпотентен, правка не теряет историю, отмеченная площадка не отправляется',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'},p=f.draft(['telegram','vk']);
+  const receipt=(patch,code='alvi')=>f.api.recordReceipt(p.id,code,{platform:'telegram',url:'https://t.me/taisabai/512',
+    publishedAt:'2026-09-14T10:00:00Z',contentRevision:p.contentRevision,...patch},owner);
+  assert.throws(()=>receipt({},'avokado'),e=>e.status===404,'карточка чужой компании не подтверждается');
+  // Ссылка: только https, только домен площадки, только адрес записи — без учётных данных, разметки, якорей и параметров с токеном.
+  for(const url of ['http://t.me/taisabai/512','https://t.me.attacker.example/taisabai/512','https://user:pass@t.me/taisabai/512',
+    'javascript:alert(1)','https://t.me/taisabai/512?token=secret','https://t.me/taisabai/512#session','https://t.me/<img src=x>/1',
+    'https://t.me/taisabai','https://t.me:8443/taisabai/512','https://www.instagram.com/p/AbCdEfGhIjK',''])
+    assert.throws(()=>receipt({url}),e=>e.status===400,url);
+  // Значения разрешённых параметров сверяются с форматом, повтор и лишние параметры отклоняются:
+  // иначе ?t=…/?z=… пронесли бы токен под видом адреса записи.
+  for(const [platform,url] of [['youtube_shorts','https://www.youtube.com/shorts/abcdefghi12?t=TOKEN'],
+    ['youtube_shorts','https://www.youtube.com/watch?v=abcdefghi12&t=TOKEN'],
+    ['youtube_shorts','https://www.youtube.com/watch?v=abcdefghi12&v=other'],
+    ['youtube_shorts','https://www.youtube.com/watch?v=<script>'],
+    ['youtube_shorts','https://youtu.be/abcdefghi12'],
+    ['vk','https://vk.com/wall-1_2?z=SECRET'],['vk','https://vk.com/club1?w=SECRET'],['vk','https://vk.com/club1?w=wall-1_2&z=SECRET'],
+    ['vk','https://vk.com/club1'],['tiktok','https://vm.tiktok.com/ZMabcdef/'],
+    ['instagram','https://www.instagram.com/p/AbCdEfGhIjK/?igsh=SESSION'],['telegram','https://t.me/taisabai/512?single=1']])
+    assert.throws(()=>f.api.recordReceipt(p.id,'alvi',{platform,url,publishedAt:'2026-09-14T10:00:00Z',contentRevision:p.contentRevision},owner),
+      e=>e.status===400,`${platform} ${url}`);
+  assert.throws(()=>receipt({platform:'facebook'}),e=>e.status===400);
+  assert.throws(()=>receipt({publishedAt:'2026-09-16T10:00:00Z'}),e=>e.details.code==='NOT_PUBLISHED_YET','запланированное не считается опубликованным');
+  assert.throws(()=>receipt({contentRevision:p.contentRevision+1}),e=>e.details.code==='CONTENT_REVISION_CONFLICT');
+  for(const [platform,url] of [['instagram','https://www.instagram.com/reel/AbCdEfGhIjK/'],['tiktok','https://www.tiktok.com/@taisabai/video/7412345678901234567'],
+    ['youtube_shorts','https://www.youtube.com/watch?v=AbCdEfGhIjK']])
+    assert.equal(f.api.recordReceipt(p.id,'alvi',{platform,url,publishedAt:'2026-09-14T10:00:00Z',contentRevision:p.contentRevision},owner).created,true,platform);
+  const first=receipt({});assert.equal(first.created,true);
+  const card=first.post,telegram=card.externalReceipts.find(item=>item.platform==='telegram');
+  assert.equal(card.status,'draft','подтверждение не меняет статус карточки');
+  assert.equal(card.approval.approved,false,'подтверждение не одобряет версию');
+  assert.deepEqual(card.deliveries,[],'подтверждение не создаёт доставку');
+  assert.equal(telegram.url,'https://t.me/taisabai/512');assert.equal(telegram.recordedByName,'Влад');
+  assert.equal(telegram.publishedAt,'2026-09-14T10:00:00.000Z');assert.equal(telegram.stale,false);assert.ok(telegram.recordedAt);
+  assert.equal(card.revision,p.revision,'подтверждение не трогает версию карточки');
+  await f.api.drain();assert.equal(f.calls.length,0,'сохранение подтверждения ничего не отправляет');
+  assert.equal(receipt({}).created,false,'повтор по компании+карточке+площадке+ссылке не создаёт дубль');
+  assert.equal(f.api.get(p.id,'alvi').externalReceipts.length,4);
+  assert.equal(receipt({url:'https://t.me/taisabai/513'}).created,true,'другая ссылка той же площадки — отдельное доказательство');
+  assert.equal(f.api.list('avokado').posts.length,0);
+  const before=f.api.get(p.id,'alvi');assert.equal(before.externalReceipts.length,5);
+  await assert.rejects(f.api.schedule(p.id,'alvi',{revision:before.revision}),e=>e.details.code==='EXTERNAL_PUBLICATION_RECORDED');
+  // Правка содержимого сохраняет доказательства, но новая версия опубликованной не считается.
+  const edited=f.api.update(p.id,'alvi',{revision:before.revision,text:'Новый текст'});
+  assert.equal(edited.contentRevision,before.contentRevision+1);assert.equal(edited.externalReceipts.length,5);
+  assert.ok(edited.externalReceipts.every(item=>item.stale===true),'ссылки относятся к прежней версии содержимого');
+  // Та же ссылка после правки — та же публикация: новой записи нет, и новая версия не выдаётся за опубликованную.
+  const again=f.api.recordReceipt(p.id,'alvi',{platform:'telegram',url:'https://t.me/taisabai/512',publishedAt:'2026-09-14T10:00:00Z',contentRevision:edited.contentRevision},owner);
+  assert.equal(again.created,false);assert.equal(again.post.externalReceipts.length,5);
+  assert.ok(again.post.externalReceipts.every(item=>item.stale===true));
+  await assert.rejects(f.api.schedule(edited.id,'alvi',{revision:edited.revision}),e=>e.details.code==='EXTERNAL_PUBLICATION_RECORDED');
+  // Неотмеченная площадка планируется и отправляется как прежде.
+  const onlyVk=f.api.update(edited.id,'alvi',{revision:edited.revision,platformIds:['vk']});
+  const planned=await f.api.schedule(onlyVk.id,'alvi',{revision:onlyVk.revision});assert.equal(planned.status,'scheduled');
+  f.advance(120000);await f.api.drain();
+  assert.equal(f.calls.length,1);assert.equal(f.calls[0].channelId,'vk');
+  assert.equal(f.api.get(p.id,'alvi').externalReceipts.length,5,'доставка не превращается в подтверждение и не стирает его');
+});
+test('подтверждение внешней публикации после постановки в план снимает уже стоящую в очереди отправку и не создаёт дубликат',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'},p=f.draft(['telegram','vk']);
+  const planned=await f.schedule(p);assert.equal(planned.status,'scheduled');
+  assert.deepEqual(planned.deliveries.map(d=>d.status),['pending','pending']);
+  f.api.recordReceipt(p.id,'alvi',{platform:'telegram',url:'https://t.me/taisabai/900',publishedAt:'2026-09-14T10:00:00Z',contentRevision:planned.contentRevision},owner);
+  f.advance(60000);await f.api.drain();await f.api.drain();
+  assert.equal(f.calls.length,0,'уже отмеченная площадка не отправляется даже из очереди');
+  const result=f.api.get(p.id,'alvi');
+  assert.equal(result.status,'needs_review');assert.equal(result.lastErrorCode,'EXTERNAL_PUBLICATION_RECORDED');
+  const telegram=result.deliveries.find(item=>item.channelId==='telegram');
+  assert.equal(telegram.status,'cancelled');assert.equal(telegram.errorCode,'EXTERNAL_PUBLICATION_RECORDED');
+  assert.equal(result.externalReceipts.length,1);assert.equal(result.externalReceipts[0].stale,false);
+  f.advance(LEASE_MS*2);await createAutoposting(f.db,f.options).drain();assert.equal(f.calls.length,0,'перезапуск воркера не отправляет отмеченное');
+});
+test('подтверждение во время подготовки отправки останавливает передачу провайдеру на барьере beforePublish',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'},p=f.draft(['telegram']);
+  const planned=await f.schedule(p);f.advance(60000);
+  let submitted=0,release,entered;const waiting=new Promise(resolve=>entered=resolve);
+  // Адаптер ждёт предварительные запросы и только потом вызывает барьер — как настоящий транспорт Onlypult.
+  f.setSend(async input=>{entered();await new Promise(resolve=>{release=resolve;});
+    input.beforePublish();submitted++;return {externalId:'must-not-happen'};});
+  const job=f.api.drain();await waiting;
+  f.api.recordReceipt(p.id,'alvi',{platform:'telegram',url:'https://t.me/taisabai/777',publishedAt:'2026-09-14T10:00:00Z',contentRevision:planned.contentRevision},owner);
+  release();await job;
+  assert.equal(submitted,0,'после подтверждения запрос площадке не передаётся');
+  const result=f.api.get(p.id,'alvi');
+  assert.equal(result.status,'needs_review');assert.equal(result.lastErrorCode,'EXTERNAL_PUBLICATION_RECORDED');
+  assert.equal(result.deliveries[0].status,'cancelled');assert.equal(result.deliveries[0].errorCode,'EXTERNAL_PUBLICATION_RECORDED');
+  assert.equal(result.deliveries[0].externalId,null);assert.equal(result.externalReceipts.length,1);
+  f.advance(LEASE_MS*2);await createAutoposting(f.db,f.options).drain();assert.equal(submitted,0);
+});
+test('подтверждение не отменяет уже переданную площадке отправку и не скрывает её результат',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'},p=f.draft(['telegram']);
+  const planned=await f.schedule(p);f.advance(60000);
+  let release,entered;const waiting=new Promise(resolve=>entered=resolve);
+  // Барьер уже пройден: запрос ушёл на площадку. Подтверждение, добавленное позже, дубликат не предотвращает.
+  f.setSend(async input=>{input.beforePublish();entered();await new Promise(resolve=>{release=resolve;});
+    return {externalId:'already-sent',url:'https://t.me/taisabai/778'};});
+  const job=f.api.drain();await waiting;
+  f.api.recordReceipt(p.id,'alvi',{platform:'telegram',url:'https://t.me/taisabai/778',publishedAt:'2026-09-14T10:00:00Z',contentRevision:planned.contentRevision},owner);
+  release();await job;
+  const result=f.api.get(p.id,'alvi');
+  assert.equal(result.deliveries[0].status,'published','результат начатой доставки не скрывается и не подменяется');
+  assert.equal(result.deliveries[0].externalId,'already-sent');
+  assert.equal(result.externalReceipts.length,1,'подтверждение сохраняется рядом с доставкой, а не вместо неё');
+});
 test('порядок плана хранится на сервере: полный список, чужие/неизвестные id отклоняются, пропущенные уходят в конец; список выдаётся по порядку',async t=>{
   const f=fixture(t);const rev=()=>f.information.get('alvi').revision;
   const a=f.api.create('alvi',{title:'A',profileRevision:rev()},7),b=f.api.create('alvi',{title:'B',profileRevision:rev()},7),c=f.api.create('alvi',{title:'C',profileRevision:rev()},7);
