@@ -482,6 +482,8 @@ async function proxyCrm(request, response, url, cors) {
     if (/^\/social-stats\/(?:accounts|import)$/.test(crmPath) && !readOnly && identity.role!=='owner') fail(403,'Настройки аккаунтов и ручной импорт доступны владельцу');
   }
   if (/^\/autoposting\/posts\/\d+\/(?:approve|reject)$/.test(crmPath) && identity.role!=='owner') fail(403,'Согласовывать и отклонять публикации может только владелец');
+  // Отметка «опубликовано вне ЛК» — решение владельца компании; права редактора недостаточно.
+  if (/^\/autoposting\/posts\/\d+\/receipts$/.test(crmPath) && identity.role!=='owner') fail(403,'Отмечать публикацию вне кабинета может только владелец');
   if (crmPath==='/autoposting/plan-summary') fail(404,'Адрес не найден');
   if (/^\/autoposting\/settings\/[^/]+\/profiles$/.test(crmPath) && identity.role!=='owner') {
     fail(403,'Профили общего аккаунта публикаций настраивает владелец');

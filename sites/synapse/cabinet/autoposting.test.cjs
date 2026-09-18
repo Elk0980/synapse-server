@@ -485,6 +485,107 @@ test('контент-план в ЛК: метаданные сохраняютс
     assert.equal(f.calls.some(c=>c.path.endsWith('/schedule')||c.path.endsWith('/approve')),false,'ничего не запланировано и не согласовано автоматически');
   }finally{f.close();}
 });
+const receiptCard=(id,dayKey,extra={})=>({id,companyCode:'alvi',title:'Карточка '+dayKey,text:'Текст',revision:2,contentRevision:2,status:'draft',
+  mediaUrls:['https://cdn.example.test/'+dayKey+'.mp4'],captions:{telegram:'ТГ'},dayKey,platformIds:['telegram'],
+  scheduledAt:'2099-01-01T02:00:00.000Z',timezone:'Asia/Irkutsk',profileRevision:2,deliveries:[],sortOrder:id,
+  readiness:{ready:true,issues:[],mediaKind:'video'},approval:{approved:true,approvedRevision:2,approvedByName:'Влад',approvedAt:'2026-09-17T01:00:00.000Z',stale:false},
+  review:{state:'approved',comment:''},history:[],meta:{},externalReceipts:[],...extra});
+
+test('публикации вне кабинета: владелец отмечает площадку без отправки, ссылка безопасна, версия содержимого не подменяется, повторная отправка заблокирована',async()=>{
+  const unsafe=receiptCard(8,'D2',{externalReceipts:[{id:9,platform:'instagram',url:'javascript:alert(1)',publishedAt:'2026-09-16T09:00:00.000Z',
+    contentRevision:2,note:'<img src=x onerror=alert(1)>',recordedByName:'<b>Влад</b>',recordedAt:'2026-09-16T10:00:00.000Z',stale:false}]});
+  const recorded=[];
+  const f=await fixture({entries:[receiptCard(7,'D1'),unsafe],override:async call=>{
+    if(/\/posts\/7\/receipts$/.test(call.path)){
+      const body=JSON.parse(call.options.body),item=f.posts.find(p=>p.id===7);recorded.push(body);
+      item.externalReceipts=[...(item.externalReceipts||[]),{id:recorded.length,platform:body.platform,url:body.url,publishedAt:body.publishedAt,
+        contentRevision:body.contentRevision,note:body.note||'',recordedByName:'Влад',recordedAt:'2026-09-18T02:00:00.000Z',stale:body.contentRevision!==item.contentRevision}];
+      return clone(item);
+    }
+    if(call.path==='/content/crm/autoposting/posts/7'&&call.method==='PATCH'){
+      const item=f.posts.find(p=>p.id===7);
+      Object.assign(item,JSON.parse(call.options.body));item.revision++;item.contentRevision++;
+      item.approval={approved:false,approvedRevision:2,stale:true};
+      item.externalReceipts=(item.externalReceipts||[]).map(receipt=>({...receipt,stale:receipt.contentRevision!==item.contentRevision}));
+      return clone(item);
+    }
+  }});
+  try{
+    f.set('autoposting-select','7','change');await f.settle();
+    assert.match(f.node('autoposting-receipts').textContent,/Публикаций вне кабинета не отмечено/);
+    const submit=()=>{f.node('autoposting-receipt-form').dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));return f.settle();};
+    // до сохранения видно, что отметка блокирует отправку площадки и не отзывается, и что начатую доставку она не отменяет
+    const warning=f.d.querySelector('[data-receipt-warning]');assert.ok(warning);
+    assert.match(warning.textContent,/заблокирует повторную отправку/);assert.match(warning.textContent,/не отзывается/);
+    assert.match(f.node('autoposting-receipts').textContent,/не отменяет отправку, уже переданную площадке/);
+    assert.equal(recorded.length,0,'предупреждение показано до первого сохранения');
+    // клиент разбирает ссылку тем же форматом, что сервер: ничего из этого на сервер не уходит
+    for(const [platform,url] of [['telegram','http://t.me/taisabai/512'],['telegram','https://t.me.attacker.example/taisabai/512'],
+      ['telegram','https://user:pass@t.me/taisabai/512'],['telegram','https://t.me:8443/taisabai/512'],
+      ['telegram','https://t.me/taisabai/512#session'],['telegram','https://t.me/taisabai/512?token=secret'],
+      ['telegram','javascript:alert(1)'],['telegram','https://t.me/taisabai'],
+      ['youtube_shorts','https://www.youtube.com/shorts/abcdefghi12?t=TOKEN'],
+      ['youtube_shorts','https://www.youtube.com/watch?v=abcdefghi12&v=other'],
+      ['youtube_shorts','https://youtu.be/abcdefghi12'],['vk','https://vk.com/wall-1_2?z=SECRET'],
+      ['vk','https://vk.com/club1?w=SECRET'],['vk','https://vk.com/club1'],['tiktok','https://vm.tiktok.com/ZMabcdef/'],
+      ['instagram','https://www.instagram.com/p/AbCdEfGhIjK/?igsh=SESSION']]){
+      f.set('autoposting-receipt-platform',platform,'change');f.set('autoposting-receipt-url',url);f.set('autoposting-receipt-date','2026-09-17T16:30');
+      await submit();assert.equal(recorded.length,0,`${platform} ${url}`);
+    }
+    assert.equal(f.calls.some(call=>call.path.endsWith('/receipts')),false,'ни одна вредная ссылка не ушла на сервер');
+    assert.match(f.node('autoposting-status').textContent,/без логина, пароля, порта/);
+    // запланированное не считается опубликованным
+    f.set('autoposting-receipt-platform','telegram','change');
+    f.set('autoposting-receipt-url','https://t.me/taisabai/512');f.set('autoposting-receipt-date','2099-01-01T10:00');
+    await submit();assert.equal(recorded.length,0);assert.match(f.node('autoposting-status').textContent,/в будущем/);
+    // корректная отметка: площадка, ссылка, время в поясе карточки и версия содержимого
+    f.set('autoposting-receipt-date','2026-09-17T16:30');await submit();
+    assert.equal(recorded.length,1);
+    assert.deepEqual(recorded[0],{platform:'telegram',url:'https://t.me/taisabai/512',publishedAt:'2026-09-17T08:30:00.000Z',contentRevision:2,note:''});
+    assert.equal(f.calls.filter(call=>call.path.endsWith('/receipts')).length,1);
+    assert.equal(f.calls.find(call=>call.path.endsWith('/receipts')).options.headers['X-CSRF-Token'],'test-csrf');
+    assert.equal(f.calls.some(call=>call.path.endsWith('/schedule')||call.path.endsWith('/approve')),false,'отметка ничего не отправляет и не согласовывает');
+    const receipts=f.node('autoposting-receipts');
+    assert.match(receipts.textContent,/Опубликовано вне ЛК/);assert.match(receipts.textContent,/содержимое v2/);
+    const link=receipts.querySelector('a');assert.equal(link.href,'https://t.me/taisabai/512');
+    assert.equal(link.rel,'noopener noreferrer');assert.equal(link.getAttribute('referrerpolicy'),'no-referrer');assert.equal(link.target,'_blank');
+    assert.equal(receipts.querySelector('[data-receipt-stale-note]'),null);
+    assert.match(f.node('autoposting-queue').textContent,/Опубликовано вне ЛК: Telegram/);
+    // правка содержимого: доказательство остаётся, но новая версия опубликованной не объявляется
+    f.set('autoposting-text','Новый текст после публикации');await f.click('autoposting-save');
+    assert.equal(f.node('autoposting-receipts').querySelectorAll('.autoposting-receipt-list li').length,1);
+    assert.match(f.node('autoposting-receipts').textContent,/Подтверждена публикация версии содержимого v2\. Публикация текущей версии v3 не подтверждена/);
+    assert.doesNotMatch(f.node('autoposting-receipts').textContent,/не публиковалась/,'кабинет не утверждает того, чего не знает');
+    assert.ok(f.node('autoposting-receipts').querySelector('[data-receipt-stale-note]'));
+    assert.match(f.node('autoposting-queue').textContent,/публикация текущей версии содержимого не подтверждена/);
+  }finally{f.close();}
+
+  // отмеченная площадка не ставится в план повторно
+  const blocked=await fixture({entries:[receiptCard(7,'D1',{externalReceipts:[{id:1,platform:'telegram',url:'https://t.me/taisabai/512',
+    publishedAt:'2026-09-17T08:30:00.000Z',contentRevision:2,note:'',recordedByName:'Влад',recordedAt:'2026-09-18T02:00:00.000Z',stale:false}]})]});
+  try{
+    blocked.set('autoposting-select','7','change');await blocked.settle();
+    await blocked.click('autoposting-preview');
+    assert.match(blocked.node('autoposting-preview-content').textContent,/отмечена как опубликованная вне ЛК/);
+    assert.equal(blocked.node('autoposting-schedule').disabled,true);
+    blocked.node('autoposting-schedule').click();await blocked.settle();
+    assert.equal(blocked.calls.some(call=>call.path.endsWith('/schedule')),false);
+  }finally{blocked.close();}
+
+  // участник с правом просмотра видит ссылку, но не может её добавить; небезопасная ссылка не становится переходом
+  const viewer=await fixture({role:'marketer',permissions:['autoposting.view'],entries:[receiptCard(7,'D1'),unsafe]});
+  try{
+    viewer.set('autoposting-select','8','change');await viewer.settle();
+    const node=viewer.node('autoposting-receipts');
+    assert.equal(viewer.node('autoposting-receipt-form'),null,'участник не отмечает публикацию вне ЛК');
+    assert.match(node.textContent,/Отмечает публикацию вне кабинета владелец/);
+    assert.equal(node.querySelector('a'),null,'javascript-ссылка не превращается в переход');
+    assert.match(node.textContent,/ссылку не удалось распознать/);
+    assert.equal(node.querySelector('img'),null);assert.equal(node.querySelector('b'),null);
+    assert.match(node.textContent,/<img src=x onerror=alert\(1\)>/);assert.match(node.textContent,/<b>Влад<\/b>/);
+    assert.ok(viewer.calls.every(call=>call.method==='GET'));
+  }finally{viewer.close();}
+});
 test('контент-план: редактор не видит отклонения, но может двигать порядок и отправлять на согласование',async()=>{
   const entries=[{id:1,companyCode:'alvi',title:'Д1',text:'',revision:1,contentRevision:1,status:'draft',mediaUrls:['https://cdn.example.test/d1.mp4'],captions:{telegram:'ТГ'},dayKey:'D1',platformIds:[],scheduledAt:null,timezone:'Asia/Bangkok',profileRevision:2,deliveries:[],sortOrder:1,readiness:{ready:true,issues:[],mediaKind:'video'},approval:{approved:false,approvedRevision:null,stale:false},review:{state:'draft',comment:''},history:[],meta:{}},
     {id:2,companyCode:'alvi',title:'Д2',text:'',revision:1,contentRevision:1,status:'draft',mediaUrls:[],captions:{vk:'ВК'},dayKey:'D2',platformIds:[],scheduledAt:null,timezone:'Asia/Bangkok',profileRevision:2,deliveries:[],sortOrder:2,readiness:{ready:false,issues:['Нет материала'],mediaKind:'none'},approval:{approved:false,approvedRevision:null,stale:false},review:{state:'draft',comment:''},history:[],meta:{}}];

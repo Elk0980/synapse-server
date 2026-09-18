@@ -28,6 +28,48 @@ const sha256=value=>{if(value===null||value===undefined||value==='')return '';if
    Одобрение — только фиксация решения владельца; публикацию оно не запускает. */
 const CAPTION_PLATFORMS=Object.freeze({instagram:{label:'Instagram / Reels',limit:2200},tiktok:{label:'TikTok',limit:2200},
   youtube_shorts:{label:'YouTube Shorts',limit:5000},vk:{label:'ВКонтакте',limit:15000},telegram:{label:'Telegram',limit:1024}});
+/* Подтверждение внешней публикации (receipt): владелец фиксирует, что материал уже вышел на площадке
+   через внешний сервис или нативный интерфейс. Это доказательство, а не доставка: провайдер не вызывается,
+   одобрение не меняется, отправка не запускается.
+   Ссылка принимается только по разобранному формату: https, домен площадки, путь адреса записи и —
+   если формат его требует — ровно один параметр с проверенным значением. Непроверяемые короткие ссылки
+   (vm.tiktok.com, youtu.be) не поддерживаются: по ним нельзя убедиться, что это адрес записи, а не редирект. */
+const RECEIPT_PLATFORMS=Object.freeze({
+  instagram:{label:'Instagram / Reels',hosts:new Set(['instagram.com','www.instagram.com']),
+    forms:[{path:/^\/(?:[A-Za-z0-9._]{1,30}\/)?(?:p|reel|reels|tv)\/[A-Za-z0-9_-]{5,40}\/?$/,query:{}}]},
+  tiktok:{label:'TikTok',hosts:new Set(['tiktok.com','www.tiktok.com']),
+    forms:[{path:/^\/@[A-Za-z0-9._]{1,30}\/(?:video|photo)\/\d{5,30}\/?$/,query:{}}]},
+  youtube_shorts:{label:'YouTube Shorts',hosts:new Set(['youtube.com','www.youtube.com','m.youtube.com']),
+    forms:[{path:/^\/shorts\/[A-Za-z0-9_-]{5,20}\/?$/,query:{}},{path:/^\/watch$/,query:{v:/^[A-Za-z0-9_-]{5,20}$/}}]},
+  vk:{label:'ВКонтакте',hosts:new Set(['vk.com','www.vk.com','m.vk.com','vk.ru','www.vk.ru']),
+    forms:[{path:/^\/(?:wall|video|clip|photo)-?\d{1,20}_\d{1,20}\/?$/,query:{}},
+      {path:/^\/[A-Za-z0-9._]{2,40}\/?$/,query:{w:/^(?:wall|video|clip|photo)-?\d{1,20}_\d{1,20}$/}}]},
+  telegram:{label:'Telegram',hosts:new Set(['t.me','telegram.me']),
+    forms:[{path:/^\/(?:c\/\d{1,20}\/\d{1,20}|[A-Za-z0-9_]{4,32}\/\d{1,20})\/?$/,query:{}}]},
+});
+/* Общая для сервера и кабинета проверка. Значения разрешённых параметров сверяются с форматом,
+   повтор параметра и любой лишний параметр отклоняются: иначе ?t=…/?w=… унесли бы токен или метку. */
+function receiptFormat(platform,value) {
+  const spec=RECEIPT_PLATFORMS[platform];
+  if(!spec||typeof value!=='string')return null;
+  const raw=value.trim();
+  if(!raw||raw.length>500||/[\x00-\x20\x7f-\x9f<>"'`\\]/.test(raw))return null;
+  let parsed;
+  try{parsed=new URL(raw);}catch{return null;}
+  if(parsed.protocol!=='https:'||parsed.username||parsed.password||parsed.port||parsed.hash)return null;
+  if(!spec.hosts.has(parsed.hostname.toLowerCase()))return null;
+  const keys=[...parsed.searchParams.keys()];
+  if(new Set(keys).size!==keys.length)return null;
+  const form=spec.forms.find(item=>item.path.test(parsed.pathname)
+    &&keys.length===Object.keys(item.query).length
+    &&Object.entries(item.query).every(([key,pattern])=>pattern.test(parsed.searchParams.get(key)??'')));
+  return form?parsed.href:null;
+}
+function receiptUrl(platform,value) {
+  const spec=RECEIPT_PLATFORMS[platform],normalized=receiptFormat(platform,value);
+  if(normalized)return normalized;
+  fail(400,`Укажите обычный https-адрес записи ${spec.label} — без логина, пароля, порта, части после «#» и лишних параметров`);
+}
 const VIDEO_RE=/\.(mp4|webm|mov|m4v)(?:[?#].*)?$/i,IMAGE_RE=/\.(jpe?g|png|webp|gif)(?:[?#].*)?$/i;
 const dayKey=value=>{if(value===null||value===undefined||value==='')return '';if(typeof value!=='string'||!/^D[1-7]$/.test(value))fail(400,'День карточки задаётся как D1…D7');return value;};
 function captions(value) {
@@ -70,6 +112,15 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
     action TEXT NOT NULL CHECK(action IN ('submitted','approved','rejected','revoked','edited','reordered','rescheduled')),
     content_revision INTEGER NOT NULL,comment TEXT NOT NULL DEFAULT '',actor_id INTEGER,actor_name TEXT,created_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS autoposting_reviews_post_idx ON autoposting_reviews(post_id,id);`);
+  /* Подтверждения внешней публикации хранятся отдельно от доставок: правка содержимого удаляет доставки,
+     но доказательства прежних выходов остаются навсегда. Идемпотентность — компания+карточка+площадка+ссылка. */
+  db.exec(`CREATE TABLE IF NOT EXISTS autoposting_publication_receipts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,company_id INTEGER NOT NULL REFERENCES companies(id),
+    post_id INTEGER NOT NULL REFERENCES autoposting_posts(id),platform TEXT NOT NULL,url TEXT NOT NULL,
+    published_at TEXT NOT NULL,content_revision INTEGER NOT NULL,note TEXT NOT NULL DEFAULT '',
+    recorded_by INTEGER,recorded_by_name TEXT,recorded_at TEXT NOT NULL,
+    UNIQUE(company_id,post_id,platform,url));
+    CREATE INDEX IF NOT EXISTS autoposting_receipts_post_idx ON autoposting_publication_receipts(post_id,platform);`);
   const deliveryColumns=new Set(db.prepare('PRAGMA table_info(autoposting_deliveries)').all().map(row=>row.name));
   for(const column of ['provider_post_id','provider_status','provider_checked_at']){
     if(!deliveryColumns.has(column))db.exec(`ALTER TABLE autoposting_deliveries ADD COLUMN ${column} TEXT`);
@@ -80,6 +131,13 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
     .run(row.id,row.company_id,action,row.content_revision??1,comment||'',actor.userId??null,actor.userName??null,iso());
   const historyDto=id=>db.prepare('SELECT action,content_revision contentRevision,comment,actor_name actorName,created_at createdAt FROM autoposting_reviews WHERE post_id=? ORDER BY id DESC LIMIT 30').all(id);
   const metaOf=row=>{const m=JSON.parse(row.meta||'{}');return Object.fromEntries(META_FIELDS.map(k=>[k,m[k]??'']));};
+  /* Подтверждения читаются как есть, без пересчёта статуса карточки: карточка остаётся черновиком,
+     а площадка получает отдельную отметку «Опубликовано вне ЛК». stale — публикация другой версии содержимого. */
+  const receiptsOf=row=>db.prepare(`SELECT id,platform,url,published_at publishedAt,content_revision contentRevision,note,
+    recorded_by_name recordedByName,recorded_at recordedAt FROM autoposting_publication_receipts WHERE post_id=? ORDER BY published_at DESC,id DESC`).all(row.id)
+    .map(item=>({...item,platformLabel:RECEIPT_PLATFORMS[item.platform]?.label||item.platform,stale:item.contentRevision!==row.content_revision}));
+  const receiptPlatforms=postId=>new Set(db.prepare('SELECT DISTINCT platform FROM autoposting_publication_receipts WHERE post_id=?').all(postId).map(item=>item.platform));
+  const channelPlatform=(channel,fallback='')=>channel?.platform||channel?.id||fallback;
   function rowFor(id,code) {
     const owner=company(db,code);
     if(!Number.isSafeInteger(Number(id))||Number(id)<1)fail(404,'Публикация не найдена','NOT_FOUND');
@@ -111,6 +169,7 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
       mediaUrls:JSON.parse(row.media_urls),platformIds:JSON.parse(row.platform_ids),scheduledAt:row.scheduled_at,timezone:row.timezone,
       dayKey:row.day_key||'',captions:JSON.parse(row.captions||'{}'),origin:row.origin||'',readiness:readiness(row),approval:approvalDto(row),
       mediaSha256:row.media_sha256||'',expectedMediaSha256:row.expected_media_sha256||'',expectedMediaFile:row.expected_media_file||'',externalId:row.external_id||'',
+      externalReceipts:receiptsOf(row),
       meta:metaOf(row),sortOrder:row.sort_order||0,review:{state:row.review_state||'draft',stateLabel:REVIEW_STATES[row.review_state||'draft'],comment:row.review_comment||'',byName:row.review_by_name||null,at:row.review_at||null},
       history:historyDto(row.id),labels:{formats:FORMATS,roles:ROLES,reviewStates:REVIEW_STATES},
       captionLimits:Object.fromEntries(Object.entries(CAPTION_PLATFORMS).map(([k,v])=>[k,v.limit])),
@@ -205,6 +264,10 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
       if(isQueueCard(row)&&!isApproved(row))fail(409,'Сначала одобрите публикацию этой версии','APPROVAL_REQUIRED');
       if(!data.scheduledAt||Date.parse(data.scheduledAt)<=now())fail(400,'Выберите время публикации в будущем');
       const channels=data.platformIds.map(id=>settings.channels.find(channel=>channel.id===id));
+      // Площадка, отмеченная как опубликованная вне ЛК, повторно не отправляется: это создало бы дубликат записи.
+      const marked=receiptPlatforms(row.id);
+      const blocked=data.platformIds.filter((id,index)=>marked.has(channelPlatform(channels[index],id)));
+      if(blocked.length)fail(409,`Уже отмечено как опубликованное вне ЛК: ${blocked.join(', ')}. Повторная отправка создаст дубликат.`,'EXTERNAL_PUBLICATION_RECORDED');
       if(channels.some(channel=>!channel||!channel.enabled||!channel.connected))fail(409,'Выбранный канал не подключён','CHANNEL_NOT_CONNECTED');
       if(channels.some(channel=>!data.text&&!captionsByPlatform[channel.platform||channel.id]))fail(400,'Для выбранного канала нет ни общего текста, ни подписи площадки');
       for(const channel of channels)revision(channel.revision);
@@ -237,6 +300,30 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
         history(row,'revoked',text(body.comment??'',2000),actor);
       }
       return dto(db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(row.id),owner);
+    });
+  }
+  /* Подтверждение внешней публикации. Владелец сообщает: эта версия содержимого уже вышла на площадке
+     через внешний сервис или нативный интерфейс. Провайдер не вызывается, ничего не отправляется,
+     статус карточки и одобрение не меняются — фиксируется только доказательство со ссылкой и временем. */
+  function recordReceipt(id,code,body,actor={}) {
+    object(body,['platform','url','publishedAt','contentRevision','note']);
+    if(typeof body.platform!=='string'||!Object.hasOwn(RECEIPT_PLATFORMS,body.platform))
+      fail(400,'Площадка подтверждения: instagram, tiktok, youtube_shorts, vk или telegram');
+    const platform=body.platform,link=receiptUrl(platform,body.url),publishedAt=utcDate(body.publishedAt);
+    // Запланированное не считается опубликованным: дата выхода в будущем — это план, а не доказательство.
+    if(Date.parse(publishedAt)>now())fail(400,'Дата публикации в будущем: запланированная запись ещё не опубликована','NOT_PUBLISHED_YET');
+    const note=text(body.note??'',500);
+    return transaction(()=>{
+      const {row,owner}=rowFor(id,code);
+      if(!Number.isSafeInteger(body.contentRevision)||body.contentRevision<1)fail(400,'Укажите версию содержимого, которая опубликована');
+      if(body.contentRevision!==row.content_revision)
+        fail(409,'Содержимое карточки изменилось: подтверждайте ту версию, которая действительно опубликована','CONTENT_REVISION_CONFLICT');
+      // Повтор того же подтверждения (компания+карточка+площадка+ссылка) возвращает прежнюю запись и не плодит историю.
+      const existing=db.prepare('SELECT id FROM autoposting_publication_receipts WHERE company_id=? AND post_id=? AND platform=? AND url=?')
+        .get(owner.id,row.id,platform,link);
+      if(!existing)db.prepare(`INSERT INTO autoposting_publication_receipts(company_id,post_id,platform,url,published_at,content_revision,note,recorded_by,recorded_by_name,recorded_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?)`).run(owner.id,row.id,platform,link,publishedAt,row.content_revision,note,actor.userId??null,actor.userName??null,iso());
+      return {created:!existing,post:dto(db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(row.id),owner)};
     });
   }
   /* Безопасный импорт пакета карточек: только черновики, без одобрения и без публикации; ссылки на медиа — как переданы,
@@ -415,6 +502,15 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
     })){review(due.id,'CHANNEL_CHANGED');return;}
     if(information.get(due.code).revision!==due.profile_revision){review(due.id,'PROFILE_CHANGED');return;}
     if(isQueueCard(due)&&!isApproved(due)){review(due.id,'APPROVAL_REVOKED');return;}
+    // Отмеченная как опубликованная вне ЛК площадка снимается с очереди до захвата lease: дубликат не отправляется.
+    const marked=receiptPlatforms(due.id);
+    const conflicting=marked.size?deliveries.filter(delivery=>delivery.status==='pending'
+      &&marked.has(channelPlatform(settings.channels.find(channel=>channel.id===delivery.channel_id),delivery.channel_id))):[];
+    if(conflicting.length){
+      const cancel=db.prepare("UPDATE autoposting_deliveries SET status='cancelled',error_code='EXTERNAL_PUBLICATION_RECORDED' WHERE post_id=? AND channel_id=? AND status='pending'");
+      for(const delivery of conflicting)cancel.run(due.id,delivery.channel_id);
+      review(due.id,'EXTERNAL_PUBLICATION_RECORDED');return;
+    }
     const lease=randomUUID();
     const claimed=db.prepare("UPDATE autoposting_posts SET status='publishing',publishing_at=?,lease=?,revision=revision+1,updated_at=? WHERE id=? AND status='scheduled' AND revision=?")
       .run(now(),lease,iso(),due.id,due.revision);
@@ -428,6 +524,11 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
       if(!channel||!channel.connected||!channel.enabled||channel.revision!==delivery.channel_revision){review(due.id,'CHANNEL_CHANGED');return;}
       const freshPost=db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(due.id);
       if(stopped||freshPost.status!=='publishing'||freshPost.lease!==lease)return;
+      // Подтверждение могло появиться между каналами: отмеченная площадка отменяется, отправка не выполняется.
+      if(receiptPlatforms(due.id).has(channelPlatform(channel,delivery.channel_id))){
+        db.prepare("UPDATE autoposting_deliveries SET status='cancelled',error_code='EXTERNAL_PUBLICATION_RECORDED' WHERE post_id=? AND channel_id=? AND status='pending'").run(due.id,delivery.channel_id);
+        review(due.id,'EXTERNAL_PUBLICATION_RECORDED');return;
+      }
       // Отзыв одобрения между каналами: оставшиеся отправки не выполняются.
       if(isQueueCard(freshPost)&&!isApproved(freshPost)){db.prepare("UPDATE autoposting_deliveries SET status='cancelled' WHERE post_id=? AND status='pending'").run(due.id);review(due.id,'APPROVAL_REVOKED');return;}
       if(information.get(due.code).revision!==due.profile_revision){review(due.id,'PROFILE_CHANGED');return;}
@@ -437,6 +538,10 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
           // Подпись площадки, если задана, заменяет общий текст именно для этого канала.
           post:(()=>{const view=dto(due,company(db,due.code));return {...view,text:view.captions?.[channel.platform||channel.id]||view.text,idempotencyKey:`synapse-post-${due.id}-${delivery.channel_id}`};})(),
           beforePublish:()=>{
+            // Подтверждение могло появиться, пока транспорт ждал предварительные запросы: адаптер вызывает
+            // этот барьер перед самой передачей, и до неё отправка ещё отменима.
+            if(receiptPlatforms(due.id).has(channelPlatform(channel,delivery.channel_id)))
+              throw Object.assign(Error('External publication recorded before provider submission'),{ambiguous:false,receiptBlocked:true});
             const active=db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(due.id);
             if(stopped||active?.status!=='publishing'||active.lease!==lease||information.get(due.code).revision!==due.profile_revision||(isQueueCard(active)&&!isApproved(active)))
               throw Object.assign(Error('Publication changed before provider submission'),{ambiguous:false});
@@ -452,6 +557,12 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
         db.prepare("UPDATE autoposting_deliveries SET status='published',external_id=?,url=?,finished_at=?,error_code=NULL WHERE post_id=? AND channel_id=? AND status='publishing'")
           .run(result.externalId.slice(0,500),result.url?url(result.url):null,iso(),due.id,delivery.channel_id);
       }catch(error){
+        // Барьер сработал до передачи площадке: отправки не было, доставка снимается с тем же понятным кодом.
+        if(error?.receiptBlocked){
+          db.prepare("UPDATE autoposting_deliveries SET status='cancelled',error_code='EXTERNAL_PUBLICATION_RECORDED',finished_at=? WHERE post_id=? AND channel_id=? AND status='publishing'")
+            .run(iso(),due.id,delivery.channel_id);
+          review(due.id,'EXTERNAL_PUBLICATION_RECORDED');return;
+        }
         const ambiguous=error?.ambiguous!==false,status=ambiguous?'needs_review':'failed';
         const code=ambiguous?'PUBLICATION_UNCERTAIN':'PUBLISH_FAILED';
         db.prepare("UPDATE autoposting_deliveries SET status=?,error_code=?,finished_at=? WHERE post_id=? AND channel_id=? AND status='publishing'")
@@ -470,6 +581,6 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   }
   function drain(){if(stopped)return Promise.resolve();if(!running)running=processDue().finally(()=>running=null);return running;}
   function stop(){stopped=true;return running||Promise.resolve();}
-  return {get,list,create,update,schedule,cancel,reconcile,drain,stop,invalidate,approve,reject,submitReview,reorder,importPackage};
+  return {get,list,create,update,schedule,cancel,reconcile,drain,stop,invalidate,approve,reject,submitReview,reorder,importPackage,recordReceipt};
 }
-module.exports={createAutoposting,LEASE_MS,CAPTION_PLATFORMS,FORMATS,ROLES,REVIEW_STATES,META_FIELDS};
+module.exports={createAutoposting,LEASE_MS,CAPTION_PLATFORMS,FORMATS,ROLES,REVIEW_STATES,META_FIELDS,RECEIPT_PLATFORMS,receiptFormat};
