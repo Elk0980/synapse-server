@@ -5,7 +5,7 @@ const esc=AlviPrice.esc;
 const groups=[
 {id:'laser',title:'Лазерная эпиляция',headline:'Меньше времени на бритьё. Больше — на себя.',intro:'Выберите отдельную зону или несколько зон за один визит. Подходящий вариант и подготовку обсудим перед процедурой.'},
 {id:'apparatus',title:'Аппаратный массаж',headline:'Коррекция фигуры начинается с первого визита.',intro:'Знакомство с процедурой, работа с выбранными зонами и программа под вашу цель.'},
-{id:'manual',title:'Ручной массаж и массаж лица',headline:'Время для себя — в руках мастера.',intro:'Массаж тела или лица: выбирайте подходящую процедуру и обсудите пожелания со специалистом.'}
+{id:'manual',title:'Ручной массаж и массаж лица',headline:'Ручной массаж тела и лица — расслабление и уход.',intro:'Массаж тела или лица: выбирайте подходящую процедуру и обсудите пожелания со специалистом.'}
 ];
 function group(cat,it){if(cat.id==='subscriptions')return 'subscriptions';if(['laser','apparatus','manual'].includes(it.direction))return it.direction;if(cat.id.startsWith('laser'))return 'laser';if(cat.id==='apparat'||(cat.id==='first-visit'&&it.id!=='first-3'))return 'apparatus';return 'manual';}
 function safeUrl(value,fallback){try{const u=new URL(value,location.href);return ['https:','http:','tel:'].includes(u.protocol)?u.href:fallback;}catch(e){return fallback;}}

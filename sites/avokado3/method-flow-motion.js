@@ -13,7 +13,7 @@
   function workPlan(viewport, header, content, count, reduced) {
     const available = Math.max(0, viewport - header - 112);
     const enabled = !reduced && content > 0 && content <= available;
-    return { enabled, travel: enabled ? available * Math.max(0, count - 1) * 1.15 : 0 };
+    return { enabled, travel: enabled ? available * Math.max(0, count - 1) * 0.75 : 0 };
   }
   function create(root, work) {
     const scene = root.querySelector('#method-5');
