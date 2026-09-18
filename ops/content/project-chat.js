@@ -484,7 +484,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       ...page,
       tasks,
       // Запланированные сообщения видны в кабинете: срок, пояс и состояние — без отдельного экрана.
-      scheduled: scheduledList(code),
+      scheduled: scheduledList(code, user),
       stages: db.prepare('SELECT id,title FROM project_chat_stages WHERE company_code=? ORDER BY id').all(code),
       access: { owner: user.role === 'owner', canReply: true },
       ai: { configured: runtime.configured, connected: runtime.connected, runtimeState: runtime.state,
@@ -732,14 +732,13 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
 
      Права проверяются ДВАЖДЫ: при планировании и ещё раз в момент отправки. За время ожидания автора
      могли исключить из проекта или сменить привязку группы — тогда сообщение не уходит вовсе. */
-  /* Право отправлять в эту комнату — одно и то же правило и при планировании, и в момент отправки:
-     действующая учётная запись, доступ к компании и членство в комнате. Проверяется дважды,
-     потому что между планированием и сроком доступ могли отозвать. */
+  /* Право писать в эту комнату в момент отправки. Берётся ровно та часть правила access(),
+     которая относится к учётной записи: она существует, у неё есть доступ к компании и членство
+     в комнате. Проверку сессии сюда переносить нечего — в момент срока запроса и сессии нет,
+     а отзыв доступа выражается именно в этих двух признаках. Выдуманных проверок здесь нет. */
   function canSendAs(user, code) {
-    if (!user) return false;
-    const fresh = authStore.getById(user.id);
-    if (!fresh || fresh.sessionVersion !== user.sessionVersion) return false;
-    return assigned(fresh, code) && isMember(fresh, code);
+    const fresh = user ? authStore.getById(user.id) : null;
+    return Boolean(fresh) && assigned(fresh, code) && isMember(fresh, code);
   }
   const SCHEDULED_GRACE_MS = 6 * 60 * 60 * 1000;
   const SCHEDULED_LIMIT = 200;
@@ -748,7 +747,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   const scheduledJSON = (row) => ({
     id: row.id, kind: row.kind, taskId: row.task_id ?? null, text: row.text,
     dueAt: row.due_at, timezone: row.timezone, status: row.status,
-    messageId: row.message_id ?? null, authorName: row.author_name || '',
+    messageId: row.message_id ?? null, authorId: row.author_id ?? null, authorName: row.author_name || '',
     error: row.error || '', createdAt: row.created_at, sentAt: row.sent_at || null, attempts: row.attempts || 0,
     /* Состояние доставки берётся у существующей очереди: «отправлено в Telegram», «ожидает»,
        «доставка уточняется» — то же самое, что показано у обычных сообщений. */
@@ -757,27 +756,56 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       : '',
   });
 
-  function scheduledList(code) {
+  /* canManage считает сервер и отдаёт готовым: кабинет не должен показывать «Изменить» тому,
+     кому сервер всё равно откажет — иначе участник получал бы 403 на ровном месте. */
+  function scheduledList(code, user = null) {
     return db.prepare(`SELECT * FROM project_chat_scheduled WHERE company_code=?
-      ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, due_at DESC, id DESC LIMIT ?`).all(code, SCHEDULED_LIMIT).map(scheduledJSON);
+      ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, due_at DESC, id DESC LIMIT ?`).all(code, SCHEDULED_LIMIT)
+      .map(row => ({ ...scheduledJSON(row),
+        canManage: Boolean(user) && row.status === 'pending' && (user.role === 'owner' || row.author_id === user.id) }));
   }
 
   /* Разбор срока. Принимаем либо местное время владельца плюс пояс, либо готовый момент в UTC.
      Отправить «задним числом» нельзя: срок в прошлом отклоняется сразу. */
-  function scheduledDue(body, at) {
-    const timezone = cleanText(body.timezone ?? 'UTC', 64, 'timezone');
+  /* Пояс проверяется ОДНИМ правилом во всех ветках: и когда срок задан местным временем,
+     и когда прислан готовый момент, и когда в PATCH меняют только пояс. */
+  function scheduledZone(value, fallbackZone = 'UTC') {
+    const timezone = cleanText(value ?? fallbackZone, 64, 'timezone') || fallbackZone;
+    if (!ZONE.test(timezone)) fail(400, 'Неизвестный часовой пояс');
+    try { new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(0); }
+    catch { fail(400, 'Неизвестный часовой пояс'); }
+    return timezone;
+  }
+  // Готовый момент принимается только как настоящий ISO с Z или смещением и существующей датой.
+  const ABSOLUTE_MOMENT = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
+  function absoluteIso(value) {
+    const match = ABSOLUTE_MOMENT.exec(String(value ?? ''));
+    if (!match) return null;
+    const [year, month, day, hour, minute] = match.slice(1, 6).map(Number);
+    const second = match[6] === undefined ? 0 : Number(match[6]);
+    if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59) return null;
+    const calendar = new Date(Date.UTC(year, month - 1, day));
+    if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() + 1 !== month || calendar.getUTCDate() !== day) return null;
+    const ms = Date.parse(String(value).replace(' ', 'T'));
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+  }
+  /* Разбор срока. checkFuture=false нужен, когда мы всего лишь сравниваем повтор запроса с уже
+     записанной отправкой: у повтора срок к этому моменту может быть в прошлом, и это не ошибка. */
+  function scheduledDue(body, at, { fallbackZone = 'UTC', checkFuture = true } = {}) {
+    const timezone = scheduledZone(body.timezone, fallbackZone);
     let iso = null;
     if (body.dueAtLocal !== undefined) {
       iso = zonedToUtcIso(body.dueAtLocal, timezone);
-      if (!iso) fail(400, 'Укажите дату и время в виде 2026-09-19T09:00 и существующий часовой пояс');
+      if (!iso) fail(400, 'Укажите существующие дату и время в виде 2026-09-19T09:00 для выбранного пояса');
     } else if (body.dueAt !== undefined) {
-      const ms = Date.parse(String(body.dueAt));
-      if (!Number.isFinite(ms)) fail(400, 'Некорректный срок отправки');
-      iso = new Date(ms).toISOString();
+      iso = absoluteIso(body.dueAt);
+      if (!iso) fail(400, 'Укажите момент в виде 2026-09-19T01:00:00Z или со смещением +07:00');
     } else fail(400, 'Укажите срок отправки');
     const ms = Date.parse(iso);
-    if (ms <= at) fail(400, 'Срок отправки уже прошёл');
-    if (ms > at + SCHEDULED_HORIZON_MS) fail(400, 'Слишком далёкий срок: не больше года вперёд');
+    if (checkFuture) {
+      if (ms <= at) fail(400, 'Срок отправки уже прошёл');
+      if (ms > at + SCHEDULED_HORIZON_MS) fail(400, 'Слишком далёкий срок: не больше года вперёд');
+    }
     return { iso, timezone };
   }
 
@@ -796,22 +824,25 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     }
     const text = cleanText(body.text ?? '', MESSAGE_LIMIT, 'text');
     if (!text) fail(400, 'Введите текст сообщения');
-    const { iso, timezone } = scheduledDue(body, at);
-    if (db.prepare("SELECT count(*) AS n FROM project_chat_scheduled WHERE company_code=? AND status='pending'").get(code).n >= SCHEDULED_LIMIT) {
-      fail(409, 'Слишком много запланированных сообщений: отмените лишние');
-    }
+    /* Сначала — повтор запроса, и только потом ограничения для НОВОЙ записи. Иначе повтор,
+       пришедший уже после наступления срока или при заполненном лимите, получал бы ошибку
+       вместо того, что на самом деле произошло: отправка уже запланирована. */
+    const sample = scheduledDue(body, at, { checkFuture: false });
     const stampNow = new Date(at).toISOString();
     const room = ensureRoom(code);
     return tx(() => {
-      /* Повтор того же запроса (потерянный ответ, двойное нажатие) не создаёт вторую отправку:
-         возвращаем уже записанную. Тот же ключ с другим содержимым — ошибка, а не тихая замена. */
       const twin = db.prepare('SELECT * FROM project_chat_scheduled WHERE company_code=? AND author_id=? AND client_id=?')
         .get(code, user.id, clientId);
       if (twin) {
-        const same = twin.text === text && twin.due_at === iso && twin.timezone === timezone
+        const same = twin.text === text && twin.due_at === sample.iso && twin.timezone === sample.timezone
           && twin.kind === kind && (twin.task_id ?? null) === (taskId ?? null);
         if (!same) fail(409, 'Этот идентификатор запроса уже использован для другого сообщения');
         return scheduledJSON(twin);
+      }
+      // Новая запись: срок обязан быть в будущем, и очередь не должна быть переполнена.
+      const { iso, timezone } = scheduledDue(body, at);
+      if (db.prepare("SELECT count(*) AS n FROM project_chat_scheduled WHERE company_code=? AND status='pending'").get(code).n >= SCHEDULED_LIMIT) {
+        fail(409, 'Слишком много запланированных сообщений: отмените лишние');
       }
       const id = Number(db.prepare(`INSERT INTO project_chat_scheduled
         (company_code,kind,task_id,text,due_at,timezone,status,author_id,author_name,chat_id_at_plan,client_id,created_at,updated_at)
@@ -842,9 +873,11 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       }
       const text = body.text === undefined ? row.text : cleanText(body.text, MESSAGE_LIMIT, 'text');
       if (!text) fail(400, 'Введите текст сообщения');
+      /* Пояс при переносе наследуется из записи, если его не прислали, и в любом случае проверяется
+         тем же правилом: смена одного только пояса не должна пройти без проверки. */
       const due = (body.dueAt === undefined && body.dueAtLocal === undefined)
-        ? { iso: row.due_at, timezone: body.timezone === undefined ? row.timezone : cleanText(body.timezone, 64, 'timezone') }
-        : scheduledDue(body, at);
+        ? { iso: row.due_at, timezone: scheduledZone(body.timezone, row.timezone) }
+        : scheduledDue(body, at, { fallbackZone: row.timezone });
       db.prepare('UPDATE project_chat_scheduled SET text=?,due_at=?,timezone=?,updated_at=? WHERE id=? AND status=\'pending\'')
         .run(text, due.iso, due.timezone, new Date(at).toISOString(), row.id);
       return scheduledJSON(db.prepare('SELECT * FROM project_chat_scheduled WHERE id=?').get(row.id));

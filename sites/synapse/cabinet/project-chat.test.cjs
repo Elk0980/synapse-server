@@ -1333,11 +1333,11 @@ test('планирование: кнопка рядом с отправкой, �
 test('планирование: список показывает срок, пояс и состояние доставки, отмена доступна только ожидающему', async () => {
   const scheduled = [
     { id: 1, kind: 'message', text: 'Утренняя сводка', dueAt: '2026-09-19T01:00:00.000Z', timezone: 'Asia/Irkutsk',
-      status: 'pending', deliveryStatus: '', error: '', taskId: null },
+      status: 'pending', deliveryStatus: '', error: '', taskId: null, authorId: 1, canManage: true },
     { id: 2, kind: 'task_reminder', text: 'Проверить правку', dueAt: '2026-09-18T01:00:00.000Z', timezone: 'Asia/Irkutsk',
-      status: 'sent', deliveryStatus: 'uncertain', error: '', taskId: 7 },
+      status: 'sent', deliveryStatus: 'uncertain', error: '', taskId: 7, authorId: 1, canManage: false },
     { id: 3, kind: 'message', text: 'Старое', dueAt: '2026-09-10T01:00:00.000Z', timezone: 'Asia/Irkutsk',
-      status: 'expired', deliveryStatus: '', error: 'Срок прошёл, пока сервер был недоступен: сообщение не отправлено', taskId: null }
+      status: 'expired', deliveryStatus: '', error: 'Срок прошёл, пока сервер был недоступен: сообщение не отправлено', taskId: null, authorId: 1, canManage: false }
   ];
   const harness = boot({ clock: true, routes: {
     'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ scheduled }) }),
@@ -1370,7 +1370,7 @@ test('планирование недоступно без права ответ
   const harness = boot({ role: 'member', clock: true, routes: {
     'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ access: { canReply: false, owner: false },
       scheduled: [{ id: 1, kind: 'message', text: 'Сводка', dueAt: '2026-09-19T01:00:00.000Z', timezone: 'Asia/Irkutsk',
-        status: 'pending', deliveryStatus: '', error: '', taskId: null }] }) })
+        status: 'pending', deliveryStatus: '', error: '', taskId: null, authorId: 2, canManage: false }] }) })
   } });
   await mount(harness);
   const { d } = harness;
@@ -1379,4 +1379,58 @@ test('планирование недоступно без права ответ
   harness.click('[data-pc-schedule]');
   await settle();
   assert.equal(d.querySelector('.pc-dialog'), null, 'диалог не открывается');
+});
+
+test('напоминание по задаче: кнопка у задачи открывает планирование и уходит kind с taskId', async () => {
+  const task = { id: 7, externalRef: 'А8', title: 'Фото вылезает на ПК', status: 'done', kind: 'client_remark',
+    site: 'palitra-love', siteLabel: 'Палитра', siteStatus: 'known', publication: 'prepared',
+    publicationLabel: 'Готово, на сайте ещё нет', publishedUrl: '', verifiedAt: '', sourceQuote: '',
+    notes: [], fixedOnSite: false, cancelled: false, assigneeId: null, stageId: null, due: '' };
+  const harness = boot({ clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ tasks: [task] }) }),
+    'POST /content/project-chat/palitra-love/scheduled': () => ({ status: 201, body: { item: { id: 9 } } })
+  } });
+  await mount(harness);
+  const { d } = harness;
+  const remind = d.querySelector('[data-pc-task-remind="7"]');
+  assert.ok(remind, 'у задачи есть кнопка «Напомнить»');
+  assert.equal(remind.closest('[data-pc-task]'), null, 'кнопка не вложена в кнопку задачи');
+
+  harness.click('[data-pc-task-remind="7"]');
+  await settle();
+  const form = d.querySelector('.pc-dialog form');
+  assert.ok(form, 'открылся диалог планирования');
+  assert.match(d.querySelector('.pc-dialog').textContent, /Фото вылезает на ПК/, 'видно, о какой задаче речь');
+  form.elements.text.value = 'Проверить, что правка на сайте';
+  form.elements.date.value = '2026-09-19';
+  form.elements.time.value = '09:00';
+  form.elements.timezone.value = 'Asia/Irkutsk';
+  harness.submit('.pc-dialog form');
+  await settle();
+
+  const sent = harness.calls.find((call) => call.method === 'POST' && call.url.includes('/scheduled'));
+  assert.ok(sent, 'запрос ушёл');
+  const body = JSON.parse(sent.body);
+  assert.equal(body.kind, 'task_reminder');
+  assert.equal(body.taskId, 7);
+  assert.equal(body.dueAtLocal, '2026-09-19T09:00');
+  assert.equal(body.timezone, 'Asia/Irkutsk');
+  assert.equal(body.text, 'Проверить, что правка на сайте');
+});
+
+test('чужую отложенную отправку кабинет не предлагает трогать', async () => {
+  const mine = { id: 1, kind: 'message', text: 'Моя сводка', dueAt: '2026-09-19T01:00:00.000Z', timezone: 'Asia/Irkutsk',
+    status: 'pending', deliveryStatus: '', error: '', taskId: null, authorId: 1, canManage: true };
+  const foreign = { id: 2, kind: 'message', text: 'Сводка коллеги', dueAt: '2026-09-19T02:00:00.000Z', timezone: 'Asia/Irkutsk',
+    status: 'pending', deliveryStatus: '', error: '', taskId: null, authorId: 2, canManage: false };
+  const harness = boot({ clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ scheduled: [mine, foreign] }) })
+  } });
+  await mount(harness);
+  const { d } = harness;
+  assert.ok(d.querySelector('[data-pc-schedule-cancel="1"]'), 'своё можно отменить');
+  assert.equal(d.querySelector('[data-pc-schedule-cancel="2"]'), null, 'чужое не предлагается отменить');
+  assert.equal(d.querySelector('[data-pc-schedule-edit="2"]'), null, 'и не предлагается изменить');
+  // Запросов к серверу за чужое не делается вовсе: нечего нажать, значит нет и 403 с выходом из чата.
+  assert.equal(harness.calls.filter((call) => call.method === 'PATCH').length, 0);
 });

@@ -13,3 +13,4 @@
 .pc-scheduled-item { border: 1px solid var(--pc-border, #2a3344); border-radius: 8px; padding: 0.5rem 0.75rem; }
 .pc-scheduled-item p { margin: 0 0 0.25rem; }
 .pc-scheduled-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+.pc-task-remind { margin-top: 0.25rem; }

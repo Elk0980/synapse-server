@@ -1260,3 +1260,68 @@ test('отложенная отправка: несуществующее мес
   const fold = await plan('2026-10-25T02:30', 'Europe/Berlin');
   assert.equal(fold.payload.item.dueAt, '2026-10-25T00:30:00.000Z');
 });
+
+test('отложенная отправка: пояс проверяется во всех ветках, готовый момент — только настоящий ISO', async () => {
+  const clock = clockAt('2026-09-18T20:00:00.000Z');
+  const { chat, owner } = setup({ clock });
+  const plan = (body) => call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+    body: { clientId: `plan-${crypto.randomUUID()}`, text: 'Проверка', ...body } });
+
+  // Готовый момент: только Z или смещение, существующая дата.
+  await assert.rejects(() => plan({ dueAt: '2026-09-19 09:00' }), status(400));
+  await assert.rejects(() => plan({ dueAt: '2026-02-30T09:00:00Z' }), status(400));
+  await assert.rejects(() => plan({ dueAt: 'завтра' }), status(400));
+  const absolute = await plan({ dueAt: '2026-09-19T01:00:00Z' });
+  assert.equal(absolute.payload.item.dueAt, '2026-09-19T01:00:00.000Z');
+  const offset = await plan({ dueAt: '2026-09-19T09:00:00+08:00' });
+  assert.equal(offset.payload.item.dueAt, '2026-09-19T01:00:00.000Z');
+
+  // Пояс проверяется и рядом с готовым моментом.
+  await assert.rejects(() => plan({ dueAt: '2026-09-19T01:00:00Z', timezone: 'Марс/Олимп' }), status(400));
+
+  // И при изменении одного только пояса.
+  const item = await plan({ dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' });
+  await assert.rejects(() => call(chat, { session: owner, method: 'PATCH', url: room(`/scheduled/${item.payload.item.id}`),
+    body: { timezone: 'Совсем/Нет' } }), status(400));
+  // Пояс не прислали — наследуется прежний, срок не меняется.
+  const kept = await call(chat, { session: owner, method: 'PATCH', url: room(`/scheduled/${item.payload.item.id}`),
+    body: { text: 'Только текст' } });
+  assert.equal(kept.payload.item.timezone, 'Asia/Irkutsk');
+  assert.equal(kept.payload.item.dueAt, item.payload.item.dueAt);
+});
+
+test('отложенная отправка: повтор запроса узнаётся даже после срока и при заполненной очереди', async () => {
+  const clock = clockAt('2026-09-18T20:00:00.000Z');
+  const { chat, owner } = setup({ clock });
+  const body = { clientId: 'plan-late-0001', text: 'Утренняя сводка', dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' };
+  const first = await call(chat, { session: owner, method: 'POST', url: room('/scheduled'), body });
+
+  // Срок прошёл, сообщение уже отправлено — повтор того же запроса возвращает ту же запись, а не ошибку.
+  clock.now = Date.parse('2026-09-19T02:00:00.000Z');
+  assert.equal(chat.processScheduledMessages().sent, 1);
+  const repeat = await call(chat, { session: owner, method: 'POST', url: room('/scheduled'), body });
+  assert.equal(repeat.payload.item.id, first.payload.item.id);
+  assert.equal(repeat.payload.item.status, 'sent');
+
+  // Новая запись с прошедшим сроком по-прежнему отклоняется.
+  await assert.rejects(() => call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+    body: { ...body, clientId: 'plan-late-0002' } }), status(400));
+});
+
+test('отложенная отправка: право менять отдаётся сервером и совпадает с тем, что он разрешает', async () => {
+  const clock = clockAt('2026-09-18T20:00:00.000Z');
+  const { chat, owner, person, session } = setup({ clock });
+  const daria = person('daria3', [ROOM]);
+  const boris = person('boris2', [ROOM]);
+  await call(chat, { session: owner, method: 'PUT', url: room('/members'), body: { userIds: [OWNER_ID, daria.id, boris.id] } });
+  await call(chat, { session: session(daria.id), method: 'POST', url: room('/scheduled'),
+    body: { clientId: `plan-${crypto.randomUUID()}`, text: 'Сообщение Дарьи', dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' } });
+
+  const forAuthor = await call(chat, { session: session(daria.id), url: room('') });
+  assert.equal(forAuthor.payload.scheduled[0].canManage, true, 'автору управление разрешено');
+  const forOther = await call(chat, { session: session(boris.id), url: room('') });
+  assert.equal(forOther.payload.scheduled[0].canManage, false, 'постороннему участнику — нет');
+  assert.equal(forOther.payload.scheduled[0].authorId, daria.id);
+  const forOwner = await call(chat, { session: owner, url: room('') });
+  assert.equal(forOwner.payload.scheduled[0].canManage, true, 'владельцу разрешено');
+});

@@ -306,7 +306,10 @@
           ? `<span class="pc-task-notes">Уточнения: ${list(task.notes).map(note => escape(note.text)).join(" · ")}</span>` : "";
         const cancelled = task.cancelled || task.status === "cancelled";
         const kind = task.kind === "internal" ? '<span class="pc-badge">Внутренняя работа</span>' : "";
-        return `<li class="pc-task${cancelled ? " pc-task-cancelled" : task.fixedOnSite ? " pc-task-done" : ""}"><button type="button" data-pc-task="${escape(task.id)}"><strong>${task.externalRef ? escape(task.externalRef) + ". " : ""}${escape(task.title)}</strong>${quote}<span class="pc-task-badges">${site}${kind}${cancelled ? '<span class="pc-badge pc-pub-cancelled">Отменено — не исправление</span>' : ""}<span class="pc-badge pc-pub-${escape(publication)}">${escape(publications[publication] || publication)}</span></span>${notes}<span>${escape(assigneeLabel(state, task))} · ${escape(stageName(state, task.stageId))}</span><small>Работа: ${escape(statuses[task.status] || task.status)}${task.due ? " · " + escape(task.due) : ""}</small></button>${link}</li>`;
+        // Кнопка напоминания стоит рядом с задачей, а не внутри её кнопки: вложенные кнопки недопустимы.
+        const remind = canReply(state)
+          ? `<button type="button" class="pc-task-remind" data-pc-task-remind="${escape(task.id)}">Напомнить</button>` : "";
+        return `<li class="pc-task${cancelled ? " pc-task-cancelled" : task.fixedOnSite ? " pc-task-done" : ""}"><button type="button" data-pc-task="${escape(task.id)}"><strong>${task.externalRef ? escape(task.externalRef) + ". " : ""}${escape(task.title)}</strong>${quote}<span class="pc-task-badges">${site}${kind}${cancelled ? '<span class="pc-badge pc-pub-cancelled">Отменено — не исправление</span>' : ""}<span class="pc-badge pc-pub-${escape(publication)}">${escape(publications[publication] || publication)}</span></span>${notes}<span>${escape(assigneeLabel(state, task))} · ${escape(stageName(state, task.stageId))}</span><small>Работа: ${escape(statuses[task.status] || task.status)}${task.due ? " · " + escape(task.due) : ""}</small></button>${link}${remind}</li>`;
       }).join("") || '<li class="pc-empty">Из сообщения можно создать задачу, назначить исполнителя и срок.</li>';
       /* В счётчике — только замечания клиента, которые ещё не на сайте и не сняты. Внутренние работы
          (резервы, счётчики) считаются отдельно и в клиентский счёт не входят. */
@@ -441,7 +444,8 @@
     node.innerHTML = items.map(item => {
       const delivery = item.status === "sent" && item.deliveryStatus
         ? ` · ${escape(scheduledDelivery[item.deliveryStatus] || item.deliveryStatus)}` : "";
-      const actions = item.status === "pending" && canReply(state)
+      // Право менять приходит с сервера: чужую отправку кабинет не предлагает трогать.
+      const actions = item.canManage
         ? `<span class="pc-scheduled-actions"><button type="button" data-pc-schedule-edit="${escape(item.id)}">Изменить</button><button type="button" data-pc-schedule-cancel="${escape(item.id)}">Отменить</button></span>`
         : "";
       const reminder = item.kind === "task_reminder" ? '<span class="pc-badge">Напоминание по задаче</span>' : "";
@@ -942,6 +946,10 @@
       if (button.matches("[data-pc-stages]")) stagesDialog(state);
       if (button.matches("[data-pc-edit-members]")) membersDialog(state);
       if (button.matches("[data-pc-schedule]")) scheduleDialog(state);
+      if (button.matches("[data-pc-task-remind]")) {
+        const task = list(state.data?.tasks).find(row => String(row.id) === button.dataset.pcTaskRemind);
+        if (task) scheduleDialog(state, { task });
+      }
       if (button.matches("[data-pc-schedule-edit]")) {
         const item = list(state.data?.scheduled).find(row => String(row.id) === button.dataset.pcScheduleEdit);
         if (item) scheduleDialog(state, { item });
