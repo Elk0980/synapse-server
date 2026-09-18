@@ -1,0 +1,29 @@
+{
+  "_комментарий": "Пример без секретов. command — всегда исполняемый файл, запускаемый напрямую: shell:false, поэтому .cmd/.bat/.ps1 на Windows НЕ годятся. Путь к node и к скрипту адаптера — абсолютные.",
+  "schema": 1,
+  "endpoint": "https://cabinet.example.test/content/project-chat-worker",
+  "keyFile": "secrets/worker-key.txt",
+  "companies": ["example-company"],
+  "stateDir": "state",
+  "jobTimeoutMs": 120000,
+  "heartbeatIntervalMs": 20000,
+  "renewIntervalMs": 20000,
+  "maxOutputBytes": 262144,
+  "agents": [
+    {
+      "name": "sample",
+      "provider": "sample",
+      "model": "",
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": ["C:\\synapse\\hugh-agent-connector\\examples\\sample-agent.js"],
+      "probeArgs": ["C:\\synapse\\hugh-agent-connector\\examples\\sample-agent.js", "--version"],
+      "input": "stdin-json",
+      "output": "json",
+      "textField": "text",
+      "envPassthrough": ["PATH", "SYSTEMROOT"],
+      "secretEnvFrom": {},
+      "requiresCredentials": false
+    }
+  ],
+  "routing": { "default": "sample", "companies": { "example-company": "sample" } }
+}

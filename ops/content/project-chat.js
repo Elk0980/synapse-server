@@ -305,6 +305,11 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       access: { owner: user.role === 'owner', canReply: true },
       ai: { configured: runtime.configured, connected: runtime.connected, runtimeState: runtime.state,
         provider: runtime.provider, model: runtime.model,
+        /* Кто обслуживает эту комнату: 'isolated-codex' | 'trusted-agent' у локального пути,
+           пусто у прежнего серверного. Нужен ленте участника, чтобы подпись под ожидающим вопросом
+           не обещала «после подключения подписки» там, где подписки Codex нет вовсе.
+           Ни кодов входа, ни ссылок, ни секретов здесь не появляется. */
+        mode: runtime.mode || '',
         // Локальный обработчик: компьютер может быть выключен — это ожидание, а не отказ.
         local: runtime.local === true, offline: runtime.offline === true, lastSeen: runtime.lastSeen || null,
         // Вход сохранён, но подписка временно ограничена: ответы придут сами, когда лимит освободится.

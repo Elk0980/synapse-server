@@ -58,7 +58,19 @@ const EXPLAIN = {
 };
 const DEFAULT_DELAY = { BUSY: 15, LOGIN_REQUIRED: 60, UNAVAILABLE: 60, RATE_LIMITED: 60 };
 
-function createLocalWorker({ db, keySha256 = '', companies = [], tx, insertMessage, buildPayload, sendJson,
+/* Политика «доверенный внешний исполнитель» (trusted external agent).
+
+   По умолчанию ВЫКЛЮЧЕНА: пустой HUGH_TRUSTED_AGENT_COMPANIES — поведение и проверки прежние,
+   изолированный Codex работает ровно как раньше и без proof заданий по-прежнему не получает.
+
+   Режим включает ТОЛЬКО конфигурация сервера, перечисляя компании поимённо. Поле trustedAgent
+   в heartbeat само по себе ничего не разрешает: для компании вне списка оно игнорируется.
+   В этом режиме сервер НЕ считает изоляцию инструментов подтверждённой и не требует её:
+   он сознательно допускает к переписке названной компании внешнего исполнителя, про которого
+   известно, что его инструменты не изолированы. Вход Codex при этом не имитируется:
+   authenticated остаётся как прислал исполнитель, а readiness называется отдельно.
+   Отзыв — удалить компанию из списка и перезапустить сервис: следующая выдача уже не состоится. */
+function createLocalWorker({ db, keySha256 = '', companies = [], trustedAgentCompanies = [], tx, insertMessage, buildPayload, sendJson,
   retryAfterSeconds, limitMessage, cleanText, messageLimit, aiAttempts, now = Date.now }) {
   const issues = [];
   const key = String(keySha256 || '').trim().toLowerCase();
@@ -70,6 +82,15 @@ function createLocalWorker({ db, keySha256 = '', companies = [], tx, insertMessa
   for (const code of requested) if (!local.includes(code)) issues.push(`HUGH_LOCAL_WORKER_COMPANIES: неизвестная компания ${JSON.stringify(code)} пропущена`);
   if (local.length && !key) issues.push('HUGH_LOCAL_WORKER_COMPANIES задан без HUGH_LOCAL_WORKER_KEY_SHA256: задания этих компаний ждут, пока ключ не настроен');
   const localSet = new Set(local);
+  /* Доверенные компании — строгое подмножество локальных: расширить область компаний режим не может. */
+  const trustedRequested = [...new Set((Array.isArray(trustedAgentCompanies) ? trustedAgentCompanies : String(trustedAgentCompanies || '').split(','))
+    .map((code) => String(code || '').trim()).filter(Boolean))];
+  const trusted = trustedRequested.filter((code) => localSet.has(code));
+  for (const code of trustedRequested) {
+    if (!trusted.includes(code)) issues.push(`HUGH_TRUSTED_AGENT_COMPANIES: ${JSON.stringify(code)} не входит в HUGH_LOCAL_WORKER_COMPANIES и пропущена`);
+  }
+  if (trusted.length) issues.push(`Режим доверенного внешнего исполнителя включён для: ${trusted.join(', ')}. Изоляция инструментов для них НЕ подтверждается`);
+  const trustedSet = new Set(trusted);
   const marks = local.map(() => '?').join(',');
   // Подстановки для массовых SQL: серверный обработчик исключает local companies, локальный — только их.
   const scope = { exclude: local.length ? ` AND company_code NOT IN (${marks})` : '',
@@ -96,7 +117,7 @@ function createLocalWorker({ db, keySha256 = '', companies = [], tx, insertMessa
   `);
   // Аренда и хеш результата живут в канонической очереди: отдельной таблицы заданий нет.
   const columns = new Set(db.prepare('PRAGMA table_info(project_chat_ai_jobs)').all().map((column) => column.name));
-  for (const column of ['lease_token', 'lease_expires_at', 'boot_id', 'result_hash']) {
+  for (const column of ['lease_token', 'lease_expires_at', 'boot_id', 'result_hash', 'lease_mode']) {
     if (!columns.has(column)) db.exec(`ALTER TABLE project_chat_ai_jobs ADD COLUMN ${column} TEXT`);
   }
   // Момент активации фиксируется один раз: метрики считаются с него, история не импортируется.
@@ -105,6 +126,8 @@ function createLocalWorker({ db, keySha256 = '', companies = [], tx, insertMessa
   }
 
   const isLocal = (code) => localSet.has(String(code ?? ''));
+  // Режим, по которому компания обслуживается ПРЯМО СЕЙЧАС. Аренда помнит свой режим отдельно.
+  const policyMode = (code) => (trustedSet.has(String(code ?? '')) ? 'trusted-agent' : 'isolated-codex');
   const workerRow = () => db.prepare('SELECT * FROM project_chat_local_worker WHERE id=1').get() || null;
   const parseJSON = (text) => { try { return JSON.parse(text || '{}') || {}; } catch { return {}; } };
   const isOffline = (row, at = now()) => {
@@ -126,6 +149,9 @@ function createLocalWorker({ db, keySha256 = '', companies = [], tx, insertMessa
       retryAfter: retryAfterSeconds(data.retryAfter),
       provider: token(data.provider, 40, /^[\w.-]*$/), model: token(data.model, 60, /^[\w.:/-]*$/),
       safety: { toolIsolationVerified: safety.toolIsolationVerified === true, reason: token(safety.reason, 64, /^[a-z][a-z0-9_]*$/) },
+      /* Самообъявление внешнего исполнителя. Разрешения не даёт: смотри trustedSet ниже. */
+      trustedAgent: data.trustedAgent === true,
+      readiness: token(data.readiness, 32, /^[a-z][a-z0-9_]*$/),
       errorCode: ERROR_CODES.has(String(data.errorCode ?? '')) ? String(data.errorCode) : '',
     };
     if (!login) return status;
@@ -226,12 +252,17 @@ function createLocalWorker({ db, keySha256 = '', companies = [], tx, insertMessa
   }
   // Готовность к ответам: свежий heartbeat той же загрузки, вход, соединение, доступность,
   // отсутствие лимита и подтверждённая изоляция инструментов. Одного available недостаточно.
-  const readyForReply = (row, bootId) => {
+  const readyForReply = (row, bootId, code = null) => {
     if (!row || isOffline(row) || row.boot_id !== bootId) return false;
     const status = parseJSON(row.status);
-    return status.authenticated === true && status.connected === true && status.available === true
-      && status.limited !== true && status.safety?.toolIsolationVerified === true;
+    if (status.connected !== true || status.available !== true || status.limited === true) return false;
+    /* Доверенный режим: подтверждения изоляции нет и оно не требуется — компанию назвал сервер.
+       Вход модели тоже не подтверждается: исполнитель заявляет готовность полем readiness. */
+    if (code !== null && trustedSet.has(code)) return status.trustedAgent === true && status.readiness === 'attested';
+    return status.authenticated === true && status.safety?.toolIsolationVerified === true;
   };
+  // Есть ли хоть одна компания, для которой выдача сейчас разрешена: без этого claim не ищет задания.
+  const servableCodes = (row, bootId) => local.filter((code) => readyForReply(row, bootId, code));
   const lease = () => ({ token: crypto.randomBytes(24).toString('base64url'), expires: stamp(now() + LEASE_MS) });
   const idle = () => ({ job: null, retryAfter: CLAIM_RETRY_AFTER });
 
@@ -248,8 +279,12 @@ function createLocalWorker({ db, keySha256 = '', companies = [], tx, insertMessa
       const busy = db.prepare(`SELECT 1 FROM project_chat_ai_jobs WHERE status='running' AND reply_message_id IS NULL AND lease_expires_at>=?${scope.include} LIMIT 1`)
         .get(at, ...scope.params) || db.prepare("SELECT 1 FROM project_chat_local_logins WHERE status='running' AND lease_expires_at>=? LIMIT 1").get(at);
       if (busy) return idle();
-      // Вход разрешён до авторизации и идёт первым: без него ответы всё равно не выдаются.
-      const login = db.prepare(`SELECT * FROM project_chat_local_logins WHERE (status='pending' OR (status='running' AND (lease_expires_at IS NULL OR lease_expires_at<?)))
+      /* Вход разрешён до авторизации и идёт первым: без него ответы всё равно не выдаются.
+         Но исполнитель, объявивший себя внешним (trustedAgent), вход Codex выполнить не может:
+         задания входа ему не выдаются вовсе, в том числе по изолированным компаниям. */
+      const declaredExternal = parseJSON(workerRow()?.status).trustedAgent === true;
+      const login = declaredExternal ? null
+        : db.prepare(`SELECT * FROM project_chat_local_logins WHERE (status='pending' OR (status='running' AND (lease_expires_at IS NULL OR lease_expires_at<?)))
         ${scope.include} ORDER BY id LIMIT 1`).get(at, ...scope.params);
       if (login) {
         const next = lease();
@@ -258,10 +293,15 @@ function createLocalWorker({ db, keySha256 = '', companies = [], tx, insertMessa
         return { job: { id: `login:${login.id}`, kind: 'login', companyCode: login.company_code, payload: {},
           payloadHash: sha256(EMPTY_PAYLOAD), leaseToken: next.token, leaseExpiresAt: next.expires } };
       }
-      if (!readyForReply(workerRow(), bootId)) return idle();
+      /* Готовность считается покомпанийно: обычная компания требует прежних условий,
+         доверенная — заявленной готовности внешнего исполнителя. Компании, для которых
+         выдача сейчас не разрешена, в выборку не попадают вовсе. */
+      const servable = servableCodes(workerRow(), bootId);
+      if (!servable.length) return idle();
+      const servableMarks = servable.map(() => '?').join(',');
       const candidates = db.prepare(`SELECT * FROM project_chat_ai_jobs WHERE reply_message_id IS NULL AND attempts<? AND next_attempt_at<=?
-        AND (status IN ('pending','error') OR (status='running' AND (lease_expires_at IS NULL OR lease_expires_at<?)))${scope.include}
-        ORDER BY id LIMIT 5`).all(aiAttempts, at, at, ...scope.params);
+        AND (status IN ('pending','error') OR (status='running' AND (lease_expires_at IS NULL OR lease_expires_at<?))) AND company_code IN (${servableMarks})
+        ORDER BY id LIMIT 5`).all(aiAttempts, at, at, ...servable);
       for (const job of candidates) {
         let payload;
         try {
@@ -273,8 +313,8 @@ function createLocalWorker({ db, keySha256 = '', companies = [], tx, insertMessa
           continue;
         }
         const next = lease();
-        db.prepare(`UPDATE project_chat_ai_jobs SET status='running',error='',payload=?,lease_token=?,lease_expires_at=?,boot_id=?,result_hash=NULL WHERE id=?`)
-          .run(payload, next.token, next.expires, bootId, job.id);
+        db.prepare(`UPDATE project_chat_ai_jobs SET status='running',error='',payload=?,lease_token=?,lease_expires_at=?,boot_id=?,result_hash=NULL,lease_mode=? WHERE id=?`)
+          .run(payload, next.token, next.expires, bootId, policyMode(job.company_code), job.id);
         return { job: { id: String(job.id), kind: 'reply', companyCode: job.company_code, payload: JSON.parse(payload),
           payloadHash: sha256(payload), leaseToken: next.token, leaseExpiresAt: next.expires } };
       }
@@ -289,10 +329,18 @@ function createLocalWorker({ db, keySha256 = '', companies = [], tx, insertMessa
     if (!isLocal(row.company_code)) fail(403, 'Компания не обслуживается локальным обработчиком');
     return row;
   }
+  /* Режим, под которым выдана аренда, должен действовать и сейчас. Если компанию убрали из
+     доверенного списка между claim и complete, результат по прежней политике не принимается.
+     Саму аренду не стираем: задание вернётся в очередь по истечении срока обычным порядком. */
+  function policyUnchanged(row) {
+    const mode = String(row.lease_mode || 'isolated-codex');
+    return mode === policyMode(row.company_code);
+  }
   function renew(body) {
     const ref = jobRef(body.jobId), leaseToken = leaseOf(body.leaseToken);
     return tx(() => {
       const row = findJob(ref);
+      if (ref.kind === 'reply' && !policyUnchanged(row)) fail(403, 'Режим обслуживания компании изменён: аренда больше не продлевается');
       if (row.status !== 'running' || !same(row.lease_token, leaseToken)) fail(409, 'Аренда задания заменена или завершена');
       const expires = stamp(now() + LEASE_MS);
       db.prepare(`UPDATE ${ref.kind === 'reply' ? 'project_chat_ai_jobs' : 'project_chat_local_logins'} SET lease_expires_at=? WHERE id=?`).run(expires, row.id);
@@ -320,6 +368,7 @@ function createLocalWorker({ db, keySha256 = '', companies = [], tx, insertMessa
     const resultHash = sha256(JSON.stringify(normalized));
     return tx(() => {
       const row = findJob(ref);
+      if (ref.kind === 'reply' && !policyUnchanged(row)) fail(403, 'Режим обслуживания компании изменён: результат по прежней политике не принят');
       if (!same(row.lease_token, leaseToken)) fail(409, 'Аренда задания заменена: результат не принят');
       if (payloadHash !== (ref.kind === 'reply' ? sha256(row.payload || '') : sha256(EMPTY_PAYLOAD))) fail(409, 'Хеш запроса не совпадает с сохранённым заданием');
       if (row.status !== 'running') {
@@ -389,32 +438,51 @@ function createLocalWorker({ db, keySha256 = '', companies = [], tx, insertMessa
     const failed = db.prepare(`SELECT * FROM project_chat_local_logins WHERE status='error'${scope.include} ORDER BY id DESC LIMIT 1`).get(...scope.params);
     const loginFailed = failed && (!worker?.login_at || failed.completed_at > worker.login_at) && (!command || failed.id > command.id) ? failed : null;
     const online = !offline && status;
-    const ready = Boolean(online && status.authenticated && status.connected && status.available && !status.limited);
+    const trustedMode = trustedSet.has(String(code ?? ''));
+    /* В доверенном режиме готовность — это заявленная готовность внешнего исполнителя,
+       а не вход Codex: authenticated здесь намеренно не участвует. */
+    const ready = trustedMode
+      ? Boolean(online && status.trustedAgent && status.readiness === 'attested' && status.connected && status.available && !status.limited)
+      : Boolean(online && status.authenticated && status.connected && status.available && !status.limited);
     const state = offline ? 'offline'
-      : login ? 'login_required'
+      : trustedMode ? (ready ? 'connected' : status.limited ? 'limited' : 'unavailable')
+        : login ? 'login_required'
         : command ? 'login_pending'
           : ready ? 'connected'
             : status.limited ? 'limited'
               : status.state === 'unknown' ? 'unavailable' : status.state;
     const error = offline ? (worker?.last_seen_at ? 'Компьютер Хью не на связи' : 'Компьютер Хью ещё ни разу не выходил на связь')
+      : trustedMode ? (status.limited ? limitMessage(status.retryAfter || 60)
+        : ready ? '' : 'Внешний исполнитель Хью пока не подтвердил готовность')
       : login ? 'Подтвердите вход по коду на официальной странице Codex'
         : command ? 'Команда входа передана компьютеру Хью, ждём ссылку и код'
           : loginFailed ? `Не удалось начать вход: ${explain(loginFailed.error_code, 0)}`
             : status.limited ? limitMessage(status.retryAfter || 60)
               : status.errorCode ? explain(status.errorCode, status.retryAfter || 60)
-                : ready ? '' : status.authenticated ? 'Хью на компьютере пока не готов отвечать' : 'Нужен вход владельца в подписку на компьютере Хью';
+                : ready ? '' : trustedMode ? 'Внешний исполнитель Хью пока не подтвердил готовность'
+                : status.authenticated ? 'Хью на компьютере пока не готов отвечать' : 'Нужен вход владельца в подписку на компьютере Хью';
     const view = { configured: true, local: true, offline, lastSeen: worker?.last_seen_at || null,
-      connected: Boolean(online && status.authenticated && status.connected), authenticated: Boolean(online && status.authenticated),
-      state, provider: status?.provider || 'codex', model: status?.model || '',
+      /* В доверенном режиме связь не зависит от входа в подписку Codex: authenticated здесь всегда false. */
+      connected: trustedMode ? ready : Boolean(online && status.authenticated && status.connected),
+      authenticated: !trustedMode && Boolean(online && status.authenticated),
+      state, provider: status?.provider || (trustedMode ? '' : 'codex'), model: status?.model || '',
       limited: Boolean(online && status.limited), retryAfter: online && status.limited ? status.retryAfter || 60 : 0,
-      loginPending: Boolean(command), error, serverTime: stamp(at) };
+      // Вход Codex к доверенному режиму отношения не имеет: кнопки и код там не показываются.
+      loginPending: trustedMode ? false : Boolean(command), error, serverTime: stamp(at),
+      /* Честная подпись режима для владельца: кто именно отвечает и что не подтверждено. */
+      mode: trustedMode ? 'trusted-agent' : 'isolated-codex',
+      toolIsolationVerified: trustedMode ? false : Boolean(online && status.safety?.toolIsolationVerified),
+      notice: trustedMode ? 'Отвечает внешний доверенный ИИ. Изоляция его инструментов не подтверждена: режим включён владельцем в настройках сервера' : '' };
     if (!detailed) return view;
+    if (trustedMode) return { ...view, loginUrl: '', userCode: '', expiresAt: '', stats: companyStats(code, at) };
     return { ...view, loginUrl: login?.loginUrl || '', userCode: login?.userCode || '', expiresAt: login?.expiresAt || '', stats: companyStats(code, at) };
   }
   /* Одна устойчивая команда входа: повторное нажатие переиспользует ожидающую команду
      или действующий код и не плодит запросов к компьютеру. */
   function requestLogin(code) {
     return tx(() => {
+      // Доверенная компания обслуживается не Codex: команда входа там бессмысленна и не создаётся.
+      if (trustedSet.has(String(code ?? ''))) return { accepted: false, status: ownerStatus(code) };
       const current = ownerStatus(code);
       if (current.userCode || current.loginPending) return { accepted: true, status: current };
       if (current.connected && current.authenticated) return { accepted: false, status: current };
@@ -423,7 +491,7 @@ function createLocalWorker({ db, keySha256 = '', companies = [], tx, insertMessa
     });
   }
 
-  return { issues, companies: local, scope, isLocal, handle, heartbeat, claim, renew, complete,
+  return { issues, companies: local, trustedCompanies: trusted, scope, isLocal, handle, heartbeat, claim, renew, complete,
     ownerStatus, requestLogin, stats, companyStats, noteMessage };
 }
 
