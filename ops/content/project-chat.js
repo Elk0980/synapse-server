@@ -179,6 +179,16 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     if (!task.has('registry_as_of')) db.exec("ALTER TABLE project_chat_tasks ADD COLUMN registry_as_of TEXT NOT NULL DEFAULT ''");
     // Момент последней синхронизации: правка позже него сделана человеком в кабинете, а не реестром.
     if (!task.has('registry_synced_at')) db.exec("ALTER TABLE project_chat_tasks ADD COLUMN registry_synced_at TEXT NOT NULL DEFAULT ''");
+    /* Явный признак ручной правки. Идёт ПОСЛЕ registry_synced_at: разовая миграция читает эту колонку.
+       Сравнение updated_at > registry_synced_at ненадёжно — правка владельца может попасть в ту же
+       миллисекунду, что и синхронизация, и тогда устаревший снимок молча её затрёт (так упал CI).
+       Флаг ставит запись из кабинета, снимает только импорт, который эту задачу перезаписал.
+       Разовая миграция переносит прежнее правило на существующие строки, чтобы не потерять уже сделанное. */
+    if (!task.has('registry_dirty')) {
+      db.exec('ALTER TABLE project_chat_tasks ADD COLUMN registry_dirty INTEGER NOT NULL DEFAULT 0');
+      db.exec(`UPDATE project_chat_tasks SET registry_dirty=1
+        WHERE registry_synced_at IS NOT NULL AND registry_synced_at<>'' AND updated_at>registry_synced_at`);
+    }
     // Одна задача на внешний идентификатор реестра: повторная синхронизация обновляет, а не плодит копии.
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS project_chat_tasks_ref ON project_chat_tasks(company_code, external_ref) WHERE external_ref<>''");
     if (!columns('project_chat_rooms').has('sites')) db.exec("ALTER TABLE project_chat_rooms ADD COLUMN sites TEXT NOT NULL DEFAULT '[]'");
@@ -620,7 +630,9 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   }
   /* Запись задачи по внешнему идентификатору реестра: повторный вызов с тем же externalRef обновляет ту же
      строку, а не создаёт вторую. Без externalRef задача обычная, как раньше. */
-  function upsertTask(code, v, { asOf = '', force = false } = {}) {
+  /* manual — задача заводится из кабинета, а не из реестра: она сразу помечается правленой,
+     иначе импорт со случайно совпавшим externalRef молча переписал бы её. */
+  function upsertTask(code, v, { asOf = '', force = false, manual = false } = {}) {
     const existing = v.externalRef
       ? db.prepare('SELECT * FROM project_chat_tasks WHERE company_code=? AND external_ref=?').get(code, v.externalRef) : null;
     /* Одно время на всю операцию: registry_synced_at и updated_at обязаны совпасть до миллисекунды,
@@ -633,7 +645,8 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
          2) ручная правка владельца (задача изменена позже последней синхронизации) не затирается снимком
             вообще — только явным force. Более свежий asOf сам по себе разрешением не является. */
       const staleSnapshot = Boolean(asOf && existing.registry_as_of && asOf < existing.registry_as_of);
-      const editedByHand = Boolean(existing.registry_synced_at && existing.updated_at > existing.registry_synced_at);
+      // Только явный флаг: одинаковые до миллисекунды отметки времени больше ни на что не влияют.
+      const editedByHand = existing.registry_dirty === 1;
       if (staleSnapshot && !force) {
         return { id: existing.id, skipped: true, reason: `снимок реестра старше записанного (${existing.registry_as_of})`, updatedAt: existing.updated_at };
       }
@@ -641,16 +654,16 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
         return { id: existing.id, skipped: true, reason: 'изменено в кабинете позже снимка реестра', updatedAt: existing.updated_at };
       }
       db.prepare(`UPDATE project_chat_tasks SET title=?,assignee_id=?,stage_id=?,status=?,due=?,source_message_id=?,
-        site=?,publication=?,published_url=?,verified_at=?,source_quote=?,kind=?,registry_as_of=?,registry_synced_at=?,updated_at=? WHERE id=?`)
+        site=?,publication=?,published_url=?,verified_at=?,source_quote=?,kind=?,registry_as_of=?,registry_synced_at=?,updated_at=?,registry_dirty=0 WHERE id=?`)
         .run(v.title, v.assigneeId, v.stageId, v.status, v.due, v.sourceMessageId, v.site, v.publication,
           v.publishedUrl, v.verifiedAt, v.sourceQuote, v.kind, asOf || existing.registry_as_of || '', at, at, existing.id);
       return { id: existing.id, skipped: false };
     }
     const id = Number(db.prepare(`INSERT INTO project_chat_tasks
-      (company_code,title,assignee_id,stage_id,status,due,source_message_id,external_ref,site,publication,published_url,verified_at,source_quote,kind,registry_as_of,registry_synced_at,created_at,updated_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      (company_code,title,assignee_id,stage_id,status,due,source_message_id,external_ref,site,publication,published_url,verified_at,source_quote,kind,registry_as_of,registry_synced_at,created_at,updated_at,registry_dirty)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(code, v.title, v.assigneeId, v.stageId, v.status, v.due, v.sourceMessageId, v.externalRef, v.site, v.publication,
-        v.publishedUrl, v.verifiedAt, v.sourceQuote, v.kind, asOf, asOf ? at : '', at, at).lastInsertRowid);
+        v.publishedUrl, v.verifiedAt, v.sourceQuote, v.kind, asOf, asOf ? at : '', at, at, manual ? 1 : 0).lastInsertRowid);
     return { id, skipped: false };
   }
   /* Уточнение клиента («Онлайн запись», «Только в Алви убрать») крепится к исходной задаче отдельной строкой
@@ -912,11 +925,12 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       if (id && !old) fail(404, 'Задача не найдена');
       const v = taskValues(code, body, old);
       // kind записывается наравне с остальными полями: иначе смена вида задачи молча терялась бы.
+      /* registry_dirty=1 — правка сделана в кабинете. Снимет её только импорт, который перезапишет задачу. */
       if (id) db.prepare(`UPDATE project_chat_tasks SET title=?,assignee_id=?,stage_id=?,status=?,due=?,source_message_id=?,
-        external_ref=?,site=?,publication=?,published_url=?,verified_at=?,source_quote=?,kind=?,updated_at=? WHERE id=? AND company_code=?`)
+        external_ref=?,site=?,publication=?,published_url=?,verified_at=?,source_quote=?,kind=?,updated_at=?,registry_dirty=1 WHERE id=? AND company_code=?`)
         .run(v.title, v.assigneeId, v.stageId, v.status, v.due, v.sourceMessageId, v.externalRef, v.site, v.publication,
           v.publishedUrl, v.verifiedAt, v.sourceQuote, v.kind, stamp(), id, code);
-      else id = upsertTask(code, v).id;
+      else id = upsertTask(code, v, { manual: true }).id;
       return reply(method === 'POST' ? 201 : 200, { task: taskJSON(db.prepare('SELECT * FROM project_chat_tasks WHERE id=?').get(id)) });
     }
     fail(404, 'Метод чата проекта не найден');

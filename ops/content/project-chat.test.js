@@ -909,3 +909,73 @@ test('блокеры ревью: вид задачи сохраняется, у�
     assert.equal(ok.payload.task.verifiedAt, verifiedAt);
   }
 });
+
+test('ручная правка распознаётся флагом, а не часами: совпавшие до миллисекунды отметки времени не теряют правку', async () => {
+  const { chat, owner, db } = setup();
+  const registry = (asOf, title) => ({ schemaVersion: 1, asOf, tasks: [
+    { externalRef: 'В1', title, site: ROOM, status: 'todo', publication: 'not_started' } ] });
+
+  const first = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'), body: registry('2026-09-18', 'Из реестра') });
+  assert.equal(first.payload.imported, 1);
+  const id = first.payload.tasks[0].id;
+  const row = () => db.prepare('SELECT * FROM project_chat_tasks WHERE id=?').get(id);
+  assert.equal(row().registry_dirty, 0, 'после импорта задача чистая');
+
+  // Владелец правит задачу в кабинете.
+  await call(chat, { session: owner, method: 'PATCH', url: room(`/tasks/${id}`), body: { title: 'Правка владельца' } });
+  assert.equal(row().registry_dirty, 1, 'правка из кабинета помечена явно');
+
+  /* Ровно тот случай, который ронял CI: PATCH попал в ту же миллисекунду, что и синхронизация,
+     поэтому сравнение updated_at > registry_synced_at ничего не даёт. Воспроизводим детерминированно. */
+  db.prepare('UPDATE project_chat_tasks SET updated_at=registry_synced_at WHERE id=?').run(id);
+  const same = row();
+  assert.equal(same.updated_at, same.registry_synced_at, 'отметки времени совпадают до миллисекунды');
+
+  const stale = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'), body: registry('2026-09-18', 'Из реестра') });
+  assert.equal(stale.payload.imported, 0, 'правка владельца не затёрта');
+  assert.equal(stale.payload.skipped, 1);
+  assert.match(stale.payload.results[0].reason, /позже снимка/);
+  assert.equal(row().title, 'Правка владельца');
+
+  // force остаётся единственным способом перезаписать и снимает признак правки.
+  const forced = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'),
+    body: { ...registry('2026-09-18', 'Из реестра'), force: true } });
+  assert.equal(forced.payload.imported, 1);
+  assert.equal(row().registry_dirty, 0, 'после перезаписи задача снова чистая');
+  assert.equal(row().title, 'Из реестра');
+
+  // И следующий обычный импорт проходит: ложного признака правки не осталось.
+  db.prepare('UPDATE project_chat_tasks SET updated_at=registry_synced_at WHERE id=?').run(id);
+  const next = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'), body: registry('2026-09-18', 'Снова из реестра') });
+  assert.equal(next.payload.imported, 1);
+  assert.equal(row().title, 'Снова из реестра');
+
+  // Задача, заведённая руками в кабинете, импортом не перезаписывается даже при совпавшем идентификаторе.
+  const byHand = await call(chat, { session: owner, method: 'POST', url: room('/tasks'),
+    body: { title: 'Своя задача', externalRef: 'В2', site: ROOM } });
+  assert.equal(byHand.statusCode, 201);
+  const handId = byHand.payload.task.id;
+  assert.equal(db.prepare('SELECT registry_dirty AS d FROM project_chat_tasks WHERE id=?').get(handId).d, 1);
+  const collide = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'),
+    body: { schemaVersion: 1, asOf: '2026-09-18', tasks: [{ externalRef: 'В2', title: 'Из реестра поверх', site: ROOM }] } });
+  assert.equal(collide.payload.skipped, 1);
+  assert.equal(db.prepare('SELECT title FROM project_chat_tasks WHERE id=?').get(handId).title, 'Своя задача');
+});
+
+test('миграция переносит прежнее правило: правленая до обновления задача остаётся защищённой', async () => {
+  const { chat, owner, db } = setup();
+  const registry = { schemaVersion: 1, asOf: '2026-09-18', tasks: [
+    { externalRef: 'В3', title: 'Из реестра', site: ROOM, status: 'todo' } ] };
+  const first = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'), body: registry });
+  const id = first.payload.tasks[0].id;
+
+  /* Строка «из прошлой версии»: флага ещё нет (0), но по прежнему правилу она правленая —
+     updated_at позже синхронизации. Повторяем то, что делает разовая миграция при обновлении. */
+  db.prepare("UPDATE project_chat_tasks SET registry_dirty=0, updated_at='2999-01-01T00:00:00.000Z' WHERE id=?").run(id);
+  db.exec(`UPDATE project_chat_tasks SET registry_dirty=1
+    WHERE registry_synced_at IS NOT NULL AND registry_synced_at<>'' AND updated_at>registry_synced_at`);
+  assert.equal(db.prepare('SELECT registry_dirty AS d FROM project_chat_tasks WHERE id=?').get(id).d, 1);
+
+  const stale = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'), body: registry });
+  assert.equal(stale.payload.skipped, 1, 'правка, сделанная до обновления, не теряется');
+});
