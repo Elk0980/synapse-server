@@ -69,6 +69,8 @@ test('restored keyboard focus at a footer position is preserved during initializ
   assert.equal(page.cta.inert, false);
   assert.equal(page.classes.has('is-hidden'), false);
   assert.equal(page.document.activeElement, page.first);
-  assert.match(html, /href="https:\/\/n1070017\.yclients\.com\/"[^>]*>Записаться/);
+  // 18.09: клиент попросил убрать онлайн-запись на ALVI — кнопка «Записаться» ведёт в контакты.
+  assert.match(html, /href="index\.html#contacts"[^>]*>Записаться/);
+  assert.doesNotMatch(html, /yclients\.com/);
   assert.match(html, /href="index\.html#contacts"[^>]*>Связаться с нами/);
 });

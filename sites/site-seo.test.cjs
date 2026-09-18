@@ -39,7 +39,9 @@ for (const [site, origin] of [['alvi', 'https://spaalvi-38.ru'], ['avokado3', 'h
       assert.equal(faq[0].mainEntity[i].acceptedAnswer.text, norm(el.querySelector('p').textContent));
       for (const field of el.querySelectorAll('[data-edit]')) assert.equal(fields.get(field.dataset.edit), norm(field.textContent));
     });
-    assert.ok(details.length >= 10);
+    assert.ok(details.length > 0, 'confirmed FAQ must not be empty');
+    assert.equal(details.length, [...fields.keys()].filter(key => /^faq\.summary-\d+$/.test(key)).length,
+      'FAQ count follows the current confirmed copy, including removed questions');
     assert.ok(nodes.every(n => !n.aggregateRating && !n.hasOfferCatalog), 'no independent copies of third-party ratings or current prices');
     dom.window.close();
   });
