@@ -799,9 +799,15 @@ test('устаревший снимок реестра не затирает б�
   assert.equal(stale.payload.results.length, 1);
   const snapshot = await call(chat, { session: owner, url: room('') });
   assert.equal(snapshot.payload.tasks[0].publication, 'published', 'правка владельца сохранена');
-  // Свежий снимок применяется, принудительный импорт — тоже.
+  /* Более свежий asOf сам по себе разрешением НЕ является: новый календарный день не доказывает,
+     что реестр учитывает правку владельца. Затереть её может только явный force. */
   const fresh = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'), body: registry('2026-09-20') });
-  assert.equal(fresh.payload.imported, 1);
+  assert.equal(fresh.payload.imported, 0);
+  assert.equal(fresh.payload.skipped, 1);
+  assert.equal((await call(chat, { session: owner, url: room('') })).payload.tasks[0].publication, 'published');
+  const forced = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'),
+    body: { ...registry('2026-09-20'), force: true } });
+  assert.equal(forced.payload.imported, 1);
   assert.equal((await call(chat, { session: owner, url: room('') })).payload.tasks[0].publication, 'prepared');
   await assert.rejects(() => call(chat, { session: owner, method: 'POST', url: room('/tasks/import'),
     body: { schemaVersion: 1, asOf: '2026-02-30', tasks: [{ externalRef: 'Д9', title: 'Плохая дата' }] } }), status(400));
@@ -854,4 +860,52 @@ test('задачи реестра не видны участнику чужог�
     body: { schemaVersion: 1, tasks: [{ externalRef: 'А1', title: 'Другое замечание', site: OTHER }] } });
   assert.equal(twin.payload.imported, 1);
   assert.equal((await call(chat, { session: owner, url: room('') })).payload.tasks.length, 1);
+});
+
+test('блокеры ревью: вид задачи сохраняется, устаревший снимок отклоняется, дата проверки проверяется по-настоящему', async () => {
+  const { chat, owner } = setup();
+
+  // 1. Смена вида задачи через PATCH записывается, а не теряется молча.
+  const created = await call(chat, { session: owner, method: 'POST', url: room('/tasks'),
+    body: { title: 'Яндекс.Метрика на сайте', site: ROOM, kind: 'internal' } });
+  assert.equal(created.payload.task.kind, 'internal');
+  const switched = await call(chat, { session: owner, method: 'PATCH', url: room(`/tasks/${created.payload.task.id}`),
+    body: { kind: 'client_remark' } });
+  assert.equal(switched.payload.task.kind, 'client_remark');
+  const reread = await call(chat, { session: owner, url: room('') });
+  assert.equal(reread.payload.tasks.find(task => task.id === created.payload.task.id).kind, 'client_remark',
+    'вид задачи сохранён в базе, а не только в ответе');
+
+  // 2. Снимок старше записанного отклоняется, даже когда владелец ничего не правил руками.
+  const registry = (asOf, title) => ({ schemaVersion: 1, asOf, tasks: [{ externalRef: 'Б1', title, site: ROOM, status: 'todo' }] });
+  const newer = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'), body: registry('2026-09-18', 'Новее') });
+  assert.equal(newer.payload.imported, 1);
+  const older = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'), body: registry('2026-09-17', 'Старее') });
+  assert.equal(older.payload.skipped, 1);
+  assert.match(older.payload.results[0].reason, /старше записанного/);
+  const kept = await call(chat, { session: owner, url: room('') });
+  assert.equal(kept.payload.tasks.find(task => task.externalRef === 'Б1').title, 'Новее');
+  // force остаётся единственным способом применить старый снимок сознательно.
+  const forcedOld = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'),
+    body: { ...registry('2026-09-17', 'Старее'), force: true } });
+  assert.equal(forcedOld.payload.imported, 1);
+
+  // 3. Собственная запись синхронизации не выглядит ручной правкой: registry_synced_at и updated_at совпадают.
+  const same = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'), body: registry('2026-09-19', 'Ещё новее') });
+  assert.equal(same.payload.imported, 1);
+  const again = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'), body: registry('2026-09-19', 'Ещё новее') });
+  assert.equal(again.payload.imported, 1, 'повтор того же снимка проходит: ложного признака ручной правки нет');
+  assert.equal(again.payload.skipped, 0);
+
+  // 4. Дата проверки — настоящая дата или дата-время, а не любая строка.
+  const id = created.payload.task.id;
+  for (const verifiedAt of ['вчера', '18.09.2026', '2026-02-30', '2026-09-18T25:00:00Z', '2026-13-01']) {
+    await assert.rejects(() => call(chat, { session: owner, method: 'PATCH', url: room(`/tasks/${id}`),
+      body: { publication: 'published', publishedUrl: 'https://example.test/x', verifiedAt } }), status(400));
+  }
+  for (const verifiedAt of ['2026-09-18', '2026-09-18T12:30:00Z', '2026-09-18T12:30:00+07:00']) {
+    const ok = await call(chat, { session: owner, method: 'PATCH', url: room(`/tasks/${id}`),
+      body: { publication: 'published', publishedUrl: 'https://example.test/x', verifiedAt } });
+    assert.equal(ok.payload.task.verifiedAt, verifiedAt);
+  }
 });

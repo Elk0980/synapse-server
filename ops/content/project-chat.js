@@ -31,8 +31,9 @@ const RETRY_AFTER_DEFAULT = 60;
    поэтому отмена живёт здесь, а не в состоянии публикации. */
 const TASK_STATUSES = new Set(['todo', 'in_progress', 'done', 'blocked', 'cancelled']);
 /* Состояние публикации отделено от состояния работы: «подготовлено» и «проверено» — это ещё НЕ «на сайте».
-   published ставится только с подтверждением работающего сайта (ссылка и дата проверки), cancelled — снятое
-   решением клиента или владельца: видно в списке, но исправлением не считается. */
+   published ставится только с подтверждением работающего сайта (ссылка и дата проверки).
+   Отмены здесь НЕТ: снятие задачи — состояние работы (status='cancelled'), а публикации у снятой
+   задачи не будет вовсе — это not_required. */
 const TASK_PUBLICATION = new Set(['not_started', 'prepared', 'published', 'awaiting_clarification', 'not_required']);
 const PUBLICATION_LABELS = Object.freeze({ not_started: 'Не опубликовано', prepared: 'Подготовлено, на сайте ещё нет',
   published: 'Опубликовано и проверено на сайте',
@@ -62,6 +63,22 @@ const isoDay = (value) => {
     && new Date(`${text}T00:00:00Z`).toISOString().slice(0, 10) === text;
   if (!ok) { const error = new Error('Некорректная дата снимка реестра'); error.status = 400; throw error; }
   return text;
+};
+/* Проверка даты проверки на сайте: ровно ISO-день или ISO дата-время. Календарь проверяется по-настоящему,
+   поэтому 2026-02-30 и 2026-09-18T25:00:00Z не проходят, а произвольная строка — тем более. */
+const isoMoment = (value) => {
+  const text = String(value ?? '');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return Number.isFinite(Date.parse(`${text}T00:00:00Z`))
+      && new Date(`${text}T00:00:00Z`).toISOString().slice(0, 10) === text;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})?$/.test(text)) return false;
+  const ms = Date.parse(text.replace(' ', 'T'));
+  if (!Number.isFinite(ms)) return false;
+  // Календарный день должен совпасть: иначе 2026-02-30T10:00:00Z «переедет» на 2 марта и пройдёт молча.
+  const day = text.slice(0, 10);
+  const utc = new Date(`${day}T00:00:00Z`);
+  return Number.isFinite(utc.getTime()) && utc.toISOString().slice(0, 10) === day;
 };
 const integer = (value, optional = false) => {
   if (optional && (value === null || value === undefined || value === '')) return null;
@@ -606,26 +623,34 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   function upsertTask(code, v, { asOf = '', force = false } = {}) {
     const existing = v.externalRef
       ? db.prepare('SELECT * FROM project_chat_tasks WHERE company_code=? AND external_ref=?').get(code, v.externalRef) : null;
+    /* Одно время на всю операцию: registry_synced_at и updated_at обязаны совпасть до миллисекунды,
+       иначе собственная запись синхронизации выглядела бы как ручная правка владельца. */
+    const at = stamp();
     if (existing) {
-      /* Устаревший снимок не затирает более позднюю правку владельца. Признак ручной правки — задача изменена
-         позже последней синхронизации реестра. Такой снимок применяется, только если он новее того, из которого
-         задача записана (реестр уже учитывает правку), либо при явном force. */
-      const editedByHand = existing.registry_synced_at && existing.updated_at > existing.registry_synced_at;
-      const newerSnapshot = asOf && existing.registry_as_of && asOf > existing.registry_as_of;
-      if (editedByHand && !newerSnapshot && !force) {
+      /* Две независимые защиты, и ни одна не отменяет другую:
+         1) снимок СТАРШЕ уже записанного в задачу не применяется никогда — он не знает более поздних данных,
+            и «наступил новый календарный день» это не доказательство: сравниваем asOf, а не часы;
+         2) ручная правка владельца (задача изменена позже последней синхронизации) не затирается снимком
+            вообще — только явным force. Более свежий asOf сам по себе разрешением не является. */
+      const staleSnapshot = Boolean(asOf && existing.registry_as_of && asOf < existing.registry_as_of);
+      const editedByHand = Boolean(existing.registry_synced_at && existing.updated_at > existing.registry_synced_at);
+      if (staleSnapshot && !force) {
+        return { id: existing.id, skipped: true, reason: `снимок реестра старше записанного (${existing.registry_as_of})`, updatedAt: existing.updated_at };
+      }
+      if (editedByHand && !force) {
         return { id: existing.id, skipped: true, reason: 'изменено в кабинете позже снимка реестра', updatedAt: existing.updated_at };
       }
       db.prepare(`UPDATE project_chat_tasks SET title=?,assignee_id=?,stage_id=?,status=?,due=?,source_message_id=?,
         site=?,publication=?,published_url=?,verified_at=?,source_quote=?,kind=?,registry_as_of=?,registry_synced_at=?,updated_at=? WHERE id=?`)
         .run(v.title, v.assigneeId, v.stageId, v.status, v.due, v.sourceMessageId, v.site, v.publication,
-          v.publishedUrl, v.verifiedAt, v.sourceQuote, v.kind, asOf || existing.registry_as_of || '', stamp(), stamp(), existing.id);
+          v.publishedUrl, v.verifiedAt, v.sourceQuote, v.kind, asOf || existing.registry_as_of || '', at, at, existing.id);
       return { id: existing.id, skipped: false };
     }
     const id = Number(db.prepare(`INSERT INTO project_chat_tasks
       (company_code,title,assignee_id,stage_id,status,due,source_message_id,external_ref,site,publication,published_url,verified_at,source_quote,kind,registry_as_of,registry_synced_at,created_at,updated_at)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(code, v.title, v.assigneeId, v.stageId, v.status, v.due, v.sourceMessageId, v.externalRef, v.site, v.publication,
-        v.publishedUrl, v.verifiedAt, v.sourceQuote, v.kind, asOf, asOf ? stamp() : '', stamp(), stamp()).lastInsertRowid);
+        v.publishedUrl, v.verifiedAt, v.sourceQuote, v.kind, asOf, asOf ? at : '', at, at).lastInsertRowid);
     return { id, skipped: false };
   }
   /* Уточнение клиента («Онлайн запись», «Только в Алви убрать») крепится к исходной задаче отдельной строкой
@@ -699,6 +724,8 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     values.publishedUrl = cleanText(values.publishedUrl, 500, 'publishedUrl');
     if (values.publishedUrl && !/^https:\/\//.test(values.publishedUrl)) fail(400, 'Ссылка на сайт должна начинаться с https://');
     values.verifiedAt = cleanText(values.verifiedAt, 40, 'verifiedAt');
+    // Дата проверки — доказательство, а не текст: принимаем только настоящий ISO-день или дату-время.
+    if (values.verifiedAt && !isoMoment(values.verifiedAt)) fail(400, 'Дата проверки должна быть в виде 2026-09-18 или 2026-09-18T12:30:00Z');
     // «Опубликовано» подтверждается работающим сайтом: без ссылки и даты проверки статус не ставится.
     if (values.publication === 'published' && (!values.publishedUrl || !values.verifiedAt)) {
       fail(400, 'Для статуса «опубликовано» нужны ссылка на страницу и дата проверки');
@@ -884,10 +911,11 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       const old = id ? db.prepare('SELECT * FROM project_chat_tasks WHERE id=? AND company_code=?').get(id, code) : null;
       if (id && !old) fail(404, 'Задача не найдена');
       const v = taskValues(code, body, old);
+      // kind записывается наравне с остальными полями: иначе смена вида задачи молча терялась бы.
       if (id) db.prepare(`UPDATE project_chat_tasks SET title=?,assignee_id=?,stage_id=?,status=?,due=?,source_message_id=?,
-        external_ref=?,site=?,publication=?,published_url=?,verified_at=?,source_quote=?,updated_at=? WHERE id=? AND company_code=?`)
+        external_ref=?,site=?,publication=?,published_url=?,verified_at=?,source_quote=?,kind=?,updated_at=? WHERE id=? AND company_code=?`)
         .run(v.title, v.assigneeId, v.stageId, v.status, v.due, v.sourceMessageId, v.externalRef, v.site, v.publication,
-          v.publishedUrl, v.verifiedAt, v.sourceQuote, stamp(), id, code);
+          v.publishedUrl, v.verifiedAt, v.sourceQuote, v.kind, stamp(), id, code);
       else id = upsertTask(code, v).id;
       return reply(method === 'POST' ? 201 : 200, { task: taskJSON(db.prepare('SELECT * FROM project_chat_tasks WHERE id=?').get(id)) });
     }
