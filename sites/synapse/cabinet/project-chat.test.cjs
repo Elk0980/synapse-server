@@ -1292,3 +1292,91 @@ test('импорт: force из файла не подменяет решение
   assert.equal(sent.length, 2);
   assert.equal(JSON.parse(sent[1].body).force, true, 'отметка владельца включает перезапись даже при force:false в файле');
 });
+
+test('планирование: кнопка рядом с отправкой, срок уходит с поясом, черновик очищается', async () => {
+  const harness = boot({ clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot() }),
+    'POST /content/project-chat/palitra-love/scheduled': () => ({ status: 201, body: { item: { id: 5 } } })
+  } });
+  await mount(harness);
+  const { d } = harness;
+  const button = d.querySelector('[data-pc-schedule]');
+  assert.ok(button, 'кнопка «Запланировать» есть рядом с «Отправить»');
+  assert.equal(button.hidden, false);
+  assert.ok(d.querySelector('[data-pc-compose] [data-pc-schedule]'), 'кнопка внутри формы отправки');
+
+  // Черновик из поля ввода попадает в диалог.
+  d.querySelector('[data-pc-compose]').elements.text.value = 'Сводка по правкам';
+  harness.click('[data-pc-schedule]');
+  await settle();
+  const form = d.querySelector('.pc-dialog form');
+  assert.equal(form.elements.text.value, 'Сводка по правкам');
+  assert.ok(form.elements.timezone, 'часовой пояс задаётся явно');
+  assert.ok([...form.elements.timezone.options].some((option) => option.value === 'Asia/Irkutsk'));
+
+  form.elements.date.value = '2026-09-19';
+  form.elements.time.value = '09:00';
+  form.elements.timezone.value = 'Asia/Irkutsk';
+  harness.submit('.pc-dialog form');
+  await settle();
+  const sent = harness.calls.find((call) => call.url.includes('/scheduled') && call.method === 'POST');
+  assert.ok(sent, 'запрос ушёл');
+  const body = JSON.parse(sent.body);
+  assert.equal(body.dueAtLocal, '2026-09-19T09:00');
+  assert.equal(body.timezone, 'Asia/Irkutsk');
+  assert.equal(body.text, 'Сводка по правкам');
+  assert.equal(typeof body.clientId, 'string');
+  assert.match(body.clientId, /^plan-[\w-]{8,}$/, 'ключ повтора запроса передан');
+  assert.equal(d.querySelector('[data-pc-compose]').elements.text.value, '', 'черновик не остаётся вторым экземпляром');
+});
+
+test('планирование: список показывает срок, пояс и состояние доставки, отмена доступна только ожидающему', async () => {
+  const scheduled = [
+    { id: 1, kind: 'message', text: 'Утренняя сводка', dueAt: '2026-09-19T01:00:00.000Z', timezone: 'Asia/Irkutsk',
+      status: 'pending', deliveryStatus: '', error: '', taskId: null },
+    { id: 2, kind: 'task_reminder', text: 'Проверить правку', dueAt: '2026-09-18T01:00:00.000Z', timezone: 'Asia/Irkutsk',
+      status: 'sent', deliveryStatus: 'uncertain', error: '', taskId: 7 },
+    { id: 3, kind: 'message', text: 'Старое', dueAt: '2026-09-10T01:00:00.000Z', timezone: 'Asia/Irkutsk',
+      status: 'expired', deliveryStatus: '', error: 'Срок прошёл, пока сервер был недоступен: сообщение не отправлено', taskId: null }
+  ];
+  const harness = boot({ clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ scheduled }) }),
+    'PATCH /content/project-chat/palitra-love/scheduled/1': () => ({ body: { item: { id: 1, status: 'cancelled' } } })
+  } });
+  await mount(harness);
+  const { d } = harness;
+  const items = [...d.querySelectorAll('.pc-scheduled-item')];
+  assert.equal(items.length, 3);
+  assert.match(items[0].textContent, /19\.09\.2026, 09:00/, 'срок показан в поясе владельца');
+  assert.match(items[0].textContent, /Asia\/Irkutsk/);
+  assert.match(items[0].textContent, /Ожидает отправки/);
+  // Отправленное в ЛК не выдаётся за доставленное в Telegram.
+  assert.match(items[1].textContent, /Отправлено · доставка уточняется/);
+  assert.match(items[1].textContent, /Напоминание по задаче/);
+  assert.match(items[2].textContent, /Срок прошёл, не отправлено/);
+
+  assert.ok(items[0].querySelector('[data-pc-schedule-cancel="1"]'), 'ожидающее можно отменить');
+  assert.equal(items[1].querySelector('[data-pc-schedule-cancel]'), null, 'отправленное не отменяется');
+  assert.equal(items[2].querySelector('[data-pc-schedule-edit]'), null, 'просроченное не редактируется');
+
+  harness.click('[data-pc-schedule-cancel="1"]');
+  await settle();
+  const cancel = harness.calls.find((call) => call.method === 'PATCH' && call.url.includes('/scheduled/1'));
+  assert.ok(cancel);
+  assert.deepEqual(JSON.parse(cancel.body), { status: 'cancelled' });
+});
+
+test('планирование недоступно без права ответа', async () => {
+  const harness = boot({ role: 'member', clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ access: { canReply: false, owner: false },
+      scheduled: [{ id: 1, kind: 'message', text: 'Сводка', dueAt: '2026-09-19T01:00:00.000Z', timezone: 'Asia/Irkutsk',
+        status: 'pending', deliveryStatus: '', error: '', taskId: null }] }) })
+  } });
+  await mount(harness);
+  const { d } = harness;
+  assert.equal(d.querySelector('[data-pc-schedule]').hidden, true, 'без права ответа кнопки нет');
+  assert.equal(d.querySelector('[data-pc-schedule-cancel]'), null, 'и отменить чужое нельзя');
+  harness.click('[data-pc-schedule]');
+  await settle();
+  assert.equal(d.querySelector('.pc-dialog'), null, 'диалог не открывается');
+});
