@@ -2,6 +2,9 @@
   "use strict";
   const cabinet = window.SbCabinet = window.SbCabinet || {};
   const statuses = { todo: "Новая", in_progress: "В работе", done: "Готово", blocked: "Нужна помощь" };
+  // Состояние публикации показывается отдельно от состояния работы: «готово» у нас ещё не значит «на сайте».
+  const publications = { not_started: "Не опубликовано", prepared: "Готово, на сайте ещё нет",
+    published: "На сайте", cancelled: "Снято решением" };
   const delivery = { local: "В чате проекта", pending: "Ожидает отправки в Telegram", sending: "Отправляется в Telegram…", sent: "Отправлено в Telegram", error: "Не отправлено в Telegram", uncertain: "Доставка в Telegram уточняется" };
   const TITLE_LIMIT = 200, PAGE = 100;
   // Локальный обработчик отдаёт ссылку и код входа не сразу: команда уходит на компьютер Хью.
@@ -274,8 +277,23 @@
     root.querySelectorAll("[data-pc-write]").forEach(node => { node.hidden = !canReply(state); });
     const tasksSignature = JSON.stringify([data.tasks, data.stages, data.members, data.formerMembers, data.access]);
     if (tasksSignature !== state.tasksSignature) {
-      q(state, "[data-pc-tasks]").innerHTML = list(data.tasks).map(task => `<li class="pc-task${task.status === "done" ? " pc-task-done" : ""}"><button type="button" data-pc-task="${escape(task.id)}"><strong>${escape(task.title)}</strong><span>${escape(assigneeLabel(state, task))} · ${escape(stageName(state, task.stageId))}</span><small>${escape(statuses[task.status] || task.status)}${task.due ? " · " + escape(task.due) : ""}</small></button></li>`).join("") || '<li class="pc-empty">Из сообщения можно создать задачу, назначить исполнителя и срок.</li>';
-      q(state, "[data-pc-task-count]").textContent = String(list(data.tasks).filter(task => task.status !== "done").length);
+      q(state, "[data-pc-tasks]").innerHTML = list(data.tasks).map(task => {
+        const publication = task.publication || "not_started";
+        // Сайт обязателен для показа: у собственника два сайта в одной переписке, карточка без метки вводит в заблуждение.
+        const site = task.siteStatus === "needs_clarification"
+          ? '<span class="pc-badge pc-badge-ask">Нужно уточнить сайт</span>'
+          : `<span class="pc-badge">${escape(task.siteLabel || task.site || "")}</span>`;
+        const link = task.publishedUrl
+          ? ` · <a href="${escape(task.publishedUrl)}" target="_blank" rel="noopener noreferrer">страница</a>${task.verifiedAt ? " от " + escape(task.verifiedAt) : ""}`
+          : "";
+        const quote = task.sourceQuote ? `<span class="pc-task-quote">«${escape(task.sourceQuote)}»</span>` : "";
+        const notes = list(task.notes).length
+          ? `<span class="pc-task-notes">Уточнения: ${list(task.notes).map(note => escape(note.text)).join(" · ")}</span>` : "";
+        return `<li class="pc-task${task.status === "done" ? " pc-task-done" : ""}"><button type="button" data-pc-task="${escape(task.id)}"><strong>${task.externalRef ? escape(task.externalRef) + ". " : ""}${escape(task.title)}</strong>${quote}<span class="pc-task-badges">${site}<span class="pc-badge pc-pub-${escape(publication)}">${escape(publications[publication] || publication)}</span></span>${notes}<span>${escape(assigneeLabel(state, task))} · ${escape(stageName(state, task.stageId))}</span><small>Работа: ${escape(statuses[task.status] || task.status)}${task.due ? " · " + escape(task.due) : ""}${link}</small></button></li>`;
+      }).join("") || '<li class="pc-empty">Из сообщения можно создать задачу, назначить исполнителя и срок.</li>';
+      // В счётчике — то, что ещё не на сайте и не снято: «готово локально» остаётся в работе.
+      q(state, "[data-pc-task-count]").textContent = String(list(data.tasks)
+        .filter(task => (task.publication || "not_started") !== "published" && (task.publication || "not_started") !== "cancelled").length);
       state.tasksSignature = tasksSignature;
     }
   };
@@ -418,7 +436,12 @@
       <label>Исполнитель<select name="assigneeId">${assigneeOptions(state, task)}</select></label>
       <label>Этап<select name="stageId">${options(list(state.data.stages).map(stage => [stage.id, stage.title]), task.stageId, "Без этапа")}</select></label>
       <label>Срок<input name="due" type="date" value="${escape(task.due || "")}"></label>
-      <label>Статус<select name="status">${Object.entries(statuses).map(([id, title]) => `<option value="${id}"${(task.status || "todo") === id ? " selected" : ""}>${title}</option>`).join("")}</select></label>
+      <label>Статус работы<select name="status">${Object.entries(statuses).map(([id, title]) => `<option value="${id}"${(task.status || "todo") === id ? " selected" : ""}>${title}</option>`).join("")}</select></label>
+      <label>Сайт<select name="site">${options(list(state.data.room?.sites).concat([state.company]).map(code => [code, state.ctx.identity.companies?.find(company => company.id === code)?.name || code]), task.site, "Нужно уточнить")}</select></label>
+      <label>Публикация<select name="publication">${Object.entries(publications).map(([id, title]) => `<option value="${id}"${(task.publication || "not_started") === id ? " selected" : ""}>${title}</option>`).join("")}</select></label>
+      <label>Ссылка на страницу<input name="publishedUrl" type="url" maxlength="500" value="${escape(task.publishedUrl || "")}" placeholder="https://"></label>
+      <label>Дата проверки на сайте<input name="verifiedAt" type="date" value="${escape(task.verifiedAt || "")}"></label>
+      <p class="pc-muted">«На сайте» ставится только после проверки работающей страницы: нужны ссылка и дата. Снятая задача остаётся видна, но исправлением не считается.</p>
       ${source || task.sourceMessageId ? '<p class="pc-muted">Задача связана с сообщением в этом проекте.</p>' : ""}
       <button type="submit"${writable ? "" : " hidden"}>Сохранить задачу</button><p role="alert"></p></form>`);
     if (!writable) dialog.querySelectorAll("input,select").forEach(node => { node.disabled = true; });
@@ -432,7 +455,16 @@
       if (assigneeId && !activeMember(state, assigneeId) && String(assigneeId) !== String(task.assigneeId ?? "")) {
         throw new Error("Этот участник вышел из проекта. Выберите активного исполнителя.");
       }
-      const payload = { title, assigneeId, stageId: Number(fields.stageId.value) || null, due: fields.due.value || null, status: fields.status.value };
+      const payload = { title, assigneeId, stageId: Number(fields.stageId.value) || null, due: fields.due.value || null, status: fields.status.value,
+        site: fields.site.value || "", publication: fields.publication.value,
+        publishedUrl: fields.publishedUrl.value.trim(), verifiedAt: fields.verifiedAt.value || "" };
+      // Сервер откажет без ссылки и даты — предупреждаем раньше, чем уходит запрос.
+      if (payload.publication === "published" && (!payload.publishedUrl || !payload.verifiedAt)) {
+        return Promise.reject(new Error("Для «На сайте» укажите ссылку на страницу и дату проверки"));
+      }
+      if (payload.publication === "published" && !payload.site) {
+        return Promise.reject(new Error("Сначала уточните, какого сайта касается задача"));
+      }
       if (!task.id) payload.sourceMessageId = source?.id || null;
       return write(state, task.id ? `/tasks/${task.id}` : "/tasks", task.id ? "PATCH" : "POST", payload);
     });

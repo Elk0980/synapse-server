@@ -28,6 +28,13 @@ const RETRY_AFTER_MIN = 5;
 const RETRY_AFTER_MAX = 900;
 const RETRY_AFTER_DEFAULT = 60;
 const TASK_STATUSES = new Set(['todo', 'in_progress', 'done', 'blocked']);
+/* Состояние публикации отделено от состояния работы: «подготовлено» и «проверено» — это ещё НЕ «на сайте».
+   published ставится только с подтверждением работающего сайта (ссылка и дата проверки), cancelled — снятое
+   решением клиента или владельца: видно в списке, но исправлением не считается. */
+const TASK_PUBLICATION = new Set(['not_started', 'prepared', 'published', 'cancelled']);
+const PUBLICATION_LABELS = Object.freeze({ not_started: 'Не опубликовано', prepared: 'Подготовлено, на сайте ещё нет',
+  published: 'Опубликовано и проверено на сайте', cancelled: 'Снято решением — исправлением не считается' });
+const CLARIFICATION_LIMIT = 50;
 const DISK_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const stamp = () => new Date().toISOString();
 const retryAfterSeconds = (value) => {
@@ -90,6 +97,15 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       status TEXT NOT NULL DEFAULT 'todo', due TEXT NOT NULL DEFAULT '',
       source_message_id INTEGER REFERENCES project_chat_messages(id), created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS project_chat_task_notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER NOT NULL REFERENCES project_chat_tasks(id) ON DELETE CASCADE,
+      company_code TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'clarification', text TEXT NOT NULL,
+      message_id INTEGER REFERENCES project_chat_messages(id), created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS project_chat_task_notes_task ON project_chat_task_notes(task_id, id);
+    -- COALESCE обязателен: в SQLite NULL не равен NULL, и уточнение без привязки к сообщению дублировалось бы при повторе.
+    CREATE UNIQUE INDEX IF NOT EXISTS project_chat_task_notes_unique
+      ON project_chat_task_notes(task_id, kind, text, COALESCE(message_id, 0));
     CREATE TABLE IF NOT EXISTS project_chat_outbox (
       id INTEGER PRIMARY KEY AUTOINCREMENT, company_code TEXT NOT NULL REFERENCES project_chat_rooms(company_code),
       message_id INTEGER NOT NULL UNIQUE REFERENCES project_chat_messages(id), chat_id TEXT NOT NULL,
@@ -116,6 +132,20 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   // Запрос к службе Хью фиксируется один раз: повтор с тем же jobId обязан нести тот же payload.
   if (!db.prepare('PRAGMA table_info(project_chat_ai_jobs)').all().some(column => column.name === 'payload')) {
     db.exec('ALTER TABLE project_chat_ai_jobs ADD COLUMN payload TEXT');
+  }
+  // Колонки добавляются к уже созданным таблицам: база на сервере переживает обновление без пересоздания.
+  const columns = (table) => new Set(db.prepare(`SELECT name FROM pragma_table_info('${table}')`).all().map(r => r.name));
+  {
+    const task = columns('project_chat_tasks');
+    if (!task.has('external_ref')) db.exec("ALTER TABLE project_chat_tasks ADD COLUMN external_ref TEXT NOT NULL DEFAULT ''");
+    if (!task.has('site')) db.exec("ALTER TABLE project_chat_tasks ADD COLUMN site TEXT NOT NULL DEFAULT ''");
+    if (!task.has('publication')) db.exec("ALTER TABLE project_chat_tasks ADD COLUMN publication TEXT NOT NULL DEFAULT 'not_started'");
+    if (!task.has('published_url')) db.exec("ALTER TABLE project_chat_tasks ADD COLUMN published_url TEXT NOT NULL DEFAULT ''");
+    if (!task.has('verified_at')) db.exec("ALTER TABLE project_chat_tasks ADD COLUMN verified_at TEXT NOT NULL DEFAULT ''");
+    if (!task.has('source_quote')) db.exec("ALTER TABLE project_chat_tasks ADD COLUMN source_quote TEXT NOT NULL DEFAULT ''");
+    // Одна задача на внешний идентификатор реестра: повторная синхронизация обновляет, а не плодит копии.
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS project_chat_tasks_ref ON project_chat_tasks(company_code, external_ref) WHERE external_ref<>''");
+    if (!columns('project_chat_rooms').has('sites')) db.exec("ALTER TABLE project_chat_rooms ADD COLUMN sites TEXT NOT NULL DEFAULT '[]'");
   }
   // Вложенный вызов внутри уже открытой транзакции не открывает вторую: SQLite их не поддерживает.
   let inTx = false;
@@ -157,7 +187,12 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     return db.prepare('SELECT * FROM project_chat_rooms WHERE company_code=?').get(code);
   }
   const roomJSON = (r) => ({ companyCode: r.company_code, title: r.title,
-    replyMode: r.reply_mode, telegramChatId: r.telegram_chat_id });
+    replyMode: r.reply_mode, telegramChatId: r.telegram_chat_id, sites: roomSites(r) });
+  /* Сайты, которые обслуживает эта комната. Один собственник может вести два сайта в одной переписке
+     (так удобнее клиенту), поэтому задача помечается сайтом. Список задаёт владелец; пустой список —
+     только сама компания. Метка вне списка не принимается: общий чат не открывает задачи чужих собственников. */
+  function roomSites(r) { try { const v = JSON.parse(r?.sites || '[]'); return Array.isArray(v) ? v.filter(x => typeof x === 'string') : []; } catch { return []; } }
+  const allowedSites = (code) => { const r = db.prepare('SELECT * FROM project_chat_rooms WHERE company_code=?').get(code); return [code.toLowerCase(), ...roomSites(r).map(x => x.toLowerCase())]; };
 
   /* Право на комнату: назначенная компания (сервер проверяет всегда) плюс членство.
      Членство не открывает клиентские чаты CRM и не требует их прав. */
@@ -240,8 +275,19 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     if (!person) return { assigneeName: 'Участник удалён', assigneeActive: false };
     return { assigneeName: person.displayName, assigneeActive: assigned(person, code) && isMember(person, code) };
   }
+  /* Карточка задачи: работа и публикация — два отдельных состояния. siteStatus='needs_clarification' означает,
+     что сайт из сообщения неоднозначен: правку не делают ни на одном сайте, пока клиент не уточнит. */
   const taskJSON = (t, cache = null) => ({ id: t.id, title: t.title, assigneeId: t.assignee_id, stageId: t.stage_id,
-    status: t.status, due: t.due, sourceMessageId: t.source_message_id, ...assigneeInfo(t.company_code, t.assignee_id, cache) });
+    status: t.status, due: t.due, sourceMessageId: t.source_message_id,
+    externalRef: t.external_ref || '', site: t.site || '', siteLabel: t.site ? (COMPANIES[t.site]?.name || t.site) : 'Сайт не определён',
+    siteStatus: t.site ? 'known' : 'needs_clarification',
+    publication: t.publication || 'not_started', publicationLabel: PUBLICATION_LABELS[t.publication || 'not_started'],
+    publishedUrl: t.published_url || '', verifiedAt: t.verified_at || '', sourceQuote: t.source_quote || '',
+    // Снятая задача никогда не показывается как исправленная, даже если работа была доведена до конца.
+    fixedOnSite: t.publication === 'published',
+    notes: db.prepare('SELECT id,kind,text,message_id,created_at FROM project_chat_task_notes WHERE task_id=? ORDER BY id').all(t.id)
+      .map(n => ({ id: n.id, kind: n.kind, text: n.text, messageId: n.message_id, createdAt: n.created_at })),
+    ...assigneeInfo(t.company_code, t.assignee_id, cache) });
 
   /* Состояние службы Хью: «настроено» (есть адрес и ключ) и «подключено» — разные вещи. */
   let statusCache = { at: 0, value: null, inflight: null };
@@ -533,14 +579,90 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       .run(status, error, JSON.stringify(ids), new Date(Date.now() + 15000 * Math.max(1, job.attempts)).toISOString(), job.id);
     return { ok: Boolean(result.ok), status };
   }
+  /* Запись задачи по внешнему идентификатору реестра: повторный вызов с тем же externalRef обновляет ту же
+     строку, а не создаёт вторую. Без externalRef задача обычная, как раньше. */
+  function upsertTask(code, v) {
+    const existing = v.externalRef
+      ? db.prepare('SELECT * FROM project_chat_tasks WHERE company_code=? AND external_ref=?').get(code, v.externalRef) : null;
+    if (existing) {
+      db.prepare(`UPDATE project_chat_tasks SET title=?,assignee_id=?,stage_id=?,status=?,due=?,source_message_id=?,
+        site=?,publication=?,published_url=?,verified_at=?,source_quote=?,updated_at=? WHERE id=?`)
+        .run(v.title, v.assigneeId, v.stageId, v.status, v.due, v.sourceMessageId, v.site, v.publication,
+          v.publishedUrl, v.verifiedAt, v.sourceQuote, stamp(), existing.id);
+      return existing.id;
+    }
+    return Number(db.prepare(`INSERT INTO project_chat_tasks
+      (company_code,title,assignee_id,stage_id,status,due,source_message_id,external_ref,site,publication,published_url,verified_at,source_quote,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(code, v.title, v.assigneeId, v.stageId, v.status, v.due, v.sourceMessageId, v.externalRef, v.site, v.publication,
+        v.publishedUrl, v.verifiedAt, v.sourceQuote, stamp(), stamp()).lastInsertRowid);
+  }
+  /* Уточнение клиента («Онлайн запись», «Только в Алви убрать») крепится к исходной задаче отдельной строкой
+     и не создаёт новую задачу. Один и тот же текст из того же сообщения повторно не добавляется. */
+  function addNote(taskId, code, note) {
+    const text = cleanText(note.text, 2000, 'note');
+    if (!text) fail(400, 'Пустое уточнение');
+    const kind = ['clarification', 'decision', 'check'].includes(note.kind) ? note.kind : 'clarification';
+    const messageId = integer(note.messageId ?? null, true);
+    if (messageId && !db.prepare('SELECT 1 FROM project_chat_messages WHERE id=? AND company_code=?').get(messageId, code)) {
+      fail(400, 'Сообщение не относится к проекту');
+    }
+    db.prepare(`INSERT OR IGNORE INTO project_chat_task_notes(task_id,company_code,kind,text,message_id,created_at)
+      VALUES(?,?,?,?,?,?)`).run(taskId, code, kind, text, messageId, stamp());
+  }
+  /* Перенос реестра замечаний в кабинет одной операцией. Повторный запуск с тем же реестром не удваивает
+     ни задачи, ни уточнения: задачи сопоставляются по externalRef, уточнения — по тексту и сообщению. */
+  function importRegistry(code, body) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) fail(400, 'Ожидается объект реестра');
+    if (Object.keys(body).some(k => !['schemaVersion', 'tasks'].includes(k))) fail(400, 'Неизвестное поле реестра');
+    if (body.schemaVersion !== 1) fail(400, 'Неизвестная версия формата реестра');
+    if (!Array.isArray(body.tasks) || !body.tasks.length || body.tasks.length > 200) fail(400, 'Укажите от 1 до 200 задач');
+    const seen = new Set();
+    return tx(() => {
+      const result = [];
+      for (const item of body.tasks) {
+        if (!item || typeof item !== 'object') fail(400, 'Задача реестра должна быть объектом');
+        const { notes, ...fields } = item;
+        const v = taskValues(code, fields, null);
+        if (!v.externalRef) fail(400, 'У задачи реестра должен быть externalRef');
+        if (seen.has(v.externalRef)) fail(400, `Повторный externalRef в запросе: ${v.externalRef}`);
+        seen.add(v.externalRef);
+        const id = upsertTask(code, v);
+        if (notes !== undefined) {
+          if (!Array.isArray(notes) || notes.length > CLARIFICATION_LIMIT) fail(400, 'Не более 50 уточнений на задачу');
+          for (const note of notes) addNote(id, code, note || {});
+        }
+        result.push({ id, externalRef: v.externalRef });
+      }
+      return result;
+    });
+  }
   function taskValues(code, body, old = null) {
-    const allowed = new Set(['title', 'assigneeId', 'stageId', 'status', 'due', 'sourceMessageId']);
+    const allowed = new Set(['title', 'assigneeId', 'stageId', 'status', 'due', 'sourceMessageId',
+      'externalRef', 'site', 'publication', 'publishedUrl', 'verifiedAt', 'sourceQuote']);
     if (Object.keys(body).some(k => !allowed.has(k))) fail(400, 'Неизвестное поле задачи');
     const values = { title: old?.title || '', assigneeId: old?.assignee_id ?? null, stageId: old?.stage_id ?? null,
-      status: old?.status || 'todo', due: old?.due || '', sourceMessageId: old?.source_message_id ?? null, ...body };
+      status: old?.status || 'todo', due: old?.due || '', sourceMessageId: old?.source_message_id ?? null,
+      externalRef: old?.external_ref || '', site: old?.site || '', publication: old?.publication || 'not_started',
+      publishedUrl: old?.published_url || '', verifiedAt: old?.verified_at || '', sourceQuote: old?.source_quote || '', ...body };
     values.title = cleanText(values.title, 200, 'title');
     if (!values.title) fail(400, 'Введите название задачи');
     if (!TASK_STATUSES.has(values.status)) fail(400, 'Неизвестный статус задачи');
+    values.externalRef = cleanText(values.externalRef, 64, 'externalRef');
+    values.sourceQuote = cleanText(values.sourceQuote, 2000, 'sourceQuote');
+    values.site = cleanText(values.site, 64, 'site').toLowerCase();
+    // Метка сайта принимается только из списка, который обслуживает эта комната.
+    if (values.site && !allowedSites(code).includes(values.site)) fail(400, 'Этот сайт не обслуживается чатом проекта');
+    if (!TASK_PUBLICATION.has(values.publication)) fail(400, 'Неизвестное состояние публикации');
+    values.publishedUrl = cleanText(values.publishedUrl, 500, 'publishedUrl');
+    if (values.publishedUrl && !/^https:\/\//.test(values.publishedUrl)) fail(400, 'Ссылка на сайт должна начинаться с https://');
+    values.verifiedAt = cleanText(values.verifiedAt, 40, 'verifiedAt');
+    // «Опубликовано» подтверждается работающим сайтом: без ссылки и даты проверки статус не ставится.
+    if (values.publication === 'published' && (!values.publishedUrl || !values.verifiedAt)) {
+      fail(400, 'Для статуса «опубликовано» нужны ссылка на страницу и дата проверки');
+    }
+    // Неоднозначный сайт не публикуется: правка не уходит сразу на оба сайта.
+    if (values.publication === 'published' && !values.site) fail(400, 'Сначала уточните, какого сайта касается задача');
     values.assigneeId = integer(values.assigneeId, true);
     // Нового исполнителя проверяем всегда; сохранённого прежнего — нет: выбывший участник
     // не должен мешать владельцу править статус, срок или название существующей задачи.
@@ -612,7 +734,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     }
     if (suffix === '/settings' && method === 'PATCH') {
       const body = await readBody(request); access(request, code, true, true);
-      if (!Object.keys(body).length || Object.keys(body).some(k => !['replyMode', 'telegramChatId'].includes(k))) fail(400, 'Неизвестная настройка');
+      if (!Object.keys(body).length || Object.keys(body).some(k => !['replyMode', 'telegramChatId', 'sites'].includes(k))) fail(400, 'Неизвестная настройка');
       const old = ensureRoom(code), mode = body.replyMode ?? old.reply_mode;
       if (!['addressed', 'delegate'].includes(mode)) fail(400, 'Неизвестный режим ответов');
       let chatId = Object.hasOwn(body, 'telegramChatId') ? body.telegramChatId : old.telegram_chat_id;
@@ -620,8 +742,20 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       if (chatId && !/^-\d{1,20}$/.test(chatId)) fail(400, 'Укажите числовой идентификатор Telegram-группы');
       const bound = chatId && getBinding(chatId);
       if (bound && bound.companyCode !== code) fail(409, 'Эта группа уже связана с другим проектом');
+      // Второй сайт того же собственника ведётся в этой же переписке. Разрешено только то, к чему у владельца
+      // комнаты есть доступ: чужие компании в список не попадают.
+      let sites = roomSites(old);
+      if (Object.hasOwn(body, 'sites')) {
+        if (!Array.isArray(body.sites) || body.sites.length > 10) fail(400, 'Укажите не более 10 сайтов');
+        sites = body.sites.map(v => cleanText(v, 64, 'site').toLowerCase()).filter(Boolean);
+        for (const site of sites) {
+          if (!COMPANIES[site]) fail(400, `Неизвестный проект: ${site}`);
+          if (!assigned(user, site)) fail(403, 'Нет доступа к этому проекту');
+        }
+        sites = [...new Set(sites)].filter(site => site !== code.toLowerCase());
+      }
       tx(() => {
-        db.prepare('UPDATE project_chat_rooms SET reply_mode=?,telegram_chat_id=?,updated_at=? WHERE company_code=?').run(mode, chatId, stamp(), code);
+        db.prepare('UPDATE project_chat_rooms SET reply_mode=?,telegram_chat_id=?,sites=?,updated_at=? WHERE company_code=?').run(mode, chatId, JSON.stringify(sites), stamp(), code);
         if (chatId !== old.telegram_chat_id) db.prepare(`UPDATE project_chat_outbox SET status='error',error='Привязка Telegram изменена'
           WHERE company_code=? AND status='pending'`).run(code);
       });
@@ -684,6 +818,21 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       } else id = Number(db.prepare('INSERT INTO project_chat_stages(company_code,title,created_at) VALUES(?,?,?)').run(code, title, stamp()).lastInsertRowid);
       return reply(method === 'POST' ? 201 : 200, { stage: { id, title } });
     }
+    if (suffix === '/tasks/import' && method === 'POST') {
+      // Перенос реестра — операция владельца: она задаёт состояние публикации, видимое клиенту.
+      const body = await readBody(request); access(request, code, true, true);
+      const imported = importRegistry(code, body);
+      return reply(200, { imported: imported.length, tasks: imported, ...(await snapshot(code, user, page)) });
+    }
+    const note = suffix.match(/^\/tasks\/(\d+)\/notes$/);
+    if (note && method === 'POST') {
+      const body = await readBody(request); access(request, code, true);
+      const id = integer(note[1]);
+      if (!db.prepare('SELECT 1 FROM project_chat_tasks WHERE id=? AND company_code=?').get(id, code)) fail(404, 'Задача не найдена');
+      if (Object.keys(body).some(k => !['text', 'kind', 'messageId'].includes(k))) fail(400, 'Неизвестное поле уточнения');
+      addNote(id, code, body);
+      return reply(201, { task: taskJSON(db.prepare('SELECT * FROM project_chat_tasks WHERE id=?').get(id)) });
+    }
     const task = suffix.match(/^\/tasks(?:\/(\d+))?$/);
     if (task && (method === 'POST' && !task[1] || method === 'PATCH' && task[1])) {
       const body = await readBody(request); access(request, code, true);
@@ -691,11 +840,11 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       const old = id ? db.prepare('SELECT * FROM project_chat_tasks WHERE id=? AND company_code=?').get(id, code) : null;
       if (id && !old) fail(404, 'Задача не найдена');
       const v = taskValues(code, body, old);
-      if (id) db.prepare(`UPDATE project_chat_tasks SET title=?,assignee_id=?,stage_id=?,status=?,due=?,source_message_id=?,updated_at=?
-        WHERE id=? AND company_code=?`).run(v.title, v.assigneeId, v.stageId, v.status, v.due, v.sourceMessageId, stamp(), id, code);
-      else id = Number(db.prepare(`INSERT INTO project_chat_tasks
-        (company_code,title,assignee_id,stage_id,status,due,source_message_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`)
-        .run(code, v.title, v.assigneeId, v.stageId, v.status, v.due, v.sourceMessageId, stamp(), stamp()).lastInsertRowid);
+      if (id) db.prepare(`UPDATE project_chat_tasks SET title=?,assignee_id=?,stage_id=?,status=?,due=?,source_message_id=?,
+        external_ref=?,site=?,publication=?,published_url=?,verified_at=?,source_quote=?,updated_at=? WHERE id=? AND company_code=?`)
+        .run(v.title, v.assigneeId, v.stageId, v.status, v.due, v.sourceMessageId, v.externalRef, v.site, v.publication,
+          v.publishedUrl, v.verifiedAt, v.sourceQuote, stamp(), id, code);
+      else id = upsertTask(code, v);
       return reply(method === 'POST' ? 201 : 200, { task: taskJSON(db.prepare('SELECT * FROM project_chat_tasks WHERE id=?').get(id)) });
     }
     fail(404, 'Метод чата проекта не найден');

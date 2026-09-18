@@ -687,3 +687,108 @@ test('текст сообщения сохраняется как данные �
   assert.equal(snapshot.payload.messages.at(-1).text, payload);
   assert.equal(snapshot.payload.messages.at(-1).authorType, 'human');
 });
+
+/* Реестр замечаний в кабинете: один собственник ведёт два сайта в одной переписке (решение Owner'а 18.09),
+   поэтому у задачи есть метка сайта, отдельное состояние публикации и устойчивый внешний идентификатор. */
+
+test('один общий чат двух сайтов: метка сайта обязательна, чужой сайт не принимается', async () => {
+  const { chat, owner } = setup();
+  await call(chat, { session: owner, method: 'PATCH', url: room('/settings'), body: { sites: [OTHER] } });
+  const snapshot = await call(chat, { session: owner, url: room('') });
+  assert.deepEqual(snapshot.payload.room.sites, [OTHER], 'комната обслуживает и второй сайт собственника');
+  const own = await call(chat, { session: owner, method: 'POST', url: room('/tasks'), body: { title: 'Правка своего сайта', site: ROOM } });
+  assert.equal(own.payload.task.site, ROOM);
+  const second = await call(chat, { session: owner, method: 'POST', url: room('/tasks'), body: { title: 'Правка второго сайта', site: OTHER } });
+  assert.equal(second.payload.task.site, OTHER);
+  assert.equal(second.payload.task.siteStatus, 'known');
+  // Сайт чужого собственника в общий чат не попадает.
+  await assert.rejects(() => call(chat, { session: owner, method: 'POST', url: room('/tasks'),
+    body: { title: 'Чужой сайт', site: 'avokado' } }), status(400));
+  await assert.rejects(() => call(chat, { session: owner, method: 'PATCH', url: room('/settings'),
+    body: { sites: ['нет-такого'] } }), status(400));
+});
+
+test('сайт из сообщения неоднозначен — «нужно уточнить», публикация запрещена, оба сайта не трогаются', async () => {
+  const { chat, owner } = setup();
+  const created = await call(chat, { session: owner, method: 'POST', url: room('/tasks'),
+    body: { title: 'Убрать онлайн-запись', sourceQuote: 'Убрать онлайн запись везде' } });
+  assert.equal(created.payload.task.site, '');
+  assert.equal(created.payload.task.siteStatus, 'needs_clarification');
+  assert.equal(created.payload.task.publication, 'not_started');
+  await assert.rejects(() => call(chat, { session: owner, method: 'PATCH', url: room(`/tasks/${created.payload.task.id}`),
+    body: { publication: 'published', publishedUrl: 'https://example.test/', verifiedAt: '2026-09-18' } }), status(400));
+});
+
+test('готово локально ≠ опубликовано: «на сайте» требует ссылку и дату проверки, снятое не считается исправлением', async () => {
+  const { chat, owner } = setup();
+  const task = (await call(chat, { session: owner, method: 'POST', url: room('/tasks'),
+    body: { title: 'Ускорить слайды', site: ROOM, status: 'done', publication: 'prepared' } })).payload.task;
+  assert.equal(task.status, 'done');
+  assert.equal(task.publication, 'prepared');
+  assert.equal(task.fixedOnSite, false, 'локальная готовность не выдаётся за правку на сайте');
+  assert.match(task.publicationLabel, /ещё нет/);
+  for (const body of [
+    { publication: 'published' },
+    { publication: 'published', publishedUrl: 'https://example.test/' },
+    { publication: 'published', verifiedAt: '2026-09-18' },
+    { publication: 'published', publishedUrl: 'http://example.test/', verifiedAt: '2026-09-18' },
+    { publication: 'на сайте' },
+  ]) await assert.rejects(() => call(chat, { session: owner, method: 'PATCH', url: room(`/tasks/${task.id}`), body }), status(400));
+  const live = await call(chat, { session: owner, method: 'PATCH', url: room(`/tasks/${task.id}`),
+    body: { publication: 'published', publishedUrl: 'https://example.test/page', verifiedAt: '2026-09-18' } });
+  assert.equal(live.payload.task.fixedOnSite, true);
+  const cancelled = await call(chat, { session: owner, method: 'PATCH', url: room(`/tasks/${task.id}`),
+    body: { publication: 'cancelled' } });
+  assert.equal(cancelled.payload.task.fixedOnSite, false, 'снятое решением видно, но исправлением не считается');
+  assert.match(cancelled.payload.task.publicationLabel, /не считается/);
+});
+
+test('повторная синхронизация реестра не плодит задачи и не удваивает уточнения', async () => {
+  const { chat, owner } = setup();
+  await call(chat, { session: owner, method: 'PATCH', url: room('/settings'), body: { sites: [OTHER] } });
+  const registry = { schemaVersion: 1, tasks: [
+    { externalRef: 'А8', title: 'Фото вылезает на ПК', site: ROOM, status: 'done', publication: 'prepared',
+      sourceQuote: 'В версии ПК на сайте вылазит фотография' },
+    { externalRef: 'А9', title: 'Онлайн-запись ведёт в контакты', site: OTHER, status: 'todo', publication: 'not_started',
+      notes: [{ text: 'Только в Алви убрать', kind: 'clarification' }] },
+  ] };
+  const first = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'), body: registry });
+  assert.equal(first.payload.imported, 2);
+  const second = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'), body: registry });
+  assert.equal(second.payload.imported, 2);
+  assert.equal(second.payload.tasks[0].id, first.payload.tasks[0].id, 'та же сущность, а не копия');
+  assert.equal(second.payload.tasks.length, 2);
+  const tasks = second.payload.tasks.map(t => t.externalRef);
+  assert.deepEqual(tasks, ['А8', 'А9']);
+  const snapshot = await call(chat, { session: owner, url: room('') });
+  assert.equal(snapshot.payload.tasks.length, 2, 'двойного счёта нет');
+  const a9 = snapshot.payload.tasks.find(t => t.externalRef === 'А9');
+  assert.equal(a9.notes.length, 1, 'то же уточнение не добавляется дважды');
+  // Уточнение крепится к исходной задаче, новую не создаёт.
+  await call(chat, { session: owner, method: 'POST', url: room(`/tasks/${a9.id}/notes`), body: { text: 'Онлайн запись' } });
+  const after = await call(chat, { session: owner, url: room('') });
+  assert.equal(after.payload.tasks.length, 2);
+  assert.deepEqual(after.payload.tasks.find(t => t.externalRef === 'А9').notes.map(n => n.text),
+    ['Только в Алви убрать', 'Онлайн запись']);
+  await assert.rejects(() => call(chat, { session: owner, method: 'POST', url: room('/tasks/import'),
+    body: { schemaVersion: 1, tasks: [{ externalRef: 'Д1', title: 'Раз' }, { externalRef: 'Д1', title: 'Два' }] } }), status(400));
+  await assert.rejects(() => call(chat, { session: owner, method: 'POST', url: room('/tasks/import'),
+    body: { schemaVersion: 2, tasks: [{ externalRef: 'Д2', title: 'Раз' }] } }), status(400));
+  await assert.rejects(() => call(chat, { session: owner, method: 'POST', url: room('/tasks/import'),
+    body: { schemaVersion: 1, tasks: [{ title: 'Без идентификатора' }] } }), status(400));
+});
+
+test('задачи реестра не видны участнику чужого проекта и не переносятся между комнатами', async () => {
+  const { chat, owner, person, session } = setup();
+  await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'),
+    body: { schemaVersion: 1, tasks: [{ externalRef: 'А1', title: 'Замечание собственника', site: ROOM }] } });
+  const stranger = person('stranger', [OTHER]);
+  await assert.rejects(() => call(chat, { session: session(stranger.id), url: room('') }), status(403));
+  const other = await call(chat, { session: owner, url: room('', OTHER) });
+  assert.equal(other.payload.tasks.length, 0, 'та же метка в другой комнате задачу не показывает');
+  // Один и тот же externalRef в разных комнатах — разные задачи, счёт не смешивается.
+  const twin = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import', OTHER),
+    body: { schemaVersion: 1, tasks: [{ externalRef: 'А1', title: 'Другое замечание', site: OTHER }] } });
+  assert.equal(twin.payload.imported, 1);
+  assert.equal((await call(chat, { session: owner, url: room('') })).payload.tasks.length, 1);
+});
