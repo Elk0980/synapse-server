@@ -4,12 +4,42 @@
    contentId → платформенный пост/URL → обращения (leads) → продажи. Правила честности: нет данных = null (UNKNOWN), не 0;
    сумма просмотров разных площадок — не уникальный охват; органика/реклама различаются полем kind; секреты не хранятся здесь. */
 const { createHash } = require('node:crypto');
+const { receiptFormat } = require('./autoposting');
 const PLATFORMS = Object.freeze({ instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube', vk: 'ВКонтакте', telegram: 'Telegram' });
 const PROVIDERS = Object.freeze(['onlypult', 'direct', 'manual']);
 const KINDS = Object.freeze(['organic', 'paid', 'mixed', 'unknown']);
 const PERIODS = Object.freeze(['day', 'lifetime']);
 const COMPLETENESS = Object.freeze(['complete', 'partial', 'unknown']);
 const RUN_STATUS = Object.freeze(['ok', 'partial', 'missing_access', 'unsupported', 'failed']);
+/* Подтверждение внешней публикации (autoposting_publication_receipts) владелец записывает по площадкам автопостинга: там YouTube Shorts —
+   отдельная площадка подписи, здесь это та же площадка аналитики youtube. Обратная карта нужна, чтобы разбирать адрес поста тем же
+   форматом, каким подтверждение принималось при записи. */
+const RECEIPT_TO_PLATFORM = Object.freeze({ instagram: 'instagram', tiktok: 'tiktok', youtube_shorts: 'youtube', vk: 'vk', telegram: 'telegram' });
+const PLATFORM_TO_RECEIPT = Object.freeze(Object.fromEntries(Object.entries(RECEIPT_TO_PLATFORM).map(([receipt, platform]) => [platform, receipt])));
+const RECEIPT_LIMIT = 200;
+/* Канонический ключ записи площадки — только по разобранному формату адреса (тот же receiptFormat, что принимает подтверждение).
+   Он объединяет разные написания одного и того же адреса: youtube watch?v=… и shorts/…, косая черта в конце, витрина страницы
+   ВКонтакте с ?w=…. Неизвестный формат даёт пустой ключ: похожие адреса не склеиваются по догадке.
+   Ключ — не идентификатор поста в API площадки: shortcode Instagram не равен media id Graph, номер сообщения Telegram — не id поста.
+   Поэтому наружу он не выдаётся: у записи без собранного поста в DTO стоит собственная ссылка receipt:<id>. */
+function canonicalPostKey(platform, value) {
+  const receiptPlatform = PLATFORM_TO_RECEIPT[platform];
+  const normalized = receiptPlatform ? receiptFormat(receiptPlatform, value) : null;
+  if (!normalized) return '';
+  const parsed = new URL(normalized), segments = parsed.pathname.split('/').filter(Boolean);
+  switch (platform) {
+    // Один и тот же shortcode площадка отдаёт и как /p/, и как /reel/, и под именем автора: адрес записи — сам shortcode (регистр значим).
+    case 'instagram': return `instagram:${segments[segments.length - 1]}`;
+    // Аккаунт сохраняется: номер ролика без автора адресом записи не является.
+    case 'tiktok': return `tiktok:${segments[0].toLowerCase()}/${segments[segments.length - 1]}`;
+    case 'youtube': return `youtube:${segments[0] === 'shorts' ? segments[1] : parsed.searchParams.get('v')}`;
+    // Объект ВКонтакте (wall-1_2) уже несёт владельца записи; короткое имя страницы — витрина того же объекта.
+    case 'vk': return `vk:${(parsed.searchParams.get('w') || segments[0]).toLowerCase()}`;
+    // Канал сохраняется: номер сообщения уникален только внутри канала.
+    case 'telegram': return `telegram:${segments.join('/').toLowerCase()}`;
+    default: return '';
+  }
+}
 /* Единый словарь метрик: ключ Synapse → единица. Исходное имя поля площадки хранится отдельно (source_field). */
 const METRICS = Object.freeze({
   followers: 'count', follower_change: 'count', reach: 'people', impressions: 'views', views: 'views', profile_visits: 'count',
@@ -300,23 +330,112 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, logger =
   const PLATFORM_ALIASES = Object.freeze({ instagram: ['instagram', 'ig', 'инстаграм'], tiktok: ['tiktok', 'тикток'], youtube: ['youtube', 'yt', 'ютуб'], vk: ['vk', 'vkontakte', 'вк', 'вконтакте'], telegram: ['telegram', 'tg', 'телеграм', 'телеграмм'] });
   const leadPlatform = (lead) => { const raw = String(lead.utm_source || lead.source || '').trim().toLowerCase(); if (!raw) return ''; return Object.keys(PLATFORM_ALIASES).find((p) => PLATFORM_ALIASES[p].includes(raw)) || ''; };
   const urlMatches = (value, url) => { if (!value || !url) return false; if (value === url) return true; if (!value.startsWith(url)) return false; const next = value.charAt(url.length), tail = url.endsWith('/'); return tail || next === '?' || next === '#' || next === '/'; };
+  const hasTable = (name) => Boolean(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name));
+  /* READ-ONLY проекция подтверждений внешних публикаций в атрибуцию. Подтверждение — доказательство владельца (ссылка и время выхода),
+     а не сбор по API: здесь не создаётся ни постов, ни метрик, ни запусков сбора, и уже сохранённые social_posts не переписываются.
+     Изоляция компании строгая: компания подтверждения берётся join companies.id = receipts.company_id и сверяется с кодом компании
+     аналитики, а карточка обязана принадлежать той же компании. Пока таблиц автопостинга нет — проекции просто нет.
+     contentId подтверждения — external_id карточки (идентификатор из пакета контент-плана, тот же, что владелец ставит в utm_content);
+     у карточки, заведённой руками, его нет, и он не выдумывается. */
+  function receiptRows(scope) {
+    if (!hasTable('autoposting_publication_receipts') || !hasTable('autoposting_posts')) return [];
+    const content = db.prepare("SELECT 1 FROM pragma_table_info('autoposting_posts') WHERE name='external_id'").get() ? 'p.external_id' : "''";
+    return db.prepare(`SELECT r.id, r.platform, r.url, r.published_at, r.post_id, ${content} content_id FROM autoposting_publication_receipts r
+      JOIN autoposting_posts p ON p.id=r.post_id AND p.company_id=r.company_id
+      JOIN companies c ON c.id=r.company_id WHERE c.code=? COLLATE NOCASE AND c.is_deleted=0
+      ORDER BY r.published_at DESC, r.id DESC LIMIT ${RECEIPT_LIMIT}`).all(scope.code);
+  }
+  /* Собранные посты и подтверждения сводятся в один список записей выхода. Запись — это один канонический адрес площадки, а не строка
+     базы: если две строки social_posts (разные platform_post_id — например, тот же ролик пришёл от провайдера и был внесён вручную)
+     разбираются в один и тот же канонический адрес, в отчёте это один выход с несколькими источниками, иначе обращение по этому адресу
+     оказалось бы неоднозначным между двумя записями и не засчиталось бы никому. Подтверждение прикладывается к собранному посту по тому
+     же строгому совпадению адреса: остаются настоящие platform_post_id и provider собранного поста, а адрес подтверждения добавляется
+     к списку адресов для сопоставления обращений — чтобы один и тот же выход не считался дважды.
+     Объединение живёт только в этой проекции: social_posts не переписываются и не удаляются. Адрес, который разбор площадки не понял,
+     ключа не даёт и ни с чем не объединяется. */
+  function attributionPosts(scope) {
+    const stored = db.prepare('SELECT * FROM social_posts WHERE company_code=? COLLATE NOCASE ORDER BY published_at DESC, id DESC LIMIT 200').all(scope.code);
+    // Копии строк базы: дальше список правится (адреса, contentId подтверждений), а social_posts остаются нетронутыми.
+    const posts = [], byKey = new Map();
+    for (const p of stored) {
+      const key = canonicalPostKey(p.platform, p.url), same = key ? byKey.get(key) : null;
+      const identity = { platformPostId: p.platform_post_id, provider: p.provider, contentId: p.content_id || '' };
+      if (same) {
+        // Тот же канонический адрес, другая строка базы: один выход, несколько источников. Первая строка (свежая по дате, затем по id)
+        // задаёт адрес и ссылку записи; её contentId не объявляется общим — расхождение карточек разбирается ниже списком кандидатов.
+        same.identities.push(identity);
+        if (p.url && !same.urls.includes(p.url)) same.urls.push(p.url);
+        if (p.content_id) same.storedContentIds.add(p.content_id);
+        if (!same.publishedAt && p.published_at) same.publishedAt = p.published_at;
+        continue;
+      }
+      const post = { key: `post:${p.id}`, platform: p.platform, platformPostId: p.platform_post_id, url: p.url, urls: p.url ? [p.url] : [],
+        identities: [identity], storedContentIds: new Set(p.content_id ? [p.content_id] : []), contentId: p.content_id,
+        publishedAt: p.published_at, provenance: 'stored', receipts: [], receiptContentIds: new Set() };
+      posts.push(post);
+      if (key) byKey.set(key, post);
+    }
+    let projected = 0, merged = 0, skipped = 0;
+    for (const receipt of receiptRows(scope)) {
+      const platform = RECEIPT_TO_PLATFORM[receipt.platform];
+      // Площадка подтверждения, которой нет в аналитике, не пропадает молча: её видно счётчиком skipped.
+      if (!platform) { skipped += 1; continue; }
+      projected += 1;
+      // Ключ несёт площадку, поэтому подтверждение не приклеится к посту другой площадки. Неразобранный адрес (формат площадки сменился
+      // после записи) ключа не даёт: такая запись живёт отдельной строкой и ни с чем не объединяется.
+      const key = canonicalPostKey(platform, receipt.url);
+      let post = key ? byKey.get(key) : null;
+      // merged считает только подтверждения, легшие на собранный пост: второе написание того же адреса подтверждения — не объединение.
+      if (post) { if (post.provenance !== 'external_receipt') { post.provenance = 'stored_with_receipt'; merged += 1; } }
+      else {
+        post = { key: `receipt:${receipt.id}`, platform, platformPostId: `receipt:${receipt.id}`, url: receipt.url, urls: [],
+          identities: [], storedContentIds: new Set(), contentId: '', publishedAt: receipt.published_at, provenance: 'external_receipt', receipts: [], receiptContentIds: new Set() };
+        posts.push(post);
+        if (key) byKey.set(key, post);
+      }
+      post.receipts.push({ referenceId: `receipt:${receipt.id}`, url: receipt.url, publishedAt: receipt.published_at, contentId: receipt.content_id || '' });
+      if (!post.urls.includes(receipt.url)) post.urls.push(receipt.url);
+      if (receipt.content_id) post.receiptContentIds.add(receipt.content_id);
+    }
+    for (const post of posts) {
+      const ids = [...post.receiptContentIds], storedIds = [...post.storedContentIds];
+      // Провайдер записи — настоящий провайдер её источника, а не догадка: один источник — его провайдер; несколько источников с разными
+      // провайдерами одним не называются, а у записи без собранного поста провайдера сбора нет вовсе. В обоих случаях null, не выдумка.
+      const providers = [...new Set(post.identities.map((i) => i.provider))];
+      post.provider = providers.length === 1 ? providers[0] : null;
+      post.sources = post.identities.length;
+      // Два собранных поста одного канонического адреса с разными карточками — расхождение настоящих contentId: общего у записи нет.
+      post.contentId = storedIds.length === 1 ? storedIds[0] : '';
+      // Один адрес подтверждён на разных карточках (или карточка спорит с собранным постом): выбрать contentId наугад нельзя.
+      // Кандидаты — все настоящие карточки записи, и от источников, и от подтверждений: список честно показывает сам спор,
+      // а не только его вторую сторону. Непустой список означает спорную запись: метка utm по ней никому не приписывается.
+      const all = [...new Set([...storedIds, ...ids])].sort();
+      post.contentIdCandidates = all.length > 1 ? all : [];
+      if (!post.contentId && !storedIds.length && ids.length === 1) post.contentId = ids[0];
+    }
+    // Порядок общий и устойчивый: свежие выходы сверху, записи без даты — в конце; при равной дате сохраняется порядок выборки.
+    posts.sort((a, b) => { const x = a.publishedAt || '', y = b.publishedAt || ''; return x === y ? 0 : x > y ? -1 : 1; });
+    return { posts, projected, merged, skipped, receiptOnly: posts.filter((p) => p.provenance === 'external_receipt').length };
+  }
   function attribution(code, from, to) {
     const scope = company(code); day(from); day(to);
-    const posts = db.prepare('SELECT * FROM social_posts WHERE company_code=? COLLATE NOCASE ORDER BY published_at DESC, id DESC LIMIT 200').all(scope.code);
+    const projection = attributionPosts(scope), posts = projection.posts;
     const leads = db.prepare(`SELECT id, stage, sale_amount, source, utm_source, utm_content, utm_campaign, referrer, landing_page FROM leads WHERE company_code=? COLLATE NOCASE AND created_at>=? AND created_at<?
       AND (COALESCE(utm_content,'')<>'' OR COALESCE(utm_campaign,'')<>'' OR COALESCE(referrer,'')<>'' OR COALESCE(landing_page,'')<>'')`).all(scope.code, from + 'T00:00:00', to + 'T23:59:59.999');
     const byContent = new Map();
-    for (const post of posts) if (post.content_id) { if (!byContent.has(post.content_id)) byContent.set(post.content_id, []); byContent.get(post.content_id).push(post); }
-    const perPost = new Map(posts.map((p) => [p.id, { leads: [], confidence: new Set() }])), ambiguous = new Map();
+    // По метке ищутся только записи с бесспорной карточкой. У спорной записи (contentIdCandidates непуст) настоящий contentId
+    // сохранён в отчёте для диагностики, но меткой не пользуется: к какой из расходящихся карточек относится обращение — неизвестно.
+    for (const post of posts) if (post.contentId && !post.contentIdCandidates.length) { if (!byContent.has(post.contentId)) byContent.set(post.contentId, []); byContent.get(post.contentId).push(post); }
+    const perPost = new Map(posts.map((p) => [p.key, { leads: [], confidence: new Set() }])), ambiguous = new Map();
     for (const lead of leads) {
-      const byUrl = posts.filter((p) => p.url && (urlMatches(lead.referrer, p.url) || urlMatches(lead.landing_page, p.url)));
-      if (byUrl.length === 1) { perPost.get(byUrl[0].id).leads.push(lead); perPost.get(byUrl[0].id).confidence.add('url'); continue; }
+      const byUrl = posts.filter((p) => p.urls.some((u) => urlMatches(lead.referrer, u) || urlMatches(lead.landing_page, u)));
+      if (byUrl.length === 1) { perPost.get(byUrl[0].key).leads.push(lead); perPost.get(byUrl[0].key).confidence.add('url'); continue; }
       const contentId = [lead.utm_content, lead.utm_campaign].map((v) => String(v || '').trim()).find((v) => v && byContent.has(v));
       if (!contentId && !byUrl.length) continue;
       const candidates = contentId ? byContent.get(contentId) : byUrl;
       const platform = leadPlatform(lead), scoped = platform ? candidates.filter((p) => p.platform === platform) : [];
       const pick = candidates.length === 1 ? candidates[0] : scoped.length === 1 ? scoped[0] : null;
-      if (pick) { perPost.get(pick.id).leads.push(lead); perPost.get(pick.id).confidence.add(contentId ? 'utm' : 'url'); continue; }
+      if (pick) { perPost.get(pick.key).leads.push(lead); perPost.get(pick.key).confidence.add(contentId ? 'utm' : 'url'); continue; }
       const key = contentId || byUrl[0].url;
       if (!ambiguous.has(key)) ambiguous.set(key, { contentId: contentId || '', url: contentId ? '' : key, platforms: Object.keys(PLATFORMS).filter((p) => candidates.some((c) => c.platform === p)), leads: [] });
       ambiguous.get(key).leads.push(lead);
@@ -325,11 +444,14 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, logger =
     const bySource = db.prepare(`SELECT source, COUNT(*) leads, SUM(CASE WHEN stage='продажа' THEN 1 ELSE 0 END) sales, SUM(CASE WHEN stage='продажа' THEN COALESCE(sale_amount,0) ELSE 0 END) revenue
       FROM leads WHERE company_code=? COLLATE NOCASE AND created_at>=? AND created_at<? GROUP BY source`).all(scope.code, from + 'T00:00:00', to + 'T23:59:59.999');
     return {
-      posts: posts.map((post) => { const m = perPost.get(post.id); return { platform: post.platform, platformPostId: post.platform_post_id, url: post.url, contentId: post.content_id, publishedAt: post.published_at, ...sum(m.leads),
-        attribution: m.leads.length ? 'exact' : (post.content_id || post.url ? 'none_in_period' : 'unknown'), confidence: m.confidence.has('url') ? 'url' : m.confidence.has('utm') ? 'utm' : 'none' }; }),
+      posts: posts.map((post) => { const m = perPost.get(post.key); return { platform: post.platform, platformPostId: post.platformPostId, url: post.url, contentId: post.contentId, publishedAt: post.publishedAt, ...sum(m.leads),
+        attribution: m.leads.length ? 'exact' : (post.contentId || post.url ? 'none_in_period' : 'unknown'), confidence: m.confidence.has('url') ? 'url' : m.confidence.has('utm') ? 'utm' : 'none',
+        provenance: post.provenance, provider: post.provider, sources: post.sources, identities: post.identities, receipts: post.receipts, contentIdCandidates: post.contentIdCandidates }; }),
       byContent: [...ambiguous.values()].map((g) => ({ contentId: g.contentId, url: g.url, platforms: g.platforms, ...sum(g.leads), attribution: 'content_only',
         note: 'Метка указывает на контент, но не на конкретную площадку: обращение не приписано ни одному посту и не задвоено.' })),
       bySource: bySource.map((r) => ({ source: r.source || 'unknown', leads: r.leads, sales: r.sales, revenue: r.revenue })),
+      receipts: { projected: projection.projected, merged: projection.merged, receiptOnly: projection.receiptOnly, skipped: projection.skipped,
+        note: 'Подтверждение внешней публикации — ссылка и время выхода, зафиксированные владельцем, а не сбор по API: показателей площадки у такой записи нет, идентификатор поста в API по ссылке не выдумывается (в отчёте стоит собственная ссылка receipt:<id>). Подтверждение объединяется с собранным постом только при строгом совпадении разобранного адреса площадки.' },
       note: 'Обращение засчитывается одному посту только по однозначной связи: URL поста в referrer/landing или метка contentId с однозначной площадкой (utm_source/source). Неоднозначные метки — отдельно, по контенту. Остальное — неизвестная атрибуция.',
     };
   }
@@ -373,4 +495,4 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, logger =
   }
   return { accounts, saveAccounts, collect, collectDue, importManual, overview, attribution, writeSnapshots, writePosts, localDay, dayBounds, PLATFORMS, METRICS, AGGREGATION };
 }
-module.exports = { createSocialStats, SOCIAL_STATS_ERRORS: ERRORS, PLATFORMS, METRICS, AGGREGATION, KINDS, localDay, dayBounds };
+module.exports = { createSocialStats, SOCIAL_STATS_ERRORS: ERRORS, PLATFORMS, METRICS, AGGREGATION, KINDS, localDay, dayBounds, canonicalPostKey, RECEIPT_TO_PLATFORM };
