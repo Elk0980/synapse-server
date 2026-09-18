@@ -780,6 +780,56 @@ test('владелец видит состояние подписки Codex бе
   harness.w.close();
 });
 
+test('внешний ИИ: готовность без фиктивного входа Codex, отключённый вход и смена режима', async () => {
+  let status = { local: true, mode: 'trusted-agent', state: 'connected', connected: true,
+    authenticated: false, model: '<img src=x onerror=alert(1)>', loginPending: true,
+    loginUrl: 'https://auth.openai.com/codex/device', userCode: 'ABCD-1234' };
+  const harness = boot({ clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ messages: [] }) }),
+    'GET /content/project-chat-runtime/status': () => ({ body: status })
+  } });
+  await mount(harness);
+  harness.click('[data-pc-settings]');
+  await settle();
+  const { d } = harness;
+  let runtime = d.querySelector('[data-pc-runtime]');
+  assert.match(runtime.textContent, /Внешний исполнитель Хью готов отвечать/);
+  assert.equal(runtime.querySelector('img'), null);
+  assert.equal(runtime.querySelector('a'), null);
+  assert.doesNotMatch(runtime.textContent, /Codex|ABCD-1234/);
+  assert.equal(d.querySelector('[data-pc-login]').hidden, true);
+  assert.equal(d.querySelector('[data-pc-login]').disabled, true);
+  assert.match(d.querySelector('.pc-runtime > .pc-muted').textContent, /не изолированы/);
+  d.querySelector('[data-pc-login]').onclick();
+  await settle();
+  assert.equal(harness.calls.filter(call => call.url.includes('/project-chat-runtime/login')).length, 0);
+
+  for (const unavailable of [
+    { state: 'offline', offline: true, error: '' },
+    { state: 'limited', limited: true, error: 'Лимит ответов исчерпан' },
+    { state: 'unavailable', connected: false, error: '<img src=x onerror=alert(1)>' }
+  ]) {
+    status = { ...status, offline: false, limited: false, ...unavailable };
+    harness.click('[data-pc-runtime-check]');
+    await settle();
+    runtime = d.querySelector('[data-pc-runtime]');
+    assert.doesNotMatch(runtime.textContent, /Хью готов отвечать\.|Подписка Codex/);
+    assert.equal(runtime.querySelector('img'), null);
+    assert.equal(d.querySelector('[data-pc-login]').hidden, true);
+  }
+  status = { local: true, mode: 'trusted-agent', state: 'login_pending', connected: false };
+  harness.click('[data-pc-runtime-check]');
+  await settle();
+  assert.equal(harness.clock.pending().filter(delay => delay === 3000).length, 0);
+  status = { local: true, mode: 'isolated-codex', state: 'login_required', connected: false, authenticated: false };
+  harness.click('[data-pc-runtime-check]');
+  await settle();
+  assert.equal(d.querySelector('[data-pc-login]').hidden, false);
+  assert.equal(d.querySelector('[data-pc-login]').disabled, false);
+  assert.match(d.querySelector('[data-pc-runtime]').textContent, /Подписка Codex/);
+  harness.w.close();
+});
+
 test('произвольная ссылка входа не предлагается вместо официальной страницы Codex', async () => {
   const harness = boot({
     routes: {

@@ -519,6 +519,18 @@
     return text ? `${text}.` : "";
   };
   const LOCAL_HINT = "Нажмите «Подключить подписку»: команда уйдёт на компьютер Хью, а ссылка с кодом появится здесь.";
+  const TRUSTED_HINT = "Ответы поручены внешнему ИИ, выбранному владельцем. Его инструменты не изолированы сервером Синапс.";
+  const trustedRuntimeHTML = data => {
+    const model = data.model ? ` Модель: ${escape(data.model)}.` : "";
+    const detail = data.error ? ` ${escape(sentence(data.error))}` : "";
+    if (data.offline === true || data.state === "offline") {
+      return "Внешний исполнитель Хью сейчас не на связи. Переписка, файлы и задачи проекта работают; вопросы к Хью ждут.";
+    }
+    if (data.state === "connected" && data.connected === true && data.limited !== true) {
+      return `Внешний исполнитель Хью готов отвечать.${model}`;
+    }
+    return `Внешний исполнитель Хью пока не готов отвечать.${detail}${model} Переписка, файлы и задачи проекта работают.`;
+  };
   // Локальный обработчик: подписка живёт на компьютере владельца, а не на сервере. Выключенный
   // компьютер — это ожидание, а не поломка, и просить подключить подписку заново в этот момент нельзя.
   const localRuntimeHTML = data => {
@@ -541,6 +553,7 @@
     return `Подписка Codex на компьютере Хью пока не подключена.${detail} ${LOCAL_HINT}`;
   };
   const runtimeHTML = data => {
+    if (data.mode === "trusted-agent") return trustedRuntimeHTML(data);
     if (data.local === true) return localRuntimeHTML(data);
     const model = data.model ? ` Модель: ${escape(data.model)}.` : "";
     const detail = data.error ? ` ${escape(sentence(data.error))}` : "";
@@ -575,14 +588,20 @@
     dialog.addEventListener("close", () => clearTimeout(state.loginTimer));
     // Компания уходит в запросе: для компании с локальным обработчиком сервер отвечает из его состояния.
     const statusPath = "/content/project-chat-runtime/status?companyCode=" + encodeURIComponent(state.company);
+    let trustedMode = false;
     const show = data => {
+      trustedMode = data.mode === "trusted-agent";
+      dialog.querySelector("[data-pc-login]").hidden = trustedMode;
+      dialog.querySelector(".pc-runtime h3").textContent = trustedMode ? "Ответы Хью через внешнего ИИ" : "Ответы Хью через Codex";
+      dialog.querySelector(".pc-runtime > .pc-muted").textContent = trustedMode ? TRUSTED_HINT : "Наличие настроек ещё не означает подключение. Хью отвечает только при подтверждённом входе; недоступный источник не считается подключённым.";
       dialog.querySelector("[data-pc-runtime]").innerHTML = runtimeHTML(data);
       // Локальный обработчик присылает ссылку и код следующим опросом: ждём, пока команда в работе.
-      if (data.local === true && data.state === "login_pending" && state.loginPolls < LOGIN_POLLS) {
+      if (!trustedMode && data.local === true && data.state === "login_pending" && state.loginPolls < LOGIN_POLLS) {
         state.loginTimer = setTimeout(() => { if (live(state, view) && dialog.isConnected) runtime(false, true); }, LOGIN_POLL_MS);
       }
     };
     const runtime = async (login, quiet = false) => {
+      if (login && trustedMode) return;
       const buttons = dialog.querySelectorAll("[data-pc-login],[data-pc-runtime-check]");
       if (!quiet) buttons.forEach(button => { button.disabled = true; });
       clearTimeout(state.loginTimer);
@@ -616,7 +635,7 @@
           ? `${head}. ${reported} ${again}`
           : `${head}: ответ от сервера не получен, причина неизвестна. ${again}`;
       }
-      finally { if (!quiet) buttons.forEach(button => { button.disabled = false; }); }
+      finally { if (!quiet) buttons.forEach(button => { button.disabled = button.hasAttribute("data-pc-login") && trustedMode; }); }
     };
     dialog.querySelector("[data-pc-login]").onclick = () => runtime(true);
     dialog.querySelector("[data-pc-runtime-check]").onclick = () => runtime(false);

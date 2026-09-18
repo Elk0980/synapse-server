@@ -17,6 +17,7 @@ on:
       - 'ops/dev/**'
       - 'ops/hugh-runtime/**'
       - 'ops/local-hugh/**'
+      - 'ops/hugh-agent-connector/**'
       - 'ops/synapse-sync'
       - 'ops/synapse-sync.test.js'
       - 'sites/synapse/cabinet/**'
@@ -30,6 +31,7 @@ on:
       - 'ops/dev/**'
       - 'ops/hugh-runtime/**'
       - 'ops/local-hugh/**'
+      - 'ops/hugh-agent-connector/**'
       - 'ops/synapse-sync'
       - 'ops/synapse-sync.test.js'
       - 'sites/synapse/cabinet/**'
@@ -87,6 +89,11 @@ jobs:
       - name: Тесты сервиса контента
         timeout-minutes: 10
         run: node --test ops/content/*.test.js
+
+      # Только локальные заглушки исполнителей; реальных ключей и клиентских сообщений нет.
+      - name: Тесты общего коннектора Хью
+        timeout-minutes: 10
+        run: node --test ops/hugh-agent-connector/*.test.js
 
       - name: Тесты чат-сервиса
         timeout-minutes: 10
