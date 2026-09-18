@@ -1134,3 +1134,161 @@ test('недоступный сервис ответов показываетс�
   assert.equal(runtime.querySelector('a'), null);
   harness.w.close();
 });
+
+test('карточка задачи: ссылка вне кнопки, дата проверки показывается днём и не теряет время', async () => {
+  const task = { id: 7, externalRef: 'А8', title: 'Фото вылезает на ПК', status: 'done', kind: 'client_remark',
+    site: 'palitra-love', siteLabel: 'Палитра', siteStatus: 'known', publication: 'published',
+    publicationLabel: 'Опубликовано и проверено на сайте', publishedUrl: 'https://example.test/a8',
+    verifiedAt: '2026-09-18T12:30:00Z', sourceQuote: '', notes: [], fixedOnSite: true, cancelled: false,
+    assigneeId: null, stageId: null, due: '' };
+  // clock: true — опрос переписки идёт на управляемых таймерах, иначе реальный таймер держит процесс.
+  const harness = boot({ clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ tasks: [task] }) }),
+    'PATCH /content/project-chat/palitra-love/tasks/7': (call) => ({ body: { task: { ...task, ...JSON.parse(call.body) } } })
+  } });
+  await mount(harness);
+  const { d } = harness;
+
+  // Ссылка не должна быть внутри кнопки: вложенные интерактивные элементы ломают клик и доступность.
+  const link = d.querySelector('.pc-task-link a');
+  assert.ok(link, 'ссылка на страницу показана');
+  assert.equal(link.closest('button'), null, 'ссылка вынесена за пределы кнопки задачи');
+  assert.equal(d.querySelectorAll('[data-pc-task] a').length, 0, 'внутри кнопки ссылок нет');
+  assert.match(d.querySelector('.pc-task-link').textContent, /проверено 2026-09-18/);
+
+  // В диалоге дата показывается днём — иначе input type="date" молча очистил бы её.
+  harness.click('[data-pc-task="7"]');
+  await settle();
+  const form = d.querySelector('.pc-dialog form');
+  assert.equal(form.elements.verifiedAt.value, '2026-09-18');
+  assert.equal(form.elements.verifiedAtFull.value, '2026-09-18T12:30:00Z');
+
+  // День не меняли — уходит исходное значение целиком, время не потеряно.
+  harness.submit('.pc-dialog form');
+  await settle();
+  const saved = harness.calls.find((call) => call.method === 'PATCH');
+  assert.equal(JSON.parse(saved.body).verifiedAt, '2026-09-18T12:30:00Z');
+});
+
+test('импорт реестра: только владельцу, ошибки файла названы, результат показан, второго реестра нет', async () => {
+  const registry = { schemaVersion: 1, asOf: '2026-09-18', tasks: [{ externalRef: 'А8', title: 'Фото вылезает на ПК' }] };
+  const harness = boot({ clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot() }),
+    'POST /content/project-chat/palitra-love/tasks/import': () => ({ body: { imported: 1, skipped: 1,
+      results: [{ externalRef: 'А8', skipped: false }, { externalRef: 'А9', skipped: true, reason: 'изменено в кабинете позже снимка реестра' }],
+      tasks: [] } })
+  } });
+  await mount(harness);
+  const { d, w } = harness;
+  const button = d.querySelector('[data-pc-import]');
+  assert.ok(button, 'кнопка импорта есть у владельца');
+  assert.equal(button.hidden, false);
+
+  harness.click('[data-pc-import]');
+  await settle();
+  const form = d.querySelector('.pc-dialog form');
+  assert.ok(form.elements.registry, 'в диалоге есть выбор файла');
+
+  // Не JSON — понятная ошибка, запроса на сервер нет.
+  const file = (text) => ({ text: async () => text });
+  Object.defineProperty(form.elements.registry, 'files', { configurable: true, get: () => [file('не json')] });
+  harness.submit('.pc-dialog form');
+  await settle();
+  assert.match(d.querySelector('.pc-dialog [role="alert"]').textContent, /не JSON/i);
+  assert.equal(harness.calls.filter((call) => call.url.includes('/tasks/import')).length, 0);
+
+  // Объект без задач тоже отклоняется до отправки.
+  Object.defineProperty(form.elements.registry, 'files', { configurable: true, get: () => [file(JSON.stringify({ schemaVersion: 1, tasks: [] }))] });
+  harness.submit('.pc-dialog form');
+  await settle();
+  assert.match(d.querySelector('.pc-dialog [role="alert"]').textContent, /нет списка задач/i);
+  assert.equal(harness.calls.filter((call) => call.url.includes('/tasks/import')).length, 0);
+
+  // Правильный файл уходит одним запросом, результат показан владельцу.
+  Object.defineProperty(form.elements.registry, 'files', { configurable: true, get: () => [file(JSON.stringify(registry))] });
+  harness.submit('.pc-dialog form');
+  await settle();
+  const sent = harness.calls.filter((call) => call.url.includes('/tasks/import'));
+  assert.equal(sent.length, 1, 'ровно один запрос импорта, второго реестра не заводим');
+  assert.equal(JSON.parse(sent[0].body).force, false, 'без отметки перезапись не запрашивается');
+  assert.match(text(harness.dom, '[data-pc-notice]'), /обновлено 1, пропущено 1/);
+  assert.match(text(harness.dom, '[data-pc-notice]'), /изменено в кабинете позже снимка/);
+  // Сообщений в переписку импорт не добавляет: в Telegram при импорте ничего не уходит.
+  assert.equal(harness.calls.filter((call) => call.url.includes('/messages') && call.method === 'POST').length, 0);
+  void w;
+});
+
+test('импорт и выбор сайтов доступны только владельцу', async () => {
+  const harness = boot({ role: 'member', clock: true, permissions: ['chat.view', 'chat.reply'], routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ access: { canReply: true, owner: false } }) })
+  } });
+  await mount(harness);
+  const { d } = harness;
+  assert.equal(d.querySelector('[data-pc-import]').hidden, true, 'участнику кнопка импорта не показана');
+  assert.equal(d.querySelector('[data-pc-settings]').hidden, true);
+  // Прямой вызов из кода тоже ничего не открывает: проверка права внутри обработчика.
+  harness.click('[data-pc-import]');
+  await settle();
+  assert.equal(d.querySelector('.pc-dialog'), null, 'диалог импорта участнику не открывается');
+});
+
+test('настройки владельца: список обслуживаемых сайтов сохраняется', async () => {
+  const harness = boot({ clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ room: { replyMode: 'addressed', telegramChatId: '-100', sites: [] } }) }),
+    'PATCH /content/project-chat/palitra-love/settings': () => ({ body: { ok: true } }),
+    'GET /content/project-chat-runtime/status': () => ({ body: { configured: true, connected: true, state: 'connected' } })
+  } });
+  await mount(harness);
+  const { d } = harness;
+  harness.click('[data-pc-settings]');
+  await settle();
+  const box = d.querySelector('[data-pc-site][value="alvi"]');
+  assert.ok(box, 'в настройках есть выбор второго сайта');
+  assert.equal(d.querySelector('[data-pc-site][value="palitra-love"]'), null, 'свой проект в списке не дублируется');
+  box.checked = true;
+  harness.submit('.pc-dialog form');
+  await settle();
+  const saved = harness.calls.find((call) => call.method === 'PATCH' && call.url.includes('/settings'));
+  assert.deepEqual(JSON.parse(saved.body).sites, ['alvi']);
+  // Диалог закрываем: опрос состояния Хью живёт не дольше окна и не должен держать процесс.
+  const close = d.querySelector('.pc-dialog [data-pc-close]');
+  if (close) close.dispatchEvent(new harness.w.Event('click', { bubbles: true }));
+  harness.views.hugh.stop?.();
+  await settle();
+});
+
+test('импорт: force из файла не подменяет решение владельца', async () => {
+  // В файле стоит force: true, галочка снята — перезапись правок кабинета запрашиваться не должна.
+  const registry = { schemaVersion: 1, asOf: '2026-09-18', force: true,
+    tasks: [{ externalRef: 'А8', title: 'Фото вылезает на ПК' }] };
+  const harness = boot({ clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot() }),
+    'POST /content/project-chat/palitra-love/tasks/import': () => ({ body: { imported: 1, skipped: 0, results: [], tasks: [] } })
+  } });
+  await mount(harness);
+  const { d } = harness;
+  harness.click('[data-pc-import]');
+  await settle();
+  const form = d.querySelector('.pc-dialog form');
+  const file = (text) => ({ text: async () => text });
+  Object.defineProperty(form.elements.registry, 'files', { configurable: true, get: () => [file(JSON.stringify(registry))] });
+
+  assert.equal(form.elements.force.checked, false, 'по умолчанию перезапись не запрошена');
+  harness.submit('.pc-dialog form');
+  await settle();
+  const first = harness.calls.filter((call) => call.url.includes('/tasks/import'));
+  assert.equal(first.length, 1);
+  assert.equal(JSON.parse(first[0].body).force, false, 'force из файла не действует без отметки владельца');
+
+  // С отметкой владельца force уходит осознанно.
+  harness.click('[data-pc-import]');
+  await settle();
+  const second = d.querySelector('.pc-dialog form');
+  Object.defineProperty(second.elements.registry, 'files', { configurable: true, get: () => [file(JSON.stringify({ ...registry, force: false }))] });
+  second.elements.force.checked = true;
+  harness.submit('.pc-dialog form');
+  await settle();
+  const sent = harness.calls.filter((call) => call.url.includes('/tasks/import'));
+  assert.equal(sent.length, 2);
+  assert.equal(JSON.parse(sent[1].body).force, true, 'отметка владельца включает перезапись даже при force:false в файле');
+});
