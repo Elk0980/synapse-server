@@ -11,6 +11,23 @@ const overview=(code='demo-travel')=>({companyCode:code,from:'2026-09-01',to:'20
   socialAggregate:{views:40,impressions:null,likes:null,comments:null,shares:null,saves:null,reach:null,reachNote:'Охват площадок не суммируется: уникальный охват — UNKNOWN.'},
   crm:{posts:[{platform:'instagram',platformPostId:'ig-1',url:'https://www.instagram.com/reel/abc/',contentId:'12',leads:2,sales:1,revenue:15000,confidence:'utm'}],bySource:[{source:'instagram',leads:3,sales:2,revenue:24000}],note:'Только по подтверждённой метке.'},
   runs:[{id:1,platform:'vk',provider:'direct',trigger:'schedule',date:'2026-09-18',started_at:'2026-09-18T02:00:00.000Z',finished_at:'2026-09-18T02:00:01.000Z',status:'ok',rows:7,error:'',missing:[]}]});
+/* Записи выхода после проекции подтверждений (PR #350): только подтверждение, ручной ввод, собранный пост с подтверждением и спором
+   карточек, запись без связи (UNKNOWN) и подтверждение с адресом, по которому переходить нельзя. */
+const attributionOverview=()=>{const data=overview();data.crm={note:'Только по подтверждённой метке.',bySource:[],byContent:[],
+  receipts:{projected:3,merged:1,receiptOnly:2,skipped:0,note:'Подтверждение — ссылка и время выхода, а не сбор по API.'},
+  posts:[
+    {platform:'telegram',platformPostId:'receipt:5',url:'https://t.me/demo/42',contentId:'',publishedAt:'2026-09-18T10:00:00.000Z',leads:0,sales:0,revenue:0,attribution:'none_in_period',confidence:'none',
+      provenance:'external_receipt',provider:null,sources:0,identities:[],receipts:[{referenceId:'receipt:5',url:'https://t.me/demo/42',publishedAt:'2026-09-18T10:00:00.000Z',contentId:''}],contentIdCandidates:[]},
+    {platform:'vk',platformPostId:'wall-1_10',url:'https://vk.com/wall-1_10',contentId:'77',publishedAt:'2026-09-18T08:00:00.000Z',leads:1,sales:1,revenue:3000,attribution:'exact',confidence:'url',
+      provenance:'stored',provider:'manual',sources:1,identities:[{platformPostId:'wall-1_10',provider:'manual',contentId:'77'}],receipts:[],contentIdCandidates:[]},
+    {platform:'youtube',platformPostId:'yt-1',url:'https://www.youtube.com/shorts/abc',contentId:'12',publishedAt:'2026-09-17T09:00:00.000Z',leads:0,sales:0,revenue:0,attribution:'none_in_period',confidence:'none',
+      provenance:'stored_with_receipt',provider:'direct',sources:2,identities:[{platformPostId:'yt-1',provider:'direct',contentId:'12'},{platformPostId:'yt-1-manual',provider:'manual',contentId:'34'}],
+      receipts:[{referenceId:'receipt:9',url:'https://www.youtube.com/shorts/abc',publishedAt:'2026-09-17T09:00:00.000Z',contentId:'34'}],contentIdCandidates:['12','34']},
+    {platform:'instagram',platformPostId:'ig-9',url:'',contentId:'',publishedAt:null,leads:0,sales:0,revenue:0,attribution:'unknown',confidence:'none',
+      provenance:'stored',provider:'onlypult',sources:1,identities:[{platformPostId:'ig-9',provider:'onlypult',contentId:''}],receipts:[],contentIdCandidates:[]},
+    {platform:'tiktok',platformPostId:'receipt:11',url:'javascript:alert(1)',contentId:'',publishedAt:null,leads:0,sales:0,revenue:0,attribution:'none_in_period',confidence:'none',
+      provenance:'external_receipt',provider:null,sources:0,identities:[],receipts:[{referenceId:'receipt:11',url:'javascript:alert(1)',publishedAt:null,contentId:''}],contentIdCandidates:[]},
+  ]};return data;};
 function fixture({role='owner',permissions=[],override}={}) {
   const dom=new JSDOM('<section id="view"></section>',{url:'https://cabinet.example.test/',runScripts:'outside-only'}),w=dom.window,d=w.document,views={},calls=[];
   w.SbCabinet={registerView:(name,view)=>{views[name]=view;}};w.eval(fs.readFileSync(__dirname+'/social-stats.js','utf8'));
@@ -35,6 +52,48 @@ test('сводка: UNKNOWN показывается прочерком, не н
     assert.doesNotMatch(f.container.innerHTML,/token|Bearer/i);
     assert.ok(f.container.querySelector('#social-accounts-form'),'владелец видит настройки');
     assert.ok(f.calls.every(c=>c.code==='demo-travel'));
+  }finally{f.close();}
+});
+test('вводный текст не называет чужую компанию; подтверждение ведёт на публикацию, ручной ввод не выдаётся за API, спор карточек и UNKNOWN показаны честно',async()=>{
+  const f=fixture({override:async call=>{if(call.path==='/content/crm/social-stats')return attributionOverview();}});try{
+    await f.render();
+    assert.doesNotMatch(f.container.textContent,/ТайСабай/,'вводный текст нейтрален к выбранной компании');
+    assert.match(f.container.querySelector('.content-header').textContent,/выбранной компании/);
+    const rows=[...f.container.querySelectorAll('.social-posts tbody tr')];assert.equal(rows.length,5);
+    for(const td of f.container.querySelectorAll('.social-posts td')) assert.ok(td.getAttribute('data-label'),'у каждой ячейки осталась подпись для узкого экрана');
+    const crmText=f.container.querySelector('.social-crm').textContent;
+    assert.match(crmText,/зафиксированные в CRM обращения/);assert.match(crmText,/не что в соцсетях не обращались/);
+    assert.match(crmText,/не подключает сбор просмотров|сбор просмотров им не подключается/);
+    assert.match(crmText,/Подтверждений прочитано: 3/);
+
+    const receipt=rows[0],receiptCell=receipt.querySelector('[data-label="Публикация"]'),receiptLink=receiptCell.querySelector('a');
+    assert.equal(receiptLink.textContent,'Открыть публикацию');assert.equal(receiptLink.getAttribute('href'),'https://t.me/demo/42');
+    assert.equal(receiptLink.getAttribute('rel'),'noopener noreferrer');
+    {const visible=receiptCell.cloneNode(true);visible.querySelectorAll('details').forEach(d=>d.remove());assert.doesNotMatch(visible.textContent,/receipt:/,'внутренний идентификатор не в основном потоке');}
+    assert.match(receiptCell.querySelector('.social-ids').textContent,/receipt:5/,'служебная ссылка спрятана в подробностях');
+    assert.match(receipt.querySelector('[data-label="Как записано"]').textContent,/Подтверждено вручную/);
+    assert.doesNotMatch(receipt.querySelector('[data-label="Как записано"]').textContent,/API/);
+
+    const manual=rows[1].querySelector('[data-label="Как записано"]').textContent;
+    assert.match(manual,/Ручной ввод/);assert.doesNotMatch(manual,/Прямой API/);assert.match(manual,/не сбор по API/);
+
+    const merged=rows[2];assert.match(merged.querySelector('[data-label="Как записано"]').textContent,/Прямой API площадки/);
+    assert.match(merged.querySelector('[data-label="Как записано"]').textContent,/Подтверждено вручную/);
+    const material=merged.querySelector('[data-label="Материал"]');
+    assert.match(material.querySelector('.social-conflict').textContent,/Спорная связь с материалом/);
+    assert.match(material.textContent,/не приписывается ни одному материалу/);
+    assert.match(material.querySelector('details').textContent,/12/);assert.match(material.querySelector('details').textContent,/34/);
+    assert.match(merged.querySelector('.social-ids').textContent,/yt-1-manual/);
+
+    const unknown=rows[3];
+    for(const label of ['Обращения','Продажи','Выручка']) assert.equal(unknown.querySelector(`[data-label="${label}"]`).textContent,'—',`${label}: UNKNOWN показан прочерком, не нулём`);
+    assert.equal(rows[1].querySelector('[data-label="Обращения"]').textContent,'1','известное число сохранено');
+
+    const unsafe=rows[4].querySelector('[data-label="Публикация"]');
+    assert.equal(unsafe.querySelector('a'),null,'небезопасный адрес ссылкой не становится');
+    assert.doesNotMatch(f.container.innerHTML,/javascript:/i);
+    assert.match(unsafe.textContent,/непригодна для перехода/);
+    assert.ok(f.calls.every(c=>c.code==='demo-travel'&&c.method==='GET'));
   }finally{f.close();}
 });
 test('аналитик читает, но не видит настроек и импорта; поздний ответ другой компании не рисуется; ключ в поле аккаунта отклоняется у владельца',async()=>{
