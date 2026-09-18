@@ -61,6 +61,8 @@ const HUGH_RUNTIME_URL = (process.env.HUGH_RUNTIME_URL || 'http://hugh-runtime:8
 // Локальный обработчик Хью на компьютере владельца: хеш его ключа и компании, обслуживаемые только им.
 const HUGH_LOCAL_WORKER_KEY_SHA256 = (process.env.HUGH_LOCAL_WORKER_KEY_SHA256 || '').trim();
 const HUGH_LOCAL_WORKER_COMPANIES = (process.env.HUGH_LOCAL_WORKER_COMPANIES || '').split(',').map((s) => s.trim()).filter(Boolean);
+/* Доверенный внешний исполнитель: по умолчанию пусто — режим выключен, поведение прежнее. */
+const HUGH_TRUSTED_AGENT_COMPANIES = (process.env.HUGH_TRUSTED_AGENT_COMPANIES || '').split(',').map((s) => s.trim()).filter(Boolean);
 // Telegram Mini App чата проекта: несекретный числовой ID бота для проверки подписи Telegram. Пусто — вход отключён.
 const TELEGRAM_BOT_ID = (process.env.TELEGRAM_BOT_ID || '').trim();
 const CRM_IDENTITY_HEADER = 'x-synapse-crm-identity';
@@ -172,7 +174,7 @@ const ORDER_SITES = { palitra: { companyCode: CONTENT_COMPANIES.palitra, title: 
 const ORDER_BODY_LIMIT = 32 * 1024;
 const projectChat = createProjectChat({ db, authStore, assetsDir: ASSETS_DIR,
   runnerUrl: HUGH_RUNTIME_URL, chatUrl: CHAT_URL, chatApiKey: CHAT_API_KEY,
-  localWorker: { keySha256: HUGH_LOCAL_WORKER_KEY_SHA256, companies: HUGH_LOCAL_WORKER_COMPANIES },
+  localWorker: { keySha256: HUGH_LOCAL_WORKER_KEY_SHA256, companies: HUGH_LOCAL_WORKER_COMPANIES, trustedAgentCompanies: HUGH_TRUSTED_AGENT_COMPANIES },
   // Соль для хеша IP выводится из секрета сессий: сам IP не хранится, отдельного секрета не нужно.
   siteOrders: { sites: ORDER_SITES, priceReader: (site) => latestStmt.get(`${site}/price`)?.body ?? null,
     ipSalt: crypto.createHash('sha256').update(`site-orders-ip:${SESSION_SECRET}`).digest('hex') },

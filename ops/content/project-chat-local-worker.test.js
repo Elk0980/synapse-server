@@ -40,7 +40,7 @@ const requireCsrf = (request, session) => {
 const sendJson = (response, status, payload, headers) => { response.statusCode = status; response.payload = payload; response.headers = headers; };
 const readBody = async (request) => request.body;
 
-function setup({ runtime = null, reply = null, local = [ROOM], key = KEY_SHA, db = null } = {}) {
+function setup({ runtime = null, reply = null, local = [ROOM], trusted = [], key = KEY_SHA, db = null } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'project-chat-local-'));
   const database = db || new DatabaseSync(':memory:');
   if (!db) database.exec('PRAGMA foreign_keys = ON;');
@@ -62,7 +62,7 @@ function setup({ runtime = null, reply = null, local = [ROOM], key = KEY_SHA, db
   };
   const chat = createProjectChat({ db: database, authStore, assetsDir: dir, runnerUrl: 'http://hugh-runtime:8080',
     chatApiKey: 'secret-key', requireSession, requireCsrf, sendJson, readBody, fetchImpl, statusTtl: 0,
-    localWorker: { keySha256: key, companies: local, now: () => clock.now } });
+    localWorker: { keySha256: key, companies: local, trustedAgentCompanies: trusted, now: () => clock.now } });
   const session = (id) => ({ user: authStore.getById(id), csrf: `csrf-${id}` });
   const person = (login, companies) => authStore.create(OWNER_ID, { login, displayName: login, password: 'x'.repeat(12), companies, permissions: [] }, HASH);
   return { db: database, authStore, chat, clock, bodies, session, person, owner: session(OWNER_ID) };
@@ -426,7 +426,9 @@ test('heartbeat сохраняет только публичные поля и �
   const beat = await worker(wide.chat, 'heartbeat', { bootId: 'boot-1', status: { ...READY, state: 'ready<script>', loginUrl: OFFICIAL,
     userCode: 'ZZZZ-9999', error: 'stack trace with secret', errorCode: 'WHATEVER', provider: 'codex;rm', safety: 'strict' } });
   const stored = JSON.parse(shared.prepare('SELECT status FROM project_chat_local_worker WHERE id=1').get().status);
-  assert.deepEqual(Object.keys(stored).sort(), ['authenticated', 'available', 'connected', 'errorCode', 'limited', 'model', 'provider', 'retryAfter', 'safety', 'state']);
+  // Закрытый список полей статуса: два поля доверенного режима добавлены, посторонние по-прежнему отбрасываются.
+  assert.deepEqual(Object.keys(stored).sort(), ['authenticated', 'available', 'connected', 'errorCode', 'limited', 'model', 'provider', 'readiness', 'retryAfter', 'safety', 'state', 'trustedAgent']);
+  assert.deepEqual([stored.trustedAgent, stored.readiness], [false, ''], 'без явного объявления доверенный режим выключен');
   assert.deepEqual([stored.state, stored.errorCode, stored.provider, stored.safety], ['unknown', '', '', { toolIsolationVerified: false, reason: '' }]);
   assert.ok(!JSON.stringify(stored).includes('ZZZZ') && !JSON.stringify(stored).includes('secret'));
   assert.deepEqual(Object.keys(beat.payload.stats).sort(),
@@ -481,4 +483,174 @@ test('счётчики офлайна: с активации, по сервер�
   clock.tick(61000);
   await complete(chat, job, { ok: true, text: 'Ответ' });
   assert.equal(stats().humanMessagesWhileOffline24h, 0);
+});
+
+
+/* Политика доверенного внешнего исполнителя. По умолчанию выключена: проверки прежние. */
+
+// Статус внешнего коннектора: изоляция инструментов НЕ подтверждена, вход модели не заявлен.
+const EXTERNAL = { state: 'connected', authenticated: false, connected: true, available: true, limited: false,
+  provider: 'claude', model: '', trustedAgent: true, readiness: 'attested',
+  safety: { toolIsolationVerified: false, reason: 'external_agent_unproven' } };
+
+test('по умолчанию режим выключен: без proof заданий не получает ни Codex, ни внешний исполнитель', async () => {
+  // Обычный Codex без подтверждённой изоляции — поведение прежнее.
+  const codex = setup();
+  await ask(codex.chat, codex.owner);
+  await bootUp(codex.chat, 'boot-1', { ...READY, safety: { toolIsolationVerified: false, reason: '' } });
+  const noJob = await worker(codex.chat, 'claim', { bootId: 'boot-1' });
+  assert.equal(noJob.payload.job, null, 'без proof Codex заданий не получает');
+
+  // Внешний исполнитель без серверного включения — тоже ничего, сколько бы он о себе ни заявлял.
+  const external = setup();
+  await ask(external.chat, external.owner);
+  await bootUp(external.chat, 'boot-1', EXTERNAL);
+  const denied = await worker(external.chat, 'claim', { bootId: 'boot-1' });
+  assert.equal(denied.payload.job, null, 'поле trustedAgent само по себе ничего не включает');
+  assert.deepEqual(external.chat.localWorker.trustedCompanies, []);
+});
+
+test('явное включение на сервере: внешний исполнитель получает свою компанию и отвечает ровно один раз', async () => {
+  const { chat, db, owner, clock } = setup({ local: [ROOM, OTHER], trusted: [ROOM] });
+  assert.ok(chat.localWorker.issues.some((issue) => issue.includes('Изоляция инструментов для них НЕ подтверждается')));
+  await ask(chat, owner);
+  await ask(chat, owner, 'Второй вопрос по другому проекту', 'ask-other', OTHER);
+  // Группа проекта привязана: проверяем, что ответ уходит существующей исходящей очередью.
+  db.prepare('UPDATE project_chat_rooms SET telegram_chat_id=? WHERE company_code=?').run('-1001234567890', ROOM);
+  await bootUp(chat, 'boot-1', EXTERNAL);
+
+  const job = await claimReply(chat);
+  assert.equal(job.companyCode, ROOM, 'чужая компания в доверенный режим не попадает');
+  const done = await complete(chat, job, { ok: true, text: 'Ответ внешнего исполнителя', provider: 'claude', model: '' });
+  assert.equal(done.payload.status, 'done');
+  assert.equal(replies(db), 1);
+
+  // Ответ ушёл в существующую исходящую очередь — второго отправителя нет.
+  const outbox = db.prepare('SELECT count(*) AS n FROM project_chat_outbox WHERE message_id=?').get(done.payload.replyMessageId);
+  assert.equal(outbox.n, 1, 'ровно одна запись в существующей очереди Telegram');
+
+  // Повтор того же результата не создаёт второго сообщения.
+  const again = await complete(chat, job, { ok: true, text: 'Ответ внешнего исполнителя', provider: 'claude', model: '' });
+  assert.equal(again.payload.duplicate, true);
+  assert.equal(replies(db), 1);
+
+  // Задание второй компании остаётся нетронутым: область компаний режим не расширяет.
+  assert.equal(jobs(db, OTHER).filter((row) => row.reply_message_id).length, 0);
+  assert.equal(clock.offset, 0);
+});
+
+test('доверенный режим: устаревшая аренда и чужая компания отклоняются', async () => {
+  const { chat, db, owner, clock } = setup({ local: [ROOM, OTHER], trusted: [ROOM] });
+  await ask(chat, owner);
+  await bootUp(chat, 'boot-1', EXTERNAL);
+  const job = await claimReply(chat);
+
+  // Аренда истекла, задание забрал другой запуск — прежний результат сервер не принимает.
+  clock.tick(200 * 1000);
+  await bootUp(chat, 'boot-2', EXTERNAL);
+  const retaken = await claimReply(chat, 'boot-2');
+  assert.notEqual(retaken.leaseToken, job.leaseToken);
+  await assert.rejects(() => complete(chat, job, { ok: true, text: 'Поздний ответ', provider: 'claude', model: '' }), status(409));
+  assert.equal(replies(db), 0);
+
+  // Чужая компания: задания второй компании не выдаются вовсе.
+  await ask(chat, owner, 'Вопрос другого проекта', 'ask-other-2', OTHER);
+  const next = await worker(chat, 'claim', { bootId: 'boot-2' });
+  assert.ok(!next.payload.job || next.payload.job.companyCode === ROOM);
+});
+
+test('доверенный режим виден владельцу честно и отключается снятием компании из списка', async () => {
+  const on = setup({ trusted: [ROOM] });
+  await bootUp(on.chat, 'boot-1', EXTERNAL);
+  const view = on.chat.localWorker.ownerStatus(ROOM);
+  assert.equal(view.mode, 'trusted-agent');
+  assert.equal(view.toolIsolationVerified, false);
+  assert.ok(view.notice.includes('Изоляция его инструментов не подтверждена'));
+  assert.equal(view.error, '', 'исполнитель заявил готовность — ложной ошибки нет');
+
+  // Отзыв доступа: компания убрана из конфигурации сервера, выдача прекращается сразу.
+  const off = setup({ trusted: [] });
+  await ask(off.chat, off.owner);
+  await bootUp(off.chat, 'boot-1', EXTERNAL);
+  const denied = await worker(off.chat, 'claim', { bootId: 'boot-1' });
+  assert.equal(denied.payload.job, null);
+  const offView = off.chat.localWorker.ownerStatus(ROOM);
+  assert.equal(offView.mode, 'isolated-codex');
+});
+
+test('доверенный режим не подменяет вход Codex и требует заявленной готовности', async () => {
+  const { chat, owner } = setup({ trusted: [ROOM] });
+  await ask(chat, owner);
+  // Исполнитель на связи, но готовность не заявлена — заданий нет.
+  await bootUp(chat, 'boot-1', { ...EXTERNAL, readiness: '' });
+  assert.equal((await worker(chat, 'claim', { bootId: 'boot-1' })).payload.job, null);
+  // Заявка на доверие без available — тоже нет.
+  await bootUp(chat, 'boot-1', { ...EXTERNAL, available: false });
+  assert.equal((await worker(chat, 'claim', { bootId: 'boot-1' })).payload.job, null);
+  // Поддельные ссылка и код входа Codex в статусе внешнего исполнителя не сохраняются.
+  await bootUp(chat, 'boot-1', { ...EXTERNAL, state: 'login_required', loginUrl: OFFICIAL, userCode: 'AAAA-1111' });
+  const view = chat.localWorker.ownerStatus(ROOM);
+  assert.equal(view.userCode, '');
+  assert.equal(view.loginUrl, '');
+});
+
+test('отзыв режима между claim и complete: результат по прежней политике не принимается, аренда сохраняется', async () => {
+  const shared = new DatabaseSync(':memory:');
+  shared.exec('PRAGMA foreign_keys = ON;');
+  const on = setup({ db: shared, local: [ROOM], trusted: [ROOM] });
+  await ask(on.chat, on.owner);
+  await bootUp(on.chat, 'boot-1', EXTERNAL);
+  const job = await claimReply(on.chat);
+  const leaseBefore = shared.prepare('SELECT lease_token,lease_expires_at,lease_mode FROM project_chat_ai_jobs WHERE id=?').get(Number(job.id));
+  assert.equal(leaseBefore.lease_mode, 'trusted-agent', 'режим аренды записан');
+
+  // Владелец убрал компанию из списка: та же база, новая конфигурация сервера.
+  const off = setup({ db: shared, local: [ROOM], trusted: [] });
+  await assert.rejects(() => complete(off.chat, job, { ok: true, text: 'Ответ после отзыва', provider: 'claude', model: '' }), status(403));
+  await assert.rejects(() => worker(off.chat, 'renew', { jobId: job.id, leaseToken: job.leaseToken }), status(403));
+  assert.equal(replies(shared), 0, 'клиенту ничего не написано');
+  const leaseAfter = shared.prepare('SELECT lease_token,lease_expires_at,lease_mode FROM project_chat_ai_jobs WHERE id=?').get(Number(job.id));
+  assert.deepEqual(leaseAfter, leaseBefore, 'аренда сохранена, а не стёрта: задание вернётся в очередь по сроку');
+});
+
+test('внешний исполнитель не забирает вход изолированных компаний', async () => {
+  const { chat, db } = setup({ local: [ROOM, OTHER], trusted: [ROOM] });
+  // Владелец просит вход для изолированной компании.
+  const requested = chat.localWorker.requestLogin(OTHER);
+  assert.equal(requested.accepted, true);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM project_chat_local_logins WHERE status='pending'").get().n, 1);
+
+  // Подключён внешний исполнитель: задание входа ему не выдаётся вовсе.
+  await bootUp(chat, 'boot-1', EXTERNAL);
+  const claimed = await worker(chat, 'claim', { bootId: 'boot-1' });
+  assert.ok(!claimed.payload.job || claimed.payload.job.kind !== 'login', 'вход Codex внешнему исполнителю не выдаётся');
+  assert.equal(db.prepare("SELECT count(*) AS n FROM project_chat_local_logins WHERE status='running'").get().n, 0);
+
+  // Команда входа для доверенной компании не создаётся вовсе.
+  const refused = chat.localWorker.requestLogin(ROOM);
+  assert.equal(refused.accepted, false);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM project_chat_local_logins').get().n, 1);
+});
+
+test('владелец видит доверенный режим без признаков подписки Codex', async () => {
+  const { chat } = setup({ local: [ROOM, OTHER], trusted: [ROOM] });
+  chat.localWorker.requestLogin(OTHER);
+  await bootUp(chat, 'boot-1', EXTERNAL);
+  const view = chat.localWorker.ownerStatus(ROOM);
+  assert.equal(view.connected, true, 'связь не зависит от входа в подписку');
+  assert.equal(view.authenticated, false, 'ложного входа не заявляем');
+  assert.equal(view.state, 'connected');
+  assert.equal(view.error, '', 'команда входа другого проекта не мешает внешнему исполнителю');
+  assert.deepEqual([view.loginPending, view.loginUrl, view.userCode, view.expiresAt], [false, '', '', '']);
+  // Изолированная компания того же сервера продолжает жить по прежним правилам.
+  const isolated = chat.localWorker.ownerStatus(OTHER);
+  assert.equal(isolated.mode, 'isolated-codex');
+  assert.equal(isolated.connected, false, 'внешний исполнитель не выдаёт себя за вошедший Codex');
+  await bootUp(chat, 'boot-1', { ...EXTERNAL, readiness: '', authenticated: true, provider: '' });
+  const unavailable = chat.localWorker.ownerStatus(ROOM);
+  assert.equal(unavailable.connected, false, 'без readiness общая лента не обещает готовность');
+  assert.equal(unavailable.authenticated, false);
+  assert.equal(unavailable.provider, '', 'неизвестный провайдер не превращается в Codex');
+  assert.equal(unavailable.state, 'unavailable');
+  assert.doesNotMatch(unavailable.error, /Codex|вход|подписк/);
 });
