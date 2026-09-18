@@ -23,7 +23,7 @@
       const leave = i === count - 1 ? 0 : smooth((phase - i - .72) / .28);
       return {
         opacity: enter * (1 - leave),
-        y: 32 * (1 - enter) - 24 * leave,
+        y: 0, /* 18.09: без сдвига — при кроссфейде соседнее фото выглядывало из-под карточки (замечание клиента) */
         scale: 1.012 - .012 * enter - .008 * leave,
         active: i === active
       };
