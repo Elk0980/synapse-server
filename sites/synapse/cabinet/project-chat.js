@@ -314,10 +314,22 @@
       /* В счётчике — только замечания клиента, которые ещё не на сайте и не сняты. Внутренние работы
          (резервы, счётчики) считаются отдельно и в клиентский счёт не входят. */
       renderScheduled(state, data);
-      const open = list(data.tasks).filter(task => (task.kind || "client_remark") === "client_remark"
-        && !(task.cancelled || task.status === "cancelled") && !task.fixedOnSite);
+      /* Сводка вместо одного числа. Раньше в заголовке стояло только количество незакрытых замечаний,
+         и при шестнадцати видимых карточках там появлялся ноль — список выглядел пустым.
+         Теперь видно всё: сколько замечаний клиента всего, сколько из них на сайте, сколько осталось
+         и сколько снято. Снятое исправлением не считается, внутренние работы стоят отдельно
+         и в клиентский счёт не входят. Карточки этим не меняются и не задваиваются. */
+      const clientTasks = list(data.tasks).filter(task => (task.kind || "client_remark") === "client_remark");
+      const cancelledTasks = clientTasks.filter(task => task.cancelled || task.status === "cancelled");
+      const onSite = clientTasks.filter(task => task.fixedOnSite && !(task.cancelled || task.status === "cancelled"));
+      const open = clientTasks.filter(task => !(task.cancelled || task.status === "cancelled") && !task.fixedOnSite);
       const internal = list(data.tasks).filter(task => task.kind === "internal").length;
-      q(state, "[data-pc-task-count]").textContent = internal ? `${open.length} · внутренних ${internal}` : String(open.length);
+      const parts = clientTasks.length
+        ? [`Замечания: ${clientTasks.length}`, `на сайте ${onSite.length}`, `осталось ${open.length}`,
+          ...(cancelledTasks.length ? [`отменено ${cancelledTasks.length}`] : [])]
+        : [];
+      if (internal) parts.push(`внутренних ${internal}`);
+      q(state, "[data-pc-task-count]").textContent = parts.join(" · ");
       state.tasksSignature = tasksSignature;
     }
   };

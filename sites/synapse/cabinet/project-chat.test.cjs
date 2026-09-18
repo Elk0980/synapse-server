@@ -1434,3 +1434,54 @@ test('чужую отложенную отправку кабинет не пр�
   // Запросов к серверу за чужое не делается вовсе: нечего нажать, значит нет и 403 с выходом из чата.
   assert.equal(harness.calls.filter((call) => call.method === 'PATCH').length, 0);
 });
+
+test('сводка задач: 12 замечаний, 10 на сайте, 2 отменены и 4 внутренние показаны понятно', async () => {
+  const base = { site: 'palitra-love', siteLabel: 'Палитра', siteStatus: 'known', publicationLabel: 'Опубликовано',
+    publishedUrl: '', verifiedAt: '', sourceQuote: '', notes: [], assigneeId: null, stageId: null, due: '' };
+  const tasks = [
+    // Десять замечаний клиента на сайте.
+    ...Array.from({ length: 10 }, (unused, index) => ({ ...base, id: index + 1, externalRef: `А${index + 1}`,
+      title: `Замечание ${index + 1}`, kind: 'client_remark', status: 'done', publication: 'published',
+      fixedOnSite: true, cancelled: false })),
+    // Два снятых: исправлением не считаются, даже если публикация когда-то была.
+    { ...base, id: 11, externalRef: 'А11', title: 'Снято клиентом', kind: 'client_remark', status: 'cancelled',
+      publication: 'not_required', fixedOnSite: false, cancelled: true },
+    { ...base, id: 12, externalRef: 'А12', title: 'Снято владельцем', kind: 'client_remark', status: 'cancelled',
+      publication: 'published', fixedOnSite: false, cancelled: true },
+    // Четыре внутренние работы: в клиентский счёт не входят.
+    ...Array.from({ length: 4 }, (unused, index) => ({ ...base, id: 13 + index, externalRef: `ВН${index + 1}`,
+      title: `Внутренняя ${index + 1}`, kind: 'internal', status: 'done', publication: 'prepared',
+      fixedOnSite: false, cancelled: false }))
+  ];
+  const harness = boot({ clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ tasks }) })
+  } });
+  await mount(harness);
+  const { d } = harness;
+  assert.equal(d.querySelectorAll('.pc-task').length, 16, 'карточки не задваиваются и не пропадают');
+  assert.equal(text(harness.dom, '[data-pc-task-count]'),
+    'Замечания: 12 · на сайте 10 · осталось 0 · отменено 2 · внутренних 4');
+
+  // Пустой проект: сводка не выдумывает нулей.
+  const empty = boot({ clock: true, routes: { 'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ tasks: [] }) }) } });
+  await mount(empty);
+  assert.equal(text(empty.dom, '[data-pc-task-count]'), '');
+});
+
+test('сводка задач: снятое не попадает в «на сайте», незакрытое видно в «осталось»', async () => {
+  const base = { site: 'palitra-love', siteLabel: 'Палитра', siteStatus: 'known', publicationLabel: 'Готово',
+    publishedUrl: '', verifiedAt: '', sourceQuote: '', notes: [], assigneeId: null, stageId: null, due: '' };
+  const tasks = [
+    { ...base, id: 1, externalRef: 'А1', title: 'На сайте', kind: 'client_remark', status: 'done',
+      publication: 'published', fixedOnSite: true, cancelled: false },
+    { ...base, id: 2, externalRef: 'А2', title: 'Ждём уточнения', kind: 'client_remark', status: 'todo',
+      publication: 'awaiting_clarification', fixedOnSite: false, cancelled: false },
+    { ...base, id: 3, externalRef: 'А3', title: 'Снято', kind: 'client_remark', status: 'cancelled',
+      publication: 'published', fixedOnSite: false, cancelled: true }
+  ];
+  const harness = boot({ clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ tasks }) })
+  } });
+  await mount(harness);
+  assert.equal(text(harness.dom, '[data-pc-task-count]'), 'Замечания: 3 · на сайте 1 · осталось 1 · отменено 1');
+});
