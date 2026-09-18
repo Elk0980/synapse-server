@@ -719,7 +719,7 @@ test('сайт из сообщения неоднозначен — «нужно
     body: { publication: 'published', publishedUrl: 'https://example.test/', verifiedAt: '2026-09-18' } }), status(400));
 });
 
-test('готово локально ≠ опубликовано: «на сайте» требует ссылку и дату проверки, снятое не считается исправлением', async () => {
+test('готово локально ≠ опубликовано: «на сайте» требует ссылку и дату проверки; отмена — состояние работы, не публикации', async () => {
   const { chat, owner } = setup();
   const task = (await call(chat, { session: owner, method: 'POST', url: room('/tasks'),
     body: { title: 'Ускорить слайды', site: ROOM, status: 'done', publication: 'prepared' } })).payload.task;
@@ -733,14 +733,78 @@ test('готово локально ≠ опубликовано: «на сай�
     { publication: 'published', verifiedAt: '2026-09-18' },
     { publication: 'published', publishedUrl: 'http://example.test/', verifiedAt: '2026-09-18' },
     { publication: 'на сайте' },
+    { publication: 'not_required' },
   ]) await assert.rejects(() => call(chat, { session: owner, method: 'PATCH', url: room(`/tasks/${task.id}`), body }), status(400));
   const live = await call(chat, { session: owner, method: 'PATCH', url: room(`/tasks/${task.id}`),
     body: { publication: 'published', publishedUrl: 'https://example.test/page', verifiedAt: '2026-09-18' } });
   assert.equal(live.payload.task.fixedOnSite, true);
-  const cancelled = await call(chat, { session: owner, method: 'PATCH', url: room(`/tasks/${task.id}`),
-    body: { publication: 'cancelled' } });
-  assert.equal(cancelled.payload.task.fixedOnSite, false, 'снятое решением видно, но исправлением не считается');
-  assert.match(cancelled.payload.task.publicationLabel, /не считается/);
+  assert.equal(live.payload.task.cancelled, false);
+  // Отмена поверх прежней публикации: задача перестаёт считаться исправлением, хотя published остался в поле.
+  const cancelled = await call(chat, { session: owner, method: 'PATCH', url: room(`/tasks/${task.id}`), body: { status: 'cancelled' } });
+  assert.equal(cancelled.payload.task.status, 'cancelled');
+  assert.equal(cancelled.payload.task.cancelled, true);
+  assert.equal(cancelled.payload.task.publication, 'published', 'история публикации сохранена');
+  assert.equal(cancelled.payload.task.fixedOnSite, false, 'снятое не считается исправленным даже при старом published');
+  // Снять задачу и одновременно объявить её опубликованной нельзя.
+  await assert.rejects(() => call(chat, { session: owner, method: 'POST', url: room('/tasks'),
+    body: { title: 'Снято и опубликовано', site: ROOM, status: 'cancelled', publication: 'published',
+      publishedUrl: 'https://example.test/x', verifiedAt: '2026-09-18' } }), status(400));
+  const dropped = await call(chat, { session: owner, method: 'POST', url: room('/tasks'),
+    body: { title: 'Снято решением', site: ROOM, status: 'cancelled', publication: 'not_required' } });
+  assert.equal(dropped.payload.task.fixedOnSite, false);
+  assert.match(dropped.payload.task.publicationLabel, /не требуется/);
+});
+
+test('ожидание уточнения — отдельное состояние публикации, а не «не требуется» и не «не начато»', async () => {
+  const { chat, owner } = setup();
+  const waiting = await call(chat, { session: owner, method: 'POST', url: room('/tasks'),
+    body: { title: 'Непонятно, чем занимается салон', site: ROOM, status: 'todo', publication: 'awaiting_clarification',
+      sourceQuote: 'Непонятно чем занимается салон' } });
+  assert.equal(waiting.payload.task.status, 'todo', 'работа не начата, а не заблокирована навсегда');
+  assert.equal(waiting.payload.task.publication, 'awaiting_clarification');
+  assert.equal(waiting.payload.task.fixedOnSite, false);
+  assert.equal(waiting.payload.task.cancelled, false, 'ожидание уточнения не равно отмене');
+  assert.match(waiting.payload.task.publicationLabel, /ждём уточнения/);
+});
+
+test('внутренние работы считаются отдельно от замечаний клиента', async () => {
+  const { chat, owner } = setup();
+  await call(chat, { session: owner, method: 'POST', url: room('/tasks'),
+    body: { title: 'Замечание клиента', site: ROOM, kind: 'client_remark' } });
+  const internal = await call(chat, { session: owner, method: 'POST', url: room('/tasks'),
+    body: { title: 'Резерв текстов', site: ROOM, kind: 'internal', status: 'done', publication: 'prepared' } });
+  assert.equal(internal.payload.task.kind, 'internal');
+  const snapshot = await call(chat, { session: owner, url: room('') });
+  assert.equal(snapshot.payload.tasks.filter(t => t.kind === 'client_remark').length, 1);
+  assert.equal(snapshot.payload.tasks.filter(t => t.kind === 'internal').length, 1);
+  await assert.rejects(() => call(chat, { session: owner, method: 'POST', url: room('/tasks'),
+    body: { title: 'Неизвестный вид', kind: 'прочее' } }), status(400));
+});
+
+test('устаревший снимок реестра не затирает более позднюю правку владельца', async () => {
+  const { chat, owner } = setup();
+  const registry = (asOf) => ({ schemaVersion: 1, asOf, tasks: [
+    { externalRef: 'А8', title: 'Фото вылезает на ПК', site: ROOM, status: 'done', publication: 'prepared' } ] });
+  const first = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'), body: registry('2026-09-18') });
+  assert.equal(first.payload.imported, 1);
+  const id = first.payload.tasks[0].id;
+  // Владелец правит задачу в кабинете уже после снимка.
+  await call(chat, { session: owner, method: 'PATCH', url: room(`/tasks/${id}`),
+    body: { publication: 'published', publishedUrl: 'https://example.test/a8', verifiedAt: '2026-09-19' } });
+  const stale = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'), body: registry('2026-09-18') });
+  assert.equal(stale.payload.imported, 0);
+  assert.equal(stale.payload.skipped, 1);
+  assert.match(stale.payload.results[0].reason, /позже снимка/);
+  assert.equal(stale.payload.results[0].id, id);
+  assert.equal(stale.payload.results.length, 1);
+  const snapshot = await call(chat, { session: owner, url: room('') });
+  assert.equal(snapshot.payload.tasks[0].publication, 'published', 'правка владельца сохранена');
+  // Свежий снимок применяется, принудительный импорт — тоже.
+  const fresh = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'), body: registry('2026-09-20') });
+  assert.equal(fresh.payload.imported, 1);
+  assert.equal((await call(chat, { session: owner, url: room('') })).payload.tasks[0].publication, 'prepared');
+  await assert.rejects(() => call(chat, { session: owner, method: 'POST', url: room('/tasks/import'),
+    body: { schemaVersion: 1, asOf: '2026-02-30', tasks: [{ externalRef: 'Д9', title: 'Плохая дата' }] } }), status(400));
 });
 
 test('повторная синхронизация реестра не плодит задачи и не удваивает уточнения', async () => {
@@ -756,10 +820,9 @@ test('повторная синхронизация реестра не плод
   assert.equal(first.payload.imported, 2);
   const second = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'), body: registry });
   assert.equal(second.payload.imported, 2);
-  assert.equal(second.payload.tasks[0].id, first.payload.tasks[0].id, 'та же сущность, а не копия');
-  assert.equal(second.payload.tasks.length, 2);
-  const tasks = second.payload.tasks.map(t => t.externalRef);
-  assert.deepEqual(tasks, ['А8', 'А9']);
+  assert.equal(second.payload.results[0].id, first.payload.results[0].id, 'та же сущность, а не копия');
+  assert.equal(second.payload.results.length, 2);
+  assert.deepEqual(second.payload.results.map(t => t.externalRef), ['А8', 'А9']);
   const snapshot = await call(chat, { session: owner, url: room('') });
   assert.equal(snapshot.payload.tasks.length, 2, 'двойного счёта нет');
   const a9 = snapshot.payload.tasks.find(t => t.externalRef === 'А9');

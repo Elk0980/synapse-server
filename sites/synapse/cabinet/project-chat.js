@@ -1,10 +1,10 @@
 (() => {
   "use strict";
   const cabinet = window.SbCabinet = window.SbCabinet || {};
-  const statuses = { todo: "Новая", in_progress: "В работе", done: "Готово", blocked: "Нужна помощь" };
+  const statuses = { todo: "Не начато", in_progress: "В работе", done: "Сделано", blocked: "Нужна помощь", cancelled: "Отменено" };
   // Состояние публикации показывается отдельно от состояния работы: «готово» у нас ещё не значит «на сайте».
   const publications = { not_started: "Не опубликовано", prepared: "Готово, на сайте ещё нет",
-    published: "На сайте", cancelled: "Снято решением" };
+    published: "На сайте", awaiting_clarification: "Ожидает уточнения", not_required: "Публикация не требуется" };
   const delivery = { local: "В чате проекта", pending: "Ожидает отправки в Telegram", sending: "Отправляется в Telegram…", sent: "Отправлено в Telegram", error: "Не отправлено в Telegram", uncertain: "Доставка в Telegram уточняется" };
   const TITLE_LIMIT = 200, PAGE = 100;
   // Локальный обработчик отдаёт ссылку и код входа не сразу: команда уходит на компьютер Хью.
@@ -289,11 +289,16 @@
         const quote = task.sourceQuote ? `<span class="pc-task-quote">«${escape(task.sourceQuote)}»</span>` : "";
         const notes = list(task.notes).length
           ? `<span class="pc-task-notes">Уточнения: ${list(task.notes).map(note => escape(note.text)).join(" · ")}</span>` : "";
-        return `<li class="pc-task${task.status === "done" ? " pc-task-done" : ""}"><button type="button" data-pc-task="${escape(task.id)}"><strong>${task.externalRef ? escape(task.externalRef) + ". " : ""}${escape(task.title)}</strong>${quote}<span class="pc-task-badges">${site}<span class="pc-badge pc-pub-${escape(publication)}">${escape(publications[publication] || publication)}</span></span>${notes}<span>${escape(assigneeLabel(state, task))} · ${escape(stageName(state, task.stageId))}</span><small>Работа: ${escape(statuses[task.status] || task.status)}${task.due ? " · " + escape(task.due) : ""}${link}</small></button></li>`;
+        const cancelled = task.cancelled || task.status === "cancelled";
+        const kind = task.kind === "internal" ? '<span class="pc-badge">Внутренняя работа</span>' : "";
+        return `<li class="pc-task${cancelled ? " pc-task-cancelled" : task.fixedOnSite ? " pc-task-done" : ""}"><button type="button" data-pc-task="${escape(task.id)}"><strong>${task.externalRef ? escape(task.externalRef) + ". " : ""}${escape(task.title)}</strong>${quote}<span class="pc-task-badges">${site}${kind}${cancelled ? '<span class="pc-badge pc-pub-cancelled">Отменено — не исправление</span>' : ""}<span class="pc-badge pc-pub-${escape(publication)}">${escape(publications[publication] || publication)}</span></span>${notes}<span>${escape(assigneeLabel(state, task))} · ${escape(stageName(state, task.stageId))}</span><small>Работа: ${escape(statuses[task.status] || task.status)}${task.due ? " · " + escape(task.due) : ""}${link}</small></button></li>`;
       }).join("") || '<li class="pc-empty">Из сообщения можно создать задачу, назначить исполнителя и срок.</li>';
-      // В счётчике — то, что ещё не на сайте и не снято: «готово локально» остаётся в работе.
-      q(state, "[data-pc-task-count]").textContent = String(list(data.tasks)
-        .filter(task => (task.publication || "not_started") !== "published" && (task.publication || "not_started") !== "cancelled").length);
+      /* В счётчике — только замечания клиента, которые ещё не на сайте и не сняты. Внутренние работы
+         (резервы, счётчики) считаются отдельно и в клиентский счёт не входят. */
+      const open = list(data.tasks).filter(task => (task.kind || "client_remark") === "client_remark"
+        && !(task.cancelled || task.status === "cancelled") && !task.fixedOnSite);
+      const internal = list(data.tasks).filter(task => task.kind === "internal").length;
+      q(state, "[data-pc-task-count]").textContent = internal ? `${open.length} · внутренних ${internal}` : String(open.length);
       state.tasksSignature = tasksSignature;
     }
   };
@@ -438,10 +443,12 @@
       <label>Срок<input name="due" type="date" value="${escape(task.due || "")}"></label>
       <label>Статус работы<select name="status">${Object.entries(statuses).map(([id, title]) => `<option value="${id}"${(task.status || "todo") === id ? " selected" : ""}>${title}</option>`).join("")}</select></label>
       <label>Сайт<select name="site">${options(list(state.data.room?.sites).concat([state.company]).map(code => [code, state.ctx.identity.companies?.find(company => company.id === code)?.name || code]), task.site, "Нужно уточнить")}</select></label>
+      <label>Вид<select name="kind">${Object.entries({ client_remark: "Замечание клиента", internal: "Внутренняя работа" })
+        .map(([id, title]) => `<option value="${id}"${(task.kind || "client_remark") === id ? " selected" : ""}>${title}</option>`).join("")}</select></label>
       <label>Публикация<select name="publication">${Object.entries(publications).map(([id, title]) => `<option value="${id}"${(task.publication || "not_started") === id ? " selected" : ""}>${title}</option>`).join("")}</select></label>
       <label>Ссылка на страницу<input name="publishedUrl" type="url" maxlength="500" value="${escape(task.publishedUrl || "")}" placeholder="https://"></label>
       <label>Дата проверки на сайте<input name="verifiedAt" type="date" value="${escape(task.verifiedAt || "")}"></label>
-      <p class="pc-muted">«На сайте» ставится только после проверки работающей страницы: нужны ссылка и дата. Снятая задача остаётся видна, но исправлением не считается.</p>
+      <p class="pc-muted">«На сайте» ставится только после проверки работающей страницы: нужны ссылка и дата. Статус работы «Отменено» оставляет задачу видимой, но исправлением она не считается — даже если раньше была опубликована.</p>
       ${source || task.sourceMessageId ? '<p class="pc-muted">Задача связана с сообщением в этом проекте.</p>' : ""}
       <button type="submit"${writable ? "" : " hidden"}>Сохранить задачу</button><p role="alert"></p></form>`);
     if (!writable) dialog.querySelectorAll("input,select").forEach(node => { node.disabled = true; });
@@ -456,7 +463,7 @@
         throw new Error("Этот участник вышел из проекта. Выберите активного исполнителя.");
       }
       const payload = { title, assigneeId, stageId: Number(fields.stageId.value) || null, due: fields.due.value || null, status: fields.status.value,
-        site: fields.site.value || "", publication: fields.publication.value,
+        site: fields.site.value || "", publication: fields.publication.value, kind: fields.kind.value,
         publishedUrl: fields.publishedUrl.value.trim(), verifiedAt: fields.verifiedAt.value || "" };
       // Сервер откажет без ссылки и даты — предупреждаем раньше, чем уходит запрос.
       if (payload.publication === "published" && (!payload.publishedUrl || !payload.verifiedAt)) {

@@ -27,13 +27,19 @@ const RUNTIME_STATUS_TTL = 10000;
 const RETRY_AFTER_MIN = 5;
 const RETRY_AFTER_MAX = 900;
 const RETRY_AFTER_DEFAULT = 60;
-const TASK_STATUSES = new Set(['todo', 'in_progress', 'done', 'blocked']);
+/* Состояние работы. cancelled — задача снята решением клиента или владельца: это НЕ исход публикации,
+   поэтому отмена живёт здесь, а не в состоянии публикации. */
+const TASK_STATUSES = new Set(['todo', 'in_progress', 'done', 'blocked', 'cancelled']);
 /* Состояние публикации отделено от состояния работы: «подготовлено» и «проверено» — это ещё НЕ «на сайте».
    published ставится только с подтверждением работающего сайта (ссылка и дата проверки), cancelled — снятое
    решением клиента или владельца: видно в списке, но исправлением не считается. */
-const TASK_PUBLICATION = new Set(['not_started', 'prepared', 'published', 'cancelled']);
+const TASK_PUBLICATION = new Set(['not_started', 'prepared', 'published', 'awaiting_clarification', 'not_required']);
 const PUBLICATION_LABELS = Object.freeze({ not_started: 'Не опубликовано', prepared: 'Подготовлено, на сайте ещё нет',
-  published: 'Опубликовано и проверено на сайте', cancelled: 'Снято решением — исправлением не считается' });
+  published: 'Опубликовано и проверено на сайте',
+  awaiting_clarification: 'Публиковать нечего: ждём уточнения клиента',
+  not_required: 'Публикация не требуется — задача снята' });
+/* Исходное замечание клиента и внутренняя работа считаются раздельно: счёт для клиента — только по его замечаниям. */
+const TASK_KINDS = new Set(['client_remark', 'internal']);
 const CLARIFICATION_LIMIT = 50;
 const DISK_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const stamp = () => new Date().toISOString();
@@ -48,6 +54,14 @@ const fail = (status, message) => { throw Object.assign(new Error(message), { st
 const cleanText = (value, max, field = 'text') => {
   if (typeof value !== 'string' || value.length > max) fail(400, `Некорректное поле ${field}`);
   return value.trim();
+};
+// Дата снимка реестра в виде YYYY-MM-DD; несуществующие даты (30 февраля) отклоняются.
+const isoDay = (value) => {
+  const text = String(value ?? '');
+  const ok = /^\d{4}-\d{2}-\d{2}$/.test(text) && Number.isFinite(Date.parse(`${text}T00:00:00Z`))
+    && new Date(`${text}T00:00:00Z`).toISOString().slice(0, 10) === text;
+  if (!ok) { const error = new Error('Некорректная дата снимка реестра'); error.status = 400; throw error; }
+  return text;
 };
 const integer = (value, optional = false) => {
   if (optional && (value === null || value === undefined || value === '')) return null;
@@ -143,6 +157,11 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     if (!task.has('published_url')) db.exec("ALTER TABLE project_chat_tasks ADD COLUMN published_url TEXT NOT NULL DEFAULT ''");
     if (!task.has('verified_at')) db.exec("ALTER TABLE project_chat_tasks ADD COLUMN verified_at TEXT NOT NULL DEFAULT ''");
     if (!task.has('source_quote')) db.exec("ALTER TABLE project_chat_tasks ADD COLUMN source_quote TEXT NOT NULL DEFAULT ''");
+    if (!task.has('kind')) db.exec("ALTER TABLE project_chat_tasks ADD COLUMN kind TEXT NOT NULL DEFAULT 'client_remark'");
+    // Дата снимка реестра, из которого задача записана: по ней импорт отличает свежий снимок от устаревшего.
+    if (!task.has('registry_as_of')) db.exec("ALTER TABLE project_chat_tasks ADD COLUMN registry_as_of TEXT NOT NULL DEFAULT ''");
+    // Момент последней синхронизации: правка позже него сделана человеком в кабинете, а не реестром.
+    if (!task.has('registry_synced_at')) db.exec("ALTER TABLE project_chat_tasks ADD COLUMN registry_synced_at TEXT NOT NULL DEFAULT ''");
     // Одна задача на внешний идентификатор реестра: повторная синхронизация обновляет, а не плодит копии.
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS project_chat_tasks_ref ON project_chat_tasks(company_code, external_ref) WHERE external_ref<>''");
     if (!columns('project_chat_rooms').has('sites')) db.exec("ALTER TABLE project_chat_rooms ADD COLUMN sites TEXT NOT NULL DEFAULT '[]'");
@@ -283,8 +302,11 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     siteStatus: t.site ? 'known' : 'needs_clarification',
     publication: t.publication || 'not_started', publicationLabel: PUBLICATION_LABELS[t.publication || 'not_started'],
     publishedUrl: t.published_url || '', verifiedAt: t.verified_at || '', sourceQuote: t.source_quote || '',
-    // Снятая задача никогда не показывается как исправленная, даже если работа была доведена до конца.
-    fixedOnSite: t.publication === 'published',
+    kind: t.kind || 'client_remark', registryAsOf: t.registry_as_of || '',
+    cancelled: t.status === 'cancelled',
+    /* Единственный признак «исправлено для клиента»: опубликовано И не отменено. Отменённая задача не считается
+       исправлением даже если в ней осталось прежнее published — снятие сильнее прошлой публикации. */
+    fixedOnSite: t.publication === 'published' && t.status !== 'cancelled',
     notes: db.prepare('SELECT id,kind,text,message_id,created_at FROM project_chat_task_notes WHERE task_id=? ORDER BY id').all(t.id)
       .map(n => ({ id: n.id, kind: n.kind, text: n.text, messageId: n.message_id, createdAt: n.created_at })),
     ...assigneeInfo(t.company_code, t.assignee_id, cache) });
@@ -581,21 +603,30 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   }
   /* Запись задачи по внешнему идентификатору реестра: повторный вызов с тем же externalRef обновляет ту же
      строку, а не создаёт вторую. Без externalRef задача обычная, как раньше. */
-  function upsertTask(code, v) {
+  function upsertTask(code, v, { asOf = '', force = false } = {}) {
     const existing = v.externalRef
       ? db.prepare('SELECT * FROM project_chat_tasks WHERE company_code=? AND external_ref=?').get(code, v.externalRef) : null;
     if (existing) {
+      /* Устаревший снимок не затирает более позднюю правку владельца. Признак ручной правки — задача изменена
+         позже последней синхронизации реестра. Такой снимок применяется, только если он новее того, из которого
+         задача записана (реестр уже учитывает правку), либо при явном force. */
+      const editedByHand = existing.registry_synced_at && existing.updated_at > existing.registry_synced_at;
+      const newerSnapshot = asOf && existing.registry_as_of && asOf > existing.registry_as_of;
+      if (editedByHand && !newerSnapshot && !force) {
+        return { id: existing.id, skipped: true, reason: 'изменено в кабинете позже снимка реестра', updatedAt: existing.updated_at };
+      }
       db.prepare(`UPDATE project_chat_tasks SET title=?,assignee_id=?,stage_id=?,status=?,due=?,source_message_id=?,
-        site=?,publication=?,published_url=?,verified_at=?,source_quote=?,updated_at=? WHERE id=?`)
+        site=?,publication=?,published_url=?,verified_at=?,source_quote=?,kind=?,registry_as_of=?,registry_synced_at=?,updated_at=? WHERE id=?`)
         .run(v.title, v.assigneeId, v.stageId, v.status, v.due, v.sourceMessageId, v.site, v.publication,
-          v.publishedUrl, v.verifiedAt, v.sourceQuote, stamp(), existing.id);
-      return existing.id;
+          v.publishedUrl, v.verifiedAt, v.sourceQuote, v.kind, asOf || existing.registry_as_of || '', stamp(), stamp(), existing.id);
+      return { id: existing.id, skipped: false };
     }
-    return Number(db.prepare(`INSERT INTO project_chat_tasks
-      (company_code,title,assignee_id,stage_id,status,due,source_message_id,external_ref,site,publication,published_url,verified_at,source_quote,created_at,updated_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    const id = Number(db.prepare(`INSERT INTO project_chat_tasks
+      (company_code,title,assignee_id,stage_id,status,due,source_message_id,external_ref,site,publication,published_url,verified_at,source_quote,kind,registry_as_of,registry_synced_at,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(code, v.title, v.assigneeId, v.stageId, v.status, v.due, v.sourceMessageId, v.externalRef, v.site, v.publication,
-        v.publishedUrl, v.verifiedAt, v.sourceQuote, stamp(), stamp()).lastInsertRowid);
+        v.publishedUrl, v.verifiedAt, v.sourceQuote, v.kind, asOf, asOf ? stamp() : '', stamp(), stamp()).lastInsertRowid);
+    return { id, skipped: false };
   }
   /* Уточнение клиента («Онлайн запись», «Только в Алви убрать») крепится к исходной задаче отдельной строкой
      и не создаёт новую задачу. Один и тот же текст из того же сообщения повторно не добавляется. */
@@ -614,8 +645,10 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
      ни задачи, ни уточнения: задачи сопоставляются по externalRef, уточнения — по тексту и сообщению. */
   function importRegistry(code, body) {
     if (!body || typeof body !== 'object' || Array.isArray(body)) fail(400, 'Ожидается объект реестра');
-    if (Object.keys(body).some(k => !['schemaVersion', 'tasks'].includes(k))) fail(400, 'Неизвестное поле реестра');
+    if (Object.keys(body).some(k => !['schemaVersion', 'tasks', 'asOf', 'force'].includes(k))) fail(400, 'Неизвестное поле реестра');
     if (body.schemaVersion !== 1) fail(400, 'Неизвестная версия формата реестра');
+    const asOf = body.asOf === undefined ? '' : isoDay(body.asOf);
+    const force = body.force === true;
     if (!Array.isArray(body.tasks) || !body.tasks.length || body.tasks.length > 200) fail(400, 'Укажите от 1 до 200 задач');
     const seen = new Set();
     return tx(() => {
@@ -627,24 +660,26 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
         if (!v.externalRef) fail(400, 'У задачи реестра должен быть externalRef');
         if (seen.has(v.externalRef)) fail(400, `Повторный externalRef в запросе: ${v.externalRef}`);
         seen.add(v.externalRef);
-        const id = upsertTask(code, v);
+        const { id, skipped, reason } = upsertTask(code, v, { asOf, force });
         if (notes !== undefined) {
           if (!Array.isArray(notes) || notes.length > CLARIFICATION_LIMIT) fail(400, 'Не более 50 уточнений на задачу');
+          // Уточнения дописываются даже к пропущенной задаче: это история переписки, она не спорит с правкой владельца.
           for (const note of notes) addNote(id, code, note || {});
         }
-        result.push({ id, externalRef: v.externalRef });
+        result.push({ id, externalRef: v.externalRef, ...(skipped ? { skipped: true, reason } : { skipped: false }) });
       }
       return result;
     });
   }
   function taskValues(code, body, old = null) {
     const allowed = new Set(['title', 'assigneeId', 'stageId', 'status', 'due', 'sourceMessageId',
-      'externalRef', 'site', 'publication', 'publishedUrl', 'verifiedAt', 'sourceQuote']);
+      'externalRef', 'site', 'publication', 'publishedUrl', 'verifiedAt', 'sourceQuote', 'kind']);
     if (Object.keys(body).some(k => !allowed.has(k))) fail(400, 'Неизвестное поле задачи');
     const values = { title: old?.title || '', assigneeId: old?.assignee_id ?? null, stageId: old?.stage_id ?? null,
       status: old?.status || 'todo', due: old?.due || '', sourceMessageId: old?.source_message_id ?? null,
       externalRef: old?.external_ref || '', site: old?.site || '', publication: old?.publication || 'not_started',
-      publishedUrl: old?.published_url || '', verifiedAt: old?.verified_at || '', sourceQuote: old?.source_quote || '', ...body };
+      publishedUrl: old?.published_url || '', verifiedAt: old?.verified_at || '', sourceQuote: old?.source_quote || '',
+      kind: old?.kind || 'client_remark', ...body };
     values.title = cleanText(values.title, 200, 'title');
     if (!values.title) fail(400, 'Введите название задачи');
     if (!TASK_STATUSES.has(values.status)) fail(400, 'Неизвестный статус задачи');
@@ -654,6 +689,13 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     // Метка сайта принимается только из списка, который обслуживает эта комната.
     if (values.site && !allowedSites(code).includes(values.site)) fail(400, 'Этот сайт не обслуживается чатом проекта');
     if (!TASK_PUBLICATION.has(values.publication)) fail(400, 'Неизвестное состояние публикации');
+    if (!TASK_KINDS.has(values.kind)) fail(400, 'Неизвестный вид задачи');
+    /* Снять задачу поверх прежней публикации можно — история публикации остаётся, но исправлением задача считаться
+       перестаёт (см. fixedOnSite). Запрещено обратное: объявлять публикацию у снятой задачи этим же запросом. */
+    if (values.status === 'cancelled' && values.publication === 'published' && body.publication === 'published') {
+      fail(400, 'Снятая задача не публикуется: сначала снимите отмену');
+    }
+    if (values.publication === 'not_required' && values.status !== 'cancelled') fail(400, '«Публикация не требуется» ставится только снятой задаче');
     values.publishedUrl = cleanText(values.publishedUrl, 500, 'publishedUrl');
     if (values.publishedUrl && !/^https:\/\//.test(values.publishedUrl)) fail(400, 'Ссылка на сайт должна начинаться с https://');
     values.verifiedAt = cleanText(values.verifiedAt, 40, 'verifiedAt');
@@ -822,7 +864,9 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       // Перенос реестра — операция владельца: она задаёт состояние публикации, видимое клиенту.
       const body = await readBody(request); access(request, code, true, true);
       const imported = importRegistry(code, body);
-      return reply(200, { imported: imported.length, tasks: imported, ...(await snapshot(code, user, page)) });
+      // results — судьба каждой строки реестра; tasks в ответе остаётся полным состоянием доски из снимка комнаты.
+      return reply(200, { ...(await snapshot(code, user, page)),
+        imported: imported.filter(t => !t.skipped).length, skipped: imported.filter(t => t.skipped).length, results: imported });
     }
     const note = suffix.match(/^\/tasks\/(\d+)\/notes$/);
     if (note && method === 'POST') {
@@ -844,7 +888,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
         external_ref=?,site=?,publication=?,published_url=?,verified_at=?,source_quote=?,updated_at=? WHERE id=? AND company_code=?`)
         .run(v.title, v.assigneeId, v.stageId, v.status, v.due, v.sourceMessageId, v.externalRef, v.site, v.publication,
           v.publishedUrl, v.verifiedAt, v.sourceQuote, stamp(), id, code);
-      else id = upsertTask(code, v);
+      else id = upsertTask(code, v).id;
       return reply(method === 'POST' ? 201 : 200, { task: taskJSON(db.prepare('SELECT * FROM project_chat_tasks WHERE id=?').get(id)) });
     }
     fail(404, 'Метод чата проекта не найден');
