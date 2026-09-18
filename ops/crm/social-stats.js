@@ -3,6 +3,7 @@
    (Onlypult — временный источник, прямые API — по мере доступа), идемпотентные сборы, журнал запусков, атрибуция
    contentId → платформенный пост/URL → обращения (leads) → продажи. Правила честности: нет данных = null (UNKNOWN), не 0;
    сумма просмотров разных площадок — не уникальный охват; органика/реклама различаются полем kind; секреты не хранятся здесь. */
+const { createHash } = require('node:crypto');
 const PLATFORMS = Object.freeze({ instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube', vk: 'ВКонтакте', telegram: 'Telegram' });
 const PROVIDERS = Object.freeze(['onlypult', 'direct', 'manual']);
 const KINDS = Object.freeze(['organic', 'paid', 'mixed', 'unknown']);
@@ -42,6 +43,10 @@ const object = (value, keys) => { if (!value || typeof value !== 'object' || Arr
 const oneOf = (value, list, required = true) => { if (value === undefined || value === null || value === '') { if (required) fail(); return ''; } if (!list.includes(value)) fail(); return value; };
 const day = (value) => { if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value + 'T00:00:00Z'))) fail(); return value; };
 const timezone = (value) => { const tz = text(value, 80) || 'Asia/Bangkok'; try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); } catch { fail(); } return tz; };
+/* Необратимый отпечаток ревизии подключения площадки: в журнал попадает только SHA256, а не сама ревизия/цель (и тем более не секрет).
+   Пустая строка — подключения нет (провайдер без connectionRevision): такие запуски сравниваются между собой как прежде. */
+const connectionFingerprint = (value) => (value === null || value === undefined ? ''
+  : createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex'));
 const metricValue = (value, metric) => { if (value === null || value === undefined) return null; if (typeof value !== 'number' || !Number.isFinite(value) || (value < 0 && !SIGNED.has(metric))) fail(); return value; };
 /* Локальный день площадки в часовом поясе компании (Asia/Bangkok по умолчанию). */
 function localDay(ms, tz) {
@@ -97,7 +102,19 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, logger =
   // Запуск привязан к аккаунту и его ревизии: после смены account_ref/подключения старые запуски (в т.ч. missing_access) не блокируют новый сбор.
   if (!db.prepare("SELECT 1 FROM pragma_table_info('social_collect_runs') WHERE name='account_ref'").get()) db.exec("ALTER TABLE social_collect_runs ADD COLUMN account_ref TEXT NOT NULL DEFAULT ''");
   if (!db.prepare("SELECT 1 FROM pragma_table_info('social_collect_runs') WHERE name='account_revision'").get()) db.exec('ALTER TABLE social_collect_runs ADD COLUMN account_revision INTEGER NOT NULL DEFAULT 0');
+  // Ревизия самого подключения площадки (токен/цель) живёт вне social_accounts: храним её необратимый SHA256-отпечаток, чтобы после
+  // пересохранения подключения прежний missing_access не подавлял сбор. Миграция безопасна: старые строки получают '' (отпечатка не было),
+  // данные журнала не переписываются; у аккаунта с подключением первый сбор после миграции просто пройдёт заново.
+  if (!db.prepare("SELECT 1 FROM pragma_table_info('social_collect_runs') WHERE name='connection_fp'").get()) db.exec("ALTER TABLE social_collect_runs ADD COLUMN connection_fp TEXT NOT NULL DEFAULT ''");
   const stamp = (ms = now()) => new Date(ms).toISOString();
+  // Ревизия подключения читается локально (без сети). Три исхода различаются явно: {ok:true,value:null} — подключения/метода нет,
+  // {ok:true,value} — ревизия прочитана, {ok:false} — чтение сорвалось. Сбой чтения нельзя выдавать за «подключения нет»: два таких
+  // сбоя до и после запроса дали бы одинаковый пустой отпечаток и пропустили бы в базу ответ от неизвестно какого подключения.
+  const connectionRevision = (adapter, context) => {
+    if (typeof adapter?.connectionRevision !== 'function') return { ok: true, value: null };
+    try { return { ok: true, value: adapter.connectionRevision(context) ?? null }; }
+    catch (error) { return { ok: false, code: error?.code || 'connection revision failed' }; }
+  };
   const transact = (fn) => { db.exec('BEGIN IMMEDIATE'); try { const r = fn(); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; } };
   function company(code) {
     if (typeof code !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail();
@@ -178,8 +195,13 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, logger =
     // Завершённый день даёт итог (complete); текущий день ещё идёт — его показатели только partial и обновляются позже.
     const closed = target < today;
     const provider = row?.provider || 'manual', adapter = adapters[provider];
-    const runId = Number(db.prepare(`INSERT INTO social_collect_runs(company_code,platform,provider,trigger,date,started_at,closed,account_ref,account_revision) VALUES(?,?,?,?,?,?,?,?,?)`)
-      .run(scope.code.toLowerCase(), platform, provider, trigger, target, stamp(), closed ? 1 : 0, row?.account_ref || '', row?.revision || 0).lastInsertRowid);
+    // Отпечаток сохранённого подключения площадки (ревизия токена/цели, без секрета) — до сетевого вызова и сразу в журнал:
+    // по нему расписание отличает «та же неработающая связка» от «владелец пересохранил подключение».
+    const connectionBefore = row ? connectionRevision(adapter, { company: scope, platform, account: row }) : { ok: true, value: null };
+    // Отпечаток сорвавшегося чтения не вычисляется: такой запуск всё равно закончится failed и ничего не запишет.
+    const connectionFp = connectionBefore.ok ? connectionFingerprint(connectionBefore.value) : '';
+    const runId = Number(db.prepare(`INSERT INTO social_collect_runs(company_code,platform,provider,trigger,date,started_at,closed,account_ref,account_revision,connection_fp) VALUES(?,?,?,?,?,?,?,?,?,?)`)
+      .run(scope.code.toLowerCase(), platform, provider, trigger, target, stamp(), closed ? 1 : 0, row?.account_ref || '', row?.revision || 0, connectionFp).lastInsertRowid);
     const finish = (status, extra = {}) => {
       db.prepare('UPDATE social_collect_runs SET finished_at=?,status=?,rows=?,error=?,missing=? WHERE id=?')
         .run(stamp(), oneOf(status, RUN_STATUS), extra.rows || 0, text(extra.error || '', 300), JSON.stringify(extra.missing || []), runId);
@@ -187,9 +209,12 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, logger =
     };
     if (!row || !row.enabled) return finish('unsupported', { missing: ['аккаунт площадки не настроен или выключен в кабинете'] });
     if (!adapter?.collect) return finish('unsupported', { missing: [`провайдер ${provider} не умеет собирать статистику`] });
+    // Ревизия подключения не прочиталась — сравнивать «до и после» не с чем: площадку не дёргаем и ни одной цифры не сохраняем.
+    if (!connectionBefore.ok) {
+      logger.warn?.(`[crm] social-stats ${platform}/${provider}: ${connectionBefore.code}`);
+      return finish('failed', { error: 'Ревизия подключения площадки не прочитана: сбор остановлен до запроса к провайдеру' });
+    }
     const bounds = dayBounds(target, tz);
-    // Отпечаток сохранённого подключения площадки (ревизия токена/цели, без секрета) до сетевого вызова.
-    const connectionBefore = adapter.connectionRevision?.({ company: scope, platform, account: row }) ?? null;
     let result;
     try { result = await adapter.collect({ company: scope, platform, account: row, date: target, timezone: tz, closed, dayStartMs: bounds.startMs, dayEndMs: bounds.endMs }); }
     catch (error) { logger.warn?.(`[crm] social-stats ${platform}/${provider}: ${error?.code || 'collect failed'}`); return finish('failed', { error: 'Сбор не удался: провайдер не ответил или ответ не распознан' }); }
@@ -198,8 +223,12 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, logger =
     if (!fresh || fresh.revision !== row.revision || fresh.account_ref !== row.account_ref || fresh.provider !== row.provider || fresh.provider_ref !== row.provider_ref) {
       return finish('failed', { error: 'Настройки аккаунта изменились во время сбора: ответ отброшен, сбор повторится' });
     }
-    const connectionAfter = adapter.connectionRevision?.({ company: scope, platform, account: fresh }) ?? null;
-    if (connectionAfter !== connectionBefore) return finish('failed', { error: 'Подключение площадки изменилось во время сбора: ответ отброшен, сбор повторится' });
+    const connectionAfter = connectionRevision(adapter, { company: scope, platform, account: fresh });
+    if (!connectionAfter.ok) {
+      logger.warn?.(`[crm] social-stats ${platform}/${provider}: ${connectionAfter.code}`);
+      return finish('failed', { error: 'Ревизия подключения площадки не прочитана после ответа: ответ отброшен, сбор повторится' });
+    }
+    if (connectionFingerprint(connectionAfter.value) !== connectionFp) return finish('failed', { error: 'Подключение площадки изменилось во время сбора: ответ отброшен, сбор повторится' });
     if (!result || !RUN_STATUS.includes(result.status)) return finish('failed', { error: 'Адаптер вернул некорректный результат' });
     if (result.status === 'missing_access' || result.status === 'unsupported') return finish(result.status, { missing: result.missing || [] });
     // Незавершённый день никогда не помечается complete, что бы ни сказал адаптер. Lifetime-снимки (подписчики) — состояние на момент
@@ -216,19 +245,30 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, logger =
   async function collectDue() {
     const due = db.prepare(`SELECT a.* FROM social_accounts a JOIN companies c ON c.code=a.company_code COLLATE NOCASE WHERE a.enabled=1 AND c.is_deleted=0 AND a.provider<>'manual'`).all();
     const results = [];
-    // Только запуски этого же аккаунта и ревизии: после смены account_ref/подключения прежний missing_access не блокирует новый сбор.
-    const lastRun = (row, date, closed) => db.prepare(`SELECT status, started_at FROM social_collect_runs WHERE company_code=? COLLATE NOCASE AND platform=? AND date=? AND closed=? AND account_ref=? AND account_revision=? ORDER BY id DESC LIMIT 1`)
-      .get(row.company_code, row.platform, date, closed ? 1 : 0, row.account_ref || '', row.revision || 0);
+    // Только запуски этого же аккаунта, его ревизии и той же ревизии подключения площадки: после смены account_ref или пересохранения
+    // подключения (токен/цель) прежний missing_access не блокирует новый сбор — иначе восстановленный доступ ждал бы до завтра.
+    const lastRun = (row, fp, date, closed) => db.prepare(`SELECT status, started_at FROM social_collect_runs WHERE company_code=? COLLATE NOCASE AND platform=? AND date=? AND closed=? AND account_ref=? AND account_revision=? AND connection_fp=? ORDER BY id DESC LIMIT 1`)
+      .get(row.company_code, row.platform, date, closed ? 1 : 0, row.account_ref || '', row.revision || 0, fp);
     for (const row of due) {
-      const ms = now(), today = localDay(ms, row.timezone), yesterday = localDay(ms - 86400000, row.timezone);
-      if (localHour(ms, row.timezone) >= row.collect_hour) {
-        const done = lastRun(row, yesterday, true);
-        if (!done || !['ok', 'partial', 'missing_access', 'unsupported'].includes(done.status)) results.push(await collect(row.company_code, row.platform, { trigger: 'schedule', date: yesterday }));
+      // Сбой по одному аккаунту (нечитаемая ревизия подключения, испорченный пояс, отказ адаптера) не отменяет расписание остальных.
+      try {
+        const ms = now(), today = localDay(ms, row.timezone), yesterday = localDay(ms - 86400000, row.timezone);
+        const scope = company(row.company_code);
+        const revision = connectionRevision(adapters[row.provider], { company: scope, platform: row.platform, account: row });
+        // Ревизия не прочитана — сравнивать запуски не с чем: идём в collect, он закончит запуск статусом failed и ничего не запишет.
+        const fp = revision.ok ? connectionFingerprint(revision.value) : '';
+        if (localHour(ms, row.timezone) >= row.collect_hour) {
+          const done = lastRun(row, fp, yesterday, true);
+          if (!done || !['ok', 'partial', 'missing_access', 'unsupported'].includes(done.status)) results.push(await collect(row.company_code, row.platform, { trigger: 'schedule', date: yesterday }));
+        }
+        const open = lastRun(row, fp, today, false);
+        // Без доступа текущий день не дёргаем повторно: причина не изменится до вмешательства владельца, итог за день соберётся утром.
+        if (open && ['missing_access', 'unsupported'].includes(open.status)) continue;
+        if (!open || Date.parse(open.started_at) <= ms - OPEN_DAY_REFRESH_MS) results.push(await collect(row.company_code, row.platform, { trigger: 'schedule', date: today }));
+      } catch (error) {
+        logger.warn?.(`[crm] social-stats ${row.platform}/${row.provider}: ${error?.code || 'schedule failed'}`);
+        results.push({ runId: null, status: 'failed', rows: 0, missing: [], error: 'Аккаунт пропущен в расписании: сбор не удалось начать', date: '', platform: row.platform, provider: row.provider, closed: null });
       }
-      const open = lastRun(row, today, false);
-      // Без доступа текущий день не дёргаем повторно: причина не изменится до вмешательства владельца, итог за день соберётся утром.
-      if (open && ['missing_access', 'unsupported'].includes(open.status)) continue;
-      if (!open || Date.parse(open.started_at) <= ms - OPEN_DAY_REFRESH_MS) results.push(await collect(row.company_code, row.platform, { trigger: 'schedule', date: today }));
     }
     return results;
   }

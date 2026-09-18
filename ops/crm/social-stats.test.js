@@ -201,6 +201,114 @@ test('после смены аккаунта прежний missing_access не 
   assert.equal(f.db.prepare("SELECT value FROM social_snapshots WHERE metric='followers' AND account_ref='@ok'").get().value, 42);
 });
 
+test('пересохранённое подключение площадки снимает подавление после missing_access в тот же день: в журнале — необратимый отпечаток ревизии', async (t) => {
+  let revision = 1, denied = true, served = 0;
+  const transport = { connectionRevision: () => ({ provider: 'direct', revision, target: '@c' }),
+    async readStats() { served += 1; if (denied) throw Object.assign(new Error('x'), { code: 'ACCESS_DENIED' }); return { provider: 'direct', target: '@c', result: 77 }; } };
+  const f = fixture(t, { transport });
+  f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@c', provider: 'direct', collectHour: 0, revision: 0 }] });
+  const first = await f.stats.collectDue();
+  assert.deepEqual(first.map((r) => r.status), ['missing_access', 'missing_access'], 'вчера и сегодня — без доступа');
+  assert.deepEqual(await f.stats.collectDue(), [], 'ревизия подключения не менялась — площадку не дёргаем');
+  assert.equal(served, 2);
+  denied = false; revision = 2; // владелец пересохранил токен подключения: social_accounts не менялись, account_ref и revision прежние
+  const after = await f.stats.collectDue();
+  assert.deepEqual(after.map((r) => [r.date, r.status]), [['2026-09-17', 'partial'], ['2026-09-18', 'partial']], 'после восстановления подключения сбор идёт в тот же день, а не завтра');
+  assert.equal(served, 4);
+  assert.equal(f.db.prepare("SELECT value FROM social_snapshots WHERE metric='followers'").get().value, 77);
+  const fps = f.db.prepare('SELECT connection_fp FROM social_collect_runs ORDER BY id').all().map((r) => r.connection_fp);
+  for (const fp of fps) assert.match(fp, /^[0-9a-f]{64}$/, 'в журнале только SHA256, не сама ревизия');
+  assert.notEqual(fps[0], fps.at(-1), 'другая ревизия подключения — другой отпечаток');
+  assert.equal(new Set(fps.slice(0, 2)).size, 1, 'одна ревизия — один отпечаток');
+  assert.doesNotMatch(JSON.stringify(fps), /direct|@c|:/, 'отпечаток необратим: исходной ревизии и цели в журнале нет');
+});
+
+test('при неизменной ревизии подключения расписание не делает лишних повторов', async (t) => {
+  let served = 0;
+  const transport = { connectionRevision: () => ({ provider: 'direct', revision: 7, target: '@c' }), async readStats() { served += 1; return { provider: 'direct', target: '@c', result: 100 + served }; } };
+  const f = fixture(t, { transport });
+  f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@c', provider: 'direct', collectHour: 0, revision: 0 }] });
+  assert.deepEqual((await f.stats.collectDue()).map((r) => [r.date, r.closed]), [['2026-09-17', true], ['2026-09-18', false]]);
+  assert.deepEqual(await f.stats.collectDue(), [], 'повтор сразу — ничего');
+  f.clock.ms += 30 * 60 * 1000;
+  assert.deepEqual(await f.stats.collectDue(), [], 'через полчаса текущий день ещё не обновляется');
+  f.clock.ms += 31 * 60 * 1000;
+  assert.deepEqual((await f.stats.collectDue()).map((r) => [r.date, r.closed]), [['2026-09-18', false]], 'через час обновляется только текущий день, итог за вчера не пересобирается');
+  assert.equal(served, 3);
+  assert.equal(f.db.prepare('SELECT count(DISTINCT connection_fp) n FROM social_collect_runs').get().n, 1, 'ревизия не менялась — отпечаток стабилен');
+  assert.equal(f.db.prepare('SELECT count(*) n FROM social_collect_runs').get().n, 3, 'лишних запусков в журнале нет');
+});
+
+test('нечитаемая ревизия подключения — это не «подключения нет»: failed без чисел и без запроса к площадке; расписание доводит остальные аккаунты', async (t) => {
+  const served = [];
+  const transport = {
+    connectionRevision(code, platform) { if (platform === 'telegram') throw Object.assign(new Error('хранилище подключений недоступно: token=abc'), { code: 'VAULT_UNAVAILABLE' }); return { provider: 'direct', revision: 3, target: 'club1' }; },
+    async readStats(code, id, method) { served.push(`${id}.${method}`);
+      if (method === 'groups.getById') return { provider: 'direct', target: '1', result: { groups: [{ id: 1, members_count: 50 }] } };
+      if (method === 'stats.get') return { provider: 'direct', target: '1', result: [{ visitors: { views: 10 }, reach: { reach: 5 }, activity: {} }] };
+      return { provider: 'direct', target: '@c', result: 900 }; } };
+  const f = fixture(t, { transport });
+  f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@c', provider: 'direct', collectHour: 0, revision: 0 }, { platform: 'vk', accountRef: 'club1', provider: 'direct', collectHour: 0, revision: 0 }] });
+  const runs = await f.stats.collectDue();
+  assert.deepEqual(runs.map((r) => [r.platform, r.date, r.status]).sort(), [['telegram', '2026-09-17', 'failed'], ['telegram', '2026-09-18', 'failed'], ['vk', '2026-09-17', 'ok'], ['vk', '2026-09-18', 'partial']],
+    'сбойный аккаунт не отменяет расписание следующего, исправного');
+  assert.equal(f.db.prepare("SELECT count(*) n FROM social_snapshots WHERE platform='telegram'").get().n, 0, 'ревизия не прочитана — ни одной цифры');
+  assert.deepEqual(served.filter((c) => c.startsWith('telegram')), [], 'площадку без читаемой ревизии не дёргаем');
+  assert.equal(f.db.prepare("SELECT value FROM social_snapshots WHERE platform='vk' AND metric='followers'").get().value, 50, 'исправный аккаунт собран');
+  const failed = f.db.prepare("SELECT error, status, connection_fp FROM social_collect_runs WHERE platform='telegram' ORDER BY id").all();
+  assert.deepEqual(failed.map((r) => r.status), ['failed', 'failed'], 'оба запуска в журнале — failed');
+  assert.match(failed[0].error, /Ревизия подключения площадки не прочитана/);
+  assert.doesNotMatch(JSON.stringify(failed), /token|VAULT|хранилище/i, 'ни исключения, ни секретов в журнале');
+});
+
+test('чтение ревизии подключения сорвалось после ответа провайдера: ответ отброшен, а не засчитан как совпавшая ревизия', async (t) => {
+  let release, broken = false;
+  const transport = { connectionRevision: () => { if (broken) throw Object.assign(new Error('x'), { code: 'VAULT_UNAVAILABLE' }); return { provider: 'direct', revision: 1, target: '@c' }; },
+    readStats: () => new Promise((resolve) => { release = () => resolve({ provider: 'direct', target: '@c', result: 5 }); }) };
+  const f = fixture(t, { transport });
+  f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@c', provider: 'direct', revision: 0 }] });
+  const pending = f.stats.collect('demo-a', 'telegram', { date: '2026-09-17' });
+  await new Promise((r) => setImmediate(r));
+  broken = true; // пока ждали ответ, подключение стало нечитаемым: подтвердить прежнюю ревизию нечем
+  release();
+  const run = await pending;
+  assert.equal(run.status, 'failed'); assert.match(run.error, /не прочитана после ответа/);
+  assert.equal(f.db.prepare('SELECT count(*) n FROM social_snapshots').get().n, 0, 'два сбоя чтения не считаются совпавшей ревизией');
+  broken = false;
+  const ok = f.stats.collect('demo-a', 'telegram', { date: '2026-09-17' }); // ревизия снова читается — ответ принимается
+  await new Promise((r) => setImmediate(r)); release();
+  assert.equal((await ok).status, 'partial');
+});
+
+test('миграция старой таблицы запусков: колонки добавляются, прежние записи целы, сбор работает', async (t) => {
+  const db = new DatabaseSync(':memory:'); t.after(() => db.close());
+  db.exec(`PRAGMA foreign_keys=ON;
+    CREATE TABLE companies(id INTEGER PRIMARY KEY, code TEXT UNIQUE COLLATE NOCASE, name TEXT, timezone TEXT, is_deleted INTEGER DEFAULT 0);
+    INSERT INTO companies(id,code,name,timezone) VALUES(1,'demo-a','Компания А','Asia/Bangkok');
+    CREATE TABLE leads(id INTEGER PRIMARY KEY, company_code TEXT, created_at TEXT, stage TEXT, sale_amount REAL, source TEXT, utm_source TEXT, utm_content TEXT, utm_campaign TEXT, referrer TEXT, landing_page TEXT);
+    CREATE TABLE social_collect_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, company_code TEXT NOT NULL COLLATE NOCASE, platform TEXT NOT NULL, provider TEXT NOT NULL, trigger TEXT NOT NULL,
+      date TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT, status TEXT NOT NULL DEFAULT 'failed', rows INTEGER NOT NULL DEFAULT 0,
+      error TEXT NOT NULL DEFAULT '', missing TEXT NOT NULL DEFAULT '[]');
+    INSERT INTO social_collect_runs(company_code,platform,provider,trigger,date,started_at,finished_at,status,missing)
+      VALUES('demo-a','telegram','direct','schedule','2026-09-17','2026-09-17T01:00:00.000Z','2026-09-17T01:00:01.000Z','missing_access','["бот не администратор канала"]');`);
+  const clock = { ms: Date.parse('2026-09-18T01:30:00Z') };
+  const transport = { connectionRevision: () => ({ provider: 'direct', revision: 1, target: '@c' }), async readStats() { return { provider: 'direct', target: '@c', result: 500 }; } };
+  const stats = createSocialStats(db, { now: () => clock.ms, adapters: createSocialAdapters({ transport }), logger: { warn() {} } });
+  const columns = db.prepare("SELECT name FROM pragma_table_info('social_collect_runs')").all().map((r) => r.name);
+  for (const name of ['closed', 'account_ref', 'account_revision', 'connection_fp']) assert.ok(columns.includes(name), 'добавлена колонка ' + name);
+  const old = db.prepare('SELECT * FROM social_collect_runs WHERE id=1').get();
+  assert.equal(old.status, 'missing_access'); assert.equal(old.missing, '["бот не администратор канала"]', 'прежняя запись не переписана');
+  assert.equal(old.connection_fp, '', 'у записей до миграции отпечатка нет');
+  assert.equal(old.account_ref, ''); assert.equal(old.account_revision, 0); assert.equal(old.closed, 1);
+  stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@c', provider: 'direct', collectHour: 0, revision: 0 }] });
+  assert.deepEqual((await stats.collectDue()).map((r) => [r.date, r.status]), [['2026-09-17', 'partial'], ['2026-09-18', 'partial']], 'запись без отпечатка не подавляет сбор после миграции');
+  assert.match(db.prepare('SELECT connection_fp FROM social_collect_runs ORDER BY id DESC LIMIT 1').get().connection_fp, /^[0-9a-f]{64}$/, 'новые запуски пишут отпечаток');
+  createSocialStats(db, { now: () => clock.ms, adapters: createSocialAdapters({ transport }), logger: { warn() {} } });
+  assert.equal(db.prepare("SELECT count(*) n FROM pragma_table_info('social_collect_runs') WHERE name='connection_fp'").get().n, 1, 'повторный запуск миграции не дублирует колонку');
+  assert.equal(db.prepare('SELECT count(*) n FROM social_collect_runs').get().n, 3, 'миграция не создаёт и не теряет записи');
+});
+
 test('ответ провайдера, пришедший после смены аккаунта или подключения, отбрасывается', async (t) => {
   let release;
   const transport = { readStats: () => new Promise((resolve) => { release = () => resolve({ provider: 'direct', target: '@old', result: 5 }); }) };
