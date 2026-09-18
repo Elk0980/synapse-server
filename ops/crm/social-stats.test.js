@@ -4,8 +4,10 @@
    с источником, атрибуция без задвоения по площадкам. Все идентификаторы в тестах вымышленные. */
 const test = require('node:test'), assert = require('node:assert/strict');
 const { DatabaseSync } = require('node:sqlite');
-const { createSocialStats, localDay, dayBounds } = require('./social-stats');
+const { createSocialStats, localDay, dayBounds, canonicalPostKey } = require('./social-stats');
 const { createSocialAdapters, NEED } = require('./social-adapters');
+const { createCompanyInformation } = require('./company-information');
+const { createAutoposting } = require('./autoposting');
 
 function fixture(t, { adapters, transport } = {}) {
   const db = new DatabaseSync(':memory:'); t.after(() => db.close());
@@ -17,6 +19,25 @@ function fixture(t, { adapters, transport } = {}) {
   const stats = createSocialStats(db, { now: () => clock.ms, adapters: adapters || createSocialAdapters({ transport }), logger: { warn() {} } });
   return { db, stats, clock };
 }
+/* Подтверждения внешних публикаций живут в таблицах автопостинга, поэтому здесь на одной базе поднимаются оба модуля.
+   Публикация ни в одном из этих тестов не выполняется: подтверждение — фиксация уже состоявшегося выхода. */
+function receiptFixture(t) {
+  const db = new DatabaseSync(':memory:'); t.after(() => db.close());
+  db.exec(`PRAGMA foreign_keys=ON;
+    CREATE TABLE companies(id INTEGER PRIMARY KEY, code TEXT UNIQUE COLLATE NOCASE, name TEXT, city TEXT, timezone TEXT, phone TEXT, email TEXT, website_url TEXT, socials TEXT, is_deleted INTEGER DEFAULT 0, updated_at TEXT);
+    INSERT INTO companies(id,code,name,timezone,socials) VALUES(1,'demo-a','Компания А','Asia/Bangkok','[]'),(2,'demo-b','Компания Б','Asia/Irkutsk','[]');
+    CREATE TABLE leads(id INTEGER PRIMARY KEY, company_code TEXT, created_at TEXT, stage TEXT, sale_amount REAL, source TEXT, utm_source TEXT, utm_content TEXT, utm_campaign TEXT, referrer TEXT, landing_page TEXT);`);
+  const clock = { ms: Date.parse('2026-09-18T01:30:00Z') };
+  const information = createCompanyInformation(db, { now: () => clock.ms });
+  const transport = { getSettings: () => ({ channels: [] }), publish: async () => { throw Error('в этих тестах ничего не публикуется'); } };
+  const posting = createAutoposting(db, { information, transport, now: () => clock.ms, logger: { warn() {} } });
+  const options = { now: () => clock.ms, adapters: {}, logger: { warn() {} } };
+  // Карточка контент-плана из пакета: id пакета попадает в external_id — это тот же идентификатор, который владелец ставит в utm_content.
+  const card = (code, externalId, title, day = 1) => posting.importPackage(code, { items: [{ id: externalId, day, title, text: 'Текст карточки' }] }).created[0];
+  const receipt = (post, code, platform, url, publishedAt) => posting.recordReceipt(post.id, code, { platform, url, publishedAt, contentRevision: post.contentRevision }, { userId: 1, userName: 'Владелец' });
+  return { db, stats: createSocialStats(db, options), posting, clock, card, receipt, options };
+}
+const receiptIds = (db) => db.prepare('SELECT id FROM autoposting_publication_receipts ORDER BY id').all().map((r) => `receipt:${r.id}`);
 const rejects = (fn, code) => { try { fn(); } catch (e) { assert.equal(e.code, code, e.message); return e; } assert.fail('expected ' + code); };
 const lead = (db, values) => db.prepare(`INSERT INTO leads(company_code,created_at,stage,sale_amount,source,utm_source,utm_content,utm_campaign,referrer,landing_page) VALUES(?,?,?,?,?,?,?,?,?,?)`)
   .run(values.code || 'demo-a', values.at || '2026-09-17T05:00:00.000Z', values.stage || 'новая', values.amount ?? null, values.source ?? null, values.utmSource ?? null, values.content ?? null, values.campaign ?? null, values.referrer ?? null, values.landing ?? null);
@@ -368,4 +389,216 @@ test('атрибуция: один contentId на пяти площадках н
   assert.equal(crm.posts.reduce((s, p) => s + p.leads, 0), 4, 'каждое обращение засчитано не более одного раза');
   assert.deepEqual(crm.byContent, [{ contentId: 'D1', url: '', platforms: ['instagram', 'tiktok', 'youtube', 'vk', 'telegram'], leads: 2, sales: 1, revenue: 1000, attribution: 'content_only', note: crm.byContent[0].note }]);
   assert.equal(crm.posts.reduce((s, p) => s + p.revenue, 0) + crm.byContent[0].revenue, 3000, 'выручка не задвоена');
+});
+
+test('канонический адрес — только разобранный формат площадки: watch и shorts с косой чертой — один выход; аккаунт Telegram и ВКонтакте сохраняется; незнакомый адрес не склеивается', () => {
+  const key = canonicalPostKey;
+  assert.equal(key('youtube', 'https://www.youtube.com/watch?v=Abc123xyz'), key('youtube', 'https://m.youtube.com/shorts/Abc123xyz/'), 'watch?v=… и shorts/… — одна запись');
+  assert.equal(key('vk', 'https://vk.com/wall-1_10'), key('vk', 'https://vk.ru/demo_club?w=wall-1_10'), 'витрина страницы ВКонтакте — тот же объект записи');
+  assert.notEqual(key('vk', 'https://vk.com/wall-1_10'), key('vk', 'https://vk.com/wall-2_10'), 'владелец записи ВКонтакте различает адреса');
+  assert.notEqual(key('telegram', 'https://t.me/demo_channel/42'), key('telegram', 'https://t.me/other_channel/42'), 'номер сообщения без канала записью не является');
+  assert.notEqual(key('tiktok', 'https://www.tiktok.com/@demo/video/1234567'), key('tiktok', 'https://www.tiktok.com/@other/video/1234567'), 'аккаунт TikTok сохраняется');
+  assert.equal(key('instagram', 'https://www.instagram.com/demo/reel/Abc12/'), key('instagram', 'https://instagram.com/p/Abc12'), 'один shortcode площадка отдаёт разными адресами');
+  assert.equal(key('youtube', 'https://example.test/vk/post1'), '', 'незнакомый адрес ключа не даёт');
+  assert.equal(key('youtube', 'https://www.youtube.com/watch?v=Abc123xyz&utm_source=x'), '', 'лишний параметр — уже не разобранный формат площадки');
+  assert.equal(key('telegram', 'https://vk.com/wall-1_10'), '', 'адрес чужой площадки не канонизируется');
+  assert.equal(key('vk', ''), ''); assert.equal(key('unknown', 'https://t.me/demo_channel/42'), '');
+});
+
+test('подтверждение внешней публикации видно в атрибуции только на чтение: без метрик, без строк в social_posts и журнале сборов; ранее записанные подтверждения включаются без повторного подтверждения', (t) => {
+  const f = receiptFixture(t);
+  const card = f.card('demo-a', 'D1', 'Карточка дня 1');
+  const recorded = f.receipt(card, 'demo-a', 'telegram', 'https://t.me/demo_channel/42', '2026-09-17T10:00:00Z');
+  assert.equal(recorded.created, true);
+  // Модуль аналитики создан до подтверждения, а подтверждение записано после: проекция читается в момент запроса.
+  const crm = f.stats.attribution('demo-a', '2026-09-17', '2026-09-18');
+  assert.equal(crm.posts.length, 1);
+  const post = crm.posts[0];
+  assert.equal(post.provenance, 'external_receipt'); assert.equal(post.platform, 'telegram');
+  assert.deepEqual(post.platformPostId, receiptIds(f.db)[0], 'у подтверждения собственная ссылка receipt:<id>');
+  assert.doesNotMatch(post.platformPostId, /42|demo_channel/, 'номер сообщения и канал не выдаются за идентификатор поста в API');
+  assert.equal(post.url, 'https://t.me/demo_channel/42'); assert.equal(post.contentId, 'D1');
+  assert.deepEqual(post.receipts.map((r) => [r.referenceId, r.publishedAt, r.contentId]), [[receiptIds(f.db)[0], '2026-09-17T10:00:00.000Z', 'D1']]);
+  assert.deepEqual(post.contentIdCandidates, []);
+  assert.equal(post.attribution, 'none_in_period'); assert.equal(post.confidence, 'none');
+  assert.ok(!('metrics' in post), 'показателей у подтверждения нет — нулей не выдумываем');
+  assert.deepEqual({ ...crm.receipts, note: '' }, { projected: 1, merged: 0, receiptOnly: 1, skipped: 0, note: '' });
+  assert.match(crm.receipts.note, /не сбор по API/);
+  for (const table of ['social_posts', 'social_post_metrics', 'social_snapshots', 'social_collect_runs'])
+    assert.equal(f.db.prepare(`SELECT count(*) n FROM ${table}`).get().n, 0, table + ': проекция ничего не пишет');
+  // Свежий экземпляр модуля (перезапуск сервиса) видит то же подтверждение, повторного действия владельца не требуется.
+  const fresh = createSocialStats(f.db, f.options);
+  assert.deepEqual(fresh.attribution('demo-a', '2026-09-17', '2026-09-18').posts.map((p) => p.url), ['https://t.me/demo_channel/42']);
+  assert.equal(f.db.prepare('SELECT count(*) n FROM autoposting_publication_receipts').get().n, 1, 'чтение не создаёт подтверждений');
+  // Площадка, которой в аналитике нет (появится в автопостинге позже), не исчезает молча и не становится постом.
+  f.db.prepare(`INSERT INTO autoposting_publication_receipts(company_id,post_id,platform,url,published_at,content_revision,recorded_at)
+    VALUES(1,?,'pinterest','https://pin.test/1','2026-09-17T10:00:00.000Z',1,'2026-09-17T10:00:00.000Z')`).run(card.id);
+  const mixed = f.stats.attribution('demo-a', '2026-09-17', '2026-09-18');
+  assert.deepEqual({ ...mixed.receipts, note: '' }, { projected: 1, merged: 0, receiptOnly: 1, skipped: 1, note: '' });
+  assert.equal(mixed.posts.length, 1);
+});
+
+test('подтверждения изолированы по компании: чужие не видны, а строка, указывающая на карточку другой компании, не читается вовсе', (t) => {
+  const f = receiptFixture(t);
+  f.receipt(f.card('demo-a', 'D1', 'Карточка А'), 'demo-a', 'vk', 'https://vk.com/wall-1_10', '2026-09-17T10:00:00Z');
+  f.receipt(f.card('demo-b', 'D9', 'Карточка Б'), 'demo-b', 'vk', 'https://vk.com/wall-2_20', '2026-09-17T11:00:00Z');
+  const urls = (code) => f.stats.attribution(code, '2026-09-17', '2026-09-18').posts.map((p) => p.url);
+  assert.deepEqual(urls('demo-a'), ['https://vk.com/wall-1_10']);
+  assert.deepEqual(urls('demo-b'), ['https://vk.com/wall-2_20']);
+  // Испорченная строка: компания подтверждения подменена, а карточка осталась чужой — такая связка не читается ни одной компанией.
+  f.db.prepare('UPDATE autoposting_publication_receipts SET company_id=1 WHERE url=?').run('https://vk.com/wall-2_20');
+  assert.deepEqual(urls('demo-a'), ['https://vk.com/wall-1_10'], 'карточка другой компании не подтягивается по подменённому company_id');
+  assert.deepEqual(urls('demo-b'), [], 'подтверждение ушло из своей компании вместе с company_id');
+});
+
+test('подтверждение объединяется с собранным постом по строгому адресу: остаются настоящий идентификатор площадки и contentId, обращение по ссылке считается один раз', (t) => {
+  const f = receiptFixture(t);
+  f.stats.writePosts('demo-a', 'youtube', [{ platformPostId: 'yt-media-1', url: 'https://www.youtube.com/watch?v=Abc123xyz', contentId: 'D1', publishedAt: '2026-09-17T09:00:00Z',
+    metrics: [{ date: '2026-09-17', metric: 'views', value: 500 }] }], { provider: 'direct' });
+  f.stats.writePosts('demo-a', 'telegram', [{ platformPostId: 'tg-1', url: 'https://example.test/tg/1', contentId: 'D2', publishedAt: '2026-09-17T08:00:00Z', metrics: [] }], { provider: 'manual' });
+  f.receipt(f.card('demo-a', 'D1', 'Ролик'), 'demo-a', 'youtube_shorts', 'https://www.youtube.com/shorts/Abc123xyz/', '2026-09-17T10:00:00Z');
+  f.receipt(f.card('demo-a', 'D2', 'Пост', 2), 'demo-a', 'telegram', 'https://t.me/demo_channel/7', '2026-09-17T11:00:00Z');
+  lead(f.db, { referrer: 'https://www.youtube.com/shorts/Abc123xyz/?utm_source=youtube' });
+  lead(f.db, { at: '2026-09-17T06:00:00.000Z', landing: 'https://www.youtube.com/watch?v=Abc123xyz', stage: 'продажа', amount: 4000 });
+  const crm = f.stats.attribution('demo-a', '2026-09-17', '2026-09-18');
+  const yt = crm.posts.find((p) => p.platform === 'youtube');
+  assert.equal(crm.posts.length, 3, 'один выход YouTube и два телеграм-адреса, которые не склеиваются');
+  assert.equal(yt.platformPostId, 'yt-media-1', 'настоящий идентификатор площадки сохранён');
+  assert.equal(yt.contentId, 'D1'); assert.equal(yt.url, 'https://www.youtube.com/watch?v=Abc123xyz'); assert.equal(yt.provenance, 'stored_with_receipt');
+  assert.deepEqual([yt.provider, yt.sources], ['direct', 1], 'провайдер собранного поста возвращается как есть');
+  assert.deepEqual(yt.receipts.map((r) => r.url), ['https://www.youtube.com/shorts/Abc123xyz/']);
+  assert.deepEqual([yt.leads, yt.sales, yt.revenue], [2, 1, 4000], 'оба написания адреса ведут к одному посту');
+  assert.equal(crm.posts.reduce((s, p) => s + p.leads, 0), 2, 'обращение не задвоено между постом и подтверждением');
+  assert.deepEqual({ ...crm.receipts, note: '' }, { projected: 2, merged: 1, receiptOnly: 1, skipped: 0, note: '' });
+  // Телеграм: собранный пост с непонятным адресом и подтверждение остаются разными записями — по догадке их не склеивают.
+  assert.deepEqual(crm.posts.filter((p) => p.platform === 'telegram').map((p) => p.provenance).sort(), ['external_receipt', 'stored']);
+  const stored = f.db.prepare("SELECT provider, platform_post_id, url, content_id FROM social_posts WHERE platform='youtube'").get();
+  assert.deepEqual({ ...stored }, { provider: 'direct', platform_post_id: 'yt-media-1', url: 'https://www.youtube.com/watch?v=Abc123xyz', content_id: 'D1' }, 'сохранённый пост не переписан');
+  assert.equal(f.db.prepare('SELECT count(*) n FROM social_posts').get().n, 2, 'подтверждение не добавило постов в базу');
+});
+
+test('повторное подтверждение идемпотентно, а два написания одного адреса не удваивают выход', (t) => {
+  const f = receiptFixture(t);
+  const card = f.card('demo-a', 'D1', 'Ролик');
+  const first = f.receipt(card, 'demo-a', 'youtube_shorts', 'https://www.youtube.com/shorts/Abc123xyz', '2026-09-17T10:00:00Z');
+  const again = f.receipt(card, 'demo-a', 'youtube_shorts', 'https://www.youtube.com/shorts/Abc123xyz', '2026-09-17T12:00:00Z');
+  assert.equal(first.created, true); assert.equal(again.created, false);
+  assert.equal(f.db.prepare('SELECT count(*) n FROM autoposting_publication_receipts').get().n, 1, 'тот же адрес не плодит строк');
+  const once = f.stats.attribution('demo-a', '2026-09-17', '2026-09-18');
+  assert.deepEqual(once.posts, f.stats.attribution('demo-a', '2026-09-17', '2026-09-18').posts, 'повторное чтение даёт тот же результат');
+  // Тот же выход записан второй раз в другом написании: строк в базе две, выход в отчёте один.
+  f.receipt(card, 'demo-a', 'youtube_shorts', 'https://www.youtube.com/watch?v=Abc123xyz', '2026-09-17T10:00:00Z');
+  const crm = f.stats.attribution('demo-a', '2026-09-17', '2026-09-18');
+  assert.equal(crm.posts.length, 1, 'watch и shorts — один и тот же выход');
+  assert.deepEqual(crm.posts[0].receipts.map((r) => r.referenceId).sort(), receiptIds(f.db).sort(), 'оба подтверждения показаны при одном посте');
+  assert.deepEqual({ ...crm.receipts, note: '' }, { projected: 2, merged: 0, receiptOnly: 1, skipped: 0, note: '' });
+  assert.equal(crm.posts[0].contentId, 'D1');
+});
+
+test('один адрес подтверждён на двух карточках: contentId не выбирается наугад, обращение по ссылке засчитывается один раз, спорная метка не приписывается', (t) => {
+  const f = receiptFixture(t);
+  const url = 'https://t.me/demo_channel/42';
+  f.receipt(f.card('demo-a', 'D1', 'Первая', 1), 'demo-a', 'telegram', url, '2026-09-17T10:00:00Z');
+  f.receipt(f.card('demo-a', 'D2', 'Вторая', 2), 'demo-a', 'telegram', url, '2026-09-17T11:00:00Z');
+  lead(f.db, { referrer: url });
+  lead(f.db, { at: '2026-09-17T06:00:00.000Z', content: 'D1', utmSource: 'telegram', stage: 'продажа', amount: 3000 });
+  const crm = f.stats.attribution('demo-a', '2026-09-17', '2026-09-18');
+  assert.equal(crm.posts.length, 1, 'один адрес — один выход, а не по выходу на карточку');
+  assert.equal(crm.posts[0].contentId, '', 'contentId спорный: наугад не выбирается');
+  assert.deepEqual(crm.posts[0].contentIdCandidates.slice().sort(), ['D1', 'D2'], 'расхождение карточек показано');
+  assert.deepEqual([crm.posts[0].leads, crm.posts[0].confidence], [1, 'url'], 'обращение по ссылке засчитано один раз');
+  assert.deepEqual(crm.posts[0].receipts.map((r) => r.contentId).sort(), ['D1', 'D2']);
+  assert.deepEqual(crm.byContent, [], 'спорная метка не создаёт групп по контенту: постов с таким contentId нет');
+  assert.equal(crm.posts.reduce((s, p) => s + p.revenue, 0), 0, 'продажа по спорной метке никому не приписана');
+  assert.deepEqual(crm.bySource, [{ source: 'unknown', leads: 2, sales: 1, revenue: 3000 }], 'выручка остаётся видна в разрезе источников CRM');
+});
+
+test('карточка подтверждения спорит с карточкой собранного поста: настоящий contentId сохранён, но метка utm по спорной записи не приписывается', (t) => {
+  const f = receiptFixture(t);
+  f.stats.writePosts('demo-a', 'youtube', [{ platformPostId: 'yt-media-1', url: 'https://www.youtube.com/watch?v=Abc123xyz', contentId: 'D1', publishedAt: '2026-09-17T09:00:00Z', metrics: [] }], { provider: 'direct' });
+  f.receipt(f.card('demo-a', 'D2', 'Ролик'), 'demo-a', 'youtube_shorts', 'https://www.youtube.com/shorts/Abc123xyz/', '2026-09-17T10:00:00Z');
+  lead(f.db, { referrer: 'https://www.youtube.com/shorts/Abc123xyz/?utm_source=youtube' });
+  lead(f.db, { at: '2026-09-17T06:00:00.000Z', content: 'D1', utmSource: 'youtube', stage: 'продажа', amount: 7000 });
+  const crm = f.stats.attribution('demo-a', '2026-09-17', '2026-09-18');
+  assert.equal(crm.posts.length, 1, 'один канонический адрес — одна запись выхода');
+  const yt = crm.posts[0];
+  assert.equal(yt.provenance, 'stored_with_receipt');
+  assert.equal(yt.contentId, 'D1', 'настоящий contentId собранного поста подтверждением не переписан и не обнулён');
+  assert.deepEqual(yt.contentIdCandidates, ['D1', 'D2'], 'спор виден целиком: и карточка источника, и карточка подтверждения');
+  assert.deepEqual([yt.leads, yt.confidence], [1, 'url'], 'засчитано только обращение по адресу');
+  assert.equal(crm.posts.reduce((s, p) => s + p.revenue, 0), 0, 'метка D1 спорной записи не приписана: продажа никому не засчитана');
+  assert.deepEqual(crm.byContent, [], 'спорная запись в поиск по метке не попадает и групп по контенту не создаёт');
+  assert.deepEqual(crm.bySource, [{ source: 'unknown', leads: 2, sales: 1, revenue: 7000 }], 'выручка остаётся видна в разрезе источников CRM');
+  assert.equal(f.db.prepare("SELECT content_id FROM social_posts WHERE platform='youtube'").get().content_id, 'D1', 'строка базы не тронута');
+});
+
+test('подтверждение и собранный пост с одной меткой, но разными адресами: метка utm не размножается по обеим записям', (t) => {
+  const f = receiptFixture(t);
+  f.stats.writePosts('demo-a', 'instagram', [{ platformPostId: 'ig-1', url: 'https://example.test/ig/1', contentId: 'D1', publishedAt: '2026-09-17T09:00:00Z', metrics: [] }], { provider: 'manual' });
+  f.receipt(f.card('demo-a', 'D1', 'Карточка'), 'demo-a', 'instagram', 'https://www.instagram.com/reel/Abc12345/', '2026-09-17T10:00:00Z');
+  lead(f.db, { content: 'D1', utmSource: 'instagram', stage: 'продажа', amount: 1000 });
+  const crm = f.stats.attribution('demo-a', '2026-09-17', '2026-09-18');
+  assert.equal(crm.posts.length, 2, 'разные адреса не склеиваются');
+  assert.equal(crm.posts.reduce((s, p) => s + p.leads, 0), 0, 'площадка одна, записей две — обращение не приписано ни одной');
+  assert.deepEqual(crm.byContent.map((g) => [g.contentId, g.platforms, g.leads, g.revenue]), [['D1', ['instagram'], 1, 1000]], 'неоднозначность показана группой по контенту');
+  assert.equal(crm.posts.reduce((s, p) => s + p.revenue, 0) + crm.byContent[0].revenue, 1000, 'выручка не задвоена');
+});
+
+test('подтверждение не превращает ручной ввод в сбор по API: provenance честный, провайдер возвращается исходный, у записи без поста его нет', (t) => {
+  const f = receiptFixture(t);
+  f.stats.writePosts('demo-a', 'vk', [{ platformPostId: 'vk-manual-1', url: 'https://vk.com/wall-1_10', contentId: 'D1', publishedAt: '2026-09-17T09:00:00Z', metrics: [] }], { provider: 'manual' });
+  f.receipt(f.card('demo-a', 'D1', 'Запись'), 'demo-a', 'vk', 'https://vk.ru/demo_club?w=wall-1_10', '2026-09-17T10:00:00Z');
+  f.receipt(f.card('demo-a', 'D2', 'Пост', 2), 'demo-a', 'telegram', 'https://t.me/demo_channel/7', '2026-09-17T11:00:00Z');
+  const crm = f.stats.attribution('demo-a', '2026-09-17', '2026-09-18');
+  const vk = crm.posts.find((p) => p.platform === 'vk');
+  assert.equal(vk.provenance, 'stored_with_receipt', 'внесённый вручную пост после подтверждения не объявляется собранным по API');
+  assert.equal(vk.provider, 'manual', 'исходный провайдер записи возвращается как есть');
+  assert.deepEqual(vk.identities, [{ platformPostId: 'vk-manual-1', provider: 'manual', contentId: 'D1' }]);
+  assert.deepEqual([vk.sources, vk.contentId], [1, 'D1']);
+  const tg = crm.posts.find((p) => p.platform === 'telegram');
+  assert.equal(tg.provenance, 'external_receipt');
+  assert.equal(tg.provider, null, 'у подтверждения провайдера сбора нет — он не выдумывается');
+  assert.deepEqual([tg.identities, tg.sources], [[], 0], 'источников сбора у подтверждения нет');
+  assert.equal(crm.posts.filter((p) => /api/i.test(p.provenance)).length, 0, 'ни одна запись не маркируется как API');
+  assert.equal(f.db.prepare("SELECT provider FROM social_posts WHERE platform='vk'").get().provider, 'manual', 'сохранённый пост не переписан');
+});
+
+test('две собранные записи одного канонического адреса — один выход: обращение по ссылке засчитано один раз, спорный contentId не выбирается наугад', (t) => {
+  const f = receiptFixture(t);
+  f.stats.writePosts('demo-a', 'youtube', [{ platformPostId: 'yt-media-1', url: 'https://www.youtube.com/watch?v=Abc123xyz', contentId: 'D1', publishedAt: '2026-09-17T09:00:00Z',
+    metrics: [{ date: '2026-09-17', metric: 'views', value: 500 }] }], { provider: 'direct' });
+  f.stats.writePosts('demo-a', 'youtube', [{ platformPostId: 'yt-shorts-1', url: 'https://www.youtube.com/shorts/Abc123xyz', contentId: 'D2', publishedAt: '2026-09-17T09:00:00Z', metrics: [] }], { provider: 'onlypult' });
+  f.receipt(f.card('demo-a', 'D1', 'Ролик'), 'demo-a', 'youtube_shorts', 'https://m.youtube.com/shorts/Abc123xyz/', '2026-09-17T10:00:00Z');
+  lead(f.db, { referrer: 'https://www.youtube.com/shorts/Abc123xyz?utm_source=youtube' });
+  lead(f.db, { at: '2026-09-17T06:00:00.000Z', content: 'D1', utmSource: 'youtube', stage: 'продажа', amount: 5000 });
+  const crm = f.stats.attribution('demo-a', '2026-09-17', '2026-09-18');
+  assert.equal(crm.posts.length, 1, 'один канонический адрес — одна запись выхода, а не две');
+  const yt = crm.posts[0];
+  assert.equal(yt.sources, 2, 'несколько источников у одного выхода названы явно');
+  assert.deepEqual(yt.identities.map((i) => [i.platformPostId, i.provider]).sort(), [['yt-media-1', 'direct'], ['yt-shorts-1', 'onlypult']], 'исходные идентификаторы площадки сохранены');
+  assert.equal(yt.provider, null, 'два источника с разными провайдерами одним провайдером не называются');
+  assert.equal(yt.provenance, 'stored_with_receipt');
+  assert.deepEqual({ ...crm.receipts, note: '' }, { projected: 1, merged: 1, receiptOnly: 0, skipped: 0, note: '' }, 'подтверждение легло на единственную запись');
+  assert.deepEqual([yt.leads, yt.confidence], [1, 'url'], 'адрес ведёт к одной записи и засчитывается один раз');
+  assert.equal(yt.contentId, '', 'карточки источников расходятся: contentId наугад не выбирается');
+  assert.deepEqual(yt.contentIdCandidates, ['D1', 'D2'], 'расхождение показано списком кандидатов');
+  assert.equal(crm.posts.reduce((s, p) => s + p.revenue, 0), 0, 'спорная метка utm не приписана записи');
+  assert.deepEqual(crm.byContent, [], 'записи с contentId D1 нет: метка не размножается и группы по контенту не создаёт');
+  assert.deepEqual(crm.bySource, [{ source: 'unknown', leads: 2, sales: 1, revenue: 5000 }], 'выручка остаётся видна в разрезе источников CRM');
+  assert.equal(f.db.prepare('SELECT count(*) n FROM social_posts').get().n, 2, 'объединение живёт только в отчёте: строки базы не тронуты');
+});
+
+test('без таблиц автопостинга проекция подтверждений пуста, а прежняя атрибуция работает как раньше', (t) => {
+  const f = fixture(t);
+  f.stats.writePosts('demo-a', 'vk', [{ platformPostId: 'vk-1', url: 'https://vk.com/wall-1_10', contentId: 'D1', publishedAt: '2026-09-17T01:00:00Z', metrics: [] }], { provider: 'manual' });
+  lead(f.db, { referrer: 'https://vk.com/wall-1_10' });
+  const crm = f.stats.attribution('demo-a', '2026-09-17', '2026-09-17');
+  assert.deepEqual({ ...crm.receipts, note: '' }, { projected: 0, merged: 0, receiptOnly: 0, skipped: 0, note: '' });
+  assert.deepEqual([crm.posts.length, crm.posts[0].leads, crm.posts[0].provenance], [1, 1, 'stored']);
+  assert.deepEqual([crm.posts[0].provider, crm.posts[0].sources], ['manual', 1], 'провайдер записи — настоящий провайдер её источника');
+  assert.deepEqual(crm.posts[0].receipts, []); assert.deepEqual(crm.posts[0].contentIdCandidates, []);
+  // Есть таблица подтверждений, но нет карточек: читать нечего, сводка не падает.
+  f.db.exec('CREATE TABLE autoposting_publication_receipts(id INTEGER PRIMARY KEY, company_id INTEGER, post_id INTEGER, platform TEXT, url TEXT, published_at TEXT)');
+  assert.equal(f.stats.attribution('demo-a', '2026-09-17', '2026-09-17').receipts.projected, 0);
+  assert.equal(f.stats.overview('demo-a', '2026-09-17', '2026-09-17').crm.posts.length, 1, 'сводка собирается без таблиц автопостинга');
 });
