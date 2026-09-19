@@ -4161,7 +4161,12 @@
       </style>
   <style>/* Отзыв в хиро кликабельный; итог квиза выглядит как карточка услуги с фото */
     .hero-review { cursor: pointer; transition: transform 200ms, border-color 200ms; }
-    .hero-review:hover, .hero-review:focus-visible { transform: translateY(-2px); outline: none; }
+    .hero-review:hover { transform: translateY(-2px); outline: none; }
+    /* Отзыв в первом экране фокусируется с клавиатуры (tabindex="0", role="link").
+       Раньше он делил правило с :hover, где outline гасился, и единственным
+       признаком фокуса оставался сдвиг на 2px — по нему нельзя понять, где ты
+       находишься. Кольцо того же вида, что у .pc__button:focus-visible. */
+    .hero-review:focus-visible { transform: translateY(-2px); outline: 2px solid rgb(255, 253, 248); outline-offset: 3px; }
     .quiz-result { padding: 0; border: 0; background: transparent; color: var(--ink); }
     .quiz-result__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
     .quiz-result__card { position: relative; overflow: hidden; min-height: 28rem; display: flex; align-items: flex-end; padding: .95rem; border: 1px solid rgba(255,255,255,.18); border-radius: 1.25rem; background: #1b241d; isolation: isolate; }
