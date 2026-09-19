@@ -44,7 +44,8 @@ test('content получает все переменные резерва Хью
     'HUGH_FALLBACK_OPENROUTER_USD_PER_1K_PROMPT', 'HUGH_FALLBACK_OPENROUTER_USD_PER_1K_COMPLETION',
     'HUGH_FALLBACK_DEEPSEEK_USD_PER_1K_PROMPT', 'HUGH_FALLBACK_DEEPSEEK_USD_PER_1K_COMPLETION',
     'HUGH_FALLBACK_BUDGET_USD', 'HUGH_FALLBACK_BUDGET_MAX_REQUESTS', 'HUGH_FALLBACK_BUDGET_WINDOW_DAYS',
-    'HUGH_FALLBACK_BUDGET_MAX_OUTPUT_TOKENS', 'HUGH_PROVIDER_MASTER_KEY', 'HUGH_PROVIDER_ALLOWED_HOSTS'];
+    'HUGH_FALLBACK_BUDGET_MAX_OUTPUT_TOKENS', 'HUGH_PROVIDER_MASTER_KEY', 'HUGH_PROVIDER_ALLOWED_HOSTS',
+    'HUGH_SKILLS', 'HUGH_SKILLS_MAX_BYTES'];
   for (const name of expected) {
     assert.ok(Object.hasOwn(env, name), `не проброшена ${name}`);
     assert.match(env[name], new RegExp(`^\\$\\{${name}:-[^}]*\\}$`), `${name} должна браться из .env сервера с пустым/безопасным значением по умолчанию`);

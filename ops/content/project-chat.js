@@ -14,6 +14,7 @@ const hughCommands = require('./hugh-commands');
 const { createLocalWorker } = require('./project-chat-local-worker');
 const { createSiteOrders } = require('./site-orders');
 const { createProjectChatMiniApp } = require('./project-chat-miniapp');
+const { createAgentSkills } = require('./agent-skills');
 
 const MAX_ATTACHMENT = 8 * 1024 * 1024;
 const MESSAGE_PAGE = 100;
@@ -151,6 +152,9 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   miniApp: miniConfig = {},
   fetchImpl = (...args) => globalThis.fetch(...args), statusTtl = RUNTIME_STATUS_TTL, fallback: fallbackConfig = {},
   crmUrl = '', crmApiKey = '', botUsername = '', cabinetUrl = '',
+  /* Навыки формата Agent Skills: доверенный каталог репозитория, только чтение markdown.
+     Передаётся явно ради тестов; боевой сервер берёт каталог по умолчанию. */
+  skills = createAgentSkills({}),
   /* Часы отложенной отправки вынесены наружу ради детерминированных тестов: боевой сервер
      передаёт реальные часы по умолчанию, тест — управляемые. Ничего, кроме планировщика, их не берёт. */
   now = () => Date.now() }) {
@@ -1335,8 +1339,15 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     const context = aiContext(job.company_code, job.message_id);
     const source = db.prepare('SELECT text FROM project_chat_messages WHERE id=?').get(job.message_id);
     const idea = hughCommands.parseCommand(source?.text || '', botUsername)?.name === 'idea';
+    /* Навык подбирается по типу задания и попадает в системную часть ДО обращения к модели.
+       Тот же payload читает и резерв, поэтому при отказе основного пути инструкции не теряются.
+       Отказ загрузчика не должен ломать чат: без навыка запрос собирается как прежде. */
+    let skill = null;
+    try { skill = skills?.instructions?.(source?.text || '', { companyCode: job.company_code }) || null; }
+    catch (error) { console.error('project-chat: навык не подключён:', error?.message || error); }
     const body = { jobId: `project-chat:${job.id}`, companyCode: job.company_code,
-      messages: context.messages, system: `${SYSTEM}\n\n${context.project}${idea ? `\n\n${hughCommands.IDEA_INSTRUCTION}` : ''}` };
+      messages: context.messages,
+      system: `${SYSTEM}\n\n${context.project}${skill ? `\n\n${skill.text}` : ''}${idea ? `\n\n${hughCommands.IDEA_INSTRUCTION}` : ''}` };
     if (!body.messages.length) fail(500, 'История проекта пуста: запрос к Хью не собран');
     if (body.messages.some(m => !['user', 'assistant'].includes(m.role) || typeof m.content !== 'string' || !m.content)) {
       fail(500, 'Некорректная история проекта: запрос к Хью не собран');
@@ -1370,7 +1381,19 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     return { configured: status.configured, available: fallback.available().length,
       providers: status.providers.map((p) => ({ name: p.name, model: p.model, cooling: p.cooling, live: p.live, lastSuccessAt: p.lastSuccessAt,
         ...(user?.role === 'owner' ? { lastError: p.lastError, cooldownUntil: p.cooldownUntil } : {}) })),
-      issues: user?.role === 'owner' ? status.issues : [] };
+      issues: user?.role === 'owner' ? status.issues : [],
+      /* Состояние навыков видит только владелец: идентификаторы и версии, без содержания. */
+      ...(user?.role === 'owner' ? { skills: skillsSummary() } : {}) };
+  }
+  function skillsSummary() {
+    try {
+      const value = skills?.status?.();
+      if (!value) return { enabled: false, skills: [], issues: ['Загрузчик навыков не подключён'] };
+      return { enabled: value.enabled, catalogVersion: value.catalogVersion, maxBytes: value.maxBytes,
+        skills: value.skills, issues: value.issues };
+    } catch (error) {
+      return { enabled: false, skills: [], issues: [`Состояние навыков не прочитано: ${error?.message || 'неизвестная ошибка'}`] };
+    }
   }
   /* Честное подтверждение приёма, когда ни основной путь, ни резерв не доступны: одно на компанию за 30 минут,
      только для вопросов, которые ждут ответа. Не обещает выполненных действий. */

@@ -131,6 +131,10 @@ services:
       HUGH_PROVIDER_MASTER_KEY: ${HUGH_PROVIDER_MASTER_KEY:-}
       # Дополнительные разрешённые хосты API (через запятую); пусто = только официальные из каталога.
       HUGH_PROVIDER_ALLOWED_HOSTS: ${HUGH_PROVIDER_ALLOWED_HOSTS:-}
+      # Навыки Agent Skills из доверенного каталога образа. Пусто = навыки подключены;
+      # HUGH_SKILLS=off выключает их целиком. Исполнения скриптов и сетевых загрузок нет.
+      HUGH_SKILLS: ${HUGH_SKILLS:-}
+      HUGH_SKILLS_MAX_BYTES: ${HUGH_SKILLS_MAX_BYTES:-}
       # Лимит видео для очереди контента (байты); пусто = 60 МБ по умолчанию сервиса.
       MAX_PUBLISHING_VIDEO_BYTES: ${MAX_PUBLISHING_VIDEO_BYTES:-}
       # Команды Хью в группах: имя бота без @ (не секрет) для @упоминаний, публичный адрес кабинета для /content.
