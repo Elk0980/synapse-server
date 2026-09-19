@@ -1453,6 +1453,17 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     if (!text) throw new Error('Сервис ИИ вернул пустой ответ');
     return { text, provider: answer.provider, model: answer.model };
   }
+  /* Один вопрос к Хью без единой записи в таблицы чата проекта: сначала собственный рантайм,
+     затем те же резервные провайдеры с общим бюджетом. Нужен личной переписке владельца,
+     у которой своё хранилище: транспорт переиспользуется, история — нет.
+     Ни одна строка `project_chat_*` здесь не читается и не пишется. */
+  async function askHugh(payload) {
+    try { return await runtimeReply(payload); }
+    catch (runtimeError) {
+      if (!fallback.available().length) throw runtimeError;
+      return fallback.reply(payload);
+    }
+  }
   /* Компании локального обработчика: сервер подхватывает их вопросы через резерв только при долгом офлайне
      компьютера и держит аренду, чтобы вернувшийся обработчик не ответил второй раз. */
   function localTakeoverCodes() {
@@ -1586,8 +1597,8 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   }
   function stopWorker() { clearInterval(timer); timer = null; }
   const bridge = { getBinding, migrateBinding, receiveTelegram, receiveCommand, storeAttachment, readAttachment, pendingTelegram, acknowledgeTelegram };
-  return { handle, bridge, ...bridge, snapshot, listMessages, requeueAI, runtimeStatus, processAIJobs,
-    processScheduledMessages, scheduledList, startWorker, stopWorker, localWorker, siteOrders, miniApp, fallback };
+  return { handle, bridge, ...bridge, snapshot, listMessages, requeueAI, runtimeStatus, processAIJobs, askHugh,
+    processScheduledMessages, scheduledList, startWorker, stopWorker, localWorker, siteOrders, miniApp, fallback, skills };
 }
 
 module.exports = { createProjectChat, MAX_ATTACHMENT, MESSAGE_PAGE };

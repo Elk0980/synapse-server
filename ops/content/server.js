@@ -14,6 +14,7 @@ const { createAuthStore, COMPANIES, PERMISSIONS, DEPENDENCIES, PRICE_CLIENT_PRES
 const { createSiteStore } = require('./site-store');
 const { createHughSettingsStore } = require('./hugh-settings-store');
 const { createProjectChat } = require('./project-chat');
+const { createOwnerPrivateChat } = require('./owner-private-chat');
 const { createHughProviders } = require('./hugh-providers');
 const { clientIp, originOf } = require('./site-orders');
 const { hashPassword, verifyPassword } = require('./passwords');
@@ -187,6 +188,13 @@ const projectChat = createProjectChat({ db, authStore, assetsDir: ASSETS_DIR,
   cabinetUrl: (process.env.CABINET_PUBLIC_URL || 'https://synapse.synapsebusiness.ru/cabinet.html').trim(),
   requireSession, requireCsrf, sendJson: send, readBody: readJson });
 for (const issue of [...projectChat.localWorker.issues, ...projectChat.miniApp.issues]) console.warn(`content: ${issue}`);
+/* Личная переписка владельца по проектам: собственные таблицы и собственная область доступа.
+   Из общего чата сюда переиспользован только транспорт обращения к модели (askHugh),
+   который ничего не читает и не пишет в таблицы чата проекта. */
+const ownerPrivateChat = createOwnerPrivateChat({ db, authStore,
+  ask: (payload) => projectChat.askHugh(JSON.stringify(payload)),
+  skills: projectChat.skills || null,
+  requireSession, requireCsrf, sendJson: send, readBody: readJson });
 
 const latestStmt = db.prepare('SELECT * FROM documents WHERE key = ? ORDER BY version DESC LIMIT 1');
 const byVersionStmt = db.prepare('SELECT * FROM documents WHERE key = ? AND version = ?');
@@ -785,6 +793,11 @@ const server = http.createServer(async (request, response) => {
         return reply(200, hughSettingsStore.save(body.settings, session.user.id));
       }
       fail(405, 'Метод не поддерживается');
+    }
+    // Личная переписка владельца по проектам. Область проверяется внутри модуля по серверной
+    // сессии; ни один клиентский маршрут к этим таблицам не обращается.
+    if (url.pathname === '/content/owner-chat' || url.pathname.startsWith('/content/owner-chat/')) {
+      if (await ownerPrivateChat.handle(request, response, url)) return;
     }
     if (url.pathname === '/content/hugh' || url.pathname.startsWith('/content/hugh/')) {
       return await proxyChat(request, response, url, cors);
