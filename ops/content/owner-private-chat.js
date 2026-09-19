@@ -234,8 +234,16 @@ function createOwnerPrivateChat({ db, authStore, requireSession, requireCsrf, se
         if (existing && existing.status === 'running' && leaseLive(existing)) {
           return { repeated: true, pending: true, question: null };
         }
-        db.prepare(`UPDATE owner_private_asks SET status='running',attempts=attempts+1,
-          lease_expires_at=?,error='',updated_at=? WHERE id=?`).run(lease, at, existing.id);
+        if (existing) {
+          db.prepare(`UPDATE owner_private_asks SET status='running',attempts=attempts+1,
+            lease_expires_at=?,error='',updated_at=? WHERE id=?`).run(lease, at, existing.id);
+        } else {
+          // Вопрос без строки состояния — данные прошлых версий или ручное вмешательство.
+          // Повтор всё равно должен работать, поэтому состояние заводится здесь.
+          db.prepare(`INSERT INTO owner_private_asks
+            (owner_user_id,company_code,audience,message_id,status,attempts,lease_expires_at,created_at,updated_at)
+            VALUES(?,?,?,?,'running',1,?,?,?)`).run(user.id, code, AUDIENCE, question.id, lease, at, at);
+        }
         return { repeated: false, retry: true, question, thread: row };
       }
       if (!text) fail(400, 'Сообщение пустое');
@@ -343,11 +351,13 @@ function createOwnerPrivateChat({ db, authStore, requireSession, requireCsrf, se
       .get(row.message_id, user.id, code, AUDIENCE);
     if (!question) fail(409, 'Вопрос не найден');
     const threadRow = thread(user.id, code);
-    transaction(db, () => {
-      db.prepare(`UPDATE owner_private_asks SET status='running',attempts=attempts+1,
-        lease_expires_at=?,error='',updated_at=? WHERE id=? AND status=?`)
-        .run(new Date(now() + LEASE_MS).toISOString(), stamp(), row.id, row.status);
-    });
+    /* Аренда берётся условием на прежнее состояние: если между чтением и записью повтор
+       успел начать другой запрос, изменений не будет и второе обращение не запускается. */
+    const taken = transaction(db, () => db.prepare(`UPDATE owner_private_asks
+      SET status='running',attempts=attempts+1,lease_expires_at=?,error='',updated_at=?
+      WHERE id=? AND status=? AND (lease_expires_at IS NULL OR lease_expires_at=?)`)
+      .run(new Date(now() + LEASE_MS).toISOString(), stamp(), row.id, row.status, row.lease_expires_at).changes);
+    if (!taken) return { repeated: true, pending: true, retried: false, ...view(user, code) };
     await run(user, code, question, threadRow);
     stillOwner(user);
     return { repeated: false, pending: false, retried: true, ...view(user, code) };

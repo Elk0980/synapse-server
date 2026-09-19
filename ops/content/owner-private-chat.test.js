@@ -262,6 +262,25 @@ test('явный повтор — отдельное действие и без 
   assert.equal(attempt, 2, 'лишних обращений не было');
 });
 
+test('два одновременных явных повтора тоже запускают ровно одно обращение', async (t) => {
+  let started = 0, release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  let fail = true;
+  const f = setup(t, { ask: async () => {
+    if (fail) { fail = false; throw new Error('Провайдер недоступен'); }
+    started += 1; await gate; return { text: 'Единственный ответ', provider: 'test', model: 'test-model' };
+  } });
+  await say(f.priv, f.owner, PILOT, SECRET);
+  const first = call(f.priv, f.owner, 'POST', `/content/owner-chat/${PILOT}/retry`);
+  const second = await call(f.priv, f.owner, 'POST', `/content/owner-chat/${PILOT}/retry`);
+  assert.equal(second.payload.pending, true, 'второй повтор не начинает своё обращение');
+  assert.equal(second.payload.retried, false);
+  release();
+  await first;
+  assert.equal(started, 1, 'обращение выполнено ровно один раз');
+  assert.equal(f.db.prepare(`SELECT count(*) AS n FROM owner_private_messages WHERE author_type='assistant'`).get().n, 1);
+});
+
 test('два одновременных повтора одного requestId запускают ровно одно обращение', async (t) => {
   let started = 0;
   let release;
