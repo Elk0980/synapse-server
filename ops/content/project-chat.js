@@ -80,6 +80,63 @@ const isoMoment = (value) => {
   const utc = new Date(`${day}T00:00:00Z`);
   return Number.isFinite(utc.getTime()) && utc.toISOString().slice(0, 10) === day;
 };
+
+/* Локальное время владельца → UTC. Смещение берётся у самого пояса на эту дату, поэтому переход
+   на летнее время и получасовые пояса считаются правильно. Два прохода: первый даёт смещение
+   приблизительно, второй — на уже уточнённый момент (важно ровно в час перевода стрелок). */
+const ZONE = /^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+)*$/;
+const LOCAL_MOMENT = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})$/;
+function zoneOffsetMs(utcMs, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone, hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    .formatToParts(new Date(utcMs));
+  const get = (type) => Number(parts.find((part) => part.type === type)?.value);
+  const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
+  return asUtc - Math.trunc(utcMs / 1000) * 1000;
+}
+function zoneParts(utcMs, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone, hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+    .formatToParts(new Date(utcMs));
+  const get = (type) => Number(parts.find((part) => part.type === type)?.value);
+  return { year: get('year'), month: get('month'), day: get('day'), hour: get('hour'), minute: get('minute') };
+}
+/* Местное время владельца → UTC, с настоящей обратной сверкой.
+
+   Возвращает null, если пояс неизвестен, дата невозможна (31 февраля, 25 часов) или местного времени
+   просто не существует — так бывает в час перевода стрелок вперёд (DST gap): 2026-03-29 02:30 в Берлине
+   не наступает никогда, и такой срок мы отклоняем, а не «исправляем» молча.
+   Обратный переход (fold, час повторяется дважды) разрешён сознательно: берётся ПЕРВОЕ,
+   более раннее вхождение — сообщение уходит раньше, а не позже назначенного владельцем времени. */
+function zonedToUtcIso(local, timeZone) {
+  const match = LOCAL_MOMENT.exec(String(local ?? ''));
+  if (!match || !ZONE.test(String(timeZone ?? ''))) return null;
+  const [year, month, day, hour, minute] = match.slice(1).map(Number);
+  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59) return null;
+  const naive = Date.UTC(year, month - 1, day, hour, minute, 0, 0);
+  if (!Number.isFinite(naive)) return null;
+  // Дата обязана существовать в календаре: Date.UTC сам переносит 31 февраля на март.
+  const back = new Date(naive);
+  if (back.getUTCFullYear() !== year || back.getUTCMonth() + 1 !== month || back.getUTCDate() !== day) return null;
+  /* Кандидаты берутся по смещениям пояса до и после указанного момента: в час обратного перевода
+     стрелок местное время существует дважды, и оба смещения дают по одному верному моменту.
+     Из подходящих выбирается САМЫЙ РАННИЙ — напоминание уйдёт не позже назначенного владельцем времени. */
+  const candidates = [];
+  for (const probe of [naive - 12 * 3600000, naive + 12 * 3600000]) {
+    let offset;
+    try { offset = zoneOffsetMs(probe, timeZone); } catch { return null; }
+    const utc = naive - offset;
+    let shown;
+    try { shown = zoneParts(utc, timeZone); } catch { return null; }
+    const exact = shown.year === year && shown.month === month && shown.day === day
+      && shown.hour === hour && shown.minute === minute;
+    if (exact && !candidates.includes(utc)) candidates.push(utc);
+  }
+  // Ни один кандидат не совпал — такого местного времени не существует (час перевода стрелок вперёд).
+  if (!candidates.length) return null;
+  const utc = Math.min(...candidates);
+  return new Date(utc).toISOString();
+}
 const integer = (value, optional = false) => {
   if (optional && (value === null || value === undefined || value === '')) return null;
   if (!Number.isSafeInteger(Number(value)) || Number(value) < 1) fail(400, 'Некорректный идентификатор');
@@ -91,7 +148,10 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   requireSession, requireCsrf, sendJson, readBody, localWorker: localConfig = {}, siteOrders: ordersConfig = {},
   miniApp: miniConfig = {},
   fetchImpl = (...args) => globalThis.fetch(...args), statusTtl = RUNTIME_STATUS_TTL, fallback: fallbackConfig = {},
-  crmUrl = '', crmApiKey = '', botUsername = '', cabinetUrl = '' }) {
+  crmUrl = '', crmApiKey = '', botUsername = '', cabinetUrl = '',
+  /* Часы отложенной отправки вынесены наружу ради детерминированных тестов: боевой сервер
+     передаёт реальные часы по умолчанию, тест — управляемые. Ничего, кроме планировщика, их не берёт. */
+  now = () => Date.now() }) {
   const storage = path.resolve(assetsDir, 'project-chat');
   fs.mkdirSync(storage, { recursive: true });
   db.exec(`
@@ -128,6 +188,33 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       status TEXT NOT NULL DEFAULT 'todo', due TEXT NOT NULL DEFAULT '',
       source_message_id INTEGER REFERENCES project_chat_messages(id), created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     );
+    /* Отложенная отправка. Отдельной очереди доставки здесь НЕТ: в срок создаётся обычное сообщение
+       комнаты, и дальше работает существующая исходящая очередь project_chat_outbox и тот же бот.
+       Время хранится в UTC; часовой пояс владельца хранится рядом только для показа и переноса. */
+    CREATE TABLE IF NOT EXISTS project_chat_scheduled (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_code TEXT NOT NULL REFERENCES project_chat_rooms(company_code),
+      kind TEXT NOT NULL DEFAULT 'message' CHECK(kind IN ('message','task_reminder')),
+      task_id INTEGER REFERENCES project_chat_tasks(id),
+      text TEXT NOT NULL,
+      due_at TEXT NOT NULL, timezone TEXT NOT NULL DEFAULT 'UTC',
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(status IN ('pending','sent','cancelled','expired','error')),
+      message_id INTEGER REFERENCES project_chat_messages(id),
+      author_id INTEGER, author_name TEXT NOT NULL DEFAULT '',
+      /* Привязка группы на момент планирования. При отправке сверяется с текущей: если владелец
+         сменил или отключил группу, старое сообщение НЕ уходит в новую — нужна перепланировка. */
+      chat_id_at_plan TEXT,
+      /* Ключ повтора запроса: потерянный ответ не должен превратиться во второе сообщение. */
+      client_id TEXT NOT NULL DEFAULT '',
+      attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at TEXT NOT NULL DEFAULT '',
+      error TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL, sent_at TEXT
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS project_chat_scheduled_client
+      ON project_chat_scheduled(company_code, author_id, client_id) WHERE client_id<>'';
+    CREATE INDEX IF NOT EXISTS project_chat_scheduled_due
+      ON project_chat_scheduled(status, due_at);
     CREATE TABLE IF NOT EXISTS project_chat_task_notes (
       id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER NOT NULL REFERENCES project_chat_tasks(id) ON DELETE CASCADE,
       company_code TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'clarification', text TEXT NOT NULL,
@@ -396,6 +483,8 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     return { room: roomJSON(room), members: roomMembers, formerMembers,
       ...page,
       tasks,
+      // Запланированные сообщения видны в кабинете: срок, пояс и состояние — без отдельного экрана.
+      scheduled: scheduledList(code, user),
       stages: db.prepare('SELECT id,title FROM project_chat_stages WHERE company_code=? ORDER BY id').all(code),
       access: { owner: user.role === 'owner', canReply: true },
       ai: { configured: runtime.configured, connected: runtime.connected, runtimeState: runtime.state,
@@ -628,6 +717,252 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       .run(status, error, JSON.stringify(ids), new Date(Date.now() + 15000 * Math.max(1, job.attempts)).toISOString(), job.id);
     return { ok: Boolean(result.ok), status };
   }
+  /* ОТЛОЖЕННАЯ ОТПРАВКА.
+
+     Что это и чего это НЕ делает. В назначенный момент сервер создаёт обычное сообщение комнаты —
+     дальше работает существующая исходящая очередь project_chat_outbox, существующий мост ops/chat
+     и тот же бот Синапса. Второго транспорта, второго бота, отдельного cron на компьютере и
+     обращений к ИИ здесь нет. Поэтому доставка переживает перезапуск сервера и закрытый браузер.
+
+     Политика просроченного. Если сервер лежал и срок прошёл, сообщение уходит один раз, но только
+     пока просрочка не больше SCHEDULED_GRACE_MS. Всё, что старше, помечается expired и НЕ уходит
+     задним числом: клиенту нельзя присылать «доброе утро» вечером. Владелец видит такие строки
+     и решает сам. Дубля не будет: строка и созданное сообщение записываются одной транзакцией,
+     а браться в работу может только строка со статусом pending.
+
+     Права проверяются ДВАЖДЫ: при планировании и ещё раз в момент отправки. За время ожидания автора
+     могли исключить из проекта или сменить привязку группы — тогда сообщение не уходит вовсе. */
+  /* Право писать в эту комнату в момент отправки. Берётся ровно та часть правила access(),
+     которая относится к учётной записи: она существует, у неё есть доступ к компании и членство
+     в комнате. Проверку сессии сюда переносить нечего — в момент срока запроса и сессии нет,
+     а отзыв доступа выражается именно в этих двух признаках. Выдуманных проверок здесь нет. */
+  function canSendAs(user, code) {
+    const fresh = user ? authStore.getById(user.id) : null;
+    return Boolean(fresh) && assigned(fresh, code) && isMember(fresh, code);
+  }
+  const SCHEDULED_GRACE_MS = 6 * 60 * 60 * 1000;
+  const SCHEDULED_LIMIT = 200;
+  const SCHEDULED_HORIZON_MS = 365 * 24 * 60 * 60 * 1000;
+
+  const scheduledJSON = (row) => ({
+    id: row.id, kind: row.kind, taskId: row.task_id ?? null, text: row.text,
+    dueAt: row.due_at, timezone: row.timezone, status: row.status,
+    messageId: row.message_id ?? null, authorId: row.author_id ?? null, authorName: row.author_name || '',
+    error: row.error || '', createdAt: row.created_at, sentAt: row.sent_at || null, attempts: row.attempts || 0,
+    /* Состояние доставки берётся у существующей очереди: «отправлено в Telegram», «ожидает»,
+       «доставка уточняется» — то же самое, что показано у обычных сообщений. */
+    deliveryStatus: row.message_id
+      ? (db.prepare('SELECT status FROM project_chat_outbox WHERE message_id=?').get(row.message_id)?.status || 'local')
+      : '',
+  });
+
+  /* canManage считает сервер и отдаёт готовым: кабинет не должен показывать «Изменить» тому,
+     кому сервер всё равно откажет — иначе участник получал бы 403 на ровном месте. */
+  function scheduledList(code, user = null) {
+    return db.prepare(`SELECT * FROM project_chat_scheduled WHERE company_code=?
+      ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, due_at DESC, id DESC LIMIT ?`).all(code, SCHEDULED_LIMIT)
+      .map(row => ({ ...scheduledJSON(row),
+        canManage: Boolean(user) && row.status === 'pending' && (user.role === 'owner' || row.author_id === user.id) }));
+  }
+
+  /* Разбор срока. Принимаем либо местное время владельца плюс пояс, либо готовый момент в UTC.
+     Отправить «задним числом» нельзя: срок в прошлом отклоняется сразу. */
+  /* Пояс проверяется ОДНИМ правилом во всех ветках: и когда срок задан местным временем,
+     и когда прислан готовый момент, и когда в PATCH меняют только пояс. */
+  function scheduledZone(value, fallbackZone = 'UTC') {
+    const timezone = cleanText(value ?? fallbackZone, 64, 'timezone') || fallbackZone;
+    if (!ZONE.test(timezone)) fail(400, 'Неизвестный часовой пояс');
+    try { new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(0); }
+    catch { fail(400, 'Неизвестный часовой пояс'); }
+    return timezone;
+  }
+  // Готовый момент принимается только как настоящий ISO с Z или смещением и существующей датой.
+  const ABSOLUTE_MOMENT = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
+  function absoluteIso(value) {
+    const match = ABSOLUTE_MOMENT.exec(String(value ?? ''));
+    if (!match) return null;
+    const [year, month, day, hour, minute] = match.slice(1, 6).map(Number);
+    const second = match[6] === undefined ? 0 : Number(match[6]);
+    if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59) return null;
+    const calendar = new Date(Date.UTC(year, month - 1, day));
+    if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() + 1 !== month || calendar.getUTCDate() !== day) return null;
+    const ms = Date.parse(String(value).replace(' ', 'T'));
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+  }
+  /* Разбор срока. checkFuture=false нужен, когда мы всего лишь сравниваем повтор запроса с уже
+     записанной отправкой: у повтора срок к этому моменту может быть в прошлом, и это не ошибка. */
+  function scheduledDue(body, at, { fallbackZone = 'UTC', checkFuture = true } = {}) {
+    const timezone = scheduledZone(body.timezone, fallbackZone);
+    let iso = null;
+    if (body.dueAtLocal !== undefined) {
+      iso = zonedToUtcIso(body.dueAtLocal, timezone);
+      if (!iso) fail(400, 'Укажите существующие дату и время в виде 2026-09-19T09:00 для выбранного пояса');
+    } else if (body.dueAt !== undefined) {
+      iso = absoluteIso(body.dueAt);
+      if (!iso) fail(400, 'Укажите момент в виде 2026-09-19T01:00:00Z или со смещением +07:00');
+    } else fail(400, 'Укажите срок отправки');
+    const ms = Date.parse(iso);
+    if (checkFuture) {
+      if (ms <= at) fail(400, 'Срок отправки уже прошёл');
+      if (ms > at + SCHEDULED_HORIZON_MS) fail(400, 'Слишком далёкий срок: не больше года вперёд');
+    }
+    return { iso, timezone };
+  }
+
+  function createScheduled(code, user, body) {
+    const at = now();
+    const allowed = new Set(['text', 'dueAt', 'dueAtLocal', 'timezone', 'kind', 'taskId', 'clientId']);
+    if (Object.keys(body).some(k => !allowed.has(k))) fail(400, 'Неизвестное поле отложенной отправки');
+    const kind = body.kind === undefined ? 'message' : String(body.kind);
+    if (!['message', 'task_reminder'].includes(kind)) fail(400, 'Неизвестный вид отложенной отправки');
+    const clientId = cleanText(body.clientId ?? '', 128, 'clientId');
+    if (!/^[a-zA-Z0-9_.:-]{8,128}$/.test(clientId)) fail(400, 'Нужен уникальный идентификатор запроса');
+    const taskId = kind === 'task_reminder' ? integer(body.taskId) : integer(body.taskId, true);
+    // Задача проверяется по компании для ЛЮБОГО вида: чужая задача не попадает ни в напоминание, ни в ссылку.
+    if (taskId !== null && !db.prepare('SELECT 1 FROM project_chat_tasks WHERE id=? AND company_code=?').get(taskId, code)) {
+      fail(400, 'Задача не относится к этому проекту');
+    }
+    const text = cleanText(body.text ?? '', MESSAGE_LIMIT, 'text');
+    if (!text) fail(400, 'Введите текст сообщения');
+    /* Сначала — повтор запроса, и только потом ограничения для НОВОЙ записи. Иначе повтор,
+       пришедший уже после наступления срока или при заполненном лимите, получал бы ошибку
+       вместо того, что на самом деле произошло: отправка уже запланирована. */
+    const sample = scheduledDue(body, at, { checkFuture: false });
+    const stampNow = new Date(at).toISOString();
+    const room = ensureRoom(code);
+    return tx(() => {
+      const twin = db.prepare('SELECT * FROM project_chat_scheduled WHERE company_code=? AND author_id=? AND client_id=?')
+        .get(code, user.id, clientId);
+      if (twin) {
+        const same = twin.text === text && twin.due_at === sample.iso && twin.timezone === sample.timezone
+          && twin.kind === kind && (twin.task_id ?? null) === (taskId ?? null);
+        if (!same) fail(409, 'Этот идентификатор запроса уже использован для другого сообщения');
+        return scheduledJSON(twin);
+      }
+      // Новая запись: срок обязан быть в будущем, и очередь не должна быть переполнена.
+      const { iso, timezone } = scheduledDue(body, at);
+      if (db.prepare("SELECT count(*) AS n FROM project_chat_scheduled WHERE company_code=? AND status='pending'").get(code).n >= SCHEDULED_LIMIT) {
+        fail(409, 'Слишком много запланированных сообщений: отмените лишние');
+      }
+      const id = Number(db.prepare(`INSERT INTO project_chat_scheduled
+        (company_code,kind,task_id,text,due_at,timezone,status,author_id,author_name,chat_id_at_plan,client_id,created_at,updated_at)
+        VALUES(?,?,?,?,?,?, 'pending', ?,?,?,?,?,?)`)
+        .run(code, kind, taskId ?? null, text, iso, timezone, user.id, user.displayName || user.login || '',
+          room.telegram_chat_id ?? null, clientId, stampNow, stampNow).lastInsertRowid);
+      return scheduledJSON(db.prepare('SELECT * FROM project_chat_scheduled WHERE id=?').get(id));
+    });
+  }
+
+  /* Изменение и отмена — только пока не отправлено. Отправленное не переписывается: сообщение уже в чате. */
+  function updateScheduled(code, id, body, user) {
+    const at = now();
+    const allowed = new Set(['text', 'dueAt', 'dueAtLocal', 'timezone', 'status']);
+    if (!Object.keys(body).length || Object.keys(body).some(k => !allowed.has(k))) fail(400, 'Неизвестное поле отложенной отправки');
+    return tx(() => {
+      const row = db.prepare('SELECT * FROM project_chat_scheduled WHERE id=? AND company_code=?').get(integer(id), code);
+      if (!row) fail(404, 'Запланированное сообщение не найдено');
+      /* Менять и отменять может только автор или владелец: отправителем всё равно останется автор,
+         поэтому чужую отложенную отправку участник переписать не должен. */
+      if (user.role !== 'owner' && row.author_id !== user.id) fail(403, 'Изменить может только автор сообщения или владелец');
+      if (row.status !== 'pending') fail(409, 'Это сообщение уже нельзя изменить: оно не ожидает отправки');
+      if (body.status !== undefined) {
+        if (body.status !== 'cancelled') fail(400, 'Отложенную отправку можно только отменить');
+        db.prepare("UPDATE project_chat_scheduled SET status='cancelled',updated_at=? WHERE id=? AND status='pending'")
+          .run(new Date(at).toISOString(), row.id);
+        return scheduledJSON(db.prepare('SELECT * FROM project_chat_scheduled WHERE id=?').get(row.id));
+      }
+      const text = body.text === undefined ? row.text : cleanText(body.text, MESSAGE_LIMIT, 'text');
+      if (!text) fail(400, 'Введите текст сообщения');
+      /* Пояс при переносе наследуется из записи, если его не прислали, и в любом случае проверяется
+         тем же правилом: смена одного только пояса не должна пройти без проверки. */
+      const due = (body.dueAt === undefined && body.dueAtLocal === undefined)
+        ? { iso: row.due_at, timezone: scheduledZone(body.timezone, row.timezone) }
+        : scheduledDue(body, at, { fallbackZone: row.timezone });
+      db.prepare('UPDATE project_chat_scheduled SET text=?,due_at=?,timezone=?,updated_at=? WHERE id=? AND status=\'pending\'')
+        .run(text, due.iso, due.timezone, new Date(at).toISOString(), row.id);
+      return scheduledJSON(db.prepare('SELECT * FROM project_chat_scheduled WHERE id=?').get(row.id));
+    });
+  }
+
+  /* Текст напоминания по задаче собирается на сервере: ссылка ведёт в кабинет к этой задаче. */
+  /* Текст напоминания собирается на сервере. Ссылка ведёт на общий чат проекта в кабинете — тот адрес,
+     который кабинет действительно открывает (#hugh). Отдельного маршрута на конкретную задачу в кабинете
+     сейчас нет, поэтому задача называется номером реестра и заголовком, а не выдуманным адресом. */
+  function reminderText(row) {
+    const task = row.task_id ? db.prepare('SELECT * FROM project_chat_tasks WHERE id=? AND company_code=?').get(row.task_id, row.company_code) : null;
+    if (!task) return row.text;
+    const head = `Напоминание по задаче${task.external_ref ? ` ${task.external_ref}` : ''}: ${task.title}`;
+    const link = cabinetUrl ? `\nЗадачи проекта в кабинете: ${cabinetUrl.replace(/\/$/, '')}/cabinet.html#hugh` : '';
+    return `${head}\n${row.text}${link}`;
+  }
+
+  /* Один проход планировщика. Вызывается серверным циклом ОТДЕЛЬНО от ответов Хью: готовность ИИ,
+     вход в подписку и квоты на отложенную отправку не влияют, к ИИ обращений нет. */
+  function processScheduledMessages() {
+    const at = now();
+    const nowIso = new Date(at).toISOString();
+    const summary = { sent: 0, expired: 0, blocked: 0, failed: 0 };
+    const due = db.prepare(`SELECT * FROM project_chat_scheduled WHERE status='pending' AND due_at<=?
+      AND (next_attempt_at='' OR next_attempt_at<=?) ORDER BY due_at, id LIMIT 50`).all(nowIso, nowIso);
+    for (const row of due) {
+      try {
+      tx(() => {
+        // Строку берём заново внутри транзакции: параллельная отмена или отправка не должны задвоиться.
+        const fresh = db.prepare("SELECT * FROM project_chat_scheduled WHERE id=? AND status='pending'").get(row.id);
+        if (!fresh) return;
+        const dueMs = Date.parse(fresh.due_at);
+        if (!Number.isFinite(dueMs) || dueMs > at) return;
+        const close = (status, error = '') => db.prepare('UPDATE project_chat_scheduled SET status=?,error=?,updated_at=? WHERE id=?')
+          .run(status, error, nowIso, fresh.id);
+        // Просроченное сверх запаса не досылается задним числом.
+        if (at - dueMs > SCHEDULED_GRACE_MS) {
+          close('expired', 'Срок прошёл, пока сервер был недоступен: сообщение не отправлено');
+          summary.expired += 1;
+          return;
+        }
+        // Права проверяются заново тем же правилом, что и обычная отправка.
+        const author = fresh.author_id ? authStore.getById(fresh.author_id) : null;
+        if (!canSendAs(author, fresh.company_code)) {
+          close('error', 'Автор больше не может писать в этот проект: сообщение не отправлено');
+          summary.blocked += 1;
+          return;
+        }
+        const room = db.prepare('SELECT * FROM project_chat_rooms WHERE company_code=?').get(fresh.company_code);
+        if (!room) { close('error', 'Проект не найден'); summary.blocked += 1; return; }
+        /* Привязка группы могла смениться или быть снята. Отправлять старое сообщение новой аудитории
+           нельзя: закрываем с ошибкой, владелец перепланирует осознанно. */
+        const plannedChat = fresh.chat_id_at_plan ?? null;
+        const currentChat = room.telegram_chat_id ?? null;
+        if (plannedChat !== currentChat) {
+          close('error', plannedChat
+            ? 'Telegram-группа проекта изменилась после планирования: сообщение не отправлено, запланируйте заново'
+            : 'Telegram-группа появилась после планирования: сообщение не отправлено, запланируйте заново');
+          summary.blocked += 1;
+          return;
+        }
+        const text = fresh.kind === 'task_reminder' ? reminderText(fresh) : fresh.text;
+        /* Сообщение и отметка отправки — одной транзакцией: повтор прохода не создаст второе сообщение.
+           Дальше доставкой занимается существующая очередь, а не планировщик. */
+        const message = insertMessage({ code: fresh.company_code, authorId: author.id,
+          authorName: author.displayName || author.login || 'Участник', authorType: 'human', text, skipAi: true });
+        db.prepare("UPDATE project_chat_scheduled SET status='sent',message_id=?,sent_at=?,updated_at=?,error='' WHERE id=?")
+          .run(message.id, nowIso, nowIso, fresh.id);
+        summary.sent += 1;
+      });
+      } catch (error) {
+        /* Сбой на одной строке не должен молча оставить её в вечном ожидании: считаем попытки,
+           пишем причину и отодвигаем повтор. После пяти неудач строка закрывается ошибкой,
+           и владелец видит её в кабинете. */
+        const attempts = (db.prepare('SELECT attempts FROM project_chat_scheduled WHERE id=?').get(row.id)?.attempts || 0) + 1;
+        const text = shortText(error?.message || 'Не удалось отправить запланированное сообщение', 300);
+        db.prepare(`UPDATE project_chat_scheduled SET attempts=?,error=?,status=?,next_attempt_at=?,updated_at=? WHERE id=?`)
+          .run(attempts, text, attempts >= 5 ? 'error' : 'pending', new Date(at + attempts * 60000).toISOString(), nowIso, row.id);
+        summary.failed = (summary.failed || 0) + 1;
+      }
+    }
+    return summary;
+  }
+
   /* Запись задачи по внешнему идентификатору реестра: повторный вызов с тем же externalRef обновляет ту же
      строку, а не создаёт вторую. Без externalRef задача обычная, как раньше. */
   /* manual — задача заводится из кабинета, а не из реестра: она сразу помечается правленой,
@@ -842,6 +1177,19 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
           WHERE company_code=? AND status='pending'`).run(code);
       });
       return reply(200, await snapshot(code, user, page));
+    }
+    /* Отложенная отправка: те же права, что и на обычное сообщение (доступ к комнате и право ответа),
+       та же проверка CSRF в общем слое. Новых прав не вводится. */
+    if (suffix === '/scheduled' && method === 'POST') {
+      const body = await readBody(request); const author = access(request, code, true);
+      // Созданная строка отдаётся отдельным полем: в snapshot поле scheduled — это весь список.
+      const item = createScheduled(code, author, body);
+      return reply(201, { ...(await snapshot(code, user, page)), item });
+    }
+    if (/^\/scheduled\/\d{1,12}$/.test(suffix) && method === 'PATCH') {
+      const body = await readBody(request); access(request, code, true);
+      const item = updateScheduled(code, suffix.split('/')[2], body, user);
+      return reply(200, { ...(await snapshot(code, user, page)), item });
     }
     if (suffix === '/retry-ai' && method === 'POST') {
       const body = await readBody(request); access(request, code, true, true);
@@ -1187,11 +1535,18 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     db.prepare(`UPDATE project_chat_ai_jobs SET status='pending',lease_token=NULL,lease_expires_at=NULL,boot_id=NULL WHERE status='running' AND boot_id='server' AND reply_message_id IS NULL`).run();
     db.prepare(`UPDATE project_chat_ai_jobs SET status='done' WHERE status='running' AND boot_id='server' AND reply_message_id IS NOT NULL`).run();
     db.prepare(`UPDATE project_chat_ai_jobs SET status='done' WHERE status='running' AND reply_message_id IS NOT NULL${serverScope}`).run(...localCodes);
-    timer = setInterval(() => { void processAIJobs().catch(() => {}); }, 3000); timer.unref();
+    /* Планировщик идёт ПЕРВЫМ и отдельно от ответов Хью: ранний выход processAIJobs при login_required,
+       квоте или недоступной службе не должен задерживать отложенную отправку — она к ИИ не обращается. */
+    timer = setInterval(() => {
+      // Системный сбой планировщика виден в журнале сервера: молча пропадать он не должен.
+      try { processScheduledMessages(); } catch (error) { console.error('project-chat: планировщик отложенной отправки не отработал:', error?.message || error); }
+      void processAIJobs().catch(() => {});
+    }, 3000); timer.unref();
   }
   function stopWorker() { clearInterval(timer); timer = null; }
   const bridge = { getBinding, migrateBinding, receiveTelegram, receiveCommand, storeAttachment, readAttachment, pendingTelegram, acknowledgeTelegram };
-  return { handle, bridge, ...bridge, snapshot, listMessages, requeueAI, runtimeStatus, processAIJobs, startWorker, stopWorker, localWorker, siteOrders, miniApp, fallback };
+  return { handle, bridge, ...bridge, snapshot, listMessages, requeueAI, runtimeStatus, processAIJobs,
+    processScheduledMessages, scheduledList, startWorker, stopWorker, localWorker, siteOrders, miniApp, fallback };
 }
 
 module.exports = { createProjectChat, MAX_ATTACHMENT, MESSAGE_PAGE };

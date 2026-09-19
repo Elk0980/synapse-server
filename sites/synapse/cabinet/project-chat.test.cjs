@@ -1292,3 +1292,196 @@ test('импорт: force из файла не подменяет решение
   assert.equal(sent.length, 2);
   assert.equal(JSON.parse(sent[1].body).force, true, 'отметка владельца включает перезапись даже при force:false в файле');
 });
+
+test('планирование: кнопка рядом с отправкой, срок уходит с поясом, черновик очищается', async () => {
+  const harness = boot({ clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot() }),
+    'POST /content/project-chat/palitra-love/scheduled': () => ({ status: 201, body: { item: { id: 5 } } })
+  } });
+  await mount(harness);
+  const { d } = harness;
+  const button = d.querySelector('[data-pc-schedule]');
+  assert.ok(button, 'кнопка «Запланировать» есть рядом с «Отправить»');
+  assert.equal(button.hidden, false);
+  assert.ok(d.querySelector('[data-pc-compose] [data-pc-schedule]'), 'кнопка внутри формы отправки');
+
+  // Черновик из поля ввода попадает в диалог.
+  d.querySelector('[data-pc-compose]').elements.text.value = 'Сводка по правкам';
+  harness.click('[data-pc-schedule]');
+  await settle();
+  const form = d.querySelector('.pc-dialog form');
+  assert.equal(form.elements.text.value, 'Сводка по правкам');
+  assert.ok(form.elements.timezone, 'часовой пояс задаётся явно');
+  assert.ok([...form.elements.timezone.options].some((option) => option.value === 'Asia/Irkutsk'));
+
+  form.elements.date.value = '2026-09-19';
+  form.elements.time.value = '09:00';
+  form.elements.timezone.value = 'Asia/Irkutsk';
+  harness.submit('.pc-dialog form');
+  await settle();
+  const sent = harness.calls.find((call) => call.url.includes('/scheduled') && call.method === 'POST');
+  assert.ok(sent, 'запрос ушёл');
+  const body = JSON.parse(sent.body);
+  assert.equal(body.dueAtLocal, '2026-09-19T09:00');
+  assert.equal(body.timezone, 'Asia/Irkutsk');
+  assert.equal(body.text, 'Сводка по правкам');
+  assert.equal(typeof body.clientId, 'string');
+  assert.match(body.clientId, /^plan-[\w-]{8,}$/, 'ключ повтора запроса передан');
+  assert.equal(d.querySelector('[data-pc-compose]').elements.text.value, '', 'черновик не остаётся вторым экземпляром');
+});
+
+test('планирование: список показывает срок, пояс и состояние доставки, отмена доступна только ожидающему', async () => {
+  const scheduled = [
+    { id: 1, kind: 'message', text: 'Утренняя сводка', dueAt: '2026-09-19T01:00:00.000Z', timezone: 'Asia/Irkutsk',
+      status: 'pending', deliveryStatus: '', error: '', taskId: null, authorId: 1, canManage: true },
+    { id: 2, kind: 'task_reminder', text: 'Проверить правку', dueAt: '2026-09-18T01:00:00.000Z', timezone: 'Asia/Irkutsk',
+      status: 'sent', deliveryStatus: 'uncertain', error: '', taskId: 7, authorId: 1, canManage: false },
+    { id: 3, kind: 'message', text: 'Старое', dueAt: '2026-09-10T01:00:00.000Z', timezone: 'Asia/Irkutsk',
+      status: 'expired', deliveryStatus: '', error: 'Срок прошёл, пока сервер был недоступен: сообщение не отправлено', taskId: null, authorId: 1, canManage: false }
+  ];
+  const harness = boot({ clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ scheduled }) }),
+    'PATCH /content/project-chat/palitra-love/scheduled/1': () => ({ body: { item: { id: 1, status: 'cancelled' } } })
+  } });
+  await mount(harness);
+  const { d } = harness;
+  const items = [...d.querySelectorAll('.pc-scheduled-item')];
+  assert.equal(items.length, 3);
+  assert.match(items[0].textContent, /19\.09\.2026, 09:00/, 'срок показан в поясе владельца');
+  assert.match(items[0].textContent, /Asia\/Irkutsk/);
+  assert.match(items[0].textContent, /Ожидает отправки/);
+  // Отправленное в ЛК не выдаётся за доставленное в Telegram.
+  assert.match(items[1].textContent, /Отправлено · доставка уточняется/);
+  assert.match(items[1].textContent, /Напоминание по задаче/);
+  assert.match(items[2].textContent, /Срок прошёл, не отправлено/);
+
+  assert.ok(items[0].querySelector('[data-pc-schedule-cancel="1"]'), 'ожидающее можно отменить');
+  assert.equal(items[1].querySelector('[data-pc-schedule-cancel]'), null, 'отправленное не отменяется');
+  assert.equal(items[2].querySelector('[data-pc-schedule-edit]'), null, 'просроченное не редактируется');
+
+  harness.click('[data-pc-schedule-cancel="1"]');
+  await settle();
+  const cancel = harness.calls.find((call) => call.method === 'PATCH' && call.url.includes('/scheduled/1'));
+  assert.ok(cancel);
+  assert.deepEqual(JSON.parse(cancel.body), { status: 'cancelled' });
+});
+
+test('планирование недоступно без права ответа', async () => {
+  const harness = boot({ role: 'member', clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ access: { canReply: false, owner: false },
+      scheduled: [{ id: 1, kind: 'message', text: 'Сводка', dueAt: '2026-09-19T01:00:00.000Z', timezone: 'Asia/Irkutsk',
+        status: 'pending', deliveryStatus: '', error: '', taskId: null, authorId: 2, canManage: false }] }) })
+  } });
+  await mount(harness);
+  const { d } = harness;
+  assert.equal(d.querySelector('[data-pc-schedule]').hidden, true, 'без права ответа кнопки нет');
+  assert.equal(d.querySelector('[data-pc-schedule-cancel]'), null, 'и отменить чужое нельзя');
+  harness.click('[data-pc-schedule]');
+  await settle();
+  assert.equal(d.querySelector('.pc-dialog'), null, 'диалог не открывается');
+});
+
+test('напоминание по задаче: кнопка у задачи открывает планирование и уходит kind с taskId', async () => {
+  const task = { id: 7, externalRef: 'А8', title: 'Фото вылезает на ПК', status: 'done', kind: 'client_remark',
+    site: 'palitra-love', siteLabel: 'Палитра', siteStatus: 'known', publication: 'prepared',
+    publicationLabel: 'Готово, на сайте ещё нет', publishedUrl: '', verifiedAt: '', sourceQuote: '',
+    notes: [], fixedOnSite: false, cancelled: false, assigneeId: null, stageId: null, due: '' };
+  const harness = boot({ clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ tasks: [task] }) }),
+    'POST /content/project-chat/palitra-love/scheduled': () => ({ status: 201, body: { item: { id: 9 } } })
+  } });
+  await mount(harness);
+  const { d } = harness;
+  const remind = d.querySelector('[data-pc-task-remind="7"]');
+  assert.ok(remind, 'у задачи есть кнопка «Напомнить»');
+  assert.equal(remind.closest('[data-pc-task]'), null, 'кнопка не вложена в кнопку задачи');
+
+  harness.click('[data-pc-task-remind="7"]');
+  await settle();
+  const form = d.querySelector('.pc-dialog form');
+  assert.ok(form, 'открылся диалог планирования');
+  assert.match(d.querySelector('.pc-dialog').textContent, /Фото вылезает на ПК/, 'видно, о какой задаче речь');
+  form.elements.text.value = 'Проверить, что правка на сайте';
+  form.elements.date.value = '2026-09-19';
+  form.elements.time.value = '09:00';
+  form.elements.timezone.value = 'Asia/Irkutsk';
+  harness.submit('.pc-dialog form');
+  await settle();
+
+  const sent = harness.calls.find((call) => call.method === 'POST' && call.url.includes('/scheduled'));
+  assert.ok(sent, 'запрос ушёл');
+  const body = JSON.parse(sent.body);
+  assert.equal(body.kind, 'task_reminder');
+  assert.equal(body.taskId, 7);
+  assert.equal(body.dueAtLocal, '2026-09-19T09:00');
+  assert.equal(body.timezone, 'Asia/Irkutsk');
+  assert.equal(body.text, 'Проверить, что правка на сайте');
+});
+
+test('чужую отложенную отправку кабинет не предлагает трогать', async () => {
+  const mine = { id: 1, kind: 'message', text: 'Моя сводка', dueAt: '2026-09-19T01:00:00.000Z', timezone: 'Asia/Irkutsk',
+    status: 'pending', deliveryStatus: '', error: '', taskId: null, authorId: 1, canManage: true };
+  const foreign = { id: 2, kind: 'message', text: 'Сводка коллеги', dueAt: '2026-09-19T02:00:00.000Z', timezone: 'Asia/Irkutsk',
+    status: 'pending', deliveryStatus: '', error: '', taskId: null, authorId: 2, canManage: false };
+  const harness = boot({ clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ scheduled: [mine, foreign] }) })
+  } });
+  await mount(harness);
+  const { d } = harness;
+  assert.ok(d.querySelector('[data-pc-schedule-cancel="1"]'), 'своё можно отменить');
+  assert.equal(d.querySelector('[data-pc-schedule-cancel="2"]'), null, 'чужое не предлагается отменить');
+  assert.equal(d.querySelector('[data-pc-schedule-edit="2"]'), null, 'и не предлагается изменить');
+  // Запросов к серверу за чужое не делается вовсе: нечего нажать, значит нет и 403 с выходом из чата.
+  assert.equal(harness.calls.filter((call) => call.method === 'PATCH').length, 0);
+});
+
+test('сводка задач: 12 замечаний, 10 на сайте, 2 отменены и 4 внутренние показаны понятно', async () => {
+  const base = { site: 'palitra-love', siteLabel: 'Палитра', siteStatus: 'known', publicationLabel: 'Опубликовано',
+    publishedUrl: '', verifiedAt: '', sourceQuote: '', notes: [], assigneeId: null, stageId: null, due: '' };
+  const tasks = [
+    // Десять замечаний клиента на сайте.
+    ...Array.from({ length: 10 }, (unused, index) => ({ ...base, id: index + 1, externalRef: `А${index + 1}`,
+      title: `Замечание ${index + 1}`, kind: 'client_remark', status: 'done', publication: 'published',
+      fixedOnSite: true, cancelled: false })),
+    // Два снятых: исправлением не считаются, даже если публикация когда-то была.
+    { ...base, id: 11, externalRef: 'А11', title: 'Снято клиентом', kind: 'client_remark', status: 'cancelled',
+      publication: 'not_required', fixedOnSite: false, cancelled: true },
+    { ...base, id: 12, externalRef: 'А12', title: 'Снято владельцем', kind: 'client_remark', status: 'cancelled',
+      publication: 'published', fixedOnSite: false, cancelled: true },
+    // Четыре внутренние работы: в клиентский счёт не входят.
+    ...Array.from({ length: 4 }, (unused, index) => ({ ...base, id: 13 + index, externalRef: `ВН${index + 1}`,
+      title: `Внутренняя ${index + 1}`, kind: 'internal', status: 'done', publication: 'prepared',
+      fixedOnSite: false, cancelled: false }))
+  ];
+  const harness = boot({ clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ tasks }) })
+  } });
+  await mount(harness);
+  const { d } = harness;
+  assert.equal(d.querySelectorAll('.pc-task').length, 16, 'карточки не задваиваются и не пропадают');
+  assert.equal(text(harness.dom, '[data-pc-task-count]'),
+    'Замечания: 12 · на сайте 10 · осталось 0 · отменено 2 · внутренних 4');
+
+  // Пустой проект: сводка не выдумывает нулей.
+  const empty = boot({ clock: true, routes: { 'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ tasks: [] }) }) } });
+  await mount(empty);
+  assert.equal(text(empty.dom, '[data-pc-task-count]'), '');
+});
+
+test('сводка задач: снятое не попадает в «на сайте», незакрытое видно в «осталось»', async () => {
+  const base = { site: 'palitra-love', siteLabel: 'Палитра', siteStatus: 'known', publicationLabel: 'Готово',
+    publishedUrl: '', verifiedAt: '', sourceQuote: '', notes: [], assigneeId: null, stageId: null, due: '' };
+  const tasks = [
+    { ...base, id: 1, externalRef: 'А1', title: 'На сайте', kind: 'client_remark', status: 'done',
+      publication: 'published', fixedOnSite: true, cancelled: false },
+    { ...base, id: 2, externalRef: 'А2', title: 'Ждём уточнения', kind: 'client_remark', status: 'todo',
+      publication: 'awaiting_clarification', fixedOnSite: false, cancelled: false },
+    { ...base, id: 3, externalRef: 'А3', title: 'Снято', kind: 'client_remark', status: 'cancelled',
+      publication: 'published', fixedOnSite: false, cancelled: true }
+  ];
+  const harness = boot({ clock: true, routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ tasks }) })
+  } });
+  await mount(harness);
+  assert.equal(text(harness.dom, '[data-pc-task-count]'), 'Замечания: 3 · на сайте 1 · осталось 1 · отменено 1');
+});

@@ -5,3 +5,12 @@
 .pc-sites { border: 1px solid var(--pc-border, #2a3344); border-radius: 8px; padding: 0.5rem 0.75rem; }
 .pc-sites legend { padding: 0 0.25rem; font-size: 0.9em; }
 .pc-site-choice { display: flex; align-items: center; gap: 0.5rem; }
+
+/* Запланированные отправки: отдельный список под задачами, без собственного экрана. */
+.pc-scheduled { margin-top: 1rem; }
+.pc-scheduled h3 { font-size: 0.95em; margin: 0 0 0.5rem; }
+.pc-scheduled ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.pc-scheduled-item { border: 1px solid var(--pc-border, #2a3344); border-radius: 8px; padding: 0.5rem 0.75rem; }
+.pc-scheduled-item p { margin: 0 0 0.25rem; }
+.pc-scheduled-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+.pc-task-remind { margin-top: 0.25rem; }

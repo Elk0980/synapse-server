@@ -36,9 +36,10 @@ const readBody = async (request) => {
   return request.body;
 };
 
-function setup({ runtime = null, reply = null, statusTtl = 0 } = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'project-chat-'));
-  const db = new DatabaseSync(':memory:');
+function setup({ runtime = null, reply = null, statusTtl = 0, clock = null, file = false, dir: reuseDir = null, db: reuseDb = null } = {}) {
+  const dir = reuseDir || fs.mkdtempSync(path.join(os.tmpdir(), 'project-chat-'));
+  // file: true — база на диске: так тест может закрыть её и открыть заново, воспроизводя перезапуск сервера.
+  const db = reuseDb || new DatabaseSync(file ? path.join(dir, 'chat.sqlite') : ':memory:');
   db.exec('PRAGMA foreign_keys = ON;');
   const authStore = createAuthStore(db, `vlad:owner:${HASH}`);
   const calls = [];
@@ -58,11 +59,14 @@ function setup({ runtime = null, reply = null, statusTtl = 0 } = {}) {
       json: async () => { if (value.broken) throw new Error('не JSON'); return value.payload ?? {}; } };
   };
   const chat = createProjectChat({ db, authStore, assetsDir: dir, runnerUrl: 'http://hugh-runtime:8080',
-    chatApiKey: 'secret-key', requireSession, requireCsrf, sendJson, readBody, fetchImpl, statusTtl });
+    chatApiKey: 'secret-key', requireSession, requireCsrf, sendJson, readBody, fetchImpl, statusTtl,
+    cabinetUrl: 'https://synapse.example.test',
+    // Управляемые часы: срок отложенной отправки проверяется без ожидания реального времени.
+    ...(clock ? { now: () => clock.now } : {}) });
   const session = (id) => ({ user: authStore.getById(id), csrf: `csrf-${id}` });
   const person = (login, companies) => authStore.create(OWNER_ID,
     { login, displayName: login, password: 'x'.repeat(12), companies, permissions: [] }, HASH);
-  return { db, authStore, chat, calls, dir, session, person, owner: session(OWNER_ID),
+  return { db, authStore, chat, calls, dir, session, person, owner: session(OWNER_ID), clock,
     storage: path.join(dir, 'project-chat') };
 }
 
@@ -978,4 +982,346 @@ test('миграция переносит прежнее правило: пра�
 
   const stale = await call(chat, { session: owner, method: 'POST', url: room('/tasks/import'), body: registry });
   assert.equal(stale.payload.skipped, 1, 'правка, сделанная до обновления, не теряется');
+});
+
+/* ОТЛОЖЕННАЯ ОТПРАВКА. Время всюду управляемое: ни одного ожидания реального времени. */
+const clockAt = (iso) => ({ now: Date.parse(iso), tick(ms) { this.now += ms; } });
+const scheduledRows = (db, code = ROOM) => db.prepare('SELECT * FROM project_chat_scheduled WHERE company_code=? ORDER BY id').all(code);
+const roomMessages = (db, code = ROOM) => db.prepare('SELECT * FROM project_chat_messages WHERE company_code=? ORDER BY id').all(code);
+
+test('отложенная отправка: пояс переводится в UTC, раньше срока не уходит, в срок уходит один раз существующей очередью', async () => {
+  const clock = clockAt('2026-09-18T20:00:00.000Z');
+  const { chat, owner, db } = setup({ clock });
+  // Комната с привязанной группой: доставка должна лечь в существующую исходящую очередь.
+  await call(chat, { session: owner, method: 'PATCH', url: room('/settings'), body: { telegramChatId: '-1001234567890' } });
+
+  // 9:00 по Иркутску — это 01:00 UTC того же дня.
+  const created = await call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+    body: { clientId: `plan-${crypto.randomUUID()}`, text: 'Доброе утро! Статус по правкам', dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' } });
+  assert.equal(created.statusCode, 201);
+  assert.equal(created.payload.item.dueAt, '2026-09-19T01:00:00.000Z');
+  assert.equal(created.payload.item.timezone, 'Asia/Irkutsk');
+  assert.equal(created.payload.item.status, 'pending');
+  assert.equal(created.payload.item.deliveryStatus, '');
+
+  const before = roomMessages(db).length;
+  // За минуту до срока не уходит ничего.
+  clock.now = Date.parse('2026-09-19T00:59:00.000Z');
+  assert.deepEqual(chat.processScheduledMessages(), { sent: 0, expired: 0, blocked: 0, failed: 0 });
+  assert.equal(roomMessages(db).length, before, 'раньше срока сообщение не создаётся');
+
+  // В срок — ровно одно сообщение и одна запись в существующей очереди Telegram.
+  clock.now = Date.parse('2026-09-19T01:00:00.000Z');
+  assert.deepEqual(chat.processScheduledMessages(), { sent: 1, expired: 0, blocked: 0, failed: 0 });
+  const messages = roomMessages(db);
+  assert.equal(messages.length, before + 1);
+  assert.equal(messages[messages.length - 1].text, 'Доброе утро! Статус по правкам');
+  const outbox = db.prepare('SELECT count(*) AS n FROM project_chat_outbox WHERE message_id=?').get(messages[messages.length - 1].id);
+  assert.equal(outbox.n, 1, 'доставка идёт существующей очередью, второго транспорта нет');
+
+  // Повторные проходы ничего не задваивают.
+  clock.tick(60000);
+  assert.deepEqual(chat.processScheduledMessages(), { sent: 0, expired: 0, blocked: 0, failed: 0 });
+  assert.equal(roomMessages(db).length, before + 1);
+  const row = scheduledRows(db)[0];
+  assert.equal(row.status, 'sent');
+  assert.equal(row.message_id, messages[messages.length - 1].id);
+
+  // Отправленное больше не изменить и не отменить.
+  await assert.rejects(() => call(chat, { session: owner, method: 'PATCH', url: room(`/scheduled/${row.id}`),
+    body: { status: 'cancelled' } }), status(409));
+
+  // Задание Хью на своё же сообщение не ставится: отложенная отправка к ИИ не обращается.
+  assert.equal(db.prepare('SELECT count(*) AS n FROM project_chat_ai_jobs WHERE message_id=?').get(messages[messages.length - 1].id).n, 0);
+});
+
+test('отложенная отправка: перенос и отмена до срока, отменённое не уходит', async () => {
+  const clock = clockAt('2026-09-18T20:00:00.000Z');
+  const { chat, owner, db } = setup({ clock });
+  const first = await call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+    body: { clientId: `plan-${crypto.randomUUID()}`, text: 'Напомню про домен', dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' } });
+  const id = first.payload.item.id;
+
+  // Перенос на другой час и другой пояс.
+  const moved = await call(chat, { session: owner, method: 'PATCH', url: room(`/scheduled/${id}`),
+    body: { dueAtLocal: '2026-09-19T10:30', timezone: 'Asia/Bangkok', text: 'Напомню про домен и почту' } });
+  assert.equal(moved.payload.item.dueAt, '2026-09-19T03:30:00.000Z');
+  assert.equal(moved.payload.item.text, 'Напомню про домен и почту');
+
+  // В прошлое перенести нельзя.
+  await assert.rejects(() => call(chat, { session: owner, method: 'PATCH', url: room(`/scheduled/${id}`),
+    body: { dueAtLocal: '2026-09-18T10:00', timezone: 'Asia/Bangkok' } }), status(400));
+
+  // Отмена до срока: в назначенное время ничего не создаётся.
+  const cancelled = await call(chat, { session: owner, method: 'PATCH', url: room(`/scheduled/${id}`), body: { status: 'cancelled' } });
+  assert.equal(cancelled.payload.item.status, 'cancelled');
+  const before = roomMessages(db).length;
+  clock.now = Date.parse('2026-09-19T04:00:00.000Z');
+  assert.deepEqual(chat.processScheduledMessages(), { sent: 0, expired: 0, blocked: 0, failed: 0 });
+  assert.equal(roomMessages(db).length, before, 'отменённое не отправляется');
+});
+
+test('отложенная отправка: перезапуск сервера и просрочка — один раз в запас, старое помечается и не уходит задним числом', async () => {
+  const clock = clockAt('2026-09-18T20:00:00.000Z');
+  const { chat, owner, db } = setup({ clock });
+  const soon = await call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+    body: { clientId: `plan-${crypto.randomUUID()}`, text: 'Короткая просрочка', dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' } });
+  const old = await call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+    body: { clientId: `plan-${crypto.randomUUID()}`, text: 'Давняя просрочка', dueAtLocal: '2026-09-19T09:05', timezone: 'Asia/Irkutsk' } });
+
+  /* Сервер «лежал»: первый срок просрочен на два часа (в пределах запаса), второй — на сутки.
+     Планировщик ничего не помнит в памяти: состояние только в базе, поэтому перезапуск не мешает. */
+  clock.now = Date.parse('2026-09-19T03:00:00.000Z');
+  const firstPass = chat.processScheduledMessages();
+  assert.equal(firstPass.sent, 2, 'обе просрочки в пределах запаса уходят по одному разу');
+
+  const third = await call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+    body: { clientId: `plan-${crypto.randomUUID()}`, text: 'Совсем старое', dueAtLocal: '2026-09-19T12:00', timezone: 'Asia/Irkutsk' } });
+  clock.now = Date.parse('2026-09-21T00:00:00.000Z');
+  const before = roomMessages(db).length;
+  const late = chat.processScheduledMessages();
+  assert.deepEqual(late, { sent: 0, expired: 1, blocked: 0, failed: 0 });
+  assert.equal(roomMessages(db).length, before, 'задним числом клиенту ничего не уходит');
+  const expired = db.prepare('SELECT * FROM project_chat_scheduled WHERE id=?').get(third.payload.item.id);
+  assert.equal(expired.status, 'expired');
+  assert.match(expired.error, /Срок прошёл/);
+  void soon; void old;
+});
+
+test('отложенная отправка: права проверяются в момент отправки, чужой проект недоступен', async () => {
+  const clock = clockAt('2026-09-18T20:00:00.000Z');
+  const { chat, owner, db, person, session } = setup({ clock });
+  const helper = person('daria', [ROOM]);
+  await call(chat, { session: owner, method: 'PUT', url: room('/members'), body: { userIds: [OWNER_ID, helper.id] } });
+
+  const planned = await call(chat, { session: session(helper.id), method: 'POST', url: room('/scheduled'),
+    body: { clientId: `plan-${crypto.randomUUID()}`, text: 'Сообщение участника', dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' } });
+  assert.equal(planned.statusCode, 201);
+
+  // Участника исключили из комнаты до наступления срока.
+  await call(chat, { session: owner, method: 'PUT', url: room('/members'), body: { userIds: [OWNER_ID] } });
+  const before = roomMessages(db).length;
+  clock.now = Date.parse('2026-09-19T01:00:00.000Z');
+  const result = chat.processScheduledMessages();
+  assert.deepEqual(result, { sent: 0, expired: 0, blocked: 1, failed: 0 });
+  assert.equal(roomMessages(db).length, before, 'исключённый автор не отправляет клиенту ничего');
+  const row = scheduledRows(db)[0];
+  assert.equal(row.status, 'error');
+  assert.match(row.error, /больше не может писать/);
+
+  // Чужой проект недоступен и на планирование.
+  const outsider = person('stranger', [OTHER]);
+  await assert.rejects(() => call(chat, { session: session(outsider.id), method: 'POST', url: room('/scheduled'),
+    body: { clientId: `plan-${crypto.randomUUID()}`, text: 'Чужое', dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' } }), status(403));
+});
+
+test('отложенная отправка: напоминание по задаче даёт ссылку на задачу, чужая задача отклоняется', async () => {
+  const clock = clockAt('2026-09-18T20:00:00.000Z');
+  const { chat, owner, db } = setup({ clock });
+  const task = await call(chat, { session: owner, method: 'POST', url: room('/tasks'),
+    body: { title: 'Выложить правку по фото', externalRef: 'А8', site: ROOM } });
+  const taskId = task.payload.task.id;
+
+  const planned = await call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+    body: { clientId: `plan-${crypto.randomUUID()}`, kind: 'task_reminder', taskId, text: 'Проверить, что правка на сайте',
+      dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' } });
+  assert.equal(planned.payload.item.kind, 'task_reminder');
+  assert.equal(planned.payload.item.taskId, taskId);
+
+  clock.now = Date.parse('2026-09-19T01:00:00.000Z');
+  assert.equal(chat.processScheduledMessages().sent, 1);
+  const last = roomMessages(db).pop();
+  assert.match(last.text, /Напоминание по задаче А8: Выложить правку по фото/);
+  assert.match(last.text, /Проверить, что правка на сайте/);
+  // Ссылка ведёт на реально существующий адрес кабинета: выдуманного маршрута на задачу здесь нет.
+  assert.match(last.text, /cabinet\.html#hugh/, 'в напоминании есть ссылка на чат проекта в кабинете');
+  assert.doesNotMatch(last.text, /task=/, 'выдуманных параметров маршрута в ссылке нет');
+
+  // Задача другого проекта в напоминание не берётся.
+  await assert.rejects(() => call(chat, { session: owner, method: 'POST', url: room('/scheduled', OTHER),
+    body: { clientId: `plan-${crypto.randomUUID()}`, kind: 'task_reminder', taskId, text: 'Чужая задача', dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' } }), status(400));
+});
+
+test('отложенная отправка: срок в прошлом, неизвестный пояс и лишние поля отклоняются', async () => {
+  const clock = clockAt('2026-09-18T20:00:00.000Z');
+  const { chat, owner } = setup({ clock });
+  const bad = (body) => call(chat, { session: owner, method: 'POST', url: room('/scheduled'), body });
+  await assert.rejects(() => bad({ text: 'Поздно', dueAtLocal: '2026-09-18T10:00', timezone: 'Asia/Irkutsk' }), status(400));
+  await assert.rejects(() => bad({ text: 'Плохой пояс', dueAtLocal: '2026-09-19T09:00', timezone: 'Марс/Олимп' }), status(400));
+  await assert.rejects(() => bad({ text: 'Без срока' }), status(400));
+  await assert.rejects(() => bad({ text: 'Пустой пояс', dueAtLocal: '19.09.2026 09:00', timezone: 'Asia/Irkutsk' }), status(400));
+  await assert.rejects(() => bad({ text: 'Лишнее поле', dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk', secret: 1 }), status(400));
+  await assert.rejects(() => bad({ text: '', dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' }), status(400));
+  await assert.rejects(() => bad({ text: 'Слишком далеко', dueAtLocal: '2030-09-19T09:00', timezone: 'Asia/Irkutsk' }), status(400));
+});
+
+test('отложенная отправка: смена и отключение Telegram-группы не отправляют старое сообщение новой аудитории', async () => {
+  const clock = clockAt('2026-09-18T20:00:00.000Z');
+  const { chat, owner, db } = setup({ clock });
+  await call(chat, { session: owner, method: 'PATCH', url: room('/settings'), body: { telegramChatId: '-1001111111111' } });
+  const planned = await call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+    body: { clientId: `plan-${crypto.randomUUID()}`, text: 'Сводка для группы', dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' } });
+
+  // Владелец перепривязал проект к другой группе.
+  await call(chat, { session: owner, method: 'PATCH', url: room('/settings'), body: { telegramChatId: '-1002222222222' } });
+  const before = roomMessages(db).length;
+  clock.now = Date.parse('2026-09-19T01:00:00.000Z');
+  const moved = chat.processScheduledMessages();
+  assert.equal(moved.blocked, 1);
+  assert.equal(roomMessages(db).length, before, 'в новую группу старое сообщение не уходит');
+  const row = db.prepare('SELECT * FROM project_chat_scheduled WHERE id=?').get(planned.payload.item.id);
+  assert.equal(row.status, 'error');
+  assert.match(row.error, /группа проекта изменилась/i);
+
+  // Отключение группы — тот же исход, тоже без отправки.
+  const second = await call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+    body: { clientId: `plan-${crypto.randomUUID()}`, text: 'Вторая сводка', dueAtLocal: '2026-09-19T10:00', timezone: 'Asia/Irkutsk' } });
+  await call(chat, { session: owner, method: 'PATCH', url: room('/settings'), body: { telegramChatId: '' } });
+  clock.now = Date.parse('2026-09-19T02:00:00.000Z');
+  assert.equal(chat.processScheduledMessages().blocked, 1);
+  assert.equal(db.prepare('SELECT status FROM project_chat_scheduled WHERE id=?').get(second.payload.item.id).status, 'error');
+});
+
+test('отложенная отправка: повтор запроса не создаёт второе сообщение, тот же ключ с другим текстом отклоняется', async () => {
+  const clock = clockAt('2026-09-18T20:00:00.000Z');
+  const { chat, owner, db } = setup({ clock });
+  const body = { clientId: 'plan-fixed-key-0001', text: 'Единственная сводка',
+    dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' };
+  const first = await call(chat, { session: owner, method: 'POST', url: room('/scheduled'), body });
+  const again = await call(chat, { session: owner, method: 'POST', url: room('/scheduled'), body });
+  assert.equal(again.payload.item.id, first.payload.item.id, 'потерянный ответ не превращается во вторую отправку');
+  assert.equal(db.prepare("SELECT count(*) AS n FROM project_chat_scheduled WHERE company_code=?").get(ROOM).n, 1);
+
+  await assert.rejects(() => call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+    body: { ...body, text: 'Другой текст' } }), status(409));
+  // Ключ обязателен: без него повтор неразличим.
+  await assert.rejects(() => call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+    body: { text: 'Без ключа', dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' } }), status(400));
+});
+
+test('отложенная отправка: чужую запись участник не меняет, владелец и автор — могут', async () => {
+  const clock = clockAt('2026-09-18T20:00:00.000Z');
+  const { chat, owner, person, session } = setup({ clock });
+  const daria = person('daria2', [ROOM]);
+  const boris = person('boris', [ROOM]);
+  await call(chat, { session: owner, method: 'PUT', url: room('/members'), body: { userIds: [OWNER_ID, daria.id, boris.id] } });
+
+  const mine = await call(chat, { session: session(daria.id), method: 'POST', url: room('/scheduled'),
+    body: { clientId: `plan-${crypto.randomUUID()}`, text: 'Сообщение Дарьи', dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' } });
+  const id = mine.payload.item.id;
+
+  // Другой участник с правом ответа чужую отправку не трогает.
+  await assert.rejects(() => call(chat, { session: session(boris.id), method: 'PATCH', url: room(`/scheduled/${id}`),
+    body: { text: 'Подменённый текст' } }), status(403));
+  await assert.rejects(() => call(chat, { session: session(boris.id), method: 'PATCH', url: room(`/scheduled/${id}`),
+    body: { status: 'cancelled' } }), status(403));
+
+  // Автор меняет свою, владелец может отменить любую.
+  const edited = await call(chat, { session: session(daria.id), method: 'PATCH', url: room(`/scheduled/${id}`), body: { text: 'Свой текст' } });
+  assert.equal(edited.payload.item.text, 'Свой текст');
+  const cancelled = await call(chat, { session: owner, method: 'PATCH', url: room(`/scheduled/${id}`), body: { status: 'cancelled' } });
+  assert.equal(cancelled.payload.item.status, 'cancelled');
+});
+
+test('отложенная отправка: перезапуск сервера с новой базой и новым экземпляром доставляет ровно один раз', async () => {
+  const clock = clockAt('2026-09-18T20:00:00.000Z');
+  const first = setup({ clock, file: true });
+  await call(first.chat, { session: first.owner, method: 'PATCH', url: room('/settings'), body: { telegramChatId: '-1001234567890' } });
+  await call(first.chat, { session: first.owner, method: 'POST', url: room('/scheduled'),
+    body: { clientId: 'plan-restart-0001', text: 'Переживи перезапуск', dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' } });
+  // «Сервер выключили»: закрываем базу и поднимаем НОВЫЙ экземпляр на том же файле.
+  first.db.close();
+
+  const restarted = setup({ clock, file: true, dir: first.dir });
+  clock.now = Date.parse('2026-09-19T01:00:00.000Z');
+  assert.equal(restarted.chat.processScheduledMessages().sent, 1, 'после перезапуска отправка состоялась');
+  const messages = roomMessages(restarted.db);
+  assert.equal(messages.filter(m => m.text === 'Переживи перезапуск').length, 1);
+
+  // Ещё один «перезапуск» — второго сообщения не появляется.
+  restarted.db.close();
+  const third = setup({ clock, file: true, dir: first.dir });
+  clock.tick(3600000);
+  assert.equal(third.chat.processScheduledMessages().sent, 0);
+  assert.equal(roomMessages(third.db).filter(m => m.text === 'Переживи перезапуск').length, 1);
+  third.db.close();
+});
+
+test('отложенная отправка: несуществующее местное время отклоняется, повторяющийся час берётся первым', async () => {
+  const clock = clockAt('2026-03-01T00:00:00.000Z');
+  const { chat, owner } = setup({ clock });
+  const plan = (dueAtLocal, timezone) => call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+    body: { clientId: `plan-${crypto.randomUUID()}`, text: 'Перевод стрелок', dueAtLocal, timezone } });
+  // 29.03.2026 02:30 в Берлине не существует: стрелки переводят с 02:00 на 03:00.
+  await assert.rejects(() => plan('2026-03-29T02:30', 'Europe/Berlin'), status(400));
+  const exists = await plan('2026-03-29T03:30', 'Europe/Berlin');
+  assert.equal(exists.payload.item.dueAt, '2026-03-29T01:30:00.000Z');
+  // 25.10.2026 02:30 в Берлине наступает дважды: берём первое, более раннее вхождение.
+  const fold = await plan('2026-10-25T02:30', 'Europe/Berlin');
+  assert.equal(fold.payload.item.dueAt, '2026-10-25T00:30:00.000Z');
+});
+
+test('отложенная отправка: пояс проверяется во всех ветках, готовый момент — только настоящий ISO', async () => {
+  const clock = clockAt('2026-09-18T20:00:00.000Z');
+  const { chat, owner } = setup({ clock });
+  const plan = (body) => call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+    body: { clientId: `plan-${crypto.randomUUID()}`, text: 'Проверка', ...body } });
+
+  // Готовый момент: только Z или смещение, существующая дата.
+  await assert.rejects(() => plan({ dueAt: '2026-09-19 09:00' }), status(400));
+  await assert.rejects(() => plan({ dueAt: '2026-02-30T09:00:00Z' }), status(400));
+  await assert.rejects(() => plan({ dueAt: 'завтра' }), status(400));
+  const absolute = await plan({ dueAt: '2026-09-19T01:00:00Z' });
+  assert.equal(absolute.payload.item.dueAt, '2026-09-19T01:00:00.000Z');
+  const offset = await plan({ dueAt: '2026-09-19T09:00:00+08:00' });
+  assert.equal(offset.payload.item.dueAt, '2026-09-19T01:00:00.000Z');
+
+  // Пояс проверяется и рядом с готовым моментом.
+  await assert.rejects(() => plan({ dueAt: '2026-09-19T01:00:00Z', timezone: 'Марс/Олимп' }), status(400));
+
+  // И при изменении одного только пояса.
+  const item = await plan({ dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' });
+  await assert.rejects(() => call(chat, { session: owner, method: 'PATCH', url: room(`/scheduled/${item.payload.item.id}`),
+    body: { timezone: 'Совсем/Нет' } }), status(400));
+  // Пояс не прислали — наследуется прежний, срок не меняется.
+  const kept = await call(chat, { session: owner, method: 'PATCH', url: room(`/scheduled/${item.payload.item.id}`),
+    body: { text: 'Только текст' } });
+  assert.equal(kept.payload.item.timezone, 'Asia/Irkutsk');
+  assert.equal(kept.payload.item.dueAt, item.payload.item.dueAt);
+});
+
+test('отложенная отправка: повтор запроса узнаётся даже после срока и при заполненной очереди', async () => {
+  const clock = clockAt('2026-09-18T20:00:00.000Z');
+  const { chat, owner } = setup({ clock });
+  const body = { clientId: 'plan-late-0001', text: 'Утренняя сводка', dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' };
+  const first = await call(chat, { session: owner, method: 'POST', url: room('/scheduled'), body });
+
+  // Срок прошёл, сообщение уже отправлено — повтор того же запроса возвращает ту же запись, а не ошибку.
+  clock.now = Date.parse('2026-09-19T02:00:00.000Z');
+  assert.equal(chat.processScheduledMessages().sent, 1);
+  const repeat = await call(chat, { session: owner, method: 'POST', url: room('/scheduled'), body });
+  assert.equal(repeat.payload.item.id, first.payload.item.id);
+  assert.equal(repeat.payload.item.status, 'sent');
+
+  // Новая запись с прошедшим сроком по-прежнему отклоняется.
+  await assert.rejects(() => call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+    body: { ...body, clientId: 'plan-late-0002' } }), status(400));
+});
+
+test('отложенная отправка: право менять отдаётся сервером и совпадает с тем, что он разрешает', async () => {
+  const clock = clockAt('2026-09-18T20:00:00.000Z');
+  const { chat, owner, person, session } = setup({ clock });
+  const daria = person('daria3', [ROOM]);
+  const boris = person('boris2', [ROOM]);
+  await call(chat, { session: owner, method: 'PUT', url: room('/members'), body: { userIds: [OWNER_ID, daria.id, boris.id] } });
+  await call(chat, { session: session(daria.id), method: 'POST', url: room('/scheduled'),
+    body: { clientId: `plan-${crypto.randomUUID()}`, text: 'Сообщение Дарьи', dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' } });
+
+  const forAuthor = await call(chat, { session: session(daria.id), url: room('') });
+  assert.equal(forAuthor.payload.scheduled[0].canManage, true, 'автору управление разрешено');
+  const forOther = await call(chat, { session: session(boris.id), url: room('') });
+  assert.equal(forOther.payload.scheduled[0].canManage, false, 'постороннему участнику — нет');
+  assert.equal(forOther.payload.scheduled[0].authorId, daria.id);
+  const forOwner = await call(chat, { session: owner, url: room('') });
+  assert.equal(forOwner.payload.scheduled[0].canManage, true, 'владельцу разрешено');
 });
