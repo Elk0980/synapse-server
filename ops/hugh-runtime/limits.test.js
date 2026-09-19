@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {LIMITS, validateReplyPayload, canonicalPayload, capOutput} = require('./limits');
+const {LIMITS, validateReplyPayload, canonicalPayload, capOutput, scopeKeyOf} = require('./limits');
 
 const base = () => ({
   jobId: 'job-1',
@@ -14,22 +14,22 @@ const base = () => ({
 test('корректное тело разбирается и нормализуется', () => {
   const payload = validateReplyPayload({...base(), jobId: ' job-1 ', companyCode: ' palitra '});
   // Тело без audience читается как общий чат проекта: прежние отправители работают без изменений.
-  assert.deepEqual(payload, {...base(), audience: 'client-shared', scopeKey: 'palitra'});
+  assert.deepEqual(payload, {...base(), audience: 'client-shared'});
 });
 
 test('audience необязателен, принимает только перечень и задаёт отдельную область заданий', () => {
   const shared = validateReplyPayload(base());
   assert.equal(shared.audience, 'client-shared');
-  assert.equal(shared.scopeKey, 'palitra', 'у общего чата ключ области равен коду компании');
+  assert.equal(scopeKeyOf(shared.companyCode, shared.audience), 'palitra', 'у общего чата ключ области равен коду компании');
 
   const explicit = validateReplyPayload({...base(), audience: 'client-shared'});
-  assert.equal(explicit.scopeKey, 'palitra');
+  assert.equal(scopeKeyOf(explicit.companyCode, explicit.audience), 'palitra');
   // Явно указанный общий чат не меняет хэш: иначе уже принятые задания стали бы конфликтом.
   assert.equal(canonicalPayload(explicit), canonicalPayload(shared));
 
   const priv = validateReplyPayload({...base(), audience: 'owner-private'});
   assert.equal(priv.audience, 'owner-private');
-  assert.equal(priv.scopeKey, 'palitra#owner-private', 'личная переписка живёт в своей области');
+  assert.equal(scopeKeyOf(priv.companyCode, priv.audience), 'palitra#owner-private', 'личная переписка живёт в своей области');
   assert.notEqual(canonicalPayload(priv), canonicalPayload(shared), 'аудитория входит в хэш');
 
   for (const bad of ['owner', 'private', '', ' ', 'OWNER-PRIVATE', 'client-shared ; drop', null, 7, {}]) {

@@ -110,7 +110,9 @@ function validateReplyPayload(raw) {
     throw invalid(`Переписка длиннее ${LIMITS.maxTranscriptBytes} байт`);
   }
 
-  return {jobId, companyCode, audience, scopeKey: scopeKeyOf(companyCode, audience), system, messages};
+  // scopeKey намеренно не возвращается: это производная величина хранилища заданий,
+  // а не часть тела запроса. Иначе она уезжала бы дальше в модель и в локальный обработчик.
+  return {jobId, companyCode, audience, system, messages};
 }
 
 /* Канонический вид для хэша идемпотентности: сравниваем именно проверенные данные.

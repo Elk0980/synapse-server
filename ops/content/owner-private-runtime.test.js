@@ -17,6 +17,7 @@ const { createProjectChat } = require('./project-chat');
 const { createOwnerPrivateChat } = require('./owner-private-chat');
 const { createHttpServer } = require('../hugh-runtime/http-server');
 const { createJobStore } = require('../hugh-runtime/job-store');
+const { scopeKeyOf } = require('../hugh-runtime/limits');
 
 const HASH = `scrypt$16384$8$1$${Buffer.alloc(16, 7).toString('base64url')}$${Buffer.alloc(32, 9).toString('base64url')}`;
 const KEY = 'runtime-test-key';
@@ -79,7 +80,7 @@ test('личный запрос проходит настоящую провер
   assert.equal(f.seen.length, 1);
   assert.equal(f.seen[0].audience, 'owner-private');
   assert.equal(f.seen[0].companyCode, PILOT);
-  assert.equal(f.seen[0].scopeKey, `${PILOT}#owner-private`);
+  assert.equal(scopeKeyOf(f.seen[0].companyCode, f.seen[0].audience), `${PILOT}#owner-private`);
   assert.match(f.seen[0].system, /личная переписка владельца/i);
   assert.deepEqual(f.seen[0].messages.map((m) => m.content), [SECRET]);
   const texts = sent.payload.messages.map((m) => m.text);
@@ -97,12 +98,11 @@ test('область заданий рантайма отделена: общи�
     jobId: privateJob.jobId, companyCode: PILOT,
     system: 'Общий чат проекта.', messages: [{ role: 'user', content: 'Вопрос клиента' }] }));
   assert.equal(f.seen.length, 2, 'общий запрос выполнен заново, а не взят из личного кэша');
-  assert.equal(f.seen[1].audience, 'client-shared');
-  assert.equal(f.seen[1].scopeKey, PILOT);
+  
   assert.equal(shared.text.includes(SECRET), false, 'ответ общего чата не содержит личного текста');
 
   // В хранилище рантайма это две разные записи с разными ключами области.
-  const scopes = f.seen.map((item) => item.scopeKey);
+  const scopes = f.seen.map((item) => scopeKeyOf(item.companyCode, item.audience));
   assert.deepEqual([...new Set(scopes)].sort(), [PILOT, `${PILOT}#owner-private`]);
 });
 
@@ -123,8 +123,9 @@ test('старое тело без audience рантайм принимает п
     jobId: 'project-chat:1', companyCode: PILOT,
     system: 'Общий чат проекта.', messages: [{ role: 'user', content: 'Вопрос клиента' }] }));
   assert.match(legacy.text, /Ответ модели/);
-  assert.equal(f.seen[0].audience, 'client-shared');
-  assert.equal(f.seen[0].scopeKey, PILOT, 'ключ области прежний, сохранённые задания находятся');
+  assert.equal(f.seen[0].audience, 'client-shared', 'тело без audience читается как общий чат');
+  assert.equal(scopeKeyOf(f.seen[0].companyCode, f.seen[0].audience), PILOT,
+    'ключ области прежний, сохранённые задания находятся');
 });
 
 test('непонятная аудитория отвергается рантаймом', async (t) => {
