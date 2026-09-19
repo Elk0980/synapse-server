@@ -154,7 +154,8 @@ function createAgentSkills({ root = DEFAULT_ROOT, env = process.env, logger = co
     for (const item of entries) {
       const value = score(item.triggers, words);
       const need = Number.isSafeInteger(item.threshold) && item.threshold > 0 ? item.threshold : 2;
-      if (value < need) continue;
+      const direct = score(item.directTriggers, words) > 0;
+      if (!direct && value < need) continue;
       if (!best || value > best.score) best = { item, score: value };
     }
     if (!best) return null;

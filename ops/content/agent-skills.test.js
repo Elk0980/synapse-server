@@ -42,6 +42,15 @@ test('встроенный навык выбирается по контентн
   assert.equal(result.text.includes('---'), false, 'шапка Agent Skills в запрос не уходит');
 });
 
+test('короткие запросы о контенте и брифе выбирают навык без специальных формулировок', () => {
+  const store = skills();
+  for (const text of ['Создай контент-план на неделю', 'Помоги с брифом клиента', 'Какие есть идеи для reels?']) {
+    assert.equal(store.select(text)?.id, 'synapse-content-system', text);
+  }
+  assert.equal(store.instructions('Составь контент-план').files.length, 2);
+  assert.match(store.instructions('Помоги с брифом').text, /целевую аудиторию/);
+});
+
 test('контекст компании отдельный и не подменяется соседней компанией', () => {
   const store = skills();
   const alvi = store.instructions(CONTENT_TASK, { companyCode: 'alvi' });
