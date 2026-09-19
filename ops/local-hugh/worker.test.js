@@ -88,7 +88,8 @@ test('claim → генерация → outbox → complete с эхом payloadHa
     assert.equal(harness.outbox.readActiveJob(), null);
     assert.equal(harness.outbox.get('42').outcome, 'accepted');
     assert.equal(harness.store.get('palitra-love', 'project-chat:42').status, 'completed');
-    assert.deepEqual(harness.runtime.replyCalls[0], replyPayload());
+    // Проверенное тело несёт явную аудиторию: тело без неё читается как общий чат проекта.
+    assert.deepEqual(harness.runtime.replyCalls[0], {...replyPayload(), audience: 'client-shared'});
     const status = harness.lastStatus();
     assert.equal(status.worker.counters.claims, 1);
     assert.equal(status.worker.counters.completesAccepted, 1);

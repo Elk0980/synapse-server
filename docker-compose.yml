@@ -116,6 +116,25 @@ services:
       HUGH_FALLBACK_DEEPSEEK_TIMEOUT_MS: ${HUGH_FALLBACK_DEEPSEEK_TIMEOUT_MS:-}
       HUGH_FALLBACK_LOCAL_OFFLINE_MINUTES: ${HUGH_FALLBACK_LOCAL_OFFLINE_MINUTES:-0}
       HUGH_ACK_WHEN_UNAVAILABLE: ${HUGH_ACK_WHEN_UNAVAILABLE:-0}
+      # Объявленные владельцем цены резервных провайдеров: без них денежная граница по провайдеру не работает.
+      HUGH_FALLBACK_OPENROUTER_USD_PER_1K_PROMPT: ${HUGH_FALLBACK_OPENROUTER_USD_PER_1K_PROMPT:-}
+      HUGH_FALLBACK_OPENROUTER_USD_PER_1K_COMPLETION: ${HUGH_FALLBACK_OPENROUTER_USD_PER_1K_COMPLETION:-}
+      HUGH_FALLBACK_DEEPSEEK_USD_PER_1K_PROMPT: ${HUGH_FALLBACK_DEEPSEEK_USD_PER_1K_PROMPT:-}
+      HUGH_FALLBACK_DEEPSEEK_USD_PER_1K_COMPLETION: ${HUGH_FALLBACK_DEEPSEEK_USD_PER_1K_COMPLETION:-}
+      # Бюджетный стоп: пусто = граница не задана. Окно и потолок ответа пусты — действуют значения кода (30 дней, 1200 токенов).
+      HUGH_FALLBACK_BUDGET_USD: ${HUGH_FALLBACK_BUDGET_USD:-}
+      HUGH_FALLBACK_BUDGET_MAX_REQUESTS: ${HUGH_FALLBACK_BUDGET_MAX_REQUESTS:-}
+      HUGH_FALLBACK_BUDGET_WINDOW_DAYS: ${HUGH_FALLBACK_BUDGET_WINDOW_DAYS:-}
+      HUGH_FALLBACK_BUDGET_MAX_OUTPUT_TOKENS: ${HUGH_FALLBACK_BUDGET_MAX_OUTPUT_TOKENS:-}
+      # Мастер-ключ хранилища ключей провайдеров, которые владелец вводит в ЛК. Значение только в .env сервера.
+      # Пусто = хранилище закрыто (fail-closed): ключи нельзя ни сохранить, ни прочитать, в рантайм ничего не уходит.
+      HUGH_PROVIDER_MASTER_KEY: ${HUGH_PROVIDER_MASTER_KEY:-}
+      # Дополнительные разрешённые хосты API (через запятую); пусто = только официальные из каталога.
+      HUGH_PROVIDER_ALLOWED_HOSTS: ${HUGH_PROVIDER_ALLOWED_HOSTS:-}
+      # Навыки Agent Skills из доверенного каталога образа. Пусто = навыки подключены;
+      # HUGH_SKILLS=off выключает их целиком. Исполнения скриптов и сетевых загрузок нет.
+      HUGH_SKILLS: ${HUGH_SKILLS:-}
+      HUGH_SKILLS_MAX_BYTES: ${HUGH_SKILLS_MAX_BYTES:-}
       # Лимит видео для очереди контента (байты); пусто = 60 МБ по умолчанию сервиса.
       MAX_PUBLISHING_VIDEO_BYTES: ${MAX_PUBLISHING_VIDEO_BYTES:-}
       # Команды Хью в группах: имя бота без @ (не секрет) для @упоминаний, публичный адрес кабинета для /content.

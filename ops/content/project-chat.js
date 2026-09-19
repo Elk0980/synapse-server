@@ -14,11 +14,14 @@ const hughCommands = require('./hugh-commands');
 const { createLocalWorker } = require('./project-chat-local-worker');
 const { createSiteOrders } = require('./site-orders');
 const { createProjectChatMiniApp } = require('./project-chat-miniapp');
+const { createAgentSkills } = require('./agent-skills');
 
 const MAX_ATTACHMENT = 8 * 1024 * 1024;
 const MESSAGE_PAGE = 100;
 const MESSAGE_LIMIT = 16000;
 const AI_ATTEMPTS = 3;
+// Заголовок задачи менеджеру о неотвеченных вопросах: по нему же ищется уже открытая задача.
+const MANAGER_TASK_TITLE = 'Ответить клиенту вручную: ИИ недоступен';
 const AI_HISTORY = 30;
 const TELEGRAM_ATTEMPTS = 3;
 const TELEGRAM_LEASE = 10 * 60 * 1000;   // дольше самой длинной серии частей одной отправки
@@ -149,6 +152,9 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   miniApp: miniConfig = {},
   fetchImpl = (...args) => globalThis.fetch(...args), statusTtl = RUNTIME_STATUS_TTL, fallback: fallbackConfig = {},
   crmUrl = '', crmApiKey = '', botUsername = '', cabinetUrl = '',
+  /* Навыки формата Agent Skills: доверенный каталог репозитория, только чтение markdown.
+     Передаётся явно ради тестов; боевой сервер берёт каталог по умолчанию. */
+  skills = createAgentSkills({}),
   /* Часы отложенной отправки вынесены наружу ради детерминированных тестов: боевой сервер
      передаёт реальные часы по умолчанию, тест — управляемые. Ничего, кроме планировщика, их не берёт. */
   now = () => Date.now() }) {
@@ -301,7 +307,8 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   /* Резервные провайдеры: OpenAI-совместимые API из окружения сервера. Ни один ключ не добавляется кодом;
      без настроенных провайдеров поведение прежнее. Компании локального обработчика сервер берёт только
      через резерв и только когда компьютер не на связи дольше HUGH_FALLBACK_LOCAL_OFFLINE_MINUTES (0 — никогда). */
-  const fallback = createHughFallback({ db, env: fallbackConfig.env || process.env, fetchImpl, messageLimit: MESSAGE_LIMIT });
+  const fallback = createHughFallback({ db, env: fallbackConfig.env || process.env, fetchImpl,
+    messageLimit: MESSAGE_LIMIT, providerStore: fallbackConfig.providerStore || null });
   const localOfflineMinutes = Number.parseInt((fallbackConfig.env || process.env).HUGH_FALLBACK_LOCAL_OFFLINE_MINUTES || '0', 10) || 0;
   // Подтверждение приёма включается вместе с резервом или явно HUGH_ACK_WHEN_UNAVAILABLE=1; иначе поведение прежнее.
   const ackEnabled = fallback.providers.length > 0 || (fallbackConfig.env || process.env).HUGH_ACK_WHEN_UNAVAILABLE === '1';
@@ -1332,8 +1339,15 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     const context = aiContext(job.company_code, job.message_id);
     const source = db.prepare('SELECT text FROM project_chat_messages WHERE id=?').get(job.message_id);
     const idea = hughCommands.parseCommand(source?.text || '', botUsername)?.name === 'idea';
+    /* Навык подбирается по типу задания и попадает в системную часть ДО обращения к модели.
+       Тот же payload читает и резерв, поэтому при отказе основного пути инструкции не теряются.
+       Отказ загрузчика не должен ломать чат: без навыка запрос собирается как прежде. */
+    let skill = null;
+    try { skill = skills?.instructions?.(source?.text || '', { companyCode: job.company_code }) || null; }
+    catch (error) { console.error('project-chat: навык не подключён:', error?.message || error); }
     const body = { jobId: `project-chat:${job.id}`, companyCode: job.company_code,
-      messages: context.messages, system: `${SYSTEM}\n\n${context.project}${idea ? `\n\n${hughCommands.IDEA_INSTRUCTION}` : ''}` };
+      messages: context.messages,
+      system: `${SYSTEM}\n\n${context.project}${skill ? `\n\n${skill.text}` : ''}${idea ? `\n\n${hughCommands.IDEA_INSTRUCTION}` : ''}` };
     if (!body.messages.length) fail(500, 'История проекта пуста: запрос к Хью не собран');
     if (body.messages.some(m => !['user', 'assistant'].includes(m.role) || typeof m.content !== 'string' || !m.content)) {
       fail(500, 'Некорректная история проекта: запрос к Хью не собран');
@@ -1367,7 +1381,19 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     return { configured: status.configured, available: fallback.available().length,
       providers: status.providers.map((p) => ({ name: p.name, model: p.model, cooling: p.cooling, live: p.live, lastSuccessAt: p.lastSuccessAt,
         ...(user?.role === 'owner' ? { lastError: p.lastError, cooldownUntil: p.cooldownUntil } : {}) })),
-      issues: user?.role === 'owner' ? status.issues : [] };
+      issues: user?.role === 'owner' ? status.issues : [],
+      /* Состояние навыков видит только владелец: идентификаторы и версии, без содержания. */
+      ...(user?.role === 'owner' ? { skills: skillsSummary() } : {}) };
+  }
+  function skillsSummary() {
+    try {
+      const value = skills?.status?.();
+      if (!value) return { enabled: false, skills: [], issues: ['Загрузчик навыков не подключён'] };
+      return { enabled: value.enabled, catalogVersion: value.catalogVersion, maxBytes: value.maxBytes,
+        skills: value.skills, issues: value.issues };
+    } catch (error) {
+      return { enabled: false, skills: [], issues: [`Состояние навыков не прочитано: ${error?.message || 'неизвестная ошибка'}`] };
+    }
   }
   /* Честное подтверждение приёма, когда ни основной путь, ни резерв не доступны: одно на компанию за 30 минут,
      только для вопросов, которые ждут ответа. Не обещает выполненных действий. */
@@ -1377,8 +1403,23 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       AND status IN ('pending','running','blocked','error') AND attempts<?${codesFilter}`).all(AI_ATTEMPTS, ...params);
     for (const { company_code: code } of waiting) {
       if (!fallback.ackDue(code)) continue;
-      tx(() => { insertMessage({ code, authorId: 'hugh', authorName: 'Хью', authorType: 'assistant', text: fallback.ACK_TEXT }); fallback.markAck(code); });
+      tx(() => {
+        insertMessage({ code, authorId: 'hugh', authorName: 'Хью', authorType: 'assistant', text: fallback.ACK_TEXT });
+        fallback.markAck(code);
+        managerTask(code);
+      });
     }
+  }
+  /* Подтверждение приёма — не ответ по существу, поэтому вопрос должен попасть к человеку.
+     Задача заводится существующим механизмом задач своей компании и не дублируется:
+     пока прежняя не закрыта, вторая не создаётся. */
+  function managerTask(code) {
+    const open = db.prepare(`SELECT id FROM project_chat_tasks WHERE company_code=? AND title=? AND status<>'done' LIMIT 1`)
+      .get(code, MANAGER_TASK_TITLE);
+    if (open) return;
+    const time = stamp();
+    db.prepare(`INSERT INTO project_chat_tasks(company_code,title,assignee_id,stage_id,status,due,source_message_id,created_at,updated_at)
+      VALUES(?,?,NULL,NULL,'todo','',NULL,?,?)`).run(code, MANAGER_TASK_TITLE, time, time);
   }
   function storeReply(job, answer) {
     tx(() => {
@@ -1411,6 +1452,17 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     const answer = await result.json(), text = cleanText(answer?.text ?? '', MESSAGE_LIMIT);
     if (!text) throw new Error('Сервис ИИ вернул пустой ответ');
     return { text, provider: answer.provider, model: answer.model };
+  }
+  /* Один вопрос к Хью без единой записи в таблицы чата проекта: сначала собственный рантайм,
+     затем те же резервные провайдеры с общим бюджетом. Нужен личной переписке владельца,
+     у которой своё хранилище: транспорт переиспользуется, история — нет.
+     Ни одна строка `project_chat_*` здесь не читается и не пишется. */
+  async function askHugh(payload) {
+    try { return await runtimeReply(payload); }
+    catch (runtimeError) {
+      if (!fallback.available().length) throw runtimeError;
+      return fallback.reply(payload);
+    }
   }
   /* Компании локального обработчика: сервер подхватывает их вопросы через резерв только при долгом офлайне
      компьютера и держит аренду, чтобы вернувшийся обработчик не ответил второй раз. */
@@ -1545,8 +1597,8 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   }
   function stopWorker() { clearInterval(timer); timer = null; }
   const bridge = { getBinding, migrateBinding, receiveTelegram, receiveCommand, storeAttachment, readAttachment, pendingTelegram, acknowledgeTelegram };
-  return { handle, bridge, ...bridge, snapshot, listMessages, requeueAI, runtimeStatus, processAIJobs,
-    processScheduledMessages, scheduledList, startWorker, stopWorker, localWorker, siteOrders, miniApp, fallback };
+  return { handle, bridge, ...bridge, snapshot, listMessages, requeueAI, runtimeStatus, processAIJobs, askHugh,
+    processScheduledMessages, scheduledList, startWorker, stopWorker, localWorker, siteOrders, miniApp, fallback, skills };
 }
 
 module.exports = { createProjectChat, MAX_ATTACHMENT, MESSAGE_PAGE };

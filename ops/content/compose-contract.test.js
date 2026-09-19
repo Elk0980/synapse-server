@@ -39,13 +39,23 @@ test('content получает все переменные резерва Хью
   const env = envOf(block);
   const expected = ['HUGH_FALLBACK_PROVIDERS', 'HUGH_FALLBACK_OPENROUTER_URL', 'HUGH_FALLBACK_OPENROUTER_KEY', 'HUGH_FALLBACK_OPENROUTER_MODEL', 'HUGH_FALLBACK_OPENROUTER_TIMEOUT_MS',
     'HUGH_FALLBACK_DEEPSEEK_URL', 'HUGH_FALLBACK_DEEPSEEK_KEY', 'HUGH_FALLBACK_DEEPSEEK_MODEL', 'HUGH_FALLBACK_DEEPSEEK_TIMEOUT_MS',
-    'HUGH_FALLBACK_LOCAL_OFFLINE_MINUTES', 'HUGH_ACK_WHEN_UNAVAILABLE', 'MAX_PUBLISHING_VIDEO_BYTES', 'TELEGRAM_BOT_USERNAME', 'CABINET_PUBLIC_URL'];
+    'HUGH_FALLBACK_LOCAL_OFFLINE_MINUTES', 'HUGH_ACK_WHEN_UNAVAILABLE', 'MAX_PUBLISHING_VIDEO_BYTES', 'TELEGRAM_BOT_USERNAME', 'CABINET_PUBLIC_URL',
+    // Без этих переменных бюджетный стоп и хранилище ключей провайдеров остаются выключенными в контейнере навсегда.
+    'HUGH_FALLBACK_OPENROUTER_USD_PER_1K_PROMPT', 'HUGH_FALLBACK_OPENROUTER_USD_PER_1K_COMPLETION',
+    'HUGH_FALLBACK_DEEPSEEK_USD_PER_1K_PROMPT', 'HUGH_FALLBACK_DEEPSEEK_USD_PER_1K_COMPLETION',
+    'HUGH_FALLBACK_BUDGET_USD', 'HUGH_FALLBACK_BUDGET_MAX_REQUESTS', 'HUGH_FALLBACK_BUDGET_WINDOW_DAYS',
+    'HUGH_FALLBACK_BUDGET_MAX_OUTPUT_TOKENS', 'HUGH_PROVIDER_MASTER_KEY', 'HUGH_PROVIDER_ALLOWED_HOSTS',
+    'HUGH_SKILLS', 'HUGH_SKILLS_MAX_BYTES'];
   for (const name of expected) {
     assert.ok(Object.hasOwn(env, name), `не проброшена ${name}`);
     assert.match(env[name], new RegExp(`^\\$\\{${name}:-[^}]*\\}$`), `${name} должна браться из .env сервера с пустым/безопасным значением по умолчанию`);
   }
   assert.equal(env.HUGH_FALLBACK_LOCAL_OFFLINE_MINUTES, '${HUGH_FALLBACK_LOCAL_OFFLINE_MINUTES:-0}', 'подхват локальных компаний по умолчанию выключен');
   assert.equal(env.HUGH_ACK_WHEN_UNAVAILABLE, '${HUGH_ACK_WHEN_UNAVAILABLE:-0}');
+  // Мастер-ключ приходит только из окружения сервера: значения в репозитории нет, пустое значение = хранилище закрыто.
+  assert.equal(env.HUGH_PROVIDER_MASTER_KEY, '${HUGH_PROVIDER_MASTER_KEY:-}', 'мастер-ключ берётся из .env сервера и по умолчанию пуст');
+  assert.ok(!compose.some((line) => /^\s+[A-Z0-9_]*(?:KEY|SECRET|TOKEN|PASSWORD)[A-Z0-9_]*:\s*[^$\s]/.test(line)),
+    'ни один ключ, секрет или токен не записан в compose значением: только ссылка на .env сервера');
   for (const forbidden of ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET', 'MODEL_API_KEY', 'ONLYPULT'])
     assert.ok(!Object.keys(env).some((name) => name.includes(forbidden)), `${forbidden} не должен пробрасываться в content`);
   // Имена провайдеров в compose совпадают с тем, что читает код: перечень HUGH_FALLBACK_PROVIDERS ограничен openrouter,deepseek.
@@ -56,6 +66,7 @@ test('content получает все переменные резерва Хью
   const example = fs.readFileSync(path.join(__dirname, '..', '..', '.env.example'), 'utf8');
   for (const name of expected.filter((n) => n.startsWith('HUGH_'))) assert.ok(example.includes(`${name}=`) || name.endsWith('_TIMEOUT_MS'), `${name} должна быть в .env.example`);
   assert.ok(!/HUGH_FALLBACK_[A-Z]+_KEY=\S/.test(example), 'в .env.example нет значений ключей');
+  assert.ok(!/HUGH_PROVIDER_MASTER_KEY=\S/.test(example), 'в .env.example нет значения мастер-ключа');
 });
 
 test('chat получает имя бота для команд Хью явным перечнем, токен бота в content не пробрасывается', () => {

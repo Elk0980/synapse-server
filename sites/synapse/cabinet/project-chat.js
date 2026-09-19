@@ -891,7 +891,7 @@
       notice(state, error.message, true);
     } finally { input.value = ""; settle(state); }
   };
-  const sharedShell = state => `<div class="pc-layout"><section class="pc-conversation" aria-label="Общий чат проекта"><header class="pc-room-header"><h2>${escape(state.ctx.identity.companies?.find(company => company.id === state.company)?.name || state.company)}</h2><p data-pc-members></p><p class="pc-muted" data-pc-connection></p><p class="pc-muted" data-pc-ai></p><button type="button" data-pc-retry-ai hidden>Повторить ответы Хью</button></header><div class="pc-history-more"><button type="button" data-pc-older hidden>Показать более ранние сообщения</button></div><ol class="pc-messages" data-pc-messages aria-label="Общая переписка" role="log" aria-live="polite"><li class="pc-empty">Загрузка…</li></ol><p data-pc-sync class="pc-muted pc-sync" role="status"></p><form data-pc-compose class="pc-compose" hidden><label class="sr-only" for="pc-message-input">Сообщение участникам проекта</label><textarea id="pc-message-input" name="text" rows="2" maxlength="12000" placeholder="Сообщение участникам проекта…"></textarea><div data-pc-pending class="pc-pending"></div><div class="pc-toolbar"><label class="pc-file-button">Прикрепить фото или файл<input type="file" multiple data-pc-upload aria-label="Прикрепить фото или файл"></label><button type="button" data-pc-schedule data-pc-write hidden>Запланировать</button><button type="submit">Отправить</button></div></form><p data-pc-readonly class="pc-muted pc-readonly" hidden>У вас доступ к просмотру. Для сообщений нужно право ответа в чате проекта.</p></section><aside class="pc-project"><div class="pc-toolbar"><h2>Задачи <span data-pc-task-count></span></h2><button type="button" data-pc-new-task data-pc-write hidden>Добавить</button></div><ul class="pc-tasks" data-pc-tasks></ul><section class="pc-scheduled" data-pc-scheduled-block hidden><h3>Запланировано</h3><ul data-pc-scheduled></ul></section><div class="pc-project-actions"><button type="button" data-pc-stages data-pc-write hidden>Этапы проекта</button><button type="button" data-pc-import data-pc-owner hidden>Импорт реестра</button><button type="button" data-pc-edit-members data-pc-owner hidden>Участники</button><button type="button" data-pc-settings data-pc-owner hidden>Настройки чата</button></div></aside></div>`;
+  const sharedShell = state => `<div class="pc-layout"><section class="pc-conversation" aria-label="Общий чат проекта"><header class="pc-room-header"><h2>${escape(state.ctx.identity.companies?.find(company => company.id === state.company)?.name || state.company)}</h2><p class="opc-audience opc-audience-shared" role="note">Общий чат проекта: сообщения видят клиент и участники, они уходят в Telegram проекта.</p><p data-pc-members></p><p class="pc-muted" data-pc-connection></p><p class="pc-muted" data-pc-ai></p><button type="button" data-pc-retry-ai hidden>Повторить ответы Хью</button></header><div class="pc-history-more"><button type="button" data-pc-older hidden>Показать более ранние сообщения</button></div><ol class="pc-messages" data-pc-messages aria-label="Общая переписка" role="log" aria-live="polite"><li class="pc-empty">Загрузка…</li></ol><p data-pc-sync class="pc-muted pc-sync" role="status"></p><form data-pc-compose class="pc-compose" hidden><label class="sr-only" for="pc-message-input">Сообщение участникам проекта</label><textarea id="pc-message-input" name="text" rows="2" maxlength="12000" placeholder="Сообщение участникам проекта…"></textarea><div data-pc-pending class="pc-pending"></div><div class="pc-toolbar"><label class="pc-file-button">Прикрепить фото или файл<input type="file" multiple data-pc-upload aria-label="Прикрепить фото или файл"></label><button type="button" data-pc-schedule data-pc-write hidden>Запланировать</button><button type="submit">Отправить</button></div></form><p data-pc-readonly class="pc-muted pc-readonly" hidden>У вас доступ к просмотру. Для сообщений нужно право ответа в чате проекта.</p></section><aside class="pc-project"><div class="pc-toolbar"><h2>Задачи <span data-pc-task-count></span></h2><button type="button" data-pc-new-task data-pc-write hidden>Добавить</button></div><ul class="pc-tasks" data-pc-tasks></ul><section class="pc-scheduled" data-pc-scheduled-block hidden><h3>Запланировано</h3><ul data-pc-scheduled></ul></section><div class="pc-project-actions"><button type="button" data-pc-stages data-pc-write hidden>Этапы проекта</button><button type="button" data-pc-import data-pc-owner hidden>Импорт реестра</button><button type="button" data-pc-edit-members data-pc-owner hidden>Участники</button><button type="button" data-pc-settings data-pc-owner hidden>Настройки чата</button></div></aside></div>`;
   const switchMode = async (state, mode) => {
     if (!active(state) || (mode === "private" && state.ctx.identity.role !== "owner")) return;
     const body = q(state, "[data-pc-body]");
@@ -899,7 +899,7 @@
     // An unsent draft belongs to the person, not to the tab that was open.
     const draft = body.querySelector("[data-pc-compose] textarea");
     if (draft && !state.revoked) state.draft = draft.value;
-    cabinet.privateHugh?.stop();
+    cabinet.ownerPrivateChat?.stop();
     state.mode = mode;
     state.view++;
     const view = state.view;
@@ -910,10 +910,15 @@
     state.root.querySelectorAll("dialog").forEach(dialog => dialog.remove());
     state.root.querySelectorAll("[data-pc-mode]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.pcMode === mode)));
     if (mode === "private") {
-      body.innerHTML = '<p class="pc-muted">Личная переписка владельца. Участники проекта её не видят.</p><div data-pc-private></div>';
-      const privateContext = Object.create(state.ctx);
-      privateContext.byId = id => id === "hugh-view" ? body.querySelector("[data-pc-private]") : state.ctx.byId(id);
-      await cabinet.privateHugh?.render(privateContext);
+      body.innerHTML = '<div data-pc-private></div>';
+      const host = body.querySelector("[data-pc-private]");
+      // Личная переписка идёт по собственному маршруту с серверной проверкой владельца.
+      // Область каждой записи — владелец и проект; общий чат её не читает.
+      const started = await cabinet.ownerPrivateChat?.render({
+        identity: state.ctx.identity, root: host, escapeHTML: escape,
+        project: state.company, openShared: () => switchMode(state, "shared")
+      });
+      if (!started) host.innerHTML = '<p class="pc-muted">Личная переписка доступна только владельцу.</p>';
       return;
     }
     state.revoked = false;
@@ -937,7 +942,7 @@
   };
   const mount = async (_, ctx) => {
     if (current) { current.controller.abort(); clearTimeout(current.timer); clearTimeout(current.loginTimer); releaseAssets(current); }
-    cabinet.privateHugh?.stop();
+    cabinet.ownerPrivateChat?.stop();
     const root = ctx.byId("hugh-view");
     const state = current = { ctx, root, company: ctx.selectedProjectId, base: "/content/project-chat/" + encodeURIComponent(ctx.selectedProjectId), controller: new AbortController(), mode: "shared", view: 0, readSequence: 0, attachments: [], history: [], seen: new Map(), loadedOlder: false, hasMore: false, cursor: null, loadingOlder: false, busy: false, attempt: null, draft: "", revoked: false };
     root.innerHTML = `<div class="content-header"><h1>Хью · чат проекта</h1></div><nav class="pc-tabs" aria-label="Переписка"><button type="button" data-pc-mode="shared" aria-pressed="true">Общий чат проекта</button>${ctx.identity.role === "owner" ? '<button type="button" data-pc-mode="private" aria-pressed="false">Личный Хью</button>' : ""}</nav><p data-pc-notice class="pc-notice" role="status"></p><div data-pc-body></div>`;

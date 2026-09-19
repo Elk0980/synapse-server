@@ -1,0 +1,44 @@
+/* Личная переписка владельца с Хью. Аудитория видна сразу: личная вкладка и общий чат
+   проекта подписаны и окрашены по-разному, чтобы сообщение не ушло не той аудитории. */
+.opc-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.opc-tab {
+  appearance: none; border: 1px solid var(--line, #d8dde5); background: transparent;
+  border-radius: 999px; padding: 6px 14px; font: inherit; cursor: pointer; min-height: 40px;
+}
+.opc-tab[aria-pressed="true"] { background: var(--accent-soft, #eef2ff); border-color: var(--accent, #4c6fff); font-weight: 600; }
+
+.opc-audience { margin: 0 0 12px; padding: 8px 12px; border-radius: 10px; font-size: 0.92rem; }
+.opc-audience-private { background: #f2f0ff; border-left: 4px solid #6c5ce7; }
+.opc-audience-shared { background: #fff6e8; border-left: 4px solid #d98324; margin-top: 16px; }
+
+.opc-layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 18px; align-items: start; }
+.opc-conversation { display: flex; flex-direction: column; min-width: 0; }
+.opc-messages { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px;
+  max-height: 52vh; overflow-y: auto; }
+.opc-message { border-radius: 12px; padding: 10px 12px; background: var(--surface-2, #f5f7fa); }
+.opc-message-owner { background: #eef2ff; }
+.opc-message p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.opc-author { font-size: 0.82rem; opacity: 0.75; }
+.opc-empty, .opc-muted { color: var(--muted, #6b7280); font-size: 0.9rem; }
+.opc-state { min-height: 1.2em; margin: 8px 0 0; color: var(--muted, #6b7280); font-size: 0.9rem; }
+.opc-error { color: #b42318; }
+
+.opc-compose { display: flex; gap: 8px; margin-top: 10px; align-items: flex-end; }
+.opc-compose textarea { flex: 1; min-width: 0; resize: vertical; font: inherit; padding: 8px; border-radius: 10px;
+  border: 1px solid var(--line, #d8dde5); }
+.opc-compose button, .opc-open-shared { min-height: 44px; padding: 0 16px; border-radius: 10px; font: inherit; cursor: pointer; }
+
+.opc-tasks { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.opc-task { border: 1px solid var(--line, #d8dde5); border-radius: 10px; padding: 8px 10px; }
+.opc-task-title { display: block; }
+.opc-task-status { font-size: 0.82rem; color: var(--muted, #6b7280); }
+
+@media (max-width: 760px) {
+  .opc-layout { grid-template-columns: minmax(0, 1fr); }
+  /* Вкладки проектов прокручиваются в одну строку: на телефоне они не должны занимать экран. */
+  .opc-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+  .opc-tab { flex: 0 0 auto; }
+  .opc-messages { max-height: 46vh; }
+  .opc-compose { flex-direction: column; align-items: stretch; }
+  .opc-compose button { width: 100%; }
+}

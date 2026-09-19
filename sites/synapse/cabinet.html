@@ -646,6 +646,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <div class="subnav" id="marketing-menu" hidden>
       <a class="nav-link" id="autoposting-link" href="#autoposting"
         data-view-link="autoposting" hidden>Автопостинг</a>
+      <a class="nav-link" id="media-mentor-link" href="#media-mentor"
+        data-view-link="media-mentor" hidden>Бриф и план</a>
+      <a class="nav-link" id="media-mentor-rollout-link" href="#media-mentor-rollout"
+        data-view-link="media-mentor-rollout" hidden>Медиа-наставник</a>
       <a class="nav-link" id="company-information-link" href="#company-information" data-view-link="company-information" hidden>Актуальность</a>
       <a class="nav-link" id="vk-community-link" href="#vk-community" data-view-link="vk-community" hidden>ВКонтакте</a>
       <a class="nav-link" id="reviews-link" href="#reviews" data-view-link="reviews" hidden>Отзывы</a>
@@ -910,6 +914,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     </section>
     <section class="view-panel" id="hugh-view" data-view="hugh" hidden></section>
     <section class="view-panel" id="autoposting-view" data-view="autoposting" hidden></section>
+    <section class="view-panel" id="media-mentor-view" data-view="media-mentor" hidden></section>
+    <section class="view-panel" id="media-mentor-rollout-view" data-view="media-mentor-rollout" hidden></section>
     <section class="view-panel" id="company-information-view" data-view="company-information" hidden></section>
     <section class="view-panel" id="vk-community-view" data-view="vk-community" hidden></section>
     <section class="view-panel" id="reviews-view" data-view="reviews" hidden></section>
@@ -924,6 +930,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     <section class="view-panel" id="site-orders-view" data-view="site-orders" hidden></section>
     <section class="view-panel" id="system-settings-view" data-view="system-settings" hidden>
       <div class="content-header"><h1>Настройки системы</h1></div>
+      <div class="card hugh-providers" id="hugh-providers" hidden></div>
       <div class="card settings-email" id="settings-email" hidden>
         <div class="settings-email-header">
           <div><h2>Общий отправитель уведомлений</h2><p>Эта проверка не отправляет письма.</p></div>
@@ -1040,17 +1047,18 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260919-task-summary-1";
+  window.SB_CABINET_ASSET_VERSION = "20260919-owner-private-chat";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
     window.SbCabinet.views[name] = definition;
   };
-  // project-chat.js загружается после hugh.js: общий чат проекта регистрирует вид «hugh»,
-  // а hugh.js оставляет только личную переписку владельца.
+  // project-chat.js загружается после hugh.js: общий чат проекта регистрирует вид «hugh».
+  // Личная переписка владельца по проектам живёт в owner-private-chat.js и ходит
+  // по собственному маршруту /content/owner-chat с серверной проверкой владельца.
   const cabinetAssets = ["platform-links", "home", "tasks", "company-information", "reviews", "studio-journey", "leads", "deals", "clients", "chat", "hugh", "project-chat", "analytics",
-    "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking", "sites", "settings", "site-orders", "account", "trademarks", "campaigns", "autoposting", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
-  const cabinetStyles = ["reviews", "analytics", "ad-platforms", "platform-demand", "social-stats", "deals", "home", "chat", "hugh", "project-chat", "settings", "site-orders", "trademarks", "sites", "campaigns", "company-information", "autoposting", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial"];
+    "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking", "sites", "settings", "site-orders", "account", "trademarks", "campaigns", "autoposting", "media-mentor", "media-mentor-rollout", "hugh-providers", "owner-private-chat", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
+  const cabinetStyles = ["reviews", "analytics", "ad-platforms", "platform-demand", "social-stats", "deals", "home", "chat", "hugh", "project-chat", "settings", "site-orders", "trademarks", "sites", "campaigns", "company-information", "autoposting", "media-mentor", "media-mentor-rollout", "hugh-providers", "owner-private-chat", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join(""));
@@ -1110,6 +1118,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     calltracking: "Колтрекинг",
     sites: "Сайты",
     autoposting: "Автопостинг",
+    "media-mentor": "Бриф и план",
+    "media-mentor-rollout": "Медиа-наставник",
     "company-information": "Актуальность",
     "vk-community": "ВКонтакте",
     "reviews": "Отзывы",
@@ -1448,6 +1458,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const permittedView = (value) => {
     if (["system-settings", "catalog", "finance", "vk-community", "site-orders"].includes(value)) return identity?.role === "owner";
     if (["company-information", "autoposting"].includes(value)) return identity?.role === "owner" || identity?.permissions?.includes(value + ".view");
+    // Медиа-наставник переиспользует право раздела публикаций: новых прав не заводим.
+    if (["media-mentor", "media-mentor-rollout"].includes(value)) return identity?.role === "owner" || identity?.permissions?.includes("autoposting.view");
     if (value === "campaigns") return identity?.role === "owner";
     if (!identity) return true;
     // The project chat is authorised by company scope and room membership on the server.
@@ -1477,7 +1489,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const setCategoryForView = (viewName) => {
     const analyticsViews = ["analytics-through", "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking"];
     const crmViews = ["crm", "deals", "clients", "chat"];
-    const categoryId = ["catalog","finance"].includes(viewName) ? "finance-menu" : ["reviews", "autoposting", "company-information", "content-factory", "campaigns", "vk-community"].includes(viewName) ? "marketing-menu" :
+    const categoryId = ["catalog","finance"].includes(viewName) ? "finance-menu" : ["reviews", "autoposting", "media-mentor", "media-mentor-rollout", "company-information", "content-factory", "campaigns", "vk-community"].includes(viewName) ? "marketing-menu" :
       ["settings", "site-orders", "system-settings", "accounts", "account", "trademarks"].includes(viewName) ? "management-menu" : analyticsViews.includes(viewName) ? "analytics-menu" :
       viewName === "sites" ? "site-menu" : crmViews.includes(viewName) || viewName.startsWith("crm-")
         ? "crm-menu" : null;
@@ -1646,6 +1658,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         link.hidden = link.dataset.viewLink !== "chat" && !hasPermission("crm.view");
       });
       byId("autoposting-link").hidden = !permittedView("autoposting");
+      byId("media-mentor-link").hidden = !permittedView("media-mentor");
+      byId("media-mentor-rollout-link").hidden = !permittedView("media-mentor-rollout");
       byId("company-information-link").hidden = !permittedView("company-information");
       byId("vk-community-link").hidden = !permittedView("vk-community");
       byId("reviews-link").hidden = !permittedView("reviews");
@@ -1681,6 +1695,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       if (hasPermission("crm.view")) registeredViews.crm.initialize(context);
       setDrawer(false);
       SbCabinet.initMenuPreferences?.({identity, setDrawer});
+      // Ключи провайдеров вводит только владелец и только в настройках системы.
+      if (identity.role === "owner") SbCabinet.initHughProviders?.({identity, byId, apiJson, escapeHTML});
       setView(viewFromHash());
       registeredViews.sites.initialize(context);
       if (hasPermission("account.view")) registeredViews.accounts.initialize(context);

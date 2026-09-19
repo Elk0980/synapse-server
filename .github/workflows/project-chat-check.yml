@@ -17,6 +17,10 @@ on:
       - 'ops/dev/**'
       - 'ops/hugh-runtime/**'
       - 'ops/local-hugh/**'
+      - 'ops/crm/media-mentor*'
+      - 'ops/crm/finance-ai*'
+      - 'ops/crm/ai-trials.js'
+      - 'ops/crm/commercial*'
       - 'ops/synapse-sync'
       - 'ops/synapse-sync.test.js'
       - 'sites/synapse/cabinet/**'
@@ -30,6 +34,10 @@ on:
       - 'ops/dev/**'
       - 'ops/hugh-runtime/**'
       - 'ops/local-hugh/**'
+      - 'ops/crm/media-mentor*'
+      - 'ops/crm/finance-ai*'
+      - 'ops/crm/ai-trials.js'
+      - 'ops/crm/commercial*'
       - 'ops/synapse-sync'
       - 'ops/synapse-sync.test.js'
       - 'sites/synapse/cabinet/**'
@@ -83,6 +91,19 @@ jobs:
       - name: Тесты локального обработчика Хью
         timeout-minutes: 10
         run: node --test ops/local-hugh/*.test.js
+
+      # Медиа-наставник: этап основы (бриф и план), внедрение и HTTP-слой.
+      # Файлы перечислены явно: каталог ops/crm целиком этой проверкой не покрывается.
+      # Только node --test, без сети, публикаций и обращений к моделям.
+      - name: Тесты Медиа-наставника
+        timeout-minutes: 10
+        run: node --test ops/crm/media-mentor.test.js ops/crm/media-mentor-rollout.test.js ops/crm/media-mentor-http.test.js ops/crm/media-mentor-transfer.test.js ops/crm/media-mentor-pilot.test.js
+
+      # Расходы на ИИ внутри существующих Финансов и права раздела. Остальные наборы
+      # каталога ops/crm этой проверкой по-прежнему не покрываются.
+      - name: Тесты Финансы→ИИ
+        timeout-minutes: 10
+        run: node --test ops/crm/finance-ai.test.js ops/crm/commercial.test.js ops/crm/crm-permissions.test.js
 
       - name: Тесты сервиса контента
         timeout-minutes: 10
