@@ -24,8 +24,22 @@ const LIMITS = Object.freeze({
 const ROLES = new Set(['user', 'assistant']);
 const JOB_ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
 const COMPANY_PATTERN = /^[A-Za-z0-9._-]+$/;
-const REPLY_FIELDS = new Set(['jobId', 'companyCode', 'messages', 'system']);
+const REPLY_FIELDS = new Set(['jobId', 'companyCode', 'messages', 'system', 'audience']);
 const MESSAGE_FIELDS = new Set(['role', 'content']);
+
+/* Аудитория запроса. Поле необязательное: прежние тела без него читаются как `client-shared`,
+   то есть общий чат проекта — поведение и ключи идемпотентности у них не меняются.
+   `owner-private` — личная переписка владельца: она ведёт собственную область заданий,
+   чтобы кэш ответа и повтор по jobId никогда не пересекались с общим чатом той же компании.
+   Значение — только из этого перечня; произвольная строка отклоняется. */
+const DEFAULT_AUDIENCE = 'client-shared';
+const AUDIENCES = new Set([DEFAULT_AUDIENCE, 'owner-private']);
+
+/* Ключ области хранения заданий. Для общего чата он равен коду компании, поэтому уже
+   сохранённые задания продолжают находиться по прежнему ключу. */
+function scopeKeyOf(companyCode, audience) {
+  return audience === DEFAULT_AUDIENCE ? companyCode : `${companyCode}#${audience}`;
+}
 
 const countChars = (value) => Array.from(value).length;
 const countBytes = (value) => Buffer.byteLength(value, 'utf8');
@@ -61,6 +75,9 @@ function validateReplyPayload(raw) {
     throw invalid('Поле companyCode задано неверно');
   }
 
+  const audience = raw.audience === undefined ? DEFAULT_AUDIENCE : requireString(raw.audience, 'audience').trim();
+  if (!AUDIENCES.has(audience)) throw invalid('Поле audience задано неверно');
+
   const system = requireString(raw.system, 'system');
   if (!system.trim()) throw invalid('Поле system пустое');
   checkSize(system, 'system', LIMITS.maxSystemChars, LIMITS.maxSystemBytes);
@@ -93,14 +110,18 @@ function validateReplyPayload(raw) {
     throw invalid(`Переписка длиннее ${LIMITS.maxTranscriptBytes} байт`);
   }
 
-  return {jobId, companyCode, system, messages};
+  return {jobId, companyCode, audience, scopeKey: scopeKeyOf(companyCode, audience), system, messages};
 }
 
-/* Канонический вид для хэша идемпотентности: сравниваем именно проверенные данные. */
+/* Канонический вид для хэша идемпотентности: сравниваем именно проверенные данные.
+   Аудитория по умолчанию в хэш не входит, поэтому уже принятые задания общего чата
+   сохраняют прежний хэш и не превращаются в конфликт после обновления рантайма. */
 function canonicalPayload(payload) {
+  const audience = payload.audience || DEFAULT_AUDIENCE;
   return JSON.stringify({
     companyCode: payload.companyCode,
     jobId: payload.jobId,
+    ...(audience === DEFAULT_AUDIENCE ? {} : {audience}),
     system: payload.system,
     messages: payload.messages.map((message) => ({role: message.role, content: message.content})),
   });
@@ -117,4 +138,5 @@ function capOutput(text) {
   return {text: capped, truncated: capped.length !== trimmed.length};
 }
 
-module.exports = {LIMITS, validateReplyPayload, canonicalPayload, capOutput, countChars, countBytes};
+module.exports = {LIMITS, AUDIENCES, DEFAULT_AUDIENCE, scopeKeyOf,
+  validateReplyPayload, canonicalPayload, capOutput, countChars, countBytes};

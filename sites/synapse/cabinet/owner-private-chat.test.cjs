@@ -16,6 +16,7 @@ const view = (patch = {}) => ({
   tasks: [{ id: 7, title: 'Согласовать план', status: 'todo', due: null }],
   clientChat: { href: '#hugh-project:alvi', label: 'Общий чат проекта: клиент, вы и Хью — видно клиенту', audience: 'client-shared' },
   handoff: { enabled: false, reason: 'Перенос пока не включён.' },
+  ask: { state: 'idle', canRetry: false, error: '' },
   ...patch
 });
 
@@ -137,6 +138,39 @@ test('ошибка отправки сохраняет набранный тек
     assert.match(f.root.textContent, /Хью сейчас недоступен/);
     assert.equal(f.root.querySelector('#opc-input').value, 'Черновик', 'набранный текст не потерян');
     assert.equal(f.root.querySelector('#opc-input').disabled, false);
+  } finally { f.close(); }
+});
+
+test('вопрос без ответа виден как таковой и повторяется явной кнопкой без дублей', async () => {
+  const retries = [];
+  const f = fixture({ respond: (call) => {
+    if (call.url.endsWith('/retry')) { retries.push(call); return view(); }
+    return view({ messages: [{ id: 1, author: 'owner', text: SECRET, at: '2026-09-19T10:00:00.000Z' }],
+      ask: { state: 'failed', canRetry: true, error: 'Хью сейчас недоступен', attempts: 1 } });
+  } });
+  try {
+    await f.started; await tick(); await tick();
+    assert.match(f.root.textContent, /Ответ не получен/);
+    assert.match(f.root.textContent, /Хью сейчас недоступен/);
+    const button = f.root.querySelector('[data-opc-retry-ask]');
+    assert.ok(button, 'кнопка повтора показана');
+    button.click();
+    // Второе нажатие подряд не должно отправлять второй повтор.
+    button.click();
+    await tick(); await tick(); await tick();
+    assert.equal(retries.length, 1, 'повтор отправлен один раз');
+    assert.equal(retries[0].method, 'POST');
+    assert.equal(retries[0].csrf, 'csrf-token');
+    assert.equal(f.root.querySelector('[data-opc-retry-ask]'), null, 'после ответа кнопки повтора нет');
+  } finally { f.close(); }
+});
+
+test('идущее обращение показано честно и кнопки повтора не предлагает', async () => {
+  const f = fixture({ respond: () => view({ ask: { state: 'running', canRetry: false, error: '', attempts: 1 } }) });
+  try {
+    await f.started; await tick(); await tick();
+    assert.match(f.root.textContent, /ответ ещё не пришёл/);
+    assert.equal(f.root.querySelector('[data-opc-retry-ask]'), null);
   } finally { f.close(); }
 });
 

@@ -13,7 +13,29 @@ const base = () => ({
 
 test('корректное тело разбирается и нормализуется', () => {
   const payload = validateReplyPayload({...base(), jobId: ' job-1 ', companyCode: ' palitra '});
-  assert.deepEqual(payload, base());
+  // Тело без audience читается как общий чат проекта: прежние отправители работают без изменений.
+  assert.deepEqual(payload, {...base(), audience: 'client-shared', scopeKey: 'palitra'});
+});
+
+test('audience необязателен, принимает только перечень и задаёт отдельную область заданий', () => {
+  const shared = validateReplyPayload(base());
+  assert.equal(shared.audience, 'client-shared');
+  assert.equal(shared.scopeKey, 'palitra', 'у общего чата ключ области равен коду компании');
+
+  const explicit = validateReplyPayload({...base(), audience: 'client-shared'});
+  assert.equal(explicit.scopeKey, 'palitra');
+  // Явно указанный общий чат не меняет хэш: иначе уже принятые задания стали бы конфликтом.
+  assert.equal(canonicalPayload(explicit), canonicalPayload(shared));
+
+  const priv = validateReplyPayload({...base(), audience: 'owner-private'});
+  assert.equal(priv.audience, 'owner-private');
+  assert.equal(priv.scopeKey, 'palitra#owner-private', 'личная переписка живёт в своей области');
+  assert.notEqual(canonicalPayload(priv), canonicalPayload(shared), 'аудитория входит в хэш');
+
+  for (const bad of ['owner', 'private', '', ' ', 'OWNER-PRIVATE', 'client-shared ; drop', null, 7, {}]) {
+    assert.throws(() => validateReplyPayload({...base(), audience: bad}),
+      (error) => error.status === 400 && error.code === 'INVALID_BODY', `должно быть отклонено: ${String(bad)}`);
+  }
 });
 
 test('сообщение ровно на границе принимается, на символ длиннее — отказ', () => {

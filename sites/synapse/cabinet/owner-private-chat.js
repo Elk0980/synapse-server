@@ -55,6 +55,9 @@
       <div class="opc-layout">
         <section class="opc-conversation" aria-label="Личная переписка с Хью">
           <ol class="opc-messages" data-opc-messages role="log" aria-live="polite">${messagesHTML(data.messages || [])}</ol>
+          ${data.ask?.canRetry ? `<p class="opc-state opc-failed" role="alert">Ответ не получен: ${escape(data.ask.error)}
+            <button type="button" data-opc-retry-ask>Повторить вопрос</button></p>`
+    : data.ask?.state === "running" ? '<p class="opc-state" role="status">Вопрос принят, ответ ещё не пришёл.</p>' : ""}
           <p class="opc-state" data-opc-state role="status"></p>
           <form class="opc-compose" data-opc-compose>
             <label class="sr-only" for="opc-input">Личное сообщение Хью</label>
@@ -133,6 +136,29 @@
     } finally { sending = false; }
   }
 
+  /* Явный повтор вопроса, оставшегося без ответа. Кнопка блокируется на время обращения,
+     поэтому двойное нажатие не отправляет второй повтор. */
+  async function retryAsk() {
+    const run = generation;
+    if (sending) return;
+    sending = true;
+    const button = node("[data-opc-retry-ask]");
+    if (button) { button.disabled = true; button.textContent = "Повторяем…"; }
+    try {
+      const data = await request(`/${encodeURIComponent(state.project)}/retry`, {
+        method: "POST", headers: { "X-CSRF-Token": context.identity.csrfToken }, signal: controller.signal
+      });
+      if (outdated(run)) return;
+      render(data);
+    } catch (error) {
+      if (outdated(run) || error.name === "AbortError") return;
+      const note = node("[data-opc-state]");
+      if (note) note.textContent = error.message;
+      const again = node("[data-opc-retry-ask]");
+      if (again) { again.disabled = false; again.textContent = "Повторить вопрос"; }
+    } finally { sending = false; }
+  }
+
   cabinet.ownerPrivateChat = {
     async render({ identity, root, escapeHTML, project, openShared }) {
       // Вкладка существует только у владельца. Роль приходит из проверенного профиля кабинета,
@@ -148,6 +174,7 @@
           void load(button.dataset.opcProject);
           return;
         }
+        if (button.matches("[data-opc-retry-ask]")) { void retryAsk(); return; }
         if (button.matches("[data-opc-shared]")) state.openShared?.();
       };
       await load(project);

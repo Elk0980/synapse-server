@@ -227,6 +227,104 @@ test('смена провайдера и модели не меняет обла
     'смена модели не переносит ответ в общий чат');
 });
 
+test('повтор того же requestId после сбоя действительно повторяет обращение и доводит до ответа', async (t) => {
+  let attempt = 0;
+  const f = setup(t, { ask: () => { if (++attempt === 1) throw new Error('Провайдер недоступен'); return { text: 'Ответ со второй попытки', provider: 'test', model: 'test-model' }; } });
+  const first = await say(f.priv, f.owner, PILOT, SECRET, 'req-retry');
+  assert.equal(first.statusCode, 503, 'первая попытка честно отказала');
+  // Вопрос сохранён и виден как оставшийся без ответа.
+  const waiting = await open(f.priv, f.owner, PILOT);
+  assert.deepEqual(waiting.payload.messages.map((m) => m.text), [SECRET]);
+  assert.equal(waiting.payload.ask.state, 'failed');
+  assert.equal(waiting.payload.ask.canRetry, true);
+
+  const second = await say(f.priv, f.owner, PILOT, SECRET, 'req-retry');
+  assert.equal(second.statusCode, 201, `повтор не прошёл: ${second.error?.message}`);
+  assert.equal(second.payload.retried, true, 'повтор именно повторил обращение, а не вернул «уже было»');
+  assert.equal(attempt, 2, 'обращение выполнено во второй раз');
+  assert.deepEqual(second.payload.messages.map((m) => m.text), [SECRET, 'Ответ со второй попытки']);
+  assert.equal(second.payload.ask.state, 'idle');
+  // Вопрос не задвоился.
+  assert.equal(f.db.prepare(`SELECT count(*) AS n FROM owner_private_messages WHERE author_type='owner'`).get().n, 1);
+});
+
+test('явный повтор — отдельное действие и без дублей', async (t) => {
+  let attempt = 0;
+  const f = setup(t, { ask: () => { if (++attempt === 1) throw new Error('Провайдер недоступен'); return { text: 'Ответ после явного повтора', provider: 'test', model: 'test-model' }; } });
+  await say(f.priv, f.owner, PILOT, SECRET);
+  const retried = await call(f.priv, f.owner, 'POST', `/content/owner-chat/${PILOT}/retry`);
+  assert.equal(retried.statusCode, 200, `повтор не прошёл: ${retried.error?.message}`);
+  assert.equal(retried.payload.retried, true);
+  assert.deepEqual(retried.payload.messages.map((m) => m.text), [SECRET, 'Ответ после явного повтора']);
+  // Повторять больше нечего.
+  const again = await call(f.priv, f.owner, 'POST', `/content/owner-chat/${PILOT}/retry`);
+  assert.equal(again.statusCode, 409);
+  assert.equal(attempt, 2, 'лишних обращений не было');
+});
+
+test('два одновременных повтора одного requestId запускают ровно одно обращение', async (t) => {
+  let started = 0;
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const f = setup(t, { ask: async () => { started += 1; await gate; return { text: 'Единственный ответ', provider: 'test', model: 'test-model' }; } });
+  const first = say(f.priv, f.owner, PILOT, SECRET, 'req-race');
+  // Второй повтор приходит, пока первое обращение ещё идёт и аренда действует.
+  const second = await say(f.priv, f.owner, PILOT, SECRET, 'req-race');
+  assert.equal(second.payload.pending, true, 'второй повтор ждёт первый, а не запускает своё обращение');
+  release();
+  const done = await first;
+  assert.equal(done.statusCode, 201);
+  assert.equal(started, 1, 'обращение выполнено ровно один раз');
+  assert.equal(f.db.prepare(`SELECT count(*) AS n FROM owner_private_messages WHERE author_type='assistant'`).get().n, 1);
+});
+
+test('перезапуск не теряет вопрос: просроченная аренда снова допускает повтор', async (t) => {
+  const f = setup(t, { ask: () => { throw new Error('Провайдер недоступен'); } });
+  await say(f.priv, f.owner, PILOT, SECRET, 'req-restart');
+  // Имитация обрыва на середине обращения: строка осталась в работе с арендой.
+  f.db.prepare(`UPDATE owner_private_asks SET status='running',
+    lease_expires_at=? WHERE message_id=(SELECT max(id) FROM owner_private_messages)`)
+    .run(new Date(Date.now() + 60000).toISOString());
+  const blocked = await open(f.priv, f.owner, PILOT);
+  assert.equal(blocked.payload.ask.state, 'running', 'пока аренда жива, повтор не предлагается');
+  // Аренда истекла — вопрос снова повторяем, и он не потерян.
+  f.db.prepare(`UPDATE owner_private_asks SET lease_expires_at=? WHERE status='running'`)
+    .run(new Date(Date.now() - 1000).toISOString());
+  const stalled = await open(f.priv, f.owner, PILOT);
+  assert.equal(stalled.payload.ask.state, 'stalled');
+  assert.equal(stalled.payload.ask.canRetry, true);
+  assert.deepEqual(stalled.payload.messages.map((m) => m.text), [SECRET], 'вопрос на месте');
+});
+
+test('ошибка провайдера не выносит наружу ни текста переписки, ни похожего на ключ', async (t) => {
+  const leak = `Сбой апстрима: payload=${SECRET} key=sk-secret-value-0123456789 bearer Bearer abcdef0123456789`;
+  const f = setup(t, { ask: () => { throw new Error(leak); } });
+  const result = await say(f.priv, f.owner, PILOT, SECRET);
+  assert.equal(result.statusCode, 503);
+  assert.equal(result.error.message.includes(SECRET), false, 'текст личного вопроса в ошибку не попадает');
+  assert.equal(/sk-secret-value/.test(result.error.message), false, 'похожее на ключ вырезано');
+  assert.equal(/Bearer\s+abcdef/.test(result.error.message), false);
+  assert.ok(result.error.message.length <= 200, 'сообщение об ошибке короткое');
+  const stored = f.db.prepare(`SELECT error FROM owner_private_asks ORDER BY id DESC LIMIT 1`).get().error;
+  assert.equal(stored.includes(SECRET), false, 'в базу сырой текст тоже не пишется');
+  assert.equal(/sk-secret-value/.test(stored), false);
+});
+
+test('отзыв доступа во время долгого обращения не возвращает данные', async (t) => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const f = setup(t, { ask: async () => { await gate; return { text: 'Ответ после отзыва', provider: 'test', model: 'test-model' }; } });
+  const pending = say(f.priv, f.owner, PILOT, SECRET);
+  // Пока обращение идёт, доступ владельца отзывают: сессия становится недействительной.
+  f.db.prepare('UPDATE auth_users SET session_version=session_version+1 WHERE id=1').run();
+  release();
+  const result = await pending;
+  assert.equal(result.statusCode, 401, 'после отзыва данные не возвращаются');
+  assert.equal(result.payload, null);
+  // Ответ при этом не потерян: он сохранён в личной ветке владельца.
+  assert.equal(f.db.prepare(`SELECT count(*) AS n FROM owner_private_messages WHERE author_type='assistant'`).get().n, 1);
+});
+
 test('недоступность модели сохраняет вопрос владельца и честно сообщает об отказе', async (t) => {
   const f = setup(t, { ask: () => { throw new Error('Резервные провайдеры недоступны'); } });
   const result = await say(f.priv, f.owner, PILOT, SECRET);

@@ -114,21 +114,24 @@ function createHttpServer(options) {
     const raw = await readJsonBody(request);
     const payload = validateReplyPayload(raw);
     const hash = crypto.createHash('sha256').update(canonicalPayload(payload)).digest('hex');
-    const claim = store.claim(payload.companyCode, payload.jobId, hash);
+    /* Область задания включает аудиторию: личная переписка владельца и общий чат той же
+       компании не делят ни кэш ответа, ни повтор по jobId. Для общего чата ключ равен коду
+       компании, поэтому ранее сохранённые задания находятся по-прежнему. */
+    const claim = store.claim(payload.scopeKey, payload.jobId, hash);
     if (claim.reuse) {
       sendJson(response, 200, {text: claim.reuse.text, provider: 'codex', model: claim.reuse.model, reused: true});
       return;
     }
     try {
       const result = await runtime.reply(payload);
-      store.complete(payload.companyCode, payload.jobId, result.text, result.model);
+      store.complete(payload.scopeKey, payload.jobId, result.text, result.model);
       sendJson(response, 200, {text: result.text, provider: 'codex', model: result.model, reused: false});
     } catch (error) {
       const code = error instanceof RuntimeError ? error.code : 'INTERNAL_ERROR';
       // Занятость и лимит подписки — это ожидание, а не попытка: аренда снимается,
       // чтобы тот же jobId вернулся позже без конфликта и без следа неудачи.
-      if (TRANSIENT_CODES.has(code)) store.release(payload.companyCode, payload.jobId);
-      else store.fail(payload.companyCode, payload.jobId, code);
+      if (TRANSIENT_CODES.has(code)) store.release(payload.scopeKey, payload.jobId);
+      else store.fail(payload.scopeKey, payload.jobId, code);
       throw error;
     }
   }
