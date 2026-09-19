@@ -21,6 +21,23 @@
 .social-ids { margin-top:6px; font-size:0.85rem; }
 .social-ids summary { color:var(--muted,#999); cursor:pointer; }
 .social-ids ul { padding-left:18px; margin:4px 0 0; overflow-wrap:anywhere; }
+/* Телефон до 640px: восемь колонок «Атрибуции CRM» не помещаются, а карточные правила workspace.css
+   действуют только внутри #crm-content, тогда как эта таблица живёт в #social-content. Правила ниже
+   адресованы только .social-posts: таблица «По дням» и таблицы других разделов CRM не затрагиваются.
+   Ячейка остаётся одним блоком с подписью-строкой перед содержимым, чтобы details внутри не ломался. */
+@media (max-width:640px) {
+  .social-posts { display:block; width:100%; min-width:0; max-width:100%; }
+  .social-posts tbody, .social-posts tr, .social-posts td { display:block; width:auto; min-width:0; max-width:100%; }
+  .social-posts thead { display:table-header-group; position:absolute; width:1px; height:1px; margin:-1px; padding:0; border:0; overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap; }
+  .social-posts thead th { position:static; padding:0; border:0; }
+  .social-posts tr { margin:0 0 10px; padding:10px 12px; border:1px solid var(--line,#333); border-radius:12px; background:var(--surface-soft,transparent); }
+  .social-posts tbody tr:last-child { margin-bottom:0; }
+  .social-posts td { padding:6px 0; border:0; white-space:normal; overflow-wrap:anywhere; }
+  .social-posts td[data-label]::before { content:attr(data-label); display:block; color:var(--muted,#999); font-size:0.8rem; }
+  .social-posts a { display:inline-block; min-height:44px; padding:10px 0; line-height:1.5; overflow-wrap:anywhere; }
+  .social-posts summary { padding:12px 0; }
+  .social-posts .social-ids ul { margin:0; }
+}
 @media (max-width:430px) {
   .social-toolbar { flex-direction:column; align-items:stretch; }
   .social-toolbar input, .social-toolbar button { width:100%; min-height:44px; }
