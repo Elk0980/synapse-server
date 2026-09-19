@@ -19,6 +19,8 @@ const MAX_ATTACHMENT = 8 * 1024 * 1024;
 const MESSAGE_PAGE = 100;
 const MESSAGE_LIMIT = 16000;
 const AI_ATTEMPTS = 3;
+// Заголовок задачи менеджеру о неотвеченных вопросах: по нему же ищется уже открытая задача.
+const MANAGER_TASK_TITLE = 'Ответить клиенту вручную: ИИ недоступен';
 const AI_HISTORY = 30;
 const TELEGRAM_ATTEMPTS = 3;
 const TELEGRAM_LEASE = 10 * 60 * 1000;   // дольше самой длинной серии частей одной отправки
@@ -138,7 +140,8 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   /* Резервные провайдеры: OpenAI-совместимые API из окружения сервера. Ни один ключ не добавляется кодом;
      без настроенных провайдеров поведение прежнее. Компании локального обработчика сервер берёт только
      через резерв и только когда компьютер не на связи дольше HUGH_FALLBACK_LOCAL_OFFLINE_MINUTES (0 — никогда). */
-  const fallback = createHughFallback({ db, env: fallbackConfig.env || process.env, fetchImpl, messageLimit: MESSAGE_LIMIT });
+  const fallback = createHughFallback({ db, env: fallbackConfig.env || process.env, fetchImpl,
+    messageLimit: MESSAGE_LIMIT, providerStore: fallbackConfig.providerStore || null });
   const localOfflineMinutes = Number.parseInt((fallbackConfig.env || process.env).HUGH_FALLBACK_LOCAL_OFFLINE_MINUTES || '0', 10) || 0;
   // Подтверждение приёма включается вместе с резервом или явно HUGH_ACK_WHEN_UNAVAILABLE=1; иначе поведение прежнее.
   const ackEnabled = fallback.providers.length > 0 || (fallbackConfig.env || process.env).HUGH_ACK_WHEN_UNAVAILABLE === '1';
@@ -794,8 +797,23 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       AND status IN ('pending','running','blocked','error') AND attempts<?${codesFilter}`).all(AI_ATTEMPTS, ...params);
     for (const { company_code: code } of waiting) {
       if (!fallback.ackDue(code)) continue;
-      tx(() => { insertMessage({ code, authorId: 'hugh', authorName: 'Хью', authorType: 'assistant', text: fallback.ACK_TEXT }); fallback.markAck(code); });
+      tx(() => {
+        insertMessage({ code, authorId: 'hugh', authorName: 'Хью', authorType: 'assistant', text: fallback.ACK_TEXT });
+        fallback.markAck(code);
+        managerTask(code);
+      });
     }
+  }
+  /* Подтверждение приёма — не ответ по существу, поэтому вопрос должен попасть к человеку.
+     Задача заводится существующим механизмом задач своей компании и не дублируется:
+     пока прежняя не закрыта, вторая не создаётся. */
+  function managerTask(code) {
+    const open = db.prepare(`SELECT id FROM project_chat_tasks WHERE company_code=? AND title=? AND status<>'done' LIMIT 1`)
+      .get(code, MANAGER_TASK_TITLE);
+    if (open) return;
+    const time = stamp();
+    db.prepare(`INSERT INTO project_chat_tasks(company_code,title,assignee_id,stage_id,status,due,source_message_id,created_at,updated_at)
+      VALUES(?,?,NULL,NULL,'todo','',NULL,?,?)`).run(code, MANAGER_TASK_TITLE, time, time);
   }
   function storeReply(job, answer) {
     tx(() => {

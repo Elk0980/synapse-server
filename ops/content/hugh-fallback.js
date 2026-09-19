@@ -5,6 +5,7 @@
    HUGH_FALLBACK_OPENROUTER_URL=https://openrouter.ai/api/v1  HUGH_FALLBACK_OPENROUTER_KEY=…  HUGH_FALLBACK_OPENROUTER_MODEL=…
    Ключи в код и журнал не попадают. Наличие переменных — не доказательство живого подключения:
    живой ответ подтверждается только успешным обменом, который виден в статусе (lastSuccessAt). */
+const { createHughBudget } = require('./hugh-budget');
 const DEFAULT_TIMEOUT_MS = 60000;
 const RATE_LIMIT_DEFAULT_S = 300, SERVER_ERROR_BASE_S = 60, SERVER_ERROR_MAX_S = 900, AUTH_ERROR_S = 3600, CLIENT_ERROR_S = 300;
 const ACK_INTERVAL_MS = 30 * 60 * 1000;
@@ -32,8 +33,16 @@ function readProviders(env = process.env) {
   return { providers, issues };
 }
 
-function createHughFallback({ db, env = process.env, fetchImpl = (...args) => globalThis.fetch(...args), now = () => Date.now(), messageLimit = 4000 } = {}) {
-  const { providers, issues } = readProviders(env);
+function createHughFallback({ db, env = process.env, fetchImpl = (...args) => globalThis.fetch(...args), now = () => Date.now(), messageLimit = 4000, providerStore = null } = {}) {
+  const fromEnv = readProviders(env);
+  const issues = [...fromEnv.issues];
+  /* Провайдеры из защищённого хранилища ЛК подключаются к тому же рантайму ответов,
+     что и заданные в окружении: отдельного мёртвого экрана настроек нет.
+     Одноимённый провайдер из хранилища заменяет заданный в окружении. */
+  const stored = providerStore && typeof providerStore.runtimeProviders === 'function'
+    ? providerStore.runtimeProviders() : [];
+  const providers = [...fromEnv.providers.filter((item) => !stored.some((row) => row.name === item.name)), ...stored];
+  if (providerStore && !providerStore.available && providerStore.lockedReason) issues.push(providerStore.lockedReason);
   db.exec(`CREATE TABLE IF NOT EXISTS project_chat_provider_state (
     provider TEXT PRIMARY KEY, cooldown_until TEXT, failures INTEGER NOT NULL DEFAULT 0, last_error TEXT NOT NULL DEFAULT '',
     last_attempt_at TEXT, last_success_at TEXT, last_model TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL)`);
@@ -47,8 +56,13 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
       last_error=excluded.last_error,last_attempt_at=excluded.last_attempt_at,last_success_at=excluded.last_success_at,last_model=excluded.last_model,updated_at=excluded.updated_at`)
       .run(name, next.cooldown_until, next.failures, next.last_error, next.last_attempt_at, next.last_success_at, next.last_model, next.updated_at);
   };
+  const budget = createHughBudget({ db, env, now });
+  // Зависшие после аварии брони не освобождаются: они переходят в неизвестный расход.
+  budget.recover();
   const cooling = (name, at = now()) => { const r = row(name); return Boolean(r?.cooldown_until && Date.parse(r.cooldown_until) > at); };
-  const available = (at = now()) => providers.filter((p) => !cooling(p.name, at));
+  // Достигнутая граница бюджета убирает всех провайдеров разом: вопрос остаётся в очереди,
+  // существующий обработчик честно подтверждает приём и не выдаёт подтверждение за ответ.
+  const available = (at = now()) => (budget.stopped(at) ? [] : providers.filter((p) => !cooling(p.name, at)));
   const nextAvailableAt = (at = now()) => {
     const times = providers.map((p) => Date.parse(row(p.name)?.cooldown_until || '') || at).filter((t) => t > at);
     return times.length ? Math.min(...times) : at;
@@ -57,32 +71,53 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
     const current = row(name), failures = (current?.failures || 0) + 1;
     upsert(name, { cooldown_until: stamp(now() + seconds * 1000), failures, last_error: shortText(error, 200), last_attempt_at: stamp() });
   }
-  function toChatBody(payload, model) {
+  function toChatBody(payload, model, maxOutputTokens) {
     const data = typeof payload === 'string' ? JSON.parse(payload) : payload;
     const messages = [{ role: 'system', content: String(data.system || '') }, ...(data.messages || []).map((m) => ({ role: m.role, content: m.content }))];
-    return JSON.stringify({ model, messages, temperature: 0.3, max_tokens: 1200 });
+    // Потолок ответа уходит провайдеру ровно тот, под который забронированы деньги.
+    return JSON.stringify({ model, messages, temperature: 0.3, max_tokens: maxOutputTokens });
   }
   async function callProvider(provider, payload) {
     const at = now();
+    // Деньги и слот резервируются ДО обращения: параллельные запросы не могут вместе
+    // перескочить границу, а неизвестный расход не считается нулём.
+    const probe = toChatBody(payload, provider.model, budget.config.maxOutputTokens);
+    const booking = budget.reserve(provider.name, { promptBytes: Buffer.byteLength(probe, 'utf8') });
+    if (!booking.allowed) return { budgetBlocked: true, reason: booking.reason };
+    const body = toChatBody(payload, provider.model, booking.maxOutputTokens);
     let response;
     try {
-      response = await fetchImpl(`${provider.url}/chat/completions`, { method: 'POST',
+      // Запрет переадресации: разрешённый адрес не должен уводить запрос с ключом на чужой хост.
+      response = await fetchImpl(`${provider.url}/chat/completions`, { method: 'POST', redirect: 'error',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${provider.secret}` },
-        body: toChatBody(payload, provider.model), signal: AbortSignal.timeout(provider.timeoutMs) });
+        body, signal: AbortSignal.timeout(provider.timeoutMs) });
     } catch (error) {
+      // Таймаут и обрыв: доказательства, что провайдер ничего не потратил, нет — бронь остаётся.
+      budget.keep(booking.id);
       const failures = row(provider.name)?.failures || 0;
       cooldown(provider.name, Math.min(SERVER_ERROR_MAX_S, SERVER_ERROR_BASE_S * 2 ** Math.min(failures, 4)), error?.name === 'TimeoutError' ? 'Таймаут ответа провайдера' : 'Сеть провайдера недоступна');
       return null;
     }
-    if (response.status === 429) { cooldown(provider.name, retryAfterSeconds(response.headers?.get?.('retry-after')) || RATE_LIMIT_DEFAULT_S, 'Лимит провайдера (429)'); return null; }
-    if (response.status === 401 || response.status === 403) { cooldown(provider.name, AUTH_ERROR_S, `Ключ провайдера отклонён (HTTP ${response.status})`); return null; }
+    // Переадресация трактуется как отказ: ответ пришёл не с того адреса, что разрешён.
+    if (response.redirected || (response.status >= 300 && response.status < 400)) {
+      budget.release(booking.id);
+      cooldown(provider.name, CLIENT_ERROR_S, 'Адрес провайдера перенаправляет запрос');
+      return null;
+    }
+    // Явный отказ обрабатывать запрос: генерации не было, бронь освобождается.
+    if (response.status === 429) { budget.release(booking.id); cooldown(provider.name, retryAfterSeconds(response.headers?.get?.('retry-after')) || RATE_LIMIT_DEFAULT_S, 'Лимит провайдера (429)'); return null; }
+    if (response.status === 401 || response.status === 403) { budget.release(booking.id); cooldown(provider.name, AUTH_ERROR_S, `Ключ провайдера отклонён (HTTP ${response.status})`); return null; }
     if (response.status >= 500) {
+      budget.keep(booking.id);
       const failures = row(provider.name)?.failures || 0;
       cooldown(provider.name, Math.min(SERVER_ERROR_MAX_S, SERVER_ERROR_BASE_S * 2 ** Math.min(failures, 4)), `Ошибка провайдера (HTTP ${response.status})`); return null;
     }
-    if (!response.ok) { cooldown(provider.name, CLIENT_ERROR_S, `Провайдер отклонил запрос (HTTP ${response.status})`); return null; }
+    if (!response.ok) { budget.keep(booking.id); cooldown(provider.name, CLIENT_ERROR_S, `Провайдер отклонил запрос (HTTP ${response.status})`); return null; }
     let data;
-    try { data = await response.json(); } catch { cooldown(provider.name, CLIENT_ERROR_S, 'Некорректный JSON провайдера'); return null; }
+    try { data = await response.json(); } catch { budget.keep(booking.id); cooldown(provider.name, CLIENT_ERROR_S, 'Некорректный JSON провайдера'); return null; }
+    // Бронь уточняется фактом только если провайдер вернул usage и цена объявлена;
+    // иначе верхняя оценка остаётся занятой.
+    budget.settle(booking.id, { promptTokens: data?.usage?.prompt_tokens, completionTokens: data?.usage?.completion_tokens });
     const content = data?.choices?.[0]?.message?.content;
     const text = shortText(typeof content === 'string' ? content : Array.isArray(content) ? content.map((c) => c?.text || '').join(' ') : '', messageLimit);
     if (!text) { cooldown(provider.name, CLIENT_ERROR_S, 'Пустой ответ провайдера'); return null; }
@@ -91,12 +126,26 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
   }
   /* Пробует доступных провайдеров по порядку; исчерпание всех — не ошибка задания, а ожидание. */
   async function reply(payload, { beforeAttempt = null } = {}) {
+    let blockedReason = '';
     for (const provider of available()) {
       if (beforeAttempt) beforeAttempt(provider);
       const result = await callProvider(provider, payload);
+      // Бюджет не дал брони: это не сбой провайдера, обращения не было.
+      if (result && result.budgetBlocked) { blockedReason = result.reason || blockedReason; continue; }
       if (result) return result;
     }
-    const at = now(), until = nextAvailableAt(at);
+    if (blockedReason && !budget.stopped()) {
+      throw Object.assign(new Error(`${blockedReason}: вопрос ждёт в очереди`),
+        { allUnavailable: true, budgetStopped: true, delay: 900 });
+    }
+    const at = now(), stop = budget.state(at);
+    // Бюджет исчерпан — это не сбой провайдера: ждать до конца окна, а не до конца паузы.
+    if (stop.stopped) {
+      throw Object.assign(new Error(`${stop.reason}: вопрос ждёт в очереди`),
+        { allUnavailable: true, budgetStopped: true,
+          delay: Math.max(60, Math.min(900, Math.ceil((Date.parse(stop.resetAt) - at) / 1000) || 900)) });
+    }
+    const until = nextAvailableAt(at);
     throw Object.assign(new Error(providers.length ? 'Резервные провайдеры недоступны: вопрос ждёт в очереди' : 'Резервные провайдеры не настроены'),
       { allUnavailable: true, delay: Math.max(30, Math.min(900, Math.ceil((until - at) / 1000) || 30)) });
   }
@@ -107,7 +156,7 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
   }
   const markAck = (code) => upsert(`ack:${code}`, { last_success_at: stamp() });
   function status() {
-    return { configured: providers.length > 0, issues, providers: providers.map((p) => {
+    return { configured: providers.length > 0, issues, budget: budget.status(), providers: providers.map((p) => {
       const r = row(p.name) || {};
       return { name: p.name, model: p.model, cooling: cooling(p.name), cooldownUntil: r.cooldown_until || null, failures: r.failures || 0,
         lastError: r.last_error || '', lastAttemptAt: r.last_attempt_at || null, lastSuccessAt: r.last_success_at || null,
@@ -116,6 +165,6 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
   }
   // Аренда серверного подхвата: сумма таймаутов провайдеров плюс запас — чтобы она не истекла посреди последовательных попыток.
   const leaseMs = () => providers.reduce((total, p) => total + p.timeoutMs, 0) + 30000;
-  return { providers: providers.map((p) => ({ name: p.name, model: p.model })), issues, available, reply, status, ackDue, markAck, leaseMs, ACK_TEXT };
+  return { providers: providers.map((p) => ({ name: p.name, model: p.model })), issues, available, reply, status, ackDue, markAck, leaseMs, budget, ACK_TEXT };
 }
 module.exports = { createHughFallback, readProviders, ACK_TEXT };

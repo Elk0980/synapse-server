@@ -14,6 +14,7 @@ const { createAuthStore, COMPANIES, PERMISSIONS, DEPENDENCIES, PRICE_CLIENT_PRES
 const { createSiteStore } = require('./site-store');
 const { createHughSettingsStore } = require('./hugh-settings-store');
 const { createProjectChat } = require('./project-chat');
+const { createHughProviders } = require('./hugh-providers');
 const { clientIp, originOf } = require('./site-orders');
 const { hashPassword, verifyPassword } = require('./passwords');
 const { createCompanyLinksReader } = require('./company-links-reader');
@@ -170,7 +171,11 @@ const hughSettingsStore = createHughSettingsStore(db);
 const ORDER_SITES = { palitra: { companyCode: CONTENT_COMPANIES.palitra, title: 'Palitra',
   origins: (process.env.PALITRA_ORDER_ORIGINS || 'https://palitra-love.synapsebusiness.ru').split(',').map((s) => s.trim()).filter(Boolean) } };
 const ORDER_BODY_LIMIT = 32 * 1024;
+/* Защищённое хранилище ключей провайдеров Хью: владелец вводит ключ в ЛК, ключ шифруется
+   внешним мастер-ключом и наружу не возвращается. Без мастер-ключа хранилище закрыто. */
+const hughProviders = createHughProviders({ db });
 const projectChat = createProjectChat({ db, authStore, assetsDir: ASSETS_DIR,
+  fallback: { providerStore: hughProviders },
   runnerUrl: HUGH_RUNTIME_URL, chatUrl: CHAT_URL, chatApiKey: CHAT_API_KEY,
   localWorker: { keySha256: HUGH_LOCAL_WORKER_KEY_SHA256, companies: HUGH_LOCAL_WORKER_COMPANIES },
   // Соль для хеша IP выводится из секрета сессий: сам IP не хранится, отдельного секрета не нужно.
@@ -473,7 +478,8 @@ async function proxyCrm(request, response, url, cors) {
     const code = url.searchParams.get('companyCode');
     if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400,'Выберите компанию');
   }
-  if (/^\/(catalog|finances)(?:\/|$)/.test(crmPath) && identity.role !== 'owner') fail(403,'Коммерческие условия и финансы доступны владельцу');
+  // Испытания моделей — часть того же owner-only раздела: цены и аккаунты клиентам не показываем.
+  if (/^\/(catalog|finances|ai-trials)(?:\/|$)/.test(crmPath) && identity.role !== 'owner') fail(403,'Коммерческие условия и финансы доступны владельцу');
   const companyModule = /^\/(company-information|autoposting)(?:\/|$)/.exec(crmPath)?.[1];
   if (/^\/(?:studio-journey|reviews|platform-demand|social-stats)(?:\/|$)/.test(crmPath)) {
     const code=url.searchParams.get('companyCode');
@@ -495,6 +501,32 @@ async function proxyCrm(request, response, url, cors) {
       requirePermission(request, `${companyModule}.${readOnly ? 'view' : 'edit'}`, code);
     }
   }
+  // Внедрение Медиа-наставника: этапы ведёт администратор Synapse, клиент читает их
+  // и отвечает на опрос ЛК по уже выданному праву раздела публикаций своей компании.
+  const mentorRollout = /^\/media-mentor-rollout(?:\/|$)/.test(crmPath);
+  if (mentorRollout) {
+    const code = url.searchParams.get('companyCode');
+    if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400, 'Выберите компанию');
+    if (identity.role !== 'owner') {
+      if (crmPath !== '/media-mentor-rollout/survey' && !readOnly) {
+        fail(403, 'Этапы внедрения ведёт администратор Synapse');
+      }
+      requirePermission(request, 'autoposting.view', code);
+    }
+  }
+  // Бриф и контент-план Медиа-наставника переиспользуют права автопостинга: новых прав нет.
+  // Согласование версии плана — решение владельца и не даёт разрешения публиковать.
+  const mentorPlan = /^\/media-mentor(?:\/|$)/.test(crmPath);
+  if (mentorPlan) {
+    const code = url.searchParams.get('companyCode');
+    if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400, 'Выберите компанию');
+    if (crmPath === '/media-mentor/plan/decision' && identity.role !== 'owner') {
+      fail(403, 'Согласовывать и отклонять план может только владелец');
+    }
+    if (identity.role !== 'owner') {
+      requirePermission(request, `autoposting.${readOnly ? 'view' : 'edit'}`, code);
+    }
+  }
   if (/^\/(?:email-campaigns|email-subscriptions)(?:\/|$)/.test(crmPath) && identity.role !== 'owner') {
     fail(403, 'Рассылки доступны только владельцу');
   }
@@ -508,7 +540,7 @@ async function proxyCrm(request, response, url, cors) {
   if (identity.role !== 'owner' && identity.companyCodes.length === 0) {
     fail(403, 'Аккаунту не назначена компания');
   }
-  if (identity.role !== 'owner' && !companyModule) {
+  if (identity.role !== 'owner' && !companyModule && !mentorRollout && !mentorPlan) {
     if (readOnly) {
       const permission = analyticsReadPath && identity.permissions.includes('analytics.view')
         ? 'analytics.view' : 'crm.view';
@@ -788,6 +820,24 @@ const server = http.createServer(async (request, response) => {
       return reply(200, { ok: true, service: 'content' });
     }
 
+    /* Настройка провайдеров Хью: только владелец, только с CSRF на запись.
+       Ключ уходит на сервер и обратно никогда не возвращается. */
+    if (url.pathname === '/content/hugh-providers' || /^\/content\/hugh-providers\/[a-z0-9-]{1,32}(?:\/check)?$/.test(url.pathname)) {
+      const session = requireSession(request);
+      if (session.user.role !== 'owner') fail(403, 'Настройка провайдеров доступна владельцу');
+      const match = /^\/content\/hugh-providers\/([a-z0-9-]{1,32})(\/check)?$/.exec(url.pathname);
+      if (url.pathname === '/content/hugh-providers' && request.method === 'GET') return reply(200, hughProviders.status());
+      if (match && !match[2] && request.method === 'PUT') {
+        requireCsrf(request, session);
+        return reply(200, hughProviders.save(match[1], await readJson(request), session.user));
+      }
+      if (match && match[2] && request.method === 'POST') {
+        requireCsrf(request, session);
+        // Проверка соединения — явное отдельное действие владельца, а не следствие сохранения.
+        return reply(200, await hughProviders.check(match[1]));
+      }
+      fail(405, 'Метод не поддерживается');
+    }
     if (url.pathname === '/content/publishing-assets') {
       if (request.method !== 'POST') fail(405, 'Метод не поддерживается');
       const session = requireSession(request), code = url.searchParams.get('companyCode');

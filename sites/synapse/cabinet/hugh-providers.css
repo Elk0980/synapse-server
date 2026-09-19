@@ -1,0 +1,13 @@
+.hugh-providers { display:grid; gap:10px; }
+.hugh-providers h2 { margin:0; }
+.hugh-note { color:var(--muted,#999); font-size:0.85rem; overflow-wrap:anywhere; }
+.hugh-locked { padding:8px 10px; border:1px solid var(--red,#ff9c9c); border-radius:8px; margin:0; }
+.hugh-provider { border:1px solid var(--line,#333); border-radius:8px; padding:8px 10px; }
+.hugh-provider summary { cursor:pointer; }
+.hugh-provider form { display:grid; gap:8px; margin-top:8px; }
+.hugh-provider label { display:grid; gap:4px; }
+.hugh-provider .wide { grid-column:1 / -1; }
+.hugh-check { display:flex; gap:6px; align-items:center; min-height:44px; }
+@media (max-width:430px) {
+  .hugh-provider input, .hugh-provider button { width:100%; min-height:44px; }
+}

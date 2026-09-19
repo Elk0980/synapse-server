@@ -17,6 +17,10 @@ const { createCompanyInformation } = require('./company-information');
 const { createAutoposting } = require('./autoposting');
 const { createAutopostingTransport } = require('./autoposting-transport');
 const { createStudioJourney, createStudioJourneyHandler } = require('./studio-journey');
+const { createMediaMentorRollout, createMediaMentorRolloutHandler } = require('./media-mentor-rollout');
+const { createMediaMentor } = require('./media-mentor');
+const { createMediaMentorTransfer } = require('./media-mentor-transfer');
+const { createMediaMentorHandler } = require('./media-mentor-http');
 const { createStudioContentPlan } = require('./studio-content-plan');
 const { createVkCommunity } = require('./vk-community');
 const { createVkCommunityHandler } = require('./vk-community-http');
@@ -583,6 +587,11 @@ const autoposting = createAutoposting(db, {information: companyInformation, tran
 const studioJourney = createStudioJourney(db);
 const studioContentPlan = createStudioContentPlan(db,{autoposting,information:companyInformation});
 const handleStudioJourney = createStudioJourneyHandler({journey:studioJourney,companyModuleContext,readJson,send});
+const mediaMentorRollout = createMediaMentorRollout(db);
+const handleMediaMentorRollout = createMediaMentorRolloutHandler({rollout:mediaMentorRollout,companyModuleContext,readJson,send});
+const mediaMentor = createMediaMentor(db);
+const mediaMentorTransfer = createMediaMentorTransfer(db,{mentor:mediaMentor,autoposting,information:companyInformation});
+const handleMediaMentor = createMediaMentorHandler({mentor:mediaMentor,transfer:mediaMentorTransfer,companyModuleContext,readJson,send});
 const vkCommunity = createVkCommunity(db,{apiKey:API_KEY});
 const handleVkCommunity = createVkCommunityHandler({community:vkCommunity,companyModuleContext,readJson,send});
 const reviews = createReviews(db);
@@ -2417,6 +2426,7 @@ function taskSummary(url) {
 
 const dealOrders = createDealOrders({db,fail,getStages:pipelineStages,getPipelines:pipelineList,setStages:(body,pipeline)=>replacePipelineStages(body,pipeline,false),getCatalog:()=>commercial.catalog()});
 const commercial=createCommercial({db,fail});
+const aiTrials=require('./ai-trials').createAiTrials({db,fail});
 
 async function route(request, response) {
   const url = new URL(request.url, 'http://localhost');
@@ -2429,7 +2439,9 @@ async function route(request, response) {
   const publicPost = request.method === 'POST' && ['/leads', '/events'].includes(url.pathname);
   if (!publicPost) requireApiKey(request);
 
-  if(url.pathname==='/catalog'||url.pathname==='/finances'||/^\/finances\/\d+$/.test(url.pathname)){
+  // Испытания моделей живут в том же owner-only разделе, что каталог и финансы.
+  if(url.pathname==='/catalog'||url.pathname==='/finances'||/^\/finances\/\d+$/.test(url.pathname)
+    ||url.pathname==='/ai-trials'||/^\/ai-trials\/\d+$/.test(url.pathname)){
     if(url.pathname==='/catalog'&&url.searchParams.has('companyCode')&&url.searchParams.get('companyCode')!=='synapse-business')fail(400,'Каталог услуг относится к Synapse Бизнес');
     const actor=crmIdentity(request);if(actor?.role!=='owner')fail(403,'Коммерческие условия и финансы доступны владельцу');
     let result;
@@ -2439,6 +2451,9 @@ async function route(request, response) {
       const today=new Date().toISOString().slice(0,10);result=commercial.finance(url.searchParams.get('companyCode'),url.searchParams.get('from')||today.slice(0,7)+'-01',url.searchParams.get('to')||today,Math.max(0,parseInt(url.searchParams.get('offset')||'0',10)||0));
     }else if(request.method==='POST'&&url.pathname==='/finances')result=commercial.saveEntry(null,url.searchParams.get('companyCode'),await readJson(request),actor);
     else if(request.method==='PATCH'&&/^\/finances\/\d+$/.test(url.pathname))result=commercial.saveEntry(entityId(url.pathname.split('/')[2]),url.searchParams.get('companyCode'),await readJson(request),actor);
+    else if(url.pathname==='/ai-trials'&&request.method==='GET')result=aiTrials.list(url.searchParams.get('companyCode'),{offset:Math.max(0,parseInt(url.searchParams.get('offset')||'0',10)||0)});
+    else if(url.pathname==='/ai-trials'&&request.method==='POST')result=aiTrials.save(null,url.searchParams.get('companyCode'),await readJson(request),actor);
+    else if(request.method==='PATCH'&&/^\/ai-trials\/\d+$/.test(url.pathname))result=aiTrials.save(entityId(url.pathname.split('/')[2]),url.searchParams.get('companyCode'),await readJson(request),actor);
     else fail(404,'Раздел не найден');
     return send(response,200,result,{...cors,'cache-control':'no-store'});
   }
@@ -2494,6 +2509,8 @@ async function route(request, response) {
   }
 
   if (await handleStudioJourney(request,response,url,cors)) return;
+  if (await handleMediaMentorRollout(request,response,url,cors)) return;
+  if (await handleMediaMentor(request,response,url,cors)) return;
   if (await handleVkCommunity(request,response,url,cors)) return;
   if (await handleReviews(request,response,url,cors)) return;
   if (await handlePlatformDemand(request,response,url,cors)) return;
