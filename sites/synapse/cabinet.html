@@ -1047,7 +1047,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260919-hugh-providers";
+  window.SB_CABINET_ASSET_VERSION = "20260919-task-summary-1-hugh-providers";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
@@ -1311,20 +1311,99 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const editorSupported = (kind) =>
     (EDITOR_PROJECTS.includes(selectedProjectId) || (kind === "price" && selectedProjectId === "palitra-love")) &&
     (identity?.role === "owner" || identity?.permissions.includes(kind === "price" ? "price.edit" : "site_editor.edit"));
-  const editorUrl = (kind) => kind === "price" && selectedProjectId === "palitra-love"
+  const legacyEditorUrl = (kind) => kind === "price" && selectedProjectId === "palitra-love"
     ? "/price-editor-palitra.html" : `${kind}-editor.html?site=${encodeURIComponent(selectedProjectId)}`;
-  const showEditorNotice = () => {
+  // Каноническим основным сайтом компании считается её активный опубликованный сайт с
+  // доступным редактором. Раньше общая кнопка строила адрес из кода компании, из-за чего
+  // у Авокадо она вела на черновик прошлой версии, а карточка «Чистовые» — на основной сайт.
+  // Прайс сюда не входит: у Авокадо он общий и остаётся на site=avokado.
+  const canonicalSiteEditors = new Map();
+  const canonicalSiteRequests = new Map();
+  // Недоступный каталог держим отдельно от «сайта нет»: тексты и повторная попытка разные.
+  const canonicalSiteFailures = new Set();
+  const canonicalSiteEditor = (sites) => {
+    // Сервер отдаёт список, уже отсортированный по названию: выбор одного и того же
+    // сайта при равных условиях не зависит от порядка ответа.
+    const site = (Array.isArray(sites) ? sites : []).find((item) =>
+      item && item.isActive && item.publicationStatus === "published" &&
+      item.capabilities?.editSite && typeof item.editorUrls?.site === "string" && item.editorUrls.site);
+    return site ? site.editorUrls.site : null;
+  };
+  const loadCanonicalSiteEditor = (code) => {
+    if (canonicalSiteEditors.has(code)) return Promise.resolve(canonicalSiteEditors.get(code));
+    if (canonicalSiteRequests.has(code)) return canonicalSiteRequests.get(code);
+    // Сбой сохраняем отдельно от пустого каталога; повтор разрешается явным кликом.
+    // До получения основного сайта ссылка ведёт в каталог, а не в старый черновик.
+    const request = apiJson(`/content/sites?companyCode=${encodeURIComponent(code)}&state=published`)
+      .then((data) => {
+        const url = canonicalSiteEditor(data?.sites);
+        canonicalSiteEditors.set(code, url);
+        canonicalSiteFailures.delete(code);
+        return url;
+      })
+      .catch(() => { canonicalSiteFailures.add(code); return null; })
+      .finally(() => canonicalSiteRequests.delete(code));
+    canonicalSiteRequests.set(code, request);
+    return request;
+  };
+  const editorUrl = (kind) => kind === "site"
+    ? (canonicalSiteEditors.get(selectedProjectId) || legacyEditorUrl("site"))
+    : legacyEditorUrl(kind);
+  // Состояние кнопки сайта. Прежний адрес компании здесь больше не используется: пока
+  // основной сайт неизвестен, открывать «какой-нибудь» редактор нельзя — именно так
+  // и получалось попадание в черновик прошлой версии Авокадо.
+  //   ready   — основной сайт известен, ведём прямо в него;
+  //   loading — каталог ещё не ответил, клик ждёт и ничего не открывает;
+  //   missing — ответ получен, подходящего сайта нет: ведём в раздел «Сайты».
+  const siteEditorState = () => {
+    const code = selectedProjectId;
+    if (!code) return "missing";
+    if (canonicalSiteEditors.has(code)) return canonicalSiteEditors.get(code) ? "ready" : "missing";
+    return canonicalSiteFailures.has(code) ? "unavailable" : "loading";
+  };
+  // Обе неопределённости ведут в каталог сайтов, а не в прежний черновик компании.
+  const siteEditorFallsBackToCatalog = (state) => state === "missing" || state === "unavailable";
+  // Сбой каталога сам себя не повторяет. Иначе ожидание на #site-editor превращалось в
+  // бесконечную очередь запросов: неудача не попадает в canonicalSiteEditors, поэтому
+  // следующая же проверка снова считала состояние «ещё грузится». Повтор делает только
+  // сам пользователь — явным кликом по кнопке.
+  const ensureCanonicalSiteEditor = (afterLoad, { retry = false } = {}) => {
+    const code = selectedProjectId;
+    if (!code || canonicalSiteEditors.has(code) || typeof apiJson !== "function") return false;
+    if (canonicalSiteFailures.has(code)) {
+      if (!retry) return false;
+      canonicalSiteFailures.delete(code);
+    }
+    loadCanonicalSiteEditor(code).then(() => { if (selectedProjectId === code) afterLoad(); });
+    return true;
+  };
+  const EDITOR_NOTICES = Object.freeze({
+    denied: "Редактор недоступен для этого проекта или у вашей учётной записи нет права редактирования",
+    loading: "Определяем основной сайт компании — повторите через секунду",
+    missing: "У этой компании нет опубликованного сайта. Откройте раздел «Сайты» и выберите нужный",
+    unavailable: "Не удалось получить список сайтов компании. Откройте раздел «Сайты»"
+  });
+  const showEditorNotice = (reason = "denied") => {
     const notice = byId("editor-link-notice");
-    notice.textContent = "Редактор недоступен для этого проекта или у вашей учётной записи нет права редактирования";
+    notice.textContent = EDITOR_NOTICES[reason] || EDITOR_NOTICES.denied;
     notice.hidden = false;
   };
-  const updateEditorLinks = () => {
+  const applyEditorLinks = () => {
     for (const kind of ["site", "price"]) {
       const supported = editorSupported(kind);
       const link = byId(`${kind}-editor-link`);
-      link.href = supported ? editorUrl(kind) : `#${kind === "site" ? "site-editor" : "price"}`;
+      // Прайс не зависит от каталога сайтов и не блокируется вместе с ним:
+      // у Авокадо он общий и остаётся на прежнем адресе.
+      const state = kind === "site" && supported ? siteEditorState() : supported ? "ready" : "denied";
+      link.dataset.editorState = state;
+      link.href = state === "ready" ? editorUrl(kind)
+        : siteEditorFallsBackToCatalog(state) ? "#sites"
+        : `#${kind === "site" ? "site-editor" : "price"}`;
       link.setAttribute("aria-disabled", String(!supported));
-      if (supported) {
+      link.setAttribute("aria-busy", String(state === "loading"));
+      // Новая вкладка открывается только для известной цели: иначе по средней кнопке
+      // мыши уехал бы прежний адрес, минуя проверку состояния.
+      if (state === "ready") {
         link.target = "_blank";
         link.rel = "noopener";
       } else {
@@ -1334,12 +1413,39 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     }
     byId("editor-link-notice").hidden = true;
   };
+  // Загрузку каталога запускает только updateEditorLinks: обновление адресов после ответа
+  // идёт через applyEditorLinks, поэтому постоянная ошибка сети не уходит в бесконечный повтор.
+  const updateEditorLinks = () => {
+    applyEditorLinks();
+    if (editorSupported("site")) ensureCanonicalSiteEditor(applyEditorLinks);
+  };
   const redirectEditorHash = () => {
     const kind = location.hash === "#site-editor" ? "site" : location.hash === "#price" ? "price" : null;
     if (!kind) return false;
     if (editorSupported(kind)) {
-      location.replace(editorUrl(kind));
-      return true;
+      if (kind !== "site") {
+        location.replace(editorUrl(kind));
+        return true;
+      }
+      // Переход по #site-editor ждёт каталог сайтов: иначе первый же заход после входа
+      // успевал уйти на прежний адрес раньше, чем становится известен основной сайт.
+      const code = selectedProjectId;
+      if (ensureCanonicalSiteEditor(() => {
+        // Ответ, пришедший после ухода со страницы редактора или после смены компании,
+        // цель уже не меняет: увозить пользователя из того места, где он сейчас, нельзя.
+        if (location.hash !== "#site-editor" || selectedProjectId !== code) return;
+        redirectEditorHash();
+      })) return true;
+      if (siteEditorState() === "ready") {
+        location.replace(editorUrl("site"));
+        return true;
+      }
+      // Каталог ответил пусто или не ответил вовсе: показываем причину и открываем раздел
+      // «Сайты» по-настоящему. Подменять один только адрес в строке нельзя — пользователь
+      // остался бы на пустом месте, а прежняя версия сайта по-прежнему под запретом.
+      showEditorNotice(siteEditorState());
+      navigate("sites");
+      return false;
     }
     showEditorNotice();
     history.replaceState(null, "", `#${defaultView()}`);
@@ -1643,6 +1749,23 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       if (editorLink.getAttribute("aria-disabled") === "true") {
         event.preventDefault();
         showEditorNotice();
+        return;
+      }
+      // Пока каталог не ответил, клик ничего не открывает: прежний адрес компании — это
+      // чужой черновик, и молча уводить в него быстрый клик нельзя.
+      if (editorLink.dataset.editorState === "loading") {
+        event.preventDefault();
+        showEditorNotice("loading");
+        ensureCanonicalSiteEditor(applyEditorLinks);
+        return;
+      }
+      if (editorLink.dataset.editorLink === "site" && siteEditorFallsBackToCatalog(editorLink.dataset.editorState)) {
+        event.preventDefault();
+        showEditorNotice(editorLink.dataset.editorState);
+        // Клик — это и есть пользовательский повтор после сбоя каталога.
+        if (editorLink.dataset.editorState === "unavailable") ensureCanonicalSiteEditor(applyEditorLinks, { retry: true });
+        navigate("sites");
+        if (window.matchMedia("(max-width: 760px)").matches) setDrawer(false);
       }
       return;
     }

@@ -1,7 +1,18 @@
 (() => {
   "use strict";
   const cabinet = window.SbCabinet = window.SbCabinet || {};
-  const statuses = { todo: "Новая", in_progress: "В работе", done: "Готово", blocked: "Нужна помощь" };
+  /* Отложенная отправка: состояние самой записи и, для отправленной, состояние доставки
+     из той же очереди Telegram, что и у обычных сообщений. */
+  const scheduledStates = { pending: "Ожидает отправки", sent: "Отправлено", cancelled: "Отменено",
+    expired: "Срок прошёл, не отправлено", error: "Не отправлено" };
+  const scheduledDelivery = { local: "в чате проекта", pending: "ожидает отправки в Telegram",
+    sending: "отправляется в Telegram", sent: "доставлено в Telegram", uncertain: "доставка уточняется",
+    error: "не доставлено в Telegram" };
+  const ZONES = ["Asia/Irkutsk", "Asia/Bangkok", "Europe/Moscow", "UTC"];
+  const statuses = { todo: "Не начато", in_progress: "В работе", done: "Сделано", blocked: "Нужна помощь", cancelled: "Отменено" };
+  // Состояние публикации показывается отдельно от состояния работы: «готово» у нас ещё не значит «на сайте».
+  const publications = { not_started: "Не опубликовано", prepared: "Готово, на сайте ещё нет",
+    published: "На сайте", awaiting_clarification: "Ожидает уточнения", not_required: "Публикация не требуется" };
   const delivery = { local: "В чате проекта", pending: "Ожидает отправки в Telegram", sending: "Отправляется в Telegram…", sent: "Отправлено в Telegram", error: "Не отправлено в Telegram", uncertain: "Доставка в Telegram уточняется" };
   const TITLE_LIMIT = 200, PAGE = 100;
   // Локальный обработчик отдаёт ссылку и код входа не сразу: команда уходит на компьютер Хью.
@@ -58,6 +69,11 @@
   const options = (items, selected, empty) => `<option value="">${escape(empty)}</option>` + items.map(([id, title]) => `<option value="${escape(id)}"${String(id) === String(selected) ? " selected" : ""}>${escape(title)}</option>`).join("");
   const FORMER_NOTE = "бывший участник";
   const chosen = id => id !== null && id !== undefined && id !== "";
+  /* Дата проверки может прийти из реестра как дата-время. input type="date" принимает только YYYY-MM-DD,
+     поэтому показываем день, а полное значение храним рядом и возвращаем нетронутым, если день не меняли. */
+  const dayOf = value => String(value || "").slice(0, 10);
+  // День не трогали — возвращаем исходное значение целиком, чтобы не потерять время из реестра.
+  const keepMoment = (full, day) => (day && dayOf(full) === day ? full : (day || ""));
   const activeMember = (state, id) => list(state.data?.members).some(member => String(member.userId) === String(id));
   const personName = (state, id) => [...list(state.data?.members), ...list(state.data?.formerMembers)]
     .find(person => String(person.userId) === String(id))?.displayName || "";
@@ -274,8 +290,46 @@
     root.querySelectorAll("[data-pc-write]").forEach(node => { node.hidden = !canReply(state); });
     const tasksSignature = JSON.stringify([data.tasks, data.stages, data.members, data.formerMembers, data.access]);
     if (tasksSignature !== state.tasksSignature) {
-      q(state, "[data-pc-tasks]").innerHTML = list(data.tasks).map(task => `<li class="pc-task${task.status === "done" ? " pc-task-done" : ""}"><button type="button" data-pc-task="${escape(task.id)}"><strong>${escape(task.title)}</strong><span>${escape(assigneeLabel(state, task))} · ${escape(stageName(state, task.stageId))}</span><small>${escape(statuses[task.status] || task.status)}${task.due ? " · " + escape(task.due) : ""}</small></button></li>`).join("") || '<li class="pc-empty">Из сообщения можно создать задачу, назначить исполнителя и срок.</li>';
-      q(state, "[data-pc-task-count]").textContent = String(list(data.tasks).filter(task => task.status !== "done").length);
+      q(state, "[data-pc-tasks]").innerHTML = list(data.tasks).map(task => {
+        const publication = task.publication || "not_started";
+        // Сайт обязателен для показа: у собственника два сайта в одной переписке, карточка без метки вводит в заблуждение.
+        const site = task.siteStatus === "needs_clarification"
+          ? '<span class="pc-badge pc-badge-ask">Нужно уточнить сайт</span>'
+          : `<span class="pc-badge">${escape(task.siteLabel || task.site || "")}</span>`;
+        /* Ссылка НЕ внутри кнопки: вложенные интерактивные элементы недопустимы, и клик по ссылке
+           открывал бы редактирование задачи вместо страницы. Выносим её отдельной строкой под кнопкой. */
+        const link = task.publishedUrl
+          ? `<p class="pc-task-link"><a href="${escape(task.publishedUrl)}" target="_blank" rel="noopener noreferrer">Открыть страницу</a>${task.verifiedAt ? " · проверено " + escape(dayOf(task.verifiedAt)) : ""}</p>`
+          : "";
+        const quote = task.sourceQuote ? `<span class="pc-task-quote">«${escape(task.sourceQuote)}»</span>` : "";
+        const notes = list(task.notes).length
+          ? `<span class="pc-task-notes">Уточнения: ${list(task.notes).map(note => escape(note.text)).join(" · ")}</span>` : "";
+        const cancelled = task.cancelled || task.status === "cancelled";
+        const kind = task.kind === "internal" ? '<span class="pc-badge">Внутренняя работа</span>' : "";
+        // Кнопка напоминания стоит рядом с задачей, а не внутри её кнопки: вложенные кнопки недопустимы.
+        const remind = canReply(state)
+          ? `<button type="button" class="pc-task-remind" data-pc-task-remind="${escape(task.id)}">Напомнить</button>` : "";
+        return `<li class="pc-task${cancelled ? " pc-task-cancelled" : task.fixedOnSite ? " pc-task-done" : ""}"><button type="button" data-pc-task="${escape(task.id)}"><strong>${task.externalRef ? escape(task.externalRef) + ". " : ""}${escape(task.title)}</strong>${quote}<span class="pc-task-badges">${site}${kind}${cancelled ? '<span class="pc-badge pc-pub-cancelled">Отменено — не исправление</span>' : ""}<span class="pc-badge pc-pub-${escape(publication)}">${escape(publications[publication] || publication)}</span></span>${notes}<span>${escape(assigneeLabel(state, task))} · ${escape(stageName(state, task.stageId))}</span><small>Работа: ${escape(statuses[task.status] || task.status)}${task.due ? " · " + escape(task.due) : ""}</small></button>${link}${remind}</li>`;
+      }).join("") || '<li class="pc-empty">Из сообщения можно создать задачу, назначить исполнителя и срок.</li>';
+      /* В счётчике — только замечания клиента, которые ещё не на сайте и не сняты. Внутренние работы
+         (резервы, счётчики) считаются отдельно и в клиентский счёт не входят. */
+      renderScheduled(state, data);
+      /* Сводка вместо одного числа. Раньше в заголовке стояло только количество незакрытых замечаний,
+         и при шестнадцати видимых карточках там появлялся ноль — список выглядел пустым.
+         Теперь видно всё: сколько замечаний клиента всего, сколько из них на сайте, сколько осталось
+         и сколько снято. Снятое исправлением не считается, внутренние работы стоят отдельно
+         и в клиентский счёт не входят. Карточки этим не меняются и не задваиваются. */
+      const clientTasks = list(data.tasks).filter(task => (task.kind || "client_remark") === "client_remark");
+      const cancelledTasks = clientTasks.filter(task => task.cancelled || task.status === "cancelled");
+      const onSite = clientTasks.filter(task => task.fixedOnSite && !(task.cancelled || task.status === "cancelled"));
+      const open = clientTasks.filter(task => !(task.cancelled || task.status === "cancelled") && !task.fixedOnSite);
+      const internal = list(data.tasks).filter(task => task.kind === "internal").length;
+      const parts = clientTasks.length
+        ? [`Замечания: ${clientTasks.length}`, `на сайте ${onSite.length}`, `осталось ${open.length}`,
+          ...(cancelledTasks.length ? [`отменено ${cancelledTasks.length}`] : [])]
+        : [];
+      if (internal) parts.push(`внутренних ${internal}`);
+      q(state, "[data-pc-task-count]").textContent = parts.join(" · ");
       state.tasksSignature = tasksSignature;
     }
   };
@@ -382,6 +436,98 @@
       schedule(state, view);
     }, 5000);
   };
+  /* Список запланированного: срок показывается в том поясе, который выбрал владелец, состояние —
+     отдельно для записи и для доставки. Изменить и отменить можно только то, что ещё ждёт отправки. */
+  const zoneTime = (iso, timeZone) => {
+    try {
+      return new Intl.DateTimeFormat("ru-RU", { timeZone, day: "2-digit", month: "2-digit", year: "numeric",
+        hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso));
+    } catch { return String(iso || ""); }
+  };
+  const renderScheduled = (state, data) => {
+    const items = list(data.scheduled);
+    const block = q(state, "[data-pc-scheduled-block]");
+    const node = q(state, "[data-pc-scheduled]");
+    if (!block || !node) return;
+    block.hidden = items.length === 0;
+    const signature = JSON.stringify(items);
+    if (signature === state.scheduledSignature) return;
+    state.scheduledSignature = signature;
+    node.innerHTML = items.map(item => {
+      const delivery = item.status === "sent" && item.deliveryStatus
+        ? ` · ${escape(scheduledDelivery[item.deliveryStatus] || item.deliveryStatus)}` : "";
+      // Право менять приходит с сервера: чужую отправку кабинет не предлагает трогать.
+      const actions = item.canManage
+        ? `<span class="pc-scheduled-actions"><button type="button" data-pc-schedule-edit="${escape(item.id)}">Изменить</button><button type="button" data-pc-schedule-cancel="${escape(item.id)}">Отменить</button></span>`
+        : "";
+      const reminder = item.kind === "task_reminder" ? '<span class="pc-badge">Напоминание по задаче</span>' : "";
+      return `<li class="pc-scheduled-item"><p>${escape(item.text)}</p><small>${escape(zoneTime(item.dueAt, item.timezone))} · ${escape(item.timezone)} · ${escape(scheduledStates[item.status] || item.status)}${delivery}${item.error ? " · " + escape(item.error) : ""}</small>${reminder}${actions}</li>`;
+    }).join("");
+  };
+
+  /* Диалог планирования. Дата, время и часовой пояс задаются явно: сервер переводит их в UTC сам,
+     поэтому «9:00 у Татьяны» остаётся 9:00 у Татьяны независимо от того, где открыт кабинет. */
+  const cancelScheduled = async (state, id) => {
+    if (!canReply(state)) return;
+    const view = state.view;
+    try {
+      await write(state, `/scheduled/${id}`, "PATCH", { status: "cancelled" });
+      if (!live(state, view)) return;
+      notice(state, "Отправка отменена");
+      await refresh(state, view);
+    } catch (error) {
+      if (!live(state, view) || error.name === "AbortError") return;
+      if (denied(error)) { revoke(state, error.message); return; }
+      notice(state, error.message || "Не удалось отменить отправку", true);
+    }
+  };
+  const scheduleDialog = (state, { item = null, task = null } = {}) => {
+    if (!canReply(state)) return;
+    const view = state.view;
+    const browserZone = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; } catch { return "UTC"; } })();
+    const zones = [...new Set([...ZONES, browserZone])];
+    const current = item ? new Date(item.dueAt) : new Date(Date.now() + 3600000);
+    const zone = item ? item.timezone : (zones.includes("Asia/Irkutsk") ? "Asia/Irkutsk" : browserZone);
+    const parts = (() => {
+      try {
+        const formatted = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit",
+          day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(current);
+        const get = (type) => formatted.find(part => part.type === type)?.value || "";
+        return { date: `${get("year")}-${get("month")}-${get("day")}`, time: `${get("hour")}:${get("minute")}` };
+      } catch { return { date: "", time: "09:00" }; }
+    })();
+    const draft = item ? item.text : (q(state, "[data-pc-compose]")?.elements.text.value || "").trim();
+    const title = task ? "Напоминание по задаче" : item ? "Изменить отправку" : "Запланировать отправку";
+    const dialog = modal(state, title, `<form class="pc-fields">${task ? `<p class="pc-muted">Задача: ${escape(task.title)}</p>` : ""}<label>Текст<textarea name="text" rows="3" maxlength="12000" required>${escape(draft)}</textarea></label><label>Дата<input name="date" type="date" value="${escape(parts.date)}" required></label><label>Время<input name="time" type="time" value="${escape(parts.time)}" required></label><label>Часовой пояс<select name="timezone">${zones.map(value => `<option value="${escape(value)}"${value === zone ? " selected" : ""}>${escape(value)}</option>`).join("")}</select></label><p class="pc-muted">Сообщение уйдёт в чат проекта и в связанную Telegram-группу в указанное время. До отправки его можно изменить или отменить.</p><button type="submit">${item ? "Сохранить" : "Запланировать"}</button><p role="alert"></p></form>`);
+    formSave(state, dialog, async form => {
+      const text = form.elements.text.value.trim();
+      if (!text) throw new Error("Введите текст сообщения");
+      if (!form.elements.date.value || !form.elements.time.value) throw new Error("Укажите дату и время");
+      const payload = { text, dueAtLocal: `${form.elements.date.value}T${form.elements.time.value}`,
+        timezone: form.elements.timezone.value };
+      /* Ключ повтора запроса живёт на форме: потерянный ответ и повторное нажатие не создадут
+         вторую отложенную отправку — сервер узнает тот же запрос. */
+      if (!item) {
+        form.dataset.pcClientId = form.dataset.pcClientId || `plan-${crypto.randomUUID()}`;
+        payload.clientId = form.dataset.pcClientId;
+      }
+      if (item) await write(state, `/scheduled/${item.id}`, "PATCH", payload);
+      else await write(state, "/scheduled", "POST", task ? { ...payload, kind: "task_reminder", taskId: task.id } : payload);
+      if (!live(state, view)) return;
+      // Черновик из поля ввода уходит в запланированное: оставлять его вторым экземпляром нельзя.
+      if (!item && !task) { const compose = q(state, "[data-pc-compose]"); if (compose) compose.elements.text.value = ""; }
+      notice(state, item ? "Отправка перенесена" : "Сообщение запланировано");
+    });
+  };
+
+  /* Выбор сайтов комнаты: только проекты, доступные этому владельцу, и без самой комнаты —
+     её код обслуживается всегда. Сервер проверяет список повторно, интерфейс лишь удобство. */
+  const siteChoices = (state, room) => {
+    const current = new Set(list(room.sites).map(code => String(code)));
+    const others = list(state.ctx.identity.companies).filter(company => String(company.id) !== String(state.company));
+    if (!others.length) return '<p class="pc-muted">Других проектов у вас нет — задачи помечаются этим сайтом.</p>';
+    return others.map(company => `<label class="pc-site-choice"><input type="checkbox" data-pc-site value="${escape(company.id)}"${current.has(String(company.id)) ? " checked" : ""}> ${escape(company.name || company.id)}</label>`).join("");
+  };
   const modal = (state, title, body) => {
     const dialog = document.createElement("dialog");
     dialog.className = "pc-dialog";
@@ -418,7 +564,15 @@
       <label>Исполнитель<select name="assigneeId">${assigneeOptions(state, task)}</select></label>
       <label>Этап<select name="stageId">${options(list(state.data.stages).map(stage => [stage.id, stage.title]), task.stageId, "Без этапа")}</select></label>
       <label>Срок<input name="due" type="date" value="${escape(task.due || "")}"></label>
-      <label>Статус<select name="status">${Object.entries(statuses).map(([id, title]) => `<option value="${id}"${(task.status || "todo") === id ? " selected" : ""}>${title}</option>`).join("")}</select></label>
+      <label>Статус работы<select name="status">${Object.entries(statuses).map(([id, title]) => `<option value="${id}"${(task.status || "todo") === id ? " selected" : ""}>${title}</option>`).join("")}</select></label>
+      <label>Сайт<select name="site">${options(list(state.data.room?.sites).concat([state.company]).map(code => [code, state.ctx.identity.companies?.find(company => company.id === code)?.name || code]), task.site, "Нужно уточнить")}</select></label>
+      <label>Вид<select name="kind">${Object.entries({ client_remark: "Замечание клиента", internal: "Внутренняя работа" })
+        .map(([id, title]) => `<option value="${id}"${(task.kind || "client_remark") === id ? " selected" : ""}>${title}</option>`).join("")}</select></label>
+      <label>Публикация<select name="publication">${Object.entries(publications).map(([id, title]) => `<option value="${id}"${(task.publication || "not_started") === id ? " selected" : ""}>${title}</option>`).join("")}</select></label>
+      <label>Ссылка на страницу<input name="publishedUrl" type="url" maxlength="500" value="${escape(task.publishedUrl || "")}" placeholder="https://"></label>
+      <label>Дата проверки на сайте<input name="verifiedAt" type="date" value="${escape(dayOf(task.verifiedAt))}"></label>
+      <input type="hidden" name="verifiedAtFull" value="${escape(task.verifiedAt || "")}">
+      <p class="pc-muted">«На сайте» ставится только после проверки работающей страницы: нужны ссылка и дата. Статус работы «Отменено» оставляет задачу видимой, но исправлением она не считается — даже если раньше была опубликована.</p>
       ${source || task.sourceMessageId ? '<p class="pc-muted">Задача связана с сообщением в этом проекте.</p>' : ""}
       <button type="submit"${writable ? "" : " hidden"}>Сохранить задачу</button><p role="alert"></p></form>`);
     if (!writable) dialog.querySelectorAll("input,select").forEach(node => { node.disabled = true; });
@@ -432,7 +586,16 @@
       if (assigneeId && !activeMember(state, assigneeId) && String(assigneeId) !== String(task.assigneeId ?? "")) {
         throw new Error("Этот участник вышел из проекта. Выберите активного исполнителя.");
       }
-      const payload = { title, assigneeId, stageId: Number(fields.stageId.value) || null, due: fields.due.value || null, status: fields.status.value };
+      const payload = { title, assigneeId, stageId: Number(fields.stageId.value) || null, due: fields.due.value || null, status: fields.status.value,
+        site: fields.site.value || "", publication: fields.publication.value, kind: fields.kind.value,
+        publishedUrl: fields.publishedUrl.value.trim(), verifiedAt: keepMoment(fields.verifiedAtFull.value, fields.verifiedAt.value) };
+      // Сервер откажет без ссылки и даты — предупреждаем раньше, чем уходит запрос.
+      if (payload.publication === "published" && (!payload.publishedUrl || !payload.verifiedAt)) {
+        return Promise.reject(new Error("Для «На сайте» укажите ссылку на страницу и дату проверки"));
+      }
+      if (payload.publication === "published" && !payload.site) {
+        return Promise.reject(new Error("Сначала уточните, какого сайта касается задача"));
+      }
       if (!task.id) payload.sourceMessageId = source?.id || null;
       return write(state, task.id ? `/tasks/${task.id}` : "/tasks", task.id ? "PATCH" : "POST", payload);
     });
@@ -565,12 +728,39 @@
     if (data.state === "unavailable") return `Сервис ответов Хью сейчас недоступен. Общая переписка, файлы и задачи работают.${detail}`;
     return `Подписка Codex пока не подключена. Общая переписка и задачи доступны.${detail} ${CONNECT_HINT}`;
   };
+  /* Импорт реестра замечаний файлом. Второго реестра не заводим: это тот же список задач комнаты,
+     сервер сам решает, что обновить и что пропустить. Личные данные в исходники не попадают —
+     файл выбирает владелец у себя. В Telegram при импорте ничего не уходит: задачи не сообщения. */
+  const importDialog = state => {
+    if (!isOwner(state)) return;
+    const view = state.view;
+    const dialog = modal(state, "Импорт реестра замечаний", `<form class="pc-fields"><label>Файл реестра (JSON)<input type="file" name="registry" accept="application/json,.json" required></label><p class="pc-muted">Ожидается объект с полями schemaVersion, asOf и tasks. Уже существующие задачи обновляются по их идентификатору реестра, копии не создаются.</p><label class="pc-site-choice"><input type="checkbox" name="force"> Перезаписать правки, сделанные в кабинете</label><p class="pc-muted">Без этой отметки задачи, изменённые в кабинете позже снимка, и снимки старше записанного пропускаются.</p><button type="submit">Загрузить</button><p role="alert"></p></form><p class="pc-muted" data-pc-import-result role="status"></p>`);
+    formSave(state, dialog, async form => {
+      const file = form.elements.registry.files[0];
+      if (!file) throw new Error("Выберите файл реестра");
+      const text = await file.text();
+      let payload;
+      try { payload = JSON.parse(text); } catch { throw new Error("Это не JSON: файл не разобран"); }
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("В файле должен быть объект реестра");
+      if (!Array.isArray(payload.tasks) || !payload.tasks.length) throw new Error("В файле нет списка задач");
+      /* force берётся ТОЛЬКО из отметки владельца: force:true, случайно оставшийся в файле,
+         не должен молча разрешать перезапись правок, сделанных в кабинете. */
+      payload.force = Boolean(form.elements.force.checked);
+      const data = await write(state, "/tasks/import", "POST", payload);
+      if (!live(state, view)) return;
+      const skipped = list(data.results).filter(item => item.skipped);
+      notice(state, `Реестр загружен: обновлено ${Number(data.imported) || 0}, пропущено ${Number(data.skipped) || 0}`
+        + (skipped.length ? `. Пропущены: ${skipped.map(item => item.reason).join("; ")}` : ""));
+    });
+  };
   const settingsDialog = async state => {
     if (!isOwner(state)) return;
     const view = state.view;
     const room = state.data.room || {};
-    const dialog = modal(state, "Настройки чата", `<form class="pc-fields"><label>Когда отвечает Хью<select name="replyMode"><option value="addressed"${room.replyMode !== "delegate" ? " selected" : ""}>По обращению</option><option value="delegate"${room.replyMode === "delegate" ? " selected" : ""}>Заменять Влада</option></select></label><p class="pc-muted">В режиме «По обращению» начните сообщение с «Хью». В режиме замены Хью участвует в обсуждении проекта.</p><label>Telegram-группа<input name="telegramChatId" inputmode="numeric" placeholder="Например, -1001234567890" value="${escape(room.telegramChatId || "")}"></label><p class="pc-muted">Укажите ID рабочей группы, куда добавлен бот. Пустое поле отключает дублирование.</p><p class="pc-muted">Кто читает группу, решает Telegram. Список участников кабинета на это не влияет: удаление участника здесь не удаляет его из группы.</p><button type="submit">Сохранить настройки</button><p role="alert"></p></form><section class="pc-runtime"><h3>Ответы Хью через Codex</h3><div data-pc-runtime role="status">Проверяем подключение…</div><div class="pc-toolbar"><button type="button" data-pc-login>Подключить подписку</button><button type="button" data-pc-runtime-check>Проверить</button></div><p class="pc-muted">Наличие настроек ещё не означает подключение. Хью отвечает только при подтверждённом входе; недоступный источник не считается подключённым.</p></section>`);
-    formSave(state, dialog, form => write(state, "/settings", "PATCH", { replyMode: form.elements.replyMode.value, telegramChatId: form.elements.telegramChatId.value.trim() }));
+    const dialog = modal(state, "Настройки чата", `<form class="pc-fields"><label>Когда отвечает Хью<select name="replyMode"><option value="addressed"${room.replyMode !== "delegate" ? " selected" : ""}>По обращению</option><option value="delegate"${room.replyMode === "delegate" ? " selected" : ""}>Заменять Влада</option></select></label><p class="pc-muted">В режиме «По обращению» начните сообщение с «Хью». В режиме замены Хью участвует в обсуждении проекта.</p><fieldset class="pc-sites"><legend>Сайты, которые обслуживает этот чат</legend>${siteChoices(state, room)}</fieldset><p class="pc-muted">У одного собственника может быть несколько сайтов в одной переписке. Метка сайта у задачи принимается только из этого списка.</p><label>Telegram-группа<input name="telegramChatId" inputmode="numeric" placeholder="Например, -1001234567890" value="${escape(room.telegramChatId || "")}"></label><p class="pc-muted">Укажите ID рабочей группы, куда добавлен бот. Пустое поле отключает дублирование.</p><p class="pc-muted">Кто читает группу, решает Telegram. Список участников кабинета на это не влияет: удаление участника здесь не удаляет его из группы.</p><button type="submit">Сохранить настройки</button><p role="alert"></p></form><section class="pc-runtime"><h3>Ответы Хью через Codex</h3><div data-pc-runtime role="status">Проверяем подключение…</div><div class="pc-toolbar"><button type="button" data-pc-login>Подключить подписку</button><button type="button" data-pc-runtime-check>Проверить</button></div><p class="pc-muted">Наличие настроек ещё не означает подключение. Хью отвечает только при подтверждённом входе; недоступный источник не считается подключённым.</p></section>`);
+    formSave(state, dialog, form => write(state, "/settings", "PATCH", { replyMode: form.elements.replyMode.value,
+      telegramChatId: form.elements.telegramChatId.value.trim(),
+      sites: [...form.querySelectorAll("[data-pc-site]:checked")].map(box => box.value) }));
     // Опрос входа живёт не дольше диалога: закрытие окна снимает таймер.
     dialog.addEventListener("close", () => clearTimeout(state.loginTimer));
     // Компания уходит в запросе: для компании с локальным обработчиком сервер отвечает из его состояния.
@@ -701,7 +891,7 @@
       notice(state, error.message, true);
     } finally { input.value = ""; settle(state); }
   };
-  const sharedShell = state => `<div class="pc-layout"><section class="pc-conversation" aria-label="Общий чат проекта"><header class="pc-room-header"><h2>${escape(state.ctx.identity.companies?.find(company => company.id === state.company)?.name || state.company)}</h2><p data-pc-members></p><p class="pc-muted" data-pc-connection></p><p class="pc-muted" data-pc-ai></p><button type="button" data-pc-retry-ai hidden>Повторить ответы Хью</button></header><div class="pc-history-more"><button type="button" data-pc-older hidden>Показать более ранние сообщения</button></div><ol class="pc-messages" data-pc-messages aria-label="Общая переписка" role="log" aria-live="polite"><li class="pc-empty">Загрузка…</li></ol><p data-pc-sync class="pc-muted pc-sync" role="status"></p><form data-pc-compose class="pc-compose" hidden><label class="sr-only" for="pc-message-input">Сообщение участникам проекта</label><textarea id="pc-message-input" name="text" rows="2" maxlength="12000" placeholder="Сообщение участникам проекта…"></textarea><div data-pc-pending class="pc-pending"></div><div class="pc-toolbar"><label class="pc-file-button">Прикрепить фото или файл<input type="file" multiple data-pc-upload aria-label="Прикрепить фото или файл"></label><button type="submit">Отправить</button></div></form><p data-pc-readonly class="pc-muted pc-readonly" hidden>У вас доступ к просмотру. Для сообщений нужно право ответа в чате проекта.</p></section><aside class="pc-project"><div class="pc-toolbar"><h2>Задачи <span data-pc-task-count></span></h2><button type="button" data-pc-new-task data-pc-write hidden>Добавить</button></div><ul class="pc-tasks" data-pc-tasks></ul><div class="pc-project-actions"><button type="button" data-pc-stages data-pc-write hidden>Этапы проекта</button><button type="button" data-pc-edit-members data-pc-owner hidden>Участники</button><button type="button" data-pc-settings data-pc-owner hidden>Настройки чата</button></div></aside></div>`;
+  const sharedShell = state => `<div class="pc-layout"><section class="pc-conversation" aria-label="Общий чат проекта"><header class="pc-room-header"><h2>${escape(state.ctx.identity.companies?.find(company => company.id === state.company)?.name || state.company)}</h2><p data-pc-members></p><p class="pc-muted" data-pc-connection></p><p class="pc-muted" data-pc-ai></p><button type="button" data-pc-retry-ai hidden>Повторить ответы Хью</button></header><div class="pc-history-more"><button type="button" data-pc-older hidden>Показать более ранние сообщения</button></div><ol class="pc-messages" data-pc-messages aria-label="Общая переписка" role="log" aria-live="polite"><li class="pc-empty">Загрузка…</li></ol><p data-pc-sync class="pc-muted pc-sync" role="status"></p><form data-pc-compose class="pc-compose" hidden><label class="sr-only" for="pc-message-input">Сообщение участникам проекта</label><textarea id="pc-message-input" name="text" rows="2" maxlength="12000" placeholder="Сообщение участникам проекта…"></textarea><div data-pc-pending class="pc-pending"></div><div class="pc-toolbar"><label class="pc-file-button">Прикрепить фото или файл<input type="file" multiple data-pc-upload aria-label="Прикрепить фото или файл"></label><button type="button" data-pc-schedule data-pc-write hidden>Запланировать</button><button type="submit">Отправить</button></div></form><p data-pc-readonly class="pc-muted pc-readonly" hidden>У вас доступ к просмотру. Для сообщений нужно право ответа в чате проекта.</p></section><aside class="pc-project"><div class="pc-toolbar"><h2>Задачи <span data-pc-task-count></span></h2><button type="button" data-pc-new-task data-pc-write hidden>Добавить</button></div><ul class="pc-tasks" data-pc-tasks></ul><section class="pc-scheduled" data-pc-scheduled-block hidden><h3>Запланировано</h3><ul data-pc-scheduled></ul></section><div class="pc-project-actions"><button type="button" data-pc-stages data-pc-write hidden>Этапы проекта</button><button type="button" data-pc-import data-pc-owner hidden>Импорт реестра</button><button type="button" data-pc-edit-members data-pc-owner hidden>Участники</button><button type="button" data-pc-settings data-pc-owner hidden>Настройки чата</button></div></aside></div>`;
   const switchMode = async (state, mode) => {
     if (!active(state) || (mode === "private" && state.ctx.identity.role !== "owner")) return;
     const body = q(state, "[data-pc-body]");
@@ -767,6 +957,17 @@
       if (button.matches("[data-pc-message-task]")) { const message = timeline(state).find(item => String(item.id) === button.dataset.pcMessageTask); if (message) taskDialog(state, {}, message); }
       if (button.matches("[data-pc-stages]")) stagesDialog(state);
       if (button.matches("[data-pc-edit-members]")) membersDialog(state);
+      if (button.matches("[data-pc-schedule]")) scheduleDialog(state);
+      if (button.matches("[data-pc-task-remind]")) {
+        const task = list(state.data?.tasks).find(row => String(row.id) === button.dataset.pcTaskRemind);
+        if (task) scheduleDialog(state, { task });
+      }
+      if (button.matches("[data-pc-schedule-edit]")) {
+        const item = list(state.data?.scheduled).find(row => String(row.id) === button.dataset.pcScheduleEdit);
+        if (item) scheduleDialog(state, { item });
+      }
+      if (button.matches("[data-pc-schedule-cancel]")) cancelScheduled(state, button.dataset.pcScheduleCancel);
+      if (button.matches("[data-pc-import]")) importDialog(state);
       if (button.matches("[data-pc-settings]")) settingsDialog(state);
     };
     await switchMode(state, "shared");

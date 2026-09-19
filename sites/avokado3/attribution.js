@@ -1,4 +1,6 @@
-/* Campaign continuity and conversion intents. No counter or network requests. */
+/* Campaign continuity, conversion intents and the site counter.
+   Единственный счётчик сайта — Яндекс Метрика 112772817 (номер подтверждён клиенткой
+   18.09.2026). Вебвизор выключен. Загрузчик и инициализация выполняются ровно один раз. */
 (function (host, factory) {
   'use strict';
   const api = factory();
@@ -7,6 +9,8 @@
 })(typeof window === 'undefined' ? null : window, function () {
   'use strict';
   const storageKey = 'avk_src';
+  const counterId = 112772817;
+  const counterLoader = 'https://mc.yandex.ru/metrika/tag.js?id=' + counterId;
   const keys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'yclid'];
   const lifetime = 30 * 86400000;
   const sitePages = /\/(?:index\.html|price\.html|contacts\.html)?$/;
@@ -76,9 +80,47 @@
     }
     return null;
   }
+  // Счётчик сайта. Договор о состоянии, важен для повторных вызовов:
+  //   win.__metrikaReady выставляется ТОЛЬКО после того, как загрузчик реально вставлен
+  //   в документ. Сбой до вставки состояние не меняет, поэтому следующий вызов
+  //   с рабочим документом подключит счётчик как обычно.
+  //   Возвращается true только когда вставлен загрузчик И прошла инициализация.
+  // Аналитика ни при каких ошибках не должна обрывать атрибуцию, поэтому исключения
+  // гасятся здесь, а не улетают в start().
+  function startCounter(win, doc) {
+    if (!win || win.__metrikaReady) return false;
+    // Тот же признак отказа от трекинга, что и у emit() ниже — отдельной механики не заводим.
+    if (win.navigator && win.navigator.doNotTrack === '1') return false;
+    // Документ без создания элементов (тесты, урезанное окружение) — счётчик просто
+    // не подключается, состояние не меняется.
+    if (!doc || typeof doc.createElement !== 'function') return false;
+    // Очередь ym определяется до вставки загрузчика, как в официальном коде счётчика.
+    try {
+      win.ym = win.ym || function () { (win.ym.a = win.ym.a || []).push(arguments); };
+      win.ym.l = Number(new Date());
+    } catch (_) { return false; }
+    try {
+      const script = doc.createElement('script');
+      script.async = true;
+      script.src = counterLoader;
+      const scripts = typeof doc.getElementsByTagName === 'function' ? doc.getElementsByTagName('script') : null;
+      const first = scripts && scripts[0];
+      if (first && first.parentNode) first.parentNode.insertBefore(script, first);
+      else (doc.head || doc.documentElement).appendChild(script);
+    } catch (_) { return false; }
+    // Загрузчик на странице — второй раз его вставлять нельзя даже при сбое init ниже.
+    win.__metrikaReady = true;
+    try {
+      win.ym(counterId, 'init', {clickmap: true, trackLinks: true, accurateTrackBounce: true, webvisor: false});
+    } catch (_) { return false; }
+    return true;
+  }
   function start(win, doc) {
     if (win.__avokadoAttributionLoaded) return;
     win.__avokadoAttributionLoaded = true;
+    // Ещё один рубеж: что бы ни случилось со счётчиком, разметка ссылок и события
+    // атрибуции обязаны запуститься.
+    try { startCounter(win, doc); } catch (_) {}
     let storage;
     try { storage = win.localStorage; } catch (_) {}
     const attribution = readAttribution(win.location, doc.referrer || '', storage, Date.now());
@@ -123,5 +165,5 @@
     if (page === 'price') emit({event: 'price_view', entry_point: 'price_page'});
     return {attribution};
   }
-  return {storageKey, lifetime, readAttribution, decorateUrl, classify, start};
+  return {storageKey, lifetime, counterId, counterLoader, readAttribution, decorateUrl, classify, startCounter, start};
 });
