@@ -90,14 +90,14 @@ test('Лео получает бриф и план, Хью — нет', async ()
   assert.ok(leoRequest, 'запрос к модели должен быть собран');
   assert.match(leoRequest.body.system, /Записи на массаж/);
   assert.match(leoRequest.body.system, /Разминка спины/);
-  assert.match(leoRequest.body.system, /Тебя зовут Лео/);
+  assert.match(leoRequest.body.system, /Ты Лео, бизнес-ассистент/);
 
   const hugh = setup({ crm: { mentor }, reply: { status: 200, payload: { text: 'готово' } } });
   await say(hugh.chat, hugh.owner, 'Хью, что по сайту?', 'persona-0006');
   await hugh.chat.processAIJobs();
   const hughRequest = hugh.calls.find((item) => item.body?.system);
   assert.ok(!hughRequest.body.system.includes('Записи на массаж'), 'бриф Хью не нужен — это деньги и размытый ответ');
-  assert.match(hughRequest.body.system, /Тебя зовут Хью/);
+  assert.match(hughRequest.body.system, /Ты Хью, бизнес-ассистент/);
 });
 
 test('Хью не ходит в CRM за сведениями Медиа-наставника', async () => {
