@@ -1,12 +1,19 @@
 (() => {
   'use strict';
-  /* Бриф компании и контент-план на 7–14 дней. Тексты вводит человек: модели здесь не вызываются,
-     публикация не выполняется. Согласование конкретной версии плана — решение по тексту,
-     а не разрешение публиковать. Всё, что приходит с сервера, выводится как текст. */
+  /* Бриф компании и контент-план на 7–14 дней. Публикация не выполняется. Согласование конкретной
+     версии плана — решение по тексту, а не разрешение публиковать. Всё, что приходит с сервера,
+     выводится как текст.
+     Подсказка плана: модель предлагает позиции, человек подставляет их в форму и сохраняет сам.
+     Ни одна позиция не попадает в план и в согласование без явного действия человека. */
   const sb = window.SbCabinet = window.SbCabinet || {};
   const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
   const PATH = '/media-mentor';
+  // Подсказка живёт в сервисе content рядом с провайдерами, а не за прокси CRM.
+  const SUGGEST_PATH = '/content/media-mentor-suggest';
+  const ANALYZE_PATH = '/content/media-mentor-analyze';
+  const REVIEW_PATH = '/content/media-mentor-review';
+  const isoDay = (shiftDays) => new Date(Date.now() + shiftDays * 86400000).toISOString().slice(0, 10);
   const STATUS = {absent: 'План ещё не составлен', pending: 'Ждёт согласования',
     approved: 'Согласовано', rejected: 'Отклонено', needs_reapproval: 'Нужно пересогласовать'};
   const day = (value) => (/^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? String(value).split('-').reverse().join('.') : '—');
@@ -105,7 +112,20 @@
     if (!data.brief.fields.platforms.length) {
       return `${view}<p class="mentor-note">Выберите площадки в брифе: без них план составить нельзя.</p>`;
     }
-    return `${view}<form id="mentor-plan-form" class="crm-form mentor-form">
+    return `${view}
+    <section class="mentor-suggest wide" data-suggest>
+      <h3>Подсказка плана</h3>
+      <p class="mentor-note">Модель предложит позиции по брифу. Ничего не сохранится и не уйдёт
+        на согласование: предложение нужно подставить в форму и проверить самому.</p>
+      <label>Начало<input data-suggest-start type="date"></label>
+      <label>Дней<select data-suggest-days>${Array.from({length: vocabulary.maxDays - vocabulary.minDays + 1},
+  (unused, index) => vocabulary.minDays + index).map((value) =>
+  `<option value="${value}"${value === vocabulary.minDays ? ' selected' : ''}>${value}</option>`).join('')}</select></label>
+      <button class="plain-button" type="button" data-suggest-run>Предложить план</button>
+      <span data-suggest-state role="status"></span>
+      <div data-suggest-result></div>
+    </section>
+<form id="mentor-plan-form" class="crm-form mentor-form">
       <input type="hidden" name="planRevision" value="${esc(plan ? plan.revision : 0)}">
       <input type="hidden" name="briefRevision" value="${esc(data.brief.revision)}">
       <p class="mentor-note">План охватывает от ${esc(vocabulary.minDays)} до ${esc(vocabulary.maxDays)} дней подряд,
@@ -192,13 +212,51 @@
     </section>`;
   }
 
+  /* Заявка на материалы считается на месте из уже загруженных плана и брифа:
+     ни запроса к серверу, ни обращения к модели здесь нет. */
+  function materialsMarkup(data) {
+    const builder = sb.mediaMentorMaterials;
+    if (!builder || !data.plan) return '';
+    const request = builder.build(data.plan, data.brief.fields);
+    if (!request.items.length && !request.skipped.length) return '';
+    const label = (list, id) => esc(list.find((item) => item.id === id)?.label || id);
+    const rows = request.items.map((item, index) => `<li>
+      <strong>${esc(day(item.date))}</strong> · ${esc(item.platformLabel)} ·
+      ${esc(item.formatLabel)} · ${item.kind === 'video' ? 'видео' : 'картинка'} ${esc(item.ratio)},
+      не ниже ${esc(item.master)}<br>${esc(item.topic)}
+      ${item.safeZone ? `<br><span class="mentor-note">${esc(item.safeZone)}</span>` : ''}
+      <details><summary>Промт и как сделать</summary>
+        <textarea class="mentor-prompt" rows="5" readonly data-prompt="${index}">${esc(item.prompt)}</textarea>
+        <button class="plain-button" type="button" data-prompt-copy="${index}">Скопировать промт</button>
+        <span data-prompt-state="${index}" role="status"></span>
+        <ul class="mentor-list">${item.howTo.map((line) => `<li>${esc(line)}</li>`).join('')}</ul>
+        <p class="mentor-note">${esc(item.upscaleNote)}</p>
+        <p class="mentor-note">Имя файла по стандарту: ${esc(item.fileName)}</p>
+      </details></li>`).join('');
+    return `<section class="card mentor-materials"><h2>Заявка на материалы</h2>
+      <p class="mentor-note">${esc(request.notice)}</p>
+      ${request.batchNote ? `<p class="crm-warning" role="note">${esc(request.batchNote)}</p>` : ''}
+      ${request.warnings.length ? `<ul class="mentor-list crm-warning" role="note">${request.warnings.map((line) =>
+    `<li>${esc(line)}</li>`).join('')}</ul>` : ''}
+      ${rows ? `<ol class="mentor-plan-list">${rows}</ol>` : ''}
+      ${request.skipped.length ? `<details class="mentor-note"><summary>Пропущено: ${request.skipped.length}</summary>
+        <ul class="mentor-list">${request.skipped.map((line) => `<li>${esc(line)}</li>`).join('')}</ul></details>` : ''}</section>`;
+  }
+
   function markup(data, ctx) {
     const edit = canEdit(ctx);
     return `<p class="card mentor-notice" role="note">${esc(data.notice)}</p>
       <section class="card mentor-brief"><h2>Бриф компании</h2>
         <p class="mentor-note">Версия ${esc(data.brief.revision)}${data.brief.updatedAt ? ` · обновлён ${esc(moment(data.brief.updatedAt))}` : ''}.
-          ${edit ? 'Тексты вводите сами: подсказок модели здесь нет.' : 'У вас только просмотр.'}</p>
+          ${edit ? 'План составьте сами или возьмите подсказку модели и проверьте её.' : 'У вас только просмотр.'}</p>
         ${briefMarkup(data, edit)}
+        ${edit && data.brief.revision ? `<section class="mentor-suggest" data-analyze>
+          <h3>Разбор брифа</h3>
+          <p class="mentor-note">Модель предложит позиционирование, рубрики и назовёт, каких сведений
+            не хватает. Ничего не сохраняется: разбор нужен вам, а не системе.</p>
+          <button class="plain-button" type="button" data-analyze-run>Разобрать бриф</button>
+          <span data-analyze-state role="status"></span>
+          <div data-analyze-result></div></section>` : ''}
         ${data.brief.history.length ? `<details><summary>История брифа (${esc(data.brief.history.length)})</summary>
           <ol class="mentor-history">${data.brief.history.map((item) => `<li>Версия ${esc(item.revision)} · ${esc(moment(item.createdAt))} ·
             ${esc(item.actorName || '—')}${item.reason ? `<br>${esc(item.reason)}` : ''}</li>`).join('')}</ol></details>` : ''}</section>
@@ -207,6 +265,17 @@
         ${data.plan && data.plan.history.length ? `<details><summary>История плана (${esc(data.plan.history.length)})</summary>
           <ol class="mentor-history">${data.plan.history.map((item) => `<li>Версия ${esc(item.revision)} по брифу ${esc(item.briefRevision)} ·
             ${esc(moment(item.createdAt))} · ${esc(item.actorName || '—')}</li>`).join('')}</ol></details>` : ''}</section>
+      ${edit ? materialsMarkup(data) : ''}
+      ${edit ? `<section class="card mentor-review"><h2>Разбор результатов</h2>
+        <section class="mentor-suggest" data-review>
+          <p class="mentor-note">Модель посмотрит собранные цифры и предложит, что изменить в плане.
+            Площадки, по которым статистика не собирается, в разбор не попадают: отсутствие данных —
+            это не плохой результат. Ничего не меняется автоматически.</p>
+          <label>С<input data-review-from type="date" value="${esc(isoDay(-29))}"></label>
+          <label>По<input data-review-to type="date" value="${esc(isoDay(0))}"></label>
+          <button class="plain-button" type="button" data-review-run>Разобрать результаты</button>
+          <span data-review-state role="status"></span>
+          <div data-review-result></div></section></section>` : ''}
       ${approvalMarkup(data, ctx)}${transferMarkup(data, ctx)}`;
   }
 
@@ -314,6 +383,159 @@
         state.textContent = error.message;
       }
     }));
+    // Копирование промта: буфер обмена может быть недоступен, поэтому есть запасной путь.
+    node.querySelectorAll('[data-prompt-copy]').forEach((button) => button.addEventListener('click', async () => {
+      const index = button.dataset.promptCopy;
+      const field = node.querySelector(`[data-prompt="${index}"]`);
+      const state = node.querySelector(`[data-prompt-state="${index}"]`);
+      try {
+        await window.navigator.clipboard.writeText(field.value);
+        state.textContent = 'Промт скопирован.';
+      } catch {
+        field.select();
+        state.textContent = 'Буфер обмена недоступен: промт выделен, скопируйте вручную.';
+      }
+    }));
+    /* Разбор результатов. Выводы и правки только показываются: план меняет человек руками. */
+    node.querySelector('[data-review-run]')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      const state = node.querySelector('[data-review-state]');
+      const result = node.querySelector('[data-review-result]');
+      const from = node.querySelector('[data-review-from]').value;
+      const to = node.querySelector('[data-review-to]').value;
+      if (!from || !to) { state.textContent = 'Укажите обе даты периода.'; return; }
+      if (from > to) { state.textContent = 'Начало периода позже его конца.'; return; }
+      button.disabled = true;
+      state.textContent = 'Считаем и спрашиваем модель…';
+      result.innerHTML = '';
+      try {
+        const answer = await ctx.apiJson(`${REVIEW_PATH}?companyCode=${encodeURIComponent(code)}`,
+          ctx.csrfOptions('POST', {from, to}));
+        if (ctx.selectedProjectId !== code || !result.isConnected) return;
+        button.disabled = false;
+        state.textContent = '';
+        const findings = (answer.findings || []).length
+          ? `<h4>Что видно по цифрам</h4><ul class="mentor-list">${answer.findings.map((item) =>
+            `<li>${esc(item.statement)}<br><span class="mentor-note">Опора: ${esc(item.basis)}</span></li>`).join('')}</ul>`
+          : '';
+        const changes = (answer.planChanges || []).length
+          ? `<h4>Что предлагается в плане</h4><ul class="mentor-list">${answer.planChanges.map((item) =>
+            `<li><strong>${esc(item.actionLabel)}</strong>${item.platform ? ` · ${esc(
+              data.vocabulary.platforms.find((p) => p.id === item.platform)?.label || item.platform)}` : ''}${
+              item.format ? ` · ${esc(data.vocabulary.formats.find((f) => f.id === item.format)?.label || item.format)}` : ''
+            }<br>${esc(item.why)}</li>`).join('')}</ul>`
+          : '';
+        const questions = (answer.questions || []).length
+          ? `<h4>Вопросы, на которые цифр не хватило</h4><ul class="mentor-list">${answer.questions.map((item) =>
+            `<li>${esc(item)}</li>`).join('')}</ul>`
+          : '';
+        // Пропущенные площадки называем прямо: иначе человек решит, что по ним всё плохо.
+        const skipped = (answer.skipped || []).length
+          ? `<p class="mentor-note">Без данных за период, в разбор не вошли: ${answer.skipped.map((id) =>
+            esc(data.vocabulary.platforms.find((p) => p.id === id)?.label || id)).join(', ')}.</p>`
+          : '';
+        const dropped = (answer.dropped || []).length
+          ? `<details class="mentor-note"><summary>Отброшено: ${answer.dropped.length}</summary>
+              <ul class="mentor-list">${answer.dropped.map((line) => `<li>${esc(line)}</li>`).join('')}</ul></details>`
+          : '';
+        result.innerHTML = answer.status === 'ok'
+          ? `<p class="mentor-note">${esc(answer.notice)}</p>${findings}${changes}${questions}${skipped}${dropped}`
+          : `<p class="mentor-note">${esc(answer.notice)}</p>${skipped}${questions}${dropped}`;
+      } catch (error) {
+        if (ctx.selectedProjectId !== code || !result.isConnected) return;
+        button.disabled = false;
+        state.textContent = error.message;
+      }
+    });
+    /* Разбор брифа. Только показывается: ни позиционирование, ни рубрики никуда не записываются. */
+    node.querySelector('[data-analyze-run]')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      const state = node.querySelector('[data-analyze-state]');
+      const result = node.querySelector('[data-analyze-result]');
+      button.disabled = true;
+      state.textContent = 'Спрашиваем модель…';
+      result.innerHTML = '';
+      try {
+        const answer = await ctx.apiJson(`${ANALYZE_PATH}?companyCode=${encodeURIComponent(code)}`,
+          ctx.csrfOptions('POST', {}));
+        if (ctx.selectedProjectId !== code || !result.isConnected) return;
+        button.disabled = false;
+        state.textContent = '';
+        const rubrics = (answer.rubrics || []).length
+          ? `<h4>Рубрики</h4><ul class="mentor-list">${answer.rubrics.map((item) =>
+            `<li><strong>${esc(item.title)}</strong>${item.why ? ` — ${esc(item.why)}` : ''}${
+              item.formats.length ? `<br><span class="mentor-note">Форматы: ${item.formats.map((id) =>
+                esc(data.vocabulary.formats.find((f) => f.id === id)?.label || id)).join(', ')}</span>` : ''}</li>`).join('')}</ul>`
+          : '';
+        // Пробелы — вопросы к человеку, а не то, что модель имеет право додумать.
+        const gaps = (answer.gaps || []).length
+          ? `<h4>Чего не хватает в брифе</h4><ul class="mentor-list">${answer.gaps.map((item) =>
+            `<li>${esc(item)}</li>`).join('')}</ul>`
+          : '';
+        const dropped = (answer.dropped || []).length
+          ? `<details class="mentor-note"><summary>Отброшено: ${answer.dropped.length}</summary>
+              <ul class="mentor-list">${answer.dropped.map((line) => `<li>${esc(line)}</li>`).join('')}</ul></details>`
+          : '';
+        result.innerHTML = answer.status === 'ok'
+          ? `<p class="mentor-note">${esc(answer.notice)}</p>
+             ${answer.positioning ? `<h4>Позиционирование</h4><p>${esc(answer.positioning)}</p>` : ''}
+             ${answer.audience ? `<h4>Аудитория</h4><p>${esc(answer.audience)}</p>` : ''}
+             ${rubrics}${gaps}${dropped}`
+          : `<p class="mentor-note">${esc(answer.notice)}</p>${dropped}`;
+      } catch (error) {
+        if (ctx.selectedProjectId !== code || !result.isConnected) return;
+        button.disabled = false;
+        state.textContent = error.message;
+      }
+    });
+    /* Подсказка плана. Предложение только показывается; в план оно попадает единственным
+       способом — человек нажимает «Подставить в форму», проверяет строки и сохраняет форму сам. */
+    const suggestRow = (item) => `<li><strong>${esc(day(item.date))}</strong> ·
+      ${esc(data.vocabulary.platforms.find((p) => p.id === item.platform)?.label || item.platform)} ·
+      ${esc(data.vocabulary.formats.find((f) => f.id === item.format)?.label || item.format)} ·
+      ${esc(data.vocabulary.roles.find((r) => r.id === item.role)?.label || item.role)}<br>${esc(item.topic)}${
+  item.hook ? `<br><span class="mentor-note">${esc(item.hook)}</span>` : ''}</li>`;
+    let suggested = [];
+    node.querySelector('[data-suggest-run]')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      const state = node.querySelector('[data-suggest-state]');
+      const result = node.querySelector('[data-suggest-result]');
+      const startDate = node.querySelector('[data-suggest-start]').value;
+      const days = Number(node.querySelector('[data-suggest-days]').value);
+      if (!startDate) { state.textContent = 'Укажите дату начала.'; return; }
+      button.disabled = true;
+      state.textContent = 'Спрашиваем модель…';
+      result.innerHTML = '';
+      try {
+        const answer = await ctx.apiJson(`${SUGGEST_PATH}?companyCode=${encodeURIComponent(code)}`,
+          ctx.csrfOptions('POST', {startDate, days}));
+        if (ctx.selectedProjectId !== code || !result.isConnected) return;
+        button.disabled = false;
+        state.textContent = '';
+        suggested = answer.status === 'ok' ? answer.items : [];
+        const dropped = (answer.dropped || []).length
+          ? `<details class="mentor-note"><summary>Отброшено моделью: ${answer.dropped.length}</summary>
+              <ul class="mentor-list">${answer.dropped.map((line) => `<li>${esc(line)}</li>`).join('')}</ul></details>`
+          : '';
+        // Пустое предложение не выдаётся за план: показываем причину, а не молчим.
+        result.innerHTML = suggested.length
+          ? `<p class="mentor-note">${esc(answer.notice)}</p>
+             <ol class="mentor-plan-list">${suggested.map(suggestRow).join('')}</ol>${dropped}
+             <button class="plain-button" type="button" data-suggest-apply>Подставить в форму</button>`
+          : `<p class="mentor-note">${esc(answer.notice)}</p>${dropped}`;
+        result.querySelector('[data-suggest-apply]')?.addEventListener('click', () => {
+          const body = node.querySelector('[data-rows="days"] [data-rows-body]');
+          body.innerHTML = suggested.map((item) => dayRow(item, data)).join('');
+          body.querySelectorAll('[data-remove]').forEach((remove) => remove.addEventListener('click',
+            (removeEvent) => removeEvent.target.closest('[data-row]').remove()));
+          state.textContent = 'Позиции подставлены. Проверьте их и нажмите «Сохранить план».';
+        });
+      } catch (error) {
+        if (ctx.selectedProjectId !== code || !result.isConnected) return;
+        button.disabled = false;
+        state.textContent = error.message;
+      }
+    });
     // Бриф согласованной версии подгружается по требованию из неизменяемой версии.
     node.querySelectorAll('[data-brief-context]').forEach((button) => button.addEventListener('click', async () => {
       const postId = button.dataset.briefContext;
@@ -388,8 +610,9 @@
       return;
     }
     container.innerHTML = `<div class="content-header"><h1>Бриф и план</h1>
-      <p>Бриф компании и контент-план на 7–14 дней. Тексты вводит человек, подсказок модели здесь нет.
-        Согласование версии плана — решение по тексту, а не разрешение публиковать.</p></div>
+      <p>Бриф компании и контент-план на 7–14 дней. Бриф заполняет человек; план можно составить
+        самому или взять подсказку модели и проверить её. Согласование версии плана — решение
+        по тексту, а не разрешение публиковать.</p></div>
       <div id="mentor-content" aria-live="polite"><p>Загружаем бриф и план…</p></div>`;
     void load(container, ctx);
   }

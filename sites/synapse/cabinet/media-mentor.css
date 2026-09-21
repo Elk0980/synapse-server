@@ -40,3 +40,42 @@
   .mentor-rows > button { width:100%; min-height:44px; }
   .mentor-platforms { flex-direction:column; gap:4px; }
 }
+
+/* Подсказка плана. Визуально отделена от формы плана: предложение модели — это ещё не план. */
+.mentor-suggest {
+  margin: 16px 0;
+  padding: 12px 14px;
+  border: 1px dashed var(--border, #d7d7dc);
+  border-radius: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: flex-end;
+}
+.mentor-suggest h3 { flex: 1 0 100%; margin: 0; font-size: 15px; }
+.mentor-suggest > .mentor-note { flex: 1 0 100%; margin: 0; }
+.mentor-suggest label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.mentor-suggest [data-suggest-result] { flex: 1 0 100%; }
+.mentor-suggest [data-suggest-result] ol { margin: 8px 0; }
+.mentor-suggest [data-suggest-state] { font-size: 13px; }
+.mentor-suggest details { margin: 8px 0; }
+.mentor-suggest summary { cursor: pointer; }
+
+/* Заявка на материалы. Промт должен быть видно целиком и легко выделяться. */
+.mentor-materials .mentor-prompt {
+  width: 100%;
+  margin: 8px 0;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  resize: vertical;
+}
+.mentor-materials details { margin-top: 6px; }
+.mentor-materials summary { cursor: pointer; }
+.mentor-materials .crm-warning {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--warning-bg, #fff4e5);
+  color: var(--warning-fg, #7a4b00);
+}

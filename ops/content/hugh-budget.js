@@ -20,6 +20,13 @@
      HUGH_FALLBACK_BUDGET_MAX_REQUESTS=2000  — граница числа обращений за окно
      HUGH_FALLBACK_BUDGET_WINDOW_DAYS=30     — длина окна, по умолчанию 30
      HUGH_FALLBACK_BUDGET_MAX_OUTPUT_TOKENS=1200 — жёсткий потолок ответа
+
+   Кроме общей границы у провайдера может быть СВОЙ лимит, заданный владельцем в кабинете
+   («Лимит расходов, $»). Он считается по тому же окну и по тем же правилам, что общая
+   граница, и действует вместе с ней: срабатывает та, которая наступит раньше. Провайдер,
+   исчерпавший свой лимит, выбывает из резерва, а остальные продолжают отвечать.
+   Личный лимит без объявленной цены провайдера не имеет смысла — тогда провайдер
+   не используется, как и при общей денежной границе.
      HUGH_FALLBACK_<ПРОВАЙДЕР>_USD_PER_1K_PROMPT=…     — цена, объявленная владельцем
      HUGH_FALLBACK_<ПРОВАЙДЕР>_USD_PER_1K_COMPLETION=…
    Заданный ноль — это цена ноль. Не заданное значение — цена неизвестна, это разные вещи.
@@ -128,6 +135,28 @@ function createHughBudget({db, env = process.env, now = () => Date.now(), random
       unknownRequests: spent.unknownRequests + held.kept, heldRequests: held.n, heldMicroUsd: held.microUsd};
   }
 
+  /* Расход одного провайдера за то же окно: у личного лимита не может быть своего счётчика,
+     иначе два лимита считали бы по-разному и расходились. */
+  function providerTotals(provider, at = now()) {
+    const start = windowStart(at), name = String(provider);
+    const spent = db.prepare(`SELECT COALESCE(SUM(requests),0) requests,COALESCE(SUM(micro_usd),0) microUsd
+      FROM hugh_fallback_spend WHERE window_start=? AND provider=?`).get(start, name);
+    const held = db.prepare(`SELECT COUNT(*) n,COALESCE(SUM(micro_usd),0) microUsd
+      FROM hugh_fallback_reservations WHERE window_start=? AND provider=?`).get(start, name);
+    return {requests: spent.requests + held.n, microUsd: spent.microUsd + held.microUsd};
+  }
+
+  /* Состояние личного лимита провайдера. limitMicroUsd не задан — ограничения нет,
+     и это честно видно в ответе, а не подменяется нулём. */
+  function providerState(provider, limitMicroUsd = null, at = now()) {
+    const used = providerTotals(provider, at);
+    const limit = Number.isSafeInteger(limitMicroUsd) && limitMicroUsd > 0 ? limitMicroUsd : 0;
+    const reached = limit > 0 && used.microUsd >= limit;
+    return {provider: String(provider), spentUsd: used.microUsd / MICRO, requests: used.requests,
+      limitUsd: limit > 0 ? limit / MICRO : null, stopped: reached,
+      reason: reached ? `Достигнут личный лимит расходов провайдера ${provider}` : ''};
+  }
+
   function state(at = now()) {
     const used = totals(at);
     const byUsd = config.limitMicroUsd > 0 && used.microUsd >= config.limitMicroUsd;
@@ -155,7 +184,8 @@ function createHughBudget({db, env = process.env, now = () => Date.now(), random
 
   /* Бронь верхней оценки до обращения. Одна транзакция на проверку и запись, поэтому
      два параллельных запроса не могут вместе выйти за границу. */
-  function reserve(provider, {promptBytes = 0, maxOutputTokens = null} = {}) {
+  function reserve(provider, {promptBytes = 0, maxOutputTokens = null, limitMicroUsd = null} = {}) {
+    const ownLimit = Number.isSafeInteger(limitMicroUsd) && limitMicroUsd > 0 ? limitMicroUsd : 0;
     const at = now(), price = priceFor(provider);
     if (configBlocked) return {allowed: false, reason: state(at).reason};
     if (price && price.invalid) {
@@ -163,7 +193,7 @@ function createHughBudget({db, env = process.env, now = () => Date.now(), random
     }
     // При денежной границе провайдер без объявленной цены не используется:
     // иначе его расход учитывался бы нулём и граница ничего не ограничивала бы.
-    if (config.limitMicroUsd > 0 && !price) {
+    if ((config.limitMicroUsd > 0 || ownLimit > 0) && !price) {
       return {allowed: false, unpriced: true,
         reason: `Цена провайдера ${provider} не задана: при денежной границе он не используется`};
     }
@@ -184,6 +214,15 @@ function createHughBudget({db, env = process.env, now = () => Date.now(), random
       }
       if (config.maxRequests > 0 && used.requests + 1 > config.maxRequests) {
         return {allowed: false, reason: 'Достигнута граница числа обращений к резервным провайдерам'};
+      }
+      // Личный лимит проверяется в той же транзакции, что и общий: иначе параллельные
+      // запросы одного провайдера вместе перескочили бы его границу.
+      if (ownLimit > 0) {
+        const own = providerTotals(provider, at);
+        if (own.microUsd + estimate > ownLimit) {
+          return {allowed: false, ownLimitReached: true,
+            reason: `Верхняя оценка запроса не умещается в личный лимит провайдера ${provider}`};
+        }
       }
       const id = newId(), stamp = new Date(at).toISOString();
       db.prepare(`INSERT INTO hugh_fallback_reservations(id,window_start,provider,micro_usd,state,created_at,updated_at)
@@ -270,7 +309,8 @@ function createHughBudget({db, env = process.env, now = () => Date.now(), random
     return {...current, issues};
   }
 
-  return {config, state, stopped, reserve, settle, keep, release, recover, status, priceFor, totals, reservation};
+  return {config, state, stopped, reserve, settle, keep, release, recover, status, priceFor, totals,
+    providerTotals, providerState, reservation};
 }
 
 module.exports = {createHughBudget, readBudget, readPrice, WINDOW_DEFAULT_DAYS,
