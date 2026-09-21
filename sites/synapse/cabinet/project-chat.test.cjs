@@ -1510,6 +1510,7 @@ test('подсказка с именами персон видна под пол
   const hint = text(harness.dom, '[data-pc-personas-hint]');
   assert.match(hint, /Хью/);
   assert.match(hint, /Лео/);
+  harness.w.close();
 });
 
 test('баннер о двух помощниках показывается при первом заходе и закрывается навсегда', async () => {
@@ -1525,6 +1526,7 @@ test('баннер о двух помощниках показывается п�
   harness.click('[data-pc-personas-close]');
   assert.equal(harness.d.querySelector('[data-pc-personas]').hidden, true);
   assert.equal(store.get('pc-personas-seen:personas-v1'), '1');
+  harness.w.close();
 });
 
 test('закрытый баннер не возвращается, а подсказка остаётся', async () => {
@@ -1535,6 +1537,7 @@ test('закрытый баннер не возвращается, а подск
   await mount(harness);
   assert.equal(harness.d.querySelector('[data-pc-personas]').hidden, true);
   assert.match(text(harness.dom, '[data-pc-personas-hint]'), /Лео/);
+  harness.w.close();
 });
 
 test('изменился состав персон — баннер показывается заново', async () => {
@@ -1545,6 +1548,7 @@ test('изменился состав персон — баннер показы
   withStorage(harness, 'pc-personas-seen:personas-v1');
   await mount(harness);
   assert.equal(harness.d.querySelector('[data-pc-personas]').hidden, false);
+  harness.w.close();
 });
 
 test('сервер не прислал персон — экран чата работает без подсказки', async () => {
@@ -1555,4 +1559,5 @@ test('сервер не прислал персон — экран чата ра
   await mount(harness);
   assert.equal(harness.d.querySelector('[data-pc-personas]').hidden, true);
   assert.equal(text(harness.dom, '[data-pc-personas-hint]'), '');
+  harness.w.close();
 });
