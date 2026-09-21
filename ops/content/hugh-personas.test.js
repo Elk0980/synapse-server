@@ -56,7 +56,7 @@ test('чужая тема переадресуется по имени, а не 
 
 test('инструкция запрещает отвечать за соседа и додумывать', () => {
   const leo = P.instruction('leo');
-  assert.match(leo, /Тебя зовут Лео/);
+  assert.match(leo, /Ты Лео, бизнес-ассистент/);
   assert.match(leo, /не отвечай по существу/);
   assert.match(leo, /не выдумывай/);
   assert.match(leo, /Хью/);
