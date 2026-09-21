@@ -497,3 +497,76 @@ test('ответ с чужим кодом компании не показыва
     assert.equal(f.node.querySelector('#mentor-brief-form'), null);
   } finally { f.close(); }
 });
+
+/* Проверка плана по курсу. Модуль правил живёт отдельно; экран показывает его вывод
+   и молчит, когда модуля нет — пустой зелёный блок был бы обещанием, которого не давали. */
+const rulesScript = fs.readFileSync(require.resolve('./media-mentor-rules.js'), 'utf8');
+function withRules(options = {}) {
+  const f = fixture(options);
+  f.w.eval(rulesScript);
+  return f;
+}
+const reelDay = (date, patch = {}) => ({date, platform: 'telegram', format: 'reel', role: 'reach',
+  topic: 'Тема', hook: '', assetId: 'a1', mentorNote: '', ...patch});
+const planOf = (days) => payload({plan: {revision: 1, briefRevision: 2,
+  updatedAt: '2026-09-18T00:00:00.000Z', days, startDate: days[0].date,
+  endDate: days[days.length - 1].date, windowDays: 7, history: []}});
+
+test('план против правил курса показывает замечание с датой', async () => {
+  const f = withRules({query: () => planOf([reelDay('2026-09-25')])});
+  try {
+    await f.view.render(f.node, f.ctx); await tick(); await tick();
+    const block = f.node.querySelector('[data-rules]');
+    assert.ok(block, 'блок проверки должен появиться');
+    assert.match(block.textContent, /25\.09\.2026/);
+    assert.match(block.textContent, /худшим/);
+    assert.equal(f.node.querySelector('[data-rules-level="violation"]') !== null, true);
+  } finally { f.close(); }
+});
+
+test('план по правилам курса получает честное «противоречий нет», а не обещание', async () => {
+  const f = withRules({query: () => planOf([reelDay('2026-09-20'), reelDay('2026-09-22'), reelDay('2026-09-24')])});
+  try {
+    await f.view.render(f.node, f.ctx); await tick(); await tick();
+    const ok = f.node.querySelector('[data-rules-ok]');
+    assert.ok(ok, 'должно быть сказано, что противоречий нет');
+    assert.match(ok.textContent, /не обещание просмотров/);
+    assert.equal(f.node.querySelector('[data-rules-list]'), null);
+  } finally { f.close(); }
+});
+
+test('напоминания о решениях человека показаны отдельно от замечаний', async () => {
+  const f = withRules({query: () => planOf([reelDay('2026-09-22')])});
+  try {
+    await f.view.render(f.node, f.ctx); await tick(); await tick();
+    const reminders = f.node.querySelector('[data-rules-reminders]');
+    assert.ok(reminders);
+    assert.match(reminders.textContent, /субтитры/);
+  } finally { f.close(); }
+});
+
+test('без модуля правил экран работает и о проверке молчит', async () => {
+  const f = fixture({query: () => planOf([reelDay('2026-09-25')])});
+  try {
+    await f.view.render(f.node, f.ctx); await tick(); await tick();
+    assert.equal(f.node.querySelector('[data-rules]'), null);
+    assert.match(f.node.textContent, /Тема/, 'сам план при этом виден');
+  } finally { f.close(); }
+});
+
+test('без плана блок проверки не показывается', async () => {
+  const f = withRules({query: () => payload({plan: null})});
+  try {
+    await f.view.render(f.node, f.ctx); await tick(); await tick();
+    assert.equal(f.node.querySelector('[data-rules]'), null);
+  } finally { f.close(); }
+});
+
+test('текст замечания выводится как текст, а не как разметка', async () => {
+  const f = withRules({query: () => planOf([reelDay('2026-09-25',
+    {topic: '<img src=x onerror="throw 1">'})])});
+  try {
+    await f.view.render(f.node, f.ctx); await tick(); await tick();
+    assert.equal(f.node.querySelector('[data-rules] img'), null);
+  } finally { f.close(); }
+});

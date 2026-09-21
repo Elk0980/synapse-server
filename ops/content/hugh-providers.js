@@ -158,15 +158,33 @@ function createHughProviders({db, env = process.env, now = () => Date.now()} = {
       saved: Boolean(saved), checkState: saved?.check_state || 'not_checked',
       checkMessage: saved?.check_message || '', checkedAt: saved?.checked_at || null,
       checkStale: Boolean(saved && saved.checked_revision !== null && saved.checked_revision !== saved.config_revision),
-      updatedAt: saved?.updated_at || null, updatedBy: saved?.updated_by || ''};
+      updatedAt: saved?.updated_at || null, updatedBy: saved?.updated_by || '',
+      /* Расход за текущее окно и состояние личного лимита. Владелец должен видеть
+         потраченное до того, как провайдер замолчит, а не узнавать об этом из тишины
+         в чате. Цифры считает бюджетный модуль по своей таблице, здесь их не пересчитываем. */
+      spend: budget.providerState(name, saved?.budget_usd_micro ?? null)};
   }
 
-  const status = () => ({storeAvailable: available, lockedReason: available ? '' : lockedReason,
-    apiStyle: API_STYLE, providers: CATALOG.map((item) => view(item.name)),
+  const status = () => {
+    /* Причина отсева считается один раз на весь ответ: иначе каждая карточка
+       заново расшифровывала бы ключ ради одной строки текста. */
+    const report = available ? runtimeReport() : {ready: [], skipped: []};
+    const skipped = new Map(report.skipped.map((item) => [item.name, item.reason]));
+    const ready = new Set(report.ready.map((item) => item.name));
+    return {storeAvailable: available, lockedReason: available ? '' : lockedReason,
+    apiStyle: API_STYLE,
+    providers: CATALOG.map((item) => ({...view(item.name),
+      // «Включён» в настройке и «участвует в ответах» — разные вещи, и разница названа.
+      inRuntime: ready.has(item.name), runtimeSkipReason: skipped.get(item.name) || ''})),
+    readyCount: report.ready.length,
+    /* Общая граница расхода — одна на всех и главнее личных. Показываем её рядом,
+       иначе личный лимит читается как полная картина, а это не так. */
+    budget: budget.state(),
     notice: 'Ключ хранится зашифрованным и не возвращается ни в одном ответе. Сохранение ничего ' +
       'не включает и не списывает денег: провайдер остаётся выключенным, пока его не включат ' +
       'отдельно, а «сохранено» не означает «проверено». Реализован один контракт: ' +
-      'OpenAI-совместимый /chat/completions. Совместимость подтверждается только успешной проверкой.'});
+      'OpenAI-совместимый /chat/completions. Совместимость подтверждается только успешной проверкой.'};
+  };
 
   function save(name, body, actor = {}) {
     if (!BY_NAME.has(name)) fail(404, 'Неизвестный провайдер', 'NOT_FOUND');
@@ -338,27 +356,45 @@ function createHughProviders({db, env = process.env, now = () => Date.now()} = {
 
   /* Подключение к существующему рантайму ответов: сохранённые и включённые провайдеры
      отдаются в том же виде, в каком hugh-fallback читает их из окружения. */
-  function runtimeProviders() {
-    if (!available) return [];
+  /* Отбор в рантайм вместе с причиной отказа по каждому отсеянному.
+     Молчаливый пропуск стоил часов разбора: провайдер выглядел включённым в кабинете,
+     а в ответах не участвовал, и узнать почему было неоткуда. */
+  function runtimeReport() {
+    if (!available) return {ready: [], skipped: [], lockedReason};
     const rows = db.prepare("SELECT * FROM hugh_provider_settings WHERE enabled=1 AND encrypted_key<>''").all();
-    const out = [];
+    const ready = [], skipped = [];
+    const skip = (name, reason) => { skipped.push({name, reason}); };
     for (const item of rows) {
       // Включённого мало: в рантайм идёт только провайдер с успешной проверкой ЭТОЙ версии.
-      if (!checkCurrent(item)) continue;
-      if (BY_NAME.get(item.name)?.contractSupported === false) continue;
+      if (!checkCurrent(item)) {
+        skip(item.name, item.check_state === 'failed'
+          ? 'Последняя проверка соединения не прошла'
+          : item.checked_revision === null
+            ? 'Настройка ни разу не проверена'
+            : 'Настройку меняли после успешной проверки — нужна новая проверка');
+        continue;
+      }
+      if (BY_NAME.get(item.name)?.contractSupported === false) {
+        skip(item.name, BY_NAME.get(item.name).unsupportedReason || 'Контракт этого провайдера не реализован');
+        continue;
+      }
       // Адрес перепроверяется и здесь: сохранённое значение не считается вечно доверенным.
-      try { checkBaseUrl(item.base_url, item.name, env); } catch { continue; }
+      try { checkBaseUrl(item.base_url, item.name, env); }
+      catch { skip(item.name, 'Сохранённый адрес API больше не проходит проверку официальных хостов'); continue; }
       let secret;
-      try { secret = crypt(item.name, item.encrypted_key, true); } catch { continue; }
-      out.push({name: item.name, url: item.base_url, secret, model: item.model_id,
+      try { secret = crypt(item.name, item.encrypted_key, true); }
+      catch { skip(item.name, 'Ключ не расшифровывается: мастер-ключ сервера изменился или ключ повреждён'); continue; }
+      ready.push({name: item.name, url: item.base_url, secret, model: item.model_id,
         timeoutMs: item.timeout_ms, maxOutputTokens: item.max_output_tokens,
         pricePromptMicroUsdPer1k: item.price_prompt_micro, priceCompletionMicroUsdPer1k: item.price_completion_micro,
         budgetMicroUsd: item.budget_usd_micro});
     }
-    return out;
+    return {ready, skipped, lockedReason: ''};
   }
 
-  return {status, view, save, check, runtimeProviders, available, lockedReason, catalog: CATALOG};
+  const runtimeProviders = () => runtimeReport().ready;
+
+  return {status, view, save, check, runtimeProviders, runtimeReport, available, lockedReason, catalog: CATALOG};
 }
 
 module.exports = {createHughProviders, HUGH_PROVIDER_CATALOG: CATALOG, HUGH_PROVIDER_API_STYLE: API_STYLE,

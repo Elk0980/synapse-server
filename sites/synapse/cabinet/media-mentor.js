@@ -96,6 +96,32 @@
       <button class="plain-button" type="button" data-remove>Убрать день</button></div>`;
   }
 
+  /* Проверка плана по механическим правилам курса. Считает отдельный модуль без модели
+     и без сети; если его нет на странице, экран работает по-прежнему и о проверке молчит,
+     а не показывает пустой зелёный блок — это было бы обещанием, которого никто не давал. */
+  function rulesMarkup(plan) {
+    const rules = sb.mediaMentorRules;
+    if (!rules || !plan) return '';
+    let result;
+    try { result = rules.review(plan); }
+    catch { return ''; }
+    if (!result || !result.checked) return '';
+    const reminders = `<details class="mentor-reminders" data-rules-reminders>
+      <summary>Что курс оставляет на решение человека</summary>
+      <ul class="mentor-list">${rules.REMINDERS.map((text) => `<li>${esc(text)}</li>`).join('')}</ul></details>`;
+    if (!result.issues.length) {
+      return `<section class="mentor-rules" data-rules><h3>Проверка по курсу</h3>
+        <p class="mentor-note" data-rules-ok>Расписание и состав плана правилам курса не противоречат.
+        Это проверка механических правил, а не обещание просмотров.</p>${reminders}</section>`;
+    }
+    const line = (item) => `<li data-rules-level="${esc(item.level)}">` +
+      `<strong>${item.level === 'violation' ? 'Нарушение' : 'Стоит поправить'}:</strong> ${esc(item.text)}</li>`;
+    return `<section class="mentor-rules" data-rules><h3>Проверка по курсу</h3>
+      <p class="mentor-note">Замечаний: ${esc(result.issues.length)}. Правила механические —
+      расписание и состав плана. Оценку идеи и темы они не заменяют.</p>
+      <ul class="mentor-list" data-rules-list>${result.issues.map(line).join('')}</ul>${reminders}</section>`;
+  }
+
   function planMarkup(data, edit) {
     const plan = data.plan, vocabulary = data.vocabulary;
     const label = (list, id) => esc(list.find((item) => item.id === id)?.label || id);
@@ -105,14 +131,15 @@
         ${label(vocabulary.platforms, item.platform)} · ${label(vocabulary.formats, item.format)} ·
         ${label(vocabulary.roles, item.role)}<br>${esc(item.topic)}${item.hook ? `<br><span class="mentor-note">${esc(item.hook)}</span>` : ''}${item.mentorNote ? `<br><span class="mentor-note">${esc(item.mentorNote)}</span>` : ''}</li>`).join('')}</ol>`
       : '<p class="mentor-note">План ещё не составлен.</p>';
-    if (!edit) return view;
+    const checked = plan ? `${view}${rulesMarkup(plan)}` : view;
+    if (!edit) return checked;
     if (!data.brief.revision) {
-      return `${view}<p class="mentor-note">Сначала сохраните бриф компании — план составляется по нему.</p>`;
+      return `${checked}<p class="mentor-note">Сначала сохраните бриф компании — план составляется по нему.</p>`;
     }
     if (!data.brief.fields.platforms.length) {
-      return `${view}<p class="mentor-note">Выберите площадки в брифе: без них план составить нельзя.</p>`;
+      return `${checked}<p class="mentor-note">Выберите площадки в брифе: без них план составить нельзя.</p>`;
     }
-    return `${view}
+    return `${checked}
     <section class="mentor-suggest wide" data-suggest>
       <h3>Подсказка плана</h3>
       <p class="mentor-note">Модель предложит позиции по брифу. Ничего не сохранится и не уйдёт

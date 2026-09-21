@@ -79,3 +79,12 @@
   background: var(--warning-bg, #fff4e5);
   color: var(--warning-fg, #7a4b00);
 }
+
+/* Проверка плана по курсу. Нарушение и «стоит поправить» различаются глазом:
+   иначе список читается как один ровный шум и его перестают смотреть. */
+.mentor-rules { margin-top: 16px; }
+.mentor-rules h3 { margin-bottom: 4px; }
+.mentor-rules [data-rules-level="violation"] strong { color: #b3261e; }
+.mentor-rules [data-rules-level="warning"] strong { color: #8a6d00; }
+.mentor-reminders { margin-top: 8px; }
+.mentor-reminders summary { cursor: pointer; }
