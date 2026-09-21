@@ -11,6 +11,44 @@
   const moment = (value) => (value && Number.isFinite(Date.parse(value))
     ? new Date(value).toLocaleString('ru-RU') : '—');
 
+  /* Деньги показываем так, чтобы мелкий расход не превращался в «0,00 $»:
+     до цента округление скрывает первые обращения и создаёт ложное «ничего не тратим». */
+  const money = (value) => (Number.isFinite(value)
+    ? `${value.toFixed(value > 0 && value < 0.01 ? 4 : 2).replace('.', ',')} $` : '—');
+
+  /* Расход за окно и личный лимит. Отсутствие лимита названо словами, а не пустотой:
+     пустое место читается как «лимит есть и он не достигнут», что неправда. */
+  function spendMarkup(item) {
+    const spend = item.spend;
+    if (!spend) return '';
+    const limit = spend.limitUsd === null || spend.limitUsd === undefined
+      ? 'личный лимит не задан' : `личный лимит ${money(spend.limitUsd)}`;
+    const stopped = spend.stopped
+      ? `<strong> Остановлен: ${esc(spend.reason)}</strong>` : '';
+    return `<p class="hugh-note" data-spend="${esc(item.name)}">За текущее окно: ` +
+      `${esc(money(spend.spentUsd))}, обращений ${esc(spend.requests)} · ${esc(limit)}.${stopped}</p>`;
+  }
+
+  /* Общая граница расхода. «Не настроена» и «настроена, но неверно» — разные состояния:
+     второе останавливает платный резерв целиком, и молчать об этом нельзя. */
+  function budgetMarkup(budget) {
+    if (!budget) return '';
+    if (budget.blockedByConfig) {
+      return `<p class="hugh-locked" role="alert" data-budget>Границы бюджета заданы неверно: ` +
+        `платный резерв остановлен. ${esc(budget.reason)}</p>`;
+    }
+    if (!budget.configured) {
+      return '<p class="hugh-note" data-budget>Общая граница расхода не задана: ' +
+        'резервные провайдеры работают без денежного потолка.</p>';
+    }
+    const requests = budget.maxRequests > 0
+      ? `, обращений ${budget.requests} из ${budget.maxRequests}` : `, обращений ${budget.requests}`;
+    const stopped = budget.stopped ? ` Остановлено: ${budget.reason}.` : '';
+    return `<p class="hugh-note" data-budget>Общий расход за окно ${esc(budget.windowDays)} дн.: ` +
+      `${esc(money(budget.spentUsd))} из ${esc(money(budget.limitUsd))}${esc(requests)}. ` +
+      `Окно обновится ${esc(moment(budget.resetAt))}.${esc(stopped)}</p>`;
+  }
+
   function providerMarkup(item) {
     const locked = !state.storeAvailable;
     // Провайдер без реализованного контракта не предлагает форму: вид работы не изображаем.
@@ -29,6 +67,7 @@
         принадлежит провайдеру.</p>
       ${item.keySetAt ? `<p class="hugh-note">Ключ задан: ${esc(moment(item.keySetAt))}. Значение не показывается и не возвращается сервером.</p>` : ''}
       ${item.checkedAt ? `<p class="hugh-note">Последняя проверка: ${esc(moment(item.checkedAt))} · ${esc(item.checkMessage)}</p>` : ''}
+      ${spendMarkup(item)}
       <form class="crm-form" data-form="${esc(item.name)}"${locked ? ' hidden' : ''}>
         <input type="hidden" name="revision" value="${esc(item.revision)}">
         <label>Адрес API (только из официальных)<input name="baseUrl" value="${esc(item.baseUrl)}"
@@ -59,6 +98,7 @@
     host.innerHTML = `<h2>Провайдеры ответов Хью</h2>
       <p class="hugh-note">${esc(state.notice)}</p>
       ${state.storeAvailable ? '' : `<p class="hugh-locked" role="alert">${esc(state.lockedReason)}. Пока мастер-ключ не задан на сервере, ключи вводить нельзя.</p>`}
+      ${budgetMarkup(state.budget)}
       ${state.providers.map((item) => providerMarkup(item)).join('')}`;
     host.querySelectorAll('form[data-form]').forEach((form) => {
       form.addEventListener('submit', (event) => { event.preventDefault(); void save(form); });

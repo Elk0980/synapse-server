@@ -1561,3 +1561,44 @@ test('сервер не прислал персон — экран чата ра
   assert.equal(text(harness.dom, '[data-pc-personas-hint]'), '');
   harness.w.close();
 });
+
+/* Резерв ответов. «Доступно 0» без причины выглядит как поломка неизвестной природы —
+   именно на этом однажды потерялся час: провайдер числился настроенным и молчал.
+   Окно закрывается в finally: упавший тест иначе оставляет его живым и процесс не выходит. */
+// Резерв показывается там, где он нужен: когда основной путь ответить не может.
+const withFallback = (fallback) => snapshot({ ai: { configured: true, connected: false,
+  runtimeState: 'login_required', queued: 0, failed: 0, fallback } });
+const bootFallback = (fallback) => boot({ routes: {
+  'GET /content/project-chat/palitra-love': () => ({ body: withFallback(fallback) }),
+} });
+
+test('резерв без доступных провайдеров называет причину', async () => {
+  const harness = bootFallback({ configured: true, available: 0,
+    stoppedReason: 'Достигнута граница расхода резервных провайдеров',
+    providers: [{ name: 'deepseek', model: 'm', cooling: false, live: true }], issues: [] });
+  try {
+    await mount(harness);
+    assert.match(harness.d.body.textContent, /доступно 0/);
+    assert.match(harness.d.body.textContent, /Достигнута граница расхода/);
+  } finally { harness.w.close(); }
+});
+
+test('доступный резерв причину не показывает', async () => {
+  const harness = bootFallback({ configured: true, available: 1, stoppedReason: '',
+    providers: [{ name: 'deepseek', model: 'm', cooling: false, live: true }], issues: [] });
+  try {
+    await mount(harness);
+    assert.match(harness.d.body.textContent, /доступно 1/);
+    assert.doesNotMatch(harness.d.body.textContent, /Причина:/);
+  } finally { harness.w.close(); }
+});
+
+test('причина со ссылкой или кодом входа в общий чат не попадает', async () => {
+  const harness = bootFallback({ configured: true, available: 0,
+    stoppedReason: 'Откройте https://example.com/login и введите ABCD-1234',
+    providers: [{ name: 'deepseek', model: 'm', cooling: false, live: false }], issues: [] });
+  try {
+    await mount(harness);
+    assert.doesNotMatch(harness.d.body.textContent, /example\.com|ABCD-1234/);
+  } finally { harness.w.close(); }
+});

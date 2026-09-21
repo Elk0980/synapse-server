@@ -302,3 +302,100 @@ test('лишние поля и подозрительное значение к�
   assert.throws(() => f.store.save('deepseek', settings(), OWNER) && f.store.save('deepseek', settings(), OWNER),
     (error) => error.details.code === 'REVISION_CONFLICT');
 });
+
+/* Расход показывается владельцу до того, как провайдер замолчит.
+   Цифры берутся из бюджетного модуля — здесь проверяется, что они доходят до кабинета. */
+test('кабинет видит расход провайдера и общую границу бюджета', () => {
+  const {store} = fixture({env: {HUGH_FALLBACK_BUDGET_USD: '10',
+    HUGH_FALLBACK_DEEPSEEK_USD_PER_1K_PROMPT: '0.0003',
+    HUGH_FALLBACK_DEEPSEEK_USD_PER_1K_COMPLETION: '0.0012'}});
+  const view = store.status().providers.find((item) => item.name === 'deepseek');
+  assert.ok(view.spend, 'расход провайдера должен быть в ответе');
+  assert.equal(view.spend.spentUsd, 0);
+  assert.equal(view.spend.limitUsd, null, 'лимит не задан — так и сказано, а не нулём');
+  const budget = store.status().budget;
+  assert.equal(budget.configured, true);
+  assert.equal(budget.limitUsd, 10);
+  assert.equal(budget.stopped, false);
+});
+
+test('сохранённый личный лимит доходит до кабинета вместе с расходом', () => {
+  const {store} = fixture({env: {HUGH_FALLBACK_BUDGET_USD: '10',
+    HUGH_FALLBACK_DEEPSEEK_USD_PER_1K_PROMPT: '0.0003',
+    HUGH_FALLBACK_DEEPSEEK_USD_PER_1K_COMPLETION: '0.0012'}});
+  store.save('deepseek', settings({budgetUsd: 2.5}), OWNER);
+  const view = store.status().providers.find((item) => item.name === 'deepseek');
+  assert.equal(view.budgetUsd, 2.5);
+  assert.equal(view.spend.limitUsd, 2.5);
+  assert.equal(view.spend.stopped, false);
+});
+
+test('без заданной границы кабинет видит это прямо, а не как нулевой расход', () => {
+  const {store} = fixture();
+  const budget = store.status().budget;
+  assert.equal(budget.configured, false);
+  assert.equal(budget.spentUsd, 0);
+});
+
+/* Почему включённый провайдер не отвечает. Молчаливый отсев стоил часов разбора:
+   в кабинете «включён», в ответах не участвует, причины нигде нет.
+   Состояния воспроизводятся так, как возникают на живом сервере: включение через кабинет
+   требует свежей проверки, поэтому выбывание случается позже — от смены мастер-ключа,
+   правки настройки в базе или ужесточения списка официальных хостов. */
+test('рабочий провайдер причины отсева не получает и считается доступным', async (t) => {
+  const f = fixture();
+  t.after(() => f.db.close());
+  await activate(f);
+  const item = f.store.status().providers.find((x) => x.name === 'deepseek');
+  assert.equal(item.inRuntime, true);
+  assert.equal(item.runtimeSkipReason, '');
+  assert.equal(f.store.status().readyCount, 1);
+});
+
+test('правка настройки в обход кабинета обесценивает проверку и это названо словами', async (t) => {
+  const f = fixture();
+  t.after(() => f.db.close());
+  await activate(f);
+  f.db.prepare('UPDATE hugh_provider_settings SET config_revision=config_revision+1 WHERE name=?').run('deepseek');
+  const item = f.store.status().providers.find((x) => x.name === 'deepseek');
+  assert.equal(item.inRuntime, false);
+  assert.match(item.runtimeSkipReason, /после успешной проверки/);
+  assert.equal(f.store.status().readyCount, 0, '«доступно» не должно считать выбывшего');
+});
+
+test('невозможность расшифровать ключ не выглядит как работающий провайдер', async (t) => {
+  const f = fixture();
+  t.after(() => f.db.close());
+  await activate(f);
+  f.db.prepare("UPDATE hugh_provider_settings SET encrypted_key='непонятно' WHERE name=?").run('deepseek');
+  const item = f.store.status().providers.find((x) => x.name === 'deepseek');
+  assert.equal(item.inRuntime, false);
+  assert.match(item.runtimeSkipReason, /не расшифровыва/);
+  assert.equal(f.store.status().readyCount, 0);
+});
+
+test('переставший быть официальным адрес называется причиной, а не тишиной', async (t) => {
+  const f = fixture();
+  t.after(() => f.db.close());
+  await activate(f);
+  f.db.prepare("UPDATE hugh_provider_settings SET base_url='https://api.example.com/v1' WHERE name=?").run('deepseek');
+  const item = f.store.status().providers.find((x) => x.name === 'deepseek');
+  assert.equal(item.inRuntime, false);
+  assert.match(item.runtimeSkipReason, /официальн/);
+});
+
+test('неудачная проверка после включения отличается от отсутствия проверки', async (t) => {
+  const f = fixture();
+  t.after(() => f.db.close());
+  await activate(f);
+  f.db.prepare("UPDATE hugh_provider_settings SET check_state='failed' WHERE name=?").run('deepseek');
+  const item = f.store.status().providers.find((x) => x.name === 'deepseek');
+  assert.match(item.runtimeSkipReason, /не прошла/);
+});
+
+test('закрытое хранилище не выдаёт ни одного готового провайдера', (t) => {
+  const f = fixture({env: {HUGH_PROVIDER_MASTER_KEY: ''}});
+  t.after(() => f.db.close());
+  assert.equal(f.store.status().readyCount, 0);
+  assert.deepEqual(f.store.runtimeReport().ready, []);
+});

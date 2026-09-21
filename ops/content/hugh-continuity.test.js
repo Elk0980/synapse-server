@@ -194,3 +194,31 @@ test('после восстановления провайдера ждущий 
   assert.equal(answered, true, 'вопрос дождался ответа, а не потерялся');
   assert.equal(tasks(f.db, PILOT).length, 1, 'вторая задача менеджеру не появилась');
 });
+
+/* Снимок комнаты читается обычным GET: post здесь не подходит, метод не тот. */
+async function snapshotOf(chat, session, code = 'alvi') {
+  const request = {method: 'GET', headers: {}, session};
+  const response = {statusCode: 0, payload: null,
+    writeHead(status) { this.statusCode = status; }, end() {}};
+  await chat.handle(request, response, new URL(`http://x/content/project-chat/${code}`));
+  return {statusCode: response.statusCode, payload: response.payload};
+}
+
+/* «Доступно 0» без причины — это час потерянного времени: провайдер числится настроенным
+   и молчит, а откуда молчание, узнать неоткуда. Причина берётся у бюджета и провайдеров. */
+test('снимок называет причину, когда доступных резервов не осталось', async (t) => {
+  const {chat, owner} = setup(t, {env: {HUGH_FALLBACK_BUDGET_USD: '10'}});
+  const view = await snapshotOf(chat, owner);
+  const fallback = view.payload.ai.fallback;
+  assert.equal(fallback.configured, true);
+  assert.equal(fallback.available, 2, 'оба провайдера настроены и доступны');
+  assert.equal(fallback.stoppedReason, '', 'при доступных резервах причина не выдумывается');
+});
+
+test('неверно заданные границы видны в снимке причиной, а не нулём без объяснения', async (t) => {
+  const {chat, owner} = setup(t, {env: {HUGH_FALLBACK_BUDGET_USD: 'не число'}});
+  const view = await snapshotOf(chat, owner);
+  const fallback = view.payload.ai.fallback;
+  assert.equal(fallback.available, 0);
+  assert.match(fallback.stoppedReason, /границ|бюджет/i);
+});

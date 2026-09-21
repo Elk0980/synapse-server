@@ -182,3 +182,91 @@ test('успешная проверка не выдаётся за подтве�
     assert.match(f.host.textContent, /не подтверждает, что хост\s+принадлежит провайдеру/);
   } finally { f.close(); }
 });
+
+/* Расход и границы. Владелец должен увидеть потраченное до того, как провайдер замолчит,
+   и отличить «лимит не задан» от «лимит есть и не достигнут». */
+const spend = (patch = {}) => ({provider: 'deepseek', spentUsd: 0, requests: 0,
+  limitUsd: null, stopped: false, reason: '', ...patch});
+
+test('расход провайдера за окно виден в его карточке', async () => {
+  const f = fixture({respond: () => status({providers: [provider({keyConfigured: true,
+    spend: spend({spentUsd: 1.25, requests: 7, limitUsd: 5})})]})});
+  try {
+    await tick(); await tick();
+    const note = f.host.querySelector('[data-spend="deepseek"]').textContent;
+    assert.match(note, /1,25 \$/);
+    assert.match(note, /обращений 7/);
+    assert.match(note, /личный лимит 5,00 \$/);
+  } finally { f.close(); }
+});
+
+test('мелкий расход не округляется до нуля', async () => {
+  const f = fixture({respond: () => status({providers: [provider({keyConfigured: true,
+    spend: spend({spentUsd: 0.0012, requests: 2})})]})});
+  try {
+    await tick(); await tick();
+    const note = f.host.querySelector('[data-spend="deepseek"]').textContent;
+    assert.match(note, /0,0012 \$/, 'первые обращения не должны выглядеть как «ничего не потрачено»');
+  } finally { f.close(); }
+});
+
+test('отсутствие личного лимита названо словами, а не пустотой', async () => {
+  const f = fixture({respond: () => status({providers: [provider({keyConfigured: true, spend: spend()})]})});
+  try {
+    await tick(); await tick();
+    assert.match(f.host.querySelector('[data-spend="deepseek"]').textContent, /личный лимит не задан/);
+  } finally { f.close(); }
+});
+
+test('исчерпанный личный лимит показан причиной, а не молчанием', async () => {
+  const f = fixture({respond: () => status({providers: [provider({keyConfigured: true,
+    spend: spend({spentUsd: 5, limitUsd: 5, stopped: true,
+      reason: 'Достигнут личный лимит расходов провайдера deepseek'})})]})});
+  try {
+    await tick(); await tick();
+    assert.match(f.host.querySelector('[data-spend="deepseek"]').textContent, /Достигнут личный лимит/);
+  } finally { f.close(); }
+});
+
+test('сервер не прислал расход — карточка работает без строки о деньгах', async () => {
+  const f = fixture({respond: () => status({providers: [provider({keyConfigured: true})]})});
+  try {
+    await tick(); await tick();
+    assert.equal(f.host.querySelector('[data-spend="deepseek"]'), null);
+    assert.match(f.host.textContent, /DeepSeek/);
+  } finally { f.close(); }
+});
+
+test('общий расход за окно виден отдельно от личного', async () => {
+  const f = fixture({respond: () => status({budget: {configured: true, blockedByConfig: false,
+    windowDays: 30, resetAt: '2026-10-21T00:00:00.000Z', spentUsd: 3.5, limitUsd: 20,
+    requests: 12, maxRequests: 0, stopped: false, reason: ''}})});
+  try {
+    await tick(); await tick();
+    const note = f.host.querySelector('[data-budget]').textContent;
+    assert.match(note, /3,50 \$ из 20,00 \$/);
+    assert.match(note, /окно 30 дн\./i);
+  } finally { f.close(); }
+});
+
+test('неверно заданные границы показываются тревогой, а не примечанием', async () => {
+  const f = fixture({respond: () => status({budget: {configured: true, blockedByConfig: true,
+    windowDays: 30, resetAt: '2026-10-21T00:00:00.000Z', spentUsd: 0, limitUsd: 0, requests: 0,
+    maxRequests: 0, stopped: true, reason: 'Границы бюджета заданы неверно: платный резерв остановлен'}})});
+  try {
+    await tick(); await tick();
+    const node = f.host.querySelector('[data-budget]');
+    assert.equal(node.getAttribute('role'), 'alert');
+    assert.match(node.textContent, /заданы неверно/);
+  } finally { f.close(); }
+});
+
+test('незаданная общая граница названа прямо, а не выглядит как ноль расхода', async () => {
+  const f = fixture({respond: () => status({budget: {configured: false, blockedByConfig: false,
+    windowDays: 30, resetAt: '2026-10-21T00:00:00.000Z', spentUsd: 0, limitUsd: 0, requests: 0,
+    maxRequests: 0, stopped: false, reason: ''}})});
+  try {
+    await tick(); await tick();
+    assert.match(f.host.querySelector('[data-budget]').textContent, /без денежного потолка/);
+  } finally { f.close(); }
+});

@@ -1455,7 +1455,15 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   }
   function fallbackSummary(user) {
     const status = fallback.status();
-    return { configured: status.configured, available: fallback.available().length,
+    const ready = fallback.available().length;
+    /* «Доступно 0» без причины читается как поломка неизвестной природы.
+       Причина берётся у бюджета и у самих провайдеров, а не придумывается здесь. */
+    const stoppedReason = ready > 0 || !status.configured ? ''
+      : status.budget?.stopped ? status.budget.reason
+        : status.providers.some((p) => p.ownLimitReached) ? 'У провайдеров исчерпаны личные лимиты расходов'
+          : status.providers.some((p) => p.cooling) ? 'Все провайдеры на паузе после недавних отказов'
+            : 'Ни один резервный провайдер сейчас не готов отвечать';
+    return { configured: status.configured, available: ready, stoppedReason,
       providers: status.providers.map((p) => ({ name: p.name, model: p.model, cooling: p.cooling, live: p.live, lastSuccessAt: p.lastSuccessAt,
         ...(user?.role === 'owner' ? { lastError: p.lastError, cooldownUntil: p.cooldownUntil } : {}) })),
       issues: user?.role === 'owner' ? status.issues : [],

@@ -160,8 +160,10 @@
     const fb = ai.fallback;
     if (!fb || !fb.configured) return "";
     const live = fb.providers.filter(p => p.live).length, cooling = fb.providers.filter(p => p.cooling).length;
+    // Ноль доступных без причины выглядит как поломка неизвестной природы: называем причину.
+    const stopped = !fb.available && fb.stoppedReason ? ` Причина: ${safeReason(fb.stoppedReason)}.` : "";
     return ` Резерв ответов: ${fb.providers.length} провайдер(а), доступно ${fb.available}` +
-      (live ? `, живой ответ получен от ${live}` : ", живой ответ ещё не подтверждён") + (cooling ? `, на паузе ${cooling}` : "") + ".";
+      (live ? `, живой ответ получен от ${live}` : ", живой ответ ещё не подтверждён") + (cooling ? `, на паузе ${cooling}` : "") + "." + stopped;
   };
   const aiSummary = state => {
     const ai = aiInfo(state);

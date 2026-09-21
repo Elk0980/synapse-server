@@ -1057,7 +1057,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   // Личная переписка владельца по проектам живёт в owner-private-chat.js и ходит
   // по собственному маршруту /content/owner-chat с серверной проверкой владельца.
   const cabinetAssets = ["platform-links", "home", "tasks", "company-information", "reviews", "studio-journey", "leads", "deals", "clients", "chat", "hugh", "project-chat", "analytics",
-    "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking", "sites", "settings", "site-orders", "account", "trademarks", "campaigns", "autoposting", "media-mentor-materials", "media-mentor", "media-mentor-rollout", "hugh-providers", "owner-private-chat", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
+    "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking", "sites", "settings", "site-orders", "account", "trademarks", "campaigns", "autoposting", "media-mentor-materials", "media-mentor-rules", "media-mentor", "media-mentor-rollout", "hugh-providers", "owner-private-chat", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
   const cabinetStyles = ["reviews", "analytics", "ad-platforms", "platform-demand", "social-stats", "deals", "home", "chat", "hugh", "project-chat", "settings", "site-orders", "trademarks", "sites", "campaigns", "company-information", "autoposting", "media-mentor", "media-mentor-rollout", "hugh-providers", "owner-private-chat", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
