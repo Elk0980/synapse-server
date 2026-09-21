@@ -16,6 +16,7 @@ const { createHughSettingsStore } = require('./hugh-settings-store');
 const { createProjectChat } = require('./project-chat');
 const { createOwnerPrivateChat } = require('./owner-private-chat');
 const { createHughProviders } = require('./hugh-providers');
+const {createMediaMentorSuggest, createMediaMentorSuggestRoute} = require('./media-mentor-suggest');
 const { clientIp, originOf } = require('./site-orders');
 const { hashPassword, verifyPassword } = require('./passwords');
 const { createCompanyLinksReader } = require('./company-links-reader');
@@ -195,6 +196,37 @@ const ownerPrivateChat = createOwnerPrivateChat({ db, authStore,
   ask: (payload) => projectChat.askHugh(JSON.stringify(payload)),
   skills: projectChat.skills || null,
   requireSession, requireCsrf, sendJson: send, readBody: readJson });
+
+/* Подсказки Медиа-наставника: разбор брифа, черновик контент-плана, разбор результатов.
+   Транспорт к модели — тот же askHugh, что и у личной переписки владельца: второго пути
+   к провайдерам и второго места для ключей не заводим.
+   Бриф и статистика читаются на сервере служебным ключом CRM: принимать их от клиента нельзя,
+   иначе подсказку можно построить на подложенных данных чужой компании. */
+const mediaMentorSuggestRoute = createMediaMentorSuggestRoute({
+  suggester: createMediaMentorSuggest({ask: (payload) => projectChat.askHugh(payload)}),
+  loadBrief: async (code) => {
+    const upstream = await fetch(`${CRM_URL}/media-mentor?companyCode=${encodeURIComponent(code)}`,
+      {headers: {'x-api-key': CRM_API_KEY}});
+    if (!upstream.ok) return null;
+    const data = await upstream.json();
+    return data?.brief?.fields ?? null;
+  },
+  // Разбор результатов читает и статистику, и текущий план: выводы без плана были бы «в воздух».
+  loadStats: async (code, {from, to} = {}) => {
+    const params = new URLSearchParams({companyCode: code});
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    const statsUpstream = await fetch(`${CRM_URL}/social-stats?${params}`,
+      {headers: {'x-api-key': CRM_API_KEY}});
+    if (!statsUpstream.ok) return null;
+    const planUpstream = await fetch(`${CRM_URL}/media-mentor?companyCode=${encodeURIComponent(code)}`,
+      {headers: {'x-api-key': CRM_API_KEY}});
+    const plan = planUpstream.ok ? (await planUpstream.json())?.plan ?? null : null;
+    return {overview: await statsUpstream.json(), plan};
+  },
+  requireSession, requireCsrf, requirePermission,
+  sendJson: send, readBody: readJson, fail,
+});
 
 const latestStmt = db.prepare('SELECT * FROM documents WHERE key = ? ORDER BY version DESC LIMIT 1');
 const byVersionStmt = db.prepare('SELECT * FROM documents WHERE key = ? AND version = ?');
@@ -798,6 +830,13 @@ const server = http.createServer(async (request, response) => {
     // сессии; ни один клиентский маршрут к этим таблицам не обращается.
     if (url.pathname === '/content/owner-chat' || url.pathname.startsWith('/content/owner-chat/')) {
       if (await ownerPrivateChat.handle(request, response, url)) return;
+    }
+    // Подсказки Медиа-наставника живут в content: провайдеры и мастер-ключ здесь,
+    // а все адреса /media-mentor* целиком проксируются в CRM и до модуля бы не дошли.
+    if (url.pathname === '/content/media-mentor-suggest'
+      || url.pathname === '/content/media-mentor-analyze'
+      || url.pathname === '/content/media-mentor-review') {
+      if (await mediaMentorSuggestRoute.handle(request, response, url)) return;
     }
     if (url.pathname === '/content/hugh' || url.pathname.startsWith('/content/hugh/')) {
       return await proxyChat(request, response, url, cors);

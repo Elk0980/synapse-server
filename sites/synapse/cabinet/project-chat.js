@@ -283,6 +283,7 @@
     q(state, "[data-pc-members]").textContent = list(data.members).map(member => member.displayName).join(", ") || "Участники пока не назначены";
     q(state, "[data-pc-connection]").textContent = data.room?.telegramChatId ? "Telegram привязан к проекту. Состояние доставки показано у сообщений." : "Telegram пока не привязан";
     q(state, "[data-pc-ai]").textContent = aiSummary(state);
+    renderPersonas(state, data.personas);
     q(state, "[data-pc-retry-ai]").hidden = !(isOwner(state) && Number(ai.failed) > 0);
     q(state, "[data-pc-compose]").hidden = !canReply(state);
     q(state, "[data-pc-readonly]").hidden = canReply(state);
@@ -891,7 +892,40 @@
       notice(state, error.message, true);
     } finally { input.value = ""; settle(state); }
   };
-  const sharedShell = state => `<div class="pc-layout"><section class="pc-conversation" aria-label="Общий чат проекта"><header class="pc-room-header"><h2>${escape(state.ctx.identity.companies?.find(company => company.id === state.company)?.name || state.company)}</h2><p class="opc-audience opc-audience-shared" role="note">Общий чат проекта: сообщения видят клиент и участники, они уходят в Telegram проекта.</p><p data-pc-members></p><p class="pc-muted" data-pc-connection></p><p class="pc-muted" data-pc-ai></p><button type="button" data-pc-retry-ai hidden>Повторить ответы Хью</button></header><div class="pc-history-more"><button type="button" data-pc-older hidden>Показать более ранние сообщения</button></div><ol class="pc-messages" data-pc-messages aria-label="Общая переписка" role="log" aria-live="polite"><li class="pc-empty">Загрузка…</li></ol><p data-pc-sync class="pc-muted pc-sync" role="status"></p><form data-pc-compose class="pc-compose" hidden><label class="sr-only" for="pc-message-input">Сообщение участникам проекта</label><textarea id="pc-message-input" name="text" rows="2" maxlength="12000" placeholder="Сообщение участникам проекта…"></textarea><div data-pc-pending class="pc-pending"></div><div class="pc-toolbar"><label class="pc-file-button">Прикрепить фото или файл<input type="file" multiple data-pc-upload aria-label="Прикрепить фото или файл"></label><button type="button" data-pc-schedule data-pc-write hidden>Запланировать</button><button type="submit">Отправить</button></div></form><p data-pc-readonly class="pc-muted pc-readonly" hidden>У вас доступ к просмотру. Для сообщений нужно право ответа в чате проекта.</p></section><aside class="pc-project"><div class="pc-toolbar"><h2>Задачи <span data-pc-task-count></span></h2><button type="button" data-pc-new-task data-pc-write hidden>Добавить</button></div><ul class="pc-tasks" data-pc-tasks></ul><section class="pc-scheduled" data-pc-scheduled-block hidden><h3>Запланировано</h3><ul data-pc-scheduled></ul></section><div class="pc-project-actions"><button type="button" data-pc-stages data-pc-write hidden>Этапы проекта</button><button type="button" data-pc-import data-pc-owner hidden>Импорт реестра</button><button type="button" data-pc-edit-members data-pc-owner hidden>Участники</button><button type="button" data-pc-settings data-pc-owner hidden>Настройки чата</button></div></aside></div>`;
+  /* Имена персон приходят с сервера: подсказка и правило постановки задания не должны
+     разойтись. Человек, не знающий имён, не получит ответа ни от кого — на этом легко
+     потерять час, поэтому имена видны всегда, а не только в баннере. */
+  const personasSeen = id => {
+    try { return window.localStorage.getItem(`pc-personas-seen:${id}`) === "1"; } catch { return false; }
+  };
+  const markPersonasSeen = id => {
+    try { window.localStorage.setItem(`pc-personas-seen:${id}`, "1"); } catch { /* приватный режим — покажем снова */ }
+  };
+  function renderPersonas(state, personas) {
+    const hint = q(state, "[data-pc-personas-hint]"), banner = q(state, "[data-pc-personas]");
+    if (!hint || !banner) return;
+    if (!personas || !personas.hint) { hint.textContent = ""; banner.hidden = true; return; }
+    hint.textContent = personas.hint;
+    const info = personas.banner;
+    // Состав персон изменится — изменится и идентификатор, и баннер покажется снова.
+    if (!info || !info.id || personasSeen(info.id)) { banner.hidden = true; return; }
+    q(state, "[data-pc-personas-title]").textContent = info.title || "";
+    const list = q(state, "[data-pc-personas-list]");
+    list.innerHTML = "";
+    for (const line of info.lines || []) {
+      const item = state.root.ownerDocument.createElement("li");
+      item.textContent = line;
+      list.appendChild(item);
+    }
+    banner.hidden = false;
+    const close = q(state, "[data-pc-personas-close]");
+    if (close && !close.dataset.bound) {
+      close.dataset.bound = "1";
+      close.addEventListener("click", () => { markPersonasSeen(info.id); banner.hidden = true; });
+    }
+  }
+
+  const sharedShell = state => `<div class="pc-layout"><section class="pc-conversation" aria-label="Общий чат проекта"><header class="pc-room-header"><h2>${escape(state.ctx.identity.companies?.find(company => company.id === state.company)?.name || state.company)}</h2><p class="opc-audience opc-audience-shared" role="note">Общий чат проекта: сообщения видят клиент и участники, они уходят в Telegram проекта.</p><p data-pc-members></p><p class="pc-muted" data-pc-connection></p><p class="pc-muted" data-pc-ai></p><section class="pc-personas" data-pc-personas hidden role="note"><h3 data-pc-personas-title></h3><ul data-pc-personas-list></ul><button type="button" data-pc-personas-close>Понятно</button></section><button type="button" data-pc-retry-ai hidden>Повторить ответы Хью</button></header><div class="pc-history-more"><button type="button" data-pc-older hidden>Показать более ранние сообщения</button></div><ol class="pc-messages" data-pc-messages aria-label="Общая переписка" role="log" aria-live="polite"><li class="pc-empty">Загрузка…</li></ol><p data-pc-sync class="pc-muted pc-sync" role="status"></p><form data-pc-compose class="pc-compose" hidden><label class="sr-only" for="pc-message-input">Сообщение участникам проекта</label><textarea id="pc-message-input" name="text" rows="2" maxlength="12000" placeholder="Сообщение участникам проекта…"></textarea><p class="pc-muted pc-personas-hint" data-pc-personas-hint></p><div data-pc-pending class="pc-pending"></div><div class="pc-toolbar"><label class="pc-file-button">Прикрепить фото или файл<input type="file" multiple data-pc-upload aria-label="Прикрепить фото или файл"></label><button type="button" data-pc-schedule data-pc-write hidden>Запланировать</button><button type="submit">Отправить</button></div></form><p data-pc-readonly class="pc-muted pc-readonly" hidden>У вас доступ к просмотру. Для сообщений нужно право ответа в чате проекта.</p></section><aside class="pc-project"><div class="pc-toolbar"><h2>Задачи <span data-pc-task-count></span></h2><button type="button" data-pc-new-task data-pc-write hidden>Добавить</button></div><ul class="pc-tasks" data-pc-tasks></ul><section class="pc-scheduled" data-pc-scheduled-block hidden><h3>Запланировано</h3><ul data-pc-scheduled></ul></section><div class="pc-project-actions"><button type="button" data-pc-stages data-pc-write hidden>Этапы проекта</button><button type="button" data-pc-import data-pc-owner hidden>Импорт реестра</button><button type="button" data-pc-edit-members data-pc-owner hidden>Участники</button><button type="button" data-pc-settings data-pc-owner hidden>Настройки чата</button></div></aside></div>`;
   const switchMode = async (state, mode) => {
     if (!active(state) || (mode === "private" && state.ctx.identity.role !== "owner")) return;
     const body = q(state, "[data-pc-body]");

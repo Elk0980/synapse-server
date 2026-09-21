@@ -1485,3 +1485,74 @@ test('сводка задач: снятое не попадает в «на са
   await mount(harness);
   assert.equal(text(harness.dom, '[data-pc-task-count]'), 'Замечания: 3 · на сайте 1 · осталось 1 · отменено 1');
 });
+
+/* Две персоны: имена приходят с сервера, подсказка видна всегда, баннер — до закрытия. */
+const PERSONAS = {
+  hint: 'Позовите по имени: «Хью, ...» — сайты; «Лео, ...» — контент.',
+  banner: { id: 'personas-v1', title: 'В чате два помощника',
+    lines: ['Хью — сайты.', 'Лео — контент.', 'Ассистент отвечает только когда его зовут по имени.',
+      'Это один сервис с двумя ролями, а не два независимых помощника.'] },
+  list: [{ key: 'hugh', name: 'Хью' }, { key: 'leo', name: 'Лео' }],
+};
+const withStorage = (harness, seen = null) => {
+  const store = new Map(seen ? [[seen, '1']] : []);
+  Object.defineProperty(harness.w, 'localStorage', { configurable: true,
+    value: { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) } });
+  return store;
+};
+
+test('подсказка с именами персон видна под полем ввода', async () => {
+  const harness = boot({ routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ personas: PERSONAS }) }),
+  } });
+  withStorage(harness);
+  await mount(harness);
+  const hint = text(harness.dom, '[data-pc-personas-hint]');
+  assert.match(hint, /Хью/);
+  assert.match(hint, /Лео/);
+});
+
+test('баннер о двух помощниках показывается при первом заходе и закрывается навсегда', async () => {
+  const harness = boot({ routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ personas: PERSONAS }) }),
+  } });
+  const store = withStorage(harness);
+  await mount(harness);
+  const banner = harness.d.querySelector('[data-pc-personas]');
+  assert.equal(banner.hidden, false, 'баннер должен быть виден при первом заходе');
+  assert.match(banner.textContent, /зовут по имени/);
+  assert.match(banner.textContent, /не два независимых помощника/);
+  harness.click('[data-pc-personas-close]');
+  assert.equal(harness.d.querySelector('[data-pc-personas]').hidden, true);
+  assert.equal(store.get('pc-personas-seen:personas-v1'), '1');
+});
+
+test('закрытый баннер не возвращается, а подсказка остаётся', async () => {
+  const harness = boot({ routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ personas: PERSONAS }) }),
+  } });
+  withStorage(harness, 'pc-personas-seen:personas-v1');
+  await mount(harness);
+  assert.equal(harness.d.querySelector('[data-pc-personas]').hidden, true);
+  assert.match(text(harness.dom, '[data-pc-personas-hint]'), /Лео/);
+});
+
+test('изменился состав персон — баннер показывается заново', async () => {
+  const harness = boot({ routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({
+      personas: { ...PERSONAS, banner: { ...PERSONAS.banner, id: 'personas-v2' } } }) }),
+  } });
+  withStorage(harness, 'pc-personas-seen:personas-v1');
+  await mount(harness);
+  assert.equal(harness.d.querySelector('[data-pc-personas]').hidden, false);
+});
+
+test('сервер не прислал персон — экран чата работает без подсказки', async () => {
+  const harness = boot({ routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot() }),
+  } });
+  withStorage(harness);
+  await mount(harness);
+  assert.equal(harness.d.querySelector('[data-pc-personas]').hidden, true);
+  assert.equal(text(harness.dom, '[data-pc-personas-hint]'), '');
+});

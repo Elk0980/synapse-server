@@ -62,7 +62,12 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
   const cooling = (name, at = now()) => { const r = row(name); return Boolean(r?.cooldown_until && Date.parse(r.cooldown_until) > at); };
   // Достигнутая граница бюджета убирает всех провайдеров разом: вопрос остаётся в очереди,
   // существующий обработчик честно подтверждает приём и не выдаёт подтверждение за ответ.
-  const available = (at = now()) => (budget.stopped(at) ? [] : providers.filter((p) => !cooling(p.name, at)));
+  /* Провайдер выбывает и по своему личному лимиту из кабинета, а не только по общей границе:
+     иначе кабинет показывал бы лимит, который ни на что не влияет. */
+  const ownLimitReached = (provider, at) => (provider.budgetMicroUsd
+    ? budget.providerState(provider.name, provider.budgetMicroUsd, at).stopped : false);
+  const available = (at = now()) => (budget.stopped(at)
+    ? [] : providers.filter((p) => !cooling(p.name, at) && !ownLimitReached(p, at)));
   const nextAvailableAt = (at = now()) => {
     const times = providers.map((p) => Date.parse(row(p.name)?.cooldown_until || '') || at).filter((t) => t > at);
     return times.length ? Math.min(...times) : at;
@@ -82,7 +87,8 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
     // Деньги и слот резервируются ДО обращения: параллельные запросы не могут вместе
     // перескочить границу, а неизвестный расход не считается нулём.
     const probe = toChatBody(payload, provider.model, budget.config.maxOutputTokens);
-    const booking = budget.reserve(provider.name, { promptBytes: Buffer.byteLength(probe, 'utf8') });
+    const booking = budget.reserve(provider.name, { promptBytes: Buffer.byteLength(probe, 'utf8'),
+      limitMicroUsd: provider.budgetMicroUsd ?? null });
     if (!booking.allowed) return { budgetBlocked: true, reason: booking.reason };
     const body = toChatBody(payload, provider.model, booking.maxOutputTokens);
     let response;
@@ -160,7 +166,14 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
       const r = row(p.name) || {};
       return { name: p.name, model: p.model, cooling: cooling(p.name), cooldownUntil: r.cooldown_until || null, failures: r.failures || 0,
         lastError: r.last_error || '', lastAttemptAt: r.last_attempt_at || null, lastSuccessAt: r.last_success_at || null,
-        live: Boolean(r.last_success_at) };
+        live: Boolean(r.last_success_at),
+        // Расход и личный лимит видны в кабинете: цифра без границы и граница без цифры
+        // одинаково бесполезны.
+        ...(() => {
+          const own = budget.providerState(p.name, p.budgetMicroUsd ?? null);
+          return { spentUsd: own.spentUsd, spentRequests: own.requests,
+            ownLimitUsd: own.limitUsd, ownLimitReached: own.stopped };
+        })() };
     }) };
   }
   // Аренда серверного подхвата: сумма таймаутов провайдеров плюс запас — чтобы она не истекла посреди последовательных попыток.
