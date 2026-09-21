@@ -1401,12 +1401,18 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   const systemFor = (key) => `${personas.instruction(key)}\n\n${SYSTEM_COMMON}`;
 
   /* Один раз собранный и проверенный запрос: дальше он хранится и повторяется без изменений. */
-  async function buildPayload(job) {
+  /* Сборка запроса синхронная: локальный обработчик собирает её внутри транзакции,
+     а транзакция не умеет ждать сеть. Сведения Медиа-наставника поэтому читаются ЗАРАНЕЕ
+     (см. processAIJobs) и передаются сюда готовой строкой. Не передали — честно говорим
+     об этом в контексте, а не подсовываем пустоту, которую модель примет за «данных нет». */
+  function buildPayload(job, mediaText = null) {
     const personaKey = personas.PERSONAS[job.persona] ? job.persona : personas.DEFAULT_PERSONA;
     const blocks = personas.contextKeys(personaKey);
     const context = aiContext(job.company_code, job.message_id);
     // Лишние сведения не кладутся: они стоят денег и размывают ответ.
-    const media = blocks.includes('brief') ? await mediaContext(job.company_code) : '';
+    const media = blocks.includes('brief')
+      ? (mediaText || 'Сведения Медиа-наставника этому обработчику не переданы: бриф и план не читай, скажи, что их нет под рукой.')
+      : '';
     const source = db.prepare('SELECT text FROM project_chat_messages WHERE id=?').get(job.message_id);
     const idea = hughCommands.parseCommand(source?.text || '', botUsername)?.name === 'idea';
     /* Навык подбирается по типу задания и попадает в системную часть ДО обращения к модели.
@@ -1586,7 +1592,11 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
         try {
           // Payload собирается и проверяется только при первой отправке и дальше повторяется дословно:
           // правка задач или сообщений между попытками не должна менять уже отправленный запрос.
-          payload = job.payload || await buildPayload(job);
+          // Сеть — до сборки: сама сборка синхронная и общая с локальным обработчиком.
+          const mediaText = !job.payload
+            && personas.contextKeys(personas.PERSONAS[job.persona] ? job.persona : personas.DEFAULT_PERSONA).includes('brief')
+            ? await mediaContext(job.company_code) : null;
+          payload = job.payload || buildPayload(job, mediaText);
         } catch (error) {
           db.prepare(`UPDATE project_chat_ai_jobs SET status='error',attempts=?,error=?,next_attempt_at=? WHERE id=? AND reply_message_id IS NULL`)
             .run(AI_ATTEMPTS, shortText(error.message || 'Не удалось собрать запрос к Хью', 200), stamp(), job.id);
