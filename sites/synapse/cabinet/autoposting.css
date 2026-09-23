@@ -1,5 +1,8 @@
 .autoposting-view { min-width:0; font-size:16px; line-height:1.55; }
 .autoposting-view [hidden] { display:none !important; }
+#autoposting-status:empty { display:none; }
+.autoposting-calendar-section { margin-top:12px; }
+.autoposting-workspace-tools > summary { cursor:pointer; min-height:48px; padding:12px 0; font-weight:600; }
 .autoposting-daily-tabs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
 .autoposting-daily-tabs button[aria-pressed=true] { border-color:var(--accent,#9fd4ff); background:var(--surface-soft,#181513); outline:1px solid var(--accent,#9fd4ff); }
 .autoposting-view .autoposting-daily-filter { max-width:440px; }

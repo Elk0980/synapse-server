@@ -3,7 +3,7 @@ const {JSDOM}=require('jsdom');
 const scripts=['company-information.js','autoposting.js'].map(file=>fs.readFileSync(require.resolve('./'+file),'utf8'));
 const clone=value=>JSON.parse(JSON.stringify(value));
 const row=(id,extra={})=>({id,companyCode:'alpha',revision:4,contentRevision:3,status:'draft',title:'Материал '+id,text:'Проверенный текст',mediaUrls:['https://example.test/material.webp'],platformIds:['telegram'],scheduledAt:'2026-09-24T23:00:00Z',timezone:'Asia/Irkutsk',profileRevision:2,captions:{telegram:'Подпись'},deliveries:[],readiness:{ready:true,issues:[]},approval:{approved:false,stale:false},...extra});
-async function fixture({entries=[row(1)],role='owner',permissions=[],override,listIds}={}){
+async function fixture({entries=[row(1)],role='owner',permissions=[],override,listIds,coverage}={}){
   const dom=new JSDOM('<section id="view"></section>',{url:'https://fixture.test',runScripts:'outside-only'}),w=dom.window,d=w.document,views={},calls=[],posts=clone(entries);
   const NativeDate=w.Date;w.Date=class extends NativeDate{constructor(...args){super(...(args.length?args:['2026-09-24T23:30:00Z']));}static now(){return Date.parse('2026-09-24T23:30:00Z');}};
   w.SbCabinet={registerView:(name,view)=>{views[name]=view;}};scripts.forEach(source=>w.eval(source));
@@ -16,7 +16,7 @@ async function fixture({entries=[row(1)],role='owner',permissions=[],override,li
     if(path.endsWith('/calendar')){
       const from=parsed.searchParams.get('from'),to=parsed.searchParams.get('to');
       const items=posts.filter(item=>item.companyCode===code).map(item=>{const publishDate=item.scheduledAt?w.SbCabinet.companyTime.toLocal(item.scheduledAt,'Asia/Irkutsk').slice(0,10):null;return {...clone(item),publishDate,effectiveDate:publishDate||item.plannedDate||null,dateKind:publishDate?'schedule':item.plannedDate?'plan':null};});
-      return {companyCode:code,from,to,timezone:'Asia/Irkutsk',today:'2026-09-25',posts:items.filter(item=>item.effectiveDate>=from&&item.effectiveDate<=to),undated:items.filter(item=>!item.effectiveDate),truncated:false,undatedTruncated:false};
+      return {companyCode:code,from,to,timezone:'Asia/Irkutsk',today:'2026-09-25',posts:items.filter(item=>item.effectiveDate>=from&&item.effectiveDate<=to),undated:items.filter(item=>!item.effectiveDate),truncated:false,undatedTruncated:false,coverage};
     }
     if(path.endsWith('/posts'))return {companyCode:code,posts:clone(posts.filter(item=>item.companyCode===code&&(!listIds||listIds.includes(item.id))))};
     const match=path.match(/\/posts\/(\d+)(?:\/(approve))?$/);assert.ok(match,path);const item=posts.find(value=>value.id===Number(match[1])&&value.companyCode===code);assert.ok(item);
@@ -103,4 +103,19 @@ test('published cards show final status and empty today offers upcoming material
     const card=f.d.querySelector('[data-daily-post="1"]');assert.match(card.textContent,/Опубликовано/);assert.doesNotMatch(card.textContent,/Готово к проверке|Нужно подготовить/);
     f.set('autoposting-daily-platform','vk');assert.deepEqual(f.visibleIds(),[]);await f.click('[data-daily-upcoming]');assert.deepEqual(f.visibleIds(),['2']);assert.equal(f.views.autoposting.title,'Материалы');assert.ok(f.calls.every(call=>call.method==='GET'));
   }finally{f.close();}
+});
+test('daily view precedes folded company settings and approval controls appear only after selection',async()=>{
+  const f=await fixture();try{
+    const tools=f.d.querySelector('.autoposting-workspace-tools');assert.equal(tools.open,false);
+    assert.ok(f.node('autoposting-posts').compareDocumentPosition(tools)&f.w.Node.DOCUMENT_POSITION_FOLLOWING);
+    assert.equal(f.node('autoposting-batch').hidden,true);assert.equal(f.node('autoposting-status').textContent,'');
+    await f.click('[data-daily-approve="1"]');assert.equal(f.node('autoposting-batch').hidden,false);assert.match(f.node('autoposting-batch').textContent,/Публикация не запускается/);
+  }finally{f.close();}
+});
+test('only known current-plan gaps in the next three days create a preparation notice',async()=>{
+  for(const basis of ['current_plan','none']){const f=await fixture({entries:[],coverage:{basis,uncoveredDates:['2026-09-24','2026-09-25','2026-09-27','2026-09-28'],unknownDates:['2026-09-26']}});try{
+    const note=f.node('autoposting-plan-gaps');assert.equal(note.hidden,basis==='none');
+    if(basis==='current_plan'){assert.match(note.textContent,/подготовить публикацию к 2026-09-25, 2026-09-27/);assert.doesNotMatch(note.textContent,/2026-09-24|2026-09-26|2026-09-28|запас|напоминан/);}
+    assert.ok(f.calls.every(call=>call.method==='GET'));
+  }finally{f.close();}}
 });
