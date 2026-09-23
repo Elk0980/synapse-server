@@ -64,6 +64,16 @@ test('неизвестная площадка получает самый стр
   assert.ok(out.warnings.some((line) => line.includes('«max» не описана')));
 });
 
+test('YouTube Shorts из словаря плана использует существующие требования YouTube', () => {
+  const out = M.build({ days: [day({ platform: 'youtube_shorts', format: 'reel' })] }, BRIEF);
+  const legacy = one({ platform: 'youtube', format: 'reel' });
+  assert.equal(out.items[0].platformLabel, 'YouTube Shorts');
+  assert.equal(out.items[0].ratio, legacy.ratio);
+  assert.deepEqual(out.items[0].safe, legacy.safe);
+  assert.match(out.items[0].prompt, /Публикуется в YouTube Shorts/);
+  assert.equal(out.warnings.length, 0);
+});
+
 test('неподтверждённая зона помечается как неподтверждённая', () => {
   const out = M.build({ days: [day({ platform: 'vk', format: 'reel' })] }, BRIEF);
   assert.equal(out.items[0].safe.confirmed, false);

@@ -14,8 +14,15 @@
   const ANALYZE_PATH = '/content/media-mentor-analyze';
   const REVIEW_PATH = '/content/media-mentor-review';
   const isoDay = (shiftDays) => new Date(Date.now() + shiftDays * 86400000).toISOString().slice(0, 10);
+  const localToday = () => {const value = new Date(); return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;};
   const STATUS = {absent: 'План ещё не составлен', pending: 'Ждёт согласования',
     approved: 'Согласовано', rejected: 'Отклонено', needs_reapproval: 'Нужно пересогласовать'};
+  const CARD_STATUS = {plan: 'Только в плане', draft: 'Черновик', scheduled: 'Запланирован',
+    publishing: 'Отправляется', published: 'Опубликован', failed: 'Ошибка отправки',
+    needs_review: 'Нужна проверка', cancelled: 'Отменён', unknown: 'Статус неизвестен'};
+  const transferredDay = (data, index) => index >= 0 && data.transfer?.current?.planRevision === data.plan?.revision
+    ? data.transfer.current.items.find((row) => row.dayIndex === index) : null;
+  const dayStatus = (draft) => !draft ? 'plan' : Object.hasOwn(CARD_STATUS, draft.cardStatus) ? draft.cardStatus : 'unknown';
   const day = (value) => (/^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? String(value).split('-').reverse().join('.') : '—');
   const moment = (value) => (value && Number.isFinite(Date.parse(value))
     ? new Date(value).toLocaleDateString('ru-RU', {day: '2-digit', month: '2-digit', year: 'numeric'}) : '—');
@@ -269,7 +276,7 @@
         <div><dt>Боли клиента</dt><dd>${readOnlyList(fields.pains, (item) => `<li>${esc(item)}</li>`)}</dd></div>
         <div><dt>Что можем доказать клиенту</dt><dd>${readOnlyList(fields.confirmedFacts,
     (item) => `<li>${esc(item.statement)}<br><span class="mentor-note">Источник: ${esc(item.source)} · ${item.approvedForContent === true ? 'разрешён для контента' : 'только внутренняя справка'}</span></li>`)}</dd></div>
-        <div><dt>Исходники</dt><dd>${readOnlyList(fields.assets,
+        <div><dt>Что у вас уже есть · необязательно</dt><dd>${readOnlyList(fields.assets,
     (item) => `<li>${esc(item.title)} · ${esc(item.kind)}${item.note ? `<br><span class="mentor-note">${esc(item.note)}</span>` : ''}</li>`)}</dd></div>
         <div><dt>Комфорт съёмки</dt><dd>${esc(vocabulary.shootingComfort.find((level) => level.id === fields.shootingComfort.level)?.label || fields.shootingComfort.level)}${fields.shootingComfort.notes ? `<br><span class="mentor-note">${esc(fields.shootingComfort.notes)}</span>` : ''}</dd></div>
         <div><dt>Площадки</dt><dd>${fields.platforms.map((id) =>
@@ -285,10 +292,10 @@
         <p class="mentor-note">Для собственника это поле необязательно. Если есть цена с датой, кейс с разрешением, документ, отзыв или личный опыт — укажите источник. Для публикаций отметьте отдельное разрешение; старые и внутренние записи в модель не попадут.</p>
         <div data-rows-body>${fields.confirmedFacts.map((fact) => factRow(fact)).join('')}</div>
         <button class="plain-button" type="button" data-add="facts">Добавить факт</button></fieldset>
-      <fieldset class="wide mentor-rows" data-rows="assets"><legend>Исходники</legend>
-        <p class="mentor-note">Зачем: начнём с уже доступного материала и попросим снять только то, чего действительно не хватает. Материалы описываются словами: ссылок и загрузки файлов на этом этапе нет.</p>
+      <fieldset class="wide mentor-rows" data-rows="assets"><legend>Что у вас уже есть · необязательно</legend>
+        <p class="mentor-note">Например: «Фото кабинета на телефоне» или «Видео, как проходит работа». Это поможет команде использовать готовое и попросить только недостающее. Здесь достаточно описания словами — файлы не загружаются. Если ничего нет, пропустите.</p>
         <div data-rows-body>${fields.assets.map((asset) => assetRow(asset, vocabulary.assetKinds)).join('')}</div>
-        <button class="plain-button" type="button" data-add="assets">Добавить исходник</button></fieldset>
+        <button class="plain-button" type="button" data-add="assets">Добавить описание</button></fieldset>
       <label>Общий ориентир по съёмке<small class="mentor-note">До личного опроса каждого участника это лишь ориентир: двигаемся без давления и никого не ставим в кадр без согласия.</small><select name="comfortLevel">${options(vocabulary.shootingComfort, fields.shootingComfort.level)}</select></label>
       <label class="wide">Общие ограничения съёмки<small class="mentor-note">Личные предпочтения каждого участника команды уточняем отдельно.</small><textarea name="comfortNotes" rows="2" maxlength="2000">${esc(fields.shootingComfort.notes)}</textarea></label>
       <fieldset class="wide mentor-platforms"><legend>Площадки компании</legend>
@@ -331,41 +338,52 @@
     return '';
   }
 
-  function dayRow(item, data, index = -1) {
+  function dayRow(item, data, index = -1, edit = true) {
     const fields = data.brief.fields, vocabulary = data.vocabulary;
     const platforms = vocabulary.platforms.filter((platform) => fields.platforms.includes(platform.id));
-    const assets = [{id: '', label: 'Без исходника'}, ...fields.assets.map((asset) => ({id: asset.id, label: asset.title}))];
-    const draft = index >= 0 && data.transfer?.current?.planRevision === data.plan?.revision
-      ? data.transfer.current.items.find((row) => row.dayIndex === index) : null;
+    const assets = [{id: '', label: 'Ничего не выбрано'}, ...fields.assets.map((asset) => ({id: asset.id, label: asset.title}))];
+    const draft = transferredDay(data, index);
     const media = draft?.mediaUrls?.length ? localMediaPreview(draft.mediaUrls[0]) : '';
-    const cardStatus = {draft: 'черновик', scheduled: 'запланирован', publishing: 'отправляется',
-      published: 'опубликован', failed: 'ошибка отправки', needs_review: 'нужна проверка', cancelled: 'отменён'};
+    const status = dayStatus(draft);
+    const action = {plan: edit ? 'Проверьте тему и дату. Если есть идея получше, предложите правку.' : 'Посмотрите тему и дату в плане.',
+      draft: draft?.hasMedia ? 'Проверьте подготовленный материал в «Автопостинге».' : 'Подготовьте фото или видео по теме. Его можно добавить ниже, в «Черновиках и файлах».',
+      scheduled: 'Материал уже запланирован. Проверьте время выхода в «Автопостинге».',
+      publishing: 'Идёт отправка. Проверьте результат в «Автопостинге».',
+      published: 'Материал опубликован. Результаты можно посмотреть в статистике.',
+      failed: 'Откройте «Автопостинг» и проверьте причину ошибки отправки.',
+      needs_review: 'Откройте карточку в «Автопостинге» и проверьте результат отправки.',
+      cancelled: 'Отправка отменена. Решите, нужен ли этот материал в плане.',
+      unknown: 'Уточните состояние карточки в «Автопостинге».'}[status];
     const feedback = index < 0 ? [] : (data.feedback || []).filter((entry) => entry.dayIndex === index);
     const platformLabel = platforms.find((row) => row.id === item.platform)?.label || item.platform || 'Площадка';
     const formatLabel = vocabulary.formats.find((row) => row.id === item.format)?.label || item.format || 'Формат';
-    return `<div class="mentor-row mentor-day" data-row>
+    return `<article class="mentor-row mentor-day" data-row data-day-index="${index}"
+      ${index >= 0 ? `data-source-order="${index}"` : ''} data-plan-date="${esc(item.date)}" data-plan-platform="${esc(item.platform)}" data-card-status="${status}">
+      <div class="mentor-day-overview">
       <div class="mentor-day-preview" data-preview-format="${esc(item.format)}" aria-label="Макет публикации">
-        <div class="mentor-day-preview-head"><strong data-preview-platform>${esc(platformLabel)}</strong>
-          <span data-preview-date>${item.date ? esc(day(item.date)) : 'Дата не выбрана'}</span></div>
-        <div class="mentor-day-preview-media">${media || '<span class="mentor-day-play" aria-hidden="true">▶</span><span>Здесь появится загруженный материал</span>'}</div>
-        <div class="mentor-day-preview-caption"><small data-preview-format-label>${esc(formatLabel)}</small>
-          <strong data-preview-topic>${esc(item.topic) || 'Тема публикации'}</strong>
-          <span data-preview-hook>${esc(item.hook) || 'Зацепка для зрителя'}</span></div>
+        <div class="mentor-day-preview-media">${media || '<span class="mentor-day-play" aria-hidden="true">▷</span><span>Медиа пока нет</span>'}</div>
       </div>
-      <div class="mentor-day-edit">
-        <div class="mentor-day-status"><strong>Материал ${index >= 0 ? index + 1 : 'новый'}</strong>
-          <span>${draft ? `Карточка №${esc(draft.postId)} · ${esc(cardStatus[draft.cardStatus] || draft.cardStatus || 'статус неизвестен')} · ${draft.hasMedia ? 'медиа загружено' : 'без медиа'}` : 'Пока только в плане'}</span></div>
+      <div class="mentor-day-summary">
+        <p class="mentor-day-meta"><time data-preview-date>${item.date ? esc(day(item.date)) : 'Дата не выбрана'}</time> ·
+          <span data-preview-platform>${esc(platformLabel)}</span> · <span data-preview-format-label>${esc(formatLabel)}</span></p>
+        <h3 data-preview-topic>${esc(item.topic) || 'Новый материал'}</h3>
+        <p class="mentor-day-status"><span>${draft ? `Карточка №${esc(draft.postId)} · ${esc(CARD_STATUS[status].toLowerCase())} · ${draft.hasMedia ? 'медиа загружено' : 'без медиа'}` : 'Пока только в плане'}</span></p>
+        <p class="mentor-day-action"><strong>Что сделать:</strong> ${esc(action)}</p>
+        ${edit && draft?.cardStatus === 'draft' && !draft.hasMedia ? `<button type="button" class="plain-button" data-material-target="${esc(draft.postId)}">Добавить файл</button>` : ''}
+      </div></div>
+      <details class="mentor-day-details"${index < 0 ? ' open' : ''}><summary>${edit ? 'Подробности и правки' : 'Подробности материала'}${feedback.length ? ` · предложений: ${feedback.length}` : ''}</summary>
+      ${edit ? `<div class="mentor-day-edit">
         ${draft ? '<p class="mentor-note">Дата и тема здесь относятся к плану. Уже созданную карточку и время выхода изменяйте в разделе «Автопостинг».</p>' : ''}
-        <label>Дата выхода<input data-field="date" type="date" required value="${esc(item.date)}"></label>
         <div class="mentor-day-selects">
+          <label>Дата в плане<input data-field="date" type="date" required value="${esc(item.date)}"></label>
           <label>Площадка<select data-field="platform">${options(platforms, item.platform)}</select></label>
           <label>Формат<select data-field="format">${options(vocabulary.formats, item.format)}</select></label>
           <label>Задача материала<select data-field="role">${options(vocabulary.roles, item.role)}</select></label>
         </div>
         <label>Тема<input data-field="topic" maxlength="300" required value="${esc(item.topic)}"></label>
-        <details class="mentor-day-more"><summary>Зацепка, исходник и задание</summary>
+        <details class="mentor-day-more"><summary>Для команды · зацепка и задание</summary>
           <label>Зацепка<input data-field="hook" maxlength="500" value="${esc(item.hook)}"></label>
-          <label>Исходник<select data-field="assetId">${options(assets, item.assetId)}</select></label>
+          <label>Что уже есть для материала<select data-field="assetId">${options(assets, item.assetId)}</select></label>
           <label>Заметка наставника<textarea data-field="mentorNote" rows="2" maxlength="2000">${esc(item.mentorNote)}</textarea></label>
         </details>
         ${index >= 0 ? `<div class="mentor-day-feedback">
@@ -378,7 +396,26 @@
           <span data-feedback-state="${index}" role="status"></span>
         </div>` : '<p class="mentor-note">Сначала сохраните материал, затем можно оставить предложение по нему.</p>'}
         <button class="plain-button" type="button" data-remove>Убрать материал</button>
-      </div></div>`;
+      </div>` : `<dl class="mentor-brief-view"><div><dt>Задача материала</dt><dd>${esc(vocabulary.roles.find((role) => role.id === item.role)?.label || item.role)}</dd></div>
+        ${item.hook ? `<div><dt>Зацепка</dt><dd>${esc(item.hook)}</dd></div>` : ''}
+        <div><dt>Что уже есть</dt><dd>${esc(assets.find((asset) => asset.id === item.assetId)?.label || 'Не указано')}</dd></div>
+        ${item.mentorNote ? `<div><dt>Задание</dt><dd>${esc(item.mentorNote)}</dd></div>` : ''}</dl>`}</details></article>`;
+  }
+
+  function planFilters(data) {
+    const states = [...new Set((data.plan?.days || []).map((unused, index) => dayStatus(transferredDay(data, index))))];
+    if (!states.includes('plan')) states.unshift('plan');
+    return `<div class="mentor-plan-filters" role="group" aria-label="Фильтры материалов">
+      <label>Площадка<select data-plan-filter="platform"><option value="">Все площадки</option>${options(data.vocabulary.platforms, '')}</select></label>
+      <label>Порядок<select data-plan-filter="order"><option value="nearest">Ближайшие сначала</option><option value="asc">Ранние даты сначала</option><option value="desc">Поздние даты сначала</option></select></label>
+      <details class="mentor-extra-filters"><summary data-plan-extra-summary>Ещё фильтры</summary><div>
+        <label>С даты<input type="date" data-plan-filter="from"></label>
+        <label>По дату<input type="date" data-plan-filter="to"></label>
+        <label>Состояние<select data-plan-filter="status"><option value="">Все состояния</option>${states.map((status) => `<option value="${status}">${CARD_STATUS[status]}</option>`).join('')}</select></label>
+        <p class="mentor-note">Для одного дня выберите одинаковые даты.</p></div></details>
+      <button type="button" class="plain-button" data-plan-reset hidden>Сбросить фильтры</button>
+    </div><p class="mentor-note" data-plan-filter-state role="status"></p>
+      <p class="mentor-filter-empty" data-plan-filter-empty hidden>По этим условиям материалов нет. Сбросьте фильтры или выберите другие даты.</p>`;
   }
 
   /* Проверка плана по механическим правилам курса. Считает отдельный модуль без модели
@@ -409,26 +446,24 @@
 
   function planMarkup(data, edit) {
     const plan = data.plan, vocabulary = data.vocabulary;
-    const label = (list, id) => esc(list.find((item) => item.id === id)?.label || id);
     const version = plan ? `<p class="mentor-note">Версия ${esc(plan.revision)} по брифу ${esc(plan.briefRevision)} ·
         ${esc(day(plan.startDate))} — ${esc(day(plan.endDate))} · ${esc(plan.windowDays)} дней · обновлён ${esc(moment(plan.updatedAt))}</p>` : '';
-    const view = plan ? `${version}
-      <ol class="mentor-plan-list">${plan.days.map((item) => `<li><strong>${esc(day(item.date))}</strong> ·
-        ${label(vocabulary.platforms, item.platform)} · ${label(vocabulary.formats, item.format)} ·
-        ${label(vocabulary.roles, item.role)}<br>${esc(item.topic)}${item.hook ? `<br><span class="mentor-note">${esc(item.hook)}</span>` : ''}${item.mentorNote ? `<br><span class="mentor-note">${esc(item.mentorNote)}</span>` : ''}</li>`).join('')}</ol>`
+    const view = plan ? `${planFilters(data)}<div class="mentor-day-cards" data-plan-feed>${plan.days.map((item, index) => dayRow(item, data, index, false)).join('')}</div>`
       : '<p class="mentor-note">План ещё не составлен.</p>';
     const stale = plan && plan.briefRevision !== data.brief.revision
       ? `<p class="mentor-warning" role="note">Бриф сохранён как версия ${esc(data.brief.revision)}. Этот план остался по версии ${esc(plan.briefRevision)} и сам не перестроился. Проверьте материалы, сохраните новую версию плана и согласуйте её заново.</p>` : '';
-    const checked = plan ? `${edit ? version : view}${stale}${rulesMarkup(plan)}` : view;
-    if (!edit) return checked;
+    const rules = rulesMarkup(plan);
+    const technical = plan ? `<details class="mentor-team"${rules.includes('data-rules-list') ? ' open' : ''}><summary>Для команды · версия и проверка расписания${rules.includes('data-rules-list') ? ' · есть замечания' : ''}</summary>${version}${rules}</details>` : '';
+    const checked = `${stale}${plan ? '' : view}`;
+    if (!edit) return `${stale}${view}${technical}`;
     if (!data.brief.revision) {
-      return `${checked}<p class="mentor-note">Сначала сохраните бриф компании — план составляется по нему.</p>`;
+      return `${checked}${plan ? view : ''}<p class="mentor-note">Сначала сохраните бриф компании — план составляется по нему.</p>${technical}`;
     }
     if (!data.brief.fields.platforms.length) {
-      return `${checked}<p class="mentor-note">Выберите площадки в брифе: без них план составить нельзя.</p>`;
+      return `${checked}${plan ? view : ''}<p class="mentor-note">Выберите площадки в брифе: без них план составить нельзя.</p>${technical}`;
     }
-    return `${checked}
-    <section class="mentor-suggest wide" data-suggest>
+    const suggestion = `<details class="mentor-suggest-tools"${plan ? '' : ' open'}><summary>${plan ? 'Предложить другой план с помощью Хью' : 'Помочь составить первый план'}</summary>
+      <section class="mentor-suggest wide" data-suggest>
       <h3>Подсказка плана</h3>
       <p class="mentor-note">Модель предложит позиции по брифу. Ничего не сохранится и не уйдёт
         на согласование: предложение нужно подставить в форму и проверить самому.</p>
@@ -439,16 +474,18 @@
       <button class="plain-button" type="button" data-suggest-run>Предложить план</button>
       <span data-suggest-state role="status"></span>
       <div data-suggest-result></div>
-    </section>
-<form id="mentor-plan-form" class="crm-form mentor-form">
+    </section></details>`;
+    return `${checked}${planFilters(data)}<form id="mentor-plan-form" class="crm-form mentor-form">
       <input type="hidden" name="planRevision" value="${esc(plan ? plan.revision : 0)}">
       <input type="hidden" name="briefRevision" value="${esc(data.brief.revision)}">
-      <p class="mentor-note">План охватывает от ${esc(vocabulary.minDays)} до ${esc(vocabulary.maxDays)} дней подряд,
-        не больше трёх материалов на дату. Дни идут по возрастанию даты. Карточка показывает макет, а не готовую публикацию.</p>
-      <div class="mentor-rows mentor-plan-editor wide" data-rows="days"><div class="mentor-day-cards" data-rows-body>${(plan ? plan.days : []).map((item, index) => dayRow(item, data, index)).join('')}</div>
+      <div class="mentor-rows mentor-plan-editor wide" data-rows="days"><div class="mentor-day-cards" data-rows-body data-plan-feed>${(plan ? plan.days : []).map((item, index) => dayRow(item, data, index)).join('')}</div>
         <button class="plain-button" type="button" data-add="days">Добавить материал</button></div>
       <div class="crm-actions wide"><button class="plain-button" type="submit">Сохранить план</button>
-        <span id="mentor-plan-state" role="status"></span></div></form>`;
+        <span id="mentor-plan-state" role="status"></span></div></form>
+      <p class="mentor-note">Сохраняется весь план, включая материалы за пределами фильтров. Сохранение не запускает публикации.</p>
+      ${suggestion}${technical}<details class="mentor-team"><summary>Для команды · требования к плану</summary>
+        <p class="mentor-note">План охватывает от ${esc(vocabulary.minDays)} до ${esc(vocabulary.maxDays)} дней подряд,
+        не больше трёх материалов на дату. Фильтры меняют только отображение. Карточка показывает макет, а не готовую публикацию.</p></details>`;
   }
 
   function approvalMarkup(data, ctx) {
@@ -508,10 +545,12 @@
         <button class="plain-button" type="button" data-brief-context="${esc(item.postId)}">Показать бриф этой версии</button>
         <div data-brief-context-body="${esc(item.postId)}"></div></details></li>`).join('')}</ul>` : '';
     return `<section class="card mentor-transfer" data-can="${state.canTransfer ? 'yes' : 'no'}">
-      <h2>Перенос в черновики автопостинга</h2>
+      <h2>Черновики и файлы</h2>
       <p class="mentor-note">${esc(state.notice)}</p>
+      <details class="mentor-team"><summary>Для команды · перенос и ограничения</summary>
       <p class="mentor-note">Остаются незаполненными: ${state.leavesUnfilled.map((item) => esc(item)).join(' · ')}.</p>
       <p class="mentor-note">${esc(state.repeatProtection)}: повтор по той же версии вернёт те же черновики.</p>
+      </details>
       ${state.current ? `<p class="mentor-note">${esc(state.materialNotice)} Без файла ждут заданий: ${esc(state.awaitingMaterial)}.</p>` : ''}
       ${state.newVersionNotice ? `<p class="mentor-warning" role="note">${esc(state.newVersionNotice)}</p>` : ''}
       ${done}
@@ -532,15 +571,18 @@
   function materialsMarkup(data) {
     const builder = sb.mediaMentorMaterials;
     if (!builder || !data.plan) return '';
-    const request = builder.build(data.plan, data.brief.fields);
+    // У текущей версии уже может быть загружен файл, даже если описание в брифе
+    // не выбрано. Убираем повторную просьбу только из списка задач, сам план не меняем.
+    const preparationPlan = {...data.plan, days: data.plan.days.map((item, index) =>
+      transferredDay(data, index)?.hasMedia ? {...item, assetId: item.assetId || 'uploaded-material'} : item)};
+    const request = builder.build(preparationPlan, data.brief.fields);
     if (!request.items.length && !request.skipped.length) return '';
-    const label = (list, id) => esc(list.find((item) => item.id === id)?.label || id);
     const rows = request.items.map((item, index) => `<li>
-      <strong>${esc(day(item.date))}</strong> · ${esc(item.platformLabel)} ·
-      ${esc(item.formatLabel)} · ${item.kind === 'video' ? 'видео' : 'картинка'} ${esc(item.ratio)},
-      не ниже ${esc(item.master)}<br>${esc(item.topic)}
-      ${item.safeZone ? `<br><span class="mentor-note">${esc(item.safeZone)}</span>` : ''}
-      <details><summary>Промт и как сделать</summary>
+      <div class="mentor-material-task"><strong>${esc(item.topic)}</strong><span>${esc(day(item.date))} · ${esc(item.platformLabel)} · ${esc(item.formatLabel)}</span>
+        <p>${item.kind === 'video' ? 'Подготовьте короткое видео по этой теме.' : 'Подберите или сделайте изображение по этой теме.'}</p></div>
+      <details class="mentor-team"><summary>Для команды · требования и промпт</summary>
+        <p>${item.kind === 'video' ? 'Видео' : 'Картинка'} ${esc(item.ratio)}, не ниже ${esc(item.master)}</p>
+        ${item.safeZone ? `<p class="mentor-note">${esc(item.safeZone)}</p>` : ''}
         <textarea class="mentor-prompt" rows="5" readonly data-prompt="${index}">${esc(item.prompt)}</textarea>
         <button class="plain-button" type="button" data-prompt-copy="${index}">Скопировать промт</button>
         <span data-prompt-state="${index}" role="status"></span>
@@ -548,21 +590,21 @@
         <p class="mentor-note">${esc(item.upscaleNote)}</p>
         <p class="mentor-note">Имя файла по стандарту: ${esc(item.fileName)}</p>
       </details></li>`).join('');
-    return `<section class="card mentor-materials"><h2>Заявка на материалы</h2>
-      <p class="mentor-note">${esc(request.notice)}</p>
-      ${request.batchNote ? `<p class="crm-warning" role="note">${esc(request.batchNote)}</p>` : ''}
+    return `<section class="card mentor-materials"><h2>Что подготовить</h2>
+      <p>Посмотрите темы и даты ниже. Подготовьте подходящее фото или видео сами либо передайте список человеку, который поможет.</p>
+      <p class="mentor-note">Это список задач, файлы автоматически не создаются. Готовый файл можно добавить в «Черновиках и файлах», когда для материала создан черновик.</p>
       ${request.warnings.length ? `<ul class="mentor-list crm-warning" role="note">${request.warnings.map((line) =>
     `<li>${esc(line)}</li>`).join('')}</ul>` : ''}
       ${rows ? `<ol class="mentor-plan-list">${rows}</ol>` : ''}
-      ${request.skipped.length ? `<details class="mentor-note"><summary>Пропущено: ${request.skipped.length}</summary>
-        <ul class="mentor-list">${request.skipped.map((line) => `<li>${esc(line)}</li>`).join('')}</ul></details>` : ''}</section>`;
+      ${request.skipped.length ? `<details class="mentor-note"><summary>Не включено в список: ${request.skipped.length}</summary>
+        <ul class="mentor-list">${request.skipped.map((line) => `<li>${esc(line)}</li>`).join('')}</ul></details>` : ''}
+      <details class="mentor-team"><summary>Для команды · как подготовить материалы</summary>
+        <p class="mentor-note">${esc(request.notice)}</p>${request.batchNote ? `<p class="mentor-note">${esc(request.batchNote)}</p>` : ''}</details></section>`;
   }
 
   function markup(data, ctx) {
     const edit = canEdit(ctx);
-    return `${journeyMarkup(data)}
-      ${propertyExampleMarkup(ctx)}
-      <section class="card mentor-brief"><h2>Бриф компании</h2>
+    return `<details class="card mentor-brief"${!data.brief.revision || !data.brief.fields.platforms.length ? ' open' : ''}><summary>О компании · бриф${data.brief.revision ? ' · сохранён' : ' · начните здесь'}</summary>
         <p class="mentor-note">Версия ${esc(data.brief.revision)}${data.brief.updatedAt ? ` · обновлён ${esc(moment(data.brief.updatedAt))}` : ''}.
           ${edit ? 'План составьте сами или возьмите подсказку модели и проверьте её.' : 'У вас только просмотр.'}</p>
         ${briefMarkup(data, edit)}
@@ -575,14 +617,15 @@
           <div data-analyze-result></div></section>` : ''}
         ${data.brief.history.length ? `<details><summary>История брифа (${esc(data.brief.history.length)})</summary>
           <ol class="mentor-history">${data.brief.history.map((item) => `<li>Версия ${esc(item.revision)} · ${esc(moment(item.createdAt))} ·
-            ${esc(item.actorName || '—')}${item.reason ? `<br>${esc(item.reason)}` : ''}</li>`).join('')}</ol></details>` : ''}</section>
+            ${esc(item.actorName || '—')}${item.reason ? `<br>${esc(item.reason)}` : ''}</li>`).join('')}</ol></details>` : ''}</details>
       <section class="card mentor-plan"><h2>Контент-план</h2>
+        <p class="mentor-note">Выберите материал по дате. ${edit ? 'Для изменений или предложения откройте «Подробности и правки».' : 'Задание и пояснения — в «Подробностях материала».'}</p>
         ${planMarkup(data, edit)}
         ${data.plan && data.plan.history.length ? `<details><summary>История плана (${esc(data.plan.history.length)})</summary>
           <ol class="mentor-history">${data.plan.history.map((item) => `<li>Версия ${esc(item.revision)} по брифу ${esc(item.briefRevision)} ·
             ${esc(moment(item.createdAt))} · ${esc(item.actorName || '—')}</li>`).join('')}</ol></details>` : ''}</section>
-      ${edit ? materialsMarkup(data) : ''}
-      ${edit ? `<section class="card mentor-review"><h2>Разбор результатов</h2>
+      ${approvalMarkup(data, ctx)}${edit ? materialsMarkup(data) : ''}${transferMarkup(data, ctx)}
+      ${edit ? `<details class="card mentor-review"><summary>Разбор результатов · что улучшить</summary>
         <section class="mentor-suggest" data-review>
           <p class="mentor-note">Модель посмотрит собранные цифры и предложит, что изменить в плане.
             Площадки, по которым статистика не собирается, в разбор не попадают: отсутствие данных —
@@ -591,8 +634,9 @@
           <label>По<input data-review-to type="date" value="${esc(isoDay(0))}"></label>
           <button class="plain-button" type="button" data-review-run>Разобрать результаты</button>
           <span data-review-state role="status"></span>
-          <div data-review-result></div></section></section>` : ''}
-      ${approvalMarkup(data, ctx)}${transferMarkup(data, ctx)}`;
+          <div data-review-result></div></section></details>` : ''}
+      <details class="mentor-team mentor-methods"><summary>Как контент приводит к обращению · схема</summary>
+        ${journeyMarkup(data)}${propertyExampleMarkup(ctx)}</details>`;
   }
 
   const rowValues = (row) => Object.fromEntries([...row.querySelectorAll('[data-field]')]
@@ -621,7 +665,10 @@
       shootingComfort: {level: form.elements.comfortLevel.value, notes: form.elements.comfortNotes.value.trim()},
       platforms: [...form.querySelectorAll('input[name="platform"]:checked')].map((box) => box.value)};
   }
-  const collectDays = (form) => [...form.querySelectorAll('[data-rows="days"] [data-row]')].map(rowValues)
+  // Порядок на экране меняется независимо от исходных индексов версии плана.
+  // Скрытые фильтрами строки тоже отправляются; dayIndex обратной связи не перенумеровывается.
+  const collectDays = (form) => [...form.querySelectorAll('[data-rows="days"] [data-row]')]
+    .sort((a, b) => Number(a.dataset.sourceOrder) - Number(b.dataset.sourceOrder)).map(rowValues)
     .map((row) => ({date: row.date, platform: row.platform, format: row.format, role: row.role,
       topic: row.topic, hook: row.hook, assetId: row.assetId, mentorNote: row.mentorNote}));
 
@@ -629,6 +676,55 @@
     const code = ctx.selectedProjectId;
     const busy = (form, state) => form.querySelectorAll('button,input,select,textarea')
       .forEach((element) => { element.disabled = state; });
+    const feed = node.querySelector('[data-plan-feed]');
+    const filter = (name) => node.querySelector(`[data-plan-filter="${name}"]`);
+    let nextSourceOrder = data.plan?.days.length || 0;
+    const openParents = (element) => {
+      for (let parent = element?.parentElement; parent && parent !== node; parent = parent.parentElement) {
+        if (parent.tagName === 'DETAILS') parent.open = true;
+      }
+    };
+    const applyPlanView = () => {
+      if (!feed) return;
+      const rows = [...feed.children];
+      rows.forEach((row) => {if (!row.hasAttribute('data-source-order')) row.dataset.sourceOrder = String(nextSourceOrder++);});
+      const from = filter('from').value, to = filter('to').value;
+      const invalidRange = from && to && from > to;
+      const platform = filter('platform').value, status = filter('status').value, order = filter('order').value;
+      const today = localToday();
+      const sortDate = (a, b) => {
+        const left = a.dataset.planDate, right = b.dataset.planDate;
+        if (!left || !right) return !left === !right ? 0 : !left ? 1 : -1;
+        if (order === 'nearest') {
+          const leftPast = left < today, rightPast = right < today;
+          if (leftPast !== rightPast) return leftPast ? 1 : -1;
+          return leftPast ? right.localeCompare(left) : left.localeCompare(right);
+        }
+        return order === 'desc' ? right.localeCompare(left) : left.localeCompare(right);
+      };
+      rows.sort((a, b) => sortDate(a, b) || Number(a.dataset.sourceOrder) - Number(b.dataset.sourceOrder));
+      rows.forEach((row) => {
+        const date = row.dataset.planDate;
+        row.hidden = Boolean(invalidRange || (platform && row.dataset.planPlatform !== platform) ||
+          (status && row.dataset.cardStatus !== status) || (from && (!date || date < from)) || (to && (!date || date > to)));
+        feed.append(row); // Перемещаем тот же узел: введённые поля, раскрытия и feedback не теряются.
+      });
+      const visible = rows.filter((row) => !row.hidden).length;
+      node.querySelector('[data-plan-filter-state]').textContent = invalidRange
+        ? 'Дата начала позже даты окончания. Исправьте диапазон или сбросьте фильтры.'
+        : `Показано ${visible} из ${rows.length} материалов${from && from === to ? ` · ${day(from)}` : ''}.`;
+      node.querySelector('[data-plan-filter-empty]').hidden = visible > 0 || rows.length === 0 || Boolean(invalidRange);
+      node.querySelector('[data-plan-reset]').hidden = !(platform || from || to || status || order !== 'nearest');
+      const extraCount = Number(Boolean(from || to)) + Number(Boolean(status));
+      node.querySelector('[data-plan-extra-summary]').textContent = `Ещё фильтры${extraCount ? ` · выбрано ${extraCount}` : ''}`;
+    };
+    const resetFilters = () => {
+      node.querySelectorAll('[data-plan-filter]').forEach((field) => {field.value = field.dataset.planFilter === 'order' ? 'nearest' : '';});
+      applyPlanView();
+    };
+    node.querySelectorAll('[data-plan-filter]').forEach((field) => field.addEventListener('change', applyPlanView));
+    node.querySelector('[data-plan-reset]')?.addEventListener('click', resetFilters);
+    applyPlanView();
     const syncDayPreview = (row) => {
       if (!row?.classList.contains('mentor-day')) return;
       const field = (name) => row.querySelector(`[data-field="${name}"]`);
@@ -638,16 +734,28 @@
       row.querySelector('[data-preview-format-label]').textContent = field('format').selectedOptions[0]?.textContent || 'Формат';
       row.querySelector('[data-preview-date]').textContent = field('date').value ? day(field('date').value) : 'Дата не выбрана';
       row.querySelector('[data-preview-topic]').textContent = field('topic').value.trim() || 'Тема публикации';
-      row.querySelector('[data-preview-hook]').textContent = field('hook').value.trim() || 'Зацепка для зрителя';
+      row.dataset.planDate = field('date').value;
+      row.dataset.planPlatform = field('platform').value;
     };
     const dayRows = node.querySelector('[data-rows="days"]');
     for (const type of ['input', 'change']) dayRows?.addEventListener(type, (event) => {
-      if (event.target.matches('[data-field]')) syncDayPreview(event.target.closest('[data-row]'));
+      if (event.target.matches('[data-field]')) {
+        syncDayPreview(event.target.closest('[data-row]'));
+        if (type === 'change' && ['date', 'platform'].includes(event.target.dataset.field)) applyPlanView();
+      }
     });
     node.querySelectorAll('[data-journey-target]').forEach((button) => button.addEventListener('click', () => {
       const target = node.ownerDocument.getElementById(button.dataset.journeyTarget);
       if (target?.tagName === 'DETAILS') target.open = true;
+      openParents(target);
       target?.scrollIntoView?.({block: 'start'});
+    }));
+    node.querySelectorAll('[data-material-target]').forEach((button) => button.addEventListener('click', () => {
+      const target = node.querySelector(`[data-material-file="${button.dataset.materialTarget}"]`);
+      if (!target) return;
+      openParents(target);
+      target.scrollIntoView?.({block: 'center'});
+      target.focus();
     }));
     node.querySelectorAll('[data-add]').forEach((button) => button.addEventListener('click', () => {
       const kind = button.dataset.add, body = button.closest('[data-rows]').querySelector('[data-rows-body]');
@@ -656,12 +764,15 @@
           : dayRow({date: '', platform: data.brief.fields.platforms[0] || '', format: 'post', role: 'reach',
             topic: '', hook: '', assetId: '', mentorNote: ''}, data);
       body.insertAdjacentHTML('beforeend', markupFor);
-      body.lastElementChild.querySelector('[data-remove]')
-        .addEventListener('click', (event) => event.target.closest('[data-row]').remove());
-      syncDayPreview(body.lastElementChild);
+      const added = body.lastElementChild;
+      added.querySelector('[data-remove]').addEventListener('click', (event) => {
+        event.target.closest('[data-row]').remove(); applyPlanView();
+      });
+      syncDayPreview(added);
+      if (kind === 'days') {resetFilters(); added.querySelector('[data-field="date"]').focus();}
     }));
     node.querySelectorAll('[data-remove]').forEach((button) => button.addEventListener('click',
-      (event) => event.target.closest('[data-row]').remove()));
+      (event) => {event.target.closest('[data-row]').remove(); applyPlanView();}));
     node.querySelectorAll('[data-feedback-send]').forEach((button) => button.addEventListener('click', async () => {
       const index = Number(button.dataset.feedbackSend), state = node.querySelector(`[data-feedback-state="${index}"]`);
       const input = node.querySelector(`[data-feedback-input="${index}"]`), message = input?.value.trim() || '';
@@ -711,6 +822,14 @@
       void submit(form, '#mentor-brief-state', `${PATH}/brief`, 'PUT',
         {revision: Number(form.elements.revision.value), brief: collectBrief(form)});
     });
+    // Браузер проверяет поля до submit: сначала показываем скрытую карточку,
+    // чтобы он мог сфокусировать поле. Незавершённый материал не удаляется.
+    node.querySelector('#mentor-plan-form')?.addEventListener('invalid', (event) => {
+      if (!event.target.closest('.mentor-day')) return;
+      resetFilters();
+      openParents(event.target);
+      node.querySelector('#mentor-plan-state').textContent = 'Заполните выделенное поле материала. Все строки плана сохранены в форме; фильтры сброшены.';
+    }, true);
     node.querySelector('#mentor-plan-form')?.addEventListener('submit', (event) => {
       event.preventDefault();
       const form = event.currentTarget;
@@ -892,7 +1011,8 @@
           const body = node.querySelector('[data-rows="days"] [data-rows-body]');
           body.innerHTML = suggested.map((item) => dayRow(item, data)).join('');
           body.querySelectorAll('[data-remove]').forEach((remove) => remove.addEventListener('click',
-            (removeEvent) => removeEvent.target.closest('[data-row]').remove()));
+            (removeEvent) => {removeEvent.target.closest('[data-row]').remove(); applyPlanView();}));
+          resetFilters();
           state.textContent = 'Позиции подставлены. Проверьте их и нажмите «Сохранить план».';
         });
       } catch (error) {

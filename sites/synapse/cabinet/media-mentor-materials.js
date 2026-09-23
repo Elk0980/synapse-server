@@ -103,14 +103,15 @@
   function requirement(day) {
     const label = FORMAT_LABELS[day.format];
     if (!label) return null;
-    const platform = PLATFORMS[day.platform];
+    // The plan vocabulary uses youtube_shorts; keep legacy youtube plans compatible.
+    const platform = PLATFORMS[day.platform === 'youtube_shorts' ? 'youtube' : day.platform];
     const rule = platform ? platform[day.format] : null;
     if (!rule) {
       return {label, kind: VIDEO, ...VERTICAL, safe: SAFE_UNIVERSAL,
         platformLabel: day.platform, platformKnown: false};
     }
     return {label, kind: rule.kind, ...rule.geometry, safe: rule.safe,
-      platformLabel: platform.label, platformKnown: true};
+      platformLabel: day.platform === 'youtube_shorts' ? 'YouTube Shorts' : platform.label, platformKnown: true};
   }
 
   const pct = (value) => `${Math.round(value * 100)}%`;

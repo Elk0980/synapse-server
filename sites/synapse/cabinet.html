@@ -1053,7 +1053,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260924-actor-workspace";
+  window.SB_CABINET_ASSET_VERSION = "20260924-simple-plan";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
@@ -1078,9 +1078,48 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const SbCabinet = window.SbCabinet = window.SbCabinet || {};
   const registeredViews = SbCabinet.views = SbCabinet.views || {};
   const REQUEST_TIMEOUT_MS = 15000;
-  const requestSignal = (signal) => signal
-    ? AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)])
-    : AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  const LONG_REQUEST_TIMEOUT_MS = 240000;
+  const LONG_REQUEST_PATHS = Object.freeze([
+    "/content/media-mentor-suggest",
+    "/content/media-mentor-analyze",
+    "/content/media-mentor-review",
+    "/content/actor-workspace/messages",
+    "/content/actor-workspace/retry"
+  ]);
+  const isAbortLikeError = (error) => error?.name === "AbortError" || error?.name === "TimeoutError";
+  const requestTimeoutMs = (url, options = {}) => {
+    if (String(options.method || "GET").toUpperCase() !== "POST") return REQUEST_TIMEOUT_MS;
+    let parsed;
+    try {
+      parsed = new URL(url, window.location.href);
+    } catch {
+      return REQUEST_TIMEOUT_MS;
+    }
+    if (parsed.origin !== window.location.origin) return REQUEST_TIMEOUT_MS;
+    return LONG_REQUEST_PATHS.includes(parsed.pathname) ? LONG_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
+  };
+  const requestDeadline = (url, options = {}) => {
+    const timeoutMs = requestTimeoutMs(url, options);
+    const timeout = AbortSignal.timeout(timeoutMs);
+    const external = options.signal;
+    const signal = external ? AbortSignal.any([external, timeout]) : timeout;
+    const rethrow = (error) => {
+      if (external?.aborted && signal.reason === external.reason) throw external.reason;
+      if (timeout.aborted || error?.name === "TimeoutError") {
+        throw new Error(`Время ожидания истекло (${Math.round(timeoutMs / 1000)} секунд)`);
+      }
+      throw error;
+    };
+    const json = async (response) => {
+      try {
+        return await response.json();
+      } catch (error) {
+        if (isAbortLikeError(error) || timeout.aborted || external?.aborted) rethrow(error);
+        return {};
+      }
+    };
+    return { signal, rethrow, json };
+  };
   const responseError = (response, body) => {
     const error = new Error(response.status === 403 ? "Недостаточно прав" : body?.error || (response.status >= 500 ? "Ошибка сервера, попробуйте позже" : "Ошибка запроса"));
     error.status = response.status;
@@ -1088,16 +1127,16 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     return error;
   };
   const apiJson = async (url, options = {}) => {
+    const deadline = requestDeadline(url, options);
     let response;
     try {
       response = await fetch(url, { credentials: "same-origin", cache: "no-store", ...options,
-      signal: requestSignal(options.signal),
+      signal: deadline.signal,
       headers: { "Content-Type": "application/json", ...(options.headers || {}) } });
     } catch (error) {
-      if (error.name === "TimeoutError") throw new Error("Время ожидания истекло (15 секунд)");
-      throw error;
+      deadline.rethrow(error);
     }
-    const body = await response.json().catch(() => ({}));
+    const body = await deadline.json(response);
     if (!response.ok) throw responseError(response, body);
     return body;
   };
@@ -1592,18 +1631,18 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       window.open(url, "_blank", "noopener");
       return null;
     }
+    const deadline = requestDeadline(url, options);
     let response;
     try {
       response = await fetch(url, {
-      ...options, signal: requestSignal(options.signal),
+      ...options, signal: deadline.signal,
       credentials: "same-origin",
       headers: { "Accept": "application/json", "Content-Type": "application/json", ...(options.headers || {}) }
       });
     } catch (error) {
-      if (error.name === "TimeoutError") throw new Error("Время ожидания истекло (15 секунд)");
-      throw error;
+      deadline.rethrow(error);
     }
-    const body = response.status === 204 ? null : await response.json().catch(() => ({}));
+    const body = response.status === 204 ? null : await deadline.json(response);
     if(scopedPath && companyAtStart!==selectedProjectId) throw new Error("Компания изменена. Откройте раздел заново.");
     if (!response.ok) throw responseError(response, body);
     return body;
