@@ -1557,7 +1557,10 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
      у которой своё хранилище: транспорт переиспользуется, история — нет.
      Ни одна строка `project_chat_*` здесь не читается и не пишется. */
   async function askHugh(payload) {
-    try { return await runtimeReply(payload); }
+    // Локальные опции адаптера не входят в строгий контракт приватного рантайма.
+    const data = typeof payload === 'string' ? JSON.parse(payload) : payload;
+    const { responseProfile, ...runtimePayload } = data;
+    try { return await runtimeReply(JSON.stringify(runtimePayload)); }
     catch (runtimeError) {
       if (!fallback.available().length) throw runtimeError;
       return fallback.reply(payload);

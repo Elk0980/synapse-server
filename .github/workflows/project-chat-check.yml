@@ -18,6 +18,8 @@ on:
       - 'ops/hugh-runtime/**'
       - 'ops/local-hugh/**'
       - 'ops/crm/media-mentor*'
+      - 'ops/crm/autoposting*'
+      - 'ops/crm/server.js'
       - 'ops/crm/social-stats*'
       - 'ops/crm/social-baselines*'
       - 'ops/crm/finance-ai*'
@@ -37,6 +39,8 @@ on:
       - 'ops/hugh-runtime/**'
       - 'ops/local-hugh/**'
       - 'ops/crm/media-mentor*'
+      - 'ops/crm/autoposting*'
+      - 'ops/crm/server.js'
       - 'ops/crm/social-stats*'
       - 'ops/crm/social-baselines*'
       - 'ops/crm/finance-ai*'
@@ -106,6 +110,10 @@ jobs:
       - name: Тесты исходной статистики до запуска
         timeout-minutes: 10
         run: node --test ops/crm/social-baselines.test.js ops/crm/social-stats.test.js ops/crm/social-stats-http.test.js
+
+      - name: Тесты календаря и публикаций
+        timeout-minutes: 10
+        run: node --test ops/crm/autoposting*.test.js
 
       # Расходы на ИИ внутри существующих Финансов и права раздела. Остальные наборы
       # каталога ops/crm этой проверкой по-прежнему не покрываются.

@@ -5,6 +5,10 @@ const { DatabaseSync } = require('node:sqlite');
 const { createHughFallback } = require('./hugh-fallback');
 const { createHughBudget } = require('./hugh-budget');
 const { createMediaMentorSuggest } = require('./media-mentor-suggest');
+const { validateReplyPayload } = require('../hugh-runtime/limits');
+const { createProjectChat } = require('./project-chat');
+const { createAuthStore } = require('./auth-store');
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 
 function setup(t, provider, output = { choices: [{ message: { content: '[]' } }] }) {
   const db = new DatabaseSync(':memory:'); t.after(() => db.close());
@@ -89,4 +93,35 @@ test('предложение наставника использует экон�
   assert.equal(result.items[0].topic, 'Вопрос клиента');
   assert.equal(result.capabilities.saved, false);
   assert.deepEqual(calls[0].thinking, { type: 'disabled' });
+});
+
+test('реальный контракт основного рантайма принимает запрос наставника с областью и jobId', async t => {
+  const db = new DatabaseSync(':memory:');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mentor-runtime-contract-'));
+  t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  const hash = `scrypt$16384$8$1$${Buffer.alloc(16, 7).toString('base64url')}$${Buffer.alloc(32, 9).toString('base64url')}`;
+  const authStore = createAuthStore(db, `owner:owner:${hash}`);
+  const seen = [];
+  const chat = createProjectChat({db, authStore, assetsDir: dir,
+    runnerUrl: 'http://runtime.test', chatApiKey: 'test-only',
+    requireSession: () => null, requireCsrf: () => {}, sendJson: () => {}, readBody: async () => ({}),
+    fetchImpl: async (_url, options) => {
+      const raw = JSON.parse(options.body);
+      seen.push(validateReplyPayload(raw));
+      assert.equal(raw.responseProfile, undefined);
+      return {ok: true, status: 200, json: async () => ({text: JSON.stringify([
+        {date:'2026-09-24', platform:'telegram', format:'post', role:'reach', topic:'Тема'}
+      ])})};
+    }, fallback: {env: {}}});
+  const suggest = createMediaMentorSuggest({ask: body => chat.askHugh(body)});
+  for (const companyCode of ['taisabai', 'palitra']) {
+    const result = await suggest.suggest({platforms: ['telegram'], pains: Array(30).fill('вопрос '.repeat(40))},
+      {startDate:'2026-09-24',days:7}, {companyCode,userId:1,audience:'owner-private'});
+    assert.equal(result.status, 'ok');
+  }
+  assert.deepEqual(seen.map(item => item.companyCode), ['taisabai','palitra']);
+  assert.equal(seen[0].audience, 'owner-private');
+  assert.notEqual(seen[0].jobId, seen[1].jobId);
+  assert.ok(seen[0].messages.length > 1);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM project_chat_messages').get().n, 0);
 });
