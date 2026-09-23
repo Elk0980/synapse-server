@@ -63,6 +63,39 @@ test('провайдер считается настроенным только 
   assert.equal(none.status().configured, false); assert.equal(none.available().length, 0);
 });
 
+test('настройка из кабинета вступает в силу без перезапуска рантайма ответов', async (t) => {
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  let ready = [];
+  const calls = [];
+  const providerStore = { available: true, runtimeProviders: () => ready };
+  const fb = createHughFallback({ db, env: {}, providerStore,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, model: JSON.parse(options.body).model });
+      return { ok: true, status: 200,
+        json: async () => ({ choices: [{ message: { content: 'План построен' } }] }) };
+    } });
+  assert.equal(fb.status().configured, false);
+  assert.equal(fb.available().length, 0);
+
+  ready = [{ name: 'deepseek', url: 'https://example.test/v1', secret: 'test-key',
+    model: 'model-one', timeoutMs: 10000 }];
+  assert.equal(fb.status().configured, true);
+  assert.equal(fb.available().length, 1);
+  assert.equal(fb.leaseMs(), 40000);
+  assert.equal((await fb.reply(JSON.stringify({ system: 's', messages: [] }))).text, 'План построен');
+  assert.deepEqual(calls[0], { url: 'https://example.test/v1/chat/completions', model: 'model-one' });
+
+  ready = [{ ...ready[0], model: 'model-two', timeoutMs: 20000 }];
+  await fb.reply(JSON.stringify({ system: 's', messages: [] }));
+  assert.equal(calls[1].model, 'model-two');
+  assert.equal(fb.leaseMs(), 50000);
+  ready = [];
+  assert.equal(fb.status().configured, false);
+  assert.equal(fb.available().length, 0);
+  assert.equal(JSON.stringify(fb.status()).includes('test-key'), false);
+});
+
 test('без основной подписки ответ идёт через первый доступный резерв; 429 и 5xx переводят провайдера в cooldown, а второй отвечает', async () => {
   let first = { status: 429, headers: { 'retry-after': '120' } };
   const s = setup({ runtime: { connected: false, state: 'login_required' }, providers: { openrouter: () => first, deepseek: { text: 'Ответ резерва B' } } });
