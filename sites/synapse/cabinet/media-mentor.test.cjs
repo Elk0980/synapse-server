@@ -87,6 +87,11 @@ test('путь клиента объясняет этапы и пользу во
     assert.equal(panels.length, 6);
     assert.equal(f.node.querySelectorAll('.mentor-journey-grid img[src="/cabinet/mentor-person.svg"]').length, 6);
     assert.match(f.node.querySelector('.mentor-journey').textContent, /не обещание мгновенных продаж/);
+    f.node.querySelector('[data-journey-target="mentor-journey-step-2"]').click();
+    assert.equal(f.w.location.hash, '', 'переход к шагу не должен менять маршрут кабинета');
+    f.node.querySelector('.mentor-journey-example-link').click();
+    assert.equal(f.node.querySelector('.mentor-property-example').open, true);
+    assert.equal(f.w.location.hash, '', 'открытие примера не должно менять маршрут кабинета');
     assert.match(f.node.querySelector('.mentor-journey').textContent, /Массаж 60 минут/);
     assert.equal(f.node.querySelector('.mentor-journey-grid img[src="x"]'), null);
     assert.match(f.node.querySelector('[name="goal"]').closest('label').textContent, /Зачем:/);

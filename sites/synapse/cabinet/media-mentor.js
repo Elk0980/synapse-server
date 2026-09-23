@@ -28,24 +28,30 @@
   let epoch = 0;
 
   const journeyStages = [
-    {title: 'Появилась потребность', question: 'Что изменилось в жизни человека?',
-      influence: 'Его обстоятельства и задача, ещё без поиска услуги.',
-      action: 'Собираем реальные ситуации и слова клиентов.', lever: 'Точность аудитории и тем.'},
-    {title: 'Осознал задачу', question: 'Как он назвал проблему?',
-      influence: 'Понятное объяснение и узнаваемый пример.',
-      action: 'Делаем полезный охватный материал без нажима.', lever: 'Первый кадр и доля целевого охвата.'},
-    {title: 'Ищет варианты', question: 'Что хочет узнать до выбора?',
-      influence: 'Ответы, которые помогают разобраться.',
-      action: 'Связываем вопросы с рубриками и версиями для площадок.', lever: 'Темы, форматы и переходы.'},
-    {title: 'Сравнивает и доверяет', question: 'Чего опасается и какие доказательства нужны?',
-      influence: 'Люди, процесс, реальные примеры и честные ограничения.',
-      action: 'Показываем работу и проверенные факты: этап «Влюбление».', lever: 'Доверие и качество вопросов.'},
-    {title: 'Решает обратиться', question: 'Что нужно для первого безопасного шага?',
-      influence: 'Ясные условия и удобный канал связи.',
-      action: 'Готовим конкретное предложение; после согласования размещаем его в доступном канале.', lever: 'Путь до заявки и скорость ответа.'},
-    {title: 'Покупает и оценивает', question: 'Оправдался ли ожидаемый результат?',
-      influence: 'Качество ответа, услуги и сопровождения.',
-      action: 'Настраиваем проверяемую связь обращения, сделки и обратной связи.', lever: 'Конверсия, сервис и повторный спрос.'},
+    {icon: '🌱', title: 'Возникла потребность', thought: 'Что-то изменилось. Что мне теперь делать?',
+      influence: 'Своя ситуация и слова других людей.',
+      media: 'Замечаем вопросы в сообщениях и комментариях.',
+      action: 'Собираем реальные ситуации в бриф, выделяем аудиторию.', lever: 'Какие вопросы повторяются.'},
+    {icon: '💡', title: 'Понял свою задачу', thought: 'Похоже, это про меня. В чём причина?',
+      influence: 'Простое объяснение без давления.',
+      media: 'Даём короткий пост или видео с узнаваемым примером.',
+      action: 'Проверяем, совпадает ли тема с целью клиента.', lever: 'Целевой охват и досмотры.'},
+    {icon: '🔎', title: 'Ищет варианты', thought: 'Какие у меня есть пути?',
+      influence: 'Полезные ответы и ясные различия.',
+      media: 'Делаем рубрику и версии для нужных соцсетей.',
+      action: 'Связываем темы с продуктом и контент-планом.', lever: 'Сохранения и переходы.'},
+    {icon: '🤝', title: 'Сравнивает и доверяет', thought: 'Почему я могу вам доверять?',
+      influence: 'Люди, процесс, факты и ограничения.',
+      media: 'Показываем лицо специалиста, кейсы и ход работы.',
+      action: 'Сверяем каждое доказательство с источником в брифе.', lever: 'Вопросы по делу и обращения.'},
+    {icon: '💬', title: 'Решает обратиться', thought: 'Как сделать первый безопасный шаг?',
+      influence: 'Понятные условия и удобная связь.',
+      media: 'Даём конкретное предложение и способ обратиться.',
+      action: 'Согласуем материал и канал, затем связываем обращение с CRM.', lever: 'Заявки и скорость ответа.'},
+    {icon: '✅', title: 'Получает результат', thought: 'Оправдались ли мои ожидания?',
+      influence: 'Качество услуги и сопровождения.',
+      media: 'С согласия клиента рассказываем о результате.',
+      action: 'Сверяем обращение, сделку и обратную связь.', lever: 'Сделки, отзывы и повторные обращения.'},
   ];
 
   function journeyMarkup(data) {
@@ -60,21 +66,117 @@
     ];
     return `<section class="card mentor-journey" aria-label="Путь клиента">
       <h2>Путь клиента: от потребности до результата</h2>
-      <p>Это схема работы, а не статус подключения и не обещание мгновенных продаж. Мы выясняем,
-        что влияет на решение человека, и каждую неделю показываем, на какой рычаг можем повлиять.</p>
-      <ol class="mentor-journey-grid">${journeyStages.map((stage, index) => `<li>
-        <img src="/cabinet/mentor-person.svg" alt="" width="80" height="80" loading="lazy">
-        <div><strong>${esc(stage.title)}</strong><p>${esc(stage.question)}</p>
-        <dl><dt>Влияет</dt><dd>${esc(stage.influence)}</dd>
-          <dt>Что настраиваем</dt><dd>${esc(stage.action)}</dd>
-          <dt>Рычаг</dt><dd>${esc(stage.lever)}</dd></dl>
-        <details><summary>Из брифа: ${esc(context[index].label)}</summary>
-          <p>${context[index].value ? esc(context[index].value) : 'Пока не выяснено'}</p></details>
-        </div></li>`).join('')}</ol>
-      <p class="mentor-note">Для каждого продукта мы заменяем общие вопросы фактами из брифа,
-        показываем связанные публикации, обращения и ограничения данных. Рост прибыли зависит также
-        от предложения, работы с заявками и самой услуги; если связи нет, мы так и пишем.</p>
+      <p>Идите по стрелкам. Ниже видно, что думает человек, где работают соцсети и что делает команда.</p>
+      <ol class="mentor-journey-track" aria-label="Шесть шагов клиента">${journeyStages.map((stage, index) =>
+    `<li><button type="button" data-journey-target="mentor-journey-step-${index + 1}"><span class="mentor-track-icon" aria-hidden="true">${stage.icon}</span>
+        <span class="mentor-track-number">Шаг ${index + 1}</span><strong>${esc(stage.title)}</strong></button></li>`).join('')}</ol>
+      <button type="button" class="mentor-journey-example-link" data-journey-target="mentor-property-example">Разобрать на примере недвижимости: 10 шагов ↓</button>
+      <ol class="mentor-journey-grid">${journeyStages.map((stage, index) => `<li id="mentor-journey-step-${index + 1}">
+        <div class="mentor-journey-heading">
+          <span class="mentor-journey-number">${index + 1}</span>
+          <span class="mentor-journey-icon" aria-hidden="true">${stage.icon}</span>
+          <strong>${esc(stage.title)}</strong>
+        </div>
+        <div class="mentor-journey-flow">
+          <div class="mentor-journey-lane mentor-journey-person">
+            <span class="mentor-journey-role">👤 Думает человек</span>
+            <div class="mentor-journey-character"><img src="/cabinet/mentor-person.svg" alt="" width="80" height="80" loading="lazy">
+              <p class="mentor-journey-thought">«${esc(stage.thought)}»</p></div>
+          </div>
+          <span class="mentor-journey-arrow mentor-journey-arrow-one" aria-hidden="true"></span>
+          <div class="mentor-journey-lane mentor-journey-media">
+            <span class="mentor-journey-role">📣 Контент и соцсети</span>
+            <p>${esc(stage.media)}</p>
+          </div>
+          <span class="mentor-journey-arrow mentor-journey-arrow-two" aria-hidden="true"></span>
+          <div class="mentor-journey-lane mentor-journey-system">
+            <span class="mentor-journey-role">⚙️ Команда и Synapse</span>
+            <p>${esc(stage.action)}</p>
+          </div>
+        </div>
+        <div class="mentor-journey-outcome"><span>📊 Проверяем: ${esc(stage.lever)}</span>
+          <details><summary>Почему это работает и что известно из брифа</summary>
+            <p>Влияет: ${esc(stage.influence)}</p>
+            <p>${esc(context[index].label)}: ${context[index].value ? esc(context[index].value) : 'Пока не выяснено'}</p></details>
+        </div>
+      </li>`).join('')}</ol>
+      <p class="mentor-note">Это схема работы, а не статус подключения и не обещание мгновенных продаж.
+        Факты из брифа и реальные результаты проверяем отдельно для каждого продукта.</p>
     </section>`;
+  }
+
+  const propertyJourney = [
+    {phase: 'interest', icon: '🌴', title: 'Пока не ищет', thought: 'Я просто живу своей жизнью.',
+      channel: 'Истории о жизни, короткие видео, рекомендации.',
+      help: 'Узнаём, какие мечты и вопросы действительно есть у людей.'},
+    {phase: 'interest', icon: '✨', title: 'Замечает идею', thought: 'А если жить или инвестировать в Таиланде?',
+      channel: 'Соцсети и видео дают первый понятный пример.',
+      help: 'Показываем реальный опыт, а не обещаем лёгкую покупку.'},
+    {phase: 'study', icon: '🎯', title: 'Определяет цель', thought: 'Мне для жизни или дохода? Сколько могу потратить?',
+      channel: 'Разборы сценариев, расходов и бюджета.',
+      help: 'Уточняем цель и считаем полную стоимость.'},
+    {phase: 'study', icon: '📚', title: 'Изучает правила', thought: 'Какие документы, платежи и риски?',
+      channel: 'Статья, памятка, ответы специалиста.',
+      help: 'Проверяем факты и честно отмечаем ограничения.'},
+    {phase: 'study', icon: '🗺️', title: 'Выбирает район', thought: 'Где мне будет удобно?',
+      channel: 'Карта, видео районов, сравнение условий жизни.',
+      help: 'Сопоставляем район с задачей и бюджетом.'},
+    {phase: 'study', icon: '🏢', title: 'Сравнивает объекты', thought: 'Что лучше и чем отличаются застройщики?',
+      channel: 'Каталог, разборы объектов, проверенные кейсы.',
+      help: 'Сравниваем цену, документы, сроки и расходы.'},
+    {phase: 'decision', icon: '🔎', title: 'Выбирает 2–3 объекта', thought: 'Вот два-три объекта, которые подходят.',
+      channel: 'Подборка на сайте, поиск, сохранённые материалы.',
+      help: 'Готовим короткое сравнение без давления.'},
+    {phase: 'decision', icon: '💬', title: 'Задаёт вопрос', thought: 'Кто ответит и что будет после заявки?',
+      channel: 'Форма, мессенджер или звонок.',
+      help: 'Передаём запрос менеджеру и фиксируем ответ в CRM.'},
+    {phase: 'decision', icon: '🧾', title: 'Проверяет и решает', thought: 'Покажите объект, условия и документы.',
+      channel: 'Консультация, просмотр, переговоры.',
+      help: 'Организуем проверку условий и сопровождение сделки.'},
+    {phase: 'after', icon: '🤝', title: 'Сделка и сопровождение', thought: 'Когда передадут объект и кто поможет потом?',
+      channel: 'Менеджер, документы, поддержка после сделки.',
+      help: 'Фиксируем условия и сопровождаем передачу в срок по договору.'},
+  ];
+  const propertyPhases = [
+    {id: 'interest', label: 'Интерес', range: '1–2'},
+    {id: 'study', label: 'Изучение', range: '3–6'},
+    {id: 'decision', label: 'Выбор и сделка', range: '7–9'},
+    {id: 'after', label: 'Сделка и сервис', range: '10'},
+  ];
+  const propertyChannels = [
+    {name: 'Соцсети и короткие видео', phases: ['interest', 'study', 'decision'], role: 'Знакомят, объясняют и отвечают на сомнения.'},
+    {name: 'Сайт, статьи и SEO', phases: ['study', 'decision'], role: 'Дают ответы и варианты.'},
+    {name: 'Поисковая реклама', phases: ['decision'], role: 'Встречает готовый запрос.'},
+    {name: 'Повторный показ и рассылка', phases: ['study', 'decision'], role: 'Возвращают к сравнению при согласии человека.'},
+    {name: 'Форма, звонок, мессенджер', phases: ['decision'], role: 'Принимают вопрос.'},
+    {name: 'Менеджер и CRM', phases: ['decision', 'after'], role: 'Помогают проверить и сопровождают.'},
+    {name: 'Сервис и рекомендации', phases: ['after'], role: 'Поддерживают после сделки.'},
+  ];
+
+  function propertyExampleMarkup(ctx) {
+    const company = ctx.identity?.companies?.find((item) => item.id === ctx.selectedProjectId);
+    const isTaiSabai = /тай\s*сабай|taisabai/i.test(`${ctx.selectedProjectId || ''} ${company?.name || ''}`);
+    return `<details id="mentor-property-example" class="card mentor-property-example"${isTaiSabai ? ' open' : ''}>
+      <summary>Пример: покупка недвижимости в Таиланде · 10 шагов</summary>
+      <p class="mentor-note">Учебный пример. Перечисленные каналы — возможные инструменты, а не статус их подключения.
+        Человек может вернуться к сравнению или отказаться от покупки.</p>
+      <div class="mentor-property-phases" aria-label="Четыре части пути">${propertyPhases.map((phase) =>
+    `<span data-phase="${phase.id}"><strong>${phase.label}</strong><small>Шаги ${phase.range}</small></span>`).join('')}</div>
+      <ol class="mentor-property-stages">${propertyJourney.map((stage, index) => `<li data-phase="${stage.phase}">
+        <div class="mentor-property-step"><b>${index + 1}</b><span aria-hidden="true">${stage.icon}</span>
+          <strong>${esc(stage.title)}</strong></div>
+        <div><small>👤 Человек</small><p>«${esc(stage.thought)}»</p></div>
+        <div><small>📣 Где встречает нас</small><p>${esc(stage.channel)}</p></div>
+        <div><small>🤝 Что делаем</small><p>${esc(stage.help)}</p></div>
+      </li>`).join('')}</ol>
+      <p class="mentor-property-return">↩ На этапах выбора человек часто возвращается к районам и объектам.
+        Контент должен помогать сравнивать, а не торопить со сделкой.</p>
+      <h3>Где помогает каждый канал</h3>
+      <div class="mentor-property-channels">${propertyChannels.map((item) => `<div>
+        <strong>${esc(item.name)}</strong><span>${esc(item.role)}</span>
+        <div>${item.phases.map((phase) => `<small data-phase="${phase}">${esc(propertyPhases.find((part) => part.id === phase).label)}</small>`).join('')}</div>
+      </div>`).join('')}</div>
+    </details>`;
   }
 
   function briefMarkup(data, edit) {
@@ -325,6 +427,7 @@
     const edit = canEdit(ctx);
     return `<p class="card mentor-notice" role="note">${esc(data.notice)}</p>
       ${journeyMarkup(data)}
+      ${propertyExampleMarkup(ctx)}
       <section class="card mentor-brief"><h2>Бриф компании</h2>
         <p class="mentor-note">Версия ${esc(data.brief.revision)}${data.brief.updatedAt ? ` · обновлён ${esc(moment(data.brief.updatedAt))}` : ''}.
           ${edit ? 'План составьте сами или возьмите подсказку модели и проверьте её.' : 'У вас только просмотр.'}</p>
@@ -390,6 +493,11 @@
     const code = ctx.selectedProjectId;
     const busy = (form, state) => form.querySelectorAll('button,input,select,textarea')
       .forEach((element) => { element.disabled = state; });
+    node.querySelectorAll('[data-journey-target]').forEach((button) => button.addEventListener('click', () => {
+      const target = node.ownerDocument.getElementById(button.dataset.journeyTarget);
+      if (target?.tagName === 'DETAILS') target.open = true;
+      target?.scrollIntoView?.({block: 'start'});
+    }));
     node.querySelectorAll('[data-add]').forEach((button) => button.addEventListener('click', () => {
       const kind = button.dataset.add, body = button.closest('[data-rows]').querySelector('[data-rows-body]');
       const markupFor = kind === 'facts' ? factRow()
