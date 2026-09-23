@@ -5,7 +5,7 @@
    HUGH_FALLBACK_OPENROUTER_URL=https://openrouter.ai/api/v1  HUGH_FALLBACK_OPENROUTER_KEY=…  HUGH_FALLBACK_OPENROUTER_MODEL=…
    Ключи в код и журнал не попадают. Наличие переменных — не доказательство живого подключения:
    живой ответ подтверждается только успешным обменом, который виден в статусе (lastSuccessAt). */
-const { createHughBudget } = require('./hugh-budget');
+const { createHughBudget, readPrice } = require('./hugh-budget');
 const DEFAULT_TIMEOUT_MS = 60000;
 const RATE_LIMIT_DEFAULT_S = 300, SERVER_ERROR_BASE_S = 60, SERVER_ERROR_MAX_S = 900, AUTH_ERROR_S = 3600, CLIENT_ERROR_S = 300;
 const ACK_INTERVAL_MS = 30 * 60 * 1000;
@@ -41,9 +41,10 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
      Одноимённый провайдер из хранилища заменяет заданный в окружении. */
   // Настройки из кабинета меняются во время работы сервера. Читать их только при запуске
   // значит продолжать отвечать старой моделью (или считать резерв пустым) до перезапуска.
+  const storedProviders = () => providerStore && typeof providerStore.runtimeProviders === 'function'
+    ? providerStore.runtimeProviders() : [];
   const currentProviders = () => {
-    const stored = providerStore && typeof providerStore.runtimeProviders === 'function'
-      ? providerStore.runtimeProviders() : [];
+    const stored = storedProviders();
     const savedNames = new Set(stored.map((item) => item.name));
     return [...fromEnv.providers.filter((item) => !savedNames.has(item.name)), ...stored];
   };
@@ -61,7 +62,24 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
       last_error=excluded.last_error,last_attempt_at=excluded.last_attempt_at,last_success_at=excluded.last_success_at,last_model=excluded.last_model,updated_at=excluded.updated_at`)
       .run(name, next.cooldown_until, next.failures, next.last_error, next.last_attempt_at, next.last_success_at, next.last_model, next.updated_at);
   };
-  const budget = createHughBudget({ db, env, now });
+  /* Цены кабинета читаются при расчёте бюджета и обновляются без перезапуска.
+     Сохранённый провайдер целиком заменяет одноимённый из окружения: неизвестную цену
+     его текущей модели нельзя подменять тарифом другой конфигурации из env. */
+  const storedPrice = (provider) => {
+    const prompt = provider.pricePromptMicroUsdPer1k, completion = provider.priceCompletionMicroUsdPer1k;
+    // Пустое поле — цена неизвестна, ноль — объявленный владельцем ноль: это разные вещи.
+    // Половина пары ценой не считается: неизвестную часть нельзя подставлять нулём.
+    if (prompt === null || prompt === undefined || completion === null || completion === undefined) return null;
+    if (!Number.isSafeInteger(prompt) || prompt < 0 || !Number.isSafeInteger(completion) || completion < 0) {
+      return { invalid: true, reason: `Цена провайдера ${provider.name} сохранена неверно` };
+    }
+    return { promptMicroUsdPer1k: prompt, completionMicroUsdPer1k: completion };
+  };
+  const priceFor = (name) => {
+    const provider = storedProviders().find((item) => item.name === name);
+    return provider ? storedPrice(provider) : readPrice(name, env);
+  };
+  const budget = createHughBudget({ db, env, now, priceFor });
   // Зависшие после аварии брони не освобождаются: они переходят в неизвестный расход.
   budget.recover();
   const cooling = (name, at = now()) => { const r = row(name); return Boolean(r?.cooldown_until && Date.parse(r.cooldown_until) > at); };

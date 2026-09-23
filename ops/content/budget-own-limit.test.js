@@ -65,6 +65,7 @@ const fallbackOf = (budgetMicroUsd) => createHughFallback({
   fetchImpl: async () => { throw Error('сеть не нужна'); },
   providerStore: { available: true, runtimeProviders: () => [{ name: 'deepseek',
     url: 'https://api.deepseek.com', secret: 'x', model: 'm', timeoutMs: 1000,
+    pricePromptMicroUsdPer1k: 300, priceCompletionMicroUsdPer1k: 1200,
     maxOutputTokens: 1200, budgetMicroUsd }] },
 });
 
