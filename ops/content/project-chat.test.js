@@ -1142,6 +1142,166 @@ test('отложенная отправка: напоминание по зад�
     body: { clientId: `plan-${crypto.randomUUID()}`, kind: 'task_reminder', taskId, text: 'Чужая задача', dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' } }), status(400));
 });
 
+test('напоминание: выполненная или отменённая задача не создаёт сообщение и сохраняет причину отмены', async (t) => {
+  for (const taskStatus of ['done', 'cancelled']) {
+    for (const when of ['before-planning', 'before-due', 'after-due']) {
+      await t.test(`${taskStatus}, ${when}`, async () => {
+        const clock = clockAt('2026-09-18T20:00:00.000Z');
+        const { chat, owner, db } = setup({ clock });
+        await call(chat, { session: owner, method: 'PATCH', url: room('/settings'), body: { telegramChatId: '-1001234567890' } });
+        const task = await call(chat, { session: owner, method: 'POST', url: room('/tasks'),
+          body: { title: 'Согласовать материал', status: when === 'before-planning' ? taskStatus : 'todo' } });
+        const taskId = task.payload.task.id;
+        const body = { clientId: `plan-${crypto.randomUUID()}`, kind: 'task_reminder', taskId,
+          text: 'Проверить материал', dueAtLocal: '2026-09-19T09:00', timezone: 'Asia/Irkutsk' };
+        const planned = await call(chat, { session: owner, method: 'POST', url: room('/scheduled'), body });
+        if (when === 'after-due') clock.now = Date.parse('2026-09-19T01:01:00.000Z');
+        if (when !== 'before-planning') await call(chat, { session: owner, method: 'PATCH',
+          url: room(`/tasks/${taskId}`), body: { status: taskStatus } });
+        if (when !== 'after-due') {
+          assert.equal(chat.processScheduledMessages().sent, 0);
+          assert.equal(scheduledRows(db)[0].status, 'pending', 'до срока сохраняется прежняя семантика расписания');
+          clock.now = Date.parse('2026-09-19T01:00:00.000Z');
+        }
+        const before = roomMessages(db).length;
+        assert.deepEqual(chat.processScheduledMessages(), { sent: 0, expired: 0, blocked: 1, failed: 0 });
+        assert.equal(roomMessages(db).length, before);
+        assert.equal(db.prepare('SELECT count(*) AS n FROM project_chat_outbox').get().n, 0);
+        const row = scheduledRows(db)[0];
+        assert.equal(row.status, 'cancelled');
+        assert.match(row.error, taskStatus === 'done' ? /Задача уже выполнена/ : /Задача отменена/);
+        assert.equal(row.message_id, null);
+        assert.equal(row.sent_at, null);
+        assert.equal(row.attempts, 0, 'это окончательная отмена, а не неудачная попытка доставки');
+        const again = await call(chat, { session: owner, method: 'POST', url: room('/scheduled'), body });
+        assert.equal(again.payload.item.id, planned.payload.item.id);
+        assert.equal(again.payload.item.status, 'cancelled');
+        assert.equal(again.payload.item.deliveryStatus, '');
+        await call(chat, { session: owner, method: 'PATCH', url: room(`/tasks/${taskId}`), body: { status: 'todo' } });
+        assert.equal(chat.processScheduledMessages().sent, 0, 'повторное открытие задачи не возрождает отменённое напоминание');
+        assert.equal(roomMessages(db).length, before);
+      });
+    }
+  }
+});
+
+test('напоминание: исчезнувшая задача или связь с другой компанией отменяет отправку без раскрытия данных', async (t) => {
+  for (const changed of ['deleted', 'missing-id', 'other-company']) {
+    await t.test(changed, async () => {
+      const clock = clockAt('2026-09-18T20:00:00.000Z');
+      const { chat, owner, db } = setup({ clock });
+      await call(chat, { session: owner, method: 'PATCH', url: room('/settings'), body: { telegramChatId: '-1001234567890' } });
+      const task = await call(chat, { session: owner, method: 'POST', url: room('/tasks'), body: { title: 'Нужен исходник' } });
+      const taskId = task.payload.task.id;
+      const planned = await call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+        body: { clientId: `plan-${crypto.randomUUID()}`, kind: 'task_reminder', taskId, text: 'Прислать исходник',
+          dueAt: '2026-09-19T01:00:00Z', timezone: 'UTC' } });
+      if (changed === 'deleted') {
+        // Только тестовая БД: имитируем старую/восстановленную запись с отсутствующей задачей.
+        db.exec('PRAGMA foreign_keys = OFF');
+        db.prepare('DELETE FROM project_chat_tasks WHERE id=?').run(taskId);
+        db.exec('PRAGMA foreign_keys = ON');
+      } else if (changed === 'missing-id') {
+        db.prepare('UPDATE project_chat_scheduled SET task_id=NULL WHERE id=?').run(planned.payload.item.id);
+      } else {
+        await call(chat, { session: owner, url: room('', OTHER) });
+        db.prepare('UPDATE project_chat_tasks SET company_code=?,title=? WHERE id=?')
+          .run(OTHER, 'Закрытое описание другого проекта', taskId);
+      }
+      const before = roomMessages(db).length;
+      clock.now = Date.parse('2026-09-19T01:00:00.000Z');
+      assert.deepEqual(chat.processScheduledMessages(), { sent: 0, expired: 0, blocked: 1, failed: 0 });
+      const row = scheduledRows(db)[0];
+      assert.equal(row.status, 'cancelled');
+      assert.match(row.error, /Задача больше не найдена в этом проекте/);
+      assert.doesNotMatch(row.error, /Закрытое описание/);
+      assert.equal(row.message_id, null);
+      assert.equal(row.sent_at, null);
+      assert.equal(roomMessages(db).length, before);
+      assert.equal(roomMessages(db, OTHER).length, 0);
+      assert.equal(db.prepare('SELECT count(*) AS n FROM project_chat_outbox').get().n, 0);
+      assert.equal(chat.processScheduledMessages().blocked, 0, 'терминальная отмена не повторяется');
+    });
+  }
+});
+
+test('напоминание: незавершённые задачи продолжают отправляться один раз с текущим заголовком', async () => {
+  const clock = clockAt('2026-09-18T20:00:00.000Z');
+  const { chat, owner, db } = setup({ clock });
+  await call(chat, { session: owner, method: 'PATCH', url: room('/settings'), body: { telegramChatId: '-1001234567890' } });
+  for (const taskStatus of ['todo', 'in_progress', 'blocked']) {
+    const task = await call(chat, { session: owner, method: 'POST', url: room('/tasks'),
+      body: { title: `Материал ${taskStatus}` } });
+    const taskId = task.payload.task.id;
+    await call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+      body: { clientId: `plan-${crypto.randomUUID()}`, kind: 'task_reminder', taskId, text: 'Обновить статус',
+        dueAtLocal: '2026-09-19T08:00', timezone: 'Asia/Bangkok' } });
+    await call(chat, { session: owner, method: 'PATCH', url: room(`/tasks/${taskId}`),
+      body: { status: taskStatus, title: `Актуальный материал ${taskStatus}` } });
+  }
+  clock.now = Date.parse('2026-09-19T01:00:00.000Z');
+  assert.equal(chat.processScheduledMessages().sent, 3);
+  assert.equal(roomMessages(db).length, 3);
+  assert.ok(roomMessages(db).every(message => message.text.includes('Актуальный материал')));
+  assert.ok(scheduledRows(db).every(row => row.status === 'sent' && row.message_id && row.sent_at));
+  assert.equal(db.prepare('SELECT count(*) AS n FROM project_chat_outbox').get().n, 3);
+  assert.equal(chat.processScheduledMessages().sent, 0);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM project_chat_outbox').get().n, 3);
+});
+
+test('отложенное обычное сообщение отправляется независимо от закрытия связанной задачи', async () => {
+  const clock = clockAt('2026-09-18T20:00:00.000Z');
+  const { chat, owner, db } = setup({ clock });
+  for (const taskStatus of ['done', 'cancelled']) {
+    const task = await call(chat, { session: owner, method: 'POST', url: room('/tasks'), body: { title: 'Материал' } });
+    const taskId = task.payload.task.id;
+    await call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+      body: { clientId: `plan-${crypto.randomUUID()}`, kind: 'message', taskId, text: `Сводка ${taskStatus}`,
+        dueAt: '2026-09-19T01:00:00Z' } });
+    await call(chat, { session: owner, method: 'PATCH', url: room(`/tasks/${taskId}`), body: { status: taskStatus } });
+  }
+  await call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+    body: { clientId: `plan-${crypto.randomUUID()}`, text: 'Сводка без задачи', dueAt: '2026-09-19T01:00:00Z' } });
+  clock.now = Date.parse('2026-09-19T01:00:00.000Z');
+  assert.deepEqual(chat.processScheduledMessages(), { sent: 3, expired: 0, blocked: 0, failed: 0 });
+  assert.deepEqual(roomMessages(db).map(message => message.text), ['Сводка done', 'Сводка cancelled', 'Сводка без задачи']);
+});
+
+test('напоминание: закрытие задачи после создания сообщения не меняет отправку и не создаёт дубль', async () => {
+  const clock = clockAt('2026-09-18T20:00:00.000Z');
+  const { chat, owner, db } = setup({ clock });
+  await call(chat, { session: owner, method: 'PATCH', url: room('/settings'), body: { telegramChatId: '-1001234567890' } });
+  const task = await call(chat, { session: owner, method: 'POST', url: room('/tasks'), body: { title: 'Согласовать материал' } });
+  const taskId = task.payload.task.id;
+  await call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+    body: { clientId: `plan-${crypto.randomUUID()}`, kind: 'task_reminder', taskId, text: 'Нужен ответ', dueAt: '2026-09-19T01:00:00Z' } });
+  clock.now = Date.parse('2026-09-19T01:00:00.000Z');
+  assert.equal(chat.processScheduledMessages().sent, 1);
+  const before = scheduledRows(db)[0];
+  await call(chat, { session: owner, method: 'PATCH', url: room(`/tasks/${taskId}`), body: { status: 'done' } });
+  assert.deepEqual(chat.processScheduledMessages(), { sent: 0, expired: 0, blocked: 0, failed: 0 });
+  assert.deepEqual(scheduledRows(db)[0], before, 'уже созданное сообщение остаётся в существующей очереди доставки');
+  assert.equal(roomMessages(db).length, 1);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM project_chat_outbox').get().n, 1);
+});
+
+test('напоминание: смена комнаты Telegram по-прежнему блокирует незавершённую задачу', async () => {
+  const clock = clockAt('2026-09-18T20:00:00.000Z');
+  const { chat, owner, db } = setup({ clock });
+  await call(chat, { session: owner, method: 'PATCH', url: room('/settings'), body: { telegramChatId: '-1001234567890' } });
+  const task = await call(chat, { session: owner, method: 'POST', url: room('/tasks'), body: { title: 'Согласовать материал' } });
+  await call(chat, { session: owner, method: 'POST', url: room('/scheduled'),
+    body: { clientId: `plan-${crypto.randomUUID()}`, kind: 'task_reminder', taskId: task.payload.task.id,
+      text: 'Нужен ответ', dueAt: '2026-09-19T01:00:00Z' } });
+  await call(chat, { session: owner, method: 'PATCH', url: room('/settings'), body: { telegramChatId: '-1002222222222' } });
+  clock.now = Date.parse('2026-09-19T01:00:00.000Z');
+  assert.deepEqual(chat.processScheduledMessages(), { sent: 0, expired: 0, blocked: 1, failed: 0 });
+  assert.equal(scheduledRows(db)[0].status, 'error');
+  assert.match(scheduledRows(db)[0].error, /группа проекта изменилась/i);
+  assert.equal(roomMessages(db).length, 0);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM project_chat_outbox').get().n, 0);
+});
+
 test('отложенная отправка: срок в прошлом, неизвестный пояс и лишние поля отклоняются', async () => {
   const clock = clockAt('2026-09-18T20:00:00.000Z');
   const { chat, owner } = setup({ clock });
