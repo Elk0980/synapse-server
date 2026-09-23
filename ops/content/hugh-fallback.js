@@ -99,21 +99,36 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
     const current = row(name), failures = (current?.failures || 0) + 1;
     upsert(name, { cooldown_until: stamp(now() + seconds * 1000), failures, last_error: shortText(error, 200), last_attempt_at: stamp() });
   }
-  function toChatBody(payload, model, maxOutputTokens) {
+  function toChatBody(payload, provider, maxOutputTokens) {
     const data = typeof payload === 'string' ? JSON.parse(payload) : payload;
     const messages = [{ role: 'system', content: String(data.system || '') }, ...(data.messages || []).map((m) => ({ role: m.role, content: m.content }))];
+    // Для короткого структурированного черновика не расходуем весь потолок на рассуждение.
+    // Опции привязаны к проверенным контрактам и моделям, а не отправляются всем API.
+    // https://api-docs.deepseek.com/guides/thinking_mode/
+    // https://docs.z.ai/guides/llm/glm-5.3
+    const options = {};
+    if (data.responseProfile === 'structured-draft') {
+      if (provider.name === 'deepseek' && /^(deepseek-flash|deepseek-pro)$/.test(provider.model)) {
+        options.thinking = { type: 'disabled' };
+      } else if (provider.name === 'zai' && /^glm-5\.3(?:-flash)?$/i.test(provider.model)) {
+        options.thinking = { type: 'enabled' };
+        options.reasoning_effort = 'low';
+      }
+    }
     // Потолок ответа уходит провайдеру ровно тот, под который забронированы деньги.
-    return JSON.stringify({ model, messages, temperature: 0.3, max_tokens: maxOutputTokens });
+    return JSON.stringify({ model: provider.model, messages, temperature: 0.3, max_tokens: maxOutputTokens, ...options });
   }
   async function callProvider(provider, payload) {
     const at = now();
     // Деньги и слот резервируются ДО обращения: параллельные запросы не могут вместе
     // перескочить границу, а неизвестный расход не считается нулём.
-    const probe = toChatBody(payload, provider.model, budget.config.maxOutputTokens);
+    const outputLimit = Number.isSafeInteger(provider.maxOutputTokens) && provider.maxOutputTokens > 0
+      ? Math.min(provider.maxOutputTokens, budget.config.maxOutputTokens) : budget.config.maxOutputTokens;
+    const probe = toChatBody(payload, provider, outputLimit);
     const booking = budget.reserve(provider.name, { promptBytes: Buffer.byteLength(probe, 'utf8'),
-      limitMicroUsd: provider.budgetMicroUsd ?? null });
+      maxOutputTokens: outputLimit, limitMicroUsd: provider.budgetMicroUsd ?? null });
     if (!booking.allowed) return { budgetBlocked: true, reason: booking.reason };
-    const body = toChatBody(payload, provider.model, booking.maxOutputTokens);
+    const body = toChatBody(payload, provider, booking.maxOutputTokens);
     let response;
     try {
       // Запрет переадресации: разрешённый адрес не должен уводить запрос с ключом на чужой хост.
@@ -149,7 +164,12 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
     budget.settle(booking.id, { promptTokens: data?.usage?.prompt_tokens, completionTokens: data?.usage?.completion_tokens });
     const content = data?.choices?.[0]?.message?.content;
     const text = shortText(typeof content === 'string' ? content : Array.isArray(content) ? content.map((c) => c?.text || '').join(' ') : '', messageLimit);
-    if (!text) { cooldown(provider.name, CLIENT_ERROR_S, 'Пустой ответ провайдера'); return null; }
+    if (!text) {
+      const exhausted = data?.choices?.[0]?.finish_reason === 'length';
+      cooldown(provider.name, CLIENT_ERROR_S, exhausted
+        ? 'Провайдер исчерпал потолок ответа до итогового текста' : 'Пустой итоговый ответ провайдера');
+      return null;
+    }
     upsert(provider.name, { cooldown_until: null, failures: 0, last_error: '', last_attempt_at: stamp(at), last_success_at: stamp(), last_model: shortText(data?.model || provider.model, 100) });
     return { text, provider: provider.name, model: shortText(data?.model || provider.model, 100) };
   }

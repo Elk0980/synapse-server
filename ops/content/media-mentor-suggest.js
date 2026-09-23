@@ -58,7 +58,9 @@ function buildPrompt(brief, { startDate, days }) {
     'В mentorNote укажи, какой один факт или материал нужен от клиента, и объясни ему простыми словами, ' +
     'зачем мы это просим и какой этап пути покупателя это улучшит. ' +
     'Задание на съёмку — одно простое действие по указанной готовности; лицо и голос не требуй. ' +
-    'Не навязывай фиксированные дни, длину видео, пороги удержания или обещания охватов.';
+    'Не навязывай фиксированные дни, длину видео, пороги удержания или обещания охватов. ' +
+    'Предложи компактный первый набор из 3–5 материалов в пределах периода: topic до 60 знаков, ' +
+    'hook до 80 знаков, mentorNote до 140 знаков. Это не обещание ежедневного выпуска.';
   const user = [
     `Даты плана: ${dates(startDate, days).join(', ')}.`,
     `Не более ${MAX_ITEMS_PER_DAY} позиций на дату.`,
@@ -72,7 +74,7 @@ function buildPrompt(brief, { startDate, days }) {
     `Исходники: ${list(brief.assets, (a) => `${a.id} — ${clean(a.title, 200)} [${a.kind}]`)}.`,
     `Готовность к съёмке: ${brief.shootingComfort?.level || 'unknown'}. ${clean(brief.shootingComfort?.notes, 500)}`,
   ].join('\n');
-  return { system, messages: [{ role: 'user', content: user }] };
+  return { system, messages: [{ role: 'user', content: user }], responseProfile: 'structured-draft' };
 }
 
 /* Из ответа берётся первый массив JSON. Если его нет — это не план, и чинить нечего. */
