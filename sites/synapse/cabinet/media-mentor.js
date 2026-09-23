@@ -560,8 +560,7 @@
 
   function markup(data, ctx) {
     const edit = canEdit(ctx);
-    return `<p class="card mentor-notice" role="note">${esc(data.notice)}</p>
-      ${journeyMarkup(data)}
+    return `${journeyMarkup(data)}
       ${propertyExampleMarkup(ctx)}
       <section class="card mentor-brief"><h2>Бриф компании</h2>
         <p class="mentor-note">Версия ${esc(data.brief.revision)}${data.brief.updatedAt ? ` · обновлён ${esc(moment(data.brief.updatedAt))}` : ''}.
@@ -966,9 +965,7 @@
       return;
     }
     container.innerHTML = `<div class="content-header"><h1>Бриф и план</h1>
-      <p>Бриф компании и контент-план на 7–14 дней. Бриф заполняет человек; план можно составить
-        самому или взять подсказку модели и проверить её. Согласование версии плана — решение
-        по тексту, а не разрешение публиковать.</p></div>
+      <p>Расскажите о компании, выберите темы на 7–14 дней и подготовьте материалы по шагам.</p></div>
       <div id="mentor-content" aria-live="polite"><p>Загружаем бриф и план…</p></div>`;
     void load(container, ctx);
   }
