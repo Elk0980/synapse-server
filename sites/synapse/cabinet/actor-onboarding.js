@@ -35,6 +35,19 @@
     `?companyCode=${encodeURIComponent(code)}`;
   const socialEndpoint = (code, review = false) => `/content/actor-onboarding/social-links${review ? '/review' : ''}` +
     `?companyCode=${encodeURIComponent(code)}`;
+  const checkInEndpoint = (code) => `/content/actor-onboarding/check-in?companyCode=${encodeURIComponent(code)}`;
+  const checkInLabels = {not_ready: 'После заполнения анкеты', waiting: 'Ещё не наступил',
+    due: 'Можно ответить', saved: 'Ответы сохранены'};
+  const checkInQuestions = [
+    {key: 'comfort', label: 'Насколько вам сейчас комфортно участвовать?',
+      why: 'Чтобы понять, подходит ли вам нынешний темп и формат.'},
+    {key: 'obstacles', label: 'Что вам мешает?', max: 2000,
+      why: 'Чтобы заметить трудности и понять, какая помощь нужна.'},
+    {key: 'improvements', label: 'Что стоит улучшить?', max: 2000,
+      why: 'Чтобы опираться на ваш опыт и сделать участие удобнее.'},
+    {key: 'nextStep', label: 'Какой следующий шаг вам по силам?', max: 1000,
+      why: 'Чтобы выбрать небольшое действие без лишнего давления.'},
+  ];
   const socialLabels = Object.freeze({instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube',
     vk: 'ВКонтакте', telegram: 'Telegram', facebook: 'Facebook', threads: 'Threads', x: 'X'});
   const socialHosts = Object.freeze({
@@ -63,6 +76,7 @@
   let current = null;
   let sequence = 0;
   const drafts = new Map();
+  const checkInDrafts = new Map();
   const draftKey = (state) => `${state.actorId ?? state.ctx.identity?.userId ?? 'unknown'}:${state.code}`;
   const live = (state) => current === state && state.id === sequence &&
     state.ctx.selectedProjectId === state.code && state.container.isConnected;
@@ -117,7 +131,10 @@
           <span class="actor-onboarding-badge" data-ready="${ready}">${ready ? 'Анкета готова' : 'Анкета в работе'}</span>
           <span>Кадр: ${esc(optionLabel('cameraComfort', item.cameraComfort))}</span>
           <span>Голос: ${esc(optionLabel('voiceComfort', item.voiceComfort))}</span>
-          <small>Обновлено: ${esc(date(item.updatedAt))}</small></li>`;
+          <small>Обновлено: ${esc(date(item.updatedAt))}</small>
+          ${item.checkIn ? `<small>Опрос через 14 дней: ${esc(checkInLabels[item.checkIn.status] || 'Статус неизвестен')}
+            ${item.checkIn.savedAt ? ` · сохранён ${esc(date(item.checkIn.savedAt))}` :
+    item.checkIn.dueAt ? ` · доступен с ${esc(date(item.checkIn.dueAt))}` : ''}</small>` : ''}</li>`;
       }).join('')}</ul>` : '<p>Участники пока не сохранили ответы.</p>'}`;
   }
   function socialLinkMarkup(item, owner = false) {
@@ -164,6 +181,106 @@
     node.textContent = message;
     node.dataset.error = String(error);
   }
+  function renderCheckIn(state, data) {
+    if (data.companyCode !== state.code || data.actorId !== state.actorId ||
+        !Object.hasOwn(checkInLabels, data.status)) throw Error('Ответ другого участника или компании');
+    const section = state.container.querySelector('[data-actor-check-in]');
+    const draft = checkInDrafts.get(draftKey(state));
+    const active = ['due', 'saved'].includes(data.status);
+    const answers = draft?.answers || data.answers || {};
+    state.checkInRevision = draft?.revision ?? data.revision;
+    section.innerHTML = `<h2>Как вам после первых двух недель?</h2>
+      <p>Один короткий опрос через 14 дней после заполнения основных ответов анкеты.
+        Можно ответить позже и затем поправить ответы.</p>
+      <p class="actor-onboarding-private">Эти ответы видите только вы. Руководитель видит только статус и даты опроса.</p>
+      <p data-check-in-state>${data.status === 'not_ready' ?
+    'Сначала сохраните направление, роль и выбранный формат кадра и голоса в анкете. После этого начнётся отсчёт 14 дней.' :
+    data.status === 'waiting' ? `Опрос будет доступен с ${esc(date(data.dueAt))}.` :
+    data.status === 'saved' ? `Ответы сохранены ${esc(date(data.savedAt))}. При желании вы можете их изменить.` :
+    'Прошло две недели. Расскажите, как вам участвовать; ответить можно в удобное время.'}</p>
+      ${active ? `<form data-check-in-form>${checkInQuestions.map((item) => {
+    const id = `actor-check-in-${item.key}`;
+    const hintId = `${id}-why`;
+    return `<div class="actor-check-in-question"><label for="${id}">${esc(item.label)}</label>
+          <p class="actor-check-in-why" id="${hintId}"><strong>Зачем:</strong> ${esc(item.why)}</p>
+          ${item.key === 'comfort' ? `<select id="${id}" name="comfort" aria-describedby="${hintId}" required>
+            ${[['', 'Выберите ответ'], ['comfortable', 'Мне комфортно'], ['mixed', 'По-разному'], ['difficult', 'Пока трудно']]
+      .map(([value, label]) => `<option value="${value}"${answers.comfort === value ? ' selected' : ''}>${label}</option>`).join('')}</select>` :
+    `<textarea id="${id}" name="${item.key}" aria-describedby="${hintId}" rows="3" maxlength="${item.max}"
+            ${item.key === 'nextStep' ? 'required placeholder="Небольшое действие или нужна помощь с выбором"' :
+    'placeholder="Можно оставить пустым"'}>${esc(answers[item.key] || '')}</textarea>`}</div>`;
+  }).join('')}<button type="submit" class="plain-button">Сохранить ответы опроса</button></form>` : ''}
+      <p data-check-in-status role="status" aria-live="polite"></p>
+      <button type="button" class="actor-onboarding-reload" data-check-in-reload>Загрузить сохранённый опрос заново</button>`;
+    if (draft && active) socialMessage(state, '[data-check-in-status]',
+      draft.revision === data.revision ? 'Ваш несохранённый ввод восстановлен.' :
+        'Опрос изменился на сервере. Ваш ввод остался здесь; загрузите сохранённые ответы перед повторной записью.',
+      draft.revision !== data.revision);
+    section.querySelector('[data-check-in-reload]').addEventListener('click', () => {
+      if (state.checkInBusy) return;
+      checkInDrafts.delete(draftKey(state));
+      void loadCheckIn(state);
+    });
+    const form = section.querySelector('[data-check-in-form]');
+    if (!form) return;
+    const read = () => Object.fromEntries(checkInQuestions.map((item) =>
+      [item.key, form.elements.namedItem(item.key).value.trim()]));
+    const remember = () => checkInDrafts.set(draftKey(state),
+      {revision: state.checkInRevision, answers: read()});
+    form.addEventListener('input', remember);
+    form.addEventListener('change', remember);
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!live(state) || state.checkInBusy || !form.reportValidity()) return;
+      remember();
+      state.checkInBusy = true;
+      const version = state.checkInVersion = (state.checkInVersion || 0) + 1;
+      section.querySelectorAll('button,textarea,select').forEach((item) => {item.disabled = true;});
+      socialMessage(state, '[data-check-in-status]', 'Сохраняем ответы опроса…');
+      try {
+        const result = await state.ctx.apiJson(checkInEndpoint(state.code), state.ctx.csrfOptions('PUT',
+          {revision: state.checkInRevision, answers: read()}));
+        if (!live(state) || !section.isConnected || version !== state.checkInVersion) return;
+        if (result.companyCode !== state.code || result.actorId !== state.actorId || result.status !== 'saved') {
+          throw Error('Ответ другого участника или компании');
+        }
+        checkInDrafts.delete(draftKey(state));
+        renderCheckIn(state, result);
+        socialMessage(state, '[data-check-in-status]', 'Ответы опроса сохранены.');
+        if (can(state.ctx, 'manage')) void loadSummary(state);
+      } catch (error) {
+        if (live(state) && section.isConnected && version === state.checkInVersion) {
+          socialMessage(state, '[data-check-in-status]', error.status === 409 ?
+            'Опрос уже изменился или ещё недоступен. Ваш ввод остался здесь; загрузите сохранённый опрос перед повтором.' :
+            `Не удалось сохранить опрос: ${error.message}`, true);
+        }
+      } finally {
+        if (live(state) && section.isConnected && version === state.checkInVersion) {
+          state.checkInBusy = false;
+          section.querySelectorAll('button,textarea,select').forEach((item) => {item.disabled = false;});
+        }
+      }
+    });
+  }
+  async function loadCheckIn(state) {
+    if (!live(state) || state.checkInBusy) return;
+    const target = state.container.querySelector('[data-actor-check-in]');
+    const version = state.checkInVersion = (state.checkInVersion || 0) + 1;
+    try {
+      const data = await state.ctx.apiJson(checkInEndpoint(state.code));
+      if (!live(state) || !target?.isConnected || version !== state.checkInVersion) return;
+      renderCheckIn(state, data);
+    } catch (error) {
+      if (live(state) && target?.isConnected && version === state.checkInVersion) {
+        if (!target.querySelector('[data-check-in-status]')) {
+          target.innerHTML = '<h2>Опрос через 14 дней</h2><p data-check-in-status role="status"></p>' +
+            '<button type="button" class="plain-button" data-check-in-retry>Попробовать снова</button>';
+          target.querySelector('[data-check-in-retry]').addEventListener('click', () => void loadCheckIn(state));
+        }
+        socialMessage(state, '[data-check-in-status]', `Не удалось загрузить опрос: ${error.message}`, true);
+      }
+    }
+  }
   function renderForm(state, response) {
     if (!live(state)) return;
     state.actorId = response.actorId;
@@ -188,6 +305,8 @@
             <button type="submit" class="plain-button" data-actor-save>Сохранить сейчас</button></div>
           <p data-actor-status role="status" aria-live="polite"></p></form>
         <button type="button" class="actor-onboarding-reload" data-actor-reload>Загрузить сохранённые ответы заново</button>
+      </section><section class="card actor-check-in" data-actor-check-in aria-label="Опрос через 14 дней">
+        <p role="status">Загружаем опрос через 14 дней…</p>
       </section><section class="card actor-onboarding-social" data-actor-social>
         <h2>Мои соцсети для компании</h2>
         <p class="actor-onboarding-private">Предложите публичную ссылку на свой профиль, если он относится к этой компании.
@@ -247,6 +366,7 @@
           `Версия ${data.revision} · обновлено ${date(data.updatedAt)}`;
         drafts.delete(draftKey(state));
         status(state, 'Ответы сохранены. Вы сможете изменить их позже.');
+        if (!checkInDrafts.has(draftKey(state))) void loadCheckIn(state);
         if (can(state.ctx, 'manage')) void loadSummary(state);
       } catch (error) {
         if (!live(state)) return;
@@ -422,18 +542,22 @@
   }
   async function load(state) {
     if (!live(state)) return;
+    const version = state.loadVersion = (state.loadVersion || 0) + 1;
+    state.checkInVersion = (state.checkInVersion || 0) + 1;
+    state.checkInBusy = false;
     state.container.innerHTML = '<div class="content-header"><h1>Моя анкета для контента</h1></div>' +
       '<div class="card" role="status">Загружаем ваши ответы…</div>';
     try {
       const data = await state.ctx.apiJson(endpoint(state.code));
-      if (!live(state)) return;
+      if (!live(state) || version !== state.loadVersion) return;
       if (data.companyCode !== state.code) throw Error('Ответ другой компании');
       renderForm(state, data);
+      void loadCheckIn(state);
       if (can(state.ctx, 'manage')) void loadSummary(state);
       void loadSocialLinks(state);
       if (can(state.ctx, 'manage')) void loadSocialReview(state);
     } catch (error) {
-      if (live(state)) state.container.innerHTML = `<div class="content-header"><h1>Моя анкета для контента</h1></div>
+      if (live(state) && version === state.loadVersion) state.container.innerHTML = `<div class="content-header"><h1>Моя анкета для контента</h1></div>
         <div class="card" role="alert">Не удалось загрузить анкету: ${esc(error.message)}</div>`;
     }
   }

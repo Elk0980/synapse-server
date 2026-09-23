@@ -9,6 +9,22 @@ const VOICE = Object.freeze(['unknown', 'text_only', 'short_voice', 'comfortable
 const FIELDS = Object.freeze(['direction', 'role', 'cameraComfort', 'voiceComfort', 'boundaries', 'suggestions']);
 const EMPTY = Object.freeze({ direction: '', role: '', cameraComfort: 'unknown',
   voiceComfort: 'unknown', boundaries: '', suggestions: '' });
+const CHECK_IN_DELAY = 14 * 24 * 60 * 60 * 1000;
+const CHECK_IN_COMFORT = Object.freeze(['comfortable', 'mixed', 'difficult']);
+const CHECK_IN_QUESTIONS = Object.freeze([
+  { key: 'comfort', label: 'Насколько вам сейчас комфортно участвовать?',
+    why: 'Чтобы понять, подходит ли вам нынешний темп и формат.' },
+  { key: 'obstacles', label: 'Что вам мешает?',
+    why: 'Чтобы заметить трудности и понять, какая помощь нужна.' },
+  { key: 'improvements', label: 'Что стоит улучшить?',
+    why: 'Чтобы опираться на ваш опыт и сделать участие удобнее.' },
+  { key: 'nextStep', label: 'Какой следующий шаг вам по силам?',
+    why: 'Чтобы выбрать небольшое действие без лишнего давления.' },
+]);
+const CHECK_IN_EMPTY = Object.freeze({ comfort: '', obstacles: '', improvements: '', nextStep: '' });
+const complete = (profile) => Boolean(profile.direction?.trim() && profile.role?.trim() &&
+  CAMERA.includes(profile.cameraComfort) && profile.cameraComfort !== 'unknown' &&
+  VOICE.includes(profile.voiceComfort) && profile.voiceComfort !== 'unknown');
 const QUESTIONS = Object.freeze([
   { key: 'direction', label: 'О каком направлении компании вы рассказываете?',
     why: 'Чтобы готовить темы по вашей работе и не смешивать направления.' },
@@ -109,7 +125,32 @@ function createActorOnboarding({ db, authStore, requireSession, requireCsrf, rea
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     PRIMARY KEY (company_code, user_id, platform)
+  );
+  CREATE TABLE IF NOT EXISTS actor_onboarding_completion (
+    company_code TEXT NOT NULL COLLATE NOCASE,
+    user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+    completed_at TEXT NOT NULL,
+    PRIMARY KEY (company_code, user_id)
+  );
+  CREATE TABLE IF NOT EXISTS actor_onboarding_check_ins (
+    company_code TEXT NOT NULL COLLATE NOCASE,
+    user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+    revision INTEGER NOT NULL CHECK (revision >= 1),
+    answers_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (company_code, user_id)
   );`);
+  // Старые анкеты не хранили дату первого полного заполнения. Для уже полных
+  // используем последнюю известную дату сохранения; дальше дата не сдвигается.
+  const existing = db.prepare(`SELECT p.company_code,p.user_id,p.profile_json,p.updated_at
+    FROM actor_onboarding_profiles p LEFT JOIN actor_onboarding_completion c
+    ON c.company_code=p.company_code AND c.user_id=p.user_id WHERE c.user_id IS NULL`).all();
+  for (const row of existing) {
+    if (complete(JSON.parse(row.profile_json))) db.prepare(`INSERT OR IGNORE INTO
+      actor_onboarding_completion(company_code,user_id,completed_at) VALUES(?,?,?)`)
+      .run(row.company_code, row.user_id, row.updated_at);
+  }
 
   // Перечитываем права на каждый запрос: прежняя cookie не сохраняет отозванный доступ.
   function access(request, code, permission) {
@@ -130,11 +171,68 @@ function createActorOnboarding({ db, authStore, requireSession, requireCsrf, rea
       createdAt: row?.created_at || null, updatedAt: row?.updated_at || null, questions: QUESTIONS,
       cameraOptions: CAMERA, voiceOptions: VOICE };
   }
+  function getOwnProfile(code, userId) {
+    if (!Object.hasOwn(COMPANIES, code) || !Number.isSafeInteger(userId) || userId < 1) return null;
+    const user = authStore.getById(userId);
+    if (!user || (user.role !== 'owner' && (!user.companyCodes.includes(code) ||
+        !user.permissions.includes('actor-onboarding.self')))) return null;
+    const row = db.prepare(`SELECT profile_json FROM actor_onboarding_profiles
+      WHERE company_code=? AND user_id=?`).get(code, userId);
+    return row ? JSON.parse(row.profile_json) : null;
+  }
+  function checkInStatus(completedAt, savedAt) {
+    const dueAt = completedAt ? new Date(Date.parse(completedAt) + CHECK_IN_DELAY).toISOString() : null;
+    return { status: savedAt ? 'saved' : !dueAt ? 'not_ready' :
+      Date.parse(now()) >= Date.parse(dueAt) ? 'due' : 'waiting',
+    completedAt: completedAt || null, dueAt, savedAt: savedAt || null };
+  }
+  function ownCheckIn(code, user) {
+    const completion = db.prepare(`SELECT completed_at FROM actor_onboarding_completion
+      WHERE company_code=? AND user_id=?`).get(code, user.id);
+    const row = db.prepare(`SELECT revision,answers_json,created_at,updated_at
+      FROM actor_onboarding_check_ins WHERE company_code=? AND user_id=?`).get(code, user.id);
+    return { companyCode: code, actorId: user.id,
+      ...checkInStatus(completion?.completed_at, row?.updated_at), revision: row?.revision || 0,
+      answers: row ? JSON.parse(row.answers_json) : { ...CHECK_IN_EMPTY },
+      createdAt: row?.created_at || null, questions: CHECK_IN_QUESTIONS,
+      comfortOptions: CHECK_IN_COMFORT };
+  }
+  function saveCheckIn(code, user, body) {
+    requireShape(body, ['revision', 'answers']);
+    if (!Number.isSafeInteger(body.revision) || body.revision < 0) fail(400, 'Некорректная версия ответов');
+    requireShape(body.answers, CHECK_IN_QUESTIONS.map((item) => item.key));
+    if (!CHECK_IN_COMFORT.includes(body.answers.comfort)) fail(400, 'Выберите, насколько вам комфортно');
+    const answers = { comfort: body.answers.comfort,
+      obstacles: cleanText(body.answers.obstacles, 2000, 'Что мешает'),
+      improvements: cleanText(body.answers.improvements, 2000, 'Что улучшить'),
+      nextStep: cleanText(body.answers.nextStep, 1000, 'Следующий шаг') };
+    if (!answers.nextStep) fail(400, 'Укажите посильный следующий шаг или напишите, что нужна помощь с выбором');
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const current = ownCheckIn(code, user);
+      if (current.status === 'not_ready' || current.status === 'waiting') {
+        fail(409, 'Этот опрос станет доступен через 14 дней после заполнения основных ответов анкеты');
+      }
+      if (body.revision !== current.revision) fail(409, 'Ответы опроса уже изменились. Обновите их перед сохранением.');
+      if (current.revision === 0 || JSON.stringify(current.answers) !== JSON.stringify(answers)) {
+        const at = now();
+        db.prepare(`INSERT INTO actor_onboarding_check_ins
+          (company_code,user_id,revision,answers_json,created_at,updated_at) VALUES(?,?,1,?,?,?)
+          ON CONFLICT(company_code,user_id) DO UPDATE SET
+          revision=actor_onboarding_check_ins.revision+1,answers_json=excluded.answers_json,
+          updated_at=excluded.updated_at`).run(code, user.id, JSON.stringify(answers), at, at);
+      }
+      db.exec('COMMIT');
+    } catch (error) { db.exec('ROLLBACK'); throw error; }
+    return ownCheckIn(code, user);
+  }
   function summary(code) {
     // Отозванные участники остаются в истории, но не показываются среди текущих.
     const rows = db.prepare(`SELECT p.user_id actorId,u.display_name actorName,p.revision,
-      p.profile_json profileJson,p.updated_at updatedAt
+      p.profile_json profileJson,p.updated_at updatedAt,c.completed_at completedAt,k.updated_at checkInSavedAt
       FROM actor_onboarding_profiles p JOIN auth_users u ON u.id=p.user_id
+      LEFT JOIN actor_onboarding_completion c ON c.company_code=p.company_code AND c.user_id=p.user_id
+      LEFT JOIN actor_onboarding_check_ins k ON k.company_code=p.company_code AND k.user_id=p.user_id
       LEFT JOIN auth_user_companies m ON m.user_id=u.id AND m.company_code=p.company_code
       LEFT JOIN auth_user_permissions a ON a.user_id=u.id AND a.permission='actor-onboarding.self'
       WHERE p.company_code=? AND (u.role='owner' OR (m.user_id IS NOT NULL AND a.user_id IS NOT NULL))
@@ -144,7 +242,8 @@ function createActorOnboarding({ db, authStore, requireSession, requireCsrf, rea
       return { actorId: row.actorId, actorName: row.actorName, revision: row.revision,
         direction: profile.direction, role: profile.role, cameraComfort: profile.cameraComfort,
         voiceComfort: profile.voiceComfort, hasBoundaries: Boolean(profile.boundaries),
-        hasSuggestions: Boolean(profile.suggestions), updatedAt: row.updatedAt };
+        hasSuggestions: Boolean(profile.suggestions), updatedAt: row.updatedAt,
+        checkIn: checkInStatus(row.completedAt, row.checkInSavedAt) };
     });
     return { companyCode: code, total: participants.length,
       ready: participants.filter((item) => item.direction && item.role &&
@@ -243,11 +342,22 @@ function createActorOnboarding({ db, authStore, requireSession, requireCsrf, rea
   }
   async function handle(request, response, url) {
     if (!['/content/actor-onboarding', '/content/actor-onboarding/summary',
+      '/content/actor-onboarding/check-in',
       '/content/actor-onboarding/social-links',
       '/content/actor-onboarding/social-links/review'].includes(url.pathname)) return false;
     if ([...url.searchParams.keys()].some((key) => key !== 'companyCode')) fail(400, 'Лишние параметры запроса');
     const code = url.searchParams.get('companyCode');
     if (typeof code !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(code)) fail(400, 'Выберите компанию');
+    if (url.pathname === '/content/actor-onboarding/check-in') {
+      if (!['GET', 'PUT'].includes(request.method)) fail(405, 'Метод не поддерживается');
+      const { session, user } = access(request, code, 'actor-onboarding.self');
+      if (request.method === 'GET') sendJson(response, 200, ownCheckIn(code, user));
+      else {
+        requireCsrf(request, session);
+        sendJson(response, 200, saveCheckIn(code, user, await readJson(request)));
+      }
+      return true;
+    }
     if (url.pathname === '/content/actor-onboarding/social-links/review') {
       if (!['GET', 'PUT'].includes(request.method)) fail(405, 'Метод не поддерживается');
       const { session, user } = access(request, code, 'actor-onboarding.manage');
@@ -301,12 +411,14 @@ function createActorOnboarding({ db, authStore, requireSession, requireCsrf, rea
           revision=actor_onboarding_profiles.revision+1,profile_json=excluded.profile_json,
           updated_at=excluded.updated_at`).run(code, user.id, JSON.stringify(profile), at, at);
       }
+      if (complete(profile)) db.prepare(`INSERT OR IGNORE INTO actor_onboarding_completion
+        (company_code,user_id,completed_at) VALUES(?,?,?)`).run(code, user.id, now());
       db.exec('COMMIT');
     } catch (error) { db.exec('ROLLBACK'); throw error; }
     sendJson(response, 200, own(code, user));
     return true;
   }
-  return { handle };
+  return { handle, getOwnProfile };
 }
 
 module.exports = { createActorOnboarding };

@@ -1,5 +1,17 @@
 .actor-onboarding-header p { max-width: 76ch; }
 .actor-onboarding-layout { display: grid; gap: 16px; min-width: 0; }
+.actor-check-in { min-width: 0; overflow-wrap: anywhere; }
+.actor-check-in h2 { margin-top: 0; }
+.actor-check-in form { display: grid; gap: 20px; }
+.actor-check-in-question { display: grid; gap: 8px; min-width: 0; }
+.actor-check-in-question label { font-weight: 700; }
+.actor-check-in-why { margin: 0; color: var(--muted, #aab4c4); line-height: 1.45; }
+.actor-check-in textarea, .actor-check-in select { box-sizing: border-box; width: 100%;
+  min-width: 0; min-height: 48px; font: inherit; }
+.actor-check-in textarea { resize: vertical; }
+.actor-check-in button { min-height: 44px; white-space: normal; }
+[data-check-in-status] { min-height: 1.4em; }
+[data-check-in-status][data-error="true"] { color: var(--red, #ff9c9c); }
 .actor-onboarding-card, .actor-onboarding-summary,
 .actor-onboarding-social, .actor-onboarding-social-review { min-width: 0; }
 .actor-onboarding-top { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 12px; }
@@ -53,6 +65,8 @@
 [data-actor-social-status][data-error="true"],
 [data-actor-social-review-status][data-error="true"] { color: var(--red, #ff9c9c); }
 @media (max-width: 600px) {
+  .actor-check-in { padding: 16px; }
+  .actor-check-in button { width: 100%; }
   .actor-onboarding-layout { gap: 10px; }
   .actor-onboarding-card, .actor-onboarding-summary,
   .actor-onboarding-social, .actor-onboarding-social-review { padding: 16px; }

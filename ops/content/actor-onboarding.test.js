@@ -10,7 +10,7 @@ const HASH = `scrypt$16384$8$1$${Buffer.alloc(16, 3).toString('base64url')}$${Bu
 const PROFILE = { direction: 'Переезд', role: 'Рассказываю личный опыт', cameraComfort: 'small_steps',
   voiceComfort: 'short_voice', boundaries: 'Не обсуждать семью', suggestions: 'Начать с прогулки' };
 
-function setup(t) {
+function setup(t, options = {}) {
   const db = new DatabaseSync(':memory:');
   const auth = createAuthStore(db, `owner:owner:${HASH}`);
   const add = (login, companies, permissions) => auth.create(1, { login, displayName: login,
@@ -19,15 +19,16 @@ function setup(t) {
   const colleague = add('colleague', ['taisabai'], ['actor-onboarding.self']);
   const director = add('director', ['taisabai'], ['actor-onboarding.manage']);
   const outsider = add('outsider', ['alvi'], ['actor-onboarding.self', 'actor-onboarding.manage']);
-  const service = createActorOnboarding({ db, authStore: auth,
+  const serviceOptions = { db, authStore: auth,
     requireSession: (request) => { if (!request.session) throw Object.assign(new Error('Требуется вход'), { status: 401 }); return request.session; },
     requireCsrf: (request, session) => { if (request.headers['x-csrf-token'] !== session.csrf) {
       throw Object.assign(new Error('Некорректный CSRF-токен'), { status: 403 });
     } }, readJson: async (request) => request.body,
-    sendJson: (response, status, payload) => { response.status = status; response.body = payload; } });
+    sendJson: (response, status, payload) => { response.status = status; response.body = payload; }, ...options };
+  const service = createActorOnboarding(serviceOptions);
   t.after(() => db.close());
   const session = (user) => ({ user: auth.getById(user.id), csrf: `csrf-${user.id}` });
-  return { db, auth, service, actor, colleague, director, outsider, owner: auth.getById(1), session };
+  return { db, auth, service, serviceOptions, actor, colleague, director, outsider, owner: auth.getById(1), session };
 }
 
 async function call(f, user, method, path, body, headers = {}) {
@@ -39,6 +40,127 @@ async function call(f, user, method, path, body, headers = {}) {
   } catch (error) { return { handled: true, status: error.status || 500, error }; }
 }
 const self = '?companyCode=taisabai';
+const checkInRoute = `/content/actor-onboarding/check-in${self}`;
+const ANSWERS = {comfort: 'mixed', obstacles: 'Личная трудность', improvements: 'Личное предложение',
+  nextStep: 'Личный небольшой шаг'};
+
+test('опрос доступен ровно через 14 суток после первого полного профиля и не просрочивается', async (t) => {
+  let at = '2026-09-01T10:30:00.000Z';
+  const f = setup(t, {now: () => at});
+  assert.equal((await call(f, f.actor, 'GET', checkInRoute)).body.status, 'not_ready');
+  assert.equal((await call(f, f.actor, 'PUT', checkInRoute, {revision: 0, answers: ANSWERS})).status, 409);
+  await call(f, f.actor, 'PUT', `/content/actor-onboarding${self}`,
+    {revision: 0, profile: {...PROFILE, role: ' ', voiceComfort: 'unknown'}});
+  assert.equal((await call(f, f.actor, 'GET', checkInRoute)).body.dueAt, null);
+  at = '2026-09-03T10:30:00.000Z';
+  await call(f, f.actor, 'PUT', `/content/actor-onboarding${self}`, {revision: 1, profile: PROFILE});
+  let view = (await call(f, f.actor, 'GET', checkInRoute)).body;
+  assert.equal(view.status, 'waiting');
+  assert.equal(view.completedAt, at);
+  assert.equal(view.dueAt, '2026-09-17T10:30:00.000Z');
+  assert.equal(view.questions.length, 4);
+  assert.ok(view.questions.every((item) => item.label && item.why));
+  at = '2026-09-04T10:30:00.000Z';
+  await call(f, f.actor, 'PUT', `/content/actor-onboarding${self}`,
+    {revision: 2, profile: {...PROFILE, role: ''}});
+  at = '2026-09-17T10:29:59.999Z';
+  assert.equal((await call(f, f.actor, 'GET', checkInRoute)).body.status, 'waiting');
+  assert.equal((await call(f, f.actor, 'PUT', checkInRoute, {revision: 0, answers: ANSWERS})).status, 409);
+  at = '2026-09-17T10:30:00.000Z';
+  view = (await call(f, f.actor, 'GET', checkInRoute)).body;
+  assert.equal(view.status, 'due');
+  assert.equal(view.completedAt, '2026-09-03T10:30:00.000Z');
+  at = '2026-12-30T10:30:00.000Z';
+  assert.equal((await call(f, f.actor, 'GET', checkInRoute)).body.status, 'due');
+  const saved = await call(f, f.actor, 'PUT', checkInRoute, {revision: 0, answers: ANSWERS});
+  assert.equal(saved.status, 200, saved.error?.message);
+  assert.equal(saved.body.status, 'saved');
+  assert.equal(saved.body.revision, 1);
+  assert.equal(saved.body.savedAt, at);
+  assert.equal((await call(f, f.actor, 'GET', `/content/actor-onboarding${self}`)).body.revision, 3);
+  at = '2027-01-31T10:30:00.000Z';
+  assert.equal((await call(f, f.actor, 'GET', checkInRoute)).body.status, 'saved', 'новый цикл не начинается');
+  assert.equal((await call(f, f.actor, 'PUT', checkInRoute, {revision: 1, answers: ANSWERS})).body.revision, 1);
+  assert.equal((await call(f, f.actor, 'PUT', checkInRoute, {revision: 0, answers: ANSWERS})).status, 409);
+  const changed = await call(f, f.actor, 'PUT', checkInRoute,
+    {revision: 1, answers: {...ANSWERS, comfort: 'comfortable'}});
+  assert.equal(changed.body.revision, 2);
+  assert.equal(changed.body.createdAt, saved.body.createdAt);
+});
+
+test('ответы опроса изолированы по участнику и компании, сводка содержит только статус и даты', async (t) => {
+  let at = '2026-09-01T00:00:00.000Z';
+  const f = setup(t, {now: () => at});
+  f.auth.updateAccess(f.owner.id, f.actor.id, ['taisabai', 'synapse-business'], ['actor-onboarding.self']);
+  await call(f, f.actor, 'PUT', `/content/actor-onboarding${self}`, {revision: 0, profile: PROFILE});
+  at = '2026-09-16T00:00:00.000Z';
+  await call(f, f.actor, 'PUT', checkInRoute, {revision: 0, answers: ANSWERS});
+  for (const response of [await call(f, f.colleague, 'GET', checkInRoute),
+    await call(f, f.actor, 'GET', '/content/actor-onboarding/check-in?companyCode=synapse-business')]) {
+    assert.equal(response.status, 200);
+    assert.equal(response.body.revision, 0);
+    assert.equal(response.body.status, 'not_ready');
+    assert.equal(response.body.answers.nextStep, '');
+  }
+  const summary = (await call(f, f.director, 'GET', `/content/actor-onboarding/summary${self}`)).body;
+  assert.deepEqual(Object.keys(summary.participants[0].checkIn).sort(),
+    ['completedAt', 'dueAt', 'savedAt', 'status']);
+  assert.equal(summary.participants[0].checkIn.status, 'saved');
+  for (const value of Object.values(ANSWERS)) assert.equal(JSON.stringify(summary).includes(value), false);
+  const directorOwn = await call(f, f.director, 'GET', checkInRoute);
+  assert.equal(directorOwn.body.actorId, f.director.id);
+  assert.equal(directorOwn.body.status, 'not_ready');
+  assert.equal(directorOwn.body.answers.nextStep, '', 'управление даёт свою анкету, но не чужие ответы');
+  assert.equal((await call(f, f.outsider, 'GET', checkInRoute)).status, 403);
+  assert.equal((await call(f, null, 'GET', checkInRoute)).status, 401);
+  assert.equal((await call(f, f.actor, 'GET', `${checkInRoute}&actorId=${f.colleague.id}`)).status, 400);
+  assert.equal((await call(f, f.actor, 'GET', '/content/actor-onboarding/check-in?companyCode=alvi')).status, 403);
+  assert.deepEqual(f.service.getOwnProfile('taisabai', f.actor.id), PROFILE);
+  assert.equal(f.service.getOwnProfile('synapse-business', f.actor.id), null);
+  assert.equal(f.service.getOwnProfile('taisabai', f.colleague.id), null);
+  assert.equal(f.service.getOwnProfile('alvi', f.actor.id), null);
+  assert.equal(f.service.getOwnProfile('taisabai', String(f.actor.id)), null);
+  const stale = f.session(f.actor);
+  f.auth.updateAccess(f.owner.id, f.actor.id, ['taisabai'], []);
+  for (const method of ['GET', 'PUT']) await assert.rejects(f.service.handle({method,
+    session: stale, headers: {'x-csrf-token': stale.csrf}, body: {revision: 1, answers: ANSWERS}}, {},
+  new URL(checkInRoute, 'http://localhost')), (error) => error.status === 403);
+  assert.equal(f.service.getOwnProfile('taisabai', f.actor.id), null);
+  assert.equal((await call(f, f.director, 'GET', `/content/actor-onboarding/summary${self}`)).body.total, 0);
+});
+
+test('опрос проверяет CSRF, точную форму тела и допустимые ответы', async (t) => {
+  let at = '2026-09-01T00:00:00.000Z';
+  const f = setup(t, {now: () => at});
+  await call(f, f.actor, 'PUT', `/content/actor-onboarding${self}`, {revision: 0, profile: PROFILE});
+  at = '2026-09-16T00:00:00.000Z';
+  const invalid = [null, [], {}, {revision: '0', answers: ANSWERS}, {revision: -1, answers: ANSWERS},
+    {revision: 0, answers: ANSWERS, actorId: f.colleague.id},
+    {revision: 0, answers: {...ANSWERS, companyCode: 'synapse-business'}},
+    {revision: 0, answers: {...ANSWERS, comfort: 'unknown'}},
+    {revision: 0, answers: {...ANSWERS, nextStep: ' '}},
+    {revision: 0, answers: {...ANSWERS, obstacles: 'x'.repeat(2001)}},
+    {revision: 0, answers: {...ANSWERS, improvements: null}}];
+  for (const body of invalid) assert.equal((await call(f, f.actor, 'PUT', checkInRoute, body)).status, 400);
+  assert.equal((await call(f, f.actor, 'PUT', checkInRoute, {revision: 0, answers: ANSWERS},
+    {'x-csrf-token': 'wrong'})).status, 403);
+  assert.equal((await call(f, f.actor, 'POST', checkInRoute, {})).status, 405);
+  assert.equal((await call(f, f.actor, 'GET', checkInRoute)).body.revision, 0);
+});
+
+test('старые полные анкеты получают неизменную дату из последнего сохранения', (t) => {
+  const f = setup(t, {now: () => '2026-09-30T00:00:00.000Z'});
+  f.db.prepare(`INSERT INTO actor_onboarding_profiles
+    (company_code,user_id,revision,profile_json,created_at,updated_at) VALUES(?,?,1,?,?,?)`)
+    .run('taisabai', f.actor.id, JSON.stringify(PROFILE), '2026-09-01T00:00:00Z', '2026-09-04T00:00:00Z');
+  createActorOnboarding(f.serviceOptions);
+  assert.equal(f.db.prepare('SELECT completed_at FROM actor_onboarding_completion').get().completed_at,
+    '2026-09-04T00:00:00Z');
+  f.db.prepare('UPDATE actor_onboarding_profiles SET updated_at=?').run('2026-09-20T00:00:00Z');
+  createActorOnboarding(f.serviceOptions);
+  assert.equal(f.db.prepare('SELECT completed_at FROM actor_onboarding_completion').get().completed_at,
+    '2026-09-04T00:00:00Z');
+});
 
 test('участник сохраняет только свой профиль; другой участник не видит его ответы', async (t) => {
   const f = setup(t);

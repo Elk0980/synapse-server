@@ -10,6 +10,11 @@ const profile = () => ({direction: '', role: '', cameraComfort: 'unknown', voice
   boundaries: '', suggestions: ''});
 const own = (code, overrides = {}) => ({companyCode: code, actorId: 17, actorName: 'Таня',
   revision: 0, profile: profile(), createdAt: null, updatedAt: null, ...overrides});
+const checkIn = (code, overrides = {}) => ({companyCode: code, actorId: 17, revision: 0,
+  status: 'not_ready', completedAt: null, dueAt: null, savedAt: null,
+  answers: {comfort: '', obstacles: '', improvements: '', nextStep: ''}, ...overrides});
+const dueCheckIn = (code, overrides = {}) => checkIn(code, {status: 'due',
+  completedAt: '2026-09-01T10:00:00Z', dueAt: '2026-09-15T10:00:00Z', ...overrides});
 const summary = (code) => ({companyCode: code, total: 2, ready: 1, participants: [
   {actorId: 17, actorName: 'Таня', revision: 1, direction: 'Туризм', role: 'Эксперт',
     cameraComfort: 'small_steps', voiceComfort: 'text_only', hasBoundaries: true,
@@ -18,6 +23,151 @@ const summary = (code) => ({companyCode: code, total: 2, ready: 1, participants:
     cameraComfort: 'unknown', voiceComfort: 'unknown', hasBoundaries: false,
     hasSuggestions: false, updatedAt: null},
 ]});
+
+test('опрос показывает ожидание, наступивший срок и сохранённые ответы без обещания повторов', async () => {
+  for (const state of ['not_ready', 'waiting', 'due', 'saved']) {
+    const f = fixture({override: (call) => call.path.endsWith('/check-in') ?
+      dueCheckIn(call.code, {status: state, revision: state === 'saved' ? 1 : 0,
+        savedAt: state === 'saved' ? '2026-09-20T00:00:00Z' : null,
+        answers: {comfort: 'mixed', obstacles: '<img src=x>', improvements: '', nextStep: 'Один шаг'}}) : undefined});
+    try {
+      f.view.render(f.container, f.ctx); await f.settle();
+      const section = f.container.querySelector('[data-actor-check-in]');
+      assert.match(section.textContent, /Один короткий опрос/);
+      assert.match(section.textContent, /Руководитель видит только статус и даты/);
+      assert.doesNotMatch(section.textContent, /каждые|следующий опрос/);
+      assert.equal(section.querySelector('img'), null);
+      if (['due', 'saved'].includes(state)) {
+        assert.equal(section.querySelectorAll('.actor-check-in-question').length, 4);
+        assert.equal(section.querySelectorAll('.actor-check-in-why').length, 4);
+        assert.equal(section.querySelector('[name="obstacles"]').value, '<img src=x>');
+        for (const label of section.querySelectorAll('label')) {
+          const input = section.querySelector(`#${label.htmlFor}`);
+          assert.ok(input);
+          assert.ok(section.querySelector(`#${input.getAttribute('aria-describedby')}`));
+        }
+      } else assert.equal(section.querySelector('form'), null);
+      if (state === 'not_ready') assert.match(section.textContent, /Сначала сохраните/);
+      if (state === 'waiting') assert.match(section.textContent, /будет доступен с/);
+      if (state === 'due') assert.match(section.textContent, /ответить можно в удобное время/);
+      if (state === 'saved') assert.match(section.textContent, /Ответы сохранены/);
+      assert.ok(f.calls.every((call) => call.method === 'GET'));
+    } finally {f.close();}
+  }
+});
+
+test('опрос сохраняется отдельно от анкеты с собственной версией и CSRF', async () => {
+  const f = fixture({override: (call) => {
+    if (!call.path.endsWith('/check-in')) return;
+    return call.method === 'PUT' ? dueCheckIn(call.code, {status: 'saved', revision: 8,
+      savedAt: '2026-09-24T00:00:00Z', answers: call.body.answers}) : dueCheckIn(call.code,
+    {status: 'saved', revision: 7, answers: {comfort: 'mixed', obstacles: '', improvements: '', nextStep: 'Проба'}});
+  }});
+  try {
+    f.view.render(f.container, f.ctx); await f.settle();
+    const form = f.container.querySelector('[data-check-in-form]');
+    form.elements.namedItem('nextStep').value = 'Следующий посильный шаг';
+    form.dispatchEvent(new f.w.Event('input', {bubbles: true}));
+    form.dispatchEvent(new f.w.Event('submit', {bubbles: true, cancelable: true}));
+    await f.settle();
+    const writes = f.calls.filter((call) => call.method === 'PUT');
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].path, '/content/actor-onboarding/check-in');
+    assert.equal(writes[0].body.revision, 7);
+    assert.equal(writes[0].headers['X-CSRF-Token'], 'test');
+    assert.deepEqual(Object.keys(writes[0].body).sort(), ['answers', 'revision']);
+    assert.equal(writes[0].body.answers.nextStep, 'Следующий посильный шаг');
+    assert.match(f.container.querySelector('[data-check-in-status]').textContent, /сохранены/);
+    assert.match(f.container.querySelector('.actor-onboarding-top small').textContent, /Версия 0/);
+    assert.equal(f.container.querySelector('[data-check-in-form] button').disabled, false);
+  } finally {f.close();}
+});
+
+test('конфликт опроса сохраняет ввод по company+actor и не затирает его новой версией', async () => {
+  let actorId = 17, revision = 0;
+  const f = fixture({override: (call) => {
+    if (call.path.endsWith('/check-in')) {
+      if (call.method === 'PUT') throw Object.assign(new Error('Conflict'), {status: 409});
+      return dueCheckIn(call.code, {actorId, revision});
+    }
+    if (call.path === '/content/actor-onboarding') return own(call.code, {actorId});
+  }});
+  try {
+    f.view.render(f.container, f.ctx); await f.settle();
+    const form = f.container.querySelector('[data-check-in-form]');
+    form.elements.namedItem('comfort').value = 'mixed';
+    form.elements.namedItem('nextStep').value = 'Личный черновик';
+    form.dispatchEvent(new f.w.Event('input', {bubbles: true}));
+    form.dispatchEvent(new f.w.Event('submit', {bubbles: true, cancelable: true}));
+    await f.settle();
+    assert.match(f.container.querySelector('[data-check-in-status]').textContent, /Ваш ввод остался/);
+    f.view.onProjectChange({...f.ctx, selectedProjectId: 'alvi'}); await f.settle();
+    assert.equal(f.container.querySelector('[name="nextStep"]').value, '');
+    revision = 1;
+    f.view.onProjectChange(f.ctx); await f.settle();
+    assert.equal(f.container.querySelector('[name="nextStep"]').value, 'Личный черновик');
+    assert.match(f.container.querySelector('[data-check-in-status]').textContent, /изменился на сервере/);
+    actorId = 18;
+    f.view.render(f.container, f.ctx); await f.settle();
+    assert.equal(f.container.querySelector('[name="nextStep"]').value, '');
+  } finally {f.close();}
+});
+
+test('задержавшийся опрос и ответ другого участника не отображаются', async () => {
+  let resolveOld;
+  const f = fixture({override: (call) => {
+    if (!call.path.endsWith('/check-in')) return;
+    if (call.code === 'taisabai') return new Promise((resolve) => {resolveOld = resolve;});
+    return dueCheckIn(call.code, {actorId: 999,
+      answers: {comfort: 'mixed', obstacles: 'Чужой текст', improvements: '', nextStep: 'Чужой шаг'}});
+  }});
+  try {
+    f.view.render(f.container, f.ctx); await f.settle();
+    f.view.onProjectChange({...f.ctx, selectedProjectId: 'alvi'}); await f.settle();
+    assert.equal(f.container.querySelector('[data-check-in-form]'), null);
+    assert.doesNotMatch(f.container.textContent, /Чужой текст|Чужой шаг/);
+    resolveOld(dueCheckIn('taisabai', {answers: {comfort: 'mixed', obstacles: 'Старый текст',
+      improvements: '', nextStep: 'Старый шаг'}}));
+    await f.settle();
+    assert.doesNotMatch(f.container.textContent, /Старый текст|Старый шаг/);
+    assert.equal(f.container.querySelector('[data-check-in-form]'), null);
+  } finally {f.close();}
+});
+
+test('карточка опроса имеет мобильную ширину и удобные поля и кнопки', () => {
+  const css = fs.readFileSync(require.resolve('./actor-onboarding.css'), 'utf8');
+  assert.match(css, /\.actor-check-in \{[^}]*min-width: 0;[^}]*overflow-wrap: anywhere;/);
+  assert.match(css, /\.actor-check-in textarea, \.actor-check-in select \{[^}]*width: 100%;[^}]*min-height: 48px;/);
+  assert.match(css, /\.actor-check-in button \{[^}]*min-height: 44px;/);
+  assert.match(css, /@media \(max-width: 600px\) \{\s*\.actor-check-in \{ padding: 16px; \}\s*\.actor-check-in button \{ width: 100%; \}/);
+});
+
+test('перезагрузка анкеты во время записи опроса не блокирует новую форму и игнорирует старый ответ', async () => {
+  let resolveSave;
+  const f = fixture({override: (call) => {
+    if (!call.path.endsWith('/check-in')) return;
+    if (call.method === 'PUT') return new Promise((resolve) => {resolveSave = resolve;});
+    return dueCheckIn(call.code);
+  }});
+  try {
+    f.view.render(f.container, f.ctx); await f.settle();
+    const form = f.container.querySelector('[data-check-in-form]');
+    form.elements.namedItem('comfort').value = 'mixed';
+    form.elements.namedItem('nextStep').value = 'Черновик до перезагрузки';
+    form.dispatchEvent(new f.w.Event('submit', {bubbles: true, cancelable: true}));
+    await f.settle();
+    assert.equal(form.querySelector('button').disabled, true);
+    f.container.querySelector('[data-actor-reload]').click(); await f.settle();
+    const replacement = f.container.querySelector('[data-check-in-form]');
+    assert.ok(replacement);
+    assert.equal(replacement.querySelector('button').disabled, false);
+    resolveSave(dueCheckIn('taisabai', {status: 'saved', revision: 1,
+      answers: {comfort: 'mixed', obstacles: '', improvements: '', nextStep: 'Устаревший ответ'}}));
+    await f.settle();
+    assert.equal(f.container.querySelector('[name="nextStep"]').value, 'Черновик до перезагрузки');
+    assert.doesNotMatch(f.container.textContent, /Устаревший ответ/);
+  } finally {f.close();}
+});
 
 function fixture({role = 'editor', permissions = ['actor-onboarding.self'], override} = {}) {
   const dom = new JSDOM('<main><section id="view"></section></main>',
@@ -40,6 +190,7 @@ function fixture({role = 'editor', permissions = ['actor-onboarding.self'], over
       const result = await override(call);
       if (result !== undefined) return clone(result);
     }
+    if (call.path.endsWith('/check-in')) return checkIn(code);
     if (call.path.endsWith('/social-links/review')) {
       if (call.method === 'PUT') {
         const key = `${code}:${call.body.platform}`;
