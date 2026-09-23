@@ -23,6 +23,7 @@ function fixture({role = 'editor', permissions = ['actor-onboarding.self'], over
   const dom = new JSDOM('<main><section id="view"></section></main>',
     {url: 'https://cabinet.test/#actor-onboarding', runScripts: 'outside-only'});
   const w = dom.window, container = w.document.getElementById('view'), views = {}, calls = [];
+  const socialRows = new Map();
   w.SbCabinet = {registerView(name, view) {views[name] = view;}};
   w.eval(script);
   const ctx = {identity: {role, permissions, companies: [
@@ -38,6 +39,25 @@ function fixture({role = 'editor', permissions = ['actor-onboarding.self'], over
     if (override) {
       const result = await override(call);
       if (result !== undefined) return clone(result);
+    }
+    if (call.path.endsWith('/social-links/review')) {
+      if (call.method === 'PUT') {
+        const key = `${code}:${call.body.platform}`;
+        const previous = socialRows.get(key);
+        if (previous) socialRows.set(key, {...previous, status: call.body.decision,
+          revision: previous.revision + 1});
+      }
+      return {companyCode: code, links: [...socialRows.values()].filter((item) => item.companyCode === code)};
+    }
+    if (call.path.endsWith('/social-links')) {
+      if (call.method === 'PUT') socialRows.set(`${code}:${call.body.platform}`, {
+        companyCode: code, actorId: 17, actorName: 'Таня', platform: call.body.platform,
+        publicUrl: call.body.publicUrl, revision: call.body.revision + 1, status: 'pending',
+        updatedAt: '2026-09-23T10:00:00Z', reviewedAt: null,
+      });
+      if (call.method === 'DELETE') socialRows.delete(`${code}:${call.body.platform}`);
+      return {companyCode: code, actorId: 17, platforms: ['instagram', 'youtube'],
+        links: [...socialRows.values()].filter((item) => item.companyCode === code)};
     }
     if (call.path.endsWith('/summary')) return summary(code);
     if (call.method === 'PUT') return own(code, {revision: call.body.revision + 1,
@@ -166,5 +186,130 @@ test('несохранённый ввод возвращается после с
     await f.settle();
     assert.equal(f.container.querySelector('[name="direction"]').value, 'Моя тема');
     assert.match(f.container.querySelector('[data-actor-status]').textContent, /изменилась на сервере/);
+  } finally {f.close();}
+});
+
+test('участник предлагает и удаляет только свою ссылку с CSRF; интерфейс не обещает подключение', async () => {
+  const f = fixture();
+  try {
+    f.view.render(f.container, f.ctx); await f.settle();
+    assert.match(f.container.textContent, /не подключает публикации и статистику/);
+    assert.equal(f.container.querySelector('[data-actor-social-review]'), null);
+    const form = f.container.querySelector('[data-actor-social-form]');
+    form.elements.namedItem('publicUrl').value = 'https://instagram.com/actor';
+    form.dispatchEvent(new f.w.Event('submit', {bubbles: true, cancelable: true}));
+    await f.settle();
+    const put = f.calls.find((call) => call.path.endsWith('/social-links') && call.method === 'PUT');
+    assert.equal(put.code, 'taisabai');
+    assert.equal(put.headers['X-CSRF-Token'], 'test');
+    assert.deepEqual(put.body, {platform: 'instagram', publicUrl: 'https://instagram.com/actor', revision: 0});
+    assert.match(f.container.querySelector('[data-actor-social-list]').textContent, /Ждёт проверки/);
+    f.container.querySelector('[data-actor-social-delete]').click(); await f.settle();
+    const del = f.calls.find((call) => call.path.endsWith('/social-links') && call.method === 'DELETE');
+    assert.equal(del.code, 'taisabai');
+    assert.equal(del.headers['X-CSRF-Token'], 'test');
+    assert.deepEqual(del.body, {platform: 'instagram', revision: 1});
+    assert.match(f.container.querySelector('[data-actor-social-list]').textContent, /ни одной ссылки/);
+  } finally {f.close();}
+});
+
+test('директор проверяет предложенную ссылку, но не получает кнопки подключения аккаунта', async () => {
+  const f = fixture({role: 'owner', permissions: []});
+  try {
+    f.view.render(f.container, f.ctx); await f.settle();
+    const form = f.container.querySelector('[data-actor-social-form]');
+    form.elements.namedItem('publicUrl').value = 'https://instagram.com/actor';
+    form.dispatchEvent(new f.w.Event('submit', {bubbles: true, cancelable: true}));
+    await f.settle();
+    const review = f.container.querySelector('[data-actor-social-review]');
+    assert.match(review.textContent, /не подключает API, автопубликацию или аналитику/);
+    review.querySelector('[data-actor-social-decision="approved"]').click(); await f.settle();
+    const decision = f.calls.find((call) => call.path.endsWith('/social-links/review') && call.method === 'PUT');
+    assert.equal(decision.headers['X-CSRF-Token'], 'test');
+    assert.deepEqual(decision.body, {actorId: 17, platform: 'instagram', revision: 1,
+      decision: 'approved'});
+    assert.match(review.textContent, /Ссылка подтверждена/);
+    assert.equal(review.querySelector('[data-actor-social-decision="approved"]'), null);
+  } finally {f.close();}
+});
+
+test('чужое имя и повреждённый URL в ответе сервера показываются только как текст', async () => {
+  const f = fixture({role: 'owner', permissions: [], override: (call) => {
+    if (call.path.endsWith('/social-links/review')) return {companyCode: call.code, links: [
+      {actorId: 18, actorName: '<img src=x onerror=alert(1)>', platform: 'instagram',
+        publicUrl: 'javascript:alert(1)', revision: 1, status: 'pending', updatedAt: null},
+    ]};
+    if (call.path.endsWith('/social-links')) return {companyCode: call.code, actorId: 17, links: [
+      {platform: 'instagram', publicUrl: 'https://evil.example/profile', revision: 1,
+        status: 'pending', updatedAt: null},
+    ]};
+    return undefined;
+  }});
+  try {
+    f.view.render(f.container, f.ctx); await f.settle();
+    assert.equal(f.container.querySelector('img'), null);
+    assert.equal(f.container.querySelector('[data-actor-social-review] a'), null);
+    assert.equal(f.container.querySelector('[data-actor-social-list] a'), null);
+    assert.match(f.container.textContent, /<img src=x onerror=alert\(1\)>/);
+  } finally {f.close();}
+});
+
+test('задержавшиеся ссылки и решения прежней компании не попадают в новый экран', async () => {
+  let resolveOwn, resolveReview;
+  const f = fixture({role: 'owner', permissions: [], override: (call) => {
+    if (call.code !== 'taisabai') return undefined;
+    if (call.path.endsWith('/social-links/review')) return new Promise((resolve) => {resolveReview = resolve;});
+    if (call.path.endsWith('/social-links')) return new Promise((resolve) => {resolveOwn = resolve;});
+    return undefined;
+  }});
+  try {
+    f.view.render(f.container, f.ctx); await f.settle();
+    f.view.onProjectChange({...f.ctx, selectedProjectId: 'alvi'}); await f.settle();
+    resolveOwn({companyCode: 'taisabai', actorId: 17, links: [
+      {platform: 'instagram', publicUrl: 'https://instagram.com/old.company',
+        revision: 1, status: 'pending'}]});
+    resolveReview({companyCode: 'taisabai', links: [
+      {actorId: 18, actorName: 'Старый участник', platform: 'instagram',
+        publicUrl: 'https://instagram.com/old.company', revision: 1, status: 'pending'}]});
+    await f.settle();
+    assert.match(f.container.textContent, /Компания: Алви/);
+    assert.doesNotMatch(f.container.textContent, /old\.company|Старый участник/);
+    assert.equal(f.calls.filter((call) => call.code === 'alvi' &&
+      call.path.endsWith('/social-links')).length, 1);
+  } finally {f.close();}
+});
+
+test('редактор с управлением не подтверждает собственную ссылку через интерфейс', async () => {
+  const f = fixture({permissions: ['actor-onboarding.self', 'actor-onboarding.manage'],
+    override: (call) => call.path.endsWith('/social-links/review') ? {companyCode: call.code, links: [
+      {actorId: 17, actorName: 'Таня', platform: 'instagram',
+        publicUrl: 'https://instagram.com/tanya', revision: 1, status: 'pending'},
+    ]} : undefined});
+  try {
+    f.view.render(f.container, f.ctx); await f.settle();
+    const review = f.container.querySelector('[data-actor-social-review]');
+    assert.match(review.textContent, /другой управляющий/);
+    assert.equal(review.querySelector('[data-actor-social-decision]'), null);
+  } finally {f.close();}
+});
+
+test('ответ старой записи ссылки после смены компании игнорируется', async () => {
+  let resolveSave;
+  const f = fixture({override: (call) => call.code === 'taisabai' &&
+    call.path.endsWith('/social-links') && call.method === 'PUT' ?
+    new Promise((resolve) => {resolveSave = resolve;}) : undefined});
+  try {
+    f.view.render(f.container, f.ctx); await f.settle();
+    const form = f.container.querySelector('[data-actor-social-form]');
+    form.elements.namedItem('publicUrl').value = 'https://instagram.com/old.company';
+    form.dispatchEvent(new f.w.Event('submit', {bubbles: true, cancelable: true}));
+    await f.settle();
+    f.view.onProjectChange({...f.ctx, selectedProjectId: 'alvi'}); await f.settle();
+    resolveSave({companyCode: 'taisabai', actorId: 17, links: [
+      {platform: 'instagram', publicUrl: 'https://instagram.com/old.company', revision: 1,
+        status: 'pending'}]});
+    await f.settle();
+    assert.match(f.container.textContent, /Компания: Алви/);
+    assert.doesNotMatch(f.container.textContent, /old\.company/);
   } finally {f.close();}
 });
