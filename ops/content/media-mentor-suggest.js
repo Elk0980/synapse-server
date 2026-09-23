@@ -29,6 +29,11 @@ const UNAVAILABLE = 'Предложение не построено: ни оди
   'Пустой план не выдаётся за результат — повторите позже или заполните план вручную.';
 const UNUSABLE = 'Ответ модели не удалось разобрать как план. Ничего не предлагается: ' +
   'додумывать за модель модуль не станет.';
+const REQUEST_TOO_LARGE = 'Материалов для одного запроса слишком много. Сократите бриф до сведений ' +
+  'для текущего плана. Запрос к модели не отправлен; сохранённые данные не изменены.';
+const failure = error => error?.code === 'MENTOR_REQUEST_TOO_LARGE'
+  ? { status: 'request_too_large', notice: REQUEST_TOO_LARGE }
+  : { status: 'unavailable', notice: UNAVAILABLE };
 
 const clean = (value, max) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
@@ -310,7 +315,14 @@ function createMediaMentorSuggest({ ask }) {
         role: message.role, content: chars.slice(i, i + 6000).join('') });
       return chunks;
     });
-    return ask(JSON.stringify({ ...prompt, messages, ...scoped }));
+    const body = JSON.stringify({ ...prompt, messages, ...scoped });
+    // Общие границы строгого рантайма; большой бриф не должен молча уходить в платный
+    // резерв после ожидаемого HTTP400. Лимиты синхронизированы с hugh-runtime/limits.js.
+    if (messages.length > 40 || messages.reduce((sum, item) => sum + Array.from(item.content).length, 0) > 48000
+      || Buffer.byteLength(body, 'utf8') > 128 * 1024) {
+      throw Object.assign(new Error(REQUEST_TOO_LARGE), { code: 'MENTOR_REQUEST_TOO_LARGE' });
+    }
+    return ask(body);
   }
 
   async function suggest(brief, { startDate, days = MIN_DAYS } = {}, context = {}) {
@@ -323,7 +335,7 @@ function createMediaMentorSuggest({ ask }) {
        Исключение наружу не выпускаем, иначе кабинет покажет аварию вместо «повторите позже». */
     let raw;
     try { raw = await request(buildPrompt(brief, { startDate, days }), context); }
-    catch { return { status: 'unavailable', items: [], dropped: [], notice: UNAVAILABLE }; }
+    catch (error) { return { ...failure(error), items: [], dropped: [] }; }
     const answer = answerText(raw);
     if (!answer || !answer.text) return { status: 'unavailable', items: [], dropped: [], notice: UNAVAILABLE };
     const rows = extractArray(answer.text);
@@ -345,7 +357,7 @@ function createMediaMentorSuggest({ ask }) {
     if (!brief || typeof brief !== 'object') throw Error('Нужен бриф компании');
     let raw;
     try { raw = await request({ ...analysisPrompt(brief), responseProfile: 'structured-draft' }, context); }
-    catch { return { status: 'unavailable', rubrics: [], gaps: [], dropped: [], notice: UNAVAILABLE }; }
+    catch (error) { return { ...failure(error), rubrics: [], gaps: [], dropped: [] }; }
     const answer = answerText(raw);
     if (!answer || !answer.text) return { status: 'unavailable', rubrics: [], gaps: [], dropped: [], notice: UNAVAILABLE };
     const data = extractObject(answer.text);
@@ -374,7 +386,7 @@ function createMediaMentorSuggest({ ask }) {
     }
     let raw;
     try { raw = await request({ ...reviewPrompt(overview, plan, digest), responseProfile: 'structured-draft' }, context); }
-    catch { return { status: 'unavailable', findings: [], planChanges: [], questions: [], dropped: [], notice: UNAVAILABLE }; }
+    catch (error) { return { ...failure(error), findings: [], planChanges: [], questions: [], dropped: [] }; }
     const answer = answerText(raw);
     if (!answer || !answer.text) {
       return { status: 'unavailable', findings: [], planChanges: [], questions: [], dropped: [], notice: UNAVAILABLE };

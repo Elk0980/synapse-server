@@ -125,3 +125,16 @@ test('реальный контракт основного рантайма пр
   assert.ok(seen[0].messages.length > 1);
   assert.equal(db.prepare('SELECT count(*) AS n FROM project_chat_messages').get().n, 0);
 });
+
+test('большой разрешённый бриф не уходит в платный резерв после предсказуемого отказа рантайма', async () => {
+  let calls = 0;
+  const suggest = createMediaMentorSuggest({ask: async () => { calls++; return null; }});
+  const brief = {platforms:['telegram'], pains:Array(30).fill('я'.repeat(300)),
+    confirmedFacts:Array.from({length:50},(_,i)=>({id:String(i),statement:'ф'.repeat(300),source:'и'.repeat(120),approvedForContent:true})),
+    assets:Array.from({length:100},(_,i)=>({id:String(i),title:'м'.repeat(200),kind:'video'}))};
+  const result = await suggest.suggest(brief,{startDate:'2026-09-24',days:7},{companyCode:'taisabai',userId:1});
+  assert.equal(result.status,'request_too_large');
+  assert.match(result.notice,/не отправлен/);
+  assert.equal(calls,0);
+  assert.deepEqual(result.items,[]);
+});
