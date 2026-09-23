@@ -27,6 +27,56 @@
     `<option value="${esc(item.id)}"${item.id === selected ? ' selected' : ''}>${esc(item.label)}</option>`).join('');
   let epoch = 0;
 
+  const journeyStages = [
+    {title: 'Появилась потребность', question: 'Что изменилось в жизни человека?',
+      influence: 'Его обстоятельства и задача, ещё без поиска услуги.',
+      action: 'Собираем реальные ситуации и слова клиентов.', lever: 'Точность аудитории и тем.'},
+    {title: 'Осознал задачу', question: 'Как он назвал проблему?',
+      influence: 'Понятное объяснение и узнаваемый пример.',
+      action: 'Делаем полезный охватный материал без нажима.', lever: 'Первый кадр и доля целевого охвата.'},
+    {title: 'Ищет варианты', question: 'Что хочет узнать до выбора?',
+      influence: 'Ответы, которые помогают разобраться.',
+      action: 'Связываем вопросы с рубриками и версиями для площадок.', lever: 'Темы, форматы и переходы.'},
+    {title: 'Сравнивает и доверяет', question: 'Чего опасается и какие доказательства нужны?',
+      influence: 'Люди, процесс, реальные примеры и честные ограничения.',
+      action: 'Показываем работу и проверенные факты: этап «Влюбление».', lever: 'Доверие и качество вопросов.'},
+    {title: 'Решает обратиться', question: 'Что нужно для первого безопасного шага?',
+      influence: 'Ясные условия и удобный канал связи.',
+      action: 'Готовим конкретное предложение; после согласования размещаем его в доступном канале.', lever: 'Путь до заявки и скорость ответа.'},
+    {title: 'Покупает и оценивает', question: 'Оправдался ли ожидаемый результат?',
+      influence: 'Качество ответа, услуги и сопровождения.',
+      action: 'Настраиваем проверяемую связь обращения, сделки и обратной связи.', lever: 'Конверсия, сервис и повторный спрос.'},
+  ];
+
+  function journeyMarkup(data) {
+    const fields = data.brief.fields;
+    const context = [
+      {label: 'Вопросы людей', value: fields.pains.join('; ')},
+      {label: 'Аудитория', value: fields.audience},
+      {label: 'Продукт', value: fields.product},
+      {label: 'Пример доказательства', value: fields.confirmedFacts[0]?.statement},
+      {label: 'Предложение и условия', value: fields.product},
+      {label: 'Цель компании', value: fields.goal},
+    ];
+    return `<section class="card mentor-journey" aria-label="Путь клиента">
+      <h2>Путь клиента: от потребности до результата</h2>
+      <p>Это схема работы, а не статус подключения и не обещание мгновенных продаж. Мы выясняем,
+        что влияет на решение человека, и каждую неделю показываем, на какой рычаг можем повлиять.</p>
+      <ol class="mentor-journey-grid">${journeyStages.map((stage, index) => `<li>
+        <img src="/cabinet/mentor-person.svg" alt="" width="80" height="80" loading="lazy">
+        <div><strong>${esc(stage.title)}</strong><p>${esc(stage.question)}</p>
+        <dl><dt>Влияет</dt><dd>${esc(stage.influence)}</dd>
+          <dt>Что настраиваем</dt><dd>${esc(stage.action)}</dd>
+          <dt>Рычаг</dt><dd>${esc(stage.lever)}</dd></dl>
+        <details><summary>Из брифа: ${esc(context[index].label)}</summary>
+          <p>${context[index].value ? esc(context[index].value) : 'Пока не выяснено'}</p></details>
+        </div></li>`).join('')}</ol>
+      <p class="mentor-note">Для каждого продукта мы заменяем общие вопросы фактами из брифа,
+        показываем связанные публикации, обращения и ограничения данных. Рост прибыли зависит также
+        от предложения, работы с заявками и самой услуги; если связи нет, мы так и пишем.</p>
+    </section>`;
+  }
+
   function briefMarkup(data, edit) {
     const fields = data.brief.fields, vocabulary = data.vocabulary;
     const readOnlyList = (items, render) => (items.length
@@ -47,21 +97,22 @@
     }
     return `<form id="mentor-brief-form" class="crm-form mentor-form">
       <input type="hidden" name="revision" value="${esc(data.brief.revision)}">
-      <label class="wide">Цель<textarea name="goal" rows="2" maxlength="2000">${esc(fields.goal)}</textarea></label>
-      <label class="wide">Продукт<textarea name="product" rows="2" maxlength="2000">${esc(fields.product)}</textarea></label>
-      <label class="wide">Аудитория<textarea name="audience" rows="2" maxlength="2000">${esc(fields.audience)}</textarea></label>
-      <label class="wide">Боли клиента — по одной в строке<textarea name="pains" rows="3">${esc(fields.pains.join('\n'))}</textarea></label>
+      <label class="wide">Цель<small class="mentor-note">Зачем: выберем измеримый итог, ради которого ведём соцсети, а не просто число постов.</small><textarea name="goal" rows="2" maxlength="2000">${esc(fields.goal)}</textarea></label>
+      <label class="wide">Продукт<small class="mentor-note">Зачем: отделим подтверждённое предложение от идеи и не пообещаем клиенту лишнего.</small><textarea name="product" rows="2" maxlength="2000">${esc(fields.product)}</textarea></label>
+      <label class="wide">Аудитория<small class="mentor-note">Зачем: покажем разным людям те вопросы и примеры, которые относятся к их ситуации.</small><textarea name="audience" rows="2" maxlength="2000">${esc(fields.audience)}</textarea></label>
+      <label class="wide">Боли клиента — по одной в строке<small class="mentor-note">Зачем: построим путь от реального вопроса к полезному ответу и предложению.</small><textarea name="pains" rows="3">${esc(fields.pains.join('\n'))}</textarea></label>
       <fieldset class="wide mentor-rows" data-rows="facts"><legend>Подтверждённые факты</legend>
-        <p class="mentor-note">Факт без источника не считается подтверждённым: укажите, откуда он взят.</p>
+        <p class="mentor-note">Зачем: доказательства помогают сравнить варианты и доверять бренду. Факт без источника не считается подтверждённым: укажите, откуда он взят.</p>
         <div data-rows-body>${fields.confirmedFacts.map((fact) => factRow(fact)).join('')}</div>
         <button class="plain-button" type="button" data-add="facts">Добавить факт</button></fieldset>
       <fieldset class="wide mentor-rows" data-rows="assets"><legend>Исходники</legend>
-        <p class="mentor-note">Материалы описываются словами: ссылок и загрузки файлов на этом этапе нет.</p>
+        <p class="mentor-note">Зачем: начнём с уже доступного материала и попросим снять только то, чего действительно не хватает. Материалы описываются словами: ссылок и загрузки файлов на этом этапе нет.</p>
         <div data-rows-body>${fields.assets.map((asset) => assetRow(asset, vocabulary.assetKinds)).join('')}</div>
         <button class="plain-button" type="button" data-add="assets">Добавить исходник</button></fieldset>
-      <label>Комфорт съёмки<select name="comfortLevel">${options(vocabulary.shootingComfort, fields.shootingComfort.level)}</select></label>
-      <label class="wide">Что учесть при съёмке<textarea name="comfortNotes" rows="2" maxlength="2000">${esc(fields.shootingComfort.notes)}</textarea></label>
+      <label>Комфорт съёмки<small class="mentor-note">Зачем: предложим посильное задание без давления и обязательного появления в кадре.</small><select name="comfortLevel">${options(vocabulary.shootingComfort, fields.shootingComfort.level)}</select></label>
+      <label class="wide">Что учесть при съёмке<small class="mentor-note">Зачем: учтём ограничения каждого участника и право согласовать финальный материал.</small><textarea name="comfortNotes" rows="2" maxlength="2000">${esc(fields.shootingComfort.notes)}</textarea></label>
       <fieldset class="wide mentor-platforms"><legend>Площадки компании</legend>
+        <p class="mentor-note">Зачем: подготовим подходящий формат и работающий путь обращения для каждой доступной площадки.</p>
         ${vocabulary.platforms.map((platform) => `<label class="mentor-checkbox"><input type="checkbox" name="platform"
           value="${esc(platform.id)}"${fields.platforms.includes(platform.id) ? ' checked' : ''}>${esc(platform.label)}</label>`).join('')}</fieldset>
       <div class="crm-actions wide"><button class="plain-button" type="submit">Сохранить бриф</button>
@@ -273,6 +324,7 @@
   function markup(data, ctx) {
     const edit = canEdit(ctx);
     return `<p class="card mentor-notice" role="note">${esc(data.notice)}</p>
+      ${journeyMarkup(data)}
       <section class="card mentor-brief"><h2>Бриф компании</h2>
         <p class="mentor-note">Версия ${esc(data.brief.revision)}${data.brief.updatedAt ? ` · обновлён ${esc(moment(data.brief.updatedAt))}` : ''}.
           ${edit ? 'План составьте сами или возьмите подсказку модели и проверьте её.' : 'У вас только просмотр.'}</p>
