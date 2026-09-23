@@ -290,7 +290,7 @@
         <div data-rows-body>${fields.assets.map((asset) => assetRow(asset, vocabulary.assetKinds)).join('')}</div>
         <button class="plain-button" type="button" data-add="assets">Добавить исходник</button></fieldset>
       <label>Общий ориентир по съёмке<small class="mentor-note">До личного опроса каждого участника это лишь ориентир: двигаемся без давления и никого не ставим в кадр без согласия.</small><select name="comfortLevel">${options(vocabulary.shootingComfort, fields.shootingComfort.level)}</select></label>
-      <label class="wide">Общие ограничения съёмки<small class="mentor-note">Личные предпочтения Влада, Лены и Сергея уточняем отдельно у каждого.</small><textarea name="comfortNotes" rows="2" maxlength="2000">${esc(fields.shootingComfort.notes)}</textarea></label>
+      <label class="wide">Общие ограничения съёмки<small class="mentor-note">Личные предпочтения каждого участника команды уточняем отдельно.</small><textarea name="comfortNotes" rows="2" maxlength="2000">${esc(fields.shootingComfort.notes)}</textarea></label>
       <fieldset class="wide mentor-platforms"><legend>Площадки компании</legend>
         <p class="mentor-note">Зачем: подготовим подходящий формат и работающий путь обращения для каждой доступной площадки.</p>
         ${vocabulary.platforms.map((platform) => `<label class="mentor-checkbox"><input type="checkbox" name="platform"
@@ -370,9 +370,9 @@
         </details>
         ${index >= 0 ? `<div class="mentor-day-feedback">
           <strong>Предложения по этому материалу</strong>
-          ${feedback.length ? `<ul class="mentor-list">${feedback.map((entry) => `<li>${esc(entry.message)}
+          <div data-feedback-list="${index}">${feedback.length ? `<ul class="mentor-list">${feedback.map((entry) => `<li>${esc(entry.message)}
             <small>${esc(entry.actorName || 'Участник')} · ${esc(moment(entry.createdAt))}</small></li>`).join('')}</ul>`
-    : '<p class="mentor-note">Предложений пока нет.</p>'}
+    : '<p class="mentor-note">Предложений пока нет.</p>'}</div>
           <label>Что стоит изменить?<textarea data-feedback-input="${index}" rows="2" maxlength="1000" placeholder="Например: может, эта тема лучше подойдёт для продающего рилса?"></textarea></label>
           <button class="plain-button" type="button" data-feedback-send="${index}">Предложить правку</button>
           <span data-feedback-state="${index}" role="status"></span>
@@ -669,9 +669,19 @@
       button.disabled = true;
       state.textContent = 'Сохраняем предложение…';
       try {
-        await ctx.crmQuery(`${PATH}/plan/feedback`, {companyCode: code},
+        const saved = await ctx.crmQuery(`${PATH}/plan/feedback`, {companyCode: code},
           ctx.csrfOptions('POST', {planRevision: data.plan.revision, dayIndex: index, message}));
-        if (ctx.selectedProjectId === code) await load(container, ctx);
+        if (ctx.selectedProjectId !== code || !button.isConnected || !node.contains(button)) return;
+        // Не перерисовываем весь бриф/план: предложение не должно стирать правки
+        // даты, темы и других полей, которые человек ещё не сохранил.
+        if (saved.companyCode === String(code).toLowerCase() && saved.plan?.revision === data.plan.revision && Array.isArray(saved.feedback)) {
+          const entries = saved.feedback.filter((entry) => entry.dayIndex === index);
+          node.querySelector(`[data-feedback-list="${index}"]`).innerHTML = `<ul class="mentor-list">${entries.map((entry) =>
+            `<li>${esc(entry.message)}<small>${esc(entry.actorName || 'Участник')} · ${esc(moment(entry.createdAt))}</small></li>`).join('')}</ul>`;
+        }
+        if (input.value.trim() === message) input.value = '';
+        button.disabled = false;
+        state.textContent = 'Предложение сохранено к текущей версии плана. Остальные правки ещё нужно сохранить.';
       } catch (error) {
         if (ctx.selectedProjectId !== code) return;
         button.disabled = false;

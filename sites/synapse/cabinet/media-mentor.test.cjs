@@ -211,7 +211,8 @@ test('карточка материала обновляет превью, по�
   current.transfer.current = {planRevision: 1, briefRevision: 2, transferredAt: '2026-09-18T10:00:00.000Z',
     actorName: 'Владелец', postIds: [42], items: [{dayIndex: 0, postId: 42, cardStatus: 'draft',
       hasMedia: false, mediaUrls: [], mediaCount: 0}]};
-  const f = fixture({query: (call) => call.method === 'POST' ? {ok: true} : current});
+  const f = fixture({query: (call) => call.method === 'POST' ? {...current, feedback: [
+    {dayIndex: 0, message: call.body.message, actorName: 'Участник', createdAt: '2026-09-18T10:05:00Z'}]} : current});
   try {
     f.view.render(f.node, f.ctx);
     await tick();
@@ -226,6 +227,11 @@ test('карточка материала обновляет превью, по�
     await tick();
     const write = f.calls.find((call) => call.path === '/media-mentor/plan/feedback');
     assert.deepEqual(write.body, {planRevision: 1, dayIndex: 0, message: 'Лучше сделать продающий рилс?'});
+    assert.equal(f.node.querySelector('.mentor-day [data-field="topic"]').value, 'Новая тема для ролика', 'предложение не стирает несохранённую тему');
+    assert.match(first.querySelector('[data-feedback-list]').textContent, /Лучше сделать продающий рилс/);
+    assert.equal(first.querySelector('[data-feedback-input]').value, '');
+    assert.match(first.querySelector('[data-feedback-state]').textContent, /Предложение сохранено/);
+    assert.equal(f.calls.filter((call) => call.method === 'GET').length, 1, 'нет перезагрузки формы');
   } finally { f.close(); }
 });
 
