@@ -546,8 +546,9 @@
         <div data-brief-context-body="${esc(item.postId)}"></div></details></li>`).join('')}</ul>` : '';
     return `<section class="card mentor-transfer" data-can="${state.canTransfer ? 'yes' : 'no'}">
       <h2>Черновики и файлы</h2>
-      <p class="mentor-note">${esc(state.notice)}</p>
+      <p class="mentor-note">После согласования плана создайте карточки и добавьте фото или видео. Готовые карточки появятся в разделе <a href="#autoposting">«Материалы»</a>.</p>
       <details class="mentor-team"><summary>Для команды · перенос и ограничения</summary>
+      <p class="mentor-note">${esc(state.notice)}</p>
       <p class="mentor-note">Остаются незаполненными: ${state.leavesUnfilled.map((item) => esc(item)).join(' · ')}.</p>
       <p class="mentor-note">${esc(state.repeatProtection)}: повтор по той же версии вернёт те же черновики.</p>
       </details>
@@ -559,7 +560,7 @@
         <input type="hidden" name="briefRevision" value="${esc(state.briefRevision)}">
         <div class="crm-actions wide"><button class="plain-button" type="submit">Перенести план в черновики</button>
           <span id="mentor-transfer-state" role="status"></span></div></form>`
-    : `<p class="mentor-note">${esc(edit ? state.blockedReason : 'Переносит план тот, у кого есть право правки автопостинга.')}</p>`}
+    : `<p class="mentor-note">${esc(edit ? state.blockedReason : 'Подготовить карточки поможет ответственный за материалы.')}</p>`}
       ${state.history.length ? `<details><summary>Прошлые переносы (${esc(state.history.length)})</summary>
         <ol class="mentor-history">${state.history.map((item) => `<li>Версия плана ${esc(item.planRevision)} ·
           ${esc(item.dayCount)} дней · ${esc(moment(item.transferredAt))} · ${esc(item.actorName || '—')}</li>`).join('')}</ol></details>` : ''}
