@@ -215,7 +215,7 @@ button { color: inherit; }
 .main { min-width: 0; padding: clamp(24px, 4vw, 56px); }
 .content-header { margin-bottom: 26px; }
 .content-header p { margin: 5px 0 0; color: var(--muted); }
-.view-panel { width: min(100%, 1180px); }
+.view-panel { width: 100%; min-width: 0; }
 h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(2rem, 4vw, 3.4rem); font-weight: 400; }
 .card {
   padding: clamp(20px, 3vw, 30px);
@@ -1047,7 +1047,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260919-owner-private-chat";
+  window.SB_CABINET_ASSET_VERSION = "20260923-journey-flow";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
