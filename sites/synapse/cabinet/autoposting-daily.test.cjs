@@ -91,3 +91,16 @@ test('unavailable or mismatched calendar is labelled incomplete instead of claim
     assert.match(f.node('autoposting-calendar-state').textContent,/до 200.*неполным/);assert.deepEqual(f.visibleIds(),['1']);assert.doesNotMatch(f.node('autoposting-posts').textContent,/Материал 9/);
   }finally{f.close();}}
 });
+test('hidden selections remain explicitly listed and removable without losing the editor draft',async()=>{
+  const f=await fixture({entries:[row(1),row(2,{captions:{vk:'Подпись'},platformIds:[]})]});try{
+    await f.click('[data-daily-approve="1"]');await f.click('[data-open-post="2"]');f.set('autoposting-text','Несохранённый текст');
+    f.set('autoposting-daily-platform','vk');assert.deepEqual(f.visibleIds(),['2']);assert.match(f.node('autoposting-selected-list').textContent,/Материал 1 · версия 3/);assert.match(f.node('autoposting-selected-list').textContent,/за пределами текущего фильтра/);
+    await f.click('[data-daily-unselect="1"]');assert.equal(f.node('autoposting-batch-approve').disabled,true);assert.equal(f.node('autoposting-text').value,'Несохранённый текст');assert.ok(f.calls.every(call=>call.method==='GET'));
+  }finally{f.close();}
+});
+test('published cards show final status and empty today offers upcoming materials without writes',async()=>{
+  const f=await fixture({entries:[row(1,{status:'published'}),row(2,{scheduledAt:'2026-09-25T23:00:00Z',platformIds:[],captions:{vk:'Подпись'}})]});try{
+    const card=f.d.querySelector('[data-daily-post="1"]');assert.match(card.textContent,/Опубликовано/);assert.doesNotMatch(card.textContent,/Готово к проверке|Нужно подготовить/);
+    f.set('autoposting-daily-platform','vk');assert.deepEqual(f.visibleIds(),[]);await f.click('[data-daily-upcoming]');assert.deepEqual(f.visibleIds(),['2']);assert.equal(f.views.autoposting.title,'Материалы');assert.ok(f.calls.every(call=>call.method==='GET'));
+  }finally{f.close();}
+});
