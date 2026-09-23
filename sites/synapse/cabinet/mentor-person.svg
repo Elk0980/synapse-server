@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-labelledby="title desc">
+  <title id="title">Человек на пути к решению</title>
+  <desc id="desc">Один и тот же схематичный персонаж используется на всех этапах пути клиента.</desc>
+  <circle cx="60" cy="60" r="57" fill="#e8f7f4"/>
+  <circle cx="60" cy="39" r="17" fill="#f5bc9d" stroke="#253348" stroke-width="3"/>
+  <path d="M43 39c0-14 8-21 17-21s17 7 17 21c-6-7-11-10-17-10s-11 3-17 10Z" fill="#253348"/>
+  <circle cx="54" cy="41" r="1.6" fill="#253348"/>
+  <circle cx="66" cy="41" r="1.6" fill="#253348"/>
+  <path d="M56 49q4 4 8 0" fill="none" stroke="#a05d52" stroke-linecap="round" stroke-width="2"/>
+  <path d="M34 104V82c0-14 10-24 26-24s26 10 26 24v22" fill="#478eab" stroke="#253348" stroke-width="3"/>
+  <path d="M49 61l11 12 11-12" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"/>
+  <path d="M34 86l-12 10m64-10 12 10" fill="none" stroke="#253348" stroke-linecap="round" stroke-width="5"/>
+</svg>

@@ -112,6 +112,7 @@ test('задание на план объясняет ОВП и учитывае
   assert.match(payload.system, /affection — доверие/);
   assert.match(payload.system, /sale — отдельное конкретное предложение/);
   assert.match(payload.system, /лицо и голос не требуй/);
+  assert.match(payload.system, /зачем мы это просим/);
   assert.match(payload.system, /Не навязывай фиксированные дни/);
 });
 

@@ -78,6 +78,22 @@ test('раздел зарегистрирован как настоящий ма
   } finally { f.close(); }
 });
 
+test('путь клиента объясняет этапы и пользу вопросов без обещания мгновенных продаж', async () => {
+  const f = fixture();
+  try {
+    f.view.render(f.node, f.ctx);
+    await tick();
+    const panels = f.node.querySelectorAll('.mentor-journey-grid li');
+    assert.equal(panels.length, 6);
+    assert.equal(f.node.querySelectorAll('.mentor-journey-grid img[src="/cabinet/mentor-person.svg"]').length, 6);
+    assert.match(f.node.querySelector('.mentor-journey').textContent, /не обещание мгновенных продаж/);
+    assert.match(f.node.querySelector('.mentor-journey').textContent, /Массаж 60 минут/);
+    assert.equal(f.node.querySelector('.mentor-journey-grid img[src="x"]'), null);
+    assert.match(f.node.querySelector('[name="goal"]').closest('label').textContent, /Зачем:/);
+    assert.match(f.node.querySelector('[name="comfortLevel"]').closest('label').textContent, /без давления/);
+  } finally { f.close(); }
+});
+
 test('без права просмотра раздел не запрашивает данные компании', async () => {
   const f = fixture({permissions: []});
   try {
@@ -103,7 +119,7 @@ test('только просмотр: бриф и план видны, форм �
     assert.match(f.node.textContent, /Тема дня 1/);
     assert.match(f.node.textContent, /Решение принимает владелец кабинета/);
     // Текст с сервера остаётся текстом.
-    assert.equal(f.node.querySelector('img'), null);
+    assert.equal(f.node.querySelector('.mentor-brief-view img'), null);
     assert.match(f.node.textContent, /Записи на массаж <img src=x/);
   } finally { f.close(); }
 });
@@ -428,7 +444,7 @@ test('бриф согласованной версии подгружается 
     assert.equal(request.params.companyCode, 'alvi');
     assert.match(f.node.textContent, /ПОЛНАЯ АУДИТОРИЯ ИЗ БРИФА/);
     assert.match(f.node.textContent, /Источник: Карточка ЛК/);
-    assert.equal(f.node.querySelector('img'), null);
+    assert.equal(f.node.querySelector('[data-brief-context-body="10"] img'), null);
   } finally { f.close(); }
 });
 
