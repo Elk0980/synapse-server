@@ -1,4 +1,17 @@
 .actor-onboarding-header p { max-width: 76ch; }
+.actor-director-preset, .actor-preset-manager { min-width: 0; overflow-wrap: anywhere; }
+.actor-director-preset h2, .actor-preset-manager h2 { margin-top: 0; }
+.actor-director-preset dl { display: grid; gap: 6px; margin: 16px 0; }
+.actor-director-preset dt { font-weight: 700; }
+.actor-director-preset dd { margin: 0 0 10px; }
+.actor-director-preset p, .actor-preset-manager p { max-width: 76ch; line-height: 1.5; }
+.actor-preset-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; min-width: 0; }
+.actor-preset-form label { display: grid; gap: 6px; min-width: 0; }
+.actor-preset-form input, .actor-preset-form select { box-sizing: border-box; width: 100%; min-width: 0; min-height: 48px; font: inherit; }
+.actor-director-preset button, .actor-preset-manager button { min-height: 44px; white-space: normal; }
+[data-actor-use-preset][hidden] { display: none; }
+[data-actor-preset-status] { min-height: 1.4em; }
+[data-actor-preset-status][data-error="true"] { color: var(--red, #ff9c9c); }
 .actor-onboarding-layout { display: grid; gap: 16px; min-width: 0; }
 .actor-onboarding-layout :is(input,select,textarea) { border: 1px solid var(--line, #3b4655);
   border-radius: 10px; padding: 10px 12px; background: var(--bg, #0b0908);
@@ -70,6 +83,8 @@
 @media (max-width: 600px) {
   .actor-check-in { padding: 16px; }
   .actor-check-in button { width: 100%; }
+  .actor-director-preset, .actor-preset-manager { padding: 16px; }
+  .actor-director-preset button, .actor-preset-manager button { width: 100%; }
   .actor-onboarding-layout { gap: 10px; }
   .actor-onboarding-card, .actor-onboarding-summary,
   .actor-onboarding-social, .actor-onboarding-social-review { padding: 16px; }

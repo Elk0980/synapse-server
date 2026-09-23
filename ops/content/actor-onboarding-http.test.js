@@ -69,11 +69,28 @@ test('живой кабинет: личный опрос, отдельная с�
   const route = '/content/actor-onboarding?companyCode=taisabai';
   assert.equal((await request(route, actorAuth)).status, 200);
   assert.equal((await request('/content/actor-onboarding/summary?companyCode=taisabai', actorAuth)).status, 403);
+  const presetsRoute = '/content/actor-onboarding/presets?companyCode=taisabai';
+  const candidates = await (await request(presetsRoute, directorAuth)).json();
+  assert.ok(candidates.participants.some(item => item.actorId === actor.id && item.preset === null));
+  assert.equal((await request(presetsRoute, actorAuth)).status, 403);
+  const preset = {direction: 'Недвижимость', role: 'Консультант', cameraComfort: 'on_camera'};
+  const presetBody = {actorId: actor.id, revision: 0, preset};
+  const noPresetCsrf = await fetch(base + presetsRoute, {method: 'PUT',
+    headers: {cookie: directorAuth.cookie, 'Content-Type': 'application/json'}, body: JSON.stringify(presetBody)});
+  assert.equal(noPresetCsrf.status, 403);
+  assert.equal((await request(presetsRoute, directorAuth, 'PUT', presetBody)).status, 200);
+  const untouched = await (await request(route, actorAuth)).json();
+  assert.equal(untouched.revision, 0);
+  assert.equal(untouched.profile.cameraComfort, 'unknown');
+  assert.deepEqual(untouched.directorPreset.values, preset);
   const profile = { direction: 'Переезд', role: 'Личный опыт', cameraComfort: 'small_steps',
     voiceComfort: 'short_voice', boundaries: 'Семья вне кадра', suggestions: 'Снимем короткий маршрут' };
   const saved = await request(route, actorAuth, 'PUT', { revision: 0, profile });
   assert.equal(saved.status, 200);
   assert.equal((await saved.json()).revision, 1);
+  assert.equal((await request(presetsRoute, directorAuth, 'PUT', {...presetBody, revision: 1,
+    preset: {...preset, role: 'Новая рабочая роль'}})).status, 200);
+  assert.deepEqual((await (await request(route, actorAuth)).json()).profile, profile);
   const summary = await (await request('/content/actor-onboarding/summary?companyCode=taisabai', directorAuth)).json();
   assert.equal(summary.ready, 1);
   assert.equal(JSON.stringify(summary).includes(profile.boundaries), false);
@@ -103,4 +120,6 @@ test('живой кабинет: личный опрос, отдельная с�
   assert.equal((await request(route, actorAuth)).status, 403, 'старая cookie не сохраняет отозванное право');
   assert.equal((await request(socialsRoute, actorAuth)).status, 403);
   assert.equal((await (await request(reviewRoute, directorAuth)).json()).links.length, 0);
+  assert.ok(!(await (await request(presetsRoute, directorAuth)).json()).participants.some(item => item.actorId === actor.id));
+  assert.equal((await request(presetsRoute, directorAuth, 'PUT', {...presetBody, revision: 2})).status, 404);
 });
