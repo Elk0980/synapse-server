@@ -1,12 +1,23 @@
 'use strict';
 
 // Личный рабочий стол участника. Общий бриф, общий план и чат проекта сюда не копируются.
-// Пока нет назначенного обработчика, сообщения только сохраняются: автоматический ответ не обещается.
+// Запрос к Хью запускается лишь при явной отправке. Чужие истории и общий чат не читаются.
 const { COMPANIES } = require('./auth-store');
 
 const PLATFORMS = Object.freeze(['instagram', 'tiktok', 'youtube', 'vk', 'telegram']);
 const FORMATS = Object.freeze(['reel', 'short', 'clip', 'story', 'post', 'carousel']);
 const STATUSES = Object.freeze(['idea', 'script', 'recorded']);
+const CHAT_CONTEXT_MESSAGES = 9;
+const CHAT_CONTEXT_CHARS = 1200;
+const CHAT_REPLY_CHARS = 4000;
+const CHAT_LEASE_MS = 5 * 60 * 1000;
+const SOCIAL_METRICS = Object.freeze(['views', 'impressions', 'likes', 'comments', 'shares', 'saves']);
+const CHAT_SYSTEM = 'Ты Хью, ассистент Синапс Бизнес в личной переписке участника компании. ' +
+  'Отвечай на русском языке коротко, по существу и без выдуманных фактов. ' +
+  'История этой беседы приватна для участника: не переноси сообщения в общий чат, ' +
+  'клиентские беседы, задачи или публикации. Никаких отправок и публикаций из этого окна нет. ' +
+  'Если для точного ответа нужны данные компании, попроси уточнить; не заявляй, что ' +
+  'уже просмотрел статистику, бриф или переписки других людей.';
 
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 function keys(value, expected) {
@@ -47,8 +58,29 @@ function normalizeEntries(entries) {
   });
 }
 
+function limitedSocialOverview(data, code) {
+  if (!data || typeof data !== 'object' || String(data.companyCode || '').toLowerCase() !== code) {
+    fail(502, 'Статистика компании временно недоступна');
+  }
+  const metric = (value) => typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? value : null;
+  const totals = (source) => Object.fromEntries(SOCIAL_METRICS.map((name) =>
+    [name, metric(source?.[name])]));
+  const platforms = Object.fromEntries(PLATFORMS.map((platform) => {
+    const source = data.platforms?.[platform] || {};
+    return [platform, { configured: source.configured === true,
+      dataStatus: ['complete', 'partial', 'no_data'].includes(source.dataStatus)
+        ? source.dataStatus : 'no_data', totals: totals(source.totals) }];
+  }));
+  const date = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? value : null;
+  return { companyCode: code, from: date(data.from), to: date(data.to),
+    socialAggregate: totals(data.socialAggregate), platforms,
+    note: 'Показатели площадок не показывают продажи и не складываются в уникальный охват.' };
+}
+
 function createActorWorkspace({ db, authStore, requireSession, requireCsrf, readJson, sendJson,
-  now = () => new Date().toISOString() }) {
+  ask = null, loadSocialOverview = null, now = () => new Date().toISOString() }) {
   db.exec(`CREATE TABLE IF NOT EXISTS actor_workspace_plans (
     company_code TEXT NOT NULL COLLATE NOCASE,
     user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
@@ -67,7 +99,20 @@ function createActorWorkspace({ db, authStore, requireSession, requireCsrf, read
     UNIQUE(company_code,user_id,client_message_id)
   );
   CREATE INDEX IF NOT EXISTS actor_workspace_messages_scope_idx
-    ON actor_workspace_messages(company_code,user_id,id DESC);`);
+    ON actor_workspace_messages(company_code,user_id,id DESC);
+  CREATE TABLE IF NOT EXISTS actor_workspace_ai_jobs (
+    company_code TEXT NOT NULL COLLATE NOCASE,
+    user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+    message_id INTEGER NOT NULL REFERENCES actor_workspace_messages(id) ON DELETE CASCADE,
+    status TEXT NOT NULL CHECK(status IN ('running','pending','done')),
+    reply_text TEXT NOT NULL DEFAULT '',
+    provider TEXT NOT NULL DEFAULT '',
+    model TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    lease_expires_at TEXT,
+    PRIMARY KEY(company_code,user_id,message_id)
+  );`);
 
   // Не доверяем роли и правам, записанным в cookie: доступ перечитывается из БД каждый раз.
   function access(request, code, permission) {
@@ -88,26 +133,76 @@ function createActorWorkspace({ db, authStore, requireSession, requireCsrf, read
       publicationEnabled: false };
   }
   function message(row) {
-    return { id: row.id, text: row.text, createdAt: row.created_at };
+    const status = row.status === 'running' &&
+      Date.parse(row.lease_expires_at || '') <= Date.parse(now()) ? 'pending' : row.status || 'pending';
+    return { id: row.id, text: row.text, createdAt: row.created_at,
+      aiStatus: status, reply: status === 'done' ? row.reply_text : null,
+      replyAt: status === 'done' ? row.updated_at : null };
+  }
+  function messageById(code, userId, id) {
+    return db.prepare(`SELECT m.id,m.text,m.created_at,j.status,j.reply_text,j.updated_at,j.lease_expires_at
+      FROM actor_workspace_messages m LEFT JOIN actor_workspace_ai_jobs j
+        ON j.company_code=m.company_code AND j.user_id=m.user_id AND j.message_id=m.id
+      WHERE m.company_code=? AND m.user_id=? AND m.id=?`).get(code, userId, id);
+  }
+  function prompt(code, user, question) {
+    const rows = db.prepare(`SELECT m.id,m.text,j.status,j.reply_text FROM actor_workspace_messages m
+      LEFT JOIN actor_workspace_ai_jobs j ON j.company_code=m.company_code
+        AND j.user_id=m.user_id AND j.message_id=m.id
+      WHERE m.company_code=? AND m.user_id=? AND m.id<=?
+        AND (m.id=? OR j.status='done')
+      ORDER BY m.id DESC LIMIT ?`).all(code, user.id, question.id, question.id, CHAT_CONTEXT_MESSAGES).reverse();
+    const messages = [];
+    for (const row of rows) {
+      messages.push({ role: 'user', content: row.id === question.id ? row.text
+        : row.text.slice(0, CHAT_CONTEXT_CHARS) });
+      if (row.id !== question.id && row.status === 'done' && row.reply_text) {
+        messages.push({ role: 'assistant', content: row.reply_text.slice(0, CHAT_CONTEXT_CHARS) });
+      }
+    }
+    return { jobId: `actor-private:${code}:${user.id}:${question.id}`,
+      companyCode: code, audience: 'actor-private', system: CHAT_SYSTEM,
+      messages };
+  }
+  async function answer(code, user, question) {
+    if (typeof ask !== 'function') {
+      db.prepare(`UPDATE actor_workspace_ai_jobs SET status='pending',updated_at=?,lease_expires_at=NULL
+        WHERE company_code=? AND user_id=? AND message_id=?`)
+        .run(now(), code, user.id, question.id);
+      return;
+    }
+    let result;
+    try { result = await ask(prompt(code, user, question)); }
+    catch { result = null; }
+    const reply = typeof result?.text === 'string' ? result.text.trim().slice(0, CHAT_REPLY_CHARS) : '';
+    db.prepare(`UPDATE actor_workspace_ai_jobs SET status=?,reply_text=?,provider=?,model=?,
+      updated_at=?,lease_expires_at=NULL WHERE company_code=? AND user_id=? AND message_id=?
+      AND status='running'`).run(reply ? 'done' : 'pending', reply,
+      reply ? String(result.provider || '').slice(0, 80) : '',
+      reply ? String(result.model || '').slice(0, 80) : '',
+      now(), code, user.id, question.id);
   }
   function summary(code) {
     // Управляющий видит лишь объём работы, без тем и текста личной переписки.
     const rows = db.prepare(`SELECT u.id actorId,u.display_name actorName,
       COALESCE(p.revision,0) planRevision,p.entries_json entriesJson,
       (SELECT COUNT(*) FROM actor_workspace_messages m WHERE m.company_code=? AND m.user_id=u.id) requests,
+      (SELECT COUNT(*) FROM actor_workspace_ai_jobs j WHERE j.company_code=? AND j.user_id=u.id
+        AND j.status<>'done') awaitingReply,
       (SELECT MAX(created_at) FROM actor_workspace_messages m WHERE m.company_code=? AND m.user_id=u.id) lastRequestAt
       FROM auth_users u
       JOIN auth_user_companies c ON c.user_id=u.id AND c.company_code=?
       JOIN auth_user_permissions a ON a.user_id=u.id AND a.permission='actor-onboarding.self'
       LEFT JOIN actor_workspace_plans p ON p.company_code=? AND p.user_id=u.id
-      ORDER BY u.display_name,u.id`).all(code, code, code, code);
+      ORDER BY u.display_name,u.id`).all(code, code, code, code, code);
     return { companyCode: code, participants: rows.map((row) => ({ actorId: row.actorId,
       actorName: row.actorName, planRevision: row.planRevision,
       plannedMaterials: row.entriesJson ? JSON.parse(row.entriesJson).length : 0,
-      requests: row.requests, lastRequestAt: row.lastRequestAt })) };
+      requests: row.requests, awaitingReply: row.awaitingReply,
+      lastRequestAt: row.lastRequestAt })) };
   }
   async function handle(request, response, url) {
-    const match = /^\/content\/actor-workspace\/(plan|messages|summary)$/.exec(url.pathname);
+    const match = /^\/content\/actor-workspace\/(plan|messages|summary|stats)$/.exec(url.pathname);
     if (!match) return false;
     const allowedParams = match[1] === 'messages' && request.method === 'GET'
       ? new Set(['companyCode', 'before', 'limit']) : new Set(['companyCode']);
@@ -120,6 +215,17 @@ function createActorWorkspace({ db, authStore, requireSession, requireCsrf, read
       if (request.method !== 'GET') fail(405, 'Метод не поддерживается');
       access(request, code, 'actor-onboarding.manage');
       sendJson(response, 200, summary(code));
+      return true;
+    }
+    if (match[1] === 'stats') {
+      if (request.method !== 'GET') fail(405, 'Метод не поддерживается');
+      const { user } = access(request, code, 'actor-onboarding.self');
+      let overview;
+      try { overview = await loadSocialOverview?.(code, user); }
+      catch { overview = null; }
+      if (!overview) fail(503, 'Статистика компании временно недоступна');
+      access(request, code, 'actor-onboarding.self');
+      sendJson(response, 200, limitedSocialOverview(overview, code));
       return true;
     }
     if (match[1] === 'plan') {
@@ -156,12 +262,14 @@ function createActorWorkspace({ db, authStore, requireSession, requireCsrf, read
       const limit = limitValue === null ? 50 : Number(limitValue);
       if ((before !== null && (!Number.isSafeInteger(before) || before < 1)) ||
           !Number.isSafeInteger(limit) || limit < 1 || limit > 100) fail(400, 'Некорректная страница сообщений');
-      const rows = db.prepare(`SELECT id,text,created_at FROM actor_workspace_messages
-        WHERE company_code=? AND user_id=? AND (? IS NULL OR id<?)
-        ORDER BY id DESC LIMIT ?`).all(code, user.id, before, before, limit);
+      const rows = db.prepare(`SELECT m.id,m.text,m.created_at,j.status,j.reply_text,j.updated_at,j.lease_expires_at
+        FROM actor_workspace_messages m LEFT JOIN actor_workspace_ai_jobs j
+          ON j.company_code=m.company_code AND j.user_id=m.user_id AND j.message_id=m.id
+        WHERE m.company_code=? AND m.user_id=? AND (? IS NULL OR m.id<?)
+        ORDER BY m.id DESC LIMIT ?`).all(code, user.id, before, before, limit);
       sendJson(response, 200, { companyCode: code, actorId: user.id,
         messages: rows.reverse().map(message), oldestMessageId: rows[0]?.id || null,
-        automatedReplyAvailable: false });
+        assistantEnabled: typeof ask === 'function' });
       return true;
     }
     requireCsrf(request, session);
@@ -170,15 +278,39 @@ function createActorWorkspace({ db, authStore, requireSession, requireCsrf, read
         typeof body.clientMessageId !== 'string' ||
         !/^[A-Za-z0-9_-]{8,100}$/.test(body.clientMessageId)) fail(400, 'Некорректный идентификатор сообщения');
     const content = shortText(body.text, 4000, 'Сообщение');
-    const existing = db.prepare(`SELECT id,text,created_at FROM actor_workspace_messages
-      WHERE company_code=? AND user_id=? AND client_message_id=?`).get(code, user.id, body.clientMessageId);
-    if (existing && existing.text !== content) fail(409, 'Этот идентификатор уже использован для другого сообщения');
-    if (!existing) db.prepare(`INSERT INTO actor_workspace_messages(company_code,user_id,client_message_id,text,created_at)
-      VALUES(?,?,?,?,?)`).run(code, user.id, body.clientMessageId, content, now());
-    const stored = db.prepare(`SELECT id,text,created_at FROM actor_workspace_messages
-      WHERE company_code=? AND user_id=? AND client_message_id=?`).get(code, user.id, body.clientMessageId);
-    sendJson(response, 200, { message: message(stored), automatedReplyAvailable: false,
-      status: 'saved', notice: 'Сообщение сохранено. Автоматический ответ пока не подключён.' });
+    let claimed = false;
+    let question;
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      question = db.prepare(`SELECT id,text,created_at FROM actor_workspace_messages
+        WHERE company_code=? AND user_id=? AND client_message_id=?`).get(code, user.id, body.clientMessageId);
+      if (question && question.text !== content) fail(409, 'Этот идентификатор уже использован для другого сообщения');
+      if (!question) {
+        const active = db.prepare(`SELECT COUNT(*) AS n FROM actor_workspace_ai_jobs
+          WHERE company_code=? AND user_id=? AND status='running' AND lease_expires_at>?`)
+          .get(code, user.id, now()).n;
+        if (active) fail(409, 'Дождитесь ответа на предыдущий вопрос');
+        const at = now();
+        const inserted = db.prepare(`INSERT INTO actor_workspace_messages
+          (company_code,user_id,client_message_id,text,created_at) VALUES(?,?,?,?,?)`)
+          .run(code, user.id, body.clientMessageId, content, at);
+        question = { id: Number(inserted.lastInsertRowid), text: content, created_at: at };
+        db.prepare(`INSERT INTO actor_workspace_ai_jobs
+          (company_code,user_id,message_id,status,created_at,updated_at,lease_expires_at)
+          VALUES(?,?,?,'running',?,?,?)`).run(code, user.id, question.id, at, at,
+          new Date(Date.parse(at) + CHAT_LEASE_MS).toISOString());
+        claimed = true;
+      }
+      db.exec('COMMIT');
+    } catch (error) { db.exec('ROLLBACK'); throw error; }
+    if (claimed) await answer(code, user, question);
+    // Права могли измениться за время обращения к модели.
+    access(request, code, 'actor-onboarding.self');
+    const stored = message(messageById(code, user.id, question.id));
+    sendJson(response, 200, { message: stored, repeated: !claimed,
+      assistantEnabled: typeof ask === 'function',
+      notice: stored.aiStatus === 'done' ? '' :
+        'Вопрос сохранён и ожидает ответа. Хью сейчас недоступен; готового ответа нет.' });
     return true;
   }
   return { handle };

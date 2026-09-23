@@ -177,7 +177,19 @@ const actorOnboarding = createActorOnboarding({ db, authStore,
 const actorWorkspace = createActorWorkspace({ db, authStore,
   requireSession: (request) => requireSession(request),
   requireCsrf: (request, session) => requireCsrf(request, session),
-  readJson: (request) => readJson(request), sendJson: (response, status, payload) => send(response, status, payload) });
+  readJson: (request) => readJson(request), sendJson: (response, status, payload) => send(response, status, payload),
+  ask: (payload) => projectChat.askHugh(JSON.stringify(payload)),
+  // Узкая статистика для участника: CRM получает доступ только к его компании; клиенту
+  // модуль отдаёт лишь агрегированные счётчики, без CRM, ссылок, аккаунтов и истории постов.
+  loadSocialOverview: async (code, user) => {
+    if (!CRM_API_KEY) return null;
+    const identity = crmIdentityHeader({ id: user.id, role: 'editor', displayName: 'Участник',
+      permissions: ['analytics.view'], companyCodes: [code] });
+    const upstream = await fetch(`${CRM_URL}/social-stats?companyCode=${encodeURIComponent(code)}`, {
+      headers: { 'x-api-key': CRM_API_KEY, [CRM_IDENTITY_HEADER]: identity },
+      signal: AbortSignal.timeout(5000) });
+    return upstream.ok ? upstream.json() : null;
+  } });
 const hughSettingsStore = createHughSettingsStore(db);
 // Заявки с сайта принимаются только для Palitra: сайт задаёт Caddy, список Origin — точный allowlist.
 const ORDER_SITES = { palitra: { companyCode: CONTENT_COMPANIES.palitra, title: 'Palitra',
