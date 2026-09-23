@@ -2544,7 +2544,14 @@ async function route(request, response) {
     const permission = request.method !== 'GET' || url.pathname.endsWith('/profiles') ? 'autoposting.edit' : 'autoposting.view';
     const {identity,company} = companyModuleContext(request,url.searchParams.get('companyCode'),permission);
     const code=company.code;let result,status=200;
-    if (url.pathname === '/autoposting/settings' && request.method === 'GET') result=await autopostingTransport.getSettings(code);
+    if (url.pathname === '/autoposting/calendar') {
+      if(request.method!=='GET')fail(405,'Метод не поддерживается');
+      if([...url.searchParams.keys()].some(key=>!['companyCode','from','to'].includes(key))
+        ||['companyCode','from','to'].some(key=>url.searchParams.getAll(key).length!==1))
+        fail(400,'Укажите компанию и один период календаря: from и to');
+      result=await autoposting.calendar(code,{from:url.searchParams.get('from'),to:url.searchParams.get('to')});
+    }
+    else if (url.pathname === '/autoposting/settings' && request.method === 'GET') result=await autopostingTransport.getSettings(code);
     else if (url.pathname === '/autoposting/settings' && request.method === 'PUT') {
       const body=await readJson(request);
       if(identity.role!=='owner'&&Array.isArray(body?.channels)){
