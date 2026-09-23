@@ -47,6 +47,10 @@ function createMediaMentorHandler({mentor, transfer, companyModuleContext, readJ
       // и не ставится в очередь: права те же, что на правку карточек автопостинга.
       result = transfer.transfer(code, await readJson(request), actor);
       status = result.created ? 201 : 200;
+    } else if (url.pathname === '/media-mentor/plan/feedback' && request.method === 'POST') {
+      // Замечание к строке текущей версии плана. Оно не меняет план и не считается решением.
+      result = served(mentor.addFeedback(code, await readJson(request), actor));
+      status = 201;
     } else if (url.pathname === '/media-mentor/brief' && request.method === 'PUT') {
       result = served(mentor.saveBrief(code, await readJson(request), actor));
     } else if (url.pathname === '/media-mentor/plan' && request.method === 'PUT') {
@@ -62,7 +66,7 @@ function createMediaMentorHandler({mentor, transfer, companyModuleContext, readJ
     // Контекст перенесённого черновика: задание дня и его исходник из неизменяемых версий.
     else if (draftContext && readOnly) result = transfer.context(code, draftContext[1]);
     else if (['/media-mentor', '/media-mentor/brief', '/media-mentor/plan', '/media-mentor/plan/decision',
-      '/media-mentor/plan/transfer'].includes(url.pathname) ||
+      '/media-mentor/plan/transfer', '/media-mentor/plan/feedback'].includes(url.pathname) ||
       briefVersion || planVersion || draftContext) fail(405, 'Метод не поддерживается');
     else fail(404, 'Раздел не найден', 'NOT_FOUND');
     send(response, status, result, {...cors, 'cache-control': 'no-store'});

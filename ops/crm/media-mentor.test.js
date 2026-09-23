@@ -89,7 +89,8 @@ test('план строится по брифу, согласуется поим
 
   const tables=f.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map(row=>row.name);
   assert.deepEqual(tables,['companies','media_mentor_brief_versions','media_mentor_briefs',
-    'media_mentor_plan_approvals','media_mentor_plan_versions','media_mentor_plans'],'модуль не создаёт таблиц публикации');
+    'media_mentor_plan_approvals','media_mentor_plan_feedback','media_mentor_plan_versions','media_mentor_plans'],
+    'модуль не создаёт таблиц публикации');
 });
 
 test('изменение брифа возвращает согласованный план на пересогласование',t=>{
@@ -269,4 +270,51 @@ test('версии и решения неизменяемы, сбой запис
   const retried=f.api.savePlan('alvi',{planRevision:1,briefRevision:1,days:daysFor(11)},ACTOR);
   assert.equal(retried.plan.revision,2);assert.equal(retried.plan.days.length,11);
   assert.equal(retried.approval.status,'pending','новая версия плана согласовывается заново');
+});
+
+test('предложения к строке плана сохраняются отдельно, не меняют план и согласование',t=>{
+  const f=fixture(t);f.ready();
+  f.api.decide('alvi',{planRevision:1,briefRevision:1,decision:'approved',comment:''},ACTOR);
+  const before=f.api.get('alvi');
+  f.tick(60000);
+  const saved=f.api.addFeedback('alvi',{planRevision:1,dayIndex:2,
+    message:'Может, сделать это темой для продающего рилса?'},ACTOR);
+  assert.deepEqual(saved.plan,before.plan);
+  assert.deepEqual(saved.approval,before.approval);
+  assert.deepEqual(saved.feedback,[{id:1,planRevision:1,dayIndex:2,
+    message:'Может, сделать это темой для продающего рилса?',
+    createdAt:'2026-09-19T05:01:00.000Z',actorId:7,actorName:'Влад'}]);
+  assert.deepEqual(createMediaMentor(f.db,{now:f.now}).get('alvi').feedback,saved.feedback,
+    'замечание остаётся после повторного открытия хранилища');
+  assert.deepEqual(f.api.planVersion('alvi',1).feedback,saved.feedback);
+
+  const newer=f.api.savePlan('alvi',{planRevision:1,briefRevision:1,days:daysFor(8)},ACTOR);
+  assert.equal(newer.plan.revision,2);
+  assert.deepEqual(newer.feedback,[],'замечания старой версии не переносятся на новый план');
+  assert.deepEqual(f.api.planVersion('alvi',1).feedback,saved.feedback,'история старой версии доступна');
+});
+
+test('предложения ограничены текущей версией, конкретной строкой и своей компанией',t=>{
+  const f=fixture(t);
+  const body={planRevision:1,dayIndex:0,message:'Уточнить зацепку'};
+  assert.throws(()=>f.api.addFeedback('alvi',body,ACTOR),e=>e.status===404);
+  f.ready();
+  for(const invalid of [{...body,planRevision:0},{...body,planRevision:2}])
+    assert.throws(()=>f.api.addFeedback('alvi',invalid,ACTOR),e=>e.status===409&&e.details.code==='STALE_PLAN');
+  for(const invalid of [{...body,dayIndex:-1},{...body,dayIndex:7},{...body,dayIndex:0.5},
+    {...body,message:' '},{...body,message:'x'.repeat(1001)},{...body,actorName:'Подставной автор'}])
+    assert.throws(()=>f.api.addFeedback('alvi',invalid,ACTOR),e=>e.status===400);
+  assert.throws(()=>f.api.addFeedback('alvi',body,{}),e=>e.status===400);
+  assert.deepEqual(f.api.get('alvi').feedback,[]);
+
+  f.api.addFeedback('alvi',body,ACTOR);
+  f.ready('avokado');
+  assert.deepEqual(f.api.get('avokado').feedback,[]);
+  assert.deepEqual(f.api.planVersion('avokado',1).feedback,[]);
+  const other=f.api.addFeedback('avokado',{...body,message:'Другая компания'},
+    {userId:8,userName:'Редактор Авокадо'});
+  assert.equal(other.feedback.length,1);
+  assert.equal(f.api.get('alvi').feedback.length,1);
+  assert.throws(()=>f.api.planVersion('avokado',2),e=>e.status===404);
+  assert.throws(()=>f.db.exec("UPDATE media_mentor_plan_feedback SET message='Подмена'"),/Immutable media mentor feedback/);
 });
