@@ -1,5 +1,8 @@
 .actor-onboarding-header p { max-width: 76ch; }
 .actor-onboarding-layout { display: grid; gap: 16px; min-width: 0; }
+.actor-onboarding-layout :is(input,select,textarea) { border: 1px solid var(--line, #3b4655);
+  border-radius: 10px; padding: 10px 12px; background: var(--bg, #0b0908);
+  color: var(--text, #f4f0eb); color-scheme: dark; }
 .actor-check-in { min-width: 0; overflow-wrap: anywhere; }
 .actor-check-in h2 { margin-top: 0; }
 .actor-check-in form { display: grid; gap: 20px; }
