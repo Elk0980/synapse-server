@@ -18,6 +18,8 @@ on:
       - 'ops/hugh-runtime/**'
       - 'ops/local-hugh/**'
       - 'ops/crm/media-mentor*'
+      - 'ops/crm/social-stats*'
+      - 'ops/crm/social-baselines*'
       - 'ops/crm/finance-ai*'
       - 'ops/crm/ai-trials.js'
       - 'ops/crm/commercial*'
@@ -35,6 +37,8 @@ on:
       - 'ops/hugh-runtime/**'
       - 'ops/local-hugh/**'
       - 'ops/crm/media-mentor*'
+      - 'ops/crm/social-stats*'
+      - 'ops/crm/social-baselines*'
       - 'ops/crm/finance-ai*'
       - 'ops/crm/ai-trials.js'
       - 'ops/crm/commercial*'
@@ -98,6 +102,10 @@ jobs:
       - name: Тесты Медиа-наставника
         timeout-minutes: 10
         run: node --test ops/crm/media-mentor.test.js ops/crm/media-mentor-rollout.test.js ops/crm/media-mentor-http.test.js ops/crm/media-mentor-transfer.test.js ops/crm/media-mentor-pilot.test.js
+
+      - name: Тесты исходной статистики до запуска
+        timeout-minutes: 10
+        run: node --test ops/crm/social-baselines.test.js ops/crm/social-stats.test.js ops/crm/social-stats-http.test.js
 
       # Расходы на ИИ внутри существующих Финансов и права раздела. Остальные наборы
       # каталога ops/crm этой проверкой по-прежнему не покрываются.
