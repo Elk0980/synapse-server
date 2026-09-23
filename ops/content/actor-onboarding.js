@@ -354,7 +354,9 @@ function createActorOnboarding({ db, authStore, requireSession, requireCsrf, rea
       if (request.method === 'GET') sendJson(response, 200, ownCheckIn(code, user));
       else {
         requireCsrf(request, session);
-        sendJson(response, 200, saveCheckIn(code, user, await readJson(request)));
+        const body = await readJson(request);
+        access(request, code, 'actor-onboarding.self');
+        sendJson(response, 200, saveCheckIn(code, user, body));
       }
       return true;
     }
@@ -364,7 +366,9 @@ function createActorOnboarding({ db, authStore, requireSession, requireCsrf, rea
       if (request.method === 'GET') sendJson(response, 200, reviewSocialLinks(code));
       else {
         requireCsrf(request, session);
-        sendJson(response, 200, decideSocialLink(code, user, await readJson(request)));
+        const body = await readJson(request);
+        access(request, code, 'actor-onboarding.manage');
+        sendJson(response, 200, decideSocialLink(code, user, body));
       }
       return true;
     }
@@ -375,6 +379,7 @@ function createActorOnboarding({ db, authStore, requireSession, requireCsrf, rea
       else {
         requireCsrf(request, session);
         const body = await readJson(request);
+        access(request, code, 'actor-onboarding.self');
         sendJson(response, 200, request.method === 'PUT'
           ? saveSocialLink(code, user, body) : removeSocialLink(code, user, body));
       }
@@ -394,6 +399,7 @@ function createActorOnboarding({ db, authStore, requireSession, requireCsrf, rea
     }
     requireCsrf(request, session);
     const body = await readJson(request);
+    access(request, code, 'actor-onboarding.self');
     if (Object.keys(body).sort().join(',') !== 'profile,revision' ||
         !Number.isSafeInteger(body.revision) || body.revision < 0) fail(400, 'Некорректная версия опроса');
     const profile = normalizeProfile(body.profile);

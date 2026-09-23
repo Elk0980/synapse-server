@@ -12,7 +12,7 @@ const ENTRY = { date: '2026-09-24', platform: 'instagram', format: 'reel',
 const path = (route = 'plan', company = 'taisabai') =>
   `/content/actor-workspace/${route}?companyCode=${company}`;
 
-function setup(t, { ask = null, loadSocialOverview = null, loadActorProfile = null, now } = {}) {
+function setup(t, { ask = null, loadSocialOverview = null, loadActorProfile = null, now, readJson } = {}) {
   const db = new DatabaseSync(':memory:');
   const auth = createAuthStore(db, `owner:owner:${HASH}`);
   const add = (login, companies, permissions) => auth.create(1, { login,
@@ -31,7 +31,7 @@ function setup(t, { ask = null, loadSocialOverview = null, loadActorProfile = nu
         throw Object.assign(new Error('Некорректный CSRF-токен'), { status: 403 });
       }
     },
-    readJson: async (request) => request.body,
+    readJson: readJson || (async (request) => request.body),
     sendJson: (response, status, payload) => { response.status = status; response.body = payload; },
     ask, loadSocialOverview, loadActorProfile, ...(now ? {now} : {}),
   });
@@ -307,7 +307,7 @@ test('личный контекст включает только свою ан�
   const f = setup(t, { loadActorProfile: (code, actorId) => {
     profileReads.push([code, actorId]);
     return { direction: 'Моё направление', role: 'Моя роль', cameraComfort: 'off_camera',
-      voiceComfort: 'text_only', boundaries: '\\'.repeat(2000), suggestions: '\\'.repeat(2000),
+      voiceComfort: 'text_only', boundaries: '\u0001'.repeat(2000), suggestions: '\\'.repeat(2000),
       anotherActor: 'Чужой секрет' };
   }, ask: async (payload) => { calls.push(payload); return { text: 'Снимем без лица' }; } });
   await call(f, f.lena, 'PUT', path(), { revision: 0, entries: [{...ENTRY, topic: 'Тема другого участника'}] });
@@ -323,6 +323,40 @@ test('личный контекст включает только свою ан�
   assert.match(calls[0].system, /off_camera/);
   assert.equal(calls[0].system.includes('Чужой секрет'), false);
   assert.equal(calls[0].system.includes('Тема другого участника'), false);
+});
+
+test('отзыв доступа пока читается тело запрещает запись и вызов модели', async (t) => {
+  let release, blocked = false, calls = 0;
+  const gate = new Promise(resolve => {release=resolve;});
+  const f = setup(t, { readJson: async (request) => {if (blocked) await gate; return request.body;},
+    ask: async () => {calls++;return null;}, now: () => '2026-09-24T01:00:00Z' });
+  const first = await call(f, f.vlad, 'POST', path('messages'),
+    {clientMessageId:'auth-late-001',text:'Первый вопрос'});
+  f.db.prepare("UPDATE actor_workspace_ai_jobs SET updated_at='2026-09-23T01:00:00Z'").run();
+  blocked = true;
+  const request = call(f, f.vlad, 'POST', path('retry'), {messageId:first.body.message.id,attempt:1});
+  await new Promise(resolve=>setImmediate(resolve));
+  f.auth.updateAccess(f.owner.id,f.vlad.id,['taisabai'],[]);
+  release();
+  assert.equal((await request).status,403);
+  assert.equal(calls,1);
+  assert.equal(f.db.prepare('SELECT attempts FROM actor_workspace_ai_jobs').get().attempts,1);
+});
+
+test('миграция старого вопроса не вызывает модель и позволяет явный повтор', async (t) => {
+  const f=setup(t);
+  f.db.prepare(`INSERT INTO actor_workspace_messages(company_code,user_id,client_message_id,text,created_at)
+    VALUES(?,?,?,?,?)`).run('taisabai',f.vlad.id,'legacy-00001','Старый вопрос','2026-09-22T00:00:00Z');
+  let calls=0;
+  f.service=createActorWorkspace({db:f.db,authStore:f.auth,requireSession:r=>r.session,
+    requireCsrf:()=>{},readJson:async r=>r.body,sendJson:(r,s,b)=>{r.status=s;r.body=b;},
+    ask:async()=>{calls++;return{text:'Ответ на старый вопрос'};},now:()=> '2026-09-24T00:00:00Z'});
+  assert.equal(calls,0);
+  const message=(await call(f,f.vlad,'GET',path('messages'))).body.messages[0];
+  assert.equal(message.aiStatus,'pending');
+  const repeated=await call(f,f.vlad,'POST',path('retry'),{messageId:message.id,attempt:message.attempts});
+  assert.equal(repeated.body.message.reply,'Ответ на старый вопрос');
+  assert.equal(calls,1);
 });
 
 test('явный повтор ограничен минутой и тремя попытками, прежний номер не создаёт новый вызов', async (t) => {

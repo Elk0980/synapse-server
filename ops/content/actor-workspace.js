@@ -120,6 +120,11 @@ function createActorWorkspace({ db, authStore, requireSession, requireCsrf, read
   if (!db.prepare('PRAGMA table_info(actor_workspace_ai_jobs)').all().some((c) => c.name === 'attempts')) {
     db.exec('ALTER TABLE actor_workspace_ai_jobs ADD COLUMN attempts INTEGER NOT NULL DEFAULT 1');
   }
+  // Старые вопросы не запускали модель. Восстановление записи разрешает явный повтор,
+  // но само не вызывает модель и не отправляет сообщение.
+  db.exec(`INSERT OR IGNORE INTO actor_workspace_ai_jobs
+    (company_code,user_id,message_id,status,created_at,updated_at,attempts)
+    SELECT company_code,user_id,id,'pending',created_at,created_at,1 FROM actor_workspace_messages`);
 
   // Не доверяем роли и правам, записанным в cookie: доступ перечитывается из БД каждый раз.
   function access(request, code, permission) {
@@ -175,10 +180,16 @@ function createActorWorkspace({ db, authStore, requireSession, requireCsrf, read
     const personal = { profile: profile ? Object.fromEntries(
       ['direction', 'role', 'cameraComfort', 'voiceComfort', 'boundaries', 'suggestions']
         .filter((key) => typeof profile[key] === 'string')
-        .map((key) => [key, profile[key].slice(0, key === 'boundaries' ? 2000 : 300)])) : null,
+        .map((key) => [key, profile[key].replace(/[\u0000-\u001f\u007f]/g, ' ')
+          .slice(0, key === 'boundaries' ? 2000 : 300)])) : null,
       plan: plan(code, user).entries.slice(0, 12) };
     const prefix = CHAT_SYSTEM + '\nСохранённые данные этого участника (JSON):\n';
     while (personal.plan.length && (prefix + JSON.stringify(personal)).length > 7800) personal.plan.pop();
+    for (const key of ['suggestions', 'role', 'direction', 'boundaries']) {
+      while ((prefix + JSON.stringify(personal)).length > 7800 && personal.profile?.[key]) {
+        personal.profile[key] = personal.profile[key].slice(0, Math.floor(personal.profile[key].length / 2));
+      }
+    }
     return { jobId: `actor-private:${code}:${user.id}:${question.id}:a${attempt}`,
       companyCode: code, audience: 'actor-private', system: prefix + JSON.stringify(personal),
       messages };
@@ -261,6 +272,7 @@ function createActorWorkspace({ db, authStore, requireSession, requireCsrf, read
       if (request.method === 'GET') { sendJson(response, 200, plan(code, user)); return true; }
       requireCsrf(request, session);
       const body = await readJson(request);
+      access(request, code, 'actor-onboarding.self');
       if (!keys(body, ['revision', 'entries']) || !Number.isSafeInteger(body.revision) ||
           body.revision < 0) fail(400, 'Некорректная версия личного плана');
       const entriesJson = JSON.stringify(normalizeEntries(body.entries));
@@ -285,6 +297,7 @@ function createActorWorkspace({ db, authStore, requireSession, requireCsrf, read
       const { session, user } = access(request, code, 'actor-onboarding.self');
       requireCsrf(request, session);
       const body = await readJson(request);
+      access(request, code, 'actor-onboarding.self');
       if (!keys(body, ['messageId', 'attempt']) || !Number.isSafeInteger(body.messageId) ||
           body.messageId < 1 || !Number.isSafeInteger(body.attempt) || body.attempt < 1) {
         fail(400, 'Некорректный запрос повторного ответа');
@@ -338,6 +351,7 @@ function createActorWorkspace({ db, authStore, requireSession, requireCsrf, read
     }
     requireCsrf(request, session);
     const body = await readJson(request);
+    access(request, code, 'actor-onboarding.self');
     if (!keys(body, ['text', 'clientMessageId']) ||
         typeof body.clientMessageId !== 'string' ||
         !/^[A-Za-z0-9_-]{8,100}$/.test(body.clientMessageId)) fail(400, 'Некорректный идентификатор сообщения');
