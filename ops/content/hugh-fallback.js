@@ -39,9 +39,14 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
   /* Провайдеры из защищённого хранилища ЛК подключаются к тому же рантайму ответов,
      что и заданные в окружении: отдельного мёртвого экрана настроек нет.
      Одноимённый провайдер из хранилища заменяет заданный в окружении. */
-  const stored = providerStore && typeof providerStore.runtimeProviders === 'function'
-    ? providerStore.runtimeProviders() : [];
-  const providers = [...fromEnv.providers.filter((item) => !stored.some((row) => row.name === item.name)), ...stored];
+  // Настройки из кабинета меняются во время работы сервера. Читать их только при запуске
+  // значит продолжать отвечать старой моделью (или считать резерв пустым) до перезапуска.
+  const currentProviders = () => {
+    const stored = providerStore && typeof providerStore.runtimeProviders === 'function'
+      ? providerStore.runtimeProviders() : [];
+    const savedNames = new Set(stored.map((item) => item.name));
+    return [...fromEnv.providers.filter((item) => !savedNames.has(item.name)), ...stored];
+  };
   if (providerStore && !providerStore.available && providerStore.lockedReason) issues.push(providerStore.lockedReason);
   db.exec(`CREATE TABLE IF NOT EXISTS project_chat_provider_state (
     provider TEXT PRIMARY KEY, cooldown_until TEXT, failures INTEGER NOT NULL DEFAULT 0, last_error TEXT NOT NULL DEFAULT '',
@@ -67,9 +72,9 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
   const ownLimitReached = (provider, at) => (provider.budgetMicroUsd
     ? budget.providerState(provider.name, provider.budgetMicroUsd, at).stopped : false);
   const available = (at = now()) => (budget.stopped(at)
-    ? [] : providers.filter((p) => !cooling(p.name, at) && !ownLimitReached(p, at)));
+    ? [] : currentProviders().filter((p) => !cooling(p.name, at) && !ownLimitReached(p, at)));
   const nextAvailableAt = (at = now()) => {
-    const times = providers.map((p) => Date.parse(row(p.name)?.cooldown_until || '') || at).filter((t) => t > at);
+    const times = currentProviders().map((p) => Date.parse(row(p.name)?.cooldown_until || '') || at).filter((t) => t > at);
     return times.length ? Math.min(...times) : at;
   };
   function cooldown(name, seconds, error) {
@@ -152,7 +157,7 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
           delay: Math.max(60, Math.min(900, Math.ceil((Date.parse(stop.resetAt) - at) / 1000) || 900)) });
     }
     const until = nextAvailableAt(at);
-    throw Object.assign(new Error(providers.length ? 'Резервные провайдеры недоступны: вопрос ждёт в очереди' : 'Резервные провайдеры не настроены'),
+    throw Object.assign(new Error(currentProviders().length ? 'Резервные провайдеры недоступны: вопрос ждёт в очереди' : 'Резервные провайдеры не настроены'),
       { allUnavailable: true, delay: Math.max(30, Math.min(900, Math.ceil((until - at) / 1000) || 30)) });
   }
   /* Подтверждение приёма: не чаще раза в 30 минут на компанию, только когда ни один путь ответа не доступен. */
@@ -162,6 +167,7 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
   }
   const markAck = (code) => upsert(`ack:${code}`, { last_success_at: stamp() });
   function status() {
+    const providers = currentProviders();
     return { configured: providers.length > 0, issues, budget: budget.status(), providers: providers.map((p) => {
       const r = row(p.name) || {};
       return { name: p.name, model: p.model, cooling: cooling(p.name), cooldownUntil: r.cooldown_until || null, failures: r.failures || 0,
@@ -177,7 +183,8 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
     }) };
   }
   // Аренда серверного подхвата: сумма таймаутов провайдеров плюс запас — чтобы она не истекла посреди последовательных попыток.
-  const leaseMs = () => providers.reduce((total, p) => total + p.timeoutMs, 0) + 30000;
-  return { providers: providers.map((p) => ({ name: p.name, model: p.model })), issues, available, reply, status, ackDue, markAck, leaseMs, budget, ACK_TEXT };
+  const leaseMs = () => currentProviders().reduce((total, p) => total + p.timeoutMs, 0) + 30000;
+  return { get providers() { return currentProviders().map((p) => ({ name: p.name, model: p.model })); },
+    issues, available, reply, status, ackDue, markAck, leaseMs, budget, ACK_TEXT };
 }
 module.exports = { createHughFallback, readProviders, ACK_TEXT };
