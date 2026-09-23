@@ -170,6 +170,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS documents_key_idx ON documents(key, version DESC);
 `);
 const authStore = createAuthStore(db, process.env.AUTH_USERS || '');
+const companyTeam = require('./company-team').createCompanyTeam(authStore);
 const actorOnboarding = createActorOnboarding({ db, authStore,
   requireSession: (request) => requireSession(request),
   requireCsrf: (request, session) => requireCsrf(request, session),
@@ -550,7 +551,7 @@ async function proxyCrm(request, response, url, cors) {
     if(identity.role!=='owner')requirePermission(request,readOnly?(/^\/(?:platform-demand|social-stats)/.test(crmPath)?'analytics.view':'crm.view'):'crm.edit',code);
     if (/^\/social-stats\/(?:accounts|import|baseline)$/.test(crmPath) && !readOnly && identity.role!=='owner') fail(403,'Настройки аккаунтов и замер до начала работы доступны владельцу');
   }
-  if (/^\/autoposting\/posts\/\d+\/(?:approve|reject)$/.test(crmPath) && identity.role!=='owner') fail(403,'Согласовывать и отклонять публикации может только владелец');
+  if (/^\/autoposting\/posts\/\d+\/(?:approve|reject)$/.test(crmPath) && identity.role!=='owner' && !identity.permissions.includes('autoposting.approve')) fail(403,'Нет права согласовывать публикации');
   // Отметка «опубликовано вне ЛК» — решение владельца компании; права редактора недостаточно.
   if (/^\/autoposting\/posts\/\d+\/receipts$/.test(crmPath) && identity.role!=='owner') fail(403,'Отмечать публикацию вне кабинета может только владелец');
   if (crmPath==='/autoposting/plan-summary') fail(404,'Адрес не найден');
@@ -985,6 +986,16 @@ const server = http.createServer(async (request, response) => {
         OWNER_DOCUMENTS.get(ownerDocumentKey)(document);
         return reply(200, { ok: true, key: ownerDocumentKey,
           ...saveVersion(ownerDocumentKey, document, publicIdentity(session.user).author) });
+      }
+      fail(405, 'Метод не поддерживается');
+    }
+
+    if (url.pathname === '/content/admin/team') {
+      const session = requirePermission(request, 'team.manage');
+      if (request.method === 'GET') return reply(200, {members: companyTeam.list(session.user.id, url.searchParams.get('companyCode'))});
+      if (request.method === 'POST') {
+        requireCsrf(request, session);
+        return reply(201, companyTeam.create(session.user.id, await readJson(request)));
       }
       fail(405, 'Метод не поддерживается');
     }

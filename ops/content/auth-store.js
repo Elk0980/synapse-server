@@ -13,8 +13,8 @@ const COMPANIES = Object.freeze({
 const PERMISSIONS = Object.freeze([
   'analytics.view', 'crm.view', 'crm.edit', 'sites.view', 'sites.create', 'sites.delete',
   'site_editor.view', 'site_editor.edit', 'price.view', 'price.edit', 'chat.view', 'chat.reply',
-  'settings.view', 'settings.edit', 'account.view',
-  'company-information.view', 'company-information.edit', 'autoposting.view', 'autoposting.edit',
+  'settings.view', 'settings.edit', 'account.view', 'team.manage',
+  'company-information.view', 'company-information.edit', 'autoposting.view', 'autoposting.edit', 'autoposting.approve',
   'actor-onboarding.self', 'actor-onboarding.manage',
 ]);
 const DEPENDENCIES = Object.freeze({
@@ -27,6 +27,7 @@ const DEPENDENCIES = Object.freeze({
   'settings.edit': ['settings.view'],
   'company-information.edit': ['company-information.view'],
   'autoposting.view': ['company-information.view'],
+  'autoposting.approve': ['autoposting.edit', 'autoposting.view', 'company-information.view'],
   'autoposting.edit': ['autoposting.view', 'company-information.view'],
   'actor-onboarding.manage': ['actor-onboarding.self'],
 });

@@ -102,4 +102,11 @@ test('calendar HTTP route keeps existing company/view authorization and requires
   }
   assert.equal((await request('POST',route+period,{body:{}})).status,405);
   assert.equal(snapshot(),before,'calendar and rejected requests must leave profile/post/delivery data unchanged');
+  const approver=encode({permissions:['autoposting.edit','autoposting.approve'],companyCodes:['qa']});
+  const approvalPath='/autoposting/posts/'+card.body.id+'/approve?companyCode=qa';
+  const decision={revision:card.body.revision,approved:false,comment:'Version review'};
+  assert.equal((await request('POST',approvalPath,{identity:editorOnly,body:decision})).status,403);
+  assert.equal((await request('POST',approvalPath.replace('companyCode=qa','companyCode=other'),{identity:approver,body:decision})).status,403);
+  assert.equal((await request('POST',approvalPath,{identity:approver,body:decision})).status,200);
+
 });

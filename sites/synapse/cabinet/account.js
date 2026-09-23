@@ -6,6 +6,8 @@ let identity, byId, escapeHTML, apiJson;
 let initialized = false;
 const api = {};
 const permissionLabel = value => ({
+  'autoposting.approve': 'Контент — согласование материалов своей компании',
+  'team.manage': 'Моя команда — добавление администраторов и мастеров',
   'company-information.view': 'Актуальность — просмотр данных компании',
   'company-information.edit': 'Актуальность — заполнение и проверка данных',
   'autoposting.view': 'Автопостинг — просмотр материалов и плана',

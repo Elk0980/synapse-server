@@ -199,8 +199,8 @@ function create(container, context) {
     if(ctx.identity?.role!=='owner')get('autoposting-channels').querySelectorAll('[data-profile-diagnostics]').forEach(node=>node.remove());
     container.querySelectorAll("input,textarea,select,button").forEach(node=>{node.disabled=busy||!settings;});
     get("autoposting-company").disabled=busy||!companies.length;
-    get('autoposting-batch').hidden=ctx.identity?.role!=='owner'||!approvalSelection.size;
-    get('autoposting-batch-approve').disabled=busy||calendarPending||!settings||ctx.identity?.role!=='owner'||!approvalSelection.size;
+    get('autoposting-batch').hidden=!permitted(ctx,'approve')||!approvalSelection.size;
+    get('autoposting-batch-approve').disabled=busy||calendarPending||!settings||!permitted(ctx,'approve')||!approvalSelection.size;
     container.querySelectorAll('[data-daily-approve]').forEach(node=>{node.disabled=busy||calendarPending||!settings||!canSelectApproval(posts.find(item=>String(item.id)===node.dataset.dailyApprove));});
     const canEdit=edit()&&(!post||EDITABLE.has(post.status))&&!post?.deliveries?.some(item=>["published","publishing","needs_review"].includes(item.status));
     form.querySelectorAll("input,textarea,select,button").forEach(node=>{node.disabled=busy||!settings||!canEdit;});
@@ -211,7 +211,7 @@ function create(container, context) {
       node.disabled=busy||!edit()||needsProfile||(ctx.identity?.role!=='owner'&&node.closest('[data-owner-connection]')&&!node.matches('[data-check-channel]'));
     });
     get("autoposting-preview").disabled=busy||!post||dirty();
-    const approve=get("autoposting-approve");if(approve)approve.disabled=busy||ctx.identity?.role!=="owner"||!post||dirty()||!post.readiness?.ready;
+    const approve=get("autoposting-approve");if(approve)approve.disabled=busy||!permitted(ctx,"approve")||!post||dirty()||!post.readiness?.ready;
     container.querySelectorAll("[data-move][data-edge]").forEach(node=>{node.disabled=true;});
     const submitReview=get("autoposting-submit-review");if(submitReview)submitReview.disabled=busy||!edit()||!post||dirty();
     const importButton2=get("autoposting-import");if(importButton2)importButton2.disabled=busy||!edit()||!settings;get("autoposting-import-json").disabled=busy||!edit()||!settings;
@@ -233,7 +233,7 @@ function create(container, context) {
   };
   const renderApproval=()=>{
     const node=get("autoposting-approval");if(!post){node.innerHTML="";return;}
-    const a=post.approval||{},r=post.readiness||{ready:false,issues:[]},owner=ctx.identity?.role==="owner";
+    const a=post.approval||{},r=post.readiness||{ready:false,issues:[]},owner=permitted(ctx,"approve");
     const rv=post.review||{state:"draft"},canEdit=edit()&&!busy;
     const historyItems=(post.history||[]).slice(0,10).map(h=>`<li>${esc(HISTORY_LABEL[h.action]||h.action)} · содержимое v${esc(h.contentRevision)} · ${esc(h.actorName||"—")} · ${esc(time.toLocal(h.createdAt,zone()).replace("T"," "))}${h.comment?` — ${esc(h.comment)}`:""}</li>`).join("");
     node.innerHTML=`<p>Версия ${esc(post.revision)} · содержимое v${esc(post.contentRevision||"")} · <strong data-review-state="${esc(rv.state)}">${esc(REVIEW[rv.state]||rv.state)}</strong>${rv.byName?` (${esc(rv.byName)}${rv.at?", "+esc(time.toLocal(rv.at,zone()).replace("T"," ")):""})`:""}</p>
@@ -401,9 +401,9 @@ function create(container, context) {
   };
   const platformsOf=item=>[...new Set([...(item.platformIds||[]).map(id=>channels().find(channel=>channel.id===id)?.platform||id),...Object.keys(item.captions||{}),...(item.planPlatform?[item.planPlatform]:[])])];
   const hasLocalChanges=item=>drafts.has(companyCode+':'+item.id)||(post?.id===item.id&&dirty());
-  const canSelectApproval=item=>ctx.identity?.role==='owner'&&item?.companyCode===companyCode&&EDITABLE.has(item.status)&&item.readiness?.ready===true&&Number.isSafeInteger(item.contentRevision)&&Number.isSafeInteger(item.revision)&&!item.approval?.approved&&!item.deliveries?.some(value=>['published','publishing','needs_review'].includes(value.status))&&!hasLocalChanges(item)&&!approvalBlocked.has(String(item.id));
+  const canSelectApproval=item=>permitted(ctx,'approve')&&item?.companyCode===companyCode&&EDITABLE.has(item.status)&&item.readiness?.ready===true&&Number.isSafeInteger(item.contentRevision)&&Number.isSafeInteger(item.revision)&&!item.approval?.approved&&!item.deliveries?.some(value=>['published','publishing','needs_review'].includes(value.status))&&!hasLocalChanges(item)&&!approvalBlocked.has(String(item.id));
   const renderBatch=()=>{
-    get('autoposting-batch').hidden=ctx.identity?.role!=='owner'||!approvalSelection.size;
+    get('autoposting-batch').hidden=!permitted(ctx,'approve')||!approvalSelection.size;
     get('autoposting-batch-approve').textContent=`Согласовать выбранные (${approvalSelection.size})`;
     get('autoposting-selected-list').innerHTML=approvalSelection.size?'<p>Будут согласованы все выбранные материалы, в том числе за пределами текущего фильтра:</p><ul>'+[...approvalSelection.values()].map(item=>`<li>${esc(item.title)} · версия ${esc(item.contentRevision)} <button type="button" class="plain-button" data-daily-unselect="${esc(item.id)}">Убрать из выбора</button></li>`).join('')+'</ul>':'';
     get('autoposting-batch-results').innerHTML=approvalResults.size?'<ul>'+[...approvalResults.values()].map(result=>`<li>${esc(result.title)}: ${esc(result.message)}</li>`).join('')+'</ul>':'';
@@ -415,7 +415,7 @@ function create(container, context) {
     const error=item.lastErrorCode?(ERRORS[item.lastErrorCode]||'Нужна проверка результата публикации. Откройте материал.'):'';
     const url=(item.mediaUrls||[]).map(safeUrl).find(Boolean),preview=url?(isVideo(url)?`<video controls preload="none" playsinline src="${esc(url)}" aria-label="Материал: ${esc(item.title)}"></video>`:`<img src="${esc(url)}" alt="Материал: ${esc(item.title)}" loading="lazy">`):'<span class="autoposting-no-media">Файл не добавлен</span>';
     const date=item.publishDate?`Время публикации: ${time.toLocal(item.scheduledAt,zone()).replace('T',' ')}`:item.plannedDate?`Дата плана: ${item.plannedDate} · время публикации не задано`:'Дата не задана';
-    return `<li class="autoposting-daily-card" data-daily-post="${esc(id)}"><div class="autoposting-daily-media">${preview}</div><div class="autoposting-daily-content"><p class="autoposting-note">${esc(platforms.map(platformLabel).join(' · ')||'Площадка не выбрана')}</p><h4>${esc(item.title||'Без названия')}</h4><p>${esc(date)}</p>${item.publishDate&&item.plannedDate&&item.publishDate!==item.plannedDate?`<p>Дата плана: ${esc(item.plannedDate)}</p>`:''}<p><span class="autoposting-badge">${esc(STATUS[item.status]||'Статус неизвестен')}</span>${readiness?`<span class="autoposting-badge">${esc(readiness)}</span>`:""}</p>${item.text?`<p class="autoposting-daily-excerpt">${esc(item.text.slice(0,240))}${item.text.length>240?'…':''}</p>`:''}${error?`<p class="autoposting-issues">${esc(error)}</p>`:''}${issues.length?`<ul class="autoposting-issues">${[...new Set(issues)].map(issue=>`<li>${esc(issue)}</li>`).join('')}</ul>`:''}${platforms.some(platform=>!DELIVERY_CONNECTED.has(platform))?'<p class="autoposting-note">Для части площадок подготовлена подпись; доставка из кабинета не подключена.</p>':''}<button type="button" class="plain-button" data-open-post="${esc(id)}">Посмотреть${edit()&&EDITABLE.has(item.status)?' / изменить':''}</button>${ctx.identity?.role==='owner'?`<label class="autoposting-checkbox"><input type="checkbox" data-daily-approve="${esc(id)}" ${approvalSelection.has(id)?'checked':''} ${canSelectApproval(item)?'':'disabled'}>Выбрать для согласования · версия ${esc(item.contentRevision||item.revision)}</label>`:''}${hasLocalChanges(item)?'<p class="autoposting-note">Есть несохранённые правки. Сначала сохраните материал и проверьте его.</p>':''}</div></li>`;
+    return `<li class="autoposting-daily-card" data-daily-post="${esc(id)}"><div class="autoposting-daily-media">${preview}</div><div class="autoposting-daily-content"><p class="autoposting-note">${esc(platforms.map(platformLabel).join(' · ')||'Площадка не выбрана')}</p><h4>${esc(item.title||'Без названия')}</h4><p>${esc(date)}</p>${item.publishDate&&item.plannedDate&&item.publishDate!==item.plannedDate?`<p>Дата плана: ${esc(item.plannedDate)}</p>`:''}<p><span class="autoposting-badge">${esc(STATUS[item.status]||'Статус неизвестен')}</span>${readiness?`<span class="autoposting-badge">${esc(readiness)}</span>`:""}</p>${item.text?`<p class="autoposting-daily-excerpt">${esc(item.text.slice(0,240))}${item.text.length>240?'…':''}</p>`:''}${error?`<p class="autoposting-issues">${esc(error)}</p>`:''}${issues.length?`<ul class="autoposting-issues">${[...new Set(issues)].map(issue=>`<li>${esc(issue)}</li>`).join('')}</ul>`:''}${platforms.some(platform=>!DELIVERY_CONNECTED.has(platform))?'<p class="autoposting-note">Для части площадок подготовлена подпись; доставка из кабинета не подключена.</p>':''}<button type="button" class="plain-button" data-open-post="${esc(id)}">Посмотреть${edit()&&EDITABLE.has(item.status)?' / изменить':''}</button>${permitted(ctx,'approve')?`<label class="autoposting-checkbox"><input type="checkbox" data-daily-approve="${esc(id)}" ${approvalSelection.has(id)?'checked':''} ${canSelectApproval(item)?'':'disabled'}>Выбрать для согласования · версия ${esc(item.contentRevision||item.revision)}</label>`:''}${hasLocalChanges(item)?'<p class="autoposting-note">Есть несохранённые правки. Сначала сохраните материал и проверьте его.</p>':''}</div></li>`;
   };
   const renderCalendar=()=>{
     if(!month)return;
@@ -566,18 +566,18 @@ function create(container, context) {
     if(node.checked)approvalSelection.set(String(item.id),{id:item.id,companyCode,revision:item.revision,contentRevision:item.contentRevision,title:item.title});else approvalSelection.delete(String(item.id));
     renderBatch();controls();
   });
-  get('autoposting-selected-list').addEventListener('click',event=>{const node=event.target.closest('[data-daily-unselect]');if(!node||busy||ctx.identity?.role!=='owner')return;approvalSelection.delete(node.dataset.dailyUnselect);renderCalendar();controls();});
+  get('autoposting-selected-list').addEventListener('click',event=>{const node=event.target.closest('[data-daily-unselect]');if(!node||busy||!permitted(ctx,'approve'))return;approvalSelection.delete(node.dataset.dailyUnselect);renderCalendar();controls();});
   get('autoposting-batch-approve').addEventListener('click',()=>{
-    if(busy||calendarPending||ctx.identity?.role!=='owner'||!approvalSelection.size)return;
+    if(busy||calendarPending||!permitted(ctx,'approve')||!approvalSelection.size)return;
     const selected=[...approvalSelection.values()];
     void run(async current=>{
       for(const snapshot of selected){
-        if(!current()||ctx.identity?.role!=='owner')return;
+        if(!current()||!permitted(ctx,'approve'))return;
         const id=String(snapshot.id);approvalSelection.delete(id);approvalBlocked.add(id);
         try{
           if(hasLocalChanges(snapshot))throw Error('Local changes');
           const latest=await request('/autoposting/posts/'+encodeURIComponent(id));if(!current())return;
-          if(ctx.identity?.role!=='owner'||latest.companyCode!==snapshot.companyCode||latest.id!==snapshot.id||latest.revision!==snapshot.revision||latest.contentRevision!==snapshot.contentRevision||!latest.readiness?.ready||!EDITABLE.has(latest.status)||latest.deliveries?.some(item=>['published','publishing','needs_review'].includes(item.status)))throw Error('Version changed');
+          if(!permitted(ctx,'approve')||latest.companyCode!==snapshot.companyCode||latest.id!==snapshot.id||latest.revision!==snapshot.revision||latest.contentRevision!==snapshot.contentRevision||!latest.readiness?.ready||!EDITABLE.has(latest.status)||latest.deliveries?.some(item=>['published','publishing','needs_review'].includes(item.status)))throw Error('Version changed');
           const result=await request('/autoposting/posts/'+encodeURIComponent(id)+'/approve','POST',{revision:snapshot.revision,approved:true});if(!current())return;
           if(result.companyCode!==snapshot.companyCode||result.id!==snapshot.id||result.contentRevision!==snapshot.contentRevision||!result.approval?.approved)throw Error('Approval unconfirmed');
           posts=posts.map(item=>item.id===result.id?result:item);
