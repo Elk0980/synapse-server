@@ -3,13 +3,14 @@
 /* Synapse Business — сервис контента сайтов.
    Хранит JSON-документы (например, прайс ALVI) с историей версий.
    Кабинет проверяет сессию, проект и права; сайты читают отдельный публичный маршрут.
-   Внешних пакетов нет: Node 24, встроенный node:sqlite. */
+   Node 24, встроенный node:sqlite; web-push для уведомлений. */
 
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
+const {createWebPush} = require('./web-push');
 const { createAuthStore, COMPANIES, PERMISSIONS, DEPENDENCIES, PRICE_CLIENT_PRESET } = require('./auth-store');
 const { createSiteStore } = require('./site-store');
 const { createHughSettingsStore } = require('./hugh-settings-store');
@@ -170,6 +171,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS documents_key_idx ON documents(key, version DESC);
 `);
 const authStore = createAuthStore(db, process.env.AUTH_USERS || '');
+const webPush = createWebPush({db, requireSession, requireCsrf, readJson, sendJson:send, transport:require('web-push')});
 const actorOnboarding = createActorOnboarding({ db, authStore,
   requireSession: (request) => requireSession(request),
   requireCsrf: (request, session) => requireCsrf(request, session),
@@ -834,6 +836,7 @@ const server = http.createServer(async (request, response) => {
     }
     if (await projectChat.handle(request,response,url)) return;
 
+    if (await webPush.handle(request,response,url)) return;
     if (await actorOnboarding.handle(request,response,url)) return;
     if (await actorWorkspace.handle(request,response,url)) return;
 

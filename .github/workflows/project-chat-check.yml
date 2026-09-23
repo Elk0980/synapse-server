@@ -85,6 +85,9 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/testdeps" --no-audit --no-fund --loglevel=error jsdom
           echo "NODE_PATH=$RUNNER_TEMP/testdeps/node_modules" >> "$GITHUB_ENV"
 
+      - name: Подготовить доставку push для тестов сервиса
+        run: npm ci --prefix ops/content --ignore-scripts --no-audit --no-fund
+
       - name: Проверить, что файлы зависимостей проекта не изменились
         run: git diff --exit-code --stat
 

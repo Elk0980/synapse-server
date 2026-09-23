@@ -1,6 +1,8 @@
 FROM node:24-alpine
 
 WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts
 COPY *.js ./
 COPY seed ./seed
 # Доверенный каталог навыков читается только на чтение и только как markdown.

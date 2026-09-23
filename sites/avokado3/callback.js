@@ -25,7 +25,7 @@
     } catch (_) {}
     return tags;
   }
-  function payload(values, location, storage, now = Date.now()) {
+  function payload(values, location, storage, now = Date.now(), doNotTrack = false) {
     const name = String(values.name || '').trim();
     const contact = String(values.contact || '').trim();
     const comment = String(values.comment || '').trim();
@@ -37,11 +37,17 @@
     }
     if (comment.length > 1000) invalid('comment', 'Сократите комментарий до 1000 символов.');
     if (values.consent !== true) invalid('consent', 'Для отправки заявки нужно ваше согласие.');
-    const tags = campaign(location, storage, now);
+    const tags = campaign(location, doNotTrack ? undefined : storage, now);
     const page = location.origin + location.pathname;
     const result = {companyCode: 'avokado', name, contact, channel: 'Обратный звонок',
       source: tags.utm_source || 'Сайт АВОКАДО', comment, page, landingPage: page};
     for (const [key, field] of Object.entries(fields)) if (tags[key]) result[field] = tags[key];
+    if (!doNotTrack) {
+      try {
+        const clientId = storage.getItem('synapse_cid');
+        if (typeof clientId === 'string' && /^[\w-]{1,128}$/.test(clientId)) result.clientId = clientId;
+      } catch (_) {}
+    }
     return result;
   }
   async function send(win, body) {
@@ -106,7 +112,8 @@
         let storage;
         try { storage = win.localStorage; } catch (_) {}
         body = payload({name: controls.namedItem('name').value, contact: controls.namedItem('contact').value,
-          comment: !addComment || addComment.checked ? comment.value : '', consent: controls.namedItem('consent').checked}, win.location, storage);
+          comment: !addComment || addComment.checked ? comment.value : '', consent: controls.namedItem('consent').checked}, win.location, storage,
+          Date.now(), win.navigator?.doNotTrack === '1');
       } catch (error) {
         if (error.field) {
           controls.namedItem(error.field).setCustomValidity(error.message);
