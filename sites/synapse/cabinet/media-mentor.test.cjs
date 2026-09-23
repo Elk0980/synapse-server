@@ -537,7 +537,7 @@ test('без права правки кнопки переноса нет даж
     f.view.render(f.node, f.ctx);
     await tick();
     assert.equal(f.node.querySelector('#mentor-transfer-form'), null);
-    assert.match(f.node.textContent, /Переносит план тот, у кого есть право правки автопостинга/);
+    assert.match(f.node.textContent, /Подготовить карточки поможет ответственный за материалы/);
     assert.equal(f.calls.filter((call) => call.method !== 'GET').length, 0);
   } finally { f.close(); }
 });

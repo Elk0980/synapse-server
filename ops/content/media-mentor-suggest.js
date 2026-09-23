@@ -1,5 +1,7 @@
 'use strict';
 
+const { randomUUID } = require('node:crypto');
+
 /* Черновик контент-плана Медиа-наставника по брифу компании.
 
    Модуль НИЧЕГО не сохраняет и ничего не согласовывает: он возвращает предложение,
@@ -27,6 +29,11 @@ const UNAVAILABLE = 'Предложение не построено: ни оди
   'Пустой план не выдаётся за результат — повторите позже или заполните план вручную.';
 const UNUSABLE = 'Ответ модели не удалось разобрать как план. Ничего не предлагается: ' +
   'додумывать за модель модуль не станет.';
+const REQUEST_TOO_LARGE = 'Материалов для одного запроса слишком много. Сократите бриф до сведений ' +
+  'для текущего плана. Запрос к модели не отправлен; сохранённые данные не изменены.';
+const failure = error => error?.code === 'MENTOR_REQUEST_TOO_LARGE'
+  ? { status: 'request_too_large', notice: REQUEST_TOO_LARGE }
+  : { status: 'unavailable', notice: UNAVAILABLE };
 
 const clean = (value, max) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
@@ -58,7 +65,9 @@ function buildPrompt(brief, { startDate, days }) {
     'В mentorNote укажи, какой один факт или материал нужен от клиента, и объясни ему простыми словами, ' +
     'зачем мы это просим и какой этап пути покупателя это улучшит. ' +
     'Задание на съёмку — одно простое действие по указанной готовности; лицо и голос не требуй. ' +
-    'Не навязывай фиксированные дни, длину видео, пороги удержания или обещания охватов.';
+    'Не навязывай фиксированные дни, длину видео, пороги удержания или обещания охватов. ' +
+    'Предложи компактный первый набор из 3–5 материалов в пределах периода: topic до 60 знаков, ' +
+    'hook до 80 знаков, mentorNote до 140 знаков. Это не обещание ежедневного выпуска.';
   const user = [
     `Даты плана: ${dates(startDate, days).join(', ')}.`,
     `Не более ${MAX_ITEMS_PER_DAY} позиций на дату.`,
@@ -72,7 +81,7 @@ function buildPrompt(brief, { startDate, days }) {
     `Исходники: ${list(brief.assets, (a) => `${a.id} — ${clean(a.title, 200)} [${a.kind}]`)}.`,
     `Готовность к съёмке: ${brief.shootingComfort?.level || 'unknown'}. ${clean(brief.shootingComfort?.notes, 500)}`,
   ].join('\n');
-  return { system, messages: [{ role: 'user', content: user }] };
+  return { system, messages: [{ role: 'user', content: user }], responseProfile: 'structured-draft' };
 }
 
 /* Из ответа берётся первый массив JSON. Если его нет — это не план, и чинить нечего. */
@@ -293,7 +302,30 @@ function normalizeReview(data, allowed) {
 function createMediaMentorSuggest({ ask }) {
   if (typeof ask !== 'function') throw Error('Media mentor suggest requires ask');
 
-  async function suggest(brief, { startDate, days = MIN_DAYS } = {}) {
+  function request(prompt, context = {}) {
+    // Только сервер маршрута задаёт область. Запрос не читает и не создаёт переписку.
+    // Раньше jobId/companyCode отсутствовали и основной рантайм отвергал любой план.
+    const scoped = context.companyCode ? { companyCode: context.companyCode,
+      jobId: `mentor:${context.userId}:${randomUUID()}`,
+      audience: context.audience === 'owner-private' ? 'owner-private' : 'actor-private' } : {};
+    // Ограничение рантайма на одно сообщение — 6000 символов; не обрезаем бриф молча.
+    const messages = prompt.messages.flatMap(message => {
+      const chars = Array.from(message.content), chunks = [];
+      for (let i = 0; i < chars.length; i += 6000) chunks.push({
+        role: message.role, content: chars.slice(i, i + 6000).join('') });
+      return chunks;
+    });
+    const body = JSON.stringify({ ...prompt, messages, ...scoped });
+    // Общие границы строгого рантайма; большой бриф не должен молча уходить в платный
+    // резерв после ожидаемого HTTP400. Лимиты синхронизированы с hugh-runtime/limits.js.
+    if (messages.length > 40 || messages.reduce((sum, item) => sum + Array.from(item.content).length, 0) > 48000
+      || Buffer.byteLength(body, 'utf8') > 128 * 1024) {
+      throw Object.assign(new Error(REQUEST_TOO_LARGE), { code: 'MENTOR_REQUEST_TOO_LARGE' });
+    }
+    return ask(body);
+  }
+
+  async function suggest(brief, { startDate, days = MIN_DAYS } = {}, context = {}) {
     if (!brief || typeof brief !== 'object') throw Error('Нужен бриф компании');
     if (!Number.isInteger(days) || days < MIN_DAYS || days > MAX_DAYS) throw Error(`План строится на ${MIN_DAYS}–${MAX_DAYS} дней`);
     if (!(brief.platforms || []).length) {
@@ -302,8 +334,8 @@ function createMediaMentorSuggest({ ask }) {
     /* Сбой транспорта — не ошибка задания: обращения не было, план не строится.
        Исключение наружу не выпускаем, иначе кабинет покажет аварию вместо «повторите позже». */
     let raw;
-    try { raw = await ask(JSON.stringify(buildPrompt(brief, { startDate, days }))); }
-    catch { return { status: 'unavailable', items: [], dropped: [], notice: UNAVAILABLE }; }
+    try { raw = await request(buildPrompt(brief, { startDate, days }), context); }
+    catch (error) { return { ...failure(error), items: [], dropped: [] }; }
     const answer = answerText(raw);
     if (!answer || !answer.text) return { status: 'unavailable', items: [], dropped: [], notice: UNAVAILABLE };
     const rows = extractArray(answer.text);
@@ -321,11 +353,11 @@ function createMediaMentorSuggest({ ask }) {
       capabilities: { saved: false, approved: false, factsVerified: false } };
   }
 
-  async function analyze(brief) {
+  async function analyze(brief, context = {}) {
     if (!brief || typeof brief !== 'object') throw Error('Нужен бриф компании');
     let raw;
-    try { raw = await ask(JSON.stringify(analysisPrompt(brief))); }
-    catch { return { status: 'unavailable', rubrics: [], gaps: [], dropped: [], notice: UNAVAILABLE }; }
+    try { raw = await request({ ...analysisPrompt(brief), responseProfile: 'structured-draft' }, context); }
+    catch (error) { return { ...failure(error), rubrics: [], gaps: [], dropped: [] }; }
     const answer = answerText(raw);
     if (!answer || !answer.text) return { status: 'unavailable', rubrics: [], gaps: [], dropped: [], notice: UNAVAILABLE };
     const data = extractObject(answer.text);
@@ -344,7 +376,7 @@ function createMediaMentorSuggest({ ask }) {
       capabilities: { saved: false, approved: false, factsVerified: false } };
   }
 
-  async function review(overview, plan = null) {
+  async function review(overview, plan = null, context = {}) {
     if (!overview || typeof overview !== 'object') throw Error('Нужен снимок статистики');
     const digest = statsDigest(overview);
     // Ни одной площадки с данными — к модели не идём: платить за выдумку незачем.
@@ -353,8 +385,8 @@ function createMediaMentorSuggest({ ask }) {
         skipped: digest.skipped, notice: NO_DATA };
     }
     let raw;
-    try { raw = await ask(JSON.stringify(reviewPrompt(overview, plan, digest))); }
-    catch { return { status: 'unavailable', findings: [], planChanges: [], questions: [], dropped: [], notice: UNAVAILABLE }; }
+    try { raw = await request({ ...reviewPrompt(overview, plan, digest), responseProfile: 'structured-draft' }, context); }
+    catch (error) { return { ...failure(error), findings: [], planChanges: [], questions: [], dropped: [] }; }
     const answer = answerText(raw);
     if (!answer || !answer.text) {
       return { status: 'unavailable', findings: [], planChanges: [], questions: [], dropped: [], notice: UNAVAILABLE };
@@ -409,16 +441,18 @@ function createMediaMentorSuggestRoute({ suggester, loadBrief, loadStats, requir
     const extra = Object.keys(body).filter((key) => !allowed.includes(key));
     if (extra.length) fail(400, 'Переданы лишние поля');
     let result;
+    const context = { companyCode: code, userId: session.user.id,
+      audience: session.user.role === 'owner' ? 'owner-private' : 'actor-private' };
     try {
       if (reviewing) {
         const stats = await loadStats(code, { from: body.from, to: body.to }, session.user);
         if (!stats) fail(404, 'Статистика компании не найдена');
-        result = await suggester.review(stats.overview, stats.plan || null);
+        result = await suggester.review(stats.overview, stats.plan || null, context);
       } else {
         const brief = await loadBrief(code, session.user);
         if (!brief) fail(404, 'Бриф компании не найден');
-        result = analysing ? await suggester.analyze(brief)
-          : await suggester.suggest(brief, { startDate: body.startDate, days: body.days ?? MIN_DAYS });
+        result = analysing ? await suggester.analyze(brief, context)
+          : await suggester.suggest(brief, { startDate: body.startDate, days: body.days ?? MIN_DAYS }, context);
       }
     }
     catch (error) { fail(400, error?.message || 'Не удалось построить предложение'); }

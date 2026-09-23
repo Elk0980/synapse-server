@@ -910,13 +910,10 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     });
   }
 
-  /* Текст напоминания по задаче собирается на сервере: ссылка ведёт в кабинет к этой задаче. */
   /* Текст напоминания собирается на сервере. Ссылка ведёт на общий чат проекта в кабинете — тот адрес,
      который кабинет действительно открывает (#hugh). Отдельного маршрута на конкретную задачу в кабинете
      сейчас нет, поэтому задача называется номером реестра и заголовком, а не выдуманным адресом. */
-  function reminderText(row) {
-    const task = row.task_id ? db.prepare('SELECT * FROM project_chat_tasks WHERE id=? AND company_code=?').get(row.task_id, row.company_code) : null;
-    if (!task) return row.text;
+  function reminderText(row, task) {
     const head = `Напоминание по задаче${task.external_ref ? ` ${task.external_ref}` : ''}: ${task.title}`;
     const link = cabinetUrl ? `\nЗадачи проекта в кабинете: ${cabinetUrl.replace(/\/$/, '')}/cabinet.html#hugh` : '';
     return `${head}\n${row.text}${link}`;
@@ -966,7 +963,21 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
           summary.blocked += 1;
           return;
         }
-        const text = fresh.kind === 'task_reminder' ? reminderText(fresh) : fresh.text;
+        let text = fresh.text;
+        if (fresh.kind === 'task_reminder') {
+          // Задачу проверяем в той же транзакции, что и создание сообщения: за время ожидания
+          // её могли закрыть, удалить или перенести. Чужой проект не раскрывает даже заголовок.
+          const task = db.prepare('SELECT * FROM project_chat_tasks WHERE id=? AND company_code=?')
+            .get(fresh.task_id, fresh.company_code);
+          if (!task || task.status === 'done' || task.status === 'cancelled') {
+            const reason = !task ? 'Задача больше не найдена в этом проекте'
+              : task.status === 'done' ? 'Задача уже выполнена' : 'Задача отменена';
+            close('cancelled', `${reason}: напоминание не отправлено`);
+            summary.blocked += 1;
+            return;
+          }
+          text = reminderText(fresh, task);
+        }
         /* Сообщение и отметка отправки — одной транзакцией: повтор прохода не создаст второе сообщение.
            Дальше доставкой занимается существующая очередь, а не планировщик. */
         const message = insertMessage({ code: fresh.company_code, authorId: author.id,
@@ -1546,7 +1557,10 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
      у которой своё хранилище: транспорт переиспользуется, история — нет.
      Ни одна строка `project_chat_*` здесь не читается и не пишется. */
   async function askHugh(payload) {
-    try { return await runtimeReply(payload); }
+    // Локальные опции адаптера не входят в строгий контракт приватного рантайма.
+    const data = typeof payload === 'string' ? JSON.parse(payload) : payload;
+    const { responseProfile, ...runtimePayload } = data;
+    try { return await runtimeReply(JSON.stringify(runtimePayload)); }
     catch (runtimeError) {
       if (!fallback.available().length) throw runtimeError;
       return fallback.reply(payload);

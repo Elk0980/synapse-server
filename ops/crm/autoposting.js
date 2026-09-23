@@ -1,6 +1,7 @@
 'use strict';
 
 const {company,fail,object,text,timezone,utcDate,revision,url}=require('./company-information');
+const {publicUrl}=require('./autoposting-transport');
 const {randomUUID}=require('node:crypto');
 const LEASE_MS=120000;
 const META_FIELDS=['format','role','audience','hook','idea','hughNote','metrics','methodSource'];
@@ -69,6 +70,29 @@ function receiptUrl(platform,value) {
   const spec=RECEIPT_PLATFORMS[platform],normalized=receiptFormat(platform,value);
   if(normalized)return normalized;
   fail(400,`Укажите обычный https-адрес записи ${spec.label} — без логина, пароля, порта, части после «#» и лишних параметров`);
+}
+/* Календарь месяца. Период задаётся календарными датами компании, а не UTC-сутками:
+   владелец видит день так, как он наступает в его часовом поясе. Окно ограничено,
+   чтобы ответ оставался предсказуемым; карточки без даты отдаются отдельным списком. */
+const CALENDAR_MAX_RANGE_DAYS=31,CALENDAR_UNDATED_LIMIT=200,CALENDAR_TARGET_DAYS=14,CALENDAR_MINIMUM_DAYS=7,CALENDAR_CRITICAL_DAYS=3;
+const CALENDAR_DATE_RE=/^\d{4}-\d{2}-\d{2}$/;
+// Повторяет BASE из company-information: эти поля компании и есть источник эталонного профиля.
+const PROFILE_BASE=Object.freeze({name:'name',city:'city',timezone:'timezone',phone:'phone',email:'email',websiteUrl:'website_url',socials:'socials'});
+function calendarDay(value,label) {
+  if(typeof value!=='string'||!CALENDAR_DATE_RE.test(value))fail(400,`${label}: укажите дату в формате ГГГГ-ММ-ДД`);
+  const time=Date.parse(`${value}T00:00:00Z`);
+  // Строгая проверка отсекает 2026-02-30 и 2025-02-29: несуществующий день нельзя молча сдвинуть.
+  if(!Number.isFinite(time)||new Date(time).toISOString().slice(0,10)!==value)fail(400,`${label}: такой даты не существует`);
+  return {value,time};
+}
+function zoneFormatter(zone) {
+  try{return new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'});}catch{return null;}
+}
+function zoneDay(formatter,instant) {
+  if(!Number.isFinite(instant))return null;
+  const parts=formatter.formatToParts(new Date(instant)),part=type=>parts.find(item=>item.type===type)?.value||'';
+  const day=`${part('year')}-${part('month')}-${part('day')}`;
+  return CALENDAR_DATE_RE.test(day)?day:null;
 }
 const VIDEO_RE=/\.(mp4|webm|mov|m4v)(?:[?#].*)?$/i,IMAGE_RE=/\.(jpe?g|png|webp|gif)(?:[?#].*)?$/i;
 const dayKey=value=>{if(value===null||value===undefined||value==='')return '';if(typeof value!=='string'||!/^D[1-7]$/.test(value))fail(400,'День карточки задаётся как D1…D7');return value;};
@@ -188,6 +212,265 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   function list(code) {
     invalidate(code);const owner=company(db,code);
     return {companyCode:owner.code.toLowerCase(),posts:db.prepare('SELECT * FROM autoposting_posts WHERE company_id=? ORDER BY sort_order ASC,created_at DESC,id DESC LIMIT 200').all(owner.id).map(row=>dto(row,owner))};
+  }
+  /* Календарь месяца — строго чтение. invalidate/get/list здесь недопустимы: они переводят карточки
+     в needs_review и архивируют новую версию данных компании, то есть меняют состояние при просмотре.
+     Из транспорта разрешено единственное действие — чтение настроек каналов: ни публикации,
+     ни сверки с провайдером, ни очереди календарь не запускает. */
+  const hasTable=name=>Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
+  function calendarRange(params) {
+    const range=params===undefined||params===null?{}:params;
+    object(range,['from','to']);
+    const from=calendarDay(range.from,'Начало периода'),to=calendarDay(range.to,'Конец периода');
+    if(to.time<from.time)fail(400,'Конец периода раньше начала');
+    const length=Math.round((to.time-from.time)/86400000)+1;
+    if(length>CALENDAR_MAX_RANGE_DAYS)fail(400,`Период календаря — не больше ${CALENDAR_MAX_RANGE_DAYS} дней`);
+    const dates=[];
+    for(let index=0;index<length;index++)dates.push(new Date(from.time+index*86400000).toISOString().slice(0,10));
+    return {from:from.value,to:to.value,dates};
+  }
+  /* Версия профиля читается из company_information без вызова information.get: тот перед ответом
+     архивирует изменения карточки компании. Если правка полей companies ещё не заархивирована,
+     текущая версия профиля устарела — на неё нельзя опереться как на подтверждённую. */
+  function calendarProfile(owner) {
+    const info=db.prepare('SELECT revision FROM company_information WHERE company_id=?').get(owner.id);
+    if(!info)return {revision:null,state:'missing'};
+    const archived=db.prepare('SELECT profile FROM company_information_versions WHERE company_id=? AND revision=?').get(owner.id,info.revision);
+    let saved=null;
+    if(archived)try{saved=JSON.parse(archived.profile);}catch{saved=null;}
+    if(!saved||typeof saved!=='object'||Array.isArray(saved))return {revision:info.revision,state:'missing'};
+    const socials=(()=>{try{const value=JSON.parse(owner.socials);return Array.isArray(value)?value:[];}catch{return [];}})();
+    const stale=Object.entries(PROFILE_BASE).some(([key,column])=>key==='socials'
+      ?JSON.stringify(saved.socials??[])!==JSON.stringify(socials)
+      :String(saved[key]??'')!==String(owner[column]??''));
+    return {revision:info.revision,state:stale?'stale':'current'};
+  }
+  /* Текущий контент-план и расписки текущего переноса. Таблиц Медиа-наставника может не быть вовсе:
+     тогда календарь честно работает без плановой основы, а не выдумывает её. */
+  function calendarPlan(owner) {
+    const blank={planRevision:null,planApproval:null,days:[],items:new Map()};
+    if(!hasTable('media_mentor_plans'))return blank;
+    const plan=db.prepare('SELECT revision,brief_revision briefRevision,plan FROM media_mentor_plans WHERE company_id=?').get(owner.id);
+    if(!plan)return blank;
+    let days=[];
+    try{const parsed=JSON.parse(plan.plan);if(Array.isArray(parsed?.days))days=parsed.days.filter(day=>day&&CALENDAR_DATE_RE.test(day.date)&&typeof day.platform==='string'&&day.platform);}catch{days=[];}
+    const brief=hasTable('media_mentor_briefs')?db.prepare('SELECT revision FROM media_mentor_briefs WHERE company_id=?').get(owner.id):null;
+    const decision=hasTable('media_mentor_plan_approvals')?db.prepare(`SELECT decision,brief_revision briefRevision FROM media_mentor_plan_approvals
+      WHERE company_id=? AND plan_revision=? ORDER BY id DESC LIMIT 1`).get(owner.id,plan.revision):null;
+    // Согласование действительно только вместе с той версией брифа, которая сейчас текущая.
+    const planApproval=!brief||plan.briefRevision!==brief.revision?'needs_reapproval'
+      :!decision?'pending':decision.decision!=='approved'?'rejected'
+        :decision.briefRevision!==brief.revision?'needs_reapproval':'approved';
+    const items=new Map(),byIndex=new Map();
+    // Только перенос ТЕКУЩЕЙ версии плана и только карточки той же компании: расписка прошлой версии
+    // плановой даты карточке не даёт — её разбирают вручную.
+    if(hasTable('media_mentor_plan_transfers')&&hasTable('media_mentor_plan_transfer_items')) {
+      for(const row of db.prepare(`SELECT i.post_id postId,i.day_index dayIndex,i.plan_date planDate,i.plan_platform planPlatform
+        FROM media_mentor_plan_transfer_items i
+        JOIN media_mentor_plan_transfers t ON t.id=i.transfer_id
+        JOIN media_mentor_plans p ON p.company_id=t.company_id AND p.revision=t.plan_revision
+        JOIN autoposting_posts a ON a.id=i.post_id AND a.company_id=t.company_id
+        WHERE t.company_id=?`).all(owner.id)){
+        items.set(row.postId,{dayIndex:row.dayIndex,planDate:CALENDAR_DATE_RE.test(row.planDate)?row.planDate:null,planPlatform:row.planPlatform||null});
+        // День плана закрывает именно та карточка, которую для него создал перенос.
+        byIndex.set(row.dayIndex,row.postId);
+      }
+    }
+    return {planRevision:plan.revision,planApproval,days,items,byIndex};
+  }
+  // Известные ограничения подключённой площадки. Файлы и сеть не проверяются: заявлять больше сохранённого нельзя.
+  function capsIssues(channel,caption,mediaCount) {
+    const caps=channel&&typeof channel.caps==='object'&&channel.caps?channel.caps:null,issues=[];
+    if(!caps)return issues;
+    if(Number.isFinite(caps.maxText)&&caption.length>caps.maxText)issues.push(`Текст длиннее лимита площадки (${caps.maxText})`);
+    if(Number.isFinite(caps.maxMedia)&&mediaCount>caps.maxMedia)issues.push(`Материалов больше, чем принимает площадка (${caps.maxMedia})`);
+    if(Number.isFinite(caps.maxCaption)&&mediaCount&&caption.length>caps.maxCaption)issues.push(`Подпись к материалу длиннее лимита площадки (${caps.maxCaption})`);
+    return issues;
+  }
+  /* Готовность для календаря считается консервативно и по площадкам: готово только то, что
+     действительно можно отправить сейчас — есть материал, подпись именно для этой площадки,
+     подключённый выбранный канал, одобрение текущей версии содержимого и текущая версия данных компании.
+     Уже опубликованное и отмеченное расписками не считается запасом на будущее. */
+  function calendarReadiness(row,link,context,effectiveDate) {
+    const base=readiness(row),caps=JSON.parse(row.captions||'{}'),media=JSON.parse(row.media_urls||'[]');
+    const selected=JSON.parse(row.platform_ids||'[]'),approved=isApproved(row);
+    const receipts=context.receipts.get(row.id)||new Map(),deliveries=context.deliveries.get(row.id)||new Map();
+    const common=[...base.issues];
+    if(!effectiveDate)common.push('Дата публикации не определена');
+    if(media.some(value=>!publicUrl(value)))common.push('Для публикации нужны доступные площадке HTTPS-ссылки на материалы');
+    if(context.profile.state==='missing')common.push('Данные компании ещё не зафиксированы: откройте карточку компании');
+    else if(context.profile.state==='stale')common.push('Карточка компании изменилась и ещё не зафиксирована новой версией: откройте данные компании');
+    else if(row.profile_revision!==context.profile.revision)common.push('Текст написан по прежней версии данных компании');
+    if(!context.channelsKnown)common.push('Настройки каналов сейчас недоступны: готовность не подтверждена');
+    // Карточка из переноса непересогласованного плана готовой считаться не может.
+    if(link&&context.planApproval&&context.planApproval!=='approved'&&context.planApproval!=='pending')
+      common.push('Контент-план изменился и требует повторного согласования');
+    const soft=[];
+    if(!approved)soft.push('Эта версия содержимого ещё не одобрена владельцем');
+    if(link&&context.planApproval==='pending')soft.push('Версия контент-плана ещё не согласована');
+    const platforms=new Map();
+    for(const id of selected){
+      const channel=context.channelById.get(id),platform=channelPlatform(channel,id),hard=[...common];
+      if(!channel)hard.push(`Канал «${id}» не настроен в подключениях`);
+      else{
+        if(!channel.enabled)hard.push(`Канал «${channel.name||id}» выключен`);
+        if(!channel.connected)hard.push(`Канал «${channel.name||id}» не подключён`);
+        if(channel.caps?.mediaMode==='photos'&&channel.provider!=='onlypult'&&media.some(value=>VIDEO_RE.test(value)))
+          hard.push('Подключение отправляет фотографии: для видео нужен подходящий способ публикации');
+      }
+      const caption=caps[platform]||row.text||'';
+      if(!caption)hard.push(`Для площадки ${platform} нет ни подписи, ни общего текста`);
+      hard.push(...capsIssues(channel,caption,media.length));
+      const delivery=deliveries.get(id),extra=[];
+      if(delivery&&channel&&delivery.channelRevision!==channel.revision)
+        hard.push('Подключение площадки изменилось после постановки в очередь');
+      if(delivery?.status==='cancelled')hard.push('Отправка на площадку отменена');
+      let state;
+      if(row.status==='cancelled'){state='inactive';extra.push('Карточка отменена');}
+      else if(receipts.get(platform)){state='published';extra.push('Площадка отмечена как опубликованная вне ЛК: повторная отправка создаст дубликат');}
+      else if(receipts.has(platform)){state='missing';extra.push('Опубликована другая версия содержимого: проверьте её перед повторной отправкой');}
+      else if(delivery?.status==='published'||row.status==='published'){state='published';extra.push('Уже опубликовано на этой площадке');}
+      else if(delivery?.status==='publishing'||row.status==='publishing'){state='pending';extra.push('Отправка выполняется');}
+      else if(['failed','needs_review'].includes(delivery?.status)||['failed','needs_review'].includes(row.status)){
+        state='missing';extra.push(`Нужна проверка результата на площадке${row.last_error_code?` (${row.last_error_code})`:''}`);
+      }
+      else state=hard.length?'missing':soft.length?'pending':'ready';
+      const issues=[...new Set(state==='published'||state==='inactive'?extra:[...extra,...hard,...soft])];
+      const previous=platforms.get(platform);
+      if(previous){previous.issues=[...new Set([...previous.issues,...issues])];if(previous.state==='ready'&&state!=='ready'){previous.state=state;previous.ready=false;}continue;}
+      platforms.set(platform,{platform,state,ready:state==='ready',issues});
+    }
+    // Площадка плана есть, а канал под неё не выбран: слот не закрыт, и выдавать его готовым нельзя.
+    for(const platform of new Set([...receipts.keys(),link?.planPlatform].filter(Boolean))){
+      if(platforms.has(platform))continue;
+      const state=row.status==='cancelled'?'inactive':receipts.get(platform)?'published':'missing';
+      const issues=state==='inactive'?['Карточка отменена']:state==='published'
+        ?['Текущая версия отмечена как опубликованная вне ЛК: повторная отправка создаст дубликат']
+        :[...new Set([...common,...soft,receipts.has(platform)
+          ?'Опубликована другая версия содержимого: проверьте её перед повторной отправкой'
+          :`Площадка плана «${platform}» не выбрана в карточке`])];
+      platforms.set(platform,{platform,state,ready:false,issues});
+    }
+    const list=[...platforms.values()];
+    let state;
+    if(row.status==='cancelled')state='inactive';
+    else if(!list.length)state='missing';
+    else if(list.every(item=>item.state==='published'))state='published';
+    else if(list.some(item=>item.state==='missing'))state='missing';
+    else if(list.some(item=>item.state==='pending'))state='pending';
+    else state='ready';
+    const issues=list.length?list.flatMap(item=>item.issues)
+      :state==='inactive'?['Карточка отменена']:[...common,...soft,'Каналы публикации не выбраны'];
+    return {state,ready:state==='ready',issues:[...new Set(issues)],platforms:list};
+  }
+  async function calendar(code,params) {
+    const range=calendarRange(params);
+    company(db,code);
+    // Настройки каналов — единственное обращение к транспорту и единственное ожидание.
+    let settings=null,channelsKnown=true;
+    try{settings=await transport.getSettings(code);}catch{settings=null;channelsKnown=false;}
+    if(settings&&!Array.isArray(settings.channels))channelsKnown=false;
+    // После ожидания состояние читается заново: компания, карточки и план могли измениться.
+    const owner=company(db,code);
+    let formatter=owner.timezone?zoneFormatter(owner.timezone):null;
+    const zone=formatter?owner.timezone:'UTC';
+    if(!formatter)formatter=zoneFormatter('UTC');
+    const today=zoneDay(formatter,now());
+    const profile=calendarProfile(owner),plan=calendarPlan(owner);
+    const channels=Array.isArray(settings?.channels)?settings.channels:[];
+    const channelById=new Map(channels.filter(channel=>channel&&typeof channel.id==='string').map(channel=>[channel.id,channel]));
+    const deliveries=new Map();
+    for(const item of db.prepare(`SELECT d.post_id postId,d.channel_id channelId,d.status,d.channel_revision channelRevision FROM autoposting_deliveries d
+      JOIN autoposting_posts p ON p.id=d.post_id WHERE p.company_id=?`).all(owner.id)){
+      if(!deliveries.has(item.postId))deliveries.set(item.postId,new Map());
+      deliveries.get(item.postId).set(item.channelId,{status:item.status,channelRevision:item.channelRevision});
+    }
+    const receipts=new Map();
+    for(const item of db.prepare(`SELECT r.post_id postId,r.platform,r.content_revision receiptRevision,p.content_revision contentRevision
+      FROM autoposting_publication_receipts r JOIN autoposting_posts p ON p.id=r.post_id AND p.company_id=r.company_id
+      WHERE r.company_id=?`).all(owner.id)){
+      if(!receipts.has(item.postId))receipts.set(item.postId,new Map());
+      const platforms=receipts.get(item.postId);
+      platforms.set(item.platform,Boolean(platforms.get(item.platform)||item.receiptRevision===item.contentRevision));
+    }
+    const context={profile,channelById,channelsKnown,planApproval:plan.planApproval,deliveries,receipts};
+    /* Сначала по минимальным полям считаются даты всех карточек компании, и только отобранные
+       читаются целиком: иначе ответ рос бы вместе с архивом компании. Дата дня плана берётся
+       из расписки переноса, а не выводится из D1…D7 — это разные вещи. */
+    const index=db.prepare('SELECT id,scheduled_at scheduledAt,sort_order sortOrder,created_at createdAt FROM autoposting_posts WHERE company_id=?').all(owner.id);
+    const within=new Set(range.dates),dated=[],undated=[];
+    for(const row of index){
+      const link=plan.items.get(row.id)||null;
+      const publishDate=row.scheduledAt?zoneDay(formatter,Date.parse(row.scheduledAt)):null;
+      const plannedDate=link?link.planDate:null;
+      // Назначенное время отправки важнее плановой даты: карточку уже поставили на конкретный день.
+      const effectiveDate=publishDate||plannedDate||null;
+      const entry={...row,link,plannedDate,planPlatform:link?link.planPlatform:null,publishDate,effectiveDate,
+        dateKind:publishDate?'schedule':plannedDate?'plan':null};
+      if(effectiveDate===null)undated.push(entry);
+      else if(within.has(effectiveDate))dated.push(entry);
+    }
+    const order=(a,b)=>(a.sortOrder-b.sortOrder)||(a.createdAt<b.createdAt?1:a.createdAt>b.createdAt?-1:0)||(b.id-a.id);
+    dated.sort((a,b)=>(a.effectiveDate<b.effectiveDate?-1:a.effectiveDate>b.effectiveDate?1:0)||order(a,b));
+    undated.sort(order);
+    const full=db.prepare('SELECT * FROM autoposting_posts WHERE id=?');
+    const view=entry=>{
+      const row=full.get(entry.id);
+      return {...dto(row,owner),plannedDate:entry.plannedDate,planPlatform:entry.planPlatform,publishDate:entry.publishDate,
+        effectiveDate:entry.effectiveDate,dateKind:entry.dateKind,calendarReadiness:calendarReadiness(row,entry.link,context,entry.effectiveDate)};
+    };
+    // Карточки с датой отдаются все: период ограничен сам по себе. Запас без даты ограничен и честно помечен.
+    const posts=dated.map(view),undatedPosts=undated.slice(0,CALENDAR_UNDATED_LIMIT).map(view);
+    const planned=new Map();
+    for(const day of plan.days){
+      if(!within.has(day.date))continue;
+      if(!planned.has(day.date))planned.set(day.date,new Map());
+      const byPlatform=planned.get(day.date);
+      // Два одинаковых слота одного дня — это два материала, а не один.
+      byPlatform.set(day.platform,(byPlatform.get(day.platform)||0)+1);
+    }
+    const groups=new Map();
+    for(const post of posts)for(const item of post.calendarReadiness.platforms){
+      const key=`${post.effectiveDate}|${item.platform}`;
+      if(!groups.has(key))groups.set(key,[]);
+      // Слот плана закрывает только карточка того же переноса с той же датой и площадкой.
+      groups.get(key).push({id:post.id,state:item.state,planMatch:Boolean(post.plannedDate===post.effectiveDate&&post.planPlatform===item.platform)});
+    }
+    const uncoveredDates=[],unknownDates=[];
+    let knownPlanDays=0,coveredPlanDays=0;
+    const days=range.dates.map(date=>{
+      const byPlatform=planned.get(date)||new Map();
+      const names=new Set([...byPlatform.keys()]);
+      for(const key of groups.keys())if(key.startsWith(`${date}|`))names.add(key.slice(date.length+1));
+      let covered=true,planTotal=0;
+      const platforms=[...names].sort().map(platform=>{
+        const count=byPlatform.get(platform)||0,members=groups.get(`${date}|${platform}`)||[];
+        // Отменённая карточка слот не занимает: он снова пустой, а не «уже чем-то закрыт».
+        const matches=members.filter(member=>member.planMatch&&member.state!=='inactive');
+        const closed=matches.filter(member=>member.state==='ready'||member.state==='published').length;
+        const tally=state=>members.filter(member=>member.state===state).length;
+        planTotal+=count;
+        if(count&&closed<count)covered=false;
+        return {platform,planned:count,ready:tally('ready'),
+          // Незакрытый слот плана — это нехватка материала, даже если в этот день лежит чужая карточка.
+          missing:tally('missing')+Math.max(0,count-matches.length),pending:tally('pending'),published:tally('published'),
+          postIds:members.map(member=>member.id)};
+      });
+      // День без слотов плана остаётся неизвестным: запас карточек планом не является.
+      if(!planTotal)unknownDates.push(date);
+      else{knownPlanDays++;if(covered)coveredPlanDays++;else uncoveredDates.push(date);}
+      return {date,platforms};
+    });
+    const counted=state=>posts.filter(post=>post.calendarReadiness.state===state).length;
+    return {companyCode:owner.code.toLowerCase(),from:range.from,to:range.to,timezone:zone,today,posts,undated:undatedPosts,
+      truncated:false,undatedTruncated:undated.length>CALENDAR_UNDATED_LIMIT,undatedTotal:undated.length,
+      coverage:{basis:plan.planRevision?'current_plan':'none',planRevision:plan.planRevision,planApproval:plan.planApproval,
+        // Гарантий по числу дней календарь не даёт: он показывает только то, что действительно есть.
+        guaranteedDays:null,days,uncoveredDates,unknownDates},
+      // Счётчики карточек относятся к датам запрошенного периода; запас без даты отдельно — undatedTotal.
+      summary:{targetDays:CALENDAR_TARGET_DAYS,minimumDays:CALENDAR_MINIMUM_DAYS,criticalBelowDays:CALENDAR_CRITICAL_DAYS,
+        readyPosts:counted('ready'),pendingPosts:counted('pending'),missingPosts:counted('missing'),
+        knownPlanDays,coveredPlanDays,stockDays:null}};
   }
   function normalized(patch,defaults) {
     const result={...defaults};
@@ -581,6 +864,7 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   }
   function drain(){if(stopped)return Promise.resolve();if(!running)running=processDue().finally(()=>running=null);return running;}
   function stop(){stopped=true;return running||Promise.resolve();}
-  return {get,list,create,update,schedule,cancel,reconcile,drain,stop,invalidate,approve,reject,submitReview,reorder,importPackage,recordReceipt};
+  return {get,list,calendar,create,update,schedule,cancel,reconcile,drain,stop,invalidate,approve,reject,submitReview,reorder,importPackage,recordReceipt};
 }
-module.exports={createAutoposting,LEASE_MS,CAPTION_PLATFORMS,FORMATS,ROLES,REVIEW_STATES,META_FIELDS,RECEIPT_PLATFORMS,receiptFormat};
+module.exports={createAutoposting,LEASE_MS,CAPTION_PLATFORMS,FORMATS,ROLES,REVIEW_STATES,META_FIELDS,RECEIPT_PLATFORMS,receiptFormat,
+  CALENDAR_MAX_RANGE_DAYS,CALENDAR_UNDATED_LIMIT,CALENDAR_TARGET_DAYS,CALENDAR_MINIMUM_DAYS,CALENDAR_CRITICAL_DAYS};

@@ -40,9 +40,130 @@ async function call(f, user, method, path, body, headers = {}) {
   } catch (error) { return { handled: true, status: error.status || 500, error }; }
 }
 const self = '?companyCode=taisabai';
+const presetRoute = `/content/actor-onboarding/presets${self}`;
+const PRESET = { direction: 'Недвижимость', role: 'Консультант', cameraComfort: 'on_camera' };
 const checkInRoute = `/content/actor-onboarding/check-in${self}`;
 const ANSWERS = {comfort: 'mixed', obstacles: 'Личная трудность', improvements: 'Личное предложение',
   nextStep: 'Личный небольшой шаг'};
+
+test('предложение директора доступно до анкеты и не становится личным ответом, готовностью или доступом', async (t) => {
+  const f = setup(t);
+  const list = await call(f, f.director, 'GET', presetRoute);
+  assert.equal(list.status, 200);
+  assert.ok(list.body.participants.some(item => item.actorId === f.actor.id && item.preset === null));
+  assert.ok(!list.body.participants.some(item => item.actorId === f.outsider.id));
+  assert.ok(list.body.participants.some(item => item.actorId === f.director.id), 'существующее manage уже включает self');
+  const before = f.auth.getById(f.actor.id);
+  const saved = await call(f, f.director, 'PUT', presetRoute, {actorId: f.actor.id, revision: 0, preset: PRESET});
+  assert.equal(saved.status, 200, saved.error?.message);
+  assert.deepEqual(saved.body.preset.values, PRESET);
+  assert.equal(saved.body.preset.proposedBy, 'director');
+  assert.equal(saved.body.preset.revision, 1);
+  const own = (await call(f, f.actor, 'GET', `/content/actor-onboarding${self}`)).body;
+  assert.equal(own.revision, 0);
+  assert.equal(own.profile.direction, '');
+  assert.equal(own.profile.cameraComfort, 'unknown');
+  assert.deepEqual(own.directorPreset, saved.body.preset);
+  assert.equal(f.service.getOwnProfile('taisabai', f.actor.id), null);
+  assert.equal((await call(f, f.actor, 'GET', checkInRoute)).body.status, 'not_ready');
+  assert.equal((await call(f, f.director, 'GET', `/content/actor-onboarding/summary${self}`)).body.total, 0);
+  assert.deepEqual(f.auth.getById(f.actor.id), before);
+  assert.equal(f.db.prepare('SELECT count(*) n FROM actor_onboarding_profiles').get().n, 0);
+});
+
+test('предложения изолированы по компании и участнику, manager не получает личные тексты', async (t) => {
+  const f = setup(t);
+  f.auth.updateAccess(1, f.actor.id, ['taisabai', 'alvi'], ['actor-onboarding.self']);
+  await call(f, f.actor, 'PUT', `/content/actor-onboarding${self}`, {revision: 0, profile: PROFILE});
+  const before = f.service.getOwnProfile('taisabai', f.actor.id);
+  await call(f, f.director, 'PUT', presetRoute, {actorId: f.actor.id, revision: 0, preset: PRESET});
+  const foreignRoute = '/content/actor-onboarding/presets?companyCode=alvi';
+  await call(f, f.outsider, 'PUT', foreignRoute,
+    {actorId: f.actor.id, revision: 0, preset: {...PRESET, direction: 'Другое направление'}});
+  assert.equal((await call(f, f.colleague, 'GET', `/content/actor-onboarding${self}`)).body.directorPreset, null);
+  const other = (await call(f, f.actor, 'GET', '/content/actor-onboarding?companyCode=alvi')).body;
+  assert.equal(other.directorPreset.values.direction, 'Другое направление');
+  assert.equal(other.revision, 0);
+  const own = (await call(f, f.actor, 'GET', `/content/actor-onboarding${self}`)).body;
+  assert.deepEqual(own.profile, before);
+  assert.equal(own.revision, 1);
+  assert.deepEqual(f.service.getOwnProfile('taisabai', f.actor.id), PROFILE);
+  const managed = (await call(f, f.director, 'GET', presetRoute)).body;
+  for (const text of [PROFILE.boundaries, PROFILE.suggestions, PROFILE.voiceComfort]) {
+    assert.equal(JSON.stringify(managed).includes(text), false);
+  }
+  assert.deepEqual(Object.keys(managed.participants.find(item => item.actorId === f.actor.id)).sort(), ['actorId', 'actorName', 'preset']);
+  assert.equal((await call(f, f.actor, 'GET', presetRoute)).status, 403);
+  assert.equal((await call(f, f.outsider, 'GET', presetRoute)).status, 403);
+  assert.equal((await call(f, f.director, 'PUT', presetRoute,
+    {actorId: f.outsider.id, revision: 0, preset: PRESET})).status, 404);
+  assert.equal((await call(f, f.actor, 'GET', `/content/actor-onboarding${self}&actorId=${f.colleague.id}`)).status, 400);
+});
+
+test('предложение имеет независимую версию, повтор без изменений и конфликт не меняют анкету', async (t) => {
+  const f = setup(t);
+  const body = {actorId: f.actor.id, revision: 0, preset: PRESET};
+  assert.equal((await call(f, f.director, 'PUT', presetRoute, body)).body.preset.revision, 1);
+  assert.equal((await call(f, f.director, 'PUT', presetRoute, body)).status, 409);
+  assert.equal((await call(f, f.director, 'PUT', presetRoute, {...body, revision: 1})).body.preset.revision, 1);
+  await call(f, f.actor, 'PUT', `/content/actor-onboarding${self}`, {revision: 0, profile: PROFILE});
+  const saved = await call(f, f.director, 'PUT', presetRoute,
+    {...body, revision: 1, preset: {...PRESET, cameraComfort: 'off_camera'}});
+  assert.equal(saved.body.preset.revision, 2);
+  const own = (await call(f, f.actor, 'GET', `/content/actor-onboarding${self}`)).body;
+  assert.deepEqual(own.profile, PROFILE);
+  assert.equal(own.revision, 1);
+  assert.equal(own.directorPreset.values.cameraComfort, 'off_camera');
+});
+
+test('запись предложения требует manage и CSRF, принимает только три разрешённых поля', async (t) => {
+  const f = setup(t);
+  const body = {actorId: f.actor.id, revision: 0, preset: PRESET};
+  assert.equal((await call(f, f.director, 'PUT', presetRoute, body, {'x-csrf-token': 'bad'})).status, 403);
+  assert.equal((await call(f, f.actor, 'PUT', presetRoute, body)).status, 403);
+  for (const extra of ['voiceComfort', 'boundaries', 'suggestions', 'permissions', 'privateChat']) {
+    assert.equal((await call(f, f.director, 'PUT', presetRoute,
+      {...body, preset: {...PRESET, [extra]: 'лишнее'}})).status, 400);
+  }
+  for (const invalid of [{...body, revision: -1}, {...body, actorId: '2'}, {...body, profile: PROFILE},
+    {...body, preset: {...PRESET, cameraComfort: 'yes'}}, {...body, preset: {...PRESET, role: 'x'.repeat(501)}},
+    {...body, preset: {...PRESET, direction: null}}]) {
+    assert.equal((await call(f, f.director, 'PUT', presetRoute, invalid)).status, 400);
+  }
+  f.auth.updateAccess(1, f.colleague.id, ['taisabai'], []);
+  assert.equal((await call(f, f.director, 'PUT', presetRoute, {...body, actorId: f.colleague.id})).status, 404);
+  assert.equal(f.db.prepare('SELECT count(*) n FROM actor_onboarding_presets').get().n, 0);
+});
+
+test('отзыв доступа manager или target во время чтения запроса запрещает сохранение предложения', async (t) => {
+  for (const mode of ['manager-permission', 'manager-company', 'target-permission', 'target-company']) {
+    await t.test(mode, async (t) => {
+      let revoke = () => {};
+      const f = setup(t, {readJson: async request => { revoke(); return request.body; }});
+      const manager = mode.startsWith('manager');
+      revoke = () => f.auth.updateAccess(1, manager ? f.director.id : f.actor.id,
+        mode.endsWith('company') ? [] : ['taisabai'], mode.endsWith('permission') ? [] :
+          [manager ? 'actor-onboarding.manage' : 'actor-onboarding.self']);
+      const denied = await call(f, f.director, 'PUT', presetRoute,
+        {actorId: f.actor.id, revision: 0, preset: PRESET});
+      assert.equal(denied.status, manager ? 403 : 404, denied.error?.message);
+      assert.equal(f.db.prepare('SELECT count(*) n FROM actor_onboarding_presets').get().n, 0);
+    });
+  }
+});
+
+test('отозванный участник исчезает из редактора и не может читать прежнее предложение', async (t) => {
+  const f = setup(t);
+  await call(f, f.director, 'PUT', presetRoute, {actorId: f.actor.id, revision: 0, preset: PRESET});
+  const staleSession = f.session(f.actor);
+  f.auth.updateAccess(1, f.actor.id, ['taisabai'], []);
+  const list = (await call(f, f.director, 'GET', presetRoute)).body;
+  assert.ok(!list.participants.some(item => item.actorId === f.actor.id));
+  await assert.rejects(() => f.service.handle({method: 'GET', session: staleSession}, {},
+    new URL(`/content/actor-onboarding${self}`, 'http://localhost')), error => error.status === 403);
+  assert.equal((await call(f, f.director, 'PUT', presetRoute,
+    {actorId: f.actor.id, revision: 1, preset: PRESET})).status, 404);
+});
 
 test('опрос доступен ровно через 14 суток после первого полного профиля и не просрочивается', async (t) => {
   let at = '2026-09-01T10:30:00.000Z';

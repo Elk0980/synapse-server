@@ -1,4 +1,29 @@
 .autoposting-view { min-width:0; font-size:16px; line-height:1.55; }
+.autoposting-view [hidden] { display:none !important; }
+#autoposting-status:empty { display:none; }
+.autoposting-calendar-section { margin-top:12px; }
+.autoposting-workspace-tools > summary { cursor:pointer; min-height:48px; padding:12px 0; font-weight:600; }
+.autoposting-daily-tabs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
+.autoposting-daily-tabs button[aria-pressed=true] { border-color:var(--accent,#9fd4ff); background:var(--surface-soft,#181513); outline:1px solid var(--accent,#9fd4ff); }
+.autoposting-view .autoposting-daily-filter { max-width:440px; }
+.autoposting-daily-list { list-style:none; padding:0; margin:20px 0; display:grid; gap:20px; }
+.autoposting-daily-card { display:grid; grid-template-columns:minmax(0,1fr); gap:16px; padding:16px; border:1px solid var(--line,#34404d); border-radius:14px; min-width:0; }
+.autoposting-daily-content { min-width:0; overflow-wrap:anywhere; }
+.autoposting-daily-content h4 { margin:0 0 8px; font-size:1.15rem; }
+.autoposting-daily-content p { margin:6px 0 12px; }
+.autoposting-daily-media { min-width:0; display:flex; align-items:center; justify-content:center; background:var(--surface-soft,#181513); border-radius:10px; }
+.autoposting-daily-media :is(img,video) { display:block; width:100%; max-height:320px; object-fit:contain; border-radius:10px; }
+.autoposting-no-media { padding:24px; color:var(--muted,#b9afa7); }
+.autoposting-daily-excerpt { white-space:pre-wrap; }
+.autoposting-view :is(.autoposting-advanced,.autoposting-editor,.autoposting-queue-section,.autoposting-undated) > summary { cursor:pointer; min-height:48px; padding:12px 0; font-weight:600; }
+.autoposting-editor { scroll-margin-top:100px; }
+#autoposting-batch-results li { margin:10px 0; overflow-wrap:anywhere; }
+@media(min-width:760px) { .autoposting-daily-card { grid-template-columns:minmax(160px,220px) minmax(0,1fr); padding:20px; } }
+@media(max-width:430px) {
+  .autoposting-view .autoposting-daily-tabs button { width:auto; font-size:14px; padding:8px 3px; }
+  .autoposting-daily-card { padding:12px; }
+  .autoposting-view .autoposting-checkbox input { width:22px; min-height:22px; }
+}
 .autoposting-view .card { min-width:0; padding:24px; margin:20px 0; }
 .autoposting-toolbar,.autoposting-actions { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:16px 0; }
 .autoposting-toolbar > select { flex:1 1 220px; max-width:440px; }

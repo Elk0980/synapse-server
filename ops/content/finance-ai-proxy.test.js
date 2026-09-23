@@ -46,29 +46,42 @@ test('расходы на ИИ и испытания через /finances: вл�
       permissions: ['crm.view', 'crm.edit']}, hashPassword(password));
     authDb.close();
 
-    const crmPort = await freePort(), contentPort = await freePort();
-    const crmBase = `http://127.0.0.1:${crmPort}`, contentBase = `http://127.0.0.1:${contentPort}`;
-    async function start(file, env, base) {
+    const crmPort = await freePort(), crmBase = `http://127.0.0.1:${crmPort}`;
+    async function start(file, env) {
       let errors = '';
       const child = spawn(process.execPath, [file], {env: {...process.env, ...env},
-        stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true});
+        stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true});
       children.push(child);
       child.stderr.on('data', (chunk) => { errors += chunk; });
-      for (let attempt = 0; attempt < 200; attempt++) {
-        if (child.exitCode !== null) throw Error('Service failed: ' + errors);
-        try { const response = await fetch(base + '/health', {signal: AbortSignal.timeout(500)}); await response.text(); return; }
-        catch { await new Promise((resolve) => setTimeout(resolve, 25)); }
-      }
-      throw Error('Service not ready: ' + errors);
+      child.stdout.setEncoding('utf8');
+      await new Promise((resolve, reject) => {
+        let output = '';
+        const timer = setTimeout(() => finish(Error('Service not ready: ' + errors)), 5000);
+        const finish = (error) => {
+          clearTimeout(timer);
+          child.stdout.off('data', onData); child.off('exit', onExit); child.off('error', onError);
+          child.stdout.resume();
+          if (error) reject(error); else resolve();
+        };
+        const onExit = (code, signal) => finish(Error(`Service exited (${code ?? signal}): ${errors}`));
+        const onError = (error) => finish(Error(`Service failed: ${error.message}; ${errors}`));
+        const onData = (chunk) => {
+          output += chunk;
+          if (new RegExp(`слушает порт ${env.PORT}[;,]`).test(output)) finish();
+        };
+        child.once('exit', onExit); child.once('error', onError); child.stdout.on('data', onData);
+      });
     }
     await start(path.join(__dirname, '../crm/server.js'), {PORT: String(crmPort), DATABASE_PATH: crmDb,
       API_KEY: key, RATE_LIMIT_MAX: '10000', STRICT_ORIGIN: '', LEADS_SMTP_HOST: '', LEADS_SMTP_PORT: '465',
       LEADS_SMTP_USER: '', LEADS_SMTP_PASSWORD: '', LEADS_MAIL_FROM: '', LEADS_NOTIFY_EMAIL: '',
-      LEADS_NOTIFY_EMAIL_ALVI: '', LEADS_NOTIFY_EMAIL_AVOKADO: ''}, crmBase);
+      LEADS_NOTIFY_EMAIL_ALVI: '', LEADS_NOTIFY_EMAIL_AVOKADO: ''});
+    // CRM уже держит свой порт: второй свободный порт не может оказаться тем же самым.
+    const contentPort = await freePort(), contentBase = `http://127.0.0.1:${contentPort}`;
     await start(path.join(__dirname, 'server.js'), {PORT: String(contentPort), DATABASE_PATH: contentDb,
       AUTH_USERS: '', API_KEY: '', CRM_URL: crmBase, CRM_API_KEY: key, SEED_DIR: directory,
       ASSETS_DIR: path.join(directory, 'assets'), SESSION_SECRET: randomBytes(32).toString('hex'),
-      HUGH_RUNNER_URL: '', CHAT_URL: '', CHAT_API_KEY: ''}, contentBase);
+      HUGH_RUNNER_URL: '', CHAT_URL: '', CHAT_API_KEY: ''});
 
     const identity = Buffer.from(JSON.stringify({v: 1, userId: 1, role: 'owner', permissions: [],
       companyCodes: ['avokado']})).toString('base64url');

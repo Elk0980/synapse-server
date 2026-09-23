@@ -29,6 +29,8 @@
   const keys = questions.map((item) => item.key);
   const optionLabel = (key, value) => questions.find((item) => item.key === key)?.options
     ?.find(([code]) => code === value)?.[1] || 'Не указано';
+  const presetCameraOptions = [['unknown', 'Нужно уточнить у участника'], ['off_camera', 'Без лица участника'],
+    ['small_steps', 'Постепенные пробы'], ['on_camera', 'В кадре — обсудить с участником']];
   const can = (ctx, permission) => ctx.identity?.role === 'owner' ||
     ctx.identity?.permissions?.includes(`actor-onboarding.${permission}`);
   const endpoint = (code, summary = false) => `/content/actor-onboarding${summary ? '/summary' : ''}` +
@@ -36,6 +38,7 @@
   const socialEndpoint = (code, review = false) => `/content/actor-onboarding/social-links${review ? '/review' : ''}` +
     `?companyCode=${encodeURIComponent(code)}`;
   const checkInEndpoint = (code) => `/content/actor-onboarding/check-in?companyCode=${encodeURIComponent(code)}`;
+  const presetsEndpoint = (code) => `/content/actor-onboarding/presets?companyCode=${encodeURIComponent(code)}`;
   const checkInLabels = {not_ready: 'После заполнения анкеты', waiting: 'Ещё не наступил',
     due: 'Можно ответить', saved: 'Ответы сохранены'};
   const checkInQuestions = [
@@ -98,6 +101,103 @@
     const result = {};
     questions.forEach((item) => { result[item.key] = form.elements.namedItem(item.key).value.trim(); });
     return result;
+  }
+  function directorPresetMarkup(preset, isNew) {
+    if (!preset?.values) return '';
+    return `<section class="card actor-director-preset" data-actor-director-preset>
+      <h2>Предложение руководителя</h2><p>${esc(preset.proposedBy || 'Руководитель')} · ${esc(date(preset.updatedAt))}</p>
+      <dl><dt>Направление</dt><dd>${esc(preset.values.direction || 'Не указано')}</dd>
+        <dt>Рабочая роль</dt><dd>${esc(preset.values.role || 'Не указана')}</dd>
+        <dt>Предлагаемый формат съёмки</dt><dd>${esc(presetCameraOptions.find(([key]) => key === preset.values.cameraComfort)?.[1] || 'Не указан')}</dd></dl>
+      <p>Это предложение, а не ваши ответы или согласие на съёмку. Подтвердите подходящее или уточните свою анкету.</p>
+      ${isNew ? '<button type="button" class="plain-button" data-actor-use-preset>Перенести в пустые поля и проверить</button>' :
+        '<p>Ваши сохранённые ответы оставлены без изменений.</p>'}</section>`;
+  }
+  const presetManagerMarkup = () => `<section class="card actor-preset-manager" data-actor-preset-manager>
+    <h2>Предложение для участника</h2><p>Выберите уже добавленного участника. Направление, рабочую роль и формат
+    съёмки человек проверит сам. Его ответы и права доступа останутся прежними.</p>
+    <div data-actor-preset-editor><p role="status">Загружаем участников…</p></div>
+    <p data-actor-preset-status role="status" aria-live="polite"></p>
+    <button type="button" class="actor-onboarding-reload" data-actor-presets-refresh>Загрузить актуальную версию предложений</button></section>`;
+  function renderPresetEditor(state, data) {
+    if (data.companyCode !== state.code || !Array.isArray(data.participants)) throw Error('Ответ другой компании');
+    const section = state.container.querySelector('[data-actor-preset-manager]');
+    const target = section.querySelector('[data-actor-preset-editor]');
+    const actors = data.participants;
+    if (!actors.length) { target.innerHTML = '<p>Нет участников с доступом к личной анкете этой компании.</p>'; return; }
+    target.innerHTML = `<form class="actor-preset-form" data-actor-preset-form>
+      <label>Участник<select name="presetActor">${actors.map((actor) =>
+        `<option value="${esc(actor.actorId)}">${esc(actor.actorName)}</option>`).join('')}</select></label>
+      <label>Направление<input name="presetDirection" maxlength="200" type="text"></label>
+      <label>Рабочая роль<input name="presetRole" maxlength="500" type="text"></label>
+      <label>Предлагаемый формат съёмки<select name="presetCamera">${presetCameraOptions
+        .map(([value, label]) => `<option value="${value}">${esc(label)}</option>`).join('')}</select></label>
+      <small data-actor-preset-version></small><button class="plain-button" type="submit">Сохранить предложение</button></form>`;
+    const form = target.querySelector('form');
+    let selected;
+    const selectActor = () => {
+      selected = actors.find(actor => actor.actorId === Number(form.elements.presetActor.value));
+      const values = selected?.preset?.values || {};
+      form.elements.presetDirection.value = values.direction || '';
+      form.elements.presetRole.value = values.role || '';
+      form.elements.presetCamera.value = values.cameraComfort || 'unknown';
+      form.querySelector('[data-actor-preset-version]').textContent = selected?.preset ?
+        `Версия ${selected.preset.revision} · ${selected.preset.proposedBy || 'Руководитель'} · ${date(selected.preset.updatedAt)}` :
+        'Предложение ещё не сохранено';
+    };
+    selectActor();
+    form.elements.presetActor.addEventListener('change', () => {
+      selectActor(); socialMessage(state, '[data-actor-preset-status]', '');
+    });
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!live(state) || !section.isConnected || state.presetBusy || !selected) return;
+      const actorId = selected.actorId;
+      const body = { actorId, revision: selected.preset?.revision || 0, preset: {
+        direction: form.elements.presetDirection.value.trim(), role: form.elements.presetRole.value.trim(),
+        cameraComfort: form.elements.presetCamera.value } };
+      state.presetBusy = true;
+      state.presetVersion = (state.presetVersion || 0) + 1;
+      section.querySelectorAll('input,select,button').forEach(item => { item.disabled = true; });
+      socialMessage(state, '[data-actor-preset-status]', 'Сохраняем предложение…');
+      try {
+        const saved = await state.ctx.apiJson(presetsEndpoint(state.code), state.ctx.csrfOptions('PUT', body));
+        if (!live(state) || !section.isConnected) return;
+        if (saved.companyCode !== state.code || saved.actorId !== actorId || !saved.preset) throw Error('Ответ другого участника');
+        selected.preset = saved.preset;
+        selectActor();
+        socialMessage(state, '[data-actor-preset-status]', 'Предложение сохранено. Участник сам проверит его в своей анкете.');
+      } catch (error) {
+        if (live(state) && section.isConnected) socialMessage(state, '[data-actor-preset-status]', error.status === 409 ?
+          'Предложение уже изменилось. Ваш ввод остался в форме; скопируйте правки перед загрузкой актуальной версии.' :
+          `Не удалось сохранить предложение: ${error.message}`, true);
+      } finally {
+        if (live(state) && section.isConnected) {
+          state.presetBusy = false;
+          section.querySelectorAll('input,select,button').forEach(item => { item.disabled = false; });
+        }
+      }
+    });
+  }
+  async function loadPresets(state) {
+    if (!live(state) || !can(state.ctx, 'manage') || state.presetBusy) return;
+    const section = state.container.querySelector('[data-actor-preset-manager]');
+    if (!section) return;
+    const version = state.presetVersion = (state.presetVersion || 0) + 1;
+    try {
+      const data = await state.ctx.apiJson(presetsEndpoint(state.code));
+      if (!live(state) || !section.isConnected || version !== state.presetVersion) return;
+      renderPresetEditor(state, data);
+      socialMessage(state, '[data-actor-preset-status]', '');
+    } catch (error) {
+      if (live(state) && section.isConnected && version === state.presetVersion) {
+        section.querySelector('[data-actor-preset-editor]').innerHTML = '';
+        socialMessage(state, '[data-actor-preset-status]', `Не удалось загрузить участников: ${error.message}`, true);
+      }
+    }
+  }
+  function bindPresets(state) {
+    state.container.querySelector('[data-actor-presets-refresh]')?.addEventListener('click', () => void loadPresets(state));
   }
   function status(state, message, error = false) {
     if (!live(state)) return;
@@ -284,6 +384,7 @@
   function renderForm(state, response) {
     if (!live(state)) return;
     state.actorId = response.actorId;
+    state.serverRevision = response.revision;
     const server = response.profile || empty();
     const draft = drafts.get(draftKey(state));
     state.revision = draft?.revision ?? response.revision;
@@ -293,7 +394,8 @@
     const node = state.container;
     node.innerHTML = `<div class="content-header actor-onboarding-header"><h1>Моя анкета для контента</h1>
       <p>Компания: <strong>${esc(company?.name || state.code)}</strong>. Ответы помогут подобрать темы и комфортный формат для вас.</p></div>
-      <div class="actor-onboarding-layout"><section class="card actor-onboarding-card">
+      <div class="actor-onboarding-layout">${directorPresetMarkup(response.directorPreset, response.revision === 0)}
+      <section class="card actor-onboarding-card">
         <div class="actor-onboarding-top"><div><strong>${esc(response.actorName || 'Мои ответы')}</strong>
           <small>Версия ${esc(response.revision)} · обновлено ${esc(date(response.updatedAt))}</small></div>
           <span data-actor-progress></span></div>
@@ -321,7 +423,7 @@
         <p data-actor-social-status role="status" aria-live="polite"></p>
         <div data-actor-social-list><p>Загружаем ваши ссылки…</p></div>
       </section>${can(state.ctx, 'manage') ? `<section class="card actor-onboarding-summary" data-actor-summary
-        aria-label="Готовность команды"><p>Загружаем готовность команды…</p></section>` : ''}</div>`;
+        aria-label="Готовность команды"><p>Загружаем готовность команды…</p></section>${presetManagerMarkup()}` : ''}</div>`;
     if (can(state.ctx, 'manage')) node.querySelector('.actor-onboarding-layout').insertAdjacentHTML('beforeend',
       `<section class="card actor-onboarding-social-review" data-actor-social-review>
         <h2>Ссылки участников на проверке</h2>
@@ -335,6 +437,19 @@
       'Несохранённые ответы восстановлены. Нажмите «Сохранить», когда будете готовы.',
     draft.revision !== response.revision);
     const form = node.querySelector('[data-actor-form]');
+    node.querySelector('[data-actor-use-preset]')?.addEventListener('click', () => {
+      if (!live(state) || state.busy || state.serverRevision !== 0 || state.revision !== 0) return;
+      const value = readForm(form);
+      const proposal = response.directorPreset.values;
+      for (const key of ['direction', 'role', 'cameraComfort']) {
+        if (!value[key] || (key === 'cameraComfort' && value[key] === 'unknown')) {
+          form.elements.namedItem(key).value = proposal[key];
+        }
+      }
+      state.profile = readForm(form);
+      drafts.set(draftKey(state), {profile: {...state.profile}, revision: state.revision, step: state.step});
+      status(state, 'Предложение перенесено только в пустые поля черновика. Проверьте или уточните ответы, затем сохраните сами. Это не согласие на съёмку.');
+    });
     form.addEventListener('input', () => {
       state.profile = readForm(form);
       drafts.set(draftKey(state), {profile: {...state.profile}, revision: state.revision, step: state.step});
@@ -362,6 +477,9 @@
         if (!live(state)) return;
         if (data.companyCode !== state.code || data.actorId !== response.actorId) throw Error('Ответ другой анкеты');
         state.revision = data.revision;
+        state.serverRevision = data.revision;
+        const usePreset = node.querySelector('[data-actor-use-preset]');
+        if (usePreset) usePreset.hidden = true;
         node.querySelector('.actor-onboarding-top small').textContent =
           `Версия ${data.revision} · обновлено ${date(data.updatedAt)}`;
         drafts.delete(draftKey(state));
@@ -383,6 +501,7 @@
     });
     node.querySelector('[data-actor-refresh-summary]')?.addEventListener('click', () => void loadSummary(state));
     bindSocial(state);
+    bindPresets(state);
   }
   function showOwnSocial(state, data) {
     if (!live(state)) return;
@@ -545,6 +664,16 @@
     const version = state.loadVersion = (state.loadVersion || 0) + 1;
     state.checkInVersion = (state.checkInVersion || 0) + 1;
     state.checkInBusy = false;
+    state.presetBusy = false;
+    state.presetVersion = (state.presetVersion || 0) + 1;
+    if (!can(state.ctx, 'self')) {
+      state.container.innerHTML = '<div class="content-header"><h1>Анкеты команды</h1></div>' +
+        `<div class="actor-onboarding-layout">${presetManagerMarkup()}<section class="card actor-onboarding-summary" data-actor-summary></section></div>`;
+      bindPresets(state);
+      void loadPresets(state);
+      void loadSummary(state);
+      return;
+    }
     state.container.innerHTML = '<div class="content-header"><h1>Моя анкета для контента</h1></div>' +
       '<div class="card" role="status">Загружаем ваши ответы…</div>';
     try {
@@ -554,6 +683,7 @@
       renderForm(state, data);
       void loadCheckIn(state);
       if (can(state.ctx, 'manage')) void loadSummary(state);
+      if (can(state.ctx, 'manage')) void loadPresets(state);
       void loadSocialLinks(state);
       if (can(state.ctx, 'manage')) void loadSocialReview(state);
     } catch (error) {
@@ -563,7 +693,7 @@
   }
   function render(container, ctx) {
     sequence++;
-    if (!can(ctx, 'self')) {
+    if (!can(ctx, 'self') && !can(ctx, 'manage')) {
       current = null;
       container.innerHTML = '<div class="content-header"><h1>Моя анкета для контента</h1></div>' +
         '<div class="card">У вас нет доступа к личной анкете этой компании.</div>';

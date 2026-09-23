@@ -228,7 +228,7 @@ function createHughBudget({db, env = process.env, now = () => Date.now(), random
       db.prepare(`INSERT INTO hugh_fallback_reservations(id,window_start,provider,micro_usd,state,created_at,updated_at)
         VALUES(?,?,?,?,'held',?,?)`).run(id, windowStart(at), String(provider), estimate, stamp, stamp);
       return {allowed: true, id, provider: String(provider), estimateMicroUsd: estimate,
-        estimateUsd: estimate / MICRO, maxOutputTokens: config.maxOutputTokens, priced: Boolean(price)};
+        estimateUsd: estimate / MICRO, maxOutputTokens: outputBound, priced: Boolean(price)};
     });
   }
 

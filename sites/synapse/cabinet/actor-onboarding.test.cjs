@@ -10,6 +10,8 @@ const profile = () => ({direction: '', role: '', cameraComfort: 'unknown', voice
   boundaries: '', suggestions: ''});
 const own = (code, overrides = {}) => ({companyCode: code, actorId: 17, actorName: 'Таня',
   revision: 0, profile: profile(), createdAt: null, updatedAt: null, ...overrides});
+const proposal = (overrides = {}) => ({revision: 1, proposedBy: 'Директор', updatedAt: '2026-09-24T00:00:00Z',
+  values: {direction: 'Недвижимость', role: 'Консультант', cameraComfort: 'on_camera'}, ...overrides});
 const checkIn = (code, overrides = {}) => ({companyCode: code, actorId: 17, revision: 0,
   status: 'not_ready', completedAt: null, dueAt: null, savedAt: null,
   answers: {comfort: '', obstacles: '', improvements: '', nextStep: ''}, ...overrides});
@@ -191,6 +193,10 @@ function fixture({role = 'editor', permissions = ['actor-onboarding.self'], over
       if (result !== undefined) return clone(result);
     }
     if (call.path.endsWith('/check-in')) return checkIn(code);
+    if (call.path.endsWith('/presets')) return call.method === 'PUT' ?
+      {companyCode: code, actorId: call.body.actorId, preset: proposal({revision: call.body.revision + 1, values: call.body.preset})} :
+      {companyCode: code, participants: [{actorId: 17, actorName: 'Таня', preset: null},
+        {actorId: 18, actorName: 'Сергей', preset: null}]};
     if (call.path.endsWith('/social-links/review')) {
       if (call.method === 'PUT') {
         const key = `${code}:${call.body.platform}`;
@@ -233,6 +239,168 @@ test('экран показывает шесть коротких вопросо
     assert.ok(f.calls.every((call) => call.method === 'GET'));
     assert.equal(f.calls.some((call) => call.path.endsWith('/summary')), false);
   } finally {f.close();}
+});
+
+test('предложение директора отдельно от ответов: явный перенос только пустых полей и самостоятельное сохранение', async () => {
+  const f = fixture({override: call => call.path === '/content/actor-onboarding' && call.method === 'GET' ?
+    own(call.code, {directorPreset: proposal({proposedBy: '<img src=x>', values: {
+      direction: '<b>Недвижимость</b>', role: 'Консультант', cameraComfort: 'on_camera'}})}) : undefined});
+  try {
+    f.view.render(f.container, f.ctx); await f.settle();
+    const card = f.container.querySelector('[data-actor-director-preset]');
+    assert.match(card.textContent, /не ваши ответы или согласие на съёмку/);
+    assert.equal(card.querySelector('img'), null);
+    assert.equal(card.querySelector('b'), null);
+    const form = f.container.querySelector('[data-actor-form]');
+    assert.equal(form.elements.direction.value, '');
+    assert.equal(form.elements.cameraComfort.value, 'unknown');
+    assert.ok(f.calls.every(call => call.method === 'GET'));
+    form.elements.role.value = 'Моя рабочая роль';
+    form.elements.boundaries.value = 'Личные границы';
+    f.container.querySelector('[data-actor-use-preset]').click();
+    assert.equal(form.elements.direction.value, '<b>Недвижимость</b>');
+    assert.equal(form.elements.role.value, 'Моя рабочая роль');
+    assert.equal(form.elements.cameraComfort.value, 'on_camera');
+    assert.equal(form.elements.voiceComfort.value, 'unknown');
+    assert.equal(form.elements.boundaries.value, 'Личные границы');
+    assert.equal(f.calls.filter(call => call.method === 'PUT').length, 0);
+    assert.match(f.container.querySelector('[data-actor-status]').textContent, /черновика.*уточните/);
+    form.elements.cameraComfort.value = 'off_camera';
+    form.dispatchEvent(new f.w.Event('submit', {bubbles: true, cancelable: true})); await f.settle();
+    const write = f.calls.find(call => call.method === 'PUT');
+    assert.equal(write.path, '/content/actor-onboarding');
+    assert.deepEqual(Object.keys(write.body).sort(), ['profile', 'revision']);
+    assert.equal(write.body.profile.cameraComfort, 'off_camera');
+    assert.equal(f.container.querySelector('[data-actor-use-preset]').hidden, true);
+    assert.equal(f.calls.some(call => call.path.endsWith('/presets')), false);
+  } finally {f.close();}
+});
+
+test('сохранённая анкета не переписывается предложением и не предлагает автоматическое принятие', async () => {
+  const saved = {...profile(), direction: 'Мой выбор', role: 'Эксперт', cameraComfort: 'off_camera', boundaries: 'Личное'};
+  const f = fixture({override: call => call.path === '/content/actor-onboarding' ?
+    own(call.code, {revision: 3, profile: saved, directorPreset: proposal()}) : undefined});
+  try {
+    f.view.render(f.container, f.ctx); await f.settle();
+    assert.equal(f.container.querySelector('[data-actor-use-preset]'), null);
+    assert.match(f.container.querySelector('[data-actor-director-preset]').textContent, /оставлены без изменений/);
+    const form = f.container.querySelector('[data-actor-form]');
+    for (const [key, value] of Object.entries(saved)) assert.equal(form.elements.namedItem(key).value, value);
+    assert.ok(f.calls.every(call => call.method === 'GET'));
+  } finally {f.close();}
+});
+
+test('manager без self редактирует только предложение существующего участника с отдельной версией и CSRF', async () => {
+  const f = fixture({permissions: ['actor-onboarding.manage']});
+  try {
+    f.view.render(f.container, f.ctx); await f.settle();
+    assert.equal(f.container.querySelector('[data-actor-form]'), null);
+    assert.equal(f.calls.some(call => call.path === '/content/actor-onboarding' || call.path.endsWith('/check-in')), false);
+    const form = f.container.querySelector('[data-actor-preset-form]');
+    assert.ok(form);
+    assert.equal(form.querySelector('[name="boundaries"],[name="voiceComfort"],[name="suggestions"]'), null);
+    form.elements.presetActor.value = '18';
+    form.elements.presetActor.dispatchEvent(new f.w.Event('change'));
+    form.elements.presetDirection.value = 'Маршруты';
+    form.elements.presetRole.value = 'Гид';
+    form.elements.presetCamera.value = 'small_steps';
+    form.dispatchEvent(new f.w.Event('submit', {bubbles: true, cancelable: true})); await f.settle();
+    const write = f.calls.find(call => call.method === 'PUT');
+    assert.equal(write.path, '/content/actor-onboarding/presets');
+    assert.equal(write.headers['X-CSRF-Token'], 'test');
+    assert.deepEqual(write.body, {actorId: 18, revision: 0,
+      preset: {direction: 'Маршруты', role: 'Гид', cameraComfort: 'small_steps'}});
+    assert.match(f.container.querySelector('[data-actor-preset-status]').textContent, /Предложение сохранено/);
+    assert.match(form.querySelector('[data-actor-preset-version]').textContent, /Версия 1/);
+    assert.equal(form.querySelector('button').disabled, false);
+  } finally {f.close();}
+});
+
+test('конфликт предложения сохраняет ввод manager, новая версия загружается явно', async () => {
+  let version = 2;
+  const f = fixture({permissions: ['actor-onboarding.manage'], override: call => {
+    if (!call.path.endsWith('/presets')) return;
+    if (call.method === 'PUT') { version = 3; throw Object.assign(new Error('Conflict'), {status: 409}); }
+    return {companyCode: call.code, participants: [{actorId: 17, actorName: '<img src=x>', preset: proposal({revision: version})}]};
+  }});
+  try {
+    f.view.render(f.container, f.ctx); await f.settle();
+    let form = f.container.querySelector('[data-actor-preset-form]');
+    form.elements.presetRole.value = 'Несохранённое уточнение';
+    form.dispatchEvent(new f.w.Event('submit', {bubbles: true, cancelable: true})); await f.settle();
+    assert.equal(f.calls.find(call => call.method === 'PUT').body.revision, 2);
+    assert.equal(form.elements.presetRole.value, 'Несохранённое уточнение');
+    assert.match(f.container.querySelector('[data-actor-preset-status]').textContent, /Ваш ввод остался/);
+    assert.equal(form.querySelector('img'), null);
+    f.container.querySelector('[data-actor-presets-refresh]').click(); await f.settle();
+    form = f.container.querySelector('[data-actor-preset-form]');
+    assert.equal(form.elements.presetRole.value, 'Консультант');
+    assert.match(form.querySelector('[data-actor-preset-version]').textContent, /Версия 3/);
+  } finally {f.close();}
+});
+
+test('задержавшееся предложение старой компании и ответ с чужим actorId не показываются', async () => {
+  let resolveSave;
+  const f = fixture({permissions: ['actor-onboarding.manage'], override: call => {
+    if (call.path.endsWith('/presets') && call.method === 'PUT') return new Promise(resolve => {resolveSave = resolve;});
+  }});
+  try {
+    f.view.render(f.container, f.ctx); await f.settle();
+    const form = f.container.querySelector('[data-actor-preset-form]');
+    form.elements.presetRole.value = 'Старое предложение';
+    form.dispatchEvent(new f.w.Event('submit', {bubbles: true, cancelable: true})); await f.settle();
+    f.view.onProjectChange({...f.ctx, selectedProjectId: 'alvi'}); await f.settle();
+    resolveSave({companyCode: 'taisabai', actorId: 17, preset: proposal({values: {direction: '', role: 'Старое предложение', cameraComfort: 'unknown'}})});
+    await f.settle();
+    assert.equal(f.container.querySelector('[name="presetRole"]').value, '');
+    assert.doesNotMatch(f.container.textContent, /Предложение сохранено/);
+    const current = f.container.querySelector('[data-actor-preset-form]');
+    current.dispatchEvent(new f.w.Event('submit', {bubbles: true, cancelable: true})); await f.settle();
+    resolveSave({companyCode: 'alvi', actorId: 999, preset: proposal()}); await f.settle();
+    assert.match(f.container.querySelector('[data-actor-preset-status]').textContent, /Ответ другого участника/);
+    assert.equal(current.elements.presetRole.value, '');
+  } finally {f.close();}
+});
+
+test('ошибка доступа к списку убирает редактор, мобильные предложения идут одной колонкой', async () => {
+  let revoked = false;
+  const f = fixture({permissions: ['actor-onboarding.manage'], override: call => {
+    if (revoked && call.path.endsWith('/presets')) throw Object.assign(new Error('Нет доступа'), {status: 403});
+  }});
+  try {
+    f.view.render(f.container, f.ctx); await f.settle();
+    revoked = true;
+    f.container.querySelector('[data-actor-presets-refresh]').click(); await f.settle();
+    assert.equal(f.container.querySelector('[data-actor-preset-form]'), null);
+    assert.match(f.container.querySelector('[data-actor-preset-status]').textContent, /Нет доступа/);
+    const css = fs.readFileSync(require.resolve('./actor-onboarding.css'), 'utf8');
+    assert.match(css, /\.actor-preset-form \{[^}]*grid-template-columns: minmax\(0, 1fr\)/);
+    assert.match(css, /\.actor-preset-form input, \.actor-preset-form select \{[^}]*width: 100%;[^}]*min-height: 48px/);
+    assert.match(css, /\.actor-director-preset button, \.actor-preset-manager button \{[^}]*min-height: 44px/);
+    assert.match(css, /\.actor-director-preset button, \.actor-preset-manager button \{ width: 100%; \}/);
+  } finally {f.close();}
+});
+
+test('пустой или недоступный список предложений не блокирует личную анкету и не требует создавать аккаунт', async () => {
+  for (const unavailable of [false, true]) {
+    const f = fixture({permissions: ['actor-onboarding.self', 'actor-onboarding.manage'], override: call => {
+      if (!call.path.endsWith('/presets')) return;
+      if (unavailable) throw Object.assign(new Error('Список временно недоступен'), {status: 503});
+      return {companyCode: call.code, participants: []};
+    }});
+    try {
+      f.view.render(f.container, f.ctx); await f.settle();
+      const form = f.container.querySelector('[data-actor-form]');
+      assert.ok(form);
+      assert.equal(form.querySelector('[data-actor-save]').disabled, false);
+      form.elements.direction.value = 'Моё направление';
+      form.dispatchEvent(new f.w.Event('submit', {bubbles: true, cancelable: true})); await f.settle();
+      assert.match(f.container.querySelector('[data-actor-status]').textContent, /Ответы сохранены/);
+      assert.equal(f.calls.filter(call => call.method === 'PUT').length, 1);
+      assert.equal(f.calls.some(call => call.path.includes('/accounts')), false);
+      assert.doesNotMatch(f.container.querySelector('[data-actor-preset-manager]').textContent, /создать аккаунт|создайте аккаунт/i);
+    } finally {f.close();}
+  }
 });
 
 test('без личного права раздел не запрашивает и не показывает анкету', async () => {

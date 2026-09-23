@@ -9,6 +9,7 @@ const VOICE = Object.freeze(['unknown', 'text_only', 'short_voice', 'comfortable
 const FIELDS = Object.freeze(['direction', 'role', 'cameraComfort', 'voiceComfort', 'boundaries', 'suggestions']);
 const EMPTY = Object.freeze({ direction: '', role: '', cameraComfort: 'unknown',
   voiceComfort: 'unknown', boundaries: '', suggestions: '' });
+const PRESET_FIELDS = Object.freeze(['direction', 'role', 'cameraComfort']);
 const CHECK_IN_DELAY = 14 * 24 * 60 * 60 * 1000;
 const CHECK_IN_COMFORT = Object.freeze(['comfortable', 'mixed', 'difficult']);
 const CHECK_IN_QUESTIONS = Object.freeze([
@@ -113,6 +114,17 @@ function createActorOnboarding({ db, authStore, requireSession, requireCsrf, rea
     updated_at TEXT NOT NULL,
     PRIMARY KEY (company_code, user_id)
   );
+  CREATE TABLE IF NOT EXISTS actor_onboarding_presets (
+    company_code TEXT NOT NULL COLLATE NOCASE,
+    user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+    revision INTEGER NOT NULL CHECK (revision >= 1),
+    preset_json TEXT NOT NULL,
+    proposed_by INTEGER REFERENCES auth_users(id) ON DELETE SET NULL,
+    proposed_name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (company_code, user_id)
+  );
   CREATE TABLE IF NOT EXISTS actor_social_link_proposals (
     company_code TEXT NOT NULL COLLATE NOCASE,
     user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
@@ -169,7 +181,55 @@ function createActorOnboarding({ db, authStore, requireSession, requireCsrf, rea
     return { companyCode: code, actorId: user.id, actorName: user.displayName,
       revision: row?.revision || 0, profile: row ? JSON.parse(row.profile_json) : { ...EMPTY },
       createdAt: row?.created_at || null, updatedAt: row?.updated_at || null, questions: QUESTIONS,
-      cameraOptions: CAMERA, voiceOptions: VOICE };
+      cameraOptions: CAMERA, voiceOptions: VOICE, directorPreset: presetFor(code, user.id) };
+  }
+  function presetFor(code, actorId) {
+    const row = db.prepare(`SELECT revision,preset_json,proposed_name,updated_at
+      FROM actor_onboarding_presets WHERE company_code=? AND user_id=?`).get(code, actorId);
+    return row ? { revision: row.revision, values: JSON.parse(row.preset_json),
+      proposedBy: row.proposed_name, updatedAt: row.updated_at } : null;
+  }
+  function presetTarget(code, actorId) {
+    if (!Number.isSafeInteger(actorId) || actorId < 1) fail(400, 'Выберите участника');
+    const user = authStore.getById(actorId);
+    if (!user || (user.role !== 'owner' && (!user.companyCodes.includes(code) ||
+        !user.permissions.includes('actor-onboarding.self')))) fail(404, 'Участник не найден в этой компании');
+    return user;
+  }
+  function presets(code) {
+    const participants = db.prepare(`SELECT u.id actorId,u.display_name actorName FROM auth_users u
+      LEFT JOIN auth_user_companies m ON m.user_id=u.id AND m.company_code=?
+      LEFT JOIN auth_user_permissions a ON a.user_id=u.id AND a.permission='actor-onboarding.self'
+      WHERE u.role='owner' OR (m.user_id IS NOT NULL AND a.user_id IS NOT NULL)
+      ORDER BY u.display_name,u.id`).all(code)
+      .map((actor) => ({ ...actor, preset: presetFor(code, actor.actorId) }));
+    return { companyCode: code, participants };
+  }
+  function savePreset(code, manager, body) {
+    requireShape(body, ['actorId', 'revision', 'preset']);
+    if (!Number.isSafeInteger(body.revision) || body.revision < 0) fail(400, 'Некорректная версия предложения');
+    requireShape(body.preset, PRESET_FIELDS);
+    if (!CAMERA.includes(body.preset.cameraComfort)) fail(400, 'Выберите формат съёмки');
+    const value = { direction: cleanText(body.preset.direction, 200, 'Направление'),
+      role: cleanText(body.preset.role, 500, 'Рабочая роль'), cameraComfort: body.preset.cameraComfort };
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      // Предложение руководителя не создаёт личных ответов, согласия или доступа участника.
+      presetTarget(code, body.actorId);
+      const old = presetFor(code, body.actorId);
+      if (body.revision !== (old?.revision || 0)) fail(409, 'Предложение уже изменилось. Загрузите актуальную версию.');
+      if (!old || JSON.stringify(old.values) !== JSON.stringify(value)) {
+        const at = now();
+        db.prepare(`INSERT INTO actor_onboarding_presets
+          (company_code,user_id,revision,preset_json,proposed_by,proposed_name,created_at,updated_at)
+          VALUES(?,?,1,?,?,?,?,?) ON CONFLICT(company_code,user_id) DO UPDATE SET
+          revision=actor_onboarding_presets.revision+1,preset_json=excluded.preset_json,
+          proposed_by=excluded.proposed_by,proposed_name=excluded.proposed_name,updated_at=excluded.updated_at`)
+          .run(code, body.actorId, JSON.stringify(value), manager.id, manager.displayName || 'Руководитель', at, at);
+      }
+      db.exec('COMMIT');
+    } catch (error) { db.exec('ROLLBACK'); throw error; }
+    return { companyCode: code, actorId: body.actorId, preset: presetFor(code, body.actorId) };
   }
   function getOwnProfile(code, userId) {
     if (!Object.hasOwn(COMPANIES, code) || !Number.isSafeInteger(userId) || userId < 1) return null;
@@ -342,12 +402,25 @@ function createActorOnboarding({ db, authStore, requireSession, requireCsrf, rea
   }
   async function handle(request, response, url) {
     if (!['/content/actor-onboarding', '/content/actor-onboarding/summary',
+      '/content/actor-onboarding/presets',
       '/content/actor-onboarding/check-in',
       '/content/actor-onboarding/social-links',
       '/content/actor-onboarding/social-links/review'].includes(url.pathname)) return false;
     if ([...url.searchParams.keys()].some((key) => key !== 'companyCode')) fail(400, 'Лишние параметры запроса');
     const code = url.searchParams.get('companyCode');
     if (typeof code !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(code)) fail(400, 'Выберите компанию');
+    if (url.pathname === '/content/actor-onboarding/presets') {
+      if (!['GET', 'PUT'].includes(request.method)) fail(405, 'Метод не поддерживается');
+      const { session } = access(request, code, 'actor-onboarding.manage');
+      if (request.method === 'GET') sendJson(response, 200, presets(code));
+      else {
+        requireCsrf(request, session);
+        const body = await readJson(request);
+        const { user } = access(request, code, 'actor-onboarding.manage');
+        sendJson(response, 200, savePreset(code, user, body));
+      }
+      return true;
+    }
     if (url.pathname === '/content/actor-onboarding/check-in') {
       if (!['GET', 'PUT'].includes(request.method)) fail(405, 'Метод не поддерживается');
       const { session, user } = access(request, code, 'actor-onboarding.self');

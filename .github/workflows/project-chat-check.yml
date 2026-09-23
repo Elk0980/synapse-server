@@ -18,6 +18,8 @@ on:
       - 'ops/hugh-runtime/**'
       - 'ops/local-hugh/**'
       - 'ops/crm/media-mentor*'
+      - 'ops/crm/autoposting*'
+      - 'ops/crm/server.js'
       - 'ops/crm/social-stats*'
       - 'ops/crm/social-baselines*'
       - 'ops/crm/finance-ai*'
@@ -37,6 +39,8 @@ on:
       - 'ops/hugh-runtime/**'
       - 'ops/local-hugh/**'
       - 'ops/crm/media-mentor*'
+      - 'ops/crm/autoposting*'
+      - 'ops/crm/server.js'
       - 'ops/crm/social-stats*'
       - 'ops/crm/social-baselines*'
       - 'ops/crm/finance-ai*'
@@ -88,7 +92,7 @@ jobs:
       # для ops/hugh-runtime Node берёт main из package.json и запускает сам сервис.
       - name: Тесты приватного рантайма Hugh
         timeout-minutes: 10
-        run: node --test ops/hugh-runtime/*.test.js
+        run: node --test --test-concurrency=2 ops/hugh-runtime/*.test.js
 
       # Локальный Windows-обработчик: офлайн-тесты с поддельным транспортом и рантаймом,
       # настоящие SQLite во временном каталоге. Сеть и подписка не нужны.
@@ -107,6 +111,10 @@ jobs:
         timeout-minutes: 10
         run: node --test ops/crm/social-baselines.test.js ops/crm/social-stats.test.js ops/crm/social-stats-http.test.js
 
+      - name: Тесты календаря и публикаций
+        timeout-minutes: 10
+        run: node --test ops/crm/autoposting*.test.js
+
       # Расходы на ИИ внутри существующих Финансов и права раздела. Остальные наборы
       # каталога ops/crm этой проверкой по-прежнему не покрываются.
       - name: Тесты Финансы→ИИ
@@ -115,7 +123,10 @@ jobs:
 
       - name: Тесты сервиса контента
         timeout-minutes: 10
-        run: node --test ops/content/*.test.js
+        # HTTP-наборы запускают собственные сервисы и выбирают локальные порты.
+        # Последовательный запуск исключает конкуренцию фикстур за порты/ресурсы;
+        # все проверки прав, сроков и отказов по-прежнему выполняются.
+        run: node --test --test-concurrency=1 ops/content/*.test.js
 
       - name: Тесты чат-сервиса
         timeout-minutes: 10
