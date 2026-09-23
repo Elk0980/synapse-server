@@ -77,6 +77,54 @@ test('исходная точка показывает отсутствие да
     assert.equal(write.code,'demo-travel');
   }finally{f.close();}
 });
+
+test('замер «ДО» разделяет измерения площадки, исторические посты и подтверждения владельца',async()=>{
+  const f=fixture({override:async call=>{
+    if(call.path!=='/content/crm/social-stats/baseline')return;
+    return {companyCode:call.code,latest:{version:2,from:'2026-09-01',to:'2026-09-18',cutoverDate:'2026-09-19',
+      createdAt:'2026-09-19T00:00:00Z',sourceNote:'первый пост',snapshot:{status:'partial',
+        coverageNote:'Доступны только записанные сведения',platforms:{instagram:{accountConfigured:true,accountRef:'travel',
+          coverage:'partial',recordedDays:1,periodDays:18,totals:{views:120},
+          sources:[{provider:'manual',capturedAt:'2026-09-18T10:00:00Z',note:'экспорт Insights'}],
+          measurements:[{metric:'views',value:120,date:'2026-09-17',provider:'manual',capturedAt:'2026-09-18T10:00:00Z',completeness:'partial'}]}},
+        postsRecorded:3,postsTruncated:true,posts:[
+          {platform:'instagram',url:'https://www.instagram.com/reel/demo/',publishedAt:'2026-09-12T08:00:00Z',
+            source:{provider:'direct',capturedAt:'2026-09-18T10:00:00Z'},metrics:[
+              {metric:'views',value:125,date:'2026-09-18',provider:'direct',capturedAt:'2026-09-18T10:00:00Z'},
+              {metric:'likes',value:0,date:'2026-09-18',provider:'direct',capturedAt:'2026-09-18T10:00:00Z'}]},
+          {platform:'tiktok',url:'',publishedAt:'2026-09-10T08:00:00Z',source:{provider:'manual',note:'<script>bad</script>'},metrics:[]}],
+        receiptsRecorded:1,receipts:[{platform:'telegram',url:'javascript:alert(1)',publishedAt:'2026-09-11T08:00:00Z',
+          source:{type:'owner_confirmation',capturedAt:'2026-09-12T08:00:00Z',note:'ссылка от владельца'},metrics:null}]}}
+      ,versions:[{version:2,from:'2026-09-01',to:'2026-09-18',createdAt:'2026-09-19T00:00:00Z'},
+        {version:1,from:'2026-08-01',to:'2026-08-31',createdAt:'2026-09-01T00:00:00Z'}]};
+  }});
+  try{
+    await f.render();
+    const baseline=f.container.querySelector('#social-baseline-content');
+    const instagram=baseline.querySelector('.social-baseline-platform');
+    assert.match(instagram.textContent,/Часть дней без записанных показателей/);
+    assert.match(instagram.textContent,/Дней хотя бы с одним показателем: 1 из 18/);
+    assert.match(instagram.textContent,/Ручной ввод, не сбор по API/);
+    assert.match(instagram.textContent,/экспорт Insights/);
+    assert.match(instagram.textContent,/частичные данные/);
+    const sections=[...baseline.querySelectorAll('.social-baseline-history')];
+    assert.equal(sections.length,2);
+    assert.match(sections[0].querySelector('summary').textContent,/Исторические публикации: записано 3/);
+    assert.match(sections[0].textContent,/Просмотры:\s*125/);
+    assert.match(sections[0].textContent,/Реакции:\s*0/,'известный ноль сохранён');
+    assert.match(sections[0].textContent,/Показатели этой публикации не записаны/);
+    assert.match(sections[0].textContent,/Показано 2 из 3 записанных публикаций/);
+    assert.match(sections[1].querySelector('summary').textContent,/Подтверждения владельца: записано 1/);
+    assert.match(sections[1].textContent,/не является статистикой площадки/);
+    assert.doesNotMatch(sections[1].textContent,/125/,'показатели собранного поста не приписаны подтверждению');
+    assert.equal(sections[1].querySelector('a'),null,'небезопасная ссылка подтверждения не открывается');
+    assert.equal(baseline.querySelector('script'),null,'заметка источника экранирована');
+    assert.doesNotMatch(baseline.innerHTML,/href="javascript:/);
+    assert.match(baseline.textContent,/История исходной точки: 2 версий/);
+    const css=fs.readFileSync(__dirname+'/social-stats.css','utf8');
+    assert.match(css,/@media \(max-width:430px\)[\s\S]*\.social-baseline-grid[^\n]*grid-template-columns:1fr/);
+  }finally{f.close();}
+});
 test('вводный текст не называет чужую компанию; подтверждение ведёт на публикацию, ручной ввод не выдаётся за API, спор карточек и UNKNOWN показаны честно',async()=>{
   const f=fixture({override:async call=>{if(call.path==='/content/crm/social-stats')return attributionOverview();}});try{
     await f.render();
