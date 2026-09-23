@@ -301,6 +301,38 @@ test('ссылки валидируются без ключей и параме�
   assert.equal((await call(f, f.actor, 'GET', route)).body.links.length, 1);
 });
 
+test('отзыв роли владельца при чтении решения запрещает подтверждать собственную ссылку', async (t) => {
+  let release, bodyStarted;
+  const waiting = new Promise((resolve) => { release = resolve; });
+  const started = new Promise((resolve) => { bodyStarted = resolve; });
+  const f = setup(t, { readJson: async (request) => {
+    if (request.body.decision && request.session.user.role === 'owner') {
+      bodyStarted();
+      await waiting;
+    }
+    return request.body;
+  } });
+  const route = `/content/actor-onboarding/social-links${self}`;
+  const review = `/content/actor-onboarding/social-links/review${self}`;
+  const account = { displayName: f.actor.displayName, companies: ['taisabai'],
+    permissions: ['actor-onboarding.manage'] };
+  f.auth.updateAccount(f.owner.id, f.actor.id, { ...account, role: 'owner' });
+  assert.equal((await call(f, f.actor, 'PUT', route,
+    { platform: 'instagram', publicUrl: 'https://instagram.com/actor', revision: 0 })).status, 200);
+  const decision = { actorId: f.actor.id, platform: 'instagram', revision: 1, decision: 'approved' };
+  const pending = call(f, f.actor, 'PUT', review, decision);
+  await started;
+  f.auth.updateAccount(f.owner.id, f.actor.id, { ...account, role: 'editor' });
+  release();
+  const denied = await pending;
+  assert.equal(denied.status, 403, denied.error?.message);
+  const unchanged = (await call(f, f.actor, 'GET', route)).body.links[0];
+  assert.deepEqual([unchanged.status, unchanged.revision, unchanged.reviewedAt], ['pending', 1, null]);
+  const approved = await call(f, f.director, 'PUT', review, decision);
+  assert.equal(approved.status, 200, approved.error?.message);
+  assert.equal(approved.body.links[0].status, 'approved', 'другой управляющий сохраняет право проверки');
+});
+
 test('отзыв доступа скрывает ссылку из списка директора и блокирует старую сессию', async (t) => {
   const f = setup(t);
   const route = `/content/actor-onboarding/social-links${self}`;

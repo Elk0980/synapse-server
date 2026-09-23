@@ -362,12 +362,12 @@ function createActorOnboarding({ db, authStore, requireSession, requireCsrf, rea
     }
     if (url.pathname === '/content/actor-onboarding/social-links/review') {
       if (!['GET', 'PUT'].includes(request.method)) fail(405, 'Метод не поддерживается');
-      const { session, user } = access(request, code, 'actor-onboarding.manage');
+      const { session } = access(request, code, 'actor-onboarding.manage');
       if (request.method === 'GET') sendJson(response, 200, reviewSocialLinks(code));
       else {
         requireCsrf(request, session);
         const body = await readJson(request);
-        access(request, code, 'actor-onboarding.manage');
+        const { user } = access(request, code, 'actor-onboarding.manage');
         sendJson(response, 200, decideSocialLink(code, user, body));
       }
       return true;
