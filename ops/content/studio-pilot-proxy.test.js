@@ -13,11 +13,29 @@ test('real content→CRM pilot routes enforce session, CSRF, edit rights and com
   for(const [login,permissions]of [['reader',['crm.view','autoposting.view']],['writer',['crm.edit','autoposting.edit']],['marketing',['autoposting.edit']]])
     auth.create(owner.id,{login,displayName:login,password,companies:['avokado'],permissions},hashPassword(password));
   authDb.close();
-  const crmPort=await freePort(),contentPort=await freePort(),crmBase=`http://127.0.0.1:${crmPort}`,contentBase=`http://127.0.0.1:${contentPort}`;
-  async function start(file,env,base){let errors='';const child=spawn(process.execPath,[file],{env:{...process.env,...env},stdio:['ignore','ignore','pipe'],windowsHide:true});children.push(child);child.stderr.on('data',chunk=>errors+=chunk);
-    for(let attempt=0;attempt<100;attempt++){if(child.exitCode!==null)throw Error('Service failed: '+errors);try{const result=await fetch(base+'/health',{signal:AbortSignal.timeout(500)});await result.text();return;}catch{await new Promise(resolve=>setTimeout(resolve,25));}}throw Error('Service not ready: '+errors);}
-  await start(path.join(__dirname,'../crm/server.js'),{PORT:String(crmPort),DATABASE_PATH:crmDb,API_KEY:key,STRICT_ORIGIN:'',LEADS_SMTP_HOST:'',LEADS_SMTP_PORT:'465',LEADS_SMTP_USER:'',LEADS_SMTP_PASSWORD:'',LEADS_MAIL_FROM:'',LEADS_NOTIFY_EMAIL:'',LEADS_NOTIFY_EMAIL_ALVI:'',LEADS_NOTIFY_EMAIL_AVOKADO:''},crmBase);
-  await start(path.join(__dirname,'server.js'),{PORT:String(contentPort),DATABASE_PATH:contentDb,AUTH_USERS:'',API_KEY:'',CRM_URL:crmBase,CRM_API_KEY:key,SEED_DIR:directory,ASSETS_DIR:path.join(directory,'assets'),SESSION_SECRET:randomBytes(32).toString('hex')},contentBase);
+  const crmPort=await freePort(),crmBase=`http://127.0.0.1:${crmPort}`;
+  async function start(file,env){
+    let errors='';
+    const child=spawn(process.execPath,[file],{env:{...process.env,...env},stdio:['ignore','pipe','pipe'],windowsHide:true});
+    children.push(child);child.stderr.on('data',chunk=>errors+=chunk);child.stdout.setEncoding('utf8');
+    await new Promise((resolve,reject)=>{
+      let output='';
+      const timer=setTimeout(()=>finish(Error('Service not ready: '+errors)),5000);
+      const finish=error=>{
+        clearTimeout(timer);
+        child.stdout.off('data',onData);child.off('exit',onExit);child.off('error',onError);child.stdout.resume();
+        if(error)reject(error);else resolve();
+      };
+      const onExit=(code,signal)=>finish(Error(`Service exited (${code??signal}): ${errors}`));
+      const onError=error=>finish(Error(`Service failed: ${error.message}; ${errors}`));
+      const onData=chunk=>{output+=chunk;if(new RegExp(`слушает порт ${env.PORT}[;,]`).test(output))finish();};
+      child.once('exit',onExit);child.once('error',onError);child.stdout.on('data',onData);
+    });
+  }
+  await start(path.join(__dirname,'../crm/server.js'),{PORT:String(crmPort),DATABASE_PATH:crmDb,API_KEY:key,STRICT_ORIGIN:'',LEADS_SMTP_HOST:'',LEADS_SMTP_PORT:'465',LEADS_SMTP_USER:'',LEADS_SMTP_PASSWORD:'',LEADS_MAIL_FROM:'',LEADS_NOTIFY_EMAIL:'',LEADS_NOTIFY_EMAIL_ALVI:'',LEADS_NOTIFY_EMAIL_AVOKADO:''});
+  // CRM уже слушает: content выбирает другой порт, а не повторно освобождённый порт CRM.
+  const contentPort=await freePort(),contentBase=`http://127.0.0.1:${contentPort}`;
+  await start(path.join(__dirname,'server.js'),{PORT:String(contentPort),DATABASE_PATH:contentDb,AUTH_USERS:'',API_KEY:'',CRM_URL:crmBase,CRM_API_KEY:key,SEED_DIR:directory,ASSETS_DIR:path.join(directory,'assets'),SESSION_SECRET:randomBytes(32).toString('hex')});
   const identity=Buffer.from(JSON.stringify({v:1,userId:1,role:'owner',permissions:[],companyCodes:[]})).toString('base64url');
   async function request(base,route,{method='GET',body,headers={}}={}){const response=await fetch(base+route,{method,headers:{...headers,...(body?{'content-type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});const text=await response.text();return{status:response.status,body:text?JSON.parse(text):null,headers:response.headers};}
   const direct=(route,options={})=>request(crmBase,route,{...options,headers:{'x-api-key':key,'x-synapse-crm-identity':identity,...options.headers}});
