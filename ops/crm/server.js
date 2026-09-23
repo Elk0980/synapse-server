@@ -29,6 +29,7 @@ const { createReviewsHandler } = require('./reviews-http');
 const { createPlatformDemand } = require('./platform-demand');
 const { createPlatformDemandHandler } = require('./platform-demand-http');
 const { createSocialStats } = require('./social-stats');
+const { createSocialBaselines } = require('./social-baselines');
 const { createSocialAdapters } = require('./social-adapters');
 const { createSocialStatsHandler } = require('./social-stats-http');
 const { createCompanyInformationCheck } = require('./company-information-check');
@@ -599,7 +600,8 @@ const handleReviews = createReviewsHandler({reviews,companyModuleContext,readJso
 const platformDemand = createPlatformDemand(db);
 const handlePlatformDemand = createPlatformDemandHandler({demand:platformDemand,companyModuleContext,readJson,send});
 const socialStats = createSocialStats(db, {adapters: createSocialAdapters({transport: autopostingTransport})});
-const handleSocialStats = createSocialStatsHandler({stats: socialStats, companyModuleContext, readJson, send});
+const socialBaselines = createSocialBaselines(db, socialStats);
+const handleSocialStats = createSocialStatsHandler({stats: socialStats, baselines: socialBaselines, companyModuleContext, readJson, send});
 function deliverLeadEmails() {
   return emailOutbox.drain().catch(() => {
     // Do not expose SMTP responses or contact details in service logs.

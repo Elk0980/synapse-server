@@ -69,6 +69,26 @@ test('аналитика соцсетей через прокси: analytics.vie
  assert.equal((await through('analyst','/social-stats?companyCode=avokado&from=2026-09-17&to=2026-09-17')).body.platforms.instagram.totals.views,900);
  assert.equal((await through('owner','/social-stats?companyCode=alvi&from=2026-09-17&to=2026-09-17')).body.socialAggregate.views,null,'другая компания не видит');
  assert.doesNotMatch(JSON.stringify(after.body),/token|Bearer|op_[a-f0-9]/i);
+ // Закреплённый замер «до» читает аналитик только своей компании, а создаёт владелец с CSRF.
+ const baselineRoute='/social-stats/baseline?companyCode=avokado';
+ const baselineBody={cutoverDate:'2026-09-19',from:'2026-09-17',to:'2026-09-17',sourceNote:'Дата начала по плану владельца',confirmedStart:true};
+ assert.equal((await through('writer',baselineRoute,{method:'POST',body:baselineBody})).status,403);
+ assert.equal((await through('analyst',baselineRoute,{method:'POST',body:baselineBody})).status,403);
+ assert.equal((await through('owner',baselineRoute,{method:'POST',body:baselineBody,headers:{'x-csrf-token':'bad'}})).status,403);
+ assert.equal((await through('owner',baselineRoute,{method:'POST',body:{...baselineBody,confirmedStart:false}})).status,400);
+ const frozen=await through('owner',baselineRoute,{method:'POST',body:baselineBody});
+ assert.equal(frozen.status,200,JSON.stringify(frozen.body));assert.equal(frozen.body.version,1);
+ assert.equal(frozen.body.snapshot.platforms.instagram.totals.views,900);
+ assert.equal((await through('owner',baselineRoute,{method:'POST',body:baselineBody})).body.unchanged,true);
+ assert.equal((await through('analyst',baselineRoute)).body.latest.version,1);
+ assert.equal((await through('analyst','/social-stats/baseline?companyCode=alvi')).status,403);
+ assert.equal((await through('crmreader',baselineRoute)).status,403);
+ assert.equal((await through('analyst','/social-stats/baseline?companyCode=avokado&version=99')).status,404);
+ const updated=await through('owner','/social-stats/import?companyCode=avokado',{method:'POST',body:{platform:'instagram',capturedAt:'2026-09-18T02:00:00Z',sourceNote:'проверенная выгрузка',rows:[{date:'2026-09-17',metric:'views',value:950}]}});
+ assert.equal(updated.status,200);
+ const refrozen=await through('owner',baselineRoute,{method:'POST',body:baselineBody});assert.equal(refrozen.body.version,2);
+ assert.equal(refrozen.body.snapshot.platforms.instagram.totals.views,950);
+ assert.equal((await through('analyst',baselineRoute+'&version=1')).body.latest.snapshot.platforms.instagram.totals.views,900,'первая версия неизменна');
  // служебная сводка плана из кабинета недоступна, по ключу сервиса — доступна
  assert.equal((await through('owner','/autoposting/plan-summary?companyCode=avokado')).status,404);
  assert.equal((await direct('/autoposting/plan-summary?companyCode=avokado')).status,200);

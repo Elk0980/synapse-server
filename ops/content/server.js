@@ -530,7 +530,7 @@ async function proxyCrm(request, response, url, cors) {
     const code=url.searchParams.get('companyCode');
     if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400,'Выберите компанию');
     if(identity.role!=='owner')requirePermission(request,readOnly?(/^\/(?:platform-demand|social-stats)/.test(crmPath)?'analytics.view':'crm.view'):'crm.edit',code);
-    if (/^\/social-stats\/(?:accounts|import)$/.test(crmPath) && !readOnly && identity.role!=='owner') fail(403,'Настройки аккаунтов и ручной импорт доступны владельцу');
+    if (/^\/social-stats\/(?:accounts|import|baseline)$/.test(crmPath) && !readOnly && identity.role!=='owner') fail(403,'Настройки аккаунтов и замер до начала работы доступны владельцу');
   }
   if (/^\/autoposting\/posts\/\d+\/(?:approve|reject)$/.test(crmPath) && identity.role!=='owner') fail(403,'Согласовывать и отклонять публикации может только владелец');
   // Отметка «опубликовано вне ЛК» — решение владельца компании; права редактора недостаточно.

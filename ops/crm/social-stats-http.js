@@ -1,7 +1,7 @@
 'use strict';
 const { SOCIAL_STATS_ERRORS } = require('./social-stats');
 /* Маршруты аналитики соцсетей: чтение — analytics.view, настройки/импорт/сбор — crm.edit (настройки и импорт — только владелец). */
-function createSocialStatsHandler({ stats, companyModuleContext, readJson, send }) {
+function createSocialStatsHandler({ stats, baselines, companyModuleContext, readJson, send }) {
   return async function handle(request, response, url, cors = {}) {
     if (!/^\/social-stats(?:\/|$)/.test(url.pathname)) return false;
     const headers = { ...cors, 'cache-control': 'no-store' };
@@ -14,6 +14,13 @@ function createSocialStatsHandler({ stats, companyModuleContext, readJson, send 
         const to = url.searchParams.get('to') || stats.localDay(Date.now(), 'Asia/Bangkok');
         const from = url.searchParams.get('from') || new Date(Date.parse(to + 'T00:00:00Z') - 29 * 86400000).toISOString().slice(0, 10);
         result = stats.overview(company.code, from, to);
+      } else if (url.pathname === '/social-stats/baseline' && readOnly) {
+        const rawVersion = url.searchParams.get('version');
+        const version = rawVersion === null ? null : Number(rawVersion);
+        result = baselines.get(company.code, version);
+      } else if (url.pathname === '/social-stats/baseline' && request.method === 'POST') {
+        if (!ownerOnly()) return true;
+        result = baselines.freeze(company.code, await readJson(request), identity);
       } else if (url.pathname === '/social-stats/accounts' && readOnly) result = stats.accounts(company.code);
       else if (url.pathname === '/social-stats/accounts' && request.method === 'PUT') { if (!ownerOnly()) return true; result = stats.saveAccounts(company.code, await readJson(request)); }
       else if (url.pathname === '/social-stats/import' && request.method === 'POST') { if (!ownerOnly()) return true; result = stats.importManual(company.code, await readJson(request), identity); }
