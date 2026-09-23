@@ -204,23 +204,23 @@ const ownerPrivateChat = createOwnerPrivateChat({ db, authStore,
    иначе подсказку можно построить на подложенных данных чужой компании. */
 const mediaMentorSuggestRoute = createMediaMentorSuggestRoute({
   suggester: createMediaMentorSuggest({ask: (payload) => projectChat.askHugh(payload)}),
-  loadBrief: async (code) => {
+  loadBrief: async (code, identity) => {
     const upstream = await fetch(`${CRM_URL}/media-mentor?companyCode=${encodeURIComponent(code)}`,
-      {headers: {'x-api-key': CRM_API_KEY}});
+      {headers: {'x-api-key': CRM_API_KEY, [CRM_IDENTITY_HEADER]: crmIdentityHeader(identity)}});
     if (!upstream.ok) return null;
     const data = await upstream.json();
     return data?.brief?.fields ?? null;
   },
   // Разбор результатов читает и статистику, и текущий план: выводы без плана были бы «в воздух».
-  loadStats: async (code, {from, to} = {}) => {
+  loadStats: async (code, {from, to} = {}, identity) => {
     const params = new URLSearchParams({companyCode: code});
     if (from) params.set('from', from);
     if (to) params.set('to', to);
     const statsUpstream = await fetch(`${CRM_URL}/social-stats?${params}`,
-      {headers: {'x-api-key': CRM_API_KEY}});
+      {headers: {'x-api-key': CRM_API_KEY, [CRM_IDENTITY_HEADER]: crmIdentityHeader(identity)}});
     if (!statsUpstream.ok) return null;
     const planUpstream = await fetch(`${CRM_URL}/media-mentor?companyCode=${encodeURIComponent(code)}`,
-      {headers: {'x-api-key': CRM_API_KEY}});
+      {headers: {'x-api-key': CRM_API_KEY, [CRM_IDENTITY_HEADER]: crmIdentityHeader(identity)}});
     const plan = planUpstream.ok ? (await planUpstream.json())?.plan ?? null : null;
     return {overview: await statsUpstream.json(), plan};
   },
