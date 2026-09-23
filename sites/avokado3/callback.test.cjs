@@ -40,6 +40,18 @@ test('saved UTM survives page navigation for 30 days and denied storage does not
   assert.equal(payload(values, location, {getItem() {throw Error('private mode');}}, now).source, 'Сайт АВОКАДО');
 });
 
+test('callback reuses the visit identifier without creating one and honors DoNotTrack', () => {
+  const storage = {getItem: key => key === 'synapse_cid' ? 'existing-visitor' : JSON.stringify({utm_source:'vk',first_seen:new Date(now).toISOString()})};
+  assert.equal(payload(values,location,storage,now).clientId,'existing-visitor');
+  assert.equal(payload(values,location,storage,now).utmSource,'vk');
+  const privateBody=payload(values,location,storage,now,true);
+  assert.equal(privateBody.clientId,undefined);assert.equal(privateBody.utmSource,undefined);
+  assert.equal(payload(values,location,{getItem(){throw Error('denied');}},now).clientId,undefined);
+  assert.equal(payload(values,location,{getItem:()=>null},now).clientId,undefined);
+  const current=payload(values,new URL(location+'?utm_source=yandex'),storage,now,true);
+  assert.equal(current.utmSource,'yandex');assert.equal(current.clientId,undefined);
+});
+
 test('only CRM 201 with a positive id confirms a new callback; deduplication is a distinct result', async () => {
   let request;
   const result = await send(transport(async (...args) => {

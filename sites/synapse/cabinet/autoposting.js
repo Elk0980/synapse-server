@@ -98,7 +98,7 @@ function create(container, context) {
   const drafts=new Map(), selections=new Map(), channelDrafts=new Map(), providerProfiles=new Map();
   const companies=(ctx.identity.companies||[]).map(item=>({code:String(item.id),name:item.name||item.id}));
   container.classList.add("autoposting-view");
-  container.innerHTML=`<h2>Материалы</h2><p>Готовые материалы и ближайшие даты.</p>
+  container.innerHTML=`<h2>Контент-завод</h2><p>Готовые материалы и ближайшие даты.</p>
     <p id="autoposting-status" role="status" aria-live="polite"></p>
     <section class="card autoposting-calendar-section" aria-label="Ваши материалы">
     <div class="autoposting-daily-tabs" aria-label="Период материалов">${[["today","Сегодня"],["upcoming","Ближайшие"],["month","Месяц"]].map(([id,label])=>`<button type="button" class="plain-button" data-daily-view="${id}" aria-pressed="${id==='today'}">${label}</button>`).join("")}</div>

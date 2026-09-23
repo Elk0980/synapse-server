@@ -84,3 +84,60 @@ dialog button:not(:disabled):active {
   .view button,
   dialog button { transition: none; }
 }
+
+/* One readable visual language for the cabinet, including dynamically loaded views. */
+:root {
+  --cabinet-radius-lg: 14px;
+  --cabinet-shadow: none;
+  --cabinet-panel-padding: 20px;
+}
+body { font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif; font-size:16px; line-height:1.55; }
+button, input, select, textarea { font-family:inherit; }
+.main { padding:clamp(16px,2.5vw,32px); }
+.view-panel { font-size:16px; line-height:1.55; }
+.view-panel :is(h1,h2,h3,h4) { font-family:inherit; font-weight:600; letter-spacing:normal; line-height:1.3; }
+.view-panel h1 { font-size:28px; }
+.view-panel h2 { font-size:22px; }
+.view-panel h3 { font-size:18px; }
+.view-panel h4 { font-size:16px; }
+.view-panel :is(small,.muted,.mentor-note,.autoposting-note,.mentor-day-meta,.mentor-day-status span,.mentor-material-task span) { font-size:14px; line-height:1.5; color:var(--muted); }
+.view-panel :is(label,summary) { font-size:15px; line-height:1.5; }
+.view-panel :is(input,select,textarea) { font:inherit; font-size:16px; max-width:100%; }
+.view-panel :is(button,input:not([type=checkbox]):not([type=radio]),select) { min-height:44px; }
+.view-panel button { font-size:15px; font-weight:500; }
+.view-panel textarea { line-height:1.55; }
+.view-panel :is(input,select,textarea):focus { border-color:var(--accent); }
+.view-panel .card { border:0; border-radius:14px; padding:20px; box-shadow:none; background:var(--surface); }
+.view-panel .card .card { border-radius:0; padding:16px 0; background:transparent; border-top:1px solid var(--line); }
+.view-panel details > summary { min-height:44px; padding:10px 0; cursor:pointer; }
+.view-panel details[open] > summary { margin-bottom:12px; }
+.view-panel summary:hover { color:var(--accent); }
+.view-panel :is(.mentor-team,.mentor-methods) { border:0; padding:0; }
+.view-panel :is(.mentor-day,.autoposting-daily-card) { border:0; border-radius:12px; box-shadow:none; background:var(--surface-soft); padding:16px; }
+.view-panel :is(.mentor-day-feedback,.mentor-suggest,.mentor-day-edit) { border:0; background:transparent; box-shadow:none; padding:12px 0; }
+.view-panel .mentor-day-preview { border:0; background:var(--bg); }
+.view-panel .mentor-day-details { border-top:1px solid var(--line); }
+.view-panel .mentor-day-preview-media { font-size:14px; }
+.view-panel .mentor-day-preview-head { font-size:14px; }
+.view-panel .mentor-day-preview-caption { font-size:14px; }
+.view-panel .mentor-day-preview-caption :is(strong,span,small) { font-size:14px; }
+.view-panel .mentor-rules [data-rules-level="violation"] strong { color:var(--red); }
+.view-panel .mentor-rules [data-rules-level="warning"] strong { color:#f4d38a; }
+.sidebar { padding:16px 12px; }
+.sidebar :is(.project-label,.sidebar-brand span,.account-summary span) { font-size:14px; }
+.nav-link { font-size:15px; font-weight:400; }
+.nav-category { font-size:14px; color:var(--muted); }
+.nav-link[aria-current="page"] { color:var(--text); background:#2b5278; }
+.project-trigger { border:0; background:var(--surface-soft); }
+.content-header { margin-bottom:20px; }
+.content-header p { max-width:72ch; font-size:15px; line-height:1.6; }
+@media(max-width:600px) {
+  .main { padding:16px 12px 32px; }
+  .view-panel h1 { font-size:26px; }
+  .view-panel h2 { font-size:20px; }
+  .view-panel .card { padding:16px; border-radius:12px; }
+  .view-panel .card .card { padding:12px 0; }
+  .view-panel :is(.mentor-day,.autoposting-daily-card) { padding:14px; }
+  .view-panel :is(.mentor-day-cards,.mentor-form,.autoposting-editor-grid) { grid-template-columns:minmax(0,1fr); }
+  .view-panel .mentor-day-overview { grid-template-columns:100px minmax(0,1fr); }
+}

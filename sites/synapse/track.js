@@ -128,6 +128,7 @@
       if (lower.indexOf('tel:') === 0) return 'phone';
       if (lower.indexOf('tg://') === 0) return 'telegram';
       var host = hostOf(href);
+      if (/(^|\.)yclients\.(com|ru)$/.test(host)) return 'booking';
       if (host === 't.me' || /(^|\.)telegram\.org$/.test(host)) return 'telegram';
       if (host === 'wa.me' || host.indexOf('whatsapp') !== -1) return 'whatsapp';
       if (/(^|\.)2gis\.ru$/.test(host)) return '2gis';

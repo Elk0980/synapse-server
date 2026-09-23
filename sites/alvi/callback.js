@@ -59,11 +59,29 @@
     form.setAttribute('aria-busy', 'true');
     status.textContent = 'Отправляем заявку…';
     const query = new URLSearchParams(location.search);
+    const fields = ['Source', 'Medium', 'Campaign', 'Content', 'Term'];
+    const hasCampaign = fields.some(field => query.get('utm_' + field.toLowerCase()));
+    let saved = {}, clientId;
+    if (typeof navigator === 'undefined' || navigator.doNotTrack !== '1') {
+      try {
+        const candidate = JSON.parse(localStorage.getItem('synapse_ft') || '{}');
+        const age = Date.now() - Number(candidate?.ts);
+        if (age >= 0 && age < 30 * 86400000) saved = candidate;
+        const existingId = localStorage.getItem('synapse_cid');
+        if (typeof existingId === 'string' && /^[\w-]{1,128}$/.test(existingId)) clientId = existingId;
+      } catch (_) {}
+    }
+    const attribution = {};
+    for (const field of fields) {
+      const value = hasCampaign ? query.get('utm_' + field.toLowerCase()) : saved['utm' + field];
+      if (typeof value === 'string' && value) attribution['utm' + field] = value.slice(0, 512);
+    }
     const payload = {
       name: name.value.trim(), contact: phone.value.trim(), companyCode: 'alvi',
-      channel: 'Обратный звонок', source: query.get('utm_source') || 'Сайт ALVI',
-      tag: 'callback', page: location.pathname, landingPage: location.href,
-      referrer: document.referrer || undefined, comment: commentText || 'Просьба перезвонить клиенту'
+      channel: 'Обратный звонок', source: attribution.utmSource || (!hasCampaign && saved.source) || 'Сайт ALVI',
+      tag: 'callback', page: location.pathname, landingPage: location.pathname,
+      referrer: document.referrer || undefined, comment: commentText || 'Просьба перезвонить клиенту',
+      ...attribution, ...(clientId ? {clientId} : {})
     };
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);

@@ -591,7 +591,7 @@
         <p class="mentor-note">${esc(item.upscaleNote)}</p>
         <p class="mentor-note">Имя файла по стандарту: ${esc(item.fileName)}</p>
       </details></li>`).join('');
-    return `<section class="card mentor-materials"><h2>Что подготовить</h2>
+    return `<details class="card mentor-materials"${request.warnings.length ? ' open' : ''}><summary><h2 style="display:inline;font-size:inherit">Что подготовить</h2> · задания на материалы</summary>
       <p>Посмотрите темы и даты ниже. Подготовьте подходящее фото или видео сами либо передайте список человеку, который поможет.</p>
       <p class="mentor-note">Это список задач, файлы автоматически не создаются. Готовый файл можно добавить в «Черновиках и файлах», когда для материала создан черновик.</p>
       ${request.warnings.length ? `<ul class="mentor-list crm-warning" role="note">${request.warnings.map((line) =>
@@ -600,7 +600,7 @@
       ${request.skipped.length ? `<details class="mentor-note"><summary>Не включено в список: ${request.skipped.length}</summary>
         <ul class="mentor-list">${request.skipped.map((line) => `<li>${esc(line)}</li>`).join('')}</ul></details>` : ''}
       <details class="mentor-team"><summary>Для команды · как подготовить материалы</summary>
-        <p class="mentor-note">${esc(request.notice)}</p>${request.batchNote ? `<p class="mentor-note">${esc(request.batchNote)}</p>` : ''}</details></section>`;
+        <p class="mentor-note">${esc(request.notice)}</p>${request.batchNote ? `<p class="mentor-note">${esc(request.batchNote)}</p>` : ''}</details></details>`;
   }
 
   function markup(data, ctx) {
