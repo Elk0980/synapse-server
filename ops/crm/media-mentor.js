@@ -14,6 +14,7 @@ const COMFORT=Object.freeze({unknown:'Не выяснено',off_camera:'В ка
 const ASSET_KINDS=Object.freeze({photo:'Фото',video:'Видео',audio:'Аудио',text:'Текст',document:'Документ'});
 const BRIEF_FIELDS=['goal','product','audience','pains','confirmedFacts','assets','shootingComfort','platforms'];
 const DAY_FIELDS=['date','platform','format','role','topic','hook','assetId','mentorNote'];
+const MAX_FEEDBACK_PER_PLAN=200;
 const EMPTY_BRIEF=Object.freeze({goal:'',product:'',audience:'',pains:[],confirmedFacts:[],assets:[],
   shootingComfort:Object.freeze({level:'unknown',notes:''}),platforms:[]});
 const MIN_DAYS=7,MAX_DAYS=14,MAX_ITEMS_PER_DAY=3;
@@ -35,8 +36,11 @@ function confirmedFacts(value) {
   if(!Array.isArray(value)||value.length>50)fail(400,'Слишком много подтверждённых фактов');
   const seen=new Set();
   return value.map(row=>{
-    object(row,['id','statement','source']);
+    object(row,['id','statement','source','approvedForContent']);
+    if(row.approvedForContent!==undefined&&typeof row.approvedForContent!=='boolean')
+      fail(400,'Разрешение использовать факт в контенте должно быть да или нет');
     const out={id:text(row.id,100,true),statement:text(row.statement,1000,true),source:text(row.source,500,true)};
+    if(row.approvedForContent===true)out.approvedForContent=true;
     if(seen.has(out.id))fail(400,'Идентификаторы фактов должны отличаться');
     seen.add(out.id);return out;
   });
@@ -124,7 +128,7 @@ function person(actor,required=false) {
   object(value,['userId','userName']);
   if(value.userId!==undefined&&value.userId!==null&&(!Number.isSafeInteger(value.userId)||value.userId<1))fail(400,'Некорректный автор изменения');
   const userName=text(value.userName??'',200);
-  if(required&&!userName)fail(400,'Укажите, кто согласует план');
+  if(required&&!userName)fail(400,'Укажите автора действия');
   return {userId:value.userId??null,userName};
 }
 
@@ -164,7 +168,18 @@ function createMediaMentor(db,{now=Date.now}={}) {
     CREATE TRIGGER IF NOT EXISTS media_mentor_plan_approvals_immutable_update BEFORE UPDATE ON media_mentor_plan_approvals
     BEGIN SELECT RAISE(ABORT,'Immutable media mentor approval'); END;
     CREATE TRIGGER IF NOT EXISTS media_mentor_plan_approvals_immutable_delete BEFORE DELETE ON media_mentor_plan_approvals
-    BEGIN SELECT RAISE(ABORT,'Immutable media mentor approval'); END;`);
+    BEGIN SELECT RAISE(ABORT,'Immutable media mentor approval'); END;
+    CREATE TABLE IF NOT EXISTS media_mentor_plan_feedback (
+    id INTEGER PRIMARY KEY,company_id INTEGER NOT NULL REFERENCES companies(id),
+    plan_revision INTEGER NOT NULL,day_index INTEGER NOT NULL CHECK(day_index>=0),
+    message TEXT NOT NULL,created_at TEXT NOT NULL,actor_id INTEGER,actor_name TEXT NOT NULL,
+    FOREIGN KEY(company_id,plan_revision) REFERENCES media_mentor_plan_versions(company_id,revision));
+    CREATE INDEX IF NOT EXISTS media_mentor_plan_feedback_idx
+    ON media_mentor_plan_feedback(company_id,plan_revision,day_index,id);
+    CREATE TRIGGER IF NOT EXISTS media_mentor_plan_feedback_immutable_update BEFORE UPDATE ON media_mentor_plan_feedback
+    BEGIN SELECT RAISE(ABORT,'Immutable media mentor feedback'); END;
+    CREATE TRIGGER IF NOT EXISTS media_mentor_plan_feedback_immutable_delete BEFORE DELETE ON media_mentor_plan_feedback
+    BEGIN SELECT RAISE(ABORT,'Immutable media mentor feedback'); END;`);
   const iso=()=>new Date(now()).toISOString();
   function transaction(work){db.exec('BEGIN IMMEDIATE');try{const result=work();db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');throw error;}}
 
@@ -209,12 +224,16 @@ function createMediaMentor(db,{now=Date.now}={}) {
   const approvalHistory=owner=>rows(db.prepare(`SELECT plan_revision planRevision,brief_revision briefRevision,decision,comment,
     decided_at decidedAt,actor_id actorId,actor_name actorName FROM media_mentor_plan_approvals
     WHERE company_id=? ORDER BY id DESC LIMIT 30`).all(owner.id));
+  const feedbackOf=(owner,planRevision)=>rows(db.prepare(`SELECT id,plan_revision planRevision,day_index dayIndex,
+    message,created_at createdAt,actor_id actorId,actor_name actorName FROM media_mentor_plan_feedback
+    WHERE company_id=? AND plan_revision=? ORDER BY id ASC`).all(owner.id,planRevision));
 
   function snapshot(owner) {
     const brief=briefOf(owner),plan=planOf(owner);
     return {companyCode:owner.code.toLowerCase(),notice:NOTICE,
       brief:{revision:brief.revision,updatedAt:brief.updatedAt,fields:brief.fields,history:briefHistory(owner)},
       plan:plan?{...plan,history:planHistory(owner)}:null,
+      feedback:plan?feedbackOf(owner,plan.revision):[],
       approval:approvalOf(owner,brief,plan),approvals:approvalHistory(owner),
       vocabulary:{platforms:labels(CAPTION_PLATFORMS),formats:labels(FORMATS),roles:labels(ROLES),
         shootingComfort:labels(COMFORT),assetKinds:labels(ASSET_KINDS),minDays:MIN_DAYS,maxDays:MAX_DAYS},
@@ -293,6 +312,27 @@ function createMediaMentor(db,{now=Date.now}={}) {
     });
   }
 
+  // Предложение привязано к неизменяемой версии и индексу строки в ней. Оно не меняет
+  // план, согласование, очередь публикаций или уже перенесённые черновики.
+  function addFeedback(code,body,actor={}) {
+    object(body,['planRevision','dayIndex','message']);revision(body.planRevision);
+    if(!Number.isSafeInteger(body.dayIndex)||body.dayIndex<0)fail(400,'Выберите строку плана');
+    const message=text(body.message,1000,true),who=person(actor,true);
+    return transaction(()=>{
+      const owner=company(db,code),plan=planOf(owner);
+      if(!plan)fail(404,'План ещё не составлен','NOT_FOUND');
+      if(body.planRevision!==plan.revision)fail(409,'План уже изменился. Обновите страницу.','STALE_PLAN');
+      if(body.dayIndex>=plan.days.length)fail(400,'Строка плана не найдена');
+      const count=db.prepare(`SELECT COUNT(*) n FROM media_mentor_plan_feedback
+        WHERE company_id=? AND plan_revision=?`).get(owner.id,plan.revision).n;
+      if(count>=MAX_FEEDBACK_PER_PLAN)fail(409,'К этой версии плана уже добавлено слишком много предложений','FEEDBACK_LIMIT');
+      db.prepare(`INSERT INTO media_mentor_plan_feedback
+        (company_id,plan_revision,day_index,message,created_at,actor_id,actor_name)
+        VALUES(?,?,?,?,?,?,?)`).run(owner.id,plan.revision,body.dayIndex,message,iso(),who.userId,who.userName);
+      return snapshot(owner);
+    });
+  }
+
   function briefVersion(code,value) {
     revision(value);
     return transaction(()=>{
@@ -314,10 +354,11 @@ function createMediaMentor(db,{now=Date.now}={}) {
       const stored=parse(row.plan,{days:[],startDate:null,endDate:null,windowDays:0});
       return {companyCode:owner.code.toLowerCase(),revision:row.revision,briefRevision:row.briefRevision,createdAt:row.createdAt,
         actorId:row.actorId,actorName:row.actorName,reason:row.reason,days:stored.days,startDate:stored.startDate,
-        endDate:stored.endDate,windowDays:stored.windowDays,decision:decisionOf(owner,row.revision)};
+        endDate:stored.endDate,windowDays:stored.windowDays,decision:decisionOf(owner,row.revision),
+        feedback:feedbackOf(owner,row.revision)};
     });
   }
-  return {get,saveBrief,savePlan,decide,briefVersion,planVersion};
+  return {get,saveBrief,savePlan,decide,addFeedback,briefVersion,planVersion};
 }
 
 module.exports={createMediaMentor,COMFORT,ASSET_KINDS,BRIEF_FIELDS,DAY_FIELDS,EMPTY_BRIEF,MIN_DAYS,MAX_DAYS,MAX_ITEMS_PER_DAY,NOTICE};

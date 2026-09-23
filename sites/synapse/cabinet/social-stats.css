@@ -1,5 +1,41 @@
 .social-toolbar { display:flex; flex-wrap:wrap; gap:12px; align-items:end; }
 .social-toolbar label { display:grid; gap:4px; }
+.social-baseline-head h2 { margin:0 0 4px; }
+.social-baseline-head p { margin:0 0 12px; }
+.social-baseline-meta { display:grid; gap:4px; margin-bottom:12px; overflow-wrap:anywhere; }
+.social-baseline-assessment { min-width:0; margin:16px 0; padding:16px;
+  border:1px solid var(--line,#333); border-radius:12px; overflow-wrap:anywhere; }
+.social-baseline-assessment h3, .social-baseline-assessment h4 { margin:0 0 8px; }
+.social-baseline-findings { display:grid; grid-template-columns:minmax(0,1fr); gap:12px;
+  list-style:none; margin:12px 0; padding:0; }
+.social-baseline-findings > li { min-width:0; border-bottom:1px solid var(--line,#333); padding-bottom:10px; }
+.social-baseline-findings p { margin:4px 0; line-height:1.5; }
+.social-baseline-next { margin-top:12px; }
+.social-baseline-next ol, .social-baseline-assessment-limits ul { margin:6px 0; padding-left:22px; }
+.social-baseline-next li, .social-baseline-assessment-limits li { margin:6px 0; line-height:1.5; }
+.social-baseline-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:10px; margin:12px 0; }
+.social-baseline-platform { min-width:0; padding:12px; border:1px solid var(--line,#333); border-radius:12px; }
+.social-baseline-platform > strong, .social-baseline-platform > small { display:block; }
+.social-baseline-platform > strong { font-size:1rem; }
+.social-baseline-platform small { color:var(--muted,#999); overflow-wrap:anywhere; }
+.social-baseline-coverage { display:block; margin:6px 0; color:var(--muted,#999); font-size:0.85rem; overflow-wrap:anywhere; }
+.social-baseline-platform .social-metrics { grid-template-columns:1fr 1fr; }
+.social-baseline-create summary, .social-baseline details summary { cursor:pointer; min-height:44px; padding:10px 0; }
+.social-baseline details { min-width:0; overflow-wrap:anywhere; }
+.social-baseline details > summary { overflow-wrap:anywhere; }
+.social-baseline-evidence { display:grid; gap:6px; margin:6px 0 10px; padding-left:20px; font-size:0.85rem; overflow-wrap:anywhere; }
+.social-baseline-evidence li { min-width:0; }
+.social-baseline-evidence small { display:block; color:var(--muted,#999); overflow-wrap:anywhere; }
+.social-baseline-history { border-top:1px solid var(--line,#333); padding-top:5px; }
+.social-baseline-create .crm-form { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:10px; }
+.social-baseline-create .crm-form label { display:grid; gap:4px; min-width:0; }
+.social-baseline-create .crm-form .wide { grid-column:1/-1; }
+.social-baseline-create .crm-form input[type="date"], .social-baseline-create .crm-form input[type="text"] { box-sizing:border-box; width:100%; min-height:44px; }
+.social-baseline-create .crm-form label:has(input[type="checkbox"]) { display:flex; align-items:center; gap:8px; }
+.social-baseline-posts { display:grid; gap:8px; padding-left:20px; overflow-wrap:anywhere; }
+.social-baseline-posts > li { min-width:0; padding:8px; border:1px solid var(--line,#333); border-radius:8px; }
+.social-baseline-posts a { overflow-wrap:anywhere; }
+.social-baseline-posts .social-note { margin:5px 0; }
 .social-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; margin:12px 0; }
 .social-platform h2 { margin:0 0 6px; font-size:1.05rem; }
 .social-platform[data-status="ok"], .social-platform[data-status="partial"] { border-color:var(--accent,#7fd); }
@@ -39,8 +75,14 @@
   .social-posts .social-ids ul { margin:0; }
 }
 @media (max-width:430px) {
+  .social-baseline-assessment { padding:12px; }
   .social-toolbar { flex-direction:column; align-items:stretch; }
   .social-toolbar input, .social-toolbar button { width:100%; min-height:44px; }
   .social-grid, .social-metrics { grid-template-columns:1fr; }
   .social-platform button { width:100%; min-height:44px; }
+  .social-baseline-grid, .social-baseline-platform .social-metrics { grid-template-columns:1fr; }
+  .social-baseline-platform { padding:10px; }
+  .social-baseline-evidence, .social-baseline-posts { padding-left:18px; }
+  .social-baseline-posts > li { padding:8px; }
+  .social-baseline-create button { width:100%; min-height:44px; }
 }

@@ -93,6 +93,10 @@
   .mentor-journey-arrow-two::before { content:'→'; }
 }
 .mentor-property-example { margin:0 0 16px; container:propertyJourney / inline-size; }
+.mentor-example-nav { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 12px; }
+.mentor-example-nav button { min-height:44px; padding:8px 12px; border:1px solid var(--line,#333);
+  border-radius:8px; background:rgba(159,212,255,.08); color:inherit; font:inherit; cursor:pointer; }
+.mentor-example-nav button:hover, .mentor-example-nav button:focus-visible { border-color:var(--accent,#9fd4ff); }
 .mentor-property-example > summary { cursor:pointer; font-size:1.12rem; font-weight:800; }
 .mentor-property-example > .mentor-note { margin:10px 0 14px; }
 .mentor-property-phases { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-bottom:14px; }
@@ -167,7 +171,49 @@
 .mentor-row { display:grid; gap:8px; grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
   align-items:end; padding:8px; border:1px solid var(--line,#333); border-radius:8px; }
 .mentor-row button { min-height:44px; }
-.mentor-day { border-style:dashed; }
+.mentor-plan-editor { padding:12px; }
+.mentor-day-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,540px),1fr)); gap:14px; min-width:0; }
+.mentor-day { display:grid; grid-template-columns:minmax(150px,.42fr) minmax(0,1fr); gap:14px;
+  align-items:start; padding:12px; border-style:solid; }
+.mentor-day-preview { display:flex; flex-direction:column; width:100%; max-width:245px; min-width:0;
+  overflow:hidden; border:1px solid var(--line,#333); border-radius:17px;
+  background:linear-gradient(160deg,#26384b,#101923 65%); box-shadow:0 8px 24px rgba(0,0,0,.16); }
+.mentor-day-preview-head { display:flex; justify-content:space-between; gap:8px; padding:10px;
+  font-size:.75rem; line-height:1.25; }
+.mentor-day-preview-head span { color:var(--muted,#b9afa7); text-align:right; }
+.mentor-day-preview-media { position:relative; display:flex; flex-direction:column; align-items:center;
+  justify-content:center; gap:8px; width:100%; aspect-ratio:9 / 14; padding:12px;
+  text-align:center; font-size:.78rem; color:#e3eaf2; background:linear-gradient(150deg,#385a6f,#18212c 65%); }
+.mentor-day-preview[data-preview-format="post"] .mentor-day-preview-media { aspect-ratio:4 / 3; }
+.mentor-day-preview[data-preview-format="carousel"] .mentor-day-preview-media { aspect-ratio:1 / 1; }
+.mentor-day-preview-media img, .mentor-day-preview-media video { position:absolute; inset:0;
+  display:block; width:100%; height:100%; object-fit:cover; }
+.mentor-day-play { display:grid; place-items:center; width:48px; height:48px;
+  border:1px solid rgba(255,255,255,.7); border-radius:50%; font-size:1.2rem; }
+.mentor-day-preview-caption { display:grid; gap:4px; min-width:0; padding:10px; }
+.mentor-day-preview-caption small { color:#a9d7f1; }
+.mentor-day-preview-caption strong, .mentor-day-preview-caption span { overflow-wrap:anywhere; }
+.mentor-day-preview-caption strong { font-size:.9rem; line-height:1.25; }
+.mentor-day-preview-caption span { color:#c0cfdb; font-size:.76rem; }
+.mentor-day-edit { display:grid; gap:9px; min-width:0; }
+.mentor-day-edit label { min-width:0; }
+.mentor-day-edit input, .mentor-day-edit select, .mentor-day-edit textarea { min-width:0; width:100%; }
+.mentor-day-status { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; }
+.mentor-day-status span { font-size:.78rem; color:var(--muted,#b9afa7); }
+.mentor-day-selects { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; }
+.mentor-day-more { padding:8px 10px; border:1px solid var(--line,#333); border-radius:8px; }
+.mentor-day-more summary { cursor:pointer; }
+.mentor-day-more label { display:grid; gap:4px; margin-top:10px; }
+.mentor-day-feedback { display:grid; gap:7px; padding:9px 10px;
+  border:1px solid var(--line,#333); border-radius:8px; background:rgba(159,212,255,.05); }
+.mentor-day-feedback > strong { font-size:.88rem; }
+.mentor-day-feedback p, .mentor-day-feedback ul { margin:0; }
+.mentor-day-feedback li { margin-bottom:5px; }
+.mentor-day-feedback li small { display:block; color:var(--muted,#b9afa7); }
+@media (max-width:750px) {
+  .mentor-day { grid-template-columns:minmax(0,1fr); }
+  .mentor-day-preview { max-width:270px; margin:0 auto; }
+}
 .mentor-platforms { border:1px solid var(--line,#333); border-radius:8px; padding:8px 10px;
   display:flex; flex-wrap:wrap; gap:10px; }
 .mentor-checkbox { display:flex; gap:6px; align-items:center; min-height:44px; }

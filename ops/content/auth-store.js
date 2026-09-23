@@ -15,6 +15,7 @@ const PERMISSIONS = Object.freeze([
   'site_editor.view', 'site_editor.edit', 'price.view', 'price.edit', 'chat.view', 'chat.reply',
   'settings.view', 'settings.edit', 'account.view',
   'company-information.view', 'company-information.edit', 'autoposting.view', 'autoposting.edit',
+  'actor-onboarding.self', 'actor-onboarding.manage',
 ]);
 const DEPENDENCIES = Object.freeze({
   'crm.edit': ['crm.view'],
@@ -27,6 +28,7 @@ const DEPENDENCIES = Object.freeze({
   'company-information.edit': ['company-information.view'],
   'autoposting.view': ['company-information.view'],
   'autoposting.edit': ['autoposting.view', 'company-information.view'],
+  'actor-onboarding.manage': ['actor-onboarding.self'],
 });
 const PRICE_CLIENT_PRESET = Object.freeze({ id: 'client-price', name: 'Клиент — только свой прайс',
   singleCompany: true, permissions: ['sites.view', 'price.view', 'price.edit'] });

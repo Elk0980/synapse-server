@@ -1,0 +1,85 @@
+.actor-onboarding-header p { max-width: 76ch; }
+.actor-onboarding-layout { display: grid; gap: 16px; min-width: 0; }
+.actor-onboarding-layout :is(input,select,textarea) { border: 1px solid var(--line, #3b4655);
+  border-radius: 10px; padding: 10px 12px; background: var(--bg, #0b0908);
+  color: var(--text, #f4f0eb); color-scheme: dark; }
+.actor-check-in { min-width: 0; overflow-wrap: anywhere; }
+.actor-check-in h2 { margin-top: 0; }
+.actor-check-in form { display: grid; gap: 20px; }
+.actor-check-in-question { display: grid; gap: 8px; min-width: 0; }
+.actor-check-in-question label { font-weight: 700; }
+.actor-check-in-why { margin: 0; color: var(--muted, #aab4c4); line-height: 1.45; }
+.actor-check-in textarea, .actor-check-in select { box-sizing: border-box; width: 100%;
+  min-width: 0; min-height: 48px; font: inherit; }
+.actor-check-in textarea { resize: vertical; }
+.actor-check-in button { min-height: 44px; white-space: normal; }
+[data-check-in-status] { min-height: 1.4em; }
+[data-check-in-status][data-error="true"] { color: var(--red, #ff9c9c); }
+.actor-onboarding-card, .actor-onboarding-summary,
+.actor-onboarding-social, .actor-onboarding-social-review { min-width: 0; }
+.actor-onboarding-top { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 12px; }
+.actor-onboarding-top div { display: grid; gap: 3px; }
+.actor-onboarding-top small, .actor-onboarding-private { color: var(--muted, #aab4c4); }
+.actor-onboarding-top [data-actor-progress] { font-weight: 700; white-space: nowrap; }
+.actor-onboarding-track { height: 8px; margin: 16px 0; overflow: hidden; border-radius: 99px; background: var(--line, #3b4655); }
+.actor-onboarding-track span { display: block; height: 100%; border-radius: inherit; background: var(--accent, #72c9f6); transition: width .2s ease; }
+.actor-onboarding-private { margin: 10px 0 18px; font-size: .9rem; line-height: 1.45; }
+.actor-onboarding-question { display: grid; gap: 10px; min-width: 0; }
+.actor-onboarding-question[hidden] { display: none; }
+.actor-onboarding-kicker { color: var(--accent, #72c9f6); font-size: .86rem; font-weight: 700; }
+.actor-onboarding-question label { font-size: 1.18rem; font-weight: 700; line-height: 1.3; }
+.actor-onboarding-why { margin: 0; max-width: 70ch; color: var(--muted, #aab4c4); line-height: 1.45; }
+.actor-onboarding-question input, .actor-onboarding-question textarea,
+.actor-onboarding-question select { box-sizing: border-box; width: 100%; min-width: 0; min-height: 48px; font: inherit; }
+.actor-onboarding-question textarea { resize: vertical; }
+.actor-onboarding-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.actor-onboarding-actions button { min-height: 44px; }
+.actor-onboarding-actions [data-actor-save] { margin-left: auto; }
+.actor-onboarding-actions button[hidden] { display: none; }
+[data-actor-status] { min-height: 1.4em; margin-bottom: 0; }
+[data-actor-status][data-error="true"] { color: var(--red, #ff9c9c); }
+.actor-onboarding-reload { margin-top: 12px; padding: 4px 0; border: 0; background: none;
+  color: var(--accent, #72c9f6); text-decoration: underline; cursor: pointer; font: inherit; }
+.actor-onboarding-summary-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: start; }
+.actor-onboarding-summary-head h2, .actor-onboarding-summary-head p { margin: 0 0 6px; }
+.actor-onboarding-people { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+  gap: 10px; padding: 0; margin: 12px 0 0; list-style: none; }
+.actor-onboarding-people li { display: grid; gap: 4px; min-width: 0; padding: 12px;
+  border: 1px solid var(--line, #3b4655); border-radius: 12px; overflow-wrap: anywhere; }
+.actor-onboarding-badge { width: fit-content; border: 1px solid var(--line, #3b4655);
+  border-radius: 99px; padding: 2px 9px; font-size: .84rem; }
+.actor-onboarding-badge[data-ready="true"] { border-color: var(--accent, #72c9f6); }
+.actor-onboarding-people small { color: var(--muted, #aab4c4); }
+.actor-onboarding-social h2, .actor-onboarding-social-review h2 { margin: 0; }
+.actor-social-form { display: grid; grid-template-columns: minmax(150px, .6fr) minmax(220px, 1.4fr) auto;
+  align-items: end; gap: 10px; min-width: 0; }
+.actor-social-form label { display: grid; gap: 6px; min-width: 0; }
+.actor-social-form input, .actor-social-form select { box-sizing: border-box; width: 100%; min-width: 0;
+  min-height: 44px; font: inherit; }
+.actor-social-form button, .actor-social-item button { min-height: 44px; }
+.actor-social-list { display: grid; gap: 10px; margin: 12px 0 0; padding: 0; list-style: none; }
+.actor-social-item { display: flex; align-items: start; justify-content: space-between; flex-wrap: wrap;
+  gap: 10px; min-width: 0; padding: 12px; border: 1px solid var(--line, #3b4655); border-radius: 12px; }
+.actor-social-item-copy { display: grid; gap: 4px; min-width: min(100%, 250px); overflow-wrap: anywhere; }
+.actor-social-item-copy a { overflow-wrap: anywhere; }
+.actor-social-item small { color: var(--muted, #aab4c4); }
+.actor-social-review-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+[data-actor-social-status], [data-actor-social-review-status] { min-height: 1.4em; }
+[data-actor-social-status][data-error="true"],
+[data-actor-social-review-status][data-error="true"] { color: var(--red, #ff9c9c); }
+@media (max-width: 600px) {
+  .actor-check-in { padding: 16px; }
+  .actor-check-in button { width: 100%; }
+  .actor-onboarding-layout { gap: 10px; }
+  .actor-onboarding-card, .actor-onboarding-summary,
+  .actor-onboarding-social, .actor-onboarding-social-review { padding: 16px; }
+  .actor-onboarding-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .actor-onboarding-actions button { width: 100%; margin: 0; }
+  .actor-onboarding-actions [data-actor-save] { grid-column: 1 / -1; }
+  .actor-onboarding-summary-head button { width: 100%; min-height: 44px; }
+  .actor-social-form { grid-template-columns: minmax(0, 1fr); }
+  .actor-social-form button, .actor-social-item button { width: 100%; }
+  .actor-social-item-copy { min-width: 0; width: 100%; }
+  .actor-social-review-actions { width: 100%; }
+  .actor-social-review-actions button { flex: 1 1 140px; }
+}

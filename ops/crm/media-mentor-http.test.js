@@ -239,6 +239,31 @@ test('перенос плана идёт по праву правки автоп
   assert.deepEqual(f.seen.at(-1), {code: 'alvi', permission: 'autoposting.view'});
 });
 
+test('замечание к строке принимает редактор своей компании, автор приходит из личности', async (t) => {
+  const f=fixture(t);
+  const viewer={...EDITOR,permissions:['autoposting.view']};
+  const editor={...EDITOR,permissions:['autoposting.view','autoposting.edit']};
+  const brief=await seedBrief(f);
+  await f.call('PUT','/media-mentor/plan',OWNER,
+    {planRevision:0,briefRevision:brief.brief.revision,days:days()});
+  const message={planRevision:1,dayIndex:0,message:'Может, это тема для продающего рилса?'};
+  await assert.rejects(f.call('POST','/media-mentor/plan/feedback',viewer,message),
+    error=>error.status===403);
+  assert.deepEqual(f.seen.at(-1),{code:'alvi',permission:'autoposting.edit'});
+  await assert.rejects(f.call('POST','/media-mentor/plan/feedback',editor,
+    {...message,actorName:'Самозванец'}),error=>error.status===400);
+  await assert.rejects(f.call('POST','/media-mentor/plan/feedback',editor,message,'avokado'),
+    error=>error.status===403);
+  const saved=await f.call('POST','/media-mentor/plan/feedback',editor,message);
+  assert.equal(saved.status,201);
+  assert.equal(saved.result.feedback.length,1);
+  assert.deepEqual([saved.result.feedback[0].actorId,saved.result.feedback[0].actorName],
+    [7,'Редактор клиента']);
+  assert.equal((await f.call('GET','/media-mentor',viewer)).result.feedback[0].message,message.message);
+  assert.equal((await f.call('GET','/media-mentor/plan/versions/1',viewer)).result.feedback.length,1);
+  assert.deepEqual((await f.call('GET','/media-mentor',OWNER,undefined,'avokado')).result.feedback,[]);
+});
+
 test('неизвестные адреса и методы закрыты', async (t) => {
   const f = fixture(t);
   await assert.rejects(f.call('POST', '/media-mentor', OWNER, {}), (error) => error.status === 405);
@@ -246,6 +271,7 @@ test('неизвестные адреса и методы закрыты', async
   await assert.rejects(f.call('DELETE', '/media-mentor/plan', OWNER), (error) => error.status === 405);
   await assert.rejects(f.call('PUT', '/media-mentor/plan/decision', OWNER, {}), (error) => error.status === 405);
   await assert.rejects(f.call('GET', '/media-mentor/plan/transfer', OWNER), (error) => error.status === 405);
+  await assert.rejects(f.call('GET', '/media-mentor/plan/feedback', OWNER), (error) => error.status === 405);
   await assert.rejects(f.call('DELETE', '/media-mentor/plan/transfer/42', OWNER), (error) => error.status === 405);
   await assert.rejects(f.call('GET', '/media-mentor/unknown', OWNER), (error) => error.status === 404);
 });

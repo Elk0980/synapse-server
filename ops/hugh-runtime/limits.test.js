@@ -30,6 +30,11 @@ test('audience необязателен, принимает только пер�
   const priv = validateReplyPayload({...base(), audience: 'owner-private'});
   assert.equal(priv.audience, 'owner-private');
   assert.equal(scopeKeyOf(priv.companyCode, priv.audience), 'palitra#owner-private', 'личная переписка живёт в своей области');
+
+  const actor = validateReplyPayload({...base(), audience: 'actor-private'});
+  assert.equal(actor.audience, 'actor-private');
+  assert.equal(scopeKeyOf(actor.companyCode, actor.audience), 'palitra#actor-private');
+  assert.notEqual(scopeKeyOf(actor.companyCode, actor.audience), scopeKeyOf(priv.companyCode, priv.audience));
   assert.notEqual(canonicalPayload(priv), canonicalPayload(shared), 'аудитория входит в хэш');
 
   for (const bad of ['owner', 'private', '', ' ', 'OWNER-PRIVATE', 'client-shared ; drop', null, 7, {}]) {

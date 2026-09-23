@@ -125,6 +125,23 @@ test('/reply повторяет сохранённый ответ и не зап
   });
 });
 
+test('личный чат участника имеет отдельный кэш от общего чата и личного чата владельца', async () => {
+  const runtime = stubRuntime();
+  await withServer(runtime, async ({base}) => {
+    const post = async (audience) => {
+      const response = await fetch(`${base}/reply`, {method: 'POST',
+        headers: {'x-api-key': KEY}, body: JSON.stringify(body({audience}))});
+      assert.equal(response.status, 200);
+      return response.json();
+    };
+    assert.equal((await post('client-shared')).reused, false);
+    assert.equal((await post('owner-private')).reused, false);
+    assert.equal((await post('actor-private')).reused, false);
+    assert.equal((await post('actor-private')).reused, true);
+    assert.equal(runtime.calls.reply.length, 3);
+  });
+});
+
 test('тот же jobId с другим содержимым — конфликт 409', async () => {
   await withServer(stubRuntime(), async ({base}) => {
     await fetch(`${base}/reply`, {method: 'POST', headers: {'x-api-key': KEY}, body: JSON.stringify(body())});

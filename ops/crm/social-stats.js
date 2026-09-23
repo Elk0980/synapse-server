@@ -136,6 +136,9 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, logger =
   // пересохранения подключения прежний missing_access не подавлял сбор. Миграция безопасна: старые строки получают '' (отпечатка не было),
   // данные журнала не переписываются; у аккаунта с подключением первый сбор после миграции просто пройдёт заново.
   if (!db.prepare("SELECT 1 FROM pragma_table_info('social_collect_runs') WHERE name='connection_fp'").get()) db.exec("ALTER TABLE social_collect_runs ADD COLUMN connection_fp TEXT NOT NULL DEFAULT ''");
+  // Источник самой исторической публикации нужен и тогда, когда её показатели не были доступны.
+  if (!db.prepare("SELECT 1 FROM pragma_table_info('social_posts') WHERE name='source_run_id'").get()) db.exec('ALTER TABLE social_posts ADD COLUMN source_run_id INTEGER');
+  if (!db.prepare("SELECT 1 FROM pragma_table_info('social_posts') WHERE name='source_collected_at'").get()) db.exec('ALTER TABLE social_posts ADD COLUMN source_collected_at TEXT');
   const stamp = (ms = now()) => new Date(ms).toISOString();
   // Ревизия подключения читается локально (без сети). Три исхода различаются явно: {ok:true,value:null} — подключения/метода нет,
   // {ok:true,value} — ревизия прочитана, {ok:false} — чтение сорвалось. Сбой чтения нельзя выдавать за «подключения нет»: два таких
@@ -202,10 +205,11 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, logger =
       object(post, ['platformPostId', 'url', 'contentId', 'publishedAt', 'kind', 'metrics', 'date']);
       const pid = text(post.platformPostId, 200, true), url = text(post.url, 2000);
       if (url && !/^https:\/\//.test(url)) fail();
-      db.prepare(`INSERT INTO social_posts(company_code,platform,platform_post_id,url,content_id,published_at,provider,kind,created_at) VALUES(?,?,?,?,?,?,?,?,?)
+      db.prepare(`INSERT INTO social_posts(company_code,platform,platform_post_id,url,content_id,published_at,provider,kind,created_at,source_run_id,source_collected_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(company_code,platform,platform_post_id) DO UPDATE SET url=CASE WHEN excluded.url<>'' THEN excluded.url ELSE social_posts.url END,
-        content_id=CASE WHEN excluded.content_id<>'' THEN excluded.content_id ELSE social_posts.content_id END,published_at=COALESCE(excluded.published_at,social_posts.published_at),provider=excluded.provider`)
-        .run(code.toLowerCase(), platform, pid, url, text(post.contentId, 200), post.publishedAt ? text(post.publishedAt, 40) : null, provider, oneOf(post.kind ?? 'organic', KINDS), collectedAt);
+        content_id=CASE WHEN excluded.content_id<>'' THEN excluded.content_id ELSE social_posts.content_id END,published_at=COALESCE(excluded.published_at,social_posts.published_at),
+        provider=excluded.provider,source_run_id=COALESCE(excluded.source_run_id,social_posts.source_run_id),source_collected_at=excluded.source_collected_at`)
+        .run(code.toLowerCase(), platform, pid, url, text(post.contentId, 200), post.publishedAt ? text(post.publishedAt, 40) : null, provider, oneOf(post.kind ?? 'organic', KINDS), collectedAt, runId, collectedAt);
       const id = db.prepare('SELECT id FROM social_posts WHERE company_code=? COLLATE NOCASE AND platform=? AND platform_post_id=?').get(code, platform, pid).id;
       for (const m of post.metrics || []) {
         const metric = oneOf(m.metric, Object.keys(METRICS));

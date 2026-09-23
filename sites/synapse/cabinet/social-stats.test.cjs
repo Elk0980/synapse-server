@@ -35,6 +35,7 @@ function fixture({role='owner',permissions=[],override}={}) {
     apiJson:async(url,options={})=>{const u=new URL(url,'https://cabinet.example.test/');const call={path:u.pathname,code:u.searchParams.get('companyCode'),method:options.method||'GET',body:options.body?JSON.parse(options.body):null};calls.push(call);
       if(override){const r=await override(call);if(r!==undefined)return r;}
       if(call.path==='/content/crm/social-stats')return overview(call.code);
+      if(call.path==='/content/crm/social-stats/baseline')return {companyCode:call.code,latest:null,versions:[]};
       if(call.path==='/content/crm/social-stats/accounts')return {companyCode:call.code,accounts:['instagram','tiktok','youtube','vk','telegram'].map(p=>({platform:p,label:p,accountRef:'',provider:'manual',enabled:false,kind:'organic',collectHour:6,revision:0,access:{status:'not_configured',missing:[]}}))};
       if(call.path==='/content/crm/social-stats/collect')return {status:'missing_access',missing:['x']};
       if(call.path==='/content/crm/social-stats/import')return {ok:true,rows:call.body.rows.length};
@@ -52,6 +53,144 @@ test('сводка: UNKNOWN показывается прочерком, не н
     assert.doesNotMatch(f.container.innerHTML,/token|Bearer/i);
     assert.ok(f.container.querySelector('#social-accounts-form'),'владелец видит настройки');
     assert.ok(f.calls.every(c=>c.code==='demo-travel'));
+  }finally{f.close();}
+});
+test('исходная точка показывает отсутствие данных честно и фиксируется только после подтверждения даты',async()=>{
+  const f=fixture({override:async call=>{
+    if(call.path==='/content/crm/social-stats/baseline'&&call.method==='GET')return {companyCode:call.code,
+      latest:{version:1,from:'2026-09-01',to:'2026-09-18',cutoverDate:'2026-09-19',createdAt:'2026-09-19T00:00:00Z',sourceNote:'первый пост',
+        snapshot:{status:'no_data',coverageNote:'Статистика не подключена',platforms:{},postsRecorded:0,posts:[]}},versions:[]};
+    if(call.path==='/content/crm/social-stats/baseline'&&call.method==='POST')return {companyCode:call.code};
+  }});
+  try{
+    await f.render();
+    const baseline=f.container.querySelector('#social-baseline-content');
+    assert.match(baseline.textContent,/Показателей за период нет/);
+    assert.match(baseline.textContent,/Статистика не подключена/);
+    assert.match(baseline.textContent,/Исторические публикации не записаны/);
+    const form=f.container.querySelector('#social-baseline-form');
+    form.elements.from.value='2026-09-01';form.elements.to.value='2026-09-18';form.elements.cutoverDate.value='2026-09-19';
+    form.elements.sourceNote.value='ссылка на первый пост';form.elements.confirmedStart.checked=true;
+    form.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));await settle();
+    const write=f.calls.find(c=>c.path==='/content/crm/social-stats/baseline'&&c.method==='POST');
+    assert.equal(write.body.confirmedStart,true);assert.equal(write.body.to,'2026-09-18');
+    assert.equal(write.code,'demo-travel');
+  }finally{f.close();}
+});
+
+test('что видим до старта: выводы, источник и пробелы рядом, подтверждения не прибавлены к публикациям',async()=>{
+  const f=fixture({override:async call=>{
+    if(call.path!=='/content/crm/social-stats/baseline')return;
+    return {companyCode:call.code,versions:[],latest:{version:2,from:'2026-09-16',to:'2026-09-18',
+      cutoverDate:'2026-09-19',createdAt:'2026-09-19T00:00:00Z',sourceNote:'синтетическая дата',
+      snapshot:{platforms:{vk:{totals:{reach:20},aggregation:{reach:'sum'}}},posts:[],receipts:[]},
+      assessment:{version:1,basis:'frozen_snapshot',periodDays:3,
+        platforms:[{platform:'vk',datesWithMetrics:2,periodDays:3,dateEvidence:'dated_metrics',missingDates:1,
+          metrics:['views','followers'],hasPointValues:true,sources:[{provider:'manual',capturedAt:'2026-09-18T12:00:00Z',
+            note:'архив <img src=x onerror=alert(1)>'}]}],unconfiguredPlatforms:['tiktok'],
+        publications:{recorded:1,detailed:1,withMetrics:1,receiptsRecorded:1,truncated:false,
+          sources:[{provider:'manual',note:'архив публикаций'}]},
+        limitations:['Подтверждения не прибавляются к числу записей.','Уникальный охват не суммируется. По просмотрам нельзя сделать вывод о продажах.'],
+        actions:['До запуска добавьте выгрузку за недостающую дату.','Сохраните тексты для оценки содержания.']}}};
+  }});
+  try{
+    await f.render();const section=f.container.querySelector('.social-baseline-assessment');
+    assert.equal(section.getAttribute('aria-label'),'Что видим до старта');
+    assert.match(section.textContent,/сохранённой версии 2/);
+    assert.match(section.textContent,/Дат хотя бы с одним показателем: 2 из 3/);
+    assert.match(section.textContent,/не хватает дат с показателями: 1/);
+    assert.match(section.textContent,/Значение на отдельную дату не заменяет дневную историю/);
+    const metricRow=section.querySelector('.social-baseline-findings > li');
+    assert.match(metricRow.textContent,/Источник:.*Ручной ввод/s);
+    assert.match(metricRow.textContent,/архив <img/);
+    assert.match(metricRow.textContent,/Для сравнения:/);
+    assert.equal(section.querySelector('img'),null);
+    assert.match(section.textContent,/Записей о публикациях: 1/);
+    assert.match(section.textContent,/Подтверждения владельца: 1; к числу записей их не прибавляем/);
+    assert.match(section.textContent,/Тексты в снимке не сохранены, качество содержания не оценено/);
+    assert.match(section.textContent,/Что сделать до запуска/);
+    assert.doesNotMatch(section.textContent,/балл|готовность|Записей о публикациях: 2/);
+    assert.match(f.container.querySelector('.social-baseline-grid').textContent,/не уникальные люди за период/);
+    assert.ok(f.calls.every(call=>call.method==='GET'),'разбор сам ничего не собирает и не записывает');
+  }finally{f.close();}
+});
+
+test('ранний снимок и неизвестные числа не превращаются в нули или оценку качества',async()=>{
+  const f=fixture({override:async call=>{
+    if(call.path!=='/content/crm/social-stats/baseline')return;
+    return {companyCode:call.code,versions:[],latest:{version:1,from:'2026-09-16',to:'2026-09-18',snapshot:{},
+      assessment:{basis:'frozen_snapshot',platforms:[{platform:'vk',datesWithMetrics:null,periodDays:3,missingDates:null,
+        dateEvidence:'none',metrics:[],sources:[]}],publications:{recorded:null,detailed:null,withMetrics:null,
+          receiptsRecorded:null,sources:[]},limitations:[],actions:[]}}};
+  }});
+  try{
+    await f.render();const section=f.container.querySelector('.social-baseline-assessment');
+    assert.match(section.textContent,/Число дат с показателями неизвестно/);
+    assert.match(section.textContent,/Записей о публикациях: —/);
+    assert.match(section.textContent,/Подтверждения владельца: —/);
+    assert.match(section.textContent,/Источник:.*в снимке не указан/s);
+    assert.doesNotMatch(section.textContent,/публикациях: 0|просмотры: 0|все данные|всё готово/);
+  }finally{f.close();}
+  const old=fixture({override:async call=>call.path==='/content/crm/social-stats/baseline'?
+    {companyCode:call.code,versions:[],latest:{version:1,snapshot:{}}}:undefined});
+  try{
+    await old.render();assert.match(old.container.querySelector('.social-baseline-assessment').textContent,
+      /разбор этой версии ещё не получен/);
+  }finally{old.close();}
+});
+
+test('выводы ДО занимают одну колонку на телефоне и не создают узкую таблицу',()=>{
+  const css=fs.readFileSync(__dirname+'/social-stats.css','utf8');
+  assert.match(css,/\.social-baseline-findings \{ display:grid; grid-template-columns:minmax\(0,1fr\)/);
+  assert.match(css,/\.social-baseline-assessment \{[^}]*min-width:0;[^}]*overflow-wrap:anywhere;/);
+  assert.match(css,/@media \(max-width:430px\) \{\s*\.social-baseline-assessment \{ padding:12px; \}/);
+});
+
+test('замер «ДО» разделяет измерения площадки, исторические посты и подтверждения владельца',async()=>{
+  const f=fixture({override:async call=>{
+    if(call.path!=='/content/crm/social-stats/baseline')return;
+    return {companyCode:call.code,latest:{version:2,from:'2026-09-01',to:'2026-09-18',cutoverDate:'2026-09-19',
+      createdAt:'2026-09-19T00:00:00Z',sourceNote:'первый пост',snapshot:{status:'partial',
+        coverageNote:'Доступны только записанные сведения',platforms:{instagram:{accountConfigured:true,accountRef:'travel',
+          coverage:'partial',recordedDays:1,periodDays:18,totals:{views:120},
+          sources:[{provider:'manual',capturedAt:'2026-09-18T10:00:00Z',note:'экспорт Insights'}],
+          measurements:[{metric:'views',value:120,date:'2026-09-17',provider:'manual',capturedAt:'2026-09-18T10:00:00Z',completeness:'partial'}]}},
+        postsRecorded:3,postsTruncated:true,posts:[
+          {platform:'instagram',url:'https://www.instagram.com/reel/demo/',publishedAt:'2026-09-12T08:00:00Z',
+            source:{provider:'direct',capturedAt:'2026-09-18T10:00:00Z'},metrics:[
+              {metric:'views',value:125,date:'2026-09-18',provider:'direct',capturedAt:'2026-09-18T10:00:00Z'},
+              {metric:'likes',value:0,date:'2026-09-18',provider:'direct',capturedAt:'2026-09-18T10:00:00Z'}]},
+          {platform:'tiktok',url:'',publishedAt:'2026-09-10T08:00:00Z',source:{provider:'manual',note:'<script>bad</script>'},metrics:[]}],
+        receiptsRecorded:1,receipts:[{platform:'telegram',url:'javascript:alert(1)',publishedAt:'2026-09-11T08:00:00Z',
+          source:{type:'owner_confirmation',capturedAt:'2026-09-12T08:00:00Z',note:'ссылка от владельца'},metrics:null}]}}
+      ,versions:[{version:2,from:'2026-09-01',to:'2026-09-18',createdAt:'2026-09-19T00:00:00Z'},
+        {version:1,from:'2026-08-01',to:'2026-08-31',createdAt:'2026-09-01T00:00:00Z'}]};
+  }});
+  try{
+    await f.render();
+    const baseline=f.container.querySelector('#social-baseline-content');
+    const instagram=baseline.querySelector('.social-baseline-platform');
+    assert.match(instagram.textContent,/Часть дней без записанных показателей/);
+    assert.match(instagram.textContent,/Дней хотя бы с одним показателем: 1 из 18/);
+    assert.match(instagram.textContent,/Ручной ввод, не сбор по API/);
+    assert.match(instagram.textContent,/экспорт Insights/);
+    assert.match(instagram.textContent,/частичные данные/);
+    const sections=[...baseline.querySelectorAll('.social-baseline-history')];
+    assert.equal(sections.length,2);
+    assert.match(sections[0].querySelector('summary').textContent,/Исторические публикации: записано 3/);
+    assert.match(sections[0].textContent,/Просмотры:\s*125/);
+    assert.match(sections[0].textContent,/Реакции:\s*0/,'известный ноль сохранён');
+    assert.match(sections[0].textContent,/Показатели этой публикации не записаны/);
+    assert.match(sections[0].textContent,/Показано 2 из 3 записанных публикаций/);
+    assert.match(sections[1].querySelector('summary').textContent,/Подтверждения владельца: записано 1/);
+    assert.match(sections[1].textContent,/не является статистикой площадки/);
+    assert.doesNotMatch(sections[1].textContent,/125/,'показатели собранного поста не приписаны подтверждению');
+    assert.equal(sections[1].querySelector('a'),null,'небезопасная ссылка подтверждения не открывается');
+    assert.equal(baseline.querySelector('script'),null,'заметка источника экранирована');
+    assert.doesNotMatch(baseline.innerHTML,/href="javascript:/);
+    assert.match(baseline.textContent,/История исходной точки: 2 версий/);
+    const css=fs.readFileSync(__dirname+'/social-stats.css','utf8');
+    assert.match(css,/@media \(max-width:430px\)[\s\S]*\.social-baseline-grid[^\n]*grid-template-columns:1fr/);
   }finally{f.close();}
 });
 test('вводный текст не называет чужую компанию; подтверждение ведёт на публикацию, ручной ввод не выдаётся за API, спор карточек и UNKNOWN показаны честно',async()=>{

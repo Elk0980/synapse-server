@@ -15,6 +15,8 @@ const { createSiteStore } = require('./site-store');
 const { createHughSettingsStore } = require('./hugh-settings-store');
 const { createProjectChat } = require('./project-chat');
 const { createOwnerPrivateChat } = require('./owner-private-chat');
+const { createActorOnboarding } = require('./actor-onboarding');
+const { createActorWorkspace } = require('./actor-workspace');
 const { createHughProviders } = require('./hugh-providers');
 const {createMediaMentorSuggest, createMediaMentorSuggestRoute} = require('./media-mentor-suggest');
 const { clientIp, originOf } = require('./site-orders');
@@ -168,6 +170,27 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS documents_key_idx ON documents(key, version DESC);
 `);
 const authStore = createAuthStore(db, process.env.AUTH_USERS || '');
+const actorOnboarding = createActorOnboarding({ db, authStore,
+  requireSession: (request) => requireSession(request),
+  requireCsrf: (request, session) => requireCsrf(request, session),
+  readJson: (request) => readJson(request), sendJson: (response, status, payload) => send(response, status, payload) });
+const actorWorkspace = createActorWorkspace({ db, authStore,
+  requireSession: (request) => requireSession(request),
+  requireCsrf: (request, session) => requireCsrf(request, session),
+  readJson: (request) => readJson(request), sendJson: (response, status, payload) => send(response, status, payload),
+  ask: (payload) => projectChat.askHugh(JSON.stringify(payload)),
+  loadActorProfile: (code, userId) => actorOnboarding.getOwnProfile(code, userId),
+  // Узкая статистика для участника: CRM получает доступ только к его компании; клиенту
+  // модуль отдаёт лишь агрегированные счётчики, без CRM, ссылок, аккаунтов и истории постов.
+  loadSocialOverview: async (code, user) => {
+    if (!CRM_API_KEY) return null;
+    const identity = crmIdentityHeader({ id: user.id, role: 'editor', displayName: 'Участник',
+      permissions: ['analytics.view'], companyCodes: [code] });
+    const upstream = await fetch(`${CRM_URL}/social-stats?companyCode=${encodeURIComponent(code)}`, {
+      headers: { 'x-api-key': CRM_API_KEY, [CRM_IDENTITY_HEADER]: identity },
+      signal: AbortSignal.timeout(5000) });
+    return upstream.ok ? upstream.json() : null;
+  } });
 const hughSettingsStore = createHughSettingsStore(db);
 // Заявки с сайта принимаются только для Palitra: сайт задаёт Caddy, список Origin — точный allowlist.
 const ORDER_SITES = { palitra: { companyCode: CONTENT_COMPANIES.palitra, title: 'Palitra',
@@ -525,7 +548,7 @@ async function proxyCrm(request, response, url, cors) {
     const code=url.searchParams.get('companyCode');
     if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400,'Выберите компанию');
     if(identity.role!=='owner')requirePermission(request,readOnly?(/^\/(?:platform-demand|social-stats)/.test(crmPath)?'analytics.view':'crm.view'):'crm.edit',code);
-    if (/^\/social-stats\/(?:accounts|import)$/.test(crmPath) && !readOnly && identity.role!=='owner') fail(403,'Настройки аккаунтов и ручной импорт доступны владельцу');
+    if (/^\/social-stats\/(?:accounts|import|baseline)$/.test(crmPath) && !readOnly && identity.role!=='owner') fail(403,'Настройки аккаунтов и замер до начала работы доступны владельцу');
   }
   if (/^\/autoposting\/posts\/\d+\/(?:approve|reject)$/.test(crmPath) && identity.role!=='owner') fail(403,'Согласовывать и отклонять публикации может только владелец');
   // Отметка «опубликовано вне ЛК» — решение владельца компании; права редактора недостаточно.
@@ -810,6 +833,9 @@ const server = http.createServer(async (request, response) => {
         error:'Подключение Хью пока недоступно'},{'cache-control':'no-store'}); }
     }
     if (await projectChat.handle(request,response,url)) return;
+
+    if (await actorOnboarding.handle(request,response,url)) return;
+    if (await actorWorkspace.handle(request,response,url)) return;
 
     if (url.pathname === '/content/crm' || url.pathname.startsWith('/content/crm/')) {
       return await proxyCrm(request, response, url, cors);

@@ -9,7 +9,9 @@ const permissionLabel = value => ({
   'company-information.view': 'Актуальность — просмотр данных компании',
   'company-information.edit': 'Актуальность — заполнение и проверка данных',
   'autoposting.view': 'Автопостинг — просмотр материалов и плана',
-  'autoposting.edit': 'Автопостинг — материалы, каналы и публикации'
+  'autoposting.edit': 'Автопостинг — материалы, каналы и публикации',
+  'actor-onboarding.self': 'Личный опрос — заполнить только свой',
+  'actor-onboarding.manage': 'Личный опрос — сводка участников компании'
 })[value] || value;
 const init = (context) => {
   ({ identity, byId, escapeHTML, apiJson } = context);

@@ -13,6 +13,7 @@
   const RUN = { ok: 'собрано', partial: 'собрано частично', missing_access: 'нет доступа', unsupported: 'не поддерживается', failed: 'ошибка сбора' };
   const KIND = { organic: 'органика', paid: 'реклама', mixed: 'смешано', unknown: 'не размечено' };
   const PROVIDER = { direct: 'прямой API', onlypult: 'Onlypult (временно)', manual: 'ручной ввод' };
+  const PLATFORM_LABELS = { instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube', vk: 'ВКонтакте', telegram: 'Telegram' };
   /* Подписи источника записи в атрибуции: ручной ввод не называется сбором по API, подтверждение владельца — тем более. */
   const POST_SOURCE = { direct: 'Прямой API площадки', onlypult: 'Onlypult (временно)', manual: 'Ручной ввод, не сбор по API' };
   const CONFIDENCE = { utm: 'UTM-метка', url: 'URL поста' };
@@ -30,6 +31,19 @@
     container.innerHTML = `<div class="content-header"><h1>Соцсети</h1><p>Ежедневные снимки по площадкам выбранной компании и связь с обращениями CRM. Данных нет — показываем «—», не ноль. Часовой пояс: Asia/Bangkok.</p></div>
       <div class="card social-toolbar"><label>С <input type="date" id="social-from" value="${esc(state.from)}"></label><label>По <input type="date" id="social-to" value="${esc(state.to)}"></label>
         <button type="button" class="plain-button" id="social-refresh">Показать</button></div>
+      <section class="card social-baseline"><div class="social-baseline-head"><div><h2>До начала нашей работы</h2>
+        <p class="social-note">Фиксируем исходную точку отдельно от обновляемой статистики. Нет доступа к числам — это «неизвестно», а не ноль.</p></div></div>
+        <div id="social-baseline-content" aria-live="polite"><p>Загружаем исходную точку…</p></div>
+        ${owner ? `<details class="social-baseline-create"><summary>Зафиксировать исходную точку</summary>
+          <p class="social-note">Дата начала — первый наш материал. Период «до» должен закончиться раньше неё. Числа берутся только из уже записанной статистики и публикаций.</p>
+          <form id="social-baseline-form" class="crm-form">
+            <label>Дата первого нашего материала<input name="cutoverDate" type="date" required value="${esc(isoDay(0))}"></label>
+            <label>Период до: с<input name="from" type="date" required value="${esc(isoDay(-30))}"></label>
+            <label>Период до: по<input name="to" type="date" required value="${esc(isoDay(-1))}"></label>
+            <label class="wide">Откуда известна дата начала<input name="sourceNote" maxlength="300" required placeholder="Например, ссылка на первый согласованный пост"></label>
+            <label class="wide"><input name="confirmedStart" type="checkbox" required> Подтверждаю дату первого нашего материала</label>
+            <div class="crm-actions wide"><button type="submit" class="plain-button">Зафиксировать «ДО»</button>
+              <span id="social-baseline-state" role="status"></span></div></form></details>` : ''}</section>
       <div id="social-content" aria-live="polite"><p>Загрузка…</p></div>
       ${owner ? `<details class="card social-settings"><summary>Аккаунты и источники (владелец)</summary><p class="social-note">Здесь только идентификаторы аккаунтов и выбор источника. Ключи и права живут в подключениях площадок (Автопостинг) или у провайдера; сюда их вводить нельзя.</p><div id="social-accounts"></div></details>
       <details class="card social-import"><summary>Ручной ввод реальных чисел (владелец)</summary><p class="social-note">Для площадок без API-доступа: числа из кабинета площадки с датой снятия и источником (скриншот, выгрузка). Это не автоматический сбор и не заглушка — без чисел строка не сохраняется.</p>
@@ -42,18 +56,41 @@
       state.from = from; state.to = to;
       const content = container.querySelector('#social-content');
       try {
-        const [data, accounts] = await Promise.all([
+        const [data, accounts, baseline] = await Promise.all([
           ctx.apiJson(`/content/crm/social-stats?companyCode=${encodeURIComponent(company)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
           owner ? ctx.apiJson(`/content/crm/social-stats/accounts?companyCode=${encodeURIComponent(company)}`) : null,
+          ctx.apiJson(`/content/crm/social-stats/baseline?companyCode=${encodeURIComponent(company)}`),
         ]);
         if (id !== requestId || ctx.selectedProjectId !== company) return;
-        if (data.companyCode !== String(company).toLowerCase()) throw new Error('Ответ другой компании');
+        if (data.companyCode !== String(company).toLowerCase() || baseline.companyCode !== String(company).toLowerCase()) throw new Error('Ответ другой компании');
         content.innerHTML = overviewMarkup(data);
+        container.querySelector('#social-baseline-content').innerHTML = baselineMarkup(baseline);
         if (owner && accounts) renderAccounts(container, ctx, accounts, load);
         bind(container, ctx, data, load);
       } catch (error) { if (id === requestId) content.innerHTML = `<p class="crm-error" role="alert">Не удалось загрузить: ${esc(error.message)}</p>`; }
     };
     container.querySelector('#social-refresh').addEventListener('click', load);
+    container.querySelector('#social-baseline-form')?.addEventListener('submit', async event => {
+      event.preventDefault();
+      const form = event.currentTarget, out = container.querySelector('#social-baseline-state');
+      const code = ctx.selectedProjectId;
+      if (form.elements.to.value >= form.elements.cutoverDate.value || form.elements.from.value > form.elements.to.value) {
+        out.textContent = 'Период «до» должен закончиться раньше первого нашего материала.'; return;
+      }
+      const body = {cutoverDate: form.elements.cutoverDate.value, from: form.elements.from.value,
+        to: form.elements.to.value, sourceNote: form.elements.sourceNote.value.trim(), confirmedStart: form.elements.confirmedStart.checked};
+      const button = form.querySelector('button[type="submit"]');
+      button.disabled = true;
+      out.textContent = 'Фиксируем исходную точку…';
+      try {
+        await ctx.apiJson(`/content/crm/social-stats/baseline?companyCode=${encodeURIComponent(code)}`,
+          ctx.csrfOptions('POST', body));
+        if (ctx.selectedProjectId !== code) return;
+        out.textContent = 'Исходная точка сохранена отдельной версией.';
+        await load();
+      } catch (error) { if (ctx.selectedProjectId === code) out.textContent = error.message; }
+      finally { button.disabled = false; }
+    });
     container.querySelector('#social-import-form')?.addEventListener('submit', async event => {
       event.preventDefault();
       const form = event.currentTarget, out = container.querySelector('#social-import-state');
@@ -65,6 +102,113 @@
       } catch (error) { out.textContent = error.message; }
     });
     void load();
+  }
+  const baselineProvider = value => POST_SOURCE[value] || (value ? String(value) : 'источник не указан');
+  function baselineSource(source) {
+    if (!source) return 'Источник не указан';
+    return `${esc(baselineProvider(source.provider))}${source.capturedAt ? ` · снято ${esc(stamp(source.capturedAt))}` : ''}
+      ${source.note ? ` · ${esc(source.note)}` : ''}${source.runId ? ` · сбор №${esc(source.runId)}` : ''}`;
+  }
+  function baselineMetric(row) {
+    return `<li><strong>${esc(METRIC_LABELS[row.metric] || row.metric || 'Показатель')}:</strong> ${num(row.value)}
+      ${row.date ? ` · ${esc(day(row.date))}` : ''}${row.period === 'lifetime' ? ' · значение на дату' : ''}
+      ${row.completeness && row.completeness !== 'complete' ? ` · ${esc(row.completeness === 'partial' ? 'частичные данные' : 'полнота неизвестна')}` : ''}
+      <small>${baselineSource(row)}</small></li>`;
+  }
+  function baselineAssessment(item) {
+    const assessment = item.assessment;
+    if (!assessment || assessment.basis !== 'frozen_snapshot') {
+      return '<section class="social-baseline-assessment" aria-label="Что видим до старта"><h3>Что видим до старта</h3>' +
+        '<p>Краткий разбор этой версии ещё не получен. Ниже доступны сохранённые числа и источники; отсутствие разбора не означает нулевой результат.</p></section>';
+    }
+    const sourceLine = (part) => `<p class="social-note"><strong>Источник:</strong> ${part.sources?.length ?
+      baselineSource(part.sources[0]) + (part.sources.length > 1 || part.sourcesTruncated ? ' · остальные источники — в подробностях снимка' : '') :
+      'в снимке не указан; уточните происхождение данных перед сравнением.'}</p>`;
+    const publications = assessment.publications || {};
+    return `<section class="social-baseline-assessment" aria-label="Что видим до старта">
+      <h3>Что видим до старта</h3><p class="social-note">Выводы только по сохранённой версии ${esc(item.version)} за
+        ${esc(day(item.from))} — ${esc(day(item.to))}. Текущая статистика сюда не подмешивается.</p>
+      <ul class="social-baseline-findings">${(assessment.platforms || []).map((part) => `<li>
+        <strong>${esc(PLATFORM_LABELS[part.platform] || part.platform)}</strong>
+        <p>${part.datesWithMetrics === null ? 'Число дат с показателями неизвестно.' :
+    `Дат хотя бы с одним показателем: ${num(part.datesWithMetrics)} из ${num(part.periodDays)}.`}
+          ${part.dateEvidence === 'stored_count' ? 'Число взято из сводки снимка; исходные даты не сохранены.' : ''}
+          ${part.metrics?.length ? `Записаны: ${part.metrics.map((key) => esc(METRIC_LABELS[key] || key)).join(', ')}.` : 'Значения показателей неизвестны.'}</p>
+        ${sourceLine(part)}<p class="social-note"><strong>Для сравнения:</strong>
+          ${part.missingDates > 0 ? `не хватает дат с показателями: ${num(part.missingDates)}; пропуски не равны нулю.` :
+    part.missingDates === 0 ? 'наличие показателя на каждую дату не означает полноту всех метрик.' : 'покрытие периода неизвестно.'}
+          ${part.hasPointValues ? 'Значение на отдельную дату не заменяет дневную историю.' : ''}</p></li>`).join('')}
+        ${assessment.unconfiguredPlatforms?.length ? `<li><strong>Пробелы в снимке</strong><p>Нет сохранённых показателей:
+          ${assessment.unconfiguredPlatforms.map((id) => esc(PLATFORM_LABELS[id] || id)).join(', ')}.</p>
+          <p class="social-note">Наличие источника и результаты этих площадок по этому снимку не подтверждены. Для нужных площадок добавьте выгрузку или отметьте отсутствие доступа.</p></li>` : ''}
+        <li><strong>Прежние публикации</strong><p>Записей о публикациях: ${num(publications.recorded)}.
+          ${publications.detailed ? `В подробных записях с показателями: ${num(publications.withMetrics)} из ${num(publications.detailed)}.` :
+    'Числа по отдельным публикациям неизвестны.'}
+          Подтверждения владельца: ${num(publications.receiptsRecorded)}; к числу записей их не прибавляем.</p>
+          ${sourceLine(publications)}<p class="social-note"><strong>Для сравнения:</strong>
+            ${publications.truncated ? 'в снимке сохранена только часть подробных записей; ' : ''}полнота архива не подтверждена.
+            Тексты в снимке не сохранены, качество содержания не оценено.</p></li></ul>
+      <details class="social-baseline-assessment-limits"><summary>Что мешает сравнению</summary>
+        <ul>${(assessment.limitations || []).map((text) => `<li>${esc(text)}</li>`).join('')}</ul></details>
+      <div class="social-baseline-next"><h4>Что сделать до запуска</h4>
+        <ol>${(assessment.actions || []).map((text) => `<li>${esc(text)}</li>`).join('')}</ol></div>
+    </section>`;
+  }
+  function baselineMarkup(data) {
+    const item = data.latest;
+    if (!item) return '<p>Исходная точка ещё не зафиксирована. Выберите подтверждённую дату первого нашего материала и период до неё.</p>';
+    const snapshot = item.snapshot || {}, platforms = snapshot.platforms || {};
+    const cards = PLATFORMS.map((id) => {
+      const part = platforms[id] || {}, totals = part.totals || {}, sources = part.sources || [], measurements = part.measurements || [];
+      const metrics = Object.entries(totals).map(([key, value]) => `<div><dt>${esc(key === 'reach' && part.aggregation?.reach === 'sum' ?
+        'Охват — сумма суточных значений, не уникальные люди за период' : METRIC_LABELS[key] || key)}</dt><dd>${num(value)}</dd></div>`).join('');
+      const coverage = part.coverage === 'days_recorded' ? 'Есть показатели на каждый день; полнота метрик неизвестна'
+        : part.coverage === 'partial' ? 'Часть дней без записанных показателей'
+          : part.coverage === 'account_not_configured' ? 'Аккаунт не настроен' : 'Показатели не записаны';
+      const sourceRows = sources.slice(0, 12), metricRows = measurements.slice(-20).reverse();
+      return `<article class="social-baseline-platform"><strong>${esc(PLATFORM_LABELS[id])}</strong>
+        <span class="social-baseline-coverage">${esc(coverage)}</span>
+        <dl class="social-metrics">${metrics || '<div><dt>Показатели</dt><dd>—</dd></div>'}</dl>
+        <p class="social-note">Дней хотя бы с одним показателем: ${num(part.recordedDays)} из ${num(part.periodDays)}.
+          ${part.accountConfigured ? `Аккаунт: ${esc(part.accountRef || '—')}.` : ''}</p>
+        <details><summary>Источники измерений: ${num(sources.length)}${part.sourcesTruncated ? '+' : ''}</summary>
+          ${sourceRows.length ? `<ul class="social-baseline-evidence">${sourceRows.map(source => `<li>${baselineSource(source)}</li>`).join('')}</ul>
+            ${sources.length > sourceRows.length || part.sourcesTruncated ? `<p class="social-note">Показаны первые ${num(sourceRows.length)} источников; список в снимке длиннее.</p>` : ''}`
+            : '<p class="social-note">Источник не записан.</p>'}</details>
+        <details><summary>Исходные измерения: ${num(measurements.length)}</summary>
+          ${metricRows.length ? `<ul class="social-baseline-evidence">${metricRows.map(baselineMetric).join('')}</ul>
+            ${measurements.length > metricRows.length ? `<p class="social-note">Показаны последние ${num(metricRows.length)} измерений.</p>` : ''}`
+            : '<p class="social-note">Измерений нет.</p>'}</details></article>`;
+    }).join('');
+    const posts = (snapshot.posts || []).slice(0, 30), receipts = (snapshot.receipts || []).slice(0, 30);
+    return `<div class="social-baseline-meta"><strong>Версия ${esc(item.version)} · период ${esc(day(item.from))} — ${esc(day(item.to))}</strong>
+      <span>Первый наш материал: ${esc(day(item.cutoverDate))} · зафиксировано ${esc(stamp(item.createdAt))}</span>
+      <span>Основание даты: ${esc(item.sourceNote || '—')}</span>
+      <span>${snapshot.status === 'no_data' ? 'Показателей за период нет' : 'Данные частичные'} · ${esc(snapshot.coverageNote || '')}</span>
+      <p class="social-note">Это замер записанного, а не полный архив соцсетей. Исторические публикации и подтверждения владельца могут относиться к одному выходу; их количество не складываем.</p></div>
+      ${baselineAssessment(item)}
+      <div class="social-baseline-grid">${cards}</div>
+      <details class="social-baseline-history"><summary>Исторические публикации: записано ${num(snapshot.postsRecorded)}</summary>
+        <p class="social-note">Показаны только публикации, уже найденные в системе. Числа взяты из записанных измерений, сравнивать разные посты без оценки покрытия нельзя.</p>
+        ${posts.length ? `<ul class="social-baseline-posts">${posts.map((post) => {
+          const metrics = post.metrics || [], visible = metrics.slice(0, 12);
+          return `<li><div><strong>${esc(PLATFORM_LABELS[post.platform] || post.platform || 'Площадка не указана')}</strong> · ${esc(day(String(post.publishedAt || '').slice(0, 10)))}
+            · ${safeUrl(post.url) ? link(post.url, 'Открыть публикацию') : 'Ссылка не записана'}</div>
+            <p class="social-note">Запись: ${baselineSource(post.source || { provider: post.provider })}</p>
+            ${visible.length ? `<ul class="social-baseline-evidence">${visible.map(baselineMetric).join('')}</ul>
+              ${metrics.length > visible.length ? `<p class="social-note">Показаны первые ${num(visible.length)} из ${num(metrics.length)} измерений.</p>` : ''}`
+              : '<p class="social-note">Показатели этой публикации не записаны — просмотры и реакции неизвестны.</p>'}</li>`;
+        }).join('')}</ul>${snapshot.postsTruncated || Number(snapshot.postsRecorded) > posts.length ? `<p class="social-note">Показано ${num(posts.length)} из ${num(snapshot.postsRecorded)} записанных публикаций.</p>` : ''}`
+          : '<p>Исторические публикации не записаны.</p>'}</details>
+      <details class="social-baseline-history"><summary>Подтверждения владельца: записано ${num(snapshot.receiptsRecorded)}</summary>
+        <p class="social-note">Подтверждение говорит о выходе публикации, но не является статистикой площадки и не даёт просмотров.</p>
+        ${receipts.length ? `<ul class="social-baseline-posts">${receipts.map(receipt => `<li><strong>${esc(PLATFORM_LABELS[receipt.platform] || receipt.platform || 'Площадка не указана')}</strong>
+          · ${esc(day(String(receipt.publishedAt || '').slice(0, 10)))} · ${safeUrl(receipt.url) ? link(receipt.url, 'Открыть публикацию') : 'Ссылка не записана'}
+          <p class="social-note">Подтверждено владельцем${receipt.source?.capturedAt ? ` · ${esc(stamp(receipt.source.capturedAt))}` : ''}${receipt.source?.note ? ` · ${esc(receipt.source.note)}` : ''}.
+          Показатели не записаны.</p></li>`).join('')}</ul>${snapshot.receiptsTruncated || Number(snapshot.receiptsRecorded) > receipts.length ? `<p class="social-note">Показано ${num(receipts.length)} из ${num(snapshot.receiptsRecorded)} подтверждений.</p>` : ''}`
+          : '<p>Подтверждений владельца за период нет.</p>'}</details>
+      ${(data.versions || []).length > 1 ? `<details><summary>История исходной точки: ${(data.versions || []).length} версий</summary><ol>${data.versions.map((row) =>
+        `<li>Версия ${esc(row.version)} · ${esc(day(row.from))} — ${esc(day(row.to))} · ${esc(stamp(row.createdAt))}</li>`).join('')}</ol></details>` : ''}`;
   }
   function overviewMarkup(data) {
     const agg = data.socialAggregate || {};

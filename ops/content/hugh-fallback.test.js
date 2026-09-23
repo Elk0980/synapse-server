@@ -10,6 +10,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { createAuthStore } = require('./auth-store');
 const { createProjectChat } = require('./project-chat');
 const { readProviders, createHughFallback, ACK_TEXT } = require('./hugh-fallback');
+const { createHughProviders } = require('./hugh-providers');
 
 const HASH = `scrypt$16384$8$1$${Buffer.alloc(16, 7).toString('base64url')}$${Buffer.alloc(32, 9).toString('base64url')}`;
 const OWNER_ID = 1;
@@ -225,4 +226,130 @@ test('подхват локальной компании: серверная а�
   s.db.prepare("UPDATE project_chat_ai_jobs SET status='running',boot_id='server' WHERE id=?").run(second.id);
   s.chat.startWorker();s.chat.stopWorker();
   assert.equal(s.jobs()[2].status,'pending');assert.equal(s.jobs()[2].lease_token,null);assert.equal(s.jobs()[1].status,'done');
+});
+
+/* Цена провайдера, введённая в кабинете, и учёт расхода в ответах.
+   Проверка соединения уже шла через бюджет с ценами из хранилища, а живой ответ — нет:
+   при денежной границе сохранённый провайдер отвергался как «цена не задана».
+   Берутся настоящие createHughProviders и createHughBudget, подменена только сеть;
+   ключи выдуманные, живых обращений и платежей нет. */
+const MASTER_KEY = 'm'.repeat(48);
+const STORE_KEY = 'sk-test-0123456789abcdef';
+const STORE_BASE = 'https://api.deepseek.com/v1';
+const STORE_MODEL = 'vendor/model-1';
+const OWNER = { userName: 'Владелец' };
+const MICRO = 1000000;
+const PRICES = { pricePromptUsdPer1k: 0.0003, priceCompletionUsdPer1k: 0.0012 };
+// Цена та же в переменных окружения: 0.0003 за 1000 токенов запроса и 0.0012 за 1000 ответа.
+const ENV_PRICED = { HUGH_FALLBACK_PROVIDERS: 'deepseek', HUGH_FALLBACK_DEEPSEEK_URL: 'https://deepseek.example/v1',
+  HUGH_FALLBACK_DEEPSEEK_KEY: 'test-key-b', HUGH_FALLBACK_DEEPSEEK_MODEL: 'deepseek-chat',
+  HUGH_FALLBACK_DEEPSEEK_USD_PER_1K_PROMPT: '0.0003', HUGH_FALLBACK_DEEPSEEK_USD_PER_1K_COMPLETION: '0.0012' };
+const providerAnswer = (usage, text = 'Ответ провайдера') => ({ ok: true, status: 200, redirected: false,
+  headers: { get: () => null },
+  json: async () => ({ model: STORE_MODEL, usage, choices: [{ message: { role: 'assistant', content: text } }] }) });
+const ASK = JSON.stringify({ system: 's', messages: [{ role: 'user', content: 'q' }] });
+// Путь кабинета целиком: сохранить → проверить соединение → включить.
+async function savedProvider({ env = {}, prices = PRICES, budgetUsd = null } = {}) {
+  const db = new DatabaseSync(':memory:');
+  const full = { HUGH_PROVIDER_MASTER_KEY: MASTER_KEY, ...env };
+  const store = createHughProviders({ db, env: full });
+  store.save('deepseek', { revision: 0, baseUrl: STORE_BASE, modelId: STORE_MODEL, apiKey: STORE_KEY,
+    enabled: false, budgetUsd, ...prices }, OWNER);
+  const checked = await store.check('deepseek',
+    { fetchImpl: async () => providerAnswer({ prompt_tokens: 5, completion_tokens: 1 }, '') });
+  assert.equal(checked.checkState, 'ok', checked.checkMessage);
+  store.save('deepseek', { revision: checked.revision, enabled: true }, OWNER);
+  assert.equal(store.runtimeProviders().length, 1);
+  return { db, store, env: full };
+}
+const spentMicro = (before, after) => Math.round((after.spentUsd - before.spentUsd) * MICRO);
+
+test('сохранённая в кабинете цена доходит до бюджета: провайдер с личным лимитом отвечает и списывает точный usage', async (t) => {
+  const f = await savedProvider({ budgetUsd: 5 });
+  t.after(() => f.db.close());
+  const calls = [];
+  const fallback = createHughFallback({ db: f.db, env: f.env, providerStore: f.store,
+    fetchImpl: async (url, options) => { calls.push({ url, model: JSON.parse(options.body).model });
+      return providerAnswer({ prompt_tokens: 1000, completion_tokens: 500 }); } });
+  assert.equal(fallback.status().providers[0].ownLimitUsd, 5);
+  const before = fallback.budget.state();
+  assert.equal(before.configured, false, 'работает личная граница без общей границы бюджета');
+  const answer = await fallback.reply(ASK);
+  assert.equal(answer.text, 'Ответ провайдера');
+  assert.deepEqual(calls, [{ url: `${STORE_BASE}/chat/completions`, model: STORE_MODEL }]);
+  const after = fallback.budget.state();
+  // 1000 токенов запроса по 0.0003 и 500 токенов ответа по 0.0012 — ровно 900 микродолларов.
+  assert.equal(spentMicro(before, after), 900);
+  assert.equal(after.heldUsd, 0, 'бронь уточнена фактом, а не осталась верхней оценкой');
+  assert.equal(after.unknownRequests, 0, 'цена и usage известны — расход не считается неизвестным');
+  assert.equal(fallback.status().providers[0].spentUsd > 0, true);
+});
+
+test('новая цена из кабинета применяется к следующему ответу без пересоздания резерва', async (t) => {
+  const f = await savedProvider({ budgetUsd: 5 });
+  t.after(() => f.db.close());
+  let calls = 0;
+  const fallback = createHughFallback({ db: f.db, env: f.env, providerStore: f.store,
+    fetchImpl: async () => { calls++; return providerAnswer({ prompt_tokens: 1000, completion_tokens: 500 }); } });
+  const start = fallback.budget.state();
+  await fallback.reply(ASK);
+  const afterFirst = fallback.budget.state();
+  assert.equal(spentMicro(start, afterFirst), 900);
+  // Правка цены не трогает адрес, модель и ключ, поэтому проверка соединения остаётся действующей.
+  const view = f.store.view('deepseek');
+  f.store.save('deepseek', { revision: view.revision, pricePromptUsdPer1k: 0.001,
+    priceCompletionUsdPer1k: 0.002 }, OWNER);
+  assert.equal(f.store.view('deepseek').enabled, true);
+  await fallback.reply(ASK);
+  // 1000 × 0.001 + 500 × 0.002 = 2000 микродолларов по новой цене, а не по прежней.
+  assert.equal(spentMicro(afterFirst, fallback.budget.state()), 2000);
+  f.store.save('deepseek', { revision: f.store.view('deepseek').revision, priceCompletionUsdPer1k: 10 }, OWNER);
+  await assert.rejects(fallback.reply(ASK),
+    (error) => error.budgetStopped === true && /личный лимит/.test(error.message));
+  assert.equal(calls, 2, 'новая цена применяется к брони до сети, а не только при списании');
+});
+
+test('удалённая или неполная цена кабинета блокирует сеть при личном лимите даже с одноимённой ценой env', async (t) => {
+  for (const missing of [{ pricePromptUsdPer1k: null, priceCompletionUsdPer1k: null },
+    { pricePromptUsdPer1k: null }, { priceCompletionUsdPer1k: null }]) {
+    const f = await savedProvider({ env: ENV_PRICED, budgetUsd: 5 });
+    t.after(() => f.db.close());
+    let calls = 0;
+    const fallback = createHughFallback({ db: f.db, env: f.env, providerStore: f.store,
+      fetchImpl: async () => { calls++; throw new Error('сети быть не должно'); } });
+    f.store.save('deepseek', { revision: f.store.view('deepseek').revision, ...missing }, OWNER);
+    const before = fallback.budget.state();
+    await assert.rejects(fallback.reply(ASK),
+      (error) => /[Цц]ена провайдера/.test(error.message) && error.budgetStopped === true);
+    assert.equal(calls, 0, 'ни одного платного обращения');
+    assert.equal(spentMicro(before, fallback.budget.state()), 0);
+    assert.equal(fallback.budget.state().heldRequests, 0, 'блокировка не создаёт бронь');
+  }
+});
+
+test('цена провайдера из окружения действует без хранилища и с подключённым пустым хранилищем', async (t) => {
+  for (const withStore of [false, true]) {
+    const db = new DatabaseSync(':memory:');
+    t.after(() => db.close());
+    const env = { ...ENV_PRICED, HUGH_PROVIDER_MASTER_KEY: MASTER_KEY, HUGH_FALLBACK_BUDGET_USD: '10' };
+    const fromEnv = createHughFallback({ db, env, providerStore: withStore ? createHughProviders({ db, env }) : null,
+      fetchImpl: async () => providerAnswer({ prompt_tokens: 1000, completion_tokens: 500 }) });
+    const before = fromEnv.budget.state();
+    assert.equal((await fromEnv.reply(ASK)).text, 'Ответ провайдера');
+    assert.equal(spentMicro(before, fromEnv.budget.state()), 900);
+  }
+});
+
+test('явный ноль в кабинете считается известной ценой и заменяет тариф одноимённого провайдера env', async (t) => {
+  const f = await savedProvider({ env: ENV_PRICED, budgetUsd: 5,
+    prices: { pricePromptUsdPer1k: 0, priceCompletionUsdPer1k: 0 } });
+  t.after(() => f.db.close());
+  const fallback = createHughFallback({ db: f.db, env: f.env, providerStore: f.store,
+    fetchImpl: async () => providerAnswer({ prompt_tokens: 1000, completion_tokens: 500 }) });
+  assert.equal((await fallback.reply(ASK)).text, 'Ответ провайдера');
+  const state = fallback.budget.state();
+  assert.equal(state.spentUsd, 0);
+  assert.equal(state.requests, 2, 'проверка и ответ учитываются даже при нулевом тарифе');
+  assert.equal(state.unknownRequests, 0);
+  assert.equal(state.heldRequests, 0);
 });
