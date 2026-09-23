@@ -156,6 +156,15 @@ test('бриф и план Медиа-наставника через прокс
     assert.equal(savedBrief.body.brief.revision, 1);
     // Автор — из сессии, а не из тела запроса.
     assert.equal(savedBrief.body.brief.history[0].actorName, 'editor');
+    // Подсказка читает уже сохранённый бриф через CRM с личностью сессии.
+    // Провайдер модели в этом тесте отключён; здесь проверяется именно чтение брифа.
+    const suggestion = await request(contentBase, '/content/media-mentor-suggest' + SCOPE,
+      {method: 'POST', body: {startDate: '2026-10-01', days: 7}, headers: sessions.editor});
+    assert.equal(suggestion.status, 200, JSON.stringify(suggestion.body));
+    assert.equal(suggestion.body.status, 'unavailable');
+    // После чтения брифа маршрут дошёл до транспорта модели; внешний вызов в fixture блокируется.
+    assert.match(await fs.readFile(blockedNetwork, 'utf8'), /blocked/);
+    await fs.writeFile(blockedNetwork, '');
     const stale = await through('editor', ROOT + '/brief' + SCOPE, {method: 'PUT', body: briefBody});
     assert.equal(stale.status, 409);
     assert.equal(stale.body.details.code, 'REVISION_CONFLICT');

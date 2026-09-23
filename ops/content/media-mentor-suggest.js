@@ -48,7 +48,15 @@ function buildPrompt(brief, { startDate, days }) {
     '"role":"reach|affection|sale","topic":"...","hook":"...","assetId":"","mentorNote":"..."}. ' +
     'Площадку бери только из списка площадок брифа. Материал (assetId) указывай только из списка ' +
     'исходников брифа, иначе оставляй пустым. Не выдумывай факты, цифры, акции и цены: ' +
-    'если сведений нет, пиши тему без них.';
+    'если сведений нет, пиши тему без них. ' +
+    'Роль материала по ОВП: reach — охват незнакомых людей через их вопрос; ' +
+    'affection — доверие через людей, процесс и подтверждённый опыт; ' +
+    'sale — отдельное конкретное предложение и путь к обращению только при подтверждённых условиях. ' +
+    'Для нескольких направлений не смешивай аудитории и продукты. ' +
+    'Начало короткого видео должно ясно называть ситуацию зрителя, содержание — отвечать на обещанный вопрос. ' +
+    'Адаптируй зацепку и формат под выбранную площадку, не делай одинаковый пост для всех. ' +
+    'Задание на съёмку — одно простое действие по указанной готовности; лицо и голос не требуй. ' +
+    'Не навязывай фиксированные дни, длину видео, пороги удержания или обещания охватов.';
   const user = [
     `Даты плана: ${dates(startDate, days).join(', ')}.`,
     `Не более ${MAX_ITEMS_PER_DAY} позиций на дату.`,
@@ -396,11 +404,11 @@ function createMediaMentorSuggestRoute({ suggester, loadBrief, loadStats, requir
     let result;
     try {
       if (reviewing) {
-        const stats = await loadStats(code, { from: body.from, to: body.to });
+        const stats = await loadStats(code, { from: body.from, to: body.to }, session.user);
         if (!stats) fail(404, 'Статистика компании не найдена');
         result = await suggester.review(stats.overview, stats.plan || null);
       } else {
-        const brief = await loadBrief(code);
+        const brief = await loadBrief(code, session.user);
         if (!brief) fail(404, 'Бриф компании не найден');
         result = analysing ? await suggester.analyze(brief)
           : await suggester.suggest(brief, { startDate: body.startDate, days: body.days ?? MIN_DAYS });

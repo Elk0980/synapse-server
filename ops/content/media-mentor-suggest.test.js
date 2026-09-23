@@ -104,6 +104,17 @@ test('даты в задании ставит код, а не модель', asy
   assert.ok(!prompt.messages[0].content.includes('2026-09-28'));
 });
 
+test('задание на план объясняет ОВП и учитывает комфорт съёмки без обещаний алгоритма', async () => {
+  let payload;
+  const s = createMediaMentorSuggest({ask: async (p) => { payload = JSON.parse(p); return {text: JSON.stringify(days())}; }});
+  await s.suggest(BRIEF, {startDate: '2026-10-01', days: 7});
+  assert.match(payload.system, /reach — охват/);
+  assert.match(payload.system, /affection — доверие/);
+  assert.match(payload.system, /sale — отдельное конкретное предложение/);
+  assert.match(payload.system, /лицо и голос не требуй/);
+  assert.match(payload.system, /Не навязывай фиксированные дни/);
+});
+
 test('в задание не попадают исходники, которых нет, и не теряется источник факта', async () => {
   const s = createMediaMentorSuggest({ ask: fake('[]') });
   const prompt = s.buildPrompt(BRIEF, { startDate: '2026-09-21', days: 7 });
@@ -167,6 +178,22 @@ test('бриф берётся с сервера, а не из тела запр�
   const r = createMediaMentorSuggestRoute(routeDeps({ loadBrief: async (code) => { asked = code; return BRIEF; } }));
   await r.handle(req(), {}, link());
   assert.equal(asked, 'alvi');
+});
+
+test('чтение брифа и статистики получает подтверждённую личность сессии', async () => {
+  const identity = {id: 'owner-1', role: 'owner'};
+  let briefIdentity, statsIdentity;
+  const r = createMediaMentorSuggestRoute(routeDeps({
+    requireSession: () => ({user: identity}),
+    loadBrief: async (_code, received) => { briefIdentity = received; return BRIEF; },
+    loadStats: async (_code, _period, received) => { statsIdentity = received; return {overview: OVERVIEW(), plan: PLAN}; },
+    readBody: async (request) => request.review ? {} : {startDate: '2026-09-21', days: 7},
+  }));
+  await r.handle(req(), {}, link());
+  const reviewRequest = {...req(), review: true};
+  await r.handle(reviewRequest, {}, link('/content/media-mentor-review'));
+  assert.equal(briefIdentity, identity);
+  assert.equal(statsIdentity, identity);
 });
 
 test('лишние поля в теле не принимаются', async () => {
