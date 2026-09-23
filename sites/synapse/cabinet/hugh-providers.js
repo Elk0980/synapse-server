@@ -44,8 +44,9 @@
     const requests = budget.maxRequests > 0
       ? `, обращений ${budget.requests} из ${budget.maxRequests}` : `, обращений ${budget.requests}`;
     const stopped = budget.stopped ? ` Остановлено: ${budget.reason}.` : '';
+    const moneyLimit = budget.limitUsd > 0 ? ` из ${money(budget.limitUsd)}` : '; общая денежная граница не задана';
     return `<p class="hugh-note" data-budget>Общий расход за окно ${esc(budget.windowDays)} дн.: ` +
-      `${esc(money(budget.spentUsd))} из ${esc(money(budget.limitUsd))}${esc(requests)}. ` +
+      `${esc(money(budget.spentUsd))}${esc(moneyLimit)}${esc(requests)}. ` +
       `Окно обновится ${esc(moment(budget.resetAt))}.${esc(stopped)}</p>`;
   }
 

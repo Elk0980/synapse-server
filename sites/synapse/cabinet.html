@@ -645,7 +645,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <button class="nav-category" type="button" aria-expanded="false" aria-controls="marketing-menu">Продвижение</button>
       <div class="subnav" id="marketing-menu" hidden>
       <a class="nav-link" id="autoposting-link" href="#autoposting"
-        data-view-link="autoposting" hidden>Автопостинг</a>
+        data-view-link="autoposting" hidden>Материалы</a>
       <a class="nav-link" id="media-mentor-link" href="#media-mentor"
         data-view-link="media-mentor" hidden>Бриф и план</a>
       <a class="nav-link" id="actor-onboarding-link" href="#actor-onboarding"
@@ -1053,7 +1053,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260924-simple-plan";
+  window.SB_CABINET_ASSET_VERSION = "20260924-daily-flow";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
@@ -1162,7 +1162,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     competitors: "Конкуренты",
     calltracking: "Колтрекинг",
     sites: "Сайты",
-    autoposting: "Автопостинг",
+    autoposting: "Материалы",
     "media-mentor": "Бриф и план",
     "actor-onboarding": "Моя анкета",
     "actor-workspace": "Моё рабочее место",
@@ -1507,7 +1507,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     if (["company-information", "autoposting"].includes(value)) return identity?.role === "owner" || identity?.permissions?.includes(value + ".view");
     // Медиа-наставник переиспользует право раздела публикаций: новых прав не заводим.
     if (["media-mentor", "media-mentor-rollout"].includes(value)) return identity?.role === "owner" || identity?.permissions?.includes("autoposting.view");
-    if (value === "actor-onboarding") return identity?.role === "owner" || identity?.permissions?.includes("actor-onboarding.self");
+    if (value === "actor-onboarding") return identity?.role === "owner" || identity?.permissions?.includes("actor-onboarding.self") || identity?.permissions?.includes("actor-onboarding.manage");
     if (value === "actor-workspace") return identity?.role === "owner" || identity?.permissions?.includes("actor-onboarding.self");
     if (value === "campaigns") return identity?.role === "owner";
     if (!identity) return true;
