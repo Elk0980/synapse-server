@@ -110,3 +110,88 @@ test('роль владельца нельзя подставить в стар�
     new URL('/content/actor-onboarding/summary?companyCode=taisabai', 'http://localhost')),
   (error) => error.status === 403);
 });
+
+test('личные соцсети начинаются с предложения: коллега не видит, директор проверяет', async (t) => {
+  const f = setup(t);
+  const route = `/content/actor-onboarding/social-links${self}`;
+  const review = `/content/actor-onboarding/social-links/review${self}`;
+  const proposed = await call(f, f.actor, 'PUT', route,
+    { platform: 'instagram', publicUrl: 'https://www.instagram.com/actor/', revision: 0 });
+  assert.equal(proposed.status, 200, proposed.error?.message);
+  assert.deepEqual([proposed.body.links[0].publicUrl, proposed.body.links[0].status,
+    proposed.body.links[0].revision], ['https://www.instagram.com/actor', 'pending', 1]);
+  assert.match(proposed.body.notice, /не подключаются автоматически/);
+  assert.equal((await call(f, f.colleague, 'GET', route)).body.links.length, 0);
+  assert.equal((await call(f, f.actor, 'GET', review)).status, 403);
+  assert.equal((await call(f, f.outsider, 'GET', review)).status, 403);
+  const managerView = await call(f, f.director, 'GET', review);
+  assert.equal(managerView.body.links[0].actorId, f.actor.id);
+  const approved = await call(f, f.director, 'PUT', review,
+    { actorId: f.actor.id, platform: 'instagram', revision: 1, decision: 'approved' });
+  assert.equal(approved.status, 200, approved.error?.message);
+  assert.deepEqual([approved.body.links[0].status, approved.body.links[0].revision], ['approved', 2]);
+  assert.equal((await call(f, f.actor, 'GET', route)).body.links[0].status, 'approved');
+  const revised = await call(f, f.actor, 'PUT', route,
+    { platform: 'instagram', publicUrl: 'https://instagram.com/actor.new', revision: 2 });
+  assert.deepEqual([revised.body.links[0].status, revised.body.links[0].revision,
+    revised.body.links[0].reviewedAt], ['pending', 3, null], 'изменённый адрес требует новой проверки');
+  assert.equal((await call(f, f.director, 'PUT', review,
+    { actorId: f.actor.id, platform: 'instagram', revision: 2, decision: 'approved' })).status, 409);
+  const rejected = await call(f, f.director, 'PUT', review,
+    { actorId: f.actor.id, platform: 'instagram', revision: 3, decision: 'rejected' });
+  assert.equal(rejected.body.links[0].status, 'rejected');
+  assert.equal((await call(f, f.actor, 'DELETE', route,
+    { platform: 'instagram', revision: 4 })).body.links.length, 0);
+});
+
+test('ссылки валидируются без ключей и параметров; запись и решение защищены CSRF', async (t) => {
+  const f = setup(t);
+  const route = `/content/actor-onboarding/social-links${self}`;
+  const review = `/content/actor-onboarding/social-links/review${self}`;
+  const invalid = [
+    ['instagram', 'http://instagram.com/actor'],
+    ['instagram', 'https://evil.example/actor'],
+    ['instagram', 'https://instagram.com.evil.example/actor'],
+    ['instagram', 'https://user:token@instagram.com/actor'],
+    ['instagram', 'https://instagram.com/actor?access_token=secret'],
+    ['instagram', 'https://instagram.com/actor#secret'],
+    ['instagram', 'https://instagram.com/'],
+    ['telegram', 'https://t.me/+privateInvite'],
+    ['tiktok', 'https://tiktok.com/actor'],
+  ];
+  for (const [platform, publicUrl] of invalid) {
+    assert.equal((await call(f, f.actor, 'PUT', route,
+      { platform, publicUrl, revision: 0 })).status, 400, publicUrl);
+  }
+  assert.equal((await call(f, f.actor, 'PUT', route,
+    { platform: 'instagram', publicUrl: 'https://instagram.com/actor', revision: 0,
+      accessToken: 'should-never-store' })).status, 400);
+  assert.equal((await call(f, f.actor, 'PUT', route,
+    { platform: 'instagram', publicUrl: 'https://instagram.com/actor', revision: 0 },
+    { 'x-csrf-token': 'wrong' })).status, 403);
+  assert.equal((await call(f, f.actor, 'PUT', route,
+    { platform: 'instagram', publicUrl: 'https://instagram.com/actor', revision: 0 })).status, 200);
+  assert.equal((await call(f, f.director, 'PUT', review,
+    { actorId: f.actor.id, platform: 'instagram', revision: 1, decision: 'approved' },
+    { 'x-csrf-token': 'wrong' })).status, 403);
+  assert.equal((await call(f, f.actor, 'DELETE', route,
+    { platform: 'instagram', revision: 1 }, { 'x-csrf-token': 'wrong' })).status, 403);
+  assert.equal((await call(f, f.actor, 'GET', route)).body.links.length, 1);
+});
+
+test('отзыв доступа скрывает ссылку из списка директора и блокирует старую сессию', async (t) => {
+  const f = setup(t);
+  const route = `/content/actor-onboarding/social-links${self}`;
+  const review = `/content/actor-onboarding/social-links/review${self}`;
+  assert.equal((await call(f, f.actor, 'PUT', route,
+    { platform: 'youtube', publicUrl: 'https://youtube.com/@actor', revision: 0 })).status, 200);
+  assert.equal((await call(f, f.director, 'GET', review)).body.links.length, 1);
+  const stale = f.session(f.actor);
+  f.auth.updateAccess(f.owner.id, f.actor.id, ['taisabai'], []);
+  assert.equal((await call(f, f.director, 'GET', review)).body.links.length, 0);
+  const response = {};
+  await assert.rejects(f.service.handle({ method: 'GET', headers: {}, session: stale }, response,
+    new URL(route, 'http://localhost')), (error) => error.status === 403);
+  assert.equal((await call(f, f.director, 'PUT', review,
+    { actorId: f.actor.id, platform: 'youtube', revision: 1, decision: 'approved' })).status, 404);
+});

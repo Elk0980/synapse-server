@@ -23,6 +23,20 @@ const QUESTIONS = Object.freeze([
   { key: 'suggestions', label: 'Что вы предложили бы улучшить?',
     why: 'Чтобы учитывать ваши идеи ещё до составления личного плана.' },
 ]);
+// Только публичные адреса профилей. Эти записи не являются OAuth-подключением
+// и не дают системе права публиковать или читать статистику аккаунта.
+const SOCIAL_PROFILES = Object.freeze({
+  instagram: { hosts: ['instagram.com', 'www.instagram.com'], path: /^\/[a-zA-Z0-9._]{1,30}\/?$/ },
+  tiktok: { hosts: ['tiktok.com', 'www.tiktok.com'], path: /^\/@[a-zA-Z0-9._]{2,24}\/?$/ },
+  youtube: { hosts: ['youtube.com', 'www.youtube.com'],
+    path: /^\/(?:@[a-zA-Z0-9._-]+|(?:channel|c|user)\/[a-zA-Z0-9_-]+)\/?$/ },
+  vk: { hosts: ['vk.com', 'www.vk.com'], path: /^\/[a-zA-Z0-9_.-]{1,64}\/?$/ },
+  telegram: { hosts: ['t.me', 'telegram.me'], path: /^\/[a-zA-Z0-9_]{5,32}\/?$/ },
+  facebook: { hosts: ['facebook.com', 'www.facebook.com'], path: /^\/[a-zA-Z0-9_.-]{1,100}\/?$/ },
+  threads: { hosts: ['threads.net', 'www.threads.net'], path: /^\/@[a-zA-Z0-9._]{1,30}\/?$/ },
+  x: { hosts: ['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com'],
+    path: /^\/[a-zA-Z0-9_]{1,15}\/?$/ },
+});
 
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 function cleanText(value, max, name) {
@@ -42,6 +56,35 @@ function normalizeProfile(value) {
     voiceComfort: value.voiceComfort, boundaries: cleanText(value.boundaries, 2000, 'Ограничения'),
     suggestions: cleanText(value.suggestions, 2000, 'Предложения') };
 }
+function requireShape(body, keys) {
+  if (!body || typeof body !== 'object' || Array.isArray(body) ||
+      Object.keys(body).sort().join(',') !== [...keys].sort().join(',')) {
+    fail(400, 'Проверьте поля запроса');
+  }
+}
+function socialPlatform(value) {
+  if (typeof value !== 'string' || !Object.hasOwn(SOCIAL_PROFILES, value)) {
+    fail(400, 'Выберите доступную площадку');
+  }
+  return value;
+}
+function revision(value) {
+  if (!Number.isSafeInteger(value) || value < 0) fail(400, 'Некорректная версия ссылки');
+  return value;
+}
+function publicProfileUrl(value, platform) {
+  if (typeof value !== 'string' || value.length > 300 || value !== value.trim()) {
+    fail(400, 'Укажите публичную ссылку на профиль');
+  }
+  let parsed;
+  try { parsed = new URL(value); } catch { fail(400, 'Укажите корректную ссылку на профиль'); }
+  const rule = SOCIAL_PROFILES[platform];
+  if (parsed.protocol !== 'https:' || !rule.hosts.includes(parsed.hostname) || parsed.port ||
+      parsed.username || parsed.password || parsed.search || parsed.hash || !rule.path.test(parsed.pathname)) {
+    fail(400, 'Нужна публичная HTTPS-ссылка на профиль выбранной площадки без параметров и ключей');
+  }
+  return `${parsed.origin}${parsed.pathname.replace(/\/$/, '')}`;
+}
 
 function createActorOnboarding({ db, authStore, requireSession, requireCsrf, readJson, sendJson,
   now = () => new Date().toISOString() }) {
@@ -53,6 +96,19 @@ function createActorOnboarding({ db, authStore, requireSession, requireCsrf, rea
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     PRIMARY KEY (company_code, user_id)
+  );
+  CREATE TABLE IF NOT EXISTS actor_social_link_proposals (
+    company_code TEXT NOT NULL COLLATE NOCASE,
+    user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+    platform TEXT NOT NULL,
+    public_url TEXT NOT NULL,
+    revision INTEGER NOT NULL CHECK (revision >= 1),
+    status TEXT NOT NULL CHECK (status IN ('pending','approved','rejected')),
+    reviewed_by INTEGER REFERENCES auth_users(id) ON DELETE SET NULL,
+    reviewed_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (company_code, user_id, platform)
   );`);
 
   // Перечитываем права на каждый запрос: прежняя cookie не сохраняет отозванный доступ.
@@ -95,11 +151,125 @@ function createActorOnboarding({ db, authStore, requireSession, requireCsrf, rea
         item.cameraComfort !== 'unknown' && item.voiceComfort !== 'unknown').length,
       participants };
   }
+  function ownSocialLinks(code, user) {
+    const links = db.prepare(`SELECT platform,public_url publicUrl,revision,status,
+      created_at createdAt,updated_at updatedAt,reviewed_at reviewedAt
+      FROM actor_social_link_proposals WHERE company_code=? AND user_id=? ORDER BY platform`)
+      .all(code, user.id);
+    return { companyCode: code, actorId: user.id, platforms: Object.keys(SOCIAL_PROFILES), links,
+      notice: 'Ссылка предложена для проверки. Публикация и статистика не подключаются автоматически.' };
+  }
+  function reviewSocialLinks(code) {
+    const links = db.prepare(`SELECT p.user_id actorId,u.display_name actorName,p.platform,
+      p.public_url publicUrl,p.revision,p.status,p.created_at createdAt,
+      p.updated_at updatedAt,p.reviewed_at reviewedAt
+      FROM actor_social_link_proposals p JOIN auth_users u ON u.id=p.user_id
+      LEFT JOIN auth_user_companies m ON m.user_id=u.id AND m.company_code=p.company_code
+      LEFT JOIN auth_user_permissions a ON a.user_id=u.id AND a.permission='actor-onboarding.self'
+      WHERE p.company_code=? AND (u.role='owner' OR (m.user_id IS NOT NULL AND a.user_id IS NOT NULL))
+      ORDER BY p.updated_at DESC,p.user_id,p.platform`).all(code);
+    return { companyCode: code, links,
+      notice: 'Подтверждение публичной ссылки не подключает аккаунт к публикации или аналитике.' };
+  }
+  function saveSocialLink(code, user, body) {
+    requireShape(body, ['platform', 'publicUrl', 'revision']);
+    const platform = socialPlatform(body.platform);
+    const url = publicProfileUrl(body.publicUrl, platform);
+    revision(body.revision);
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const old = db.prepare(`SELECT revision,public_url publicUrl FROM actor_social_link_proposals
+        WHERE company_code=? AND user_id=? AND platform=?`).get(code, user.id, platform);
+      if (body.revision !== (old?.revision || 0)) fail(409, 'Ссылка уже изменилась. Обновите страницу.');
+      if (!old || old.publicUrl !== url) {
+        const at = now();
+        db.prepare(`INSERT INTO actor_social_link_proposals
+          (company_code,user_id,platform,public_url,revision,status,created_at,updated_at)
+          VALUES(?,?,?,?,1,'pending',?,?) ON CONFLICT(company_code,user_id,platform) DO UPDATE SET
+          public_url=excluded.public_url,revision=actor_social_link_proposals.revision+1,
+          status='pending',reviewed_by=NULL,reviewed_at=NULL,updated_at=excluded.updated_at`)
+          .run(code, user.id, platform, url, at, at);
+      }
+      db.exec('COMMIT');
+    } catch (error) { db.exec('ROLLBACK'); throw error; }
+    return ownSocialLinks(code, user);
+  }
+  function removeSocialLink(code, user, body) {
+    requireShape(body, ['platform', 'revision']);
+    const platform = socialPlatform(body.platform);
+    revision(body.revision);
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const old = db.prepare(`SELECT revision FROM actor_social_link_proposals
+        WHERE company_code=? AND user_id=? AND platform=?`).get(code, user.id, platform);
+      if (!old) fail(404, 'Ссылка не найдена');
+      if (body.revision !== old.revision) fail(409, 'Ссылка уже изменилась. Обновите страницу.');
+      db.prepare(`DELETE FROM actor_social_link_proposals
+        WHERE company_code=? AND user_id=? AND platform=?`).run(code, user.id, platform);
+      db.exec('COMMIT');
+    } catch (error) { db.exec('ROLLBACK'); throw error; }
+    return ownSocialLinks(code, user);
+  }
+  function decideSocialLink(code, reviewer, body) {
+    requireShape(body, ['actorId', 'platform', 'revision', 'decision']);
+    if (!Number.isSafeInteger(body.actorId) || body.actorId < 1) fail(400, 'Участник не найден');
+    const platform = socialPlatform(body.platform);
+    revision(body.revision);
+    if (!['approved', 'rejected'].includes(body.decision)) fail(400, 'Выберите решение');
+    if (reviewer.id === body.actorId && reviewer.role !== 'owner') {
+      fail(403, 'Свою ссылку должен подтвердить другой управляющий');
+    }
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const current = db.prepare(`SELECT p.revision,p.status FROM actor_social_link_proposals p
+        JOIN auth_users u ON u.id=p.user_id
+        LEFT JOIN auth_user_companies m ON m.user_id=u.id AND m.company_code=p.company_code
+        LEFT JOIN auth_user_permissions a ON a.user_id=u.id AND a.permission='actor-onboarding.self'
+        WHERE p.company_code=? AND p.user_id=? AND p.platform=?
+          AND (u.role='owner' OR (m.user_id IS NOT NULL AND a.user_id IS NOT NULL))`)
+        .get(code, body.actorId, platform);
+      if (!current) fail(404, 'Ссылка участника не найдена');
+      if (body.revision !== current.revision) fail(409, 'Ссылка уже изменилась. Обновите страницу.');
+      if (current.status !== body.decision) {
+        const at = now();
+        db.prepare(`UPDATE actor_social_link_proposals SET status=?,revision=revision+1,
+          reviewed_by=?,reviewed_at=?,updated_at=?
+          WHERE company_code=? AND user_id=? AND platform=?`)
+          .run(body.decision, reviewer.id, at, at, code, body.actorId, platform);
+      }
+      db.exec('COMMIT');
+    } catch (error) { db.exec('ROLLBACK'); throw error; }
+    return reviewSocialLinks(code);
+  }
   async function handle(request, response, url) {
-    if (!['/content/actor-onboarding', '/content/actor-onboarding/summary'].includes(url.pathname)) return false;
+    if (!['/content/actor-onboarding', '/content/actor-onboarding/summary',
+      '/content/actor-onboarding/social-links',
+      '/content/actor-onboarding/social-links/review'].includes(url.pathname)) return false;
     if ([...url.searchParams.keys()].some((key) => key !== 'companyCode')) fail(400, 'Лишние параметры запроса');
     const code = url.searchParams.get('companyCode');
     if (typeof code !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(code)) fail(400, 'Выберите компанию');
+    if (url.pathname === '/content/actor-onboarding/social-links/review') {
+      if (!['GET', 'PUT'].includes(request.method)) fail(405, 'Метод не поддерживается');
+      const { session, user } = access(request, code, 'actor-onboarding.manage');
+      if (request.method === 'GET') sendJson(response, 200, reviewSocialLinks(code));
+      else {
+        requireCsrf(request, session);
+        sendJson(response, 200, decideSocialLink(code, user, await readJson(request)));
+      }
+      return true;
+    }
+    if (url.pathname === '/content/actor-onboarding/social-links') {
+      if (!['GET', 'PUT', 'DELETE'].includes(request.method)) fail(405, 'Метод не поддерживается');
+      const { session, user } = access(request, code, 'actor-onboarding.self');
+      if (request.method === 'GET') sendJson(response, 200, ownSocialLinks(code, user));
+      else {
+        requireCsrf(request, session);
+        const body = await readJson(request);
+        sendJson(response, 200, request.method === 'PUT'
+          ? saveSocialLink(code, user, body) : removeSocialLink(code, user, body));
+      }
+      return true;
+    }
     if (url.pathname.endsWith('/summary')) {
       if (request.method !== 'GET') fail(405, 'Метод не поддерживается');
       access(request, code, 'actor-onboarding.manage');

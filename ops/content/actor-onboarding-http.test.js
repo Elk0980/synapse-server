@@ -77,10 +77,30 @@ test('живой кабинет: личный опрос, отдельная с�
   const summary = await (await request('/content/actor-onboarding/summary?companyCode=taisabai', directorAuth)).json();
   assert.equal(summary.ready, 1);
   assert.equal(JSON.stringify(summary).includes(profile.boundaries), false);
+  const socialsRoute = '/content/actor-onboarding/social-links?companyCode=taisabai';
+  const reviewRoute = '/content/actor-onboarding/social-links/review?companyCode=taisabai';
+  const social = await request(socialsRoute, actorAuth, 'PUT', {
+    platform: 'instagram', publicUrl: 'https://instagram.com/actor', revision: 0,
+  });
+  assert.equal(social.status, 200);
+  assert.equal((await social.json()).links[0].status, 'pending');
+  assert.equal((await request(reviewRoute, actorAuth)).status, 403);
+  const pending = await (await request(reviewRoute, directorAuth)).json();
+  assert.equal(pending.links[0].publicUrl, 'https://instagram.com/actor');
+  const noCsrf = await fetch(base + reviewRoute, { method: 'PUT',
+    headers: { cookie: directorAuth.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ actorId: actor.id, platform: 'instagram', revision: 1, decision: 'approved' }) });
+  assert.equal(noCsrf.status, 403);
+  assert.equal((await request(reviewRoute, directorAuth, 'PUT', {
+    actorId: actor.id, platform: 'instagram', revision: 1, decision: 'approved',
+  })).status, 200);
+  assert.equal((await (await request(socialsRoute, actorAuth)).json()).links[0].status, 'approved');
   assert.equal((await request('/content/actor-onboarding?companyCode=alvi', actorAuth)).status, 403);
   const revoked = await request(`/content/admin/accounts/${actor.id}`, owner, 'PATCH', {
     displayName: 'actor', role: 'editor', companies: ['taisabai'], permissions: [],
   });
   assert.equal(revoked.status, 200);
   assert.equal((await request(route, actorAuth)).status, 403, 'старая cookie не сохраняет отозванное право');
+  assert.equal((await request(socialsRoute, actorAuth)).status, 403);
+  assert.equal((await (await request(reviewRoute, directorAuth)).json()).links.length, 0);
 });
