@@ -36,8 +36,11 @@ function confirmedFacts(value) {
   if(!Array.isArray(value)||value.length>50)fail(400,'Слишком много подтверждённых фактов');
   const seen=new Set();
   return value.map(row=>{
-    object(row,['id','statement','source']);
+    object(row,['id','statement','source','approvedForContent']);
+    if(row.approvedForContent!==undefined&&typeof row.approvedForContent!=='boolean')
+      fail(400,'Разрешение использовать факт в контенте должно быть да или нет');
     const out={id:text(row.id,100,true),statement:text(row.statement,1000,true),source:text(row.source,500,true)};
+    if(row.approvedForContent===true)out.approvedForContent=true;
     if(seen.has(out.id))fail(400,'Идентификаторы фактов должны отличаться');
     seen.add(out.id);return out;
   });

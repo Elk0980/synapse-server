@@ -99,6 +99,20 @@ test('путь клиента объясняет этапы и пользу во
   } finally { f.close(); }
 });
 
+test('ТайСабай видит отдельные подробные примеры трёх направлений', async () => {
+  const f = fixture({query: () => payload({companyCode: 'taisabai'})});
+  try {
+    f.ctx.selectedProjectId = 'taisabai';
+    f.ctx.identity.companies.push({id: 'taisabai', name: 'ТайСабай'});
+    f.view.render(f.node, f.ctx);
+    await tick();
+    assert.equal(f.node.querySelectorAll('.mentor-property-example').length, 3);
+    for (const id of ['mentor-property-example', 'mentor-relocation-example', 'mentor-tourism-example']) {
+      assert.equal(f.node.querySelectorAll(`#${id} .mentor-property-stages li`).length, 10);
+    }
+  } finally { f.close(); }
+});
+
 test('без права просмотра раздел не запрашивает данные компании', async () => {
   const f = fixture({permissions: []});
   try {
@@ -170,6 +184,48 @@ test('редактор сохраняет бриф целиком: списки,
     assert.deepEqual(write.body.brief.assets, FIELDS.assets);
     assert.deepEqual(write.body.brief.shootingComfort, {level: 'hands_only', notes: 'Лицо не показываем'});
     assert.deepEqual(write.body.brief.platforms, ['telegram', 'vk', 'instagram']);
+  } finally { f.close(); }
+});
+
+test('внутренняя справка не отправляется модели и требует отдельного разрешения для контента', async () => {
+  const f = fixture();
+  try {
+    f.view.render(f.node, f.ctx);
+    await tick();
+    const form = f.node.querySelector('#mentor-brief-form');
+    const approval = form.querySelector('[data-fact-approved]');
+    assert.equal(approval.checked, false);
+    assert.doesNotMatch(f.node.querySelector('.mentor-journey').textContent, /Приём 10:00–21:00/);
+    submit(f.w, form);
+    await tick();
+    assert.equal(f.calls.find((call) => call.method === 'PUT').body.brief.confirmedFacts[0].approvedForContent, undefined);
+    approval.checked = true;
+    submit(f.w, form);
+    await tick();
+    assert.equal(f.calls.filter((call) => call.method === 'PUT').at(-1).body.brief.confirmedFacts[0].approvedForContent, true);
+  } finally { f.close(); }
+});
+
+test('карточка материала обновляет превью, показывает статус черновика и принимает предложение', async () => {
+  const current = payload();
+  current.transfer.current = {planRevision: 1, briefRevision: 2, transferredAt: '2026-09-18T10:00:00.000Z',
+    actorName: 'Владелец', postIds: [42], items: [{dayIndex: 0, postId: 42, cardStatus: 'draft',
+      hasMedia: false, mediaUrls: [], mediaCount: 0}]};
+  const f = fixture({query: (call) => call.method === 'POST' ? {ok: true} : current});
+  try {
+    f.view.render(f.node, f.ctx);
+    await tick();
+    const first = f.node.querySelector('.mentor-day');
+    assert.match(first.textContent, /Карточка №42 · черновик/);
+    const topic = first.querySelector('[data-field="topic"]');
+    topic.value = 'Новая тема для ролика';
+    topic.dispatchEvent(new f.w.Event('input', {bubbles: true}));
+    assert.equal(first.querySelector('[data-preview-topic]').textContent, 'Новая тема для ролика');
+    first.querySelector('[data-feedback-input]').value = 'Лучше сделать продающий рилс?';
+    first.querySelector('[data-feedback-send]').click();
+    await tick();
+    const write = f.calls.find((call) => call.path === '/media-mentor/plan/feedback');
+    assert.deepEqual(write.body, {planRevision: 1, dayIndex: 0, message: 'Лучше сделать продающий рилс?'});
   } finally { f.close(); }
 });
 

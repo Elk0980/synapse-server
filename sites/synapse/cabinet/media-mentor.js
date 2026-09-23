@@ -60,7 +60,7 @@
       {label: 'Вопросы людей', value: fields.pains.join('; ')},
       {label: 'Аудитория', value: fields.audience},
       {label: 'Продукт', value: fields.product},
-      {label: 'Пример доказательства', value: fields.confirmedFacts[0]?.statement},
+      {label: 'Пример доказательства', value: fields.confirmedFacts.find((fact) => fact.approvedForContent === true)?.statement},
       {label: 'Предложение и условия', value: fields.product},
       {label: 'Цель компании', value: fields.goal},
     ];
@@ -153,30 +153,108 @@
     {name: 'Сервис и рекомендации', phases: ['after'], role: 'Поддерживают после сделки.'},
   ];
 
+  const relocationJourney = [
+    {phase: 'interest', icon: '🌴', title: 'Мечтает о перемене', thought: 'А каково жить в Таиланде?',
+      channel: 'Истории Влада, Лены и Сергея в коротких видео.', help: 'Показываем личный опыт без обещания, что у всех будет так же.'},
+    {phase: 'interest', icon: '💡', title: 'Задаёт первый вопрос', thought: 'Реально ли переехать мне?',
+      channel: 'Пост с частыми вопросами и честными ограничениями.', help: 'Разделяем бытовые вопросы, документы и бюджет.'},
+    {phase: 'study', icon: '🧮', title: 'Считает деньги', thought: 'Сколько нужно на первые месяцы?',
+      channel: 'Разбор реальных категорий расходов.', help: 'Просим вводные: состав семьи, район и запас денег.'},
+    {phase: 'study', icon: '📄', title: 'Изучает документы', thought: 'Какие правила действуют для меня?',
+      channel: 'Памятка с датой и ссылками на официальные правила.', help: 'Проверяем актуальные требования; не обещаем визу или статус.'},
+    {phase: 'study', icon: '🏠', title: 'Выбирает район и жильё', thought: 'Где будет удобно жить?',
+      channel: 'Видео районов, карта и сравнение вариантов.', help: 'Сопоставляем быт, бюджет, транспорт и задачи семьи.'},
+    {phase: 'study', icon: '🛒', title: 'Представляет обычный день', thought: 'Как там с едой, врачом, школой и услугами?',
+      channel: 'Серия бытовых историй от людей на месте.', help: 'Отвечаем на конкретные вопросы, отмечаем неизвестное.'},
+    {phase: 'decision', icon: '⚖️', title: 'Сравнивает сценарии', thought: 'Что делать самому, а где нужна помощь?',
+      channel: 'Чек-лист самостоятельных шагов и сопровождения.', help: 'Объясняем объём возможной услуги и границы ответственности.'},
+    {phase: 'decision', icon: '💬', title: 'Обращается', thought: 'Можно обсудить мой случай?',
+      channel: 'Форма или мессенджер с понятным следующим шагом.', help: 'Фиксируем запрос по переезду отдельно от туризма и недвижимости.'},
+    {phase: 'decision', icon: '🗓️', title: 'Составляет план', thought: 'Что и когда готовить?',
+      channel: 'Консультация и персональный список вопросов.', help: 'Согласуем порядок действий и проверяем цены и условия до обещаний.'},
+    {phase: 'after', icon: '🤝', title: 'Переезжает и адаптируется', thought: 'К кому обратиться после приезда?',
+      channel: 'Практические подсказки и поддержка по договорённости.', help: 'Собираем обратную связь, исправляем пробелы в материалах.'},
+  ];
+  const tourismJourney = [
+    {phase: 'interest', icon: '☀️', title: 'Хочет отдохнуть', thought: 'Хочу поездку без лишней суеты.',
+      channel: 'Короткие видео о Паттайе и реальном маршруте.', help: 'Показываем разные типы отдыха без обещания идеальной поездки.'},
+    {phase: 'interest', icon: '📅', title: 'Выбирает время', thought: 'Когда и на сколько дней ехать?',
+      channel: 'Сезонные подсказки с датой и оговорками.', help: 'Выясняем даты и состав путешественников.'},
+    {phase: 'study', icon: '👨‍👩‍👧', title: 'Определяет свой отдых', thought: 'Нам важнее экскурсии или спокойствие?',
+      channel: 'Подборки для разных запросов.', help: 'Записываем темп, возраст, ограничения и интересы.'},
+    {phase: 'study', icon: '💰', title: 'Считает бюджет', thought: 'Сколько будет стоить вся поездка?',
+      channel: 'Понятный разбор статей расходов.', help: 'Уточняем границы бюджета и включённые услуги.'},
+    {phase: 'study', icon: '✈️', title: 'Думает о прилёте', thought: 'Кто встретит и как добраться?',
+      channel: 'Видео пути от аэропорта и частые вопросы.', help: 'Проверяем доступность транспорта и условия партнёра.'},
+    {phase: 'study', icon: '🗺️', title: 'Выбирает маршрут', thought: 'Что посмотреть без перегруза?',
+      channel: 'Карта, пример дня и экскурсии.', help: 'Составляем посильный маршрут с запасом времени.'},
+    {phase: 'decision', icon: '🔍', title: 'Сравнивает варианты', thought: 'Что включено и кому доверять?',
+      channel: 'Проверяемые описания и отзывы с разрешением.', help: 'Показываем цену, условия отмены и ограничения до оплаты.'},
+    {phase: 'decision', icon: '💬', title: 'Оставляет запрос', thought: 'Можно подобрать поездку под нас?',
+      channel: 'Форма, звонок или мессенджер.', help: 'Сергей получает запрос и уточняет необходимые детали.'},
+    {phase: 'decision', icon: '✅', title: 'Подтверждает план', thought: 'Всё ли готово к вылету?',
+      channel: 'Подтверждение маршрута и контактов.', help: 'Сверяем брони, встречу, оплату и контакты исполнителей.'},
+    {phase: 'after', icon: '🌟', title: 'Отдыхает и делится опытом', thought: 'Помогут ли, если план изменится?',
+      channel: 'Связь во время поездки и отзыв после.', help: 'Решаем вопросы по согласованной услуге и собираем обратную связь.'},
+  ];
+  const commonPhases = [
+    {id: 'interest', label: 'Интерес', range: '1–2'},
+    {id: 'study', label: 'Разбор вариантов', range: '3–6'},
+    {id: 'decision', label: 'Решение и обращение', range: '7–9'},
+    {id: 'after', label: 'Опыт и поддержка', range: '10'},
+  ];
+  const relocationChannels = [
+    {name: 'Личные истории и короткие видео', phases: ['interest', 'study'], role: 'Помогают представить жизнь на месте.'},
+    {name: 'Памятки и сайт', phases: ['study', 'decision'], role: 'Собирают проверенные шаги и ограничения.'},
+    {name: 'Форма и мессенджер', phases: ['decision'], role: 'Принимают личный вопрос.'},
+    {name: 'Консультация и CRM', phases: ['decision', 'after'], role: 'Хранят договорённости и следующий шаг.'},
+  ];
+  const tourismChannels = [
+    {name: 'Видео и соцсети', phases: ['interest', 'study'], role: 'Показывают маршрут и помогают выбрать отдых.'},
+    {name: 'Сайт и условия поездки', phases: ['study', 'decision'], role: 'Дают состав услуги, цену и ограничения.'},
+    {name: 'Форма и мессенджер', phases: ['decision'], role: 'Передают запрос Сергею.'},
+    {name: 'Менеджер и сопровождение', phases: ['decision', 'after'], role: 'Подтверждают детали и помогают во время поездки.'},
+  ];
+
   function propertyExampleMarkup(ctx) {
     const company = ctx.identity?.companies?.find((item) => item.id === ctx.selectedProjectId);
     const isTaiSabai = /тай\s*сабай|taisabai/i.test(`${ctx.selectedProjectId || ''} ${company?.name || ''}`);
-    return `<details id="mentor-property-example" class="card mentor-property-example"${isTaiSabai ? ' open' : ''}>
-      <summary>Пример: покупка недвижимости в Таиланде · 10 шагов</summary>
-      <p class="mentor-note">Учебный пример. Перечисленные каналы — возможные инструменты, а не статус их подключения.
-        Человек может вернуться к сравнению или отказаться от покупки.</p>
-      <div class="mentor-property-phases" aria-label="Четыре части пути">${propertyPhases.map((phase) =>
+    const examples = [
+      {id: 'mentor-property-example', title: 'Недвижимость · 10 шагов', journey: propertyJourney,
+        phases: propertyPhases, channels: propertyChannels,
+        returnNote: 'При выборе объекта человек часто возвращается к районам, документам и бюджету.'},
+      {id: 'mentor-relocation-example', title: 'Переезд · 10 шагов', journey: relocationJourney,
+        phases: commonPhases, channels: relocationChannels,
+        returnNote: 'До переезда человек возвращается к бюджету, документам и условиям жизни; правила нужно перепроверять.'},
+      {id: 'mentor-tourism-example', title: 'Туризм · 10 шагов', journey: tourismJourney,
+        phases: commonPhases, channels: tourismChannels,
+        returnNote: 'Путешественник может менять даты и маршрут; наличие услуг и цены проверяются заново.'},
+    ];
+    const shown = isTaiSabai ? examples : examples.slice(0, 1);
+    return `<section class="mentor-example-section" aria-label="Примеры воронок">
+      <div class="mentor-example-nav">${shown.map((example) => `<button type="button"
+        data-journey-target="${example.id}">${esc(example.title)} ↓</button>`).join('')}</div>
+      ${shown.map((example) => `<details id="${example.id}"
+      class="card mentor-property-example"${isTaiSabai && example.id === 'mentor-property-example' ? ' open' : ''}>
+      <summary>Пример: ${example.title}</summary>
+      <p class="mentor-note">Учебная воронка. Каналы — возможные инструменты, а не статус подключения.
+        Конкретное предложение, цену и права на материалы подтверждаем перед публикацией.</p>
+      <div class="mentor-property-phases" aria-label="Четыре части пути">${example.phases.map((phase) =>
     `<span data-phase="${phase.id}"><strong>${phase.label}</strong><small>Шаги ${phase.range}</small></span>`).join('')}</div>
-      <ol class="mentor-property-stages">${propertyJourney.map((stage, index) => `<li data-phase="${stage.phase}">
+      <ol class="mentor-property-stages">${example.journey.map((stage, index) => `<li data-phase="${stage.phase}">
         <div class="mentor-property-step"><b>${index + 1}</b><span aria-hidden="true">${stage.icon}</span>
           <strong>${esc(stage.title)}</strong></div>
         <div><small>👤 Человек</small><p>«${esc(stage.thought)}»</p></div>
         <div><small>📣 Где встречает нас</small><p>${esc(stage.channel)}</p></div>
         <div><small>🤝 Что делаем</small><p>${esc(stage.help)}</p></div>
       </li>`).join('')}</ol>
-      <p class="mentor-property-return">↩ На этапах выбора человек часто возвращается к районам и объектам.
-        Контент должен помогать сравнивать, а не торопить со сделкой.</p>
+      <p class="mentor-property-return">↩ ${esc(example.returnNote)}</p>
       <h3>Где помогает каждый канал</h3>
-      <div class="mentor-property-channels">${propertyChannels.map((item) => `<div>
+      <div class="mentor-property-channels">${example.channels.map((item) => `<div>
         <strong>${esc(item.name)}</strong><span>${esc(item.role)}</span>
-        <div>${item.phases.map((phase) => `<small data-phase="${phase}">${esc(propertyPhases.find((part) => part.id === phase).label)}</small>`).join('')}</div>
+        <div>${item.phases.map((phase) => `<small data-phase="${phase}">${esc(example.phases.find((part) => part.id === phase).label)}</small>`).join('')}</div>
       </div>`).join('')}</div>
-    </details>`;
+    </details>`).join('')}</section>`;
   }
 
   function briefMarkup(data, edit) {
@@ -189,8 +267,8 @@
         <div><dt>Продукт</dt><dd>${esc(fields.product) || '—'}</dd></div>
         <div><dt>Аудитория</dt><dd>${esc(fields.audience) || '—'}</dd></div>
         <div><dt>Боли клиента</dt><dd>${readOnlyList(fields.pains, (item) => `<li>${esc(item)}</li>`)}</dd></div>
-        <div><dt>Подтверждённые факты</dt><dd>${readOnlyList(fields.confirmedFacts,
-    (item) => `<li>${esc(item.statement)}<br><span class="mentor-note">Источник: ${esc(item.source)}</span></li>`)}</dd></div>
+        <div><dt>Что можем доказать клиенту</dt><dd>${readOnlyList(fields.confirmedFacts,
+    (item) => `<li>${esc(item.statement)}<br><span class="mentor-note">Источник: ${esc(item.source)} · ${item.approvedForContent === true ? 'разрешён для контента' : 'только внутренняя справка'}</span></li>`)}</dd></div>
         <div><dt>Исходники</dt><dd>${readOnlyList(fields.assets,
     (item) => `<li>${esc(item.title)} · ${esc(item.kind)}${item.note ? `<br><span class="mentor-note">${esc(item.note)}</span>` : ''}</li>`)}</dd></div>
         <div><dt>Комфорт съёмки</dt><dd>${esc(vocabulary.shootingComfort.find((level) => level.id === fields.shootingComfort.level)?.label || fields.shootingComfort.level)}${fields.shootingComfort.notes ? `<br><span class="mentor-note">${esc(fields.shootingComfort.notes)}</span>` : ''}</dd></div>
@@ -203,20 +281,22 @@
       <label class="wide">Продукт<small class="mentor-note">Зачем: отделим подтверждённое предложение от идеи и не пообещаем клиенту лишнего.</small><textarea name="product" rows="2" maxlength="2000">${esc(fields.product)}</textarea></label>
       <label class="wide">Аудитория<small class="mentor-note">Зачем: покажем разным людям те вопросы и примеры, которые относятся к их ситуации.</small><textarea name="audience" rows="2" maxlength="2000">${esc(fields.audience)}</textarea></label>
       <label class="wide">Боли клиента — по одной в строке<small class="mentor-note">Зачем: построим путь от реального вопроса к полезному ответу и предложению.</small><textarea name="pains" rows="3">${esc(fields.pains.join('\n'))}</textarea></label>
-      <fieldset class="wide mentor-rows" data-rows="facts"><legend>Подтверждённые факты</legend>
-        <p class="mentor-note">Зачем: доказательства помогают сравнить варианты и доверять бренду. Факт без источника не считается подтверждённым: укажите, откуда он взят.</p>
+      <fieldset class="wide mentor-rows" data-rows="facts"><legend>Что можем доказать клиенту · необязательно</legend>
+        <p class="mentor-note">Для собственника это поле необязательно. Если есть цена с датой, кейс с разрешением, документ, отзыв или личный опыт — укажите источник. Для публикаций отметьте отдельное разрешение; старые и внутренние записи в модель не попадут.</p>
         <div data-rows-body>${fields.confirmedFacts.map((fact) => factRow(fact)).join('')}</div>
         <button class="plain-button" type="button" data-add="facts">Добавить факт</button></fieldset>
       <fieldset class="wide mentor-rows" data-rows="assets"><legend>Исходники</legend>
         <p class="mentor-note">Зачем: начнём с уже доступного материала и попросим снять только то, чего действительно не хватает. Материалы описываются словами: ссылок и загрузки файлов на этом этапе нет.</p>
         <div data-rows-body>${fields.assets.map((asset) => assetRow(asset, vocabulary.assetKinds)).join('')}</div>
         <button class="plain-button" type="button" data-add="assets">Добавить исходник</button></fieldset>
-      <label>Комфорт съёмки<small class="mentor-note">Зачем: предложим посильное задание без давления и обязательного появления в кадре.</small><select name="comfortLevel">${options(vocabulary.shootingComfort, fields.shootingComfort.level)}</select></label>
-      <label class="wide">Что учесть при съёмке<small class="mentor-note">Зачем: учтём ограничения каждого участника и право согласовать финальный материал.</small><textarea name="comfortNotes" rows="2" maxlength="2000">${esc(fields.shootingComfort.notes)}</textarea></label>
+      <label>Общий ориентир по съёмке<small class="mentor-note">До личного опроса каждого участника это лишь ориентир: двигаемся без давления и никого не ставим в кадр без согласия.</small><select name="comfortLevel">${options(vocabulary.shootingComfort, fields.shootingComfort.level)}</select></label>
+      <label class="wide">Общие ограничения съёмки<small class="mentor-note">Личные предпочтения Влада, Лены и Сергея уточняем отдельно у каждого.</small><textarea name="comfortNotes" rows="2" maxlength="2000">${esc(fields.shootingComfort.notes)}</textarea></label>
       <fieldset class="wide mentor-platforms"><legend>Площадки компании</legend>
         <p class="mentor-note">Зачем: подготовим подходящий формат и работающий путь обращения для каждой доступной площадки.</p>
         ${vocabulary.platforms.map((platform) => `<label class="mentor-checkbox"><input type="checkbox" name="platform"
           value="${esc(platform.id)}"${fields.platforms.includes(platform.id) ? ' checked' : ''}>${esc(platform.label)}</label>`).join('')}</fieldset>
+      <p class="mentor-note wide">Изменения брифа сохраняются новой версией. Готовый план сам не меняется:
+        после сохранения проверьте его, обновите и согласуйте новую версию.</p>
       <div class="crm-actions wide"><button class="plain-button" type="submit">Сохранить бриф</button>
         <span id="mentor-brief-state" role="status"></span></div></form>`;
   }
@@ -225,6 +305,8 @@
     <input type="hidden" data-field="id" value="${esc(fact.id)}">
     <label>Факт<input data-field="statement" maxlength="1000" required value="${esc(fact.statement)}"></label>
     <label>Источник<input data-field="source" maxlength="500" required value="${esc(fact.source)}"></label>
+    <label class="mentor-fact-use"><input type="checkbox" data-fact-approved${fact.approvedForContent === true ? ' checked' : ''}>
+      Можно использовать в контенте</label>
     <button class="plain-button" type="button" data-remove>Удалить</button></div>`;
   const assetRow = (asset = {id: '', title: '', kind: 'photo', note: ''}, kinds = []) => `<div class="mentor-row" data-row>
     <input type="hidden" data-field="id" value="${esc(asset.id)}">
@@ -233,20 +315,70 @@
     <label>Заметка<input data-field="note" maxlength="1000" value="${esc(asset.note)}"></label>
     <button class="plain-button" type="button" data-remove>Удалить</button></div>`;
 
-  function dayRow(item, data) {
+  function localMediaPreview(url) {
+    if (typeof url !== 'string' || /[\u0000-\u0020\u007f]/.test(url)) return '';
+    let parsed;
+    try { parsed = new URL(url, window.location.href); }
+    catch { return ''; }
+    if (parsed.origin !== window.location.origin || !parsed.pathname.startsWith('/content/publishing-assets/')) return '';
+    const src = esc(parsed.href);
+    if (/\.(mp4|webm)$/i.test(parsed.pathname)) {
+      return `<video controls preload="metadata" playsinline src="${src}" aria-label="Загруженный видеоматериал"></video>`;
+    }
+    if (/\.(jpe?g|png|webp)$/i.test(parsed.pathname)) {
+      return `<img loading="lazy" src="${src}" alt="Загруженный материал">`;
+    }
+    return '';
+  }
+
+  function dayRow(item, data, index = -1) {
     const fields = data.brief.fields, vocabulary = data.vocabulary;
     const platforms = vocabulary.platforms.filter((platform) => fields.platforms.includes(platform.id));
     const assets = [{id: '', label: 'Без исходника'}, ...fields.assets.map((asset) => ({id: asset.id, label: asset.title}))];
+    const draft = index >= 0 && data.transfer?.current?.planRevision === data.plan?.revision
+      ? data.transfer.current.items.find((row) => row.dayIndex === index) : null;
+    const media = draft?.mediaUrls?.length ? localMediaPreview(draft.mediaUrls[0]) : '';
+    const cardStatus = {draft: 'черновик', scheduled: 'запланирован', publishing: 'отправляется',
+      published: 'опубликован', failed: 'ошибка отправки', needs_review: 'нужна проверка', cancelled: 'отменён'};
+    const feedback = index < 0 ? [] : (data.feedback || []).filter((entry) => entry.dayIndex === index);
+    const platformLabel = platforms.find((row) => row.id === item.platform)?.label || item.platform || 'Площадка';
+    const formatLabel = vocabulary.formats.find((row) => row.id === item.format)?.label || item.format || 'Формат';
     return `<div class="mentor-row mentor-day" data-row>
-      <label>Дата<input data-field="date" type="date" required value="${esc(item.date)}"></label>
-      <label>Площадка<select data-field="platform">${options(platforms, item.platform)}</select></label>
-      <label>Формат<select data-field="format">${options(vocabulary.formats, item.format)}</select></label>
-      <label>Роль<select data-field="role">${options(vocabulary.roles, item.role)}</select></label>
-      <label class="wide">Тема<input data-field="topic" maxlength="300" required value="${esc(item.topic)}"></label>
-      <label class="wide">Зацепка<input data-field="hook" maxlength="500" value="${esc(item.hook)}"></label>
-      <label>Исходник<select data-field="assetId">${options(assets, item.assetId)}</select></label>
-      <label class="wide">Заметка наставника<textarea data-field="mentorNote" rows="2" maxlength="2000">${esc(item.mentorNote)}</textarea></label>
-      <button class="plain-button" type="button" data-remove>Убрать день</button></div>`;
+      <div class="mentor-day-preview" data-preview-format="${esc(item.format)}" aria-label="Макет публикации">
+        <div class="mentor-day-preview-head"><strong data-preview-platform>${esc(platformLabel)}</strong>
+          <span data-preview-date>${item.date ? esc(day(item.date)) : 'Дата не выбрана'}</span></div>
+        <div class="mentor-day-preview-media">${media || '<span class="mentor-day-play" aria-hidden="true">▶</span><span>Здесь появится загруженный материал</span>'}</div>
+        <div class="mentor-day-preview-caption"><small data-preview-format-label>${esc(formatLabel)}</small>
+          <strong data-preview-topic>${esc(item.topic) || 'Тема публикации'}</strong>
+          <span data-preview-hook>${esc(item.hook) || 'Зацепка для зрителя'}</span></div>
+      </div>
+      <div class="mentor-day-edit">
+        <div class="mentor-day-status"><strong>Материал ${index >= 0 ? index + 1 : 'новый'}</strong>
+          <span>${draft ? `Карточка №${esc(draft.postId)} · ${esc(cardStatus[draft.cardStatus] || draft.cardStatus || 'статус неизвестен')} · ${draft.hasMedia ? 'медиа загружено' : 'без медиа'}` : 'Пока только в плане'}</span></div>
+        ${draft ? '<p class="mentor-note">Дата и тема здесь относятся к плану. Уже созданную карточку и время выхода изменяйте в разделе «Автопостинг».</p>' : ''}
+        <label>Дата выхода<input data-field="date" type="date" required value="${esc(item.date)}"></label>
+        <div class="mentor-day-selects">
+          <label>Площадка<select data-field="platform">${options(platforms, item.platform)}</select></label>
+          <label>Формат<select data-field="format">${options(vocabulary.formats, item.format)}</select></label>
+          <label>Задача материала<select data-field="role">${options(vocabulary.roles, item.role)}</select></label>
+        </div>
+        <label>Тема<input data-field="topic" maxlength="300" required value="${esc(item.topic)}"></label>
+        <details class="mentor-day-more"><summary>Зацепка, исходник и задание</summary>
+          <label>Зацепка<input data-field="hook" maxlength="500" value="${esc(item.hook)}"></label>
+          <label>Исходник<select data-field="assetId">${options(assets, item.assetId)}</select></label>
+          <label>Заметка наставника<textarea data-field="mentorNote" rows="2" maxlength="2000">${esc(item.mentorNote)}</textarea></label>
+        </details>
+        ${index >= 0 ? `<div class="mentor-day-feedback">
+          <strong>Предложения по этому материалу</strong>
+          ${feedback.length ? `<ul class="mentor-list">${feedback.map((entry) => `<li>${esc(entry.message)}
+            <small>${esc(entry.actorName || 'Участник')} · ${esc(moment(entry.createdAt))}</small></li>`).join('')}</ul>`
+    : '<p class="mentor-note">Предложений пока нет.</p>'}
+          <label>Что стоит изменить?<textarea data-feedback-input="${index}" rows="2" maxlength="1000" placeholder="Например: может, эта тема лучше подойдёт для продающего рилса?"></textarea></label>
+          <button class="plain-button" type="button" data-feedback-send="${index}">Предложить правку</button>
+          <span data-feedback-state="${index}" role="status"></span>
+        </div>` : '<p class="mentor-note">Сначала сохраните материал, затем можно оставить предложение по нему.</p>'}
+        <button class="plain-button" type="button" data-remove>Убрать материал</button>
+      </div></div>`;
   }
 
   /* Проверка плана по механическим правилам курса. Считает отдельный модуль без модели
@@ -278,13 +410,16 @@
   function planMarkup(data, edit) {
     const plan = data.plan, vocabulary = data.vocabulary;
     const label = (list, id) => esc(list.find((item) => item.id === id)?.label || id);
-    const view = plan ? `<p class="mentor-note">Версия ${esc(plan.revision)} по брифу ${esc(plan.briefRevision)} ·
-        ${esc(day(plan.startDate))} — ${esc(day(plan.endDate))} · ${esc(plan.windowDays)} дней · обновлён ${esc(moment(plan.updatedAt))}</p>
+    const version = plan ? `<p class="mentor-note">Версия ${esc(plan.revision)} по брифу ${esc(plan.briefRevision)} ·
+        ${esc(day(plan.startDate))} — ${esc(day(plan.endDate))} · ${esc(plan.windowDays)} дней · обновлён ${esc(moment(plan.updatedAt))}</p>` : '';
+    const view = plan ? `${version}
       <ol class="mentor-plan-list">${plan.days.map((item) => `<li><strong>${esc(day(item.date))}</strong> ·
         ${label(vocabulary.platforms, item.platform)} · ${label(vocabulary.formats, item.format)} ·
         ${label(vocabulary.roles, item.role)}<br>${esc(item.topic)}${item.hook ? `<br><span class="mentor-note">${esc(item.hook)}</span>` : ''}${item.mentorNote ? `<br><span class="mentor-note">${esc(item.mentorNote)}</span>` : ''}</li>`).join('')}</ol>`
       : '<p class="mentor-note">План ещё не составлен.</p>';
-    const checked = plan ? `${view}${rulesMarkup(plan)}` : view;
+    const stale = plan && plan.briefRevision !== data.brief.revision
+      ? `<p class="mentor-warning" role="note">Бриф сохранён как версия ${esc(data.brief.revision)}. Этот план остался по версии ${esc(plan.briefRevision)} и сам не перестроился. Проверьте материалы, сохраните новую версию плана и согласуйте её заново.</p>` : '';
+    const checked = plan ? `${edit ? version : view}${stale}${rulesMarkup(plan)}` : view;
     if (!edit) return checked;
     if (!data.brief.revision) {
       return `${checked}<p class="mentor-note">Сначала сохраните бриф компании — план составляется по нему.</p>`;
@@ -309,9 +444,9 @@
       <input type="hidden" name="planRevision" value="${esc(plan ? plan.revision : 0)}">
       <input type="hidden" name="briefRevision" value="${esc(data.brief.revision)}">
       <p class="mentor-note">План охватывает от ${esc(vocabulary.minDays)} до ${esc(vocabulary.maxDays)} дней подряд,
-        не больше трёх материалов на дату. Дни идут по возрастанию даты.</p>
-      <div class="mentor-rows wide" data-rows="days"><div data-rows-body>${(plan ? plan.days : []).map((item) => dayRow(item, data)).join('')}</div>
-        <button class="plain-button" type="button" data-add="days">Добавить день</button></div>
+        не больше трёх материалов на дату. Дни идут по возрастанию даты. Карточка показывает макет, а не готовую публикацию.</p>
+      <div class="mentor-rows mentor-plan-editor wide" data-rows="days"><div class="mentor-day-cards" data-rows-body>${(plan ? plan.days : []).map((item, index) => dayRow(item, data, index)).join('')}</div>
+        <button class="plain-button" type="button" data-add="days">Добавить материал</button></div>
       <div class="crm-actions wide"><button class="plain-button" type="submit">Сохранить план</button>
         <span id="mentor-plan-state" role="status"></span></div></form>`;
   }
@@ -472,9 +607,11 @@
     });
 
   function collectBrief(form) {
-    const facts = [...form.querySelectorAll('[data-rows="facts"] [data-row]')].map(rowValues)
+    const facts = [...form.querySelectorAll('[data-rows="facts"] [data-row]')]
+      .map((element) => ({...rowValues(element), approved: element.querySelector('[data-fact-approved]').checked}))
       .filter((row) => row.statement || row.source)
-      .map((row) => ({id: row.id || newId(), statement: row.statement, source: row.source}));
+      .map((row) => ({id: row.id || newId(), statement: row.statement, source: row.source,
+        ...(row.approved ? {approvedForContent: true} : {})}));
     const assets = [...form.querySelectorAll('[data-rows="assets"] [data-row]')].map(rowValues)
       .filter((row) => row.title)
       .map((row) => ({id: row.id || newId(), title: row.title, kind: row.kind, note: row.note}));
@@ -493,6 +630,21 @@
     const code = ctx.selectedProjectId;
     const busy = (form, state) => form.querySelectorAll('button,input,select,textarea')
       .forEach((element) => { element.disabled = state; });
+    const syncDayPreview = (row) => {
+      if (!row?.classList.contains('mentor-day')) return;
+      const field = (name) => row.querySelector(`[data-field="${name}"]`);
+      const preview = row.querySelector('.mentor-day-preview');
+      preview.dataset.previewFormat = field('format').value;
+      row.querySelector('[data-preview-platform]').textContent = field('platform').selectedOptions[0]?.textContent || 'Площадка';
+      row.querySelector('[data-preview-format-label]').textContent = field('format').selectedOptions[0]?.textContent || 'Формат';
+      row.querySelector('[data-preview-date]').textContent = field('date').value ? day(field('date').value) : 'Дата не выбрана';
+      row.querySelector('[data-preview-topic]').textContent = field('topic').value.trim() || 'Тема публикации';
+      row.querySelector('[data-preview-hook]').textContent = field('hook').value.trim() || 'Зацепка для зрителя';
+    };
+    const dayRows = node.querySelector('[data-rows="days"]');
+    for (const type of ['input', 'change']) dayRows?.addEventListener(type, (event) => {
+      if (event.target.matches('[data-field]')) syncDayPreview(event.target.closest('[data-row]'));
+    });
     node.querySelectorAll('[data-journey-target]').forEach((button) => button.addEventListener('click', () => {
       const target = node.ownerDocument.getElementById(button.dataset.journeyTarget);
       if (target?.tagName === 'DETAILS') target.open = true;
@@ -507,9 +659,26 @@
       body.insertAdjacentHTML('beforeend', markupFor);
       body.lastElementChild.querySelector('[data-remove]')
         .addEventListener('click', (event) => event.target.closest('[data-row]').remove());
+      syncDayPreview(body.lastElementChild);
     }));
     node.querySelectorAll('[data-remove]').forEach((button) => button.addEventListener('click',
       (event) => event.target.closest('[data-row]').remove()));
+    node.querySelectorAll('[data-feedback-send]').forEach((button) => button.addEventListener('click', async () => {
+      const index = Number(button.dataset.feedbackSend), state = node.querySelector(`[data-feedback-state="${index}"]`);
+      const input = node.querySelector(`[data-feedback-input="${index}"]`), message = input?.value.trim() || '';
+      if (!message) { state.textContent = 'Напишите предложение.'; return; }
+      button.disabled = true;
+      state.textContent = 'Сохраняем предложение…';
+      try {
+        await ctx.crmQuery(`${PATH}/plan/feedback`, {companyCode: code},
+          ctx.csrfOptions('POST', {planRevision: data.plan.revision, dayIndex: index, message}));
+        if (ctx.selectedProjectId === code) await load(container, ctx);
+      } catch (error) {
+        if (ctx.selectedProjectId !== code) return;
+        button.disabled = false;
+        state.textContent = error.message;
+      }
+    }));
 
     const submit = async (form, stateId, path, method, body) => {
       const state = node.querySelector(stateId);

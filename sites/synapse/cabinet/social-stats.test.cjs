@@ -35,6 +35,7 @@ function fixture({role='owner',permissions=[],override}={}) {
     apiJson:async(url,options={})=>{const u=new URL(url,'https://cabinet.example.test/');const call={path:u.pathname,code:u.searchParams.get('companyCode'),method:options.method||'GET',body:options.body?JSON.parse(options.body):null};calls.push(call);
       if(override){const r=await override(call);if(r!==undefined)return r;}
       if(call.path==='/content/crm/social-stats')return overview(call.code);
+      if(call.path==='/content/crm/social-stats/baseline')return {companyCode:call.code,latest:null,versions:[]};
       if(call.path==='/content/crm/social-stats/accounts')return {companyCode:call.code,accounts:['instagram','tiktok','youtube','vk','telegram'].map(p=>({platform:p,label:p,accountRef:'',provider:'manual',enabled:false,kind:'organic',collectHour:6,revision:0,access:{status:'not_configured',missing:[]}}))};
       if(call.path==='/content/crm/social-stats/collect')return {status:'missing_access',missing:['x']};
       if(call.path==='/content/crm/social-stats/import')return {ok:true,rows:call.body.rows.length};
@@ -52,6 +53,28 @@ test('сводка: UNKNOWN показывается прочерком, не н
     assert.doesNotMatch(f.container.innerHTML,/token|Bearer/i);
     assert.ok(f.container.querySelector('#social-accounts-form'),'владелец видит настройки');
     assert.ok(f.calls.every(c=>c.code==='demo-travel'));
+  }finally{f.close();}
+});
+test('исходная точка показывает отсутствие данных честно и фиксируется только после подтверждения даты',async()=>{
+  const f=fixture({override:async call=>{
+    if(call.path==='/content/crm/social-stats/baseline'&&call.method==='GET')return {companyCode:call.code,
+      latest:{version:1,from:'2026-09-01',to:'2026-09-18',cutoverDate:'2026-09-19',createdAt:'2026-09-19T00:00:00Z',sourceNote:'первый пост',
+        snapshot:{status:'no_data',coverageNote:'Статистика не подключена',platforms:{},postsRecorded:0,posts:[]}},versions:[]};
+    if(call.path==='/content/crm/social-stats/baseline'&&call.method==='POST')return {companyCode:call.code};
+  }});
+  try{
+    await f.render();
+    const baseline=f.container.querySelector('#social-baseline-content');
+    assert.match(baseline.textContent,/Показателей за период нет/);
+    assert.match(baseline.textContent,/Статистика не подключена/);
+    assert.match(baseline.textContent,/Исторические публикации не записаны/);
+    const form=f.container.querySelector('#social-baseline-form');
+    form.elements.from.value='2026-09-01';form.elements.to.value='2026-09-18';form.elements.cutoverDate.value='2026-09-19';
+    form.elements.sourceNote.value='ссылка на первый пост';form.elements.confirmedStart.checked=true;
+    form.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));await settle();
+    const write=f.calls.find(c=>c.path==='/content/crm/social-stats/baseline'&&c.method==='POST');
+    assert.equal(write.body.confirmedStart,true);assert.equal(write.body.to,'2026-09-18');
+    assert.equal(write.code,'demo-travel');
   }finally{f.close();}
 });
 test('вводный текст не называет чужую компанию; подтверждение ведёт на публикацию, ручной ввод не выдаётся за API, спор карточек и UNKNOWN показаны честно',async()=>{

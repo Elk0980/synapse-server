@@ -1,5 +1,20 @@
 .social-toolbar { display:flex; flex-wrap:wrap; gap:12px; align-items:end; }
 .social-toolbar label { display:grid; gap:4px; }
+.social-baseline-head h2 { margin:0 0 4px; }
+.social-baseline-head p { margin:0 0 12px; }
+.social-baseline-meta { display:grid; gap:4px; margin-bottom:12px; overflow-wrap:anywhere; }
+.social-baseline-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:10px; margin:12px 0; }
+.social-baseline-platform { min-width:0; padding:12px; border:1px solid var(--line,#333); border-radius:12px; }
+.social-baseline-platform > strong, .social-baseline-platform > small { display:block; }
+.social-baseline-platform small { color:var(--muted,#999); overflow-wrap:anywhere; }
+.social-baseline-platform .social-metrics { grid-template-columns:1fr 1fr; }
+.social-baseline-create summary, .social-baseline details summary { cursor:pointer; min-height:44px; padding:10px 0; }
+.social-baseline-create .crm-form { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:10px; }
+.social-baseline-create .crm-form label { display:grid; gap:4px; min-width:0; }
+.social-baseline-create .crm-form .wide { grid-column:1/-1; }
+.social-baseline-create .crm-form input[type="date"], .social-baseline-create .crm-form input[type="text"] { box-sizing:border-box; width:100%; min-height:44px; }
+.social-baseline-create .crm-form label:has(input[type="checkbox"]) { display:flex; align-items:center; gap:8px; }
+.social-baseline-posts { display:grid; gap:7px; padding-left:20px; overflow-wrap:anywhere; }
 .social-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; margin:12px 0; }
 .social-platform h2 { margin:0 0 6px; font-size:1.05rem; }
 .social-platform[data-status="ok"], .social-platform[data-status="partial"] { border-color:var(--accent,#7fd); }
@@ -43,4 +58,6 @@
   .social-toolbar input, .social-toolbar button { width:100%; min-height:44px; }
   .social-grid, .social-metrics { grid-template-columns:1fr; }
   .social-platform button { width:100%; min-height:44px; }
+  .social-baseline-platform .social-metrics { grid-template-columns:1fr 1fr; }
+  .social-baseline-create button { width:100%; min-height:44px; }
 }

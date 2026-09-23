@@ -22,6 +22,25 @@ test('нормальный ответ превращается в позиции
   assert.equal(out.capabilities.approved, false);
 });
 
+test('модель получает только факты, которые владелец разрешил для контента', async () => {
+  const brief = {...BRIEF, confirmedFacts: [
+    {id: 'internal', statement: 'Внутренний технический отчёт', source: 'закрытая CRM'},
+    {id: 'public', statement: 'Часы приёма 10–20', source: 'официальный сайт', approvedForContent: true},
+  ]};
+  const prompts = [];
+  const s = createMediaMentorSuggest({ask: async (payload) => {
+    prompts.push(JSON.parse(payload).messages[0].content);
+    return {text: prompts.length === 1 ? JSON.stringify([row()]) : JSON.stringify({
+      positioning: 'Салон', rubrics: [{title: 'Вопросы', why: 'польза', formats: ['post']}], gaps: []})};
+  }});
+  await s.suggest(brief, {startDate: '2026-09-21', days: 7});
+  await s.analyze(brief);
+  for (const prompt of prompts) {
+    assert.match(prompt, /Часы приёма 10–20/);
+    assert.doesNotMatch(prompt, /Внутренний технический отчёт|закрытая CRM/);
+  }
+});
+
 test('площадка вне брифа отбрасывается с причиной', async () => {
   const s = createMediaMentorSuggest({ ask: fake(JSON.stringify([row(), row({ platform: 'instagram' })])) });
   const out = await s.suggest(BRIEF, { startDate: '2026-09-21', days: 7 });
@@ -118,7 +137,8 @@ test('задание на план объясняет ОВП и учитывае
 
 test('в задание не попадают исходники, которых нет, и не теряется источник факта', async () => {
   const s = createMediaMentorSuggest({ ask: fake('[]') });
-  const prompt = s.buildPrompt(BRIEF, { startDate: '2026-09-21', days: 7 });
+  const brief = {...BRIEF, confirmedFacts: BRIEF.confirmedFacts.map((fact) => ({...fact, approvedForContent: true}))};
+  const prompt = s.buildPrompt(brief, { startDate: '2026-09-21', days: 7 });
   assert.ok(prompt.messages[0].content.includes('a1 — Фото кабинета [photo]'));
   assert.ok(prompt.messages[0].content.includes('источник: сайт'));
 });
