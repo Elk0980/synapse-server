@@ -115,13 +115,53 @@
       ${row.completeness && row.completeness !== 'complete' ? ` · ${esc(row.completeness === 'partial' ? 'частичные данные' : 'полнота неизвестна')}` : ''}
       <small>${baselineSource(row)}</small></li>`;
   }
+  function baselineAssessment(item) {
+    const assessment = item.assessment;
+    if (!assessment || assessment.basis !== 'frozen_snapshot') {
+      return '<section class="social-baseline-assessment" aria-label="Что видим до старта"><h3>Что видим до старта</h3>' +
+        '<p>Краткий разбор этой версии ещё не получен. Ниже доступны сохранённые числа и источники; отсутствие разбора не означает нулевой результат.</p></section>';
+    }
+    const sourceLine = (part) => `<p class="social-note"><strong>Источник:</strong> ${part.sources?.length ?
+      baselineSource(part.sources[0]) + (part.sources.length > 1 || part.sourcesTruncated ? ' · остальные источники — в подробностях снимка' : '') :
+      'в снимке не указан; уточните происхождение данных перед сравнением.'}</p>`;
+    const publications = assessment.publications || {};
+    return `<section class="social-baseline-assessment" aria-label="Что видим до старта">
+      <h3>Что видим до старта</h3><p class="social-note">Выводы только по сохранённой версии ${esc(item.version)} за
+        ${esc(day(item.from))} — ${esc(day(item.to))}. Текущая статистика сюда не подмешивается.</p>
+      <ul class="social-baseline-findings">${(assessment.platforms || []).map((part) => `<li>
+        <strong>${esc(PLATFORM_LABELS[part.platform] || part.platform)}</strong>
+        <p>${part.datesWithMetrics === null ? 'Число дат с показателями неизвестно.' :
+    `Дат хотя бы с одним показателем: ${num(part.datesWithMetrics)} из ${num(part.periodDays)}.`}
+          ${part.dateEvidence === 'stored_count' ? 'Число взято из сводки снимка; исходные даты не сохранены.' : ''}
+          ${part.metrics?.length ? `Записаны: ${part.metrics.map((key) => esc(METRIC_LABELS[key] || key)).join(', ')}.` : 'Значения показателей неизвестны.'}</p>
+        ${sourceLine(part)}<p class="social-note"><strong>Для сравнения:</strong>
+          ${part.missingDates > 0 ? `не хватает дат с показателями: ${num(part.missingDates)}; пропуски не равны нулю.` :
+    part.missingDates === 0 ? 'наличие показателя на каждую дату не означает полноту всех метрик.' : 'покрытие периода неизвестно.'}
+          ${part.hasPointValues ? 'Значение на отдельную дату не заменяет дневную историю.' : ''}</p></li>`).join('')}
+        ${assessment.unconfiguredPlatforms?.length ? `<li><strong>Пробелы в снимке</strong><p>Нет сохранённых показателей:
+          ${assessment.unconfiguredPlatforms.map((id) => esc(PLATFORM_LABELS[id] || id)).join(', ')}.</p>
+          <p class="social-note">Наличие источника и результаты этих площадок по этому снимку не подтверждены. Для нужных площадок добавьте выгрузку или отметьте отсутствие доступа.</p></li>` : ''}
+        <li><strong>Прежние публикации</strong><p>Записей о публикациях: ${num(publications.recorded)}.
+          ${publications.detailed ? `В подробных записях с показателями: ${num(publications.withMetrics)} из ${num(publications.detailed)}.` :
+    'Числа по отдельным публикациям неизвестны.'}
+          Подтверждения владельца: ${num(publications.receiptsRecorded)}; к числу записей их не прибавляем.</p>
+          ${sourceLine(publications)}<p class="social-note"><strong>Для сравнения:</strong>
+            ${publications.truncated ? 'в снимке сохранена только часть подробных записей; ' : ''}полнота архива не подтверждена.
+            Тексты в снимке не сохранены, качество содержания не оценено.</p></li></ul>
+      <details class="social-baseline-assessment-limits"><summary>Что мешает сравнению</summary>
+        <ul>${(assessment.limitations || []).map((text) => `<li>${esc(text)}</li>`).join('')}</ul></details>
+      <div class="social-baseline-next"><h4>Что сделать до запуска</h4>
+        <ol>${(assessment.actions || []).map((text) => `<li>${esc(text)}</li>`).join('')}</ol></div>
+    </section>`;
+  }
   function baselineMarkup(data) {
     const item = data.latest;
     if (!item) return '<p>Исходная точка ещё не зафиксирована. Выберите подтверждённую дату первого нашего материала и период до неё.</p>';
     const snapshot = item.snapshot || {}, platforms = snapshot.platforms || {};
     const cards = PLATFORMS.map((id) => {
       const part = platforms[id] || {}, totals = part.totals || {}, sources = part.sources || [], measurements = part.measurements || [];
-      const metrics = Object.entries(totals).map(([key, value]) => `<div><dt>${esc(METRIC_LABELS[key] || key)}</dt><dd>${num(value)}</dd></div>`).join('');
+      const metrics = Object.entries(totals).map(([key, value]) => `<div><dt>${esc(key === 'reach' && part.aggregation?.reach === 'sum' ?
+        'Охват — сумма суточных значений, не уникальные люди за период' : METRIC_LABELS[key] || key)}</dt><dd>${num(value)}</dd></div>`).join('');
       const coverage = part.coverage === 'days_recorded' ? 'Есть показатели на каждый день; полнота метрик неизвестна'
         : part.coverage === 'partial' ? 'Часть дней без записанных показателей'
           : part.coverage === 'account_not_configured' ? 'Аккаунт не настроен' : 'Показатели не записаны';
@@ -146,6 +186,7 @@
       <span>Основание даты: ${esc(item.sourceNote || '—')}</span>
       <span>${snapshot.status === 'no_data' ? 'Показателей за период нет' : 'Данные частичные'} · ${esc(snapshot.coverageNote || '')}</span>
       <p class="social-note">Это замер записанного, а не полный архив соцсетей. Исторические публикации и подтверждения владельца могут относиться к одному выходу; их количество не складываем.</p></div>
+      ${baselineAssessment(item)}
       <div class="social-baseline-grid">${cards}</div>
       <details class="social-baseline-history"><summary>Исторические публикации: записано ${num(snapshot.postsRecorded)}</summary>
         <p class="social-note">Показаны только публикации, уже найденные в системе. Числа взяты из записанных измерений, сравнивать разные посты без оценки покрытия нельзя.</p>

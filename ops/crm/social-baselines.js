@@ -22,6 +22,91 @@ const safeNote = (value) => {
 };
 const source = (row) => ({ provider: row.provider || 'unknown', capturedAt: row.collected_at || null,
   runId: row.run_id ?? null, note: row.error?.startsWith('Источник: ') ? row.error.slice(10) : null });
+const numeric = (value) => typeof value === 'number' && Number.isFinite(value);
+const count = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
+const evidence = (rows) => {
+  const unique = new Map();
+  for (const row of rows) {
+    if (!row || (!row.provider && !row.capturedAt && !row.note)) continue;
+    const item = { provider: row.provider || 'unknown', capturedAt: row.capturedAt || null,
+      note: row.note || null };
+    unique.set(JSON.stringify(item), item);
+  }
+  return { sources: [...unique.values()].slice(0, 3), sourcesTruncated: unique.size > 3 };
+};
+
+// Только выводы из неизменяемого снимка. Не читаем текущую статистику, аккаунты,
+// тексты публикаций или внешние сервисы; старые версии получают тот же разбор.
+function assessSnapshot(snapshot, from, to) {
+  const duration = (Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86400000 + 1;
+  const periodDays = Number.isSafeInteger(duration) && duration > 0 ? duration : null;
+  const inPeriod = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    value >= from && value <= to && Number.isFinite(Date.parse(value + 'T00:00:00Z'));
+  const platforms = [], unconfiguredPlatforms = [];
+  for (const platform of Object.keys(PLATFORMS)) {
+    const part = snapshot.platforms?.[platform];
+    if (!part) { unconfiguredPlatforms.push(platform); continue; }
+    const measurements = Array.isArray(part.measurements) ? part.measurements : [];
+    const dates = new Set(), metrics = new Set();
+    for (const row of measurements) {
+      if (!numeric(row.value)) continue;
+      if (row.period === 'day' && inPeriod(row.date)) { dates.add(row.date); metrics.add(row.metric); }
+      if (row.period === 'lifetime' && row.date <= to) metrics.add(row.metric);
+    }
+    for (const [day, values] of Object.entries(part.days || {})) {
+      if (!inPeriod(day)) continue;
+      for (const [metric, row] of Object.entries(values || {})) {
+        if (numeric(row?.value)) { dates.add(day); metrics.add(metric); }
+      }
+    }
+    for (const [metric, value] of Object.entries(part.totals || {})) if (numeric(value)) metrics.add(metric);
+    const pointValues = Object.values(part.latest || {}).filter((row) => numeric(row?.value));
+    for (const [metric, row] of Object.entries(part.latest || {})) if (numeric(row?.value)) metrics.add(metric);
+    const storedDays = count(part.recordedDays);
+    // В раннем снимке могут остаться только счётчик дней и итоги. Не объявляем
+    // их точными датами и не заменяем отсутствие счётчика нулём.
+    const hasDatedEvidence = Array.isArray(part.measurements) || (part.days && typeof part.days === 'object');
+    const datesWithMetrics = hasDatedEvidence ? dates.size : storedDays !== null &&
+      periodDays !== null && storedDays <= periodDays ? storedDays : null;
+    if (!part.accountConfigured && !metrics.size && !datesWithMetrics) {
+      unconfiguredPlatforms.push(platform); continue;
+    }
+    const sources = evidence([...(Array.isArray(part.sources) ? part.sources : []),
+      ...measurements.filter((row) => numeric(row.value))]);
+    platforms.push({ platform, datesWithMetrics, periodDays,
+      dateEvidence: dates.size ? 'dated_metrics' : datesWithMetrics ? 'stored_count' : 'none',
+      missingDates: periodDays !== null && datesWithMetrics !== null ? periodDays - datesWithMetrics : null,
+      metrics: [...metrics].filter((metric) => typeof metric === 'string').sort(),
+      hasPointValues: pointValues.length > 0 || measurements.some((row) => row.period === 'lifetime' && numeric(row.value)),
+      ...sources, sourcesTruncated: sources.sourcesTruncated || Boolean(part.sourcesTruncated) });
+  }
+  const posts = Array.isArray(snapshot.posts) ? snapshot.posts : [];
+  const detailed = Array.isArray(snapshot.posts) ? posts.length : null;
+  const recorded = count(snapshot.postsRecorded) ?? detailed;
+  const receipts = count(snapshot.receiptsRecorded) ?? (Array.isArray(snapshot.receipts) ? snapshot.receipts.length : null);
+  const postsWithMetrics = detailed === null ? null : posts.filter((post) =>
+    Array.isArray(post.metrics) && post.metrics.some((metric) => numeric(metric.value) && inPeriod(metric.date))).length;
+  const publications = { recorded, detailed, withMetrics: postsWithMetrics, receiptsRecorded: receipts,
+    truncated: Boolean(snapshot.postsTruncated) || (recorded !== null && detailed !== null && recorded > detailed),
+    ...evidence(posts.map((post) => post.source || { provider: post.provider })) };
+  const missingMetricDates = !platforms.length || platforms.some((part) => part.datesWithMetrics === null || part.missingDates > 0);
+  return { version: 1, basis: 'frozen_snapshot', periodDays, platforms, unconfiguredPlatforms, publications,
+    limitations: [
+      missingMetricDates ? 'Дневная статистика неполная: отсутствующие даты нельзя считать днями с нулевым результатом.' :
+        'На каждую дату есть хотя бы один показатель. Это не подтверждает полноту всех метрик или одинаковые условия сравнения.',
+      'Записи о публикациях не подтверждают полноту архива. Подтверждения владельца могут относиться к тем же выходам и не прибавляются к числу записей.',
+      'Тексты и материалы публикаций в этом снимке не сохранены; качество содержания не оценено.',
+      'Уникальный охват не суммируется между датами и площадками. По просмотрам нельзя сделать вывод о продажах.'
+    ],
+    actions: [
+      missingMetricDates || unconfiguredPlatforms.length ?
+        'До запуска сохраните выгрузку за недостающие даты для нужных площадок с источником и временем снятия; если её нет, явно отметьте пробелы.' :
+        'До запуска проверьте, что у сравниваемых периодов совпадают аккаунты, длительность, показатели и разделение рекламы и органики.',
+      recorded ? 'Сверьте записи с архивом площадки, проверьте повторы и сохраните тексты или материалы для оценки содержания.' :
+        'Добавьте архив прежних публикаций с датами, ссылками и доступными показателями; отдельно сохраните тексты или материалы.',
+      'После дополнений зафиксируйте новую версию «ДО». Для будущего сравнения используйте одинаковые показатели и длительность периода.'
+    ] };
+}
 
 function createSocialBaselines(db, stats, { now = () => Date.now() } = {}) {
   db.exec(`CREATE TABLE IF NOT EXISTS social_baselines (
@@ -49,9 +134,14 @@ function createSocialBaselines(db, stats, { now = () => Date.now() } = {}) {
     if (!row) throw Object.assign(new Error('Компания не найдена'), { code: 'NOT_FOUND', status: 404 });
     return row;
   };
-  const dto = (row) => row && ({ id: row.id, version: row.version, cutoverDate: row.cutover_date, from: row.period_from,
-    to: row.period_to, sourceNote: row.source_note, createdAt: row.created_at, createdBy: row.created_by,
-    supersedesId: row.supersedes_id, snapshot: JSON.parse(row.snapshot_json) });
+  const dto = (row) => {
+    if (!row) return null;
+    const snapshot = JSON.parse(row.snapshot_json);
+    return { id: row.id, version: row.version, cutoverDate: row.cutover_date, from: row.period_from,
+      to: row.period_to, sourceNote: row.source_note, createdAt: row.created_at, createdBy: row.created_by,
+      supersedesId: row.supersedes_id, snapshot,
+      assessment: assessSnapshot(snapshot, row.period_from, row.period_to) };
+  };
 
   function get(code, version = null) {
     const scope = company(code);
