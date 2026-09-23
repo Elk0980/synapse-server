@@ -12,7 +12,7 @@ const ENTRY = { date: '2026-09-24', platform: 'instagram', format: 'reel',
 const path = (route = 'plan', company = 'taisabai') =>
   `/content/actor-workspace/${route}?companyCode=${company}`;
 
-function setup(t, { ask = null, loadSocialOverview = null } = {}) {
+function setup(t, { ask = null, loadSocialOverview = null, loadActorProfile = null, now } = {}) {
   const db = new DatabaseSync(':memory:');
   const auth = createAuthStore(db, `owner:owner:${HASH}`);
   const add = (login, companies, permissions) => auth.create(1, { login,
@@ -33,7 +33,7 @@ function setup(t, { ask = null, loadSocialOverview = null } = {}) {
     },
     readJson: async (request) => request.body,
     sendJson: (response, status, payload) => { response.status = status; response.body = payload; },
-    ask, loadSocialOverview,
+    ask, loadSocialOverview, loadActorProfile, ...(now ? {now} : {}),
   });
   t.after(() => db.close());
   const session = (user) => ({ user: auth.getById(user.id), csrf: `csrf-${user.id}` });
@@ -300,4 +300,79 @@ test('подмена роли в cookie не даёт управляющий д�
   assert.equal((await call(f, f.vlad, 'POST', path('summary'), {})).status, 405);
   assert.equal((await call(f, f.vlad, 'POST', `${path('messages')}&actorId=2`,
     { clientMessageId: 'request-00001', text: 'x' })).status, 400);
+});
+
+test('личный контекст включает только свою анкету и план и укладывается в лимит рантайма', async (t) => {
+  const calls = [], profileReads = [];
+  const f = setup(t, { loadActorProfile: (code, actorId) => {
+    profileReads.push([code, actorId]);
+    return { direction: 'Моё направление', role: 'Моя роль', cameraComfort: 'off_camera',
+      voiceComfort: 'text_only', boundaries: '\\'.repeat(2000), suggestions: '\\'.repeat(2000),
+      anotherActor: 'Чужой секрет' };
+  }, ask: async (payload) => { calls.push(payload); return { text: 'Снимем без лица' }; } });
+  await call(f, f.lena, 'PUT', path(), { revision: 0, entries: [{...ENTRY, topic: 'Тема другого участника'}] });
+  const entries = Array.from({length: 12}, (_, i) => ({ ...ENTRY,
+    date: `2026-10-${String(i+1).padStart(2,'0')}`, topic: '\\'.repeat(240) }));
+  await call(f, f.vlad, 'PUT', path(), { revision: 0, entries });
+  const sent = await call(f, f.vlad, 'POST', path('messages'),
+    {clientMessageId: 'context-00001', text: 'Что снять первым?'});
+  assert.equal(sent.body.message.aiStatus, 'done');
+  assert.deepEqual(profileReads, [['taisabai', f.vlad.id]]);
+  const {validateReplyPayload} = require('../hugh-runtime/limits');
+  assert.doesNotThrow(() => validateReplyPayload(calls[0]));
+  assert.match(calls[0].system, /off_camera/);
+  assert.equal(calls[0].system.includes('Чужой секрет'), false);
+  assert.equal(calls[0].system.includes('Тема другого участника'), false);
+});
+
+test('явный повтор ограничен минутой и тремя попытками, прежний номер не создаёт новый вызов', async (t) => {
+  let time = Date.parse('2026-09-24T01:00:00Z'), count = 0;
+  const f = setup(t, {now: () => new Date(time).toISOString(), ask: async () => {count++; return null;} });
+  const sent = await call(f, f.vlad, 'POST', path('messages'),
+    {clientMessageId: 'retry-00001', text: 'Помоги с роликом'});
+  const id = sent.body.message.id;
+  const body = {messageId: id, attempt: 1};
+  assert.equal(sent.body.message.attempts, 1);
+  assert.equal((await call(f, f.vlad, 'POST', path('retry'), body)).status, 429);
+  assert.equal((await call(f, f.lena, 'POST', path('retry'), body)).status, 404);
+  assert.equal((await call(f, f.vlad, 'POST', path('retry'), body,
+    {headers: {'x-csrf-token': 'wrong'}})).status, 403);
+  time += 61000;
+  const retried = await call(f, f.vlad, 'POST', path('retry'), body);
+  assert.equal(retried.status, 200, retried.error?.message);
+  assert.equal(retried.body.message.attempts, 2);
+  assert.equal(retried.body.repeated, false);
+  assert.equal((await call(f, f.vlad, 'POST', path('retry'), body)).body.repeated, true);
+  assert.equal(count, 2);
+  time += 61000;
+  const third = await call(f, f.vlad, 'POST', path('retry'), {...body, attempt: 2});
+  assert.equal(third.body.message.attempts, 3);
+  assert.equal(third.body.message.retryAfterAt, null);
+  time += 61000;
+  assert.equal((await call(f, f.vlad, 'POST', path('retry'), {...body, attempt: 3})).status, 409);
+  assert.equal(count, 3);
+  assert.equal(f.db.prepare('SELECT COUNT(*) n FROM actor_workspace_messages').get().n, 1);
+});
+
+test('истёкшая попытка не перезаписывает новый ответ; параллельный повтор идемпотентен', async (t) => {
+  let time = Date.parse('2026-09-24T01:00:00Z'), release, calls = [];
+  const pending = new Promise((resolve) => {release=resolve;});
+  const f = setup(t, { now: () => new Date(time).toISOString(), ask: async (payload) => {
+    calls.push(payload); return calls.length === 1 ? pending : {text: 'Ответ после восстановления'};
+  } });
+  const first = call(f, f.vlad, 'POST', path('messages'), {clientMessageId: 'lease-00001', text: 'Первый вопрос'});
+  await new Promise((resolve) => setImmediate(resolve));
+  const waiting = (await call(f, f.vlad, 'GET', path('messages'))).body.messages[0];
+  assert.equal((await call(f, f.vlad, 'POST', path('retry'), {messageId: waiting.id, attempt: 1})).status, 409);
+  time += 6 * 60000 + 1;
+  const result = await call(f, f.vlad, 'POST', path('retry'), {messageId: waiting.id, attempt: 1});
+  assert.equal(result.body.message.reply, 'Ответ после восстановления');
+  release({text: 'Опоздавший ответ'});
+  await first;
+  const stored = (await call(f, f.vlad, 'GET', path('messages'))).body.messages[0];
+  assert.equal(stored.reply, 'Ответ после восстановления');
+  assert.equal(stored.attempts, 2);
+  assert.notEqual(calls[0].jobId, calls[1].jobId);
+  assert.equal((await call(f, f.vlad, 'POST', path('retry'), {messageId: waiting.id, attempt: 1})).body.repeated, true);
+  assert.equal(calls.length, 2);
 });

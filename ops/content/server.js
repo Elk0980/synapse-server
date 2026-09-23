@@ -179,6 +179,7 @@ const actorWorkspace = createActorWorkspace({ db, authStore,
   requireCsrf: (request, session) => requireCsrf(request, session),
   readJson: (request) => readJson(request), sendJson: (response, status, payload) => send(response, status, payload),
   ask: (payload) => projectChat.askHugh(JSON.stringify(payload)),
+  loadActorProfile: (code, userId) => actorOnboarding.getOwnProfile(code, userId),
   // Узкая статистика для участника: CRM получает доступ только к его компании; клиенту
   // модуль отдаёт лишь агрегированные счётчики, без CRM, ссылок, аккаунтов и истории постов.
   loadSocialOverview: async (code, user) => {
