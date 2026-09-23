@@ -16,6 +16,7 @@ const { createHughSettingsStore } = require('./hugh-settings-store');
 const { createProjectChat } = require('./project-chat');
 const { createOwnerPrivateChat } = require('./owner-private-chat');
 const { createActorOnboarding } = require('./actor-onboarding');
+const { createActorWorkspace } = require('./actor-workspace');
 const { createHughProviders } = require('./hugh-providers');
 const {createMediaMentorSuggest, createMediaMentorSuggestRoute} = require('./media-mentor-suggest');
 const { clientIp, originOf } = require('./site-orders');
@@ -170,6 +171,10 @@ db.exec(`
 `);
 const authStore = createAuthStore(db, process.env.AUTH_USERS || '');
 const actorOnboarding = createActorOnboarding({ db, authStore,
+  requireSession: (request) => requireSession(request),
+  requireCsrf: (request, session) => requireCsrf(request, session),
+  readJson: (request) => readJson(request), sendJson: (response, status, payload) => send(response, status, payload) });
+const actorWorkspace = createActorWorkspace({ db, authStore,
   requireSession: (request) => requireSession(request),
   requireCsrf: (request, session) => requireCsrf(request, session),
   readJson: (request) => readJson(request), sendJson: (response, status, payload) => send(response, status, payload) });
@@ -817,6 +822,7 @@ const server = http.createServer(async (request, response) => {
     if (await projectChat.handle(request,response,url)) return;
 
     if (await actorOnboarding.handle(request,response,url)) return;
+    if (await actorWorkspace.handle(request,response,url)) return;
 
     if (url.pathname === '/content/crm' || url.pathname.startsWith('/content/crm/')) {
       return await proxyCrm(request, response, url, cors);
