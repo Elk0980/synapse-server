@@ -15,6 +15,7 @@ const { createSiteStore } = require('./site-store');
 const { createHughSettingsStore } = require('./hugh-settings-store');
 const { createProjectChat } = require('./project-chat');
 const { createOwnerPrivateChat } = require('./owner-private-chat');
+const { createActorOnboarding } = require('./actor-onboarding');
 const { createHughProviders } = require('./hugh-providers');
 const {createMediaMentorSuggest, createMediaMentorSuggestRoute} = require('./media-mentor-suggest');
 const { clientIp, originOf } = require('./site-orders');
@@ -168,6 +169,10 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS documents_key_idx ON documents(key, version DESC);
 `);
 const authStore = createAuthStore(db, process.env.AUTH_USERS || '');
+const actorOnboarding = createActorOnboarding({ db, authStore,
+  requireSession: (request) => requireSession(request),
+  requireCsrf: (request, session) => requireCsrf(request, session),
+  readJson: (request) => readJson(request), sendJson: (response, status, payload) => send(response, status, payload) });
 const hughSettingsStore = createHughSettingsStore(db);
 // Заявки с сайта принимаются только для Palitra: сайт задаёт Caddy, список Origin — точный allowlist.
 const ORDER_SITES = { palitra: { companyCode: CONTENT_COMPANIES.palitra, title: 'Palitra',
@@ -810,6 +815,8 @@ const server = http.createServer(async (request, response) => {
         error:'Подключение Хью пока недоступно'},{'cache-control':'no-store'}); }
     }
     if (await projectChat.handle(request,response,url)) return;
+
+    if (await actorOnboarding.handle(request,response,url)) return;
 
     if (url.pathname === '/content/crm' || url.pathname.startsWith('/content/crm/')) {
       return await proxyCrm(request, response, url, cors);
