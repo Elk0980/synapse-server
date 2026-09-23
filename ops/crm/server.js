@@ -2583,7 +2583,7 @@ async function route(request, response) {
       // Одобрение версии — решение владельца кабинета; права редактора недостаточно.
       if (action==='approve' || action==='reject') {
         if (request.method!=='POST') fail(405,'Метод не поддерживается');
-        if (identity.role!=='owner') fail(403,'Согласовывать и отклонять публикации может только владелец',{code:'FORBIDDEN'});
+        if (identity.role!=='owner' && !identity.permissions?.has('autoposting.approve')) fail(403,'Нет права согласовывать публикации',{code:'FORBIDDEN'});
         result=action==='approve'?autoposting.approve(id,code,await readJson(request),identity):autoposting.reject(id,code,await readJson(request),identity);
         return send(response,status,result,{...cors,'cache-control':'no-store'});
       }
