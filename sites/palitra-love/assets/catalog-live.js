@@ -33,14 +33,19 @@
     const draw = typeof render === 'function' ? render : fallbackCard;
     return draw({ ...item, photo: safeImage(item.photo) }, { extraClass: 'card', tags: item.tags });
   }
-  /* Запасная разметка на случай отсутствия price-render.js: та же структура и классы. */
+  /* Служебные примечания импорта не показываются (то же правило, что в price-render.js). */
+  const AUTO_PRICE_NOTE = /^\s*цена\s+(?:из|на\s+момент)\s+публикации(?=[\s,;.:]|$)[\s\S]*актуальн/i;
+  const isAutoPriceNote = note => AUTO_PRICE_NOTE.test(String(note ?? ''));
+  /* Запасная разметка на случай отсутствия price-render.js: та же структура и классы —
+     цена + «Купить», без ссылок Telegram и второй кнопки заявки. */
   function fallbackCard(item, opts) {
     const image = safeImage(item.photo);
     const priceText = String(item.price ?? '').trim();
     const media = image
       ? `<div class="product-media"><img class="price-card__photo photo" src="${esc(image)}" alt="${esc(item.title)}" loading="lazy" decoding="async" width="800" height="1000"></div>`
       : '<div class="product-media product-media--empty" aria-hidden="true"><img src="/assets/img/logo-mark.svg" alt="" width="64" height="64" loading="lazy"></div>';
-    return `<article class="pc price-card product-card${opts.extraClass ? ' ' + esc(opts.extraClass) : ''}" id="${esc(item.id)}" data-id="${esc(item.id)}"${opts.tags ? ` data-cat="${esc(opts.tags.join(' '))}"` : ''}>${media}<div class="price-card__body"><h3 class="pc__title">${esc(item.title)}</h3>${item.desc ? `<p class="price-card__description">${esc(item.desc)}</p>` : ''}${item.note ? `<p class="note">${esc(item.note)}</p>` : ''}<div class="product-footer"><div class="product-purchase"><p class="pc__price price" data-price-known="${priceText ? 'true' : 'false'}">${priceText ? esc(priceText) : 'Цена уточняется'}</p><button class="button product-add" type="button" data-add data-id="${esc(item.id)}" data-title="${esc(item.title)}">В корзину</button></div><p class="product-links"><a class="product-telegram" href="https://t.me/palitralovee" target="_blank" rel="noopener">Канал в Telegram</a><a class="price-card__button" href="/#zayavka">Заказать под Ваш повод</a></p></div></div></article>`;
+    const note = item.note && !isAutoPriceNote(item.note) ? `<p class="note">${esc(item.note)}</p>` : '';
+    return `<article class="pc price-card product-card${opts.extraClass ? ' ' + esc(opts.extraClass) : ''}" id="${esc(item.id)}" data-id="${esc(item.id)}"${opts.tags ? ` data-cat="${esc(opts.tags.join(' '))}"` : ''}>${media}<div class="price-card__body"><h3 class="pc__title">${esc(item.title)}</h3>${item.desc ? `<p class="price-card__description">${esc(item.desc)}</p>` : ''}${note}<div class="product-footer"><div class="product-purchase"><p class="pc__price price" data-price-known="${priceText ? 'true' : 'false'}">${priceText ? esc(priceText) : 'Цена уточняется'}</p><button class="button product-add" type="button" data-add data-id="${esc(item.id)}" data-title="${esc(item.title)}">Купить</button></div></div></div></article>`;
   }
   function schema(list, origin, pathname) {
     return { '@context': 'https://schema.org', '@type': 'ItemList', name: 'Каталог Palitra',
@@ -90,5 +95,5 @@
     });
     updateSchema();
   }
-  return { entries, card, fallbackCard, schema, removeProductLists, mount };
+  return { entries, card, fallbackCard, isAutoPriceNote, schema, removeProductLists, mount };
 }));

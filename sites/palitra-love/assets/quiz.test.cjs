@@ -45,6 +45,9 @@ test('итог: цена только из live-прайса по priceId, ин�
   assert.equal(root.innerHTML.includes('?text='), false);
   const orderLinks = [...root.querySelectorAll('[data-order-product]')];
   assert.ok(orderLinks.every((a) => a.getAttribute('href') === '/#zayavka' && a.textContent === 'Оставить заявку'));
+  // Замечание Дарьи 20.09: в карточке результата одно действие — заявка, без перехода в Telegram.
+  assert.equal(root.querySelectorAll('.quiz-product a[href*="t.me"]').length, 0);
+  assert.ok([...root.querySelectorAll('.quiz-product')].every((card) => card.querySelectorAll('a, button').length === 1));
   orderLinks[1].click();
   const draft = JSON.parse(plain(win.sessionStorage.getItem(order.DRAFT_KEY)));
   assert.deepEqual(draft, { occasion: 'Выписка', source: '/vypiska', lines: ['Кого встречаете: Мальчика', 'Когда выписка: Завтра', 'Бюджет: 8–12 тысяч', 'Выбранная позиция: Шары для деток — цена уточняется'] });

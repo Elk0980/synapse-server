@@ -18,19 +18,50 @@ const full = { id: 'vypiska-1', title: 'Выписка мальчика', price:
 const bare = { id: 'x-2', title: 'Очень длинное название позиции без цены и без фотографии для проверки переносов', price: '' };
 const classSequence = (html) => [...html.matchAll(/class="([^"]+)"/g)].map((m) => m[1]);
 
-test('карточка прайса: фиксированный порядок блоков, известная цена как строка ЛК', () => {
+test('карточка прайса: фиксированный порядок блоков, известная цена как строка ЛК, одна кнопка «Купить», без Telegram и второй заявки', () => {
   const html = P.productCard(full);
   assert.match(html, /^<article class="pc price-card product-card" id="vypiska-1" data-id="vypiska-1">/);
-  // Примечание — в содержимом, до низа; низ у всех карточек одинаков: цена + «В корзину», затем ссылки.
-  const order = ['pc price-card product-card', 'product-media', 'price-card__photo photo', 'price-card__body', 'pc__title', 'price-card__description', 'note', 'product-footer', 'product-purchase', 'pc__price price', 'button product-add', 'product-links', 'product-telegram', 'price-card__button'];
+  // Примечание владельца — в содержимом, до низа; низ у всех карточек одинаков: цена + «Купить».
+  const order = ['pc price-card product-card', 'product-media', 'price-card__photo photo', 'price-card__body', 'pc__title', 'price-card__description', 'note', 'product-footer', 'product-purchase', 'pc__price price', 'button product-add'];
   assert.deepEqual(classSequence(html), order);
   assert.match(html, /data-price-known="true">9 270 руб\.</);
   assert.match(html, /width="800" height="1000"/);
-  assert.match(html, /href="\/#zayavka"/);
-  assert.match(html, /<button class="button product-add" type="button" data-add data-id="vypiska-1" data-title="Выписка мальчика">В корзину<\/button>/);
+  assert.match(html, /<button class="button product-add" type="button" data-add data-id="vypiska-1" data-title="Выписка мальчика">Купить<\/button>/);
+  // Замечание Дарьи 20.09: в карточке нет перехода в Telegram и дублирующих призывов — только «Купить».
+  assert.doesNotMatch(html, /t\.me\/|product-links|product-telegram|\/#zayavka|Заказать под Ваш повод|В корзину/);
+  assert.equal((html.match(/<button /g) || []).length, 1);
+  assert.equal((html.match(/<a /g) || []).length, 0);
   // Без примечания низ карточки совпадает с карточкой с примечанием: footer не зависит от note.
   const bare = P.productCard({ ...full, note: '' });
   assert.equal(bare.slice(bare.indexOf('<div class="product-footer">')), html.slice(html.indexOf('<div class="product-footer">')));
+});
+
+test('служебные примечания импорта («Цена из публикации…», «Цена на момент публикации…») скрыты на сайте, примечание владельца остаётся, редактор видит всё; строки прайса не меняются', () => {
+  const auto1 = 'Цена из публикации от 07.05.2026; актуальность уточняется при заказе.';
+  const auto2 = 'Цена на момент публикации, актуальную подтверждаем при заказе';
+  const custom = 'Состав: 15 шаров, лента в подарок';
+  assert.equal(P.isAutoPriceNote(auto1), true);
+  assert.equal(P.isAutoPriceNote(auto2), true);
+  assert.equal(P.isAutoPriceNote(' цена из публикации от 01.01.2026; актуальность уточняется '), true);
+  assert.equal(P.isAutoPriceNote(custom), false);
+  assert.equal(P.isAutoPriceNote('Цена из публикации в журнале, состав как на фото'), false, 'без слова «актуальность» — обычное примечание');
+  assert.equal(P.isAutoPriceNote(''), false);
+  for (const note of [auto1, auto2]) {
+    const item = { ...full, note };
+    const html = P.productCard(item);
+    assert.doesNotMatch(html, /class="note"|публикации|актуальност/);
+    assert.match(html, /data-price-known="true">9 270 руб\./, 'живая цена не подменяется');
+    assert.equal(item.note, note, 'объект позиции не мутируется');
+    // Карточка без служебного примечания идентична карточке, у которой примечания нет вовсе.
+    assert.equal(html, P.productCard({ ...full, note: '' }));
+    // Редактор ЛК показывает примечание как есть — владелец может его увидеть и убрать сам.
+    const editor = P.productCard(item, { editor: true, starHtml: () => '', editHtml: () => '' });
+    assert.match(editor, new RegExp(`<p class="note">${note.replace(/[.;]/g, '\\$&')}</p>`));
+  }
+  assert.match(P.productCard({ ...full, note: custom }), /<p class="note">Состав: 15 шаров, лента в подарок<\/p>/);
+  assert.match(catalogLive.card({ ...full, note: custom, tags: ['bukety'] }), /<p class="note">Состав: 15 шаров/);
+  assert.doesNotMatch(catalogLive.card({ ...full, note: auto1, tags: ['bukety'] }), /class="note"/);
+  assert.equal(catalogLive.card({ ...full, note: auto2, tags: ['bukety'] }, P.productCard), catalogLive.card({ ...full, note: auto2, tags: ['bukety'] }), 'запасная разметка скрывает то же самое');
 });
 
 test('пустая цена — «Цена уточняется», не 0; без фото — заглушка 4:5; текст не обрезается', () => {
