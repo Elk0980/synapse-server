@@ -75,11 +75,11 @@ test('requestId без sessionStorage: память страницы даёт т
   order.forgetRequest('cart', null); order.forgetRequest('request', null);
 });
 
-/* Страница с корзиной как на сайте: карточка с «В корзину», панель, форма; fetch подменён. */
+/* Страница с корзиной как на сайте: карточка с «Купить», панель, форма; fetch подменён. */
 function page({ responses = [], price = PRICE, priceLoad } = {}) {
   const html = `<!doctype html><body data-page="price"><header><button class="cart-button" data-cart-open>Корзина · <span data-cart-count>0</span></button></header>
-    <article class="pc price-card"><div class="product-footer"><div class="product-purchase"><p class="price">3 290 руб.</p><button class="button product-add" type="button" data-add data-id="rose-1" data-title="Розы">В корзину</button></div></div></article>
-    <button type="button" data-add data-id="gone-9" data-title="Нет">В корзину</button>
+    <article class="pc price-card"><div class="product-footer"><div class="product-purchase"><p class="price">3 290 руб.</p><button class="button product-add" type="button" data-add data-id="rose-1" data-title="Розы">Купить</button></div></div></article>
+    <button type="button" data-add data-id="gone-9" data-title="Нет">Купить</button>
     <aside class="cart" data-cart hidden aria-hidden="true"><button type="button" data-cart-close>Закрыть</button><div data-cart-items></div><p data-cart-summary></p><span data-total></span>
       <form data-order-form="cart"><input name="name"><input name="phone" type="tel"><textarea name="comment"></textarea><input type="checkbox" name="consent"><button>Отправить</button></form></aside>
     <section id="zayavka"><form><input name="name"><input name="phone"><select name="occasion"><option>Выписка</option></select><input name="date"><textarea name="comment"></textarea><input type="checkbox" name="consent"><button>Оставить заявку</button></form></section></body>`;
@@ -111,6 +111,7 @@ test('добавление в корзину, панель, счётчик; от
     add.click(); add.click();
     assert.equal(p.doc.querySelector('[data-cart-count]').textContent, '2');
     assert.equal(add.textContent, 'В корзине');
+    assert.equal(add.dataset.label, 'Купить', 'исходная подпись «Купить» запомнена и вернётся после подтверждения');
     p.doc.querySelector('[data-cart-open]').click(); await tick();
     const panel = p.doc.querySelector('[data-cart]');
     assert.equal(panel.hidden, false);

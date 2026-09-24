@@ -5,7 +5,13 @@
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[char]));
   const PRICE_UNKNOWN = 'Цена уточняется';
-  const TELEGRAM_URL = 'https://t.me/palitralovee';
+  /* Служебные примечания импорта («Цена из публикации от 01.01.2026; актуальность уточняется при заказе»,
+     «Цена на момент публикации, актуальную подтверждаем при заказе») на публичном сайте не показываются
+     (замечание Дарьи 20.09.2026). Строки прайса не меняются: в редакторе ЛК примечание видно как есть,
+     а любое другое примечание владельца (состав, размер, срок) остаётся на карточке. */
+  // Без \b: в JS граница слова не работает для кириллицы.
+  const AUTO_PRICE_NOTE = /^\s*цена\s+(?:из|на\s+момент)\s+публикации(?=[\s,;.:]|$)[\s\S]*актуальн/i;
+  const isAutoPriceNote = (note) => AUTO_PRICE_NOTE.test(String(note ?? ''));
   function findItem(data, id) {
     for (const cat of data.categories || []) {
       const it = (cat.items || []).find((item) => item.id === id);
@@ -22,8 +28,9 @@
     return '/' + photo.replace(/^\.\//, '');
   }
   /* Одна структура карточки для прайса и каталога: медиа-блок 4:5 (фото или заглушка),
-     название, описание и примечание прайса — в содержимом; внизу у всех карточек ряда
-     одинаковый блок: цена + «В корзину», затем ссылки Telegram и заявки под повод.
+     название, описание и примечание владельца — в содержимом; внизу у всех карточек ряда
+     один и тот же компактный блок: цена + «Купить» (добавляет в корзину; онлайн-оплаты нет).
+     Ссылок в Telegram и второй кнопки заявки в карточке нет (замечание Дарьи 20.09.2026).
      Пустая цена показывается словами, не нулём; тексты не обрезаются. */
   function productCard(item, opts = {}) {
     const editor = opts.editor || false;
@@ -32,14 +39,16 @@
       ? `<div class="product-media"><img class="price-card__photo photo" src="${esc(image)}" alt="${esc(item.title)}" loading="lazy" decoding="async" width="800" height="1000"></div>`
       : '<div class="product-media product-media--empty" aria-hidden="true"><img src="/assets/img/logo-mark.svg" alt="" width="64" height="64" loading="lazy"></div>';
     const description = item.desc ? `<p class="price-card__description">${esc(item.desc)}</p>` : '';
-    const note = item.note ? `<p class="note">${esc(item.note)}</p>` : '';
+    // Редактор ЛК видит примечание как есть; публичная карточка скрывает служебное примечание импорта.
+    const noteShown = Boolean(item.note) && (editor || !isAutoPriceNote(item.note));
+    const note = noteShown ? `<p class="note">${esc(item.note)}</p>` : '';
     const star = editor ? opts.starHtml(item) : '';
     const priceText = String(item.price ?? '').trim();
     const known = Boolean(priceText);
     const price = `<p class="pc__price price" data-price-known="${known ? 'true' : 'false'}">${known ? esc(priceText) : PRICE_UNKNOWN}</p>`;
     const footer = editor
       ? `<div class="product-footer"><div class="product-purchase">${price}</div>${opts.editHtml(item)}</div>`
-      : `<div class="product-footer"><div class="product-purchase">${price}<button class="button product-add" type="button" data-add data-id="${esc(item.id)}" data-title="${esc(item.title)}">В корзину</button></div><p class="product-links"><a class="product-telegram" href="${TELEGRAM_URL}" target="_blank" rel="noopener">Канал в Telegram</a><a class="price-card__button" href="/#zayavka">Заказать под Ваш повод</a></p></div>`;
+      : `<div class="product-footer"><div class="product-purchase">${price}<button class="button product-add" type="button" data-add data-id="${esc(item.id)}" data-title="${esc(item.title)}">Купить</button></div></div>`;
     const classes = ['pc', 'price-card', 'product-card'].concat(opts.extraClass ? [opts.extraClass] : []).join(' ');
     const dataCat = Array.isArray(opts.tags) && opts.tags.length ? ` data-cat="${esc(opts.tags.join(' '))}"` : '';
     return `<article class="${classes}" id="${esc(item.id)}" data-id="${esc(item.id)}"${dataCat}>${star}${media}<div class="price-card__body"><h3 class="pc__title">${esc(item.title)}</h3>${description}${note}${footer}</div></article>`;
@@ -93,5 +102,5 @@
     }
     return null;
   }
-  window.PalitraPrice = { esc, findItem, isPopular, productCard, renderSections, renderNav, load, PRICE_UNKNOWN };
+  window.PalitraPrice = { esc, findItem, isPopular, isAutoPriceNote, productCard, renderSections, renderNav, load, PRICE_UNKNOWN };
 }());

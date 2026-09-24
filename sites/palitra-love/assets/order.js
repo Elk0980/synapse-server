@@ -356,8 +356,10 @@
       if (add) {
         if (cart.add(add.dataset.id, 1)) {
           updateCount();
+          // Подпись кнопки задаёт карточка («Купить»); после подтверждения возвращаем исходную.
+          const label = add.dataset.label || (add.dataset.label = add.textContent);
           add.classList.add('is-added'); add.textContent = 'В корзине';
-          win.setTimeout(() => { add.classList.remove('is-added'); add.textContent = 'В корзину'; }, 1500);
+          win.setTimeout(() => { add.classList.remove('is-added'); add.textContent = label; }, 1500);
           if (panel && !panel.hidden) renderItems();
         }
         return;

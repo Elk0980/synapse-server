@@ -56,7 +56,8 @@
       resultShown = true;
       const productCards = config.products.map((product, index) => {
         const price = priceOf(product);
-        return `<article class="quiz-product"><img src="/assets/img/${esc(product.image)}" alt="${esc(product.name)}" width="800" height="1000" loading="lazy"><div><h3>${esc(product.name)}</h3><div class="product-purchase"><p class="price" data-price-known="${price.known ? 'true' : 'false'}">${esc(price.text)}</p><a class="button" data-order-product="${index}" href="${REQUEST_URL}">Оставить заявку</a></div><p class="note">${price.known ? 'Цена из прайса на момент показа; менеджер подтвердит состав и стоимость по заявке.' : 'Стоимость подтвердит менеджер по заявке.'}</p><div class="quiz-actions">${channelLink()}</div></div></article>`;
+        // Карточка результата: одно действие — заявка; ссылки в Telegram в карточке нет (замечание Дарьи 20.09.2026).
+        return `<article class="quiz-product"><img src="/assets/img/${esc(product.image)}" alt="${esc(product.name)}" width="800" height="1000" loading="lazy"><div><h3>${esc(product.name)}</h3><div class="product-purchase"><p class="price" data-price-known="${price.known ? 'true' : 'false'}">${esc(price.text)}</p><a class="button" data-order-product="${index}" href="${REQUEST_URL}">Оставить заявку</a></div><p class="note">${price.known ? 'Цена из прайса на момент показа; менеджер подтвердит состав и стоимость по заявке.' : 'Стоимость подтвердит менеджер по заявке.'}</p></div></article>`;
       }).join('');
       root.innerHTML = `<div class="quiz-panel"><h2>Вот что подойдёт</h2><p>Нажмите «Оставить заявку»: ответы и выбранный вариант подставятся в комментарий формы. В форме нужно указать имя, телефон, дату и согласие на обработку данных.</p><div class="quiz-results">${productCards}</div><div class="quiz-fallback" data-quiz-fallback hidden role="status"></div><button type="button" class="button outline" data-quiz-restart>Пройти ещё раз</button></div>`;
     };
