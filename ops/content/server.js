@@ -14,6 +14,7 @@ const { createAuthStore, COMPANIES, PERMISSIONS, DEPENDENCIES, PRICE_CLIENT_PRES
 const { createSiteStore } = require('./site-store');
 const { createHughSettingsStore } = require('./hugh-settings-store');
 const { createProjectChat } = require('./project-chat');
+const { createVoiceSources } = require('./voice-sources');
 const { createOwnerPrivateChat } = require('./owner-private-chat');
 const { createActorOnboarding } = require('./actor-onboarding');
 const { createActorWorkspace } = require('./actor-workspace');
@@ -200,6 +201,8 @@ const ORDER_BODY_LIMIT = 32 * 1024;
 /* Защищённое хранилище ключей провайдеров Хью: владелец вводит ключ в ЛК, ключ шифруется
    внешним мастер-ключом и наружу не возвращается. Без мастер-ключа хранилище закрыто. */
 const hughProviders = createHughProviders({ db });
+// Голосовые исходники для монтажа: приватно, без публичной ссылки и без передачи в автопостинг.
+const voiceSources = createVoiceSources({ db, assetsDir: ASSETS_DIR, companies: COMPANIES, verifyPost: crmAutopostingPost });
 const projectChat = createProjectChat({ db, authStore, assetsDir: ASSETS_DIR,
   fallback: { providerStore: hughProviders },
   runnerUrl: HUGH_RUNTIME_URL, chatUrl: CHAT_URL, chatApiKey: CHAT_API_KEY,
@@ -496,6 +499,25 @@ async function readRequestBody(request) {
     chunks.push(chunk);
   }
   return Buffer.concat(chunks);
+}
+
+/* Ролик для голосовой записи подтверждает только CRM тем же служебным ключом и доверенным заголовком,
+   что и прокси: права пользователя проверяются там же. Любой сбой — отказ, запись не принимается. */
+async function crmAutopostingPost(user, companyCode, postId) {
+  if (!CRM_API_KEY) fail(503, 'Проверка ролика в CRM не настроена');
+  let upstream;
+  try {
+    upstream = await fetch(`${CRM_URL}/autoposting/posts/${postId}?companyCode=${encodeURIComponent(companyCode)}`, {
+      headers: { 'x-api-key': CRM_API_KEY, [CRM_IDENTITY_HEADER]: crmIdentityHeader(user) }, signal: AbortSignal.timeout(5000) });
+  } catch (error) {
+    console.error('content: ошибка проверки ролика CRM:', error.message);
+    fail(502, 'CRM недоступна: проверить ролик нельзя');
+  }
+  if ([400, 403, 404].includes(upstream.status)) { await upstream.body?.cancel(); fail(404, 'Ролик не найден в выбранной компании'); }
+  if (!upstream.ok) { await upstream.body?.cancel(); fail(502, 'CRM не подтвердила ролик'); }
+  let post;
+  try { post = await upstream.json(); } catch { fail(502, 'Некорректный ответ CRM'); }
+  if (Number(post?.id) !== postId || String(post?.companyCode || '') !== companyCode) fail(404, 'Ролик не найден в выбранной компании');
 }
 
 async function crmLeadCompany(id) {
@@ -917,6 +939,10 @@ const server = http.createServer(async (request, response) => {
       }
       fail(405, 'Метод не поддерживается');
     }
+    if (url.pathname === '/content/voice-sources' || url.pathname.startsWith('/content/voice-sources/')) {
+      if (await voiceSources.handle(request, response, url, { requireSession, requireCsrf, readRaw, reply })) return;
+      fail(404, 'Запись не найдена');
+    }
     if (url.pathname === '/content/publishing-assets') {
       if (request.method !== 'POST') fail(405, 'Метод не поддерживается');
       const session = requireSession(request), code = url.searchParams.get('companyCode');
@@ -1162,6 +1188,8 @@ const server = http.createServer(async (request, response) => {
     // --- файлы (фоны блоков): /content/:site/assets[/:name]
     if (parts[2] === 'assets') {
       const site = parts[1].replace(/[^\w-]/g, '');
+      // Служебные каталоги ASSETS_DIR не являются сайтами: приватные файлы через этот публичный маршрут не раздаются.
+      if (!site || ['voice-sources', 'project-chat', 'publishing'].includes(site)) fail(404, 'Файл не найден');
       const dir = path.join(ASSETS_DIR, site);
       if (request.method === 'GET' && parts.length === 4) {
         const file = path.join(dir, path.basename(parts[3]));

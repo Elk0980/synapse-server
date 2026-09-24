@@ -134,3 +134,12 @@
   .autoposting-platform-previews pre,.autoposting-preview-section pre { font-size:0.85rem; }
   .autoposting-view a,.autoposting-view span { overflow-wrap:anywhere; }
 }
+
+/* Голос для монтажа: одна крупная кнопка и плеер на всю ширину, удобно с телефона. */
+.autoposting-voice{margin-top:16px}
+.autoposting-voice-list{list-style:none;margin:8px 0;padding:0;display:grid;gap:10px}
+.autoposting-voice-list li{display:grid;gap:4px;overflow-wrap:anywhere}
+.autoposting-voice-list audio{width:100%}
+.autoposting-voice-pick{display:inline-flex;align-items:center;min-height:44px;cursor:pointer}
+.autoposting-voice-pick input{position:absolute;width:1px;height:1px;opacity:0}
+.autoposting-voice-pick:focus-within{outline:2px solid currentColor;outline-offset:2px}
