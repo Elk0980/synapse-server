@@ -316,6 +316,14 @@
     .ed-form input:focus, .ed-form textarea:focus { outline: 1px solid var(--gold); }
     .ed-form__actions { grid-column: 1 / -1; display: flex; gap: 0.5rem; flex-wrap: wrap; }
     .ed-form small { color: var(--ink-faint); font-size: 0.74rem; }
+    .ed-form__intro { grid-column: 1 / -1; margin: 0; font-size: 0.8rem; color: var(--ink-faint); }
+    .ed-req { font-weight: 400; color: var(--gold); }
+    .ed-form .ed-more { grid-column: 1 / -1; border: 1px dashed var(--line); border-radius: 0.6rem; padding: 0.4rem 0.7rem; }
+    .ed-form .ed-more summary { cursor: pointer; font-size: 0.8rem; color: var(--ink-faint); }
+    .ed-form .ed-more[open] summary { margin-bottom: 0.5rem; }
+    .ed-form .ed-more__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem 1rem; }
+    .ed-form .ed-more__note { margin: 0 0 0.6rem; font-size: 0.76rem; color: var(--ink-faint); }
+    @media (max-width: 62rem) { .ed-form .ed-more__grid { grid-template-columns: 1fr; } }
 
     .ed-showcase { display: grid; gap: 0.55rem; margin: 0.5rem 0 1rem; }
     .ed-showcase__item {
@@ -369,7 +377,7 @@
     <input type="file" id="ed-import-file" accept="application/json,.json" hidden>
     <a class="ed-btn ed-btn--ghost" id="ed-login" href="/cabinet.html" target="_blank" rel="noopener" hidden>Войти в кабинет</a>
     <button class="ed-btn ed-btn--ghost" id="ed-session-retry" type="button" hidden>Проверить вход</button>
-    <a class="ed-btn ed-btn--ghost" href="https://palitra-love.synapsebusiness.ru/price.html" id="ed-open-price" target="_blank" rel="noopener">Открыть прайс ↗</a>
+    <a class="ed-btn ed-btn--ghost" href="https://palitra-love.synapsebusiness.ru/price.html" id="ed-open-price" target="_blank" rel="noopener" title="Так товары видят покупатели. Изменения появляются после «Сохранить»">Как видят покупатели ↗</a>
     <button class="ed-btn ed-btn--main" id="ed-save" type="button" disabled>Сохранить</button>
   </div>
 
@@ -523,19 +531,37 @@
       <button class="ed-btn ed-btn--small ed-btn--danger" type="button" data-del="${esc(it.id)}">Удалить</button>`;
     return row ? `<span class="ed-row-tools">${btns}</span>` : `<div class="pc__tools">${btns}</div>`;
   }
+  /* Цена хранится строкой в формате сайта («7 720 руб.»); корзина считает её через priceKopecks
+     (ops/content/site-orders.js). Здесь приводим к этому формату только однозначные числа: пусто
+     остаётся пустым («Цена уточняется» на сайте), любой текст («от 5 000», «за шт.», диапазон)
+     сохраняется как есть — с предупреждением, что корзина такую цену не посчитает. */
+  const PRICE_INPUT = /^\s*(\d[\d\s]*)(?:[.,](\d{1,2}))?\s*(?:руб\.?|р\.?|₽)?\s*$/i;
+  function normalizePrice(raw) {
+    const text = String(raw ?? '').replace(/[  ]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!text) return { value: '', kind: 'empty' };
+    const m = PRICE_INPUT.exec(text);
+    if (!m) return { value: text, kind: 'text' };
+    const digits = m[1].replace(/\s+/g, '');
+    if (!/^\d{1,13}$/.test(digits)) return { value: text, kind: 'text' };
+    const rub = digits.replace(/^0+(?=\d)/, '');
+    const kop = (m[2] || '').padEnd(2, '0');
+    if (rub === '0' && kop === '00') return { value: text, kind: 'text' }; // нулевая цена — не цена, оставляем как текст
+    const grouped = rub.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return { value: `${grouped}${kop === '00' ? '' : ',' + kop} руб.`, kind: 'number' };
+  }
+  window.PalitraEditorPrice = { normalizePrice };
+
   function formHtml(it) {
     const cat = catOf(it.id);
     const isTable = cat && cat.kind === 'table';
     return `<form class="ed-form" data-form="${esc(it.id)}">
-      <label class="is-wide">Название в прайсе<input name="title" value="${esc(it.title)}" required></label>
-      <label>Название на главной<input name="card" value="${esc(it.card || '')}"><small>коротко, без кавычек</small></label>
-      <label>Цена<input name="price" value="${esc(it.price || '')}"></label>
-      <label>Длительность<input name="duration" value="${esc(it.duration || '')}"></label>
-      <label>Кому подходит (главная)<input name="who" value="${esc(it.who || '')}"></label>
-      <label class="is-wide">Описание для главной<input name="desc" value="${esc(it.desc || '')}"></label>
-      <label class="is-wide">Состав одной строкой (главная)<input name="composition" value="${esc(it.composition || '')}"><small>если пусто — берутся первые пункты состава</small></label>
+      <p class="ed-form__intro">Обязательно только название. Остальное можно заполнить или поправить позже.</p>
+      <label class="is-wide">Название товара <b class="ed-req">обязательно</b><input name="title" value="${esc(it.title)}" required><small>так товар называется на сайте, в корзине и в заявке менеджеру</small></label>
+      <label>Цена<input name="price" value="${esc(it.price || '')}" inputmode="decimal" placeholder="7720" autocomplete="off"><small>Введите число: 7720 → сохранится «7 720 руб.», копейки через запятую: 7720,50. Пусто — на сайте «Цена уточняется». Текст вроде «от 5000» или «за шт.» сохранится как написано, но корзина такую цену не посчитает.</small></label>
+      <label>Примечание<input name="note" value="${esc(it.note || '')}"><small>необязательно; показывается в карточке под описанием. Служебная подпись «Цена из публикации…» на сайте не показывается — здесь её можно стереть или заменить своей.</small></label>
+      <label class="is-wide">Описание в карточке<input name="desc" value="${esc(it.desc || '')}"><small>необязательно; показывается на сайте под названием</small></label>
       <div class="is-wide ed-photo" data-photo-box="${esc(it.id)}">
-        <span class="ed-field__label">Фото на фоне карточки (главная)</span>
+        <span class="ed-field__label">Фото товара <small>необязательно; без фото на сайте показывается заглушка с логотипом</small></span>
         <input type="hidden" name="photo" value="${esc(it.photo || '')}">
         <div class="ed-photo__row">
           <div class="ed-photo__preview ${it.photo ? '' : 'is-empty'}" style="${it.photo ? `background-image:url('${esc(imgUrl(it.photo))}')` : ''}">${it.photo ? '' : 'без фото'}</div>
@@ -546,7 +572,17 @@
           </div>
         </div>
       </div>
-      ${isTable ? '' : `<label class="is-wide">Состав программы — по одному пункту в строке<textarea name="items">${esc((it.items || []).join('\n'))}</textarea></label>`}
+      <details class="ed-more">
+        <summary>Дополнительно — поля старой формы</summary>
+        <p class="ed-more__note">Сайт Palitra эти поля сейчас не показывает. Заполнять их не нужно; уже введённые значения сохраняются как есть.</p>
+        <div class="ed-more__grid">
+          <label>Короткое название<input name="card" value="${esc(it.card || '')}"><small>используется только в списках этого редактора</small></label>
+          <label>Длительность<input name="duration" value="${esc(it.duration || '')}"></label>
+          <label>Кому подходит<input name="who" value="${esc(it.who || '')}"></label>
+          <label>Состав одной строкой<input name="composition" value="${esc(it.composition || '')}"></label>
+          ${isTable ? '' : `<label class="is-wide">Состав по пунктам — по одному в строке<textarea name="items">${esc((it.items || []).join('\n'))}</textarea></label>`}
+        </div>
+      </details>
       <div class="ed-form__actions">
         <button class="ed-btn ed-btn--main ed-btn--small" type="submit">Готово</button>
         <button class="ed-btn ed-btn--small" type="button" data-cancel="1">Отмена</button>
@@ -559,11 +595,19 @@
     if (!f) return;
     const fd = new FormData(form);
     const it = f.it;
-    for (const k of ['title', 'card', 'price', 'duration', 'who', 'desc', 'composition', 'photo']) {
+    // Все поля формы сохраняются как есть; поля, которых в форме нет (oldPrice, quizEnabled и т.п.), не трогаются.
+    for (const k of ['title', 'card', 'duration', 'who', 'desc', 'composition', 'photo', 'note']) {
       if (fd.has(k)) it[k] = String(fd.get(k)).trim();
+    }
+    let warning = '';
+    if (fd.has('price')) {
+      const price = normalizePrice(fd.get('price'));
+      it.price = price.value;
+      if (price.kind === 'text') warning = `Цена «${price.value}» сохранена как текст: на сайте покажется так же, а в корзине эта позиция будет считаться «цена уточняется». Для расчёта введите число, например 7720.`;
     }
     if (fd.has('items')) it.items = String(fd.get('items')).split('\n').map((s) => s.trim()).filter(Boolean);
     editing = null; markDirty(); render();
+    if (warning) setStatus(warning, 'error');
   }
   /* ---------- фото карточки: загрузка с компьютера ---------- */
   function photoBox(id) { return document.querySelector(`[data-photo-box="${CSS.escape(id)}"]`); }
@@ -636,9 +680,9 @@
     markDirty(); render();
   }
   function addCategory() {
-    const title = prompt('Название нового раздела');
+    const title = prompt('Название нового раздела (категории товаров), например «Корзины»');
     if (!title) return;
-    const kind = confirm('Раздел с карточками программ? (Отмена — таблица «услуга · время · цена»)') ? 'programs' : 'table';
+    const kind = confirm('Раздел с карточками товаров с фото? (Отмена — таблица «услуга · время · цена»)') ? 'programs' : 'table';
     let n = data.categories.length + 1;
     const ids = new Set(data.categories.map((c) => c.id).concat(['s8'])); // s8 занят сертификатами на странице прайса
     while (ids.has(`s${n}`)) n += 1;
@@ -685,7 +729,7 @@
   }
   function sectionTools(cat) {
     return `<div class="ed-section-tools">
-      <button class="ed-btn ed-btn--small" type="button" data-additem="${esc(cat.id)}">+ Добавить позицию</button>
+      <button class="ed-btn ed-btn--small" type="button" data-additem="${esc(cat.id)}">+ Добавить товар</button>
       <label class="ed-status">Звёзды этого раздела идут в блок:
         <select class="ed-select" data-block-select="${esc(cat.id)}" style="min-width:auto;margin-left:.4rem">
           <option value="self" ${cat.block === 'two' ? '' : 'selected'}>${esc(blockTitle('self'))}</option>
@@ -704,7 +748,7 @@
       return `<li><a class="pnav__top" href="#block-${b}">${esc(blockTitle(b))}<span class="ed-count${n >= max ? ' is-full' : ''}">${n} / ${max}</span></a></li>`;
     }).join('\n');
     nav.innerHTML = PalitraPrice.renderNav(data, { prefix, noCertificates: true, editor: true }) +
-      `<li><button class="ed-btn ed-btn--small" type="button" id="ed-addcat" style="margin-top:.6rem">+ Новый раздел</button></li>`;
+      `<li><button class="ed-btn ed-btn--small" type="button" id="ed-addcat" style="margin-top:.6rem" title="Раздел — это категория товаров на сайте (Букеты, Шары…)">+ Новый раздел (категория)</button></li>`;
     // счётчики популярных в меню
     for (const cat of data.categories) {
       const a = nav.querySelector(`a[href="#${cat.id}"]`);
@@ -877,8 +921,8 @@
 
   (async () => {
     if (!window.PalitraPrice) {
-      setStatus('Не загрузился рендер прайса (price-render.js с сайта Palitra)', 'error');
-      $('#ed-content').innerHTML = '<p class="ed-status is-error">Не удалось загрузить price-render.js с palitra-love.synapsebusiness.ru. Проверьте, что сайт Palitra доступен.</p>';
+      setStatus('Не загрузился рендер карточек (price-render-palitra.js)', 'error');
+      $('#ed-content').innerHTML = '<p class="ed-status is-error">Не удалось загрузить файл price-render-palitra.js из кабинета. Обновите страницу; если не помогло — сообщите администратору Synapse.</p>';
       return;
     }
     try { await loadSession(); await loadData(); saveBtn.disabled = false; setStatus('Готово к работе'); }
