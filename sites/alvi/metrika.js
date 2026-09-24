@@ -1,5 +1,7 @@
 /* Яндекс Метрика для сайта ALVI. Номер счётчика задаётся здесь и только здесь. */
 (function () {
+  // Встроенный прайс в рабочем кабинете не является посещением сайта клиентом.
+  if (window.parent !== window && new URLSearchParams(window.location.search).get('embedded') === '1') return;
   var COUNTER_ID = 112777602;
   window.ALVI_METRIKA_ID = COUNTER_ID;
 
