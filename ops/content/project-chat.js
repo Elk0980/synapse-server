@@ -1162,6 +1162,20 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     const user = access(request, code, write, /^\/(?:members|candidates|settings|retry-ai|telegram-links(?:\/\d{1,20})?)$/.test(suffix));
     const reply = (status, data) => { sendJson(response, status, data, { 'cache-control': 'no-store' }); return true; };
     const page = { before: url.searchParams.get('before'), limit: url.searchParams.get('limit') };
+    // Пустая комната второго сайта открывает существующую общую переписку.
+    // Доступ проверяется к обеим комнатам; история и Telegram-привязки не переносятся.
+    if (suffix === '/resolve' && method === 'GET') {
+      const own = ensureRoom(code);
+      const occupied = own.telegram_chat_id || ['project_chat_messages','project_chat_tasks','project_chat_attachments','project_chat_scheduled']
+        .some(table => db.prepare(`SELECT 1 FROM ${table} WHERE company_code=? LIMIT 1`).get(code));
+      const candidates = occupied ? [] : db.prepare('SELECT * FROM project_chat_rooms WHERE company_code<>?').all(code)
+        .filter(room => roomSites(room).includes(code) && assigned(user,room.company_code) && isMember(user,room.company_code));
+      const target = candidates.length === 1 ? candidates[0] : own;
+      // Mini App авторизована только на конкретную комнату; не расширяем её область.
+      const resolved = user.roomSession ? own : target;
+      return reply(200, {companyCode: resolved.company_code, shared: resolved.company_code !== code,
+        title: [resolved.company_code,...roomSites(resolved)].map(c => COMPANIES[c]?.name || COMPANIES[c] || c).join(' · ')});
+    }
     if (!suffix && method === 'GET') return reply(200, await snapshot(code, user, page));
     if (suffix === '/messages' && method === 'GET') return reply(200, listMessages(code, page));
     // Привязки Telegram участников этой комнаты: только владелец из кабинета, только к действующему участнику.
