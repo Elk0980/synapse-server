@@ -30,3 +30,9 @@
   font-size: 12px;
   line-height: 1.4;
 }
+
+/* Название компании читается первым; цвет только помогает, но не заменяет текст. */
+.pc-task-company{display:inline-block!important;align-self:flex-start;max-width:100%;box-sizing:border-box;padding:5px 9px;border:1px solid var(--line);border-radius:8px;font-size:.85rem!important;font-weight:700;line-height:1.4;overflow-wrap:anywhere;margin-bottom:5px}
+.pc-company-alvi{background:#203953;color:#d5eaff;border-color:#547b9d}
+.pc-company-avokado{background:#254135;color:#def4dc;border-color:#5d8c66}
+.pc-company-other{background:var(--surface-soft);color:var(--text)}

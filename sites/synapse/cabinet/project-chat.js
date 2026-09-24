@@ -296,9 +296,11 @@
       q(state, "[data-pc-tasks]").innerHTML = list(data.tasks).map(task => {
         const publication = task.publication || "not_started";
         // Сайт обязателен для показа: у собственника два сайта в одной переписке, карточка без метки вводит в заблуждение.
-        const site = task.siteStatus === "needs_clarification"
-          ? '<span class="pc-badge pc-badge-ask">Нужно уточнить сайт</span>'
-          : `<span class="pc-badge">${escape(task.siteLabel || task.site || "")}</span>`;
+        const companyName = ({alvi: "АЛВИ", avokado: "Авокадо"})[task.site] || task.siteLabel || task.site;
+        const companyTone = ["alvi", "avokado"].includes(task.site) ? task.site : "other";
+        const site = task.siteStatus === "needs_clarification" || !companyName
+          ? '<span class="pc-task-company pc-badge-ask">Компания: нужно уточнить</span>'
+          : `<span class="pc-task-company pc-company-${companyTone}">Компания: ${escape(companyName)}</span>`;
         /* Ссылка НЕ внутри кнопки: вложенные интерактивные элементы недопустимы, и клик по ссылке
            открывал бы редактирование задачи вместо страницы. Выносим её отдельной строкой под кнопкой. */
         const link = task.publishedUrl
@@ -312,7 +314,7 @@
         // Кнопка напоминания стоит рядом с задачей, а не внутри её кнопки: вложенные кнопки недопустимы.
         const remind = canReply(state)
           ? `<button type="button" class="pc-task-remind" data-pc-task-remind="${escape(task.id)}">Напомнить</button>` : "";
-        return `<li class="pc-task${cancelled ? " pc-task-cancelled" : task.fixedOnSite ? " pc-task-done" : ""}"><button type="button" data-pc-task="${escape(task.id)}"><strong>${task.externalRef ? escape(task.externalRef) + ". " : ""}${escape(task.title)}</strong>${quote}<span class="pc-task-badges">${site}${kind}${cancelled ? '<span class="pc-badge pc-pub-cancelled">Отменено — не исправление</span>' : ""}<span class="pc-badge pc-pub-${escape(publication)}">${escape(publications[publication] || publication)}</span></span>${notes}<span>${escape(assigneeLabel(state, task))} · ${escape(stageName(state, task.stageId))}</span><small>Работа: ${escape(statuses[task.status] || task.status)}${task.due ? " · " + escape(task.due) : ""}</small></button>${link}${remind}</li>`;
+        return `<li class="pc-task${cancelled ? " pc-task-cancelled" : task.fixedOnSite ? " pc-task-done" : ""}"><button type="button" data-pc-task="${escape(task.id)}">${site}<strong>${task.externalRef ? escape(task.externalRef) + ". " : ""}${escape(task.title)}</strong>${quote}<span class="pc-task-badges">${kind}${cancelled ? '<span class="pc-badge pc-pub-cancelled">Отменено — не исправление</span>' : ""}<span class="pc-badge pc-pub-${escape(publication)}">${escape(publications[publication] || publication)}</span></span>${notes}<span>${escape(assigneeLabel(state, task))} · ${escape(stageName(state, task.stageId))}</span><small>Работа: ${escape(statuses[task.status] || task.status)}${task.due ? " · " + escape(task.due) : ""}</small></button>${link}${remind}</li>`;
       }).join("") || '<li class="pc-empty">Из сообщения можно создать задачу, назначить исполнителя и срок.</li>';
       /* В счётчике — только замечания клиента, которые ещё не на сайте и не сняты. Внутренние работы
          (резервы, счётчики) считаются отдельно и в клиентский счёт не входят. */
@@ -568,7 +570,7 @@
       <label>Этап<select name="stageId">${options(list(state.data.stages).map(stage => [stage.id, stage.title]), task.stageId, "Без этапа")}</select></label>
       <label>Срок<input name="due" type="date" value="${escape(task.due || "")}"></label>
       <label>Статус работы<select name="status">${Object.entries(statuses).map(([id, title]) => `<option value="${id}"${(task.status || "todo") === id ? " selected" : ""}>${title}</option>`).join("")}</select></label>
-      <label>Сайт<select name="site">${options(list(state.data.room?.sites).concat([state.company]).map(code => [code, state.ctx.identity.companies?.find(company => company.id === code)?.name || code]), task.site, "Нужно уточнить")}</select></label>
+      <label>Компания задачи<select name="site">${options(list(state.data.room?.sites).concat([state.company]).map(code => [code, state.ctx.identity.companies?.find(company => company.id === code)?.name || code]), task.site, "Нужно уточнить")}</select></label>
       <label>Вид<select name="kind">${Object.entries({ client_remark: "Замечание клиента", internal: "Внутренняя работа" })
         .map(([id, title]) => `<option value="${id}"${(task.kind || "client_remark") === id ? " selected" : ""}>${title}</option>`).join("")}</select></label>
       <label>Публикация<select name="publication">${Object.entries(publications).map(([id, title]) => `<option value="${id}"${(task.publication || "not_started") === id ? " selected" : ""}>${title}</option>`).join("")}</select></label>
