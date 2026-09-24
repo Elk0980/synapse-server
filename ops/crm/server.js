@@ -35,6 +35,7 @@ const { createSocialStatsHandler } = require('./social-stats-http');
 const { createCompanyInformationCheck } = require('./company-information-check');
 const { createDealOrders } = require('./deal-orders');
 
+const metrikaReport = require('./metrika').createMetrika();
 const IS_MAIN = require.main === module;
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
 const DATABASE_PATH = process.env.DATABASE_PATH || (IS_MAIN ? '/data/crm.sqlite' : ':memory:');
@@ -2517,6 +2518,12 @@ async function route(request, response) {
   if (await handleReviews(request,response,url,cors)) return;
   if (await handlePlatformDemand(request,response,url,cors)) return;
   if (await handleSocialStats(request,response,url,cors)) return;
+  if (url.pathname === '/metrika/report') {
+    const {company} = companyModuleContext(request, url.searchParams.get('companyCode'), 'analytics.view');
+    if (request.method !== 'GET') return send(response, 405, {error: 'Доступно только чтение'}, cors);
+    const report = await metrikaReport(company.code.toLowerCase(), url.searchParams.get('from'), url.searchParams.get('to'));
+    return send(response, 200, report, {...cors, 'cache-control': 'no-store'});
+  }
   if (url.pathname === '/company-information' || url.pathname === '/company-information/check') {
     const permission = request.method === 'GET' ? 'company-information.view' : 'company-information.edit';
     const {identity,company} = companyModuleContext(request,url.searchParams.get('companyCode'),permission);

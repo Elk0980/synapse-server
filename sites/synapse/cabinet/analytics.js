@@ -174,8 +174,21 @@ const renderPlatformFilter = () => {
 };
 const funnelProjectLabel = () => ctx.selectedProjectId === "synapse-business" ? "онлайн-созвон" :
   ["alvi", "avokado"].includes(ctx.selectedProjectId) ? "запись на визит" : "заявка";
-const renderAnalytics = (dashboard, summary, expenses, potential = null, owner = analyticsState.payload?.owner) => {
-  analyticsState.payload = { dashboard, summary, expenses, potential, owner };
+const metrikaBlock = (report) => {
+  const labels = {not_configured: "Метрика ещё не подключена к кабинету. Администратору нужно настроить доступ к отчётам.",
+    access_denied: "Яндекс не разрешил доступ к счётчику. Администратору нужно проверить подключение.",
+    rate_limited: "Яндекс временно ограничил частоту запросов. Повторите позже.",
+    unavailable: "Не удалось получить отчёт Метрики. Повторите загрузку.",
+    invalid_response: "Яндекс вернул неполный отчёт. Повторите загрузку."};
+  const ready = report?.status === "ok" && report.metrics;
+  return `<section class="analytics-section" aria-label="Яндекс Метрика"><h2>Посещения сайта · Яндекс Метрика</h2>
+    ${ready ? `<p><strong>Визиты: ${formatMetric(report.metrics.visits)}</strong> · Посетители: ${formatMetric(report.metrics.users)} · Просмотры: ${formatMetric(report.metrics.pageViews)}</p>
+    <p>Счётчик ${escapeHTML(report.counterId)} · ${escapeHTML(report.from)} — ${escapeHTML(report.to)} · Загружено: ${escapeHTML(new Date(report.fetchedAt).toLocaleString("ru-RU"))}${report.sampled ? " · Выборочные данные" : ""}</p>`
+    : `<p role="status">${labels[report?.status] || labels.unavailable}</p>`}
+    <small>Все источники сайта за выбранный период. Фильтр площадок ниже относится к CRM. Эти показатели не прибавляются к событиям CRM; посетители и заявки — разные величины.</small></section>`;
+};
+const renderAnalytics = (dashboard, summary, expenses, potential = null, owner = analyticsState.payload?.owner, metrika = analyticsState.payload?.metrika) => {
+  analyticsState.payload = { dashboard, summary, expenses, potential, owner, metrika };
   const stats = Array.isArray(dashboard.sourceStats) ? dashboard.sourceStats : [];
   const allSelected = analyticsState.selected.size === ANALYTICS_PLATFORMS.length;
   const knownCodes = new Set(ANALYTICS_PLATFORMS.flatMap((platform) => platform.codes));
@@ -268,7 +281,7 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
       <td>${noExpenses ? "—" : formatMoney(platform.expenses)}</td>
       <td>${noExpenses ? "—" : formatROMI(platform.romi)}</td><td>${dataMark(kind, platform.capturedAt)}</td></tr>`;
   }).join("");
-  byId("analytics-content").innerHTML = `<section class="analytics-section"><h2>Воронка</h2>
+  byId("analytics-content").innerHTML = `${metrikaBlock(metrika)}<section class="analytics-section"><h2>Воронка</h2>
     <div class="analytics-funnel">${funnelRows}</div><div class="analytics-finance">
     <div class="crm-stat"><span>Расходы</span><strong>${financeUnavailable
       ? "по компании не ведутся" : financeExpenses === null ? "—" : formatMoney(financeExpenses)}</strong></div>
@@ -343,7 +356,7 @@ const loadAnalytics = async () => {
   const current = () => requestId === analyticsRequestId && sameScope(owner);
   const scope = { companyCode: owner.companyCode };
   try {
-    const [dashboard, summary, expensePayload, potential] = await Promise.all([
+    const [dashboard, summary, expensePayload, potential, metrika] = await Promise.all([
       crmQuery("/dashboard", { period: analyticsState.period, ...range, ...scope }),
       crmQuery("/summary", { ...range, ...scope }),
       crmQuery("/expenses", { ...range, ...scope }),
@@ -351,10 +364,12 @@ const loadAnalytics = async () => {
       crmQuery("/platform-demand/potential", { ...range, ...scope })
         .then((result) => result?.company?.code === scope.companyCode &&
           result?.requested?.from === range.from && result?.requested?.to === range.to ? result : { error: true })
-        .catch(() => ({ error: true }))
+        .catch(() => ({ error: true })),
+      crmQuery("/metrika/report", { ...range, ...scope }).catch(() => ({ status: "unavailable" }))
     ]);
     if (!current()) return;
-    renderAnalytics(dashboard, summary, expensePayload.expenses || [], potential, owner);
+    renderAnalytics(dashboard, summary, expensePayload.expenses || [], potential, owner,
+      metrika.companyCode === scope.companyCode && metrika.from === range.from && metrika.to === range.to ? metrika : {status: "unavailable"});
   } catch (error) {
     if (!current()) return;
     byId("analytics-content").innerHTML =
