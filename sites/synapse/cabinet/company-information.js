@@ -44,7 +44,7 @@ const ROW_FIELDS = {
   promotions: [["title", "Название акции", "text"], ["description", "Условия акции", "textarea"], ["price", "Цена по акции", "number"], ["oldPrice", "Прежняя цена", "number"], ["startsAt", "Начало акции", "datetime-local"], ["endsAt", "Окончание акции", "datetime-local"]],
   materials: [["title","Название материала","text"],["url","Ссылка на материал","url"],["type","Тип материала","text"]]
 };
-const SOCIALS = {two_gis:"2ГИС", yandex_maps:"Яндекс Карты", max:"MAX", telegram:"Telegram — чат", telegram_channel:"Telegram — канал", whatsapp:"WhatsApp", vk:"ВКонтакте", booking:"Онлайн-запись"};
+const SOCIALS = {two_gis:"2ГИС", yandex_maps:"Яндекс Карты", max:"MAX", telegram:"Telegram — чат", telegram_channel:"Telegram — канал", whatsapp:"WhatsApp", vk:"ВКонтакте", booking:"Онлайн-запись", youtube:"YouTube"};
 const STATES = {unknown:"Не подтверждено", confirmed:"Подтверждено владельцем", removed:"Удалено владельцем"};
 let controller;
 function create(container, context) {
