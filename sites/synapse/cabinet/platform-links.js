@@ -13,13 +13,14 @@
     two_gis:['https://account.2gis.com/', 'Открыть кабинет 2ГИС'],
     yandex_maps:['https://business.yandex.ru/', 'Открыть Яндекс Бизнес'],
     vk:['https://vk.com/', 'Открыть ВКонтакте'],
+    youtube:['https://studio.youtube.com/', 'Открыть YouTube Studio'],
     vk_ads:['https://ads.vk.com/', 'Открыть VK Рекламу'],
     yandex_direct:['https://direct.yandex.ru/', 'Открыть Яндекс Директ'],
     telegram:['https://web.telegram.org/', 'Открыть Telegram'],
     // Existing publishing integration uses the Russian Onlypult application.
     onlypult:['https://app.ru.onlypult.com/', 'Открыть Onlypult']
   };
-  const labels = {website:'Сайт',two_gis:'2ГИС',yandex_maps:'Яндекс Карты',max:'MAX',telegram:'Telegram — чат',telegram_channel:'Telegram — канал',whatsapp:'WhatsApp',vk:'ВКонтакте',booking:'Онлайн-запись'};
+  const labels = {website:'Сайт',two_gis:'2ГИС',yandex_maps:'Яндекс Карты',max:'MAX',telegram:'Telegram — чат',telegram_channel:'Telegram — канал',whatsapp:'WhatsApp',vk:'ВКонтакте',booking:'Онлайн-запись',youtube:'YouTube'};
   const normalize = value => {const id=String(value || '').toLowerCase().trim();return Object.hasOwn(aliases,id) ? aliases[id] : id;};
   function safeUrl(value) {
     if (typeof value !== 'string' || !/^https:\/\//i.test(value) || value.length > 2048 || /[\u0000-\u0020\u007f\\]/.test(value)) return null;
