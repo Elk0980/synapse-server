@@ -596,3 +596,45 @@ test('контент-план: редактор не видит отклонен
     assert.ok(!f.node('autoposting-queue').querySelector('[data-post-id="1"] [data-move="down"]').disabled);
   }finally{f.close();}
 });
+const voicePost=(id,companyCode='alvi')=>({id,companyCode,revision:1,status:'draft',title:'Ролик '+id,text:'Текст',mediaUrls:['https://synapse.synapsebusiness.ru/content/publishing-assets/'+companyCode+'/'+'a'.repeat(32)+'.mp4'],platformIds:[],scheduledAt:null,timezone:'Asia/Irkutsk',profileRevision:2,deliveries:[]});
+function voiceServer(stored={}){return call=>{
+  if(call.path!=='/content/voice-sources')return undefined;
+  const postId=call.url.match(/postId=(\d+)/)[1],key=call.code+':'+postId;
+  if(call.method==='POST'){const item={id:Object.values(stored).flat().length+1,companyCode:call.code,postId:Number(postId),name:decodeURIComponent(call.url.match(/name=([^&]*)/)[1]),mime:call.options.headers['Content-Type'],size:2048,createdAt:'2026-09-24T01:00:00.000Z',url:'/content/voice-sources/'+(Object.values(stored).flat().length+1)+'?companyCode='+call.code};(stored[key]=stored[key]||[]).unshift(item);return {item};}
+  return {companyCode:call.code,postId:Number(postId),items:stored[key]||[]};
+};}
+test('голос для монтажа: привязка к сохранённому ролику, плеер и отдельность от видео',async()=>{
+ const stored={'alvi:9':[{id:1,companyCode:'alvi',postId:9,name:'Таня дубль 1.m4a',mime:'audio/mp4',size:4096,createdAt:'2026-09-24T00:00:00.000Z',url:'/content/voice-sources/1?companyCode=alvi'},
+  {id:99,companyCode:'avokado',postId:9,name:'чужая.mp3',mime:'audio/mpeg',size:1,createdAt:'',url:'/content/voice-sources/99?companyCode=avokado'}]};
+ const f=await fixture({entries:[voicePost(9)],override:voiceServer(stored)});
+ try{
+  assert.match(f.node('autoposting-voice-body').textContent,/Сначала сохраните черновик/);
+  f.set('autoposting-select','9','change');await f.settle();
+  const players=f.node('autoposting-voice-body').querySelectorAll('audio');
+  assert.equal(players.length,1,'чужая компания отфильтрована');assert.equal(players[0].getAttribute('src'),'/content/voice-sources/1?companyCode=alvi');assert.ok(players[0].hasAttribute('controls'));
+  const media=f.node('autoposting-media').value;
+  const picker=f.node('autoposting-voice-file');assert.ok(picker,'кнопка выбора есть у владельца');
+  const file=new f.w.File([new Uint8Array(64)],'голос.m4a',{type:''});Object.defineProperty(picker,'files',{value:[file]});
+  picker.dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();
+  const upload=f.calls.find(c=>c.path==='/content/voice-sources'&&c.method==='POST');assert.ok(upload);
+  assert.equal(upload.code,'alvi');assert.match(upload.url,/postId=9/);assert.equal(upload.options.headers['Content-Type'],'audio/mp4');assert.equal(upload.options.headers['X-CSRF-Token'],'test-csrf');
+  assert.equal(f.node('autoposting-voice-body').querySelectorAll('audio').length,2);assert.match(f.node('autoposting-voice-status').textContent,/сохранена и привязана/);
+  assert.equal(f.node('autoposting-media').value,media,'голос не попадает в материалы публикации');
+  assert.ok(!f.calls.some(c=>c.path.startsWith('/content/crm/')&&c.method!=='GET'),'в CRM/автопостинг ничего не отправлено');
+ }finally{f.close();}
+});
+test('голос для монтажа: неверный файл не отправляется, просмотр без права правки без кнопки',async()=>{
+ const f=await fixture({entries:[voicePost(9)],override:voiceServer()});
+ try{
+  f.set('autoposting-select','9','change');await f.settle();const picker=f.node('autoposting-voice-file');
+  Object.defineProperty(picker,'files',{value:[new f.w.File([new Uint8Array(8)],'ролик.mp4',{type:'video/mp4'})]});picker.dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();
+  assert.match(f.node('autoposting-voice-status').textContent,/M4A, MP3, OGG или WAV/);assert.ok(!f.calls.some(c=>c.path==='/content/voice-sources'&&c.method==='POST'));
+ }finally{f.close();}
+ const v=await fixture({role:'user',permissions:['autoposting.view','company-information.view'],entries:[voicePost(9)],override:voiceServer()});
+ try{v.set('autoposting-select','9','change');await v.settle();assert.equal(v.node('autoposting-voice-file'),null);assert.match(v.node('autoposting-voice-body').textContent,/Записей пока нет/);}finally{v.close();}
+});
+test('голос для монтажа: ответ прежней компании не показывается после переключения',async()=>{
+ let release;const f=await fixture({entries:[voicePost(9)],override:call=>call.path==='/content/voice-sources'&&call.code==='alvi'?new Promise(resolve=>{release=()=>resolve({companyCode:'alvi',postId:9,items:[{id:1,companyCode:'alvi',postId:9,name:'alvi.m4a',size:1,url:'/content/voice-sources/1?companyCode=alvi'}]});}):voiceServer()(call)});
+ try{f.set('autoposting-select','9','change');await f.settle();await f.views.autoposting.onProjectChange({...f.ctx,selectedProjectId:'avokado'});await f.settle();release();await f.settle();
+  assert.ok(!f.node('autoposting-voice-body').textContent.includes('alvi.m4a'));}finally{f.close();}
+});

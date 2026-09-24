@@ -125,6 +125,7 @@ function create(container, context) {
     <div class="autoposting-date-fields"><label>Дата и время<input id="autoposting-date" type="datetime-local"></label><label>Часовой пояс<input id="autoposting-timezone" maxlength="80" required placeholder="Asia/Irkutsk"></label></div>
     <p class="autoposting-note">Время относится к указанному часовому поясу, а не настройкам компьютера. Черновик можно сохранить без даты и подключённого канала.</p>
     <button class="plain-button" id="autoposting-save" type="submit">Сохранить черновик</button><p id="autoposting-form-status" aria-live="off"></p></form>
+    <section id="autoposting-voice" class="autoposting-voice" aria-labelledby="autoposting-voice-title"><h4 id="autoposting-voice-title">Голос для монтажа</h4><p class="autoposting-note">Приватный исходник для монтажёра: не публикуется, не уходит в Onlypult или ВКонтакте и не заменяет видео ролика. M4A, MP3, OGG или WAV до 25 МБ.</p><div id="autoposting-voice-body"></div><p id="autoposting-voice-status" class="autoposting-note" role="status"></p></section>
     <div class="autoposting-actions"><button class="plain-button" id="autoposting-preview" type="button">Предпросмотр</button><button class="plain-button" id="autoposting-cancel" type="button" hidden>Снять с публикации</button><button class="plain-button" id="autoposting-reconcile" type="button" hidden>Проверить результат в сервисе</button></div></section>
     <section class="card autoposting-preview-section" aria-labelledby="autoposting-preview-title"><h3 id="autoposting-preview-title" tabindex="-1">Проверка перед публикацией</h3><div id="autoposting-preview-content"><p>Сохраните материал и откройте предпросмотр.</p></div><div id="autoposting-approval" class="autoposting-approval"></div><div id="autoposting-receipts" class="autoposting-receipts"></div><button class="plain-button" id="autoposting-schedule" type="button" disabled>Поставить в план</button><p class="autoposting-note">После постановки в план материал отправляется автоматически. Уже начатую публикацию площадка может завершить после отмены.</p></section></div>
     </details><details class="card autoposting-queue-section"><summary>Для команды · очередь и импорт</summary><h3>Очередь контента</h3><p class="autoposting-note">Карточки дней с подписями пяти площадок. Одобрение относится к конкретной версии: правка текста или материала снимает его. Галочки по умолчанию сняты; сохранение и одобрение ничего не публикуют. Instagram / Reels, TikTok и YouTube Shorts здесь — подготовленные варианты подписей: их доставка не подключена и не заявляется; автоматическая отправка возможна только в подключённые каналы Telegram и ВКонтакте после постановки в план.</p><div id="autoposting-queue"></div>
@@ -349,8 +350,35 @@ function create(container, context) {
     const values={title:post?.title||"",text:post?.text||"",media:(post?.mediaUrls||[]).join("\n"),date:time.toLocal(post?.scheduledAt,timezone),timezone,platformIds:post?.platformIds||[],dayKey:post?.dayKey||"",origin:post?.origin||"",captions:post?.captions||{},mediaSha256:post?.mediaSha256||"",meta:post?.meta||{}};
     setRaw(values);baseline=raw();
     const draft=drafts.get(key());if(draft){post=draft.post;baseline=draft.baseline;setRaw(draft.raw);}
-    renderState();invalidate();
+    renderState();invalidate();renderVoice();
   };
+  // Голос хранится отдельно от mediaUrls карточки: приватная ссылка открывается только в кабинете.
+  let voiceEpoch=0;
+  const voiceStatus=text=>{get("autoposting-voice-status").textContent=text;};
+  const renderVoice=()=>{
+    const version=++voiceEpoch,code=companyCode,postId=post?.id,body=get("autoposting-voice-body");voiceStatus("");
+    if(!postId){body.innerHTML='<p class="autoposting-note">Сначала сохраните черновик ролика: запись привязывается к сохранённой карточке.</p>';return;}
+    body.innerHTML='<p class="autoposting-note">Загружаем записи…</p>';
+    const query="?companyCode="+encodeURIComponent(code)+"&postId="+encodeURIComponent(postId);
+    const current=()=>version===voiceEpoch&&code===companyCode&&String(post?.id)===String(postId);
+    ctx.apiJson("/content/voice-sources"+query).then(result=>{
+      if(!current())return;if(result?.companyCode!==code||!Array.isArray(result.items))throw Error("Wrong company");
+      const items=result.items.filter(item=>item.companyCode===code&&String(item.postId)===String(postId)&&/^\/content\/voice-sources\/\d+\?/.test(String(item.url)));
+      body.innerHTML=(items.length?`<ul class="autoposting-voice-list">${items.map(item=>`<li><span>${esc(item.name)} · ${Math.max(1,Math.round(item.size/1024))} КБ · ${esc(String(item.createdAt||"").slice(0,16).replace("T"," "))}</span><audio controls preload="none" src="${esc(item.url)}" aria-label="Голос: ${esc(item.name)}"></audio></li>`).join("")}</ul>`:'<p class="autoposting-note">Записей пока нет.</p>')+
+        (edit()?'<label class="plain-button autoposting-voice-pick">Добавить голосовую запись<input id="autoposting-voice-file" type="file" accept="audio/mp4,audio/x-m4a,audio/mpeg,audio/ogg,audio/wav,audio/x-wav,.m4a,.mp3,.ogg,.oga,.opus,.wav"></label>':"");
+    }).catch(()=>{if(current())body.innerHTML='<p class="autoposting-note">Не удалось загрузить записи. Обновите страницу.</p>';});
+  };
+  const VOICE_EXT={m4a:"audio/mp4",mp3:"audio/mpeg",ogg:"audio/ogg",oga:"audio/ogg",opus:"audio/ogg",wav:"audio/wav"};
+  const uploadVoice=file=>{
+    const code=companyCode,postId=post?.id;if(!file||!postId||!edit())return;
+    const type=VOICE_EXT[(/\.([a-z0-9]+)$/i.exec(file.name||"")?.[1]||"").toLowerCase()]||file.type;
+    if(!/^audio\/(mp4|x-m4a|m4a|aac|mpeg|mp3|ogg|opus|wav|x-wav|wave|vnd\.wave)$/.test(type||"")||!file.size||file.size>25*1024*1024){voiceStatus("Нужна запись M4A, MP3, OGG или WAV до 25 МБ.");return;}
+    voiceStatus("Загружаем запись…");const options=ctx.csrfOptions("POST");
+    ctx.apiJson("/content/voice-sources?companyCode="+encodeURIComponent(code)+"&postId="+encodeURIComponent(postId)+"&name="+encodeURIComponent(file.name||""),{...options,body:file,headers:{...options.headers,"Content-Type":type}})
+      .then(result=>{if(code!==companyCode||String(post?.id)!==String(postId))return;if(result?.item?.companyCode!==code)throw Error("Wrong company");renderVoice();voiceStatus("Запись сохранена и привязана к ролику.");})
+      .catch(()=>{if(code===companyCode&&String(post?.id)===String(postId))voiceStatus("Не удалось загрузить запись. Нужен файл M4A, MP3, OGG или WAV до 25 МБ.");});
+  };
+  get("autoposting-voice-body").addEventListener("change",event=>{if(event.target.id==="autoposting-voice-file"){uploadVoice(event.target.files?.[0]);event.target.value="";}});
   const renderChannels=()=>{
     const vk=channels().find(channel=>channel.id==="vk");
     const socials=Array.isArray(information?.profile?.socials)?information.profile.socials:[];
