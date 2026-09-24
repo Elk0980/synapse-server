@@ -131,3 +131,17 @@ test('stale responses never overwrite newer ones: period change, A→B→A compa
   f.toggle2gis();await tick();assert.match(f.card().textContent,/только целевые рубрики/);assert.match(f.content(),/500/);
  }finally{f.dom.window.close();}
 });
+
+
+test('Метрика показывает отдельный отчёт периода, ошибку вместо нулей и отбрасывает чужую компанию', async()=>{
+ for(const scenario of ['ok','access_denied','foreign']){
+  const f=await fixture({potential:potentialFor('alvi'),respond:({path})=>path==='/metrika/report'?{
+   companyCode:scenario==='foreign'?'avokado':'alvi',...AUG,status:scenario==='access_denied'?'access_denied':'ok',
+   counterId:'101',fetchedAt:'2026-09-24T06:00:00Z',metrics:scenario==='access_denied'?null:{visits:123,users:81,pageViews:231}
+  }:undefined});
+  try{const text=f.d.querySelector('[aria-label="Яндекс Метрика"]').textContent;
+   if(scenario==='ok'){assert.match(text,/Визиты: 123/);assert.match(text,/Посетители: 81/);assert.match(text,/не прибавляются/);}
+   else{assert.doesNotMatch(text,/Визиты: 123/);assert.match(text,scenario==='access_denied'?/не разрешил доступ/:/Не удалось получить/);}
+  }finally{f.dom.window.close();}
+ }
+});

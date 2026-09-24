@@ -49,6 +49,16 @@ test('аналитика соцсетей через прокси: analytics.vie
  assert.equal((await through('owner','/social-stats')).status,400,'компания обязательна');
  const view=await through('analyst','/social-stats?companyCode=avokado&from=2026-09-01&to=2026-09-18');assert.equal(view.status,200,JSON.stringify(view.body));
  assert.equal(view.body.companyCode,'avokado');assert.equal(view.body.socialAggregate.reach,null);assert.equal(view.body.platforms.instagram.access.status,'not_configured');assert.match(view.headers.get('cache-control'),/no-store/);
+ // Метрика использует те же границы компаний и отдельное право аналитики.
+ const mr='/metrika/report?companyCode=avokado&from=2026-09-01&to=2026-09-24';
+ const missingMetrika=await through('analyst',mr);
+ assert.equal(missingMetrika.status,200);assert.equal(missingMetrika.body.status,'not_configured');assert.equal(missingMetrika.body.metrics,null);
+ assert.equal((await through('crmreader',mr)).status,403);
+ assert.equal((await through('unrelated',mr)).status,403);
+ assert.equal((await through('analyst',mr.replace('avokado','alvi'))).status,403);
+ assert.equal((await through('owner','/metrika/report')).status,400);
+ assert.equal((await through('owner',mr,{method:'POST',body:{}})).status,405);
+ assert.equal((await through('owner',mr.replace('2026-09-01','2026-02-30'))).status,400);
  // настройки — только владелец
  const accounts={accounts:[{platform:'instagram',accountRef:'@example.travel',provider:'direct',revision:0,timezone:'Asia/Bangkok'},{platform:'telegram',accountRef:'@ch',provider:'direct',revision:0}]};
  assert.equal((await through('writer','/social-stats/accounts?companyCode=avokado',{method:'PUT',body:accounts})).status,403,'crm.edit без роли владельца не настраивает');
