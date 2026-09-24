@@ -1485,3 +1485,21 @@ test('отложенная отправка: право менять отдаё�
   const forOwner = await call(chat, { session: owner, url: room('') });
   assert.equal(forOwner.payload.scheduled[0].canManage, true, 'владельцу разрешено');
 });
+
+
+test('общая переписка второго сайта: два членства, пустая комната, без переноса истории',async t=>{
+ const {chat,owner,person,session,db}=setup();
+ const member=person('shared-studios',['alvi','avokado']);
+ await addMember(chat,owner,[member.id],'alvi');await addMember(chat,owner,[member.id],'avokado');
+ await call(chat,{session:owner,method:'PATCH',url:room('/settings','alvi'),body:{sites:['avokado'],telegramChatId:'-100123'}});
+ const before=db.prepare('SELECT count(*) n FROM project_chat_messages').get().n;
+ const resolved=await call(chat,{session:session(member.id),url:room('/resolve','avokado')});
+ assert.equal(resolved.payload.companyCode,'alvi');assert.equal(resolved.payload.shared,true);
+ assert.match(resolved.payload.title,/Алви.*Авокадо/);
+ assert.equal(db.prepare('SELECT count(*) n FROM project_chat_messages').get().n,before);
+ await addMember(chat,owner,[],'alvi');
+ assert.equal((await call(chat,{session:session(member.id),url:room('/resolve','avokado')})).payload.companyCode,'avokado');
+ await addMember(chat,owner,[member.id],'alvi');
+ await say(chat,session(member.id),'Собственная история','separate-history','avokado');
+ assert.equal((await call(chat,{session:session(member.id),url:room('/resolve','avokado')})).payload.companyCode,'avokado');
+});

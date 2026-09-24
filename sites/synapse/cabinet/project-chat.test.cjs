@@ -66,7 +66,7 @@ const boot = (options = {}) => {
     const call = { url, method, headers: init.headers || {}, body: init.body };
     calls.push(call);
     const key = `${method} ${new w.URL(url, ORIGIN).pathname}`;
-    const handler = routes[key];
+    const handler = routes[key] || (key.endsWith('/resolve') ? () => ({body:{shared:false}}) : null);
     return Promise.resolve(handler ? handler(call) : { status: 404, body: { error: `нет маршрута ${key}` } }).then((result) => {
       if (result instanceof Error) throw result;
       const status = result.status === undefined ? 200 : result.status;
@@ -1047,6 +1047,7 @@ test('снимок, пришедший после перехода на личн
   const gate = deferred();
   const harness = boot({ routes: { 'GET /content/project-chat/palitra-love': () => gate.promise } });
   const rendering = harness.views.hugh.render(harness.d.getElementById('hugh-view'), harness.ctx);
+  await settle(); // Разрешение общей комнаты завершено, снимок ещё ожидается.
   harness.click('[data-pc-mode="private"]');
   await settle();
   gate.resolve({ body: snapshot({ messages: [message({ text: 'Поздний снимок общего чата' })] }) });
@@ -1067,6 +1068,7 @@ test('опрос, завершившийся на личной вкладке, �
   });
   const { d } = harness;
   const rendering = harness.views.hugh.render(d.getElementById('hugh-view'), harness.ctx);
+  await settle();
   gates[0].resolve({ body: snapshot({ messages: [message({ id: 'm1', text: 'Первый снимок' })] }) });
   await rendering;
   await settle();
@@ -1601,4 +1603,16 @@ test('причина со ссылкой или кодом входа в общ�
     await mount(harness);
     assert.doesNotMatch(harness.d.body.textContent, /example\.com|ABCD-1234/);
   } finally { harness.w.close(); }
+});
+
+
+test('Авокадо открывает общий чат АЛВИ, не меняя выбранную компанию кабинета',async()=>{
+ const h=boot({company:'avokado',role:'member',routes:{
+  'GET /content/project-chat/avokado/resolve':()=>({body:{companyCode:'alvi',shared:true,title:'Алви · Авокадо'}}),
+  'GET /content/project-chat/alvi':()=>({body:snapshot({messages:[message({text:'Общая история двух студий'})]})})
+ }});
+ try{await mount(h);assert.equal(h.scope.company,'avokado');assert.match(h.d.body.textContent,/Алви · Авокадо/);
+  assert.match(h.d.body.textContent,/Общая история двух студий/);
+  assert.equal(h.calls.filter(c=>c.url==='/content/project-chat/avokado').length,0);
+ }finally{h.w.close();}
 });
