@@ -983,7 +983,7 @@
     const state = current = { ctx, root, selectedCompany: ctx.selectedProjectId, company: ctx.selectedProjectId, base: "/content/project-chat/" + encodeURIComponent(ctx.selectedProjectId), controller: new AbortController(), mode: "shared", view: 0, readSequence: 0, attachments: [], history: [], seen: new Map(), loadedOlder: false, hasMore: false, cursor: null, loadingOlder: false, busy: false, attempt: null, draft: "", revoked: false };
     root.innerHTML = '<p role="status">Открываем переписку…</p>';
     try {
-      const resolved = await request(state, '/resolve');
+      const resolved = ctx.authHeaders ? {shared:false} : await request(state, '/resolve');
       if (!active(state)) return;
       state.sharedTitle = resolved.title;
       if (resolved.shared && /^[a-z0-9_-]+$/.test(resolved.companyCode)) {
