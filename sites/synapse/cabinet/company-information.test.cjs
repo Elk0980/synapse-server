@@ -52,6 +52,37 @@ test('service quantity stays unknown for old rows and saves a course without div
     assert.equal(body.profile.services[0].durationMinutes,45);assert.equal(body.profile.services[0].bookingIntervalMinutes,60);
   }finally{f.close();}
 });
+
+test('catalog file is previewed before an explicit reviewed import; text is escaped and no automatic write occurs',async()=>{
+  const entry={service:{id:'course',title:'<img src=x>',price:1000,currency:'RUB',procedureCount:5,durationMinutes:45},source:'<script>bad</script>',sourceRef:'Row 1',checkedAt:'2026-01-01T00:00:00.000Z'};
+  const input={companyCode:'alvi',clientImportId:'file-test-001',entries:[entry]};
+  const f=await fixture({override:call=>{
+    if(call.path.endsWith('/catalog-preview'))return {companyCode:'alvi',added:1,unchanged:0,entries:[entry]};
+    if(call.path.endsWith('/catalog-import'))return {...record('alvi'),revision:2,importResult:{added:1},profile:{...record('alvi').profile,services:[entry.service]}};
+  }});
+  try{
+    Object.defineProperty(f.node('information-catalog-file'),'files',{value:[{size:100,text:async()=>JSON.stringify(input)}]});
+    await f.click('information-catalog-preview');assert.equal(f.calls.filter(c=>c.path.endsWith('/catalog-import')).length,0);
+    assert.equal(f.node('information-catalog-preview-data').querySelector('img,script'),null);
+    assert.match(f.node('information-catalog-preview-data').textContent,/1000 RUB за 5/);
+    assert.equal(f.node('information-catalog-import').disabled,true);
+    f.node('information-catalog-reviewed').checked=true;f.node('information-catalog-reviewed').dispatchEvent(new f.w.Event('change'));
+    await f.click('information-catalog-import');
+    const call=f.calls.find(c=>c.path.endsWith('/catalog-import')),body=JSON.parse(call.options.body);
+    assert.equal(body.companyCode,'alvi');assert.equal(body.revision,1);assert.equal(body.clientImportId,input.clientImportId);
+    assert.equal(call.options.headers['X-CSRF-Token'],'test-csrf');assert.match(f.node('information-catalog-status').textContent,/сохранены/);
+  }finally{f.close();}
+});
+
+test('a catalog for another company and unsaved form edits cannot be imported',async()=>{
+  const f=await fixture();try{
+    Object.defineProperty(f.node('information-catalog-file'),'files',{value:[{size:100,text:async()=>JSON.stringify({companyCode:'avokado',clientImportId:'wrong-001',entries:[]})}]});
+    await f.click('information-catalog-preview');assert.equal(f.calls.filter(c=>c.method==='POST').length,0);
+    assert.equal(f.node('information-catalog-import').disabled,true);
+    f.set('information-name','Несохранённое');await f.click('information-catalog-preview');
+    assert.match(f.node('information-catalog-status').textContent,/Сначала сохраните/);
+  }finally{f.close();}
+});
 test('company timezone converts wall time to UTC without depending on computer timezone and rejects DST gaps/ambiguity',async()=>{
   const f=await fixture();try{const time=f.w.SbCabinet.companyTime;
     assert.equal(time.toUTC('2099-01-01T10:00','Asia/Irkutsk'),'2099-01-01T02:00:00.000Z');

@@ -114,6 +114,32 @@ test('real content-to-CRM modules enforce assigned company permissions, trusted 
   assert.equal(existsSync(f.marker),false,'all test data and services stay local, without publication or external fetch');
 });
 
+test('catalog preview and import require edit permission, CSRF and the selected company; replay is harmless',async t=>{
+  const f=await fixture(t),{editor,viewer,none}=f.sessions;
+  const before=(await f.crm('GET','/company-information?companyCode=alvi',undefined,editor)).body;
+  const body={companyCode:'alvi',clientImportId:'http-catalog-001',revision:before.revision,entries:[{
+    service:{id:'http-course',title:'Курс',price:1000,currency:'RUB',procedureCount:5},
+    source:'Fixture',sourceRef:'Row 1',checkedAt:'2026-01-01T00:00:00.000Z'}]};
+  for(const route of ['/catalog-preview','/catalog-import']){
+    const path='/company-information'+route+'?companyCode=alvi';
+    assert.equal((await f.crm('POST',path,body)).status,401);
+    for(const session of [viewer,none])assert.equal((await f.crm('POST',path,body,session)).status,403);
+    assert.equal((await f.crm('POST',path,body,{...editor,csrf:'bad'})).status,403);
+    assert.equal((await f.crm('POST','/company-information'+route+'?companyCode=avokado',body,editor)).status,403);
+    assert.equal((await f.crm('POST',path,{...body,companyCode:'avokado'},editor)).status,400);
+  }
+  const preview=await f.crm('POST','/company-information/catalog-preview?companyCode=alvi',body,editor);
+  assert.equal(preview.status,200);assert.equal(preview.body.added,1);
+  assert.equal((await f.crm('GET','/company-information?companyCode=alvi',undefined,editor)).body.revision,before.revision);
+  const applied=await f.crm('POST','/company-information/catalog-import?companyCode=alvi',body,editor);
+  assert.equal(applied.status,200);assert.equal(applied.body.importResult.added,1);
+  const replay=await f.crm('POST','/company-information/catalog-import?companyCode=alvi',body,editor);
+  assert.equal(replay.status,200);assert.equal(replay.body.importResult.duplicate,true);assert.equal(replay.body.revision,applied.body.revision);
+  const knowledge=(await f.crm('GET','/company-information/knowledge?companyCode=alvi',undefined,viewer)).body;
+  assert.equal(knowledge.services[0].price,1000);assert.equal(knowledge.services[0].procedureCount,5);
+  assert.equal(existsSync(f.marker),false);
+});
+
 test('publishing photo uploads require an assigned editor and CSRF; opaque public images are bounded and non-executable',async t=>{
   const f=await fixture(t),{owner,editor,viewer,none,information_editor,posting_editor}=f.sessions;
   const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6ksAAAAASUVORK5CYII=','base64');

@@ -3,6 +3,7 @@
 const {publicLinkUrl} = require('./company-links');
 const {createCompanyFacts} = require('./company-facts');
 const {companyKnowledge} = require('./company-knowledge');
+const {createHash}=require('node:crypto');
 const BASE = {name:'name',city:'city',timezone:'timezone',phone:'phone',email:'email',websiteUrl:'website_url',socials:'socials'};
 const EXTRA = ['address','hours','description','services','promotions','materials'];
 const FIELDS = [...Object.keys(BASE),...EXTRA];
@@ -99,7 +100,11 @@ function createCompanyInformation(db,{now=Date.now,check:checker}={}) {
     BEGIN SELECT RAISE(ABORT,'Immutable company information version'); END;
     CREATE TABLE IF NOT EXISTS company_information_checks (
     id INTEGER PRIMARY KEY,company_id INTEGER NOT NULL REFERENCES companies(id),revision INTEGER NOT NULL,
-    checks TEXT NOT NULL,checked_at TEXT NOT NULL);`);
+    checks TEXT NOT NULL,checked_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS company_catalog_imports (
+    company_id INTEGER NOT NULL REFERENCES companies(id),client_import_id TEXT NOT NULL,
+    request_hash TEXT NOT NULL,revision INTEGER NOT NULL,created_at TEXT NOT NULL,actor_id INTEGER,
+    PRIMARY KEY(company_id,client_import_id));`);
   const iso=()=>new Date(now()).toISOString();
   function compose(owner,info) {
     const profile={};
@@ -181,6 +186,61 @@ function createCompanyInformation(db,{now=Date.now,check:checker}={}) {
     return get(code);
   }
   function factHistory(code,key) {get(code);return {companyCode:company(db,code).code.toLowerCase(),facts:facts.history(company(db,code).id,key)};}
-  return {get,save,check,factHistory,knowledge:code=>companyKnowledge(get(code))};
+  function prepareImport(code,body) {
+    object(body,['companyCode','clientImportId','revision','entries']);revision(body.revision);
+    if(body.companyCode!==String(code).toLowerCase())fail(400,'Компания файла не совпадает с выбранной компанией');
+    if(typeof body.clientImportId!=='string'||!/^[-a-zA-Z0-9_]{8,100}$/.test(body.clientImportId))fail(400,'Нужен уникальный идентификатор импорта');
+    if(!Array.isArray(body.entries)||!body.entries.length||body.entries.length>200)fail(400,'Нужно от 1 до 200 услуг');
+    const services=structured('services',body.entries.map(entry=>entry?.service));
+    const entries=body.entries.map((entry,index)=>{
+      object(entry,['service','source','sourceRef','checkedAt']);
+      const service=services[index];
+      if(service.price===undefined||service.price===null||!service.currency||!service.procedureCount)fail(400,'Укажите цену, валюту и количество процедур для каждой услуги');
+      const source=text(entry.source,1000,true),sourceRef=text(entry.sourceRef,2000,true),checkedAt=utcDate(entry.checkedAt);
+      if(checkedAt!==entry.checkedAt.replace(/(?<!\.\d{3})Z$/,'.000Z')||Date.parse(checkedAt)>now())fail(400,'Проверьте дату источника');
+      return {service,source,sourceRef,checkedAt};
+    });
+    // Повтор файла после перезагрузки получает свежую revision, но это тот же импорт.
+    const requestHash=createHash('sha256').update(JSON.stringify({companyCode:body.companyCode,clientImportId:body.clientImportId,entries})).digest('hex');
+    const snapshot=get(code),owner=company(db,code);
+    const receipt=db.prepare('SELECT * FROM company_catalog_imports WHERE company_id=? AND client_import_id=?').get(owner.id,body.clientImportId);
+    if(receipt){if(receipt.request_hash!==requestHash)fail(409,'Этот идентификатор уже использован для другого импорта');return {snapshot,owner,entries,requestHash,duplicate:true,added:0};}
+    if(snapshot.revision!==body.revision)fail(409,'Каталог изменился. Сначала обновите сведения');
+    const byId=new Map(snapshot.profile.services.map(row=>[row.id,row]));
+    let added=0;
+    for(const {service}of entries){
+      const existing=byId.get(service.id);
+      const same=existing&&Object.keys({...existing,...service}).every(key=>JSON.stringify(existing[key])===JSON.stringify(service[key]));
+      if(existing&&!same)fail(409,'Услуга с таким идентификатором уже отличается: импорт не заменяет существующие значения');
+      if(!existing){byId.set(service.id,service);added++;}
+    }
+    if(byId.size>200)fail(400,'После импорта будет больше 200 услуг');
+    const merged=[...byId.values()];
+    if(Buffer.byteLength(JSON.stringify({...snapshot.profile,services:merged}))>200000)fail(400,'Данные компании слишком большие');
+    return {snapshot,owner,entries,requestHash,duplicate:false,added,merged};
+  }
+  function importPreview(code,body) {
+    const prepared=prepareImport(code,body);
+    return {companyCode:prepared.snapshot.companyCode,revision:prepared.snapshot.revision,added:prepared.added,
+      unchanged:prepared.entries.length-prepared.added,duplicate:prepared.duplicate,entries:prepared.entries};
+  }
+  function importCatalog(code,body,actorId=null) {
+    const prepared=prepareImport(code,body);let added=0;
+    if(!prepared.duplicate)transaction(()=>{
+      const {entries,requestHash,merged}=prepared,owner=company(db,code),info=refresh(owner);
+      if(info.revision!==body.revision)fail(409,'Каталог изменился. Сначала обновите сведения');
+      const profile={...compose(owner,info),services:merged},states=parse(info.field_states,{});
+      let next=info.revision;
+      if(prepared.added){states.services={state:'confirmed',updatedAt:iso(),actorId};next=archive(owner,info,profile,states,actorId,'Импорт услуг с проверенными источниками');}
+      const latest=new Map(facts.list(owner.id).map(f=>[f.key,f]));
+      const proofs=entries.flatMap(entry=>Object.entries(entry.service).filter(([key,value])=>key!=='id'&&value!==null&&value!=='').map(([key])=>({
+        factId:latest.get(`services/${encodeURIComponent(entry.service.id)}/${key}`).id,source:entry.source,sourceRef:entry.sourceRef,checkedAt:entry.checkedAt})));
+      for(let index=0;index<proofs.length;index+=200)facts.confirm(owner.id,proofs.slice(index,index+200),next,actorId);
+      db.prepare('INSERT INTO company_catalog_imports VALUES(?,?,?,?,?,?)').run(owner.id,body.clientImportId,requestHash,next,iso(),actorId);
+      added=prepared.added;
+    });
+    return {...get(code),importResult:{clientImportId:body.clientImportId,duplicate:prepared.duplicate,added}};
+  }
+  return {get,save,check,factHistory,importPreview,importCatalog,knowledge:code=>companyKnowledge(get(code))};
 }
 module.exports={createCompanyInformation,company,fail,object,text,timezone,utcDate,revision,url,normalizeProfile};
