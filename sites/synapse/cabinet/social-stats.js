@@ -57,6 +57,9 @@
             <label class="wide"><input name="confirmedStart" type="checkbox" required> Подтверждаю дату первого нашего материала</label>
             <div class="crm-actions wide"><button type="submit" class="plain-button">Зафиксировать «ДО»</button>
               <span id="social-baseline-state" role="status"></span></div></form></details>` : ''}</section>
+      <section class="card social-insights"><h2>Что видно по данным</h2>
+        <p class="social-note">Выводы по сохранённым измерениям: что изменилось, насколько полны данные и что ещё нужно проверить.</p>
+        <div id="social-insights" aria-live="polite"><p>Загрузка…</p></div></section>
       <div id="social-content" aria-live="polite"><p>Загрузка…</p></div>
       ${owner ? `<details class="card social-analytics-access"><summary>Аналитический доступ Onlypult (владелец)</summary>
         <p class="social-note">Отдельный ключ кабинета Onlypult для чтения аналитики Instagram и TikTok. Он не заменяет подключение публикаций и хранится отдельно. Ключ показывается только один раз — вам; кабинет его не отображает и не возвращает. ВКонтакте, Telegram, YouTube, 2ГИС и MAX этот источник не покрывает.</p>
@@ -72,15 +75,27 @@
       state.from = from; state.to = to;
       const content = container.querySelector('#social-content');
       try {
-        const [data, accounts, baseline, access] = await Promise.all([
+        const [data, accounts, baseline, access, insights] = await Promise.all([
           ctx.apiJson(`/content/crm/social-stats?companyCode=${encodeURIComponent(company)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
           owner ? ctx.apiJson(`/content/crm/social-stats/accounts?companyCode=${encodeURIComponent(company)}`) : null,
           ctx.apiJson(`/content/crm/social-stats/baseline?companyCode=${encodeURIComponent(company)}`),
           // Состояние аналитического доступа не должно ронять всю страницу, если источник молчит.
           owner ? ctx.apiJson(`/content/crm/social-stats/analytics/access?companyCode=${encodeURIComponent(company)}`).catch(() => null) : null,
+          // Сводка выводов не должна ронять страницу, если расчёт недоступен.
+          ctx.apiJson(`/content/crm/social-stats/insights?companyCode=${encodeURIComponent(company)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`).catch((error) => ({ failed: error.message })),
         ]);
         if (id !== requestId || ctx.selectedProjectId !== company) return;
         if (data.companyCode !== String(company).toLowerCase() || baseline.companyCode !== String(company).toLowerCase()) throw new Error('Ответ другой компании');
+        /* Ответ предыдущей компании или предыдущего периода отбрасывается целиком:
+           сверка идёт по номеру запроса И по коду компании в самом ответе. */
+        const box = container.querySelector('#social-insights');
+        if (box) {
+          if (!insights || insights.failed) box.innerHTML = `<p class="crm-error" role="alert">Выводы не рассчитаны: ${esc(insights?.failed || 'ответ не получен')}</p>`;
+          else if (insights.companyCode !== String(company).toLowerCase()
+            || insights.requestedPeriod?.from !== from || insights.requestedPeriod?.to !== to) {
+            box.innerHTML = '<p class="social-note">Выводы относятся к другому запросу и не показаны. Обновите период.</p>';
+          } else box.innerHTML = insightsMarkup(insights);
+        }
         content.innerHTML = overviewMarkup(data);
         container.querySelector('#social-baseline-content').innerHTML = baselineMarkup(baseline);
         const cached = owner ? profilesFresh(ctx, access) : null;
@@ -229,6 +244,52 @@
           : '<p>Подтверждений владельца за период нет.</p>'}</details>
       ${(data.versions || []).length > 1 ? `<details><summary>История исходной точки: ${(data.versions || []).length} версий</summary><ol>${data.versions.map((row) =>
         `<li>Версия ${esc(row.version)} · ${esc(day(row.from))} — ${esc(day(row.to))} · ${esc(stamp(row.createdAt))}</li>`).join('')}</ol></details>` : ''}`;
+  }
+  /* «Что видно по данным». Разметка только показывает уже посчитанное: ни одного расчёта,
+     ни одного досчёта нуля здесь нет. Семь состояний площадок видны всегда, 2ГИС стоит
+     отдельным блоком, подробные источники раскрываются по желанию. */
+  const INSIGHT_PLATFORMS = ['instagram', 'tiktok', 'youtube', 'vk', 'telegram', 'max'];
+  const INSIGHT_LABELS = { ...PLATFORM_LABELS, max: 'MAX', posts: 'Публикации', crm: 'Обращения CRM' };
+  const COMPARISON = { ok: 'сравнение допустимо', not_comparable: 'сравнивать нельзя', none: 'сравнения нет' };
+  function insightSources(item) {
+    const parts = [];
+    if (item.sources?.accountRef) parts.push(`аккаунт ${item.sources.accountRef}`);
+    if (item.sources?.timezone) parts.push(`сутки ${item.sources.timezone}`);
+    if (item.sources?.provider) parts.push(`источник ${PROVIDER[item.sources.provider] || item.sources.provider}`);
+    if (item.sources?.sourceNote) parts.push(`происхождение: ${item.sources.sourceNote}`);
+    if (item.sources?.organizationId) parts.push(`организация ${item.sources.organizationId}`);
+    if (item.sources?.branchId) parts.push(`филиал ${item.sources.branchId}`);
+    if (item.sources?.reportIds?.length) parts.push(`отчёты ${item.sources.reportIds.join(', ')}`);
+    if (item.dates?.measuredAt) parts.push(`измерено ${day(item.dates.measuredAt)}`);
+    if (item.dates?.previousMeasuredAt) parts.push(`прежнее измерение ${day(item.dates.previousMeasuredAt)}`);
+    if (item.dates?.from && item.dates?.to) parts.push(`период ${day(item.dates.from)} — ${day(item.dates.to)}`);
+    if (item.dates?.previousFrom) parts.push(`сравниваемый период ${day(item.dates.previousFrom)} — ${day(item.dates.previousTo)}`);
+    if (item.reason) parts.push(`причина: ${item.reason}`);
+    return parts;
+  }
+  const insightLine = (item) => `<li data-rule="${esc(item.ruleId)}" data-comparison="${esc(item.comparison)}">
+    <p>${esc(item.text)}</p>
+    ${insightSources(item).length ? `<details class="social-missing"><summary>Источник и границы (${esc(COMPARISON[item.comparison] || item.comparison)})</summary><ul>${insightSources(item).map(part => `<li>${esc(part)}</li>`).join('')}</ul></details>` : ''}</li>`;
+  function insightsMarkup(data) {
+    const period = `${esc(day(data.requestedPeriod?.from))} — ${esc(day(data.requestedPeriod?.to))}`;
+    const compare = data.comparisonPeriod ? `${esc(day(data.comparisonPeriod.from))} — ${esc(day(data.comparisonPeriod.to))}` : '—';
+    const social = INSIGHT_PLATFORMS.map(p => {
+      const items = (data.social || []).filter(item => item.platform === p);
+      return `<article class="social-insight-platform" data-insight-platform="${p}"><h3>${esc(INSIGHT_LABELS[p] || p)}</h3>
+        ${items.length ? `<ul class="social-runs">${items.map(insightLine).join('')}</ul>`
+          : '<p class="social-note">Наблюдений нет: измерений по этой площадке не сохранено. Это отсутствие данных, а не ноль.</p>'}</article>`;
+    }).join('');
+    const extra = (data.observations || []).filter(item => ['posts', 'crm'].includes(item.platform));
+    const gis = data.companyMetrics || [];
+    return `<p class="social-note">Выбранный период: ${period} · сравниваемый период: ${compare}${data.requestedPeriod?.timezone ? ` · сутки ${esc(data.requestedPeriod.timezone)}` : ''}${data.requestedPeriod?.includesToday ? ' · в период входит незавершённый день' : ''} · правила ${esc(data.rulesVersion)}</p>
+      <div class="social-insight-grid">${social}</div>
+      <article class="social-insight-platform" data-insight-platform="gis"><h3>2ГИС · загруженные отчёты</h3>
+        ${gis.length ? `<ul class="social-runs">${gis.map(insightLine).join('')}</ul>`
+          : '<p class="social-note">Загруженных отчётов 2ГИС нет. Это отсутствие данных, а не ноль.</p>'}</article>
+      ${extra.length ? `<article class="social-insight-platform" data-insight-platform="posts-crm"><h3>Публикации и обращения</h3>
+        <ul class="social-runs">${extra.map(insightLine).join('')}</ul></article>` : ''}
+      ${(data.limitations || []).length ? `<details class="social-missing" open><summary>Чего по этим данным сказать нельзя</summary><ul>${data.limitations.map(line => `<li>${esc(line)}</li>`).join('')}</ul></details>` : ''}
+      ${(data.nextSteps || []).length ? `<details class="social-missing"><summary>Следующий шаг</summary><ul>${data.nextSteps.map(line => `<li>${esc(line)}</li>`).join('')}</ul></details>` : ''}`;
   }
   function overviewMarkup(data) {
     const agg = data.socialAggregate || {};

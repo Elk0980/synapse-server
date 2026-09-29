@@ -32,7 +32,7 @@ function fixture({role='owner',permissions=[],override}={}) {
   const dom=new JSDOM('<section id="view"></section>',{url:'https://cabinet.example.test/',runScripts:'outside-only'}),w=dom.window,d=w.document,views={},calls=[];
   w.SbCabinet={registerView:(name,view)=>{views[name]=view;}};w.eval(fs.readFileSync(__dirname+'/social-stats.js','utf8'));
   const ctx={selectedProjectId:'demo-travel',identity:{role,permissions,companies:[{id:'demo-travel',name:'Демо-проект'}]},csrfOptions:(method,body)=>({method,headers:{'X-CSRF-Token':'t'},body:JSON.stringify(body)}),
-    apiJson:async(url,options={})=>{const u=new URL(url,'https://cabinet.example.test/');const call={path:u.pathname,code:u.searchParams.get('companyCode'),method:options.method||'GET',body:options.body?JSON.parse(options.body):null};calls.push(call);
+    apiJson:async(url,options={})=>{const u=new URL(url,'https://cabinet.example.test/');const call={path:u.pathname,code:u.searchParams.get('companyCode'),from:u.searchParams.get('from'),to:u.searchParams.get('to'),method:options.method||'GET',body:options.body?JSON.parse(options.body):null};calls.push(call);
       if(override){const r=await override(call);if(r!==undefined)return r;}
       if(call.path==='/content/crm/social-stats')return overview(call.code);
       if(call.path==='/content/crm/social-stats/baseline')return {companyCode:call.code,latest:null,versions:[]};
@@ -489,5 +489,93 @@ test('сохранение и удаление аналитического кл
     assert.match(f.container.innerHTML,/an_1000/);
     f.container.querySelector('[data-analytics="remove"]').dispatchEvent(new f.w.Event('click',{bubbles:true}));await settle();
     assert.doesNotMatch(f.container.innerHTML,/an_1000/,'после удаления доступа список сброшен');
+  }finally{f.close();}
+});
+
+/* Блок «Что видно по данным»: семь состояний площадок, отдельный 2ГИС, отбрасывание
+   устаревшего ответа. Чтение не собирает, не импортирует и не фиксирует замер. */
+const insightsPayload=(code='demo-travel',over={})=>({rulesVersion:'2026-09-29',companyCode:code,
+  requestedPeriod:{from:'2026-09-01',to:'2026-09-18',timezone:'Asia/Irkutsk',includesToday:false},
+  comparisonPeriod:{from:'2026-08-14',to:'2026-08-31'},baselineVersion:null,
+  observations:[
+    {ruleId:'state.single',platform:'instagram',platformLabel:'Instagram',metric:'followers',metricLabel:'подписчики',unit:'count',kind:'state',
+      text:'Instagram: подписчики — 136 на 2026-09-18 (источник: manual). Это состояние на дату; одним замером динамика не доказана.',
+      values:{value:136},dates:{measuredAt:'2026-09-18'},comparison:'none',reason:'второго сопоставимого замера нет',
+      sources:{accountRef:'@alvi',timezone:'Asia/Irkutsk',provider:'manual',sourceNote:'шапка профиля'}},
+    {ruleId:'absent.no_source',platform:'max',platformLabel:'MAX',metric:null,metricLabel:null,unit:null,kind:'absent',
+      text:'MAX: измерений нет — источник измерений MAX в аналитике не реализован.',values:null,dates:null,
+      comparison:'none',reason:'источник измерений MAX в аналитике не реализован',sources:null},
+    {ruleId:'posts.period_meaning',platform:'posts',platformLabel:'Публикации',metric:null,metricLabel:null,unit:null,kind:'posts',
+      text:'Публикации: период относится к датам ИЗМЕРЕНИЯ показателей, а не к датам выхода публикаций.',
+      values:null,dates:{from:'2026-09-01',to:'2026-09-18'},comparison:'none',reason:'',sources:null},
+    {ruleId:'crm.none_linked',platform:'crm',platformLabel:'Обращения CRM',metric:null,metricLabel:null,unit:null,kind:'crm',
+      text:'Обращения CRM: однозначно связанных с публикациями обращений нет.',values:{linked:0},dates:null,
+      comparison:'none',reason:'однозначной связи нет',sources:null},
+  ],
+  companyMetrics:[{ruleId:'gis.coverage',platform:'gis',platformLabel:'2ГИС',metric:'views',metricLabel:null,unit:'views',kind:'coverage',
+    text:'2ГИС · Показы карточки: известно за 7 из 7 дн.; сумма — 300.',values:{total:300},dates:{from:'2026-09-01',to:'2026-09-18'},
+    comparison:'none',reason:'',sources:{organizationId:'70000001',branchId:'70000002',reportIds:[5]}}],
+  limitations:['Охват не суммируется по дням и не складывается между площадками; общий уникальный охват остаётся неизвестным.'],
+  nextSteps:['MAX: источник измерений не реализован — решить, подключаем источник или ведём измерения вручную.'],...over,
+  // social — то же подмножество, что отдаёт расчёт: наблюдения социальных площадок.
+  social:null});
+const withSocial=(code='demo-travel',over={})=>{const data=insightsPayload(code,over);
+  data.social=data.observations.filter(item=>['instagram','tiktok','youtube','vk','telegram','max'].includes(item.platform));
+  return data;};
+
+test('блок выводов: семь площадок, отдельный 2ГИС, источники и ограничения раскрываются',async()=>{
+  const f=fixture({override:async call=>{
+    if(call.path==='/content/crm/social-stats/insights')
+      return withSocial(call.code,{requestedPeriod:{from:call.from,to:call.to,timezone:'Asia/Irkutsk',includesToday:false}});
+    return undefined;}});
+  try{
+    await f.render();
+    const box=f.container.querySelector('#social-insights');
+    assert.ok(box);
+    for(const p of ['instagram','tiktok','youtube','vk','telegram','max'])
+      assert.ok(box.querySelector(`[data-insight-platform="${p}"]`),p+' показан');
+    const gis=box.querySelector('[data-insight-platform="gis"]');
+    assert.ok(gis,'2ГИС — отдельный блок');
+    assert.match(gis.textContent,/Показы карточки/);
+    assert.match(gis.textContent,/отчёты 5/);
+    assert.match(box.querySelector('[data-insight-platform="max"]').textContent,/измерений нет/);
+    assert.doesNotMatch(box.querySelector('[data-insight-platform="max"]').textContent,/\b0\b/);
+    // Площадка без наблюдений называет причину, а не показывает ноль.
+    assert.match(box.querySelector('[data-insight-platform="tiktok"]').textContent,/отсутствие данных, а не ноль/);
+    assert.match(box.querySelector('[data-rule="state.single"]').textContent,/136 на 2026-09-18/);
+    assert.match(box.querySelector('[data-rule="state.single"] details').textContent,/аккаунт @alvi/);
+    assert.match(box.querySelector('[data-rule="state.single"] details').textContent,/сутки Asia\/Irkutsk/);
+    assert.match(box.textContent,/Охват не суммируется/);
+    assert.match(box.textContent,/Следующий шаг/);
+    assert.match(box.textContent,/датам ИЗМЕРЕНИЯ показателей/);
+    // Чтение ничего не собирает и не фиксирует.
+    assert.equal(f.calls.some(c=>c.method!=='GET'),false,'открытие страницы не делает записей');
+    assert.equal(f.calls.filter(c=>c.path==='/content/crm/social-stats/insights').length,1);
+  }finally{f.close();}
+});
+
+test('ответ выводов другой компании или другого периода не показывается',async()=>{
+  const f=fixture({override:async call=>{
+    if(call.path==='/content/crm/social-stats/insights')
+      return withSocial('demo-other',{requestedPeriod:{from:call.from,to:call.to,timezone:'Asia/Irkutsk',includesToday:false}});
+    return undefined;}});
+  try{
+    await f.render();
+    const box=f.container.querySelector('#social-insights');
+    assert.match(box.textContent,/относятся к другому запросу и не показаны/);
+    assert.doesNotMatch(box.textContent,/136 на 2026-09-18/);
+  }finally{f.close();}
+});
+
+test('сбой расчёта выводов не ломает сводку соцсетей',async()=>{
+  const f=fixture({override:async call=>{
+    if(call.path==='/content/crm/social-stats/insights')throw new Error('Расчёт недоступен');
+    return undefined;}});
+  try{
+    await f.render();
+    assert.match(f.container.querySelector('#social-insights').textContent,/Выводы не рассчитаны: Расчёт недоступен/);
+    // Основная сводка на месте.
+    assert.ok(f.container.querySelector('[data-platform="vk"]'));
+    assert.match(f.container.querySelector('[data-platform="vk"]').textContent,/собрано/);
   }finally{f.close();}
 });

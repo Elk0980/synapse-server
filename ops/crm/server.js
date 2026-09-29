@@ -618,7 +618,7 @@ const socialStats = createSocialStats(db, {evidence: socialAnalyticsEvidence,
   adapters: createSocialAdapters({transport: autopostingTransport, analytics: socialAnalytics})});
 const socialBaselines = createSocialBaselines(db, socialStats);
 const handleSocialStats = createSocialStatsHandler({stats: socialStats, baselines: socialBaselines,
-  analytics: socialAnalytics, companyModuleContext, readJson, send});
+  analytics: socialAnalytics, companyMetrics: platformCompanyMetrics, companyModuleContext, readJson, send});
 function deliverLeadEmails() {
   return emailOutbox.drain().catch(() => {
     // Do not expose SMTP responses or contact details in service logs.

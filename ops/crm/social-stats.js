@@ -6,6 +6,7 @@
 const { createHash } = require('node:crypto');
 const { receiptFormat } = require('./autoposting');
 const PLATFORMS = Object.freeze({ instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube', vk: 'ВКонтакте', telegram: 'Telegram' });
+const { buildInsights, previousPeriod } = require('./social-insights');
 const PROVIDERS = Object.freeze(['onlypult', 'direct', 'manual']);
 const KINDS = Object.freeze(['organic', 'paid', 'mixed', 'unknown']);
 /* Подсказка для выбора системы суток в кабинете. Это не ограничение: сохраняется любой
@@ -969,7 +970,24 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
       crm: attribution(scope.code, from, to), postMetrics: postMetrics(scope.code, from, to), metrics: METRICS, runs: db.prepare('SELECT id,platform,provider,trigger,date,started_at,finished_at,status,rows,error,source_note,missing FROM social_collect_runs WHERE company_code=? COLLATE NOCASE ORDER BY id DESC LIMIT 30').all(scope.code)
         .map((r) => ({ ...r, missing: JSON.parse(r.missing || '[]'), ...runNote(r) })) };
   }
-  return { accounts, saveAccounts, collect, collectDue, importManual, overview, attribution, postMetrics, writeSnapshots, writePosts,
+  /* «Что видно по данным». Ничего не собирает и не пишет: читает уже сохранённые
+     измерения через overview/postMetrics и отдаёт их чистому модулю выводов. Сводка 2ГИС и
+     выбранная версия замера «ДО» приходят снаружи — здесь их хранилище не дублируется. */
+  function insights(code, from, to, { companyMetrics = null, previousCompanyMetrics = null, baseline = null } = {}) {
+    const scope = company(code); day(from); day(to); if (from > to) fail();
+    const comparison = previousPeriod(from, to);
+    return buildInsights({
+      companyCode: scope.code.toLowerCase(),
+      period: { from, to, timezone: scope.timezone || 'Asia/Bangkok' },
+      current: overview(scope.code, from, to),
+      previous: comparison ? overview(scope.code, comparison.from, comparison.to) : null,
+      comparison,
+      postMetrics: postMetrics(scope.code, from, to),
+      baseline, companyMetrics, previousCompanyMetrics,
+      today: localDay(now(), scope.timezone || 'Asia/Bangkok'),
+    });
+  }
+  return { accounts, saveAccounts, collect, collectDue, importManual, overview, insights, attribution, postMetrics, writeSnapshots, writePosts,
     migrateLegacyEvidence, queuedDates, acquireLease, releaseLease, localDay, dayBounds, PLATFORMS, METRICS, AGGREGATION };
 }
 module.exports = { createSocialStats, SOCIAL_STATS_ERRORS: ERRORS, PLATFORMS, METRICS, AGGREGATION, KINDS, TIMEZONE_CHOICES, localDay, dayBounds, canonicalPostKey, RECEIPT_TO_PLATFORM };
