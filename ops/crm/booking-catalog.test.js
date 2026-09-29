@@ -64,3 +64,17 @@ test('program booking retains whole visit and guest count after catalog changes 
   assert.match(restored.state.serviceQuote.text,/6900 ₽ за программу целиком/);
   assert.doesNotMatch(restored.state.serviceQuote.text,/процедур/);
 });
+
+test('minute and two-guest procedure conditions survive catalog replacement and restart',t=>{
+  for(const service of [
+    {id:'minutes',title:'Тариф',price:990,currency:'RUB',priceUnit:'minutes',minuteCount:30},
+    {id:'pair',title:'Массаж',price:5600,currency:'RUB',procedureCount:1,guestCount:2,durationMinutes:60}
+  ]){
+    const f=fixture(t);
+    f.info.importCatalog('alvi',{companyCode:'alvi',revision:f.info.get('alvi').revision,clientImportId:'units-booking-001',entries:[{service,source:'Прайс',sourceRef:'Строка',checkedAt:'2026-09-29T11:00:00Z'}]});
+    const request={...f.body(),serviceSelection:{id:service.id,knowledgeRevision:f.info.knowledge('alvi').knowledgeRevision}};
+    const booked=f.api.record('alvi',1,request,9);assert.deepEqual(booked.state.serviceQuote.service,service);
+    f.update(18000);
+    assert.deepEqual(createStudioJourney(f.db,{now:f.now}).get('alvi',1).state.serviceQuote.service,service);
+  }
+});

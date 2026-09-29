@@ -146,3 +146,16 @@ test('program editor preserves total price, guest count and whole visit duration
     assert.equal(service.durationMinutes,null);assert.equal(service.procedureCount,null);
   }finally{f.close();}
 });
+
+test('minute editor saves paid time without inventing a procedure duration',async()=>{
+  const f=await fixture();try{
+    const row=f.node('information-services');
+    for(const [key,value]of Object.entries({priceUnit:'minutes',minuteCount:'100',durationMinutes:'',procedureCount:''})){
+      const input=row.querySelector('[data-row-field="'+key+'"]');input.value=value;input.dispatchEvent(new f.w.Event('input',{bubbles:true}));
+    }
+    await f.click('information-save');
+    const service=JSON.parse(f.calls.find(call=>call.method==='PUT').options.body).profile.services[0];
+    assert.equal(service.price,500);assert.equal(service.minuteCount,100);assert.equal(service.priceUnit,'minutes');
+    assert.equal(service.durationMinutes,null);assert.equal(service.procedureCount,null);
+  }finally{f.close();}
+});

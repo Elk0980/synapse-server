@@ -30,7 +30,7 @@ function companyKnowledge(snapshot) {
     const prefix=`services/${encodeURIComponent(service.id)}/`;
     // Нельзя выдавать голую цену без названия, валюты или без подтверждения
     // сохранённых условий/длительности. Ноль — допустимая цена, отсутствие — нет.
-    const required=new Set(['title','price','currency',...(service.priceUnit==='program'?['priceUnit','guestCount','visitDurationMinutes']:['procedureCount']),...Object.keys(service).filter(key=>key!=='id'&&populated(service[key]))]);
+    const required=new Set(['title','price','currency',...(service.priceUnit==='program'?['priceUnit','guestCount','visitDurationMinutes']:service.priceUnit==='minutes'?['priceUnit','minuteCount']:['procedureCount']),...Object.keys(service).filter(key=>key!=='id'&&populated(service[key]))]);
     const missing=[...required].filter(key=>!populated(service[key])||!valid(prefix+key));
     if(missing.length){unavailableServices.push({id:service.id,missingFields:missing});continue;}
     const fields=Object.keys(service).filter(key=>key!=='id'&&populated(service[key]));
@@ -56,13 +56,15 @@ function serviceQuote(knowledge,serviceId,expectedRevision) {
     fail(409,'Каталог изменился. Обновите предложение перед ответом.','KNOWLEDGE_CHANGED');
   const found=knowledge.services.find(row=>row.id===serviceId);
   if(!found)fail(409,'Услуга отсутствует в проверенном каталоге. Передайте вопрос администратору.','SERVICE_UNAVAILABLE');
-  const fields=['id','title','price','currency','priceUnit','guestCount','visitDurationMinutes','procedureCount','durationMinutes','bookingIntervalMinutes','description'];
+  const fields=['id','title','price','currency','priceUnit','minuteCount','guestCount','visitDurationMinutes','procedureCount','durationMinutes','bookingIntervalMinutes','description'];
   const service=Object.fromEntries(fields.filter(key=>populated(found[key])).map(key=>[key,found[key]]));
-  const count=service.procedureCount;
-  const word=count%10===1&&count%100!==11?'процедуру':count%10>=2&&count%10<=4&&!(count%100>=12&&count%100<=14)?'процедуры':'процедур';
-  const unit=service.priceUnit==='program'?`программу целиком (гостей: ${service.guestCount})`:`${count} ${word}`;
+  const minutes=service.priceUnit==='minutes',count=minutes?service.minuteCount:service.procedureCount;
+  const words=minutes?['минуту','минуты','минут']:['процедуру','процедуры','процедур'];
+  const word=count%10===1&&count%100!==11?words[0]:count%10>=2&&count%10<=4&&!(count%100>=12&&count%100<=14)?words[1]:words[2];
+  const unit=(service.priceUnit==='program'?'программу целиком':`${count} ${word}`)+(service.guestCount?` (гостей: ${service.guestCount})`:'');
   const lines=[service.title,`${String(service.price).replace('.',',')} ${service.currency==='RUB'?'₽':service.currency} за ${unit}.`];
   if(service.priceUnit==='program')lines.push(`Общая длительность визита: ${service.visitDurationMinutes} мин.`);
+  else if(minutes)lines.push('Указано суммарное оплаченное время. Длительность отдельного сеанса уточнит администратор.');
   else if(service.durationMinutes)lines.push(`Продолжительность одной процедуры: ${service.durationMinutes} мин.`);
   if(service.description)lines.push(service.description);
   return {companyCode:knowledge.companyCode,knowledgeRevision:knowledge.knowledgeRevision,service,
