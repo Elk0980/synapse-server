@@ -303,6 +303,7 @@
         ${(item.history || []).length ? `<details class="social-missing"><summary>Прежние аккаунты площадки (не входят в сводку)</summary><ul>${item.history.map(h => `<li>${esc(h.accountRef)}: дней ${num(h.days)}${Object.entries(h.totals || {}).map(([m, v]) => `, ${esc(METRIC_LABELS[m] || m)} ${num(v)}`).join('')}</li>`).join('')}</ul></details>` : ''}
         ${item.dataStatus === 'lifetime_only' ? '<p class="social-note">Есть только замер состояния на дату (подписчики): суточного ряда по этой площадке пока нет.</p>' : ''}
         <p class="social-note">Свежесть: ${esc(stamp(item.lastCollectedAt))} · разметка: ${(item.kinds || []).map(k => KIND[k] || k).join(', ') || '—'}${item.timezone ? ` · сутки ${esc(item.timezone)}` : ''}</p>
+        ${item.access?.note ? `<p class="social-note">${esc(item.access.note)}</p>` : ''}
         ${(item.lastRun?.missing?.length || item.access?.missing?.length) ? `<details class="social-missing"><summary>Чего недостаёт</summary><ul>${(item.lastRun?.missing?.length ? item.lastRun.missing : item.access.missing).map(x => `<li>${esc(x)}</li>`).join('')}</ul></details>` : ''}
         ${/* Происхождение измерения — не ошибка: раньше пометка источника ручного импорта красилась красным. */''}
         ${item.lastRun?.sourceNote ? `<p class="social-note">Источник измерения: ${esc(item.lastRun.sourceNote)}</p>` : ''}
@@ -518,6 +519,7 @@
       <label>Система суток<select name="${a.platform}.timezone">${zones.map((z) => `<option value="${esc(z)}"${a.timezone === z ? ' selected' : ''}>${esc(z)}</option>`).join('')}</select></label>
       <label>Час сбора (по выбранным суткам)<input name="${a.platform}.collectHour" type="number" min="0" max="23" value="${a.collectHour}"></label>
       <label class="autoposting-checkbox"><input type="checkbox" name="${a.platform}.enabled"${a.enabled ? ' checked' : ''}>Собирать</label>
+      ${a.access?.note ? `<p class="social-note">${esc(a.access.note)}</p>` : ''}
       ${a.access?.missing?.length ? `<p class="social-note">Недостаёт: ${esc(a.access.missing.join('; '))}</p>` : ''}</fieldset>`; }).join('')}
       <div class="crm-actions wide"><button class="plain-button" type="submit">Сохранить аккаунты</button><span id="social-accounts-state" role="status"></span></div></form>`;
     node.querySelector('#social-accounts-form').addEventListener('submit', async event => {

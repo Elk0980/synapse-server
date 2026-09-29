@@ -2,6 +2,7 @@
 
 const http = require("node:http");
 const crypto = require("node:crypto");
+const { createTelegramChannelStats, readJsonLimited } = require("./telegram-channel-stats");
 const CONSENT_COPY = require("./consent-texts.json");
 const { DatabaseSync } = require("node:sqlite");
 const { URL } = require("node:url");
@@ -572,6 +573,49 @@ async function telegramRequest(method, payload) {
     throw new Error(`Telegram ${method}: HTTP ${response.status}`);
   return body;
 }
+
+/* Счётчик подписчиков канала. Привязка берётся с защищённого маршрута CRM тем же
+   межсервисным ключом, который у chat уже есть; новых секретов и новых прав не появляется.
+   Ключ в адрес не попадает и в журналы не пишется. */
+async function readCompanyLinks(companyCode, { signal } = {}) {
+  if (!CRM_URL || !CRM_API_KEY) throw Object.assign(new Error("Доступ к привязкам компании не настроен"), { code: "NO_BINDING" });
+  const base = CRM_URL.replace(/\/leads\/?$/, "");
+  const response = await fetch(`${base}/company-links/${encodeURIComponent(companyCode)}`, {
+    method: "GET",
+    redirect: "error",
+    headers: { "x-api-key": CRM_API_KEY },
+    // Срок задаёт вся цепочка измерения: своего отдельного таймаута у шага нет.
+    signal,
+  });
+  if (response.status === 404) throw Object.assign(new Error("Компания не найдена"), { code: "NOT_FOUND" });
+  if (response.status === 408 || response.status === 429 || response.status >= 500)
+    throw Object.assign(new Error("Привязки компании временно недоступны"), { code: "UPSTREAM_UNAVAILABLE" });
+  if (!response.ok) throw Object.assign(new Error("Привязки компании не прочитаны"), { code: "NO_BINDING" });
+  return readJsonLimited(response, { signal });
+}
+
+/* Отдельный вызов Bot API ТОЛЬКО для счётчика подписчиков: с отменой по общему сроку,
+   запретом редиректа и ограниченным чтением ответа. Существующий telegramRequest для
+   отправки сообщений остаётся как был — его смысл здесь не меняется. */
+async function telegramChannelCount(method, payload, { signal } = {}) {
+  if (method !== "getChatMemberCount") throw Object.assign(new Error("Недопустимый метод Bot API"), { code: "VALIDATION_ERROR" });
+  if (!TELEGRAM_BOT_TOKEN) throw Object.assign(new Error("Бот Synapse не подключён"), { code: "TELEGRAM_UNAVAILABLE" });
+  let response;
+  try {
+    response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`, {
+      method: "POST",
+      // За редиректом с токеном бота в адресе не идём.
+      redirect: "error",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      signal,
+    });
+  } catch { throw Object.assign(new Error("Telegram не ответил"), { code: "TELEGRAM_UNAVAILABLE" }); }
+  const body = await readJsonLimited(response, { signal });
+  if (!response.ok || body?.ok !== true) throw Object.assign(new Error("Telegram отклонил запрос счётчика"), { code: "TELEGRAM_UNAVAILABLE" });
+  return body;
+}
+const telegramChannelStats = createTelegramChannelStats({ readCompanyLinks, telegramRequest: telegramChannelCount });
 
 const CLIENT_COMPANIES = new Set(["alvi", "avokado", "palitra"]);
 const CLIENT_STATUSES = new Set(["new", "in_progress", "done", "blocked"]);
@@ -1191,6 +1235,42 @@ async function clientTaskAdminRoutes(request, response, url, origin) {
 
 async function route(request, response, origin) {
   const url = new URL(request.url, "http://localhost");
+  /* Текущий счётчик подписчиков канала для CRM. Только GET, только код компании в запросе:
+     ни URL, ни chat_id, ни метод Bot API снаружи не принимаются. Ключ проверяется отдельно
+     именно на этом маршруте и сравнивается постоянным по времени сравнением; это не общий
+     сервисный доступ к chat и не расширение прав operator/admin. */
+  if (url.pathname === "/internal/telegram/channel-members") {
+    if (request.method !== "GET") fail(405, "Метод не поддерживается");
+    /* Сравнение идёт по БАЙТАМ: у произвольного Unicode длина строки и длина буфера
+       расходятся, и timingSafeEqual на буферах разной длины бросает необработанную ошибку. */
+    const provided = request.headers["x-api-key"];
+    const expected = CRM_API_KEY;
+    let ok = false;
+    if (expected && typeof provided === "string") {
+      const left = Buffer.from(provided, "utf8"), right = Buffer.from(expected, "utf8");
+      ok = left.length === right.length && crypto.timingSafeEqual(left, right);
+    }
+    // Без верного ключа ни CRM, ни Telegram не вызываются.
+    if (!ok) fail(401, "Неверный ключ сервиса");
+    // Ровно один companyCode: повторённый параметр — не запрос по контракту.
+    const values = url.searchParams.getAll("companyCode");
+    if (values.length !== 1) fail(400, "Нужен ровно один параметр companyCode");
+    const companyCode = values[0] || "";
+    const known = new Set(["companyCode"]);
+    for (const key of url.searchParams.keys()) if (!known.has(key)) fail(400, "Недопустимый параметр запроса");
+    let result;
+    try { result = await telegramChannelStats.channelMembers(companyCode); }
+    catch (error) {
+      const map = { VALIDATION_ERROR: 400, NO_BINDING: 409, UNSUPPORTED_LINK: 409, NOT_FOUND: 404,
+        BINDING_CHANGED: 409, TELEGRAM_UNAVAILABLE: 502, BAD_RESPONSE: 502,
+        RESPONSE_TOO_LARGE: 502, UPSTREAM_UNAVAILABLE: 503, TIMEOUT: 504 };
+      // Наружу уходит только объяснение; ни ключа, ни адреса с ключом в нём нет.
+      fail(map[error?.code] || 502, error?.code && map[error.code] ? error.message : "Счётчик подписчиков не получен");
+    }
+    // Межсервисный ответ отдаётся без CORS-происхождения: это не браузерный маршрут.
+    return send(response, 200, result);
+  }
+
   if (request.method === "GET" && url.pathname === "/internal/consents") {
     if (!CONSENT_SERVICE_KEY || request.headers["x-service-key"] !== CONSENT_SERVICE_KEY)
       fail(401, "Неверный ключ сервиса");

@@ -26,6 +26,9 @@ services:
       PORT: "8080"
       DATABASE_PATH: /data/crm.sqlite
       API_KEY: ${CRM_API_KEY}
+      # Адрес сервиса счётчика подписчиков Telegram. Только адрес: ключ здесь уже есть
+      # (API_KEY), новых секретов и новых разрешений эта строка не добавляет.
+      CHAT_STATS_URL: http://chat:8080
       ALLOWED_ORIGINS: ${CRM_ALLOWED_ORIGINS:-}
       RATE_LIMIT_WINDOW_MS: ${CRM_RATE_LIMIT_WINDOW_MS:-60000}
       RATE_LIMIT_MAX: ${CRM_RATE_LIMIT_MAX:-120}

@@ -25,31 +25,110 @@ const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
    Он инъекцией, а не импортом подключения публикаций: у аналитики свой ключ, своя ревизия
    и свой список профилей, и перепутать их нельзя. Без инъекции адаптер честно говорит,
    что подключения нет, и чисел не выдумывает. */
-function createSocialAdapters({ transport, analytics = null, env = process.env, now = () => Date.now() } = {}) {
+function createSocialAdapters({ transport, analytics = null, channelStats = null, env = process.env, now = () => Date.now() } = {}) {
+  /* Отдельный путь для Telegram: текущий счётчик подписчиков через уже работающего бота
+     Synapse. Он не зависит от того, чем ведутся ПУБЛИКАЦИИ: строка аккаунта может быть
+     onlypult, а счётчик всё равно снимается. Подключения публикаций это не трогает.
+     Просмотры и реакции постов Bot API не отдаёт — и здесь их не появляется. */
+  const CHANNEL_NOTE = 'регулярный счётчик подписчиков канала через существующего бота Synapse; просмотры и реакции постов через Bot API недоступны';
+  const channelReady = () => Boolean(channelStats?.channelMembers && channelStats.ready !== false);
+  async function telegramChannel({ company, account }) {
+    if (!channelReady()) return null;
+    const ref = String(account?.account_ref || '').trim();
+    // Аккаунт без явно указанного канала не угадывается.
+    if (!ref) return { status: 'missing_access', missing: ['в аккаунте аналитики не указан канал: угадывать его нельзя', CHANNEL_NOTE] };
+    let answer;
+    try { answer = await channelStats.channelMembers(company.code); }
+    catch (error) {
+      /* Отказ по привязке — окончательный: канал не подтверждён, и запасной путь его не
+         подтвердит. Ненастроенный или неотвечающий сервис — временная причина, при ней
+         прежний прямой путь через подключение площадки остаётся доступен. */
+      const decisive = ['NO_BINDING', 'UNSUPPORTED_LINK', 'BINDING_CHANGED', 'COMPANY_MISMATCH', 'BAD_RESPONSE', 'REJECTED'];
+      if (decisive.includes(error?.code))
+        return { status: 'missing_access', hard: true,
+          missing: [`счётчик подписчиков не снят: ${error?.message || 'отказ сервиса'}`, CHANNEL_NOTE] };
+      /* Временная причина (сервис не ответил, адрес не настроен) — НЕ missing_access:
+         такой статус закрывает дату от повторов, и восстановившийся сервис уже не спросили
+         бы до следующих суток. failed оставляет дату в очереди повторов. */
+      return { status: 'failed', temporary: true,
+        error: `счётчик подписчиков не снят: ${error?.message || 'сервис не ответил'}`,
+        missing: [`счётчик подписчиков временно недоступен: ${error?.message || 'сервис не ответил'}`, CHANNEL_NOTE] };
+    }
+    /* hard — ответ пришёл, но он относится не к нам. Это окончательный отказ: подменять его
+       запасным путём нельзя, иначе расхождение привязки осталось бы незамеченным. */
+    if (String(answer.companyCode).toLowerCase() !== String(company.code).toLowerCase())
+      return { status: 'missing_access', hard: true, missing: ['ответ счётчика относится к другой компании: значение не записано'] };
+    /* Сверка с сохранённым аккаунтом: @имя и -100… — разные записи одного канала, но
+       подтвердить их тождество нечем, поэтому расхождение останавливает запись. */
+    const same = ref.replace(/^@/, '').toLowerCase() === String(answer.accountRef).replace(/^@/, '').toLowerCase();
+    if (!same) return { status: 'missing_access', hard: true,
+      missing: [`канал компании (${answer.accountRef}) не совпадает с сохранённым в аккаунте аналитики (${ref}): значение не записано`] };
+    return { status: 'partial',
+      /* Текущее число — состояние на момент наблюдения. historical здесь не ставится:
+         снимок датируется днём наблюдения, а не целевой датой backfill. */
+      snapshots: [{ period: 'lifetime', metric: 'followers', value: answer.value,
+        sourceField: 'getChatMemberCount', kind: account.kind, completeness: 'complete' }],
+      missing: ['просмотры и реакции постов: Bot API их не отдаёт'],
+      provenance: { accountRef: answer.accountRef, observedAt: answer.observedAt || null, source: answer.source } };
+  }
   const direct = {
     info: () => ({ name: 'direct', available: Boolean(transport), note: 'Прямые API площадок через сохранённые подключения; Instagram/TikTok/YouTube требуют собственных приложений и разрешений владельца.' }),
     // Отпечаток подключения площадки (ревизия/цель, без токена): сравнивается до и после сетевого вызова.
-    connectionRevision({ company, platform }) {
+    connectionRevision({ company, platform, account }) {
+      /* Счётчик канала опирается на компанию и сохранённый канал. Но при временной
+         недоступности счётчика сбор уходит на прежний путь через подключение площадки —
+         значит ревизия ЭТОГО подключения из отпечатка выпадать не должна, иначе смена
+         токена во время запроса осталась бы незамеченной и старое число записалось бы. */
+      if (platform === 'telegram' && channelReady()) {
+        const own = `telegram_channel:${String(company?.code || '').toLowerCase()}:${account?.account_ref || ''}`;
+        if (typeof transport?.connectionRevision !== 'function') return own;
+        const info = transport.connectionRevision(company.code, platform);
+        return `${own}|${info ? `${info.provider}:${info.revision}:${info.target}` : 'none'}`;
+      }
       if (platform !== 'telegram' && platform !== 'vk' || !transport?.connectionRevision) return null;
       const info = transport.connectionRevision(company.code, platform);
       return info ? `${info.provider}:${info.revision}:${info.target}` : null;
     },
     describe(platform, account) {
-      if (platform === 'telegram' || platform === 'vk') return { status: 'depends_on_connection', missing: scopedNeed(platform, account), note: 'Проверяется при сборе по сохранённому подключению площадки.' };
+      if (platform === 'telegram') {
+        if (channelReady() && account?.account_ref) return { status: 'depends_on_connection',
+          missing: ['подтверждённая ссылка на публичный канал в карточке компании (поле telegram_channel)', 'бот Synapse — администратор канала'],
+          note: `${CHANNEL_NOTE}. Наличие настройки не означает, что счётчик уже снят: это проверяется при сборе.` };
+        if (channelReady()) return { status: 'missing_access',
+          missing: ['в аккаунте аналитики не указан канал', CHANNEL_NOTE] };
+        return { status: 'depends_on_connection', missing: scopedNeed(platform, account), note: 'Проверяется при сборе по сохранённому подключению площадки.' };
+      }
+      if (platform === 'vk') return { status: 'depends_on_connection', missing: scopedNeed(platform, account), note: 'Проверяется при сборе по сохранённому подключению площадки.' };
       return { status: 'missing_access', missing: scopedNeed(platform, account) };
     },
     async collect({ company, platform, account, date, timezone, closed = true, dayStartMs, dayEndMs }) {
       const need = scopedNeed(platform, account);
       if (platform !== 'telegram' && platform !== 'vk') return { status: 'missing_access', missing: need };
+      /* Счётчик канала идёт первым и не требует сохранённого подключения площадки.
+         Прежний прямой путь через подключение сохраняется как запасной. */
+      let temporary = null;
+      if (platform === 'telegram' && channelReady()) {
+        const channel = await telegramChannel({ company, account });
+        /* Запасной прямой путь через подключение площадки остаётся только для случаев,
+           когда счётчик просто не настроен или временно не ответил. Расхождение привязки
+           им не заслоняется. */
+        if (channel && channel.temporary && transport?.readStats) temporary = channel;
+        else if (channel && (channel.status !== 'missing_access' || channel.hard || !transport?.readStats)) return channel;
+      }
+      /* Если временная причина была, а запасной путь тоже не дал чисел, наружу уходит
+         повторяемый статус: дата остаётся в очереди, а не закрывается как «нет доступа». */
+      const keepRetryable = (result) => (temporary && ['missing_access', 'unsupported'].includes(result.status)
+        ? { status: 'failed', error: temporary.error, missing: [...temporary.missing, ...(result.missing || [])] }
+        : result);
       if (!transport?.readStats) return { status: 'unsupported', missing: ['транспорт подключений недоступен'] };
       if (platform === 'telegram') {
         const chat = account.account_ref || undefined;
         let result;
         try { result = await transport.readStats(company.code, 'telegram', 'getChatMemberCount', chat ? { chat_id: chat } : {}); }
-        catch (error) { return { status: 'missing_access', missing: [`Telegram отклонил запрос (${error?.code || 'ошибка'}): ${need[0]}`] }; }
-        if (!result) return { status: 'missing_access', missing: ['подключение Telegram (токен бота) не сохранено', ...need] };
-        if (result.unsupported) return { status: 'unsupported', missing: [`подключение Telegram через ${result.provider} не даёт статистики; нужен прямой бот`] };
-        if (!chat && !result.target) return { status: 'missing_access', missing: ['не указан канал (@имя или -100…) ни в аккаунте аналитики, ни в подключении'] };
+        catch (error) { return keepRetryable({ status: 'missing_access', missing: [`Telegram отклонил запрос (${error?.code || 'ошибка'}): ${need[0]}`] }); }
+        if (!result) return keepRetryable({ status: 'missing_access', missing: ['подключение Telegram (токен бота) не сохранено', ...need] });
+        if (result.unsupported) return keepRetryable({ status: 'unsupported', missing: [`подключение Telegram через ${result.provider} не даёт статистики; нужен прямой бот`] });
+        if (!chat && !result.target) return keepRetryable({ status: 'missing_access', missing: ['не указан канал (@имя или -100…) ни в аккаунте аналитики, ни в подключении'] });
         const count = num(result.result);
         if (count === null) return { status: 'failed', error: 'Telegram вернул не число подписчиков' };
         return { status: 'partial', snapshots: [{ date, period: 'lifetime', metric: 'followers', value: count, sourceField: 'getChatMemberCount', kind: account.kind, completeness: 'complete' }],
@@ -98,6 +177,9 @@ function createSocialAdapters({ transport, analytics = null, env = process.env, 
         : 'Onlypult Analytics не подключён: аналитический доступ и профиль an_… не сохранены.' }),
     // describe сети не касается: только сохранённое состояние доступа и выбранного профиля.
     describe(platform, account) {
+      /* Публикации Telegram могут идти через Onlypult — счётчик подписчиков это не
+         отменяет: он снимается отдельным путём через бота Synapse и публикаций не касается. */
+      if (platform === 'telegram' && channelReady()) return direct.describe('telegram', account);
       if (!ONLYPULT_PLATFORMS.includes(platform))
         return { status: 'unsupported', missing: [ONLYPULT_NEED[3]] };
       if (!analyticsReady()) return { status: 'missing_access', missing: ONLYPULT_NEED };
@@ -110,7 +192,11 @@ function createSocialAdapters({ transport, analytics = null, env = process.env, 
     },
     /* Отпечаток аналитической привязки: ревизия доступа плюс профиль, native ID и система
        суток. Контракт вызова — один объект контекста, как у прямого адаптера. */
-    connectionRevision({ company, account } = {}) {
+    connectionRevision({ company, account, platform } = {}) {
+      /* У счётчика канала своя привязка: компания и сохранённый канал. Аналитический доступ
+         Onlypult к нему отношения не имеет, поэтому и отпечаток другой. */
+      if (platform === 'telegram' && channelReady())
+        return { provider: 'telegram_channel', companyCode: String(company?.code || '').toLowerCase(), accountRef: account?.account_ref || '' };
       if (!analyticsReady()) return null;
       const code = company?.code || account?.company_code || '';
       if (!code) return null;
@@ -122,6 +208,8 @@ function createSocialAdapters({ transport, analytics = null, env = process.env, 
     },
     async collect({ company, platform, account, date, timezone, companyCode }) {
       const code = company?.code || companyCode || account?.company_code || account?.companyCode || '';
+      // Счётчик подписчиков канала не зависит от того, чем ведутся публикации.
+      if (platform === 'telegram' && channelReady()) return telegramChannel({ company: { code }, account });
       if (!ONLYPULT_PLATFORMS.includes(platform)) return { status: 'unsupported', missing: [ONLYPULT_NEED[3]] };
       const ready = onlypult.describe(platform, { ...account, company_code: code });
       if (['missing_access', 'unsupported'].includes(ready.status)) return { status: ready.status, missing: ready.missing };
