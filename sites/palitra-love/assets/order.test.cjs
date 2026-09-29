@@ -273,3 +273,33 @@ test('без согласия и с пустой корзиной запроса
     assert.equal(p.form.querySelector('[name=website]').getAttribute('aria-hidden'), 'true');
   } finally { p.close(); }
 });
+
+test('после успешной заявки — «Продолжить в Telegram» только по ссылке сервера на t.me; повтор и чужие адреса без ссылки', async () => {
+  const link = 'https://t.me/palitra_qa_bot?start=o_AbCdEfGhIjKlMnOpQrStUvWxYz012345';
+  const p = page({ responses: [
+    { status: 201, body: { ok: true, orderId: 21, status: 'accepted', telegram: { url: link, expiresAt: '2026-09-29T10:00:00Z' } } },
+    { status: 201, body: { ok: true, orderId: 22, status: 'accepted', telegram: { url: 'javascript:alert(1)' } } },
+    { status: 201, body: { ok: true, orderId: 23, status: 'accepted', telegram: { url: 'https://evil.example/?start=o_AbCdEfGhIjKlMnOpQrStUvWx' } } },
+    { status: 200, body: { ok: true, duplicate: true, orderId: 23, status: 'accepted' } }] });
+  try {
+    // Ждём завершения отправки по состоянию формы, а не по числу тактов: так тест не зависит от скорости машины.
+    const send = async () => {
+      const before = p.calls.length;
+      p.doc.querySelector('[data-add][data-id="rose-1"]').click(); p.fill(); p.submit();
+      for (let waited = 0; waited < 3000 && !(p.calls.length > before && p.form.getAttribute('aria-busy') === 'false'); waited += 10) await new Promise((r) => setTimeout(r, 10));
+    };
+    await send();
+    const anchor = p.form.querySelector('[data-order-telegram]');
+    assert.ok(anchor, 'ссылка показана под успешной заявкой');
+    assert.deepEqual([anchor.getAttribute('href'), anchor.target, anchor.rel, anchor.textContent], [link, '_blank', 'noopener noreferrer', 'Продолжить в Telegram']);
+    assert.equal(anchor.previousElementSibling, p.status());
+    assert.equal(p.doc.querySelectorAll('[data-order-telegram]').length, 1, 'одна ссылка и только в форме заявки — на карточках товаров Telegram-кнопок нет');
+    assert.equal(p.status().dataset.state, 'success');
+    for (let round = 0; round < 3; round++) {
+      await send();
+      assert.equal(p.status().dataset.state, 'success');
+      assert.equal(p.form.querySelector('[data-order-telegram]'), null, 'небезопасная ссылка и повтор — без ссылки, заявка всё равно принята');
+    }
+    assert.equal(order.TELEGRAM_LINK.test(link), true);
+  } finally { p.close(); }
+});

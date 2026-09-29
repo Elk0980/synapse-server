@@ -65,6 +65,17 @@ services:
       MODEL_API_URL: ${MODEL_API_URL:-}
       MODEL_API_KEY: ${MODEL_API_KEY:-}
       PROJECT_CONTENT_URL: http://content:8080
+      # Клиентский бот Palitra (отдельный от бота Synapse). Пусто — бот выключен целиком.
+      # Токен и секрет webhook — только в .env сервера; опрос (1) не требует публичного webhook.
+      PALITRA_CLIENT_BOT_TOKEN: ${PALITRA_CLIENT_BOT_TOKEN:-}
+      PALITRA_CLIENT_BOT_WEBHOOK_SECRET: ${PALITRA_CLIENT_BOT_WEBHOOK_SECRET:-}
+      PALITRA_CLIENT_BOT_POLLING: ${PALITRA_CLIENT_BOT_POLLING:-}
+      # Имя бота без @ (не секрет): мост сверяет его с getMe до опроса и отправок. Без имени бот не запускается.
+      PALITRA_CLIENT_BOT_USERNAME: ${PALITRA_CLIENT_BOT_USERNAME:-}
+      # Необязательные лимиты входящих событий; пусто — 20 в минуту и 300 в сутки на чат, 1000 в час на бота.
+      PALITRA_CLIENT_BOT_LIMIT_CHAT_MINUTE: ${PALITRA_CLIENT_BOT_LIMIT_CHAT_MINUTE:-}
+      PALITRA_CLIENT_BOT_LIMIT_CHAT_DAY: ${PALITRA_CLIENT_BOT_LIMIT_CHAT_DAY:-}
+      PALITRA_CLIENT_BOT_LIMIT_BOT_HOUR: ${PALITRA_CLIENT_BOT_LIMIT_BOT_HOUR:-}
       # Операционные флаги Node для этого сервиса, а не учётные данные. По умолчанию пусто —
       # поведение прежнее. Чем это заполняют на проде, описано в ops/chat/README.md.
       NODE_OPTIONS: ${CHAT_NODE_OPTIONS:-}
@@ -140,6 +151,13 @@ services:
       # Команды Хью в группах: имя бота без @ (не секрет) для @упоминаний, публичный адрес кабинета для /content.
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
       CABINET_PUBLIC_URL: ${CABINET_PUBLIC_URL:-}
+      # Имя клиентского бота Palitra без @ (не секрет): включает диалоги и ссылку «Продолжить в Telegram».
+      # Пусто — выключено. Токен бота сюда не передаётся: он только у сервиса chat.
+      PALITRA_CLIENT_BOT_USERNAME: ${PALITRA_CLIENT_BOT_USERNAME:-}
+      # Необязательно: ссылка на политику в приветствии бота; пусто — https://palitra-love.ru/privacy.
+      PALITRA_CLIENT_BOT_POLICY_URL: ${PALITRA_CLIENT_BOT_POLICY_URL:-}
+      # Общий предел сохранённых файлов клиентских ботов в МБ; пусто — 1024. Сверх предела файл не сохраняется.
+      CLIENT_DIALOGS_MAX_STORAGE_MB: ${CLIENT_DIALOGS_MAX_STORAGE_MB:-}
       ALLOWED_ORIGINS: ${CONTENT_ALLOWED_ORIGINS:-}
     expose:
       - "8080"

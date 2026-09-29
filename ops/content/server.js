@@ -20,6 +20,7 @@ const { createActorWorkspace } = require('./actor-workspace');
 const { createHughProviders } = require('./hugh-providers');
 const {createMediaMentorSuggest, createMediaMentorSuggestRoute} = require('./media-mentor-suggest');
 const { clientIp, originOf, PALITRA_ORDER_ORIGINS } = require('./site-orders');
+const { createClientDialogs } = require('./client-dialogs');
 const { hashPassword, verifyPassword } = require('./passwords');
 const { createCompanyLinksReader } = require('./company-links-reader');
 const { createEmailUnsubscribeProxy, TOKEN: EMAIL_UNSUBSCRIBE_TOKEN } = require('./email-unsubscribe-proxy');
@@ -213,6 +214,17 @@ const projectChat = createProjectChat({ db, authStore, assetsDir: ASSETS_DIR,
   cabinetUrl: (process.env.CABINET_PUBLIC_URL || 'https://synapse.synapsebusiness.ru/cabinet.html').trim(),
   requireSession, requireCsrf, sendJson: send, readBody: readJson });
 for (const issue of [...projectChat.localWorker.issues, ...projectChat.miniApp.issues]) console.warn(`content: ${issue}`);
+/* Клиентский Telegram-бот Palitra: переписка клиентов с менеджером и уведомления о заявках.
+   Включается только именем бота (не секрет); токен живёт только в сервисе chat. Пусто — выключен. */
+// Общий предел сохранённых файлов клиентских ботов (МБ); пусто — 1024 МБ. Сверх предела файл не сохраняется, история не удаляется.
+const CLIENT_DIALOGS_MAX_STORAGE_MB = Number.parseInt(process.env.CLIENT_DIALOGS_MAX_STORAGE_MB || '', 10);
+const clientDialogs = createClientDialogs({ db, assetsDir: ASSETS_DIR, siteOrders: projectChat.siteOrders,
+  ...(CLIENT_DIALOGS_MAX_STORAGE_MB >= 0 ? { maxStorage: CLIENT_DIALOGS_MAX_STORAGE_MB * 1024 * 1024 } : {}),
+  bots: { palitra: { companyCode: CONTENT_COMPANIES.palitra, site: 'palitra', title: 'Palitra',
+    username: (process.env.PALITRA_CLIENT_BOT_USERNAME || '').trim().replace(/^@/, ''),
+    // Ссылка на политику в приветствии: до переключения DNS боевого домена можно указать временный адрес сайта.
+    hours: '09:00–21:00', policyUrl: /^https:\/\/[\w.-]+\/[\w./-]*$/.test(process.env.PALITRA_CLIENT_BOT_POLICY_URL || '')
+      ? process.env.PALITRA_CLIENT_BOT_POLICY_URL : 'https://palitra-love.ru/privacy' } } });
 /* Личная переписка владельца по проектам: собственные таблицы и собственная область доступа.
    Из общего чата сюда переиспользован только транспорт обращения к модели (askHugh),
    который ничего не читает и не пишет в таблицы чата проекта. */
@@ -810,6 +822,13 @@ const server = http.createServer(async (request, response) => {
       }
       fail(404,'Маршрут не найден');
     }
+    // Мост клиентского бота: тот же внутренний ключ службы chat, свои маршруты и таблицы.
+    if (url.pathname.startsWith('/content/internal/client-bot/')) {
+      const supplied = String(request.headers['x-api-key'] || '');
+      if (!CHAT_API_KEY || Buffer.byteLength(supplied) !== Buffer.byteLength(CHAT_API_KEY) ||
+          !crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(CHAT_API_KEY))) fail(401,'Нет доступа');
+      return await clientDialogs.handleInternal(request, response, url, { readJson, readRaw, send: (res, status, payload) => send(res, status, payload) });
+    }
     if (url.pathname.startsWith('/content/project-chat-runtime/')) {
       const session=requireSession(request);
       if(session.user.role!=='owner') fail(403,'Доступно только владельцу');
@@ -1143,6 +1162,13 @@ const server = http.createServer(async (request, response) => {
       try { body = JSON.parse((await readRaw(request, ORDER_BODY_LIMIT)).toString('utf8')); } catch (error) { if (error.status === 413) throw error; fail(400, 'Некорректный JSON'); }
       try {
         const result = projectChat.siteOrders.submit({ site: parts[1], body, origin: originOf(request), ip: clientIp(request) });
+        // Только новая заявка получает одноразовую ссылку в Telegram; сбой ссылки не влияет на принятую заявку.
+        if (result.status === 201) {
+          try {
+            const link = clientDialogs.issueOrderLink({ site: parts[1], orderId: result.body.orderId });
+            if (link) result.body.telegram = link;
+          } catch (error) { console.error('content: ссылка на клиентский бот не выдана:', error.message); }
+        }
         return reply(result.status, result.body, { 'cache-control': 'no-store' });
       } catch (error) {
         if (![400, 403, 409, 429, 503].includes(error.status)) throw error;
@@ -1168,7 +1194,16 @@ const server = http.createServer(async (request, response) => {
       if (parts[2] === 'order-recipient' && parts.length === 3 && request.method === 'GET') return reply(200, orders.recipientStatus(site), headers);
       if (parts[2] === 'order-recipient' && parts.length === 3 && request.method === 'PUT') return reply(200, orders.setRecipient(site, await readJson(request)), headers);
       if (parts[2] === 'order-recipient' && parts.length === 4 && parts[3] === 'test' && request.method === 'POST') return reply(202, orders.testRecipient(site), headers);
+      if (parts[2] === 'order-recipient' && parts.length === 4 && parts[3] === 'transport' && request.method === 'PUT') {
+        return reply(200, orders.setTransport(site, await readJson(request), { clientBotReady: clientDialogs.transportReady }), headers);
+      }
       fail(404, 'Не найдено');
+    }
+    // --- клиентский бот и диалоги в ЛК: только владелец, только сайт с настроенным ботом; мутации с CSRF.
+    if (parts[2] === 'client-bot' || parts[2] === 'client-dialogs') {
+      const session = requireSession(request);
+      if (session.user.role !== 'owner') fail(403, 'Доступно только владельцу');
+      return await clientDialogs.handleCabinet(request, response, url, parts, { session, requireCsrf, send: (res, status, payload, extra) => send(res, status, payload, { ...cors, ...(extra || {}) }) });
     }
 
     // --- файлы (фоны блоков): /content/:site/assets[/:name]
