@@ -385,4 +385,7 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
   return { submit, pendingTelegram, acknowledge, isOrderJob, listOrders, recipientStatus, setRecipient, testRecipient, renotify, sites: Object.keys(sites) };
 }
 
-module.exports = { createSiteOrders, clientIp, originOf, priceKopecks, isPrivateAddress, ORDER_STATUSES, JOB_PREFIX };
+/* Точный allowlist Origin для заявок Palitra: боевой домен без www (www отвечает 301 и страниц не отдаёт)
+   и временный адрес, который работает до и после переключения DNS. Шаблонов и поддоменов нет. */
+const PALITRA_ORDER_ORIGINS = Object.freeze(['https://palitra-love.ru', 'https://palitra-love.synapsebusiness.ru']);
+module.exports = { createSiteOrders, clientIp, originOf, priceKopecks, isPrivateAddress, ORDER_STATUSES, JOB_PREFIX, PALITRA_ORDER_ORIGINS };

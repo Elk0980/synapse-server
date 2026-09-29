@@ -308,6 +308,9 @@
     .ed-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem 1rem; margin-top: 0.8rem; }
     .ed-form label { display: grid; gap: 0.25rem; font-size: 0.78rem; color: var(--ink-faint); letter-spacing: 0.03em; }
     .ed-form label.is-wide { grid-column: 1 / -1; }
+    .ed-form select { font: inherit; padding: 0.45rem 0.5rem; border: 1px solid #b9c0c8; border-radius: 4px; color: #1a1a1a; background: #fff; }
+    .ed-suggest { grid-column: 1 / -1; margin: -0.2rem 0 0; font-size: 0.8rem; color: var(--ink-faint); display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+    .ed-suggest[hidden] { display: none; }
     .ed-form input, .ed-form textarea, .ed-select {
       font: inherit; font-size: 0.92rem; color: var(--ink); padding: 0.55rem 0.7rem;
       border: 1px solid var(--line); border-radius: 0.6rem; background: #f5f5f7;
@@ -354,6 +357,16 @@
     .ed-photo__tools { display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-start; flex: 1 1 12rem; }
     .ed-photo__tools .ed-btn input[type=file] { display: none; }
     .ed-photo__tools small { font-size: 0.76rem; }
+    .ed-gallery { display: grid; gap: 0.45rem; margin-top: 0.4rem; }
+    .ed-gallery__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    /* Фото карточек в списке редактора не шире карточки: при загруженных снимках страница уезжала вбок. */
+    .pc .price-card__photo { display: block; max-width: 100%; height: auto; aspect-ratio: 4 / 5; object-fit: cover; }
+    .ed-gallery__list { display: flex; flex-wrap: wrap; gap: 0.6rem; list-style: none; margin: 0; padding: 0; }
+    .ed-gallery__item { display: grid; gap: 0.3rem; width: 8.5rem; }
+    .ed-gallery__thumb { width: 100%; aspect-ratio: 4 / 5; border-radius: 0.6rem; border: 1px solid var(--line); background: #f5f5f7 center / cover no-repeat; }
+    .ed-gallery__tools { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+    .ed-gallery__tools .ed-btn { padding: 0.2rem 0.45rem; }
+    .ed-gallery__empty { font-size: 0.78rem; color: var(--ink-faint); }
     @media (max-width: 62rem) {
       .ed-form { grid-template-columns: 1fr; }
       .pnav .ed-count { float: none; }
@@ -551,12 +564,85 @@
   }
   window.PalitraEditorPrice = { normalizePrice };
 
+  /* Раздел (категория) товара. Подсказка по названию — только предложение: раздел меняется,
+     когда владелец сам нажмёт «Выбрать» и затем «Готово» и «Сохранить». Фоновой массовой
+     переклассификации нет, другие товары не трогаются. Подсказываются только существующие
+     разделы того же вида (карточки или таблица). */
+  // words — прямые признаки раздела (вес 2), soft — косвенные, например названия цветов (вес 1):
+  // «Корзина с ромашками» — это корзина, а не букет.
+  const CATEGORY_HINTS = [
+    { id: 'vypiska', words: ['выписк', 'роддом', 'новорожд'] },
+    { id: 'dr-detyam', words: ['детск', 'деток', 'детям', 'ребен', 'малыш'] },
+    { id: 'dr-muzhchine', words: ['мужчин', 'мужск', 'мужу', 'папе', 'дембел'] },
+    { id: 'dr-zhenschine', words: ['женщин', 'девушк', 'жене', 'маме', 'подруг'] },
+    { id: 'bukety', words: ['букет'], soft: ['роз', 'роза', 'розы', 'хризантем', 'гортенз', 'пион', 'тюльпан', 'эустом', 'ромашк'] },
+    { id: 'korziny', words: ['корзин', 'композиц'] },
+    { id: 'dofaminovye', words: ['дофамин'] },
+    { id: 'giganty', words: ['гигант', 'цифр'] },
+    { id: 'devichnik', words: ['девичник'] },
+  ];
+  const normText = (value) => String(value ?? '').toLowerCase().replace(/ё/g, 'е');
+  const wordsOf = (value) => normText(value).split(/[^a-zа-я0-9]+/).filter(Boolean);
+  function suggestCategory(doc, title, currentId) {
+    const words = wordsOf(title);
+    if (!words.length || !doc || !Array.isArray(doc.categories)) return null;
+    const current = doc.categories.find((c) => c.id === currentId);
+    const kind = current ? current.kind : 'programs';
+    const scores = new Map();
+    for (const cat of doc.categories) {
+      if (cat.kind !== kind) continue;
+      const hint = CATEGORY_HINTS.find((h) => h.id === cat.id) || {};
+      const strong = new Set(hint.words || []);
+      // Своё название раздела тоже подсказывает: «Корзины и композиции» → «корзи», «композиц».
+      for (const w of wordsOf(cat.title)) if (w.length >= 5) strong.add(w.slice(0, Math.max(5, w.length - 2)));
+      const soft = hint.soft || [];
+      // Основа из 3 букв должна совпасть со словом целиком («роз», но не «розовая»).
+      const matches = (w, stem) => (stem.length <= 3 ? w === stem : w.startsWith(stem));
+      let score = 0;
+      for (const w of words) score += [...strong].some((stem) => matches(w, stem)) ? 2 : soft.some((stem) => matches(w, stem)) ? 1 : 0;
+      if (score) scores.set(cat.id, score);
+    }
+    if (!scores.size) return null;
+    const best = Math.max(...scores.values());
+    const leaders = [...scores].filter(([, v]) => v === best).map(([id]) => id);
+    if (leaders.length !== 1 || leaders[0] === currentId) return null;
+    const cat = doc.categories.find((c) => c.id === leaders[0]);
+    return { id: cat.id, title: cat.title };
+  }
+  window.PalitraEditorCategory = { suggestCategory };
+  function categoryOptions(it) {
+    const cat = catOf(it.id);
+    return data.categories.filter((c) => !cat || c.kind === cat.kind)
+      .map((c) => `<option value="${esc(c.id)}" ${cat && c.id === cat.id ? 'selected' : ''}>${esc(c.title)}</option>`).join('');
+  }
+  function showSuggestion(form) {
+    const box = form.querySelector('[data-cat-suggest]');
+    const select = form.querySelector('select[name="category"]');
+    if (!box || !select) return;
+    const hint = suggestCategory(data, form.elements.title.value, select.value);
+    box.hidden = !hint;
+    box.innerHTML = hint ? `<span>По названию похоже на раздел «${esc(hint.title)}».</span><button class="ed-btn ed-btn--small" type="button" data-cat-apply="${esc(hint.id)}">Выбрать этот раздел</button>` : '';
+  }
+  /* Перенос товара в другой раздел: id и отметки «популярное» сохраняются; в разделе не больше 8 популярных. */
+  function moveItem(id, targetId) {
+    const f = PalitraPrice.findItem(data, id);
+    const target = data.categories.find((c) => c.id === targetId);
+    if (!f || !target || f.cat.id === target.id) return '';
+    if (target.kind !== f.cat.kind) return `Раздел «${target.title}» другого вида — товар оставлен в «${f.cat.title}».`;
+    if (inShowcase(id) && popularCount(target) >= MAX_PER_CATEGORY) return `В разделе «${target.title}» уже ${MAX_PER_CATEGORY} популярных — снимите звезду или выберите другой раздел.`;
+    f.cat.items = f.cat.items.filter((x) => x.id !== id);
+    target.items.push(f.it);
+    return '';
+  }
+
   function formHtml(it) {
     const cat = catOf(it.id);
     const isTable = cat && cat.kind === 'table';
     return `<form class="ed-form" data-form="${esc(it.id)}">
       <p class="ed-form__intro">Обязательно только название. Остальное можно заполнить или поправить позже.</p>
       <label class="is-wide">Название товара <b class="ed-req">обязательно</b><input name="title" value="${esc(it.title)}" required><small>так товар называется на сайте, в корзине и в заявке менеджеру</small></label>
+      <label class="is-wide">Раздел (категория)<select name="category">${categoryOptions(it)}</select><small>в каком разделе каталога показывать товар; раздел можно сменить в любой момент</small></label>
+      <p class="ed-suggest" data-cat-suggest="${esc(it.id)}" aria-live="polite" hidden></p>
       <label>Цена<input name="price" value="${esc(it.price || '')}" inputmode="decimal" placeholder="7720" autocomplete="off"><small>Введите число: 7720 → сохранится «7 720 руб.», копейки через запятую: 7720,50. Пусто — на сайте «Цена уточняется». Текст вроде «от 5000» или «за шт.» сохранится как написано, но корзина такую цену не посчитает.</small></label>
       <label>Примечание<input name="note" value="${esc(it.note || '')}"><small>необязательно; показывается в карточке под описанием. Служебная подпись «Цена из публикации…» на сайте не показывается — здесь её можно стереть или заменить своей.</small></label>
       <label class="is-wide">Описание в карточке<input name="desc" value="${esc(it.desc || '')}"><small>необязательно; показывается на сайте под названием</small></label>
@@ -569,6 +655,15 @@
             <label class="ed-btn ed-btn--small">Загрузить фото<input type="file" accept="image/jpeg,image/png,image/webp" data-photo-upload="${esc(it.id)}" hidden></label>
             <button class="ed-btn ed-btn--small ed-btn--danger" type="button" data-photo-clear="${esc(it.id)}" ${it.photo ? '' : 'disabled'}>Убрать</button>
             <small class="ed-status" data-photo-status="${esc(it.id)}">JPEG, PNG или WebP; большие снимки уменьшаются до 1600 px сами.</small>
+          </div>
+        </div>
+        <div class="ed-gallery" data-gallery-box="${esc(it.id)}">
+          <span class="ed-field__label">Дополнительные фото <small>необязательно; на сайте листаются после обложки, до ${MAX_GALLERY} шт.</small></span>
+          <input type="hidden" name="gallery" value="${esc(JSON.stringify(galleryList(it)))}">
+          <ul class="ed-gallery__list" data-gallery-list>${galleryItemsHtml(galleryList(it))}</ul>
+          <div class="ed-gallery__actions">
+            <label class="ed-btn ed-btn--small">Добавить фото<input type="file" accept="image/jpeg,image/png,image/webp" multiple data-gallery-upload="${esc(it.id)}" hidden></label>
+            <small class="ed-status" data-gallery-status="${esc(it.id)}"></small>
           </div>
         </div>
       </div>
@@ -606,10 +701,85 @@
       if (price.kind === 'text') warning = `Цена «${price.value}» сохранена как текст: на сайте покажется так же, а в корзине эта позиция будет считаться «цена уточняется». Для расчёта введите число, например 7720.`;
     }
     if (fd.has('items')) it.items = String(fd.get('items')).split('\n').map((s) => s.trim()).filter(Boolean);
+    if (fd.has('gallery')) {
+      let list = [];
+      try { const v = JSON.parse(String(fd.get('gallery') || '[]')); if (Array.isArray(v)) list = v.filter((p) => typeof p === 'string' && p.trim()).map((p) => p.trim()); } catch (_) { list = []; }
+      list = list.filter((p, i) => list.indexOf(p) === i && p !== it.photo).slice(0, MAX_GALLERY);
+      // Поле появляется только когда фото есть: у старых товаров документ не меняется.
+      if (list.length) it.gallery = list; else delete it.gallery;
+    }
+    if (fd.has('category')) { const moveWarning = moveItem(id, String(fd.get('category'))); if (moveWarning) warning = warning ? `${warning} ${moveWarning}` : moveWarning; }
     editing = null; markDirty(); render();
     if (warning) setStatus(warning, 'error');
   }
   /* ---------- фото карточки: загрузка с компьютера ---------- */
+  /* ---------- несколько фото: обложка (photo) + дополнительные (gallery) ----------
+     Обложка остаётся прежним полем photo — старые товары и сайт работают без изменений.
+     Дополнительные фото владелец добавляет сам; редактор ничего не подставляет и не угадывает. */
+  const MAX_GALLERY = 8;
+  const galleryList = (it) => (Array.isArray(it.gallery) ? it.gallery.filter((p) => typeof p === 'string' && p.trim()) : []);
+  function galleryItemsHtml(list) {
+    if (!list.length) return '<li class="ed-gallery__empty">Пока только обложка.</li>';
+    return list.map((url, i) => `<li class="ed-gallery__item" data-gallery-index="${i}">
+      <div class="ed-gallery__thumb" role="img" aria-label="Дополнительное фото ${i + 1}" style="background-image:url('${esc(imgUrl(url)).replace(/'/g, '%27')}')"></div>
+      <div class="ed-gallery__tools">
+        <button class="ed-btn ed-btn--small" type="button" data-gallery-act="cover" title="Сделать обложкой">Обложка</button>
+        <button class="ed-btn ed-btn--small" type="button" data-gallery-act="left" aria-label="Переместить левее" ${i === 0 ? 'disabled' : ''}>←</button>
+        <button class="ed-btn ed-btn--small" type="button" data-gallery-act="right" aria-label="Переместить правее" ${i === list.length - 1 ? 'disabled' : ''}>→</button>
+        <button class="ed-btn ed-btn--small ed-btn--danger" type="button" data-gallery-act="remove" aria-label="Убрать фото ${i + 1}">Убрать</button>
+      </div></li>`).join('');
+  }
+  function galleryBox(id) { return document.querySelector(`[data-gallery-box="${CSS.escape(id)}"]`); }
+  function readGallery(id) {
+    const box = galleryBox(id); if (!box) return [];
+    try { const v = JSON.parse(box.querySelector('input[name="gallery"]').value || '[]'); return Array.isArray(v) ? v.filter((p) => typeof p === 'string' && p) : []; }
+    catch (_) { return []; }
+  }
+  function writeGallery(id, list) {
+    const box = galleryBox(id); if (!box) return;
+    box.querySelector('input[name="gallery"]').value = JSON.stringify(list);
+    box.querySelector('[data-gallery-list]').innerHTML = galleryItemsHtml(list);
+  }
+  function galleryAction(button) {
+    const box = button.closest('[data-gallery-box]'); const item = button.closest('[data-gallery-index]');
+    if (!box || !item) return;
+    const id = box.dataset.galleryBox; const i = Number(item.dataset.galleryIndex);
+    const list = readGallery(id);
+    if (!(i >= 0 && i < list.length)) return;
+    const act = button.dataset.galleryAct;
+    if (act === 'remove') list.splice(i, 1);
+    if (act === 'left' && i > 0) [list[i - 1], list[i]] = [list[i], list[i - 1]];
+    if (act === 'right' && i < list.length - 1) [list[i + 1], list[i]] = [list[i], list[i + 1]];
+    if (act === 'cover') {
+      // Обмен: выбранное фото становится обложкой, прежняя обложка встаёт на его место.
+      const cover = photoBox(id)?.querySelector('input[name="photo"]').value || '';
+      const chosen = list[i];
+      if (cover) list[i] = cover; else list.splice(i, 1);
+      setPhoto(id, chosen);
+    }
+    writeGallery(id, list);
+    const st = document.querySelector(`[data-gallery-status="${CSS.escape(id)}"]`);
+    if (st) st.textContent = 'Изменено — нажмите «Готово», затем «Сохранить».';
+  }
+  async function uploadGallery(id, files) {
+    const st = document.querySelector(`[data-gallery-status="${CSS.escape(id)}"]`);
+    const say = (t, bad) => { if (st) { st.textContent = t; st.className = 'ed-status' + (bad ? ' is-error' : ''); } };
+    let added = 0;
+    for (const file of files) {
+      const list = readGallery(id);
+      if (list.length >= MAX_GALLERY) { say(`Не больше ${MAX_GALLERY} дополнительных фото`, true); return; }
+      if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { say(`«${file.name}»: нужен JPEG, PNG или WebP`, true); continue; }
+      say(`Загружаю ${added + 1} из ${files.length}…`);
+      const prepared = await shrinkImage(file) || file;
+      if (prepared.size > 8 * 1024 * 1024) { say(`«${file.name}»: больше 8 МБ даже после уменьшения`, true); continue; }
+      try {
+        const j = await apiFetch(ASSETS, { method: 'POST', headers: { 'Content-Type': prepared.type, 'X-Filename': encodeURIComponent(prepared.name) }, body: prepared });
+        const current = readGallery(id);
+        if (!current.includes(j.url)) { current.push(j.url); writeGallery(id, current); added += 1; }
+      } catch (e) { say('Не загружено: ' + e.message, true); return; }
+    }
+    if (added) say(`Добавлено фото: ${added}. Нажмите «Готово», затем «Сохранить».`);
+  }
   function photoBox(id) { return document.querySelector(`[data-photo-box="${CSS.escape(id)}"]`); }
   function setPhoto(id, url) {
     const box = photoBox(id); if (!box) return;
@@ -654,6 +824,7 @@
   document.addEventListener('change', (e) => {
     const t = e.target;
     if (t.dataset.photoUpload && t.files && t.files[0]) { const f = t.files[0]; uploadPhoto(t.dataset.photoUpload, f); t.value = ''; }
+    if (t.dataset.galleryUpload && t.files && t.files.length) { const files = [...t.files]; uploadGallery(t.dataset.galleryUpload, files); t.value = ''; }
   });
 
   function newId(cat) {
@@ -692,8 +863,11 @@
     markDirty(); render();
     document.getElementById(cat.id)?.scrollIntoView();
   }
+  /* Раздел «Акции» узнаётся по id или названию: у рендера Palitra своей функции для этого нет
+     (раньше здесь вызывался несуществующий PalitraPrice.isPromoCat — нажатие падало с ошибкой). */
+  const isPromoCat = (c) => Boolean(c) && (c.id === 'promo' || /^акци/i.test(String(c.title || '').trim()));
   function addPromoCategory() {
-    if (data.categories.some((c) => PalitraPrice.isPromoCat(c))) return;
+    if (data.categories.some(isPromoCat)) { document.getElementById(data.categories.find(isPromoCat).id)?.scrollIntoView(); return; }
     const cat = { id: 'promo', title: 'Акции', kind: 'programs', block: 'self', items: [] };
     data.categories.unshift(cat);
     markDirty(); render();
@@ -764,6 +938,8 @@
       image.src = imgUrl(image.getAttribute('src'));
     });
     subEl.textContent = `версия ${data.version || '—'} · обновлено ${data.updatedAt ? new Date(data.updatedAt).toLocaleString('ru-RU') : '—'}` + (dirty ? ' · не сохранено' : '');
+    const openForm = content.querySelector('form[data-form]');
+    if (openForm) showSuggestion(openForm);
     window.scrollTo(0, y);
   }
 
@@ -876,6 +1052,12 @@
     if (t.dataset.edit) { editing = t.dataset.edit; render(); return; }
     if (t.dataset.cancel) { editing = null; render(); return; }
     if (t.dataset.photoClear) { setPhoto(t.dataset.photoClear, ''); return; }
+    if (t.dataset.galleryAct) { galleryAction(t); return; }
+    if (t.dataset.catApply) {
+      const form = t.closest('form[data-form]'); const select = form?.querySelector('select[name="category"]');
+      if (select) { select.value = t.dataset.catApply; showSuggestion(form); setStatus('Раздел выбран. Нажмите «Готово», затем «Сохранить».', 'ok'); }
+      return;
+    }
     if (t.dataset.del) return deleteItem(t.dataset.del);
     if (t.dataset.additem) return addItem(t.dataset.additem);
     if (t.dataset.rename) return renameCategory(t.dataset.rename);
@@ -901,8 +1083,14 @@
     e.preventDefault(); applyForm(form);
   });
   document.addEventListener('change', (e) => {
+    const catSelect = e.target.closest('form[data-form] select[name="category"]');
+    if (catSelect) { showSuggestion(catSelect.form); return; }
     const sel = e.target.closest('select[data-block-select]');
     if (sel) setCategoryBlock(sel.dataset.blockSelect, sel.value);
+  });
+  document.addEventListener('input', (e) => {
+    const form = e.target.closest('form[data-form]');
+    if (form && e.target.name === 'title') showSuggestion(form);
   });
   window.addEventListener('beforeunload', (e) => { if (dirty || importBusy) { e.preventDefault(); e.returnValue = ''; } });
   document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); save(); } });

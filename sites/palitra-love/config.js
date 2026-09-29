@@ -1,3 +1,3 @@
 window.PALITRA_CONFIG = {
-  SITE_URL: "https://palitra-love.synapsebusiness.ru"
+  SITE_URL: "https://palitra-love.ru"
 };

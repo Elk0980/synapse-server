@@ -311,3 +311,30 @@ body.cart-open{overflow:hidden}
   .price-grid .product-add,body[data-page="catalog"] .grid .product-add{width:100%;min-height:40px;padding:8px 10px;font-size:13px;border-radius:10px}
   .price-grid .product-media--empty img,body[data-page="catalog"] .grid .product-media--empty img{width:40px;height:40px}
 }
+
+/* Правки 29.09.2026: в полосе доверия три утверждения без неподтверждённых чисел. */
+@media(min-width:801px){.trust{grid-template-columns:repeat(3,1fr)}}
+@media(min-width:481px) and (max-width:800px){.trust span:last-child:nth-child(odd){grid-column:1/-1}}
+
+/* Несколько фото у товара (29.09.2026): лента с привязкой к кадру внутри того же медиа-блока 4:5.
+   Телефон — свайп; компьютер — кнопки и стрелки клавиатуры. Товар с одним фото не меняется. */
+.product-gallery{position:relative;overflow:hidden}
+.product-gallery__track{display:flex;width:100%;height:100%;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scroll-behavior:smooth;overscroll-behavior-x:contain;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.product-gallery__track::-webkit-scrollbar{display:none}
+.product-gallery__track:focus-visible{outline:2px solid var(--olive);outline-offset:-2px}
+.product-gallery__track>img{flex:0 0 100%;width:100%;height:100%;scroll-snap-align:start;scroll-snap-stop:always}
+.product-gallery>.product-gallery__nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;min-height:0;margin:0;padding:0;box-shadow:none;border-radius:50%;border:1px solid var(--line);background:rgba(246,243,238,.88);color:var(--ink);font-size:26px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.product-gallery>.product-gallery__nav--prev{left:8px}
+.product-gallery>.product-gallery__nav--next{right:8px}
+.product-gallery>.product-gallery__nav:disabled{opacity:0;pointer-events:none}
+.product-gallery__count{position:absolute;right:10px;bottom:10px;margin:0;padding:3px 9px;border-radius:999px;background:rgba(43,41,36,.72);color:#fff;font-size:12px;line-height:1.4}
+@media(hover:none){.product-gallery>.product-gallery__nav{width:36px;height:36px;font-size:22px;opacity:.9}}
+@media(max-width:480px){.product-gallery>.product-gallery__nav{width:32px;height:32px;font-size:20px}.product-gallery>.product-gallery__nav--prev{left:4px}.product-gallery>.product-gallery__nav--next{right:4px}.product-gallery__count{right:6px;bottom:6px;font-size:11px}}
+@media(prefers-reduced-motion:reduce){.product-gallery__track{scroll-behavior:auto}}
+
+/* Настоящий логотип PALITRALOVE (PNG клиента, 29.08.2026): горизонтальный тёмный — в шапке, светлый в две строки —
+   в подвале и на экране загрузки. Пропорции задаются шириной, высота считается из атрибутов width/height. */
+.brand img.brand-logo{width:220px;height:auto;max-width:none}
+@media(max-width:800px){.brand img.brand-logo{width:176px}}
+@media(max-width:480px){.brand img.brand-logo{width:132px;height:auto}}
+.footer-logo{width:auto;height:54px;aspect-ratio:1026/397;margin:0 0 18px}

@@ -27,6 +27,80 @@
     if (/^(https?:)?\/\//.test(photo) || photo.startsWith('/')) return photo;
     return '/' + photo.replace(/^\.\//, '');
   }
+  /* Несколько фото у товара (замечание Дарьи: «несколько фото у каждого товара»).
+     Обложка — прежнее поле photo; дополнительные — необязательный список gallery. Товар без gallery
+     выглядит и размечается как раньше. Только локальные пути сайта и https; повторы убираются; не больше 9. */
+  const MAX_PHOTOS = 9;
+  const safePhoto = (photo) => (typeof photo === 'string' && (/^\/(?!\/)/.test(photo) || /^https:\/\//i.test(photo)) ? photo : '');
+  function photosOf(item) {
+    // Обложка обрабатывается ровно как раньше (совместимость одиночного фото); дополнительные — строже.
+    const cover = imageUrl(item.photo);
+    const out = cover ? [cover] : [];
+    for (const photo of Array.isArray(item.gallery) ? item.gallery : []) {
+      if (out.length >= MAX_PHOTOS) break;
+      // Дополнительные фото принимаются только как путь сайта или https — как проверяет сервер при сохранении.
+      const url = safePhoto(typeof photo === 'string' ? photo.trim() : '');
+      if (url && !out.includes(url)) out.push(url);
+    }
+    return out;
+  }
+  /* Лента с прокруткой и привязкой к кадру: на телефоне листается пальцем, на компьютере — кнопками
+     и стрелками клавиатуры. Первое фото грузится как раньше, остальные — лениво. */
+  function galleryHtml(item, images) {
+    const total = images.length;
+    const slides = images.map((src, index) => `<img class="price-card__photo photo" src="${esc(src)}" alt="${esc(item.title)} — фото ${index + 1} из ${total}" loading="lazy" decoding="async" width="800" height="1000">`).join('');
+    return `<div class="product-media product-gallery" data-gallery role="group" aria-roledescription="галерея" aria-label="Фото товара: ${esc(item.title)}">`
+      + `<div class="product-gallery__track" data-gallery-track tabindex="0" aria-label="Листайте фото: стрелки влево и вправо">${slides}</div>`
+      + '<button class="product-gallery__nav product-gallery__nav--prev" type="button" data-gallery-prev aria-label="Предыдущее фото" disabled>‹</button>'
+      + '<button class="product-gallery__nav product-gallery__nav--next" type="button" data-gallery-next aria-label="Следующее фото">›</button>'
+      + `<p class="product-gallery__count" data-gallery-count aria-live="polite">1 / ${total}</p></div>`;
+  }
+  function galleryState(gallery) {
+    const track = gallery.querySelector('[data-gallery-track]');
+    const total = track ? track.children.length : 0;
+    const width = track ? track.clientWidth : 0;
+    const index = total && width ? Math.min(total - 1, Math.max(0, Math.round(track.scrollLeft / width))) : 0;
+    return { track, total, index };
+  }
+  function syncGallery(gallery) {
+    const { total, index } = galleryState(gallery);
+    const count = gallery.querySelector('[data-gallery-count]');
+    if (count) count.textContent = `${index + 1} / ${total}`;
+    const prev = gallery.querySelector('[data-gallery-prev]');
+    const next = gallery.querySelector('[data-gallery-next]');
+    if (prev) prev.disabled = index <= 0;
+    if (next) next.disabled = index >= total - 1;
+  }
+  function stepGallery(gallery, delta) {
+    const { track, total, index } = galleryState(gallery);
+    if (!track || !total) return;
+    const target = Math.min(total - 1, Math.max(0, index + delta));
+    const left = target * track.clientWidth;
+    if (typeof track.scrollTo === 'function') track.scrollTo({ left, behavior: 'smooth' });
+    else track.scrollLeft = left;
+    syncGallery(gallery);
+  }
+  function installGallery(doc) {
+    if (!doc || doc.__palitraGallery) return;
+    doc.__palitraGallery = true;
+    doc.addEventListener('click', (event) => {
+      const button = event.target.closest && event.target.closest('[data-gallery-prev],[data-gallery-next]');
+      if (!button) return;
+      const gallery = button.closest('[data-gallery]');
+      if (gallery) stepGallery(gallery, button.hasAttribute('data-gallery-next') ? 1 : -1);
+    });
+    doc.addEventListener('keydown', (event) => {
+      const track = event.target.closest && event.target.closest('[data-gallery-track]');
+      if (!track || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return;
+      event.preventDefault();
+      stepGallery(track.closest('[data-gallery]'), event.key === 'ArrowRight' ? 1 : -1);
+    });
+    // scroll не всплывает — слушаем на этапе перехвата, чтобы счётчик шёл за пальцем.
+    doc.addEventListener('scroll', (event) => {
+      const track = event.target && event.target.closest && event.target.closest('[data-gallery-track]');
+      if (track) syncGallery(track.closest('[data-gallery]'));
+    }, true);
+  }
   /* Одна структура карточки для прайса и каталога: медиа-блок 4:5 (фото или заглушка),
      название, описание и примечание владельца — в содержимом; внизу у всех карточек ряда
      один и тот же компактный блок: цена + «Купить» (добавляет в корзину; онлайн-оплаты нет).
@@ -34,10 +108,12 @@
      Пустая цена показывается словами, не нулём; тексты не обрезаются. */
   function productCard(item, opts = {}) {
     const editor = opts.editor || false;
-    const image = imageUrl(item.photo);
-    const media = image
-      ? `<div class="product-media"><img class="price-card__photo photo" src="${esc(image)}" alt="${esc(item.title)}" loading="lazy" decoding="async" width="800" height="1000"></div>`
-      : '<div class="product-media product-media--empty" aria-hidden="true"><img src="/assets/img/logo-mark.svg" alt="" width="64" height="64" loading="lazy"></div>';
+    const images = photosOf(item);
+    const media = images.length > 1
+      ? galleryHtml(item, images)
+      : images.length
+        ? `<div class="product-media"><img class="price-card__photo photo" src="${esc(images[0])}" alt="${esc(item.title)}" loading="lazy" decoding="async" width="800" height="1000"></div>`
+        : '<div class="product-media product-media--empty" aria-hidden="true"><img src="/assets/img/logo-mark.svg" alt="" width="64" height="64" loading="lazy"></div>';
     const description = item.desc ? `<p class="price-card__description">${esc(item.desc)}</p>` : '';
     // Редактор ЛК видит примечание как есть; публичная карточка скрывает служебное примечание импорта.
     const noteShown = Boolean(item.note) && (editor || !isAutoPriceNote(item.note));
@@ -102,5 +178,6 @@
     }
     return null;
   }
-  window.PalitraPrice = { esc, findItem, isPopular, isAutoPriceNote, productCard, renderSections, renderNav, load, PRICE_UNKNOWN };
+  if (typeof document !== 'undefined') installGallery(document);
+  window.PalitraPrice = { esc, findItem, isPopular, isAutoPriceNote, productCard, renderSections, renderNav, load, photosOf, syncGallery, PRICE_UNKNOWN };
 }());
