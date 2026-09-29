@@ -45,7 +45,7 @@ function structured(field,value) {
     }
     return structuredClone(value);
   }
-  const allowed={services:['id','title','description','price','currency','durationMinutes','bookingIntervalMinutes'],
+  const allowed={services:['id','title','description','price','currency','procedureCount','durationMinutes','bookingIntervalMinutes'],
     promotions:['id','title','description','price','oldPrice','startsAt','endsAt','timezone','serviceIds'],
     materials:['id','title','url','type','serviceIds','promotionIds']}[field];
   const seen=new Set();
@@ -54,7 +54,9 @@ function structured(field,value) {
     if(seen.has(out.id))fail(400,'Идентификаторы записей должны отличаться');seen.add(out.id);
     for(const [key,v] of Object.entries(row)){
       if(['id','title'].includes(key))continue;
-      if(['price','oldPrice','durationMinutes','bookingIntervalMinutes'].includes(key)) {
+      if(key==='procedureCount') {
+        if(v!==null&&(!Number.isSafeInteger(v)||v<1||v>1000))fail(400,'Количество процедур должно быть целым числом от 1 до 1000');out[key]=v;
+      }else if(['price','oldPrice','durationMinutes','bookingIntervalMinutes'].includes(key)) {
         if(v!==null&&(typeof v!=='number'||!Number.isFinite(v)||v<0||v>100000000))fail(400,'Проверьте цену или длительность');out[key]=v;
       }else if(['startsAt','endsAt'].includes(key)){out[key]=v===null||v===''?null:utcDate(v);}
       else if(key==='timezone'){out[key]=v?timezone(v):'';}

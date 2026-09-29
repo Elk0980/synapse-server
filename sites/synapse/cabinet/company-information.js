@@ -40,7 +40,7 @@ const FIELDS = [
 ];
 const ROW_FIELDS = {
   socials: [["type", "Площадка", "social"], ["url", "Ссылка", "url"], ["label", "Подпись", "text"]],
-  services: [["title", "Название услуги", "text"], ["description", "Описание", "textarea"], ["price", "Цена", "number"], ["currency", "Валюта", "text"], ["durationMinutes", "Длительность процедуры, минут", "number"], ["bookingIntervalMinutes", "Интервал записи, минут", "number"]],
+  services: [["title", "Название услуги", "text"], ["description", "Описание", "textarea"], ["price", "Цена за указанное количество процедур", "number"], ["currency", "Валюта", "text"], ["procedureCount", "Количество процедур за эту цену", "number"], ["durationMinutes", "Длительность одной процедуры, минут", "number"], ["bookingIntervalMinutes", "Интервал записи на один визит, минут", "number"]],
   promotions: [["title", "Название акции", "text"], ["description", "Условия акции", "textarea"], ["price", "Цена по акции", "number"], ["oldPrice", "Прежняя цена", "number"], ["startsAt", "Начало акции", "datetime-local"], ["endsAt", "Окончание акции", "datetime-local"]],
   materials: [["title","Название материала","text"],["url","Ссылка на материал","url"],["type","Тип материала","text"]]
 };
@@ -101,7 +101,7 @@ function create(container, context) {
         const options = {...SOCIALS}; if (value && !Object.hasOwn(options,value)) options[value] = value;
         control = `<select data-row-field="${key}"><option value="">Выберите площадку</option>${Object.entries(options).map(([id,title]) => `<option value="${esc(id)}"${id === value ? " selected" : ""}>${esc(title)}</option>`).join("")}</select>`;
       } else if (type === "textarea") control = `<textarea data-row-field="${key}" rows="3" maxlength="5000">${esc(value)}</textarea>`;
-      else control = `<input data-row-field="${key}" type="${type}" value="${esc(value)}"${type === "number" ? ' min="0" max="100000000" step="any"' : ` maxlength="${key==="title"?300:kind==="socials"||key==="url"?2000:100}"`}${key==="title"||kind==="materials"&&key==="url"?" required":""}>`;
+      else control = `<input data-row-field="${key}" type="${type}" value="${esc(value)}"${type === "number" ? (key==='procedureCount'?' min="1" max="1000" step="1"':' min="0" max="100000000" step="any"') : ` maxlength="${key==="title"?300:kind==="socials"||key==="url"?2000:100}"`}${key==="title"||kind==="materials"&&key==="url"?" required":""}>`;
       return `<label>${label}${control}</label>`;
     }).join("")}</div><button class="plain-button" type="button" data-remove-row="${kind}" data-index="${index}">Удалить ${({socials:"ссылку",services:"услугу",promotions:"акцию",materials:"материал"})[kind]}</button></fieldset>`).join("");
   };

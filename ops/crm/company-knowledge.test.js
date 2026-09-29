@@ -15,7 +15,7 @@ function fixture(t){
   function save(code,profile){return api.save(code,{revision:api.get(code).revision,profile});}
   return {api,db,confirm,save};
 }
-const service={id:'massage/60',title:'Массаж 60 минут',price:3500,currency:'RUB',durationMinutes:60,description:'Одна процедура'};
+const service={id:'massage/60',title:'Массаж 60 минут',price:3500,currency:'RUB',procedureCount:1,durationMinutes:60,description:'Одна процедура'};
 const keys=Object.keys(service).filter(k=>k!=='id').map(k=>'services/massage%2F60/'+k);
 
 test('legacy values stay outside knowledge; source-only confirmation changes knowledge revision',t=>{
@@ -48,7 +48,7 @@ test('catalog requires the whole service context; a changed price removes the se
 });
 test('missing currency does not become RUB; zero price is retained; partial and empty catalogs are explicit',t=>{
   const {api,confirm,save}=fixture(t);
-  save('alvi',{services:[{id:'free',title:'Знакомство',price:0,currency:'RUB'},{id:'unknown',title:'Сеанс',price:100}]});
+  save('alvi',{services:[{id:'free',title:'Знакомство',price:0,currency:'RUB',procedureCount:1},{id:'unknown',title:'Сеанс',price:100,procedureCount:1}]});
   confirm('alvi',api.get('alvi').facts.filter(f=>f.key.startsWith('services/')).map(f=>f.key));
   const data=api.knowledge('alvi');assert.equal(data.services.length,1);assert.equal(data.services[0].price,0);
   assert.equal(data.readiness.catalog,'partial');assert.deepEqual(data.readiness.unavailableServices,[{id:'unknown',missingFields:['currency']}]);
@@ -61,4 +61,20 @@ test('external CRM changes invalidate proof and deleted companies fail',t=>{
   db.prepare("UPDATE companies SET is_deleted=1 WHERE code='alvi'").run();
   assert.throws(()=>api.knowledge('alvi'),e=>e.status===404);
   assert.throws(()=>api.knowledge('missing'),e=>e.status===404);
+});
+
+test('course prices require an explicit verified procedure count; legacy rows do not imply one visit',t=>{
+  const {api,confirm,save}=fixture(t);
+  const course={id:'course',title:'Массаж',price:15700,currency:'RUB',durationMinutes:60};
+  save('alvi',{services:[course]});
+  const verify=()=>confirm('alvi',api.get('alvi').facts.filter(f=>f.key.startsWith('services/')).map(f=>f.key));
+  verify();assert.deepEqual(api.knowledge('alvi').readiness.unavailableServices,[{id:'course',missingFields:['procedureCount']}]);
+  for(const quantity of [0,-1,1.5,1001,'5'])assert.throws(()=>save('alvi',{services:[{...course,procedureCount:quantity}]}),e=>e.status===400);
+  save('alvi',{services:[{...course,procedureCount:5}]});
+  assert.equal(api.knowledge('alvi').services.length,0);verify();
+  let result=api.knowledge('alvi').services[0];assert.equal(result.price,15700);assert.equal(result.procedureCount,5);
+  assert.equal(result.durationMinutes,60,'duration describes one procedure, not the whole course');
+  assert.ok(result.sources.procedureCount.factId);
+  save('alvi',{services:[{...course,procedureCount:10}]});assert.equal(api.knowledge('alvi').services.length,0);
+  verify();result=api.knowledge('alvi').services[0];assert.equal(result.procedureCount,10);assert.equal(result.price,15700);
 });
