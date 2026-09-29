@@ -132,3 +132,17 @@ test('unsaved profile edits cannot silently acquire a source for an older value'
     assert.match(f.node('information-fact-status').textContent,/Сначала сохраните/);assert.equal(f.node('information-phone').value,'new');
   }finally{f.close();}
 });
+
+
+test('program editor preserves total price, guest count and whole visit duration on save',async()=>{
+  const f=await fixture();try{
+    const row=f.node('information-services');
+    for(const [key,value]of Object.entries({priceUnit:'program',guestCount:'2',visitDurationMinutes:'150',durationMinutes:'',procedureCount:''})) {
+      const input=row.querySelector('[data-row-field="'+key+'"]');input.value=value;input.dispatchEvent(new f.w.Event('input',{bubbles:true}));
+    }
+    await f.click('information-save');
+    const body=JSON.parse(f.calls.find(call=>call.method==='PUT').options.body),service=body.profile.services[0];
+    assert.equal(service.price,500);assert.equal(service.priceUnit,'program');assert.equal(service.guestCount,2);assert.equal(service.visitDurationMinutes,150);
+    assert.equal(service.durationMinutes,null);assert.equal(service.procedureCount,null);
+  }finally{f.close();}
+});

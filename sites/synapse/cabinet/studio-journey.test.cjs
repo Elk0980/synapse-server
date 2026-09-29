@@ -107,3 +107,15 @@ test('correction form requires reason, preserves payment history and posts only 
     assert.match(f.node.textContent,/Аннулирована ошибочная запись № check-7/);assert.match(f.node.textContent,/Оплата 1500/);assert.equal(f.node.querySelector('img'),null);assert.equal(f.node.querySelector('[data-commerce-void]'),null);
   }finally{f.close();}
 });
+
+
+test('program selection describes the whole visit and guests without inventing procedures',async()=>{
+  const service={id:'spa',title:'SPA',price:6900,currency:'RUB',priceUnit:'program',guestCount:2,visitDurationMinutes:90};
+  const f=fixture({query:c=>c.path==='/company-information/knowledge'?{companyCode:'alvi',knowledgeRevision:'a'.repeat(64),services:[service]}:card()});
+  try{await f.api.mountCard(f.node,f.ctx,1);f.node.querySelector('[data-service-load]').click();await tick();
+    const select=f.node.querySelector('[data-service-select]');select.value='spa';select.dispatchEvent(new f.w.Event('change'));
+    const preview=f.node.querySelector('[data-service-preview]').textContent;
+    assert.match(preview,/6900 RUB за программу целиком/);assert.match(preview,/Гостей: 2/);assert.match(preview,/Весь визит: 90 мин/);
+    assert.doesNotMatch(preview,/undefined|процедур/);assert.equal(f.calls.filter(c=>c.method==='POST').length,0);
+  }finally{f.close();}
+});

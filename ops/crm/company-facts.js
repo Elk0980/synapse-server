@@ -5,6 +5,7 @@ const LABELS = {name:'Название',city:'Город',timezone:'Часово
   websiteUrl:'Сайт',address:'Адрес',hours:'Часы работы',description:'Описание',socials:'Ссылки',
   services:'Услуги',promotions:'Акции',materials:'Материалы',title:'Название',price:'Цена',
   oldPrice:'Прежняя цена',currency:'Валюта',procedureCount:'Количество процедур за указанную цену',durationMinutes:'Длительность одной процедуры',bookingIntervalMinutes:'Интервал записи',
+  priceUnit:'За что указана цена',guestCount:'Число гостей в программе',visitDurationMinutes:'Длительность всего визита',
   startsAt:'Начало',endsAt:'Окончание',url:'Ссылка',type:'Тип',label:'Подпись',serviceIds:'Связанные услуги',promotionIds:'Связанные акции'};
 const fail=(status,message)=>{throw Object.assign(Error(message),{status});};
 const clean=(value,max,required=false)=>{

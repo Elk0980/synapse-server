@@ -50,3 +50,17 @@ test('catalog selection requires its existing permission; event writes recheck a
   denyCatalog=false;await assert.rejects(handler({method:'POST',revoke:true},{},url),e=>e.status===403);
   assert.equal(f.api.get('alvi',1).events.length,0);
 });
+
+
+test('program booking retains whole visit and guest count after catalog changes and restart',t=>{
+  const f=fixture(t),program={id:'spa',title:'SPA',price:6900,currency:'RUB',priceUnit:'program',guestCount:2,visitDurationMinutes:90};
+  f.info.importCatalog('alvi',{companyCode:'alvi',revision:f.info.get('alvi').revision,clientImportId:'program-booking-001',entries:[{service:program,source:'Прайс',sourceRef:'Строка программы',checkedAt:'2026-09-29T11:00:00Z'}]});
+  const request={...f.body(),serviceSelection:{id:'spa',knowledgeRevision:f.info.knowledge('alvi').knowledgeRevision}};
+  const booked=f.api.record('alvi',1,request,9);
+  assert.deepEqual(booked.state.serviceQuote.service,program);
+  f.update(18000);
+  const restored=createStudioJourney(f.db,{now:f.now}).get('alvi',1);
+  assert.deepEqual(restored.state.serviceQuote.service,program);
+  assert.match(restored.state.serviceQuote.text,/6900 ₽ за программу целиком/);
+  assert.doesNotMatch(restored.state.serviceQuote.text,/процедур/);
+});
