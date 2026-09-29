@@ -13,7 +13,7 @@ const {
 const { detectTask } = require("./task-intake");
 const { bindingError, parseBindingCommand } = require("./telegram-binding");
 const { createProjectChatBridge } = require("./project-chat-bridge");
-const { createClientBotBridge } = require("./client-bot-bridge");
+const { createClientBotRegistry } = require("./client-bot-registry");
 
 const SCRIPT = {
   greeting:
@@ -922,13 +922,14 @@ const projectBridge = createProjectChatBridge({
 
 /* Клиентский бот создаётся только при заданном токене и адресе службы диалогов: иначе он полностью выключен
    и существующий бот Synapse, общий чат проекта и заявки работают как раньше. */
-const clientBot = PALITRA_CLIENT_BOT_TOKEN && PALITRA_CLIENT_BOT_USERNAME && PROJECT_CONTENT_URL && API_KEY
-  ? createClientBotBridge({ db, botKey: "palitra", token: PALITRA_CLIENT_BOT_TOKEN, expectedUsername: PALITRA_CLIENT_BOT_USERNAME,
+const clientBots = createClientBotRegistry({ reservedTokens: [TELEGRAM_BOT_TOKEN], configs:
+  PALITRA_CLIENT_BOT_TOKEN && PALITRA_CLIENT_BOT_USERNAME && PROJECT_CONTENT_URL && API_KEY
+  ? [{ db, botKey: "palitra", token: PALITRA_CLIENT_BOT_TOKEN, expectedUsername: PALITRA_CLIENT_BOT_USERNAME,
     contentUrl: PROJECT_CONTENT_URL, apiKey: API_KEY, webhookSecret: PALITRA_CLIENT_BOT_WEBHOOK_SECRET, polling: PALITRA_CLIENT_BOT_POLLING,
     quietHours: TELEGRAM_QUIET_HOURS, limits: { perChatMinute: clientBotLimit("PALITRA_CLIENT_BOT_LIMIT_CHAT_MINUTE"),
-      perChatDay: clientBotLimit("PALITRA_CLIENT_BOT_LIMIT_CHAT_DAY"), perBotHour: clientBotLimit("PALITRA_CLIENT_BOT_LIMIT_BOT_HOUR") } })
-  : null;
-if (PALITRA_CLIENT_BOT_TOKEN && !clientBot) console.warn("Клиентский бот Palitra выключен: нужны PALITRA_CLIENT_BOT_USERNAME, PROJECT_CONTENT_URL и CHAT_API_KEY");
+      perChatDay: clientBotLimit("PALITRA_CLIENT_BOT_LIMIT_CHAT_DAY"), perBotHour: clientBotLimit("PALITRA_CLIENT_BOT_LIMIT_BOT_HOUR") } }]
+  : [] });
+if (PALITRA_CLIENT_BOT_TOKEN && !clientBots.get("palitra")) console.warn("Клиентский бот Palitra выключен: нужны PALITRA_CLIENT_BOT_USERNAME, PROJECT_CONTENT_URL и CHAT_API_KEY");
 
 async function handleTelegramUpdate(update) {
   if (projectBridge.enqueue(update)) return { ok: true, queued: true };
@@ -1222,7 +1223,9 @@ async function route(request, response, origin) {
   if (request.method === "POST" && url.pathname === "/telegram/webhook") {
     return handleWebhook(request, response, origin);
   }
-  if (request.method === "POST" && url.pathname === "/telegram/client-bot/palitra/webhook") {
+  const clientBotRoute = url.pathname.match(/^\/telegram\/client-bot\/([a-z][a-z0-9-]{0,31})\/webhook$/);
+  if (request.method === "POST" && clientBotRoute) {
+    const clientBot = clientBots.get(clientBotRoute[1]);
     if (!clientBot) fail(404, "Метод или адрес не найден");
     const secret = request.headers["x-telegram-bot-api-secret-token"];
     // Секрет проверяется до чтения тела: чужие запросы не попадают в очередь.
@@ -1406,14 +1409,14 @@ server.listen(PORT, () =>
 if (TELEGRAM_POLLING) void pollTelegramUpdates();
 if (PROJECT_CONTENT_URL && API_KEY) projectBridge.start();
 else console.warn("Мост общего чата проекта выключен: нужны PROJECT_CONTENT_URL и CHAT_API_KEY");
-if (clientBot) clientBot.start();
+clientBots.start();
 const clientNotificationTimer = setInterval(() => void processClientNotifications(), 60_000);
 clientNotificationTimer.unref();
 void processClientNotifications();
 
 function shutdown() {
   projectBridge.stop();
-  clientBot?.stop();
+  clientBots.stop();
   server.close(() => {
     db.close();
     process.exit(0);
