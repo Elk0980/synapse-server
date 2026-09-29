@@ -113,7 +113,7 @@ test('переписка: список, чтение с отметкой про�
   assert.match(thread.textContent, /Изменено клиентом/);
   assert.equal(thread.querySelector('.client-message__text').textContent, 'Нужен букет <b>', 'текст клиента показан как текст');
   assert.equal(thread.querySelector('.client-message__text b'), null);
-  assert.equal(thread.querySelector('textarea, form'), null, 'ответа из ЛК нет: менеджер отвечает в Telegram');
+  assert.equal(thread.querySelector('textarea:not([readonly]), form'), null, 'редактирования и отправки ответа из ЛК нет: менеджер отвечает в Telegram');
   const read = await f.answer('/content/palitra/client-dialogs/7/read', { ok: true }, 'POST');
   assert.equal(read.options.headers['X-CSRF-Token'], 'csrf-1');
   assert.equal(f.d.querySelector('[data-dialog-id="7"] .client-dialog__unread'), null);
@@ -199,4 +199,40 @@ test('заменённое клиентом вложение показано п
   assert.match(thread.querySelector('.client-file--replaced').textContent, /Прежняя версия \(клиент заменил вложение/);
   assert.match(thread.textContent, /v\.mp4.*исчерпан лимит хранилища бота/);
   f.w.close();
+});
+
+test('консультация: сервер проверяет версию, текст без HTML, повторная проверка убирает старую цену при ошибке',async()=>{
+  const f=fixture({company:'alvi'}),requests=[];const revision='a'.repeat(64);
+  f.ctx.crmQuery=(path,params)=>new Promise((resolve,reject)=>requests.push({path,params,resolve,reject}));
+  try{
+    f.render();await f.answer('/content/alvi/client-bot',bot());await f.answer('/content/alvi/client-dialogs?limit=50',{dialogs:[{id:7,name:'Клиент',unread:0}]});
+    f.d.querySelector('[data-dialog-id]').click();await tick();await f.answer('/content/alvi/client-dialogs/7',{dialog:{id:7,name:'Клиент',unread:0},messages:[]});
+    const click=key=>f.d.querySelector('[data-consult-'+key+']').click();
+    click('load');click('load');assert.equal(requests.length,1);assert.equal(requests[0].params.companyCode,'alvi');
+    requests[0].resolve({companyCode:'alvi',knowledgeRevision:revision,services:[{id:'course',title:'Курс'}]});await tick();
+    const select=f.d.querySelector('[data-consult-service]');select.value='course';select.dispatchEvent(new f.w.Event('change'));
+    click('prepare');assert.deepEqual({...requests[1].params},{companyCode:'alvi',serviceId:'course',knowledgeRevision:revision});
+    requests[1].resolve({companyCode:'alvi',knowledgeRevision:revision,service:{id:'course'},text:'Курс <img src=x>\n15700 ₽ за 5 процедур.\nПродолжительность одной процедуры: 60 мин.'});await tick();
+    const output=f.d.querySelector('[data-consult-text]');assert.match(output.value,/15700 ₽ за 5 процедур/);assert.match(output.value,/уточнит администратор/);assert.equal(output.readOnly,true);assert.equal(f.d.querySelector('[data-dialog-consultation] img'),null);
+    assert.ok(!f.calls.some(c=>c.options.method==='POST'),'подготовка не создаёт карточку и ничего не отправляет');
+    click('prepare');assert.equal(output.value,'');requests[2].reject(Error('Каталог изменился'));await tick();assert.equal(output.value,'');assert.equal(f.d.querySelector('[data-consult-result]').hidden,true);assert.match(f.container.textContent,/Каталог изменился.*Загрузите каталог заново/);
+  }finally{f.w.close();}
+});
+
+test('консультация: чужой каталог и чужое предложение не показываются клиентским текстом',async()=>{
+  const f=fixture({company:'alvi'}),revision='b'.repeat(64);let mode='foreignCatalog';
+  f.ctx.crmQuery=async path=>path.endsWith('/knowledge')?{companyCode:mode==='foreignCatalog'?'palitra-love':'alvi',knowledgeRevision:revision,services:[{id:'one',title:'Услуга'}]}:{companyCode:'palitra-love',knowledgeRevision:revision,service:{id:'one'},text:'Чужая цена'};
+  try{
+    f.render();await f.answer('/content/alvi/client-bot',bot());await f.answer('/content/alvi/client-dialogs?limit=50',{dialogs:[{id:7,name:'Клиент',unread:0}]});f.d.querySelector('[data-dialog-id]').click();await tick();await f.answer('/content/alvi/client-dialogs/7',{dialog:{id:7,name:'Клиент',unread:0},messages:[]});
+    f.d.querySelector('[data-consult-load]').click();await tick();assert.equal(f.d.querySelector('[data-consult-choice]').hidden,true);
+    mode='foreignQuote';f.d.querySelector('[data-consult-load]').click();await tick();const select=f.d.querySelector('[data-consult-service]');select.value='one';select.dispatchEvent(new f.w.Event('change'));f.d.querySelector('[data-consult-prepare]').click();await tick();
+    assert.equal(f.d.querySelector('[data-consult-text]').value,'');assert.match(f.container.textContent,/другой компании или услуги/);
+  }finally{f.w.close();}
+});
+
+test('консультация: поздний ответ после смены компании не применяется',async()=>{
+  const f=fixture({company:'alvi'});let resolve;
+  f.ctx.crmQuery=()=>new Promise(r=>resolve=r);
+  try{f.render();await f.answer('/content/alvi/client-bot',bot());await f.answer('/content/alvi/client-dialogs?limit=50',{dialogs:[{id:7,name:'Клиент',unread:0}]});f.d.querySelector('[data-dialog-id]').click();await tick();await f.answer('/content/alvi/client-dialogs/7',{dialog:{id:7,name:'Клиент',unread:0},messages:[]});f.d.querySelector('[data-consult-load]').click();f.state.company='avokado';await f.render();resolve({companyCode:'alvi',knowledgeRevision:'c'.repeat(64),services:[{id:'secret',title:'Поздняя услуга'}]});await tick();assert.doesNotMatch(f.container.textContent,/Поздняя услуга/);
+  }finally{f.w.close();}
 });

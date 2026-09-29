@@ -17,6 +17,57 @@ const FILE_STATUS = Object.freeze({ pending: "файл ещё загружает
 const TRANSPORT = Object.freeze({ project_bot: "бот Synapse (прежний канал)", client_bot: "клиентский бот компании" });
 const when = (iso) => { const date = new Date(iso); return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short" }).format(date); };
 
+function mountConsultation(node, context, alive) {
+  const companyCode = context.selectedProjectId;
+  const current = () => alive() && node.isConnected && context.selectedProjectId === companyCode;
+  node.innerHTML = `<h4>Ответ об услуге</h4><button type="button" data-consult-load>Загрузить проверенный каталог</button>
+    <label hidden data-consult-choice>Услуга<select data-consult-service></select></label>
+    <button type="button" hidden data-consult-prepare>Проверить цену и подготовить текст</button>
+    <p role="status" data-consult-status>Текст для ответа менеджера в Telegram. Запись и отправка выполняются отдельно.</p>
+    <label hidden data-consult-result>Текст для клиента<textarea readonly rows="7" data-consult-text></textarea></label>`;
+  const load = node.querySelector('[data-consult-load]'), choice = node.querySelector('[data-consult-choice]');
+  const select = node.querySelector('[data-consult-service]'), prepare = node.querySelector('[data-consult-prepare]');
+  const status = node.querySelector('[data-consult-status]'), result = node.querySelector('[data-consult-result]'), output = node.querySelector('[data-consult-text]');
+  let catalog = null, busy = false;
+  const clear = () => { output.value = ''; result.hidden = true; };
+  const lock = value => { busy = value; load.disabled = value; select.disabled = value; prepare.disabled = value; };
+  select.addEventListener('change', () => { clear(); prepare.hidden = !select.value; status.textContent = 'Перед ответом проверьте цену кнопкой ниже.'; });
+  load.addEventListener('click', async () => {
+    if (busy || !current()) return;
+    clear(); catalog = null; choice.hidden = prepare.hidden = true;
+    if (!context.crmQuery) { status.textContent = 'Обновите кабинет, чтобы прочитать каталог.'; return; }
+    lock(true); status.textContent = 'Читаем подтверждённые услуги…';
+    try {
+      const data = await context.crmQuery('/company-information/knowledge', { companyCode });
+      if (!current()) return;
+      if (data.companyCode !== companyCode || !Array.isArray(data.services) || !/^[a-f0-9]{64}$/.test(data.knowledgeRevision)) throw Error('Не удалось проверить компанию и версию каталога.');
+      catalog = data; select.replaceChildren();
+      const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Выберите услугу'; select.append(placeholder);
+      for (const service of data.services) {
+        const option = document.createElement('option'); option.value = service.id; option.textContent = service.title; select.append(option);
+      }
+      choice.hidden = !data.services.length;
+      status.textContent = data.services.length ? 'Выберите услугу; цена будет проверена перед подготовкой текста.' : 'Подтверждённых услуг пока нет. Цену нужно уточнить у администратора.';
+    } catch (error) { if (current()) status.textContent = error.message || 'Каталог недоступен. Уточните цену у администратора.'; }
+    finally { if (current()) lock(false); }
+  });
+  prepare.addEventListener('click', async () => {
+    if (busy || !current() || !catalog || !select.value) return;
+    const serviceId = select.value, knowledgeRevision = catalog.knowledgeRevision;
+    clear(); lock(true); status.textContent = 'Повторно проверяем услугу и цену…';
+    try {
+      const quote = await context.crmQuery('/company-information/quote', { companyCode, serviceId, knowledgeRevision });
+      if (!current()) return;
+      if (quote.companyCode !== companyCode || quote.knowledgeRevision !== knowledgeRevision || quote.service?.id !== serviceId || typeof quote.text !== 'string' || !quote.text.trim()) throw Error('Получено предложение другой компании или услуги.');
+      output.value = quote.text + '\nСвободное время и возможность записи уточнит администратор.';
+      result.hidden = false;
+      status.textContent = `Цена проверена ${when(new Date().toISOString())}. Перед последующим ответом проверьте её заново. Текст ещё не отправлен.`;
+    } catch (error) {
+      if (current()) { clear(); catalog = null; choice.hidden = prepare.hidden = true; status.textContent = (error.message || 'Не удалось проверить цену.') + ' Загрузите каталог заново.'; }
+    } finally { if (current()) lock(false); }
+  });
+}
+
 function render(container, context, { site, alive, api, mutation, onTransportChange = () => {} }) {
   const h = context.escapeHTML;
   const base = `/content/${site}`;
@@ -168,10 +219,12 @@ function render(container, context, { site, alive, api, mutation, onTransportCha
       const d = data.dialog;
       thread.innerHTML = `<header class="client-dialogs__head"><h3>${h(d.name)}${d.username ? ` <span>@${h(d.username)}</span>` : ""}</h3>
         <p>Диалог №${h(d.id)}${d.source ? ` · источник: ${h(d.source)}` : ""}${data.order ? ` · заявка №${h(data.order.id)}` : ""}</p></header>
+        <section class="client-consultation" data-dialog-consultation></section>
         <section data-dialog-crm><button type="button" data-dialog-crm-open>Создать или открыть карточку CRM</button><p data-dialog-crm-status role="status">Карточка связывает это обращение с записью на визит. Сообщения и уведомления не отправляются.</p><div data-dialog-crm-card class="studio-journey"></div></section>
         <div class="client-dialogs__messages">${data.messages.map(messageHtml).join("") || "<p>Сообщений нет.</p>"}</div>`;
       const crmButton=thread.querySelector('[data-dialog-crm-open]'),crmStatus=thread.querySelector('[data-dialog-crm-status]'),crmCard=thread.querySelector('[data-dialog-crm-card]');
       const companyAtStart=context.selectedProjectId;
+      mountConsultation(thread.querySelector('[data-dialog-consultation]'), context, () => alive() && version === openVersion);
       crmButton.addEventListener('click',async()=>{
         if(crmButton.disabled||!alive()||version!==openVersion)return;
         if(!cabinet.studioJourney||!context.crmQuery){crmStatus.textContent='Обновите кабинет, чтобы открыть карточку CRM.';return;}

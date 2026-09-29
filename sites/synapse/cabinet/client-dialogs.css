@@ -41,3 +41,8 @@ video.client-file { max-width: min(100%, 360px); }
 .site-order__work { justify-self: start; padding: 2px 10px; border-radius: 999px; font-size: 13px; background: #eef4ff; color: #22406e; }
 .site-order__work--done { background: #e3f3e6; color: #2f6b3a; }
 .site-order__work--cancelled { background: #f1f2ef; color: #6b6f6a; }
+.client-consultation { border: 1px solid var(--border, #dce2dc); border-radius: 10px; padding: 14px; margin-bottom: 16px; }
+.client-consultation label { display: block; margin: 12px 0; }
+.client-consultation label[hidden] { display: none; }
+.client-consultation select, .client-consultation textarea { display: block; box-sizing: border-box; width: 100%; margin-top: 6px; }
+.client-consultation textarea { white-space: pre-wrap; resize: vertical; }
