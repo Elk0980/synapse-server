@@ -5,16 +5,16 @@ const {createStudioCommerce}=require('./studio-commerce');
 const TYPES = ['booked', 'confirmed', 'visited', 'no_show', 'rescheduled', 'cancelled', 'membership'];
 const LABELS = {new:'Новая заявка',booked:'Записан',confirmed:'Подтвердил визит',visited:'Пришёл',no_show:'Не пришёл',rescheduled:'Перенос',cancelled:'Отменил запись',membership:'Купил абонемент'};
 function stateOf(events) {
-  const state={status:'new',appointmentAt:null,timezone:null,visited:0,memberships:0};
+  const state={status:'new',appointmentAt:null,timezone:null,serviceQuote:null,visited:0,memberships:0};
   for(const e of events.filter(e=>!e.voidedAt)) {
     state.status=e.type;
-    if(['booked','rescheduled'].includes(e.type)){state.appointmentAt=e.appointmentAt;state.timezone=e.timezone;}
+    if(['booked','rescheduled'].includes(e.type)){state.appointmentAt=e.appointmentAt;state.timezone=e.timezone;state.serviceQuote=e.serviceQuote||null;}
     if(e.type==='visited')state.visited++;
     if(e.type==='membership')state.memberships++;
   }
   return state;
 }
-function createStudioJourney(db,{now=Date.now}={}) {
+function createStudioJourney(db,{now=Date.now,quoteService}={}) {
   const commerce=createStudioCommerce(db,{now});
   db.exec(`CREATE TABLE IF NOT EXISTS studio_journey_events (
     id INTEGER PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), lead_id INTEGER NOT NULL REFERENCES leads(id),
@@ -24,6 +24,8 @@ function createStudioJourney(db,{now=Date.now}={}) {
     voided_at TEXT, voided_by INTEGER, void_reason TEXT, request_id TEXT NOT NULL,
     UNIQUE(company_id,lead_id,request_id));
     CREATE INDEX IF NOT EXISTS studio_journey_lead_idx ON studio_journey_events(company_id,lead_id,id);`);
+  if(!db.prepare('PRAGMA table_info(studio_journey_events)').all().some(c=>c.name==='service_quote'))
+    db.exec('ALTER TABLE studio_journey_events ADD COLUMN service_quote TEXT');
   const iso=()=>new Date(now()).toISOString();
   function transaction(work){db.exec('BEGIN IMMEDIATE');try{const result=work();db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');throw error;}}
   function leadFor(code,id){
@@ -34,8 +36,9 @@ function createStudioJourney(db,{now=Date.now}={}) {
   }
   const eventsFor=(owner,id)=>db.prepare(`SELECT id,type,occurred_at occurredAt,appointment_at appointmentAt,timezone,note,
     membership_name membershipName,amount_cents amountCents,evidence,created_at createdAt,actor_id actorId,
-    voided_at voidedAt,voided_by voidedBy,void_reason voidReason,request_id requestId
-    FROM studio_journey_events WHERE company_id=? AND lead_id=? ORDER BY id`).all(owner.id,id);
+    voided_at voidedAt,voided_by voidedBy,void_reason voidReason,request_id requestId,service_quote serviceQuote
+    FROM studio_journey_events WHERE company_id=? AND lead_id=? ORDER BY id`).all(owner.id,id)
+    .map(e=>({...e,serviceQuote:e.serviceQuote?JSON.parse(e.serviceQuote):null}));
   function get(code,id){
     const {owner,lead}=leadFor(code,id),events=eventsFor(owner,lead.id),state=stateOf(events);
     return {companyCode:owner.code.toLowerCase(),leadId:lead.id,name:lead.name,contact:lead.contact,
@@ -43,7 +46,7 @@ function createStudioJourney(db,{now=Date.now}={}) {
       revision:events.length+events.filter(e=>e.voidedAt).length,timezone:state.timezone||owner.timezone||'UTC',state,events};
   }
   function record(code,id,body,actorId=null){
-    object(body,['revision','requestId','type','occurredAt','appointmentAt','timezone','note','membershipName','amount','evidence']);
+    object(body,['revision','requestId','type','occurredAt','appointmentAt','timezone','note','membershipName','amount','evidence','serviceSelection']);
     revision(body.revision);const requestId=text(body.requestId,100,true);
     if(!/^[\w-]{8,100}$/.test(requestId))fail(400,'Некорректный номер изменения');
     return transaction(()=>{
@@ -51,6 +54,14 @@ function createStudioJourney(db,{now=Date.now}={}) {
       if(current.events.some(e=>e.requestId===requestId))return current;
       if(current.revision!==body.revision)fail(409,'Карточка уже изменена. Обновите её.','REVISION_CONFLICT');
       const type=body.type;if(!TYPES.includes(type))fail(400,'Выберите событие');
+      if(body.serviceSelection!==undefined&&type!=='booked')fail(400,'Услугу выбирают при новой записи; перенос сохраняет прежние условия');
+      let serviceQuote=type==='rescheduled'?current.state.serviceQuote:null;
+      if(body.serviceSelection!==undefined){
+        object(body.serviceSelection,['id','knowledgeRevision']);
+        if(!quoteService)fail(503,'Проверка каталога временно недоступна');
+        serviceQuote=quoteService(owner.code,body.serviceSelection.id,body.serviceSelection.knowledgeRevision);
+        if(serviceQuote.companyCode.toLowerCase()!==owner.code.toLowerCase())fail(409,'Предложение относится к другой компании');
+      }
       const occurredAt=body.occurredAt?utcDate(body.occurredAt):iso();
       const previous=current.events.filter(e=>!e.voidedAt).at(-1);
       if(Date.parse(occurredAt)>now()+60000||Date.parse(occurredAt)<Date.parse(current.createdAt)||(previous&&occurredAt<previous.occurredAt))
@@ -78,8 +89,8 @@ function createStudioJourney(db,{now=Date.now}={}) {
           fail(400,'Укажите фактически оплаченную сумму с точностью до копеек');
         amountCents=Math.round(body.amount*100);
       }
-      db.prepare(`INSERT INTO studio_journey_events(company_id,lead_id,type,occurred_at,appointment_at,timezone,note,membership_name,amount_cents,evidence,created_at,actor_id,request_id)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(owner.id,Number(id),type,occurredAt,appointmentAt,zone,note,membershipName,amountCents,evidence,iso(),actorId,requestId);
+      db.prepare(`INSERT INTO studio_journey_events(company_id,lead_id,type,occurred_at,appointment_at,timezone,note,membership_name,amount_cents,evidence,created_at,actor_id,request_id,service_quote)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(owner.id,Number(id),type,occurredAt,appointmentAt,zone,note,membershipName,amountCents,evidence,iso(),actorId,requestId,serviceQuote?JSON.stringify(serviceQuote):null);
       return get(code,id);
     });
   }
@@ -122,7 +133,7 @@ function createStudioJourneyHandler({journey,companyModuleContext,readJson,send}
   return async function handleStudioJourney(request,response,url,cors={}){
     if(!/^\/studio-journey(?:\/|$)/.test(url.pathname))return false;
     const code=url.searchParams.get('companyCode'),permission=request.method==='GET'?'crm.view':'crm.edit';
-    const {identity}=companyModuleContext(request,code,permission);
+    companyModuleContext(request,code,permission);
     const commerce=/^\/studio-journey\/(\d+)\/commerce(?:\/(publication|payments|voids))?$/.exec(url.pathname);
     if(commerce){
       let result;
@@ -139,8 +150,15 @@ function createStudioJourneyHandler({journey,companyModuleContext,readJson,send}
     let result,status=200;
     if(!match[1]&&request.method==='GET')result=journey.list(code,{from:url.searchParams.get('from'),to:url.searchParams.get('to'),source:url.searchParams.get('source')||'',offset:Number(url.searchParams.get('offset')||0)});
     else if(match[1]&&!match[2]&&request.method==='GET')result=journey.get(code,match[1]);
-    else if(match[2]&&!match[3]&&request.method==='POST'){result=journey.record(code,match[1],await readJson(request),identity.userId);status=201;}
-    else if(match[3]&&request.method==='DELETE')result=journey.remove(code,match[1],match[3],await readJson(request),identity.userId);
+    else if(match[2]&&!match[3]&&request.method==='POST'){
+      const body=await readJson(request),fresh=companyModuleContext(request,code,permission);
+      if(body?.serviceSelection!==undefined)companyModuleContext(request,code,'company-information.view');
+      result=journey.record(code,match[1],body,fresh.identity.userId);status=201;
+    }
+    else if(match[3]&&request.method==='DELETE'){
+      const body=await readJson(request),fresh=companyModuleContext(request,code,permission);
+      result=journey.remove(code,match[1],match[3],body,fresh.identity.userId);
+    }
     else fail(405,'Метод не поддерживается');
     send(response,status,result,{...cors,'cache-control':'no-store'});return true;
   };

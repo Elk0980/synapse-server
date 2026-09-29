@@ -7,6 +7,7 @@ const editable=ctx=>ctx.identity?.role==='owner'||ctx.identity?.permissions?.inc
 const date=(value,zone)=>value?new Intl.DateTimeFormat('ru-RU',{timeZone:zone,dateStyle:'medium',timeStyle:'short'}).format(new Date(value)):'—';
 const request=(ctx,code,path,method,body)=>ctx.crmQuery('/studio-journey'+path,{companyCode:code},method?ctx.csrfOptions(method,body):undefined);
 const companyName=(ctx,code)=>ctx.identity?.companies?.find(c=>c.id===code)?.name||code;
+const quoteMarkup=quote=>quote?`<p class="journey-note"><strong>Услуга и условия при записи:</strong><br>${esc(quote.text).replace(/\n/g,'<br>')}</p>`:'';
 const summaryEpochs=new WeakMap();
 const money=totals=>totals?.length?totals.map(t=>`${(t.netCents/100).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})} ${t.currency}`).join('; '):'Нет записей';
 async function mountCommerce(node,ctx,leadId,zone,onChange){
@@ -76,23 +77,45 @@ async function mountCard(node,ctx,leadId,{onChange=()=>{}}={}){
   const draw=()=>{
     const zone=saved.timezone,state=saved.state,canEdit=editable(ctx),last=saved.events.filter(e=>!e.voidedAt).at(-1);
     const options=({new:['booked'],booked:['confirmed','visited','no_show','rescheduled','cancelled'],rescheduled:['confirmed','visited','no_show','rescheduled','cancelled'],confirmed:['visited','no_show','rescheduled','cancelled'],visited:['membership','booked'],membership:['booked'],no_show:['rescheduled','booked'],cancelled:['booked']})[state.status]||[];
-    node.innerHTML=`<h3>Визит и абонемент</h3><p><strong>${esc(labels[state.status])}</strong>${state.appointmentAt?' · '+esc(date(state.appointmentAt,zone)):''}</p><p class="journey-note">Часовой пояс: ${esc(zone)}. Отметки сохраняются отдельно от старого этапа заявки.</p>
+    node.innerHTML=`<h3>Визит и абонемент</h3><p><strong>${esc(labels[state.status])}</strong>${state.appointmentAt?' · '+esc(date(state.appointmentAt,zone)):''}</p>${quoteMarkup(state.serviceQuote)}<p class="journey-note">Часовой пояс: ${esc(zone)}. Отметки сохраняются отдельно от старого этапа заявки.</p>
       ${canEdit?`<form data-journey-form><div class="journey-fields"><label>Что произошло<select name="type">${options.map(t=>`<option value="${t}">${esc(labels[t])}</option>`).join('')}</select></label>
       <label data-appointment>Дата и время визита<input name="appointmentAt" type="datetime-local"></label><label>Когда произошло<input name="occurredAt" type="datetime-local" value="${esc(cabinet.companyTime.toLocal(new Date().toISOString(),zone))}" required></label>
       <label data-membership hidden>Название абонемента<input name="membershipName" maxlength="200"></label><label data-membership hidden>Фактически оплачено, ₽<input name="amount" type="number" min="0.01" step="0.01"></label><label data-membership hidden>Номер чека или основание оплаты<input name="evidence" maxlength="1000"></label>
       <label class="journey-wide">Комментарий / причина<textarea name="note" maxlength="2000" rows="2"></textarea></label></div><p data-membership class="journey-note" hidden>Это отметка администратора с основанием оплаты. Проверка чека и финансовый учёт выполняются отдельно.</p><button class="plain-button" type="submit">Сохранить отметку</button></form>`:''}
-      <p data-journey-status role="status"></p><details><summary>История и исправление отметок (${saved.events.length})</summary><ol class="journey-history">${saved.events.map(e=>`<li${e.voidedAt?' class="journey-void"':''}><strong>${esc(labels[e.type])}</strong> · ${esc(date(e.occurredAt,e.timezone))}${e.appointmentAt?`<br>Визит: ${esc(date(e.appointmentAt,e.timezone))}`:''}${e.membershipName?`<br>${esc(e.membershipName)} · ${esc((e.amountCents/100).toLocaleString('ru-RU'))} ₽ · ${esc(e.evidence)}`:''}${e.note?'<br>'+esc(e.note):''}${e.voidedAt?'<br>Отменено: '+esc(e.voidReason):''}</li>`).join('')||'<li>Отметок пока нет</li>'}</ol>
+      <p data-journey-status role="status"></p><details><summary>История и исправление отметок (${saved.events.length})</summary><ol class="journey-history">${saved.events.map(e=>`<li${e.voidedAt?' class="journey-void"':''}><strong>${esc(labels[e.type])}</strong> · ${esc(date(e.occurredAt,e.timezone))}${e.appointmentAt?`<br>Визит: ${esc(date(e.appointmentAt,e.timezone))}`:''}${quoteMarkup(e.serviceQuote)}${e.membershipName?`<br>${esc(e.membershipName)} · ${esc((e.amountCents/100).toLocaleString('ru-RU'))} ₽ · ${esc(e.evidence)}`:''}${e.note?'<br>'+esc(e.note):''}${e.voidedAt?'<br>Отменено: '+esc(e.voidReason):''}</li>`).join('')||'<li>Отметок пока нет</li>'}</ol>
       ${canEdit&&last?`<form data-journey-undo><label>Причина исправления<input name="reason" maxlength="2000" required></label><button class="plain-button" type="submit">Отменить последнюю отметку</button></form>`:''}</details>
       <details><summary>Черновики напоминаний</summary><p class="journey-note">Тексты не отправляются автоматически. Перед отправкой проверьте запись, контакт и согласованный канал связи.</p><label>Текст для клиента<textarea data-reminder rows="5" readonly></textarea></label><div class="journey-actions"><button type="button" class="plain-button" data-draft="confirm">Подтверждение записи</button><button type="button" class="plain-button" data-draft="remind">Напомнить о визите</button><button type="button" class="plain-button" data-draft="reschedule">Предложить перенос</button></div></details>`;
     node.insertAdjacentHTML('beforeend','<details data-commerce><summary>Источник обращения и оплаты</summary><div data-commerce-body></div></details>');
     const commerce=node.querySelector('[data-commerce]');let loaded=false;commerce.addEventListener('toggle',()=>{if(commerce.open&&!loaded){loaded=true;void mountCommerce(node.querySelector('[data-commerce-body]'),ctx,leadId,zone,onChange);}});
     const form=node.querySelector('[data-journey-form]');
+    let selectedService=null,catalogLoading=false;
+    if(form&&(ctx.identity?.role==='owner'||ctx.identity?.permissions?.includes('company-information.view'))){
+      form.querySelector('.journey-fields').insertAdjacentHTML('beforeend',`<div class="journey-wide" data-service-picker><button type="button" class="plain-button" data-service-load>Выбрать услугу из проверенного каталога</button><label hidden data-service-label>Услуга<select data-service-select><option value="">Без привязки к каталогу</option></select></label><p data-service-preview class="journey-note"></p><p class="journey-note">Стоимость относится ко всему предложению. Свободное время и условия записи подтверждает администратор.</p></div>`);
+      const picker=form.querySelector('[data-service-picker]'),select=picker.querySelector('select'),preview=picker.querySelector('[data-service-preview]');
+      let catalog=null;
+      const togglePicker=()=>{picker.hidden=form.elements.type.value!=='booked';};form.elements.type.addEventListener('change',togglePicker);togglePicker();
+      picker.querySelector('button').addEventListener('click',async()=>{
+        if(busy||catalogLoading||!alive())return;catalogLoading=true;selectedService=null;select.innerHTML='<option value="">Без привязки к каталогу</option>';select.disabled=true;preview.textContent='Читаем проверенный каталог…';
+        try{const result=await ctx.crmQuery('/company-information/knowledge',{companyCode:code});
+          if(!alive()||!picker.isConnected)return;
+          if(result.companyCode!==code||!Array.isArray(result.services))throw Error('Каталог относится к другой компании');
+          catalog=result;select.innerHTML='<option value="">Без привязки к каталогу</option>'+catalog.services.map(s=>`<option value="${esc(s.id)}">${esc(s.title)} — ${esc(s.price)} ${esc(s.currency)}, процедур: ${esc(s.procedureCount)}</option>`).join('');
+          picker.querySelector('[data-service-label]').hidden=false;preview.textContent=catalog.services.length?'Выберите услугу. При сохранении цена будет проверена повторно.':'Подтверждённых услуг пока нет. Уточните услугу и стоимость у администратора.';
+        }catch(error){if(alive()&&picker.isConnected){catalog=null;preview.textContent='Каталог не загрузился: '+error.message;}}
+        finally{catalogLoading=false;if(picker.isConnected)select.disabled=false;}
+      });
+      select.addEventListener('change',()=>{
+        const service=catalog?.services.find(s=>s.id===select.value);selectedService=service?{id:service.id,knowledgeRevision:catalog.knowledgeRevision}:null;
+        preview.textContent=service?`${service.title}: ${service.price} ${service.currency} за ${service.procedureCount} процедур.${service.durationMinutes?' Одна процедура: '+service.durationMinutes+' мин.':''}${service.description?' '+service.description:''}`:'';
+      });
+    }
     if(form){const toggle=()=>{const type=form.elements.type.value;node.querySelectorAll('[data-membership]').forEach(el=>el.hidden=type!=='membership');const booking=['booked','rescheduled'].includes(type);form.querySelector('[data-appointment]').hidden=!booking;form.elements.appointmentAt.required=booking;for(const name of ['membershipName','amount','evidence'])form.elements[name].required=type==='membership';form.elements.note.required=['rescheduled','no_show','cancelled'].includes(type);};form.elements.type.addEventListener('change',toggle);toggle();
       const defaultOccurred=form.elements.occurredAt.value;
-      form.addEventListener('submit',async event=>{event.preventDefault();if(busy||!alive()||!form.reportValidity())return;const values=new FormData(form),type=values.get('type');
+      form.addEventListener('submit',async event=>{event.preventDefault();if(busy||!alive()||!form.reportValidity())return;if(catalogLoading){status('Дождитесь загрузки каталога и выберите услугу');return;}const values=new FormData(form),type=values.get('type');
         try{const body={revision:saved.revision,requestId:window.crypto.randomUUID(),type,timezone:zone,note:values.get('note')};
           if(values.get('occurredAt')!==defaultOccurred)body.occurredAt=cabinet.companyTime.toUTC(values.get('occurredAt'),zone);
           if(['booked','rescheduled'].includes(type))body.appointmentAt=cabinet.companyTime.toUTC(values.get('appointmentAt'),zone);
+          if(type==='booked'&&selectedService)body.serviceSelection=selectedService;
           if(type==='membership')Object.assign(body,{membershipName:values.get('membershipName'),amount:Number(values.get('amount')),evidence:values.get('evidence')});
           await mutate('/events','POST',body);
         }catch(error){status(error.message);}});

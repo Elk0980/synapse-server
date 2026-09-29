@@ -25,6 +25,32 @@ test('appointment form converts the company time to UTC and never writes to the 
 test('stale card responses are discarded after the selected company changes',async()=>{
   let finish;const f=fixture({query:()=>new Promise(resolve=>finish=resolve)});try{const pending=f.api.mountCard(f.node,f.ctx,1);f.ctx.selectedProjectId='avokado';finish({...card(),name:'PRIVATE ALVI'});await pending;assert.doesNotMatch(f.node.textContent,/PRIVATE ALVI/);assert.equal(f.node.querySelector('form'),null);}finally{f.close();}
 });
+
+test('catalog choice sends only ID and version, safely shows total course price and preserves the saved quote',async()=>{
+  const service={id:'course',title:'Курс <img src=x>',price:15700,currency:'RUB',procedureCount:5,durationMinutes:60},revision='a'.repeat(64);
+  const quote={companyCode:'alvi',knowledgeRevision:revision,service,text:'Курс <img src=x>\n15700 ₽ за 5 процедур.'};
+  const f=fixture({query:call=>call.path==='/company-information/knowledge'?{companyCode:'alvi',knowledgeRevision:revision,services:[service]}:call.method==='POST'?{...card(),revision:1,state:{status:'booked',appointmentAt:call.body.appointmentAt,serviceQuote:quote},events:[]}:card()});
+  try{await f.api.mountCard(f.node,f.ctx,1);f.node.querySelector('[data-service-load]').click();await tick();
+    const select=f.node.querySelector('[data-service-select]');select.value='course';select.dispatchEvent(new f.w.Event('change'));
+    assert.match(f.node.querySelector('[data-service-preview]').textContent,/15700 RUB за 5/);assert.equal(f.node.querySelector('img'),null);
+    const form=f.node.querySelector('[data-journey-form]');form.elements.appointmentAt.value='2026-09-30T18:00';form.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));await tick();
+    const write=f.calls.find(c=>c.method==='POST');assert.deepEqual(write.body.serviceSelection,{id:'course',knowledgeRevision:revision});
+    assert.equal(write.body.price,undefined);assert.match(f.node.textContent,/15700 ₽ за 5 процедур/);assert.equal(f.node.querySelector('img'),null);
+  }finally{f.close();}
+});
+
+test('unavailable, foreign and late catalogs do not supply a service; crm-only editors have no catalog control',async()=>{
+  for(const catalog of [{companyCode:'alvi',services:[]},{companyCode:'avokado',services:[{id:'foreign',title:'PRIVATE'}]}]){
+    const f=fixture({query:c=>c.path==='/company-information/knowledge'?catalog:card()});try{
+      await f.api.mountCard(f.node,f.ctx,1);f.node.querySelector('[data-service-load]').click();await tick();
+      assert.equal(f.node.querySelector('[data-service-select]').options.length,1);assert.doesNotMatch(f.node.textContent,/PRIVATE/);
+    }finally{f.close();}
+  }
+  let finish;const f=fixture({query:c=>c.path==='/company-information/knowledge'?new Promise(resolve=>finish=resolve):card()});try{
+    await f.api.mountCard(f.node,f.ctx,1);f.node.querySelector('[data-service-load]').click();f.ctx.selectedProjectId='avokado';finish({companyCode:'alvi',services:[{title:'PRIVATE'}]});await tick();assert.doesNotMatch(f.node.textContent,/PRIVATE/);
+  }finally{f.close();}
+  const g=fixture({edit:false});try{g.ctx.identity.permissions.push('crm.edit');await g.api.mountCard(g.node,g.ctx,1);assert.ok(g.node.querySelector('[data-journey-form]'));assert.equal(g.node.querySelector('[data-service-load]'),null);}finally{g.close();}
+});
 test('membership requires paid amount and evidence; a reschedule requires a reason',async()=>{
   for(const state of ['visited','confirmed']){
     const f=fixture({query:()=>({...card(),state:{status:state,appointmentAt:'2026-09-16T12:00:00.000Z'}})});try{await f.api.mountCard(f.node,f.ctx,1);const form=f.node.querySelector('form');

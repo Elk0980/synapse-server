@@ -592,7 +592,7 @@ const companyInformation = createCompanyInformation(db, {check: createCompanyInf
 const taskCoordination = createTaskCoordination(db);
 const autopostingTransport = createAutopostingTransport(db, {apiKey: API_KEY});
 const autoposting = createAutoposting(db, {information: companyInformation, transport: autopostingTransport});
-const studioJourney = createStudioJourney(db);
+const studioJourney = createStudioJourney(db,{quoteService:(code,id,version)=>companyInformation.quote(code,id,version)});
 const studioContentPlan = createStudioContentPlan(db,{autoposting,information:companyInformation});
 const handleStudioJourney = createStudioJourneyHandler({journey:studioJourney,companyModuleContext,readJson,send});
 const mediaMentorRollout = createMediaMentorRollout(db);
