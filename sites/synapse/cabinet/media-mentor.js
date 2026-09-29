@@ -465,7 +465,12 @@
         ${index >= 0 && item.ideaId && viewer.decide ? `<button type="button" class="plain-button" data-variant-decide="approved"
           data-variant-idea-id="${esc(item.ideaId)}">Согласовать всю идею</button>
           <button type="button" class="plain-button" data-variant-decide="rejected"
-          data-variant-idea-id="${esc(item.ideaId)}">Вернуть всю идею</button>` : ''}
+          data-variant-idea-id="${esc(item.ideaId)}">Вернуть всю идею</button>
+          <button type="button" class="plain-button" data-variant-decide="withdrawn"
+          data-variant-idea-id="${esc(item.ideaId)}">Отозвать по всей идее</button>
+          <label>Причина возврата всей идеи (обязательна)
+            <input data-idea-comment maxlength="2000" placeholder="Что исправить во всей идее"></label>
+          <span data-idea-state-line role="status"></span>` : ''}
       </div>
       <div data-variant-panels>${present.map((platform) => variantPanel(platform,
     item.variants[platform.id] || {}, data, item, index, !(active && platform.id === active.id))).join('')}</div>
@@ -497,8 +502,8 @@
         <button type="button" class="plain-button" data-variant-decide="approved" data-variant-scope="plan">Согласовать весь план</button>
         <button type="button" class="plain-button" data-variant-decide="rejected" data-variant-scope="plan">Вернуть весь план</button>
         <button type="button" class="plain-button" data-variant-decide="withdrawn" data-variant-scope="plan">Отозвать по всему плану</button>
-        <label>Причина возврата (обязательна)<input data-variant-comment maxlength="2000" placeholder="Что исправить в плане"></label>
-        <span data-variant-state-line role="status"></span>
+        <label>Причина возврата (обязательна)<input data-plan-comment maxlength="2000" placeholder="Что исправить в плане"></label>
+        <span data-plan-state-line role="status"></span>
       </div>` : `<p class="mentor-note">${viewer.decide ? '' : 'Решения по версиям принимает владелец кабинета.'}</p>`}
       ${viewer.edit ? `<div class="mentor-variant-actions">
         <button type="button" class="plain-button" data-variants-transfer
@@ -1200,10 +1205,29 @@
         const scopeAttr = button.dataset.variantScope || '';
         const ideaId = button.dataset.variantIdeaId || '';
         const platform = button.dataset.variantPlatform || '';
-        const holder = button.closest('[data-variant]') || button.closest('[data-variants]')
-          || button.closest('[data-plan-variants]');
-        const comment = holder?.querySelector('[data-variant-comment]')?.value.trim() || '';
-        const line = holder?.querySelector('[data-variant-state-line]');
+        /* Поля причины и состояния выбираются ПО ОБЛАСТИ решения, а не поиском ближайшего
+           подходящего узла. Раньше решение по всей идее брало первое поле внутри блока версий —
+           то есть поле первой панели, даже скрытой: причину писали в открытой вкладке, а
+           уходила пустая из скрытой, и ошибка появлялась там, где её не видно.
+           У каждой области теперь своё имя поля, и вкладка на это не влияет. */
+        const scopeFields = () => {
+          if (scopeAttr !== 'plan' && platform) {
+            const panel = button.closest('[data-variant]');
+            return {comment: panel?.querySelector('[data-variant-comment]'),
+              line: panel?.querySelector('[data-variant-state-line]')};
+          }
+          if (scopeAttr !== 'plan') {
+            const block = button.closest('[data-variants]');
+            return {comment: block?.querySelector('[data-idea-comment]'),
+              line: block?.querySelector('[data-idea-state-line]')};
+          }
+          const block = button.closest('[data-plan-variants]');
+          return {comment: block?.querySelector('[data-plan-comment]'),
+            line: block?.querySelector('[data-plan-state-line]')};
+        };
+        const fields = scopeFields();
+        const comment = fields.comment?.value.trim() || '';
+        const line = fields.line;
         // Несохранённые правки: решение относилось бы к прежнему тексту — этого не допускаем.
         if (planDirty()) { say(line, DIRTY_NOTE); return; }
         if (decision === 'rejected' && !comment) {

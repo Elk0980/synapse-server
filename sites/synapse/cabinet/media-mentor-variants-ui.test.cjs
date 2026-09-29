@@ -253,7 +253,7 @@ test('несохранённая правка не даёт согласоват
     planActions.querySelector('[data-variant-decide="approved"]').click(); await tick();
     f.node.querySelector('[data-variants-transfer]')?.click(); await tick();
     assert.equal(f.calls.filter((item) => /variants\/(decision|transfer)/.test(item.path)).length, 0);
-    assert.match(planActions.querySelector('[data-variant-state-line]').textContent, /Сначала сохраните план/);
+    assert.match(planActions.querySelector('[data-plan-state-line]').textContent, /Сначала сохраните план/);
     // После сохранения решение проходит.
     submit(f.w, f.node.querySelector('#mentor-plan-form')); await tick(); await tick();
     f.calls.length = 0;
@@ -695,5 +695,76 @@ test('payload без состояний версий оставляет стар
     assert.ok(f.node.querySelector('#mentor-decision-form'), 'прежний путь остаётся для прежних ответов');
     assert.ok(f.node.querySelector('#mentor-transfer-form'));
     assert.equal(f.node.querySelector('[data-legacy-approval]'), null);
+  } finally { f.close(); }
+});
+
+/* Возврат всей идеи не зависит от того, какая вкладка открыта. Раньше обработчик брал первое
+   поле причины внутри блока версий — поле ПЕРВОЙ панели, даже скрытой: причину писали в
+   открытой вкладке, а уходила пустая из скрытой, и ошибка появлялась там, где её не видно. */
+test('возврат всей идеи берёт общее поле причины, а не поле открытой вкладки', async () => {
+  // Основная площадка идеи — ВКонтакте, поэтому активна ВТОРАЯ панель, первая (Telegram) скрыта.
+  const days = planDays().map((day) => ({...day, platform: 'vk'}));
+  const f = fixture({query: () => payload({variants: statesFor(days)}, days)});
+  try {
+    await f.view.render(f.node, f.ctx); await tick(); await tick();
+    const block = f.node.querySelector('[data-variants="idea-1"]');
+    const panels = [...block.querySelectorAll('[data-variant]')];
+    assert.deepEqual(panels.map((panel) => panel.dataset.variant), ['telegram', 'vk']);
+    assert.equal(panels[0].hidden, true, 'первая панель скрыта');
+    assert.equal(panels[1].hidden, false, 'активна вторая вкладка');
+
+    const ideaReject = [...block.querySelectorAll('.mentor-variant-tabs [data-variant-decide="rejected"]')][0];
+    const ideaComment = block.querySelector('[data-idea-comment]');
+    const ideaLine = block.querySelector('[data-idea-state-line]');
+    assert.ok(ideaComment && ideaLine, 'у решения по всей идее свои поле причины и строка состояния');
+
+    // Пустое общее поле: отказ виден рядом с кнопкой идеи, а не в скрытой панели.
+    ideaReject.click(); await tick(); await tick();
+    assert.equal(f.calls.filter((item) => item.path.endsWith('/plan/variants/decision')).length, 0);
+    assert.match(ideaLine.textContent, /Укажите, что исправить/);
+    assert.equal(panels[0].querySelector('[data-variant-state-line]').textContent, '',
+      'ошибка не уходит в скрытую панель');
+    assert.equal(panels[1].querySelector('[data-variant-state-line]').textContent, '');
+
+    // Причины отдельных версий в решение по идее не подставляются.
+    panels[0].querySelector('[data-variant-comment]').value = 'Причина скрытой версии';
+    panels[1].querySelector('[data-variant-comment]').value = 'Причина открытой версии';
+    ideaReject.click(); await tick(); await tick();
+    assert.equal(f.calls.filter((item) => item.path.endsWith('/plan/variants/decision')).length, 0,
+      'чужие поля общее не заменяют');
+    assert.match(ideaLine.textContent, /Укажите, что исправить/);
+
+    // Заполненное общее поле уходит для всей идеи.
+    ideaComment.value = 'Переписать всю идею';
+    ideaReject.click(); await tick(); await tick();
+    const call = f.calls.find((item) => item.path.endsWith('/plan/variants/decision'));
+    assert.ok(call, 'возврат всей идеи отправлен');
+    assert.deepEqual([call.body.scope, call.body.ideaId, call.body.decision, call.body.comment],
+      ['idea', 'idea-1', 'rejected', 'Переписать всю идею']);
+    assert.equal(call.body.platforms, undefined, 'площадки в решении по идее не указываются');
+  } finally { f.close(); }
+});
+
+test('решение по отдельной версии берёт только своё поле причины', async () => {
+  const days = planDays().map((day) => ({...day, platform: 'vk'}));
+  const f = fixture({query: () => payload({variants: statesFor(days)}, days)});
+  try {
+    await f.view.render(f.node, f.ctx); await tick(); await tick();
+    const block = f.node.querySelector('[data-variants="idea-1"]');
+    block.querySelector('[data-idea-comment]').value = 'Причина всей идеи';
+    const hidden = block.querySelector('[data-variant="telegram"]');
+    const active = block.querySelector('[data-variant="vk"]');
+    hidden.querySelector('[data-variant-comment]').value = 'Причина телеграма';
+    active.querySelector('[data-variant-comment]').value = 'Причина ВК';
+    active.querySelector('[data-variant-decide="rejected"]').click(); await tick(); await tick();
+    const call = f.calls.find((item) => item.path.endsWith('/plan/variants/decision'));
+    assert.deepEqual([call.body.scope, call.body.platforms, call.body.comment],
+      ['variants', ['vk'], 'Причина ВК']);
+    // И пустое поле своей версии останавливает решение именно по ней.
+    f.calls.length = 0;
+    const again = f.node.querySelector('[data-variants="idea-1"] [data-variant="vk"]');
+    again.querySelector('[data-variant-decide="rejected"]').click(); await tick(); await tick();
+    assert.equal(f.calls.filter((item) => item.path.endsWith('/plan/variants/decision')).length, 0);
+    assert.match(again.querySelector('[data-variant-state-line]').textContent, /Укажите, что исправить/);
   } finally { f.close(); }
 });
