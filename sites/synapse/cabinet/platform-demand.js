@@ -48,7 +48,7 @@
   }
   let controller;
   function create(container,initial) {
-    let ctx=initial,company='',epoch=0,busy=false,data=null,dataset=null,preview=null;
+    let ctx=initial,company='',epoch=0,busy=false,data=null,dataset=null,preview=null,metrics=null,metricsPreview=null;
     const get=id=>container.querySelector('#demand-'+id);
     const editable=()=>allowed(ctx,true);
     const status=text=>{get('status').textContent=text;};
@@ -63,6 +63,7 @@
       get('refresh').disabled=busy||!company;
       get('import-save').disabled=busy||!editable()||!preview||!get('confirm').checked;
       get('category-save').disabled=busy||!editable()||!get('category').value;
+      const metricsSave=get('metrics-save');if(metricsSave)metricsSave.disabled=busy||!editable()||!metricsPreview;
     }
     async function run(label,work,write=false) {
       if(busy||!allowed(ctx)||write&&!editable())return;
@@ -77,7 +78,7 @@
       <p class="demand-warning">Поисковый спрос показывает интерес к услугам, а не число клиентов студии. Запросы не равны заявкам, записям или визитам.</p>
       <p><a href="#analytics-through">Открыть фактические заявки и результаты компании</a><span class="demand-note"> — в сквозной аналитике выберите такой же период.</span></p>
       <details class="card" id="demand-settings"><summary>Организация и кабинет 2ГИС</summary><form id="demand-settings-form" data-demand-write><div class="demand-fields">
-      <label>ID организации<input name="organizationId" maxlength="20" inputmode="numeric" pattern="[1-9][0-9]{0,19}" required></label><label>Название в 2ГИС<input name="organizationName" maxlength="300" required></label><label>Город<input name="city" maxlength="150" required></label><label>Ссылка на кабинет организации<input name="cabinetUrl" type="url" maxlength="2000" placeholder="https://account.2gis.com/orgs/…/" required></label></div>
+      <label>ID организации<input name="organizationId" maxlength="20" inputmode="numeric" pattern="[1-9][0-9]{0,19}" required></label><label>Название в 2ГИС<input name="organizationName" maxlength="300" required></label><label>Город<input name="city" maxlength="150" required></label><label>Ссылка на кабинет организации<input name="cabinetUrl" type="url" maxlength="2000" placeholder="https://account.2gis.com/orgs/…/" required></label><label class="demand-wide">ID филиала (нужен только для показателей компании)<input name="branchId" maxlength="20" inputmode="numeric" pattern="[1-9][0-9]{0,19}"><span class="demand-note">Спрос по рубрикам работает и без филиала. Пустое поле очищает филиал; при смене организации филиал придётся указать заново.</span></label></div>
       <button class="plain-button" type="submit">Сохранить организацию</button></form></details><div id="demand-source-links" class="demand-actions"></div>
       <section class="card"><h3>Сохранённые отчёты</h3><label>Отчёт<select id="demand-dataset"></select></label><div id="demand-report"></div></section>
       <details class="card" id="demand-import"><summary>Добавить отчёт из JSON</summary><p>Вставьте структурированный отчёт, подготовленный из кабинета 2ГИС. Перед сохранением проверьте компанию, организацию, период и строки. Файл XLS здесь не загружается.</p>
@@ -85,7 +86,19 @@
       <div id="demand-preview" class="demand-preview" tabindex="-1" hidden></div><label class="demand-check"><input id="demand-confirm" type="checkbox">Я проверил компанию, организацию, период и данные отчёта</label><button class="primary-button" type="button" id="demand-import-save" disabled>Сохранить проверенный отчёт</button></form>
       <details><summary>Формат JSON — образец структуры, не данные компании</summary><pre id="demand-example"></pre></details></details>
       <section class="card" data-demand-write><h3>Целевые рубрики</h3><p class="demand-note">Выберите назначение рубрики и при необходимости сохраните причину. Общая строка «Все рубрики» не классифицируется. Доли запросов не складываются в количество клиентов.</p><form id="demand-category-form"><div class="demand-fields"><label>Рубрика<select id="demand-category" required></select></label><label>Назначение<select id="demand-classification">${Object.entries(CLASSES).map(([value,label])=>`<option value="${value}">${label}</option>`).join('')}</select></label><label class="demand-wide">Причина<textarea id="demand-reason" maxlength="2000" rows="2"></textarea></label></div><button class="plain-button" id="demand-category-save" type="submit">Сохранить назначение рубрики</button></form></section>
-      <details class="card"><summary>История получения отчётов</summary><div id="demand-history"></div></details>`;
+      <details class="card"><summary>История получения отчётов</summary><div id="demand-history"></div></details>
+      <section class="card demand-company-metrics" id="demand-metrics-card"><h3>Показатели компании</h3>
+      <p class="demand-note">Это фактические показатели карточки компании в 2ГИС: показы, позиция в выдаче, переходы и обращения. Они загружаются отдельно и со спросом по рубрикам не смешиваются.</p>
+      <p class="demand-note">Прочерк означает «нет данных», а ноль — измеренный ноль. Показы не равны охвату, обращения не равны продажам, а категории обращений между собой не складываются.</p>
+      <form id="demand-metrics-period" class="demand-fields"><label>С<input id="demand-metrics-from" type="date" required></label><label>По<input id="demand-metrics-to" type="date" required></label><button class="plain-button" type="submit">Показать период</button></form>
+      <p id="demand-metrics-status" role="status" aria-live="polite"></p>
+      <div id="demand-metrics-body"></div>
+      <div id="demand-metrics-import" data-demand-write hidden><h4>Загрузить подготовленный файл</h4>
+      <p class="demand-note">Выберите файл отчётов, подготовленный из кабинета 2ГИС. Ничего не сохранится, пока вы не посмотрите предпросмотр и не подтвердите загрузку.</p>
+      <label>Файл отчётов<input id="demand-metrics-file" type="file" accept="application/json,.json"></label>
+      <div id="demand-metrics-preview" class="demand-preview" tabindex="-1" hidden></div>
+      <button class="primary-button" type="button" id="demand-metrics-save" disabled>Загрузить показатели</button></div>
+      <details id="demand-metrics-history-box"><summary>История загрузок</summary><div id="demand-metrics-history"></div></details></section>`;
     function table(report) {
       return `<div class="demand-table-wrap" tabindex="0" aria-label="Таблица отчёта, прокручивается по горизонтали"><table class="demand-table"><thead><tr><th scope="col">Рубрика / запрос</th><th scope="col">Период</th><th scope="col">Количество запросов</th><th scope="col">Доля, %</th><th scope="col">Назначение</th></tr></thead><tbody>${(report.rows||[]).map(row=>{
         const saved=data?.categories?.items?.find(item=>categoryKey(item.category)===categoryKey(row.category)),classification=saved?.classification||row.classification||'unclassified';
@@ -103,7 +116,7 @@
     }
     function draw() {
       const settings=data.settings||{};
-      for(const key of ['organizationId','organizationName','city','cabinetUrl'])get('settings-form').elements[key].value=settings[key]||'';
+      for(const key of ['organizationId','organizationName','city','cabinetUrl','branchId'])get('settings-form').elements[key].value=settings[key]||'';
       get('settings').open=!settings.configured;
       get('source-links').innerHTML=link(settings.cabinetUrl,'Открыть кабинет этой организации')||sb.platformLinks?.cabinetLink('two_gis')||'';
       get('expected').textContent=`Компания: ${data.company.name}. Организация: ${settings.organizationName||'не настроена'}; ID ${settings.organizationId||'—'}; город ${settings.city||'—'}.`;
@@ -114,18 +127,79 @@
       get('history').innerHTML=(data.history||[]).length?'<ul>'+data.history.map(item=>`<li>${esc(REPORTS[item.reportKind]||item.reportKind)} · ${esc(range(item))} · получен ${esc(instant(item.capturedAt))} · сохранён ${esc(instant(item.importedAt))}${item.lastCheckedAt?' · проверен '+esc(instant(item.lastCheckedAt)):''}</li>`).join('')+'</ul>':'<p>История появится после сохранения первого отчёта.</p>';
     }
     async function refreshData(current){const result=await api();if(!current())return;data=validate(result);draw();}
+    const metricsStatus=text=>{get('metrics-status').textContent=text;};
+    // Чтение выбранного файла через FileReader: работает и в браузере, и в тестовой среде.
+    const readText=file=>new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||''));reader.onerror=()=>reject(Error('READ_FAILED'));reader.readAsText(file);});
+    function clearMetricsPreview(){metricsPreview=null;get('metrics-preview').replaceChildren();get('metrics-preview').hidden=true;controls();}
+    function metricValue(item){return item.hasValue?number(item.value):'<span class="demand-no-data">нет данных</span>';}
+    function drawMetrics() {
+      const body=get('metrics-body');
+      if(!metrics){body.innerHTML='<p>Показатели компании ещё не загружены за этот период.</p>';get('metrics-history').replaceChildren();return;}
+      const coverage=metrics.coverage||{},summary=metrics.summary||{};
+      const withData=(metrics.metrics||[]).filter(item=>item.daysWithValue>0);
+      const rows=(metrics.metrics||[]).map(item=>`<tr><td>${esc(item.label)}<br><span class="demand-note">${esc(item.reportKindLabel||'')}</span></td>
+        <td class="demand-numeric">${item.totalAvailable?number(item.total):'<span class="demand-no-data">не считается</span>'}${item.totalNote?`<br><span class="demand-note">${esc(item.totalNote)}</span>`:''}</td>
+        <td class="demand-numeric">${item.aggregation==='daily_only'&&item.daysWithValue&&item.min!==null&&item.max!==null?esc(number(item.min))+' — '+esc(number(item.max)):'—'}</td>
+        <td class="demand-numeric">${esc(String(item.daysWithValue))} / ${esc(String(coverage.expectedDays??0))}${item.daysWithoutValue?`<br><span class="demand-note">пустых значений в отчётах: ${esc(String(item.daysWithoutValue))}</span>`:''}</td>
+        <td>${item.days.length?item.days.map(day_=>`${esc(day(day_.date))}: ${metricValue(day_)}`).join('<br>'):'—'}</td></tr>`).join('');
+      const list=items=>(items||[]).length?`<ul>${items.map(line=>`<li>${esc(line)}</li>`).join('')}</ul>`:'';
+      body.innerHTML=`<p class="demand-meta">Организация ${esc(metrics.organizationId)} · филиал ${esc(metrics.branchId)} · период ${esc(day(metrics.period.from))} — ${esc(day(metrics.period.to))}</p>
+        ${withData.length?`<div class="demand-table-wrap" tabindex="0" aria-label="Показатели компании, таблица прокручивается по горизонтали"><table class="demand-table"><thead><tr><th scope="col">Показатель</th><th scope="col">Итог за период</th><th scope="col">Диапазон по дням</th><th scope="col">Дней со значением из дней периода</th><th scope="col">По дням</th></tr></thead><tbody>${rows}</tbody></table></div>`
+          :'<p>За выбранный период загруженных значений нет. Это не ноль показов, а отсутствие загруженных отчётов.</p>'}
+        <h4>Покрытие</h4><ul class="demand-coverage">
+          <li>Дней в периоде: ${esc(String(coverage.expectedDays??0))}, из них с измерениями: ${esc(String((coverage.datesWithValue||[]).length))}${(coverage.dates||[]).length>(coverage.datesWithValue||[]).length?` (ещё ${esc(String((coverage.dates||[]).length-(coverage.datesWithValue||[]).length))} дат загружены с пустыми значениями)`:''}</li>
+          <li>Показателей с данными: ${esc(String(coverage.metricsWithData??0))} из ${esc(String(coverage.metricsTotal??0))}</li>
+          <li>Известных значений: ${esc(String(coverage.knownValues??0))} из ${esc(String(coverage.valuesRead??0))} прочитанных строк, из них измеренных нулей: ${esc(String(coverage.zeroValues??0))}</li>
+          <li>Отчётов действующих: ${esc(String(coverage.reportsActive??0))}, заменённых прежними версиями: ${esc(String(coverage.reportsSuperseded??0))}</li>
+          <li>Даты снятия: ${(coverage.capturedDates||[]).length?esc((coverage.capturedDates||[]).map(day).join(', ')):'—'} · точное время снятия ${coverage.capturedAtKnown?'известно':'известно не для всех отчётов'}</li>
+          <li>Часовой пояс отчётов ${coverage.timezoneKnown?'известен':'неизвестен: даты оставлены как в источнике'}</li>
+        </ul><p class="demand-note">${esc(coverage.note||'')}</p>
+        ${summary.visible?`<h4>Что видно</h4>${list(summary.visible)}`:''}
+        ${summary.cannotConclude?`<h4>Чего пока нельзя заключить</h4>${list(summary.cannotConclude)}`:''}
+        ${summary.nextStep?`<h4>Следующий шаг</h4>${list(summary.nextStep)}`:''}
+        <p class="demand-note">${esc(metrics.note||'')}</p>`;
+      get('metrics-history').innerHTML=(metrics.history||[]).length
+        ?'<ul>'+metrics.history.map(item=>`<li>${esc(item.reportKindLabel)} · ${esc(range(item))} · снято ${esc(day(item.capturedDate))}${item.capturedAtKnown?' в '+esc(instant(item.capturedAt)):' (точное время неизвестно)'} · ${esc(item.sourceKindLabel)} · версия ${esc(String(item.version))}${item.supersededBy?' · заменён более поздней загрузкой':''}${item.originalFilename?' · файл '+esc(item.originalFilename):''}${item.scopeNoteLabel?'<br>'+esc(item.scopeNoteLabel):''}<br>${link(item.sourceUrl,'Открыть источник в кабинете')}</li>`).join('')+'</ul>'
+        :'<p>Загрузок ещё не было.</p>';
+    }
+    async function refreshMetrics(current) {
+      const from=get('metrics-from').value,to=get('metrics-to').value;
+      if(!date(from)||!date(to)||from>to){metricsStatus('Укажите период: дата начала не позже даты конца.');return;}
+      const result=await ctx.apiJson('/content/crm/platform-demand/company-metrics?companyCode='+encodeURIComponent(company)+'&from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to));
+      if(!current())return;
+      if(String(result.companyCode||'').toLowerCase()!==company.toLowerCase())throw Error('WRONG_COMPANY');
+      metrics=result;drawMetrics();metricsStatus('Показаны загруженные показатели за выбранный период.');
+    }
     async function load(code) {
       company=String(code||'');epoch++;busy=false;data=null;dataset=null;get('json').value='';clearPreview();get('settings-form').reset();get('source-links').replaceChildren();get('dataset').replaceChildren();get('report').replaceChildren();get('history').replaceChildren();get('category').replaceChildren();get('reason').value='';get('expected').textContent='';get('example').textContent='';get('import').open=false;
+      metrics=null;clearMetricsPreview();get('metrics-file').value='';get('metrics-body').replaceChildren();get('metrics-history').replaceChildren();metricsStatus('');
+      const today=new Date(),shift=new Date(today.getTime()-29*86400000);
+      get('metrics-to').value=today.toISOString().slice(0,10);get('metrics-from').value=shift.toISOString().slice(0,10);
+      get('metrics-import').hidden=!editable();
       get('company').textContent=ctx.identity?.companies?.find(item=>String(item.id)===company)?.name||company;
       if(!company||!allowed(ctx)){status('Выберите доступную компанию.');controls();return;}
-      await run('Загружаем сохранённые отчёты компании…',async current=>{await refreshData(current);if(current())status('Показаны сохранённые отчёты выбранной организации.');});
+      await run('Загружаем сохранённые отчёты компании…',async current=>{await refreshData(current);if(!current())return;
+        status('Показаны сохранённые отчёты выбранной организации.');
+        // Показатели компании доступны только после подтверждённого филиала; иначе блок честно об этом говорит.
+        if(data?.settings?.branchConfirmed)await refreshMetrics(current);
+        else{metrics=null;drawMetrics();metricsStatus('Укажите филиал организации в настройках 2ГИС: показатели компании снимаются по конкретному филиалу.');}});
     }
     get('refresh').addEventListener('click',()=>void load(company));
-    get('settings-form').addEventListener('input',clearPreview);
+    get('settings-form').addEventListener('input',()=>{clearPreview();clearMetricsPreview();});
     get('settings-form').addEventListener('submit',event=>{event.preventDefault();if(!editable()||!data||!get('settings-form').reportValidity())return;
       const body={revision:data.settings.revision};for(const key of ['organizationId','organizationName','city','cabinetUrl'])body[key]=get('settings-form').elements[key].value.trim();
+      // Филиал отправляется всегда, в том числе пустой: пустая строка — это явная очистка.
+      body.branchId=get('settings-form').elements.branchId.value.trim();
       if(!/^[1-9]\d{0,19}$/.test(body.organizationId)||!validSource(body.cabinetUrl,body.organizationId)){status('Укажите ID и ссылку account.2gis.com/orgs/ID/ для одной организации.');return;}
-      clearPreview();void run('Сохраняем организацию…',async current=>{await api('/settings','PUT',body);if(!current())return;await refreshData(current);if(current())status('Организация сохранена для выбранной компании. Отчёты другой организации не смешиваются с ней.');},true);
+      if(body.branchId&&!/^[1-9]\d{0,19}$/.test(body.branchId)){status('ID филиала — число, либо оставьте поле пустым.');return;}
+      clearPreview();
+      /* Настройки изменились — прежние предпросмотр и показатели относятся к прежнему филиалу
+         и больше не действительны. Показатели перечитываются только для подтверждённого филиала. */
+      clearMetricsPreview();metrics=null;drawMetrics();get('metrics-file').value='';
+      void run('Сохраняем организацию…',async current=>{await api('/settings','PUT',body);if(!current())return;await refreshData(current);if(!current())return;
+        status('Организация сохранена для выбранной компании. Отчёты другой организации не смешиваются с ней.');
+        if(data?.settings?.branchConfirmed)await refreshMetrics(current);
+        else{metrics=null;drawMetrics();metricsStatus('Укажите филиал организации в настройках 2ГИС: показатели компании снимаются по конкретному филиалу.');}},true);
     });
     get('json').addEventListener('input',clearPreview);get('confirm').addEventListener('change',controls);
     get('import-form').addEventListener('submit',event=>{event.preventDefault();if(busy||!editable()||!data)return;clearPreview();
@@ -137,6 +211,46 @@
     get('dataset').addEventListener('change',()=>{const id=get('dataset').value;if(!id)return;dataset=null;drawReport();void run('Загружаем выбранный отчёт…',async current=>{
       const result=await api('/datasets/'+encodeURIComponent(id));if(!current())return;const item=result.dataset;if(!item||item.organizationId!==data.settings.organizationId||item.organizationName!==data.settings.organizationName||item.city!==data.settings.city)throw Error('WRONG_ORGANIZATION');dataset=item;drawReport();drawCategories();status('Выбранный отчёт загружен.');
     });});
+    get('metrics-period').addEventListener('submit',event=>{event.preventDefault();clearMetricsPreview();
+      void run('Загружаем показатели компании…',async current=>{await refreshMetrics(current);});});
+    get('metrics-file').addEventListener('change',()=>{
+      clearMetricsPreview();
+      const file=get('metrics-file').files&&get('metrics-file').files[0];
+      if(!file||!editable()||!data)return;
+      if(file.size>5*1024*1024){metricsStatus('Файл слишком большой: ожидается подготовленный отчёт, а не выгрузка целиком.');return;}
+      void run('Проверяем файл отчётов…',async current=>{
+        let parsed;
+        try{parsed=JSON.parse(await readText(file));}catch(_){if(current())metricsStatus('Файл не распознан: это должен быть подготовленный файл отчётов 2ГИС.');return;}
+        if(!current())return;
+        const reports=Array.isArray(parsed)?parsed:parsed&&Array.isArray(parsed.reports)?parsed.reports:null;
+        if(!reports||!reports.length){metricsStatus('В файле нет отчётов.');return;}
+        const result=await ctx.apiJson('/content/crm/platform-demand/company-metrics/preview?companyCode='+encodeURIComponent(company),ctx.csrfOptions('POST',{reports}));
+        if(!current())return;
+        if(String(result.companyCode||'').toLowerCase()!==company.toLowerCase())throw Error('WRONG_COMPANY');
+        /* Подтверждение привязано к состоянию данных (dataRevision) и к отпечатку именно
+           показанного пакета: устаревшее подтверждение сервер отклонит целиком. */
+        metricsPreview={company,reports,settingsRevision:result.settingsRevision,dataRevision:result.dataRevision,
+          packageHash:result.packageHash,requiresConfirmation:result.requiresConfirmation};
+        get('metrics-preview').innerHTML=`<p><strong>Будет загружено в компанию: ${esc(data.company.name)}</strong> · отчётов: ${esc(String(result.reports.length))}</p>
+          <ul>${result.reports.map(item=>`<li>${esc(item.reportKindLabel)} · ${esc(range(item))} · значений ${esc(String(item.rowCount))}, из них известных ${esc(String(item.knownValues))}, нулей ${esc(String(item.zeroValues))} · снято ${esc(day(item.capturedDate))}${item.capturedAtKnown?'':' (точное время неизвестно)'} · ${esc(item.sourceKindLabel)}${item.alreadyImported?'<br>Эти числа уже действуют с теми же условиями: повторная загрузка ничего не добавит.':''}${(item.conditionChanges||[]).length?'<br>Изменились условия или подтверждение источника: '+item.conditionChanges.map(change=>esc(change.label)+' — было «'+esc(change.previous)+'», станет «'+esc(change.next)+'»').join('; ')+(item.unchangedValuesWithNewConditions?`. Значений с теми же числами: ${esc(String(item.unchangedValuesWithNewConditions))}.`:''):''}${item.scopeNoteLabel?'<br>'+esc(item.scopeNoteLabel):''}${item.conflictCount?`<br>Совпадающих дат: ${esc(String(item.conflictCount))}, из них изменится значений: ${esc(String(item.changedValues))}`:''}</li>`).join('')}</ul>
+          ${result.requiresConfirmation?`<p class="demand-warning">${esc(result.note)}</p>${result.conditionsOnly?'':`<ul>${result.reports.flatMap(item=>item.conflicts.filter(change=>change.changed).map(change=>`<li>${esc(day(change.date))} · ${esc(change.metricLabel)}: было ${change.previousValue===null?'нет данных':esc(number(change.previousValue))} → станет ${change.nextValue===null?'нет данных':esc(number(change.nextValue))}</li>`)).join('')}</ul>`}`:`<p class="demand-note">${esc(result.note)}</p>`}`;
+        get('metrics-preview').hidden=false;get('metrics-preview').focus();
+        metricsStatus('Предпросмотр готов. Ничего ещё не загружено.');controls();
+      },true);
+    });
+    get('metrics-save').addEventListener('click',()=>{
+      if(!metricsPreview||!editable()||metricsPreview.company!==company)return;
+      void run('Загружаем показатели компании…',async current=>{
+        const result=await ctx.apiJson('/content/crm/platform-demand/company-metrics/import?companyCode='+encodeURIComponent(company),
+          ctx.csrfOptions('POST',{settingsRevision:metricsPreview.settingsRevision,dataRevision:metricsPreview.dataRevision,
+            packageHash:metricsPreview.packageHash,confirmReplace:metricsPreview.requiresConfirmation,reports:metricsPreview.reports}));
+        if(!current())return;
+        clearMetricsPreview();get('metrics-file').value='';
+        await refreshData(current);if(!current())return;
+        await refreshMetrics(current);if(!current())return;
+        metricsStatus(result.imported.length?`Загружено отчётов: ${result.imported.length}. Повторно уже загруженные не добавлялись.`:'Новых отчётов не было: эти значения уже загружены.');
+      },true);
+    });
     get('category').addEventListener('change',()=>{const item=data?.categories?.items?.find(item=>item.category===get('category').value);get('classification').value=item?.classification||'unclassified';get('reason').value=item?.reason||'';controls();});
     get('category-form').addEventListener('submit',event=>{event.preventDefault();if(!editable()||!data||!get('category-form').reportValidity())return;
       const body={revision:data.categories.revision,items:[{category:get('category').value,classification:get('classification').value,reason:get('reason').value.trim()}]};

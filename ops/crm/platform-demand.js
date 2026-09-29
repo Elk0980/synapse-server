@@ -43,6 +43,10 @@ function createPlatformDemand(db,{now=()=>Date.now()}={}) {
     CREATE TABLE IF NOT EXISTS platform_demand_audit (
       id INTEGER PRIMARY KEY AUTOINCREMENT,company_code TEXT NOT NULL,action TEXT NOT NULL,payload TEXT NOT NULL,
       actor_id INTEGER,actor_name TEXT,created_at TEXT NOT NULL);`);
+  // Филиал нужен фактическим показателям компании; спрос по рубрикам работает и без него,
+  // поэтому колонка добавляется к уже существующим настройкам и по умолчанию пуста.
+  if(!db.prepare("SELECT 1 FROM pragma_table_info('platform_demand_settings') WHERE name='branch_id'").get())
+    db.exec("ALTER TABLE platform_demand_settings ADD COLUMN branch_id TEXT NOT NULL DEFAULT ''");
   const stamp=()=>new Date(now()).toISOString();
   const transact=fn=>{db.exec('BEGIN IMMEDIATE');try{const result=fn();db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');throw error;}};
   const audit=(code,action,body,actor)=>db.prepare('INSERT INTO platform_demand_audit(company_code,action,payload,actor_id,actor_name,created_at) VALUES(?,?,?,?,?,?)').run(code,action,JSON.stringify(body),actor?.userId??null,actor?.userName??null,stamp());
@@ -53,7 +57,8 @@ function createPlatformDemand(db,{now=()=>Date.now()}={}) {
   }
   const settingsRow=code=>db.prepare('SELECT * FROM platform_demand_settings WHERE company_code=?').get(code);
   const settingsDto=row=>({revision:row?.revision??0,configured:Boolean(row),organizationId:row?.organization_id??'',
-    organizationName:row?.organization_name??'',city:row?.city??'',cabinetUrl:row?.cabinet_url??'',collectionMode:'manual',canSync:false});
+    organizationName:row?.organization_name??'',city:row?.city??'',cabinetUrl:row?.cabinet_url??'',
+    branchId:row?.branch_id??'',branchConfirmed:Boolean(row?.branch_id),collectionMode:'manual',canSync:false});
   function identity(settings,row) {return settings&&row.organization_id===settings.organization_id&&row.organization_name===settings.organization_name&&row.city===settings.city;}
   function rawRows(code,settings) {
     return settings?db.prepare(`SELECT * FROM platform_demand_datasets WHERE company_code=? AND organization_id=? AND organization_name=? AND city=?
@@ -112,11 +117,18 @@ function createPlatformDemand(db,{now=()=>Date.now()}={}) {
     if(!row||!identity(settingsRow(current.code),row))fail('NOT_FOUND',404);return {dataset:datasetDto(row)};
   }
   function saveSettings(code,body,actor) {
-    const current=company(code);object(body,['revision','organizationId','organizationName','city','cabinetUrl']);revision(body.revision);
+    const current=company(code);object(body,['revision','organizationId','organizationName','city','cabinetUrl','branchId']);revision(body.revision);
     const org=organization(body.organizationId),name=text(body.organizationName,300),city=text(body.city,150),url=sourceUrl(body.cabinetUrl,org);
+    /* Филиал необязателен: без него остаётся прежнее поведение, с ним открываются фактические
+       показатели компании. Старый клиент не присылает branchId вовсе — тогда уже сохранённый
+       филиал сохраняется, но только пока организация та же. Явная пустая строка очищает филиал;
+       смена организации переносить прежний филиал не может: это был бы филиал чужой организации. */
+    const branchGiven=body.branchId!==undefined;
+    const branch=!branchGiven||body.branchId===null||body.branchId===''?'':organization(body.branchId);
     return transact(()=>{const previous=settingsRow(current.code);if((previous?.revision??0)!==body.revision)fail('REVISION_CONFLICT',409);
-      db.prepare(`INSERT INTO platform_demand_settings(company_code,organization_id,organization_name,city,cabinet_url,revision,updated_at) VALUES(?,?,?,?,?,1,?)
-        ON CONFLICT(company_code) DO UPDATE SET organization_id=excluded.organization_id,organization_name=excluded.organization_name,city=excluded.city,cabinet_url=excluded.cabinet_url,revision=platform_demand_settings.revision+1,updated_at=excluded.updated_at`).run(current.code,org,name,city,url,stamp());
+      const kept=!branchGiven&&previous&&previous.organization_id===org?(previous.branch_id||''):branch;
+      db.prepare(`INSERT INTO platform_demand_settings(company_code,organization_id,organization_name,city,cabinet_url,branch_id,revision,updated_at) VALUES(?,?,?,?,?,?,1,?)
+        ON CONFLICT(company_code) DO UPDATE SET organization_id=excluded.organization_id,organization_name=excluded.organization_name,city=excluded.city,cabinet_url=excluded.cabinet_url,branch_id=excluded.branch_id,revision=platform_demand_settings.revision+1,updated_at=excluded.updated_at`).run(current.code,org,name,city,url,kept,stamp());
       audit(current.code,'settings',body,actor);return {settings:settingsDto(settingsRow(current.code))};});
   }
   function importDataset(code,body,actor) {
