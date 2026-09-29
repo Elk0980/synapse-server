@@ -49,6 +49,7 @@ const STATES = {unknown:"Не подтверждено", confirmed:"Подтве
 let controller;
 function create(container, context) {
   let ctx = context, companyCode = "", saved = null, rows = {}, busy = false, epoch = 0, baseline = null, baselineRaw = null;
+  let catalogImport=null;
   const drafts = new Map();
   const companies = (ctx.identity.companies || []).map(item => ({code:String(item.id), name:item.name || item.id}));
   container.classList.add("company-information-view");
@@ -57,6 +58,13 @@ function create(container, context) {
     <div class="company-information-toolbar"><label for="information-company">Компания</label><select id="information-company">${companies.map(item => `<option value="${esc(item.code)}">${esc(item.name)}</option>`).join("")}</select>
       <button class="plain-button" id="information-refresh" type="button">Обновить сведения</button></div>
     <p id="information-status" role="status" aria-live="polite"></p>
+    <section class="card"><h3>Импорт проверенного каталога</h3><p>Файл содержит услуги и источники. Существующие услуги сохраняются; отличающиеся записи с тем же идентификатором требуют отдельной сверки.</p>
+      <label>Файл каталога<input id="information-catalog-file" type="file" accept="application/json,.json"></label>
+      <button class="plain-button" id="information-catalog-preview" type="button">Проверить файл</button>
+      <div id="information-catalog-preview-data"></div>
+      <label class="information-catalog-review"><input id="information-catalog-reviewed" type="checkbox">Сверены компания, цены, количество процедур и источники</label>
+      <button class="plain-button" id="information-catalog-import" type="button" disabled>Добавить проверенные услуги</button>
+      <p id="information-catalog-status" role="status"></p></section>
     <section class="card" id="information-platform-links" hidden><h3>Сохранённые страницы компании и кабинеты</h3><p>Страница компании видна клиентам. Кабинет площадки откроется отдельно; вход и права проверяются на самой площадке.</p><ul id="information-platform-link-list"></ul></section>
     <form id="information-form"><section class="card information-fields" aria-label="Основные сведения">
     ${FIELDS.map(([key,label,max,type]) => `<label for="information-${key}">${label}<span class="information-field-state" data-field-state="${key}"></span>${type === "textarea" ? `<textarea id="information-${key}" maxlength="${max}" rows="${key === "description" ? 5 : 2}"></textarea>` : `<input id="information-${key}" type="${type || "text"}" maxlength="${max}"${key === "name" ? " required" : ""}${key === "timezone" ? ' placeholder="Asia/Irkutsk"' : ""}>`}</label>`).join("")}
@@ -92,6 +100,8 @@ function create(container, context) {
     get("information-facts-form").querySelectorAll("input,textarea,button").forEach(node=>{node.disabled=busy||!saved||!editable();});
     get("information-fact-select").disabled=busy||!saved;
     get("information-fact-history").disabled=busy||!saved?.facts?.length;
+    for(const id of ['information-catalog-file','information-catalog-preview','information-catalog-reviewed'])get(id).disabled=busy||!saved||!editable();
+    get('information-catalog-import').disabled=busy||!saved||!editable()||!catalogImport||!get('information-catalog-reviewed').checked;
   };
   const renderRows = kind => {
     get("information-" + kind).innerHTML = rows[kind].map((item,index) => `<fieldset data-row="${kind}" data-index="${index}"><legend>${({socials:"Ссылка",services:"Услуга",promotions:"Акция",materials:"Материал"})[kind]} ${index + 1}</legend>${kind==="materials"&&imageUrl(item.url)?`<a href="${esc(imageUrl(item.url))}" target="_blank" rel="noopener noreferrer"><img class="information-thumbnail" src="${esc(imageUrl(item.url))}" alt="${esc(item.title||"Материал")}" loading="lazy"></a>`:""}<div class="information-row-fields">${ROW_FIELDS[kind].map(([key,label,type]) => {
@@ -165,6 +175,8 @@ function create(container, context) {
     showFact(); renderDiagnostics(data); updateControls();
   };
   const load = async code => {
+    catalogImport=null;get('information-catalog-file').value='';get('information-catalog-reviewed').checked=false;
+    get('information-catalog-preview-data').replaceChildren();get('information-catalog-status').textContent='';
     stash(); get("information-photo").value=""; companyCode = code; const version = ++epoch;
     saved = null; busy = true; form.hidden=true; get("information-company").value = code; updateControls();
     get('information-fact-select').replaceChildren();showFact();
@@ -229,6 +241,38 @@ function create(container, context) {
     finally {if (version === epoch) {busy=false; updateControls();}}
   });
   get("information-company").addEventListener("change", () => {void load(get("information-company").value);});
+  const catalogStatus=text=>{get('information-catalog-status').textContent=text;};
+  get('information-catalog-reviewed').addEventListener('change',updateControls);
+  get('information-catalog-file').addEventListener('change',()=>{catalogImport=null;get('information-catalog-reviewed').checked=false;get('information-catalog-preview-data').replaceChildren();updateControls();});
+  get('information-catalog-preview').addEventListener('click',async()=>{
+    if(busy||!saved||!editable())return;
+    if(JSON.stringify(rawValues())!==JSON.stringify(baselineRaw)){catalogStatus('Сначала сохраните или отмените изменения формы.');return;}
+    const file=get('information-catalog-file').files?.[0];if(!file||file.size>500000){catalogStatus('Выберите JSON-файл каталога до 500 КБ.');return;}
+    const version=epoch;busy=true;catalogImport=null;get('information-catalog-reviewed').checked=false;updateControls();catalogStatus('Проверяем файл…');
+    try{
+      const data=JSON.parse(await file.text());if(version!==epoch)return;
+      if(!data||data.companyCode!==companyCode||Object.keys(data).some(key=>!['companyCode','clientImportId','entries'].includes(key)))throw Error('Компания или формат файла не совпадают');
+      const body={...data,revision:saved.revision};const preview=await api('/catalog-preview','POST',body);if(version!==epoch)return;
+      if(preview.companyCode!==companyCode||!Array.isArray(preview.entries))throw Error('Некорректный ответ проверки');
+      catalogImport=body;
+      get('information-catalog-preview-data').innerHTML=`<p>Компания: <strong>${esc(companyCode)}</strong>. Добавится: ${esc(preview.added)}. Уже есть: ${esc(preview.unchanged)}.</p><ol>`+
+        preview.entries.map(entry=>`<li><strong>${esc(entry.service.title)}</strong> — ${esc(entry.service.price)} ${esc(entry.service.currency)} за ${esc(entry.service.procedureCount)} процедур${entry.service.durationMinutes?' · одна процедура '+esc(entry.service.durationMinutes)+' мин':''}. Источник: ${esc(entry.source)}; ${esc(entry.sourceRef)}; ${esc(entry.checkedAt)}</li>`).join('')+'</ol>';
+      catalogStatus(preview.duplicate?'Этот импорт уже применён. Повтор не добавит услуги.':'Сверьте услуги и источники, затем отметьте проверку.');
+    }catch{if(version===epoch){catalogImport=null;catalogStatus('Файл не прошёл проверку: проверьте компанию, услуги, источники и текущую версию каталога.');}}
+    finally{if(version===epoch){busy=false;updateControls();}}
+  });
+  get('information-catalog-import').addEventListener('click',async()=>{
+    if(busy||!saved||!editable()||!catalogImport||!get('information-catalog-reviewed').checked)return;
+    if(JSON.stringify(rawValues())!==JSON.stringify(baselineRaw)){catalogStatus('Форма изменилась после проверки файла. Сохраните или отмените изменения.');return;}
+    const version=epoch;busy=true;updateControls();catalogStatus('Сохраняем услуги и источники…');
+    try{
+      const data=await api('/catalog-import','POST',catalogImport);if(version!==epoch)return;
+      if(data.companyCode!==companyCode)throw Error('Wrong company');
+      drafts.delete(companyCode);render(data);catalogImport=null;get('information-catalog-reviewed').checked=false;
+      catalogStatus(data.importResult?.duplicate?'Импорт уже был сохранён. Дубликаты не созданы.':'Услуги и источники сохранены. Существующие услуги сохранены.');
+    }catch{if(version===epoch)catalogStatus('Сохранение не подтверждено. Повтор использует тот же идентификатор и не создаст дубли. При конфликте версии обновите сведения и проверьте файл снова.');}
+    finally{if(version===epoch){busy=false;updateControls();}}
+  });
   get("information-refresh").addEventListener("click", () => {void load(companyCode);});
   get("information-upload").addEventListener("click",async()=>{
     if(busy||!saved||!editable())return;const file=get("information-photo").files?.[0];

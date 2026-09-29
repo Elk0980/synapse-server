@@ -2534,13 +2534,18 @@ async function route(request, response) {
   if (await handleReviews(request,response,url,cors)) return;
   if (await handlePlatformDemand(request,response,url,cors)) return;
   if (await handleSocialStats(request,response,url,cors)) return;
-  if (['/company-information','/company-information/check','/company-information/facts','/company-information/knowledge'].includes(url.pathname)) {
+  if (['/company-information','/company-information/check','/company-information/facts','/company-information/knowledge','/company-information/catalog-preview','/company-information/catalog-import'].includes(url.pathname)) {
     const permission = request.method === 'GET' ? 'company-information.view' : 'company-information.edit';
     const {identity,company} = companyModuleContext(request,url.searchParams.get('companyCode'),permission);
     let result;
     if (url.pathname === '/company-information' && request.method === 'GET') result = companyInformation.get(company.code);
     else if (url.pathname === '/company-information/knowledge' && request.method === 'GET') result = companyInformation.knowledge(company.code);
     else if (url.pathname === '/company-information/facts' && request.method === 'GET') result = companyInformation.factHistory(company.code,url.searchParams.get('key'));
+    else if (url.pathname === '/company-information/catalog-preview' && request.method === 'POST') result=companyInformation.importPreview(company.code,await readJson(request));
+    else if (url.pathname === '/company-information/catalog-import' && request.method === 'POST') {
+      result=companyInformation.importCatalog(company.code,await readJson(request),identity.userId);
+      if(result.importResult.added)autoposting.invalidate(company.code);
+    }
     else if (url.pathname === '/company-information' && request.method === 'PUT') {
       const body=await readJson(request);
       result = companyInformation.save(company.code,body,identity.userId);

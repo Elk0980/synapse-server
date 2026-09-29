@@ -9,6 +9,9 @@
   border-radius:10px; font:inherit; font-size:16px; color:var(--text,#f4f0eb); background:var(--surface-soft,#181513);
 }
 .company-information-view textarea { resize:vertical; }
+.company-information-view .information-catalog-review { display:flex; align-items:center; gap:12px; margin:16px 0; }
+.company-information-view .information-catalog-review input { width:22px; height:22px; min-height:22px; flex:0 0 22px; padding:0; }
+#information-catalog-preview-data { max-height:420px; overflow:auto; }
 .company-information-view button { min-height:48px; font-size:16px; white-space:normal; }
 .information-field-state,.information-note { color:var(--muted,#b9afa7); font-size:14px; }
 .information-rows fieldset { margin:0 0 18px; padding:18px; border:1px solid var(--line,rgba(244,240,235,.12)); border-radius:12px; min-width:0; }
