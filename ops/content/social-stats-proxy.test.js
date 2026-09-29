@@ -89,6 +89,35 @@ test('аналитика соцсетей через прокси: analytics.vie
  const refrozen=await through('owner',baselineRoute,{method:'POST',body:baselineBody});assert.equal(refrozen.body.version,2);
  assert.equal(refrozen.body.snapshot.platforms.instagram.totals.views,950);
  assert.equal((await through('analyst',baselineRoute+'&version=1')).body.latest.snapshot.platforms.instagram.totals.views,900,'первая версия неизменна');
+ /* Выводы «Что видно по данным»: только чтение уже сохранённого. Права — те же, что у
+    чтения аналитики соцсетей (analytics.view в своей компании); новых прав не появляется. */
+ const insightsRoute='/social-stats/insights?companyCode=avokado&from=2026-09-17&to=2026-09-17';
+ assert.equal((await through('unrelated',insightsRoute)).status,403);
+ assert.equal((await through('crmreader',insightsRoute)).status,403,'crm.view выводов не читает');
+ assert.equal((await through('analyst','/social-stats/insights?companyCode=alvi')).status,403,'чужая компания');
+ const insights=await through('analyst',insightsRoute);
+ assert.equal(insights.status,200,JSON.stringify(insights.body));
+ assert.equal(insights.body.companyCode,'avokado');
+ assert.equal(insights.body.requestedPeriod.from,'2026-09-17');
+ assert.equal(insights.body.comparisonPeriod.to,'2026-09-16');
+ assert.match(insights.headers.get('cache-control'),/no-store/);
+ // Семь площадок названы всегда: MAX — с причиной отсутствия источника, а не нулём.
+ for (const platform of ['instagram','tiktok','youtube','vk','telegram','max'])
+  assert.ok(insights.body.observations.some(item=>item.platform===platform),platform+' назван');
+ const max=insights.body.observations.find(item=>item.platform==='max');
+ assert.equal(max.ruleId,'absent.no_source');
+ assert.match(max.text,/измерений нет/);
+ // 2ГИС отдельным блоком: источник не настроен — честная причина, соцсети не ломаются.
+ assert.ok(Array.isArray(insights.body.companyMetrics));
+ assert.equal(insights.body.companyMetrics[0].platform,'gis');
+ assert.ok(insights.body.limitations.some(line=>/Охват не суммируется/.test(line)));
+ assert.doesNotMatch(JSON.stringify(insights.body),/token|Bearer|op_[a-f0-9]/i);
+ // Чтение выводов ничего не собирает и не фиксирует: журнал запусков и версии замера не выросли.
+ const runsBefore=(await through('analyst','/social-stats?companyCode=avokado&from=2026-09-17&to=2026-09-17')).body.runs.length;
+ await through('analyst',insightsRoute);
+ assert.equal((await through('analyst','/social-stats?companyCode=avokado&from=2026-09-17&to=2026-09-17')).body.runs.length,runsBefore,'выводы сбор не запускают');
+ assert.equal((await through('owner','/social-stats/insights?companyCode=avokado',{method:'POST',body:{}})).status,405);
+
  /* Аналитический доступ Onlypult: отдельный owner-only раздел. Ключ не возвращается ни
     одним маршрутом, чужая компания не видна, список профилей клиенту не показывается.
     Живых обращений к источнику здесь нет: сеть наружу заблокирована фикстурой. */
@@ -130,6 +159,16 @@ test('аналитика соцсетей через прокси: analytics.vie
  const afterRemoval=await through('analyst','/social-stats?companyCode=avokado&from=2026-09-17&to=2026-09-17');
  assert.equal(afterRemoval.body.platforms.instagram.activeInterval,'Asia/Irkutsk');
  assert.deepEqual(afterRemoval.body.platforms.instagram.otherIntervals.map(g=>[g.timezone,g.totals.views]),[['Asia/Bangkok',950]],'история сохранена в своей системе суток');
+ /* Защита от отката чужих принятых функций: тот же экземпляр CRM обязан продолжать
+    отдавать маршруты координации задач и истории подтверждённых фактов компании.
+    Проверяется запущенный сервер, а не только текст файла. */
+ const coordination=await direct('/coordination/tasks?companyCode=avokado');
+ assert.equal(coordination.status,200,'маршрут /coordination/tasks на месте: '+JSON.stringify(coordination.body));
+ assert.ok(coordination.body&&typeof coordination.body==='object');
+ const facts=await direct('/company-information/facts?companyCode=avokado&key=phone');
+ assert.equal(facts.status,200,'маршрут /company-information/facts на месте: '+JSON.stringify(facts.body));
+ assert.notEqual(facts.body?.error,'Адрес не найден');
+
  // служебная сводка плана из кабинета недоступна, по ключу сервиса — доступна
  assert.equal((await through('owner','/autoposting/plan-summary?companyCode=avokado')).status,404);
  assert.equal((await direct('/autoposting/plan-summary?companyCode=avokado')).status,200);

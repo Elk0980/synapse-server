@@ -37,6 +37,11 @@
 .social-baseline-posts a { overflow-wrap:anywhere; }
 .social-baseline-posts .social-note { margin:5px 0; }
 .social-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; margin:12px 0; }
+/* Выводы: на широком экране столбцы, на телефоне — короткие широкие карточки в один столбец. */
+.social-insight-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; margin:12px 0; }
+.social-insight-platform { border:1px solid var(--line,#333); border-radius:10px; padding:10px; margin:0 0 12px; }
+.social-insight-platform h3 { margin:0 0 6px; font-size:1rem; }
+.social-insight-platform li[data-comparison="not_comparable"] { border-left:3px solid var(--line,#333); padding-left:8px; }
 .social-platform h2 { margin:0 0 6px; font-size:1.05rem; }
 .social-platform[data-status="ok"], .social-platform[data-status="partial"] { border-color:var(--accent,#7fd); }
 .social-platform[data-status="missing_access"], .social-platform[data-status="failed"] { border-color:var(--red,#ff9c9c); }
@@ -78,7 +83,7 @@
   .social-baseline-assessment { padding:12px; }
   .social-toolbar { flex-direction:column; align-items:stretch; }
   .social-toolbar input, .social-toolbar button { width:100%; min-height:44px; }
-  .social-grid, .social-metrics { grid-template-columns:1fr; }
+  .social-grid, .social-metrics, .social-insight-grid { grid-template-columns:1fr; }
   .social-platform button { width:100%; min-height:44px; }
   .social-baseline-grid, .social-baseline-platform .social-metrics { grid-template-columns:1fr; }
   .social-baseline-platform { padding:10px; }

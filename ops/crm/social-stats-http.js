@@ -1,5 +1,6 @@
 'use strict';
 const { SOCIAL_STATS_ERRORS } = require('./social-stats');
+const { previousPeriod } = require('./social-insights');
 /* Маршруты аналитики соцсетей: чтение — analytics.view, настройки/импорт/сбор — crm.edit (настройки и импорт — только владелец). */
 /* Отказы аналитического источника переводятся в HTTP здесь. Сообщения общие: ни ключа,
    ни адреса с ключом в строке запроса, ни текста ответа источника наружу не выходит. */
@@ -21,7 +22,11 @@ const ANALYTICS_HTTP = Object.freeze({
   PROFILE_CHANGED: [409, 'Ответ источника относится к другому аналитическому профилю.'],
   ACCOUNT_CHANGED: [409, 'Ответ источника относится к другому аккаунту площадки.'],
 });
-function createSocialStatsHandler({ stats, baselines, analytics = null, companyModuleContext, readJson, send }) {
+/* companyMetrics — уже существующий сервис загруженных отчётов 2ГИС. Он подключается сюда
+   только для чтения сводки под ТЕМИ ЖЕ правами, что и его собственный маршрут
+   /platform-demand/company-metrics (чтение — analytics.view в своей компании): нового
+   доступа и новых прав здесь не появляется, хранилище не дублируется. */
+function createSocialStatsHandler({ stats, baselines, analytics = null, companyMetrics = null, companyModuleContext, readJson, send }) {
   return async function handle(request, response, url, cors = {}) {
     if (!/^\/social-stats(?:\/|$)/.test(url.pathname)) return false;
     const headers = { ...cors, 'cache-control': 'no-store' };
@@ -41,6 +46,21 @@ function createSocialStatsHandler({ stats, baselines, analytics = null, companyM
       } else if (url.pathname === '/social-stats/baseline' && request.method === 'POST') {
         if (!ownerOnly()) return true;
         result = baselines.freeze(company.code, await readJson(request), identity);
+      } else if (url.pathname === '/social-stats/insights' && readOnly) {
+        /* Только чтение уже сохранённого: сбор не запускается, импорт не делается,
+           замер «ДО» не фиксируется. 2ГИС и выбранная версия замера подставляются как есть. */
+        const to = url.searchParams.get('to') || stats.localDay(Date.now(), 'Asia/Bangkok');
+        const from = url.searchParams.get('from') || new Date(Date.parse(to + 'T00:00:00Z') - 29 * 86400000).toISOString().slice(0, 10);
+        const previous = previousPeriod(from, to);
+        // Отсутствие или сбой настройки 2ГИС не должен ломать выводы по соцсетям.
+        const gis = (a, b) => { try { return companyMetrics ? companyMetrics.summary(company.code, a, b) : null; } catch { return null; } };
+        let baseline = null;
+        try { baseline = baselines.get(company.code, null); } catch { baseline = null; }
+        result = stats.insights(company.code, from, to, {
+          companyMetrics: gis(from, to),
+          previousCompanyMetrics: previous ? gis(previous.from, previous.to) : null,
+          baseline,
+        });
       } else if (url.pathname === '/social-stats/accounts' && readOnly) result = stats.accounts(company.code);
       else if (url.pathname === '/social-stats/accounts' && request.method === 'PUT') { if (!ownerOnly()) return true; result = stats.saveAccounts(company.code, await readJson(request)); }
       else if (url.pathname === '/social-stats/import' && request.method === 'POST') { if (!ownerOnly()) return true; result = stats.importManual(company.code, await readJson(request), identity); }
