@@ -2522,14 +2522,16 @@ async function route(request, response) {
   if (await handleReviews(request,response,url,cors)) return;
   if (await handlePlatformDemand(request,response,url,cors)) return;
   if (await handleSocialStats(request,response,url,cors)) return;
-  if (url.pathname === '/company-information' || url.pathname === '/company-information/check') {
+  if (['/company-information','/company-information/check','/company-information/facts'].includes(url.pathname)) {
     const permission = request.method === 'GET' ? 'company-information.view' : 'company-information.edit';
     const {identity,company} = companyModuleContext(request,url.searchParams.get('companyCode'),permission);
     let result;
     if (url.pathname === '/company-information' && request.method === 'GET') result = companyInformation.get(company.code);
+    else if (url.pathname === '/company-information/facts' && request.method === 'GET') result = companyInformation.factHistory(company.code,url.searchParams.get('key'));
     else if (url.pathname === '/company-information' && request.method === 'PUT') {
-      result = companyInformation.save(company.code,await readJson(request),identity.userId);
-      autoposting.invalidate(company.code);
+      const body=await readJson(request);
+      result = companyInformation.save(company.code,body,identity.userId);
+      if(Object.keys(body.profile).length||body.factConfirmations===undefined)autoposting.invalidate(company.code);
     } else if (url.pathname === '/company-information/check' && request.method === 'POST') result = await companyInformation.check(company.code);
     else fail(405,'Метод не поддерживается');
     return send(response,200,result,{...cors,'cache-control':'no-store'});

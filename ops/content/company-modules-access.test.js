@@ -76,6 +76,16 @@ test('real content-to-CRM modules enforce assigned company permissions, trusted 
   const saved=await f.crm('PUT','/company-information?companyCode=alvi',profileBody,editor);assert.equal(saved.status,200);
   assert.equal(saved.body.profile.description,'Fixture confirmed facts');assert.equal(saved.body.history[0].actorId,saved.body.fieldStates.description.actorId);
   assert.equal((await f.crm('PUT','/company-information?companyCode=alvi',profileBody,editor)).status,409);
+  const fact=saved.body.facts.find(item=>item.key==='description');
+  const proofBody={revision:saved.body.revision,profile:{},factConfirmations:[{factId:fact.id,source:'Fixture document',sourceRef:'Document 1',checkedAt:new Date(Date.now()-1000).toISOString()}]};
+  assert.equal((await f.crm('PUT','/company-information?companyCode=alvi',proofBody,viewer)).status,403);
+  assert.equal((await f.crm('PUT','/company-information?companyCode=alvi',proofBody,{...editor,csrf:'wrong'})).status,403);
+  const proven=await f.crm('PUT','/company-information?companyCode=alvi',proofBody,editor);
+  assert.equal(proven.status,200);assert.equal(proven.body.revision,saved.body.revision);
+  assert.equal(proven.body.facts.find(item=>item.key==='description').status,'confirmed');
+  assert.equal((await f.crm('PUT','/company-information?companyCode=alvi',proofBody,editor)).status,409);
+  assert.equal((await f.crm('GET','/company-information/facts?companyCode=avokado&key=description',undefined,editor)).status,403);
+  assert.equal((await f.crm('GET','/company-information/facts?companyCode=alvi&key=description',undefined,viewer)).body.facts[0].source,'Fixture document');
   const draftBody={title:'QA draft',text:'Never send from this test',mediaUrls:[],platformIds:[],timezone:'UTC',profileRevision:saved.body.revision};
   for(const session of [none,viewer])assert.equal((await f.crm('POST','/autoposting/posts?companyCode=alvi',draftBody,session)).status,403);
   for(const csrf of [undefined,'wrong'])assert.equal((await f.crm('POST','/autoposting/posts?companyCode=alvi',draftBody,{...editor,csrf})).status,403);

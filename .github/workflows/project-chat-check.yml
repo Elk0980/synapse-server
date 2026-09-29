@@ -21,6 +21,8 @@ on:
       - 'ops/crm/autoposting*'
       - 'ops/crm/server.js'
       - 'ops/crm/task-coordination*'
+      - 'ops/crm/company-facts*'
+      - 'ops/crm/company-information*'
       - 'ops/crm/social-stats*'
       - 'ops/crm/social-baselines*'
       - 'ops/crm/platform-demand*'
@@ -45,6 +47,8 @@ on:
       - 'ops/crm/autoposting*'
       - 'ops/crm/server.js'
       - 'ops/crm/task-coordination*'
+      - 'ops/crm/company-facts*'
+      - 'ops/crm/company-information*'
       - 'ops/crm/social-stats*'
       - 'ops/crm/social-baselines*'
       - 'ops/crm/platform-demand*'
@@ -134,6 +138,10 @@ jobs:
       - name: Тесты доски координации проектов
         timeout-minutes: 10
         run: node --test ops/crm/task-coordination.test.js
+
+      - name: Тесты источников и актуальности данных компании
+        timeout-minutes: 10
+        run: node --test ops/crm/company-facts.test.js ops/crm/company-information.test.js ops/crm/company-information-check.test.js
 
       - name: Тесты сервиса контента и прав координации
         timeout-minutes: 10
