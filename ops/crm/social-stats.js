@@ -341,6 +341,13 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, logger =
      аналитики, а карточка обязана принадлежать той же компании. Пока таблиц автопостинга нет — проекции просто нет.
      contentId подтверждения — external_id карточки (идентификатор из пакета контент-плана, тот же, что владелец ставит в utm_content);
      у карточки, заведённой руками, его нет, и он не выдумывается. */
+  /* Сколько подтверждений у компании всего — та же защита по компании и is_deleted, что и при чтении строк. */
+  function receiptTotal(scope) {
+    if (!hasTable('autoposting_publication_receipts') || !hasTable('autoposting_posts')) return 0;
+    return db.prepare(`SELECT COUNT(*) n FROM autoposting_publication_receipts r
+      JOIN autoposting_posts p ON p.id=r.post_id AND p.company_id=r.company_id
+      JOIN companies c ON c.id=r.company_id WHERE c.code=? COLLATE NOCASE AND c.is_deleted=0`).get(scope.code).n;
+  }
   function receiptRows(scope) {
     if (!hasTable('autoposting_publication_receipts') || !hasTable('autoposting_posts')) return [];
     const content = db.prepare("SELECT 1 FROM pragma_table_info('autoposting_posts') WHERE name='external_id'").get() ? 'p.external_id' : "''";
@@ -364,17 +371,20 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, logger =
     for (const p of stored) {
       const key = canonicalPostKey(p.platform, p.url), same = key ? byKey.get(key) : null;
       const identity = { platformPostId: p.platform_post_id, provider: p.provider, contentId: p.content_id || '' };
+      // Служебная привязка к строке базы нужна только чтению показателей и в публичный DTO атрибуции не попадает.
+      const sourceRow = { postId: p.id, referenceId: `post:${p.id}`, platformPostId: p.platform_post_id, provider: p.provider, contentId: p.content_id || '' };
       if (same) {
         // Тот же канонический адрес, другая строка базы: один выход, несколько источников. Первая строка (свежая по дате, затем по id)
         // задаёт адрес и ссылку записи; её contentId не объявляется общим — расхождение карточек разбирается ниже списком кандидатов.
         same.identities.push(identity);
+        same.sourceRows.push(sourceRow);
         if (p.url && !same.urls.includes(p.url)) same.urls.push(p.url);
         if (p.content_id) same.storedContentIds.add(p.content_id);
         if (!same.publishedAt && p.published_at) same.publishedAt = p.published_at;
         continue;
       }
       const post = { key: `post:${p.id}`, platform: p.platform, platformPostId: p.platform_post_id, url: p.url, urls: p.url ? [p.url] : [],
-        identities: [identity], storedContentIds: new Set(p.content_id ? [p.content_id] : []), contentId: p.content_id,
+        identities: [identity], sourceRows: [sourceRow], storedContentIds: new Set(p.content_id ? [p.content_id] : []), contentId: p.content_id,
         publishedAt: p.published_at, provenance: 'stored', receipts: [], receiptContentIds: new Set() };
       posts.push(post);
       if (key) byKey.set(key, post);
@@ -393,7 +403,7 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, logger =
       if (post) { if (post.provenance !== 'external_receipt') { post.provenance = 'stored_with_receipt'; merged += 1; } }
       else {
         post = { key: `receipt:${receipt.id}`, platform, platformPostId: `receipt:${receipt.id}`, url: receipt.url, urls: [],
-          identities: [], storedContentIds: new Set(), contentId: '', publishedAt: receipt.published_at, provenance: 'external_receipt', receipts: [], receiptContentIds: new Set() };
+          identities: [], sourceRows: [], storedContentIds: new Set(), contentId: '', publishedAt: receipt.published_at, provenance: 'external_receipt', receipts: [], receiptContentIds: new Set() };
         posts.push(post);
         if (key) byKey.set(key, post);
       }
@@ -460,6 +470,104 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, logger =
     };
   }
   /* Сводка по дням и площадкам: агрегат соцсетей отдельно от CRM; null = данных нет; охваты площадок не складываются в «уникальных людей». */
+  /* Показатели публикаций из сохранённых social_post_metrics. Только чтение: в соцсети не обращаемся,
+     сбор не включаем, чисел не выдумываем.
+     У метрики поста нет признака периода (день это или накопительный итог), поэтому даты НЕ суммируются
+     и прирост по ним не считается. Показывается последнее измерение каждой метрики каждой исходной записи
+     внутри выбранного интервала. null — данных нет, настоящий 0 сохраняется и от null отличается.
+     Один канонический адрес может объединять несколько строк social_posts: их измерения остаются раздельными,
+     молча один источник не выбирается и значения не складываются. */
+  function postMetrics(code, from, to) {
+    const scope = company(code); day(from); day(to); if (from > to) fail();
+    const projection = attributionPosts(scope);
+    const storedTotal = db.prepare('SELECT COUNT(*) n FROM social_posts WHERE company_code=? COLLATE NOCASE').get(scope.code).n;
+    const read = db.prepare(`SELECT date, metric, value, unit, source_field, completeness, provider, collected_at, run_id
+      FROM social_post_metrics WHERE post_id=? AND date>=? AND date<=? ORDER BY date, metric`);
+    const dates = new Set();
+    let measurementsRead = 0, sourcesWithMetrics = 0, knownValues = 0, latestKnownValues = 0, sourcesWithKnownValues = 0;
+    const posts = projection.posts.map((post) => {
+      const sources = post.sourceRows.map((source) => {
+        const rows = read.all(source.postId, from, to);
+        measurementsRead += rows.length;
+        // Последнее измерение каждой метрики ВНУТРИ интервала: за его границы не выходим и «последнее вообще» не подставляем.
+        const latest = new Map();
+        // Известное значение считается по всем прочитанным строкам периода, а не по последним:
+        // если вчера значение было, а сегодня null, история известного не исчезает, но последним остаётся null.
+        let knownRows = 0;
+        for (const row of rows) { dates.add(row.date); latest.set(row.metric, row); if (row.value !== null && row.value !== undefined) knownRows += 1; }
+        if (rows.length) sourcesWithMetrics += 1;
+        const measurements = [...latest.values()].map((row) => ({ metric: row.metric,
+          date: row.date, value: row.value === null || row.value === undefined ? null : row.value, unit: row.unit,
+          hasValue: !(row.value === null || row.value === undefined),
+          sourceField: row.source_field || '', completeness: row.completeness || 'unknown', provider: row.provider,
+          collectedAt: row.collected_at, runId: row.run_id ?? null, referenceId: source.referenceId }))
+          .sort((a, b) => a.metric.localeCompare(b.metric));
+        // Строка измерения и известное значение — разное: строка с value=null данных не даёт.
+        // knownValuesInPeriod — по всем строкам периода; latestKnownValues — сколько показанных последних измерений известны.
+        const latestKnown = measurements.filter((m) => m.hasValue).length;
+        knownValues += knownRows;
+        latestKnownValues += latestKnown;
+        if (knownRows) sourcesWithKnownValues += 1;
+        return { referenceId: source.referenceId, platformPostId: source.platformPostId, provider: source.provider,
+          contentId: source.contentId, measurementsInPeriod: rows.length, knownValuesInPeriod: knownRows,
+          latestKnownValues: latestKnown, measurements };
+      });
+      return { key: post.key, platform: post.platform, platformLabel: PLATFORMS[post.platform] || post.platform,
+        url: post.url, publishedAt: post.publishedAt, provenance: post.provenance, provider: post.provider,
+        // Подтверждение владельца — ссылка и время, а не сбор по API: показателей площадки у него нет.
+        receiptOnly: post.provenance === 'external_receipt', receipts: post.receipts.map((r) => r.referenceId),
+        sources };
+    });
+    const dateList = [...dates].sort();
+    const receiptsTotal = receiptTotal(scope);
+    const coverage = {
+      period: { from, to },
+      // Список публикаций — последние 200 записей архива компании, а не выборка по датам публикации.
+      // Период фильтрует только измерения.
+      storedPostsTotal: storedTotal, storedPostsRead: Math.min(storedTotal, 200), postsLimit: 200,
+      storedPostsTruncated: storedTotal > 200, storedPostsOmitted: Math.max(0, storedTotal - 200),
+      postsSelection: 'last_stored', periodAppliesTo: 'measurement_dates',
+      projectedPosts: posts.length, sourceRows: posts.reduce((n, p) => n + p.sources.length, 0),
+      sourcesWithMeasurements: sourcesWithMetrics, sourcesWithKnownValues,
+      measurementsRead, knownValues, latestKnownValues,
+      receiptsTotal: receiptsTotal, receiptsRead: Math.min(receiptsTotal, RECEIPT_LIMIT), receiptsLimit: RECEIPT_LIMIT,
+      receiptsTruncated: receiptsTotal > RECEIPT_LIMIT, receiptsOmitted: Math.max(0, receiptsTotal - RECEIPT_LIMIT),
+      receiptsProjected: projection.projected, receiptsMerged: projection.merged,
+      receiptsOnly: projection.receiptOnly, receiptsSkipped: projection.skipped,
+      measurementDates: dateList, measurementDaysCovered: dateList.length,
+      firstMeasurementDate: dateList[0] || null, lastMeasurementDate: dateList[dateList.length - 1] || null,
+      note: 'Прочитано столько сохранённых публикаций, сколько показано: остальное отрезано лимитом и названо отдельно. Строки со completeness=complete говорят о полноте конкретного измерения, но не доказывают ни полноту дней периода, ни полноту всего архива.',
+    };
+    const findings = [], limits = [], next = [];
+    if (!measurementsRead) {
+      findings.push('Сохранённых измерений за этот период нет.');
+      limits.push('Без измерений нельзя сказать ничего ни об охватах, ни о просмотрах: данных недостаточно.');
+      next.push('Проверить, настроен ли сбор показателей для площадок этой компании, и за какие дни он действительно проходил.');
+    } else if (!knownValues) {
+      // Строки есть, а известных значений нет: это тоже «данных недостаточно», а не «есть данные».
+      findings.push(`Строк измерений в периоде: ${measurementsRead}, но ни в одной нет известного значения.`);
+      limits.push('Известных значений нет: строки сохранены пустыми, поэтому данных недостаточно для любых выводов.');
+      next.push('Разобрать, почему сбор сохранил строки без значений, прежде чем что-либо сравнивать.');
+    } else {
+      findings.push(`Строк измерений в периоде: ${measurementsRead}, из них с известным значением: ${knownValues}.`);
+      if (latestKnownValues < knownValues) findings.push(`Последних показанных измерений с известным значением: ${latestKnownValues}. Исторические измерения периода учитываются отдельно.`);
+      if (posts.some(post => post.sources.some(source => source.knownValuesInPeriod > 0 && source.measurements.some(measurement => !measurement.hasValue)))) findings.push('У части метрик самое свежее измерение пустое, и прежнее известное им не подменяется.');
+      findings.push(`Известные значения есть у ${sourcesWithKnownValues} исходных записей из ${coverage.sourceRows}.`);
+      findings.push(`Даты измерений в периоде: ${dateList.join(', ')}.`);
+      limits.push('У метрики поста не сохранён признак периода, поэтому дни не суммируются, прирост и конверсия по ним не считаются.');
+      if (coverage.sourceRows > sourcesWithKnownValues) limits.push('У части публикаций известных значений нет: сравнивать их между собой нельзя.');
+    }
+    limits.push('Список публикаций — последние сохранённые записи архива, а не выборка по датам публикации: период фильтрует только измерения.');
+    if (coverage.storedPostsTruncated) limits.push(`Прочитаны не все публикации архива: ${coverage.storedPostsRead} из ${storedTotal}, не показано ${coverage.storedPostsOmitted}.`);
+    if (coverage.receiptsTruncated) limits.push(`Прочитаны не все подтверждения владельца: ${coverage.receiptsRead} из ${receiptsTotal}, не показано ${coverage.receiptsOmitted}.`);
+    if (projection.receiptOnly) limits.push(`Подтверждений владельца без собранного поста: ${projection.receiptOnly}. У них показателей площадки нет и быть не может.`);
+    if (projection.skipped) limits.push(`Подтверждений с площадкой вне аналитики: ${projection.skipped}.`);
+    limits.push('Вывод «все публикации» не делается: доказательств полноты архива здесь нет.');
+    if (!next.length) next.push('Разобрать записи без измерений и дни без сбора, прежде чем сравнивать публикации между собой.');
+    return { companyCode: scope.code, period: { from, to }, posts, coverage,
+      summary: { visible: findings, cannotConclude: limits, nextStep: next },
+      note: 'Показано последнее измерение каждой метрики каждой исходной записи внутри выбранного периода. Значения не складываются между датами и между источниками одного адреса. Пустое значение — данных нет; ноль — измеренный ноль.' };
+  }
   function overview(code, from, to) {
     const scope = company(code); day(from); day(to); if (from > to) fail();
     const rows = db.prepare(`SELECT platform, account_ref, date, metric, value, unit, kind, completeness, provider, collected_at FROM social_snapshots
@@ -494,9 +602,9 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, logger =
       aggregationNote: 'avg — невзвешенное среднее суточных значений за период (каждый день с равным весом), а не общее удержание/средняя длительность за период.',
       socialAggregate: { views: sumAcross('views'), impressions: sumAcross('impressions'), likes: sumAcross('likes'), comments: sumAcross('comments'), shares: sumAcross('shares'), saves: sumAcross('saves'),
         reachNote: 'Охват площадок не суммируется: одни и те же люди могут быть на нескольких площадках. Уникальный охват — UNKNOWN.', reach: null },
-      crm: attribution(scope.code, from, to), metrics: METRICS, runs: db.prepare('SELECT id,platform,provider,trigger,date,started_at,finished_at,status,rows,error,missing FROM social_collect_runs WHERE company_code=? COLLATE NOCASE ORDER BY id DESC LIMIT 30').all(scope.code)
+      crm: attribution(scope.code, from, to), postMetrics: postMetrics(scope.code, from, to), metrics: METRICS, runs: db.prepare('SELECT id,platform,provider,trigger,date,started_at,finished_at,status,rows,error,missing FROM social_collect_runs WHERE company_code=? COLLATE NOCASE ORDER BY id DESC LIMIT 30').all(scope.code)
         .map((r) => ({ ...r, missing: JSON.parse(r.missing || '[]') })) };
   }
-  return { accounts, saveAccounts, collect, collectDue, importManual, overview, attribution, writeSnapshots, writePosts, localDay, dayBounds, PLATFORMS, METRICS, AGGREGATION };
+  return { accounts, saveAccounts, collect, collectDue, importManual, overview, attribution, postMetrics, writeSnapshots, writePosts, localDay, dayBounds, PLATFORMS, METRICS, AGGREGATION };
 }
 module.exports = { createSocialStats, SOCIAL_STATS_ERRORS: ERRORS, PLATFORMS, METRICS, AGGREGATION, KINDS, localDay, dayBounds, canonicalPostKey, RECEIPT_TO_PLATFORM };

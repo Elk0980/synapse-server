@@ -86,3 +86,13 @@
   .social-baseline-posts > li { padding:8px; }
   .social-baseline-create button { width:100%; min-height:44px; }
 }
+
+/* Показатели публикаций: источники одного адреса показываются раздельно, отсутствие данных видно словами. */
+.social-post-metrics .social-post-sources { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.social-post-metrics .social-post-sources > li { border-left: 2px solid var(--line, #d9dee5); padding-left: 10px; }
+.social-post-metrics .social-post-sources ul { margin: 4px 0 0; padding-left: 18px; }
+.social-post-metrics .social-coverage { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.social-post-metrics .social-no-data { color: var(--muted, #6b7480); font-style: italic; }
+@media (max-width: 640px) {
+  .social-post-metrics .social-post-sources > li { padding-left: 8px; }
+}

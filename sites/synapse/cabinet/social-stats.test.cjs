@@ -251,3 +251,83 @@ test('аналитик читает, но не видит настроек и и
     const put=f.calls.find(c=>c.method==='PUT');assert.equal(put.body.accounts.find(a=>a.platform==='vk').accountRef,'club240466302');assert.equal(put.body.accounts[0].timezone,'Asia/Bangkok');
   }finally{f.close();}
 });
+
+/* Показатели публикаций: значения показываются как есть, отсутствие данных не превращается в ноль,
+   источники одного адреса не складываются, покрытие названо числами, поля экранируются. */
+const postMetricsOverview=()=>{const data=overview();data.postMetrics={companyCode:'demo-travel',period:{from:'2026-09-01',to:'2026-09-18'},
+  note:'Показано последнее измерение каждой метрики каждой исходной записи внутри выбранного периода.',
+  posts:[
+    {key:'post:1',platform:'youtube',platformLabel:'YouTube',url:'https://www.youtube.com/shorts/abc',publishedAt:'2026-09-17T09:00:00.000Z',
+      provenance:'stored',provider:'direct',receiptOnly:false,receipts:[],sources:[
+        {referenceId:'post:1',platformPostId:'yt-1',provider:'direct',contentId:'12',measurementsInPeriod:1,knownValuesInPeriod:1,latestKnownValues:1,
+          measurements:[{metric:'views',date:'2026-09-17',value:500,unit:'views',hasValue:true,
+            sourceField:'viewCount',completeness:'complete',provider:'direct',collectedAt:'2026-09-18T02:00:00.000Z',runId:1,referenceId:'post:1'}]},
+        {referenceId:'post:2',platformPostId:'yt-1-manual<script>',provider:'manual',contentId:'34',measurementsInPeriod:1,knownValuesInPeriod:1,latestKnownValues:1,
+          measurements:[{metric:'views',date:'2026-09-17',value:30,unit:'views',hasValue:true,
+            sourceField:'',completeness:'unknown',provider:'manual',collectedAt:'2026-09-18T02:00:00.000Z',runId:null,referenceId:'post:2'}]}]},
+    {key:'post:3',platform:'telegram',platformLabel:'Telegram',url:'https://t.me/demo/1',publishedAt:'2026-09-16T08:00:00.000Z',
+      provenance:'stored',provider:'manual',receiptOnly:false,receipts:[],sources:[
+        {referenceId:'post:3',platformPostId:'tg-1',provider:'manual',contentId:'',measurementsInPeriod:1,knownValuesInPeriod:1,latestKnownValues:1,
+          measurements:[{metric:'likes',date:'2026-09-16',value:0,unit:'count',hasValue:true,
+            sourceField:'',completeness:'unknown',provider:'manual',collectedAt:'2026-09-18T02:00:00.000Z',runId:null,referenceId:'post:3'},
+            {metric:'views',date:'2026-09-16',value:null,unit:'views',hasValue:false,
+              sourceField:'',completeness:'unknown',provider:'manual',collectedAt:'2026-09-18T02:00:00.000Z',runId:null,referenceId:'post:3'}]}]},
+    {key:'receipt:5',platform:'telegram',platformLabel:'Telegram',url:'https://t.me/demo/42',publishedAt:'2026-09-18T10:00:00.000Z',
+      provenance:'external_receipt',provider:null,receiptOnly:true,receipts:['receipt:5'],sources:[]}],
+  coverage:{period:{from:'2026-09-01',to:'2026-09-18'},storedPostsTotal:205,storedPostsRead:200,postsLimit:200,storedPostsTruncated:true,storedPostsOmitted:5,
+    postsSelection:'last_stored',periodAppliesTo:'measurement_dates',
+    projectedPosts:3,sourceRows:3,sourcesWithMeasurements:3,sourcesWithKnownValues:3,measurementsRead:4,knownValues:3,latestKnownValues:3,
+    receiptsTotal:210,receiptsRead:200,receiptsLimit:200,receiptsTruncated:true,receiptsOmitted:10,
+    receiptsProjected:1,receiptsMerged:0,receiptsOnly:1,receiptsSkipped:2,
+    measurementDates:['2026-09-16','2026-09-17'],measurementDaysCovered:2,firstMeasurementDate:'2026-09-16',lastMeasurementDate:'2026-09-17',
+    note:'Строки со completeness=complete не доказывают ни полноту дней периода, ни полноту всего архива.'},
+  summary:{visible:['Измерений в периоде: 4.'],cannotConclude:['Дни не суммируются.','Вывод «все публикации» не делается.'],nextStep:['Разобрать дни без сбора.']}};
+  return data;};
+
+test('показатели публикаций: ноль и «нет данных» различаются, источники одного адреса раздельны, покрытие названо, подтверждение метрик не получает',async()=>{
+  const f=fixture({override:call=>call.path==='/content/crm/social-stats'?postMetricsOverview():undefined});try{
+    await f.render();
+    const section=f.container.querySelector('.social-post-metrics');
+    assert.ok(section,'раздел показателей публикаций есть');
+    const text=section.textContent.replace(/ /g,' ');
+    assert.match(text,/Просмотры: 500/);assert.match(text,/Просмотры: 30/);
+    assert.doesNotMatch(text,/Просмотры: 530/,'значения источников одного адреса не складываются');
+    assert.match(text,/post:1/);assert.match(text,/post:2/,'у каждого источника назван идентификатор записи');
+    assert.match(text,/Реакции: 0/,'измеренный ноль остаётся нулём, а название метрики даёт кабинет');
+    assert.doesNotMatch(text,/\bviews\b/,'сырые английские единицы наружу не выводятся');
+    assert.doesNotMatch(text,/Просмотры: 500 count/,'единица не дублирует название метрики');
+    assert.match(text,/Просмотры: нет данных/,'отсутствие данных не превращается в ноль');
+    assert.match(text,/Показателей площадки у такой записи нет/,'подтверждение владельца не получает выдуманных метрик');
+    assert.match(text,/Из них прочитано: 200 \(не показано 5\)/);
+    assert.match(text,/Подтверждений владельца сохранено: 210/);
+    assert.match(text,/Из них прочитано: 200 \(не показано 10\)/);
+    assert.match(text,/Строк измерений прочитано: 4/);
+    assert.match(text,/Из них с известным значением: 3/);
+    assert.match(text,/период фильтрует только измерения/);
+    assert.match(text,/Публикаций сохранено: 205/);
+    assert.match(text,/Даты измерений: 16\.09\.2026, 17\.09\.2026/);
+    assert.match(text,/Подтверждений с площадкой вне аналитики: 2/);
+    assert.match(text,/не доказывают ни полноту дней/);
+    assert.match(text,/Что видно/);assert.match(text,/Чего пока нельзя заключить/);assert.match(text,/Следующий шаг/);
+    assert.doesNotMatch(section.innerHTML,/<script>/,'поля экранируются');
+    assert.match(section.innerHTML,/yt-1-manual&lt;script&gt;/);
+  }finally{f.close();}
+});
+
+test('показатели публикаций: пустой ответ честно говорит об отсутствии данных и не рисует нулей',async()=>{
+  const empty=()=>{const data=overview();data.postMetrics={companyCode:'demo-travel',period:{from:'2026-09-01',to:'2026-09-18'},posts:[],
+    note:'Показано последнее измерение каждой метрики.',
+    coverage:{storedPostsTotal:0,storedPostsRead:0,storedPostsTruncated:false,storedPostsOmitted:0,sourceRows:0,sourcesWithMeasurements:0,
+      sourcesWithKnownValues:0,measurementsRead:0,knownValues:0,latestKnownValues:0,receiptsTotal:0,receiptsRead:0,receiptsTruncated:false,receiptsOmitted:0,
+      receiptsOnly:0,receiptsSkipped:0,measurementDates:[],note:'Полнота архива не доказана.'},
+    summary:{visible:['Сохранённых измерений за этот период нет.'],cannotConclude:['Данных недостаточно.'],nextStep:['Проверить сбор.']}};
+  return data;};
+  const f=fixture({override:call=>call.path==='/content/crm/social-stats'?empty():undefined});try{
+    await f.render();
+    const text=f.container.querySelector('.social-post-metrics').textContent;
+    assert.match(text,/Сохранённых публикаций у компании нет/);
+    assert.match(text,/Даты измерений: нет/);
+    assert.match(text,/Сохранённых измерений за этот период нет/);
+    assert.match(text,/Данных недостаточно/);
+  }finally{f.close();}
+});
