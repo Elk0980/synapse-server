@@ -66,7 +66,7 @@ test('живой content: приём заявки Palitra, маршруты вл
 
   // Публичный маршрут: только POST + JSON + разрешённый Origin; тело ограничено 32 КиБ.
   assert.equal((await req('/public-orders/palitra')).status, 404);
-  assert.equal((await req('/public-orders/alvi', null, 'POST', order, { Origin: ORIGIN })).status, 404);
+  assert.equal((await req('/public-orders/alvi', null, 'POST', order, { Origin: ORIGIN })).status, 403, 'ALVI имеет внутреннего получателя, но публичный приём закрыт');
   assert.equal((await req('/public-orders/palitra', null, 'POST', order)).status, 403);
   assert.equal((await req('/public-orders/palitra', null, 'POST', order, { Origin: 'https://evil.example' })).status, 403);
   assert.equal((await fetch(`${base}/public-orders/palitra`, { method: 'POST', headers: { Origin: ORIGIN, 'Content-Type': 'text/plain' }, body: JSON.stringify(order) })).status, 415);
@@ -91,7 +91,11 @@ test('живой content: приём заявки Palitra, маршруты вл
   assert.equal((await req('/content/admin/accounts', owner, 'POST', { login: 'daria', displayName: 'Дарья', password: memberSecret, companies: ['palitra-love'], permissions: [] })).status, 201);
   const daria = await login('daria', memberSecret);
   assert.equal((await req('/content/palitra/orders', daria)).status, 403);
-  assert.equal((await req('/content/alvi/orders', owner)).status, 404);
+  const alviOrders = await req('/content/alvi/orders', owner);
+  assert.equal(alviOrders.status, 200);
+  assert.deepEqual((await alviOrders.json()).orders, [], 'заявка Palitra не появляется у ALVI');
+  assert.equal((await req('/content/alvi/orders', daria)).status, 403);
+  assert.equal((await req('/content/avokado/orders', owner)).status, 404);
   const listed = await req('/content/palitra/orders', owner);
   assert.equal(listed.status, 200);
   const listBody = await listed.json();

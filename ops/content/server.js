@@ -19,7 +19,8 @@ const { createActorOnboarding } = require('./actor-onboarding');
 const { createActorWorkspace } = require('./actor-workspace');
 const { createHughProviders } = require('./hugh-providers');
 const {createMediaMentorSuggest, createMediaMentorSuggestRoute} = require('./media-mentor-suggest');
-const { clientIp, originOf, PALITRA_ORDER_ORIGINS } = require('./site-orders');
+const { clientIp, originOf } = require('./site-orders');
+const { clientCompanyConfig } = require('./client-bot-config');
 const { createClientDialogs } = require('./client-dialogs');
 const { hashPassword, verifyPassword } = require('./passwords');
 const { createCompanyLinksReader } = require('./company-links-reader');
@@ -195,8 +196,8 @@ const actorWorkspace = createActorWorkspace({ db, authStore,
   } });
 const hughSettingsStore = createHughSettingsStore(db);
 // Заявки с сайта принимаются только для Palitra: сайт задаёт Caddy, список Origin — точный allowlist.
-const ORDER_SITES = { palitra: { companyCode: CONTENT_COMPANIES.palitra, title: 'Palitra',
-  origins: (process.env.PALITRA_ORDER_ORIGINS || PALITRA_ORDER_ORIGINS.join(',')).split(',').map((s) => s.trim()).filter(Boolean) } };
+const clientCompanies = clientCompanyConfig(process.env, CONTENT_COMPANIES);
+const ORDER_SITES = clientCompanies.orderSites;
 const ORDER_BODY_LIMIT = 32 * 1024;
 /* Защищённое хранилище ключей провайдеров Хью: владелец вводит ключ в ЛК, ключ шифруется
    внешним мастер-ключом и наружу не возвращается. Без мастер-ключа хранилище закрыто. */
@@ -214,17 +215,13 @@ const projectChat = createProjectChat({ db, authStore, assetsDir: ASSETS_DIR,
   cabinetUrl: (process.env.CABINET_PUBLIC_URL || 'https://synapse.synapsebusiness.ru/cabinet.html').trim(),
   requireSession, requireCsrf, sendJson: send, readBody: readJson });
 for (const issue of [...projectChat.localWorker.issues, ...projectChat.miniApp.issues]) console.warn(`content: ${issue}`);
-/* Клиентский Telegram-бот Palitra: переписка клиентов с менеджером и уведомления о заявках.
+/* Клиентские Telegram-боты: переписка клиентов с менеджером и уведомления о заявках.
    Включается только именем бота (не секрет); токен живёт только в сервисе chat. Пусто — выключен. */
 // Общий предел сохранённых файлов клиентских ботов (МБ); пусто — 1024 МБ. Сверх предела файл не сохраняется, история не удаляется.
 const CLIENT_DIALOGS_MAX_STORAGE_MB = Number.parseInt(process.env.CLIENT_DIALOGS_MAX_STORAGE_MB || '', 10);
 const clientDialogs = createClientDialogs({ db, assetsDir: ASSETS_DIR, siteOrders: projectChat.siteOrders,
   ...(CLIENT_DIALOGS_MAX_STORAGE_MB >= 0 ? { maxStorage: CLIENT_DIALOGS_MAX_STORAGE_MB * 1024 * 1024 } : {}),
-  bots: { palitra: { companyCode: CONTENT_COMPANIES.palitra, site: 'palitra', title: 'Palitra',
-    username: (process.env.PALITRA_CLIENT_BOT_USERNAME || '').trim().replace(/^@/, ''),
-    // Ссылка на политику в приветствии: до переключения DNS боевого домена можно указать временный адрес сайта.
-    hours: '09:00–21:00', policyUrl: /^https:\/\/[\w.-]+\/[\w./-]*$/.test(process.env.PALITRA_CLIENT_BOT_POLICY_URL || '')
-      ? process.env.PALITRA_CLIENT_BOT_POLICY_URL : 'https://palitra-love.ru/privacy' } } });
+  bots: clientCompanies.bots });
 /* Личная переписка владельца по проектам: собственные таблицы и собственная область доступа.
    Из общего чата сюда переиспользован только транспорт обращения к модели (askHugh),
    который ничего не читает и не пишет в таблицы чата проекта. */
@@ -1185,7 +1182,7 @@ const server = http.createServer(async (request, response) => {
     if (parts[0] !== 'content' || parts.length < 3) fail(404, 'Не найдено');
     if (!SITES.has(parts[1])) fail(404, 'Неизвестный сайт');
 
-    // --- заявки с сайта в ЛК: только владелец, только сайт Palitra; мутации с CSRF.
+    // --- заявки в ЛК: только владелец, только настроенные компании; мутации с CSRF.
     if (parts[2] === 'orders' || parts[2] === 'order-recipient') {
       const session = requireSession(request);
       if (session.user.role !== 'owner') fail(403, 'Доступно только владельцу');

@@ -15,6 +15,7 @@ const { detectTask } = require("./task-intake");
 const { bindingError, parseBindingCommand } = require("./telegram-binding");
 const { createProjectChatBridge } = require("./project-chat-bridge");
 const { createClientBotRegistry } = require("./client-bot-registry");
+const { clientBotConfigs } = require("./client-bot-config");
 
 const SCRIPT = {
   greeting:
@@ -60,13 +61,6 @@ const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || "";
 const TELEGRAM_OWNER_ID = process.env.TELEGRAM_OWNER_ID || "";
 const TELEGRAM_POLLING = process.env.TELEGRAM_POLLING === "1";
 const PROJECT_CONTENT_URL = (process.env.PROJECT_CONTENT_URL || "").replace(/\/$/, "");
-// Клиентский бот Palitra: отдельный токен, отдельная очередь и отметка опроса. Пусто — бот выключен.
-const PALITRA_CLIENT_BOT_TOKEN = (process.env.PALITRA_CLIENT_BOT_TOKEN || "").trim();
-const PALITRA_CLIENT_BOT_WEBHOOK_SECRET = (process.env.PALITRA_CLIENT_BOT_WEBHOOK_SECRET || "").trim();
-const PALITRA_CLIENT_BOT_POLLING = process.env.PALITRA_CLIENT_BOT_POLLING === "1";
-// Имя бота (не секрет): мост проверяет getMe, что токен относится именно к этому боту.
-const PALITRA_CLIENT_BOT_USERNAME = (process.env.PALITRA_CLIENT_BOT_USERNAME || "").trim().replace(/^@/, "");
-const clientBotLimit = (name) => Number.parseInt(process.env[name] || "", 10);
 const CLIENT_BOARD_SECRET = process.env.CLIENT_BOARD_SECRET || "";
 const CONSENT_SERVICE_KEY = process.env.CONSENT_SERVICE_KEY || "";
 const CLIENT_BOARD_BASE_URL = (process.env.CLIENT_BOARD_BASE_URL || "https://{company}.synapsebusiness.ru/zadachi.html").trim();
@@ -966,14 +960,8 @@ const projectBridge = createProjectChatBridge({
 
 /* Клиентский бот создаётся только при заданном токене и адресе службы диалогов: иначе он полностью выключен
    и существующий бот Synapse, общий чат проекта и заявки работают как раньше. */
-const clientBots = createClientBotRegistry({ reservedTokens: [TELEGRAM_BOT_TOKEN], configs:
-  PALITRA_CLIENT_BOT_TOKEN && PALITRA_CLIENT_BOT_USERNAME && PROJECT_CONTENT_URL && API_KEY
-  ? [{ db, botKey: "palitra", token: PALITRA_CLIENT_BOT_TOKEN, expectedUsername: PALITRA_CLIENT_BOT_USERNAME,
-    contentUrl: PROJECT_CONTENT_URL, apiKey: API_KEY, webhookSecret: PALITRA_CLIENT_BOT_WEBHOOK_SECRET, polling: PALITRA_CLIENT_BOT_POLLING,
-    quietHours: TELEGRAM_QUIET_HOURS, limits: { perChatMinute: clientBotLimit("PALITRA_CLIENT_BOT_LIMIT_CHAT_MINUTE"),
-      perChatDay: clientBotLimit("PALITRA_CLIENT_BOT_LIMIT_CHAT_DAY"), perBotHour: clientBotLimit("PALITRA_CLIENT_BOT_LIMIT_BOT_HOUR") } }]
-  : [] });
-if (PALITRA_CLIENT_BOT_TOKEN && !clientBots.get("palitra")) console.warn("Клиентский бот Palitra выключен: нужны PALITRA_CLIENT_BOT_USERNAME, PROJECT_CONTENT_URL и CHAT_API_KEY");
+const clientBots = createClientBotRegistry({ reservedTokens: [TELEGRAM_BOT_TOKEN],
+  configs: clientBotConfigs(process.env, { db, contentUrl: PROJECT_CONTENT_URL, apiKey: API_KEY, quietHours: TELEGRAM_QUIET_HOURS }) });
 
 async function handleTelegramUpdate(update) {
   if (projectBridge.enqueue(update)) return { ok: true, queued: true };
