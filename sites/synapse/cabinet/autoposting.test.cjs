@@ -28,6 +28,21 @@ test('VK access failure explains missing permission without exposing provider te
  const f=await fixture({override:call=>call.path.endsWith('/check')?{ok:false,code:'WALL_PERMISSION_REQUIRED',error:'RAW_SECRET'}:undefined});
  try{f.node('autoposting-channels').querySelector('[data-check-channel=vk]').click();await f.settle();assert.match(f.node('autoposting-status').textContent,/разрешение wall/);assert.ok(!f.d.body.textContent.includes('RAW_SECRET'));}finally{f.close();}
 });
+test('channel setup explains its own media rules and TikTok blocker without claiming every channel publishes public Shorts',async()=>{
+ const ids=['youtube_shorts','instagram','tiktok','max'];
+ const f=await fixture({override:call=>call.path.endsWith('/autoposting/settings')?{
+  timezone:'Asia/Irkutsk',channels:ids.map(id=>({id,platform:id,provider:'onlypult',name:id,revision:1,enabled:false,connected:false,tokenConfigured:false}))
+ }:undefined});
+ try{
+  const help=id=>f.node('autoposting-channels').querySelector(`[data-channel="${id}"] [data-channel-publishing-help]`).textContent;
+  assert.match(help('youtube_shorts'),/один видеофайл.*Shorts в публичном доступе/);
+  for(const id of ['instagram','tiktok','max'])assert.doesNotMatch(help(id),/Shorts|публичном доступе/);
+  assert.match(help('instagram'),/истории и Reels/);assert.match(help('instagram'),/Reel — ровно одно видео/);
+  assert.match(help('tiktok'),/Отправка пока заблокирована/);assert.match(help('tiktok'),/режимы видимости не подтверждены/);
+  assert.match(help('max'),/Вложения необязательны/);
+  assert.ok(f.calls.every(call=>call.method==='GET'));
+ }finally{f.close();}
+});
 async function fixture({role='owner',permissions=[],override,entries=[],starter=false}={}){
   const dom=new JSDOM('<section id="view"></section>',{url:'https://cabinet.test/',runScripts:'outside-only'}),w=dom.window,d=w.document,views={},calls=[],posts=clone(entries),configs={alvi:{channels:channels(),timezone:'Asia/Irkutsk'},avokado:{channels:channels(),timezone:'Asia/Irkutsk'}};
   w.SbCabinet={registerView:(name,view)=>{views[name]=view;}};scripts.forEach(source=>w.eval(source));
