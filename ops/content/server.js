@@ -19,7 +19,7 @@ const { createActorOnboarding } = require('./actor-onboarding');
 const { createActorWorkspace } = require('./actor-workspace');
 const { createHughProviders } = require('./hugh-providers');
 const {createMediaMentorSuggest, createMediaMentorSuggestRoute} = require('./media-mentor-suggest');
-const { clientIp, originOf } = require('./site-orders');
+const { clientIp, originOf, PALITRA_ORDER_ORIGINS } = require('./site-orders');
 const { hashPassword, verifyPassword } = require('./passwords');
 const { createCompanyLinksReader } = require('./company-links-reader');
 const { createEmailUnsubscribeProxy, TOKEN: EMAIL_UNSUBSCRIBE_TOKEN } = require('./email-unsubscribe-proxy');
@@ -195,7 +195,7 @@ const actorWorkspace = createActorWorkspace({ db, authStore,
 const hughSettingsStore = createHughSettingsStore(db);
 // Заявки с сайта принимаются только для Palitra: сайт задаёт Caddy, список Origin — точный allowlist.
 const ORDER_SITES = { palitra: { companyCode: CONTENT_COMPANIES.palitra, title: 'Palitra',
-  origins: (process.env.PALITRA_ORDER_ORIGINS || 'https://palitra-love.synapsebusiness.ru').split(',').map((s) => s.trim()).filter(Boolean) } };
+  origins: (process.env.PALITRA_ORDER_ORIGINS || PALITRA_ORDER_ORIGINS.join(',')).split(',').map((s) => s.trim()).filter(Boolean) } };
 const ORDER_BODY_LIMIT = 32 * 1024;
 /* Защищённое хранилище ключей провайдеров Хью: владелец вводит ключ в ЛК, ключ шифруется
    внешним мастер-ключом и наружу не возвращается. Без мастер-ключа хранилище закрыто. */
@@ -405,6 +405,18 @@ function validatePrice(doc) {
       if (typeof it.title !== 'string' || !it.title.trim()) problems.push(`Позиция ${it.id}: пустое название`);
       if (it.oldPrice != null && typeof it.oldPrice !== 'string') problems.push(`Позиция ${it.id}: старая цена должна быть строкой`);
       if (it.quizEnabled != null && typeof it.quizEnabled !== 'boolean') problems.push(`Позиция ${it.id}: признак участия в квизе должен быть логическим`);
+      if (it.gallery != null) {
+        // Дополнительные фото товара (обложка — прежнее поле photo): до 8 адресов сайта или https.
+        if (!Array.isArray(it.gallery)) problems.push(`Позиция ${it.id}: дополнительные фото должны быть списком`);
+        else {
+          if (it.gallery.length > 8) problems.push(`Позиция ${it.id}: больше 8 дополнительных фото`);
+          for (const photo of it.gallery) {
+            if (typeof photo !== 'string' || photo.length > 1000 || !(/^\/(?!\/)/.test(photo) || /^https:\/\//i.test(photo))) {
+              problems.push(`Позиция ${it.id}: некорректный адрес дополнительного фото`); break;
+            }
+          }
+        }
+      }
     }
   }
   const showcase = doc.showcase || {};

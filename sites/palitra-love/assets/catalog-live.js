@@ -47,12 +47,18 @@
     const note = item.note && !isAutoPriceNote(item.note) ? `<p class="note">${esc(item.note)}</p>` : '';
     return `<article class="pc price-card product-card${opts.extraClass ? ' ' + esc(opts.extraClass) : ''}" id="${esc(item.id)}" data-id="${esc(item.id)}"${opts.tags ? ` data-cat="${esc(opts.tags.join(' '))}"` : ''}>${media}<div class="price-card__body"><h3 class="pc__title">${esc(item.title)}</h3>${item.desc ? `<p class="price-card__description">${esc(item.desc)}</p>` : ''}${note}<div class="product-footer"><div class="product-purchase"><p class="pc__price price" data-price-known="${priceText ? 'true' : 'false'}">${priceText ? esc(priceText) : 'Цена уточняется'}</p><button class="button product-add" type="button" data-add data-id="${esc(item.id)}" data-title="${esc(item.title)}">Купить</button></div></div></div></article>`;
   }
+  /* Обложка и дополнительные фото (gallery) в разметке товара: одно фото — строкой, как раньше; несколько — списком. */
+  function imageField(item, origin) {
+    const urls = [item.photo].concat(Array.isArray(item.gallery) ? item.gallery : []).map(safeImage).filter(Boolean)
+      .map(url => new URL(url, origin).href).filter((url, index, all) => all.indexOf(url) === index).slice(0, 9);
+    return urls.length > 1 ? { image: urls } : urls.length ? { image: urls[0] } : {};
+  }
   function schema(list, origin, pathname) {
     return { '@context': 'https://schema.org', '@type': 'ItemList', name: 'Каталог Palitra',
       numberOfItems: list.length,
       itemListElement: list.map((item, index) => ({ '@type': 'ListItem', position: index + 1,
         item: { '@type': 'Product', name: item.title, url: `${origin}${pathname}#${encodeURIComponent(item.id)}`,
-          ...(safeImage(item.photo) ? { image: new URL(item.photo, origin).href } : {}),
+          ...imageField(item, origin),
           ...(item.desc ? { description: item.desc } : {}) }
       })) };
   }

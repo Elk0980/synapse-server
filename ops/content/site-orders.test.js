@@ -13,7 +13,7 @@ const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 const { createAuthStore } = require('./auth-store');
 const { createProjectChat } = require('./project-chat');
-const { clientIp, originOf, priceKopecks } = require('./site-orders');
+const { clientIp, originOf, priceKopecks, PALITRA_ORDER_ORIGINS } = require('./site-orders');
 const { createProjectChatBridge } = require('../chat/project-chat-bridge');
 const { parseQuietHours } = require('../chat/quiet-hours');
 
@@ -39,7 +39,7 @@ const requireCsrf = (request, session) => {
 const sendJson = (response, status, payload, headers) => { response.statusCode = status; response.payload = payload; response.headers = headers; };
 const readBody = async (request) => request.body;
 
-function setup({ price = PRICE } = {}) {
+function setup({ price = PRICE, origins = [ORIGIN] } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'site-orders-'));
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON;');
@@ -48,7 +48,7 @@ function setup({ price = PRICE } = {}) {
   const state = { price };
   const chat = createProjectChat({ db, authStore, assetsDir: dir, runnerUrl: '', chatApiKey: '',
     requireSession, requireCsrf, sendJson, readBody, fetchImpl: async () => { throw new Error('нет службы'); },
-    siteOrders: { sites: { [SITE]: { companyCode: ROOM, title: 'Palitra', origins: [ORIGIN] } }, priceReader: () => state.price, ipSalt: 'salt', now: () => clock.now } });
+    siteOrders: { sites: { [SITE]: { companyCode: ROOM, title: 'Palitra', origins } }, priceReader: () => state.price, ipSalt: 'salt', now: () => clock.now } });
   const owner = { user: authStore.getById(OWNER_ID), csrf: `csrf-${OWNER_ID}` };
   return { db, chat, orders: chat.siteOrders, clock, state, owner };
 }
@@ -414,4 +414,22 @@ test('получатель: смена сбрасывает подтвержде
   const moved = orders.setRecipient(SITE, { telegramChatId: '555555555', label: 'Дарья Трафик' });
   assert.deepEqual([moved.version, moved.verifiedAt, moved.lastTestError], [3, null, '']);
   assert.equal(db.prepare('SELECT count(*) AS n FROM site_order_outbox').get().n, 3, 'смена получателя сама ничего не отправляет');
+});
+
+test('боевой домен: заявки принимаются ровно с palitra-love.ru и временного адреса, остальное — 403 ORIGIN', () => {
+  assert.deepEqual([...PALITRA_ORDER_ORIGINS], ['https://palitra-love.ru', 'https://palitra-love.synapsebusiness.ru']);
+  const { orders } = setup({ origins: [...PALITRA_ORDER_ORIGINS] });
+  let ip = 10;
+  const next = () => `203.0.113.${ip++}`;
+  for (const origin of PALITRA_ORDER_ORIGINS) {
+    const result = submit(orders, body(), { origin, ip: next() });
+    assert.equal(result.status, 201, origin);
+  }
+  assert.equal(originOf({ headers: { referer: 'https://palitra-love.ru/catalog/shary?utm_source=vk' } }), 'https://palitra-love.ru');
+  for (const origin of ['https://www.palitra-love.ru', 'http://palitra-love.ru', 'https://palitra-love.ru:8443',
+    'https://palitra-love.ru.evil.example', 'https://evil.palitra-love.ru', 'https://palitralove.ru', '']) {
+    const result = submit(orders, body(), { origin, ip: next() });
+    assert.equal(result.status, 403, origin || 'пустой Origin');
+    assert.equal(result.body.code, 'ORIGIN', origin);
+  }
 });

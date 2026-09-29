@@ -445,8 +445,10 @@ chat.synapsebusiness.ru {
   import static
 }
 
-# --- Palitra Love: магазин цветов и воздушных шаров (черновик) -------------
-palitra-love.synapsebusiness.ru {
+# --- Palitra Love: магазин цветов и воздушных шаров ---------------------------
+# Общие маршруты витрины: company-links, прайс, фото товаров, приём заявок и SPA-fallback.
+# Один сниппет для боевого и временного адресов, чтобы они не расходились.
+(palitra_site) {
   root * /srv/sites/palitra-love
   @company_links {
     path /api/company-links
@@ -481,10 +483,33 @@ palitra-love.synapsebusiness.ru {
     rewrite * /public-orders/palitra
     reverse_proxy content:8080
   }
-  import draft
   # Keep SPA fallback inside the final handler: it must not rewrite API requests.
   handle {
     try_files {path} {path}/index.html /index.html
     import static
   }
+}
+
+# Боевой домен. Основной адрес — без www. Работает после того, как Анна направит
+# A-записи @ и www на этот сервер; до этого Caddy не сможет выпустить сертификат.
+www.palitra-love.ru {
+  redir https://palitra-love.ru{uri} 301
+}
+
+palitra-love.ru {
+  import palitra_site
+}
+
+# Временный адрес остаётся рабочим (ЛК и старые ссылки), но закрыт от индексации:
+# заголовок noindex на всех ответах и собственный robots.txt с запретом обхода.
+palitra-love.synapsebusiness.ru {
+  import draft
+  @palitra_draft_robots path /robots.txt
+  handle @palitra_draft_robots {
+    header Content-Type "text/plain; charset=utf-8"
+    respond `User-agent: *
+Disallow: /
+` 200
+  }
+  import palitra_site
 }
