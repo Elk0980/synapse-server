@@ -475,3 +475,174 @@ test('канал YouTube Shorts без сохранённой строки уж�
  assert.equal(fresh.enabled,false);assert.equal(fresh.connected,false);
  assert.equal(fresh.caps.maxMedia,1);assert.equal(fresh.caps.mediaMode,'video');
 });
+
+/* Instagram, TikTok и MAX: контракт подтверждён по OpenAPI Onlypult (29.09.2026).
+   Профили, числа и опции здесь синтетические. */
+function newPlatformFixture(t,id,{profile,platform,limits,post}){
+ const f=onlypultFixture(t);
+ f.profiles.push({id:profile,name:'ALVI '+id,platform,status:'active'});
+ f.replies['/posts/limits']=limits;
+ f.replies['/posts']=post;
+ const save=(changes={})=>{
+  const current=f.api.getSettings('alvi').channels.find(item=>item.id===id)?.revision||0;
+  return f.api.saveSettings('alvi',{channels:[{id,revision:current,enabled:true,provider:'onlypult',target:profile,token:OP_TOKEN,...changes}]});
+ };
+ const publish=(post={})=>f.api.publish({companyCode:'alvi',channelId:id,
+   post:{id:41,text:'Согласованный текст',mediaUrls:['https://cdn.example.test/d1.jpg'],...post}});
+ return {...f,save,publish};
+}
+const igFixture=t=>newPlatformFixture(t,'instagram',{profile:'ig-1',platform:'instagram_business_login',
+ limits:{platform:{limits:{text:{charLimit:2200},media:{maxCount:10,maxCountStory:1}}}},
+ post:{id:'ig0000000000000a',profile_id:'ig-1',status:'scheduled',platform:'instagram_business_login'}});
+const ttFixture=t=>newPlatformFixture(t,'tiktok',{profile:'tt-1',platform:'tiktok',
+ limits:{platform:{limits:{text:{charLimit:2200},media:{maxCount:1}}}},
+ post:{id:'tt0000000000000a',profile_id:'tt-1',status:'scheduled',platform:'tiktok'}});
+const maxFixture=t=>newPlatformFixture(t,'max',{profile:'max-1',platform:'max',
+ limits:{platform:{limits:{text:{charLimit:4000},media:{maxCount:10}}}},
+ post:{id:'mx0000000000000a',profile_id:'max-1',status:'scheduled',platform:'max'}});
+
+test('Instagram, TikTok и MAX публикуются только через Onlypult и в отправку ВКонтакте не попадают',async t=>{
+ for(const id of ['instagram','tiktok','max']){
+  const f=onlypultFixture(t);
+  assert.throws(()=>f.api.saveSettings('alvi',{channels:[{id,revision:0,enabled:false,provider:'direct',target:'p1',token:OP_TOKEN}]}),
+    error=>/только через Onlypult/.test(error.message),id+': прямое подключение сервер не принимает');
+  const fresh=f.api.getSettings('alvi').channels.find(item=>item.id===id);
+  assert.equal(fresh.provider,'onlypult');assert.equal(fresh.enabled,false);assert.equal(fresh.connected,false);
+ }
+ // Прямая ветка остаётся только у ВКонтакте: чужая площадка отклоняется, а не уходит в wall.post.
+ const direct=fixture(t);
+ direct.api.saveSettings('alvi',{channels:[{id:'vk',revision:0,enabled:true,target:'12345',token:VK_TOKEN}]});
+ assert.equal((await direct.api.checkChannel('alvi','vk')).ok,true);
+ const before=direct.calls.filter(call=>call.method==='wall.post').length;
+ assert.equal(before,0);
+});
+
+test('Instagram: профиль сверяется точно, Story и Reel взаимоисключающи, опции уходят только своей площадке',async t=>{
+ const f=igFixture(t);f.save();
+ assert.equal((await f.api.checkChannel('alvi','instagram')).ok,true);
+ const ok=await f.publish({platformOptions:{instagram:{is_reels:true,disable_comment:true}},mediaUrls:['https://cdn.example.test/d1.mp4']});
+ assert.equal(ok.providerPostId,'ig0000000000000a');
+ assert.equal(ok.status,'needs_review','идентификатор провайдера публикацией не считается');
+ const sent=f.calls.filter(call=>call.path==='/posts'&&call.options.method==='POST').pop();
+ assert.deepEqual(sent.body.platform_options,{instagram:{is_reels:true,disable_comment:true}});
+ assert.equal(Object.hasOwn(sent.body.platform_options,'tiktok'),false);
+ await assert.rejects(f.publish({platformOptions:{instagram:{is_story:true,is_reels:true}}}),error=>error.code==='CONTENT_LIMIT');
+ // Лимит Story у профиля отдельный: два файла в Story не проходят, хотя обычный maxCount равен 10.
+ await assert.rejects(f.publish({platformOptions:{instagram:{is_story:true}},
+   mediaUrls:['https://cdn.example.test/d1.jpg','https://cdn.example.test/d2.jpg']}),error=>error.code==='CONTENT_LIMIT');
+ // Опция чужой площадки в карточке до отправки не доходит.
+ await assert.rejects(f.publish({platformOptions:{instagram:{privacy:'PUBLIC_TO_EVERYONE'}}}),error=>error.code==='CONTENT_LIMIT');
+});
+
+test('TikTok: выбор режима обязателен, но и его одного мало — отправка стоит до подтверждения возможностей профиля',async t=>{
+ const f=ttFixture(t);f.save();
+ assert.equal((await f.api.checkChannel('alvi','tiktok')).ok,true);
+ const posts=()=>f.calls.filter(call=>call.path==='/posts'&&call.options.method==='POST').length;
+ const before=posts();
+ await assert.rejects(f.publish({mediaUrls:['https://cdn.example.test/d1.mp4']}),error=>error.code==='TIKTOK_PRIVACY_REQUIRED');
+ assert.equal(posts(),before,'без выбранного режима провайдер не вызывается');
+ await assert.rejects(f.publish({platformOptions:{tiktok:{privacy:'FRIENDS'}},mediaUrls:['https://cdn.example.test/d1.mp4']}),
+   error=>error.code==='TIKTOK_PRIVACY_REQUIRED','неподтверждённое значение не принимается');
+ /* Даже при выбранном и сохранённом режиме отправка останавливается: проверенный контракт
+    Onlypult не сообщает, какие режимы доступны конкретному профилю, а публиковать вслепую нельзя.
+    Это барьер, а не подключённый TikTok. */
+ await assert.rejects(f.publish({platformOptions:{tiktok:{privacy:'SELF_ONLY',disable_duet:true}},mediaUrls:['https://cdn.example.test/d1.mp4']}),
+   error=>error.code==='TIKTOK_PRIVACY_UNCONFIRMED'&&error.ambiguous===false);
+ assert.equal(posts(),before,'ни одна публикация в TikTok не ушла');
+});
+
+test('MAX: свои лимиты и своя опция, лимиты Telegram и YouTube на него не переносятся',async t=>{
+ const f=maxFixture(t);f.save();
+ assert.equal((await f.api.checkChannel('alvi','max')).ok,true);
+ const ok=await f.publish({platformOptions:{max:{pin_message:true}}});
+ assert.deepEqual(f.calls.filter(call=>call.path==='/posts'&&call.options.method==='POST').pop().body.platform_options,{max:{pin_message:true}});
+ assert.equal(ok.status,'needs_review');
+ // 4000 символов допустимы для MAX, хотя у Telegram предел 4096, а у YouTube — 5000: лимит берётся у профиля.
+ const long=await f.publish({text:'т'.repeat(4000)});
+ assert.equal(long.providerPostId,'mx0000000000000a');
+ await assert.rejects(f.publish({text:'т'.repeat(4001)}),error=>error.code==='CONTENT_LIMIT');
+});
+
+test('новые площадки: отказ доступа, отказ лимитов, неизвестный ответ и чужая платформа не дают публикации',async t=>{
+ const denied=igFixture(t);denied.save();
+ assert.equal((await denied.api.checkChannel('alvi','instagram')).ok,true);
+ denied.setHandler(request=>request.path==='/posts'
+   ?wire({status:403,code:1},403)
+   :wire({data:denied.replies[request.path]}));
+ await assert.rejects(denied.publish({platformOptions:{instagram:{is_story:true}}}),error=>error.code==='ACCESS_DENIED');
+ const uncertain=maxFixture(t);uncertain.save();
+ assert.equal((await uncertain.api.checkChannel('alvi','max')).ok,true);
+ uncertain.setHandler(request=>request.path==='/posts'?wire({data:{id:'mx0000000000000a',status:'scheduled'}}):wire({data:uncertain.replies[request.path]}));
+ await assert.rejects(uncertain.publish(),error=>error.code==='RESPONSE_UNCERTAIN'&&error.ambiguous===true,'неизвестный ответ не повторяется и не считается успехом');
+ const wrong=igFixture(t);wrong.save();
+ assert.equal((await wrong.api.checkChannel('alvi','instagram')).ok,true);
+ wrong.setHandler(request=>request.path==='/posts'
+   ?wire({data:{id:'ig0000000000000a',profile_id:'ig-1',status:'scheduled',platform:'tiktok'}})
+   :wire({data:wrong.replies[request.path]}));
+ await assert.rejects(wrong.publish({platformOptions:{instagram:{is_story:true}}}),
+   error=>error.code==='RESPONSE_UNCERTAIN','ответ о чужой площадке публикацией не считается');
+});
+
+/* Регрессии приёмки 29.09: дефекты 4, 5, 6. Профили и числа синтетические. */
+
+test('Reel — ровно одно вложение и оно видео: фото «в довесок» к ролику не уходит',async t=>{
+ const f=igFixture(t);f.save();
+ assert.equal((await f.api.checkChannel('alvi','instagram')).ok,true);
+ const posts=()=>f.calls.filter(call=>call.path==='/posts'&&call.options.method==='POST').length;
+ const before=posts();
+ await assert.rejects(f.publish({platformOptions:{instagram:{is_reels:true}},
+   mediaUrls:['https://cdn.example.test/d1.mp4','https://cdn.example.test/d1.jpg']}),error=>error.code==='CONTENT_LIMIT');
+ assert.equal(posts(),before,'смешанный набор до провайдера не доходит');
+ await assert.rejects(f.publish({platformOptions:{instagram:{is_reels:true}},mediaUrls:['https://cdn.example.test/d1.jpg']}),
+   error=>error.code==='CONTENT_LIMIT','Reel без видео не отправляется');
+ const reel=await f.publish({platformOptions:{instagram:{is_reels:true}},mediaUrls:['https://cdn.example.test/d1.mp4']});
+ assert.equal(reel.providerPostId,'ig0000000000000a');
+ // Обычная публикация и Story живут по своим правилам: предел Reel на них не переносится.
+ const carousel=await f.publish({mediaUrls:['https://cdn.example.test/d1.jpg','https://cdn.example.test/d2.jpg']});
+ assert.equal(carousel.providerPostId,'ig0000000000000a','две фотографии без режима Reel проходят');
+ const story=await f.publish({platformOptions:{instagram:{is_story:true}},mediaUrls:['https://cdn.example.test/d1.jpg']});
+ assert.equal(story.providerPostId,'ig0000000000000a');
+});
+
+test('ограничения профиля применяются целиком: минимум вложений, хештеги, упоминания и отдельный максимум Story',async t=>{
+ const f=igFixture(t);
+ f.replies['/posts/limits']={platform:{limits:{text:{charLimit:2200,hashLimit:1,mentionsLimit:1},
+   media:{minCount:2,maxCount:10,maxCountStory:1}}}};
+ f.save();assert.equal((await f.api.checkChannel('alvi','instagram')).ok,true);
+ const posts=()=>f.calls.filter(call=>call.path==='/posts'&&call.options.method==='POST').length;
+ const two=['https://cdn.example.test/d1.jpg','https://cdn.example.test/d2.jpg'];
+ let before=posts();
+ await assert.rejects(f.publish({mediaUrls:['https://cdn.example.test/d1.jpg']}),error=>error.code==='CONTENT_LIMIT');
+ assert.equal(posts(),before,'минимум вложений профиля соблюдается');
+ before=posts();
+ await assert.rejects(f.publish({text:'Текст #один #два',mediaUrls:two}),error=>error.code==='CONTENT_LIMIT');
+ await assert.rejects(f.publish({text:'Текст @one @two',mediaUrls:two}),error=>error.code==='CONTENT_LIMIT');
+ assert.equal(posts(),before,'лимиты хештегов и упоминаний профиля соблюдаются');
+ const ok=await f.publish({text:'Текст #один @one',mediaUrls:two});
+ assert.equal(ok.providerPostId,'ig0000000000000a','ровно по лимиту проходит');
+ /* Story задаёт свой максимум и ЗАМЕНЯЕТ обычный: два вложения проходят обычной публикацией,
+    но в Story не проходят, а одно вложение в Story проходит, хотя минимум обычного режима равен двум. */
+ await assert.rejects(f.publish({platformOptions:{instagram:{is_story:true}},mediaUrls:two}),error=>error.code==='CONTENT_LIMIT');
+ const story=await f.publish({platformOptions:{instagram:{is_story:true}},mediaUrls:['https://cdn.example.test/d1.jpg']});
+ assert.equal(story.providerPostId,'ig0000000000000a');
+});
+
+test('настройки показывают реальные форматы новых площадок, а не общий список Onlypult',async t=>{
+ const f=onlypultFixture(t);
+ const caps=id=>f.api.getSettings('alvi').channels.find(item=>item.id===id).caps;
+ // TikTok требует одно видео — настройки больше не обещают десять фотографий.
+ assert.equal(caps('tiktok').maxMedia,1);
+ assert.equal(caps('tiktok').mediaMode,'video');
+ assert.equal(caps('youtube_shorts').maxMedia,1);
+ assert.equal(caps('youtube_shorts').mediaMode,'video');
+ assert.equal(caps('instagram').maxMedia,10);
+ assert.equal(caps('max').maxMedia,10);
+ assert.equal(caps('max').maxText,4000,'лимит MAX не подменяется лимитом Telegram');
+ // Точные пределы приходят от профиля перед отправкой, и настройки об этом говорят прямо.
+ for(const id of ['instagram','tiktok','max','youtube_shorts'])assert.equal(caps(id).limitsFrom,'profile');
+ // Обещанный настройками формат backend не отклоняет: одно видео в TikTok доходит до проверки режима.
+ const tt=ttFixture(t);tt.save();
+ assert.equal((await tt.api.checkChannel('alvi','tiktok')).ok,true);
+ await assert.rejects(tt.publish({platformOptions:{tiktok:{privacy:'SELF_ONLY'}},mediaUrls:['https://cdn.example.test/d1.mp4']}),
+   error=>error.code==='TIKTOK_PRIVACY_UNCONFIRMED','остановка именно на подтверждении режима, а не на формате');
+});

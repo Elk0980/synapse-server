@@ -850,3 +850,164 @@ test('календарь не считает YouTube Shorts готовым, ес
   const good=await entry({});
   assert.equal(good.state,'ready','правильный материал остаётся готовым');
 });
+
+/* Семь площадок Алви: план и согласование. Компании, числа и опции синтетические. */
+const SEVEN=['vk','telegram','youtube_shorts','instagram','tiktok','two_gis','max'];
+
+test('все семь площадок сохраняются при создании, правке и перечитывании; неизвестный сохранённый канал не пропадает',t=>{
+  const f=fixture(t);
+  const post=f.api.create('alvi',{title:'Семь площадок',text:'Подтверждённый текст',mediaUrls:['https://cdn.example.test/d1.mp4'],
+    platformIds:SEVEN,scheduledAt:null,timezone:'Asia/Irkutsk',profileRevision:f.information.get('alvi').revision},7);
+  assert.deepEqual(post.platformIds,SEVEN);
+  assert.deepEqual(f.api.get(post.id,'alvi').platformIds,SEVEN,'выбор переживает перечитывание');
+  // Правка текста выбор не теряет: Instagram, TikTok, MAX и 2ГИС остаются в карточке.
+  const edited=f.api.update(post.id,'alvi',{revision:post.revision,text:'Другой подтверждённый текст',
+    platformIds:post.platformIds,profileRevision:f.information.get('alvi').revision});
+  assert.deepEqual(edited.platformIds,SEVEN);
+  // Сохранённый идентификатор вне словаря не выбрасывается молча.
+  const legacy=f.api.update(edited.id,'alvi',{revision:edited.revision,platformIds:[...SEVEN,'yandex_maps'],
+    profileRevision:f.information.get('alvi').revision});
+  assert.deepEqual(f.api.get(legacy.id,'alvi').platformIds,[...SEVEN,'yandex_maps']);
+});
+
+test('подписи и согласование охватывают семь площадок; 2ГИС планируется, но подтверждение публикации по нему не принимается',t=>{
+  const f=fixture(t);
+  const captions=Object.fromEntries(SEVEN.map(id=>[id,'Подпись '+id]));
+  const post=f.api.create('alvi',{title:'Подписи',text:'Общий текст',mediaUrls:['https://cdn.example.test/d1.mp4'],
+    platformIds:SEVEN,captions,dayKey:'D1',scheduledAt:null,timezone:'Asia/Irkutsk',profileRevision:f.information.get('alvi').revision},7);
+  assert.deepEqual(Object.keys(post.captions).sort(),SEVEN.slice().sort());
+  assert.deepEqual(post.platformApprovals.map(item=>item.platformId).sort(),SEVEN.slice().sort());
+  assert.ok(post.platformApprovals.every(item=>item.state==='pending'));
+  assert.equal(post.readiness.ready,true);
+  // 2ГИС согласуется наравне с остальными.
+  const approved=f.api.approve(post.id,'alvi',{revision:post.revision,approved:true,platformIds:['two_gis','max']},{userId:1,userName:'Влад'});
+  const byId=new Map(approved.platformApprovals.map(item=>[item.platformId,item]));
+  assert.equal(byId.get('two_gis').approved,true);
+  assert.equal(byId.get('max').approved,true);
+  assert.equal(byId.get('instagram').approved,false,'остальные площадки решение не затронуло');
+  assert.equal(approved.approval?.approved,false,'карточка целиком согласованной не стала');
+  // Подтверждение публикации: формат ссылки для MAX и 2ГИС не подтверждён, поэтому расписка не принимается.
+  assert.throws(()=>f.api.recordReceipt(approved.id,'alvi',{platform:'two_gis',url:'https://2gis.ru/irkutsk/firm/1',publishedAt:'2026-09-15T10:00:00Z',contentRevision:approved.contentRevision}),
+    error=>error.status===400&&/не подтверждён/.test(error.message));
+  assert.throws(()=>f.api.recordReceipt(approved.id,'alvi',{platform:'max',url:'https://max.ru/post/1',publishedAt:'2026-09-15T10:00:00Z',contentRevision:approved.contentRevision}),
+    error=>error.status===400);
+});
+
+test('частичное решение по площадкам: пустое пересечение отклоняется, согласованные ранее каналы не сбрасываются',t=>{
+  const f=fixture(t);
+  const post=f.api.create('alvi',{title:'Частично',text:'Подтверждённый текст',mediaUrls:['https://cdn.example.test/d1.mp4'],
+    platformIds:['telegram','youtube_shorts','instagram'],dayKey:'D2',captions:{telegram:'ТГ'},scheduledAt:null,
+    timezone:'Asia/Irkutsk',profileRevision:f.information.get('alvi').revision},7);
+  const first=f.api.approve(post.id,'alvi',{revision:post.revision,approved:true,platformIds:['telegram','youtube_shorts']},{userId:1,userName:'Влад'});
+  assert.deepEqual(first.platformApprovals.filter(item=>item.approved).map(item=>item.platformId).sort(),['telegram','youtube_shorts']);
+  // Возврат Instagram на доработку прежние решения по TG и YouTube не трогает.
+  const rejected=f.api.reject(first.id,'alvi',{revision:first.revision,comment:'Переснять вертикаль',platformIds:['instagram']},{userId:1,userName:'Влад'});
+  const map=new Map(rejected.platformApprovals.map(item=>[item.platformId,item]));
+  assert.equal(map.get('instagram').state,'rejected');
+  assert.equal(map.get('telegram').approved,true);
+  assert.equal(map.get('youtube_shorts').approved,true);
+  // Площадка, не выбранная в карточке, решением не затрагивается.
+  assert.throws(()=>f.api.approve(rejected.id,'alvi',{revision:rejected.revision,approved:true,platformIds:['tiktok']}),
+    error=>error.status===400&&/не выбраны в карточке/.test(error.message));
+  assert.throws(()=>f.api.approve(rejected.id,'alvi',{revision:rejected.revision,approved:true,platformIds:[]}),
+    error=>error.status===400);
+  // Устаревшая версия решения не принимается.
+  assert.throws(()=>f.api.approve(rejected.id,'alvi',{revision:post.revision,approved:true,platformIds:['instagram']}),
+    error=>error.status===409);
+  assert.throws(()=>f.api.approve(rejected.id,'avokado',{revision:rejected.revision,approved:true,platformIds:['instagram']}),
+    error=>error.status===404,'решение не переходит на другую компанию');
+});
+
+test('публикуемые опции входят в версию содержимого: их правка снимает согласование, чужие поля не принимаются',t=>{
+  const f=fixture(t);
+  const post=f.api.create('alvi',{title:'Опции',text:'Подтверждённый текст',mediaUrls:['https://cdn.example.test/d1.mp4'],
+    platformIds:['instagram','tiktok','max'],dayKey:'D3',captions:{instagram:'ИГ'},scheduledAt:null,timezone:'Asia/Irkutsk',
+    platformOptions:{instagram:{is_reels:true},tiktok:{privacy:'SELF_ONLY'},max:{pin_message:true}},
+    profileRevision:f.information.get('alvi').revision},7);
+  assert.deepEqual(post.platformOptions,{instagram:{is_reels:true},max:{pin_message:true},tiktok:{privacy:'SELF_ONLY'}});
+  const approved=f.api.approve(post.id,'alvi',{revision:post.revision,approved:true},{userId:1,userName:'Влад'});
+  assert.equal(approved.approval.approved,true);
+  const changed=f.api.update(approved.id,'alvi',{revision:approved.revision,
+    platformOptions:{instagram:{is_story:true},tiktok:{privacy:'SELF_ONLY'},max:{pin_message:true}},
+    profileRevision:f.information.get('alvi').revision});
+  assert.equal(changed.contentRevision,approved.contentRevision+1,'смена опции — новая версия содержимого');
+  assert.equal(changed.approval.approved,false,'прежнее согласование снято');
+  assert.ok(changed.platformApprovals.every(item=>item.state==='pending'));
+  // Закрытая схема: чужие поля, чужие площадки и неподтверждённые значения не принимаются.
+  const revision=changed.revision,profileRevision=f.information.get('alvi').revision;
+  for(const options of [{instagram:{is_video:true}},{telegram:{pin_message:true}},{tiktok:{privacy:'FRIENDS'}},
+    {instagram:{is_story:true,is_reels:true}},{max:{pin_message:'да'}}]){
+    assert.throws(()=>f.api.update(changed.id,'alvi',{revision,platformOptions:options,profileRevision}),error=>error.status===400);
+  }
+  assert.deepEqual(f.api.get(changed.id,'alvi').platformOptions,{instagram:{is_story:true},max:{pin_message:true},tiktok:{privacy:'SELF_ONLY'}},
+    'отклонённые правки ничего не записали');
+});
+
+test('согласование не запускает доставку, а выбранная неподключённая площадка остаётся в плане',async t=>{
+  const f=fixture(t);
+  const post=f.api.create('alvi',{title:'План',text:'Подтверждённый текст',mediaUrls:['https://cdn.example.test/d1.mp4'],
+    platformIds:['telegram','two_gis','instagram'],scheduledAt:new Date(Date.parse('2026-09-15T00:00:00Z')+60000).toISOString(),
+    timezone:'Asia/Irkutsk',profileRevision:f.information.get('alvi').revision},7);
+  const approved=f.api.approve(post.id,'alvi',{revision:post.revision,approved:true},{userId:1,userName:'Влад'});
+  await f.api.drain();
+  assert.equal(f.calls.length,0,'согласование доставку не запускает');
+  assert.deepEqual(f.api.get(approved.id,'alvi').platformIds,['telegram','two_gis','instagram'],'неподключённые площадки остались в плане');
+  assert.notEqual(f.api.get(approved.id,'alvi').status,'published','подключения нет — публикацией это не становится');
+});
+
+/* Регрессии приёмки 29.09: дефекты 1 и 2. Компании, числа и опции синтетические. */
+
+test('продолжение карточки переносит публикуемые опции оставшихся площадок',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'};
+  const options={instagram:{is_story:true,disable_comment:false},tiktok:{privacy:'SELF_ONLY'},max:{pin_message:true}};
+  let card=f.api.create('alvi',{title:'Родитель',text:'Подтверждённый текст',mediaUrls:['https://cdn.example.test/d1.mp4'],
+    platformIds:['telegram','instagram','tiktok','max'],dayKey:'D1',captions:{telegram:'ТГ',instagram:'ИГ',tiktok:'ТТ'},
+    scheduledAt:new Date(Date.parse('2026-09-15T00:00:00Z')+3600000).toISOString(),timezone:'Asia/Irkutsk',
+    platformOptions:options,profileRevision:f.information.get('alvi').revision},7);
+  // Telegram отправлен, остальные площадки продолжаются отдельной карточкой — как в жизни.
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true,platformIds:['telegram']},owner);
+  card=await f.api.schedule(card.id,'alvi',{revision:card.revision,platformIds:['telegram']});
+  f.advance(3600000);await f.api.drain();
+  const parent=f.api.get(card.id,'alvi');
+  const result=f.api.split(parent.id,'alvi',{revision:parent.revision,platformIds:['instagram','tiktok']},owner);
+  assert.equal(result.created,true);
+  const child=result.child;
+  assert.deepEqual(child.platformIds,['instagram','tiktok']);
+  // Переносятся значения ровно переданных площадок, включая явное false; чужая опция не тянется.
+  assert.deepEqual(child.platformOptions,{instagram:{disable_comment:false,is_story:true},tiktok:{privacy:'SELF_ONLY'}});
+  assert.equal(Object.hasOwn(child.platformOptions,'max'),false,'опция площадки, оставшейся у родителя, в продолжение не попала');
+  assert.equal(child.platformOptions.instagram.disable_comment,false,'явное false пережило продолжение');
+  // Продолжение согласуется заново и дальше везёт те же настройки.
+  assert.ok(child.platformApprovals.every(item=>item.state==='pending'));
+  const approved=f.api.approve(child.id,'alvi',{revision:child.revision,approved:true},owner);
+  assert.equal(approved.approval.approved,true);
+  assert.deepEqual(f.api.get(approved.id,'alvi').platformOptions,{instagram:{disable_comment:false,is_story:true},tiktok:{privacy:'SELF_ONLY'}});
+  assert.deepEqual(f.api.get(parent.id,'alvi').platformOptions,options,'у родителя настройки не изменились');
+});
+
+test('импорт пакета принимает публикуемые опции, а пакет с другими опциями не выдаётся за повтор',t=>{
+  const f=fixture(t);
+  const item=(over={})=>({dayKey:'D1',title:'Импорт с опциями',text:'Подтверждённый текст',
+    mediaUrls:['https://cdn.example.test/d1.mp4'],captions:{instagram:'ИГ'},
+    platformIds:['instagram','tiktok'],platformOptions:{instagram:{is_reels:true},tiktok:{privacy:'SELF_ONLY'}},...over});
+  const first=f.api.importPackage('alvi',{items:[item()]},7);
+  assert.equal(first.created.length,1);
+  assert.deepEqual(first.created[0].platformOptions,{instagram:{is_reels:true},tiktok:{privacy:'SELF_ONLY'}});
+  assert.deepEqual(f.api.get(first.created[0].id,'alvi').platformOptions,{instagram:{is_reels:true},tiktok:{privacy:'SELF_ONLY'}});
+  // Тот же пакет дублей не создаёт.
+  const again=f.api.importPackage('alvi',{items:[item()]},7);
+  assert.equal(again.created.length,0);
+  assert.equal(again.skipped[0].reason,'duplicate');
+  // Другой набор публикуемых опций — это не «то же содержимое»: пропуск помечен отдельной причиной.
+  const other=f.api.importPackage('alvi',{items:[item({platformOptions:{instagram:{is_story:true}}})]},7);
+  assert.equal(other.created.length,0,'дубль не создаётся');
+  assert.equal(other.skipped[0].reason,'options_differ');
+  assert.match(other.skipped[0].note,/другие публикуемые опции/);
+  assert.deepEqual(f.api.get(first.created[0].id,'alvi').platformOptions,{instagram:{is_reels:true},tiktok:{privacy:'SELF_ONLY'}},
+    'сохранённая карточка не переписана');
+  // Закрытая схема действует и в импорте.
+  assert.throws(()=>f.api.importPackage('alvi',{items:[item({dayKey:'D2',title:'Чужое поле',platformOptions:{instagram:{is_video:true}}})]},7),
+    error=>error.status===400);
+  assert.throws(()=>f.api.importPackage('alvi',{items:[item({dayKey:'D3',title:'Чужая площадка',platformOptions:{telegram:{pin_message:true}}})]},7),
+    error=>error.status===400);
+});
