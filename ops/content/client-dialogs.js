@@ -650,7 +650,7 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
         return [view(row)];
       }
       // Уведомления о заявках этого сайта — после переписки: ответ клиенту важнее.
-      return siteOrders.pendingTelegram('client_bot').filter((job) => job.site === bot.site).map((job) => orderJobView(job, bot));
+      return siteOrders.pendingTelegram('client_bot', bot.site).map((job) => orderJobView(job, bot));
     });
   }
 

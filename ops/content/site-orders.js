@@ -271,11 +271,13 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     ...(job.transport === 'client_bot' ? { site: job.site, orderId: job.order_id, orderKind: job.kind } : {}) });
   /* Мост каждого канала забирает только свои задания. Общий чат проекта вызывает без аргумента — прежний канал.
      Вызывается внутри транзакции вызывающего модуля. */
-  function pendingTelegram(transport = 'project_bot') {
+  function pendingTelegram(transport = 'project_bot', site = null) {
     if (!TRANSPORTS.has(transport)) fail(400, 'Неизвестный канал уведомлений');
-    const expired = db.prepare(`SELECT id,order_id,kind FROM site_order_outbox WHERE status='sending' AND claimed_at<? AND transport=?`).all(stamp(now() - TELEGRAM_LEASE), transport);
+    if (site !== null && !siteConfig(site)) fail(404, 'Не найдено');
+    // Ограничение компании применяется до захвата: чужое задание не меняет состояние и попытки.
+    const expired = db.prepare(`SELECT id,order_id,kind FROM site_order_outbox WHERE status='sending' AND claimed_at<? AND transport=? AND (? IS NULL OR site=?)`).all(stamp(now() - TELEGRAM_LEASE), transport, site, site);
     for (const job of expired) settle(job.id, 'uncertain', 'Отправка прервана; результат доставки неизвестен', []);
-    const jobs = db.prepare(`SELECT * FROM site_order_outbox WHERE status='pending' AND next_attempt_at<=? AND transport=? ORDER BY id LIMIT 1`).all(stamp(), transport);
+    const jobs = db.prepare(`SELECT * FROM site_order_outbox WHERE status='pending' AND next_attempt_at<=? AND transport=? AND (? IS NULL OR site=?) ORDER BY id LIMIT 1`).all(stamp(), transport, site, site);
     for (const job of jobs) db.prepare(`UPDATE site_order_outbox SET status='sending',claimed_at=?,attempts=attempts+1 WHERE id=?`).run(stamp(), job.id);
     return jobs.map((job) => jobJSON({ ...job, attempts: job.attempts + 1 }));
   }
