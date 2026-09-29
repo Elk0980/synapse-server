@@ -57,7 +57,7 @@ async function fixture(t){
 
 test('real content-to-CRM modules enforce assigned company permissions, trusted role and CSRF',async t=>{
   const f=await fixture(t),{owner,editor,viewer,none}=f.sessions;
-  for(const route of ['/company-information','/autoposting/settings','/autoposting/posts']){
+  for(const route of ['/company-information','/company-information/knowledge','/autoposting/settings','/autoposting/posts']){
     assert.equal((await f.crm('GET',route+'?companyCode=alvi')).status,401);
     for(const session of [owner,editor,viewer])assert.equal((await f.crm('GET',route+'?companyCode=alvi',undefined,session)).status,200);
     assert.equal((await f.crm('GET',route+'?companyCode=alvi',undefined,none)).status,403);
@@ -77,12 +77,18 @@ test('real content-to-CRM modules enforce assigned company permissions, trusted 
   assert.equal(saved.body.profile.description,'Fixture confirmed facts');assert.equal(saved.body.history[0].actorId,saved.body.fieldStates.description.actorId);
   assert.equal((await f.crm('PUT','/company-information?companyCode=alvi',profileBody,editor)).status,409);
   const fact=saved.body.facts.find(item=>item.key==='description');
+  const beforeKnowledge=(await f.crm('GET','/company-information/knowledge?companyCode=alvi',undefined,viewer)).body;
+  assert.ok(!Object.hasOwn(beforeKnowledge.profile,'description'));
   const proofBody={revision:saved.body.revision,profile:{},factConfirmations:[{factId:fact.id,source:'Fixture document',sourceRef:'Document 1',checkedAt:new Date(Date.now()-1000).toISOString()}]};
   assert.equal((await f.crm('PUT','/company-information?companyCode=alvi',proofBody,viewer)).status,403);
   assert.equal((await f.crm('PUT','/company-information?companyCode=alvi',proofBody,{...editor,csrf:'wrong'})).status,403);
   const proven=await f.crm('PUT','/company-information?companyCode=alvi',proofBody,editor);
   assert.equal(proven.status,200);assert.equal(proven.body.revision,saved.body.revision);
   assert.equal(proven.body.facts.find(item=>item.key==='description').status,'confirmed');
+  const afterKnowledge=(await f.crm('GET','/company-information/knowledge?companyCode=alvi',undefined,viewer)).body;
+  assert.equal(afterKnowledge.profile.description,'Fixture confirmed facts');
+  assert.equal(afterKnowledge.sources.description.sourceRef,'Document 1');
+  assert.notEqual(afterKnowledge.knowledgeRevision,beforeKnowledge.knowledgeRevision);
   assert.equal((await f.crm('PUT','/company-information?companyCode=alvi',proofBody,editor)).status,409);
   assert.equal((await f.crm('GET','/company-information/facts?companyCode=avokado&key=description',undefined,editor)).status,403);
   assert.equal((await f.crm('GET','/company-information/facts?companyCode=alvi&key=description',undefined,viewer)).body.facts[0].source,'Fixture document');

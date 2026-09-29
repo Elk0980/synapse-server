@@ -2,6 +2,7 @@
 
 const {publicLinkUrl} = require('./company-links');
 const {createCompanyFacts} = require('./company-facts');
+const {companyKnowledge} = require('./company-knowledge');
 const BASE = {name:'name',city:'city',timezone:'timezone',phone:'phone',email:'email',websiteUrl:'website_url',socials:'socials'};
 const EXTRA = ['address','hours','description','services','promotions','materials'];
 const FIELDS = [...Object.keys(BASE),...EXTRA];
@@ -178,6 +179,6 @@ function createCompanyInformation(db,{now=Date.now,check:checker}={}) {
     return get(code);
   }
   function factHistory(code,key) {get(code);return {companyCode:company(db,code).code.toLowerCase(),facts:facts.history(company(db,code).id,key)};}
-  return {get,save,check,factHistory};
+  return {get,save,check,factHistory,knowledge:code=>companyKnowledge(get(code))};
 }
 module.exports={createCompanyInformation,company,fail,object,text,timezone,utcDate,revision,url,normalizeProfile};

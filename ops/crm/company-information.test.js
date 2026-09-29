@@ -80,7 +80,7 @@ test('real CRM API requires trusted identity, scopes editors and persists compan
   }
   await start();
   for(const code of ['qa','other'])assert.equal((await request('POST','/companies',{code,name:code,timezone:'UTC'})).status,201);
-  const routes=['/company-information','/autoposting/settings','/autoposting/posts'];
+  const routes=['/company-information','/company-information/knowledge','/autoposting/settings','/autoposting/posts'];
   for(const route of routes){
     assert.equal((await request('GET',route+'?companyCode=qa',null,owner,false)).status,401);
     assert.equal((await request('GET',route+'?companyCode=qa',null,null)).status,403);
@@ -91,6 +91,9 @@ test('real CRM API requires trusted identity, scopes editors and persists compan
   assert.equal((await request('GET','/company-information?companyCode=qa',null,encode({role:'admin'}))).status,403);
   assert.equal((await request('GET','/company-information')).status,400);
   const initial=(await request('GET','/company-information?companyCode=qa')).body;
+  const knowledge=(await request('GET','/company-information/knowledge?companyCode=qa',null,viewer));
+  assert.deepEqual(knowledge.body.profile,{});assert.equal(knowledge.body.companyCode,'qa');
+  assert.equal(knowledge.body.readiness.catalog,'unavailable');
   assert.equal((await request('GET','/company-information/facts?companyCode=other&key=name',null,viewer)).status,403);
   assert.equal((await request('GET','/company-information/facts?companyCode=qa&key=name',null,null)).status,403);
   const factsHistory=await request('GET','/company-information/facts?companyCode=qa&key=name',null,viewer);
