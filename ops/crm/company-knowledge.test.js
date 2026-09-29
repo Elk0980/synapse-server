@@ -114,3 +114,33 @@ test('course prices require an explicit verified procedure count; legacy rows do
   save('alvi',{services:[{...course,procedureCount:10}]});assert.equal(api.knowledge('alvi').services.length,0);
   verify();result=api.knowledge('alvi').services[0];assert.equal(result.procedureCount,10);assert.equal(result.price,15700);
 });
+
+
+test('program quote keeps the whole price, guest count and visit time with verified evidence',t=>{
+  const {api,confirm,save}=fixture(t);
+  const program={id:'spa',title:'Программа для двоих',price:6900,currency:'RUB',priceUnit:'program',guestCount:2,visitDurationMinutes:90};
+  const verify=()=>confirm('alvi',api.get('alvi').facts.filter(f=>f.key.startsWith('services/')).map(f=>f.key));
+  save('alvi',{services:[program]});verify();
+  let catalog=api.knowledge('alvi');
+  const q=api.quote('alvi','spa',catalog.knowledgeRevision);
+  assert.deepEqual(q.service,program);
+  assert.equal(q.text,'Программа для двоих\n6900 ₽ за программу целиком (гостей: 2).\nОбщая длительность визита: 90 мин.');
+  assert.equal(q.availability,'not_checked');
+  for(const field of ['guestCount','visitDurationMinutes']) {
+    const changed={...program,[field]:program[field]+1};
+    save('alvi',{services:[changed]});
+    assert.throws(()=>api.quote('alvi','spa',catalog.knowledgeRevision),e=>e.details.code==='KNOWLEDGE_CHANGED');
+    assert.equal(api.knowledge('alvi').services.length,0);verify();catalog=api.knowledge('alvi');
+    assert.equal(api.quote('alvi','spa',catalog.knowledgeRevision).service[field],changed[field]);
+  }
+  save('alvi',{services:[{...program,visitDurationMinutes:null}]});verify();
+  assert.deepEqual(api.knowledge('alvi').readiness.unavailableServices,[{id:'spa',missingFields:['visitDurationMinutes']}]);
+});
+
+test('program fields reject mixed units and invalid quantities without guessing from the title',t=>{
+  const {save}=fixture(t);
+  const program={id:'spa',title:'Программа',price:500,currency:'RUB',priceUnit:'program',guestCount:1,visitDurationMinutes:90};
+  for(const patch of [{priceUnit:'per_guest'},{procedureCount:1},{durationMinutes:60},{priceUnit:''},{priceUnit:'procedures'},
+    {guestCount:0},{guestCount:1.5},{guestCount:'2'},{visitDurationMinutes:0},{visitDurationMinutes:-1},{visitDurationMinutes:10001}])
+    assert.throws(()=>save('alvi',{services:[{...program,...patch}]}),e=>e.status===400);
+});

@@ -46,7 +46,7 @@ function structured(field,value) {
     }
     return structuredClone(value);
   }
-  const allowed={services:['id','title','description','price','currency','procedureCount','durationMinutes','bookingIntervalMinutes'],
+  const allowed={services:['id','title','description','price','currency','priceUnit','guestCount','visitDurationMinutes','procedureCount','durationMinutes','bookingIntervalMinutes'],
     promotions:['id','title','description','price','oldPrice','startsAt','endsAt','timezone','serviceIds'],
     materials:['id','title','url','type','serviceIds','promotionIds']}[field];
   const seen=new Set();
@@ -55,7 +55,11 @@ function structured(field,value) {
     if(seen.has(out.id))fail(400,'Идентификаторы записей должны отличаться');seen.add(out.id);
     for(const [key,v] of Object.entries(row)){
       if(['id','title'].includes(key))continue;
-      if(key==='procedureCount') {
+      if(key==='priceUnit') {
+        if(!['','procedures','program'].includes(v))fail(400,'Выберите цену за процедуры или за программу');out[key]=v;
+      }else if(['guestCount','visitDurationMinutes'].includes(key)) {
+        if(v!==null&&(!Number.isSafeInteger(v)||v<1||v>10000))fail(400,'Число гостей и длительность визита должны быть положительными целыми числами');out[key]=v;
+      }else if(key==='procedureCount') {
         if(v!==null&&(!Number.isSafeInteger(v)||v<1||v>1000))fail(400,'Количество процедур должно быть целым числом от 1 до 1000');out[key]=v;
       }else if(['price','oldPrice','durationMinutes','bookingIntervalMinutes'].includes(key)) {
         if(v!==null&&(typeof v!=='number'||!Number.isFinite(v)||v<0||v>100000000))fail(400,'Проверьте цену или длительность');out[key]=v;
@@ -65,6 +69,11 @@ function structured(field,value) {
         if(!Array.isArray(v)||v.length>200)fail(400,'Некорректные связанные записи');out[key]=v.map(id=>text(id,100,true));
       }else if(key==='url'){out[key]=url(v);}
       else out[key]=text(v,key==='description'?5000:100);
+    }
+    if(field==='services') {
+      const present=key=>out[key]!==undefined&&out[key]!==null&&out[key]!=='';
+      if(out.priceUnit==='program'&&['procedureCount','durationMinutes'].some(present))fail(400,'Для программы укажите число гостей и длительность всего визита, без количества и длительности отдельных процедур');
+      if(out.priceUnit!=='program'&&['guestCount','visitDurationMinutes'].some(present))fail(400,'Для числа гостей и длительности всего визита выберите цену за программу');
     }
     if(out.startsAt&&out.endsAt&&out.endsAt<=out.startsAt)fail(400,'Окончание акции должно быть позже начала');
     return out;
@@ -201,7 +210,10 @@ function createCompanyInformation(db,{now=Date.now,check:checker}={}) {
     const entries=body.entries.map((entry,index)=>{
       object(entry,['service','source','sourceRef','checkedAt']);
       const service=services[index];
-      if(service.price===undefined||service.price===null||!service.currency||!service.procedureCount)fail(400,'Укажите цену, валюту и количество процедур для каждой услуги');
+      if(service.price===undefined||service.price===null||!service.currency)fail(400,'Укажите цену и валюту для каждой услуги');
+      if(service.priceUnit==='program') {
+        if(!service.guestCount||!service.visitDurationMinutes)fail(400,'Укажите число гостей и длительность всего визита для каждой программы');
+      }else if(!service.procedureCount)fail(400,'Укажите количество процедур для каждой услуги');
       const source=text(entry.source,1000,true),sourceRef=text(entry.sourceRef,2000,true),checkedAt=utcDate(entry.checkedAt);
       if(checkedAt!==entry.checkedAt.replace(/(?<!\.\d{3})Z$/,'.000Z')||Date.parse(checkedAt)>now())fail(400,'Проверьте дату источника');
       return {service,source,sourceRef,checkedAt};

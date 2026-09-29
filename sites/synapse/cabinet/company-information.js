@@ -40,7 +40,7 @@ const FIELDS = [
 ];
 const ROW_FIELDS = {
   socials: [["type", "Площадка", "social"], ["url", "Ссылка", "url"], ["label", "Подпись", "text"]],
-  services: [["title", "Название услуги", "text"], ["description", "Описание", "textarea"], ["price", "Цена за указанное количество процедур", "number"], ["currency", "Валюта", "text"], ["procedureCount", "Количество процедур за эту цену", "number"], ["durationMinutes", "Длительность одной процедуры, минут", "number"], ["bookingIntervalMinutes", "Интервал записи на один визит, минут", "number"]],
+  services: [["title", "Название услуги", "text"], ["description", "Описание", "textarea"], ["price", "Цена предложения целиком", "number"], ["priceUnit", "За что указана цена", "price-unit"], ["guestCount", "Только программа: число гостей", "number"], ["visitDurationMinutes", "Только программа: весь визит, минут", "number"], ["currency", "Валюта", "text"], ["procedureCount", "Количество процедур за эту цену", "number"], ["durationMinutes", "Длительность одной процедуры, минут", "number"], ["bookingIntervalMinutes", "Интервал записи на один визит, минут", "number"]],
   promotions: [["title", "Название акции", "text"], ["description", "Условия акции", "textarea"], ["price", "Цена по акции", "number"], ["oldPrice", "Прежняя цена", "number"], ["startsAt", "Начало акции", "datetime-local"], ["endsAt", "Окончание акции", "datetime-local"]],
   materials: [["title","Название материала","text"],["url","Ссылка на материал","url"],["type","Тип материала","text"]]
 };
@@ -62,7 +62,7 @@ function create(container, context) {
       <label>Файл каталога<input id="information-catalog-file" type="file" accept="application/json,.json"></label>
       <button class="plain-button" id="information-catalog-preview" type="button">Проверить файл</button>
       <div id="information-catalog-preview-data"></div>
-      <label class="information-catalog-review"><input id="information-catalog-reviewed" type="checkbox">Сверены компания, цены, количество процедур и источники</label>
+      <label class="information-catalog-review"><input id="information-catalog-reviewed" type="checkbox">Сверены компания, цены, единицы расчёта, число гостей или процедур и источники</label>
       <button class="plain-button" id="information-catalog-import" type="button" disabled>Добавить проверенные услуги</button>
       <p id="information-catalog-status" role="status"></p></section>
     <section class="card" id="information-platform-links" hidden><h3>Сохранённые страницы компании и кабинеты</h3><p>Страница компании видна клиентам. Кабинет площадки откроется отдельно; вход и права проверяются на самой площадке.</p><ul id="information-platform-link-list"></ul></section>
@@ -70,7 +70,7 @@ function create(container, context) {
     ${FIELDS.map(([key,label,max,type]) => `<label for="information-${key}">${label}<span class="information-field-state" data-field-state="${key}"></span>${type === "textarea" ? `<textarea id="information-${key}" maxlength="${max}" rows="${key === "description" ? 5 : 2}"></textarea>` : `<input id="information-${key}" type="${type || "text"}" maxlength="${max}"${key === "name" ? " required" : ""}${key === "timezone" ? ' placeholder="Asia/Irkutsk"' : ""}>`}</label>`).join("")}
     </section>
     ${[["socials","Ссылки на площадки"],["services","Услуги"],["promotions","Акции"],["materials","Фото и материалы"]].map(([key,title]) => `<section class="card information-repeater"><h3>${title}</h3><div id="information-${key}" class="information-rows"></div><button class="plain-button" type="button" data-add-row="${key}">Добавить</button>${key==="materials"?'<label>Фото с устройства<input id="information-photo" type="file" accept="image/jpeg,image/png,image/webp"></label><button class="plain-button" id="information-upload" type="button">Загрузить фото</button><p class="information-note">JPEG, PNG или WebP до 10 МБ. После загрузки сохраните данные компании.</p>':""}</section>`).join("")}
-    <p class="information-note">Пустое поле после удаления значения сохраняет удаление. Длительность процедуры и интервал записи — разные сведения. Даты акций указаны в часовом поясе компании.</p>
+    <p class="information-note">Пустое поле после удаления значения сохраняет удаление. Для программы заполните число гостей и весь визит, оставив количество и длительность процедур пустыми. Интервал записи указывается отдельно. Даты акций указаны в часовом поясе компании.</p>
     <button class="plain-button" id="information-save" type="submit">Сохранить данные компании</button><p id="information-form-status" aria-live="off"></p></form>
     <section class="card information-checks"><h3>Сверка площадок</h3><button class="plain-button" id="information-check" type="button">Проверить актуальность</button><div id="information-checks"></div></section>
     <section class="card"><h3>Источники отдельных фактов</h3><p>Выберите сохранённое значение и укажите, по какому документу или сообщению оно проверено. Изменение значения требует новой проверки.</p>
@@ -110,8 +110,9 @@ function create(container, context) {
       if (type === "social") {
         const options = {...SOCIALS}; if (value && !Object.hasOwn(options,value)) options[value] = value;
         control = `<select data-row-field="${key}"><option value="">Выберите площадку</option>${Object.entries(options).map(([id,title]) => `<option value="${esc(id)}"${id === value ? " selected" : ""}>${esc(title)}</option>`).join("")}</select>`;
-      } else if (type === "textarea") control = `<textarea data-row-field="${key}" rows="3" maxlength="5000">${esc(value)}</textarea>`;
-      else control = `<input data-row-field="${key}" type="${type}" value="${esc(value)}"${type === "number" ? (key==='procedureCount'?' min="1" max="1000" step="1"':' min="0" max="100000000" step="any"') : ` maxlength="${key==="title"?300:kind==="socials"||key==="url"?2000:100}"`}${key==="title"||kind==="materials"&&key==="url"?" required":""}>`;
+      } else if (type === "price-unit") control = `<select data-row-field="${key}"><option value=""${!value?' selected':''}>Не указано отдельно</option><option value="procedures"${value==='procedures'?' selected':''}>Указанное количество процедур</option><option value="program"${value==='program'?' selected':''}>Программа целиком</option></select>`;
+      else if (type === "textarea") control = `<textarea data-row-field="${key}" rows="3" maxlength="5000">${esc(value)}</textarea>`;
+      else control = `<input data-row-field="${key}" type="${type}" value="${esc(value)}"${type === "number" ? (['procedureCount','guestCount','visitDurationMinutes'].includes(key)?' min="1" max="'+(key==='procedureCount'?1000:10000)+'" step="1"':' min="0" max="100000000" step="any"') : ` maxlength="${key==="title"?300:kind==="socials"||key==="url"?2000:100}"`}${key==="title"||kind==="materials"&&key==="url"?" required":""}>`;
       return `<label>${label}${control}</label>`;
     }).join("")}</div><button class="plain-button" type="button" data-remove-row="${kind}" data-index="${index}">Удалить ${({socials:"ссылку",services:"услугу",promotions:"акцию",materials:"материал"})[kind]}</button></fieldset>`).join("");
   };
@@ -124,6 +125,8 @@ function create(container, context) {
         next[key] = type === "number" ? (value === "" ? null : Number(value)) : type === "datetime-local" ? (value ? toUTC(value,profile.timezone || "UTC") : "") : value;
         if(type === "datetime-local" && value === toLocal(old[key],profile.timezone || "UTC")) next[key]=old[key] || "";
       });
+      if(kind==='services'&&!next.priceUnit&&!Object.hasOwn(old,'priceUnit'))delete next.priceUnit;
+      for(const key of ['guestCount','visitDurationMinutes'])if(kind==='services'&&next[key]===null&&!Object.hasOwn(old,key))delete next[key];
       return next;
     });
     return profile;
@@ -256,7 +259,7 @@ function create(container, context) {
       if(preview.companyCode!==companyCode||!Array.isArray(preview.entries))throw Error('Некорректный ответ проверки');
       catalogImport=body;
       get('information-catalog-preview-data').innerHTML=`<p>Компания: <strong>${esc(companyCode)}</strong>. Добавится: ${esc(preview.added)}. Уже есть: ${esc(preview.unchanged)}.</p><ol>`+
-        preview.entries.map(entry=>`<li><strong>${esc(entry.service.title)}</strong> — ${esc(entry.service.price)} ${esc(entry.service.currency)} за ${esc(entry.service.procedureCount)} процедур${entry.service.durationMinutes?' · одна процедура '+esc(entry.service.durationMinutes)+' мин':''}. Источник: ${esc(entry.source)}; ${esc(entry.sourceRef)}; ${esc(entry.checkedAt)}</li>`).join('')+'</ol>';
+        preview.entries.map(entry=>`<li><strong>${esc(entry.service.title)}</strong> — ${esc(entry.service.price)} ${esc(entry.service.currency)} ${entry.service.priceUnit==='program'?'за программу целиком · гостей: '+esc(entry.service.guestCount)+' · весь визит: '+esc(entry.service.visitDurationMinutes)+' мин':'за '+esc(entry.service.procedureCount)+' процедур'}${entry.service.priceUnit!=='program'&&entry.service.durationMinutes?' · одна процедура '+esc(entry.service.durationMinutes)+' мин':''}. Источник: ${esc(entry.source)}; ${esc(entry.sourceRef)}; ${esc(entry.checkedAt)}</li>`).join('')+'</ol>';
       catalogStatus(preview.duplicate?'Этот импорт уже применён. Повтор не добавит услуги.':'Сверьте услуги и источники, затем отметьте проверку.');
     }catch{if(version===epoch){catalogImport=null;catalogStatus('Файл не прошёл проверку: проверьте компанию, услуги, источники и текущую версию каталога.');}}
     finally{if(version===epoch){busy=false;updateControls();}}

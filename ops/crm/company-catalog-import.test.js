@@ -57,3 +57,21 @@ test('more than 200 facts are confirmed within one import and a late database fa
   assert.equal(result.importResult.added,77);assert.equal(api.knowledge('alvi').services.length,77);
   assert.equal(result.facts.filter(f=>f.key.startsWith('services/')&&f.status==='confirmed').length,77*5);
 });
+
+
+test('program import verifies units and guests, replays safely, and rejects missing program context atomically',t=>{
+  const {api,body,entry}=fixture(t);
+  const service={id:'spa',title:'Программа',price:6900,currency:'RUB',priceUnit:'program',guestCount:2,visitDurationMinutes:90};
+  const request={...body(),entries:[{...entry('spa'),service}]};
+  for(const field of ['guestCount','visitDurationMinutes']) {
+    const bad={...service};delete bad[field];
+    assert.throws(()=>api.importCatalog('alvi',{...request,entries:[entry('course'),{...request.entries[0],service:bad}]}),e=>e.status===400);
+    assert.equal(api.get('alvi').profile.services.length,0);
+  }
+  assert.equal(api.importPreview('alvi',request).added,1);
+  const result=api.importCatalog('alvi',request,7);
+  assert.deepEqual(result.profile.services,[service]);
+  for(const key of ['priceUnit','guestCount','visitDurationMinutes'])assert.equal(result.facts.find(f=>f.key==='services/spa/'+key).status,'confirmed');
+  assert.deepEqual(api.quote('alvi','spa',api.knowledge('alvi').knowledgeRevision).service,service);
+  assert.equal(api.importCatalog('alvi',request,7).importResult.duplicate,true);
+});
