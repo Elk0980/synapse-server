@@ -135,7 +135,13 @@ function createCompanyInformation(db,{now=Date.now,check:checker}={}) {
     }
     return db.prepare('SELECT * FROM company_information WHERE company_id=?').get(owner.id);
   }
-  function transaction(work){db.exec('BEGIN IMMEDIATE');try{const result=work();db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');throw error;}}
+  function transaction(work){
+    // Каталог проверяется и внутри атомарного сохранения записи на услугу.
+    const nested=db.isTransaction;
+    db.exec(nested?'SAVEPOINT company_information':'BEGIN IMMEDIATE');
+    try{const result=work();db.exec(nested?'RELEASE company_information':'COMMIT');return result;}
+    catch(error){db.exec(nested?'ROLLBACK TO company_information; RELEASE company_information':'ROLLBACK');throw error;}
+  }
   function get(code) {
     return transaction(()=>{
       const owner=company(db,code),info=refresh(owner),profile=compose(owner,info);
