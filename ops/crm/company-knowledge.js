@@ -45,4 +45,25 @@ function companyKnowledge(snapshot) {
       promotions:'unavailable',materials:'unavailable'}};
   return {...data,knowledgeRevision:createHash('sha256').update(JSON.stringify(data)).digest('hex')};
 }
-module.exports={companyKnowledge};
+// Потребитель передаёт только выбранный ID и версию просмотренного каталога.
+// Цену, количество и условия заново берём из текущих доказанных сведений.
+function serviceQuote(knowledge,serviceId,expectedRevision) {
+  const fail=(status,message,code)=>{throw Object.assign(Error(message),{status,details:{code}});};
+  if(typeof serviceId!=='string'||!serviceId||serviceId.length>100||
+    typeof expectedRevision!=='string'||!/^[a-f0-9]{64}$/.test(expectedRevision))
+    fail(400,'Укажите услугу и версию проверенного каталога','VALIDATION_ERROR');
+  if(expectedRevision!==knowledge.knowledgeRevision)
+    fail(409,'Каталог изменился. Обновите предложение перед ответом.','KNOWLEDGE_CHANGED');
+  const found=knowledge.services.find(row=>row.id===serviceId);
+  if(!found)fail(409,'Услуга отсутствует в проверенном каталоге. Передайте вопрос администратору.','SERVICE_UNAVAILABLE');
+  const fields=['id','title','price','currency','procedureCount','durationMinutes','bookingIntervalMinutes','description'];
+  const service=Object.fromEntries(fields.filter(key=>populated(found[key])).map(key=>[key,found[key]]));
+  const count=service.procedureCount;
+  const word=count%10===1&&count%100!==11?'процедуру':count%10>=2&&count%10<=4&&!(count%100>=12&&count%100<=14)?'процедуры':'процедур';
+  const lines=[service.title,`${String(service.price).replace('.',',')} ${service.currency==='RUB'?'₽':service.currency} за ${count} ${word}.`];
+  if(service.durationMinutes)lines.push(`Продолжительность одной процедуры: ${service.durationMinutes} мин.`);
+  if(service.description)lines.push(service.description);
+  return {companyCode:knowledge.companyCode,knowledgeRevision:knowledge.knowledgeRevision,service,
+    text:lines.join('\n'),availability:'not_checked'};
+}
+module.exports={companyKnowledge,serviceQuote};

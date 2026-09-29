@@ -137,6 +137,17 @@ test('catalog preview and import require edit permission, CSRF and the selected 
   assert.equal(replay.status,200);assert.equal(replay.body.importResult.duplicate,true);assert.equal(replay.body.revision,applied.body.revision);
   const knowledge=(await f.crm('GET','/company-information/knowledge?companyCode=alvi',undefined,viewer)).body;
   assert.equal(knowledge.services[0].price,1000);assert.equal(knowledge.services[0].procedureCount,5);
+  const quotePath='/company-information/quote?companyCode=alvi&serviceId=http-course&knowledgeRevision='+knowledge.knowledgeRevision;
+  assert.equal((await f.crm('GET',quotePath)).status,401);
+  assert.equal((await f.crm('GET',quotePath,undefined,none)).status,403);
+  assert.equal((await f.crm('GET',quotePath.replace('companyCode=alvi','companyCode=avokado'),undefined,viewer)).status,403);
+  const quote=await f.crm('GET',quotePath,undefined,viewer);
+  assert.equal(quote.status,200);assert.equal(quote.body.text,'Курс\n1000 ₽ за 5 процедур.');
+  assert.equal(quote.body.availability,'not_checked');assert.ok(!JSON.stringify(quote.body).includes('Fixture'));
+  assert.equal((await f.crm('GET',quotePath+'&price=1',undefined,viewer)).status,400);
+  assert.equal((await f.crm('GET',quotePath+'&serviceId=other',undefined,viewer)).status,400);
+  assert.equal((await f.crm('GET',quotePath.replace(knowledge.knowledgeRevision,'0'.repeat(64)),undefined,viewer)).status,409);
+  assert.equal((await f.crm('GET','/company-information?companyCode=alvi',undefined,editor)).body.revision,applied.body.revision);
   assert.equal(existsSync(f.marker),false);
 });
 

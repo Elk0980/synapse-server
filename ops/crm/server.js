@@ -2534,12 +2534,18 @@ async function route(request, response) {
   if (await handleReviews(request,response,url,cors)) return;
   if (await handlePlatformDemand(request,response,url,cors)) return;
   if (await handleSocialStats(request,response,url,cors)) return;
-  if (['/company-information','/company-information/check','/company-information/facts','/company-information/knowledge','/company-information/catalog-preview','/company-information/catalog-import'].includes(url.pathname)) {
+  if (['/company-information','/company-information/check','/company-information/facts','/company-information/knowledge','/company-information/quote','/company-information/catalog-preview','/company-information/catalog-import'].includes(url.pathname)) {
     const permission = request.method === 'GET' ? 'company-information.view' : 'company-information.edit';
     const {identity,company} = companyModuleContext(request,url.searchParams.get('companyCode'),permission);
     let result;
     if (url.pathname === '/company-information' && request.method === 'GET') result = companyInformation.get(company.code);
     else if (url.pathname === '/company-information/knowledge' && request.method === 'GET') result = companyInformation.knowledge(company.code);
+    else if (url.pathname === '/company-information/quote' && request.method === 'GET') {
+      const keys=['companyCode','serviceId','knowledgeRevision'];
+      if([...url.searchParams.keys()].some(key=>!keys.includes(key))||keys.some(key=>url.searchParams.getAll(key).length!==1))
+        fail(400,'Укажите компанию, услугу и одну версию каталога');
+      result=companyInformation.quote(company.code,url.searchParams.get('serviceId'),url.searchParams.get('knowledgeRevision'));
+    }
     else if (url.pathname === '/company-information/facts' && request.method === 'GET') result = companyInformation.factHistory(company.code,url.searchParams.get('key'));
     else if (url.pathname === '/company-information/catalog-preview' && request.method === 'POST') result=companyInformation.importPreview(company.code,await readJson(request));
     else if (url.pathname === '/company-information/catalog-import' && request.method === 'POST') {

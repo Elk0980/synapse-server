@@ -2,7 +2,7 @@
 
 const {publicLinkUrl} = require('./company-links');
 const {createCompanyFacts} = require('./company-facts');
-const {companyKnowledge} = require('./company-knowledge');
+const {companyKnowledge,serviceQuote} = require('./company-knowledge');
 const {createHash}=require('node:crypto');
 const BASE = {name:'name',city:'city',timezone:'timezone',phone:'phone',email:'email',websiteUrl:'website_url',socials:'socials'};
 const EXTRA = ['address','hours','description','services','promotions','materials'];
@@ -241,6 +241,7 @@ function createCompanyInformation(db,{now=Date.now,check:checker}={}) {
     });
     return {...get(code),importResult:{clientImportId:body.clientImportId,duplicate:prepared.duplicate,added}};
   }
-  return {get,save,check,factHistory,importPreview,importCatalog,knowledge:code=>companyKnowledge(get(code))};
+  return {get,save,check,factHistory,importPreview,importCatalog,knowledge:code=>companyKnowledge(get(code)),
+    quote:(code,serviceId,expectedRevision)=>serviceQuote(companyKnowledge(get(code)),serviceId,expectedRevision)};
 }
 module.exports={createCompanyInformation,company,fail,object,text,timezone,utcDate,revision,url,normalizeProfile};
