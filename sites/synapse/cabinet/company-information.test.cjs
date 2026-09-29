@@ -40,6 +40,18 @@ test('invalid unfinished input survives a project switch and stale company respo
     assert.equal(f.node('information-company').value,'alvi');assert.equal(f.node('information-name').value,'Черновик АЛВИ');assert.equal(f.node('information-timezone').value,'unfinished/zone');
   }finally{f.close();}
 });
+
+test('service quantity stays unknown for old rows and saves a course without dividing its price or duration',async()=>{
+  const f=await fixture();try{
+    const count=f.node('information-services').querySelector('[data-row-field="procedureCount"]');
+    assert.equal(count.value,'');assert.equal(count.min,'1');assert.equal(count.step,'1');
+    count.value='5';count.dispatchEvent(new f.w.Event('input',{bubbles:true}));
+    await f.click('information-save');
+    const body=JSON.parse(f.calls.find(call=>call.method==='PUT').options.body);
+    assert.equal(body.profile.services[0].procedureCount,5);assert.equal(body.profile.services[0].price,500);
+    assert.equal(body.profile.services[0].durationMinutes,45);assert.equal(body.profile.services[0].bookingIntervalMinutes,60);
+  }finally{f.close();}
+});
 test('company timezone converts wall time to UTC without depending on computer timezone and rejects DST gaps/ambiguity',async()=>{
   const f=await fixture();try{const time=f.w.SbCabinet.companyTime;
     assert.equal(time.toUTC('2099-01-01T10:00','Asia/Irkutsk'),'2099-01-01T02:00:00.000Z');

@@ -30,7 +30,7 @@ function companyKnowledge(snapshot) {
     const prefix=`services/${encodeURIComponent(service.id)}/`;
     // Нельзя выдавать голую цену без названия, валюты или без подтверждения
     // сохранённых условий/длительности. Ноль — допустимая цена, отсутствие — нет.
-    const required=new Set(['title','price','currency',...Object.keys(service).filter(key=>key!=='id'&&populated(service[key]))]);
+    const required=new Set(['title','price','currency','procedureCount',...Object.keys(service).filter(key=>key!=='id'&&populated(service[key]))]);
     const missing=[...required].filter(key=>!populated(service[key])||!valid(prefix+key));
     if(missing.length){unavailableServices.push({id:service.id,missingFields:missing});continue;}
     const fields=Object.keys(service).filter(key=>key!=='id'&&populated(service[key]));
