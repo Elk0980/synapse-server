@@ -17,7 +17,7 @@ function fixture({role='owner',permissions=[],override,empty=false}={}) {
   const data={alvi:record('alvi'),avokado:record('avokado')};if(empty){data.alvi.datasets=[];data.alvi.history=[];}
   const ctx={selectedProjectId:'alvi',identity:{role,permissions,companies:[{id:'alvi',name:'АЛВИ'},{id:'avokado',name:'Авокадо'}]},csrfOptions:(method,body)=>({method,headers:{'X-CSRF-Token':'test-csrf'},body:JSON.stringify(body)}),
     apiJson:async(url,options={})=>{
-      const u=new URL(url,'https://cabinet.example.test/'),code=u.searchParams.get('companyCode'),call={path:u.pathname,code,method:options.method||'GET',body:options.body?JSON.parse(options.body):null,options};calls.push(call);
+      const u=new URL(url,'https://cabinet.example.test/'),code=u.searchParams.get('companyCode'),call={path:u.pathname,code,method:options.method||'GET',body:options.body?JSON.parse(options.body):null,options,search:u.searchParams};calls.push(call);
       if(override){const result=await override(call);if(result!==undefined)return clone(result);}
       if(call.path.endsWith('/settings')){assert.equal(call.body.revision,data[code].settings.revision);data[code].settings={...call.body,configured:true,revision:call.body.revision+1};return {settings:clone(data[code].settings)};}
       if(call.path.endsWith('/categories')){assert.equal(call.body.revision,data[code].categories.revision);data[code].categories={revision:call.body.revision+1,items:call.body.items};return {categories:clone(data[code].categories)};}
@@ -143,5 +143,218 @@ test('search-share phrases are never offered as rubrics: only server categories 
     f.set('dataset','alvi-share','change');await f.settle();
     assert.deepEqual(options(),['Эпиляция'],'share snapshot adds no phrases');
     assert.doesNotMatch(f.node('category').innerHTML,/авокадо|прочее/);
+  }finally{f.close();}
+});
+
+/* Фактические показатели компании 2ГИС. Компании, организации, филиалы и числа
+   в этих проверках синтетические: реальная выгрузка ALVI в тесты не попадает. */
+const M_ORG='70000000000000101',M_BRANCH='70000000000000102';
+const mDay=index=>`2026-09-${String(index).padStart(2,'0')}`;
+function metricsFixture(t,{role='owner',permissions=[],filename='appearance.xlsx'}={}) {
+  const {DatabaseSync}=require('node:sqlite');
+  const {createPlatformDemand}=require('../../../ops/crm/platform-demand');
+  const {createPlatformCompanyMetrics}=require('../../../ops/crm/platform-company-metrics');
+  const db=new DatabaseSync(':memory:');
+  db.exec("CREATE TABLE companies(code TEXT PRIMARY KEY,name TEXT,is_deleted INTEGER DEFAULT 0); INSERT INTO companies VALUES('alvi','АЛВИ',0),('avokado','Авокадо',0)");
+  const demand=createPlatformDemand(db,{now:()=>Date.parse('2026-09-30T05:00:00Z')});
+  const metrics=createPlatformCompanyMetrics(db,{now:()=>Date.parse('2026-09-30T05:00:00Z')});
+  const actor={userId:1,userName:'Владелец'};
+  for(const code of ['alvi','avokado'])demand.saveSettings(code,{revision:demand.get(code).settings.revision,organizationId:M_ORG,organizationName:'Демо',city:'Демоград',
+    cabinetUrl:`https://account.2gis.com/orgs/${M_ORG}/stats`,branchId:M_BRANCH},actor);
+  const f=fixture({role,permissions,override:call=>{
+    if(call.path.endsWith('/company-metrics'))return metrics.summary(call.code,call.search.get('from'),call.search.get('to'));
+    if(call.path.endsWith('/company-metrics/preview'))return metrics.preview(call.code,call.body,actor);
+    if(call.path.endsWith('/company-metrics/import'))return metrics.importReports(call.code,call.body,actor);
+    if(call.path.endsWith('/settings'))return demand.saveSettings(call.code,call.body,actor);
+    if(call.path.endsWith('/import'))return demand.importDataset(call.code,call.body);
+    if(call.path.endsWith('/categories'))return demand.saveCategories(call.code,call.body);
+    return demand.get(call.code);
+  }});
+  return {f,db,demand,metrics,actor,filename};
+}
+// Импорт всегда парой «предпросмотр → подтверждение»: подтверждение привязано к состоянию данных.
+const mSeed=(ctxf,list,over={})=>{const seen=ctxf.metrics.preview('alvi',{reports:list},ctxf.actor);
+  return ctxf.metrics.importReports('alvi',{settingsRevision:ctxf.demand.get('alvi').settings.revision,
+    dataRevision:seen.dataRevision,packageHash:seen.packageHash,confirmReplace:seen.requiresConfirmation,reports:list,...over},ctxf.actor);};
+const mReport=(over={})=>({reportKind:'appearance',periodStart:mDay(1),periodEnd:mDay(3),granularity:'day',timezone:null,
+  capturedDate:'2026-09-29',capturedAt:null,sourceKind:'official_xlsx',sourceUrl:`https://account.2gis.com/orgs/${M_ORG}/stats`,
+  originalFilename:'appearance.xlsx',originalFileSha256:'a'.repeat(64),scopeNote:null,
+  rows:[{date:mDay(1),metric:'appearance_views',value:10,sourcePosition:'A2'},
+        {date:mDay(2),metric:'appearance_views',value:0,sourcePosition:'A3'},
+        {date:mDay(1),metric:'search_position',value:4,sourcePosition:'B2'},
+        {date:mDay(2),metric:'search_position',value:7,sourcePosition:'B3'}],...over});
+
+test('все одиннадцать показателей показаны; измеренный ноль отличается от отсутствия данных; позиция в выдаче не суммируется',async t=>{
+  const {f,metrics,demand,actor}=metricsFixture(t);
+  mSeed({metrics,demand,actor},[mReport()]);
+  try{
+    await f.render();f.set('metrics-from',mDay(1));f.set('metrics-to',mDay(3));f.submit('metrics-period');await f.settle();
+    const table=f.node('metrics-body').querySelector('table');
+    assert.equal(table.tBodies[0].rows.length,11,'словарь показателей выводится целиком, а не только заполненные строки');
+    const row=name=>[...table.tBodies[0].rows].find(item=>item.cells[0].textContent.includes(name));
+    const views=row('Показы');
+    assert.equal(views.cells[1].textContent.trim(),'10','измеренный ноль входит в сумму и не превращает её в «нет данных»');
+    assert.match(views.cells[3].textContent,/2 \/ 3/,'третий день не загружен и считается пропуском, а не нулём');
+    assert.match(views.cells[4].textContent,/0/);
+    const position=row('Позиция в выдаче');
+    assert.match(position.cells[1].textContent,/не считается/,'позиция в выдаче не суммируется и не усредняется');
+    assert.match(position.cells[2].textContent,/4 — 7/);
+    const empty=row('Клики в адрес');
+    assert.match(empty.cells[4].textContent,/—/);
+    assert.match(f.node('metrics-body').textContent,/измеренных нулей: 1/);
+    assert.match(f.node('metrics-body').textContent,/Конверсия между отчётами не считается/);
+    assert.doesNotMatch(f.node('metrics-body').textContent,/состоявшихся звонк/i);
+  }finally{f.close();}
+});
+
+test('без подтверждённого филиала показатели не запрашиваются и блок честно объясняет причину',async t=>{
+  const {f,db}=metricsFixture(t);
+  db.exec("UPDATE platform_demand_settings SET branch_id=''");
+  try{
+    await f.render();await f.settle();
+    assert.equal(f.calls.some(call=>call.path.includes('company-metrics')),false);
+    assert.match(f.node('metrics-status').textContent,/Укажите филиал организации/);
+    assert.match(f.node('metrics-body').textContent,/ещё не загружены/);
+  }finally{f.close();}
+});
+
+test('аналитик показатели только читает: блока загрузки нет и запись не уходит',async t=>{
+  const {f,metrics,demand,actor}=metricsFixture(t,{role:'marketer',permissions:['analytics.view']});
+  mSeed({metrics,demand,actor},[mReport()]);
+  try{
+    await f.render();f.set('metrics-from',mDay(1));f.set('metrics-to',mDay(3));f.submit('metrics-period');await f.settle();
+    assert.equal(f.node('metrics-import').hidden,true);
+    assert.equal(f.node('metrics-save').disabled,true);
+    f.node('metrics-save').click();await f.settle();
+    assert.ok(f.calls.every(call=>call.method==='GET'),'у аналитика не появляется ни одного изменяющего запроса');
+    assert.match(f.node('metrics-body').textContent,/Показы/);
+  }finally{f.close();}
+});
+
+test('загрузка файла: предпросмотр ничего не пишет, замена дат требует подтверждения, повтор не удваивает итоги',async t=>{
+  const {f,metrics}=metricsFixture(t);
+  const put=value=>{const file=new f.w.File([JSON.stringify(value)],'reports.json',{type:'application/json'});
+    Object.defineProperty(f.node('metrics-file'),'files',{value:[file],configurable:true});
+    f.node('metrics-file').dispatchEvent(new f.w.Event('change',{bubbles:true}));};
+  try{
+    await f.render();await f.settle();
+    put({reports:[mReport()]});await f.settle();
+    assert.equal(f.node('metrics-preview').hidden,false);
+    assert.match(f.node('metrics-preview').textContent,/Будет загружено в компанию: АЛВИ/);
+    assert.match(f.node('metrics-preview').textContent,/Совпадающих дат нет/);
+    assert.equal(metrics.summary('alvi',mDay(1),mDay(3)).coverage.knownValues,0,'предпросмотр ничего не сохранил');
+    f.node('metrics-save').click();await f.settle();
+    assert.match(f.node('metrics-status').textContent,/Загружено отчётов: 1/);
+    const after=metrics.summary('alvi',mDay(1),mDay(3));
+    assert.equal(after.coverage.knownValues,4);
+    assert.equal(f.node('metrics-preview').hidden,true);
+    put({reports:[mReport()]});await f.settle();
+    assert.match(f.node('metrics-preview').textContent,/уже загружен/);
+    f.node('metrics-save').click();await f.settle();
+    assert.equal(metrics.summary('alvi',mDay(1),mDay(3)).coverage.knownValues,4,'повтор тех же чисел ничего не прибавил');
+    put({reports:[mReport({rows:[{date:mDay(1),metric:'appearance_views',value:99,sourcePosition:'A2'}]})]});await f.settle();
+    assert.match(f.node('metrics-preview').textContent,/было 10 → станет 99/);
+    assert.ok(f.node('metrics-preview').querySelector('.demand-warning'));
+  }finally{f.close();}
+});
+
+test('смена компании очищает предпросмотр и показатели прежней компании',async t=>{
+  const {f}=metricsFixture(t);
+  const put=value=>{const file=new f.w.File([JSON.stringify(value)],'reports.json',{type:'application/json'});
+    Object.defineProperty(f.node('metrics-file'),'files',{value:[file],configurable:true});
+    f.node('metrics-file').dispatchEvent(new f.w.Event('change',{bubbles:true}));};
+  try{
+    await f.render();await f.settle();put({reports:[mReport()]});await f.settle();
+    assert.equal(f.node('metrics-preview').hidden,false);
+    await f.views['platform-demand'].render(f.container,{...f.ctx,selectedProjectId:'avokado'});await f.settle();
+    assert.equal(f.node('metrics-preview').hidden,true);
+    assert.equal(f.node('metrics-preview').textContent,'');
+    assert.equal(f.node('metrics-save').disabled,true);
+    f.node('metrics-save').click();await f.settle();
+    assert.equal(f.calls.some(call=>call.method==='POST'&&call.path.includes('company-metrics/import')),false);
+  }finally{f.close();}
+});
+
+test('название файла и подпись источника выводятся как текст, разметка из них не исполняется',async t=>{
+  const {f,metrics,demand,actor}=metricsFixture(t);
+  mSeed({metrics,demand,actor},[mReport({originalFilename:'<img src=x onerror=alert(1)>.xlsx'})]);
+  try{
+    await f.render();f.set('metrics-from',mDay(1));f.set('metrics-to',mDay(3));f.submit('metrics-period');await f.settle();
+    f.node('metrics-history-box').open=true;
+    assert.equal(f.node('metrics-history').querySelector('img'),null);
+    assert.match(f.node('metrics-history').textContent,/<img src=x onerror=alert\(1\)>\.xlsx/);
+    assert.equal(f.container.querySelector('script'),null);
+  }finally{f.close();}
+});
+
+test('филиал настраивается в форме организации, а сохранение сбрасывает прежние показатели',async t=>{
+  const {f,db}=metricsFixture(t);
+  db.exec("UPDATE platform_demand_settings SET branch_id=''");
+  try{
+    await f.render();await f.settle();
+    const form=f.node('settings-form');
+    assert.ok(form.elements.branchId,'поле филиала есть в форме организации');
+    assert.equal(form.elements.branchId.value,'');
+    assert.match(f.node('metrics-status').textContent,/Укажите филиал организации/);
+    form.elements.branchId.value=M_BRANCH;f.submit('settings-form');await f.settle();
+    const saved=f.calls.find(call=>call.path.endsWith('/settings')&&call.method==='PUT');
+    assert.equal(saved.body.branchId,M_BRANCH,'филиал уходит на сервер');
+    assert.ok(f.calls.some(call=>call.path.endsWith('/company-metrics')),'показатели перечитаны для подтверждённого филиала');
+    assert.match(f.node('metrics-body').textContent,/Организация/);
+  }finally{f.close();}
+});
+
+test('правка формы организации сбрасывает подтверждённый предпросмотр показателей',async t=>{
+  const {f}=metricsFixture(t);
+  try{
+    await f.render();await f.settle();
+    const file=new f.w.File([JSON.stringify({reports:[mReport()]})],'reports.json',{type:'application/json'});
+    Object.defineProperty(f.node('metrics-file'),'files',{value:[file],configurable:true});
+    f.node('metrics-file').dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();
+    assert.equal(f.node('metrics-preview').hidden,false);
+    f.node('settings-form').elements.city.value='Другой город';
+    f.node('settings-form').dispatchEvent(new f.w.Event('input',{bubbles:true}));
+    assert.equal(f.node('metrics-preview').hidden,true,'предпросмотр относился к прежним настройкам');
+    assert.equal(f.node('metrics-save').disabled,true);
+  }finally{f.close();}
+});
+
+test('пустые строки, известные значения и измеренные нули в покрытии не путаются',async t=>{
+  const {f,metrics,demand,actor}=metricsFixture(t);
+  mSeed({metrics,demand,actor},[mReport({periodStart:mDay(1),periodEnd:mDay(2),rows:[
+    {date:mDay(1),metric:'appearance_views',value:0,sourcePosition:'A2'},
+    {date:mDay(2),metric:'appearance_views',value:null,sourcePosition:'A3'}]})]);
+  try{
+    await f.render();f.set('metrics-from',mDay(1));f.set('metrics-to',mDay(3));f.submit('metrics-period');await f.settle();
+    const body=f.node('metrics-body').textContent;
+    assert.match(body,/из них с измерениями: 1/,'день с пустым значением измеренным не считается');
+    assert.match(body,/пустыми значениями/);
+    assert.match(body,/Известных значений: 1 из 2 прочитанных строк, из них измеренных нулей: 1/);
+    const views=[...f.node('metrics-body').querySelectorAll('tbody tr')]
+      .find(row=>row.cells[0].textContent.includes('Показы'));
+    assert.equal(views.cells[1].textContent.trim(),'0','измеренный ноль показан как ноль, а не как прочерк');
+    assert.match(views.cells[4].textContent,/нет данных/);
+  }finally{f.close();}
+});
+
+test('предпросмотр объясняет изменение условий сбора при тех же числах',async t=>{
+  const {f,metrics,demand,actor}=metricsFixture(t);
+  const base=(over={})=>mReport({reportKind:'pagevisits',periodStart:mDay(1),periodEnd:mDay(1),
+    rows:[{date:mDay(1),metric:'page_visits',value:5,sourcePosition:'A2'}],...over});
+  mSeed({metrics,demand,actor},[base()]);
+  const put=value=>{const file=new f.w.File([JSON.stringify(value)],'reports.json',{type:'application/json'});
+    Object.defineProperty(f.node('metrics-file'),'files',{value:[file],configurable:true});
+    f.node('metrics-file').dispatchEvent(new f.w.Event('change',{bubbles:true}));};
+  try{
+    await f.render();await f.settle();
+    put({reports:[base({timezone:'Asia/Irkutsk',scopeNote:'partner_sites_excluded'})]});await f.settle();
+    const text=f.node('metrics-preview').textContent;
+    assert.doesNotMatch(text,/ничего не добавит/,'это не повтор');
+    assert.match(text,/Изменились условия или подтверждение источника/);
+    assert.match(text,/часовой пояс — было «не указан», станет «Asia\/Irkutsk»/);
+    assert.match(text,/охват источника — было «без ограничения»/);
+    assert.match(text,/изменились условия сбора/);
+    f.node('metrics-save').click();await f.settle();
+    assert.match(f.node('metrics-status').textContent,/Загружено отчётов: 1/);
   }finally{f.close();}
 });

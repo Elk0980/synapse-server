@@ -174,8 +174,38 @@ const renderPlatformFilter = () => {
 };
 const funnelProjectLabel = () => ctx.selectedProjectId === "synapse-business" ? "онлайн-созвон" :
   ["alvi", "avokado"].includes(ctx.selectedProjectId) ? "запись на визит" : "заявка";
-const renderAnalytics = (dashboard, summary, expenses, potential = null, owner = analyticsState.payload?.owner) => {
-  analyticsState.payload = { dashboard, summary, expenses, potential, owner };
+/* Фактическая статистика 2ГИС: только загруженные в ЛК отчёты за тот же период.
+   Эти события не сводятся с продажами CRM и не считаются уникальными обращениями:
+   пересечение совокупностей отчётов 2ГИС между собой и с CRM не доказано. */
+const renderCompanyMetricsSection = (companyMetrics, owner) => {
+  const head = '<section class="analytics-section analytics-2gis"><h2>Фактическая статистика 2ГИС</h2>' +
+    `<p class="crm-note">Загруженные отчёты кабинета 2ГИС за ${escapeHTML(shortRange(owner))}. ` +
+    'Это не события CRM: с продажами и заявками они не складываются.</p>';
+  const link = '<p><a class="plain-button" href="#platform-demand">Подробности в разделе 2ГИС</a></p></section>';
+  if (!companyMetrics) return head + '<div class="crm-empty">Показатели 2ГИС не загружены за этот период.</div>' + link;
+  if (companyMetrics.error) return head +
+    '<div class="crm-empty">Показатели 2ГИС сейчас недоступны: состояние за период неизвестно.</div>' + link;
+  const rows = (companyMetrics.metrics || []).filter((item) => item.daysWithValue > 0);
+  if (!rows.length) return head +
+    '<div class="crm-empty">За этот период загруженных значений нет. Это не ноль показов, а отсутствие отчётов.</div>' + link;
+  /* Диапазон по дням уместен только для позиции в выдаче и только при известных min/max.
+     Счётчик без сопоставимого итога показывает причину, а не «null–null». */
+  const cells = rows.map((item) => {
+    const range = item.aggregation === "daily_only" && item.min !== null && item.max !== null
+      ? `${item.min}–${item.max} по дням` : null;
+    const value = item.totalAvailable ? formatMetric(item.total) : range || "итог не сводится";
+    const note = item.totalAvailable || range ? "" :
+      `<span class="crm-note">${escapeHTML(item.totalNote || "Значения собраны при разных условиях.")}</span>`;
+    return `<div class="crm-stat"><span>${escapeHTML(item.label)}</span><strong>${escapeHTML(value)}</strong>${note}</div>`;
+  }).join("");
+  const coverage = companyMetrics.coverage || {};
+  return head + `<div class="crm-summary">${cells}</div>` +
+    `<p class="crm-note">Дней с измерениями: ${escapeHTML(String((coverage.datesWithValue || []).length))} из ${
+      escapeHTML(String(coverage.expectedDays ?? 0))}. «Звонки и просмотры телефона» — не состоявшиеся звонки. ` +
+    'Категории обращений не складываются друг с другом и с действиями на странице.</p>' + link;
+};
+const renderAnalytics = (dashboard, summary, expenses, potential = null, owner = analyticsState.payload?.owner, companyMetrics = analyticsState.payload?.companyMetrics ?? null) => {
+  analyticsState.payload = { dashboard, summary, expenses, potential, owner, companyMetrics };
   const stats = Array.isArray(dashboard.sourceStats) ? dashboard.sourceStats : [];
   const allSelected = analyticsState.selected.size === ANALYTICS_PLATFORMS.length;
   const knownCodes = new Set(ANALYTICS_PLATFORMS.flatMap((platform) => platform.codes));
@@ -279,7 +309,8 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
     <section class="analytics-section"><h2>Площадки</h2><div class="crm-table-wrap">
     <table class="crm-table analytics-source-table"><thead><tr><th>Площадка</th><th>Показы</th><th>Клики</th>
     <th>Обращения</th><th>Заявки</th><th>Продажи</th><th>Выручка</th><th>Расходы</th><th>ROMI</th>
-    <th>Данные</th></tr></thead><tbody>${tableRows}</tbody></table></div></section>`;
+    <th>Данные</th></tr></thead><tbody>${tableRows}</tbody></table></div></section>
+    ${renderCompanyMetricsSection(companyMetrics, owner)}`;
   byId("analytics-content").querySelectorAll("[data-funnel-step]").forEach((button) => {
     button.addEventListener("click", () => {
       const detail = byId("analytics-content").querySelector(`[data-funnel-detail="${button.dataset.funnelStep}"]`);
@@ -343,7 +374,7 @@ const loadAnalytics = async () => {
   const current = () => requestId === analyticsRequestId && sameScope(owner);
   const scope = { companyCode: owner.companyCode };
   try {
-    const [dashboard, summary, expensePayload, potential] = await Promise.all([
+    const [dashboard, summary, expensePayload, potential, companyMetrics] = await Promise.all([
       crmQuery("/dashboard", { period: analyticsState.period, ...range, ...scope }),
       crmQuery("/summary", { ...range, ...scope }),
       crmQuery("/expenses", { ...range, ...scope }),
@@ -351,10 +382,15 @@ const loadAnalytics = async () => {
       crmQuery("/platform-demand/potential", { ...range, ...scope })
         .then((result) => result?.company?.code === scope.companyCode &&
           result?.requested?.from === range.from && result?.requested?.to === range.to ? result : { error: true })
+        .catch(() => ({ error: true })),
+      // Фактические показатели 2ГИС тоже не ломают аналитику: ошибка видна только в своём блоке.
+      crmQuery("/platform-demand/company-metrics", { ...range, ...scope })
+        .then((result) => String(result?.companyCode || "").toLowerCase() === String(scope.companyCode).toLowerCase() &&
+          result?.period?.from === range.from && result?.period?.to === range.to ? result : { error: true })
         .catch(() => ({ error: true }))
     ]);
     if (!current()) return;
-    renderAnalytics(dashboard, summary, expensePayload.expenses || [], potential, owner);
+    renderAnalytics(dashboard, summary, expensePayload.expenses || [], potential, owner, companyMetrics);
   } catch (error) {
     if (!current()) return;
     byId("analytics-content").innerHTML =
@@ -394,7 +430,8 @@ const renderAnalyticsControls = () => {
         analyticsState.payload.summary,
         analyticsState.payload.expenses,
         analyticsState.payload.potential,
-        analyticsState.payload.owner
+        analyticsState.payload.owner,
+        analyticsState.payload.companyMetrics
       );
     }
   });

@@ -22,6 +22,8 @@ on:
       - 'ops/crm/server.js'
       - 'ops/crm/social-stats*'
       - 'ops/crm/social-baselines*'
+      - 'ops/crm/platform-demand*'
+      - 'ops/crm/platform-company-metrics*'
       - 'ops/crm/finance-ai*'
       - 'ops/crm/ai-trials.js'
       - 'ops/crm/commercial*'
@@ -43,6 +45,8 @@ on:
       - 'ops/crm/server.js'
       - 'ops/crm/social-stats*'
       - 'ops/crm/social-baselines*'
+      - 'ops/crm/platform-demand*'
+      - 'ops/crm/platform-company-metrics*'
       - 'ops/crm/finance-ai*'
       - 'ops/crm/ai-trials.js'
       - 'ops/crm/commercial*'
@@ -110,6 +114,10 @@ jobs:
       - name: Тесты исходной статистики до запуска
         timeout-minutes: 10
         run: node --test ops/crm/social-baselines.test.js ops/crm/social-stats.test.js ops/crm/social-stats-http.test.js
+
+      - name: Тесты спроса и фактических показателей 2ГИС
+        timeout-minutes: 10
+        run: node --test ops/crm/platform-demand.test.js ops/crm/platform-company-metrics.test.js ops/crm/platform-company-metrics-http.test.js
 
       - name: Тесты календаря и публикаций
         timeout-minutes: 10
