@@ -18,6 +18,42 @@ function fixture(t){
 const service={id:'massage/60',title:'Массаж 60 минут',price:3500,currency:'RUB',procedureCount:1,durationMinutes:60,description:'Одна процедура'};
 const keys=Object.keys(service).filter(k=>k!=='id').map(k=>'services/massage%2F60/'+k);
 
+test('quotes use current verified values and omit internal sources without promising a booking',t=>{
+  const {api,confirm,save}=fixture(t);
+  save('alvi',{services:[{...service,price:15700,procedureCount:5,bookingIntervalMinutes:90}]});
+  confirm('alvi',[...keys,'services/massage%2F60/bookingIntervalMinutes']);
+  const current=api.knowledge('alvi'),q=api.quote('alvi',service.id,current.knowledgeRevision);
+  assert.equal(q.service.price,15700);assert.equal(q.service.procedureCount,5);
+  assert.equal(q.service.durationMinutes,60);assert.equal(q.service.bookingIntervalMinutes,90);
+  assert.equal(q.text,'Массаж 60 минут\n15700 ₽ за 5 процедур.\nПродолжительность одной процедуры: 60 мин.\nОдна процедура');
+  assert.equal(q.availability,'not_checked');
+  for(const privateField of ['sources','sourceRef','factId','checkedAt','supersedesId'])assert.ok(!JSON.stringify(q).includes(privateField));
+  assert.throws(()=>api.quote('avokado',service.id,current.knowledgeRevision),e=>e.status===409);
+  assert.throws(()=>api.quote('alvi','absent',current.knowledgeRevision),e=>e.details.code==='SERVICE_UNAVAILABLE');
+  for(const rev of [null,'','fake'])assert.throws(()=>api.quote('alvi',service.id,rev),e=>e.status===400);
+});
+
+test('a price or proof change invalidates an in-flight selection; unverified replacement cannot be quoted',t=>{
+  const {api,confirm,save}=fixture(t);save('alvi',{services:[service]});confirm('alvi',keys);
+  const initial=api.knowledge('alvi');
+  save('alvi',{services:[{...service,price:3600}]});
+  assert.throws(()=>api.quote('alvi',service.id,initial.knowledgeRevision),e=>e.details.code==='KNOWLEDGE_CHANGED');
+  const unverified=api.knowledge('alvi');
+  assert.throws(()=>api.quote('alvi',service.id,unverified.knowledgeRevision),e=>e.details.code==='SERVICE_UNAVAILABLE');
+  confirm('alvi',[keys.find(k=>k.endsWith('/price'))]);const refreshed=api.knowledge('alvi');
+  assert.equal(api.quote('alvi',service.id,refreshed.knowledgeRevision).service.price,3600);
+  confirm('alvi',[keys.find(k=>k.endsWith('/price'))]);
+  assert.throws(()=>api.quote('alvi',service.id,refreshed.knowledgeRevision),e=>e.details.code==='KNOWLEDGE_CHANGED');
+});
+
+test('zero and fractional prices are not rounded or divided; procedure counts are explicit',t=>{
+  const {api,confirm,save}=fixture(t);
+  for(const [price,quantity,label] of [[0,1,'0 ₽ за 1 процедуру'],[12.345,2,'12,345 ₽ за 2 процедуры'],[123,11,'123 ₽ за 11 процедур']]){
+    save('alvi',{services:[{...service,price,procedureCount:quantity}]});confirm('alvi',keys);
+    assert.ok(api.quote('alvi',service.id,api.knowledge('alvi').knowledgeRevision).text.includes(label));
+  }
+});
+
 test('legacy values stay outside knowledge; source-only confirmation changes knowledge revision',t=>{
   const {api,confirm,save}=fixture(t);
   save('alvi',{phone:'+7 private unverified',websiteUrl:'https://example.test/'});
