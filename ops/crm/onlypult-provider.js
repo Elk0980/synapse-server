@@ -8,7 +8,15 @@ const BASE = 'https://api.onlypult.com/v1';
 const PLATFORM = {vk:['vkontakte','vk'],telegram:['telegram'],youtube_shorts:['youtube']};
 // Канал YouTube Shorts: заголовок обязателен, ровно один публичный HTTPS-видеофайл.
 // Категорию не отправляем: она опциональна и её идентификаторы берутся из отдельного запроса профиля.
-const VIDEO_URL = /^https:\/\/[^\s]+\.(?:mp4|mov|m4v|webm)(?:\?[^\s]*)?$/i;
+/* Единое правило ссылки на видео для YouTube Shorts во всех трёх проверках (кабинет, сервер, адаптер):
+   разбирается как URL, схема только https, фрагмент пуст, расширение проверяется именно в пути.
+   Поэтому jpg?name=.mp4 видео не считается, clip.mp4?version=1 проходит, clip.mp4#t=1 отклоняется. */
+function isVideoUrl(value) {
+  if (typeof value !== 'string' || !value) return false;
+  let url;
+  try {url = new URL(value);} catch {return false;}
+  return url.protocol === 'https:' && url.hash === '' && /\.(mp4|mov|m4v|webm)$/i.test(url.pathname);
+}
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value);
 function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
   async function request(row,method,path,body) {
@@ -113,7 +121,7 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
     if (row.id === 'youtube_shorts') {
       const title = typeof post.title === 'string' ? post.title.trim() : '';
       if (!title) throw failure('CONTENT_LIMIT');
-      const videos = post.mediaUrls.filter(url => VIDEO_URL.test(url));
+      const videos = post.mediaUrls.filter(isVideoUrl);
       if (post.mediaUrls.length !== 1 || videos.length !== 1) throw failure('CONTENT_LIMIT');
       // privacy: публикация из кабинета делается публичной осознанно, это видно в подписи действия.
       if (title.length > 100) throw failure('CONTENT_LIMIT');

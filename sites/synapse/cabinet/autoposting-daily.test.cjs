@@ -306,6 +306,9 @@ test('кабинет не пускает в план картинку или htt
   for (const [name,mediaUrls] of [
     ['картинка вместо видео',['https://example.test/frame.jpg']],
     ['видео по http',['http://example.test/clip.mp4']],
+    ['картинка с расширением в параметре',['https://example.test/frame.jpg?file=.mp4']],
+    ['видео с фрагментом',['https://example.test/clip.mp4#t=1']],
+    ['видео с параметром и фрагментом',['https://example.test/clip.mp4?x=1#t=1']],
   ]) {
     const f=await fixture({entries:[make(mediaUrls)],override:call=>call.path.endsWith('/settings')
       ?{timezone:'Asia/Irkutsk',channels}:undefined});try{
@@ -315,10 +318,10 @@ test('кабинет не пускает в план картинку или htt
       assert.ok(!f.calls.some(call=>/schedule/.test(call.path)),name);
     }finally{f.close();}
   }
-  const ok=await fixture({entries:[make(['https://example.test/clip.mp4'])],override:call=>call.path.endsWith('/settings')
+  const ok=await fixture({entries:[make(['https://example.test/clip.mp4?version=1'])],override:call=>call.path.endsWith('/settings')
     ?{timezone:'Asia/Irkutsk',channels}:undefined});try{
     await ok.click('[data-open-post="1"]');await ok.click('#autoposting-preview');
     assert.doesNotMatch(ok.node('autoposting-preview-content').textContent,/ровно один видеофайл по HTTPS/);
-    assert.equal(ok.node('autoposting-schedule').disabled,false,'правильный ролик планируется');
+    assert.equal(ok.node('autoposting-schedule').disabled,false,'настоящий параметр запроса видео не ломает');
   }finally{ok.close();}
 });

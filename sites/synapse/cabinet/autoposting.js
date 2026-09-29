@@ -23,8 +23,15 @@ const DELIVERY_CONNECTED = new Set(["vk","telegram","youtube_shorts"]);
 // Каналы без прямой интеграции: публикация только через Onlypult, способ подключения не выбирается.
 const PROVIDER_ONLY = new Set(["youtube_shorts"]);
 const PLATFORM_TITLE = {telegram:"Telegram",vk:"ВКонтакте",youtube_shorts:"YouTube Shorts"};
-// То же правило, что у провайдера: один доступный площадке HTTPS-видеофайл. Картинка сюда не годится.
-const VIDEO_URL = /^https:\/\/[^\s]+\.(?:mp4|mov|m4v|webm)(?:[?#][^\s]*)?$/i;
+/* Единое правило ссылки на видео для YouTube Shorts во всех трёх проверках (кабинет, сервер, адаптер):
+   разбирается как URL, схема только https, фрагмент пуст, расширение проверяется именно в пути.
+   Поэтому jpg?name=.mp4 видео не считается, clip.mp4?version=1 проходит, clip.mp4#t=1 отклоняется. */
+function isShortsVideoUrl(value) {
+  if (typeof value !== 'string' || !value) return false;
+  let url;
+  try {url = new URL(value);} catch {return false;}
+  return url.protocol === 'https:' && url.hash === '' && /\.(mp4|mov|m4v|webm)$/i.test(url.pathname);
+}
 // Контент-план: формат и роль независимы; метаданные видны только в ЛК и не входят в подписи.
 const FORMATS = [["post","Пост"],["story","Сторис"],["reel","Reels / Shorts / клип"],["carousel","Карусель"]];
 const ROLES = [["reach","Охватный"],["affection","На влюбление"],["sale","На продажу"]];
@@ -191,7 +198,7 @@ function create(container, context) {
     // несогласованный YouTube не должен блокировать согласованный Telegram.
     if(targets.includes('youtube_shorts')){
       if(data.title.length>100)result.push('YouTube Shorts: название станет публичным заголовком, сократите его до 100 символов.');
-      if(data.mediaUrls.length!==1||!data.mediaUrls.every(url=>VIDEO_URL.test(url)))
+      if(data.mediaUrls.length!==1||!data.mediaUrls.every(isShortsVideoUrl))
         result.push('YouTube Shorts: нужен ровно один видеофайл по HTTPS — mp4, mov, m4v или webm.');
     }
     for(const id of targets){

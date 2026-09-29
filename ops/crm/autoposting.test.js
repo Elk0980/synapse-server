@@ -801,6 +801,9 @@ test('сервер не ставит в план заведомо невалид
     ['картинка вместо видео',{mediaUrls:['https://cdn.example.test/frame.jpg']}],
     ['видео по http',{mediaUrls:['http://cdn.example.test/d1.mp4']}],
     ['два файла',{mediaUrls:['https://cdn.example.test/a.mp4','https://cdn.example.test/b.mp4']}],
+    ['картинка с расширением в параметре',{mediaUrls:['https://cdn.example.test/frame.jpg?file=.mp4']}],
+    ['видео с фрагментом',{mediaUrls:['https://cdn.example.test/d1.mp4#t=1']}],
+    ['видео с параметром и фрагментом',{mediaUrls:['https://cdn.example.test/d1.mp4?x=1#t=1']}],
     ['длинное название',{title:'З'.repeat(101)}],
   ]) {
     const item=card(changes);
@@ -814,6 +817,10 @@ test('сервер не ставит в план заведомо невалид
   assert.equal(planned.status,'scheduled');
   assert.equal(planned.deliveries.length,1);
   assert.deepEqual(planned.platformIds,['telegram','youtube_shorts']);
+  // Настоящий параметр запроса видео не ломает: отклоняется именно фрагмент.
+  const withQuery=card({mediaUrls:['https://cdn.example.test/d1.mp4?x=1']});
+  const queryPlanned=await f.api.schedule(withQuery.id,'alvi',{revision:withQuery.revision});
+  assert.equal(queryPlanned.status,'scheduled');assert.equal(queryPlanned.deliveries.length,2);
   // И правильный материал планируется целиком.
   const good=card();
   const ok=await f.api.schedule(good.id,'alvi',{revision:good.revision});

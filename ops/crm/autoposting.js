@@ -99,11 +99,20 @@ const VIDEO_RE=/\.(mp4|webm|mov|m4v)(?:[?#].*)?$/i,IMAGE_RE=/\.(jpe?g|png|webp|g
    Те же требования проверяет провайдер; здесь они нужны, чтобы заведомо невалидная очередь
    не создавалась ни из кабинета, ни прямым запросом. */
 const YOUTUBE_SHORTS='youtube_shorts';
+/* Единое правило ссылки на видео для YouTube Shorts во всех трёх проверках (кабинет, сервер, адаптер):
+   разбирается как URL, схема только https, фрагмент пуст, расширение проверяется именно в пути.
+   Поэтому jpg?name=.mp4 видео не считается, clip.mp4?version=1 проходит, clip.mp4#t=1 отклоняется. */
+function isShortsVideoUrl(value) {
+  if (typeof value !== 'string' || !value) return false;
+  let url;
+  try {url = new URL(value);} catch {return false;}
+  return url.protocol === 'https:' && url.hash === '' && /\.(mp4|mov|m4v|webm)$/i.test(url.pathname);
+}
 function youtubeShortsIssues(title,mediaUrls) {
   const issues=[],text=typeof title==='string'?title.trim():'';
   if(!text)issues.push('YouTube Shorts: нужно название — оно станет публичным заголовком ролика');
   else if(text.length>100)issues.push('YouTube Shorts: название длиннее 100 символов, канал его не примет');
-  const videos=mediaUrls.filter(url=>publicUrl(url)&&VIDEO_RE.test(url));
+  const videos=mediaUrls.filter(url=>publicUrl(url)&&isShortsVideoUrl(url));
   if(mediaUrls.length!==1||videos.length!==1)
     issues.push('YouTube Shorts: нужен ровно один видеофайл по HTTPS (mp4, mov, m4v или webm)');
   return issues;
