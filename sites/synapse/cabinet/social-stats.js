@@ -232,6 +232,7 @@
       <div class="social-grid">${cards}</div>
       <section class="card"><h2>По дням</h2>${dayRows ? `<div class="crm-table-wrap"><table class="crm-table crm-entity-table social-days"><thead><tr><th>День</th>${PLATFORMS.map(p => `<th>${esc(data.platforms[p].label)}</th>`).join('')}</tr></thead><tbody>${dayRows}</tbody></table></div>` : '<p>За выбранный период снимков нет.</p>'}</section>
       ${crmMarkup(crm)}
+      ${postMetricsMarkup(data.postMetrics)}
       <section class="card"><h2>Журнал сборов</h2>${data.runs?.length ? `<ul class="social-runs">${data.runs.slice(0, 15).map(r => `<li>${esc(day(r.date))} · ${esc(data.platforms[r.platform]?.label || r.platform)} · ${esc(PROVIDER[r.provider] || r.provider)} · <strong>${esc(RUN[r.status] || r.status)}</strong> · строк ${num(r.rows)} · ${esc(stamp(r.finished_at || r.started_at))}${r.error ? ` · ${esc(r.error)}` : ''}${r.missing?.length ? ` · недостаёт: ${esc(r.missing.join('; '))}` : ''}</li>`).join('')}</ul>` : '<p>Сборов ещё не было.</p>'}</section>`;
   }
   /* Запись выхода: собранный пост (stored), собранный пост с подтверждением владельца (stored_with_receipt) или только подтверждение
@@ -259,6 +260,55 @@
   }
   /* Ноль обращений показывается только там, где искать было по чему (ссылка или материал). Без связи это UNKNOWN — «—», не ноль. */
   const linked = (post, value) => (post.attribution === 'unknown' ? '—' : num(value));
+  /* Показатели публикаций: только сохранённые измерения. Значение пустое — данных нет; ноль — измеренный ноль.
+     Даты не складываются: у метрики поста не сохранён признак периода, поэтому показывается последнее измерение
+     внутри выбранного интервала. Источники одного адреса остаются раздельными. */
+  const COMPLETENESS_LABEL = { complete: 'измерение полное', partial: 'измерение неполное', unknown: 'полнота неизвестна' };
+  /* Единицы приходят с сервера как есть (views/count/people/seconds/percent). Название метрики уже говорит,
+     что измерено, поэтому «просмотры» и «штуки» не дублируются; секунды и проценты остаются однозначными. */
+  const UNIT_LABEL = { views: '', count: '', people: 'человек', seconds: 'с', percent: '%' };
+  const unitSuffix = unit => { const label = UNIT_LABEL[unit]; return label === undefined ? (unit ? ` ${unit}` : '') : (label ? ` ${label}` : ''); };
+  function postMetricsMarkup(report) {
+    if (!report) return '<section class="card social-post-metrics"><h2>Показатели публикаций</h2><p>Раздел ещё не получен от сервера.</p></section>';
+    const coverage = report.coverage || {}, posts = report.posts || [], summary = report.summary || {};
+    const measured = value => (value === null || value === undefined ? '<span class="social-no-data">нет данных</span>' : esc(String(value)));
+    const rows = posts.map(post => {
+      const sources = (post.sources || []).map(source => {
+        const list = (source.measurements || []).map(m => `<li>${esc(METRIC_LABELS[m.metric] || m.metric)}: ${measured(m.value)}${m.hasValue ? esc(unitSuffix(m.unit)) : ''} · за ${esc(day(m.date))} · собрано ${esc(stamp(m.collectedAt))} · ${esc(PROVIDER[m.provider] || m.provider || 'источник не указан')}${m.sourceField ? ` · поле ${esc(m.sourceField)}` : ''} · ${esc(COMPLETENESS_LABEL[m.completeness] || COMPLETENESS_LABEL.unknown)} · запись ${esc(m.referenceId)}</li>`).join('');
+        return `<li>Источник ${esc(source.referenceId)} · ${esc(source.platformPostId || '—')} · ${esc(POST_SOURCE[source.provider] || source.provider || '—')}${list ? `<ul>${list}</ul>` : '<p class="social-note">Измерений за период нет.</p>'}</li>`;
+      }).join('');
+      return `<tr><td data-label="Площадка">${esc(post.platformLabel || post.platform)}</td>
+        <td data-label="Публикация">${safeUrl(post.url) ? link(post.url, 'ссылка') : '—'}${post.publishedAt ? `<br>${esc(stamp(post.publishedAt))}` : ''}</td>
+        <td data-label="Измерения">${post.receiptOnly
+          ? '<p class="social-note">Подтверждение владельца: ссылка и время выхода. Показателей площадки у такой записи нет.</p>'
+          : sources ? `<ul class="social-post-sources">${sources}</ul>` : '<p class="social-note">Исходных записей нет.</p>'}</td></tr>`;
+    }).join('');
+    const line = (label, value) => `<li>${esc(label)}: ${esc(String(value))}</li>`;
+    const block = (title, items) => (items || []).length
+      ? `<h3>${esc(title)}</h3><ul>${items.map(item => `<li>${esc(item)}</li>`).join('')}</ul>` : '';
+    return `<section class="card social-post-metrics"><h2>Показатели публикаций</h2>
+      <p class="social-note">${esc(report.note || '')}</p>
+      <p class="social-note">В списке — последние сохранённые публикации архива компании, а не выборка по датам публикации: выбранный период фильтрует только измерения.</p>
+      ${rows ? `<div class="crm-table-wrap"><table class="crm-table crm-entity-table"><thead><tr><th>Площадка</th><th>Публикация</th><th>Измерения за период</th></tr></thead><tbody>${rows}</tbody></table></div>`
+        : '<p>Сохранённых публикаций у компании нет.</p>'}
+      <h3>Покрытие</h3><ul class="social-coverage">
+        ${line('Публикаций сохранено', coverage.storedPostsTotal ?? 0)}
+        ${line('Из них прочитано', `${coverage.storedPostsRead ?? 0}${coverage.storedPostsTruncated ? ` (не показано ${coverage.storedPostsOmitted ?? 0})` : ''}`)}
+        ${line('Исходных записей', coverage.sourceRows ?? 0)}
+        ${line('Из них со строками измерений', coverage.sourcesWithMeasurements ?? 0)}
+        ${line('Из них с известными значениями', coverage.sourcesWithKnownValues ?? 0)}
+        ${line('Строк измерений прочитано', coverage.measurementsRead ?? 0)}
+        ${line('Из них с известным значением', coverage.knownValues ?? 0)}
+        ${line('Подтверждений владельца сохранено', coverage.receiptsTotal ?? 0)}
+        ${line('Из них прочитано', `${coverage.receiptsRead ?? 0}${coverage.receiptsTruncated ? ` (не показано ${coverage.receiptsOmitted ?? 0})` : ''}`)}
+        ${line('Даты измерений', (coverage.measurementDates || []).length ? (coverage.measurementDates || []).map(day).join(', ') : 'нет')}
+        ${line('Подтверждений владельца без собранного поста', coverage.receiptsOnly ?? 0)}
+        ${line('Подтверждений с площадкой вне аналитики', coverage.receiptsSkipped ?? 0)}
+      </ul><p class="social-note">${esc(coverage.note || '')}</p>
+      ${block('Что видно', summary.visible)}
+      ${block('Чего пока нельзя заключить', summary.cannotConclude)}
+      ${block('Следующий шаг', summary.nextStep)}</section>`;
+  }
   function crmMarkup(crm) {
     const posts = crm.posts || [], receipts = crm.receipts;
     return `<section class="card social-crm"><h2>Атрибуция CRM</h2><p class="social-note">${esc(crm.note || '')}</p>

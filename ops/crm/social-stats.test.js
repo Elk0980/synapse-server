@@ -602,3 +602,162 @@ test('без таблиц автопостинга проекция подтве
   assert.equal(f.stats.attribution('demo-a', '2026-09-17', '2026-09-17').receipts.projected, 0);
   assert.equal(f.stats.overview('demo-a', '2026-09-17', '2026-09-17').crm.posts.length, 1, 'сводка собирается без таблиц автопостинга');
 });
+
+/* Показатели публикаций в ЛК: только чтение сохранённого, без обращений в соцсети и без выдуманных чисел. */
+test('показатели публикаций: изоляция компании, 0 и «нет данных» различаются, дни не суммируются, берётся последнее измерение внутри периода', (t) => {
+  const f = fixture(t);
+  f.stats.writePosts('demo-a', 'telegram', [{ platformPostId: 'tg-1', url: 'https://t.me/demo_channel/1', contentId: 'D1',
+    publishedAt: '2026-09-16T08:00:00Z', metrics: [
+      { date: '2026-09-16', metric: 'views', value: 100, completeness: 'complete' },
+      { date: '2026-09-17', metric: 'views', value: 140, completeness: 'complete' },
+      { date: '2026-09-17', metric: 'likes', value: 0 },
+      { date: '2026-09-17', metric: 'shares', value: null },
+      { date: '2026-09-18', metric: 'views', value: 900 },
+    ] }], { provider: 'manual' });
+  f.stats.writePosts('demo-b', 'telegram', [{ platformPostId: 'tg-b-1', url: 'https://t.me/other_channel/1',
+    publishedAt: '2026-09-16T08:00:00Z', metrics: [{ date: '2026-09-17', metric: 'views', value: 777 }] }], { provider: 'manual' });
+
+  const report = f.stats.postMetrics('demo-a', '2026-09-16', '2026-09-17');
+  assert.equal(report.companyCode, 'demo-a');
+  assert.doesNotMatch(JSON.stringify(report), /777|other_channel|demo-b/, 'данные другой компании не попадают');
+  assert.equal(report.posts.length, 1);
+  const source = report.posts[0].sources[0];
+  const views = source.measurements.find((m) => m.metric === 'views');
+  assert.equal(views.value, 140, 'показано последнее измерение в периоде, а не сумма 100+140 и не 900 из-за границы');
+  assert.equal(views.date, '2026-09-17');
+  assert.equal(views.completeness, 'complete');
+  assert.equal(views.referenceId, source.referenceId, 'у измерения назван идентификатор исходной записи');
+  assert.equal(views.unit, 'views', 'единица приходит из действующего словаря единиц и названием метрики не подменяется');
+  assert.equal(views.metricLabel, undefined, 'человеческое название метрики даёт кабинет, а не словарь единиц');
+  const likes = source.measurements.find((m) => m.metric === 'likes');
+  assert.equal(likes.value, 0);assert.equal(likes.hasValue, true, 'измеренный ноль остаётся нулём');
+  const shares = source.measurements.find((m) => m.metric === 'shares');
+  assert.equal(shares.value, null);assert.equal(shares.hasValue, false, 'сохранённый null значением не считается');
+  assert.equal(source.measurements.some((m) => m.metric === 'views' && m.value === 240), false, 'дни не складываются');
+  assert.equal(source.measurementsInPeriod, 4);
+  assert.equal(source.knownValuesInPeriod, 3, 'известные считаются по всем строкам периода: 100, 140 и 0');
+  assert.equal(source.latestKnownValues, 2, 'среди показанных последних известны только views и likes');
+  assert.deepEqual(report.coverage.measurementDates, ['2026-09-16', '2026-09-17']);
+  assert.equal(report.coverage.measurementsRead, 4, '900 за 18-е в период не входит');
+  assert.equal(report.coverage.knownValues, 3, 'по всем прочитанным строкам');
+  assert.equal(report.coverage.latestKnownValues, 2, 'по показанным последним измерениям');
+
+  const empty = f.stats.postMetrics('demo-a', '2026-09-01', '2026-09-02');
+  assert.equal(empty.coverage.measurementsRead, 0);
+  assert.equal(empty.posts[0].sources[0].measurements.length, 0, 'нет данных — это пусто, а не ноль');
+  assert.ok(empty.summary.visible.some((line) => /измерений за этот период нет/i.test(line)));
+  assert.ok(empty.summary.cannotConclude.some((line) => /недостаточно/i.test(line)));
+});
+
+test('показатели публикаций: несколько известных дней не выдаются за пустое последнее измерение', (t) => {
+  const f = fixture(t);
+  f.stats.writePosts('demo-a', 'telegram', [{ platformPostId: 'tg-known-days', url: 'https://t.me/demo_channel/12',
+    publishedAt: '2026-09-16T08:00:00Z', metrics: [
+      { date: '2026-09-16', metric: 'views', value: 100 },
+      { date: '2026-09-17', metric: 'views', value: 140 },
+    ] }], { provider: 'manual' });
+  const report = f.stats.postMetrics('demo-a', '2026-09-16', '2026-09-17');
+  assert.equal(report.coverage.knownValues, 2);
+  assert.equal(report.coverage.latestKnownValues, 1);
+  assert.equal(report.posts[0].sources[0].measurements[0].value, 140);
+  assert.doesNotMatch(report.summary.visible.join(' '), /свежее измерение пустое/);
+});
+
+test('показатели публикаций: пустое сегодняшнее измерение не подменяется вчерашним известным', (t) => {
+  const f = fixture(t);
+  f.stats.writePosts('demo-a', 'telegram', [{ platformPostId: 'tg-gap', url: 'https://t.me/demo_channel/9',
+    publishedAt: '2026-09-16T08:00:00Z', metrics: [
+      { date: '2026-09-16', metric: 'views', value: 100 }, { date: '2026-09-17', metric: 'views', value: null }] }], { provider: 'manual' });
+  const report = f.stats.postMetrics('demo-a', '2026-09-16', '2026-09-17');
+  const source = report.posts[0].sources[0], views = source.measurements.find((m) => m.metric === 'views');
+  assert.equal(views.date, '2026-09-17');
+  assert.equal(views.value, null, 'последнее измерение пустое и вчерашним числом не подменяется');
+  assert.equal(views.hasValue, false);
+  assert.equal(source.measurementsInPeriod, 2);
+  assert.equal(source.knownValuesInPeriod, 1, 'историческая известная строка в периоде есть');
+  assert.equal(source.latestKnownValues, 0, 'но среди показанных последних известных нет');
+  assert.equal(report.coverage.knownValues, 1);
+  assert.ok(report.summary.visible.every((line) => !/ни в одной нет известного значения/i.test(line)),
+    'при существующей известной строке так писать нельзя');
+  assert.ok(report.summary.visible.some((line) => /самое свежее измерение пустое/i.test(line)));
+});
+
+test('показатели публикаций: строки без значений не выдаются за данные, а измеренные нули выдаются', (t) => {
+  const f = fixture(t);
+  f.stats.writePosts('demo-a', 'telegram', [{ platformPostId: 'tg-null', url: 'https://t.me/demo_channel/2',
+    publishedAt: '2026-09-16T08:00:00Z', metrics: [
+      { date: '2026-09-17', metric: 'views', value: null }, { date: '2026-09-17', metric: 'likes', value: null }] }], { provider: 'manual' });
+  const allNull = f.stats.postMetrics('demo-a', '2026-09-17', '2026-09-17');
+  assert.equal(allNull.coverage.measurementsRead, 2, 'строки прочитаны');
+  assert.equal(allNull.coverage.knownValues, 0, 'известных значений нет');
+  assert.equal(allNull.coverage.sourcesWithKnownValues, 0);
+  assert.ok(allNull.summary.visible.some((line) => /ни в одной нет известного значения/i.test(line)));
+  assert.ok(allNull.summary.cannotConclude.some((line) => /недостаточно/i.test(line)), 'пустые строки не выглядят достаточными данными');
+
+  const g = fixture(t);
+  g.stats.writePosts('demo-a', 'telegram', [{ platformPostId: 'tg-zero', url: 'https://t.me/demo_channel/3',
+    publishedAt: '2026-09-16T08:00:00Z', metrics: [{ date: '2026-09-17', metric: 'views', value: 0 }] }], { provider: 'manual' });
+  const zeros = g.stats.postMetrics('demo-a', '2026-09-17', '2026-09-17');
+  assert.equal(zeros.coverage.knownValues, 1, 'измеренный ноль — это известное значение');
+  assert.ok(zeros.summary.cannotConclude.every((line) => !/недостаточно/i.test(line)));
+});
+
+test('показатели публикаций: подтверждения считаются и усекаются в области своей компании', (t) => {
+  const f = receiptFixture(t);
+  for (let index = 0; index < 205; index += 1) {
+    f.receipt(f.card('demo-a', `D${index}`, `Пост ${index}`, (index % 7) + 1), 'demo-a', 'telegram', `https://t.me/demo_channel/${index}`, '2026-09-17T11:00:00Z');
+  }
+  f.receipt(f.card('demo-b', 'B1', 'Чужой пост'), 'demo-b', 'telegram', 'https://t.me/other_channel/1', '2026-09-17T11:00:00Z');
+  const report = f.stats.postMetrics('demo-a', '2026-09-17', '2026-09-17');
+  assert.equal(report.coverage.receiptsTotal, 205, 'считаются только подтверждения своей компании');
+  assert.equal(report.coverage.receiptsRead, 200);
+  assert.equal(report.coverage.receiptsLimit, 200);
+  assert.equal(report.coverage.receiptsTruncated, true);
+  assert.equal(report.coverage.receiptsOmitted, 5);
+  assert.ok(report.summary.cannotConclude.some((line) => /не все подтверждения/i.test(line) && line.includes('205')));
+  assert.doesNotMatch(JSON.stringify(report), /other_channel/);
+});
+
+test('показатели публикаций: один адрес с двумя исходными записями сохраняет источники раздельно, подтверждение владельца метрик не получает', (t) => {
+  const f = receiptFixture(t);
+  f.stats.writePosts('demo-a', 'youtube', [{ platformPostId: 'yt-media-1', url: 'https://www.youtube.com/watch?v=Abc123xyz', contentId: 'D1',
+    publishedAt: '2026-09-17T09:00:00Z', metrics: [{ date: '2026-09-17', metric: 'views', value: 500 }] }], { provider: 'direct' });
+  f.stats.writePosts('demo-a', 'youtube', [{ platformPostId: 'yt-media-2', url: 'https://www.youtube.com/shorts/Abc123xyz', contentId: 'D1',
+    publishedAt: '2026-09-17T09:00:00Z', metrics: [{ date: '2026-09-17', metric: 'views', value: 30 }] }], { provider: 'manual' });
+  f.receipt(f.card('demo-a', 'D9', 'Пост'), 'demo-a', 'telegram', 'https://t.me/demo_channel/77', '2026-09-17T11:00:00Z');
+
+  const report = f.stats.postMetrics('demo-a', '2026-09-17', '2026-09-17');
+  const merged = report.posts.find((p) => p.sources.length > 1);
+  assert.ok(merged, 'две записи одного адреса остались одним выходом с двумя источниками');
+  const values = merged.sources.map((s) => s.measurements.find((m) => m.metric === 'views')?.value).sort((a, b) => a - b);
+  assert.deepEqual(values, [30, 500], 'значения источников не складываются и один из них молча не выбирается');
+  assert.equal(merged.sources[0].referenceId !== merged.sources[1].referenceId, true);
+  const receiptOnly = report.posts.find((p) => p.receiptOnly);
+  assert.ok(receiptOnly, 'подтверждение без собранного поста видно отдельно');
+  assert.deepEqual(receiptOnly.sources, [], 'у подтверждения нет исходных записей и выдуманных показателей');
+  assert.equal(report.coverage.receiptsOnly >= 1, true);
+  assert.equal(report.coverage.receiptsOnly, 1, 'подтверждение без собранного поста посчитано');
+  assert.ok(report.summary.cannotConclude.some((line) => /подтвержден/i.test(line) && /показателей площадки/i.test(line)),
+    'о подтверждениях без показателей предупреждено явно, без зависимости от порядка слов');
+});
+
+test('показатели публикаций: лимит чтения и подтверждений назван явно, полнота архива не утверждается', (t) => {
+  const f = fixture(t);
+  const posts = Array.from({ length: 205 }, (value, index) => ({ platformPostId: `tg-${index}`, url: `https://t.me/demo_channel/${index}`,
+    publishedAt: `2026-09-17T${String(index % 24).padStart(2, '0')}:00:00Z`,
+    metrics: index < 2 ? [{ date: '2026-09-17', metric: 'views', value: index, completeness: 'complete' }] : [] }));
+  f.stats.writePosts('demo-a', 'telegram', posts, { provider: 'manual' });
+  const report = f.stats.postMetrics('demo-a', '2026-09-17', '2026-09-17');
+  assert.equal(report.coverage.storedPostsTotal, 205);
+  assert.equal(report.coverage.storedPostsRead, 200);
+  assert.equal(report.coverage.storedPostsTruncated, true);
+  assert.ok(report.summary.cannotConclude.some((line) => /не все публикации/i.test(line) && line.includes('200') && line.includes('205')),
+    'лимит назван числами, а не порядком слов');
+  assert.ok(report.summary.cannotConclude.some((line) => /все публикации/i.test(line) && /не делается/i.test(line)));
+  assert.equal(report.coverage.storedPostsOmitted, 5);
+  assert.equal(report.coverage.postsSelection, 'last_stored');
+  assert.equal(report.coverage.periodAppliesTo, 'measurement_dates');
+  assert.match(report.coverage.note, /не доказывают ни полноту дней/);
+  assert.throws(() => f.stats.postMetrics('demo-a', '2026-09-18', '2026-09-17'), (error) => error.status === 400);
+  assert.throws(() => f.stats.postMetrics('demo-zzz', '2026-09-17', '2026-09-17'), (error) => error.status === 404);
+});
