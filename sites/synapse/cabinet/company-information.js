@@ -65,7 +65,18 @@ function create(container, context) {
     <p class="information-note">Пустое поле после удаления значения сохраняет удаление. Длительность процедуры и интервал записи — разные сведения. Даты акций указаны в часовом поясе компании.</p>
     <button class="plain-button" id="information-save" type="submit">Сохранить данные компании</button><p id="information-form-status" aria-live="off"></p></form>
     <section class="card information-checks"><h3>Сверка площадок</h3><button class="plain-button" id="information-check" type="button">Проверить актуальность</button><div id="information-checks"></div></section>
-    <section class="card"><h3>История подтверждённых версий</h3><div id="information-history"></div></section>`;
+    <section class="card"><h3>Источники отдельных фактов</h3><p>Выберите сохранённое значение и укажите, по какому документу или сообщению оно проверено. Изменение значения требует новой проверки.</p>
+      <form id="information-facts-form" class="crm-form">
+      <label class="wide">Факт<select id="information-fact-select"></select></label>
+      <div id="information-fact-detail" class="wide"></div>
+      <label>Источник<input id="information-fact-source" maxlength="1000" required placeholder="Например: прайс от Татьяны от 29 сентября"></label>
+      <label>Ссылка или точное обозначение документа<input id="information-fact-ref" maxlength="2000" required></label>
+      <label>Когда проверено<input id="information-fact-date" type="datetime-local" required></label>
+      <label>Пояснение<textarea id="information-fact-note" maxlength="2000"></textarea></label>
+      <p class="wide" id="information-fact-zone"></p>
+      <div class="crm-actions wide"><button class="plain-button" id="information-fact-confirm" type="submit">Подтвердить по источнику</button><button class="plain-button" id="information-fact-history" type="button">История этого факта</button></div>
+      <p class="wide" id="information-fact-status" role="status"></p><div class="wide" id="information-fact-versions"></div></form></section>
+    <section class="card"><h3>История сохранённых версий</h3><div id="information-history"></div></section>`;
   const get = id => container.querySelector("#" + id);
   const form = get("information-form");
   const editable = () => allowed(ctx, "edit");
@@ -78,6 +89,9 @@ function create(container, context) {
     get("information-company").disabled = busy || !companies.length;
     get("information-refresh").disabled = busy || !companyCode;
     get("information-check").disabled = busy || !saved || !editable();
+    get("information-facts-form").querySelectorAll("input,textarea,button").forEach(node=>{node.disabled=busy||!saved||!editable();});
+    get("information-fact-select").disabled=busy||!saved;
+    get("information-fact-history").disabled=busy||!saved?.facts?.length;
   };
   const renderRows = kind => {
     get("information-" + kind).innerHTML = rows[kind].map((item,index) => `<fieldset data-row="${kind}" data-index="${index}"><legend>${({socials:"Ссылка",services:"Услуга",promotions:"Акция",materials:"Материал"})[kind]} ${index + 1}</legend>${kind==="materials"&&imageUrl(item.url)?`<a href="${esc(imageUrl(item.url))}" target="_blank" rel="noopener noreferrer"><img class="information-thumbnail" src="${esc(imageUrl(item.url))}" alt="${esc(item.title||"Материал")}" loading="lazy"></a>`:""}<div class="information-row-fields">${ROW_FIELDS[kind].map(([key,label,type]) => {
@@ -115,6 +129,15 @@ function create(container, context) {
   };
   const stash = () => {if(companyCode&&saved){const raw=rawValues();if(JSON.stringify(raw)!==JSON.stringify(baselineRaw))
     drafts.set(companyCode,{saved:copy(saved),baseline:copy(baseline),baselineRaw:copy(baselineRaw),rows:copy(rows),raw});else drafts.delete(companyCode);}};
+  const factText = value => value===null?'Не указано':typeof value==='object'?JSON.stringify(value):String(value);
+  const showFact = () => {
+    const fact=saved?.facts?.find(item=>String(item.id)===get('information-fact-select').value);
+    for(const key of ['source','ref','date','note','status','versions']) {
+      const node=get('information-fact-'+key);if('value' in node)node.value='';else node.textContent='';
+    }
+    get('information-fact-zone').textContent='Дата проверки — в часовом поясе компании: '+(saved?.profile?.timezone||'UTC');
+    get('information-fact-detail').textContent=fact?`${fact.label}: ${fact.removed?'Удалено':factText(fact.value)}. ${fact.status==='confirmed'?'Проверено по источнику: '+fact.source+'; '+fact.sourceRef+'; '+new Date(fact.checkedAt).toLocaleString('ru-RU'):'Источник не проверен'}. ${fact.supersedesId?'Заменяет запись №'+fact.supersedesId+'.':'Первая зафиксированная версия.'}`:'Сохранённых фактов пока нет.';
+  };
   const renderDiagnostics = data => {
     const checks = Array.isArray(data.checks) ? data.checks : [];
     const valueText=value=>value==null?"не указано":typeof value!=="object"?String(value):Array.isArray(value)?value.map(item=>typeof item==="object"?item?.title||item?.name||"запись":String(item)).join(", "):value.title||value.name||"составное значение";
@@ -132,16 +155,19 @@ function create(container, context) {
     saved = copy(draft?.saved || data);
     const profile = saved.profile || {};
     FIELDS.forEach(([key]) => {get("information-" + key).value = String(profile[key] ?? "");
-      container.querySelector(`[data-field-state="${key}"]`).textContent = STATES[data.fieldStates?.[key]?.state] || STATES.unknown;});
+      const fact=data.facts?.find(item=>item.key===key);
+      container.querySelector(`[data-field-state="${key}"]`).textContent = fact?(fact.status==='confirmed'?'Проверено по источнику':'Источник не проверен'):(STATES[data.fieldStates?.[key]?.state] || STATES.unknown);});
     for (const kind of Object.keys(ROW_FIELDS)) {rows[kind] = copy(Array.isArray(profile[kind]) ? profile[kind] : []); renderRows(kind);}
     baseline = draft?.baseline || read();
     baselineRaw=draft?.baselineRaw||rawValues();
     if(draft){rows=copy(draft.rows);for(const kind of Object.keys(ROW_FIELDS))renderRows(kind);applyRaw(draft.raw);}
-    renderDiagnostics(data); updateControls();
+    get('information-fact-select').innerHTML=(saved.facts||[]).map(fact=>`<option value="${fact.id}">${esc(fact.label)} — ${esc(fact.removed?'Удалено':factText(fact.value).slice(0,100))} · ${fact.status==='confirmed'?'Проверено':'Нужен источник'}</option>`).join('');
+    showFact(); renderDiagnostics(data); updateControls();
   };
   const load = async code => {
     stash(); get("information-photo").value=""; companyCode = code; const version = ++epoch;
     saved = null; busy = true; form.hidden=true; get("information-company").value = code; updateControls();
+    get('information-fact-select').replaceChildren();showFact();
     get("information-platform-link-list").replaceChildren(); get("information-platform-links").hidden = true;
     if (!code) {busy=false; status("Нет доступных компаний."); updateControls(); return;}
     status("Загружаем подтверждённые сведения…");
@@ -149,11 +175,35 @@ function create(container, context) {
       const data = await api(); if (version !== epoch) return;
       if (data.companyCode !== code) throw Error("Wrong company");
       const draft = drafts.get(code); render(data,draft);
-      status(draft && data.revision !== draft.saved.revision ? "В компании уже есть новая версия. Ваш несохранённый ввод сохранён в форме; перед сохранением сверяйте изменения." : editable() ? "Сохранение подтверждает данные выбранной компании." : "Доступ только для просмотра.");
+      status(draft && data.revision !== draft.saved.revision ? "В компании уже есть новая версия. Ваш несохранённый ввод сохранён в форме; перед сохранением сверяйте изменения." : editable() ? "Сохранение обновляет сведения выбранной компании. Источники подтверждаются отдельно." : "Доступ только для просмотра.");
     } catch (_) {if (version === epoch) status("Не удалось загрузить данные. Ввод другой компании не будет сохранён здесь.");}
     finally {if (version === epoch) {busy=false; updateControls();}}
   };
   form.addEventListener("input", stash);
+  get('information-fact-select').addEventListener('change',showFact);
+  get('information-facts-form').addEventListener('submit',async event=>{
+    event.preventDefault();if(busy||!saved||!editable()||!event.currentTarget.reportValidity())return;
+    stash();if(drafts.has(companyCode)){get('information-fact-status').textContent='Сначала сохраните изменения сведений компании: источник должен относиться к сохранённому значению.';return;}
+    const fact=saved.facts?.find(item=>String(item.id)===get('information-fact-select').value);if(!fact)return;
+    let checkedAt;try{checkedAt=toUTC(get('information-fact-date').value,saved.profile.timezone||'UTC');}catch{get('information-fact-status').textContent='Проверьте дату и часовой пояс компании.';return;}
+    const proof={factId:fact.id,source:get('information-fact-source').value.trim(),sourceRef:get('information-fact-ref').value.trim(),checkedAt,note:get('information-fact-note').value.trim()};
+    const version=epoch;busy=true;updateControls();
+    try{const data=await api('','PUT',{revision:saved.revision,profile:{},factConfirmations:[proof],reason:'Сверка отдельного факта по источнику'});
+      if(version!==epoch)return;if(data.companyCode!==companyCode)throw Error('Wrong company');render(data);
+      const current=data.facts?.find(item=>item.key===fact.key);if(current){get('information-fact-select').value=String(current.id);showFact();}
+      get('information-fact-status').textContent='Источник сохранён. История предыдущих значений сохранена.';
+    }catch{if(version===epoch)get('information-fact-status').textContent='Не удалось подтвердить. Если значение изменилось, обновите сведения и сверяйте новую версию. Ввод сохранён.';}
+    finally{if(version===epoch){busy=false;updateControls();}}
+  });
+  get('information-fact-history').addEventListener('click',async()=>{
+    const fact=saved?.facts?.find(item=>String(item.id)===get('information-fact-select').value);if(busy||!fact)return;
+    const version=epoch,selected=fact.id;get('information-fact-versions').textContent='Загрузка истории…';
+    try{const data=await ctx.apiJson(path('/facts')+'&key='+encodeURIComponent(fact.key));
+      if(version!==epoch||get('information-fact-select').value!==String(selected))return;
+      if(data.companyCode!==companyCode)throw Error('Wrong company');
+      get('information-fact-versions').innerHTML='<ol>'+data.facts.map(item=>`<li>Запись №${item.id}: ${esc(item.removed?'Удалено':factText(item.value))} — ${esc(item.source||'Источник не проверен')}${item.sourceRef?' · '+esc(item.sourceRef):''}${item.checkedAt?' · '+esc(new Date(item.checkedAt).toLocaleString('ru-RU')):''}${item.supersedesId?' · заменяет №'+item.supersedesId:''}${item.note?' · '+esc(item.note):''}</li>`).join('')+'</ol>';
+    }catch{if(version===epoch)get('information-fact-versions').textContent='История сейчас недоступна.';}
+  });
   form.addEventListener("change", stash);
   form.addEventListener("click", event => {
     const add = event.target.closest("[data-add-row]"), remove = event.target.closest("[data-remove-row]");
@@ -174,7 +224,7 @@ function create(container, context) {
     try {
       const data = await api("","PUT",{revision:saved.revision,profile:partial}); if (version !== epoch) return;
       if (data.companyCode !== companyCode) throw Error("Wrong company");
-      drafts.delete(companyCode); render(data); status("Данные компании сохранены и подтверждены. Публикации на площадках проверяются отдельно.");
+      drafts.delete(companyCode); render(data); status("Данные компании сохранены. Источники отдельных значений и публикации на площадках проверяются отдельно.");
     } catch (_) {if (version === epoch) status("Не удалось сохранить. Ввод остался в форме. Если версия изменена в другом окне, сначала сверьте свежие сведения.");}
     finally {if (version === epoch) {busy=false; updateControls();}}
   });

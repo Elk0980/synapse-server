@@ -58,3 +58,34 @@ test('external check facts and malicious profile strings render as text, with ac
   const bad=record('alvi');bad.profile.name='<img src=x onerror=alert(1)>';bad.checks=[{platformId:'two_gis',status:'differences',fields:[{field:'name',expected:'<script>bad()</script>',observed:'Другое имя',status:'differs'}]}];
   const f=await fixture({override:()=>bad});try{assert.equal(f.node('information-name').value,bad.profile.name);assert.equal(f.d.querySelector('script,img'),null);assert.match(f.node('information-checks').textContent,/Есть расхождения/);assert.match(f.node('information-checks').textContent,/<script>bad\(\)<\/script>/);}finally{f.close();}
 });
+
+test('fact confirmation sends the saved value identity, scoped source and company-local check date; history stays escaped',async()=>{
+  const data=record('alvi');data.facts=[{id:21,key:'phone',label:'Телефон',value:'+70000000000',status:'unverified',source:'',supersedesId:20}];
+  const f=await fixture({override:call=>{
+    if(call.path.endsWith('/facts'))return {companyCode:'alvi',facts:[{...data.facts[0],source:'<img src=x>',sourceRef:'Документ',note:'<script>bad()</script>'}]};
+    if(call.method==='PUT'){
+      const body=JSON.parse(call.options.body);assert.deepEqual(body.profile,{});assert.equal(body.revision,1);
+      const proof=body.factConfirmations[0];assert.equal(proof.factId,21);assert.equal(proof.checkedAt,'2026-09-29T02:00:00.000Z');
+      assert.equal(proof.source,'Прайс');assert.equal(proof.sourceRef,'Документ, строка 2');assert.equal(call.code,'alvi');
+      return {...data,revision:2,facts:[{...data.facts[0],...proof,id:22,status:'confirmed',supersedesId:21}]};
+    }
+    return data;
+  }});
+  try{
+    assert.match(f.node('information-fact-detail').textContent,/Источник не проверен/);
+    f.set('information-fact-source','Прайс');f.set('information-fact-ref','Документ, строка 2');f.set('information-fact-date','2026-09-29T10:00');
+    await f.click('information-fact-confirm');assert.equal(f.node('information-fact-select').value,'22');
+    assert.match(f.node('information-fact-detail').textContent,/Проверено по источнику/);
+    await f.click('information-fact-history');assert.equal(f.d.querySelector('img,script'),null);
+    assert.match(f.node('information-fact-versions').textContent,/<script>bad\(\)<\/script>/);
+  }finally{f.close();}
+});
+
+test('unsaved profile edits cannot silently acquire a source for an older value',async()=>{
+  const data=record('alvi');data.facts=[{id:21,key:'phone',label:'Телефон',value:'old',status:'unverified'}];
+  const f=await fixture({override:()=>data});try{
+    f.set('information-phone','new');f.set('information-fact-source','Документ');f.set('information-fact-ref','Строка 1');f.set('information-fact-date','2026-09-29T10:00');
+    await f.click('information-fact-confirm');assert.ok(f.calls.every(call=>call.method==='GET'));
+    assert.match(f.node('information-fact-status').textContent,/Сначала сохраните/);assert.equal(f.node('information-phone').value,'new');
+  }finally{f.close();}
+});

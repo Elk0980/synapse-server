@@ -91,6 +91,10 @@ test('real CRM API requires trusted identity, scopes editors and persists compan
   assert.equal((await request('GET','/company-information?companyCode=qa',null,encode({role:'admin'}))).status,403);
   assert.equal((await request('GET','/company-information')).status,400);
   const initial=(await request('GET','/company-information?companyCode=qa')).body;
+  assert.equal((await request('GET','/company-information/facts?companyCode=other&key=name',null,viewer)).status,403);
+  assert.equal((await request('GET','/company-information/facts?companyCode=qa&key=name',null,null)).status,403);
+  const factsHistory=await request('GET','/company-information/facts?companyCode=qa&key=name',null,viewer);
+  assert.equal(factsHistory.status,200);assert.equal(factsHistory.body.facts[0].value,'qa');
   assert.equal((await request('PUT','/company-information?companyCode=qa',{revision:initial.revision,profile:{description:'denied'}},viewer)).status,403);
   const saved=await request('PUT','/company-information?companyCode=qa',{revision:initial.revision,profile:{description:'Owner facts',phone:''}},editor);
   assert.equal(saved.status,200);assert.equal(saved.body.fieldStates.phone.state,'removed');

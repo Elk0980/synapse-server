@@ -1,6 +1,7 @@
 'use strict';
 
 const {publicLinkUrl} = require('./company-links');
+const {createCompanyFacts} = require('./company-facts');
 const BASE = {name:'name',city:'city',timezone:'timezone',phone:'phone',email:'email',websiteUrl:'website_url',socials:'socials'};
 const EXTRA = ['address','hours','description','services','promotions','materials'];
 const FIELDS = [...Object.keys(BASE),...EXTRA];
@@ -81,6 +82,7 @@ function normalizeProfile(patch) {
 }
 
 function createCompanyInformation(db,{now=Date.now,check:checker}={}) {
+  const facts=createCompanyFacts(db,{now});
   db.exec(`CREATE TABLE IF NOT EXISTS company_information (
     company_id INTEGER PRIMARY KEY REFERENCES companies(id), revision INTEGER NOT NULL DEFAULT 0,
     extras TEXT NOT NULL DEFAULT '{}',field_states TEXT NOT NULL DEFAULT '{}');
@@ -112,6 +114,7 @@ function createCompanyInformation(db,{now=Date.now,check:checker}={}) {
       .run(owner.id,next,JSON.stringify(extras),JSON.stringify(states));
     db.prepare('INSERT INTO company_information_versions VALUES(?,?,?,?,?,?,?)')
       .run(owner.id,next,JSON.stringify(profile),JSON.stringify(states),time,actorId,reason);
+    facts.sync(owner.id,profile,next,actorId);
     return next;
   }
   function refresh(owner,actorId=null,reason='Данные существующей карточки CRM') {
@@ -128,20 +131,25 @@ function createCompanyInformation(db,{now=Date.now,check:checker}={}) {
   function get(code) {
     return transaction(()=>{
       const owner=company(db,code),info=refresh(owner),profile=compose(owner,info);
+      facts.sync(owner.id,profile,info.revision);
       const history=db.prepare('SELECT revision,created_at createdAt,actor_id actorId,reason FROM company_information_versions WHERE company_id=? ORDER BY revision DESC LIMIT 30').all(owner.id);
       const audit=db.prepare('SELECT revision,checks FROM company_information_checks WHERE company_id=? ORDER BY id DESC LIMIT 1').get(owner.id);
       const checks=audit?parse(audit.checks,[]).map(item=>({...item,revision:audit.revision,...(audit.revision!==info.revision?{status:'needs_review',message:'Данные компании изменились после проверки. Повторите сверку.'}:{})})):[];
-      return {companyCode:owner.code.toLowerCase(),revision:info.revision,profile,fieldStates:parse(info.field_states,{}),history,checks};
+      return {companyCode:owner.code.toLowerCase(),revision:info.revision,profile,fieldStates:parse(info.field_states,{}),history,checks,facts:facts.list(owner.id)};
     });
   }
   function save(code,body,actorId=null) {
-    object(body,['revision','profile','reason']);revision(body.revision);
+    object(body,['revision','profile','reason','factConfirmations']);revision(body.revision);
     const patch=normalizeProfile(body.profile),reason=body.reason===undefined?'Сохранено собственником':text(body.reason,500);
     // Reconcile previous writers before checking the caller's revision. Their update remains recorded on a conflict.
     get(code);
     transaction(()=>{
       const owner=company(db,code),info=refresh(owner);
       if(body.revision!==info.revision)fail(409,'Данные уже изменились. Обновите страницу.','REVISION_CONFLICT');
+      if(!Object.keys(patch).length&&body.factConfirmations!==undefined){
+        // Добавление доказательства не меняет содержимое профиля и не останавливает согласованные публикации.
+        facts.confirm(owner.id,body.factConfirmations,info.revision,actorId);return;
+      }
       const profile={...compose(owner,info),...patch};
       if(Buffer.byteLength(JSON.stringify(profile))>200000)fail(400,'Данные компании слишком большие');
       const states=parse(info.field_states,{}),time=iso();
@@ -149,7 +157,8 @@ function createCompanyInformation(db,{now=Date.now,check:checker}={}) {
       const baseFields=Object.keys(patch).filter(key=>Object.hasOwn(BASE,key));
       if(baseFields.length)db.prepare(`UPDATE companies SET ${baseFields.map(key=>BASE[key]+'=?').join(',')},updated_at=? WHERE id=?`)
         .run(...baseFields.map(key=>key==='socials'?JSON.stringify(profile[key]):profile[key]),time,owner.id);
-      archive(owner,info,profile,states,actorId,reason);
+      const next=archive(owner,info,profile,states,actorId,reason);
+      if(body.factConfirmations!==undefined)facts.confirm(owner.id,body.factConfirmations,next,actorId);
     });
     return get(code);
   }
@@ -168,6 +177,7 @@ function createCompanyInformation(db,{now=Date.now,check:checker}={}) {
     db.prepare('INSERT INTO company_information_checks(company_id,revision,checks,checked_at) VALUES(?,?,?,?)').run(owner.id,snapshot.revision,JSON.stringify(checks),iso());
     return get(code);
   }
-  return {get,save,check};
+  function factHistory(code,key) {get(code);return {companyCode:company(db,code).code.toLowerCase(),facts:facts.history(company(db,code).id,key)};}
+  return {get,save,check,factHistory};
 }
 module.exports={createCompanyInformation,company,fail,object,text,timezone,utcDate,revision,url,normalizeProfile};
