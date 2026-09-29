@@ -110,10 +110,15 @@ test('публичный приём: Origin, honeypot, валидация, св�
   state.price = PRICE;
   assert.equal(orderRows(db).length, 0);
   // Состав и цены — с сервера; клиентская цена и название игнорируются; пустая и «от …» цены — неизвестны.
-  const accepted = submit(orders, body({ items: [{ id: 'bukety-1', qty: 2, price: 1, title: 'подмена' }, { id: 'shary-1', qty: 1 }, { id: 'korziny-1', qty: 3 }, { id: 'gigant-1', qty: 1 }] }));
+  // UUID может случайно содержать начало телефона. Проверяем его отдельно от публичного ответа.
+  const requestId = 'f2f9f2bc-0c3c-47d2-adf4-c3511869143a';
+  const accepted = submit(orders, body({ requestId, items: [{ id: 'bukety-1', qty: 2, price: 1, title: 'подмена' }, { id: 'shary-1', qty: 1 }, { id: 'korziny-1', qty: 3 }, { id: 'gigant-1', qty: 1 }] }));
   assert.equal(accepted.status, 201);
   assert.match(accepted.body.message, /Менеджер свяжется с вами, подтвердит состав и стоимость, согласует оплату и доставку/);
-  assert.doesNotMatch(JSON.stringify(accepted.body), /Анна|914/);
+  const { requestId: returnedRequestId, ...publicResult } = accepted.body;
+  assert.equal(returnedRequestId, requestId);
+  assert.deepEqual(Object.keys(accepted.body).sort(), ['message', 'ok', 'orderId', 'requestId', 'status']);
+  assert.doesNotMatch(JSON.stringify(publicResult), /Анна|914/);
   const row = orderRows(db)[0];
   assert.equal(row.id, accepted.body.orderId);
   assert.deepEqual([row.known_total, row.unknown_count, row.phone_normalized, row.status], [825050, 2, '79140001122', 'accepted']);

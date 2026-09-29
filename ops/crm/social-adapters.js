@@ -11,12 +11,21 @@ const NEED = Object.freeze({
   telegram: ['бот из подключения Telegram должен быть администратором канала {account}; Bot API даёт только число подписчиков, просмотры постов недоступны без MTProto/канальной статистики'],
 });
 const scopedNeed = (platform, account) => { const ref = String(account?.account_ref || '').trim() || 'из настроек аналитики'; return (NEED[platform] || ['адаптер не реализован']).map((line) => line.replace('{account}', ref)); };
-const ONLYPULT_NEED = ['аналитические профили Onlypult (an_…) отдельно от профилей публикаций', 'подключение Onlypult MCP Analytics по OAuth 2.1 (в Onlypult ключ API/MCP не создан)',
-  'подтверждённый e-mail кабинета Onlypult', 'Onlypult Analytics не покрывает ВКонтакте, Telegram и YouTube — для них нужен прямой путь'];
+/* Чего недостаёт для сбора через Onlypult Analytics. Это REST по Bearer-ключу кабинета,
+   а не MCP и не OAuth 2.1: прежняя формулировка про обязательный MCP OAuth и несуществующий
+   ключ устарела и вводила в заблуждение. */
+const ONLYPULT_NEED = ['аналитический ключ доступа кабинета Onlypult, сохранённый отдельно от ключа публикаций',
+  'аналитический профиль Onlypult (an_…), подключённый к нужному аккаунту площадки',
+  'подтверждённые самим профилем разделы (overview) и дневная детализация',
+  'Onlypult Analytics не покрывает ВКонтакте, Telegram, YouTube, 2ГИС и MAX — для них нужен отдельный источник'];
 const { dayBounds } = require('./social-stats');
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
-function createSocialAdapters({ transport, env = process.env, now = () => Date.now() } = {}) {
+/* analytics — отдельный аналитический доступ и сборщик Onlypult Analytics.
+   Он инъекцией, а не импортом подключения публикаций: у аналитики свой ключ, своя ревизия
+   и свой список профилей, и перепутать их нельзя. Без инъекции адаптер честно говорит,
+   что подключения нет, и чисел не выдумывает. */
+function createSocialAdapters({ transport, analytics = null, env = process.env, now = () => Date.now() } = {}) {
   const direct = {
     info: () => ({ name: 'direct', available: Boolean(transport), note: 'Прямые API площадок через сохранённые подключения; Instagram/TikTok/YouTube требуют собственных приложений и разрешений владельца.' }),
     // Отпечаток подключения площадки (ревизия/цель, без токена): сравнивается до и после сетевого вызова.
@@ -74,12 +83,84 @@ function createSocialAdapters({ transport, env = process.env, now = () => Date.n
       return { status: 'missing_access', missing: need };
     },
   };
+  /* Onlypult Analytics: реальный сбор по REST для Instagram и TikTok.
+     Остальные пять площадок семи — не «пока не настроены», а не покрываются этим источником:
+     для них unsupported, а не missing_access, и существующие отдельные источники не трогаются. */
+  const ONLYPULT_PLATFORMS = ['instagram', 'tiktok'];
+  const analyticsReady = () => Boolean(analytics?.collector && analytics?.credentials);
   const onlypult = {
-    info: () => ({ name: 'onlypult', available: false, temporary: true, note: 'Временный источник: Onlypult MCP Analytics (OAuth 2.1, профили an_…). Подключение не создано.' }),
-    describe(platform) { return { status: 'missing_access', missing: ['vk', 'telegram', 'youtube'].includes(platform) ? [ONLYPULT_NEED[3]] : ONLYPULT_NEED }; },
-    async collect({ platform }) {
-      // Мост к MCP Analytics отсутствует: без OAuth-подключения сбор невозможен; заглушек с цифрами нет.
-      return { status: ['vk', 'telegram', 'youtube'].includes(platform) ? 'unsupported' : 'missing_access', missing: ['vk', 'telegram', 'youtube'].includes(platform) ? [ONLYPULT_NEED[3]] : ONLYPULT_NEED };
+    /* Onlypult правит историю задним числом: закрытые сутки недавнего окна нужно перепроверять,
+       иначе исправленное значение к нам не доедет. У прямых подключений такого поведения нет. */
+    revisesHistory: true,
+    info: () => ({ name: 'onlypult', available: analyticsReady(), temporary: false,
+      note: analyticsReady()
+        ? 'Onlypult Analytics по REST: Instagram и TikTok по аналитическим профилям an_…; ВКонтакте, Telegram, YouTube, 2ГИС и MAX этот источник не покрывает.'
+        : 'Onlypult Analytics не подключён: аналитический доступ и профиль an_… не сохранены.' }),
+    // describe сети не касается: только сохранённое состояние доступа и выбранного профиля.
+    describe(platform, account) {
+      if (!ONLYPULT_PLATFORMS.includes(platform))
+        return { status: 'unsupported', missing: [ONLYPULT_NEED[3]] };
+      if (!analyticsReady()) return { status: 'missing_access', missing: ONLYPULT_NEED };
+      let access = null;
+      try { access = analytics.credentials.get(account?.company_code || account?.companyCode || ''); } catch { access = null; }
+      if (!access?.configured) return { status: 'missing_access', missing: [ONLYPULT_NEED[0], ONLYPULT_NEED[1]] };
+      if (!account?.provider_ref) return { status: 'missing_access', missing: ['выбранный аналитический профиль Onlypult (an_…) для этого аккаунта'] };
+      if (!account?.account_ref) return { status: 'missing_access', missing: ['подтверждённый идентификатор аккаунта площадки (native ID) выбранного профиля'] };
+      return { status: access.checked ? 'ok' : 'unchecked', missing: access.checked ? [] : ['проверка аналитического доступа не выполнена после последнего изменения ключа'] };
+    },
+    /* Отпечаток аналитической привязки: ревизия доступа плюс профиль, native ID и система
+       суток. Контракт вызова — один объект контекста, как у прямого адаптера. */
+    connectionRevision({ company, account } = {}) {
+      if (!analyticsReady()) return null;
+      const code = company?.code || account?.company_code || '';
+      if (!code) return null;
+      let access = null;
+      try { access = analytics.credentials.connectionRevision(code); } catch { return null; }
+      if (!access) return null;
+      return { revision: access.revision, provider: 'onlypult_analytics',
+        providerRef: account?.provider_ref || '', accountRef: account?.account_ref || '', timezone: account?.timezone || '' };
+    },
+    async collect({ company, platform, account, date, timezone, companyCode }) {
+      const code = company?.code || companyCode || account?.company_code || account?.companyCode || '';
+      if (!ONLYPULT_PLATFORMS.includes(platform)) return { status: 'unsupported', missing: [ONLYPULT_NEED[3]] };
+      const ready = onlypult.describe(platform, { ...account, company_code: code });
+      if (['missing_access', 'unsupported'].includes(ready.status)) return { status: ready.status, missing: ready.missing };
+      const before = onlypult.connectionRevision({ company: { code }, account });
+      let result;
+      try {
+        /* Профиль берётся из настоящего списка источника, а не собирается здесь.
+           Синтетический профиль с пустыми capabilities — это обход проверки: у него нет
+           ни подтверждённой платформы, ни подтверждённого native ID, ни разрешённых разделов. */
+        const listing = await analytics.collector.listProfiles(code);
+        const profile = (listing.profiles || []).find((item) => item.id === account.provider_ref);
+        if (!profile) return { status: 'missing_access',
+          missing: [`аналитический профиль ${account.provider_ref} не найден в списке источника: выберите профиль заново`] };
+        if (profile.platform !== platform) return { status: 'missing_access',
+          missing: [`аналитический профиль ${account.provider_ref} относится к другой площадке (${profile.platform})`] };
+        if (String(profile.nativeAccountId) !== String(account.account_ref)) return { status: 'missing_access',
+          missing: ['идентификатор аккаунта площадки у профиля не совпадает с сохранённым: сбор остановлен'] };
+        result = await analytics.collector.collectDay({ companyCode: code, profile,
+          from: date, to: date, timezone: timezone || account.timezone || undefined });
+      } catch (error) {
+        // Причина отказа честная и без чисел; ключ в сообщение не попадает.
+        return { status: error?.code === 'UNSUPPORTED' ? 'unsupported' : 'missing_access',
+          missing: [`Onlypult Analytics: ${error?.code || 'ошибка запроса'}`] };
+      }
+      const after = onlypult.connectionRevision({ company: { code }, account });
+      /* Привязка проверяется до и после запроса: если доступ, профиль, аккаунт или часовой
+         пояс сменились, пока шёл GET, результат относится к другой системе — не записываем. */
+      if (JSON.stringify(before) !== JSON.stringify(after))
+        return { status: 'missing_access', missing: ['аналитическая привязка изменилась во время запроса: результат не записан'] };
+      if (result.status === 'unsupported') return { status: 'unsupported', missing: result.missing };
+      /* Исходные блоки ответа передаются наверх ВСЕГДА, независимо от того, вышел ли из
+         них хоть один показатель. Иначе кандидатный график, итог источника и null-ряд
+         терялись здесь и в доказательства не попадали: ответ был, а следа не осталось. */
+      return { status: result.status, snapshots: result.measurements || [], posts: [], missing: result.missing || [],
+        provenance: { providerRef: account.provider_ref, nativeAccountId: account.account_ref,
+          coverage: result.coverage, warnings: result.warnings, period: result.period,
+          mappingVersion: result.mappingVersion, catalogVersion: result.catalogVersion,
+          accessRevision: result.accessRevision, identityConfirmed: result.identityConfirmed === true,
+          projectable: result.projectable !== false, blocks: result.blocks || [] } };
     },
   };
   const manual = {

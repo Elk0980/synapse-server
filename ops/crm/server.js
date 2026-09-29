@@ -33,6 +33,9 @@ const { createSocialStats } = require('./social-stats');
 const { createSocialBaselines } = require('./social-baselines');
 const { createSocialAdapters } = require('./social-adapters');
 const { createSocialStatsHandler } = require('./social-stats-http');
+const { createSocialAnalyticsCredentials } = require('./social-analytics-credentials');
+const { createSocialAnalyticsEvidence } = require('./social-analytics-evidence');
+const { createSocialOnlypultAnalytics } = require('./social-onlypult-analytics');
 const { createCompanyInformationCheck } = require('./company-information-check');
 const { createDealOrders } = require('./deal-orders');
 const { createTaskCoordination } = require('./task-coordination');
@@ -604,9 +607,18 @@ const platformDemand = createPlatformDemand(db);
 // Фактические показатели компании 2ГИС: отдельный сервис в том же разделе, без новых прав и маршрутов вне /platform-demand.
 const platformCompanyMetrics = createPlatformCompanyMetrics(db);
 const handlePlatformDemand = createPlatformDemandHandler({demand:platformDemand,companyMetrics:platformCompanyMetrics,companyModuleContext,readJson,send});
-const socialStats = createSocialStats(db, {adapters: createSocialAdapters({transport: autopostingTransport})});
+/* Аналитический доступ Onlypult хранится ОТДЕЛЬНО от доступа публикаций: своё шифрование,
+   своё пространство имён, своя ревизия. Ключ из этого хранилища в DTO и журналы не выходит. */
+const socialAnalyticsCredentials = createSocialAnalyticsCredentials(db, {apiKey: API_KEY});
+const socialAnalyticsEvidence = createSocialAnalyticsEvidence(db);
+const socialOnlypultAnalytics = createSocialOnlypultAnalytics({
+  resolveCredential: (code) => socialAnalyticsCredentials.resolve(code)});
+const socialAnalytics = {credentials: socialAnalyticsCredentials, collector: socialOnlypultAnalytics, evidence: socialAnalyticsEvidence};
+const socialStats = createSocialStats(db, {evidence: socialAnalyticsEvidence,
+  adapters: createSocialAdapters({transport: autopostingTransport, analytics: socialAnalytics})});
 const socialBaselines = createSocialBaselines(db, socialStats);
-const handleSocialStats = createSocialStatsHandler({stats: socialStats, baselines: socialBaselines, companyModuleContext, readJson, send});
+const handleSocialStats = createSocialStatsHandler({stats: socialStats, baselines: socialBaselines,
+  analytics: socialAnalytics, companyModuleContext, readJson, send});
 function deliverLeadEmails() {
   return emailOutbox.drain().catch(() => {
     // Do not expose SMTP responses or contact details in service logs.

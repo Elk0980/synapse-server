@@ -227,3 +227,31 @@ test('публикация после полуночи по времени ко�
   const frozen = baseline.freeze('alvi', request);
   assert.equal(frozen.snapshot.postsRecorded, 0, 'UTC 18.09 16:30 — уже 19.09 в Иркутске');
 });
+
+/* Замер смешивал системы суток: recordedDays считался по активному ряду overview, а
+   исходные показатели брались по всем поясам сразу — и оценка покрытия выходила ложной
+   (одна записанная дата против трёх «исходных точек», missingDates=0). */
+test('замер считает покрытие в активной системе суток, прочие наблюдения показаны отдельно', (t) => {
+  const f = fixture(t);
+  f.stats.saveAccounts('alvi', { accounts: [{ platform: 'instagram', accountRef: '@example.travel',
+    provider: 'manual', revision: 0, timezone: 'UTC' }] });
+  const row = { metric: 'views', period: 'day', completeness: 'complete' };
+  f.stats.writeSnapshots('alvi', 'instagram', '@example.travel', [{ ...row, date: '2026-09-28', value: 50 }],
+    { provider: 'manual', tz: 'UTC', collectedAt: '2026-09-28T10:00:00.000Z' });
+  f.stats.writeSnapshots('alvi', 'instagram', '@example.travel',
+    [{ ...row, date: '2026-09-27', value: 10 }, { ...row, date: '2026-09-28', value: 20 }],
+    { provider: 'manual', tz: 'Asia/Bangkok', collectedAt: '2026-09-28T11:00:00.000Z' });
+  f.clock.ms = Date.parse('2026-09-30T12:00:00Z');
+  const built = f.baseline.freeze('alvi', { cutoverDate: '2026-09-29', from: '2026-09-27', to: '2026-09-28',
+    sourceNote: 'проверка покрытия', confirmedStart: true }, { userId: 1, userName: 'Владелец' });
+  const part = built.snapshot.platforms.instagram;
+  assert.deepEqual(part.measurements.map((m) => [m.date, m.value]), [['2026-09-28', 50]],
+    'в замер вошёл только ряд активной системы суток');
+  assert.equal(part.recordedDays, 1);
+  assert.equal(part.activeInterval, 'UTC');
+  assert.deepEqual(part.otherObservations.map((m) => [m.date, m.value, m.timezone]),
+    [['2026-09-27', 10, 'Asia/Bangkok'], ['2026-09-28', 20, 'Asia/Bangkok']], 'чужие наблюдения не потеряны');
+  const ig = built.assessment.platforms.find((p) => p.platform === 'instagram');
+  assert.equal(ig.datesWithMetrics, 1, 'даты считаются по тому же ряду, что и recordedDays');
+  assert.equal(ig.missingDates, 1, 'непокрытый день назван, а не спрятан чужими точками');
+});

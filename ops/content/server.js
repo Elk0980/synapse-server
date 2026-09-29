@@ -575,6 +575,10 @@ async function proxyCrm(request, response, url, cors) {
     if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400,'Выберите компанию');
     if(identity.role!=='owner')requirePermission(request,readOnly?(/^\/(?:platform-demand|social-stats)/.test(crmPath)?'analytics.view':'crm.view'):'crm.edit',code);
     if (/^\/social-stats\/(?:accounts|import|baseline)$/.test(crmPath) && !readOnly && identity.role!=='owner') fail(403,'Настройки аккаунтов и замер до начала работы доступны владельцу');
+    /* Аналитический доступ Onlypult — ключ к кабинету источника, а не настройка показа.
+       Owner-only И на чтение тоже: список профилей an_… выдаётся общим кабинетом и
+       клиентскому аккаунту с analytics.view не показывается. */
+    if (/^\/social-stats\/analytics(?:\/|$)/.test(crmPath) && identity.role!=='owner') fail(403,'Аналитический доступ и профили Onlypult настраивает владелец');
   }
   if (/^\/autoposting\/posts\/\d+\/(?:approve|reject)$/.test(crmPath) && identity.role!=='owner' && !identity.permissions.includes('autoposting.approve')) fail(403,'Нет права согласовывать публикации');
   // Отметка «опубликовано вне ЛК» — решение владельца компании; права редактора недостаточно.

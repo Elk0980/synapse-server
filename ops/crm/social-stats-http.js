@@ -1,7 +1,27 @@
 'use strict';
 const { SOCIAL_STATS_ERRORS } = require('./social-stats');
 /* Маршруты аналитики соцсетей: чтение — analytics.view, настройки/импорт/сбор — crm.edit (настройки и импорт — только владелец). */
-function createSocialStatsHandler({ stats, baselines, companyModuleContext, readJson, send }) {
+/* Отказы аналитического источника переводятся в HTTP здесь. Сообщения общие: ни ключа,
+   ни адреса с ключом в строке запроса, ни текста ответа источника наружу не выходит. */
+const ANALYTICS_HTTP = Object.freeze({
+  MISSING_ACCESS: [409, 'Аналитический доступ не настроен: сохраните ключ Onlypult Analytics.'],
+  CREDENTIAL_UNREADABLE: [409, 'Сохранённый аналитический доступ не читается: сохраните ключ заново.'],
+  ACCESS_DENIED: [502, 'Источник отклонил аналитический доступ: ключ не принят или не даёт прав на аналитику.'],
+  NOT_FOUND: [502, 'Аналитический профиль или раздел у источника не найден.'],
+  UNSUPPORTED: [502, 'Источник не поддерживает такой запрос для этого профиля.'],
+  RATE_LIMITED: [503, 'Источник временно ограничил обращения: повторите позже.'],
+  UPSTREAM_ERROR: [502, 'Источник вернул ошибку.'],
+  TIMEOUT: [504, 'Источник не ответил вовремя.'],
+  CONNECTION_UNCERTAIN: [504, 'Источник не ответил.'],
+  RESPONSE_TOO_LARGE: [502, 'Ответ источника слишком большой.'],
+  RESPONSE_UNCERTAIN: [502, 'Ответ источника не разобран.'],
+  BAD_ENDPOINT: [500, 'Недопустимый адрес источника.'],
+  BAD_PERIOD: [400, 'Неверный период запроса.'],
+  BAD_TIMEZONE: [400, 'Неизвестный часовой пояс.'],
+  PROFILE_CHANGED: [409, 'Ответ источника относится к другому аналитическому профилю.'],
+  ACCOUNT_CHANGED: [409, 'Ответ источника относится к другому аккаунту площадки.'],
+});
+function createSocialStatsHandler({ stats, baselines, analytics = null, companyModuleContext, readJson, send }) {
   return async function handle(request, response, url, cors = {}) {
     if (!/^\/social-stats(?:\/|$)/.test(url.pathname)) return false;
     const headers = { ...cors, 'cache-control': 'no-store' };
@@ -28,6 +48,45 @@ function createSocialStatsHandler({ stats, baselines, companyModuleContext, read
         const body = await readJson(request);
         if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some((k) => !['platform', 'date'].includes(k))) { send(response, 400, { error: SOCIAL_STATS_ERRORS.VALIDATION_ERROR, code: 'VALIDATION_ERROR' }, headers); return true; }
         result = await stats.collect(company.code, body.platform, { trigger: `manual:${identity.userId}`, date: body.date || null });
+      } else if (url.pathname.startsWith('/social-stats/analytics')) {
+        /* Отдельный аналитический доступ Onlypult Analytics. Только владелец своей компании:
+           это ключ к кабинету источника, а не настройка показа. Ключ не возвращается ни в
+           одном ответе — DTO знает лишь «настроен или нет» и состояние проверки. */
+        if (!analytics?.credentials) { send(response, 503, { error: 'Аналитический источник не подключён к серверу.', code: 'NOT_CONFIGURED' }, headers); return true; }
+        if (!ownerOnly()) return true;
+        const provider = 'onlypult_analytics';
+        /* У модуля доступа свои сообщения (ревизия, формат ключа). Они уже написаны для
+           владельца и секрета не содержат, поэтому отдаются как есть, а не подменяются
+           общим текстом словаря social-stats. */
+        try {
+        if (url.pathname === '/social-stats/analytics/access' && readOnly) result = analytics.credentials.get(company.code, provider);
+        else if (url.pathname === '/social-stats/analytics/access' && request.method === 'PUT') result = analytics.credentials.save(company.code, provider, await readJson(request), identity);
+        else if (url.pathname === '/social-stats/analytics/access' && request.method === 'DELETE') result = analytics.credentials.remove(company.code, provider, await readJson(request), identity);
+        else if (url.pathname === '/social-stats/analytics/profiles' && readOnly) {
+          if (!analytics.collector) { send(response, 503, { error: 'Сборщик аналитики не подключён к серверу.', code: 'NOT_CONFIGURED' }, headers); return true; }
+          /* Список профилей — он же проверка доступа: результат запоминается на текущей
+             ревизии ключа, поэтому «подключено» не переезжает на новый неизвестный ключ. */
+          const before = analytics.credentials.get(company.code, provider);
+          try {
+            const listing = await analytics.collector.listProfiles(company.code);
+            analytics.credentials.markChecked(company.code, provider, { revision: before.revision, status: 'connected' });
+            result = { ...listing, access: analytics.credentials.get(company.code, provider) };
+          } catch (error) {
+            const known = ANALYTICS_HTTP[error?.code];
+            analytics.credentials.markChecked(company.code, provider, { revision: before.revision, status: 'error', code: error?.code || 'UNKNOWN' });
+            if (!known) throw error;
+            send(response, known[0], { error: known[1], code: error.code, access: analytics.credentials.get(company.code, provider) }, headers);
+            return true;
+          }
+        } else { send(response, 405, { error: 'Метод не поддерживается.', code: 'METHOD_NOT_ALLOWED' }, headers); return true; }
+        } catch (error) {
+          const known = ANALYTICS_HTTP[error?.code];
+          if (known) { send(response, known[0], { error: known[1], code: error.code }, headers); return true; }
+          if (typeof error?.status === 'number' && error?.message) { send(response, error.status, { error: error.message, code: error.code || 'VALIDATION_ERROR' }, headers); return true; }
+          throw error;
+        }
+        send(response, 200, result, headers);
+        return true;
       } else { send(response, 405, { error: 'Метод не поддерживается.', code: 'METHOD_NOT_ALLOWED' }, headers); return true; }
       send(response, 200, result, headers);
     } catch (error) {
@@ -37,4 +96,4 @@ function createSocialStatsHandler({ stats, baselines, companyModuleContext, read
     return true;
   };
 }
-module.exports = { createSocialStatsHandler };
+module.exports = { createSocialStatsHandler, ANALYTICS_HTTP };

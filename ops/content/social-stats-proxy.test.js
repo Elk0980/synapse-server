@@ -89,6 +89,47 @@ test('аналитика соцсетей через прокси: analytics.vie
  const refrozen=await through('owner',baselineRoute,{method:'POST',body:baselineBody});assert.equal(refrozen.body.version,2);
  assert.equal(refrozen.body.snapshot.platforms.instagram.totals.views,950);
  assert.equal((await through('analyst',baselineRoute+'&version=1')).body.latest.snapshot.platforms.instagram.totals.views,900,'первая версия неизменна');
+ /* Аналитический доступ Onlypult: отдельный owner-only раздел. Ключ не возвращается ни
+    одним маршрутом, чужая компания не видна, список профилей клиенту не показывается.
+    Живых обращений к источнику здесь нет: сеть наружу заблокирована фикстурой. */
+ const accessRoute='/social-stats/analytics/access?companyCode=avokado';
+ assert.equal((await through('analyst',accessRoute)).status,403,'analytics.view аналитический ключ не читает');
+ assert.equal((await through('writer',accessRoute)).status,403);
+ assert.equal((await through('crmreader',accessRoute)).status,403);
+ assert.equal((await through('analyst','/social-stats/analytics/profiles?companyCode=avokado')).status,403,'список профилей клиенту не показывается');
+ const emptyAccess=await through('owner',accessRoute);
+ assert.equal(emptyAccess.status,200,JSON.stringify(emptyAccess.body));
+ assert.equal(emptyAccess.body.configured,false);assert.equal(emptyAccess.body.status,'not_configured');
+ assert.equal((await through('owner',accessRoute,{method:'PUT',body:{revision:0,credential:'fixture-analytics-key'},headers:{'x-csrf-token':'bad'}})).status,403,'CSRF');
+ assert.equal((await through('owner',accessRoute,{method:'PUT',body:{revision:0,credential:''}})).status,400,'пустой первый ключ — отказ');
+ const savedAccess=await through('owner',accessRoute,{method:'PUT',body:{revision:0,credential:'fixture-analytics-key'}});
+ assert.equal(savedAccess.status,200,JSON.stringify(savedAccess.body));
+ assert.equal(savedAccess.body.configured,true);assert.equal(savedAccess.body.status,'unchecked');assert.equal(savedAccess.body.revision,1);
+ assert.doesNotMatch(JSON.stringify(savedAccess.body),/fixture-analytics-key/,'ключ обратно не возвращается');
+ assert.equal((await through('owner',accessRoute,{method:'PUT',body:{revision:0,credential:'fixture-analytics-key'}})).status,409,'устаревшая ревизия');
+ // Чужая компания своего доступа не получает.
+ assert.equal((await through('owner','/social-stats/analytics/access?companyCode=alvi')).body.configured,false);
+ // Профиль публикаций (числовой ID) аналитическим не является — площадка остаётся без доступа.
+ assert.equal((await through('owner','/social-stats/accounts?companyCode=avokado',{method:'PUT',body:{accounts:[{platform:'instagram',accountRef:'@example.travel',provider:'onlypult',providerRef:'1863531',revision:1,timezone:'Asia/Irkutsk'}]}})).status,200);
+ const withPublishingId=await through('analyst','/social-stats?companyCode=avokado&from=2026-09-17&to=2026-09-17');
+ assert.equal(withPublishingId.body.platforms.instagram.timezone,'Asia/Irkutsk','выбранная система суток видна в сводке');
+ // Сбор без настоящего профиля честно останавливается и ни одной цифры не пишет.
+ const blocked=await through('owner','/social-stats/collect?companyCode=avokado',{method:'POST',body:{platform:'instagram',date:'2026-09-17'}});
+ assert.equal(blocked.status,200);
+ assert.ok(['missing_access','failed'].includes(blocked.body.status),JSON.stringify(blocked.body));
+ assert.doesNotMatch(JSON.stringify(blocked.body),/fixture-analytics-key/,'ключ не попадает в результат сбора');
+ // Неизвестный подпуть раздела не проваливается в другую ветку.
+ assert.equal((await through('owner','/social-stats/analytics/unknown?companyCode=avokado')).status,405);
+ // Удаление доступа: владелец, с ревизией; история измерений при этом не трогается.
+ assert.equal((await through('analyst',accessRoute,{method:'DELETE',body:{revision:1}})).status,403);
+ const removed=await through('owner',accessRoute,{method:'DELETE',body:{revision:1}});
+ assert.equal(removed.status,200,JSON.stringify(removed.body));assert.equal(removed.body.configured,false);
+ /* Убранный доступ историю не трогает. Показатель остался в своей системе суток
+    (импорт шёл в Asia/Bangkok, а аккаунту потом выбрали Asia/Irkutsk), поэтому он виден
+    отдельной группой и с основным рядом не складывается. */
+ const afterRemoval=await through('analyst','/social-stats?companyCode=avokado&from=2026-09-17&to=2026-09-17');
+ assert.equal(afterRemoval.body.platforms.instagram.activeInterval,'Asia/Irkutsk');
+ assert.deepEqual(afterRemoval.body.platforms.instagram.otherIntervals.map(g=>[g.timezone,g.totals.views]),[['Asia/Bangkok',950]],'история сохранена в своей системе суток');
  // служебная сводка плана из кабинета недоступна, по ключу сервиса — доступна
  assert.equal((await through('owner','/autoposting/plan-summary?companyCode=avokado')).status,404);
  assert.equal((await direct('/autoposting/plan-summary?companyCode=avokado')).status,200);

@@ -6,6 +6,7 @@ const test = require('node:test'), assert = require('node:assert/strict');
 const { DatabaseSync } = require('node:sqlite');
 const { createSocialStats, localDay, dayBounds, canonicalPostKey } = require('./social-stats');
 const { createSocialAdapters, NEED } = require('./social-adapters');
+const { createSocialAnalyticsEvidence } = require('./social-analytics-evidence');
 const { createCompanyInformation } = require('./company-information');
 const { createAutoposting } = require('./autoposting');
 
@@ -251,13 +252,22 @@ test('при неизменной ревизии подключения расп
   f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@c', provider: 'direct', collectHour: 0, revision: 0 }] });
   assert.deepEqual((await f.stats.collectDue()).map((r) => [r.date, r.closed]), [['2026-09-17', true], ['2026-09-18', false]]);
   assert.deepEqual(await f.stats.collectDue(), [], 'повтор сразу — ничего');
+  /* Вчерашний день у Telegram остаётся неполным (Bot API не отдаёт показатели постов) и
+     потому стоит в очереди повторов. Раньше очередь безусловно пропускала yesterday, и
+     такая дата не перепроверялась никогда. Теперь повтор делается ровно по своей задержке. */
+  const queued = f.stats.queuedDates('demo-a', 'telegram', '@c');
+  assert.deepEqual(queued.map((r) => [r.date, r.attempts]), [['2026-09-17', 1], ['2026-09-18', 1]],
+    'текущий день тоже неполон, но он обновляется своей веткой, а не очередью');
   f.clock.ms += 30 * 60 * 1000;
-  assert.deepEqual(await f.stats.collectDue(), [], 'через полчаса текущий день ещё не обновляется');
+  const retry = await f.stats.collectDue();
+  assert.deepEqual(retry.map((r) => [r.date, r.closed]), [['2026-09-17', true]], 'через полчаса повторяется вчерашняя дата из очереди, текущий день ещё не обновляется');
+  assert.equal(f.stats.queuedDates('demo-a', 'telegram', '@c')[0].attempts, 2, 'задержка выросла');
   f.clock.ms += 31 * 60 * 1000;
-  assert.deepEqual((await f.stats.collectDue()).map((r) => [r.date, r.closed]), [['2026-09-18', false]], 'через час обновляется только текущий день, итог за вчера не пересобирается');
-  assert.equal(served, 3);
+  // Задержка второй попытки — 30 минут, она тоже истекла: текущий день обновляется, вчерашний повторяется.
+  assert.deepEqual((await f.stats.collectDue()).map((r) => [r.date, r.closed]).sort(),
+    [['2026-09-17', true], ['2026-09-18', false]], 'итог за вчера не пересобирается расписанием — только очередью повторов');
   assert.equal(f.db.prepare('SELECT count(DISTINCT connection_fp) n FROM social_collect_runs').get().n, 1, 'ревизия не менялась — отпечаток стабилен');
-  assert.equal(f.db.prepare('SELECT count(*) n FROM social_collect_runs').get().n, 3, 'лишних запусков в журнале нет');
+  assert.equal(f.db.prepare("SELECT count(*) n FROM social_collect_runs WHERE trigger='schedule'").get().n, 3, 'лишних плановых запусков в журнале нет');
 });
 
 test('нечитаемая ревизия подключения — это не «подключения нет»: failed без чисел и без запроса к площадке; расписание доводит остальные аккаунты', async (t) => {
@@ -364,7 +374,12 @@ test('ручной импорт: только с датой снятия и ис
   assert.deepEqual(view.crm.bySource, [{ source: 'instagram', leads: 3, sales: 2, revenue: 24000 }]);
   assert.deepEqual(view.crm.byContent, []);
   assert.equal(f.stats.overview('demo-b', '2026-09-17', '2026-09-17').crm.posts.length, 0, 'посты другой компании не видны');
-  assert.match(view.runs[0].error, /Источник: скриншот статистики/);
+  /* Происхождение измерения — не ошибка: успешный ручной импорт больше не кладёт пометку
+     источника в поле error, из-за чего ЛК показывал её красным. */
+  assert.match(view.runs[0].sourceNote, /скриншот статистики/);
+  assert.equal(view.runs[0].error, '', 'успешный импорт не считается ошибкой');
+  assert.equal(view.platforms.instagram.lastRun.sourceNote, view.runs[0].sourceNote);
+  assert.equal(view.platforms.instagram.lastRun.error, '');
   rejects(() => f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'instagram', accountRef: '@x', revision: 0 }] }), 'REVISION_CONFLICT');
   rejects(() => f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'vk', accountRef: 'token=abc', revision: 0 }] }), 'VALIDATION_ERROR');
 });
@@ -760,4 +775,163 @@ test('показатели публикаций: лимит чтения и по
   assert.match(report.coverage.note, /не доказывают ни полноту дней/);
   assert.throws(() => f.stats.postMetrics('demo-a', '2026-09-18', '2026-09-17'), (error) => error.status === 400);
   assert.throws(() => f.stats.postMetrics('demo-zzz', '2026-09-17', '2026-09-17'), (error) => error.status === 404);
+});
+
+/* Наблюдения живого ЛК 29.09.2026. Каждое — отдельная регрессия, воспроизводящая прежнее поведение. */
+
+test('наблюдение ЛК: карточка только с lifetime-замером показывает свежесть и разметку, а не прочерки', (t) => {
+  const f = fixture(t);
+  f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@example_channel', provider: 'manual', revision: 0, timezone: 'Asia/Bangkok' }] });
+  f.stats.importManual('demo-a', { platform: 'telegram', capturedAt: '2026-09-18T01:00:00.000Z', sourceNote: 'шапка канала в Telegram Web', kind: 'unknown',
+    rows: [{ date: '2026-09-18', period: 'lifetime', metric: 'followers', value: 136, sourceField: 'Telegram Web channel header subscribers', completeness: 'complete', kind: 'unknown' }] }, { userId: 1, userName: 'Владелец' });
+  const card = f.stats.overview('demo-a', '2026-09-18', '2026-09-18').platforms.telegram;
+  assert.equal(card.latest.followers.value, 136);
+  assert.equal(card.dataStatus, 'lifetime_only', 'дневного ряда нет — это отдельное состояние, а не «нет данных»');
+  assert.equal(card.lastCollectedAt, '2026-09-18T01:00:00.000Z', 'свежесть считается и по lifetime-замеру');
+  assert.deepEqual(card.kinds, ['unknown'], 'разметка берётся из того же замера');
+});
+
+test('наблюдение ЛК: пустая нетронутая строка площадки не создаёт настроенный источник, существующие записи не стираются', (t) => {
+  const f = fixture(t);
+  // Форма отправляет все пять площадок разом — заполнена одна.
+  const all = ['instagram', 'tiktok', 'youtube', 'vk', 'telegram'];
+  f.stats.saveAccounts('demo-a', { accounts: all.map((platform) => ({ platform, revision: 0,
+    accountRef: platform === 'instagram' ? '@example.travel' : '', provider: 'manual', enabled: platform === 'instagram' })) });
+  const after = f.stats.accounts('demo-a').accounts;
+  assert.equal(after.find((a) => a.platform === 'instagram').configured, true);
+  for (const platform of all.filter((p) => p !== 'instagram')) {
+    const row = after.find((a) => a.platform === platform);
+    assert.equal(row.configured, false, `${platform}: пустая строка не считается настроенной`);
+    assert.equal(row.revision, 0, `${platform}: запись не создана`);
+    assert.equal(row.access.status, 'not_configured');
+  }
+  assert.equal(f.db.prepare('SELECT COUNT(*) n FROM social_accounts').get().n, 1, 'в базе одна запись, а не пять');
+  // Повторное сохранение теми же пустыми строками не трогает уже настроенный источник.
+  f.stats.saveAccounts('demo-a', { accounts: all.map((platform) => ({ platform,
+    revision: platform === 'instagram' ? 1 : 0, accountRef: platform === 'instagram' ? '@example.travel' : '',
+    provider: 'manual', enabled: platform === 'instagram' })) });
+  assert.equal(f.stats.accounts('demo-a').accounts.find((a) => a.platform === 'instagram').accountRef, '@example.travel');
+  assert.equal(f.db.prepare('SELECT COUNT(*) n FROM social_accounts').get().n, 1);
+  // Существующую запись по-прежнему можно очистить осознанно: тогда она перестаёт быть настроенной, но не исчезает.
+  const before = f.stats.accounts('demo-a').accounts.find((a) => a.platform === 'instagram').revision;
+  f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'instagram', accountRef: '', provider: 'manual', revision: before, enabled: false }] });
+  const cleared = f.stats.accounts('demo-a').accounts.find((a) => a.platform === 'instagram');
+  assert.equal(cleared.configured, false);
+  assert.equal(cleared.revision, before + 1, 'явная правка существующей записи сохраняется');
+});
+
+test('наблюдение ЛК: система суток выбирается и сохраняется, историческим строкам новый пояс задним числом не присваивается', (t) => {
+  const f = fixture(t);
+  assert.ok(f.stats.accounts('demo-a').timezones.includes('Asia/Irkutsk'), 'выбор пояса предлагается кабинету');
+  f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'instagram', accountRef: '@example.travel', provider: 'manual', revision: 0, timezone: 'Asia/Bangkok' }] });
+  f.stats.importManual('demo-a', { platform: 'instagram', capturedAt: '2026-09-17T12:00:00.000Z', sourceNote: 'скриншот Insights',
+    rows: [{ date: '2026-09-17', metric: 'views', value: 100 }] }, { userId: 1 });
+  f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'instagram', accountRef: '@example.travel', provider: 'manual', revision: 1, timezone: 'Asia/Irkutsk' }] });
+  assert.equal(f.stats.accounts('demo-a').accounts.find((a) => a.platform === 'instagram').timezone, 'Asia/Irkutsk');
+  const stored = f.db.prepare("SELECT timezone FROM social_snapshots WHERE metric='views'").all();
+  assert.deepEqual(stored.map((r) => r.timezone), ['Asia/Bangkok'], 'прежнее наблюдение осталось в своей системе суток');
+  const card = f.stats.overview('demo-a', '2026-09-17', '2026-09-18').platforms.instagram;
+  assert.equal(card.timezone, 'Asia/Irkutsk', 'карточка называет действующую систему суток');
+  assert.equal(card.totals.views ?? null, null, 'наблюдение прежнего пояса не складывается с новым рядом');
+  assert.equal(card.otherIntervals.length, 1);
+  assert.equal(card.otherIntervals[0].timezone, 'Asia/Bangkok');
+  assert.equal(card.otherIntervals[0].totals.views, 100);
+});
+
+test('наблюдение ЛК: происхождение ручного импорта не показывается как ошибка, старые записи читаются без переписывания', (t) => {
+  const f = fixture(t);
+  f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'instagram', accountRef: '@example.travel', provider: 'manual', revision: 0 }] });
+  f.stats.importManual('demo-a', { platform: 'instagram', capturedAt: '2026-09-18T01:00:00.000Z', sourceNote: 'скриншот Insights 18.09',
+    rows: [{ date: '2026-09-18', metric: 'views', value: 10 }] }, { userId: 1 });
+  const fresh = f.stats.overview('demo-a', '2026-09-18', '2026-09-18');
+  assert.equal(fresh.runs[0].sourceNote, 'скриншот Insights 18.09');
+  assert.equal(fresh.runs[0].error, '');
+  assert.equal(f.db.prepare('SELECT error FROM social_collect_runs ORDER BY id DESC LIMIT 1').get().error, '', 'в журнале ошибки нет');
+  // Запись старого образца: пометка лежала в error. Её не переписываем, но и ошибкой не считаем.
+  f.db.prepare(`INSERT INTO social_collect_runs(company_code,platform,provider,trigger,date,started_at,finished_at,status,rows,error,missing)
+    VALUES('demo-a','instagram','manual','manual:legacy','2026-09-18','2026-09-18T02:00:00.000Z','2026-09-18T02:00:00.000Z','ok',1,'Источник: выгрузка старого образца','[]')`).run();
+  const legacy = f.stats.overview('demo-a', '2026-09-18', '2026-09-18');
+  assert.equal(legacy.runs[0].sourceNote, 'выгрузка старого образца');
+  assert.equal(legacy.runs[0].error, '');
+  assert.equal(legacy.platforms.instagram.lastRun.error, '', 'карточка не красит успешный импорт ошибкой');
+  assert.equal(f.db.prepare('SELECT error FROM social_collect_runs ORDER BY id DESC LIMIT 1').get().error,
+    'Источник: выгрузка старого образца', 'старое доказательство осталось побайтно прежним');
+  // Настоящая ошибка по-прежнему видна.
+  f.db.prepare(`INSERT INTO social_collect_runs(company_code,platform,provider,trigger,date,started_at,finished_at,status,rows,error,missing)
+    VALUES('demo-a','instagram','manual','manual:legacy','2026-09-18','2026-09-18T03:00:00.000Z','2026-09-18T03:00:00.000Z','failed',0,'Сбор не удался','[]')`).run();
+  assert.equal(f.stats.overview('demo-a', '2026-09-18', '2026-09-18').runs[0].error, 'Сбор не удался');
+});
+
+/* Ограждение lifetime через НАСТОЯЩИЙ collect, а не через прямой writeSnapshots с
+   подставленным временем. A и B идут за разными датами, значит берут разные аренды, но
+   lifetime-снимок обоих пишется по одному фактическому ключу — сегодняшнему дню.
+   Побеждает тот, чьё наблюдение свежее, а не тот, кто позже завершился. */
+test('два параллельных collect: задержавшийся ответ более раннего наблюдения не перезаписывает свежий lifetime', async (t) => {
+  const gate = {};
+  const transport = { async readStats(code, id, method, options) {
+    void options;
+    const key = method || 'followers';
+    void key;
+    return new Promise((resolve) => { gate.pending = gate.pending || []; gate.pending.push(resolve); }); } };
+  const f = fixture(t, { transport });
+  f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@c', provider: 'direct', revision: 0, timezone: 'Asia/Bangkok' }] });
+  // A стартует раньше: наблюдение 08:00:00Z, цель — вчера.
+  f.clock.ms = Date.parse('2026-09-18T08:00:00Z');
+  const a = f.stats.collect('demo-a', 'telegram', { trigger: 'schedule', date: '2026-09-17' });
+  await new Promise((r) => setImmediate(r));
+  // B стартует секундой позже: наблюдение 08:00:01Z, цель — сегодня, своя аренда.
+  f.clock.ms = Date.parse('2026-09-18T08:00:01Z');
+  const b = f.stats.collect('demo-a', 'telegram', { trigger: 'manual', date: '2026-09-18' });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(gate.pending.length, 2, 'оба запроса ушли к провайдеру и ждут ответа');
+  // B отвечает первым — 200 подписчиков.
+  gate.pending[1]({ provider: 'direct', target: '@c', result: 200 });
+  const runB = await b;
+  // Текущие сутки закрытыми не считаются, поэтому запуск за сегодня — partial, но запись прошла.
+  assert.equal(runB.status, 'partial');
+  assert.equal(runB.rows, 1);
+  assert.equal(f.db.prepare("SELECT value FROM social_snapshots WHERE metric='followers'").get().value, 200);
+  // A отвечает позже — со своими, более старыми 100. Завершение позже, наблюдение раньше.
+  f.clock.ms = Date.parse('2026-09-18T08:00:02Z');
+  gate.pending[0]({ provider: 'direct', target: '@c', result: 100 });
+  const runA = await a;
+  const stored = f.db.prepare("SELECT date, value, collected_at FROM social_snapshots WHERE metric='followers'").all();
+  assert.deepEqual(stored.map((r) => [r.date, r.value]), [['2026-09-18', 200]],
+    'задержавшийся ответ более раннего наблюдения свежий снимок не вытеснил');
+  assert.equal(stored[0].collected_at, '2026-09-18T08:00:01.000Z');
+  assert.equal(runA.rows, 0, 'отброшенная строка записью не считается');
+  // Оба запуска остались в журнале: ни один ответ не потерян молча.
+  const runs = f.db.prepare('SELECT id,date,status FROM social_collect_runs ORDER BY id').all();
+  assert.deepEqual(runs.map((r) => r.date), ['2026-09-17', '2026-09-18']);
+});
+
+test('оба параллельных ответа сохраняются в доказательствах, даже если проекцию занял более свежий', async (t) => {
+  const gate = { pending: [] };
+  const transport = { async readStats() { return new Promise((resolve) => gate.pending.push(resolve)); } };
+  const db = new DatabaseSync(':memory:'); t.after(() => db.close());
+  db.exec(`PRAGMA foreign_keys=ON;
+    CREATE TABLE companies(id INTEGER PRIMARY KEY, code TEXT UNIQUE COLLATE NOCASE, name TEXT, timezone TEXT, is_deleted INTEGER DEFAULT 0);
+    INSERT INTO companies(id,code,name,timezone) VALUES(1,'demo-a','Компания А','Asia/Bangkok');
+    CREATE TABLE leads(id INTEGER PRIMARY KEY, company_code TEXT, created_at TEXT, stage TEXT, sale_amount REAL, source TEXT, utm_source TEXT, utm_content TEXT, utm_campaign TEXT, referrer TEXT, landing_page TEXT);`);
+  const clock = { ms: Date.parse('2026-09-18T08:00:00Z') };
+  const evidence = createSocialAnalyticsEvidence(db, { now: () => clock.ms });
+  const stats = createSocialStats(db, { now: () => clock.ms, evidence, adapters: createSocialAdapters({ transport }), logger: { warn() {} } });
+  stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@c', provider: 'direct', revision: 0, timezone: 'Asia/Bangkok' }] });
+  const a = stats.collect('demo-a', 'telegram', { trigger: 'schedule', date: '2026-09-17' });
+  await new Promise((r) => setImmediate(r));
+  clock.ms = Date.parse('2026-09-18T08:00:01Z');
+  const b = stats.collect('demo-a', 'telegram', { trigger: 'manual', date: '2026-09-18' });
+  await new Promise((r) => setImmediate(r));
+  gate.pending[1]({ provider: 'direct', target: '@c', result: 200 });
+  await b;
+  clock.ms = Date.parse('2026-09-18T08:00:02Z');
+  gate.pending[0]({ provider: 'direct', target: '@c', result: 100 });
+  await a;
+  const records = evidence.list({ companyCode: 'demo-a', platform: 'telegram' })
+    .filter((item) => item.synapseMetric === 'followers').sort((x, y) => x.id - y.id);
+  assert.equal(records.length, 2, 'ответы обоих запусков сохранены отдельно');
+  assert.deepEqual(records.map((item) => item.points[0].value).sort((x, y) => x - y), [100, 200]);
+  assert.deepEqual(records.map((item) => item.collectedAt).sort(),
+    ['2026-09-18T08:00:00.000Z', '2026-09-18T08:00:01.000Z'], 'время наблюдения — момент начала запроса, а не завершения');
+  assert.equal(new Set(records.map((item) => item.runId)).size, 2, 'каждое доказательство привязано к своему запуску');
 });
