@@ -40,18 +40,30 @@ test('живой content + мост: переписка через бота, в�
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'client-dialogs-live-'));
   const ownerSecret = crypto.randomBytes(24).toString('hex');
   const serviceKey = crypto.randomBytes(24).toString('hex');
+  const crmPort=await freePort(),crmKey=crypto.randomBytes(24).toString('hex'),crmBase=`http://127.0.0.1:${crmPort}`,crmDb=path.join(dir,'crm.sqlite');
+  const crm=spawn(process.execPath,[path.join(__dirname,'../crm/server.js')],{env:{...process.env,PORT:String(crmPort),DATABASE_PATH:crmDb,API_KEY:crmKey,
+    LEADS_SMTP_HOST:'',LEADS_SMTP_USER:'',LEADS_SMTP_PASSWORD:'',LEADS_NOTIFY_EMAIL:'',LEADS_NOTIFY_EMAIL_ALVI:'',LEADS_NOTIFY_EMAIL_AVOKADO:''},stdio:'ignore',windowsHide:true});
+  t.after(async()=>{if(crm.exitCode===null&&crm.signalCode===null){const exited=once(crm,'exit');crm.kill();await exited;}});
+  const crmOwner=Buffer.from(JSON.stringify({v:1,userId:1,role:'owner',permissions:[],companyCodes:[]})).toString('base64url');
+  const crmRequest=(url,method='GET',body,identity=crmOwner)=>fetch(crmBase+url,{method,headers:{'x-api-key':crmKey,'x-synapse-crm-identity':identity,'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
+  let crmReady=false;for(let i=0;i<200&&!crmReady;i++){try{crmReady=(await crmRequest('/companies')).ok;}catch{}if(!crmReady)await new Promise(r=>setTimeout(r,25));}
+  assert.ok(crmReady,'CRM запущена');
+  for(const code of ['palitra-love','alvi'])assert.equal((await crmRequest('/companies','POST',{code,name:code,timezone:'UTC'})).status,201);
   const port = await freePort();
   const child = spawn(process.execPath, [path.join(__dirname, 'server.js')], {
     env: { ...process.env, PORT: String(port), DATABASE_PATH: path.join(dir, 'db.sqlite'), ASSETS_DIR: path.join(dir, 'assets'),
       SEED_DIR: path.join(__dirname, 'seed'), API_KEY: '', CHAT_API_KEY: serviceKey, HUGH_RUNTIME_URL: `http://127.0.0.1:${await freePort()}`,
       PALITRA_CLIENT_BOT_USERNAME: '@palitra_qa_bot', PALITRA_ORDER_ORIGINS: ORIGIN,
       ALVI_CLIENT_BOT_USERNAME: '',
+      CRM_URL:crmBase,CRM_API_KEY:crmKey,
       AUTH_USERS: `owner:owner:${hashPassword(ownerSecret)}`, SESSION_SECRET: crypto.randomBytes(32).toString('hex') },
     stdio: 'ignore',
   });
   // Сначала дождаться выхода процесса (он держит базу), затем удалить только свою временную папку; ошибки не подавляются.
   t.after(async () => {
     if (child.exitCode === null && child.signalCode === null) { const exited = once(child, 'exit'); child.kill(); await exited; }
+    if(crm.exitCode===null&&crm.signalCode===null){const exited=once(crm,'exit');crm.kill();await exited;}
+    assert.equal(path.dirname(path.resolve(dir)),path.resolve(os.tmpdir()));
     fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
   const base = `http://127.0.0.1:${port}`;
@@ -165,6 +177,23 @@ test('живой content + мост: переписка через бота, в�
   const list = await (await req('/content/palitra/client-dialogs', owner)).json();
   assert.equal(list.dialogs.length, 1);
   const dialog = await (await req(`/content/palitra/client-dialogs/${list.dialogs[0].id}`, owner)).json();
+  const intakeUrl=`/content/palitra/client-dialogs/${list.dialogs[0].id}/crm`,sentBeforeIntake=sent.length;
+  assert.equal((await req(intakeUrl,daria,'POST')).status,403);
+  assert.equal((await req(intakeUrl,{cookie:owner.cookie},'POST')).status,403);
+  assert.equal((await req(`/content/alvi/client-dialogs/${list.dialogs[0].id}/crm`,owner,'POST')).status,404);
+  const intake=await req(intakeUrl,owner,'POST',{companyCode:'alvi',telegramUserId:'forged'});assert.equal(intake.status,200);
+  const receipt=await intake.json();assert.equal(receipt.companyCode,'palitra-love');assert.equal(receipt.created,true);
+  const repeated=await (await req(intakeUrl,owner,'POST')).json();assert.equal(repeated.leadId,receipt.leadId);assert.equal(repeated.created,false);
+  const crmLead=await (await crmRequest(`/leads/${receipt.leadId}?companyCode=palitra-love`)).json();assert.equal(crmLead.contact,`Telegram ID ${CLIENT}`);
+  const infoUrl='/company-information?companyCode=palitra-love';
+  const initialInfo=await (await crmRequest(infoUrl)).json();
+  const catalog=await (await crmRequest(infoUrl,'PUT',{revision:initialInfo.revision,profile:{services:[{id:'qa-service',title:'Тестовая услуга',price:1500,currency:'RUB',procedureCount:1}]}})).json();
+  assert.equal((await crmRequest(infoUrl,'PUT',{revision:catalog.revision,profile:{},factConfirmations:catalog.facts.filter(f=>f.key.startsWith('services/')).map(f=>({factId:f.id,source:'Синтетический прайс',sourceRef:'Тест, строка 1',checkedAt:new Date().toISOString()}))})).status,200);
+  const knowledge=await (await crmRequest('/company-information/knowledge?companyCode=palitra-love')).json();
+  const booked=await crmRequest(`/studio-journey/${receipt.leadId}/events?companyCode=palitra-love`,'POST',{revision:0,requestId:'dialog-booking-test',type:'booked',appointmentAt:new Date(Date.now()+86400000).toISOString(),serviceSelection:{id:'qa-service',knowledgeRevision:knowledge.knowledgeRevision}});
+  assert.equal(booked.status,201);assert.equal((await booked.json()).state.serviceQuote.service.price,1500);
+  assert.equal(sent.length,sentBeforeIntake,'создание CRM не отправляет Telegram');
+  const inspectDb=new DatabaseSync(crmDb);assert.equal(inspectDb.prepare('SELECT count(*) n FROM lead_email_outbox').get().n,0);inspectDb.close();
   const byAuthor = (type) => dialog.messages.filter((message) => message.authorType === type);
   assert.deepEqual(byAuthor('client').map((message) => [message.text, message.deliveryStatus]), [['Нужен букет к 18:00', 'sent'], ['', 'sent']]);
   assert.deepEqual(byAuthor('operator').map((message) => [message.text, message.deliveryStatus]), [['Добрый день! Соберём.', 'sent']]);

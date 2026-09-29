@@ -22,6 +22,7 @@ const {createMediaMentorSuggest, createMediaMentorSuggestRoute} = require('./med
 const { clientIp, originOf } = require('./site-orders');
 const { clientCompanyConfig } = require('./client-bot-config');
 const { createClientDialogs } = require('./client-dialogs');
+const { createClientIntakeProxy } = require('./client-intake-proxy');
 const { hashPassword, verifyPassword } = require('./passwords');
 const { createCompanyLinksReader } = require('./company-links-reader');
 const { createEmailUnsubscribeProxy, TOKEN: EMAIL_UNSUBSCRIBE_TOKEN } = require('./email-unsubscribe-proxy');
@@ -71,6 +72,7 @@ const HUGH_LOCAL_WORKER_COMPANIES = (process.env.HUGH_LOCAL_WORKER_COMPANIES || 
 // Telegram Mini App чата проекта: несекретный числовой ID бота для проверки подписи Telegram. Пусто — вход отключён.
 const TELEGRAM_BOT_ID = (process.env.TELEGRAM_BOT_ID || '').trim();
 const CRM_IDENTITY_HEADER = 'x-synapse-crm-identity';
+const openClientIntake = createClientIntakeProxy({crmUrl:CRM_URL,apiKey:CRM_API_KEY,identityHeader:crmIdentityHeader});
 const loginFailures = new Map();
 
 /* Ответ службы Хью для кабинета: только известные поля и короткие строки,
@@ -1205,6 +1207,13 @@ const server = http.createServer(async (request, response) => {
     if (parts[2] === 'client-bot' || parts[2] === 'client-dialogs') {
       const session = requireSession(request);
       if (session.user.role !== 'owner') fail(403, 'Доступно только владельцу');
+      if(parts[2]==='client-dialogs'&&parts.length===5&&parts[4]==='crm'&&request.method==='POST'){
+        requireCsrf(request,session);
+        const source=clientDialogs.crmIntake(parts[1],parts[3]);
+        const result=await openClientIntake(source,session.user);
+        const fresh=requireSession(request);if(fresh.user.role!=='owner'||fresh.user.id!==session.user.id)fail(403,'Доступ изменился');
+        return reply(200,result,{'cache-control':'no-store'});
+      }
       return await clientDialogs.handleCabinet(request, response, url, parts, { session, requireCsrf, send: (res, status, payload, extra) => send(res, status, payload, { ...cors, ...(extra || {}) }) });
     }
 
