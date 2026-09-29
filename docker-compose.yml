@@ -79,6 +79,14 @@ services:
       PALITRA_CLIENT_BOT_LIMIT_CHAT_MINUTE: ${PALITRA_CLIENT_BOT_LIMIT_CHAT_MINUTE:-}
       PALITRA_CLIENT_BOT_LIMIT_CHAT_DAY: ${PALITRA_CLIENT_BOT_LIMIT_CHAT_DAY:-}
       PALITRA_CLIENT_BOT_LIMIT_BOT_HOUR: ${PALITRA_CLIENT_BOT_LIMIT_BOT_HOUR:-}
+      # ALVI: отдельное подключение, пустые значения ничего не запускают.
+      ALVI_CLIENT_BOT_TOKEN: ${ALVI_CLIENT_BOT_TOKEN:-}
+      ALVI_CLIENT_BOT_WEBHOOK_SECRET: ${ALVI_CLIENT_BOT_WEBHOOK_SECRET:-}
+      ALVI_CLIENT_BOT_POLLING: ${ALVI_CLIENT_BOT_POLLING:-}
+      ALVI_CLIENT_BOT_USERNAME: ${ALVI_CLIENT_BOT_USERNAME:-}
+      ALVI_CLIENT_BOT_LIMIT_CHAT_MINUTE: ${ALVI_CLIENT_BOT_LIMIT_CHAT_MINUTE:-}
+      ALVI_CLIENT_BOT_LIMIT_CHAT_DAY: ${ALVI_CLIENT_BOT_LIMIT_CHAT_DAY:-}
+      ALVI_CLIENT_BOT_LIMIT_BOT_HOUR: ${ALVI_CLIENT_BOT_LIMIT_BOT_HOUR:-}
       # Операционные флаги Node для этого сервиса, а не учётные данные. По умолчанию пусто —
       # поведение прежнее. Чем это заполняют на проде, описано в ops/chat/README.md.
       NODE_OPTIONS: ${CHAT_NODE_OPTIONS:-}
@@ -159,6 +167,9 @@ services:
       PALITRA_CLIENT_BOT_USERNAME: ${PALITRA_CLIENT_BOT_USERNAME:-}
       # Необязательно: ссылка на политику в приветствии бота; пусто — https://palitra-love.ru/privacy.
       PALITRA_CLIENT_BOT_POLICY_URL: ${PALITRA_CLIENT_BOT_POLICY_URL:-}
+      ALVI_CLIENT_BOT_USERNAME: ${ALVI_CLIENT_BOT_USERNAME:-}
+      ALVI_CLIENT_BOT_POLICY_URL: ${ALVI_CLIENT_BOT_POLICY_URL:-}
+      ALVI_CLIENT_BOT_HOURS: ${ALVI_CLIENT_BOT_HOURS:-}
       # Общий предел сохранённых файлов клиентских ботов в МБ; пусто — 1024. Сверх предела файл не сохраняется.
       CLIENT_DIALOGS_MAX_STORAGE_MB: ${CLIENT_DIALOGS_MAX_STORAGE_MB:-}
       ALLOWED_ORIGINS: ${CONTENT_ALLOWED_ORIGINS:-}

@@ -1,10 +1,9 @@
 (() => {
 "use strict";
-/* Заявки с сайта Palitra: список заявок, получатель уведомлений в Telegram, проверка получателя,
-   явный повтор уведомления. Только владелец и только компания palitra-love; сайт в маршрутах
-   фиксирован (palitra) и не выводится из ввода. Смена компании закрывает вид и отбрасывает ответы. */
+/* Заявки и клиентские боты: только владелец, компании из явного списка.
+   Сайт выбирается по компании, не из ввода; смена компании отбрасывает старые ответы. */
 const cabinet = window.SbCabinet = window.SbCabinet || {};
-const SITE_BY_COMPANY = Object.freeze({ "palitra-love": "palitra" });
+const SITE_BY_COMPANY = Object.freeze({ "palitra-love": "palitra", alvi: "alvi" });
 const STATUS = Object.freeze({
   accepted: ["Принята, уведомление не отправлялось", "accepted"],
   notified: ["Уведомление доставлено в Telegram", "notified"],
@@ -26,10 +25,10 @@ const explainNotify = (order) => {
   return notify?.finishedAt ? `Доставлено ${when(notify.finishedAt)}` : "";
 };
 const recipientSummary = (recipient) => {
-  if (!recipient.configured) return "Получатель не настроен: заявки сохраняются, уведомления никому не уходят.";
+  if (!recipient.configured) return "Получатель не настроен: уведомления никому не уходят.";
   if (recipient.verifiedAt) return `Получатель подтверждён проверкой ${when(recipient.verifiedAt)}.`;
   if (recipient.lastTestError) return recipient.transport === "client_bot"
-    ? `Проверка не прошла: ${recipient.lastTestError}. Получатель должен быть привязан к боту Palitra (см. ниже).`
+    ? `Проверка не прошла: ${recipient.lastTestError}. Получатель должен быть привязан к клиентскому боту компании (см. ниже).`
     : `Проверка не прошла: ${recipient.lastTestError}. Получатель должен написать боту @synapse_sb_bot команду /start.`;
   if (recipient.lastTest && ["pending", "sending"].includes(recipient.lastTest.status)) return "Проверочное сообщение отправляется…";
   return "Получатель сохранён, но ещё не подтверждён проверкой.";
@@ -45,7 +44,8 @@ cabinet.registerView("site-orders", { title: "Заявки с сайта",
     const alive = () => current === version && context.selectedProjectId === code && container.isConnected;
     container.innerHTML = '<div class="content-header"><h1>Заявки с сайта</h1></div>';
     if (context.identity.role !== "owner") { container.insertAdjacentHTML("beforeend", '<div class="card"><p>Доступно только владельцу.</p></div>'); return; }
-    if (!site) { container.insertAdjacentHTML("beforeend", '<div class="card"><p>Заявки с сайта ведутся только для Palitra. Выберите компанию Palitra в переключателе.</p></div>'); return; }
+    if (!site) { container.insertAdjacentHTML("beforeend", '<div class="card"><p>Модуль доступен для Palitra и ALVI. Выберите компанию в переключателе.</p></div>'); return; }
+    if (site === "alvi") container.insertAdjacentHTML("beforeend", '<div class="card"><p>Здесь настраивается получатель и переписка клиентского бота ALVI. Публичный приём заявок с сайта пока не подключён. Настройка получателя сама по себе не включает бота.</p></div>');
     const base = `/content/${site}`;
     const controller = new AbortController();
     const api = (url, options = {}) => context.apiJson(url, { ...options, signal: controller.signal });
@@ -59,7 +59,7 @@ cabinet.registerView("site-orders", { title: "Заявки с сайта",
       <label>Подпись<input name="label" maxlength="80" autocomplete="off" placeholder="например, менеджер"></label>
       <div class="site-orders__actions"><button type="submit">Сохранить получателя</button><button type="button" data-recipient-test>Отправить проверочное сообщение</button><button type="button" data-orders-refresh>Обновить</button></div>
       <p role="status" data-recipient-status></p></form>
-      <p class="site-orders__hint">Бот пишет только тем, кто сам начал с ним диалог: для прежнего канала получатель один раз отправляет /start боту @synapse_sb_bot, для бота Palitra — привязывается кодом ниже. Сохранение ничего не отправляет; проверка отправляет одно служебное сообщение.</p></section>
+      <p class="site-orders__hint">Бот пишет только тем, кто сам начал с ним диалог: для прежнего канала получатель один раз отправляет /start боту @synapse_sb_bot, для клиентского бота компании — привязывается кодом ниже. Сохранение ничего не отправляет; проверка отправляет одно служебное сообщение.</p></section>
       <div data-client-bot-box></div>
       <section class="card"><h2>Заявки</h2><div data-orders-list aria-live="polite">Загрузка…</div>
       <div class="site-orders__more"><button type="button" data-orders-more hidden>Показать ещё</button><p role="status" data-orders-more-status></p></div></section>`;
@@ -215,7 +215,7 @@ cabinet.registerView("site-orders", { title: "Заявки с сайта",
     // Смена компании или уход с вида: незавершённые запросы отменяются, ответы не применяются.
     const observer = new MutationObserver(() => { if (!alive()) { controller.abort(); observer.disconnect(); } });
     observer.observe(container, { childList: true });
-    // Клиентский бот Palitra (client-dialogs.js): состояние, привязка менеджера, канал заявок, переписка.
+    // Клиентский бот компании: состояние, привязка менеджера, канал заявок, переписка.
     const botBox = panel.querySelector("[data-client-bot-box]");
     botPanel = cabinet.clientDialogs ? cabinet.clientDialogs.render(botBox, context, { site, alive, api, mutation, onTransportChange: () => load({ quiet: true }) }) : null;
     await load();

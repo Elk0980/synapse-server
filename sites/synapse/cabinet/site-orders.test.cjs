@@ -29,6 +29,23 @@ function fixture({ role = 'owner', company = 'palitra-love' } = {}) {
   return { w, d, views, calls, ctx, state, container: d.getElementById('view'), render: () => views['site-orders'].render(d.getElementById('view'), ctx) };
 }
 
+test('ALVI: собственный маршрут и честное предупреждение о неподключённом публичном приёме', async () => {
+  const f = fixture({ company: 'alvi' });
+  const rendering = f.render();
+  assert.equal(f.calls[0].url, '/content/alvi/orders?limit=50');
+  f.calls[0].resolve({ orders: [], recipient: recipient() });
+  await rendering; await tick();
+  assert.match(f.container.textContent, /Публичный приём заявок с сайта пока не подключён/);
+  assert.doesNotMatch(f.container.textContent, /для бота Palitra/);
+  f.d.querySelector('[name="telegramChatId"]').value = '555000222';
+  f.d.querySelector('[data-recipient-form]').dispatchEvent(new f.w.Event('submit', { bubbles: true, cancelable: true }));
+  await tick();
+  assert.equal(f.calls[1].url, '/content/alvi/order-recipient');
+  assert.equal(f.calls[1].options.headers['X-CSRF-Token'], 'csrf-1');
+  f.calls[1].resolve(recipient({ configured: true, telegramChatId: '555000222' }));
+  await tick(); f.w.close();
+});
+
 test('владелец Palitra: список, получатель не настроен, предупреждение о заявках без уведомления; маршруты фиксированы на /content/palitra', async () => {
   const f = fixture();
   const rendering = f.render();
@@ -74,21 +91,21 @@ test('«Показать ещё»: страницы по beforeId, одна до
   const start = g.render();
   g.calls[0].resolve({ orders: [order(50, 'notified')], nextCursor: 50, recipient: recipient() }); await start; await tick();
   g.d.querySelector('[data-orders-more]').click(); await tick();
-  g.state.company = 'alvi'; await g.render(); await tick();
+  g.state.company = 'avokado'; await g.render(); await tick();
   assert.equal(g.calls[1].options.signal.aborted, true);
   g.calls[1].resolve({ orders: [order(2, 'notified')], nextCursor: null, recipient: recipient() }); await tick();
   assert.doesNotMatch(g.container.textContent, /№2|№50/);
   f.w.close(); g.w.close();
 });
 
-test('смена компании закрывает вид и отбрасывает старый ответ; не-Palitra не делает запросов; не-владелец не видит данных', async () => {
+test('смена компании закрывает вид и отбрасывает старый ответ; неподдерживаемая компания не делает запросов; не-владелец не видит данных', async () => {
   const f = fixture();
   const first = f.render();
-  f.state.company = 'alvi';
+  f.state.company = 'avokado';
   const second = f.render();
   await second; await tick();
-  assert.equal(f.calls.length, 1, 'для АЛВИ запросов нет');
-  assert.match(f.container.textContent, /только для Palitra/);
+  assert.equal(f.calls.length, 1, 'для Авокадо запросов нет');
+  assert.match(f.container.textContent, /доступен для Palitra и ALVI/);
   assert.equal(f.calls[0].options.signal.aborted, true, 'старый запрос отменён');
   f.calls[0].resolve({ orders: [order(9, 'notified')], recipient: recipient() });
   await first; await tick();

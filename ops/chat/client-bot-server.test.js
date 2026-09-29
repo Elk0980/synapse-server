@@ -175,3 +175,18 @@ test('без имени бота токен не используется вов
   await new Promise((resolve) => setTimeout(resolve, 300));
   assert.equal(mock.seen.telegram.filter((call) => call.token === CLIENT_TOKEN).length, 0);
 });
+
+test('ALVI использует собственную конфигурацию и маршрут без включения Palitra', async (t) => {
+  const mock = await startMock();
+  t.after(() => stopMock(mock));
+  const chat = await startChat(t, mock.url, { PALITRA_CLIENT_BOT_TOKEN: '', ALVI_CLIENT_BOT_TOKEN: CLIENT_TOKEN,
+    ALVI_CLIENT_BOT_USERNAME: CLIENT_NAME, ALVI_CLIENT_BOT_POLLING: '1', ALVI_CLIENT_BOT_WEBHOOK_SECRET: 'alvi-hook' });
+  await waitFor(() => mock.seen.content.some(call => call.url.startsWith('/content/internal/client-bot/receive')));
+  const receive = mock.seen.content.find(call => call.url.startsWith('/content/internal/client-bot/receive'));
+  assert.match(receive.url, /botKey=alvi/);
+  assert.equal((await post(`${chat.base}/telegram/client-bot/palitra/webhook`, {}, { 'x-telegram-bot-api-secret-token': 'alvi-hook' })).status, 404);
+  assert.equal((await post(`${chat.base}/telegram/client-bot/alvi/webhook`, { update_id: 81,
+    message: { message_id: 6, chat: { id: 901, type: 'private' }, from: { id: 901 }, text: 'ALVI' } },
+    { 'x-telegram-bot-api-secret-token': 'alvi-hook' })).status, 200);
+  assert.ok(mock.seen.telegram.every(call => call.token === CLIENT_TOKEN));
+});

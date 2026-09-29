@@ -14,7 +14,7 @@ const DELIVERY = Object.freeze({
 });
 const FILE_STATUS = Object.freeze({ pending: "файл ещё загружается", too_large: "файл не сохранён: слишком большой", unavailable: "файл не сохранён: недоступен боту",
   quota_exceeded: "файл не сохранён: исчерпан лимит хранилища бота" });
-const TRANSPORT = Object.freeze({ project_bot: "бот Synapse (прежний канал)", client_bot: "бот Palitra" });
+const TRANSPORT = Object.freeze({ project_bot: "бот Synapse (прежний канал)", client_bot: "клиентский бот компании" });
 const when = (iso) => { const date = new Date(iso); return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short" }).format(date); };
 
 function render(container, context, { site, alive, api, mutation, onTransportChange = () => {} }) {
@@ -49,7 +49,7 @@ function render(container, context, { site, alive, api, mutation, onTransportCha
   const setBusy = (value) => { busy = value; for (const button of [codeButton, transportButton, revokeButton]) button.disabled = value; };
 
   const describe = (bot) => {
-    if (!bot.enabled) return "Бот не подключён: на сервере не задано имя бота. Заявки и уведомления работают прежним способом.";
+    if (!bot.enabled) return "Бот не подключён. После подключения здесь появятся его состояние и переписка с клиентами.";
     const parts = [`Бот @${bot.username}.`];
     parts.push(bot.bridge?.ready ? `Сервис chat подтвердил бота ${when(bot.bridge.checkedAt)}.`
       : `Сервис chat не подтвердил бота${bot.bridge?.error ? `: ${bot.bridge.error}` : ""} — ссылки в Telegram после заявки не выдаются.`);
@@ -71,7 +71,7 @@ function render(container, context, { site, alive, api, mutation, onTransportCha
     revokeButton.hidden = !bot.operator.bound;
     const toClient = bot.transport !== "client_bot";
     transportButton.hidden = !bot.enabled || (toClient && !bot.transportReady?.ok);
-    transportButton.textContent = toClient ? "Присылать заявки ботом Palitra" : "Вернуть заявки на бот Synapse";
+    transportButton.textContent = toClient ? `Присылать заявки ботом @${bot.username}` : "Вернуть заявки на бот Synapse";
     transportButton.dataset.target = toClient ? "client_bot" : "project_bot";
     events.replaceChildren(...(bot.events || []).map((event) => {
       const item = document.createElement("li");
@@ -105,7 +105,7 @@ function render(container, context, { site, alive, api, mutation, onTransportCha
     if (busy || !alive()) return;
     const transport = transportButton.dataset.target;
     const warning = transport === "client_bot"
-      ? "Новые заявки будут приходить менеджеру ботом Palitra. Уже отправленные заявки повторно не рассылаются. Продолжить?"
+      ? `Новые заявки будут приходить менеджеру ботом @${state.username}. Уже отправленные заявки повторно не рассылаются. Продолжить?`
       : "Новые заявки будут приходить прежним ботом Synapse. Продолжить?";
     if (!window.confirm(warning)) return;
     setBusy(true); status.textContent = "Меняем канал уведомлений…";

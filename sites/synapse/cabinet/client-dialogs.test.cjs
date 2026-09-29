@@ -38,7 +38,7 @@ test('бот не подключён: честное состояние, кно�
   f.render();
   await f.answer('/content/palitra/client-bot', bot({ enabled: false, username: '' }));
   await f.answer('/content/palitra/orders?limit=50', { orders: [], recipient: recipient() });
-  assert.match(f.d.querySelector('[data-bot-summary]').textContent, /Бот не подключён.*прежним способом/);
+  assert.match(f.d.querySelector('[data-bot-summary]').textContent, /Бот не подключён.*После подключения/);
   assert.equal(f.d.querySelector('[data-bot-code]').hidden, true);
   assert.equal(f.d.querySelector('[data-bot-transport]').hidden, true);
   assert.equal(f.d.querySelector('[data-client-dialogs]').hidden, true);
@@ -63,7 +63,7 @@ test('код менеджера: POST с CSRF, показ один раз с к�
   // После привязки: кнопка «Присылать заявки ботом Palitra» → PUT транспорта с CSRF и обновление списка заявок.
   await f.answer('/content/palitra/client-bot', bot({ operator: { bound: true, telegramUserId: '555000111', boundAt: '2026-09-29T09:05:00Z', matchesRecipient: true }, transportReady: { ok: true } }));
   const transport = f.d.querySelector('[data-bot-transport]');
-  assert.deepEqual([transport.hidden, transport.textContent], [false, 'Присылать заявки ботом Palitra']);
+  assert.deepEqual([transport.hidden, transport.textContent], [false, 'Присылать заявки ботом @palitra_qa_bot']);
   transport.click(); await tick();
   const put = f.find('/content/palitra/order-recipient/transport', 'PUT');
   assert.deepEqual([JSON.parse(put.options.body), put.options.headers['X-CSRF-Token']], [{ transport: 'client_bot' }, 'csrf-1']);
@@ -124,13 +124,13 @@ test('смена компании: запросы бота отменяются,
   const f = fixture();
   f.render();
   const botCall = f.find('/content/palitra/client-bot');
-  f.state.company = 'alvi';
+  f.state.company = 'avokado';
   await f.render(); await tick();
   assert.equal(botCall.options.signal.aborted, true);
   botCall.resolve(bot({ username: 'late_bot' }));
   await tick();
   assert.doesNotMatch(f.container.textContent, /late_bot/);
-  assert.match(f.container.textContent, /только для Palitra/);
+  assert.match(f.container.textContent, /доступен для Palitra и ALVI/);
   f.w.close();
 });
 

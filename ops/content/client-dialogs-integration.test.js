@@ -45,6 +45,7 @@ test('живой content + мост: переписка через бота, в�
     env: { ...process.env, PORT: String(port), DATABASE_PATH: path.join(dir, 'db.sqlite'), ASSETS_DIR: path.join(dir, 'assets'),
       SEED_DIR: path.join(__dirname, 'seed'), API_KEY: '', CHAT_API_KEY: serviceKey, HUGH_RUNTIME_URL: `http://127.0.0.1:${await freePort()}`,
       PALITRA_CLIENT_BOT_USERNAME: '@palitra_qa_bot', PALITRA_ORDER_ORIGINS: ORIGIN,
+      ALVI_CLIENT_BOT_USERNAME: '',
       AUTH_USERS: `owner:owner:${hashPassword(ownerSecret)}`, SESSION_SECRET: crypto.randomBytes(32).toString('hex') },
     stdio: 'ignore',
   });
@@ -110,7 +111,14 @@ test('живой content + мост: переписка через бота, в�
   assert.equal((await fetch(`${base}/content/internal/client-bot/outbox?botKey=palitra`)).status, 401);
   assert.equal((await req('/content/palitra/client-bot', daria)).status, 403);
   assert.equal((await req('/content/palitra/client-dialogs', daria)).status, 403);
-  assert.equal((await req('/content/alvi/client-bot', owner)).status, 404);
+  const alviStatus = await (await req('/content/alvi/client-bot', owner)).json();
+  assert.equal(alviStatus.enabled, false);
+  assert.equal((await req('/content/alvi/client-bot', daria)).status, 403);
+  assert.equal((await req('/content/alvi/order-recipient', { cookie: owner.cookie }, 'PUT', { telegramChatId: '555000222' })).status, 403);
+  assert.equal((await req('/content/alvi/order-recipient', owner, 'PUT', { telegramChatId: '555000222', label: 'Администратор ALVI' })).status, 200);
+  assert.equal((await (await req('/content/palitra/order-recipient', owner)).json()).configured, false, 'получатели раздельны');
+  assert.equal((await req('/content/alvi/client-bot/operator-code', owner, 'POST')).status, 409, 'пустое имя не включает бота');
+  assert.equal((await req('/public-orders/alvi', null, 'POST', {}, { Origin: 'https://example.test' })).status, 403, 'публичный приём ALVI закрыт');
   const status0 = await (await req('/content/palitra/client-bot', owner)).json();
   assert.deepEqual([status0.enabled, status0.username, status0.operator.bound, status0.transport, status0.bridge.ready], [true, 'palitra_qa_bot', false, 'project_bot', false]);
   await bridge.tick();   // мост проверяет getMe и подтверждает бота в content
