@@ -142,6 +142,22 @@ test('ручной ответ Хью сохраняет получателя и 
   harness.w.close();
 });
 
+test('квитанция открывает только безопасные ссылки доставленного сообщения', async () => {
+  const harness = boot({ routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ messages: [
+      message({ id: 'receipt1', deliveryStatus: 'sent', reviewedByOwner: true,
+        telegramLinks: ['https://t.me/c/123/456', 'javascript:alert(1)', 'https://evil.test/'] }),
+      message({ id: 'receipt2', deliveryStatus: 'uncertain', telegramLinks: ['https://t.me/c/123/789'] })
+    ] }) })
+  } });
+  await mount(harness);
+  const links = [...harness.d.querySelectorAll('.pc-message-footer a')];
+  assert.equal(links.length, 1);
+  assert.equal(links[0].href, 'https://t.me/c/123/456');
+  assert.match(harness.d.querySelector('[data-message-id="receipt1"]').textContent, /Проверено владельцем/);
+  harness.w.close();
+});
+
 test('хост Mini App: заголовок вместо cookie и CSRF, вложения через защищённый blob, освобождение при смене проекта и отзыве', async () => {
   const harness = boot({ role: 'member', clock: true, routes: {
     'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ access: { canReply: true, owner: false }, messages: [
