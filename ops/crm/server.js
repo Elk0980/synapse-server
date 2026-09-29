@@ -35,6 +35,7 @@ const { createSocialAdapters } = require('./social-adapters');
 const { createSocialStatsHandler } = require('./social-stats-http');
 const { createCompanyInformationCheck } = require('./company-information-check');
 const { createDealOrders } = require('./deal-orders');
+const { createTaskCoordination } = require('./task-coordination');
 
 const IS_MAIN = require.main === module;
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
@@ -584,6 +585,7 @@ const emailCampaigns = createEmailCampaigns(db, {transport: campaignTransport, l
 });
 const emailDiagnostics = createEmailDiagnostics(db, {getEnvironment: emailSettings.getEnvironment});
 const companyInformation = createCompanyInformation(db, {check: createCompanyInformationCheck()});
+const taskCoordination = createTaskCoordination(db);
 const autopostingTransport = createAutopostingTransport(db, {apiKey: API_KEY});
 const autoposting = createAutoposting(db, {information: companyInformation, transport: autopostingTransport});
 const studioJourney = createStudioJourney(db);
@@ -2760,6 +2762,18 @@ async function route(request, response) {
   if (request.method === 'GET' && overviewMatch) {
     const company = scopedCompany(url.searchParams.get('companyCode'));
     return send(response, 200, companyOverview(entityId(overviewMatch[1]), company), cors);
+  }
+  if (/^\/coordination(?:\/|$)/.test(url.pathname)) {
+    const actor = crmIdentity(request);
+    if (actor?.role !== 'owner') fail(403, 'Координация доступна владельцу');
+    const match = url.pathname.match(/^\/coordination\/tasks\/(\d+)$/);
+    let result;
+    if (url.pathname === '/coordination/tasks' && request.method === 'GET') {
+      result = taskCoordination.list(Object.fromEntries(url.searchParams), actor);
+    } else if (match && request.method === 'GET') result = taskCoordination.get(entityId(match[1]), actor);
+    else if (match && request.method === 'PUT') result = taskCoordination.save(entityId(match[1]), await readJson(request), actor);
+    else fail(404, 'Адрес не найден');
+    return send(response, 200, result, {...cors, 'cache-control':'private, no-store'});
   }
   if (await handleRelationRoutes(request, response, url, cors)) return;
   if (request.method === 'GET' && url.pathname === '/tasks/summary') {

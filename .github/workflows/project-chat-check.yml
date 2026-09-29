@@ -20,6 +20,7 @@ on:
       - 'ops/crm/media-mentor*'
       - 'ops/crm/autoposting*'
       - 'ops/crm/server.js'
+      - 'ops/crm/task-coordination*'
       - 'ops/crm/social-stats*'
       - 'ops/crm/social-baselines*'
       - 'ops/crm/platform-demand*'
@@ -43,6 +44,7 @@ on:
       - 'ops/crm/media-mentor*'
       - 'ops/crm/autoposting*'
       - 'ops/crm/server.js'
+      - 'ops/crm/task-coordination*'
       - 'ops/crm/social-stats*'
       - 'ops/crm/social-baselines*'
       - 'ops/crm/platform-demand*'
@@ -129,7 +131,11 @@ jobs:
         timeout-minutes: 10
         run: node --test ops/crm/finance-ai.test.js ops/crm/commercial.test.js ops/crm/crm-permissions.test.js
 
-      - name: Тесты сервиса контента
+      - name: Тесты доски координации проектов
+        timeout-minutes: 10
+        run: node --test ops/crm/task-coordination.test.js
+
+      - name: Тесты сервиса контента и прав координации
         timeout-minutes: 10
         # HTTP-наборы запускают собственные сервисы и выбирают локальные порты.
         # Последовательный запуск исключает конкуренцию фикстур за порты/ресурсы;

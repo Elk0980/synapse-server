@@ -561,6 +561,7 @@ async function proxyCrm(request, response, url, cors) {
   const identity = initialSession.user;
   const readOnly = request.method === 'GET';
   const crmPath = url.pathname.slice('/content/crm'.length) || '/';
+  if (/^\/coordination(?:\/|$)/.test(crmPath) && identity.role !== 'owner') fail(403, 'Координация доступна владельцу');
   if (/^\/vk-community(?:\/|$)/.test(crmPath)) {
     if (identity.role !== 'owner') fail(403,'Подключение и сообщения ВК доступны владельцу');
     const code = url.searchParams.get('companyCode');

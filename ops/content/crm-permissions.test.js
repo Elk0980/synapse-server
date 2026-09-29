@@ -138,6 +138,25 @@ test('CRM proxy restricts pipelines to the owner and preserves company-scoped ed
   const viewer = await login('viewer');
   const crm = (session, method, pathname, body, headers) =>
     request(base, method, `/content/crm${pathname}`, body, session, headers);
+  await t.test('coordination uses owner session, CSRF and revision checks without exposing internal notes to clients', async () => {
+    assert.equal((await crm(undefined,'GET','/coordination/tasks')).status,401);
+    for(const session of [editor,mover,targetEditor,observer,viewer]) {
+      assert.equal((await crm(session,'GET','/coordination/tasks')).status,403);
+      assert.equal((await crm(session,'PUT','/coordination/tasks/1',{revision:0,data:{}})).status,403);
+    }
+    const created=await crm(owner,'POST','/tasks',{title:'Coordination HTTP fixture'});
+    assert.equal(created.status,201);
+    const route=`/coordination/tasks/${created.body.id}`;
+    assert.equal((await crm(owner,'GET',route)).body.revision,0);
+    const update={revision:0,data:{module:'delivery',result:'Internal evidence'}};
+    assert.equal((await crm({...owner,csrf:'invalid'},'PUT',route,update)).status,403);
+    assert.equal((await crm(owner,'PUT',route,update)).status,200);
+    assert.equal((await crm(owner,'PUT',route,update)).status,409);
+    assert.equal((await crm(owner,'GET',route)).body.result,'Internal evidence');
+    assert.equal((await crm(owner,'GET',`/tasks/${created.body.id}`)).body.result,undefined);
+    await crm(owner,'DELETE',`/tasks/${created.body.id}`);
+    assert.equal((await crm(owner,'GET',route)).status,404);
+  });
   await t.test('email diagnostics require an owner session and expose only safe status', async () => {
     assert.equal((await crm(undefined, 'GET', '/email-status')).status, 401);
     for (const session of [editor, mover, targetEditor, observer, viewer]) {
