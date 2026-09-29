@@ -1288,18 +1288,21 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       const text = cleanText(body.text ?? '', MESSAGE_LIMIT);
       const clientId = cleanText(body.clientMessageId ?? '', 128, 'clientMessageId');
       if (!/^[a-zA-Z0-9_.:-]{8,128}$/.test(clientId)) fail(400, 'Нужен уникальный идентификатор сообщения');
+      if (!Array.isArray(body.attachmentIds ?? []) || (body.attachmentIds || []).length > 10) fail(400, 'Допустимо до 10 разных вложений');
+      const requestedIds = (body.attachmentIds || []).map(v => integer(v)).sort((a, b) => a - b);
+      if (new Set(requestedIds).size !== requestedIds.length) fail(400, 'Вложения не должны повторяться');
       const result = tx(() => {
         const old = db.prepare("SELECT * FROM project_chat_messages WHERE company_code=? AND author_id='hugh' AND client_message_id=?").get(code, clientId);
         if (old) {
           const proof = db.prepare('SELECT * FROM project_chat_reviewed_messages WHERE message_id=?').get(old.id);
           const view = messageJSON(old);
           if (!proof || proof.reviewer_id !== String(reviewer.id) || proof.chat_id !== body.expectedChatId || old.text !== text ||
-              JSON.stringify(view.attachments.map(a => a.id)) !== JSON.stringify(body.attachmentIds || [])) fail(409, 'Этот идентификатор уже использован для другого сообщения');
+              JSON.stringify(view.attachments.map(a => a.id)) !== JSON.stringify(requestedIds)) fail(409, 'Этот идентификатор уже использован для другого сообщения');
           return { message: view, duplicate: true };
         }
         const destination = ensureRoom(code).telegram_chat_id;
         if (!destination || typeof body.expectedChatId !== 'string' || destination !== body.expectedChatId) fail(409, 'Получатель изменился. Обновите чат и проверьте получателя');
-        const ids = checkAttachments(code, body.attachmentIds || []);
+        const ids = checkAttachments(code, requestedIds);
         if (!text && !ids.length) fail(400, 'Добавьте текст или вложение');
         const row = insertMessage({ code, authorId: 'hugh', authorName: 'Хью', authorType: 'assistant', text, ids, clientId, skipAi: true });
         db.prepare('INSERT INTO project_chat_reviewed_messages(message_id,reviewer_id,chat_id,reviewed_at) VALUES(?,?,?,?)')

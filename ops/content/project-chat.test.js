@@ -96,7 +96,9 @@ test('проверенная владельцем отправка Хью: фа�
   db.prepare('UPDATE project_chat_rooms SET telegram_chat_id=? WHERE company_code=?').run('-10012345', ROOM);
   const uploaded = await call(chat, { session: owner, method: 'POST', url: room('/attachments'), bytes: PNG,
     headers: { 'content-type': 'image/png', 'x-filename': 'price.png' } });
-  const body = { text: 'Прайс для согласования', attachmentIds: [uploaded.payload.attachment.id],
+  const second = await call(chat, { session: owner, method: 'POST', url: room('/attachments'), bytes: PNG,
+    headers: { 'content-type': 'image/png', 'x-filename': 'second.png' } });
+  const body = { text: 'Прайс для согласования', attachmentIds: [second.payload.attachment.id, uploaded.payload.attachment.id],
     clientMessageId: 'reviewed-price-01', expectedChatId: '-10012345' };
   const send = () => call(chat, { session: owner, method: 'POST', url: room('/reviewed-messages'), body });
   assert.equal((await send()).statusCode, 201);
