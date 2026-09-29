@@ -116,6 +116,48 @@ const boot = (options = {}) => {
 
 const mount = async (harness) => { await harness.views.hugh.render(harness.d.getElementById('hugh-view'), harness.ctx); await settle(); };
 
+test('ручной ответ Хью сохраняет получателя и ключ при потере подтверждения', async () => {
+  const posts = [];
+  const harness = boot({ routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot() }),
+    'POST /content/project-chat/palitra-love/reviewed-messages': call => {
+      posts.push(JSON.parse(call.body));
+      return posts.length === 1 ? { status: 502 } : { body: { ok: true } };
+    }
+  } });
+  await mount(harness);
+  const checkbox = harness.d.querySelector('[data-pc-reviewed]');
+  assert.equal(checkbox.parentElement.hidden, false);
+  checkbox.checked = true;
+  harness.d.querySelector('[data-pc-compose] textarea').value = 'Проверенный макет';
+  harness.submit('[data-pc-compose]');
+  await settle();
+  assert.equal(checkbox.disabled, true);
+  harness.submit('[data-pc-compose]');
+  await settle();
+  assert.equal(posts.length, 2);
+  assert.deepEqual(posts[1], posts[0]);
+  assert.equal(posts[0].expectedChatId, '-1001234567890');
+  assert.equal(harness.calls.filter(c => c.method === 'POST' && c.url.endsWith('/messages')).length, 0);
+  harness.w.close();
+});
+
+test('квитанция открывает только безопасные ссылки доставленного сообщения', async () => {
+  const harness = boot({ routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ messages: [
+      message({ id: 'receipt1', deliveryStatus: 'sent', reviewedByOwner: true,
+        telegramLinks: ['https://t.me/c/123/456', 'javascript:alert(1)', 'https://evil.test/'] }),
+      message({ id: 'receipt2', deliveryStatus: 'uncertain', telegramLinks: ['https://t.me/c/123/789'] })
+    ] }) })
+  } });
+  await mount(harness);
+  const links = [...harness.d.querySelectorAll('.pc-message-footer a')];
+  assert.equal(links.length, 1);
+  assert.equal(links[0].href, 'https://t.me/c/123/456');
+  assert.match(harness.d.querySelector('[data-message-id="receipt1"]').textContent, /Проверено владельцем/);
+  harness.w.close();
+});
+
 test('хост Mini App: заголовок вместо cookie и CSRF, вложения через защищённый blob, освобождение при смене проекта и отзыве', async () => {
   const harness = boot({ role: 'member', clock: true, routes: {
     'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ access: { canReply: true, owner: false }, messages: [

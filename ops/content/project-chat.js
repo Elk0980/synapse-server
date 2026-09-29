@@ -180,6 +180,10 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       UNIQUE(company_code,author_id,client_message_id), UNIQUE(external_chat_id,external_message_id)
     );
     CREATE INDEX IF NOT EXISTS project_chat_messages_room ON project_chat_messages(company_code,id);
+    CREATE TABLE IF NOT EXISTS project_chat_reviewed_messages (
+      message_id INTEGER PRIMARY KEY REFERENCES project_chat_messages(id),
+      reviewer_id TEXT NOT NULL, chat_id TEXT NOT NULL, reviewed_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS project_chat_attachments (
       id INTEGER PRIMARY KEY AUTOINCREMENT, company_code TEXT NOT NULL REFERENCES project_chat_rooms(company_code),
       message_id INTEGER REFERENCES project_chat_messages(id), name TEXT NOT NULL, mime TEXT NOT NULL,
@@ -392,13 +396,22 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       if (!files.has(a.message_id)) files.set(a.message_id, []);
       files.get(a.message_id).push(attachmentJSON(a));
     }
-    const delivery = new Map(db.prepare(`SELECT message_id,status FROM project_chat_outbox WHERE message_id IN (${marks})`)
-      .all(...ids).map(r => [r.message_id, r.status]));
+    const delivery = new Map(db.prepare(`SELECT message_id,status,chat_id,external_ids FROM project_chat_outbox WHERE message_id IN (${marks})`)
+      .all(...ids).map(r => [r.message_id, r]));
+    const reviewed = new Set(db.prepare(`SELECT message_id FROM project_chat_reviewed_messages WHERE message_id IN (${marks})`)
+      .all(...ids).map(r => r.message_id));
+    const receiptLinks = row => {
+      if (row?.status !== 'sent' || !/^-100\d+$/.test(row.chat_id)) return [];
+      let external; try { external = JSON.parse(row.external_ids || '[]'); } catch { return []; }
+      return Array.isArray(external) ? external.filter(id => /^\d+$/.test(String(id)))
+        .map(id => `https://t.me/c/${row.chat_id.slice(4)}/${id}`) : [];
+    };
     const jobs = new Map(db.prepare(`SELECT id,message_id,status FROM project_chat_ai_jobs WHERE message_id IN (${marks})`)
       .all(...ids).map(r => [r.message_id, r]));
     return rows.map(m => ({ id: m.id, authorName: m.author_name, authorType: m.author_type, text: m.text,
       createdAt: m.created_at, attachments: files.get(m.id) || [],
-      deliveryStatus: delivery.get(m.id) || 'local',
+      deliveryStatus: delivery.get(m.id)?.status || 'local',
+      telegramLinks: receiptLinks(delivery.get(m.id)), reviewedByOwner: reviewed.has(m.id),
       // Ожидание подключения — это по-прежнему очередь, а не отказ.
       ...(jobs.has(m.id) ? { aiStatus: jobs.get(m.id).status === 'blocked' ? 'pending' : jobs.get(m.id).status,
         aiJobId: jobs.get(m.id).id } : {}) }));
@@ -1268,6 +1281,35 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
         'content-disposition': `${item.mime === 'application/pdf' ? 'attachment' : 'inline'}; filename="attachment"; filename*=UTF-8''${encodeURIComponent(item.name)}`,
         'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; sandbox" });
       response.end(item.bytes); return true;
+    }
+    if (suffix === '/reviewed-messages' && method === 'POST') {
+      const body = await readBody(request), reviewer = access(request, code, true, true);
+      if (Object.keys(body).some(k => !['text', 'attachmentIds', 'clientMessageId', 'expectedChatId'].includes(k))) fail(400, 'Неизвестное поле сообщения');
+      const text = cleanText(body.text ?? '', MESSAGE_LIMIT);
+      const clientId = cleanText(body.clientMessageId ?? '', 128, 'clientMessageId');
+      if (!/^[a-zA-Z0-9_.:-]{8,128}$/.test(clientId)) fail(400, 'Нужен уникальный идентификатор сообщения');
+      if (!Array.isArray(body.attachmentIds ?? []) || (body.attachmentIds || []).length > 10) fail(400, 'Допустимо до 10 разных вложений');
+      const requestedIds = (body.attachmentIds || []).map(v => integer(v)).sort((a, b) => a - b);
+      if (new Set(requestedIds).size !== requestedIds.length) fail(400, 'Вложения не должны повторяться');
+      const result = tx(() => {
+        const old = db.prepare("SELECT * FROM project_chat_messages WHERE company_code=? AND author_id='hugh' AND client_message_id=?").get(code, clientId);
+        if (old) {
+          const proof = db.prepare('SELECT * FROM project_chat_reviewed_messages WHERE message_id=?').get(old.id);
+          const view = messageJSON(old);
+          if (!proof || proof.reviewer_id !== String(reviewer.id) || proof.chat_id !== body.expectedChatId || old.text !== text ||
+              JSON.stringify(view.attachments.map(a => a.id)) !== JSON.stringify(requestedIds)) fail(409, 'Этот идентификатор уже использован для другого сообщения');
+          return { message: view, duplicate: true };
+        }
+        const destination = ensureRoom(code).telegram_chat_id;
+        if (!destination || typeof body.expectedChatId !== 'string' || destination !== body.expectedChatId) fail(409, 'Получатель изменился. Обновите чат и проверьте получателя');
+        const ids = checkAttachments(code, requestedIds);
+        if (!text && !ids.length) fail(400, 'Добавьте текст или вложение');
+        const row = insertMessage({ code, authorId: 'hugh', authorName: 'Хью', authorType: 'assistant', text, ids, clientId, skipAi: true });
+        db.prepare('INSERT INTO project_chat_reviewed_messages(message_id,reviewer_id,chat_id,reviewed_at) VALUES(?,?,?,?)')
+          .run(row.id, String(reviewer.id), destination, stamp());
+        return { message: messageJSON(row), duplicate: false };
+      });
+      return reply(result.duplicate ? 200 : 201, result);
     }
     if (suffix === '/messages' && method === 'POST') {
       const body = await readBody(request), freshUser = access(request, code, true);

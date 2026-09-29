@@ -115,6 +115,9 @@ test('живой content: вход Mini App с production-ключом, room-т�
   assert.equal((await fetch(`${base}/content/project-chat/${ROOM}/attachments/${attachment.id}`)).status, 401, 'без токена и cookie файла нет');
   // Владельческие маршруты и чужая компания закрыты; вне комнаты токен не принимается вовсе.
   assert.equal((await withToken(`/content/project-chat/${ROOM}/settings`, token, 'PATCH', { replyMode: 'delegate' })).status, 403);
+  assert.equal((await withToken(`/content/project-chat/${ROOM}/reviewed-messages`, token, 'POST', {
+    text: 'Не должно отправиться от Хью', clientMessageId: 'miniapp-reviewed-01', expectedChatId: '-10012345'
+  })).status, 403);
   assert.equal((await withToken(`/content/project-chat/${ROOM}/telegram-links`, token)).status, 403);
   assert.equal((await withToken(`/content/project-chat/${OTHER}`, token)).status, 403);
   assert.equal((await withToken(`/content/project-chat-runtime/status?companyCode=${ROOM}`, token)).status, 401);
