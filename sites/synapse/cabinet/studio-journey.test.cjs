@@ -119,3 +119,19 @@ test('program selection describes the whole visit and guests without inventing p
     assert.doesNotMatch(preview,/undefined|процедур/);assert.equal(f.calls.filter(c=>c.method==='POST').length,0);
   }finally{f.close();}
 });
+
+test('selection distinguishes paid minutes from procedures for two guests',async()=>{
+  for(const service of [
+    {id:'minutes',title:'Тариф',price:990,currency:'RUB',priceUnit:'minutes',minuteCount:30},
+    {id:'pair',title:'Массаж',price:5600,currency:'RUB',procedureCount:1,guestCount:2,durationMinutes:60}
+  ]){
+    const f=fixture({query:c=>c.path==='/company-information/knowledge'?{companyCode:'alvi',knowledgeRevision:'a'.repeat(64),services:[service]}:card()});
+    try{await f.api.mountCard(f.node,f.ctx,1);f.node.querySelector('[data-service-load]').click();await tick();
+      const select=f.node.querySelector('[data-service-select]');select.value=service.id;select.dispatchEvent(new f.w.Event('change'));
+      const preview=f.node.querySelector('[data-service-preview]').textContent;
+      if(service.id==='minutes'){assert.match(preview,/990 RUB за 30 оплаченных минут/);assert.match(preview,/Длительность отдельного сеанса уточнит администратор/);assert.doesNotMatch(preview,/процедур|Весь визит/);}
+      else{assert.match(preview,/5600 RUB/);assert.match(preview,/Гостей: 2/);assert.doesNotMatch(preview,/2800/);}
+      assert.doesNotMatch(preview,/undefined/);assert.equal(f.calls.filter(c=>c.method==='POST').length,0);
+    }finally{f.close();}
+  }
+});

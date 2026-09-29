@@ -75,3 +75,20 @@ test('program import verifies units and guests, replays safely, and rejects miss
   assert.deepEqual(api.quote('alvi','spa',api.knowledge('alvi').knowledgeRevision).service,service);
   assert.equal(api.importCatalog('alvi',request,7).importResult.duplicate,true);
 });
+
+test('minute import rejects incomplete context atomically and keeps verified program facts intact',t=>{
+  const {api,db,options,body,entry}=fixture(t);
+  const program={id:'spa',title:'SPA',price:500,currency:'RUB',priceUnit:'program',guestCount:2,visitDurationMinutes:90};
+  api.importCatalog('alvi',{...body(),entries:[{...entry('spa'),service:program}]});
+  const proof=api.get('alvi').facts.find(f=>f.key==='services/spa/guestCount');
+  assert.equal(proof.label,'Услуги · SPA · Число гостей в программе');
+  const service={id:'minutes',title:'Минуты',price:990,currency:'RUB',priceUnit:'minutes',minuteCount:30};
+  const request={...body(),clientImportId:'minutes-import-001',entries:[entry('pair'),{...entry('minutes'),service}]};
+  assert.throws(()=>api.importCatalog('alvi',{...request,entries:[entry('pair'),{...entry('minutes'),service:{...service,minuteCount:null}}]}),e=>e.status===400);
+  assert.equal(api.get('alvi').profile.services.length,1);
+  api.importCatalog('alvi',request);const restarted=createCompanyInformation(db,options);
+  assert.equal(restarted.get('alvi').facts.find(f=>f.key==='services/spa/guestCount').id,proof.id);
+  assert.equal(restarted.knowledge('alvi').services.length,3);
+  assert.equal(restarted.importCatalog('alvi',request).importResult.duplicate,true);
+  assert.equal(restarted.quote('alvi','minutes',restarted.knowledge('alvi').knowledgeRevision).service.minuteCount,30);
+});

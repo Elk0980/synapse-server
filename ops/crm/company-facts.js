@@ -5,7 +5,7 @@ const LABELS = {name:'Название',city:'Город',timezone:'Часово
   websiteUrl:'Сайт',address:'Адрес',hours:'Часы работы',description:'Описание',socials:'Ссылки',
   services:'Услуги',promotions:'Акции',materials:'Материалы',title:'Название',price:'Цена',
   oldPrice:'Прежняя цена',currency:'Валюта',procedureCount:'Количество процедур за указанную цену',durationMinutes:'Длительность одной процедуры',bookingIntervalMinutes:'Интервал записи',
-  priceUnit:'За что указана цена',guestCount:'Число гостей в программе',visitDurationMinutes:'Длительность всего визита',
+  priceUnit:'За что указана цена',guestCount:'Число гостей в программе',visitDurationMinutes:'Длительность всего визита',minuteCount:'Количество оплаченных минут',
   startsAt:'Начало',endsAt:'Окончание',url:'Ссылка',type:'Тип',label:'Подпись',serviceIds:'Связанные услуги',promotionIds:'Связанные акции'};
 const fail=(status,message)=>{throw Object.assign(Error(message),{status});};
 const clean=(value,max,required=false)=>{
@@ -20,7 +20,8 @@ function profileFacts(profile) {
         // Старые ссылки CRM не имеют ID: перестановка таких строк требует повторной сверки.
         const id=String(row.id??index),title=row.title||row.label||row.type||String(index+1);
         for(const [key,part] of Object.entries(row)) if(key!=='id') {
-          facts.set(`${field}/${encodeURIComponent(id)}/${key}`,{label:`${LABELS[field]||field} · ${title} · ${LABELS[key]||key}`,value:part});
+          const label=key==='guestCount'&&row.priceUnit!=='program'?'Число гостей за указанную цену':LABELS[key]||key;
+          facts.set(`${field}/${encodeURIComponent(id)}/${key}`,{label:`${LABELS[field]||field} · ${title} · ${label}`,value:part});
         }
       });
     } else facts.set(field,{label:LABELS[field]||field,value});

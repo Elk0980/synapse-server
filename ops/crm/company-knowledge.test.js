@@ -144,3 +144,32 @@ test('program fields reject mixed units and invalid quantities without guessing 
     {guestCount:0},{guestCount:1.5},{guestCount:'2'},{visitDurationMinutes:0},{visitDurationMinutes:-1},{visitDurationMinutes:10001}])
     assert.throws(()=>save('alvi',{services:[{...program,...patch}]}),e=>e.status===400);
 });
+
+test('paid minutes retain total price without inventing sessions, and changed quantities require evidence',t=>{
+  const {api,confirm,save}=fixture(t);
+  const service={id:'minutes',title:'Тариф',price:2900,currency:'RUB',priceUnit:'minutes',minuteCount:100};
+  const verify=()=>confirm('alvi',api.get('alvi').facts.filter(f=>f.key.startsWith('services/')).map(f=>f.key));
+  save('alvi',{services:[service]});verify();const revision=api.knowledge('alvi').knowledgeRevision;
+  const quote=api.quote('alvi','minutes',revision);assert.deepEqual(quote.service,service);
+  assert.match(quote.text,/2900 ₽ за 100 минут/);assert.match(quote.text,/суммарное оплаченное время/);
+  assert.doesNotMatch(quote.text,/процедур|Общая длительность визита/);
+  save('alvi',{services:[{...service,minuteCount:150}]});
+  assert.throws(()=>api.quote('alvi','minutes',revision),e=>e.details.code==='KNOWLEDGE_CHANGED');
+  assert.equal(api.knowledge('alvi').services.length,0);verify();
+  assert.equal(api.quote('alvi','minutes',api.knowledge('alvi').knowledgeRevision).service.price,2900);
+  for(const patch of [{procedureCount:1},{durationMinutes:100},{visitDurationMinutes:100},{minuteCount:0},{minuteCount:1.5},{minuteCount:'100'},{priceUnit:'procedures'},{priceUnit:'program'}])
+    assert.throws(()=>save('alvi',{services:[{...service,...patch}]}),e=>e.status===400);
+});
+
+test('procedure for two keeps the full amount and requires verified guest count',t=>{
+  const {api,confirm,save}=fixture(t);
+  const service={id:'pair',title:'Массаж для двоих',price:5600,currency:'RUB',procedureCount:1,guestCount:2,durationMinutes:60};
+  save('alvi',{services:[service]});
+  const facts=api.get('alvi').facts.filter(f=>f.key.startsWith('services/'));
+  confirm('alvi',facts.filter(f=>!f.key.endsWith('/guestCount')).map(f=>f.key));
+  assert.equal(api.knowledge('alvi').services.length,0);
+  confirm('alvi',facts.filter(f=>f.key.endsWith('/guestCount')).map(f=>f.key));
+  const quote=api.quote('alvi','pair',api.knowledge('alvi').knowledgeRevision);
+  assert.deepEqual(quote.service,service);assert.match(quote.text,/5600 ₽ за 1 процедуру \(гостей: 2\)/);
+  assert.doesNotMatch(quote.text,/2800/);
+});
