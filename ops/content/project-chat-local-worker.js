@@ -268,6 +268,11 @@ function createLocalWorker({ db, keySha256 = '', companies = [], tx, insertMessa
           // Запрос собирается один раз и дальше повторяется дословно; ошибка сборки — терминальная.
           payload = job.payload || buildPayload(job);
         } catch (error) {
+          if (error.attachmentPending) {
+            db.prepare("UPDATE project_chat_ai_jobs SET status='pending',error=?,next_attempt_at=? WHERE id=? AND reply_message_id IS NULL")
+              .run(error.message, stamp(now() + 5000), job.id);
+            continue;
+          }
           db.prepare(`UPDATE project_chat_ai_jobs SET status='error',attempts=?,error=?,next_attempt_at=? WHERE id=? AND reply_message_id IS NULL`)
             .run(aiAttempts, String(error.message || 'Не удалось собрать запрос к Хью').slice(0, 200), at, job.id);
           continue;
