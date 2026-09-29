@@ -2,6 +2,7 @@
 
 const {company,fail,object,text,timezone,utcDate,revision,url}=require('./company-information');
 const {publicUrl}=require('./autoposting-transport');
+const {createMediaMentorPlanLink}=require('./media-mentor-plan-link');
 const {randomUUID}=require('node:crypto');
 const LEASE_MS=120000;
 const META_FIELDS=['format','role','audience','hook','idea','hughNote','metrics','methodSource'];
@@ -187,8 +188,11 @@ function captions(value) {
   return result;
 }
 const mediaKind=urls=>urls.some(u=>VIDEO_RE.test(u))?'video':urls.some(u=>IMAGE_RE.test(u))?'image':urls.length?'file':'none';
-function createAutoposting(db,{information,transport,now=Date.now,logger=console}={}) {
+function createAutoposting(db,{information,transport,planLink,now=Date.now,logger=console}={}) {
   if(!information||!transport)throw Error('Autoposting requires company information and publication adapters');
+  /* Охрана связи с версией контент-плана включена всегда: отдельного «выключателя» нет,
+     иначе появился бы путь отправки в обход согласования. Подменить её из запроса нельзя. */
+  const plan=planLink||createMediaMentorPlanLink(db);
   db.exec(`CREATE TABLE IF NOT EXISTS autoposting_posts (
     id INTEGER PRIMARY KEY,company_id INTEGER NOT NULL REFERENCES companies(id),revision INTEGER NOT NULL DEFAULT 1,
     status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','scheduled','publishing','published','failed','needs_review','cancelled')),
@@ -316,8 +320,17 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   }
   /* Одно правило для всех путей отправки: отправляется только та доставка, для канала которой
      утверждена текущая версия содержимого. Карточка без каналов опирается на согласование карточки. */
+  /* Отдельное одобрение материала обязательно и для карточки, пришедшей из контент-плана.
+     Согласование версии плана — решение по ТЕКСТУ ПЛАНА, а не разрешение опубликовать
+     конкретный финальный текст, медиа и канал: это разные утверждения, и одно другого не
+     заменяет. Признак берётся из связи в отдельной таблице, а не из day_key и подписей:
+     эти поля можно очистить правкой карточки, а связь так не снимается. */
+  const requiresApproval=row=>isQueueCard(row)||Boolean(plan.linkOf(row.id,row.company_id));
   const deliveryApproved=(row,channelId)=>{
-    if(!isQueueCard(row))return true;
+    // Связь с версией плана проверяется ПЕРВОЙ: карточка без признаков очереди тоже может
+    // происходить из плана, и ранний выход ниже пропустил бы отозванный текст.
+    if(plan.blockedReason(row))return false;
+    if(!requiresApproval(row))return true;
     // Согласование версии обязательно, но оно бывает двух видов: карточка целиком (approved_revision)
     // или частичное — по отдельным каналам (partial_approved_revision). Общий отзыв снимает оба,
     // поэтому снятие approved_revision без частичного согласования останавливает все каналы.
@@ -764,6 +777,9 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
     transaction(()=>{
       const {row,owner}=rowFor(id,code);
       if(row.revision!==body.revision)fail(409,'Публикация уже изменена','REVISION_CONFLICT');
+      // Планирование карточки из контент-плана: разрешено только пока её версия согласована.
+      // Проверка внутри транзакции — между чтением и записью согласование могли отозвать.
+      if(plan.blockedReason(row))fail(409,plan.MESSAGE,plan.REASON);
       if(!['draft','failed','cancelled','needs_review'].includes(row.status))fail(409,'Публикация уже запланирована или отправляется','POST_STATE');
       if(db.prepare("SELECT 1 FROM autoposting_deliveries WHERE post_id=? AND status IN ('publishing','published','needs_review')").get(row.id))fail(409,'Проверьте результат на площадке перед повторной отправкой','PUBLICATION_REVIEW_REQUIRED');
       const data=normalized(body,dto(row,owner));
@@ -773,7 +789,9 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
       if((!data.text&&!Object.keys(captionsByPlatform).length)||!data.platformIds.length)fail(400,'Добавьте текст и выберите каналы');
       // Карточки очереди контента (день или подписи площадок) ставятся в план только с одобрением именно этой версии.
       // Отправляется только утверждённая текущая версия, и только на те каналы, для которых она утверждена.
-      if(isQueueCard(row)){
+      // Карточка из контент-плана одобряется отдельно, как и карточка очереди: согласование
+      // плана разрешением на публикацию не является.
+      if(requiresApproval(row)){
         materializePlatformReviews(row);
         const states=new Map(platformApprovals(row).map(item=>[item.platformId,item]));
         const waiting=data.platformIds.filter(id=>!states.get(id)?.approved);
@@ -790,6 +808,11 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
       const blocked=data.platformIds.filter((id,index)=>marked.has(channelPlatform(channels[index],id)));
       if(blocked.length)fail(409,`Уже отмечено как опубликованное вне ЛК: ${blocked.join(', ')}. Повторная отправка создаст дубликат.`,'EXTERNAL_PUBLICATION_RECORDED');
       if(channels.some(channel=>!channel||!channel.enabled||!channel.connected))fail(409,'Выбранный канал не подключён','CHANNEL_NOT_CONNECTED');
+      /* Подмена площадки у карточки из плана: согласована версия для одной площадки, а канал
+         выбран на другой. Сверяется фактическая площадка канала, а не его идентификатор. */
+      const wrongPlatform=data.platformIds.filter((id,index)=>
+        plan.platformMismatch(row,channelPlatform(channels[index],id)));
+      if(wrongPlatform.length)fail(409,plan.PLATFORM_MESSAGE,plan.PLATFORM_REASON);
       if(channels.some(channel=>!data.text&&!captionsByPlatform[channel.platform||channel.id]))fail(400,'Для выбранного канала нет ни общего текста, ни подписи площадки');
       for(const channel of channels)revision(channel.revision);
       db.prepare('DELETE FROM autoposting_deliveries WHERE post_id=?').run(row.id);
@@ -982,6 +1005,12 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
     const outcome=transaction(()=>{
       const {row,owner}=rowFor(id,code);
       if(row.revision!==body.revision)fail(409,'Публикация уже изменена','REVISION_CONFLICT');
+      /* Продолжение карточки, пришедшей из контент-плана, создало бы дочернюю карточку без связи
+         с версией плана — то есть путь отправки в обход согласования. Наследовать связь тоже нельзя:
+         согласована была версия для конкретной площадки, а не для оставшихся. Поэтому переход
+         прямо запрещён, и это говорится вслух. */
+      if(plan.linkOf(row.id,owner.id))
+        fail(409,'Этот материал пришёл из контент-плана. Продолжение по оставшимся площадкам создало бы карточку без согласованной версии плана — добавьте нужную площадку версией идеи в плане и согласуйте её.','PLAN_LINKED_POST');
       // Продолжать можно только после завершённой отправки: пока карточка черновик или стоит в плане,
       // она сама может отправить те же площадки, и продолжение создало бы второе задание.
       const receiptsHere=receiptPlatforms(row.id);
@@ -1129,6 +1158,12 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
     const current=invalidate(due.code);if(due.profile_revision!==current.revision)return;
     const settings=await transport.getSettings(due.code);
     if(stopped)return;
+    // Ожидание настроек — это await: за него согласование версии плана могли отозвать.
+    // Карточка снимается с очереди целиком, отправки не было.
+    if(plan.blockedReason(due)){
+      db.prepare(`UPDATE autoposting_deliveries SET status='cancelled',error_code='${plan.REASON}' WHERE post_id=? AND status='pending'`).run(due.id);
+      review(due.id,plan.REASON);return;
+    }
     // За время ожидания владелец мог переписать карточку и заново поставить её в план. Снимок due устарел,
     // и решения по нему относились бы к чужой версии: этот проход просто уходит, не отменяя новый план.
     const reread=db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(due.id);
@@ -1140,7 +1175,7 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
     })){review(due.id,'CHANNEL_CHANGED');return;}
     if(information.get(due.code).revision!==due.profile_revision){review(due.id,'PROFILE_CHANGED');return;}
     // Неодобренный канал снимается с очереди; если одобренных не осталось — карточка уходит на пересмотр.
-    if(isQueueCard(due)){
+    if(requiresApproval(due)){
       const waiting=deliveries.filter(delivery=>delivery.status==='pending'&&!deliveryApproved(due,delivery.channel_id));
       if(waiting.length){
         const cancel=db.prepare("UPDATE autoposting_deliveries SET status='cancelled',error_code='APPROVAL_REVOKED' WHERE post_id=? AND channel_id=? AND status='pending'");
@@ -1170,6 +1205,12 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
       if(!channel||!channel.connected||!channel.enabled||channel.revision!==delivery.channel_revision){review(due.id,'CHANNEL_CHANGED');return;}
       const freshPost=db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(due.id);
       if(stopped||freshPost.status!=='publishing'||freshPost.lease!==lease)return;
+      // Фактическая площадка канала против площадки, согласованной в плане.
+      if(plan.platformMismatch(freshPost,channelPlatform(channel,delivery.channel_id))){
+        db.prepare(`UPDATE autoposting_deliveries SET status='cancelled',error_code='${plan.PLATFORM_REASON}' WHERE post_id=? AND channel_id=? AND status='pending'`)
+          .run(due.id,delivery.channel_id);
+        review(due.id,plan.PLATFORM_REASON);return;
+      }
       // Подтверждение могло появиться между каналами: отмеченная площадка отменяется, отправка не выполняется.
       if(receiptPlatforms(due.id).has(channelPlatform(channel,delivery.channel_id))){
         db.prepare("UPDATE autoposting_deliveries SET status='cancelled',error_code='EXTERNAL_PUBLICATION_RECORDED' WHERE post_id=? AND channel_id=? AND status='pending'").run(due.id,delivery.channel_id);
@@ -1193,6 +1234,12 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
             if(receiptPlatforms(due.id).has(channelPlatform(channel,delivery.channel_id)))
               throw Object.assign(Error('External publication recorded before provider submission'),{ambiguous:false,receiptBlocked:true});
             const active=db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(due.id);
+            // Последний барьер перед реальной передачей площадке: связь с планом проверяется здесь
+            // явно, а не только через deliveryApproved, чтобы правило было видно в точке отправки.
+            if(active&&plan.blockedReason(active))
+              throw Object.assign(Error('Plan approval revoked before provider submission'),{ambiguous:false});
+            if(active&&plan.platformMismatch(active,channelPlatform(channel,delivery.channel_id)))
+              throw Object.assign(Error('Plan platform mismatch before provider submission'),{ambiguous:false});
             if(stopped||active?.status!=='publishing'||active.lease!==lease||information.get(due.code).revision!==due.profile_revision||!deliveryApproved(active,delivery.channel_id))
               throw Object.assign(Error('Publication changed before provider submission'),{ambiguous:false});
           }});

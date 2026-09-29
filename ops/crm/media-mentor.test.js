@@ -89,7 +89,8 @@ test('план строится по брифу, согласуется поим
 
   const tables=f.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map(row=>row.name);
   assert.deepEqual(tables,['companies','media_mentor_brief_versions','media_mentor_briefs',
-    'media_mentor_plan_approvals','media_mentor_plan_feedback','media_mentor_plan_versions','media_mentor_plans'],
+    'media_mentor_plan_approvals','media_mentor_plan_feedback','media_mentor_plan_versions','media_mentor_plans',
+    'media_mentor_variant_approvals','media_mentor_variant_revisions'],
     'модуль не создаёт таблиц публикации');
 });
 
@@ -317,4 +318,299 @@ test('предложения ограничены текущей версией,
   assert.equal(f.api.get('alvi').feedback.length,1);
   assert.throws(()=>f.api.planVersion('avokado',2),e=>e.status===404);
   assert.throws(()=>f.db.exec("UPDATE media_mentor_plan_feedback SET message='Подмена'"),/Immutable media mentor feedback/);
+});
+
+/* ---------- Версии площадок ----------
+   Одна идея — до семи независимых текстов. Решение адресное: весь план, идея или выбранные
+   версии. Правка снимает решение только по своей версии. Перестановка идей связей не рвёт. */
+
+const variantsOf=(patch={})=>({vk:{text:'ВК: текст'},telegram:{text:'ТГ: текст'},...patch});
+
+test('старый план читается как одна версия, новые площадки появляются только явно',t=>{
+  const f=fixture(t),state=f.ready();
+  const idea=state.plan.days[0];
+  assert.ok(idea.ideaId,'идее выдан устойчивый идентификатор');
+  assert.deepEqual(Object.keys(idea.variants),[idea.platform],
+    'за остальные площадки автоматического согласия никто не даёт');
+  assert.equal(idea.variants[idea.platform].text,'','текст версии не выдумывается');
+  assert.equal(idea.variants[idea.platform].contentRevision,1);
+  assert.equal(state.variants.length,7);
+  assert.ok(state.variants.every(item=>item.status==='empty'),'пустая версия согласованной не считается');
+});
+
+test('семь текстов одной идеи независимы, три материала в день считаются по идеям',t=>{
+  const f=fixture(t);
+  f.api.saveBrief('alvi',{revision:0,brief:BRIEF},ACTOR);
+  const days=daysFor().map(day=>({...day,variants:variantsOf()}));
+  const state=f.api.savePlan('alvi',{planRevision:0,briefRevision:1,days},ACTOR);
+  assert.deepEqual(Object.keys(state.plan.days[0].variants).sort(),['telegram','vk']);
+  assert.equal(state.plan.days[0].variants.vk.text,'ВК: текст');
+  assert.equal(state.plan.days[0].variants.telegram.text,'ТГ: текст');
+  assert.equal(state.variants.length,14,'у каждой идеи своё состояние по каждой площадке');
+  // Три идеи в один день с двумя версиями каждая — это три материала, а не шесть.
+  const crowded=[...daysFor(2),...Array.from({length:3},(_,index)=>dayAt('2026-09-27',0,
+    {topic:`Плотный день ${index+1}`,assetId:''})),...daysFor(4,'2026-09-28')]
+    .map(day=>({...day,variants:variantsOf()}));
+  const packed=f.api.savePlan('alvi',{planRevision:1,briefRevision:1,days:crowded},ACTOR);
+  assert.equal(packed.plan.days.length,9);
+  const tooMany=[...crowded.slice(0,5),{...crowded[4],topic:'Четвёртый материал'},...crowded.slice(5)];
+  assert.throws(()=>f.api.savePlan('alvi',{planRevision:2,briefRevision:1,days:tooMany},ACTOR),
+    e=>e.status===400&&/не больше/.test(e.message));
+  // Версия для площадки, которой нет в брифе, не принимается.
+  assert.throws(()=>f.api.savePlan('alvi',{planRevision:2,briefRevision:1,
+    days:daysFor().map(day=>({...day,variants:variantsOf({instagram:{text:'Нельзя'}})}))},ACTOR),
+  e=>e.status===400);
+});
+
+test('решение адресное: план, идея и выбранные версии — разные утверждения',t=>{
+  const f=fixture(t);
+  f.api.saveBrief('alvi',{revision:0,brief:BRIEF},ACTOR);
+  const days=daysFor().map(day=>({...day,variants:variantsOf()}));
+  let state=f.api.savePlan('alvi',{planRevision:0,briefRevision:1,days},ACTOR);
+  const first=state.plan.days[0].ideaId,second=state.plan.days[1].ideaId;
+  state=f.api.decideVariants('alvi',{planRevision:1,briefRevision:1,scope:'variants',
+    ideaId:first,platforms:['vk'],decision:'approved',comment:''},ACTOR);
+  let map=new Map(state.variants.map(item=>[`${item.ideaId}|${item.platform}`,item]));
+  assert.equal(map.get(`${first}|vk`).status,'approved');
+  assert.equal(map.get(`${first}|vk`).scope,'variants');
+  assert.equal(map.get(`${first}|telegram`).status,'pending','соседняя версия согласия не получила');
+  assert.equal(state.applied.length,1);
+  state=f.api.decideVariants('alvi',{planRevision:1,briefRevision:1,scope:'idea',
+    ideaId:second,decision:'approved',comment:''},ACTOR);
+  map=new Map(state.variants.map(item=>[`${item.ideaId}|${item.platform}`,item]));
+  assert.equal(map.get(`${second}|vk`).status,'approved');
+  assert.equal(map.get(`${second}|telegram`).status,'approved');
+  state=f.api.decideVariants('alvi',{planRevision:1,briefRevision:1,scope:'plan',
+    decision:'approved',comment:''},ACTOR);
+  assert.ok(state.variants.every(item=>item.status==='approved'),'план целиком закрывает остальные');
+  assert.equal(state.applied.length,11,'уже согласованные повторно не переписываются');
+  // Область обязана быть названа и не смешиваться с чужими полями.
+  for(const invalid of [{scope:'plan',ideaId:first},{scope:'idea'},{scope:'variants',ideaId:first},
+    {scope:'variants',ideaId:first,platforms:[]},{scope:'everything'}])
+    assert.throws(()=>f.api.decideVariants('alvi',{planRevision:1,briefRevision:1,
+      decision:'approved',comment:'',...invalid},ACTOR),e=>e.status===400||e.status===404);
+});
+
+test('возврат одной версии не трогает остальные и требует причины',t=>{
+  const f=fixture(t);
+  f.api.saveBrief('alvi',{revision:0,brief:BRIEF},ACTOR);
+  const days=daysFor().map(day=>({...day,variants:variantsOf()}));
+  let state=f.api.savePlan('alvi',{planRevision:0,briefRevision:1,days},ACTOR);
+  const first=state.plan.days[0].ideaId;
+  state=f.api.decideVariants('alvi',{planRevision:1,briefRevision:1,scope:'plan',
+    decision:'approved',comment:''},ACTOR);
+  assert.throws(()=>f.api.decideVariants('alvi',{planRevision:1,briefRevision:1,scope:'variants',
+    ideaId:first,platforms:['vk'],decision:'rejected',comment:''},ACTOR),
+  e=>e.status===400&&/что исправить/.test(e.message));
+  state=f.api.decideVariants('alvi',{planRevision:1,briefRevision:1,scope:'variants',
+    ideaId:first,platforms:['vk'],decision:'rejected',comment:'Слишком длинно'},ACTOR);
+  let map=new Map(state.variants.map(item=>[`${item.ideaId}|${item.platform}`,item]));
+  assert.equal(map.get(`${first}|vk`).status,'rejected');
+  assert.equal(map.get(`${first}|vk`).reason,'Слишком длинно');
+  assert.equal(map.get(`${first}|telegram`).status,'approved','возврат одной версии соседнюю не трогает');
+  // Отзыв снимает согласование и возвращает версию в ожидание.
+  state=f.api.decideVariants('alvi',{planRevision:1,briefRevision:1,scope:'variants',
+    ideaId:first,platforms:['telegram'],decision:'withdrawn',comment:''},ACTOR);
+  map=new Map(state.variants.map(item=>[`${item.ideaId}|${item.platform}`,item]));
+  assert.equal(map.get(`${first}|telegram`).status,'pending');
+  assert.equal(map.get(`${first}|telegram`).reason,'Согласование отозвано');
+  // Отзывать нечего, если согласования не было.
+  assert.throws(()=>f.api.decideVariants('alvi',{planRevision:1,briefRevision:1,scope:'variants',
+    ideaId:first,platforms:['vk'],decision:'withdrawn',comment:''},ACTOR),e=>e.status===409);
+});
+
+test('правка версии снимает её решение и не трогает соседние; смена брифа требует пересогласования',t=>{
+  const f=fixture(t);
+  f.api.saveBrief('alvi',{revision:0,brief:BRIEF},ACTOR);
+  const days=daysFor().map(day=>({...day,variants:variantsOf()}));
+  let state=f.api.savePlan('alvi',{planRevision:0,briefRevision:1,days},ACTOR);
+  const first=state.plan.days[0].ideaId;
+  state=f.api.decideVariants('alvi',{planRevision:1,briefRevision:1,scope:'plan',
+    decision:'approved',comment:''},ACTOR);
+  const edited=state.plan.days.map((day,index)=>index===0
+    ? {...day,variants:{...day.variants,vk:{...day.variants.vk,text:'ВК: переписали'}}} : day);
+  state=f.api.savePlan('alvi',{planRevision:state.plan.revision,briefRevision:1,days:edited},ACTOR);
+  assert.equal(state.plan.days[0].variants.vk.contentRevision,2);
+  assert.equal(state.plan.days[0].variants.telegram.contentRevision,1,'соседняя версия не переоценивается');
+  let map=new Map(state.variants.map(item=>[`${item.ideaId}|${item.platform}`,item]));
+  assert.equal(map.get(`${first}|vk`).status,'pending','правка сняла решение по своей версии');
+  assert.equal(map.get(`${first}|telegram`).status,'approved','и только по своей');
+  // Правка поля самой идеи касается всех её версий: задание изменилось целиком.
+  const retopic=state.plan.days.map((day,index)=>index===0?{...day,topic:'Новая тема'}:day);
+  state=f.api.savePlan('alvi',{planRevision:state.plan.revision,briefRevision:1,days:retopic},ACTOR);
+  map=new Map(state.variants.map(item=>[`${item.ideaId}|${item.platform}`,item]));
+  assert.equal(map.get(`${first}|telegram`).status,'pending','смена темы сняла решение по всем версиям идеи');
+  // Смена брифа возвращает на пересогласование все версии.
+  f.api.saveBrief('alvi',{revision:1,brief:{...BRIEF,goal:'Новая цель'}},ACTOR);
+  const after=f.api.savePlan('alvi',{planRevision:state.plan.revision,briefRevision:2,
+    days:state.plan.days},ACTOR);
+  assert.ok(after.variants.every(item=>item.status!=='approved'),'после смены брифа согласий нет');
+});
+
+test('перестановка идей не перепривязывает историю решений',t=>{
+  const f=fixture(t);
+  f.api.saveBrief('alvi',{revision:0,brief:BRIEF},ACTOR);
+  // Две идеи в один день: их порядок можно поменять, не трогая ни одной даты.
+  const days=[dayAt('2026-09-21',0,{topic:'Первая'}),dayAt('2026-09-21',0,{topic:'Вторая'}),
+    ...daysFor(6,'2026-09-22')].map(day=>({...day,variants:variantsOf()}));
+  let state=f.api.savePlan('alvi',{planRevision:0,briefRevision:1,days},ACTOR);
+  const first=state.plan.days[0].ideaId,second=state.plan.days[1].ideaId;
+  state=f.api.decideVariants('alvi',{planRevision:1,briefRevision:1,scope:'idea',
+    ideaId:first,decision:'approved',comment:''},ACTOR);
+  const moved=[state.plan.days[1],state.plan.days[0],...state.plan.days.slice(2)];
+  state=f.api.savePlan('alvi',{planRevision:state.plan.revision,briefRevision:1,days:moved},ACTOR);
+  assert.equal(state.plan.days[0].ideaId,second,'идентификаторы пережили перестановку');
+  assert.equal(state.plan.days[1].ideaId,first);
+  const map=new Map(state.variants.map(item=>[`${item.ideaId}|${item.platform}`,item]));
+  assert.equal(map.get(`${first}|vk`).status,'approved','решение осталось у своей идеи');
+  assert.equal(map.get(`${first}|vk`).contentRevision,1,'ревизия не менялась: содержимое прежнее');
+  assert.equal(map.get(`${second}|vk`).status,'pending','и не переехало на соседнюю');
+});
+
+/* Блокеры приёмки 1 и 5: ревизия содержимого монотонна по сохранённой истории,
+   а считается по ДЕЙСТВУЮЩЕМУ содержимому — с учётом значений, унаследованных от идеи. */
+test('удаление версии и возврат прежнего текста не воскрешают старое согласование',t=>{
+  const f=fixture(t);
+  f.api.saveBrief('alvi',{revision:0,brief:BRIEF},ACTOR);
+  const days=daysFor().map(day=>({...day,variants:variantsOf()}));
+  let state=f.api.savePlan('alvi',{planRevision:0,briefRevision:1,days},ACTOR);
+  const first=state.plan.days[0].ideaId;
+  state=f.api.decideVariants('alvi',{planRevision:1,briefRevision:1,scope:'variants',
+    ideaId:first,platforms:['vk'],decision:'approved',comment:''},ACTOR);
+  assert.equal(state.plan.days[0].variants.vk.contentRevision,1);
+  // Версия удалена целиком: основной площадкой идеи становится telegram.
+  const without=state.plan.days.map((day,index)=>index===0
+    ? {...day,platform:'telegram',variants:{telegram:day.variants.telegram}}:day);
+  state=f.api.savePlan('alvi',{planRevision:state.plan.revision,briefRevision:1,days:without},ACTOR);
+  assert.equal(state.plan.days[0].variants.vk,undefined);
+  // И возвращена ровно тем же текстом.
+  const back=state.plan.days.map((day,index)=>index===0
+    ? {...day,variants:{...day.variants,vk:{text:'ВК: текст'}}}:day);
+  state=f.api.savePlan('alvi',{planRevision:state.plan.revision,briefRevision:1,days:back},ACTOR);
+  assert.equal(state.plan.days[0].variants.vk.contentRevision,2,'выдана новая ревизия, а не прежняя');
+  const map=new Map(state.variants.map(item=>[`${item.ideaId}|${item.platform}`,item]));
+  assert.equal(map.get(`${first}|vk`).status,'pending','старое согласование не ожило');
+});
+
+test('A→B→A даёт три разные ревизии, история переживает удаление идеи',t=>{
+  const f=fixture(t);
+  f.api.saveBrief('alvi',{revision:0,brief:BRIEF},ACTOR);
+  const days=daysFor().map(day=>({...day,variants:variantsOf()}));
+  let state=f.api.savePlan('alvi',{planRevision:0,briefRevision:1,days},ACTOR);
+  const first=state.plan.days[0].ideaId;
+  const withText=(value)=>state.plan.days.map((day,index)=>index===0
+    ? {...day,variants:{...day.variants,vk:{...day.variants.vk,text:value}}}:day);
+  state=f.api.savePlan('alvi',{planRevision:state.plan.revision,briefRevision:1,days:withText('Б')},ACTOR);
+  assert.equal(state.plan.days[0].variants.vk.contentRevision,2);
+  state=f.api.savePlan('alvi',{planRevision:state.plan.revision,briefRevision:1,days:withText('ВК: текст')},ACTOR);
+  assert.equal(state.plan.days[0].variants.vk.contentRevision,3,'возврат к прежнему тексту — новая ревизия');
+  const kept={...state.plan.days[0]};
+  // Идея удалена: на её месте другая, окно плана сохраняется.
+  const dropped=[dayAt('2026-09-21',0,{topic:'Замена',assetId:'',ideaId:'zamena-1'}),...state.plan.days.slice(1)]
+    .map(day=>({...day,variants:day.variants||variantsOf()}));
+  state=f.api.savePlan('alvi',{planRevision:state.plan.revision,briefRevision:1,days:dropped},ACTOR);
+  assert.equal(state.plan.days.some(day=>day.ideaId===first),false,'идея действительно удалена');
+  // И заведена заново под тем же идентификатором с прежним текстом.
+  const restored=[{...kept,variants:variantsOf()},...state.plan.days.slice(1)];
+  state=f.api.savePlan('alvi',{planRevision:state.plan.revision,briefRevision:1,days:restored},ACTOR);
+  const revived=state.plan.days.find(day=>day.ideaId===first);
+  assert.ok(revived.variants.vk.contentRevision>3,'повторное использование ID не сбрасывает историю ревизий');
+  assert.ok(revived.variants.telegram.contentRevision>1);
+});
+
+test('правка поля идеи меняет ревизию наследующей версии и не трогает версию со своим значением',t=>{
+  const f=fixture(t);
+  f.api.saveBrief('alvi',{revision:0,brief:BRIEF},ACTOR);
+  // vk наследует формат идеи, telegram задаёт свой.
+  const days=daysFor().map((day,index)=>index===0
+    ? {...day,platform:'vk',format:'post',variants:{vk:{text:'ВК'},telegram:{text:'ТГ',format:'reel'}}}
+    : {...day,variants:variantsOf()});
+  let state=f.api.savePlan('alvi',{planRevision:0,briefRevision:1,days},ACTOR);
+  const first=state.plan.days[0].ideaId;
+  state=f.api.decideVariants('alvi',{planRevision:1,briefRevision:1,scope:'idea',
+    ideaId:first,decision:'approved',comment:''},ACTOR);
+  const changed=state.plan.days.map((day,index)=>index===0?{...day,format:'carousel'}:day);
+  state=f.api.savePlan('alvi',{planRevision:state.plan.revision,briefRevision:1,days:changed},ACTOR);
+  const map=new Map(state.variants.map(item=>[`${item.ideaId}|${item.platform}`,item]));
+  assert.equal(map.get(`${first}|vk`).status,'pending','наследующая версия изменилась и требует решения');
+  assert.equal(map.get(`${first}|telegram`).status,'approved','версия со своим форматом согласование не теряет');
+  assert.equal(state.plan.days[0].variants.telegram.contentRevision,1);
+});
+
+test('пустая и исключённая версии не согласуются; ревизии и чужая компания проверяются',t=>{
+  const f=fixture(t);
+  f.api.saveBrief('alvi',{revision:0,brief:BRIEF},ACTOR);
+  const days=daysFor().map((day,index)=>index===0
+    ? {...day,variants:{vk:{text:'ВК: текст'},telegram:{text:''}}}
+    : {...day,variants:variantsOf({telegram:{text:'ТГ',excluded:true}})});
+  let state=f.api.savePlan('alvi',{planRevision:0,briefRevision:1,days},ACTOR);
+  const first=state.plan.days[0].ideaId,other=state.plan.days[1].ideaId;
+  state=f.api.decideVariants('alvi',{planRevision:1,briefRevision:1,scope:'plan',
+    decision:'approved',comment:''},ACTOR);
+  const map=new Map(state.variants.map(item=>[`${item.ideaId}|${item.platform}`,item]));
+  assert.equal(map.get(`${first}|telegram`).status,'empty');
+  assert.equal(map.get(`${first}|telegram`).decision,null,'пустая версия одобренной не становится');
+  assert.equal(map.get(`${other}|telegram`).status,'excluded');
+  assert.equal(map.get(`${first}|vk`).status,'approved');
+  // Явный выбор пустой версии — ошибка, а не молчаливый пропуск.
+  assert.throws(()=>f.api.decideVariants('alvi',{planRevision:state.plan.revision,briefRevision:1,
+    scope:'variants',ideaId:first,platforms:['telegram'],decision:'approved',comment:''},ACTOR),
+  e=>e.status===409&&e.details.code==='VARIANT_NOT_APPROVABLE');
+  // Устаревшие ревизии и чужая идея отклоняются.
+  assert.throws(()=>f.api.decideVariants('alvi',{planRevision:99,briefRevision:1,scope:'plan',
+    decision:'approved',comment:''},ACTOR),e=>e.details.code==='REVISION_CONFLICT');
+  assert.throws(()=>f.api.decideVariants('alvi',{planRevision:state.plan.revision,briefRevision:1,
+    scope:'idea',ideaId:'idea-чужая',decision:'approved',comment:''},ACTOR),e=>e.status===400||e.status===404);
+  f.ready('avokado');
+  assert.deepEqual(f.api.get('avokado').variants.filter(item=>item.status==='approved'),[],
+    'решения одной компании другой не видны');
+  assert.throws(()=>f.db.exec("UPDATE media_mentor_variant_approvals SET decision='rejected'"),
+    /Immutable media mentor variant approval/);
+});
+
+test('лимит текста площадки и план выхода версии проверяются, очередью публикации не становятся',t=>{
+  const f=fixture(t);
+  f.api.saveBrief('alvi',{revision:0,brief:BRIEF},ACTOR);
+  const limit=f.api.get('alvi').vocabulary.captionLimits.telegram;
+  assert.ok(limit>0,'лимит площадки известен из существующего словаря');
+  const tooLong=daysFor().map((day,index)=>index===0
+    ? {...day,variants:variantsOf({telegram:{text:'я'.repeat(limit+1)}})}:{...day,variants:variantsOf()});
+  assert.throws(()=>f.api.savePlan('alvi',{planRevision:0,briefRevision:1,days:tooLong},ACTOR),
+    e=>e.status===400&&/длиннее/.test(e.message));
+  const planned=daysFor().map((day,index)=>index===0
+    ? {...day,variants:variantsOf({vk:{text:'ВК: текст',plannedDate:'2026-09-21',
+      plannedTime:'09:30',timezone:'Asia/Irkutsk'}})}:{...day,variants:variantsOf()});
+  const state=f.api.savePlan('alvi',{planRevision:0,briefRevision:1,days:planned},ACTOR);
+  const vk=state.plan.days[0].variants.vk;
+  assert.deepEqual([vk.plannedDate,vk.plannedTime,vk.timezone],['2026-09-21','09:30','Asia/Irkutsk']);
+  assert.equal(state.capabilities.publishing,false,'план выхода очередью публикации не становится');
+  for(const bad of [{plannedTime:'25:00'},{plannedTime:'9:30'},{timezone:'Марс/Олимп'},
+    {plannedDate:'2026-02-30'},{format:'видео'}])
+    assert.throws(()=>f.api.savePlan('alvi',{planRevision:state.plan.revision,briefRevision:1,
+      days:daysFor().map((day,index)=>index===0
+        ? {...day,variants:variantsOf({vk:{text:'ВК: текст',...bad}})}:{...day,variants:variantsOf()})},ACTOR),
+    e=>e.status===400);
+});
+
+test('обмен датами между материалами принимается сервером и сохраняет привязки',t=>{
+  const f=fixture(t);
+  f.api.saveBrief('alvi',{revision:0,brief:BRIEF},ACTOR);
+  const days=daysFor().map(day=>({...day,variants:variantsOf()}));
+  let state=f.api.savePlan('alvi',{planRevision:0,briefRevision:1,days},ACTOR);
+  const first=state.plan.days[0].ideaId,second=state.plan.days[1].ideaId;
+  const before={start:state.plan.startDate,end:state.plan.endDate,window:state.plan.windowDays};
+  /* Ровно то, что делает кнопка «ниже» в кабинете: соседи меняются календарными датами,
+     а сами материалы едут вместе со своими версиями. Набор дат не меняется. */
+  const swapped=[{...state.plan.days[1],date:state.plan.days[0].date},
+    {...state.plan.days[0],date:state.plan.days[1].date},...state.plan.days.slice(2)];
+  state=f.api.savePlan('alvi',{planRevision:state.plan.revision,briefRevision:1,days:swapped},ACTOR);
+  assert.deepEqual(state.plan.days.slice(0,2).map(day=>day.ideaId),[second,first],
+    'материалы поменялись местами');
+  assert.deepEqual(state.plan.days.slice(0,2).map(day=>day.date),['2026-09-21','2026-09-22']);
+  assert.deepEqual([state.plan.startDate,state.plan.endDate,state.plan.windowDays],
+    [before.start,before.end,before.window],'окно плана не расширилось и не сузилось');
+  assert.equal(state.plan.days[1].variants.vk.text,'ВК: текст','версии переехали со своей идеей');
+  // Плановая дата версии наследуется от идеи, поэтому переезд требует нового решения.
+  const map=new Map(state.variants.map(item=>[`${item.ideaId}|${item.platform}`,item]));
+  assert.ok(map.get(`${first}|vk`).contentRevision>1,'смена даты меняет действующее содержимое');
 });

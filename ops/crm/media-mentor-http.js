@@ -41,7 +41,8 @@ function createMediaMentorHandler({mentor, transfer, companyModuleContext, readJ
     const draftContext = /^\/media-mentor\/plan\/transfer\/([^/]+)$/.exec(url.pathname);
     let result, status = 200;
     if (url.pathname === '/media-mentor' && readOnly) {
-      result = {...served(mentor.get(code)), transfer: transfer.status(code)};
+      result = {...served(mentor.get(code)), transfer: transfer.status(code),
+        variantTransfer: transfer.variantStatus(code)};
     } else if (url.pathname === '/media-mentor/plan/transfer' && request.method === 'POST') {
       // Перенос согласованной версии плана в черновики автопостинга. Ничего не публикуется
       // и не ставится в очередь: права те же, что на правку карточек автопостинга.
@@ -55,6 +56,18 @@ function createMediaMentorHandler({mentor, transfer, companyModuleContext, readJ
       result = served(mentor.saveBrief(code, await readJson(request), actor));
     } else if (url.pathname === '/media-mentor/plan' && request.method === 'PUT') {
       result = served(mentor.savePlan(code, await readJson(request), actor));
+    } else if (url.pathname === '/media-mentor/plan/variants/decision' && request.method === 'POST') {
+      /* Адресное решение по версиям площадок: весь план, одна идея или выбранные версии.
+         Право то же, что и у решения по плану, — владелец кабинета: это согласование текста,
+         а не разрешение публиковать. */
+      if (identity.role !== 'owner') fail(403, 'Согласовывать и отклонять версии может только владелец', 'FORBIDDEN');
+      result = served(mentor.decideVariants(code, await readJson(request), actor));
+      status = 201;
+    } else if (url.pathname === '/media-mentor/plan/variants/transfer' && request.method === 'POST') {
+      // Перенос согласованных версий площадок в черновики автопостинга: по одному черновику
+      // на версию. Ничего не публикуется и не ставится в очередь.
+      result = transfer.transferVariants(code, await readJson(request), actor);
+      status = result.createdCount ? 201 : 200;
     } else if (url.pathname === '/media-mentor/plan/decision' && request.method === 'POST') {
       // Решение по версии плана принимает владелец кабинета, как и согласование публикаций.
       // Права редактора для этого недостаточно.
@@ -66,7 +79,8 @@ function createMediaMentorHandler({mentor, transfer, companyModuleContext, readJ
     // Контекст перенесённого черновика: задание дня и его исходник из неизменяемых версий.
     else if (draftContext && readOnly) result = transfer.context(code, draftContext[1]);
     else if (['/media-mentor', '/media-mentor/brief', '/media-mentor/plan', '/media-mentor/plan/decision',
-      '/media-mentor/plan/transfer', '/media-mentor/plan/feedback'].includes(url.pathname) ||
+      '/media-mentor/plan/transfer', '/media-mentor/plan/feedback',
+      '/media-mentor/plan/variants/decision', '/media-mentor/plan/variants/transfer'].includes(url.pathname) ||
       briefVersion || planVersion || draftContext) fail(405, 'Метод не поддерживается');
     else fail(404, 'Раздел не найден', 'NOT_FOUND');
     send(response, status, result, {...cors, 'cache-control': 'no-store'});

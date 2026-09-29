@@ -22,6 +22,8 @@ function fixture(t) {
     status: (code) => ({planRevision: null, canTransfer: false, blockedReason: 'Заглушка', company: code}),
     transfer: (code, body, actor) => { transfers.push({code, body, actor}); return {created: true, companyCode: code, posts: []}; },
     context: (code, postId) => ({companyCode: code, postId, asset: null, assetIsMedia: false}),
+    variantStatus: (code) => ({planRevision: null, canTransfer: false, blockedReason: 'Заглушка', items: [], company: code}),
+    transferVariants: (code, body, actor) => { transfers.push({code, body, actor, scope: 'variants'}); return {createdCount: 0, companyCode: code, posts: []}; },
   };
   const handler = createMediaMentorHandler({
     mentor, transfer,
@@ -274,4 +276,102 @@ test('неизвестные адреса и методы закрыты', async
   await assert.rejects(f.call('GET', '/media-mentor/plan/feedback', OWNER), (error) => error.status === 405);
   await assert.rejects(f.call('DELETE', '/media-mentor/plan/transfer/42', OWNER), (error) => error.status === 405);
   await assert.rejects(f.call('GET', '/media-mentor/unknown', OWNER), (error) => error.status === 404);
+});
+
+/* ---------- Маршруты и права решений по версиям площадок ----------
+   Проверяется не заглушка, а сам маршрут: право, метод, компания и то, что решение
+   действительно записывается настоящим модулем Медиа-наставника. */
+
+async function seedPlan(f, identity = OWNER) {
+  await seedBrief(f, identity);
+  const withVariants = days().map((day) => ({...day,
+    variants: {telegram: {text: 'ТГ текст'}, vk: {text: 'ВК текст'}}}));
+  const saved = await f.call('PUT', '/media-mentor/plan', identity,
+    {planRevision: 0, briefRevision: 1, days: withVariants});
+  assert.equal(saved.status, 200, JSON.stringify(saved.result));
+  return saved.result;
+}
+
+test('решение по версиям площадок: маршрут свой, метод один, компания обязательна', async (t) => {
+  const f = fixture(t);
+  await seedPlan(f);
+  const body = {planRevision: 1, briefRevision: 1, scope: 'plan', decision: 'approved', comment: ''};
+  const ok = await f.call('POST', '/media-mentor/plan/variants/decision', OWNER, body);
+  assert.equal(ok.status, 201);
+  assert.equal(ok.result.variants.filter((item) => item.status === 'approved').length, 14);
+  assert.equal(ok.result.capabilities.planApprovalAuthorizesPublishing, false,
+    'ответ не выдаёт согласование плана за разрешение публиковать');
+  // Другие методы на том же адресе не подхватываются молча: модуль отвечает отказом 405,
+  // а не пропускает запрос дальше как чужой.
+  for (const method of ['GET', 'PUT', 'DELETE']) {
+    await assert.rejects(() => f.call(method, '/media-mentor/plan/variants/decision', OWNER, body),
+      (error) => error.status === 405, method);
+  }
+  // Соседний адрес модулю не принадлежит.
+  const neighbour = await f.call('POST', '/media-mentor-rollout/plan/variants/decision', OWNER, body);
+  assert.equal(neighbour.handled, false);
+});
+
+test('решение по версиям — только владелец; редактор получает понятный отказ', async (t) => {
+  const f = fixture(t);
+  await seedPlan(f);
+  const body = {planRevision: 1, briefRevision: 1, scope: 'plan', decision: 'approved', comment: ''};
+  const editor = {...EDITOR, permissions: ['autoposting.view', 'autoposting.edit']};
+  await assert.rejects(() => f.call('POST', '/media-mentor/plan/variants/decision', editor, body),
+    (error) => error.status === 403 && error.details.code === 'FORBIDDEN');
+  // Право на запись проверяется тем же ключом, что и у остальных изменений раздела.
+  assert.deepEqual(f.seen.at(-1), {code: 'alvi', permission: 'autoposting.edit'});
+  const stranger = {...EDITOR, permissions: ['autoposting.view']};
+  await assert.rejects(() => f.call('POST', '/media-mentor/plan/variants/decision', stranger, body),
+    (error) => error.status === 403);
+  // Ни одно решение не записалось.
+  const state = await f.call('GET', '/media-mentor', OWNER);
+  assert.deepEqual(state.result.variants.filter((item) => item.status === 'approved'), []);
+});
+
+test('чужая компания решение по версиям не принимает и своих решений не отдаёт', async (t) => {
+  const f = fixture(t);
+  await seedPlan(f);
+  const body = {planRevision: 1, briefRevision: 1, scope: 'plan', decision: 'approved', comment: ''};
+  const editor = {...EDITOR, permissions: ['autoposting.view', 'autoposting.edit'], role: 'editor'};
+  await assert.rejects(() => f.call('POST', '/media-mentor/plan/variants/decision', editor, body, 'avokado'),
+    (error) => error.status === 403);
+  await f.call('POST', '/media-mentor/plan/variants/decision', OWNER, body);
+  const other = await f.call('GET', '/media-mentor', OWNER, undefined, 'avokado');
+  assert.deepEqual(other.result.variants, [], 'решения одной компании другой не видны');
+});
+
+test('перенос версий идёт по праву правки автопостинга и получает автора из личности', async (t) => {
+  const f = fixture(t);
+  await seedPlan(f);
+  const editor = {...EDITOR, permissions: ['autoposting.view', 'autoposting.edit']};
+  const body = {planRevision: 1, briefRevision: 1};
+  const done = await f.call('POST', '/media-mentor/plan/variants/transfer', editor, body);
+  assert.equal(done.status, 200, 'перенос владельцем не ограничен: это правка карточек автопостинга');
+  assert.deepEqual(f.seen.at(-1), {code: 'alvi', permission: 'autoposting.edit'});
+  const last = f.transfers.at(-1);
+  assert.equal(last.scope, 'variants');
+  assert.deepEqual(last.actor, {userId: 7, userName: 'Редактор клиента'});
+  // Имя автора из тела запроса не принимается.
+  await f.call('POST', '/media-mentor/plan/variants/transfer', editor, {...body, actorName: 'Подставной'});
+  assert.deepEqual(f.transfers.at(-1).actor, {userId: 7, userName: 'Редактор клиента'});
+  const readOnly = {...EDITOR, permissions: ['autoposting.view']};
+  await assert.rejects(() => f.call('POST', '/media-mentor/plan/variants/transfer', readOnly, body),
+    (error) => error.status === 403);
+  for (const method of ['GET', 'PUT']) {
+    await assert.rejects(() => f.call(method, '/media-mentor/plan/variants/transfer', editor, body),
+      (error) => error.status === 405, method);
+  }
+});
+
+test('чтение раздела отдаёт состояние версий и расписку переноса версий', async (t) => {
+  const f = fixture(t);
+  await seedPlan(f);
+  const readOnly = {...EDITOR, permissions: ['autoposting.view']};
+  const state = await f.call('GET', '/media-mentor', readOnly);
+  assert.equal(state.status, 200);
+  assert.deepEqual(f.seen.at(-1), {code: 'alvi', permission: 'autoposting.view'});
+  assert.equal(state.result.variants.length, 14, 'состояние версий видно и на чтение');
+  assert.ok(state.result.variantTransfer, 'расписка переноса версий отдаётся отдельно от старой');
+  assert.ok(state.result.transfer, 'старая расписка по дням остаётся читаемой');
 });
