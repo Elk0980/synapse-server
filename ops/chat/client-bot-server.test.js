@@ -135,6 +135,17 @@ test('с токеном: свой опрос своим токеном и сво
     assert.equal(db.prepare('SELECT count(*) AS n FROM telegram_checkpoint').get().n, 0, 'отметка бота Synapse не тронута');
   } finally { db.close(); }
   assert.equal((await post(`${chat.base}/telegram/client-bot/palitra/webhook`, { update_id: 80 }, { 'x-telegram-bot-api-secret-token': 'wrong' })).status, 401);
+  // Неизвестная компания и неверный секрет отклоняются до разбора даже некорректного тела.
+  for (const key of ['alvi', 'constructor']) {
+    const unknown = await fetch(`${chat.base}/telegram/client-bot/${key}/webhook`, {
+      method: 'POST', headers: { 'x-telegram-bot-api-secret-token': 'client-hook' }, body: '{invalid',
+    });
+    assert.equal(unknown.status, 404);
+  }
+  const unauthorized = await fetch(`${chat.base}/telegram/client-bot/palitra/webhook`, {
+    method: 'POST', headers: { 'x-telegram-bot-api-secret-token': 'wrong' }, body: '{invalid',
+  });
+  assert.equal(unauthorized.status, 401);
   const accepted = await post(`${chat.base}/telegram/client-bot/palitra/webhook`,
     { update_id: 81, message: { message_id: 6, chat: { id: 901, type: 'private' }, from: { id: 901 }, text: 'webhook' } },
     { 'x-telegram-bot-api-secret-token': 'client-hook' });
