@@ -433,3 +433,40 @@ test('боевой домен: заявки принимаются ровно с
     assert.equal(result.body.code, 'ORIGIN', origin);
   }
 });
+
+test('канал уведомлений: по умолчанию прежний, клиентский — только при готовности, смена ничего не рассылает; статус обработки отдельно', () => {
+  const { orders, db, chat } = setup();
+  assert.throws(() => orders.setTransport(SITE, { transport: 'client_bot' }), (e) => e.status === 409, 'без получателя');
+  orders.setRecipient(SITE, RECIPIENT);
+  assert.equal(orders.recipientStatus(SITE).transport, 'project_bot');
+  const first = submit(orders, body());
+  assert.equal(outboxRows(db)[0].transport, 'project_bot');
+  assert.throws(() => orders.setTransport(SITE, { transport: 'client_bot' }), (e) => e.status === 409 && /не подключён/.test(e.message), 'по умолчанию бот не готов');
+  assert.throws(() => orders.setTransport(SITE, { transport: 'client_bot', extra: 1 }, { clientBotReady: () => ({ ok: true }) }), (e) => e.status === 400);
+  const jobs = outboxRows(db).length;
+  const switched = orders.setTransport(SITE, { transport: 'client_bot' }, { clientBotReady: (site, chatId) => ({ ok: site === SITE && chatId === RECIPIENT.telegramChatId }) });
+  assert.deepEqual([switched.transport, switched.version, switched.verifiedAt], ['client_bot', 2, null]);
+  assert.equal(outboxRows(db).length, jobs, 'смена канала не создаёт заданий');
+  assert.deepEqual([outboxRows(db)[0].status, outboxRows(db)[0].error], ['error', 'Канал уведомлений изменён до отправки']);
+  submit(orders, body());
+  assert.equal(outboxRows(db)[1].transport, 'client_bot');
+  assert.equal(chat.bridge.pendingTelegram().length, 0, 'мост общего чата не берёт задания клиентского бота');
+  const [clientJob] = orders.pendingTelegram('client_bot');
+  assert.deepEqual([clientJob.id, clientJob.orderKind, clientJob.site], ['order:2', 'order', SITE]);
+  assert.throws(() => orders.pendingTelegram('fax'), (e) => e.status === 400);
+  assert.deepEqual(orders.orderJob('order:2'), { id: 2, site: SITE, orderId: 2, kind: 'order', chatId: RECIPIENT.telegramChatId, transport: 'client_bot', status: 'sending' });
+  assert.equal(orders.orderJob('cb:2'), null);
+  // Статус обработки: отдельно от статуса уведомления, с журналом и без изменений при повторе.
+  assert.deepEqual(orders.listOrders(SITE).orders.at(-1).work, { status: 'new', updatedBy: '', updatedAt: null });
+  assert.equal(orders.setWorkStatus(SITE, first.body.orderId, 'in_work', 'Менеджер').changed, true);
+  assert.equal(orders.setWorkStatus(SITE, first.body.orderId, 'in_work', 'Менеджер').changed, false);
+  assert.throws(() => orders.setWorkStatus(SITE, first.body.orderId, 'lost'), (e) => e.status === 400);
+  assert.throws(() => orders.setWorkStatus(SITE, 999, 'done'), (e) => e.status === 404);
+  const listed = orders.listOrders(SITE).orders.find((order) => order.id === first.body.orderId);
+  // Остановленное при смене канала уведомление — «не доставлено»; повтор только явным действием владельца.
+  assert.deepEqual([listed.status, listed.work.status, listed.work.updatedBy], ['notify_failed', 'in_work', 'Менеджер']);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM site_order_work_events').get().n, 1);
+  // Смена получателя возвращает прежний канал.
+  orders.setRecipient(SITE, { telegramChatId: '987654321', label: 'Другой' });
+  assert.equal(orders.recipientStatus(SITE).transport, 'project_bot');
+});

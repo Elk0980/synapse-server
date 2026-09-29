@@ -25,6 +25,9 @@
   const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const ITEM_ID = /^[a-z0-9][a-z0-9_-]{0,79}$/i;
   const UTM = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
+  /* Ссылка «Продолжить в Telegram» приходит от сервера только к новой заявке и только когда бот Palitra
+     полностью настроен. Принимается строго ссылка на t.me с одноразовым токеном; иначе ссылки просто нет. */
+  const TELEGRAM_LINK = /^https:\/\/t\.me\/[A-Za-z][A-Za-z0-9_]{3,31}\?start=o_[A-Za-z0-9_-]{16,62}$/;
   const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   const PRICE_PATTERN = /^\s*(\d[\d\s ]*)(?:[.,](\d{1,2}))?\s*(?:руб\.?|р\.?|₽)?\s*$/i;
   const MESSAGES = {
@@ -227,7 +230,8 @@
       let body = null;
       try { body = await Promise.race([response.json(), aborted]); } catch (error) { if (error === abortError) throw error; body = null; }
       if ((response.status === 201 || response.status === 200) && body && body.ok === true && Number.isSafeInteger(body.orderId) && body.orderId > 0) {
-        return { orderId: body.orderId, duplicate: body.duplicate === true, message: typeof body.message === 'string' ? body.message : '' };
+        const telegramUrl = body.telegram && typeof body.telegram.url === 'string' && TELEGRAM_LINK.test(body.telegram.url) ? body.telegram.url : '';
+        return { orderId: body.orderId, duplicate: body.duplicate === true, message: typeof body.message === 'string' ? body.message : '', telegramUrl };
       }
       const code = body && typeof body.code === 'string' ? body.code : response.status === 429 ? 'RATE_LIMITED' : response.status === 409 ? 'REQUEST_MISMATCH' : response.status === 503 ? 'ORDERS_UNAVAILABLE' : 'HTTP';
       throw Object.assign(new Error(code), { code, status: response.status, itemId: body && body.itemId });
@@ -395,6 +399,17 @@
         for (const control of form.querySelectorAll('input, select, textarea, button')) control.disabled = busy;
       };
       const message = (text, state) => { status.textContent = text; status.dataset.state = state; };
+      // Ссылка в Telegram показывается только под успешной заявкой и убирается при следующей отправке.
+      const dropTelegram = () => { const old = form.querySelector('[data-order-telegram]'); if (old) old.remove(); };
+      const offerTelegram = (url) => {
+        dropTelegram();
+        if (!url) return;
+        const link = doc.createElement('a');
+        link.className = 'button outline order-telegram'; link.setAttribute('data-order-telegram', '');
+        link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer';
+        link.textContent = 'Продолжить в Telegram';
+        status.after(link);
+      };
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
         if (pending) return;
@@ -414,6 +429,7 @@
           return;
         }
         setBusy(true);
+        dropTelegram();
         try {
           // Подготовка (прайс, хеш, id) и отправка — в одном try: любая ошибка снимает блокировку в finally.
           if (kind === 'cart') {
@@ -430,6 +446,7 @@
           if (kind === 'cart') { cart.consume(snapshot); renderItems(); }
           form.reset();
           message(result.message || `Заявка №${result.orderId} принята. Менеджер свяжется с вами, подтвердит состав и стоимость, согласует оплату и доставку.`, 'success');
+          offerTelegram(result.telegramUrl);
         } catch (error) {
           if (error.code === 'REQUEST_MISMATCH') forgetRequest(kind, session);
           if (error.code === 'ITEM_UNKNOWN') { index = null; refreshPrice(); }
@@ -448,5 +465,5 @@
     return { cart, openCart, closeCart, renderItems, loadIndex, priceState: () => priceState };
   }
 
-  return { CART_KEY, REQUEST_KEY, DRAFT_KEY, ENDPOINT, MESSAGES, createCart, readCart, priceIndex, parsePrice, describe, formatRub, buildPayload, fingerprint, requestIdFor, forgetRequest, readRequestDraft, applyRequestDraft, send, errorMessage, mount };
+  return { CART_KEY, REQUEST_KEY, DRAFT_KEY, ENDPOINT, MESSAGES, TELEGRAM_LINK, createCart, readCart, priceIndex, parsePrice, describe, formatRub, buildPayload, fingerprint, requestIdFor, forgetRequest, readRequestDraft, applyRequestDraft, send, errorMessage, mount };
 }));

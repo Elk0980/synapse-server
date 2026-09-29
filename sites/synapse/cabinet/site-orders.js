@@ -12,6 +12,8 @@ const STATUS = Object.freeze({
   notify_failed: ["Уведомление не доставлено", "failed"]
 });
 const KIND = Object.freeze({ cart: "Корзина", request: "Форма" });
+// Состояние обработки менеджером (кнопки в Telegram бота Palitra) — отдельно от статуса уведомления.
+const WORK = Object.freeze({ new: "Новая", in_work: "В работе", done: "Выполнена", cancelled: "Отменена" });
 const rub = (kopecks) => `${Math.floor(kopecks / 100).toLocaleString("ru-RU")}${kopecks % 100 ? `,${String(kopecks % 100).padStart(2, "0")}` : ""} ₽`;
 const when = (iso) => { const date = new Date(iso); return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short" }).format(date); };
 let version = 0;
@@ -26,7 +28,9 @@ const explainNotify = (order) => {
 const recipientSummary = (recipient) => {
   if (!recipient.configured) return "Получатель не настроен: заявки сохраняются, уведомления никому не уходят.";
   if (recipient.verifiedAt) return `Получатель подтверждён проверкой ${when(recipient.verifiedAt)}.`;
-  if (recipient.lastTestError) return `Проверка не прошла: ${recipient.lastTestError}. Получатель должен написать боту @synapse_sb_bot команду /start.`;
+  if (recipient.lastTestError) return recipient.transport === "client_bot"
+    ? `Проверка не прошла: ${recipient.lastTestError}. Получатель должен быть привязан к боту Palitra (см. ниже).`
+    : `Проверка не прошла: ${recipient.lastTestError}. Получатель должен написать боту @synapse_sb_bot команду /start.`;
   if (recipient.lastTest && ["pending", "sending"].includes(recipient.lastTest.status)) return "Проверочное сообщение отправляется…";
   return "Получатель сохранён, но ещё не подтверждён проверкой.";
 };
@@ -55,7 +59,8 @@ cabinet.registerView("site-orders", { title: "Заявки с сайта",
       <label>Подпись<input name="label" maxlength="80" autocomplete="off" placeholder="например, менеджер"></label>
       <div class="site-orders__actions"><button type="submit">Сохранить получателя</button><button type="button" data-recipient-test>Отправить проверочное сообщение</button><button type="button" data-orders-refresh>Обновить</button></div>
       <p role="status" data-recipient-status></p></form>
-      <p class="site-orders__hint">Бот пишет только тем, кто сам начал с ним диалог: получатель должен один раз отправить /start боту @synapse_sb_bot. Сохранение ничего не отправляет; проверка отправляет одно служебное сообщение.</p></section>
+      <p class="site-orders__hint">Бот пишет только тем, кто сам начал с ним диалог: для прежнего канала получатель один раз отправляет /start боту @synapse_sb_bot, для бота Palitra — привязывается кодом ниже. Сохранение ничего не отправляет; проверка отправляет одно служебное сообщение.</p></section>
+      <div data-client-bot-box></div>
       <section class="card"><h2>Заявки</h2><div data-orders-list aria-live="polite">Загрузка…</div>
       <div class="site-orders__more"><button type="button" data-orders-more hidden>Показать ещё</button><p role="status" data-orders-more-status></p></div></section>`;
     container.append(panel);
@@ -68,6 +73,9 @@ cabinet.registerView("site-orders", { title: "Заявки с сайта",
     const moreButton = panel.querySelector("[data-orders-more]");
     const moreStatus = panel.querySelector("[data-orders-more-status]");
     let busy = false;
+    // Блок клиентского бота (client-dialogs.js): обновляется вместе с заявками по кнопке и после смены получателя. Без фонового опроса.
+    let botPanel = null;
+    const refreshBot = () => { if (botPanel && alive()) void botPanel.refresh(); };
     // Страницы по курсору: список копится, «Показать ещё» запрашивает id < nextCursor; одна догрузка за раз.
     let shown = [], nextCursor = null, loadingMore = false;
     const setBusy = (value) => { busy = value; for (const control of form.querySelectorAll("input, button")) control.disabled = value; form.setAttribute("aria-busy", String(value)); };
@@ -99,7 +107,8 @@ cabinet.registerView("site-orders", { title: "Заявки с сайта",
           <span class="site-order__status site-order__status--${cls}">${h(label)}</span></header>
           <p class="site-order__contact">${h(order.name)} · <a href="tel:${h(order.phone.replace(/[^\d+]/g, ""))}">${h(order.phone)}</a></p>
           ${items}${order.comment ? `<p class="site-order__comment">${h(order.comment)}</p>` : ""}
-          <p class="site-order__notify">${h(explainNotify(order))}</p>`;
+          <p class="site-order__notify">${h(explainNotify(order))}</p>
+          ${order.work && order.work.status !== "new" ? `<span class="site-order__work site-order__work--${h(order.work.status)}">Обработка: ${h(WORK[order.work.status] || order.work.status)}${order.work.updatedAt ? ` · ${h(when(order.work.updatedAt))}` : ""}</span>` : ""}`;
         if (["accepted", "notify_uncertain", "notify_failed"].includes(order.status) && !(order.notify && ["pending", "sending"].includes(order.notify.status))) {
           const button = document.createElement("button");
           button.type = "button"; button.className = "site-order__renotify";
@@ -177,6 +186,7 @@ cabinet.registerView("site-orders", { title: "Заявки с сайта",
         const recipient = await api(`${base}/order-recipient`, mutation("PUT", { telegramChatId, label }));
         if (!alive()) return;
         showRecipient(recipient);
+        refreshBot();
         status.textContent = recipient.verifiedAt ? "Получатель сохранён." : "Получатель сохранён. Подтверждение сбрасывается при смене чата — отправьте проверочное сообщение.";
       } catch (error) { if (alive()) status.textContent = error.status === 400 ? "Сервер не принял Telegram ID." : "Не удалось сохранить получателя."; }
       finally { if (alive()) setBusy(false); }
@@ -201,10 +211,13 @@ cabinet.registerView("site-orders", { title: "Заявки с сайта",
       } catch (error) { if (alive()) status.textContent = error.status === 409 ? "Сначала сохраните получателя." : "Не удалось отправить проверочное сообщение."; }
       finally { if (alive()) setBusy(false); }
     });
-    form.querySelector("[data-orders-refresh]").addEventListener("click", () => { if (!busy) load(); });
+    form.querySelector("[data-orders-refresh]").addEventListener("click", () => { if (!busy) { load(); refreshBot(); } });
     // Смена компании или уход с вида: незавершённые запросы отменяются, ответы не применяются.
     const observer = new MutationObserver(() => { if (!alive()) { controller.abort(); observer.disconnect(); } });
     observer.observe(container, { childList: true });
+    // Клиентский бот Palitra (client-dialogs.js): состояние, привязка менеджера, канал заявок, переписка.
+    const botBox = panel.querySelector("[data-client-bot-box]");
+    botPanel = cabinet.clientDialogs ? cabinet.clientDialogs.render(botBox, context, { site, alive, api, mutation, onTransportChange: () => load({ quiet: true }) }) : null;
     await load();
   }
 });

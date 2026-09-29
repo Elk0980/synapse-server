@@ -24,6 +24,12 @@ const MAX_KOPECKS = 10 ** 13;            // защита от переполне
 const PRICE_PATTERN = /^\s*(\d[\d\s ]*)(?:[.,](\d{1,2}))?\s*(?:руб\.?|р\.?|₽)?\s*$/i;
 const JOB_PREFIX = 'order:';
 const LIST_LIMIT = 100;
+/* Канал доставки уведомлений о заявках: прежний бот Synapse (через мост общего чата проекта) или
+   клиентский бот компании. По умолчанию — прежний; клиентский включает только владелец явно. */
+const TRANSPORTS = new Set(['project_bot', 'client_bot']);
+/* Состояние обработки заявки менеджером. Отдельно от статуса уведомления (site_orders.status):
+   «уведомление доставлено» не значит «заявка в работе». Нет строки — заявка новая. */
+const WORK_STATUSES = new Set(['new', 'in_work', 'done', 'cancelled']);
 
 const fail = (status, message, code) => { throw Object.assign(new Error(message), { status, code }); };
 const sha256 = (value) => crypto.createHash('sha256').update(String(value), 'utf8').digest('hex');
@@ -98,7 +104,19 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     CREATE INDEX IF NOT EXISTS site_order_outbox_order ON site_order_outbox(order_id, id);
     CREATE TABLE IF NOT EXISTS site_order_rate (ip_hash TEXT NOT NULL, created_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS site_order_rate_ip ON site_order_rate(ip_hash, created_at);
+    CREATE TABLE IF NOT EXISTS site_order_work (
+      order_id INTEGER PRIMARY KEY REFERENCES site_orders(id), status TEXT NOT NULL CHECK(status IN ('new','in_work','done','cancelled')),
+      updated_by TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS site_order_work_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL REFERENCES site_orders(id),
+      status TEXT NOT NULL, actor TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
+    );
   `);
+  // Колонки канала добавляются к уже созданным таблицам: прежние строки получают прежний канал.
+  const columns = (table) => new Set(db.prepare(`SELECT name FROM pragma_table_info('${table}')`).all().map((row) => row.name));
+  if (!columns('site_order_recipients').has('transport')) db.exec("ALTER TABLE site_order_recipients ADD COLUMN transport TEXT NOT NULL DEFAULT 'project_bot'");
+  if (!columns('site_order_outbox').has('transport')) db.exec("ALTER TABLE site_order_outbox ADD COLUMN transport TEXT NOT NULL DEFAULT 'project_bot'");
   const stamp = (at = now()) => new Date(at).toISOString();
   const siteConfig = (site) => (Object.hasOwn(sites, site) ? sites[site] : null);
   const ipHash = (ip) => sha256(`${ip}|${ipSalt}`);
@@ -183,8 +201,10 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
   function enqueue(site, config, kind, order, recipient) {
     const text = kind === 'test' ? `Проверка получателя заявок ${config.title}. Ответ не требуется.` : orderText(order, config.title);
     const at = stamp();
-    return Number(db.prepare(`INSERT INTO site_order_outbox(site,company_code,order_id,kind,chat_id,recipient_version,text,next_attempt_at,created_at)
-      VALUES(?,?,?,?,?,?,?,?,?)`).run(site, config.companyCode, order ? order.id : null, kind, recipient.telegram_chat_id, recipient.version, text, at, at).lastInsertRowid);
+    // Канал фиксируется в задании: смена канала потом не перенаправляет уже поставленное.
+    const transport = TRANSPORTS.has(recipient.transport) ? recipient.transport : 'project_bot';
+    return Number(db.prepare(`INSERT INTO site_order_outbox(site,company_code,order_id,kind,chat_id,recipient_version,text,next_attempt_at,created_at,transport)
+      VALUES(?,?,?,?,?,?,?,?,?,?)`).run(site, config.companyCode, order ? order.id : null, kind, recipient.telegram_chat_id, recipient.version, text, at, at, transport).lastInsertRowid);
   }
 
   /* ---------- публичный приём ---------- */
@@ -246,14 +266,25 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
 
   /* ---------- очередь для моста ---------- */
   const jobJSON = (job) => ({ id: `${JOB_PREFIX}${job.id}`, companyCode: job.company_code, chatId: job.chat_id, messageId: null,
-    attempt: job.attempts, text: job.text, authorName: 'Заявка с сайта', authorType: 'system', attachments: [] });
-  function pendingTelegram() {
-    // Вызывается внутри транзакции pendingTelegram общего чата.
-    const expired = db.prepare(`SELECT id,order_id,kind FROM site_order_outbox WHERE status='sending' AND claimed_at<?`).all(stamp(now() - TELEGRAM_LEASE));
+    attempt: job.attempts, text: job.text, authorName: 'Заявка с сайта', authorType: 'system', attachments: [],
+    // Клиентскому боту нужны номер заявки и вид задания (кнопки статуса только у заявки, не у проверки).
+    ...(job.transport === 'client_bot' ? { site: job.site, orderId: job.order_id, orderKind: job.kind } : {}) });
+  /* Мост каждого канала забирает только свои задания. Общий чат проекта вызывает без аргумента — прежний канал.
+     Вызывается внутри транзакции вызывающего модуля. */
+  function pendingTelegram(transport = 'project_bot') {
+    if (!TRANSPORTS.has(transport)) fail(400, 'Неизвестный канал уведомлений');
+    const expired = db.prepare(`SELECT id,order_id,kind FROM site_order_outbox WHERE status='sending' AND claimed_at<? AND transport=?`).all(stamp(now() - TELEGRAM_LEASE), transport);
     for (const job of expired) settle(job.id, 'uncertain', 'Отправка прервана; результат доставки неизвестен', []);
-    const jobs = db.prepare(`SELECT * FROM site_order_outbox WHERE status='pending' AND next_attempt_at<=? ORDER BY id LIMIT 1`).all(stamp());
+    const jobs = db.prepare(`SELECT * FROM site_order_outbox WHERE status='pending' AND next_attempt_at<=? AND transport=? ORDER BY id LIMIT 1`).all(stamp(), transport);
     for (const job of jobs) db.prepare(`UPDATE site_order_outbox SET status='sending',claimed_at=?,attempts=attempts+1 WHERE id=?`).run(stamp(), job.id);
     return jobs.map((job) => jobJSON({ ...job, attempts: job.attempts + 1 }));
+  }
+  /* Сведения о задании для клиентского бота: какой заявке и какому чату оно отправлялось. */
+  function orderJob(jobId) {
+    const id = Number(String(jobId).slice(JOB_PREFIX.length));
+    if (!isOrderJob(jobId) || !Number.isSafeInteger(id) || id < 1) return null;
+    const job = db.prepare('SELECT id,site,order_id,kind,chat_id,transport,status FROM site_order_outbox WHERE id=?').get(id);
+    return job ? { id: job.id, site: job.site, orderId: job.order_id, kind: job.kind, chatId: job.chat_id, transport: job.transport, status: job.status } : null;
   }
   const isOrderJob = (jobId) => typeof jobId === 'string' && jobId.startsWith(JOB_PREFIX);
   const currentAttempt = (orderId) => db.prepare("SELECT id FROM site_order_outbox WHERE order_id=? AND kind='order' ORDER BY id DESC LIMIT 1").get(orderId)?.id;
@@ -304,7 +335,12 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
   /* ---------- владелец ---------- */
   const notifyJSON = (job) => (job ? { jobId: `${JOB_PREFIX}${job.id}`, kind: job.kind, status: job.status, attempts: job.attempts, error: job.error,
     createdAt: job.created_at, finishedAt: job.finished_at, recipientVersion: job.recipient_version } : null);
+  const workJSON = (orderId) => {
+    const row = db.prepare('SELECT status,updated_by,updated_at FROM site_order_work WHERE order_id=?').get(orderId);
+    return row ? { status: row.status, updatedBy: row.updated_by, updatedAt: row.updated_at } : { status: 'new', updatedBy: '', updatedAt: null };
+  };
   const orderJSON = (row) => ({ id: row.id, requestId: row.request_id, kind: row.kind, status: row.status, createdAt: row.created_at, notifiedAt: row.notified_at,
+    work: workJSON(row.id),
     name: row.name, phone: row.phone, comment: row.comment, items: JSON.parse(row.items_json), knownTotal: row.known_total, unknownCount: row.unknown_count,
     page: row.page, utm: JSON.parse(row.utm_json || '{}'),
     notify: notifyJSON(db.prepare("SELECT * FROM site_order_outbox WHERE order_id=? AND kind='order' ORDER BY id DESC LIMIT 1").get(row.id)) });
@@ -319,6 +355,7 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     const lastTest = db.prepare("SELECT * FROM site_order_outbox WHERE site=? AND kind='test' ORDER BY id DESC LIMIT 1").get(site);
     return { configured: Boolean(recipient), telegramChatId: recipient?.telegram_chat_id || '', label: recipient?.label || '',
       version: recipient?.version || 0, verifiedAt: recipient?.verified_at || null, lastTestError: recipient?.last_test_error || '',
+      transport: recipient?.transport || 'project_bot',
       lastTest: notifyJSON(lastTest && recipient && lastTest.recipient_version === recipient.version ? lastTest : null),
       unnotifiedOrders: unnotified, updatedAt: recipient?.updated_at || null };
   }
@@ -348,7 +385,8 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
       const at = stamp();
       if (!current) db.prepare('INSERT INTO site_order_recipients(site,company_code,telegram_chat_id,label,updated_at) VALUES(?,?,?,?,?)').run(site, config.companyCode, chatId, label, at);
       else if (current.telegram_chat_id !== chatId) {
-        db.prepare(`UPDATE site_order_recipients SET telegram_chat_id=?,label=?,version=version+1,verified_at=NULL,last_test_error='',updated_at=? WHERE site=?`).run(chatId, label, at, site);
+        // Новый получатель возвращается на прежний канал: клиентский бот привязан к конкретному Telegram ID оператора.
+        db.prepare(`UPDATE site_order_recipients SET telegram_chat_id=?,label=?,version=version+1,verified_at=NULL,last_test_error='',transport='project_bot',updated_at=? WHERE site=?`).run(chatId, label, at, site);
         // Ещё не начатые задания прежнему получателю останавливаются: новому их отправит только явный повтор владельца.
         // Уже отправляемые и неизвестно доставленные не перенаправляются.
         const stopped = db.prepare(`SELECT id FROM site_order_outbox WHERE site=? AND status='pending'`).all(site);
@@ -382,10 +420,61 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     return { ok: true, jobId: `${JOB_PREFIX}${jobId}`, previous: notifyJSON(previous), order: orderJSON(db.prepare('SELECT * FROM site_orders WHERE id=?').get(id)) };
   }
 
-  return { submit, pendingTelegram, acknowledge, isOrderJob, listOrders, recipientStatus, setRecipient, testRecipient, renotify, sites: Object.keys(sites) };
+  /* Смена канала уведомлений. Клиентский бот — только если модуль клиентского бота подтвердил готовность
+     (включён, оператор привязан к Telegram ID этого получателя). Смена ничего не рассылает: прежние заявки
+     остаются с прежним исходом, ещё не начатые задания останавливаются так же, как при смене получателя. */
+  function setTransport(site, body, { clientBotReady = () => ({ ok: false, reason: 'Клиентский бот не подключён' }) } = {}) {
+    const config = siteConfig(site);
+    if (!config) fail(404, 'Не найдено');
+    if (!body || typeof body !== 'object' || Object.keys(body).some((k) => k !== 'transport')) fail(400, 'Неизвестное поле');
+    const transport = body.transport;
+    if (!TRANSPORTS.has(transport)) fail(400, 'Неизвестный канал уведомлений');
+    const recipient = recipientOf(site);
+    if (!recipient) fail(409, 'Получатель заявок не настроен');
+    if (recipient.transport === transport) return recipientStatus(site);
+    if (transport === 'client_bot') {
+      const ready = clientBotReady(site, recipient.telegram_chat_id) || {};
+      if (!ready.ok) fail(409, ready.reason || 'Клиентский бот не готов');
+    }
+    tx(() => {
+      db.prepare(`UPDATE site_order_recipients SET transport=?,version=version+1,verified_at=NULL,last_test_error='',updated_at=? WHERE site=?`).run(transport, stamp(), site);
+      const stopped = db.prepare(`SELECT id,external_ids FROM site_order_outbox WHERE site=? AND status='pending'`).all(site);
+      for (const job of stopped) settle(job.id, 'error', 'Канал уведомлений изменён до отправки', JSON.parse(job.external_ids || '[]'));
+    });
+    return recipientStatus(site);
+  }
+  /* Статус обработки меняет менеджер (кнопкой в Telegram) или владелец. Повтор того же статуса — без изменений. */
+  function setWorkStatus(site, orderId, status, actor = '') {
+    if (!siteConfig(site)) fail(404, 'Не найдено');
+    if (!WORK_STATUSES.has(status)) fail(400, 'Неизвестный статус обработки');
+    const id = Number(orderId);
+    if (!Number.isSafeInteger(id) || id < 1) fail(400, 'Некорректный номер заявки');
+    const order = db.prepare('SELECT id FROM site_orders WHERE id=? AND site=?').get(id, site);
+    if (!order) fail(404, 'Заявка не найдена');
+    const before = workJSON(id);
+    if (before.status === status) return { changed: false, work: before };
+    const at = stamp(), who = shortText(actor, 80);
+    tx(() => {
+      db.prepare(`INSERT INTO site_order_work(order_id,status,updated_by,updated_at) VALUES(?,?,?,?)
+        ON CONFLICT(order_id) DO UPDATE SET status=excluded.status,updated_by=excluded.updated_by,updated_at=excluded.updated_at`).run(id, status, who, at);
+      db.prepare('INSERT INTO site_order_work_events(order_id,status,actor,created_at) VALUES(?,?,?,?)').run(id, status, who, at);
+    });
+    return { changed: true, work: workJSON(id) };
+  }
+  /* Короткая сводка заявки для клиентского бота: без контактов, только то, что нужно для связи с диалогом. */
+  function orderSummary(site, orderId) {
+    const id = Number(orderId);
+    if (!siteConfig(site) || !Number.isSafeInteger(id) || id < 1) return null;
+    const row = db.prepare('SELECT id,request_id,created_at FROM site_orders WHERE id=? AND site=?').get(id, site);
+    return row ? { id: row.id, requestId: row.request_id, createdAt: row.created_at, work: workJSON(row.id) } : null;
+  }
+
+  return { submit, pendingTelegram, acknowledge, isOrderJob, orderJob, listOrders, recipientStatus, setRecipient, setTransport, testRecipient, renotify,
+    setWorkStatus, orderSummary, sites: Object.keys(sites) };
 }
 
 /* Точный allowlist Origin для заявок Palitra: боевой домен без www (www отвечает 301 и страниц не отдаёт)
    и временный адрес, который работает до и после переключения DNS. Шаблонов и поддоменов нет. */
 const PALITRA_ORDER_ORIGINS = Object.freeze(['https://palitra-love.ru', 'https://palitra-love.synapsebusiness.ru']);
-module.exports = { createSiteOrders, clientIp, originOf, priceKopecks, isPrivateAddress, ORDER_STATUSES, JOB_PREFIX, PALITRA_ORDER_ORIGINS };
+module.exports = { createSiteOrders, clientIp, originOf, priceKopecks, isPrivateAddress, ORDER_STATUSES, JOB_PREFIX, PALITRA_ORDER_ORIGINS,
+  TRANSPORTS, WORK_STATUSES };

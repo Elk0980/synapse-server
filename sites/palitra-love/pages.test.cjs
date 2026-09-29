@@ -9,6 +9,8 @@ const path = require('node:path');
 
 const ROOT = __dirname;
 const VERSION = '20260929rel1';
+// Корзина и заявка выпускаются отдельно (ссылка «Продолжить в Telegram»): своя версия подключения order.js.
+const ORDER_VERSION = '20260929bot1';
 function pages(dir = ROOT, out = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
@@ -29,14 +31,15 @@ test('каждая страница подключает одну версию �
   for (const file of all) {
     const html = read(file);
     const name = rel(file);
-    for (const asset of ['/assets/styles.css', '/assets/app.js', '/price-render.js', '/assets/order.js']) {
+    for (const asset of ['/assets/styles.css', '/assets/app.js', '/price-render.js']) {
       assert.match(html, new RegExp(`${asset.replace(/[./]/g, '\\$&')}\\?v=${VERSION}"`), `${name}: ${asset}`);
     }
+    assert.match(html, new RegExp(`/assets/order\\.js\\?v=${ORDER_VERSION}"`), `${name}: /assets/order.js`);
     for (const optional of ['catalog-live.js', 'quiz.js']) {
       if (html.includes(`/assets/${optional}?v=`)) assert.match(html, new RegExp(`${optional.replace('.', '\\.')}\\?v=${VERSION}"`), `${name}: ${optional}`);
     }
     assert.ok(html.indexOf('/price-render.js?v=') < html.indexOf('/assets/order.js?v='), `${name}: order.js после price-render.js`);
-    for (const stale of ['styles.css?v=20260907type1', 'app.js?v=20260907brand1', 'price-render.js?v=20260908live1', '?v=20260917catalog1', '?v=20260917align1', '?v=20260917order1', '?v=20260917order2', '?v=20260918channel1', '?v=20260918channel2', '?v=20260924darya1', 'config.js?v=20260904a']) {
+    for (const stale of ['styles.css?v=20260907type1', 'app.js?v=20260907brand1', 'price-render.js?v=20260908live1', '?v=20260917catalog1', '?v=20260917align1', '?v=20260917order1', '?v=20260917order2', '?v=20260918channel1', '?v=20260918channel2', '?v=20260924darya1', 'config.js?v=20260904a', 'order.js?v=20260929rel1']) {
       assert.ok(!html.includes(stale), `${name}: старая версия ${stale}`);
     }
   }
