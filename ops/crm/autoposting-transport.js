@@ -7,6 +7,15 @@ const PLATFORMS = Object.freeze({
   vk: {name: 'ВКонтакте', maxText: 15000, maxMedia: 1, mediaMode: 'link'},
   // YouTube Shorts отправляется только через Onlypult: прямого подключения к каналу у нас нет.
   youtube_shorts: {name: 'YouTube Shorts', maxText: 5000, maxMedia: 1, mediaMode: 'video', providerOnly: 'onlypult', requiresTitle: true},
+  /* Instagram, TikTok и MAX отправляются ТОЛЬКО через Onlypult: прямых подключений у нас нет.
+     providerOnly закрывает им прямую ветку; отдельная проверка в publish не даёт им уйти
+     в общий хвост отправки ВКонтакте, даже если строка канала окажется без провайдера.
+     Лимиты здесь — предварительные границы содержимого; настоящие берутся у профиля
+     через GET /posts/limits перед каждой отправкой и лимиты TG/YT сюда не переносятся. */
+  instagram: {name: 'Instagram', maxText: 2200, maxMedia: 10, mediaMode: 'photos', providerOnly: 'onlypult'},
+  tiktok: {name: 'TikTok', maxText: 2200, maxMedia: 1, mediaMode: 'video', providerOnly: 'onlypult'},
+  // MAX: 4000 символов и до 10 медиа — официальная страница площадки Onlypult, проверена 29.09.2026.
+  max: {name: 'MAX', maxText: 4000, maxMedia: 10, mediaMode: 'photos', providerOnly: 'onlypult'},
 });
 const fail = (message, status = 400) => {throw Object.assign(new Error(message), {status, ambiguous: false});};
 const failure = (code, ambiguous = false) => Object.assign(new Error('Не удалось выполнить действие на площадке'), {code, ambiguous, status: 502});
@@ -60,12 +69,23 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
     try {return crypt(row.company_code, row.id, row.encrypted_token, true);}
     catch {throw failure('TOKEN_UNREADABLE');}
   }
-  /* Живые ограничения Onlypult: Telegram — 4000 символов текста, 1024 в подписи к медиа, до 10 материалов;
-     YouTube Shorts — ровно одно видео и обязательный заголовок. Прямые лимиты площадок здесь не действуют. */
-  const providerCaps = (id, caps) => id === 'youtube_shorts'
-    ? {...caps, maxMedia: 1, mediaMode: 'video'}
-    : id === 'telegram' ? {...caps, maxText: 4000, maxCaption: 1024, maxMedia: 10, mediaMode: 'photos'}
-    : {...caps, maxMedia: 10, mediaMode: 'photos'};
+  /* Живые ограничения Onlypult по площадкам. Общая перезапись в «10 фотографий» осталась только
+     для ВКонтакте, где она и была: у остальных площадок свои форматы, и объявлять в настройках
+     то, что backend затем молча отклонит, нельзя.
+     Telegram — 4000 символов текста, 1024 в подписи к медиа, до 10 материалов;
+     YouTube Shorts и TikTok — ровно одно видео;
+     Instagram и MAX — до 10 вложений, но настоящий предел приходит от профиля перед отправкой. */
+  const PROVIDER_CAPS = Object.freeze({
+    youtube_shorts: {maxMedia: 1, mediaMode: 'video'},
+    tiktok: {maxMedia: 1, mediaMode: 'video'},
+    telegram: {maxText: 4000, maxCaption: 1024, maxMedia: 10, mediaMode: 'photos'},
+    instagram: {maxMedia: 10, mediaMode: 'photos'},
+    max: {maxMedia: 10, mediaMode: 'photos'},
+    vk: {maxMedia: 10, mediaMode: 'photos'},
+  });
+  const providerCaps = (id, caps) => ({...caps, ...(PROVIDER_CAPS[id] || {}),
+    // Точные ограничения площадки сообщает профиль перед каждой отправкой: это предварительные границы.
+    limitsFrom: 'profile'});
   function getSettings(code) {
     const current = company(code);
     return {companyCode: current.code, timezone: current.timezone || 'Asia/Irkutsk', channels: Object.entries(PLATFORMS).map(([id, caps]) => {
@@ -236,6 +256,10 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
         chatId.startsWith('-100') ? `https://t.me/c/${chatId.slice(4)}/${message.message_id}` : null;
       return {id: messages.map(item => item.message_id).join(','), externalId: String(message.message_id), url, status: 'published'};
     }
+    /* Явная граница: сюда доходит только прямое подключение, и оно бывает лишь у Telegram и ВК.
+       Новый канал через Onlypult никогда не попадает в отправку ВКонтакте — при любой неожиданной
+       комбинации провайдера и площадки отправка отклоняется, а не уходит не туда. */
+    if (channelId !== 'vk') throw failure('CHANNEL_MISCONFIGURED');
     const guid = crypto.createHash('sha256').update(String(post.idempotencyKey || `${current.code}:${post.id}:${post.revision}`)).digest('hex').slice(0,16);
     const result = await call(row, 'wall.post', {owner_id: '-' + row.target, from_group: '1', message: text,
       ...(media.length ? {attachments: media[0]} : {}), guid}, true);

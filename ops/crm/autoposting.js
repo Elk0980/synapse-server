@@ -5,7 +5,7 @@ const {publicUrl}=require('./autoposting-transport');
 const {randomUUID}=require('node:crypto');
 const LEASE_MS=120000;
 const META_FIELDS=['format','role','audience','hook','idea','hughNote','metrics','methodSource'];
-const EDITABLE=['title','text','mediaUrls','platformIds','scheduledAt','timezone','profileRevision','dayKey','captions','origin','mediaSha256',...META_FIELDS];
+const EDITABLE=['title','text','mediaUrls','platformIds','scheduledAt','timezone','profileRevision','dayKey','captions','origin','mediaSha256','platformOptions',...META_FIELDS];
 /* Метаданные контент-плана: формат и роль независимы; ни одно поле не попадает в публичную подпись.
    Роли — из процесса «привлечение → доверие → обращение»; источник методики — текст (название курса/принципа), не ссылка. */
 const FORMATS=Object.freeze({post:'Пост',story:'Сторис',reel:'Reels / Shorts / клип',carousel:'Карусель'});
@@ -27,8 +27,65 @@ function meta(value) {
 const sha256=value=>{if(value===null||value===undefined||value==='')return '';if(typeof value!=='string'||!/^[a-f0-9]{64}$/i.test(value))fail(400,'Хеш SHA-256 должен быть 64 шестнадцатеричных символа');return value.toLowerCase();};
 /* Очередь контента: пять площадок с лимитами подписей, карточки дней (D1…D7), версия и одобрение конкретной версии.
    Одобрение — только фиксация решения владельца; публикацию оно не запускает. */
-const CAPTION_PLATFORMS=Object.freeze({instagram:{label:'Instagram / Reels',limit:2200},tiktok:{label:'TikTok',limit:2200},
-  youtube_shorts:{label:'YouTube Shorts',limit:5000},vk:{label:'ВКонтакте',limit:15000},telegram:{label:'Telegram',limit:1024}});
+/* Публикуемые опции площадок — ЗАКРЫТАЯ схема. Каждое поле влияет на то, что выйдет
+   на площадке, поэтому опции хранятся в версии содержимого и согласуются вместе с текстом:
+   их изменение поднимает content_revision и снимает прежнее согласование.
+   Состав полей взят из проверенной OpenAPI Onlypult (29.09.2026), ничего сверх неё не принимается.
+   Опции одной площадки не отправляются другой.
+   instagram: is_story и is_reels взаимоисключающие — Story и Reel это разные режимы.
+   tiktok.privacy: полного перечня доступных конкретному аккаунту режимов схема не даёт,
+   поэтому принимаются только два документированных значения, и «по умолчанию публично»
+   здесь не подставляется — без явного выбора отправка TikTok не идёт. */
+const PLATFORM_OPTION_SCHEMA=Object.freeze({
+  instagram:Object.freeze({is_story:'boolean',is_reels:'boolean',disable_comment:'boolean'}),
+  tiktok:Object.freeze({privacy:['PUBLIC_TO_EVERYONE','SELF_ONLY'],disable_comment:'boolean',disable_duet:'boolean',disable_stitch:'boolean'}),
+  max:Object.freeze({pin_message:'boolean'}),
+});
+function platformOptions(value) {
+  if(value===null||value===undefined||value==='')return {};
+  if(typeof value!=='object'||Array.isArray(value))fail(400,'Опции площадок должны быть объектом');
+  const out={};
+  for(const [platform,options]of Object.entries(value)){
+    if(!Object.hasOwn(PLATFORM_OPTION_SCHEMA,platform))fail(400,`Для площадки «${platform}» публикуемых опций нет`);
+    if(!options||typeof options!=='object'||Array.isArray(options))fail(400,'Опции площадки должны быть объектом');
+    const schema=PLATFORM_OPTION_SCHEMA[platform],clean={};
+    for(const [key,item]of Object.entries(options)){
+      if(!Object.hasOwn(schema,key))fail(400,`Неизвестная опция «${key}» для площадки ${platform}`);
+      const rule=schema[key];
+      if(rule==='boolean'){if(typeof item!=='boolean')fail(400,`Опция «${key}» — true или false`);clean[key]=item;}
+      else{if(typeof item!=='string'||!rule.includes(item))fail(400,`Опция «${key}»: допустимо ${rule.join(' или ')}`);clean[key]=item;}
+    }
+    if(platform==='instagram'&&clean.is_story===true&&clean.is_reels===true)fail(400,'Story и Reel — разные режимы Instagram: выберите один');
+    if(Object.keys(clean).length)out[platform]=Object.fromEntries(Object.keys(clean).sort().map(key=>[key,clean[key]]));
+  }
+  return Object.fromEntries(Object.keys(out).sort().map(key=>[key,out[key]]));
+}
+
+/* Единый словарь планирования: семь площадок Алви. Это словарь ПЛАНА и согласования,
+   а не список подключённых каналов: площадка остаётся в плане, даже когда транспорт
+   к ней не подключён, и честно помечается недоступной для доставки.
+
+   delivery — чем площадка закрывается: 'transport' — отправкой из Synapse (когда канал
+   реально подключён), 'manual' — только вручную, отправки из Synapse нет.
+   limitSource — откуда взят лимит подписи: 'confirmed' — из проверенного контракта площадки
+   или Onlypult, 'internal' — наш предел хранения, официальный лимит сервиса не проверен.
+   Внутренний предел не выдаётся за ограничение внешней площадки. */
+const PLAN_PLATFORMS=Object.freeze({
+  instagram:{label:'Instagram / Reels',limit:2200,limitSource:'confirmed',delivery:'transport'},
+  tiktok:{label:'TikTok',limit:2200,limitSource:'confirmed',delivery:'transport'},
+  youtube_shorts:{label:'YouTube Shorts',limit:5000,limitSource:'confirmed',delivery:'transport'},
+  vk:{label:'ВКонтакте',limit:15000,limitSource:'confirmed',delivery:'transport'},
+  telegram:{label:'Telegram',limit:1024,limitSource:'confirmed',delivery:'transport'},
+  // MAX: 4000 символов и до 10 медиа — официальная страница площадки Onlypult, проверена 29.09.2026.
+  max:{label:'MAX',limit:4000,limitSource:'confirmed',delivery:'transport'},
+  /* 2ГИС: официальный лимит подписи не проверен, поэтому 2000 — наш предел хранения,
+     а не ограничение 2ГИС. Отправки из Synapse нет: площадка планируется и согласуется,
+     закрывается вручную. Профиль или endpoint Onlypult для неё не выдумывается. */
+  two_gis:{label:'2ГИС',limit:2000,limitSource:'internal',delivery:'manual'},
+});
+// Подписи задаются для всех семи площадок. Прежние пять сохранили свои лимиты без изменений.
+const CAPTION_PLATFORMS=Object.freeze(Object.fromEntries(Object.entries(PLAN_PLATFORMS)
+  .map(([id,item])=>[id,{label:item.label,limit:item.limit}])));
 /* Подтверждение внешней публикации (receipt): владелец фиксирует, что материал уже вышел на площадке
    через внешний сервис или нативный интерфейс. Это доказательство, а не доставка: провайдер не вызывается,
    одобрение не меняется, отправка не запускается.
@@ -150,7 +207,8 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
     ['approved_revision','INTEGER'],['approved_at','TEXT'],['approved_by','INTEGER'],['approved_by_name','TEXT'],
     ['media_sha256',"TEXT NOT NULL DEFAULT ''"],['expected_media_sha256',"TEXT NOT NULL DEFAULT ''"],['expected_media_file',"TEXT NOT NULL DEFAULT ''"],['external_id',"TEXT NOT NULL DEFAULT ''"],
     ['content_revision','INTEGER NOT NULL DEFAULT 1'],['meta',"TEXT NOT NULL DEFAULT '{}'"],['sort_order','INTEGER NOT NULL DEFAULT 0'],
-    ['partial_approved_revision','INTEGER'],['review_state',"TEXT NOT NULL DEFAULT 'draft'"],['review_comment',"TEXT NOT NULL DEFAULT ''"],['review_by_name','TEXT'],['review_at','TEXT']]){
+    ['partial_approved_revision','INTEGER'],['review_state',"TEXT NOT NULL DEFAULT 'draft'"],['review_comment',"TEXT NOT NULL DEFAULT ''"],['review_by_name','TEXT'],['review_at','TEXT'],
+    ['platform_options',"TEXT NOT NULL DEFAULT '{}'"]]){
     if(!postColumns.has(column))db.exec(`ALTER TABLE autoposting_posts ADD COLUMN ${column} ${type}`);
   }
   db.exec(`CREATE TABLE IF NOT EXISTS autoposting_reviews (
@@ -204,7 +262,7 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   const channelPlatform=(channel,fallback='')=>channel?.platform||channel?.id||fallback;
   const PLATFORM_REVIEW_STATES={pending:'Ждёт согласования',approved:'Согласовано',rejected:'На доработку'};
   const platformIdsOf=row=>{try{const value=JSON.parse(row.platform_ids||'[]');return Array.isArray(value)?value:[];}catch{return [];}};
-  const platformLabel=id=>CAPTION_PLATFORMS[id]?.label||RECEIPT_PLATFORMS[id]?.label||id;
+  const platformLabel=id=>PLAN_PLATFORMS[id]?.label||RECEIPT_PLATFORMS[id]?.label||id;
   const platformReviewRows=postId=>db.prepare(`SELECT platform_id platformId,state,content_revision contentRevision,comment,actor_name byName,created_at at
     FROM autoposting_platform_reviews WHERE post_id=? ORDER BY platform_id`).all(postId);
   /* Перенос прежнего решения по карточке в пер-площадочные записи. Делается только для каналов,
@@ -309,7 +367,8 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   function dto(row,owner) {
     return {id:row.id,companyCode:owner.code.toLowerCase(),revision:row.revision,contentRevision:row.content_revision,status:row.status,title:row.title,text:row.text,
       mediaUrls:JSON.parse(row.media_urls),platformIds:JSON.parse(row.platform_ids),scheduledAt:row.scheduled_at,timezone:row.timezone,
-      dayKey:row.day_key||'',captions:JSON.parse(row.captions||'{}'),origin:row.origin||'',readiness:readiness(row),approval:cardApprovalDto(row),platformApprovals:platformApprovals(row),
+      dayKey:row.day_key||'',captions:JSON.parse(row.captions||'{}'),origin:row.origin||'',platformOptions:JSON.parse(row.platform_options||'{}'),
+      readiness:readiness(row),approval:cardApprovalDto(row),platformApprovals:platformApprovals(row),
       mediaSha256:row.media_sha256||'',expectedMediaSha256:row.expected_media_sha256||'',expectedMediaFile:row.expected_media_file||'',externalId:row.external_id||'',
       externalReceipts:receiptsOf(row),
       continuedPlatforms:db.prepare('SELECT platform_id platformId,child_post_id childPostId,created_at createdAt FROM autoposting_split_links WHERE source_post_id=? ORDER BY platform_id').all(row.id)
@@ -621,6 +680,7 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
       else if(key==='profileRevision')result[key]=revision(value);
       else if(key==='dayKey')result[key]=dayKey(value);
       else if(key==='captions')result[key]=captions(value);
+      else if(key==='platformOptions')result[key]=platformOptions(value);
       else if(key==='origin')result[key]=text(value??'',200);
       else if(key==='mediaSha256')result[key]=sha256(value);
       else if(META_FIELDS.includes(key))result.meta={...(result.meta||{}),...meta({[key]:value})};
@@ -635,11 +695,11 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   }
   function create(code,body,actorId=null) {
     object(body,EDITABLE);const owner=company(db,code),current=information.get(code);
-    const data=normalized(body,{title:'',text:'',mediaUrls:[],platformIds:[],scheduledAt:null,timezone:current.profile.timezone||'UTC',profileRevision:current.revision,dayKey:'',captions:{},origin:'',mediaSha256:'',meta:{}});
+    const data=normalized(body,{title:'',text:'',mediaUrls:[],platformIds:[],scheduledAt:null,timezone:current.profile.timezone||'UTC',profileRevision:current.revision,dayKey:'',captions:{},origin:'',mediaSha256:'',platformOptions:{},meta:{}});
     if(data.profileRevision!==current.revision)fail(409,'Данные компании изменились','PROFILE_CHANGED');
     const time=iso(),order=(db.prepare('SELECT COALESCE(MAX(sort_order),0) m FROM autoposting_posts WHERE company_id=?').get(owner.id).m||0)+1;
-    const id=db.prepare(`INSERT INTO autoposting_posts(company_id,title,text,media_urls,platform_ids,scheduled_at,timezone,profile_revision,created_at,updated_at,created_by,day_key,captions,origin,media_sha256,meta,sort_order)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(owner.id,data.title,data.text,JSON.stringify(data.mediaUrls),JSON.stringify(data.platformIds),data.scheduledAt,data.timezone,data.profileRevision,time,time,actorId,data.dayKey,JSON.stringify(data.captions),data.origin,data.mediaSha256,JSON.stringify(data.meta||{}),order).lastInsertRowid;
+    const id=db.prepare(`INSERT INTO autoposting_posts(company_id,title,text,media_urls,platform_ids,scheduled_at,timezone,profile_revision,created_at,updated_at,created_by,day_key,captions,origin,media_sha256,platform_options,meta,sort_order)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(owner.id,data.title,data.text,JSON.stringify(data.mediaUrls),JSON.stringify(data.platformIds),data.scheduledAt,data.timezone,data.profileRevision,time,time,actorId,data.dayKey,JSON.stringify(data.captions),data.origin,data.mediaSha256,JSON.stringify(data.platformOptions||{}),JSON.stringify(data.meta||{}),order).lastInsertRowid;
     return get(Number(id),code);
   }
   function update(id,code,body,actor={}) {
@@ -658,12 +718,14 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
       // Содержимое = текст, подписи, материал, день, происхождение, метаданные. Плановая дата и часовой пояс — не содержимое:
       // их смена не сбрасывает согласование и не активирует отправку (запланированная карточка при этом возвращается в черновик).
       const contentChanged=data.title!==row.title||data.text!==row.text||JSON.stringify(data.mediaUrls)!==row.media_urls||data.dayKey!==(row.day_key||'')
-        ||JSON.stringify(data.captions)!==(row.captions||'{}')||data.origin!==(row.origin||'')||mediaSha!==(row.media_sha256||'')||nextMeta!==JSON.stringify(metaOf(row));
+        ||JSON.stringify(data.captions)!==(row.captions||'{}')||data.origin!==(row.origin||'')||mediaSha!==(row.media_sha256||'')||nextMeta!==JSON.stringify(metaOf(row))
+        // Публикуемые опции — часть содержимого: их правка создаёт новую версию и снимает согласование.
+        ||JSON.stringify(data.platformOptions)!==(row.platform_options||'{}');
       const queue=isQueueCard(row)||isQueueCard({day_key:data.dayKey,captions:JSON.stringify(data.captions)});
       const nextReview=contentChanged?(queue?'pending':'draft'):row.review_state||'draft';
-      db.prepare(`UPDATE autoposting_posts SET title=?,text=?,media_urls=?,platform_ids=?,scheduled_at=?,timezone=?,profile_revision=?,day_key=?,captions=?,origin=?,media_sha256=?,meta=?,
+      db.prepare(`UPDATE autoposting_posts SET title=?,text=?,media_urls=?,platform_ids=?,scheduled_at=?,timezone=?,profile_revision=?,day_key=?,captions=?,origin=?,media_sha256=?,platform_options=?,meta=?,
         status='draft',revision=revision+1,content_revision=content_revision+?,review_state=?,review_comment=CASE WHEN ? THEN '' ELSE review_comment END,updated_at=?,last_error_code=NULL WHERE id=?`)
-        .run(data.title,data.text,JSON.stringify(data.mediaUrls),JSON.stringify(data.platformIds),data.scheduledAt,data.timezone,data.profileRevision,data.dayKey,JSON.stringify(data.captions),data.origin,mediaSha,nextMeta,
+        .run(data.title,data.text,JSON.stringify(data.mediaUrls),JSON.stringify(data.platformIds),data.scheduledAt,data.timezone,data.profileRevision,data.dayKey,JSON.stringify(data.captions),data.origin,mediaSha,JSON.stringify(data.platformOptions),nextMeta,
           contentChanged?1:0,nextReview,contentChanged?1:0,iso(),row.id);
       db.prepare('DELETE FROM autoposting_deliveries WHERE post_id=?').run(row.id);
       // Согласование по каналам: снятые каналы забываются, новые заводятся как «Ждёт согласования»
@@ -786,7 +848,11 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   function recordReceipt(id,code,body,actor={}) {
     object(body,['platform','url','publishedAt','contentRevision','note']);
     if(typeof body.platform!=='string'||!Object.hasOwn(RECEIPT_PLATFORMS,body.platform))
-      fail(400,'Площадка подтверждения: instagram, tiktok, youtube_shorts, vk или telegram');
+      /* Подтверждение публикации принимается только там, где формат адреса записи проверен.
+         Для MAX и 2ГИС официальный проверяемый формат ссылки пока не подтверждён, поэтому
+         подтверждение по ним не принимается вовсе: произвольная ссылка или отметка «вышло»
+         доказательством публикации не считается, и незакрытая площадка остаётся видимой. */
+      fail(400,'Подтверждение публикации принимается для Instagram, TikTok, YouTube Shorts, ВКонтакте и Telegram. Для MAX и 2ГИС проверяемый формат ссылки ещё не подтверждён.');
     const platform=body.platform,link=receiptUrl(platform,body.url),publishedAt=utcDate(body.publishedAt);
     // Запланированное не считается опубликованным: дата выхода в будущем — это план, а не доказательство.
     if(Date.parse(publishedAt)>now())fail(400,'Дата публикации в будущем: запланированная запись ещё не опубликована','NOT_PUBLISHED_YET');
@@ -810,7 +876,7 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   /* Пакет материалов (schemaVersion 1, как готовит владелец): день числом, подписи объектами {text,account}, YouTube {title,text},
      media {file, poster, sha256, publicUrl, origin}. Приводится к карточке; одобрение пакета игнорируется — одобряет только владелец в ЛК. */
   function packageItem(item) {
-    object(item,['id','day','title','revision','status','approval','scheduledAt','timezone','durationSeconds','width','height','media','captions','cta','dayKey','text','mediaUrls','origin','platformIds','meta']);
+    object(item,['id','day','title','revision','status','approval','scheduledAt','timezone','durationSeconds','width','height','media','captions','cta','dayKey','text','mediaUrls','origin','platformIds','platformOptions','meta']);
     const out={};
     if(item.meta!==undefined&&item.meta!==null)Object.assign(out,meta(item.meta));
     if(item.dayKey!==undefined)out.dayKey=item.dayKey;
@@ -820,6 +886,8 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
     if(item.scheduledAt!==undefined)out.scheduledAt=item.scheduledAt;
     if(item.timezone!==undefined)out.timezone=item.timezone;
     if(item.platformIds!==undefined)out.platformIds=item.platformIds;
+    // Публикуемые опции проходят ту же закрытую нормализацию, что и в карточке.
+    if(item.platformOptions!==undefined)out.platformOptions=item.platformOptions;
     const media=item.media&&typeof item.media==='object'&&!Array.isArray(item.media)?item.media:null;
     if(media)object(media,['file','poster','sha256','publicUrl','posterUrl','origin','sourceUrl']);
     out.mediaUrls=Array.isArray(item.mediaUrls)?item.mediaUrls:[media?.publicUrl,media?.posterUrl].filter(v=>typeof v==='string'&&v);
@@ -853,15 +921,25 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
       const created=[],skipped=[],mediaPending=[];
       for(const raw of body.items){
         const item=packageItem(raw);
-        const data=normalized(item,{title:'',text:'',mediaUrls:[],platformIds:[],scheduledAt:null,timezone:current.profile.timezone||'UTC',profileRevision:current.revision,dayKey:'',captions:{},origin:'import',mediaSha256:'',meta:{}});
+        const data=normalized(item,{title:'',text:'',mediaUrls:[],platformIds:[],scheduledAt:null,timezone:current.profile.timezone||'UTC',profileRevision:current.revision,dayKey:'',captions:{},origin:'import',mediaSha256:'',platformOptions:{},meta:{}});
         if(!data.title)fail(400,'У карточки пакета нет названия');
         const expectedSha=item.expectedMediaSha256||'',expectedFile=item.expectedMediaFile||'',externalId=item.externalId||'';
         const duplicate=(externalId&&db.prepare("SELECT id FROM autoposting_posts WHERE company_id=? AND external_id=? AND status<>'cancelled' ORDER BY id LIMIT 1").get(owner.id,externalId))
           ||db.prepare("SELECT id FROM autoposting_posts WHERE company_id=? AND day_key=? AND title=? AND status<>'cancelled' ORDER BY id LIMIT 1").get(owner.id,data.dayKey,data.title);
-        if(duplicate){skipped.push({id:duplicate.id,dayKey:data.dayKey,title:data.title,externalId});continue;}
+        /* Повтор пакета дублей не создаёт. Но если у уже сохранённой карточки другие публикуемые
+           опции, это не «то же самое содержимое»: молча выдавать её за повтор нельзя — пропуск
+           помечается отдельной причиной, а прежняя карточка не переписывается. */
+        if(duplicate){
+          const stored=db.prepare('SELECT platform_options FROM autoposting_posts WHERE id=?').get(duplicate.id)?.platform_options||'{}';
+          const sameOptions=stored===JSON.stringify(data.platformOptions||{});
+          skipped.push({id:duplicate.id,dayKey:data.dayKey,title:data.title,externalId,
+            reason:sameOptions?'duplicate':'options_differ',
+            note:sameOptions?'':'У сохранённой карточки другие публикуемые опции: проверьте её вручную, пакет ничего не переписал.'});
+          continue;
+        }
         const time=iso(),order=(db.prepare('SELECT COALESCE(MAX(sort_order),0) m FROM autoposting_posts WHERE company_id=?').get(owner.id).m||0)+1;
-        const id=db.prepare(`INSERT INTO autoposting_posts(company_id,title,text,media_urls,platform_ids,scheduled_at,timezone,profile_revision,created_at,updated_at,created_by,day_key,captions,origin,expected_media_sha256,expected_media_file,external_id,meta,sort_order,review_state)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft')`).run(owner.id,data.title,data.text,JSON.stringify(data.mediaUrls),JSON.stringify(data.platformIds),data.scheduledAt,data.timezone,data.profileRevision,time,time,actorId,data.dayKey,JSON.stringify(data.captions),data.origin||'import',expectedSha,expectedFile,externalId,JSON.stringify(data.meta||{}),order).lastInsertRowid;
+        const id=db.prepare(`INSERT INTO autoposting_posts(company_id,title,text,media_urls,platform_ids,scheduled_at,timezone,profile_revision,created_at,updated_at,created_by,day_key,captions,origin,expected_media_sha256,expected_media_file,external_id,platform_options,meta,sort_order,review_state)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft')`).run(owner.id,data.title,data.text,JSON.stringify(data.mediaUrls),JSON.stringify(data.platformIds),data.scheduledAt,data.timezone,data.profileRevision,time,time,actorId,data.dayKey,JSON.stringify(data.captions),data.origin||'import',expectedSha,expectedFile,externalId,JSON.stringify(data.platformOptions||{}),JSON.stringify(data.meta||{}),order).lastInsertRowid;
         const view=dto(db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(id),owner);
         created.push(view);
         if(!data.mediaUrls.length)mediaPending.push({id:view.id,dayKey:view.dayKey,title:view.title,file:expectedFile,sha256:expectedSha});
@@ -935,13 +1013,20 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
       }
       const captionsAll=JSON.parse(row.captions||'{}');
       const captions=Object.fromEntries(Object.entries(captionsAll).filter(([platform])=>ids.includes(platform)));
+      /* Публикуемые опции переносятся вместе с площадками: продолжение должно выйти так же,
+         как утверждал владелец. Берутся только опции передаваемых площадок — опция чужой
+         площадки в дочерней карточке не нужна и отправлена быть не может. Значения
+         сохраняются как есть, включая явное false. */
+      const optionsAll=JSON.parse(row.platform_options||'{}');
+      const childOptions=Object.fromEntries(Object.entries(optionsAll).filter(([platform])=>ids.includes(platform)));
       const time=iso(),order=(db.prepare('SELECT COALESCE(MAX(sort_order),0) m FROM autoposting_posts WHERE company_id=?').get(owner.id).m||0)+1;
       // У ребёнка нет расписания, доставок и одобрений: нужна новая проверка и новое согласование.
       const childId=Number(db.prepare(`INSERT INTO autoposting_posts(company_id,title,text,media_urls,platform_ids,scheduled_at,timezone,profile_revision,created_at,updated_at,created_by,
-        day_key,captions,origin,media_sha256,expected_media_sha256,expected_media_file,meta,sort_order,review_state,content_revision,status)
-        VALUES(?,?,?,?,?,NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',1,'draft')`)
+        day_key,captions,origin,media_sha256,expected_media_sha256,expected_media_file,platform_options,meta,sort_order,review_state,content_revision,status)
+        VALUES(?,?,?,?,?,NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',1,'draft')`)
         .run(owner.id,row.title,row.text,row.media_urls,JSON.stringify(ids),row.timezone,row.profile_revision,time,time,actor.userId??null,
-          row.day_key||'',JSON.stringify(captions),row.origin||'',row.media_sha256||'',row.expected_media_sha256||'',row.expected_media_file||'',row.meta||'{}',order).lastInsertRowid);
+          row.day_key||'',JSON.stringify(captions),row.origin||'',row.media_sha256||'',row.expected_media_sha256||'',row.expected_media_file||'',
+          JSON.stringify(childOptions),row.meta||'{}',order).lastInsertRowid);
       const child=db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(childId);
       for(const value of ids){
         db.prepare(`INSERT INTO autoposting_platform_reviews(post_id,platform_id,state,content_revision,comment,actor_id,actor_name,created_at)
@@ -1148,5 +1233,5 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   function stop(){stopped=true;return running||Promise.resolve();}
   return {get,list,calendar,create,update,schedule,cancel,reconcile,drain,stop,invalidate,approve,reject,split,submitReview,reorder,importPackage,recordReceipt};
 }
-module.exports={createAutoposting,LEASE_MS,CAPTION_PLATFORMS,FORMATS,ROLES,REVIEW_STATES,META_FIELDS,RECEIPT_PLATFORMS,receiptFormat,
+module.exports={createAutoposting,LEASE_MS,PLAN_PLATFORMS,CAPTION_PLATFORMS,FORMATS,ROLES,REVIEW_STATES,META_FIELDS,RECEIPT_PLATFORMS,receiptFormat,
   CALENDAR_MAX_RANGE_DAYS,CALENDAR_UNDATED_LIMIT,CALENDAR_TARGET_DAYS,CALENDAR_MINIMUM_DAYS,CALENDAR_CRITICAL_DAYS};

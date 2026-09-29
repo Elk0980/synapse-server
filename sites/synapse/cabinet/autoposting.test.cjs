@@ -398,7 +398,10 @@ test('очередь контента: карточка дня с видео и 
     const approve=f.node('autoposting-approve');assert.ok(approve);assert.equal(approve.checked,false,'галочка по умолчанию снята');assert.equal(approve.disabled,false);
     await f.click('autoposting-preview');assert.match(f.node('autoposting-preview-content').textContent,/Instagram \/ Reels/);assert.match(f.node('autoposting-preview-content').textContent,/YouTube Shorts/);assert.match(f.node('autoposting-preview-content').textContent,/Telegram · 17 \/ 1024/);
     assert.ok(f.node('autoposting-preview-content').querySelector('video'));
-    assert.match(f.node('autoposting-preview-content').textContent,/TikTok[^]*вариант подготовлен, доставка не подключена/);assert.doesNotMatch(f.node('autoposting-preview-content').textContent,/Telegram · 17 \/ 1024 · вариант подготовлен/);
+    // Готовность доставки названа причиной, а не общей фразой: у TikTok канала нет, у 2ГИС отправки нет вовсе.
+    assert.match(f.node('autoposting-preview-content').textContent,/TikTok[^]*канал не настроен/);
+    assert.match(f.node('autoposting-preview-content').textContent,/2ГИС[^]*отправки из кабинета нет/);
+    assert.doesNotMatch(f.node('autoposting-preview-content').textContent,/Telegram · 17 \/ 1024 · канал не настроен/);
     assert.match(f.d.querySelector('.autoposting-queue-section').textContent,/доставка не подключена и не заявляется/);
     assert.equal(f.node('autoposting-schedule').disabled,true,'без одобрения в план не ставится');
     approve.checked=true;approve.dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();
@@ -410,9 +413,9 @@ test('очередь контента: карточка дня с видео и 
     assert.match(f.node('autoposting-approval').textContent,/Прежнее согласование относилось к версии содержимого 1/);assert.equal(f.node('autoposting-approve').checked,false);
     // импорт пакета
     f.set('autoposting-import-json',JSON.stringify({items:[{dayKey:'D2',title:'Д2',captions:{vk:'Два'},mediaUrls:['https://cdn.example.test/d2.mp4']},{dayKey:'D3',title:'Д3',captions:{tiktok:'Три'}}]}));
-    await f.click('autoposting-import');assert.match(f.node('autoposting-import-state').textContent,/Создано черновиков: 2, пропущено как дубли: 0/);
+    await f.click('autoposting-import');assert.match(f.node('autoposting-import-state').textContent,/Создано черновиков: 2\. Пропущенных материалов нет\./);
     assert.match(f.node('autoposting-queue').textContent,/D2/);assert.match(f.node('autoposting-queue').textContent,/D3[^]*без материала/);
-    await f.click('autoposting-import');assert.match(f.node('autoposting-import-state').textContent,/Создано черновиков: 0, пропущено как дубли: 2/);
+    await f.click('autoposting-import');assert.match(f.node('autoposting-import-state').textContent,/Создано черновиков: 0\. Уже были в плане \(тот же материал\) \(2\)/);
     assert.ok(f.calls.every(call=>!call.path.endsWith('/schedule')),'ни одной публикации');
   }finally{f.close();}
 });
@@ -594,5 +597,302 @@ test('контент-план: редактор не видит отклонен
     f.node('autoposting-select').value='1';f.node('autoposting-select').dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();
     assert.equal(f.node('autoposting-reject-form'),null);assert.ok(f.node('autoposting-submit-review'));assert.equal(f.node('autoposting-approve').disabled,true);
     assert.ok(!f.node('autoposting-queue').querySelector('[data-post-id="1"] [data-move="down"]').disabled);
+  }finally{f.close();}
+});
+
+/* Семь площадок в кабинете: план и согласование отдельно от готовности доставки.
+   Компании, числа и опции синтетические. */
+const SEVEN=['instagram','tiktok','youtube_shorts','vk','telegram','max','two_gis'];
+const platformBoxes=f=>[...f.node('autoposting-platforms').querySelectorAll('input[type=checkbox]')];
+
+test('флажки строятся по плану семи площадок, а не по подключённым каналам; неподключённая площадка честно помечена',async()=>{
+  const f=await fixture();try{
+    assert.deepEqual(platformBoxes(f).map(node=>node.value),SEVEN,'все семь доступны для выбора');
+    const text=f.node('autoposting-platforms').textContent;
+    assert.match(text,/Telegram — подключён/);
+    assert.match(text,/Instagram \/ Reels — канал не настроен/);
+    assert.match(text,/2ГИС — отправки из кабинета нет/);
+    assert.match(text,/остаётся в плане и опубликованной не становится/);
+  }finally{f.close();}
+});
+
+test('выбор Instagram, TikTok, MAX и 2ГИС не теряется после правки и перечитывания',async()=>{
+  const f=await fixture();try{
+    f.set('autoposting-title','Семь площадок');f.set('autoposting-text','Подтверждённый текст');
+    f.set('autoposting-media','https://cdn.example.test/d1.mp4');f.set('autoposting-date','2099-01-01T10:00');
+    for(const id of SEVEN)f.node('autoposting-platforms').querySelector(`[value=${id}]`).click();
+    await f.click('autoposting-save');await f.settle();
+    const created=f.calls.find(call=>call.method==='POST'&&call.path.endsWith('/posts'));
+    assert.deepEqual(JSON.parse(created.options.body).platformIds,SEVEN);
+    // Правка текста выбор не теряет: перерисовка карточки оставляет все семь отмеченными.
+    f.set('autoposting-text','Другой подтверждённый текст');await f.settle();
+    assert.deepEqual(platformBoxes(f).filter(node=>node.checked).map(node=>node.value),SEVEN,
+      'ни одна площадка не пропала после правки');
+    // Перечитывание сохранённой карточки тоже сохраняет выбор.
+    f.set('autoposting-select',String(f.posts.at(-1).id),'change');await f.settle();
+    assert.deepEqual(platformBoxes(f).filter(node=>node.checked).map(node=>node.value),SEVEN);
+  }finally{f.close();}
+});
+
+test('сохранённая площадка вне словаря кабинета получает свой флажок и остаётся в карточке',async()=>{
+  const entry={id:501,companyCode:'alvi',title:'Старая карточка',text:'Текст',revision:1,status:'draft',
+    mediaUrls:['https://cdn.example.test/d1.mp4'],platformIds:['telegram','yandex_maps'],scheduledAt:null,
+    timezone:'Asia/Irkutsk',profileRevision:2,deliveries:[],captions:{},
+    readiness:{ready:true,issues:[],mediaKind:'video'},approval:{approved:false,stale:false},platformApprovals:[]};
+  const f=await fixture({entries:[entry]});try{
+    f.set('autoposting-select','501','change');await f.settle();
+    const values=platformBoxes(f).map(node=>node.value);
+    assert.ok(values.includes('yandex_maps'),'неизвестный сохранённый канал показан отдельным флажком');
+    assert.match(f.node('autoposting-platforms').textContent,/сохранённая площадка, неизвестная этой версии кабинета/);
+    assert.deepEqual(platformBoxes(f).filter(node=>node.checked).map(node=>node.value).sort(),['telegram','yandex_maps']);
+  }finally{f.close();}
+});
+
+test('массовое решение применяется к пересечению отмеченных площадок, а карточка без них пропускается',async()=>{
+  const entries=[
+    {id:601,companyCode:'alvi',title:'С Telegram',text:'Текст',revision:1,contentRevision:1,status:'draft',dayKey:'D1',
+      mediaUrls:['https://cdn.example.test/d1.mp4'],platformIds:['telegram','instagram'],captions:{telegram:'ТГ'},
+      scheduledAt:null,timezone:'Asia/Irkutsk',profileRevision:2,deliveries:[],
+      readiness:{ready:true,issues:[],mediaKind:'video'},approval:{approved:false,stale:false},
+      platformApprovals:[{platformId:'telegram',state:'pending',approved:false,contentRevision:1},
+        {platformId:'instagram',state:'pending',approved:false,contentRevision:1}]},
+    {id:602,companyCode:'alvi',title:'Только 2ГИС',text:'Текст',revision:1,contentRevision:1,status:'draft',dayKey:'D2',
+      mediaUrls:['https://cdn.example.test/d2.mp4'],platformIds:['two_gis'],captions:{two_gis:'2ГИС'},
+      scheduledAt:null,timezone:'Asia/Irkutsk',profileRevision:2,deliveries:[],
+      readiness:{ready:true,issues:[],mediaKind:'video'},approval:{approved:false,stale:false},
+      platformApprovals:[{platformId:'two_gis',state:'pending',approved:false,contentRevision:1}]}];
+  const f=await fixture({entries,override:call=>{
+    if(call.path.endsWith('/autoposting/calendar')){
+      const url=new URL(call.url,'https://cabinet.test');
+      return {companyCode:call.code,from:url.searchParams.get('from'),to:url.searchParams.get('to'),
+        posts:entries.map(item=>({...item,effectiveDate:url.searchParams.get('from')})),undated:[]};
+    }
+    const read=call.path.match(/\/posts\/(\d+)$/);
+    if(read&&call.method==='GET')return entries.find(entry=>entry.id===Number(read[1]));
+    if(!/\/posts\/\d+\/approve$/.test(call.path))return undefined;
+    const id=Number(call.path.match(/\/posts\/(\d+)\//)[1]),body=JSON.parse(call.options.body);
+    const item=entries.find(entry=>entry.id===id);
+    const touched=body.platformIds||item.platformIds;
+    return {...item,revision:item.revision,contentRevision:item.contentRevision,
+      platformApprovals:item.platformApprovals.map(entry=>touched.includes(entry.platformId)
+        ?{...entry,state:'approved',approved:true,contentRevision:item.contentRevision}:entry),
+      approval:{approved:false,stale:false}};
+  }});
+  try{
+    f.d.querySelector('[data-daily-view=month]').click();await f.settle();
+    for(const id of ['601','602']){
+      const box=f.d.querySelector(`[data-daily-approve="${id}"]`);
+      assert.ok(box,'карточка '+id+' должна быть доступна для выбора');
+      box.click();
+    }
+    await f.settle();
+    f.d.querySelector('[name="autoposting-batch-scope"][value=subset]').click();
+    f.d.querySelector('[data-batch-platform=telegram]').click();
+    await f.click('autoposting-batch-approve');await f.settle();
+    const sent=f.calls.filter(call=>/\/posts\/\d+\/approve$/.test(call.path)).map(call=>({path:call.path,body:JSON.parse(call.options.body)}));
+    assert.equal(sent.length,1,'к карточке без отмеченных площадок решение не применялось');
+    assert.deepEqual(sent[0].body.platformIds,['telegram']);
+    const results=f.node('autoposting-batch-results').textContent;
+    assert.match(results,/Telegram/);
+    assert.match(results,/нет отмеченных площадок/);
+    assert.doesNotMatch(results,/Instagram/,'Instagram решением не затронут');
+  }finally{f.close();}
+});
+
+test('публикуемые опции сохраняются вместе с материалом; Story и Reel одновременно не принимаются',async()=>{
+  const f=await fixture();try{
+    f.set('autoposting-title','Опции');f.set('autoposting-text','Подтверждённый текст');
+    f.set('autoposting-media','https://cdn.example.test/d1.mp4');f.set('autoposting-date','2099-01-01T10:00');
+    f.node('autoposting-platforms').querySelector('[value=instagram]').click();
+    f.d.querySelector('[data-option="instagram.is_reels"]').click();
+    f.d.querySelector('[data-option="tiktok.disable_duet"]').click();
+    const select=f.d.querySelector('[data-option="tiktok.privacy"]');
+    select.value='SELF_ONLY';select.dispatchEvent(new f.w.Event('input',{bubbles:true}));
+    await f.click('autoposting-save');await f.settle();
+    const created=f.calls.find(call=>call.method==='POST'&&call.path.endsWith('/posts'));
+    assert.deepEqual(JSON.parse(created.options.body).platformOptions,
+      {instagram:{is_reels:true},tiktok:{disable_duet:true,privacy:'SELF_ONLY'}});
+    // Story и Reel одновременно — понятный отказ, ничего не отправляется.
+    const before=f.calls.length;
+    f.d.querySelector('[data-option="instagram.is_story"]').click();
+    await f.click('autoposting-save');await f.settle();
+    assert.match(f.node('autoposting-form-status').textContent,/разные режимы Instagram/);
+    assert.equal(f.calls.length,before,'запрос не ушёл');
+  }finally{f.close();}
+});
+
+test('подтверждение публикации не предлагается для MAX и 2ГИС',async()=>{
+  const entry={id:701,companyCode:'alvi',title:'Для расписки',text:'Текст',revision:1,contentRevision:1,status:'draft',
+    mediaUrls:['https://cdn.example.test/d1.mp4'],platformIds:['telegram'],scheduledAt:null,timezone:'Asia/Irkutsk',
+    profileRevision:2,deliveries:[],captions:{},readiness:{ready:true,issues:[],mediaKind:'video'},
+    approval:{approved:false,stale:false},platformApprovals:[]};
+  const f=await fixture({entries:[entry]});try{
+    f.set('autoposting-select','701','change');await f.settle();
+    const options=[...f.node('autoposting-receipt-platform').options].map(item=>item.value);
+    assert.deepEqual(options,['instagram','tiktok','youtube_shorts','vk','telegram']);
+    assert.match(f.node('autoposting-receipt-platform').closest('details,section,div').textContent,/формат ссылки ещё не подтверждён/);
+  }finally{f.close();}
+});
+
+/* Регрессии приёмки 29.09: дефекты 3 и 8, плюс показ опций в предпросмотре. */
+
+const optionsEntry=(over={})=>({id:801,companyCode:'alvi',title:'С опциями',text:'Текст',revision:1,contentRevision:1,
+  status:'draft',dayKey:'D1',mediaUrls:['https://cdn.example.test/d1.mp4'],platformIds:['tiktok','instagram','max'],
+  captions:{tiktok:'ТТ'},scheduledAt:'2099-01-01T03:00:00.000Z',timezone:'Asia/Irkutsk',profileRevision:2,deliveries:[],
+  platformOptions:{tiktok:{privacy:'PUBLIC_TO_EVERYONE',disable_comment:false}},
+  readiness:{ready:true,issues:[],mediaKind:'video'},approval:{approved:false,stale:false},platformApprovals:[],...over});
+
+test('сохранённое явное false переживает открытие и правку даты и не подменяется отсутствием поля',async()=>{
+  const f=await fixture({entries:[optionsEntry()]});try{
+    f.set('autoposting-select','801','change');await f.settle();
+    assert.equal(f.d.querySelector('[data-option="tiktok.disable_comment"]').checked,false);
+    assert.equal(f.d.querySelector('[data-option="tiktok.privacy"]').value,'PUBLIC_TO_EVERYONE');
+    // Меняется только дата — публикуемые опции должны уйти теми же, вместе с явным false.
+    f.set('autoposting-date','2099-02-02T10:00');
+    await f.click('autoposting-save');await f.settle();
+    const sent=f.calls.filter(call=>call.method!=='GET'&&/\/posts\/\d+$/.test(call.path)).pop();
+    assert.ok(sent,'материал сохранился');
+    assert.deepEqual(JSON.parse(sent.options.body).platformOptions,
+      {tiktok:{disable_comment:false,privacy:'PUBLIC_TO_EVERYONE'}},'явное false не потерялось');
+  }finally{f.close();}
+});
+
+test('прежняя карточка без опций не получает новых false при открытии, а снятый переключатель передаёт false',async()=>{
+  const legacy=optionsEntry({id:802,title:'Прежняя карточка',platformIds:['telegram','youtube_shorts'],
+    captions:{telegram:'ТГ'},platformOptions:{}});
+  const f=await fixture({entries:[legacy]});try{
+    f.set('autoposting-select','802','change');await f.settle();
+    f.set('autoposting-date','2099-03-03T10:00');
+    await f.click('autoposting-save');await f.settle();
+    const sent=f.calls.filter(call=>call.method!=='GET'&&/\/posts\/\d+$/.test(call.path)).pop();
+    assert.deepEqual(JSON.parse(sent.options.body).platformOptions,{},'простое открытие новых false не проставляет');
+  }finally{f.close();}
+  // А вот снятый владельцем переключатель — осознанное решение и уходит как false.
+  const g=await fixture({entries:[optionsEntry({id:803,platformOptions:{max:{pin_message:true}},platformIds:['max']})]});
+  try{
+    g.set('autoposting-select','803','change');await g.settle();
+    const node=g.d.querySelector('[data-option="max.pin_message"]');
+    assert.equal(node.checked,true);
+    node.click();await g.settle();
+    await g.click('autoposting-save');await g.settle();
+    const sent=g.calls.filter(call=>call.method!=='GET'&&/\/posts\/\d+$/.test(call.path)).pop();
+    assert.deepEqual(JSON.parse(sent.options.body).platformOptions,{max:{pin_message:false}},'снятие передаёт явное false');
+  }finally{g.close();}
+});
+
+test('предпросмотр показывает утверждаемое поведение площадок словами, а не названиями полей',async()=>{
+  const f=await fixture({entries:[optionsEntry({platformOptions:{instagram:{is_reels:true,disable_comment:true},
+    tiktok:{privacy:'SELF_ONLY',disable_duet:false},max:{pin_message:true}}})]});try{
+    f.set('autoposting-select','801','change');await f.settle();
+    await f.click('autoposting-preview');
+    const text=f.node('autoposting-preview-content').textContent;
+    assert.match(text,/Как это выйдет на площадках/);
+    assert.match(text,/Выйдет как Reel/);
+    assert.match(text,/Комментарии отключены/);
+    assert.match(text,/Кто увидит: Только для себя/);
+    assert.match(text,/Дуэты разрешены/,'явное false показано как снятое ограничение, а не пропущено');
+    assert.match(text,/Сообщение будет закреплено/);
+    assert.doesNotMatch(text,/is_reels|disable_comment|pin_message|SELF_ONLY/,'технических названий полей владельцу не показываем');
+  }finally{f.close();}
+});
+
+test('2000 символов у 2ГИС названы внутренним пределом поля, а не лимитом площадки',async()=>{
+  const f=await fixture();try{
+    const captions=f.d.querySelector('.autoposting-captions').textContent;
+    assert.match(captions,/официальный лимит не подтверждён/);
+    assert.match(captions,/внутренний предел поля/);
+    assert.doesNotMatch(captions,/Подтверждённые лимиты площадок:[^]*2ГИС — 2000/,'2ГИС не стоит в списке подтверждённых лимитов');
+    f.d.querySelector('[data-caption="two_gis"]').value='Текст';
+    f.d.querySelector('[data-caption="two_gis"]').dispatchEvent(new f.w.Event('input',{bubbles:true}));
+    await f.settle();
+    assert.match(f.d.querySelector('[data-caption-count="two_gis"]').textContent,/5 \/ 2000 · внутренний предел поля, лимит площадки не подтверждён/);
+    assert.match(f.d.querySelector('[data-caption-count="telegram"]').textContent,/^0 \/ 1024$/,'у подтверждённых площадок приписки нет');
+  }finally{f.close();}
+});
+
+/* Регрессии приёмки: разбор причин пропуска в импорте и честная подпись предела 2ГИС. */
+
+const importFixture=(skipped,created=[])=>fixture({override:call=>{
+  if(call.path!=='/content/crm/autoposting/import')return undefined;
+  return {companyCode:call.code,created,skipped,mediaPending:[]};
+}});
+
+test('импорт разделяет реальные дубли и несовпадающие настройки, а note выводится текстом',async()=>{
+  const f=await importFixture([
+    {id:11,dayKey:'D1',title:'Уже было',reason:'duplicate'},
+    {id:12,dayKey:'D2',title:'Другие опции',reason:'options_differ',
+      note:'У сохранённой карточки другие публикуемые опции: проверьте её вручную, пакет ничего не переписал. <b>x</b>'},
+    {id:13,dayKey:'D3',title:'Иное',reason:'media_missing',note:'Файл из пакета не найден'},
+  ],[{id:21,dayKey:'D4',title:'Новая'}]);
+  try{
+    f.set('autoposting-import-json',JSON.stringify({items:[{dayKey:'D1',title:'Уже было'}]}));
+    await f.click('autoposting-import');await f.settle();
+    const state=f.node('autoposting-import-state');
+    const text=state.textContent;
+    assert.match(text,/Создано черновиков: 1\./);
+    assert.match(text,/Уже были в плане \(тот же материал\) \(1\): №11 · D1 · Уже было/);
+    assert.match(text,/другие публикуемые опции \(1\): №12 · D2 · Другие опции — У сохранённой карточки другие публикуемые опции/);
+    assert.match(text,/Пропущены по другой причине \(1\): №13 · D3 · Иное — Файл из пакета не найден/);
+    assert.doesNotMatch(text,/пропущено как дубли/,'разные причины больше не свалены в дубли');
+    assert.equal(state.querySelector('b'),null,'note остаётся текстом, разметка из него не исполняется');
+    assert.match(text,/<b>x<\/b>/,'текст note показан как есть');
+    assert.match(f.node('autoposting-status').textContent,/Пакет импортирован: черновиков создано 1/);
+  }finally{f.close();}
+});
+
+test('пакет только с несовпадающими настройками не обещает созданных карточек',async()=>{
+  const f=await importFixture([{id:31,dayKey:'D1',title:'Тот же день',reason:'options_differ',
+    note:'У сохранённой карточки другие публикуемые опции: проверьте её вручную, пакет ничего не переписал.'}]);
+  try{
+    f.set('autoposting-import-json',JSON.stringify({items:[{dayKey:'D1',title:'Тот же день'}]}));
+    await f.click('autoposting-import');await f.settle();
+    const status=f.node('autoposting-status').textContent;
+    assert.match(status,/Новых черновиков не создано/);
+    assert.match(status,/другие публикуемые опции/);
+    assert.doesNotMatch(status,/Пакет импортирован как черновики/,'созданные карточки не обещаются');
+    assert.match(f.node('autoposting-import-state').textContent,/Создано черновиков: 0\./);
+    assert.match(f.node('autoposting-import-state').textContent,/Сохранённые карточки пакет не переписывает/);
+  }finally{f.close();}
+});
+
+test('пакет только из настоящих дублей называется своими словами',async()=>{
+  const f=await importFixture([{id:41,dayKey:'D1',title:'Повтор',reason:'duplicate'},{id:42,dayKey:'D2',title:'Повтор два'}]);
+  try{
+    f.set('autoposting-import-json',JSON.stringify({items:[{dayKey:'D1',title:'Повтор'}]}));
+    await f.click('autoposting-import');await f.settle();
+    assert.match(f.node('autoposting-status').textContent,/все материалы пакета уже были в плане/);
+    const text=f.node('autoposting-import-state').textContent;
+    assert.match(text,/Уже были в плане \(тот же материал\) \(2\)/);
+    assert.doesNotMatch(text,/другие публикуемые опции/);
+    assert.doesNotMatch(text,/по другой причине/);
+  }finally{f.close();}
+});
+
+test('неизвестная причина пропуска без созданных карточек не называется повтором',async()=>{
+  const f=await importFixture([{id:43,dayKey:'D1',title:'Проверить',reason:'media_missing',note:'Файл не найден'}]);
+  try{
+    f.set('autoposting-import-json',JSON.stringify({items:[{dayKey:'D1',title:'Проверить'}]}));
+    await f.click('autoposting-import');await f.settle();
+    const status=f.node('autoposting-status').textContent;
+    assert.match(status,/Новых черновиков не создано: материалы пропущены/);
+    assert.doesNotMatch(status,/уже были в плане/);
+    assert.match(f.node('autoposting-import-state').textContent,/Файл не найден/);
+  }finally{f.close();}
+});
+
+test('предпросмотр подписи 2ГИС называет предел внутренним, а не лимитом площадки',async()=>{
+  const entry={id:901,companyCode:'alvi',title:'Длинная подпись',text:'Общий текст',revision:1,contentRevision:1,
+    status:'draft',dayKey:'D1',mediaUrls:['https://cdn.example.test/d1.mp4'],platformIds:['two_gis','telegram'],
+    captions:{two_gis:'т'.repeat(2001),telegram:'ТГ'},scheduledAt:null,timezone:'Asia/Irkutsk',profileRevision:2,
+    deliveries:[],readiness:{ready:true,issues:[],mediaKind:'video'},approval:{approved:false,stale:false},platformApprovals:[]};
+  const f=await fixture({entries:[entry]});try{
+    f.set('autoposting-select','901','change');await f.settle();
+    await f.click('autoposting-preview');
+    const text=f.node('autoposting-preview-content').textContent;
+    assert.match(text,/2ГИС · 2001 \/ 2000 · внутренний предел поля, лимит площадки не подтверждён · превышен внутренний предел поля/);
+    assert.doesNotMatch(text,/2ГИС[^·]*· превышен лимит(?! )/,'у 2ГИС не пишем «превышен лимит» без пояснения');
+    assert.match(text,/Telegram · 2 \/ 1024/,'у подтверждённых площадок подпись прежняя');
+    assert.doesNotMatch(text,/Telegram · 2 \/ 1024 · внутренний предел/,'приписка только у 2ГИС');
+    assert.match(text,/Площадки: 2ГИС, Telegram/,'в шапке предпросмотра площадка названа по-человечески');
   }finally{f.close();}
 });
