@@ -36,7 +36,7 @@ const readBody = async (request) => {
   return request.body;
 };
 
-function setup({ runtime = null, reply = null, statusTtl = 0, clock = null, file = false, dir: reuseDir = null, db: reuseDb = null } = {}) {
+function setup({ runtime = null, reply = null, statusTtl = 0, clock = null, file = false, dir: reuseDir = null, db: reuseDb = null, attachmentText = {} } = {}) {
   const dir = reuseDir || fs.mkdtempSync(path.join(os.tmpdir(), 'project-chat-'));
   // file: true — база на диске: так тест может закрыть её и открыть заново, воспроизводя перезапуск сервера.
   const db = reuseDb || new DatabaseSync(file ? path.join(dir, 'chat.sqlite') : ':memory:');
@@ -60,7 +60,7 @@ function setup({ runtime = null, reply = null, statusTtl = 0, clock = null, file
   };
   const chat = createProjectChat({ db, authStore, assetsDir: dir, runnerUrl: 'http://hugh-runtime:8080',
     chatApiKey: 'secret-key', requireSession, requireCsrf, sendJson, readBody, fetchImpl, statusTtl,
-    cabinetUrl: 'https://synapse.example.test',
+    cabinetUrl: 'https://synapse.example.test', attachmentText,
     // Управляемые часы: срок отложенной отправки проверяется без ожидания реального времени.
     ...(clock ? { now: () => clock.now } : {}) });
   const session = (id) => ({ user: authStore.getById(id), csrf: `csrf-${id}` });
@@ -1502,4 +1502,28 @@ test('общая переписка второго сайта: два членс
  await addMember(chat,owner,[member.id],'alvi');
  await say(chat,session(member.id),'Собственная история','separate-history','avokado');
  assert.equal((await call(chat,{session:session(member.id),url:room('/resolve','avokado')})).payload.companyCode,'avokado');
+});
+
+test('фотографии доходят до модели текстом только после OCR, без чужих файлов и расхода попыток', async () => {
+  let payload = null, release;
+  const { chat, db, owner } = setup({
+    runtime: { connected: true, authenticated: true, state: 'ready', provider: 'codex', model: 'gpt-5-codex' },
+    attachmentText: { extract: () => new Promise(resolve => { release = resolve; }) },
+    reply: body => { payload = body; return { status: 200, payload: { text: 'Цены прочитаны', provider: 'codex', model: 'gpt-5-codex' } }; },
+  });
+  const upload = await call(chat, { session: owner, method: 'POST', url: room('/attachments'),
+    bytes: PNG, headers: { 'x-filename': 'price.png', 'content-type': 'image/png' } });
+  await call(chat, { session: owner, method: 'POST', url: room('/messages'),
+    body: { text: 'Хью, прочитай прайс', clientMessageId: 'ocr-test-0001', attachmentIds: [upload.payload.attachment.id] } });
+  await chat.processAIJobs();
+  assert.equal(payload, null, 'модель не вызывается с одними названиями вместо текста');
+  assert.equal(db.prepare('SELECT attempts FROM project_chat_ai_jobs').get().attempts, 0);
+  await new Promise(setImmediate); release('Массаж спины 60 минут — 2500 ₽'); await new Promise(setImmediate);
+  const foreign = chat.storeAttachment({ companyCode: OTHER, name: 'foreign.png', mime: 'image/png', bytes: PNG });
+  db.prepare('INSERT INTO project_chat_attachment_text VALUES(?,?,?,?,?,?)').run(foreign.id, OTHER, 'ready', 'ЧУЖОЙ ПРАЙС', 0, new Date().toISOString());
+  db.prepare("UPDATE project_chat_ai_jobs SET next_attempt_at='2000-01-01T00:00:00Z'").run();
+  await chat.processAIJobs();
+  assert.ok(payload.messages.at(-1).content.includes('Массаж спины 60 минут — 2500 ₽'));
+  assert.ok(!JSON.stringify(payload).includes('ЧУЖОЙ ПРАЙС'));
+  assert.ok(payload.system.includes('сомнительные цифры уточняй точечно'));
 });

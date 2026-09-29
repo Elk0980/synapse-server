@@ -1,5 +1,7 @@
 FROM node:24-alpine
 
+RUN apk add --no-cache tesseract-ocr tesseract-ocr-data-rus tesseract-ocr-data-eng poppler-utils
+
 WORKDIR /app
 COPY *.js ./
 COPY seed ./seed
