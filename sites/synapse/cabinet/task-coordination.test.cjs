@@ -34,9 +34,18 @@ test('owner board uses existing tasks, independent milestones and explicit all-c
     f.d.querySelector('[data-coord-edit]').click();await settle();
     const form=f.d.querySelector('[data-coord-form]');
     form.elements.namedItem('result').value='Проверенный результат';
+    const checked='2026-09-29T09:45:30.123';
+    assert.equal(form.elements.namedItem('verified-checkedAt').type,'datetime-local');
+    form.elements.namedItem('verified-state').value='confirmed';
+    form.elements.namedItem('verified-evidence').value='Проверено по квитанции';
+    form.elements.namedItem('verified-checkedAt').value=checked;
+    form.elements.namedItem('verifiedModel').value='Проверенная модель';
+    form.elements.namedItem('modelCheckedAt').value=checked;
     f.conflict();form.dispatchEvent(new f.w.Event('submit',{cancelable:true}));await settle();
     const sent=f.calls.find(c=>c.options?.method==='PUT');assert.equal(sent.options.body.revision,3);
     assert.equal(sent.options.body.data.result,'Проверенный результат');
+    assert.equal(sent.options.body.data.milestones.verified.checkedAt,new Date(checked).toISOString());
+    assert.equal(sent.options.body.data.modelCheckedAt,new Date(checked).toISOString());
     assert.match(form.textContent,/изменена другим исполнителем/);
     assert.equal(form.elements.namedItem('result').value,'Проверенный результат');
     assert.equal(form.querySelector('[type=submit]').disabled,false);
