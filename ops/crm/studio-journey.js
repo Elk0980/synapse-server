@@ -123,14 +123,14 @@ function createStudioJourneyHandler({journey,companyModuleContext,readJson,send}
     if(!/^\/studio-journey(?:\/|$)/.test(url.pathname))return false;
     const code=url.searchParams.get('companyCode'),permission=request.method==='GET'?'crm.view':'crm.edit';
     const {identity}=companyModuleContext(request,code,permission);
-    const commerce=/^\/studio-journey\/(\d+)\/commerce(?:\/(publication|payments))?$/.exec(url.pathname);
+    const commerce=/^\/studio-journey\/(\d+)\/commerce(?:\/(publication|payments|voids))?$/.exec(url.pathname);
     if(commerce){
       let result;
       if(request.method==='GET'&&!commerce[2])result=journey.commerce.get(code,commerce[1]);
       else if(request.method==='POST'&&commerce[2]){
         const body=await readJson(request);
         const fresh=companyModuleContext(request,code,permission);
-        result=journey.commerce[commerce[2]==='publication'?'publication':'payment'](code,commerce[1],body,fresh.identity.userId);
+        result=journey.commerce[commerce[2]==='publication'?'publication':commerce[2]==='voids'?'voidPayment':'payment'](code,commerce[1],body,fresh.identity.userId);
       }else fail(405,'Метод не поддерживается');
       send(response,200,result,{...cors,'cache-control':'no-store'});return true;
     }

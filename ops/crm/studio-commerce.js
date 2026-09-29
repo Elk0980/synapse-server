@@ -27,7 +27,7 @@ function createStudioCommerce(db,{now=Date.now}={}) {
       (p.status='published' OR EXISTS(SELECT 1 FROM autoposting_publication_receipts r WHERE r.post_id=p.id)) ORDER BY p.id DESC LIMIT 200`).all(owner.id);
   }
   function get(code,id){
-    const {owner,lead}=scope(code,id),history=events(owner,lead),payments=history.filter(row=>row.kind==='payment'),totals=new Map();
+    const {owner,lead}=scope(code,id),history=events(owner,lead),voided=new Set(history.filter(row=>row.kind==='void').map(row=>row.data.paymentId)),payments=history.filter(row=>row.kind==='payment'&&!voided.has(row.id)),totals=new Map();
     for(const row of payments){const p=row.data;if(!totals.has(p.currency))totals.set(p.currency,{currency:p.currency,receivedCents:0,refundedCents:0,netCents:0});
       const total=totals.get(p.currency);total[p.type==='received'?'receivedCents':'refundedCents']+=p.amountCents;total.netCents=total.receivedCents-total.refundedCents;}
     return {companyCode:owner.code.toLowerCase(),leadId:lead.id,revision:history.length,
@@ -35,7 +35,7 @@ function createStudioCommerce(db,{now=Date.now}={}) {
       basis:'Только записи этого журнала с основанием. Старые суммы сделки и абонементов не прибавлены. Это ручной учёт, не банковская сверка.'};
   }
   function write(code,id,kind,body,actorId,normalize){
-    object(body,kind==='publication'?['revision','requestId','postId','evidence']:['revision','requestId','type','amount','currency','reference','evidence','occurredAt','refundOf']);
+    object(body,kind==='void'?['revision','requestId','paymentId','evidence']:kind==='publication'?['revision','requestId','postId','evidence']:['revision','requestId','type','amount','currency','reference','evidence','occurredAt','refundOf']);
     revision(body.revision);const requestId=text(body.requestId,100,true);
     if(!/^[a-zA-Z0-9_-]{8,100}$/.test(requestId))fail(400,'Нужен уникальный номер изменения');
     const {revision:unused,...request}=body;
@@ -50,6 +50,7 @@ function createStudioCommerce(db,{now=Date.now}={}) {
       const eventId=Number(db.prepare('INSERT INTO studio_commerce_events(company_id,lead_id,kind,request_id,request_hash,data,actor_id,created_at) VALUES(?,?,?,?,?,?,?,?)')
         .run(owner.id,lead.id,kind,requestId,hash,JSON.stringify(data),actorId??null,new Date(now()).toISOString()).lastInsertRowid);
       if(kind==='payment')db.prepare('INSERT INTO studio_payment_references(company_id,reference,event_id) VALUES(?,?,?)').run(owner.id,data.reference,eventId);
+      if(kind==='void')db.prepare('DELETE FROM studio_payment_references WHERE company_id=? AND event_id=?').run(owner.id,data.paymentId);
       const result=get(code,id);db.exec('COMMIT');return result;
     }catch(error){db.exec('ROLLBACK');throw error;}
   }
@@ -83,11 +84,19 @@ function createStudioCommerce(db,{now=Date.now}={}) {
     }else if(body.refundOf!==undefined&&body.refundOf!==null)fail(400,'У оплаты не бывает исходного возврата');
     return {type:body.type,amountCents,currency:body.currency,reference,evidence,occurredAt,refundOf};
   });}
+  function voidPayment(code,id,body,actorId){return write(code,id,'void',body,actorId,({current})=>{
+    const evidence=text(body.evidence,1000,true);
+    if(!Number.isSafeInteger(body.paymentId)||body.paymentId<1)fail(400,'Выберите запись для исправления');
+    const original=current.payments.find(row=>row.id===body.paymentId);
+    if(!original)fail(409,'Действующая запись этой заявки не найдена');
+    if(current.payments.some(row=>row.data.refundOf===original.id))fail(409,'Сначала исправьте связанные возвраты. Оплату с действующими возвратами аннулировать нельзя.');
+    return {paymentId:original.id,reference:original.data.reference,evidence};
+  });}
   function cohort(code,leads,byLead){
     const owner=company(db,code),ids=new Set(leads.map(lead=>lead.id)),histories=new Map();
-    const rows=db.prepare(`SELECT e.lead_id,e.kind,e.data FROM studio_commerce_events e JOIN leads l ON l.id=e.lead_id
+    const rows=db.prepare(`SELECT e.id,e.lead_id,e.kind,e.data FROM studio_commerce_events e JOIN leads l ON l.id=e.lead_id
       WHERE e.company_id=? AND l.company_code=? COLLATE NOCASE ORDER BY e.id`).all(owner.id,owner.code);
-    for(const row of rows){if(!ids.has(row.lead_id))continue;if(!histories.has(row.lead_id))histories.set(row.lead_id,[]);histories.get(row.lead_id).push({kind:row.kind,...JSON.parse(row.data)});}
+    for(const row of rows){if(!ids.has(row.lead_id))continue;if(!histories.has(row.lead_id))histories.set(row.lead_id,[]);histories.get(row.lead_id).push({id:row.id,kind:row.kind,...JSON.parse(row.data)});}
     const groups=new Map();
     for(const lead of leads){
       const history=histories.get(lead.id)||[],source=history.filter(row=>row.kind==='publication').at(-1),postId=source?.postId??null;
@@ -95,12 +104,12 @@ function createStudioCommerce(db,{now=Date.now}={}) {
       const group=groups.get(postId),stages=byLead.get(lead.id)||[];group.leads++;
       if(stages.some(type=>['booked','rescheduled'].includes(type)))group.booked++;
       if(stages.includes('visited'))group.visited++;
-      const payments=history.filter(row=>row.kind==='payment');if(payments.some(row=>row.type==='received'))group.paidLeads++;
+      const voided=new Set(history.filter(row=>row.kind==='void').map(row=>row.paymentId)),payments=history.filter(row=>row.kind==='payment'&&!voided.has(row.id));if(payments.some(row=>row.type==='received'))group.paidLeads++;
       for(const p of payments){if(!group.totals.has(p.currency))group.totals.set(p.currency,{currency:p.currency,receivedCents:0,refundedCents:0,netCents:0});
         const total=group.totals.get(p.currency);total[p.type==='received'?'receivedCents':'refundedCents']+=p.amountCents;total.netCents=total.receivedCents-total.refundedCents;}
     }
     return [...groups.values()].map(group=>({...group,totals:[...group.totals.values()]}));
   }
-  return {get,publication,payment,cohort};
+  return {get,publication,payment,voidPayment,cohort};
 }
 module.exports={createStudioCommerce};

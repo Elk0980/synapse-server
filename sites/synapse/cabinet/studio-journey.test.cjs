@@ -70,3 +70,14 @@ test('commerce discards late data after a company switch and supports retrying f
   let resolve;const f=fixture({query:()=>new Promise(done=>resolve=done)});try{const pending=f.api.mountCommerce(f.node,f.ctx,1,'Asia/Irkutsk',()=>{});f.ctx.selectedProjectId='avokado';resolve({...commerce(),basis:'PRIVATE COMPANY'});await pending;assert.doesNotMatch(f.node.textContent,/PRIVATE COMPANY/);}finally{f.close();}
   let reads=0;const g=fixture({query:()=>{if(++reads===1)throw Error('Offline');return commerce();}});try{await g.api.mountCommerce(g.node,g.ctx,1,'Asia/Irkutsk',()=>{});g.node.querySelector('[data-retry]').click();await tick();assert.equal(reads,2);assert.ok(g.node.querySelector('[data-commerce-payment]'));}finally{g.close();}
 });
+
+test('correction form requires reason, preserves payment history and posts only void',async()=>{
+  const payment={id:7,kind:'payment',createdAt:'2026-09-29T09:00:00Z',data:{type:'received',amountCents:150000,currency:'RUB',reference:'check-7',evidence:'Чек',occurredAt:'2026-09-29T09:00:00Z'}};
+  const initial={...commerce(),revision:1,payments:[payment],history:[payment],totals:[{currency:'RUB',netCents:150000}]};
+  const f=fixture({query:call=>call.method==='GET'?initial:{...commerce(),revision:2,history:[payment,{id:8,kind:'void',createdAt:'2026-09-29T10:00:00Z',data:{paymentId:7,reference:'check-7',evidence:call.body.evidence}}]}});
+  try{await f.api.mountCommerce(f.node,f.ctx,1,'Asia/Irkutsk',()=>{});const form=f.node.querySelector('[data-commerce-void]');assert.equal(form.elements.evidence.required,true);
+    form.elements.evidence.value='Ошибка <img src=x>';form.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));await tick();
+    const writes=f.calls.filter(c=>c.method==='POST');assert.equal(writes.length,1);assert.equal(writes[0].path,'/studio-journey/1/commerce/voids');assert.equal(writes[0].body.paymentId,7);assert.equal(writes[0].body.revision,1);
+    assert.match(f.node.textContent,/Аннулирована ошибочная запись № check-7/);assert.match(f.node.textContent,/Оплата 1500/);assert.equal(f.node.querySelector('img'),null);assert.equal(f.node.querySelector('[data-commerce-void]'),null);
+  }finally{f.close();}
+});

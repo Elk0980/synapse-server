@@ -98,5 +98,13 @@ test('real content→CRM pilot routes enforce session, CSRF, edit rights and com
   assert.equal((await through('writer',payment,{method:'POST',body:paymentBody})).body.revision,1);
   const link=`/studio-journey/${id}/commerce/publication?companyCode=avokado`;
   assert.equal((await through('writer',link,{method:'POST',body:{revision:1,requestId:'source-http-001',postId,evidence:'Local proof'}})).status,409,'draft is not evidence of a publication');
+  const voidRoute=`/studio-journey/${id}/commerce/voids?companyCode=avokado`;
+  const voidBody={revision:1,requestId:'void-http-0001',paymentId:paid.body.payments[0].id,evidence:'Local correction'};
+  assert.equal((await through('reader',voidRoute,{method:'POST',body:voidBody})).status,403);
+  assert.equal((await through('writer',voidRoute,{method:'POST',body:voidBody,headers:{'x-csrf-token':''}})).status,403);
+  assert.equal((await through('writer',voidRoute.replace('avokado','alvi'),{method:'POST',body:voidBody})).status,403);
+  const corrected=await through('writer',voidRoute,{method:'POST',body:voidBody});assert.equal(corrected.status,200,JSON.stringify(corrected.body));
+  assert.deepEqual(corrected.body.totals,[]);assert.equal(corrected.body.history.length,2);
+  assert.equal((await through('writer',voidRoute,{method:'POST',body:voidBody})).body.revision,2);
   const db=new DatabaseSync(crmDb);try{assert.equal(db.prepare('SELECT COUNT(*) n FROM autoposting_deliveries').get().n,0);assert.equal(db.prepare('SELECT COUNT(*) n FROM studio_journey_events').get().n,1);assert.equal(db.prepare('SELECT COUNT(*) n FROM autoposting_posts').get().n,7);}finally{db.close();}
 });

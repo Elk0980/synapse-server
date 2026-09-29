@@ -73,3 +73,43 @@ test('cohort groups current attribution and ledger once, without importing old s
   assert.deepEqual(api.cohort('alvi',[],new Map()),[]);
   assert.equal(api.get('alvi',1).publications.length,1);
 });
+
+test('void preserves audit, allows corrected reference, and replay never recreates voided payment',t=>{
+  const {api,body}=fixture(t),input=body();const original=api.payment('alvi',1,input).payments[0];
+  const correction={revision:1,requestId:'void-0001',paymentId:original.id,evidence:'Ошибка суммы, сверено с чеком'};
+  let value=api.voidPayment('alvi',1,correction,7);
+  assert.equal(value.revision,2);assert.deepEqual(value.payments,[]);assert.deepEqual(value.totals,[]);
+  assert.equal(value.history[0].data.amountCents,100000);assert.equal(value.history[1].actorId,7);
+  assert.equal(api.voidPayment('alvi',1,correction,7).revision,2);
+  assert.equal(api.payment('alvi',1,input).payments.length,0);
+  assert.throws(()=>api.voidPayment('alvi',1,{...correction,evidence:'Другая причина'}),e=>e.status===409);
+  assert.throws(()=>api.voidPayment('alvi',1,{...correction,revision:2,requestId:'void-0002'}),e=>e.status===409);
+  const cohort=api.cohort('alvi',[{id:1}],new Map());assert.equal(cohort[0].paidLeads,0);assert.deepEqual(cohort[0].totals,[]);
+  value=api.payment('alvi',1,body({reference:input.reference,amount:950}));
+  assert.equal(value.totals[0].netCents,95000);assert.equal(value.history.length,3);
+  api.voidPayment('alvi',1,correction,7);
+  assert.throws(()=>api.payment('alvi',3,{...body({reference:input.reference}),revision:0}),e=>e.status===409);
+});
+
+test('void checks dependencies, company and lead scope, evidence and revision',t=>{
+  const {api,body}=fixture(t);let value=api.payment('alvi',1,body());const received=value.payments[0].id;
+  value=api.payment('alvi',1,body({type:'refund',refundOf:received,amount:100}));const refund=value.payments[1].id;
+  const correction={revision:2,requestId:'void-0001',paymentId:received,evidence:'Исправление ошибки'};
+  assert.throws(()=>api.voidPayment('alvi',1,correction),e=>e.status===409);
+  assert.throws(()=>api.voidPayment('avokado',1,correction),e=>e.status===404);
+  assert.throws(()=>api.voidPayment('avokado',2,{...correction,revision:0}),e=>e.status===409);
+  assert.throws(()=>api.voidPayment('alvi',3,{...correction,revision:0}),e=>e.status===409);
+  assert.throws(()=>api.voidPayment('alvi',1,{...correction,paymentId:refund,evidence:''}),e=>e.status===400);
+  assert.throws(()=>api.voidPayment('alvi',1,{...correction,paymentId:refund,revision:1}),e=>e.status===409);
+  value=api.voidPayment('alvi',1,{...correction,paymentId:refund});assert.equal(value.totals[0].netCents,100000);
+  value=api.voidPayment('alvi',1,{...correction,revision:3,requestId:'void-0002'});assert.deepEqual(value.totals,[]);
+  assert.throws(()=>api.payment('alvi',1,body({type:'refund',refundOf:received,amount:100})),e=>e.status===409);
+});
+
+test('failed reference release rolls back void and totals',t=>{
+  const {api,db,body}=fixture(t);const value=api.payment('alvi',1,body());
+  db.exec("CREATE TRIGGER reject_release BEFORE DELETE ON studio_payment_references BEGIN SELECT RAISE(ABORT,'test release failure'); END");
+  assert.throws(()=>api.voidPayment('alvi',1,{revision:1,requestId:'void-0001',paymentId:value.payments[0].id,evidence:'Ошибка'}),/test release failure/);
+  assert.equal(api.get('alvi',1).revision,1);assert.equal(api.get('alvi',1).totals[0].netCents,100000);
+  assert.equal(db.prepare('SELECT count(*) n FROM studio_payment_references').get().n,1);
+});
