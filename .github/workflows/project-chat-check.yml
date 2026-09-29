@@ -25,6 +25,8 @@ on:
       - 'ops/crm/company-knowledge*'
       - 'ops/crm/company-catalog-import*'
       - 'ops/crm/company-information*'
+      - 'ops/crm/studio-commerce*'
+      - 'ops/crm/studio-journey*'
       - 'ops/crm/social-stats*'
       - 'ops/crm/social-baselines*'
       - 'ops/crm/platform-demand*'
@@ -53,6 +55,8 @@ on:
       - 'ops/crm/company-knowledge*'
       - 'ops/crm/company-catalog-import*'
       - 'ops/crm/company-information*'
+      - 'ops/crm/studio-commerce*'
+      - 'ops/crm/studio-journey*'
       - 'ops/crm/social-stats*'
       - 'ops/crm/social-baselines*'
       - 'ops/crm/platform-demand*'
@@ -146,6 +150,10 @@ jobs:
       - name: Тесты источников и актуальности данных компании
         timeout-minutes: 10
         run: node --test ops/crm/company-catalog-import.test.js ops/crm/company-knowledge.test.js ops/crm/company-facts.test.js ops/crm/company-information.test.js ops/crm/company-information-check.test.js
+
+      - name: Тесты пути клиента и учёта оплат
+        timeout-minutes: 10
+        run: node --test ops/crm/studio-commerce.test.js ops/crm/studio-journey.test.js
 
       - name: Тесты сервиса контента и прав координации
         timeout-minutes: 10

@@ -1,6 +1,7 @@
 'use strict';
 
 const {company, fail, object, text, timezone, utcDate, revision} = require('./company-information');
+const {createStudioCommerce}=require('./studio-commerce');
 const TYPES = ['booked', 'confirmed', 'visited', 'no_show', 'rescheduled', 'cancelled', 'membership'];
 const LABELS = {new:'Новая заявка',booked:'Записан',confirmed:'Подтвердил визит',visited:'Пришёл',no_show:'Не пришёл',rescheduled:'Перенос',cancelled:'Отменил запись',membership:'Купил абонемент'};
 function stateOf(events) {
@@ -14,6 +15,7 @@ function stateOf(events) {
   return state;
 }
 function createStudioJourney(db,{now=Date.now}={}) {
+  const commerce=createStudioCommerce(db,{now});
   db.exec(`CREATE TABLE IF NOT EXISTS studio_journey_events (
     id INTEGER PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id), lead_id INTEGER NOT NULL REFERENCES leads(id),
     type TEXT NOT NULL, occurred_at TEXT NOT NULL, appointment_at TEXT, timezone TEXT NOT NULL,
@@ -109,11 +111,11 @@ function createStudioJourney(db,{now=Date.now}={}) {
       for(const target of [summary,groups.get(source)]){target.leads++;for(const [metric,types]of [['booked',['booked','rescheduled']],['confirmed',['confirmed']],['visited',['visited']],['memberships',['membership']]])if(events.some(e=>types.includes(e)))target[metric]++;
         target.noShows+=events.filter(e=>e==='no_show').length;target.reschedules+=events.filter(e=>e==='rescheduled').length;target.completedVisits+=events.filter(e=>e==='visited').length;}}
     for(const target of [summary,...groups.values()]){const completed=target.completedVisits+target.noShows;target.noShowRate=completed?Math.round(target.noShows/completed*1000)/10:null;target.membershipRate=target.visited?Math.round(target.memberships/target.visited*1000)/10:null;}
-    return {companyCode:owner.code.toLowerCase(),timezone:owner.timezone||'UTC',summary,sources:[...groups.values()],total:leads.length,offset,
+    return {companyCode:owner.code.toLowerCase(),timezone:owner.timezone||'UTC',summary,sources:[...groups.values()],publications:commerce.cohort(code,leads,byLead),total:leads.length,offset,
       leads:leads.slice(offset,offset+50).map(l=>{const card=get(code,l.id);return {leadId:card.leadId,name:card.name,contact:card.contact,source:card.source,createdAt:card.createdAt,state:card.state};}),
       basis:'Когорта заявок, созданных в выбранный период. Этапы — по фактическим отметкам; старые статусы и суммы не учитываются.'};
   }
-  return {get,record,remove,list};
+  return {get,record,remove,list,commerce};
 }
 
 function createStudioJourneyHandler({journey,companyModuleContext,readJson,send}){
@@ -121,6 +123,17 @@ function createStudioJourneyHandler({journey,companyModuleContext,readJson,send}
     if(!/^\/studio-journey(?:\/|$)/.test(url.pathname))return false;
     const code=url.searchParams.get('companyCode'),permission=request.method==='GET'?'crm.view':'crm.edit';
     const {identity}=companyModuleContext(request,code,permission);
+    const commerce=/^\/studio-journey\/(\d+)\/commerce(?:\/(publication|payments|voids))?$/.exec(url.pathname);
+    if(commerce){
+      let result;
+      if(request.method==='GET'&&!commerce[2])result=journey.commerce.get(code,commerce[1]);
+      else if(request.method==='POST'&&commerce[2]){
+        const body=await readJson(request);
+        const fresh=companyModuleContext(request,code,permission);
+        result=journey.commerce[commerce[2]==='publication'?'publication':commerce[2]==='voids'?'voidPayment':'payment'](code,commerce[1],body,fresh.identity.userId);
+      }else fail(405,'Метод не поддерживается');
+      send(response,200,result,{...cors,'cache-control':'no-store'});return true;
+    }
     const match=/^\/studio-journey(?:\/(\d+)(?:\/(events)(?:\/(\d+))?)?)?$/.exec(url.pathname);
     if(!match)fail(404,'Раздел не найден','NOT_FOUND');
     let result,status=200;

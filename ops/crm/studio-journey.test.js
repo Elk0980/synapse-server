@@ -68,4 +68,15 @@ test('HTTP adapter authorizes company and permission before reading or mutating 
   await assert.rejects(handler({method:'GET'},{},new URL('https://test/studio-journey/1?companyCode=avokado')),e=>e.status===403);
   await handler({method:'POST',body:{revision:0,requestId:'http-request-1',type:'booked',appointmentAt:'2026-09-17T08:00:00Z'}},{},new URL('https://test/studio-journey/1/events?companyCode=alvi'));
   assert.equal(calls.at(-1).permission,'crm.edit');assert.equal(responses.at(-1).status,201);
+  await handler({method:'GET'},{},new URL('https://test/studio-journey/1/commerce?companyCode=alvi'));
+  assert.equal(calls.at(-1).permission,'crm.view');assert.deepEqual(responses.at(-1).result.totals,[]);
+  await handler({method:'POST',body:{revision:0,requestId:'payment-http-001',type:'received',amount:500,currency:'RUB',reference:'receipt1',evidence:'Чек1',occurredAt:'2026-09-17T07:00:00Z'}},{},new URL('https://test/studio-journey/1/commerce/payments?companyCode=alvi'));
+  assert.equal(responses.at(-1).result.totals[0].netCents,50000);assert.equal(calls.at(-1).permission,'crm.edit');
+});
+
+test('commerce rechecks rights after reading the body and records nothing if access was revoked',async t=>{
+  const f=fixture(t);let revoked=false;
+  const handler=createStudioJourneyHandler({journey:f.api,companyModuleContext(){if(revoked)throw Object.assign(Error('Revoked'),{status:403});return {identity:{userId:9}};},readJson:async()=>{revoked=true;return {};},send:()=>assert.fail('should not send success')});
+  await assert.rejects(handler({method:'POST'},{},new URL('https://test/studio-journey/1/commerce/payments?companyCode=alvi')),e=>e.status===403);
+  assert.equal(f.api.commerce.get('alvi',1).revision,0);
 });

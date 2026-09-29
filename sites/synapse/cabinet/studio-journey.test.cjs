@@ -3,6 +3,7 @@ const {JSDOM}=require('jsdom');
 const scripts=['company-information.js','studio-journey.js'].map(file=>fs.readFileSync(require.resolve('./'+file),'utf8'));
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const card=()=>({companyCode:'alvi',leadId:1,name:'Анна <img src=x>',contact:'+7111',createdAt:'2026-09-16T00:00:00Z',source:'vk',revision:0,timezone:'Asia/Irkutsk',state:{status:'new',appointmentAt:null},events:[]});
+const commerce=()=>({companyCode:'alvi',leadId:1,revision:0,publication:null,payments:[],totals:[],history:[],publications:[{id:1,title:'Пост <img src=x>'}],basis:'Ручной учёт с основанием'});
 function fixture({edit=true,query}={}){
   const dom=new JSDOM('<section id="view" class="studio-journey"></section>',{url:'https://test.local',runScripts:'outside-only'}),w=dom.window,node=w.document.getElementById('view'),calls=[];
   w.SbCabinet={registerView(){}};scripts.forEach(script=>w.eval(script));
@@ -41,5 +42,42 @@ test('summary shares the dashboard period and source, and ignores superseded rep
     pending[1]({summary,timezone:'Asia/Irkutsk',sources:[{...summary,source:'CURRENT'}]});await second;
     pending[0]({summary,timezone:'Asia/Irkutsk',sources:[{...summary,source:'STALE'}]});await first;
     assert.match(f.node.textContent,/CURRENT/);assert.doesNotMatch(f.node.textContent,/STALE/);assert.match(f.node.textContent,/Каждая заявка считается один раз/);
+  }finally{f.close();}
+});
+
+test('commerce shows read-only history safely and never writes while opening',async()=>{
+  const data=commerce();data.publication={postId:1,title:'Пост <img src=x>'};
+  const f=fixture({edit:false,query:()=>data});try{
+    await f.api.mountCommerce(f.node,f.ctx,1,'Asia/Irkutsk',()=>{});
+    assert.equal(f.node.querySelector('form'),null);assert.equal(f.node.querySelector('img'),null);
+    assert.match(f.node.textContent,/Пост <img src=x>/);assert.match(f.node.textContent,/Нет записей/);
+    assert.equal(f.calls.length,1);assert.equal(f.calls[0].method,'GET');
+  }finally{f.close();}
+});
+
+test('payment form retries the identical request after timeout and converts company time',async()=>{
+  let attempts=0;const f=fixture({query:call=>{if(call.method==='GET')return commerce();if(++attempts===1)throw Error('Timeout');return {...commerce(),revision:1};}});
+  try{await f.api.mountCommerce(f.node,f.ctx,1,'Asia/Irkutsk',()=>{});
+    const form=f.node.querySelector('[data-commerce-payment]');
+    Object.assign(form.elements.amount,{value:'1500.25'});form.elements.reference.value='receipt-7';form.elements.evidence.value='Кассовый чек';form.elements.occurredAt.value='2026-09-29T17:00';
+    const submit=()=>form.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));submit();await tick();assert.match(f.node.textContent,/Timeout/);submit();await tick();
+    const writes=f.calls.filter(c=>c.method==='POST');assert.equal(writes.length,2);assert.deepEqual(writes[0].body,writes[1].body);
+    assert.equal(writes[0].body.amount,1500.25);assert.equal(writes[0].body.occurredAt,'2026-09-29T09:00:00.000Z');assert.equal(writes[0].body.refundOf,undefined);assert.match(f.node.textContent,/Запись сохранена/);
+  }finally{f.close();}
+});
+
+test('commerce discards late data after a company switch and supports retrying failed reads',async()=>{
+  let resolve;const f=fixture({query:()=>new Promise(done=>resolve=done)});try{const pending=f.api.mountCommerce(f.node,f.ctx,1,'Asia/Irkutsk',()=>{});f.ctx.selectedProjectId='avokado';resolve({...commerce(),basis:'PRIVATE COMPANY'});await pending;assert.doesNotMatch(f.node.textContent,/PRIVATE COMPANY/);}finally{f.close();}
+  let reads=0;const g=fixture({query:()=>{if(++reads===1)throw Error('Offline');return commerce();}});try{await g.api.mountCommerce(g.node,g.ctx,1,'Asia/Irkutsk',()=>{});g.node.querySelector('[data-retry]').click();await tick();assert.equal(reads,2);assert.ok(g.node.querySelector('[data-commerce-payment]'));}finally{g.close();}
+});
+
+test('correction form requires reason, preserves payment history and posts only void',async()=>{
+  const payment={id:7,kind:'payment',createdAt:'2026-09-29T09:00:00Z',data:{type:'received',amountCents:150000,currency:'RUB',reference:'check-7',evidence:'Чек',occurredAt:'2026-09-29T09:00:00Z'}};
+  const initial={...commerce(),revision:1,payments:[payment],history:[payment],totals:[{currency:'RUB',netCents:150000}]};
+  const f=fixture({query:call=>call.method==='GET'?initial:{...commerce(),revision:2,history:[payment,{id:8,kind:'void',createdAt:'2026-09-29T10:00:00Z',data:{paymentId:7,reference:'check-7',evidence:call.body.evidence}}]}});
+  try{await f.api.mountCommerce(f.node,f.ctx,1,'Asia/Irkutsk',()=>{});const form=f.node.querySelector('[data-commerce-void]');assert.equal(form.elements.evidence.required,true);
+    form.elements.evidence.value='Ошибка <img src=x>';form.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));await tick();
+    const writes=f.calls.filter(c=>c.method==='POST');assert.equal(writes.length,1);assert.equal(writes[0].path,'/studio-journey/1/commerce/voids');assert.equal(writes[0].body.paymentId,7);assert.equal(writes[0].body.revision,1);
+    assert.match(f.node.textContent,/Аннулирована ошибочная запись № check-7/);assert.match(f.node.textContent,/Оплата 1500/);assert.equal(f.node.querySelector('img'),null);assert.equal(f.node.querySelector('[data-commerce-void]'),null);
   }finally{f.close();}
 });
