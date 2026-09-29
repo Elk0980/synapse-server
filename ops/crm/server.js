@@ -2569,7 +2569,7 @@ async function route(request, response) {
     else if (url.pathname === '/autoposting/starter-plan' && request.method === 'GET') result=studioContentPlan.get(code);
     else if (url.pathname === '/autoposting/starter-plan' && request.method === 'POST') {result=studioContentPlan.import(code,await readJson(request),identity.userId);status=result.created?201:200;}
     else {
-      const match=/^\/autoposting\/posts(?:\/(\d+)(?:\/(schedule|cancel|reconcile|approve|reject|submit-review|receipts))?)?$/.exec(url.pathname);
+      const match=/^\/autoposting\/posts(?:\/(\d+)(?:\/(schedule|cancel|reconcile|approve|reject|split|submit-review|receipts))?)?$/.exec(url.pathname);
       if (url.pathname==='/autoposting/order' && request.method==='PUT') {
         result=autoposting.reorder(code,await readJson(request),identity);
         return send(response,status,result,{...cors,'cache-control':'no-store'});
@@ -2593,6 +2593,13 @@ async function route(request, response) {
         if (identity.role!=='owner') fail(403,'Отмечать публикацию вне кабинета может только владелец',{code:'FORBIDDEN'});
         const receipt=autoposting.recordReceipt(id,code,await readJson(request),identity);
         return send(response,receipt.created?201:200,receipt.post,{...cors,'cache-control':'no-store'});
+      }
+      // Продолжение работы по оставшимся площадкам: создаёт связанный черновик, ничего не публикует.
+      // Права те же, что у правки материалов этой компании; новых прав и режимов не вводится.
+      if (action==='split') {
+        if (request.method!=='POST') fail(405,'Метод не поддерживается');
+        const outcome=autoposting.split(id,code,await readJson(request),identity);
+        return send(response,outcome.created?201:200,outcome,{...cors,'cache-control':'no-store'});
       }
       if (action==='submit-review') {
         if (request.method!=='POST') fail(405,'Метод не поддерживается');

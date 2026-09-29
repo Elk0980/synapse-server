@@ -134,3 +134,16 @@
   .autoposting-platform-previews pre,.autoposting-preview-section pre { font-size:0.85rem; }
   .autoposting-view a,.autoposting-view span { overflow-wrap:anywhere; }
 }
+
+/* Согласование по площадкам: состояние и причина видны у каждой площадки отдельно. */
+.autoposting-platform-approvals{list-style:none;margin:8px 0;padding:0;display:grid;gap:6px}
+.autoposting-platform-approvals>li{border:1px solid var(--line,#d9dee5);border-radius:8px;padding:8px 10px}
+.autoposting-platform-approvals>li[data-platform-state="approved"]{border-color:#2f7d4f}
+.autoposting-platform-approvals>li[data-platform-state="rejected"]{border-color:#b23b3b}
+.autoposting-platform-approvals>li>p{margin:4px 0 0}
+.autoposting-batch-reason{display:block;margin:10px 0 6px}
+.autoposting-batch-reason textarea{width:100%;box-sizing:border-box}
+@media (max-width:640px){
+  .autoposting-platform-approvals>li{padding:10px}
+  #autoposting-batch button{width:100%;margin-top:6px}
+}
