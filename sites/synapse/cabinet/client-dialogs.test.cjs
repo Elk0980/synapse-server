@@ -134,6 +134,18 @@ test('смена компании: запросы бота отменяются,
   f.w.close();
 });
 
+test('диалог открывает одну CRM-карточку через CSRF, повторный клик заблокирован, чужая квитанция отклоняется',async()=>{
+  const f=fixture({company:'alvi'});let mounted=0;
+  f.ctx.crmQuery=async()=>{};f.w.SbCabinet.studioJourney={mountCard:async(node,ctx,id)=>{assert.equal(ctx,f.ctx);assert.equal(id,42);mounted++;node.textContent='Карточка визита';}};
+  try{f.render();await f.answer('/content/alvi/client-bot',bot());await f.answer('/content/alvi/client-dialogs?limit=50',{dialogs:[{id:7,name:'Клиент',unread:0}],nextCursor:null});
+    f.d.querySelector('[data-dialog-id="7"]').click();await tick();await f.answer('/content/alvi/client-dialogs/7',{dialog:{id:7,name:'Клиент',unread:0},messages:[]});
+    const button=f.d.querySelector('[data-dialog-crm-open]');button.click();button.click();await tick();
+    assert.equal(f.calls.filter(c=>c.url.endsWith('/7/crm')).length,1);assert.equal(f.find('/content/alvi/client-dialogs/7/crm','POST').options.headers['X-CSRF-Token'],'csrf-1');
+    await f.answer('/content/alvi/client-dialogs/7/crm',{companyCode:'alvi',leadId:42,created:true},'POST');assert.equal(mounted,1);assert.match(f.container.textContent,/Карточка CRM №42 создана/);
+    button.click();await tick();await f.answer('/content/alvi/client-dialogs/7/crm',{companyCode:'palitra-love',leadId:43},'POST');assert.equal(mounted,1);assert.match(f.container.textContent,/другой компании/);
+  }finally{f.w.close();}
+});
+
 test('заявка показывает состояние обработки менеджером отдельно от статуса уведомления', async () => {
   const f = fixture();
   f.render();

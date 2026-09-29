@@ -168,7 +168,24 @@ function render(container, context, { site, alive, api, mutation, onTransportCha
       const d = data.dialog;
       thread.innerHTML = `<header class="client-dialogs__head"><h3>${h(d.name)}${d.username ? ` <span>@${h(d.username)}</span>` : ""}</h3>
         <p>Диалог №${h(d.id)}${d.source ? ` · источник: ${h(d.source)}` : ""}${data.order ? ` · заявка №${h(data.order.id)}` : ""}</p></header>
+        <section data-dialog-crm><button type="button" data-dialog-crm-open>Создать или открыть карточку CRM</button><p data-dialog-crm-status role="status">Карточка связывает это обращение с записью на визит. Сообщения и уведомления не отправляются.</p><div data-dialog-crm-card class="studio-journey"></div></section>
         <div class="client-dialogs__messages">${data.messages.map(messageHtml).join("") || "<p>Сообщений нет.</p>"}</div>`;
+      const crmButton=thread.querySelector('[data-dialog-crm-open]'),crmStatus=thread.querySelector('[data-dialog-crm-status]'),crmCard=thread.querySelector('[data-dialog-crm-card]');
+      const companyAtStart=context.selectedProjectId;
+      crmButton.addEventListener('click',async()=>{
+        if(crmButton.disabled||!alive()||version!==openVersion)return;
+        if(!cabinet.studioJourney||!context.crmQuery){crmStatus.textContent='Обновите кабинет, чтобы открыть карточку CRM.';return;}
+        crmButton.disabled=true;crmStatus.textContent='Открываем карточку обращения…';
+        try{
+          const result=await api(`${base}/client-dialogs/${encodeURIComponent(id)}/crm`,mutation('POST'));
+          if(!alive()||version!==openVersion||!crmCard.isConnected)return;
+          if(result.companyCode!==companyAtStart||!Number.isSafeInteger(result.leadId)||result.leadId<1)throw Error('Карточка относится к другой компании');
+          crmStatus.textContent=`Карточка CRM №${result.leadId}${result.created?' создана':' открыта'}.`;
+          await cabinet.studioJourney.mountCard(crmCard,context,result.leadId);
+          crmButton.textContent='Обновить карточку CRM';
+        }catch(error){if(alive()&&version===openVersion)crmStatus.textContent=error.message||'CRM недоступна. Повторное открытие найдёт ту же карточку.';}
+        finally{if(crmButton.isConnected)crmButton.disabled=false;}
+      });
       if (d.unread) {
         await api(`${base}/client-dialogs/${encodeURIComponent(id)}/read`, mutation("POST"));
         if (!alive()) return;

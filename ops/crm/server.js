@@ -17,6 +17,7 @@ const { createCompanyInformation } = require('./company-information');
 const { createAutoposting } = require('./autoposting');
 const { createAutopostingTransport } = require('./autoposting-transport');
 const { createStudioJourney, createStudioJourneyHandler } = require('./studio-journey');
+const { createClientIntakes, createClientIntakesHandler } = require('./client-intakes');
 const { createMediaMentorRollout, createMediaMentorRolloutHandler } = require('./media-mentor-rollout');
 const { createMediaMentor } = require('./media-mentor');
 const { createMediaMentorTransfer } = require('./media-mentor-transfer');
@@ -595,6 +596,7 @@ const autoposting = createAutoposting(db, {information: companyInformation, tran
 const studioJourney = createStudioJourney(db,{quoteService:(code,id,version)=>companyInformation.quote(code,id,version)});
 const studioContentPlan = createStudioContentPlan(db,{autoposting,information:companyInformation});
 const handleStudioJourney = createStudioJourneyHandler({journey:studioJourney,companyModuleContext,readJson,send});
+const handleClientIntakes = createClientIntakesHandler({intakes:createClientIntakes(db),companyModuleContext,readJson,send});
 const mediaMentorRollout = createMediaMentorRollout(db);
 const handleMediaMentorRollout = createMediaMentorRolloutHandler({rollout:mediaMentorRollout,companyModuleContext,readJson,send});
 const mediaMentor = createMediaMentor(db);
@@ -2534,6 +2536,7 @@ async function route(request, response) {
     return send(response,status,result,{...cors,'cache-control':'no-store'});
   }
 
+  if (await handleClientIntakes(request,response,url,cors)) return;
   if (await handleStudioJourney(request,response,url,cors)) return;
   if (await handleMediaMentorRollout(request,response,url,cors)) return;
   if (await handleMediaMentor(request,response,url,cors)) return;

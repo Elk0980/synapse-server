@@ -28,6 +28,7 @@ on:
       - 'ops/crm/studio-commerce*'
       - 'ops/crm/studio-journey*'
       - 'ops/crm/booking-catalog*'
+      - 'ops/crm/client-intakes*'
       - 'ops/crm/social-stats*'
       - 'ops/crm/social-baselines*'
       - 'ops/crm/platform-demand*'
@@ -59,6 +60,7 @@ on:
       - 'ops/crm/studio-commerce*'
       - 'ops/crm/studio-journey*'
       - 'ops/crm/booking-catalog*'
+      - 'ops/crm/client-intakes*'
       - 'ops/crm/social-stats*'
       - 'ops/crm/social-baselines*'
       - 'ops/crm/platform-demand*'
@@ -155,7 +157,7 @@ jobs:
 
       - name: Тесты пути клиента и учёта оплат
         timeout-minutes: 10
-        run: node --test ops/crm/studio-commerce.test.js ops/crm/studio-journey.test.js ops/crm/booking-catalog.test.js
+        run: node --test ops/crm/studio-commerce.test.js ops/crm/studio-journey.test.js ops/crm/booking-catalog.test.js ops/crm/client-intakes.test.js
 
       - name: Тесты сервиса контента и прав координации
         timeout-minutes: 10

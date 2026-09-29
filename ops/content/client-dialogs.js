@@ -855,6 +855,12 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
     db.prepare('UPDATE client_dialogs SET unread=0 WHERE id=?').run(dialog.id);
     return { ok: true };
   }
+  function crmIntake(site,dialogId){
+    const found=botForSite(site),view=dialogView(site,dialogId);
+    return {companyCode:found.bot.companyCode,body:{botKey:found.key,dialogId:view.dialog.id,
+      telegramUserId:view.dialog.telegramUserId,name:view.dialog.name,
+      firstQuestion:view.messages.find(m=>m.direction==='in'&&m.authorType==='client')?.text||'',source:view.dialog.source||'client_bot'}};
+  }
   function attachmentFile(site, attachmentId) {
     const found = botForSite(site);
     const id = Number(attachmentId);
@@ -923,7 +929,7 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
 
   return { receive, callback, pendingJobs, acknowledge, heartbeat, bridgeState, saveAttachment, markAttachment, issueOrderLink, createOperatorCode,
     revokeOperator, transportReady, status, listDialogs, dialogView, markRead, attachmentFile, handleInternal, handleCabinet,
-    enabledFor: (site) => Boolean(botForSite(site)?.enabled), storage };
+    crmIntake, enabledFor: (site) => Boolean(botForSite(site)?.enabled), storage };
 }
 
 module.exports = { createClientDialogs, JOB_PREFIX, WORK_LABELS };
