@@ -603,7 +603,12 @@ test('план против правил курса показывает зам�
     assert.ok(block, 'блок проверки должен появиться');
     assert.match(block.textContent, /25\.09\.2026/);
     assert.match(block.textContent, /худшим/);
-    assert.equal(f.node.querySelector('[data-rules-level="violation"]') !== null, true);
+    // День недели показывается как рекомендация курса и прямо так и подписан.
+    const line = f.node.querySelector('[data-rules-level="recommendation"]');
+    assert.ok(line, 'замечание по дню недели показывается как рекомендация курса');
+    assert.match(line.textContent, /Рекомендация курса/);
+    assert.equal(f.node.querySelector('[data-rules-level="violation"]'), null,
+      'нарушением план из-за одного дня недели не объявляется');
   } finally { f.close(); }
 });
 

@@ -28,25 +28,32 @@ test('план по дням курса замечаний не собирает
   } finally { r.close(); }
 });
 
-test('пятница и суббота названы худшими днями, а не просто отмечены', () => {
+/* День недели — гипотеза курса, а не факт об этой компании: проверить её можно только
+   на собственной статистике. Поэтому худший день называется рекомендацией курса, а не
+   нарушением плана, и текст говорит это вслух. */
+test('пятница и суббота названы худшими днями курса — как рекомендация, а не нарушение', () => {
   const r = rules();
   try {
     const result = r.value.review({days: [reel(SUN), reel(TUE), reel('2026-09-25')]});
     const worst = result.issues.find((item) => item.date === '2026-09-25');
-    assert.equal(worst.level, 'violation');
+    assert.equal(worst.level, 'recommendation');
     assert.match(worst.text, /пятница/);
     assert.match(worst.text, /худшим/);
+    assert.match(worst.text, /не ошибка плана/);
+    assert.equal(result.issues.some((item) => item.level === 'violation'), false,
+      'один только день недели нарушением не объявляется');
   } finally { r.close(); }
 });
 
-test('понедельник и среда — замечание помягче: это не худший день, а не тот', () => {
+test('понедельник и среда — та же рекомендация курса по дню недели', () => {
   const r = rules();
   try {
     const result = r.value.review({days: [reel('2026-09-21'), reel(THU)]});
     const item = result.issues.find((x) => x.date === '2026-09-21');
-    assert.equal(item.level, 'warning');
+    assert.equal(item.level, 'recommendation');
     assert.match(item.text, /понедельник/);
     assert.match(item.text, /воскресенье, вторник и четверг/);
+    assert.match(item.text, /не ошибка плана/);
   } finally { r.close(); }
 });
 
@@ -72,12 +79,14 @@ test('больше трёх роликов на набор в неделю — �
   } finally { r.close(); }
 });
 
-test('пустая неделя внутри плана — это пропуск публикаций', () => {
+test('пустая неделя внутри плана называется рекомендацией курса, а не запретом', () => {
   const r = rules();
   try {
     const result = r.value.review({days: [reel(TUE), reel('2026-10-06')]});
     assert.match(texts(result), /ни одного ролика на набор/);
-    assert.match(texts(result), /Пропускать публикации/);
+    // Механическое правило курса не выдаётся за доказанный запрет или гарантию результата.
+    assert.match(texts(result), /его рекомендация по регулярности/);
+    assert.equal(/не разрешает|нельзя|единственный источник/.test(texts(result)), false, texts(result));
   } finally { r.close(); }
 });
 

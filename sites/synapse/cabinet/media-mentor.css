@@ -276,6 +276,38 @@
 .mentor-rules h3 { margin-bottom: 4px; }
 .mentor-rules [data-rules-level="violation"] strong { color: #b3261e; }
 .mentor-rules [data-rules-level="warning"] strong { color: #8a6d00; }
+/* Рекомендация курса по дню недели — не ошибка плана, поэтому и цвет у неё спокойный. */
+.mentor-rules [data-rules-level="recommendation"] strong { color: #3a5a8a; }
+
+/* Версии площадок: вкладки в строку, открыт один текст. Семь идей по семь версий не должны
+   превращаться в 49 развёрнутых блоков — поэтому панели переключаются, а не раскрываются все. */
+.mentor-variants { margin:12px 0; border:1px solid rgba(0,0,0,.12); border-radius:10px; padding:10px; }
+.mentor-variant-tabs { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:8px; }
+.mentor-variant-tab { border:1px solid rgba(0,0,0,.18); border-radius:999px; background:transparent;
+  padding:4px 12px; font-size:.86rem; cursor:pointer; }
+.mentor-variant-tab[aria-pressed="true"] { background:rgba(0,0,0,.08); font-weight:600; }
+.mentor-variant-tab[data-variant-state="approved"] { border-color:#2e7d32; }
+.mentor-variant-tab[data-variant-state="rejected"] { border-color:#b3261e; }
+.mentor-variant-tab[data-variant-state="excluded"],
+.mentor-variant-tab[data-variant-state="empty"] { opacity:.72; }
+.mentor-variant-panel textarea { width:100%; }
+.mentor-variant-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:8px; }
+.mentor-variant-actions label { flex:1 1 220px; }
+.mentor-day-order { display:flex; gap:8px; margin:8px 0; }
+.mentor-variants-plan { margin:12px 0; padding:12px; border:1px solid rgba(0,0,0,.12); border-radius:10px; }
+.mentor-variants-plan h3 { margin:0 0 6px; }
+/* Только чтение: текст версии показывается как текст, а не как поле ввода. */
+.mentor-variant-read { white-space:pre-wrap; margin:4px 0; }
+.mentor-variant-tab[aria-pressed="true"] { outline:2px solid rgba(0,0,0,.25); outline-offset:1px; }
+/* Архив прежнего согласования: читается, но не соперничает с действующим путём. */
+.mentor-archive { opacity:.9; }
+.mentor-archive > summary { font-weight:600; }
+.mentor-day-order { align-items:center; flex-wrap:wrap; }
+.mentor-day-order [data-move-note] { flex:1 1 100%; }
+@media (max-width: 720px) {
+  .mentor-variant-tabs { gap:4px; }
+  .mentor-variant-actions { flex-direction:column; align-items:stretch; }
+}
 .mentor-reminders { margin-top: 8px; }
 .mentor-reminders summary { cursor: pointer; }
 

@@ -23,6 +23,37 @@
   const transferredDay = (data, index) => index >= 0 && data.transfer?.current?.planRevision === data.plan?.revision
     ? data.transfer.current.items.find((row) => row.dayIndex === index) : null;
   const dayStatus = (draft) => !draft ? 'plan' : Object.hasOwn(CARD_STATUS, draft.cardStatus) ? draft.cardStatus : 'unknown';
+  /* Материал может иметь карточки двух происхождений: прежнюю — по номеру дня — и по одной
+     на согласованную версию площадки. Обе показываются вместе, один и тот же номер карточки
+     не задваивается, а состояние берётся самое продвинутое: черновик не должен затирать уже
+     опубликованное или неизвестное — иначе интерфейс скажет, что отправлять ещё нечего. */
+  const STATUS_RANK = {plan: 0, cancelled: 1, draft: 2, failed: 3, scheduled: 4,
+    publishing: 5, needs_review: 6, unknown: 7, published: 8};
+  const variantDrafts = (data, item) => (item && item.ideaId && data.variantTransfer
+    ? (data.variantTransfer.items || []).filter((row) => row.ideaId === item.ideaId) : []);
+  function cardsFor(data, index, item) {
+    const out = new Map();
+    const legacy = transferredDay(data, index);
+    if (legacy) out.set(legacy.postId, {...legacy, origin: 'day', platform: legacy.planPlatform});
+    for (const row of variantDrafts(data, item)) if (!out.has(row.postId)) out.set(row.postId, {...row, origin: 'variant'});
+    return [...out.values()];
+  }
+  const cardsStatus = (cards) => (cards.length
+    ? cards.map(dayStatus).reduce((best, next) => (STATUS_RANK[next] > STATUS_RANK[best] ? next : best))
+    : 'plan');
+  const cardsMedia = (cards) => cards.find((card) => card.hasMedia) || null;
+  // Площадки, у которых у этой идеи есть версия. По ним фильтруется план: идея в Telegram
+  // с версией для ВКонтакте обязана находиться по фильтру «ВКонтакте».
+  /* Согласование ведётся ОДНИМ путём — по версиям площадок. Прежнее решение по плану целиком
+     оставило бы два независимых ответа на один вопрос: наверху «8 из 8 согласовано», внизу
+     «ждёт согласования» со своими кнопками. Поэтому для плана, у которого сервер отдаёт
+     состояния версий, прежний блок превращается в архив: данные, история и медиа остаются
+     читаемыми, но второго набора кнопок нет. */
+  const variantAware = (data) => Boolean(data.plan) && Array.isArray(data.variants);
+  const rowPlatforms = (item) => {
+    const list = Object.keys(item.variants || {});
+    return list.length ? list : [item.platform].filter(Boolean);
+  };
   const day = (value) => (/^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? String(value).split('-').reverse().join('.') : '—');
   const moment = (value) => (value && Number.isFinite(Date.parse(value))
     ? new Date(value).toLocaleDateString('ru-RU', {day: '2-digit', month: '2-digit', year: 'numeric'}) : '—');
@@ -338,15 +369,166 @@
     return '';
   }
 
+  /* ---------- Версии площадок ----------
+     Одна идея — до семи независимых текстов, по одному на площадку. Показываются компактно:
+     переключатели площадок в строку, открыт один текст. Раскрывать семь карточек на каждый
+     из семи дней нельзя — это 49 развёрнутых блоков на экране.
+     Плановая дата и время версии — ориентир контент-плана. Очередь публикации задаётся
+     отдельно, в «Автопостинге», и об этом сказано прямо в интерфейсе. */
+  const VARIANT_STATUS = {approved: 'согласовано', rejected: 'на доработку', pending: 'ждёт решения',
+    empty: 'текста нет', excluded: 'не публикуем'};
+  const PLAN_TIME_NOTE = 'Плановая дата и время версии — ориентир контент-плана, а не очередь ' +
+    'публикации. Время отправки задаётся отдельно, в разделе «Автопостинг».';
+  const DIRTY_NOTE = 'Сначала сохраните план: в форме есть несохранённые правки, и решение ' +
+    'относилось бы к прежнему тексту.';
+  // Кто смотрит раздел: решения по версиям принимает только владелец кабинета, как и решение
+  // по плану целиком. Остальные видят тексты и состояния, но не кнопки.
+  let viewer = {decide: false, edit: false};
+
+  const variantPlatforms = (data) => data.vocabulary.platforms
+    .filter((platform) => data.brief.fields.platforms.includes(platform.id));
+  const variantStateOf = (data, ideaId, platform) => (data.variants || [])
+    .find((state) => state.ideaId === ideaId && state.platform === platform) || null;
+  const variantCardOf = (data, ideaId, platform) => (data.variantTransfer?.items || [])
+    .find((item) => item.ideaId === ideaId && item.platform === platform) || null;
+
+  function variantTab(platform, data, ideaId, active) {
+    const state = variantStateOf(data, ideaId, platform.id);
+    const label = state ? VARIANT_STATUS[state.status] || state.status : 'новая';
+    return `<button type="button" class="mentor-variant-tab" data-variant-tab="${esc(platform.id)}"
+      data-variant-state="${esc(state ? state.status : 'pending')}"
+      aria-pressed="${active ? 'true' : 'false'}">${esc(platform.label)} · ${esc(label)}</button>`;
+  }
+
+  function variantPanel(platform, variant, data, item, index, hidden) {
+    const vocabulary = data.vocabulary;
+    const assets = [{id: '', label: 'Ничего не выбрано'},
+      ...data.brief.fields.assets.map((asset) => ({id: asset.id, label: asset.title}))];
+    const limit = (vocabulary.captionLimits || {})[platform.id] || null;
+    const ideaId = item.ideaId || '';
+    const state = variantStateOf(data, ideaId, platform.id);
+    const card = variantCardOf(data, ideaId, platform.id);
+    const decided = state && state.decision
+      ? `<p class="mentor-note" data-variant-decision>${esc(VARIANT_STATUS[state.status] || state.status)}${state.reason ? ` · ${esc(state.reason)}` : ''}${state.actorName ? ` · ${esc(state.actorName)}` : ''}</p>`
+      : '<p class="mentor-note" data-variant-decision>Решения по этой версии ещё нет.</p>';
+    // Расписка переноса показывается у своей версии, а не по старому номеру дня.
+    const transferred = card
+      ? `<p class="mentor-note" data-variant-card="${esc(card.postId)}">Перенесено в черновик №${esc(card.postId)} · ${esc(card.cardStatus)}${card.hasMedia ? ' · медиа загружено' : ' · без медиа'}. Отправку и время задаёт «Автопостинг» после отдельного одобрения материала.</p>`
+      : '<p class="mentor-note" data-variant-card="">В черновики ещё не переносилась.</p>';
+    const actions = index >= 0 && ideaId
+      ? (viewer.decide
+        ? `<div class="mentor-variant-actions">
+          <button type="button" class="plain-button" data-variant-decide="approved"
+            data-variant-idea-id="${esc(ideaId)}" data-variant-platform="${esc(platform.id)}">Согласовать версию</button>
+          <button type="button" class="plain-button" data-variant-decide="rejected"
+            data-variant-idea-id="${esc(ideaId)}" data-variant-platform="${esc(platform.id)}">Вернуть на доработку</button>
+          <button type="button" class="plain-button" data-variant-decide="withdrawn"
+            data-variant-idea-id="${esc(ideaId)}" data-variant-platform="${esc(platform.id)}">Отозвать согласование</button>
+          <label>Причина возврата (обязательна)<input data-variant-comment maxlength="2000" placeholder="Что исправить в этой версии"></label>
+          <span data-variant-state-line role="status"></span>
+        </div>`
+        : '<p class="mentor-note" data-variant-readonly>Решения по версиям принимает владелец кабинета.</p>')
+      : '<p class="mentor-note">Сначала сохраните план — затем версию можно согласовать.</p>';
+    const editable = viewer.edit
+      ? `<label data-variant-text-label>Текст для площадки «${esc(platform.label)}»${limit ? ` · до ${esc(limit)} символов` : ''}
+          <textarea data-variant-field="text"${limit ? ` maxlength="${esc(limit)}"` : ''} rows="4">${esc(variant.text || '')}</textarea></label>
+        <details class="mentor-day-more"><summary>Подробности версии</summary>
+          <label>Зацепка<input data-variant-field="hook" maxlength="500" value="${esc(variant.hook || '')}"></label>
+          <label>Формат<select data-variant-field="format"><option value="">Как у идеи</option>${options(vocabulary.formats, variant.format || '')}</select></label>
+          <label>Что уже есть<select data-variant-field="assetId">${options(assets, variant.assetId || '')}</select></label>
+          <label>Заметка наставника<textarea data-variant-field="mentorNote" rows="2" maxlength="2000">${esc(variant.mentorNote || '')}</textarea></label>
+          <div class="mentor-day-selects">
+            <label>Плановая дата<input data-variant-field="plannedDate" type="date" value="${esc(variant.plannedDate || '')}"></label>
+            <label>Плановое время<input data-variant-field="plannedTime" type="time" value="${esc(variant.plannedTime || '')}"></label>
+            <label>Часовой пояс<input data-variant-field="timezone" maxlength="64" placeholder="Например: Asia/Irkutsk" value="${esc(variant.timezone || '')}"></label>
+          </div>
+          <label class="mentor-inline"><input data-variant-field="excluded" type="checkbox"${variant.excluded ? ' checked' : ''}> Эту площадку не публикуем</label>
+          <p class="mentor-note">${esc(PLAN_TIME_NOTE)}</p>
+        </details>`
+      // Только просмотр: текст версии всё равно виден — иначе читатель не знает, что согласуют.
+      : `<p class="mentor-variant-read" data-variant-text>${variant.text ? esc(variant.text) : 'Текста пока нет.'}</p>
+        ${variant.plannedDate || variant.plannedTime ? `<p class="mentor-note">Плановый выход: ${esc(variant.plannedDate || '—')} ${esc(variant.plannedTime || '')}. ${esc(PLAN_TIME_NOTE)}</p>` : ''}`;
+    return `<div class="mentor-variant-panel" data-variant="${esc(platform.id)}" data-variant-idea="${esc(ideaId)}"
+      ${hidden ? 'hidden' : ''}>${editable}${decided}${transferred}${actions}</div>`;
+  }
+
+  function variantsMarkup(item, data, index) {
+    const platforms = variantPlatforms(data);
+    const present = platforms.filter((platform) => Object.hasOwn(item.variants || {}, platform.id));
+    // Основная площадка идеи открыта первой: у старого плана версия ровно одна, и она же основная.
+    const active = present.find((platform) => platform.id === item.platform) || present[0] || null;
+    const add = platforms.filter((platform) => !Object.hasOwn(item.variants || {}, platform.id));
+    return `<div class="mentor-variants" data-variants="${esc(item.ideaId || '')}">
+      <div class="mentor-variant-tabs" role="group" aria-label="Версии для площадок">
+        <span data-variant-tabs>${present.map((platform) => variantTab(platform, data, item.ideaId, active && platform.id === active.id)).join('')}</span>
+        ${viewer.edit && add.length ? `<select data-variant-add aria-label="Добавить площадку"><option value="">Добавить площадку…</option>${options(add, '')}</select>` : ''}
+        ${index >= 0 && item.ideaId && viewer.decide ? `<button type="button" class="plain-button" data-variant-decide="approved"
+          data-variant-idea-id="${esc(item.ideaId)}">Согласовать всю идею</button>
+          <button type="button" class="plain-button" data-variant-decide="rejected"
+          data-variant-idea-id="${esc(item.ideaId)}">Вернуть всю идею</button>
+          <button type="button" class="plain-button" data-variant-decide="withdrawn"
+          data-variant-idea-id="${esc(item.ideaId)}">Отозвать по всей идее</button>
+          <label>Причина возврата всей идеи (обязательна)
+            <input data-idea-comment maxlength="2000" placeholder="Что исправить во всей идее"></label>
+          <span data-idea-state-line role="status"></span>` : ''}
+      </div>
+      <div data-variant-panels>${present.map((platform) => variantPanel(platform,
+    item.variants[platform.id] || {}, data, item, index, !(active && platform.id === active.id))).join('')}</div>
+      ${present.length ? '' : '<p class="mentor-note" data-variant-empty>Версий для площадок пока нет: добавьте площадку выше.</p>'}
+    </div>`;
+  }
+
+  /* Решения и перенос по всему плану: один понятный путь рядом с планом, а не спрятанный
+     в подробностях каждой идеи. Перенос создаёт независимые черновики — по одному на
+     согласованную версию — и ничего не публикует. */
+  function planVariantsMarkup(data) {
+    const plan = data.plan;
+    if (!plan) return '';
+    const states = data.variants || [];
+    const counts = states.reduce((acc, item) => ({...acc, [item.status]: (acc[item.status] || 0) + 1}), {});
+    const transfer = data.variantTransfer || null;
+    const stale = plan.briefRevision !== data.brief.revision;
+    return `<section class="mentor-variants-plan" data-plan-variants>
+      <h3>Версии площадок</h3>
+      <p class="mentor-note" data-variant-counts>Всего версий: ${esc(states.length)} ·
+        согласовано ${esc(counts.approved || 0)} · на доработку ${esc(counts.rejected || 0)} ·
+        ждут решения ${esc(counts.pending || 0)} · без текста ${esc(counts.empty || 0)} ·
+        не публикуем ${esc(counts.excluded || 0)}.</p>
+      <p class="mentor-note">Согласование версии — решение по тексту плана. Разрешением опубликовать
+        оно не является: материал в «Автопостинге» всё равно одобряется отдельно, вместе с его
+        финальным текстом, медиа и каналом.</p>
+      ${stale ? '<p class="mentor-warning" role="note">План составлен по прежней версии брифа. Обновите план и согласуйте версии заново.</p>' : ''}
+      ${viewer.decide && !stale ? `<div class="mentor-variant-actions" data-plan-variant-actions>
+        <button type="button" class="plain-button" data-variant-decide="approved" data-variant-scope="plan">Согласовать весь план</button>
+        <button type="button" class="plain-button" data-variant-decide="rejected" data-variant-scope="plan">Вернуть весь план</button>
+        <button type="button" class="plain-button" data-variant-decide="withdrawn" data-variant-scope="plan">Отозвать по всему плану</button>
+        <label>Причина возврата (обязательна)<input data-plan-comment maxlength="2000" placeholder="Что исправить в плане"></label>
+        <span data-plan-state-line role="status"></span>
+      </div>` : `<p class="mentor-note">${viewer.decide ? '' : 'Решения по версиям принимает владелец кабинета.'}</p>`}
+      ${viewer.edit ? `<div class="mentor-variant-actions">
+        <button type="button" class="plain-button" data-variants-transfer
+          ${transfer && transfer.canTransfer ? '' : 'disabled'}>Перенести согласованные версии в черновики</button>
+        <span class="mentor-note" data-variants-transfer-note>${esc(transfer
+    ? (transfer.canTransfer ? `Готовы к переносу: ${transfer.awaitingTransfer}. Создаются только черновики: ни публикаций, ни очереди, ни выбора каналов.`
+      : transfer.blockedReason || 'Переносить пока нечего.')
+    : 'Состояние переноса версий недоступно.')}</span>
+        <span data-variants-transfer-state role="status"></span>
+      </div>` : ''}
+    </section>`;
+  }
+
   function dayRow(item, data, index = -1, edit = true) {
     const fields = data.brief.fields, vocabulary = data.vocabulary;
     const platforms = vocabulary.platforms.filter((platform) => fields.platforms.includes(platform.id));
     const assets = [{id: '', label: 'Ничего не выбрано'}, ...fields.assets.map((asset) => ({id: asset.id, label: asset.title}))];
-    const draft = transferredDay(data, index);
-    const media = draft?.mediaUrls?.length ? localMediaPreview(draft.mediaUrls[0]) : '';
-    const status = dayStatus(draft);
+    // Карточки обоих происхождений: прежняя по дню и по одной на согласованную версию.
+    const cards = cardsFor(data, index, item);
+    const draft = cards[0] || null;
+    const withMedia = cardsMedia(cards);
+    const media = withMedia?.mediaUrls?.length ? localMediaPreview(withMedia.mediaUrls[0]) : '';
+    const status = cardsStatus(cards);
     const action = {plan: edit ? 'Проверьте тему и дату. Если есть идея получше, предложите правку.' : 'Посмотрите тему и дату в плане.',
-      draft: draft?.hasMedia ? 'Проверьте подготовленный материал в «Автопостинге».' : 'Подготовьте фото или видео по теме. Его можно добавить ниже, в «Черновиках и файлах».',
+      draft: withMedia ? 'Проверьте подготовленный материал в «Автопостинге».' : 'Подготовьте фото или видео по теме. Его можно добавить ниже, в «Черновиках и файлах».',
       scheduled: 'Материал уже запланирован. Проверьте время выхода в «Автопостинге».',
       publishing: 'Идёт отправка. Проверьте результат в «Автопостинге».',
       published: 'Материал опубликован. Результаты можно посмотреть в статистике.',
@@ -358,7 +540,10 @@
     const platformLabel = platforms.find((row) => row.id === item.platform)?.label || item.platform || 'Площадка';
     const formatLabel = vocabulary.formats.find((row) => row.id === item.format)?.label || item.format || 'Формат';
     return `<article class="mentor-row mentor-day" data-row data-day-index="${index}"
-      ${index >= 0 ? `data-source-order="${index}"` : ''} data-plan-date="${esc(item.date)}" data-plan-platform="${esc(item.platform)}" data-card-status="${status}">
+      data-idea-id="${esc(item.ideaId || '')}"
+      ${index >= 0 ? `data-source-order="${index}"` : ''} data-plan-date="${esc(item.date)}"
+      data-plan-platform="${esc(item.platform)}" data-plan-platforms="${esc(rowPlatforms(item).join(' '))}"
+      data-card-status="${status}" data-card-ids="${esc(cards.map((card) => card.postId).join(' '))}">
       <div class="mentor-day-overview">
       <div class="mentor-day-preview" data-preview-format="${esc(item.format)}" aria-label="Макет публикации">
         <div class="mentor-day-preview-media">${media || '<span class="mentor-day-play" aria-hidden="true">▷</span><span>Медиа пока нет</span>'}</div>
@@ -367,9 +552,12 @@
         <p class="mentor-day-meta"><time data-preview-date>${item.date ? esc(day(item.date)) : 'Дата не выбрана'}</time> ·
           <span data-preview-platform>${esc(platformLabel)}</span> · <span data-preview-format-label>${esc(formatLabel)}</span></p>
         <h3 data-preview-topic>${esc(item.topic) || 'Новый материал'}</h3>
-        <p class="mentor-day-status"><span>${draft ? `Карточка №${esc(draft.postId)} · ${esc(CARD_STATUS[status].toLowerCase())} · ${draft.hasMedia ? 'медиа загружено' : 'без медиа'}` : 'Пока только в плане'}</span></p>
+        <p class="mentor-day-status"><span>${cards.length
+    ? `${cards.length > 1 ? `Карточек ${esc(cards.length)}: ` : 'Карточка '}${cards.map((card) => `№${esc(card.postId)}${card.platform ? ` (${esc(card.platform)})` : ''}`).join(', ')} · ${esc(CARD_STATUS[status].toLowerCase())} · ${withMedia ? 'медиа загружено' : 'без медиа'}`
+    : 'Пока только в плане'}</span></p>
         <p class="mentor-day-action"><strong>Что сделать:</strong> ${esc(action)}</p>
-        ${edit && draft?.cardStatus === 'draft' && !draft.hasMedia ? `<button type="button" class="plain-button" data-material-target="${esc(draft.postId)}">Добавить файл</button>` : ''}
+        ${edit && !withMedia && cards.some((card) => card.cardStatus === 'draft')
+    ? `<button type="button" class="plain-button" data-material-target="${esc(cards.find((card) => card.cardStatus === 'draft').postId)}">Добавить файл</button>` : ''}
       </div></div>
       <details class="mentor-day-details"${index < 0 ? ' open' : ''}><summary>${edit ? 'Подробности и правки' : 'Подробности материала'}${feedback.length ? ` · предложений: ${feedback.length}` : ''}</summary>
       ${edit ? `<div class="mentor-day-edit">
@@ -381,6 +569,12 @@
           <label>Задача материала<select data-field="role">${options(vocabulary.roles, item.role)}</select></label>
         </div>
         <label>Тема<input data-field="topic" maxlength="300" required value="${esc(item.topic)}"></label>
+        ${variantsMarkup(item, data, index)}
+        <div class="mentor-day-order">
+          <button type="button" class="plain-button" data-move="up" aria-label="Выше в плане">↑ Выше</button>
+          <button type="button" class="plain-button" data-move="down" aria-label="Ниже в плане">↓ Ниже</button>
+          <span class="mentor-note" data-move-note role="status"></span>
+        </div>
         <details class="mentor-day-more"><summary>Для команды · зацепка и задание</summary>
           <label>Зацепка<input data-field="hook" maxlength="500" value="${esc(item.hook)}"></label>
           <label>Что уже есть для материала<select data-field="assetId">${options(assets, item.assetId)}</select></label>
@@ -396,14 +590,16 @@
           <span data-feedback-state="${index}" role="status"></span>
         </div>` : '<p class="mentor-note">Сначала сохраните материал, затем можно оставить предложение по нему.</p>'}
         <button class="plain-button" type="button" data-remove>Убрать материал</button>
-      </div>` : `<dl class="mentor-brief-view"><div><dt>Задача материала</dt><dd>${esc(vocabulary.roles.find((role) => role.id === item.role)?.label || item.role)}</dd></div>
+      </div>` : `${variantsMarkup(item, data, index)}<dl class="mentor-brief-view"><div><dt>Задача материала</dt><dd>${esc(vocabulary.roles.find((role) => role.id === item.role)?.label || item.role)}</dd></div>
         ${item.hook ? `<div><dt>Зацепка</dt><dd>${esc(item.hook)}</dd></div>` : ''}
         <div><dt>Что уже есть</dt><dd>${esc(assets.find((asset) => asset.id === item.assetId)?.label || 'Не указано')}</dd></div>
         ${item.mentorNote ? `<div><dt>Задание</dt><dd>${esc(item.mentorNote)}</dd></div>` : ''}</dl>`}</details></article>`;
   }
 
   function planFilters(data) {
-    const states = [...new Set((data.plan?.days || []).map((unused, index) => dayStatus(transferredDay(data, index))))];
+    // Состояния берутся по обоим происхождениям карточек: иначе список состояний
+    // остался бы из одного «Только в плане», хотя черновики версий уже созданы.
+    const states = [...new Set((data.plan?.days || []).map((item, index) => cardsStatus(cardsFor(data, index, item))))];
     if (!states.includes('plan')) states.unshift('plan');
     return `<div class="mentor-plan-filters" role="group" aria-label="Фильтры материалов">
       <label>Площадка<select data-plan-filter="platform"><option value="">Все площадки</option>${options(data.vocabulary.platforms, '')}</select></label>
@@ -436,8 +632,10 @@
         <p class="mentor-note" data-rules-ok>Расписание и состав плана правилам курса не противоречат.
         Это проверка механических правил, а не обещание просмотров.</p>${reminders}</section>`;
     }
+    // Три уровня различаются вслух: рекомендация курса по дню недели нарушением не называется.
+    const LEVELS = {violation: 'Нарушение', recommendation: 'Рекомендация курса', warning: 'Стоит поправить'};
     const line = (item) => `<li data-rules-level="${esc(item.level)}">` +
-      `<strong>${item.level === 'violation' ? 'Нарушение' : 'Стоит поправить'}:</strong> ${esc(item.text)}</li>`;
+      `<strong>${LEVELS[item.level] || LEVELS.warning}:</strong> ${esc(item.text)}</li>`;
     return `<section class="mentor-rules" data-rules><h3>Проверка по курсу</h3>
       <p class="mentor-note">Замечаний: ${esc(result.issues.length)}. Правила механические —
       расписание и состав плана. Оценку идеи и темы они не заменяют.</p>
@@ -448,7 +646,7 @@
     const plan = data.plan, vocabulary = data.vocabulary;
     const version = plan ? `<p class="mentor-note">Версия ${esc(plan.revision)} по брифу ${esc(plan.briefRevision)} ·
         ${esc(day(plan.startDate))} — ${esc(day(plan.endDate))} · ${esc(plan.windowDays)} дней · обновлён ${esc(moment(plan.updatedAt))}</p>` : '';
-    const view = plan ? `${planFilters(data)}<div class="mentor-day-cards" data-plan-feed>${plan.days.map((item, index) => dayRow(item, data, index, false)).join('')}</div>`
+    const view = plan ? `${planVariantsMarkup(data)}${planFilters(data)}<div class="mentor-day-cards" data-plan-feed>${plan.days.map((item, index) => dayRow(item, data, index, false)).join('')}</div>`
       : '<p class="mentor-note">План ещё не составлен.</p>';
     const stale = plan && plan.briefRevision !== data.brief.revision
       ? `<p class="mentor-warning" role="note">Бриф сохранён как версия ${esc(data.brief.revision)}. Этот план остался по версии ${esc(plan.briefRevision)} и сам не перестроился. Проверьте материалы, сохраните новую версию плана и согласуйте её заново.</p>` : '';
@@ -478,7 +676,7 @@
     return `${checked}${planFilters(data)}<form id="mentor-plan-form" class="crm-form mentor-form">
       <input type="hidden" name="planRevision" value="${esc(plan ? plan.revision : 0)}">
       <input type="hidden" name="briefRevision" value="${esc(data.brief.revision)}">
-      <div class="mentor-rows mentor-plan-editor wide" data-rows="days"><div class="mentor-day-cards" data-rows-body data-plan-feed>${(plan ? plan.days : []).map((item, index) => dayRow(item, data, index)).join('')}</div>
+      ${planVariantsMarkup(data)}<div class="mentor-rows mentor-plan-editor wide" data-rows="days"><div class="mentor-day-cards" data-rows-body data-plan-feed>${(plan ? plan.days : []).map((item, index) => dayRow(item, data, index)).join('')}</div>
         <button class="plain-button" type="button" data-add="days">Добавить материал</button></div>
       <div class="crm-actions wide"><button class="plain-button" type="submit">Сохранить план</button>
         <span id="mentor-plan-state" role="status"></span></div></form>
@@ -495,7 +693,21 @@
          версия плана ${esc(approval.planRevision)} · ${esc(approval.actorName || '—')} · ${esc(moment(approval.decidedAt))}${approval.comment ? `<br>${esc(approval.comment)}` : ''}</p>`
       : '<p class="mentor-note">Решений по этой версии ещё нет.</p>';
     // Решать можно только по плану, составленному по текущей версии брифа.
-    const canAct = canDecide(ctx) && !!plan && plan.briefRevision === data.brief.revision;
+    const canAct = canDecide(ctx) && !!plan && plan.briefRevision === data.brief.revision && !variantAware(data);
+    if (variantAware(data)) {
+      // Архив: прежние решения по плану целиком видны, но новых здесь не принимают.
+      return `<details class="card mentor-approval mentor-archive" data-status="${esc(approval.status)}" data-legacy-approval>
+        <summary>Архив · прежнее согласование плана целиком</summary>
+        <p class="mentor-note">Согласование ведётся по версиям площадок — в блоке «Версии площадок»
+          рядом с планом. Здесь только история прежних решений по плану целиком: новых решений
+          этот блок не принимает, чтобы не было двух ответов на один вопрос.</p>
+        <p class="mentor-note">Прежнее состояние: <strong>${esc(STATUS[approval.status] || approval.status)}</strong>${approval.reason ? ` · ${esc(approval.reason)}` : ''}</p>
+        ${decided}
+        ${data.approvals.length ? `<details><summary>История решений по плану (${esc(data.approvals.length)})</summary>
+          <ol class="mentor-history">${data.approvals.map((item) => `<li>${esc(moment(item.decidedAt))} · версия ${esc(item.planRevision)} ·
+            ${esc(item.decision === 'approved' ? 'согласовано' : 'отклонено')} · ${esc(item.actorName || '—')}${item.comment ? `<br>${esc(item.comment)}` : ''}</li>`).join('')}</ol></details>` : ''}
+      </details>`;
+    }
     return `<section class="card mentor-approval" data-status="${esc(approval.status)}">
       <h2>Согласование версии плана</h2>
       <p><strong>${esc(STATUS[approval.status] || approval.status)}</strong>${approval.reason ? ` · ${esc(approval.reason)}` : ''}</p>
@@ -526,7 +738,7 @@
     const done = state.current ? `<p>Перенесено ${esc(moment(state.current.transferredAt))} ·
         ${esc(state.current.postIds.length)} черновиков · ${esc(state.current.actorName || '—')} ·
         план v${esc(state.current.planRevision)}, бриф v${esc(state.current.briefRevision)}</p>
-      <ul class="mentor-drafts">${state.current.items.map((item) => `<li>
+      <ul class="mentor-drafts" data-legacy-drafts>${state.current.items.map((item) => `<li>
         <details><summary>${esc(day(item.planDate))} · ${esc(item.planPlatform)} · черновик №${esc(item.postId)}</summary>
         <p><strong>${esc(item.topic)}</strong></p>
         <p class="mentor-note">Формат: ${esc(item.format || '—')} · роль: ${esc(item.role || '—')}${item.hook ? ` · зацепка: ${esc(item.hook)}` : ''}</p>
@@ -544,9 +756,35 @@
           <span data-material-state="${esc(item.postId)}" role="status"></span>` : ''}
         <button class="plain-button" type="button" data-brief-context="${esc(item.postId)}">Показать бриф этой версии</button>
         <div data-brief-context-body="${esc(item.postId)}"></div></details></li>`).join('')}</ul>` : '';
+    /* Черновики версий площадок — та же карточка автопостинга, тот же приём файлов.
+       Номер карточки не задваивается с прежней расписки по дням. */
+    const legacyIds = new Set(state.current ? state.current.postIds : []);
+    const variantItems = (data.variantTransfer?.items || []).filter((item) => !legacyIds.has(item.postId));
+    const byVariant = variantItems.length ? `<p>Черновики версий площадок: ${esc(variantItems.length)}.</p>
+      <ul class="mentor-drafts" data-variant-drafts>${variantItems.map((item) => `<li>
+        <details><summary>${esc(day(item.planDate))} · ${esc(item.platform)} · черновик №${esc(item.postId)} · ${esc(CARD_STATUS[dayStatus(item)].toLowerCase())}</summary>
+        <p class="mentor-note">Идея ${esc(item.ideaId)} · версия содержимого ${esc(item.contentRevision)} ·
+          план v${esc(item.planRevision)}, бриф v${esc(item.briefRevision)}${item.plannedDate ? ` · плановый выход ${esc(day(item.plannedDate))}${item.plannedTime ? ` ${esc(item.plannedTime)}` : ''}` : ''}.</p>
+        <p class="mentor-material" data-has-media="${item.hasMedia ? 'yes' : 'no'}">
+          <span>Материал:</span> ${item.hasMedia ? `добавлен · файлов ${esc(item.mediaCount)}` : 'не добавлен'}</p>
+        ${edit && item.cardStatus === 'draft' ? `<label class="mentor-upload">Добавить свой материал (фото JPEG, PNG, WebP или видео MP4, WebM)
+          <input type="file" data-material-file="${esc(item.postId)}"
+            accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"></label>
+          <button class="plain-button" type="button" data-material-add="${esc(item.postId)}"
+            data-post-revision="${esc(item.postRevision)}">Загрузить и приложить к карточке</button>
+          <span data-material-state="${esc(item.postId)}" role="status"></span>`
+    : '<p class="mentor-note">Эта карточка уже вышла из состояния черновика — работайте с ней в «Автопостинге», чтобы не переписать её результат.</p>'}
+        <button class="plain-button" type="button" data-variant-context="${esc(item.postId)}"
+          data-variant-context-plan="${esc(item.planRevision)}" data-variant-context-brief="${esc(item.briefRevision)}"
+          data-variant-context-idea="${esc(item.ideaId)}" data-variant-context-platform="${esc(item.platform)}">Показать задание и бриф этой версии</button>
+        <div data-variant-context-body="${esc(item.postId)}"></div>
+        </details></li>`).join('')}</ul>` : '';
     return `<section class="card mentor-transfer" data-can="${state.canTransfer ? 'yes' : 'no'}">
       <h2>Черновики и файлы</h2>
       <p class="mentor-note">После согласования плана создайте карточки и добавьте фото или видео. Готовые карточки появятся в разделе <a href="#autoposting">«Материалы»</a>.</p>
+      ${variantAware(data) ? `<p class="mentor-note" data-variant-transfer-here>Перенос выполняется в блоке «Версии площадок»
+        рядом с планом — по одному черновику на согласованную версию. Здесь показаны уже созданные
+        черновики и приём файлов к ним.</p>${byVariant}` : ''}
       <details class="mentor-team"><summary>Для команды · перенос и ограничения</summary>
       <p class="mentor-note">${esc(state.notice)}</p>
       <p class="mentor-note">Остаются незаполненными: ${state.leavesUnfilled.map((item) => esc(item)).join(' · ')}.</p>
@@ -555,13 +793,13 @@
       ${state.current ? `<p class="mentor-note">${esc(state.materialNotice)} Без файла ждут заданий: ${esc(state.awaitingMaterial)}.</p>` : ''}
       ${state.newVersionNotice ? `<p class="mentor-warning" role="note">${esc(state.newVersionNotice)}</p>` : ''}
       ${done}
-      ${edit && state.canTransfer ? `<form id="mentor-transfer-form" class="crm-form">
+      ${variantAware(data) ? '' : edit && state.canTransfer ? `<form id="mentor-transfer-form" class="crm-form">
         <input type="hidden" name="planRevision" value="${esc(state.planRevision)}">
         <input type="hidden" name="briefRevision" value="${esc(state.briefRevision)}">
         <div class="crm-actions wide"><button class="plain-button" type="submit">Перенести план в черновики</button>
           <span id="mentor-transfer-state" role="status"></span></div></form>`
     : `<p class="mentor-note">${esc(edit ? state.blockedReason : 'Подготовить карточки поможет ответственный за материалы.')}</p>`}
-      ${state.history.length ? `<details><summary>Прошлые переносы (${esc(state.history.length)})</summary>
+      ${state.history.length ? `<details data-legacy-transfer-history><summary>${variantAware(data) ? 'Архив · прошлые переносы плана целиком' : 'Прошлые переносы'} (${esc(state.history.length)})</summary>
         <ol class="mentor-history">${state.history.map((item) => `<li>Версия плана ${esc(item.planRevision)} ·
           ${esc(item.dayCount)} дней · ${esc(moment(item.transferredAt))} · ${esc(item.actorName || '—')}</li>`).join('')}</ol></details>` : ''}
     </section>`;
@@ -574,8 +812,9 @@
     if (!builder || !data.plan) return '';
     // У текущей версии уже может быть загружен файл, даже если описание в брифе
     // не выбрано. Убираем повторную просьбу только из списка задач, сам план не меняем.
+    // Файл мог прийти к карточке любого происхождения — по дню или по версии площадки.
     const preparationPlan = {...data.plan, days: data.plan.days.map((item, index) =>
-      transferredDay(data, index)?.hasMedia ? {...item, assetId: item.assetId || 'uploaded-material'} : item)};
+      cardsMedia(cardsFor(data, index, item)) ? {...item, assetId: item.assetId || 'uploaded-material'} : item)};
     const request = builder.build(preparationPlan, data.brief.fields);
     if (!request.items.length && !request.skipped.length) return '';
     const rows = request.items.map((item, index) => `<li>
@@ -605,6 +844,9 @@
 
   function markup(data, ctx) {
     const edit = canEdit(ctx);
+    // Роль читателя фиксируется на время сборки разметки: кнопки решений рисуются только владельцу,
+    // а тексты версий видны и на чтение.
+    viewer = {decide: canDecide(ctx), edit};
     return `<details class="card mentor-brief"${!data.brief.revision || !data.brief.fields.platforms.length ? ' open' : ''}><summary>О компании · бриф${data.brief.revision ? ' · сохранён' : ' · начните здесь'}</summary>
         <p class="mentor-note">Версия ${esc(data.brief.revision)}${data.brief.updatedAt ? ` · обновлён ${esc(moment(data.brief.updatedAt))}` : ''}.
           ${edit ? 'План составьте сами или возьмите подсказку модели и проверьте её.' : 'У вас только просмотр.'}</p>
@@ -668,10 +910,20 @@
   }
   // Порядок на экране меняется независимо от исходных индексов версии плана.
   // Скрытые фильтрами строки тоже отправляются; dayIndex обратной связи не перенумеровывается.
+  /* Версии собираются со ВСЕХ панелей строки, включая скрытые переключателем: закрытая
+     вкладка — это не удалённая версия, и терять её текст при сохранении нельзя. */
+  const rowVariants = (row) => Object.fromEntries([...row.querySelectorAll('[data-variant]')]
+    .map((panel) => [panel.dataset.variant, Object.fromEntries([...panel.querySelectorAll('[data-variant-field]')]
+      .map((field) => [field.dataset.variantField,
+        field.type === 'checkbox' ? field.checked : field.value.trim()]))]));
   const collectDays = (form) => [...form.querySelectorAll('[data-rows="days"] [data-row]')]
-    .sort((a, b) => Number(a.dataset.sourceOrder) - Number(b.dataset.sourceOrder)).map(rowValues)
+    .sort((a, b) => Number(a.dataset.sourceOrder) - Number(b.dataset.sourceOrder))
+    .map((row) => ({...rowValues(row), ideaId: row.dataset.ideaId || '', variants: rowVariants(row)}))
     .map((row) => ({date: row.date, platform: row.platform, format: row.format, role: row.role,
-      topic: row.topic, hook: row.hook, assetId: row.assetId, mentorNote: row.mentorNote}));
+      topic: row.topic, hook: row.hook, assetId: row.assetId, mentorNote: row.mentorNote,
+      // Пустой ideaId не передаётся: сервер выдаёт его сам при первом сохранении идеи.
+      ...(row.ideaId ? {ideaId: row.ideaId} : {}),
+      ...(Object.keys(row.variants).length ? {variants: row.variants} : {})}));
 
   function bind(container, node, ctx, data) {
     const code = ctx.selectedProjectId;
@@ -706,7 +958,11 @@
       rows.sort((a, b) => sortDate(a, b) || Number(a.dataset.sourceOrder) - Number(b.dataset.sourceOrder));
       rows.forEach((row) => {
         const date = row.dataset.planDate;
-        row.hidden = Boolean(invalidRange || (platform && row.dataset.planPlatform !== platform) ||
+        /* Фильтр площадки — по НАЛИЧИЮ версии для неё, а не по основной площадке идеи:
+           идея в Telegram с версией для ВКонтакте обязана находиться по фильтру «ВКонтакте».
+           Список площадок строки обновляется и для ещё не сохранённой добавленной версии. */
+        const rowPlatformList = (row.dataset.planPlatforms || row.dataset.planPlatform || '').split(' ').filter(Boolean);
+        row.hidden = Boolean(invalidRange || (platform && !rowPlatformList.includes(platform)) ||
           (status && row.dataset.cardStatus !== status) || (from && (!date || date < from)) || (to && (!date || date > to)));
         feed.append(row); // Перемещаем тот же узел: введённые поля, раскрытия и feedback не теряются.
       });
@@ -737,7 +993,18 @@
       row.querySelector('[data-preview-topic]').textContent = field('topic').value.trim() || 'Тема публикации';
       row.dataset.planDate = field('date').value;
       row.dataset.planPlatform = field('platform').value;
+      syncRowPlatforms(row);
     };
+    /* Площадки строки пересчитываются по фактическим панелям версий, включая только что
+       добавленную и ещё не сохранённую. Основная площадка идеи добавляется, даже если
+       версии для неё пока нет: иначе материал исчез бы из своего же фильтра. */
+    function syncRowPlatforms(row) {
+      if (!row) return;
+      const list = [...row.querySelectorAll('[data-variant]')].map((panel) => panel.dataset.variant);
+      const main = row.querySelector('[data-field="platform"]')?.value || row.dataset.planPlatform || '';
+      if (main && !list.includes(main)) list.push(main);
+      row.dataset.planPlatforms = list.filter(Boolean).join(' ');
+    }
     const dayRows = node.querySelector('[data-rows="days"]');
     for (const type of ['input', 'change']) dayRows?.addEventListener(type, (event) => {
       if (event.target.matches('[data-field]')) {
@@ -770,6 +1037,10 @@
         event.target.closest('[data-row]').remove(); applyPlanView();
       });
       syncDayPreview(added);
+      // Новая строка получает те же обработчики, что и остальные: версии, порядок и решения
+      // должны работать сразу, а не после перезагрузки раздела.
+      added.querySelectorAll('[data-variants]').forEach(wireVariants);
+      added.querySelectorAll('[data-move]').forEach(wireMove);
       if (kind === 'days') {resetFilters(); added.querySelector('[data-field="date"]').focus();}
     }));
     node.querySelectorAll('[data-remove]').forEach((button) => button.addEventListener('click',
@@ -831,6 +1102,216 @@
       openParents(event.target);
       node.querySelector('#mentor-plan-state').textContent = 'Заполните выделенное поле материала. Все строки плана сохранены в форме; фильтры сброшены.';
     }, true);
+    /* ---------- Версии площадок: переключение, добавление, порядок и адресные решения ---------- */
+    const planForm = node.querySelector('#mentor-plan-form');
+    /* Снимок сохранённого состава плана. По нему видно, есть ли в форме несохранённые правки:
+       решение и перенос по невидимому серверу тексту молча принимать нельзя. */
+    const savedPlan = planForm ? JSON.stringify(collectDays(planForm)) : null;
+    const planDirty = () => Boolean(planForm) && JSON.stringify(collectDays(planForm)) !== savedPlan;
+    const say = (element, message) => { if (element) element.textContent = message; };
+
+    const platformLabelOf = (id) => (data.vocabulary.platforms.find((item) => item.id === id) || {}).label || id;
+    const captionLimit = (id) => (data.vocabulary.captionLimits || {})[id] || null;
+
+    /* Полноценное добавление площадки: своя вкладка, свой лимит, свои обработчики и пустые
+       поля. Клонировать соседнюю версию нельзя — у неё чужой текст и чужой лимит. */
+    function addVariant(block, platformId) {
+      const panels = block.querySelector('[data-variant-panels]');
+      const tabs = block.querySelector('[data-variant-tabs]');
+      if (!panels || !tabs || block.querySelector(`[data-variant="${platformId}"]`)) return null;
+      const ideaId = block.dataset.variants || '';
+      const label = platformLabelOf(platformId), limit = captionLimit(platformId);
+      const panel = node.ownerDocument.createElement('div');
+      panel.className = 'mentor-variant-panel';
+      panel.dataset.variant = platformId;
+      panel.dataset.variantIdea = ideaId;
+      panel.innerHTML = `<label data-variant-text-label>Текст для площадки «${esc(label)}»${limit ? ` · до ${esc(limit)} символов` : ''}
+          <textarea data-variant-field="text"${limit ? ` maxlength="${esc(limit)}"` : ''} rows="4"></textarea></label>
+        <details class="mentor-day-more"><summary>Подробности версии</summary>
+          <label>Зацепка<input data-variant-field="hook" maxlength="500" value=""></label>
+          <label>Формат<select data-variant-field="format"><option value="">Как у идеи</option>${options(data.vocabulary.formats, '')}</select></label>
+          <label>Что уже есть<select data-variant-field="assetId">${options([{id: '', label: 'Ничего не выбрано'},
+    ...data.brief.fields.assets.map((asset) => ({id: asset.id, label: asset.title}))], '')}</select></label>
+          <label>Заметка наставника<textarea data-variant-field="mentorNote" rows="2" maxlength="2000"></textarea></label>
+          <div class="mentor-day-selects">
+            <label>Плановая дата<input data-variant-field="plannedDate" type="date" value=""></label>
+            <label>Плановое время<input data-variant-field="plannedTime" type="time" value=""></label>
+            <label>Часовой пояс<input data-variant-field="timezone" maxlength="64" placeholder="Например: Asia/Irkutsk" value=""></label>
+          </div>
+          <label class="mentor-inline"><input data-variant-field="excluded" type="checkbox"> Эту площадку не публикуем</label>
+          <p class="mentor-note">${esc(PLAN_TIME_NOTE)}</p>
+        </details>
+        <p class="mentor-note" data-variant-decision>Решения по этой версии ещё нет.</p>
+        <p class="mentor-note" data-variant-card="">В черновики ещё не переносилась.</p>
+        <p class="mentor-note">Новая версия согласуется после сохранения плана.</p>`;
+      panels.append(panel);
+      const tab = node.ownerDocument.createElement('button');
+      tab.type = 'button';
+      tab.className = 'mentor-variant-tab';
+      tab.dataset.variantTab = platformId;
+      tab.dataset.variantState = 'pending';
+      tab.setAttribute('aria-pressed', 'false');
+      tab.textContent = `${label} · новая`;
+      tabs.append(tab);
+      block.querySelector('[data-variant-empty]')?.remove();
+      wireTabs(block);
+      showVariant(block, platformId);
+      // Новая версия сразу попадает в фильтр площадок, ещё до сохранения плана.
+      syncRowPlatforms(block.closest('[data-row]'));
+      applyPlanView();
+      return panel;
+    }
+
+    const showVariant = (block, platformId) => {
+      block.querySelectorAll('[data-variant]').forEach((panel) => {
+        panel.hidden = panel.dataset.variant !== platformId;
+      });
+      block.querySelectorAll('[data-variant-tab]').forEach((tab) => {
+        tab.setAttribute('aria-pressed', tab.dataset.variantTab === platformId ? 'true' : 'false');
+      });
+    };
+    // Обработчики вешаются заново после добавления версии: новая вкладка обязана работать сразу.
+    function wireTabs(block) {
+      block.querySelectorAll('[data-variant-tab]').forEach((tab) => {
+        if (tab.dataset.variantWired) return;
+        tab.dataset.variantWired = '1';
+        tab.addEventListener('click', () => showVariant(block, tab.dataset.variantTab));
+      });
+    }
+    function wireVariants(block) {
+      wireTabs(block);
+      const adder = block.querySelector('[data-variant-add]');
+      if (adder && !adder.dataset.variantWired) {
+        adder.dataset.variantWired = '1';
+        adder.addEventListener('change', () => {
+          const platformId = adder.value;
+          if (!platformId) return;
+          if (addVariant(block, platformId)) adder.querySelector(`option[value="${platformId}"]`)?.remove();
+          adder.value = '';
+          if (!adder.querySelector('option[value]:not([value=""])')) adder.hidden = true;
+        });
+      }
+      block.querySelectorAll('[data-variant-decide]').forEach(wireDecision);
+    }
+
+    /* Адресное решение по версиям. Область называется явно: «весь план», «вся идея» и
+       «эта версия» — разные утверждения, и одно другим здесь не подменяется. */
+    function wireDecision(button) {
+      if (button.dataset.variantWired) return;
+      button.dataset.variantWired = '1';
+      button.addEventListener('click', () => {
+        if (!planForm) return;
+        const decision = button.dataset.variantDecide;
+        const scopeAttr = button.dataset.variantScope || '';
+        const ideaId = button.dataset.variantIdeaId || '';
+        const platform = button.dataset.variantPlatform || '';
+        /* Поля причины и состояния выбираются ПО ОБЛАСТИ решения, а не поиском ближайшего
+           подходящего узла. Раньше решение по всей идее брало первое поле внутри блока версий —
+           то есть поле первой панели, даже скрытой: причину писали в открытой вкладке, а
+           уходила пустая из скрытой, и ошибка появлялась там, где её не видно.
+           У каждой области теперь своё имя поля, и вкладка на это не влияет. */
+        const scopeFields = () => {
+          if (scopeAttr !== 'plan' && platform) {
+            const panel = button.closest('[data-variant]');
+            return {comment: panel?.querySelector('[data-variant-comment]'),
+              line: panel?.querySelector('[data-variant-state-line]')};
+          }
+          if (scopeAttr !== 'plan') {
+            const block = button.closest('[data-variants]');
+            return {comment: block?.querySelector('[data-idea-comment]'),
+              line: block?.querySelector('[data-idea-state-line]')};
+          }
+          const block = button.closest('[data-plan-variants]');
+          return {comment: block?.querySelector('[data-plan-comment]'),
+            line: block?.querySelector('[data-plan-state-line]')};
+        };
+        const fields = scopeFields();
+        const comment = fields.comment?.value.trim() || '';
+        const line = fields.line;
+        // Несохранённые правки: решение относилось бы к прежнему тексту — этого не допускаем.
+        if (planDirty()) { say(line, DIRTY_NOTE); return; }
+        if (decision === 'rejected' && !comment) {
+          say(line, 'Укажите, что исправить: возврат без причины исполнителю ничего не говорит.');
+          return;
+        }
+        const scope = scopeAttr === 'plan' ? 'plan' : (platform ? 'variants' : 'idea');
+        void submit(planForm, '#mentor-plan-state', `${PATH}/plan/variants/decision`, 'POST',
+          {planRevision: Number(planForm.elements.planRevision.value),
+            briefRevision: Number(planForm.elements.briefRevision.value),
+            scope, ...(scope === 'plan' ? {} : {ideaId}),
+            ...(scope === 'variants' ? {platforms: [platform]} : {}), decision, comment});
+      });
+    }
+
+    node.querySelectorAll('[data-variants]').forEach(wireVariants);
+    node.querySelectorAll('[data-plan-variants] [data-variant-decide]').forEach(wireDecision);
+
+    /* Перенос согласованных версий в независимые черновики. Ничего не публикует
+       и в очередь не ставит: материал в «Автопостинге» одобряется отдельно. */
+    node.querySelector('[data-variants-transfer]')?.addEventListener('click', () => {
+      if (!planForm) return;
+      const line = node.querySelector('[data-variants-transfer-state]');
+      if (planDirty()) { say(line, DIRTY_NOTE); return; }
+      void submit(planForm, '#mentor-plan-state', `${PATH}/plan/variants/transfer`, 'POST',
+        {planRevision: Number(planForm.elements.planRevision.value),
+          briefRevision: Number(planForm.elements.briefRevision.value)});
+    });
+
+    /* Порядок материалов в плане. Сервер держит дни по возрастанию даты, поэтому «выше» и
+       «ниже» — это ОБМЕН КАЛЕНДАРНЫМИ ДАТАМИ с соседом, а не переброс строки. Так кнопка
+       делает ровно то, что обещает, и сохранение не отвергается; окно плана не меняется,
+       потому что набор дат остаётся прежним. */
+    function wireMove(button) {
+      if (button.dataset.moveWired) return;
+      button.dataset.moveWired = '1';
+      button.addEventListener('click', () => {
+      const row = button.closest('[data-row]');
+      const rows = [...(feed ? feed.children : [])];
+      const at = rows.indexOf(row), to = button.dataset.move === 'up' ? at - 1 : at + 1;
+      if (at < 0 || to < 0 || to >= rows.length) return;
+      const neighbour = rows[to];
+      const mine = row.querySelector('[data-field="date"]'), theirs = neighbour.querySelector('[data-field="date"]');
+      if (!mine || !theirs) return;
+      const keep = mine.value;
+      /* Плановая дата версии. Если она совпадала с датой идеи, версия держалась за идею —
+         и переезжает вместе с ней. Если версия задала СВОЮ, отличную дату, она остаётся как
+         была: молча переписать заданное человеком нельзя. Но и промолчать тоже нельзя —
+         об оставшихся датах сказано прямо под кнопками. */
+      const carryDates = (target, fromDate, toDate) => {
+        const stayed = [];
+        for (const panel of target.querySelectorAll('[data-variant]')) {
+          const field = panel.querySelector('[data-variant-field="plannedDate"]');
+          if (!field || !field.value) continue;
+          if (field.value === fromDate) field.value = toDate;
+          else stayed.push(panel.dataset.variant);
+        }
+        return stayed;
+      };
+      const stayedHere = carryDates(row, keep, theirs.value);
+      const stayedThere = carryDates(neighbour, theirs.value, keep);
+      const stayed = [...new Set([...stayedHere, ...stayedThere])];
+      const note = row.querySelector('[data-move-note]');
+      if (note) {
+        note.textContent = stayed.length
+          ? `Материалы поменялись датами. У этих версий задана своя дата выхода, она не менялась: ${stayed.join(', ')}.`
+          : 'Материалы поменялись датами вместе со своими версиями.';
+      }
+      mine.value = theirs.value;
+      theirs.value = keep;
+      row.dataset.planDate = mine.value;
+      neighbour.dataset.planDate = theirs.value;
+      const order = Number(row.dataset.sourceOrder);
+      row.dataset.sourceOrder = neighbour.dataset.sourceOrder;
+      neighbour.dataset.sourceOrder = String(order);
+      for (const target of [row, neighbour]) {
+        const label = target.querySelector('[data-preview-date]');
+        if (label) label.textContent = target.querySelector('[data-field="date"]').value;
+      }
+      if (button.dataset.move === 'up') feed.insertBefore(row, neighbour);
+      else feed.insertBefore(neighbour, row);
+      });
+    }
+    node.querySelectorAll('[data-move]').forEach(wireMove);
     node.querySelector('#mentor-plan-form')?.addEventListener('submit', (event) => {
       event.preventDefault();
       const form = event.currentTarget;
@@ -1040,6 +1521,54 @@
             <div><dt>Боли клиента</dt><dd>${brief.pains.length ? `<ul class="mentor-list">${brief.pains.map((item) => `<li>${esc(item)}</li>`).join('')}</ul>` : '—'}</dd></div>
             <div><dt>Подтверждённые факты</dt><dd>${brief.confirmedFacts.length ? `<ul class="mentor-list">${brief.confirmedFacts.map((item) => `<li>${esc(item.statement)}<br><span class="mentor-note">Источник: ${esc(item.source)}</span></li>`).join('')}</ul>` : '—'}</dd></div>
             <div><dt>Комфорт съёмки</dt><dd>${esc(brief.shootingComfort.level)}${brief.shootingComfort.notes ? `<br><span class="mentor-note">${esc(brief.shootingComfort.notes)}</span>` : ''}</dd></div>
+          </dl>`;
+      } catch (error) {
+        if (ctx.selectedProjectId !== code || !body.isConnected) return;
+        button.disabled = false;
+        body.textContent = error.message;
+      }
+    }));
+    /* Контекст черновика версии. Прежний адрес /plan/transfer/{postId} знает только расписку
+       по дням и для карточки версии ответил бы «не найдено», поэтому кнопка сюда не ведёт.
+       Читаются уже существующие адреса неизменяемых версий плана и брифа, записанные в самой
+       расписке: показывается СОХРАНЁННЫЙ исторический контекст, а не текущая правка формы.
+       Идея ищется по ideaId; исходник — свой у версии, иначе унаследованный от идеи. */
+    node.querySelectorAll('[data-variant-context]').forEach((button) => button.addEventListener('click', async () => {
+      const postId = button.dataset.variantContext;
+      const body = node.querySelector(`[data-variant-context-body="${postId}"]`);
+      const ideaId = button.dataset.variantContextIdea, platform = button.dataset.variantContextPlatform;
+      button.disabled = true;
+      body.textContent = 'Загружаем сохранённую версию плана и брифа…';
+      try {
+        const [planVersion, briefVersion] = await Promise.all([
+          ctx.crmQuery(`${PATH}/plan/versions/${encodeURIComponent(button.dataset.variantContextPlan)}`, {companyCode: code}),
+          ctx.crmQuery(`${PATH}/brief/versions/${encodeURIComponent(button.dataset.variantContextBrief)}`, {companyCode: code}),
+        ]);
+        if (ctx.selectedProjectId !== code || !body.isConnected) return;
+        const idea = (planVersion.days || []).find((row) => row.ideaId === ideaId) || null;
+        const variant = idea && idea.variants ? idea.variants[platform] : null;
+        const brief = briefVersion.fields || {};
+        const assetId = (variant && variant.assetId) || (idea && idea.assetId) || '';
+        const asset = assetId ? (brief.assets || []).find((row) => row.id === assetId) || null : null;
+        if (!idea) {
+          // У плана старого образца идей по идентификатору может не быть: врать об этом нельзя.
+          body.innerHTML = '<p class="mentor-note">В сохранённой версии плана эта идея по идентификатору не найдена: ' +
+            'план той версии составлялся без идентификаторов идей. Откройте версию плана целиком в истории.</p>';
+          return;
+        }
+        body.innerHTML = `<p class="mentor-note">Это сохранённая версия плана v${esc(button.dataset.variantContextPlan)}
+            и брифа v${esc(button.dataset.variantContextBrief)}, по которым карточка создана. Текущие правки формы сюда не попадают.</p>
+          <dl class="mentor-brief-view">
+            <div><dt>Тема</dt><dd>${esc(idea.topic) || '—'}</dd></div>
+            <div><dt>Текст версии</dt><dd>${variant && variant.text ? esc(variant.text) : '—'}</dd></div>
+            <div><dt>Формат</dt><dd>${esc((variant && variant.format) || idea.format || '—')}</dd></div>
+            <div><dt>Задача материала</dt><dd>${esc(idea.role) || '—'}</dd></div>
+            <div><dt>Зацепка</dt><dd>${esc((variant && variant.hook) || idea.hook || '—')}</dd></div>
+            <div><dt>Заметка наставника</dt><dd>${esc((variant && variant.mentorNote) || idea.mentorNote || '—')}</dd></div>
+            <div><dt>Исходник</dt><dd>${asset ? `${esc(asset.title)} · ${esc(asset.kind)}${asset.note ? `<br>${esc(asset.note)}` : ''}
+              <br><span class="mentor-note">Это описание словами, а не загруженный файл.</span>` : 'в плане не указан'}</dd></div>
+            <div><dt>Цель компании</dt><dd>${esc(brief.goal) || '—'}</dd></div>
+            <div><dt>Аудитория</dt><dd>${esc(brief.audience) || '—'}</dd></div>
           </dl>`;
       } catch (error) {
         if (ctx.selectedProjectId !== code || !body.isConnected) return;
