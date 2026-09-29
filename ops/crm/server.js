@@ -32,6 +32,7 @@ const { createPlatformCompanyMetrics } = require('./platform-company-metrics');
 const { createSocialStats } = require('./social-stats');
 const { createSocialBaselines } = require('./social-baselines');
 const { createSocialAdapters } = require('./social-adapters');
+const { createTelegramChannelStatsClient } = require('./telegram-channel-stats');
 const { createSocialStatsHandler } = require('./social-stats-http');
 const { createSocialAnalyticsCredentials } = require('./social-analytics-credentials');
 const { createSocialAnalyticsEvidence } = require('./social-analytics-evidence');
@@ -614,8 +615,14 @@ const socialAnalyticsEvidence = createSocialAnalyticsEvidence(db);
 const socialOnlypultAnalytics = createSocialOnlypultAnalytics({
   resolveCredential: (code) => socialAnalyticsCredentials.resolve(code)});
 const socialAnalytics = {credentials: socialAnalyticsCredentials, collector: socialOnlypultAnalytics, evidence: socialAnalyticsEvidence};
+/* Счётчик подписчиков Telegram: адрес сервиса задаётся только на сервере, ключ — уже
+   существующий межсервисный API_KEY. Новых секретов и новых прав не появляется; без
+   настройки клиент честно не готов, и цифры не появляются. */
+const telegramChannelStats = createTelegramChannelStatsClient({
+  baseUrl: process.env.CHAT_STATS_URL || '', apiKey: API_KEY});
 const socialStats = createSocialStats(db, {evidence: socialAnalyticsEvidence,
-  adapters: createSocialAdapters({transport: autopostingTransport, analytics: socialAnalytics})});
+  adapters: createSocialAdapters({transport: autopostingTransport, analytics: socialAnalytics,
+    channelStats: telegramChannelStats})});
 const socialBaselines = createSocialBaselines(db, socialStats);
 const handleSocialStats = createSocialStatsHandler({stats: socialStats, baselines: socialBaselines,
   analytics: socialAnalytics, companyMetrics: platformCompanyMetrics, companyModuleContext, readJson, send});

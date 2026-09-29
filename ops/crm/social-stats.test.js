@@ -935,3 +935,219 @@ test('оба параллельных ответа сохраняются в д�
     ['2026-09-18T08:00:00.000Z', '2026-09-18T08:00:01.000Z'], 'время наблюдения — момент начала запроса, а не завершения');
   assert.equal(new Set(records.map((item) => item.runId)).size, 2, 'каждое доказательство привязано к своему запуску');
 });
+
+/* Счётчик подписчиков Telegram через существующего бота Synapse: отдельный путь, не
+   зависящий от подключения публикаций. Всё синтетическое, сети нет. */
+function channelFixture(t, { value = 136, accountRef = '@demo_channel', fail: failWith = null, provider = 'direct', ready = true } = {}) {
+  const calls = [];
+  const channelStats = { ready, async channelMembers(code) {
+    calls.push(code);
+    if (failWith) throw Object.assign(new Error(failWith.message || 'отказ'), { code: failWith.code });
+    return { companyCode: code, accountRef, value, observedAt: '2026-09-18T01:30:00.000Z', source: 'getChatMemberCount' };
+  } };
+  // Транспорт публикаций намеренно не даёт статистики: счётчик обязан работать без него.
+  const transport = { async readStats() { throw new Error('подключение публикаций статистики не даёт'); },
+    connectionRevision: () => ({ provider: 'onlypult', revision: 1, target: 'channel' }) };
+  const f = fixture(t, { adapters: createSocialAdapters({ transport, channelStats }) });
+  f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@demo_channel',
+    provider, enabled: true, kind: 'unknown', timezone: 'Asia/Bangkok', collectHour: 6, revision: 0 }] });
+  return { ...f, calls, channelStats };
+}
+
+test('Telegram: счётчик подписчиков снимается при публикационной строке Onlypult и без подключения площадки', async (t) => {
+  for (const provider of ['direct', 'onlypult']) {
+    const f = channelFixture(t, { provider });
+    const run = await f.stats.collect('demo-a', 'telegram', { date: '2026-09-18' });
+    assert.equal(run.status, 'partial', provider);
+    assert.equal(run.rows, 1, provider);
+    assert.deepEqual(f.calls, ['demo-a'], 'сервис счётчика спрошен один раз');
+    const row = f.db.prepare("SELECT date, period, metric, value, source_field, completeness FROM social_snapshots WHERE platform='telegram'").get();
+    assert.deepEqual({ ...row }, { date: '2026-09-18', period: 'lifetime', metric: 'followers', value: 136,
+      source_field: 'getChatMemberCount', completeness: 'complete' });
+    assert.ok(run.missing.some((line) => /Bot API их не отдаёт/.test(line)), 'просмотры и реакции честно названы недоступными');
+    // Строка публикаций не тронута: адаптер не менял ни провайдера, ни аккаунт.
+    const account = f.stats.accounts('demo-a').accounts.find((a) => a.platform === 'telegram');
+    assert.equal(account.provider, provider);
+    assert.equal(account.accountRef, '@demo_channel');
+  }
+});
+
+test('Telegram: текущее число датируется днём наблюдения, а сбор за прошлую дату не переписывает историю сегодняшним', async (t) => {
+  const f = channelFixture(t);
+  // Сегодня в поясе аккаунта — 2026-09-18. Собираем за 17-е: это backfill.
+  const run = await f.stats.collect('demo-a', 'telegram', { date: '2026-09-17' });
+  assert.equal(run.date, '2026-09-17', 'запуск остаётся за запрошенную дату');
+  assert.equal(run.closed, true);
+  const rows = f.db.prepare("SELECT date, value FROM social_snapshots WHERE platform='telegram' ORDER BY date").all();
+  assert.deepEqual(rows.map((r) => ({ ...r })), [{ date: '2026-09-18', value: 136 }],
+    'сегодняшний счётчик записан сегодняшним днём, а не 17-м');
+  // Ручной исторический замер остаётся на своей дате и сегодняшним числом не затирается.
+  f.stats.importManual('demo-a', { platform: 'telegram', capturedAt: '2026-09-15T08:00:00.000Z',
+    sourceNote: 'шапка канала в Telegram Web', kind: 'unknown',
+    rows: [{ date: '2026-09-15', period: 'lifetime', metric: 'followers', value: 120 }] }, { userId: 1 });
+  await f.stats.collect('demo-a', 'telegram', { date: '2026-09-16' });
+  assert.deepEqual(f.db.prepare("SELECT date, value FROM social_snapshots WHERE platform='telegram' ORDER BY date").all().map((r) => ({ ...r })),
+    [{ date: '2026-09-15', value: 120 }, { date: '2026-09-18', value: 136 }], 'ручной замер сохранён');
+});
+
+test('Telegram: расписание снимает текущий день без языковой модели, повтор не дублирует строку', async (t) => {
+  const f = channelFixture(t);
+  const due = await f.stats.collectDue();
+  assert.ok(due.length, 'расписание дошло до аккаунта');
+  assert.equal(f.db.prepare("SELECT COUNT(*) n FROM social_snapshots WHERE platform='telegram'").get().n, 1);
+  await f.stats.collect('demo-a', 'telegram', { date: '2026-09-18' });
+  assert.equal(f.db.prepare("SELECT COUNT(*) n FROM social_snapshots WHERE platform='telegram'").get().n, 1, 'повтор не создаёт вторую строку');
+  assert.equal(f.db.prepare("SELECT value FROM social_snapshots WHERE platform='telegram'").get().value, 136);
+});
+
+test('Telegram: чужой канал в ответе, смена аккаунта и отказ сервиса не дают чисел', async (t) => {
+  const alien = channelFixture(t, { accountRef: '@other_channel' });
+  const run = await alien.stats.collect('demo-a', 'telegram', { date: '2026-09-18' });
+  assert.equal(run.status, 'missing_access');
+  assert.ok(run.missing.some((line) => /не совпадает с сохранённым/.test(line)));
+  assert.equal(alien.db.prepare("SELECT COUNT(*) n FROM social_snapshots WHERE platform='telegram'").get().n, 0, 'ни одной цифры');
+
+  const refused = channelFixture(t, { fail: { code: 'NO_BINDING', message: 'у компании не указан публичный канал' } });
+  const second = await refused.stats.collect('demo-a', 'telegram', { date: '2026-09-18' });
+  assert.equal(second.status, 'missing_access');
+  assert.ok(second.missing.some((line) => /не указан публичный канал/.test(line)));
+  assert.equal(refused.db.prepare("SELECT COUNT(*) n FROM social_snapshots WHERE platform='telegram'").get().n, 0);
+
+  // Аккаунт без указанного канала не угадывается.
+  const blank = channelFixture(t);
+  blank.stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '', provider: 'direct',
+    enabled: true, kind: 'unknown', timezone: 'Asia/Bangkok', collectHour: 6, revision: 1 }] });
+  const third = await blank.stats.collect('demo-a', 'telegram', { date: '2026-09-18' });
+  assert.equal(third.status, 'missing_access');
+  assert.deepEqual(blank.calls, [], 'без указанного канала сервис счётчика даже не спрашивается');
+  assert.equal(blank.db.prepare("SELECT COUNT(*) n FROM social_snapshots WHERE platform='telegram'").get().n, 0);
+});
+
+test('Telegram: задержавшийся ответ не перезаписывает более свежий счётчик', async (t) => {
+  const gate = { pending: [] };
+  const channelStats = { ready: true, channelMembers: (code) => new Promise((resolve) => gate.pending.push((value) =>
+    resolve({ companyCode: code, accountRef: '@demo_channel', value, observedAt: null, source: 'getChatMemberCount' }))) };
+  const f = fixture(t, { adapters: createSocialAdapters({ transport: null, channelStats }) });
+  f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@demo_channel', provider: 'direct',
+    enabled: true, kind: 'unknown', timezone: 'Asia/Bangkok', collectHour: 6, revision: 0 }] });
+  f.clock.ms = Date.parse('2026-09-18T08:00:00Z');
+  const a = f.stats.collect('demo-a', 'telegram', { trigger: 'schedule', date: '2026-09-17' });
+  await new Promise((r) => setImmediate(r));
+  f.clock.ms = Date.parse('2026-09-18T08:00:01Z');
+  const b = f.stats.collect('demo-a', 'telegram', { trigger: 'manual', date: '2026-09-18' });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(gate.pending.length, 2);
+  gate.pending[1](200);
+  await b;
+  f.clock.ms = Date.parse('2026-09-18T08:00:02Z');
+  gate.pending[0](100);
+  const late = await a;
+  assert.equal(late.rows, 0, 'отброшенная строка записью не считается');
+  assert.deepEqual(f.db.prepare("SELECT date, value FROM social_snapshots WHERE platform='telegram'").all().map((r) => ({ ...r })),
+    [{ date: '2026-09-18', value: 200 }], 'свежий счётчик остался');
+});
+
+test('Telegram: карточка честно объясняет, что доступен только счётчик подписчиков', (t) => {
+  const f = channelFixture(t);
+  const account = f.stats.accounts('demo-a').accounts.find((a) => a.platform === 'telegram');
+  assert.equal(account.access.status, 'depends_on_connection');
+  assert.match(account.access.note, /счётчик подписчиков канала через существующего бота Synapse/);
+  assert.match(account.access.note, /просмотры и реакции постов через Bot API недоступны/);
+  assert.match(account.access.note, /Наличие настройки не означает, что счётчик уже снят/);
+  assert.ok(account.access.missing.some((line) => /telegram_channel/.test(line)));
+});
+
+/* Приёмка 29.09: при временной недоступности счётчика сбор уходит на прежний путь через
+   подключение площадки — и ревизия ЭТОГО подключения обязана остаться в проверке. */
+test('Telegram: смена ревизии подключения во время запасного пути отбрасывает ответ', async (t) => {
+  let release, revision = 1;
+  const transport = {
+    connectionRevision: () => ({ provider: 'direct', revision, target: '@demo_channel' }),
+    readStats: () => new Promise((resolve) => { release = () => resolve({ provider: 'direct', target: '@demo_channel', result: 100 }); }),
+  };
+  // Счётчик временно недоступен: сбор обязан уйти на запасной путь, но с проверкой его ревизии.
+  const channelStats = { ready: true, channelMembers: async () => { throw Object.assign(new Error('сервис счётчика подписчиков не ответил'), { code: 'UNAVAILABLE' }); } };
+  const f = fixture(t, { adapters: createSocialAdapters({ transport, channelStats }) });
+  f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@demo_channel', provider: 'direct',
+    enabled: true, kind: 'unknown', timezone: 'Asia/Bangkok', collectHour: 6, revision: 0 }] });
+  const pending = f.stats.collect('demo-a', 'telegram', { date: '2026-09-18' });
+  await new Promise((r) => setImmediate(r));
+  revision = 2; // владелец пересохранил подключение, пока шёл запрос
+  release();
+  const run = await pending;
+  assert.equal(run.rows, 0, 'ответ прежней ревизии не записан');
+  assert.match(run.error, /Подключение площадки изменилось во время сбора/);
+  assert.equal(f.db.prepare("SELECT COUNT(*) n FROM social_snapshots WHERE platform='telegram'").get().n, 0, 'старого числа 100 в базе нет');
+  // Тот же путь при неизменной ревизии значение записывает.
+  const stable = fixture(t, { adapters: createSocialAdapters({
+    transport: { connectionRevision: () => ({ provider: 'direct', revision: 1, target: '@demo_channel' }),
+      readStats: async () => ({ provider: 'direct', target: '@demo_channel', result: 100 }) }, channelStats }) });
+  stable.stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@demo_channel', provider: 'direct',
+    enabled: true, kind: 'unknown', timezone: 'Asia/Bangkok', collectHour: 6, revision: 0 }] });
+  await stable.stats.collect('demo-a', 'telegram', { date: '2026-09-18' });
+  assert.equal(stable.db.prepare("SELECT value FROM social_snapshots WHERE platform='telegram'").get().value, 100);
+});
+
+/* Временная недоступность не должна закрывать дату от повторов: иначе восстановившийся
+   сервис уже не спросят до следующих суток. */
+test('Telegram: временная недоступность счётчика остаётся повторяемой и после восстановления даёт число', async (t) => {
+  let available = false, asked = 0;
+  const channelStats = { ready: true, async channelMembers(code) {
+    asked += 1;
+    if (!available) throw Object.assign(new Error('сервис счётчика подписчиков не ответил'), { code: 'UNAVAILABLE' });
+    return { companyCode: code, accountRef: '@demo_channel', value: 136, observedAt: null, source: 'getChatMemberCount' };
+  } };
+  // Публикации через Onlypult: запасного пути статистики у этой строки нет.
+  const f = fixture(t, { adapters: createSocialAdapters({ transport: null, channelStats }) });
+  f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@demo_channel', provider: 'onlypult',
+    enabled: true, kind: 'unknown', timezone: 'Asia/Bangkok', collectHour: 6, revision: 0 }] });
+  const first = await f.stats.collectDue();
+  assert.ok(first.length, 'расписание дошло до аккаунта');
+  assert.equal(first.every((r) => r.status !== 'missing_access'), true, 'временная причина не выдаётся за отсутствие доступа');
+  assert.equal(f.db.prepare("SELECT COUNT(*) n FROM social_snapshots WHERE platform='telegram'").get().n, 0);
+  assert.ok(f.stats.queuedDates('demo-a', 'telegram', '@demo_channel').length, 'дата осталась в очереди повторов');
+  // Сервис восстановился; через два часа расписание обязано спросить снова.
+  available = true;
+  const asksBefore = asked;
+  f.clock.ms += 2 * 60 * 60 * 1000;
+  const second = await f.stats.collectDue();
+  assert.ok(second.length, 'после восстановления расписание собрало заново');
+  assert.ok(asked > asksBefore, 'счётчик спросили повторно');
+  assert.equal(f.db.prepare("SELECT value FROM social_snapshots WHERE platform='telegram'").get().value, 136);
+  // Окончательная причина по-прежнему закрывает дату от бесполезных повторов.
+  const decisive = fixture(t, { adapters: createSocialAdapters({ transport: null, channelStats: { ready: true,
+    channelMembers: async () => { throw Object.assign(new Error('у компании не указан публичный канал'), { code: 'NO_BINDING' }); } } }) });
+  decisive.stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@demo_channel', provider: 'onlypult',
+    enabled: true, kind: 'unknown', timezone: 'Asia/Bangkok', collectHour: 6, revision: 0 }] });
+  const refused = await decisive.stats.collectDue();
+  assert.ok(refused.some((r) => r.status === 'missing_access'), 'отсутствие привязки — не временная причина');
+  assert.deepEqual(decisive.stats.queuedDates('demo-a', 'telegram', '@demo_channel'), [], 'бесполезные повторы не ставятся');
+});
+
+test('Telegram: реальный HTTP-клиент сохраняет повтор сбора после 429 и временных ошибок сервера', async (t) => {
+  const { createTelegramChannelStatsClient } = require('./telegram-channel-stats');
+  for (const status of [429, 502, 503, 504]) {
+    let available = false, calls = 0;
+    const channelStats = createTelegramChannelStatsClient({ baseUrl: 'http://fixture.invalid', apiKey: 'fixture-key',
+      fetchImpl: async () => {
+        calls += 1;
+        if (!available) return new Response('{}', { status });
+        return new Response(JSON.stringify({ companyCode: 'demo-a', accountRef: '@demo_channel', value: 136,
+          observedAt: '2026-09-18T10:00:00Z' }), { status: 200 });
+      } });
+    const f = fixture(t, { adapters: createSocialAdapters({ transport: null, channelStats }) });
+    f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@demo_channel', provider: 'onlypult',
+      enabled: true, kind: 'unknown', timezone: 'Asia/Bangkok', collectHour: 6, revision: 0 }] });
+    const first = await f.stats.collectDue();
+    assert.ok(first.length && first.every((run) => run.status !== 'missing_access'), `HTTP${status}: временный отказ не закрывает доступ`);
+    assert.ok(f.stats.queuedDates('demo-a', 'telegram', '@demo_channel').length, `HTTP${status}: повтор поставлен`);
+    assert.equal(f.db.prepare("SELECT COUNT(*) n FROM social_snapshots WHERE platform='telegram'").get().n, 0);
+    const callsBefore = calls;
+    available = true;
+    f.clock.ms += 2 * 60 * 60 * 1000;
+    const recovered = await f.stats.collectDue();
+    assert.ok(recovered.some((run) => run.rows > 0), `HTTP${status}: после восстановления записан замер`);
+    assert.ok(calls > callsBefore, `HTTP${status}: запрос повторился`);
+    assert.equal(f.db.prepare("SELECT value FROM social_snapshots WHERE platform='telegram'").get().value, 136);
+  }
+});
