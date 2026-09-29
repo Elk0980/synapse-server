@@ -27,6 +27,9 @@
     return Number.isNaN(parsed.getTime()) ? "" : parsed.toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   };
   const identifier = () => crypto.randomUUID();
+  const receiptLinks = message => message.deliveryStatus === 'sent' ? list(message.telegramLinks)
+    .filter(url => typeof url === 'string' && /^https:\/\/t\.me\/c\/\d+\/\d+$/.test(url))
+    .map((url, index) => `<a href="${escape(url)}" target="_blank" rel="noopener noreferrer">Открыть в Telegram${index ? ` (${index + 1})` : ''}</a>`).join(' ') : '';
   const assetUrl = value => {
     try {
       const url = new URL(value, location.origin);
@@ -262,7 +265,7 @@
     <div class="pc-message-meta"><strong>${escape(message.authorName || (message.authorType === "assistant" ? "Хью" : "Участник"))}</strong>${message.authorType === "assistant" ? `<span class="pc-ai-badge">${AI_BADGE}</span>` : ""}<time datetime="${escape(message.createdAt)}">${escape(date(message.createdAt))}</time>${message.authorType === "telegram" ? '<span>Telegram</span>' : ""}</div>
     ${message.text ? `<p class="pc-message-text">${escape(message.text)}</p>` : ""}
     ${list(message.attachments).length ? `<div class="pc-attachments">${message.attachments.map(attachment => attachmentHTML(attachment, state)).join("")}</div>` : ""}
-    <div class="pc-message-footer"><small${message.deliveryStatus === "error" ? ' class="pc-error"' : ""}>${escape(delivery[message.deliveryStatus] || "")}</small>${reply ? `<button type="button" data-pc-message-task="${escape(message.id)}">В задачу</button>` : ""}</div>
+    <div class="pc-message-footer"><small${message.deliveryStatus === "error" ? ' class="pc-error"' : ""}>${escape(delivery[message.deliveryStatus] || "")}</small>${message.reviewedByOwner ? '<small>Проверено владельцем</small>' : ''}${receiptLinks(message)}${reply ? `<button type="button" data-pc-message-task="${escape(message.id)}">В задачу</button>` : ""}</div>
     ${aiNoteHTML(message, ai)}
   </li>`).join("") || '<li class="pc-empty">Здесь будет общая переписка участников проекта.</li>';
   };

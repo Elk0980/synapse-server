@@ -396,13 +396,22 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       if (!files.has(a.message_id)) files.set(a.message_id, []);
       files.get(a.message_id).push(attachmentJSON(a));
     }
-    const delivery = new Map(db.prepare(`SELECT message_id,status FROM project_chat_outbox WHERE message_id IN (${marks})`)
-      .all(...ids).map(r => [r.message_id, r.status]));
+    const delivery = new Map(db.prepare(`SELECT message_id,status,chat_id,external_ids FROM project_chat_outbox WHERE message_id IN (${marks})`)
+      .all(...ids).map(r => [r.message_id, r]));
+    const reviewed = new Set(db.prepare(`SELECT message_id FROM project_chat_reviewed_messages WHERE message_id IN (${marks})`)
+      .all(...ids).map(r => r.message_id));
+    const receiptLinks = row => {
+      if (row?.status !== 'sent' || !/^-100\d+$/.test(row.chat_id)) return [];
+      let external; try { external = JSON.parse(row.external_ids || '[]'); } catch { return []; }
+      return Array.isArray(external) ? external.filter(id => /^\d+$/.test(String(id)))
+        .map(id => `https://t.me/c/${row.chat_id.slice(4)}/${id}`) : [];
+    };
     const jobs = new Map(db.prepare(`SELECT id,message_id,status FROM project_chat_ai_jobs WHERE message_id IN (${marks})`)
       .all(...ids).map(r => [r.message_id, r]));
     return rows.map(m => ({ id: m.id, authorName: m.author_name, authorType: m.author_type, text: m.text,
       createdAt: m.created_at, attachments: files.get(m.id) || [],
-      deliveryStatus: delivery.get(m.id) || 'local',
+      deliveryStatus: delivery.get(m.id)?.status || 'local',
+      telegramLinks: receiptLinks(delivery.get(m.id)), reviewedByOwner: reviewed.has(m.id),
       // Ожидание подключения — это по-прежнему очередь, а не отказ.
       ...(jobs.has(m.id) ? { aiStatus: jobs.get(m.id).status === 'blocked' ? 'pending' : jobs.get(m.id).status,
         aiJobId: jobs.get(m.id).id } : {}) }));

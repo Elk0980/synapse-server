@@ -109,6 +109,11 @@ test('проверенная владельцем отправка Хью: фа�
   assert.equal((await send()).statusCode, 200);
   assert.equal(db.prepare('SELECT count(*) n FROM project_chat_outbox').get().n, 1);
   assert.equal(db.prepare('SELECT status FROM project_chat_outbox WHERE message_id=?').get(message.id).status, 'uncertain');
+  assert.deepEqual((await send()).payload.message.telegramLinks, []);
+  db.prepare("UPDATE project_chat_outbox SET status='sent',external_ids=? WHERE message_id=?").run('["218","219"]', message.id);
+  const receipt = (await send()).payload.message;
+  assert.equal(receipt.reviewedByOwner, true);
+  assert.deepEqual(receipt.telegramLinks, ['https://t.me/c/12345/218', 'https://t.me/c/12345/219']);
   body.text = 'Другая версия';
   await assert.rejects(send, status(409));
 });
@@ -123,6 +128,8 @@ test('отправка от Хью отклоняет участника, CSRF �
   await assert.rejects(() => send(session(member.id)), status(403));
   await assert.rejects(() => send(owner, { 'x-csrf-token': 'bad' }), status(403));
   await assert.rejects(() => send(owner), status(409));
+  db.prepare('UPDATE auth_users SET session_version=session_version+1 WHERE id=?').run(OWNER_ID);
+  await assert.rejects(() => send(owner), status(401));
   assert.equal(db.prepare('SELECT count(*) n FROM project_chat_messages').get().n, 0);
 });
 
