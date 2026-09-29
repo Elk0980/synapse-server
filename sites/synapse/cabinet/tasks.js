@@ -39,6 +39,64 @@ const init = (context) => {
   };
   let renderVersion = 0;
   let searchTimer;
+  const milestones = {code:'Код готов',connected:'Подключено',verified:'Проверено',accepted:'Принято'};
+  const milestoneStates = {pending:'Не подтверждено',confirmed:'Подтверждено',not_required:'Не требуется'};
+  const coordinationFields = {module:'Модуль',ownerThreadId:'Идентификатор ответственного чата',ownerThreadName:'Название чата',
+    executorId:'Идентификатор исполнителя',executorName:'Исполнитель',verifiedModel:'Проверенная модель',
+    modelCheckedAt:'Дата проверки модели (ISO)',scope:'Область работы',acceptance:'Критерий готовности',
+    result:'Подтверждённый результат',blocker:'Что мешает',nextAction:'Следующий шаг'};
+  const renderCoordination = async (allCompanies = false) => {
+    if(ctx.identity?.role !== 'owner') return;
+    const version = ++renderVersion, content = byId('tasks-content');
+    content.textContent = 'Загрузка доски…';
+    try {
+      loadTaskCompanies();
+      const scope = allCompanies ? {} : scopeParams(), records = [];
+      let page;
+      do {
+        page = await crmQuery('/coordination/tasks',{...scope,limit:200,offset:records.length});
+        if(version !== renderVersion || ctx.currentView !== 'tasks') return;
+        records.push(...page.tasks);
+      } while(page.tasks.length && records.length < page.pagination.total);
+      content.innerHTML = `<h2>Координация проектов</h2><p>Ответственный чат и исполнитель указываются отдельно. Отметки готовности подтверждаются основанием и датой.</p>
+        <p class="crm-muted">Обновление вручную. Доска пока не запускает чаты и не блокирует общие ресурсы.</p>
+        <div class="crm-actions"><button type="button" data-coord-back>К списку задач</button>
+        <label><input type="checkbox" data-coord-all ${allCompanies?'checked':''}>Все проекты</label></div>
+        <div class="coordination-board">${records.map(item=>`<article class="crm-card" style="padding:16px;margin:16px 0;border:1px solid currentColor;border-radius:12px;overflow-wrap:anywhere">
+        <h3>${escapeHTML(item.title)}</h3><p>${escapeHTML(taskCompanyName(item.companyCode))} · ${escapeHTML(item.module || 'Модуль не указан')}</p>
+        <p>Ответственный чат: ${escapeHTML(item.ownerThreadName || item.ownerThreadId || 'Не назначен')}<br>Исполнитель: ${escapeHTML(item.executorName || item.assigneeName || 'Не назначен')}</p>
+        <dl>${Object.entries(milestones).map(([key,label])=>`<dt><strong>${label}: ${milestoneStates[item.milestones[key].state]}</strong></dt><dd>${escapeHTML(item.milestones[key].evidence || 'Нет подтверждения')}${item.milestones[key].checkedAt?' · '+escapeHTML(item.milestones[key].checkedAt):''}</dd>`).join('')}</dl>
+        <p>Результат: ${escapeHTML(item.result || 'Не указан')}<br>Что мешает: ${escapeHTML(item.blocker || 'Не указано')}<br>Следующий шаг: ${escapeHTML(item.nextAction || 'Не указан')}</p>
+        <p class="crm-muted">Обновлено: ${escapeHTML(item.updatedAt || 'Ещё не проверено')}</p>
+        <button type="button" data-coord-edit="${item.taskId}">Обновить карточку</button></article>`).join('') || '<p>Задач пока нет. Добавьте задачу в общем списке.</p>'}</div>`;
+      content.querySelector('[data-coord-back]').onclick = renderTaskList;
+      content.querySelector('[data-coord-all]').onchange = event=>renderCoordination(event.target.checked);
+      content.querySelectorAll('[data-coord-edit]').forEach(button=>button.onclick=()=>editCoordination(records.find(item=>String(item.taskId)===button.dataset.coordEdit),allCompanies));
+    } catch(error) {
+      if(version===renderVersion) content.innerHTML = `<p role="alert">${escapeHTML(error.message)}</p>`;
+    }
+  };
+  const editCoordination = (item, allCompanies) => {
+    const content=byId('tasks-content'), version=++renderVersion;
+    content.innerHTML = `<h2>${escapeHTML(item.title)}</h2><p>Компания: ${escapeHTML(taskCompanyName(item.companyCode))}. Изменения относятся к этой задаче.</p>
+      <form class="crm-form" data-coord-form>${Object.entries(coordinationFields).map(([key,label])=>`<label>${label}<textarea name="${key}" maxlength="${['scope','acceptance','result','blocker','nextAction'].includes(key)?4000:200}">${escapeHTML(item[key] || '')}</textarea></label>`).join('')}
+      ${Object.entries(milestones).map(([key,label])=>`<fieldset class="wide"><legend>${label}</legend><label>Состояние<select name="${key}-state">${taskOptions(milestoneStates,item.milestones[key].state)}</select></label>
+      <label>Основание: проверка, ссылка или версия результата<textarea name="${key}-evidence" maxlength="4000">${escapeHTML(item.milestones[key].evidence)}</textarea></label>
+      <label>Дата и время проверки (ISO)<input name="${key}-checkedAt" placeholder="2026-09-29T10:00:00Z" value="${escapeHTML(item.milestones[key].checkedAt)}"></label></fieldset>`).join('')}
+      <div class="crm-actions wide"><button type="submit">Сохранить</button><button type="button" data-coord-cancel>К доске</button></div><p data-coord-result role="status"></p></form>`;
+    const form=content.querySelector('[data-coord-form]');
+    form.querySelector('[data-coord-cancel]').onclick=()=>renderCoordination(allCompanies);
+    form.onsubmit=async event=>{
+      event.preventDefault(); const button=form.querySelector('[type=submit]'); button.disabled=true;
+      const data=Object.fromEntries(Object.keys(coordinationFields).map(key=>[key,form.elements.namedItem(key).value.trim()]));
+      data.milestones=Object.fromEntries(Object.keys(milestones).map(key=>[key,Object.fromEntries(['state','evidence','checkedAt'].map(field=>[field,form.elements.namedItem(`${key}-${field}`).value.trim()]))]));
+      try {
+        await crmQuery(`/coordination/tasks/${item.taskId}`,{},csrfOptions('PUT',{revision:item.revision,data}));
+        if(version===renderVersion && ctx.currentView==='tasks') await renderCoordination(allCompanies);
+      } catch(error) {if(version===renderVersion) form.querySelector('[data-coord-result]').textContent=error.message;}
+      finally {button.disabled=false;}
+    };
+  };
   const taskRoute = (id = "") => {
     const params = new URLSearchParams();
     FILTER_KEYS.forEach((key) => {
@@ -202,6 +260,7 @@ const init = (context) => {
         ${taskOptions(TASK_SOURCES, taskState.source)}</select>
         <input type="search" data-task-search value="${escapeHTML(taskState.q)}" placeholder="Поиск"
           aria-label="Поиск задач"><button class="plain-button" type="button" data-task-add>Добавить</button>
+        ${ctx.identity?.role === 'owner' ? '<button type="button" data-task-coordination>Координация проектов</button>' : ''}
         </div><p class="crm-list-count">Показано ${tasks.length} из ${tasks.length}</p>
         <div class="crm-table-wrap"><table class="crm-table crm-entity-table"><thead><tr>
         <th class="crm-grow">Задача</th><th>Проект</th><th>Исполнитель</th><th>Приоритет</th><th>Срок</th>
@@ -219,6 +278,7 @@ const init = (context) => {
   };
   const bindTaskList = () => {
     const content = byId("tasks-content");
+    content.querySelector('[data-task-coordination]')?.addEventListener('click',()=>renderCoordination());
     content.querySelectorAll("[data-task-status-tab]").forEach((button) => {
       button.addEventListener("click", () => {
         taskState.status = button.dataset.taskStatusTab;
