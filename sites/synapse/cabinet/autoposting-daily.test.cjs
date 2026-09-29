@@ -155,7 +155,7 @@ test('частичное согласование в карточке: в пла
   const writes=[];
   const f=await fixture({entries:[row(1,{platformIds:['telegram','vk'],captions:{telegram:'ТГ',vk:'ВК'},platformApprovals,
     // Дата в будущем относительно зафиксированного времени фикстуры: иначе кабинет справедливо не даёт ставить в план.
-    scheduledAt:'2026-09-26T09:00:00Z',
+    scheduledAt:'2026-09-24T23:45:00Z',
     approval:{approved:false,stale:false,platforms:platformApprovals}})],override:(call,posts)=>{
       if(call.method==='GET'||!/\/(schedule|approve)$/.test(call.path))return undefined;
       writes.push({path:call.path,body:JSON.parse(call.options.body)});
@@ -218,4 +218,110 @@ test('продолжение по оставшимся площадкам: кн�
     await viewer.click('[data-open-post="1"]');
     assert.equal(viewer.d.querySelector('#autoposting-continue-remaining'),null,'только чтение продолжение не создаёт');
   }finally{viewer.close();}
+});
+
+test('карточка подключения YouTube Shorts: только Onlypult, по умолчанию выключено, есть загрузка профилей, проверка и сохранение',async()=>{
+  const channels=[
+    {id:'telegram',platform:'telegram',name:'Telegram',enabled:false,connected:true,revision:1,provider:'direct'},
+    {id:'youtube_shorts',platform:'youtube_shorts',name:'YouTube Shorts',enabled:false,connected:false,revision:0,
+     provider:'onlypult',target:'',caps:{maxText:5000,maxMedia:1,mediaMode:'video'}}];
+  const f=await fixture({override:call=>call.path.endsWith('/settings')
+    ?{timezone:'Asia/Irkutsk',channels}:undefined});try{
+    f.d.querySelector('.autoposting-connections')?.setAttribute('open','');
+    const card=[...f.d.querySelectorAll('[data-channel]')].find(node=>node.dataset.channel==='youtube_shorts');
+    assert.ok(card,'карточка канала есть');
+    const options=[...card.querySelectorAll('[data-channel-field="provider"] option')].map(node=>node.value);
+    assert.deepEqual(options,['onlypult'],'прямого подключения в выборе нет');
+    assert.equal(card.querySelector('[data-channel-field="provider"]').value,'onlypult');
+    assert.equal(card.querySelector('[data-channel-field="enabled"]').checked,false,'по умолчанию отправка выключена');
+    assert.ok(card.querySelector('[data-channel-field="name"]'),'название канала можно задать');
+    assert.ok(card.querySelector('[data-channel-field="target"]'),'профиль выбирается списком');
+    assert.ok(card.querySelector('[data-load-profiles="youtube_shorts"]'),'есть загрузка профилей');
+    assert.ok(card.querySelector('[data-check-channel="youtube_shorts"]'),'есть проверка доступа');
+    assert.ok(card.querySelector('button[type="submit"]'),'есть сохранение подключения');
+    assert.match(card.textContent,/только через Onlypult/);
+    assert.match(card.textContent,/заголовок|заголовка/i);
+    // Подключённый, но выключенный канал больше не выглядит неподключённым.
+    const platforms=f.node('autoposting-platforms').textContent;
+    assert.match(platforms,/Telegram — отправка выключена/);
+    assert.doesNotMatch(platforms,/Telegram — требуется подключение/);
+    assert.ok(f.calls.every(call=>call.method==='GET'),'осмотр карточки ничего не сохраняет');
+  }finally{f.close();}
+});
+
+test('карточка подключения названа своей площадкой, а требования YouTube не блокируют согласованный Telegram',async()=>{
+  const channels=[
+    {id:'telegram',platform:'telegram',name:'Telegram',enabled:true,connected:true,revision:1,provider:'direct'},
+    {id:'youtube_shorts',platform:'youtube_shorts',name:'',enabled:false,connected:false,revision:0,provider:'onlypult',target:'',
+     caps:{maxText:5000,maxMedia:1,mediaMode:'video'}}];
+  const platformApprovals=[
+    {platformId:'telegram',platformLabel:'Telegram',state:'approved',stateLabel:'Согласовано',approved:true,stale:false,contentRevision:3,comment:'',byName:'Влад',at:null},
+    {platformId:'youtube_shorts',platformLabel:'YouTube Shorts',state:'pending',stateLabel:'Ждёт согласования',approved:false,stale:false,contentRevision:3,comment:'',byName:null,at:null}];
+  const entry=row(1,{title:'З'.repeat(140),platformIds:['telegram','youtube_shorts'],captions:{telegram:'ТГ'},
+    scheduledAt:'2026-09-24T23:45:00Z',platformApprovals,approval:{approved:false,stale:false,platforms:platformApprovals}});
+  const f=await fixture({entries:[entry],override:call=>call.path.endsWith('/settings')
+    ?{timezone:'Asia/Irkutsk',channels}:undefined});try{
+    const youtubeCard=[...f.d.querySelectorAll('[data-channel]')].find(node=>node.dataset.channel==='youtube_shorts');
+    assert.match(youtubeCard.querySelector('h3').textContent,/YouTube Shorts/,'канал назван своей площадкой, а не Telegram');
+    const telegramCard=[...f.d.querySelectorAll('[data-channel]')].find(node=>node.dataset.channel==='telegram');
+    assert.match(telegramCard.querySelector('h3').textContent,/Telegram/);
+    await f.click('[data-open-post="1"]');
+    await f.click('#autoposting-preview');
+    const preview=f.node('autoposting-preview-content').textContent;
+    assert.doesNotMatch(preview,/сократите его до 100 символов/,'длинное название несогласованного YouTube не мешает Telegram');
+    assert.equal(f.node('autoposting-schedule').disabled,false,'согласованный Telegram ставится в план');
+  }finally{f.close();}
+});
+
+test('когда YouTube Shorts согласован, длинное название и не ровно одно видео блокируют планирование, а предпросмотр называет публичный доступ',async()=>{
+  const channels=[{id:'youtube_shorts',platform:'youtube_shorts',name:'YouTube Shorts',enabled:true,connected:true,revision:1,
+    provider:'onlypult',target:'profile',caps:{maxText:5000,maxMedia:1,mediaMode:'video'}}];
+  const approvals=[{platformId:'youtube_shorts',platformLabel:'YouTube Shorts',state:'approved',stateLabel:'Согласовано',
+    approved:true,stale:false,contentRevision:3,comment:'',byName:'Влад',at:null}];
+  const make=extra=>row(1,{platformIds:['youtube_shorts'],captions:{},scheduledAt:'2026-09-24T23:45:00Z',
+    platformApprovals:approvals,approval:{approved:false,stale:false,platforms:approvals},...extra});
+  const long=await fixture({entries:[make({title:'З'.repeat(101),mediaUrls:['https://example.test/clip.mp4']})],
+    override:call=>call.path.endsWith('/settings')?{timezone:'Asia/Irkutsk',channels}:undefined});try{
+    await long.click('[data-open-post="1"]');await long.click('#autoposting-preview');
+    const text=long.node('autoposting-preview-content').textContent;
+    assert.match(text,/сократите его до 100 символов/);
+    assert.match(text,/публичный доступ/,'предпросмотр прямо говорит про публичный доступ');
+    assert.equal(long.node('autoposting-schedule').disabled,true);
+  }finally{long.close();}
+  const two=await fixture({entries:[make({title:'Короткое название',mediaUrls:['https://example.test/a.mp4','https://example.test/b.mp4']})],
+    override:call=>call.path.endsWith('/settings')?{timezone:'Asia/Irkutsk',channels}:undefined});try{
+    await two.click('[data-open-post="1"]');await two.click('#autoposting-preview');
+    assert.match(two.node('autoposting-preview-content').textContent,/ровно один видеофайл/);
+    assert.equal(two.node('autoposting-schedule').disabled,true);
+  }finally{two.close();}
+});
+
+test('кабинет не пускает в план картинку или http-ссылку для YouTube Shorts, и не мешает согласованному Telegram',async()=>{
+  const channels=[{id:'youtube_shorts',platform:'youtube_shorts',name:'YouTube Shorts',enabled:true,connected:true,revision:1,
+    provider:'onlypult',target:'profile',caps:{maxText:5000,maxMedia:1,mediaMode:'video'}}];
+  const approvals=[{platformId:'youtube_shorts',platformLabel:'YouTube Shorts',state:'approved',stateLabel:'Согласовано',
+    approved:true,stale:false,contentRevision:3,comment:'',byName:'Влад',at:null}];
+  const make=mediaUrls=>row(1,{platformIds:['youtube_shorts'],captions:{},scheduledAt:'2026-09-24T23:45:00Z',
+    title:'Короткое название',mediaUrls,platformApprovals:approvals,approval:{approved:false,stale:false,platforms:approvals}});
+  for (const [name,mediaUrls] of [
+    ['картинка вместо видео',['https://example.test/frame.jpg']],
+    ['видео по http',['http://example.test/clip.mp4']],
+    ['картинка с расширением в параметре',['https://example.test/frame.jpg?file=.mp4']],
+    ['видео с фрагментом',['https://example.test/clip.mp4#t=1']],
+    ['видео с параметром и фрагментом',['https://example.test/clip.mp4?x=1#t=1']],
+  ]) {
+    const f=await fixture({entries:[make(mediaUrls)],override:call=>call.path.endsWith('/settings')
+      ?{timezone:'Asia/Irkutsk',channels}:undefined});try{
+      await f.click('[data-open-post="1"]');await f.click('#autoposting-preview');
+      assert.match(f.node('autoposting-preview-content').textContent,/ровно один видеофайл по HTTPS/,name);
+      assert.equal(f.node('autoposting-schedule').disabled,true,name);
+      assert.ok(!f.calls.some(call=>/schedule/.test(call.path)),name);
+    }finally{f.close();}
+  }
+  const ok=await fixture({entries:[make(['https://example.test/clip.mp4?version=1'])],override:call=>call.path.endsWith('/settings')
+    ?{timezone:'Asia/Irkutsk',channels}:undefined});try{
+    await ok.click('[data-open-post="1"]');await ok.click('#autoposting-preview');
+    assert.doesNotMatch(ok.node('autoposting-preview-content').textContent,/ровно один видеофайл по HTTPS/);
+    assert.equal(ok.node('autoposting-schedule').disabled,false,'настоящий параметр запроса видео не ломает');
+  }finally{ok.close();}
 });

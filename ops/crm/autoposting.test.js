@@ -786,3 +786,67 @@ test('каналы, переданные в разные продолжения,
       &&new RegExp(`материал №${second.id}`).test(error.message),
     'конфликт называет оба продолжения, а не подменяет их одним');
 });
+
+test('сервер не ставит в план заведомо невалидный YouTube Shorts: картинка, http, отсутствие видео и длинное название',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'};
+  f.channels.push({id:'youtube_shorts',enabled:true,connected:true,revision:1});
+  const future=new Date(Date.parse('2026-09-15T00:00:00Z')+3600000).toISOString();
+  const card=(changes={})=>{
+    const created=f.api.create('alvi',{title:'Утро в студии',text:'Описание',mediaUrls:['https://cdn.example.test/d1.mp4'],
+      platformIds:['telegram','youtube_shorts'],dayKey:'D2',captions:{telegram:'ТГ',youtube_shorts:'Шортс'},
+      scheduledAt:future,timezone:'Asia/Irkutsk',profileRevision:f.information.get('alvi').revision,...changes},7);
+    return f.api.approve(created.id,'alvi',{revision:created.revision,approved:true},owner);
+  };
+  for (const [name,changes] of [
+    ['картинка вместо видео',{mediaUrls:['https://cdn.example.test/frame.jpg']}],
+    ['видео по http',{mediaUrls:['http://cdn.example.test/d1.mp4']}],
+    ['два файла',{mediaUrls:['https://cdn.example.test/a.mp4','https://cdn.example.test/b.mp4']}],
+    ['картинка с расширением в параметре',{mediaUrls:['https://cdn.example.test/frame.jpg?file=.mp4']}],
+    ['видео с фрагментом',{mediaUrls:['https://cdn.example.test/d1.mp4#t=1']}],
+    ['видео с параметром и фрагментом',{mediaUrls:['https://cdn.example.test/d1.mp4?x=1#t=1']}],
+    ['длинное название',{title:'З'.repeat(101)}],
+  ]) {
+    const item=card(changes);
+    await assert.rejects(f.api.schedule(item.id,'alvi',{revision:item.revision}),
+      error=>error.status===400&&error.details.code==='CONTENT_LIMIT',name);
+    assert.equal(f.api.get(item.id,'alvi').deliveries.length,0,`${name}: очередь не создана`);
+  }
+  // Частичное согласование не ломается: Telegram в план идёт, YouTube остаётся в карточке.
+  const partial=card({mediaUrls:['https://cdn.example.test/frame.jpg']});
+  const planned=await f.api.schedule(partial.id,'alvi',{revision:partial.revision,platformIds:['telegram']});
+  assert.equal(planned.status,'scheduled');
+  assert.equal(planned.deliveries.length,1);
+  assert.deepEqual(planned.platformIds,['telegram','youtube_shorts']);
+  // Настоящий параметр запроса видео не ломает: отклоняется именно фрагмент.
+  const withQuery=card({mediaUrls:['https://cdn.example.test/d1.mp4?x=1']});
+  const queryPlanned=await f.api.schedule(withQuery.id,'alvi',{revision:withQuery.revision});
+  assert.equal(queryPlanned.status,'scheduled');assert.equal(queryPlanned.deliveries.length,2);
+  // И правильный материал планируется целиком.
+  const good=card();
+  const ok=await f.api.schedule(good.id,'alvi',{revision:good.revision});
+  assert.equal(ok.status,'scheduled');assert.equal(ok.deliveries.length,2);
+});
+
+test('календарь не считает YouTube Shorts готовым, если вместо видео картинка или название слишком длинное',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'},range={from:'2026-09-01',to:'2026-09-30'};
+  f.channels.push({id:'youtube_shorts',enabled:true,connected:true,revision:1});
+  const entry=async(changes,platform='youtube_shorts')=>{
+    const created=f.api.create('alvi',{title:'Утро в студии',text:'Описание',mediaUrls:['https://cdn.example.test/d1.mp4'],
+      platformIds:['youtube_shorts'],dayKey:'D3',captions:{youtube_shorts:'Шортс'},
+      scheduledAt:new Date(Date.parse('2026-09-15T00:00:00Z')+3600000).toISOString(),
+      timezone:'Asia/Irkutsk',profileRevision:f.information.get('alvi').revision,...changes},7);
+    f.api.approve(created.id,'alvi',{revision:created.revision,approved:true},owner);
+    const data=await f.api.calendar('alvi',range);
+    const item=[...(data.posts||[]),...(data.undated||[])].find(value=>value.id===created.id);
+    assert.ok(item);
+    return ((item.calendarReadiness||{}).platforms||[]).find(value=>value.platform===platform);
+  };
+  const picture=await entry({mediaUrls:['https://cdn.example.test/frame.jpg']});
+  assert.notEqual(picture.state,'ready','картинка не делает Shorts готовым');
+  assert.ok(picture.issues.some(issue=>/ровно один видеофайл по HTTPS/.test(issue)));
+  const longTitle=await entry({title:'З'.repeat(101)});
+  assert.notEqual(longTitle.state,'ready');
+  assert.ok(longTitle.issues.some(issue=>/длиннее 100 символов/.test(issue)));
+  const good=await entry({});
+  assert.equal(good.state,'ready','правильный материал остаётся готовым');
+});

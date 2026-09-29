@@ -52,7 +52,13 @@ test('settings encrypt every tenant token and expose no credentials; only explic
  const rows=f.db.prepare('SELECT * FROM autoposting_channels').all();
  for(const row of rows){assert.ok(!JSON.stringify(row).includes(TG_TOKEN));assert.ok(!JSON.stringify(row).includes(VK_TOKEN));assert.equal(JSON.parse(row.encrypted_token).v,1)}
  assert.notEqual(rows[0].encrypted_token,rows[2].encrypted_token);
- const saved=f.api.getSettings('alvi');noSecrets(saved);assert.ok(saved.channels.every(c=>c.tokenConfigured&&!c.connected));
+ const saved=f.api.getSettings('alvi');noSecrets(saved);
+ // Проверяются каналы, для которых ключ действительно сохранён. YouTube Shorts здесь не настраивался:
+ // он приходит в списке выключенным и без ключа, и это не должно ломать проверку остальных.
+ for(const id of ['telegram','vk']){const channel=saved.channels.find(item=>item.id===id);
+  assert.ok(channel.tokenConfigured&&!channel.connected,id);}
+ const youtube=saved.channels.find(item=>item.id==='youtube_shorts');
+ assert.ok(youtube&&!youtube.enabled&&!youtube.tokenConfigured&&!youtube.connected,'ненастроенный канал остаётся выключенным и без ключа');
  const checked=await f.api.checkChannel('alvi','telegram');noSecrets(checked);assert.equal(checked.ok,true);
  assert.equal(checked.channels.find(c=>c.id==='telegram').connected,true);assert.equal(checked.channels.find(c=>c.id==='vk').connected,false);
 });
@@ -345,4 +351,127 @@ test('Onlypult preflight guards owner edits and plan/content limits before any m
   const promise=change==='owner'?f.api.publish({companyCode:'alvi',channelId:'vk',post:{text:'Owner text',mediaUrls:[]},beforePublish:()=>{throw Object.assign(Error('Changed'),{ambiguous:false});}}):f.publish();
   await assert.rejects(promise);assert.equal(f.calls.some(c=>c.options.method==='POST'),false);
  }
+});
+
+/* YouTube Shorts через Onlypult. Живой ответ отдаёт одиночный числовой profile_id и platform,
+   документированный контракт — profile_ids:string[]; поддерживаются оба, строго. */
+function youtubeFixture(t){
+ const f=onlypultFixture(t);
+ f.profiles.push({id:'1863531',name:'ALVI YouTube',platform:'youtube',status:'active'});
+ f.replies['/posts/limits']={platform:{limits:{text:{charLimit:5000},media:{maxCount:1}}}};
+ f.replies['/posts']={id:'a1b2c3d4e5f6a7b8',profile_id:1863531,status:'draft',platform:'youtube',is_shorts:true,publish_at:null,published_at:null};
+ f.replies['/posts/a1b2c3d4e5f6a7b8']={id:'a1b2c3d4e5f6a7b8',profile_id:1863531,status:'published',platform:'youtube',is_shorts:true};
+ // Ревизия берётся текущая: повторное сохранение с нулевой упиралось бы в штатную защиту 409,
+ // и ослаблять её в production ради теста нельзя.
+ const save=(changes={})=>{
+  const current=f.api.getSettings('alvi').channels.find(item=>item.id==='youtube_shorts')?.revision||0;
+  return f.api.saveSettings('alvi',{channels:[{id:'youtube_shorts',revision:current,enabled:true,
+    provider:'onlypult',target:'1863531',token:OP_TOKEN,...changes}]});
+ };
+ const publish=(post={})=>f.api.publish({companyCode:'alvi',channelId:'youtube_shorts',
+   post:{id:31,title:'Утро в студии',text:'Описание ролика',mediaUrls:['https://cdn.example.test/d1.mp4'],...post}});
+ return {...f,save,publish};
+}
+
+test('YouTube Shorts: прямое подключение запрещено, профиль и платформа сверяются точно, отправляются заголовок и is_shorts',async t=>{
+ const f=youtubeFixture(t);
+ assert.throws(()=>f.api.saveSettings('alvi',{channels:[{id:'youtube_shorts',revision:0,enabled:false,provider:'direct',target:'1863531',token:OP_TOKEN}]}),
+   error=>/только через Onlypult/.test(error.message),'direct на этом канале сервер не принимает');
+ f.save({enabled:false});
+ const saved=f.api.getSettings('alvi').channels.find(item=>item.id==='youtube_shorts');
+ assert.equal(saved.provider,'onlypult');assert.equal(saved.enabled,false,'подключение создаётся выключенным');
+ assert.equal(saved.caps.maxMedia,1);assert.equal(saved.caps.mediaMode,'video');
+ f.save();assert.equal((await f.api.checkChannel('alvi','youtube_shorts')).ok,true);
+ const result=await f.publish();
+ const post=f.calls.filter(call=>call.path==='/posts'&&call.options.method==='POST').pop();
+ assert.equal(post.body.title,'Утро в студии','заголовок дошёл до провайдера');
+ assert.deepEqual(post.body.platform_options,{youtube:{is_shorts:true,privacy:'public'}});
+ assert.equal(Object.hasOwn(post.body.platform_options.youtube,'category'),false,'категория не выдумывается');
+ assert.deepEqual(post.body.media_urls,['https://cdn.example.test/d1.mp4']);
+ // Провайдерский идентификатор и статус не доказывают живую ссылку.
+ assert.equal(result.status,'needs_review');assert.equal(result.providerPostId,'a1b2c3d4e5f6a7b8');
+ assert.equal(result.errorCode,'PROVIDER_PENDING');
+ // Ревизия читается из настроек, а не вычисляется арифметикой от прежнего снимка.
+ const live=f.api.getSettings('alvi').channels.find(item=>item.id==='youtube_shorts');
+ const done=await f.api.reconcile({companyCode:'alvi',channelId:'youtube_shorts',channelRevision:live.revision,providerPostId:'a1b2c3d4e5f6a7b8'});
+ assert.equal(done.providerStatus,'published');assert.equal(done.status,'needs_review');
+ assert.equal(done.errorCode,'PROVIDER_LINK_UNAVAILABLE','без ссылки публикация не объявляется живой');
+});
+
+test('YouTube Shorts: без заголовка и не ровно одного видео отправка не начинается',async t=>{
+ const f=youtubeFixture(t);f.save();assert.equal((await f.api.checkChannel('alvi','youtube_shorts')).ok,true);
+ const before=f.calls.length;
+ await assert.rejects(f.publish({title:'   '}),error=>error.code==='CONTENT_LIMIT');
+ await assert.rejects(f.publish({mediaUrls:[]}),error=>error.code==='CONTENT_LIMIT');
+ await assert.rejects(f.publish({mediaUrls:['https://cdn.example.test/a.mp4','https://cdn.example.test/b.mp4']}),error=>error.code==='CONTENT_LIMIT');
+ assert.equal(f.calls.filter((call,index)=>index>=before&&call.path==='/posts'&&call.options.method==='POST').length,0,'провайдер не вызывался');
+});
+
+test('ответ провайдера: числовой profile_id принимается строго, несовпадение и чужая платформа отклоняются',async t=>{
+ for (const [name,reply] of [
+   ['чужой профиль',{id:'a1b2c3d4e5f6a7b8',profile_id:1863532,status:'draft',platform:'youtube'}],
+   ['противоречие двух полей',{id:'a1b2c3d4e5f6a7b8',profile_id:1863531,profile_ids:['1863532'],status:'draft',platform:'youtube'}],
+   ['чужая платформа',{id:'a1b2c3d4e5f6a7b8',profile_id:1863531,status:'draft',platform:'telegram'}],
+   ['нецелый идентификатор',{id:'a1b2c3d4e5f6a7b8',profile_id:1863531.5,status:'draft',platform:'youtube'}],
+   ['отрицательный идентификатор',{id:'a1b2c3d4e5f6a7b8',profile_id:-1,status:'draft',platform:'youtube'}],
+   ['неизвестный статус',{id:'a1b2c3d4e5f6a7b8',profile_id:1863531,status:'queued',platform:'youtube'}],
+ ]) {
+   const f=youtubeFixture(t);f.replies['/posts']=reply;f.save();
+   assert.equal((await f.api.checkChannel('alvi','youtube_shorts')).ok,true);
+   await assert.rejects(f.publish(),error=>error.code==='RESPONSE_UNCERTAIN',name);
+ }
+ // Совпадающие поля и старый строковый контракт принимаются.
+ const ok=youtubeFixture(t);
+ ok.replies['/posts']={id:'a1b2c3d4e5f6a7b8',profile_id:1863531,profile_ids:['1863531'],status:'draft',platform:'youtube'};
+ ok.save();assert.equal((await ok.api.checkChannel('alvi','youtube_shorts')).ok,true);
+ assert.equal((await ok.publish()).providerPostId,'a1b2c3d4e5f6a7b8');
+});
+
+test('Telegram через Onlypult: подпись к видео до 1024 символов, текст до 4000, прежние каналы остаются',async t=>{
+ const f=onlypultFixture(t);
+ f.api.saveSettings('alvi',{channels:[channel('telegram',0,{provider:'onlypult',target:'alvi-tg',token:OP_TOKEN})]});
+ const telegram=f.api.getSettings('alvi').channels.find(item=>item.id==='telegram');
+ assert.equal(telegram.caps.maxText,4000);assert.equal(telegram.caps.maxCaption,1024);assert.equal(telegram.caps.maxMedia,10);
+ assert.equal((await f.api.checkChannel('alvi','telegram')).ok,true);
+ const send=(text,mediaUrls)=>f.api.publish({companyCode:'alvi',channelId:'telegram',post:{id:41,text,mediaUrls}});
+ await assert.rejects(send('т'.repeat(1025),['https://cdn.example.test/d1.mp4']),error=>error.code==='CONTENT_LIMIT','подпись к медиа ограничена 1024');
+ await assert.rejects(send('т'.repeat(4001),[]),error=>error.code==='CONTENT_LIMIT','текст без медиа ограничен 4000');
+ // Прежние два канала на месте и не сломаны новым.
+ const ids=f.api.getSettings('alvi').channels.map(item=>item.id);
+ assert.ok(ids.includes('telegram')&&ids.includes('vk')&&ids.includes('youtube_shorts'));
+});
+
+test('новый формат ответа без platform не принимается, явный profile_id:null рядом со списком тоже; старый список без platform принимается',async t=>{
+ for (const [name,reply] of [
+   ['одиночный profile_id без platform',{id:'a1b2c3d4e5f6a7b8',profile_id:1863531,status:'draft'}],
+   ['явный profile_id:null рядом со списком',{id:'a1b2c3d4e5f6a7b8',profile_id:null,profile_ids:['1863531'],status:'draft',platform:'youtube'}],
+   ['явный profile_id:null без списка',{id:'a1b2c3d4e5f6a7b8',profile_id:null,status:'draft',platform:'youtube'}],
+ ]) {
+   const f=youtubeFixture(t);f.replies['/posts']=reply;f.save();
+   assert.equal((await f.api.checkChannel('alvi','youtube_shorts')).ok,true);
+   await assert.rejects(f.publish(),error=>error.code==='RESPONSE_UNCERTAIN',name);
+ }
+ const legacy=youtubeFixture(t);
+ legacy.replies['/posts']={id:'a1b2c3d4e5f6a7b8',profile_ids:['1863531'],status:'draft'};
+ legacy.save();assert.equal((await legacy.api.checkChannel('alvi','youtube_shorts')).ok,true);
+ assert.equal((await legacy.publish()).providerPostId,'a1b2c3d4e5f6a7b8','старый контракт без platform остаётся рабочим');
+});
+
+test('заголовок длиннее 100 символов отклоняется до обращения к провайдеру и не подрезается молча',async t=>{
+ const f=youtubeFixture(t);f.save();assert.equal((await f.api.checkChannel('alvi','youtube_shorts')).ok,true);
+ const before=f.calls.filter(call=>call.path==='/posts'&&call.options.method==='POST').length;
+ await assert.rejects(f.publish({title:'з'.repeat(101)}),error=>error.code==='CONTENT_LIMIT');
+ assert.equal(f.calls.filter(call=>call.path==='/posts'&&call.options.method==='POST').length,before,'провайдер не вызывался');
+ const ok=await f.publish({title:'з'.repeat(100)});
+ assert.equal(ok.providerPostId,'a1b2c3d4e5f6a7b8');
+ const sent=f.calls.filter(call=>call.path==='/posts'&&call.options.method==='POST').pop();
+ assert.equal(sent.body.title.length,100,'ровно 100 проходит и не меняется');
+});
+
+test('канал YouTube Shorts без сохранённой строки уже предлагается как Onlypult и выключенным',async t=>{
+ const f=onlypultFixture(t);
+ const fresh=f.api.getSettings('alvi').channels.find(item=>item.id==='youtube_shorts');
+ assert.equal(fresh.provider,'onlypult','иначе кабинет стартует с прямого подключения');
+ assert.equal(fresh.enabled,false);assert.equal(fresh.connected,false);
+ assert.equal(fresh.caps.maxMedia,1);assert.equal(fresh.caps.mediaMode,'video');
 });
