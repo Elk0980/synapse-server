@@ -90,6 +90,42 @@ const addMember = (chat, owner, ids, code = ROOM) =>
 const say = (chat, session, text, id, code = ROOM) =>
   call(chat, { session, method: 'POST', url: room('/messages', code), body: { text, clientMessageId: id } });
 
+test('проверенная владельцем отправка Хью: файл, журнал, очередь и безопасный повтор', async () => {
+  const { chat, db, owner } = setup();
+  await call(chat, { session: owner, url: room() });
+  db.prepare('UPDATE project_chat_rooms SET telegram_chat_id=? WHERE company_code=?').run('-10012345', ROOM);
+  const uploaded = await call(chat, { session: owner, method: 'POST', url: room('/attachments'), bytes: PNG,
+    headers: { 'content-type': 'image/png', 'x-filename': 'price.png' } });
+  const body = { text: 'Прайс для согласования', attachmentIds: [uploaded.payload.attachment.id],
+    clientMessageId: 'reviewed-price-01', expectedChatId: '-10012345' };
+  const send = () => call(chat, { session: owner, method: 'POST', url: room('/reviewed-messages'), body });
+  assert.equal((await send()).statusCode, 201);
+  const message = db.prepare("SELECT * FROM project_chat_messages WHERE client_message_id='reviewed-price-01'").get();
+  assert.equal(message.author_id, 'hugh');
+  assert.equal(message.author_type, 'assistant');
+  assert.equal(db.prepare('SELECT reviewer_id FROM project_chat_reviewed_messages WHERE message_id=?').get(message.id).reviewer_id, '1');
+  assert.equal(db.prepare('SELECT count(*) n FROM project_chat_ai_jobs').get().n, 0);
+  db.prepare("UPDATE project_chat_outbox SET status='uncertain' WHERE message_id=?").run(message.id);
+  assert.equal((await send()).statusCode, 200);
+  assert.equal(db.prepare('SELECT count(*) n FROM project_chat_outbox').get().n, 1);
+  assert.equal(db.prepare('SELECT status FROM project_chat_outbox WHERE message_id=?').get(message.id).status, 'uncertain');
+  body.text = 'Другая версия';
+  await assert.rejects(send, status(409));
+});
+
+test('отправка от Хью отклоняет участника, CSRF и изменившегося получателя', async () => {
+  const { chat, db, owner, person, session } = setup();
+  const member = person('reviewer', [ROOM]);
+  await addMember(chat, owner, [member.id]);
+  db.prepare('UPDATE project_chat_rooms SET telegram_chat_id=? WHERE company_code=?').run('-10022222', ROOM);
+  const body = { text: 'Тест', clientMessageId: 'reviewed-price-02', expectedChatId: '-10011111' };
+  const send = (actor, headers = {}) => call(chat, { session: actor, headers, method: 'POST', url: room('/reviewed-messages'), body });
+  await assert.rejects(() => send(session(member.id)), status(403));
+  await assert.rejects(() => send(owner, { 'x-csrf-token': 'bad' }), status(403));
+  await assert.rejects(() => send(owner), status(409));
+  assert.equal(db.prepare('SELECT count(*) n FROM project_chat_messages').get().n, 0);
+});
+
 test('членство в комнате открывает проект без прав клиентского чата CRM', async () => {
   const { chat, authStore, owner, person, session } = setup();
   const daria = person('daria', [ROOM]);
