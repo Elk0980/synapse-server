@@ -19,7 +19,12 @@ const PLANNING = [["two_gis","2ГИС"],["yandex_maps","Яндекс Карты"
 // Очередь контента: пять площадок с лимитами подписей (совпадают с сервером), карточки дней и одобрение конкретной версии.
 const CAPTIONS = [["instagram","Instagram / Reels",2200],["tiktok","TikTok",2200],["youtube_shorts","YouTube Shorts",5000],["vk","ВКонтакте",15000],["telegram","Telegram",1024]];
 // Доставка подключена только для каналов Telegram/ВКонтакте из настроек; остальные площадки — подготовленные варианты подписей.
-const DELIVERY_CONNECTED = new Set(["vk","telegram"]);
+const DELIVERY_CONNECTED = new Set(["vk","telegram","youtube_shorts"]);
+// Каналы без прямой интеграции: публикация только через Onlypult, способ подключения не выбирается.
+const PROVIDER_ONLY = new Set(["youtube_shorts"]);
+const PLATFORM_TITLE = {telegram:"Telegram",vk:"ВКонтакте",youtube_shorts:"YouTube Shorts"};
+// То же правило, что у провайдера: один доступный площадке HTTPS-видеофайл. Картинка сюда не годится.
+const VIDEO_URL = /^https:\/\/[^\s]+\.(?:mp4|mov|m4v|webm)(?:[?#][^\s]*)?$/i;
 // Контент-план: формат и роль независимы; метаданные видны только в ЛК и не входят в подписи.
 const FORMATS = [["post","Пост"],["story","Сторис"],["reel","Reels / Shorts / клип"],["carousel","Карусель"]];
 const ROLES = [["reach","Охватный"],["affection","На влюбление"],["sale","На продажу"]];
@@ -112,7 +117,7 @@ function create(container, context) {
     <section class="card autoposting-starter" id="autoposting-starter-plan" hidden></section></details>
 </details>
     <details id="autoposting-editor" class="autoposting-editor"><summary>Открыть редактор / новый материал</summary><div class="autoposting-editor-grid"><section class="card"><h3>Материал</h3><label for="autoposting-select">Открыть материал</label><select id="autoposting-select"><option value="">Новый черновик</option></select><p id="autoposting-post-state"></p><p id="autoposting-post-error" role="status" hidden></p><div id="autoposting-deliveries"></div>
-    <form id="autoposting-form"><label>Название в кабинете<input id="autoposting-title" maxlength="200" required></label><label>Текст публикации<textarea id="autoposting-text" rows="9" maxlength="20000"></textarea></label>
+    <form id="autoposting-form"><label>Название в кабинете<input id="autoposting-title" maxlength="200" required></label><p class="autoposting-note" id="autoposting-title-note">Для YouTube Shorts это название становится публичным заголовком ролика: не длиннее 100 символов, иначе материал в план не ставится.</p><label>Текст публикации<textarea id="autoposting-text" rows="9" maxlength="20000"></textarea></label>
     <details class="autoposting-meta"><summary>Для команды · источники и ссылки</summary>    <div class="autoposting-date-fields"><label>День карточки<select id="autoposting-day">${DAYS.map(d=>`<option value="${d}">${d||"—"}</option>`).join("")}</select></label><label>Происхождение материала<input id="autoposting-origin" maxlength="200" placeholder="например: видео Gemini, без надписи ИИ"></label></div>
     <label>Материалы по ссылкам<textarea id="autoposting-media" rows="3" placeholder="https://example.com/video.mp4"></textarea></label>
 </details><ul id="autoposting-media-preview" class="autoposting-media-preview"></ul>
@@ -173,7 +178,7 @@ function create(container, context) {
     try{data=read();}catch(error){return [error.message];}
     if(!data.title||(!data.text&&!Object.keys(data.captions).length))result.push("Заполните название и текст или подписи площадок.");
     if(!data.scheduledAt||Date.parse(data.scheduledAt)<=Date.now())result.push("Выберите дату и время в будущем.");
-    if(!data.platformIds.length)result.push("Выберите подключённый канал Telegram или ВКонтакте.");
+    if(!data.platformIds.length)result.push("Выберите подключённый канал публикации.");
     if(!Number.isSafeInteger(information?.revision)||information.revision<1)result.push("Сначала сохраните данные компании в разделе «Актуальность».");
     if(post&&post.profileRevision!==information.revision)result.push("Данные компании изменились. Проверьте текст и сохраните его заново.");
     if(post?.deliveries?.some(item=>["published","publishing","needs_review"].includes(item.status)))result.push("Материал уже отправлялся на площадку. Проверьте опубликованное вручную: автоматический повтор может создать дубль.");
@@ -181,7 +186,15 @@ function create(container, context) {
     const marked=receiptPlatforms(post);
     // Проверяются ровно те площадки, которые уйдут в план: при частичном согласовании это только
     // согласованные каналы, и неподключённый несогласованный канал отправке не мешает.
-    for(const id of scheduleTargets(post,data.platformIds)){
+    const targets=scheduleTargets(post,data.platformIds);
+    // Требования YouTube проверяются только если этот канал действительно уходит в план:
+    // несогласованный YouTube не должен блокировать согласованный Telegram.
+    if(targets.includes('youtube_shorts')){
+      if(data.title.length>100)result.push('YouTube Shorts: название станет публичным заголовком, сократите его до 100 символов.');
+      if(data.mediaUrls.length!==1||!data.mediaUrls.every(url=>VIDEO_URL.test(url)))
+        result.push('YouTube Shorts: нужен ровно один видеофайл по HTTPS — mp4, mov, m4v или webm.');
+    }
+    for(const id of targets){
       const channel=channels().find(item=>item.id===id);
       // Площадка с подтверждением внешней публикации повторно не отправляется: сервер откажет, и дубликат не нужен.
       if(marked.has(channel?.platform||id))result.push(`${channel?.name||id}: площадка отмечена как опубликованная вне ЛК. Повторная отправка создаст дубликат.`);
@@ -388,7 +401,7 @@ function create(container, context) {
     get("autoposting-deliveries").innerHTML=(post?.deliveries||[]).map(item=>`<p>${esc(channels().find(channel=>channel.id===item.channelId)?.name||item.channelId)}: ${esc(STATUS[item.status]||{pending:"Ожидает отправки"}[item.status]||"Требуется проверка")}${item.errorCode&&ERRORS[item.errorCode]?` · ${esc(ERRORS[item.errorCode])}`:""}${safeUrl(item.url)?` · <a href="${esc(safeUrl(item.url))}" target="_blank" rel="noopener noreferrer">Открыть публикацию</a>`:""}</p>`).join("");
   };
   const renderPost=()=>{
-    get("autoposting-platforms").innerHTML='<legend>Куда опубликовать</legend>'+channels().map(channel=>`<label class="autoposting-checkbox"><input type="checkbox" value="${esc(channel.id)}">${esc(channel.name||channel.platform)} — ${channel.connected&&channel.enabled?"подключён":"требуется подключение"}</label>`).join("");
+    get("autoposting-platforms").innerHTML='<legend>Куда опубликовать</legend>'+channels().map(channel=>`<label class="autoposting-checkbox"><input type="checkbox" value="${esc(channel.id)}">${esc(channel.name||channel.platform)} — ${!channel.connected?"доступ не подтверждён":channel.enabled?"подключён":"отправка выключена"}</label>`).join("");
     const timezone=post?.timezone||zone();
     const values={title:post?.title||"",text:post?.text||"",media:(post?.mediaUrls||[]).join("\n"),date:time.toLocal(post?.scheduledAt,timezone),timezone,platformIds:post?.platformIds||[],dayKey:post?.dayKey||"",origin:post?.origin||"",captions:post?.captions||{},mediaSha256:post?.mediaSha256||"",meta:post?.meta||{}};
     setRaw(values);baseline=raw();
@@ -416,10 +429,10 @@ function create(container, context) {
     get("autoposting-channels").innerHTML=channels().map(channel=>{
       const values=channelDrafts.get(companyCode+":"+channel.id)?.values||channel;
       const onlypult=values.provider==='onlypult', profiles=providerProfiles.get(companyCode+":"+channel.id)||[];
-      return `<form class="autoposting-channel" data-channel="${esc(channel.id)}"${onlypult?' data-owner-connection':''}><h3>${esc(channel.platform==="vk"?"ВКонтакте":"Telegram")}</h3><p>${channel.connected?"Доступ подтверждён":"Доступ не подтверждён"}${channel.enabled?" · включён":" · выключен"}</p>
+      return `<form class="autoposting-channel" data-channel="${esc(channel.id)}"${onlypult?' data-owner-connection':''}><h3>${esc(channel.name||PLATFORM_TITLE[channel.id]||channel.platform||channel.id)}</h3><p>${channel.connected?"Доступ подтверждён":"Доступ не подтверждён"}${channel.enabled?" · включён":" · выключен"}</p>
         <p data-channel-links>${[cabinet.platformLinks?.companyLink({companyCode,record:information,platform:channel.platform==='telegram'?'telegram_channel':channel.platform}),cabinet.platformLinks?.cabinetLink(channel.platform)].filter(Boolean).join(' · ')}</p>
         ${ctx.identity?.role!=='owner'?'<p class="autoposting-note">Onlypult подключает владелец Synapse. После подключения здесь можно готовить и планировать публикации своей компании.</p>':''}
-        <label>Способ подключения<select data-channel-field="provider"><option value="direct"${!onlypult?' selected':''}>Напрямую</option><option value="onlypult"${onlypult?' selected':''}${ctx.identity?.role!=='owner'?' disabled':''}>Через Onlypult</option></select></label>
+        <label>Способ подключения<select data-channel-field="provider">${PROVIDER_ONLY.has(channel.id)?`<option value="onlypult" selected>Через Onlypult</option>`:`<option value="direct"${!onlypult?' selected':''}>Напрямую</option><option value="onlypult"${onlypult?' selected':''}${ctx.identity?.role!=='owner'?' disabled':''}>Через Onlypult</option>`}</select></label>${PROVIDER_ONLY.has(channel.id)?'<p class="autoposting-note">Этот канал публикуется только через Onlypult. Для отправки нужны заголовок и ровно один видеофайл по HTTPS; ролик выходит как Shorts в публичном доступе.</p>':''}
         ${onlypult?'<p class="autoposting-note">Подключите сообщество в Onlypult. Сохраните его ключ здесь, загрузите список профилей и выберите профиль этой компании.</p>'+(cabinet.platformLinks?.cabinetLink('onlypult') || ''):channel.platform==="vk"?'<p class="autoposting-note">Для администратора с уже выданным совместимым доступом. Эти поля не создают приложение ВК и не выдают разрешения.</p>':''}
         <label>Название канала<input data-channel-field="name" value="${esc(values.name||"")}" maxlength="200" required></label>
         ${onlypult?`<label>Профиль этой компании<select data-channel-field="target"><option value="">Сначала загрузите профили</option>${values.target&&!profiles.some(p=>p.id===values.target)?`<option value="${esc(values.target)}" selected>Сохранённый профиль ${esc(values.target)}</option>`:''}${profiles.map(p=>`<option value="${esc(p.id)}"${String(values.target)===p.id?' selected':''}>${esc(p.name)} · ${esc(p.id)}${p.status==='active'?'':' · требует подключения'}</option>`).join('')}</select></label><button class="plain-button" type="button" data-load-profiles="${esc(channel.id)}">Загрузить профили Onlypult</button>`:`<label>${channel.platform==="vk"?"ID сообщества (число или clubNNN)":"Канал (@name или -100…)"}<input data-channel-field="target" value="${esc(values.target||"")}" maxlength="200"></label>`}
@@ -591,7 +604,7 @@ function create(container, context) {
   });
   get("autoposting-preview").addEventListener("click",()=>{
     if(busy||!post||dirty())return;const issues=problems();reviewed=post.revision;
-    get("autoposting-preview-content").innerHTML=`<h4>${esc(post.title)}</h4><pre>${esc(post.text)}</pre><p>${post.scheduledAt?esc(time.toLocal(post.scheduledAt,post.timezone).replace("T"," ")+" · "+post.timezone):"Дата не задана"}</p>
+    get("autoposting-preview-content").innerHTML=`<h4>${esc(post.title)}</h4>${(post.platformIds||[]).includes("youtube_shorts")?`<p class="autoposting-note" data-youtube-title>Публичный заголовок YouTube Shorts: «${esc(post.title)}» · ${esc(String(post.title||"").length)} / 100 · публичный доступ</p>`:""}<pre>${esc(post.text)}</pre><p>${post.scheduledAt?esc(time.toLocal(post.scheduledAt,post.timezone).replace("T"," ")+" · "+post.timezone):"Дата не задана"}</p>
       <p>Площадки: ${post.platformIds.map(id=>esc(channels().find(item=>item.id===id)?.name||id)).join(", ")||"не выбраны"}</p>
       ${(post.mediaUrls||[]).length?`<ul class="autoposting-media-preview">${mediaPreview(post.mediaUrls)}</ul>`:"<p>Материал не прикреплён.</p>"}
       ${isQueueCard(post)?`<p>Версия ${esc(post.revision)}${post.dayKey?" · день "+esc(post.dayKey):""}${post.origin?" · "+esc(post.origin):""}</p><div class="autoposting-platform-previews">${CAPTIONS.map(([id,label,limit])=>{const caption=post.captions?.[id]||post.text||"";return `<details${post.captions?.[id]?" open":""}><summary>${label} · ${caption.length} / ${limit}${caption.length>limit?" · превышен лимит":""}${post.captions?.[id]?"":" · общий текст"}${DELIVERY_CONNECTED.has(id)?"":" · вариант подготовлен, доставка не подключена"}</summary><pre>${esc(caption)}</pre></details>`;}).join("")}</div>`:""}

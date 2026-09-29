@@ -5,6 +5,8 @@ const {createOnlypultProvider} = require('./onlypult-provider');
 const PLATFORMS = Object.freeze({
   telegram: {name: 'Telegram', maxText: 4096, maxMedia: 10, mediaMode: 'photos', maxCaption: 1024},
   vk: {name: 'ВКонтакте', maxText: 15000, maxMedia: 1, mediaMode: 'link'},
+  // YouTube Shorts отправляется только через Onlypult: прямого подключения к каналу у нас нет.
+  youtube_shorts: {name: 'YouTube Shorts', maxText: 5000, maxMedia: 1, mediaMode: 'video', providerOnly: 'onlypult', requiresTitle: true},
 });
 const fail = (message, status = 400) => {throw Object.assign(new Error(message), {status, ambiguous: false});};
 const failure = (code, ambiguous = false) => Object.assign(new Error('Не удалось выполнить действие на площадке'), {code, ambiguous, status: 502});
@@ -58,17 +60,24 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
     try {return crypt(row.company_code, row.id, row.encrypted_token, true);}
     catch {throw failure('TOKEN_UNREADABLE');}
   }
+  /* Живые ограничения Onlypult: Telegram — 4000 символов текста, 1024 в подписи к медиа, до 10 материалов;
+     YouTube Shorts — ровно одно видео и обязательный заголовок. Прямые лимиты площадок здесь не действуют. */
+  const providerCaps = (id, caps) => id === 'youtube_shorts'
+    ? {...caps, maxMedia: 1, mediaMode: 'video'}
+    : id === 'telegram' ? {...caps, maxText: 4000, maxCaption: 1024, maxMedia: 10, mediaMode: 'photos'}
+    : {...caps, maxMedia: 10, mediaMode: 'photos'};
   function getSettings(code) {
     const current = company(code);
     return {companyCode: current.code, timezone: current.timezone || 'Asia/Irkutsk', channels: Object.entries(PLATFORMS).map(([id, caps]) => {
       const row = rowFor(current.code, id);
       let hasToken = false;
       if (row) try {hasToken = Boolean(tokenFor(row));} catch {}
-      return {id, platform: id, provider: row?.provider || 'direct', name: row?.name || caps.name, target: row?.target || '', enabled: Boolean(row?.enabled),
+      const provider = row?.provider || caps.providerOnly || 'direct';
+      return {id, platform: id, provider, name: row?.name || caps.name, target: row?.target || '', enabled: Boolean(row?.enabled),
         connected: Boolean(row && hasToken && row.checked_revision === row.revision && row.status === 'connected'),
         tokenConfigured: hasToken, revision: row?.revision || 0, status: row?.status || 'not_configured',
         checkedAt: row?.checked_at || null, profileDisplayName: row?.profile_display_name || null,
-        caps: row?.provider === 'onlypult' ? {...caps, maxMedia: 10, mediaMode: 'photos'} : caps};
+        caps: provider === 'onlypult' ? providerCaps(id, caps) : caps};
     })};
   }
   function saveSettings(code, body) {
@@ -82,6 +91,9 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
       const previous = rowFor(current.code, input.id);
       const provider = input.provider === undefined ? (previous?.provider || 'direct') : input.provider;
       if (!['direct','onlypult'].includes(provider)) fail('Способ подключения не поддерживается');
+      // У канала без прямой интеграции способ публикации только через сервис: иначе отправлять нечем.
+      if (PLATFORMS[input.id]?.providerOnly && provider !== PLATFORMS[input.id].providerOnly)
+        fail('Этот канал публикуется только через Onlypult');
       if (input.revision !== (previous?.revision || 0)) fail('Подключение изменилось. Обновите настройки', 409);
       if (input.name !== undefined && typeof input.name !== 'string') fail('Проверьте название площадки');
       const name = input.name?.trim() || PLATFORMS[input.id].name;
@@ -194,9 +206,14 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
     const current = company(companyCode), row = rowFor(current.code, channelId);
     if (!row || !row.enabled || row.status !== 'connected' || row.checked_revision !== row.revision) throw failure('CONNECTION_MISSING');
     if (channelRevision !== undefined && row.revision !== channelRevision) throw failure('CHANNEL_CHANGED');
-    const caps = row.provider === 'onlypult' ? {...PLATFORMS[channelId],maxMedia:10} : PLATFORMS[channelId], text = String(post.text || ''), media = post.mediaUrls || [];
+    const caps = row.provider === 'onlypult' ? providerCaps(channelId,PLATFORMS[channelId]) : PLATFORMS[channelId];
+    const text = String(post.text || ''), media = post.mediaUrls || [], title = String(post.title || '').trim();
     if (!text.trim() || text.length > caps.maxText || !Array.isArray(media) || media.length > caps.maxMedia ||
-        media.some(url => !publicUrl(url)) || (channelId === 'telegram' && media.length && text.length > caps.maxCaption)) throw failure('CONTENT_LIMIT');
+        media.some(url => !publicUrl(url)) ||
+        (Number.isInteger(caps.maxCaption) && media.length && text.length > caps.maxCaption)) throw failure('CONTENT_LIMIT');
+    // YouTube Shorts: без заголовка и без ровно одного видео отправлять нечего.
+    // Заголовок не подрезается: согласованный текст менять молча нельзя.
+    if (caps.requiresTitle && (!title || title.length > 100 || media.length !== 1)) throw failure('CONTENT_LIMIT');
     if (row.provider === 'onlypult') {
       // No provider POST retry: Onlypult's public contract has no idempotency key.
       // Guard every awaited preflight against owner changes before the first POST.
@@ -205,7 +222,7 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
         if (!latest || latest.revision !== row.revision || !latest.enabled || latest.status !== 'connected') throw failure('SETTINGS_CHANGED');
         if (beforePublish) beforePublish();
       };
-      return onlypult.publish(row,{...post,text,mediaUrls:media},guard);
+      return onlypult.publish(row,{...post,text,title,mediaUrls:media},guard);
     }
     if (channelId === 'telegram') {
       const result = media.length > 1 ? await call(row, 'sendMediaGroup', {chat_id: row.target,

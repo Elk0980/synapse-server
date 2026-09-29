@@ -5,7 +5,10 @@
 // A provider status alone must therefore never become Synapse "published".
 const BASE = 'https://api.onlypult.com/v1';
 // Onlypult's live response on 2026-09-17 uses "vk"; OpenAPI documents "vkontakte".
-const PLATFORM = {vk:['vkontakte','vk'],telegram:['telegram']};
+const PLATFORM = {vk:['vkontakte','vk'],telegram:['telegram'],youtube_shorts:['youtube']};
+// Канал YouTube Shorts: заголовок обязателен, ровно один публичный HTTPS-видеофайл.
+// Категорию не отправляем: она опциональна и её идентификаторы берутся из отдельного запроса профиля.
+const VIDEO_URL = /^https:\/\/[^\s]+\.(?:mp4|mov|m4v|webm)(?:\?[^\s]*)?$/i;
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value);
 function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
   async function request(row,method,path,body) {
@@ -64,9 +67,36 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
     if (matches[0].status !== 'active') throw failure('PROFILE_INACTIVE');
     return matches[0];
   }
+  /* Профиль в ответе. Документированный контракт — profile_ids:string[]; живой ответ присылает
+     одиночный числовой profile_id. Поддерживаются оба, строго: строковый идентификатор берётся как есть,
+     числовой принимается только как безопасное положительное целое и приводится к каноничной строке.
+     Присутствуют оба — обязаны совпадать. Всё остальное — неизвестный ответ. */
+  function profileOf(data) {
+    let fromList=null,fromSingle=null;
+    if (Object.hasOwn(data,'profile_ids')) {
+      if (!Array.isArray(data.profile_ids) || data.profile_ids.length !== 1 || !id(data.profile_ids[0])) return null;
+      fromList = data.profile_ids[0];
+    }
+    if (Object.hasOwn(data,'profile_id')) {
+      const value = data.profile_id;
+      // Явный null рядом со списком — неполный, противоречивый ответ, а не «поля нет».
+      if (value === null) return null;
+      if (typeof value === 'string') {if (!id(value)) return null;fromSingle = value;}
+      else if (Number.isSafeInteger(value) && value > 0) fromSingle = String(value);
+      else return null;
+    }
+    if (fromList && fromSingle && fromList !== fromSingle) return null;
+    // Новый формат опознаётся по одиночному profile_id, и площадка в нём обязательна.
+    if (fromSingle && !fromList && !Object.hasOwn(data,'platform')) return null;
+    return fromList || fromSingle;
+  }
   function receipt(data,row,expectedId) {
+    const profile = data && typeof data === 'object' && !Array.isArray(data) ? profileOf(data) : null;
+    // Площадка названа — сверяем точно. Ответ без неё допустим только при строгом совпадении профиля.
+    const platformNamed = data && Object.hasOwn(data,'platform');
+    if (platformNamed && !PLATFORM[row.id]?.includes(data.platform)) throw failure('RESPONSE_UNCERTAIN',true);
     if (!data || !id(data.id) || (expectedId && data.id !== expectedId) ||
-        !Array.isArray(data.profile_ids) || data.profile_ids.length !== 1 || data.profile_ids[0] !== row.target ||
+        !profile || profile !== row.target ||
         !['draft','scheduled','published','failed'].includes(data.status)) throw failure('RESPONSE_UNCERTAIN',true);
     return {provider:'onlypult',providerPostId:data.id,providerStatus:data.status,status:'needs_review',
       errorCode:data.status === 'published' ? 'PROVIDER_LINK_UNAVAILABLE' : data.status === 'failed' ? 'PROVIDER_FAILED' : 'PROVIDER_PENDING'};
@@ -79,8 +109,19 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
     const textLimit = limits?.platform?.limits?.text?.charLimit, mediaLimit = limits?.platform?.limits?.media?.maxCount;
     if ((Number.isInteger(textLimit) && textLimit > 0 && post.text.length > textLimit) ||
         (Number.isInteger(mediaLimit) && mediaLimit > 0 && post.mediaUrls.length > mediaLimit)) throw failure('CONTENT_LIMIT');
+    const extra = {};
+    if (row.id === 'youtube_shorts') {
+      const title = typeof post.title === 'string' ? post.title.trim() : '';
+      if (!title) throw failure('CONTENT_LIMIT');
+      const videos = post.mediaUrls.filter(url => VIDEO_URL.test(url));
+      if (post.mediaUrls.length !== 1 || videos.length !== 1) throw failure('CONTENT_LIMIT');
+      // privacy: публикация из кабинета делается публичной осознанно, это видно в подписи действия.
+      if (title.length > 100) throw failure('CONTENT_LIMIT');
+      extra.title = title;
+      extra.platform_options = {youtube:{is_shorts:true,privacy:'public'}};
+    }
     return receipt(await request(row,'POST','/posts',{profile_ids:[row.target],content:post.text,
-      publish_now:true,...(post.mediaUrls.length ? {media_urls:post.mediaUrls} : {})}),row);
+      publish_now:true,...(post.mediaUrls.length ? {media_urls:post.mediaUrls} : {}),...extra}),row);
   }
   async function reconcile(row,providerPostId) {
     if (!id(providerPostId) || !id(row.target)) throw failure('PROVIDER_POST_REQUIRED');

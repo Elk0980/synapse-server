@@ -95,6 +95,19 @@ function zoneDay(formatter,instant) {
   return CALENDAR_DATE_RE.test(day)?day:null;
 }
 const VIDEO_RE=/\.(mp4|webm|mov|m4v)(?:[?#].*)?$/i,IMAGE_RE=/\.(jpe?g|png|webp|gif)(?:[?#].*)?$/i;
+/* YouTube Shorts: заголовок до 100 символов и ровно один доступный площадке HTTPS-видеофайл.
+   Те же требования проверяет провайдер; здесь они нужны, чтобы заведомо невалидная очередь
+   не создавалась ни из кабинета, ни прямым запросом. */
+const YOUTUBE_SHORTS='youtube_shorts';
+function youtubeShortsIssues(title,mediaUrls) {
+  const issues=[],text=typeof title==='string'?title.trim():'';
+  if(!text)issues.push('YouTube Shorts: нужно название — оно станет публичным заголовком ролика');
+  else if(text.length>100)issues.push('YouTube Shorts: название длиннее 100 символов, канал его не примет');
+  const videos=mediaUrls.filter(url=>publicUrl(url)&&VIDEO_RE.test(url));
+  if(mediaUrls.length!==1||videos.length!==1)
+    issues.push('YouTube Shorts: нужен ровно один видеофайл по HTTPS (mp4, mov, m4v или webm)');
+  return issues;
+}
 const dayKey=value=>{if(value===null||value===undefined||value==='')return '';if(typeof value!=='string'||!/^D[1-7]$/.test(value))fail(400,'День карточки задаётся как D1…D7');return value;};
 function captions(value) {
   if(value===null||value===undefined)return {};
@@ -428,6 +441,7 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
         if(channel.caps?.mediaMode==='photos'&&channel.provider!=='onlypult'&&media.some(value=>VIDEO_RE.test(value)))
           hard.push('Подключение отправляет фотографии: для видео нужен подходящий способ публикации');
       }
+      if(id===YOUTUBE_SHORTS)hard.push(...youtubeShortsIssues(row.title,media));
       const caption=caps[platform]||row.text||'';
       if(!caption)hard.push(`Для площадки ${platform} нет ни подписи, ни общего текста`);
       hard.push(...capsIssues(channel,caption,media.length));
@@ -695,6 +709,10 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
         if(waiting.length)fail(409,`Сначала одобрите эту версию для каналов: ${waiting.map(platformLabel).join(', ')}`,'APPROVAL_REQUIRED');
       }
       if(!data.scheduledAt||Date.parse(data.scheduledAt)<=now())fail(400,'Выберите время публикации в будущем');
+      if(data.platformIds.includes(YOUTUBE_SHORTS)){
+        const issues=youtubeShortsIssues(data.title,data.mediaUrls);
+        if(issues.length)fail(400,issues.join('; '),'CONTENT_LIMIT');
+      }
       const channels=data.platformIds.map(id=>settings.channels.find(channel=>channel.id===id));
       // Площадка, отмеченная как опубликованная вне ЛК, повторно не отправляется: это создало бы дубликат записи.
       const marked=receiptPlatforms(row.id);
@@ -1074,7 +1092,7 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
       try{
         const result=await transport.publish({companyCode:due.code.toLowerCase(),channelId:delivery.channel_id,channelRevision:delivery.channel_revision,
           // Подпись площадки, если задана, заменяет общий текст именно для этого канала.
-          post:(()=>{const view=dto(due,company(db,due.code));return {...view,text:view.captions?.[channel.platform||channel.id]||view.text,idempotencyKey:`synapse-post-${due.id}-${delivery.channel_id}`};})(),
+          post:(()=>{const view=dto(due,company(db,due.code));return {...view,title:view.title||'',text:view.captions?.[channel.platform||channel.id]||view.text,idempotencyKey:`synapse-post-${due.id}-${delivery.channel_id}`};})(),
           beforePublish:()=>{
             // Подтверждение могло появиться, пока транспорт ждал предварительные запросы: адаптер вызывает
             // этот барьер перед самой передачей, и до неё отправка ещё отменима.
