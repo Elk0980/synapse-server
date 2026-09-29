@@ -37,7 +37,9 @@ function fixture({role='owner',permissions=[],override}={}) {
       if(call.path==='/content/crm/social-stats')return overview(call.code);
       if(call.path==='/content/crm/social-stats/baseline')return {companyCode:call.code,latest:null,versions:[]};
       if(call.path==='/content/crm/social-stats/accounts')return {companyCode:call.code,accounts:['instagram','tiktok','youtube','vk','telegram'].map(p=>({platform:p,label:p,accountRef:'',provider:'manual',enabled:false,kind:'organic',collectHour:6,revision:0,access:{status:'not_configured',missing:[]}}))};
-      if(call.path==='/content/crm/social-stats/collect')return {status:'missing_access',missing:['x']};
+      if(call.path==='/content/crm/social-stats/analytics/access')return {companyCode:call.code,provider:'onlypult_analytics',providerLabel:'Onlypult Analytics',configured:false,status:'not_configured',statusCode:'',revision:0,checkedRevision:null,checked:false,checkedAt:null,updatedAt:null};
+      if(call.path==='/content/crm/social-stats/analytics/profiles')return {accessRevision:1,profiles:[],rejected:0,access:{configured:true,status:'connected',revision:1,checked:true,checkedAt:'2026-09-29T09:00:00.000Z'}};
+      if(call.path==='/content/crm/social-stats/collect')return {status:'missing_access',missing:['x'],date:'2026-09-18',closed:true,rows:0};
       if(call.path==='/content/crm/social-stats/import')return {ok:true,rows:call.body.rows.length};
       throw new Error('unexpected '+call.path);}};
   return {w,d,ctx,calls,views,container:d.getElementById('view'),render:async()=>{views['social-stats'].render(d.getElementById('view'),ctx);await settle();},close:()=>w.close()};
@@ -329,5 +331,163 @@ test('показатели публикаций: пустой ответ чес�
     assert.match(text,/Даты измерений: нет/);
     assert.match(text,/Сохранённых измерений за этот период нет/);
     assert.match(text,/Данных недостаточно/);
+  }finally{f.close();}
+});
+
+/* Задание ALVI-ONLYPULT-ANALYTICS: блок аналитического доступа, выбор профиля и системы
+   суток, ручной сбор с датой тем же путём, что и фоновый. Ключ в интерфейс не возвращается. */
+test('аналитический доступ: владелец сохраняет ключ, проверка грузит профили, ключ наружу не выходит',async()=>{
+  const profiles=[{id:'an_1000',platform:'instagram',nativeAccountId:'17841400000000001',timezone:'Asia/Irkutsk'}];
+  const f=fixture({override:async call=>{
+    if(call.path==='/content/crm/social-stats/analytics/profiles')return {accessRevision:1,profiles,rejected:0};
+    return undefined;}});
+  try{
+    await f.render();
+    const form=f.container.querySelector('#social-analytics-form');
+    assert.ok(form,'владелец видит блок доступа');
+    assert.match(f.container.querySelector('.social-analytics-access').textContent,/не настроен/);
+    form.elements.credential.value='demo-analytics-key';
+    form.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));await settle();
+    const saved=f.calls.find(c=>c.path==='/content/crm/social-stats/analytics/access'&&c.method==='PUT');
+    assert.ok(saved,'ключ уходит на сервер отдельным маршрутом');
+    assert.deepEqual(Object.keys(saved.body).sort(),['credential','revision']);
+    // Ключ не остаётся в разметке и не возвращается кабинетом.
+    assert.doesNotMatch(f.container.innerHTML,/demo-analytics-key/);
+    f.container.querySelector('[data-analytics="check"]').dispatchEvent(new f.w.Event('click',{bubbles:true}));await settle();
+    assert.ok(f.calls.some(c=>c.path==='/content/crm/social-stats/analytics/profiles'&&c.method==='GET'));
+    assert.match(f.container.querySelector('.social-analytics-access').textContent,/an_1000/);
+    // Профиль выбирается у своей площадки и сохраняется как providerRef.
+    const select=f.container.querySelector('[name="instagram.providerRef"]');
+    assert.ok(select,'у площадки есть выбор аналитического профиля');
+    assert.deepEqual([...select.options].map(o=>o.value),['','an_1000']);
+    assert.equal(f.container.querySelector('[name="tiktok.providerRef"]').options.length,1,'чужой площадке профиль не предлагается');
+    assert.match(f.container.querySelector('[data-platform="tiktok"].social-account').textContent,/профилей этой площадки у источника нет/);
+    select.value='an_1000';
+    f.container.querySelector('[name="instagram.accountRef"]').value='17841400000000001';
+    f.container.querySelector('#social-accounts-form').dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));await settle();
+    const put=f.calls.filter(c=>c.path==='/content/crm/social-stats/accounts'&&c.method==='PUT').pop();
+    assert.equal(put.body.accounts.find(a=>a.platform==='instagram').providerRef,'an_1000');
+  }finally{f.close();}
+});
+
+test('система суток выбирается в кабинете и уходит на сервер, а не навязывается Бангкоком',async()=>{
+  const f=fixture({override:async call=>{
+    if(call.path==='/content/crm/social-stats/accounts'&&call.method==='GET')
+      return {companyCode:call.code,timezone:'Asia/Bangkok',timezones:['Asia/Bangkok','Asia/Irkutsk','UTC'],
+        accounts:['instagram','tiktok','youtube','vk','telegram'].map(p=>({platform:p,label:p,accountRef:'',provider:'manual',providerRef:'',
+          enabled:false,kind:'organic',timezone:p==='instagram'?'Asia/Irkutsk':'Asia/Bangkok',collectHour:6,revision:0,configured:false,access:{status:'not_configured',missing:[]}}))};
+    return undefined;}});
+  try{
+    await f.render();
+    const zone=f.container.querySelector('[name="instagram.timezone"]');
+    assert.deepEqual([...zone.options].map(o=>o.value),['Asia/Bangkok','Asia/Irkutsk','UTC']);
+    assert.equal(zone.value,'Asia/Irkutsk','сохранённый пояс выбран');
+    zone.value='UTC';
+    f.container.querySelector('#social-accounts-form').dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));await settle();
+    const put=f.calls.filter(c=>c.path==='/content/crm/social-stats/accounts'&&c.method==='PUT').pop();
+    assert.equal(put.body.accounts.find(a=>a.platform==='instagram').timezone,'UTC');
+    assert.equal(put.body.accounts.find(a=>a.platform==='vk').timezone,'Asia/Bangkok','чужая площадка сохраняет свой пояс');
+  }finally{f.close();}
+});
+
+test('ручной сбор идёт тем же маршрутом с выбранной датой и показывает результат',async()=>{
+  const f=fixture({override:async call=>{
+    if(call.path==='/content/crm/social-stats/collect')
+      return {status:'partial',date:call.body.date,closed:false,rows:3,missing:['reach: источник не вернул ряд за период'],platform:call.body.platform};
+    return undefined;}});
+  try{
+    await f.render();
+    const card=f.container.querySelector('[data-platform="vk"]');
+    card.querySelector('[data-collect-date="vk"]').value='2026-09-17';
+    card.querySelector('[data-collect="vk"]').dispatchEvent(new f.w.Event('click',{bubbles:true}));await settle();
+    const run=f.calls.filter(c=>c.path==='/content/crm/social-stats/collect').pop();
+    assert.deepEqual(run.body,{platform:'vk',date:'2026-09-17'},'ручной сбор — тот же маршрут, только с датой');
+    const out=f.container.querySelector('[data-collect-result="vk"]').textContent;
+    assert.match(out,/собрано частично за 17\.09\.2026/);
+    assert.match(out,/сутки ещё идут/);
+    assert.match(out,/недостаёт: reach/);
+  }finally{f.close();}
+});
+
+test('замер состояния на дату показывает свежесть и разметку, источник измерения не красится ошибкой',async()=>{
+  const f=fixture({override:async call=>{
+    if(call.path==='/content/crm/social-stats'){
+      const data=overview(call.code);
+      data.platforms.telegram={...data.platforms.telegram,dataStatus:'lifetime_only',lastCollectedAt:'2026-09-29T08:58:00.000Z',
+        kinds:['unknown'],timezone:'Asia/Bangkok',days:{},totals:{},latest:{followers:{value:136,date:'2026-09-29'}},
+        lastRun:{status:'ok',date:'2026-09-29',closed:true,finishedAt:'2026-09-29T08:58:00.000Z',error:'',sourceNote:'шапка канала в Telegram Web',missing:[],provider:'manual'}};
+      data.runs=[{id:2,platform:'telegram',provider:'manual',trigger:'manual:owner',date:'2026-09-29',started_at:'2026-09-29T08:58:00.000Z',
+        finished_at:'2026-09-29T08:58:00.000Z',status:'ok',rows:1,error:'',sourceNote:'шапка канала в Telegram Web',missing:[]}];
+      return data;}
+    return undefined;}});
+  try{
+    await f.render();
+    const card=f.container.querySelector('[data-platform="telegram"]');
+    assert.match(card.textContent,/136/);
+    assert.doesNotMatch(card.textContent,/Свежесть: —/,'свежесть известна по замеру состояния');
+    assert.doesNotMatch(card.textContent,/разметка: —/);
+    assert.match(card.textContent,/Источник измерения: шапка канала/);
+    assert.equal(card.querySelectorAll('.crm-error').length,0,'успешный импорт ошибкой не показывается');
+    assert.match(f.container.textContent,/источник: шапка канала/);
+  }finally{f.close();}
+});
+
+/* Список аналитических профилей принадлежит одной компании и одной ревизии ключа.
+   Общий кэш показывал профиль компании A в кабинете компании B. */
+test('профили аналитики не переезжают в другую компанию и не приходят запоздалым ответом',async()=>{
+  const byCompany={'demo-travel':[{id:'an_company_a',platform:'instagram',nativeAccountId:'private-a',timezone:'Asia/Irkutsk'}],
+    'demo-other':[{id:'an_company_b',platform:'instagram',nativeAccountId:'private-b',timezone:'Asia/Bangkok'}]};
+  let hold=null;
+  const f=fixture({override:async call=>{
+    if(call.path==='/content/crm/social-stats/analytics/profiles'){
+      if(hold&&call.code===hold.code)return new Promise(resolve=>{hold.release=()=>resolve({accessRevision:1,profiles:byCompany[call.code]||[]});});
+      return {accessRevision:1,profiles:byCompany[call.code]||[]};}
+    return undefined;}});
+  try{
+    await f.render();
+    f.container.querySelector('[data-analytics="check"]').dispatchEvent(new f.w.Event('click',{bubbles:true}));await settle();
+    assert.match(f.container.querySelector('.social-analytics-access').textContent,/an_company_a/);
+    assert.deepEqual([...f.container.querySelector('[name="instagram.providerRef"]').options].map(o=>o.value),['','an_company_a']);
+    // Переключение компании: чужой профиль исчезает, пока не проверен доступ новой компании.
+    f.ctx.selectedProjectId='demo-other';
+    await f.render();
+    assert.doesNotMatch(f.container.querySelector('.social-analytics-access').textContent,/an_company_a/,'профиль чужой компании не показывается');
+    assert.doesNotMatch(f.container.querySelector('[name="instagram.providerRef"]').innerHTML,/an_company_a|private-a/);
+    assert.match(f.container.querySelector('[data-platform="instagram"].social-account').textContent,/Список профилей не загружен/);
+    // Свой список у новой компании загружается отдельно.
+    f.container.querySelector('[data-analytics="check"]').dispatchEvent(new f.w.Event('click',{bubbles:true}));await settle();
+    assert.match(f.container.querySelector('.social-analytics-access').textContent,/an_company_b/);
+    assert.doesNotMatch(f.container.innerHTML,/an_company_a/);
+    // Запоздалый ответ: запрос ушёл для demo-other, компанию переключили обратно — ответ отбрасывается.
+    hold={code:'demo-other'};
+    f.container.querySelector('[data-analytics="check"]').dispatchEvent(new f.w.Event('click',{bubbles:true}));await settle();
+    f.ctx.selectedProjectId='demo-travel';
+    await f.render();
+    hold.release();await settle();
+    assert.doesNotMatch(f.container.innerHTML,/an_company_b|private-b/,'запоздалый ответ чужой компании в кабинет не попал');
+    assert.match(f.container.querySelector('[data-platform="instagram"].social-account').textContent,/Список профилей не загружен/);
+  }finally{f.close();}
+});
+
+test('сохранение и удаление аналитического ключа сбрасывают список профилей',async()=>{
+  const f=fixture({override:async call=>{
+    if(call.path==='/content/crm/social-stats/analytics/profiles')
+      return {accessRevision:1,profiles:[{id:'an_1000',platform:'instagram',nativeAccountId:'17841400000000001',timezone:'Asia/Irkutsk'}]};
+    if(call.path==='/content/crm/social-stats/analytics/access'&&call.method==='GET')
+      return {companyCode:call.code,provider:'onlypult_analytics',configured:true,status:'connected',statusCode:'',revision:1,checkedRevision:1,checked:true,checkedAt:'2026-09-29T09:00:00.000Z',updatedAt:null};
+    if(call.path==='/content/crm/social-stats/analytics/access')return {companyCode:call.code,configured:true,status:'unchecked',statusCode:'',revision:2,checkedRevision:null,checked:false,checkedAt:null,updatedAt:null};
+    return undefined;}});
+  try{
+    await f.render();
+    f.container.querySelector('[data-analytics="check"]').dispatchEvent(new f.w.Event('click',{bubbles:true}));await settle();
+    assert.match(f.container.innerHTML,/an_1000/);
+    const form=f.container.querySelector('#social-analytics-form');
+    form.elements.credential.value='another-key';
+    form.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));await settle();
+    assert.doesNotMatch(f.container.innerHTML,/an_1000/,'после смены ключа прежний список не показывается');
+    f.container.querySelector('[data-analytics="check"]').dispatchEvent(new f.w.Event('click',{bubbles:true}));await settle();
+    assert.match(f.container.innerHTML,/an_1000/);
+    f.container.querySelector('[data-analytics="remove"]').dispatchEvent(new f.w.Event('click',{bubbles:true}));await settle();
+    assert.doesNotMatch(f.container.innerHTML,/an_1000/,'после удаления доступа список сброшен');
   }finally{f.close();}
 });

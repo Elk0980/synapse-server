@@ -20,8 +20,14 @@ const safeNote = (value) => {
   if (typeof value !== 'string' || !value.trim() || value.length > 300 || /[\u0000-\u001f\u007f]/.test(value)) fail('Укажите источник даты начала работы');
   return value.trim();
 };
+/* Происхождение измерения в замере «ДО». Новые версии копируют не только числа:
+   поле источника, система суток, область и полнота объясняют, ОТКУДА число взялось.
+   Прежние сохранённые версии при этом не переписываются — у них свой снимок. */
 const source = (row) => ({ provider: row.provider || 'unknown', capturedAt: row.collected_at || null,
-  runId: row.run_id ?? null, note: row.error?.startsWith('Источник: ') ? row.error.slice(10) : null });
+  /* Происхождение измерения теперь хранится в своём поле журнала. Старые записи, где оно
+     лежало в error с префиксом, читаются по-прежнему: их доказательства не переписываются. */
+  runId: row.run_id ?? null, note: row.source_note || (row.error?.startsWith('Источник: ') ? row.error.slice(10) : null) || null,
+  sourceField: row.source_field || '', timezone: row.timezone || null, scope: row.scope || 'profile' });
 const numeric = (value) => typeof value === 'number' && Number.isFinite(value);
 const count = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
 const evidence = (rows) => {
@@ -166,17 +172,29 @@ function createSocialBaselines(db, stats, { now = () => Date.now() } = {}) {
       // а не полноту всех метрик или публикаций площадки.
       const coverage = !item.configured ? 'account_not_configured' : !recordedDays ? 'no_data'
         : recordedDays === periodDays && item.dataStatus === 'complete' ? 'days_recorded' : 'partial';
-      const raw = item.configured ? db.prepare(`SELECT s.date,s.period,s.metric,s.value,s.unit,s.kind,s.completeness,s.provider,s.collected_at,s.run_id,r.error
+      /* Исходные показатели берутся в ТОЙ ЖЕ системе суток и области, что и сводка overview.
+         Иначе замер смешивал наблюдения разных поясов: recordedDays считался по активному
+         ряду, а measurements содержали ещё и чужие даты — и оценка покрытия выходила ложной.
+         Наблюдения прочих систем суток и областей не теряются: они перечислены отдельно.
+         Последний lifetime-замер ищется внутри своей системы суток по той же причине. */
+      const activeInterval = item.timezone || null;
+      const raw = item.configured ? db.prepare(`SELECT s.date,s.period,s.metric,s.value,s.unit,s.kind,s.completeness,s.provider,s.collected_at,s.run_id,s.source_field,s.timezone,s.scope,r.error,r.source_note
         FROM social_snapshots s LEFT JOIN social_collect_runs r ON r.id=s.run_id
         WHERE s.company_code=? COLLATE NOCASE AND s.platform=? AND s.account_ref=? AND
           ((s.period='day' AND s.date>=? AND s.date<=?) OR
            (s.period='lifetime' AND s.date=(SELECT MAX(t.date) FROM social_snapshots t
              WHERE t.company_code=s.company_code AND t.platform=s.platform AND t.account_ref=s.account_ref
-               AND t.metric=s.metric AND t.period='lifetime' AND t.date<=?)))
+               AND t.metric=s.metric AND t.period='lifetime'
+               AND t.timezone=s.timezone AND COALESCE(t.scope,'profile')=COALESCE(s.scope,'profile') AND t.date<=?)))
         ORDER BY s.date,s.metric LIMIT ?`).all(scope.code, platform, item.accountRef || '', from, to, to, MAX_MEASUREMENTS + 1) : [];
       if (raw.length > MAX_MEASUREMENTS) fail('Слишком много исходных показателей: сократите период замера');
-      const measurements = raw.map((row) => ({ date: row.date, period: row.period, metric: row.metric,
+      const active = (row) => (activeInterval === null || (row.timezone || '') === activeInterval)
+        && (row.scope || 'profile') === 'profile';
+      const measurements = raw.filter(active).map((row) => ({ date: row.date, period: row.period, metric: row.metric,
         value: row.value, unit: row.unit, kind: row.kind, completeness: row.completeness, ...source(row) }));
+      const otherObservations = raw.filter((row) => !active(row)).map((row) => ({ date: row.date, period: row.period,
+        metric: row.metric, value: row.value, unit: row.unit, timezone: row.timezone || '', scope: row.scope || 'profile',
+        note: 'Наблюдение другой системы суток или другой области источника: в покрытие замера не входит.' }));
       const refs = [...new Map(raw.map((row) => {
         const evidence = source(row);
         return [`${evidence.provider}|${evidence.capturedAt}|${evidence.runId}`, evidence];
@@ -184,14 +202,15 @@ function createSocialBaselines(db, stats, { now = () => Date.now() } = {}) {
       platforms[platform] = { accountRef: item.accountRef || null, accountConfigured: item.configured,
         accountProvider: item.provider, access: item.access?.status || 'unknown', coverage, recordedDays, periodDays,
         totals: item.configured ? item.totals : {}, latest: item.configured ? item.latest : {},
-        aggregation: item.configured ? item.aggregation : {}, measurements,
+        aggregation: item.configured ? item.aggregation : {}, measurements, activeInterval,
+        otherObservations, otherIntervals: item.configured ? (item.otherIntervals || []) : [],
         days: item.configured ? item.days : {}, sources: refs.slice(0, MAX_SOURCES), sourcesTruncated: refs.length > MAX_SOURCES };
     }
 
     // Посты без сохранённой даты выхода не считаются историческими публикациями.
     // Расширяем SQL-окно на день с каждой стороны из-за часовых поясов, затем проверяем локальную дату.
     const timezone = scope.timezone || 'Asia/Bangkok';
-    const candidates = db.prepare(`SELECT p.*,r.error AS source_note FROM social_posts p LEFT JOIN social_collect_runs r ON r.id=p.source_run_id WHERE p.company_code=? COLLATE NOCASE
+    const candidates = db.prepare(`SELECT p.*,r.error AS legacy_note,r.source_note AS source_note FROM social_posts p LEFT JOIN social_collect_runs r ON r.id=p.source_run_id WHERE p.company_code=? COLLATE NOCASE
       AND p.published_at IS NOT NULL AND substr(p.published_at,1,10)>=? AND substr(p.published_at,1,10)<=?
       ORDER BY p.published_at DESC,p.id DESC`).all(scope.code, adjacentDay(from, -1), adjacentDay(to, 1));
     const observed = candidates.filter((post) => {
@@ -199,13 +218,13 @@ function createSocialBaselines(db, stats, { now = () => Date.now() } = {}) {
       return Number.isFinite(ms) && localDay(ms, timezone) >= from && localDay(ms, timezone) <= to;
     });
     const posts = observed.slice(0, MAX_POSTS).map((post) => {
-      const metrics = db.prepare(`SELECT m.date,m.metric,m.value,m.unit,m.completeness,m.provider,m.collected_at,m.run_id,r.error
+      const metrics = db.prepare(`SELECT m.date,m.metric,m.value,m.unit,m.completeness,m.provider,m.collected_at,m.run_id,r.error,r.source_note
         FROM social_post_metrics m LEFT JOIN social_collect_runs r ON r.id=m.run_id
         WHERE m.post_id=? AND m.date>=? AND m.date<=? ORDER BY m.date DESC,m.metric`).all(post.id, from, to);
       return { platform: post.platform, platformPostId: post.platform_post_id, url: post.url || null,
         contentId: post.content_id || null, publishedAt: post.published_at, provider: post.provider,
         source: { provider: post.provider, capturedAt: post.source_collected_at || post.created_at, runId: post.source_run_id,
-          note: post.source_note?.startsWith('Источник: ') ? post.source_note.slice(10) : null },
+          note: post.source_note || (post.legacy_note?.startsWith('Источник: ') ? post.legacy_note.slice(10) : null) || null },
         // Эти записи не удостоверяют, что найдены ВСЕ публикации за период.
         metrics: metrics.map((metric) => ({ date: metric.date, metric: metric.metric, value: metric.value,
           unit: metric.unit, completeness: metric.completeness, ...source(metric) })) };

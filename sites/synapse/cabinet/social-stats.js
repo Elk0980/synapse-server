@@ -24,6 +24,19 @@
   const isoDay = (offset = 0) => { const d = new Date(Date.now() + offset * 86400000); return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d); };
   let requestId = 0;
   const state = { from: isoDay(-29), to: isoDay(0) };
+  const ACCESS_STATUS = { not_configured: 'не настроен', unchecked: 'сохранён, но не проверен', connected: 'проверен', error: 'проверка не прошла' };
+  /* Список аналитических профилей принадлежит КОНКРЕТНОЙ компании и конкретной ревизии
+     ключа. Общий кэш показывал профиль одной компании в кабинете другой, а запоздалый
+     ответ мог принести чужой список. Поэтому кэш хранит свой ключ и сверяется с текущим;
+     каждая загрузка помечается номером, и устаревший ответ отбрасывается. */
+  let profilesCache = null;   // { company, revision, profiles, error }
+  let profilesRequest = 0;
+  const profilesKey = (ctx, access) => `${String(ctx.selectedProjectId || '').toLowerCase()}|${access?.revision ?? ''}`;
+  const profilesFresh = (ctx, access) => (profilesCache && profilesCache.key === profilesKey(ctx, access) ? profilesCache : null);
+  const dropProfiles = () => { profilesCache = null; profilesRequest += 1; };
+  /* Аналитический профиль Onlypult подходит аккаунту, только если совпала площадка.
+     Профиль публикаций (числовой ID) аналитическим не является и в список не попадает. */
+  const profilesFor = (list, platform) => (list || []).filter((item) => item.platform === platform);
 
   function render(container, ctx) {
     if (!allowed(ctx)) { container.replaceChildren(); return; }
@@ -45,7 +58,10 @@
             <div class="crm-actions wide"><button type="submit" class="plain-button">Зафиксировать «ДО»</button>
               <span id="social-baseline-state" role="status"></span></div></form></details>` : ''}</section>
       <div id="social-content" aria-live="polite"><p>Загрузка…</p></div>
-      ${owner ? `<details class="card social-settings"><summary>Аккаунты и источники (владелец)</summary><p class="social-note">Здесь только идентификаторы аккаунтов и выбор источника. Ключи и права живут в подключениях площадок (Автопостинг) или у провайдера; сюда их вводить нельзя.</p><div id="social-accounts"></div></details>
+      ${owner ? `<details class="card social-analytics-access"><summary>Аналитический доступ Onlypult (владелец)</summary>
+        <p class="social-note">Отдельный ключ кабинета Onlypult для чтения аналитики Instagram и TikTok. Он не заменяет подключение публикаций и хранится отдельно. Ключ показывается только один раз — вам; кабинет его не отображает и не возвращает. ВКонтакте, Telegram, YouTube, 2ГИС и MAX этот источник не покрывает.</p>
+        <div id="social-analytics-access"></div></details>
+      <details class="card social-settings"><summary>Аккаунты и источники (владелец)</summary><p class="social-note">Здесь только идентификаторы аккаунтов и выбор источника. Ключи и права живут в подключениях площадок (Автопостинг) или у провайдера; сюда их вводить нельзя.</p><div id="social-accounts"></div></details>
       <details class="card social-import"><summary>Ручной ввод реальных чисел (владелец)</summary><p class="social-note">Для площадок без API-доступа: числа из кабинета площадки с датой снятия и источником (скриншот, выгрузка). Это не автоматический сбор и не заглушка — без чисел строка не сохраняется.</p>
         <form id="social-import-form" class="crm-form"><label>Площадка<select name="platform">${PLATFORMS.map(p => `<option value="${p}">${p}</option>`).join('')}</select></label>
         <label>Момент снятия<input name="capturedAt" type="datetime-local" required></label><label class="wide">Источник<input name="sourceNote" required maxlength="300" placeholder="скриншот Insights 18.09"></label>
@@ -56,16 +72,20 @@
       state.from = from; state.to = to;
       const content = container.querySelector('#social-content');
       try {
-        const [data, accounts, baseline] = await Promise.all([
+        const [data, accounts, baseline, access] = await Promise.all([
           ctx.apiJson(`/content/crm/social-stats?companyCode=${encodeURIComponent(company)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
           owner ? ctx.apiJson(`/content/crm/social-stats/accounts?companyCode=${encodeURIComponent(company)}`) : null,
           ctx.apiJson(`/content/crm/social-stats/baseline?companyCode=${encodeURIComponent(company)}`),
+          // Состояние аналитического доступа не должно ронять всю страницу, если источник молчит.
+          owner ? ctx.apiJson(`/content/crm/social-stats/analytics/access?companyCode=${encodeURIComponent(company)}`).catch(() => null) : null,
         ]);
         if (id !== requestId || ctx.selectedProjectId !== company) return;
         if (data.companyCode !== String(company).toLowerCase() || baseline.companyCode !== String(company).toLowerCase()) throw new Error('Ответ другой компании');
         content.innerHTML = overviewMarkup(data);
         container.querySelector('#social-baseline-content').innerHTML = baselineMarkup(baseline);
-        if (owner && accounts) renderAccounts(container, ctx, accounts, load);
+        const cached = owner ? profilesFresh(ctx, access) : null;
+        if (owner) renderAnalyticsAccess(container, ctx, access, load, cached);
+        if (owner && accounts) renderAccounts(container, ctx, accounts, load, cached);
         bind(container, ctx, data, load);
       } catch (error) { if (id === requestId) content.innerHTML = `<p class="crm-error" role="alert">Не удалось загрузить: ${esc(error.message)}</p>`; }
     };
@@ -220,10 +240,16 @@
         ${Object.entries(totals).map(([m, v]) => `<div><dt>${esc(METRIC_LABELS[m] || m)} ${item.aggregation?.[m] === 'avg' ? '— невзвешенное среднее по дням' : 'за период'}</dt><dd>${num(v)}</dd></div>`).join('') || '<div><dt>Данных за период</dt><dd>—</dd></div>'}</dl>
         ${item.dataStatus === 'partial' ? '<p class="social-note">Есть незавершённые дни: текущий день обновляется в течение суток, итог — после закрытия дня.</p>' : ''}
         ${(item.history || []).length ? `<details class="social-missing"><summary>Прежние аккаунты площадки (не входят в сводку)</summary><ul>${item.history.map(h => `<li>${esc(h.accountRef)}: дней ${num(h.days)}${Object.entries(h.totals || {}).map(([m, v]) => `, ${esc(METRIC_LABELS[m] || m)} ${num(v)}`).join('')}</li>`).join('')}</ul></details>` : ''}
-        <p class="social-note">Свежесть: ${esc(stamp(item.lastCollectedAt))} · разметка: ${(item.kinds || []).map(k => KIND[k] || k).join(', ') || '—'}</p>
+        ${item.dataStatus === 'lifetime_only' ? '<p class="social-note">Есть только замер состояния на дату (подписчики): суточного ряда по этой площадке пока нет.</p>' : ''}
+        <p class="social-note">Свежесть: ${esc(stamp(item.lastCollectedAt))} · разметка: ${(item.kinds || []).map(k => KIND[k] || k).join(', ') || '—'}${item.timezone ? ` · сутки ${esc(item.timezone)}` : ''}</p>
         ${(item.lastRun?.missing?.length || item.access?.missing?.length) ? `<details class="social-missing"><summary>Чего недостаёт</summary><ul>${(item.lastRun?.missing?.length ? item.lastRun.missing : item.access.missing).map(x => `<li>${esc(x)}</li>`).join('')}</ul></details>` : ''}
+        ${/* Происхождение измерения — не ошибка: раньше пометка источника ручного импорта красилась красным. */''}
+        ${item.lastRun?.sourceNote ? `<p class="social-note">Источник измерения: ${esc(item.lastRun.sourceNote)}</p>` : ''}
         ${item.lastRun?.error ? `<p class="crm-error">${esc(item.lastRun.error)}</p>` : ''}
-        <button type="button" class="plain-button" data-collect="${p}">Собрать сейчас</button></article>`; }).join('');
+        ${(item.pendingDates || []).length ? `<p class="social-note">Ждут повтора: ${esc(item.pendingDates.map(d => day(d.date)).join(', '))}</p>` : ''}
+        <div class="crm-actions"><label class="social-collect-date">Дата сбора<input type="date" data-collect-date="${p}" max="${esc(isoDay(0))}" value="${esc(isoDay(0))}"></label>
+        <button type="button" class="plain-button" data-collect="${p}">Собрать сейчас</button></div>
+        <p class="social-note" data-collect-result="${p}" role="status"></p></article>`; }).join('');
     const days = new Map();
     for (const p of PLATFORMS) for (const [d, metrics] of Object.entries(data.platforms[p].days || {})) { days.set(d, days.get(d) || {}); days.get(d)[p] = metrics; }
     const dayRows = [...days.keys()].sort().reverse().map(d => `<tr><td data-label="День">${esc(day(d))}</td>${PLATFORMS.map(p => { const m = days.get(d)[p]; return `<td data-label="${esc(data.platforms[p].label)}">${m ? Object.entries(m).map(([k, v]) => `${esc(METRIC_LABELS[k] || k)}: ${num(v.value)}${v.kind && v.kind !== 'unknown' ? ` (${KIND[v.kind]})` : ''}`).join('<br>') : '—'}</td>`; }).join('')}</tr>`).join('');
@@ -233,7 +259,7 @@
       <section class="card"><h2>По дням</h2>${dayRows ? `<div class="crm-table-wrap"><table class="crm-table crm-entity-table social-days"><thead><tr><th>День</th>${PLATFORMS.map(p => `<th>${esc(data.platforms[p].label)}</th>`).join('')}</tr></thead><tbody>${dayRows}</tbody></table></div>` : '<p>За выбранный период снимков нет.</p>'}</section>
       ${crmMarkup(crm)}
       ${postMetricsMarkup(data.postMetrics)}
-      <section class="card"><h2>Журнал сборов</h2>${data.runs?.length ? `<ul class="social-runs">${data.runs.slice(0, 15).map(r => `<li>${esc(day(r.date))} · ${esc(data.platforms[r.platform]?.label || r.platform)} · ${esc(PROVIDER[r.provider] || r.provider)} · <strong>${esc(RUN[r.status] || r.status)}</strong> · строк ${num(r.rows)} · ${esc(stamp(r.finished_at || r.started_at))}${r.error ? ` · ${esc(r.error)}` : ''}${r.missing?.length ? ` · недостаёт: ${esc(r.missing.join('; '))}` : ''}</li>`).join('')}</ul>` : '<p>Сборов ещё не было.</p>'}</section>`;
+      <section class="card"><h2>Журнал сборов</h2>${data.runs?.length ? `<ul class="social-runs">${data.runs.slice(0, 15).map(r => `<li>${esc(day(r.date))} · ${esc(data.platforms[r.platform]?.label || r.platform)} · ${esc(PROVIDER[r.provider] || r.provider)} · <strong>${esc(RUN[r.status] || r.status)}</strong> · строк ${num(r.rows)} · ${esc(stamp(r.finished_at || r.started_at))}${r.sourceNote ? ` · источник: ${esc(r.sourceNote)}` : ''}${r.error ? ` · <span class="crm-error">${esc(r.error)}</span>` : ''}${r.missing?.length ? ` · недостаёт: ${esc(r.missing.join('; '))}` : ''}</li>`).join('')}</ul>` : '<p>Сборов ещё не было.</p>'}</section>`;
   }
   /* Запись выхода: собранный пост (stored), собранный пост с подтверждением владельца (stored_with_receipt) или только подтверждение
      (external_receipt). Подтверждение — ссылка и время выхода от владельца, поэтому провайдером сбора оно не подписывается, а ручной
@@ -323,27 +349,122 @@
       <h3>Обращения по источникам за период</h3>${(crm.bySource || []).length ? `<ul>${crm.bySource.map(s => `<li>${esc(s.source)}: обращений ${num(s.leads)}, продаж ${num(s.sales)}, выручка ${num(s.revenue)}</li>`).join('')}</ul>` : '<p>Обращений с зафиксированным источником за период нет.</p>'}</section>`;
   }
   function bind(container, ctx, data, load) {
+    /* Ручной сбор идёт тем же путём, что и фоновый: тот же /social-stats/collect, та же
+       аренда, та же очередь повторов. Отдельной «ручной» ветки сбора нет. */
     container.querySelectorAll('[data-collect]').forEach(button => button.addEventListener('click', async () => {
-      if (ctx.identity?.role !== 'owner' && !ctx.identity?.permissions?.includes('crm.edit')) { button.textContent = 'Нужно право редактирования'; return; }
-      button.disabled = true;
-      try { const run = await ctx.apiJson(`/content/crm/social-stats/collect?companyCode=${encodeURIComponent(ctx.selectedProjectId)}`, ctx.csrfOptions('POST', { platform: button.dataset.collect })); button.textContent = RUN[run.status] || run.status; await load(); }
-      catch (error) { button.disabled = false; button.textContent = error.message; }
+      const platform = button.dataset.collect, out = container.querySelector(`[data-collect-result="${platform}"]`);
+      if (ctx.identity?.role !== 'owner' && !ctx.identity?.permissions?.includes('crm.edit')) { if (out) out.textContent = 'Нужно право редактирования.'; return; }
+      const chosen = container.querySelector(`[data-collect-date="${platform}"]`)?.value || '';
+      button.disabled = true; if (out) out.textContent = 'Собираем…';
+      try {
+        const run = await ctx.apiJson(`/content/crm/social-stats/collect?companyCode=${encodeURIComponent(ctx.selectedProjectId)}`,
+          ctx.csrfOptions('POST', { platform, ...(chosen ? { date: chosen } : {}) }));
+        const message = [`${RUN[run.status] || run.status} за ${day(run.date)}`,
+          run.closed ? 'сутки закрыты' : 'сутки ещё идут',
+          `записей: ${num(run.rows)}`,
+          run.missing?.length ? `недостаёт: ${run.missing.join('; ')}` : ''].filter(Boolean).join(' · ');
+        await load();
+        // Перерисовка заменила узлы: результат ставится в свежий, иначе он пропадал сразу.
+        const fresh = container.querySelector(`[data-collect-result="${platform}"]`);
+        if (fresh) fresh.textContent = message;
+      } catch (error) { const fresh = container.querySelector(`[data-collect-result="${platform}"]`) || out; if (fresh) fresh.textContent = error.message; }
+      button.disabled = false;
     }));
   }
-  function renderAccounts(container, ctx, accounts, load) {
+  /* Аналитический доступ: сохранение ключа, проверка и загрузка списка профилей an_….
+     Ключ уходит одним полем и обратно не возвращается: кабинет знает только «настроен или
+     нет» и состояние проверки. Пустое поле при сохранении прежний ключ НЕ стирает. */
+  function renderAnalyticsAccess(container, ctx, access, load, cached) {
+    const node = container.querySelector('#social-analytics-access'); if (!node) return;
+    if (!access) { node.innerHTML = '<p class="crm-error" role="alert">Состояние аналитического доступа не прочитано. Обновите страницу.</p>'; return; }
+    const checked = access.checked ? 'подключение подтверждено на текущем ключе' : 'текущий ключ проверкой не подтверждён';
+    node.innerHTML = `<form id="social-analytics-form" class="crm-form">
+      <p class="social-status">Onlypult Analytics: <strong>${esc(access.configured ? ACCESS_STATUS[access.status] || access.status : 'не настроен')}</strong> · ${esc(checked)}${access.checkedAt ? ` · проверен ${esc(stamp(access.checkedAt))}` : ''}</p>
+      ${access.status === 'error' && access.statusCode ? `<p class="crm-error">Последняя проверка не прошла: ${esc(access.statusCode)}</p>` : ''}
+      <input type="hidden" name="revision" value="${esc(access.revision)}">
+      <label class="wide">Ключ доступа к аналитике<input name="credential" type="password" autocomplete="off" maxlength="400" placeholder="${access.configured ? 'ключ сохранён — оставьте пустым, чтобы не менять' : 'вставьте ключ кабинета Onlypult'}"></label>
+      <div class="crm-actions wide">
+        <button class="plain-button" type="submit">Сохранить доступ</button>
+        <button class="plain-button" type="button" data-analytics="check">Проверить и загрузить профили</button>
+        ${access.configured ? '<button class="plain-button" type="button" data-analytics="remove">Убрать доступ</button>' : ''}
+        <span id="social-analytics-state" role="status"></span></div>
+      ${cached?.error ? `<p class="crm-error" role="alert">${esc(cached.error)}</p>` : ''}
+      ${cached?.profiles ? (cached.profiles.length
+        ? `<p class="social-note">Аналитических профилей получено: ${num(cached.profiles.length)}. Профиль выбирается у площадки ниже.</p>
+           <ul class="social-runs">${cached.profiles.map((item) => `<li>${esc(item.id)} · ${esc(PLATFORM_LABELS[item.platform] || item.platform)} · аккаунт площадки ${esc(item.nativeAccountId || 'не назван')}${item.timezone ? ` · сутки ${esc(item.timezone)}` : ''}</li>`).join('')}</ul>`
+        : '<p class="social-note">Источник ответил, но аналитических профилей (an_…) в кабинете нет. Подключение аналитики недостающее: профиль нужно завести на стороне Onlypult — без него сбор не запускается и цифры не появятся.</p>') : ''}</form>`;
+    const out = node.querySelector('#social-analytics-state');
+    node.querySelector('#social-analytics-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget, credential = form.elements.credential.value.trim();
+      try {
+        await ctx.apiJson(`/content/crm/social-stats/analytics/access?companyCode=${encodeURIComponent(ctx.selectedProjectId)}`,
+          ctx.csrfOptions('PUT', { revision: Number(form.elements.revision.value), credential }));
+        form.elements.credential.value = '';
+        dropProfiles();
+        out.textContent = 'Сохранено. Проверьте доступ, чтобы подтвердить подключение.';
+        await load();
+      } catch (error) { out.textContent = error.message; }
+    });
+    node.querySelector('[data-analytics="check"]')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget; button.disabled = true; out.textContent = 'Проверяем…';
+      /* Ответ принадлежит той компании и той ревизии ключа, с которыми ушёл запрос.
+         Запоздалый ответ после переключения компании отбрасывается целиком. */
+      const ticket = ++profilesRequest, key = profilesKey(ctx, access), company = ctx.selectedProjectId;
+      try {
+        const listing = await ctx.apiJson(`/content/crm/social-stats/analytics/profiles?companyCode=${encodeURIComponent(company)}`);
+        if (ticket !== profilesRequest || ctx.selectedProjectId !== company) return;
+        const profiles = Array.isArray(listing.profiles) ? listing.profiles : [];
+        profilesCache = { key, profiles, error: '' };
+        out.textContent = profiles.length ? 'Доступ подтверждён.' : 'Доступ подтверждён, но профилей аналитики нет.';
+      } catch (error) {
+        if (ticket !== profilesRequest || ctx.selectedProjectId !== company) return;
+        profilesCache = { key, profiles: null, error: error.message };
+        out.textContent = error.message;
+      }
+      button.disabled = false;
+      await load();
+    });
+    node.querySelector('[data-analytics="remove"]')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget; button.disabled = true;
+      try {
+        await ctx.apiJson(`/content/crm/social-stats/analytics/access?companyCode=${encodeURIComponent(ctx.selectedProjectId)}`,
+          ctx.csrfOptions('DELETE', { revision: Number(node.querySelector('[name="revision"]').value) }));
+        dropProfiles();
+        out.textContent = 'Доступ убран. История измерений и доказательств сохранена.';
+        await load();
+      } catch (error) { out.textContent = error.message; button.disabled = false; }
+    });
+  }
+  function renderAccounts(container, ctx, accounts, load, cached) {
     const node = container.querySelector('#social-accounts'); if (!node) return;
-    node.innerHTML = `<form id="social-accounts-form" class="crm-form">${accounts.accounts.map(a => `<fieldset class="wide social-account" data-platform="${a.platform}"><legend>${esc(a.label)} · ${esc(ACCESS[a.access?.status] || a.access?.status || '')}</legend>
+    /* Система суток — настоящий выбор, а не навязанный Asia/Bangkok: аккаунту в Иркутске
+       нужен свой день. Сохранённый пояс остаётся в списке, даже если его нет в подсказке. */
+    const zones = [...new Set([...(accounts.timezones || ['Asia/Bangkok']), ...accounts.accounts.map((a) => a.timezone).filter(Boolean)])];
+    node.innerHTML = `<form id="social-accounts-form" class="crm-form">${accounts.accounts.map(a => {
+      const options = profilesFor(cached?.profiles, a.platform);
+      return `<fieldset class="wide social-account" data-platform="${a.platform}"><legend>${esc(a.label)} · ${esc(ACCESS[a.access?.status] || a.access?.status || '')}${a.configured ? '' : ' · аккаунт не указан'}</legend>
       <input type="hidden" name="${a.platform}.revision" value="${a.revision}"><label>Аккаунт (@имя, ID, club…)<input name="${a.platform}.accountRef" value="${esc(a.accountRef)}" maxlength="200"></label>
       <label>Источник<select name="${a.platform}.provider">${['direct', 'onlypult', 'manual'].map(p => `<option value="${p}"${a.provider === p ? ' selected' : ''}>${PROVIDER[p]}</option>`).join('')}</select></label>
+      <label>Аналитический профиль Onlypult<select name="${a.platform}.providerRef">
+        <option value="">не выбран</option>
+        ${options.map((item) => `<option value="${esc(item.id)}"${a.providerRef === item.id ? ' selected' : ''}>${esc(item.id)} · аккаунт ${esc(item.nativeAccountId || 'не назван')}${item.timezone ? ` · ${esc(item.timezone)}` : ''}</option>`).join('')}
+        ${a.providerRef && !options.some((item) => item.id === a.providerRef) ? `<option value="${esc(a.providerRef)}" selected>${esc(a.providerRef)} · в загруженном списке нет</option>` : ''}
+      </select></label>
+      ${!cached?.profiles ? '<p class="social-note">Список профилей не загружен: проверьте аналитический доступ выше.</p>'
+        : !options.length ? '<p class="social-note">Аналитических профилей этой площадки у источника нет. Недостающее подключение: заведите профиль в Onlypult — сбор без него не запускается.</p>' : ''}
       <label>Разметка<select name="${a.platform}.kind">${Object.entries(KIND).map(([k, l]) => `<option value="${k}"${a.kind === k ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
-      <label>Час сбора (Бангкок)<input name="${a.platform}.collectHour" type="number" min="0" max="23" value="${a.collectHour}"></label>
+      <label>Система суток<select name="${a.platform}.timezone">${zones.map((z) => `<option value="${esc(z)}"${a.timezone === z ? ' selected' : ''}>${esc(z)}</option>`).join('')}</select></label>
+      <label>Час сбора (по выбранным суткам)<input name="${a.platform}.collectHour" type="number" min="0" max="23" value="${a.collectHour}"></label>
       <label class="autoposting-checkbox"><input type="checkbox" name="${a.platform}.enabled"${a.enabled ? ' checked' : ''}>Собирать</label>
-      ${a.access?.missing?.length ? `<p class="social-note">Недостаёт: ${esc(a.access.missing.join('; '))}</p>` : ''}</fieldset>`).join('')}
+      ${a.access?.missing?.length ? `<p class="social-note">Недостаёт: ${esc(a.access.missing.join('; '))}</p>` : ''}</fieldset>`; }).join('')}
       <div class="crm-actions wide"><button class="plain-button" type="submit">Сохранить аккаунты</button><span id="social-accounts-state" role="status"></span></div></form>`;
     node.querySelector('#social-accounts-form').addEventListener('submit', async event => {
       event.preventDefault(); const form = event.currentTarget, out = node.querySelector('#social-accounts-state');
       const payload = { accounts: PLATFORMS.map(p => ({ platform: p, revision: Number(form.elements[`${p}.revision`].value), accountRef: form.elements[`${p}.accountRef`].value.trim(), provider: form.elements[`${p}.provider`].value,
-        kind: form.elements[`${p}.kind`].value, collectHour: Number(form.elements[`${p}.collectHour`].value), enabled: form.elements[`${p}.enabled`].checked, timezone: 'Asia/Bangkok' })) };
+        providerRef: form.elements[`${p}.providerRef`].value.trim(),
+        kind: form.elements[`${p}.kind`].value, collectHour: Number(form.elements[`${p}.collectHour`].value), enabled: form.elements[`${p}.enabled`].checked,
+        timezone: form.elements[`${p}.timezone`].value })) };
       if (payload.accounts.some(a => /(?:token|key|secret|password|bearer)/i.test(a.accountRef))) { out.textContent = 'Ключи сюда вводить нельзя.'; return; }
       try { await ctx.apiJson(`/content/crm/social-stats/accounts?companyCode=${encodeURIComponent(ctx.selectedProjectId)}`, ctx.csrfOptions('PUT', payload)); out.textContent = 'Сохранено.'; await load(); }
       catch (error) { out.textContent = error.message; }
