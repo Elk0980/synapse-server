@@ -74,9 +74,14 @@ test('read-only and editor permissions never grant batch approval, including syn
     f.node('autoposting-batch-approve').disabled=false;await f.click('#autoposting-batch-approve');assert.ok(f.calls.every(call=>call.method==='GET'));
   }finally{f.close();}}
 });
-test('approval unavailable for incomplete, already approved, published, uncertain or locally modified cards',async()=>{
+test('approval unavailable for incomplete, published, uncertain or locally modified cards; already approved can be selected only to be returned',async()=>{
   const f=await fixture({entries:[row(1,{readiness:{ready:false,issues:['Добавьте файл']}}),row(2,{approval:{approved:true}}),row(3,{status:'published'}),row(4,{deliveries:[{status:'needs_review'}]}),row(5)]});try{
-    for(const id of [1,2,3,4])assert.equal(f.d.querySelector('[data-daily-approve="'+id+'"]').disabled,true);
+    for(const id of [1,3,4])assert.equal(f.d.querySelector('[data-daily-approve="'+id+'"]').disabled,true);
+    // Назначение флажка изменилось: согласованную карточку выбирают, чтобы вернуть её на доработку.
+    assert.equal(f.d.querySelector('[data-daily-approve="2"]').disabled,false,'согласованную карточку можно выбрать для возврата');
+    await f.click('[data-daily-approve="2"]');await f.click('#autoposting-batch-approve');
+    assert.ok(f.calls.every(call=>call.method==='GET'),'повторное массовое согласование уже одобренного не пишет ничего');
+    assert.match(f.node('autoposting-batch-results').textContent,/Материал 2: Уже согласовано/);
     await f.click('[data-open-post="5"]');f.set('autoposting-text','Правка');assert.equal(f.d.querySelector('[data-daily-approve="5"]').disabled,true);assert.ok(f.calls.every(call=>call.method==='GET'));
   }finally{f.close();}
 });
@@ -118,4 +123,99 @@ test('only known current-plan gaps in the next three days create a preparation n
     if(basis==='current_plan'){assert.match(note.textContent,/подготовить публикацию к 2026-09-25, 2026-09-27/);assert.doesNotMatch(note.textContent,/2026-09-24|2026-09-26|2026-09-28|запас|напоминан/);}
     assert.ok(f.calls.every(call=>call.method==='GET'));
   }finally{f.close();}}
+});
+
+test('массовый возврат на доработку: причина обязательна, вызывается существующий reject по каждой карточке, результат по каждой свой',async()=>{
+  const seen=[];
+  const f=await fixture({entries:[row(1,{approval:{approved:true}}),row(2,{approval:{approved:true}})],override:(call,posts)=>{
+    if(!call.path.endsWith('/reject'))return undefined;
+    const id=Number(call.path.match(/\/posts\/(\d+)\//)[1]),body=JSON.parse(call.options.body);
+    seen.push({id,body});
+    if(id===2)throw Object.assign(Error('RAW_PROVIDER_FAILURE'),{status:409});
+    const item=posts.find(value=>value.id===id);item.revision++;item.approval={approved:false,stale:false};
+    item.review={state:'rejected',comment:body.comment};return item;
+  }});try{
+    for(const id of [1,2])await f.click('[data-daily-approve="'+id+'"]');
+    await f.click('#autoposting-batch-reject');
+    assert.equal(seen.length,0,'без причины возврат не отправляется');
+    f.set('autoposting-batch-reason','Переносим на следующую неделю');
+    await f.click('#autoposting-batch-reject');
+    assert.deepEqual(seen.map(item=>item.id),[1,2],'по каждой карточке отдельный вызов существующего reject');
+    assert.equal(seen[0].body.comment,'Переносим на следующую неделю');
+    assert.match(f.node('autoposting-batch-results').textContent,/Материал 1: Возвращено на доработку/);
+    assert.match(f.node('autoposting-batch-results').textContent,/Материал 2: Возврат не подтверждён/);
+    assert.doesNotMatch(f.d.body.textContent,/RAW_PROVIDER_FAILURE/,'сырая ошибка наружу не выводится');
+    assert.ok(!f.calls.some(call=>/schedule|publish/.test(call.path)),'возврат ничего не публикует');
+  }finally{f.close();}
+});
+
+test('частичное согласование в карточке: в план уходит только согласованная площадка, статус второй виден, согласование можно снять',async()=>{
+  const platformApprovals=[{platformId:'telegram',platformLabel:'Telegram',state:'approved',stateLabel:'Согласовано',approved:true,stale:false,contentRevision:3,comment:'',byName:'Влад',at:null},
+    {platformId:'vk',platformLabel:'ВКонтакте',state:'rejected',stateLabel:'На доработку',approved:false,stale:false,contentRevision:3,comment:'Нужен другой хук',byName:'Влад',at:null}];
+  const writes=[];
+  const f=await fixture({entries:[row(1,{platformIds:['telegram','vk'],captions:{telegram:'ТГ',vk:'ВК'},platformApprovals,
+    // Дата в будущем относительно зафиксированного времени фикстуры: иначе кабинет справедливо не даёт ставить в план.
+    scheduledAt:'2026-09-26T09:00:00Z',
+    approval:{approved:false,stale:false,platforms:platformApprovals}})],override:(call,posts)=>{
+      if(call.method==='GET'||!/\/(schedule|approve)$/.test(call.path))return undefined;
+      writes.push({path:call.path,body:JSON.parse(call.options.body)});
+      const item=posts[0];item.revision++;return item;
+    }});try{
+    await f.click('[data-open-post="1"]');
+    // Предпросмотр — обязательное условие постановки в план; ВК в подключениях фикстуры нет вовсе,
+    // и это не должно мешать отправке согласованного Telegram.
+    await f.click('#autoposting-preview');
+    const text=f.node('autoposting-approval').textContent;
+    assert.match(text,/Telegram/);assert.match(text,/ВКонтакте/);
+    assert.match(text,/Согласовано/);assert.match(text,/На доработку/);
+    assert.match(text,/Нужен другой хук/,'причина по площадке видна');
+    assert.match(text,/В план уйдут только согласованные площадки: Telegram/);
+    assert.equal(f.node('autoposting-schedule').disabled,false,'несогласованный и даже неподключённый ВК не блокирует план для Telegram');
+    await f.click('#autoposting-schedule');
+    assert.equal(writes.length,1);assert.match(writes[0].path,/\/schedule$/);
+    assert.deepEqual(writes[0].body.platformIds,['telegram'],'в план отправлена только согласованная площадка');
+    await f.click('#autoposting-revoke-platforms');
+    assert.equal(writes.length,2);assert.match(writes[1].path,/\/approve$/);
+    assert.equal(writes[1].body.approved,false);
+    assert.deepEqual(writes[1].body.platformIds,['telegram','vk'],'снятие относится к отмеченным площадкам');
+  }finally{f.close();}
+});
+
+test('продолжение по оставшимся площадкам: кнопка вызывает split один раз, повтор не создаёт второй материал',async()=>{
+  const platformApprovals=[{platformId:'telegram',platformLabel:'Telegram',state:'approved',stateLabel:'Согласовано',approved:true,stale:false,contentRevision:3,comment:'',byName:'Влад',at:null},
+    {platformId:'vk',platformLabel:'ВКонтакте',state:'pending',stateLabel:'Ждёт согласования',approved:false,stale:false,contentRevision:3,comment:'',byName:null,at:null}];
+  const parent=row(1,{status:'published',platformIds:['telegram','vk'],captions:{telegram:'ТГ',vk:'ВК'},platformApprovals,
+    approval:{approved:false,stale:false,platforms:platformApprovals},
+    deliveries:[{channelId:'telegram',status:'published'}],continuedPlatforms:[],continuedFrom:null});
+  const child={...row(2,{platformIds:['vk'],captions:{vk:'ВК'},continuedFrom:{postId:1,contentRevision:3}}),title:'Материал 2'};
+  const splits=[];
+  const f=await fixture({entries:[parent],override:(call,posts)=>{
+    if(!call.path.endsWith('/split'))return undefined;
+    splits.push(JSON.parse(call.options.body));
+    const source=posts[0];
+    const created=splits.length===1;
+    source.continuedPlatforms=[{platformId:'vk',platformLabel:'ВКонтакте',childPostId:2,createdAt:'2026-09-24T23:30:00Z'}];
+    return {created,post:source,child};
+  }});try{
+    await f.click('[data-open-post="1"]');
+    assert.match(f.node('autoposting-approval').textContent,/Продолжить по оставшимся площадкам/);
+    await f.click('#autoposting-continue-remaining');
+    assert.equal(splits.length,1);
+    assert.deepEqual(splits[0].platformIds,['vk'],'продолжение запрашивается только по неотправленной площадке');
+    assert.equal(splits[0].revision,parent.revision);
+    assert.match(f.d.body.textContent,/Создан отдельный материал №2/);
+    await f.click('[data-open-post="1"]');
+    assert.match(f.node('autoposting-approval').textContent,/продолжена в отдельном материале №2/,'в исходной карточке видно, куда ушла работа');
+    assert.equal(f.d.querySelector('#autoposting-continue-remaining'),null,'переданная площадка второй раз не предлагается');
+    assert.ok(!f.calls.some(call=>/schedule/.test(call.path)),'продолжение ничего не планирует и не публикует');
+  }finally{f.close();}
+  // Продолжение создаёт черновик: достаточно права правки материалов, права согласования не требуется.
+  const editor=await fixture({entries:[parent],role:'marketer',permissions:['autoposting.view','autoposting.edit']});try{
+    await editor.click('[data-open-post="1"]');
+    assert.ok(editor.d.querySelector('#autoposting-continue-remaining'),'редактор без права одобрения может продолжить работу');
+  }finally{editor.close();}
+  const viewer=await fixture({entries:[parent],role:'marketer',permissions:['autoposting.view']});try{
+    await viewer.click('[data-open-post="1"]');
+    assert.equal(viewer.d.querySelector('#autoposting-continue-remaining'),null,'только чтение продолжение не создаёт');
+  }finally{viewer.close();}
 });

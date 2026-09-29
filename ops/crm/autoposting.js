@@ -128,7 +128,7 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
     ['approved_revision','INTEGER'],['approved_at','TEXT'],['approved_by','INTEGER'],['approved_by_name','TEXT'],
     ['media_sha256',"TEXT NOT NULL DEFAULT ''"],['expected_media_sha256',"TEXT NOT NULL DEFAULT ''"],['expected_media_file',"TEXT NOT NULL DEFAULT ''"],['external_id',"TEXT NOT NULL DEFAULT ''"],
     ['content_revision','INTEGER NOT NULL DEFAULT 1'],['meta',"TEXT NOT NULL DEFAULT '{}'"],['sort_order','INTEGER NOT NULL DEFAULT 0'],
-    ['review_state',"TEXT NOT NULL DEFAULT 'draft'"],['review_comment',"TEXT NOT NULL DEFAULT ''"],['review_by_name','TEXT'],['review_at','TEXT']]){
+    ['partial_approved_revision','INTEGER'],['review_state',"TEXT NOT NULL DEFAULT 'draft'"],['review_comment',"TEXT NOT NULL DEFAULT ''"],['review_by_name','TEXT'],['review_at','TEXT']]){
     if(!postColumns.has(column))db.exec(`ALTER TABLE autoposting_posts ADD COLUMN ${column} ${type}`);
   }
   db.exec(`CREATE TABLE IF NOT EXISTS autoposting_reviews (
@@ -145,6 +145,24 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
     recorded_by INTEGER,recorded_by_name TEXT,recorded_at TEXT NOT NULL,
     UNIQUE(company_id,post_id,platform,url));
     CREATE INDEX IF NOT EXISTS autoposting_receipts_post_idx ON autoposting_publication_receipts(post_id,platform);`);
+  /* Согласование по площадкам. Решение владельца хранится отдельно для каждого канала карточки
+     и всегда привязано к версии содержимого: одобрение прежней версии к новой не относится.
+     Карточки без записей здесь — прежняя модель «одно решение на карточку»; её решение
+     переносится только на каналы, уже выбранные в карточке, и никогда на новые. */
+  db.exec(`CREATE TABLE IF NOT EXISTS autoposting_platform_reviews (
+    post_id INTEGER NOT NULL REFERENCES autoposting_posts(id),platform_id TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','approved','rejected')),
+    content_revision INTEGER NOT NULL,comment TEXT NOT NULL DEFAULT '',actor_id INTEGER,actor_name TEXT,created_at TEXT NOT NULL,
+    PRIMARY KEY(post_id,platform_id));
+    CREATE INDEX IF NOT EXISTS autoposting_platform_reviews_post_idx ON autoposting_platform_reviews(post_id);`);
+  /* Продолжение работы по оставшимся площадкам. Одна площадка исходной карточки может быть передана
+     только одной активной дочерней карточке — это и есть защита от двойного нажатия и двух заданий в плане. */
+  db.exec(`CREATE TABLE IF NOT EXISTS autoposting_split_links (
+    source_post_id INTEGER NOT NULL REFERENCES autoposting_posts(id),platform_id TEXT NOT NULL,
+    child_post_id INTEGER NOT NULL REFERENCES autoposting_posts(id),company_id INTEGER NOT NULL,
+    source_content_revision INTEGER NOT NULL,created_at TEXT NOT NULL,created_by INTEGER,
+    PRIMARY KEY(source_post_id,platform_id));
+    CREATE INDEX IF NOT EXISTS autoposting_split_child_idx ON autoposting_split_links(child_post_id);`);
   const deliveryColumns=new Set(db.prepare('PRAGMA table_info(autoposting_deliveries)').all().map(row=>row.name));
   for(const column of ['provider_post_id','provider_status','provider_checked_at']){
     if(!deliveryColumns.has(column))db.exec(`ALTER TABLE autoposting_deliveries ADD COLUMN ${column} TEXT`);
@@ -162,6 +180,77 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
     .map(item=>({...item,platformLabel:RECEIPT_PLATFORMS[item.platform]?.label||item.platform,stale:item.contentRevision!==row.content_revision}));
   const receiptPlatforms=postId=>new Set(db.prepare('SELECT DISTINCT platform FROM autoposting_publication_receipts WHERE post_id=?').all(postId).map(item=>item.platform));
   const channelPlatform=(channel,fallback='')=>channel?.platform||channel?.id||fallback;
+  const PLATFORM_REVIEW_STATES={pending:'Ждёт согласования',approved:'Согласовано',rejected:'На доработку'};
+  const platformIdsOf=row=>{try{const value=JSON.parse(row.platform_ids||'[]');return Array.isArray(value)?value:[];}catch{return [];}};
+  const platformLabel=id=>CAPTION_PLATFORMS[id]?.label||RECEIPT_PLATFORMS[id]?.label||id;
+  const platformReviewRows=postId=>db.prepare(`SELECT platform_id platformId,state,content_revision contentRevision,comment,actor_name byName,created_at at
+    FROM autoposting_platform_reviews WHERE post_id=? ORDER BY platform_id`).all(postId);
+  /* Перенос прежнего решения по карточке в пер-площадочные записи. Делается только для каналов,
+     уже выбранных в карточке: новый канал получает отдельную запись «Ждёт согласования». */
+  function materializePlatformReviews(row) {
+    const existing=new Set(platformReviewRows(row.id).map(item=>item.platformId));
+    const state=isApproved(row)?'approved':(row.review_state==='rejected'?'rejected':'pending');
+    const contentRevision=(state==='approved'?row.approved_revision:null)??row.content_revision??1;
+    for(const id of platformIdsOf(row)){
+      if(existing.has(id))continue;
+      db.prepare(`INSERT INTO autoposting_platform_reviews(post_id,platform_id,state,content_revision,comment,actor_id,actor_name,created_at)
+        VALUES(?,?,?,?,?,?,?,?)`).run(row.id,id,state,contentRevision,state==='rejected'?(row.review_comment||''):'',
+        row.approved_by??null,row.approved_by_name??null,iso());
+    }
+  }
+  /* Видимые статусы и причины по каналам. Одобрение считается действующим только для текущей версии содержимого. */
+  function platformApprovals(row) {
+    const stored=new Map(platformReviewRows(row.id).map(item=>[item.platformId,item]));
+    const legacyApproved=isApproved(row);
+    return platformIdsOf(row).map(id=>{
+      const item=stored.get(id)||null;
+      const state=item?item.state:(legacyApproved?'approved':(row.review_state==='rejected'?'rejected':'pending'));
+      const contentRevision=(item?item.contentRevision:(legacyApproved?row.approved_revision:row.content_revision))??null;
+      const approved=state==='approved'&&contentRevision===row.content_revision;
+      return {platformId:id,platformLabel:platformLabel(id),state,stateLabel:PLATFORM_REVIEW_STATES[state]||state,approved,
+        stale:state==='approved'&&!approved,contentRevision,
+        comment:item?(item.comment||''):(state==='rejected'?(row.review_comment||''):''),
+        byName:item?(item.byName||null):(row.review_by_name||null),at:item?(item.at||null):(row.review_at||null)};
+    });
+  }
+  const setPlatformReview=(row,ids,state,comment,actor={})=>{
+    for(const id of ids)db.prepare(`INSERT INTO autoposting_platform_reviews(post_id,platform_id,state,content_revision,comment,actor_id,actor_name,created_at)
+      VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(post_id,platform_id) DO UPDATE SET state=excluded.state,content_revision=excluded.content_revision,
+      comment=excluded.comment,actor_id=excluded.actor_id,actor_name=excluded.actor_name,created_at=excluded.created_at`)
+      .run(row.id,id,state,row.content_revision??1,comment||'',actor.userId??null,actor.userName??null,iso());
+  };
+  /* Какие каналы затрагивает решение. Поле не передано или пустое — все каналы карточки (прежнее поведение). */
+  function requestedPlatforms(row,body) {
+    const all=platformIdsOf(row);
+    const value=body.platformIds;
+    if(value===undefined||value===null)return all;
+    if(!Array.isArray(value)||value.length>20)fail(400,'Допускается не более 20 каналов');
+    const ids=value.map(id=>text(id,100,true));
+    if(new Set(ids).size!==ids.length)fail(400,'Канал выбран дважды');
+    // Явный пустой список — это не «все каналы», а ошибка выбора: наследование «все» действует
+    // только когда поле вообще не передано.
+    if(!ids.length)fail(400,'Отметьте хотя бы одну площадку');
+    const unknown=ids.filter(id=>!all.includes(id));
+    if(unknown.length)fail(400,`Эти каналы не выбраны в карточке: ${unknown.map(platformLabel).join(', ')}`);
+    return ids;
+  }
+  /* Одно правило для всех путей отправки: отправляется только та доставка, для канала которой
+     утверждена текущая версия содержимого. Карточка без каналов опирается на согласование карточки. */
+  const deliveryApproved=(row,channelId)=>{
+    if(!isQueueCard(row))return true;
+    // Согласование версии обязательно, но оно бывает двух видов: карточка целиком (approved_revision)
+    // или частичное — по отдельным каналам (partial_approved_revision). Общий отзыв снимает оба,
+    // поэтому снятие approved_revision без частичного согласования останавливает все каналы.
+    const versionApproved=isApproved(row)||(row.partial_approved_revision!==null&&row.partial_approved_revision!==undefined&&row.partial_approved_revision===row.content_revision);
+    if(!versionApproved)return false;
+    const platforms=platformApprovals(row);
+    if(!platforms.length)return isApproved(row);
+    return platforms.find(item=>item.platformId===channelId)?.approved===true;
+  };
+  const cancelDeliveries=(row,ids)=>{
+    if(!ids.length)return;
+    db.prepare(`UPDATE autoposting_deliveries SET status='cancelled' WHERE post_id=? AND status='pending' AND channel_id IN (${ids.map(()=>'?').join(',')})`).run(row.id,...ids);
+  };
   function rowFor(id,code) {
     const owner=company(db,code);
     if(!Number.isSafeInteger(Number(id))||Number(id)<1)fail(404,'Публикация не найдена','NOT_FOUND');
@@ -188,14 +277,24 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
     return {approved,approvedRevision:row.approved_revision??null,contentRevision:row.content_revision,approvedAt:row.approved_at||null,approvedByName:row.approved_by_name||null,
       stale:row.approved_revision!==null&&row.approved_revision!==undefined&&!approved};
   }
+  /* Карточка считается согласованной целиком только если согласованы все её каналы этой же версии:
+     иначе добавленный канал делал бы вид, что одобрение распространилось и на него. */
+  function cardApprovalDto(row) {
+    const base=approvalDto(row),platforms=platformApprovals(row);
+    const approved=base.approved&&(platforms.length===0||platforms.every(item=>item.approved));
+    return {...base,approved,platforms};
+  }
   function dto(row,owner) {
     return {id:row.id,companyCode:owner.code.toLowerCase(),revision:row.revision,contentRevision:row.content_revision,status:row.status,title:row.title,text:row.text,
       mediaUrls:JSON.parse(row.media_urls),platformIds:JSON.parse(row.platform_ids),scheduledAt:row.scheduled_at,timezone:row.timezone,
-      dayKey:row.day_key||'',captions:JSON.parse(row.captions||'{}'),origin:row.origin||'',readiness:readiness(row),approval:approvalDto(row),
+      dayKey:row.day_key||'',captions:JSON.parse(row.captions||'{}'),origin:row.origin||'',readiness:readiness(row),approval:cardApprovalDto(row),platformApprovals:platformApprovals(row),
       mediaSha256:row.media_sha256||'',expectedMediaSha256:row.expected_media_sha256||'',expectedMediaFile:row.expected_media_file||'',externalId:row.external_id||'',
       externalReceipts:receiptsOf(row),
+      continuedPlatforms:db.prepare('SELECT platform_id platformId,child_post_id childPostId,created_at createdAt FROM autoposting_split_links WHERE source_post_id=? ORDER BY platform_id').all(row.id)
+        .map(item=>({...item,platformLabel:platformLabel(item.platformId)})),
+      continuedFrom:db.prepare('SELECT source_post_id postId,source_content_revision contentRevision FROM autoposting_split_links WHERE child_post_id=? LIMIT 1').get(row.id)||null,
       meta:metaOf(row),sortOrder:row.sort_order||0,review:{state:row.review_state||'draft',stateLabel:REVIEW_STATES[row.review_state||'draft'],comment:row.review_comment||'',byName:row.review_by_name||null,at:row.review_at||null},
-      history:historyDto(row.id),labels:{formats:FORMATS,roles:ROLES,reviewStates:REVIEW_STATES},
+      history:historyDto(row.id),labels:{formats:FORMATS,roles:ROLES,reviewStates:REVIEW_STATES,platformReviewStates:PLATFORM_REVIEW_STATES},
       captionLimits:Object.fromEntries(Object.entries(CAPTION_PLATFORMS).map(([k,v])=>[k,v.limit])),
       profileRevision:row.profile_revision,createdAt:row.created_at,updatedAt:row.updated_at,lastErrorCode:row.last_error_code,
       deliveries:db.prepare(`SELECT channel_id channelId,status,external_id externalId,url,error_code errorCode,finished_at finishedAt,
@@ -294,6 +393,13 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   function calendarReadiness(row,link,context,effectiveDate) {
     const base=readiness(row),caps=JSON.parse(row.captions||'{}'),media=JSON.parse(row.media_urls||'[]');
     const selected=JSON.parse(row.platform_ids||'[]'),approved=isApproved(row);
+    // Готовность считается по каждой площадке отдельно: одобрение прежних каналов не распространяется
+    // на добавленный, а общий отзыв версии снимает готовность со всех.
+    const approvalByPlatform=new Map(platformApprovals(row).map(item=>[item.platformId,item.approved]));
+    // Площадка, работа по которой передана в продолжение, закрыта на исходнике: иначе один и тот же
+    // канал считался бы готовым дважды — и здесь, и в дочерней карточке.
+    const handedOver=new Map(db.prepare('SELECT platform_id platformId,child_post_id childPostId FROM autoposting_split_links WHERE source_post_id=?')
+      .all(row.id).map(item=>[item.platformId,item.childPostId]));
     const receipts=context.receipts.get(row.id)||new Map(),deliveries=context.deliveries.get(row.id)||new Map();
     const common=[...base.issues];
     if(!effectiveDate)common.push('Дата публикации не определена');
@@ -306,11 +412,15 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
     if(link&&context.planApproval&&context.planApproval!=='approved'&&context.planApproval!=='pending')
       common.push('Контент-план изменился и требует повторного согласования');
     const soft=[];
-    if(!approved)soft.push('Эта версия содержимого ещё не одобрена владельцем');
+    if(!approved&&!approvalByPlatform.size)soft.push('Эта версия содержимого ещё не одобрена владельцем');
     if(link&&context.planApproval==='pending')soft.push('Версия контент-плана ещё не согласована');
     const platforms=new Map();
     for(const id of selected){
       const channel=context.channelById.get(id),platform=channelPlatform(channel,id),hard=[...common];
+      // Несогласованность — это ожидание решения владельца, а не нехватка материала: мягкое замечание,
+      // и оно относится к конкретной площадке. Прежняя модель (записей по площадкам нет) — общее замечание выше.
+      const softLocal=[...soft];
+      if(approvalByPlatform.size&&!approvalByPlatform.get(id))softLocal.push('Эта версия ещё не одобрена владельцем для этой площадки');
       if(!channel)hard.push(`Канал «${id}» не настроен в подключениях`);
       else{
         if(!channel.enabled)hard.push(`Канал «${channel.name||id}» выключен`);
@@ -327,15 +437,17 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
       if(delivery?.status==='cancelled')hard.push('Отправка на площадку отменена');
       let state;
       if(row.status==='cancelled'){state='inactive';extra.push('Карточка отменена');}
+      else if(handedOver.has(id)){state='inactive';extra.push(`Работа по этой площадке продолжена в материале №${handedOver.get(id)}: здесь она в запас не идёт`);}
       else if(receipts.get(platform)){state='published';extra.push('Площадка отмечена как опубликованная вне ЛК: повторная отправка создаст дубликат');}
       else if(receipts.has(platform)){state='missing';extra.push('Опубликована другая версия содержимого: проверьте её перед повторной отправкой');}
-      else if(delivery?.status==='published'||row.status==='published'){state='published';extra.push('Уже опубликовано на этой площадке');}
+      // Опубликованность — свойство площадки, а не карточки: чужая успешная отправка не делает этот канал опубликованным.
+      else if(delivery?.status==='published'||(!deliveries.size&&row.status==='published')){state='published';extra.push('Уже опубликовано на этой площадке');}
       else if(delivery?.status==='publishing'||row.status==='publishing'){state='pending';extra.push('Отправка выполняется');}
       else if(['failed','needs_review'].includes(delivery?.status)||['failed','needs_review'].includes(row.status)){
         state='missing';extra.push(`Нужна проверка результата на площадке${row.last_error_code?` (${row.last_error_code})`:''}`);
       }
-      else state=hard.length?'missing':soft.length?'pending':'ready';
-      const issues=[...new Set(state==='published'||state==='inactive'?extra:[...extra,...hard,...soft])];
+      else state=hard.length?'missing':softLocal.length?'pending':'ready';
+      const issues=[...new Set(state==='published'||state==='inactive'?extra:[...extra,...hard,...softLocal])];
       const previous=platforms.get(platform);
       if(previous){previous.issues=[...new Set([...previous.issues,...issues])];if(previous.state==='ready'&&state!=='ready'){previous.state=state;previous.ready=false;}continue;}
       platforms.set(platform,{platform,state,ready:state==='ready',issues});
@@ -352,13 +464,18 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
       platforms.set(platform,{platform,state,ready:false,issues});
     }
     const list=[...platforms.values()];
+    // Закрытые площадки (отменённые или переданные в продолжение) в итог карточки не входят:
+    // иначе карточка без единой работающей площадки выглядела бы готовой и попадала в запас.
+    const active=list.filter(item=>item.state!=='inactive');
     let state;
     if(row.status==='cancelled')state='inactive';
     else if(!list.length)state='missing';
-    else if(list.every(item=>item.state==='published'))state='published';
-    else if(list.some(item=>item.state==='missing'))state='missing';
-    else if(list.some(item=>item.state==='pending'))state='pending';
-    else state='ready';
+    else if(!active.length)state='inactive';
+    else if(active.every(item=>item.state==='published'))state='published';
+    else if(active.some(item=>item.state==='missing'))state='missing';
+    else if(active.some(item=>item.state==='pending'))state='pending';
+    else if(active.some(item=>item.state==='ready'))state='ready';
+    else state='missing';
     const issues=list.length?list.flatMap(item=>item.issues)
       :state==='inactive'?['Карточка отменена']:[...common,...soft,'Каналы публикации не выбраны'];
     return {state,ready:state==='ready',issues:[...new Set(issues)],platforms:list};
@@ -526,13 +643,38 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
         .run(data.title,data.text,JSON.stringify(data.mediaUrls),JSON.stringify(data.platformIds),data.scheduledAt,data.timezone,data.profileRevision,data.dayKey,JSON.stringify(data.captions),data.origin,mediaSha,nextMeta,
           contentChanged?1:0,nextReview,contentChanged?1:0,iso(),row.id);
       db.prepare('DELETE FROM autoposting_deliveries WHERE post_id=?').run(row.id);
+      // Согласование по каналам: снятые каналы забываются, новые заводятся как «Ждёт согласования»
+      // и прежнее одобрение на них не переносится; общая правка содержимого возвращает на согласование все каналы.
+      materializePlatformReviews(row);
+      const prevIds=platformIdsOf(row),nextIds=data.platformIds,nextContentRevision=(row.content_revision??1)+(contentChanged?1:0);
+      const removed=prevIds.filter(id=>!nextIds.includes(id));
+      if(removed.length)db.prepare(`DELETE FROM autoposting_platform_reviews WHERE post_id=? AND platform_id IN (${removed.map(()=>'?').join(',')})`).run(row.id,...removed);
+      if(contentChanged)db.prepare("UPDATE autoposting_platform_reviews SET state='pending',content_revision=?,comment='',actor_id=?,actor_name=?,created_at=? WHERE post_id=?")
+        .run(nextContentRevision,actor.userId??null,actor.userName??null,iso(),row.id);
+      for(const id of nextIds.filter(id=>!prevIds.includes(id)))
+        db.prepare(`INSERT INTO autoposting_platform_reviews(post_id,platform_id,state,content_revision,comment,actor_id,actor_name,created_at)
+          VALUES(?,?,'pending',?,'',?,?,?)`).run(row.id,id,nextContentRevision,actor.userId??null,actor.userName??null,iso());
+      // Добавление канала не меняет содержимое, но снимает согласование карточки целиком: новый канал не согласован.
+      // Согласование карточки держится в согласии с каналами. Все каналы согласованы для этой версии —
+      // карточка согласована целиком (например, снят единственный несогласованный канал). Иначе снимается
+      // только видимый статус: approved_revision сохраняется как свидетельство прежнего решения (stale).
+      const afterEdit=platformApprovals(db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(row.id));
+      if(afterEdit.length&&afterEdit.every(item=>item.approved))
+        db.prepare(`UPDATE autoposting_posts SET approved_revision=(SELECT content_revision FROM autoposting_posts WHERE id=?),
+          partial_approved_revision=NULL,approved_at=COALESCE(approved_at,?),review_state='approved' WHERE id=?`).run(row.id,iso(),row.id);
+      else if(afterEdit.some(item=>!item.approved))
+        db.prepare(`UPDATE autoposting_posts SET partial_approved_revision=CASE WHEN ?=1 THEN (SELECT content_revision FROM autoposting_posts WHERE id=?) ELSE NULL END,
+          review_state=CASE WHEN review_state='approved' THEN 'pending' ELSE review_state END WHERE id=?`)
+          .run(afterEdit.some(item=>item.approved)?1:0,row.id,row.id);
       const fresh=db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(row.id);
       if(contentChanged)history(fresh,'edited',queue?'Возвращено на согласование после правки':'',actor);
       else if(data.scheduledAt!==row.scheduled_at||data.timezone!==row.timezone)history(fresh,'rescheduled',`План: ${data.scheduledAt||'—'} ${data.timezone}`,actor);
     });return get(id,code);
   }
   async function schedule(id,code,body) {
-    object(body,['revision','scheduledAt','timezone','profileRevision']);revision(body.revision);
+    // platformIds не обязателен: без него в план идут все каналы карточки, как раньше. С ним — только указанные,
+    // а остальные остаются в карточке со своими статусами и просто не отправляются.
+    object(body,['revision','scheduledAt','timezone','profileRevision','platformIds']);revision(body.revision);
     const settings=await transport.getSettings(code),current=invalidate(code);
     transaction(()=>{
       const {row,owner}=rowFor(id,code);
@@ -540,11 +682,18 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
       if(!['draft','failed','cancelled','needs_review'].includes(row.status))fail(409,'Публикация уже запланирована или отправляется','POST_STATE');
       if(db.prepare("SELECT 1 FROM autoposting_deliveries WHERE post_id=? AND status IN ('publishing','published','needs_review')").get(row.id))fail(409,'Проверьте результат на площадке перед повторной отправкой','PUBLICATION_REVIEW_REQUIRED');
       const data=normalized(body,dto(row,owner));
+      if(Object.hasOwn(body,'platformIds'))data.platformIds=requestedPlatforms(row,body);
       if(data.profileRevision!==current.revision||row.profile_revision!==current.revision)fail(409,'Пересмотрите текст по новой версии компании','PROFILE_CHANGED');
       const captionsByPlatform=JSON.parse(row.captions||'{}');
       if((!data.text&&!Object.keys(captionsByPlatform).length)||!data.platformIds.length)fail(400,'Добавьте текст и выберите каналы');
       // Карточки очереди контента (день или подписи площадок) ставятся в план только с одобрением именно этой версии.
-      if(isQueueCard(row)&&!isApproved(row))fail(409,'Сначала одобрите публикацию этой версии','APPROVAL_REQUIRED');
+      // Отправляется только утверждённая текущая версия, и только на те каналы, для которых она утверждена.
+      if(isQueueCard(row)){
+        materializePlatformReviews(row);
+        const states=new Map(platformApprovals(row).map(item=>[item.platformId,item]));
+        const waiting=data.platformIds.filter(id=>!states.get(id)?.approved);
+        if(waiting.length)fail(409,`Сначала одобрите эту версию для каналов: ${waiting.map(platformLabel).join(', ')}`,'APPROVAL_REQUIRED');
+      }
       if(!data.scheduledAt||Date.parse(data.scheduledAt)<=now())fail(400,'Выберите время публикации в будущем');
       const channels=data.platformIds.map(id=>settings.channels.find(channel=>channel.id===id));
       // Площадка, отмеченная как опубликованная вне ЛК, повторно не отправляется: это создало бы дубликат записи.
@@ -562,7 +711,7 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   }
   /* Одобрение конкретной версии владельцем. Не публикует, не планирует; снятие галочки убирает одобрение. */
   function approve(id,code,body,actor={}) {
-    object(body,['revision','approved','comment']);revision(body.revision);
+    object(body,['revision','approved','comment','platformIds']);revision(body.revision);
     if(typeof body.approved!=='boolean')fail(400,'Укажите approved: true или false');
     return transaction(()=>{
       const {row,owner}=rowFor(id,code);
@@ -571,15 +720,28 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
         const state=readiness(row);
         if(!state.ready)fail(409,`Материал не готов: ${state.issues.join('; ')}`,'NOT_READY');
         if(['publishing','published'].includes(row.status))fail(409,'Публикацию уже отправляют или опубликовали','POST_STATE');
-        db.prepare(`UPDATE autoposting_posts SET approved_revision=?,approved_at=?,approved_by=?,approved_by_name=?,review_state='approved',review_comment='',review_by_name=?,review_at=?,revision=revision+1,updated_at=? WHERE id=?`)
+        materializePlatformReviews(row);
+        const ids=requestedPlatforms(row,body);
+        setPlatformReview(row,ids,'approved','',actor);
+        // Карточка целиком считается согласованной только когда согласованы все её каналы этой же версии.
+        // Карточка без выбранных каналов согласуется как содержимое; добавленный позже канал всё равно ждёт согласования.
+        const everyApproved=platformApprovals(row).every(item=>item.approved);
+        if(everyApproved)db.prepare(`UPDATE autoposting_posts SET approved_revision=?,partial_approved_revision=NULL,approved_at=?,approved_by=?,approved_by_name=?,review_state='approved',review_comment='',review_by_name=?,review_at=?,revision=revision+1,updated_at=? WHERE id=?`)
           .run(row.content_revision,iso(),actor.userId??null,actor.userName??null,actor.userName??null,iso(),iso(),row.id);
+        else db.prepare(`UPDATE autoposting_posts SET approved_revision=NULL,partial_approved_revision=?,approved_at=NULL,approved_by=NULL,approved_by_name=NULL,review_state='pending',review_comment='',review_by_name=?,review_at=?,revision=revision+1,updated_at=? WHERE id=?`)
+          .run(row.content_revision,actor.userName??null,iso(),iso(),row.id);
         history(row,'approved',text(body.comment??'',2000),actor);
       }else{
         // Отзыв одобрения останавливает ещё не начатую отправку: запланированная карточка возвращается в черновик.
         if(row.status==='publishing')fail(409,'Отправка уже началась: дождитесь результата, затем снимите с публикации','POST_STATE');
-        db.prepare("UPDATE autoposting_deliveries SET status='cancelled' WHERE post_id=? AND status='pending'").run(row.id);
-        db.prepare(`UPDATE autoposting_posts SET approved_revision=NULL,approved_at=NULL,approved_by=NULL,approved_by_name=NULL,review_state='pending',review_by_name=?,review_at=?,revision=revision+1,updated_at=?,
-          status=CASE WHEN status='scheduled' THEN 'draft' ELSE status END,last_error_code=CASE WHEN status='scheduled' THEN 'APPROVAL_REVOKED' ELSE last_error_code END WHERE id=?`).run(actor.userName??null,iso(),iso(),row.id);
+        materializePlatformReviews(row);
+        const ids=requestedPlatforms(row,body);
+        setPlatformReview(row,ids,'pending','',actor);
+        cancelDeliveries(row,ids);
+        // Остались ли согласованные каналы: если нет — это общий отзыв версии, частичное согласование тоже снимается.
+        const stillApproved=platformApprovals(row).some(item=>item.approved)?row.content_revision:null;
+        db.prepare(`UPDATE autoposting_posts SET approved_revision=NULL,partial_approved_revision=?,approved_at=NULL,approved_by=NULL,approved_by_name=NULL,review_state='pending',review_by_name=?,review_at=?,revision=revision+1,updated_at=?,
+          status=CASE WHEN status='scheduled' THEN 'draft' ELSE status END,last_error_code=CASE WHEN status='scheduled' THEN 'APPROVAL_REVOKED' ELSE last_error_code END WHERE id=?`).run(stillApproved,actor.userName??null,iso(),iso(),row.id);
         history(row,'revoked',text(body.comment??'',2000),actor);
       }
       return dto(db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(row.id),owner);
@@ -588,6 +750,12 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   /* Подтверждение внешней публикации. Владелец сообщает: эта версия содержимого уже вышла на площадке
      через внешний сервис или нативный интерфейс. Провайдер не вызывается, ничего не отправляется,
      статус карточки и одобрение не меняются — фиксируется только доказательство со ссылкой и временем. */
+  /* Расписка по площадке, работа по которой передана в продолжение, ставится на самом продолжении:
+     иначе исходник «закрывает» канал, а дочерняя карточка об этом не знает и отправляет повторно. */
+  function receiptHandedOver(row,platform) {
+    const link=db.prepare('SELECT child_post_id childPostId FROM autoposting_split_links WHERE source_post_id=? AND platform_id=?').get(row.id,platform);
+    if(link)fail(409,`Работа по площадке ${platformLabel(platform)} продолжена в материале №${link.childPostId}. Отметьте публикацию там, иначе продолжение отправит её ещё раз.`,'SPLIT_HANDED_OVER');
+  }
   function recordReceipt(id,code,body,actor={}) {
     object(body,['platform','url','publishedAt','contentRevision','note']);
     if(typeof body.platform!=='string'||!Object.hasOwn(RECEIPT_PLATFORMS,body.platform))
@@ -601,6 +769,7 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
       if(!Number.isSafeInteger(body.contentRevision)||body.contentRevision<1)fail(400,'Укажите версию содержимого, которая опубликована');
       if(body.contentRevision!==row.content_revision)
         fail(409,'Содержимое карточки изменилось: подтверждайте ту версию, которая действительно опубликована','CONTENT_REVISION_CONFLICT');
+      receiptHandedOver(row,platform);
       // Повтор того же подтверждения (компания+карточка+площадка+ссылка) возвращает прежнюю запись и не плодит историю.
       const existing=db.prepare('SELECT id FROM autoposting_publication_receipts WHERE company_id=? AND post_id=? AND platform=? AND url=?')
         .get(owner.id,row.id,platform,link);
@@ -676,19 +845,89 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   /* Отклонение — только владелец, комментарий обязателен; автор, время и текст сохраняются в истории и на карточке.
      Запланированная карточка при отклонении снимается с плана. */
   function reject(id,code,body,actor={}) {
-    object(body,['revision','comment']);revision(body.revision);
+    object(body,['revision','comment','platformIds']);revision(body.revision);
     const comment=text(body.comment,2000,true);
     return transaction(()=>{
       const {row,owner}=rowFor(id,code);
       if(row.revision!==body.revision)fail(409,'Публикация уже изменена','REVISION_CONFLICT');
       if(['publishing','published'].includes(row.status))fail(409,'Публикацию уже отправляют или опубликовали','POST_STATE');
-      db.prepare("UPDATE autoposting_deliveries SET status='cancelled' WHERE post_id=? AND status='pending'").run(row.id);
-      db.prepare(`UPDATE autoposting_posts SET approved_revision=NULL,approved_at=NULL,approved_by=NULL,approved_by_name=NULL,review_state='rejected',review_comment=?,review_by_name=?,review_at=?,
+      materializePlatformReviews(row);
+      const rejected=requestedPlatforms(row,body);
+      setPlatformReview(row,rejected,'rejected',comment,actor);
+      cancelDeliveries(row,rejected);
+      const stillApprovedAfterReject=platformApprovals(row).some(item=>item.approved)?row.content_revision:null;
+      db.prepare(`UPDATE autoposting_posts SET approved_revision=NULL,partial_approved_revision=?,approved_at=NULL,approved_by=NULL,approved_by_name=NULL,review_state='rejected',review_comment=?,review_by_name=?,review_at=?,
         revision=revision+1,updated_at=?,status=CASE WHEN status='scheduled' THEN 'draft' ELSE status END,last_error_code=CASE WHEN status='scheduled' THEN 'APPROVAL_REVOKED' ELSE last_error_code END WHERE id=?`)
-        .run(comment,actor.userName??null,iso(),iso(),row.id);
+        .run(stillApprovedAfterReject,comment,actor.userName??null,iso(),iso(),row.id);
+      // Комментарий владельца сохраняется дословно; какие каналы затронуты — в autoposting_platform_reviews.
       history(row,'rejected',comment,actor);
       return dto(db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(row.id),owner);
     });
+  }
+  /* Продолжение по оставшимся площадкам. Исходная карточка не меняется: её доставки, расписки и статусы
+     остаются как есть, guards не ослабляются. Создаётся связанная карточка только для тех площадок,
+     по которым отправки не было и её результат известен. Повторный вызов возвращает уже созданную карточку. */
+  function split(id,code,body,actor={}) {
+    object(body,['revision','platformIds','reason']);revision(body.revision);
+    if(!Array.isArray(body.platformIds)||!body.platformIds.length)fail(400,'Отметьте хотя бы одну площадку');
+    if(body.platformIds.length>20)fail(400,'Допускается не более 20 каналов');
+    const reason=text(body.reason??'',2000);
+    // Сборка представления обращается к данным компании и открывает свою транзакцию,
+    // поэтому внутри этой транзакции возвращаются только идентификаторы.
+    const outcome=transaction(()=>{
+      const {row,owner}=rowFor(id,code);
+      if(row.revision!==body.revision)fail(409,'Публикация уже изменена','REVISION_CONFLICT');
+      // Продолжать можно только после завершённой отправки: пока карточка черновик или стоит в плане,
+      // она сама может отправить те же площадки, и продолжение создало бы второе задание.
+      const receiptsHere=receiptPlatforms(row.id);
+      const published=db.prepare("SELECT 1 FROM autoposting_deliveries WHERE post_id=? AND status='published'").get(row.id);
+      if(row.status!=='published'||(!published&&!receiptsHere.size))
+        fail(409,'Продолжать по оставшимся площадкам можно только после того, как отправка исходного материала завершилась и её результат известен','POST_STATE');
+      const all=platformIdsOf(row);
+      const ids=body.platformIds.map(value=>text(value,100,true));
+      if(new Set(ids).size!==ids.length)fail(400,'Канал выбран дважды');
+      const unknown=ids.filter(value=>!all.includes(value));
+      if(unknown.length)fail(400,`Эти каналы не выбраны в карточке: ${unknown.join(', ')}`);
+      // Действительно неотправленные площадки считает сервер, а не клиент.
+      const deliveries=new Map(db.prepare('SELECT channel_id,status FROM autoposting_deliveries WHERE post_id=?').all(row.id).map(item=>[item.channel_id,item.status]));
+      const marked=receiptsHere;
+      const blocked=ids.filter(value=>marked.has(value)||['published','publishing','needs_review'].includes(deliveries.get(value)));
+      if(blocked.length)fail(409,`Результат отправки по этим каналам уже есть или ещё неизвестен: ${blocked.map(platformLabel).join(', ')}. Продолжать по ним нельзя — это создало бы дубликат.`,'PUBLICATION_REVIEW_REQUIRED');
+      // Идемпотентность: площадка исходной карточки передаётся только одной активной дочерней карточке.
+      const links=new Map(db.prepare('SELECT platform_id platformId,child_post_id childPostId FROM autoposting_split_links WHERE source_post_id=?').all(row.id).map(item=>[item.platformId,item.childPostId]));
+      // Связь вечная: отменённый ребёнок мог успеть отправить или оставить неизвестный результат,
+      // поэтому вторую копию по той же площадке не создаём никогда.
+      const mapped=ids.filter(value=>links.has(value));
+      if(mapped.length&&mapped.length!==ids.length)
+        fail(409,`Часть каналов уже передана в продолжение: ${mapped.map(value=>`${platformLabel(value)} → материал №${links.get(value)}`).join('; ')}. Запросите отдельно только новые каналы.`,'SPLIT_ALREADY_EXISTS');
+      if(mapped.length===ids.length){
+        const children=[...new Set(ids.map(value=>links.get(value)))];
+        if(children.length>1)
+          fail(409,`Эти каналы переданы в разные продолжения: ${ids.map(value=>`${platformLabel(value)} → материал №${links.get(value)}`).join('; ')}. Запросите каждый из них отдельно.`,'SPLIT_ALREADY_EXISTS');
+        return {created:false,sourceId:row.id,childId:children[0]};
+      }
+      const captionsAll=JSON.parse(row.captions||'{}');
+      const captions=Object.fromEntries(Object.entries(captionsAll).filter(([platform])=>ids.includes(platform)));
+      const time=iso(),order=(db.prepare('SELECT COALESCE(MAX(sort_order),0) m FROM autoposting_posts WHERE company_id=?').get(owner.id).m||0)+1;
+      // У ребёнка нет расписания, доставок и одобрений: нужна новая проверка и новое согласование.
+      const childId=Number(db.prepare(`INSERT INTO autoposting_posts(company_id,title,text,media_urls,platform_ids,scheduled_at,timezone,profile_revision,created_at,updated_at,created_by,
+        day_key,captions,origin,media_sha256,expected_media_sha256,expected_media_file,meta,sort_order,review_state,content_revision,status)
+        VALUES(?,?,?,?,?,NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',1,'draft')`)
+        .run(owner.id,row.title,row.text,row.media_urls,JSON.stringify(ids),row.timezone,row.profile_revision,time,time,actor.userId??null,
+          row.day_key||'',JSON.stringify(captions),row.origin||'',row.media_sha256||'',row.expected_media_sha256||'',row.expected_media_file||'',row.meta||'{}',order).lastInsertRowid);
+      const child=db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(childId);
+      for(const value of ids){
+        db.prepare(`INSERT INTO autoposting_platform_reviews(post_id,platform_id,state,content_revision,comment,actor_id,actor_name,created_at)
+          VALUES(?,?,'pending',1,'',?,?,?)`).run(childId,value,actor.userId??null,actor.userName??null,time);
+        db.prepare(`INSERT INTO autoposting_split_links(source_post_id,platform_id,child_post_id,company_id,source_content_revision,created_at,created_by)
+          VALUES(?,?,?,?,?,?,?)`).run(row.id,value,childId,owner.id,row.content_revision??1,time,actor.userId??null);
+      }
+      const label=ids.map(platformLabel).join(', ');
+      history(row,'edited',`Работа по площадкам ${label} продолжена в карточке №${childId}${reason?`: ${reason}`:''}`,actor);
+      history(child,'submitted',`Продолжение карточки №${row.id} (версия содержимого ${row.content_revision??1}) по площадкам ${label}`,actor);
+      return {created:true,sourceId:row.id,childId};
+    });
+    return {created:outcome.created,post:get(outcome.sourceId,code),child:get(outcome.childId,code)};
   }
   /* Отправить на согласование вручную (например, импортированную карточку без правок). */
   function submitReview(id,code,body,actor={}) {
@@ -778,13 +1017,25 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
     const current=invalidate(due.code);if(due.profile_revision!==current.revision)return;
     const settings=await transport.getSettings(due.code);
     if(stopped)return;
+    // За время ожидания владелец мог переписать карточку и заново поставить её в план. Снимок due устарел,
+    // и решения по нему относились бы к чужой версии: этот проход просто уходит, не отменяя новый план.
+    const reread=db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(due.id);
+    if(!reread||reread.revision!==due.revision||reread.content_revision!==due.content_revision||reread.status!=='scheduled'||reread.scheduled_at!==due.scheduled_at)return;
     const deliveries=db.prepare('SELECT * FROM autoposting_deliveries WHERE post_id=? ORDER BY channel_id').all(due.id);
     if(deliveries.some(delivery=>{
       const channel=settings.channels.find(c=>c.id===delivery.channel_id);
       return !channel||!channel.connected||!channel.enabled||channel.revision!==delivery.channel_revision;
     })){review(due.id,'CHANNEL_CHANGED');return;}
     if(information.get(due.code).revision!==due.profile_revision){review(due.id,'PROFILE_CHANGED');return;}
-    if(isQueueCard(due)&&!isApproved(due)){review(due.id,'APPROVAL_REVOKED');return;}
+    // Неодобренный канал снимается с очереди; если одобренных не осталось — карточка уходит на пересмотр.
+    if(isQueueCard(due)){
+      const waiting=deliveries.filter(delivery=>delivery.status==='pending'&&!deliveryApproved(due,delivery.channel_id));
+      if(waiting.length){
+        const cancel=db.prepare("UPDATE autoposting_deliveries SET status='cancelled',error_code='APPROVAL_REVOKED' WHERE post_id=? AND channel_id=? AND status='pending'");
+        for(const delivery of waiting)cancel.run(due.id,delivery.channel_id);
+      }
+      if(!deliveries.some(delivery=>delivery.status==='pending'&&deliveryApproved(due,delivery.channel_id))){review(due.id,'APPROVAL_REVOKED');return;}
+    }
     // Отмеченная как опубликованная вне ЛК площадка снимается с очереди до захвата lease: дубликат не отправляется.
     const marked=receiptPlatforms(due.id);
     const conflicting=marked.size?deliveries.filter(delivery=>delivery.status==='pending'
@@ -813,7 +1064,11 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
         review(due.id,'EXTERNAL_PUBLICATION_RECORDED');return;
       }
       // Отзыв одобрения между каналами: оставшиеся отправки не выполняются.
-      if(isQueueCard(freshPost)&&!isApproved(freshPost)){db.prepare("UPDATE autoposting_deliveries SET status='cancelled' WHERE post_id=? AND status='pending'").run(due.id);review(due.id,'APPROVAL_REVOKED');return;}
+      if(!deliveryApproved(freshPost,delivery.channel_id)){
+        db.prepare("UPDATE autoposting_deliveries SET status='cancelled',error_code='APPROVAL_REVOKED' WHERE post_id=? AND channel_id=? AND status='pending'").run(due.id,delivery.channel_id);
+        if(!db.prepare("SELECT 1 FROM autoposting_deliveries WHERE post_id=? AND status='pending'").get(due.id)){review(due.id,'APPROVAL_REVOKED');return;}
+        continue;
+      }
       if(information.get(due.code).revision!==due.profile_revision){review(due.id,'PROFILE_CHANGED');return;}
       if(!db.prepare("UPDATE autoposting_deliveries SET status='publishing',started_at=? WHERE post_id=? AND channel_id=? AND status='pending'").run(now(),due.id,delivery.channel_id).changes)continue;
       try{
@@ -826,7 +1081,7 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
             if(receiptPlatforms(due.id).has(channelPlatform(channel,delivery.channel_id)))
               throw Object.assign(Error('External publication recorded before provider submission'),{ambiguous:false,receiptBlocked:true});
             const active=db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(due.id);
-            if(stopped||active?.status!=='publishing'||active.lease!==lease||information.get(due.code).revision!==due.profile_revision||(isQueueCard(active)&&!isApproved(active)))
+            if(stopped||active?.status!=='publishing'||active.lease!==lease||information.get(due.code).revision!==due.profile_revision||!deliveryApproved(active,delivery.channel_id))
               throw Object.assign(Error('Publication changed before provider submission'),{ambiguous:false});
           }});
         if(result?.provider==='onlypult'){
@@ -864,7 +1119,7 @@ function createAutoposting(db,{information,transport,now=Date.now,logger=console
   }
   function drain(){if(stopped)return Promise.resolve();if(!running)running=processDue().finally(()=>running=null);return running;}
   function stop(){stopped=true;return running||Promise.resolve();}
-  return {get,list,calendar,create,update,schedule,cancel,reconcile,drain,stop,invalidate,approve,reject,submitReview,reorder,importPackage,recordReceipt};
+  return {get,list,calendar,create,update,schedule,cancel,reconcile,drain,stop,invalidate,approve,reject,split,submitReview,reorder,importPackage,recordReceipt};
 }
 module.exports={createAutoposting,LEASE_MS,CAPTION_PLATFORMS,FORMATS,ROLES,REVIEW_STATES,META_FIELDS,RECEIPT_PLATFORMS,receiptFormat,
   CALENDAR_MAX_RANGE_DAYS,CALENDAR_UNDATED_LIMIT,CALENDAR_TARGET_DAYS,CALENDAR_MINIMUM_DAYS,CALENDAR_CRITICAL_DAYS};

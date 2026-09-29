@@ -409,3 +409,380 @@ test('порядок плана хранится на сервере: полны
   assert.equal(imported.created[0].meta.role,'affection');assert.equal(imported.created[0].review.state,'draft');assert.equal(imported.created[0].sortOrder,4,'после переупорядочивания трёх карточек новая встаёт в конец');
   assert.throws(()=>f.api.importPackage('alvi',{items:[{title:'Плохо',meta:{role:'viral'}}]}),e=>e.status===400);
 });
+
+/* Согласование по площадкам. Проверяется ровно то, что раньше ломалось:
+   добавленный канал не наследовал прежнее одобрение, а возврат на доработку был только на карточку целиком. */
+function platformCard(f,platformIds=['telegram','vk'],code='alvi'){
+  return f.api.create(code,{title:'Д2 — Процедура',text:'Общий текст',mediaUrls:['https://cdn.example.test/d2.mp4'],platformIds,
+    dayKey:'D2',origin:'gemini-video',captions:{telegram:'Телеграм',vk:'ВК'},
+    scheduledAt:new Date(Date.parse('2026-09-15T00:00:00Z')+3600000).toISOString(),timezone:'Asia/Irkutsk',
+    profileRevision:f.information.get(code).revision},7);
+}
+const stateOf=(card,id)=>card.platformApprovals.find(item=>item.platformId===id);
+
+test('согласование по площадкам: частичное одобрение не делает карточку согласованной и не пускает неодобренный канал в план',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'};let card=platformCard(f);
+  assert.equal(card.platformApprovals.length,2);
+  assert.ok(card.platformApprovals.every(item=>item.state==='pending'&&item.approved===false));
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true,platformIds:['telegram']},owner);
+  assert.equal(stateOf(card,'telegram').approved,true);assert.equal(stateOf(card,'vk').approved,false);
+  assert.equal(card.approval.approved,false,'карточка целиком не согласована, пока согласован только один канал');
+  assert.equal(card.review.state,'pending');
+  await assert.rejects(f.api.schedule(card.id,'alvi',{revision:card.revision}),e=>e.details.code==='APPROVAL_REQUIRED');
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true,platformIds:['vk']},owner);
+  assert.equal(card.approval.approved,true,'после одобрения всех каналов карточка согласована целиком');
+  assert.equal(card.review.state,'approved');
+  const planned=await f.api.schedule(card.id,'alvi',{revision:card.revision});
+  assert.equal(planned.status,'scheduled');await f.api.drain();assert.equal(f.calls.length,0);
+});
+
+test('добавленная после согласования площадка не наследует одобрение и не уходит в план',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'};let card=platformCard(f,['telegram']);
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true},owner);
+  assert.equal(card.approval.approved,true);
+  const withVk=f.api.update(card.id,'alvi',{revision:card.revision,platformIds:['telegram','vk']});
+  assert.equal(stateOf(withVk,'telegram').approved,true,'у прежнего канала одобрение сохраняется');
+  assert.equal(stateOf(withVk,'vk').state,'pending','новый канал не наследует прежнее решение');
+  assert.equal(stateOf(withVk,'vk').approved,false);
+  assert.equal(withVk.approval.approved,false,'карточка целиком больше не согласована');
+  await assert.rejects(f.api.schedule(withVk.id,'alvi',{revision:withVk.revision}),e=>e.details.code==='APPROVAL_REQUIRED');
+  await f.api.drain();assert.equal(f.calls.length,0,'несогласованный канал не получает отправку');
+});
+
+test('возврат одной площадки на доработку: причина обязательна, видна по каналу, остальные каналы не сбрасываются',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'};let card=platformCard(f);
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true},owner);
+  assert.equal(card.approval.approved,true);
+  assert.throws(()=>f.api.reject(card.id,'alvi',{revision:card.revision,comment:'   ',platformIds:['vk']},owner),e=>e.status===400,'причина обязательна');
+  assert.throws(()=>f.api.reject(card.id,'alvi',{revision:card.revision,comment:'нет',platformIds:['facebook']},owner),e=>e.status===400,'канал не из карточки отклоняется');
+  card=f.api.reject(card.id,'alvi',{revision:card.revision,comment:'Для ВК нужен другой хук',platformIds:['vk']},owner);
+  assert.equal(stateOf(card,'vk').state,'rejected');assert.equal(stateOf(card,'vk').comment,'Для ВК нужен другой хук');
+  assert.equal(stateOf(card,'vk').byName,'Влад');
+  assert.equal(stateOf(card,'telegram').approved,true,'одобрение другого канала возвратом не снимается');
+  assert.equal(card.approval.approved,false,'карточка целиком не согласована, пока один канал на доработке');
+  await assert.rejects(f.api.schedule(card.id,'alvi',{revision:card.revision}),e=>e.details.code==='APPROVAL_REQUIRED');
+  await f.api.drain();assert.equal(f.calls.length,0);
+});
+
+test('общая правка текста возвращает на согласование все площадки, а не только одну',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'};let card=platformCard(f);
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true},owner);
+  assert.ok(card.platformApprovals.every(item=>item.approved));
+  const edited=f.api.update(card.id,'alvi',{revision:card.revision,text:'Общий текст переписан'});
+  assert.ok(edited.platformApprovals.every(item=>item.state==='pending'&&item.approved===false),'все затронутые каналы ждут нового согласования');
+  assert.equal(edited.approval.approved,false);
+  await assert.rejects(f.api.schedule(edited.id,'alvi',{revision:edited.revision}),e=>e.details.code==='APPROVAL_REQUIRED');
+});
+
+test('массовый возврат идёт по карточкам через существующий reject и даёт результат по каждой отдельно; несогласованное не отправляется',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'};
+  let first=platformCard(f,['telegram']),second=platformCard(f,['telegram']);
+  first=f.api.approve(first.id,'alvi',{revision:first.revision,approved:true},owner);
+  second=f.api.approve(second.id,'alvi',{revision:second.revision,approved:true},owner);
+  const results=[first,{...second,revision:second.revision-1}].map(card=>{
+    try{return {id:card.id,ok:true,card:f.api.reject(card.id,'alvi',{revision:card.revision,comment:'Переносим на следующую неделю'},owner)};}
+    catch(error){return {id:card.id,ok:false,code:error.details?.code||null};}
+  });
+  assert.equal(results[0].ok,true);assert.equal(results[0].card.review.state,'rejected');
+  assert.equal(stateOf(results[0].card,'telegram').state,'rejected');
+  assert.equal(results[1].ok,false);assert.equal(results[1].code,'REVISION_CONFLICT','каждая карточка даёт свой результат, одна ошибка не отменяет остальные');
+  assert.equal(f.api.get(second.id,'alvi').approval.approved,true,'вторая карточка осталась как была');
+  f.advance(3600000);await f.api.drain();assert.equal(f.calls.length,0,'возврат на доработку ничего не публикует');
+});
+
+test('утверждённый канал доходит до отправки, неутверждённый нет: approve только Telegram, план, drain после срока = одна отправка Telegram и ни одной ВК',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'};let card=platformCard(f,['telegram','vk']);
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true,platformIds:['telegram']},owner);
+  assert.equal(stateOf(card,'telegram').approved,true);assert.equal(stateOf(card,'vk').approved,false);
+  card=f.api.update(card.id,'alvi',{revision:card.revision,platformIds:['telegram']});
+  assert.equal(stateOf(card,'telegram').approved,true,'снятие другого канала не трогает одобрение Telegram');
+  const planned=await f.api.schedule(card.id,'alvi',{revision:card.revision});
+  assert.equal(planned.status,'scheduled');await f.api.drain();assert.equal(f.calls.length,0,'до срока публикации ничего не отправлено');
+  f.advance(3600000);await f.api.drain();
+  assert.equal(f.calls.length,1,'ровно одна отправка');
+  assert.equal(f.calls[0].channelId,'telegram');
+  assert.equal(f.calls.filter(call=>call.channelId==='vk').length,0,'в ВК не отправлено ничего');
+  assert.equal(f.api.get(card.id,'alvi').status,'published');
+});
+
+test('снятие одобрения одного канала после постановки в план не даёт отправить ничего и не уничтожает решение по другому каналу',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'};let card=platformCard(f,['telegram','vk']);
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true},owner);
+  card=await f.api.schedule(card.id,'alvi',{revision:card.revision});assert.equal(card.status,'scheduled');
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:false,platformIds:['vk']},owner);
+  assert.equal(stateOf(card,'vk').approved,false);
+  assert.equal(stateOf(card,'telegram').approved,true,'одобрение Telegram сохранено');
+  f.advance(3600000);await f.api.drain();
+  assert.equal(f.calls.length,0,'несогласованная карточка не отправляется ни по одному пути');
+});
+
+test('явный пустой список площадок отклоняется и в одобрении, и в возврате; отсутствие поля по-прежнему означает все каналы',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'};let card=platformCard(f,['telegram','vk']);
+  assert.throws(()=>f.api.approve(card.id,'alvi',{revision:card.revision,approved:true,platformIds:[]},owner),e=>e.status===400,'пустой выбор не одобряет всё');
+  assert.ok(card.platformApprovals.every(item=>!item.approved),'после отказа ничего не согласовано');
+  assert.throws(()=>f.api.reject(card.id,'alvi',{revision:card.revision,comment:'Переделать',platformIds:[]},owner),e=>e.status===400,'пустой выбор не возвращает всё');
+  assert.equal(f.api.get(card.id,'alvi').review.state,'draft','отклонённый запрос ничего не изменил');
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true},owner);
+  assert.ok(card.platformApprovals.every(item=>item.approved),'без поля platformIds решение относится ко всем каналам');
+});
+
+test('частичное согласование без удаления площадок: в план идёт только согласованный Telegram, ВК остаётся в карточке и не отправляется',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'};let card=platformCard(f,['telegram','vk']);
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true,platformIds:['telegram']},owner);
+  assert.equal(stateOf(card,'telegram').approved,true);assert.equal(stateOf(card,'vk').approved,false);
+  card=f.api.reject(card.id,'alvi',{revision:card.revision,comment:'Для ВК нужен другой хук',platformIds:['vk']},owner);
+  assert.equal(stateOf(card,'vk').state,'rejected');assert.equal(stateOf(card,'telegram').approved,true);
+  await assert.rejects(f.api.schedule(card.id,'alvi',{revision:card.revision}),e=>e.details.code==='APPROVAL_REQUIRED','без выбора каналов план по-прежнему требует все');
+  await assert.rejects(f.api.schedule(card.id,'alvi',{revision:card.revision,platformIds:['vk']}),e=>e.details.code==='APPROVAL_REQUIRED','несогласованный канал в план не берётся');
+  await assert.rejects(f.api.schedule(card.id,'alvi',{revision:card.revision,platformIds:[]}),e=>e.status===400,'пустой выбор каналов отклоняется');
+  const planned=await f.api.schedule(card.id,'alvi',{revision:card.revision,platformIds:['telegram']});
+  assert.equal(planned.status,'scheduled');
+  assert.deepEqual(planned.platformIds,['telegram','vk'],'ВК остался в карточке');
+  assert.equal(stateOf(planned,'vk').state,'rejected','статус ВК и его причина сохранены');
+  assert.equal(planned.deliveries.length,1,'отправка запланирована только для Telegram');
+  await f.api.drain();assert.equal(f.calls.length,0,'до срока ничего не отправлено');
+  f.advance(3600000);await f.api.drain();
+  assert.equal(f.calls.length,1);assert.equal(f.calls[0].channelId,'telegram');
+  assert.equal(f.calls.filter(call=>call.channelId==='vk').length,0,'в ВК не отправлено ничего');
+});
+
+test('общий отзыв версии останавливает и частично согласованные каналы',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'};let card=platformCard(f,['telegram','vk']);
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true,platformIds:['telegram']},owner);
+  card=await f.api.schedule(card.id,'alvi',{revision:card.revision,platformIds:['telegram']});
+  assert.equal(card.status,'scheduled');
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:false},owner);
+  assert.equal(card.status,'draft');assert.equal(card.lastErrorCode,'APPROVAL_REVOKED');
+  assert.ok(card.platformApprovals.every(item=>!item.approved),'общий отзыв снимает согласование всех каналов');
+  f.advance(3600000);await f.api.drain();assert.equal(f.calls.length,0);
+});
+
+test('гонка обработчика: правка и новый план во время ожидания настроек не отменяются устаревшим проходом',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'};let card=platformCard(f,['telegram']);
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true},owner);
+  card=await f.api.schedule(card.id,'alvi',{revision:card.revision});
+  assert.equal(card.status,'scheduled');
+  f.advance(3600000);
+  const original=f.transport.getSettings;let barrier=0;
+  f.transport.getSettings=async code=>{
+    if(++barrier===1){
+      // Владелец успел переписать материал и заново поставить его в план, пока обработчик ждал настройки.
+      let fresh=f.api.get(card.id,'alvi');
+      fresh=f.api.update(fresh.id,'alvi',{revision:fresh.revision,text:'Переписанный текст'});
+      fresh=f.api.approve(fresh.id,'alvi',{revision:fresh.revision,approved:true},owner);
+      fresh=await f.api.schedule(fresh.id,'alvi',{revision:fresh.revision,scheduledAt:new Date(Date.parse('2026-09-15T00:00:00Z')+2*3600000+600000).toISOString()});
+      assert.equal(fresh.status,'scheduled');
+    }
+    return original(code);
+  };
+  await f.api.drain();
+  f.transport.getSettings=original;
+  const after=f.api.get(card.id,'alvi');
+  assert.equal(f.calls.length,0,'устаревший снимок ничего не отправил');
+  assert.equal(after.status,'scheduled','новый план не снят');
+  assert.equal(after.lastErrorCode,null,'устаревший проход не пометил карточку отзывом');
+  assert.equal(after.text,'Переписанный текст');
+  assert.ok(after.deliveries.every(delivery=>delivery.status==='pending'),'новые доставки не отменены');
+});
+
+test('календарь: добавленная подключённая площадка не наследует одобрение и ждёт решения, а не считается готовой',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'},range={from:'2026-09-01',to:'2026-09-30'};
+  let card=platformCard(f,['telegram']);
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true},owner);
+  const entryOf=async(id,platform)=>{
+    const data=await f.api.calendar('alvi',range);
+    const item=[...(data.posts||[]),...(data.undated||[])].find(value=>value.id===id);
+    assert.ok(item,'карточка есть в календаре');
+    return ((item.calendarReadiness||{}).platforms||[]).find(entry=>entry.platform===platform);
+  };
+  assert.equal((await entryOf(card.id,'telegram')).state,'ready','одобренный Telegram готов');
+  const withVk=f.api.update(card.id,'alvi',{revision:card.revision,platformIds:['telegram','vk']});
+  assert.equal(stateOf(withVk,'vk').approved,false);
+  const vk=await entryOf(card.id,'vk');
+  assert.equal(vk.state,'pending','добавленный ВК ждёт решения владельца, а не помечается нехваткой материала');
+  assert.ok(vk.issues.some(issue=>/не одобрена владельцем для этой площадки/.test(issue)),'причина названа прямо');
+  assert.equal((await entryOf(card.id,'telegram')).state,'ready','одобрение Telegram сохранено и не сбивается добавлением ВК');
+  const revoked=f.api.approve(withVk.id,'alvi',{revision:withVk.revision,approved:false},owner);
+  assert.ok(revoked.platformApprovals.every(item=>!item.approved));
+  assert.equal((await entryOf(card.id,'telegram')).state,'pending','общий отзыв снимает готовность и с Telegram');
+});
+
+test('полный цикл частичной отправки: Telegram отправлен, ВК продолжен связанной карточкой, доработан, согласован и отправлен; по одной отправке на канал',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'};let card=platformCard(f,['telegram','vk']);
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true,platformIds:['telegram']},owner);
+  card=await f.api.schedule(card.id,'alvi',{revision:card.revision,platformIds:['telegram']});
+  f.advance(3600000);await f.api.drain();
+  assert.equal(f.calls.length,1);assert.equal(f.calls[0].channelId,'telegram');
+  const parent=f.api.get(card.id,'alvi');
+  assert.deepEqual(parent.platformIds,['telegram','vk'],'ВК остался в исходной карточке');
+  // Исходную карточку править нельзя — guard сохранён.
+  assert.throws(()=>f.api.update(parent.id,'alvi',{revision:parent.revision,text:'Правка'}),e=>e.details.code==='POST_STATE','прежний guard исходника сохранён');
+  // Продолжение только по ВК: Telegram сервер не отдаёт.
+  assert.throws(()=>f.api.split(parent.id,'alvi',{revision:parent.revision,platformIds:['telegram']},owner),e=>e.details.code==='PUBLICATION_REVIEW_REQUIRED');
+  assert.throws(()=>f.api.split(parent.id,'alvi',{revision:parent.revision,platformIds:[]},owner),e=>e.status===400);
+  assert.throws(()=>f.api.split(parent.id,'avokado',{revision:parent.revision,platformIds:['vk']},owner),e=>e.status===404,'чужая компания не продолжает');
+  const first=f.api.split(parent.id,'alvi',{revision:parent.revision,platformIds:['vk'],reason:'Нужен другой хук'},owner);
+  assert.equal(first.created,true);
+  let child=first.child;
+  assert.deepEqual(child.platformIds,['vk']);assert.equal(child.status,'draft');assert.equal(child.scheduledAt,null);
+  assert.deepEqual(Object.keys(child.captions),['vk'],'у ребёнка только подписи оставшихся площадок');
+  assert.equal(child.deliveries.length,0);assert.equal(child.approval.approved,false);assert.equal(child.review.state,'pending');
+  assert.equal(child.continuedFrom.postId,parent.id);assert.equal(child.continuedFrom.contentRevision,parent.contentRevision);
+  const linked=f.api.get(parent.id,'alvi');
+  assert.deepEqual(linked.continuedPlatforms.map(item=>item.platformId),['vk']);
+  assert.equal(linked.continuedPlatforms[0].childPostId,child.id,'в исходной карточке видно, куда ушла работа');
+  // Повторное и одновременное нажатие не создаёт второго активного ребёнка.
+  const again=f.api.split(linked.id,'alvi',{revision:linked.revision,platformIds:['vk']},owner);
+  assert.equal(again.created,false);assert.equal(again.child.id,child.id);
+  const third=f.api.split(f.api.get(parent.id,'alvi').id,'alvi',{revision:f.api.get(parent.id,'alvi').revision,platformIds:['vk']},owner);
+  assert.equal(third.child.id,child.id);
+  assert.equal(f.api.list('alvi').posts.filter(item=>item.continuedFrom&&item.continuedFrom.postId===parent.id).length,1,'ровно одно продолжение по ВК');
+  // Доработка и согласование ребёнка, затем отправка только в ВК.
+  child=f.api.update(child.id,'alvi',{revision:child.revision,captions:{vk:'ВК, переписанная подпись'},
+    scheduledAt:new Date(Date.parse('2026-09-15T00:00:00Z')+2*3600000).toISOString()});
+  await assert.rejects(f.api.schedule(child.id,'alvi',{revision:child.revision}),e=>e.details.code==='APPROVAL_REQUIRED','несогласованное продолжение в план не идёт');
+  child=f.api.approve(child.id,'alvi',{revision:child.revision,approved:true},owner);
+  child=await f.api.schedule(child.id,'alvi',{revision:child.revision});
+  assert.equal(child.status,'scheduled');
+  f.advance(3600000);await f.api.drain();await f.api.drain();
+  assert.equal(f.calls.filter(call=>call.channelId==='telegram').length,1,'Telegram отправлен ровно один раз');
+  assert.equal(f.calls.filter(call=>call.channelId==='vk').length,1,'ВК отправлен ровно один раз');
+  assert.equal(f.api.get(child.id,'alvi').status,'published');
+});
+
+test('продолжение запрещено при неизвестном результате отправки',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'};let card=platformCard(f,['telegram','vk']);
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true},owner);
+  card=await f.api.schedule(card.id,'alvi',{revision:card.revision});
+  f.advance(3600000);f.setSend(async()=>{throw Error('сеть оборвалась');});await f.api.drain();
+  const stuck=f.api.get(card.id,'alvi');assert.equal(stuck.lastErrorCode,'PUBLICATION_UNCERTAIN');
+  assert.throws(()=>f.api.split(stuck.id,'alvi',{revision:stuck.revision,platformIds:['telegram']},owner),e=>e.details.code==='POST_STATE','незавершённая карточка не продолжается: ранний guard срабатывает первым');
+});
+
+test('продолжение недоступно для черновика и запланированной карточки: они сами могут отправить те же площадки',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'};let card=platformCard(f,['telegram','vk']);
+  assert.throws(()=>f.api.split(card.id,'alvi',{revision:card.revision,platformIds:['vk']},owner),e=>e.details.code==='POST_STATE','черновик не продолжают');
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true,platformIds:['telegram']},owner);
+  card=await f.api.schedule(card.id,'alvi',{revision:card.revision,platformIds:['telegram']});
+  assert.equal(card.status,'scheduled');
+  assert.throws(()=>f.api.split(card.id,'alvi',{revision:card.revision,platformIds:['vk']},owner),e=>e.details.code==='POST_STATE','запланированную не продолжают');
+  f.advance(3600000);await f.api.drain();
+  const settled=f.api.get(card.id,'alvi');assert.equal(settled.status,'published');
+  assert.equal(f.api.split(settled.id,'alvi',{revision:settled.revision,platformIds:['vk']},owner).created,true,'после завершённой отправки продолжение доступно');
+});
+
+test('связь по площадке вечная: отменённый ребёнок не создаётся заново, смешанный запрос даёт конфликт со ссылкой',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'};
+  f.channels.push({id:'youtube_shorts',enabled:true,connected:true,revision:1});
+  let card=platformCard(f,['telegram','vk']);
+  card=f.api.update(card.id,'alvi',{revision:card.revision,platformIds:['telegram','vk','youtube_shorts'],captions:{telegram:'ТГ',vk:'ВК',youtube_shorts:'Шортс'}});
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true,platformIds:['telegram']},owner);
+  card=await f.api.schedule(card.id,'alvi',{revision:card.revision,platformIds:['telegram']});
+  f.advance(3600000);await f.api.drain();
+  let parent=f.api.get(card.id,'alvi');assert.equal(parent.status,'published');
+  const first=f.api.split(parent.id,'alvi',{revision:parent.revision,platformIds:['vk']},owner);
+  assert.equal(first.created,true);const childId=first.child.id;
+  // Отмена ребёнка не освобождает площадку: у него могла остаться неизвестная или уже выполненная отправка.
+  const child=f.api.get(childId,'alvi');f.api.cancel(childId,'alvi',{revision:child.revision});
+  parent=f.api.get(parent.id,'alvi');
+  const retry=f.api.split(parent.id,'alvi',{revision:parent.revision,platformIds:['vk']},owner);
+  assert.equal(retry.created,false);assert.equal(retry.child.id,childId,'вторая копия по ВК не создаётся даже после отмены');
+  assert.equal(f.api.list('alvi').posts.filter(item=>item.continuedFrom?.postId===parent.id).length,1);
+  // Смешанный запрос: часть уже передана, часть новая.
+  parent=f.api.get(parent.id,'alvi');
+  assert.throws(()=>f.api.split(parent.id,'alvi',{revision:parent.revision,platformIds:['vk','youtube_shorts']},owner),
+    e=>e.details.code==='SPLIT_ALREADY_EXISTS'&&/материал №/.test(e.message),'конфликт со ссылкой на существующее продолжение');
+  parent=f.api.get(parent.id,'alvi');
+  const second=f.api.split(parent.id,'alvi',{revision:parent.revision,platformIds:['youtube_shorts']},owner);
+  assert.equal(second.created,true);assert.notEqual(second.child.id,childId,'новые каналы запрашиваются отдельно');
+});
+
+test('в календаре опубликована только своя площадка: расписка и доставка считаются по каналу, не по карточке',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'},range={from:'2026-09-01',to:'2026-09-30'};
+  let card=platformCard(f,['telegram','vk']);
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true,platformIds:['telegram']},owner);
+  card=await f.api.schedule(card.id,'alvi',{revision:card.revision,platformIds:['telegram']});
+  f.advance(3600000);await f.api.drain();
+  const data=await f.api.calendar('alvi',range);
+  const item=[...(data.posts||[]),...(data.undated||[])].find(value=>value.id===card.id);
+  assert.ok(item);
+  const byPlatform=new Map(((item.calendarReadiness||{}).platforms||[]).map(entry=>[entry.platform,entry]));
+  assert.equal(byPlatform.get('telegram').state,'published','Telegram опубликован по своей доставке');
+  assert.notEqual(byPlatform.get('vk').state,'published','ВК не становится опубликованным из-за чужой отправки');
+});
+
+test('после передачи площадки в продолжение расписка ставится только на продолжении: повторной отправки ВК не происходит',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'};let card=platformCard(f,['telegram','vk']);
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true,platformIds:['telegram']},owner);
+  card=await f.api.schedule(card.id,'alvi',{revision:card.revision,platformIds:['telegram']});
+  f.advance(3600000);await f.api.drain();
+  assert.equal(f.calls.filter(call=>call.channelId==='telegram').length,1);
+  let parent=f.api.get(card.id,'alvi');assert.equal(parent.status,'published');
+  const outcome=f.api.split(parent.id,'alvi',{revision:parent.revision,platformIds:['vk']},owner);
+  assert.equal(outcome.created,true);let child=outcome.child;
+  // Расписку по переданной площадке исходник больше не принимает — иначе продолжение отправит её ещё раз.
+  assert.throws(()=>f.api.recordReceipt(parent.id,'alvi',{platform:'vk',url:'https://vk.com/wall-1_2',
+    publishedAt:'2026-09-15T00:30:00Z',contentRevision:f.api.get(parent.id,'alvi').contentRevision},owner),
+    e=>e.details.code==='SPLIT_HANDED_OVER'&&/материале №/.test(e.message));
+  // Штатно расписка ставится на продолжении, и оно после этого не отправляет ВК повторно.
+  const receipt=f.api.recordReceipt(child.id,'alvi',{platform:'vk',url:'https://vk.com/wall-1_2',
+    publishedAt:'2026-09-15T00:30:00Z',contentRevision:child.contentRevision},owner);
+  assert.equal(receipt.created,true);
+  child=f.api.get(child.id,'alvi');
+  child=f.api.approve(child.id,'alvi',{revision:child.revision,approved:true},owner);
+  await assert.rejects(f.api.schedule(child.id,'alvi',{revision:child.revision,
+    scheduledAt:new Date(Date.parse('2026-09-15T00:00:00Z')+2*3600000).toISOString()}),
+    e=>e.details.code==='EXTERNAL_PUBLICATION_RECORDED','отмеченная вне ЛК площадка повторно не отправляется');
+  f.advance(3600000);await f.api.drain();
+  assert.equal(f.calls.filter(call=>call.channelId==='vk').length,0,'ВК из кабинета не отправлялся ни разу');
+  assert.equal(f.calls.filter(call=>call.channelId==='telegram').length,1,'Telegram остался с одной отправкой');
+});
+
+test('переданная в продолжение площадка не считается запасом на исходнике и не задваивает агрегаты',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'},range={from:'2026-09-01',to:'2026-09-30'};
+  let card=platformCard(f,['telegram','vk']);
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true,platformIds:['telegram']},owner);
+  card=await f.api.schedule(card.id,'alvi',{revision:card.revision,platformIds:['telegram']});
+  f.advance(3600000);await f.api.drain();
+  let parent=f.api.get(card.id,'alvi');assert.equal(parent.status,'published');
+  const before=await f.api.calendar('alvi',range);
+  const child=f.api.split(parent.id,'alvi',{revision:parent.revision,platformIds:['vk']},owner).child;
+  const after=await f.api.calendar('alvi',range);
+  const platformOf=(data,id,platform)=>{
+    const item=[...(data.posts||[]),...(data.undated||[])].find(value=>value.id===id);
+    assert.ok(item,'карточка есть в календаре');
+    return ((item.calendarReadiness||{}).platforms||[]).find(entry=>entry.platform===platform);
+  };
+  const vk=platformOf(after,parent.id,'vk');
+  assert.equal(vk.state,'inactive','ВК исходника закрыт: работа передана');
+  assert.equal(vk.ready,false);
+  assert.ok(vk.issues.some(issue=>new RegExp(`материале №${child.id}`).test(issue)),'видно, куда ушла работа');
+  assert.equal(platformOf(after,parent.id,'telegram').state,'published','Telegram исходника не затронут');
+  assert.ok(after.summary.readyPosts<=before.summary.readyPosts,'передача работы не увеличивает запас готового');
+  // Итог карточки считается без закрытых площадок: Telegram опубликован, ВК передан — готовой она не становится.
+  const parentItem=[...(after.posts||[]),...(after.undated||[])].find(value=>value.id===parent.id);
+  assert.equal(parentItem.calendarReadiness.state,'published','исходник закрыт публикацией своей площадки, а не «готов»');
+  assert.equal(parentItem.calendarReadiness.ready,false);
+});
+
+test('каналы, переданные в разные продолжения, не возвращают молча первое из них',async t=>{
+  const f=fixture(t),owner={userId:1,userName:'Влад'};
+  f.channels.push({id:'youtube_shorts',enabled:true,connected:true,revision:1});
+  let card=platformCard(f,['telegram','vk']);
+  card=f.api.update(card.id,'alvi',{revision:card.revision,platformIds:['telegram','vk','youtube_shorts'],
+    captions:{telegram:'ТГ',vk:'ВК',youtube_shorts:'Шортс'}});
+  card=f.api.approve(card.id,'alvi',{revision:card.revision,approved:true,platformIds:['telegram']},owner);
+  card=await f.api.schedule(card.id,'alvi',{revision:card.revision,platformIds:['telegram']});
+  f.advance(3600000);await f.api.drain();
+  let parent=f.api.get(card.id,'alvi');
+  const first=f.api.split(parent.id,'alvi',{revision:parent.revision,platformIds:['vk']},owner).child;
+  parent=f.api.get(parent.id,'alvi');
+  const second=f.api.split(parent.id,'alvi',{revision:parent.revision,platformIds:['youtube_shorts']},owner).child;
+  assert.notEqual(first.id,second.id);
+  parent=f.api.get(parent.id,'alvi');
+  assert.throws(()=>f.api.split(parent.id,'alvi',{revision:parent.revision,platformIds:['vk','youtube_shorts']},owner),
+    error=>error.details.code==='SPLIT_ALREADY_EXISTS'
+      &&new RegExp(`материал №${first.id}`).test(error.message)
+      &&new RegExp(`материал №${second.id}`).test(error.message),
+    'конфликт называет оба продолжения, а не подменяет их одним');
+});
