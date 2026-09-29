@@ -111,7 +111,7 @@ function createStudioJourney(db,{now=Date.now}={}) {
       for(const target of [summary,groups.get(source)]){target.leads++;for(const [metric,types]of [['booked',['booked','rescheduled']],['confirmed',['confirmed']],['visited',['visited']],['memberships',['membership']]])if(events.some(e=>types.includes(e)))target[metric]++;
         target.noShows+=events.filter(e=>e==='no_show').length;target.reschedules+=events.filter(e=>e==='rescheduled').length;target.completedVisits+=events.filter(e=>e==='visited').length;}}
     for(const target of [summary,...groups.values()]){const completed=target.completedVisits+target.noShows;target.noShowRate=completed?Math.round(target.noShows/completed*1000)/10:null;target.membershipRate=target.visited?Math.round(target.memberships/target.visited*1000)/10:null;}
-    return {companyCode:owner.code.toLowerCase(),timezone:owner.timezone||'UTC',summary,sources:[...groups.values()],total:leads.length,offset,
+    return {companyCode:owner.code.toLowerCase(),timezone:owner.timezone||'UTC',summary,sources:[...groups.values()],publications:commerce.cohort(code,leads,byLead),total:leads.length,offset,
       leads:leads.slice(offset,offset+50).map(l=>{const card=get(code,l.id);return {leadId:card.leadId,name:card.name,contact:card.contact,source:card.source,createdAt:card.createdAt,state:card.state};}),
       basis:'Когорта заявок, созданных в выбранный период. Этапы — по фактическим отметкам; старые статусы и суммы не учитываются.'};
   }

@@ -59,3 +59,17 @@ test('bad data and reference insertion failures roll back; no invented historic 
   db.exec('DROP TRIGGER reject_ref');assert.equal(api.payment('alvi',1,body()).revision,1);
   assert.equal(db.prepare('SELECT sale_amount FROM leads WHERE id=1').get().sale_amount,99000);
 });
+
+test('cohort groups current attribution and ledger once, without importing old sales or foreign leads',t=>{
+  const {api,body}=fixture(t);
+  api.publication('alvi',1,{revision:0,requestId:'source-001',postId:1,evidence:'Подтверждение'});
+  let result=api.payment('alvi',1,body({amount:800}));
+  api.payment('alvi',1,body({type:'refund',refundOf:result.payments[0].id,amount:100}));
+  api.payment('avokado',2,{...body({amount:999}),revision:0});
+  const cohort=api.cohort('alvi',[{id:1},{id:3}],new Map([[1,['booked','rescheduled','visited']]]));
+  assert.equal(cohort.length,2);const linked=cohort.find(row=>row.postId===1);
+  assert.equal(linked.leads,1);assert.equal(linked.booked,1);assert.equal(linked.visited,1);assert.equal(linked.paidLeads,1);assert.equal(linked.totals[0].netCents,70000);
+  assert.deepEqual(cohort.find(row=>row.postId===null).totals,[]);
+  assert.deepEqual(api.cohort('alvi',[],new Map()),[]);
+  assert.equal(api.get('alvi',1).publications.length,1);
+});

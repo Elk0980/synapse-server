@@ -21,12 +21,17 @@ function createStudioCommerce(db,{now=Date.now}={}) {
   }
   const events=(owner,lead)=>db.prepare('SELECT id,kind,data,actor_id actorId,created_at createdAt FROM studio_commerce_events WHERE company_id=? AND lead_id=? ORDER BY id')
     .all(owner.id,lead.id).map(row=>({...row,data:JSON.parse(row.data)}));
+  function publications(owner){
+    if(!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='autoposting_posts'").get())return [];
+    return db.prepare(`SELECT p.id,p.title FROM autoposting_posts p WHERE p.company_id=? AND
+      (p.status='published' OR EXISTS(SELECT 1 FROM autoposting_publication_receipts r WHERE r.post_id=p.id)) ORDER BY p.id DESC LIMIT 200`).all(owner.id);
+  }
   function get(code,id){
     const {owner,lead}=scope(code,id),history=events(owner,lead),payments=history.filter(row=>row.kind==='payment'),totals=new Map();
     for(const row of payments){const p=row.data;if(!totals.has(p.currency))totals.set(p.currency,{currency:p.currency,receivedCents:0,refundedCents:0,netCents:0});
       const total=totals.get(p.currency);total[p.type==='received'?'receivedCents':'refundedCents']+=p.amountCents;total.netCents=total.receivedCents-total.refundedCents;}
     return {companyCode:owner.code.toLowerCase(),leadId:lead.id,revision:history.length,
-      publication:history.filter(row=>row.kind==='publication').at(-1)?.data||null,payments,totals:[...totals.values()],history,
+      publication:history.filter(row=>row.kind==='publication').at(-1)?.data||null,payments,totals:[...totals.values()],history,publications:publications(owner),
       basis:'Только записи этого журнала с основанием. Старые суммы сделки и абонементов не прибавлены. Это ручной учёт, не банковская сверка.'};
   }
   function write(code,id,kind,body,actorId,normalize){
@@ -78,6 +83,24 @@ function createStudioCommerce(db,{now=Date.now}={}) {
     }else if(body.refundOf!==undefined&&body.refundOf!==null)fail(400,'У оплаты не бывает исходного возврата');
     return {type:body.type,amountCents,currency:body.currency,reference,evidence,occurredAt,refundOf};
   });}
-  return {get,publication,payment};
+  function cohort(code,leads,byLead){
+    const owner=company(db,code),ids=new Set(leads.map(lead=>lead.id)),histories=new Map();
+    const rows=db.prepare(`SELECT e.lead_id,e.kind,e.data FROM studio_commerce_events e JOIN leads l ON l.id=e.lead_id
+      WHERE e.company_id=? AND l.company_code=? COLLATE NOCASE ORDER BY e.id`).all(owner.id,owner.code);
+    for(const row of rows){if(!ids.has(row.lead_id))continue;if(!histories.has(row.lead_id))histories.set(row.lead_id,[]);histories.get(row.lead_id).push({kind:row.kind,...JSON.parse(row.data)});}
+    const groups=new Map();
+    for(const lead of leads){
+      const history=histories.get(lead.id)||[],source=history.filter(row=>row.kind==='publication').at(-1),postId=source?.postId??null;
+      if(!groups.has(postId))groups.set(postId,{postId,title:postId?source.title:'Публикация не установлена',leads:0,booked:0,visited:0,paidLeads:0,totals:new Map()});
+      const group=groups.get(postId),stages=byLead.get(lead.id)||[];group.leads++;
+      if(stages.some(type=>['booked','rescheduled'].includes(type)))group.booked++;
+      if(stages.includes('visited'))group.visited++;
+      const payments=history.filter(row=>row.kind==='payment');if(payments.some(row=>row.type==='received'))group.paidLeads++;
+      for(const p of payments){if(!group.totals.has(p.currency))group.totals.set(p.currency,{currency:p.currency,receivedCents:0,refundedCents:0,netCents:0});
+        const total=group.totals.get(p.currency);total[p.type==='received'?'receivedCents':'refundedCents']+=p.amountCents;total.netCents=total.receivedCents-total.refundedCents;}
+    }
+    return [...groups.values()].map(group=>({...group,totals:[...group.totals.values()]}));
+  }
+  return {get,publication,payment,cohort};
 }
 module.exports={createStudioCommerce};
