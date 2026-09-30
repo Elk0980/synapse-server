@@ -911,3 +911,16 @@ test('предпросмотр подписи 2ГИС называет пред�
     assert.match(text,/Площадки: 2ГИС, Telegram/,'в шапке предпросмотра площадка названа по-человечески');
   }finally{f.close();}
 });
+
+test('возврат к материалам после смены проекта загружает выбранную компанию',async()=>{
+ const f=await fixture();try{
+  f.set('autoposting-title','Черновик первого проекта');
+  await f.views.autoposting.render(f.node('view'),f.ctx);
+  assert.equal(f.node('autoposting-title').value,'Черновик первого проекта');
+  f.ctx.selectedProjectId='avokado';
+  await f.views.autoposting.render(f.node('view'),f.ctx);await f.settle();
+  assert.equal(f.node('autoposting-company').value,'avokado');
+  assert.notEqual(f.node('autoposting-title').value,'Черновик первого проекта');
+  assert.ok(f.calls.some(c=>c.path.endsWith('/autoposting/posts')&&c.code==='avokado'));
+ }finally{f.close();}
+});

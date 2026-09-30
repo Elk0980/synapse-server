@@ -16,6 +16,11 @@
     prefs.orders = prefs.orders && typeof prefs.orders === 'object' ? prefs.orders : {};
     prefs.open = prefs.open && typeof prefs.open === 'object' ? prefs.open : {};
     prefs.favorites = Array.isArray(prefs.favorites) ? prefs.favorites : [];
+    const unifiedKey = id => ['autoposting','media-mentor-rollout'].includes(id) ? 'content-factory' : id;
+    prefs.favorites = [...new Set(prefs.favorites.map(unifiedKey))];
+    Object.keys(prefs.orders).forEach(group => {
+      if (Array.isArray(prefs.orders[group])) prefs.orders[group] = [...new Set(prefs.orders[group].map(unifiedKey))];
+    });
     const save = () => { try { localStorage.setItem(key, JSON.stringify(prefs)); } catch {} };
     const mobile = () => window.matchMedia('(max-width:760px)').matches;
     const controls = document.createElement('div');
