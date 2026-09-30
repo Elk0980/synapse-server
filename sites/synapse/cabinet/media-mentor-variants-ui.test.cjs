@@ -330,6 +330,48 @@ test('у новой строки плана версии добавляются 
   } finally { f.close(); }
 });
 
+test('добавленные материалы сохраняются по датам вместе со скрытыми строками при обратном порядке экрана', async () => {
+  const days = planDays(5);
+  const f = fixture({query: () => payload({}, days)});
+  try {
+    await f.view.render(f.node, f.ctx); await tick(); await tick();
+    for (let index = 0; index < 5; index++) {
+      const before = new Set(f.node.querySelectorAll('[data-plan-feed] [data-row]'));
+      f.node.querySelector('[data-add="days"]').click();
+      const fresh = [...f.node.querySelectorAll('[data-plan-feed] [data-row]')].find((row) => !before.has(row));
+      fresh.querySelector('[data-field="date"]').value = days[index].date;
+      fresh.querySelector('[data-field="topic"]').value = `Дополнение ${index + 1}`;
+      fresh.querySelector('[data-field="platform"]').value = 'telegram';
+      const adder = fresh.querySelector('[data-variant-add]');
+      adder.value = 'telegram';
+      adder.dispatchEvent(new f.w.Event('change', {bubbles: true}));
+      fresh.querySelector('[data-variant-field="text"]').value = `Новый текст ${index + 1}`;
+      fresh.querySelector('[data-field="date"]').dispatchEvent(new f.w.Event('change', {bubbles: true}));
+    }
+    for (const [name, value] of [['order', 'desc'], ['platform', 'vk']]) {
+      const filter = f.node.querySelector(`[data-plan-filter="${name}"]`);
+      filter.value = value;
+      filter.dispatchEvent(new f.w.Event('change', {bubbles: true}));
+    }
+    const rows = [...f.node.querySelectorAll('[data-plan-feed] [data-row]')];
+    assert.equal(rows.filter((row) => row.hidden).length, 5, 'новые строки скрыты фильтром');
+    assert.equal(rows[0].dataset.planDate, days[4].date, 'экран отсортирован в обратном порядке');
+    submit(f.w, f.node.querySelector('#mentor-plan-form')); await tick(); await tick();
+    const saved = f.calls.find((call) => call.method === 'PUT' && call.path.endsWith('/plan')).body.days;
+    assert.equal(saved.length, 10, 'скрытые строки тоже сохранены');
+    assert.deepEqual(saved.map((day) => day.date), days.flatMap((day) => [day.date, day.date]));
+    for (let index = 0; index < 5; index++) {
+      const original = saved[index * 2], added = saved[index * 2 + 1];
+      assert.equal(original.ideaId, days[index].ideaId, 'при одинаковой дате исходный порядок стабилен');
+      assert.equal(original.variants.telegram.text, days[index].variants.telegram.text);
+      assert.equal(original.variants.vk.text, days[index].variants.vk.text);
+      assert.equal(added.ideaId, undefined);
+      assert.equal(added.topic, `Дополнение ${index + 1}`);
+      assert.equal(added.variants.telegram.text, `Новый текст ${index + 1}`);
+    }
+  } finally { f.close(); }
+});
+
 test('кнопка «ниже» меняет материалы датами и план уходит по возрастанию дат', async () => {
   const f = fixture();
   try {
