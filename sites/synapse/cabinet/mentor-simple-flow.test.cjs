@@ -106,9 +106,16 @@ test('фильтры и сортировка сохраняют те же DOM-у
   } finally {f.close();}
 });
 
-test('сохранение при фильтре отправляет все строки в исходном порядке с исходными версиями', async () => {
+for (const withVariants of [false, true]) test(`сохранение при фильтре отправляет все строки по датам без потери полей: ${withVariants ? 'идеи с версиями' : 'старый план'}`, async () => {
   let resolveSave;
-  const f = fixture({override: (call) => call.method === 'PUT' ? new Promise((resolve) => {resolveSave = resolve;}) : undefined});
+  const data = example();
+  if (withVariants) data.plan.days.forEach((item, index) => {
+    item.ideaId = `idea-${index}`;
+    item.variants = {[item.platform]: {text: `Текст ${index}`, hook: `Зацепка версии ${index}`,
+      format: 'post', assetId: 'a1', mentorNote: `Заметка версии ${index}`, plannedDate: item.date,
+      plannedTime: '12:30', timezone: 'Europe/Moscow', excluded: index === 2}};
+  });
+  const f = fixture({data, override: (call) => call.method === 'PUT' ? new Promise((resolve) => {resolveSave = resolve;}) : undefined});
   try {
     await f.start(); f.input(0, 'topic', 'Своя новая тема'); f.filter('platform', 'vk'); f.filter('status', 'draft'); f.filter('order', 'desc');
     assert.equal(f.visible().length, 1);
@@ -116,7 +123,10 @@ test('сохранение при фильтре отправляет все с�
     const save = f.calls.find((call) => call.path === '/media-mentor/plan' && call.method === 'PUT');
     assert.equal(save.params.companyCode, 'alvi'); assert.equal(save.headers['X-CSRF-Token'], 'test');
     assert.equal(save.body.planRevision, 3); assert.equal(save.body.briefRevision, 2);
-    assert.deepEqual(save.body.days, f.original.plan.days.map((item, index) => index ? item : {...item, topic: 'Своя новая тема'}));
+    // Исходный fixture намеренно перемешан; сервер принимает даты только по возрастанию.
+    const expected = [2, 5, 6, 4, 1, 3, 0].map((index) => index
+      ? f.original.plan.days[index] : {...f.original.plan.days[index], topic: 'Своя новая тема'});
+    assert.deepEqual(save.body.days, expected, 'все поля, ideaId и версии сохраняются целиком');
     assert.equal(save.body.days.length, 7);
     assert.deepEqual(f.data, f.original);
     resolveSave(f.data); await f.settle();
