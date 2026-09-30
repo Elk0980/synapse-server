@@ -70,7 +70,7 @@ const init = (context) => {
       ${['blocked','awaiting_executor'].includes(data.state)?'<button type="button" data-dispatch-action="retry">Передать уточнение</button>':''}
       ${!['manual','done','cancelled'].includes(data.state)?'<button type="button" data-dispatch-action="cancel">Остановить обработку</button>':''}
       <button type="button" data-dispatch-refresh>Обновить состояние</button></div><p role="status" data-dispatch-status></p>
-      <details><summary>История работы</summary>${(data.history||[]).map(h=>`<p>${escapeHTML(displayDate(h.createdAt))} · ${escapeHTML(h.note)}</p>`).join('')||'<p>Работа ещё не запускалась.</p>'}</details>`;
+      <details><summary>История работы</summary>${(data.history||[]).map(h=>`<details><summary>${escapeHTML(displayDate(h.createdAt))} · ${escapeHTML(h.note)}</summary>${h.question?`<p>${escapeHTML(h.question)}</p>`:""}${h.result?`<pre style="white-space:pre-wrap">${escapeHTML(h.result)}</pre>`:""}${h.model?`<p>Модель: ${escapeHTML(h.model)}</p>`:""}</details>`).join('')||'<p>Работа ещё не запускалась.</p>'}</details>`;
     container.querySelector('[data-dispatch-refresh]').onclick=()=>renderTaskCard(task.id);
     container.querySelectorAll('[data-dispatch-action]').forEach(button=>button.onclick=async()=>{
       button.disabled=true;const action=button.dataset.dispatchAction;

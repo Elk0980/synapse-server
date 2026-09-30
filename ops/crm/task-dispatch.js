@@ -10,7 +10,7 @@ function createTaskDispatch(db,{now=()=>Date.now()}={}){
  question TEXT NOT NULL DEFAULT '',answer TEXT NOT NULL DEFAULT '',result TEXT NOT NULL DEFAULT '',provider TEXT NOT NULL DEFAULT '',model TEXT NOT NULL DEFAULT '',
  usage TEXT NOT NULL DEFAULT '{}',attempts INTEGER NOT NULL DEFAULT 0,lease_token TEXT NOT NULL DEFAULT '',lease_until INTEGER NOT NULL DEFAULT 0,next_at INTEGER NOT NULL DEFAULT 0,
  updated_at TEXT NOT NULL,created_at TEXT NOT NULL);
- CREATE TABLE IF NOT EXISTS task_dispatch_history(id INTEGER PRIMARY KEY,task_id INTEGER NOT NULL,revision INTEGER NOT NULL,state TEXT NOT NULL,note TEXT NOT NULL,created_at TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS task_dispatch_history(id INTEGER PRIMARY KEY,task_id INTEGER NOT NULL,revision INTEGER NOT NULL,state TEXT NOT NULL,note TEXT NOT NULL,question TEXT NOT NULL DEFAULT '',result TEXT NOT NULL DEFAULT '',model TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS task_dispatch_alerts(id INTEGER PRIMARY KEY,task_id INTEGER NOT NULL,company_code TEXT NOT NULL,event_key TEXT NOT NULL UNIQUE,text TEXT NOT NULL,handed_off INTEGER NOT NULL DEFAULT 0);
  CREATE TABLE IF NOT EXISTS task_dispatch_mirrors(room TEXT NOT NULL,source_id INTEGER NOT NULL,task_id INTEGER NOT NULL,source_version INTEGER NOT NULL DEFAULT 0,source_note TEXT NOT NULL DEFAULT '',PRIMARY KEY(room,source_id));
  CREATE TRIGGER IF NOT EXISTS dispatch_history_no_update BEFORE UPDATE ON task_dispatch_history BEGIN SELECT RAISE(ABORT,'Immutable dispatch history'); END;
@@ -19,7 +19,7 @@ function createTaskDispatch(db,{now=()=>Date.now()}={}){
  const tx=fn=>{db.exec('BEGIN IMMEDIATE');try{const r=fn();db.exec('COMMIT');return r;}catch(e){db.exec('ROLLBACK');throw e;}};
  const task=id=>{if(!Number.isSafeInteger(id)||id<1)fail(400,'Некорректная задача');const r=db.prepare('SELECT * FROM tasks WHERE id=? AND is_deleted=0').get(id);if(!r)fail(404,'Задача не найдена');return r;};
  const row=id=>db.prepare('SELECT * FROM task_dispatch WHERE task_id=?').get(id);
- const history=(id,note)=>{const r=row(id);db.prepare('INSERT INTO task_dispatch_history(task_id,revision,state,note,created_at) VALUES(?,?,?,?,?)').run(id,r.revision,r.state,note,stamp());};
+ const history=(id,note)=>{const r=row(id);db.prepare('INSERT INTO task_dispatch_history(task_id,revision,state,note,question,result,model,created_at) VALUES(?,?,?,?,?,?,?,?)').run(id,r.revision,r.state,note,r.question,r.result,r.model,stamp());};
  const change=(id,fields,note)=>{db.prepare(`UPDATE task_dispatch SET ${Object.keys(fields).map(k=>`${k}=?`).join(',')},revision=revision+1,updated_at=? WHERE task_id=?`).run(...Object.values(fields),stamp(),id);history(id,note);};
  const alert=(r,label)=>db.prepare('INSERT OR IGNORE INTO task_dispatch_alerts(task_id,company_code,event_key,text) VALUES(?,?,?,?)').run(r.task_id,r.company_code,`dispatch:${r.task_id}:${r.cycle}:${r.state}`,`Задача #${r.task_id} · ${r.company_code}\n${label}\n${r.question||r.result||'Требуется проверка владельца'}\nЛК → Задачи → Доска проектов.`.slice(0,3000));
  function reconcile(){
@@ -31,7 +31,7 @@ function createTaskDispatch(db,{now=()=>Date.now()}={}){
  }
  function view(r){if(!r)return null;return {taskId:r.task_id,companyCode:r.company_code,revision:r.revision,state:r.state,department:r.department,question:r.question,answer:r.answer,result:r.result,provider:r.provider,model:r.model,attempts:r.attempts,updatedAt:r.updated_at,usage:JSON.parse(r.usage),
  limits:{attemptsPerCycle:2,maxOutputTokens:1200},executor:r.state==='running'?'Серверный API':r.state==='awaiting_executor'?'Не подключён':r.model?`${r.provider} · ${r.model}`:'Не назначен'};}
- function get(id,a){owner(a);task(id);reconcile();return {...(view(row(id))||{taskId:id,revision:0,state:'manual'}),history:db.prepare('SELECT revision,state,note,created_at AS createdAt FROM task_dispatch_history WHERE task_id=? ORDER BY id DESC LIMIT 30').all(id)};}
+ function get(id,a){owner(a);task(id);reconcile();return {...(view(row(id))||{taskId:id,revision:0,state:'manual'}),history:db.prepare('SELECT revision,state,note,question,result,model,created_at AS createdAt FROM task_dispatch_history WHERE task_id=? ORDER BY id DESC LIMIT 30').all(id)};}
  function put(id,revision){const t=task(id);if(['done','cancelled'].includes(t.status))fail(409,'Задача уже закрыта');if(!t.company_code)fail(400,'Выберите проект задачи');const old=row(id);if((old?.revision||0)!==revision)fail(409,'Карточка изменилась. Обновите её');if(old)fail(409,'Задача уже передана диспетчеру');
   db.prepare("INSERT INTO task_dispatch(task_id,company_code,state,updated_at,created_at) VALUES(?,?,'queued',?,?)").run(id,t.company_code,stamp(),stamp());history(id,'Поручение принято сервером. Ожидает разбора недорогой моделью.');
  }
