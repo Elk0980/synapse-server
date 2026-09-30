@@ -38,3 +38,6 @@ test('mirror deduplicates by room and ID; notification handoff is idempotent',t=
 test('invalid decisions and model-free completion do not mutate work',t=>{const {api}=fixture(t);api.enqueue(1,{revision:0},owner);const j=api.claim();
  for(const bad of [{state:'done',result:'done',provider:'p',model:'m'}, {state:'review',result:'text'}, {state:'review',result:'text',provider:'p',model:'m',department:'unknown'}]) assert.throws(()=>api.complete(j,bad),e=>e.status===400);
  assert.equal(api.get(1,owner).state,'running');});
+
+ test('new chat clarification supersedes old lease without creating another CRM task',t=>{const {api,db}=fixture(t);const data={room:'alpha',sourceId:8,sourceVersion:1,companyCode:'alpha',title:'Правки',note:'Первый вариант'};const first=api.mirror(data),job=api.claim();
+ const second=api.mirror({...data,sourceVersion:2,note:'Новая точная правка'});assert.equal(first.taskId,second.taskId);assert.throws(()=>api.complete(job,{state:'review',result:'Устаревший',department:'support',provider:'p',model:'m'}),e=>e.status===409);const fresh=api.claim();assert.match(fresh.description,/Новая точная правка/);assert.equal(db.prepare('SELECT count(*) n FROM task_dispatch_mirrors').get().n,1);});

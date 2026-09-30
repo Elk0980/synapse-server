@@ -75,7 +75,7 @@ const init = (context) => {
     container.querySelectorAll('[data-dispatch-action]').forEach(button=>button.onclick=async()=>{
       button.disabled=true;const action=button.dataset.dispatchAction;
       try{const next=await crmQuery(`/coordination/dispatch/${task.id}/${action==='enqueue'?'enqueue':'action'}`,{companyCode:task.companyCode},csrfOptions('POST',{revision:data.revision,action,text:container.querySelector('[data-dispatch-answer]')?.value||''}));
-        if(version===renderVersion&&ctx.currentView==='tasks')renderDispatchControls(container,task,next,version);
+        if(version===renderVersion&&ctx.currentView==='tasks'){if(next.state==='done'){task.status='done';const select=container.parentElement.querySelector('[name=status]');if(select)select.value='done';}renderDispatchControls(container,task,next,version);}
       }catch(error){container.querySelector('[data-dispatch-status]').textContent=error.message;}finally{button.disabled=false;}
     });
   };
