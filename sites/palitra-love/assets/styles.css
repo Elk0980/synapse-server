@@ -444,3 +444,9 @@ html[data-flowers="hidden"] .work-gallery{grid-template-columns:repeat(2,minmax(
 .product-card>.product-media,.product-dialog .product-media{position:relative;min-height:0;overflow:hidden}
 .product-card>.product-media:not(.product-media--empty)>img,.product-card>.product-media>.product-gallery__track,
 .product-dialog .product-media:not(.product-media--empty)>img,.product-dialog .product-media>.product-gallery__track{position:absolute;inset:0;width:100%;height:100%}
+
+/* Каталог начинает показ товаров сразу после заголовка, без высоты видеоблока главной. */
+body[data-page="catalog"] .hero{display:block;height:auto;min-height:0;padding:16px 0 12px}
+body[data-page="catalog"] .hero h1{font-size:clamp(32px,4vw,48px);margin:0 0 12px}
+body[data-page="catalog"] .hero+section{padding-top:20px}
+body[data-page="catalog"] .hero .actions:empty{display:none}
