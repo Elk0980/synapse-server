@@ -53,8 +53,35 @@ const init = (context) => {
   };
   const displayDate = value => value ? new Date(value).toLocaleString('ru-RU') : '';
   const isoDateInput = value => value ? new Date(value).toISOString() : '';
+  const dispatchStates={manual:'Вручную',queued:'В очереди',running:'Идёт разбор',needs_input:'Нужен ваш ответ',awaiting_executor:'Нужен исполнитель',blocked:'Нужна помощь',review:'Результат на проверке',done:'Принято',cancelled:'Остановлено'};
+  const departments={coordination:'Координация',engineering:'Разработка',design:'Дизайн',marketing:'Маркетинг',analytics:'Аналитика',support:'Поддержка'};
+  let boardTimer;
+  const dispatchSummary = d => `<p><strong>${dispatchStates[d?.state]||'Вручную'}</strong>${d?.department?' · '+escapeHTML(departments[d.department]||d.department):''}</p>
+    ${d?.question?`<p><strong>Вопрос:</strong> ${escapeHTML(d.question)}</p>`:''}
+    ${d?.result?`<p style="white-space:pre-wrap">${escapeHTML(d.result)}</p>`:''}
+    ${d?.model?`<p class="crm-muted">${escapeHTML(d.provider)} · ${escapeHTML(d.model)}${d.usage?.promptTokens!=null?' · Вход: '+d.usage.promptTokens+' токенов':''}${d.usage?.completionTokens!=null?' · Ответ: '+d.usage.completionTokens+' токенов':''}</p>`:''}`;
+  const renderDispatchControls = (container, task, data, version) => {
+    container.innerHTML=`<h3>Работа помощников</h3>${dispatchSummary(data)}<p class="crm-muted">Простой текст готовит недорогой API. Код, файлы и публикации ожидают подключённого исполнителя. Результат принимает владелец.</p>
+      ${['manual','done','cancelled'].includes(data.state)?'':`<p>Исполнитель: ${escapeHTML(data.executor||'Не назначен')}. Попытки: ${data.attempts||0} из 2.</p>`}
+      ${['needs_input','review','blocked','awaiting_executor'].includes(data.state)?'<label>Ответ или замечание<textarea data-dispatch-answer maxlength="2000" rows="3"></textarea></label>':''}
+      <div class="crm-actions">${data.state==='manual'&&!['done','cancelled'].includes(task.status)?'<button type="button" data-dispatch-action="enqueue">Передать помощнику</button>':''}
+      ${data.state==='needs_input'?'<button type="button" data-dispatch-action="answer">Ответить и продолжить</button>':''}
+      ${data.state==='review'?'<button type="button" data-dispatch-action="accept">Принять результат</button><button type="button" data-dispatch-action="revise">Вернуть на исправление</button>':''}
+      ${['blocked','awaiting_executor'].includes(data.state)?'<button type="button" data-dispatch-action="retry">Передать уточнение</button>':''}
+      ${!['manual','done','cancelled'].includes(data.state)?'<button type="button" data-dispatch-action="cancel">Остановить обработку</button>':''}
+      <button type="button" data-dispatch-refresh>Обновить состояние</button></div><p role="status" data-dispatch-status></p>
+      <details><summary>История работы</summary>${(data.history||[]).map(h=>`<p>${escapeHTML(displayDate(h.createdAt))} · ${escapeHTML(h.note)}</p>`).join('')||'<p>Работа ещё не запускалась.</p>'}</details>`;
+    container.querySelector('[data-dispatch-refresh]').onclick=()=>renderTaskCard(task.id);
+    container.querySelectorAll('[data-dispatch-action]').forEach(button=>button.onclick=async()=>{
+      button.disabled=true;const action=button.dataset.dispatchAction;
+      try{const next=await crmQuery(`/coordination/dispatch/${task.id}/${action==='enqueue'?'enqueue':'action'}`,{companyCode:task.companyCode},csrfOptions('POST',{revision:data.revision,action,text:container.querySelector('[data-dispatch-answer]')?.value||''}));
+        if(version===renderVersion&&ctx.currentView==='tasks')renderDispatchControls(container,task,next,version);
+      }catch(error){container.querySelector('[data-dispatch-status]').textContent=error.message;}finally{button.disabled=false;}
+    });
+  };
   const renderCoordination = async (allCompanies = false) => {
     if(ctx.identity?.role !== 'owner') return;
+    clearTimeout(boardTimer);
     const version = ++renderVersion, content = byId('tasks-content');
     content.textContent = 'Загрузка доски…';
     try {
@@ -66,18 +93,22 @@ const init = (context) => {
         if(version !== renderVersion || ctx.currentView !== 'tasks') return;
         records.push(...page.tasks);
       } while(page.tasks.length && records.length < page.pagination.total);
-      content.innerHTML = `<h2>Координация проектов</h2><p>Ответственный чат и исполнитель указываются отдельно. Отметки готовности подтверждаются основанием и датой.</p>
-        <p class="crm-muted">Обновление вручную. Доска пока не запускает чаты и не блокирует общие ресурсы.</p>
+      content.innerHTML = `<h2>Доска проектов</h2><p>Ответственный чат и исполнитель указываются отдельно. Отметки готовности подтверждаются основанием и датой.</p>
+        <p class="crm-muted">Поручение помощнику обрабатывается на сервере. Здесь видны вопросы, результаты и задачи без исполнителя. Codex и Claude не запускаются без подключённого моста.</p>
         <div class="crm-actions"><button class="plain-button" type="button" data-coord-back>К списку задач</button>
-        <label><input type="checkbox" data-coord-all ${allCompanies?'checked':''}>Все проекты</label></div>
+        <button class="plain-button" type="button" data-coord-add>Добавить задачу</button><button class="plain-button" type="button" data-coord-refresh>Обновить</button><label><input type="checkbox" data-coord-all ${allCompanies?'checked':''}>Все проекты</label></div>
         <div class="coordination-board">${records.map(item=>`<article class="crm-card" style="padding:16px;margin:16px 0;border:1px solid currentColor;border-radius:12px;overflow-wrap:anywhere">
-        <h3>${escapeHTML(item.title)}</h3><p>${escapeHTML(taskCompanyName(item.companyCode))} · ${escapeHTML(item.module || 'Модуль не указан')}</p>
+        <h3>#${item.taskId} · ${escapeHTML(item.title)}</h3>${dispatchSummary(item.dispatch)}<button class="plain-button" type="button" data-dispatch-open="${item.taskId}">Открыть задачу</button><p>${escapeHTML(taskCompanyName(item.companyCode))} · ${escapeHTML(item.module || 'Модуль не указан')}</p>
         <p>Ответственный чат: ${escapeHTML(item.ownerThreadName || item.ownerThreadId || 'Не назначен')}<br>Исполнитель: ${escapeHTML(item.executorName || item.assigneeName || 'Не назначен')}</p>
         <dl>${Object.entries(milestones).map(([key,label])=>`<dt><strong>${label}: ${milestoneStates[item.milestones[key].state]}</strong></dt><dd>${escapeHTML(item.milestones[key].evidence || 'Нет подтверждения')}${item.milestones[key].checkedAt?' · '+escapeHTML(displayDate(item.milestones[key].checkedAt)):''}</dd>`).join('')}</dl>
         <p>Результат: ${escapeHTML(item.result || 'Не указан')}<br>Что мешает: ${escapeHTML(item.blocker || 'Не указано')}<br>Следующий шаг: ${escapeHTML(item.nextAction || 'Не указан')}</p>
         <p class="crm-muted">Обновлено: ${escapeHTML(displayDate(item.updatedAt) || 'Ещё не проверено')}</p>
         <button class="plain-button" type="button" data-coord-edit="${item.taskId}">Обновить карточку</button></article>`).join('') || '<p>Задач пока нет. Добавьте задачу в общем списке.</p>'}</div>`;
       content.querySelector('[data-coord-back]').onclick = renderTaskList;
+      content.querySelector('[data-coord-add]').onclick=openTaskCreate;
+      content.querySelector('[data-coord-refresh]').onclick=()=>renderCoordination(allCompanies);
+      content.querySelectorAll('[data-dispatch-open]').forEach(button=>button.onclick=()=>{const item=records.find(x=>String(x.taskId)===button.dataset.dispatchOpen);if(item.companyCode!==ctx.selectedProjectId)chooseProject(item.companyCode);navigate(taskRoute(item.taskId));});
+      boardTimer=setTimeout(()=>{if(version===renderVersion&&ctx.currentView==='tasks'&&!document.querySelector('dialog[open]'))void renderCoordination(allCompanies);},15000);
       content.querySelector('[data-coord-all]').onchange = event=>renderCoordination(event.target.checked);
       content.querySelectorAll('[data-coord-edit]').forEach(button=>button.onclick=()=>editCoordination(records.find(item=>String(item.taskId)===button.dataset.coordEdit),allCompanies));
     } catch(error) {
@@ -356,6 +387,7 @@ const init = (context) => {
     status: form.elements.status.value
   });
   const renderTaskCard = async (id) => {
+    clearTimeout(boardTimer);
     const version = ++renderVersion;
     const scope = scopeParams();
     const content = byId("tasks-content");
@@ -369,11 +401,16 @@ const init = (context) => {
         <p>${escapeHTML(TASK_SOURCES[task.source] || task.source)} · ${escapeHTML(task.sourceAuthor || "—")}</p>
         <p>${escapeHTML(task.sourceRef || "—")}</p><p>${escapeHTML(task.createdAt || "—")}</p></section>` : "";
       content.innerHTML = `<a class="crm-card-back" href="#${escapeHTML(taskRoute())}" data-task-back>← К списку</a>
-        <header class="crm-card-header"><h2>${escapeHTML(task.title)}</h2></header>${source}${taskFormMarkup(task)}`;
+        <header class="crm-card-header"><h2>${escapeHTML(task.title)}</h2></header>${source}${taskFormMarkup(task)}${ctx.identity?.role==='owner'?'<section data-task-dispatch></section>':''}`;
       content.querySelector("[data-task-back]").addEventListener("click", (event) => {
         event.preventDefault();
         navigate(taskRoute());
       });
+      if(ctx.identity?.role==='owner'){
+        const dispatch=await crmQuery(`/coordination/dispatch/${task.id}`,{companyCode:task.companyCode});
+        if(version!==renderVersion||ctx.currentView!=='tasks')return;
+        renderDispatchControls(content.querySelector('[data-task-dispatch]'),task,dispatch,version);
+      }
       const form = content.querySelector("[data-task-form]");
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -418,7 +455,9 @@ const init = (context) => {
     const id = decodeURIComponent(route.split("/")[1] || "");
     const canonical = `#${taskRoute(id)}`;
     if (location.hash !== canonical) history.replaceState(null, "", canonical);
-    if (id) renderTaskCard(id);
+    if(id==='board')renderCoordination(true);
+    else if (id) renderTaskCard(id);
+    else if(ctx.identity?.role==='owner')renderCoordination(true);
     else renderTaskList();
   };
   const openTaskCreate = async () => {
@@ -431,11 +470,14 @@ const init = (context) => {
     form.querySelector("[data-task-role]").innerHTML = taskOptions(TASK_ROLES, "synapse");
     form.querySelector("[data-task-priority]").innerHTML = taskOptions(TASK_PRIORITIES, "normal");
     form.querySelector("[data-task-status]").innerHTML = taskOptions(TASK_STATUSES, "planned");
+    form.dataset.sourceRef = `owner-board:${crypto.randomUUID()}`;
     form.elements.title.value = "";
     form.elements.description.value = "";
     form.elements.assigneeName.value = "";
     form.elements.dueDate.value = "";
     form.querySelector("[role=alert]").hidden = true;
+    form.querySelector('[data-task-auto-label]')?.remove();
+    if(ctx.identity?.role==='owner')form.insertAdjacentHTML('beforeend','<label data-task-auto-label><input type="checkbox" name="dispatchToAssistant" checked>Передать помощнику: разобрать, задать вопросы и подготовить результат</label>');
     dialog.showModal();
   };
   byId("task-create-dialog").querySelector("[data-task-create-close]").addEventListener("click", () => {
@@ -445,14 +487,20 @@ const init = (context) => {
     event.preventDefault();
     const form = event.currentTarget;
     const error = form.querySelector("[role=alert]");
+    if(form.dataset.saving)return;form.dataset.saving="1";
+    const submit=form.querySelector("[type=submit]");if(submit)submit.disabled=true;
     try {
       const payload = taskPayload(form);
       const created = await crmQuery("/tasks", taskCreateScope(payload.companyCode), csrfOptions("POST", {
         ...payload,
         source: "manual",
-        sourceRef: "",
+        sourceRef: form.dataset.sourceRef || "",
         sourceAuthor: ""
       }));
+      if(created?.id&&form.elements.dispatchToAssistant?.checked){
+        try{await crmQuery(`/coordination/dispatch/${created.id}/enqueue`,{companyCode:payload.companyCode},csrfOptions('POST',{revision:0}));}
+        catch{ /* Задача сохранена. Карточка покажет ручной режим и позволит передать без дубля. */ }
+      }
       byId("task-create-dialog").close();
       const projectChanged = payload.companyCode && payload.companyCode !== ctx.selectedProjectId;
       if (projectChanged) chooseProject(payload.companyCode);
@@ -462,7 +510,7 @@ const init = (context) => {
     } catch (failure) {
       error.textContent = failure.message;
       error.hidden = false;
-    }
+    } finally {delete form.dataset.saving;if(submit)submit.disabled=false;}
   });
   Object.assign(api, { renderTasksRoute, loadTasksSummary });
 };

@@ -171,6 +171,7 @@
   const aiSummary = state => {
     const ai = aiInfo(state);
     const reserve = fallbackText(ai);
+    if (state.data?.room?.apiAssistant) return `Хью отвечает через недорогие API; сложные запросы передаёт в задачи владельцу.${reserve}${ai.queued ? ` Ожидают ответа: ${ai.queued}.` : ""}`;
     if (!ai.connected) {
       const reason = !ai.configured ? "Автоматические ответы Хью пока не подключены."
         : ai.runtimeState === "offline" ? "Компьютер Хью сейчас не на связи: вопросы к нему ждут его возвращения."

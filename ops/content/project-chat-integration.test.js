@@ -80,6 +80,7 @@ test('живой content обслуживает комнату проекта, �
   assert.equal((await internal('/content/internal/project-chat/unknown')).status, 404);
 
   const owner = await login('owner', ownerSecret);
+  assert.equal((await req('/content/crm/internal/task-dispatch/claim', owner, 'POST', {})).status,403);
   const snapshot = await req(`/content/project-chat/${ROOM}`, owner);
   assert.equal(snapshot.status, 200);
   const view = await snapshot.json();
