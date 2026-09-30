@@ -9,7 +9,7 @@ const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 const { createAuthStore } = require('./auth-store');
 const { createProjectChat } = require('./project-chat');
-const { readProviders, createHughFallback, ACK_TEXT } = require('./hugh-fallback');
+const { readProviders, createHughFallback, ACK_TEXT, LEGACY_ACK_TEXT } = require('./hugh-fallback');
 const { createHughProviders } = require('./hugh-providers');
 
 const HASH = `scrypt$16384$8$1$${Buffer.alloc(16, 7).toString('base64url')}$${Buffer.alloc(32, 9).toString('base64url')}`;
@@ -38,9 +38,10 @@ function setup({ runtime = null, reply = null, providers = {}, env = ENV, localC
     return { ok: (v.status || 200) < 400, status: v.status || 200, headers: { get: (h) => (v.headers || {})[h] ?? null },
       json: async () => v.payload ?? { choices: [{ message: { content: v.text || '' } }], model: v.model || name + '-model' } };
   };
-  const chat = createProjectChat({ db, authStore, assetsDir: dir, runnerUrl: 'http://hugh-runtime:8080', chatApiKey: 'secret-key',
+  const rebuild = () => createProjectChat({ db, authStore, assetsDir: dir, runnerUrl: 'http://hugh-runtime:8080', chatApiKey: 'secret-key',
     requireSession, requireCsrf, sendJson, readBody, fetchImpl, statusTtl: 0, fallback: { env },
     localWorker: { keySha256: 'a'.repeat(64), companies: localCompanies } });
+  const chat = rebuild();
   const owner = { user: authStore.getById(OWNER_ID), csrf: 'csrf' };
   const say = async (text, id, code = 'taisabai') => {
     const response = { statusCode: 0, payload: null, writeHead() {}, end() {} };
@@ -49,8 +50,124 @@ function setup({ runtime = null, reply = null, providers = {}, env = ENV, localC
   };
   const jobs = () => db.prepare('SELECT * FROM project_chat_ai_jobs ORDER BY id').all();
   const replies = (code = 'taisabai') => db.prepare(`SELECT text FROM project_chat_messages WHERE company_code=? AND author_type='assistant' ORDER BY id`).all(code).map((r) => r.text);
-  return { db, chat, calls, say, jobs, replies, owner };
+  return { db, chat, calls, say, jobs, replies, owner, rebuild };
 }
+
+const expireAckCooldown = (s) => {
+  s.db.prepare("UPDATE project_chat_provider_state SET last_success_at='2000-01-01T00:00:00Z' WHERE provider LIKE 'ack:%'").run();
+  s.db.prepare("UPDATE project_chat_ai_jobs SET next_attempt_at='2000-01-01T00:00:00Z'").run();
+};
+async function reviewedReply(s, { code = 'taisabai', status = 'sent', receipts = '["123"]' } = {}) {
+  s.db.prepare('UPDATE project_chat_rooms SET telegram_chat_id=? WHERE company_code=?').run('-10012345', code);
+  const response = { statusCode: 0, payload: null, writeHead() {}, end() {} };
+  await s.chat.handle({ method: 'POST', headers: {}, session: s.owner,
+    body: { text: 'Проверенный ответ.', clientMessageId: 'reviewed-audit-' + code, expectedChatId: '-10012345' } },
+  response, new URL(`http://x/content/project-chat/${code}/reviewed-messages`));
+  assert.equal(response.statusCode, 201, JSON.stringify(response.payload));
+  s.db.prepare('UPDATE project_chat_outbox SET status=?,external_ids=? WHERE message_id=?')
+    .run(status, receipts, response.payload.message.id);
+  return response.payload.message.id;
+}
+
+test('уведомление не дублирует подпись доставки и не отрицает работу других исполнителей', () => {
+  assert.doesNotMatch(ACK_TEXT, /Хью|бизнес-ассистент|никаких действий|Отвечу, когда/);
+  assert.match(ACK_TEXT, /повторно отправлять.*не нужно/);
+});
+
+test('старое обращение не получает второй ack после cooldown и перезапуска; новое получает', async () => {
+  const s = setup();
+  await s.say('Хью, первый вопрос', 'ack-first');
+  await s.chat.processAIJobs();
+  expireAckCooldown(s);
+  await s.rebuild().processAIJobs();
+  assert.equal(s.replies().filter(t => t === ACK_TEXT).length, 1);
+  await s.say('Хью, новый вопрос', 'ack-second');
+  await s.chat.processAIJobs();
+  assert.equal(s.replies().filter(t => t === ACK_TEXT).length, 2);
+  assert.ok(s.jobs().every(j => j.reply_message_id === null && j.status === 'blocked'));
+});
+
+test('доставленный проверенный ответ подавляет ack старому вопросу, но не новому и не закрывает задания', async () => {
+  const s = setup();
+  await s.say('Хью, первый вопрос', 'review-first');
+  await reviewedReply(s);
+  await s.chat.processAIJobs();
+  assert.deepEqual(s.replies(), ['Проверенный ответ.']);
+  assert.equal(s.jobs()[0].reply_message_id, null);
+  assert.equal(s.jobs()[0].status, 'blocked');
+  assert.equal(s.db.prepare('SELECT count(*) n FROM project_chat_tasks').get().n, 1);
+  await s.say('Хью, ещё вопрос', 'review-next');
+  await s.chat.processAIJobs();
+  assert.deepEqual(s.replies(), ['Проверенный ответ.', ACK_TEXT]);
+});
+
+for (const variant of [{status:'pending'}, {status:'error'}, {status:'uncertain'}, {status:'sent',receipts:'[]'}]) {
+  test(`неподтверждённый ручной ответ не подавляет ack: ${JSON.stringify(variant)}`, async () => {
+    const s = setup();
+    await s.say('Хью, вопрос', 'unconfirmed');
+    const id = await reviewedReply(s, variant);
+    await s.chat.processAIJobs();
+    assert.equal(s.replies().filter(t => t === ACK_TEXT).length, 1);
+    assert.equal(s.db.prepare('SELECT status FROM project_chat_outbox WHERE message_id=?').get(id).status, variant.status);
+  });
+}
+
+test('ответ другой компании, старой привязки и обычный ответ ИИ не подавляют ack', async () => {
+  for (const variant of ['company', 'binding', 'automatic']) {
+    const s = setup();
+    await s.say('Хью, вопрос', 'isolated');
+    if (variant === 'company') {
+      await s.say('Хью, другой проект', 'other', 'alvi');
+      await reviewedReply(s, {code:'alvi'});
+    } else {
+      const id = await reviewedReply(s);
+      if (variant === 'binding') s.db.prepare('UPDATE project_chat_rooms SET telegram_chat_id=? WHERE company_code=?').run('-10098765','taisabai');
+      else s.db.prepare('DELETE FROM project_chat_reviewed_messages WHERE message_id=?').run(id);
+    }
+    await s.chat.processAIJobs();
+    assert.equal(s.replies().filter(t => t === ACK_TEXT).length, 1, variant);
+  }
+});
+
+test('неопределённая доставка ack не создаёт другое уведомление после cooldown', async () => {
+  const s = setup();
+  await s.say('Хью, вопрос', 'uncertain-ack');
+  s.db.prepare('UPDATE project_chat_rooms SET telegram_chat_id=? WHERE company_code=?').run('-10012345','taisabai');
+  await s.chat.processAIJobs();
+  const ack = s.db.prepare('SELECT id FROM project_chat_messages WHERE text=?').get(ACK_TEXT);
+  s.db.prepare("UPDATE project_chat_outbox SET status='uncertain' WHERE message_id=?").run(ack.id);
+  expireAckCooldown(s);
+  await s.rebuild().processAIJobs();
+  assert.equal(s.replies().filter(t => t === ACK_TEXT).length, 1);
+  assert.equal(s.db.prepare('SELECT status FROM project_chat_outbox WHERE message_id=?').get(ack.id).status,'uncertain');
+});
+
+test('обновление старой БД узнаёт прежний системный ack и не повторяет его', async () => {
+  const s = setup();
+  await s.say('Хью, старый вопрос', 'legacy-ack');
+  await s.chat.processAIJobs();
+  s.db.prepare('UPDATE project_chat_messages SET text=? WHERE text=?').run(LEGACY_ACK_TEXT, ACK_TEXT);
+  s.db.exec('DROP TABLE project_chat_acknowledged_jobs');
+  expireAckCooldown(s);
+  await s.rebuild().processAIJobs();
+  assert.deepEqual(s.replies(), [LEGACY_ACK_TEXT]);
+  assert.equal(s.db.prepare('SELECT count(*) n FROM project_chat_acknowledged_jobs').get().n, 1);
+});
+
+test('ошибка записи связи откатывает ack, outbox и cooldown вместе', async () => {
+  const s = setup();
+  await s.say('Хью, вопрос', 'rollback-ack');
+  s.db.prepare('UPDATE project_chat_rooms SET telegram_chat_id=? WHERE company_code=?').run('-10012345','taisabai');
+  s.db.exec("CREATE TRIGGER reject_ack BEFORE INSERT ON project_chat_acknowledged_jobs BEGIN SELECT RAISE(ABORT, 'test ack failure'); END");
+  await assert.rejects(s.chat.processAIJobs(), /test ack failure/);
+  assert.deepEqual(s.replies(), []);
+  assert.equal(s.db.prepare('SELECT count(*) n FROM project_chat_outbox').get().n, 0);
+  assert.equal(s.chat.fallback.ackDue('taisabai'), true);
+  s.db.exec('DROP TRIGGER reject_ack');
+  expireAckCooldown(s);
+  await s.chat.processAIJobs();
+  assert.deepEqual(s.replies(), [ACK_TEXT]);
+});
 
 test('провайдер считается настроенным только с адресом, ключом и моделью; ключи не попадают в статус', () => {
   const { providers, issues } = readProviders({ ...ENV, HUGH_FALLBACK_PROVIDERS: 'openrouter,deepseek,broken,Bad Name', HUGH_FALLBACK_BROKEN_URL: 'https://x' });
@@ -130,7 +247,7 @@ test('все пути недоступны: вопрос ждёт без сго�
   assert.ok(jobs.every((j) => j.status === 'blocked' && j.attempts === 0 && j.reply_message_id === null), JSON.stringify(jobs));
   assert.deepEqual(s.replies(), [ACK_TEXT], 'ровно одно подтверждение на компанию');
   assert.doesNotMatch(ACK_TEXT, /выполнено|готово|сделано/i);
-  assert.match(ACK_TEXT, /ИИ/);
+  assert.match(ACK_TEXT, /Автоматический ответ задерживается/);
   // подтверждение ушло в очередь Telegram как обычное сообщение ассистента только при привязке — привязки нет
   assert.equal(s.db.prepare('SELECT count(*) n FROM project_chat_outbox').get().n, 0);
   // после восстановления провайдера вопросы отвечаются, второе подтверждение не шлётся

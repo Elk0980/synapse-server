@@ -9,7 +9,10 @@ const { createHughBudget, readPrice } = require('./hugh-budget');
 const DEFAULT_TIMEOUT_MS = 60000;
 const RATE_LIMIT_DEFAULT_S = 300, SERVER_ERROR_BASE_S = 60, SERVER_ERROR_MAX_S = 900, AUTH_ERROR_S = 3600, CLIENT_ERROR_S = 300;
 const ACK_INTERVAL_MS = 30 * 60 * 1000;
-const ACK_TEXT = 'Хью, бизнес-ассистент Синапс Бизнес (ИИ): сообщение получено и поставлено в очередь. ' +
+// Подпись ИИ добавляет Telegram-мост. Не отрицаем работу человека и не обещаем срок восстановления.
+const ACK_TEXT = 'Автоматический ответ задерживается. Сообщение сохранено — повторно отправлять его не нужно.';
+// Только для распознавания уже созданных уведомлений при обновлении БД; никогда не отправляется.
+const LEGACY_ACK_TEXT = 'Хью, бизнес-ассистент Синапс Бизнес (ИИ): сообщение получено и поставлено в очередь. ' +
   'Сейчас ответить не могу — сервис ИИ временно недоступен. Отвечу, когда он восстановится; ' +
   'никаких действий по вашему сообщению пока не выполнялось.';
 const NAME_RE = /^[a-z][a-z0-9_-]{0,30}$/i;
@@ -225,4 +228,4 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
   return { get providers() { return currentProviders().map((p) => ({ name: p.name, model: p.model })); },
     issues, available, reply, status, ackDue, markAck, leaseMs, budget, ACK_TEXT };
 }
-module.exports = { createHughFallback, readProviders, ACK_TEXT };
+module.exports = { createHughFallback, readProviders, ACK_TEXT, LEGACY_ACK_TEXT };

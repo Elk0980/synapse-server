@@ -93,8 +93,8 @@ test('отказ основной и обеих резервных моделе�
   const list = messages(f.db, PILOT);
   const ack = list.find((row) => row.author_type === 'assistant');
   assert.ok(ack, `подтверждение приёма не найдено: ${JSON.stringify(list.map((row) => [row.author_type, row.text]))}`);
-  assert.match(ack.text, /сообщение получено и поставлено в очередь/);
-  assert.match(ack.text, /Сейчас ответить не могу/);
+  assert.match(ack.text, /Сообщение сохранено/);
+  assert.match(ack.text, /Автоматический ответ задерживается/);
   assert.doesNotMatch(ack.text, /Ответ провайдера/);
 
   const open = tasks(f.db, PILOT);
