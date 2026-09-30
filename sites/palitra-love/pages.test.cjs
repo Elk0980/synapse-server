@@ -10,6 +10,8 @@ const path = require('node:path');
 const ROOT = __dirname;
 const VERSION = '20260930catalog2';
 const VISIBILITY_VERSION = '20260930plants1';
+// Список скрытых товаров меняется отдельно от стилей: своя версия подключения config.js.
+const CONFIG_VERSION = '20260930mixed1';
 const CATALOG_STYLE_VERSION = '20260930compact1';
 // Корзина и заявка выпускаются отдельно (ссылка «Продолжить в Telegram»): своя версия подключения order.js.
 const PRICE_VERSION = '20260930prices1';
@@ -41,7 +43,8 @@ test('каждая страница подключает одну версию �
       assert.match(html, new RegExp(`${asset.replace(/[./]/g, '\\$&')}\\?v=${PRICE_VERSION}"`), `${name}: ${asset}`);
     }
     for (const asset of ['/assets/styles.css', '/config.js']) {
-      const version = asset === '/assets/styles.css' && name.startsWith('catalog/') ? CATALOG_STYLE_VERSION : VISIBILITY_VERSION;
+      const version = asset === '/config.js' ? CONFIG_VERSION
+        : name.startsWith('catalog/') ? CATALOG_STYLE_VERSION : VISIBILITY_VERSION;
       assert.match(html, new RegExp(`${asset.replace(/[./]/g, '\\$&')}\\?v=${version}"`), `${name}: ${asset}`);
     }
     assert.match(html, new RegExp(`/assets/order\\.js\\?v=${ORDER_VERSION}"`), `${name}: /assets/order.js`);
@@ -52,7 +55,7 @@ test('каждая страница подключает одну версию �
     assert.ok(html.indexOf('/assets/price-format.js?v=') < html.indexOf('/price-render.js?v='), `${name}: форматтер до карточек`);
     if (html.includes('/assets/catalog-live.js?v=')) assert.ok(html.indexOf('/price-render.js?v=') < html.indexOf('/assets/catalog-live.js?v='), `${name}: каталог после рендера`);
     assert.ok(html.indexOf('/price-render.js?v=') < html.indexOf('/assets/order.js?v='), `${name}: order.js после price-render.js`);
-    for (const stale of ['styles.css?v=20260907type1', 'app.js?v=20260907brand1', 'price-render.js?v=20260908live1', '?v=20260917catalog1', '?v=20260917align1', '?v=20260917order1', '?v=20260917order2', '?v=20260918channel1', '?v=20260918channel2', '?v=20260924darya1', 'config.js?v=20260904a', 'order.js?v=20260929rel1']) {
+    for (const stale of ['styles.css?v=20260907type1', 'app.js?v=20260907brand1', 'price-render.js?v=20260908live1', '?v=20260917catalog1', '?v=20260917align1', '?v=20260917order1', '?v=20260917order2', '?v=20260918channel1', '?v=20260918channel2', '?v=20260924darya1', 'config.js?v=20260904a', 'config.js?v=20260930plants1', 'order.js?v=20260929rel1']) {
       assert.ok(!html.includes(stale), `${name}: старая версия ${stale}`);
     }
   }

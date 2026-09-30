@@ -27,3 +27,21 @@ test('подтверждённые растения и безымянный бу
   assert.equal(api.publicData(price), price);
   assert.equal(JSON.stringify(price), before);
 });
+
+test('смешанный заказ import-tg-753-1 (шары + букет роз в кадре) скрыт обратимо, соседние шары остаются', () => {
+  const context = {window: {}};
+  for (const file of ['config.js', 'price-render.js']) vm.runInNewContext(fs.readFileSync(path.join(__dirname, file), 'utf8'), context);
+  const mixed = {id: 'import-tg-753-1', title: 'Шары на день рождения', price: '6 290 руб.', photo: '/api/assets/mu57htwc-import-tg-753-1.webp'};
+  const balloons = [{id: 'import-tg-674-1', title: 'Шары на День рождения девушке', price: '8 990 руб.', photo: '/api/assets/import-tg-674-1.webp'},
+    {id: 'import-tg-713-1', title: 'Индивидуальный заказ шариков на день рождения', price: '26 870 руб.', photo: '/api/assets/import-tg-713-1.webp'}];
+  const price = {categories: [{id: 'dr-zhenschine', title: 'День рождения женщине', items: [mixed, balloons[0]]},
+    {id: 'dr-muzhchine', title: 'День рождения мужчине', items: [balloons[1]]}]};
+  const before = JSON.stringify(price), api = context.window.PalitraPrice;
+  const visible = api.publicData(price).categories.flatMap(cat => cat.items.map(item => item.id));
+  assert.deepEqual(visible, balloons.map(item => item.id));
+  assert.ok(!api.renderSections(price).includes('import-tg-753-1'), 'смешанный товар не показывается');
+  assert.equal(api.publicData(price, {editor: true}), price, 'редактор видит исходный прайс');
+  context.window.PALITRA_CONFIG.FLOWERS_VISIBLE = true;
+  assert.equal(api.publicData(price), price, 'обратимо через FLOWERS_VISIBLE');
+  assert.equal(JSON.stringify(price), before, 'исходные данные и цена не меняются');
+});
