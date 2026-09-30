@@ -113,6 +113,22 @@ function createHughBudget({db, env = process.env, now = () => Date.now(), random
     CREATE INDEX IF NOT EXISTS hugh_fallback_reservations_window
     ON hugh_fallback_reservations(window_start,state)`);
   const windowMs = config.windowDays * 24 * 60 * 60 * 1000;
+  db.exec(`CREATE TABLE IF NOT EXISTS ai_cost_samples(id TEXT PRIMARY KEY,provider TEXT NOT NULL,
+    created_at INTEGER NOT NULL,micro_usd INTEGER NOT NULL,priced INTEGER NOT NULL,state TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS ai_cost_samples_time ON ai_cost_samples(created_at,provider);
+    CREATE TABLE IF NOT EXISTS ai_economy_meta(id INTEGER PRIMARY KEY,started_at INTEGER NOT NULL)`);
+  db.prepare('INSERT OR IGNORE INTO ai_economy_meta VALUES(1,?)').run(now());
+  function rate(provider = null, at = now()) {
+    const start = Math.max(db.prepare('SELECT started_at FROM ai_economy_meta WHERE id=1').get().started_at, at - 7 * 86400000);
+    const rows = db.prepare(`SELECT COUNT(*) n,COALESCE(SUM(micro_usd),0) cost,
+      COALESCE(SUM(CASE WHEN priced=0 THEN 1 ELSE 0 END),0) unpriced
+      FROM ai_cost_samples WHERE created_at>=? AND created_at<=? AND (? IS NULL OR provider=?)`).get(start,at,provider,provider);
+    const days = Math.max(0,(at-start)/86400000), enough = days>=1 && rows.n>=3 && !rows.unpriced;
+    return {since:new Date(start).toISOString(),days,requests:rows.n,unpriced:rows.unpriced,
+      usdPerDay:enough && rows.cost>0 ? rows.cost/MICRO/days : null,
+      reason:rows.unpriced?'Есть обращения без известного тарифа':!enough?'Нужно не менее суток наблюдений и трёх обращений':rows.cost===0?'Недостаточно расхода для прогноза':'',
+      basis:'local-estimate'};
+  }
   const windowStartMs = (at) => Math.floor(at / windowMs) * windowMs;
   const windowStart = (at) => new Date(windowStartMs(at)).toISOString();
   const prices = new Map();
@@ -153,6 +169,7 @@ function createHughBudget({db, env = process.env, now = () => Date.now(), random
     const limit = Number.isSafeInteger(limitMicroUsd) && limitMicroUsd > 0 ? limitMicroUsd : 0;
     const reached = limit > 0 && used.microUsd >= limit;
     return {provider: String(provider), spentUsd: used.microUsd / MICRO, requests: used.requests,
+      remainingUsd:limit>0?Math.max(0,(limit-used.microUsd)/MICRO):null,rate:rate(String(provider),at),
       limitUsd: limit > 0 ? limit / MICRO : null, stopped: reached,
       reason: reached ? `Достигнут личный лимит расходов провайдера ${provider}` : ''};
   }
@@ -166,6 +183,8 @@ function createHughBudget({db, env = process.env, now = () => Date.now(), random
       resetAt: new Date(windowStartMs(at) + windowMs).toISOString(),
       spentUsd: used.microUsd / MICRO, limitUsd: config.limitMicroUsd / MICRO,
       requests: used.requests, maxRequests: config.maxRequests,
+      remainingUsd:config.limitMicroUsd>0?Math.max(0,(config.limitMicroUsd-used.microUsd)/MICRO):null,
+      remainingRequests:config.maxRequests>0?Math.max(0,config.maxRequests-used.requests):null,rate:rate(null,at),
       unknownRequests: used.unknownRequests, heldRequests: used.heldRequests,
       heldUsd: used.heldMicroUsd / MICRO, maxOutputTokens: config.maxOutputTokens, guarantee: GUARANTEE,
       stopped: configBlocked || byUsd || byRequests,
@@ -227,6 +246,7 @@ function createHughBudget({db, env = process.env, now = () => Date.now(), random
       const id = newId(), stamp = new Date(at).toISOString();
       db.prepare(`INSERT INTO hugh_fallback_reservations(id,window_start,provider,micro_usd,state,created_at,updated_at)
         VALUES(?,?,?,?,'held',?,?)`).run(id, windowStart(at), String(provider), estimate, stamp, stamp);
+      db.prepare("INSERT INTO ai_cost_samples VALUES(?,?,?,?,?,'held')").run(id,String(provider),at,estimate,price?1:0);
       return {allowed: true, id, provider: String(provider), estimateMicroUsd: estimate,
         estimateUsd: estimate / MICRO, maxOutputTokens: outputBound, priced: Boolean(price)};
     });
@@ -262,6 +282,7 @@ function createHughBudget({db, env = process.env, now = () => Date.now(), random
       }
       const actual = Math.ceil((promptTokens / 1000) * price.promptMicroUsdPer1k)
         + Math.ceil((completionTokens / 1000) * price.completionMicroUsdPer1k);
+      db.prepare("UPDATE ai_cost_samples SET micro_usd=?,state='settled',priced=1 WHERE id=?").run(actual,id);
       db.prepare('DELETE FROM hugh_fallback_reservations WHERE id=?').run(id);
       addSpend(row.provider, row.window_start, {requests: 1, promptTokens, completionTokens, microUsd: actual});
       return {settled: true, microUsd: actual};
@@ -283,7 +304,10 @@ function createHughBudget({db, env = process.env, now = () => Date.now(), random
   function release(id) {
     const row = reservation(id);
     if (!row || row.state !== 'held') return {released: false};
-    db.prepare("DELETE FROM hugh_fallback_reservations WHERE id=? AND state='held'").run(id);
+    transaction(() => {
+      db.prepare("DELETE FROM hugh_fallback_reservations WHERE id=? AND state='held'").run(id);
+      db.prepare('DELETE FROM ai_cost_samples WHERE id=?').run(id);
+    });
     return {released: true, microUsd: row.micro_usd};
   }
 
@@ -310,7 +334,7 @@ function createHughBudget({db, env = process.env, now = () => Date.now(), random
   }
 
   return {config, state, stopped, reserve, settle, keep, release, recover, status, priceFor, totals,
-    providerTotals, providerState, reservation};
+    providerTotals, providerState, reservation, rate};
 }
 
 module.exports = {createHughBudget, readBudget, readPrice, WINDOW_DEFAULT_DAYS,

@@ -20,6 +20,7 @@
 
 const crypto = require('node:crypto');
 const {createHughBudget} = require('./hugh-budget');
+const {createHughEconomy,forecast} = require('./hugh-economy');
 
 const NAMESPACE = 'synapse/hugh-provider/v1';
 const MIN_MASTER_KEY = 32;
@@ -119,6 +120,11 @@ function createHughProviders({db, env = process.env, now = () => Date.now()} = {
   }
 
   const row = (name) => db.prepare('SELECT * FROM hugh_provider_settings WHERE name=?').get(name) || null;
+  const economy=createHughEconomy({db,now,account:()=>{
+    const r=row('deepseek');
+    if(!available||!r?.encrypted_key||!r.enabled||!/^https:\/\/api\.deepseek\.com(?:\/v1)?$/.test(r.base_url))return null;
+    try{return {revision:r.config_revision,secret:crypt('deepseek',r.encrypted_key,true)};}catch{return null;}
+  }});
   const money = (value, name) => {
     if (value === undefined || value === null || value === '') return null;
     const parsed = Number(value);
@@ -139,6 +145,9 @@ function createHughProviders({db, env = process.env, now = () => Date.now()} = {
 
   function view(name) {
     const item = BY_NAME.get(name), saved = row(name);
+    const spend=budget.providerState(name,saved?.budget_usd_micro??null),wallet=economy.view(name,saved?.config_revision||0);
+    const live=db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='project_chat_provider_state'").get()
+      ?db.prepare('SELECT cooldown_until, last_error,last_success_at,last_model FROM project_chat_provider_state WHERE provider=?').get(name):null;
     return {name, title: item.title, console: item.console, hosts: [...item.hosts], apiStyle: API_STYLE,
       contractSupported: item.contractSupported !== false,
       unsupportedReason: item.contractSupported === false ? item.unsupportedReason : '',
@@ -162,7 +171,9 @@ function createHughProviders({db, env = process.env, now = () => Date.now()} = {
       /* Расход за текущее окно и состояние личного лимита. Владелец должен видеть
          потраченное до того, как провайдер замолчит, а не узнавать об этом из тишины
          в чате. Цифры считает бюджетный модуль по своей таблице, здесь их не пересчитываем. */
-      spend: budget.providerState(name, saved?.budget_usd_micro ?? null)};
+      spend:{...spend,daysToLimit:forecast(spend.remainingUsd,spend.rate)},wallet:{...wallet,
+        daysRemaining:wallet.status==='ok'&&!wallet.stale?forecast(wallet.balances?.find(b=>b.currency==='USD')?.total,spend.rate):null},
+      health:live?{cooling:Date.parse(live.cooldown_until)>now(),retryAt:live.cooldown_until,lastError:live.last_error,lastSuccessAt:live.last_success_at,actualModel:live.last_model}:null};
   }
 
   const status = () => {
@@ -394,7 +405,9 @@ function createHughProviders({db, env = process.env, now = () => Date.now()} = {
 
   const runtimeProviders = () => runtimeReport().ready;
 
-  return {status, view, save, check, runtimeProviders, runtimeReport, available, lockedReason, catalog: CATALOG};
+  const monitorEconomy=async(runtime)=>{await economy.refresh();economy.warnings(status(),runtime);};
+  return {status, view, save, check, runtimeProviders, runtimeReport, available, lockedReason, catalog: CATALOG,
+    refreshBalance:()=>economy.refresh(),monitorEconomy};
 }
 
 module.exports = {createHughProviders, HUGH_PROVIDER_CATALOG: CATALOG, HUGH_PROVIDER_API_STYLE: API_STYLE,
