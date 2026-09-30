@@ -2627,7 +2627,10 @@ async function route(request, response) {
       if (action==='approve' || action==='reject') {
         if (request.method!=='POST') fail(405,'Метод не поддерживается');
         if (identity.role!=='owner' && !identity.permissions?.has('autoposting.approve')) fail(403,'Нет права согласовывать публикации',{code:'FORBIDDEN'});
-        result=action==='approve'?autoposting.approve(id,code,await readJson(request),identity):autoposting.reject(id,code,await readJson(request),identity);
+        const body=await readJson(request);
+        if(action==='reject')result=autoposting.reject(id,code,body,identity);
+        else if(body.schedule===true)result=await autoposting.approveAndSchedule(id,code,body,identity);
+        else result=autoposting.approve(id,code,body,identity);
         return send(response,status,result,{...cors,'cache-control':'no-store'});
       }
       // Подтверждение внешней публикации — свидетельство владельца, а не отправка: провайдер не вызывается.

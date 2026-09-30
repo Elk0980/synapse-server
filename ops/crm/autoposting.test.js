@@ -6,7 +6,7 @@ const {createAutoposting,LEASE_MS}=require('./autoposting');
 function fixture(t){
   const db=new DatabaseSync(':memory:');t.after(()=>db.close());
   db.exec(`PRAGMA foreign_keys=ON;CREATE TABLE companies(id INTEGER PRIMARY KEY,code TEXT UNIQUE COLLATE NOCASE,name TEXT,city TEXT,timezone TEXT,phone TEXT,email TEXT,website_url TEXT,socials TEXT,is_deleted INTEGER DEFAULT 0,updated_at TEXT);
-    INSERT INTO companies(id,code,name,timezone,socials) VALUES(1,'alvi','ALVI','Asia/Irkutsk','[]'),(2,'avokado','Авокадо','UTC','[]');`);
+    INSERT INTO companies(id,code,name,timezone,socials) VALUES(1,'alvi','ALVI','Asia/Irkutsk','[]'),(2,'avokado','Авокадо','UTC','[]'),(3,'palitra-love','Palitra','Europe/Moscow','[]');`);
   let time=Date.parse('2026-09-15T00:00:00Z'),send=async()=>({externalId:'qa-1',url:'https://example.test/post'});
   const calls=[],channels=[{id:'telegram',enabled:true,connected:true,revision:1},{id:'vk',enabled:true,connected:true,revision:1}];
   const information=createCompanyInformation(db,{now:()=>time});
@@ -16,6 +16,120 @@ function fixture(t){
   const schedule=p=>api.schedule(p.id,p.companyCode,{revision:p.revision});
   return {db,information,api,options,transport,channels,calls,draft,schedule,setSend:value=>send=value,advance:ms=>time+=ms};
 }
+const palitraDraft=(f,extra={})=>f.api.create('palitra-love',{title:'Материал',text:'Проверенный текст',mediaUrls:['https://example.test/photo.webp'],platformIds:['telegram'],scheduledAt:'2026-09-15T00:01:00Z',timezone:'Europe/Moscow',profileRevision:f.information.get('palitra-love').revision,...extra},7);
+const approveSchedule=(f,p,body={})=>f.api.approveAndSchedule(p.id,p.companyCode,{revision:p.revision,approved:true,schedule:true,...body},{userId:7,userName:'Согласующий'});
+
+test('Palitra: обычная карточка без dayKey/captions требует одобрения; политика других компаний прежняя',async t=>{
+  const f=fixture(t),p=palitraDraft(f);
+  assert.equal(p.dayKey,'');assert.deepEqual(p.captions,{});assert.equal(p.approvalRequired,true);assert.equal(p.approveAndScheduleAvailable,true);
+  await assert.rejects(f.schedule(p),e=>e.details.code==='APPROVAL_REQUIRED');
+  const other=f.draft();assert.equal(other.approvalRequired,false);assert.equal(other.approveAndScheduleAvailable,false);
+  await assert.rejects(approveSchedule(f,other),e=>e.details.code==='APPROVAL_SCHEDULE_DISABLED');
+  assert.equal((await f.schedule(other)).status,'scheduled');
+});
+
+test('Palitra: явное одобрение и очередь атомарны, используют сохранённые каналы/время и не публикуют сразу',async t=>{
+  const f=fixture(t),p=palitraDraft(f,{platformIds:['telegram','vk']});
+  const result=await approveSchedule(f,p);
+  assert.equal(result.status,'scheduled');assert.equal(result.approval.approved,true);
+  assert.equal(result.scheduledAt,p.scheduledAt);assert.equal(result.timezone,p.timezone);
+  assert.deepEqual(result.deliveries.map(d=>d.channelId),['telegram','vk']);assert.equal(f.calls.length,0);
+  assert.equal(result.history.filter(h=>h.action==='approved').length,1);assert.match(result.history.find(h=>h.action==='approved').comment,/поставлено в план/);
+  await assert.rejects(approveSchedule(f,p),e=>e.details.code==='REVISION_CONFLICT');
+  await assert.rejects(approveSchedule(f,result),e=>e.details.code==='POST_STATE');
+  assert.equal(f.api.get(p.id,p.companyCode).history.length,result.history.length);
+  f.advance(60000);await f.api.drain();await f.api.drain();assert.equal(f.calls.length,2);
+});
+
+test('Palitra: ошибки даты, каналов, готовности и подмена параметров не оставляют частичного одобрения',async t=>{
+  const cases=[{extra:{scheduledAt:null}},{extra:{scheduledAt:'2026-09-14T00:00:00Z'}},{extra:{platformIds:[]}},
+    {disconnect:true},{extra:{mediaUrls:[],platformIds:['tiktok']}},{body:{platformIds:['vk']}},{body:{scheduledAt:'2026-10-01T00:00:00Z'}},{body:{approved:false}}];
+  for(const scenario of cases){const f=fixture(t),p=palitraDraft(f,scenario.extra);if(scenario.disconnect)f.channels[0].connected=false;
+    await assert.rejects(approveSchedule(f,p,scenario.body));
+    const saved=f.api.get(p.id,p.companyCode);assert.equal(saved.revision,p.revision);assert.equal(saved.approval.approved,false);
+    assert.equal(saved.status,'draft');assert.deepEqual(saved.history,p.history);assert.deepEqual(saved.deliveries,[]);assert.equal(f.calls.length,0);
+  }
+});
+
+test('Palitra: конкурентная правка или отзыв во время чтения подключений побеждают старое решение',async t=>{
+  for(const action of ['edit','revoke']){const f=fixture(t);let p=palitraDraft(f);
+    if(action==='revoke')p=f.api.approve(p.id,p.companyCode,{revision:p.revision,approved:true});
+    let release;const waiting=new Promise(resolve=>release=resolve);
+    f.transport.getSettings=async()=>{await waiting;return {channels:structuredClone(f.channels)};};
+    const pending=approveSchedule(f,p);const rejected=assert.rejects(pending,e=>e.details.code==='REVISION_CONFLICT');
+    const changed=action==='edit'?f.api.update(p.id,p.companyCode,{revision:p.revision,text:'Новая версия'}):f.api.approve(p.id,p.companyCode,{revision:p.revision,approved:false});
+    release();await rejected;
+    const saved=f.api.get(p.id,p.companyCode);assert.equal(saved.revision,changed.revision);assert.equal(saved.approval.approved,false);assert.deepEqual(saved.deliveries,[]);
+  }
+});
+
+test('Palitra: правка, отзыв и изменение подключения после постановки останавливают доставку',async t=>{
+  for(const action of ['edit','revoke','channel']){const f=fixture(t),p=await approveSchedule(f,palitraDraft(f));
+    if(action==='edit')f.api.update(p.id,p.companyCode,{revision:p.revision,text:'Изменено'});
+    if(action==='revoke')f.api.approve(p.id,p.companyCode,{revision:p.revision,approved:false});
+    if(action==='channel')f.channels[0].revision++;
+    f.advance(60000);await f.api.drain();assert.equal(f.calls.length,0);assert.notEqual(f.api.get(p.id,p.companyCode).status,'scheduled');
+  }
+});
+
+test('Palitra: старая очередь без согласования не обходит новый барьер; простой approve не ставит в план',async t=>{
+  const f=fixture(t),p=palitraDraft(f);
+  f.db.prepare("UPDATE autoposting_posts SET status='scheduled' WHERE id=?").run(p.id);
+  f.db.prepare("INSERT INTO autoposting_deliveries(post_id,channel_id,channel_revision) VALUES(?,'telegram',1)").run(p.id);
+  f.advance(60000);await f.api.drain();assert.equal(f.calls.length,0);
+  const stopped=f.api.get(p.id,p.companyCode);assert.equal(stopped.lastErrorCode,'APPROVAL_REVOKED');assert.equal(stopped.status,'needs_review');
+  const plain=f.api.approve(stopped.id,stopped.companyCode,{revision:stopped.revision,approved:true});
+  assert.equal(plain.approval.approved,true);assert.equal(plain.status,'needs_review');assert.equal(f.calls.length,0);
+});
+
+test('Palitra: частичное согласование обычной карточки и новый канал требуют раздельных решений',async t=>{
+  const f=fixture(t),p=palitraDraft(f,{platformIds:['telegram','vk']});
+  const approved=f.api.approve(p.id,p.companyCode,{revision:p.revision,approved:true,platformIds:['telegram']});
+  await assert.rejects(f.schedule(approved),e=>e.details.code==='APPROVAL_REQUIRED');
+  const scheduled=await f.api.schedule(approved.id,approved.companyCode,{revision:approved.revision,platformIds:['telegram']});
+  assert.deepEqual(scheduled.deliveries.map(d=>d.channelId),['telegram']);
+  const edited=f.api.update(scheduled.id,scheduled.companyCode,{revision:scheduled.revision,platformIds:['telegram','vk','instagram']});
+  await assert.rejects(f.schedule(edited),e=>e.details.code==='APPROVAL_REQUIRED');
+});
+
+test('Palitra: текстовый Telegram проходит согласование и очередь только с подключением, фото не требуется',async t=>{
+  const f=fixture(t),p=palitraDraft(f,{mediaUrls:[]});assert.equal(p.readiness.ready,true);assert.equal(p.readiness.textOnly,true);
+  f.channels[0].connected=false;await assert.rejects(approveSchedule(f,p),e=>e.details.code==='CHANNEL_NOT_CONNECTED');
+  assert.equal(f.api.get(p.id,p.companyCode).approval.approved,false);
+  f.channels[0].connected=true;const saved=await approveSchedule(f,p);assert.equal(saved.status,'scheduled');
+  f.advance(60000);await f.api.drain();assert.equal(f.calls.length,1);assert.deepEqual(f.calls[0].post.mediaUrls,[]);assert.equal(f.calls[0].post.text,p.text);
+});
+
+test('Palitra: текст не заменяет TikTok, Instagram, Shorts, Stories или ожидаемый файл; другие компании прежние',async t=>{
+  for(const extra of [{platformIds:['tiktok']},{platformIds:['instagram']},{platformIds:['youtube_shorts']},{format:'story'},{format:'reel'}]){
+    const f=fixture(t),p=palitraDraft(f,{mediaUrls:[],...extra});assert.equal(p.readiness.ready,false);
+    await assert.rejects(approveSchedule(f,p),e=>e.details.code==='NOT_READY');assert.equal(f.calls.length,0);
+  }
+  const f=fixture(t),p=palitraDraft(f,{mediaUrls:[]});
+  f.db.prepare("UPDATE autoposting_posts SET expected_media_file='expected.mp4' WHERE id=?").run(p.id);
+  assert.equal(f.api.get(p.id,p.companyCode).readiness.ready,false);
+  const other=f.draft();assert.equal(other.readiness.ready,false);assert.equal((await f.schedule(other)).status,'scheduled');
+});
+
+test('Palitra: текстовый пост не обходит неподтверждённую возможность провайдера и лимит текста',async t=>{
+  for(const problem of ['provider','limit']){
+    const f=fixture(t),p=palitraDraft(f,{mediaUrls:[],...(problem==='limit'?{text:'a'.repeat(4097)}:{})});
+    if(problem==='provider')f.channels[0].provider='onlypult';
+    await assert.rejects(approveSchedule(f,p),e=>e.details.code===(problem==='provider'?'NOT_READY':'CONTENT_LIMIT'));
+    assert.equal(f.api.get(p.id,p.companyCode).approval.approved,false);assert.equal(f.calls.length,0);
+  }
+});
+
+test('Palitra: новая версия компании не оставляет одобрение, а прежнее одобрение не теряется при ошибке канала',async t=>{
+  const f=fixture(t),p=palitraDraft(f);
+  f.db.prepare("UPDATE companies SET phone='changed' WHERE code='palitra-love'").run();
+  await assert.rejects(approveSchedule(f,p),e=>['REVISION_CONFLICT','PROFILE_CHANGED'].includes(e.details.code));
+  const stale=f.api.get(p.id,p.companyCode);assert.equal(stale.approval.approved,false);assert.deepEqual(stale.deliveries,[]);
+  const revised=f.api.update(p.id,p.companyCode,{revision:stale.revision,profileRevision:f.information.get(p.companyCode).revision});
+  const approved=f.api.approve(revised.id,revised.companyCode,{revision:revised.revision,approved:true});
+  f.channels[0].connected=false;await assert.rejects(approveSchedule(f,approved),e=>e.details.code==='CHANNEL_NOT_CONNECTED');
+  const unchanged=f.api.get(p.id,p.companyCode);assert.equal(unchanged.approval.approved,true);assert.equal(unchanged.revision,approved.revision);assert.deepEqual(unchanged.history,approved.history);assert.deepEqual(unchanged.deliveries,[]);
+});
 test('drafts never publish; scheduled posts survive recreation, respect UTC and publish once per selected channel',async t=>{
   const f=fixture(t),p=f.draft(['telegram','vk']);await f.api.drain();assert.equal(f.calls.length,0);
   const scheduled=await f.schedule(p);assert.equal(scheduled.status,'scheduled');await f.api.drain();assert.equal(f.calls.length,0);

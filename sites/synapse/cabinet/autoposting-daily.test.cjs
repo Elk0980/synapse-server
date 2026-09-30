@@ -3,11 +3,11 @@ const {JSDOM}=require('jsdom');
 const scripts=['company-information.js','autoposting.js'].map(file=>fs.readFileSync(require.resolve('./'+file),'utf8'));
 const clone=value=>JSON.parse(JSON.stringify(value));
 const row=(id,extra={})=>({id,companyCode:'alpha',revision:4,contentRevision:3,status:'draft',title:'Материал '+id,text:'Проверенный текст',mediaUrls:['https://example.test/material.webp'],platformIds:['telegram'],scheduledAt:'2026-09-24T23:00:00Z',timezone:'Asia/Irkutsk',profileRevision:2,captions:{telegram:'Подпись'},deliveries:[],readiness:{ready:true,issues:[]},approval:{approved:false,stale:false},...extra});
-async function fixture({entries=[row(1)],role='owner',permissions=[],override,listIds,coverage}={}){
+async function fixture({entries=[row(1)],role='owner',permissions=[],override,listIds,coverage,companyCode='alpha'}={}){
   const dom=new JSDOM('<section id="view"></section>',{url:'https://fixture.test',runScripts:'outside-only'}),w=dom.window,d=w.document,views={},calls=[],posts=clone(entries);
   const NativeDate=w.Date;w.Date=class extends NativeDate{constructor(...args){super(...(args.length?args:['2026-09-24T23:30:00Z']));}static now(){return Date.parse('2026-09-24T23:30:00Z');}};
   w.SbCabinet={registerView:(name,view)=>{views[name]=view;}};scripts.forEach(source=>w.eval(source));
-  const ctx={selectedProjectId:'alpha',identity:{role,permissions,companies:[{id:'alpha',name:'Тест А'},{id:'beta',name:'Тест Б'}]},csrfOptions:(method,body)=>({method,headers:{'X-CSRF-Token':'fixture'},body:JSON.stringify(body)}),apiJson:async(url,options={})=>{
+  const ctx={selectedProjectId:companyCode,identity:{role,permissions,companies:[{id:companyCode,name:'Тест А'},{id:'beta',name:'Тест Б'}]},csrfOptions:(method,body)=>({method,headers:{'X-CSRF-Token':'fixture'},body:JSON.stringify(body)}),apiJson:async(url,options={})=>{
     const parsed=new URL(url,'https://fixture.test'),code=parsed.searchParams.get('companyCode'),path=parsed.pathname,method=options.method||'GET',call={code,path,method,url,options};calls.push(call);
     if(override){const result=await override(call,posts);if(result!==undefined)return clone(result);}
     if(path.endsWith('/company-information'))return {companyCode:code,revision:2,profile:{timezone:'Asia/Irkutsk'}};
@@ -22,13 +22,68 @@ async function fixture({entries=[row(1)],role='owner',permissions=[],override,li
     const match=path.match(/\/posts\/(\d+)(?:\/(approve))?$/);assert.ok(match,path);const item=posts.find(value=>value.id===Number(match[1])&&value.companyCode===code);assert.ok(item);
     if(method==='GET')return clone(item);
     const body=JSON.parse(options.body);assert.equal(body.revision,item.revision);assert.equal(options.headers['X-CSRF-Token'],'fixture');
-    if(match[2]==='approve'){assert.equal(ctx.identity.role,'owner');assert.equal(body.approved,true);item.approval={approved:true,approvedRevision:item.contentRevision,stale:false};item.revision++;return clone(item);}
+    if(match[2]==='approve'){assert.ok(ctx.identity.role==='owner'||ctx.identity.permissions.includes('autoposting.approve'));assert.equal(body.approved,true);item.approval={approved:true,approvedRevision:item.contentRevision,stale:false};if(body.schedule===true)item.status='scheduled';item.revision++;return clone(item);}
     if(method==='PATCH'){Object.assign(item,body);item.revision++;item.contentRevision++;item.approval={approved:false,stale:true};return clone(item);}
     throw Error('Unexpected write');
   }};
   await views.autoposting.render(d.getElementById('view'),ctx);
   const f={w,d,ctx,views,calls,posts,node:id=>d.getElementById(id),settle:async()=>{for(let i=0;i<10;i++)await new Promise(resolve=>setImmediate(resolve));},set(id,value){const node=f.node(id);node.value=value;node.dispatchEvent(new w.Event('change',{bubbles:true}));},async click(selector){const node=d.querySelector(selector);assert.ok(node,selector);node.click();await f.settle();},visibleIds:()=>[...d.querySelectorAll('#autoposting-posts > .autoposting-daily-list > [data-daily-post]')].map(node=>node.dataset.dailyPost),close:()=>w.close()};return f;
 }
+const palitraRow=extra=>row(1,{companyCode:'palitra-love',dayKey:'',captions:{},scheduledAt:'2026-09-25T01:00:00Z',approvalRequired:true,approveAndScheduleAvailable:true,...extra});
+
+test('Palitra: обычная карточка требует согласования; явная кнопка использует сохранённую версию после предпросмотра',async()=>{
+  const f=await fixture({companyCode:'palitra-love',entries:[palitraRow()]});try{
+    await f.click('[data-open-post="1"]');assert.equal(f.node('autoposting-approve-schedule').disabled,true);
+    assert.match(f.d.querySelector('[data-approve-schedule-summary]').textContent,/Telegram/);
+    assert.match(f.d.querySelector('[data-approve-schedule-summary]').textContent,/2026-09-25 09:00/);
+    await f.click('#autoposting-preview');assert.equal(f.node('autoposting-schedule').disabled,true);assert.equal(f.node('autoposting-approve-schedule').disabled,false);
+    assert.ok(f.calls.every(call=>call.method==='GET'));
+    await f.click('#autoposting-approve-schedule');
+    const writes=f.calls.filter(call=>call.method!=='GET');assert.equal(writes.length,1);assert.equal(writes[0].code,'palitra-love');
+    assert.ok(writes[0].path.endsWith('/1/approve'));assert.deepEqual(JSON.parse(writes[0].options.body),{revision:4,approved:true,schedule:true});
+    assert.equal(f.posts[0].status,'scheduled');assert.equal(f.node('autoposting-approve-schedule').disabled,true);
+    await f.click('#autoposting-approve-schedule');assert.equal(f.calls.filter(call=>call.method!=='GET').length,1);
+  }finally{f.close();}
+});
+
+test('Palitra: несохранённая правка, прошлое время и отключённый канал блокируют объединённое действие',async()=>{
+  for(const scenario of ['dirty','past','channel','no-media']){
+    const f=await fixture({companyCode:'palitra-love',entries:[palitraRow(scenario==='past'?{scheduledAt:'2026-09-24T22:00:00Z'}:scenario==='no-media'?{readiness:{ready:false,issues:['Нет материала']}}:{})],override:call=>scenario==='channel'&&call.path.endsWith('/settings')?{timezone:'Asia/Irkutsk',channels:[{id:'telegram',platform:'telegram',name:'Telegram',enabled:true,connected:false,revision:1}]}:undefined});try{
+      await f.click('[data-open-post="1"]');await f.click('#autoposting-preview');if(scenario==='dirty')f.set('autoposting-text','Новая несохранённая версия');
+      assert.equal(f.node('autoposting-approve-schedule').disabled,true,scenario);
+      f.node('autoposting-approve-schedule').disabled=false;await f.click('#autoposting-approve-schedule');assert.ok(f.calls.every(call=>call.method==='GET'),scenario);
+    }finally{f.close();}
+  }
+});
+
+test('Palitra: права edit и approve обязательны даже при искусственном нажатии; другим компаниям кнопка не показана',async()=>{
+  for(const permissions of [['autoposting.view','autoposting.edit'],['autoposting.view','autoposting.approve']]){
+    const f=await fixture({companyCode:'palitra-love',entries:[palitraRow()],role:'marketer',permissions});try{
+      await f.click('[data-open-post="1"]');await f.click('#autoposting-preview');assert.equal(f.node('autoposting-approve-schedule').disabled,true);
+      f.node('autoposting-approve-schedule').disabled=false;await f.click('#autoposting-approve-schedule');assert.ok(f.calls.every(call=>call.method==='GET'));
+    }finally{f.close();}
+  }
+  const other=await fixture();try{await other.click('[data-open-post="1"]');assert.equal(other.node('autoposting-approve-schedule'),null);}finally{other.close();}
+});
+
+test('Palitra: отказ при постановке не изображается успехом и не повторяется автоматически',async()=>{
+  const f=await fixture({companyCode:'palitra-love',entries:[palitraRow()],override:call=>{if(call.path.endsWith('/approve'))throw Error('REVISION_CONFLICT');}});try{
+    await f.click('[data-open-post="1"]');await f.click('#autoposting-preview');await f.click('#autoposting-approve-schedule');
+    assert.equal(f.posts[0].status,'draft');assert.equal(f.posts[0].approval.approved,false);assert.equal(f.node('autoposting-approve-schedule').disabled,true);
+    assert.equal(f.calls.filter(call=>call.method!=='GET').length,1);assert.match(f.d.body.textContent,/Не удалось подтвердить согласование и очередь/);
+    assert.doesNotMatch(f.d.body.textContent,/REVISION_CONFLICT/);
+  }finally{f.close();}
+});
+
+test('Palitra: текстовый Telegram доступен без изображения, но только с поддержанным подключением',async()=>{
+  for(const provider of ['direct','onlypult']){
+    const f=await fixture({companyCode:'palitra-love',entries:[palitraRow({mediaUrls:[],readiness:{ready:true,textOnly:true,issues:[]}})],override:call=>call.path.endsWith('/settings')?{timezone:'Asia/Irkutsk',channels:[{id:'telegram',platform:'telegram',name:'Telegram',enabled:true,connected:true,revision:1,provider}]}:undefined});try{
+      await f.click('[data-open-post="1"]');await f.click('#autoposting-preview');assert.match(f.node('autoposting-preview-content').textContent,/Текстовая публикация/);
+      assert.equal(f.node('autoposting-approve-schedule').disabled,provider!=='direct');
+      await f.click('#autoposting-approve-schedule');assert.equal(f.calls.filter(call=>call.method!=='GET').length,provider==='direct'?1:0);
+    }finally{f.close();}
+  }
+});
 test('today uses company timezone, separates planned date from publication time and keeps unknown dates separate',async()=>{
   const f=await fixture({entries:[row(1),row(2,{scheduledAt:null,plannedDate:'2026-09-25',planPlatform:'vk',platformIds:[],captions:{}}),row(3,{scheduledAt:null}),row(4,{scheduledAt:'2026-09-25T23:00:00Z'})]});try{
     assert.deepEqual(f.visibleIds(),['1','2']);assert.match(f.node('autoposting-calendar-zone').textContent,/Сегодня: 2026-09-25/);
