@@ -30,6 +30,10 @@ function isVideoUrl(value) {
   return url.protocol === 'https:' && url.hash === '' && /\.(mp4|mov|m4v|webm)$/i.test(url.pathname);
 }
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value);
+/* Instagram Story без подписи. Контракт https://onlypult.com/dev/openapi.yaml (OpenAPI 3.0.3, info.version 1.0.0,
+   проверен root 30.09.2026): PostCreateRequest.required = [profile_ids]; content — string без minLength,
+   «Required unless media_ids or media_urls is provided». PlatformSettings.is_story — Story для Instagram,
+   несовместим с is_reels/is_shorts. Поэтому при материале и пустом тексте content не отправляется вовсе. */
 function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
   async function request(row,method,path,body) {
     const token = tokenFor(row), mutation = method !== 'GET';
@@ -186,6 +190,9 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
       // Опции для площадки, у которой публикуемых опций нет, не отправляются вовсе.
       throw failure('CONTENT_LIMIT');
     }
+    /* Пустой текст допустим только для Instagram Story с материалом; вторая защита после транспорта. */
+    const withoutText = !post.text.trim();
+    if (withoutText && (!storyMode || !post.mediaUrls.length)) throw failure('CONTENT_LIMIT');
     if (row.id === 'youtube_shorts') {
       const title = typeof post.title === 'string' ? post.title.trim() : '';
       if (!title) throw failure('CONTENT_LIMIT');
@@ -196,7 +203,7 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
       extra.title = title;
       extra.platform_options = {youtube:{is_shorts:true,privacy:'public'}};
     }
-    return receipt(await request(row,'POST','/posts',{profile_ids:[row.target],content:post.text,
+    return receipt(await request(row,'POST','/posts',{profile_ids:[row.target],...(withoutText ? {} : {content:post.text}),
       publish_now:true,...(post.mediaUrls.length ? {media_urls:post.mediaUrls} : {}),...extra}),row);
   }
   async function reconcile(row,providerPostId) {

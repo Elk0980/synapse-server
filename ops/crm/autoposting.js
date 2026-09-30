@@ -7,6 +7,10 @@ const {randomUUID}=require('node:crypto');
 const LEASE_MS=120000;
 const META_FIELDS=['format','role','audience','hook','idea','hughNote','metrics','methodSource'];
 const EDITABLE=['title','text','mediaUrls','platformIds','scheduledAt','timezone','profileRevision','dayKey','captions','origin','mediaSha256','platformOptions',...META_FIELDS];
+/* Материал без текста транспорт Synapse отправляет только как Instagram Story через Onlypult
+   (режим «Публиковать как Story» сохранён в согласованной версии). Для остальных каналов пустой
+   текст отклоняет наш транспорт — это наше ограничение, а не правило площадки. */
+const mediaOnlyTargetMessage=name=>`${name}: без текста Synapse отправляет только Instagram Story (включите «Публиковать как Story» и выберите Instagram); для этого канала транспорт Synapse требует текст`;
 /* Метаданные контент-плана: формат и роль независимы; ни одно поле не попадает в публичную подпись.
    Роли — из процесса «привлечение → доверие → обращение»; источник методики — текст (название курса/принципа), не ссылка. */
 const FORMATS=Object.freeze({post:'Пост',story:'Сторис',reel:'Reels / Shorts / клип',carousel:'Карусель'});
@@ -354,6 +358,13 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     const row=db.prepare('SELECT * FROM autoposting_posts WHERE id=? AND company_id=?').get(Number(id),owner.id);
     if(!row)fail(404,'Публикация не найдена','NOT_FOUND');return {row,owner};
   }
+  /* Сторис без публичной подписи: материал есть, текста и подписей нет, и это сторис —
+     по плану (meta.format) или по публикуемому режиму Instagram. Формат плана сам ничего не отправляет. */
+  const instagramStory=row=>JSON.parse(row.platform_options||'{}')?.instagram?.is_story===true;
+  const mediaOnlyStoryRow=(row,media=JSON.parse(row.media_urls||'[]'),caps=JSON.parse(row.captions||'{}'))=>
+    media.length>0&&!String(row.text||'').trim()&&!Object.keys(caps).length&&(metaOf(row).format==='story'||instagramStory(row));
+  // Канал, куда такую сторис транспорт действительно отправит: фактическая площадка Instagram и режим Story.
+  const storyTarget=(row,platform)=>platform==='instagram'&&instagramStory(row);
   /* Готовность содержимого: материал либо разрешённый текстовый формат, текст/подписи в лимитах.
      Не подтверждает подключение: оно отдельно проверяется при постановке и перед отправкой. */
   function readiness(row) {
@@ -368,9 +379,12 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     // Пакет назвал хеш ролика: без сверки загруженный файл не считается тем самым видео.
     else if(row.expected_media_sha256&&!row.media_sha256)issues.push('Хеш видео не сверен с пакетом: загрузите ролик из пакета через кабинет');
     else if(row.expected_media_sha256&&row.media_sha256!==row.expected_media_sha256)issues.push('Загруженный файл не совпадает с роликом из пакета (SHA-256 отличается)');
-    if(!row.text&&!Object.keys(caps).length)issues.push('Нет текста и подписей площадок');
+    // Сторис по замыслу выходит без публичной подписи: для формата story с приложенным материалом
+    // пустой текст — это содержание, а не пропуск. Материал обязателен; другие форматы требуют текст, как прежде.
+    const mediaOnlyStory=mediaOnlyStoryRow(row,media,caps);
+    if(!row.text&&!Object.keys(caps).length&&!mediaOnlyStory)issues.push('Нет текста и подписей площадок');
     for(const [platform,caption]of Object.entries(caps))if(caption.length>CAPTION_PLATFORMS[platform].limit)issues.push(`Подпись ${CAPTION_PLATFORMS[platform].label} длиннее лимита`);
-    return {ready:!issues.length,issues,mediaKind:mediaKind(media),textOnly};
+    return {ready:!issues.length,issues,mediaKind:mediaKind(media),textOnly,mediaOnlyStory};
   }
   /* Одобрение привязано к content_revision — версии содержимого (текст, подписи, материал, день, происхождение).
      Технические переходы (план, отправка, отмена) меняют revision, но не content_revision, и одобрение сохраняют. */
@@ -536,7 +550,8 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
       }
       if(id===YOUTUBE_SHORTS)hard.push(...youtubeShortsIssues(row.title,media));
       const caption=caps[platform]||row.text||'';
-      if(!caption)hard.push(`Для площадки ${platform} нет ни подписи, ни общего текста`);
+      if(!caption&&!(base.mediaOnlyStory&&storyTarget(row,platform)))
+        hard.push(base.mediaOnlyStory?mediaOnlyTargetMessage(channel?.name||platform):`Для площадки ${platform} нет ни подписи, ни общего текста`);
       hard.push(...capsIssues(channel,caption,media.length));
       const delivery=deliveries.get(id),extra=[];
       if(delivery&&channel&&delivery.channelRevision!==channel.revision)
@@ -817,7 +832,8 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
       if(Object.hasOwn(body,'platformIds'))data.platformIds=requestedPlatforms(row,body);
       if(data.profileRevision!==current.revision||row.profile_revision!==current.revision)fail(409,'Пересмотрите текст по новой версии компании','PROFILE_CHANGED');
       const captionsByPlatform=JSON.parse(row.captions||'{}');
-      if((!data.text&&!Object.keys(captionsByPlatform).length)||!data.platformIds.length)fail(400,'Добавьте текст и выберите каналы');
+      const storyOnly=mediaOnlyStoryRow(row);
+      if((!data.text&&!Object.keys(captionsByPlatform).length&&!storyOnly)||!data.platformIds.length)fail(400,'Добавьте текст и выберите каналы');
       // Карточки очереди контента (день или подписи площадок) ставятся в план только с одобрением именно этой версии.
       // Отправляется только утверждённая текущая версия, и только на те каналы, для которых она утверждена.
       // Карточка из контент-плана одобряется отдельно, как и карточка очереди: согласование
@@ -850,7 +866,12 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
       const wrongPlatform=data.platformIds.filter((id,index)=>
         plan.platformMismatch(row,channelPlatform(channels[index],id)));
       if(wrongPlatform.length)fail(409,plan.PLATFORM_MESSAGE,plan.PLATFORM_REASON);
-      if(channels.some(channel=>!data.text&&!captionsByPlatform[channel.platform||channel.id]))fail(400,'Для выбранного канала нет ни общего текста, ни подписи площадки');
+      // Сторис без подписи уходит только в Instagram в режиме Story; остальные каналы требуют текст, как прежде.
+      if(storyOnly){
+        const wrong=channels.filter((channel,index)=>!storyTarget(row,channelPlatform(channel,data.platformIds[index])));
+        if(wrong.length)fail(409,mediaOnlyTargetMessage(wrong.map(channel=>channel.name||channel.id).join(', ')),'MEDIA_ONLY_TARGET');
+      }
+      else if(channels.some(channel=>!data.text&&!captionsByPlatform[channel.platform||channel.id]))fail(400,'Для выбранного канала нет ни общего текста, ни подписи площадки');
       for(const channel of channels)revision(channel.revision);
       db.prepare('DELETE FROM autoposting_deliveries WHERE post_id=?').run(row.id);
       for(const channel of channels)db.prepare('INSERT INTO autoposting_deliveries(post_id,channel_id,channel_revision) VALUES(?,?,?)').run(row.id,channel.id,channel.revision);

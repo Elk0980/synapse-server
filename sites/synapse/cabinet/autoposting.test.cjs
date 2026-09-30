@@ -924,3 +924,43 @@ test('возврат к материалам после смены проект�
   assert.ok(f.calls.some(c=>c.path.endsWith('/autoposting/posts')&&c.code==='avokado'));
  }finally{f.close();}
 });
+test('сторис без подписи: сохраняется только с материалом; в план — только в Instagram в режиме Story, другим каналам нужен текст транспорта Synapse',async()=>{
+  const ig={id:'instagram',platform:'instagram',provider:'onlypult',name:'Instagram',target:'profile',revision:1,enabled:true,connected:true,tokenConfigured:true,caps:{maxText:2200,maxMedia:10}};
+  let fx;const f=await fixture({override:call=>{
+    if(call.path==='/content/crm/autoposting/settings'&&call.method==='GET')return {channels:[...channels(),ig],timezone:'Asia/Irkutsk'};
+    if(call.path==='/content/crm/autoposting/posts'&&call.method==='POST'){const body=JSON.parse(call.options.body);
+      const item={id:fx.posts.length+1,companyCode:call.code,revision:1,status:'draft',deliveries:[],...body,meta:{format:body.format,role:body.role||''},readiness:{ready:true,issues:[],mediaKind:'image',mediaOnlyStory:true},approval:{approved:true,approvedRevision:1,stale:false}};fx.posts.push(item);return item;}
+    const m=call.path.match(/\/posts\/(\d+)$/);
+    if(m&&call.method==='PATCH'){const item=fx.posts.find(p=>p.id===Number(m[1]));Object.assign(item,JSON.parse(call.options.body),{revision:item.revision+1});item.meta={format:item.format,role:item.role||''};return clone(item);}
+  }});fx=f;try{
+    fill(f,{text:'',media:''});f.set('autoposting-format','story','change');await f.click('autoposting-save');
+    assert.equal(f.calls.filter(call=>call.method==='POST').length,0,'сторис без материала не сохраняется');
+    assert.match(f.node('autoposting-form-status').textContent,/Без текста сохраняется только сторис с материалом/);
+    f.set('autoposting-media','https://cdn.example.test/story.jpg');f.set('autoposting-format','post','change');await f.click('autoposting-save');
+    assert.equal(f.calls.filter(call=>call.method==='POST').length,0,'пост без текста не сохраняется');
+    f.set('autoposting-format','story','change');await f.click('autoposting-save');
+    const create=f.calls.filter(call=>call.method==='POST');assert.equal(create.length,1);
+    const body=JSON.parse(create[0].options.body);assert.equal(body.text,'');assert.equal(body.format,'story');assert.deepEqual(body.captions,{});
+    // Цель — Telegram: постановка закрыта, причина говорит о нашем транспорте и не приписывает правило площадке.
+    await f.click('autoposting-preview');assert.equal(f.node('autoposting-schedule').disabled,true);
+    const text=f.node('autoposting-preview-content').textContent;
+    assert.match(text,/Telegram: без текста Synapse отправляет только Instagram Story/);assert.match(text,/транспорт Synapse требует текст/);
+    assert.doesNotMatch(text,/площадке нужен текст|Публикуется вручную вне ЛК|нет ни общего текста/);
+    // Instagram в режиме Story: причина исчезает, постановка доступна.
+    f.node('autoposting-platforms').querySelector('[value=telegram]').click();f.node('autoposting-platforms').querySelector('[value=instagram]').click();
+    f.d.querySelector('[data-option="instagram.is_story"]').click();await f.click('autoposting-save');
+    const patch=f.calls.filter(call=>call.method==='PATCH').at(-1);assert.deepEqual(JSON.parse(patch.options.body).platformOptions,{instagram:{is_story:true}});
+    await f.click('autoposting-preview');
+    assert.doesNotMatch(f.node('autoposting-preview-content').textContent,/без текста Synapse отправляет только Instagram Story/);
+    assert.equal(f.node('autoposting-schedule').disabled,false);
+    assert.equal(f.calls.filter(call=>call.path.endsWith('/schedule')).length,0,'сама проверка ничего не ставит в план');
+  }finally{f.close();}
+});
+test('сторис без подписи сохраняется по режиму «Публиковать как Story» без формата плана',async()=>{
+  const f=await fixture();try{
+    fill(f,{text:'',media:'https://cdn.example.test/story.jpg'});
+    f.node('autoposting-platforms').querySelector('[value=instagram]').click();f.d.querySelector('[data-option="instagram.is_story"]').click();
+    await f.click('autoposting-save');const create=f.calls.filter(call=>call.method==='POST');assert.equal(create.length,1);
+    const body=JSON.parse(create[0].options.body);assert.equal(body.format,'');assert.equal(body.text,'');assert.deepEqual(body.platformOptions,{instagram:{is_story:true}});
+  }finally{f.close();}
+});
