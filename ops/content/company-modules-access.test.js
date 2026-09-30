@@ -183,7 +183,7 @@ test('publishing photo uploads require an assigned editor and CSRF; opaque publi
     successful.push(url.pathname);
     const publicImage=await raw('GET',url.pathname);assert.equal(publicImage.status,200);assert.deepEqual(publicImage.data,png);
     assert.equal(publicImage.headers.get('content-type'),'image/png');assert.equal(publicImage.headers.get('x-content-type-options'),'nosniff');
-    assert.match(publicImage.headers.get('content-security-policy'),/default-src 'none'; sandbox/);
+    assert.equal(publicImage.headers.get('content-security-policy'),"default-src 'none'; sandbox",'изображения по-прежнему без media-src');
     assert.match(publicImage.headers.get('cache-control'),/immutable/);assert.match(publicImage.headers.get('content-disposition'),/^inline; filename="[a-f0-9]{32}\.png"$/);
     const head=await raw('HEAD',url.pathname);assert.equal(head.status,200);assert.equal(head.data.length,0);assert.equal(Number(head.headers.get('content-length')),png.length);
     assert.equal((await raw('GET',url.pathname.replace('/alvi/','/avokado/'))).status,404);
@@ -219,4 +219,21 @@ test('video uploads accept only real MP4/WebM containers under the video limit, 
   assert.equal((await raw('GET',url.pathname,undefined,null,undefined,{range:`bytes=${mp4.length+5}-`})).status,416);
   const second=await raw('POST',upload,webm,owner,'video/webm');assert.equal(second.status,201);assert.match(new URL(second.body.url).pathname,/\.webm$/);
   assert.equal((await raw('GET',new URL(second.body.url).pathname.replace('/alvi/','/avokado/'))).status,404);
+  // Прямое открытие ссылки: страница плеера браузера подчиняется CSP ответа. Видео разрешено грузить только с этого
+  // же адреса, всё остальное (скрипты, стили, фреймы, формы, соединения) по-прежнему запрещено, sandbox на месте.
+  const videoCsp="default-src 'none'; media-src 'self' https://synapse.synapsebusiness.ru; sandbox";
+  for(const pathname of [url.pathname,new URL(second.body.url).pathname])for(const method of ['GET','HEAD']){
+    const response=await raw(method,pathname,undefined,null,undefined,method==='GET'?{range:'bytes=0-3'}:{});
+    assert.equal(response.status,method==='GET'?206:200,pathname+' '+method);
+    assert.equal(response.headers.get('content-security-policy'),videoCsp,pathname+' '+method);
+    const directives=Object.fromEntries(videoCsp.split(';').map(part=>part.trim().split(/\s+/)).map(([name,...values])=>[name,values]));
+    assert.deepEqual(Object.keys(directives).sort(),['default-src','media-src','sandbox'],'нет script-src, style-src, frame-src и connect-src');
+    assert.deepEqual(directives.sandbox,[],'sandbox без allow-* исключений');
+    assert.ok(!/unsafe|\*|data:|blob:/.test(videoCsp),'нет unsafe-*, звёздочек и data:/blob:');
+    assert.equal(response.headers.get('x-content-type-options'),'nosniff');
+    assert.equal(response.headers.get('access-control-allow-origin'),null,'CORS не открывается');
+    assert.match(response.headers.get('content-type'),/^video\/(mp4|webm)$/);
+  }
+  const traversal=await raw('GET','/content/publishing-assets/alvi/'+'a'.repeat(32)+'.html');
+  assert.equal(traversal.status,404);assert.equal(traversal.headers.get('content-security-policy'),null,'чужие пути не получают медиа-политику');
 });

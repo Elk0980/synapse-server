@@ -1010,8 +1010,13 @@ const server = http.createServer(async (request, response) => {
       const file = path.join(ASSETS_DIR,'publishing',match[1],match[2]);
       if (!fs.existsSync(file)) fail(404,'Материал не найден');
       const size = fs.statSync(file).size;
+      // При прямом открытии ссылки браузер строит собственную страницу с <video>, и она подчиняется CSP этого ответа.
+      // Без media-src ролик блокируется правилом default-src 'none' (readyState 0). Разрешаем только загрузку медиа
+      // с этого же адреса; скрипты, стили, фреймы и формы запрещены по-прежнему, sandbox сохраняется.
+      const csp = VIDEO_TYPES.has(ASSET_MIME[match[3]])
+        ? `default-src 'none'; media-src 'self' ${PUBLISHING_ASSET_ORIGIN}; sandbox` : "default-src 'none'; sandbox";
       const headers = {'content-type':ASSET_MIME[match[3]],'cache-control':'public, max-age=31536000, immutable','accept-ranges':'bytes',
-        'x-content-type-options':'nosniff','content-security-policy':"default-src 'none'; sandbox",'content-disposition':`inline; filename="${match[2]}"`};
+        'x-content-type-options':'nosniff','content-security-policy':csp,'content-disposition':`inline; filename="${match[2]}"`};
       // Диапазоны нужны плееру: без них перемотка и предпросмотр видео в браузере не работают.
       const range = /^bytes=(\d*)-(\d*)$/.exec(String(request.headers.range || ''));
       let start = 0, end = size - 1, status = 200;
