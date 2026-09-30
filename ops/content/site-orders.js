@@ -14,7 +14,12 @@ const ORDER_STATUSES = ['accepted', 'notified', 'notify_uncertain', 'notify_fail
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ITEM_ID = /^[a-z0-9][a-z0-9_-]{0,79}$/i;
 const CHAT_ID = /^\d{5,20}$/;
-const BODY_FIELDS = new Set(['requestId', 'kind', 'name', 'phone', 'comment', 'consent', 'items', 'occasion', 'date', 'page', 'utm', 'website']);
+const BODY_FIELDS = new Set(['requestId', 'kind', 'name', 'phone', 'comment', 'consent', 'items', 'occasion', 'date', 'page', 'utm', 'website',
+  'contactChannel', 'contact', 'telegramUsername', 'deliveryAddress', 'deliveryDate', 'deliveryInterval']);
+const CONTACT_CHANNELS = Object.freeze({ phone: 'Звонок', telegram: 'Telegram', whatsapp: 'WhatsApp', max: 'MAX' });
+const phoneDigits = (value) => { const digits = value.replace(/\D/g, ''); return digits.length === 11 && digits.startsWith('8') ? `7${digits.slice(1)}` : digits; };
+const validPhone = (value) => value.length <= 32 && /^[+\d\s().-]+$/.test(value) && /^\d{10,15}$/.test(phoneDigits(value));
+const validDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
 const UTM_FIELDS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
 const RATE_SHORT = { windowMs: 10 * 60 * 1000, limit: 5 };
 const RATE_DAY = { windowMs: 24 * 60 * 60 * 1000, limit: 20 };
@@ -78,7 +83,7 @@ const originOf = (request) => {
   return '';
 };
 
-function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = Date.now }) {
+function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = Date.now, groupNotificationSites = [], groupReader = () => null }) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS site_order_recipients (
       site TEXT PRIMARY KEY, company_code TEXT NOT NULL, telegram_chat_id TEXT NOT NULL, label TEXT NOT NULL DEFAULT '',
@@ -117,9 +122,21 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
   const columns = (table) => new Set(db.prepare(`SELECT name FROM pragma_table_info('${table}')`).all().map((row) => row.name));
   if (!columns('site_order_recipients').has('transport')) db.exec("ALTER TABLE site_order_recipients ADD COLUMN transport TEXT NOT NULL DEFAULT 'project_bot'");
   if (!columns('site_order_outbox').has('transport')) db.exec("ALTER TABLE site_order_outbox ADD COLUMN transport TEXT NOT NULL DEFAULT 'project_bot'");
+  if (!columns('site_order_outbox').has('destination')) db.exec("ALTER TABLE site_order_outbox ADD COLUMN destination TEXT NOT NULL DEFAULT 'manager'");
+  for (const field of ['contact_channel', 'contact', 'telegram_username', 'delivery_address', 'delivery_date', 'delivery_interval']) {
+    if (!columns('site_orders').has(field)) db.exec(`ALTER TABLE site_orders ADD COLUMN ${field} TEXT NOT NULL DEFAULT ''`);
+  }
+  if (!columns('site_orders').has('group_required')) db.exec('ALTER TABLE site_orders ADD COLUMN group_required INTEGER NOT NULL DEFAULT 0');
   const stamp = (at = now()) => new Date(at).toISOString();
   const siteConfig = (site) => (Object.hasOwn(sites, site) ? sites[site] : null);
   const ipHash = (ip) => sha256(`${ip}|${ipSalt}`);
+  const groupEnabled = (site) => groupNotificationSites.includes(site);
+  const groupOf = (site) => {
+    const config = siteConfig(site);
+    if (!config || !groupEnabled(site)) return null;
+    const id = String(groupReader(config.companyCode) || '');
+    return /^-\d{1,20}$/.test(id) ? { telegram_chat_id: id, version: 0, transport: 'project_bot' } : null;
+  };
 
   /* ---------- прайс ---------- */
   function priceIndex(site) {
@@ -146,10 +163,41 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     if (!KINDS.has(body.kind)) fail(400, 'Некорректное поле kind', 'VALIDATION');
     const name = cleanString(body.name, 80, 'name');
     if (!name) fail(400, 'Укажите имя', 'VALIDATION');
-    const phone = cleanString(body.phone, 32, 'phone');
-    let digits = phone.replace(/\D/g, '');
-    if (digits.length === 11 && digits.startsWith('8')) digits = `7${digits.slice(1)}`;
-    if (digits.length < 10 || digits.length > 15) fail(400, 'Укажите телефон', 'VALIDATION');
+    const structured = Object.hasOwn(body, 'contactChannel');
+    let phone = cleanString(body.phone, 32, 'phone'), digits = phoneDigits(phone);
+    let contactChannel = '', contact = '', telegramUsername = '';
+    const deliveryAddress = cleanString(body.deliveryAddress, 500, 'deliveryAddress');
+    const deliveryDate = cleanString(body.deliveryDate, 10, 'deliveryDate');
+    const deliveryInterval = cleanString(body.deliveryInterval, 80, 'deliveryInterval');
+    if (structured) {
+      contactChannel = cleanString(body.contactChannel, 16, 'contactChannel');
+      if (!Object.hasOwn(CONTACT_CHANNELS, contactChannel)) fail(400, 'Выберите способ связи', 'VALIDATION');
+      contact = cleanString(body.contact, 100, 'contact');
+      if (!contact) fail(400, 'Укажите контакт для связи', 'VALIDATION');
+      telegramUsername = cleanString(body.telegramUsername, 33, 'telegramUsername');
+      if (contactChannel === 'phone' || contactChannel === 'whatsapp') {
+        if (!validPhone(contact)) fail(400, 'Укажите телефон для выбранного способа связи', 'VALIDATION');
+        if (phone && (!validPhone(phone) || phoneDigits(phone) !== phoneDigits(contact))) fail(400, 'Телефон и контакт не совпадают', 'VALIDATION');
+        phone = contact; digits = phoneDigits(phone);
+      } else if (phone && !validPhone(phone)) fail(400, 'Некорректный дополнительный телефон', 'VALIDATION');
+      if (contactChannel === 'telegram') {
+        const handle = (value) => `@${value.replace(/^@/, '')}`;
+        if (!/^@?[a-z][a-z0-9_]{4,31}$/i.test(contact) || (telegramUsername && (!/^@?[a-z][a-z0-9_]{4,31}$/i.test(telegramUsername) || handle(telegramUsername).toLowerCase() !== handle(contact).toLowerCase()))) fail(400, 'Укажите Telegram @ник', 'VALIDATION');
+        contact = handle(contact).toLowerCase(); telegramUsername = contact;
+      } else if (telegramUsername) fail(400, 'Telegram ник допустим только для Telegram', 'VALIDATION');
+      if (contactChannel === 'max') {
+        if (/[^\s@]+@[^\s@]+\.[^\s@]+/.test(contact) || (/:/.test(contact) && !/^https:\/\//i.test(contact))) fail(400, 'Укажите контакт MAX, без email и небезопасных ссылок', 'VALIDATION');
+        if (/^https:\/\//i.test(contact)) {
+          try { const url = new URL(contact); if (url.protocol !== 'https:' || !url.hostname || url.username || url.password) throw new Error(); }
+          catch { fail(400, 'Некорректная ссылка MAX', 'VALIDATION'); }
+        }
+      }
+      if (body.kind === 'cart' && (!deliveryAddress || !deliveryDate || !deliveryInterval)) fail(400, 'Укажите адрес, дату и интервал доставки', 'VALIDATION');
+    } else {
+      if (digits.length < 10 || digits.length > 15) fail(400, 'Укажите телефон', 'VALIDATION');
+      if (['contact', 'telegramUsername', 'deliveryAddress', 'deliveryDate', 'deliveryInterval'].some((key) => body[key] !== undefined)) fail(400, 'Для новых полей укажите contactChannel', 'VALIDATION');
+    }
+    if (deliveryDate && !validDate(deliveryDate)) fail(400, 'Укажите действительную дату доставки', 'VALIDATION');
     if (body.consent !== true) fail(400, 'Нужно согласие на обработку данных', 'VALIDATION');
     let comment = cleanString(body.comment, 1000, 'comment');
     if (body.kind === 'request') {
@@ -175,14 +223,22 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     }
     const website = cleanString(body.website, 200, 'website');
     // Отпечаток — только смысл заявки: тот же requestId с другим составом или контактом не «тот же» запрос.
-    const fingerprint = sha256(JSON.stringify({ kind: body.kind, name, phone: digits, comment, items }));
-    return { requestId, kind: body.kind, name, phone, phoneNormalized: digits, comment, items, page, utm, honeypot: Boolean(website), fingerprint };
+    const meaning = { kind: body.kind, name, phone: digits, comment, items };
+    if (structured) Object.assign(meaning, { contactChannel, contact: ['phone', 'whatsapp'].includes(contactChannel) ? digits : contact, telegramUsername, deliveryAddress, deliveryDate, deliveryInterval });
+    const fingerprint = sha256(JSON.stringify(meaning));
+    return { requestId, kind: body.kind, name, phone, phoneNormalized: digits, contactChannel, contact, telegramUsername, deliveryAddress, deliveryDate, deliveryInterval,
+      comment, items, page, utm, honeypot: Boolean(website), fingerprint };
   }
 
   /* ---------- текст уведомления ---------- */
   const moscow = (iso) => new Date(iso).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   function orderText(order, siteTitle) {
-    const lines = [`Заявка №${order.id} · ${siteTitle} · ${moscow(order.created_at)}`, `Имя: ${order.name}`, `Телефон: ${order.phone}`];
+    const lines = [`Заявка №${order.id} · ${siteTitle} · ${moscow(order.created_at)}`, `Имя: ${order.name}`];
+    if (order.contact_channel) lines.push(`Связаться через: ${CONTACT_CHANNELS[order.contact_channel]}`, `Контакт: ${order.contact}`);
+    if (order.phone) lines.push(`Телефон: ${order.phone}`);
+    if (order.delivery_address) lines.push(`Адрес доставки: ${order.delivery_address}`);
+    if (order.delivery_date) lines.push(`Дата доставки: ${order.delivery_date}`);
+    if (order.delivery_interval) lines.push(`Интервал доставки: ${order.delivery_interval}`);
     const items = JSON.parse(order.items_json);
     if (items.length) {
       lines.push('Состав:');
@@ -198,13 +254,13 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     return lines.join('\n');
   }
   const recipientOf = (site) => db.prepare('SELECT * FROM site_order_recipients WHERE site=?').get(site) || null;
-  function enqueue(site, config, kind, order, recipient) {
+  function enqueue(site, config, kind, order, recipient, destination = 'manager') {
     const text = kind === 'test' ? `Проверка получателя заявок ${config.title}. Ответ не требуется.` : orderText(order, config.title);
     const at = stamp();
     // Канал фиксируется в задании: смена канала потом не перенаправляет уже поставленное.
     const transport = TRANSPORTS.has(recipient.transport) ? recipient.transport : 'project_bot';
-    return Number(db.prepare(`INSERT INTO site_order_outbox(site,company_code,order_id,kind,chat_id,recipient_version,text,next_attempt_at,created_at,transport)
-      VALUES(?,?,?,?,?,?,?,?,?,?)`).run(site, config.companyCode, order ? order.id : null, kind, recipient.telegram_chat_id, recipient.version, text, at, at, transport).lastInsertRowid);
+    return Number(db.prepare(`INSERT INTO site_order_outbox(site,company_code,order_id,kind,chat_id,recipient_version,text,next_attempt_at,created_at,transport,destination)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(site, config.companyCode, order ? order.id : null, kind, recipient.telegram_chat_id, recipient.version, text, at, at, transport, destination).lastInsertRowid);
   }
 
   /* ---------- публичный приём ---------- */
@@ -242,13 +298,17 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     const recipient = recipientOf(site);
     try {
       const order = tx(() => {
-        const id = Number(db.prepare(`INSERT INTO site_orders(site,company_code,request_id,fingerprint,kind,name,phone,phone_normalized,comment,items_json,known_total,unknown_count,page,utm_json,ip_hash,created_at)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(site, config.companyCode, input.requestId, input.fingerprint, input.kind, input.name, input.phone, input.phoneNormalized,
-          input.comment, JSON.stringify(items), knownTotal, unknownCount, input.page, JSON.stringify(input.utm), hash, stamp(at)).lastInsertRowid);
+        const id = Number(db.prepare(`INSERT INTO site_orders(site,company_code,request_id,fingerprint,kind,name,phone,phone_normalized,comment,items_json,known_total,unknown_count,page,utm_json,ip_hash,created_at,
+          contact_channel,contact,telegram_username,delivery_address,delivery_date,delivery_interval,group_required)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(site, config.companyCode, input.requestId, input.fingerprint, input.kind, input.name, input.phone, input.phoneNormalized,
+          input.comment, JSON.stringify(items), knownTotal, unknownCount, input.page, JSON.stringify(input.utm), hash, stamp(at),
+          input.contactChannel, input.contact, input.telegramUsername, input.deliveryAddress, input.deliveryDate, input.deliveryInterval, groupEnabled(site) ? 1 : 0).lastInsertRowid);
         db.prepare('INSERT INTO site_order_rate(ip_hash,created_at) VALUES(?,?)').run(hash, stamp(at));
         const row = db.prepare('SELECT * FROM site_orders WHERE id=?').get(id);
         // Получатель не настроен — заявка всё равно сохранена; уведомление владелец отправит явно после настройки.
         if (recipient) enqueue(site, config, 'order', row, recipient);
+        const group = groupOf(site);
+        if (group) enqueue(site, config, 'order', row, group, 'group');
         return row;
       });
       return { status: 201, body: { ok: true, orderId: order.id, requestId: order.request_id, status: 'accepted',
@@ -277,6 +337,9 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     // Ограничение компании применяется до захвата: чужое задание не меняет состояние и попытки.
     const expired = db.prepare(`SELECT id,order_id,kind FROM site_order_outbox WHERE status='sending' AND claimed_at<? AND transport=? AND (? IS NULL OR site=?)`).all(stamp(now() - TELEGRAM_LEASE), transport, site, site);
     for (const job of expired) settle(job.id, 'uncertain', 'Отправка прервана; результат доставки неизвестен', []);
+    // Проверяем действующую привязку до захвата. Начатое/неизвестно доставленное не перенаправляем.
+    const groupJobs = db.prepare(`SELECT id,site,chat_id,external_ids FROM site_order_outbox WHERE destination='group' AND status='pending' AND transport=? AND (? IS NULL OR site=?)`).all(transport, site, site);
+    for (const job of groupJobs) if (groupOf(job.site)?.telegram_chat_id !== job.chat_id) settle(job.id, 'error', 'Рабочая группа изменилась или отключена до отправки', JSON.parse(job.external_ids || '[]'));
     const jobs = db.prepare(`SELECT * FROM site_order_outbox WHERE status='pending' AND next_attempt_at<=? AND transport=? AND (? IS NULL OR site=?) ORDER BY id LIMIT 1`).all(stamp(), transport, site, site);
     for (const job of jobs) db.prepare(`UPDATE site_order_outbox SET status='sending',claimed_at=?,attempts=attempts+1 WHERE id=?`).run(stamp(), job.id);
     return jobs.map((job) => jobJSON({ ...job, attempts: job.attempts + 1 }));
@@ -289,14 +352,14 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     return job ? { id: job.id, site: job.site, orderId: job.order_id, kind: job.kind, chatId: job.chat_id, transport: job.transport, status: job.status } : null;
   }
   const isOrderJob = (jobId) => typeof jobId === 'string' && jobId.startsWith(JOB_PREFIX);
-  const currentAttempt = (orderId) => db.prepare("SELECT id FROM site_order_outbox WHERE order_id=? AND kind='order' ORDER BY id DESC LIMIT 1").get(orderId)?.id;
+  const currentAttempt = (orderId) => db.prepare("SELECT id FROM site_order_outbox WHERE order_id=? AND kind='order' AND destination='manager' ORDER BY id DESC LIMIT 1").get(orderId)?.id;
   function settle(jobId, status, error, ids) {
     const job = db.prepare('SELECT * FROM site_order_outbox WHERE id=?').get(jobId);
     const finished = ['sent', 'uncertain', 'error'].includes(status) ? stamp() : null;
     db.prepare(`UPDATE site_order_outbox SET status=?,error=?,external_ids=?,next_attempt_at=?,claimed_at=NULL,finished_at=COALESCE(?,finished_at) WHERE id=?`)
       .run(status, error, JSON.stringify(ids), stamp(now() + 15000 * Math.max(1, job.attempts)), finished, job.id);
     // Статус заявки отражает только текущую (последнюю) попытку: поздний ответ по прежней её не перезаписывает.
-    if (job.kind === 'order' && job.order_id && currentAttempt(job.order_id) === job.id) {
+    if (job.destination === 'manager' && job.kind === 'order' && job.order_id && currentAttempt(job.order_id) === job.id) {
       const orderStatus = status === 'sent' ? 'notified' : status === 'uncertain' ? 'notify_uncertain' : status === 'error' ? 'notify_failed' : null;
       if (orderStatus) db.prepare('UPDATE site_orders SET status=?,notified_at=COALESCE(?,notified_at) WHERE id=?').run(orderStatus, status === 'sent' ? stamp() : null, job.order_id);
     }
@@ -341,11 +404,20 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     const row = db.prepare('SELECT status,updated_by,updated_at FROM site_order_work WHERE order_id=?').get(orderId);
     return row ? { status: row.status, updatedBy: row.updated_by, updatedAt: row.updated_at } : { status: 'new', updatedBy: '', updatedAt: null };
   };
+  const groupNotifyJSON = (row) => {
+    if (!row.group_required) return null;
+    const job = db.prepare("SELECT * FROM site_order_outbox WHERE order_id=? AND kind='order' AND destination='group' ORDER BY id DESC LIMIT 1").get(row.id);
+    const configured = Boolean(groupOf(row.site));
+    return { required: true, configured, ...notifyJSON(job), status: job?.status || (configured ? 'not_queued' : 'missing_binding') };
+  };
   const orderJSON = (row) => ({ id: row.id, requestId: row.request_id, kind: row.kind, status: row.status, createdAt: row.created_at, notifiedAt: row.notified_at,
     work: workJSON(row.id),
     name: row.name, phone: row.phone, comment: row.comment, items: JSON.parse(row.items_json), knownTotal: row.known_total, unknownCount: row.unknown_count,
+    contactChannel: row.contact_channel, contact: row.contact, telegramUsername: row.telegram_username,
+    deliveryAddress: row.delivery_address, deliveryDate: row.delivery_date, deliveryInterval: row.delivery_interval,
     page: row.page, utm: JSON.parse(row.utm_json || '{}'),
-    notify: notifyJSON(db.prepare("SELECT * FROM site_order_outbox WHERE order_id=? AND kind='order' ORDER BY id DESC LIMIT 1").get(row.id)) });
+    groupNotify: groupNotifyJSON(row),
+    notify: notifyJSON(db.prepare("SELECT * FROM site_order_outbox WHERE order_id=? AND kind='order' AND destination='manager' ORDER BY id DESC LIMIT 1").get(row.id)) });
   function recipientStatus(site) {
     const config = siteConfig(site);
     if (!config) fail(404, 'Не найдено');
@@ -353,11 +425,12 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     // Заявки без уведомления, которое ушло или идёт: принятые без задания и с остановленным/отказанным заданием.
     // Неизвестно доставленные сюда не входят — их повтор владелец решает отдельно.
     const unnotified = db.prepare(`SELECT count(*) AS n FROM site_orders o WHERE o.site=? AND o.status IN ('accepted','notify_failed')
-      AND NOT EXISTS (SELECT 1 FROM site_order_outbox x WHERE x.order_id=o.id AND x.kind='order' AND x.status IN ('pending','sending','sent'))`).get(site).n;
+      AND NOT EXISTS (SELECT 1 FROM site_order_outbox x WHERE x.order_id=o.id AND x.kind='order' AND x.destination='manager' AND x.status IN ('pending','sending','sent'))`).get(site).n;
     const lastTest = db.prepare("SELECT * FROM site_order_outbox WHERE site=? AND kind='test' ORDER BY id DESC LIMIT 1").get(site);
     return { configured: Boolean(recipient), telegramChatId: recipient?.telegram_chat_id || '', label: recipient?.label || '',
       version: recipient?.version || 0, verifiedAt: recipient?.verified_at || null, lastTestError: recipient?.last_test_error || '',
       transport: recipient?.transport || 'project_bot',
+      group: { enabled: groupEnabled(site), configured: Boolean(groupOf(site)) },
       lastTest: notifyJSON(lastTest && recipient && lastTest.recipient_version === recipient.version ? lastTest : null),
       unnotifiedOrders: unnotified, updatedAt: recipient?.updated_at || null };
   }
@@ -391,7 +464,7 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
         db.prepare(`UPDATE site_order_recipients SET telegram_chat_id=?,label=?,version=version+1,verified_at=NULL,last_test_error='',transport='project_bot',updated_at=? WHERE site=?`).run(chatId, label, at, site);
         // Ещё не начатые задания прежнему получателю останавливаются: новому их отправит только явный повтор владельца.
         // Уже отправляемые и неизвестно доставленные не перенаправляются.
-        const stopped = db.prepare(`SELECT id FROM site_order_outbox WHERE site=? AND status='pending'`).all(site);
+        const stopped = db.prepare(`SELECT id FROM site_order_outbox WHERE site=? AND status='pending' AND destination='manager'`).all(site);
         for (const job of stopped) settle(job.id, 'error', 'Получатель изменён до отправки', JSON.parse(db.prepare('SELECT external_ids FROM site_order_outbox WHERE id=?').get(job.id).external_ids || '[]'));
       } else db.prepare('UPDATE site_order_recipients SET label=?,updated_at=? WHERE site=?').run(label, at, site);
     });
@@ -406,19 +479,24 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     return { ok: true, jobId: `${JOB_PREFIX}${jobId}`, recipient: recipientStatus(site) };
   }
   /* Явный повтор владельцем: новое задание текущему получателю; прежнее состояние (uncertain/error) сохраняется в истории. */
-  function renotify(site, orderId) {
+  function renotify(site, orderId, destination = 'manager') {
     const config = siteConfig(site);
     if (!config) fail(404, 'Не найдено');
     const id = Number(orderId);
     if (!Number.isSafeInteger(id) || id < 1) fail(400, 'Некорректный номер заявки');
     const order = db.prepare('SELECT * FROM site_orders WHERE id=? AND site=?').get(id, site);
     if (!order) fail(404, 'Заявка не найдена');
-    const recipient = recipientOf(site);
-    if (!recipient) fail(409, 'Получатель заявок не настроен');
-    const active = db.prepare("SELECT id FROM site_order_outbox WHERE order_id=? AND status IN ('pending','sending') LIMIT 1").get(id);
-    if (active) fail(409, 'Уведомление по этой заявке уже отправляется');
-    const previous = db.prepare("SELECT * FROM site_order_outbox WHERE order_id=? AND kind='order' ORDER BY id DESC LIMIT 1").get(id);
-    const jobId = tx(() => enqueue(site, config, 'order', order, recipient));
+    if (!['manager', 'group'].includes(destination)) fail(400, 'Неизвестное назначение');
+    if (destination === 'group' && !order.group_required) fail(409, 'Групповое уведомление для этой заявки не включено');
+    const recipient = destination === 'group' ? groupOf(site) : recipientOf(site);
+    if (!recipient) fail(409, destination === 'group' ? 'Рабочая группа не настроена' : 'Получатель заявок не настроен');
+    let previous;
+    const jobId = tx(() => {
+      const active = db.prepare("SELECT id FROM site_order_outbox WHERE order_id=? AND destination=? AND status IN ('pending','sending') LIMIT 1").get(id, destination);
+      if (active) fail(409, 'Уведомление по этой заявке уже отправляется');
+      previous = db.prepare("SELECT * FROM site_order_outbox WHERE order_id=? AND kind='order' AND destination=? ORDER BY id DESC LIMIT 1").get(id, destination);
+      return enqueue(site, config, 'order', order, recipient, destination);
+    });
     return { ok: true, jobId: `${JOB_PREFIX}${jobId}`, previous: notifyJSON(previous), order: orderJSON(db.prepare('SELECT * FROM site_orders WHERE id=?').get(id)) };
   }
 
@@ -440,7 +518,7 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     }
     tx(() => {
       db.prepare(`UPDATE site_order_recipients SET transport=?,version=version+1,verified_at=NULL,last_test_error='',updated_at=? WHERE site=?`).run(transport, stamp(), site);
-      const stopped = db.prepare(`SELECT id,external_ids FROM site_order_outbox WHERE site=? AND status='pending'`).all(site);
+      const stopped = db.prepare(`SELECT id,external_ids FROM site_order_outbox WHERE site=? AND status='pending' AND destination='manager'`).all(site);
       for (const job of stopped) settle(job.id, 'error', 'Канал уведомлений изменён до отправки', JSON.parse(job.external_ids || '[]'));
     });
     return recipientStatus(site);

@@ -13,7 +13,7 @@ const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 const { createAuthStore } = require('./auth-store');
 const { createProjectChat } = require('./project-chat');
-const { clientIp, originOf, priceKopecks, PALITRA_ORDER_ORIGINS } = require('./site-orders');
+const { createSiteOrders, clientIp, originOf, priceKopecks, PALITRA_ORDER_ORIGINS } = require('./site-orders');
 const { createProjectChatBridge } = require('../chat/project-chat-bridge');
 const { parseQuietHours } = require('../chat/quiet-hours');
 
@@ -39,7 +39,7 @@ const requireCsrf = (request, session) => {
 const sendJson = (response, status, payload, headers) => { response.statusCode = status; response.payload = payload; response.headers = headers; };
 const readBody = async (request) => request.body;
 
-function setup({ price = PRICE, origins = [ORIGIN] } = {}) {
+function setup({ price = PRICE, origins = [ORIGIN], groupNotificationSites = [] } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'site-orders-'));
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON;');
@@ -48,7 +48,7 @@ function setup({ price = PRICE, origins = [ORIGIN] } = {}) {
   const state = { price };
   const chat = createProjectChat({ db, authStore, assetsDir: dir, runnerUrl: '', chatApiKey: '',
     requireSession, requireCsrf, sendJson, readBody, fetchImpl: async () => { throw new Error('нет службы'); },
-    siteOrders: { sites: { [SITE]: { companyCode: ROOM, title: 'Palitra', origins } }, priceReader: () => state.price, ipSalt: 'salt', now: () => clock.now } });
+    siteOrders: { sites: { [SITE]: { companyCode: ROOM, title: 'Palitra', origins } }, groupNotificationSites, priceReader: () => state.price, ipSalt: 'salt', now: () => clock.now } });
   const owner = { user: authStore.getById(OWNER_ID), csrf: `csrf-${OWNER_ID}` };
   return { db, chat, orders: chat.siteOrders, clock, state, owner };
 }
@@ -67,6 +67,136 @@ async function call(chat, { session = null, method = 'GET', url, body: payload }
 const orderRows = (db) => db.prepare('SELECT * FROM site_orders ORDER BY id').all();
 const outboxRows = (db) => db.prepare('SELECT * FROM site_order_outbox ORDER BY id').all();
 const RECIPIENT = { telegramChatId: '123456789', label: 'Дарья' };
+const modern = (extra = {}) => body({ phone: '', contactChannel: 'telegram', contact: '@sample_user', telegramUsername: 'sample_user',
+  deliveryAddress: 'Тестовая улица, 1', deliveryDate: '2026-10-01', deliveryInterval: '12:00–15:00', ...extra });
+const bindGroup = async (f, id = '-1001') => {
+  const result = await call(f.chat, { session: f.owner, method: 'PATCH', url: `/content/project-chat/${ROOM}/settings`, body: { telegramChatId: id } });
+  assert.equal(result.statusCode, 200);
+};
+
+test('новый контракт: четыре канала, структурная доставка, строгая валидация без обязательного телефона для Telegram/MAX', () => {
+  for (const [channel, contact, phone] of [['phone', '+7 900 000-00-00', '+7 900 000-00-00'], ['whatsapp', '89000000000', '89000000000'], ['telegram', 'Sample_User', ''], ['max', 'https://max.example/profile', '']]) {
+    const f = setup();
+    const created = submit(f.orders, modern({ contactChannel: channel, contact, telegramUsername: channel === 'telegram' ? '@sample_user' : '' }));
+    assert.equal(created.status, 201, JSON.stringify(created));
+    const row = f.orders.listOrders(SITE).orders[0];
+    assert.equal(row.contactChannel, channel); assert.equal(row.phone, phone);
+    assert.equal(row.contact, channel === 'telegram' ? '@sample_user' : contact);
+    assert.deepEqual([row.deliveryAddress, row.deliveryDate, row.deliveryInterval], ['Тестовая улица, 1', '2026-10-01', '12:00–15:00']);
+    assert.equal(f.db.prepare('SELECT delivery_address FROM site_orders').get().delivery_address, row.deliveryAddress);
+  }
+  const f = setup();
+  const invalid = [
+    { contactChannel: 'email' }, { contact: '' }, { contact: '@12345' }, { contact: '@abcd' }, { telegramUsername: '@other_user' },
+    { contactChannel: 'max', contact: 'x@example.test', telegramUsername: '' }, { contactChannel: 'max', contact: 'javascript:alert(1)', telegramUsername: '' },
+    { contactChannel: 'max', contact: 'https://user:pass@host.test', telegramUsername: '' }, { contactChannel: 'max', contact: 'http://host.test', telegramUsername: '' },
+    { contactChannel: 'phone', contact: '123', telegramUsername: '' }, { contactChannel: 'phone', contact: '89000000000', phone: '89111111111', telegramUsername: '' },
+    { deliveryDate: '2026-02-30' }, { deliveryDate: '2025-02-29' }, { deliveryDate: '' }, { deliveryAddress: '' }, { deliveryInterval: '' },
+    { deliveryAddress: 'x'.repeat(501) }, { deliveryInterval: 'x'.repeat(81) }, { comment: 'x'.repeat(1001) }, { contact: 'x'.repeat(101) }
+  ];
+  for (const extra of invalid) assert.equal(submit(f.orders, modern(extra)).status, 400, JSON.stringify(extra));
+  assert.equal(submit(f.orders, body({ deliveryAddress: 'не терять молча' })).status, 400);
+  assert.equal(submit(f.orders, modern({ kind: 'request', items: [], deliveryAddress: '', deliveryDate: '', deliveryInterval: '' })).status, 201, 'короткая форма без доставки и телефона');
+  assert.equal(submit(f.orders, modern({ deliveryDate: '2028-02-29' })).status, 201, 'високосная дата');
+});
+
+test('fingerprint: legacy неизменен; все новые значимые поля защищены от повторного requestId', () => {
+  const f = setup(), legacy = body();
+  submit(f.orders, legacy);
+  assert.equal(orderRows(f.db)[0].fingerprint, crypto.createHash('sha256').update(JSON.stringify({ kind: 'cart', name: 'Анна', phone: '79140001122', comment: 'к 18:00', items: [{ id: 'bukety-1', qty: 2 }] })).digest('hex'));
+  assert.equal(submit(f.orders, { ...legacy, phone: '+7 (914) 0001122' }).status, 200);
+  const payload = modern(); assert.equal(submit(f.orders, payload).status, 201);
+  assert.equal(submit(f.orders, { ...payload, contact: 'SAMPLE_USER', telegramUsername: '@Sample_User' }).status, 200);
+  for (const extra of [{ name: 'Другое имя' }, { phone: '89000000000' }, { comment: 'другой текст' }, { contact: '@second_user', telegramUsername: '@second_user' },
+    { contactChannel: 'max', contact: 'profile', telegramUsername: '' }, { deliveryAddress: 'Другой адрес' }, { deliveryDate: '2026-10-02' }, { deliveryInterval: '18:00–20:00' }, { items: [{ id: 'bukety-1', qty: 3 }] }]) {
+    assert.equal(submit(f.orders, { ...payload, ...extra }).status, 409, JSON.stringify(extra));
+  }
+  assert.equal(orderRows(f.db).length, 2);
+});
+
+test('группа: обе формы и любой контакт доставляются независимо от личного получателя, без AI jobs и дублей', async () => {
+  const f = setup({ groupNotificationSites: [SITE] }); await bindGroup(f);
+  for (const [channel, contact] of [['phone', '89000000000'], ['telegram', '@sample_user'], ['whatsapp', '+79000000000'], ['max', 'profile']]) {
+    for (const kind of ['cart', 'request']) {
+      const payload = modern({ kind, items: kind === 'request' ? [] : [{ id: 'bukety-1', qty: 1 }], contactChannel: channel, contact, telegramUsername: channel === 'telegram' ? contact : '' });
+      const result = submit(f.orders, payload, { ip: `203.0.113.${outboxRows(f.db).length + 10}` });
+      assert.equal(result.status, 201); assert.equal(submit(f.orders, payload).status, 200);
+      const [job] = f.chat.bridge.pendingTelegram(); assert.equal(job.chatId, '-1001');
+      assert.match(job.text, /Связаться через:/); assert.match(job.text, /Адрес доставки: Тестовая улица, 1/);
+      f.chat.bridge.acknowledgeTelegram(job.id, { ok: true, externalMessageIds: ['1'] });
+      const order = f.orders.listOrders(SITE).orders[0];
+      assert.equal(order.groupNotify.status, 'sent'); assert.equal(order.notify, null); assert.equal(order.status, 'accepted');
+    }
+  }
+  assert.equal(outboxRows(f.db).length, 8);
+  assert.equal(f.db.prepare('SELECT count(*) AS n FROM project_chat_ai_jobs').get().n, 0);
+  assert.equal(f.db.prepare('SELECT count(*) AS n FROM project_chat_messages').get().n, 0, 'уведомления не создают сообщений/AI в комнате');
+  assert.throws(() => f.orders.setRecipient(SITE, { telegramChatId: '-1001' }), (e) => e.status === 400);
+});
+
+test('группа и менеджер: транспорт, ACK, ошибки и повторы изолированы; старый ACK не отменяет новый групповой повтор', async () => {
+  const f = setup({ groupNotificationSites: [SITE] }); await bindGroup(f); f.orders.setRecipient(SITE, RECIPIENT);
+  f.orders.setTransport(SITE, { transport: 'client_bot' }, { clientBotReady: () => ({ ok: true }) });
+  const created = submit(f.orders, modern());
+  const [group] = f.chat.bridge.pendingTelegram(), [manager] = f.orders.pendingTelegram('client_bot', SITE);
+  assert.equal(group.chatId, '-1001'); assert.equal(manager.chatId, RECIPIENT.telegramChatId);
+  f.orders.acknowledge(manager.id, { ok: true });
+  f.orders.acknowledge(group.id, { uncertain: true });
+  let row = f.orders.listOrders(SITE).orders[0]; assert.equal(row.status, 'notified'); assert.equal(row.notify.status, 'sent'); assert.equal(row.groupNotify.status, 'uncertain');
+  assert.equal(f.chat.bridge.pendingTelegram().length, 0, 'unknown не повторяется автоматически');
+  const repeat = f.orders.renotify(SITE, created.body.orderId, 'group');
+  assert.throws(() => f.orders.renotify(SITE, created.body.orderId, 'group'), (e) => e.status === 409);
+  f.orders.acknowledge(group.id, { ok: true });
+  row = f.orders.listOrders(SITE).orders[0]; assert.equal(row.groupNotify.status, 'pending'); assert.equal(row.notify.status, 'sent');
+  f.orders.acknowledge(repeat.jobId, { ok: true }); assert.equal(f.orders.listOrders(SITE).orders[0].groupNotify.status, 'sent');
+  assert.equal(outboxRows(f.db).filter((x) => x.destination === 'manager').length, 1);
+});
+
+test('изменение группы отменяет pending в старый чат; личные настройки не отменяют групповую очередь; missing не теряет заказ', async () => {
+  const f = setup({ groupNotificationSites: [SITE] });
+  const first = submit(f.orders, modern());
+  assert.equal(f.orders.listOrders(SITE).orders[0].groupNotify.status, 'missing_binding');
+  assert.throws(() => f.orders.renotify(SITE, first.body.orderId, 'group'), (e) => e.status === 409);
+  await bindGroup(f);
+  assert.equal(outboxRows(f.db).length, 0, 'привязка сама не рассылает backlog');
+  f.orders.renotify(SITE, first.body.orderId, 'group');
+  await bindGroup(f, '-1002');
+  assert.equal(f.chat.bridge.pendingTelegram().length, 0);
+  assert.equal(f.orders.listOrders(SITE).orders[0].groupNotify.status, 'error');
+  f.orders.renotify(SITE, first.body.orderId, 'group');
+  f.orders.setRecipient(SITE, RECIPIENT);
+  f.orders.setRecipient(SITE, { telegramChatId: '555555555' });
+  f.orders.setTransport(SITE, { transport: 'client_bot' }, { clientBotReady: () => ({ ok: true }) });
+  const [job] = f.chat.bridge.pendingTelegram(); assert.equal(job.chatId, '-1002');
+  f.clock.tick(11 * 60000); assert.equal(f.chat.bridge.pendingTelegram().length, 0);
+  assert.equal(f.orders.listOrders(SITE).orders[0].groupNotify.status, 'uncertain');
+  const other = setup(); await bindGroup(other); submit(other.orders, body());
+  assert.equal(other.orders.listOrders(SITE).orders[0].groupNotify, null, 'без явного включения старое поведение');
+  assert.throws(() => other.orders.renotify(SITE, 1, 'group'), (e) => e.status === 409, 'старые заявки не рассылаются в группу');
+});
+
+test('сбой групповой вставки откатывает заказ и личное задание целиком', async () => {
+  const f = setup({ groupNotificationSites: [SITE] }); await bindGroup(f); f.orders.setRecipient(SITE, RECIPIENT);
+  f.db.exec("CREATE TRIGGER fail_group BEFORE INSERT ON site_order_outbox WHEN NEW.destination='group' BEGIN SELECT RAISE(ABORT,'synthetic group failure'); END");
+  assert.throws(() => submit(f.orders, modern()), /synthetic group failure/);
+  assert.equal(orderRows(f.db).length, 0); assert.equal(outboxRows(f.db).length, 0);
+});
+
+test('аддитивная миграция: прежние заказы, fingerprints и личные задания сохраняются без группового backlog', () => {
+  const f = setup(); f.orders.setRecipient(SITE, RECIPIENT);
+  const payload = body(); submit(f.orders, payload);
+  const before = orderRows(f.db)[0], job = outboxRows(f.db)[0];
+  // Возвращаем только схему к предыдущей версии, сохраняя реальные данные прежнего контракта.
+  for (const name of ['contact_channel', 'contact', 'telegram_username', 'delivery_address', 'delivery_date', 'delivery_interval', 'group_required']) f.db.exec(`ALTER TABLE site_orders DROP COLUMN ${name}`);
+  f.db.exec('ALTER TABLE site_order_outbox DROP COLUMN destination');
+  const migrated = createSiteOrders({ db: f.db, tx: (fn) => fn(), sites: { [SITE]: { companyCode: ROOM, title: 'Palitra', origins: [ORIGIN] } },
+    priceReader: () => PRICE, groupNotificationSites: [SITE], groupReader: () => '-1001' });
+  assert.equal(migrated.listOrders(SITE).orders[0].groupNotify, null);
+  assert.equal(orderRows(f.db)[0].fingerprint, before.fingerprint);
+  assert.equal(outboxRows(f.db)[0].destination, 'manager'); assert.equal(outboxRows(f.db)[0].chat_id, job.chat_id);
+  assert.equal(submit(migrated, payload).status, 200); assert.equal(outboxRows(f.db).length, 1);
+  assert.throws(() => migrated.renotify(SITE, before.id, 'group'), (e) => e.status === 409);
+});
 
 test('цены прайса читаются в копейках, всё неточное — неизвестно; IP берётся только от доверенного прокси', () => {
   assert.equal(priceKopecks('3 500 руб.'), 350000);

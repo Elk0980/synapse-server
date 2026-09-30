@@ -29,6 +29,41 @@ function fixture({ role = 'owner', company = 'palitra-love' } = {}) {
   return { w, d, views, calls, ctx, state, container: d.getElementById('view'), render: () => views['site-orders'].render(d.getElementById('view'), ctx) };
 }
 
+test('структурный контакт/доставка и рабочая группа: экранирование, независимое состояние и адресный повтор с CSRF', async () => {
+  const f = fixture(), rendering = f.render();
+  const row = order(1, 'notified', { phone: '', contactChannel: 'telegram', contact: '@sample_<b>', deliveryAddress: 'Улица <script>bad()</script>',
+    deliveryDate: '2026-10-01', deliveryInterval: '12:00–15:00', notify: { status: 'sent', finishedAt: '2026-09-30T10:00:00Z' }, groupNotify: { configured: true, status: 'uncertain' } });
+  f.calls[0].resolve({ orders: [row], recipient: recipient({ configured: true, group: { enabled: true, configured: true } }) });
+  await rendering; await tick();
+  assert.match(f.container.textContent, /Telegram: @sample_<b>/);
+  assert.match(f.container.textContent, /Улица <script>bad\(\)<\/script>.*2026-10-01.*12:00–15:00/);
+  assert.equal(f.d.querySelector('.site-order__contact a'), null, 'ник не превращается в телефон/опасную ссылку');
+  assert.equal(f.d.querySelector('.site-order__delivery script'), null, 'адрес экранирован');
+  assert.match(f.d.querySelector('.site-order__notify').textContent, /Личное уведомление: Доставлено/);
+  assert.match(f.d.querySelector('.site-order__group-notify').textContent, /Рабочая группа: Доставка не подтверждена/);
+  assert.equal(f.d.querySelector('.site-order__renotify'), null, 'личное доставленное не предлагается повторять');
+  const button = f.d.querySelector('.site-order__renotify-group');
+  f.w.confirm = () => false; button.click(); await tick(); assert.equal(f.calls.length, 1);
+  f.w.confirm = () => true; button.click(); button.click(); await tick();
+  assert.equal(f.calls.length, 2); assert.equal(f.calls[1].url, '/content/palitra/orders/1/renotify-group');
+  assert.equal(f.calls[1].options.method, 'POST'); assert.equal(f.calls[1].options.headers['X-CSRF-Token'], 'csrf-1');
+  f.calls[1].resolve({ order: { ...row, groupNotify: { configured: true, status: 'pending' } } }); await tick();
+  assert.equal(f.d.querySelector('.site-order__renotify-group'), null);
+  assert.match(f.d.querySelector('.site-order__notify').textContent, /Доставлено/);
+  assert.match(f.d.querySelector('.site-order__group-notify').textContent, /отправляется/);
+  f.w.close();
+});
+
+test('нет личного получателя: групповая доставка не выдаётся за личную и отсутствие привязки группы видно', async () => {
+  const f = fixture(), rendering = f.render();
+  f.calls[0].resolve({ orders: [order(1, 'accepted', { groupNotify: { configured: false, status: 'missing_binding' } })], recipient: recipient({ group: { enabled: true, configured: false } }) });
+  await rendering; await tick();
+  assert.match(f.d.querySelector('[data-recipient-summary]').textContent, /личные уведомления не уходят/);
+  assert.match(f.d.querySelector('[data-group-summary]').textContent, /Рабочая группа не подключена/);
+  assert.match(f.d.querySelector('.site-order__group-notify').textContent, /Заявка сохранена/);
+  assert.equal(f.d.querySelector('.site-order__renotify-group'), null); f.w.close();
+});
+
 test('ALVI: собственный маршрут и честное предупреждение о неподключённом публичном приёме', async () => {
   const f = fixture({ company: 'alvi' });
   const rendering = f.render();
@@ -54,10 +89,10 @@ test('владелец Palitra: список, получатель не наст
   await rendering; await tick();
   const text = f.container.textContent;
   assert.match(text, /Получатель не настроен/);
-  assert.match(f.d.querySelector('[data-orders-warning]').textContent, /1 заявок сохранены без уведомления/);
+  assert.match(f.d.querySelector('[data-orders-warning]').textContent, /1 заявок сохранены без личного уведомления/);
   const cards = f.d.querySelectorAll('.site-order');
   assert.equal(cards.length, 2);
-  assert.match(cards[0].textContent, /№2/); assert.match(cards[0].textContent, /Доставка не подтверждена/); assert.match(cards[0].textContent, /может создать дубль/);
+  assert.match(cards[0].textContent, /№2/); assert.match(cards[0].textContent, /Личное уведомление не подтверждено/); assert.match(cards[0].textContent, /может создать дубль/);
   assert.match(cards[1].textContent, /уведомление не отправлялось/);
   assert.match(plain(cards[0].textContent), /Розы × 2 — 6 580 ₽/); assert.match(cards[0].textContent, /цена уточняется/);
   assert.equal(cards[0].querySelector('b').textContent, '№2');
@@ -199,7 +234,7 @@ test('перечитывание после действия при >100 пок�
   assert.equal(ids.length, 150, 'ничего из показанного не потеряно');
   assert.equal(ids[0], '№150'); assert.equal(ids[99], '№51'); assert.equal(ids[100], '№50'); assert.equal(ids[149], '№1');
   assert.equal(new Set(ids).size, 150, 'без дублей');
-  assert.match(f.d.querySelectorAll('.site-order')[0].textContent, /Уведомление не доставлено/, 'свежий статус применён');
+  assert.match(f.d.querySelectorAll('.site-order')[0].textContent, /Личное уведомление не доставлено/, 'свежий статус применён');
   assert.equal(more.hidden, true, 'курсор «всё показано» сохранён, а не сброшен на 51');
   // Новая заявка сверху после следующего обновления: свежая страница вытесняет ровно одну старую строку в хвост, но не теряет её.
   f.d.querySelector('[data-orders-refresh]').click(); await tick();

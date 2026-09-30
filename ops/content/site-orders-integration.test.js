@@ -126,4 +126,40 @@ test('живой content: приём заявки Palitra, маршруты вл
   const testJob = await req('/content/palitra/order-recipient/test', owner, 'POST');
   assert.equal(testJob.status, 202);
   assert.equal((await testJob.json()).jobId, 'order:2');
+  // Новая групповая доставка: отдельные права/CSRF, независимость от личной проверки и выбранного контакта.
+  assert.equal(after.orders[0].groupNotify.status, 'missing_binding');
+  assert.equal((await req(`/content/palitra/orders/${createdBody.orderId}/renotify-group`, owner, 'POST')).status, 409);
+  assert.equal((await req(`/content/palitra/orders/${createdBody.orderId}/renotify-group`, daria, 'POST')).status, 403);
+  assert.equal((await req(`/content/palitra/orders/${createdBody.orderId}/renotify-group`, { cookie: owner.cookie, csrf: 'forged' }, 'POST')).status, 403);
+  assert.equal((await req('/content/project-chat/palitra-love/settings', owner, 'PATCH', { telegramChatId: '-1001234' })).status, 200);
+  assert.equal((await req(`/content/alvi/orders/${createdBody.orderId}/renotify-group`, owner, 'POST')).status, 404);
+  const groupRetry = await req(`/content/palitra/orders/${createdBody.orderId}/renotify-group`, owner, 'POST');
+  assert.equal(groupRetry.status, 202);
+  const groupRetryBody = await groupRetry.json();
+  assert.equal(groupRetryBody.order.notify.status, 'sent');
+  assert.equal(groupRetryBody.order.groupNotify.status, 'pending');
+  assert.equal((await req(`/content/palitra/orders/${createdBody.orderId}/renotify-group`, owner, 'POST')).status, 409);
+  const [privateTest] = (await (await internal('/content/internal/project-chat/outbox')).json()).jobs;
+  assert.equal(privateTest.id, 'order:2');
+  await internal('/content/internal/project-chat/acknowledge', 'POST', { jobId: privateTest.id, ok: true });
+  const [groupJob] = (await (await internal('/content/internal/project-chat/outbox')).json()).jobs;
+  assert.equal(groupJob.id, groupRetryBody.jobId); assert.equal(groupJob.chatId, '-1001234');
+  await internal('/content/internal/project-chat/acknowledge', 'POST', { jobId: groupJob.id, ok: true });
+  const modern = { ...order, requestId: crypto.randomUUID(), phone: '', contactChannel: 'telegram', contact: '@sample_user', telegramUsername: '@sample_user',
+    deliveryAddress: 'Тестовая улица, 1', deliveryDate: '2026-10-01', deliveryInterval: '12:00–15:00', comment: 'Позвонить не нужно' };
+  const newCart = await req('/public-orders/palitra', null, 'POST', modern, { Origin: ORIGIN });
+  assert.equal(newCart.status, 201);
+  assert.equal((await req('/public-orders/palitra', null, 'POST', modern, { Origin: ORIGIN })).status, 200);
+  const [personal, groupNew] = [
+    ...(await (await internal('/content/internal/project-chat/outbox')).json()).jobs,
+    ...(await (await internal('/content/internal/project-chat/outbox')).json()).jobs
+  ];
+  assert.equal(personal.chatId, '123456789'); assert.equal(groupNew.chatId, '-1001234');
+  assert.match(groupNew.text, /Контакт: @sample_user/); assert.match(groupNew.text, /Адрес доставки: Тестовая улица, 1/);
+  assert.equal((await (await internal('/content/internal/project-chat/outbox')).json()).jobs.length, 0, 'повтор формы не добавил задания');
+  await internal('/content/internal/project-chat/acknowledge', 'POST', { jobId: personal.id, ok: true });
+  await internal('/content/internal/project-chat/acknowledge', 'POST', { jobId: groupNew.id, ok: false, uncertain: true });
+  const final = await (await req('/content/palitra/orders', owner)).json();
+  assert.deepEqual([final.orders[0].status, final.orders[0].notify.status, final.orders[0].groupNotify.status], ['notified', 'sent', 'uncertain']);
+  assert.deepEqual([final.orders[0].contactChannel, final.orders[0].phone, final.orders[0].deliveryDate], ['telegram', '', '2026-10-01']);
 });

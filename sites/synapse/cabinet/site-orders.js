@@ -5,12 +5,21 @@
 const cabinet = window.SbCabinet = window.SbCabinet || {};
 const SITE_BY_COMPANY = Object.freeze({ "palitra-love": "palitra", alvi: "alvi" });
 const STATUS = Object.freeze({
-  accepted: ["Принята, уведомление не отправлялось", "accepted"],
-  notified: ["Уведомление доставлено в Telegram", "notified"],
-  notify_uncertain: ["Доставка не подтверждена", "uncertain"],
-  notify_failed: ["Уведомление не доставлено", "failed"]
+  accepted: ["Принята, личное уведомление не отправлялось", "accepted"],
+  notified: ["Личное уведомление доставлено в Telegram", "notified"],
+  notify_uncertain: ["Личное уведомление не подтверждено", "uncertain"],
+  notify_failed: ["Личное уведомление не доставлено", "failed"]
 });
 const KIND = Object.freeze({ cart: "Корзина", request: "Форма" });
+const CHANNEL = Object.freeze({ phone: "Звонок", telegram: "Telegram", whatsapp: "WhatsApp", max: "MAX" });
+const groupSummary = (notify) => {
+  if (!notify) return "";
+  if (notify.status === "sent") return `Доставлено${notify.finishedAt ? ` ${when(notify.finishedAt)}` : ""}`;
+  if (["pending", "sending"].includes(notify.status)) return "Уведомление отправляется…";
+  if (notify.status === "uncertain") return "Доставка не подтверждена. Сообщение могло дойти; повтор может создать дубль.";
+  if (notify.status === "error") return `Не доставлено${notify.error ? `: ${notify.error}` : ""}.`;
+  return notify.configured ? "Заявка сохранена; уведомление в группу ещё не отправлялось." : "Рабочая группа не подключена. Заявка сохранена.";
+};
 // Состояние обработки менеджером (кнопки в Telegram бота Palitra) — отдельно от статуса уведомления.
 const WORK = Object.freeze({ new: "Новая", in_work: "В работе", done: "Выполнена", cancelled: "Отменена" });
 const rub = (kopecks) => `${Math.floor(kopecks / 100).toLocaleString("ru-RU")}${kopecks % 100 ? `,${String(kopecks % 100).padStart(2, "0")}` : ""} ₽`;
@@ -25,7 +34,7 @@ const explainNotify = (order) => {
   return notify?.finishedAt ? `Доставлено ${when(notify.finishedAt)}` : "";
 };
 const recipientSummary = (recipient) => {
-  if (!recipient.configured) return "Получатель не настроен: уведомления никому не уходят.";
+  if (!recipient.configured) return "Получатель не настроен: личные уведомления не уходят.";
   if (recipient.verifiedAt) return `Получатель подтверждён проверкой ${when(recipient.verifiedAt)}.`;
   if (recipient.lastTestError) return recipient.transport === "client_bot"
     ? `Проверка не прошла: ${recipient.lastTestError}. Получатель должен быть привязан к клиентскому боту компании (см. ниже).`
@@ -52,9 +61,10 @@ cabinet.registerView("site-orders", { title: "Заявки с сайта",
     const mutation = (method, body) => ({ method, headers: { "X-CSRF-Token": context.identity.csrfToken }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     const panel = document.createElement("div");
     panel.className = "site-orders";
-    panel.innerHTML = `<section class="card site-orders__recipient"><h2>Получатель уведомлений в Telegram</h2>
+    panel.innerHTML = `<section class="card site-orders__recipient"><h2>Получатель личных уведомлений в Telegram</h2>
       <p class="site-orders__warning" data-orders-warning hidden></p>
       <p data-recipient-summary>Загрузка…</p>
+      <p data-group-summary hidden></p>
       <form class="site-orders__form" data-recipient-form><label>Telegram ID личного чата<input name="telegramChatId" inputmode="numeric" pattern="[0-9]{5,20}" maxlength="20" autocomplete="off" placeholder="числовой ID, не имя пользователя"></label>
       <label>Подпись<input name="label" maxlength="80" autocomplete="off" placeholder="например, менеджер"></label>
       <div class="site-orders__actions"><button type="submit">Сохранить получателя</button><button type="button" data-recipient-test>Отправить проверочное сообщение</button><button type="button" data-orders-refresh>Обновить</button></div>
@@ -83,12 +93,15 @@ cabinet.registerView("site-orders", { title: "Заявки с сайта",
       if (!alive()) return;
       summary.textContent = recipientSummary(recipient);
       summary.dataset.state = !recipient.configured ? "missing" : recipient.verifiedAt ? "verified" : "unverified";
+      const group = panel.querySelector("[data-group-summary]");
+      group.hidden = !recipient.group?.enabled;
+      group.textContent = recipient.group?.configured ? "Рабочая группа подключена. Доставка каждой заявки в группу показана отдельно ниже." : "Рабочая группа не подключена; заявки сохраняются в ЛК. Настройте группу в чате проекта, затем отправьте нужные уведомления из списка.";
       if (document.activeElement !== form.elements.telegramChatId) form.elements.telegramChatId.value = recipient.telegramChatId || "";
       if (document.activeElement !== form.elements.label) form.elements.label.value = recipient.label || "";
       testButton.hidden = !recipient.configured;
       const count = Number(recipient.unnotifiedOrders) || 0;
       warning.hidden = count === 0;
-      warning.textContent = count ? `${count} заявок сохранены без уведомления. Настройте и проверьте получателя, затем отправьте их повторно из списка.` : "";
+      warning.textContent = count ? `${count} заявок сохранены без личного уведомления. Настройте и проверьте получателя, затем отправьте их повторно из списка.` : "";
     };
     const showOrders = (orders) => {
       if (!alive()) return;
@@ -105,9 +118,11 @@ cabinet.registerView("site-orders", { title: "Заявки с сайта",
           : '<p class="site-order__items">Заявка с формы, без корзины.</p>';
         article.innerHTML = `<header class="site-order__head"><b>№${h(order.id)}</b> · ${h(when(order.createdAt))} · ${h(KIND[order.kind] || order.kind)}
           <span class="site-order__status site-order__status--${cls}">${h(label)}</span></header>
-          <p class="site-order__contact">${h(order.name)} · <a href="tel:${h(order.phone.replace(/[^\d+]/g, ""))}">${h(order.phone)}</a></p>
+          <p class="site-order__contact">${h(order.name)}${order.contactChannel ? ` · ${h(CHANNEL[order.contactChannel] || order.contactChannel)}: ${h(order.contact)}` : ""}${order.phone ? ` · <a href="tel:${h(order.phone.replace(/[^\d+]/g, ""))}">${h(order.phone)}</a>` : ""}</p>
+          ${order.deliveryAddress ? `<p class="site-order__delivery">Доставка: ${h(order.deliveryAddress)}${order.deliveryDate ? ` · ${h(order.deliveryDate)}` : ""}${order.deliveryInterval ? ` · ${h(order.deliveryInterval)}` : ""}</p>` : ""}
           ${items}${order.comment ? `<p class="site-order__comment">${h(order.comment)}</p>` : ""}
-          <p class="site-order__notify">${h(explainNotify(order))}</p>
+          <p class="site-order__notify">Личное уведомление: ${h(explainNotify(order))}</p>
+          ${order.groupNotify ? `<p class="site-order__group-notify">Рабочая группа: ${h(groupSummary(order.groupNotify))}</p>` : ""}
           ${order.work && order.work.status !== "new" ? `<span class="site-order__work site-order__work--${h(order.work.status)}">Обработка: ${h(WORK[order.work.status] || order.work.status)}${order.work.updatedAt ? ` · ${h(when(order.work.updatedAt))}` : ""}</span>` : ""}`;
         if (["accepted", "notify_uncertain", "notify_failed"].includes(order.status) && !(order.notify && ["pending", "sending"].includes(order.notify.status))) {
           const button = document.createElement("button");
@@ -129,6 +144,24 @@ cabinet.registerView("site-orders", { title: "Заявки с сайта",
               status.textContent = `Уведомление по заявке №${order.id} поставлено в очередь.`;
             }
             catch (error) { if (alive()) status.textContent = error.status === 409 ? "Получатель не настроен или уведомление уже отправляется." : "Не удалось поставить уведомление в очередь."; }
+            finally { if (alive()) { setBusy(false); load({ quiet: true }); } }
+          });
+          article.append(button);
+        }
+        if (order.groupNotify?.configured && ["missing_binding", "not_queued", "error", "uncertain"].includes(order.groupNotify.status)) {
+          const button = document.createElement("button");
+          button.type = "button"; button.className = "site-order__renotify-group";
+          button.textContent = order.groupNotify.status === "uncertain" ? "Повторить в группу (возможен дубль)" : "Отправить в рабочую группу";
+          button.addEventListener("click", async () => {
+            if (busy || !alive()) return;
+            if (order.groupNotify.status === "uncertain" && !window.confirm(`Заявка №${order.id}: сообщение могло дойти в группу. Отправить повторно?`)) return;
+            setBusy(true); button.disabled = true;
+            try {
+              const result = await api(`${base}/orders/${encodeURIComponent(order.id)}/renotify-group`, mutation("POST"));
+              if (!alive()) return;
+              if (result?.order?.id === order.id) { shown = shown.map((row) => row.id === order.id ? result.order : row); showOrders(shown); }
+              status.textContent = `Уведомление по заявке №${order.id} поставлено в очередь рабочей группы.`;
+            } catch (error) { if (alive()) status.textContent = error.status === 409 ? "Группа не подключена или уведомление уже отправляется." : "Не удалось поставить уведомление в очередь группы."; }
             finally { if (alive()) { setBusy(false); load({ quiet: true }); } }
           });
           article.append(button);
