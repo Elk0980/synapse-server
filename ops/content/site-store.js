@@ -23,7 +23,7 @@ const LEGACY_SITES = [
     '/site-editor.html?site=avokado2', '/price-editor.html?site=avokado'],
   ['avokado3', 'avokado', 'АВОКАДО — основной сайт', 'published', 'https://avokado38.ru/', 'avokado3',
     '/site-editor.html?site=avokado3', '/price-editor.html?site=avokado'],
-  ['palitra-love', 'palitra-love', 'Palitra', 'draft',
+  ['palitra-love', 'palitra-love', 'Palitra', 'published',
     'https://palitra-love.synapsebusiness.ru/', 'palitra', null, '/price-editor-palitra.html'],
 ];
 
@@ -92,6 +92,18 @@ function createSiteStore(db, authStore, saveDocument) {
       WHERE id='alvi' AND company_code='alvi' AND source='legacy' AND deleted_at IS NULL
         AND (publication_status<>'published' OR name IN ('ALVI','АЛВИ')
           OR public_url='https://alvi.synapsebusiness.ru/')`).run(publicationStamp);
+    db.prepare('INSERT INTO site_migrations (id, applied_at) VALUES (?, ?)').run(migration, publicationStamp);
+  });
+  // Publish the working Palitra subdomain once. The bought domain still awaits DNS and is not claimed:
+  // a card whose address was changed is left alone, as are deleted, managed or other-company records.
+  transaction(db, () => {
+    const migration = 'palitra_publication_20261001';
+    if (db.prepare('SELECT id FROM site_migrations WHERE id=?').get(migration)) return;
+    const publicationStamp = new Date().toISOString();
+    db.prepare(`UPDATE managed_sites SET publication_status='published', updated_at=?
+      WHERE id='palitra-love' AND company_code='palitra-love' AND source='legacy' AND deleted_at IS NULL
+        AND public_url='https://palitra-love.synapsebusiness.ru/' AND publication_status<>'published'`)
+      .run(publicationStamp);
     db.prepare('INSERT INTO site_migrations (id, applied_at) VALUES (?, ?)').run(migration, publicationStamp);
   });
   const visible = (user, row) => user.role === 'owner' || user.companyCodes.includes(row.company_code);
