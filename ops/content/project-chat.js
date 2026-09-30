@@ -334,7 +334,8 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     retryAfterSeconds, limitMessage, cleanText, messageLimit: MESSAGE_LIMIT, aiAttempts: AI_ATTEMPTS });
   const serverScope = localWorker.scope.exclude, localCodes = localWorker.scope.params;
   /* Заявки с сайта: свой outbox (order:<n>) доставляется тем же мостом через pendingTelegram/acknowledgeTelegram. */
-  const siteOrders = createSiteOrders({ db, tx, priceReader: () => null, ...ordersConfig });
+  const siteOrders = createSiteOrders({ db, tx, priceReader: () => null, ...ordersConfig,
+    groupReader: (companyCode) => db.prepare('SELECT telegram_chat_id FROM project_chat_rooms WHERE company_code=?').get(companyCode)?.telegram_chat_id || null });
   const ownerAlerts = createHughOwnerAlerts({ db, now });
   /* Резервные провайдеры: OpenAI-совместимые API из окружения сервера. Ни один ключ не добавляется кодом;
      без настроенных провайдеров поведение прежнее. Компании локального обработчика сервер берёт только

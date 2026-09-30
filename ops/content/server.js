@@ -209,7 +209,7 @@ const projectChat = createProjectChat({ db, authStore, assetsDir: ASSETS_DIR,
   runnerUrl: HUGH_RUNTIME_URL, chatUrl: CHAT_URL, chatApiKey: CHAT_API_KEY,
   localWorker: { keySha256: HUGH_LOCAL_WORKER_KEY_SHA256, companies: HUGH_LOCAL_WORKER_COMPANIES },
   // Соль для хеша IP выводится из секрета сессий: сам IP не хранится, отдельного секрета не нужно.
-  siteOrders: { sites: ORDER_SITES, priceReader: (site) => latestStmt.get(`${site}/price`)?.body ?? null,
+  siteOrders: { sites: ORDER_SITES, groupNotificationSites: ['palitra'], priceReader: (site) => latestStmt.get(`${site}/price`)?.body ?? null,
     ipSalt: crypto.createHash('sha256').update(`site-orders-ip:${SESSION_SECRET}`).digest('hex') },
   miniApp: { botId: TELEGRAM_BOT_ID, sessionSecret: SESSION_SECRET },
   // Команды Хью в группах: сводка плана берётся из CRM тем же служебным ключом; имя бота — не секрет.
@@ -1201,6 +1201,7 @@ const server = http.createServer(async (request, response) => {
         return reply(200, orders.listOrders(site, { limit: url.searchParams.get('limit'), beforeId: url.searchParams.get('beforeId') }), headers);
       }
       if (parts[2] === 'orders' && parts.length === 5 && parts[4] === 'renotify' && request.method === 'POST') return reply(202, orders.renotify(site, parts[3]), headers);
+      if (parts[2] === 'orders' && parts.length === 5 && parts[4] === 'renotify-group' && request.method === 'POST') return reply(202, orders.renotify(site, parts[3], 'group'), headers);
       if (parts[2] === 'order-recipient' && parts.length === 3 && request.method === 'GET') return reply(200, orders.recipientStatus(site), headers);
       if (parts[2] === 'order-recipient' && parts.length === 3 && request.method === 'PUT') return reply(200, orders.setRecipient(site, await readJson(request)), headers);
       if (parts[2] === 'order-recipient' && parts.length === 4 && parts[3] === 'test' && request.method === 'POST') return reply(202, orders.testRecipient(site), headers);
