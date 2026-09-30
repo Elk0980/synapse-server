@@ -2810,7 +2810,7 @@ async function route(request, response) {
     if(action==='claim') result={job:taskDispatch.claim()};
     else if(action==='renew') result=taskDispatch.renew(body);
     else if(action==='complete') result=taskDispatch.complete(body.job,body.result);
-    else if(action==='error') result=taskDispatch.error(body.job);
+    else if(action==='error') result=taskDispatch.error(body.job,body.details);
     else if(action==='mirror') result=taskDispatch.mirror(body);
     else if(action==='alerts') result={alerts:taskDispatch.alerts()};
     else if(action==='ack-alert') result=taskDispatch.ackAlert(entityId(body.id));

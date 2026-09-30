@@ -27,14 +27,14 @@ function createTaskDispatchWorker({db,crmUrl,crmApiKey,fallback,fetchImpl=global
  }catch{ // Факт сбоя виден владельцу, очередь CRM остаётся на сервере.
   alerts.add('synapse-business','dispatch-transport-error','Доска задач: связь обработчика с очередью временно недоступна. Задания сохранены. Проверьте состояние диспетчера в ЛК.');
  }finally{syncBusy=false;}}
- async function processOne(){if(busy||stopping||!crmApiKey)return;busy=true;let job,renewTimer;try{
+ async function processOne(){if(busy||stopping||!crmApiKey)return;busy=true;let job,renewTimer,stage='provider';try{
   job=(await request('claim')).job;if(!job)return;
   let leaseLost=false;renewTimer=setInterval(()=>{void request('renew',job).catch(()=>{leaseLost=true;});},45000);renewTimer.unref?.();
   const payload=JSON.stringify({companyCode:job.companyCode,responseProfile:'structured-draft',maxOutputTokens:1200,system:INSTRUCTION,
    messages:[{role:'user',content:JSON.stringify({title:job.title,description:job.description,ownerAnswer:job.answer})}]});
   const answer=await fallback.reply(payload);if(leaseLost)return;
-  await request('complete',{job,result:{...parseDecision(answer.text),provider:answer.provider,model:answer.model,usage:answer.usage||null}});
- }catch{if(job)await request('error',{job}).catch(()=>{});}finally{clearInterval(renewTimer);busy=false;}}
+  stage='format';const decision=parseDecision(answer.text);stage='transport';await request('complete',{job,result:{...decision,provider:answer.provider,model:answer.model,usage:answer.usage||null}});
+ }catch(error){if(job)await request('error',{job,details:{code:stage,delay:error?.allUnavailable?error.delay:60}}).catch(()=>{});}finally{clearInterval(renewTimer);busy=false;}}
  function start(){if(timer||!crmApiKey)return;stopping=false;timer=setInterval(()=>{void sync();void processOne();},intervalMs);timer.unref?.();}
  function stop(){stopping=true;clearInterval(timer);timer=null;}
  return {start,stop,sync,processOne};
