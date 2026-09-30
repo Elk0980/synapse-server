@@ -42,8 +42,22 @@ test('HTTP: source bridge сохраняет приватное видео и б
   assert.equal((await req(stored.fileUrl)).status,401);
   assert.equal((await req(stored.fileUrl.replace('palitra-love','alvi'),{cookie})).status,404);
   const file=await req(stored.fileUrl,{cookie});assert.equal(file.status,200);assert.equal(file.headers.get('cache-control'),'private, no-store');assert.deepEqual(Buffer.from(await file.arrayBuffer()),video);
-  // Коллизия, созданная владельцем уже после старта, не превращает источник в обычный чат.
   const profile=await (await req('/content/whoami',{cookie})).json();
+  const manual=(fields,headers={cookie,'x-csrf-token':profile.csrfToken})=>{
+    const body=new FormData();for(const [key,value] of Object.entries(fields))body.set(key,value);body.set('file',new Blob([video],{type:'video/mp4'}),'manual.mp4');
+    return fetch(base+'/content/telegram-sources/palitra-love/manual-upload',{method:'POST',headers,body});
+  };
+  assert.equal((await manual({telegramUrl:'https://t.me/c/111/100'},{cookie})).status,403,'требуется CSRF');
+  assert.equal((await manual({telegramUrl:'https://t.me/c/111/100'},{})).status,401,'требуется сессия');
+  const imported=await manual({telegramUrl:'https://t.me/c/111/100'});assert.equal(imported.status,201);
+  const linked=(await imported.json()).item;assert.equal(linked.telegramUrl,'https://t.me/c/111/100');assert.equal(linked.importMethod,'manual');
+  assert.equal((await manual({telegramUrl:'https://t.me/c/111/100'})).status,200);
+  const archived=await manual({sourceChatId:'-100111',provenance:'История беседы до миграции; тестовая дата; manual.mp4'});assert.equal(archived.status,201);
+  const old=(await archived.json()).item;assert.equal(old.telegramUrl,null);assert.equal(old.importMethod,'manual_archive');
+  assert.deepEqual(Buffer.from(await (await req(old.fileUrl,{cookie})).arrayBuffer()),video);
+  assert.equal((await req(old.fileUrl)).status,401);
+  assert.equal((await manual({telegramUrl:'https://t.me/c/222/100'})).status,403);
+  // Коллизия, созданная владельцем уже после старта, не превращает источник в обычный чат.
   const settings=await fetch(base+'/content/project-chat/palitra-love/settings',{method:'PATCH',headers:{cookie,'x-csrf-token':profile.csrfToken,'content-type':'application/json'},body:JSON.stringify({telegramChatId:'-100111'})});
   assert.equal(settings.status,200);
   const collision=await (await req(internal+'/binding?chatId=-100111',{'x-api-key':key})).json();

@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {DatabaseSync} = require('node:sqlite');
+const {Writable}=require('node:stream');
 const {createTelegramSources,readSourceConfig,MAX_FILE} = require('./telegram-sources');
 const PNG = Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),Buffer.alloc(24)]);
 const CONFIG = {enabled:true,sources:[{chatId:'-100111',companyCode:'palitra-love',enabled:true},{chatId:'-100222',companyCode:'alvi',enabled:true}]};
@@ -22,8 +23,9 @@ function setup(t, config = CONFIG) {
   t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
   return {get db(){return db;},get module(){return module;},dir,users,
     restart(next=config){db.close();db=new DatabaseSync(dbFile);config=next;module=createTelegramSources(options());return module;},
-    async call(url,userId=2,method='GET') {const res={writeHead(status,headers){this.status=status;this.headers=headers;},end(bytes){this.bytes=bytes;}};
-      await module.handle({method,session:userId?{user:{...users[userId]}}:null},res,new URL('http://local'+url));return res;}};
+    async call(url,userId=2,method='GET') {const chunks=[];const res=new Writable({write(chunk,encoding,done){chunks.push(Buffer.from(chunk));done();}});
+      res.writeHead=function(status,headers){this.status=status;this.headers=headers;};
+      await module.handle({method,session:userId?{user:{...users[userId]}}:null},res,new URL('http://local'+url));res.bytes=Buffer.concat(chunks);return res;}};
 }
 test('приватный файл и квитанция переживают перезапуск; исходная рабочая привязка и другие очереди не меняются', async t=>{
   const s=setup(t);s.db.exec("CREATE TABLE project_chat_rooms(company_code TEXT,telegram_chat_id TEXT); INSERT INTO project_chat_rooms VALUES('palitra-love','-100999')");
