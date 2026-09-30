@@ -182,7 +182,10 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
     if (rejected) {
       const errorCode = telegram ? data.error_code : data.error?.error_code;
       // Only a parsed provider rejection establishes that no post was accepted.
-      throw failure([401,403,5,7,15,27,28].includes(errorCode) ? 'ACCESS_DENIED' : 'PLATFORM_REJECTED', false);
+      // Только числовой код: ни текст провайдера, ни адрес с токеном наружу не выходят.
+      // Сбор статистики различает постоянный неверный канал и временные 429/5xx.
+      throw Object.assign(failure([401,403,5,7,15,27,28].includes(errorCode) ? 'ACCESS_DENIED' : 'PLATFORM_REJECTED', false),
+        { providerErrorCode: errorCode });
     }
     if (!response.ok) throw failure('CONNECTION_UNCERTAIN', publishing);
     if (telegram ? data.ok !== true || !Object.hasOwn(data,'result') : !Object.hasOwn(data,'response')) throw failure('RESPONSE_UNCERTAIN', publishing);

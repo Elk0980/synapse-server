@@ -213,13 +213,13 @@ test('после смены аккаунта прежний missing_access не 
   const f = fixture(t, { transport });
   const saved = f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@old', provider: 'direct', collectHour: 0, revision: 0 }] });
   const first = await f.stats.collectDue();
-  assert.deepEqual(first.map((r) => r.status), ['missing_access', 'missing_access'], 'вчера и сегодня — без доступа');
+  assert.deepEqual(first.map((r) => r.status), ['missing_access'], 'текущий снимок — без доступа');
   assert.deepEqual(await f.stats.collectDue(), [], 'без изменений повтор не дёргает площадку');
   denied = false;
   f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@ok', provider: 'direct', collectHour: 0, revision: saved.accounts.find((a) => a.platform === 'telegram').revision }] });
   const after = await f.stats.collectDue();
-  assert.deepEqual(after.map((r) => [r.date, r.status]), [['2026-09-17', 'partial'], ['2026-09-18', 'partial']], 'новый аккаунт собирается сразу, не завтра');
-  assert.equal(served, 4);
+  assert.deepEqual(after.map((r) => [r.date, r.status]), [['2026-09-18', 'partial']], 'новый аккаунт собирается сразу, не завтра');
+  assert.equal(served, 2);
   assert.equal(f.db.prepare("SELECT value FROM social_snapshots WHERE metric='followers' AND account_ref='@ok'").get().value, 42);
 });
 
@@ -230,18 +230,18 @@ test('пересохранённое подключение площадки с�
   const f = fixture(t, { transport });
   f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@c', provider: 'direct', collectHour: 0, revision: 0 }] });
   const first = await f.stats.collectDue();
-  assert.deepEqual(first.map((r) => r.status), ['missing_access', 'missing_access'], 'вчера и сегодня — без доступа');
+  assert.deepEqual(first.map((r) => r.status), ['missing_access'], 'текущий снимок — без доступа');
   assert.deepEqual(await f.stats.collectDue(), [], 'ревизия подключения не менялась — площадку не дёргаем');
-  assert.equal(served, 2);
+  assert.equal(served, 1);
   denied = false; revision = 2; // владелец пересохранил токен подключения: social_accounts не менялись, account_ref и revision прежние
   const after = await f.stats.collectDue();
-  assert.deepEqual(after.map((r) => [r.date, r.status]), [['2026-09-17', 'partial'], ['2026-09-18', 'partial']], 'после восстановления подключения сбор идёт в тот же день, а не завтра');
-  assert.equal(served, 4);
+  assert.deepEqual(after.map((r) => [r.date, r.status]), [['2026-09-18', 'partial']], 'после восстановления подключения сбор идёт в тот же день, а не завтра');
+  assert.equal(served, 2);
   assert.equal(f.db.prepare("SELECT value FROM social_snapshots WHERE metric='followers'").get().value, 77);
   const fps = f.db.prepare('SELECT connection_fp FROM social_collect_runs ORDER BY id').all().map((r) => r.connection_fp);
   for (const fp of fps) assert.match(fp, /^[0-9a-f]{64}$/, 'в журнале только SHA256, не сама ревизия');
   assert.notEqual(fps[0], fps.at(-1), 'другая ревизия подключения — другой отпечаток');
-  assert.equal(new Set(fps.slice(0, 2)).size, 1, 'одна ревизия — один отпечаток');
+  assert.equal(fps.length, 2, 'на каждую ревизию один запуск');
   assert.doesNotMatch(JSON.stringify(fps), /direct|@c|:/, 'отпечаток необратим: исходной ревизии и цели в журнале нет');
 });
 
@@ -250,24 +250,20 @@ test('при неизменной ревизии подключения расп
   const transport = { connectionRevision: () => ({ provider: 'direct', revision: 7, target: '@c' }), async readStats() { served += 1; return { provider: 'direct', target: '@c', result: 100 + served }; } };
   const f = fixture(t, { transport });
   f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@c', provider: 'direct', collectHour: 0, revision: 0 }] });
-  assert.deepEqual((await f.stats.collectDue()).map((r) => [r.date, r.closed]), [['2026-09-17', true], ['2026-09-18', false]]);
+  assert.deepEqual((await f.stats.collectDue()).map((r) => [r.date, r.closed]), [['2026-09-18', false]]);
   assert.deepEqual(await f.stats.collectDue(), [], 'повтор сразу — ничего');
-  /* Вчерашний день у Telegram остаётся неполным (Bot API не отдаёт показатели постов) и
-     потому стоит в очереди повторов. Раньше очередь безусловно пропускала yesterday, и
-     такая дата не перепроверялась никогда. Теперь повтор делается ровно по своей задержке. */
+  // Успешный текущий счётчик не отправляется в повтор из-за недоступных показателей постов.
   const queued = f.stats.queuedDates('demo-a', 'telegram', '@c');
-  assert.deepEqual(queued.map((r) => [r.date, r.attempts]), [['2026-09-17', 1], ['2026-09-18', 1]],
-    'текущий день тоже неполон, но он обновляется своей веткой, а не очередью');
+  assert.deepEqual(queued, [], 'ограничение Bot API не является временной ошибкой');
   f.clock.ms += 30 * 60 * 1000;
   const retry = await f.stats.collectDue();
-  assert.deepEqual(retry.map((r) => [r.date, r.closed]), [['2026-09-17', true]], 'через полчаса повторяется вчерашняя дата из очереди, текущий день ещё не обновляется');
-  assert.equal(f.stats.queuedDates('demo-a', 'telegram', '@c')[0].attempts, 2, 'задержка выросла');
+  assert.deepEqual(retry, [], 'через полчаса успешный снимок не повторяется');
+  assert.deepEqual(f.stats.queuedDates('demo-a', 'telegram', '@c'), []);
   f.clock.ms += 31 * 60 * 1000;
-  // Задержка второй попытки — 30 минут, она тоже истекла: текущий день обновляется, вчерашний повторяется.
-  assert.deepEqual((await f.stats.collectDue()).map((r) => [r.date, r.closed]).sort(),
-    [['2026-09-17', true], ['2026-09-18', false]], 'итог за вчера не пересобирается расписанием — только очередью повторов');
+  assert.deepEqual(await f.stats.collectDue(), [], 'через час не появляется обновление текущего дня или backfill');
+  assert.equal(served, 1);
   assert.equal(f.db.prepare('SELECT count(DISTINCT connection_fp) n FROM social_collect_runs').get().n, 1, 'ревизия не менялась — отпечаток стабилен');
-  assert.equal(f.db.prepare("SELECT count(*) n FROM social_collect_runs WHERE trigger='schedule'").get().n, 3, 'лишних плановых запусков в журнале нет');
+  assert.equal(f.db.prepare("SELECT count(*) n FROM social_collect_runs WHERE trigger='schedule'").get().n, 1, 'лишних плановых запусков в журнале нет');
 });
 
 test('нечитаемая ревизия подключения — это не «подключения нет»: failed без чисел и без запроса к площадке; расписание доводит остальные аккаунты', async (t) => {
@@ -281,13 +277,13 @@ test('нечитаемая ревизия подключения — это не
   const f = fixture(t, { transport });
   f.stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@c', provider: 'direct', collectHour: 0, revision: 0 }, { platform: 'vk', accountRef: 'club1', provider: 'direct', collectHour: 0, revision: 0 }] });
   const runs = await f.stats.collectDue();
-  assert.deepEqual(runs.map((r) => [r.platform, r.date, r.status]).sort(), [['telegram', '2026-09-17', 'failed'], ['telegram', '2026-09-18', 'failed'], ['vk', '2026-09-17', 'ok'], ['vk', '2026-09-18', 'partial']],
+  assert.deepEqual(runs.map((r) => [r.platform, r.date, r.status]).sort(), [['telegram', '2026-09-18', 'failed'], ['vk', '2026-09-17', 'ok'], ['vk', '2026-09-18', 'partial']],
     'сбойный аккаунт не отменяет расписание следующего, исправного');
   assert.equal(f.db.prepare("SELECT count(*) n FROM social_snapshots WHERE platform='telegram'").get().n, 0, 'ревизия не прочитана — ни одной цифры');
   assert.deepEqual(served.filter((c) => c.startsWith('telegram')), [], 'площадку без читаемой ревизии не дёргаем');
   assert.equal(f.db.prepare("SELECT value FROM social_snapshots WHERE platform='vk' AND metric='followers'").get().value, 50, 'исправный аккаунт собран');
   const failed = f.db.prepare("SELECT error, status, connection_fp FROM social_collect_runs WHERE platform='telegram' ORDER BY id").all();
-  assert.deepEqual(failed.map((r) => r.status), ['failed', 'failed'], 'оба запуска в журнале — failed');
+  assert.deepEqual(failed.map((r) => r.status), ['failed'], 'запуск в журнале — failed');
   assert.match(failed[0].error, /Ревизия подключения площадки не прочитана/);
   assert.doesNotMatch(JSON.stringify(failed), /token|VAULT|хранилище/i, 'ни исключения, ни секретов в журнале');
 });
@@ -333,11 +329,11 @@ test('миграция старой таблицы запусков: колон�
   assert.equal(old.connection_fp, '', 'у записей до миграции отпечатка нет');
   assert.equal(old.account_ref, ''); assert.equal(old.account_revision, 0); assert.equal(old.closed, 1);
   stats.saveAccounts('demo-a', { accounts: [{ platform: 'telegram', accountRef: '@c', provider: 'direct', collectHour: 0, revision: 0 }] });
-  assert.deepEqual((await stats.collectDue()).map((r) => [r.date, r.status]), [['2026-09-17', 'partial'], ['2026-09-18', 'partial']], 'запись без отпечатка не подавляет сбор после миграции');
+  assert.deepEqual((await stats.collectDue()).map((r) => [r.date, r.status]), [['2026-09-18', 'partial']], 'запись без отпечатка не подавляет сбор после миграции');
   assert.match(db.prepare('SELECT connection_fp FROM social_collect_runs ORDER BY id DESC LIMIT 1').get().connection_fp, /^[0-9a-f]{64}$/, 'новые запуски пишут отпечаток');
   createSocialStats(db, { now: () => clock.ms, adapters: createSocialAdapters({ transport }), logger: { warn() {} } });
   assert.equal(db.prepare("SELECT count(*) n FROM pragma_table_info('social_collect_runs') WHERE name='connection_fp'").get().n, 1, 'повторный запуск миграции не дублирует колонку');
-  assert.equal(db.prepare('SELECT count(*) n FROM social_collect_runs').get().n, 3, 'миграция не создаёт и не теряет записи');
+  assert.equal(db.prepare('SELECT count(*) n FROM social_collect_runs').get().n, 2, 'миграция не создаёт и не теряет записи');
 });
 
 test('ответ провайдера, пришедший после смены аккаунта или подключения, отбрасывается', async (t) => {
