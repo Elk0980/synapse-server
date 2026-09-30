@@ -1,0 +1,26 @@
+name: spec-kit
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  process-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Проверить комплект и входы моделей
+        run: python tools/spec-kit/gate.py check
+      - name: Проверить отрицательные сценарии
+        run: python -m unittest discover -s tools/spec-kit -p 'test_*.py'
+      - name: Проверить основание изменения
+        if: github.event_name == 'pull_request'
+        run: python tools/spec-kit/gate.py pr "$GITHUB_EVENT_PATH"
