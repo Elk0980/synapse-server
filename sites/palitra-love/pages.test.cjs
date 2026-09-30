@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = __dirname;
-const VERSION = '20260929rel1';
+const VERSION = '20260930meeting1';
 // Корзина и заявка выпускаются отдельно (ссылка «Продолжить в Telegram»): своя версия подключения order.js.
 const ORDER_VERSION = '20260929bot1';
 function pages(dir = ROOT, out = []) {

@@ -1,12 +1,13 @@
 (() => {
   const hero = document.querySelector('.hero');
   if (!hero) return;
+  const story = document.getElementById('brand-story');
 
   // Layout depends on the actual header/banner, never on media playback.
   const root = document.documentElement;
   const header = document.querySelector('header');
   const cookie = document.querySelector('.cookie');
-  const content = document.querySelector('.hero-main');
+  const content = document.querySelector('.signature-copy') || document.querySelector('.hero-main');
   const updateLayout = () => {
     root.style.setProperty('--header-height', `${header?.getBoundingClientRect().height || 0}px`);
     root.style.setProperty('--hero-content-height', `${Math.ceil(content?.getBoundingClientRect().height || 0) + 32}px`);
@@ -60,7 +61,7 @@
     if (pause) pause.hidden = true;
     if (status) {
       const failed = hasMediaError();
-      status.textContent = failed ? 'Видео недоступно. Можно написать в Telegram или оставить заявку.' : '';
+      status.textContent = failed ? 'Не удалось загрузить историю. Каталог и форма заявки доступны ниже.' : '';
       status.hidden = !failed;
     }
     phase = 'poster';
@@ -126,6 +127,22 @@
     play();
   });
 
-  if (reduceMotion) showPoster();
+  // История остаётся рядом с предложением, но загружается и играет только по выбору посетителя.
+  if (story) {
+    story.addEventListener('toggle', () => {
+      if (story.open) {
+        if (phase === 'poster') phase = 'story';
+        updateOverlays();
+        play();
+      } else video.pause();
+    });
+    document.querySelectorAll('[data-story-open]').forEach(link => link.addEventListener('click', event => {
+      event.preventDefault();
+      story.open = true;
+      story.scrollIntoView({ behavior: reduceMotion ? 'instant' : 'smooth', block: 'start' });
+      story.querySelector('summary')?.focus({ preventScroll: true });
+    }));
+    showPoster();
+  } else if (reduceMotion) showPoster();
   else play();
 })();

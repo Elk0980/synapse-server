@@ -132,7 +132,7 @@ test('статические страницы: ни в одной карточк
   }
 });
 
-test('главная: карточки-примеры без «Купить» (нет id в каталоге), без Telegram; одно действие — заявка под повод', () => {
+test('главная: четыре повода ведут в реальные разделы каталога без псевдоцены и покупки примера', () => {
   const dom = new JSDOM(read('index.html'), { url: 'https://palitra-love.synapsebusiness.ru/', runScripts: 'outside-only' });
   const win = dom.window;
   win.PALITRA_CONFIG = { SITE_URL: win.location.origin };
@@ -141,12 +141,13 @@ test('главная: карточки-примеры без «Купить» (�
   assert.equal(cards.length, 4);
   for (const card of cards) {
     assert.equal(card.querySelector('[data-add]'), null, 'пример нельзя «купить» как позицию каталога');
-    assert.equal(card.querySelectorAll('a').length, 0, 'ссылок в карточке нет');
-    const buttons = card.querySelectorAll('button');
-    assert.equal(buttons.length, 1);
-    assert.equal(buttons[0].textContent, 'Заказать под Ваш повод');
-    assert.ok(buttons[0].dataset.occasion);
-    assert.equal(card.querySelector('.price').textContent, 'Цена уточняется');
+    const links = card.querySelectorAll('a');
+    assert.equal(links.length, 1);
+    const href = links[0].getAttribute('href');
+    assert.match(href, /^\/catalog\/[a-z-]+$/);
+    assert.ok(fs.existsSync(path.join(__dirname, href, 'index.html')), 'раздел существует');
+    assert.equal(card.querySelectorAll('button').length, 0);
+    assert.equal(card.querySelector('.price'), null, 'повод не выдаётся за товар с неизвестной ценой');
   }
   win.close();
 });
