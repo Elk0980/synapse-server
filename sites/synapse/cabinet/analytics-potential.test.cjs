@@ -57,7 +57,7 @@ test('unlinked aggregate stages never claim client conversion, even with complet
  const f=await fixture({dashboard:views,potential:potentialFor('alvi')});
  try{assert.equal(f.conversion(),'Конверсия из предыдущей ступени: — (показатели напрямую не сопоставимы)');
   for(const item of f.d.querySelectorAll('.funnel-conversion'))assert.doesNotMatch(item.textContent,/%/);
-  assert.match(f.d.querySelectorAll('.funnel-conversion')[2].textContent,/нет сопоставимой когорты клиентов/);
+  assert.match(f.d.querySelectorAll('.funnel-conversion')[2].textContent,/нет подтверждённой связи клиентов между этапами/);
   assert.match(f.content(),/могут пересекаться/);}
  finally{f.dom.window.close();}
 });

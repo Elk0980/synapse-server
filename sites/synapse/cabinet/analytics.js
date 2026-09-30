@@ -263,7 +263,7 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
     const previousStep = funnel[index - 1];
     // Источники отдают агрегаты событий, а не связанную когорту клиентов.
     const conversion = previousStep?.noConversionFrom ? `— (${previousStep.noConversionFrom})`
-      : index > 0 ? "— (нет сопоставимой когорты клиентов)" : "—";
+      : index > 0 ? "— (нет подтверждённой связи клиентов между этапами)" : "—";
     const width = step.value === null ? 28 : Math.max(28, step.value / maximum * 100);
     const details = platforms.map((platform) => {
       const key = { views: "pageViews", clicks: "funnelClicks", warmup: "clicks", deal: "sales" }[step.id];
