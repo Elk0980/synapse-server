@@ -52,8 +52,22 @@ function setup({ botId = BOT_ID, publicKeyHex = PUBLIC_HEX } = {}) {
 /* initData в формате Telegram: подпись Ed25519 над bot_id:WebAppData + отсортированные пары.
    auth_date по умолчанию уникален для каждого вызова: одинаковые строки — это уже повтор входа. */
 let sequence = 0;
+/* Стеновые часы в каждом тесте заморожены на моменте его старта (t.mock, восстановление после теста
+   автоматическое); серверные часы фикстуры — те же плюс clock.tick. Реальная дата не подменяется
+   константой, чтобы new Date() в модулях не расходился с Date.now. Иначе initData и verify
+   читали Date.now в разные моменты: при переходе через границу секунды «+61» становился «+60»
+   и принимался (CI push-run 36747750963), а «уникальные» auth_date соседних вызовов совпадали
+   (минус секунда счётчика, плюс секунда часов) и честный вход получал 409 replayed.
+   Умолчание — возраст 10…289 с: не пересекается с явными 0…4 с и остаётся в пределе 300 с. */
+const realNow = Date.now;
+let wallMs = 0;
+test.beforeEach((t) => {
+  wallMs = realNow();
+  sequence = 0;
+  t.mock.method(Date, 'now', () => wallMs);
+});
 /* project — подписанный start_param (ссылка проекта); null — открытие без ссылки проекта. */
-function initData({ user = { id: DARIA_TG, first_name: 'Дарья' }, authDate = Math.floor(Date.now() / 1000) - (sequence++ % 250), botId = BOT_ID, key = privateKey, project = ROOM, extra = {}, raw = null } = {}) {
+function initData({ user = { id: DARIA_TG, first_name: 'Дарья' }, authDate = Math.floor(Date.now() / 1000) - 10 - (sequence++ % 280), botId = BOT_ID, key = privateKey, project = ROOM, extra = {}, raw = null } = {}) {
   const params = { auth_date: String(authDate), query_id: 'AAHdF6IQAAAAAN0XohDhrOrc', user: JSON.stringify(user), ...(project ? { start_param: project } : {}), ...extra };
   const data = `${botId}:WebAppData\n${Object.keys(params).sort().map((k) => `${k}=${params[k]}`).join('\n')}`;
   const signature = crypto.sign(null, Buffer.from(data, 'utf8'), key).toString('base64url');
@@ -96,6 +110,8 @@ const linkDaria = async ({ chat, owner, person }, { tg = DARIA_TG, member = true
 
 test('подпись Telegram: только правильный ключ, бот, срок и форма данных; без bot id вход отключён', async () => {
   const { chat, clock } = setup();
+  const startMs = Date.now();
+  const S = Math.floor(startMs / 1000);
   const good = initData();
   assert.equal(chat.miniApp.verifyInitData(good).telegramUserId, String(DARIA_TG));
   const { privateKey: stranger } = crypto.generateKeyPairSync('ed25519');
@@ -108,14 +124,31 @@ test('подпись Telegram: только правильный ключ, бо�
     ['user.id не число', initData({ user: { id: '5001', first_name: 'Дарья' } })],
     ['user.id ноль', initData({ user: { id: 0 } })],
     ['user.id дробный', initData({ user: { id: 1.5 } })],
-    ['слишком старые', initData({ authDate: Math.floor(Date.now() / 1000) - 301 })],
-    ['из будущего', initData({ authDate: Math.floor(Date.now() / 1000) + 61 })],
     ['пусто', ''],
     ['огромный', `${good}&pad=${'x'.repeat(17000)}`],
   ]) assert.throws(() => chat.miniApp.verifyInitData(raw), status(401), name);
-  // Срок считается серверными часами: через 6 минут те же данные уже не принимаются.
+  // Границы срока в целых секундах серверных часов, в начале и в конце секунды:
+  // 300 с назад и 60 с вперёд принимаются, 301 и 61 — нет, причём именно как истёкшие.
+  const expired = (error) => error.status === 401 && error.state === 'expired';
+  for (const ms of [0, 999]) {
+    wallMs = S * 1000 + ms;
+    const s = Math.floor(Date.now() / 1000);
+    assert.equal(s, S, 'часы теста заморожены');
+    assert.equal(chat.miniApp.verifyInitData(initData({ authDate: s - 300 })).telegramUserId, String(DARIA_TG), `ровно 300 с, ms=${ms}`);
+    assert.equal(chat.miniApp.verifyInitData(initData({ authDate: s + 60 })).telegramUserId, String(DARIA_TG), `ровно +60 с, ms=${ms}`);
+    assert.throws(() => chat.miniApp.verifyInitData(initData({ authDate: s - 301 })), expired, `слишком старые, ms=${ms}`);
+    assert.throws(() => chat.miniApp.verifyInitData(initData({ authDate: s + 61 })), expired, `из будущего, ms=${ms}`);
+  }
+  wallMs = startMs;
+  // Срок считается серверными часами: те же данные живут ровно 300 с, на 301-й отвергаются.
+  const edge = initData({ authDate: S });
+  clock.tick(300 * 1000);
+  assert.equal(chat.miniApp.verifyInitData(edge).telegramUserId, String(DARIA_TG));
+  clock.tick(1000);
+  assert.throws(() => chat.miniApp.verifyInitData(edge), expired);
+  // Через 6 минут и прежний вход уже не принимается.
   clock.tick(6 * 60000);
-  assert.throws(() => chat.miniApp.verifyInitData(good), (error) => error.status === 401 && error.state === 'expired');
+  assert.throws(() => chat.miniApp.verifyInitData(good), expired);
   const off = setup({ botId: '' });
   await assert.rejects(() => post(off.chat, { initData: initData() }).then((r) => { if (r.statusCode !== 200) throw Object.assign(new Error(r.payload.error), { status: r.statusCode }); }), status(503));
   assert.equal(off.chat.miniApp.enabled, false);

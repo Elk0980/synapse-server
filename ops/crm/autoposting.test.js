@@ -1125,3 +1125,74 @@ test('импорт пакета принимает публикуемые опц
   assert.throws(()=>f.api.importPackage('alvi',{items:[item({dayKey:'D3',title:'Чужая площадка',platformOptions:{telegram:{pin_message:true}}})]},7),
     error=>error.status===400);
 });
+
+const IG={id:'instagram',platform:'instagram',provider:'onlypult',name:'Instagram',enabled:true,connected:true,revision:1};
+const STORY={text:'',mediaUrls:['https://example.test/story.jpg'],format:'story',platformIds:['instagram'],platformOptions:{instagram:{is_story:true}}};
+
+test('Сторис без подписи: согласование версии и площадки → очередь → отправка в Instagram Story без текста',async t=>{
+  const f=fixture(t);f.channels.push({...IG});
+  const p=palitraDraft(f,STORY);
+  assert.equal(p.text,'');assert.equal(p.readiness.ready,true);assert.equal(p.readiness.mediaOnlyStory,true);assert.deepEqual(p.readiness.issues,[]);
+  // Без согласования в план не ставится: gate версии и площадки сохранён.
+  await assert.rejects(f.schedule(p),e=>e.details.code==='APPROVAL_REQUIRED');
+  const saved=await approveSchedule(f,p);assert.equal(saved.status,'scheduled');
+  f.advance(60000);await f.api.drain();
+  assert.equal(f.calls.length,1);assert.equal(f.calls[0].channelId,'instagram');
+  assert.equal(f.calls[0].post.text,'');assert.deepEqual(f.calls[0].post.platformOptions,{instagram:{is_story:true}});
+  assert.deepEqual(f.calls[0].post.mediaUrls,['https://example.test/story.jpg']);
+  // Режим Story без формата плана тоже считается сторис: признак публикации, а не метаданные.
+  const byOption=palitraDraft(f,{...STORY,format:''});assert.equal(byOption.readiness.ready,true);assert.equal(byOption.readiness.mediaOnlyStory,true);
+});
+
+test('Сторис без подписи не уходит в Telegram, ВК или Instagram без режима Story; прочие gates сохранены',async t=>{
+  const f=fixture(t);f.channels.push({...IG});
+  for(const extra of [{platformIds:['telegram'],platformOptions:{}},{platformIds:['vk'],platformOptions:{}},{platformOptions:{}},
+    {platformOptions:{instagram:{is_story:false}}},{platformIds:['instagram','telegram']}]){
+    const p=palitraDraft(f,{...STORY,...extra});assert.equal(p.readiness.ready,true,JSON.stringify(extra));
+    await assert.rejects(approveSchedule(f,p),e=>e.details.code==='MEDIA_ONLY_TARGET'&&/транспорт Synapse требует текст/.test(e.message)&&!/площадке нужен текст/.test(e.message),JSON.stringify(extra));
+    const fresh=f.api.get(p.id,p.companyCode);assert.equal(fresh.approval.approved,false);assert.equal(fresh.status,'draft');
+  }
+  // Время в прошлом, отключённый канал и согласование только другой площадки не обходятся.
+  const past=palitraDraft(f,{...STORY,scheduledAt:'2026-09-14T00:00:00Z'});
+  await assert.rejects(approveSchedule(f,past),e=>/в будущем/.test(e.message));
+  f.channels[2].connected=false;const off=palitraDraft(f,STORY);
+  await assert.rejects(approveSchedule(f,off),e=>e.details.code==='CHANNEL_NOT_CONNECTED');f.channels[2].connected=true;
+  const partial=palitraDraft(f,{...STORY,platformIds:['instagram','telegram']});
+  f.api.approve(partial.id,partial.companyCode,{revision:partial.revision,approved:true,platformIds:['telegram']},{userId:7,userName:'С'});
+  const cur=f.api.get(partial.id,partial.companyCode);
+  await assert.rejects(f.schedule(cur),e=>['APPROVAL_REQUIRED','MEDIA_ONLY_TARGET'].includes(e.details.code));
+  // Компания без обязательного согласования: те же правила доставки.
+  const other=f.api.create('alvi',{title:'Сторис',text:'',mediaUrls:['https://example.test/story.jpg'],platformIds:['telegram'],format:'story',
+    scheduledAt:new Date(Date.parse('2026-09-15T00:00:00Z')+3600000).toISOString(),timezone:'Asia/Irkutsk',profileRevision:f.information.get('alvi').revision},7);
+  await assert.rejects(f.schedule(other),e=>e.details.code==='MEDIA_ONLY_TARGET');
+  f.advance(3*3600000);await f.api.drain();assert.equal(f.calls.length,0);
+});
+
+test('Пустой материал и пустые обычные посты не проходят; сторис с текстом — как прежде',async t=>{
+  const f=fixture(t);f.channels.push({...IG});
+  const noMedia=palitraDraft(f,{...STORY,mediaUrls:[]});
+  assert.equal(noMedia.readiness.ready,false);assert.equal(noMedia.readiness.mediaOnlyStory,false);
+  assert.ok(noMedia.readiness.issues.some(i=>/Нет материала/.test(i)));assert.ok(noMedia.readiness.issues.includes('Нет текста и подписей площадок'));
+  assert.throws(()=>f.api.approve(noMedia.id,noMedia.companyCode,{revision:noMedia.revision,approved:true},{userId:7}),e=>e.details.code==='NOT_READY');
+  for(const format of ['','post','reel','carousel']){
+    const p=palitraDraft(f,{text:'',format});assert.equal(p.readiness.ready,false,format);assert.equal(p.readiness.mediaOnlyStory,false);
+    assert.ok(p.readiness.issues.includes('Нет текста и подписей площадок'),format);
+  }
+  const reels=palitraDraft(f,{...STORY,format:'reel',platformOptions:{instagram:{is_reels:true}}});assert.equal(reels.readiness.ready,false);
+  const pkg=palitraDraft(f,STORY);
+  f.db.prepare("UPDATE autoposting_posts SET expected_media_sha256=? WHERE id=?").run('a'.repeat(64),pkg.id);
+  const fresh=f.api.get(pkg.id,pkg.companyCode);assert.equal(fresh.readiness.ready,false);assert.match(fresh.readiness.issues.join(';'),/Хеш видео не сверен/);
+  const withText=palitraDraft(f,{format:'story'});assert.equal(withText.readiness.mediaOnlyStory,false);
+  const scheduled=await approveSchedule(f,withText);assert.equal(scheduled.status,'scheduled');
+  f.advance(60000);await f.api.drain();assert.equal(f.calls.length,1);assert.equal(f.calls[0].post.text,'Проверенный текст');
+});
+
+test('Календарь: Instagram Story без подписи не считается нехваткой текста, другой канал получает точную причину',async t=>{
+  const f=fixture(t);f.channels.push({...IG});
+  const ig=palitraDraft(f,STORY),tg=palitraDraft(f,{...STORY,platformIds:['telegram'],platformOptions:{}});
+  const cal=await f.api.calendar('palitra-love',{from:'2026-09-01',to:'2026-09-30'});
+  const igItem=cal.posts.find(post=>post.id===ig.id),tgItem=cal.posts.find(post=>post.id===tg.id);
+  assert.ok(!igItem.calendarReadiness.platforms[0].issues.some(i=>/текст/.test(i)),JSON.stringify(igItem.calendarReadiness.platforms[0].issues));
+  assert.ok(tgItem.calendarReadiness.platforms[0].issues.some(i=>/без текста Synapse отправляет только Instagram Story/.test(i)));
+  assert.ok(!tgItem.calendarReadiness.platforms[0].issues.some(i=>/нет ни подписи, ни общего текста/.test(i)));
+});

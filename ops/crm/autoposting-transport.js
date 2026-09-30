@@ -228,7 +228,12 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
     if (channelRevision !== undefined && row.revision !== channelRevision) throw failure('CHANNEL_CHANGED');
     const caps = row.provider === 'onlypult' ? providerCaps(channelId,PLATFORMS[channelId]) : PLATFORMS[channelId];
     const text = String(post.text || ''), media = post.mediaUrls || [], title = String(post.title || '').trim();
-    if (!text.trim() || text.length > caps.maxText || !Array.isArray(media) || media.length > caps.maxMedia ||
+    /* Пустой текст — только у Instagram Story через Onlypult с материалом: сторис выходит без публичной
+       подписи. Любой другой канал или режим с пустым текстом отклоняется: пустых обычных постов нет. */
+    const options = post.platformOptions && typeof post.platformOptions === 'object' && !Array.isArray(post.platformOptions) ? post.platformOptions : {};
+    const storyWithoutText = channelId === 'instagram' && row.provider === 'onlypult' && options.instagram?.is_story === true &&
+      Array.isArray(media) && media.length > 0;
+    if ((!text.trim() && !storyWithoutText) || text.length > caps.maxText || !Array.isArray(media) || media.length > caps.maxMedia ||
         media.some(url => !publicUrl(url)) ||
         (Number.isInteger(caps.maxCaption) && media.length && text.length > caps.maxCaption)) throw failure('CONTENT_LIMIT');
     // YouTube Shorts: без заголовка и без ровно одного видео отправлять нечего.

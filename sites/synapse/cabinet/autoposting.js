@@ -93,6 +93,12 @@ const mediaPreview = urls => (urls||[]).map(url=>{const safe=safeUrl(url);if(!sa
   const player=isVideo(safe)?`<video class="autoposting-video" controls preload="metadata" playsinline src="${esc(safe)}"></video>`:cabinet.companyAssets?.imageUrl?.(url)||/\.(jpe?g|png|webp|gif)(?:[?#].*)?$/i.test(safe)?`<img class="autoposting-thumbnail" src="${esc(safe)}" alt="Материал публикации" loading="lazy">`:"";
   return `<li>${player}<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a></li>`;}).join("");
 const isQueueCard = item => Boolean(item?.dayKey||Object.keys(item?.captions||{}).length);
+// Сторис с материалом и без подписи — законный формат (текст на кадре, стикеры ставятся нативно):
+// сторис по плану (формат) или по публикуемому режиму Instagram. Формат плана сам ничего не отправляет.
+const mediaOnlyStory = data => (data?.mediaUrls||[]).length>0&&!data.text&&!Object.keys(data.captions||{}).length
+  &&(data.format==="story"||data.platformOptions?.instagram?.is_story===true);
+// Без текста транспорт Synapse отправляет только Instagram Story через Onlypult; остальные каналы — с текстом.
+const storyTargetNote = name => `${name}: без текста Synapse отправляет только Instagram Story (включите «Публиковать как Story» и выберите Instagram); для этого канала транспорт Synapse требует текст.`;
 const requiresApproval = item => Boolean(item?.approvalRequired||isQueueCard(item));
 // Подтверждение внешней публикации: доказательство уже вышедшей записи. Та же проверка формата, что на сервере
 // (ops/crm/autoposting.js): https, домен площадки, путь адреса записи, никаких учётных данных, порта, части после «#»
@@ -310,7 +316,8 @@ function create(container, context) {
   const problems=({approving=false}={})=>{
     const result=[];let data;
     try{data=read();}catch(error){return [error.message];}
-    if(!data.title||(!data.text&&!Object.keys(data.captions).length))result.push("Заполните название и текст или подписи площадок.");
+    const storyOnly=mediaOnlyStory(data);
+    if(!data.title||(!data.text&&!Object.keys(data.captions).length&&!storyOnly))result.push("Заполните название и текст или подписи площадок.");
     if(!data.scheduledAt||Date.parse(data.scheduledAt)<=Date.now())result.push("Выберите дату и время в будущем.");
     if(!data.platformIds.length)result.push("Выберите подключённый канал публикации.");
     if(!Number.isSafeInteger(information?.revision)||information.revision<1)result.push("Сначала сохраните данные компании в разделе «Актуальность».");
@@ -337,7 +344,8 @@ function create(container, context) {
       const maxText=channel.platform==="telegram"&&data.mediaUrls.length?1024:(channel.caps?.maxText|| (channel.platform==="vk"?15000:4096));
       const maxMedia=Number.isSafeInteger(channel.caps?.maxMedia)?channel.caps.maxMedia:(channel.platform==="vk"?1:10);
       const channelText=data.captions[channel.platform]||data.text;
-      if(!channelText)result.push(`${channel.name||id}: нет ни общего текста, ни подписи площадки.`);
+      if(!channelText&&storyOnly&&!((channel.platform||id)==="instagram"&&data.platformOptions?.instagram?.is_story===true))result.push(storyTargetNote(channel.name||id));
+      else if(!channelText&&!storyOnly)result.push(`${channel.name||id}: нет ни общего текста, ни подписи площадки.`);
       if(channelText.length>maxText)result.push(`${channel.name||id}: текст до ${maxText} символов${data.mediaUrls.length&&channel.platform==="telegram"?" с изображениями":""}.`);
       if(data.mediaUrls.length>maxMedia)result.push(`${channel.name||id}: материалов не больше ${maxMedia}.`);
     }
@@ -818,7 +826,7 @@ function create(container, context) {
   form.addEventListener("submit",event=>{
     event.preventDefault();if(busy||!edit()||!settings||(post&&!EDITABLE.has(post.status))||!form.reportValidity())return;
     let data;try{data=read();}catch(error){message(error.message);return;}
-    if(!data.title||(!data.text&&!Object.keys(data.captions).length)){message("Заполните название и текст материала или подписи площадок.");return;}
+    if(!data.title||(!data.text&&!Object.keys(data.captions).length&&!mediaOnlyStory(data))){message("Заполните название и текст материала или подписи площадок. Без текста сохраняется только сторис с материалом.");return;}
     void run(async current=>{const oldKey=key();const result=await request("/autoposting/posts"+(post?"/"+encodeURIComponent(post.id):""),post?"PATCH":"POST",{...data,...(post?{revision:post.revision}:{})});if(!current())return;
       drafts.delete(oldKey);post=result;posts=[result,...posts.filter(item=>item.id!==result.id)];selections.set(companyCode,result.id);renderList();renderPost();message("Черновик сохранён. Откройте предпросмотр перед постановкой в план.");
     },"Сохраняем черновик…","Не удалось сохранить. Ввод остался в форме; версия могла измениться в другом окне.");
