@@ -12,6 +12,15 @@
   // Без \b: в JS граница слова не работает для кириллицы.
   const AUTO_PRICE_NOTE = /^\s*цена\s+(?:из|на\s+момент)\s+публикации(?=[\s,;.:]|$)[\s\S]*актуальн/i;
   const isAutoPriceNote = (note) => AUTO_PRICE_NOTE.test(String(note ?? ''));
+  function publicData(data, opts = {}) {
+    const config = window.PALITRA_CONFIG || {};
+    if (opts.editor || config.FLOWERS_VISIBLE !== false) return data;
+    const categories = new Set(config.FLOWER_CATEGORY_IDS || ['bukety', 'korziny']);
+    const items = new Set(config.FLOWER_ITEM_IDS || []);
+    const photos = new Set(config.FLOWER_PHOTO_PATHS || []);
+    return { ...data, categories: (data.categories || []).filter(cat => !categories.has(cat.id))
+      .map(cat => ({ ...cat, items: (cat.items || []).filter(item => !items.has(item.id) && !photos.has(item.photo)) })) };
+  }
   function findItem(data, id) {
     for (const cat of data.categories || []) {
       const it = (cat.items || []).find((item) => item.id === id);
@@ -101,6 +110,52 @@
       if (track) syncGallery(track.closest('[data-gallery]'));
     }, true);
   }
+  function installDetails(doc) {
+    if (!doc || doc.__palitraDetails) return;
+    doc.__palitraDetails = true;
+    let dialog, opener;
+    const close = () => {
+      if (!dialog) return;
+      if (typeof dialog.close === 'function') dialog.close(); else dialog.removeAttribute('open');
+      doc.body.classList.remove('product-dialog-open');
+      opener?.focus();
+    };
+    doc.addEventListener('click', event => {
+      if (event.target.closest('[data-product-close]')) { close(); return; }
+      if (event.target.closest('.product-dialog [data-cart-open]')) { close(); return; }
+      const summary = event.target.closest('[data-product-details] > summary');
+      if (!summary) return;
+      event.preventDefault();
+      const card = summary.closest('.product-card');
+      if (!card) return;
+      if (!dialog) {
+        dialog = doc.createElement('dialog');
+        dialog.className = 'product-dialog';
+        dialog.setAttribute('aria-labelledby', 'product-dialog-title');
+        doc.body.append(dialog);
+        dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
+        dialog.addEventListener('click', event => { if (event.target === dialog) close(); });
+      }
+      opener = summary;
+      dialog.innerHTML = '<button type="button" class="product-dialog-close" data-product-close aria-label="Закрыть товар">×</button><div class="product-dialog-layout"></div>';
+      const layout = dialog.querySelector('.product-dialog-layout');
+      const media = card.querySelector('.product-media')?.cloneNode(true);
+      if (media) layout.append(media);
+      const body = doc.createElement('div'); body.className = 'product-dialog-body';
+      const title = doc.createElement('h2'); title.id = 'product-dialog-title'; title.textContent = card.querySelector('h3')?.textContent || 'Товар';
+      body.append(title);
+      for (const field of card.querySelectorAll('[data-product-details] .price-card__description,[data-product-details] .note')) body.append(field.cloneNode(true));
+      body.append(card.querySelector('.product-footer').cloneNode(true));
+      const checkout = doc.createElement('button'); checkout.type = 'button'; checkout.className = 'button outline';
+      checkout.setAttribute('data-cart-open', ''); checkout.textContent = 'Перейти к оформлению'; body.append(checkout);
+      layout.append(body);
+      if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', '');
+      dialog.querySelectorAll('[data-gallery]').forEach(syncGallery);
+      doc.body.classList.add('product-dialog-open');
+      dialog.querySelector('[data-product-close]').focus();
+    });
+    doc.addEventListener('keydown', event => { if (event.key === 'Escape' && dialog?.open) { event.preventDefault(); close(); } });
+  }
   /* Одна структура карточки для прайса и каталога: медиа-блок 4:5 (фото или заглушка),
      название, описание и примечание владельца — в содержимом; внизу у всех карточек ряда
      один и тот же компактный блок: цена + «Купить» (добавляет в корзину; онлайн-оплаты нет).
@@ -127,10 +182,11 @@
       : `<div class="product-footer"><div class="product-purchase">${price}<button class="button product-add" type="button" data-add data-id="${esc(item.id)}" data-title="${esc(item.title)}">Купить</button></div></div>`;
     const classes = ['pc', 'price-card', 'product-card'].concat(opts.extraClass ? [opts.extraClass] : []).join(' ');
     const dataCat = Array.isArray(opts.tags) && opts.tags.length ? ` data-cat="${esc(opts.tags.join(' '))}"` : '';
-    return `<article class="${classes}" id="${esc(item.id)}" data-id="${esc(item.id)}"${dataCat}>${star}${media}<div class="price-card__body"><h3 class="pc__title">${esc(item.title)}</h3>${description}${note}${footer}</div></article>`;
+    const details = editor ? description + note : `<details class="product-details" data-product-details><summary>Подробнее</summary>${description}${note}</details>`;
+    return `<article class="${classes}" id="${esc(item.id)}" data-id="${esc(item.id)}"${dataCat}>${star}${media}<div class="price-card__body"><h3 class="pc__title">${esc(item.title)}</h3>${details}${footer}</div></article>`;
   }
   function renderSections(data, opts = {}) {
-    return (data.categories || []).filter((cat) => opts.editor || (cat.items || []).length).map((cat) => {
+    return (publicData(data, opts).categories || []).filter((cat) => opts.editor || (cat.items || []).length).map((cat) => {
       const extra = opts.editor && opts.titleExtra ? opts.titleExtra(cat) : '';
       const cards = (cat.items || []).map((item) => productCard(item, opts)).join('\n');
       const empty = opts.editor && !cards ? '<p class="ps__note">В этом разделе пока нет позиций.</p>' : '';
@@ -140,7 +196,7 @@
   }
   function renderNav(data, opts = {}) {
     const prefix = opts.prefix || '';
-    return prefix + (data.categories || []).filter((cat) => opts.editor || (cat.items || []).length).map((cat) => `<li><a class="pnav__top" href="#${esc(cat.id)}">${esc(cat.title)}</a></li>`).join('\n');
+    return prefix + (publicData(data, opts).categories || []).filter((cat) => opts.editor || (cat.items || []).length).map((cat) => `<li><a class="pnav__top" href="#${esc(cat.id)}">${esc(cat.title)}</a></li>`).join('\n');
   }
   const CACHE_KEY = 'palitra-public-price-v1';
   const validPrice = (data) => data && Array.isArray(data.categories) && data.categories.every((cat) =>
@@ -178,6 +234,6 @@
     }
     return null;
   }
-  if (typeof document !== 'undefined') installGallery(document);
-  window.PalitraPrice = { esc, findItem, isPopular, isAutoPriceNote, productCard, renderSections, renderNav, load, photosOf, syncGallery, PRICE_UNKNOWN };
+  if (typeof document !== 'undefined') { installGallery(document); installDetails(document); }
+  window.PalitraPrice = { esc, findItem, isPopular, isAutoPriceNote, productCard, renderSections, renderNav, load, publicData, photosOf, syncGallery, PRICE_UNKNOWN };
 }());

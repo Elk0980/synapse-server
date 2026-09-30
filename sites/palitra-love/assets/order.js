@@ -37,7 +37,7 @@
     unavailable: 'Приём заявок временно недоступен. Корзина сохранена — попробуйте позже или напишите нам в Telegram.',
     mismatch: 'Состав заявки изменился с прошлой попытки. Проверьте корзину и отправьте ещё раз.',
     stale: 'Часть позиций уже недоступна в прайсе. Удалите их из корзины и отправьте заявку снова.',
-    validation: 'Проверьте имя, телефон и согласие — сервер не принял заявку.',
+    validation: 'Проверьте контакт, поля заявки и согласие — сервер не принял заявку.',
     consent: 'Для отправки заявки нужно согласие на обработку данных.',
     empty: 'Корзина пуста — добавьте позиции из прайса или каталога.',
     priceLoading: 'Загружаем прайс, чтобы сверить состав корзины. Подождите несколько секунд.',
@@ -155,14 +155,51 @@
     const invalid = (field, message) => { throw Object.assign(new Error(message), { field }); };
     if (kind !== 'cart' && kind !== 'request') invalid('kind', 'Неизвестный тип заявки');
     if (!name || name.length > 80) invalid('name', 'Укажите имя: не больше 80 символов.');
-    const digits = normalizePhone(phone);
-    if (phone.length > 32 || digits.length < 10 || digits.length > 15) invalid('phone', 'Укажите номер телефона с кодом.');
+    const modern = fields.contactChannel !== undefined;
+    const channel = String(modern ? fields.contactChannel : 'phone');
+    let contact = String(fields.contact || '').trim();
+    let telegramUsername = '';
+    if (modern) {
+      if (!['phone', 'telegram', 'whatsapp', 'max'].includes(channel)) invalid('contactChannel', 'Выберите способ связи.');
+      if (channel === 'telegram') {
+        telegramUsername = String(fields.telegramUsername || contact).trim().replace(/^@/, '');
+        if (!/^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(telegramUsername)) invalid('telegramUsername', 'Укажите Telegram-ник: например, @username.');
+        contact = telegramUsername = '@' + telegramUsername.toLowerCase();
+      } else if (channel === 'phone' || channel === 'whatsapp') {
+        const digits = normalizePhone(contact);
+        if (contact.length > 32 || !/^[+\d\s().-]+$/.test(contact) || digits.length < 10 || digits.length > 15) invalid('contact', 'Укажите номер телефона с кодом.');
+      } else {
+        if (!contact || contact.length > 100 || /[^\s@]+@[^\s@]+\.[^\s@]+/.test(contact)
+          || (/:/.test(contact) && !/^https:\/\//i.test(contact))) invalid('contact', 'Укажите телефон, имя или HTTPS-ссылку для связи в MAX.');
+        if (/^https:\/\//i.test(contact)) {
+          try { const url = new URL(contact); if (!url.hostname || url.username || url.password) throw new Error(); }
+          catch (_) { invalid('contact', 'Проверьте ссылку для связи в MAX.'); }
+        }
+      }
+    } else {
+      const digits = normalizePhone(phone);
+      if (phone.length > 32 || digits.length < 10 || digits.length > 15) invalid('phone', 'Укажите номер телефона с кодом.');
+    }
     if (comment.length > 1000) invalid('comment', 'Сократите комментарий до 1000 символов.');
     if (fields.consent !== true) invalid('consent', MESSAGES.consent);
     if (kind === 'cart' && (!items.length || items.length > MAX_LINES)) invalid('items', MESSAGES.empty);
     const payload = { kind, name, phone, comment, consent: true,
       items: kind === 'cart' ? items.map((item) => ({ id: item.id, qty: item.qty })) : [],
       page: location.origin + location.pathname, utm: campaign(location), website: String(fields.website || '') };
+    if (modern) {
+      delete payload.phone;
+      Object.assign(payload, { contactChannel: channel, contact });
+      if (telegramUsername) payload.telegramUsername = telegramUsername;
+      if (kind === 'cart') {
+        const address = String(fields.deliveryAddress || '').trim();
+        const date = String(fields.deliveryDate || '').trim();
+        const interval = String(fields.deliveryInterval || '').trim();
+        if (!address || address.length > 500) invalid('deliveryAddress', 'Укажите адрес доставки или самовывоз, до 500 символов.');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) invalid('deliveryDate', 'Укажите дату получения заказа.');
+        if (!interval || interval.length > 80) invalid('deliveryInterval', 'Укажите удобное время, до 80 символов.');
+        Object.assign(payload, { deliveryAddress: address, deliveryDate: date, deliveryInterval: interval });
+      }
+    }
     if (kind === 'request') {
       const occasion = String(fields.occasion || '').trim(), date = String(fields.date || '').trim();
       if (occasion) payload.occasion = occasion.slice(0, 80);
@@ -173,7 +210,12 @@
   /* Отпечаток смысла заявки: состав + контакты + комментарий. Хранится только его хеш (не контакты). */
   async function fingerprint(payload, subtle) {
     const items = [...payload.items].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-    const material = JSON.stringify({ kind: payload.kind, name: payload.name, phone: normalizePhone(payload.phone), comment: payload.comment, items, occasion: payload.occasion || '', date: payload.date || '' });
+    const channel = payload.contactChannel || 'phone';
+    const contact = payload.contactChannel ? payload.contact : payload.phone;
+    const material = JSON.stringify({ kind: payload.kind, name: payload.name,
+      contactChannel: channel, contact: ['phone', 'whatsapp'].includes(channel) ? normalizePhone(contact) : contact,
+      comment: payload.comment, items, occasion: payload.occasion || '', date: payload.date || '',
+      deliveryAddress: payload.deliveryAddress || '', deliveryDate: payload.deliveryDate || '', deliveryInterval: payload.deliveryInterval || '' });
     if (subtle && subtle.digest) {
       const buffer = await subtle.digest('SHA-256', new TextEncoder().encode(material));
       return [...new Uint8Array(buffer)].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -277,6 +319,8 @@
       const text = [draft.occasion ? `Повод: ${draft.occasion}` : '', ...draft.lines].filter(Boolean).join('\n');
       comment.value = comment.value ? `${comment.value}\n${text}` : text;
       comment.value = comment.value.slice(0, 1000);
+      const summary = form.querySelector('[data-request-context]');
+      if (summary) { summary.textContent = comment.value; summary.hidden = false; }
     }
     try { session.removeItem(DRAFT_KEY); } catch (_) { /* недоступно */ }
     return true;
@@ -302,7 +346,7 @@
       if (!win.PalitraPrice || !win.PalitraPrice.load) { priceState = 'error'; return Promise.resolve(null); }
       priceState = 'loading';
       indexPromise = Promise.resolve().then(() => win.PalitraPrice.load(PRICE_SOURCES)).then((data) => {
-        index = data ? priceIndex(data) : null;
+        index = data ? priceIndex(win.PalitraPrice.publicData ? win.PalitraPrice.publicData(data) : data) : null;
         priceState = index ? 'ready' : 'error';
         return index;
       }, () => { priceState = 'error'; return null; }).finally(() => { indexPromise = null; });
@@ -324,7 +368,7 @@
         if (summary) summary.textContent = '';
       } else {
         list.innerHTML = view.lines.map((line) => `<div class="cart-line${line.missing ? ' cart-line--missing' : ''}${line.pending ? ' cart-line--pending' : ''}" data-cart-line="${esc(line.id)}">
-          <div class="cart-line__info"><b>${line.pending ? 'Позиция прайса' : esc(line.title)}</b><span>${line.pending ? (priceState === 'error' ? 'Прайс не загружен' : 'Загружаем прайс…') : line.missing ? 'Позиции больше нет в прайсе — удалите её' : line.price === null ? 'Цена уточняется' : `${formatRub(line.price)} × ${line.qty} = ${formatRub(line.price * line.qty)}`}</span></div>
+          <div class="cart-line__info"><b>${line.pending ? 'Позиция прайса' : esc(line.title)}</b><span>${line.pending ? (priceState === 'error' ? 'Прайс не загружен' : 'Загружаем прайс…') : line.missing ? 'Позиция сейчас недоступна — удалите её' : line.price === null ? 'Цена уточняется' : `${formatRub(line.price)} × ${line.qty} = ${formatRub(line.price * line.qty)}`}</span></div>
           <div class="cart-line__qty"><button type="button" data-qty-dec aria-label="Меньше">−</button><span aria-live="polite">${line.qty}</span><button type="button" data-qty-inc aria-label="Больше">+</button><button type="button" class="cart-line__remove" data-remove aria-label="Удалить">Удалить</button></div>
         </div>`).join('');
         if (total) total.textContent = view.ready && view.knownTotal ? formatRub(view.knownTotal) : '—';
@@ -393,10 +437,29 @@
         trap.setAttribute('aria-hidden', 'true'); trap.className = 'order-trap'; form.append(trap);
       }
       let pending = false;
+      const syncContact = () => {
+        const channel = form.elements.contactChannel;
+        if (!channel) return;
+        const telegram = channel.value === 'telegram';
+        const contact = form.elements.contact, username = form.elements.telegramUsername;
+        form.querySelector('[data-contact-field]').hidden = telegram;
+        form.querySelector('[data-telegram-field]').hidden = !telegram;
+        contact.disabled = pending || telegram; contact.required = !telegram;
+        username.disabled = pending || !telegram; username.required = telegram;
+        const max = channel.value === 'max';
+        contact.type = max ? 'text' : 'tel';
+        contact.maxLength = max ? 100 : 32;
+        contact.autocomplete = max ? 'off' : 'tel';
+        form.querySelector('[data-contact-label]').textContent = max ? 'Телефон или контакт в MAX' : 'Номер телефона';
+        contact.placeholder = max ? 'Телефон, имя или ссылка в MAX' : '+7 …';
+      };
+      form.elements.contactChannel?.addEventListener('change', syncContact);
+      syncContact();
       const setBusy = (busy) => {
         pending = busy;
         form.setAttribute('aria-busy', String(busy));
         for (const control of form.querySelectorAll('input, select, textarea, button')) control.disabled = busy;
+        syncContact();
       };
       const message = (text, state) => { status.textContent = text; status.dataset.state = state; };
       // Ссылка в Telegram показывается только под успешной заявкой и убирается при следующей отправке.
@@ -445,6 +508,8 @@
           forgetRequest(kind, session);
           if (kind === 'cart') { cart.consume(snapshot); renderItems(); }
           form.reset();
+          const context = form.querySelector('[data-request-context]');
+          if (context) { context.hidden = true; context.textContent = ''; }
           message(result.message || `Заявка №${result.orderId} принята. Менеджер свяжется с вами, подтвердит состав и стоимость, согласует оплату и доставку.`, 'success');
           offerTelegram(result.telegramUrl);
         } catch (error) {

@@ -27,13 +27,17 @@
     }).catch(() => {});
   };
   const priceOf = product => {
-    const id = typeof product.priceId === 'string' ? product.priceId : '';
+    const id = typeof product?.priceId === 'string' ? product.priceId : '';
     const live = id && liveReady ? livePrices.get(id) : undefined;
     return live ? { known: true, text: live } : { known: false, text: PRICE_UNKNOWN };
   };
 
   document.querySelectorAll('[data-occasion-quiz]').forEach(root => {
     const config = JSON.parse(root.querySelector('script[type="application/json"]').textContent);
+    if (window.PALITRA_CONFIG?.FLOWERS_VISIBLE === false) {
+      const photos = new Set(window.PALITRA_CONFIG.FLOWER_PHOTO_PATHS || []);
+      config.products = config.products.filter(product => !photos.has('/assets/img/' + product.image));
+    }
     const answers = [];
     let step = 0;
     let resultShown = false;
@@ -48,7 +52,7 @@
       const price = priceOf(product);
       return [
         ...config.questions.map((question, index) => `${question.title}: ${answers[index] ?? '—'}`),
-        `Выбранная позиция: ${product.name} — ${price.known ? price.text : 'цена уточняется'}`
+        product ? `Выбранная позиция: ${product.name} — ${price.known ? price.text : 'цена уточняется'}` : 'Нужен индивидуальный подбор'
       ];
     };
     const draftFor = product => ({ occasion: config.occasion, source: config.source, lines: draftLines(product) });
@@ -59,7 +63,7 @@
         // Карточка результата: одно действие — заявка; ссылки в Telegram в карточке нет (замечание Дарьи 20.09.2026).
         return `<article class="quiz-product"><img src="/assets/img/${esc(product.image)}" alt="${esc(product.name)}" width="800" height="1000" loading="lazy"><div><h3>${esc(product.name)}</h3><div class="product-purchase"><p class="price" data-price-known="${price.known ? 'true' : 'false'}">${esc(price.text)}</p><a class="button" data-order-product="${index}" href="${REQUEST_URL}">Оставить заявку</a></div><p class="note">${price.known ? 'Цена из прайса на момент показа; менеджер подтвердит состав и стоимость по заявке.' : 'Стоимость подтвердит менеджер по заявке.'}</p></div></article>`;
       }).join('');
-      root.innerHTML = `<div class="quiz-panel"><h2>Вот что подойдёт</h2><p>Нажмите «Оставить заявку»: ответы и выбранный вариант подставятся в комментарий формы. В форме нужно указать имя, телефон, дату и согласие на обработку данных.</p><div class="quiz-results">${productCards}</div><div class="quiz-fallback" data-quiz-fallback hidden role="status"></div><button type="button" class="button outline" data-quiz-restart>Пройти ещё раз</button></div>`;
+      root.innerHTML = `<div class="quiz-panel"><h2>${config.products.length ? 'Вот что подойдёт' : 'Подберём оформление для вас'}</h2><p>Нажмите «Оставить заявку»: ответы и выбранный вариант подставятся в комментарий формы. В форме нужно указать имя, удобный способ связи, контакт и согласие на обработку данных.</p><div class="quiz-results">${productCards || `<a class="button" data-order-custom href="${REQUEST_URL}">Оставить заявку</a>`}</div><div class="quiz-fallback" data-quiz-fallback hidden role="status"></div><button type="button" class="button outline" data-quiz-restart>Пройти ещё раз</button></div>`;
     };
     /* Хранилище недоступно: ответы не теряются — показываем их текстом для копирования в комментарий. */
     const showFallback = draft => {
@@ -67,7 +71,7 @@
       if (!box) return;
       const text = [`Повод: ${draft.occasion}`, ...draft.lines].join('\n');
       box.hidden = false;
-      box.innerHTML = `<p>Не удалось передать ответы в форму автоматически. Скопируйте текст ниже в комментарий заявки:</p><textarea readonly rows="6">${esc(text)}</textarea><a class="button" href="${REQUEST_URL}">Перейти к форме заявки</a>`;
+      box.innerHTML = `<p>Не удалось передать ответы в форму автоматически. Скопируйте текст ниже, чтобы отправить его менеджеру после заявки:</p><textarea readonly rows="6">${esc(text)}</textarea><a class="button" href="${REQUEST_URL}">Перейти к форме заявки</a>`;
       box.querySelector('textarea').focus();
     };
     root.addEventListener('click', event => {
@@ -75,10 +79,10 @@
       if (answer) { answers[step] = answer.dataset.answer; step += 1; step === 3 ? renderResult() : renderQuestion(); }
       if (event.target.closest('[data-quiz-back]')) { step -= 1; renderQuestion(); }
       if (event.target.closest('[data-quiz-restart]')) { answers.length = 0; step = 0; renderQuestion(); }
-      const order = event.target.closest('[data-order-product]');
+      const order = event.target.closest('[data-order-product],[data-order-custom]');
       if (!order) return;
       // Черновик сохраняется до перехода; при отказе хранилища переход не выполняется молча.
-      const draft = draftFor(config.products[Number(order.dataset.orderProduct)]);
+      const draft = draftFor(order.hasAttribute('data-order-custom') ? null : config.products[Number(order.dataset.orderProduct)]);
       if (!saveDraft(draft)) { event.preventDefault(); showFallback(draft); }
     });
     renderQuestion();

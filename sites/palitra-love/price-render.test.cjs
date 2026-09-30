@@ -22,7 +22,7 @@ test('карточка прайса: фиксированный порядок �
   const html = P.productCard(full);
   assert.match(html, /^<article class="pc price-card product-card" id="vypiska-1" data-id="vypiska-1">/);
   // Примечание владельца — в содержимом, до низа; низ у всех карточек одинаков: цена + «Купить».
-  const order = ['pc price-card product-card', 'product-media', 'price-card__photo photo', 'price-card__body', 'pc__title', 'price-card__description', 'note', 'product-footer', 'product-purchase', 'pc__price price', 'button product-add'];
+  const order = ['pc price-card product-card', 'product-media', 'price-card__photo photo', 'price-card__body', 'pc__title', 'product-details', 'price-card__description', 'note', 'product-footer', 'product-purchase', 'pc__price price', 'button product-add'];
   assert.deepEqual(classSequence(html), order);
   assert.match(html, /data-price-known="true">9 270 руб\.</);
   assert.match(html, /width="800" height="1000"/);

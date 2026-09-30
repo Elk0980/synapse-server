@@ -45,7 +45,7 @@
       ? `<div class="product-media"><img class="price-card__photo photo" src="${esc(image)}" alt="${esc(item.title)}" loading="lazy" decoding="async" width="800" height="1000"></div>`
       : '<div class="product-media product-media--empty" aria-hidden="true"><img src="/assets/img/logo-mark.svg" alt="" width="64" height="64" loading="lazy"></div>';
     const note = item.note && !isAutoPriceNote(item.note) ? `<p class="note">${esc(item.note)}</p>` : '';
-    return `<article class="pc price-card product-card${opts.extraClass ? ' ' + esc(opts.extraClass) : ''}" id="${esc(item.id)}" data-id="${esc(item.id)}"${opts.tags ? ` data-cat="${esc(opts.tags.join(' '))}"` : ''}>${media}<div class="price-card__body"><h3 class="pc__title">${esc(item.title)}</h3>${item.desc ? `<p class="price-card__description">${esc(item.desc)}</p>` : ''}${note}<div class="product-footer"><div class="product-purchase"><p class="pc__price price" data-price-known="${priceText ? 'true' : 'false'}">${priceText ? esc(priceText) : 'Цена уточняется'}</p><button class="button product-add" type="button" data-add data-id="${esc(item.id)}" data-title="${esc(item.title)}">Купить</button></div></div></div></article>`;
+    return `<article class="pc price-card product-card${opts.extraClass ? ' ' + esc(opts.extraClass) : ''}" id="${esc(item.id)}" data-id="${esc(item.id)}"${opts.tags ? ` data-cat="${esc(opts.tags.join(' '))}"` : ''}>${media}<div class="price-card__body"><h3 class="pc__title">${esc(item.title)}</h3><details class="product-details" data-product-details><summary>Подробнее</summary>${item.desc ? `<p class="price-card__description">${esc(item.desc)}</p>` : ''}${note}</details><div class="product-footer"><div class="product-purchase"><p class="pc__price price" data-price-known="${priceText ? 'true' : 'false'}">${priceText ? esc(priceText) : 'Цена уточняется'}</p><button class="button product-add" type="button" data-add data-id="${esc(item.id)}" data-title="${esc(item.title)}">Купить</button></div></div></div></article>`;
   }
   /* Обложка и дополнительные фото (gallery) в разметке товара: одно фото — строкой, как раньше; несколько — списком. */
   function imageField(item, origin) {
@@ -76,8 +76,12 @@
     const container = doc.querySelector('[data-products]');
     if (!container) return;
     const data = await win.PalitraPrice.load(['/api/price', '/data/price.json']);
-    if (!data) return; // Keep the existing fallback if the service is unavailable.
-    const list = entries(data, win.location.pathname);
+    if (!data) {
+      container.innerHTML = '<p class="catalog-empty">Не удалось загрузить каталог. Обновите страницу или <a href="/#zayavka">оставьте заявку на подбор</a>.</p>';
+      return;
+    }
+    const visibleData = win.PalitraPrice.publicData ? win.PalitraPrice.publicData(data) : data;
+    const list = entries(visibleData, win.location.pathname);
     const render = win.PalitraPrice.productCard;
     container.innerHTML = list.length ? list.map(item => card(item, render)).join('') : '<p>В этом разделе пока нет товаров.</p>';
     doc.querySelectorAll('script[type="application/ld+json"]').forEach(script => {

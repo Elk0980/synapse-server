@@ -18,6 +18,11 @@ const fields = { name: 'Анна', phone: '8 999 828-10-10', comment: 'к 12:00'
 // toLocaleString('ru-RU') разделяет тысячи узким неразрывным пробелом — сравниваем с обычным.
 const plain = (text) => String(text).replace(/[  ]/g, ' ');
 const tick = async () => { for (let i = 0; i < 6; i++) await new Promise((r) => setImmediate(r)); };
+const waitFor = async (predicate) => {
+  const deadline = Date.now() + 2000;
+  while (!predicate() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 5));
+  assert.ok(predicate(), 'ожидаемое состояние формы наступило');
+};
 
 test('корзина хранит только id и количество, лимиты соблюдаются, удалённая позиция помечается, а не пропадает', () => {
   const storage = memory();
@@ -188,7 +193,7 @@ test('зависшее тело ответа: таймаут покрывает 
     assert.equal(p.form.querySelector('button').disabled, false);
     assert.equal(p.api.cart.count(), 1);
     Object.defineProperty(p.win, 'crypto', { value: { subtle, randomUUID: () => '11111111-1111-4111-8111-111111111111' }, configurable: true });
-    p.submit(); await tick();
+    p.submit(); await waitFor(() => p.status().dataset.state === 'success');
     assert.equal(p.calls.length, 2); assert.equal(p.status().dataset.state, 'success');
     assert.ok(realSend === order.send);
   } finally { p.close(); }
@@ -256,14 +261,15 @@ test('без согласия и с пустой корзиной запроса
     assert.equal(p.calls.length, 0); assert.match(p.status().textContent, /пуста/);
     p.doc.querySelector('[data-add][data-id="gone-9"]').click();
     p.doc.querySelector('[data-cart-open]').click(); await tick();
-    assert.match(p.doc.querySelector('.cart-line--missing').textContent, /больше нет в прайсе/);
+    assert.match(p.doc.querySelector('.cart-line--missing').textContent, /сейчас недоступна/);
     p.fill(); p.submit(); await tick();
     assert.equal(p.calls.length, 0); assert.match(p.status().textContent, /недоступна/);
     p.doc.querySelector('.cart-line--missing [data-remove]').click();
     assert.equal(p.api.cart.count(), 0);
     const request = p.doc.querySelector('#zayavka form');
     request.elements.name.value = 'Иван'; request.elements.phone.value = '+7 999 828 10 10'; request.elements.occasion.value = 'Выписка'; request.elements.date.value = '2026-09-20'; request.elements.consent.checked = true;
-    request.dispatchEvent(new p.win.Event('submit', { cancelable: true })); await tick();
+    request.dispatchEvent(new p.win.Event('submit', { cancelable: true }));
+    await waitFor(() => request.querySelector('[data-order-status]').dataset.state === 'success');
     assert.equal(p.calls.length, 1);
     assert.equal(p.calls[0].body.kind, 'request'); assert.deepEqual(p.calls[0].body.items, []); assert.equal(p.calls[0].body.occasion, 'Выписка');
     assert.equal(request.querySelector('[data-order-status]').dataset.state, 'success');
