@@ -35,6 +35,7 @@ const TRANSPORTS = new Set(['project_bot', 'client_bot']);
 /* Состояние обработки заявки менеджером. Отдельно от статуса уведомления (site_orders.status):
    «уведомление доставлено» не значит «заявка в работе». Нет строки — заявка новая. */
 const WORK_STATUSES = new Set(['new', 'in_work', 'done', 'cancelled']);
+const CHECKLIST_ITEMS = Object.freeze({ photo: 'Фото готового заказа отправлено', guide: 'Памятка по шарам отправлена' });
 
 const fail = (status, message, code) => { throw Object.assign(new Error(message), { status, code }); };
 const sha256 = (value) => crypto.createHash('sha256').update(String(value), 'utf8').digest('hex');
@@ -117,6 +118,18 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
       id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL REFERENCES site_orders(id),
       status TEXT NOT NULL, actor TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS site_order_checklist (
+      order_id INTEGER NOT NULL REFERENCES site_orders(id), item TEXT NOT NULL CHECK(item IN ('photo','guide')),
+      checked INTEGER NOT NULL CHECK(checked IN (0,1)), revision INTEGER NOT NULL,
+      actor_type TEXT NOT NULL, actor_id TEXT NOT NULL, actor_label TEXT NOT NULL, updated_at TEXT NOT NULL,
+      PRIMARY KEY(order_id,item)
+    );
+    CREATE TABLE IF NOT EXISTS site_order_checklist_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL REFERENCES site_orders(id),
+      item TEXT NOT NULL CHECK(item IN ('photo','guide')), checked INTEGER NOT NULL CHECK(checked IN (0,1)), revision INTEGER NOT NULL,
+      actor_type TEXT NOT NULL, actor_id TEXT NOT NULL, actor_label TEXT NOT NULL, created_at TEXT NOT NULL,
+      UNIQUE(order_id,item,revision)
+    );
   `);
   // Колонки канала добавляются к уже созданным таблицам: прежние строки получают прежний канал.
   const columns = (table) => new Set(db.prepare(`SELECT name FROM pragma_table_info('${table}')`).all().map((row) => row.name));
@@ -130,6 +143,7 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
   const stamp = (at = now()) => new Date(at).toISOString();
   const siteConfig = (site) => (Object.hasOwn(sites, site) ? sites[site] : null);
   const ipHash = (ip) => sha256(`${ip}|${ipSalt}`);
+  const checklistEnabled = (site) => site === 'palitra' && siteConfig(site)?.companyCode === 'palitra-love';
   const groupEnabled = (site) => groupNotificationSites.includes(site);
   const groupOf = (site) => {
     const config = siteConfig(site);
@@ -404,6 +418,17 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     const row = db.prepare('SELECT status,updated_by,updated_at FROM site_order_work WHERE order_id=?').get(orderId);
     return row ? { status: row.status, updatedBy: row.updated_by, updatedAt: row.updated_at } : { status: 'new', updatedBy: '', updatedAt: null };
   };
+  const checklistActor = (row) => row ? { type: row.actor_type, id: row.actor_id, label: row.actor_label } : null;
+  function checklistJSON(site, orderId, history = true) {
+    if (!checklistEnabled(site)) return null;
+    const rows = db.prepare('SELECT * FROM site_order_checklist WHERE order_id=?').all(orderId);
+    const items = Object.entries(CHECKLIST_ITEMS).map(([key, label]) => {
+      const row = rows.find((item) => item.item === key);
+      return { key, label, checked: Boolean(row?.checked), revision: row?.revision || 0, actor: checklistActor(row), updatedAt: row?.updated_at || null };
+    });
+    return { items, ...(history ? { history: db.prepare('SELECT * FROM site_order_checklist_events WHERE order_id=? ORDER BY id DESC LIMIT 20').all(orderId)
+      .map((row) => ({ id: row.id, key: row.item, checked: Boolean(row.checked), revision: row.revision, actor: checklistActor(row), createdAt: row.created_at })) } : {}) };
+  }
   const groupNotifyJSON = (row) => {
     if (!row.group_required) return null;
     const job = db.prepare("SELECT * FROM site_order_outbox WHERE order_id=? AND kind='order' AND destination='group' ORDER BY id DESC LIMIT 1").get(row.id);
@@ -417,6 +442,7 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     deliveryAddress: row.delivery_address, deliveryDate: row.delivery_date, deliveryInterval: row.delivery_interval,
     page: row.page, utm: JSON.parse(row.utm_json || '{}'),
     groupNotify: groupNotifyJSON(row),
+    ...(checklistEnabled(row.site) ? { checklist: checklistJSON(row.site, row.id) } : {}),
     notify: notifyJSON(db.prepare("SELECT * FROM site_order_outbox WHERE order_id=? AND kind='order' AND destination='manager' ORDER BY id DESC LIMIT 1").get(row.id)) });
   function recipientStatus(site) {
     const config = siteConfig(site);
@@ -541,16 +567,53 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
     });
     return { changed: true, work: workJSON(id) };
   }
+  /* Ручное подтверждение менеджера, не событие доставки. Не создаёт outbox и не меняет обработку. */
+  function checklistOrder(site, orderId) {
+    if (!checklistEnabled(site)) fail(404, 'Чек-лист недоступен');
+    const id = Number(orderId);
+    if (!Number.isSafeInteger(id) || id < 1) fail(400, 'Некорректный номер заявки');
+    const row = db.prepare('SELECT * FROM site_orders WHERE id=? AND site=?').get(id, site);
+    if (!row) fail(404, 'Заявка не найдена');
+    return { order: orderJSON(row) };
+  }
+  function setChecklist(site, orderId, body, actor) {
+    if (!checklistEnabled(site)) fail(404, 'Чек-лист недоступен');
+    const id = Number(orderId);
+    if (!Number.isSafeInteger(id) || id < 1) fail(400, 'Некорректный номер заявки');
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some((key) => !['item', 'checked', 'revision'].includes(key))
+      || !Object.hasOwn(CHECKLIST_ITEMS, body.item) || typeof body.checked !== 'boolean' || !Number.isSafeInteger(body.revision) || body.revision < 0) fail(400, 'Некорректная отметка');
+    if (!actor || !['owner', 'telegram'].includes(actor.type) || !/^\d{1,20}$/.test(String(actor.id))) fail(400, 'Не указан автор отметки');
+    const who = { type: actor.type, id: String(actor.id), label: shortText(actor.label || (actor.type === 'owner' ? 'Владелец' : 'Менеджер в Telegram'), 80) };
+    return tx(() => {
+      const order = db.prepare('SELECT * FROM site_orders WHERE id=? AND site=?').get(id, site);
+      if (!order) fail(404, 'Заявка не найдена');
+      const before = checklistJSON(site, id, false).items.find((item) => item.key === body.item);
+      if (body.revision !== before.revision) {
+        const replay = body.revision === before.revision - 1 && before.checked === body.checked && before.actor?.type === who.type && before.actor?.id === who.id;
+        if (!replay) fail(409, 'Отметка уже изменена. Обновите заявку', 'CHECKLIST_STALE');
+        return { changed: false, order: orderJSON(order) };
+      }
+      if (before.checked === body.checked) return { changed: false, order: orderJSON(order) };
+      const at = stamp(), revision = before.revision + 1, checked = body.checked ? 1 : 0;
+      db.prepare(`INSERT INTO site_order_checklist(order_id,item,checked,revision,actor_type,actor_id,actor_label,updated_at) VALUES(?,?,?,?,?,?,?,?)
+        ON CONFLICT(order_id,item) DO UPDATE SET checked=excluded.checked,revision=excluded.revision,actor_type=excluded.actor_type,actor_id=excluded.actor_id,actor_label=excluded.actor_label,updated_at=excluded.updated_at`)
+        .run(id, body.item, checked, revision, who.type, who.id, who.label, at);
+      db.prepare('INSERT INTO site_order_checklist_events(order_id,item,checked,revision,actor_type,actor_id,actor_label,created_at) VALUES(?,?,?,?,?,?,?,?)')
+        .run(id, body.item, checked, revision, who.type, who.id, who.label, at);
+      return { changed: true, order: orderJSON(order) };
+    });
+  }
   /* Короткая сводка заявки для клиентского бота: без контактов, только то, что нужно для связи с диалогом. */
   function orderSummary(site, orderId) {
     const id = Number(orderId);
     if (!siteConfig(site) || !Number.isSafeInteger(id) || id < 1) return null;
     const row = db.prepare('SELECT id,request_id,created_at FROM site_orders WHERE id=? AND site=?').get(id, site);
-    return row ? { id: row.id, requestId: row.request_id, createdAt: row.created_at, work: workJSON(row.id) } : null;
+    return row ? { id: row.id, requestId: row.request_id, createdAt: row.created_at, work: workJSON(row.id),
+      ...(checklistEnabled(site) ? { checklist: checklistJSON(site, row.id, false) } : {}) } : null;
   }
 
   return { submit, pendingTelegram, acknowledge, isOrderJob, orderJob, listOrders, recipientStatus, setRecipient, setTransport, testRecipient, renotify,
-    setWorkStatus, orderSummary, sites: Object.keys(sites) };
+    setWorkStatus, setChecklist, checklistOrder, orderSummary, sites: Object.keys(sites) };
 }
 
 /* Точный allowlist Origin для заявок Palitra: боевой домен без www (www отвечает 301 и страниц не отдаёт)

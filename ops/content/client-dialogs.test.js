@@ -72,6 +72,44 @@ function bindDarya(t) {
   return code;
 }
 
+test('чек-лист в Telegram: только действующий оператор и подтверждённая связь сообщения/заявки; повтор, отмена, stale без отправки клиенту', () => {
+  const t = setup(); bindDarya(t);
+  t.orders.setTransport(SITE, { transport: 'client_bot' }, { clientBotReady: t.dialogs.transportReady });
+  const created = order(t), id = created.body.orderId, [job] = t.dialogs.pendingJobs('palitra');
+  const original = job.parts.at(-1).params.text;
+  assert.match(original, /ручные отметки менеджера/);
+  const keys = job.parts.at(-1).params.reply_markup.inline_keyboard;
+  assert.equal(keys.length, 3); assert.equal(keys[1][0].callback_data, `oc:${id}:photo:1:0`);
+  const press = (data, extra = {}) => t.dialogs.callback('palitra', { id: 'c-1', from: { id: Number(DARYA) }, data,
+    message: { message_id: 4200, chat: { id: Number(DARYA), type: 'private' }, text: original }, ...extra });
+  assert.equal(press(`oc:${id}:photo:1:0`).answer.showAlert, true, 'до ACK связь сообщения ещё не подтверждена');
+  t.dialogs.acknowledge('palitra', { jobId: job.id, ok: true, externalMessageIds: ['4200'] });
+  const jobsBefore = outbox(t.db), orderJobsBefore = t.db.prepare('SELECT * FROM site_order_outbox').all();
+  const first = press(`oc:${id}:photo:1:0`);
+  assert.equal(first.answer.text, 'Ручная отметка сохранена'); assert.equal(first.edit.text, original);
+  assert.equal(first.edit.replyMarkup.inline_keyboard[1][0].callback_data, `oc:${id}:photo:0:1`);
+  assert.match(first.edit.replyMarkup.inline_keyboard[1][0].text, /снять отметку/);
+  const saved = t.orders.listOrders(SITE).orders[0];
+  assert.deepEqual(saved.checklist.items[0].actor, { type: 'telegram', id: DARYA, label: 'Дарья' });
+  assert.equal(saved.status, 'notified'); assert.equal(saved.work.status, 'new');
+  t.clock.tick(1000);
+  assert.equal(press(`oc:${id}:photo:1:0`).answer.text, 'Отметка уже сохранена');
+  assert.equal(t.orders.listOrders(SITE).orders[0].checklist.history.length, 1);
+  assert.equal(press(`oc:${id}:photo:0:1`).answer.text, 'Ручная отметка снята');
+  const stale = press(`oc:${id}:photo:1:0`); assert.equal(stale.answer.showAlert, true);
+  assert.equal(stale.edit.replyMarkup.inline_keyboard[1][0].callback_data, `oc:${id}:photo:1:2`);
+  for (const extra of [{ from: { id: Number(STRANGER) } }, { message: { message_id: 999, chat: { id: Number(DARYA), type: 'private' }, text: original } },
+    { message: { message_id: 4200, chat: { id: Number(DARYA), type: 'group' }, text: original } }]) assert.equal(press(`oc:${id}:guide:1:0`, extra).answer.showAlert, true);
+  const another = order(t); assert.equal(press(`oc:${another.body.orderId}:guide:1:0`).answer.showAlert, true, 'номер другой заявки нельзя подставить в кнопку');
+  assert.equal(t.orders.listOrders(SITE).orders.find((row) => row.id === id).checklist.history.length, 2);
+  assert.deepEqual(outbox(t.db), jobsBefore, 'клиентских сообщений не создаётся');
+  assert.deepEqual(t.db.prepare('SELECT * FROM site_order_outbox WHERE order_id=?').all(id), orderJobsBefore, 'уведомления не меняются');
+  const inWork = press(`ow:${id}:in_work`); assert.equal(inWork.edit.replyMarkup.inline_keyboard.length, 3, 'изменение статуса сохраняет кнопки чек-листа');
+  t.dialogs.revokeOperator(SITE, 'owner');
+  assert.equal(press(`oc:${id}:guide:1:0`).answer.showAlert, true);
+  assert.equal(t.orders.checklistOrder(SITE, id).order.checklist.items[1].checked, false);
+});
+
 test('бот не включён без имени; события групп и чужих личек не принимаются', () => {
   const off = setup({ username: '' });
   assert.throws(() => off.dialogs.receive('palitra', { message: off.message(CLIENT, 'Здравствуйте') }), (error) => error.status === 404 && error.code === 'BOT_DISABLED');

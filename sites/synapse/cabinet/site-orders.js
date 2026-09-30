@@ -33,8 +33,19 @@ const explainNotify = (order) => {
   if (order.status === "accepted") return notify && ["pending", "sending"].includes(notify.status) ? "Уведомление отправляется…" : "Заявка сохранена, уведомление не отправлялось — получатель не был настроен.";
   return notify?.finishedAt ? `Доставлено ${when(notify.finishedAt)}` : "";
 };
-const recipientSummary = (recipient) => {
+const recipientSummary = (recipient, site) => {
   if (!recipient.configured) return "Получатель не настроен: личные уведомления не уходят.";
+  if (site === "palitra") {
+    const test = recipient.lastTest;
+    if (test && ["pending", "sending"].includes(test.status)) return "Ручная проверка: проверочное сообщение отправляется…";
+    const at = test?.finishedAt || test?.createdAt || recipient.verifiedAt;
+    const prefix = `Последняя ручная проверка${at ? ` ${when(at)}` : " (дата не сохранена)"}`;
+    const note = " Доставка конкретных заявок показана отдельно в списке ниже.";
+    if (recipient.lastTestError) return `${prefix}: не прошла — ${recipient.lastTestError}.${note}`;
+    if (test?.status === "sent" || recipient.verifiedAt) return `${prefix}: успешно.${note}`;
+    if (test?.status === "uncertain") return `${prefix}: доставка проверочного сообщения не подтверждена.${note}`;
+    return `Получатель сохранён; успешной ручной проверки пока нет.${note}`;
+  }
   if (recipient.verifiedAt) return `Получатель подтверждён проверкой ${when(recipient.verifiedAt)}.`;
   if (recipient.lastTestError) return recipient.transport === "client_bot"
     ? `Проверка не прошла: ${recipient.lastTestError}. Получатель должен быть привязан к клиентскому боту компании (см. ниже).`
@@ -91,7 +102,7 @@ cabinet.registerView("site-orders", { title: "Заявки с сайта",
     const setBusy = (value) => { busy = value; for (const control of form.querySelectorAll("input, button")) control.disabled = value; form.setAttribute("aria-busy", String(value)); };
     const showRecipient = (recipient) => {
       if (!alive()) return;
-      summary.textContent = recipientSummary(recipient);
+      summary.textContent = recipientSummary(recipient, site);
       summary.dataset.state = !recipient.configured ? "missing" : recipient.verifiedAt ? "verified" : "unverified";
       const group = panel.querySelector("[data-group-summary]");
       group.hidden = !recipient.group?.enabled;
@@ -165,6 +176,43 @@ cabinet.registerView("site-orders", { title: "Заявки с сайта",
             finally { if (alive()) { setBusy(false); load({ quiet: true }); } }
           });
           article.append(button);
+        }
+        if (site === "palitra" && order.checklist?.items) {
+          const checks = document.createElement("section");
+          checks.className = "site-order__checklist";
+          checks.innerHTML = '<h3>Ручная отметка менеджера</h3><p class="site-order__check-hint">Отметьте после отправки клиенту.</p>';
+          for (const item of order.checklist.items) {
+            const row = document.createElement("div"); row.className = "site-order__check";
+            row.innerHTML = `<span>${item.checked ? "✓ " : ""}${h(item.label)}</span><small>${item.updatedAt
+              ? `${item.checked ? "Отмечено" : "Отметка снята"}: ${h(item.actor?.label || "Менеджер")} · ${h(when(item.updatedAt))}` : "Пока не отмечено"}</small>`;
+            const button = document.createElement("button"); button.type = "button"; button.dataset.checklistItem = item.key;
+            button.textContent = item.checked ? "Снять отметку" : "Отметить отправку";
+            button.setAttribute("aria-label", `${button.textContent}: ${item.label}`);
+            button.addEventListener("click", async () => {
+              if (busy || !alive()) return;
+              setBusy(true); button.disabled = true;
+              const url = `${base}/orders/${encodeURIComponent(order.id)}/checklist`;
+              const apply = (result) => { if (result?.order?.id === order.id) { shown = shown.map((value) => value.id === order.id ? result.order : value); showOrders(shown); } };
+              try {
+                const result = await api(url, mutation("PUT", { item: item.key, checked: !item.checked, revision: item.revision }));
+                if (!alive()) return;
+                apply(result); status.textContent = item.checked ? "Ручная отметка снята." : "Ручная отметка сохранена.";
+              } catch (error) {
+                if (!alive()) return;
+                if (error.status === 409) {
+                  try { const fresh = await api(url); if (!alive()) return; apply(fresh); status.textContent = "Отметка уже изменена. Показано актуальное состояние."; }
+                  catch { if (alive()) status.textContent = "Отметка уже изменена. Обновите список перед повтором."; }
+                } else status.textContent = "Не удалось сохранить отметку. Повторите действие.";
+              } finally { if (alive()) { setBusy(false); button.disabled = false; } }
+            });
+            row.append(button); checks.append(row);
+          }
+          if (order.checklist.history?.length) {
+            const history = document.createElement("details");
+            history.innerHTML = `<summary>История отметок</summary><ul>${order.checklist.history.map((event) => `<li>${h(event.key === "photo" ? "Фото" : "Памятка")}: ${event.checked ? "отмечено" : "отметка снята"} · ${h(event.actor?.label || "Менеджер")} · ${h(when(event.createdAt))}</li>`).join("")}</ul>`;
+            checks.append(history);
+          }
+          article.append(checks);
         }
         return article;
       }));
