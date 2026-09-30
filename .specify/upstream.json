@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/github/spec-kit",
+  "commit": "2c0a57abe1e7383a864c7d5e4dfa2457d7537734",
+  "version": "1.0.14.dev0",
+  "processVersion": "1.0.0",
+  "integrations": ["codex", "claude", "qwen"],
+  "script": "py"
+}

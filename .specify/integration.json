@@ -1,0 +1,25 @@
+{
+  "version": "1.0.14.dev0",
+  "integration_state_schema": 1,
+  "installed_integrations": [
+    "codex",
+    "claude",
+    "qwen"
+  ],
+  "integration_settings": {
+    "codex": {
+      "script": "py",
+      "invoke_separator": "-"
+    },
+    "claude": {
+      "script": "py",
+      "invoke_separator": "-"
+    },
+    "qwen": {
+      "script": "py",
+      "invoke_separator": "."
+    }
+  },
+  "integration": "codex",
+  "default_integration": "codex"
+}
