@@ -917,7 +917,8 @@
       .map((field) => [field.dataset.variantField,
         field.type === 'checkbox' ? field.checked : field.value.trim()]))]));
   const collectDays = (form) => [...form.querySelectorAll('[data-rows="days"] [data-row]')]
-    .sort((a, b) => Number(a.dataset.sourceOrder) - Number(b.dataset.sourceOrder))
+    .sort((a, b) => a.querySelector('[data-field="date"]').value.localeCompare(b.querySelector('[data-field="date"]').value)
+      || Number(a.dataset.sourceOrder) - Number(b.dataset.sourceOrder))
     .map((row) => ({...rowValues(row), ideaId: row.dataset.ideaId || '', variants: rowVariants(row)}))
     .map((row) => ({date: row.date, platform: row.platform, format: row.format, role: row.role,
       topic: row.topic, hook: row.hook, assetId: row.assetId, mentorNote: row.mentorNote,
