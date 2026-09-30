@@ -17,7 +17,7 @@ const clean = (value, max) => String(value ?? '').replace(/[\r\n\t]+/g, ' ').sli
 // Ответ ИИ в группе подписывается всегда одинаково: участники видят, что пишет бот, а не Влад.
 const AI_SIGNATURE = 'Хью, бизнес-ассистент Синапс Бизнес (ИИ)';
 
-function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacyHandler, botUsername = '',
+function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacyHandler, botUsername = '', ownerChatId = '',
   botId = /^\d+:/.test(String(telegramToken || '')) ? String(telegramToken).split(':')[0] : '',
   fetchImpl = (...args) => fetch(...args), quietHours = parseQuietHours(process.env), now = () => new Date() }) {
   db.exec(`CREATE TABLE IF NOT EXISTS project_telegram_inbox (
@@ -178,6 +178,12 @@ function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacy
     }
   }
   async function delivery(job) {
+    if (job.audience === 'owner') {
+      if (!/^owner-alert:\d+$/.test(String(job.id)) || !/^\d+$/.test(String(ownerChatId))) {
+        return { ok:false,retryable:false,uncertain:false,error:'Личный Telegram владельца не настроен' };
+      }
+      job = { ...job,chatId:String(ownerChatId),attachments:[] };
+    }
     const prefix = `${job.authorType === 'assistant' ? AI_SIGNATURE : (job.authorName || 'Участник')}\n`;
     const full = prefix + (job.text || '');
     const parts = [];

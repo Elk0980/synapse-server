@@ -57,6 +57,97 @@ const expireAckCooldown = (s) => {
   s.db.prepare("UPDATE project_chat_provider_state SET last_success_at='2000-01-01T00:00:00Z' WHERE provider LIKE 'ack:%'").run();
   s.db.prepare("UPDATE project_chat_ai_jobs SET next_attempt_at='2000-01-01T00:00:00Z'").run();
 };
+async function apiAssistant(s, body = { apiAssistant: true, assistantContext: 'Только вопросы текущего проекта. Макеты проверяет владелец.' }, code = 'taisabai') {
+  const res = { writeHead() {}, end() {} };
+  await s.chat.handle({ method:'PATCH', headers:{}, session:s.owner, body }, res, new URL(`http://x/content/project-chat/${code}/settings`));
+  return res;
+}
+test('API-помощник отвечает без обращения и без primary; пустой цикл бесплатен', async () => {
+  const s = setup({ runtime:{ connected:true }, providers:{ openrouter:{ text:'{"action":"reply","text":"Уточнение принято."}' } } });
+  await apiAssistant(s);
+  await s.say('Новое уточнение', 'api-simple');
+  await s.chat.processAIJobs();
+  assert.deepEqual(s.replies(), ['Уточнение принято.']);
+  assert.equal(s.calls.filter(c => c.url.endsWith('/reply')).length, 0);
+  const n = s.calls.filter(c => c.url.endsWith('/chat/completions')).length;
+  await s.chat.processAIJobs();
+  assert.equal(s.calls.filter(c => c.url.endsWith('/chat/completions')).length, n);
+});
+test('API создаёт одну настоящую задачу; уточнение и перезапуск не дублируют её', async () => {
+  let answer = { action:'escalate', task:{ title:'Исправить перенос в макете', note:'Нужна проверка всех страниц' } };
+  const s = setup({ providers:{ openrouter:() => ({ text:JSON.stringify(answer) }) } });
+  await apiAssistant(s);
+  await s.say('Исправьте макет', 'api-task');
+  await s.chat.processAIJobs();
+  const task = s.db.prepare("SELECT * FROM project_chat_tasks WHERE external_ref LIKE 'api-assistant:%'").get();
+  assert.ok(task); assert.match(s.replies()[0], new RegExp('#' + task.id));
+  answer = { action:'escalate', task:{ title:'Тот же макет', note:'Также на второй странице', existingTaskId:task.id } };
+  await s.say('И на второй странице', 'api-note');
+  await s.chat.processAIJobs();
+  await s.rebuild().processAIJobs();
+  assert.equal(s.db.prepare('SELECT count(*) n FROM project_chat_tasks').get().n, 1);
+  assert.equal(s.db.prepare('SELECT count(*) n FROM project_chat_task_notes').get().n, 2);
+  assert.equal(s.replies().length, 2);
+});
+test('невалидный ответ не отправляется, чужую задачу нельзя уточнить', async () => {
+  const s = setup({ providers:{ openrouter:{ text:JSON.stringify({ action:'escalate',task:{ title:'x', note:'y', existingTaskId:999 } }) } } });
+  await apiAssistant(s); await s.say('Нужна правка', 'api-invalid'); await s.chat.processAIJobs();
+  assert.deepEqual(s.replies(), []);
+  assert.equal(s.jobs()[0].status, 'error');
+  assert.equal(s.db.prepare("SELECT count(*) n FROM project_chat_tasks WHERE external_ref LIKE 'api-assistant:%'").get().n, 0);
+  assert.equal(s.db.prepare('SELECT count(*) n FROM project_chat_tasks').get().n, 1);
+});
+test('выключение приостанавливает незавершённые API-задания; другая комната не меняется', async () => {
+  const s = setup({ providers:{ openrouter:{ text:'{"action":"reply","text":"ok"}' } } });
+  await apiAssistant(s); await s.say('Вопрос', 'api-off');
+  await apiAssistant(s, { apiAssistant:false });
+  await s.chat.processAIJobs();
+  assert.deepEqual(s.replies(), []);
+  await s.say('Без обращения', 'other-silent', 'alvi');
+  assert.equal(s.jobs().length, 1);
+});
+test('режим API нельзя включить поверх локального исполнителя', async () => {
+  const s = setup({ localCompanies:['taisabai'] });
+  await assert.rejects(() => apiAssistant(s), e => e.status === 409);
+});
+test('API не переходит к primary при отказе провайдеров и не отвечает боту', async () => {
+  const s = setup({ runtime:{ connected:true }, reply:{ status:200,payload:{text:'нельзя'} } });
+  await apiAssistant(s, { apiAssistant:true,assistantContext:'Текущий проект',telegramChatId:'-10012345' });
+  s.chat.receiveTelegram({ chatId:'-10012345',messageId:'51',authorId:'1',authorName:'Бот',text:'Привет',isBot:true });
+  assert.equal(s.jobs().length,0);
+  await s.say('Вопрос', 'api-failure'); await s.chat.processAIJobs();
+  assert.equal(s.calls.filter(c => c.url.endsWith('/reply')).length,0);
+  assert.equal(s.jobs()[0].status,'blocked');
+});
+test('ignore не публикуется и не расходует API при повторной обработке после перезапуска', async () => {
+  const s = setup({ providers:{openrouter:{text:'{"action":"ignore"}'}} });
+  await apiAssistant(s); await s.say('Спасибо', 'api-ignore'); await s.chat.processAIJobs();
+  await s.rebuild().processAIJobs();
+  assert.deepEqual(s.replies(),[]); assert.equal(s.jobs()[0].status,'done');
+  assert.equal(s.calls.filter(c => c.url.endsWith('/chat/completions')).length,1);
+});
+test('задержка даёт клиенту статус и владельцу уведомление ровно один раз',async()=>{
+  const s=setup();await apiAssistant(s);await s.say('Вопрос','attention');
+  s.db.prepare("UPDATE project_chat_messages SET created_at='2000-01-01T00:00:00Z'").run();
+  s.chat.processAssistantAttention();s.rebuild().processAssistantAttention();
+  assert.equal(s.replies().length,1);
+  assert.match(s.replies()[0],/Время начала/);
+  assert.equal(s.db.prepare('SELECT count(*) n FROM hugh_owner_alerts').get().n,1);
+  const delivery=s.chat.pendingTelegram();assert.equal(Array.isArray(delivery),true);
+  assert.equal(delivery[0].audience,'owner');
+  assert.equal(s.chat.acknowledgeTelegram(delivery[0].id,{ok:true,externalMessageIds:['123']}).status,'sent');
+});
+test('задача без движения вызывает дополнительный сигнал, закрытая — нет',async()=>{
+  const s=setup({providers:{openrouter:{text:'{"action":"escalate","task":{"title":"Макет","note":"Проверить"}}'}}});
+  await apiAssistant(s);await s.say('Нужен макет','stale-task');await s.chat.processAIJobs();
+  s.db.prepare("UPDATE project_chat_tasks SET updated_at='2000-01-01T00:00:00Z'").run();
+  s.db.prepare("UPDATE project_chat_task_notes SET created_at='2000-01-01T00:00:00Z'").run();
+  s.chat.processAssistantAttention();s.rebuild().processAssistantAttention();
+  assert.equal(s.db.prepare("SELECT count(*) n FROM hugh_owner_alerts WHERE event_key LIKE 'stale:%'").get().n,1);
+  s.db.prepare("UPDATE project_chat_tasks SET status='done'").run();
+  s.chat.processAssistantAttention();
+  assert.equal(s.db.prepare('SELECT count(*) n FROM hugh_owner_alerts').get().n,2);
+});
 async function reviewedReply(s, { code = 'taisabai', status = 'sent', receipts = '["123"]' } = {}) {
   s.db.prepare('UPDATE project_chat_rooms SET telegram_chat_id=? WHERE company_code=?').run('-10012345', code);
   const response = { statusCode: 0, payload: null, writeHead() {}, end() {} };

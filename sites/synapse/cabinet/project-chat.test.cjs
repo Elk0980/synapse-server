@@ -115,6 +115,21 @@ const boot = (options = {}) => {
 };
 
 const mount = async (harness) => { await harness.views.hugh.render(harness.d.getElementById('hugh-view'), harness.ctx); await settle(); };
+test('API-помощник: статус, уведомления владельца и проверка без отправки клиенту', async()=>{
+  const h=boot({clock:true,routes:{
+    'GET /content/project-chat/palitra-love':()=>({body:snapshot({room:{apiAssistant:true,assistantContext:'Контекст'},ownerAlerts:[{text:'Нужен ответ <script>',status:'sent'}]})}),
+    'GET /content/project-chat-runtime/status':()=>({body:{}}),
+    'POST /content/project-chat/palitra-love/assistant-preview':()=>({body:{provider:'deepseek',model:'test-flash',decision:{action:'reply',text:'Ответ проверен'},delivered:false}})
+  }});
+  await mount(h);assert.match(text(h.dom,'[data-pc-ai]'),/API/);
+  assert.match(text(h.dom,'[data-pc-alerts]'),/Доставлено в Telegram/);
+  assert.equal(h.d.querySelector('[data-pc-alerts] script'),null);
+  h.click('[data-pc-settings]');await settle();
+  h.d.querySelector('[data-pc-api-question]').value='Тест';h.click('[data-pc-api-preview]');await settle();
+  assert.match(text(h.dom,'[data-pc-api-result]'),/deepseek.*test-flash.*Клиенту не отправлено.*Ответ проверен/);
+  assert.equal(h.calls.filter(c=>c.method==='POST'&&/\/messages$/.test(c.url)).length,0);
+  h.dom.window.close();
+});
 
 test('ручной ответ Хью сохраняет получателя и ключ при потере подтверждения', async () => {
   const posts = [];

@@ -17,7 +17,7 @@ const json = (payload, status = 200) => ({ ok: status < 400, status, json: async
 
 function setup({ rooms = {}, jobs = [], files = {}, telegram = () => ({ result: { message_id: 500 } }),
   contentUrl = CONTENT, apiKey = 'secret', content = null, now = () => new Date('2026-09-17T12:00:00Z'),
-  db = new DatabaseSync(':memory:'), botUsername = '', telegramToken = 'bot-token' } = {}) {
+  db = new DatabaseSync(':memory:'), botUsername = '', telegramToken = 'bot-token', ownerChatId = '' } = {}) {
   const calls = { content: [], telegram: [], legacy: [], files: 0 };
   const fetchImpl = async (url, options = {}) => {
     const target = String(url);
@@ -50,13 +50,24 @@ function setup({ rooms = {}, jobs = [], files = {}, telegram = () => ({ result: 
   };
   const bridge = createProjectChatBridge({ db, contentUrl, apiKey, telegramToken,
     legacyHandler: async (update) => { calls.legacy.push(update); }, fetchImpl,
-    quietHours: parseQuietHours({}), now, botUsername });
+    quietHours: parseQuietHours({}), now, botUsername, ownerChatId });
   return { db, bridge, calls };
 }
 
 const groupUpdate = (id, message) => ({ update_id: id,
   message: { message_id: id * 10, chat: { id: -1001, type: 'supergroup' }, from: { id: 777, first_name: 'Дарья' }, ...message } });
 const ROOMS = { '-1001': { companyCode: 'palitra-love', title: 'Palitra' } };
+test('уведомление отправляется только настроенному владельцу, не адресу из задания',async()=>{
+  const s=setup({ownerChatId:'12345'});
+  const job={id:'owner-alert:1',audience:'owner',chatId:'-1001',text:'Нужен ответ',authorType:'assistant',attachments:[]};
+  assert.equal((await s.bridge.delivery(job)).ok,true);
+  assert.equal(JSON.parse(s.calls.telegram[0].body).chat_id,'12345');
+  await s.bridge.delivery(job);
+  assert.equal(s.calls.telegram.length,1);
+  const missing=setup();
+  assert.equal((await missing.bridge.delivery(job)).ok,false);
+  assert.equal(missing.calls.telegram.length,0);
+});
 const routes = (calls) => calls.content.map((c) => c.route);
 
 test('в очередь попадают только групповые события и только при настроенной комнате', () => {
