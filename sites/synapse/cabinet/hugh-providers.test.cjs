@@ -270,3 +270,14 @@ test('незаданная общая граница названа прямо, 
     assert.match(f.host.querySelector('[data-budget]').textContent, /без денежного потолка/);
   } finally { f.close(); }
 });
+
+test('экономика различает локальный лимит, API-кошелёк, прогноз и ошибку обновления',async()=>{
+ const f=fixture({respond:call=>{
+  if(call.path.endsWith('/balance'))return {status:'error',message:'Не подтверждено'};
+  return status({budget:{remainingUsd:9,remainingRequests:88,heldUsd:0.012,resetAt:'2026-10-01T00:00:00Z'},providers:[provider({keyConfigured:true,modelId:'flash',inRuntime:true,wallet:{supported:true,status:'error',balances:[{currency:'USD',total:18}],checkedAt:'2026-09-30T01:00:00Z',message:'<img src=x onerror=alert(1)>',daysRemaining:null},spend:{spentUsd:1,remainingUsd:9,rate:{reason:'Нужно не менее суток наблюдений и трёх обращений'}}})]});
+ }});try{await tick();await tick();const el=f.host.querySelector('[aria-label="Экономика ИИ"]');
+ assert.match(el.textContent,/18 USD/);assert.match(el.textContent,/9,00/);assert.match(el.textContent,/не подтверждён как текущий/);assert.match(el.textContent,/недостаточно данных/);assert.match(el.textContent,/Codex и Claude.*остаток неизвестен/);assert.equal(el.querySelector('img'),null);
+ el.querySelector('[data-balance]').click();await tick();await tick();await tick();
+ const request=f.calls.find(c=>c.path.endsWith('/balance'));assert.equal(request.method,'POST');assert.equal(request.csrf,'csrf-token');assert.match(f.host.textContent,/Текущий баланс не подтверждён/);assert.doesNotMatch(f.host.textContent,/Баланс получен/);
+ }finally{f.close();}
+});

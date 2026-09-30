@@ -938,10 +938,10 @@ const server = http.createServer(async (request, response) => {
 
     /* Настройка провайдеров Хью: только владелец, только с CSRF на запись.
        Ключ уходит на сервер и обратно никогда не возвращается. */
-    if (url.pathname === '/content/hugh-providers' || /^\/content\/hugh-providers\/[a-z0-9-]{1,32}(?:\/check)?$/.test(url.pathname)) {
+    if (url.pathname === '/content/hugh-providers' || /^\/content\/hugh-providers\/[a-z0-9-]{1,32}(?:\/(?:check|balance))?$/.test(url.pathname)) {
       const session = requireSession(request);
       if (session.user.role !== 'owner') fail(403, 'Настройка провайдеров доступна владельцу');
-      const match = /^\/content\/hugh-providers\/([a-z0-9-]{1,32})(\/check)?$/.exec(url.pathname);
+      const match = /^\/content\/hugh-providers\/([a-z0-9-]{1,32})(\/(?:check|balance))?$/.exec(url.pathname);
       if (url.pathname === '/content/hugh-providers' && request.method === 'GET') return reply(200, hughProviders.status());
       if (match && !match[2] && request.method === 'PUT') {
         requireCsrf(request, session);
@@ -949,6 +949,10 @@ const server = http.createServer(async (request, response) => {
       }
       if (match && match[2] && request.method === 'POST') {
         requireCsrf(request, session);
+        if(match[2]==='/balance'){
+          if(match[1]!=='deepseek')fail(400,'Автоматический источник баланса не подключён');
+          return reply(200,await hughProviders.refreshBalance());
+        }
         // Проверка соединения — явное отдельное действие владельца, а не следствие сохранения.
         return reply(200, await hughProviders.check(match[1]));
       }
@@ -1310,13 +1314,17 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
+let economyTimer;
 server.listen(PORT, () => {
   console.log(`content: слушает порт ${PORT}, база ${DATABASE_PATH}`);
   projectChat.startWorker();
   taskDispatchWorker.start();
+  const monitor=()=>hughProviders.monitorEconomy(projectChat.fallback.status()).catch(()=>{});
+  economyTimer=setInterval(()=>void monitor(),600000);economyTimer.unref();void monitor();
 });
 
 function shutdownContent() {
+  clearInterval(economyTimer);
   projectChat.stopWorker();
   taskDispatchWorker.stop();
   server.close(() => {

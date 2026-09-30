@@ -56,12 +56,13 @@ const init = (context) => {
   const dispatchStates={manual:'Вручную',queued:'В очереди',running:'Идёт разбор',needs_input:'Нужен ваш ответ',awaiting_executor:'Нужен исполнитель',blocked:'Нужна помощь',review:'Результат на проверке',done:'Принято',cancelled:'Остановлено'};
   const departments={coordination:'Координация',engineering:'Разработка',design:'Дизайн',marketing:'Маркетинг',analytics:'Аналитика',support:'Поддержка'};
   let boardTimer;
+  const reviewMarkup=r=>r?`<p><strong>Вторая проверка: ${escapeHTML({passed:'существенных замечаний нет',changes:'есть замечания',unavailable:'не выполнена'}[r.verdict]||'неизвестно')}</strong>${r.model?' · '+escapeHTML(r.provider)+' / '+escapeHTML(r.model):''}</p><p>${escapeHTML(r.note)}${r.usage?.promptTokens!=null?' · Вход: '+r.usage.promptTokens+' токенов':''}${r.usage?.completionTokens!=null?' · Ответ: '+r.usage.completionTokens+' токенов':''}</p>`:'';
   const dispatchSummary = d => `<p><strong>${dispatchStates[d?.state]||'Вручную'}</strong>${d?.department?' · '+escapeHTML(departments[d.department]||d.department):''}</p>
     ${d?.question?`<p><strong>Вопрос:</strong> ${escapeHTML(d.question)}</p>`:''}
     ${d?.result?`<p style="white-space:pre-wrap">${escapeHTML(d.result)}</p>`:''}
     ${d?.model?`<p class="crm-muted">${escapeHTML(d.provider)} · ${escapeHTML(d.model)}${d.usage?.promptTokens!=null?' · Вход: '+d.usage.promptTokens+' токенов':''}${d.usage?.completionTokens!=null?' · Ответ: '+d.usage.completionTokens+' токенов':''}</p>`:''}`;
   const renderDispatchControls = (container, task, data, version) => {
-    container.innerHTML=`<h3>Работа помощников</h3>${dispatchSummary(data)}<p class="crm-muted">Простой текст готовит недорогой API. Код, файлы и публикации ожидают подключённого исполнителя. Результат принимает владелец.</p>
+    container.innerHTML=`<h3>Работа помощников</h3>${dispatchSummary(data)}${reviewMarkup(data.review)}<p class="crm-muted">Простой текст готовит недорогой API. Код, файлы и публикации ожидают подключённого исполнителя. Результат принимает владелец.</p>
       ${['manual','done','cancelled'].includes(data.state)?'':`<p>Исполнитель: ${escapeHTML(data.executor||'Не назначен')}. Попытки: ${data.attempts||0} из 2.</p>`}
       ${['needs_input','review','blocked','awaiting_executor'].includes(data.state)?'<label>Ответ или замечание<textarea data-dispatch-answer maxlength="2000" rows="3"></textarea></label>':''}
       <div class="crm-actions">${data.state==='manual'&&!['done','cancelled'].includes(task.status)?'<button type="button" data-dispatch-action="enqueue">Передать помощнику</button>':''}
@@ -70,7 +71,7 @@ const init = (context) => {
       ${['blocked','awaiting_executor'].includes(data.state)?'<button type="button" data-dispatch-action="retry">Передать уточнение</button>':''}
       ${!['manual','done','cancelled'].includes(data.state)?'<button type="button" data-dispatch-action="cancel">Остановить обработку</button>':''}
       <button type="button" data-dispatch-refresh>Обновить состояние</button></div><p role="status" data-dispatch-status></p>
-      <details><summary>История работы</summary>${(data.history||[]).map(h=>`<details><summary>${escapeHTML(displayDate(h.createdAt))} · ${escapeHTML(h.note)}</summary>${h.question?`<p>${escapeHTML(h.question)}</p>`:""}${h.result?`<pre style="white-space:pre-wrap">${escapeHTML(h.result)}</pre>`:""}${h.model?`<p>Модель: ${escapeHTML(h.model)}</p>`:""}</details>`).join('')||'<p>Работа ещё не запускалась.</p>'}</details>`;
+      <details><summary>История работы</summary>${(data.history||[]).map(h=>`<details><summary>${escapeHTML(displayDate(h.createdAt))} · ${escapeHTML(h.note)}</summary>${h.question?`<p>${escapeHTML(h.question)}</p>`:""}${h.result?`<pre style="white-space:pre-wrap">${escapeHTML(h.result)}</pre>`:""}${reviewMarkup(h.review)}${h.model?`<p>Модель: ${escapeHTML(h.model)}</p>`:""}</details>`).join('')||'<p>Работа ещё не запускалась.</p>'}</details>`;
     container.querySelector('[data-dispatch-refresh]').onclick=()=>renderTaskCard(task.id);
     container.querySelectorAll('[data-dispatch-action]').forEach(button=>button.onclick=async()=>{
       button.disabled=true;const action=button.dataset.dispatchAction;
@@ -93,7 +94,7 @@ const init = (context) => {
         if(version !== renderVersion || ctx.currentView !== 'tasks') return;
         records.push(...page.tasks);
       } while(page.tasks.length && records.length < page.pagination.total);
-      content.innerHTML = `<h2>Доска проектов</h2><p>Ответственный чат и исполнитель указываются отдельно. Отметки готовности подтверждаются основанием и датой.</p>
+      content.innerHTML = `<h2>Доска проектов</h2><p><a href="#system-settings">Экономика ИИ: расходы, остатки и резерв моделей</a></p><p>Ответственный чат и исполнитель указываются отдельно. Отметки готовности подтверждаются основанием и датой.</p>
         <p class="crm-muted">Поручение помощнику обрабатывается на сервере. Здесь видны вопросы, результаты и задачи без исполнителя. Codex и Claude не запускаются без подключённого моста.</p>
         <div class="crm-actions"><button class="plain-button" type="button" data-coord-back>К списку задач</button>
         <button class="plain-button" type="button" data-coord-add>Добавить задачу</button><button class="plain-button" type="button" data-coord-refresh>Обновить</button><label><input type="checkbox" data-coord-all ${allCompanies?'checked':''}>Все проекты</label></div>

@@ -15,6 +15,27 @@
      до цента округление скрывает первые обращения и создаёт ложное «ничего не тратим». */
   const money = (value) => (Number.isFinite(value)
     ? `${value.toFixed(value > 0 && value < 0.01 ? 4 : 2).replace('.', ',')} $` : '—');
+  const days = value => Number.isFinite(value)?(value<1?'менее суток':`около ${Math.floor(value)} дн.`):'пока недостаточно данных';
+  function economyMarkup(){
+    const b=state.budget,active=state.providers.filter(p=>p.keyConfigured);
+    const ready=active.filter(p=>p.inRuntime&&!p.health?.cooling&&!p.spend?.stopped&&!b?.stopped);
+    return `<section aria-label="Экономика ИИ"><h2>Экономика ИИ</h2>
+      <p><strong>${ready.length>=2?'Основная и резервная модели доступны':ready.length===1?'Доступна одна модель — резерва сейчас нет':'Доступных API-моделей сейчас нет'}</strong></p>
+      <p>При сбое запрос переходит резерву. Готовый текст задачи дополнительно проверяет другой провайдер; итог принимает владелец.</p>
+      <p>Общий остаток лимита: ${b?.remainingUsd==null?'денежный лимит не задан':esc(money(b.remainingUsd))}. Осталось обращений: ${b?.remainingRequests==null?'лимит не задан':esc(b.remainingRequests)}. Обновление окна: ${esc(moment(b?.resetAt))}.</p>
+      <p>Зарезервировано, включая неопределённый расход: ${esc(money(b?.heldUsd))}. Это расчёт по объявленным тарифам, не выписка провайдера. Пополнения не прибавляются к расходу.</p>
+      ${active.map(p=>{const w=p.wallet||{},s=p.spend||{},r=s.rate||{};return `<article class="hugh-provider"><h3>${esc(p.title)}</h3>
+        <p>Модель: ${esc(p.health?.actualModel||p.modelId)} · ${p.health?.cooling?`пауза до ${esc(moment(p.health.retryAt))}`:p.inRuntime?'подключена':'не участвует в ответах'}${p.health?.lastSuccessAt?` · ответ проверен ${esc(moment(p.health.lastSuccessAt))}`:''}</p>
+        ${p.health?.cooling?`<p>${esc(p.health.lastError)}</p>`:''}
+        <p>Расход окна: ${esc(money(s.spentUsd))} · Остаток нашего лимита: ${s.remainingUsd==null?'не задан':esc(money(s.remainingUsd))} · Прогноз до лимита: ${esc(days(s.daysToLimit))}.</p>
+        <p><strong>API-баланс:</strong> ${w.balances?.length?w.balances.map(x=>`${esc(x.total)} ${esc(x.currency)}`).join(' / '):'нет данных'}${w.checkedAt?` · снимок ${esc(moment(w.checkedAt))}`:''}${w.stale||w.status==='error'?' · не подтверждён как текущий':''}.</p>
+        ${w.message?`<p>${esc(w.message)}</p>`:''}
+        <p>Прогноз API-баланса: ${esc(days(w.daysRemaining))}. ${r.usdPerDay!=null?`Наблюдаемый расход: ${esc(money(r.usdPerDay))}/день за ${esc(r.days.toFixed(1))} дн.; оценка только нагрузки этого сервера.`:esc(r.reason||'Наблюдения ещё не накоплены')} Валюты без курса не пересчитываются.</p>
+        ${w.supported?`<button type="button" class="plain-button" data-balance="${esc(p.name)}">Обновить API-баланс</button>`:''}
+        <a href="${esc(p.console)}" target="_blank" rel="noopener">Открыть кабинет провайдера</a></article>`;}).join('')}
+      <p>Баланс DeepSeek проверяется сервером раз в 10 минут. Лимиты подписок Codex и Claude: автоматический источник пока не подключён; остаток неизвестен. API-баланс и лимиты подписки — разные ресурсы.</p>
+      <p role="status" data-economy-status></p></section>`;
+  }
 
   /* Расход за окно и личный лимит. Отсутствие лимита названо словами, а не пустотой:
      пустое место читается как «лимит есть и он не достигнут», что неправда. */
@@ -96,7 +117,7 @@
 
   function render() {
     host.hidden = false;
-    host.innerHTML = `<h2>Провайдеры ответов Хью</h2>
+    host.innerHTML = `${economyMarkup()}<h2>Провайдеры ответов Хью</h2>
       <p class="hugh-note">${esc(state.notice)}</p>
       ${state.storeAvailable ? '' : `<p class="hugh-locked" role="alert">${esc(state.lockedReason)}. Пока мастер-ключ не задан на сервере, ключи вводить нельзя.</p>`}
       ${budgetMarkup(state.budget)}
@@ -106,6 +127,11 @@
     });
     host.querySelectorAll('[data-check]').forEach((button) => {
       button.addEventListener('click', () => { void check(button.dataset.check); });
+    });
+    host.querySelectorAll('[data-balance]').forEach(button=>button.onclick=async()=>{
+      button.disabled=true;const note=host.querySelector('[data-economy-status]');note.textContent='Обновляем данные провайдера…';
+      try{const result=await api(`/content/hugh-providers/${encodeURIComponent(button.dataset.balance)}/balance`,'POST');await load(result.status==='ok'&&!result.stale?'Баланс получен. Снимки кэшируются на 10 минут.':'Текущий баланс не подтверждён. Проверьте сообщение рядом с провайдером.');}
+      catch(e){note.textContent=e.message;button.disabled=false;}
     });
   }
 

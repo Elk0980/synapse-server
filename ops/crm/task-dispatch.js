@@ -16,10 +16,13 @@ function createTaskDispatch(db,{now=()=>Date.now()}={}){
  CREATE TRIGGER IF NOT EXISTS dispatch_history_no_update BEFORE UPDATE ON task_dispatch_history BEGIN SELECT RAISE(ABORT,'Immutable dispatch history'); END;
  CREATE TRIGGER IF NOT EXISTS dispatch_history_no_delete BEFORE DELETE ON task_dispatch_history BEGIN SELECT RAISE(ABORT,'Immutable dispatch history'); END;`);
  const stamp=()=>new Date(now()).toISOString();
+ for(const table of ['task_dispatch','task_dispatch_history']){
+  if(!db.prepare(`PRAGMA table_info(${table})`).all().some(c=>c.name==='review'))db.exec(`ALTER TABLE ${table} ADD COLUMN review TEXT NOT NULL DEFAULT 'null'`);
+ }
  const tx=fn=>{db.exec('BEGIN IMMEDIATE');try{const r=fn();db.exec('COMMIT');return r;}catch(e){db.exec('ROLLBACK');throw e;}};
  const task=id=>{if(!Number.isSafeInteger(id)||id<1)fail(400,'Некорректная задача');const r=db.prepare('SELECT * FROM tasks WHERE id=? AND is_deleted=0').get(id);if(!r)fail(404,'Задача не найдена');return r;};
  const row=id=>db.prepare('SELECT * FROM task_dispatch WHERE task_id=?').get(id);
- const history=(id,note)=>{const r=row(id);db.prepare('INSERT INTO task_dispatch_history(task_id,revision,state,note,question,result,model,created_at) VALUES(?,?,?,?,?,?,?,?)').run(id,r.revision,r.state,note,r.question,r.result,r.model,stamp());};
+ const history=(id,note)=>{const r=row(id);db.prepare('INSERT INTO task_dispatch_history(task_id,revision,state,note,question,result,model,created_at,review) VALUES(?,?,?,?,?,?,?,?,?)').run(id,r.revision,r.state,note,r.question,r.result,r.model,stamp(),r.review);};
  const change=(id,fields,note)=>{db.prepare(`UPDATE task_dispatch SET ${Object.keys(fields).map(k=>`${k}=?`).join(',')},revision=revision+1,updated_at=? WHERE task_id=?`).run(...Object.values(fields),stamp(),id);history(id,note);};
  const alert=(r,label)=>db.prepare('INSERT OR IGNORE INTO task_dispatch_alerts(task_id,company_code,event_key,text) VALUES(?,?,?,?)').run(r.task_id,r.company_code,`dispatch:${r.task_id}:${r.cycle}:${r.state}`,`Задача #${r.task_id} · ${r.company_code}\n${label}\n${r.question||r.result||'Требуется проверка владельца'}\nЛК → Задачи → Доска проектов.`.slice(0,3000));
  function reconcile(){
@@ -30,8 +33,8 @@ function createTaskDispatch(db,{now=()=>Date.now()}={}){
   }
  }
  function view(r){if(!r)return null;return {taskId:r.task_id,companyCode:r.company_code,revision:r.revision,state:r.state,department:r.department,question:r.question,answer:r.answer,result:r.result,provider:r.provider,model:r.model,attempts:r.attempts,updatedAt:r.updated_at,usage:JSON.parse(r.usage),
- limits:{attemptsPerCycle:2,maxOutputTokens:1200},executor:r.state==='running'?'Серверный API':r.state==='awaiting_executor'?'Не подключён':r.model?`${r.provider} · ${r.model}`:'Не назначен'};}
- function get(id,a){owner(a);task(id);reconcile();return {...(view(row(id))||{taskId:id,revision:0,state:'manual'}),history:db.prepare('SELECT revision,state,note,question,result,model,created_at AS createdAt FROM task_dispatch_history WHERE task_id=? ORDER BY id DESC LIMIT 30').all(id)};}
+ review:JSON.parse(r.review),limits:{attemptsPerCycle:2,maxOutputTokens:1200,reviewMaxOutputTokens:600},executor:r.state==='running'?'Серверный API':r.state==='awaiting_executor'?'Не подключён':r.model?`${r.provider} · ${r.model}`:'Не назначен'};}
+ function get(id,a){owner(a);task(id);reconcile();return {...(view(row(id))||{taskId:id,revision:0,state:'manual'}),history:db.prepare('SELECT revision,state,note,question,result,model,review,created_at AS createdAt FROM task_dispatch_history WHERE task_id=? ORDER BY id DESC LIMIT 30').all(id).map(h=>({...h,review:JSON.parse(h.review)}))};}
  function put(id,revision){const t=task(id);if(['done','cancelled'].includes(t.status))fail(409,'Задача уже закрыта');if(!t.company_code)fail(400,'Выберите проект задачи');const old=row(id);if((old?.revision||0)!==revision)fail(409,'Карточка изменилась. Обновите её');if(old)fail(409,'Задача уже передана диспетчеру');
   db.prepare("INSERT INTO task_dispatch(task_id,company_code,state,updated_at,created_at) VALUES(?,?,'queued',?,?)").run(id,t.company_code,stamp(),stamp());history(id,'Поручение принято сервером. Ожидает разбора недорогой моделью.');
  }
@@ -42,7 +45,7 @@ function createTaskDispatch(db,{now=()=>Date.now()}={}){
   if(!['answer','revise','retry'].includes(b.action)||!['needs_input','review','blocked','awaiting_executor'].includes(r.state))fail(409,'Действие недоступно');
   if(b.action==='answer'&&r.state!=='needs_input')fail(409,'Нет вопроса');if(b.action==='revise'&&r.state!=='review')fail(409,'Нет результата');
   const answer=clean(b.text||'',2000);if(!answer)fail(400,'Укажите ответ или следующий шаг');
-  change(id,{state:'queued',answer:[r.answer,answer].filter(Boolean).join('\n').slice(-4000),question:'',result:'',cycle:r.cycle+1,attempts:0,next_at:0,lease_token:'',lease_until:0},`Уточнение владельца: ${answer}`);
+  change(id,{state:'queued',review:'null',answer:[r.answer,answer].filter(Boolean).join('\n').slice(-4000),question:'',result:'',cycle:r.cycle+1,attempts:0,next_at:0,lease_token:'',lease_until:0},`Уточнение владельца: ${answer}`);
  });return get(id,a);}
  function claim(){return tx(()=>{reconcile();const r=db.prepare("SELECT d.*,t.title,t.description FROM task_dispatch d JOIN tasks t ON t.id=d.task_id WHERE d.state='queued' AND d.next_at<=? ORDER BY d.task_id LIMIT 1").get(now());if(!r)return null;
   const token=randomUUID();change(r.task_id,{state:'running',attempts:r.attempts+1,lease_token:token,lease_until:now()+180000},'Серверный API начал разбор; файловые исполнители не запущены');
@@ -52,8 +55,13 @@ function createTaskDispatch(db,{now=()=>Date.now()}={}){
  function complete(job,b){reconcile();return tx(()=>{check(job);if(!['needs_input','review','awaiting_executor'].includes(b.state)||!DEPARTMENTS.includes(b.department))fail(400,'Некорректное решение');
   const usage={};for(const key of ['promptTokens','completionTokens']){const v=b.usage?.[key];if(v!=null&&(!Number.isSafeInteger(v)||v<0))fail(400,'Некорректный расход');usage[key]=v??null;}
   const provider=clean(b.provider||'',100),model=clean(b.model||'',150),question=clean(b.question||'',1500),result=clean(b.result||'',6000);
+  let review=null;
+  if(b.review!=null){const v=b.review;if(!['passed','changes','unavailable'].includes(v.verdict)||b.state!=='review')fail(400,'Некорректная проверка');
+   review={verdict:v.verdict,note:clean(v.note||'',1500),provider:clean(v.provider||'',100),model:clean(v.model||'',150),usage:{}};
+   if(v.verdict!=='unavailable'&&(!review.provider||review.provider===provider||!review.model||review.model.toLowerCase()===model.toLowerCase()))fail(400,'Проверка требует другую модель');
+   for(const k of ['promptTokens','completionTokens']){const n=v.usage?.[k];if(n!=null&&(!Number.isSafeInteger(n)||n<0))fail(400,'Некорректный расход проверки');review.usage[k]=n??null;}}
   if(!provider||!model||(b.state==='needs_input'?!question:!result))fail(400,'Нужны результат и проверенная модель');
-  change(job.taskId,{state:b.state,department:b.department,question,result,provider,model,usage:JSON.stringify(usage),lease_token:'',lease_until:0},b.state==='review'?'Черновик подготовлен. Ожидает проверки владельца.':b.state==='needs_input'?'Нужно уточнение владельца.':'Подходящий исполнитель пока не подключён. Время начала не назначено.');
+  change(job.taskId,{state:b.state,department:b.department,question,result,provider,model,usage:JSON.stringify(usage),review:JSON.stringify(review),lease_token:'',lease_until:0},b.state==='review'?'Черновик подготовлен. Ожидает проверки владельца.':b.state==='needs_input'?'Нужно уточнение владельца.':'Подходящий исполнитель пока не подключён. Время начала не назначено.');
   alert(row(job.taskId),{review:'Результат готов к проверке',needs_input:'Нужен ваш ответ',awaiting_executor:'Нужно назначить исполнителя'}[b.state]);return {ok:true};});}
  function error(job,details={}){reconcile();return tx(()=>{const r=check(job);const state=r.attempts<2?'queued':'blocked';const delay=Number.isSafeInteger(details.delay)?Math.min(900,Math.max(60,details.delay)):60;const reasons={provider:'Провайдеры API временно недоступны',format:'Ответ модели не соответствует формату задачи',transport:'Не удалось сохранить результат в очереди'};const reason=reasons[details.code]||'API не завершил обработку';change(job.taskId,{state,next_at:now()+delay*1000,lease_token:'',lease_until:0,result:`${reason}. Запрос сохранён.${state==='queued'?` Следующая попытка не раньше ${new Date(now()+delay*1000).toISOString()}.`:' Нужна проверка владельца.'}`},'Не удалось получить проверяемый ответ');alert({...row(job.taskId),state:'error'},'Задержка обработки задачи');return {ok:true};});}
  function mirror(b){if(!/^[a-z0-9_-]{1,64}$/.test(b.room||'')||!Number.isSafeInteger(b.sourceId)||b.sourceId<1)fail(400,'Некорректный источник');
@@ -63,7 +71,7 @@ function createTaskDispatch(db,{now=()=>Date.now()}={}){
    const old=db.prepare('SELECT * FROM task_dispatch_mirrors WHERE room=? AND source_id=?').get(b.room,b.sourceId);
    if(old){const current=task(old.task_id),dispatch=row(old.task_id);if(current.company_code!==b.companyCode)fail(409,'Задача перенесена в другую компанию');
     if(version>old.source_version){db.prepare('UPDATE task_dispatch_mirrors SET source_note=?,source_version=? WHERE room=? AND source_id=?').run(note,version,b.room,b.sourceId);
-     if(!['done','cancelled'].includes(current.status)&&!['done','cancelled'].includes(dispatch.state))change(old.task_id,{state:'queued',cycle:dispatch.cycle+1,attempts:0,next_at:0,lease_token:'',lease_until:0,result:''},'Получено новое уточнение из переписки; прошлый результат требует повторной проверки');
+     if(!['done','cancelled'].includes(current.status)&&!['done','cancelled'].includes(dispatch.state))change(old.task_id,{state:'queued',review:'null',question:'',cycle:dispatch.cycle+1,attempts:0,next_at:0,lease_token:'',lease_until:0,result:''},'Получено новое уточнение из переписки; прошлый результат требует повторной проверки');
     }return {taskId:old.task_id,state:row(old.task_id)?.state};}
 
    const id=Number(db.prepare("INSERT INTO tasks(title,description,company_code,created_at,updated_at,source,source_ref,source_author,created_by) VALUES(?,?,?,?,?,'chat',?,'Хью','Серверный помощник')").run(title,note,b.companyCode,stamp(),stamp(),`project-chat:${b.room}:${b.sourceId}`).lastInsertRowid);

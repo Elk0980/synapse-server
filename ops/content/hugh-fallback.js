@@ -180,14 +180,19 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
       usage: {promptTokens: Number.isSafeInteger(data?.usage?.prompt_tokens) ? data.usage.prompt_tokens : null, completionTokens: Number.isSafeInteger(data?.usage?.completion_tokens) ? data.usage.completion_tokens : null} };
   }
   /* Пробует доступных провайдеров по порядку; исчерпание всех — не ошибка задания, а ожидание. */
-  async function reply(payload, { beforeAttempt = null } = {}) {
+  async function reply(payload, { beforeAttempt = null,excludeProviders=[],validate=null,maxAttempts=2 } = {}) {
     let blockedReason = '';
-    for (const provider of available()) {
+    let attempts=0;
+    for (const provider of available().filter(p=>!excludeProviders.includes(p.name))) {
+      if(attempts++>=Math.min(2,Math.max(1,maxAttempts)))break;
       if (beforeAttempt) beforeAttempt(provider);
       const result = await callProvider(provider, payload);
       // Бюджет не дал брони: это не сбой провайдера, обращения не было.
       if (result && result.budgetBlocked) { blockedReason = result.reason || blockedReason; continue; }
-      if (result) return result;
+      if (result) {
+        if(validate){try{validate(result.text);}catch{cooldown(provider.name,CLIENT_ERROR_S,'Ответ не соответствует требуемому формату');continue;}}
+        return result;
+      }
     }
     if (blockedReason && !budget.stopped()) {
       throw Object.assign(new Error(`${blockedReason}: вопрос ждёт в очереди`),

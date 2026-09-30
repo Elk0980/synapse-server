@@ -45,3 +45,26 @@ test('invalid decisions and model-free completion do not mutate work',t=>{const 
 test('revision preserves the previous draft and question in immutable history',t=>{const {api,db}=fixture(t);api.enqueue(1,{revision:0},owner);api.complete(api.claim(),{state:'review',result:'Первый результат',department:'support',provider:'p',model:'m'});const saved=api.get(1,owner);api.act(1,{revision:saved.revision,action:'revise',text:'Исправить формулировку'},owner);const revised=api.get(1,owner);assert.equal(revised.result,'');assert.ok(revised.history.some(h=>h.result==='Первый результат'&&h.model==='m'));assert.throws(()=>db.exec("DELETE FROM task_dispatch_history"),/Immutable/);});
 
 test('provider cooldown delays the next claim and explains the delay',t=>{const {api,tick}=fixture(t);api.enqueue(1,{revision:0},owner);api.error(api.claim(),{code:'provider',delay:600});assert.match(api.get(1,owner).result,/Провайдеры API/);tick(61000);assert.equal(api.claim(),null);tick(540000);assert.equal(api.claim().taskId,1);});
+
+test('independent review persists on restart and history, clears on revision',t=>{
+ const {api,db}=fixture(t);api.enqueue(1,{revision:0},owner);
+ const review={verdict:'passed',note:'Проверено по задаче',provider:'second',model:'reviewer',usage:{promptTokens:30,completionTokens:12}};
+ api.complete(api.claim(),{state:'review',result:'Черновик',department:'marketing',provider:'first',model:'writer',review});
+ let saved=createTaskDispatch(db).get(1,owner);assert.deepEqual(saved.review,review);assert.deepEqual(saved.history[0].review,review);
+ api.act(1,{revision:saved.revision,action:'revise',text:'Уточнить условия'},owner);saved=api.get(1,owner);
+ assert.equal(saved.review,null);assert.ok(saved.history.some(h=>h.review?.model==='reviewer'));
+});
+test('same model or provider cannot self-review and rejected review leaves lease intact',t=>{
+ const {api}=fixture(t);api.enqueue(1,{revision:0},owner);const job=api.claim();
+ const result={state:'review',result:'Черновик',department:'marketing',provider:'first',model:'writer'};
+ for(const review of [{provider:'first',model:'reviewer'},{provider:'second',model:'writer'},{provider:'second',model:'WRITER'},{provider:'second',model:''}]){
+  assert.throws(()=>api.complete(job,{...result,review:{verdict:'passed',note:'ok',...review}}),e=>e.status===400);
+  assert.equal(api.get(1,owner).state,'running');
+ }
+ api.complete(job,{...result,review:{verdict:'unavailable',note:'Проверка недоступна'}});assert.equal(api.get(1,owner).review.verdict,'unavailable');
+});
+test('new chat clarification clears obsolete review without removing evidence',t=>{
+ const {api}=fixture(t);const input={room:'alpha',sourceId:55,companyCode:'alpha',title:'Текст',note:'Первая версия',sourceVersion:1};const {taskId}=api.mirror(input);
+ api.complete(api.claim(),{state:'review',result:'Черновик',department:'marketing',provider:'a',model:'writer',review:{verdict:'changes',note:'Нужно уточнить',provider:'b',model:'checker'}});
+ api.mirror({...input,note:'Вторая версия',sourceVersion:2});const r=api.get(taskId,owner);assert.equal(r.state,'queued');assert.equal(r.review,null);assert.ok(r.history.some(h=>h.review?.verdict==='changes'));
+});

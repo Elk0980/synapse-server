@@ -118,6 +118,14 @@ test('ввод ключей провайдеров: владелец, CSRF, кл
     assert.equal((await as('owner', '/content/hugh-providers/unknown',
       {method: 'PUT', body: {revision: 0, baseUrl: 'https://api.deepseek.com/v1', modelId: 'm'}})).status, 404);
     assert.equal((await as('owner', '/content/hugh-providers/deepseek')).status, 405);
+    // Баланс тоже закрыт сессией владельца и CSRF; выключенный API не обращается наружу.
+    assert.equal((await request('/content/hugh-providers/deepseek/balance',{method:'POST'})).status,401);
+    assert.equal((await as('client','/content/hugh-providers/deepseek/balance',{method:'POST'})).status,403);
+    assert.equal((await as('owner','/content/hugh-providers/deepseek/balance',{method:'POST',headers:{'x-csrf-token':'wrong'}})).status,403);
+    assert.equal((await as('owner','/content/hugh-providers/deepseek/balance')).status,405);
+    assert.equal((await as('owner','/content/hugh-providers/zai/balance',{method:'POST'})).status,400);
+    const balance=await as('owner','/content/hugh-providers/deepseek/balance',{method:'POST'});
+    assert.equal(balance.status,200);assert.equal(balance.body.status,'unknown');assert.doesNotMatch(balance.text,new RegExp(KEY));
     // Проверка соединения требует CSRF и не выполняется клиентом.
     assert.equal((await as('client', '/content/hugh-providers/deepseek/check', {method: 'POST'})).status, 403);
     assert.equal((await as('owner', '/content/hugh-providers/deepseek/check',
