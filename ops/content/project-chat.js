@@ -9,7 +9,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { COMPANIES } = require('./auth-store');
-const { createHughFallback } = require('./hugh-fallback');
+const { createHughFallback, LEGACY_ACK_TEXT } = require('./hugh-fallback');
 const hughCommands = require('./hugh-commands');
 const personas = require('./hugh-personas');
 const { createLocalWorker } = require('./project-chat-local-worker');
@@ -249,6 +249,10 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       reply_message_id INTEGER REFERENCES project_chat_messages(id), provider TEXT, model TEXT,
       payload TEXT
     );
+    CREATE TABLE IF NOT EXISTS project_chat_acknowledged_jobs (
+      job_id INTEGER PRIMARY KEY REFERENCES project_chat_ai_jobs(id) ON DELETE CASCADE,
+      ack_message_id INTEGER NOT NULL REFERENCES project_chat_messages(id)
+    );
     CREATE TABLE IF NOT EXISTS project_chat_command_replies (
       chat_id TEXT NOT NULL, message_id TEXT NOT NULL, company_code TEXT NOT NULL, command TEXT NOT NULL,
       state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','done')), reply_message_id INTEGER, created_at TEXT NOT NULL,
@@ -259,6 +263,13 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       PRIMARY KEY(chat_id,message_id)
     );
   `);
+  // Старое системное уведомление тоже считается созданным, включая uncertain outbox.
+  // Не угадываем по фрагментам текста: только точный прежний шаблон, автор и компания.
+  db.prepare(`INSERT OR IGNORE INTO project_chat_acknowledged_jobs(job_id,ack_message_id)
+    SELECT j.id, MIN(m.id) FROM project_chat_ai_jobs j
+    JOIN project_chat_messages m ON m.company_code=j.company_code AND m.id>j.message_id
+    WHERE j.reply_message_id IS NULL AND m.author_type='assistant' AND m.author_id='hugh' AND m.text=?
+    GROUP BY j.id`).run(LEGACY_ACK_TEXT);
   // Запрос к службе Хью фиксируется один раз: повтор с тем же jobId обязан нести тот же payload.
   if (!db.prepare('PRAGMA table_info(project_chat_ai_jobs)').all().some(column => column.name === 'payload')) {
     db.exec('ALTER TABLE project_chat_ai_jobs ADD COLUMN payload TEXT');
@@ -1565,18 +1576,37 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       return { enabled: false, skills: [], issues: [`Состояние навыков не прочитано: ${error?.message || 'неизвестная ошибка'}`] };
     }
   }
-  /* Честное подтверждение приёма, когда ни основной путь, ни резерв не доступны: одно на компанию за 30 минут,
-     только для вопросов, которые ждут ответа. Не обещает выполненных действий. */
+  /* Один ack на обращение, с прежним ограничением частоты на компанию. Ручная доставка
+     подавляет устаревшее уведомление, но НЕ является доказательством решения всех вопросов. */
   function acknowledgePending(codesFilter = '', params = []) {
     if (!ackEnabled) return;
     const waiting = db.prepare(`SELECT DISTINCT company_code FROM project_chat_ai_jobs WHERE reply_message_id IS NULL
       AND status IN ('pending','running','blocked','error') AND attempts<?${codesFilter}`).all(AI_ATTEMPTS, ...params);
     for (const { company_code: code } of waiting) {
-      if (!fallback.ackDue(code)) continue;
       tx(() => {
-        insertMessage({ code, authorId: 'hugh', authorName: personas.PERSONAS.hugh.name, authorType: 'assistant', text: fallback.ACK_TEXT });
-        fallback.markAck(code);
         managerTask(code);
+        if (!fallback.ackDue(code)) return;
+        const jobs = db.prepare(`SELECT j.id FROM project_chat_ai_jobs j
+          WHERE j.company_code=? AND j.reply_message_id IS NULL
+          AND j.status IN ('pending','running','blocked','error') AND j.attempts<?
+          AND NOT EXISTS (SELECT 1 FROM project_chat_acknowledged_jobs a WHERE a.job_id=j.id)
+          AND NOT EXISTS (
+            SELECT 1 FROM project_chat_reviewed_messages r
+            JOIN project_chat_messages m ON m.id=r.message_id
+            JOIN project_chat_outbox o ON o.message_id=m.id
+            JOIN project_chat_rooms room ON room.company_code=m.company_code
+            WHERE m.company_code=j.company_code AND m.id>j.message_id
+              AND m.author_type='assistant' AND m.author_id='hugh'
+              AND o.company_code=j.company_code AND o.status='sent'
+              AND r.chat_id=o.chat_id AND o.chat_id=room.telegram_chat_id
+              AND json_array_length(CASE WHEN json_valid(o.external_ids) THEN o.external_ids ELSE '[]' END)>0
+          )`).all(code, AI_ATTEMPTS);
+        if (!jobs.length) return;
+        const message = insertMessage({ code, authorId: 'hugh', authorName: personas.PERSONAS.hugh.name,
+          authorType: 'assistant', text: fallback.ACK_TEXT });
+        const remember = db.prepare('INSERT INTO project_chat_acknowledged_jobs(job_id,ack_message_id) VALUES(?,?)');
+        for (const job of jobs) remember.run(job.id, message.id);
+        fallback.markAck(code);
       });
     }
   }

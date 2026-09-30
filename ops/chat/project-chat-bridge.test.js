@@ -208,6 +208,16 @@ test('такт моста берёт задания по одному и под�
   assert.equal(calls.content.filter((c) => c.route === '/outbox').length, 3, 'пустой ответ останавливает опрос');
 });
 
+test('уведомление о задержке доставляется с одной подписью ИИ', async () => {
+  const { ACK_TEXT } = require('../content/hugh-fallback');
+  const { bridge, calls } = setup({ rooms: ROOMS, jobs: [{ id: 33, text: ACK_TEXT,
+    companyCode: 'palitra-love', chatId: '-1001', authorName: 'Хью', authorType: 'assistant', attachments: [] }] });
+  await bridge.tick();
+  const text = JSON.parse(calls.telegram[0].body).text;
+  assert.equal((text.match(/Хью, бизнес-ассистент/g) || []).length, 1);
+  assert.match(text, /Автоматический ответ задерживается/);
+});
+
 test('заявка с сайта: строковый id order:<n> доставляется в личный чат, подтверждается тем же id и не повторяется после неизвестного результата', async () => {
   const orderJob = (id) => ({ id, text: 'Заявка №7 · Palitra', companyCode: 'palitra-love', chatId: '123456789', authorName: 'Заявка с сайта', authorType: 'system', attachments: [] });
   const { bridge, calls } = setup({ jobs: [orderJob('order:7')] });
