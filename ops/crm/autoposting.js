@@ -325,7 +325,11 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
      конкретный финальный текст, медиа и канал: это разные утверждения, и одно другого не
      заменяет. Признак берётся из связи в отдельной таблице, а не из day_key и подписей:
      эти поля можно очистить правкой карточки, а связь так не снимается. */
-  const requiresApproval=row=>isQueueCard(row)||Boolean(plan.linkOf(row.id,row.company_id));
+  // Явная политика компании: обычная карточка Palitra также требует согласования.
+  // Для остальных компаний сохраняются прежние правила очереди и связанного плана.
+  const approvalPolicy=code=>String(code).toLowerCase()==='palitra-love';
+  const companyApprovalRequired=row=>approvalPolicy(db.prepare('SELECT code FROM companies WHERE id=?').get(row.company_id)?.code);
+  const requiresApproval=row=>companyApprovalRequired(row)||isQueueCard(row)||Boolean(plan.linkOf(row.id,row.company_id));
   const deliveryApproved=(row,channelId)=>{
     // Связь с версией плана проверяется ПЕРВОЙ: карточка без признаков очереди тоже может
     // происходить из плана, и ранний выход ниже пропустил бы отозванный текст.
@@ -350,16 +354,23 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     const row=db.prepare('SELECT * FROM autoposting_posts WHERE id=? AND company_id=?').get(Number(id),owner.id);
     if(!row)fail(404,'Публикация не найдена','NOT_FOUND');return {row,owner};
   }
-  /* Готовность к одобрению: есть материал, есть текст или подпись хотя бы одной площадки, подписи в лимитах. Ничего не публикует. */
+  /* Готовность содержимого: материал либо разрешённый текстовый формат, текст/подписи в лимитах.
+     Не подтверждает подключение: оно отдельно проверяется при постановке и перед отправкой. */
   function readiness(row) {
     const media=JSON.parse(row.media_urls),caps=JSON.parse(row.captions||'{}'),issues=[];
-    if(!media.length)issues.push('Нет материала: добавьте ссылку на видео или изображение'+(row.expected_media_file?` (ожидается файл ${row.expected_media_file} из пакета)`:''));
+    const ids=JSON.parse(row.platform_ids||'[]');
+    // Информационный текст Palitra сохраняет существующий формат прямых Telegram/VK.
+    // Отсутствующий обещанный файл, Stories и видеоплощадки текстовым постом не подменяются.
+    const textOnly=companyApprovalRequired(row)&&!media.length&&Boolean(row.text?.trim())&&ids.length>0
+      &&ids.every(id=>['telegram','vk'].includes(id))&&!row.expected_media_file&&!row.expected_media_sha256
+      &&['','post'].includes(metaOf(row).format)&&!Object.keys(JSON.parse(row.platform_options||'{}')).length;
+    if(!media.length&&!textOnly)issues.push('Нет материала: добавьте ссылку на видео или изображение'+(row.expected_media_file?` (ожидается файл ${row.expected_media_file} из пакета)`:''));
     // Пакет назвал хеш ролика: без сверки загруженный файл не считается тем самым видео.
     else if(row.expected_media_sha256&&!row.media_sha256)issues.push('Хеш видео не сверен с пакетом: загрузите ролик из пакета через кабинет');
     else if(row.expected_media_sha256&&row.media_sha256!==row.expected_media_sha256)issues.push('Загруженный файл не совпадает с роликом из пакета (SHA-256 отличается)');
     if(!row.text&&!Object.keys(caps).length)issues.push('Нет текста и подписей площадок');
     for(const [platform,caption]of Object.entries(caps))if(caption.length>CAPTION_PLATFORMS[platform].limit)issues.push(`Подпись ${CAPTION_PLATFORMS[platform].label} длиннее лимита`);
-    return {ready:!issues.length,issues,mediaKind:mediaKind(media)};
+    return {ready:!issues.length,issues,mediaKind:mediaKind(media),textOnly};
   }
   /* Одобрение привязано к content_revision — версии содержимого (текст, подписи, материал, день, происхождение).
      Технические переходы (план, отправка, отмена) меняют revision, но не content_revision, и одобрение сохраняют. */
@@ -382,6 +393,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
       mediaUrls:JSON.parse(row.media_urls),platformIds:JSON.parse(row.platform_ids),scheduledAt:row.scheduled_at,timezone:row.timezone,
       dayKey:row.day_key||'',captions:JSON.parse(row.captions||'{}'),origin:row.origin||'',platformOptions:JSON.parse(row.platform_options||'{}'),
       readiness:readiness(row),approval:cardApprovalDto(row),platformApprovals:platformApprovals(row),
+      approvalRequired:requiresApproval(row),approveAndScheduleAvailable:approvalPolicy(owner.code),
       mediaSha256:row.media_sha256||'',expectedMediaSha256:row.expected_media_sha256||'',expectedMediaFile:row.expected_media_file||'',externalId:row.external_id||'',
       externalReceipts:receiptsOf(row),
       continuedPlatforms:db.prepare('SELECT platform_id platformId,child_post_id childPostId,created_at createdAt FROM autoposting_split_links WHERE source_post_id=? ORDER BY platform_id').all(row.id)
@@ -774,7 +786,11 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     // а остальные остаются в карточке со своими статусами и просто не отправляются.
     object(body,['revision','scheduledAt','timezone','profileRevision','platformIds']);revision(body.revision);
     const settings=await transport.getSettings(code),current=invalidate(code);
-    transaction(()=>{
+    transaction(()=>schedulePrepared(id,code,body,settings,current));
+    return get(id,code);
+  }
+  // Только внутри транзакции. Общее ядро для отдельной постановки и явного согласования с ней.
+  function schedulePrepared(id,code,body,settings,current) {
       const {row,owner}=rowFor(id,code);
       if(row.revision!==body.revision)fail(409,'Публикация уже изменена','REVISION_CONFLICT');
       // Планирование карточки из контент-плана: разрешено только пока её версия согласована.
@@ -808,6 +824,12 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
       const blocked=data.platformIds.filter((id,index)=>marked.has(channelPlatform(channels[index],id)));
       if(blocked.length)fail(409,`Уже отмечено как опубликованное вне ЛК: ${blocked.join(', ')}. Повторная отправка создаст дубликат.`,'EXTERNAL_PUBLICATION_RECORDED');
       if(channels.some(channel=>!channel||!channel.enabled||!channel.connected))fail(409,'Выбранный канал не подключён','CHANNEL_NOT_CONNECTED');
+      if(companyApprovalRequired(row)&&!data.mediaUrls.length){
+        if(!readiness(row).textOnly||channels.some(channel=>(channel.provider||'direct')!=='direct'||!['telegram','vk'].includes(channel.platform||channel.id)))
+          fail(409,'Для этого способа публикации нужен материал: текст без медиа поддержан только прямыми Telegram и ВКонтакте','NOT_READY');
+        if(channels.some(channel=>(captionsByPlatform[channel.platform||channel.id]||data.text).length>(channel.caps?.maxText||(channel.id==='telegram'?4096:15000))))
+          fail(400,'Текст превышает лимит выбранного канала','CONTENT_LIMIT');
+      }
       /* Подмена площадки у карточки из плана: согласована версия для одной площадки, а канал
          выбран на другой. Сверяется фактическая площадка канала, а не его идентификатор. */
       const wrongPlatform=data.platformIds.filter((id,index)=>
@@ -819,13 +841,29 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
       for(const channel of channels)db.prepare('INSERT INTO autoposting_deliveries(post_id,channel_id,channel_revision) VALUES(?,?,?)').run(row.id,channel.id,channel.revision);
       db.prepare(`UPDATE autoposting_posts SET status='scheduled',scheduled_at=?,timezone=?,revision=revision+1,updated_at=?,last_error_code=NULL WHERE id=?`)
         .run(data.scheduledAt,data.timezone,iso(),row.id);
-    });return get(id,code);
+  }
+  async function approveAndSchedule(id,code,body,actor={}) {
+    object(body,['revision','approved','schedule','comment']);revision(body.revision);
+    if(body.approved!==true||body.schedule!==true)fail(400,'Укажите явное одобрение и постановку в план');
+    const {owner}=rowFor(id,code);
+    if(!approvalPolicy(owner.code))fail(409,'Для этой компании согласование и постановка в план выполняются отдельно','APPROVAL_SCHEDULE_DISABLED');
+    const settings=await transport.getSettings(owner.code),current=invalidate(owner.code);
+    return transaction(()=>{
+      // Ревизия проверяется после ожидания настроек. Только сохранённые дата и все каналы карточки;
+      // нельзя незаметно подменить их одновременно с решением согласующего.
+      const approved=approvePrepared(id,owner.code,{revision:body.revision,approved:true,comment:body.comment??'Одобрено и поставлено в план'},actor);
+      schedulePrepared(id,owner.code,{revision:approved.revision},settings,current);
+      const {row}=rowFor(id,owner.code);
+      return dto(row,owner);
+    });
   }
   /* Одобрение конкретной версии владельцем. Не публикует, не планирует; снятие галочки убирает одобрение. */
   function approve(id,code,body,actor={}) {
     object(body,['revision','approved','comment','platformIds']);revision(body.revision);
     if(typeof body.approved!=='boolean')fail(400,'Укажите approved: true или false');
-    return transaction(()=>{
+    return transaction(()=>approvePrepared(id,code,body,actor));
+  }
+  function approvePrepared(id,code,body,actor) {
       const {row,owner}=rowFor(id,code);
       if(row.revision!==body.revision)fail(409,'Публикация уже изменена','REVISION_CONFLICT');
       if(body.approved){
@@ -857,7 +895,6 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
         history(row,'revoked',text(body.comment??'',2000),actor);
       }
       return dto(db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(row.id),owner);
-    });
   }
   /* Подтверждение внешней публикации. Владелец сообщает: эта версия содержимого уже вышла на площадке
      через внешний сервис или нативный интерфейс. Провайдер не вызывается, ничего не отправляется,
@@ -1278,7 +1315,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
   }
   function drain(){if(stopped)return Promise.resolve();if(!running)running=processDue().finally(()=>running=null);return running;}
   function stop(){stopped=true;return running||Promise.resolve();}
-  return {get,list,calendar,create,update,schedule,cancel,reconcile,drain,stop,invalidate,approve,reject,split,submitReview,reorder,importPackage,recordReceipt};
+  return {get,list,calendar,create,update,schedule,cancel,reconcile,drain,stop,invalidate,approve,approveAndSchedule,reject,split,submitReview,reorder,importPackage,recordReceipt};
 }
 module.exports={createAutoposting,LEASE_MS,PLAN_PLATFORMS,CAPTION_PLATFORMS,FORMATS,ROLES,REVIEW_STATES,META_FIELDS,RECEIPT_PLATFORMS,receiptFormat,
   CALENDAR_MAX_RANGE_DAYS,CALENDAR_UNDATED_LIMIT,CALENDAR_TARGET_DAYS,CALENDAR_MINIMUM_DAYS,CALENDAR_CRITICAL_DAYS};

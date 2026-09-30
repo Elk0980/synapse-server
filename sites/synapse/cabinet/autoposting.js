@@ -93,6 +93,7 @@ const mediaPreview = urls => (urls||[]).map(url=>{const safe=safeUrl(url);if(!sa
   const player=isVideo(safe)?`<video class="autoposting-video" controls preload="metadata" playsinline src="${esc(safe)}"></video>`:cabinet.companyAssets?.imageUrl?.(url)||/\.(jpe?g|png|webp|gif)(?:[?#].*)?$/i.test(safe)?`<img class="autoposting-thumbnail" src="${esc(safe)}" alt="Материал публикации" loading="lazy">`:"";
   return `<li>${player}<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a></li>`;}).join("");
 const isQueueCard = item => Boolean(item?.dayKey||Object.keys(item?.captions||{}).length);
+const requiresApproval = item => Boolean(item?.approvalRequired||isQueueCard(item));
 // Подтверждение внешней публикации: доказательство уже вышедшей записи. Та же проверка формата, что на сервере
 // (ops/crm/autoposting.js): https, домен площадки, путь адреса записи, никаких учётных данных, порта, части после «#»
 // и лишних параметров; значение разрешённого параметра сверяется с форматом. Применяется и до отправки, и при выводе.
@@ -293,7 +294,7 @@ function create(container, context) {
     if(options.instagram?.is_story===true&&options.instagram?.is_reels===true)throw Error("Story и Reel — разные режимы Instagram: выберите один.");
     return {title:values.title.trim(),text:values.text.trim(),mediaUrls,platformIds:values.platformIds,scheduledAt,timezone:values.timezone,profileRevision:information.revision,dayKey:values.dayKey,origin:values.origin.trim(),captions,mediaSha256:values.mediaSha256||"",platformOptions:options,...metaOut};
   };
-  const problems=()=>{
+  const problems=({approving=false}={})=>{
     const result=[];let data;
     try{data=read();}catch(error){return [error.message];}
     if(!data.title||(!data.text&&!Object.keys(data.captions).length))result.push("Заполните название и текст или подписи площадок.");
@@ -302,11 +303,11 @@ function create(container, context) {
     if(!Number.isSafeInteger(information?.revision)||information.revision<1)result.push("Сначала сохраните данные компании в разделе «Актуальность».");
     if(post&&post.profileRevision!==information.revision)result.push("Данные компании изменились. Проверьте текст и сохраните его заново.");
     if(post?.deliveries?.some(item=>["published","publishing","needs_review"].includes(item.status)))result.push("Материал уже отправлялся на площадку. Проверьте опубликованное вручную: автоматический повтор может создать дубль.");
-    if(post&&isQueueCard(post)&&!post.approval?.approved&&!approvedPlatforms(post).length)result.push("Ни одна площадка этой версии не одобрена владельцем.");
+    if(!approving&&post&&requiresApproval(post)&&!post.approval?.approved&&!approvedPlatforms(post).length)result.push("Ни одна площадка этой версии ещё не согласована.");
     const marked=receiptPlatforms(post);
     // Проверяются ровно те площадки, которые уйдут в план: при частичном согласовании это только
     // согласованные каналы, и неподключённый несогласованный канал отправке не мешает.
-    const targets=scheduleTargets(post,data.platformIds);
+    const targets=approving?data.platformIds:scheduleTargets(post,data.platformIds);
     // Требования YouTube проверяются только если этот канал действительно уходит в план:
     // несогласованный YouTube не должен блокировать согласованный Telegram.
     if(targets.includes('youtube_shorts')){
@@ -319,6 +320,7 @@ function create(container, context) {
       // Площадка с подтверждением внешней публикации повторно не отправляется: сервер откажет, и дубликат не нужен.
       if(marked.has(channel?.platform||id))result.push(`${channel?.name||id}: площадка отмечена как опубликованная вне ЛК. Повторная отправка создаст дубликат.`);
       if(!channel?.connected||!channel.enabled){result.push((channel?.name||id)+": включите канал и проверьте доступ.");continue;}
+      if(post?.approveAndScheduleAvailable&&!data.mediaUrls.length&&(channel.provider||'direct')!=='direct')result.push(`${channel.name||id}: текст без медиа поддержан только прямыми Telegram и ВКонтакте.`);
       const maxText=channel.platform==="telegram"&&data.mediaUrls.length?1024:(channel.caps?.maxText|| (channel.platform==="vk"?15000:4096));
       const maxMedia=Number.isSafeInteger(channel.caps?.maxMedia)?channel.caps.maxMedia:(channel.platform==="vk"?1:10);
       const channelText=data.captions[channel.platform]||data.text;
@@ -329,6 +331,8 @@ function create(container, context) {
     return result;
   };
   const readyToSchedule=()=>post&&EDITABLE.has(post.status)&&!dirty()&&reviewed===post.revision&&!problems().length;
+  const readyToApproveAndSchedule=()=>post?.approveAndScheduleAvailable&&edit()&&permitted(ctx,'approve')
+    &&EDITABLE.has(post.status)&&post.readiness?.ready&&!dirty()&&reviewed===post.revision&&!problems({approving:true}).length;
   const controls=()=>{
     container.setAttribute("aria-busy",String(busy));
     if(ctx.identity?.role!=='owner')get('autoposting-channels').querySelectorAll('[data-profile-diagnostics]').forEach(node=>node.remove());
@@ -354,6 +358,7 @@ function create(container, context) {
     // Счётчик сам объясняет происхождение предела: внутренний предел поля не выдаётся за лимит площадки.
     for(const [id,,limit,,source] of CAPTIONS){const node=container.querySelector(`[data-caption-count="${id}"]`);const len=container.querySelector(`[data-caption="${id}"]`).value.length;node.textContent=`${len} / ${limit}`+(source==="internal"?" · внутренний предел поля, лимит площадки не подтверждён":"");node.classList.toggle("autoposting-over",len>limit);}
     get("autoposting-schedule").disabled=busy||!edit()||!readyToSchedule();
+    const approveSchedule=get('autoposting-approve-schedule');if(approveSchedule)approveSchedule.disabled=busy||!readyToApproveAndSchedule();
     get("autoposting-cancel").hidden=!post||!["scheduled","publishing"].includes(post.status);
     get("autoposting-cancel").disabled=busy||!edit();
     get("autoposting-reconcile").hidden=!post?.deliveries?.some(item=>item.providerPostId);
@@ -377,10 +382,11 @@ function create(container, context) {
       ${rv.state==="rejected"&&rv.comment?`<p class="autoposting-issues" data-review-comment>Причина отклонения: ${esc(rv.comment)}</p>`:""}
       <p>${r.ready?"Материал готов к согласованию":"Материал не готов: "+esc((r.issues||[]).join("; "))}</p>
       ${(post.platformApprovals||[]).length?`<ul class="autoposting-platform-approvals">${post.platformApprovals.map(item=>`<li data-platform-state="${esc(item.state)}">${owner?`<label class="autoposting-checkbox"><input type="checkbox" data-approval-platform="${esc(item.platformId)}" checked>${esc(item.platformLabel)}</label>`:`<strong>${esc(item.platformLabel)}</strong>`} <span class="autoposting-badge">${esc(item.stateLabel)}</span>${item.stale?' <span class="autoposting-badge">решение относилось к прежней версии</span>':""}${item.comment?`<p class="autoposting-issues">Причина: ${esc(item.comment)}</p>`:""}${item.byName?`<p class="autoposting-note">${esc(item.byName)}${item.at?" · "+esc(time.toLocal(item.at,zone()).replace("T"," ")):""}</p>`:""}</li>`).join("")}</ul>${owner?'<p class="autoposting-note">Отметьте площадки, к которым относится решение. С площадки, которую не трогаете, отметку снимите.</p>':""}`:""}
-      ${rv.state!=="pending"&&!a.approved&&isQueueCard(post)?`<button class="plain-button" type="button" id="autoposting-submit-review"${canEdit?"":" disabled"}>Отправить на согласование</button>`:""}
+      ${rv.state!=="pending"&&!a.approved&&requiresApproval(post)?`<button class="plain-button" type="button" id="autoposting-submit-review"${canEdit?"":" disabled"}>Отправить на согласование</button>`:""}
       <label class="autoposting-checkbox"><input type="checkbox" id="autoposting-approve"${a.approved?" checked":""}${owner?"":" disabled"}>Одобрено публиковать (содержимое v${esc(post.contentRevision||"")})</label>
-      <p class="autoposting-note">${a.approved?`Согласовано ${esc(a.approvedByName||"владельцем")}${a.approvedAt?" · "+esc(time.toLocal(a.approvedAt,zone()).replace("T"," ")):""}. Согласование не запускает публикацию; плановая дата — тоже. Отправка начинается только кнопкой «Поставить в план».`:a.stale?`Прежнее согласование относилось к версии содержимого ${esc(a.approvedRevision)} и снято после правки.`:"Не согласовано. Согласует владелец после проверки предпросмотра."}${owner?"":" Согласует владелец кабинета."}</p>
-      ${isQueueCard(post)?`<p class="autoposting-note" data-schedule-scope>${approvedPlatforms(post).length?`В план уйдут только согласованные площадки: ${esc(approvedPlatforms(post).map(platformLabel).join(", "))}.`+((post.platformApprovals||[]).some(entry=>!entry.approved)?` Остальные остаются в карточке со своим статусом и не отправляются.`:""):"Согласованных площадок пока нет: ставить в план нечего."}</p>`:""}
+      <p class="autoposting-note">${a.approved?`Согласовано ${esc(a.approvedByName||(post.approveAndScheduleAvailable?"согласующим":"владельцем"))}${a.approvedAt?" · "+esc(time.toLocal(a.approvedAt,zone()).replace("T"," ")):""}. ${post.approveAndScheduleAvailable?(post.status==='scheduled'?'Версия стоит в очереди на сохранённое время.':'Отдельное согласование не ставит в очередь. Используйте «Поставить в план» либо «Одобрить и запланировать».'):'Согласование не запускает публикацию; плановая дата — тоже. Отправка начинается только кнопкой «Поставить в план».'}`:a.stale?`Прежнее согласование относилось к версии содержимого ${esc(a.approvedRevision)} и снято после правки.`:post.approveAndScheduleAvailable?"Не согласовано. Согласующий проверяет предпросмотр перед решением.":"Не согласовано. Согласует владелец после проверки предпросмотра."}${owner?"":post.approveAndScheduleAvailable?" Согласует участник с правом согласования.":" Согласует владелец кабинета."}</p>
+      ${requiresApproval(post)?`<p class="autoposting-note" data-schedule-scope>${approvedPlatforms(post).length?`В план уйдут только согласованные площадки: ${esc(approvedPlatforms(post).map(platformLabel).join(", "))}.`+((post.platformApprovals||[]).some(entry=>!entry.approved)?` Остальные остаются в карточке со своим статусом и не отправляются.`:""):"Согласованных площадок пока нет: ставить в план нечего."}</p>`:""}
+      ${post.approveAndScheduleAvailable?`<p class="autoposting-note" data-approve-schedule-summary>Одним действием можно одобрить эту версию для всех сохранённых каналов (${esc((post.platformIds||[]).map(platformLabel).join(', ')||'не выбраны')}) и поставить её в очередь на ${post.scheduledAt?esc(time.toLocal(post.scheduledAt,post.timezone).replace('T',' ')+' · '+post.timezone):'дату, которую нужно сначала сохранить'}. Сначала откройте предпросмотр. Если канал не подключён, решение и очередь не сохранятся.</p><button type="button" class="primary" id="autoposting-approve-schedule" disabled>Одобрить и запланировать</button>`:""}
       ${(post.continuedPlatforms||[]).length?`<p class="autoposting-note" data-continued-to>Работа по площадкам ${esc(post.continuedPlatforms.map(entry=>entry.platformLabel).join(", "))} продолжена в отдельном материале №${esc(post.continuedPlatforms[0].childPostId)}. Второй раз в план эти площадки отсюда не ставятся.</p>`:""}
       ${post.continuedFrom?`<p class="autoposting-note" data-continued-from>Это продолжение материала №${esc(post.continuedFrom.postId)} по оставшимся площадкам. Согласование нужно новое.</p>`:""}
       ${edit()&&remainingPlatforms(post).length?`<button class="plain-button" type="button" id="autoposting-continue-remaining">Продолжить по оставшимся площадкам</button><p class="autoposting-note">Создаст отдельный материал только для площадок, по которым отправки не было: ${esc(remainingPlatforms(post).map(platformLabel).join(", "))}. Уже отправленное не повторяется.</p>`:""}
@@ -399,6 +405,17 @@ function create(container, context) {
       if(!nodes.length)return undefined;
       return nodes.filter(item=>item.checked).map(item=>item.dataset.approvalPlatform);
     };
+    get('autoposting-approve-schedule')?.addEventListener('click',()=>{
+      if(busy||!readyToApproveAndSchedule())return;
+      const id=post.id,revision=post.revision;
+      void run(async current=>{
+        invalidate();
+        const result=await request('/autoposting/posts/'+encodeURIComponent(id)+'/approve','POST',{revision,approved:true,schedule:true});
+        if(!current())return;
+        post=result;posts=posts.map(item=>item.id===result.id?result:item);drafts.delete(key());renderList();renderPost();
+        message('Версия одобрена и поставлена в очередь на сохранённое время для всех выбранных каналов.');
+      },'Одобряем и ставим в очередь…','Не удалось подтвердить согласование и очередь. Обновите статусы и проверьте дату, каналы и версию материала.');
+    });
     get("autoposting-continue-remaining")?.addEventListener("click",()=>{
       // Продолжение создаёт черновик и ничего не согласовывает: достаточно права правки материалов.
       if(busy||!post||!edit())return;
@@ -605,7 +622,7 @@ function create(container, context) {
       &&!(item.deliveries||[]).some(entry=>entry.channelId===id&&["published","publishing","needs_review"].includes(entry.status)));
   };
   const scheduleTargets=(item,selected)=>{
-    if(!item||!isQueueCard(item)||item.approval?.approved)return selected;
+    if(!item||!requiresApproval(item)||item.approval?.approved)return selected;
     const approved=approvedPlatforms(item);
     return approved.length?selected.filter(id=>approved.includes(id)):selected;
   };
@@ -768,7 +785,7 @@ function create(container, context) {
     if(busy||!post||dirty())return;const issues=problems();reviewed=post.revision;
     get("autoposting-preview-content").innerHTML=`<h4>${esc(post.title)}</h4>${(post.platformIds||[]).includes("youtube_shorts")?`<p class="autoposting-note" data-youtube-title>Публичный заголовок YouTube Shorts: «${esc(post.title)}» · ${esc(String(post.title||"").length)} / 100 · публичный доступ</p>`:""}<pre>${esc(post.text)}</pre><p>${post.scheduledAt?esc(time.toLocal(post.scheduledAt,post.timezone).replace("T"," ")+" · "+post.timezone):"Дата не задана"}</p>
       <p>Площадки: ${post.platformIds.map(id=>esc(channels().find(item=>item.id===id)?.name||platformLabel(id))).join(", ")||"не выбраны"}</p>
-      ${(post.mediaUrls||[]).length?`<ul class="autoposting-media-preview">${mediaPreview(post.mediaUrls)}</ul>`:"<p>Материал не прикреплён.</p>"}
+      ${(post.mediaUrls||[]).length?`<ul class="autoposting-media-preview">${mediaPreview(post.mediaUrls)}</ul>`:post.readiness?.textOnly?"<p>Текстовая публикация в Telegram / ВКонтакте: изображение не требуется.</p>":"<p>Материал не прикреплён.</p>"}
       ${Object.keys(post?.platformOptions||{}).length?`<div class="autoposting-platform-options-preview"><h4>Как это выйдет на площадках</h4>${Object.entries(post.platformOptions).map(([platform,options])=>`<p><strong>${esc(CAPTIONS.find(item=>item[0]===platform)?.[1]||platform)}</strong>: ${esc(optionWords(platform,options).join("; ")||"без особых настроек")}</p>`).join("")}<p class="autoposting-note">Эти настройки утверждаются вместе с текстом: их правка снимает согласование.</p></div>`:""}${isQueueCard(post)?`<p>Версия ${esc(post.revision)}${post.dayKey?" · день "+esc(post.dayKey):""}${post.origin?" · "+esc(post.origin):""}</p><div class="autoposting-platform-previews">${CAPTIONS.map(([id,label,limit,,source])=>{const caption=post.captions?.[id]||post.text||"";
         /* То же пояснение, что у поля подписи и у счётчика: у 2ГИС 2000 — внутренний предел
            нашего поля, а не подтверждённый лимит площадки. Иначе предпросмотр обещает знание
@@ -783,7 +800,7 @@ function create(container, context) {
   get("autoposting-schedule").addEventListener("click",()=>{
     if(!edit()||!readyToSchedule())return;
     const selectedTargets=scheduleTargets(post,read().platformIds);
-    const targets=isQueueCard(post)&&!post.approval?.approved&&approvedPlatforms(post).length?selectedTargets:null;
+    const targets=requiresApproval(post)&&!post.approval?.approved&&approvedPlatforms(post).length?selectedTargets:null;
     if(targets&&!targets.length){message("Ни одна площадка этой версии не одобрена: ставить в план нечего.");return;}
     void run(async current=>{invalidate();const result=await request("/autoposting/posts/"+encodeURIComponent(post.id)+"/schedule","POST",{revision:post.revision,...(targets?{platformIds:targets}:{})});if(!current())return;
       post=result;posts=posts.map(item=>item.id===result.id?result:item);drafts.delete(key());renderList();renderPost();
