@@ -14,6 +14,7 @@ const { createAuthStore, COMPANIES, PERMISSIONS, DEPENDENCIES, PRICE_CLIENT_PRES
 const { createSiteStore } = require('./site-store');
 const { createHughSettingsStore } = require('./hugh-settings-store');
 const { createProjectChat } = require('./project-chat');
+const { createTelegramSources, readSourceConfig } = require('./telegram-sources');
 const { createOwnerPrivateChat } = require('./owner-private-chat');
 const { createActorOnboarding } = require('./actor-onboarding');
 const { createActorWorkspace } = require('./actor-workspace');
@@ -217,6 +218,10 @@ const projectChat = createProjectChat({ db, authStore, assetsDir: ASSETS_DIR,
   cabinetUrl: (process.env.CABINET_PUBLIC_URL || 'https://synapse.synapsebusiness.ru/cabinet.html').trim(),
   requireSession, requireCsrf, sendJson: send, readBody: readJson });
 const taskDispatchWorker = require('./task-dispatch-worker').createTaskDispatchWorker({db,crmUrl:CRM_URL,crmApiKey:CRM_API_KEY,fallback:projectChat.fallback});
+// Необязательный приватный конфиг на постоянном томе content. Без него приём выключен.
+const telegramSources = createTelegramSources({db, assetsDir:ASSETS_DIR, authStore, requireSession, sendJson:send,
+  config:readSourceConfig(path.join(path.dirname(DATABASE_PATH),'telegram-sources.json'))});
+if (!telegramSources.healthy) console.warn('content: настройки источников Telegram требуют проверки; приём выключен');
 for (const issue of [...projectChat.localWorker.issues, ...projectChat.miniApp.issues]) console.warn(`content: ${issue}`);
 /* Клиентские Telegram-боты: переписка клиентов с менеджером и уведомления о заявках.
    Включается только именем бота (не секрет); токен живёт только в сервисе chat. Пусто — выключен. */
@@ -791,7 +796,19 @@ const server = http.createServer(async (request, response) => {
           !crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(CHAT_API_KEY))) fail(401,'Нет доступа');
       const route = url.pathname.slice('/content/internal/project-chat'.length);
       if (route === '/binding' && request.method === 'GET') {
-        return reply(200,{room:projectChat.bridge.getBinding(url.searchParams.get('chatId'))});
+        const chatId=url.searchParams.get('chatId');
+        const room = projectChat.bridge.getBinding(chatId);
+        const source = telegramSources.binding(chatId);
+        // Известный источник первичен даже при конфликте настроек; обычная комната сохраняет контракт.
+        return reply(200,source ? {room:null,source} : {room});
+      }
+      if (route === '/source-migrate' && request.method === 'POST') {
+        const body=await readJson(request); return reply(200,telegramSources.migrate(body.chatId,body.newChatId));
+      }
+      if (route === '/source-receipt' && request.method === 'GET') return reply(200,{item:telegramSources.receipt(url.searchParams.get('chatId'),url.searchParams.get('messageId'))});
+      if (route === '/source-receive' && request.method === 'POST') {
+        let body; try {body=JSON.parse((await readRaw(request,28*1024*1024)).toString('utf8'));} catch {fail(400,'Некорректный исходник');}
+        return reply(200,telegramSources.receive(body));
       }
       if (route === '/outbox' && request.method === 'GET') return reply(200,{jobs:projectChat.bridge.pendingTelegram()});
       if (route === '/attachment' && request.method === 'GET') {
@@ -870,6 +887,7 @@ const server = http.createServer(async (request, response) => {
       } catch { return reply(503,{state:'unavailable',connected:false,configured:true,provider:'codex',
         error:'Подключение Хью пока недоступно'},{'cache-control':'no-store'}); }
     }
+    if (await telegramSources.handle(request,response,url)) return;
     if (await projectChat.handle(request,response,url)) return;
 
     if (await actorOnboarding.handle(request,response,url)) return;

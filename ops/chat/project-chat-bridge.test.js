@@ -15,7 +15,7 @@ const CONTENT = 'http://content:8080';
 const PREFIX = '/content/internal/project-chat';
 const json = (payload, status = 200) => ({ ok: status < 400, status, json: async () => payload });
 
-function setup({ rooms = {}, jobs = [], files = {}, telegram = () => ({ result: { message_id: 500 } }),
+function setup({ rooms = {}, sources = {}, jobs = [], files = {}, telegram = () => ({ result: { message_id: 500 } }),
   contentUrl = CONTENT, apiKey = 'secret', content = null, now = () => new Date('2026-09-17T12:00:00Z'),
   db = new DatabaseSync(':memory:'), botUsername = '', telegramToken = 'bot-token', ownerChatId = '' } = {}) {
   const calls = { content: [], telegram: [], legacy: [], files: 0 };
@@ -40,7 +40,9 @@ function setup({ rooms = {}, jobs = [], files = {}, telegram = () => ({ result: 
     const body = options.body ? JSON.parse(options.body) : null;
     calls.content.push({ route: route.split('?')[0], query: Object.fromEntries(new URL(target).searchParams), body });
     if (content) { const custom = content(route, body); if (custom) return custom; }
-    if (route.startsWith('/binding')) return json({ room: rooms[new URL(target).searchParams.get('chatId')] || null });
+    if (route.startsWith('/binding')) return json({ room: rooms[new URL(target).searchParams.get('chatId')] || null, source:sources[new URL(target).searchParams.get('chatId')] || null });
+    if (route.startsWith('/source-receipt')) return json({item:null});
+    if (route.startsWith('/source-receive')) return json({item:{id:1},duplicate:false});
     if (route.startsWith('/outbox')) return json({ jobs: jobs.length ? [jobs.shift()] : [] });
     if (route.startsWith('/attachment')) return json(files[new URL(target).searchParams.get('id')] || {});
     if (route.startsWith('/migrate')) return json({ ok: true, migrated: true });
@@ -57,6 +59,59 @@ function setup({ rooms = {}, jobs = [], files = {}, telegram = () => ({ result: 
 const groupUpdate = (id, message) => ({ update_id: id,
   message: { message_id: id * 10, chat: { id: -1001, type: 'supergroup' }, from: { id: 777, first_name: 'Дарья' }, ...message } });
 const ROOMS = { '-1001': { companyCode: 'palitra-love', title: 'Palitra' } };
+const SOURCES = {'-1001':{companyCode:'palitra-love',enabled:true}};
+
+test('source-only: оба порядка событий миграции резервируют новый источник без legacy, AI или исходящих',async()=>{
+  for(const migrateFromFirst of [false,true]) {
+    const sources={'-1001':{companyCode:'palitra-love',enabled:true}};
+    const s=setup({sources,content:(route,body)=>{
+      if(route==='/source-migrate'){sources[body.newChatId]={companyCode:'palitra-love',enabled:false};return json({source:sources[body.newChatId]});}
+    }});
+    const old=groupUpdate(101,{migrate_to_chat_id:-1002}),next=groupUpdate(102,{chat:{id:-1002,type:'supergroup'},migrate_from_chat_id:-1001});
+    await s.bridge.receive(migrateFromFirst?next:old);
+    s.bridge.enqueue(groupUpdate(103,{chat:{id:-1002,type:'supergroup'},text:'/idea Хью'}));await s.bridge.tick();
+    assert.equal(s.calls.content.filter(x=>x.route==='/source-migrate').length,1);
+    assert.equal(s.calls.content.filter(x=>['/migrate','/receive','/source-receive'].includes(x.route)).length,0);
+    assert.equal(s.calls.legacy.length,0);assert.equal(s.calls.telegram.length,0);assert.equal(s.bridge.failedInbox().length,1);s.db.close();
+  }
+});
+test('source-only: команды и текст не попадают в legacy/комнату, выключенный источник сохраняет событие без ответа',async()=>{
+  const s=setup({sources:SOURCES});
+  for(const [n,text] of [[1,'/plan'],[2,'Хью'],[3,'/bind palitra']]) await s.bridge.receive(groupUpdate(n,{text}));
+  assert.equal(s.calls.legacy.length,0);assert.equal(s.calls.telegram.length,0);
+  assert.equal(s.calls.content.filter(x=>x.route==='/source-receive').length,3);
+  assert.equal(s.calls.content.filter(x=>x.route==='/receive').length,0);
+  const off=setup({sources:{'-1001':{companyCode:'palitra-love',enabled:false}}});off.bridge.enqueue(groupUpdate(4,{text:'Материал'}));await off.bridge.tick();
+  assert.equal(off.bridge.failedInbox().length,1);assert.notEqual(off.db.prepare('SELECT body FROM project_telegram_inbox').get().body,'{}');
+  assert.equal(off.calls.legacy.length,0);assert.equal(off.calls.telegram.length,0);
+  s.db.close();off.db.close();
+});
+test('source-only: MOV 65,7 МБ не скачивается, сохранён ручной импорт без повторов; видео до лимита скачивается',async()=>{
+  const s=setup({sources:SOURCES,telegram:()=>({result:{file_path:'videos/a.mp4',file_size:PNG.length}})});
+  s.bridge.enqueue(groupUpdate(20,{video:{file_id:'large',file_unique_id:'uid1',file_size:65700000,mime_type:'video/quicktime',file_name:'source.MOV'}}));
+  await s.bridge.tick();await s.bridge.tick();
+  const event=s.calls.content.find(x=>x.route==='/source-receive').body;
+  assert.equal(event.status,'manual_import');assert.equal(event.file.size,65700000);
+  assert.equal(s.calls.files,0);assert.equal(s.calls.telegram.length,0);
+  assert.equal(s.db.prepare('SELECT state FROM project_telegram_inbox').get().state,'done');
+  await s.bridge.receive(groupUpdate(21,{video:{file_id:'small',file_unique_id:'uid2',file_size:PNG.length,mime_type:'video/mp4'}}));
+  assert.equal(s.calls.files,1);assert.deepEqual(s.calls.telegram.map(x=>x.method),['getFile']);
+  assert.equal(s.calls.content.at(-1).body.status,'stored');assert.equal(s.calls.legacy.length,0);s.db.close();
+});
+test('source-only: квитанция после перезапуска не даёт повторно скачивать; сетевой сбой остаётся в долговечной очереди',async()=>{
+  const db=new DatabaseSync(':memory:');let fail=true, receipt=false;
+  const handler=(route)=>{
+    if(route.startsWith('/source-receipt')) return fail ? json({},503) : json({item:receipt?{id:1}:null});
+    if(route==='/source-receive'){receipt=true;return json({item:{id:1}});}
+  };
+  const first=setup({db,sources:SOURCES,content:handler});first.bridge.enqueue(groupUpdate(30,{photo:[{file_id:'photo',file_size:PNG.length}]}));await first.bridge.tick();
+  assert.equal(db.prepare('SELECT state FROM project_telegram_inbox').get().state,'pending');
+  fail=false;db.prepare('UPDATE project_telegram_inbox SET retry_at=0').run();
+  const second=setup({db,sources:SOURCES,content:handler,telegram:()=>({result:{file_path:'photos/a.jpg',file_size:PNG.length}})});await second.bridge.tick();
+  assert.equal(second.calls.files,1);assert.equal(receipt,true);
+  const third=setup({db,sources:SOURCES,content:handler});await third.bridge.receive(groupUpdate(30,{photo:[{file_id:'photo',file_size:PNG.length}]}));
+  assert.equal(third.calls.files,0);assert.equal(third.calls.telegram.length,0);assert.equal(third.calls.legacy.length,0);db.close();
+});
 test('уведомление отправляется только настроенному владельцу, не адресу из задания',async()=>{
   const s=setup({ownerChatId:'12345'});
   const job={id:'owner-alert:1',audience:'owner',chatId:'-1001',text:'Нужен ответ',authorType:'assistant',attachments:[]};
