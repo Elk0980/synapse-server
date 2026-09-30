@@ -53,7 +53,7 @@ test('вечером одна сводка версий, действующая 
   const f=fixture(t,{items:[item(),item(2,{dateKind:'plan',scheduledAt:null,title:'<Сценарий>\nбез времени'})]});await f.run();
   const [message]=f.messages();assert.equal(f.messages().length,1);assert.equal(message.company_code,COMPANY);assert.equal(message.author_type,'assistant');assert.equal(message.author_name,'Хью');
   assert.match(message.text,/01\.10\.2026/);assert.match(message.text,/№1 · версия 1/);assert.match(message.text,/Дата плана; время публикации ещё не задано/);
-  assert.match(message.text,/https:\/\/fixture\.test\/cabinet\.html#content-factory\/materials\?company=palitra-love&post=1&revision=1/);
+  assert.match(message.text,/https:\/\/fixture\.test\/cabinet\.html#autoposting\?company=palitra-love&post=1&revision=1/);
   assert.match(message.text,/не является согласованием/);
   const out=f.db.prepare('SELECT * FROM project_chat_outbox').get();assert.equal(out.chat_id,'-1001111111111');assert.equal(out.status,'pending');
   assert.equal(f.count('content_review_reminder_items'),2);assert.equal(f.count('project_chat_ai_jobs'),0);assert.equal(f.runs()[0].status,'queued');

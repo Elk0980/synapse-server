@@ -36,7 +36,8 @@ function cabinetBase(value){
   }catch{return null;}
 }
 function materialUrl(base,item){
-  return base+'#content-factory/materials?'+new URLSearchParams({company:COMPANY,post:String(item.id),revision:String(item.contentRevision)});
+  // Оболочка переносит этот alias в content-factory/materials, сохраняя параметры карточки.
+  return base+'#autoposting?'+new URLSearchParams({company:COMPANY,post:String(item.id),revision:String(item.contentRevision)});
 }
 const plain=value=>String(value).replace(/[\u0000-\u001f\u007f-\u009f]/g,' ').slice(0,140);
 function batches(base,slot,items){

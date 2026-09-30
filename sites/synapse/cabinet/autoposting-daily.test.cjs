@@ -1,10 +1,17 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
 const {JSDOM}=require('jsdom');
 const scripts=['company-information.js','autoposting.js'].map(file=>fs.readFileSync(require.resolve('./'+file),'utf8'));
+const cabinetHtml=fs.readFileSync(require.resolve('../cabinet.html'),'utf8');
+const shellRouting=cabinetHtml.slice(cabinetHtml.indexOf('  const defaultView ='),cabinetHtml.indexOf('  const setCategoryForView ='));
+const {materialUrl}=require('../../../ops/content/content-review-reminders');
 const clone=value=>JSON.parse(JSON.stringify(value));
 const row=(id,extra={})=>({id,companyCode:'alpha',revision:4,contentRevision:3,status:'draft',title:'Материал '+id,text:'Проверенный текст',mediaUrls:['https://example.test/material.webp'],platformIds:['telegram'],scheduledAt:'2026-09-24T23:00:00Z',timezone:'Asia/Irkutsk',profileRevision:2,captions:{telegram:'Подпись'},deliveries:[],readiness:{ready:true,issues:[]},approval:{approved:false,stale:false},...extra});
-async function fixture({entries=[row(1)],role='owner',permissions=[],override,listIds,coverage,companyCode='alpha',url='https://fixture.test',chooseProject=false}={}){
+async function fixture({entries=[row(1)],role='owner',permissions=[],override,listIds,coverage,companyCode='alpha',url='https://fixture.test',chooseProject=false,routeThroughShell=false}={}){
   const dom=new JSDOM('<section id="view"></section>',{url,runScripts:'outside-only'}),w=dom.window,d=w.document,views={},calls=[],posts=clone(entries);
+  if(routeThroughShell){
+    assert.match(shellRouting,/const viewFromHash =/);
+    assert.equal(w.eval(`(()=>{const VIEW_TITLES={home:'Главная',autoposting:'Материалы','media-mentor-rollout':'Этапы'};const permittedView=()=>true;${shellRouting}\nreturn viewFromHash();})()`),'autoposting');
+  }
   const NativeDate=w.Date;w.Date=class extends NativeDate{constructor(...args){super(...(args.length?args:['2026-09-24T23:30:00Z']));}static now(){return Date.parse('2026-09-24T23:30:00Z');}};
   w.SbCabinet={registerView:(name,view)=>{views[name]=view;}};scripts.forEach(source=>w.eval(source));
   const ctx={selectedProjectId:companyCode,identity:{role,permissions,companies:[{id:companyCode,name:'Тест А'},{id:'beta',name:'Тест Б'}]},csrfOptions:(method,body)=>({method,headers:{'X-CSRF-Token':'fixture'},body:JSON.stringify(body)}),apiJson:async(url,options={})=>{
@@ -31,6 +38,19 @@ async function fixture({entries=[row(1)],role='owner',permissions=[],override,li
   const f={w,d,ctx,views,calls,posts,node:id=>d.getElementById(id),settle:async()=>{for(let i=0;i<10;i++)await new Promise(resolve=>setImmediate(resolve));},set(id,value){const node=f.node(id);node.value=value;node.dispatchEvent(new w.Event('change',{bubbles:true}));},async click(selector){const node=d.querySelector(selector);assert.ok(node,selector);node.click();await f.settle();},visibleIds:()=>[...d.querySelectorAll('#autoposting-posts > .autoposting-daily-list > [data-daily-post]')].map(node=>node.dataset.dailyPost),close:()=>w.close()};return f;
 }
 const palitraRow=extra=>row(1,{companyCode:'palitra-love',dayKey:'',captions:{},scheduledAt:'2026-09-25T01:00:00Z',approvalRequired:true,approveAndScheduleAvailable:true,...extra});
+
+test('ссылка из напоминания проходит реальную маршрутизацию кабинета и открывает материал с проверкой версии',async()=>{
+  for(const revision of [3,1]){
+    const url=materialUrl('https://fixture.test/cabinet.html',{id:51,contentRevision:revision});
+    const f=await fixture({companyCode:'palitra-love',entries:[palitraRow({id:51,scheduledAt:'2027-01-15T10:00:00Z'})],listIds:[],url,routeThroughShell:true});try{
+      assert.equal(f.w.location.hash,`#content-factory/materials?company=palitra-love&post=51&revision=${revision}`);
+      assert.equal(f.node('autoposting-editor').open,true);assert.equal(f.node('autoposting-select').value,'51');
+      assert.ok(f.calls.some(call=>call.path.endsWith('/posts/51')&&call.code==='palitra-love'));
+      assert.ok(f.calls.every(call=>call.method==='GET'));assert.equal(f.node('autoposting-approve-schedule').disabled,true);
+      if(revision===1)assert.match(f.node('autoposting-status').textContent,/материал изменился/);
+    }finally{f.close();}
+  }
+});
 
 test('ссылка открывает конкретный материал за пределами списка и месяца, без одобрения или записи',async()=>{
   const f=await fixture({entries:[row(51,{scheduledAt:'2027-01-15T10:00:00Z'})],listIds:[],url:'https://fixture.test/#content-factory/materials?company=alpha&post=51&revision=3'});try{
