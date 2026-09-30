@@ -53,6 +53,32 @@ test('сетка: на телефоне (≤480) прайс и каталог �
   assert.doesNotMatch(css, /line-clamp|text-overflow:ellipsis/, 'тексты карточек не обрезаются');
 });
 
+test('разные пропорции архивных фото не задают высоту карточки: обложка и лента вынесены из потока, заглушка сохранена', () => {
+  const p = renderer();
+  const cards = [
+    {id: 'portrait', title: 'Вертикальный исходник', photo: '/portrait.jpg'},
+    {id: 'gallery', title: 'Галерея', photo: '/wide.jpg', gallery: ['/tall.jpg']},
+    {id: 'empty', title: 'Без фото'}
+  ].map(item => p.productCard(item, {extraClass: 'card'})).join('');
+  const dom = new JSDOM(`<style>${css}</style><main>${cards}</main>`), w = dom.window;
+  // jsdom не измеряет раскладку. Проверяется фактический каскад на разметке рендера;
+  // размеры 320/390 px после выпуска отдельно проверяет координатор в браузере.
+  for (const card of w.document.querySelectorAll('.product-card')) {
+    const media = w.getComputedStyle(card.querySelector('.product-media'));
+    assert.equal(media.position, 'relative');
+    assert.equal(media.aspectRatio, '4/5');
+    assert.equal(Number.parseFloat(media.minHeight), 0);
+  }
+  for (const selector of ['#portrait .product-media>img', '#gallery .product-gallery__track']) {
+    const layer = w.getComputedStyle(w.document.querySelector(selector));
+    assert.equal(layer.position, 'absolute');
+    assert.equal(layer.width, '100%'); assert.equal(layer.height, '100%');
+  }
+  assert.notEqual(w.getComputedStyle(w.document.querySelector('#empty img')).position, 'absolute');
+  assert.equal(w.document.querySelector('#empty img').getAttribute('width'), '64');
+  dom.window.close();
+});
+
 test('каталог (настоящая страница, общий рендер): в каждой карточке одна кнопка «Купить», нет Telegram и второй заявки; служебные примечания скрыты, примечание владельца показано, цены не подменены', async () => {
   const dom = new JSDOM(read('catalog/index.html'), { url: 'https://palitra-love.synapsebusiness.ru/catalog', runScripts: 'outside-only' });
   const win = dom.window;
