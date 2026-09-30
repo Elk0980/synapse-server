@@ -1,9 +1,9 @@
 /* Catalog cards use the same saved price document as the client editor. */
 (function (root, factory) {
-  const api = factory();
+  const api = factory(typeof module === 'object' && module.exports ? require('./price-format.js') : root.PalitraPriceFormat);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else api.mount(root);
-}(typeof window === 'undefined' ? null : window, function () {
+}(typeof window === 'undefined' ? null : window, function (priceFormat) {
   'use strict';
   const aliases = {
     vypiska: ['vypiska', 'shary', 'malysham'],
@@ -40,7 +40,7 @@
      цена + «Купить», без ссылок Telegram и второй кнопки заявки. */
   function fallbackCard(item, opts) {
     const image = safeImage(item.photo);
-    const priceText = String(item.price ?? '').trim();
+    const priceText = priceFormat ? priceFormat.format(item.price) : String(item.price ?? '').trim();
     const media = image
       ? `<div class="product-media"><img class="price-card__photo photo" src="${esc(image)}" alt="${esc(item.title)}" loading="lazy" decoding="async" width="800" height="1000"></div>`
       : '<div class="product-media product-media--empty" aria-hidden="true"><img src="/assets/img/logo-mark.svg" alt="" width="64" height="64" loading="lazy"></div>';

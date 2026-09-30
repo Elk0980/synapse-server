@@ -14,7 +14,7 @@ test('catalog uses all saved products and category routes select the correct ite
 });
 test('placeholder price remains unknown, existing exact price is preserved and content is escaped', () => {
   const list = entries(data, '/catalog');
-  assert.match(card(list[0]), /3 290 руб\./);
+  assert.match(card(list[0]), /3 290 ₽/);
   assert.match(card(list[1]), /Цена уточняется/);
   assert.doesNotMatch(card(list[2]), /<script>|javascript:/);
 });
@@ -35,6 +35,7 @@ test('live catalog renders saved items in the actual catalog page and keeps filt
   dom.window.PALITRA_CONFIG = { SITE_URL: dom.window.location.origin };
   dom.window.eval(fs.readFileSync(path.join(__dirname, 'app.js'), 'utf8'));
   // Настоящий общий рендер карточек; только загрузка прайса подменена.
+  dom.window.eval(fs.readFileSync(path.join(__dirname, 'price-format.js'), 'utf8'));
   dom.window.eval(fs.readFileSync(path.join(__dirname, '../price-render.js'), 'utf8'));
   dom.window.PalitraPrice.load = async () => data;
   await mount(dom.window);

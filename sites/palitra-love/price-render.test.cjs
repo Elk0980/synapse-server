@@ -9,7 +9,7 @@ const path = require('node:path');
 const catalogLive = require('./assets/catalog-live.js');
 
 function renderer() {
-  const window = {};
+  const window = { PalitraPriceFormat: require('./assets/price-format.js') };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'price-render.js'), 'utf8'), { window });
   return window.PalitraPrice;
 }
@@ -18,13 +18,13 @@ const full = { id: 'vypiska-1', title: 'Выписка мальчика', price:
 const bare = { id: 'x-2', title: 'Очень длинное название позиции без цены и без фотографии для проверки переносов', price: '' };
 const classSequence = (html) => [...html.matchAll(/class="([^"]+)"/g)].map((m) => m[1]);
 
-test('карточка прайса: фиксированный порядок блоков, известная цена как строка ЛК, одна кнопка «Купить», без Telegram и второй заявки', () => {
+test('карточка прайса: фиксированный порядок блоков, единое отображение цены, одна кнопка «Купить», без Telegram и второй заявки', () => {
   const html = P.productCard(full);
   assert.match(html, /^<article class="pc price-card product-card" id="vypiska-1" data-id="vypiska-1">/);
   // Примечание владельца — в содержимом, до низа; низ у всех карточек одинаков: цена + «Купить».
   const order = ['pc price-card product-card', 'product-media', 'price-card__photo photo', 'price-card__body', 'pc__title', 'product-details', 'price-card__description', 'note', 'product-footer', 'product-purchase', 'pc__price price', 'button product-add'];
   assert.deepEqual(classSequence(html), order);
-  assert.match(html, /data-price-known="true">9 270 руб\.</);
+  assert.match(html, /data-price-known="true">9 270 ₽</);
   assert.match(html, /width="800" height="1000"/);
   assert.match(html, /<button class="button product-add" type="button" data-add data-id="vypiska-1" data-title="Выписка мальчика">Купить<\/button>/);
   // Замечание Дарьи 20.09: в карточке нет перехода в Telegram и дублирующих призывов — только «Купить».
@@ -50,12 +50,13 @@ test('служебные примечания импорта («Цена из п
     const item = { ...full, note };
     const html = P.productCard(item);
     assert.doesNotMatch(html, /class="note"|публикации|актуальност/);
-    assert.match(html, /data-price-known="true">9 270 руб\./, 'живая цена не подменяется');
+    assert.match(html, /data-price-known="true">9 270 ₽/, 'меняется запись, не сумма');
     assert.equal(item.note, note, 'объект позиции не мутируется');
     // Карточка без служебного примечания идентична карточке, у которой примечания нет вовсе.
     assert.equal(html, P.productCard({ ...full, note: '' }));
     // Редактор ЛК показывает примечание как есть — владелец может его увидеть и убрать сам.
     const editor = P.productCard(item, { editor: true, starHtml: () => '', editHtml: () => '' });
+    assert.match(editor, /data-price-known="true">9 270 руб\./, 'редактор сохраняет исходную строку');
     assert.match(editor, new RegExp(`<p class="note">${note.replace(/[.;]/g, '\\$&')}</p>`));
   }
   assert.match(P.productCard({ ...full, note: custom }), /<p class="note">Состав: 15 шаров, лента в подарок<\/p>/);

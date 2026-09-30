@@ -174,7 +174,7 @@
     const noteShown = Boolean(item.note) && (editor || !isAutoPriceNote(item.note));
     const note = noteShown ? `<p class="note">${esc(item.note)}</p>` : '';
     const star = editor ? opts.starHtml(item) : '';
-    const priceText = String(item.price ?? '').trim();
+    const priceText = !editor && window.PalitraPriceFormat ? window.PalitraPriceFormat.format(item.price) : String(item.price ?? '').trim();
     const known = Boolean(priceText);
     const price = `<p class="pc__price price" data-price-known="${known ? 'true' : 'false'}">${known ? esc(priceText) : PRICE_UNKNOWN}</p>`;
     const footer = editor

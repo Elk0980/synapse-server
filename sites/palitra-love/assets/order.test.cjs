@@ -161,11 +161,11 @@ test('изменение контактов даёт новый requestId; 409 R
   const p = page({ responses: [new TypeError('network'), { status: 409, body: { ok: false, code: 'REQUEST_MISMATCH' } }, { status: 400, body: { ok: false, code: 'ITEM_UNKNOWN', itemId: 'rose-1' } }] });
   try {
     p.doc.querySelector('[data-add][data-id="rose-1"]').click();
-    p.fill(); p.submit(); await tick();
-    p.fill({ ...fields, phone: '+7 999 000-00-00' }); p.submit(); await tick();
+    p.fill(); p.submit(); await waitFor(() => p.calls.length === 1 && p.form.getAttribute('aria-busy') === 'false');
+    p.fill({ ...fields, phone: '+7 999 000-00-00' }); p.submit(); await waitFor(() => p.calls.length === 2 && p.form.getAttribute('aria-busy') === 'false');
     assert.notEqual(p.calls[1].body.requestId, p.calls[0].body.requestId, 'другой телефон — другой requestId');
     assert.match(p.status().textContent, /изменился/);
-    p.submit(); await tick();
+    p.submit(); await waitFor(() => p.calls.length === 3 && p.form.getAttribute('aria-busy') === 'false');
     assert.notEqual(p.calls[2].body.requestId, p.calls[1].body.requestId, 'после 409 id обновлён');
     assert.match(p.status().textContent, /недоступна/);
     assert.equal(p.api.cart.count(), 1, 'корзина сохранена');
