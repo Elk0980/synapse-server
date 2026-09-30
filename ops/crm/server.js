@@ -2572,6 +2572,15 @@ async function route(request, response) {
     else fail(405,'Метод не поддерживается');
     return send(response,200,result,{...cors,'cache-control':'no-store'});
   }
+  // Детерминированные напоминания: ключ сервиса уже проверен общим маршрутом.
+  // Сессионный proxy не получает новый способ обхода прав через служебный GET.
+  if (url.pathname === '/autoposting/review-reminders' && request.method === 'GET') {
+    if(request.headers[CRM_IDENTITY_HEADER])fail(403,'Только служебное чтение');
+    if([...url.searchParams.keys()].some(key=>!['companyCode','date'].includes(key))||
+      ['companyCode','date'].some(key=>url.searchParams.getAll(key).length!==1))fail(400,'Укажите компанию и дату');
+    const result=autoposting.reviewReminderSummary(url.searchParams.get('companyCode'),url.searchParams.get('date'));
+    return send(response,200,result,{...cors,'cache-control':'no-store'});
+  }
   // Служебная сводка плана для команд Хью в Telegram: только по ключу сервиса, без подписей и метаданных карточек.
   if (url.pathname === '/autoposting/plan-summary' && request.method === 'GET') {
     const code = url.searchParams.get('companyCode');

@@ -3,8 +3,8 @@ const {JSDOM}=require('jsdom');
 const scripts=['company-information.js','autoposting.js'].map(file=>fs.readFileSync(require.resolve('./'+file),'utf8'));
 const clone=value=>JSON.parse(JSON.stringify(value));
 const row=(id,extra={})=>({id,companyCode:'alpha',revision:4,contentRevision:3,status:'draft',title:'Материал '+id,text:'Проверенный текст',mediaUrls:['https://example.test/material.webp'],platformIds:['telegram'],scheduledAt:'2026-09-24T23:00:00Z',timezone:'Asia/Irkutsk',profileRevision:2,captions:{telegram:'Подпись'},deliveries:[],readiness:{ready:true,issues:[]},approval:{approved:false,stale:false},...extra});
-async function fixture({entries=[row(1)],role='owner',permissions=[],override,listIds,coverage,companyCode='alpha'}={}){
-  const dom=new JSDOM('<section id="view"></section>',{url:'https://fixture.test',runScripts:'outside-only'}),w=dom.window,d=w.document,views={},calls=[],posts=clone(entries);
+async function fixture({entries=[row(1)],role='owner',permissions=[],override,listIds,coverage,companyCode='alpha',url='https://fixture.test',chooseProject=false}={}){
+  const dom=new JSDOM('<section id="view"></section>',{url,runScripts:'outside-only'}),w=dom.window,d=w.document,views={},calls=[],posts=clone(entries);
   const NativeDate=w.Date;w.Date=class extends NativeDate{constructor(...args){super(...(args.length?args:['2026-09-24T23:30:00Z']));}static now(){return Date.parse('2026-09-24T23:30:00Z');}};
   w.SbCabinet={registerView:(name,view)=>{views[name]=view;}};scripts.forEach(source=>w.eval(source));
   const ctx={selectedProjectId:companyCode,identity:{role,permissions,companies:[{id:companyCode,name:'Тест А'},{id:'beta',name:'Тест Б'}]},csrfOptions:(method,body)=>({method,headers:{'X-CSRF-Token':'fixture'},body:JSON.stringify(body)}),apiJson:async(url,options={})=>{
@@ -26,10 +26,54 @@ async function fixture({entries=[row(1)],role='owner',permissions=[],override,li
     if(method==='PATCH'){Object.assign(item,body);item.revision++;item.contentRevision++;item.approval={approved:false,stale:true};return clone(item);}
     throw Error('Unexpected write');
   }};
+  if(chooseProject)ctx.chooseProject=code=>{ctx.selectedProjectId=code;w.history.replaceState(null,'','#content-factory/materials');void views.autoposting.onProjectChange(ctx);};
   await views.autoposting.render(d.getElementById('view'),ctx);
   const f={w,d,ctx,views,calls,posts,node:id=>d.getElementById(id),settle:async()=>{for(let i=0;i<10;i++)await new Promise(resolve=>setImmediate(resolve));},set(id,value){const node=f.node(id);node.value=value;node.dispatchEvent(new w.Event('change',{bubbles:true}));},async click(selector){const node=d.querySelector(selector);assert.ok(node,selector);node.click();await f.settle();},visibleIds:()=>[...d.querySelectorAll('#autoposting-posts > .autoposting-daily-list > [data-daily-post]')].map(node=>node.dataset.dailyPost),close:()=>w.close()};return f;
 }
 const palitraRow=extra=>row(1,{companyCode:'palitra-love',dayKey:'',captions:{},scheduledAt:'2026-09-25T01:00:00Z',approvalRequired:true,approveAndScheduleAvailable:true,...extra});
+
+test('ссылка открывает конкретный материал за пределами списка и месяца, без одобрения или записи',async()=>{
+  const f=await fixture({entries:[row(51,{scheduledAt:'2027-01-15T10:00:00Z'})],listIds:[],url:'https://fixture.test/#content-factory/materials?company=alpha&post=51&revision=3'});try{
+    assert.equal(f.node('autoposting-editor').open,true);assert.equal(f.node('autoposting-select').value,'51');
+    assert.ok(f.calls.some(call=>call.path.endsWith('/posts/51')));assert.ok(f.calls.every(call=>call.method==='GET'));
+    assert.equal(f.node('autoposting-schedule').disabled,true);assert.match(f.node('autoposting-status').textContent,/Проверьте предпросмотр/);
+  }finally{f.close();}
+});
+test('старая ссылка показывает предупреждение и текущую версию; неизвестная компания не запрашивается',async()=>{
+  const stale=await fixture({url:'https://fixture.test/#content-factory/materials?company=alpha&post=1&revision=1'});try{
+    assert.equal(stale.node('autoposting-editor').open,true);assert.match(stale.node('autoposting-status').textContent,/материал изменился/);
+    assert.ok(stale.calls.every(call=>call.method==='GET'));assert.equal(stale.node('autoposting-schedule').disabled,true);
+  }finally{stale.close();}
+  for(const query of ['company=foreign&post=1&revision=3','company=alpha&post=1&post=2&revision=3','company=alpha&post=-1&revision=3']){
+    const f=await fixture({url:'https://fixture.test/#content-factory/materials?'+query});try{
+      assert.equal(f.node('autoposting-editor').open,false);assert.ok(!f.calls.some(call=>/\/posts\/\d+/.test(call.path)));
+      assert.match(f.node('autoposting-status').textContent,/недоступен или ссылка неверна/);
+    }finally{f.close();}
+  }
+});
+test('ссылка меняет только доступную компанию через штатный выбор и переживает очистку hash оболочкой',async()=>{
+  const f=await fixture({entries:[row(1),row(2,{companyCode:'beta'})],chooseProject:true,url:'https://fixture.test/#content-factory/materials?company=beta&post=2&revision=3'});try{
+    await f.settle();assert.equal(f.ctx.selectedProjectId,'beta');assert.equal(f.node('autoposting-company').value,'beta');
+    assert.equal(f.node('autoposting-select').value,'2');assert.ok(f.calls.every(call=>call.method==='GET'));
+    assert.ok(f.calls.some(call=>call.path.endsWith('/posts/2')&&call.code==='beta'));
+  }finally{f.close();}
+});
+test('ошибка доступа и чужая карточка в ответе не открываются по ссылке',async()=>{
+  for(const mode of ['denied','wrong-company']){
+    const f=await fixture({url:'https://fixture.test/#content-factory/materials?company=alpha&post=1&revision=3',override:call=>{
+      if(call.path.endsWith('/posts/1')){if(mode==='denied')throw Error('403');return row(1,{companyCode:'beta'});}
+    }});try{assert.equal(f.node('autoposting-editor').open,false);assert.match(f.node('autoposting-status').textContent,/Не удалось открыть материал/);assert.ok(f.calls.every(call=>call.method==='GET'));}finally{f.close();}
+  }
+});
+test('переход по ссылке в уже открытом модуле сохраняет несохранённую правку и не выдаёт её за текущую согласованную версию',async()=>{
+  const f=await fixture();try{
+    await f.click('[data-open-post="1"]');f.set('autoposting-text','Локальная несохранённая версия');
+    f.w.history.replaceState(null,'','#content-factory/materials?company=alpha&post=1&revision=1');
+    await f.views.autoposting.render(f.d.getElementById('view'),f.ctx);
+    assert.equal(f.node('autoposting-text').value,'Локальная несохранённая версия');assert.match(f.node('autoposting-status').textContent,/несохранённые правки/);
+    assert.equal(f.node('autoposting-schedule').disabled,true);assert.ok(f.calls.every(call=>call.method==='GET'));
+  }finally{f.close();}
+});
 
 test('Palitra: обычная карточка требует согласования; явная кнопка использует сохранённую версию после предпросмотра',async()=>{
   const f=await fixture({companyCode:'palitra-love',entries:[palitraRow()]});try{

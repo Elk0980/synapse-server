@@ -151,6 +151,18 @@ const profileShapeLines=diagnostics=>{
   if(Number.isSafeInteger(diagnostics?.otherShapesCount)&&diagnostics.otherShapesCount>0&&diagnostics.otherShapesCount<=1000)lines.push(`Профили с другой структурой: ${diagnostics.otherShapesCount}.`);
   return lines;
 };
+// Ссылка из уведомления только открывает карточку. Одобрение всегда остаётся
+// отдельным действием с текущим предпросмотром и серверной проверкой версии.
+function materialLink(hash) {
+  const match=/^#(?:content-factory\/materials|autoposting)\?(.+)$/.exec(hash);
+  if(!match)return null;
+  const query=new URLSearchParams(match[1]),company=query.get('company'),id=Number(query.get('post')),revision=Number(query.get('revision'));
+  if([...query.keys()].some(key=>!['company','post','revision'].includes(key))||
+    ['company','post','revision'].some(key=>query.getAll(key).length!==1)||
+    !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(company||'')||!Number.isSafeInteger(id)||id<1||!Number.isSafeInteger(revision)||revision<1)
+    return {error:true,key:hash};
+  return {company,id,revision,key:`${company}:${id}:${revision}`};
+}
 let controller;
 function create(container, context) {
   const time = cabinet.companyTime;
@@ -158,6 +170,7 @@ function create(container, context) {
   let selectedDate="", month="", dailyView="today", dailyPlatform="", calendarData=null, calendarEpoch=0, calendarPending=false;
   const approvalSelection=new Map(), approvalResults=new Map(), approvalBlocked=new Set();
   const drafts=new Map(), selections=new Map(), channelDrafts=new Map(), providerProfiles=new Map();
+  let pendingLink=null,handledLink='',linkEpoch=0;
   const companies=(ctx.identity.companies||[]).map(item=>({code:String(item.id),name:item.name||item.id}));
   container.classList.add("autoposting-view");
   container.innerHTML=`<h2>Материалы</h2><p>Готовые материалы и ближайшие даты.</p>
@@ -713,7 +726,35 @@ function create(container, context) {
     finally{if(version===epoch){busy=false;controls();}}
   };
   const selectPost=id=>{get("autoposting-editor").open=true;stash();post=posts.find(item=>String(item.id)===String(id))||null;selections.set(companyCode,post?.id||null);renderPost();get("autoposting-select").value=post?String(post.id):"";};
+  const openLinkedPost=async()=>{
+    const link=pendingLink||materialLink(window.location.hash);
+    if(!link||(!pendingLink&&link.key===handledLink)||busy)return;
+    if(link.error||!companies.some(item=>item.code===link.company)){
+      pendingLink=null;handledLink=link.key;message('Материал по ссылке недоступен или ссылка неверна. Проверьте выбранную компанию и доступ.');return;
+    }
+    if(link.company!==companyCode){
+      pendingLink=link;
+      if(ctx.chooseProject)ctx.chooseProject(link.company);else await load(link.company);
+      return;
+    }
+    pendingLink=null;handledLink=link.key;
+    const version=epoch,requestVersion=++linkEpoch;busy=true;controls();
+    try{
+      // Прямой GET нужен даже если карточки нет в первом списке или текущем месяце.
+      const item=await request('/autoposting/posts/'+link.id);
+      if(version!==epoch||requestVersion!==linkEpoch)return;
+      if(item.companyCode!==companyCode||item.id!==link.id)throw Error('Wrong material scope');
+      posts=[item,...posts.filter(value=>value.id!==item.id)];renderList();selectPost(item.id);
+      message(dirty()?'У материала есть несохранённые правки в этом окне. Они сохранены; завершите правку и заново проверьте предпросмотр перед согласованием.':
+        item.contentRevision===link.revision?'Материал открыт. Проверьте предпросмотр перед согласованием.':
+        'После уведомления материал изменился. Открыта текущая версия; проверьте её заново перед согласованием.');
+    }catch(_){if(version===epoch&&requestVersion===linkEpoch)message('Не удалось открыть материал по ссылке. Он удалён, недоступен или временно не загружается.');}
+    finally{if(version===epoch&&requestVersion===linkEpoch){busy=false;controls();}}
+    const next=materialLink(window.location.hash);
+    if(version===epoch&&requestVersion===linkEpoch&&next&&next.key!==link.key)await openLinkedPost();
+  };
   const load=async(code,refresh=false)=>{
+    if(refresh)handledLink='';
     stash();get("autoposting-photo").value="";get("autoposting-channels").querySelectorAll('input[type="password"]').forEach(node=>{node.value="";});
     get('autoposting-channels').querySelectorAll('[data-profile-diagnostics]').forEach(node=>node.remove());
     companyCode=code;const version=++epoch;calendarEpoch++;calendarData=null;calendarPending=false;approvalSelection.clear();approvalResults.clear();approvalBlocked.clear();renderBatch();posts=[];get('autoposting-posts').replaceChildren();get('autoposting-calendar').replaceChildren();get('autoposting-batch-results').replaceChildren();get('autoposting-calendar-state').textContent='';get('autoposting-calendar-zone').textContent='';get('autoposting-plan-gaps').hidden=true;get('autoposting-plan-gaps').textContent='';get('autoposting-editor').open=false;busy=true;settings=null;information=null;starterPlan=null;post=null;get("autoposting-company").value=code;renderStarterPlan();
@@ -730,6 +771,7 @@ function create(container, context) {
       await loadCalendar();
     }catch(_){if(version===epoch){get("vk-connection-guide").textContent="Не удалось получить статус подключения выбранной компании. Обновите статусы.";message("Не удалось загрузить автопостинг. Ввод сохранён в текущем окне; повторите обновление.");}}
     finally{if(version===epoch){busy=false;controls();}}
+    if(version===epoch&&settings&&information)await openLinkedPost();
   };
   /* Снятие переключателя — осознанное решение владельца: с этого момента карточка везёт
      явное false, а не «поля нет». Отметка ставится до пересчёта формы. */
@@ -971,7 +1013,7 @@ function create(container, context) {
     },"Проверяем доступ без публикации…","Не удалось проверить канал. Посты этой проверкой не публикуются.");
   });
   const code=companies.find(item=>item.code===ctx.selectedProjectId)?.code||companies[0]?.code||"";
-  return {ready:load(code),update(next){ctx=next;controls();},change(next){ctx=next;const code=String(next.selectedProjectId||"");if(code!==companyCode&&companies.some(item=>item.code===code))return load(code);}};
+  return {ready:load(code),update(next){ctx=next;controls();},change(next){ctx=next;const code=String(next.selectedProjectId||"");if(code!==companyCode&&companies.some(item=>item.code===code))return load(code);return openLinkedPost();}};
 }
 cabinet.registerView("autoposting",{title:"Материалы",render(container,context){if(!permitted(context,"view")){container?.replaceChildren();return;}if(!controller)controller=create(container,context);else {controller.update(context);return controller.change(context);}return controller.ready;},
   onProjectChange(context){if(permitted(context,"view"))return controller?.change(context);}});

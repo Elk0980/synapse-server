@@ -1,6 +1,7 @@
 'use strict';
 const apiAssistant = require('./hugh-api-assistant');
 const { createHughOwnerAlerts } = require('./hugh-owner-alerts');
+const { createContentReviewReminders, configFromEnv: reviewReminderConfigFromEnv } = require('./content-review-reminders');
 
 /* Общий чат проекта: одна комната на компанию, участники, вложения, задачи и этапы.
    Доступ даёт членство в комнате вместе с назначенной компанией; отдельные права
@@ -155,7 +156,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   requireSession, requireCsrf, sendJson, readBody, localWorker: localConfig = {}, siteOrders: ordersConfig = {},
   miniApp: miniConfig = {},
   fetchImpl = (...args) => globalThis.fetch(...args), statusTtl = RUNTIME_STATUS_TTL, fallback: fallbackConfig = {},
-  crmUrl = '', crmApiKey = '', botUsername = '', cabinetUrl = '',
+  crmUrl = '', crmApiKey = '', botUsername = '', cabinetUrl = '', reviewReminders = reviewReminderConfigFromEnv(),
   /* Навыки формата Agent Skills: доверенный каталог репозитория, только чтение markdown.
      Передаётся явно ради тестов; боевой сервер берёт каталог по умолчанию. */
   skills = createAgentSkills({}), attachmentText: attachmentTextConfig = {},
@@ -1870,8 +1871,11 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       }
     } finally { aiBusy = false; }
   }
+  const contentReviewReminders=createContentReviewReminders({db,transaction:tx,insertMessage,crmUrl,crmApiKey,cabinetUrl,
+    config:reviewReminders,fetchImpl,now});
   function startWorker() {
     if (timer) return;
+    contentReviewReminders.start();
     // Прерванное задание возвращается в очередь: ответ не задвоится — вставка и отметка done в одной транзакции.
     // Задания local companies живут по аренде и при перезапуске сервера не трогаются.
     db.prepare(`UPDATE project_chat_ai_jobs SET status='pending' WHERE status='running' AND reply_message_id IS NULL${serverScope}`).run(...localCodes);
@@ -1885,10 +1889,11 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       // Системный сбой планировщика виден в журнале сервера: молча пропадать он не должен.
       try { processScheduledMessages(); } catch (error) { console.error('project-chat: планировщик отложенной отправки не отработал:', error?.message || error); }
       try { processAssistantAttention(); } catch (error) { console.error('project-chat: контроль ответов:', error?.message || error); }
+      void contentReviewReminders.process().catch(()=>console.error('project-chat: напоминания о согласовании не обработаны'));
       void processAIJobs().catch(() => {});
     }, 3000); timer.unref();
   }
-  function stopWorker() { clearInterval(timer); timer = null; }
+  function stopWorker() { clearInterval(timer); timer = null; contentReviewReminders.stop(); }
   // Контроль срока — обычный код, без вызовов моделей и без зависимости от aiBusy.
   function processAssistantAttention() {
     tx(() => {
@@ -1927,7 +1932,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   }
   const bridge = { getBinding, migrateBinding, receiveTelegram, receiveCommand, storeAttachment, readAttachment, pendingTelegram, acknowledgeTelegram };
   return { handle, bridge, ...bridge, snapshot, listMessages, requeueAI, runtimeStatus, processAIJobs, askHugh,
-    processScheduledMessages, processAssistantAttention, scheduledList, startWorker, stopWorker, localWorker, siteOrders, miniApp, fallback, skills };
+    processScheduledMessages, processAssistantAttention, scheduledList, startWorker, stopWorker, localWorker, siteOrders, miniApp, fallback, skills, contentReviewReminders };
 }
 
 module.exports = { createProjectChat, MAX_ATTACHMENT, MESSAGE_PAGE };

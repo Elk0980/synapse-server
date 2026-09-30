@@ -25,6 +25,15 @@ test('Palitra approve+schedule HTTP: existing edit/approve permissions, company 
   const created=await request('POST','/autoposting/posts?companyCode=palitra-love',{body:{title:'Материал',text:'Текст',mediaUrls:['https://example.test/photo.webp'],platformIds:['telegram'],scheduledAt:new Date(Date.now()+3600000).toISOString(),timezone:'UTC',profileRevision:1}});
   assert.equal(created.status,201);assert.equal(created.body.approvalRequired,true);
   const id=created.body.id,route=`/autoposting/posts/${id}/approve?companyCode=palitra-love`,body={revision:created.body.revision,approved:true,schedule:true};
+  const localParts=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(created.body.scheduledAt));
+  const localDate=['year','month','day'].map(part=>localParts.find(value=>value.type===part).value).join('-');
+  const reminderRoute=`/autoposting/review-reminders?companyCode=palitra-love&date=${localDate}`;
+  const reminder=await request('GET',reminderRoute,{identity:null});assert.equal(reminder.status,200);assert.equal(reminder.body.items[0].id,id);
+  assert.equal(reminder.body.items[0].text,undefined);assert.equal(reminder.body.timezone,'Europe/Moscow');
+  assert.equal((await request('GET',reminderRoute,{identity:null,authenticated:false})).status,401);
+  assert.equal((await request('GET',reminderRoute)).status,403,'сессионный proxy не получает служебный маршрут');
+  assert.equal((await request('GET',reminderRoute.replace('palitra-love','other'),{identity:null})).status,404);
+  assert.equal((await request('GET',reminderRoute+'&date='+localDate,{identity:null})).status,400);
   for(const permissions of [['autoposting.view'],['autoposting.edit'],['autoposting.approve']]){
     const result=await request('POST',route,{body,identity:encode({permissions,companyCodes:['palitra-love']})});assert.equal(result.status,403);
   }

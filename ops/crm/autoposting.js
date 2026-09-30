@@ -587,6 +587,21 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
       :state==='inactive'?['Карточка отменена']:[...common,...soft,'Каналы публикации не выбраны'];
     return {state,ready:state==='ready',issues:[...new Set(issues)],platforms:list};
   }
+  // Служебное чтение для уведомления, а не разрешение публикации. Не обращается к
+  // транспорту/information.get и не архивирует профиль; даты плана — только из расписки.
+  function reviewReminderSummary(code,date) {
+    const owner=company(db,code);
+    if(!approvalPolicy(owner.code))fail(404,'Напоминания для компании не настроены','NOT_FOUND');
+    const day=calendarRange({from:date,to:date}).from,timezone='Europe/Moscow';
+    const formatter=zoneFormatter(timezone),plan=calendarPlan(owner),items=[];
+    for(const row of db.prepare("SELECT * FROM autoposting_posts WHERE company_id=? AND status NOT IN ('published','cancelled','publishing') ORDER BY id").all(owner.id)){
+      const effectiveDate=row.scheduled_at?zoneDay(formatter,Date.parse(row.scheduled_at)):plan.items.get(row.id)?.planDate;
+      if(effectiveDate!==day||cardApprovalDto(row).approved)continue;
+      items.push({id:row.id,revision:row.revision,contentRevision:row.content_revision,title:row.title,
+        effectiveDate,dateKind:row.scheduled_at?'schedule':'plan',scheduledAt:row.scheduled_at||null,status:row.status,approved:false});
+    }
+    return {companyCode:owner.code.toLowerCase(),timezone,date:day,items};
+  }
   async function calendar(code,params) {
     const range=calendarRange(params);
     company(db,code);
@@ -1315,7 +1330,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
   }
   function drain(){if(stopped)return Promise.resolve();if(!running)running=processDue().finally(()=>running=null);return running;}
   function stop(){stopped=true;return running||Promise.resolve();}
-  return {get,list,calendar,create,update,schedule,cancel,reconcile,drain,stop,invalidate,approve,approveAndSchedule,reject,split,submitReview,reorder,importPackage,recordReceipt};
+  return {get,list,calendar,reviewReminderSummary,create,update,schedule,cancel,reconcile,drain,stop,invalidate,approve,approveAndSchedule,reject,split,submitReview,reorder,importPackage,recordReceipt};
 }
 module.exports={createAutoposting,LEASE_MS,PLAN_PLATFORMS,CAPTION_PLATFORMS,FORMATS,ROLES,REVIEW_STATES,META_FIELDS,RECEIPT_PLATFORMS,receiptFormat,
   CALENDAR_MAX_RANGE_DAYS,CALENDAR_UNDATED_LIMIT,CALENDAR_TARGET_DAYS,CALENDAR_MINIMUM_DAYS,CALENDAR_CRITICAL_DAYS};
