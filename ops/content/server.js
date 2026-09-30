@@ -219,7 +219,7 @@ const projectChat = createProjectChat({ db, authStore, assetsDir: ASSETS_DIR,
   requireSession, requireCsrf, sendJson: send, readBody: readJson });
 const taskDispatchWorker = require('./task-dispatch-worker').createTaskDispatchWorker({db,crmUrl:CRM_URL,crmApiKey:CRM_API_KEY,fallback:projectChat.fallback});
 // Необязательный приватный конфиг на постоянном томе content. Без него приём выключен.
-const telegramSources = createTelegramSources({db, assetsDir:ASSETS_DIR, authStore, requireSession, sendJson:send,
+const telegramSources = createTelegramSources({db, assetsDir:ASSETS_DIR, authStore, requireSession, requireCsrf, sendJson:send,
   config:readSourceConfig(path.join(path.dirname(DATABASE_PATH),'telegram-sources.json'))});
 if (!telegramSources.healthy) console.warn('content: настройки источников Telegram требуют проверки; приём выключен');
 for (const issue of [...projectChat.localWorker.issues, ...projectChat.miniApp.issues]) console.warn(`content: ${issue}`);

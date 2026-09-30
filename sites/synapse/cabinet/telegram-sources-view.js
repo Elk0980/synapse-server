@@ -35,7 +35,14 @@
     const requestController = controller = new AbortController();
     // Scope замкнут на компанию этого mount; destroy подавляет поздний ответ.
     mounted = cabinet.telegramSources.mount({element: panel, companyCode: code,
-      request: url => context.apiJson(url, {signal: requestController.signal})});
+      request: url => context.apiJson(url, {signal: requestController.signal}),
+      upload: async (url,body)=>{
+        if(identity.role!=='owner'||url!==`/content/telegram-sources/${code}/manual-upload`)throw new Error('Нет доступа к ручному импорту');
+        // Для FormData браузер сам добавляет multipart boundary; apiJson задаёт JSON Content-Type.
+        const response=await fetch(url,{method:'POST',credentials:'same-origin',cache:'no-store',
+          headers:{'X-CSRF-Token':identity.csrfToken},body,signal:requestController.signal});
+        const result=await response.json();if(!response.ok)throw new Error(result.error||'Не удалось загрузить файл');return result;
+      }});
   }
 
   cabinet.registerView(VIEW, {

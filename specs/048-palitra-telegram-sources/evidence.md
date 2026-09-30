@@ -39,3 +39,21 @@
 Независимый reviewer `content_meeting_package` повторно проверил фиксированный backend head `d9339bccba92bf57fce8983e499c467771429810`: оба порядка миграции, позднюю коллизию и сохранение обычного room receive. Обе первоначальные P1 сняты; других блокеров в выделенном scope не обнаружено. Полные прогоны он не повторял. CI этого backend head: оба project-chat checks PASS, Spec Kit PASS; для итогового head с UI нужны отдельные CI-результаты.
 
 Подключение, порядок резервирования и ограничения описаны в `integration.md`. Лимит основан на [официальном getFile](https://core.telegram.org/bots/api#getfile), а не на возможности скачивания Telegram Desktop. Старое `/content` обещание видео отдельно отмечено владельцу команд.
+
+## Ручной импорт (T007–T009), 30.09.2026
+
+Исполнитель продолжения — Claude (единственный писатель после остановки Codex-автора). Незакоммиченный diff взят из рабочей копии `worktrees/palitra-editor-ux-20260924` без reset, наложен на `87072ae` в отдельной облачной копии; прогон — Linux, Node 22.22. Windows и CI (Node 24) здесь не запускались.
+
+| Команда | Результат |
+|---|---|
+| `node --test ops/content/telegram-sources.test.js ops/content/telegram-sources-manual.test.js ops/content/telegram-sources-integration.test.js` | 14/14 PASS (включая 68 935 123 и 170 000 000 байт потоком, повтор/конфликт, CSRF/owner/sessionVersion/компания, обрыв, сигнатура, квота, companyLimits) |
+| `node --test --test-concurrency=4 ops/content/*.test.js` | 544 tests: 543 PASS, 0 failed, 1 skipped |
+| `node --test sites/synapse/cabinet/*.test.cjs` (jsdom через NODE_PATH) | 635/635 PASS |
+| `node --check` модуля, multipart, server, UI, adapter | PASS |
+| `git diff --cached --check` | PASS |
+| `python tools/spec-kit/gate.py check` | status ok, 48 файлов |
+| `check_prerequisites.py --json --require-spec --require-tasks --include-tasks` (с `SPECIFY_FEATURE_DIRECTORY`) | PASS, feature 048 |
+
+Ревью кода продолжателем: поток пишется во временный каталог внутри приватного хранилища и переименовывается на том же диске; при ошибке, обрыве и дубле временный файл удаляется. Авторизация повторяется после чтения. Для истории без ссылки message ID не подделывается (`archive:<sha256>`). Скачивание потоковое. Оставлено как есть: одна ручная загрузка на процесс (429 для второй), `requestTimeout` 300 с (см. integration.md).
+
+Не проверено: реальный файл на production, Caddy, Windows-прогон. T010 остаётся за координатором.
