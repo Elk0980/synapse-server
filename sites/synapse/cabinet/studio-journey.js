@@ -51,7 +51,7 @@ async function mountCommerce(node,ctx,leadId,zone,onChange){
   }
   node.textContent='Загружаем источник и оплаты…';await load();
 }
-async function mountSummary(node,ctx,{period='today',source='',range=null}={}){
+async function mountSummary(node,ctx,{period='today',source='',range=null,showCardHint=true}={}){
   const code=ctx.scopeParams().companyCode;
   const epoch=(summaryEpochs.get(node)||0)+1;summaryEpochs.set(node,epoch);
   node.innerHTML='<p>Загружаем путь клиента…</p>';
@@ -65,7 +65,7 @@ async function mountSummary(node,ctx,{period='today',source='',range=null}={}){
       <p>Неявок: <strong>${esc(s.noShows)}</strong> · Переносов: <strong>${esc(s.reschedules)}</strong> · Доля неявок: <strong>${s.noShowRate===null?'—':esc(s.noShowRate)+'%'}</strong></p>
       <details><summary>Сравнить источники и понять цифры</summary><p class="journey-note">Доля неявок = неявки / (состоявшиеся визиты + неявки). Будущие записи и отмены исключены. Каждая заявка считается один раз на этапе; повторные визиты и переносы считаются событиями. Старый статус «Продажа» не означает покупку абонемента.</p>
       <div class="journey-table"><table><thead><tr><th>Источник</th><th>Заявки</th><th>Пришли</th><th>Абонемент</th><th>Неявки</th></tr></thead><tbody>${result.sources.map(row=>`<tr><th>${esc(row.source)}</th><td>${row.leads}</td><td>${row.visited}</td><td>${row.memberships}</td><td>${row.noShows}</td></tr>`).join('')||'<tr><td colspan="5">Нет отметок за период</td></tr>'}</tbody></table></div></details>
-      <p class="journey-note">Откройте имя клиента в списке ниже, чтобы назначить визит и отметить результат.</p>`;
+      ${showCardHint?'<p class="journey-note">Откройте имя клиента в списке ниже, чтобы назначить визит и отметить результат.</p>':''}`;
     if(result.publications)node.insertAdjacentHTML('beforeend',`<details><summary>Публикации → обращения → запись → оплата</summary><p class="journey-note">Та же когорта обращений. Привязка публикации подтверждается вручную; оплаты — по отдельному журналу за всё время жизни этих обращений. Это не денежный поток за выбранный период. Валюты показаны отдельно. «Оплачивали» включает последующие возвраты. Пустой журнал не доказывает отсутствие оплаты.</p><div class="journey-table"><table><thead><tr><th>Публикация</th><th>Обращения</th><th>Записывались</th><th>Пришли</th><th>Оплачивали</th><th>Поступления</th><th>Возвраты</th><th>За вычетом возвратов</th></tr></thead><tbody>${result.publications.map(p=>`<tr><th>${esc(p.title)}</th><td>${p.leads}</td><td>${p.booked}</td><td>${p.visited}</td><td>${p.paidLeads}</td><td>${esc(money(p.totals,'receivedCents'))}</td><td>${esc(money(p.totals,'refundedCents'))}</td><td>${esc(money(p.totals))}</td></tr>`).join('')}</tbody></table></div></details>`);
   }catch(error){if(node.isConnected&&ctx.scopeParams().companyCode===code&&summaryEpochs.get(node)===epoch)node.textContent='Путь клиента не удалось загрузить. '+error.message;}
 }
