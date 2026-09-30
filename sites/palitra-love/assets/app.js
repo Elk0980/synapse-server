@@ -36,11 +36,9 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')setMenu(false)});
 const cookie=document.querySelector('.cookie');if(localStorage.getItem('palitra-cookie'))cookie?.remove();document.querySelectorAll('[data-cookie]').forEach(b=>b.onclick=()=>{localStorage.setItem('palitra-cookie',b.dataset.cookie);cookie.remove()});
 
 if(C.FLOWERS_VISIBLE===false){
-  document.querySelectorAll('[data-flowers]').forEach(node=>node.hidden=true);
+  document.querySelectorAll('body [data-flowers]').forEach(node=>node.hidden=true);
   if(/^\/uchitelyu(?:\/|$)/.test(location.pathname))document.querySelectorAll('script[type="application/ld+json"]').forEach(script=>script.remove());
   if(/^\/catalog\/(bukety|korziny)(?:\/|$)/.test(location.pathname)){
-    document.title='Раздел временно скрыт — Palitra';
-    document.querySelector('meta[property="og:title"]')?.setAttribute('content',document.title);
     document.querySelector('main h1').textContent='Этот раздел пока скрыт';
     const lead=document.querySelector('main .lead');if(lead)lead.innerHTML='Выберите шары и оформление в <a href="/catalog">каталоге</a> или <a href="/#zayavka">закажите индивидуальный подбор</a>.';
   }

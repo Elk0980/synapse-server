@@ -10,10 +10,10 @@ const tick = async () => {for (let i = 0; i < 6; i++) await new Promise(resolve 
 const PRICE = {categories: [
   {id: 'bukety', title: 'Букеты', items: [{id: 'flower-1', title: 'Букет', price: '1000', photo: '/assets/img/hrizantema.jpg'}]},
   {id: 'shary', title: 'Шары', items: [{id: 'balloon-1', title: 'Набор шаров', desc: 'Подробный состав', note: 'Надпись согласуем', price: '2000', photo: '/assets/img/shary-detkam.jpg', gallery: ['/assets/img/shary-dr-detok.jpg']}]},
-  {id: 'mixed', title: 'Смешанная подборка', items: [{id: 'flower-2', title: 'Композиция', price: '3000', photo: '/assets/img/gortenzii.jpg'}]}
+  {id: 'mixed', title: 'Смешанная подборка', items: [{id: 'flower-2', title: 'Композиция', price: '3000', photo: '/assets/img/gortenzii.jpg'}, {id: 'import-tg-372-3', title: 'Орхидея', photo: '/api/assets/test-orchid.webp'}]}
 ]};
 function page(url = '/catalog') {
-  const dom = new JSDOM(read(url === '/' ? 'index.html' : 'catalog/index.html'), {url: 'https://palitra-love.ru' + url, runScripts: 'outside-only'});
+  const dom = new JSDOM(read(url === '/' ? 'index.html' : url.replace(/^\//, '').replace(/\/$/, '') + '/index.html'), {url: 'https://palitra-love.ru' + url, runScripts: 'outside-only'});
   dom.window.eval(read('config.js'));
   dom.window.eval(read('assets/app.js'));
   dom.window.eval(read('price-render.js'));
@@ -24,12 +24,15 @@ function page(url = '/catalog') {
 test('скрытие цветов обратимо, не мутирует прайс, редактор сохраняет все товары; каталог и схема согласованы', async () => {
   const original = JSON.stringify(PRICE), dom = page(), w = dom.window, p = w.PalitraPrice;
   assert.equal(w.PALITRA_CONFIG.FLOWERS_VISIBLE, false);
+  assert.equal(w.document.documentElement.hidden, false, 'флаг на html не скрывает документ');
+  assert.equal(w.document.body.hidden, false);
   assert.deepEqual(Array.from(p.publicData(PRICE).categories.flatMap(x => x.items), x => x.id), ['balloon-1']);
   assert.equal(p.publicData(PRICE, {editor: true}), PRICE);
   assert.doesNotMatch(p.renderNav(PRICE), /Букеты/);
   assert.match(p.renderNav(PRICE, {editor: true}), /Букеты/);
   assert.doesNotMatch(p.renderSections(PRICE), /flower-1|flower-2/);
   await catalog.mount(w);
+  assert.equal(w.document.querySelector('main').closest('[hidden]'), null);
   assert.deepEqual([...w.document.querySelectorAll('[data-products] [data-add]')].map(x => x.dataset.id), ['balloon-1']);
   assert.equal(JSON.parse(w.document.querySelector('#palitra-catalog-schema').textContent).numberOfItems, 1);
   assert.equal(w.document.querySelector('[data-filter="bukety"]').hidden, true);
@@ -113,12 +116,27 @@ test('цветочная тематическая страница скрыта;
   const dom = new JSDOM(read('uchitelyu/index.html'), {url: 'https://palitra-love.ru/uchitelyu', runScripts: 'outside-only'}), w = dom.window;
   w.eval(read('config.js')); w.eval(read('assets/app.js')); w.eval(read('assets/quiz.js'));
   assert.equal(w.document.querySelector('main[data-flowers]').hidden, true);
+  assert.equal(w.document.documentElement.hidden, false);
+  assert.equal([...w.document.querySelectorAll('h1')].filter(node => !node.closest('[hidden]')).length, 1, 'один видимый заголовок');
+  assert.equal(w.document.querySelectorAll('[data-no-flowers] a[href="/catalog"]').length, 1, 'один переход в каталог');
   assert.ok(w.document.querySelector('[data-no-flowers] a[href="/#zayavka"]'));
   for (let i = 0; i < 3; i++) w.document.querySelector('[data-answer]').click();
   const cta = w.document.querySelector('[data-order-custom]');
   assert.ok(cta); cta.dispatchEvent(new w.MouseEvent('click', {bubbles: true, cancelable: true}));
   assert.match(w.sessionStorage.getItem(order.DRAFT_KEY), /Нужен индивидуальный подбор/);
   dom.window.close();
+});
+
+test('скрытые цветочные адреса не рекламируются исходными метаданными или sitemap', () => {
+  const sitemap = read('sitemap.xml');
+  for (const route of ['catalog/bukety', 'catalog/korziny', 'uchitelyu']) {
+    assert.ok(!sitemap.includes('https://palitra-love.ru/' + route + '</loc>'));
+    const dom = new JSDOM(read(route + '/index.html')), d = dom.window.document;
+    const metadata = [d.title, ...Array.from(d.querySelectorAll('meta[name="description"],meta[property="og:title"],meta[property="og:description"]'), n => n.content), ...Array.from(d.querySelectorAll('.breadcrumbs'), n => n.textContent)];
+    assert.doesNotMatch(metadata.join(' '), /букет|цветоч|корзин/iu);
+    for (const script of d.querySelectorAll('script[type="application/ld+json"]')) assert.doesNotMatch(script.textContent, /букет|цветоч|корзины/iu);
+    dom.window.close();
+  }
 });
 
 test('новые поля меняют отпечаток заявки, одинаковый телефон в другой записи — нет', async () => {
@@ -136,6 +154,8 @@ test('реальные формы: условный ник, сохранение
     ? {status: 503, json: async () => ({code: 'ORDERS_UNAVAILABLE'})}
     : {status: 201, json: async () => ({ok: true, orderId: 77})};};
   const api = order.mount(w), f = w.document.querySelector('#zayavka form');
+  assert.equal(w.document.querySelector('.signature-hero').closest('[hidden]'), null, 'главная видима после app.js');
+  assert.equal(f.closest('[hidden]'), null, 'короткая заявка доступна');
   assert.equal(f.querySelector('[name="date"]'), null);
   assert.equal(f.querySelector('[name="occasion"]').type, 'hidden');
   assert.match(f.querySelector('[data-request-context]').textContent, /голубые шары/);
@@ -152,6 +172,7 @@ test('реальные формы: условный ник, сохранение
   assert.equal(f.elements.contactChannel.value, 'phone'); assert.equal(f.elements.telegramUsername.disabled, true);
   assert.equal(f.elements.contact.disabled, false);
   const cart = w.document.querySelector('[data-order-form="cart"]');
+  api.openCart(); assert.equal(cart.closest('[hidden]'), null, 'полная форма видна после открытия корзины');
   for (const [key, value] of Object.entries(fields)) if (key !== 'consent') cart.elements[key].value = value;
   cart.elements.consent.checked = true; api.cart.add('balloon-1');
   cart.dispatchEvent(new w.Event('submit', {cancelable: true})); await tick();
