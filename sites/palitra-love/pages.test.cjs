@@ -10,6 +10,7 @@ const path = require('node:path');
 const ROOT = __dirname;
 const VERSION = '20260930catalog2';
 const VISIBILITY_VERSION = '20260930plants1';
+const CATALOG_STYLE_VERSION = '20260930compact1';
 // Корзина и заявка выпускаются отдельно (ссылка «Продолжить в Telegram»): своя версия подключения order.js.
 const PRICE_VERSION = '20260930prices1';
 const ORDER_VERSION = PRICE_VERSION;
@@ -40,7 +41,8 @@ test('каждая страница подключает одну версию �
       assert.match(html, new RegExp(`${asset.replace(/[./]/g, '\\$&')}\\?v=${PRICE_VERSION}"`), `${name}: ${asset}`);
     }
     for (const asset of ['/assets/styles.css', '/config.js']) {
-      assert.match(html, new RegExp(`${asset.replace(/[./]/g, '\\$&')}\\?v=${VISIBILITY_VERSION}"`), `${name}: ${asset}`);
+      const version = asset === '/assets/styles.css' && name.startsWith('catalog/') ? CATALOG_STYLE_VERSION : VISIBILITY_VERSION;
+      assert.match(html, new RegExp(`${asset.replace(/[./]/g, '\\$&')}\\?v=${version}"`), `${name}: ${asset}`);
     }
     assert.match(html, new RegExp(`/assets/order\\.js\\?v=${ORDER_VERSION}"`), `${name}: /assets/order.js`);
     for (const optional of ['catalog-live.js', 'quiz.js']) {
