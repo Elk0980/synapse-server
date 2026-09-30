@@ -234,11 +234,11 @@
 
   function render(container, ctx) {
     if (!canRead(ctx)) {
-      container.innerHTML = '<div class="content-header"><h1>Медиа-наставник</h1></div>' +
+      container.innerHTML = '<div class="content-header"><h2>Этапы и результаты</h2></div>' +
         '<div class="card"><p>Раздел доступен по праву «Автопостинг: просмотр». Обратитесь к владельцу кабинета.</p></div>';
       return;
     }
-    container.innerHTML = `<div class="content-header"><h1>Медиа-наставник</h1>
+    container.innerHTML = `<div class="content-header"><h2>Этапы и результаты</h2>
       <p>Две дорожки внедрения — разработка модуля и настройка у клиента: что готово, что в работе,
         где блокер и какой следующий шаг. Раз в 7 дней — короткий опрос о том, что улучшить.
         Опрос живёт внутри кабинета.</p></div>

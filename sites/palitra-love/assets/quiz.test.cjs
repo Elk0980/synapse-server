@@ -102,15 +102,15 @@ test('черновик квиза подставляется в форму за�
   win.close();
 });
 
-test('главная: карточки-примеры без статических цен, «Цена уточняется» до live-сопоставления по priceId', async () => {
+test('главная: выбор повода без статических цен и подстановки исторических priceId', async () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const dom = new JSDOM(html, { url: 'https://palitra-love.synapsebusiness.ru/', runScripts: 'outside-only' });
   const win = dom.window;
   win.PALITRA_CONFIG = { SITE_URL: win.location.origin };
   win.eval(fs.readFileSync(path.join(__dirname, 'app.js'), 'utf8'));
   const prices = [...win.document.querySelectorAll('[data-products] .price')];
-  assert.equal(prices.length, 4);
-  assert.ok(prices.every((p) => p.textContent === 'Цена уточняется' && p.dataset.priceKnown === 'false'));
+  assert.equal(prices.length, 0);
+  assert.equal(win.document.querySelectorAll('[data-products] .occasion-card').length, 4);
   assert.equal(win.document.querySelector('[data-products]').textContent.includes('₽'), false, 'числовых от-цен нет');
   assert.ok(!fs.readFileSync(path.join(__dirname, 'app.js'), 'utf8').includes('p:9270'), 'старые числа удалены из app.js');
   win.close();

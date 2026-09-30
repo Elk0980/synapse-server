@@ -338,3 +338,94 @@ body.cart-open{overflow:hidden}
 @media(max-width:800px){.brand img.brand-logo{width:176px}}
 @media(max-width:480px){.brand img.brand-logo{width:132px;height:auto}}
 .footer-logo{width:auto;height:54px;aspect-ratio:1026/397;margin:0 0 18px}
+
+
+/* 30.09: настоящие работы на первом экране, история по выбору посетителя. */
+.brand-tagline{display:none}
+@media(max-width:1350px){.brand-lockup h1{display:none}}
+@media(min-width:801px){.navlinks{flex-wrap:nowrap;gap:clamp(9px,1.1vw,16px);font-size:14px}.brand-lockup{gap:0}nav{gap:20px}}
+.signature-hero{padding:54px 0 46px;background:var(--bg);color:var(--text)}
+.signature-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center;gap:52px}
+.signature-copy .eyebrow{margin:0 0 22px;font-size:11px;letter-spacing:.16em}
+.signature-copy #hero-title{max-width:10ch;margin:0;font-size:clamp(42px,4.5vw,64px);font-weight:400;line-height:1.08;letter-spacing:-.045em;text-wrap:balance}
+.signature-copy #hero-title em{font-weight:400;color:#687345}
+.signature-lead{max-width:39ch;margin:24px 0 0;font-size:17px;line-height:1.6;color:var(--muted)}
+.signature-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}
+.signature-actions .button{display:flex;align-items:center;justify-content:space-between;gap:22px;min-height:52px;padding:14px 20px;border-radius:6px;font-size:14px;background:#687345;color:#fff}
+.signature-actions .button.outline{background:transparent;color:var(--text);border:1px solid var(--line)}
+.signature-actions .button:hover{box-shadow:none;background:#566137}
+.signature-actions .button.outline:hover{background:var(--surface)}
+.signature-story-link{display:inline-flex;align-items:center;gap:12px;margin-top:26px;color:var(--text);font-size:14px;text-decoration:none}
+.signature-story-link small{display:block;margin-top:2px;color:var(--muted);font-size:11px}
+.story-play-icon{flex:none;display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border:1px solid var(--line);border-radius:50%;font-size:11px;padding-left:2px}
+.signature-story-link:hover .story-play-icon{background:var(--surface);border-color:var(--gold)}
+.signature-visual{position:relative;height:540px;min-width:0}
+.signature-visual a{position:absolute;display:block;overflow:hidden;text-decoration:none;background:var(--line);border-radius:120px 120px 5px 5px}
+.signature-visual img{display:block;width:100%;height:100%;object-fit:cover;transition:transform .6s ease}
+.signature-visual a:hover img{transform:scale(1.025)}
+.signature-visual a>span{position:absolute;left:12px;right:12px;bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;background:rgba(246,243,238,.94);padding:12px 14px;color:var(--text);font-size:12px;border-radius:3px}
+.signature-image-main{inset:0 0 auto auto;width:75%;height:460px}
+.signature-image-detail{left:0;bottom:8px;width:43%;height:285px;border:6px solid var(--bg);border-radius:80px 80px 5px 5px!important}
+.signature-image-detail img{object-position:52% 50%}
+.signature-image-detail>span{left:6px!important;right:6px!important;bottom:6px!important;padding:10px!important;font-size:11px!important}
+.signature-caption{position:absolute;right:0;bottom:12px;width:53%;margin:0;font-family:var(--font-heading);font-style:italic;font-size:17px;color:var(--muted);text-align:right}
+.brand-story-wrap{padding-bottom:12px}
+.brand-story{scroll-margin-top:100px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.brand-story>summary{display:flex;align-items:center;gap:14px;padding:14px 0;cursor:pointer;list-style:none;font-size:14px}
+.brand-story>summary::-webkit-details-marker{display:none}
+.story-duration{margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap}
+.brand-story .hero{height:auto;min-height:0;aspect-ratio:16/9;width:100%;padding:0;border-radius:6px}
+.brand-story .hero-stage{inset:0;transform:none;width:100%;height:100%;aspect-ratio:16/9}
+.brand-story #hero-sms{display:block;left:60%;width:29%;font-size:clamp(10px,1.2vw,16px)}
+.brand-story #hero-offer{display:block;left:53%;width:43%}
+.brand-story #hero-scroll{display:none}
+.story-controls{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:14px 0}
+.story-controls button{background:transparent;color:var(--text);border:1px solid var(--line);font-size:13px;min-height:44px}
+body[data-page="home"] .trust{margin-top:24px;gap:0;border-bottom:1px solid var(--line);padding-bottom:24px}
+body[data-page="home"] .trust span{padding:0 24px;border:0;border-right:1px solid var(--line);border-radius:0;background:transparent;font-size:13px;color:var(--muted)}
+body[data-page="home"] .trust span:first-child{padding-left:0}
+body[data-page="home"] .trust span:last-child{border-right:0}
+body[data-page="home"] .trust b{color:var(--text);font-size:14px;font-weight:500}
+.home-products{padding-top:64px}
+.section-intro{max-width:58ch;margin:-8px 0 30px;color:var(--muted);font-size:16px}
+.home-products .grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:20px}
+.home-products .occasion-card{border:0;border-radius:6px;background:transparent}
+.occasion-card-link{display:flex;flex:1;flex-direction:column;text-decoration:none}
+.occasion-card .product-media{border-radius:6px;overflow:hidden}
+.occasion-card .photo{transition:transform .4s ease}
+.occasion-card-link:hover .photo{transform:scale(1.025)}
+.occasion-card-copy{display:flex;flex:1;flex-direction:column;padding:18px 0 0}
+.home-products .occasion-card h3{font-size:22px;line-height:1.25;margin:0 0 12px}
+.occasion-card-copy>span{display:flex;justify-content:space-between;gap:12px;padding-top:10px;margin-top:auto;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+.other-occasions{border-color:var(--line);border-radius:6px;background:transparent;font-size:14px}
+.our-work{padding-top:24px}
+.work-gallery{gap:20px}
+.work-gallery a{overflow:hidden;border-radius:6px}
+.work-gallery img{height:100%;aspect-ratio:4/5;object-fit:cover}
+.order-steps{border-top:1px solid var(--line);padding-top:56px}
+.order-step-grid{list-style:none;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:44px;margin:36px 0 0;padding:0}
+.order-step-grid li{border-top:1px solid var(--line);padding-top:20px}
+.order-step-grid li>span{display:block;font-size:12px;color:var(--muted);letter-spacing:.1em}
+.order-step-grid h3{font-size:24px;margin:14px 0 12px}
+.order-step-grid p{margin:0;color:var(--muted);font-size:14px}
+#zayavka .two{align-items:start}
+#zayavka h2{max-width:11ch;font-size:clamp(36px,4vw,52px)}
+#zayavka .two>div>p:not(.eyebrow){max-width:36ch;color:var(--muted)}
+.request-phone{margin-top:30px;font-size:14px}.request-phone a{display:inline-block;margin-top:5px;color:var(--text);font-size:22px;text-decoration:none}
+@media(min-width:801px) and (max-width:1000px){.signature-layout{gap:30px}.signature-visual{height:460px}.signature-image-main{height:390px}.signature-image-detail{height:240px}.signature-caption{font-size:14px}.brand img.brand-logo{width:190px}nav{gap:14px}.navlinks{gap:9px;font-size:13px}}
+@media(max-width:800px){
+.signature-hero{padding:34px 0 28px}.signature-layout{grid-template-columns:1fr;gap:30px}.signature-copy #hero-title{max-width:14ch;font-size:clamp(40px,7vw,58px)}.signature-copy .eyebrow{margin-bottom:18px}.signature-lead{max-width:43ch;margin-top:20px;font-size:16px}.signature-actions{margin-top:22px}.signature-story-link{margin-top:20px}.signature-visual{height:450px;width:min(540px,100%);margin:0 auto}.signature-image-main{height:390px;width:72%}.signature-image-detail{height:270px;width:43%}.signature-caption{font-size:15px;bottom:8px}
+.home-products .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}.order-step-grid{gap:24px}.order-step-grid h3{font-size:21px}.brand-story{scroll-margin-top:90px}.brand-story #hero-sms{top:28%;padding:8px}.brand-story #hero-offer{padding:10px}.brand-story #hero-offer strong{font-size:clamp(12px,2.1vw,20px)}.brand-story #hero-offer span{font-size:11px}
+body[data-page="home"] .trust{grid-template-columns:repeat(3,minmax(0,1fr));gap:0}body[data-page="home"] .trust span{padding:0 16px}body[data-page="home"] .trust span:last-child{grid-column:auto}.home-products{padding-top:44px}
+}
+@media(max-width:480px){
+nav{min-height:68px;gap:5px}.brand img.brand-logo{width:140px}.menu{min-width:44px;padding:8px 6px;font-size:12px}.cart-button{padding:8px;font-size:12px;min-height:44px}.brand-lockup{min-width:0}.signature-copy #hero-title{font-size:39px;max-width:12ch;line-height:1.1}.signature-copy .eyebrow{font-size:10px;letter-spacing:.1em}.signature-lead{font-size:15px}.signature-actions{gap:10px}.signature-actions .button{width:100%;justify-content:center;min-height:48px}.signature-visual{height:350px}.signature-image-main{height:290px;width:72%}.signature-image-detail{height:215px;width:46%;bottom:4px;border-width:4px}.signature-visual a>span{font-size:10px;padding:9px;left:8px;right:8px;bottom:8px}.signature-image-detail>span{font-size:10px!important;padding:7px!important}.signature-caption{font-size:12px;bottom:7px;width:49%}.brand-story>summary{font-size:12px;gap:10px}.brand-story>summary>.story-play-icon{width:32px;height:32px}.story-duration{font-size:10px;white-space:normal;max-width:60px;text-align:right}.brand-story #hero-brand{width:28%;left:75%}.brand-story #hero-offer span{display:none}.brand-story #hero-sms{font-size:9px;line-height:1.15;padding:5px;border-radius:5px}
+body[data-page="home"] .trust{grid-template-columns:1fr;margin-top:12px;padding-bottom:10px}body[data-page="home"] .trust span{padding:10px 0;border-right:0;border-bottom:1px solid var(--line)}body[data-page="home"] .trust span br{display:none}body[data-page="home"] .trust span b{margin-right:5px}body[data-page="home"] .trust span:last-child{border-bottom:0}
+.home-products .grid{gap:22px 12px}.home-products .occasion-card h3{font-size:17px;line-height:1.25}.occasion-card-copy{padding-top:12px}.occasion-card-copy>span{font-size:12px}.section-intro{font-size:14px;margin-top:-10px}.other-occasions{padding:18px}.work-gallery{gap:12px}.order-step-grid{grid-template-columns:1fr;gap:26px;margin-top:28px}.order-step-grid li{display:grid;grid-template-columns:30px 1fr;gap:0 14px}.order-step-grid li>span{padding-top:5px}.order-step-grid h3{margin:0 0 10px;font-size:22px}.order-step-grid p{grid-column:2}.order-steps{padding-top:40px}#zayavka .two{gap:28px}#zayavka form{padding:18px}.request-phone{margin-top:22px}
+}
+@media(prefers-reduced-motion:reduce){.signature-visual img,.occasion-card .photo{transition:none}.signature-visual a:hover img,.occasion-card-link:hover .photo{transform:none}}
+
+/* Средние экраны: меню раскрывается раньше, чем ссылки начнут теснить логотип и корзину. */
+@media(min-width:801px) and (max-width:1000px){
+header nav{position:relative}.menu{display:block;margin-left:auto;min-height:44px}.menu-close{display:block;align-self:flex-end;width:44px;height:44px;padding:0;font-size:28px;line-height:1}.navlinks{display:none;position:absolute;top:100%;left:calc(50% - 50vw);right:calc(50% - 50vw);flex-direction:column;flex-wrap:nowrap;gap:0;padding:12px 16px 16px;background:var(--paper);border-bottom:1px solid var(--line);box-shadow:0 12px 20px var(--shadow);z-index:1}.navlinks.is-open{display:flex}.navlinks a{display:flex;align-items:center;min-height:52px;padding:8px 16px;border-bottom:1px solid var(--line);font-size:16px}
+}

@@ -956,6 +956,6 @@ function create(container, context) {
   const code=companies.find(item=>item.code===ctx.selectedProjectId)?.code||companies[0]?.code||"";
   return {ready:load(code),update(next){ctx=next;controls();},change(next){ctx=next;const code=String(next.selectedProjectId||"");if(code!==companyCode&&companies.some(item=>item.code===code))return load(code);}};
 }
-cabinet.registerView("autoposting",{title:"Материалы",render(container,context){if(!permitted(context,"view")){container?.replaceChildren();return;}if(!controller)controller=create(container,context);else controller.update(context);return controller.ready;},
+cabinet.registerView("autoposting",{title:"Материалы",render(container,context){if(!permitted(context,"view")){container?.replaceChildren();return;}if(!controller)controller=create(container,context);else {controller.update(context);return controller.change(context);}return controller.ready;},
   onProjectChange(context){if(permitted(context,"view"))return controller?.change(context);}});
 })();

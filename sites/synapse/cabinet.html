@@ -558,6 +558,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }
+  .factory-tabs {display:flex; flex-wrap:wrap; gap:8px; margin:0 0 20px;}
+  .factory-tabs a {text-decoration:none; white-space:normal;}
+  .factory-tabs a[aria-current="page"] {background:var(--surface-hover, #233a53); color:var(--text, #fff); border-color:var(--accent, #a6c8ef);}
 </style>
 
 <link rel="stylesheet" href="brand/living-logo.css?v=20260911-projects-1">
@@ -644,21 +647,17 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       </div>
       <button class="nav-category" type="button" aria-expanded="false" aria-controls="marketing-menu">Продвижение</button>
       <div class="subnav" id="marketing-menu" hidden>
-      <a class="nav-link" id="autoposting-link" href="#autoposting"
-        data-view-link="autoposting" hidden>Материалы</a>
+      <a class="nav-link" id="content-factory-link" href="#content-factory"
+        data-view-link="content-factory" hidden>Контент завод</a>
       <a class="nav-link" id="media-mentor-link" href="#media-mentor"
         data-view-link="media-mentor" hidden>Бриф и план</a>
       <a class="nav-link" id="actor-onboarding-link" href="#actor-onboarding"
         data-view-link="actor-onboarding" hidden>Моя анкета</a>
       <a class="nav-link" id="actor-workspace-link" href="#actor-workspace"
         data-view-link="actor-workspace" hidden>Моё рабочее место</a>
-      <a class="nav-link" id="media-mentor-rollout-link" href="#media-mentor-rollout"
-        data-view-link="media-mentor-rollout" hidden>Медиа-наставник</a>
       <a class="nav-link" id="company-information-link" href="#company-information" data-view-link="company-information" hidden>Актуальность</a>
       <a class="nav-link" id="vk-community-link" href="#vk-community" data-view-link="vk-community" hidden>ВКонтакте</a>
       <a class="nav-link" id="reviews-link" href="#reviews" data-view-link="reviews" hidden>Отзывы</a>
-      <a class="nav-link" id="content-factory-link" href="#content-factory"
-        data-view-link="content-factory">Контент завод</a>
       <a class="nav-link" id="campaigns-link" href="#campaigns" data-view-link="campaigns" hidden>Рассылки</a>
       </div>
       <button class="nav-category" id="finance-category" type="button" aria-expanded="false" aria-controls="finance-menu" hidden>Финансы</button>
@@ -684,6 +683,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   <main class="main" id="main-content" tabindex="-1">
     <div class="content-header"><p id="startup-error" class="startup-error" role="alert" hidden></p></div>
     <div class="workspace-scope" id="workspace-scope"><strong></strong><button type="button" id="workspace-change-company">Сменить компанию</button></div>
+    <div id="content-factory-header" hidden>
+      <div class="content-header"><h1>Контент завод</h1></div>
+      <nav class="factory-tabs" aria-label="Контент завод">
+        <a class="plain-button" href="#content-factory/materials" data-factory-view="autoposting">Материалы и публикации</a>
+        <a class="plain-button" href="#content-factory/progress" data-factory-view="media-mentor-rollout">Этапы и результаты</a>
+      </nav>
+    </div>
     <section class="view-panel" id="home-view" data-view="home" hidden>
       <div class="content-header home-header"><h1>Главная</h1>
         <div class="home-tools"><div class="home-periods" id="home-periods" role="group"
@@ -927,8 +933,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     <section class="view-panel" id="vk-community-view" data-view="vk-community" hidden></section>
     <section class="view-panel" id="reviews-view" data-view="reviews" hidden></section>
     <section class="view-panel" id="content-factory-view" data-view="content-factory" hidden>
-      <div class="content-header"><h1>Контент завод</h1></div>
-      <div class="card"><p class="development">В разработке</p></div>
+      <div class="card"><p>Для работы с материалами и этапами обратитесь к владельцу кабинета за доступом.</p></div>
     </section>
     <section class="view-panel" id="campaigns-view" data-view="campaigns" hidden></section>
     <section class="view-panel" id="catalog-view" data-view="catalog" hidden></section>
@@ -1238,7 +1243,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       : 'Компания: '+projectContext();
     el.querySelector('strong').textContent=caption;
     el.querySelector('button').hidden=SYSTEM_VIEWS.has(currentView)||currentView==='account';
-    document.title=VIEW_TITLES[currentView]+' — '+(SYSTEM_VIEWS.has(currentView)?'Система Synapse':projectContext());
+    document.title=(factoryViews.includes(currentView)?'Контент завод':VIEW_TITLES[currentView])+' — '+(SYSTEM_VIEWS.has(currentView)?'Система Synapse':projectContext());
   };
   const renderProjectContexts = () => {
     byId("analytics-project-context").textContent = `Проект: ${projectContext()}`;
@@ -1351,7 +1356,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     if(window.matchMedia("(max-width: 760px)").matches)setDrawer(false);
     const context = cabinetContext();
     // Entity IDs and unfinished forms belong to the previous company.
-    history.replaceState(null, '', '#'+currentView);
+    history.replaceState(null, '', '#'+(factoryRoutes[currentView] || currentView));
     const view=registeredViews[currentView];
     if(view?.onProjectChange) view.onProjectChange(context);
     else view?.render(document.querySelector(`[data-view="${currentView}"]`),context);
@@ -1528,15 +1533,27 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       return hasPermission("crm.view");
     }
     if (value === "content-factory") {
-      return identity.role === "owner" || identity.permissions.includes("content-factory.view");
+      return identity.role === "owner" || identity.permissions.includes("content-factory.view") || identity.permissions.includes("autoposting.view");
     }
     return true;
   };
   const defaultView = () => "home";
   const validView = (value) => Object.hasOwn(VIEW_TITLES, value) && permittedView(value);
+  const factoryRoutes = {autoposting: "content-factory/materials", "media-mentor-rollout": "content-factory/progress"};
+  const factoryViews = ["content-factory", ...Object.keys(factoryRoutes)];
   const viewFromHash = () => {
-    const value = decodeURIComponent(location.hash.slice(1)).split(/[/?]/)[0];
+    const raw = decodeURIComponent(location.hash.slice(1));
+    let value = raw.split(/[/?]/)[0];
+    if (value === "content-factory") {
+      const part = raw.split(/[/?]/)[1];
+      if (part === "progress") value = "media-mentor-rollout";
+      else if (part === "materials" || (!part && permittedView("autoposting"))) value = "autoposting";
+    }
     if (Object.hasOwn(VIEW_TITLES, value) && !permittedView(value)) return "access-denied";
+    if (factoryRoutes[value]) {
+      const tail = raw.startsWith(value) ? raw.slice(value.length) : "";
+      history.replaceState(null, "", "#" + factoryRoutes[value] + tail);
+    }
     return validView(value) ? value : defaultView();
   };
   const setCategoryForView = (viewName) => {
@@ -1573,12 +1590,19 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   });
   const setView = (viewName, focusMain = false) => {
     currentView = validView(viewName) ? viewName : defaultView();
+    const factory = factoryViews.includes(currentView);
+    byId("content-factory-header").hidden = !factory;
+    byId("content-factory-header").querySelectorAll("[data-factory-view]").forEach(link => {
+      link.hidden = !permittedView(link.dataset.factoryView);
+      if (link.dataset.factoryView === currentView) link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
+    });
     document.querySelectorAll("[data-view]").forEach((view) => {
       view.hidden = view.dataset.view !== currentView;
     });
     document.querySelectorAll("[data-view-link]").forEach((link) => {
       const clientRoute = currentView.startsWith("crm-") && link.dataset.viewLink === "clients";
-      if (link.dataset.viewLink === currentView || clientRoute) link.setAttribute("aria-current", "page");
+      if (link.dataset.viewLink === currentView || clientRoute || (factory && link.dataset.viewLink === "content-factory")) link.setAttribute("aria-current", "page");
       else link.removeAttribute("aria-current");
     });
     document.querySelectorAll("[data-client-view]").forEach((link) => {
@@ -1591,7 +1615,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       target.insertAdjacentElement("afterend", byId("client-tabs"));
     }
     setCategoryForView(currentView);
-    const title = VIEW_TITLES[currentView];
+    const title = factory ? "Контент завод" : VIEW_TITLES[currentView];
     byId("mobile-title").textContent = title;
     renderScopeBanner();
     const active = document.querySelector(`[data-view="${currentView}"]`);
@@ -1605,7 +1629,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     if (focusMain) { window.scrollTo({top: 0, behavior: "instant"}); byId("main-content").focus({preventScroll: true}); }
   };
   const navigate = (viewName) => {
-    if (location.hash === `#${viewName}`) setView(viewName, true);
+    if (location.hash === `#${viewName}`) setView(viewFromHash(), true);
     else location.hash = viewName;
   };
 
@@ -1710,11 +1734,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       byId("crm-menu").querySelectorAll("[data-view-link]").forEach((link) => {
         link.hidden = link.dataset.viewLink !== "chat" && !hasPermission("crm.view");
       });
-      byId("autoposting-link").hidden = !permittedView("autoposting");
       byId("media-mentor-link").hidden = !permittedView("media-mentor");
       byId("actor-onboarding-link").hidden = !permittedView("actor-onboarding");
       byId("actor-workspace-link").hidden = !permittedView("actor-workspace");
-      byId("media-mentor-rollout-link").hidden = !permittedView("media-mentor-rollout");
       byId("company-information-link").hidden = !permittedView("company-information");
       byId("vk-community-link").hidden = !permittedView("vk-community");
       byId("reviews-link").hidden = !permittedView("reviews");
