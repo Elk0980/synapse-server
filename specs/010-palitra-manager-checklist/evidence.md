@@ -29,7 +29,7 @@ node --test ops/content/site-orders.test.js ops/content/site-orders-integration.
 
 ## Converge
 
-Проверены7FR,3SC,1сценарий,7решений плана и5принципов конституции. Пробелов missing/partial/contradicts/unrequested нет; пустая фаза Convergence не добавлялась. `.specify/extensions.yml` отсутствует. T005 завершается ссылкой на открытый PR.
+Проверены 7FR, 3SC, 1сценарий, 7решений плана и 5принципов конституции. Пробелов missing/partial/contradicts/unrequested нет; пустая фаза Convergence не добавлялась. `.specify/extensions.yml` отсутствует. Открыт PR426: https://github.com/Elk0980/synapse-server/pull/426 — без merge/deploy.
 
 ## Пределы и выпуск
 
