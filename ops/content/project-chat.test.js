@@ -203,6 +203,9 @@ test('владельческие настройки и участники нед
   const hers = session(daria.id);
   for (const request of [
     { method: 'PATCH', url: room('/settings'), body: { replyMode: 'delegate' } },
+    { method: 'PATCH', url: room('/settings'), body: { apiAssistant: true, assistantContext: 'Изменить правила' } },
+    { method: 'POST', url: room('/assistant-preview'), body: { text: 'Вопрос' } },
+    { method: 'POST', url: room('/assistant-alert-test'), body: { requestId:'test-owner-alert' } },
     { method: 'PUT', url: room('/members'), body: { userIds: [] } },
     { method: 'GET', url: room('/candidates') },
     { method: 'POST', url: room('/retry-ai'), body: {} },

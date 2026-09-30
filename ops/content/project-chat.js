@@ -1,4 +1,6 @@
 'use strict';
+const apiAssistant = require('./hugh-api-assistant');
+const { createHughOwnerAlerts } = require('./hugh-owner-alerts');
 
 /* Общий чат проекта: одна комната на компанию, участники, вложения, задачи и этапы.
    Доступ даёт членство в комнате вместе с назначенной компанией; отдельные права
@@ -282,6 +284,11 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   }
   // Колонки добавляются к уже созданным таблицам: база на сервере переживает обновление без пересоздания.
   const columns = (table) => new Set(db.prepare(`SELECT name FROM pragma_table_info('${table}')`).all().map(r => r.name));
+  if (!columns('project_chat_rooms').has('api_assistant')) db.exec("ALTER TABLE project_chat_rooms ADD COLUMN api_assistant INTEGER NOT NULL DEFAULT 0");
+  if (!columns('project_chat_rooms').has('assistant_context')) db.exec("ALTER TABLE project_chat_rooms ADD COLUMN assistant_context TEXT NOT NULL DEFAULT ''");
+  if (!columns('project_chat_ai_jobs').has('api_assistant')) {
+    db.exec("ALTER TABLE project_chat_ai_jobs ADD COLUMN api_assistant INTEGER NOT NULL DEFAULT 0");
+  }
   {
     const task = columns('project_chat_tasks');
     if (!task.has('external_ref')) db.exec("ALTER TABLE project_chat_tasks ADD COLUMN external_ref TEXT NOT NULL DEFAULT ''");
@@ -328,6 +335,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   const serverScope = localWorker.scope.exclude, localCodes = localWorker.scope.params;
   /* Заявки с сайта: свой outbox (order:<n>) доставляется тем же мостом через pendingTelegram/acknowledgeTelegram. */
   const siteOrders = createSiteOrders({ db, tx, priceReader: () => null, ...ordersConfig });
+  const ownerAlerts = createHughOwnerAlerts({ db, now });
   /* Резервные провайдеры: OpenAI-совместимые API из окружения сервера. Ни один ключ не добавляется кодом;
      без настроенных провайдеров поведение прежнее. Компании локального обработчика сервер берёт только
      через резерв и только когда компьютер не на связи дольше HUGH_FALLBACK_LOCAL_OFFLINE_MINUTES (0 — никогда). */
@@ -351,7 +359,8 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     return db.prepare('SELECT * FROM project_chat_rooms WHERE company_code=?').get(code);
   }
   const roomJSON = (r) => ({ companyCode: r.company_code, title: r.title,
-    replyMode: r.reply_mode, telegramChatId: r.telegram_chat_id, sites: roomSites(r) });
+    replyMode: r.reply_mode, telegramChatId: r.telegram_chat_id, sites: roomSites(r),
+    apiAssistant: Boolean(r.api_assistant), assistantContext: r.assistant_context || '' });
   /* Сайты, которые обслуживает эта комната. Один собственник может вести два сайта в одной переписке
      (так удобнее клиенту), поэтому задача помечается сайтом. Список задаёт владелец; пустой список —
      только сама компания. Метка вне списка не принимается: общий чат не открывает задачи чужих собственников. */
@@ -523,6 +532,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     return { room: roomJSON(room), members: roomMembers, formerMembers,
       ...page,
       tasks,
+      ...(user.role === 'owner' ? { ownerAlerts:ownerAlerts.list(code) } : {}),
       // Запланированные сообщения видны в кабинете: срок, пояс и состояние — без отдельного экрана.
       scheduled: scheduledList(code, user),
       stages: db.prepare('SELECT id,title FROM project_chat_stages WHERE company_code=? ORDER BY id').all(code),
@@ -562,12 +572,12 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     /* Ответ модели ставится по обращению: имя персоны, ответ боту или @упоминание (addressed),
        либо режим «Заменять Влада». Имя определяет и то, кто отвечает, и какой контекст соберут. */
     const persona = type !== 'assistant' && !skipAi
-      ? personas.addressedPersona(text, { addressed, delegate: room.reply_mode === 'delegate' })
+      ? (room.api_assistant ? 'hugh' : personas.addressedPersona(text, { addressed, delegate: room.reply_mode === 'delegate' }))
       : null;
     const aiJob = Boolean(persona);
     if (aiJob) {
-      db.prepare(`INSERT INTO project_chat_ai_jobs(company_code,message_id,persona,next_attempt_at) VALUES(?,?,?,?)`)
-        .run(code, messageId, persona, now);
+      db.prepare(`INSERT INTO project_chat_ai_jobs(company_code,message_id,persona,next_attempt_at,api_assistant) VALUES(?,?,?,?,?)`)
+        .run(code, messageId, persona, now, room.api_assistant ? 1 : 0);
     }
     localWorker.noteMessage(code, messageId, type, aiJob);
   }
@@ -737,6 +747,8 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   /* Забираем ровно одно задание: последовательная отправка частей не должна упираться в срок аренды. */
   function pendingTelegram(limit = 1) {
     return tx(() => {
+      const alerts = ownerAlerts.pending();
+      if (alerts.jobs.length) return alerts.jobs;
       db.prepare(`UPDATE project_chat_outbox SET status='uncertain',error='Отправка прервана; результат доставки неизвестен',claimed_at=NULL
         WHERE status='sending' AND claimed_at < ?`).run(new Date(Date.now() - TELEGRAM_LEASE).toISOString());
       const jobs = db.prepare(`SELECT o.* FROM project_chat_outbox o JOIN project_chat_rooms r ON r.company_code=o.company_code
@@ -754,6 +766,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     });
   }
   function acknowledgeTelegram(jobId, result = {}) {
+    if (ownerAlerts.isJob(jobId)) return ownerAlerts.acknowledge(jobId,result);
     if (siteOrders.isOrderJob(jobId)) return siteOrders.acknowledge(jobId, result);
     const job = db.prepare('SELECT * FROM project_chat_outbox WHERE id=?').get(integer(jobId));
     if (!job) fail(404, 'Отправка не найдена');
@@ -1226,10 +1239,37 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       });
       return reply(200, await snapshot(code, user, page));
     }
+    if (suffix === '/assistant-alert-test' && method === 'POST') {
+      access(request,code,true,true);
+      const body = await readBody(request), key=cleanText(body.requestId,80,'requestId');
+      if (Object.keys(body).some(k => k!=='requestId') || !/^[a-z0-9-]{8,80}$/i.test(key)) fail(400,'Укажите идентификатор проверки');
+      ownerAlerts.add(code,`test:${code}:${key}`,`Проверка уведомлений Хью · ${code}. Сообщения о задержках ответов и задачах будут приходить сюда и в кабинет Synapse. Это тест, действий по клиентским задачам не требуется.`);
+      return reply(200,{ ownerAlerts:ownerAlerts.list(code) });
+    }
+    if (suffix === '/assistant-preview' && method === 'POST') {
+      access(request, code, true, true);
+      const body = await readBody(request);
+      if (Object.keys(body).some(k => k !== 'text')) fail(400,'Неизвестное поле');
+      const text = cleanText(body.text,1000,'text');
+      if (!text) fail(400,'Введите проверочный вопрос');
+      const last = db.prepare('SELECT id FROM project_chat_messages WHERE company_code=? ORDER BY id DESC LIMIT 1').get(code);
+      const context = last ? aiContext(code,last.id,true) : { messages:[],project:'' };
+      const room = ensureRoom(code);
+      const payload = { responseProfile:'structured-draft', companyCode:code,
+        system:`${personas.instruction('hugh')}\n${apiAssistant.INSTRUCTION}\n${context.project}\nРабочий контекст владельца:\n${room.assistant_context}`,
+        messages:[...context.messages,{role:'user',content:text}] };
+      const answer = await fallback.reply(JSON.stringify(payload));
+      return reply(200,{ decision:apiAssistant.decision(answer.text),provider:answer.provider,model:answer.model, delivered:false });
+    }
     if (suffix === '/settings' && method === 'PATCH') {
       const body = await readBody(request); access(request, code, true, true);
-      if (!Object.keys(body).length || Object.keys(body).some(k => !['replyMode', 'telegramChatId', 'sites'].includes(k))) fail(400, 'Неизвестная настройка');
+      if (!Object.keys(body).length || Object.keys(body).some(k => !['replyMode', 'telegramChatId', 'sites', 'apiAssistant', 'assistantContext'].includes(k))) fail(400, 'Неизвестная настройка');
       const old = ensureRoom(code), mode = body.replyMode ?? old.reply_mode;
+      if (Object.hasOwn(body, 'apiAssistant') && typeof body.apiAssistant !== 'boolean') fail(400, 'Укажите режим API');
+      const apiMode = body.apiAssistant ?? Boolean(old.api_assistant);
+      if (apiMode && localCodes.includes(code)) fail(409, 'У комнаты есть локальный исполнитель; сначала согласуйте его отключение');
+      const assistantContext = Object.hasOwn(body, 'assistantContext') ? cleanText(body.assistantContext, 6000, 'assistantContext') : old.assistant_context;
+      if (apiMode && !assistantContext.trim()) fail(400, 'Добавьте актуальный контекст и границы работы помощника');
       if (!['addressed', 'delegate'].includes(mode)) fail(400, 'Неизвестный режим ответов');
       let chatId = Object.hasOwn(body, 'telegramChatId') ? body.telegramChatId : old.telegram_chat_id;
       chatId = chatId === null || chatId === '' ? null : String(chatId);
@@ -1250,6 +1290,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       }
       tx(() => {
         db.prepare('UPDATE project_chat_rooms SET reply_mode=?,telegram_chat_id=?,sites=?,updated_at=? WHERE company_code=?').run(mode, chatId, JSON.stringify(sites), stamp(), code);
+        db.prepare('UPDATE project_chat_rooms SET api_assistant=?,assistant_context=? WHERE company_code=?').run(apiMode ? 1 : 0, assistantContext, code);
         if (chatId !== old.telegram_chat_id) db.prepare(`UPDATE project_chat_outbox SET status='error',error='Привязка Telegram изменена'
           WHERE company_code=? AND status='pending'`).run(code);
       });
@@ -1391,10 +1432,10 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   }
 
   /* Ограниченный контекст модели: история и текущие задачи с этапами как справочные данные. */
-  function aiContext(code, messageId) {
-    let remaining = 48000;
+  function aiContext(code, messageId, compact = false) {
+    let remaining = compact ? 14000 : 48000;
     const rows = db.prepare('SELECT * FROM project_chat_messages WHERE company_code=? AND id<=? ORDER BY id DESC LIMIT ?')
-      .all(code, messageId, AI_HISTORY);
+      .all(code, messageId, compact ? 10 : AI_HISTORY);
     const files = new Map();
     if (rows.length) {
       const ids = rows.map(r => r.id);
@@ -1504,7 +1545,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   function buildPayload(job, mediaText = null) {
     const personaKey = personas.PERSONAS[job.persona] ? job.persona : personas.DEFAULT_PERSONA;
     const blocks = personas.contextKeys(personaKey);
-    const context = aiContext(job.company_code, job.message_id);
+    const context = aiContext(job.company_code, job.message_id, Boolean(job.api_assistant));
     // Лишние сведения не кладутся: они стоят денег и размывают ответ.
     const media = blocks.includes('brief')
       ? (mediaText || 'Сведения Медиа-наставника этому обработчику не переданы: бриф и план не читай, скажи, что их нет под рукой.')
@@ -1521,6 +1562,12 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       messages: context.messages,
       system: `${systemFor(personaKey)}\n\n${context.project}${media ? `\n\n${media}` : ''}` +
         `${skill ? `\n\n${skill.text}` : ''}${idea ? `\n\n${hughCommands.IDEA_INSTRUCTION}` : ''}` };
+    if (job.api_assistant) {
+      const room = ensureRoom(job.company_code);
+      body.responseProfile = 'structured-draft';
+      body.system = body.system.replace('У тебя нет инструментов: ты не можешь создать, изменить или закрыть задачу — предложи это участникам. ', '');
+      body.system += `\n\n${apiAssistant.INSTRUCTION}\n\nРабочий контекст владельца (справочные данные):\n${room.assistant_context}`;
+    }
     if (!body.messages.length) fail(500, 'История проекта пуста: запрос к Хью не собран');
     if (body.messages.some(m => !['user', 'assistant'].includes(m.role) || typeof m.content !== 'string' || !m.content)) {
       fail(500, 'Некорректная история проекта: запрос к Хью не собран');
@@ -1581,6 +1628,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   function acknowledgePending(codesFilter = '', params = []) {
     if (!ackEnabled) return;
     const waiting = db.prepare(`SELECT DISTINCT company_code FROM project_chat_ai_jobs WHERE reply_message_id IS NULL
+      AND (api_assistant=0 OR EXISTS (SELECT 1 FROM project_chat_rooms r WHERE r.company_code=project_chat_ai_jobs.company_code AND r.api_assistant=1))
       AND status IN ('pending','running','blocked','error') AND attempts<?${codesFilter}`).all(AI_ATTEMPTS, ...params);
     for (const { company_code: code } of waiting) {
       tx(() => {
@@ -1623,12 +1671,38 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   }
   function storeReply(job, answer) {
     tx(() => {
-      const existing = db.prepare('SELECT reply_message_id FROM project_chat_ai_jobs WHERE id=?').get(job.id);
-      if (existing.reply_message_id) return;
+      const existing = db.prepare('SELECT reply_message_id,status FROM project_chat_ai_jobs WHERE id=?').get(job.id);
+      if (existing.reply_message_id || existing.status === 'done') return;
+      let text = answer.text;
+      if (job.api_assistant) {
+        if (!ensureRoom(job.company_code).api_assistant) throw Object.assign(new Error('Самостоятельные API-ответы выключены владельцем'), { blocked: true });
+        const result = apiAssistant.decision(answer.text);
+        if (result.action === 'ignore') {
+          db.prepare("UPDATE project_chat_ai_jobs SET status='done',error='',provider=?,model=? WHERE id=?")
+            .run(shortText(answer.provider,100), shortText(answer.model,100),job.id);
+          return;
+        }
+        text = result.text;
+        if (result.action === 'escalate') {
+          let taskId = result.existingTaskId;
+          if (taskId && !db.prepare("SELECT 1 FROM project_chat_tasks WHERE id=? AND company_code=? AND status<>'done'").get(taskId, job.company_code)) {
+            throw Object.assign(new Error('API указал недоступную задачу; ответ не отправлен'), { terminal:true });
+          }
+          if (!taskId) {
+            const source = db.prepare('SELECT text FROM project_chat_messages WHERE id=? AND company_code=?').get(job.message_id, job.company_code);
+            taskId = upsertTask(job.company_code, { title:result.title, assigneeId:null, stageId:null, status:'todo', due:'',
+              sourceMessageId:job.message_id, externalRef:`api-assistant:${job.id}`, site:'', publication:'not_started',
+              publishedUrl:'', verifiedAt:'', sourceQuote:shortText(source?.text || '',2000), kind:'client_remark' }, { manual:true }).id;
+          }
+          addNote(taskId,job.company_code,{ text:result.note, messageId:job.message_id,kind:'clarification' });
+          text = `Сохранил запрос в задаче #${taskId}: ${result.title}. Нужна проверка владельца. Время начала пока не назначено; уведомление владельцу поставлено на отправку.`;
+          ownerAlerts.add(job.company_code,`task:${job.id}`,`Хью · ${job.company_code}: требуется ваше решение по задаче #${taskId}.\n${result.title}\n${result.note}\nВремя начала ещё не назначено. Откройте задачи в кабинете Synapse.`);
+        }
+      }
       // Ответ подписывается именем той персоны, которую позвали.
       const answering = personas.PERSONAS[job.persona] || personas.PERSONAS[personas.DEFAULT_PERSONA];
       const row = insertMessage({ code: job.company_code, authorId: answering.key, authorName: answering.name,
-        authorType: 'assistant', text: answer.text });
+        authorType: 'assistant', text });
       db.prepare(`UPDATE project_chat_ai_jobs SET status='done',error='',reply_message_id=?,provider=?,model=? WHERE id=?`)
         .run(row.id, shortText(answer.provider, 100), shortText(answer.model, 100), job.id);
     });
@@ -1710,9 +1784,11 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
         AND (status IN ('pending','error','blocked') OR (status='running' AND boot_id='server'))
         AND (lease_expires_at IS NULL OR lease_expires_at<?))` : '';
       const jobs = db.prepare(`SELECT * FROM project_chat_ai_jobs WHERE reply_message_id IS NULL AND attempts<? AND next_attempt_at<=?
+        AND (api_assistant=0 OR EXISTS (SELECT 1 FROM project_chat_rooms r WHERE r.company_code=project_chat_ai_jobs.company_code AND r.api_assistant=1))
         AND ((status IN ('pending','error')${serverScope})${takeoverScope}) ORDER BY id LIMIT 5`)
         .all(AI_ATTEMPTS, stamp(), ...localCodes, ...(takeover.length ? [...takeover, stamp()] : []));
       for (const job of jobs) {
+        if (job.api_assistant && !ensureRoom(job.company_code).api_assistant) continue;
         const isTakeover = takeover.includes(job.company_code);
         let payload;
         try {
@@ -1745,7 +1821,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
         }
         try {
           let answer = null, primaryError = null;
-          if (runtimeUsable && !isTakeover) {
+          if (runtimeUsable && !isTakeover && !job.api_assistant) {
             try { answer = await runtimeReply(payload); }
             catch (error) {
               if (error.terminal) throw error;
@@ -1771,6 +1847,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
           const message = shortText(error.message || 'ИИ недоступен', 200);
           if (error.terminal) {
             // Столкновение входных данных: автоповтор его не разрешит, нужен владелец.
+            if (job.api_assistant) managerTask(job.company_code);
             db.prepare(`UPDATE project_chat_ai_jobs SET status='error',attempts=?,error=?,next_attempt_at=?,lease_token=NULL,lease_expires_at=NULL WHERE id=? AND reply_message_id IS NULL`)
               .run(AI_ATTEMPTS, message, stamp(), job.id);
             continue;
@@ -1807,13 +1884,50 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     timer = setInterval(() => {
       // Системный сбой планировщика виден в журнале сервера: молча пропадать он не должен.
       try { processScheduledMessages(); } catch (error) { console.error('project-chat: планировщик отложенной отправки не отработал:', error?.message || error); }
+      try { processAssistantAttention(); } catch (error) { console.error('project-chat: контроль ответов:', error?.message || error); }
       void processAIJobs().catch(() => {});
     }, 3000); timer.unref();
   }
   function stopWorker() { clearInterval(timer); timer = null; }
+  // Контроль срока — обычный код, без вызовов моделей и без зависимости от aiBusy.
+  function processAssistantAttention() {
+    tx(() => {
+      const delayed = db.prepare(`SELECT j.*,m.created_at FROM project_chat_ai_jobs j
+        JOIN project_chat_rooms r ON r.company_code=j.company_code
+        JOIN project_chat_messages m ON m.id=j.message_id
+        WHERE j.api_assistant=1 AND r.api_assistant=1 AND j.status<>'done' AND j.reply_message_id IS NULL
+        AND NOT EXISTS (SELECT 1 FROM project_chat_reviewed_messages v
+          JOIN project_chat_messages reply ON reply.id=v.message_id
+          JOIN project_chat_outbox o ON o.message_id=reply.id
+          WHERE reply.company_code=j.company_code AND reply.id>j.message_id
+            AND o.status='sent' AND o.chat_id=r.telegram_chat_id AND v.chat_id=o.chat_id
+            AND json_array_length(CASE WHEN json_valid(o.external_ids) THEN o.external_ids ELSE '[]' END)>0)
+        AND (m.created_at<? OR j.attempts>=?)`).all(new Date(now()-60000).toISOString(),AI_ATTEMPTS);
+      for (const job of delayed) {
+        managerTask(job.company_code);
+        ownerAlerts.add(job.company_code,`delay:${job.id}`,`Хью · ${job.company_code}: клиент пока не получил ответ по обращению #${job.message_id}. Запрос сохранён. Проверьте очередь и задачу разбора ответа в кабинете.`);
+        if (!db.prepare('SELECT 1 FROM project_chat_acknowledged_jobs WHERE job_id=?').get(job.id)) {
+          const message = insertMessage({ code:job.company_code,authorId:'hugh',authorName:'Хью',authorType:'assistant',
+            text:'Ответ по вашему запросу задерживается. Запрос сохранён, владельцу создана задача проверки и уведомление. Время начала работы пока не назначено; повторять сообщение не нужно.' });
+          db.prepare('INSERT INTO project_chat_acknowledged_jobs(job_id,ack_message_id) VALUES(?,?)').run(job.id,message.id);
+        }
+      }
+      const stale = db.prepare(`SELECT t.* FROM project_chat_tasks t JOIN project_chat_rooms r ON r.company_code=t.company_code
+        WHERE r.api_assistant=1 AND t.external_ref LIKE 'api-assistant:%' AND t.status NOT IN ('done','cancelled')
+        AND t.updated_at<? AND NOT EXISTS (SELECT 1 FROM project_chat_task_notes n WHERE n.task_id=t.id AND n.created_at>=?)`)
+        .all(new Date(now()-900000).toISOString(),new Date(now()-900000).toISOString());
+      for (const task of stale) ownerAlerts.add(task.company_code,`stale:${task.id}`,`Хью · ${task.company_code}: задача #${task.id} без обновлений более 15 минут.\n${task.title}\nУкажите клиенту следующий шаг и время начала в общем чате.`);
+      const unsent = db.prepare(`SELECT o.id,o.company_code,o.status FROM project_chat_outbox o
+        JOIN project_chat_ai_jobs j ON j.reply_message_id=o.message_id
+        JOIN project_chat_messages m ON m.id=o.message_id
+        WHERE j.api_assistant=1 AND (o.status IN ('error','uncertain') OR (o.status<>'sent' AND m.created_at<?))`)
+        .all(new Date(now()-60000).toISOString());
+      for (const out of unsent) ownerAlerts.add(out.company_code,`delivery:${out.id}`,`Хью · ${out.company_code}: ответ подготовлен, но доставка клиенту не подтверждена (отправка #${out.id}). Проверьте квитанцию в кабинете; неизвестную доставку нельзя повторять вслепую.`);
+    });
+  }
   const bridge = { getBinding, migrateBinding, receiveTelegram, receiveCommand, storeAttachment, readAttachment, pendingTelegram, acknowledgeTelegram };
   return { handle, bridge, ...bridge, snapshot, listMessages, requeueAI, runtimeStatus, processAIJobs, askHugh,
-    processScheduledMessages, scheduledList, startWorker, stopWorker, localWorker, siteOrders, miniApp, fallback, skills };
+    processScheduledMessages, processAssistantAttention, scheduledList, startWorker, stopWorker, localWorker, siteOrders, miniApp, fallback, skills };
 }
 
 module.exports = { createProjectChat, MAX_ATTACHMENT, MESSAGE_PAGE };
