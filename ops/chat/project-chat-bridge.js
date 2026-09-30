@@ -5,6 +5,8 @@ const { parseQuietHours, isQuietTime, prepareTelegramPayload } = require('./quie
 
 const MAX_FILE = 8 * 1024 * 1024;
 const TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
+const SOURCE_MAX_FILE = 20 * 1024 * 1024; // Облачный Bot API getFile, без отдельного сервера API.
+const SOURCE_TYPES = new Set([...TYPES, 'video/mp4', 'video/quicktime', 'video/webm']);
 const OUTBOX_PER_TICK = 5;
 const INBOX_BACKOFF = 300000;
 const INBOX_BUDGET = 20;
@@ -124,16 +126,62 @@ function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacy
     }
     return { files: [{ name: photo ? `photo-${message.message_id}.jpg` : String(doc.file_name || 'document.pdf').slice(0, 180), mime, base64: Buffer.concat(chunks).toString('base64') }], note: '' };
   }
+  async function receiveSource(message, source) {
+    // Известный источник не передаётся в legacy даже в выключенном состоянии.
+    // Оригинальное событие останется в failed inbox для явного повтора после включения.
+    if (!source.enabled) throw Object.assign(new Error('Приём исходников выключен; событие сохранено для ручного повтора'), {terminal: true});
+    const chatId = String(message.chat.id), messageId = String(message.message_id);
+    const receipt = await content(`/source-receipt?chatId=${encodeURIComponent(chatId)}&messageId=${encodeURIComponent(messageId)}`);
+    if (receipt.item) return;
+    const photo = message.photo?.at(-1);
+    const item = photo || message.video || message.document || message.animation || message.video_note || message.audio || message.voice;
+    const event = {chatId, messageId, mediaGroupId: String(message.media_group_id || ''), text: message.text || message.caption || ''};
+    if (!item) { if (event.text.trim()) await content('/source-receive', event); return; }
+    const mime = photo ? 'image/jpeg' : item.mime_type || (message.video_note ? 'video/mp4' : 'application/octet-stream');
+    event.file = {fileId:item.file_id, fileUniqueId:item.file_unique_id, size:item.file_size, mime,
+      name:item.file_name || `${photo ? 'photo' : 'source'}-${messageId}${photo ? '.jpg' : ''}`};
+    const manual = async reason => content('/source-receive', {...event, status:'manual_import', reason});
+    if (item.file_size > SOURCE_MAX_FILE) return manual('Файл больше 20 МБ; нужен ручной импорт из Telegram');
+    if (!SOURCE_TYPES.has(mime)) return manual('Формат не поддерживается автоматически; нужен ручной импорт');
+    let info;
+    try { info = await telegram('getFile', {file_id:item.file_id}); }
+    catch (error) {
+      if (!error.certain || error.retryable) throw error;
+      return manual('Telegram не отдаёт файл через облачный API; нужен ручной импорт');
+    }
+    if (info.file_size > SOURCE_MAX_FILE) return manual('Файл больше 20 МБ; нужен ручной импорт из Telegram');
+    if (!/^[a-zA-Z0-9_./-]+$/.test(info.file_path || '') || info.file_path.includes('..')) return manual('Адрес файла недоступен; нужен ручной импорт');
+    const response = await fetchImpl(`https://api.telegram.org/file/bot${telegramToken}/${info.file_path}`, {signal:AbortSignal.timeout(30000),redirect:'error'});
+    if (!response.ok && response.status < 500 && response.status !== 429) return manual('Файл недоступен для скачивания; нужен ручной импорт');
+    if (!response.ok) throw new Error('Исходник ожидает повторного скачивания');
+    const chunks = []; let length = 0;
+    for await (const chunk of response.body) {
+      length += chunk.length;
+      if (length > SOURCE_MAX_FILE) { await response.body.cancel?.().catch(() => {}); return manual('Файл больше 20 МБ; нужен ручной импорт из Telegram'); }
+      chunks.push(Buffer.from(chunk));
+    }
+    try { await content('/source-receive', {...event,status:'stored',base64:Buffer.concat(chunks).toString('base64')}); }
+    catch (error) { if (!FILE_REJECTED.has(error.status)) throw error; return manual('Файл не принят хранилищем; нужен ручной импорт'); }
+  }
   async function receive(update) {
     const message = update.message;
     // Свои сообщения и чужие боты не попадают в комнату и не вызывают ответ Хью.
     if (message.from?.is_bot) return;
+    const { room, source } = await content(`/binding?chatId=${encodeURIComponent(message.chat.id)}`);
+    if (!source && message.migrate_from_chat_id) {
+      const previous = await content(`/binding?chatId=${encodeURIComponent(message.migrate_from_chat_id)}`);
+      if (previous.source) return content('/source-migrate', {chatId:String(message.migrate_from_chat_id),newChatId:String(message.chat.id)});
+    }
+    // Источники имеют собственные приватные записи. Никаких команд, задач, AI jobs или outbox.
+    if (source) {
+      if (message.migrate_to_chat_id) return content('/source-migrate', {chatId:String(message.chat.id),newChatId:String(message.migrate_to_chat_id)});
+      return receiveSource(message, source);
+    }
     // Перенос группы в супергруппу: служебное событие без содержания, привязку переносит комната.
     if (message.migrate_to_chat_id) {
       await content('/migrate', { chatId: String(message.chat.id), newChatId: String(message.migrate_to_chat_id) });
       return;
     }
-    const { room } = await content(`/binding?chatId=${encodeURIComponent(message.chat.id)}`);
     if (!room && message.migrate_from_chat_id) {
       await content('/migrate', { chatId: String(message.migrate_from_chat_id), newChatId: String(message.chat.id) });
       return;
