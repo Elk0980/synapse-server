@@ -8,9 +8,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = __dirname;
-const VERSION = '20260930meeting1';
+const VERSION = '20260930catalog2';
 // Корзина и заявка выпускаются отдельно (ссылка «Продолжить в Telegram»): своя версия подключения order.js.
-const ORDER_VERSION = '20260929bot1';
+const ORDER_VERSION = '20260930catalog2';
 function pages(dir = ROOT, out = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
@@ -115,5 +115,5 @@ test('Telegram и заявка: ссылки сайта ведут в канал
   const quiz = read(path.join(ROOT, 'assets', 'quiz.js'));
   assert.ok(!quiz.includes('?text='), 'quiz.js не передаёт ответы в чат напрямую — только в форму заявки');
   assert.match(quiz, /\/#zayavka/, 'quiz.js ведёт на форму заявки');
-  assert.match(read(path.join(ROOT, 'index.html')), /<section class="band" id="zayavka">[\s\S]*<select name="occasion"[\s\S]*<input name="date" type="date" required>[\s\S]*name="consent" required/, 'форма заявки главной: повод, дата и согласие обязательны');
+  assert.match(read(path.join(ROOT, 'index.html')), /<section class="band" id="zayavka">[\s\S]*name="name"[^>]*required[\s\S]*name="contactChannel" required[\s\S]*name="contact"[^>]*required[\s\S]*name="consent" required/, 'короткая форма: имя, канал, контакт и согласие');
 });

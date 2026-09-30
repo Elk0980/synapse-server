@@ -37,7 +37,7 @@ test('итог: цена только из live-прайса по priceId, ин�
   assert.deepEqual(links(), [['Оставить заявку', '/#zayavka'], ['Канал в Telegram', 'https://t.me/palitralovee']]);
   answerAll(root); await tick();
   assert.match(root.textContent, /Вот что подойдёт/);
-  assert.match(root.textContent, /имя, телефон, дату и согласие на обработку данных/, 'точный список полей формы');
+  assert.match(root.textContent, /имя, удобный способ связи, контакт и согласие на обработку данных/, 'точный список полей короткой формы');
   assert.doesNotMatch(root.textContent, /останется указать имя и телефон/);
   const prices = [...root.querySelectorAll('.price')].map((p) => [plain(p.textContent), p.dataset.priceKnown]);
   assert.deepEqual(prices, [['9 500 руб.', 'true'], ['Цена уточняется', 'false']], 'live-цена по id, без статических 9270/8390');

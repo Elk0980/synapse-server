@@ -9,12 +9,14 @@ const products=[
  {occasion:'День рождения мужчине',n:'Мужской сет на день рождения',d:'Сердце с фото и надписью и шары на атласной ленте. Фото и надпись согласуем с вами заранее, доставим к нужному времени.',priceId:'',c:'muzhchinam den-rozhdeniya',img:'muzhskoy-set.jpg',alt:'Мужской сет на день рождения: сердце с надписью и шары — Palitra, Подольск'},
  {occasion:'День рождения женщине',n:'Хризантема в нежно-персиковом',d:'Подбираем нежное оформление дня рождения: цветы, шары и доставку к нужному времени. Собираем эксклюзивные заказы по вашим пожеланиям.',priceId:'',c:'bukety den-rozhdeniya',img:'hrizantema.jpg',alt:'Букет хризантем в нежно-персиковом цвете — Palitra, Подольск'}
 ];
+if(C.FLOWERS_VISIBLE===false)products[3]={...products[3],n:'Шары для дня рождения',d:'Подберём оформление по вашим пожеланиям.',c:'den-rozhdeniya shary',img:'shary-dr-detok.jpg',alt:'Шары Palitra для дня рождения'};
+if(C.FLOWERS_VISIBLE===false)products.forEach(product=>{product.d=product.d.replace(/шары и цветы/g,'шары').replace(/шары, цветы и доставка/g,'шары и доставка').replace(/цветы, шары/g,'шары')});
 const PRICE_UNKNOWN='Цена уточняется';
 const escText=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 /* Та же структура карточки, что в price-render.js: медиа 4:5, тело, прижатый к низу блок цены и действий. */
 function cards(list,home=false){
   if(home){
-    const routes=['/catalog/vypiska','/catalog/malysham','/catalog/muzhchinam','/catalog/bukety'];
+    const routes=['/catalog/vypiska','/catalog/malysham','/catalog/muzhchinam',C.FLOWERS_VISIBLE === false ? '/catalog/den-rozhdeniya' : '/catalog/bukety'];
     return list.map((x,i)=>`<article class="card product-card occasion-card" data-cat="${x.c}"><a href="${routes[i]}" class="occasion-card-link"><div class="product-media"><img class="photo" src="/assets/img/${x.img}" alt="${x.alt}" loading="lazy" decoding="async" width="800" height="1000"></div><div class="occasion-card-copy"><h3>${x.occasion}</h3><span>Выбрать <b aria-hidden="true">↗</b></span></div></a></article>`).join('');
   }
   return list.map(x=>`<article class="card product-card" data-cat="${x.c}"><div class="product-media"><img class="photo" src="/assets/img/${x.img}" alt="${x.alt}" loading="lazy" decoding="async" width="800" height="1000"></div><div class="price-card__body"><h3>${x.n}</h3><p class="price-card__description">${x.d}</p><p class="note">Стоимость подтвердит менеджер по заявке.</p><div class="product-footer"><div class="product-purchase"><p class="price" data-price-known="false"${x.priceId?` data-price-for="${escText(x.priceId)}"`:''}>${PRICE_UNKNOWN}</p><button class="button price-card__button" type="button" data-occasion="${x.occasion}">Заказать под Ваш повод</button></div></div></div></article>`).join('');
@@ -24,7 +26,7 @@ function applyLivePrices(){const nodes=[...document.querySelectorAll('[data-pric
 document.querySelectorAll('script[type="application/ld+json"]').forEach(script=>{const data=JSON.parse(script.textContent);const addImages=node=>{if(Array.isArray(node))return node.forEach(addImages);if(!node||typeof node!=='object')return;if(node['@type']==='LocalBusiness')node.logo=`${C.SITE_URL}/assets/img/logo-palitralove-dark.png`;Object.values(node).forEach(addImages)};addImages(data);script.textContent=JSON.stringify(data)});
 const page=document.body.dataset.page;
 const catalog=document.querySelector('[data-products]');
-if(catalog){let list=products;if(page==='vypiska')list=products.filter(x=>x.c.includes('vypiska')||x.c.includes('bukety'));if(page==='birthday')list=products.filter(x=>x.c.includes('den-rozhdeniya'));if(page==='men')list=products.filter(x=>x.c.includes('muzhchinam'));if(page==='dopamine')list=products.filter(x=>x.c.includes('bukety'));if(page==='giants')list=products.filter(x=>x.c.includes('den-rozhdeniya'));catalog.innerHTML=cards(list,page==='home');if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',applyLivePrices,{once:true});else applyLivePrices();}
+if(catalog){let list=products;if(page==='vypiska')list=products.filter(x=>x.c.includes('vypiska')||x.c.includes('bukety'));if(page==='birthday')list=products.filter(x=>x.c.includes('den-rozhdeniya'));if(page==='men')list=products.filter(x=>x.c.includes('muzhchinam'));if(page==='dopamine')list=products.filter(x=>x.c.includes(C.FLOWERS_VISIBLE===false?'shary':'bukety'));if(page==='giants')list=products.filter(x=>x.c.includes('den-rozhdeniya'));catalog.innerHTML=page==='catalog'?'<p class="catalog-empty" role="status">Загружаем каталог…</p>':cards(list,page==='home');if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',applyLivePrices,{once:true});else applyLivePrices();}
 const menuButton=document.querySelector('[data-menu-toggle]');
 const mobileMenu=document.querySelector('.navlinks');
 function setMenu(open){if(!menuButton||!mobileMenu)return;mobileMenu.classList.toggle('is-open',open);menuButton.setAttribute('aria-expanded',String(open));}
@@ -32,3 +34,14 @@ document.addEventListener('click',e=>{const orderButton=e.target.closest('[data-
 document.addEventListener('keydown',e=>{if(e.key==='Escape')setMenu(false)});
 /* Формы заявки и корзины обрабатывает assets/order.js: успех только после ответа сервера. */
 const cookie=document.querySelector('.cookie');if(localStorage.getItem('palitra-cookie'))cookie?.remove();document.querySelectorAll('[data-cookie]').forEach(b=>b.onclick=()=>{localStorage.setItem('palitra-cookie',b.dataset.cookie);cookie.remove()});
+
+if(C.FLOWERS_VISIBLE===false){
+  document.querySelectorAll('[data-flowers]').forEach(node=>node.hidden=true);
+  if(/^\/uchitelyu(?:\/|$)/.test(location.pathname))document.querySelectorAll('script[type="application/ld+json"]').forEach(script=>script.remove());
+  if(/^\/catalog\/(bukety|korziny)(?:\/|$)/.test(location.pathname)){
+    document.title='Раздел временно скрыт — Palitra';
+    document.querySelector('meta[property="og:title"]')?.setAttribute('content',document.title);
+    document.querySelector('main h1').textContent='Этот раздел пока скрыт';
+    const lead=document.querySelector('main .lead');if(lead)lead.innerHTML='Выберите шары и оформление в <a href="/catalog">каталоге</a> или <a href="/#zayavka">закажите индивидуальный подбор</a>.';
+  }
+}
