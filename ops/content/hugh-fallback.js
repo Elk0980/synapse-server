@@ -125,8 +125,10 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
     const at = now();
     // Деньги и слот резервируются ДО обращения: параллельные запросы не могут вместе
     // перескочить границу, а неизвестный расход не считается нулём.
+    const requested = typeof payload === 'string' ? JSON.parse(payload) : payload;
+    const requestedLimit = Number.isSafeInteger(requested.maxOutputTokens) && requested.maxOutputTokens > 0 ? requested.maxOutputTokens : budget.config.maxOutputTokens;
     const outputLimit = Number.isSafeInteger(provider.maxOutputTokens) && provider.maxOutputTokens > 0
-      ? Math.min(provider.maxOutputTokens, budget.config.maxOutputTokens) : budget.config.maxOutputTokens;
+      ? Math.min(provider.maxOutputTokens, budget.config.maxOutputTokens, requestedLimit) : Math.min(budget.config.maxOutputTokens, requestedLimit);
     const probe = toChatBody(payload, provider, outputLimit);
     const booking = budget.reserve(provider.name, { promptBytes: Buffer.byteLength(probe, 'utf8'),
       maxOutputTokens: outputLimit, limitMicroUsd: provider.budgetMicroUsd ?? null });
@@ -174,7 +176,8 @@ function createHughFallback({ db, env = process.env, fetchImpl = (...args) => gl
       return null;
     }
     upsert(provider.name, { cooldown_until: null, failures: 0, last_error: '', last_attempt_at: stamp(at), last_success_at: stamp(), last_model: shortText(data?.model || provider.model, 100) });
-    return { text, provider: provider.name, model: shortText(data?.model || provider.model, 100) };
+    return { text, provider: provider.name, model: shortText(data?.model || provider.model, 100),
+      usage: {promptTokens: Number.isSafeInteger(data?.usage?.prompt_tokens) ? data.usage.prompt_tokens : null, completionTokens: Number.isSafeInteger(data?.usage?.completion_tokens) ? data.usage.completion_tokens : null} };
   }
   /* Пробует доступных провайдеров по порядку; исчерпание всех — не ошибка задания, а ожидание. */
   async function reply(payload, { beforeAttempt = null } = {}) {

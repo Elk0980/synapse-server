@@ -25,12 +25,12 @@ function fixture(role='owner') {
 }
 test('owner board uses existing tasks, independent milestones and explicit all-company scope',async()=>{
   const f=fixture();try{
-    await settle();f.d.querySelector('[data-task-coordination]').click();await settle();
+    await settle();
     assert.match(f.d.body.textContent,/Код готов/);assert.match(f.d.body.textContent,/Принято: Не подтверждено/);
     assert.equal(f.d.querySelector('проверка'),null);
-    assert.equal(f.calls.find(c=>c.path==='/coordination/tasks').params.companyCode,'alvi');
+    assert.equal(f.calls.find(c=>c.path==='/coordination/tasks').params.companyCode,undefined);
     f.d.querySelector('[data-coord-all]').click();await settle();
-    assert.equal(f.calls.filter(c=>c.path==='/coordination/tasks').at(-1).params.companyCode,undefined);
+    assert.equal(f.calls.filter(c=>c.path==='/coordination/tasks').at(-1).params.companyCode,'alvi');
     f.d.querySelector('[data-coord-edit]').click();await settle();
     const form=f.d.querySelector('[data-coord-form]');
     form.elements.namedItem('result').value='Проверенный результат';

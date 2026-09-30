@@ -41,6 +41,7 @@ const { createSocialOnlypultAnalytics } = require('./social-onlypult-analytics')
 const { createCompanyInformationCheck } = require('./company-information-check');
 const { createDealOrders } = require('./deal-orders');
 const { createTaskCoordination } = require('./task-coordination');
+const { createTaskDispatch } = require('./task-dispatch');
 
 const IS_MAIN = require.main === module;
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
@@ -591,6 +592,7 @@ const emailCampaigns = createEmailCampaigns(db, {transport: campaignTransport, l
 const emailDiagnostics = createEmailDiagnostics(db, {getEnvironment: emailSettings.getEnvironment});
 const companyInformation = createCompanyInformation(db, {check: createCompanyInformationCheck()});
 const taskCoordination = createTaskCoordination(db);
+const taskDispatch = createTaskDispatch(db);
 const autopostingTransport = createAutopostingTransport(db, {apiKey: API_KEY});
 const autoposting = createAutoposting(db, {information: companyInformation, transport: autopostingTransport});
 const studioJourney = createStudioJourney(db,{quoteService:(code,id,version)=>companyInformation.quote(code,id,version)});
@@ -2799,6 +2801,33 @@ async function route(request, response) {
     const company = scopedCompany(url.searchParams.get('companyCode'));
     return send(response, 200, companyOverview(entityId(overviewMatch[1]), company), cors);
   }
+  if (url.pathname.startsWith('/internal/task-dispatch/')) {
+    // Общий CRM service key уже проверен. Маршрут не доступен через браузерный proxy.
+    if (request.headers[CRM_IDENTITY_HEADER]) fail(403, 'Только серверный обработчик');
+    if (request.method !== 'POST') fail(405, 'Метод не поддерживается');
+    const body = await readJson(request), action = url.pathname.slice('/internal/task-dispatch/'.length);
+    let result;
+    if(action==='claim') result={job:taskDispatch.claim()};
+    else if(action==='renew') result=taskDispatch.renew(body);
+    else if(action==='complete') result=taskDispatch.complete(body.job,body.result);
+    else if(action==='error') result=taskDispatch.error(body.job);
+    else if(action==='mirror') result=taskDispatch.mirror(body);
+    else if(action==='alerts') result={alerts:taskDispatch.alerts()};
+    else if(action==='ack-alert') result=taskDispatch.ackAlert(entityId(body.id));
+    else fail(404,'Адрес не найден');
+    return send(response,200,result,{...cors,'cache-control':'no-store'});
+  }
+  const dispatchMatch=url.pathname.match(/^\/coordination\/dispatch\/(\d+)(?:\/(enqueue|action))?$/);
+  if(dispatchMatch){
+    const actor=crmIdentity(request), id=entityId(dispatchMatch[1]);
+    if(url.searchParams.get('companyCode') && taskCoordination.get(id,actor).companyCode!==url.searchParams.get('companyCode')) fail(404,'Задача другой компании');
+    let result;
+    if(request.method==='GET'&&!dispatchMatch[2]) result=taskDispatch.get(id,actor);
+    else if(request.method==='POST'&&dispatchMatch[2]==='enqueue') result=taskDispatch.enqueue(id,await readJson(request),actor);
+    else if(request.method==='POST'&&dispatchMatch[2]==='action') result=taskDispatch.act(id,await readJson(request),actor);
+    else fail(405,'Метод не поддерживается');
+    return send(response,200,result,{...cors,'cache-control':'private, no-store'});
+  }
   if (/^\/coordination(?:\/|$)/.test(url.pathname)) {
     const actor = crmIdentity(request);
     if (actor?.role !== 'owner') fail(403, 'Координация доступна владельцу');
@@ -2806,6 +2835,7 @@ async function route(request, response) {
     let result;
     if (url.pathname === '/coordination/tasks' && request.method === 'GET') {
       result = taskCoordination.list(Object.fromEntries(url.searchParams), actor);
+      result.tasks = result.tasks.map(item => ({...item, dispatch:taskDispatch.get(item.taskId,actor)}));
     } else if (match && request.method === 'GET') result = taskCoordination.get(entityId(match[1]), actor);
     else if (match && request.method === 'PUT') result = taskCoordination.save(entityId(match[1]), await readJson(request), actor);
     else fail(404, 'Адрес не найден');

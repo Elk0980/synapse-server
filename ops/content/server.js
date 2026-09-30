@@ -216,6 +216,7 @@ const projectChat = createProjectChat({ db, authStore, assetsDir: ASSETS_DIR,
   crmUrl: CRM_URL, crmApiKey: CRM_API_KEY, botUsername: (process.env.TELEGRAM_BOT_USERNAME || '').trim().replace(/^@/, ''),
   cabinetUrl: (process.env.CABINET_PUBLIC_URL || 'https://synapse.synapsebusiness.ru/cabinet.html').trim(),
   requireSession, requireCsrf, sendJson: send, readBody: readJson });
+const taskDispatchWorker = require('./task-dispatch-worker').createTaskDispatchWorker({db,crmUrl:CRM_URL,crmApiKey:CRM_API_KEY,fallback:projectChat.fallback});
 for (const issue of [...projectChat.localWorker.issues, ...projectChat.miniApp.issues]) console.warn(`content: ${issue}`);
 /* Клиентские Telegram-боты: переписка клиентов с менеджером и уведомления о заявках.
    Включается только именем бота (не секрет); токен живёт только в сервисе chat. Пусто — выключен. */
@@ -560,6 +561,7 @@ async function proxyCrm(request, response, url, cors) {
   const identity = initialSession.user;
   const readOnly = request.method === 'GET';
   const crmPath = url.pathname.slice('/content/crm'.length) || '/';
+  if (crmPath.startsWith('/internal/')) fail(403, 'Служебный маршрут недоступен');
   if (/^\/coordination(?:\/|$)/.test(crmPath) && identity.role !== 'owner') fail(403, 'Координация доступна владельцу');
   if (/^\/vk-community(?:\/|$)/.test(crmPath)) {
     if (identity.role !== 'owner') fail(403,'Подключение и сообщения ВК доступны владельцу');
@@ -1311,10 +1313,12 @@ const server = http.createServer(async (request, response) => {
 server.listen(PORT, () => {
   console.log(`content: слушает порт ${PORT}, база ${DATABASE_PATH}`);
   projectChat.startWorker();
+  taskDispatchWorker.start();
 });
 
 function shutdownContent() {
   projectChat.stopWorker();
+  taskDispatchWorker.stop();
   server.close(() => {
     db.close();
     process.exit(0);

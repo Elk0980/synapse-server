@@ -149,7 +149,7 @@ jobs:
 
       - name: Тесты доски координации проектов
         timeout-minutes: 10
-        run: node --test ops/crm/task-coordination.test.js
+        run: node --test ops/crm/task-coordination.test.js ops/crm/task-dispatch.test.js ops/crm/task-dispatch-http.test.js
 
       - name: Тесты источников и актуальности данных компании
         timeout-minutes: 10

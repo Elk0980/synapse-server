@@ -1,0 +1,20 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {DatabaseSync}=require('node:sqlite');
+const {createTaskDispatchWorker,parseDecision}=require('./task-dispatch-worker');
+function fixture(t){const db=new DatabaseSync(':memory:');t.after(()=>db.close());db.exec(`CREATE TABLE project_chat_rooms(company_code TEXT,api_assistant INTEGER);
+ CREATE TABLE project_chat_tasks(id INTEGER PRIMARY KEY,company_code TEXT,site TEXT,title TEXT,source_quote TEXT,external_ref TEXT,status TEXT,updated_at TEXT);
+ CREATE TABLE project_chat_task_notes(id INTEGER PRIMARY KEY,task_id INTEGER,text TEXT);`);return db;}
+test('idle queue never calls a model; only task data enters structured API with hard output cap',async t=>{const db=fixture(t);let calls=0,job=null,complete;const fetchImpl=async(url,opts)=>{const action=url.split('/').at(-1),body=JSON.parse(opts.body);if(action==='complete')complete=body;return {ok:true,json:async()=>action==='claim'?{job}:action==='alerts'?{alerts:[]}:{ok:true}};};
+ const api=createTaskDispatchWorker({db,crmUrl:'http://crm.test',crmApiKey:'fixture',fetchImpl,fallback:{reply:async payload=>{calls++;const p=JSON.parse(payload);assert.equal(p.maxOutputTokens,1200);assert.equal(p.responseProfile,'structured-draft');assert.match(p.messages[0].content,/Тестовый текст/);return {text:JSON.stringify({state:'review',department:'marketing',result:'Готовый текст',question:''}),provider:'deepseek',model:'flash',usage:{promptTokens:40,completionTokens:20}};}}});
+ await api.processOne();assert.equal(calls,0);job={taskId:1,companyCode:'alpha',leaseToken:'test',title:'Тестовый текст',description:'Новый текст',answer:''};await api.processOne();assert.equal(calls,1);assert.equal(complete.result.model,'flash');assert.equal(complete.result.usage.completionTokens,20);
+});
+test('worker holds one generation and reports invalid model output without claiming success',async t=>{const db=fixture(t);let release,started,claims=0,errors=0,completes=0;const began=new Promise(r=>started=r),gate=new Promise(r=>release=r);
+ const api=createTaskDispatchWorker({db,crmUrl:'http://crm.test',crmApiKey:'fixture',fetchImpl:async(url)=>{const a=url.split('/').at(-1);if(a==='claim')claims++;if(a==='error')errors++;if(a==='complete')completes++;return{ok:true,json:async()=>({job:{taskId:1,companyCode:'alpha',leaseToken:'lease',title:'Test',description:'',answer:''}})};},fallback:{reply:async()=>{started();await gate;return {text:'Не JSON',provider:'p',model:'m'};}}});
+ const first=api.processOne();await began;await api.processOne();assert.equal(claims,1);release();await first;assert.equal(errors,1);assert.equal(completes,0);
+});
+test('mirror links existing chat task and alerts hand off once even if acknowledgement is retried',async t=>{const db=fixture(t);db.exec("INSERT INTO project_chat_rooms VALUES('alpha',1); INSERT INTO project_chat_tasks VALUES(1,'alpha','','Правка','','api-assistant:1','todo',''); INSERT INTO project_chat_task_notes VALUES(10,1,'Уточнение клиента');");
+ let mirrored,ack=0;const api=createTaskDispatchWorker({db,crmUrl:'http://crm.test',crmApiKey:'fixture',fallback:{},fetchImpl:async(url,opts)=>{const a=url.split('/').at(-1);if(a==='mirror')mirrored=JSON.parse(opts.body);if(a==='ack-alert')ack++;return {ok:true,json:async()=>a==='mirror'?{taskId:9,state:'queued'}:a==='alerts'?{alerts:[{id:1,eventKey:'same-event',companyCode:'alpha',text:'Нужен ответ'}]}:{ok:true}};}});
+ await api.sync();await api.sync();assert.equal(mirrored.sourceVersion,10);assert.equal(mirrored.companyCode,'alpha');assert.match(mirrored.note,/Уточнение/);assert.equal(db.prepare('SELECT crm_task_id FROM task_dispatch_links').get().crm_task_id,9);assert.equal(db.prepare('SELECT count(*) n FROM hugh_owner_alerts').get().n,1);assert.equal(ack,2);
+});
+test('unknown model actions cannot become server commands',()=>{for(const text of ['{}','{"state":"execute","command":"anything"}','{"state":"review","department":"marketing","result":"ok","url":"https://evil.test"}'])assert.throws(()=>parseDecision(text));});
