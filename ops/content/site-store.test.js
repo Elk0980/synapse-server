@@ -246,3 +246,123 @@ test('ALVI promotion respects custom fields and skips deleted, managed or differ
     assert.deepEqual(db.prepare('SELECT * FROM managed_sites ORDER BY id').all(), before);
   }
 });
+
+const PALITRA_MIGRATION = 'palitra_publication_20261001';
+const PALITRA_URL = 'https://palitra-love.synapsebusiness.ru/';
+const palitraRows = (db) => db.prepare(`SELECT * FROM managed_sites
+  WHERE company_code='palitra-love' OR public_url=? ORDER BY id`).all(PALITRA_URL);
+
+test('new registry lists the working Palitra subdomain once as a published site', (t) => {
+  const {db, owner, open} = fixture(t);
+  const sites = open(); open();
+  const palitra = sites.get(owner, 'palitra-love');
+  assert.equal(palitra.name, 'Palitra');
+  assert.equal(palitra.publicUrl, PALITRA_URL, 'the bought domain awaits DNS and is not claimed');
+  assert.equal(palitra.publicationStatus, 'published');
+  assert.equal(palitra.company.id, 'palitra-love');
+  assert.equal(palitra.isActive, true);
+  assert.deepEqual(palitra.editorUrls, {site: null, price: '/price-editor-palitra.html'});
+  assert.equal(palitra.capabilities.delete, false);
+  assert.deepEqual(palitraRows(db).map(row => row.id), ['palitra-love'], 'no duplicate card');
+  assert.deepEqual(sites.list(owner, {companyCode: 'palitra-love', state: 'published'}).map(site => site.id), ['palitra-love']);
+  assert.deepEqual(sites.list(owner, {companyCode: 'palitra-love', state: 'draft'}), []);
+  assert.ok(db.prepare('SELECT id FROM site_migrations WHERE id=?').get(PALITRA_MIGRATION));
+});
+
+test('Palitra migration publishes the existing draft card once and changes nothing else', (t) => {
+  const {db, owner, open} = fixture(t);
+  open();
+  // Simulate the production registry created from the former draft seed, before this migration.
+  db.prepare('DELETE FROM site_migrations WHERE id=?').run(PALITRA_MIGRATION);
+  db.prepare(`UPDATE managed_sites SET publication_status='draft', is_active=0, created_by=?,
+    created_at='2026-09-10', updated_at='2026-09-28' WHERE id='palitra-love'`).run(owner.id);
+  db.exec('CREATE TABLE documents (key TEXT PRIMARY KEY, body TEXT)');
+  db.prepare('INSERT INTO documents VALUES (?,?)').run('palitra/price', '{"price":"Owner price"}');
+  const documents = db.prepare('SELECT * FROM documents').all();
+  const before = db.prepare('SELECT * FROM managed_sites ORDER BY id').all();
+  const sites = open();
+  for (const row of before) {
+    const after = db.prepare('SELECT * FROM managed_sites WHERE id=?').get(row.id);
+    if (row.id !== 'palitra-love') {
+      assert.deepEqual(after, row, 'other companies and draft collections stay untouched');
+      continue;
+    }
+    assert.deepEqual({...after, updated_at: row.updated_at}, {...row, publication_status: 'published'},
+      'only publication status and its timestamp change');
+    assert.notEqual(after.updated_at, row.updated_at);
+  }
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM managed_sites').get().n, before.length, 'no rows added');
+  assert.deepEqual(palitraRows(db).map(row => row.id), ['palitra-love']);
+  const card = sites.get(owner, 'palitra-love');
+  assert.equal(card.publicUrl, PALITRA_URL);
+  assert.equal(card.isActive, false, 'publication does not silently change activity');
+  assert.equal(card.capabilities.editPrice, true);
+  assert.deepEqual(db.prepare('SELECT * FROM documents').all(), documents);
+  const marker = db.prepare('SELECT * FROM site_migrations WHERE id=?').get(PALITRA_MIGRATION);
+  assert.ok(marker);
+  const rows = db.prepare('SELECT * FROM managed_sites ORDER BY id').all();
+  open(); open();
+  assert.deepEqual(db.prepare('SELECT * FROM managed_sites ORDER BY id').all(), rows,
+    'restarts neither duplicate the card nor rewrite its timestamp');
+  assert.deepEqual(db.prepare('SELECT * FROM site_migrations WHERE id=?').get(PALITRA_MIGRATION), marker);
+});
+
+test('a manual return of Palitra to drafts after migration survives later startups', (t) => {
+  const {db, owner, open} = fixture(t);
+  open();
+  db.prepare("UPDATE managed_sites SET publication_status='draft', updated_at='2026-10-02' WHERE id='palitra-love'").run();
+  const before = db.prepare('SELECT * FROM managed_sites ORDER BY id').all();
+  const sites = open(); open();
+  assert.deepEqual(db.prepare('SELECT * FROM managed_sites ORDER BY id').all(), before);
+  assert.equal(sites.get(owner, 'palitra-love').publicationStatus, 'draft');
+});
+
+test('Palitra migration skips a changed address, deleted, managed or other-company records', (t) => {
+  const {db, open} = fixture(t);
+  open();
+  const reset = (assignments) => {
+    db.prepare(`UPDATE managed_sites SET company_code='palitra-love', source='legacy', deleted_at=NULL,
+      public_url='${PALITRA_URL}', publication_status='draft', ${assignments} WHERE id='palitra-love'`).run();
+    db.prepare('DELETE FROM site_migrations WHERE id=?').run(PALITRA_MIGRATION);
+  };
+  for (const override of ["public_url='https://palitra-love.ru/'", "public_url=NULL", "deleted_at='2026-09-30'",
+    "source='managed'", "company_code='alvi'"]) {
+    reset(override);
+    const before = db.prepare('SELECT * FROM managed_sites ORDER BY id').all();
+    open();
+    assert.deepEqual(db.prepare('SELECT * FROM managed_sites ORDER BY id').all(), before, override);
+    assert.ok(db.prepare('SELECT id FROM site_migrations WHERE id=?').get(PALITRA_MIGRATION), override);
+  }
+});
+
+test('Palitra publication rolls back if its marker cannot be stored, then retries cleanly', (t) => {
+  const {db, owner, open} = fixture(t);
+  open();
+  db.prepare('DELETE FROM site_migrations WHERE id=?').run(PALITRA_MIGRATION);
+  db.prepare("UPDATE managed_sites SET publication_status='draft', updated_at='2026-09-28' WHERE id='palitra-love'").run();
+  const before = db.prepare('SELECT * FROM managed_sites ORDER BY id').all();
+  db.exec(`CREATE TRIGGER palitra_marker_failure BEFORE INSERT ON site_migrations
+    WHEN NEW.id='${PALITRA_MIGRATION}' BEGIN SELECT RAISE(ABORT,'simulated marker failure'); END`);
+  assert.throws(open, /simulated marker failure/);
+  assert.deepEqual(db.prepare('SELECT * FROM managed_sites ORDER BY id').all(), before);
+  assert.equal(db.prepare('SELECT id FROM site_migrations WHERE id=?').get(PALITRA_MIGRATION), undefined);
+  db.exec('DROP TRIGGER palitra_marker_failure');
+  assert.equal(open().get(owner, 'palitra-love').publicationStatus, 'published');
+  assert.ok(db.prepare('SELECT id FROM site_migrations WHERE id=?').get(PALITRA_MIGRATION));
+  assert.deepEqual(palitraRows(db).map(row => row.id), ['palitra-love']);
+});
+
+test('new blank sites of Palitra and other companies are still created as deletable drafts', (t) => {
+  const {db, owner, open} = fixture(t);
+  const sites = open();
+  const store = createSiteStore(db, { audit() {} }, () => {});
+  for (const companyCode of ['palitra-love', 'alvi']) {
+    const created = store.create(owner, {name: `Новый сайт ${companyCode}`, companyCode});
+    assert.equal(created.publicationStatus, 'draft');
+    assert.equal(created.capabilities.delete, true);
+    assert.equal(created.publicUrl, null);
+  }
+  const drafts = sites.list(owner, {companyCode: 'palitra-love', state: 'draft'}).map(site => site.name);
+  assert.deepEqual(drafts, ['Новый сайт palitra-love']);
+  assert.deepEqual(sites.list(owner, {companyCode: 'palitra-love', state: 'published'}).map(site => site.id), ['palitra-love']);
+});
