@@ -52,11 +52,43 @@ test('potential is requested for the selected company and period and rendered as
  }finally{f.dom.window.close();}
 });
 
-test('potential → views is never expressed as a percentage, even for a complete period; later steps still convert',async()=>{
+test('unlinked aggregate stages never claim client conversion, even with complete snapshot coverage',async()=>{
  const views={...empty,sourceStats:[{source:'2gis',external:{pageViews:1000,siteClicks:40},externalCapturedAt:'2026-09-17T09:00:00.000Z',clicks:5,leads:1}]};
  const f=await fixture({dashboard:views,potential:potentialFor('alvi')});
  try{assert.equal(f.conversion(),'Конверсия из предыдущей ступени: — (показатели напрямую не сопоставимы)');
-  assert.match(f.d.querySelectorAll('.funnel-conversion')[2].textContent,/%/,'views → clicks keeps its percentage');}
+  for(const item of f.d.querySelectorAll('.funnel-conversion'))assert.doesNotMatch(item.textContent,/%/);
+  assert.match(f.d.querySelectorAll('.funnel-conversion')[2].textContent,/нет сопоставимой когорты клиентов/);
+  assert.match(f.content(),/могут пересекаться/);}
+ finally{f.dom.window.close();}
+});
+
+test('platform ROMI is recomputed from complete sums, never summed from row percentages',async()=>{
+ const f=await fixture({dashboard:{sourceStats:[
+  {source:'vk',revenue:200,expenses:100,romi:100},
+  {source:'vk-ads',revenue:1800,expenses:900,romi:100}
+ ],revenue:2000,expenses:1000,romi:100},potential:potentialFor('alvi')});
+ try{const row=[...f.d.querySelectorAll('.analytics-source-table tbody tr')].find(r=>r.cells[0].textContent==='ВКонтакте');
+  assert.equal(row.cells[8].textContent,'100%');}
+ finally{f.dom.window.close();}
+});
+
+test('platform ROMI stays unknown for incomplete or invalid bases and distinguishes known zero revenue',async()=>{
+ const cases=[
+  [{revenue:100,expenses:null},'—'],[{revenue:null,expenses:100},'—'],
+  [{revenue:100,expenses:0},'—'],[{revenue:100,expenses:-10},'—'],
+  [{revenue:NaN,expenses:100},'—'],[{revenue:100,expenses:Infinity},'—'],
+  [{revenue:'100',expenses:100},'—'],[{revenue:0,expenses:100},'-100%']
+ ];
+ for(const [base,expected] of cases){
+  const f=await fixture({dashboard:{sourceStats:[{source:'vk',...base,romi:999}],expenses:100},potential:potentialFor('alvi')});
+  try{const row=[...f.d.querySelectorAll('.analytics-source-table tbody tr')].find(r=>r.cells[0].textContent==='ВКонтакте');
+   assert.equal(row.cells[8].textContent,expected,JSON.stringify(base));}
+  finally{f.dom.window.close();}
+ }
+ const f=await fixture({dashboard:{sourceStats:[{source:'vk',revenue:200,expenses:100,romi:100},
+  {source:'vk-ads',revenue:300,expenses:null,romi:null}],expenses:100},potential:potentialFor('alvi')});
+ try{const row=[...f.d.querySelectorAll('.analytics-source-table tbody tr')].find(r=>r.cells[0].textContent==='ВКонтакте');
+  assert.equal(row.cells[8].textContent,'—','one complete row must not hide another incomplete row');}
  finally{f.dom.window.close();}
 });
 
