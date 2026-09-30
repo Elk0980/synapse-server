@@ -162,6 +162,9 @@ services:
       # Команды Хью в группах: имя бота без @ (не секрет) для @упоминаний, публичный адрес кабинета для /content.
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
       CABINET_PUBLIC_URL: ${CABINET_PUBLIC_URL:-}
+      PALITRA_REVIEW_REMINDERS_ENABLED: ${PALITRA_REVIEW_REMINDERS_ENABLED:-false}
+      PALITRA_REVIEW_REMINDER_EVENING: ${PALITRA_REVIEW_REMINDER_EVENING:-}
+      PALITRA_REVIEW_REMINDER_MORNING: ${PALITRA_REVIEW_REMINDER_MORNING:-}
       # Имя клиентского бота Palitra без @ (не секрет): включает диалоги и ссылку «Продолжить в Telegram».
       # Пусто — выключено. Токен бота сюда не передаётся: он только у сервиса chat.
       PALITRA_CLIENT_BOT_USERNAME: ${PALITRA_CLIENT_BOT_USERNAME:-}
