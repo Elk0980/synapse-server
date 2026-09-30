@@ -65,6 +65,24 @@ test('опрос второго бота не захватывает более 
   } finally { t.close(); }
 });
 
+test('новый чек-лист Palitra не появляется и не изменяется в ботах других компаний', () => {
+  const t = fixture();
+  try {
+    const id = Number(t.db.prepare(`INSERT INTO site_orders(site,company_code,request_id,fingerprint,kind,name,phone,phone_normalized,items_json,ip_hash,created_at)
+      VALUES('one','first','fixture-1','hash','request','Тест','1111111111','1111111111','[]','ip','2026-09-30T10:00:00Z')`).run().lastInsertRowid);
+    const row = t.orders.listOrders('one').orders[0]; assert.equal(Object.hasOwn(row, 'checklist'), false);
+    t.orders.renotify('one', id);
+    const [job] = t.dialogs.pendingJobs('one'); const part = job.parts.at(-1);
+    assert.equal(part.params.reply_markup.inline_keyboard.length, 1);
+    assert.doesNotMatch(part.params.text, /ручные отметки/);
+    t.dialogs.acknowledge('one', { jobId: job.id, ok: true, externalMessageIds: ['5000'] });
+    const result = t.dialogs.callback('one', { id: 'fake', from: { id: 111111 }, data: `oc:${id}:photo:1:0`,
+      message: { message_id: 5000, chat: { id: 111111, type: 'private' }, text: part.params.text } });
+    assert.equal(result.answer.showAlert, true); assert.equal(result.edit, null);
+    assert.equal(t.db.prepare('SELECT count(*) AS n FROM site_order_checklist_events').get().n, 0);
+  } finally { t.close(); }
+});
+
 test('истечение аренды одной компании не обрабатывается опросом другой', () => {
   const t = fixture();
   try {

@@ -29,6 +29,50 @@ function fixture({ role = 'owner', company = 'palitra-love' } = {}) {
   return { w, d, views, calls, ctx, state, container: d.getElementById('view'), render: () => views['site-orders'].render(d.getElementById('view'), ctx) };
 }
 
+const checklist = (extra = {}) => ({ items: [
+  { key: 'photo', label: 'Фото готового заказа отправлено', checked: false, revision: 0, actor: null, updatedAt: null, ...extra },
+  { key: 'guide', label: 'Памятка по шарам отправлена', checked: false, revision: 0, actor: null, updatedAt: null }
+], history: [] });
+
+test('чек-лист ЛК: ручная семантика, mark/undo с CSRF, автор и время экранированы, статусы доставки не меняются', async () => {
+  const f = fixture(), rendering = f.render();
+  const row = order(3, 'notified', { notify: { status: 'sent' }, checklist: checklist() });
+  f.calls[0].resolve({ orders: [order(120, 'accepted'), row], recipient: recipient() }); await rendering; await tick();
+  assert.match(f.container.textContent, /Ручная отметка менеджера/); assert.match(f.container.textContent, /Отметьте после отправки клиенту/);
+  assert.equal(f.d.querySelectorAll('[data-checklist-item]').length, 2);
+  const photo = f.d.querySelector('[data-checklist-item="photo"]'); photo.click(); photo.click(); await tick();
+  assert.equal(f.calls.length, 2); assert.equal(f.calls[1].url, '/content/palitra/orders/3/checklist'); assert.equal(f.calls[1].options.method, 'PUT');
+  assert.equal(f.calls[1].options.headers['X-CSRF-Token'], 'csrf-1'); assert.deepEqual(JSON.parse(f.calls[1].options.body), { item: 'photo', checked: true, revision: 0 });
+  const marked = { ...row, checklist: checklist({ checked: true, revision: 1, actor: { type: 'telegram', id: '123456', label: 'Менеджер <b>' }, updatedAt: '2026-09-30T10:00:00Z' }) };
+  marked.checklist.history = [{ key: 'photo', checked: true, actor: marked.checklist.items[0].actor, createdAt: '2026-09-30T10:00:00Z' }];
+  f.calls[1].resolve({ changed: true, order: marked }); await tick();
+  assert.equal(f.d.querySelectorAll('.site-order').length, 2, 'соседние строки сохранены');
+  assert.match(f.d.querySelector('.site-order__check').textContent, /Менеджер <b>/); assert.match(f.d.querySelector('.site-order__check small').textContent, /30\.09\.2026/);
+  assert.equal(f.d.querySelector('.site-order__check b'), null); assert.match(f.d.querySelector('.site-order__checklist details').textContent, /История отметок/);
+  const undo = f.d.querySelector('[data-checklist-item="photo"]'); assert.equal(undo.textContent, 'Снять отметку'); undo.click(); await tick();
+  assert.deepEqual(JSON.parse(f.calls[2].options.body), { item: 'photo', checked: false, revision: 1 });
+  f.calls[2].resolve({ changed: true, order: { ...row, checklist: checklist({ checked: false, revision: 2, actor: { label: 'Владелец' }, updatedAt: '2026-09-30T10:01:00Z' }) } }); await tick();
+  assert.match(f.d.querySelector('.site-order__check small').textContent, /Отметка снята: Владелец/);
+  assert.equal(f.d.querySelector('[data-checklist-item="photo"]').textContent, 'Отметить отправку');
+  assert.match(f.d.querySelectorAll('.site-order')[1].querySelector('.site-order__status').textContent, /Личное уведомление доставлено/);
+  f.w.close();
+});
+
+test('чек-лист409: адресное обновление сохраняет старую строку и не повторяет изменение; ALVI без чек-листа', async () => {
+  const f = fixture(), rendering = f.render(), row = order(3, 'accepted', { checklist: checklist() });
+  f.calls[0].resolve({ orders: [order(200, 'accepted'), row], nextCursor: 2, recipient: recipient() }); await rendering; await tick();
+  f.d.querySelector('[data-checklist-item="photo"]').click(); await tick();
+  f.calls[1].reject(Object.assign(new Error('stale'), { status: 409 })); await tick();
+  assert.equal(f.calls[2].url, '/content/palitra/orders/3/checklist'); assert.equal(f.calls[2].options.method, undefined);
+  f.calls[2].resolve({ order: { ...row, checklist: checklist({ checked: true, revision: 7, actor: { label: 'Другой менеджер' }, updatedAt: '2026-09-30T10:00:00Z' }) } }); await tick();
+  assert.equal(f.calls.length, 3); assert.equal(f.d.querySelectorAll('.site-order').length, 2);
+  assert.match(f.d.querySelector('[data-recipient-status]').textContent, /актуальное состояние/);
+  assert.equal(f.d.querySelector('[data-orders-more]').hidden, false, 'курсор не потерян');
+  f.state.company = 'alvi'; const alvi = f.render();
+  f.calls[3].resolve({ orders: [row], recipient: recipient() }); await alvi; await tick();
+  assert.equal(f.d.querySelector('.site-order__checklist'), null); f.w.close();
+});
+
 test('структурный контакт/доставка и рабочая группа: экранирование, независимое состояние и адресный повтор с CSRF', async () => {
   const f = fixture(), rendering = f.render();
   const row = order(1, 'notified', { phone: '', contactChannel: 'telegram', contact: '@sample_<b>', deliveryAddress: 'Улица <script>bad()</script>',
@@ -165,7 +209,7 @@ test('сохранение получателя: числовой ID, PUT с CSR
   assert.deepEqual(JSON.parse(f.calls[1].options.body), { telegramChatId: '123456789', label: 'Дарья' });
   assert.equal(form.querySelector('button[type=submit]').disabled, true, 'на время запроса форма заблокирована');
   f.calls[1].resolve(recipient({ configured: true, telegramChatId: '123456789', label: 'Дарья', version: 1 })); await tick();
-  assert.match(f.container.textContent, /ещё не подтверждён проверкой/);
+  assert.match(f.container.textContent, /успешной ручной проверки пока нет/);
   assert.match(form.querySelector('[role=status]').textContent, /проверочное сообщение/);
   assert.equal(f.d.querySelector('[data-recipient-test]').hidden, false);
   assert.equal(form.querySelector('button[type=submit]').disabled, false);
@@ -183,11 +227,25 @@ test('проверка получателя: POST test, затем опрос с
   f.d.querySelector('[data-recipient-test]').click(); await wait();
   assert.equal(f.calls[1].url, '/content/palitra/order-recipient/test'); assert.equal(f.calls[1].options.method, 'POST');
   f.calls[1].resolve({ ok: true, jobId: 'order:5', recipient: recipient({ configured: true, telegramChatId: '123456789', version: 1, lastTest: { status: 'pending' } }) }); await wait();
-  assert.match(f.container.textContent, /Проверочное сообщение отправляется/);
+  assert.match(f.container.textContent, /проверочное сообщение отправляется/i);
   assert.equal(f.calls[2].url, '/content/palitra/order-recipient');
   f.calls[2].resolve(recipient({ configured: true, telegramChatId: '123456789', version: 1, lastTestError: "403 — Forbidden: bot can't initiate conversation with a user" })); await wait();
-  assert.match(f.container.textContent, /Проверка не прошла: 403/); assert.match(f.container.textContent, /\/start/);
+  assert.match(f.container.textContent, /Последняя ручная проверка \(дата не сохранена\): не прошла — 403/); assert.match(f.container.textContent, /\/start/);
   assert.equal(f.calls.length, 3, 'после результата опрос остановлен');
+  f.w.close();
+});
+
+test('Palitra: старая ручная проверка с датой отдельно от свежей доставки заявки, без нового тестового сообщения', async () => {
+  const f = fixture(), rendering = f.render();
+  f.calls[0].resolve({ orders: [order(2, 'notified', { notify: { status: 'sent', finishedAt: '2026-09-30T12:47:00Z' } })],
+    recipient: recipient({ configured: true, lastTestError: '403 — bot cannot initiate conversation',
+      lastTest: { status: 'error', createdAt: '2026-09-24T10:00:00Z', finishedAt: '2026-09-24T10:01:00Z' } }) });
+  await rendering; await tick();
+  const summary = f.d.querySelector('[data-recipient-summary]').textContent;
+  assert.match(summary, /Последняя ручная проверка 24\.09\.2026/); assert.match(summary, /не прошла — 403/);
+  assert.match(summary, /Доставка конкретных заявок показана отдельно/); assert.doesNotMatch(summary, /должен|\/start/);
+  assert.match(f.d.querySelector('.site-order__notify').textContent, /Доставлено 30\.09\.2026/);
+  assert.equal(f.calls.length, 1, 'старый результат не запускает отправку или дополнительный опрос');
   f.w.close();
 });
 

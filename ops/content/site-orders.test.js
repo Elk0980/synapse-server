@@ -67,6 +67,51 @@ async function call(chat, { session = null, method = 'GET', url, body: payload }
 const orderRows = (db) => db.prepare('SELECT * FROM site_orders ORDER BY id').all();
 const outboxRows = (db) => db.prepare('SELECT * FROM site_order_outbox ORDER BY id').all();
 const RECIPIENT = { telegramChatId: '123456789', label: 'Дарья' };
+const CHECK_OWNER = { type: 'owner', id: '1', label: 'Владелец' };
+
+test('ручные отметки: значения/автор/время/версия, отмена и аудит атомарны; повтор и stale не меняют состояние', () => {
+  const f = setup(); f.orders.setRecipient(SITE, RECIPIENT);
+  const created = submit(f.orders, body()), id = created.body.orderId;
+  const beforeOrder = orderRows(f.db)[0], beforeJobs = outboxRows(f.db);
+  const initial = f.orders.checklistOrder(SITE, id).order.checklist;
+  assert.deepEqual(initial.items.map((item) => [item.key, item.checked, item.revision, item.actor, item.updatedAt]), [['photo', false, 0, null, null], ['guide', false, 0, null, null]]);
+  assert.equal(f.orders.setChecklist(SITE, id, { item: 'photo', checked: false, revision: 0 }, CHECK_OWNER).changed, false);
+  const marked = f.orders.setChecklist(SITE, id, { item: 'photo', checked: true, revision: 0 }, CHECK_OWNER);
+  assert.equal(marked.changed, true);
+  const photo = marked.order.checklist.items[0];
+  assert.deepEqual([photo.checked, photo.revision, photo.actor], [true, 1, CHECK_OWNER]); assert.ok(photo.updatedAt);
+  f.clock.tick(60000);
+  const again = f.orders.setChecklist(SITE, id, { item: 'photo', checked: true, revision: 0 }, CHECK_OWNER);
+  assert.equal(again.changed, false); assert.deepEqual(again.order.checklist.items[0], photo); assert.equal(again.order.checklist.history.length, 1);
+  assert.throws(() => f.orders.setChecklist(SITE, id, { item: 'photo', checked: false, revision: 0 }, CHECK_OWNER), (e) => e.status === 409);
+  const undone = f.orders.setChecklist(SITE, id, { item: 'photo', checked: false, revision: 1 }, CHECK_OWNER);
+  assert.deepEqual([undone.order.checklist.items[0].checked, undone.order.checklist.items[0].revision], [false, 2]);
+  assert.notEqual(undone.order.checklist.items[0].updatedAt, photo.updatedAt);
+  assert.deepEqual(undone.order.checklist.history.map((event) => event.checked), [false, true]);
+  assert.throws(() => f.orders.setChecklist(SITE, id, { item: 'photo', checked: true, revision: 0 }, CHECK_OWNER), (e) => e.status === 409, 'старое нажатие после отмены не восстанавливает отметку');
+  const operator = { type: 'telegram', id: '555555555', label: 'Менеджер' };
+  const guide = f.orders.setChecklist(SITE, id, { item: 'guide', checked: true, revision: 0 }, operator);
+  assert.deepEqual(guide.order.checklist.items[1].actor, operator); assert.equal(guide.order.checklist.items[0].revision, 2);
+  assert.throws(() => f.orders.setChecklist(SITE, id, { item: 'guide', checked: true, revision: 0 }, CHECK_OWNER), (e) => e.status === 409, 'чужой replay не переписывает автора');
+  assert.deepEqual(orderRows(f.db)[0], beforeOrder); assert.deepEqual(outboxRows(f.db), beforeJobs);
+  assert.equal(f.orders.orderSummary(SITE, id).work.status, 'new');
+  f.db.exec("CREATE TRIGGER fail_checklist BEFORE INSERT ON site_order_checklist_events BEGIN SELECT RAISE(ABORT,'synthetic audit failure'); END");
+  assert.throws(() => f.orders.setChecklist(SITE, id, { item: 'photo', checked: true, revision: 2 }, CHECK_OWNER), /synthetic audit failure/);
+  assert.equal(f.orders.checklistOrder(SITE, id).order.checklist.items[0].revision, 2, 'сбой аудита откатил состояние');
+});
+
+test('чек-лист: неизвестные поля, подмена автора и неподдерживаемый сайт отклоняются', () => {
+  const f = setup(), id = submit(f.orders, body()).body.orderId;
+  for (const data of [{ item: 'x', checked: true, revision: 0 }, { item: 'photo', checked: 1, revision: 0 }, { item: 'photo', checked: true, revision: -1 },
+    { item: 'photo', checked: true, revision: 0, actor: CHECK_OWNER }, null, []]) {
+    assert.throws(() => f.orders.setChecklist(SITE, id, data, CHECK_OWNER), (e) => e.status === 400);
+  }
+  assert.throws(() => f.orders.setChecklist(SITE, id, { item: 'photo', checked: true, revision: 0 }, { type: 'client', id: 1 }), (e) => e.status === 400);
+  assert.throws(() => f.orders.setChecklist(SITE, 999, { item: 'photo', checked: true, revision: 0 }, CHECK_OWNER), (e) => e.status === 404);
+  assert.throws(() => f.orders.checklistOrder(SITE, 999), (e) => e.status === 404);
+  assert.throws(() => f.orders.setChecklist('alvi', id, { item: 'photo', checked: true, revision: 0 }, CHECK_OWNER), (e) => e.status === 404);
+  assert.equal(f.db.prepare('SELECT count(*) AS n FROM site_order_checklist_events').get().n, 0);
+});
 const modern = (extra = {}) => body({ phone: '', contactChannel: 'telegram', contact: '@sample_user', telegramUsername: 'sample_user',
   deliveryAddress: 'Тестовая улица, 1', deliveryDate: '2026-10-01', deliveryInterval: '12:00–15:00', ...extra });
 const bindGroup = async (f, id = '-1001') => {

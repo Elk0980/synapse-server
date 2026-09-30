@@ -623,15 +623,17 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
     parts: JSON.parse(row.parts).map(({ method, params }) => ({ method, params })), after: JSON.parse(row.after) });
   function orderJobView(job, bot) {
     const summary = job.orderKind === 'order' ? siteOrders.orderSummary(bot.site, job.orderId) : null;
-    const text = summary ? `${job.text}\n\nСтатус обработки: ${WORK_LABELS[summary.work.status]}` : job.text;
+    const text = summary ? `${job.text}${summary.checklist ? '\n\nФото и памятка — ручные отметки менеджера.' : ''}\n\nСтатус обработки: ${WORK_LABELS[summary.work.status]}` : job.text;
     const parts = textParts(job.chatId, text);
-    if (summary) parts[parts.length - 1].params.reply_markup = keyboard(summary.id);
+    if (summary) parts[parts.length - 1].params.reply_markup = keyboard(summary.id, summary.checklist);
     return { id: job.id, kind: 'order', parts, after: [] };
   }
-  const keyboard = (orderId) => ({ inline_keyboard: [[
+  const keyboard = (orderId, checklist) => ({ inline_keyboard: [[
     { text: 'В работе', callback_data: `ow:${orderId}:in_work` },
     { text: 'Выполнена', callback_data: `ow:${orderId}:done` },
-    { text: 'Отмена', callback_data: `ow:${orderId}:cancelled` }]] });
+    { text: 'Отмена', callback_data: `ow:${orderId}:cancelled` }],
+    ...(checklist?.items || []).map((item) => [{ text: `${item.key === 'photo' ? 'Фото' : 'Памятка'}: ${item.checked ? '✓ · снять отметку' : 'отметить отправку'}`,
+      callback_data: `oc:${orderId}:${item.key}:${item.checked ? 0 : 1}:${item.revision}` }])] });
   function pendingJobs(key) {
     const bot = requireBot(key);
     return tx(() => {
@@ -722,6 +724,27 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
     const operator = activeOperator(key);
     const answer = (text, showAlert = false) => ({ ok: true, answer: { text, showAlert }, edit: null });
     if (!operator || operator.telegram_user_id !== fromId) return answer('Кнопка доступна только менеджеру', true);
+    const check = /^oc:(\d{1,12}):(photo|guide):([01]):(\d{1,12})$/.exec(String(query.data || ''));
+    if (check) {
+      const orderId = Number(check[1]), chatId = idOf(query.message?.chat?.id), messageId = positive(query.message?.message_id);
+      const mapped = db.prepare('SELECT order_id FROM client_bot_map WHERE bot_key=? AND chat_id=? AND message_id=?').get(key, chatId, messageId);
+      if (query.message?.chat?.type !== 'private' || chatId !== operator.telegram_user_id || mapped?.order_id !== orderId) return answer('Сообщение не связано с этой заявкой', true);
+      const refresh = (text, showAlert = false) => {
+        const summary = siteOrders.orderSummary(bot.site, orderId);
+        const original = typeof query.message?.text === 'string' ? query.message.text : '';
+        return { ok: true, answer: { text, showAlert }, edit: summary?.checklist && original
+          ? { chatId, messageId, text: original, replyMarkup: keyboard(orderId, summary.checklist) } : null };
+      };
+      try {
+        const result = siteOrders.setChecklist(bot.site, orderId, { item: check[2], checked: check[3] === '1', revision: Number(check[4]) },
+          { type: 'telegram', id: fromId, label: siteOrders.recipientStatus(bot.site).label || 'Менеджер в Telegram' });
+        return refresh(result.changed ? (check[3] === '1' ? 'Ручная отметка сохранена' : 'Ручная отметка снята') : 'Отметка уже сохранена');
+      } catch (error) {
+        if (error.status === 409) return refresh('Отметка уже изменена. Кнопки обновлены — проверьте состояние.', true);
+        if (error.status === 404) return answer('Чек-лист заявки недоступен', true);
+        throw error;
+      }
+    }
     const match = /^ow:(\d{1,12}):(in_work|done|cancelled)$/.exec(String(query.data || ''));
     if (!match) return answer('Неизвестная кнопка');
     const orderId = Number(match[1]), status = match[2];
@@ -733,7 +756,7 @@ function createClientDialogs({ db, assetsDir, siteOrders, bots = {}, now = Date.
     const chatId = idOf(query.message?.chat?.id), messageId = positive(query.message?.message_id);
     const original = typeof query.message?.text === 'string' ? query.message.text.replace(/\n\nСтатус обработки: [^\n]*$/u, '') : '';
     const edit = result.changed && chatId === operator.telegram_user_id && messageId && original
-      ? { chatId, messageId, text: `${original}\n\nСтатус обработки: ${label}`.slice(0, 4096), replyMarkup: keyboard(orderId) } : null;
+      ? { chatId, messageId, text: `${original}\n\nСтатус обработки: ${label}`.slice(0, 4096), replyMarkup: keyboard(orderId, siteOrders.orderSummary(bot.site, orderId)?.checklist) } : null;
     return { ok: true, answer: { text: result.changed ? `Статус: ${label}` : `Уже: ${label}`, showAlert: false }, edit };
   }
 

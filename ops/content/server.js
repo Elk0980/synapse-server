@@ -1202,6 +1202,11 @@ const server = http.createServer(async (request, response) => {
       }
       if (parts[2] === 'orders' && parts.length === 5 && parts[4] === 'renotify' && request.method === 'POST') return reply(202, orders.renotify(site, parts[3]), headers);
       if (parts[2] === 'orders' && parts.length === 5 && parts[4] === 'renotify-group' && request.method === 'POST') return reply(202, orders.renotify(site, parts[3], 'group'), headers);
+      if (parts[2] === 'orders' && parts.length === 5 && parts[4] === 'checklist') {
+        if (request.method === 'GET') return reply(200, orders.checklistOrder(site, parts[3]), headers);
+        if (request.method === 'PUT') return reply(200, orders.setChecklist(site, parts[3], await readJson(request),
+          { type: 'owner', id: session.user.id, label: session.user.displayName || session.user.login }), headers);
+      }
       if (parts[2] === 'order-recipient' && parts.length === 3 && request.method === 'GET') return reply(200, orders.recipientStatus(site), headers);
       if (parts[2] === 'order-recipient' && parts.length === 3 && request.method === 'PUT') return reply(200, orders.setRecipient(site, await readJson(request)), headers);
       if (parts[2] === 'order-recipient' && parts.length === 4 && parts[3] === 'test' && request.method === 'POST') return reply(202, orders.testRecipient(site), headers);

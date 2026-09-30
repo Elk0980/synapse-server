@@ -28,3 +28,17 @@
 .site-orders__more button { min-height: 44px; }
 .site-orders__more button[hidden] { display: none; }
 .site-orders__more p { margin: 0; color: var(--muted, #6b6f6a); font-size: 14px; }
+.site-order__checklist { display: grid; gap: 10px; margin-top: 8px; padding: 12px; border: 1px solid var(--line, #d3d7d2); border-radius: 10px; }
+.site-order__checklist h3, .site-order__check-hint { margin: 0; }
+.site-order__checklist h3 { font-size: 15px; }
+.site-order__check-hint, .site-order__check small { color: var(--muted, #6b6f6a); font-size: 13px; }
+.site-order__check { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; }
+.site-order__check span, .site-order__check small { overflow-wrap: anywhere; }
+.site-order__check small { grid-column: 1; }
+.site-order__check button { grid-column: 2; grid-row: 1 / 3; min-height: 44px; }
+.site-order__checklist details { font-size: 13px; overflow-wrap: anywhere; }
+.site-order__checklist summary { cursor: pointer; }
+@media (max-width: 520px) {
+  .site-order__check { grid-template-columns: minmax(0, 1fr); }
+  .site-order__check button { grid-column: 1; grid-row: auto; justify-self: start; }
+}
