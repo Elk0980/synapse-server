@@ -14,7 +14,7 @@ const catalogLive = require('./assets/catalog-live.js');
 
 const read = (file) => fs.readFileSync(path.join(__dirname, file), 'utf8');
 const css = read('assets/styles.css');
-const renderer = () => { const window = {}; vm.runInNewContext(read('price-render.js'), { window }); return window.PalitraPrice; };
+const renderer = () => { const window = { PalitraPriceFormat: require('./assets/price-format.js') }; vm.runInNewContext(read('price-render.js'), { window }); return window.PalitraPrice; };
 const PRICE = { version: 3, categories: [
   { id: 'bukety', title: 'Букеты', items: [
     { id: 'b-1', title: 'Букет из хризантем', price: '3 290 руб.', desc: 'Нежный букет.', note: 'Цена из публикации от 07.05.2026; актуальность уточняется при заказе.', photo: '/api/assets/a.jpg' },
@@ -84,6 +84,7 @@ test('каталог (настоящая страница, общий ренде
   const win = dom.window;
   win.PALITRA_CONFIG = { SITE_URL: win.location.origin };
   win.eval(read('assets/app.js'));
+  win.eval(read('assets/price-format.js'));
   win.eval(read('price-render.js'));
   win.PalitraPrice.load = async () => PRICE;
   await catalogLive.mount(win);
@@ -97,7 +98,7 @@ test('каталог (настоящая страница, общий ренде
     assert.equal(card.querySelectorAll('a').length, 0, 'ссылок (Telegram, заявка) в карточке нет');
     assert.doesNotMatch(card.textContent, /публикации|актуальност/);
   }
-  assert.equal(cards[0].querySelector('.price').textContent, '3 290 руб.');
+  assert.equal(cards[0].querySelector('.price').textContent, '3 290 ₽');
   assert.equal(cards[0].querySelector('.price').dataset.priceKnown, 'true');
   assert.equal(cards[1].querySelector('.price').textContent, 'Цена уточняется');
   assert.equal(cards[1].querySelector('.price').dataset.priceKnown, 'false');

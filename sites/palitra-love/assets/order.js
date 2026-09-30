@@ -12,10 +12,10 @@
    - изменения корзины во время отправки не блокируются: после успеха из корзины вычитается
      только отправленный снимок, добавленное за это время остаётся. */
 (function (root, factory) {
-  const api = factory();
+  const api = factory(typeof module === 'object' && module.exports ? require('./price-format.js') : root.PalitraPriceFormat);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else api.mount(root);
-}(typeof window === 'undefined' ? null : window, function () {
+}(typeof window === 'undefined' ? null : window, function (priceFormat) {
   'use strict';
   const CART_KEY = 'palitra-cart-v1';
   const REQUEST_KEY = 'palitra-order-request-v1';
@@ -107,7 +107,8 @@
     const index = new Map();
     for (const category of (data && data.categories) || []) {
       for (const item of category.items || []) {
-        if (item && typeof item.id === 'string' && !index.has(item.id)) index.set(item.id, { title: item.title || item.id, price: parsePrice(item.price) });
+        if (item && typeof item.id === 'string' && !index.has(item.id)) index.set(item.id, { title: item.title || item.id, price: parsePrice(item.price),
+          priceText: priceFormat ? priceFormat.format(item.price) : String(item.price ?? '').trim() });
       }
     }
     return index;
@@ -119,7 +120,7 @@
     const kopecks = Number((match[2] || '0').padEnd(2, '0'));
     return Number.isSafeInteger(rubles) ? rubles * 100 + kopecks : null;
   }
-  const formatRub = (kopecks) => `${Math.floor(kopecks / 100).toLocaleString('ru-RU')}${kopecks % 100 ? `,${String(kopecks % 100).padStart(2, '0')}` : ''} ₽`;
+  const formatRub = priceFormat?.formatRub || ((kopecks) => `${Math.floor(kopecks / 100).toLocaleString('ru-RU')}${kopecks % 100 ? `,${String(kopecks % 100).padStart(2, '0')}` : ''} ₽`);
   /* Строки корзины с названиями и ценами прайса. Без загруженного прайса ничего не помечается
      удалённым; после загрузки отсутствующие позиции помечаются, а не выбрасываются молча. */
   function describe(items, index) {
@@ -130,7 +131,7 @@
       if (!entry) { missing += 1; return { ...item, title: item.id, price: null, missing: true, pending: false }; }
       if (entry.price === null) unknown += 1;
       else known += entry.price * item.qty;
-      return { ...item, title: entry.title, price: entry.price, missing: false, pending: false };
+      return { ...item, title: entry.title, price: entry.price, priceText: entry.priceText, missing: false, pending: false };
     });
     return { lines, knownTotal: known, unknownCount: unknown, missingCount: missing, ready: Boolean(index) };
   }
@@ -368,7 +369,7 @@
         if (summary) summary.textContent = '';
       } else {
         list.innerHTML = view.lines.map((line) => `<div class="cart-line${line.missing ? ' cart-line--missing' : ''}${line.pending ? ' cart-line--pending' : ''}" data-cart-line="${esc(line.id)}">
-          <div class="cart-line__info"><b>${line.pending ? 'Позиция прайса' : esc(line.title)}</b><span>${line.pending ? (priceState === 'error' ? 'Прайс не загружен' : 'Загружаем прайс…') : line.missing ? 'Позиция сейчас недоступна — удалите её' : line.price === null ? 'Цена уточняется' : `${formatRub(line.price)} × ${line.qty} = ${formatRub(line.price * line.qty)}`}</span></div>
+          <div class="cart-line__info"><b>${line.pending ? 'Позиция прайса' : esc(line.title)}</b><span>${line.pending ? (priceState === 'error' ? 'Прайс не загружен' : 'Загружаем прайс…') : line.missing ? 'Позиция сейчас недоступна — удалите её' : line.price === null ? esc(line.priceText || 'Цена уточняется') : `${formatRub(line.price)} × ${line.qty} = ${formatRub(line.price * line.qty)}`}</span></div>
           <div class="cart-line__qty"><button type="button" data-qty-dec aria-label="Меньше">−</button><span aria-live="polite">${line.qty}</span><button type="button" data-qty-inc aria-label="Больше">+</button><button type="button" class="cart-line__remove" data-remove aria-label="Удалить">Удалить</button></div>
         </div>`).join('');
         if (total) total.textContent = view.ready && view.knownTotal ? formatRub(view.knownTotal) : '—';
