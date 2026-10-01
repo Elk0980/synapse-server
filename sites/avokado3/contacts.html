@@ -48,10 +48,10 @@
     <p class="av-callback-intro">Оставьте номер — администратор свяжется с вами.</p>
     <form data-callback-form aria-labelledby="callback-heading" action="/api/leads" method="post" hidden>
       <fieldset>
-        <label for="callback-name">Ваше имя<input id="callback-name" name="name" type="text" autocomplete="name" maxlength="80" required></label>
-        <label for="callback-contact">Телефон<input id="callback-contact" name="contact" type="tel" inputmode="tel" autocomplete="tel" maxlength="32" required></label>
+        <label for="callback-name">Ваше имя<input id="callback-name" class="ym-disable-keys ym-hide-content" name="name" type="text" autocomplete="name" maxlength="80" required></label>
+        <label for="callback-contact">Телефон<input id="callback-contact" class="ym-disable-keys ym-hide-content" name="contact" type="tel" inputmode="tel" autocomplete="tel" maxlength="32" required></label>
         <label class="av-callback-comment-toggle av-callback-wide"><input name="addComment" type="checkbox" aria-controls="callback-comment-field" aria-expanded="false"><span>Добавить комментарий</span></label>
-        <label class="av-callback-comment av-callback-wide" id="callback-comment-field" for="callback-comment" hidden>Комментарий · необязательно<textarea id="callback-comment" name="comment" rows="2" maxlength="1000" disabled></textarea></label>
+        <label class="av-callback-comment av-callback-wide" id="callback-comment-field" for="callback-comment" hidden>Комментарий · необязательно<textarea id="callback-comment" class="ym-disable-keys ym-hide-content" name="comment" rows="2" maxlength="1000" disabled></textarea></label>
         <label class="av-callback-consent av-callback-wide" for="callback-consent"><input id="callback-consent" name="consent" type="checkbox" required><span>Я даю <a href="consent.html" target="_blank" rel="noopener">согласие на обработку персональных данных</a> и ознакомлен(а) с <a href="privacy.html" target="_blank" rel="noopener">политикой конфиденциальности</a>.</span></label>
       </fieldset>
       <button type="submit">Заказать обратный звонок</button>
@@ -82,7 +82,7 @@
     Иркутск, ул. Красноказачья, 84 · ежедневно 09:00–21:00
   </div>
 </main>
-<script src="attribution.js?v=20260919-metrika"></script>
-<script src="callback.js?v=20260917-comment"></script><script src="https://synapse.synapsebusiness.ru/company-links.js?v=20260915-crm-links"></script>
+<script src="attribution.js?v=20261001-goals"></script>
+<script src="callback.js?v=20261001-goals"></script><script src="https://synapse.synapsebusiness.ru/company-links.js?v=20260915-crm-links"></script>
 </body>
 </html>

@@ -175,6 +175,7 @@ test('аналитика не обрывает атрибуцию: start раз�
     addEventListener: () => {}
   };
   const win = {
+    addEventListener() {},
     navigator: {},
     location: new URL('https://avokado38.ru/index.html?utm_source=vk'),
     document: doc,
