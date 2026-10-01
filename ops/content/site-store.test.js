@@ -249,15 +249,17 @@ test('ALVI promotion respects custom fields and skips deleted, managed or differ
 
 const PALITRA_MIGRATION = 'palitra_publication_20261001';
 const PALITRA_URL = 'https://palitra-love.synapsebusiness.ru/';
+const PALITRA_DOMAIN_MIGRATION = 'palitra_domain_url_20261001';
+const PALITRA_DOMAIN_URL = 'https://palitra-love.ru/';
 const palitraRows = (db) => db.prepare(`SELECT * FROM managed_sites
   WHERE company_code='palitra-love' OR public_url=? ORDER BY id`).all(PALITRA_URL);
 
-test('new registry lists the working Palitra subdomain once as a published site', (t) => {
+test('new registry lists Palitra once as a published site at its bought domain', (t) => {
   const {db, owner, open} = fixture(t);
   const sites = open(); open();
   const palitra = sites.get(owner, 'palitra-love');
   assert.equal(palitra.name, 'Palitra');
-  assert.equal(palitra.publicUrl, PALITRA_URL, 'the bought domain awaits DNS and is not claimed');
+  assert.equal(palitra.publicUrl, PALITRA_DOMAIN_URL);
   assert.equal(palitra.publicationStatus, 'published');
   assert.equal(palitra.company.id, 'palitra-love');
   assert.equal(palitra.isActive, true);
@@ -267,6 +269,22 @@ test('new registry lists the working Palitra subdomain once as a published site'
   assert.deepEqual(sites.list(owner, {companyCode: 'palitra-love', state: 'published'}).map(site => site.id), ['palitra-love']);
   assert.deepEqual(sites.list(owner, {companyCode: 'palitra-love', state: 'draft'}), []);
   assert.ok(db.prepare('SELECT id FROM site_migrations WHERE id=?').get(PALITRA_MIGRATION));
+  assert.ok(db.prepare('SELECT id FROM site_migrations WHERE id=?').get(PALITRA_DOMAIN_MIGRATION));
+});
+
+test('a new registry gets the Palitra domain from the seed, without an address migration', (t) => {
+  const template = fixture(t);
+  template.open();
+  const {db, open} = fixture(t);
+  // Same schema as the store creates, plus a probe that records any later address rewrite.
+  for (const {sql} of template.db.prepare(`SELECT sql FROM sqlite_master
+    WHERE type='table' AND name IN ('managed_sites','site_migrations')`).all()) db.exec(sql);
+  db.exec(`CREATE TABLE address_rewrites (old TEXT, new TEXT);
+    CREATE TRIGGER palitra_address_probe AFTER UPDATE OF public_url ON managed_sites WHEN NEW.id='palitra-love'
+    BEGIN INSERT INTO address_rewrites VALUES (OLD.public_url, NEW.public_url); END`);
+  open(); open();
+  assert.deepEqual(db.prepare('SELECT * FROM address_rewrites').all(), []);
+  assert.equal(db.prepare("SELECT public_url FROM managed_sites WHERE id='palitra-love'").get().public_url, PALITRA_DOMAIN_URL);
 });
 
 test('Palitra migration publishes the existing draft card once and changes nothing else', (t) => {
@@ -274,8 +292,9 @@ test('Palitra migration publishes the existing draft card once and changes nothi
   open();
   // Simulate the production registry created from the former draft seed, before this migration.
   db.prepare('DELETE FROM site_migrations WHERE id=?').run(PALITRA_MIGRATION);
-  db.prepare(`UPDATE managed_sites SET publication_status='draft', is_active=0, created_by=?,
-    created_at='2026-09-10', updated_at='2026-09-28' WHERE id='palitra-love'`).run(owner.id);
+  // The later domain migration is already marked here, so this test isolates the publication step.
+  db.prepare(`UPDATE managed_sites SET publication_status='draft', is_active=0, created_by=?, public_url=?,
+    created_at='2026-09-10', updated_at='2026-09-28' WHERE id='palitra-love'`).run(owner.id, PALITRA_URL);
   db.exec('CREATE TABLE documents (key TEXT PRIMARY KEY, body TEXT)');
   db.prepare('INSERT INTO documents VALUES (?,?)').run('palitra/price', '{"price":"Owner price"}');
   const documents = db.prepare('SELECT * FROM documents').all();
@@ -339,7 +358,8 @@ test('Palitra publication rolls back if its marker cannot be stored, then retrie
   const {db, owner, open} = fixture(t);
   open();
   db.prepare('DELETE FROM site_migrations WHERE id=?').run(PALITRA_MIGRATION);
-  db.prepare("UPDATE managed_sites SET publication_status='draft', updated_at='2026-09-28' WHERE id='palitra-love'").run();
+  db.prepare(`UPDATE managed_sites SET publication_status='draft', public_url=?, updated_at='2026-09-28'
+    WHERE id='palitra-love'`).run(PALITRA_URL);
   const before = db.prepare('SELECT * FROM managed_sites ORDER BY id').all();
   db.exec(`CREATE TRIGGER palitra_marker_failure BEFORE INSERT ON site_migrations
     WHEN NEW.id='${PALITRA_MIGRATION}' BEGIN SELECT RAISE(ABORT,'simulated marker failure'); END`);
@@ -365,4 +385,118 @@ test('new blank sites of Palitra and other companies are still created as deleta
   const drafts = sites.list(owner, {companyCode: 'palitra-love', state: 'draft'}).map(site => site.name);
   assert.deepEqual(drafts, ['Новый сайт palitra-love']);
   assert.deepEqual(sites.list(owner, {companyCode: 'palitra-love', state: 'published'}).map(site => site.id), ['palitra-love']);
+});
+
+// --- Palitra on its bought domain: the existing legacy card changes address once ---------------
+const allSites = (db) => db.prepare('SELECT * FROM managed_sites ORDER BY id').all();
+const domainMarker = (db) => db.prepare('SELECT * FROM site_migrations WHERE id=?').get(PALITRA_DOMAIN_MIGRATION);
+// Production as left by PR435: published legacy card at the subdomain, the domain step not yet applied.
+function productionAfterPublication(db, open, assignments = '') {
+  open();
+  db.prepare('DELETE FROM site_migrations WHERE id=?').run(PALITRA_DOMAIN_MIGRATION);
+  db.prepare(`UPDATE managed_sites SET public_url=?, publication_status='published', updated_at='2026-10-01'
+    ${assignments} WHERE id='palitra-love'`).run(PALITRA_URL);
+}
+
+test('Palitra domain migration changes only the subdomain address of the existing card, once', (t) => {
+  const {db, owner, open} = fixture(t);
+  productionAfterPublication(db, open, ", is_active=0, created_by=1, created_at='2026-09-10'");
+  db.exec('CREATE TABLE documents (key TEXT PRIMARY KEY, body TEXT)');
+  db.prepare('INSERT INTO documents VALUES (?,?)').run('palitra/price', '{"price":"Owner price"}');
+  const documents = db.prepare('SELECT * FROM documents').all();
+  const before = allSites(db);
+  const sites = open();
+  for (const row of before) {
+    const after = db.prepare('SELECT * FROM managed_sites WHERE id=?').get(row.id);
+    if (row.id !== 'palitra-love') {
+      assert.deepEqual(after, row, 'other sites keep owner and custom addresses');
+      continue;
+    }
+    assert.deepEqual({...after, updated_at: row.updated_at}, {...row, public_url: PALITRA_DOMAIN_URL},
+      'status, activity, editors, author and creation time are kept');
+    assert.notEqual(after.updated_at, row.updated_at);
+  }
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM managed_sites').get().n, before.length, 'no second site');
+  assert.deepEqual(db.prepare("SELECT id FROM managed_sites WHERE company_code='palitra-love'").all().map(r => r.id),
+    ['palitra-love']);
+  const card = sites.get(owner, 'palitra-love');
+  assert.equal(card.publicUrl, PALITRA_DOMAIN_URL);
+  assert.equal(card.publicationStatus, 'published');
+  assert.equal(card.capabilities.delete, false);
+  assert.deepEqual(db.prepare('SELECT * FROM documents').all(), documents, 'content and prices untouched');
+  const marker = domainMarker(db);
+  assert.ok(marker);
+  const rows = allSites(db);
+  open(); open();
+  assert.deepEqual(allSites(db), rows, 'restarts change nothing, not even timestamps');
+  assert.deepEqual(domainMarker(db), marker);
+});
+
+test('Palitra domain migration keeps a manually chosen draft status', (t) => {
+  const {db, owner, open} = fixture(t);
+  productionAfterPublication(db, open, ", publication_status='draft'");
+  const sites = open();
+  const card = sites.get(owner, 'palitra-love');
+  assert.equal(card.publicUrl, PALITRA_DOMAIN_URL);
+  assert.equal(card.publicationStatus, 'draft');
+});
+
+test('a registry from before PR435 is published first and then moved to the domain', (t) => {
+  const {db, owner, open} = fixture(t);
+  open();
+  db.prepare('DELETE FROM site_migrations WHERE id IN (?, ?)').run(PALITRA_MIGRATION, PALITRA_DOMAIN_MIGRATION);
+  db.prepare(`UPDATE managed_sites SET public_url=?, publication_status='draft' WHERE id='palitra-love'`).run(PALITRA_URL);
+  const card = open().get(owner, 'palitra-love');
+  assert.equal(card.publicationStatus, 'published');
+  assert.equal(card.publicUrl, PALITRA_DOMAIN_URL);
+  assert.ok(db.prepare('SELECT id FROM site_migrations WHERE id=?').get(PALITRA_MIGRATION));
+  assert.ok(domainMarker(db));
+});
+
+test('Palitra domain migration skips a custom address, deleted, managed or other-company records', (t) => {
+  const {db, open} = fixture(t);
+  open();
+  for (const override of ["public_url='https://example.com/palitra/'", 'public_url=NULL',
+    "public_url='https://palitra-love.synapsebusiness.ru'", "deleted_at='2026-09-30'",
+    "source='managed'", "company_code='alvi'"]) {
+    db.prepare(`UPDATE managed_sites SET company_code='palitra-love', source='legacy', deleted_at=NULL,
+      public_url=?, ${override} WHERE id='palitra-love'`).run(PALITRA_URL);
+    db.prepare('DELETE FROM site_migrations WHERE id=?').run(PALITRA_DOMAIN_MIGRATION);
+    const before = allSites(db);
+    open();
+    assert.deepEqual(allSites(db), before, override);
+    assert.ok(domainMarker(db), override);
+  }
+});
+
+test('documented rollback returns the card to the subdomain and later startups keep it', (t) => {
+  const {db, owner, open} = fixture(t);
+  productionAfterPublication(db, open);
+  open();
+  const marker = domainMarker(db);
+  // Exact rollback statement from PUBLIC_URL_MIGRATION_20261001.md; the marker stays on purpose.
+  const rollback = db.prepare(`UPDATE managed_sites SET public_url='https://palitra-love.synapsebusiness.ru/', updated_at=?
+    WHERE id='palitra-love' AND company_code='palitra-love' AND source='legacy' AND deleted_at IS NULL
+      AND public_url='https://palitra-love.ru/'`).run('2026-10-02T00:00:00.000Z');
+  assert.equal(rollback.changes, 1);
+  const before = allSites(db);
+  const sites = open(); open();
+  assert.deepEqual(allSites(db), before);
+  assert.equal(sites.get(owner, 'palitra-love').publicUrl, PALITRA_URL);
+  assert.equal(sites.get(owner, 'palitra-love').publicationStatus, 'published');
+  assert.deepEqual(domainMarker(db), marker);
+});
+
+test('Palitra domain migration rolls back if its marker cannot be stored, then retries cleanly', (t) => {
+  const {db, owner, open} = fixture(t);
+  productionAfterPublication(db, open);
+  const before = allSites(db);
+  db.exec(`CREATE TRIGGER palitra_domain_marker_failure BEFORE INSERT ON site_migrations
+    WHEN NEW.id='${PALITRA_DOMAIN_MIGRATION}' BEGIN SELECT RAISE(ABORT,'simulated marker failure'); END`);
+  assert.throws(open, /simulated marker failure/);
+  assert.deepEqual(allSites(db), before);
+  assert.equal(domainMarker(db), undefined);
+  db.exec('DROP TRIGGER palitra_domain_marker_failure');
+  assert.equal(open().get(owner, 'palitra-love').publicUrl, PALITRA_DOMAIN_URL);
+  assert.ok(domainMarker(db));
 });

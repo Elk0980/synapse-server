@@ -24,7 +24,7 @@ const LEGACY_SITES = [
   ['avokado3', 'avokado', 'АВОКАДО — основной сайт', 'published', 'https://avokado38.ru/', 'avokado3',
     '/site-editor.html?site=avokado3', '/price-editor.html?site=avokado'],
   ['palitra-love', 'palitra-love', 'Palitra', 'published',
-    'https://palitra-love.synapsebusiness.ru/', 'palitra', null, '/price-editor-palitra.html'],
+    'https://palitra-love.ru/', 'palitra', null, '/price-editor-palitra.html'],
 ];
 
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
@@ -94,7 +94,7 @@ function createSiteStore(db, authStore, saveDocument) {
           OR public_url='https://alvi.synapsebusiness.ru/')`).run(publicationStamp);
     db.prepare('INSERT INTO site_migrations (id, applied_at) VALUES (?, ?)').run(migration, publicationStamp);
   });
-  // Publish the working Palitra subdomain once. The bought domain still awaits DNS and is not claimed:
+  // Publish the working Palitra subdomain once (01.10.2026, before the bought domain was live):
   // a card whose address was changed is left alone, as are deleted, managed or other-company records.
   transaction(db, () => {
     const migration = 'palitra_publication_20261001';
@@ -105,6 +105,19 @@ function createSiteStore(db, authStore, saveDocument) {
         AND public_url='https://palitra-love.synapsebusiness.ru/' AND publication_status<>'published'`)
       .run(publicationStamp);
     db.prepare('INSERT INTO site_migrations (id, applied_at) VALUES (?, ?)').run(migration, publicationStamp);
+  });
+  // Palitra moved to its bought domain (DNS, HTTPS and the site were checked live on 01.10.2026).
+  // Only the subdomain address of the existing legacy card changes, once. Status, editors, activity,
+  // a custom address, deleted, managed and other-company records stay as they are; a later manual
+  // change — including a return to the subdomain — survives restarts because the marker stays.
+  transaction(db, () => {
+    const migration = 'palitra_domain_url_20261001';
+    if (db.prepare('SELECT id FROM site_migrations WHERE id=?').get(migration)) return;
+    const stamp = new Date().toISOString();
+    db.prepare(`UPDATE managed_sites SET public_url='https://palitra-love.ru/', updated_at=?
+      WHERE id='palitra-love' AND company_code='palitra-love' AND source='legacy' AND deleted_at IS NULL
+        AND public_url='https://palitra-love.synapsebusiness.ru/'`).run(stamp);
+    db.prepare('INSERT INTO site_migrations (id, applied_at) VALUES (?, ?)').run(migration, stamp);
   });
   const visible = (user, row) => user.role === 'owner' || user.companyCodes.includes(row.company_code);
   const output = (user, row) => {
