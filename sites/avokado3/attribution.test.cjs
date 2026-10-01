@@ -49,7 +49,7 @@ test('internal page links carry tags without modifying messengers, unrelated sit
 test('conversion classification uses exact destinations and no contact values in events', () => {
   assert.deepEqual(classify(booking, base), {event: 'booking_click', channel: 'yclients'});
   assert.deepEqual(classify('tel:+79331901059', base), {event: 'phone_click', channel: 'phone'});
-  assert.deepEqual(classify('https://vk.com/lasermkt', base), {event: 'messenger_click', channel: 'vk'});
+  assert.deepEqual(classify('https://vk.com/lasermkt', base), {event: 'social_click', channel: 'vk'});
   assert.deepEqual(classify('price.html#laser', base), {event: 'price_click'});
   assert.equal(classify('#laser', base + 'price.html'), null);
   assert.equal(classify('https://t.me.evil.example/person', base), null);
@@ -61,9 +61,9 @@ test('dynamic catalogue and CMS updates are attributed; one delegated event per 
       matches: () => true, closest() {return this;}};
   }
   const initial = anchor(booking, 'sticky_cta');
-  const win = {location: new URL(base + '?utm_source=yandex&utm_content=creative'), localStorage: memory(), navigator: {},
-    MutationObserver: class {constructor(fn) {onMutation = fn;} observe() {}}};
-  const doc = {body: {}, referrer: '', querySelectorAll: () => [initial], addEventListener: (k, fn) => {handlers[k] = fn;}};
+  const win = {addEventListener() {}, location: new URL(base + '?utm_source=yandex&utm_content=creative'), localStorage: memory(), navigator: {},
+    MutationObserver: class {constructor(fn) {if (!onMutation) onMutation = fn;} observe() {}}};
+  const doc = {getElementById: () => null, body: {}, referrer: '', querySelectorAll: () => [initial], addEventListener: (k, fn) => {handlers[k] = fn;}};
   start(win, doc); start(win, doc);
   assert.equal(win.dataLayer, undefined);
   const added = anchor(booking, 'catalog_laser');
@@ -81,12 +81,12 @@ test('dynamic catalogue and CMS updates are attributed; one delegated event per 
   handlers.auxclick({target: beforeMutation, button: 2});
   assert.equal(win.dataLayer.length, 2);
 });
-test('full-price view is emitted once; do-not-track suppresses events while navigation still works', () => {
+test('an unloaded price shell is not a view, including when do-not-track is enabled', () => {
   for (const doNotTrack of [undefined, '1']) {
     const handlers = {};
-    const win = {location: new URL(base + 'price.html'), localStorage: memory(), navigator: {doNotTrack}};
+    const win = {addEventListener() {}, location: new URL(base + 'price.html'), localStorage: memory(), navigator: {doNotTrack}};
     const doc = {body: {}, referrer: base, querySelectorAll: () => [], addEventListener: (k, fn) => {handlers[k] = fn;}};
     start(win, doc); start(win, doc);
-    assert.deepEqual(win.dataLayer, doNotTrack ? undefined : [{event: 'price_view', entry_point: 'price_page'}]);
+    assert.deepEqual(win.dataLayer, undefined);
   }
 });

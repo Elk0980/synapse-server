@@ -13,6 +13,22 @@
   const status = form.querySelector('.callback-form__status');
   let pending = false;
   let completed = false;
+
+  /* Метрика: цели шлёт только этот файл, по фактическому ответу сервера.
+     Персональные данные в параметры целей не попадают — только технические причины. */
+  const track = (goalName, params) => {
+    try { if (typeof window.alviGoal === 'function') window.alviGoal(goalName, params); } catch (_) {}
+  };
+  // Вебвизор не записывает нажатия клавиш в полях формы: имя, телефон и комментарий.
+  for (const field of [name, phone, comment].filter(Boolean)) field.classList.add('ym-disable-keys');
+
+  let startSent = false;
+  const markStart = () => {
+    if (startSent) return;
+    startSent = true;
+    track('callback_start');
+  };
+
   const validPhone = (value) => {
     const digits = String(value || '').replace(/\D/g, '');
     return (digits.length === 11 && /^[78]/.test(digits)) || (digits.length >= 10 && digits.length <= 15);
@@ -27,7 +43,7 @@
     }
   };
 
-  form.addEventListener('input', update);
+  form.addEventListener('input', () => { markStart(); update(); });
   addComment?.addEventListener('change', () => {update();if(addComment.checked)comment?.focus();});
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -58,6 +74,9 @@
     update();
     form.setAttribute('aria-busy', 'true');
     status.textContent = 'Отправляем заявку…';
+    // Запрос действительно уходит на сервер — это попытка, а не лид.
+    markStart();
+    track('callback_attempt');
     const query = new URLSearchParams(location.search);
     const payload = {
       name: name.value.trim(), contact: phone.value.trim(), companyCode: 'alvi',
@@ -71,16 +90,25 @@
       const response = await fetch('/api/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: controller.signal });
       if (!response.ok || ![200, 201].includes(response.status)) throw Object.assign(new Error('request failed'), {status: response.status});
       const accepted = await response.json();
-      if (!Number.isSafeInteger(accepted?.id) || accepted.id <= 0) throw new Error('unconfirmed response');
+      if (!Number.isSafeInteger(accepted?.id) || accepted.id <= 0) throw Object.assign(new Error('unconfirmed response'), {reason: 'bad_id'});
       if (response.status === 200 && accepted.deduplicated === true) {
+        // Повтор того же телефона — не новый лид. Отдельная цель, callback_submit не шлём.
+        track('callback_duplicate');
         status.textContent = 'Заявка с этим телефоном уже есть. Чтобы уточнить запрос, позвоните в ALVI: +7 924 618-05-55 или напишите нам.';
       } else {
-        if (response.status !== 201 || accepted.deduplicated === true) throw new Error('unconfirmed response');
+        if (response.status !== 201 || accepted.deduplicated === true) throw Object.assign(new Error('unconfirmed response'), {reason: 'not_created'});
         completed = true;
         form.classList.add('is-success');
+        // Новая заявка: ровно 201, положительный целочисленный id, без признака дубля.
+        track('callback_submit');
         status.textContent = 'Заявка принята. Спасибо за обращение!';
       }
     } catch (error) {
+      const reason = error?.name === 'AbortError' ? 'timeout'
+        : error?.reason ? error.reason
+        : Number.isFinite(error?.status) ? String(error.status)
+        : 'network';
+      track('callback_error', { reason });
       status.textContent = error.status === 429
         ? 'Слишком много заявок за короткое время. Подождите несколько минут или позвоните в ALVI: +7 924 618-05-55. Введённые данные сохранены в форме.'
         : 'Не удалось подтвердить отправку заявки. Попробуйте ещё раз или позвоните в ALVI: +7 924 618-05-55. Введённые данные сохранены в форме.';

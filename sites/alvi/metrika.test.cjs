@@ -6,9 +6,11 @@ const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, 'metrika.js'), 'utf8');
 function run(embedded) {
   const inserted = [];
-  const win = {location: {search: embedded ? '?embedded=1' : ''}};
+  const win = {location: {search: embedded ? '?embedded=1' : ''}, addEventListener() {}};
   win.parent = embedded ? {} : win;
-  const document = {scripts: [], createElement: () => ({}), getElementsByTagName: () => [{parentNode: {insertBefore: node => inserted.push(node)}}], addEventListener() {}};
+  win.top = embedded ? win.parent : win;
+  const document = {readyState: 'loading', scripts: [], createElement: () => ({}), getElementsByTagName: () => [{parentNode: {insertBefore: node => inserted.push(node)}}], addEventListener() {}};
+  win.document = document;
   const context = {window: win, document, URLSearchParams, setTimeout, Date};
   Object.defineProperty(context, 'ym', {get: () => win.ym});
   vm.runInNewContext(source, context);

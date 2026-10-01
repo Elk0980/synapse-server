@@ -1,4 +1,8 @@
-/* A callback request is confirmed only by the CRM response, never by email delivery. */
+/* A callback request is confirmed only by the CRM response, never by email delivery.
+   Этапы заявки сообщаются аналитике ТОЛЬКО отсюда: глобальный fetch не
+   перехватывается. Заявкой считается единственный случай — ответ 201 с целым
+   положительным id и без признака дубля; дубль и ошибка — отдельные цели.
+   В аналитику уходит имя цели и ничего больше: ни имя, ни телефон, ни комментарий. */
 (function (host, factory) {
   'use strict';
   const api = factory();
@@ -61,6 +65,20 @@
       return {id: accepted.id, repeated: false};
     } finally { win.clearTimeout(timeout); }
   }
+  // Какая цель соответствует исходу отправки. Вынесено отдельно, чтобы правило
+  // «заявка только при подтверждённом 201» проверялось тестом без DOM.
+  function outcomeGoal(result, error) {
+    if (error || !result || !Number.isSafeInteger(result.id) || result.id <= 0) return 'callback_error';
+    if (result.repeated === true) return 'callback_duplicate';
+    return result.repeated === false ? 'callback_submit' : 'callback_error';
+  }
+  // Единственный канал в аналитику. Отсутствие attribution.js ничего не ломает.
+  function report(win, goal) {
+    try {
+      const analytics = win && win.AvokadoAnalytics;
+      if (analytics && typeof analytics.track === 'function') analytics.track(goal);
+    } catch (_) {}
+  }
   function errorMessage(error) {
     if (error.status === 429) return 'Слишком много заявок за короткое время. Подождите несколько минут или позвоните в студию. Введённые данные сохранены в форме.';
     if (error.status === 400 || error.status === 422) return 'Не удалось принять заявку. Проверьте имя и номер телефона или позвоните в студию. Введённые данные сохранены в форме.';
@@ -122,15 +140,20 @@
       submit.textContent = 'Отправляем…';
       form.setAttribute('aria-busy', 'true');
       message('Отправляем заявку…', 'pending');
+      // Попытка: валидация пройдена и запрос реально уходит. Это ещё не заявка.
+      report(win, 'callback_attempt');
       try {
         const result = await send(win, body);
         if (result.repeated) {
+          report(win, outcomeGoal(result));
           message('Заявка с этим телефоном уже есть. Чтобы уточнить запрос, позвоните в студию или напишите нам.', 'existing');
         } else {
+          report(win, outcomeGoal(result));
           form.reset();
           message('Заявка сохранена. Спасибо за обращение!', 'success');
         }
       } catch (error) {
+        report(win, outcomeGoal(null, error));
         message(errorMessage(error), 'error');
       } finally {
         pending = false;
@@ -144,5 +167,5 @@
     });
   }
   function start(win, doc) { doc.querySelectorAll('[data-callback-form]').forEach(form => bind(win, form)); }
-  return {campaign, payload, send, bind, start};
+  return {campaign, payload, send, report, outcomeGoal, bind, start};
 });
