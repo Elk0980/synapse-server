@@ -54,11 +54,11 @@ for (const hash of ['#content-factory/sources', '#telegram-sources']) test('вк
     await f.settle();
     assert.equal(f.w.location.hash, '#content-factory/sources');
     assert.equal(f.panel().hidden, false); assert.equal(f.tab().hidden, false);
-    assert.equal(f.tab().textContent, 'Исходники из Telegram');
+    assert.equal(f.tab().textContent, 'Исходники');
     assert.equal(f.tab().getAttribute('aria-current'), 'page');
     assert.match(f.d.title, /^Контент завод — Первый/);
     assert.equal(f.d.querySelector('#content-factory-link').getAttribute('aria-current'), 'page');
-    assert.match(f.panel().textContent, /Приём новых исходников выключен/);
+    assert.match(f.panel().textContent, /Автоприём из Telegram выключен/); // CF17: состояние Telegram не выдаётся за состояние всей загрузки
     assert.deepEqual(f.sourceCalls().map(r => r.url), ['/content/telegram-sources/one']);
     assert.ok(f.requests.every(r => r.method === 'GET'));
     const sourceScripts = [...f.assets.join('').matchAll(/src="([^"]+)"/g)].map(m => m[1]);
@@ -109,7 +109,7 @@ test('уход/возврат очищает исходники, скрытый 
     assert.equal(f.sourceCalls().length, 0);
     f.tab().click(); await f.settle(); assert.match(f.panel().textContent, /Исходник one/);
     const oldSignal = f.sourceCalls()[0].signal;
-    f.d.querySelector('[href="#content-factory/materials"]').click(); await f.settle();
+    f.d.querySelector('[href="#content-factory/plan"]').click(); await f.settle();
     assert.equal(f.panel().textContent, ''); assert.equal(oldSignal.aborted, true);
     assert.equal(f.d.querySelector('#autoposting-view input'), draft); assert.equal(draft.value, 'Несохранённый текст');
     await f.company('Второй'); assert.equal(f.sourceCalls().length, 1);

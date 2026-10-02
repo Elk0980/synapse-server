@@ -48,11 +48,18 @@ function payload(overrides = {}) {
     ...overrides};
 }
 
+// Часы окна теста фиксированы: порядок «Ближайшие сначала» считает «сегодня» по местной дате, а фикстуры плана — с 1 октября 2026.
+// Без этого при местной дате позже 1 октября первый материал уходит в «прошедшие» и тест зависит от календаря (CF26-R2).
+const FIXED_NOW = '2026-09-30T12:00:00Z';
+const freezeClock = (w) => { const Native = w.Date;
+  w.Date = class extends Native { constructor(...args) { super(...(args.length ? args : [FIXED_NOW])); } static now() { return Native.parse(FIXED_NOW); } }; };
+
 function fixture({role = 'editor', permissions = ['autoposting.view', 'autoposting.edit'], query} = {}) {
   const dom = new JSDOM('<section id="view"></section>', {url: 'https://test.local', runScripts: 'outside-only'});
   const w = dom.window, node = w.document.getElementById('view'), calls = [];
   const views = {};
   w.SbCabinet = {registerView(name, definition) { views[name] = definition; }};
+  freezeClock(w);
   w.eval(script);
   const ctx = {
     identity: {role, permissions, csrfToken: 'csrf-token', companies: [{id: 'alvi', name: 'АЛВИ'}]},

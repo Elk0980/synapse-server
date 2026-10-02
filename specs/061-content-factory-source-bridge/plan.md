@@ -1,0 +1,2 @@
+# План
+Codex единственный автор ops/content/content-factory-source-bridge.js/test, ops/content/server.js, ops/crm/server.js и specs061. Агент Spec059 пишет только telegram-sources/multipart/uploadtest; агент Spec060 только autoposting/source-links-test. Повторная auth перед записью и передачей, paths строго sha/company, fresh sourceRevision. Повтор использует детерминированную публичную копию; чужая компания/CSRF/viewonly/MIME/hash/metadata/stale исключаются. Closed CRM /internal/content-factory/source-attach и source-usage защищены service key + companyModuleContext.

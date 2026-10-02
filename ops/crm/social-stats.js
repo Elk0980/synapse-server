@@ -687,7 +687,9 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
   function receiptRows(scope) {
     if (!hasTable('autoposting_publication_receipts') || !hasTable('autoposting_posts')) return [];
     const content = db.prepare("SELECT 1 FROM pragma_table_info('autoposting_posts') WHERE name='external_id'").get() ? 'p.external_id' : "''";
-    return db.prepare(`SELECT r.id, r.platform, r.url, r.published_at, r.post_id, ${content} content_id FROM autoposting_publication_receipts r
+    const revision = db.prepare("SELECT 1 FROM pragma_table_info('autoposting_publication_receipts') WHERE name='content_revision'").get()
+      ? "CASE WHEN typeof(r.content_revision)='integer' AND r.content_revision BETWEEN 1 AND 9007199254740991 THEN r.content_revision END" : 'NULL';
+    return db.prepare(`SELECT r.id, r.platform, r.url, r.published_at, r.post_id, ${content} content_id, ${revision} content_revision FROM autoposting_publication_receipts r
       JOIN autoposting_posts p ON p.id=r.post_id AND p.company_id=r.company_id
       JOIN companies c ON c.id=r.company_id WHERE c.code=? COLLATE NOCASE AND c.is_deleted=0
       ORDER BY r.published_at DESC, r.id DESC LIMIT ${RECEIPT_LIMIT}`).all(scope.code);
@@ -743,10 +745,13 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
         posts.push(post);
         if (key) byKey.set(key, post);
       }
-      post.receipts.push({ referenceId: `receipt:${receipt.id}`, url: receipt.url, publishedAt: receipt.published_at, contentId: receipt.content_id || '' });
+      post.receipts.push({ referenceId: `receipt:${receipt.id}`, url: receipt.url, publishedAt: receipt.published_at, contentId: receipt.content_id || '', autopostingId: receipt.post_id });
+      // Версии остаются внутри проекции: прежний публичный DTO подтверждений не меняется.
+      (post.publishedVersions ||= new Set()).add(receipt.content_revision);
       if (!post.urls.includes(receipt.url)) post.urls.push(receipt.url);
       if (receipt.content_id) post.receiptContentIds.add(receipt.content_id);
     }
+    const completeReceipts = receiptTotal(scope) <= RECEIPT_LIMIT;
     for (const post of posts) {
       const ids = [...post.receiptContentIds], storedIds = [...post.storedContentIds];
       // Провайдер записи — настоящий провайдер её источника, а не догадка: один источник — его провайдер; несколько источников с разными
@@ -761,17 +766,56 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
       // а не только его вторую сторону. Непустой список означает спорную запись: метка utm по ней никому не приписывается.
       const all = [...new Set([...storedIds, ...ids])].sort();
       post.contentIdCandidates = all.length > 1 ? all : [];
+      // Номер social_posts не является номером карточки. Ссылка разрешена только по
+      // однозначному подтверждению своей компании и полной выборке подтверждений.
+      const cardIds = [...new Set(post.receipts.map((r) => r.autopostingId).filter((id) => Number.isSafeInteger(id) && id > 0))];
+      post.autopostingId = completeReceipts && cardIds.length === 1 && !post.contentIdCandidates.length ? cardIds[0] : null;
       if (!post.contentId && !storedIds.length && ids.length === 1) post.contentId = ids[0];
     }
     // Порядок общий и устойчивый: свежие выходы сверху, записи без даты — в конце; при равной дате сохраняется порядок выборки.
     posts.sort((a, b) => { const x = a.publishedAt || '', y = b.publishedAt || ''; return x === y ? 0 : x > y ? -1 : 1; });
     return { posts, projected, merged, skipped, receiptOnly: posts.filter((p) => p.provenance === 'external_receipt').length };
   }
-  function attribution(code, from, to) {
+  // Opt-in относится только к точным timestamps заявок. Суточные измерения площадок не пересчитываются.
+  function crmRange(scope, from, to, options) {
+    if (options !== undefined) {
+      if (!options || typeof options !== 'object' || Array.isArray(options)) fail('VALIDATION_ERROR', 400, { field: 'crmPeriod' });
+      object(options, ['crmPeriod']);
+    }
+    const mode = options && Object.hasOwn(options, 'crmPeriod') ? options.crmPeriod : 'utc';
+    if (!['utc', 'project'].includes(mode)) fail('VALIDATION_ERROR', 400, { field: 'crmPeriod' });
+    // Legacy границы и DTO сохраняются буквально, включая прежнюю семантику верхнего предела.
+    if (mode === 'utc') return { start: from + 'T00:00:00', end: to + 'T23:59:59.999', period: null };
+    if (from > to) fail('VALIDATION_ERROR', 400, { field: 'to' });
+    let zone;
+    try {
+      if (typeof scope.timezone !== 'string' || !scope.timezone.trim()) fail();
+      zone = timezone(scope.timezone);
+    } catch { fail('VALIDATION_ERROR', 400, { field: 'timezone' }); }
+    const start = new Date(dayBounds(from, zone).startMs).toISOString(), end = new Date(dayBounds(to, zone).endMs).toISOString();
+    return { start, end, period: { basis: 'project', timezone: zone, from, to, startInclusive: start, endExclusive: end } };
+  }
+  function attribution(code, from, to, options) {
     const scope = company(code); day(from); day(to);
+    const range = crmRange(scope, from, to, options);
     const projection = attributionPosts(scope), posts = projection.posts;
+    // Метки читаются только у доказанного материала той же компании. Номер архива,
+    // текст и адрес не позволяют угадать ни формат, ни цель публикации.
+    const cardIds = [...new Set(posts.map(post => post.autopostingId).filter(id => Number.isSafeInteger(id) && id > 0))];
+    const tags = new Map();
+    if (cardIds.length && hasTable('autoposting_posts') && db.prepare("SELECT 1 FROM pragma_table_info('autoposting_posts') WHERE name='meta'").get()) {
+      const revision = db.prepare("SELECT 1 FROM pragma_table_info('autoposting_posts') WHERE name='content_revision'").get()
+        ? "CASE WHEN typeof(p.content_revision)='integer' AND p.content_revision BETWEEN 1 AND 9007199254740991 THEN p.content_revision END" : 'NULL';
+      const rows = db.prepare(`SELECT p.id,p.meta,${revision} contentRevision FROM autoposting_posts p JOIN companies c ON c.id=p.company_id
+        WHERE c.code=? COLLATE NOCASE AND c.is_deleted=0 AND p.id IN (${cardIds.map(() => '?').join(',')})`).all(scope.code, ...cardIds);
+      for (const row of rows) {
+        let meta; try { meta = JSON.parse(row.meta); } catch { meta = null; }
+        tags.set(row.id, {contentRevision: row.contentRevision, format: ['post','story','reel','carousel'].includes(meta?.format) ? meta.format : null,
+          ovpRole: ['reach','affection','sale'].includes(meta?.role) ? meta.role : null});
+      }
+    }
     const leads = db.prepare(`SELECT id, stage, sale_amount, source, utm_source, utm_content, utm_campaign, referrer, landing_page FROM leads WHERE company_code=? COLLATE NOCASE AND created_at>=? AND created_at<?
-      AND (COALESCE(utm_content,'')<>'' OR COALESCE(utm_campaign,'')<>'' OR COALESCE(referrer,'')<>'' OR COALESCE(landing_page,'')<>'')`).all(scope.code, from + 'T00:00:00', to + 'T23:59:59.999');
+      AND (COALESCE(utm_content,'')<>'' OR COALESCE(utm_campaign,'')<>'' OR COALESCE(referrer,'')<>'' OR COALESCE(landing_page,'')<>'')`).all(scope.code, range.start, range.end);
     const byContent = new Map();
     // По метке ищутся только записи с бесспорной карточкой. У спорной записи (contentIdCandidates непуст) настоящий contentId
     // сохранён в отчёте для диагностики, но меткой не пользуется: к какой из расходящихся карточек относится обращение — неизвестно.
@@ -792,11 +836,17 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
     }
     const sum = (list) => ({ leads: list.length, sales: list.filter((l) => l.stage === 'продажа').length, revenue: list.filter((l) => l.stage === 'продажа').reduce((s, l) => s + (l.sale_amount || 0), 0) });
     const bySource = db.prepare(`SELECT source, COUNT(*) leads, SUM(CASE WHEN stage='продажа' THEN 1 ELSE 0 END) sales, SUM(CASE WHEN stage='продажа' THEN COALESCE(sale_amount,0) ELSE 0 END) revenue
-      FROM leads WHERE company_code=? COLLATE NOCASE AND created_at>=? AND created_at<? GROUP BY source`).all(scope.code, from + 'T00:00:00', to + 'T23:59:59.999');
+      FROM leads WHERE company_code=? COLLATE NOCASE AND created_at>=? AND created_at<? GROUP BY source`).all(scope.code, range.start, range.end);
     return {
-      posts: posts.map((post) => { const m = perPost.get(post.key); return { platform: post.platform, platformPostId: post.platformPostId, url: post.url, contentId: post.contentId, publishedAt: post.publishedAt, ...sum(m.leads),
+      ...(range.period ? { period: range.period } : {}),
+      posts: posts.map((post) => { const m = perPost.get(post.key), current = tags.get(post.autopostingId);
+        // Метки текущего черновика относятся к выходу лишь при единственной доказанной той же версии.
+        const sameVersion = Number.isSafeInteger(current?.contentRevision) && current.contentRevision > 0
+          && post.publishedVersions?.size === 1 && post.publishedVersions.has(current.contentRevision);
+        return { platform: post.platform, platformPostId: post.platformPostId, url: post.url, contentId: post.contentId, publishedAt: post.publishedAt, ...sum(m.leads),
         attribution: m.leads.length ? 'exact' : (post.contentId || post.url ? 'none_in_period' : 'unknown'), confidence: m.confidence.has('url') ? 'url' : m.confidence.has('utm') ? 'utm' : 'none',
-        provenance: post.provenance, provider: post.provider, sources: post.sources, identities: post.identities, receipts: post.receipts, contentIdCandidates: post.contentIdCandidates }; }),
+        provenance: post.provenance, provider: post.provider, sources: post.sources, identities: post.identities, receipts: post.receipts, contentIdCandidates: post.contentIdCandidates, autopostingId: post.autopostingId,
+        format: sameVersion ? current.format : null, ovpRole: sameVersion ? current.ovpRole : null }; }),
       byContent: [...ambiguous.values()].map((g) => ({ contentId: g.contentId, url: g.url, platforms: g.platforms, ...sum(g.leads), attribution: 'content_only',
         note: 'Метка указывает на контент, но не на конкретную площадку: обращение не приписано ни одному посту и не задвоено.' })),
       bySource: bySource.map((r) => ({ source: r.source || 'unknown', leads: r.leads, sales: r.sales, revenue: r.revenue })),
@@ -904,7 +954,7 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
       summary: { visible: findings, cannotConclude: limits, nextStep: next },
       note: 'Показано последнее измерение каждой метрики каждой исходной записи внутри выбранного периода. Значения не складываются между датами и между источниками одного адреса. Пустое значение — данных нет; ноль — измеренный ноль.' };
   }
-  function overview(code, from, to) {
+  function overview(code, from, to, options) {
     const scope = company(code); day(from); day(to); if (from > to) fail();
     const rows = db.prepare(`SELECT platform, account_ref, date, metric, value, unit, kind, completeness, provider, timezone, scope, collected_at FROM social_snapshots
       WHERE company_code=? COLLATE NOCASE AND period='day' AND date>=? AND date<=? ORDER BY platform, date, metric`).all(scope.code, from, to);
@@ -967,7 +1017,7 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
       aggregationNote: 'avg — невзвешенное среднее суточных значений за период (каждый день с равным весом), а не общее удержание/средняя длительность за период.',
       socialAggregate: { views: sumAcross('views'), impressions: sumAcross('impressions'), likes: sumAcross('likes'), comments: sumAcross('comments'), shares: sumAcross('shares'), saves: sumAcross('saves'),
         reachNote: 'Охват площадок не суммируется: одни и те же люди могут быть на нескольких площадках. Уникальный охват — UNKNOWN.', reach: null },
-      crm: attribution(scope.code, from, to), postMetrics: postMetrics(scope.code, from, to), metrics: METRICS, runs: db.prepare('SELECT id,platform,provider,trigger,date,started_at,finished_at,status,rows,error,source_note,missing FROM social_collect_runs WHERE company_code=? COLLATE NOCASE ORDER BY id DESC LIMIT 30').all(scope.code)
+      crm: attribution(scope.code, from, to, options), postMetrics: postMetrics(scope.code, from, to), metrics: METRICS, runs: db.prepare('SELECT id,platform,provider,trigger,date,started_at,finished_at,status,rows,error,source_note,missing FROM social_collect_runs WHERE company_code=? COLLATE NOCASE ORDER BY id DESC LIMIT 30').all(scope.code)
         .map((r) => ({ ...r, missing: JSON.parse(r.missing || '[]'), ...runNote(r) })) };
   }
   /* «Что видно по данным». Ничего не собирает и не пишет: читает уже сохранённые

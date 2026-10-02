@@ -45,6 +45,20 @@ function safeFailure(code,ambiguous) {return error=>{
  assert.equal(error.code,code);assert.equal(error.ambiguous,ambiguous);noSecrets({message:error.message,...error});return true;
 };}
 
+test('CF28 internal destination revision is monotonic, canonical and atomic without public credential fields',async t=>{
+ const f=fixture(t);f.save();assert.deepEqual(f.api.approvalDestination('alvi','telegram'),{destinationRevision:1,channelRevision:1});
+ f.api.saveSettings('alvi',{channels:[channel('telegram',1,{name:'UI rename',target:'@QA_CHANNEL',token:''})]});
+ assert.deepEqual(f.api.approvalDestination('alvi','telegram'),{destinationRevision:1,channelRevision:2});
+ await f.api.checkChannel('alvi','telegram');assert.deepEqual(f.api.approvalDestination('alvi','telegram'),{destinationRevision:1,channelRevision:2});
+ f.api.saveSettings('alvi',{channels:[channel('telegram',2,{target:'@qa_other'})]});f.api.saveSettings('alvi',{channels:[channel('telegram',3)]});
+ assert.deepEqual(f.api.approvalDestination('alvi','telegram'),{destinationRevision:3,channelRevision:4});
+ const before=f.api.approvalDestination('alvi','telegram');
+ assert.throws(()=>f.api.saveSettings('alvi',{channels:[channel('telegram',4,{target:'@qa_other'}),channel('vk',99)]}),e=>e.status===409);
+ assert.deepEqual(f.api.approvalDestination('alvi','telegram'),before);assert.deepEqual(f.api.approvalDestination('avokado','telegram'),{destinationRevision:0,channelRevision:0});
+ noSecrets(f.api.approvalDestination('alvi','telegram'));const dto=f.api.getSettings('alvi');noSecrets(dto);
+ assert.ok(!JSON.stringify(dto).includes('destinationRevision'));assert.equal(f.calls.filter(call=>['sendMessage','sendPhoto','sendMediaGroup','wall.post'].includes(call.method)).length,0);
+});
+
 test('settings encrypt every tenant token and expose no credentials; only explicit successful checks connect a saved revision',async t=>{
  const f=fixture(t);const initial=f.api.getSettings('alvi');assert.equal(initial.channels.every(c=>!c.connected&&!c.tokenConfigured),true);
  f.save('telegram');f.save('vk');f.save('telegram','avokado');

@@ -36,9 +36,12 @@ function createSocialStatsHandler({ stats, baselines, analytics = null, companyM
     try {
       let result;
       if (url.pathname === '/social-stats' && readOnly) {
+        const modes = url.searchParams.getAll('crmPeriod');
+        if (modes.length > 1 || (modes.length === 1 && !['project', 'utc'].includes(modes[0])))
+          throw Object.assign(new Error(SOCIAL_STATS_ERRORS.VALIDATION_ERROR), { code: 'VALIDATION_ERROR', status: 400, field: 'crmPeriod' });
         const to = url.searchParams.get('to') || stats.localDay(Date.now(), 'Asia/Bangkok');
         const from = url.searchParams.get('from') || new Date(Date.parse(to + 'T00:00:00Z') - 29 * 86400000).toISOString().slice(0, 10);
-        result = stats.overview(company.code, from, to);
+        result = modes.length ? stats.overview(company.code, from, to, { crmPeriod: modes[0] }) : stats.overview(company.code, from, to);
       } else if (url.pathname === '/social-stats/baseline' && readOnly) {
         const rawVersion = url.searchParams.get('version');
         const version = rawVersion === null ? null : Number(rawVersion);

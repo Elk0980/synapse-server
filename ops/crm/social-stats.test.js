@@ -433,6 +433,8 @@ test('подтверждение внешней публикации видно 
   assert.deepEqual(post.platformPostId, receiptIds(f.db)[0], 'у подтверждения собственная ссылка receipt:<id>');
   assert.doesNotMatch(post.platformPostId, /42|demo_channel/, 'номер сообщения и канал не выдаются за идентификатор поста в API');
   assert.equal(post.url, 'https://t.me/demo_channel/42'); assert.equal(post.contentId, 'D1');
+  assert.equal(post.autopostingId, card.id, 'ссылка ведёт в подтверждённую карточку, а не к номеру сообщения');
+  assert.equal(post.receipts[0].autopostingId, card.id);
   assert.deepEqual(post.receipts.map((r) => [r.referenceId, r.publishedAt, r.contentId]), [[receiptIds(f.db)[0], '2026-09-17T10:00:00.000Z', 'D1']]);
   assert.deepEqual(post.contentIdCandidates, []);
   assert.equal(post.attribution, 'none_in_period'); assert.equal(post.confidence, 'none');
@@ -463,6 +465,9 @@ test('подтверждения изолированы по компании: �
   // Испорченная строка: компания подтверждения подменена, а карточка осталась чужой — такая связка не читается ни одной компанией.
   f.db.prepare('UPDATE autoposting_publication_receipts SET company_id=1 WHERE url=?').run('https://vk.com/wall-2_20');
   assert.deepEqual(urls('demo-a'), ['https://vk.com/wall-1_10'], 'карточка другой компании не подтягивается по подменённому company_id');
+  const safe = f.stats.attribution('demo-a', '2026-09-17', '2026-09-18').posts;
+  assert.equal(safe.length, 1);
+  assert.equal(safe[0].receipts[0].autopostingId, safe[0].autopostingId, 'связь редактора взята только из оставшегося своего подтверждения');
   assert.deepEqual(urls('demo-b'), [], 'подтверждение ушло из своей компании вместе с company_id');
 });
 
@@ -506,6 +511,7 @@ test('повторное подтверждение идемпотентно, а
   const crm = f.stats.attribution('demo-a', '2026-09-17', '2026-09-18');
   assert.equal(crm.posts.length, 1, 'watch и shorts — один и тот же выход');
   assert.deepEqual(crm.posts[0].receipts.map((r) => r.referenceId).sort(), receiptIds(f.db).sort(), 'оба подтверждения показаны при одном посте');
+  assert.equal(crm.posts[0].autopostingId, card.id, 'два написания одного адреса с одной карточкой сохраняют однозначную связь');
   assert.deepEqual({ ...crm.receipts, note: '' }, { projected: 2, merged: 0, receiptOnly: 1, skipped: 0, note: '' });
   assert.equal(crm.posts[0].contentId, 'D1');
 });
@@ -521,6 +527,7 @@ test('один адрес подтверждён на двух карточка�
   assert.equal(crm.posts.length, 1, 'один адрес — один выход, а не по выходу на карточку');
   assert.equal(crm.posts[0].contentId, '', 'contentId спорный: наугад не выбирается');
   assert.deepEqual(crm.posts[0].contentIdCandidates.slice().sort(), ['D1', 'D2'], 'расхождение карточек показано');
+  assert.equal(crm.posts[0].autopostingId, null, 'между двумя карточками одного адреса редактор не выбирается наугад');
   assert.deepEqual([crm.posts[0].leads, crm.posts[0].confidence], [1, 'url'], 'обращение по ссылке засчитано один раз');
   assert.deepEqual(crm.posts[0].receipts.map((r) => r.contentId).sort(), ['D1', 'D2']);
   assert.deepEqual(crm.byContent, [], 'спорная метка не создаёт групп по контенту: постов с таким contentId нет');
@@ -612,6 +619,7 @@ test('без таблиц автопостинга проекция подтве
   assert.deepEqual([crm.posts.length, crm.posts[0].leads, crm.posts[0].provenance], [1, 1, 'stored']);
   assert.deepEqual([crm.posts[0].provider, crm.posts[0].sources], ['manual', 1], 'провайдер записи — настоящий провайдер её источника');
   assert.deepEqual(crm.posts[0].receipts, []); assert.deepEqual(crm.posts[0].contentIdCandidates, []);
+  assert.equal(crm.posts[0].autopostingId, null, 'номер social_posts не используется без подтверждённой связи');
   // Есть таблица подтверждений, но нет карточек: читать нечего, сводка не падает.
   f.db.exec('CREATE TABLE autoposting_publication_receipts(id INTEGER PRIMARY KEY, company_id INTEGER, post_id INTEGER, platform TEXT, url TEXT, published_at TEXT)');
   assert.equal(f.stats.attribution('demo-a', '2026-09-17', '2026-09-17').receipts.projected, 0);
@@ -724,6 +732,9 @@ test('показатели публикаций: подтверждения сч
   }
   f.receipt(f.card('demo-b', 'B1', 'Чужой пост'), 'demo-b', 'telegram', 'https://t.me/other_channel/1', '2026-09-17T11:00:00Z');
   const report = f.stats.postMetrics('demo-a', '2026-09-17', '2026-09-17');
+  const crm = f.stats.attribution('demo-a', '2026-09-17', '2026-09-17');
+  assert.equal(crm.posts.length, 200);
+  assert.ok(crm.posts.every((post) => post.autopostingId === null), 'при усечённом реестре нельзя доказать единственность связи');
   assert.equal(report.coverage.receiptsTotal, 205, 'считаются только подтверждения своей компании');
   assert.equal(report.coverage.receiptsRead, 200);
   assert.equal(report.coverage.receiptsLimit, 200);

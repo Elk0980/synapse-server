@@ -29,7 +29,7 @@ function fixture(t) {
   let time = Date.parse('2026-09-19T09:00:00Z');
   const publishCalls = [];
   const information = createCompanyInformation(db, {now: () => time});
-  const transport = {getSettings: () => ({channels: [{id: 'telegram', enabled: true, connected: true, revision: 1}]}),
+  const transport = {approvalDestination:(_code,id)=>({destinationRevision:id==='telegram'?1:0,channelRevision:id==='telegram'?1:0}),getSettings: () => ({channels: [{id: 'telegram', enabled: true, connected: true, revision: 1}]}),
     publish: async (input) => { publishCalls.push(input); return {externalId: 'x', url: 'https://example.test/p'}; }};
   const autoposting = createAutoposting(db, {information, transport, now: () => time, logger: {warn() {}}});
   const mentor = createMediaMentor(db, {now: () => time});
@@ -430,7 +430,7 @@ function variantFixture(t) {
   const channels = [{id: 'telegram', platform: 'telegram', enabled: true, connected: true, revision: 1},
     {id: 'vk', platform: 'vk', enabled: true, connected: true, revision: 1}];
   const hooks = {beforeEachPublish: null};
-  const transport = {getSettings: async () => ({channels}),
+  const transport = {approvalDestination:(_code,id)=>{const channel=channels.find(item=>item.id===id);return {destinationRevision:channel?.revision||0,channelRevision:channel?.revision||0};},getSettings: async () => ({channels}),
     publish: async (input) => {
       if (hooks.beforeEachPublish) await hooks.beforeEachPublish(input);
       if (input.beforePublish) input.beforePublish();

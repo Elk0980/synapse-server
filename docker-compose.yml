@@ -109,6 +109,7 @@ services:
       context: ./ops/content
     restart: always
     environment:
+      CONTENT_PLAN_WORKER_ENABLED: ${CONTENT_PLAN_WORKER_ENABLED:-0}
       PORT: "8080"
       DATABASE_PATH: /data/content.sqlite
       API_KEY: ${CONTENT_API_KEY}

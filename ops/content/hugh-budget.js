@@ -112,6 +112,32 @@ function createHughBudget({db, env = process.env, now = () => Date.now(), random
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS hugh_fallback_reservations_window
     ON hugh_fallback_reservations(window_start,state)`);
+  // Scope links use the existing cost samples: settlement/release has one source of truth.
+  db.exec(`CREATE TABLE IF NOT EXISTS content_plan_cost_scope (
+    reservation_id TEXT PRIMARY KEY, company TEXT NOT NULL, job TEXT NOT NULL, window_start TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS content_plan_cost_scope_job ON content_plan_cost_scope(company,job);
+    CREATE INDEX IF NOT EXISTS content_plan_cost_scope_window ON content_plan_cost_scope(company,window_start)`);
+  // All six values must be explicitly positive. Company caps use the global budget window;
+  // job caps span its entire resume lineage, across windows. No deployment defaults.
+  // CONTENT_PLAN_JOB_BUDGET_USD / CONTENT_PLAN_JOB_MAX_REQUESTS
+  // CONTENT_PLAN_COMPANY_BUDGET_USD / CONTENT_PLAN_COMPANY_MAX_REQUESTS
+  // CONTENT_PLAN_CHAT_RESERVE_USD / CONTENT_PLAN_CHAT_RESERVE_REQUESTS
+  // Chat reserve is a remaining-budget floor for plans, not a promise of provider balance.
+  const planKeys = {
+    jobUsd:['CONTENT_PLAN_JOB_BUDGET_USD',money], companyUsd:['CONTENT_PLAN_COMPANY_BUDGET_USD',money],
+    jobRequests:['CONTENT_PLAN_JOB_MAX_REQUESTS',whole], companyRequests:['CONTENT_PLAN_COMPANY_MAX_REQUESTS',whole],
+    chatUsd:['CONTENT_PLAN_CHAT_RESERVE_USD',money], chatRequests:['CONTENT_PLAN_CHAT_RESERVE_REQUESTS',whole]};
+  const planPolicy = Object.fromEntries(Object.entries(planKeys).map(([key,[name,parse]])=>{
+    const parsed=present(env[name])?parse(env[name]):{ok:false,value:0};
+    return [key,parsed.ok&&parsed.value>0?parsed.value:null];
+  }));
+  function planReady(){return !configBlocked && config.limitMicroUsd>0 && config.maxRequests>0 &&
+    Object.values(planPolicy).every(v=>v!==null) && planPolicy.chatUsd<config.limitMicroUsd && planPolicy.chatRequests<config.maxRequests;}
+  function planTotals(company,job,start){
+    return db.prepare(`SELECT COUNT(*) requests,COALESCE(SUM(s.micro_usd),0) microUsd
+      FROM content_plan_cost_scope c JOIN ai_cost_samples s ON s.id=c.reservation_id
+      WHERE c.company=? AND (? IS NULL OR c.job=?) AND (? IS NULL OR c.window_start=?)`).get(company,job,job,start,start);
+  }
   const windowMs = config.windowDays * 24 * 60 * 60 * 1000;
   db.exec(`CREATE TABLE IF NOT EXISTS ai_cost_samples(id TEXT PRIMARY KEY,provider TEXT NOT NULL,
     created_at INTEGER NOT NULL,micro_usd INTEGER NOT NULL,priced INTEGER NOT NULL,state TEXT NOT NULL);
@@ -203,7 +229,10 @@ function createHughBudget({db, env = process.env, now = () => Date.now(), random
 
   /* Бронь верхней оценки до обращения. Одна транзакция на проверку и запись, поэтому
      два параллельных запроса не могут вместе выйти за границу. */
-  function reserve(provider, {promptBytes = 0, maxOutputTokens = null, limitMicroUsd = null} = {}) {
+  function reserve(provider, {promptBytes = 0, maxOutputTokens = null, limitMicroUsd = null, contentPlan = null} = {}) {
+    if(contentPlan && (!planReady() || typeof contentPlan.company!=='string' || !/^[a-z0-9_-]{1,80}$/i.test(contentPlan.company) ||
+      typeof contentPlan.job!=='string' || !/^[a-z0-9_-]{1,100}$/i.test(contentPlan.job)))
+      return {allowed:false,reason:'Лимиты подготовки плана и резерв клиентских ответов не настроены'};
     const ownLimit = Number.isSafeInteger(limitMicroUsd) && limitMicroUsd > 0 ? limitMicroUsd : 0;
     const at = now(), price = priceFor(provider);
     if (configBlocked) return {allowed: false, reason: state(at).reason};
@@ -212,7 +241,7 @@ function createHughBudget({db, env = process.env, now = () => Date.now(), random
     }
     // При денежной границе провайдер без объявленной цены не используется:
     // иначе его расход учитывался бы нулём и граница ничего не ограничивала бы.
-    if ((config.limitMicroUsd > 0 || ownLimit > 0) && !price) {
+    if ((config.limitMicroUsd > 0 || ownLimit > 0 || contentPlan) && !price) {
       return {allowed: false, unpriced: true,
         reason: `Цена провайдера ${provider} не задана: при денежной границе он не используется`};
     }
@@ -234,6 +263,14 @@ function createHughBudget({db, env = process.env, now = () => Date.now(), random
       if (config.maxRequests > 0 && used.requests + 1 > config.maxRequests) {
         return {allowed: false, reason: 'Достигнута граница числа обращений к резервным провайдерам'};
       }
+      if(contentPlan){
+        const company=contentPlan.company.toLowerCase();
+        const jobUsed=planTotals(company,contentPlan.job,null),companyUsed=planTotals(company,null,windowStart(at));
+        if(jobUsed.requests+1>planPolicy.jobRequests || jobUsed.microUsd+estimate>planPolicy.jobUsd ||
+          companyUsed.requests+1>planPolicy.companyRequests || companyUsed.microUsd+estimate>planPolicy.companyUsd ||
+          used.requests+1>config.maxRequests-planPolicy.chatRequests || used.microUsd+estimate>config.limitMicroUsd-planPolicy.chatUsd)
+          return {allowed:false,reason:'Достигнут лимит подготовки плана или резерв клиентских ответов'};
+      }
       // Личный лимит проверяется в той же транзакции, что и общий: иначе параллельные
       // запросы одного провайдера вместе перескочили бы его границу.
       if (ownLimit > 0) {
@@ -247,6 +284,7 @@ function createHughBudget({db, env = process.env, now = () => Date.now(), random
       db.prepare(`INSERT INTO hugh_fallback_reservations(id,window_start,provider,micro_usd,state,created_at,updated_at)
         VALUES(?,?,?,?,'held',?,?)`).run(id, windowStart(at), String(provider), estimate, stamp, stamp);
       db.prepare("INSERT INTO ai_cost_samples VALUES(?,?,?,?,?,'held')").run(id,String(provider),at,estimate,price?1:0);
+      if(contentPlan)db.prepare('INSERT INTO content_plan_cost_scope VALUES(?,?,?,?)').run(id,contentPlan.company.toLowerCase(),contentPlan.job,windowStart(at));
       return {allowed: true, id, provider: String(provider), estimateMicroUsd: estimate,
         estimateUsd: estimate / MICRO, maxOutputTokens: outputBound, priced: Boolean(price)};
     });
@@ -307,6 +345,7 @@ function createHughBudget({db, env = process.env, now = () => Date.now(), random
     transaction(() => {
       db.prepare("DELETE FROM hugh_fallback_reservations WHERE id=? AND state='held'").run(id);
       db.prepare('DELETE FROM ai_cost_samples WHERE id=?').run(id);
+      db.prepare('DELETE FROM content_plan_cost_scope WHERE reservation_id=?').run(id);
     });
     return {released: true, microUsd: row.micro_usd};
   }
@@ -333,7 +372,7 @@ function createHughBudget({db, env = process.env, now = () => Date.now(), random
     return {...current, issues};
   }
 
-  return {config, state, stopped, reserve, settle, keep, release, recover, status, priceFor, totals,
+  return {planReady, planTotals, config, state, stopped, reserve, settle, keep, release, recover, status, priceFor, totals,
     providerTotals, providerState, reservation, rate};
 }
 
