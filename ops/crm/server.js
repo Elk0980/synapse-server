@@ -2621,10 +2621,16 @@ async function route(request, response) {
     else if (url.pathname === '/autoposting/starter-plan' && request.method === 'GET') result=studioContentPlan.get(code);
     else if (url.pathname === '/autoposting/starter-plan' && request.method === 'POST') {result=studioContentPlan.import(code,await readJson(request),identity.userId);status=result.created?201:200;}
     else {
-      const match=/^\/autoposting\/posts(?:\/(\d+)(?:\/(schedule|cancel|reconcile|approve|reject|split|submit-review|receipts))?)?$/.exec(url.pathname);
+      const match=/^\/autoposting\/posts(?:\/(\d+)(?:\/(schedule|cancel|reconcile|approve|reject|split|submit-review|receipts|delete|restore))?)?$/.exec(url.pathname);
       if (url.pathname==='/autoposting/order' && request.method==='PUT') {
         result=autoposting.reorder(code,await readJson(request),identity);
         return send(response,status,result,{...cors,'cache-control':'no-store'});
+      }
+      // Корзина материалов: чтение — право просмотра, удаление и восстановление — право правки
+      // материалов этой компании (проверено выше вместе с выбором компании). Ничего не публикует.
+      if (url.pathname==='/autoposting/trash') {
+        if (request.method!=='GET') fail(405,'Метод не поддерживается');
+        return send(response,status,autoposting.trash(code),{...cors,'cache-control':'no-store'});
       }
       if (url.pathname==='/autoposting/import' && request.method==='POST') {
         result=autoposting.importPackage(code,await readJson(request),identity.userId);status=result.created.length?201:200;
@@ -2655,6 +2661,12 @@ async function route(request, response) {
         if (request.method!=='POST') fail(405,'Метод не поддерживается');
         const outcome=autoposting.split(id,code,await readJson(request),identity);
         return send(response,outcome.created?201:200,outcome,{...cors,'cache-control':'no-store'});
+      }
+      if (action==='delete' || action==='restore') {
+        if (request.method!=='POST') fail(405,'Метод не поддерживается');
+        const body=await readJson(request);
+        result=action==='delete'?autoposting.remove(id,code,body,identity):autoposting.restore(id,code,body,identity);
+        return send(response,status,result,{...cors,'cache-control':'no-store'});
       }
       if (action==='submit-review') {
         if (request.method!=='POST') fail(405,'Метод не поддерживается');

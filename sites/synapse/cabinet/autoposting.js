@@ -170,13 +170,14 @@ function materialLink(hash) {
   return {company,id,revision,key:`${company}:${id}:${revision}`};
 }
 let controller;
+const DELETABLE_STATUSES=new Set(["draft","cancelled","failed","needs_review"]);
 function create(container, context) {
   const time = cabinet.companyTime;
   let ctx=context, companyCode="", settings=null, information=null, starterPlan=null, posts=[], post=null, busy=false, epoch=0, baseline=null, reviewed=null;
   let selectedDate="", month="", dailyView="today", dailyPlatform="", calendarData=null, calendarEpoch=0, calendarPending=false;
   const approvalSelection=new Map(), approvalResults=new Map(), approvalBlocked=new Set();
   const drafts=new Map(), selections=new Map(), channelDrafts=new Map(), providerProfiles=new Map();
-  let pendingLink=null,handledLink='',linkEpoch=0;
+  let pendingLink=null,handledLink='',linkEpoch=0,trashPosts=[],deleteArmed="";
   const companies=(ctx.identity.companies||[]).map(item=>({code:String(item.id),name:item.name||item.id}));
   container.classList.add("autoposting-view");
   container.innerHTML=`<h2>Материалы</h2><p>Готовые материалы и ближайшие даты.</p>
@@ -192,6 +193,7 @@ function create(container, context) {
     <details class="card autoposting-connections"><summary>Подключение площадок</summary><p class="autoposting-note">Пустой ключ сохраняет прежний. Новый ключ применяется только кнопкой сохранения; после изменения канала проверьте доступ. Проверка не публикует посты.</p><div id="autoposting-channels" class="autoposting-channel-grid"></div><div id="autoposting-planning" class="autoposting-planning"></div></details>
     <section class="card autoposting-starter" id="autoposting-starter-plan" hidden></section></details>
 </details>
+    <details class="card autoposting-trash" id="autoposting-trash" hidden><summary>Корзина · <span id="autoposting-trash-count">0</span></summary><p class="autoposting-note">Удалённые материалы не показываются в списках и календаре, не согласуются и не публикуются. Файлы, тексты и история сохраняются; материал можно восстановить.</p><ul id="autoposting-trash-list" class="autoposting-daily-list"></ul></details>
     <details id="autoposting-editor" class="autoposting-editor"><summary>Открыть редактор / новый материал</summary><div class="autoposting-editor-grid"><section class="card"><h3>Материал</h3><label for="autoposting-select">Открыть материал</label><select id="autoposting-select"><option value="">Новый черновик</option></select><p id="autoposting-post-state"></p><p id="autoposting-post-error" role="status" hidden></p><div id="autoposting-deliveries"></div>
     <form id="autoposting-form"><label>Название в кабинете<input id="autoposting-title" maxlength="200" required></label><p class="autoposting-note" id="autoposting-title-note">Для YouTube Shorts это название становится публичным заголовком ролика: не длиннее 100 символов, иначе материал в план не ставится.</p><label>Текст публикации<textarea id="autoposting-text" rows="9" maxlength="20000"></textarea></label>
     <details class="autoposting-meta"><summary>Для команды · источники и ссылки</summary>    <div class="autoposting-date-fields"><label>День карточки<select id="autoposting-day">${DAYS.map(d=>`<option value="${d}">${d||"—"}</option>`).join("")}</select></label><label>Происхождение материала<input id="autoposting-origin" maxlength="200" placeholder="например: видео Gemini, без надписи ИИ"></label></div>
@@ -207,7 +209,7 @@ function create(container, context) {
     <div class="autoposting-date-fields"><label>Дата и время<input id="autoposting-date" type="datetime-local"></label><label>Часовой пояс<input id="autoposting-timezone" maxlength="80" required placeholder="Asia/Irkutsk"></label></div>
     <p class="autoposting-note">Время относится к указанному часовому поясу, а не настройкам компьютера. Черновик можно сохранить без даты и подключённого канала.</p>
     <button class="plain-button" id="autoposting-save" type="submit">Сохранить черновик</button><p id="autoposting-form-status" aria-live="off"></p></form>
-    <div class="autoposting-actions"><button class="plain-button" id="autoposting-preview" type="button">Предпросмотр</button><button class="plain-button" id="autoposting-cancel" type="button" hidden>Снять с публикации</button><button class="plain-button" id="autoposting-reconcile" type="button" hidden>Проверить результат в сервисе</button></div></section>
+    <div class="autoposting-actions"><button class="plain-button" id="autoposting-preview" type="button">Предпросмотр</button><button class="plain-button" id="autoposting-cancel" type="button" hidden>Снять с публикации</button><button class="plain-button" id="autoposting-reconcile" type="button" hidden>Проверить результат в сервисе</button><button class="plain-button" id="autoposting-delete" type="button" hidden>Удалить в корзину</button></div></section>
     <section class="card autoposting-preview-section" aria-labelledby="autoposting-preview-title"><h3 id="autoposting-preview-title" tabindex="-1">Проверка перед публикацией</h3><div id="autoposting-preview-content"><p>Сохраните материал и откройте предпросмотр.</p></div><div id="autoposting-approval" class="autoposting-approval"></div><div id="autoposting-receipts" class="autoposting-receipts"></div><button class="plain-button" id="autoposting-schedule" type="button" disabled>Поставить в план</button><p class="autoposting-note">После постановки в план материал отправляется автоматически. Уже начатую публикацию площадка может завершить после отмены.</p></section></div>
     </details><details class="card autoposting-queue-section"><summary>Для команды · очередь и импорт</summary><h3>Очередь контента</h3><p class="autoposting-note">Карточки дней с подписями пяти площадок. Одобрение относится к конкретной версии: правка текста или материала снимает его. Галочки по умолчанию сняты; сохранение и одобрение ничего не публикуют. Instagram / Reels, TikTok и YouTube Shorts здесь — подготовленные варианты подписей: их доставка не подключена и не заявляется; автоматическая отправка возможна только в подключённые каналы Telegram и ВКонтакте после постановки в план.</p><div id="autoposting-queue"></div>
     <details class="autoposting-import"><summary>Импорт пакета карточек</summary><p class="autoposting-note">JSON вида {"items":[{"dayKey":"D1","title":"…","mediaUrls":["https://…/d1.mp4"],"captions":{"instagram":"…","tiktok":"…","youtube_shorts":"…","vk":"…","telegram":"…"},"origin":"видео Gemini"}]}. Создаются только черновики без одобрения; отсутствующее видео не подставляется. Повтор пакета не создаёт дубли.</p><textarea id="autoposting-import-json" rows="6"></textarea><button class="plain-button" id="autoposting-import" type="button">Импортировать черновики</button><p id="autoposting-import-state" role="status"></p></details></details>`;
@@ -384,6 +386,10 @@ function create(container, context) {
     get("autoposting-cancel").disabled=busy||!edit();
     get("autoposting-reconcile").hidden=!post?.deliveries?.some(item=>item.providerPostId);
     get("autoposting-reconcile").disabled=busy||!edit();
+    // Удалить можно только то, что не стоит в очереди и не отправляется; сервер проверяет это ещё раз.
+    const deleteButton=get("autoposting-delete");deleteButton.hidden=!post||!edit()||!DELETABLE_STATUSES.has(post.status);deleteButton.disabled=busy||dirty();
+    if(!post||deleteArmed!==post.id+":"+post.revision){deleteArmed="";deleteButton.textContent="Удалить в корзину";}
+    get("autoposting-trash-list").querySelectorAll("[data-trash-restore]").forEach(node=>{node.disabled=busy||!edit();node.hidden=!edit();});
     const importButton=get('autoposting-import-plan');if(importButton)importButton.disabled=busy||!edit()||Boolean(starterPlan?.imports?.[get('autoposting-plan-platform').value]);
   };
   const invalidate=()=>{reviewed=null;get("autoposting-preview-content").innerHTML="<p>Предпросмотр не выполнен или устарел. Сохраните изменения и проверьте материал заново.</p>";controls();};
@@ -696,6 +702,20 @@ function create(container, context) {
     });
     renderBatch();
   };
+  /* Корзина читается отдельно: если сервер её ещё не умеет, раздел просто скрыт, а материалы работают как прежде. */
+  const renderTrash=()=>{
+    const box=get("autoposting-trash");box.hidden=!trashPosts.length;get("autoposting-trash-count").textContent=String(trashPosts.length);
+    get("autoposting-trash-list").innerHTML=trashPosts.map(item=>`<li><strong>${esc(item.title)}</strong><p class="autoposting-note">№${esc(item.id)} · удалено ${esc(item.deleted?.at?time.toLocal(item.deleted.at,zone()).replace("T"," "):"")}${item.deleted?.byName?" · "+esc(item.deleted.byName):""}${item.deleted?.comment?" · "+esc(item.deleted.comment):""}</p><button type="button" class="plain-button" data-trash-restore="${esc(item.id)}">Восстановить</button></li>`).join("");
+    controls();
+  };
+  const loadTrash=async()=>{
+    const version=epoch,code=companyCode;
+    try{const result=await request("/autoposting/trash");if(version!==epoch)return;
+      if(result.companyCode!==code||!Array.isArray(result.posts)||result.posts.some(item=>item.companyCode!==code))throw Error("Wrong trash scope");
+      trashPosts=result.posts;}
+    catch(_){if(version===epoch)trashPosts=[];}
+    if(version===epoch)renderTrash();
+  };
   const loadCalendar=async()=>{
     const version=epoch,calendarVersion=++calendarEpoch,code=companyCode,range=dateRange();calendarPending=true;calendarData=null;renderCalendar();controls();
     try{const result=await ctx.apiJson(endpoint('/autoposting/calendar')+'&from='+range.from+'&to='+range.to);
@@ -765,7 +785,7 @@ function create(container, context) {
     if(refresh)handledLink='';
     stash();get("autoposting-photo").value="";get("autoposting-channels").querySelectorAll('input[type="password"]').forEach(node=>{node.value="";});
     get('autoposting-channels').querySelectorAll('[data-profile-diagnostics]').forEach(node=>node.remove());
-    companyCode=code;const version=++epoch;calendarEpoch++;calendarData=null;calendarPending=false;approvalSelection.clear();approvalResults.clear();approvalBlocked.clear();renderBatch();posts=[];get('autoposting-posts').replaceChildren();get('autoposting-calendar').replaceChildren();get('autoposting-batch-results').replaceChildren();get('autoposting-calendar-state').textContent='';get('autoposting-calendar-zone').textContent='';get('autoposting-plan-gaps').hidden=true;get('autoposting-plan-gaps').textContent='';get('autoposting-editor').open=false;busy=true;settings=null;information=null;starterPlan=null;post=null;get("autoposting-company").value=code;renderStarterPlan();
+    companyCode=code;const version=++epoch;calendarEpoch++;calendarData=null;trashPosts=[];renderTrash();calendarPending=false;approvalSelection.clear();approvalResults.clear();approvalBlocked.clear();renderBatch();posts=[];get('autoposting-posts').replaceChildren();get('autoposting-calendar').replaceChildren();get('autoposting-batch-results').replaceChildren();get('autoposting-calendar-state').textContent='';get('autoposting-calendar-zone').textContent='';get('autoposting-plan-gaps').hidden=true;get('autoposting-plan-gaps').textContent='';get('autoposting-editor').open=false;busy=true;settings=null;information=null;starterPlan=null;post=null;get("autoposting-company").value=code;renderStarterPlan();
     get('autoposting-channels').querySelectorAll('[data-channel-links]').forEach(node=>node.replaceChildren());get('autoposting-planning').replaceChildren();
     get("vk-connection-guide").innerHTML='<h3 id="vk-connection-title">Подключение ВКонтакте</h3><p>Загружаем настройки выбранной компании…</p>';controls();
     if(!code){busy=false;get("vk-connection-guide").textContent="Выберите доступную компанию.";message("Нет доступных компаний.");controls();return;}
@@ -776,7 +796,7 @@ function create(container, context) {
       month=refresh&&month?month:time.toLocal(new Date().toISOString(),zone()).slice(0,7);selectedDate="";
       post=posts.find(item=>item.id===selections.get(code))||null;
       renderChannels();renderList();renderPost();renderStarterPlan();message(edit()?"":"Доступ только для просмотра.");
-      await loadCalendar();
+      await loadCalendar();await loadTrash();
     }catch(_){if(version===epoch){get("vk-connection-guide").textContent="Не удалось получить статус подключения выбранной компании. Обновите статусы.";message("Не удалось загрузить автопостинг. Ввод сохранён в текущем окне; повторите обновление.");}}
     finally{if(version===epoch){busy=false;controls();}}
     if(version===epoch&&settings&&information)await openLinkedPost();
@@ -861,6 +881,29 @@ function create(container, context) {
     if(!edit()||!post||!["scheduled","publishing"].includes(post.status))return;
     void run(async current=>{const result=await request("/autoposting/posts/"+encodeURIComponent(post.id)+"/cancel","POST",{revision:post.revision});if(!current())return;post=result;posts=posts.map(item=>item.id===result.id?result:item);renderList();renderPost();message("Материал снят с очереди. Уже начатую публикацию площадка может завершить.");
     },"Отменяем публикацию…","Не удалось подтвердить отмену. Обновите статусы.");
+  });
+  /* Удаление в корзину — второе нажатие той же кнопки по той же версии: без системных окон подтверждения. */
+  get("autoposting-delete").addEventListener("click",()=>{
+    if(busy||!edit()||!post||dirty()||!DELETABLE_STATUSES.has(post.status))return;
+    const armed=post.id+":"+post.revision;
+    if(deleteArmed!==armed){deleteArmed=armed;get("autoposting-delete").textContent="Подтвердить удаление";message(`Нажмите «Подтвердить удаление», чтобы убрать «${post.title}» в корзину. Файлы и история сохранятся, материал можно восстановить.`);return;}
+    const target=post;deleteArmed="";
+    void run(async current=>{const result=await request("/autoposting/posts/"+encodeURIComponent(target.id)+"/delete","POST",{revision:target.revision});if(!current())return;
+      if(result.companyCode!==companyCode||result.id!==target.id||!result.deleted)throw Error("Wrong delete result");
+      drafts.delete(key());posts=posts.filter(item=>item.id!==target.id);post=null;selections.set(companyCode,null);trashPosts=[result,...trashPosts.filter(item=>item.id!==result.id)];
+      renderList();renderPost();renderTrash();message(`Материал «${target.title}» перемещён в корзину. Его можно восстановить.`);
+      await loadCalendar();
+    },"Перемещаем материал в корзину…","Не удалось подтвердить удаление. Обновите статусы: материал мог измениться или уже стоит в очереди.");
+  });
+  get("autoposting-trash-list").addEventListener("click",event=>{
+    const button=event.target.closest("[data-trash-restore]");if(!button||busy||!edit())return;
+    const item=trashPosts.find(value=>String(value.id)===button.dataset.trashRestore);if(!item)return;
+    void run(async current=>{const result=await request("/autoposting/posts/"+encodeURIComponent(item.id)+"/restore","POST",{revision:item.revision});if(!current())return;
+      if(result.companyCode!==companyCode||result.id!==item.id||result.deleted)throw Error("Wrong restore result");
+      trashPosts=trashPosts.filter(value=>value.id!==item.id);posts=[result,...posts.filter(value=>value.id!==item.id)];
+      renderList();renderTrash();message(`Материал «${item.title}» восстановлен в прежнем виде.`);
+      await loadCalendar();
+    },"Восстанавливаем материал…","Не удалось подтвердить восстановление. Обновите статусы.");
   });
   get('autoposting-reconcile').addEventListener('click',()=>{
     if(busy||!edit()||!post?.deliveries?.some(item=>item.providerPostId))return;

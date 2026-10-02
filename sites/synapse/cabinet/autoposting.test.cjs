@@ -43,6 +43,41 @@ test('channel setup explains its own media rules and TikTok blocker without clai
   assert.ok(f.calls.every(call=>call.method==='GET'));
  }finally{f.close();}
 });
+test('корзина: удаление требует второго нажатия по той же версии, убирает материал из списка и восстанавливается',async()=>{
+ const flower={id:23,companyCode:'alvi',revision:4,status:'draft',title:'Пробный · День1',text:'Букеты',mediaUrls:['https://example.test/clip.mp4'],platformIds:['telegram'],scheduledAt:null,timezone:'Asia/Irkutsk',profileRevision:2,deliveries:[]};
+ const kept={...flower,id:26,title:'Шары · материал',text:'Шары'};
+ let trash=[];const writes=[];
+ const f=await fixture({entries:[flower,kept],override:call=>{
+  if(call.path==='/content/crm/autoposting/trash'){assert.equal(call.method,'GET');return {companyCode:call.code,posts:trash.filter(item=>item.companyCode===call.code)};}
+  const action=call.path.match(/\/posts\/(\d+)\/(delete|restore)$/);if(!action)return undefined;
+  const body=JSON.parse(call.options.body),id=Number(action[1]);writes.push({id,action:action[2],body,code:call.code});
+  if(action[2]==='delete'){const index=f.posts.findIndex(item=>item.id===id&&item.companyCode===call.code);assert.ok(index>=0);assert.equal(body.revision,f.posts[index].revision);
+    const [item]=f.posts.splice(index,1);const removed={...item,revision:item.revision+1,deleted:{at:'2026-10-02T03:00:00.000Z',byName:'Влад',comment:''}};trash.push(removed);return removed;}
+  const item=trash.find(value=>value.id===id&&value.companyCode===call.code);assert.ok(item);assert.equal(body.revision,item.revision);
+  trash=trash.filter(value=>value!==item);const restored={...item,revision:item.revision+1,deleted:null};f.posts.push(restored);return restored;
+ }});
+ try{
+  assert.equal(f.node('autoposting-trash').hidden,true,'пустая корзина скрыта');
+  f.set('autoposting-select','23','change');const button=f.node('autoposting-delete');assert.equal(button.hidden,false);
+  await f.click('autoposting-delete');assert.equal(writes.length,0,'первое нажатие ничего не удаляет');assert.match(button.textContent,/Подтвердить удаление/);
+  assert.match(f.node('autoposting-status').textContent,/Пробный · День1/);
+  await f.click('autoposting-delete');assert.deepEqual(writes,[{id:23,action:'delete',body:{revision:4},code:'alvi'}]);
+  assert.ok(![...f.node('autoposting-select').options].some(option=>option.value==='23'),'удалённый материал исчез из выбора');
+  assert.ok([...f.node('autoposting-select').options].some(option=>option.value==='26'),'соседний материал остался');
+  assert.equal(f.node('autoposting-trash').hidden,false);assert.equal(f.node('autoposting-trash-count').textContent,'1');
+  assert.match(f.node('autoposting-trash-list').textContent,/Пробный · День1/);assert.match(f.node('autoposting-status').textContent,/перемещён в корзину/);
+  f.node('autoposting-trash-list').querySelector('[data-trash-restore="23"]').click();await f.settle();
+  assert.deepEqual(writes[1],{id:23,action:'restore',body:{revision:5},code:'alvi'});
+  assert.ok([...f.node('autoposting-select').options].some(option=>option.value==='23'));assert.equal(f.node('autoposting-trash').hidden,true);
+  assert.ok(f.calls.every(call=>!/\/(schedule|approve|publish)/.test(call.path)),'удаление и восстановление ничего не ставят в план и не согласуют');
+ }finally{f.close();}
+});
+test('корзина: кнопка удаления скрыта для материала в очереди и для доступа только на просмотр',async()=>{
+ const queued={id:30,companyCode:'alvi',revision:2,status:'scheduled',title:'В плане',text:'Текст',mediaUrls:[],platformIds:['telegram'],scheduledAt:'2099-01-01T02:00:00Z',timezone:'Asia/Irkutsk',profileRevision:2,deliveries:[{channelId:'telegram',status:'pending'}]};
+ const draft={...queued,id:31,status:'draft',title:'Черновик',deliveries:[]};
+ const f=await fixture({entries:[queued,draft]});try{f.set('autoposting-select','30','change');assert.equal(f.node('autoposting-delete').hidden,true);f.set('autoposting-select','31','change');assert.equal(f.node('autoposting-delete').hidden,false);}finally{f.close();}
+ const viewer=await fixture({role:'editor',permissions:['autoposting.view'],entries:[draft]});try{viewer.set('autoposting-select','31','change');assert.equal(viewer.node('autoposting-delete').hidden,true);}finally{viewer.close();}
+});
 async function fixture({role='owner',permissions=[],override,entries=[],starter=false}={}){
   const dom=new JSDOM('<section id="view"></section>',{url:'https://cabinet.test/',runScripts:'outside-only'}),w=dom.window,d=w.document,views={},calls=[],posts=clone(entries),configs={alvi:{channels:channels(),timezone:'Asia/Irkutsk'},avokado:{channels:channels(),timezone:'Asia/Irkutsk'}};
   w.SbCabinet={registerView:(name,view)=>{views[name]=view;}};scripts.forEach(source=>w.eval(source));
