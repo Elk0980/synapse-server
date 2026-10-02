@@ -1,0 +1,31 @@
+# Dormant example, never automatically loaded or merged with compose.eva.yml.
+# Apply only to the EXISTING CRM compose project after approval of the exact
+# task projection, project-code allowlist and dedicated socket volume.
+# Root docker-compose.yml defines service "crm"; this overlay keeps its /data
+# volume, environment and networking intact. Nothing publishes the socket on TCP.
+#
+# The dedicated external volume must already exist, contain no CRM data and have
+# a parent directory owned by the CRM runtime UID (verify: expected root), 0700.
+# The optional reader creates tasks.sock with 0600. No directory/chown repair is
+# performed by the reader. Eva must run with the same UID to connect.
+#
+# EVA_TASK_PROJECTS must be a nonempty JSON array of individually approved,
+# existing company codes. No default, wildcard or unassigned-company fallback.
+# Keep the existing CRM environment source; do not replace it with Eva's file.
+
+services:
+  crm:
+    environment:
+      EVA_TASK_SOCKET_PATH: /run/eva-tasks/tasks.sock
+      EVA_TASK_PROJECTS: ${EVA_TASK_PROJECTS:?Set the approved explicit JSON array of existing company codes}
+    volumes:
+      - type: volume
+        source: eva_task_socket
+        target: /run/eva-tasks
+        volume:
+          nocopy: true
+
+volumes:
+  eva_task_socket:
+    external: true
+    name: ${EVA_TASK_SOCKET_VOLUME:?Set the approved existing task-only socket volume; never use a CRM data volume}

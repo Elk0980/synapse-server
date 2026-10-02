@@ -39,7 +39,7 @@ def validate_timezone(value):
 
 def validate_volume(value):
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{1,127}", value):
-        raise SetupError("Нужно точное имя существующего Docker volume CRM.")
+        raise SetupError("Нужно точное имя согласованного Docker volume только для сокета задач.")
     return value
 
 
@@ -129,7 +129,7 @@ def save_configuration(directory_fd, token, owner_id, timezone, volume):
     metadata = (
         f"EVA_OWNER_USER_ID={owner_id}\n"
         f"EVA_TIMEZONE={timezone}\n"
-        f"EVA_CRM_VOLUME={volume}\n"
+        f"EVA_TASK_SOCKET_VOLUME={volume}\n"
     )
     # No chmod, replacement, secret-derived error, network call or automatic startup.
     # If interrupted between these exclusive writes, an operator checks the partial
@@ -166,7 +166,7 @@ def main(argv=None):
         print("Eva: только сохранение локальной настройки. Бот не запускается.")
         owner_id = validate_owner_id(input("Ваш проверенный числовой Telegram user ID: "))
         timezone = validate_timezone(input("Часовой пояс IANA [Etc/UTC]: "))
-        volume = validate_volume(input("Точное имя существующего Docker volume CRM (из docker inspect): "))
+        volume = validate_volume(input("Имя согласованного существующего volume только для сокета задач (не CRM): "))
         token = read_hidden_token()
         save_configuration(directory_fd, token, owner_id, timezone, volume)
         print("Сохранено в /etc/synapse/eva: каталог 0700, новые файлы 0600. Бот не запускался.")

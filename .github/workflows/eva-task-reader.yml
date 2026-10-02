@@ -1,0 +1,40 @@
+name: eva-task-reader
+
+on:
+  pull_request:
+    paths:
+      - 'ops/eva-tasks/**'
+      - 'ops/crm/eva-task-reader*'
+      - 'ops/crm/server.js'
+      - 'ops/crm/Dockerfile'
+      - '.github/workflows/eva-task-reader.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reader:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Task reader and transport tests
+        run: node --test ops/eva-tasks/*.test.js ops/crm/eva-task-reader.test.js
+      - name: Human setup tests
+        run: python -m unittest discover -s ops/eva-tasks -p setup_test.py -v
+      - name: Check CRM syntax
+        run: node --check ops/crm/server.js
+      - name: Build isolated Eva image
+        run: docker build -t synapse-eva:test ops/eva-tasks
+      - name: Validate dormant Eva compose
+        env:
+          EVA_OWNER_USER_ID: '123456'
+          EVA_TASK_SOCKET_VOLUME: 'synthetic-eva-socket-ci'
+        run: docker compose -f ops/eva-tasks/compose.eva.yml config --quiet

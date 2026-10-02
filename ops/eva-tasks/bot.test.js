@@ -391,6 +391,46 @@ test('source failure is distinguishable from an empty list and retry recovers wi
   assert.equal(failedCard[1].method, 'editMessageText');
 });
 
+test('deferred async source settles before actions, rejects safely and rereads on retry', async () => {
+  const requests = [];
+  const h = harness({ config: { source: { listTasks: () => new Promise((resolve, reject) => {
+    requests.push({ resolve, reject });
+  }) } } });
+  let completed = false;
+  const starting = h.start().then(actions => { completed = true; return actions; });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(requests.length, 1);
+  assert.equal(completed, false, 'No actions are returned before async source data arrives');
+  requests[0].resolve([task()]);
+  const home = await starting;
+  assert.match(output(home).text, /Eva · SynapseBusiness/);
+
+  const data = findButton(home, 'Все задачи').callback_data;
+  completed = false;
+  const listing = h.bot(h.callback(data)).then(actions => { completed = true; return actions; });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(requests.length, 2);
+  assert.equal(completed, false);
+  const unauthorized = h.callback(data, { from: { id: OWNER + 1 } });
+  assert.deepEqual(await h.bot(unauthorized), []);
+  assert.equal(requests.length, 2, 'A foreign sender cannot trigger a source read while another is pending');
+  requests[1].reject(new Error('PRIVATE_UDS_PATH_OR_RESPONSE_MUST_NOT_LEAK'));
+  const failed = await listing;
+  assert.equal(failed[0].method, 'answerCallbackQuery');
+  assert.equal(failed[1].method, 'editMessageText');
+  assert.match(output(failed).text, /Задачи сейчас недоступны/);
+  assert.ok(!JSON.stringify(failed).includes('PRIVATE_UDS'));
+  assert.ok(!output(failed).text.includes('Пока нет задач'));
+
+  const retrying = h.click(failed, 'Повторить');
+  assert.equal(requests.length, 3);
+  requests[2].resolve([task({ title: 'Свежие данные после переподключения' })]);
+  const recovered = await retrying;
+  assert.match(output(recovered).text, /Свежие данные после переподключения/);
+  assert.ok(!output(recovered).text.includes('Проверить макет'));
+  assert.equal(h.events.filter(event => event === 'source_error').length, 1);
+});
+
 test('malformed and duplicated source records do not become an empty or misleading view', async () => {
   for (const tasks of [null, { tasks: [] }, [null], [{ title: 'Missing identity' }], [task(), task()]]) {
     const h = harness({ config: { source: { listTasks: async () => tasks } } });
