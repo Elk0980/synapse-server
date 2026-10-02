@@ -1,0 +1,6 @@
+**
+!Dockerfile
+!.dockerignore
+!runtime.js
+!bot.js
+!task-source.js
