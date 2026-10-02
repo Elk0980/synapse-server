@@ -1746,8 +1746,9 @@ async function handleEntityRoutes(request, response, url, cors) {
         if (company) values.companyCode = company.code.toLowerCase();
         if (values.sourceRef) {
           const duplicate = db.prepare(
-            'SELECT * FROM tasks WHERE source_ref = ? AND is_deleted = 0 ORDER BY id LIMIT 1'
-          ).get(values.sourceRef);
+            `SELECT * FROM tasks WHERE source_ref = ? AND company_code = ? COLLATE NOCASE
+              AND source = ? AND is_deleted = 0 ORDER BY id LIMIT 1`
+          ).get(values.sourceRef, values.companyCode, values.source);
           if (duplicate) {
             send(response, 200, { ...serializeEntity(config, duplicate), duplicate: true }, cors);
             return true;
