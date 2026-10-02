@@ -863,7 +863,8 @@ const server = http.createServer(async (request, response) => {
         let body; try {body=JSON.parse((await readRaw(request,28*1024*1024)).toString('utf8'));} catch {fail(400,'Некорректный исходник');}
         return reply(200,telegramSources.receive(body));
       }
-      if (route === '/outbox' && request.method === 'GET') return reply(200,{jobs:projectChat.bridge.pendingTelegram()});
+      // capabilities объявляет мост: правку отправленного сообщения получает только мост, который её умеет.
+      if (route === '/outbox' && request.method === 'GET') return reply(200,{jobs:projectChat.bridge.pendingTelegram(1,{capabilities:url.searchParams.get('capabilities')||''})});
       if (route === '/attachment' && request.method === 'GET') {
         const file = projectChat.bridge.readAttachment(url.searchParams.get('id'),url.searchParams.get('companyCode'));
         return reply(200,{name:file.name,mime:file.mime,base64:file.bytes.toString('base64')});

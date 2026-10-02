@@ -18,6 +18,10 @@ const FILE_REJECTED = new Set([413, 415]);
 const clean = (value, max) => String(value ?? '').replace(/[\r\n\t]+/g, ' ').slice(0, max);
 // Ответ ИИ в группе подписывается всегда одинаково: участники видят, что пишет бот, а не Влад.
 const AI_SIGNATURE = 'Хью, бизнес-ассистент Синапс Бизнес (ИИ)';
+// Одна текстовая часть сообщения в Telegram; правка меняет ровно одну такую часть.
+const TEXT_PART = 3500;
+const EDIT_JOB = /^edit:\d{1,12}$/;
+const EDIT_CAPABILITY = 'edit';
 
 function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacyHandler, botUsername = '', ownerChatId = '',
   botId = /^\d+:/.test(String(telegramToken || '')) ? String(telegramToken).split(':')[0] : '',
@@ -84,7 +88,35 @@ function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacy
       throw Object.assign(new Error(`Telegram: неизвестный результат (${response.status})`), { certain: false });
     }
     throw Object.assign(new Error(`Telegram: ${response.status}${detail ? ` — ${detail}` : ''}`),
-      { certain: true, retryable: response.status === 429 });
+      { certain: true, retryable: response.status === 429, description: String(payload?.description ?? '') });
+  }
+  /* Правка уже отправленного сообщения Хью: ровно один editMessageText тем же ботом, в ту же группу,
+     для того же номера сообщения. Ничего не отправляется, не закрепляется и не удаляется.
+     ok возвращается только с подтверждением правки именно этого сообщения или с «message is not
+     modified» (текст в Telegram уже такой). Правка идемпотентна, поэтому неизвестный исход помечается
+     как повторяемый: повтор тем же текстом дубля не создаёт. */
+  async function editDelivery(job) {
+    const chatId = String(job.chatId ?? ''), messageId = String(job.telegramMessageId ?? '');
+    if (!EDIT_JOB.test(String(job.id)) || !/^-?\d{1,20}$/.test(chatId) || !/^\d{1,20}$/.test(messageId)
+      || typeof job.text !== 'string' || !job.text.trim()) {
+      return { ok: false, uncertain: false, retryable: false, error: 'Некорректное задание правки' };
+    }
+    const text = `${AI_SIGNATURE}\n${job.text}`;
+    if (text.length > TEXT_PART) return { ok: false, uncertain: false, retryable: false, error: 'Текст правки длиннее одной части Telegram' };
+    let result;
+    try {
+      result = await telegram('editMessageText', { chat_id: chatId, message_id: Number(messageId), text });
+    } catch (error) {
+      if (error.certain && /message is not modified/i.test(String(error.description || ''))) {
+        return { ok: true, notModified: true, editedMessageId: messageId, chatId };
+      }
+      if (error.certain) return { ok: false, uncertain: false, retryable: Boolean(error.retryable), error: clean(error.message, 300) };
+      return { ok: false, uncertain: true, retryable: true, error: 'Нет подтверждения правки от Telegram' };
+    }
+    if (!result || typeof result !== 'object' || String(result.message_id) !== messageId || String(result.chat?.id) !== chatId) {
+      return { ok: false, uncertain: true, retryable: true, error: 'Telegram не подтвердил правку именно этого сообщения' };
+    }
+    return { ok: true, editedMessageId: messageId, chatId };
   }
   function enqueue(update) {
     const message = update.message;
@@ -226,6 +258,7 @@ function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacy
     }
   }
   async function delivery(job) {
+    if (job.kind === 'edit') return editDelivery(job);
     if (job.audience === 'owner') {
       if (!/^owner-alert:\d+$/.test(String(job.id)) || !/^\d+$/.test(String(ownerChatId))) {
         return { ok:false,retryable:false,uncertain:false,error:'Личный Telegram владельца не настроен' };
@@ -236,7 +269,7 @@ function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacy
     const full = prefix + (job.text || '');
     const parts = [];
     if ((job.text || '').trim() || !job.attachments?.length) {
-      for (let start = 0; start < full.length; start += 3500) parts.push({ text: full.slice(start, start + 3500) });
+      for (let start = 0; start < full.length; start += TEXT_PART) parts.push({ text: full.slice(start, start + TEXT_PART) });
     }
     for (const file of job.attachments || []) parts.push({ file });
     const ids = [];
@@ -362,9 +395,12 @@ function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacy
     // Комната выдаёт по одному заданию: срок аренды не истекает во время последовательных частей.
     for (let index = 0; index < OUTBOX_PER_TICK; index++) {
       let jobs;
-      try { ({ jobs } = await content('/outbox')); } catch { return; }
+      // Мост объявляет правку: без этого флага комната заданий правки не выдаёт.
+      try { ({ jobs } = await content(`/outbox?capabilities=${EDIT_CAPABILITY}`)); } catch { return; }
       if (!jobs?.length) return;
       for (const job of jobs) {
+        // Правка без своего номера edit:N не квитируется: числовой номер принадлежит обычной отправке.
+        if (job.kind === 'edit' && !EDIT_JOB.test(String(job.id))) continue;
         let result;
         try { result = await delivery(job); }
         catch (error) {
@@ -407,4 +443,4 @@ function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacy
     stop() { clearInterval(timer); },
   };
 }
-module.exports = { createProjectChatBridge, AI_SIGNATURE };
+module.exports = { createProjectChatBridge, AI_SIGNATURE, TEXT_PART };

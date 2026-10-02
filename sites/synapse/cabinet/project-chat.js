@@ -19,6 +19,11 @@
   const LOGIN_POLL_MS = 3000, LOGIN_POLLS = 40;
   // Ответ ИИ помечается всегда одинаково: участники видят, что пишет бот, а не Влад.
   const AI_BADGE = "ИИ · бизнес-ассистент Синапс Бизнес";
+  /* Правка отправленного сообщения Хью меняет одну часть Telegram (3500 символов) вместе с подписью
+     Хью и переводом строки. Сервер проверяет то же самое; здесь лишь подсказка до отправки. */
+  const EDIT_TEXT_LIMIT = 3500 - "Хью, бизнес-ассистент Синапс Бизнес (ИИ)".length - 1;
+  const editStates = { pending: "Правка ожидает отправки в Telegram", sending: "Правка отправляется в Telegram…",
+    sent: "Изменено в Telegram", error: "Правка не применена" };
   let current;
   const list = value => Array.isArray(value) ? value : [];
   const escape = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -261,13 +266,25 @@
     if (["failed", "error"].includes(message.aiStatus)) return '<small class="pc-error">Хью пока не ответил. Сообщение сохранено.</small>';
     return "";
   };
+  /* Кнопка правки — только владельцу и только у сообщения, отправленного им от имени Хью одной частью
+     без вложений, пока предыдущая правка не завершена. Окончательно всё проверяет сервер. */
+  const canEditMessage = (state, message) => isOwner(state) && message.authorType === "assistant" && message.reviewedByOwner === true
+    && message.deliveryStatus === "sent" && list(message.telegramLinks).length === 1 && !list(message.attachments).length
+    && !["pending", "sending"].includes(message.edit?.status) && Boolean(state.data?.room?.telegramChatId);
+  const editNoteHTML = message => {
+    const edit = message.edit;
+    if (!edit || !editStates[edit.status]) return message.editedAt ? `<small>Изменено ${escape(date(message.editedAt))}</small>` : "";
+    if (edit.status === "error") return `<small class="pc-error">${escape(editStates.error)}${edit.error ? `: ${escape(edit.error)}` : ""}</small>`;
+    if (edit.status === "sent") return `<small>${escape(editStates.sent)}${message.editedAt ? ` ${escape(date(message.editedAt))}` : ""}</small>`;
+    return `<small>${escape(editStates[edit.status])}</small>`;
+  };
   const messagesHTML = state => {
     const ai = aiInfo(state), reply = canReply(state);
     return timeline(state).map(message => `<li class="pc-message${message.authorType === "assistant" ? " pc-message-ai" : ""}" data-message-id="${escape(message.id)}">
     <div class="pc-message-meta"><strong>${escape(message.authorName || (message.authorType === "assistant" ? "Хью" : "Участник"))}</strong>${message.authorType === "assistant" ? `<span class="pc-ai-badge">${AI_BADGE}</span>` : ""}<time datetime="${escape(message.createdAt)}">${escape(date(message.createdAt))}</time>${message.authorType === "telegram" ? '<span>Telegram</span>' : ""}</div>
     ${message.text ? `<p class="pc-message-text">${escape(message.text)}</p>` : ""}
     ${list(message.attachments).length ? `<div class="pc-attachments">${message.attachments.map(attachment => attachmentHTML(attachment, state)).join("")}</div>` : ""}
-    <div class="pc-message-footer"><small${message.deliveryStatus === "error" ? ' class="pc-error"' : ""}>${escape(delivery[message.deliveryStatus] || "")}</small>${message.reviewedByOwner ? '<small>Проверено владельцем</small>' : ''}${receiptLinks(message)}${reply ? `<button type="button" data-pc-message-task="${escape(message.id)}">В задачу</button>` : ""}</div>
+    <div class="pc-message-footer"><small${message.deliveryStatus === "error" ? ' class="pc-error"' : ""}>${escape(delivery[message.deliveryStatus] || "")}</small>${message.reviewedByOwner ? '<small>Проверено владельцем</small>' : ''}${editNoteHTML(message)}${receiptLinks(message)}${reply ? `<button type="button" data-pc-message-task="${escape(message.id)}">В задачу</button>` : ""}${canEditMessage(state, message) ? `<button type="button" data-pc-message-edit="${escape(message.id)}">Изменить в Telegram</button>` : ""}</div>
     ${aiNoteHTML(message, ai)}
   </li>`).join("") || '<li class="pc-empty">Здесь будет общая переписка участников проекта.</li>';
   };
@@ -570,6 +587,25 @@
         if (dialog.isConnected) result.textContent = error.message;
       }
       finally { submit.disabled = false; }
+    });
+  };
+  /* Правка уже отправленного сообщения Хью. Ключ правки создаётся при открытии окна и сохраняется
+     при повторной отправке из того же окна: потерянный ответ не превращается во вторую правку.
+     Нового сообщения в группе нет, закреп не меняется — правится то же сообщение тем же ботом. */
+  const editDialog = (state, message) => {
+    if (!state.data || !canEditMessage(state, message)) return;
+    const expectedText = message.text || "", expectedChatId = state.data.room.telegramChatId, clientEditId = identifier();
+    const dialog = modal(state, "Изменить сообщение в Telegram", `<form class="pc-fields"><label>Текст<textarea name="text" rows="10" maxlength="${EDIT_TEXT_LIMIT}" required>${escape(expectedText)}</textarea></label>
+      <p class="pc-muted">Изменится уже отправленное сообщение Хью в группе. Новое сообщение не отправляется, закреп не меняется. Подпись Хью добавляется автоматически. Текст в чате проекта обновится после подтверждения Telegram.</p>
+      <button type="submit">Изменить в Telegram</button><p role="alert"></p></form>`);
+    formSave(state, dialog, async form => {
+      const text = form.elements.text.value.trim();
+      if (!text) throw new Error("Введите текст сообщения");
+      if (text.length > EDIT_TEXT_LIMIT) throw new Error(`Не больше ${EDIT_TEXT_LIMIT} символов: правка меняет одну часть сообщения в Telegram`);
+      if (text === expectedText) throw new Error("Текст не изменился");
+      const result = await write(state, `/reviewed-messages/${encodeURIComponent(message.id)}/edit`, "POST", { text, expectedText, expectedChatId, clientEditId });
+      if (result?.message) mergeMessages(state, [result.message], false);
+      notice(state, "Правка поставлена в очередь. Текст обновится после подтверждения Telegram.");
     });
   };
   const taskDialog = (state, task = {}, source) => {
@@ -1046,6 +1082,7 @@
       if (button.matches("[data-pc-new-task]")) taskDialog(state);
       if (button.matches("[data-pc-task]")) { const task = list(state.data?.tasks).find(item => String(item.id) === button.dataset.pcTask); if (task) taskDialog(state, task); }
       if (button.matches("[data-pc-message-task]")) { const message = timeline(state).find(item => String(item.id) === button.dataset.pcMessageTask); if (message) taskDialog(state, {}, message); }
+      if (button.matches("[data-pc-message-edit]")) { const message = timeline(state).find(item => String(item.id) === button.dataset.pcMessageEdit); if (message) editDialog(state, message); }
       if (button.matches("[data-pc-stages]")) stagesDialog(state);
       if (button.matches("[data-pc-edit-members]")) membersDialog(state);
       if (button.matches("[data-pc-schedule]")) scheduleDialog(state);

@@ -30,6 +30,17 @@ const MANAGER_TASK_TITLE = 'Ответить клиенту вручную: ИИ
 const AI_HISTORY = 30;
 const TELEGRAM_ATTEMPTS = 3;
 const TELEGRAM_LEASE = 10 * 60 * 1000;   // дольше самой длинной серии частей одной отправки
+/* Правка уже отправленного сообщения Хью. Мост ops/chat отправляет текст частями по 3500 символов
+   и подписывает ответ Хью строкой AI_SIGNATURE; правка меняет ровно одну часть, поэтому подпись,
+   перевод строки и новый текст обязаны поместиться в неё. Значения сверяет тест с модулем моста. */
+const TELEGRAM_PART_LIMIT = 3500;
+const HUGH_SIGNATURE = 'Хью, бизнес-ассистент Синапс Бизнес (ИИ)';
+const EDIT_TEXT_LIMIT = TELEGRAM_PART_LIMIT - HUGH_SIGNATURE.length - 1;
+const EDIT_ATTEMPTS = 3;
+const EDIT_LEASE = 2 * 60 * 1000;
+const EDIT_JOB = /^edit:(\d{1,12})$/;
+// Мост объявляет, что умеет правку; прежний мост без этого флага заданий правки не получает.
+const EDIT_CAPABILITY = 'edit';
 const RUNTIME_STATUS_TTL = 10000;
 // Ограничение подписки Хью: ждём указанное службой время в разумных пределах.
 const RETRY_AFTER_MIN = 5;
@@ -317,6 +328,28 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS project_chat_tasks_ref ON project_chat_tasks(company_code, external_ref) WHERE external_ref<>''");
     if (!columns('project_chat_rooms').has('sites')) db.exec("ALTER TABLE project_chat_rooms ADD COLUMN sites TEXT NOT NULL DEFAULT '[]'");
   }
+  /* Журнал и очередь правок отправленных сообщений Хью. Исходный текст сохраняется в old_text;
+     текст ЛК меняется только по квитанции моста о правке именно этого сообщения Telegram.
+     Незавершённой (pending/sending) может быть только одна правка сообщения. */
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS project_chat_message_edits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_code TEXT NOT NULL REFERENCES project_chat_rooms(company_code),
+      message_id INTEGER NOT NULL REFERENCES project_chat_messages(id),
+      chat_id TEXT NOT NULL, telegram_message_id TEXT NOT NULL,
+      old_text TEXT NOT NULL, new_text TEXT NOT NULL,
+      editor_id TEXT NOT NULL, client_edit_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sending','sent','error')),
+      attempts INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '',
+      not_modified INTEGER NOT NULL DEFAULT 0, text_synced INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at TEXT NOT NULL, claimed_at TEXT, created_at TEXT NOT NULL, finished_at TEXT,
+      UNIQUE(company_code, client_edit_id)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS project_chat_message_edits_open
+      ON project_chat_message_edits(message_id) WHERE status IN ('pending','sending');
+    CREATE INDEX IF NOT EXISTS project_chat_message_edits_queue
+      ON project_chat_message_edits(status, next_attempt_at);
+  `);
   // Вложенный вызов внутри уже открытой транзакции не открывает вторую: SQLite их не поддерживает.
   let inTx = false;
   const tx = (fn) => {
@@ -430,10 +463,18 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     };
     const jobs = new Map(db.prepare(`SELECT id,message_id,status FROM project_chat_ai_jobs WHERE message_id IN (${marks})`)
       .all(...ids).map(r => [r.message_id, r]));
+    // Последняя правка сообщения и момент последней применённой: старшая запись идёт позже по id.
+    const edits = new Map(), editedAt = new Map();
+    for (const e of db.prepare(`SELECT * FROM project_chat_message_edits WHERE message_id IN (${marks}) ORDER BY id`).all(...ids)) {
+      edits.set(e.message_id, e);
+      if (e.status === 'sent' && e.text_synced === 1) editedAt.set(e.message_id, e.finished_at);
+    }
     return rows.map(m => ({ id: m.id, authorName: m.author_name, authorType: m.author_type, text: m.text,
       createdAt: m.created_at, attachments: files.get(m.id) || [],
       deliveryStatus: delivery.get(m.id)?.status || 'local',
       telegramLinks: receiptLinks(delivery.get(m.id)), reviewedByOwner: reviewed.has(m.id),
+      ...(editedAt.has(m.id) ? { editedAt: editedAt.get(m.id) } : {}),
+      ...(edits.has(m.id) ? { edit: editJSON(edits.get(m.id)) } : {}),
       // Ожидание подключения — это по-прежнему очередь, а не отказ.
       ...(jobs.has(m.id) ? { aiStatus: jobs.get(m.id).status === 'blocked' ? 'pending' : jobs.get(m.id).status,
         aiJobId: jobs.get(m.id).id } : {}) }));
@@ -747,7 +788,9 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   }
 
   /* Забираем ровно одно задание: последовательная отправка частей не должна упираться в срок аренды. */
-  function pendingTelegram(limit = 1) {
+  /* capabilities — что умеет запросивший мост (через запятую). Правку получает только мост,
+     явно объявивший EDIT_CAPABILITY: прежний мост принял бы задание за обычное и отправил новое сообщение. */
+  function pendingTelegram(limit = 1, { capabilities = '' } = {}) {
     return tx(() => {
       const alerts = ownerAlerts.pending();
       if (alerts.jobs.length) return alerts.jobs;
@@ -756,6 +799,10 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       const jobs = db.prepare(`SELECT o.* FROM project_chat_outbox o JOIN project_chat_rooms r ON r.company_code=o.company_code
         WHERE o.status='pending' AND o.next_attempt_at<=? AND o.chat_id=r.telegram_chat_id ORDER BY o.id LIMIT 1`).all(stamp());
       for (const job of jobs) db.prepare(`UPDATE project_chat_outbox SET status='sending',claimed_at=?,attempts=attempts+1 WHERE id=?`).run(stamp(), job.id);
+      if (!jobs.length && String(capabilities).split(',').map(v => v.trim()).includes(EDIT_CAPABILITY)) {
+        const edit = pendingEdit();
+        if (edit) return [edit];
+      }
       // Комната идёт первой; заявки с сайта берутся той же транзакцией и тем же лимитом «одно задание».
       if (!jobs.length) return siteOrders.pendingTelegram();
       return jobs.map(j => {
@@ -767,7 +814,135 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       });
     });
   }
+  /* ПРАВКА ОТПРАВЛЕННОГО СООБЩЕНИЯ ХЬЮ.
+
+     Что правится. Только сообщение, которое владелец отправил от имени Хью (/reviewed-messages):
+     автор hugh, есть отметка проверки, доставка sent, ровно одна часть в Telegram, без вложений,
+     и группа комнаты та же, куда сообщение ушло. Всё это проверяется при постановке правки
+     и ещё раз в момент выдачи мосту: сменилась группа — правка не уходит.
+
+     Что делает мост. Ровно один вызов editMessageText тем же ботом для того же сообщения.
+     Новых сообщений, закрепов и удалений нет. Правка идемпотентна (тот же текст ещё раз даёт
+     «message is not modified»), поэтому неизвестный исход можно повторить без дубля — в отличие
+     от отправки. Попыток не больше EDIT_ATTEMPTS.
+
+     Когда меняется текст ЛК. Только по квитанции ok с номером именно этого сообщения и чата;
+     ошибка или неподтверждённый ответ текст ЛК не меняют. Исходный текст остаётся в журнале. */
+  function editJSON(e) {
+    return { id: e.id, status: e.status, error: e.error || '', createdAt: e.created_at,
+      finishedAt: e.finished_at || null, notModified: e.not_modified === 1, textSynced: e.text_synced === 1 };
+  }
+  function editTarget(code, id) {
+    const message = db.prepare('SELECT * FROM project_chat_messages WHERE id=? AND company_code=?').get(id, code);
+    if (!message) fail(404, 'Сообщение не найдено');
+    if (message.author_id !== 'hugh' || message.author_type !== 'assistant') fail(409, 'Изменить можно только сообщение Хью');
+    const proof = db.prepare('SELECT * FROM project_chat_reviewed_messages WHERE message_id=?').get(id);
+    if (!proof) fail(409, 'Изменить можно только сообщение, которое владелец отправил от имени Хью');
+    const outbox = db.prepare('SELECT * FROM project_chat_outbox WHERE message_id=? AND company_code=?').get(id, code);
+    if (!outbox || outbox.status !== 'sent') fail(409, 'Сообщение ещё не доставлено в Telegram');
+    let external;
+    try { external = JSON.parse(outbox.external_ids || '[]'); } catch { external = null; }
+    if (!Array.isArray(external) || external.length !== 1 || !/^\d{1,20}$/.test(String(external[0]))) {
+      fail(409, 'Сообщение ушло в Telegram не одной частью — изменить его одной правкой нельзя');
+    }
+    if (db.prepare('SELECT 1 FROM project_chat_attachments WHERE message_id=? LIMIT 1').get(id)) fail(409, 'Сообщение с вложениями изменить нельзя');
+    const room = db.prepare('SELECT telegram_chat_id FROM project_chat_rooms WHERE company_code=?').get(code);
+    if (!room?.telegram_chat_id || room.telegram_chat_id !== outbox.chat_id || proof.chat_id !== outbox.chat_id) {
+      fail(409, 'Группа Telegram проекта изменилась. Правка в прежнюю группу не отправляется');
+    }
+    return { message, chatId: outbox.chat_id, telegramMessageId: String(external[0]) };
+  }
+  function createEdit(code, id, body, editor) {
+    if (Object.keys(body).some(k => !['text', 'expectedText', 'expectedChatId', 'clientEditId'].includes(k))) fail(400, 'Неизвестное поле правки');
+    const text = cleanText(body.text ?? '', MESSAGE_LIMIT);
+    if (!text) fail(400, 'Введите текст сообщения');
+    if (text.length > EDIT_TEXT_LIMIT) fail(400, `Текст правки длиннее одной части Telegram: не больше ${EDIT_TEXT_LIMIT} символов`);
+    if (typeof body.expectedText !== 'string' || typeof body.expectedChatId !== 'string') fail(400, 'Нужны текущий текст сообщения и получатель');
+    const clientId = cleanText(body.clientEditId ?? '', 128, 'clientEditId');
+    if (!/^[a-zA-Z0-9_.:-]{8,128}$/.test(clientId)) fail(400, 'Нужен уникальный идентификатор правки');
+    return tx(() => {
+      const old = db.prepare('SELECT * FROM project_chat_message_edits WHERE company_code=? AND client_edit_id=?').get(code, clientId);
+      if (old) {
+        if (old.message_id !== id || old.new_text !== text || old.old_text !== body.expectedText
+          || old.chat_id !== body.expectedChatId || old.editor_id !== String(editor.id)) fail(409, 'Этот идентификатор уже использован для другой правки');
+        return { edit: old, duplicate: true };
+      }
+      const target = editTarget(code, id);
+      if (target.chatId !== body.expectedChatId) fail(409, 'Получатель изменился. Обновите чат и проверьте получателя');
+      if (target.message.text !== body.expectedText) fail(409, 'Сообщение уже изменилось. Обновите чат и проверьте текст');
+      if (target.message.text === text) fail(400, 'Текст не изменился');
+      if (db.prepare("SELECT 1 FROM project_chat_message_edits WHERE message_id=? AND status IN ('pending','sending')").get(id)) {
+        fail(409, 'Предыдущая правка этого сообщения ещё не завершена');
+      }
+      const now = stamp();
+      const editId = Number(db.prepare(`INSERT INTO project_chat_message_edits
+        (company_code,message_id,chat_id,telegram_message_id,old_text,new_text,editor_id,client_edit_id,next_attempt_at,created_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?)`).run(code, id, target.chatId, target.telegramMessageId, target.message.text, text,
+        String(editor.id), clientId, now, now).lastInsertRowid);
+      return { edit: db.prepare('SELECT * FROM project_chat_message_edits WHERE id=?').get(editId), duplicate: false };
+    });
+  }
+  // Вызывается внутри транзакции pendingTelegram: правка выдаётся, только если всё ещё безопасна.
+  function pendingEdit() {
+    const now = stamp();
+    // Истёкшая аренда: правка идемпотентна, поэтому повтор безопасен, но не бесконечен.
+    db.prepare(`UPDATE project_chat_message_edits SET claimed_at=NULL,next_attempt_at=?,
+        status=CASE WHEN attempts>=? THEN 'error' ELSE 'pending' END,
+        error=CASE WHEN attempts>=? THEN ? ELSE error END,
+        finished_at=CASE WHEN attempts>=? THEN ? ELSE finished_at END
+      WHERE status='sending' AND claimed_at<?`).run(now, EDIT_ATTEMPTS, EDIT_ATTEMPTS,
+      'Нет подтверждения правки от Telegram. Проверьте сообщение в группе', EDIT_ATTEMPTS, now,
+      new Date(Date.now() - EDIT_LEASE).toISOString());
+    for (;;) {
+      const row = db.prepare("SELECT * FROM project_chat_message_edits WHERE status='pending' AND next_attempt_at<=? ORDER BY id LIMIT 1").get(now);
+      if (!row) return null;
+      let blocker = '';
+      try {
+        const target = editTarget(row.company_code, row.message_id);
+        if (target.chatId !== row.chat_id || target.telegramMessageId !== row.telegram_message_id) blocker = 'Получатель изменился; правка не отправлена';
+        else if (target.message.text !== row.old_text) blocker = 'Сообщение изменилось после постановки правки; правка не отправлена';
+      } catch (error) { blocker = shortText(error.message, 300); }
+      if (blocker) {
+        db.prepare("UPDATE project_chat_message_edits SET status='error',error=?,finished_at=?,claimed_at=NULL WHERE id=?").run(blocker, now, row.id);
+        continue;
+      }
+      db.prepare("UPDATE project_chat_message_edits SET status='sending',claimed_at=?,attempts=attempts+1 WHERE id=?").run(now, row.id);
+      return { id: `edit:${row.id}`, kind: 'edit', companyCode: row.company_code, chatId: row.chat_id,
+        telegramMessageId: row.telegram_message_id, text: row.new_text, authorType: 'assistant', authorName: 'Хью',
+        attempt: row.attempts + 1 };
+    }
+  }
+  function acknowledgeEdit(jobId, result = {}) {
+    const id = Number(EDIT_JOB.exec(String(jobId))[1]);
+    return tx(() => {
+      const row = db.prepare('SELECT * FROM project_chat_message_edits WHERE id=?').get(id);
+      if (!row) fail(404, 'Правка не найдена');
+      if (row.status === 'sent') return { ok: true, status: 'sent' };
+      const now = stamp();
+      // Успехом считается только подтверждение правки именно этого сообщения в той же группе.
+      const confirmed = result.ok === true && String(result.editedMessageId ?? '') === row.telegram_message_id
+        && String(result.chatId ?? '') === row.chat_id;
+      if (confirmed) {
+        // Поздняя квитанция после более новой правки не затирает её текст.
+        const synced = Number(db.prepare('UPDATE project_chat_messages SET text=? WHERE id=? AND company_code=? AND text=?')
+          .run(row.new_text, row.message_id, row.company_code, row.old_text).changes) === 1;
+        db.prepare(`UPDATE project_chat_message_edits SET status='sent',error=?,not_modified=?,text_synced=?,finished_at=?,claimed_at=NULL WHERE id=?`)
+          .run(synced ? '' : 'Telegram применил правку позже другой; текст ЛК не перезаписан', result.notModified ? 1 : 0,
+            synced ? 1 : 0, now, row.id);
+        return { ok: true, status: 'sent' };
+      }
+      // Отказ по уже закрытой правке ничего не меняет: её исход определён раньше.
+      if (!['sending', 'pending'].includes(row.status)) return { ok: false, status: row.status };
+      const retry = !result.ok && (result.uncertain || result.retryable) && row.attempts < EDIT_ATTEMPTS;
+      const error = result.ok ? 'Telegram не подтвердил правку этого сообщения' : shortText(result.error || 'Не удалось изменить сообщение в Telegram', 300);
+      db.prepare('UPDATE project_chat_message_edits SET status=?,error=?,next_attempt_at=?,finished_at=?,claimed_at=NULL WHERE id=?')
+        .run(retry ? 'pending' : 'error', error, new Date(Date.now() + 15000 * Math.max(1, row.attempts)).toISOString(),
+          retry ? null : now, row.id);
+      return { ok: false, status: retry ? 'pending' : 'error' };
+    });
+  }
   function acknowledgeTelegram(jobId, result = {}) {
+    if (EDIT_JOB.test(String(jobId))) return acknowledgeEdit(jobId, result);
     if (ownerAlerts.isJob(jobId)) return ownerAlerts.acknowledge(jobId,result);
     if (siteOrders.isOrderJob(jobId)) return siteOrders.acknowledge(jobId, result);
     const job = db.prepare('SELECT * FROM project_chat_outbox WHERE id=?').get(integer(jobId));
@@ -1365,6 +1540,14 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       });
       return reply(result.duplicate ? 200 : 201, result);
     }
+    // Правка отправленного сообщения Хью: только владелец в кабинете, своя компания, тот же бот.
+    const editRoute = suffix.match(/^\/reviewed-messages\/(\d{1,12})\/edit$/);
+    if (editRoute && method === 'POST') {
+      const body = await readBody(request), editor = access(request, code, true, true);
+      const result = createEdit(code, integer(editRoute[1]), body, editor);
+      return reply(result.duplicate ? 200 : 202, { edit: editJSON(result.edit),
+        message: messageJSON(db.prepare('SELECT * FROM project_chat_messages WHERE id=?').get(result.edit.message_id)) });
+    }
     if (suffix === '/messages' && method === 'POST') {
       const body = await readBody(request), freshUser = access(request, code, true);
       if (Object.keys(body).some(k => !['text', 'attachmentIds', 'clientMessageId'].includes(k))) fail(400, 'Неизвестное поле сообщения');
@@ -1936,4 +2119,4 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     processScheduledMessages, processAssistantAttention, scheduledList, startWorker, stopWorker, localWorker, siteOrders, miniApp, fallback, skills, contentReviewReminders };
 }
 
-module.exports = { createProjectChat, MAX_ATTACHMENT, MESSAGE_PAGE };
+module.exports = { createProjectChat, MAX_ATTACHMENT, MESSAGE_PAGE, TELEGRAM_PART_LIMIT, HUGH_SIGNATURE, EDIT_TEXT_LIMIT };
