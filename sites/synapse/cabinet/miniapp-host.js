@@ -10,7 +10,7 @@
   const views = {};
   const cabinet = window.SbCabinet = window.SbCabinet || {};
   cabinet.registerView = (name, definition) => { views[name] = definition; };
-  const session = { token: null, companies: [], identity: null, company: null };
+  const session = { token: null, companies: [], identity: null, company: null, personal: null, personalStep: "" };
   const authHeaders = () => (session.token ? { Authorization: "Bearer " + session.token } : {});
   // Фото и PDF читаются тем же защищённым маршрутом, что и в кабинете, но с заголовком вместо cookie.
   // Заголовок уходит только на маршрут вложений открытого проекта на этом же домене; редиректы запрещены,
@@ -34,6 +34,65 @@
   const noProjectScreen = () => `<section class="ma-screen"><h1>Чат проекта</h1><p>Откройте чат по ссылке своего проекта — её даёт владелец или она закреплена в группе проекта.</p><p class="ma-muted">Ссылка указывает проект, к которому вас привяжут. Без неё код привязки не выдаётся.</p>${closeButton()}</section>`;
   const notConfiguredScreen = () => `<section class="ma-screen"><h1>Чат проекта</h1><p>Вход в чат проекта из Telegram пока не включён.</p><p class="ma-muted">Пока чат доступен в кабинете Synapse Business.</p>${closeButton()}</section>`;
   const chooserScreen = () => `<section class="ma-screen"><h1>Выберите проект</h1><ul class="ma-list">${session.companies.map(company => `<li><button type="button" class="ma-button" data-ma-company="${escape(company.code)}">${escape(company.title)}</button></li>`).join("")}</ul></section>`;
+  /* Личные напоминания от Хью (specs/083). Разрешение писать лично засчитывает ТОЛЬКО сервер — по свежим
+     подписанным данным входа (allows_write_to_pm в initData). Ответ окна Telegram (callback requestWriteAccess)
+     и initDataUnsafe не подписаны: сюда они не отправляются и «подтверждено» не показывают. После решения
+     пользователя нужен новый запуск Mini App — данные входа выдаются Telegram на одно открытие. */
+  const WRITE_ACCESS_VERSION = "6.9";
+  const canRequestWriteAccess = () => Boolean(tg && typeof tg.requestWriteAccess === "function"
+    && typeof tg.isVersionAtLeast === "function" && tg.isVersionAtLeast(WRITE_ACCESS_VERSION));
+  const personalBanner = () => {
+    const personal = session.personal;
+    if (!personal || typeof personal !== "object") return "";
+    const box = body => `<section class="ma-personal" data-ma-personal>${body}</section>`;
+    // Тот же критерий, что у владельца: только состояние сервера ready (подписанный вход позже привязки и отзыва).
+    if (personal.confirmed === true && personal.state === "ready") {
+      return box('<p class="ma-muted">Хью может написать вам лично: разрешение подтверждено Telegram при этом входе.</p>');
+    }
+    if (personal.state === "several_links") {
+      return box('<p class="ma-muted">К вашему аккаунту привязано несколько Telegram — личные напоминания не отправляются. Сообщите владельцу проекта.</p>');
+    }
+    const step = session.personalStep;
+    // Разрешение есть, но этот запуск не позже текущей привязки (или пришли более старые данные входа): нужен новый запуск.
+    if (personal.state === "stale_permission" && step !== "granted") {
+      return box(`<p>Разрешение Хью писать вам лично получено до текущей привязки, сразу после неё или пришло со старыми данными входа. Закройте чат и откройте его снова из Telegram не раньше чем через минуту после привязки — новый вход подтвердит разрешение.</p>${closeButton()}`);
+    }
+    if (step === "granted") {
+      return box(`<p>Telegram принял ваше разрешение. Чтобы оно засчиталось, закройте чат и откройте его снова из Telegram: сервер проверит разрешение по новым данным входа.</p><p class="ma-muted">Пока вы не откроете чат заново, разрешение не подтверждено.</p>${closeButton()}`);
+    }
+    const intro = '<p>Хью может присылать вам личные напоминания по задачам проекта, только если вы сами разрешите боту писать вам.</p>';
+    if (!canRequestWriteAccess()) {
+      return box(`${intro}<p class="ma-muted">Ваша версия Telegram не умеет запрашивать это разрешение из чата. Обновите Telegram и откройте чат проекта снова.</p>`);
+    }
+    const note = step === "denied" ? '<p class="ma-muted">Разрешение не дано. Без него Хью не напишет вам лично; сообщения в группе вы видите как прежде.</p>'
+      : step === "failed" ? '<p class="ma-muted">Telegram не смог показать запрос. Обновите Telegram и попробуйте снова.</p>'
+        : personal.state === "revoked" ? '<p class="ma-muted">Telegram не доставил последнее личное сообщение Хью (бот заблокирован или разрешение снято). Разрешите снова и откройте чат заново не раньше чем через минуту.</p>' : "";
+    return box(`${intro}${note}<p><button type="button" class="ma-button" data-ma-write-access>Разрешить Хью писать мне лично</button></p>`);
+  };
+  const renderPersonal = () => {
+    const node = root.querySelector("[data-ma-personal]");
+    const html = personalBanner();
+    if (node) node.outerHTML = html || "";
+  };
+  // Запрос разрешения — только по нажатию самого получателя, один раз на нажатие. Результат окна не отправляется.
+  let asking = false;
+  const requestWriteAccess = () => {
+    if (asking || !canRequestWriteAccess() || !session.personal || session.personal.state === "ready") return;
+    asking = true;
+    const button = root.querySelector("[data-ma-write-access]");
+    if (button) button.disabled = true;
+    try {
+      tg.requestWriteAccess(granted => {
+        asking = false;
+        session.personalStep = granted === true ? "granted" : "denied";
+        renderPersonal();
+      });
+    } catch (_) {
+      asking = false;
+      session.personalStep = "failed";
+      renderPersonal();
+    }
+  };
   const minutesLeft = value => {
     const minutes = Math.round((Date.parse(value) - Date.now()) / 60000);
     return Number.isFinite(minutes) && minutes > 0 ? `ещё ${minutes} мин` : "недолго";
@@ -77,7 +136,7 @@
   const leaveRoom = () => { if (views.hugh && typeof views.hugh.unmount === "function") views.hugh.unmount(); };
   const open = async code => {
     session.company = code;
-    screen('<section id="hugh-view" class="ma-room"></section>');
+    screen(`${personalBanner()}<section id="hugh-view" class="ma-room"></section>`);
     if (session.companies.length > 1) showBack(() => { session.company = null; hideBack(); leaveRoom(); screen(chooserScreen()); });
     else hideBack();
     if (!views.hugh) { screen(reopenScreen("Чат не загрузился.")); return; }
@@ -110,6 +169,9 @@
       session.token = data.token;
       session.companies = Array.isArray(data.companies) ? data.companies : [];
       session.identity = data.identity || { userId: 0, displayName: "Участник" };
+      // Состояние разрешения писать лично — только из ответа сервера по подписанным данным этого входа.
+      session.personal = data.personal && typeof data.personal === "object" ? data.personal : null;
+      session.personalStep = "";
       const hinted = session.companies.find(company => company.code === data.startParam);
       if (session.companies.length === 1 || hinted) await open((hinted || session.companies[0]).code);
       else if (session.companies.length) screen(chooserScreen());
@@ -125,8 +187,9 @@
     screen(reopenScreen(data.state === "replayed" ? "Эти данные входа уже использованы." : "Сессия чата истекла."));
   };
   root.addEventListener("click", event => {
-    const button = event.target.closest("button[data-ma-close],button[data-ma-company]");
+    const button = event.target.closest("button[data-ma-close],button[data-ma-company],button[data-ma-write-access]");
     if (!button) return;
+    if (button.dataset.maWriteAccess !== undefined) { requestWriteAccess(); return; }
     if (button.dataset.maClose !== undefined) { if (tg && typeof tg.close === "function") tg.close(); return; }
     if (button.dataset.maCompany && session.companies.some(company => company.code === button.dataset.maCompany)) open(button.dataset.maCompany);
   });

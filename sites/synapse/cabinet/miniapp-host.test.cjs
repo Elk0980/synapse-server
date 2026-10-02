@@ -183,3 +183,118 @@ test('несколько проектов: выбор и кнопка «Наза
   assert.equal(h.calls.length, after, 'после отзыва запросов с прежним токеном больше нет');
   h.close();
 });
+
+// Личные напоминания от Хью (specs/083): разрешение писать лично запрашивает только сам получатель,
+// а подтверждает только сервер по свежим подписанным данным входа. Ответ окна Telegram не доказательство.
+const personalSession = (personal) => () => ({ body: { token: 'room.p.s', expiresAt: '2026-09-18T00:00:00.000Z', startParam: 'palitra-love',
+  companies: [{ code: 'palitra-love', title: 'Палитра' }], identity: { userId: 2, displayName: 'Дарья' }, ...(personal ? { personal } : {}) } });
+const personalRoutes = (personal) => ({ 'POST /content/project-chat-miniapp/session': personalSession(personal),
+  'GET /content/project-chat/palitra-love': () => ({ body: snapshot() }) });
+// Telegram 6.9+: requestWriteAccess есть; окно вызывается только из теста и только по нажатию в хосте.
+const withWriteAccess = (h, { version = true, method = true } = {}) => {
+  h.asks = [];
+  h.tg.isVersionAtLeast = (value) => { assert.equal(value, '6.9'); return version; };
+  if (method) h.tg.requestWriteAccess = (callback) => { h.asks.push(callback); };
+  return h;
+};
+
+test('разрешение писать лично: кнопка только по нажатию, «да» в окне Telegram не подтверждает — нужен новый вход', async () => {
+  const h = withWriteAccess(boot({ telegram: { startParam: 'palitra-love' }, routes: personalRoutes({ confirmed: false, state: 'no_permission' }) }));
+  await settle(10);
+  assert.match(text(h), /только если вы сами разрешите боту писать вам/);
+  assert.equal(h.asks.length, 0, 'окно Telegram само не открывается');
+  const before = h.calls.length;
+  click(h, '[data-ma-write-access]');
+  click(h, '[data-ma-write-access]');
+  assert.equal(h.asks.length, 1, 'одно окно на одно нажатие, повторный клик во время запроса не открывает второе');
+  h.asks[0](true);
+  await settle();
+  assert.match(text(h), /Telegram принял ваше разрешение\. Чтобы оно засчиталось, закройте чат и откройте его снова/);
+  assert.match(text(h), /Пока вы не откроете чат заново, разрешение не подтверждено/);
+  assert.doesNotMatch(text(h), /подтверждено Telegram при этом входе/);
+  assert.equal(h.d.querySelector('[data-ma-write-access]'), null);
+  // Ответ окна никуда не отправлен: новых запросов к серверу с разрешением нет.
+  assert.ok(h.calls.slice(before).every((c) => c.method === 'GET'), 'ни одного POST после решения в окне');
+  assert.ok(h.calls.every((c) => !String(c.body || '').includes('allow')), 'клиентский признак разрешения не отправляется');
+  click(h, '[data-ma-close]');
+  assert.equal(h.tg.closed, true);
+});
+
+test('отказ, ошибка Telegram и старая версия не делают получателя готовым', async () => {
+  const denied = withWriteAccess(boot({ telegram: { startParam: 'palitra-love' }, routes: personalRoutes({ confirmed: false, state: 'no_permission' }) }));
+  await settle(10);
+  click(denied, '[data-ma-write-access]');
+  denied.asks[0](false);
+  await settle();
+  assert.match(text(denied), /Разрешение не дано\. Без него Хью не напишет вам лично/);
+  click(denied, '[data-ma-write-access]');
+  assert.equal(denied.asks.length, 2, 'снова — только по новому нажатию');
+
+  const failed = withWriteAccess(boot({ telegram: { startParam: 'palitra-love' }, routes: personalRoutes({ confirmed: false, state: 'no_permission' }) }));
+  failed.tg.requestWriteAccess = () => { throw new Error('WebAppMethodUnsupported'); };
+  await settle(10);
+  click(failed, '[data-ma-write-access]');
+  await settle();
+  assert.match(text(failed), /Telegram не смог показать запрос/);
+
+  for (const options of [{ version: false }, { method: false }]) {
+    const old = withWriteAccess(boot({ telegram: { startParam: 'palitra-love' }, routes: personalRoutes({ confirmed: false, state: 'no_permission' }) }), options);
+    await settle(10);
+    assert.equal(old.d.querySelector('[data-ma-write-access]'), null);
+    assert.match(text(old), /Ваша версия Telegram не умеет запрашивать это разрешение из чата\. Обновите Telegram/);
+  }
+});
+
+test('«подтверждено» показывает только ответ сервера; initDataUnsafe и прежний сервер без поля не в счёт', async () => {
+  const confirmed = withWriteAccess(boot({ telegram: { startParam: 'palitra-love' }, routes: personalRoutes({ confirmed: true, state: 'ready' }) }));
+  await settle(10);
+  assert.match(text(confirmed), /Хью может написать вам лично: разрешение подтверждено Telegram при этом входе/);
+  assert.equal(confirmed.d.querySelector('[data-ma-write-access]'), null);
+
+  const unsafe = boot({ telegram: { startParam: 'palitra-love' }, routes: personalRoutes({ confirmed: false, state: 'no_permission' }) });
+  unsafe.tg.initDataUnsafe.user = { id: 5001, allows_write_to_pm: true };
+  withWriteAccess(unsafe);
+  await settle(10);
+  assert.ok(unsafe.d.querySelector('[data-ma-write-access]'), 'неподписанное поле клиента не подтверждает разрешение');
+  assert.doesNotMatch(text(unsafe), /подтверждено Telegram/);
+  assert.deepEqual(JSON.parse(unsafe.calls.find((c) => c.method === 'POST').body), { initData: unsafe.tg.initData });
+
+  const several = withWriteAccess(boot({ telegram: { startParam: 'palitra-love' }, routes: personalRoutes({ confirmed: false, state: 'several_links' }) }));
+  await settle(10);
+  assert.match(text(several), /привязано несколько Telegram/);
+  assert.equal(several.d.querySelector('[data-ma-write-access]'), null);
+
+  const legacy = withWriteAccess(boot({ telegram: { startParam: 'palitra-love' }, routes: personalRoutes(null) }));
+  await settle(10);
+  assert.equal(legacy.d.querySelector('[data-ma-personal]'), null, 'прежний сервер без поля — без плашки');
+});
+
+test('данные входа до текущей привязки или после отзыва: «подтверждено» не показывается, нужен новый вход', async () => {
+  // stale_permission: разрешение подписано раньше чем через минуту после привязки — только новый запуск через минуту, без окна разрешения.
+  const stale = withWriteAccess(boot({ telegram: { startParam: 'palitra-love' }, routes: personalRoutes({ confirmed: false, state: 'stale_permission' }) }));
+  await settle(10);
+  assert.match(text(stale), /получено до текущей привязки, сразу после неё или пришло со старыми данными входа\. Закройте чат и откройте его снова из Telegram не раньше чем через минуту после привязки/);
+  assert.doesNotMatch(text(stale), /подтверждено Telegram/);
+  assert.equal(stale.d.querySelector('[data-ma-write-access]'), null, 'окно разрешения не нужно — нужен новый вход');
+  click(stale, '[data-ma-close]');
+  assert.equal(stale.tg.closed, true);
+
+  // revoked: Telegram ответил 403 — видимое объяснение и повторное разрешение только по нажатию.
+  const revoked = withWriteAccess(boot({ telegram: { startParam: 'palitra-love' }, routes: personalRoutes({ confirmed: false, state: 'revoked' }) }));
+  await settle(10);
+  assert.match(text(revoked), /Telegram не доставил последнее личное сообщение Хью.*откройте чат заново не раньше чем через минуту/);
+  assert.doesNotMatch(text(revoked), /подтверждено Telegram/);
+  assert.equal(revoked.asks.length, 0);
+  click(revoked, '[data-ma-write-access]');
+  assert.equal(revoked.asks.length, 1);
+  revoked.asks[0](true);
+  await settle();
+  assert.match(text(revoked), /Пока вы не откроете чат заново, разрешение не подтверждено/);
+
+  // Несогласованный ответ (confirmed без ready) не показывается как подтверждение.
+  for (const state of ['stale_permission', 'revoked', 'no_permission', undefined]) {
+    const odd = withWriteAccess(boot({ telegram: { startParam: 'palitra-love' }, routes: personalRoutes({ confirmed: true, state }) }));
+    await settle(10);
+    assert.doesNotMatch(text(odd), /подтверждено Telegram/, String(state));
+  }
+});

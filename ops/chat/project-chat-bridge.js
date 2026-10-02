@@ -22,6 +22,10 @@ const AI_SIGNATURE = 'Хью, бизнес-ассистент Синапс Би�
 const TEXT_PART = 3500;
 const EDIT_JOB = /^edit:\d{1,12}$/;
 const EDIT_CAPABILITY = 'edit';
+// Личное напоминание участнику (specs/083): отдельный вид задания, мост объявляет его явно.
+const PERSONAL_JOB = /^personal:\d{1,12}$/;
+const PERSONAL_CAPABILITY = 'personal';
+const CAPABILITIES = [EDIT_CAPABILITY, PERSONAL_CAPABILITY].join(',');
 
 function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacyHandler, botUsername = '', ownerChatId = '',
   botId = /^\d+:/.test(String(telegramToken || '')) ? String(telegramToken).split(':')[0] : '',
@@ -88,7 +92,7 @@ function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacy
       throw Object.assign(new Error(`Telegram: неизвестный результат (${response.status})`), { certain: false });
     }
     throw Object.assign(new Error(`Telegram: ${response.status}${detail ? ` — ${detail}` : ''}`),
-      { certain: true, retryable: response.status === 429, description: String(payload?.description ?? '') });
+      { certain: true, retryable: response.status === 429, description: String(payload?.description ?? ''), status: response.status });
   }
   /* Правка уже отправленного сообщения Хью: ровно один editMessageText тем же ботом, в ту же группу,
      для того же номера сообщения. Ничего не отправляется, не закрепляется и не удаляется.
@@ -117,6 +121,32 @@ function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacy
       return { ok: false, uncertain: true, retryable: true, error: 'Telegram не подтвердил правку именно этого сообщения' };
     }
     return { ok: true, editedMessageId: messageId, chatId };
+  }
+  /* Личное напоминание от Хью: ровно один sendMessage в личный чат получателя тем же ботом, что пишет в группу.
+     Бот задания обязан совпасть с ботом этого моста: разрешение получателя давалось конкретному боту.
+     Неизвестный исход не повторяется (сообщение могло уйти); 403 — видимый отказ получателя.
+     Ни правок, ни закрепов, ни отправки в группу. */
+  async function personalDelivery(job) {
+    const chatId = String(job.chatId ?? '');
+    if (!PERSONAL_JOB.test(String(job.id)) || !/^[1-9]\d{0,19}$/.test(chatId) || typeof job.text !== 'string' || !job.text.trim()) {
+      return { ok: false, uncertain: false, retryable: false, error: 'Некорректное задание личного напоминания' };
+    }
+    if (!botId || String(job.botId ?? '') !== String(botId)) {
+      return { ok: false, uncertain: false, retryable: false, error: 'Разрешение получателя дано другому боту; не отправлено' };
+    }
+    const text = `${AI_SIGNATURE}\n${job.text}`;
+    if (text.length > TEXT_PART) return { ok: false, uncertain: false, retryable: false, error: 'Текст длиннее одного сообщения Telegram' };
+    let result;
+    try {
+      result = await telegram('sendMessage', { chat_id: chatId, text });
+    } catch (error) {
+      if (error.certain) return { ok: false, uncertain: false, retryable: false, forbidden: error.status === 403, error: clean(error.message, 300) };
+      return { ok: false, uncertain: true, retryable: false, error: 'Нет подтверждения отправки от Telegram; повтор не выполняется' };
+    }
+    if (String(result?.chat?.id ?? '') !== chatId) {
+      return { ok: false, uncertain: true, retryable: false, error: 'Telegram не подтвердил доставку именно этому получателю' };
+    }
+    return { ok: true, messageId: String(result.message_id), chatId };
   }
   function enqueue(update) {
     const message = update.message;
@@ -259,6 +289,7 @@ function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacy
   }
   async function delivery(job) {
     if (job.kind === 'edit') return editDelivery(job);
+    if (job.kind === 'personal') return personalDelivery(job);
     if (job.audience === 'owner') {
       if (!/^owner-alert:\d+$/.test(String(job.id)) || !/^\d+$/.test(String(ownerChatId))) {
         return { ok:false,retryable:false,uncertain:false,error:'Личный Telegram владельца не настроен' };
@@ -396,11 +427,12 @@ function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacy
     for (let index = 0; index < OUTBOX_PER_TICK; index++) {
       let jobs;
       // Мост объявляет правку: без этого флага комната заданий правки не выдаёт.
-      try { ({ jobs } = await content(`/outbox?capabilities=${EDIT_CAPABILITY}`)); } catch { return; }
+      try { ({ jobs } = await content(`/outbox?capabilities=${CAPABILITIES}`)); } catch { return; }
       if (!jobs?.length) return;
       for (const job of jobs) {
         // Правка без своего номера edit:N не квитируется: числовой номер принадлежит обычной отправке.
         if (job.kind === 'edit' && !EDIT_JOB.test(String(job.id))) continue;
+        if (job.kind === 'personal' && !PERSONAL_JOB.test(String(job.id))) continue;
         let result;
         try { result = await delivery(job); }
         catch (error) {
@@ -443,4 +475,4 @@ function createProjectChatBridge({ db, contentUrl, apiKey, telegramToken, legacy
     stop() { clearInterval(timer); },
   };
 }
-module.exports = { createProjectChatBridge, AI_SIGNATURE, TEXT_PART };
+module.exports = { createProjectChatBridge, AI_SIGNATURE, TEXT_PART, CAPABILITIES };
