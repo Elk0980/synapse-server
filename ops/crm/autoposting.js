@@ -216,7 +216,8 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     ['media_sha256',"TEXT NOT NULL DEFAULT ''"],['expected_media_sha256',"TEXT NOT NULL DEFAULT ''"],['expected_media_file',"TEXT NOT NULL DEFAULT ''"],['external_id',"TEXT NOT NULL DEFAULT ''"],
     ['content_revision','INTEGER NOT NULL DEFAULT 1'],['meta',"TEXT NOT NULL DEFAULT '{}'"],['sort_order','INTEGER NOT NULL DEFAULT 0'],
     ['partial_approved_revision','INTEGER'],['review_state',"TEXT NOT NULL DEFAULT 'draft'"],['review_comment',"TEXT NOT NULL DEFAULT ''"],['review_by_name','TEXT'],['review_at','TEXT'],
-    ['platform_options',"TEXT NOT NULL DEFAULT '{}'"]]){
+    ['platform_options',"TEXT NOT NULL DEFAULT '{}'"],
+    ['deleted_at','TEXT'],['deleted_by','INTEGER'],['deleted_by_name','TEXT'],['deleted_comment',"TEXT NOT NULL DEFAULT ''"]]){
     if(!postColumns.has(column))db.exec(`ALTER TABLE autoposting_posts ADD COLUMN ${column} ${type}`);
   }
   db.exec(`CREATE TABLE IF NOT EXISTS autoposting_reviews (
@@ -224,6 +225,15 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     action TEXT NOT NULL CHECK(action IN ('submitted','approved','rejected','revoked','edited','reordered','rescheduled')),
     content_revision INTEGER NOT NULL,comment TEXT NOT NULL DEFAULT '',actor_id INTEGER,actor_name TEXT,created_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS autoposting_reviews_post_idx ON autoposting_reviews(post_id,id);`);
+  /* Корзина материалов. Удаление обратимо: строка карточки, её медиа, согласования, доставки
+     и расписки остаются как были; меняется только признак deleted_at. Журнал удалений и
+     восстановлений хранится отдельно — у истории согласования свой закрытый список действий. */
+  db.exec(`CREATE TABLE IF NOT EXISTS autoposting_post_trash_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,post_id INTEGER NOT NULL REFERENCES autoposting_posts(id),company_id INTEGER NOT NULL,
+    action TEXT NOT NULL CHECK(action IN ('deleted','restored')),revision INTEGER NOT NULL,comment TEXT NOT NULL DEFAULT '',
+    actor_id INTEGER,actor_name TEXT,created_at TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS autoposting_post_trash_events_post_idx ON autoposting_post_trash_events(post_id,id);
+    CREATE INDEX IF NOT EXISTS autoposting_posts_trash_idx ON autoposting_posts(company_id,deleted_at);`);
   /* Подтверждения внешней публикации хранятся отдельно от доставок: правка содержимого удаляет доставки,
      но доказательства прежних выходов остаются навсегда. Идемпотентность — компания+карточка+площадка+ссылка. */
   db.exec(`CREATE TABLE IF NOT EXISTS autoposting_publication_receipts (
@@ -352,11 +362,13 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     if(!ids.length)return;
     db.prepare(`UPDATE autoposting_deliveries SET status='cancelled' WHERE post_id=? AND status='pending' AND channel_id IN (${ids.map(()=>'?').join(',')})`).run(row.id,...ids);
   };
-  function rowFor(id,code) {
+  /* Удалённая карточка для всех обычных действий не существует: чтение, правка, согласование,
+     постановка, продолжение и проверка отвечают 404. Найти её можно только в корзине (deleted=true). */
+  function rowFor(id,code,{deleted=false}={}) {
     const owner=company(db,code);
     if(!Number.isSafeInteger(Number(id))||Number(id)<1)fail(404,'Публикация не найдена','NOT_FOUND');
-    const row=db.prepare('SELECT * FROM autoposting_posts WHERE id=? AND company_id=?').get(Number(id),owner.id);
-    if(!row)fail(404,'Публикация не найдена','NOT_FOUND');return {row,owner};
+    const row=db.prepare(`SELECT * FROM autoposting_posts WHERE id=? AND company_id=? AND deleted_at IS ${deleted?'NOT NULL':'NULL'}`).get(Number(id),owner.id);
+    if(!row)fail(404,deleted?'В корзине такой публикации нет':'Публикация не найдена','NOT_FOUND');return {row,owner};
   }
   /* Сторис без публичной подписи: материал есть, текста и подписей нет, и это сторис —
      по плану (meta.format) или по публикуемому режиму Instagram. Формат плана сам ничего не отправляет. */
@@ -417,6 +429,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
       history:historyDto(row.id),labels:{formats:FORMATS,roles:ROLES,reviewStates:REVIEW_STATES,platformReviewStates:PLATFORM_REVIEW_STATES},
       captionLimits:Object.fromEntries(Object.entries(CAPTION_PLATFORMS).map(([k,v])=>[k,v.limit])),
       profileRevision:row.profile_revision,createdAt:row.created_at,updatedAt:row.updated_at,lastErrorCode:row.last_error_code,
+      deleted:row.deleted_at?{at:row.deleted_at,byName:row.deleted_by_name||null,comment:row.deleted_comment||''}:null,
       deliveries:db.prepare(`SELECT channel_id channelId,status,external_id externalId,url,error_code errorCode,finished_at finishedAt,
         provider_post_id providerPostId,provider_status providerStatus,provider_checked_at providerCheckedAt
         FROM autoposting_deliveries WHERE post_id=? ORDER BY channel_id`).all(row.id)};
@@ -424,13 +437,13 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
   function invalidate(code) {
     const current=information.get(code),owner=company(db,code);
     db.prepare(`UPDATE autoposting_posts SET status='needs_review',revision=revision+1,last_error_code='PROFILE_CHANGED',updated_at=?
-      WHERE company_id=? AND status='scheduled' AND profile_revision<>?`).run(iso(),owner.id,current.revision);
+      WHERE company_id=? AND status='scheduled' AND profile_revision<>? AND deleted_at IS NULL`).run(iso(),owner.id,current.revision);
     return current;
   }
   function get(id,code) {invalidate(code);const {row,owner}=rowFor(id,code);return dto(row,owner);}
   function list(code) {
     invalidate(code);const owner=company(db,code);
-    return {companyCode:owner.code.toLowerCase(),posts:db.prepare('SELECT * FROM autoposting_posts WHERE company_id=? ORDER BY sort_order ASC,created_at DESC,id DESC LIMIT 200').all(owner.id).map(row=>dto(row,owner))};
+    return {companyCode:owner.code.toLowerCase(),posts:db.prepare('SELECT * FROM autoposting_posts WHERE company_id=? AND deleted_at IS NULL ORDER BY sort_order ASC,created_at DESC,id DESC LIMIT 200').all(owner.id).map(row=>dto(row,owner))};
   }
   /* Календарь месяца — строго чтение. invalidate/get/list здесь недопустимы: они переводят карточки
      в needs_review и архивируют новую версию данных компании, то есть меняют состояние при просмотре.
@@ -488,7 +501,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
         FROM media_mentor_plan_transfer_items i
         JOIN media_mentor_plan_transfers t ON t.id=i.transfer_id
         JOIN media_mentor_plans p ON p.company_id=t.company_id AND p.revision=t.plan_revision
-        JOIN autoposting_posts a ON a.id=i.post_id AND a.company_id=t.company_id
+        JOIN autoposting_posts a ON a.id=i.post_id AND a.company_id=t.company_id AND a.deleted_at IS NULL
         WHERE t.company_id=?`).all(owner.id)){
         items.set(row.postId,{dayIndex:row.dayIndex,planDate:CALENDAR_DATE_RE.test(row.planDate)?row.planDate:null,planPlatform:row.planPlatform||null});
         // День плана закрывает именно та карточка, которую для него создал перенос.
@@ -609,7 +622,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     if(!approvalPolicy(owner.code))fail(404,'Напоминания для компании не настроены','NOT_FOUND');
     const day=calendarRange({from:date,to:date}).from,timezone='Europe/Moscow';
     const formatter=zoneFormatter(timezone),plan=calendarPlan(owner),items=[];
-    for(const row of db.prepare("SELECT * FROM autoposting_posts WHERE company_id=? AND status NOT IN ('published','cancelled','publishing') ORDER BY id").all(owner.id)){
+    for(const row of db.prepare("SELECT * FROM autoposting_posts WHERE company_id=? AND deleted_at IS NULL AND status NOT IN ('published','cancelled','publishing') ORDER BY id").all(owner.id)){
       const effectiveDate=row.scheduled_at?zoneDay(formatter,Date.parse(row.scheduled_at)):plan.items.get(row.id)?.planDate;
       if(effectiveDate!==day||cardApprovalDto(row).approved)continue;
       items.push({id:row.id,revision:row.revision,contentRevision:row.content_revision,title:row.title,
@@ -635,14 +648,14 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     const channelById=new Map(channels.filter(channel=>channel&&typeof channel.id==='string').map(channel=>[channel.id,channel]));
     const deliveries=new Map();
     for(const item of db.prepare(`SELECT d.post_id postId,d.channel_id channelId,d.status,d.channel_revision channelRevision FROM autoposting_deliveries d
-      JOIN autoposting_posts p ON p.id=d.post_id WHERE p.company_id=?`).all(owner.id)){
+      JOIN autoposting_posts p ON p.id=d.post_id WHERE p.company_id=? AND p.deleted_at IS NULL`).all(owner.id)){
       if(!deliveries.has(item.postId))deliveries.set(item.postId,new Map());
       deliveries.get(item.postId).set(item.channelId,{status:item.status,channelRevision:item.channelRevision});
     }
     const receipts=new Map();
     for(const item of db.prepare(`SELECT r.post_id postId,r.platform,r.content_revision receiptRevision,p.content_revision contentRevision
       FROM autoposting_publication_receipts r JOIN autoposting_posts p ON p.id=r.post_id AND p.company_id=r.company_id
-      WHERE r.company_id=?`).all(owner.id)){
+      WHERE r.company_id=? AND p.deleted_at IS NULL`).all(owner.id)){
       if(!receipts.has(item.postId))receipts.set(item.postId,new Map());
       const platforms=receipts.get(item.postId);
       platforms.set(item.platform,Boolean(platforms.get(item.platform)||item.receiptRevision===item.contentRevision));
@@ -651,7 +664,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     /* Сначала по минимальным полям считаются даты всех карточек компании, и только отобранные
        читаются целиком: иначе ответ рос бы вместе с архивом компании. Дата дня плана берётся
        из расписки переноса, а не выводится из D1…D7 — это разные вещи. */
-    const index=db.prepare('SELECT id,scheduled_at scheduledAt,sort_order sortOrder,created_at createdAt FROM autoposting_posts WHERE company_id=?').all(owner.id);
+    const index=db.prepare('SELECT id,scheduled_at scheduledAt,sort_order sortOrder,created_at createdAt FROM autoposting_posts WHERE company_id=? AND deleted_at IS NULL').all(owner.id);
     const within=new Set(range.dates),dated=[],undated=[];
     for(const row of index){
       const link=plan.items.get(row.id)||null;
@@ -1026,11 +1039,14 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
            опции, это не «то же самое содержимое»: молча выдавать её за повтор нельзя — пропуск
            помечается отдельной причиной, а прежняя карточка не переписывается. */
         if(duplicate){
-          const stored=db.prepare('SELECT platform_options FROM autoposting_posts WHERE id=?').get(duplicate.id)?.platform_options||'{}';
+          const storedRow=db.prepare('SELECT platform_options,deleted_at FROM autoposting_posts WHERE id=?').get(duplicate.id)||{};
+          const stored=storedRow.platform_options||'{}';
           const sameOptions=stored===JSON.stringify(data.platformOptions||{});
+          // Удалённая карточка повтором пакета не воскресает и не дублируется: её можно только восстановить из корзины.
           skipped.push({id:duplicate.id,dayKey:data.dayKey,title:data.title,externalId,
-            reason:sameOptions?'duplicate':'options_differ',
-            note:sameOptions?'':'У сохранённой карточки другие публикуемые опции: проверьте её вручную, пакет ничего не переписал.'});
+            reason:storedRow.deleted_at?'deleted':sameOptions?'duplicate':'options_differ',
+            note:storedRow.deleted_at?'Такая карточка удалена в корзину: пакет её не создаёт заново. При необходимости восстановите её из корзины.'
+              :sameOptions?'':'У сохранённой карточки другие публикуемые опции: проверьте её вручную, пакет ничего не переписал.'});
           continue;
         }
         const time=iso(),order=(db.prepare('SELECT COALESCE(MAX(sort_order),0) m FROM autoposting_posts WHERE company_id=?').get(owner.id).m||0)+1;
@@ -1162,7 +1178,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     if(new Set(body.ids).size!==body.ids.length)fail(400,'Карточка указана дважды');
     const owner=company(db,code);invalidate(code);
     transaction(()=>{
-      const rows=db.prepare('SELECT id,sort_order FROM autoposting_posts WHERE company_id=? ORDER BY sort_order ASC,created_at DESC,id DESC').all(owner.id),known=new Set(rows.map(r=>r.id));
+      const rows=db.prepare('SELECT id,sort_order FROM autoposting_posts WHERE company_id=? AND deleted_at IS NULL ORDER BY sort_order ASC,created_at DESC,id DESC').all(owner.id),known=new Set(rows.map(r=>r.id));
       for(const id of body.ids)if(!known.has(id))fail(404,'Карточка не найдена в выбранной компании','NOT_FOUND');
       const ordered=[...body.ids,...rows.map(r=>r.id).filter(id=>!body.ids.includes(id))];
       const stmt=db.prepare('UPDATE autoposting_posts SET sort_order=?,updated_at=? WHERE id=? AND company_id=?');
@@ -1170,6 +1186,66 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
       const first=db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(body.ids[0]);if(first)history(first,'reordered',`Порядок: ${ordered.join(',')}`.slice(0,500),actor);
     });
     return list(code);
+  }
+  /* Удаление материала в корзину и восстановление. Ничего не публикует и ничего не стирает:
+     медиа, текст, согласования, доставки, расписки и связи остаются на месте, меняется только
+     признак удаления. Удалить можно только то, что точно не ушло и не уходит на площадку. */
+  const DELETABLE_STATUSES=new Set(['draft','cancelled','failed','needs_review']);
+  // Карточка, на которую опирается другой модуль (план, стартовый план, продолжение по площадкам),
+  // удалением из него не выпадает: связь сначала разбирают там, где она создана.
+  function linkedReason(row) {
+    if(db.prepare('SELECT 1 FROM autoposting_split_links WHERE source_post_id=? OR child_post_id=? LIMIT 1').get(row.id,row.id))
+      return 'Материал связан с продолжением работы по площадкам: удалить его нельзя';
+    if(hasTable('media_mentor_plan_transfer_items')&&db.prepare('SELECT 1 FROM media_mentor_plan_transfer_items WHERE post_id=? LIMIT 1').get(row.id))
+      return 'Материал создан переносом контент-плана: удаление изменило бы перенос плана';
+    if(hasTable('media_mentor_variant_transfers')&&db.prepare('SELECT 1 FROM media_mentor_variant_transfers WHERE post_id=? LIMIT 1').get(row.id))
+      return 'Материал создан из версии контент-плана: удаление изменило бы связь с планом';
+    if(hasTable('studio_content_plan_items')&&db.prepare('SELECT 1 FROM studio_content_plan_items WHERE post_id=? LIMIT 1').get(row.id))
+      return 'Материал входит в стартовый план: удалить его отсюда нельзя';
+    return '';
+  }
+  const trashEvent=(row,action,revisionAfter,comment,actor={})=>db.prepare(`INSERT INTO autoposting_post_trash_events
+    (post_id,company_id,action,revision,comment,actor_id,actor_name,created_at) VALUES(?,?,?,?,?,?,?,?)`)
+    .run(row.id,row.company_id,action,revisionAfter,comment||'',actor.userId??null,actor.userName??null,iso());
+  const trashDto=(row,owner)=>({...dto(row,owner),trashHistory:db.prepare(`SELECT action,revision,comment,actor_name actorName,created_at createdAt
+    FROM autoposting_post_trash_events WHERE post_id=? ORDER BY id DESC LIMIT 20`).all(row.id)});
+  function remove(id,code,body,actor={}) {
+    object(body,['revision','comment']);revision(body.revision);
+    const comment=body.comment===undefined||body.comment===null?'':text(body.comment,500);
+    return transaction(()=>{
+      const {row,owner}=rowFor(id,code);
+      if(row.revision!==body.revision)fail(409,'Публикация уже изменена','REVISION_CONFLICT');
+      if(row.status==='scheduled')fail(409,'Материал стоит в плане публикаций: сначала снимите его с публикации','POST_STATE');
+      if(!DELETABLE_STATUSES.has(row.status))fail(409,'Материал уже отправляют или опубликовали: удалить его нельзя','POST_STATE');
+      if(db.prepare(`SELECT 1 FROM autoposting_deliveries WHERE post_id=? AND (status IN ('publishing','published','needs_review') OR provider_post_id IS NOT NULL) LIMIT 1`).get(row.id))
+        fail(409,'По материалу есть начатая или подтверждённая отправка: удалить его нельзя','PUBLICATION_EXISTS');
+      if(db.prepare('SELECT 1 FROM autoposting_publication_receipts WHERE post_id=? LIMIT 1').get(row.id))
+        fail(409,'Материал отмечен как опубликованный: удалить его нельзя','PUBLICATION_RECORDED');
+      const linked=linkedReason(row);if(linked)fail(409,linked,'POST_LINKED');
+      const time=iso();
+      const changed=db.prepare(`UPDATE autoposting_posts SET deleted_at=?,deleted_by=?,deleted_by_name=?,deleted_comment=?,revision=revision+1,updated_at=?
+        WHERE id=? AND company_id=? AND revision=? AND deleted_at IS NULL`).run(time,actor.userId??null,actor.userName??null,comment,time,row.id,owner.id,row.revision).changes;
+      if(changed!==1)fail(409,'Публикация уже изменена','REVISION_CONFLICT');
+      trashEvent(row,'deleted',row.revision+1,comment,actor);
+      return trashDto(db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(row.id),owner);
+    });
+  }
+  function restore(id,code,body,actor={}) {
+    object(body,['revision']);revision(body.revision);
+    return transaction(()=>{
+      const {row,owner}=rowFor(id,code,{deleted:true});
+      if(row.revision!==body.revision)fail(409,'Публикация уже изменена','REVISION_CONFLICT');
+      const changed=db.prepare(`UPDATE autoposting_posts SET deleted_at=NULL,deleted_by=NULL,deleted_by_name=NULL,deleted_comment='',revision=revision+1,updated_at=?
+        WHERE id=? AND company_id=? AND revision=? AND deleted_at IS NOT NULL`).run(iso(),row.id,owner.id,row.revision).changes;
+      if(changed!==1)fail(409,'Публикация уже изменена','REVISION_CONFLICT');
+      trashEvent(row,'restored',row.revision+1,'',actor);
+      return dto(db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(row.id),owner);
+    });
+  }
+  function trash(code) {
+    const owner=company(db,code);
+    return {companyCode:owner.code.toLowerCase(),posts:db.prepare(`SELECT * FROM autoposting_posts WHERE company_id=? AND deleted_at IS NOT NULL
+      ORDER BY deleted_at DESC,id DESC LIMIT 200`).all(owner.id).map(row=>trashDto(row,owner))};
   }
   function cancel(id,code,body) {
     object(body,['revision']);revision(body.revision);
@@ -1226,7 +1302,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     db.prepare("UPDATE autoposting_deliveries SET status='needs_review',error_code='PUBLICATION_UNCERTAIN' WHERE status='publishing' AND started_at<=?").run(now()-LEASE_MS);
     db.prepare("UPDATE autoposting_posts SET status='needs_review',last_error_code='PUBLICATION_UNCERTAIN',revision=revision+1,updated_at=? WHERE status='publishing' AND publishing_at<=?").run(iso(),now()-LEASE_MS);
     const due=db.prepare(`SELECT p.*,c.code FROM autoposting_posts p JOIN companies c ON c.id=p.company_id
-      WHERE p.status='scheduled' AND p.scheduled_at<=? AND c.is_deleted=0 ORDER BY p.scheduled_at,p.id LIMIT 1`).get(iso());
+      WHERE p.status='scheduled' AND p.scheduled_at<=? AND c.is_deleted=0 AND p.deleted_at IS NULL ORDER BY p.scheduled_at,p.id LIMIT 1`).get(iso());
     if(!due||stopped)return;
     const current=invalidate(due.code);if(due.profile_revision!==current.revision)return;
     const settings=await transport.getSettings(due.code);
@@ -1266,7 +1342,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
       review(due.id,'EXTERNAL_PUBLICATION_RECORDED');return;
     }
     const lease=randomUUID();
-    const claimed=db.prepare("UPDATE autoposting_posts SET status='publishing',publishing_at=?,lease=?,revision=revision+1,updated_at=? WHERE id=? AND status='scheduled' AND revision=?")
+    const claimed=db.prepare("UPDATE autoposting_posts SET status='publishing',publishing_at=?,lease=?,revision=revision+1,updated_at=? WHERE id=? AND status='scheduled' AND revision=? AND deleted_at IS NULL")
       .run(now(),lease,iso(),due.id,due.revision);
     if(!claimed.changes)return;
     for(const delivery of deliveries){
@@ -1351,7 +1427,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
   }
   function drain(){if(stopped)return Promise.resolve();if(!running)running=processDue().finally(()=>running=null);return running;}
   function stop(){stopped=true;return running||Promise.resolve();}
-  return {get,list,calendar,reviewReminderSummary,create,update,schedule,cancel,reconcile,drain,stop,invalidate,approve,approveAndSchedule,reject,split,submitReview,reorder,importPackage,recordReceipt};
+  return {get,list,calendar,reviewReminderSummary,create,update,schedule,cancel,remove,restore,trash,reconcile,drain,stop,invalidate,approve,approveAndSchedule,reject,split,submitReview,reorder,importPackage,recordReceipt};
 }
 module.exports={createAutoposting,LEASE_MS,PLAN_PLATFORMS,CAPTION_PLATFORMS,FORMATS,ROLES,REVIEW_STATES,META_FIELDS,RECEIPT_PLATFORMS,receiptFormat,
   CALENDAR_MAX_RANGE_DAYS,CALENDAR_UNDATED_LIMIT,CALENDAR_TARGET_DAYS,CALENDAR_MINIMUM_DAYS,CALENDAR_CRITICAL_DAYS};
