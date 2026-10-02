@@ -26,7 +26,7 @@ function fixture(t,{mentorTables=true}={}) {
     {id:'vk',platform:'vk',name:'ВКонтакте',enabled:true,connected:true,revision:1,caps:{maxText:15000,maxMedia:1,mediaMode:'link'}}];
   const settingsCalls=[],sideEffects=[];
   const information=createCompanyInformation(db,{now:()=>time});
-  const transport={getSettings:async code=>{settingsCalls.push(code);return {channels:structuredClone(channels)};},
+  const transport={approvalDestination:(_code,id)=>{const channel=channels.find(item=>item.id===id);return {destinationRevision:channel?.revision||0,channelRevision:channel?.revision||0};},getSettings:async code=>{settingsCalls.push(code);return {channels:structuredClone(channels)};},
     publish:async input=>{sideEffects.push(['publish',input]);return {externalId:'never'};},
     reconcile:async input=>{sideEffects.push(['reconcile',input]);return null;}};
   const api=createAutoposting(db,{information,transport,now:()=>time,logger:{warn(){}}});

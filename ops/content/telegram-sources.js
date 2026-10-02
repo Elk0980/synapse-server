@@ -13,12 +13,37 @@ const MAX_FILE = 20 * 1024 * 1024;
 const MAX_MANUAL_FILE = 256 * 1024 * 1024;
 const DEFAULT_STORAGE = 512 * 1024 * 1024;
 const MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime', 'video/webm', 'application/pdf']);
+const EXTENSIONS=Object.freeze({'.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp','.mp4':'video/mp4','.mov':'video/quicktime','.webm':'video/webm','.pdf':'application/pdf'});
+// Content-контейнер не содержит CRM. Соответствие действительным словарям CRM проверяет upload.test.
+const SOURCE_PLATFORMS=Object.freeze({instagram:'Instagram / Reels',tiktok:'TikTok',youtube_shorts:'YouTube Shorts',vk:'ВКонтакте',telegram:'Telegram',max:'MAX',two_gis:'2ГИС'});
+const SOURCE_FORMATS=Object.freeze({post:'Пост',story:'Сторис',reel:'Reels / Shorts / клип',carousel:'Карусель'});
+const EMPTY_METADATA=Object.freeze({platforms:[],formats:[],occasion:'',eventDate:'',usageRestrictions:'',materialState:'source'});
 const fail = (status, message) => { throw Object.assign(new Error(message), {status}); };
 const text = (value, max = 200) => String(value ?? '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '').slice(0, max);
 const chatId = value => { const id = String(value ?? ''); if (!/^-\d{1,20}$/.test(id)) fail(400, 'Некорректный источник'); return id; };
 const messageId = value => { const id = String(value ?? ''); if (!/^[1-9]\d{0,19}$/.test(id)) fail(400, 'Некорректный номер сообщения'); return id; };
 const company = value => { if (!Object.hasOwn(COMPANIES, value)) fail(400, 'Неизвестная компания'); return value; };
 const telegramUrl = (chat, message) => /^-100\d+$/.test(chat) && /^[1-9]\d*$/.test(message) ? `https://t.me/c/${chat.slice(4)}/${message}` : null;
+function normalizeMetadata(value){
+  if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(key=>!Object.hasOwn(EMPTY_METADATA,key)))fail(400,'Некорректные сведения об исходнике');
+  const out={};
+  for(const [key,item]of Object.entries(value)){
+    if(key==='platforms'||key==='formats'){
+      const dictionary=key==='platforms'?SOURCE_PLATFORMS:SOURCE_FORMATS;
+      if(!Array.isArray(item)||item.some(id=>typeof id!=='string'||!Object.hasOwn(dictionary,id))||new Set(item).size!==item.length)fail(400,'Выберите уникальные площадки и форматы из списка');
+      out[key]=Object.keys(dictionary).filter(id=>item.includes(id));
+    }else{
+      if(typeof item!=='string'||item.length>(key==='usageRestrictions'?2000:key==='occasion'?500:key==='eventDate'?10:20))fail(400,'Некорректное текстовое поле исходника');
+      const cleaned=item.trim();
+      if(key==='materialState'&&!['source','ready'].includes(cleaned))fail(400,'Состояние материала: source или ready');
+      if(key==='eventDate'&&cleaned){
+        const time=Date.parse(cleaned+'T00:00:00Z');
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(cleaned)||!Number.isFinite(time)||new Date(time).toISOString().slice(0,10)!==cleaned)fail(400,'Укажите существующую дату события ГГГГ-ММ-ДД');
+      }
+      out[key]=text(cleaned,key==='usageRestrictions'?2000:500);
+    }
+  }return out;
+}
 
 function readSourceConfig(file) {
   try {
@@ -54,7 +79,7 @@ function createTelegramSources({db, assetsDir, config = {enabled: false, sources
       UNIQUE(chat_id,message_id));
     CREATE INDEX IF NOT EXISTS telegram_source_items_company ON telegram_source_items(company_code,id);`);
   const columns = db.prepare('PRAGMA table_info(telegram_source_items)').all().map(row=>row.name);
-  for (const [name,type] of [['import_method',"TEXT NOT NULL DEFAULT 'telegram'"],['imported_by','INTEGER'],['imported_at','TEXT'],['origin_note',"TEXT NOT NULL DEFAULT ''"]]) {
+  for (const [name,type] of [['import_method',"TEXT NOT NULL DEFAULT 'telegram'"],['imported_by','INTEGER'],['imported_at','TEXT'],['origin_note',"TEXT NOT NULL DEFAULT ''"],['revision','INTEGER NOT NULL DEFAULT 1'],['metadata',`TEXT NOT NULL DEFAULT '${JSON.stringify(EMPTY_METADATA)}'`]]) {
     if (!columns.includes(name)) db.exec(`ALTER TABLE telegram_source_items ADD COLUMN ${name} ${type}`);
   }
   let manualBusy = false;
@@ -109,7 +134,7 @@ function createTelegramSources({db, assetsDir, config = {enabled: false, sources
   const json = row => row && ({id: row.id, companyCode: row.company_code, name: row.name, mime: row.mime,
     caption: row.caption, mediaGroupId: row.media_group_id, size: row.size ?? row.declared_size,
     status: row.status, reason: row.reason, createdAt: row.created_at, importMethod:row.import_method, importedAt:row.imported_at,
-    sha256:row.sha256, provenance:row.origin_note,
+    sha256:row.sha256, provenance:row.origin_note,revision:row.revision,metadata:JSON.parse(row.metadata),
     telegramUrl: telegramUrl(row.chat_id, row.message_id),
     fileUrl: row.status === 'stored' ? `/content/telegram-sources/${row.company_code}/${row.id}/file` : null});
   function receipt(chat, message) {
@@ -163,6 +188,8 @@ function createTelegramSources({db, assetsDir, config = {enabled: false, sources
     if (user.role !== 'owner' && (!user.companyCodes.includes(code) || !user.permissions.includes('autoposting.view'))) fail(403, 'Нет доступа к исходникам компании');
     return {session,user};
   }
+  const canUpload=user=>user.role==='owner'||user.permissions?.includes('autoposting.edit');
+  function writeAccess(request,code){const current=access(request,code);if(!canUpload(current.user))fail(403,'Нет права изменения исходников');requireCsrf(request,current.session);return current;}
   function manualSourceChat(code, chat) {
     if (!healthy) fail(503, 'Настройки источников требуют проверки');
     const source=binding(chatId(chat));
@@ -201,7 +228,7 @@ function createTelegramSources({db, assetsDir, config = {enabled: false, sources
       fs.mkdirSync(dir,{recursive:true,mode:0o700});
       if (!fs.existsSync(destination)) {fs.renameSync(file.path,destination);createdFile=destination;}
       const now=new Date().toISOString();let id=old?.id;
-      if (old) db.prepare(`UPDATE telegram_source_items SET name=?,mime=?,caption=?,size=?,sha256=?,disk_name=?,status='stored',reason='',import_method=?,imported_by=?,imported_at=?,origin_note=? WHERE id=?`)
+      if (old) db.prepare(`UPDATE telegram_source_items SET name=?,mime=?,caption=?,size=?,sha256=?,disk_name=?,status='stored',reason='',import_method=?,imported_by=?,imported_at=?,origin_note=?,revision=revision+1 WHERE id=?`)
         .run(old.name||name,mime,old.caption||caption,file.size,sha,sha,method,authorId,now,provenance,id);
       else id=db.prepare(`INSERT INTO telegram_source_items(company_code,chat_id,message_id,caption,name,mime,declared_size,size,sha256,disk_name,status,created_at,import_method,imported_by,imported_at,origin_note)
         VALUES(?,?,?,?,?,?,?,?,?,?,'stored',?,?,?,?,?)`).run(code,chat,message,caption,name,mime,file.size,file.size,sha,sha,now,method,authorId,now,provenance).lastInsertRowid;
@@ -219,8 +246,7 @@ function createTelegramSources({db, assetsDir, config = {enabled: false, sources
       if ((fields.caption||'').length>12000) fail(400,'Подпись слишком длинная');
       const name=text(file.name,180).replace(/[\\/\r\n]/g,'_').toWellFormed();
       if (!name.trim()) fail(400,'У файла нет имени');
-      const extension={'.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp','.mp4':'video/mp4','.mov':'video/quicktime','.webm':'video/webm','.pdf':'application/pdf'};
-      const mime=(!file.mime || file.mime==='application/octet-stream') ? extension[path.extname(name).toLowerCase()] : file.mime.toLowerCase();
+      const mime=(!file.mime || file.mime==='application/octet-stream') ? EXTENSIONS[path.extname(name).toLowerCase()] : file.mime.toLowerCase();
       if (!MIME.has(mime) || !validBytes(mime,file.head)) fail(415,'Формат или содержимое файла не поддерживается');
       // Чтение большого multipart асинхронно: повторяем актуальную авторизацию прямо перед записью.
       const fresh=access(request,code);requireCsrf(request,fresh.session);
@@ -229,8 +255,64 @@ function createTelegramSources({db, assetsDir, config = {enabled: false, sources
       sendJson(response,result.duplicate?200:201,result,{'cache-control':'no-store'});return true;
     } finally {try{await parsed?.cleanup();}finally{manualBusy=false;}}
   }
+  function saveUpload(code,fields,file,name,mime,metadata,authorId){
+    let createdFile=null;db.exec('BEGIN IMMEDIATE');
+    try{
+      const old=db.prepare("SELECT * FROM telegram_source_items WHERE company_code=? AND sha256=? AND status='stored' ORDER BY id LIMIT 1").get(code,file.sha256);
+      if(old){db.exec('COMMIT');return {item:json(old),duplicate:true};}
+      const used=db.prepare('SELECT COALESCE(SUM(size),0) n FROM (SELECT disk_name,MAX(size) size FROM telegram_source_items WHERE company_code=? AND disk_name IS NOT NULL GROUP BY disk_name)').get(code).n;
+      const exists=db.prepare('SELECT 1 FROM telegram_source_items WHERE company_code=? AND disk_name=?').get(code,file.sha256);
+      if(!exists&&used+file.size>limits(code).storage)fail(413,'Хранилище компании заполнено; файл не сохранён');
+      const dir=path.join(storage,code),destination=path.join(dir,file.sha256);fs.mkdirSync(dir,{recursive:true,mode:0o700});
+      if(!fs.existsSync(destination)){fs.renameSync(file.path,destination);createdFile=destination;}
+      const now=new Date().toISOString();
+      const id=db.prepare(`INSERT INTO telegram_source_items(company_code,chat_id,message_id,caption,name,mime,declared_size,size,sha256,disk_name,status,created_at,import_method,imported_by,imported_at,metadata)
+        VALUES(?,?,?,?,?,?,?,?,?,?,'stored',?,'upload',?,?,?)`).run(code,'upload:'+code,file.sha256,text(fields.caption,12000),name,mime,file.size,file.size,file.sha256,file.sha256,now,authorId,now,JSON.stringify(metadata)).lastInsertRowid;
+      db.exec('COMMIT');return {item:json(db.prepare('SELECT * FROM telegram_source_items WHERE id=?').get(id)),duplicate:false};
+    }catch(error){if(db.isTransaction)db.exec('ROLLBACK');if(createdFile)fs.rmSync(createdFile,{force:true});throw error;}
+  }
+  async function upload(request,response,code){
+    const initial=writeAccess(request,code);if(manualBusy)fail(429,'Другая загрузка ещё выполняется. Повторите позже');
+    manualBusy=true;let parsed;
+    try{
+      parsed=await readSourceMultipart(request,{storage,maxFile:limits(code).manual,upload:true});
+      const {file,fields}=parsed;
+      if((fields.caption||'').length>12000)fail(400,'Подпись слишком длинная');
+      let input={};if(fields.metadata!==undefined){try{input=JSON.parse(fields.metadata);}catch{fail(400,'Сведения об исходнике должны быть JSON');}}
+      const metadata={...EMPTY_METADATA,...normalizeMetadata(input)};
+      const name=text(file.name,180).replace(/[\\/\r\n]/g,'_').toWellFormed();if(!name.trim())fail(400,'У файла нет имени');
+      const mime=(!file.mime||file.mime==='application/octet-stream')?EXTENSIONS[path.extname(name).toLowerCase()]:file.mime.toLowerCase();
+      if(!MIME.has(mime)||!validBytes(mime,file.head))fail(415,'Формат или содержимое файла не поддерживается');
+      const fresh=writeAccess(request,code);if(fresh.user.id!==initial.user.id)fail(403,'Доступ изменился во время загрузки');
+      const result=saveUpload(code,fields,file,name,mime,metadata,fresh.user.id);
+      sendJson(response,result.duplicate?200:201,result,{'cache-control':'no-store'});return true;
+    }finally{try{await parsed?.cleanup();}finally{manualBusy=false;}}
+  }
+  async function patchMetadata(request,response,code,id){
+    const initial=writeAccess(request,code);
+    if(!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(request.headers['content-type']||''))fail(415,'Ожидался JSON');
+    const chunks=[];let size=0;for await(const chunk of request){size+=chunk.length;if(size>32768)fail(413,'Сведения об исходнике слишком длинные');chunks.push(Buffer.from(chunk));}
+    let body;try{body=JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{fail(400,'Ожидался JSON');}
+    if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(key=>!['revision','metadata','caption'].includes(key))||!Number.isSafeInteger(body.revision)||body.revision<1)fail(400,'Нужна версия исходника и сведения для изменения');
+    const patch=normalizeMetadata(body.metadata);
+    if(body.caption!==undefined&&(typeof body.caption!=='string'||body.caption.length>12000))fail(400,'Некорректная подпись');
+    const fresh=writeAccess(request,code);if(fresh.user.id!==initial.user.id)fail(403,'Доступ изменился во время сохранения');
+    db.exec('BEGIN IMMEDIATE');
+    try{
+      const row=db.prepare('SELECT * FROM telegram_source_items WHERE id=? AND company_code=?').get(id,code);if(!row)fail(404,'Исходник не найден');
+      if(row.revision!==body.revision)fail(409,'Исходник уже изменён. Обновите страницу');
+      const metadata={...JSON.parse(row.metadata),...patch},caption=body.caption===undefined?row.caption:text(body.caption,12000);
+      if(JSON.stringify(metadata)!==row.metadata||caption!==row.caption)db.prepare('UPDATE telegram_source_items SET metadata=?,caption=?,revision=revision+1 WHERE id=? AND company_code=?').run(JSON.stringify(metadata),caption,id,code);
+      const item=json(db.prepare('SELECT * FROM telegram_source_items WHERE id=? AND company_code=?').get(id,code));
+      db.exec('COMMIT');sendJson(response,200,{item},{'cache-control':'no-store'});return true;
+    }catch(error){if(db.isTransaction)db.exec('ROLLBACK');throw error;}
+  }
   async function handle(request, response, url) {
     if (!url.pathname.startsWith('/content/telegram-sources/')) return false;
+    const ordinary=/^\/content\/telegram-sources\/([a-z0-9_-]+)\/upload$/.exec(url.pathname);
+    if(ordinary){if(request.method!=='POST')fail(405,'Метод не поддерживается');return upload(request,response,ordinary[1]);}
+    const metadata=/^\/content\/telegram-sources\/([a-z0-9_-]+)\/(\d+)\/metadata$/.exec(url.pathname);
+    if(metadata){if(request.method!=='PATCH')fail(405,'Метод не поддерживается');return patchMetadata(request,response,metadata[1],Number(metadata[2]));}
     const manual=/^\/content\/telegram-sources\/([a-z0-9_-]+)\/manual-upload$/.exec(url.pathname);
     if(manual) {
       if(request.method!=='POST')fail(405,'Метод не поддерживается');
@@ -244,6 +326,8 @@ function createTelegramSources({db, assetsDir, config = {enabled: false, sources
       const before = Number(url.searchParams.get('before')) || Number.MAX_SAFE_INTEGER;
       const rows = db.prepare('SELECT * FROM telegram_source_items WHERE company_code=? AND id<? ORDER BY id DESC LIMIT 51').all(code,before);
       sendJson(response, 200, {items: rows.slice(0,50).map(json), nextBefore: rows.length > 50 ? rows[49].id : null,
+        uploadAllowed:canUpload(current.user),limits:{maxFileBytes:limits(code).manual,storageLimitBytes:limits(code).storage,mimeTypes:[...MIME],extensions:Object.keys(EXTENSIONS),maxFiles:1},
+        metadataVocabulary:{platforms:Object.entries(SOURCE_PLATFORMS).map(([id,label])=>({id,label})),formats:Object.entries(SOURCE_FORMATS).map(([id,label])=>({id,label}))},
         manualUploadAllowed:healthy && current.user.role==='owner' && Boolean(db.prepare('SELECT 1 FROM telegram_source_chats WHERE company_code=?').get(code)),
         ...(current.user.role==='owner'?{manualMaxBytes:limits(code).manual,storageLimitBytes:limits(code).storage,sources:db.prepare('SELECT chat_id FROM telegram_source_chats WHERE company_code=? ORDER BY chat_id').all(code).map(row=>({chatId:row.chat_id}))}:{}),
         enabled: healthy && db.prepare('SELECT chat_id FROM telegram_source_chats WHERE company_code=? AND enabled=1').all(code).some(row=>binding(row.chat_id).enabled)}, {'cache-control':'no-store'});

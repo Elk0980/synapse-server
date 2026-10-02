@@ -1,6 +1,8 @@
 'use strict';
 
 const {company,fail,object,text,timezone,utcDate,revision,url}=require('./company-information');
+const {normalizeNotes,createReviewNotes}=require('./autoposting-review-notes');
+const {createRecovery}=require('./autoposting-recovery');
 const {publicUrl}=require('./autoposting-transport');
 const {createMediaMentorPlanLink}=require('./media-mentor-plan-link');
 const {randomUUID}=require('node:crypto');
@@ -192,7 +194,7 @@ function captions(value) {
   return result;
 }
 const mediaKind=urls=>urls.some(u=>VIDEO_RE.test(u))?'video':urls.some(u=>IMAGE_RE.test(u))?'image':urls.length?'file':'none';
-function createAutoposting(db,{information,transport,planLink,now=Date.now,logger=console}={}) {
+function createAutoposting(db,{information,transport,planLink,reviewTasks,workflow,now=Date.now,logger=console}={}) {
   if(!information||!transport)throw Error('Autoposting requires company information and publication adapters');
   /* Охрана связи с версией контент-плана включена всегда: отдельного «выключателя» нет,
      иначе появился бы путь отправки в обход согласования. Подменить её из запроса нельзя. */
@@ -234,6 +236,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     actor_id INTEGER,actor_name TEXT,created_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS autoposting_post_trash_events_post_idx ON autoposting_post_trash_events(post_id,id);
     CREATE INDEX IF NOT EXISTS autoposting_posts_trash_idx ON autoposting_posts(company_id,deleted_at);`);
+  const reviewNotes=createReviewNotes(db);
   /* Подтверждения внешней публикации хранятся отдельно от доставок: правка содержимого удаляет доставки,
      но доказательства прежних выходов остаются навсегда. Идемпотентность — компания+карточка+площадка+ссылка. */
   db.exec(`CREATE TABLE IF NOT EXISTS autoposting_publication_receipts (
@@ -253,6 +256,9 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     content_revision INTEGER NOT NULL,comment TEXT NOT NULL DEFAULT '',actor_id INTEGER,actor_name TEXT,created_at TEXT NOT NULL,
     PRIMARY KEY(post_id,platform_id));
     CREATE INDEX IF NOT EXISTS autoposting_platform_reviews_post_idx ON autoposting_platform_reviews(post_id);`);
+  const platformReviewColumns=new Set(db.prepare('PRAGMA table_info(autoposting_platform_reviews)').all().map(row=>row.name));
+  for(const column of ['approved_profile_revision','approved_destination_revision'])
+    if(!platformReviewColumns.has(column))db.exec(`ALTER TABLE autoposting_platform_reviews ADD COLUMN ${column} INTEGER`);
   /* Продолжение работы по оставшимся площадкам. Одна площадка исходной карточки может быть передана
      только одной активной дочерней карточке — это и есть защита от двойного нажатия и двух заданий в плане. */
   db.exec(`CREATE TABLE IF NOT EXISTS autoposting_split_links (
@@ -265,6 +271,29 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
   for(const column of ['provider_post_id','provider_status','provider_checked_at']){
     if(!deliveryColumns.has(column))db.exec(`ALTER TABLE autoposting_deliveries ADD COLUMN ${column} TEXT`);
   }
+  const recovery=createRecovery(db,{now});
+  // Источник и его файлы принадлежат content; здесь только связи и квитанции атомарного attach.
+  db.exec(`CREATE TABLE IF NOT EXISTS autoposting_source_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,company_id INTEGER NOT NULL REFERENCES companies(id),
+    request_id TEXT NOT NULL,request_payload TEXT NOT NULL,source_id INTEGER NOT NULL,source_revision INTEGER NOT NULL,
+    sha256 TEXT NOT NULL,url TEXT NOT NULL,post_id INTEGER NOT NULL REFERENCES autoposting_posts(id),
+    content_revision INTEGER NOT NULL,attached_at TEXT NOT NULL,result TEXT NOT NULL DEFAULT '',
+    UNIQUE(company_id,request_id));
+    CREATE INDEX IF NOT EXISTS autoposting_source_links_source ON autoposting_source_links(company_id,source_id,id);`);
+  // Происхождение адаптации не редактируется телом карточки; receipt хранит исходный ответ.
+  db.exec(`CREATE TABLE IF NOT EXISTS autoposting_variant_links (
+    post_id INTEGER PRIMARY KEY REFERENCES autoposting_posts(id),company_id INTEGER NOT NULL REFERENCES companies(id),
+    source_post_id INTEGER NOT NULL REFERENCES autoposting_posts(id),source_revision INTEGER NOT NULL,
+    source_content_revision INTEGER NOT NULL,root_post_id INTEGER NOT NULL REFERENCES autoposting_posts(id),
+    root_content_revision INTEGER NOT NULL,platform_id TEXT NOT NULL,created_at TEXT NOT NULL,created_by INTEGER);
+    CREATE TABLE IF NOT EXISTS autoposting_variant_requests (
+    company_id INTEGER NOT NULL REFERENCES companies(id),request_id TEXT NOT NULL,request_payload TEXT NOT NULL,
+    post_id INTEGER NOT NULL REFERENCES autoposting_posts(id),result TEXT NOT NULL,created_at TEXT NOT NULL,
+    PRIMARY KEY(company_id,request_id));`);
+  const variantLinkOf=row=>db.prepare(`SELECT source_post_id postId,source_revision revision,source_content_revision contentRevision,
+    root_post_id rootPostId,root_content_revision rootContentRevision FROM autoposting_variant_links WHERE post_id=? AND company_id=?`).get(row.id,row.company_id);
+  const variantOrigin=row=>{const link=variantLinkOf(row);return {variantOf:link?{postId:link.postId,revision:link.revision,contentRevision:link.contentRevision}:null,
+    rootIdea:link?{postId:link.rootPostId,contentRevision:link.rootContentRevision}:null};};
   const iso=()=>new Date(now()).toISOString();
   function transaction(work){db.exec('BEGIN IMMEDIATE');try{const result=work();db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');throw error;}}
   const history=(row,action,comment,actor={})=>db.prepare('INSERT INTO autoposting_reviews(post_id,company_id,action,content_revision,comment,actor_id,actor_name,created_at) VALUES(?,?,?,?,?,?,?,?)')
@@ -281,8 +310,17 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
   const PLATFORM_REVIEW_STATES={pending:'Ждёт согласования',approved:'Согласовано',rejected:'На доработку'};
   const platformIdsOf=row=>{try{const value=JSON.parse(row.platform_ids||'[]');return Array.isArray(value)?value:[];}catch{return [];}};
   const platformLabel=id=>PLAN_PLATFORMS[id]?.label||RECEIPT_PLATFORMS[id]?.label||id;
-  const platformReviewRows=postId=>db.prepare(`SELECT platform_id platformId,state,content_revision contentRevision,comment,actor_name byName,created_at at
+  const platformReviewRows=postId=>db.prepare(`SELECT platform_id platformId,state,content_revision contentRevision,comment,actor_name byName,created_at at,
+    approved_profile_revision approvedProfileRevision,approved_destination_revision approvedDestinationRevision
     FROM autoposting_platform_reviews WHERE post_id=? ORDER BY platform_id`).all(postId);
+  function approvalDestination(code,id) {
+    if(typeof transport.approvalDestination!=='function')return null;
+    const value=transport.approvalDestination(code,id);
+    if(!value||typeof value!=='object'||value.then||!Number.isSafeInteger(value.destinationRevision)||value.destinationRevision<0
+      ||!Number.isSafeInteger(value.channelRevision)||value.channelRevision<0)
+      fail(409,'Не удалось проверить назначение. Обновите подключение и согласуйте материал заново.','APPROVAL_CONTEXT_UNAVAILABLE');
+    return value;
+  }
   /* Перенос прежнего решения по карточке в пер-площадочные записи. Делается только для каналов,
      уже выбранных в карточке: новый канал получает отдельную запись «Ждёт согласования». */
   function materializePlatformReviews(row) {
@@ -297,14 +335,23 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     }
   }
   /* Видимые статусы и причины по каналам. Одобрение считается действующим только для текущей версии содержимого. */
-  function platformApprovals(row) {
+  function platformApprovals(row,forDelivery=false) {
     const stored=new Map(platformReviewRows(row.id).map(item=>[item.platformId,item]));
     const legacyApproved=isApproved(row);
+    const code=forDelivery?null:db.prepare('SELECT code FROM companies WHERE id=?').get(row.company_id)?.code;
+    let currentProfileRevision;
     return platformIdsOf(row).map(id=>{
       const item=stored.get(id)||null;
       const state=item?item.state:(legacyApproved?'approved':(row.review_state==='rejected'?'rejected':'pending'));
       const contentRevision=(item?item.contentRevision:(legacyApproved?row.approved_revision:row.content_revision))??null;
-      const approved=state==='approved'&&contentRevision===row.content_revision;
+      let approved=state==='approved'&&contentRevision===row.content_revision;
+      // Историческая очередь сохраняет content guards; новый binding проверяется при NEW schedule.
+      if(approved&&!forDelivery&&item?.approvedDestinationRevision!==null&&item?.approvedDestinationRevision!==undefined){
+        const destination=approvalDestination(code,id);
+        currentProfileRevision??=hasTable('company_information')?db.prepare('SELECT revision FROM company_information WHERE company_id=?').get(row.company_id)?.revision:row.profile_revision;
+        approved=Boolean(destination&&destination.destinationRevision===item.approvedDestinationRevision
+          &&item.approvedProfileRevision===row.profile_revision&&item.approvedProfileRevision===currentProfileRevision);
+      }
       return {platformId:id,platformLabel:platformLabel(id),state,stateLabel:PLATFORM_REVIEW_STATES[state]||state,approved,
         stale:state==='approved'&&!approved,contentRevision,
         comment:item?(item.comment||''):(state==='rejected'?(row.review_comment||''):''),
@@ -312,10 +359,15 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     });
   }
   const setPlatformReview=(row,ids,state,comment,actor={})=>{
-    for(const id of ids)db.prepare(`INSERT INTO autoposting_platform_reviews(post_id,platform_id,state,content_revision,comment,actor_id,actor_name,created_at)
-      VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(post_id,platform_id) DO UPDATE SET state=excluded.state,content_revision=excluded.content_revision,
-      comment=excluded.comment,actor_id=excluded.actor_id,actor_name=excluded.actor_name,created_at=excluded.created_at`)
-      .run(row.id,id,state,row.content_revision??1,comment||'',actor.userId??null,actor.userName??null,iso());
+    const code=db.prepare('SELECT code FROM companies WHERE id=?').get(row.company_id)?.code;
+    for(const id of ids){
+      const destination=state==='approved'?approvalDestination(code,id):null;
+      db.prepare(`INSERT INTO autoposting_platform_reviews(post_id,platform_id,state,content_revision,comment,actor_id,actor_name,created_at,approved_profile_revision,approved_destination_revision)
+        VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(post_id,platform_id) DO UPDATE SET state=excluded.state,content_revision=excluded.content_revision,
+        comment=excluded.comment,actor_id=excluded.actor_id,actor_name=excluded.actor_name,created_at=excluded.created_at,
+        approved_profile_revision=excluded.approved_profile_revision,approved_destination_revision=excluded.approved_destination_revision`)
+        .run(row.id,id,state,row.content_revision??1,comment||'',actor.userId??null,actor.userName??null,iso(),destination?row.profile_revision:null,destination?.destinationRevision??null);
+    }
   };
   /* Какие каналы затрагивает решение. Поле не передано или пустое — все каналы карточки (прежнее поведение). */
   function requestedPlatforms(row,body) {
@@ -343,7 +395,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
   // Для остальных компаний сохраняются прежние правила очереди и связанного плана.
   const approvalPolicy=code=>String(code).toLowerCase()==='palitra-love';
   const companyApprovalRequired=row=>approvalPolicy(db.prepare('SELECT code FROM companies WHERE id=?').get(row.company_id)?.code);
-  const requiresApproval=row=>companyApprovalRequired(row)||isQueueCard(row)||Boolean(plan.linkOf(row.id,row.company_id));
+  const requiresApproval=row=>companyApprovalRequired(row)||isQueueCard(row)||Boolean(plan.linkOf(row.id,row.company_id))||Boolean(variantLinkOf(row));
   const deliveryApproved=(row,channelId)=>{
     // Связь с версией плана проверяется ПЕРВОЙ: карточка без признаков очереди тоже может
     // происходить из плана, и ранний выход ниже пропустил бы отозванный текст.
@@ -354,7 +406,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     // поэтому снятие approved_revision без частичного согласования останавливает все каналы.
     const versionApproved=isApproved(row)||(row.partial_approved_revision!==null&&row.partial_approved_revision!==undefined&&row.partial_approved_revision===row.content_revision);
     if(!versionApproved)return false;
-    const platforms=platformApprovals(row);
+    const platforms=platformApprovals(row,true);
     if(!platforms.length)return isApproved(row);
     return platforms.find(item=>item.platformId===channelId)?.approved===true;
   };
@@ -362,13 +414,17 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     if(!ids.length)return;
     db.prepare(`UPDATE autoposting_deliveries SET status='cancelled' WHERE post_id=? AND status='pending' AND channel_id IN (${ids.map(()=>'?').join(',')})`).run(row.id,...ids);
   };
-  /* Удалённая карточка для всех обычных действий не существует: чтение, правка, согласование,
-     постановка, продолжение и проверка отвечают 404. Найти её можно только в корзине (deleted=true). */
-  function rowFor(id,code,{deleted=false}={}) {
+  // Backward compatibility: legacy trash remains invisible to ordinary reads;
+  // archived cards may be read for history and restored via the existing endpoint.
+  function rowFor(id,code,options=false) {
+    const deleted=typeof options==='object'&&options?.deleted===true;
+    const allowArchived=options===true;
     const owner=company(db,code);
     if(!Number.isSafeInteger(Number(id))||Number(id)<1)fail(404,'Публикация не найдена','NOT_FOUND');
     const row=db.prepare(`SELECT * FROM autoposting_posts WHERE id=? AND company_id=? AND deleted_at IS ${deleted?'NOT NULL':'NULL'}`).get(Number(id),owner.id);
-    if(!row)fail(404,deleted?'В корзине такой публикации нет':'Публикация не найдена','NOT_FOUND');return {row,owner};
+    if(!row)fail(404,deleted?'В корзине такой публикации нет':'Публикация не найдена','NOT_FOUND');
+    if(row.archived_at&&!allowArchived)fail(409,'Карточка удалена. Сначала восстановите её.','POST_ARCHIVED');
+    return {row,owner};
   }
   /* Сторис без публичной подписи: материал есть, текста и подписей нет, и это сторис —
      по плану (meta.format) или по публикуемому режиму Instagram. Формат плана сам ничего не отправляет. */
@@ -414,8 +470,9 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     const approved=base.approved&&(platforms.length===0||platforms.every(item=>item.approved));
     return {...base,approved,platforms};
   }
-  function dto(row,owner) {
-    return {id:row.id,companyCode:owner.code.toLowerCase(),revision:row.revision,contentRevision:row.content_revision,status:row.status,title:row.title,text:row.text,
+  function reviewBatch(rows,owner){return {notes:reviewNotes.listMany(rows,owner.id),tasks:reviewTasks?.listMany?reviewTasks.listMany(rows,owner.id):null};}
+  function dto(row,owner,batch) {
+    return {archive:{archivedAt:row.archived_at||null,archivedBy:row.archived_by??null},id:row.id,companyCode:owner.code.toLowerCase(),revision:row.revision,contentRevision:row.content_revision,status:row.status,title:row.title,text:row.text,
       mediaUrls:JSON.parse(row.media_urls),platformIds:JSON.parse(row.platform_ids),scheduledAt:row.scheduled_at,timezone:row.timezone,
       dayKey:row.day_key||'',captions:JSON.parse(row.captions||'{}'),origin:row.origin||'',platformOptions:JSON.parse(row.platform_options||'{}'),
       readiness:readiness(row),approval:cardApprovalDto(row),platformApprovals:platformApprovals(row),
@@ -425,8 +482,10 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
       continuedPlatforms:db.prepare('SELECT platform_id platformId,child_post_id childPostId,created_at createdAt FROM autoposting_split_links WHERE source_post_id=? ORDER BY platform_id').all(row.id)
         .map(item=>({...item,platformLabel:platformLabel(item.platformId)})),
       continuedFrom:db.prepare('SELECT source_post_id postId,source_content_revision contentRevision FROM autoposting_split_links WHERE child_post_id=? LIMIT 1').get(row.id)||null,
+      ...variantOrigin(row),
+      planLink:plan.linkOf(row.id,owner.id),
       meta:metaOf(row),sortOrder:row.sort_order||0,review:{state:row.review_state||'draft',stateLabel:REVIEW_STATES[row.review_state||'draft'],comment:row.review_comment||'',byName:row.review_by_name||null,at:row.review_at||null},
-      history:historyDto(row.id),labels:{formats:FORMATS,roles:ROLES,reviewStates:REVIEW_STATES,platformReviewStates:PLATFORM_REVIEW_STATES},
+      history:historyDto(row.id),reviewNotes:batch?batch.notes.get(row.id)||[]:reviewNotes.list(row),reviewTasks:batch?.tasks?batch.tasks.get(row.id)||[]:reviewTasks?reviewTasks.list(row):[],labels:{formats:FORMATS,roles:ROLES,reviewStates:REVIEW_STATES,platformReviewStates:PLATFORM_REVIEW_STATES},
       captionLimits:Object.fromEntries(Object.entries(CAPTION_PLATFORMS).map(([k,v])=>[k,v.limit])),
       profileRevision:row.profile_revision,createdAt:row.created_at,updatedAt:row.updated_at,lastErrorCode:row.last_error_code,
       deleted:row.deleted_at?{at:row.deleted_at,byName:row.deleted_by_name||null,comment:row.deleted_comment||''}:null,
@@ -437,13 +496,26 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
   function invalidate(code) {
     const current=information.get(code),owner=company(db,code);
     db.prepare(`UPDATE autoposting_posts SET status='needs_review',revision=revision+1,last_error_code='PROFILE_CHANGED',updated_at=?
-      WHERE company_id=? AND status='scheduled' AND profile_revision<>? AND deleted_at IS NULL`).run(iso(),owner.id,current.revision);
+      WHERE company_id=? AND archived_at IS NULL AND deleted_at IS NULL AND status='scheduled' AND profile_revision<>?`).run(iso(),owner.id,current.revision);
     return current;
   }
-  function get(id,code) {invalidate(code);const {row,owner}=rowFor(id,code);return dto(row,owner);}
+  function get(id,code) {invalidate(code);const {row,owner}=rowFor(id,code,true);return dto(row,owner);}
+  /* Полная история по запросу: никакой актуализации профиля или карточки при чтении. */
+  function readHistory(id,code,options={}) {
+    object(options,['before','limit']);
+    const limit=options.limit===undefined?30:options.limit,before=options.before;
+    if(!Number.isSafeInteger(limit)||limit<1||limit>100||before!==undefined&&(!Number.isSafeInteger(before)||before<1))fail(400,'Укажите допустимый лимит и курсор истории');
+    const {row,owner}=rowFor(id,code,true);
+    const rows=db.prepare(`SELECT id,action,content_revision contentRevision,comment,actor_name actorName,created_at createdAt
+      FROM autoposting_reviews WHERE post_id=? AND company_id=?${before===undefined?'':' AND id<?'} ORDER BY id DESC LIMIT ?`)
+      .all(row.id,owner.id,...(before===undefined?[]:[before]),limit+1);
+    const hasMore=rows.length>limit,items=rows.slice(0,limit);
+    return {companyCode:owner.code.toLowerCase(),postId:row.id,contentRevision:row.content_revision,items,hasMore,nextBefore:hasMore?items.at(-1).id:null};
+  }
   function list(code) {
     invalidate(code);const owner=company(db,code);
-    return {companyCode:owner.code.toLowerCase(),posts:db.prepare('SELECT * FROM autoposting_posts WHERE company_id=? AND deleted_at IS NULL ORDER BY sort_order ASC,created_at DESC,id DESC LIMIT 200').all(owner.id).map(row=>dto(row,owner))};
+    const rows=db.prepare('SELECT * FROM autoposting_posts WHERE company_id=? AND archived_at IS NULL AND deleted_at IS NULL ORDER BY sort_order ASC,created_at DESC,id DESC LIMIT 200').all(owner.id),batch=reviewBatch(rows,owner);
+    return {companyCode:owner.code.toLowerCase(),posts:rows.map(row=>dto(row,owner,batch))};
   }
   /* Календарь месяца — строго чтение. invalidate/get/list здесь недопустимы: они переводят карточки
      в needs_review и архивируют новую версию данных компании, то есть меняют состояние при просмотре.
@@ -622,7 +694,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     if(!approvalPolicy(owner.code))fail(404,'Напоминания для компании не настроены','NOT_FOUND');
     const day=calendarRange({from:date,to:date}).from,timezone='Europe/Moscow';
     const formatter=zoneFormatter(timezone),plan=calendarPlan(owner),items=[];
-    for(const row of db.prepare("SELECT * FROM autoposting_posts WHERE company_id=? AND deleted_at IS NULL AND status NOT IN ('published','cancelled','publishing') ORDER BY id").all(owner.id)){
+    for(const row of db.prepare("SELECT * FROM autoposting_posts WHERE company_id=? AND archived_at IS NULL AND deleted_at IS NULL AND status NOT IN ('published','cancelled','publishing') ORDER BY id").all(owner.id)){
       const effectiveDate=row.scheduled_at?zoneDay(formatter,Date.parse(row.scheduled_at)):plan.items.get(row.id)?.planDate;
       if(effectiveDate!==day||cardApprovalDto(row).approved)continue;
       items.push({id:row.id,revision:row.revision,contentRevision:row.content_revision,title:row.title,
@@ -664,15 +736,19 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     /* Сначала по минимальным полям считаются даты всех карточек компании, и только отобранные
        читаются целиком: иначе ответ рос бы вместе с архивом компании. Дата дня плана берётся
        из расписки переноса, а не выводится из D1…D7 — это разные вещи. */
-    const index=db.prepare('SELECT id,scheduled_at scheduledAt,sort_order sortOrder,created_at createdAt FROM autoposting_posts WHERE company_id=? AND deleted_at IS NULL').all(owner.id);
+    const index=db.prepare('SELECT id,scheduled_at scheduledAt,sort_order sortOrder,created_at createdAt FROM autoposting_posts WHERE company_id=? AND archived_at IS NULL AND deleted_at IS NULL').all(owner.id);
     const within=new Set(range.dates),dated=[],undated=[];
+    const generatedPlans=new Map();
+    if(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='content_plan_drafts'").get())
+      for(const item of db.prepare('SELECT post_id,planned_date,platform FROM content_plan_drafts WHERE company_id=?').all(owner.id))generatedPlans.set(item.post_id,item);
     for(const row of index){
       const link=plan.items.get(row.id)||null;
       const publishDate=row.scheduledAt?zoneDay(formatter,Date.parse(row.scheduledAt)):null;
-      const plannedDate=link?link.planDate:null;
+      const generated=generatedPlans.get(row.id);
+      const plannedDate=link?link.planDate:generated?.planned_date||null;
       // Назначенное время отправки важнее плановой даты: карточку уже поставили на конкретный день.
       const effectiveDate=publishDate||plannedDate||null;
-      const entry={...row,link,plannedDate,planPlatform:link?link.planPlatform:null,publishDate,effectiveDate,
+      const entry={...row,link,plannedDate,planPlatform:link?link.planPlatform:generated?.platform||null,publishDate,effectiveDate,
         dateKind:publishDate?'schedule':plannedDate?'plan':null};
       if(effectiveDate===null)undated.push(entry);
       else if(within.has(effectiveDate))dated.push(entry);
@@ -681,9 +757,10 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     dated.sort((a,b)=>(a.effectiveDate<b.effectiveDate?-1:a.effectiveDate>b.effectiveDate?1:0)||order(a,b));
     undated.sort(order);
     const full=db.prepare('SELECT * FROM autoposting_posts WHERE id=?');
+    const batch=reviewBatch([...dated,...undated.slice(0,CALENDAR_UNDATED_LIMIT)],owner);
     const view=entry=>{
       const row=full.get(entry.id);
-      return {...dto(row,owner),plannedDate:entry.plannedDate,planPlatform:entry.planPlatform,publishDate:entry.publishDate,
+      return {...dto(row,owner,batch),plannedDate:entry.plannedDate,planPlatform:entry.planPlatform,publishDate:entry.publishDate,
         effectiveDate:entry.effectiveDate,dateKind:entry.dateKind,calendarReadiness:calendarReadiness(row,entry.link,context,entry.effectiveDate)};
     };
     // Карточки с датой отдаются все: период ограничен сам по себе. Запас без даты ограничен и честно помечен.
@@ -763,16 +840,23 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
   }
   function create(code,body,actorId=null) {
     object(body,EDITABLE);const owner=company(db,code),current=information.get(code);
+    return get(createPrepared(owner,body,current,actorId),code);
+  }
+  // Приватное ядро позволяет attach создать карточку и связь в одной внешней транзакции.
+  function createPrepared(owner,body,current,actorId) {
     const data=normalized(body,{title:'',text:'',mediaUrls:[],platformIds:[],scheduledAt:null,timezone:current.profile.timezone||'UTC',profileRevision:current.revision,dayKey:'',captions:{},origin:'',mediaSha256:'',platformOptions:{},meta:{}});
     if(data.profileRevision!==current.revision)fail(409,'Данные компании изменились','PROFILE_CHANGED');
     const time=iso(),order=(db.prepare('SELECT COALESCE(MAX(sort_order),0) m FROM autoposting_posts WHERE company_id=?').get(owner.id).m||0)+1;
     const id=db.prepare(`INSERT INTO autoposting_posts(company_id,title,text,media_urls,platform_ids,scheduled_at,timezone,profile_revision,created_at,updated_at,created_by,day_key,captions,origin,media_sha256,platform_options,meta,sort_order)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(owner.id,data.title,data.text,JSON.stringify(data.mediaUrls),JSON.stringify(data.platformIds),data.scheduledAt,data.timezone,data.profileRevision,time,time,actorId,data.dayKey,JSON.stringify(data.captions),data.origin,data.mediaSha256,JSON.stringify(data.platformOptions||{}),JSON.stringify(data.meta||{}),order).lastInsertRowid;
-    return get(Number(id),code);
+    return Number(id);
   }
   function update(id,code,body,actor={}) {
     object(body,['revision',...EDITABLE]);revision(body.revision);const current=invalidate(code);
-    transaction(()=>{
+    transaction(()=>updatePrepared(id,code,body,actor,current));return get(id,code);
+  }
+  // Те же guards и переходы для обычной правки и attach; BEGIN остаётся у вызывающего метода.
+  function updatePrepared(id,code,body,actor,current) {
       const {row,owner}=rowFor(id,code);
       if(row.revision!==body.revision)fail(409,'Публикация уже изменена','REVISION_CONFLICT');
       if(['publishing','published'].includes(row.status))fail(409,'Публикацию уже отправляют или опубликовали','POST_STATE');
@@ -822,12 +906,126 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
       const fresh=db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(row.id);
       if(contentChanged)history(fresh,'edited',queue?'Возвращено на согласование после правки':'',actor);
       else if(data.scheduledAt!==row.scheduled_at||data.timezone!==row.timezone)history(fresh,'rescheduled',`План: ${data.scheduledAt||'—'} ${data.timezone}`,actor);
-    });return get(id,code);
+  }
+  const sourceLinkDto=link=>({id:link.id,sourceId:link.source_id,sourceRevision:link.source_revision,
+    sha256:link.sha256,url:link.url,postId:link.post_id,contentRevision:link.content_revision,attachedAt:link.attached_at});
+  function sourceAttachment(owner,body) {
+    object(body,['clientRequestId','source','postId','revision','newPost']);
+    if(typeof body.clientRequestId!=='string'||!/^[a-zA-Z0-9_-]{8,100}$/.test(body.clientRequestId))fail(400,'Укажите идентификатор запроса');
+    object(body.source,['id','revision','sha256','url']);
+    const positive=value=>Number.isSafeInteger(value)&&value>0;
+    if(!positive(body.source.id)||!positive(body.source.revision))fail(400,'Укажите исходник и его версию');
+    if(typeof body.source.sha256!=='string'||!/^[a-f0-9]{64}$/i.test(body.source.sha256))fail(400,'Укажите SHA-256 исходника');
+    if(typeof body.source.url!=='string'||body.source.url.length>2000||!publicUrl(body.source.url))fail(400,'Нужна публичная HTTPS-ссылка на готовый материал');
+    const delivery=new URL(body.source.url),match=/^\/content\/publishing-assets\/([a-z0-9_-]{1,64})\/[a-f0-9]{32}\.(jpg|png|webp|mp4|webm)$/.exec(delivery.pathname);
+    if(!match||match[1]!==owner.code.toLowerCase()||delivery.search||delivery.hash)fail(400,'Материал должен принадлежать выбранной компании');
+    const existing=Object.hasOwn(body,'postId'),creating=Object.hasOwn(body,'newPost');
+    if(existing===creating||existing&&!positive(body.revision)||!existing&&Object.hasOwn(body,'revision'))fail(400,'Выберите одну карточку или создание нового черновика');
+    const source={id:body.source.id,revision:body.source.revision,sha256:body.source.sha256.toLowerCase(),url:delivery.href};
+    if(existing){if(!positive(body.postId))fail(400,'Укажите карточку');return {source,postId:body.postId,revision:body.revision};}
+    object(body.newPost,['title','text','format','ovpRole']);
+    const newPost={title:Object.hasOwn(body.newPost,'title')?text(body.newPost.title,200):'Новый материал',
+      text:Object.hasOwn(body.newPost,'text')?text(body.newPost.text,20000):'',
+      format:Object.hasOwn(body.newPost,'format')?body.newPost.format:'',ovpRole:Object.hasOwn(body.newPost,'ovpRole')?body.newPost.ovpRole:''};
+    if(typeof newPost.format!=='string'||newPost.format!==''&&!Object.hasOwn(FORMATS,newPost.format)||
+      typeof newPost.ovpRole!=='string'||newPost.ovpRole!==''&&!Object.hasOwn(ROLES,newPost.ovpRole))fail(400,'Укажите допустимые формат и цель ОВП');
+    return {source,newPost};
+  }
+  function lookupSourceAttachment(code,body) {
+    const owner=company(db,code),payload=sourceAttachment(owner,body),serialized=JSON.stringify(payload);
+    const previous=db.prepare('SELECT request_payload,result FROM autoposting_source_links WHERE company_id=? AND request_id=?').get(owner.id,body.clientRequestId);
+    if(!previous)return null;
+    if(previous.request_payload!==serialized)fail(409,'Этот запрос уже использован для другого прикрепления','REQUEST_CONFLICT');
+    return {...JSON.parse(previous.result),duplicate:true};
+  }
+  function attachSource(code,body,actor={}) {
+    return transaction(()=>{
+      const owner=company(db,code),payload=sourceAttachment(owner,body),serialized=JSON.stringify(payload);
+      const previous=db.prepare('SELECT request_payload,result FROM autoposting_source_links WHERE company_id=? AND request_id=?').get(owner.id,body.clientRequestId);
+      if(previous){
+        if(previous.request_payload!==serialized)fail(409,'Этот запрос уже использован для другого прикрепления','REQUEST_CONFLICT');
+        return {...JSON.parse(previous.result),duplicate:true};
+      }
+      const current=invalidate(code);let postId;
+      if(payload.newPost){
+        postId=createPrepared(owner,{title:payload.newPost.title,text:payload.newPost.text,format:payload.newPost.format,
+          role:payload.newPost.ovpRole,mediaUrls:[payload.source.url],mediaSha256:payload.source.sha256},current,actor.userId??null);
+      }else{
+        const {row}=rowFor(payload.postId,code),mediaUrls=JSON.parse(row.media_urls);
+        if(!mediaUrls.includes(payload.source.url))mediaUrls.push(payload.source.url);
+        updatePrepared(row.id,code,{revision:payload.revision,mediaUrls,mediaSha256:mediaUrls.length===1?payload.source.sha256:''},actor,current);
+        postId=row.id;
+      }
+      const row=db.prepare('SELECT * FROM autoposting_posts WHERE id=? AND company_id=?').get(postId,owner.id);
+      const linkId=Number(db.prepare(`INSERT INTO autoposting_source_links(company_id,request_id,request_payload,source_id,source_revision,sha256,url,post_id,content_revision,attached_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?)`).run(owner.id,body.clientRequestId,serialized,payload.source.id,payload.source.revision,
+          payload.source.sha256,payload.source.url,postId,row.content_revision,iso()).lastInsertRowid);
+      const link=sourceLinkDto(db.prepare('SELECT * FROM autoposting_source_links WHERE id=?').get(linkId));
+      const result=JSON.stringify({companyCode:owner.code.toLowerCase(),duplicate:false,post:dto(row,owner),link});
+      db.prepare('UPDATE autoposting_source_links SET result=? WHERE id=?').run(result,linkId);
+      return JSON.parse(result);
+    });
+  }
+  function sourceUsage(code,sourceId) {
+    const owner=company(db,code);
+    if(!Number.isSafeInteger(sourceId)||sourceId<1)fail(400,'Укажите исходник');
+    const usages=db.prepare(`SELECT l.*,p.title,p.status,p.revision currentRevision,p.content_revision currentContentRevision,p.archived_at,p.media_urls
+      FROM autoposting_source_links l JOIN autoposting_posts p ON p.id=l.post_id AND p.company_id=l.company_id
+      WHERE l.company_id=? AND l.source_id=? ORDER BY l.id DESC`).all(owner.id,sourceId).map(row=>({...sourceLinkDto(row),
+        post:{id:row.post_id,title:row.title,status:row.status,revision:row.currentRevision,contentRevision:row.currentContentRevision,archivedAt:row.archived_at||null},
+        current:JSON.parse(row.media_urls).includes(row.url)}));
+    return {companyCode:owner.code.toLowerCase(),sourceId,usages};
+  }
+  function variantRequest(id,body) {
+    object(body,['revision','clientRequestId','platformId']);revision(body.revision);
+    if(body.revision<1||typeof body.clientRequestId!=='string'||!/^[a-zA-Z0-9_-]{8,100}$/.test(body.clientRequestId))fail(400,'Укажите версию и идентификатор запроса');
+    const platformId=text(body.platformId,100,true);
+    if(!Object.hasOwn(PLAN_PLATFORMS,platformId))fail(400,'Выберите штатную площадку контент-плана');
+    if(!Number.isSafeInteger(Number(id))||Number(id)<1)fail(404,'Публикация не найдена','NOT_FOUND');
+    return {postId:Number(id),revision:body.revision,platformId};
+  }
+  function createVariant(id,code,body,actor={}) {
+    return transaction(()=>{
+      const owner=company(db,code),payload=variantRequest(id,body),serialized=JSON.stringify(payload);
+      const receipt=db.prepare('SELECT request_payload,result FROM autoposting_variant_requests WHERE company_id=? AND request_id=?').get(owner.id,body.clientRequestId);
+      if(receipt){
+        if(receipt.request_payload!==serialized)fail(409,'Этот запрос уже использован для другой версии','REQUEST_CONFLICT');
+        return {...JSON.parse(receipt.result),created:false};
+      }
+      const {row}=rowFor(payload.postId,code);
+      if(row.revision!==payload.revision)fail(409,'Публикация уже изменена','REVISION_CONFLICT');
+      // Без новой независимо согласованной версии плана копия обошла бы planLink guard.
+      if(plan.linkOf(row.id,owner.id))fail(409,'Создайте и отдельно согласуйте версию нужной площадки в контент-плане.','PLAN_LINKED_POST');
+      const origin=variantOrigin(row),root=origin.rootIdea||{postId:row.id,contentRevision:row.content_revision};
+      const target=payload.platformId,caps=JSON.parse(row.captions||'{}'),options=JSON.parse(row.platform_options||'{}'),sourceMeta=metaOf(row);
+      const data=normalized({title:row.title,text:row.text,mediaUrls:JSON.parse(row.media_urls),platformIds:[target],timezone:row.timezone,
+        profileRevision:row.profile_revision,mediaSha256:row.media_sha256||'',format:sourceMeta.format,role:sourceMeta.role,
+        captions:Object.hasOwn(caps,target)?{[target]:caps[target]}:{},platformOptions:Object.hasOwn(options,target)?{[target]:options[target]}:{}},{});
+      const time=iso(),order=(db.prepare('SELECT COALESCE(MAX(sort_order),0) m FROM autoposting_posts WHERE company_id=?').get(owner.id).m||0)+1;
+      const childId=Number(db.prepare(`INSERT INTO autoposting_posts(company_id,title,text,media_urls,platform_ids,scheduled_at,timezone,profile_revision,
+        created_at,updated_at,created_by,captions,origin,media_sha256,expected_media_sha256,expected_media_file,platform_options,meta,sort_order)
+        VALUES(?,?,?,?,?,NULL,?,?,?,?,?,?,'content_factory_variant',?,?,?,?,?,?)`).run(owner.id,data.title,data.text,JSON.stringify(data.mediaUrls),JSON.stringify(data.platformIds),
+          data.timezone,data.profileRevision,time,time,actor.userId??null,JSON.stringify(data.captions),data.mediaSha256,row.expected_media_sha256||'',row.expected_media_file||'',
+          JSON.stringify(data.platformOptions),JSON.stringify(data.meta),order).lastInsertRowid);
+      db.prepare(`INSERT INTO autoposting_variant_links(post_id,company_id,source_post_id,source_revision,source_content_revision,root_post_id,root_content_revision,platform_id,created_at,created_by)
+        VALUES(?,?,?,?,?,?,?,?,?,?)`).run(childId,owner.id,row.id,row.revision,row.content_revision,root.postId,root.contentRevision,target,time,actor.userId??null);
+      const child=db.prepare('SELECT * FROM autoposting_posts WHERE id=? AND company_id=?').get(childId,owner.id);
+      setPlatformReview(child,[target],'pending','',actor);
+      const result=JSON.stringify({companyCode:owner.code.toLowerCase(),created:true,post:dto(child,owner)});
+      db.prepare(`INSERT INTO autoposting_variant_requests(company_id,request_id,request_payload,post_id,result,created_at) VALUES(?,?,?,?,?,?)`)
+        .run(owner.id,body.clientRequestId,serialized,childId,result,time);
+      return JSON.parse(result);
+    });
+  }
+  function requireAutomaticWorkflow(code) {
+    const state=workflow?.get(code);
+    if(state?.configured===true&&state.fields?.releaseMode==='manual')fail(409,'В процессе выбран ручной выпуск. Автоматическая постановка в очередь отключена.','WORKFLOW_MANUAL_MODE');
   }
   async function schedule(id,code,body) {
     // platformIds не обязателен: без него в план идут все каналы карточки, как раньше. С ним — только указанные,
     // а остальные остаются в карточке со своими статусами и просто не отправляются.
     object(body,['revision','scheduledAt','timezone','profileRevision','platformIds']);revision(body.revision);
+    requireAutomaticWorkflow(code);
     const settings=await transport.getSettings(code),current=invalidate(code);
     transaction(()=>schedulePrepared(id,code,body,settings,current));
     return get(id,code);
@@ -836,6 +1034,8 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
   function schedulePrepared(id,code,body,settings,current) {
       const {row,owner}=rowFor(id,code);
       if(row.revision!==body.revision)fail(409,'Публикация уже изменена','REVISION_CONFLICT');
+      requireAutomaticWorkflow(owner.code);
+      if(information.get(owner.code).revision!==current.revision)fail(409,'Данные компании изменились во время постановки. Пересмотрите материал.','PROFILE_CHANGED');
       // Планирование карточки из контент-плана: разрешено только пока её версия согласована.
       // Проверка внутри транзакции — между чтением и записью согласование могли отозвать.
       if(plan.blockedReason(row))fail(409,plan.MESSAGE,plan.REASON);
@@ -853,7 +1053,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
       // плана разрешением на публикацию не является.
       if(requiresApproval(row)){
         materializePlatformReviews(row);
-        const states=new Map(platformApprovals(row).map(item=>[item.platformId,item]));
+        const states=new Map(platformApprovals(row,true).map(item=>[item.platformId,item]));
         const waiting=data.platformIds.filter(id=>!states.get(id)?.approved);
         if(waiting.length)fail(409,`Сначала одобрите эту версию для каналов: ${waiting.map(platformLabel).join(', ')}`,'APPROVAL_REQUIRED');
       }
@@ -886,6 +1086,22 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
       }
       else if(channels.some(channel=>!data.text&&!captionsByPlatform[channel.platform||channel.id]))fail(400,'Для выбранного канала нет ни общего текста, ни подписи площадки');
       for(const channel of channels)revision(channel.revision);
+      const reviews=new Map(platformReviewRows(row.id).map(item=>[item.platformId,item]));
+      for(const channel of channels){
+        const item=reviews.get(channel.id),required=requiresApproval(row)||item?.state==='approved';
+        const destination=approvalDestination(owner.code,channel.id);
+        if(!required){
+          if(destination&&channel.revision!==destination.channelRevision)fail(409,'Подключение изменилось во время постановки. Обновите настройки.','CHANNEL_CHANGED');
+          continue;
+        }
+        if(item?.approvedProfileRevision!==null&&item?.approvedProfileRevision!==undefined&&item.approvedProfileRevision!==row.profile_revision)
+          fail(409,'Данные компании изменились после согласования. Согласуйте материал заново.','APPROVAL_PROFILE_CHANGED');
+        if(!destination||item?.approvedProfileRevision===null||item?.approvedProfileRevision===undefined
+          ||item?.approvedDestinationRevision===null||item?.approvedDestinationRevision===undefined
+          ||destination.destinationRevision!==item.approvedDestinationRevision)
+          fail(409,'Назначение публикации изменилось или не было согласовано. Согласуйте материал для текущего подключения.','APPROVAL_DESTINATION_CHANGED');
+        if(channel.revision!==destination.channelRevision)fail(409,'Подключение изменилось во время постановки. Обновите настройки.','CHANNEL_CHANGED');
+      }
       db.prepare('DELETE FROM autoposting_deliveries WHERE post_id=?').run(row.id);
       for(const channel of channels)db.prepare('INSERT INTO autoposting_deliveries(post_id,channel_id,channel_revision) VALUES(?,?,?)').run(row.id,channel.id,channel.revision);
       db.prepare(`UPDATE autoposting_posts SET status='scheduled',scheduled_at=?,timezone=?,revision=revision+1,updated_at=?,last_error_code=NULL WHERE id=?`)
@@ -896,6 +1112,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     if(body.approved!==true||body.schedule!==true)fail(400,'Укажите явное одобрение и постановку в план');
     const {owner}=rowFor(id,code);
     if(!approvalPolicy(owner.code))fail(409,'Для этой компании согласование и постановка в план выполняются отдельно','APPROVAL_SCHEDULE_DISABLED');
+    requireAutomaticWorkflow(owner.code);
     const settings=await transport.getSettings(owner.code),current=invalidate(owner.code);
     return transaction(()=>{
       // Ревизия проверяется после ожидания настроек. Только сохранённые дата и все каналы карточки;
@@ -924,7 +1141,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
         setPlatformReview(row,ids,'approved','',actor);
         // Карточка целиком считается согласованной только когда согласованы все её каналы этой же версии.
         // Карточка без выбранных каналов согласуется как содержимое; добавленный позже канал всё равно ждёт согласования.
-        const everyApproved=platformApprovals(row).every(item=>item.approved);
+        const everyApproved=platformApprovals(row,true).every(item=>item.approved);
         if(everyApproved)db.prepare(`UPDATE autoposting_posts SET approved_revision=?,partial_approved_revision=NULL,approved_at=?,approved_by=?,approved_by_name=?,review_state='approved',review_comment='',review_by_name=?,review_at=?,revision=revision+1,updated_at=? WHERE id=?`)
           .run(row.content_revision,iso(),actor.userId??null,actor.userName??null,actor.userName??null,iso(),iso(),row.id);
         else db.prepare(`UPDATE autoposting_posts SET approved_revision=NULL,partial_approved_revision=?,approved_at=NULL,approved_by=NULL,approved_by_name=NULL,review_state='pending',review_comment='',review_by_name=?,review_at=?,revision=revision+1,updated_at=? WHERE id=?`)
@@ -938,7 +1155,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
         setPlatformReview(row,ids,'pending','',actor);
         cancelDeliveries(row,ids);
         // Остались ли согласованные каналы: если нет — это общий отзыв версии, частичное согласование тоже снимается.
-        const stillApproved=platformApprovals(row).some(item=>item.approved)?row.content_revision:null;
+        const stillApproved=platformApprovals(row,true).some(item=>item.approved)?row.content_revision:null;
         db.prepare(`UPDATE autoposting_posts SET approved_revision=NULL,partial_approved_revision=?,approved_at=NULL,approved_by=NULL,approved_by_name=NULL,review_state='pending',review_by_name=?,review_at=?,revision=revision+1,updated_at=?,
           status=CASE WHEN status='scheduled' THEN 'draft' ELSE status END,last_error_code=CASE WHEN status='scheduled' THEN 'APPROVAL_REVOKED' ELSE last_error_code END WHERE id=?`).run(stillApproved,actor.userName??null,iso(),iso(),row.id);
         history(row,'revoked',text(body.comment??'',2000),actor);
@@ -1033,8 +1250,8 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
         const data=normalized(item,{title:'',text:'',mediaUrls:[],platformIds:[],scheduledAt:null,timezone:current.profile.timezone||'UTC',profileRevision:current.revision,dayKey:'',captions:{},origin:'import',mediaSha256:'',platformOptions:{},meta:{}});
         if(!data.title)fail(400,'У карточки пакета нет названия');
         const expectedSha=item.expectedMediaSha256||'',expectedFile=item.expectedMediaFile||'',externalId=item.externalId||'';
-        const duplicate=(externalId&&db.prepare("SELECT id FROM autoposting_posts WHERE company_id=? AND external_id=? AND status<>'cancelled' ORDER BY id LIMIT 1").get(owner.id,externalId))
-          ||db.prepare("SELECT id FROM autoposting_posts WHERE company_id=? AND day_key=? AND title=? AND status<>'cancelled' ORDER BY id LIMIT 1").get(owner.id,data.dayKey,data.title);
+        const duplicate=(externalId&&db.prepare("SELECT id,archived_at FROM autoposting_posts WHERE company_id=? AND external_id=? AND status<>'cancelled' ORDER BY id LIMIT 1").get(owner.id,externalId))
+          ||db.prepare("SELECT id,archived_at FROM autoposting_posts WHERE company_id=? AND day_key=? AND title=? AND status<>'cancelled' ORDER BY id LIMIT 1").get(owner.id,data.dayKey,data.title);
         /* Повтор пакета дублей не создаёт. Но если у уже сохранённой карточки другие публикуемые
            опции, это не «то же самое содержимое»: молча выдавать её за повтор нельзя — пропуск
            помечается отдельной причиной, а прежняя карточка не переписывается. */
@@ -1044,9 +1261,8 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
           const sameOptions=stored===JSON.stringify(data.platformOptions||{});
           // Удалённая карточка повтором пакета не воскресает и не дублируется: её можно только восстановить из корзины.
           skipped.push({id:duplicate.id,dayKey:data.dayKey,title:data.title,externalId,
-            reason:storedRow.deleted_at?'deleted':sameOptions?'duplicate':'options_differ',
-            note:storedRow.deleted_at?'Такая карточка удалена в корзину: пакет её не создаёт заново. При необходимости восстановите её из корзины.'
-              :sameOptions?'':'У сохранённой карточки другие публикуемые опции: проверьте её вручную, пакет ничего не переписал.'});
+            reason:storedRow.deleted_at?'deleted':sameOptions?'duplicate':'options_differ',archivedAt:duplicate.archived_at||null,
+            note:storedRow.deleted_at?'Такая карточка удалена в корзину: пакет её не создаёт заново. При необходимости восстановите её из корзины.':duplicate.archived_at?'Карточка удалена из плана. Откройте «Удалённые материалы», чтобы восстановить её; повторный импорт ничего не восстановил.':sameOptions?'':'У сохранённой карточки другие публикуемые опции: проверьте её вручную, пакет ничего не переписал.'});
           continue;
         }
         const time=iso(),order=(db.prepare('SELECT COALESCE(MAX(sort_order),0) m FROM autoposting_posts WHERE company_id=?').get(owner.id).m||0)+1;
@@ -1062,12 +1278,13 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
   /* Отклонение — только владелец, комментарий обязателен; автор, время и текст сохраняются в истории и на карточке.
      Запланированная карточка при отклонении снимается с плана. */
   function reject(id,code,body,actor={}) {
-    object(body,['revision','comment','platformIds']);revision(body.revision);
+    object(body,['revision','comment','platformIds','annotations']);revision(body.revision);
     const comment=text(body.comment,2000,true);
     return transaction(()=>{
       const {row,owner}=rowFor(id,code);
       if(row.revision!==body.revision)fail(409,'Публикация уже изменена','REVISION_CONFLICT');
       if(['publishing','published'].includes(row.status))fail(409,'Публикацию уже отправляют или опубликовали','POST_STATE');
+      const annotations=normalizeNotes(body.annotations,JSON.parse(row.media_urls));
       materializePlatformReviews(row);
       const rejected=requestedPlatforms(row,body);
       setPlatformReview(row,rejected,'rejected',comment,actor);
@@ -1078,6 +1295,8 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
         .run(stillApprovedAfterReject,comment,actor.userName??null,iso(),iso(),row.id);
       // Комментарий владельца сохраняется дословно; какие каналы затронуты — в autoposting_platform_reviews.
       history(row,'rejected',comment,actor);
+      reviewNotes.save(row,annotations,actor,iso());
+      if(reviewTasks)reviewTasks.save(row,owner,comment,annotations,actor,iso());
       return dto(db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(row.id),owner);
     });
   }
@@ -1178,7 +1397,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     if(new Set(body.ids).size!==body.ids.length)fail(400,'Карточка указана дважды');
     const owner=company(db,code);invalidate(code);
     transaction(()=>{
-      const rows=db.prepare('SELECT id,sort_order FROM autoposting_posts WHERE company_id=? AND deleted_at IS NULL ORDER BY sort_order ASC,created_at DESC,id DESC').all(owner.id),known=new Set(rows.map(r=>r.id));
+      const rows=db.prepare('SELECT id,sort_order FROM autoposting_posts WHERE company_id=? AND archived_at IS NULL AND deleted_at IS NULL ORDER BY sort_order ASC,created_at DESC,id DESC').all(owner.id),known=new Set(rows.map(r=>r.id));
       for(const id of body.ids)if(!known.has(id))fail(404,'Карточка не найдена в выбранной компании','NOT_FOUND');
       const ordered=[...body.ids,...rows.map(r=>r.id).filter(id=>!body.ids.includes(id))];
       const stmt=db.prepare('UPDATE autoposting_posts SET sort_order=?,updated_at=? WHERE id=? AND company_id=?');
@@ -1230,7 +1449,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
       return trashDto(db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(row.id),owner);
     });
   }
-  function restore(id,code,body,actor={}) {
+  function restoreTrash(id,code,body,actor={}) {
     object(body,['revision']);revision(body.revision);
     return transaction(()=>{
       const {row,owner}=rowFor(id,code,{deleted:true});
@@ -1293,7 +1512,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     // Poll only known pending jobs. Unknown/timeout attempts cannot be reconciled by guessing text.
     if(transport.reconcile&&!stopped){
       const pending=db.prepare(`SELECT d.*,c.code FROM autoposting_deliveries d JOIN autoposting_posts p ON p.id=d.post_id
-        JOIN companies c ON c.id=p.company_id WHERE c.is_deleted=0 AND d.status='needs_review'
+        JOIN companies c ON c.id=p.company_id WHERE c.is_deleted=0 AND p.archived_at IS NULL AND p.deleted_at IS NULL AND d.status='needs_review'
         AND d.provider_post_id IS NOT NULL AND d.provider_status IN ('draft','scheduled')
         AND (d.provider_checked_at IS NULL OR d.provider_checked_at<=?) LIMIT 5`).all(new Date(now()-60000).toISOString());
       for(const delivery of pending){if(stopped)return;await reconcileDelivery(delivery.post_id,delivery.code,delivery);}
@@ -1302,7 +1521,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
     db.prepare("UPDATE autoposting_deliveries SET status='needs_review',error_code='PUBLICATION_UNCERTAIN' WHERE status='publishing' AND started_at<=?").run(now()-LEASE_MS);
     db.prepare("UPDATE autoposting_posts SET status='needs_review',last_error_code='PUBLICATION_UNCERTAIN',revision=revision+1,updated_at=? WHERE status='publishing' AND publishing_at<=?").run(iso(),now()-LEASE_MS);
     const due=db.prepare(`SELECT p.*,c.code FROM autoposting_posts p JOIN companies c ON c.id=p.company_id
-      WHERE p.status='scheduled' AND p.scheduled_at<=? AND c.is_deleted=0 AND p.deleted_at IS NULL ORDER BY p.scheduled_at,p.id LIMIT 1`).get(iso());
+      WHERE p.archived_at IS NULL AND p.deleted_at IS NULL AND p.status='scheduled' AND p.scheduled_at<=? AND c.is_deleted=0 ORDER BY p.scheduled_at,p.id LIMIT 1`).get(iso());
     if(!due||stopped)return;
     const current=invalidate(due.code);if(due.profile_revision!==current.revision)return;
     const settings=await transport.getSettings(due.code);
@@ -1342,7 +1561,7 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
       review(due.id,'EXTERNAL_PUBLICATION_RECORDED');return;
     }
     const lease=randomUUID();
-    const claimed=db.prepare("UPDATE autoposting_posts SET status='publishing',publishing_at=?,lease=?,revision=revision+1,updated_at=? WHERE id=? AND status='scheduled' AND revision=? AND deleted_at IS NULL")
+    const claimed=db.prepare("UPDATE autoposting_posts SET status='publishing',publishing_at=?,lease=?,revision=revision+1,updated_at=? WHERE id=? AND status='scheduled' AND revision=? AND deleted_at IS NULL AND archived_at IS NULL")
       .run(now(),lease,iso(),due.id,due.revision);
     if(!claimed.changes)return;
     for(const delivery of deliveries){
@@ -1427,7 +1646,14 @@ function createAutoposting(db,{information,transport,planLink,now=Date.now,logge
   }
   function drain(){if(stopped)return Promise.resolve();if(!running)running=processDue().finally(()=>running=null);return running;}
   function stop(){stopped=true;return running||Promise.resolve();}
-  return {get,list,calendar,reviewReminderSummary,create,update,schedule,cancel,remove,restore,trash,reconcile,drain,stop,invalidate,approve,approveAndSchedule,reject,split,submitReview,reorder,importPackage,recordReceipt};
+  function archived(code){const owner=company(db,code),rows=db.prepare('SELECT * FROM autoposting_posts WHERE company_id=? AND archived_at IS NOT NULL ORDER BY archived_at DESC,id DESC LIMIT 200').all(owner.id),batch=reviewBatch(rows,owner);return {companyCode:owner.code.toLowerCase(),posts:rows.map(row=>dto(row,owner,batch))};}
+  function archive(id,code,body,actor){rowFor(id,code);recovery.archive(id,code,body,actor);return get(id,code);}
+  function restore(id,code,body,actor={}){
+    const owner=company(db,code),row=db.prepare('SELECT id,deleted_at,archived_at FROM autoposting_posts WHERE id=? AND company_id=?').get(id,owner.id);
+    if(row?.deleted_at||row&&!row.archived_at&&db.prepare('SELECT 1 FROM autoposting_post_trash_events WHERE post_id=? AND company_id=? LIMIT 1').get(row.id,owner.id))return restoreTrash(id,code,body,actor);
+    recovery.restore(id,code,body,actor);return get(id,code);
+  }
+  return {history:readHistory,createVariant,attachSource,lookupSourceAttachment,sourceUsage,remove,trash,archive,restore,archived,get,list,calendar,reviewReminderSummary,create,update,schedule,cancel,reconcile,drain,stop,invalidate,approve,approveAndSchedule,reject,split,submitReview,reorder,importPackage,recordReceipt};
 }
 module.exports={createAutoposting,LEASE_MS,PLAN_PLATFORMS,CAPTION_PLATFORMS,FORMATS,ROLES,REVIEW_STATES,META_FIELDS,RECEIPT_PLATFORMS,receiptFormat,
   CALENDAR_MAX_RANGE_DAYS,CALENDAR_UNDATED_LIMIT,CALENDAR_TARGET_DAYS,CALENDAR_MINIMUM_DAYS,CALENDAR_CRITICAL_DAYS};

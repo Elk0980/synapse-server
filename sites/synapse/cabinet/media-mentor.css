@@ -162,6 +162,15 @@
 .mentor-material[data-has-media="yes"] { color:var(--accent,#7fd); }
 .mentor-upload { display:grid; gap:4px; margin:6px 0; }
 .mentor-upload input { min-height:44px; }
+/* CF26-R5: «Черновики и файлы» на узком экране. Элементы сетки по умолчанию не уже своего содержимого (min-width:auto),
+   а поле выбора файла и длинные подписи имеют большую внутреннюю ширину — строка черновика вылезала за секцию на 390 px.
+   Колонка сетки и элементы могут сжиматься, поле файла и кнопки не шире контейнера, длинные слова переносятся. */
+.mentor-transfer { grid-template-columns:minmax(0,1fr); }
+.mentor-transfer > *, .mentor-drafts > li, .mentor-drafts details, .mentor-upload { min-width:0; }
+.mentor-transfer summary, .mentor-transfer p { overflow-wrap:anywhere; }
+.mentor-upload input[type="file"] { width:100%; max-width:100%; min-width:0; box-sizing:border-box; }
+.mentor-drafts button { max-width:100%; white-space:normal; overflow-wrap:anywhere; }
+.mentor-drafts summary { min-height:44px; padding:10px 0; box-sizing:border-box; }
 .mentor-note { color:var(--muted,#999); font-size:0.85rem; overflow-wrap:anywhere; }
 .mentor-form { display:grid; gap:10px; }
 .mentor-form label { display:grid; gap:4px; }
@@ -364,4 +373,14 @@
   .mentor-day-preview-media { font-size:.75rem; }
   .mentor-day-edit .mentor-day-selects { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .mentor-extra-filters > div { grid-template-columns:repeat(3,minmax(0,1fr)); }
+}
+/* CF26: идея по ссылке из карточки, перенос одной версии и прежние переносы — без новых окон. */
+.mentor-day.mentor-focus { outline:2px solid var(--accent,#9fd4ff); outline-offset:3px; }
+.mentor-focus-note { margin:0 0 12px; padding:8px 12px; border-left:3px solid var(--accent,#9fd4ff); }
+.mentor-variant-transfer { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:8px; }
+.mentor-variant-transfer [data-variant-transfer-line] { flex:1 1 220px; min-width:0; }
+.mentor-variant-history { margin:4px 0; }
+.mentor-variant-history > summary { cursor:pointer; color:var(--muted,#999); font-size:.85rem; }
+@media (max-width: 720px) {
+  .mentor-variant-transfer { flex-direction:column; align-items:stretch; }
 }

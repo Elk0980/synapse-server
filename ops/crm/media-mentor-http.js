@@ -26,7 +26,7 @@ function versionNumber(value) {
   return parsed;
 }
 
-function createMediaMentorHandler({mentor, transfer, companyModuleContext, readJson, send}) {
+function createMediaMentorHandler({mentor, transfer, generation, generationDrafts, workflow, companyModuleContext, readJson, send}) {
   return async function handleMediaMentor(request, response, url, cors = {}) {
     // Раздел внедрения живёт на /media-mentor-rollout и сюда не попадает: после имени
     // модуля обязателен «/» или конец пути.
@@ -39,8 +39,21 @@ function createMediaMentorHandler({mentor, transfer, companyModuleContext, readJ
     const briefVersion = /^\/media-mentor\/brief\/versions\/([^/]+)$/.exec(url.pathname);
     const planVersion = /^\/media-mentor\/plan\/versions\/([^/]+)$/.exec(url.pathname);
     const draftContext = /^\/media-mentor\/plan\/transfer\/([^/]+)$/.exec(url.pathname);
+    const inputsMonth = /^\/media-mentor\/inputs\/months\/([^/]+)$/.exec(url.pathname);
+    const generationJob = /^\/media-mentor\/generation\/([a-zA-Z0-9_-]+)$/.exec(url.pathname);
+    const generationImport = /^\/media-mentor\/generation\/([a-zA-Z0-9_-]+)\/drafts$/.exec(url.pathname);
     let result, status = 200;
-    if (url.pathname === '/media-mentor' && readOnly) {
+    if(generationImport){
+      if(request.method!=='POST')fail(405,'Метод не поддерживается');
+      if(!generationDrafts)fail(501,'Перенос предложений пока не подключён','PROVIDER_NOT_CONFIGURED');
+      result=generationDrafts.transfer(code,generationImport[1],await readJson(request),actor);
+    } else if (url.pathname === '/media-mentor/generation' || generationJob) {
+      if(!generation) fail(501,'Подготовка плана пока не подключена','PROVIDER_NOT_CONFIGURED');
+      if(generationJob && readOnly) result=generation.get(code,generationJob[1]);
+      else if(!generationJob && readOnly) result=generation.list(code,url.searchParams.get('month'));
+      else if(!generationJob && request.method==='POST') result=generation.create(code,await readJson(request));
+      else fail(405,'Метод не поддерживается');
+    } else if (url.pathname === '/media-mentor' && readOnly) {
       result = {...served(mentor.get(code)), transfer: transfer.status(code),
         variantTransfer: transfer.variantStatus(code)};
     } else if (url.pathname === '/media-mentor/plan/transfer' && request.method === 'POST') {
@@ -52,6 +65,27 @@ function createMediaMentorHandler({mentor, transfer, companyModuleContext, readJ
       // Замечание к строке текущей версии плана. Оно не меняет план и не считается решением.
       result = served(mentor.addFeedback(code, await readJson(request), actor));
       status = 201;
+    } else if (url.pathname === '/media-mentor/workflow') {
+      if (!readOnly && request.method !== 'PUT') fail(405, 'Метод не поддерживается');
+      if (!workflow) fail(501, 'Настройки выпуска пока не подключены', 'PROVIDER_NOT_CONFIGURED');
+      if (readOnly) result = workflow.get(code);
+      else {
+        const body = await readJson(request);
+        // Session/CSRF остаются в existing content-service bridge; trusted company/permission читаются заново после async.
+        const fresh = companyModuleContext(request, code, 'autoposting.edit');
+        if (fresh.identity.userId !== identity.userId) fail(403, 'Доступ изменился во время операции', 'FORBIDDEN');
+        result = workflow.save(fresh.company.code, body, {userId: fresh.identity.userId, userName: fresh.identity.userName});
+      }
+    } else if (url.pathname === '/media-mentor/inputs' && readOnly) {
+      // Вводные контент-завода: профиль покупателей отдельно от брифа. Права — те же, что у брифа.
+      result = mentor.inputs.get(code);
+    } else if (url.pathname === '/media-mentor/inputs' && request.method === 'PUT') {
+      result = mentor.inputs.saveProfile(code, await readJson(request), actor);
+    } else if (inputsMonth && readOnly) {
+      result = mentor.inputs.month(code, inputsMonth[1]);
+    } else if (inputsMonth && request.method === 'PUT') {
+      // Пожелания конкретного месяца: не меняют постоянный профиль и бриф, ничего не генерируют.
+      result = mentor.inputs.saveMonth(code, inputsMonth[1], await readJson(request), actor);
     } else if (url.pathname === '/media-mentor/brief' && request.method === 'PUT') {
       result = served(mentor.saveBrief(code, await readJson(request), actor));
     } else if (url.pathname === '/media-mentor/plan' && request.method === 'PUT') {
@@ -61,12 +95,17 @@ function createMediaMentorHandler({mentor, transfer, companyModuleContext, readJ
          Право то же, что и у решения по плану, — владелец кабинета: это согласование текста,
          а не разрешение публиковать. */
       if (identity.role !== 'owner') fail(403, 'Согласовывать и отклонять версии может только владелец', 'FORBIDDEN');
-      result = served(mentor.decideVariants(code, await readJson(request), actor));
+      const body = await readJson(request), fresh = companyModuleContext(request, code, 'autoposting.edit');
+      if (fresh.identity.userId !== actor.userId) fail(403, 'Доступ изменился во время операции', 'FORBIDDEN');
+      if (fresh.identity.role !== 'owner') fail(403, 'Согласовывать и отклонять версии может только владелец', 'FORBIDDEN');
+      result = served(mentor.decideVariants(code, body, {userId: fresh.identity.userId, userName: fresh.identity.userName}));
       status = 201;
     } else if (url.pathname === '/media-mentor/plan/variants/transfer' && request.method === 'POST') {
       // Перенос согласованных версий площадок в черновики автопостинга: по одному черновику
       // на версию. Ничего не публикуется и не ставится в очередь.
-      result = transfer.transferVariants(code, await readJson(request), actor);
+      const body = await readJson(request), fresh = companyModuleContext(request, code, 'autoposting.edit');
+      if (fresh.identity.userId !== actor.userId) fail(403, 'Доступ изменился во время операции', 'FORBIDDEN');
+      result = transfer.transferVariants(code, body, {userId: fresh.identity.userId, userName: fresh.identity.userName});
       status = result.createdCount ? 201 : 200;
     } else if (url.pathname === '/media-mentor/plan/decision' && request.method === 'POST') {
       // Решение по версии плана принимает владелец кабинета, как и согласование публикаций.

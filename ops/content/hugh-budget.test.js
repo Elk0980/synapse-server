@@ -214,3 +214,64 @@ test('границы и цены читаются только из явной �
   assert.deepEqual(readPrice('../evil', {}), {invalid: true, reason: 'Недопустимое имя провайдера'});
   assert.equal(readPrice('primary', {HUGH_FALLBACK_PRIMARY_USD_PER_1K_PROMPT: 'нет'}).invalid, true);
 });
+
+const PLAN_LIMITS={...PRICED,HUGH_FALLBACK_BUDGET_USD:'100',HUGH_FALLBACK_BUDGET_MAX_REQUESTS:'20',
+ CONTENT_PLAN_JOB_BUDGET_USD:'10',CONTENT_PLAN_COMPANY_BUDGET_USD:'20',
+ CONTENT_PLAN_JOB_MAX_REQUESTS:'2',CONTENT_PLAN_COMPANY_MAX_REQUESTS:'3',
+ CONTENT_PLAN_CHAT_RESERVE_USD:'10',CONTENT_PLAN_CHAT_RESERVE_REQUESTS:'5'};
+test('план без явных лимитов не расходует API; обычный ответ доступен',async t=>{
+ const f=fixture({...PRICED});t.after(()=>f.db.close());
+ await assert.rejects(f.fallback.reply(PAYLOAD,{contentPlan:{company:'alpha',job:'job1'}}),e=>e.budgetStopped===true);
+ assert.equal(f.calls.length,0);await f.fallback.reply(PAYLOAD);assert.equal(f.calls.length,1);
+});
+test('план использует общий журнал: неизвестный исход, новый worker, лимит задачи и проекта',t=>{
+ const f=fixture(PLAN_LIMITS);t.after(()=>f.db.close());let b=f.fallback.budget;
+ const book=(job='job1',company='alpha')=>b.reserve('primary',{promptBytes:10,maxOutputTokens:10,contentPlan:{company,job}});
+ const first=book();assert.equal(first.allowed,true);b.keep(first.id);
+ b=createHughBudget({db:f.db,env:{...BASE,...PLAN_LIMITS},now:f.at});
+ const second=book();assert.equal(second.allowed,true);b.settle(second.id,{promptTokens:2,completionTokens:2});
+ assert.equal(book().allowed,false);assert.equal(book('job2').allowed,true);assert.equal(book('job3').allowed,false);
+ assert.equal(book('job1','beta').allowed,true);
+ assert.equal(b.planTotals('alpha','job1',null).requests,2);assert.equal(b.totals().requests,4);
+});
+test('резерв ответов клиентам сохраняется; явный отказ провайдера освобождает и лимит плана',t=>{
+ const f=fixture({...PLAN_LIMITS,HUGH_FALLBACK_BUDGET_MAX_REQUESTS:'6'});t.after(()=>f.db.close());const b=f.fallback.budget;
+ const reserve=()=>b.reserve('primary',{promptBytes:1,maxOutputTokens:1,contentPlan:{company:'alpha',job:'job1'}});
+ const first=reserve();assert.equal(first.allowed,true);assert.equal(reserve().allowed,false);
+ b.release(first.id);const next=reserve();assert.equal(next.allowed,true);
+ assert.equal(b.reserve('primary',{promptBytes:1,maxOutputTokens:1}).allowed,true);
+ assert.equal(b.planTotals('alpha','job1',null).requests,1);
+});
+test('денежный лимит плана учитывает верхнюю оценку до вызова и не затрагивает клиентский ответ',t=>{
+ const f=fixture({...PLAN_LIMITS,CONTENT_PLAN_JOB_BUDGET_USD:'0.01'});t.after(()=>f.db.close());const b=f.fallback.budget;
+ assert.equal(b.reserve('primary',{promptBytes:100,maxOutputTokens:100,contentPlan:{company:'alpha',job:'job1'}}).allowed,false);
+ assert.equal(b.totals().requests,0);assert.equal(b.reserve('primary',{promptBytes:100,maxOutputTokens:100}).allowed,true);
+});
+test('реальный fallback считает каждую попытку провайдера в лимит плана',async t=>{
+ const f=fixture({...PLAN_LIMITS,CONTENT_PLAN_JOB_MAX_REQUESTS:'1'});t.after(()=>f.db.close());
+ f.setResponder(()=>{throw Error('Синтетический обрыв соединения')});
+ await assert.rejects(f.fallback.reply(PAYLOAD,{contentPlan:{company:'alpha',job:'job1'}}),e=>e.budgetStopped===true);
+ assert.equal(f.calls.length,1);assert.equal(f.fallback.budget.planTotals('alpha','job1',null).requests,1);
+ assert.equal(f.fallback.budget.totals().unknownRequests,1);
+});
+test('денежный резерв клиентских ответов запрещает план до общего бюджетного стопа',t=>{
+ const f=fixture({...PLAN_LIMITS,HUGH_FALLBACK_BUDGET_USD:'1',CONTENT_PLAN_CHAT_RESERVE_USD:'0.9'});t.after(()=>f.db.close());
+ const b=f.fallback.budget;
+ assert.equal(b.reserve('primary',{promptBytes:100,maxOutputTokens:100,contentPlan:{company:'alpha',job:'job1'}}).allowed,false);
+ assert.equal(b.stopped(),false);assert.equal(b.reserve('primary',{promptBytes:100,maxOutputTokens:100}).allowed,true);
+});
+
+
+test('таймаут плана не отключает ответы клиентам; ошибка ключа остаётся общей',async t=>{
+ const f=fixture({...PLAN_LIMITS,HUGH_FALLBACK_PROVIDERS:'primary'});t.after(()=>f.db.close());
+ f.setResponder(()=>{throw Object.assign(Error('Synthetic timeout'),{name:'TimeoutError'})});
+ await assert.rejects(f.fallback.reply(PAYLOAD,{contentPlan:{company:'alpha',job:'job1'}}));
+ assert.equal(f.calls.length,1);assert.equal(f.fallback.available().length,1);
+ f.setResponder(()=>ok('Ответ клиенту',{prompt_tokens:1,completion_tokens:1}));
+ await f.fallback.reply(PAYLOAD);assert.equal(f.calls.length,2);
+ await assert.rejects(f.fallback.reply(PAYLOAD,{contentPlan:{company:'alpha',job:'job1'}}));
+ assert.equal(f.calls.length,2,'успех клиентского ответа не снимает паузу плана');
+ f.advance(1000000);f.setResponder(()=>fail(401));
+ await assert.rejects(f.fallback.reply(PAYLOAD,{contentPlan:{company:'alpha',job:'job2'}}));
+ assert.equal(f.fallback.available().length,0,'явно отклонённый ключ нельзя повторять в клиентском чате');
+});

@@ -88,7 +88,9 @@ test('план строится по брифу, согласуется поим
   assert.equal(reversed.approval.actorId,null);assert.equal(reversed.approvals.length,2);
 
   const tables=f.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map(row=>row.name);
-  assert.deepEqual(tables,['companies','media_mentor_brief_versions','media_mentor_briefs',
+  // CF1: рядом с брифом живут вводные контент-завода — это не таблицы публикации.
+  assert.deepEqual(tables,['companies','content_factory_month_versions','content_factory_months',
+    'content_factory_profile_versions','content_factory_profiles','media_mentor_brief_versions','media_mentor_briefs',
     'media_mentor_plan_approvals','media_mentor_plan_feedback','media_mentor_plan_versions','media_mentor_plans',
     'media_mentor_variant_approvals','media_mentor_variant_revisions'],
     'модуль не создаёт таблиц публикации');

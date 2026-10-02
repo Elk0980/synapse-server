@@ -39,6 +39,7 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
   const columns = new Set(db.prepare('PRAGMA table_info(autoposting_channels)').all().map(row => row.name));
   if (!columns.has('provider')) db.exec("ALTER TABLE autoposting_channels ADD COLUMN provider TEXT NOT NULL DEFAULT 'direct'");
   if (!columns.has('profile_display_name')) db.exec('ALTER TABLE autoposting_channels ADD COLUMN profile_display_name TEXT');
+  if (!columns.has('destination_revision')) db.exec('ALTER TABLE autoposting_channels ADD COLUMN destination_revision INTEGER NOT NULL DEFAULT 1');
   function company(code) {
     if (typeof code !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail('Выберите компанию');
     const row = db.prepare('SELECT code,timezone FROM companies WHERE code=? COLLATE NOCASE AND is_deleted=0').get(code);
@@ -121,6 +122,7 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
       let target = input.target.trim();
       if (provider === 'onlypult' && !(target === '' && !input.enabled) && !/^[A-Za-z0-9_-]{1,100}$/.test(target)) fail('Выберите профиль Onlypult');
       if (provider === 'direct' && input.id === 'telegram' && !/^(@[A-Za-z][A-Za-z0-9_]{4,31}|-100\d{5,16})$/.test(target)) fail('Укажите @имя канала Telegram или его ID -100…');
+      if (provider === 'direct' && input.id === 'telegram' && target.startsWith('@')) target = target.toLowerCase();
       if (provider === 'direct' && input.id === 'vk') {
         target = target.replace(/^(?:https:\/\/(?:www\.)?vk\.com\/)?(?:club|public)/, '').replace(/\/$/, '');
         if (!/^[1-9]\d{0,14}$/.test(target)) fail('Укажите числовой ID сообщества ВКонтакте');
@@ -130,14 +132,20 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
       if (!token) fail('Введите ключ доступа для этой площадки');
       if (provider === 'direct' && input.id === 'telegram' && !/^\d{5,16}:[A-Za-z0-9_-]{20,}$/.test(token)) fail('Проверьте токен бота Telegram');
       if (provider === 'onlypult' && !/^op_[a-fA-F0-9]{64}$/.test(token)) fail('Проверьте ключ API Onlypult');
-      return {id: input.id, provider, name, target, token, enabled: input.enabled};
+      let previousToken = null;
+      if (previous) try {previousToken = tokenFor(previous);} catch {}
+      const previousTarget = previous?.provider === 'direct' && input.id === 'telegram' && previous.target.startsWith('@') ? previous.target.toLowerCase() : previous?.target;
+      const destinationChanged = previous && ((previous.provider || 'direct') !== provider || previousTarget !== target || previousToken !== token);
+      const destinationRevision = previous ? previous.destination_revision + (destinationChanged ? 1 : 0) : 1;
+      if (!Number.isSafeInteger(destinationRevision) || destinationRevision < 1) fail('Версия назначения недоступна. Проверьте подключение', 409);
+      return {id: input.id, provider, name, target, token, enabled: input.enabled, destinationRevision};
     });
       for (const config of configs) db.prepare(`INSERT INTO autoposting_channels
-        (company_code,id,name,target,enabled,encrypted_token,revision,status,updated_at,provider) VALUES(?,?,?,?,?,?,1,'needs_check',?,?)
+        (company_code,id,name,target,enabled,encrypted_token,revision,status,updated_at,provider,destination_revision) VALUES(?,?,?,?,?,?,1,'needs_check',?,?,?)
         ON CONFLICT(company_code,id) DO UPDATE SET name=excluded.name,target=excluded.target,enabled=excluded.enabled,
           encrypted_token=excluded.encrypted_token,revision=autoposting_channels.revision+1,checked_revision=NULL,
-          status='needs_check',checked_at=NULL,profile_display_name=NULL,provider=excluded.provider,updated_at=excluded.updated_at`).run(current.code,config.id,config.name,
-            config.target,Number(config.enabled),crypt(current.code,config.id,config.token),new Date(now()).toISOString(),config.provider);
+          status='needs_check',checked_at=NULL,profile_display_name=NULL,provider=excluded.provider,updated_at=excluded.updated_at,destination_revision=excluded.destination_revision`).run(current.code,config.id,config.name,
+            config.target,Number(config.enabled),crypt(current.code,config.id,config.token),new Date(now()).toISOString(),config.provider,config.destinationRevision);
       db.exec('COMMIT');
     } catch (error) {db.exec('ROLLBACK'); throw error;}
     return getSettings(current.code);
@@ -295,7 +303,12 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
     if (!row || !row.encrypted_token) return null;
     return {revision: row.revision, target: row.target || '', provider: row.provider || 'direct'};
   }
-  return {getSettings,saveSettings,checkChannel,listProfiles,publish,reconcile,readStats,connectionRevision};
+  // Только серверный синхронный снимок: цель и ключи не выходят из transport.
+  function approvalDestination(code, id) {
+    const current = company(code), row = rowFor(current.code, id);
+    return {destinationRevision: row?.target && row.encrypted_token ? row.destination_revision : 0, channelRevision: row?.revision || 0};
+  }
+  return {getSettings,saveSettings,checkChannel,listProfiles,publish,reconcile,readStats,connectionRevision,approvalDestination};
 }
 
 module.exports = {createAutopostingTransport,PLATFORMS,publicUrl};

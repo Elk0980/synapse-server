@@ -1,0 +1,6 @@
+# План CF15
+1. Прочитать actual review-task relation, tasks due_date/status/assignee и company timezone; согласовать DTO с координатором до кода.
+2. Новый CRM collector без миграций/exec/update: bounded iterator над самой свежей связью, company/version/state/full approval guards, реальные date/assignee (пустое имя допустимо), <=100 DTO. TaskId ASC/afterTaskId/nextAfterTaskId для устойчивого обхода хвоста.
+3. Новый content consumer только injected service request и existing hugh-owner-alerts.add; fail closed до любой записи при invalid summary, event keys детерминированы. До10 страниц/1000 предложенных фактов за sync, cursor в памяти; после полной успешной страницы продвинуть, в конце reset0, после restart перечитать с0 и использовать durable dedupe.
+4. Meaningful synthetic SQLite tests: отсутствие назначения/срока, latest/stale/deleted/completed/reassigned company, archives/status/approved/partial/stale approval, timezone midnight/DST, изменённый срок; реально существующая owner queue, loss after INSERT/restart/uncertain/sent, >100/paging/cap10/сбой страницы/abort/reset.
+5. Запустить только два новых набора, зафиксировать evidence/converge/SHA. Root отдельно подключит service-key worker-only HTTP и optional runner dependency; пакетом это не заявляется.

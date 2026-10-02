@@ -15,6 +15,9 @@ const { createEmailDiagnostics } = require('./email-diagnostics');
 const { companyPublicLinks } = require('./company-links');
 const { createCompanyInformation } = require('./company-information');
 const { createAutoposting } = require('./autoposting');
+const {createContentFactorySourceHandler}=require('./content-factory-source-http');
+const {createContentFactoryContextHandler}=require('./content-factory-context-http');
+const {createReviewTasks}=require('./autoposting-review-tasks');
 const { createAutopostingTransport } = require('./autoposting-transport');
 const { createStudioJourney, createStudioJourneyHandler } = require('./studio-journey');
 const { createClientIntakes, createClientIntakesHandler } = require('./client-intakes');
@@ -22,6 +25,9 @@ const { createMediaMentorRollout, createMediaMentorRolloutHandler } = require('.
 const { createMediaMentor } = require('./media-mentor');
 const { createMediaMentorTransfer } = require('./media-mentor-transfer');
 const { createMediaMentorHandler } = require('./media-mentor-http');
+const { createContentPlanJobs } = require('./content-plan-jobs');
+const { createContentPlanService } = require('./content-plan-service');
+const { createContentPlanDrafts } = require('./content-plan-drafts');
 const { createStudioContentPlan } = require('./studio-content-plan');
 const { createVkCommunity } = require('./vk-community');
 const { createVkCommunityHandler } = require('./vk-community-http');
@@ -594,7 +600,12 @@ const companyInformation = createCompanyInformation(db, {check: createCompanyInf
 const taskCoordination = createTaskCoordination(db);
 const taskDispatch = createTaskDispatch(db);
 const autopostingTransport = createAutopostingTransport(db, {apiKey: API_KEY});
-const autoposting = createAutoposting(db, {information: companyInformation, transport: autopostingTransport});
+const contentFactoryWorkflow=require('./content-factory-workflow').createContentFactoryWorkflow(db);
+const autoposting = createAutoposting(db, {information: companyInformation, transport: autopostingTransport,reviewTasks:createReviewTasks(db),workflow:contentFactoryWorkflow});
+const handleContentFactoryCompletion=require('./content-factory-completion-http').createContentFactoryCompletionHandler({autoposting,companyModuleContext,readJson,send});
+const handleContentFactoryReviewDelays=require('./content-factory-review-delays-http').createContentFactoryReviewDelaysHandler({
+  delays:require('./content-factory-review-delays').createContentFactoryReviewDelays({db}),readJson,send});
+const handleContentFactorySources=createContentFactorySourceHandler({autoposting,companyModuleContext,readJson,send});
 const studioJourney = createStudioJourney(db,{quoteService:(code,id,version)=>companyInformation.quote(code,id,version)});
 const studioContentPlan = createStudioContentPlan(db,{autoposting,information:companyInformation});
 const handleStudioJourney = createStudioJourneyHandler({journey:studioJourney,companyModuleContext,readJson,send});
@@ -603,7 +614,13 @@ const mediaMentorRollout = createMediaMentorRollout(db);
 const handleMediaMentorRollout = createMediaMentorRolloutHandler({rollout:mediaMentorRollout,companyModuleContext,readJson,send});
 const mediaMentor = createMediaMentor(db);
 const mediaMentorTransfer = createMediaMentorTransfer(db,{mentor:mediaMentor,autoposting,information:companyInformation});
-const handleMediaMentor = createMediaMentorHandler({mentor:mediaMentor,transfer:mediaMentorTransfer,companyModuleContext,readJson,send});
+const contentPlanJobs = createContentPlanJobs(db,{requireWorker:true});
+const contentPlanDispatch = require('./content-plan-dispatch').createContentPlanDispatch({jobs:contentPlanJobs});
+const contentPlanGeneration = createContentPlanService({mentor:mediaMentor,jobs:contentPlanJobs,workflow:contentFactoryWorkflow});
+const handleContentFactoryContext=createContentFactoryContextHandler({generation:contentPlanGeneration,jobs:contentPlanJobs,companyModuleContext,readJson,send,
+  planningInsights:{capture:(code,month)=>require('./content-factory-planning-insights').createPlanningInsights({stats:socialStats}).capture(code,month)}});
+const contentPlanDrafts = createContentPlanDrafts(db,{jobs:contentPlanJobs,autoposting});
+const handleMediaMentor = createMediaMentorHandler({mentor:mediaMentor,transfer:mediaMentorTransfer,generation:contentPlanGeneration,generationDrafts:contentPlanDrafts,workflow:contentFactoryWorkflow,companyModuleContext,readJson,send});
 const vkCommunity = createVkCommunity(db,{apiKey:API_KEY});
 const handleVkCommunity = createVkCommunityHandler({community:vkCommunity,companyModuleContext,readJson,send});
 const reviews = createReviews(db);
@@ -2592,6 +2609,7 @@ async function route(request, response) {
       scheduledAt: p.scheduledAt, timezone: p.timezone, mediaKind: p.readiness?.mediaKind || 'none' }));
     return send(response, 200, { companyCode: company.code.toLowerCase(), items }, { ...cors, 'cache-control': 'no-store' });
   }
+  if(await handleContentFactoryCompletion(request,response,url,cors))return;
   if (/^\/autoposting(?:\/|$)/.test(url.pathname)) {
     const permission = request.method !== 'GET' || url.pathname.endsWith('/profiles') ? 'autoposting.edit' : 'autoposting.view';
     const {identity,company} = companyModuleContext(request,url.searchParams.get('companyCode'),permission);
@@ -2603,6 +2621,7 @@ async function route(request, response) {
         fail(400,'Укажите компанию и один период календаря: from и to');
       result=await autoposting.calendar(code,{from:url.searchParams.get('from'),to:url.searchParams.get('to')});
     }
+    else if (url.pathname === '/autoposting/archived' && request.method === 'GET') result=autoposting.archived(code);
     else if (url.pathname === '/autoposting/settings' && request.method === 'GET') result=await autopostingTransport.getSettings(code);
     else if (url.pathname === '/autoposting/settings' && request.method === 'PUT') {
       const body=await readJson(request);
@@ -2621,7 +2640,7 @@ async function route(request, response) {
     else if (url.pathname === '/autoposting/starter-plan' && request.method === 'GET') result=studioContentPlan.get(code);
     else if (url.pathname === '/autoposting/starter-plan' && request.method === 'POST') {result=studioContentPlan.import(code,await readJson(request),identity.userId);status=result.created?201:200;}
     else {
-      const match=/^\/autoposting\/posts(?:\/(\d+)(?:\/(schedule|cancel|reconcile|approve|reject|split|submit-review|receipts|delete|restore))?)?$/.exec(url.pathname);
+      const match=/^\/autoposting\/posts(?:\/(\d+)(?:\/(schedule|cancel|reconcile|approve|reject|split|submit-review|receipts|delete|archive|restore))?)?$/.exec(url.pathname);
       if (url.pathname==='/autoposting/order' && request.method==='PUT') {
         result=autoposting.reorder(code,await readJson(request),identity);
         return send(response,status,result,{...cors,'cache-control':'no-store'});
@@ -2662,10 +2681,10 @@ async function route(request, response) {
         const outcome=autoposting.split(id,code,await readJson(request),identity);
         return send(response,outcome.created?201:200,outcome,{...cors,'cache-control':'no-store'});
       }
-      if (action==='delete' || action==='restore') {
+      if (action==='delete' || action==='archive' || action==='restore') {
         if (request.method!=='POST') fail(405,'Метод не поддерживается');
         const body=await readJson(request);
-        result=action==='delete'?autoposting.remove(id,code,body,identity):autoposting.restore(id,code,body,identity);
+        result=action==='delete'?autoposting.remove(id,code,body,identity):autoposting[action](id,code,body,identity);
         return send(response,status,result,{...cors,'cache-control':'no-store'});
       }
       if (action==='submit-review') {
@@ -2824,6 +2843,15 @@ async function route(request, response) {
   if (request.method === 'GET' && overviewMatch) {
     const company = scopedCompany(url.searchParams.get('companyCode'));
     return send(response, 200, companyOverview(entityId(overviewMatch[1]), company), cors);
+  }
+  if(await handleContentFactorySources(request,response,url))return;
+  if(await handleContentFactoryReviewDelays(request,response,url))return;
+  if(await handleContentFactoryContext(request,response,url))return;
+  if (url.pathname.startsWith('/internal/content-plan/')) {
+    if (request.headers[CRM_IDENTITY_HEADER]) fail(403, 'Только серверный обработчик');
+    if (request.method !== 'POST') fail(405, 'Метод не поддерживается');
+    const result=contentPlanDispatch.handle(url.pathname.slice('/internal/content-plan/'.length),await readJson(request));
+    return send(response,200,result,{...cors,'cache-control':'no-store'});
   }
   if (url.pathname.startsWith('/internal/task-dispatch/')) {
     // Общий CRM service key уже проверен. Маршрут не доступен через браузерный proxy.

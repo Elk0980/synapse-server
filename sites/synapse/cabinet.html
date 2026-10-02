@@ -649,8 +649,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <div class="subnav" id="marketing-menu" hidden>
       <a class="nav-link" id="content-factory-link" href="#content-factory"
         data-view-link="content-factory" hidden>Контент завод</a>
-      <a class="nav-link" id="media-mentor-link" href="#media-mentor"
-        data-view-link="media-mentor" hidden>Бриф и план</a>
       <a class="nav-link" id="actor-onboarding-link" href="#actor-onboarding"
         data-view-link="actor-onboarding" hidden>Моя анкета</a>
       <a class="nav-link" id="actor-workspace-link" href="#actor-workspace"
@@ -686,10 +684,17 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     <div id="content-factory-header" hidden>
       <div class="content-header"><h1>Контент завод</h1></div>
       <nav class="factory-tabs" aria-label="Контент завод">
-        <a class="plain-button" href="#content-factory/materials" data-factory-view="autoposting">Материалы и публикации</a>
-        <a class="plain-button" href="#content-factory/progress" data-factory-view="media-mentor-rollout">Этапы и результаты</a>
-        <a class="plain-button" href="#content-factory/sources" data-factory-view="telegram-sources">Исходники из Telegram</a>
+        <a class="plain-button" href="#content-factory/plan" data-factory-view="autoposting" data-factory-also="media-mentor">Контент-план</a>
+        <a class="plain-button" href="#content-factory/sources" data-factory-view="telegram-sources">Исходники</a>
+        <a class="plain-button" href="#content-factory/stats" data-factory-view="content-factory-stats" data-factory-also="media-mentor-rollout">Статистика</a>
+        <a class="plain-button" href="#content-factory/settings" data-factory-view="content-factory-settings">Настройки модуля</a>
       </nav>
+      <div class="factory-plan-bar" id="content-factory-plan-bar" hidden>
+        <button class="plain-button" type="button" data-factory-action="compose">Составить план</button>
+        <button class="plain-button" type="button" data-factory-action="create">Создать публикацию</button>
+        <span class="factory-bar-status" data-factory-bar-status role="status"></span>
+        <section class="card factory-compose" id="content-factory-compose" aria-live="polite" hidden></section>
+      </div>
     </div>
     <section class="view-panel" id="home-view" data-view="home" hidden>
       <div class="content-header home-header"><h1>Главная</h1>
@@ -931,6 +936,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     <section class="view-panel" id="actor-workspace-view" data-view="actor-workspace" hidden></section>
     <section class="view-panel" id="media-mentor-rollout-view" data-view="media-mentor-rollout" hidden></section>
     <section class="view-panel" id="telegram-sources-view" data-view="telegram-sources" hidden></section>
+    <section class="view-panel" id="content-factory-stats-view" data-view="content-factory-stats" hidden></section>
+    <section class="view-panel" id="content-factory-settings-view" data-view="content-factory-settings" hidden></section>
     <section class="view-panel" id="company-information-view" data-view="company-information" hidden></section>
     <section class="view-panel" id="vk-community-view" data-view="vk-community" hidden></section>
     <section class="view-panel" id="reviews-view" data-view="reviews" hidden></section>
@@ -1062,7 +1069,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20260930-story-publish";
+  window.SB_CABINET_ASSET_VERSION = "20261001-content-factory-cf2";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
@@ -1072,8 +1079,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   // Личная переписка владельца по проектам живёт в owner-private-chat.js и ходит
   // по собственному маршруту /content/owner-chat с серверной проверкой владельца.
   const cabinetAssets = ["platform-links", "home", "tasks", "company-information", "reviews", "studio-journey", "leads", "deals", "clients", "chat", "hugh", "project-chat", "analytics",
-    "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking", "sites", "settings", "client-dialogs", "site-orders", "account", "company-team", "trademarks", "campaigns", "autoposting", "media-mentor-materials", "media-mentor-rules", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "telegram-sources", "telegram-sources-view", "hugh-providers", "owner-private-chat", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
-  const cabinetStyles = ["reviews", "analytics", "ad-platforms", "platform-demand", "social-stats", "deals", "home", "chat", "hugh", "project-chat", "settings", "client-dialogs", "site-orders", "trademarks", "sites", "campaigns", "company-information", "autoposting", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "hugh-providers", "owner-private-chat", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial"];
+    "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking", "sites", "settings", "client-dialogs", "site-orders", "account", "company-team", "trademarks", "campaigns", "autoposting", "media-mentor-materials", "media-mentor-rules", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "telegram-sources", "telegram-sources-view", "content-factory", "hugh-providers", "owner-private-chat", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
+  const cabinetStyles = ["reviews", "analytics", "ad-platforms", "platform-demand", "social-stats", "deals", "home", "chat", "hugh", "project-chat", "settings", "client-dialogs", "site-orders", "trademarks", "sites", "campaigns", "company-information", "autoposting", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "content-factory", "hugh-providers", "owner-private-chat", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join(""));
@@ -1132,7 +1139,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const responseError = (response, body) => {
     const error = new Error(response.status === 403 ? "Недостаточно прав" : body?.error || (response.status >= 500 ? "Ошибка сервера, попробуйте позже" : "Ошибка запроса"));
     error.status = response.status;
-    if (typeof body?.code === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(body.code)) error.code = body.code;
+    // CRM кладёт код отказа в details.code; верхний code (сервис контента) имеет приоритет.
+    const validCode = (value) => typeof value === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(value);
+    if (validCode(body?.code)) error.code = body.code;
+    else if (validCode(body?.details?.code)) error.code = body.details.code;
     return error;
   };
   const apiJson = async (url, options = {}) => {
@@ -1171,12 +1181,14 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     competitors: "Конкуренты",
     calltracking: "Колтрекинг",
     sites: "Сайты",
-    autoposting: "Материалы",
-    "media-mentor": "Бриф и план",
+    autoposting: "Контент-план",
+    "media-mentor": "Предложения плана",
+    "content-factory-settings": "Настройки модуля",
+    "content-factory-stats": "Статистика контента",
     "actor-onboarding": "Моя анкета",
     "actor-workspace": "Моё рабочее место",
     "media-mentor-rollout": "Медиа-наставник",
-    "telegram-sources": "Исходники из Telegram",
+    "telegram-sources": "Исходники",
     "company-information": "Актуальность",
     "vk-community": "ВКонтакте",
     "reviews": "Отзывы",
@@ -1518,7 +1530,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     if (["system-settings", "catalog", "finance", "vk-community", "site-orders"].includes(value)) return identity?.role === "owner";
     if (["company-information", "autoposting"].includes(value)) return identity?.role === "owner" || identity?.permissions?.includes(value + ".view");
     // Медиа-наставник переиспользует право раздела публикаций: новых прав не заводим.
-    if (["media-mentor", "media-mentor-rollout"].includes(value)) return identity?.role === "owner" || identity?.permissions?.includes("autoposting.view");
+    if (["media-mentor", "media-mentor-rollout", "content-factory-settings", "content-factory-stats"].includes(value)) return identity?.role === "owner" || identity?.permissions?.includes("autoposting.view");
     if (value === "actor-onboarding") return identity?.role === "owner" || identity?.permissions?.includes("actor-onboarding.self") || identity?.permissions?.includes("actor-onboarding.manage");
     if (value === "actor-workspace") return identity?.role === "owner" || identity?.permissions?.includes("actor-onboarding.self");
     if (value === "campaigns") return identity?.role === "owner";
@@ -1543,28 +1555,34 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   };
   const defaultView = () => "home";
   const validView = (value) => Object.hasOwn(VIEW_TITLES, value) && permittedView(value);
-  const factoryRoutes = {autoposting: "content-factory/materials", "media-mentor-rollout": "content-factory/progress", "telegram-sources": "content-factory/sources"};
+  /* Контент завод (CF1): четыре вкладки. Канонические адреса видов; прежние адреса (#autoposting,
+     #content-factory/materials, #media-mentor, #media-mentor-rollout, #telegram-sources) переводятся
+     на них с сохранением параметров карточки (?company=…&post=…&revision=…). */
+  const factoryRoutes = {autoposting: "content-factory/plan", "media-mentor": "content-factory/plan/proposals",
+    "telegram-sources": "content-factory/sources", "content-factory-stats": "content-factory/stats",
+    "media-mentor-rollout": "content-factory/progress", "content-factory-settings": "content-factory/settings"};
   const factoryViews = ["content-factory", ...Object.keys(factoryRoutes)];
+  const factoryParts = {plan: "autoposting", materials: "autoposting", "plan/proposals": "media-mentor", sources: "telegram-sources",
+    stats: "content-factory-stats", progress: "media-mentor-rollout", settings: "content-factory-settings"};
   const viewFromHash = () => {
     const raw = decodeURIComponent(location.hash.slice(1));
-    let value = raw.split(/[/?]/)[0];
+    const pathPart = raw.split("?")[0], query = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
+    let value = pathPart.split("/")[0];
     if (value === "content-factory") {
-      const part = raw.split(/[/?]/)[1];
-      if (part === "progress") value = "media-mentor-rollout";
-      else if (part === "sources") value = "telegram-sources";
-      else if (part === "materials" || (!part && permittedView("autoposting"))) value = "autoposting";
+      const part = pathPart.slice("content-factory/".length);
+      if (Object.hasOwn(factoryParts, part)) value = factoryParts[part];
+      else if (!part && permittedView("autoposting")) value = "autoposting";
     }
     if (Object.hasOwn(VIEW_TITLES, value) && !permittedView(value)) return "access-denied";
-    if (factoryRoutes[value]) {
-      const tail = raw.startsWith(value) ? raw.slice(value.length) : "";
-      history.replaceState(null, "", "#" + factoryRoutes[value] + tail);
+    if (factoryRoutes[value] && pathPart !== factoryRoutes[value]) {
+      history.replaceState(null, "", "#" + factoryRoutes[value] + query);
     }
     return validView(value) ? value : defaultView();
   };
   const setCategoryForView = (viewName) => {
     const analyticsViews = ["analytics-through", "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking"];
     const crmViews = ["crm", "deals", "clients", "chat"];
-    const categoryId = ["catalog","finance"].includes(viewName) ? "finance-menu" : ["reviews", "autoposting", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "telegram-sources", "company-information", "content-factory", "campaigns", "vk-community"].includes(viewName) ? "marketing-menu" :
+    const categoryId = ["catalog","finance"].includes(viewName) ? "finance-menu" : ["reviews", "autoposting", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "telegram-sources", "content-factory-stats", "content-factory-settings", "company-information", "content-factory", "campaigns", "vk-community"].includes(viewName) ? "marketing-menu" :
       ["settings", "site-orders", "system-settings", "accounts", "account", "company-team", "trademarks"].includes(viewName) ? "management-menu" : analyticsViews.includes(viewName) ? "analytics-menu" :
       viewName === "sites" ? "site-menu" : crmViews.includes(viewName) || viewName.startsWith("crm-")
         ? "crm-menu" : null;
@@ -1601,9 +1619,15 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     byId("content-factory-header").hidden = !factory;
     byId("content-factory-header").querySelectorAll("[data-factory-view]").forEach(link => {
       link.hidden = !permittedView(link.dataset.factoryView);
-      if (link.dataset.factoryView === currentView) link.setAttribute("aria-current", "page");
+      const views = [link.dataset.factoryView, ...(link.dataset.factoryAlso || "").split(" ").filter(Boolean)];
+      if (views.includes(currentView)) link.setAttribute("aria-current", "page");
       else link.removeAttribute("aria-current");
     });
+    // Строка действий только на вкладке «Контент-план»; вводные живут в «Настройках модуля», не над доской.
+    const planBar = byId("content-factory-plan-bar");
+    planBar.hidden = !["autoposting", "media-mentor"].includes(currentView) || !permittedView(currentView);
+    if (planBar.hidden) byId("content-factory-compose").hidden = true;
+    else SbCabinet.contentFactory?.bindPlanBar?.(planBar, cabinetContext());
     document.querySelectorAll("[data-view]").forEach((view) => {
       view.hidden = view.dataset.view !== currentView;
     });
@@ -1741,7 +1765,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       byId("crm-menu").querySelectorAll("[data-view-link]").forEach((link) => {
         link.hidden = link.dataset.viewLink !== "chat" && !hasPermission("crm.view");
       });
-      byId("media-mentor-link").hidden = !permittedView("media-mentor");
       byId("actor-onboarding-link").hidden = !permittedView("actor-onboarding");
       byId("actor-workspace-link").hidden = !permittedView("actor-workspace");
       byId("company-information-link").hidden = !permittedView("company-information");

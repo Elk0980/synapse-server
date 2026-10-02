@@ -2,15 +2,15 @@
 // Узкий потоковый multipart: один файл, ограниченные текстовые поля, без сторонних пакетов.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const fail=(status,message)=>{throw Object.assign(new Error(message),{status});};
-async function readSourceMultipart(request,{storage,maxFile}) {
+async function readSourceMultipart(request,{storage,maxFile,upload=false}) {
   const type=String(request.headers['content-type']||'');
   const parsed=/^multipart\/form-data\s*;\s*boundary=(?:"([a-zA-Z0-9'()+_,.\/:=? -]{1,70})"|([a-zA-Z0-9'()+_,.\/:=?-]{1,70}))\s*$/i.exec(type);
-  if(!parsed)fail(415,'Выберите файл для ручного импорта');
+  if(!parsed)fail(415,upload?'Выберите файл для загрузки':'Выберите файл для ручного импорта');
   const maxBody=maxFile+65536;
   if(Number(request.headers['content-length'])>maxBody)fail(413,'Файл превышает предел ручного импорта');
   const boundary=parsed[1]||parsed[2], first=Buffer.from('--'+boundary+'\r\n'), marker=Buffer.from('\r\n--'+boundary);
   let buffer=Buffer.alloc(0),state='first',part=null,file=null,fd=null,tempDir=null,total=0;
-  const fields={},seen=new Set(),allowed=new Set(['file','telegramUrl','sourceChatId','provenance','caption']);
+  const fields={},seen=new Set(),allowed=new Set(upload?['file','caption','metadata']:['file','telegramUrl','sourceChatId','provenance','caption']);
   async function cleanup(){if(fd){await fd.close().catch(()=>{});fd=null;}if(file?.path)fs.rmSync(file.path,{force:true});if(tempDir)fs.rmdirSync(tempDir);}
   async function data(bytes){
     if(!bytes.length)return;
@@ -20,7 +20,7 @@ async function readSourceMultipart(request,{storage,maxFile}) {
       part.hash.update(bytes);if(part.head.length<32)part.head=Buffer.concat([part.head,bytes.subarray(0,32-part.head.length)]);
       await fd.writeFile(bytes);
     }else{
-      if(part.size>(part.name==='caption'?48000:4000))fail(400,'Текстовое поле слишком длинное');
+      if(part.size>(part.name==='caption'?48000:part.name==='metadata'?16000:4000))fail(400,'Текстовое поле слишком длинное');
       part.chunks.push(Buffer.from(bytes));
     }
   }
@@ -48,7 +48,7 @@ async function readSourceMultipart(request,{storage,maxFile}) {
         }
         const disposition=/^form-data;\s*name="([A-Za-z]+)"(?:;\s*filename="([^"\r\n]*)")?$/.exec(headers['content-disposition']||'');
         const name=disposition?.[1];
-        if(!allowed.has(name)||seen.has(name)||seen.size>=4)fail(400,'Нужны один файл и его происхождение');
+        if(!allowed.has(name)||seen.has(name)||seen.size>=4)fail(400,upload?'Нужен один файл и необязательные сведения':'Нужны один файл и его происхождение');
         seen.add(name);part={name,size:0,chunks:[]};
         if(name==='file'){
           if(disposition[2]===undefined)fail(400,'Не выбран файл');

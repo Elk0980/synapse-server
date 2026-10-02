@@ -10,7 +10,7 @@ function fixture(t){
   let time=Date.parse('2026-09-15T00:00:00Z'),send=async()=>({externalId:'qa-1',url:'https://example.test/post'});
   const calls=[],channels=[{id:'telegram',enabled:true,connected:true,revision:1},{id:'vk',enabled:true,connected:true,revision:1}];
   const information=createCompanyInformation(db,{now:()=>time});
-  const transport={getSettings:()=>({channels:structuredClone(channels)}),publish:async input=>{calls.push(input);return send(input);}};
+  const transport={approvalDestination:(_code,id)=>{const channel=channels.find(item=>item.id===id);return {destinationRevision:channel?.revision||0,channelRevision:channel?.revision||0};},getSettings:()=>({channels:structuredClone(channels)}),publish:async input=>{calls.push(input);return send(input);}};
   const options={information,transport,now:()=>time,logger:{warn(){}}},api=createAutoposting(db,options);
   const draft=(platformIds=['telegram'],code='alvi')=>api.create(code,{title:'Тест',text:'Подтверждённый текст',mediaUrls:[],platformIds,scheduledAt:new Date(time+60000).toISOString(),timezone:'Asia/Irkutsk',profileRevision:information.get(code).revision},7);
   const schedule=p=>api.schedule(p.id,p.companyCode,{revision:p.revision});
@@ -18,6 +18,34 @@ function fixture(t){
 }
 const palitraDraft=(f,extra={})=>f.api.create('palitra-love',{title:'Материал',text:'Проверенный текст',mediaUrls:['https://example.test/photo.webp'],platformIds:['telegram'],scheduledAt:'2026-09-15T00:01:00Z',timezone:'Europe/Moscow',profileRevision:f.information.get('palitra-love').revision,...extra},7);
 const approveSchedule=(f,p,body={})=>f.api.approveAndSchedule(p.id,p.companyCode,{revision:p.revision,approved:true,schedule:true,...body},{userId:7,userName:'Согласующий'});
+
+test('CF4: замечания атомарны с возвратом и сохраняют версию и файл после замены',async t=>{
+  const f=fixture(t),p=await approveSchedule(f,palitraDraft(f));
+  const note={category:'text',comment:'Заменить надпись',timingKind:'material',mediaIndex:0,startMs:12000,endMs:14000};
+  assert.throws(()=>f.api.reject(p.id,p.companyCode,{revision:p.revision,comment:'Правки',annotations:[{...note,endMs:11000}]}));
+  const untouched=f.api.get(p.id,p.companyCode);
+  assert.equal(untouched.revision,p.revision);assert.equal(untouched.status,'scheduled');assert.equal(untouched.approval.approved,true);assert.deepEqual(untouched.reviewNotes,[]);
+  const changed=f.api.reject(p.id,p.companyCode,{revision:p.revision,comment:'Правки',annotations:[note,{category:'music',comment:'Плавнее вступление',timingKind:'editing_wish',startMs:0,endMs:5000}]},{userId:7,userName:'Владелец'});
+  assert.equal(changed.status,'draft');assert.equal(changed.approval.approved,false);
+  assert.deepEqual(f.api.list(p.companyCode).posts.find(x=>x.id===p.id).reviewNotes,changed.reviewNotes);
+  assert.equal(changed.reviewNotes.length,1);assert.equal(changed.reviewNotes[0].annotations.length,2);
+  assert.equal(changed.reviewNotes[0].annotations[0].durationVerified,false);
+  assert.throws(()=>f.api.reject(p.id,p.companyCode,{revision:p.revision,comment:'Повтор',annotations:[note]}),e=>e.details.code==='REVISION_CONFLICT');
+  assert.throws(()=>f.api.get(p.id,'avokado'));
+  const edited=f.api.update(p.id,p.companyCode,{revision:changed.revision,text:'Исправленный текст',mediaUrls:['https://example.test/new.webp']});
+  assert.deepEqual(edited.reviewNotes,changed.reviewNotes);
+  assert.deepEqual(edited.reviewNotes[0].mediaUrls,['https://example.test/photo.webp']);
+  assert.ok(edited.contentRevision>edited.reviewNotes[0].contentRevision);
+});
+
+test('CF4: пожелание монтажа без медиа допустимо, отметка готового файла требует файл',t=>{
+  const f=fixture(t),p=palitraDraft(f,{mediaUrls:[]});
+  const note={category:'visual',comment:'Показать фотографию',timingKind:'editing_wish',startMs:12000};
+  assert.throws(()=>f.api.reject(p.id,p.companyCode,{revision:p.revision,comment:'Правки',annotations:[{...note,timingKind:'material',mediaIndex:0}]}));
+  const result=f.api.reject(p.id,p.companyCode,{revision:p.revision,comment:'Правки',annotations:[note]});
+  assert.equal(result.reviewNotes[0].annotations[0].startMs,12000);
+  assert.deepEqual(result.reviewNotes[0].mediaUrls,[]);
+});
 
 test('Palitra: обычная карточка без dayKey/captions требует одобрения; политика других компаний прежняя',async t=>{
   const f=fixture(t),p=palitraDraft(f);

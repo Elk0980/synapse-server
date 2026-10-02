@@ -8,6 +8,7 @@
 
 const {company,fail,object,text,revision}=require('./company-information');
 const {FORMATS,ROLES,CAPTION_PLATFORMS}=require('./autoposting');
+const {createContentFactoryInputs}=require('./content-factory-inputs');
 
 const COMFORT=Object.freeze({unknown:'Не выяснено',off_camera:'В кадр не готов',voice_only:'Только голос',
   hands_only:'Руки и процесс без лица',on_camera:'Готов в кадр'});
@@ -625,8 +626,11 @@ function createMediaMentor(db,{now=Date.now}={}) {
     });
   }
 
+  /* Вводные контент-завода (CF1) живут рядом с брифом на той же базе, но отдельно от него:
+     их правка не создаёт версию брифа и не снимает согласования плана. */
+  const inputs=createContentFactoryInputs(db,{now});
   return {get,saveBrief,savePlan,decide,decideVariants,addFeedback,briefVersion,planVersion,
-    planVariantStates,variantDecisions};
+    planVariantStates,variantDecisions,inputs};
 }
 
 module.exports={createMediaMentor,variantEffective,COMFORT,ASSET_KINDS,BRIEF_FIELDS,DAY_FIELDS,EMPTY_BRIEF,MIN_DAYS,MAX_DAYS,MAX_ITEMS_PER_DAY,NOTICE};

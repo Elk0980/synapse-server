@@ -15,6 +15,8 @@ const { createSiteStore } = require('./site-store');
 const { createHughSettingsStore } = require('./hugh-settings-store');
 const { createProjectChat } = require('./project-chat');
 const { createTelegramSources, readSourceConfig } = require('./telegram-sources');
+const {createContentFactorySourceBridge}=require('./content-factory-source-bridge');
+const {createSourceContext}=require('./content-factory-source-context');
 const { createOwnerPrivateChat } = require('./owner-private-chat');
 const { createActorOnboarding } = require('./actor-onboarding');
 const { createActorWorkspace } = require('./actor-workspace');
@@ -218,10 +220,29 @@ const projectChat = createProjectChat({ db, authStore, assetsDir: ASSETS_DIR,
   cabinetUrl: (process.env.CABINET_PUBLIC_URL || 'https://synapse.synapsebusiness.ru/cabinet.html').trim(),
   requireSession, requireCsrf, sendJson: send, readBody: readJson });
 const taskDispatchWorker = require('./task-dispatch-worker').createTaskDispatchWorker({db,crmUrl:CRM_URL,crmApiKey:CRM_API_KEY,fallback:projectChat.fallback});
+const contentPlanRunner = require('./content-plan-runner').createContentPlanRunner({crmUrl:CRM_URL,crmApiKey:CRM_API_KEY,fallback:projectChat.fallback,
+  alerts:require('./hugh-owner-alerts').createHughOwnerAlerts({db}),reviewDelayNotifications:true,
+  onReviewDelayError:()=>console.warn('content: проверка просроченных согласований не выполнена; повтор при следующей проверке')});
 // Необязательный приватный конфиг на постоянном томе content. Без него приём выключен.
 const telegramSources = createTelegramSources({db, assetsDir:ASSETS_DIR, authStore, requireSession, requireCsrf, sendJson:send,
   config:readSourceConfig(path.join(path.dirname(DATABASE_PATH),'telegram-sources.json'))});
 if (!telegramSources.healthy) console.warn('content: настройки источников Telegram требуют проверки; приём выключен');
+const contentFactorySources=createContentFactorySourceBridge({db,authStore,assetsDir:ASSETS_DIR,
+  requireSession,requireCsrf,readJson,sendJson:send,publishingOrigin:PUBLISHING_ASSET_ORIGIN,
+  maxImageBytes:MAX_PUBLISHING_ASSET,maxVideoBytes:MAX_PUBLISHING_VIDEO,ready:()=>Boolean(CRM_API_KEY),
+  crmCall:contentFactoryCrm});
+const contentFactorySourceContext=createSourceContext({db});
+async function contentFactoryCrm(action,companyCode,body,user){
+    let upstream;
+    try{upstream=await fetch(`${CRM_URL}/internal/content-factory/${action}?companyCode=${encodeURIComponent(companyCode)}`,{
+      method:'POST',redirect:'error',headers:{'content-type':'application/json','x-api-key':CRM_API_KEY,
+        [CRM_IDENTITY_HEADER]:crmIdentityHeader(user)},body:JSON.stringify(body),signal:AbortSignal.timeout(10000)});
+    }catch{fail(502,'Ответ CRM не получен. Повторите тот же запрос.');}
+    const result=await upstream.json().catch(()=>null);
+    if(!upstream.ok)fail(upstream.status,typeof result?.error==='string'?result.error.slice(0,500):'CRM не завершила операцию');
+    if(!result||typeof result!=='object')fail(502,'CRM вернула неполный ответ. Повторите тот же запрос.');
+    return result;
+}
 for (const issue of [...projectChat.localWorker.issues, ...projectChat.miniApp.issues]) console.warn(`content: ${issue}`);
 /* Клиентские Telegram-боты: переписка клиентов с менеджером и уведомления о заявках.
    Включается только именем бота (не секрет); токен живёт только в сервисе chat. Пусто — выключен. */
@@ -676,6 +697,21 @@ async function proxyCrm(request, response, url, cors) {
     if (!requestedCompany) url.searchParams.set('companyCode', identity.companyCodes[0]);
   }
   if (!CRM_API_KEY) fail(503, 'Прокси CRM не настроен');
+  if(request.method==='POST'&&crmPath==='/media-mentor/generation'){
+    const code=url.searchParams.get('companyCode').toLowerCase(),body=await readJson(request);
+    if(Object.keys(body).length!==2||!Object.hasOwn(body,'month')||!Object.hasOwn(body,'clientRequestId'))fail(400,'Нужны только месяц и ключ запроса');
+    function freshGenerationUser(){
+      const current=requirePermission(request,'autoposting.edit',code);requirePermission(request,'autoposting.view',code);requireCsrf(request,current);
+      if(current.user.id!==initialSession.user.id)fail(403,'Доступ изменился во время подготовки');
+      return current.user;
+    }
+    const previous=await contentFactoryCrm('plan-lookup',code,body,freshGenerationUser());
+    freshGenerationUser();
+    if(previous.job)return send(response,200,previous,{...cors,'cache-control':'no-store'});
+    const sourceLibrary=contentFactorySourceContext.capture(code);
+    const result=await contentFactoryCrm('plan-start',code,{request:body,sourceLibrary},freshGenerationUser());
+    freshGenerationUser();return send(response,200,result,{...cors,'cache-control':'no-store'});
+  }
   if (identity.role !== 'owner' && crmPath === '/expenses' && request.method !== 'GET') {
     fail(403, 'Расходы вносит владелец');
   }
@@ -723,13 +759,30 @@ async function proxyCrm(request, response, url, cors) {
       }
     }
   }
+  let forwardIdentity = identity;
+  const completionWrite = (request.method === 'PUT' && crmPath === '/media-mentor/workflow') ||
+    (request.method === 'POST' && /^\/autoposting\/posts\/\d+\/variants$/.test(crmPath)) ||
+    (request.method === 'POST' && /^\/media-mentor\/plan\/variants\/(?:decision|transfer)$/.test(crmPath));
+  if (completionWrite) {
+    requestBody = await readRequestBody(request);
+    const current = requirePermission(request, 'autoposting.edit', url.searchParams.get('companyCode'));
+    requireCsrf(request, current);
+    if (current.user.id !== initialSession.user.id) fail(403, 'Доступ изменился во время подготовки');
+    if (crmPath === '/media-mentor/plan/variants/decision' && current.user.role !== 'owner') {
+      fail(403, 'Согласовывать и отклонять вариант может только владелец');
+    }
+    forwardIdentity = current.user;
+  }
   const target = new URL(`${CRM_URL}${crmPath}${url.search}`);
   const headers = { ...request.headers, host: target.host, 'x-api-key': CRM_API_KEY };
   delete headers.cookie;
   // CRM accepts this header as trusted context, so caller-supplied claims must never pass through.
   delete headers[CRM_IDENTITY_HEADER];
-  headers[CRM_IDENTITY_HEADER] = crmIdentityHeader(identity);
-  if (requestBody) headers['content-length'] = requestBody.length;
+  headers[CRM_IDENTITY_HEADER] = crmIdentityHeader(forwardIdentity);
+  if (requestBody) {
+    delete headers['transfer-encoding'];
+    headers['content-length'] = requestBody.length;
+  }
   const upstream = http.request(target, { method: request.method, headers }, (upstreamResponse) => {
     const responseHeaders = { ...upstreamResponse.headers, ...cors };
     response.writeHead(upstreamResponse.statusCode || 502, responseHeaders);
@@ -887,6 +940,7 @@ const server = http.createServer(async (request, response) => {
       } catch { return reply(503,{state:'unavailable',connected:false,configured:true,provider:'codex',
         error:'Подключение Хью пока недоступно'},{'cache-control':'no-store'}); }
     }
+    if (await contentFactorySources.handle(request,response,url)) return;
     if (await telegramSources.handle(request,response,url)) return;
     if (await projectChat.handle(request,response,url)) return;
 
@@ -1348,6 +1402,7 @@ server.listen(PORT, () => {
   console.log(`content: слушает порт ${PORT}, база ${DATABASE_PATH}`);
   projectChat.startWorker();
   taskDispatchWorker.start();
+  if(process.env.CONTENT_PLAN_WORKER_ENABLED==='1')contentPlanRunner.start();
   const monitor=()=>hughProviders.monitorEconomy(projectChat.fallback.status()).catch(()=>{});
   economyTimer=setInterval(()=>void monitor(),600000);economyTimer.unref();void monitor();
 });
@@ -1356,7 +1411,9 @@ function shutdownContent() {
   clearInterval(economyTimer);
   projectChat.stopWorker();
   taskDispatchWorker.stop();
-  server.close(() => {
+  const contentPlanStopped=contentPlanRunner.stop();
+  server.close(async () => {
+    await contentPlanStopped;
     db.close();
     process.exit(0);
   });

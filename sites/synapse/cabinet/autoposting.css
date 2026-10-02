@@ -147,3 +147,167 @@
   .autoposting-platform-approvals>li{padding:10px}
   #autoposting-batch button{width:100%;margin-top:6px}
 }
+
+/* ---------- CF3-BOARD: недельная доска Контент-плана ---------- */
+.autoposting-view { --ap-telegram:#4fb3ea; --ap-vk:#6f97d6; --ap-instagram:#e264b4; --ap-tiktok:#4fd8d2; --ap-youtube_shorts:#ff6b6b; --ap-max:#a98bff; --ap-two_gis:#5fd08f; --ap-yandex_maps:#f2c94c; --ap-none:#8d857e; }
+.view-panel .ap-board-section { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; padding:16px; }
+.ap-board-section > * { min-width:0; }
+.ap-board-section > p:empty { display:none; }
+.ap-board-nav { display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; }
+.view-panel .ap-board-nav > button.plain-button { width:auto; min-width:44px; padding:8px 12px; }
+.ap-week-label { flex:0 1 auto; min-width:250px; text-align:center; font-size:1.05rem; }
+.ap-board-nav > #autoposting-next-week { margin-right:auto; }
+.ap-nav-field { display:flex; align-items:center; gap:6px; font-size:.85rem; color:var(--muted); }
+.ap-nav-field input { width:auto; min-height:40px; }
+.ap-filters-bar { display:grid; gap:8px; }
+.ap-filters-toggle { display:none; justify-self:start; }
+.ap-filters { display:flex; flex-wrap:wrap; align-items:end; gap:8px 12px; }
+.ap-filters label { display:grid; gap:2px; font-size:.85rem; color:var(--muted); min-width:150px; flex:0 1 190px; }
+.ap-filters select { min-height:40px; width:100%; }
+.ap-filters [hidden] { display:none; }
+#autoposting-month-controls .autoposting-calendar { max-width:520px; }
+.ap-day-strip { display:none; }
+.ap-board { display:grid; grid-template-columns:repeat(var(--ap-days,7),minmax(132px,1fr)); gap:8px; overflow-x:auto; padding-bottom:6px; scroll-snap-type:x proximity; }
+.ap-day { min-width:0; display:flex; flex-direction:column; gap:6px; padding:6px; border:1px solid var(--line); border-radius:14px; background:rgba(24,21,19,.6); scroll-snap-align:start; }
+.ap-day.is-today { border-color:rgba(159,212,255,.55); }
+.ap-day.is-selected { outline:2px solid var(--accent); outline-offset:1px; }
+.ap-day-head { display:flex; align-items:center; gap:6px; margin:0; font-size:.92rem; font-weight:600; }
+.ap-today { font-size:.72rem; font-weight:600; color:var(--accent); }
+.ap-day-count { margin-left:auto; min-width:22px; text-align:center; font-size:.78rem; color:var(--muted); }
+.ap-day-empty { margin:0; font-size:.82rem; color:var(--muted); }
+.ap-day-list, .ap-undated-list { list-style:none; margin:0; padding:0; display:grid; gap:8px; }
+.ap-undated-list { grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); }
+.ap-undated { border-top:1px solid var(--line); padding-top:10px; }
+.ap-undated h3 { margin:0 0 4px; font-size:1rem; }
+.ap-card { position:relative; display:grid; gap:5px; padding:8px 8px 8px 11px; border:1px solid var(--line); border-radius:12px; background:var(--surface); min-width:0; overflow-wrap:break-word; hyphens:auto; cursor:pointer; }
+.ap-card::before { content:""; position:absolute; left:0; top:8px; bottom:8px; width:4px; border-radius:4px; background:var(--ap-none); }
+.ap-card[data-platform="telegram"]::before { background:var(--ap-telegram); } .ap-card[data-platform="vk"]::before { background:var(--ap-vk); }
+.ap-card[data-platform="instagram"]::before { background:var(--ap-instagram); } .ap-card[data-platform="tiktok"]::before { background:var(--ap-tiktok); }
+.ap-card[data-platform="youtube_shorts"]::before { background:var(--ap-youtube_shorts); } .ap-card[data-platform="max"]::before { background:var(--ap-max); }
+.ap-card[data-platform="two_gis"]::before { background:var(--ap-two_gis); } .ap-card[data-platform="yandex_maps"]::before { background:var(--ap-yandex_maps); }
+.ap-card:hover { border-color:rgba(159,212,255,.4); }
+.view-panel .ap-board-section .ap-card button.ap-card-open { display:grid; gap:6px; width:100%; min-height:0; padding:0; border:0; border-radius:8px; background:none; text-align:left; cursor:pointer; color:inherit; font:inherit; }
+.ap-card-open:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:8px; }
+.ap-thumb { position:relative; display:block; width:100%; aspect-ratio:16/10; border-radius:8px; overflow:hidden; background:var(--surface-soft); }
+.ap-thumb :is(img,video) { width:100%; height:100%; object-fit:cover; display:block; pointer-events:none; }
+.ap-thumb-label { position:absolute; left:6px; bottom:6px; padding:1px 6px; border-radius:6px; background:rgba(0,0,0,.65); font-size:.72rem; }
+.ap-card-title { font-weight:600; font-size:.88rem; line-height:1.3; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+.ap-chips { display:flex; flex-wrap:wrap; gap:4px; margin:0; }
+.ap-chip { display:inline-flex; align-items:center; gap:4px; font-size:.74rem; color:var(--text); }
+.ap-chip i { width:8px; height:8px; border-radius:50%; background:var(--ap-none); flex:none; }
+.ap-chip[data-platform="telegram"] i { background:var(--ap-telegram); } .ap-chip[data-platform="vk"] i { background:var(--ap-vk); }
+.ap-chip[data-platform="instagram"] i { background:var(--ap-instagram); } .ap-chip[data-platform="tiktok"] i { background:var(--ap-tiktok); }
+.ap-chip[data-platform="youtube_shorts"] i { background:var(--ap-youtube_shorts); } .ap-chip[data-platform="max"] i { background:var(--ap-max); }
+.ap-chip[data-platform="two_gis"] i { background:var(--ap-two_gis); } .ap-chip[data-platform="yandex_maps"] i { background:var(--ap-yandex_maps); }
+.ap-card-meta, .ap-card-note { margin:0; font-size:.76rem; color:var(--muted); }
+.ap-card-warning { color:#ffd58a; }
+.ap-card-state { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:4px 8px; margin:0; }
+.ap-status { display:inline-block; max-width:100%; overflow-wrap:normal; hyphens:none; padding:1px 8px; border-radius:999px; font-size:.74rem; font-weight:600; border:1px solid var(--line); color:var(--text); background:rgba(244,240,235,.06); }
+.ap-status[data-status="pending"] { color:#ffd58a; border-color:rgba(255,213,138,.45); }
+.ap-status:is([data-status="rework"],[data-status="check"],[data-status="uncertain"]) { color:#ffb37a; border-color:rgba(255,179,122,.45); }
+.ap-status:is([data-status="approved"],[data-status="partial"]) { color:var(--green); border-color:rgba(121,220,182,.45); }
+.ap-status:is([data-status="scheduled"],[data-status="publishing"]) { color:var(--accent); border-color:rgba(159,212,255,.45); }
+.ap-status[data-status="published"] { color:#0b0908; background:var(--green); border-color:var(--green); }
+.ap-status[data-status="failed"] { color:var(--red); border-color:rgba(255,156,156,.5); }
+.ap-card-select { display:inline-flex; align-items:center; gap:4px; font-size:.76rem; color:var(--muted); cursor:pointer; }
+.ap-card-select input { width:18px; height:18px; margin:0; }
+.ap-empty-board, .ap-filter-empty { padding:12px; border:1px dashed var(--line); border-radius:12px; }
+.ap-empty-board p, .ap-filter-empty { margin:0 0 6px; }
+/* Редактор публикации поверх доски */
+.autoposting-view .autoposting-editor > summary { display:none; }
+.autoposting-view .autoposting-editor[open] { position:fixed; inset:0; z-index:60; overflow:auto; padding:24px clamp(8px,3vw,32px); background:rgba(5,4,4,.72); margin:0; }
+.autoposting-view .autoposting-editor[open] > .ap-editor-bar, .autoposting-view .autoposting-editor[open] > .autoposting-editor-grid { max-width:1240px; margin:0 auto; }
+.ap-editor-bar { position:sticky; top:-24px; z-index:2; display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; padding:12px 16px; border:1px solid var(--line); border-radius:16px 16px 0 0; background:var(--surface); }
+.ap-editor-bar strong { font-size:1.05rem; }
+.ap-editor-bar button { margin-left:auto; }
+.autoposting-view .autoposting-editor[open] > .autoposting-editor-grid { padding:12px; border:1px solid var(--line); border-top:0; border-radius:0 0 16px 16px; background:var(--bg); }
+body.autoposting-modal-open { overflow:hidden; }
+@media(max-width:1100px) { .ap-board { grid-template-columns:repeat(var(--ap-days,7),minmax(160px,1fr)); } }
+@media(max-width:720px) {
+  .ap-week-label { flex:1 1 0; min-width:0; font-size:.95rem; }
+  .view-panel .ap-board-nav > #autoposting-overview { flex:1 1 100%; }
+  .ap-board-nav > #autoposting-next-week { margin-right:0; }
+  .ap-nav-field { flex:1 1 100%; justify-content:space-between; }
+  .ap-nav-field input { flex:1 1 auto; max-width:220px; }
+  .ap-filters-toggle { display:inline-block; }
+  .ap-filters:not(.is-open) { display:none; }
+  .ap-filters { flex-direction:column; align-items:stretch; padding:10px; border:1px solid var(--line); border-radius:12px; }
+  .ap-filters label { flex:1 1 auto; min-width:0; }
+  .ap-day-strip { display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; }
+  .view-panel .ap-board-section .ap-day-strip button { width:auto; flex:0 0 auto; display:grid; justify-items:center; gap:0; min-width:48px; min-height:56px; padding:4px 8px; }
+  .ap-day-strip button[aria-pressed="true"] { outline:2px solid var(--accent); }
+  .ap-day-strip span { font-size:.72rem; color:var(--muted); } .ap-day-strip em { font-style:normal; font-size:.72rem; color:var(--accent); }
+  .ap-board { display:grid; grid-template-columns:minmax(0,1fr); overflow:visible; }
+  .ap-day { scroll-margin-top:72px; }
+  .ap-card { grid-template-columns:minmax(0,1fr); }
+  .ap-card.has-thumb .ap-card-open { grid-template-columns:96px minmax(0,1fr); align-items:start; }
+  .ap-card.has-thumb .ap-thumb { aspect-ratio:1/1; }
+  .ap-undated-list { grid-template-columns:minmax(0,1fr); }
+  .autoposting-view .autoposting-editor[open] { padding:0; }
+  .ap-editor-bar { top:0; border-radius:0; }
+  .autoposting-view .autoposting-editor[open] > .autoposting-editor-grid { border-radius:0; padding:8px; }
+  .autoposting-view .autoposting-editor[open] #autoposting-save { position:sticky; bottom:8px; z-index:2; width:100%; box-shadow:0 -6px 18px rgba(0,0,0,.5); background:#1d3f73; }
+}
+
+/* ---------- CF3-R1: окно публикации — предпросмотр слева, поля справа (ПК); на телефоне поля → проверка ---------- */
+.ap-editor-state { font-weight:600; }
+.ap-editor-media ul { list-style:none; margin:0 0 10px; padding:0; display:grid; gap:8px; }
+.ap-editor-media ul:empty::before { content:attr(data-empty); display:block; padding:18px; border:1px dashed var(--line); border-radius:12px; color:var(--muted); text-align:center; }
+.ap-editor-media li { display:grid; gap:4px; overflow-wrap:anywhere; font-size:.8rem; }
+.ap-editor-media :is(img,video) { width:100%; height:auto; max-height:420px; object-fit:contain; border-radius:12px; background:var(--surface-soft); }
+.ap-editor-plan-fields select { width:100%; }
+.view-panel .autoposting-approval button.ap-approve { margin:6px 0 2px; }
+@media(min-width:901px) {
+  .autoposting-view .autoposting-editor-grid { grid-template-columns:minmax(0,5fr) minmax(0,7fr); align-items:start; }
+  .autoposting-view .autoposting-editor-grid > .ap-editor-preview { order:-1; }
+}
+.ap-editor-bar { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; }
+.ap-editor-bar #autoposting-editor-note { grid-column:1; grid-row:2; }
+.autoposting-view .ap-editor-bar button.plain-button { grid-column:2; grid-row:1 / span 2; width:auto; margin-left:0; }
+@media(max-width:720px) { .ap-editor-bar strong { font-size:.95rem; } .ap-editor-bar { padding:8px 10px; gap:2px 8px; } }
+
+/* ---------- CF4: замечания к версии ---------- */
+.autoposting-reject { display:grid; gap:8px; margin-top:12px; padding-top:10px; border-top:1px solid var(--line); }
+.autoposting-reject h4, .ap-review-tasks h4 { margin:0; }
+.ap-note-form { display:grid; gap:8px; margin:0; padding:10px; border:1px solid var(--line); border-radius:12px; }
+.ap-note-form legend { padding:0 4px; font-weight:600; }
+.ap-note-row { display:grid; grid-template-columns:auto auto 1fr; align-items:center; gap:4px 6px; }
+.ap-note-row > :is(select,textarea) { grid-column:1 / -1; width:100%; }
+.ap-note-time { display:grid; gap:8px; }
+.ap-note-time fieldset { margin:0; padding:6px 8px; border:1px solid var(--line); border-radius:10px; }
+.view-panel .autoposting-view .ap-hint, .view-panel .ap-hint { min-height:24px; width:24px; height:24px; padding:0; border-radius:50%; font-size:.8rem; line-height:1; display:inline-grid; place-items:center; }
+.ap-hint-text { grid-column:1 / -1; font-size:.82rem; color:var(--muted); }
+.ap-notes-pending { margin:0; padding-left:20px; display:grid; gap:4px; }
+.ap-notes-pending:empty { display:none; }
+.ap-notes-pending li { overflow-wrap:anywhere; }
+.view-panel .ap-notes-pending button { min-height:32px; padding:2px 10px; margin-left:6px; width:auto; }
+.ap-review-notes ul.ap-note-groups { list-style:none; margin:6px 0 0; padding:0; display:grid; gap:8px; }
+.ap-note-group ol { margin:4px 0 0; padding-left:20px; overflow-wrap:anywhere; }
+.ap-review-tasks ul { margin:4px 0; padding-left:20px; }
+
+/* ---------- CF5: подсказки у полей, удаление и «Удалённые материалы» ---------- */
+.autoposting-view .ap-field { display:grid; grid-template-columns:auto auto 1fr; align-items:center; gap:6px; min-width:0; margin:14px 0; }
+.autoposting-view .ap-field > label { display:inline; margin:0; }
+.autoposting-view .ap-field > :is(input,select,textarea) { grid-column:1 / -1; width:100%; min-width:0; }
+.ap-field-group .ap-field-title { font-weight:600; }
+.ap-field-legend { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.ap-field-legend .ap-hint-text { flex:1 1 100%; }
+.ap-archive-zone { margin-top:12px; }
+.ap-archive-zone:empty { display:none; }
+.ap-archive-confirm { display:grid; gap:8px; padding:10px; border:1px solid var(--line); border-radius:12px; background:var(--surface-soft); }
+.ap-archive-confirm p { margin:0; overflow-wrap:anywhere; }
+.ap-archive-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.view-panel .ap-archive-actions button { width:auto; }
+.ap-archive { margin-top:14px; }
+.ap-archive > summary { cursor:pointer; color:var(--muted); font-weight:600; }
+.ap-archive-items { list-style:none; margin:8px 0 0; padding:0; display:grid; gap:8px; }
+.ap-archive-item { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px 12px; padding:8px 10px; border:1px dashed var(--line); border-radius:10px; color:var(--muted); }
+.ap-archive-item > div { min-width:0; overflow-wrap:anywhere; }
+.ap-archive-item strong { display:block; color:var(--text); }
+.ap-archive-item[data-focus="true"] { border-style:solid; border-color:var(--accent); }
+.view-panel .ap-archive-item button { width:auto; }
+
+/* ---------- CF6: компактная история замечаний ---------- */
+.ap-review-history { display: grid; gap: 4px; }
+.ap-review-last { margin: 0; font-size: .9rem; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.ap-review-notes > summary { cursor: pointer; color: var(--muted); }

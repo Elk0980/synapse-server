@@ -21,7 +21,7 @@ function fixture(t) {
   const channels = [{id:'telegram',platform:'telegram',enabled:true,connected:true,revision:1,
     caps:{maxText:4096,maxCaption:1024,maxMedia:10,mediaMode:'photos'}}];
   const information = createCompanyInformation(db,{now});
-  const api = createAutoposting(db,{information,now,transport:{getSettings:() => ({channels:structuredClone(channels)}),
+  const api = createAutoposting(db,{information,now,transport:{approvalDestination:(_code,id)=>{const channel=channels.find(item=>item.id===id);return {destinationRevision:channel?.revision||0,channelRevision:channel?.revision||0};},getSettings:() => ({channels:structuredClone(channels)}),
     publish:() => assert.fail('calendar must never send')}});
   const mentor = createMediaMentor(db,{now});
   const transfer = createMediaMentorTransfer(db,{mentor,autoposting:api,information,now});

@@ -445,7 +445,7 @@ test('очередь контента: карточка дня с видео и 
     Object.assign(f.posts[0],{readiness:{ready:true,issues:[],mediaKind:'video'},approval:{approved:false,approvedRevision:null,stale:false}});
     await f.click('autoposting-refresh');f.node('autoposting-select').value='1';f.node('autoposting-select').dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();
     assert.match(f.node('autoposting-queue').textContent,/D1/);assert.match(f.node('autoposting-queue').textContent,/не согласовано/);
-    const approve=f.node('autoposting-approve');assert.ok(approve);assert.equal(approve.checked,false,'галочка по умолчанию снята');assert.equal(approve.disabled,false);
+    const approve=f.node('autoposting-approve');assert.ok(approve);assert.equal(approve.tagName,'BUTTON','CF3-R1: одна явная кнопка вместо галочки');assert.equal(approve.dataset.approved,'false','по умолчанию не согласовано');assert.match(approve.textContent,/^Согласовать/);assert.equal(approve.disabled,false);
     await f.click('autoposting-preview');assert.match(f.node('autoposting-preview-content').textContent,/Instagram \/ Reels/);assert.match(f.node('autoposting-preview-content').textContent,/YouTube Shorts/);assert.match(f.node('autoposting-preview-content').textContent,/Telegram · 17 \/ 1024/);
     assert.ok(f.node('autoposting-preview-content').querySelector('video'));
     // Готовность доставки названа причиной, а не общей фразой: у TikTok канала нет, у 2ГИС отправки нет вовсе.
@@ -454,13 +454,13 @@ test('очередь контента: карточка дня с видео и 
     assert.doesNotMatch(f.node('autoposting-preview-content').textContent,/Telegram · 17 \/ 1024 · канал не настроен/);
     assert.match(f.d.querySelector('.autoposting-queue-section').textContent,/доставка не подключена и не заявляется/);
     assert.equal(f.node('autoposting-schedule').disabled,true,'без одобрения в план не ставится');
-    approve.checked=true;approve.dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();
+    approve.click();await f.settle();
     const approveCall=f.calls.find(call=>call.path.endsWith('/approve'));assert.ok(approveCall);assert.deepEqual(JSON.parse(approveCall.options.body),{revision:1,approved:true});
     assert.match(f.node('autoposting-approval').textContent,/Согласовано Влад/);assert.match(f.node('autoposting-queue').textContent,/согласовано/);
     assert.equal(f.calls.filter(call=>call.path.endsWith('/schedule')).length,0,'одобрение не публикует и не планирует');
     // правка текста → сохранение → одобрение снято
     f.set('autoposting-text','Новый текст');await f.click('autoposting-save');
-    assert.match(f.node('autoposting-approval').textContent,/Прежнее согласование относилось к версии содержимого 1/);assert.equal(f.node('autoposting-approve').checked,false);
+    assert.match(f.node('autoposting-approval').textContent,/Прежнее согласование относилось к версии содержимого 1/);assert.equal(f.node('autoposting-approve').dataset.approved,'false');
     // импорт пакета
     f.set('autoposting-import-json',JSON.stringify({items:[{dayKey:'D2',title:'Д2',captions:{vk:'Два'},mediaUrls:['https://cdn.example.test/d2.mp4']},{dayKey:'D3',title:'Д3',captions:{tiktok:'Три'}}]}));
     await f.click('autoposting-import');assert.match(f.node('autoposting-import-state').textContent,/Создано черновиков: 2\. Пропущенных материалов нет\./);
@@ -473,8 +473,8 @@ test('очередь контента: редактор без роли влад
   const entries=[{id:1,companyCode:'alvi',title:'Д1',text:'Текст',revision:3,status:'draft',mediaUrls:['https://cdn.example.test/d1.mp4'],captions:{instagram:'IG'},dayKey:'D1',platformIds:[],scheduledAt:null,timezone:'Asia/Irkutsk',profileRevision:2,deliveries:[],readiness:{ready:true,issues:[],mediaKind:'video'},approval:{approved:true,approvedRevision:3,approvedByName:'Влад',approvedAt:'2026-09-18T01:00:00.000Z',stale:false}}];
   const f=await fixture({role:'marketer',permissions:['autoposting.view','autoposting.edit'],entries});try{
     f.node('autoposting-select').value='1';f.node('autoposting-select').dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();
-    const approve=f.node('autoposting-approve');assert.ok(approve);assert.equal(approve.checked,true);assert.equal(approve.disabled,true);assert.match(f.node('autoposting-approval').textContent,/Согласует владелец кабинета/);
-    approve.dispatchEvent(new f.w.Event('change',{bubbles:true}));await f.settle();assert.equal(f.calls.filter(call=>call.path.endsWith('/approve')).length,0);
+    const approve=f.node('autoposting-approve');assert.ok(approve);assert.equal(approve.dataset.approved,'true');assert.equal(approve.disabled,true);assert.match(f.node('autoposting-approval').textContent,/Согласует владелец кабинета/);
+    approve.dispatchEvent(new f.w.Event('click',{bubbles:true}));await f.settle();assert.equal(f.calls.filter(call=>call.path.endsWith('/approve')).length,0,'искусственное нажатие без права ничего не пишет');
   }finally{f.close();}
 });
 test('видео с устройства загружается через тот же маршрут, хеш сверяется с пакетом: чужой файл помечается, ролик из пакета — «совпадает»',async()=>{
@@ -528,7 +528,7 @@ test('контент-план в ЛК: метаданные сохраняютс
     f.node('autoposting-reject-comment').value='<img src=x onerror=alert(1)> слишком прямой хук';rejectForm.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));await f.settle();
     assert.equal(f.calls.filter(c=>c.path.endsWith('/reject')).length,1);
     const reason=f.d.querySelector('[data-review-comment]');assert.ok(reason);assert.match(reason.textContent,/слишком прямой хук/);assert.equal(reason.querySelector('img'),null,'комментарий экранирован');
-    assert.match(f.node('autoposting-approval').textContent,/Отклонено \(Влад/);assert.match(f.node('autoposting-approval').textContent,/История согласования \(1\)/);
+    assert.match(f.node('autoposting-approval').textContent,/На доработке \(Влад/);assert.match(f.node('autoposting-approval').textContent,/История согласования \(в карточке: 1\)/);
     // отправить на согласование снова
     f.node('autoposting-submit-review').click();await f.settle();assert.equal(f.calls.filter(c=>c.path.endsWith('/submit-review')).length,1);assert.match(f.node('autoposting-approval').textContent,/На согласовании/);
     // сохранение с метаданными: поля уходят отдельно от подписей
@@ -729,7 +729,8 @@ test('массовое решение применяется к пересече
       approval:{approved:false,stale:false}};
   }});
   try{
-    f.d.querySelector('[data-daily-view=month]').click();await f.settle();
+    // CF3-BOARD: доска всегда загружает весь месяц; карточки без даты — в группе «Без даты».
+    await f.settle();
     for(const id of ['601','602']){
       const box=f.d.querySelector(`[data-daily-approve="${id}"]`);
       assert.ok(box,'карточка '+id+' должна быть доступна для выбора');
@@ -927,6 +928,48 @@ test('неизвестная причина пропуска без создан
     assert.match(status,/Новых черновиков не создано: материалы пропущены/);
     assert.doesNotMatch(status,/уже были в плане/);
     assert.match(f.node('autoposting-import-state').textContent,/Файл не найден/);
+  }finally{f.close();}
+});
+
+test('CF7: повтор импорта удалённой карточки — отдельная группа с датой удаления, не «уже в плане», кнопка к «Удалённым материалам» без восстановления',async()=>{
+  const archivedAt='2026-10-01T07:43:00.000Z';
+  const f=await fixture({override:call=>{
+    if(call.path==='/content/crm/autoposting/import')return {companyCode:call.code,created:[],mediaPending:[],skipped:[
+      {id:51,dayKey:'D1',title:'Удалённая',reason:'duplicate',archivedAt,note:'Карточка удалена из плана. Откройте «Удалённые материалы», чтобы восстановить её; повторный импорт ничего не восстановил.'}]};
+    if(call.path==='/content/crm/autoposting/archived')return {companyCode:call.code,posts:[{id:51,companyCode:call.code,title:'Удалённая',revision:3,status:'draft',archive:{archivedAt,archivedBy:1},reviewNotes:[]}]};
+    return undefined;
+  }});
+  try{
+    f.set('autoposting-import-json',JSON.stringify({items:[{dayKey:'D1',title:'Удалённая'}]}));
+    await f.click('autoposting-import');await f.settle();
+    const state=f.node('autoposting-import-state'),text=state.textContent,status=f.node('autoposting-status').textContent;
+    assert.match(text,/Совпадают с удалёнными из плана — импорт их не восстановил, на доске их нет \(1\): №51 · D1 · Удалённая · удалено 01\.10\.2026, 15:43/);
+    assert.doesNotMatch(text,/Уже были в плане/,'удалённая карточка не выдаётся за действующую');
+    assert.match(status,/совпадают с удалёнными из плана\. Импорт их не восстановил/);
+    assert.doesNotMatch(status,/уже были в плане/);
+    const writes=()=>f.calls.filter(c=>c.method!=='GET').map(c=>c.path);
+    const before=writes().length;
+    const open=state.querySelector('[data-import-archive]');
+    assert.equal(open.textContent,'Открыть «Удалённые материалы»');
+    open.click();await f.settle();
+    assert.equal(f.node('autoposting-archive').open,true);
+    assert.equal(f.d.querySelector('[data-archived-post="51"]').dataset.focus,'true','отмечена совпавшая карточка');
+    assert.deepEqual(writes().slice(before),[],'открытие списка ничего не восстанавливает и не пишет');
+  }finally{f.close();}
+});
+
+test('CF7: смешанный пакет — обычный дубль и удалённая карточка разведены по своим группам',async()=>{
+  const f=await importFixture([{id:61,dayKey:'D1',title:'Действующая',reason:'duplicate'},
+    {id:62,dayKey:'D2',title:'Удалённая',reason:'options_differ',archivedAt:'2026-10-01T07:00:00.000Z'}]);
+  try{
+    f.set('autoposting-import-json',JSON.stringify({items:[{dayKey:'D1',title:'Действующая'}]}));
+    await f.click('autoposting-import');await f.settle();
+    const text=f.node('autoposting-import-state').textContent;
+    assert.match(text,/Совпадают с удалёнными из плана[^.]*\(1\): №62/);
+    assert.match(text,/Уже были в плане \(тот же материал\) \(1\): №61/);
+    assert.doesNotMatch(text,/другие публикуемые опции \(1\): №62/,'удалённая не попадает в группу опций');
+    assert.doesNotMatch(f.node('autoposting-status').textContent,/все материалы пакета уже были в плане/);
+    assert.match(f.node('autoposting-status').textContent,/часть совпадает с удалёнными из плана/);
   }finally{f.close();}
 });
 

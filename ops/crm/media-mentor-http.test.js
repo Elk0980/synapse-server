@@ -375,3 +375,91 @@ test('чтение раздела отдаёт состояние версий �
   assert.ok(state.result.variantTransfer, 'расписка переноса версий отдаётся отдельно от старой');
   assert.ok(state.result.transfer, 'старая расписка по дням остаётся читаемой');
 });
+
+
+test('неподключённая генерация и перенос возвращают501 после проверки доступа',async t=>{
+ const f=fixture(t);
+ for(const path of ['/media-mentor/generation','/media-mentor/generation/test-job/drafts']){
+  await assert.rejects(f.call('POST',path,OWNER,{}),e=>e.status===501&&e.details.code==='PROVIDER_NOT_CONFIGURED');
+  await assert.rejects(f.call('POST',path,null,{}),e=>e.status===403);
+ }
+ assert.equal(f.transfers.length,0);
+});
+
+function workflowHttpFixture(t,{enabled=true}={}){
+ const f=fixture(t),workflow=require('./content-factory-workflow').createContentFactoryWorkflow(f.db);
+ const seen=[];let reads=0;
+ const handler=createMediaMentorHandler({mentor:f.mentor,workflow:enabled?workflow:null,
+  companyModuleContext(request,code,permission){
+   seen.push({code,permission});const identity=request.identity;
+   const deny=()=>{throw Object.assign(Error('Synthetic guard denied'),{status:403});};
+   if(!identity||identity.role!=='owner'&&!identity.permissions?.includes(permission))deny();
+   if(identity.role!=='owner'&&!identity.companies?.includes(String(code).toLowerCase()))deny();
+   // Моделирует существующий upstream session/CSRF guard; отдельная CSRF схема в handler не появляется.
+   if(request.method!=='GET'&&!request.csrf)deny();
+   return {identity,company:require('./company-information').company(f.db,code)};
+  },readJson:async request=>{
+   reads++;await new Promise(resolve=>setImmediate(resolve));if(request.afterRead)request.afterRead(request);
+   if(request.parseError)throw Object.assign(Error('Malformed synthetic JSON'),{status:400});return request.body;
+  },send:(response,status,result,headers)=>{response.sent={status,result,headers};}});
+ const call=async(method,identity,body,options={})=>{
+  const code=Object.hasOwn(options,'code')?options.code:'alvi',response={};
+  const request={method,identity,body,csrf:options.csrf!==false,afterRead:options.afterRead,parseError:options.parseError};
+  const path=options.path||'/media-mentor/workflow',query=code===null?'':`?companyCode=${code}`;
+  const handled=await handler(request,response,new URL(`http://crm.local${path}${query}`),{'x-test':'cors-preserved'});
+  return {handled,...response.sent};
+ };
+ return {...f,workflow,call,seen,reads:()=>reads};
+}
+test('workflow HTTP использует реальный CF21 get/save, no-store, view/edit и доверенного автора',async t=>{
+ const f=workflowHttpFixture(t),viewer={...EDITOR,permissions:['autoposting.view']},editor={...EDITOR,permissions:['autoposting.view','autoposting.edit']};
+ const initial=await f.call('GET',viewer);assert.equal(initial.status,200);assert.equal(initial.result.configured,false);
+ assert.equal(initial.headers['cache-control'],'no-store');assert.equal(initial.headers['x-test'],'cors-preserved');
+ assert.deepEqual(f.seen.at(-1),{code:'alvi',permission:'autoposting.view'});
+ const saved=await f.call('PUT',editor,{revision:0,fields:{releaseMode:'manual',publisherName:'Указанное имя'}});
+ assert.equal(saved.status,200);assert.equal(saved.result.revision,1);assert.equal(saved.result.configured,true);
+ assert.equal(saved.headers['cache-control'],'no-store');assert.equal(saved.result.approverRole,'owner');
+ assert.deepEqual(f.seen.slice(-2),[{code:'alvi',permission:'autoposting.edit'},{code:'alvi',permission:'autoposting.edit'}]);
+ const actor=f.db.prepare('SELECT actor_id,actor_name FROM content_factory_workflow_versions WHERE company_id=1').get();
+ assert.deepEqual({...actor},{actor_id:7,actor_name:'Редактор клиента'});
+ assert.equal((await f.call('GET',OWNER,undefined,{code:'avokado'})).result.configured,false);
+});
+test('workflow HTTP отклоняет view-only/чужую компанию/missing identity/CSRF до JSON и записи',async t=>{
+ const f=workflowHttpFixture(t),viewer={...EDITOR,permissions:['autoposting.view']},editor={...EDITOR,permissions:['autoposting.view','autoposting.edit']};
+ const body={revision:0,fields:{releaseMode:'manual'}};
+ await assert.rejects(f.call('PUT',viewer,body),e=>e.status===403);
+ await assert.rejects(f.call('GET',viewer,undefined,{code:'avokado'}),e=>e.status===403);
+ await assert.rejects(f.call('GET',null),e=>e.status===403);
+ await assert.rejects(f.call('PUT',editor,body,{csrf:false}),e=>e.status===403);
+ await assert.rejects(f.call('GET',OWNER,undefined,{code:null}),e=>e.status===400);
+ await assert.rejects(f.call('GET',OWNER,undefined,{code:'missing'}),e=>e.status===404);
+ assert.equal(f.reads(),0);assert.equal(f.workflow.get('alvi').configured,false);
+});
+test('workflow HTTP malformed/actor injection/revision/method/missing dependency не создают лишних версий',async t=>{
+ const f=workflowHttpFixture(t),body={revision:0,fields:{releaseMode:'manual'}};
+ await assert.rejects(f.call('PUT',OWNER,body,{parseError:true}),e=>e.status===400);
+ await assert.rejects(f.call('PUT',OWNER,{...body,actorName:'Подставное'}),e=>e.status===400);
+ await assert.rejects(f.call('PUT',OWNER,{revision:0,fields:{hours:['24:00']}}),e=>e.status===400);
+ assert.equal(f.workflow.get('alvi').configured,false);
+ await f.call('PUT',OWNER,body);
+ await assert.rejects(f.call('PUT',OWNER,body),e=>e.status===409);
+ for(const method of ['POST','DELETE','PATCH','HEAD'])await assert.rejects(f.call(method,OWNER,body),e=>e.status===405);
+ await assert.rejects(f.call('GET',OWNER,undefined,{path:'/media-mentor/workflow/extra'}),e=>e.status===404);
+ const missing=workflowHttpFixture(t,{enabled:false});
+ for(const method of ['GET','PUT'])await assert.rejects(missing.call(method,OWNER,body),e=>e.status===501);
+ assert.equal(f.db.prepare('SELECT COUNT(*) n FROM content_factory_workflow_versions').get().n,1);
+});
+test('workflow PUT fresh context отклоняет revoke/identity swap/CSRF loss во время JSON',async t=>{
+ const editor={...EDITOR,permissions:['autoposting.view','autoposting.edit']};
+ for(const afterRead of [request=>{request.identity=null;},request=>{request.identity={...editor,permissions:['autoposting.view']};},
+  request=>{request.identity={...editor,userId:99};},request=>{request.csrf=false;}]){
+  const f=workflowHttpFixture(t);
+  await assert.rejects(f.call('PUT',editor,{revision:0,fields:{releaseMode:'manual'}},{afterRead}),e=>e.status===403);
+  assert.equal(f.reads(),1);assert.equal(f.workflow.get('alvi').configured,false);
+ }
+});
+test('workflow PUT использует fresh trusted actor при той же личности',async t=>{
+ const f=workflowHttpFixture(t),editor={...EDITOR,permissions:['autoposting.view','autoposting.edit']};
+ await f.call('PUT',editor,{revision:0,fields:{releaseMode:'manual'}},{afterRead:request=>{request.identity={...editor,userName:'Актуальное имя'};}});
+ assert.equal(f.db.prepare('SELECT actor_name FROM content_factory_workflow_versions').get().actor_name,'Актуальное имя');
+});

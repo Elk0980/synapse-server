@@ -384,13 +384,67 @@
   // Кто смотрит раздел: решения по версиям принимает только владелец кабинета, как и решение
   // по плану целиком. Остальные видят тексты и состояния, но не кнопки.
   let viewer = {decide: false, edit: false};
+  // Открытый раздел (для адреса фокуса): несохранённые правки плана при переходе по ссылке не теряются.
+  let active = null, pendingFocus = null;
+  /* CF26-R2: фокус, применённый после штатного переключения компании (оболочка при этом очищает параметры адреса),
+     хранится как явный фокус ЭТОЙ компании и восстанавливается после сохранения, решения и переноса. */
+  let keptFocus = null;
+  const currentFocus = (code) => focusFromHash() ||
+    (keptFocus && keptFocus.company === String(code || '').toLowerCase() ? keptFocus : null);
+  /* CF26-R3: перечитывание после действия берёт фокус в момент применения ответа, а не захваченный при начале действия. */
+  const CURRENT_FOCUS = Symbol('current-focus');
+  /* Состояние полей раздела: по нему видно, менял ли человек что-то после начала действия. Фильтры показа и выбор файлов — не правки. */
+  const fieldsState = (node) => JSON.stringify([...node.querySelectorAll('input,textarea,select')]
+    .filter((field) => !field.matches('[data-plan-filter],input[type="file"]'))
+    .map((field) => (field.type === 'checkbox' || field.type === 'radio' ? field.checked : field.value)));
+  const KEPT_NOTE = 'План не перечитан: после начала действия в форме появились правки или выбран другой материал — они на месте. Сохраните их или откройте раздел заново.';
+  const FAILED_NOTE = 'Свежий план загрузить не удалось — форма и правки на месте. Откройте раздел заново, чтобы увидеть результат.';
+  const FOCUS_ROUTE = '#content-factory/plan/proposals';
+  function focusFromHash() {
+    const hash = String(window.location.hash || ''), at = hash.indexOf('?');
+    if (at < 0 || hash.slice(0, at) !== FOCUS_ROUTE) return null;
+    const query = new URLSearchParams(hash.slice(at + 1)), keys = [...query.keys()];
+    if (!keys.length) return null;
+    const one = (name) => query.getAll(name).length === 1 ? query.get(name) : '';
+    const company = one('company'), idea = one('idea'), platform = one('platform');
+    if (keys.some((name) => !['company', 'idea', 'platform'].includes(name)) ||
+      !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(company) || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(idea) ||
+      !/^[a-z][a-z0-9_]{0,63}$/.test(platform)) return {error: true};
+    return {company, idea, platform};
+  }
 
   const variantPlatforms = (data) => data.vocabulary.platforms
     .filter((platform) => data.brief.fields.platforms.includes(platform.id));
   const variantStateOf = (data, ideaId, platform) => (data.variants || [])
     .find((state) => state.ideaId === ideaId && state.platform === platform) || null;
-  const variantCardOf = (data, ideaId, platform) => (data.variantTransfer?.items || [])
-    .find((item) => item.ideaId === ideaId && item.platform === platform) || null;
+  /* CF26: расписка версии — только перенос ТЕКУЩЕЙ версии содержимого (ideaId + площадка + contentRevision).
+     Переносы прежних версий того же текста — история, текущей перенесённой версией они не называются. */
+  const variantCardOf = (data, ideaId, platform, contentRevision) => Number.isSafeInteger(contentRevision)
+    ? (data.variantTransfer?.items || []).find((item) => item.ideaId === ideaId && item.platform === platform &&
+      item.contentRevision === contentRevision) || null : null;
+  const variantHistoryOf = (data, ideaId, platform, contentRevision) => (data.variantTransfer?.items || [])
+    .filter((item) => item.ideaId === ideaId && item.platform === platform && item.contentRevision !== contentRevision);
+  const draftHref = (code, item) => Number.isSafeInteger(Number(item.postId)) && Number.isSafeInteger(item.postRevision) && item.postRevision > 0
+    ? `#content-factory/plan?${new URLSearchParams({company: code, post: String(item.postId), revision: String(item.postRevision)})}` : '';
+  /* Перенос одной версии: тело хранится до ответа. Потерянный ответ повторяется ТЕМ ЖЕ телом —
+     другой версии или второго переноса этим путём не будет (сервер узнаёт повтор по версии содержимого). */
+  const transferJobs = new Map();
+  const jobKey = (code, ideaId, platform, contentRevision) => `${String(code).toLowerCase()}|${ideaId}|${platform}|${contentRevision}`;
+  const TRANSFER_DIRTY_NOTE = 'Сначала сохраните план: в форме есть несохранённые правки, а перенос взял бы прежний текст.';
+  const TRANSFER_ERRORS = {IDEA_NOT_FOUND: 'Идеи больше нет в текущем плане. Обновите раздел и проверьте план.',
+    STALE_PLAN: 'План уже сохранён в другой версии. Обновите раздел, проверьте версию и при необходимости согласуйте заново.',
+    BRIEF_CHANGED: 'Бриф изменился. Обновите план под новый бриф и согласуйте версии заново.',
+    PROFILE_CHANGED: 'Данные компании изменились. Откройте раздел заново и повторите перенос.',
+    STALE_VARIANT: 'Текст этой версии уже изменился. Обновите раздел: переносится только текущая согласованная версия.',
+    VARIANT_NOT_APPROVABLE: 'Пустая или исключённая версия не переносится. Добавьте текст или снимите «не публикуем», сохраните и согласуйте.',
+    VARIANT_NOT_APPROVED: 'Эта версия ещё не согласована. Сначала владелец согласует текущую версию.'};
+  const transferErrorText = (error) => {
+    const server = String(error.message || '').replace(/[.\s]+$/, '');
+    const known = TRANSFER_ERRORS[error.code] || (error.status === 403 ? 'Недостаточно прав для переноса.'
+      : error.status === 404 ? 'Не найдено в этой компании. Обновите раздел.' : 'Сервер не принял перенос.');
+    return `${known}${server && !TRANSFER_ERRORS[error.code] && error.status !== 403 ? ` Ответ сервера: ${server}.` : ''}` +
+      `${error.code ? ` Код: ${error.code}.` : ''} Ничего не перенесено; повтор автоматически не отправлялся.`;
+  };
 
   function variantTab(platform, data, ideaId, active) {
     const state = variantStateOf(data, ideaId, platform.id);
@@ -407,14 +461,35 @@
     const limit = (vocabulary.captionLimits || {})[platform.id] || null;
     const ideaId = item.ideaId || '';
     const state = variantStateOf(data, ideaId, platform.id);
-    const card = variantCardOf(data, ideaId, platform.id);
+    const contentRevision = Number.isSafeInteger(variant.contentRevision) ? variant.contentRevision : null;
+    const card = variantCardOf(data, ideaId, platform.id, contentRevision);
+    const older = ideaId ? variantHistoryOf(data, ideaId, platform.id, contentRevision) : [];
+    const job = contentRevision && ideaId ? transferJobs.get(jobKey(data.companyCode, ideaId, platform.id, contentRevision)) : null;
     const decided = state && state.decision
       ? `<p class="mentor-note" data-variant-decision>${esc(VARIANT_STATUS[state.status] || state.status)}${state.reason ? ` · ${esc(state.reason)}` : ''}${state.actorName ? ` · ${esc(state.actorName)}` : ''}</p>`
       : '<p class="mentor-note" data-variant-decision>Решения по этой версии ещё нет.</p>';
     // Расписка переноса показывается у своей версии, а не по старому номеру дня.
-    const transferred = card
-      ? `<p class="mentor-note" data-variant-card="${esc(card.postId)}">Перенесено в черновик №${esc(card.postId)} · ${esc(card.cardStatus)}${card.hasMedia ? ' · медиа загружено' : ' · без медиа'}. Отправку и время задаёт «Автопостинг» после отдельного одобрения материала.</p>`
-      : '<p class="mentor-note" data-variant-card="">В черновики ещё не переносилась.</p>';
+    const href = card ? draftHref(data.companyCode, card) : '';
+    const transferred = (card
+      ? `<p class="mentor-note" data-variant-card="${esc(card.postId)}">Текущая версия (содержимое v${esc(contentRevision)}) перенесена в черновик №${esc(card.postId)} · ${esc(CARD_STATUS[dayStatus(card)].toLowerCase())}${card.hasMedia ? ' · медиа загружено' : ' · без медиа'}. Отправку и время задаёт «Автопостинг» после отдельного одобрения материала.${href ? ` <a href="${esc(href)}" data-variant-card-open>Открыть черновик №${esc(card.postId)}</a>` : ''}</p>`
+      : `<p class="mentor-note" data-variant-card="">${older.length ? `Текущая версия${contentRevision ? ` (содержимое v${esc(contentRevision)})` : ''} в черновики ещё не переносилась.` : 'В черновики ещё не переносилась.'}</p>`) +
+      (older.length ? `<details class="mentor-variant-history" data-variant-history><summary>Прежние переносы этой площадки (${esc(older.length)})</summary>
+        <ul class="mentor-list">${older.map((item) => `<li data-variant-history-item="${esc(item.postId)}">Черновик №${esc(item.postId)} · содержимое v${esc(item.contentRevision)} · ${esc(CARD_STATUS[dayStatus(item)].toLowerCase())}. Прежний текст, не текущая версия.</li>`).join('')}</ul></details>` : '');
+    const stalePlan = !data.plan || data.plan.briefRevision !== data.brief.revision;
+    const transferable = viewer.edit && index >= 0 && ideaId && contentRevision && !card && !stalePlan &&
+      state && state.status === 'approved' && state.contentRevision === contentRevision &&
+      Boolean(variant.text) && variant.excluded !== true;
+    // Неизвестный исход разрешается свежим планом: расписка ровно этой версии уже есть — повтор не нужен.
+    if (job && job.state === 'unknown' && card) {
+      job.state = 'done';
+      job.text = `Перенос подтверждён свежим чтением плана: черновик №${card.postId}.`;
+    }
+    const retry = job && job.state === 'unknown';
+    const transferBox = viewer.edit && (transferable || retry || job?.text)
+      ? `<div class="mentor-variant-transfer" data-variant-transfer-box>${transferable || retry
+        ? `<button type="button" class="plain-button" data-variant-transfer data-variant-idea-id="${esc(ideaId)}"
+          data-variant-platform="${esc(platform.id)}" data-variant-content-revision="${esc(contentRevision)}"${job?.state === 'pending' ? ' disabled' : ''}>${retry ? 'Повторить тот же перенос' : 'Перенести эту версию в черновик'}</button>` : ''}
+        <span class="mentor-note" data-variant-transfer-line role="status">${esc(job?.text || '')}</span></div>` : '';
     const actions = index >= 0 && ideaId
       ? (viewer.decide
         ? `<div class="mentor-variant-actions">
@@ -449,7 +524,8 @@
       : `<p class="mentor-variant-read" data-variant-text>${variant.text ? esc(variant.text) : 'Текста пока нет.'}</p>
         ${variant.plannedDate || variant.plannedTime ? `<p class="mentor-note">Плановый выход: ${esc(variant.plannedDate || '—')} ${esc(variant.plannedTime || '')}. ${esc(PLAN_TIME_NOTE)}</p>` : ''}`;
     return `<div class="mentor-variant-panel" data-variant="${esc(platform.id)}" data-variant-idea="${esc(ideaId)}"
-      ${hidden ? 'hidden' : ''}>${editable}${decided}${transferred}${actions}</div>`;
+      data-variant-revision="${esc(contentRevision || '')}"
+      ${hidden ? 'hidden' : ''}>${editable}${decided}${transferred}${transferBox}${actions}</div>`;
   }
 
   function variantsMarkup(item, data, index) {
@@ -847,7 +923,9 @@
     // Роль читателя фиксируется на время сборки разметки: кнопки решений рисуются только владельцу,
     // а тексты версий видны и на чтение.
     viewer = {decide: canDecide(ctx), edit};
-    return `<details class="card mentor-brief"${!data.brief.revision || !data.brief.fields.platforms.length ? ' open' : ''}><summary>О компании · бриф${data.brief.revision ? ' · сохранён' : ' · начните здесь'}</summary>
+    /* Контент завод CF1: вводные заполняются во вкладке «Настройки модуля», а не над планом.
+       Бриф (история версий и разбор) остаётся здесь свёрнутым под планом. */
+    const briefBlock = `<details class="card mentor-brief"><summary>Бриф (вводные) · версия ${esc(data.brief.revision)} · основная правка — во вкладке «Настройки модуля»</summary>
         <p class="mentor-note">Версия ${esc(data.brief.revision)}${data.brief.updatedAt ? ` · обновлён ${esc(moment(data.brief.updatedAt))}` : ''}.
           ${edit ? 'План составьте сами или возьмите подсказку модели и проверьте её.' : 'У вас только просмотр.'}</p>
         ${briefMarkup(data, edit)}
@@ -860,8 +938,10 @@
           <div data-analyze-result></div></section>` : ''}
         ${data.brief.history.length ? `<details><summary>История брифа (${esc(data.brief.history.length)})</summary>
           <ol class="mentor-history">${data.brief.history.map((item) => `<li>Версия ${esc(item.revision)} · ${esc(moment(item.createdAt))} ·
-            ${esc(item.actorName || '—')}${item.reason ? `<br>${esc(item.reason)}` : ''}</li>`).join('')}</ol></details>` : ''}</details>
-      <section class="card mentor-plan"><h2>Контент-план</h2>
+            ${esc(item.actorName || '—')}${item.reason ? `<br>${esc(item.reason)}` : ''}</li>`).join('')}</ol></details>` : ''}</details>`;
+    const invite = !data.brief.revision || !data.brief.fields.platforms.length
+      ? `<p class="card mentor-warning" role="note">Сначала заполните вводные и площадки во вкладке <a href="#content-factory/settings">«Настройки модуля»</a>. Пока это не сделано, план не составляется.</p>` : '';
+    return `${invite}      <section class="card mentor-plan"><h2>Контент-план</h2>
         <p class="mentor-note">Выберите материал по дате. ${edit ? 'Для изменений или предложения откройте «Подробности и правки».' : 'Задание и пояснения — в «Подробностях материала».'}</p>
         ${planMarkup(data, edit)}
         ${data.plan && data.plan.history.length ? `<details><summary>История плана (${esc(data.plan.history.length)})</summary>
@@ -878,6 +958,7 @@
           <button class="plain-button" type="button" data-review-run>Разобрать результаты</button>
           <span data-review-state role="status"></span>
           <div data-review-result></div></section></details>` : ''}
+      ${briefBlock}
       <details class="mentor-team mentor-methods"><summary>Как контент приводит к обращению · схема</summary>
         ${journeyMarkup(data)}${propertyExampleMarkup(ctx)}</details>`;
   }
@@ -928,6 +1009,10 @@
 
   function bind(container, node, ctx, data) {
     const code = ctx.selectedProjectId;
+    /* CF26-R2: у каждой отрисовки свой маркер. Ответ, пришедший после перерисовки раздела (переход по фокусу, A→B→A),
+       к текущей форме не относится: он не перерисовывает её, не перечитывает план и не меняет фокус. */
+    const token = {};
+    const isCurrent = () => Boolean(active && active.token === token && node.isConnected) && ctx.selectedProjectId === code;
     const busy = (form, state) => form.querySelectorAll('button,input,select,textarea')
       .forEach((element) => { element.disabled = state; });
     const feed = node.querySelector('[data-plan-feed]');
@@ -1075,14 +1160,20 @@
 
     const submit = async (form, stateId, path, method, body) => {
       const state = node.querySelector(stateId);
+      const guard = {state: fieldsState(node)};
       busy(form, true);
       state.textContent = 'Сохраняем…';
       try {
         await ctx.crmQuery(path, {companyCode: code}, ctx.csrfOptions(method, body));
-        if (ctx.selectedProjectId !== code) return;
-        await load(container, ctx);
+        if (!isCurrent()) return; // раздел уже перерисован: новые правки текущей формы не трогаем
+        // Идея из ссылки остаётся показанной после сохранения и решения: адрес фокуса только читает.
+        const outcome = await load(container, ctx, CURRENT_FOCUS, guard);
+        if ((outcome === 'kept' || outcome === 'failed') && isCurrent()) {
+          busy(form, false);
+          state.textContent = `Запрос выполнен. ${outcome === 'kept' ? KEPT_NOTE : FAILED_NOTE}`;
+        }
       } catch (error) {
-        if (ctx.selectedProjectId !== code) return;
+        if (!isCurrent()) return;
         busy(form, false);
         state.textContent = error.message;
       }
@@ -1193,6 +1284,112 @@
         });
       }
       block.querySelectorAll('[data-variant-decide]').forEach(wireDecision);
+      block.querySelectorAll('[data-variant-transfer]').forEach(wireTransfer);
+    }
+
+    /* CF26: перенос ОДНОЙ текущей согласованной версии. Правка формы, решения и выбор публикации
+       здесь не делаются; финальный материал в «Автопостинге» одобряется отдельно. */
+    function wireTransfer(button) {
+      if (button.dataset.variantWired) return;
+      button.dataset.variantWired = '1';
+      button.addEventListener('click', () => { void transferOne(button); });
+    }
+    async function transferOne(button) {
+      if (!planForm || !isCurrent()) return;
+      const ideaId = button.dataset.variantIdeaId, platform = button.dataset.variantPlatform;
+      const contentRevision = Number(button.dataset.variantContentRevision);
+      /* Состояние показывается в ТЕКУЩЕЙ отрисовке той же компании (она могла смениться за время ожидания);
+         меняются только кнопка и строка переноса этой версии — не форма, не план и не фокус. */
+      const currentRoot = () => (ctx.selectedProjectId === code && active && active.code === String(code).toLowerCase() &&
+        active.node.isConnected ? active.node : null);
+      const panelIn = (root) => {
+        const block = root ? [...root.querySelectorAll('[data-variants]')].find((item) => item.dataset.variants === ideaId) : null;
+        return block ? [...block.querySelectorAll('[data-variant]')].find((item) => item.dataset.variant === platform) || null : null;
+      };
+      const show = (text) => {
+        const panel = panelIn(currentRoot());
+        // CF26-R3: только панель той же версии содержимого; панель новой версии чужую расписку не получает.
+        if (!panel || Number(panel.dataset.variantRevision) !== contentRevision) return;
+        const shown = [...panel.querySelectorAll('[data-variant-transfer]')].find((item) =>
+          Number(item.dataset.variantContentRevision) === contentRevision) || null;
+        if (shown) {
+          shown.disabled = job.state === 'pending' || job.state === 'done';
+          shown.textContent = job.state === 'unknown' ? 'Повторить тот же перенос' : 'Перенести эту версию в черновик';
+        }
+        say(panel.querySelector('[data-variant-transfer-line]'), text);
+      };
+      const key = jobKey(code, ideaId, platform, contentRevision);
+      let job = transferJobs.get(key);
+      if (job?.state === 'pending') return;
+      if (job?.state !== 'unknown') {
+        if (planDirty()) { say(panelIn(node)?.querySelector('[data-variant-transfer-line]'), TRANSFER_DIRTY_NOTE); return; }
+        job = {body: {planRevision: Number(planForm.elements.planRevision.value),
+          briefRevision: Number(planForm.elements.briefRevision.value),
+          selection: {ideaId, platform, contentRevision}}};
+      }
+      const guard = {state: fieldsState(node)};
+      job.state = 'pending';
+      job.text = 'Переносим эту версию в черновик…';
+      transferJobs.set(key, job);
+      show(job.text);
+      const sel = job.body.selection;
+      const same = (item) => Boolean(item) && item.ideaId === sel.ideaId && item.platform === sel.platform &&
+        item.contentRevision === sel.contentRevision && Number.isSafeInteger(Number(item.postId));
+      try {
+        const result = await ctx.crmQuery(`${PATH}/plan/variants/transfer`, {companyCode: code}, ctx.csrfOptions('POST', job.body));
+        if (ctx.selectedProjectId !== code) throw Object.assign(new Error('late'), {late: true});
+        const created = (result?.created || []).find(same), replay = (result?.skipped || []).find(same);
+        if (result?.companyCode !== String(code).toLowerCase() || !(created || replay)) {
+          throw Object.assign(new Error('ответ не относится к этой версии'), {scope: true});
+        }
+        const extra = (result.created || []).filter((item) => !same(item)).map((item) => item.postId);
+        job.state = 'created';
+        job.postId = Number((created || replay).postId);
+        job.replay = !created;
+        job.extra = extra;
+      } catch (error) {
+        const definite = !error.late && !error.scope && Number.isInteger(error.status) && error.status >= 400 &&
+          error.status < 500 && ![408, 429].includes(error.status);
+        if (definite) {
+          job = {state: 'error', text: transferErrorText(error)};
+          transferJobs.set(key, job);
+        } else {
+          job.state = 'unknown';
+          job.text = `Ответ не получен${error.late ? ' до смены компании' : error.scope ? ' или не относится к этой версии' : error.message ? ` (${String(error.message).replace(/[.\s]+$/, '')})` : ''}. ` +
+            'Перенос мог выполниться. «Повторить тот же перенос» отправит тот же запрос — второго черновика по этой версии не будет.';
+        }
+        show(job.text);
+        return;
+      }
+      // Расписка — не текущая карточка: её состояние берётся свежим чтением той же компании.
+      let fresh = null;
+      try {
+        const post = await ctx.crmQuery(`/autoposting/posts/${encodeURIComponent(job.postId)}`, {companyCode: code});
+        if (ctx.selectedProjectId === code && post?.companyCode === String(code).toLowerCase() && Number(post.id) === job.postId) fresh = post;
+      } catch { fresh = null; }
+      const archived = Boolean(fresh?.archive?.archivedAt);
+      const head = job.replay ? `Эта версия уже была перенесена раньше: черновик №${job.postId}` : `Перенесено: черновик №${job.postId}`;
+      job.state = 'done';
+      job.text = fresh
+        ? `${head} · сейчас: ${CARD_STATUS[dayStatus({cardStatus: fresh.status})].toLowerCase()}${archived
+          ? ' · удалён из плана (в «Удалённых материалах»); повторный перенос его не восстанавливает' : ''}. Финальный материал одобряется отдельно в «Автопостинге».`
+        : ctx.selectedProjectId === code
+          ? `${head}. Загрузить его текущую карточку не удалось — повторно переносить не нужно; откройте его в «Контент-плане».`
+          : `${head}. Компания сменилась до проверки карточки — повторно переносить не нужно.`;
+      if (job.extra.length) job.text += ` Сервер вернул и другие черновики: №${job.extra.join(', №')} — проверьте их в «Контент-плане».`;
+      if (!isCurrent()) {
+        // Раздел перерисован, пока шёл ответ: расписка сохранена у версии, текущая форма и её правки не трогаются.
+        show(`${job.text} Ответ пришёл после того, как раздел открыли заново: план не перечитан, правки формы на месте.`);
+        return;
+      }
+      if (planDirty()) {
+        // Несохранённые правки не стираются перечитыванием: расписка показана, план обновится после сохранения.
+        show(`${job.text} План не перечитан: в форме есть несохранённые правки.`);
+        return;
+      }
+      const outcome = await load(container, ctx, CURRENT_FOCUS, guard);
+      if (outcome === 'kept') show(`${job.text} ${KEPT_NOTE}`);
+      if (outcome === 'failed') show(`${job.text} ${FAILED_NOTE}`);
     }
 
     /* Адресное решение по версиям. Область называется явно: «весь план», «вся идея» и
@@ -1328,27 +1525,53 @@
       const postId = button.dataset.materialAdd;
       const input = node.querySelector(`[data-material-file="${postId}"]`);
       const state = node.querySelector(`[data-material-state="${postId}"]`);
-      const item = (data.transfer?.current?.items || []).find((row) => String(row.postId) === String(postId));
+      /* R4: точная своя карточка — из той коллекции, где нарисована кнопка (прежняя расписка по дням или версии площадок).
+         Её материалы и ревизия фиксируются в момент нажатия; неизвестный состав не заменяется пустым списком. */
+      const rows = button.closest('[data-legacy-drafts]') ? data.transfer?.current?.items : data.variantTransfer?.items;
+      const item = (Array.isArray(rows) ? rows : []).find((row) => String(row.postId) === String(postId));
       const file = input?.files?.[0];
       if (!file) { state.textContent = 'Выберите файл материала.'; return; }
+      if (!item || !Array.isArray(item.mediaUrls) || String(item.postRevision) !== button.dataset.postRevision) {
+        state.textContent = 'Состав материалов этой карточки неизвестен — файл не загружен и не приложен, чтобы не потерять уже добавленные. Откройте раздел заново.';
+        return;
+      }
+      const media = [...item.mediaUrls], revision = Number(item.postRevision);
+      // R4: снимок полей — как у переноса и сохранения (R3); поздний ответ применяется только к той же отрисовке.
+      const guard = {state: fieldsState(node)};
       button.disabled = true;
       state.textContent = 'Загружаем материал…';
+      let uploaded;
       try {
-        const uploaded = await ctx.apiJson(
+        uploaded = await ctx.apiJson(
           `${data.transfer.materialUploadPath}?companyCode=${encodeURIComponent(code)}`,
           {method: 'POST', body: file,
             headers: {'Content-Type': file.type, 'X-CSRF-Token': ctx.identity.csrfToken}});
-        if (ctx.selectedProjectId !== code) return;
-        await ctx.crmQuery(`/autoposting/posts/${encodeURIComponent(postId)}`, {companyCode: code},
-          ctx.csrfOptions('PATCH', {revision: Number(button.dataset.postRevision),
-            mediaUrls: [...(item ? item.mediaUrls : []), uploaded.url]}));
-        if (ctx.selectedProjectId !== code) return;
-        await load(container, ctx);
       } catch (error) {
-        if (ctx.selectedProjectId !== code) return;
+        if (!isCurrent()) return;
         button.disabled = false;
         state.textContent = error.message;
+        return;
       }
+      // R5: файл загружен, но приложить его можно только из той же отрисовки той же компании. После повторного открытия
+      // раздела или A→B→A прежний обработчик не отправляет PATCH и не трогает новую форму; файл не объявляется приложенным.
+      if (!isCurrent()) return;
+      try {
+        await ctx.crmQuery(`/autoposting/posts/${encodeURIComponent(postId)}`, {companyCode: code},
+          ctx.csrfOptions('PATCH', {revision, mediaUrls: [...media, uploaded.url]}));
+      } catch (error) {
+        if (!isCurrent()) return;
+        // Повтора нет: 409 значит, что карточку уже изменили; неизвестный исход не повторяется вслепую.
+        state.textContent = error.status === 409
+          ? `Карточку уже изменили в другом окне — файл загружен, но не приложен, чтобы не переписать её материалы. Откройте раздел заново. (${error.message})`
+          : error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429
+            ? `Файл загружен, но не приложен: ${error.message}`
+            : `Не удалось подтвердить, приложен ли файл (${error.message}). Повторно не прикладываем — откройте раздел заново и проверьте материалы карточки.`;
+        return;
+      }
+      if (!isCurrent()) return;
+      const result = await load(container, ctx, CURRENT_FOCUS, guard);
+      if (result === 'kept') state.textContent = `Материал приложен к карточке №${postId}. ${KEPT_NOTE}`;
+      else if (result === 'failed') state.textContent = `Материал приложен к карточке №${postId}. ${FAILED_NOTE}`;
     }));
     // Копирование промта: буфер обмена может быть недоступен, поэтому есть запасной путь.
     node.querySelectorAll('[data-prompt-copy]').forEach((button) => button.addEventListener('click', async () => {
@@ -1599,38 +1822,114 @@
             briefRevision: Number(form.elements.briefRevision.value), decision: choice, comment});
       });
     }
+    /* CF26: адрес фокуса только показывает идею и вкладку версии. Ни сохранения, ни решений, ни переноса. */
+    const applyFocus = (focus, kept = false) => {
+      let note = node.querySelector('[data-plan-focus]');
+      if (!note) {
+        node.insertAdjacentHTML('afterbegin', '<p class="mentor-note mentor-focus-note" data-plan-focus role="status"></p>');
+        note = node.querySelector('[data-plan-focus]');
+      }
+      node.querySelectorAll('.mentor-focus').forEach((element) => element.classList.remove('mentor-focus'));
+      const tail = kept ? ' План не перечитан: в форме есть несохранённые правки, они на месте.' : '';
+      if (focus.error) {
+        note.textContent = `${focus.message || 'Ссылка на версию идеи неполная или повреждена: нужны компания, идея и площадка.'} Показан план без выделения.${tail}`;
+        return;
+      }
+      const row = data.plan ? [...node.querySelectorAll('[data-row][data-idea-id]')].find((element) => element.dataset.ideaId === focus.idea) : null;
+      if (!row) {
+        note.textContent = `${data.plan ? `Идея ${focus.idea} не найдена в текущем плане компании: её могли убрать или план пересобрали.`
+          : 'План компании ещё не составлен — идею из ссылки показать негде.'} Ничего не выбрано вместо неё.${tail}`;
+        return;
+      }
+      if (row.hidden) resetFilters();
+      const details = row.querySelector('.mentor-day-details');
+      if (details) details.open = true;
+      const block = [...row.querySelectorAll('[data-variants]')].find((element) => element.dataset.variants === focus.idea);
+      const tab = block ? [...block.querySelectorAll('[data-variant-tab]')].find((element) => element.dataset.variantTab === focus.platform) : null;
+      if (tab) showVariant(block, focus.platform);
+      row.classList.add('mentor-focus');
+      const topic = row.querySelector('[data-preview-topic]')?.textContent.trim() || focus.idea;
+      const label = platformLabelOf(focus.platform);
+      note.textContent = (tab ? `Показана идея «${topic}» · версия ${label}. Ничего не сохраняется и не переносится само.`
+        : `Идея «${topic}» найдена, но версии для площадки ${label} в ней нет: её можно добавить в подробностях идеи и сохранить план.`) + tail;
+      row.scrollIntoView?.({block: 'start'});
+      (tab || details?.querySelector('summary'))?.focus?.({preventScroll: true});
+    };
+    active = {container, node, token, code: String(code).toLowerCase(), planDirty, applyFocus, fieldsState: () => fieldsState(node)};
   }
 
-  async function load(container, ctx) {
+  /* guard — снимок полей раздела при начале действия (перенос, сохранение, решение). Ответ плана применяется, только
+     если открыта та же форма и её поля с тех пор не менялись; иначе правки и текущий фокус остаются (CF26-R3). */
+  async function load(container, ctx, focus = null, guard = null) {
     const id = ++epoch, code = ctx.selectedProjectId;
     const node = container.querySelector('#mentor-content');
-    if (!node) return;
+    if (!node) return 'stale';
+    const formOpen = () => Boolean(guard) && Boolean(active) && active.node === node;
     try {
       const data = await ctx.crmQuery(PATH, {companyCode: code});
       // Ответ прежней компании не рисуется: бриф и план не смешиваются между компаниями.
-      if (id !== epoch || ctx.selectedProjectId !== code || !node.isConnected) return;
+      if (id !== epoch || ctx.selectedProjectId !== code || !node.isConnected) return 'stale';
       if (data.companyCode !== String(code).toLowerCase()) throw new Error('Ответ другой компании');
+      if (formOpen() && active.fieldsState() !== guard.state) return 'kept';
+      const target = focus === CURRENT_FOCUS ? currentFocus(code) : focus;
       node.innerHTML = markup(data, ctx);
       bind(container, node, ctx, data);
+      // Фокус применяется только к своей компании: ссылка другой компании здесь ничего не выделяет.
+      if (target && active?.node === node && (target.error || target.company === String(code).toLowerCase())) active.applyFocus(target);
+      return 'applied';
     } catch (error) {
-      if (id === epoch && node.isConnected) {
-        node.innerHTML = `<p class="crm-error" role="alert">Не удалось загрузить бриф и план: ${esc(error.message)}</p>`;
-      }
+      if (id !== epoch || !node.isConnected) return 'stale';
+      if (formOpen()) return 'failed'; // открытая форма не заменяется сообщением об ошибке
+      node.innerHTML = `<p class="crm-error" role="alert">Не удалось загрузить бриф и план: ${esc(error.message)}</p>`;
+      return 'failed';
     }
   }
 
   function render(container, ctx) {
+    if (!container || !ctx) return;
     if (!canRead(ctx)) {
       container.innerHTML = '<div class="content-header"><h1>Бриф и план</h1></div>' +
         '<div class="card"><p>Раздел доступен по праву «Автопостинг: просмотр». Обратитесь к владельцу кабинета.</p></div>';
       return;
     }
-    container.innerHTML = `<div class="content-header"><h1>Бриф и план</h1>
-      <p>Расскажите о компании, выберите темы на 7–14 дней и подготовьте материалы по шагам.</p></div>
+    const code = String(ctx.selectedProjectId || '').toLowerCase();
+    let focus = focusFromHash();
+    if (!focus && pendingFocus && pendingFocus.company === code) focus = pendingFocus;
+    pendingFocus = null;
+    const open = active && active.container === container && active.node.isConnected ? active : null;
+    const dirty = Boolean(open && open.code === code && open.planDirty());
+    if (focus && !focus.error && focus.company !== code) {
+      const allowed = (ctx.identity.companies || []).some((company) => String(company.id).toLowerCase() === focus.company);
+      if (allowed && !dirty && typeof ctx.chooseProject === 'function') {
+        // Переключение компании — существующим выбором проекта; прежние ответы отбрасываются эпохой загрузки.
+        pendingFocus = focus;
+        ctx.chooseProject(focus.company);
+        if (String(ctx.selectedProjectId || '').toLowerCase() === focus.company) return;
+        pendingFocus = null;
+      }
+      focus = {error: true, message: !allowed || typeof ctx.chooseProject !== 'function'
+        ? `Ссылка ведёт в другую компанию (${focus.company}), она вам недоступна. Компания не переключена.`
+        : dirty ? `Ссылка ведёт в другую компанию (${focus.company}). Сначала сохраните план текущей компании — компания не переключена.`
+          : `Не удалось переключиться на компанию ${focus.company}. Компания не переключена.`};
+    }
+    const valid = Boolean(focus && !focus.error && focus.company === code);
+    if (focus && dirty) {
+      // Тот же раздел с несохранёнными правками: не перерисовываем, выделение — в текущей форме.
+      if (valid) keptFocus = focus;
+      Promise.resolve().then(() => { if (open.node.isConnected) open.applyFocus(focus, true); });
+      return;
+    }
+    // Открытие без фокуса или со сбойной ссылкой и смена компании сбрасывают хранимый фокус: в чужую компанию он не переносится.
+    keptFocus = valid ? focus : null;
+    container.innerHTML = `<div class="content-header"><h2>Предложения плана</h2>
+      <p>Темы на 7–14 дней по вводным из «Настроек модуля»: проверьте, согласуйте и перенесите в черновики Контент-плана. Автоматическое составление плана не запускается.</p></div>
       <div id="mentor-content" aria-live="polite"><p>Загружаем бриф и план…</p></div>`;
-    void load(container, ctx);
+    active = null;
+    void load(container, ctx, focus);
   }
 
   sb.mediaMentor = {render, load};
-  sb.registerView('media-mentor', {title: 'Бриф и план', render, onProjectChange: render});
+  // Смена компании вызывает onProjectChange(ctx) без узла раздела: узел берётся свой, ответ прежней компании отбрасывается.
+  const onProjectChange = (ctx) => render(window.document.querySelector('[data-view="media-mentor"]'), ctx);
+  sb.registerView('media-mentor', {title: 'Бриф и план', render, onProjectChange});
 })();

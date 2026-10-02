@@ -316,9 +316,29 @@ function createMediaMentorTransfer(db, {mentor, autoposting, information, now = 
   }
 
   function transferVariants(code, body, actor = {}) {
-    object(body, ['planRevision', 'briefRevision']);
+    object(body, ['planRevision', 'briefRevision', 'selection']);
     revision(body.planRevision);
     revision(body.briefRevision);
+    let selection = null;
+    if (Object.hasOwn(body, 'selection')) {
+      object(body.selection, ['ideaId', 'platform', 'contentRevision']);
+      const ideaId = text(body.selection.ideaId, 100, true), platform = text(body.selection.platform, 100, true);
+      if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(ideaId) ||
+        !Number.isSafeInteger(body.selection.contentRevision) || body.selection.contentRevision < 1) {
+        fail(400, 'Укажите идею, площадку и текущую версию содержимого');
+      }
+      selection = {ideaId, platform, contentRevision: body.selection.contentRevision};
+    }
+    // Проверяется дважды: сначала снимок, затем факты внутри транзакции.
+    const selectedVariant = days => {
+      const idea = days.find(item => item.ideaId === selection.ideaId);
+      if (!idea) fail(404, 'Идея плана не найдена', 'IDEA_NOT_FOUND');
+      if (!Object.hasOwn(idea.variants || {}, selection.platform)) fail(400, 'У идеи нет версии для выбранной площадки');
+      const variant = idea.variants[selection.platform];
+      if (variant.contentRevision !== selection.contentRevision) fail(409, 'Версия площадки уже изменилась. Обновите план.', 'STALE_VARIANT');
+      if (variant.excluded === true || !variant.text) fail(409, 'Пустая или исключённая версия не переносится', 'VARIANT_NOT_APPROVABLE');
+      return idea;
+    };
     const actorId = Number.isSafeInteger(actor.userId) ? actor.userId : null;
     const actorName = actor.userName ? text(actor.userName, 200) : '';
     const snapshot = mentor.get(code), profile = information.get(code);
@@ -329,7 +349,7 @@ function createMediaMentorTransfer(db, {mentor, autoposting, information, now = 
       fail(409, 'Бриф изменился. Обновите план и согласуйте заново.', 'BRIEF_CHANGED');
     }
     const ideas = new Map(plan.days.map((day) => [day.ideaId, day]));
-    for (const idea of plan.days) {
+    for (const idea of selection ? [selectedVariant(plan.days)] : plan.days) {
       if (idea.topic.length > TITLE_LIMIT) {
         fail(400, `Тема дня ${idea.date} длиннее ${TITLE_LIMIT} символов и не поместится в заголовок карточки. Сократите тему в плане.`);
       }
@@ -370,14 +390,26 @@ function createMediaMentorTransfer(db, {mentor, autoposting, information, now = 
       let order = (db.prepare('SELECT COALESCE(MAX(sort_order),0) m FROM autoposting_posts WHERE company_id=?')
         .get(owner.id).m || 0);
       const days = JSON.parse(planRow.plan).days;
+      if (selection) selectedVariant(days);
       for (const day of days) {
+        if (selection && day.ideaId !== selection.ideaId) continue;
         for (const [platform, variant] of Object.entries(day.variants || {})) {
+          if (selection && platform !== selection.platform) continue;
           // Пустая или исключённая версия материалом не является и в перенос не идёт.
           if (variant.excluded === true || !variant.text) continue;
           const decision = decided.get(owner.id, day.ideaId, platform, variant.contentRevision, body.briefRevision);
+          if (selection && (!decision || decision.decision !== 'approved')) fail(409, 'Эта версия площадки ещё не согласована', 'VARIANT_NOT_APPROVED');
           if (!decision || decision.decision !== 'approved') continue;
           const already = seen.get(owner.id, day.ideaId, platform, variant.contentRevision);
-          if (already) { skipped.push({ideaId: day.ideaId, platform, contentRevision: variant.contentRevision, postId: already.postId}); continue; }
+          if (already) {
+            const item = {ideaId: day.ideaId, platform, contentRevision: variant.contentRevision, postId: already.postId};
+            if (selection) {
+              const card = db.prepare('SELECT status cardStatus,archived_at archivedAt FROM autoposting_posts WHERE id=? AND company_id=?').get(already.postId, owner.id);
+              if (!card) fail(404, 'Перенесённый черновик не найден', 'NOT_FOUND');
+              item.cardStatus = card.cardStatus; item.archivedAt = card.archivedAt || null;
+            }
+            skipped.push(item); continue;
+          }
           /* Указатель происхождения неизменяем по построению: он называет версии плана и брифа,
              идею, площадку и ревизию содержимого, по которым карточка создана. Последующие правки
              плана его не переписывают — они создают новую версию и новый перенос. */
