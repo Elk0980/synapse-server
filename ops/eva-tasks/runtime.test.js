@@ -46,18 +46,20 @@ test('import is inert and does not load task source, read credentials or fetch',
 
 test('config requires absolute paths, positive safe owner ID and real timezone', (t) => {
   const dir = temporaryDirectory(t);
-  const env = { EVA_TOKEN_FILE: path.join(dir, 'token'), EVA_STATE_DIR: dir, EVA_DB_PATH: path.join(dir, 'crm.sqlite'), EVA_OWNER_USER_ID: String(OWNER) };
+  const env = { EVA_TOKEN_FILE: path.join(dir, 'token'), EVA_STATE_DIR: dir, EVA_TASK_SOCKET: path.join(dir, 'tasks.sock'), EVA_OWNER_USER_ID: String(OWNER) };
   assert.equal(loadConfig(env).timeZone, 'Etc/UTC');
   assert.equal(loadConfig({ ...env, EVA_TIMEZONE: 'Asia/Irkutsk' }).ownerUserId, OWNER);
   for (const owner of ['', '0', '-1', '1.2', ' 123 ', '00123', '9007199254740992', 'not-an-id']) {
     assert.throws(() => loadConfig({ ...env, EVA_OWNER_USER_ID: owner }), /invalid_config/);
   }
-  for (const key of ['EVA_TOKEN_FILE', 'EVA_STATE_DIR', 'EVA_DB_PATH']) {
+  for (const key of ['EVA_TOKEN_FILE', 'EVA_STATE_DIR', 'EVA_TASK_SOCKET']) {
     for (const value of ['', '.', 'relative/file', undefined]) assert.throws(() => loadConfig({ ...env, [key]: value }), /invalid_config/);
   }
   for (const zone of ['Fake/Zone', '+03:00', 'Europe/Moscow\n', 'http://example.com']) {
     assert.throws(() => loadConfig({ ...env, EVA_TIMEZONE: zone }), /invalid_config/);
   }
+  assert.equal(loadConfig({ ...env, EVA_DB_PATH: path.join(dir, 'must-never-open.sqlite') }).dbPath, undefined);
+  assert.throws(() => loadConfig({ ...env, EVA_TASK_SOCKET: undefined, EVA_DB_PATH: path.join(dir, 'legacy.sqlite') }), /invalid_config/);
 });
 
 test('token can only come from bounded file content; missing, empty or URL-like values fail redacted', (t) => {

@@ -43,8 +43,8 @@ class ValidationTests(unittest.TestCase):
                 setup.validate_timezone(value)
 
     def test_volume_exact_name_no_paths_or_env_injection(self):
-        self.assertEqual(setup.validate_volume("synapse-server_crm_data"), "synapse-server_crm_data")
-        for value in ("", "x", "/data", "../crm", " crm", "crm\nX=1", "${CRM}", "crm:ro"):
+        self.assertEqual(setup.validate_volume("approved_eva_task_socket"), "approved_eva_task_socket")
+        for value in ("", "x", "/data", "../tasks", " tasks", "tasks\nX=1", "${SOCKET}", "tasks:ro"):
             with self.subTest(value=value), self.assertRaises(setup.SetupError):
                 setup.validate_volume(value)
 
@@ -150,12 +150,14 @@ class FilesystemContractTests(unittest.TestCase):
              mock.patch.object(setup, "refuse_existing"), \
              mock.patch.object(setup, "write_private_file") as write, \
              mock.patch.object(setup.os, "fsync"):
-            setup.save_configuration(40, FAKE_TOKEN, "12345", "Etc/UTC", "test_crm_data")
+            setup.save_configuration(40, FAKE_TOKEN, "12345", "Etc/UTC", "test_task_socket")
         self.assertEqual(write.call_args_list[0], mock.call(40, "telegram-token", (FAKE_TOKEN + "\n").encode()))
         metadata = write.call_args_list[1].args[2].decode()
-        self.assertEqual(metadata, "EVA_OWNER_USER_ID=12345\nEVA_TIMEZONE=Etc/UTC\nEVA_CRM_VOLUME=test_crm_data\n")
+        self.assertEqual(metadata, "EVA_OWNER_USER_ID=12345\nEVA_TIMEZONE=Etc/UTC\nEVA_TASK_SOCKET_VOLUME=test_task_socket\n")
         self.assertNotIn(FAKE_TOKEN, metadata)
         self.assertNotIn("TOKEN", metadata)
+        self.assertNotIn("CRM", metadata)
+        self.assertNotIn("EVA_DB_PATH", metadata)
 
 
 class HumanInputTests(unittest.TestCase):
@@ -196,8 +198,37 @@ class HumanInputTests(unittest.TestCase):
 
     def test_no_token_environment_or_network_contract(self):
         source = Path(__file__).with_name("setup.py").read_text(encoding="utf-8")
-        for forbidden in ("os.environ", "getenv(", "subprocess", "urllib", "requests", "socket", "chmod("):
+        for forbidden in ("os.environ", "getenv(", "subprocess", "urllib", "requests", "import socket", "chmod("):
             self.assertNotIn(forbidden, source)
+
+
+class DeployBoundaryTests(unittest.TestCase):
+    def test_bot_config_cannot_mount_crm_or_take_a_database_path(self):
+        compose = Path(__file__).with_name("compose.eva.yml").read_text(encoding="utf-8")
+        self.assertIn("EVA_TASK_SOCKET: /run/eva-tasks/tasks.sock", compose)
+        self.assertIn("EVA_TASK_SOCKET_VOLUME:?", compose)
+        self.assertIn("external: true", compose)
+        self.assertIn("target: /run/eva-tasks\n        read_only: true", compose)
+        for forbidden in ("EVA_DB_PATH", "EVA_CRM_VOLUME", "crm_data", "target: /crm", "CRM_API_KEY", "env_file:", "ports:"):
+            self.assertNotIn(forbidden, compose)
+
+    def test_image_contains_socket_client_and_not_legacy_database_adapter(self):
+        base = Path(__file__).parent
+        dockerfile = (base / "Dockerfile").read_text(encoding="utf-8")
+        allowed = (base / ".dockerignore").read_text(encoding="utf-8").splitlines()
+        self.assertIn("COPY runtime.js bot.js socket-source.js ./", dockerfile)
+        self.assertNotIn("task-source.js", dockerfile)
+        self.assertEqual(allowed, ["**", "!Dockerfile", "!.dockerignore", "!runtime.js", "!bot.js", "!socket-source.js"])
+
+    def test_crm_overlay_requires_explicit_scope_and_has_no_default_or_public_port(self):
+        compose = Path(__file__).with_name("compose.eva-crm.example.yml").read_text(encoding="utf-8")
+        self.assertIn("services:\n  crm:\n", compose)
+        self.assertIn("EVA_TASK_SOCKET_PATH: /run/eva-tasks/tasks.sock", compose)
+        self.assertIn("EVA_TASK_PROJECTS: ${EVA_TASK_PROJECTS:?", compose)
+        self.assertIn("EVA_TASK_SOCKET_VOLUME:?", compose)
+        self.assertIn("external: true", compose)
+        for forbidden in ("ports:", "EVA_TASK_PROJECTS:-", "EVA_TASK_PROJECTS: []", "EVA_TASK_PROJECTS: '*'", "CRM_API_KEY"):
+            self.assertNotIn(forbidden, compose)
 
 
 if __name__ == "__main__":

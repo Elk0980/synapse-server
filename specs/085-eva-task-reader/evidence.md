@@ -8,8 +8,8 @@ Production, существующие credentials и клиентские дан�
 
 | Команда / область | Результат |
 |---|---|
-| `node --test ops/eva-tasks/*.test.js` | 62 passed,0 failed: adapter7, bot27, runtime21, CRM regression7 |
-| `python -m unittest discover -s ops/eva-tasks -p setup_test.py -v` | 18 passed |
+| `node --test ops/eva-tasks/*.test.js ops/crm/eva-task-reader.test.js` | 103 passed,0 failed,1 Linux-only skipped:104 tests |
+| `python -m unittest discover -s ops/eva-tasks -p setup_test.py -v` | 21 passed |
 | `node --check ops/crm/server.js` | passed |
 | `git diff --check` | passed |
 | `python tools/spec-kit/gate.py check` | ok;48 official files verified;codex/claude/qwen |
@@ -26,20 +26,23 @@ Production, существующие credentials и клиентские дан�
 Независимые ограниченные code reviews выявили и после правок перепроверили: повторные проекты
 при регистре кода; потерю различия невалидного срока; ошибочную классификацию обрыва HTTP200.
 Это независимые задачи проверки в том же агентном окружении, не доказательство независимого провайдера.
-CRM patch независимо проверен на SHA256
-`7e75b5802aaa5194b296d7c80aee75244c21f9c261473f643229466fdd4e60e0`:
+Первоначальный узкий CRM dedup patch независимо проверен на SHA256
+`7e75b5802aaa5194b296d7c80aee75244c21f9c261473f643229466fdd4e60e0` (до добавления opt-in hook):
 исходный код4pass/3fail, исправленный7pass. [Подробности](source-ref-before.md).
 
 ## Соответствие требованиям
 
-FR001/004/005: adapter только чтение, canonical IDs, fresh source, no mutations.
+FR001/004/005: task-only SELECT внутри CRM, canonical IDs, fresh source, no mutations.
 FR002: bot navigation tests + actual runtime integration.
 FR003/008: input/output authorization, safe cursor, redacted errors, setup tests.
-FR006/007: fixed transport, duplicate/crash tests, no model/HTTP listener.
+FR006/007: fixed transport, duplicate/crash tests, no model/public HTTP listener.
 FR009: setup/compose/README готовы; личный ввод и activation остаются E8/E9.
 FR010: приватный пакет установлен в существующий локальный AI_HANDOFF вне этого public repo;
 в прежний вход добавлен указатель с сохранением содержимого и ACL. В публичный diff пакет не входит.
-FR011: семь regression-сценариев; server.js изменён одним hunk, данные не мигрировались.
+FR011: семь regression-сценариев; dedup hunk сохранён, данные не мигрировались.
+FR012/013: server-side approved project scope, удаление компании отзывает выдачу на следующем чтении;
+фиксированные девять полей, strict path/method/body, размер/срок/UTF-8/schema, закрытый socket lifecycle.
+Eva image/compose не получают DB, CRM key или основной env. Дополнительный server.js hook opt-in.
 
 Spec Kit convergence: требования/план/конституция сверены с указанными файлами и тестами.
 Необработанных buildable gaps в локальном scope не осталось. E8/E9 намеренно открыты:
@@ -47,10 +50,10 @@ Spec Kit convergence: требования/план/конституция св�
 
 ## Не выполнено и границы
 
-- Docker отсутствует в локальном PATH: build/Compose/Linux filesystem/WAL mount не исполнены.
-- Telegram username, owner ID, токен, точное имя CRM volume и часовой пояс лично не настроены.
+- Docker отсутствует в локальном PATH: локальный build/Compose/Linux filesystem не исполнены.
+- Telegram username, owner ID, токен, socket volume/project allowlist и часовой пояс лично не настроены.
 - Нет production deploy, нового публичного endpoint, изменения существующих прав или отправки реальных сообщений.
-- Read-only mount даёт процессу техническое чтение всей CRM; выдача этого доступа требует отдельного решения.
+- Whole-CRM mount заменён на task-only socket. Новый ограниченный доступ/поля в Telegram требуют решения.
 - Cursor сохраняется до ответа: после аварии возможен потерянный экран, восстанавливаемый /tasks;
   exactly-once сетевой доставки нет. Crash lock разбирает оператор, не автоматический перехват.
 - Общая полнота legacy списков не заявлена; Eva честно обозначает CRM. Узкая дедупликация
@@ -58,3 +61,24 @@ Spec Kit convergence: требования/план/конституция св�
 
 Инструкция запуска и точный объём согласования: [ops/eva-tasks/README.md](../../ops/eva-tasks/README.md).
 Telegram API сверено с [официальной документацией](https://core.telegram.org/bots/api).
+
+Дополнение02.10: документирована утверждённая схема владелец→Ева-координатор→проектные чаты,
+разделение assigned/in_progress/executor_completed/reviewed и передача на том же CRM ID.
+Это документационное уточнение: runtime, схема данных, значения статусов и доступы не менялись.
+
+## Дополнение: ограничение доступа к задачам
+
+Последующая реализация FR012/013 меняет transport, не CRM schema/statuses. [Аудит](least-privilege.md)
+объясняет, почему общий API key, coordination GET и whole-volume mount не подходят.
+Независимый review обнаружил сохранение доступа после soft-delete компании; INNER JOIN активной
+компании и regression теперь проверяют отзыв при каждом чтении. Invalid UTF-8 тест дополнительно
+проверен mutation в памяти: lossy decoder даёт1 ожидаемый FAIL, реальный fatal decoder проходит.
+Mock inode-тест проверяет только дополнительный unlink нашего кода: native Node/libuv close
+может удалить привязанный pathname, поэтому менять socket/volume при живом listener запрещено инструкцией.
+
+Для Linux добавлен CI eva-task-reader: реальный UDS request/mode/cleanup на синтетической DB,
+все тесты, image build и compose config. Результат конкретного commit проверяется после push;
+один факт наличия workflow не считается выполненной Linux-проверкой. Production E2E/приёмка отдельно.
+
+Совместимость проверена с main08984a2 и draft PR444 head afcf6d1: base общий, изменяемые пути
+не пересекаются, PR444 не менялся и не merge-ился. Совместный production runtime не тестировался.

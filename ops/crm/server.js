@@ -3381,6 +3381,13 @@ const autopostingTimer = IS_MAIN ? setInterval(() => {void autoposting.drain().c
 autopostingTimer?.unref();
 server.on('close', () => { clearInterval(pipelineRulesTimer); clearInterval(emailOutboxTimer); clearInterval(autopostingTimer); });
 
+// Dormant unless both explicit task-only socket settings are supplied. No shared API key is delegated.
+const evaTaskReaderReady = IS_MAIN
+  ? require('./eva-task-reader').startTaskReader({db}).catch(() => {
+    console.error('[crm] Eva task reader unavailable'); return null;
+  })
+  : Promise.resolve(null);
+
 if (IS_MAIN) {
   server.listen(PORT, () => {
     console.log(`Мини-CRM слушает порт ${PORT}; база: ${DATABASE_PATH}`);
@@ -3393,7 +3400,10 @@ function shutdown() {
   clearInterval(pipelineRulesTimer);
   clearInterval(emailOutboxTimer);
   clearInterval(autopostingTimer);
-  const emailWorkersStopped = Promise.all([emailOutbox.stop(), emailCampaigns.stop(), autoposting.stop()]);
+  const evaTaskReaderStopped = evaTaskReaderReady.then(reader => reader?.close()).catch(() => {
+    console.error('[crm] Eva task reader shutdown failed');
+  });
+  const emailWorkersStopped = Promise.all([emailOutbox.stop(), emailCampaigns.stop(), autoposting.stop(), evaTaskReaderStopped]);
   server.close(async () => {
     await emailWorkersStopped;
     db.close();

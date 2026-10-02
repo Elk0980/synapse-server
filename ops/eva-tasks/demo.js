@@ -6,7 +6,7 @@ const readline = require('node:readline/promises');
 
 async function demo() {
   const ownerUserId = 1001;
-  const source = { listTasks: () => [
+  const source = { listTasks: async () => [
     { id: 1, title: 'ДЕМО — проверить стартовый документ', companyCode: 'synapse',
       companyName: 'Synapse', status: 'in_progress', dueAt: '2026-10-02',
       nextAction: 'Открыть минимальный порядок чтения', blocker: '', waitingForOwner: false },

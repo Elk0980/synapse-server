@@ -46,7 +46,7 @@ function loadConfig(env = process.env) {
   if (typeof owner !== 'string' || !/^[1-9]\d*$/.test(owner) || !Number.isSafeInteger(Number(owner))) {
     throw new RuntimeError('invalid_config');
   }
-  if (![env.EVA_TOKEN_FILE, env.EVA_DB_PATH, env.EVA_STATE_DIR].every(absolutePath)) {
+  if (![env.EVA_TOKEN_FILE, env.EVA_TASK_SOCKET, env.EVA_STATE_DIR].every(absolutePath)) {
     throw new RuntimeError('invalid_config');
   }
   if (typeof timeZone !== 'string' || !/^[A-Za-z][A-Za-z0-9._+-]*(\/[A-Za-z0-9._+-]+)*$/.test(timeZone)) {
@@ -54,7 +54,7 @@ function loadConfig(env = process.env) {
   }
   try { new Intl.DateTimeFormat('en', { timeZone }).format(0); }
   catch { throw new RuntimeError('invalid_config'); }
-  return Object.freeze({ tokenFile: env.EVA_TOKEN_FILE, dbPath: env.EVA_DB_PATH,
+  return Object.freeze({ tokenFile: env.EVA_TOKEN_FILE, taskSocket: env.EVA_TASK_SOCKET,
     stateDir: env.EVA_STATE_DIR, ownerUserId: Number(owner), timeZone });
 }
 
@@ -335,9 +335,9 @@ async function main() {
   let source;
   try {
     await startupCheck({ transport, expectedBotId: Number(token.split(':')[0]), signal: controller.signal });
-    const { createTaskSource } = require('./task-source');
+    const { createTaskSource } = require('./socket-source');
     const { createBot } = require('./bot');
-    source = createTaskSource({ dbPath: config.dbPath });
+    source = createTaskSource({ socketPath: config.taskSocket });
     const bot = createBot({ ownerUserId: config.ownerUserId, source, timeZone: config.timeZone, audit });
     audit('started');
     await poll({ transport, state, bot, ownerUserId: config.ownerUserId, audit, signal: controller.signal });
