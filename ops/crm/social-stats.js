@@ -191,6 +191,23 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
   // пересохранения подключения прежний missing_access не подавлял сбор. Миграция безопасна: старые строки получают '' (отпечатка не было),
   // данные журнала не переписываются; у аккаунта с подключением первый сбор после миграции просто пройдёт заново.
   if (!db.prepare("SELECT 1 FROM pragma_table_info('social_collect_runs') WHERE name='connection_fp'").get()) db.exec("ALTER TABLE social_collect_runs ADD COLUMN connection_fp TEXT NOT NULL DEFAULT ''");
+  // Принятый текущий снимок запоминается отдельно от изменяемой проекции: ручной
+  // импорт может заменить её run_id, но не должен заново запускать сегодняшний API.
+  if (!db.prepare("SELECT 1 FROM pragma_table_info('social_collect_runs') WHERE name='snapshot_date'").get()) {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.exec("ALTER TABLE social_collect_runs ADD COLUMN snapshot_date TEXT NOT NULL DEFAULT ''");
+      db.exec("ALTER TABLE social_collect_runs ADD COLUMN snapshot_timezone TEXT NOT NULL DEFAULT ''");
+      const accepted = db.prepare(`SELECT r.id,s.date,s.timezone FROM social_collect_runs r JOIN social_snapshots s ON s.run_id=r.id
+        WHERE r.platform='telegram' AND r.provider<>'manual' AND r.status IN ('ok','partial') AND r.rows>0 AND r.finished_at IS NOT NULL
+          AND s.company_code=r.company_code COLLATE NOCASE AND s.platform=r.platform AND s.account_ref=r.account_ref AND s.provider=r.provider
+          AND s.period='lifetime' AND s.metric='followers' AND s.source_field='getChatMemberCount'
+          AND s.value IS NOT NULL AND s.completeness='complete' AND s.scope='profile'`).all();
+      const mark = db.prepare('UPDATE social_collect_runs SET snapshot_date=?,snapshot_timezone=? WHERE id=?');
+      for (const item of accepted) mark.run(item.date, item.timezone, item.id);
+      db.exec('COMMIT');
+    } catch (error) { db.exec('ROLLBACK'); throw error; }
+  }
   // Источник самой исторической публикации нужен и тогда, когда её показатели не были доступны.
   /* Происхождение измерения — не ошибка. Раньше пометка источника ручного импорта писалась
      в error и показывалась в ЛК красным, хотя импорт завершался ok. Колонка отделяет одно от
@@ -367,6 +384,10 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
     .all(row.company_code, row.platform, row.account_ref || '', stamp());
   const queuedDates = (code, platform, accountRef) => db.prepare(`SELECT date, reason, attempts, next_attempt_at nextAttemptAt, last_status lastStatus
     FROM social_collect_queue WHERE company_code=? COLLATE NOCASE AND platform=? AND account_ref=? ORDER BY date`).all(code, platform, accountRef || '');
+  const dropSnapshotQueue = (row, beforeDate = null) => db.prepare(`DELETE FROM social_collect_queue
+    WHERE company_code=? COLLATE NOCASE AND platform=? AND account_ref=?${beforeDate ? ' AND date<?' : ''}`)
+    .run(row.company_code, row.platform, row.account_ref || '', ...(beforeDate ? [beforeDate] : []));
+  const currentSnapshot = (adapter, context) => adapter?.collectionMode?.(context) === 'current_snapshot';
 
   /* Перенос уже сохранённых измерений в неизменяемые доказательства. Делается до первого
      изменения проекций и идемпотентно: повтор не создаёт копий, исходные 136 и настоящий 0
@@ -419,6 +440,8 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
     // Завершённый день даёт итог (complete); текущий день ещё идёт — его показатели только partial и обновляются позже.
     const closed = target < today;
     const provider = row?.provider || 'manual', adapter = adapters[provider];
+    const snapshotOnly = currentSnapshot(adapter, { company: scope, platform, account: row });
+    let lease = null;
     // Отпечаток сохранённого подключения площадки (ревизия токена/цели, без секрета) — до сетевого вызова и сразу в журнал:
     // по нему расписание отличает «та же неработающая связка» от «владелец пересохранил подключение».
     const connectionBefore = row ? connectionRevision(adapter, { company: scope, platform, account: row }) : { ok: true, value: null };
@@ -427,6 +450,13 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
     const runId = Number(db.prepare(`INSERT INTO social_collect_runs(company_code,platform,provider,trigger,date,started_at,closed,account_ref,account_revision,connection_fp) VALUES(?,?,?,?,?,?,?,?,?,?)`)
       .run(scope.code.toLowerCase(), platform, provider, trigger, target, stamp(), closed ? 1 : 0, row?.account_ref || '', row?.revision || 0, connectionFp).lastInsertRowid);
     const finish = (status, extra = {}) => {
+      // Временные ранние отказы тоже освобождают аренду и получают ограниченный повтор.
+      // Для снимка повтор имеет смысл только за день наблюдения, а не за запрошенное вчера.
+      if (snapshotOnly) {
+        releaseLease(lease);
+        if (status === 'failed') queueDate({ code: scope.code.toLowerCase(), platform,
+          accountRef: row?.account_ref || '', date: today, reason: extra.error || 'временный отказ', status });
+      }
       db.prepare('UPDATE social_collect_runs SET finished_at=?,status=?,rows=?,error=?,missing=? WHERE id=?')
         .run(stamp(), oneOf(status, RUN_STATUS), extra.rows || 0, text(extra.error || '', 300), JSON.stringify(extra.missing || []), runId);
       return { runId, status, rows: extra.rows || 0, missing: extra.missing || [], error: extra.error || '', date: target, platform, provider, closed };
@@ -435,7 +465,7 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
     if (!adapter?.collect) return finish('unsupported', { missing: [`провайдер ${provider} не умеет собирать статистику`] });
     /* Аренда берётся до сетевого вызова: ручная кнопка и таймер не пойдут за одними сутками
        одновременно. Ключ включает семантику интервала — часовой пояс аккаунта. */
-    const lease = { code: scope.code.toLowerCase(), platform, accountRef: row.account_ref || '', date: target, intervalKey: tz,
+    lease = { code: scope.code.toLowerCase(), platform, accountRef: row.account_ref || '', date: target, intervalKey: tz,
       ...acquireLease({ code: scope.code.toLowerCase(), platform, accountRef: row.account_ref || '', date: target, intervalKey: tz,
         bindingFp: connectionFp, owner: trigger }) };
     if (!lease.ok) return finish('partial', { missing: [`сбор за ${target} уже идёт (${lease.holder || 'другой запуск'}): повторный запуск не начат`] });
@@ -541,16 +571,30 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
           }
           if (entries.length) evidence.recordRun(entries);
         }
-        return writeSnapshots(scope.code, platform, row.account_ref, snapshots, { provider, tz, runId, collectedAt: observedAt })
+        const written = writeSnapshots(scope.code, platform, row.account_ref, snapshots, { provider, tz, runId, collectedAt: observedAt })
           + writePosts(scope.code, platform, result.posts || [], { provider, runId, collectedAt: observedAt });
+        if (snapshotOnly && ['ok', 'partial'].includes(result.status) && db.prepare(`SELECT 1 FROM social_snapshots
+          WHERE run_id=? AND company_code=? COLLATE NOCASE AND platform=? AND account_ref=? AND provider=? AND date=? AND timezone=?
+            AND period='lifetime' AND metric='followers' AND source_field='getChatMemberCount' AND scope='profile'
+            AND value IS NOT NULL AND completeness='complete' LIMIT 1`).get(runId, scope.code, platform, row.account_ref, provider, today, tz)) {
+          // Маркер фиксируется вместе с принятой строкой, до позднего finish: даже
+          // остановка процесса между COMMIT и finish не вызывает второй замер.
+          db.prepare('UPDATE social_collect_runs SET snapshot_date=?,snapshot_timezone=? WHERE id=?').run(today, tz, runId);
+        }
+        return written;
       });
     } finally { releaseLease(lease); }
     if (fenced) return finish('failed', { error: 'Аренда сбора потеряна или привязка изменилась: результат отброшен, проекция не тронута' });
-    const status = rows ? (closed ? result.status : (result.status === 'ok' ? 'partial' : result.status)) : 'partial';
+    const status = snapshotOnly && result.status === 'failed' ? 'failed'
+      : rows ? (closed ? result.status : (result.status === 'ok' ? 'partial' : result.status)) : 'partial';
     /* Неполный день не забывается после полуночи, а закрытые сутки недавнего окна
        перепроверяются: источник может позднее исправить значение. */
     const queueKey = { code: scope.code.toLowerCase(), platform, accountRef: row.account_ref || '', date: target };
-    if (status === 'partial' || (result.missing || []).length) queueDate({ ...queueKey, reason: (result.missing || [])[0] || 'день неполный', status });
+    if (result.retryable === false) {
+      if (snapshotOnly && rows) dropSnapshotQueue(row);
+      else dropQueued(queueKey);
+    } else if (snapshotOnly && status === 'failed') { /* finish поставит единственный повтор */ }
+    else if (status === 'partial' || (result.missing || []).length) queueDate({ ...queueKey, date: snapshotOnly ? today : target, reason: (result.missing || [])[0] || 'день неполный', status });
     else if (closed) dropQueued(queueKey);
     return finish(status, { rows, missing: result.missing || [], error: result.error || '' });
   }
@@ -572,6 +616,37 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
         const revision = connectionRevision(adapters[row.provider], { company: scope, platform: row.platform, account: row });
         // Ревизия не прочитана — сравнивать запуски не с чем: идём в collect, он закончит запуск статусом failed и ничего не запишет.
         const fp = revision.ok ? connectionFingerprint(revision.value) : '';
+        if (currentSnapshot(adapters[row.provider], { company: scope, platform: row.platform, account: row })) {
+          const start = new Date(dayBounds(today, row.timezone).startMs).toISOString();
+          // Журнал может быть помечен запрошенным «вчера», тогда как принят снимок сегодня.
+          // Ручной импорт и старое подключение сегодняшний автоматический замер не заменяют.
+          const accepted = revision.ok && db.prepare(`SELECT 1 FROM social_collect_runs
+            WHERE company_code=? COLLATE NOCASE AND platform=? AND account_ref=? AND snapshot_date=? AND snapshot_timezone=?
+              AND provider=? AND account_revision=? AND connection_fp=? LIMIT 1`)
+            .get(row.company_code, row.platform, row.account_ref || '', today, row.timezone, row.provider, row.revision || 0, fp);
+          if (accepted) { dropSnapshotQueue(row); continue; }
+          // Невосстановимые прошлые даты не отправляются в API ни через retry, ни через revisesHistory.
+          dropSnapshotQueue(row, today);
+          if (localHour(ms, row.timezone) < row.collect_hour) continue;
+          const matching = db.prepare(`SELECT status,started_at,finished_at,trigger FROM social_collect_runs
+            WHERE company_code=? COLLATE NOCASE AND platform=? AND account_ref=? AND provider=? AND account_revision=?
+              AND connection_fp=? AND started_at>=? ORDER BY id DESC`)
+            .all(row.company_code, row.platform, row.account_ref || '', row.provider, row.revision || 0, fp, start);
+          const last = matching[0];
+          if (last && ['missing_access','unsupported'].includes(last.status)) continue;
+          const queueKey = { code: row.company_code, platform: row.platform, accountRef: row.account_ref || '', date: today };
+          const attempts = matching.filter(run => ['schedule','retry'].includes(run.trigger)).length;
+          // После исчерпания серии отсутствие успешного замера не запускает новую серию каждый tick.
+          if (attempts >= QUEUE_MAX_ATTEMPTS) { dropQueued(queueKey); continue; }
+          if (last && !last.finished_at && Date.parse(last.started_at) > ms - LEASE_MS) continue;
+          if (!last) dropQueued(queueKey); // очередь прежней привязки не задерживает новый аккаунт
+          const queued = queuedDates(row.company_code, row.platform, row.account_ref).find(item => item.date === today);
+          if (queued && Date.parse(queued.nextAttemptAt) > ms) continue;
+          // Например, чужая живая аренда дала partial без строк и без очереди: не крутим её каждый tick.
+          if (last && !queued && Date.parse(last.started_at) > ms - 15 * 60000) continue;
+          results.push(await collect(row.company_code, row.platform, { trigger: attempts ? 'retry' : 'schedule', date: today }));
+          continue;
+        }
         /* Даты, реально собранные в ЭТОМ проходе. Раньше очередь безусловно пропускала
            today и yesterday, а основная ветка считала вчерашний partial обработанным —
            и вчерашняя дата не перепроверялась никогда, сколько бы ни ждала в очереди. */

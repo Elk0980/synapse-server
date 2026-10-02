@@ -36,7 +36,7 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
     if (!channelReady()) return null;
     const ref = String(account?.account_ref || '').trim();
     // Аккаунт без явно указанного канала не угадывается.
-    if (!ref) return { status: 'missing_access', missing: ['в аккаунте аналитики не указан канал: угадывать его нельзя', CHANNEL_NOTE] };
+    if (!ref) return { status: 'missing_access', hard: true, missing: ['в аккаунте аналитики не указан канал: угадывать его нельзя', CHANNEL_NOTE] };
     let answer;
     try { answer = await channelStats.channelMembers(company.code); }
     catch (error) {
@@ -63,7 +63,7 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
     const same = ref.replace(/^@/, '').toLowerCase() === String(answer.accountRef).replace(/^@/, '').toLowerCase();
     if (!same) return { status: 'missing_access', hard: true,
       missing: [`канал компании (${answer.accountRef}) не совпадает с сохранённым в аккаунте аналитики (${ref}): значение не записано`] };
-    return { status: 'partial',
+    return { status: 'partial', retryable: false,
       /* Текущее число — состояние на момент наблюдения. historical здесь не ставится:
          снимок датируется днём наблюдения, а не целевой датой backfill. */
       snapshots: [{ period: 'lifetime', metric: 'followers', value: answer.value,
@@ -72,6 +72,7 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
       provenance: { accountRef: answer.accountRef, observedAt: answer.observedAt || null, source: answer.source } };
   }
   const direct = {
+    collectionMode: ({ platform }) => platform === 'telegram' ? 'current_snapshot' : 'daily',
     info: () => ({ name: 'direct', available: Boolean(transport), note: 'Прямые API площадок через сохранённые подключения; Instagram/TikTok/YouTube требуют собственных приложений и разрешений владельца.' }),
     // Отпечаток подключения площадки (ревизия/цель, без токена): сравнивается до и после сетевого вызова.
     connectionRevision({ company, platform, account }) {
@@ -125,13 +126,19 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
         const chat = account.account_ref || undefined;
         let result;
         try { result = await transport.readStats(company.code, 'telegram', 'getChatMemberCount', chat ? { chat_id: chat } : {}); }
-        catch (error) { return keepRetryable({ status: 'missing_access', missing: [`Telegram отклонил запрос (${error?.code || 'ошибка'}): ${need[0]}`] }); }
+        catch (error) {
+          const permanentRejection = error?.code === 'PLATFORM_REJECTED' && Number.isInteger(error.providerErrorCode)
+            && error.providerErrorCode >= 400 && error.providerErrorCode < 500 && error.providerErrorCode !== 429;
+          if (!permanentRejection && !['ACCESS_DENIED', 'TOKEN_UNREADABLE', 'CONNECTION_MISSING'].includes(error?.code))
+            return { status: 'failed', error: 'Telegram временно не ответил: сбор будет повторён' };
+          return keepRetryable({ status: 'missing_access', missing: [`Telegram отклонил запрос (${error?.code || 'ошибка'}): ${need[0]}`] });
+        }
         if (!result) return keepRetryable({ status: 'missing_access', missing: ['подключение Telegram (токен бота) не сохранено', ...need] });
         if (result.unsupported) return keepRetryable({ status: 'unsupported', missing: [`подключение Telegram через ${result.provider} не даёт статистики; нужен прямой бот`] });
         if (!chat && !result.target) return keepRetryable({ status: 'missing_access', missing: ['не указан канал (@имя или -100…) ни в аккаунте аналитики, ни в подключении'] });
         const count = num(result.result);
         if (count === null) return { status: 'failed', error: 'Telegram вернул не число подписчиков' };
-        return { status: 'partial', snapshots: [{ date, period: 'lifetime', metric: 'followers', value: count, sourceField: 'getChatMemberCount', kind: account.kind, completeness: 'complete' }],
+        return { status: 'partial', retryable: false, snapshots: [{ date, period: 'lifetime', metric: 'followers', value: count, sourceField: 'getChatMemberCount', kind: account.kind, completeness: 'complete' }],
           missing: ['просмотры и реакции постов: Bot API их не отдаёт'] };
       }
       if (platform === 'vk') {
@@ -168,6 +175,7 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
   const ONLYPULT_PLATFORMS = ['instagram', 'tiktok'];
   const analyticsReady = () => Boolean(analytics?.collector && analytics?.credentials);
   const onlypult = {
+    collectionMode: ({ platform }) => platform === 'telegram' && channelReady() ? 'current_snapshot' : 'daily',
     /* Onlypult правит историю задним числом: закрытые сутки недавнего окна нужно перепроверять,
        иначе исправленное значение к нам не доедет. У прямых подключений такого поведения нет. */
     revisesHistory: true,
