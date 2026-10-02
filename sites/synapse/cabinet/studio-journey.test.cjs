@@ -4,6 +4,31 @@ const scripts=['company-information.js','studio-journey.js'].map(file=>fs.readFi
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const card=()=>({companyCode:'alvi',leadId:1,name:'Анна <img src=x>',contact:'+7111',createdAt:'2026-09-16T00:00:00Z',source:'vk',revision:0,timezone:'Asia/Irkutsk',state:{status:'new',appointmentAt:null},events:[]});
 const commerce=()=>({companyCode:'alvi',leadId:1,revision:0,publication:null,payments:[],totals:[],history:[],publications:[{id:1,title:'Пост <img src=x>'}],basis:'Ручной учёт с основанием'});
+
+test('publication cohort exposes received, refunded and net by currency without turning missing history into zero',async()=>{
+  const summary={leads:2,booked:1,confirmed:1,visited:1,memberships:0,noShows:0,reschedules:0,noShowRate:0};
+  const result={companyCode:'alvi',timezone:'Asia/Irkutsk',summary,sources:[],publications:[
+    {postId:1,title:'Пост <img src=x>',leads:1,booked:1,visited:1,paidLeads:1,totals:[
+      {currency:'RUB',receivedCents:120055,refundedCents:120055,netCents:0},
+      {currency:'THB',receivedCents:50000,refundedCents:10000,netCents:40000}]},
+    {postId:null,title:'Публикация не установлена',leads:1,booked:0,visited:0,paidLeads:0,totals:[]}]};
+  const f=fixture({query:()=>result});try{
+    await f.api.mountSummary(f.node,f.ctx);
+    const table=[...f.node.querySelectorAll('table')].find(t=>t.textContent.includes('Публикация'));
+    assert.deepEqual([...table.querySelectorAll('thead th')].map(n=>n.textContent),
+      ['Публикация','Обращения','Записывались','Пришли','Оплачивали','Поступления','Возвраты','За вычетом возвратов']);
+    const cells=[...table.querySelector('tbody tr').children].map(n=>n.textContent.replace(/\s/g,''));
+    assert.equal(cells[4],'1');
+    assert.equal(cells[5],'1200,55RUB;500,00THB');
+    assert.equal(cells[6],'1200,55RUB;100,00THB');
+    assert.equal(cells[7],'0,00RUB;400,00THB');
+    assert.deepEqual([...table.querySelectorAll('tbody tr')[1].children].slice(5).map(n=>n.textContent),['Нет записей','Нет записей','Нет записей']);
+    assert.match(f.node.textContent,/за всё время жизни этих обращений/);
+    assert.match(f.node.textContent,/не денежный поток за выбранный период/);
+    assert.equal(f.node.querySelector('img'),null);
+    assert.ok(f.calls.every(c=>c.method==='GET'));
+  }finally{f.close();}
+});
 function fixture({edit=true,query}={}){
   const dom=new JSDOM('<section id="view" class="studio-journey"></section>',{url:'https://test.local',runScripts:'outside-only'}),w=dom.window,node=w.document.getElementById('view'),calls=[];
   w.SbCabinet={registerView(){}};scripts.forEach(script=>w.eval(script));

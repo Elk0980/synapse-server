@@ -123,6 +123,13 @@ const aggregatePlatform = (platform, stats) => {
     row.external?.messengerClicks
   ]));
   const visits = optionalSum(rows.map((row) => row.visits));
+  // Проценты разных источников не складываются. Неполная база не даёт ROMI.
+  const completeFinance = rows.length > 0 && rows.every((row) =>
+    Number.isFinite(row.revenue) && Number.isFinite(row.expenses) && row.expenses >= 0);
+  const financeRevenue = completeFinance ? rows.reduce((sum, row) => sum + row.revenue, 0) : null;
+  const financeExpenses = completeFinance ? rows.reduce((sum, row) => sum + row.expenses, 0) : null;
+  const combinedRomi = Number.isFinite(financeRevenue) && Number.isFinite(financeExpenses) && financeExpenses > 0
+    ? (financeRevenue - financeExpenses) / financeExpenses * 100 : null;
   return {
     platform,
     rows,
@@ -137,7 +144,7 @@ const aggregatePlatform = (platform, stats) => {
     sales: optionalSum(rows.map((row) => row.sales)),
     revenue: optionalSum(rows.map((row) => row.revenue)),
     expenses: optionalSum(rows.map((row) => row.expenses)),
-    romi: rows.length ? optionalSum(rows.map((row) => row.romi)) : null,
+    romi: Number.isFinite(combinedRomi) ? combinedRomi : null,
     capturedAt: externals.map((row) => row.externalCapturedAt).filter(Boolean).sort().at(-1) || null,
     hasExternal: externals.length > 0
   };
@@ -233,9 +240,7 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
   const expensesUnavailable = values.expenses === null || dashboard.expensesScope || summary.expensesScope;
   const financeExpenses = expensesUnavailable ? null : allSelected ? values.expenses : total("expenses");
   const financeRevenue = allSelected ? values.revenue : revenue;
-  const financeRomi = expensesUnavailable ? null : allSelected ? values.romi :
-    financeRevenue === null || financeRevenue === undefined || financeExpenses === null || !financeExpenses
-      ? null : (financeRevenue - financeExpenses) / financeExpenses * 100;
+  const financeRomi = expensesUnavailable ? null : allSelected ? values.romi : selectedAggregate.romi;
   const financeUnavailable = expensesUnavailable || (!allSelected && financeExpenses === null);
   const newestCapture = platforms.map((platform) => platform.capturedAt).filter(Boolean).sort().at(-1);
   const funnel = [
@@ -256,11 +261,9 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
   const maximum = Math.max(...numeric, 1);
   const funnelRows = funnel.map((step, index) => {
     const previousStep = funnel[index - 1];
-    const previous = previousStep?.value;
-    // Переход из ступени с noConversionFrom (потенциал → показы) процентом не выражается.
+    // Источники отдают агрегаты событий, а не связанную когорту клиентов.
     const conversion = previousStep?.noConversionFrom ? `— (${previousStep.noConversionFrom})`
-      : step.value !== null && previous > 0
-        ? `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(step.value / previous * 100)}%` : "—";
+      : index > 0 ? "— (нет подтверждённой связи клиентов между этапами)" : "—";
     const width = step.value === null ? 28 : Math.max(28, step.value / maximum * 100);
     const details = platforms.map((platform) => {
       const key = { views: "pageViews", clicks: "funnelClicks", warmup: "clicks", deal: "sales" }[step.id];
@@ -299,16 +302,18 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
       <td>${noExpenses ? "—" : formatROMI(platform.romi)}</td><td>${dataMark(kind, platform.capturedAt)}</td></tr>`;
   }).join("");
   byId("analytics-content").innerHTML = `<section class="analytics-section"><h2>Воронка</h2>
+    <p class="crm-note">Это сводка событий из разных источников. Действия на площадках, визиты сайта и заявки
+    могут пересекаться; суммы не означают число уникальных людей. Конверсия клиентов между этими этапами не подтверждена.</p>
     <div class="analytics-funnel">${funnelRows}</div><div class="analytics-finance">
     <div class="crm-stat"><span>Расходы</span><strong>${financeUnavailable
       ? "по компании не ведутся" : financeExpenses === null ? "—" : formatMoney(financeExpenses)}</strong></div>
-    <div class="crm-stat"><span>Выручка</span><strong>${financeRevenue === null || financeRevenue === undefined
+    <div class="crm-stat"><span>Суммы сделок (CRM)</span><strong>${financeRevenue === null || financeRevenue === undefined
       ? "—" : formatMoney(financeRevenue)}</strong></div>
     <div class="crm-stat"><span>ROMI</span><strong>${financeUnavailable
       ? "по компании не ведутся" : formatROMI(financeRomi)}</strong></div></div></section>
     <section class="analytics-section"><h2>Площадки</h2><div class="crm-table-wrap">
     <table class="crm-table analytics-source-table"><thead><tr><th>Площадка</th><th>Показы</th><th>Клики</th>
-    <th>Обращения</th><th>Заявки</th><th>Продажи</th><th>Выручка</th><th>Расходы</th><th>ROMI</th>
+    <th>Обращения</th><th>Заявки</th><th>Продажи</th><th>Суммы сделок</th><th>Расходы</th><th>ROMI</th>
     <th>Данные</th></tr></thead><tbody>${tableRows}</tbody></table></div></section>
     ${renderCompanyMetricsSection(companyMetrics, owner)}`;
   byId("analytics-content").querySelectorAll("[data-funnel-step]").forEach((button) => {
@@ -318,6 +323,25 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
       button.setAttribute("aria-expanded", String(!detail.hidden));
     });
   });
+  const ledger = document.createElement("section");
+  ledger.className = "studio-journey";
+  ledger.dataset.analyticsLedger = "";
+  byId("analytics-content").append(ledger);
+  const canReadCRM = identity.permissions.includes("crm.view");
+  const ledgerRange = dashboard.range;
+  if (!canReadCRM) {
+    ledger.textContent = "Журнал оплат доступен участникам с правом просмотра CRM. Суммы сделок выше не подтверждают поступление денег.";
+  } else if (!SbCabinet.studioJourney || !ledgerRange?.from || !ledgerRange?.to) {
+    ledger.textContent = "Журнал оплат не загружен: нет модуля или подтверждённого периода. Суммы сделок выше не подтверждают поступление денег.";
+  } else {
+    const note = document.createElement("p");
+    note.className = "journey-note";
+    note.textContent = "Подтверждённые отметки и журнал оплат по всем источникам выбранной компании. Фильтр площадок выше применяется только к сводным показателям. Суммы сделок и журнал оплат не складываются; записи журнала не являются автоматической банковской сверкой.";
+    ledger.append(note);
+    const report = document.createElement("div");
+    ledger.append(report);
+    void SbCabinet.studioJourney.mountSummary(report, ctx, {range: {...ledgerRange}, showCardHint: false});
+  }
   const legacySources = Array.isArray(summary.sources) ? summary.sources : [];
   byId("analytics-legacy").innerHTML = `<div class="crm-summary">
     <div class="crm-stat"><span>Заявки</span><strong>${formatMetric(values.total)}</strong></div>
@@ -327,7 +351,7 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
     <div class="analytics-actions"><h2>Заявки по источникам</h2>
     <button class="plain-button" id="analytics-csv" type="button">Выгрузить CSV</button></div>
     ${legacySources.length ? `<div class="crm-table-wrap"><table class="crm-table"><thead><tr>
-    <th>Источник</th><th>Заявки</th><th>Записи</th><th>Визиты</th><th>Продажи</th><th>Выручка</th>
+    <th>Источник</th><th>Заявки</th><th>Записи</th><th>Визиты</th><th>Продажи</th><th>Суммы сделок</th>
     </tr></thead><tbody>${legacySources.map((source) => `<tr><td>${escapeHTML(source.source)}</td>
     <td>${formatMetric(source.leads)}</td><td>${formatMetric(source.booked)}</td>
     <td>${formatMetric(source.visited)}</td>
