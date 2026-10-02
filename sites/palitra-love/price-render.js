@@ -5,6 +5,11 @@
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[char]));
   const PRICE_UNKNOWN = 'Цена уточняется';
+  /* Карточка без описания и без видимого примечания (на 02.10.2026 — 60 из 65 публичных карточек:
+     у импортированных позиций описания нет, служебное примечание о цене скрыто). Раньше «Подробнее»
+     открывало пустой блок и окно только с названием и ценой. Теперь — честная строка о том, что
+     описания нет; состав, название и цену это не подменяет и не придумывает (specs/084). */
+  const DETAILS_MISSING = 'Описание этого товара ещё не добавлено. Состав и стоимость менеджер подтвердит при заказе.';
   /* Служебные примечания импорта («Цена из публикации от 01.01.2026; актуальность уточняется при заказе»,
      «Цена на момент публикации, актуальную подтверждаем при заказе») на публичном сайте не показываются
      (замечание Дарьи 20.09.2026). Строки прайса не меняются: в редакторе ЛК примечание видно как есть,
@@ -145,7 +150,14 @@
       const title = doc.createElement('h2'); title.id = 'product-dialog-title'; title.textContent = card.querySelector('h3')?.textContent || 'Товар';
       body.append(title);
       for (const field of card.querySelectorAll('[data-product-details] .price-card__description,[data-product-details] .note')) body.append(field.cloneNode(true));
-      body.append(card.querySelector('.product-footer').cloneNode(true));
+      const footer = card.querySelector('.product-footer').cloneNode(true);
+      /* Копия кнопки не наследует временную отметку «В корзине» после недавнего «Купить»:
+         в окне всегда исходная подпись, сама кнопка по-прежнему только добавляет в корзину. */
+      for (const add of footer.querySelectorAll('[data-add]')) {
+        add.classList.remove('is-added');
+        add.textContent = add.dataset.label || 'Купить';
+      }
+      body.append(footer);
       const checkout = doc.createElement('button'); checkout.type = 'button'; checkout.className = 'button outline';
       checkout.setAttribute('data-cart-open', ''); checkout.textContent = 'Перейти к оформлению'; body.append(checkout);
       layout.append(body);
@@ -182,7 +194,8 @@
       : `<div class="product-footer"><div class="product-purchase">${price}<button class="button product-add" type="button" data-add data-id="${esc(item.id)}" data-title="${esc(item.title)}">Купить</button></div></div>`;
     const classes = ['pc', 'price-card', 'product-card'].concat(opts.extraClass ? [opts.extraClass] : []).join(' ');
     const dataCat = Array.isArray(opts.tags) && opts.tags.length ? ` data-cat="${esc(opts.tags.join(' '))}"` : '';
-    const details = editor ? description + note : `<details class="product-details" data-product-details><summary>Подробнее</summary>${description}${note}</details>`;
+    const missing = description || note ? '' : `<p class="note product-details__missing" data-details-missing>${DETAILS_MISSING}</p>`;
+    const details = editor ? description + note : `<details class="product-details" data-product-details><summary>Подробнее</summary>${description}${note}${missing}</details>`;
     return `<article class="${classes}" id="${esc(item.id)}" data-id="${esc(item.id)}"${dataCat}>${star}${media}<div class="price-card__body"><h3 class="pc__title">${esc(item.title)}</h3>${details}${footer}</div></article>`;
   }
   function renderSections(data, opts = {}) {
@@ -235,5 +248,5 @@
     return null;
   }
   if (typeof document !== 'undefined') { installGallery(document); installDetails(document); }
-  window.PalitraPrice = { esc, findItem, isPopular, isAutoPriceNote, productCard, renderSections, renderNav, load, publicData, photosOf, syncGallery, PRICE_UNKNOWN };
+  window.PalitraPrice = { esc, findItem, isPopular, isAutoPriceNote, productCard, renderSections, renderNav, load, publicData, photosOf, syncGallery, PRICE_UNKNOWN, DETAILS_MISSING };
 }());

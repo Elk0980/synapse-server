@@ -105,7 +105,11 @@ test('каталог (настоящая страница, общий ренде
   assert.ok(!cards[1].textContent.includes('0 ₽') && !cards[1].textContent.includes('0 руб'), 'неизвестная цена не превращается в 0');
   assert.equal(cards[2].querySelector('.note').textContent, 'Состав: 15 роз и эвкалипт');
   assert.equal(cards[0].querySelector('.note'), null);
-  assert.equal(cards[1].querySelector('.note'), null);
+  // Служебное примечание по-прежнему скрыто; вместо пустого «Подробнее» — строка «описание ещё не добавлено» (specs/084).
+  assert.equal(cards[1].querySelector('.note:not([data-details-missing])'), null);
+  assert.equal(cards[1].querySelector('[data-details-missing]').textContent, win.PalitraPrice.DETAILS_MISSING);
+  assert.equal(cards[0].querySelector('[data-details-missing]'), null, 'есть описание — строки нет');
+  assert.equal(cards[2].querySelector('[data-details-missing]'), null, 'есть примечание владельца — строки нет');
   assert.deepEqual(PRICE.categories[0].items.map((item) => item.note).filter(Boolean).length, 3, 'данные прайса не изменены рендером');
   win.close();
 });

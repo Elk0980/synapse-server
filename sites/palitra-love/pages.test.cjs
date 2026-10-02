@@ -16,6 +16,8 @@ const CATALOG_STYLE_VERSION = '20260930compact1';
 // Корзина и заявка выпускаются отдельно (ссылка «Продолжить в Telegram»): своя версия подключения order.js.
 const PRICE_VERSION = '20260930prices1';
 const ORDER_VERSION = PRICE_VERSION;
+// Карточки и каталог (строка «описание ещё не добавлено», окно товара) выпускаются отдельно — specs/084.
+const DETAILS_VERSION = '20261002details1';
 function pages(dir = ROOT, out = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
@@ -40,7 +42,8 @@ test('каждая страница подключает одну версию �
       assert.match(html, new RegExp(`${asset.replace(/[./]/g, '\\$&')}\\?v=${VERSION}"`), `${name}: ${asset}`);
     }
     for (const asset of ['/assets/price-format.js', '/price-render.js']) {
-      assert.match(html, new RegExp(`${asset.replace(/[./]/g, '\\$&')}\\?v=${PRICE_VERSION}"`), `${name}: ${asset}`);
+      const version = asset === '/price-render.js' ? DETAILS_VERSION : PRICE_VERSION;
+      assert.match(html, new RegExp(`${asset.replace(/[./]/g, '\\$&')}\\?v=${version}"`), `${name}: ${asset}`);
     }
     for (const asset of ['/assets/styles.css', '/config.js']) {
       const version = asset === '/config.js' ? CONFIG_VERSION
@@ -49,7 +52,7 @@ test('каждая страница подключает одну версию �
     }
     assert.match(html, new RegExp(`/assets/order\\.js\\?v=${ORDER_VERSION}"`), `${name}: /assets/order.js`);
     for (const optional of ['catalog-live.js', 'quiz.js']) {
-      if (html.includes(`/assets/${optional}?v=`)) assert.match(html, new RegExp(`${optional.replace('.', '\\.')}\\?v=${optional === 'catalog-live.js' ? PRICE_VERSION : VERSION}"`), `${name}: ${optional}`);
+      if (html.includes(`/assets/${optional}?v=`)) assert.match(html, new RegExp(`${optional.replace('.', '\\.')}\\?v=${optional === 'catalog-live.js' ? DETAILS_VERSION : VERSION}"`), `${name}: ${optional}`);
     }
     assert.equal((html.match(/\/assets\/price-format\.js\?v=/g) || []).length, 1, `${name}: один форматтер`);
     assert.ok(html.indexOf('/assets/price-format.js?v=') < html.indexOf('/price-render.js?v='), `${name}: форматтер до карточек`);

@@ -36,6 +36,7 @@
   /* Служебные примечания импорта не показываются (то же правило, что в price-render.js). */
   const AUTO_PRICE_NOTE = /^\s*цена\s+(?:из|на\s+момент)\s+публикации(?=[\s,;.:]|$)[\s\S]*актуальн/i;
   const isAutoPriceNote = note => AUTO_PRICE_NOTE.test(String(note ?? ''));
+  const DETAILS_MISSING = 'Описание этого товара ещё не добавлено. Состав и стоимость менеджер подтвердит при заказе.';
   /* Запасная разметка на случай отсутствия price-render.js: та же структура и классы —
      цена + «Купить», без ссылок Telegram и второй кнопки заявки. */
   function fallbackCard(item, opts) {
@@ -45,7 +46,9 @@
       ? `<div class="product-media"><img class="price-card__photo photo" src="${esc(image)}" alt="${esc(item.title)}" loading="lazy" decoding="async" width="800" height="1000"></div>`
       : '<div class="product-media product-media--empty" aria-hidden="true"><img src="/assets/img/logo-mark.svg" alt="" width="64" height="64" loading="lazy"></div>';
     const note = item.note && !isAutoPriceNote(item.note) ? `<p class="note">${esc(item.note)}</p>` : '';
-    return `<article class="pc price-card product-card${opts.extraClass ? ' ' + esc(opts.extraClass) : ''}" id="${esc(item.id)}" data-id="${esc(item.id)}"${opts.tags ? ` data-cat="${esc(opts.tags.join(' '))}"` : ''}>${media}<div class="price-card__body"><h3 class="pc__title">${esc(item.title)}</h3><details class="product-details" data-product-details><summary>Подробнее</summary>${item.desc ? `<p class="price-card__description">${esc(item.desc)}</p>` : ''}${note}</details><div class="product-footer"><div class="product-purchase"><p class="pc__price price" data-price-known="${priceText ? 'true' : 'false'}">${priceText ? esc(priceText) : 'Цена уточняется'}</p><button class="button product-add" type="button" data-add data-id="${esc(item.id)}" data-title="${esc(item.title)}">Купить</button></div></div></div></article>`;
+    // Та же честная строка, что в price-render.js, когда описания и видимого примечания нет.
+    const missing = item.desc || note ? '' : `<p class="note product-details__missing" data-details-missing>${DETAILS_MISSING}</p>`;
+    return `<article class="pc price-card product-card${opts.extraClass ? ' ' + esc(opts.extraClass) : ''}" id="${esc(item.id)}" data-id="${esc(item.id)}"${opts.tags ? ` data-cat="${esc(opts.tags.join(' '))}"` : ''}>${media}<div class="price-card__body"><h3 class="pc__title">${esc(item.title)}</h3><details class="product-details" data-product-details><summary>Подробнее</summary>${item.desc ? `<p class="price-card__description">${esc(item.desc)}</p>` : ''}${note}${missing}</details><div class="product-footer"><div class="product-purchase"><p class="pc__price price" data-price-known="${priceText ? 'true' : 'false'}">${priceText ? esc(priceText) : 'Цена уточняется'}</p><button class="button product-add" type="button" data-add data-id="${esc(item.id)}" data-title="${esc(item.title)}">Купить</button></div></div></div></article>`;
   }
   /* Обложка и дополнительные фото (gallery) в разметке товара: одно фото — строкой, как раньше; несколько — списком. */
   function imageField(item, origin) {
@@ -105,5 +108,5 @@
     });
     updateSchema();
   }
-  return { entries, card, fallbackCard, isAutoPriceNote, schema, removeProductLists, mount };
+  return { entries, card, fallbackCard, isAutoPriceNote, schema, removeProductLists, mount, DETAILS_MISSING };
 }));
