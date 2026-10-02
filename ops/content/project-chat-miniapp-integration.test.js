@@ -118,6 +118,10 @@ test('живой content: вход Mini App с production-ключом, room-т�
   assert.equal((await withToken(`/content/project-chat/${ROOM}/reviewed-messages`, token, 'POST', {
     text: 'Не должно отправиться от Хью', clientMessageId: 'miniapp-reviewed-01', expectedChatId: '-10012345'
   })).status, 403);
+  // Правка отправленного сообщения Хью — тоже только владельцу в кабинете (specs/082).
+  assert.equal((await withToken(`/content/project-chat/${ROOM}/reviewed-messages/1/edit`, token, 'POST', {
+    text: 'Не должно измениться', expectedText: 'x', expectedChatId: '-10012345', clientEditId: 'miniapp-edit-0001'
+  })).status, 403);
   assert.equal((await withToken(`/content/project-chat/${ROOM}/telegram-links`, token)).status, 403);
   assert.equal((await withToken(`/content/project-chat/${OTHER}`, token)).status, 403);
   assert.equal((await withToken(`/content/project-chat-runtime/status?companyCode=${ROOM}`, token)).status, 401);

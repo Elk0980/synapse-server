@@ -1673,3 +1673,87 @@ test('Авокадо открывает общий чат АЛВИ, не мен�
   assert.equal(h.calls.filter(c=>c.url==='/content/project-chat/avokado').length,0);
  }finally{h.w.close();}
 });
+
+// Правка отправленного сообщения Хью (specs/082-project-chat-reviewed-edit).
+const reviewedSent = (over = {}) => message({ authorType: 'assistant', authorName: 'Хью', text: 'Сводка 13 задач', deliveryStatus: 'sent',
+  reviewedByOwner: true, telegramLinks: ['https://t.me/c/1234567890/136'], ...over });
+
+test('кнопка правки — только владельцу и только у доставленного одной частью сообщения Хью', async () => {
+  const messages = [
+    reviewedSent({ id: 'ok' }),
+    reviewedSent({ id: 'parts', telegramLinks: ['https://t.me/c/1234567890/136', 'https://t.me/c/1234567890/137'] }),
+    reviewedSent({ id: 'model', reviewedByOwner: false }),
+    reviewedSent({ id: 'files', attachments: [{ id: 1, name: 'a.png', mime: 'image/png', size: 1 }] }),
+    reviewedSent({ id: 'queued', edit: { id: 3, status: 'pending', error: '' } }),
+    reviewedSent({ id: 'unsure', deliveryStatus: 'uncertain' }),
+    message({ id: 'human', deliveryStatus: 'sent', telegramLinks: ['https://t.me/c/1234567890/140'] })
+  ];
+  for (const [owner, expected] of [[true, ['ok']], [false, []]]) {
+    const harness = boot({ routes: { 'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ messages, access: { canReply: true, owner } }) }) } });
+    await mount(harness);
+    assert.deepEqual([...harness.d.querySelectorAll('[data-pc-message-edit]')].map(node => node.dataset.pcMessageEdit), expected);
+    assert.match(harness.d.querySelector('[data-message-id="queued"]').textContent, /Правка ожидает отправки в Telegram/);
+    harness.w.close();
+  }
+});
+
+test('правка отправляет текущий текст, получателя и тот же ключ при повторе; новое сообщение не создаётся', async () => {
+  const posts = [];
+  const harness = boot({ routes: {
+    // Сервер после принятия правки отдаёт её состояние и в снимке комнаты.
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ messages: [reviewedSent({ id: 'm136',
+      ...(posts.length > 1 ? { edit: { id: 1, status: 'pending', error: '' } } : {}) })] }) }),
+    'POST /content/project-chat/palitra-love/reviewed-messages/m136/edit': call => {
+      posts.push(JSON.parse(call.body));
+      return posts.length === 1 ? { status: 502 }
+        : { status: 202, body: { edit: { id: 1, status: 'pending' }, message: reviewedSent({ id: 'm136', edit: { id: 1, status: 'pending', error: '' } }) } };
+    }
+  } });
+  try {
+  await mount(harness);
+  harness.click('[data-pc-message-edit="m136"]');
+  const dialog = harness.d.querySelector('dialog');
+  assert.match(dialog.textContent, /Новое сообщение не отправляется, закреп не меняется/);
+  const area = dialog.querySelector('textarea[name="text"]');
+  assert.equal(area.value, 'Сводка 13 задач');
+  // Тот же текст и слишком длинный текст до сервера не доходят.
+  harness.submit('dialog form');
+  await settle();
+  assert.match(dialog.querySelector('[role="alert"]').textContent, /Текст не изменился/);
+  area.value = 'x'.repeat(3500);
+  harness.submit('dialog form');
+  await settle();
+  assert.match(dialog.querySelector('[role="alert"]').textContent, /Не больше \d+ символов/);
+  assert.equal(posts.length, 0);
+  area.value = 'Сводка 13 задач — обновлено';
+  harness.submit('dialog form');
+  await settle();
+  assert.equal(posts.length, 1);
+  assert.ok(dialog.isConnected, 'при сбое окно остаётся для повтора');
+  harness.submit('dialog form');
+  await settle();
+  assert.equal(posts.length, 2);
+  assert.deepEqual(posts[1], posts[0], 'повтор с тем же ключом правки');
+  assert.deepEqual(Object.keys(posts[0]).sort(), ['clientEditId', 'expectedChatId', 'expectedText', 'text']);
+  assert.equal(posts[0].expectedText, 'Сводка 13 задач');
+  assert.equal(posts[0].expectedChatId, '-1001234567890');
+  assert.equal(posts[0].text, 'Сводка 13 задач — обновлено');
+  assert.equal(harness.calls.filter(c => c.method === 'POST' && /\/(messages|reviewed-messages)$/.test(c.url)).length, 0);
+  assert.match(harness.d.querySelector('[data-message-id="m136"]').textContent, /Правка ожидает отправки в Telegram/);
+  assert.equal(harness.d.querySelector('[data-pc-message-edit="m136"]'), null, 'пока правка не завершена, вторую не начать');
+  } finally { harness.w.close(); }
+});
+
+test('итог правки виден у сообщения: применена или не применена с причиной', async () => {
+  const harness = boot({ routes: { 'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ messages: [
+    reviewedSent({ id: 'done', editedAt: '2026-10-02T08:00:00.000Z', edit: { id: 1, status: 'sent', error: '' } }),
+    reviewedSent({ id: 'failed', edit: { id: 2, status: 'error', error: 'Группа Telegram проекта изменилась <b>' } })
+  ] }) }) } });
+  await mount(harness);
+  assert.match(harness.d.querySelector('[data-message-id="done"]').textContent, /Изменено в Telegram/);
+  const failed = harness.d.querySelector('[data-message-id="failed"]');
+  assert.match(failed.textContent, /Правка не применена: Группа Telegram проекта изменилась <b>/);
+  assert.equal(failed.querySelector('b'), null);
+  assert.ok(harness.d.querySelector('[data-pc-message-edit="failed"]'), 'после ошибки можно поставить новую правку');
+  harness.w.close();
+});
