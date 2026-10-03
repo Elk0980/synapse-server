@@ -275,12 +275,15 @@ const verifiedCombos = [
   ['laser-combo-7', 'Подмышки + ноги полностью + тотальное бикини.'],
   ['laser-combo-8', 'Безлимит по зонам.'],
 ];
+// R4 03.10.2026, решение Влада: «Хочу всё» в прайсе — состав V8 (сохранённое описание; пустое по-прежнему дополняется из списка выше).
+const v8Combo8Desc = 'Ноги + руки + тотальное бикини + линия живота + малая зона лица.';
 
 test('all eight verified combo descriptions sit with table names and follow selected home cards', () => {
   const selected = copy(defaults);
   selected.showcase = {self: verifiedCombos.map(([id]) => id), two: []};
   const full = render(selected, true), home = render(selected, false);
-  for (const [id, desc] of verifiedCombos) {
+  for (const [id, verified] of verifiedCombos) {
+    const desc = id === 'laser-combo-8' ? v8Combo8Desc : verified;
     const service = item(defaults, id);
     assert.equal(service.desc, desc, id);
     const row = full.match(new RegExp(`<tr\\b[^>]*data-service="${id}"[\\s\\S]*?<\\/tr>`))[0];
@@ -372,7 +375,7 @@ function legacyWithBuccal(){
 test('only the former buccal service is removed and its showcase slot uses the existing chiroplastic massage',()=>{
   assert.equal(item(defaults,'face-6'),undefined);
   assert.equal(items(defaults).filter(it=>it.id==='face-7').length,1);
-  assert.equal(item(defaults,'face-7').price,'1 процедура — 2 800 ₽ · 5 процедур — 12 500 ₽ · 10 процедур — 22 500 ₽');
+  assert.equal(item(defaults,'face-7').price,'1 процедура — 2 800 ₽ · 5 процедур — 12 500 ₽ (2 500 ₽ / сеанс) · 10 процедур — 22 500 ₽ (2 250 ₽ / сеанс)');
   for(const version of [2,3,4]){
     const legacy=legacyWithBuccal();legacy.catalogVersion=version;
     item(legacy,'face-7').price='Цена владельца';
@@ -474,7 +477,7 @@ test('V8 price variants keep exact unit labels in one price string, render one l
   const seed = JSON.parse(fs.readFileSync(path.join(__dirname, '../../ops/content/seed/avokado-price.json'), 'utf8'));
   for (const doc of [defaults, seed]) {
     const tiered = items(doc).filter(it => String(it.price).includes(' · '));
-    assert.equal(tiered.length, 26);
+    assert.equal(tiered.length, 27);
     const full = render(prepare(doc, null), true);
     for (const service of tiered) {
       const parts = service.price.split(' · ');
@@ -487,17 +490,27 @@ test('V8 price variants keep exact unit labels in one price string, render one l
       assert.equal(visible(cell), service.price, `${service.id}: visible text is the saved string`);
       assert.equal((cell.match(/class="av-price-tier"/g) || []).length, 3, service.id);
       for (const part of parts) {
-        const [label, amount] = part.split(' — ');
-        assert.ok(cell.includes(`<span class="av-price-unit">${label} —</span> <span class="av-price-amount">${amount}</span>`), `${service.id}: ${part}`);
+        const [label, rest] = part.split(' — ');
+        // R5: цена одного сеанса из PDF V8 — «(N ₽ / сеанс)» после итога курса, показывается под ним.
+        const [, amount, session] = /^(.*?)(?: \(([^()]+) \/ сеанс\))?$/.exec(rest);
+        const course = session
+          ? `<span class="av-price-course"><span class="av-price-amount">${amount}</span><span class="av-price-session"><span class="av-price-paren"> (</span><span class="av-price-session-sum">${session}</span> <span class="av-price-session-unit">/ сеанс</span><span class="av-price-paren">)</span></span></span>`
+          : `<span class="av-price-amount">${amount}</span>`;
+        assert.ok(cell.includes(`<span class="av-price-unit">${label} —</span> ${course}`), `${service.id}: ${part}`);
+        assert.equal(Boolean(session), label === '5 процедур' || label === '10 процедур', `${service.id}: ${label} — цена сеанса только под итогом курса процедур`);
       }
     }
     for (const service of items(doc).filter(it => it.price && !it.price.includes(' · ') && !it.promo)) {
       const row = full.match(new RegExp(`<tr\\b[^>]*data-service="${service.id}"[\\s\\S]*?<\\/tr>`));
       if (row) assert.ok(row[0].includes(`<td>${service.price}</td>`), `${service.id}: plain price HTML is unchanged`);
     }
-    // «Хочу всё» ждёт ответа владельца о составе: цена и описание как до V8.
-    assert.equal(item(doc, 'laser-combo-8').price, '4 990 ₽');
-    assert.equal(item(prepare(doc, null), 'laser-combo-8').desc, 'Безлимит по зонам.');
+    // «Хочу всё» по V8 (R4): цены за 1/5/10 процедур и состав из пяти зон; прежнее описание не подставляется.
+    assert.equal(item(doc, 'laser-combo-8').price, '1 процедура — 5 500 ₽ · 5 процедур — 26 100 ₽ (5 220 ₽ / сеанс) · 10 процедур — 49 500 ₽ (4 950 ₽ / сеанс)');
+    // R5: 24 позиции с ценой одного сеанса (25 строк PDF; «Расслабляющий» 60/90 мин — одна строка сайта с диапазонами), у программ — нет.
+    assert.equal(tiered.filter(it => it.price.includes(' / сеанс)')).length, 24);
+    assert.equal(tiered.flatMap(it => it.price.match(/ \/ сеанс\)/g) || []).length, 48);
+    assert.ok(tiered.filter(it => it.id.startsWith('apparat-')).every(it => !it.price.includes('сеанс')));
+    assert.equal(item(prepare(doc, null), 'laser-combo-8').desc, v8Combo8Desc);
   }
   const home = render(defaults, false);
   const card = home.match(/<article\b[^>]*data-service="face-7"[\s\S]*?<\/article>/)[0];

@@ -175,19 +175,25 @@ ${body}
   }
 
   /* V8 03.10.2026: несколько цен одной услуги приходят одной строкой price —
-     «1 процедура — 2 390 ₽ · 5 процедур — 11 350 ₽ · 10 процедур — 21 500 ₽». Показываем по строке на вариант;
-     подпись и сумма не разрываются. Одиночная цена выводится как раньше. Стили встроены: CSS страницы не меняется. */
+     «1 процедура — 2 390 ₽ · 5 процедур — 11 350 ₽ (2 270 ₽ / сеанс) · 10 процедур — 21 500 ₽ (2 150 ₽ / сеанс)».
+     Показываем по строке на вариант; цена одного сеанса — мелко под итогом курса. Подпись и суммы не разрываются.
+     Одиночная цена выводится как раньше. Стили встроены: CSS страницы не меняется. */
   function priceTiers(value) {
     const tiers = String(value || '').split(' · ');
     if (tiers.length < 2) return null;
-    const parts = tiers.map((t) => { const i = t.indexOf(' — '); return i > 0 && i + 3 < t.length ? [t.slice(0, i), t.slice(i + 3)] : null; });
+    const parts = tiers.map((t) => {
+      const i = t.indexOf(' — ');
+      if (!(i > 0 && i + 3 < t.length)) return null;
+      const amount = t.slice(i + 3), m = /^(.*\S) \(([^()]+) \/ сеанс\)$/.exec(amount);
+      return m ? [t.slice(0, i), m[1], m[2]] : [t.slice(0, i), amount];
+    });
     return parts.some((p) => !p) ? null : parts;
   }
   function priceRowHtml(it) {
     const parts = priceTiers(it.price);
     if (!parts) return `<div class="row"><span>${esc(it.title)}</span><span>${esc(it.price)}</span></div>`;
     /* Узкий экран: блок цен переносится под название (flex-wrap) и прижат вправо, а не раздвигает колонку прайса. */
-    return `<div class="row" style="flex-wrap:wrap"><span>${esc(it.title)}</span><span class="price-tiers" style="white-space:normal;text-align:right;margin-left:auto">${parts.map(([unit, amount]) => `<span class="price-tier" style="display:block"><span style="white-space:nowrap;font-weight:400">${esc(unit)} —</span> <span style="white-space:nowrap">${esc(amount)}</span></span>`).join('<span style="display:none"> · </span>')}</span></div>`;
+    return `<div class="row" style="flex-wrap:wrap"><span>${esc(it.title)}</span><span class="price-tiers" style="white-space:normal;text-align:right;margin-left:auto">${parts.map(([unit, amount, session]) => `<span class="price-tier" style="display:block"><span style="white-space:nowrap;font-weight:400">${esc(unit)} —</span> <span style="white-space:nowrap">${esc(amount)}</span>${session ? `<span class="price-session" style="display:block;font-size:.85em;font-weight:400;opacity:.85"><span style="display:none"> (</span><span style="white-space:nowrap">${esc(session)}</span> <span style="white-space:nowrap">/ сеанс</span><span style="display:none">)</span></span>` : ''}</span>`).join('<span style="display:none"> · </span>')}</span></div>`;
   }
 
   /* Главная Авокадо: заменяем только ценовые узлы, сохраняя штатную сетку, классы и fallback. */
