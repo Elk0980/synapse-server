@@ -71,3 +71,18 @@
 .av-certificate-open:hover{color:#fff0c8}
 .av-certificate-open:focus-visible{outline:3px solid #ecd781;outline-offset:3px;border-radius:3px}
 @media(max-width:700px){.av-gift>.av-certificate-preview{grid-row:1;max-width:520px;margin-inline:auto;gap:12px}.av-certificate-side figcaption{font-size:12px}}
+/* V8 03.10.2026: варианты цены одной услуги (1/5/10 процедур, 1/7/10 посещений) — строка на вариант; подпись и сумма не разрываются. */
+.av-price-tiers{display:grid;gap:6px;white-space:normal}
+.av-price-tier{display:block}
+.av-price-sep{display:none}
+.av-price-unit,.av-price-amount{white-space:nowrap}
+.av-price-unit{color:#b9b49e;font-size:.86em;font-weight:400}
+/* Таблицы с временем и вариантами цены. Компьютер: колонка цены шире, вариант — одной строкой «10 процедур — 23 800 ₽».
+   Телефон: колонке цены нужно ≥110 px («10 посещений —», «23 800–32 300 ₽»); подпись над суммой; колонка времени уже («60–90» / «мин»). */
+@media(min-width:701px){.av-table.av-table--tiers:not(.av-table--no-duration) th:first-child{width:46%}.av-table.av-table--tiers:not(.av-table--no-duration) th:nth-child(2){width:16%}.av-table.av-table--tiers:not(.av-table--no-duration) th:nth-child(3){width:38%}}
+@media(max-width:700px){.av-table--tiers .av-price-unit{display:block}}
+@media(max-width:700px){.av-price-page .av-table.av-table--tiers:not(.av-table--no-duration) th:first-child{width:48%}.av-price-page .av-table.av-table--tiers:not(.av-table--no-duration) th:nth-child(2){width:16%}.av-price-page .av-table.av-table--tiers:not(.av-table--no-duration) th:nth-child(3){width:36%}.av-price-page .av-table.av-table--tiers:not(.av-table--no-duration) :is(th,td):nth-child(2){padding-inline:6px}}
+/* R3 · ≤420 px: таблицы с вариантами цены («23 800–32 300 ₽» не помещается в треть узкого экрана). Строка становится блоком:
+   название (и время) сверху, варианты цены ниже на всю ширину, по строке на вариант. Размер шрифта и данные прежние;
+   заголовок колонок скрыт только визуально. Таблицы без вариантов цены не меняются. */
+@media(max-width:420px){.av-price-page .av-table.av-table--tiers,.av-price-page .av-table.av-table--tiers tbody{display:block;width:100%}.av-price-page .av-table.av-table--tiers thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}.av-price-page .av-table.av-table--tiers tbody tr{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;border-bottom:1px solid #dfd1a425}.av-price-page .av-table.av-table--tiers tbody tr>*{border-bottom:0}.av-price-page .av-table.av-table--tiers tbody th:first-child,.av-price-page .av-table.av-table--tiers:not(.av-table--no-duration) tbody th:first-child{width:auto;padding-bottom:6px}.av-price-page .av-table.av-table--tiers tbody td:nth-child(2):not(:last-child){padding-inline:9px;padding-bottom:6px;text-align:right;white-space:nowrap}.av-price-page .av-table.av-table--tiers tbody td:last-child{grid-column:1/-1;padding-top:0}.av-price-page .av-table.av-table--tiers .av-price-unit{display:inline}}
