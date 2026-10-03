@@ -13,3 +13,5 @@
 - [ ] E9: владелец лично добавляет токен, оператор проверяет ID/socket volume/projects/время и запускает; live приёмка.
 - [x] E10: исправить company/source scope дедупликации POST /tasks, сохранить baseline и regression tests.
 - [x] E11: заменить whole-CRM mount на opt-in task-only UNIX socket и проверить узкие границы доступа.
+- [x] E12: FR-014/015 — добавить явный token-first pairing через личную TTY и Telegram, без файлов/доступа задач до подтверждения; сохранить ручной offline setup.
+- [x] E13: SC-005 — проверить положительный и отрицательные pairing сценарии, ограниченный HTTPS, блокировку setup, redaction и прежнюю авторизацию; обновить evidence/README, без push/merge/live API.

@@ -231,5 +231,134 @@ class DeployBoundaryTests(unittest.TestCase):
             self.assertNotIn(forbidden, compose)
 
 
+class PairedSetupTests(unittest.TestCase):
+    ARGS = ["--pair", "FixtureEvaBot", "Asia/Bangkok", "fixture_eva_socket"]
+
+    def run_main(self, *, pair_result=None, pair_error=None, lock_error=None, stdout_tty=True, save_error=None, argv=None):
+        import pairing
+        events = []
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(contextlib.redirect_stdout(out))
+            stack.enter_context(contextlib.redirect_stderr(err))
+            for target, value in ((setup.sys, "linux"),):
+                stack.enter_context(mock.patch.object(target, "platform", value))
+            stack.enter_context(mock.patch.object(setup.os, "geteuid", return_value=0, create=True))
+            stack.enter_context(mock.patch.object(setup.sys.stdin, "isatty", return_value=True))
+            stack.enter_context(mock.patch.object(out, "isatty", return_value=stdout_tty))
+            stack.enter_context(mock.patch.object(err, "isatty", return_value=True))
+            stack.enter_context(mock.patch.object(setup.os, "umask"))
+            stack.enter_context(mock.patch.object(setup, "ZoneInfo"))
+            opened = stack.enter_context(mock.patch.object(setup, "open_private_directory", return_value=40))
+            locked = stack.enter_context(mock.patch.object(setup, "lock_setup", side_effect=lock_error))
+            stack.enter_context(mock.patch.object(setup, "refuse_existing"))
+            closed = stack.enter_context(mock.patch.object(setup.os, "close"))
+            manual_inputs = ["12345", "Asia/Bangkok", "fixture_eva_socket"]
+            stack.enter_context(mock.patch("builtins.input", side_effect=manual_inputs if argv == [] else AssertionError("No numeric ID prompt")))
+            token = stack.enter_context(mock.patch.object(setup, "read_hidden_token", side_effect=lambda: events.append("token") or FAKE_TOKEN))
+            def confirm(*_args):
+                events.append("confirm")
+                if pair_error:
+                    raise pair_error
+                return pair_result or {"owner_id": "12345", "expires_at": pairing.time.monotonic() + 100}
+            paired = stack.enter_context(mock.patch.object(setup, "confirm_owner", side_effect=confirm))
+            def save(*_args):
+                events.append("save")
+                if save_error:
+                    raise save_error
+            saved = stack.enter_context(mock.patch.object(setup, "save_configuration", side_effect=save))
+            result = setup.main(self.ARGS if argv is None else argv)
+        self.assertNotIn(FAKE_TOKEN, out.getvalue() + err.getvalue())
+        return result, events, opened, locked, closed, token, paired, saved
+
+    def test_token_first_then_confirm_then_exclusive_save_with_no_id_question(self):
+        result, events, _, locked, closed, _, paired, saved = self.run_main()
+        self.assertEqual(result, 0)
+        self.assertEqual(events, ["token", "confirm", "save"])
+        locked.assert_called_once_with(40)
+        closed.assert_called_once_with(40)
+        paired.assert_called_once_with(FAKE_TOKEN, "FixtureEvaBot")
+        saved.assert_called_once_with(40, FAKE_TOKEN, "12345", "Asia/Bangkok", "fixture_eva_socket")
+
+    def test_previous_manual_mode_stays_offline_and_does_not_pair(self):
+        import pairing
+        with mock.patch.object(pairing, "TelegramAPI") as api:
+            result, events, _, _, _, _, paired, saved = self.run_main(argv=[])
+        self.assertEqual(result, 0)
+        self.assertEqual(events, ["token", "save"])
+        paired.assert_not_called()
+        api.assert_not_called()
+        saved.assert_called_once_with(40, FAKE_TOKEN, "12345", "Asia/Bangkok", "fixture_eva_socket")
+
+    def test_pairing_failure_or_abort_never_saves(self):
+        for failure in (setup.SetupError("not confirmed"), EOFError(), KeyboardInterrupt()):
+            with self.subTest(kind=type(failure).__name__):
+                result, events, _, _, closed, _, _, saved = self.run_main(pair_error=failure)
+                self.assertEqual(result, 1)
+                self.assertEqual(events, ["token", "confirm"])
+                saved.assert_not_called()
+                closed.assert_called_once_with(40)
+
+    def test_expiry_rechecked_immediately_before_save(self):
+        result, _, _, _, closed, _, _, saved = self.run_main(pair_result={"owner_id": "12345", "expires_at": 0})
+        self.assertEqual(result, 1)
+        saved.assert_not_called()
+        closed.assert_called_once_with(40)
+
+    def test_lock_failure_before_token_or_network(self):
+        result, events, _, _, closed, token, paired, saved = self.run_main(lock_error=setup.SetupError("locked"))
+        self.assertEqual(result, 1)
+        self.assertEqual(events, [])
+        token.assert_not_called()
+        paired.assert_not_called()
+        saved.assert_not_called()
+        closed.assert_called_once_with(40)
+
+    def test_pairing_stdout_must_be_personal_tty(self):
+        result, events, opened, _, _, _, _, _ = self.run_main(stdout_tty=False)
+        self.assertEqual(result, 2)
+        self.assertEqual(events, [])
+        opened.assert_not_called()
+
+    def test_write_failure_does_not_claim_success_or_expose_secret(self):
+        result, _, _, _, closed, _, _, _ = self.run_main(save_error=OSError(FAKE_TOKEN))
+        self.assertEqual(result, 1)
+        closed.assert_called_once_with(40)
+
+    def test_lock_uses_nonblocking_flock_and_does_not_create_lock_file(self):
+        fake = SimpleNamespace(LOCK_EX=2, LOCK_NB=4, flock=mock.Mock())
+        with mock.patch.dict("sys.modules", {"fcntl": fake}):
+            setup.lock_setup(40)
+            fake.flock.assert_called_once_with(40, 6)
+            fake.flock.side_effect = BlockingIOError(FAKE_TOKEN)
+            with self.assertRaises(setup.SetupError) as error:
+                setup.lock_setup(40)
+        self.assertNotIn(FAKE_TOKEN, str(error.exception))
+
+    def test_pairing_code_echo_fallback_stops(self):
+        def warn(*_args, **_kwargs):
+            setup.warnings.warn("no terminal", setup.getpass.GetPassWarning)
+        with mock.patch.object(setup.getpass, "getpass", side_effect=warn):
+            with self.assertRaises(setup.getpass.GetPassWarning):
+                setup.read_pairing_code(30)
+
+    def test_deadline_timer_interrupts_entire_pairing_and_is_restored(self):
+        import pairing
+        fake_signal = SimpleNamespace(ITIMER_REAL=0, SIGALRM=14,
+                                      getitimer=mock.Mock(return_value=(0.0, 0.0)),
+                                      signal=mock.Mock(return_value="prior"), setitimer=mock.Mock())
+        with mock.patch.dict("sys.modules", {"signal": fake_signal}), \
+             mock.patch.object(pairing, "TelegramAPI") as api, \
+             mock.patch.object(pairing, "pair_owner", side_effect=pairing.PairingError("timeout")):
+            with self.assertRaises(setup.SetupError):
+                setup.confirm_owner(FAKE_TOKEN, "FixtureEvaBot")
+        api.assert_called_once_with(FAKE_TOKEN)
+        self.assertEqual(fake_signal.setitimer.call_args_list, [mock.call(0, 300), mock.call(0, 0)])
+        self.assertEqual(fake_signal.signal.call_args_list[-1], mock.call(14, "prior"))
+        handler = fake_signal.signal.call_args_list[0].args[1]
+        with self.assertRaises(pairing.PairingError):
+            handler(14, None)
+
+
 if __name__ == "__main__":
     unittest.main()

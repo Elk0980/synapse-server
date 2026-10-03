@@ -28,7 +28,7 @@ jobs:
       - name: Task reader and transport tests
         run: node --test ops/eva-tasks/*.test.js ops/crm/eva-task-reader.test.js
       - name: Human setup tests
-        run: python -m unittest discover -s ops/eva-tasks -p setup_test.py -v
+        run: python -m unittest discover -s ops/eva-tasks -p '*_test.py' -v
       - name: Check CRM syntax
         run: node --check ops/crm/server.js
       - name: Build isolated Eva image
