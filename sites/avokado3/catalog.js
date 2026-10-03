@@ -12,15 +12,16 @@ function safeUrl(value,fallback){try{const u=new URL(value,location.href);return
 function contactUrl(full){return full?'index.html#contacts':'#contacts';}
 function certificateButton(value){return !value||value==='Обсудить сертификат'?'Выбрать сертификат':value;}
 // Price variants stay one plain price string, so the API and the LK editor are unchanged:
-// «1 процедура — 2 390 ₽ · 5 процедур — 11 350 ₽ · 10 процедур — 21 500 ₽». The page shows one line per variant.
+// «1 процедура — 2 390 ₽ · 5 процедур — 11 350 ₽ (2 270 ₽ / сеанс) · 10 процедур — 21 500 ₽ (2 150 ₽ / сеанс)».
+// The page shows one line per variant; a per-session price «(… / сеанс)» is shown under the course total.
 function priceTiers(value){
  const tiers=String(value||'').split(' · ');if(tiers.length<2)return null;
- const parts=tiers.map(t=>{const i=t.indexOf(' — ');return i>0&&i+3<t.length?[t.slice(0,i),t.slice(i+3)]:null;});
+ const parts=tiers.map(t=>{const i=t.indexOf(' — ');if(!(i>0&&i+3<t.length))return null;const amount=t.slice(i+3),m=/^(.*\S) \(([^()]+) \/ сеанс\)$/.exec(amount);return m?[t.slice(0,i),m[1],m[2]]:[t.slice(0,i),amount];});
  return parts.some(p=>!p)?null:parts;
 }
 function priceHtml(value){
  const parts=priceTiers(value);if(!parts)return esc(value||'—');
- return `<span class="av-price-tiers">${parts.map(([unit,amount])=>`<span class="av-price-tier"><span class="av-price-unit">${esc(unit)} —</span> <span class="av-price-amount">${esc(amount)}</span></span>`).join('<span class="av-price-sep"> · </span>')}</span>`;
+ return `<span class="av-price-tiers">${parts.map(([unit,amount,session])=>`<span class="av-price-tier"><span class="av-price-unit">${esc(unit)} —</span> ${session?`<span class="av-price-course"><span class="av-price-amount">${esc(amount)}</span><span class="av-price-session"><span class="av-price-paren"> (</span><span class="av-price-session-sum">${esc(session)}</span> <span class="av-price-session-unit">/ сеанс</span><span class="av-price-paren">)</span></span></span>`:`<span class="av-price-amount">${esc(amount)}</span>`}</span>`).join('<span class="av-price-sep"> · </span>')}</span>`;
 }
 function backfillCertificateButton(data){
  if(data?.certificates?.button!=='Обсудить сертификат')return data;

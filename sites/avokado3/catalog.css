@@ -86,3 +86,9 @@
    название (и время) сверху, варианты цены ниже на всю ширину, по строке на вариант. Размер шрифта и данные прежние;
    заголовок колонок скрыт только визуально. Таблицы без вариантов цены не меняются. */
 @media(max-width:420px){.av-price-page .av-table.av-table--tiers,.av-price-page .av-table.av-table--tiers tbody{display:block;width:100%}.av-price-page .av-table.av-table--tiers thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}.av-price-page .av-table.av-table--tiers tbody tr{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;border-bottom:1px solid #dfd1a425}.av-price-page .av-table.av-table--tiers tbody tr>*{border-bottom:0}.av-price-page .av-table.av-table--tiers tbody th:first-child,.av-price-page .av-table.av-table--tiers:not(.av-table--no-duration) tbody th:first-child{width:auto;padding-bottom:6px}.av-price-page .av-table.av-table--tiers tbody td:nth-child(2):not(:last-child){padding-inline:9px;padding-bottom:6px;text-align:right;white-space:nowrap}.av-price-page .av-table.av-table--tiers tbody td:last-child{grid-column:1/-1;padding-top:0}.av-price-page .av-table.av-table--tiers .av-price-unit{display:inline}}
+/* R5 · цена одного сеанса под итогом курса (PDF V8): сумма курса и «N ₽ / сеанс» — один встроенный блок, цена сеанса под суммой.
+   Блок переносится целиком, как прежде сумма; прежние правила раскладки (R2/R3) не меняются. */
+.av-price-course{display:inline-flex;flex-direction:column}
+.av-price-session{font-size:.8em;line-height:1.35;color:#b9b49e;font-weight:400}
+.av-price-paren{display:none}
+.av-price-session-sum,.av-price-session-unit{white-space:nowrap}
