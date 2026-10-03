@@ -1,0 +1,52 @@
+name: synapse-eva
+
+services:
+  eva:
+    image: synapse-eva:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    init: true
+    user: "0:0"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: "0.50"
+    restart: unless-stopped
+    stop_grace_period: 40s
+    environment:
+      EVA_TOKEN_FILE: /run/secrets/eva_telegram_token
+      EVA_TASK_SOCKET: /run/eva-tasks/tasks.sock
+      EVA_STATE_DIR: /state
+      EVA_OWNER_USER_ID: ${EVA_OWNER_USER_ID:?Set owner ID using the human setup command}
+      EVA_TIMEZONE: ${EVA_TIMEZONE:-Etc/UTC}
+    volumes:
+      - type: volume
+        source: task_socket
+        target: /run/eva-tasks
+        read_only: true
+        volume:
+          nocopy: true
+      - type: volume
+        source: eva_state
+        target: /state
+      - type: bind
+        source: /etc/synapse/eva/telegram-token
+        target: /run/secrets/eva_telegram_token
+        read_only: true
+        bind:
+          create_host_path: false
+    logging:
+      driver: local
+      options:
+        max-size: "1m"
+        max-file: "3"
+
+volumes:
+  task_socket:
+    external: true
+    name: ${EVA_TASK_SOCKET_VOLUME:?Set the approved existing task-only socket volume; never use a CRM data volume}
+  eva_state:
