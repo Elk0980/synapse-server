@@ -21,7 +21,9 @@
   }
   function productCard(data, item, opts) {
     const editor = opts.editor || false;
-    const photo = item.photo ? `<img class="price-card__photo" src="${esc(imageUrl(item.photo))}" alt="${esc(item.title)}" loading="lazy">` : '';
+    // width/height задают пропорцию 4:5 до загрузки: без них незагруженное ленивое фото имело высоту 0,
+    // и каждая догрузка сдвигала страницу на высоту фото (specs/086).
+    const photo = item.photo ? `<img class="price-card__photo" src="${esc(imageUrl(item.photo))}" alt="${esc(item.title)}" loading="lazy" decoding="async" width="800" height="1000">` : '';
     const description = item.desc ? `<p class="price-card__description">${esc(item.desc)}</p>` : '';
     const note = item.note ? `<p class="note">${esc(item.note)}</p>` : '';
     const star = editor ? opts.starHtml(item) : '';

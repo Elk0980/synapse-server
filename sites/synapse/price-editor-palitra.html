@@ -359,8 +359,10 @@
     .ed-photo__tools small { font-size: 0.76rem; }
     .ed-gallery { display: grid; gap: 0.45rem; margin-top: 0.4rem; }
     .ed-gallery__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-    /* Фото карточек в списке редактора не шире карточки: при загруженных снимках страница уезжала вбок. */
-    .pc .price-card__photo { display: block; max-width: 100%; height: auto; aspect-ratio: 4 / 5; object-fit: cover; }
+    /* Фото карточек в списке редактора не шире карточки: при загруженных снимках страница уезжала вбок.
+       Место под фото резервируется до загрузки (ширина карточки × 5/4): иначе ленивое фото до загрузки имело
+       высоту 0, и при прокрутке каждая догрузка сдвигала страницу на высоту фото — фото «пропадали» (specs/086). */
+    .pc .price-card__photo { display: block; width: 100%; max-width: 100%; height: auto; aspect-ratio: 4 / 5; object-fit: cover; background: #eef0f2; }
     .ed-gallery__list { display: flex; flex-wrap: wrap; gap: 0.6rem; list-style: none; margin: 0; padding: 0; }
     .ed-gallery__item { display: grid; gap: 0.3rem; width: 8.5rem; }
     .ed-gallery__thumb { width: 100%; aspect-ratio: 4 / 5; border-radius: 0.6rem; border: 1px solid var(--line); background: #f5f5f7 center / cover no-repeat; }
@@ -405,7 +407,7 @@
 
   <div class="ed-modal" id="ed-modal"><div class="ed-modal__box" id="ed-modal-box"></div></div>
 
-  <script src="price-render-palitra.js"></script>
+  <script src="price-render-palitra.js?v=20261002photos1"></script>
   <script src="palitra-catalog-import.js?v=20260917-1"></script>
   <script>
 (() => {
