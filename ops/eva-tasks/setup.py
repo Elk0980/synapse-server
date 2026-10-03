@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Human-only, offline first setup. Never accepts a token via arguments or env."""
+"""Human-only first setup; explicit --pair enables bounded Telegram confirmation."""
 
 import getpass
 import os
@@ -146,28 +146,88 @@ def read_hidden_token():
         return validate_token(getpass.getpass("Вставьте токен BotFather (ввод скрыт): "))
 
 
+def lock_setup(directory_fd):
+    # Linux flock on this directory FD: no stale lock file, released on close/exit.
+    import fcntl
+    try:
+        fcntl.flock(directory_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        raise SetupError("Другая настройка уже выполняется. Ничего не сохранено.") from None
+
+
+def read_pairing_code(_seconds):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", getpass.GetPassWarning)
+        return getpass.getpass("Если это ВАШ личный Telegram, подтвердите его кодом из Eva (ввод скрыт): ")
+
+
+def confirm_owner(token, bot_username):
+    import pairing
+    import signal
+    # SIGALRM interrupts network reads AND blocking getpass, including no Enter.
+    if signal.getitimer(signal.ITIMER_REAL) != (0.0, 0.0):
+        raise SetupError("Консоль уже занята таймером. Настройка остановлена.")
+    def expired(_signum, _frame):
+        raise pairing.PairingError("Срок подтверждения истёк. Настройка не сохранена.")
+    old_handler = signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, 300)
+    try:
+        result = pairing.pair_owner(
+            pairing.TelegramAPI(token), bot_username, int(token.split(":", 1)[0]),
+            show_link=lambda link: print("Откройте лично своим Telegram и нажмите Start; ссылку не пересылайте:\n" + link),
+            confirm_code=read_pairing_code)
+        pairing.ensure_fresh(result["expires_at"])
+        return result
+    except pairing.PairingError:
+        raise SetupError("Подтверждение Telegram не завершено. Настройка не сохранена; повторите позже.") from None
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, old_handler)
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
-    if argv:
-        print("Запуск без аргументов: sudo python3 ops/eva-tasks/setup.py", file=sys.stderr)
+    pair_mode = len(argv) == 4 and argv[0] == "--pair"
+    if argv and not pair_mode:
+        print("Запуск: setup.py либо setup.py --pair BOT_USERNAME TIMEZONE SOCKET_VOLUME", file=sys.stderr)
         return 2
     if sys.platform != "linux" or os.geteuid() != 0:
         print("Настройку запускает человек через sudo на Linux-сервере.", file=sys.stderr)
         return 2
-    if not sys.stdin.isatty() or not sys.stderr.isatty():
+    if not sys.stdin.isatty() or not sys.stderr.isatty() or (pair_mode and not sys.stdout.isatty()):
         print("Нужна личная интерактивная консоль TTY; pipe и перенаправление запрещены.", file=sys.stderr)
         return 2
     directory_fd = None
     try:
         # Newly created directories/files use exactly 0700/0600. Existing modes stay intact.
         os.umask(0o077)
+        if pair_mode:
+            bot_username = argv[1]
+            if (not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{4,31}", bot_username)
+                    or not bot_username.lower().endswith("bot")):
+                raise SetupError("Нужно подтверждённое публичное имя отдельного бота без @.")
+            timezone = validate_timezone(argv[2])
+            volume = validate_volume(argv[3])
         directory_fd = open_private_directory()
+        lock_setup(directory_fd)
         refuse_existing(directory_fd)
         print("Eva: только сохранение локальной настройки. Бот не запускается.")
-        owner_id = validate_owner_id(input("Ваш проверенный числовой Telegram user ID: "))
-        timezone = validate_timezone(input("Часовой пояс IANA [Etc/UTC]: "))
-        volume = validate_volume(input("Имя согласованного существующего volume только для сокета задач (не CRM): "))
-        token = read_hidden_token()
+        if pair_mode:
+            print("После личного ввода токена — пять минут на подтверждение своего Telegram. До успеха файлы не сохраняются.")
+            token = read_hidden_token()
+            paired = confirm_owner(token, bot_username)
+            owner_id = validate_owner_id(paired["owner_id"])
+            # Check again immediately before the existing exclusive file writes.
+            import pairing
+            try:
+                pairing.ensure_fresh(paired["expires_at"])
+            except pairing.PairingError:
+                raise SetupError("Срок подтверждения истёк. Настройка не сохранена.") from None
+        else:
+            owner_id = validate_owner_id(input("Ваш проверенный числовой Telegram user ID: "))
+            timezone = validate_timezone(input("Часовой пояс IANA [Etc/UTC]: "))
+            volume = validate_volume(input("Имя согласованного существующего volume только для сокета задач (не CRM): "))
+            token = read_hidden_token()
         save_configuration(directory_fd, token, owner_id, timezone, volume)
         print("Сохранено в /etc/synapse/eva: каталог 0700, новые файлы 0600. Бот не запускался.")
         return 0

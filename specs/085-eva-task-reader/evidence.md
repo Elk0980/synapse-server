@@ -82,3 +82,40 @@ Mock inode-тест проверяет только дополнительный
 
 Совместимость проверена с main08984a2 и draft PR444 head afcf6d1: base общий, изменяемые пути
 не пересекаются, PR444 не менялся и не merge-ился. Совместный production runtime не тестировался.
+
+## Дополнение 03.10.2026: локальный token-first setup
+
+FR014/015, SC005, E12/E13 реализованы локальным patch поверх PR443 head2bba36f; push/merge нет.
+setup --pair принимает только публичные параметры bot username/timezone/socket volume. Токен
+вводится первым лично; до двухстороннего подтверждения находится только в памяти. Свежая
+192-bit ссылка из личной TTY и 40-bit код из выбранного private Telegram связывают этот аккаунт
+с человеком у консоли. Один кандидат, одна попытка, общий SIGALRM300 секунд, повторные проверки
+monotonic deadline; обычный setup остаётся offline. Знание username/первое сообщение не дают прав.
+До успеха нет token/eva.env; после него используются прежние O_EXCL/O_NOFOLLOW0600/fsync helpers.
+Блокировка flock каталога сериализует setup без нового lock-файла. Это не блокировка внешних poller.
+
+Временный bootstrap ограничен четырьмя методами фиксированного HTTPS api.telegram.org, TLS с
+проверкой hostname/cert; redirect/409/неоднозначная доставка/слишком большой ответ — отказ.
+Подтверждает потребление только candidate update до записи env: обычный bot.js иначе трактует
+/start nonce как запрос задач. Последующие updates оставлены runtime. Bootstrap не получает
+socket/CRM, не запускает reader/Docker/systemd, не меняет project scope и не входит в image.
+
+Проверки Windows, 03.10 около17:53 Asia/Bangkok:
+
+- python -B -m unittest discover -s ops/eva-tasks -p '*_test.py': **60 passed** (31 setup +29 pairing).
+  Используются фиктивные token/transport/HTTP connection, реальные Telegram-запросы запрещены
+  в transport fixtures. Проверены stranger/group/forwarded/edited/callback/replay, неверные
+  identity/webhook/code, TTL после input/ACK, frozen candidate, ACK failure, лимиты, TLS/redaction,
+  отсутствие сохранения до подтверждения, отказ второго setup, offline manual mode, write failure.
+- node --test ops/eva-tasks/*.test.js ops/crm/eva-task-reader.test.js ops/crm/task-coordination.test.js:
+  **106 passed, 0 failed, 1 Linux-only skipped**. Runtime/CRM/compose авторизация не изменялись.
+- Spec Kit gate: **48 files verified**; diff-check passed. CI discovery расширен на *_test.py,
+  но новый CI не запускался: patch не отправлен в GitHub.
+- Независимое ревью выявило legacy forward_date и поглощение SIGALRM при HTTPS close(); оба
+  исправлены с регрессиями. Второй дефект воспроизведён in-memory до исправления.
+
+Convergence: FR001–015, SC001–005 и локальные plan/tasks сверены; новых buildable gaps в данном
+patch не осталось. E8/E9 отражают отдельные release/live этапы; локальные тесты их не заменяют.
+Новые Linux TTY/SIGALRM/flock, реальный HTTPS/pairing и серверная установка ещё не проверены.
+Официальные контракты: https://core.telegram.org/bots/api#getupdates и
+https://core.telegram.org/bots/features#deep-linking .
