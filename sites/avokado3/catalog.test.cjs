@@ -13,7 +13,9 @@ const context = vm.createContext({window: {}, URL, location: {href: 'https://avo
 vm.runInContext(read('price-render.js'), context);
 context.AlviPrice = context.window.AlviPrice;
 vm.runInContext(read('catalog.js'), context);
-const {prepare, render} = context.window.AvokadoCatalog;
+const {prepare, render, priceHtml} = context.window.AvokadoCatalog;
+// Text a visitor sees (and a screen reader gets) in a fragment: tags removed, entities kept as in esc().
+const visible = html => html.replace(/<[^>]+>/g, '');
 
 test('subscription migration adds the section once and preserves later edits, clears and deletion', () => {
   for (const version of [2, 3, 4]) {
@@ -74,9 +76,9 @@ test('help and certificate actions open Contacts on the correct page', () => {
 
 test('all services and selected cards remain reachable; prices propagate to both pages', () => {
   const home = render(defaults, false), full = render(defaults, true);
-  assert.equal(items(defaults).length, 48);
+  assert.equal(items(defaults).length, 59);  // V8 03.10.2026: +11 позиций (6 зон, 3 массажа тела/спины, 2 ухода за лицом)
   assert.equal((home.match(/data-service=/g) || []).length, 6);
-  assert.equal((full.match(/data-service=/g) || []).length, 47);
+  assert.equal((full.match(/data-service=/g) || []).length, 58);
   const ids = [...full.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]);
   assert.equal(ids.length, new Set(ids).size);
   for (const group of ['laser','apparatus','manual','certificate']) assert.ok(ids.includes(group));
@@ -252,7 +254,7 @@ test('updated times and owner prices agree in home cards and the full price tabl
     const match = full.match(new RegExp(`<(?:article|tr)\\b[^>]*data-service="${id}"[\\s\\S]*?<\\/(?:article|tr)>`));
     assert.ok(match, id);
     assert.ok(match[0].includes(duration), `${id}: full price`);
-    assert.ok(match[0].includes(item(prepared, id).price), `${id}: price remains beside the duration`);
+    assert.ok(visible(match[0]).includes(item(prepared, id).price), `${id}: price remains beside the duration`);
     const selected = {...prepared, showcase:{self:[id],two:[]}};
     const home = render(selected, false);
     assert.ok(home.includes(`<dt>Время</dt><dd>${duration}</dd>`), `${id}: home card`);
@@ -283,7 +285,7 @@ test('all eight verified combo descriptions sit with table names and follow sele
     assert.equal(service.desc, desc, id);
     const row = full.match(new RegExp(`<tr\\b[^>]*data-service="${id}"[\\s\\S]*?<\\/tr>`))[0];
     assert.ok(row.includes(`${service.title}<small>${desc}</small></th>`), `${id}: description belongs to the service name`);
-    assert.ok(row.includes(`<td>${service.price}</td>`), `${id}: price is unchanged`);
+    assert.equal(visible(row.slice(row.lastIndexOf('<td>'))), service.price, `${id}: price is unchanged`);
     const card = home.match(new RegExp(`<article\\b[^>]*data-service="${id}"[\\s\\S]*?<\\/article>`))[0];
     assert.ok(card.includes(`<p class="av-description">${desc}</p>`), `${id}: same description on the home showcase`);
   }
@@ -370,7 +372,7 @@ function legacyWithBuccal(){
 test('only the former buccal service is removed and its showcase slot uses the existing chiroplastic massage',()=>{
   assert.equal(item(defaults,'face-6'),undefined);
   assert.equal(items(defaults).filter(it=>it.id==='face-7').length,1);
-  assert.equal(item(defaults,'face-7').price,'2 800 ₽');
+  assert.equal(item(defaults,'face-7').price,'1 процедура — 2 800 ₽ · 5 процедур — 12 500 ₽ · 10 процедур — 22 500 ₽');
   for(const version of [2,3,4]){
     const legacy=legacyWithBuccal();legacy.catalogVersion=version;
     item(legacy,'face-7').price='Цена владельца';
@@ -464,4 +466,45 @@ test('empty and unsafe certificate images fall back independently without unsafe
       assert.doesNotMatch(sides.join(''), /(?:src|href)="(?:javascript|data|tel|file):/i);
     }
   }
+});
+
+// V8 03.10.2026: цены за 5/10 процедур и 7/10 посещений лежат в той же строке price.
+const tierLabels = new Set(['1 процедура', '5 процедур', '10 процедур', '1 посещение', '7 посещений', '10 посещений']);
+test('V8 price variants keep exact unit labels in one price string, render one line each and leave plain prices unchanged', () => {
+  const seed = JSON.parse(fs.readFileSync(path.join(__dirname, '../../ops/content/seed/avokado-price.json'), 'utf8'));
+  for (const doc of [defaults, seed]) {
+    const tiered = items(doc).filter(it => String(it.price).includes(' · '));
+    assert.equal(tiered.length, 26);
+    const full = render(prepare(doc, null), true);
+    for (const service of tiered) {
+      const parts = service.price.split(' · ');
+      assert.equal(parts.length, 3, service.id);
+      const labels = parts.map(part => part.split(' — ')[0]);
+      assert.ok(labels.every(label => tierLabels.has(label)), `${service.id}: ${labels}`);
+      assert.ok(['1 процедура,5 процедур,10 процедур', '1 посещение,7 посещений,10 посещений'].includes(labels.join(',')), service.id);
+      const row = full.match(new RegExp(`<tr\\b[^>]*data-service="${service.id}"[\\s\\S]*?<\\/tr>`))[0];
+      const cell = row.slice(row.lastIndexOf('<td>'));
+      assert.equal(visible(cell), service.price, `${service.id}: visible text is the saved string`);
+      assert.equal((cell.match(/class="av-price-tier"/g) || []).length, 3, service.id);
+      for (const part of parts) {
+        const [label, amount] = part.split(' — ');
+        assert.ok(cell.includes(`<span class="av-price-unit">${label} —</span> <span class="av-price-amount">${amount}</span>`), `${service.id}: ${part}`);
+      }
+    }
+    for (const service of items(doc).filter(it => it.price && !it.price.includes(' · ') && !it.promo)) {
+      const row = full.match(new RegExp(`<tr\\b[^>]*data-service="${service.id}"[\\s\\S]*?<\\/tr>`));
+      if (row) assert.ok(row[0].includes(`<td>${service.price}</td>`), `${service.id}: plain price HTML is unchanged`);
+    }
+    // «Хочу всё» ждёт ответа владельца о составе: цена и описание как до V8.
+    assert.equal(item(doc, 'laser-combo-8').price, '4 990 ₽');
+    assert.equal(item(prepare(doc, null), 'laser-combo-8').desc, 'Безлимит по зонам.');
+  }
+  const home = render(defaults, false);
+  const card = home.match(/<article\b[^>]*data-service="face-7"[\s\S]*?<\/article>/)[0];
+  assert.ok(card.includes('<span class="av-price-current"><span class="av-price-tiers">'), 'showcase card shows all three prices');
+  assert.equal(priceHtml('2 800–3 800 ₽'), '2 800–3 800 ₽');
+  assert.equal(priceHtml('Скидка · по записи'), 'Скидка · по записи', 'free text without labels stays as typed');
+  assert.equal(priceHtml(''), '—');
+  const unsafe = priceHtml('1 процедура — <img src=x onerror=alert(1)> · 5 процедур — 2 ₽');
+  assert.ok(unsafe.includes('&lt;img') && !unsafe.includes('<img'));
 });

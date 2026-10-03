@@ -11,6 +11,17 @@ function group(cat,it){if(cat.id==='subscriptions')return 'subscriptions';if(['l
 function safeUrl(value,fallback){try{const u=new URL(value,location.href);return ['https:','http:','tel:'].includes(u.protocol)?u.href:fallback;}catch(e){return fallback;}}
 function contactUrl(full){return full?'index.html#contacts':'#contacts';}
 function certificateButton(value){return !value||value==='Обсудить сертификат'?'Выбрать сертификат':value;}
+// Price variants stay one plain price string, so the API and the LK editor are unchanged:
+// «1 процедура — 2 390 ₽ · 5 процедур — 11 350 ₽ · 10 процедур — 21 500 ₽». The page shows one line per variant.
+function priceTiers(value){
+ const tiers=String(value||'').split(' · ');if(tiers.length<2)return null;
+ const parts=tiers.map(t=>{const i=t.indexOf(' — ');return i>0&&i+3<t.length?[t.slice(0,i),t.slice(i+3)]:null;});
+ return parts.some(p=>!p)?null:parts;
+}
+function priceHtml(value){
+ const parts=priceTiers(value);if(!parts)return esc(value||'—');
+ return `<span class="av-price-tiers">${parts.map(([unit,amount])=>`<span class="av-price-tier"><span class="av-price-unit">${esc(unit)} —</span> <span class="av-price-amount">${esc(amount)}</span></span>`).join('<span class="av-price-sep"> · </span>')}</span>`;
+}
 function backfillCertificateButton(data){
  if(data?.certificates?.button!=='Обсудить сертификат')return data;
  return {...data,certificates:{...data.certificates,button:certificateButton(data.certificates.button)}};
@@ -44,9 +55,9 @@ const photo=it.photo?safeUrl(it.photo,''):'';
 const offerTerms=it.promo&&it.composition?`<p class="av-description av-offer-terms">${esc(it.composition)}</p>`:'';
 const extra=[...(it.composition&&!it.promo?[['Состав',it.composition]]:[]),...(it.who?[['Кому',it.who]]:[])];
 const description=(it.desc?`<p class="av-description">${esc(it.desc)}</p>`:'')+(extra.length?`<dl class="av-facts">${extra.map(([k,v])=>`<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`:'')+(full&&it.items?.length?`<ul>${it.items.map(v=>`<li>${esc(v)}</li>`).join('')}</ul>`:'');
-return `<article class="av-card${photo?' av-card--photo':''}" ${full?`id="${esc(it.id)}"`:''} data-service="${esc(it.id)}">${photo?`<img class="av-card-photo" src="${esc(photo)}" alt="" loading="lazy">`:''}<div class="av-card-body">${it.promo?'<p class="av-tag">Специальное предложение</p>':''}<h3>${full?esc(it.title):`<a href="price.html#${esc(it.id)}">${esc(it.card||it.title)}</a>`}</h3><dl class="av-facts av-facts--primary"><dt>Цена</dt><dd class="av-price-pair"><span class="av-price-current">${esc(it.price||'—')}</span>${it.oldPrice?` <s>${esc(it.oldPrice)}</s>`:''}</dd>${direction==='laser'?'':`<dt>Время</dt><dd>${esc(it.duration||'—')}</dd>`}</dl>${offerTerms}${description?`<details class="av-card-details" open><summary>Подробнее об услуге</summary><div class="av-card-details-content">${description}</div></details>`:''}${actions(data,it.id,full)}</div></article>`;
+return `<article class="av-card${photo?' av-card--photo':''}" ${full?`id="${esc(it.id)}"`:''} data-service="${esc(it.id)}">${photo?`<img class="av-card-photo" src="${esc(photo)}" alt="" loading="lazy">`:''}<div class="av-card-body">${it.promo?'<p class="av-tag">Специальное предложение</p>':''}<h3>${full?esc(it.title):`<a href="price.html#${esc(it.id)}">${esc(it.card||it.title)}</a>`}</h3><dl class="av-facts av-facts--primary"><dt>Цена</dt><dd class="av-price-pair"><span class="av-price-current">${priceHtml(it.price)}</span>${it.oldPrice?` <s>${esc(it.oldPrice)}</s>`:''}</dd>${direction==='laser'?'':`<dt>Время</dt><dd>${esc(it.duration||'—')}</dd>`}</dl>${offerTerms}${description?`<details class="av-card-details" open><summary>Подробнее об услуге</summary><div class="av-card-details-content">${description}</div></details>`:''}${actions(data,it.id,full)}</div></article>`;
 }
-function table(data,cat,direction){const showTime=direction!=='laser';return `<div class="av-table-wrap"><table class="av-table${showTime?'':' av-table--no-duration'}"><thead><tr><th>Услуга</th>${showTime?'<th>Время</th>':''}<th>Цена</th></tr></thead><tbody>${cat.items.map(it=>`<tr id="${esc(it.id)}" data-service="${esc(it.id)}"><th scope="row">${esc(it.title)}${it.desc?`<small>${esc(it.desc)}</small>`:''}</th>${showTime?`<td>${esc(it.duration||'—')}</td>`:''}<td>${esc(it.price||'—')}${it.oldPrice?` <s>${esc(it.oldPrice)}</s>`:''}</td></tr>`).join('')}</tbody></table></div>${actions(data,cat.id,true)}`;}
+function table(data,cat,direction){const showTime=direction!=='laser',tiers=cat.items.some(it=>priceTiers(it.price));return `<div class="av-table-wrap"><table class="av-table${showTime?'':' av-table--no-duration'}${tiers?' av-table--tiers':''}"><thead><tr><th>Услуга</th>${showTime?'<th>Время</th>':''}<th>Цена</th></tr></thead><tbody>${cat.items.map(it=>`<tr id="${esc(it.id)}" data-service="${esc(it.id)}"><th scope="row">${esc(it.title)}${it.desc?`<small>${esc(it.desc)}</small>`:''}</th>${showTime?`<td>${esc(it.duration||'—')}</td>`:''}<td>${priceHtml(it.price)}${it.oldPrice?` <s>${esc(it.oldPrice)}</s>`:''}</td></tr>`).join('')}</tbody></table></div>${actions(data,cat.id,true)}`;}
 function certificatePhoto(value,fallback){
  const standard=new URL(fallback,location.href);standard.searchParams.set('v','20260915-qr');
  try{
@@ -162,7 +173,7 @@ function prepare(data,defaults){
  }
  out.catalogVersion=3;return addSubscriptions(removeLegacyBuccal(backfillCertificateButton(backfillComboDescriptions(correctLegacyMassageDurations(out)))));
 }
-window.AvokadoCatalog={render,group,prepare};
+window.AvokadoCatalog={render,group,prepare,priceHtml};
 const target=document.getElementById('av-catalog-content');if(!target)return;
 const full=document.body.hasAttribute('data-full-price');
 Promise.all([AlviPrice.load(['/api/price']),AlviPrice.load(['data/price.json'])]).then(([live,defaults])=>{const data=prepare(live,defaults);if(!data){target.innerHTML='<p class="av-loading">Прайс временно недоступен. <a href="tel:+79331901059">Уточнить у студии</a></p>';return;}target.innerHTML=render(data,full);document.dispatchEvent(new Event('avokado:catalog-ready'));const compact=matchMedia('(max-width:700px)');const fitCards=()=>target.querySelectorAll('.av-card-details').forEach(el=>{el.open=!compact.matches;});fitCards();compact.addEventListener('change',fitCards);if(location.hash){const el=document.getElementById(decodeURIComponent(location.hash.slice(1)));if(el&&target.contains(el))el.scrollIntoView();}});
