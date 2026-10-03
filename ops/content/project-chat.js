@@ -18,6 +18,7 @@ const personas = require('./hugh-personas');
 const { createLocalWorker } = require('./project-chat-local-worker');
 const { createSiteOrders } = require('./site-orders');
 const { createProjectChatMiniApp } = require('./project-chat-miniapp');
+const { createPersonalReminders, PERSONAL_CAPABILITY } = require('./personal-reminders');
 const { createAgentSkills } = require('./agent-skills');
 const { createAttachmentText } = require('./attachment-text');
 
@@ -383,6 +384,11 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
      Членство проверяется теми же assigned/isMember, что и в кабинете. */
   const miniApp = createProjectChatMiniApp({ db, authStore, ...miniConfig, tx, sendJson,
     assigned: (user, code) => assigned(user, code), isMember: (user, code) => isMember(user, code) });
+  /* Личные напоминания от Хью (specs/083): отдельная очередь personal:<n>, тот же бот и тот же мост,
+     только подтверждённый участник с подписанным разрешением писать лично. */
+  const personalReminders = createPersonalReminders({ db, tx, authStore, miniApp, companies: COMPANIES,
+    assigned: (user, code) => assigned(user, code), isMember: (user, code) => isMember(user, code),
+    signature: HUGH_SIGNATURE, partLimit: TELEGRAM_PART_LIMIT, stamp });
   function validCompany(code) {
     if (!Object.hasOwn(COMPANIES, code)) fail(404, 'Проект не найден');
     return code;
@@ -799,9 +805,15 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
       const jobs = db.prepare(`SELECT o.* FROM project_chat_outbox o JOIN project_chat_rooms r ON r.company_code=o.company_code
         WHERE o.status='pending' AND o.next_attempt_at<=? AND o.chat_id=r.telegram_chat_id ORDER BY o.id LIMIT 1`).all(stamp());
       for (const job of jobs) db.prepare(`UPDATE project_chat_outbox SET status='sending',claimed_at=?,attempts=attempts+1 WHERE id=?`).run(stamp(), job.id);
-      if (!jobs.length && String(capabilities).split(',').map(v => v.trim()).includes(EDIT_CAPABILITY)) {
+      const declared = String(capabilities).split(',').map(v => v.trim());
+      if (!jobs.length && declared.includes(EDIT_CAPABILITY)) {
         const edit = pendingEdit();
         if (edit) return [edit];
+      }
+      // Личное напоминание получает только мост, объявивший его: прежний мост принял бы его за групповое.
+      if (!jobs.length && declared.includes(PERSONAL_CAPABILITY)) {
+        const personal = personalReminders.pending();
+        if (personal) return [personal];
       }
       // Комната идёт первой; заявки с сайта берутся той же транзакцией и тем же лимитом «одно задание».
       if (!jobs.length) return siteOrders.pendingTelegram();
@@ -943,6 +955,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
   }
   function acknowledgeTelegram(jobId, result = {}) {
     if (EDIT_JOB.test(String(jobId))) return acknowledgeEdit(jobId, result);
+    if (personalReminders.isJob(jobId)) return personalReminders.acknowledge(jobId, result);
     if (ownerAlerts.isJob(jobId)) return ownerAlerts.acknowledge(jobId,result);
     if (siteOrders.isOrderJob(jobId)) return siteOrders.acknowledge(jobId, result);
     const job = db.prepare('SELECT * FROM project_chat_outbox WHERE id=?').get(integer(jobId));
@@ -1375,7 +1388,7 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
     if (!match) return false;
     const code = match[1], suffix = match[2], method = request.method;
     const write = !['GET', 'HEAD'].includes(method);
-    const user = access(request, code, write, /^\/(?:members|candidates|settings|retry-ai|telegram-links(?:\/\d{1,20})?)$/.test(suffix));
+    const user = access(request, code, write, /^\/(?:members|candidates|settings|retry-ai|personal-reminders|telegram-links(?:\/\d{1,20})?)$/.test(suffix));
     const reply = (status, data) => { sendJson(response, status, data, { 'cache-control': 'no-store' }); return true; };
     const page = { before: url.searchParams.get('before'), limit: url.searchParams.get('limit') };
     // Пустая комната второго сайта открывает существующую общую переписку.
@@ -1539,6 +1552,20 @@ function createProjectChat({ db, authStore, assetsDir, runnerUrl = '', chatUrl =
         return { message: messageJSON(row), duplicate: false };
       });
       return reply(result.duplicate ? 200 : 201, result);
+    }
+    /* Личные напоминания: только владелец в кабинете (Mini App и участники — 403), своя компания.
+       GET — получатели с состоянием разрешения и журнал; POST — одно напоминание в очередь. */
+    if (suffix === '/personal-reminders' && method === 'GET') {
+      access(request, code, false, true);
+      const taskId = url.searchParams.get('taskId');
+      return reply(200, { recipients: personalReminders.recipients(code),
+        reminders: personalReminders.list(code, taskId === null || taskId === '' ? null : integer(taskId)),
+        textLimit: personalReminders.textLimit });
+    }
+    if (suffix === '/personal-reminders' && method === 'POST') {
+      const body = await readBody(request), author = access(request, code, true, true);
+      const result = personalReminders.create(code, body, author);
+      return reply(result.duplicate ? 200 : 202, result);
     }
     // Правка отправленного сообщения Хью: только владелец в кабинете, своя компания, тот же бот.
     const editRoute = suffix.match(/^\/reviewed-messages\/(\d{1,12})\/edit$/);

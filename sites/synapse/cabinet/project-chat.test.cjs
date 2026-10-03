@@ -1757,3 +1757,85 @@ test('итог правки виден у сообщения: применена
   assert.ok(harness.d.querySelector('[data-pc-message-edit="failed"]'), 'после ошибки можно поставить новую правку');
   harness.w.close();
 });
+
+// Личное напоминание от Хью (specs/083-project-chat-personal-reminders).
+const personalTask = (over = {}) => ({ id: 7, title: 'Подтвердить состав набора', status: 'todo', assigneeId: null, stageId: null, externalRef: '', kind: 'client_remark', publication: 'not_started', ...over });
+const personalRecipients = () => ([
+  { userId: 2, displayName: 'Дарья', state: 'ready', stateLabel: 'Можно отправить лично', telegramUserId: '5001' },
+  { userId: 3, displayName: 'Анна', state: 'no_permission', stateLabel: 'Нужно действие получателя: открыть чат проекта в Telegram, нажать «Разрешить Хью писать мне лично», затем закрыть чат и открыть его снова' }
+]);
+
+test('кнопка «Напомнить лично» — только владельцу и не у снятой задачи', async () => {
+  for (const [owner, expected] of [[true, ['7']], [false, []]]) {
+    const harness = boot({ routes: { 'GET /content/project-chat/palitra-love': () => ({ body: snapshot({
+      access: { canReply: true, owner }, tasks: [personalTask(), personalTask({ id: 8, status: 'cancelled', cancelled: true })] }) }) } });
+    try {
+      await mount(harness);
+      assert.deepEqual([...harness.d.querySelectorAll('[data-pc-personal-remind]')].map(node => node.dataset.pcPersonalRemind), expected);
+    } finally { harness.w.close(); }
+  }
+});
+
+test('личное напоминание: только готовый получатель, причина для остальных, тот же ключ при повторе, без групповых отправок', async () => {
+  const posts = [];
+  const harness = boot({ routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ tasks: [personalTask()] }) }),
+    'GET /content/project-chat/palitra-love/personal-reminders': call => {
+      assert.match(call.url, /taskId=7$/);
+      return { body: { recipients: personalRecipients(), reminders: [
+        { id: 1, recipientName: 'Дарья', status: 'error', error: 'Telegram запретил отправку (403) <b>', text: 'Напоминание по задаче №7', telegramMessageId: null }
+      ] } };
+    },
+    'POST /content/project-chat/palitra-love/personal-reminders': call => {
+      posts.push(JSON.parse(call.body));
+      return posts.length === 1 ? { status: 502 } : { status: 202, body: { reminder: { id: 2, recipientName: 'Дарья', status: 'pending' } } };
+    }
+  } });
+  try {
+    await mount(harness);
+    harness.click('[data-pc-personal-remind="7"]');
+    await settle();
+    const dialog = harness.d.querySelector('dialog');
+    assert.match(dialog.textContent, /задача №7/);
+    assert.match(dialog.textContent, /Анна: Нужно действие получателя/);
+    assert.match(dialog.textContent, /Не отправлено: Telegram запретил отправку \(403\) <b>/);
+    assert.equal(dialog.querySelector('.pc-personal-history b'), null);
+    assert.deepEqual([...dialog.querySelectorAll('select[name="recipient"] option')].map(node => node.textContent), ['Дарья'], 'только готовый получатель');
+    dialog.querySelector('textarea[name="text"]').value = 'Пришлите состав набора.';
+    harness.submit('dialog form');
+    await settle();
+    assert.match(dialog.querySelector('[role="alert"]').textContent, /что зависит от ответа/);
+    assert.equal(posts.length, 0);
+    dialog.querySelector('input[name="dependency"]').value = 'цена на сайте';
+    harness.submit('dialog form');
+    await settle();
+    assert.equal(posts.length, 1);
+    assert.ok(dialog.isConnected, 'при сбое окно остаётся для повтора');
+    harness.submit('dialog form');
+    await settle();
+    assert.equal(posts.length, 2);
+    assert.deepEqual(posts[1], posts[0], 'повтор с тем же ключом');
+    assert.deepEqual(posts[0], { recipientUserId: 2, taskId: 7, text: 'Пришлите состав набора.', dependency: 'цена на сайте',
+      expectedTelegramUserId: '5001', clientReminderId: posts[0].clientReminderId });
+    assert.ok(posts[0].clientReminderId.length >= 8);
+    assert.equal(harness.calls.filter(c => c.method === 'POST' && /\/(messages|reviewed-messages|scheduled)$/.test(c.url)).length, 0);
+    assert.match(harness.d.querySelector('[data-pc-notice]').textContent, /поставлено в очередь: Дарья/);
+  } finally { harness.w.close(); }
+});
+
+test('без готовых получателей отправка недоступна и названо нужное действие получателя', async () => {
+  const harness = boot({ routes: {
+    'GET /content/project-chat/palitra-love': () => ({ body: snapshot({ tasks: [personalTask()] }) }),
+    'GET /content/project-chat/palitra-love/personal-reminders': () => ({ body: { recipients: personalRecipients().slice(1), reminders: [] } })
+  } });
+  try {
+    await mount(harness);
+    harness.click('[data-pc-personal-remind="7"]');
+    await settle();
+    const dialog = harness.d.querySelector('dialog');
+    assert.equal(dialog.querySelector('select[name="recipient"]').disabled, true);
+    assert.equal(dialog.querySelector('button[type="submit"]').disabled, true);
+    assert.match(dialog.textContent, /нажать «Разрешить Хью писать мне лично», затем закрыть чат и открыть его снова/);
+    assert.equal(harness.calls.filter(c => c.method === 'POST').length, 0);
+  } finally { harness.w.close(); }
+});

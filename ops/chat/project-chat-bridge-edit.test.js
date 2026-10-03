@@ -53,7 +53,7 @@ test('мост объявляет правку и выполняет ровно 
   await bridge.tick();
   const outbox = calls.content.filter((c) => c.route === '/outbox');
   assert.ok(outbox.length >= 1);
-  assert.ok(outbox.every((c) => c.query.capabilities === 'edit'), 'каждый запрос очереди объявляет правку');
+  assert.ok(outbox.every((c) => String(c.query.capabilities).split(',').includes('edit')), 'каждый запрос очереди объявляет правку');
   assert.deepEqual(calls.telegram.map((c) => c.method), ['editMessageText']);
   assert.deepEqual(calls.telegram[0].body, { chat_id: GROUP, message_id: 136, text: `${AI_SIGNATURE}\nСводка — обновлено` });
   assert.deepEqual(acks(calls), [{ jobId: 'edit:7', ok: true, editedMessageId: '136', chatId: GROUP }]);

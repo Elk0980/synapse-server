@@ -342,7 +342,10 @@
         // Кнопка напоминания стоит рядом с задачей, а не внутри её кнопки: вложенные кнопки недопустимы.
         const remind = canReply(state)
           ? `<button type="button" class="pc-task-remind" data-pc-task-remind="${escape(task.id)}">Напомнить</button>` : "";
-        return `<li class="pc-task${cancelled ? " pc-task-cancelled" : task.fixedOnSite ? " pc-task-done" : ""}"><button type="button" data-pc-task="${escape(task.id)}">${site}<strong>${task.externalRef ? escape(task.externalRef) + ". " : ""}${escape(task.title)}</strong>${quote}<span class="pc-task-badges">${kind}${cancelled ? '<span class="pc-badge pc-pub-cancelled">Отменено — не исправление</span>' : ""}<span class="pc-badge pc-pub-${escape(publication)}">${escape(publications[publication] || publication)}</span></span>${notes}<span>${escape(assigneeLabel(state, task))} · ${escape(stageName(state, task.stageId))}</span><small>Работа: ${escape(statuses[task.status] || task.status)}${task.due ? " · " + escape(task.due) : ""}</small></button>${link}${remind}</li>`;
+        // Личное напоминание от Хью — только владельцу и только по действующей задаче (specs/083).
+        const personal = isOwner(state) && !cancelled
+          ? `<button type="button" class="pc-task-remind" data-pc-personal-remind="${escape(task.id)}">Напомнить лично</button>` : "";
+        return `<li class="pc-task${cancelled ? " pc-task-cancelled" : task.fixedOnSite ? " pc-task-done" : ""}"><button type="button" data-pc-task="${escape(task.id)}">${site}<strong>${task.externalRef ? escape(task.externalRef) + ". " : ""}${escape(task.title)}</strong>${quote}<span class="pc-task-badges">${kind}${cancelled ? '<span class="pc-badge pc-pub-cancelled">Отменено — не исправление</span>' : ""}<span class="pc-badge pc-pub-${escape(publication)}">${escape(publications[publication] || publication)}</span></span>${notes}<span>${escape(assigneeLabel(state, task))} · ${escape(stageName(state, task.stageId))}</span><small>Работа: ${escape(statuses[task.status] || task.status)}${task.due ? " · " + escape(task.due) : ""}</small></button>${link}${remind}${personal}</li>`;
       }).join("") || '<li class="pc-empty">Из сообщения можно создать задачу, назначить исполнителя и срок.</li>';
       /* В счётчике — только замечания клиента, которые ещё не на сайте и не сняты. Внутренние работы
          (резервы, счётчики) считаются отдельно и в клиентский счёт не входят. */
@@ -606,6 +609,49 @@
       const result = await write(state, `/reviewed-messages/${encodeURIComponent(message.id)}/edit`, "POST", { text, expectedText, expectedChatId, clientEditId });
       if (result?.message) mergeMessages(state, [result.message], false);
       notice(state, "Правка поставлена в очередь. Текст обновится после подтверждения Telegram.");
+    });
+  };
+  /* Личное напоминание от Хью одному участнику по задаче (specs/083). Получатели и их состояние приходят
+     с сервера: отправить можно только тому, у кого есть подтверждённая привязка Telegram и его собственное
+     разрешение боту писать лично. Участие в группе таким разрешением не считается. Ключ создаётся при
+     открытии окна и повторяется при повторной отправке: потерянный ответ не превращается во второе сообщение. */
+  const personalStates = { pending: "Ожидает отправки", sending: "Отправляется…", sent: "Доставлено лично",
+    uncertain: "Исход неизвестен — повтор не выполняется, проверьте у получателя", error: "Не отправлено" };
+  const personalRef = task => `№${task.externalRef || task.id}`;
+  const personalDialog = async (state, task) => {
+    if (!isOwner(state) || !task || task.cancelled) return;
+    const view = state.view, clientReminderId = identifier();
+    let data;
+    try { data = await request(state, `/personal-reminders?taskId=${encodeURIComponent(task.id)}`); }
+    catch (error) {
+      if (!live(state, view) || error.name === "AbortError") return;
+      if (denied(error)) { revoke(state, error.message); return; }
+      notice(state, error.message || "Не удалось открыть личные напоминания", true); return;
+    }
+    if (!live(state, view)) return;
+    const recipients = list(data.recipients), ready = recipients.filter(item => item.state === "ready");
+    const history = list(data.reminders).map(item => `<li><strong>${escape(item.recipientName)}</strong> · ${escape(personalStates[item.status] || item.status)}${item.error ? `: ${escape(item.error)}` : ""}${item.telegramMessageId ? ` · сообщение ${escape(item.telegramMessageId)}` : ""}<br><small>${escape(item.text)}</small></li>`).join("");
+    const blocked = recipients.filter(item => item.state !== "ready")
+      .map(item => `<li>${escape(item.displayName)}: ${escape(item.stateLabel || item.state)}</li>`).join("");
+    const dialog = modal(state, `Напомнить лично · задача ${personalRef(task)}`, `<form class="pc-fields">
+      <p class="pc-muted">Хью напишет одному участнику в личный чат от имени бота проекта. В текст автоматически войдут номер и название задачи. Сообщение уходит один раз; повторов и отправки в группу нет.</p>
+      ${blocked ? `<p class="pc-muted">Пока нельзя написать лично:</p><ul class="pc-personal-blocked">${blocked}</ul>` : ""}
+      ${recipients.length ? "" : '<p class="pc-muted">В проекте нет участников, кроме владельца.</p>'}
+      <label>Кому<select name="recipient"${ready.length ? "" : " disabled"}>${ready.map(item => `<option value="${escape(item.userId)}" data-telegram="${escape(item.telegramUserId)}">${escape(item.displayName)}</option>`).join("")}</select></label>
+      <label>О чём напомнить<textarea name="text" rows="4" maxlength="1500" required></textarea></label>
+      <label>Что зависит от ответа<input name="dependency" maxlength="500" required></label>
+      <button type="submit"${ready.length ? "" : " disabled"}>Отправить лично</button><p role="alert"></p>
+      ${history ? `<p class="pc-muted">Отправленные по этой задаче:</p><ul class="pc-personal-history">${history}</ul>` : ""}</form>`);
+    if (!ready.length) return;
+    formSave(state, dialog, async form => {
+      const option = form.elements.recipient.selectedOptions[0];
+      const text = form.elements.text.value.trim(), dependency = form.elements.dependency.value.trim();
+      if (!option) throw new Error("Выберите получателя");
+      if (!text) throw new Error("Напишите, о чём напоминание");
+      if (!dependency) throw new Error("Укажите, что зависит от ответа");
+      const result = await write(state, "/personal-reminders", "POST", { recipientUserId: Number(option.value), taskId: task.id,
+        text, dependency, expectedTelegramUserId: option.dataset.telegram, clientReminderId });
+      notice(state, `Личное напоминание поставлено в очередь: ${result?.reminder?.recipientName || "получатель"}. Состояние — в окне «Напомнить лично» у задачи.`);
     });
   };
   const taskDialog = (state, task = {}, source) => {
@@ -1086,6 +1132,10 @@
       if (button.matches("[data-pc-stages]")) stagesDialog(state);
       if (button.matches("[data-pc-edit-members]")) membersDialog(state);
       if (button.matches("[data-pc-schedule]")) scheduleDialog(state);
+      if (button.matches("[data-pc-personal-remind]")) {
+        const task = list(state.data?.tasks).find(row => String(row.id) === button.dataset.pcPersonalRemind);
+        if (task) personalDialog(state, task);
+      }
       if (button.matches("[data-pc-task-remind]")) {
         const task = list(state.data?.tasks).find(row => String(row.id) === button.dataset.pcTaskRemind);
         if (task) scheduleDialog(state, { task });
