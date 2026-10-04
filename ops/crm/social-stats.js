@@ -418,10 +418,14 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
     if (target > today) fail();
     // Завершённый день даёт итог (complete); текущий день ещё идёт — его показатели только partial и обновляются позже.
     const closed = target < today;
-    const provider = row?.provider || 'manual', adapter = adapters[provider];
+    const selectedProvider = row?.provider || 'manual', adapter = adapters[selectedProvider];
     // Отпечаток сохранённого подключения площадки (ревизия токена/цели, без секрета) — до сетевого вызова и сразу в журнал:
     // по нему расписание отличает «та же неработающая связка» от «владелец пересохранил подключение».
     const connectionBefore = row ? connectionRevision(adapter, { company: scope, platform, account: row }) : { ok: true, value: null };
+    // VK's independent reader can serve an existing Onlypult-selected analytics account.
+    // Preserve that setting, but attribute snapshots/evidence to the API actually used.
+    const provider = platform === 'vk' && connectionBefore.ok && connectionBefore.value?.provider === 'vk_direct'
+      ? 'direct' : selectedProvider;
     // Отпечаток сорвавшегося чтения не вычисляется: такой запуск всё равно закончится failed и ничего не запишет.
     const connectionFp = connectionBefore.ok ? connectionFingerprint(connectionBefore.value) : '';
     const runId = Number(db.prepare(`INSERT INTO social_collect_runs(company_code,platform,provider,trigger,date,started_at,closed,account_ref,account_revision,connection_fp) VALUES(?,?,?,?,?,?,?,?,?,?)`)

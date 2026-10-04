@@ -31,6 +31,9 @@ const { createContentPlanDrafts } = require('./content-plan-drafts');
 const { createStudioContentPlan } = require('./studio-content-plan');
 const { createVkCommunity } = require('./vk-community');
 const { createVkCommunityHandler } = require('./vk-community-http');
+const { createVkDirect } = require('./vk-direct');
+const { createVkDesign } = require('./vk-design');
+const { createVkToolsHandler } = require('./vk-tools-http');
 const { createReviews } = require('./reviews');
 const { createReviewsHandler } = require('./reviews-http');
 const { createPlatformDemand } = require('./platform-demand');
@@ -623,6 +626,9 @@ const contentPlanDrafts = createContentPlanDrafts(db,{jobs:contentPlanJobs,autop
 const handleMediaMentor = createMediaMentorHandler({mentor:mediaMentor,transfer:mediaMentorTransfer,generation:contentPlanGeneration,generationDrafts:contentPlanDrafts,workflow:contentFactoryWorkflow,companyModuleContext,readJson,send});
 const vkCommunity = createVkCommunity(db,{apiKey:API_KEY});
 const handleVkCommunity = createVkCommunityHandler({community:vkCommunity,companyModuleContext,readJson,send});
+const vkDirect = createVkDirect(db,{apiKey:API_KEY});
+const vkDesign = createVkDesign(db,{direct:vkDirect});
+const handleVkTools = createVkToolsHandler({direct:vkDirect,design:vkDesign,companyModuleContext,readJson,send});
 const reviews = createReviews(db);
 const handleReviews = createReviewsHandler({reviews,companyModuleContext,readJson,send});
 const platformDemand = createPlatformDemand(db);
@@ -642,7 +648,7 @@ const socialAnalytics = {credentials: socialAnalyticsCredentials, collector: soc
 const telegramChannelStats = createTelegramChannelStatsClient({
   baseUrl: process.env.CHAT_STATS_URL || '', apiKey: API_KEY});
 const socialStats = createSocialStats(db, {evidence: socialAnalyticsEvidence,
-  adapters: createSocialAdapters({transport: autopostingTransport, analytics: socialAnalytics,
+  adapters: createSocialAdapters({transport: autopostingTransport, analytics: socialAnalytics, vkDirect,
     channelStats: telegramChannelStats})});
 const socialBaselines = createSocialBaselines(db, socialStats);
 const handleSocialStats = createSocialStatsHandler({stats: socialStats, baselines: socialBaselines,
@@ -2560,6 +2566,7 @@ async function route(request, response) {
   if (await handleMediaMentorRollout(request,response,url,cors)) return;
   if (await handleMediaMentor(request,response,url,cors)) return;
   if (await handleVkCommunity(request,response,url,cors)) return;
+  if (await handleVkTools(request,response,url,cors)) return;
   if (await handleReviews(request,response,url,cors)) return;
   if (await handlePlatformDemand(request,response,url,cors)) return;
   if (await handleSocialStats(request,response,url,cors)) return;

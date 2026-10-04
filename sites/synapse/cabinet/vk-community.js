@@ -16,7 +16,7 @@
   };
   let controller;
   function create(container, initial) {
-    let ctx = initial, companyCode = '', epoch = 0, settings = null, selected = null, dialogs = [], busy = false, offset = 0, total = 0, pendingReply = null;
+    let ctx = initial, companyCode = '', epoch = 0, settings = null, selected = null, dialogs = [], busy = false, offset = 0, total = 0, pendingReply = null, tools;
     const isOwner = () => ctx.identity?.role === 'owner';
     const node = id => container.querySelector('#vk-' + id);
     const name = () => ctx.identity.companies?.find(c => String(c.id) === companyCode)?.name || companyCode;
@@ -28,7 +28,7 @@
     const controls = () => {
       if (!node('status')) return;
       container.setAttribute('aria-busy', String(busy));
-      container.querySelectorAll('button,input,textarea,select').forEach(el => { el.disabled = busy || !isOwner(); });
+      container.querySelectorAll('button,input,textarea,select').forEach(el => { if (!el.closest('.vk-tools')) el.disabled = busy || !isOwner(); });
       node('check').disabled = busy || !settings?.configured || dirty();
       node('sync').disabled = busy || !settings?.connected || dirty();
       node('send').disabled = busy || !settings?.connected || !selected?.canReply || dirty() || !node('reply').value.trim() || replyUncertain();
@@ -70,7 +70,7 @@
         <a class="card" href="#autoposting"><strong>Публикации</strong><span id="vk-publishing">Проверяем сохранённое подключение…</span><small>Контент и расписание →</small></a>
         <a class="card" href="#ad-platforms"><strong>Реклама</strong><span>Ручные снимки показателей</span><small>Автоматический сбор ещё не подключён →</small></a>
         <a class="card" href="#analytics-through"><strong>Результат</strong><span>Переходы, заявки и этапы CRM</span><small>Визиты и покупки отмечает администратор →</small></a>
-        <a class="card" href="#company-information"><strong>Оформление и сведения</strong><span>Эталонные данные компании</span><small>Изменения ВК пока применяются отдельно →</small></a>
+        <a class="card" href="#company-information"><strong>Оформление и сведения</strong><span>Эталонные данные компании</span><small>Описание и статичная обложка — ниже в разделе ВК</small></a>
       </div>
       <section class="card vk-setup"><h3 id="vk-connection">Сообщения: не подключены</h3><p id="vk-community-name"></p><p id="vk-platform-links"></p>
         <ol class="vk-steps"><li id="vk-step-key">Сохранить ID и ключ сообщества</li><li id="vk-step-check">Проверить доступ к сообщениям</li><li>Получить диалоги</li><li>Открыть диалог и отправить согласованный ответ</li></ol>
@@ -81,12 +81,14 @@
         </details>
         <div class="vk-actions"><button type="button" class="plain-button" id="vk-check">Проверить доступ</button><button type="button" class="plain-button" id="vk-sync">Получить диалоги</button><span id="vk-checked"></span></div>
       </section>
-      <section class="card"><h3>Сообщения клиентов</h3><p>Ответ отправляется выбранному клиенту только кнопкой «Отправить ответ». Автоответы ещё не настроены. В диалоге показаны последние 50 сообщений.</p>
+      <section class="card"><h3>Сообщения клиентов</h3><p>Текст ответа остаётся черновиком до нажатия «Отправить ответ». Автоответы не включены. В диалоге показаны последние 50 сообщений.</p>
         <div class="vk-inbox"><aside><div id="vk-dialog-list"><p>Подключите сообщения и нажмите «Получить диалоги».</p></div><div id="vk-pages" class="vk-actions" hidden><button type="button" id="vk-previous" class="plain-button">Назад</button><span id="vk-page-label"></span><button type="button" id="vk-next" class="plain-button">Далее</button></div></aside>
         <div><h4 id="vk-recipient" tabindex="-1">Выберите диалог</h4><div id="vk-messages" class="vk-messages"></div><form id="vk-reply-panel" hidden><label>Ваш ответ<textarea id="vk-reply" rows="4" maxlength="4000" required></textarea></label><button type="submit" class="plain-button" id="vk-send">Отправить ответ</button></form></div></div>
-      </section>`;
+      </section><div id="vk-direct-tools"></div>`;
+    tools = cabinet.mountVkTools?.(node('direct-tools'), ctx);
     const load = async nextCode => {
       companyCode = String(nextCode || ''); epoch++; busy = false; settings = null; dialogs = []; total = 0; offset = 0; clearConversation();
+      const toolsReady = tools?.update(ctx, companyCode);
       node('token').value = ''; node('group').value = ''; node('dialog-list').innerHTML = '<p>Подключите сообщения и нажмите «Получить диалоги».</p>'; node('pages').hidden = true; node('company-name').textContent = name(); node('publishing').textContent = 'Статус не получен'; drawSettings();
       if (!companyCode || !isOwner()) { message('Выберите компанию. Подключение доступно владельцу.'); controls(); return; }
       await run('Загружаем настройки выбранной компании…', async current => {
@@ -94,6 +96,7 @@
         message(settings.connected ? 'Можно получить диалоги сообщества.' : 'Настройте отдельное подключение сообщений ВК.');
         try { const publishing = await ctx.apiJson('/content/crm/autoposting/settings?companyCode=' + encodeURIComponent(companyCode)); if (!current()) return; const channel = publishing.channels?.find(c => c.platform === 'vk'); node('publishing').textContent = channel?.connected && channel.enabled ? 'Доступ проверен · отправка разрешена' : 'Требуется настройка публикаций'; } catch (_) { if (current()) node('publishing').textContent = 'Откройте раздел для проверки'; }
       });
+      await toolsReady;
     };
     node('refresh').addEventListener('click', () => { if (!busy) void load(companyCode); });
     ['group','token','reply'].forEach(id => node(id).addEventListener('input', () => { if (id === 'reply' && !replyUncertain()) pendingReply = null; controls(); }));
@@ -139,7 +142,7 @@
         else message('Результат отправки не подтверждён. Обновите диалоги и проверьте историю, чтобы не отправить ответ дважды.');
       });
     });
-    return {load,ready:load(ctx.selectedProjectId),update(next) {ctx = next; if (!isOwner()) {epoch++; settings = null; dialogs = []; selected = null; pendingReply = null; container.replaceChildren(); controller = null; return;} if (String(next.selectedProjectId || '') !== companyCode) return load(next.selectedProjectId); controls();}};
+    return {load,ready:load(ctx.selectedProjectId),update(next) {ctx = next; if (!isOwner()) {epoch++; settings = null; dialogs = []; selected = null; pendingReply = null; tools?.destroy(); container.replaceChildren(); controller = null; return;} if (String(next.selectedProjectId || '') !== companyCode) return load(next.selectedProjectId); tools?.update(ctx, companyCode); controls();}};
   }
   cabinet.registerView('vk-community', {title:'ВКонтакте',render(container,ctx) {if (ctx.identity?.role !== 'owner') {controller?.update(ctx); container.replaceChildren(); controller = null; return;} if (!controller) controller = create(container,ctx); else return controller.update(ctx); return controller.ready;},onProjectChange(ctx) {return controller?.update(ctx);}});
 })();

@@ -18,12 +18,14 @@ const settings = (companyCode = 'avokado', extra = {}) => ({ companyCode, groupI
   group: { id: '12345', name: companyCode === 'avokado' ? 'Авокадо ВК' : 'АЛВИ ВК', screenName: 'fixture' }, ...extra });
 const dialog = (peerId = 101, extra = {}) => ({ peerId, title: 'Клиент <img src=x>', unreadCount: 1, canReply: true,
   lastMessage: { id: 10, peerId, fromId: peerId, text: 'Текст <script>test</script>', date: 1789640000, out: false }, ...extra });
-function fixture({ role = 'owner', override } = {}) {
+function fixture({ role = 'owner', override, directTools = false } = {}) {
   const errors = [], calls = [], views = {}, vc = new VirtualConsole();
   vc.on('jsdomError', error => errors.push(error.message));
   const dom = new JSDOM('<main id="view"></main>', { url: 'https://cabinet.example.test/cabinet.html#vk-community', runScripts: 'outside-only', virtualConsole: vc });
   const w = dom.window, d = w.document, container = d.getElementById('view');
-  w.SbCabinet = { registerView(name, view) { views[name] = view; } }; w.eval(source);
+  w.SbCabinet = { registerView(name, view) { views[name] = view; } };
+  if (directTools) w.eval(fs.readFileSync(__dirname + '/vk-tools.js', 'utf8'));
+  w.eval(source);
   let ctx = { selectedProjectId: 'avokado', identity: { role, companies: [{ id: 'avokado', name: 'Авокадо' }, { id: 'alvi', name: 'АЛВИ' }] },
     csrfOptions: (method, body) => ({ method, body: JSON.stringify(body), headers: { 'X-CSRF-Token': 'fixture-csrf' } }),
     async apiJson(url, options = {}) {
@@ -34,6 +36,7 @@ function fixture({ role = 'owner', override } = {}) {
       if (call.method !== 'GET') assert.equal(call.headers['X-CSRF-Token'], 'fixture-csrf');
       if (override) { const value = await override(call); if (value !== undefined) return value; }
       const base = { companyCode: call.companyCode, revision: 1 };
+      if (call.path.includes('/vk-tools/')) return { ...base, purpose: call.path.split('/')[4], groupId: '12345', tokenType: call.path.includes('/analytics/') ? 'user' : 'group', configured: true, enabled: true, connected: true };
       if (call.path.endsWith('/autoposting/settings')) return { channels: [] };
       if (call.path.endsWith('/settings')) return settings(call.companyCode, call.method === 'PUT' ? { revision: 2, connected: false, status: 'needs_check' } : {});
       if (call.path.endsWith('/check')) return { ...settings(call.companyCode), ok: true };
@@ -61,6 +64,26 @@ test('non-owner sees no connection controls and makes no API calls', async () =>
   const f = fixture({ role: 'editor' }); try {
     await f.mount(); assert.equal(f.calls.length, 0); assert.equal(f.container.children.length, 0);
     await f.change('alvi'); assert.equal(f.calls.length, 0);
+  } finally { f.close(); }
+});
+
+test('direct tools mount alongside inbox with independent controls and clear together on project change', async () => {
+  const f = fixture({ directTools: true });
+  try {
+    await f.mount();
+    assert.equal(f.calls.length, 4);
+    assert.ok(f.calls.every(call => call.method === 'GET'));
+    const directNode = id => f.container.querySelector('#vkt-' + id);
+    assert.equal(directNode('analytics-type').disabled, true, 'inbox controls cannot enable a forbidden analytics token type');
+    assert.equal(directNode('apply').disabled, true, 'inbox load cannot enable unpreviewed apply');
+    directNode('design-token').value = 'PRIVATE_DIRECT_KEY';
+    directNode('description').value = 'PRIVATE_DIRECT_DRAFT';
+    await f.change('alvi');
+    assert.equal(directNode('design-token').value, '');
+    assert.equal(directNode('description').value, '');
+    assert.equal(f.node('token').value, '');
+    await f.change('alvi', 'editor', true);
+    assert.equal(f.container.children.length, 0);
   } finally { f.close(); }
 });
 

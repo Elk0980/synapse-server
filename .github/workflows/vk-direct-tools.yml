@@ -1,0 +1,33 @@
+name: vk-direct-tools
+on:
+  pull_request:
+    paths:
+      - 'ops/crm/vk-*'
+      - 'ops/crm/social-*'
+      - 'ops/crm/server.js'
+      - 'ops/content/server.js'
+      - 'ops/content/vk-*'
+      - 'sites/synapse/cabinet/vk-*'
+      - 'sites/synapse/cabinet.html'
+      - '.github/workflows/vk-direct-tools.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: vk-direct-tools-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install isolated DOM test dependency
+        run: npm install --prefix "$RUNNER_TEMP/vk-dom" --no-save --package-lock=false jsdom@26.1.0
+      - name: Direct VK, isolation, proxy and existing inbox regressions
+        env:
+          NODE_PATH: ${{ runner.temp }}/vk-dom/node_modules
+        run: node --test ops/crm/vk-*.test.js ops/crm/social-vk*.test.js ops/crm/social-stats.test.js ops/crm/social-onlypult-flow.test.js ops/crm/autoposting-onlypult-flow.test.js ops/content/vk-*.test.js sites/synapse/cabinet/vk-*.test.cjs

@@ -589,7 +589,7 @@ async function proxyCrm(request, response, url, cors) {
   const crmPath = url.pathname.slice('/content/crm'.length) || '/';
   if (crmPath.startsWith('/internal/')) fail(403, 'Служебный маршрут недоступен');
   if (/^\/coordination(?:\/|$)/.test(crmPath) && identity.role !== 'owner') fail(403, 'Координация доступна владельцу');
-  if (/^\/vk-community(?:\/|$)/.test(crmPath)) {
+  if (/^\/(?:vk-community|vk-tools)(?:\/|$)/.test(crmPath)) {
     if (identity.role !== 'owner') fail(403,'Подключение и сообщения ВК доступны владельцу');
     const code = url.searchParams.get('companyCode');
     if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400,'Выберите компанию');
