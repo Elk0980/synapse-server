@@ -14,3 +14,6 @@
 - [x] T007 Run focused unit, route, DOM and regression tests; review all deletions and secret-free diff.
 - [x] T008 Converge requirements and independent review; close findings.
 - [x] T009 Commit/push feature branch, open draft PR and record exact validation/remaining live setup boundary.
+
+## Phase 4: Final review convergence
+- [x] T010 Clarify design connection success feedback so it cannot imply editing rights per FR-002/FR-007 (partial; low-severity UI wording).

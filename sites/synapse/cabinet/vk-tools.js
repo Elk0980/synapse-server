@@ -110,7 +110,7 @@
         node(purpose+'-token').value='';if(purpose==='design'){observed=null;invalidate();}
         void run('Сохраняем отдельное подключение…',async current=>{const data=await request(purpose,'/settings',body,'PUT');if(!current())return;settings[purpose]=validate(data,purpose);drawSetting(purpose);say('Подключение сохранено. Теперь отдельно проверьте доступ.');});
       });
-      node(purpose+'-check').addEventListener('click',()=>{if(dirty(purpose))return;const revision=settings[purpose].revision;void run('Проверяем доступ без изменения сообщества…',async current=>{const data=await request(purpose,'/check',{revision});if(!current())return;settings[purpose]=validate(data,purpose,revision);drawSetting(purpose);say(data.connected?'Доступ подтверждён.':errorText[data.errorCode]||'Доступ пока не подтверждён.');});});
+      node(purpose+'-check').addEventListener('click',()=>{if(dirty(purpose))return;const revision=settings[purpose].revision;void run('Проверяем доступ без изменения сообщества…',async current=>{const data=await request(purpose,'/check',{revision});if(!current())return;settings[purpose]=validate(data,purpose,revision);drawSetting(purpose);say(data.connected?(purpose==='analytics'?'Доступ к статистике подтверждён.':'Тип ключа и чтение сообщества проверены; права на изменение ещё не проверены.'):errorText[data.errorCode]||'Доступ пока не подтверждён.');});});
     }
     node('description').addEventListener('input',invalidate);
     node('cover').addEventListener('change',()=>{

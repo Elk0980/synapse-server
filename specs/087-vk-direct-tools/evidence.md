@@ -30,4 +30,14 @@ The dedicated analytics selector now preserves the existing direct provider only
 
 The image validator uses a nonrecursive invalid-character scan plus canonical Base64 roundtrip. All 22 design tests passed, including an actual multi-megabyte PNG preview, exactly 8 MiB accepted and 8 MiB + 1 byte rejected before provider access.
 
-Windows execution disconnected before the final combined rerun and local commit. The exact reviewed patches were reconstructed against published head `51b5f27561285fbb2e4e84526c0d4af34ffa283a` and delivered atomically through GitHub's API; final CI must be read on the resulting PR head. That prior head passed vk-direct-tools, spec-kit and both project-chat-check runs. Local checkout requires reconciliation after connection recovery; do not overwrite its uncommitted copies or force-push the earlier head. No merge or deployment.
+Windows execution disconnected before the final combined rerun and local commit. The exact reviewed patches were reconstructed against published head `51b5f27561285fbb2e4e84526c0d4af34ffa283a` and delivered atomically through GitHub's API. Connection recovered: all five local changed-file blob hashes matched the resulting `94016a8fa7be05151e0b0b4efb83002f5a7c7797`, and the isolated checkout was reconciled cleanly. That head passed 167 VK CI tests and full project checks. No merge or deployment.
+
+## Final pre-rollout review — 2026-10-04
+
+Independent review of immutable `94016a8` found no blocking defect in token redaction/encryption, owner/company/CSRF isolation, method/target binding, upload destinations, image limits, quotas or durable idempotency. All 40 backend/proxy tests passed; an additional cross-company same-group concurrency probe confirmed no second write and no foreign history disclosure after recreating the module. Image validation is structural, not a full pixel decoder; design connection checks do not prove edit rights or token ownership of the public group.
+
+The latest Spec Kit failure was PR metadata only: the required `Spec:` prefix was lost during description editing. Restoring that prefix passed run `37206687314` without changing code. Main remained `f6a93da88d8d9b67ec74dccf096c8a1dd6779bcb` (0 commits behind, clean mergeability). A synthetic repeat-startup migration probe confirmed exactly three added tables, unchanged pre-existing schema/rows, no foreign-key errors and no automatically created connection.
+
+One low-severity UI wording finding is corrected in this follow-up: design check success explicitly says token type/community reading are checked while edit rights remain unverified. Exact minimum OAuth scopes/masks and current token issuance steps remain unknown because official method/access-rights pages were unavailable; no guessed grant recipe is provided. This blocks credential setup, not a separately approved code-only rollout. No new permissions or server operations were performed. Latest-head CI is recorded in PR metadata after completion.
+
+The wording-only follow-up passed 31 existing VK cabinet DOM tests, syntax check and diff check. No runtime transport, migration, API contract or permission behavior changed.
