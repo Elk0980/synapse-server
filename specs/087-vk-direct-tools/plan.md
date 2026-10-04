@@ -3,7 +3,7 @@
 Process 1.0.0. Base f6a93da88d8d9b67ec74dccf096c8a1dd6779bcb, branch 087-vk-direct-tools, isolated vk-integration-work checkout. Stack: Node 24 node:sqlite, existing content proxy and cabinet JavaScript. No dependencies or live keys required.
 
 ## Ownership and increments
-- Root: specification, ops/crm/server.js, ops/content/server.js, new ops/crm/vk-tools-http.js and route tests, docs and CI. Fresh targeted patches only.
+- Root: specification, ops/crm/server.js, ops/content/server.js, ops/crm/social-stats.js (actual provider attribution only), new ops/crm/vk-tools-http.js and route tests, docs and CI. Fresh targeted patches only.
 - Analytics agent: ops/crm/vk-direct.js and tests, ops/crm/social-adapters.js and focused analytics tests. Shared direct connection contract agreed before consumers.
 - Design agent: ops/crm/vk-design.js and tests. No edits to direct connector or root server files.
 - UI agent: sites/synapse/cabinet/vk-community.js/css and tests plus new vk-tools.js/css if needed. No backend edits.
