@@ -11,7 +11,7 @@ function fixture(override,role='owner') {
   const dom = new JSDOM('<main></main>',{url:'https://example.test',runScripts:'outside-only'}),w=dom.window,container=w.document.querySelector('main'),calls=[];
   w.eval(source);
   let ctx={selectedProjectId:'palitra-love',identity:{role},csrfOptions:(method,body)=>({method,body:JSON.stringify(body),headers:{'X-CSRF-Token':'test'}}),async apiJson(url,options={}) {
-    const u=new URL(url,'https://example.test'),parts=u.pathname.split('/'),call={path:u.pathname,purpose:parts[4],companyCode:u.searchParams.get('companyCode'),method:options.method||'GET',body:options.body?JSON.parse(options.body):null,headers:options.headers};calls.push(call);
+    const u=new URL(url,'https://example.test'),parts=u.pathname.split('/'),call={path:u.pathname,purpose:parts[4],companyCode:u.searchParams.get('companyCode'),query:Object.fromEntries(u.searchParams),method:options.method||'GET',body:options.body?JSON.parse(options.body):null,headers:options.headers};calls.push(call);
     assert.ok(['palitra-love','alvi'].includes(call.companyCode));if(call.method!=='GET')assert.equal(call.headers['X-CSRF-Token'],'test');
     if(override){const value=await override(call);if(value!==undefined)return value;}
     if(call.path.endsWith('/settings'))return setting(call.companyCode,call.purpose,call.method==='PUT'?{revision:3,connected:false}:{});
@@ -74,4 +74,72 @@ test('read-only state remains available after an unverified apply without cleari
     await readState(f);assert.equal(f.calls.at(-1).method,'GET');assert.equal(f.node('description').value,'Новое описание');assert.match(f.node('current-state').textContent,/Старое описание/);
     assert.equal(f.node('apply').disabled,true);assert.equal(f.node('description-preview').disabled,true);assert.equal(f.calls.filter(c=>c.path.endsWith('/apply')).length,1);assert.equal(apply.body.requestId,f.calls.find(c=>c.path.endsWith('/apply')).body.requestId);
   }finally{f.close();}
+});
+
+const materialDto=c=>({companyCode:c.companyCode,groupId:c.companyCode==='palitra-love'?'12345':'123',revision:2,previewId:'album-preview',operation:'album_photo',album:{id:7,title:'Фото <img src=x>'},caption:c.body?.caption||'',image:{mime:'image/png',width:1,height:1,size:7,sourceHash:'fixture-hash'},expiresAt:'2099-01-01T00:00:00Z'});
+function materialFixture(override){return fixture(async c=>{
+  if(override){const result=await override(c);if(result!==undefined)return result;}
+  if(c.path.endsWith('/settings')&&c.purpose==='design')return setting(c.companyCode,c.purpose,{tokenType:'user'});
+  if(c.path.endsWith('/albums')){assert.equal(c.query.revision,'2');return {...materialDto(c),total:2,offset:Number(c.query.offset),nextOffset:null,albums:[{id:7,title:'Фото <img src=x>',size:0},{id:8,title:'Другой альбом',size:1}]};}
+  if(c.path.endsWith('/material-preview'))return materialDto(c);
+  if(c.path.endsWith('/material-apply'))return {...materialDto(c),requestId:c.body.requestId,status:'verified'};
+  if(c.path.endsWith('/material-history')){assert.equal(c.query.revision,'2');return {...materialDto(c),items:[]};}
+});}
+async function materialFile(f,name='fixture.png',type='image/png'){
+  const file=new f.w.File(['fixture'],name,{type});Object.defineProperty(f.node('material-file'),'files',{configurable:true,value:[file]});f.node('material-file').dispatchEvent(new f.w.Event('change'));
+  for(let i=0;i<30&&!f.node('material-file-info').textContent;i++)await new Promise(resolve=>setTimeout(resolve,5));
+}
+async function materialDraft(f){await f.mount();f.node('albums-refresh').click();await tick();f.node('album').value='7';f.node('album').dispatchEvent(new f.w.Event('change'));await materialFile(f);f.input('material-caption','Подпись <script>');}
+
+test('albums require checked user design binding and never load automatically',async()=>{
+  const f=fixture();try{await f.mount();assert.equal(f.node('albums-refresh').disabled,true);f.node('albums-refresh').click();assert.equal(f.calls.length,2);assert.match(f.node('materials-connection').textContent,/Пользователь/);}finally{f.close();}
+});
+test('album upload previews exact destination and local photo before one explicit confirmed apply',async()=>{
+  let release;const f=materialFixture(c=>c.path.endsWith('/material-apply')?new Promise(resolve=>{release=()=>resolve({...materialDto(c),requestId:c.body.requestId,status:'verified'});}):undefined);
+  try{
+    await materialDraft(f);assert.equal(f.calls.length,3,'selection and caption do not upload');assert.equal(f.container.querySelector('script'),null);assert.equal(f.node('material-caption').maxLength,2000);
+    f.node('material-preview-button').click();await tick();const call=f.calls.at(-1);assert.equal(call.method,'POST');assert.equal(call.body.albumId,7);assert.equal(call.body.image.mime,'image/png');assert.equal(call.body.caption,'Подпись <script>');assert.equal(f.node('material-apply').disabled,false);
+    assert.match(f.node('material-preview').textContent,/12345/);assert.match(f.node('material-preview').textContent,/Фото <img src=x> · ID 7/);assert.equal(f.node('material-preview').querySelectorAll('img').length,1);assert.ok(!f.calls.some(c=>c.path.endsWith('/material-apply')));
+    f.node('material-apply').click();f.node('material-apply').click();await tick();assert.equal(f.calls.filter(c=>c.path.endsWith('/material-apply')).length,1);assert.deepEqual(Object.keys(f.calls.at(-1).body).sort(),['previewId','requestId','revision']);release();await tick();assert.equal(f.node('material-apply').disabled,true);assert.match(f.node('status').textContent,/Проверено/);
+  }finally{f.close();}
+});
+test('album preview is invalidated by caption, destination, file and binding changes',async()=>{
+  const f=materialFixture();try{
+    await materialDraft(f);
+    for(const edit of [()=>f.input('material-caption','Изменено'),()=>{f.node('album').value='8';f.node('album').dispatchEvent(new f.w.Event('change'));},()=>materialFile(f,'second.png'),()=>f.input('design-token','FIXTURE_ONLY')]){
+      f.node('album').value='7';f.node('material-preview-button').click();await tick();assert.equal(f.node('material-apply').disabled,false);await edit();assert.equal(f.node('material-apply').disabled,true);assert.equal(f.node('material-preview').children.length,0);
+    }
+    assert.equal(f.calls.filter(c=>c.path.endsWith('/material-apply')).length,0);
+  }finally{f.close();}
+});
+test('late album preview after content edit or company switch cannot restore confirmation',async()=>{
+  for(const edit of ['caption','company']){let release;const f=materialFixture(c=>c.path.endsWith('/material-preview')?new Promise(resolve=>{release=()=>resolve({...materialDto(c),album:{id:7,title:'PRIVATE_LATE_ALBUM'}});}):undefined);
+    try{await materialDraft(f);f.node('material-preview-button').click();await tick();if(edit==='caption')f.input('material-caption','Changed');else await f.change('alvi');release();await tick();assert.equal(f.node('material-apply').disabled,true);assert.doesNotMatch(f.container.textContent,/PRIVATE_LATE_ALBUM/);}finally{f.close();}
+  }
+});
+test('unknown album apply stays blocked across edits and company navigation until matching journal confirms outcome',async()=>{
+  let original,verified=false;const f=materialFixture(c=>{
+    if(c.path.endsWith('/material-apply')){original=c.body;throw Error('PRIVATE_PROVIDER_ERROR');}
+    if(c.path.endsWith('/material-history'))return {...materialDto(c),items:verified?[{...materialDto(c),requestId:original.requestId,status:'verified'}]:[{...materialDto(c),revision:1,groupId:'999',requestId:original?.requestId,status:'verified'}]};
+  });try{
+    await materialDraft(f);f.node('material-preview-button').click();await tick();f.node('material-apply').click();await tick();assert.match(f.node('status').textContent,/не подтверждён/);f.input('material-caption','Changed');assert.equal(f.node('material-preview-button').disabled,true);
+    f.node('material-history-refresh').click();await tick();assert.equal(f.calls.at(-1).query.revision,'2');assert.equal(f.node('material-preview-button').disabled,true,'old binding journal cannot clear current outcome lock');
+    await f.change('alvi');await f.change('palitra-love');assert.match(f.node('materials-connection').textContent,/заблокирована/);assert.equal(f.node('material-apply').disabled,true);assert.equal(f.calls.filter(c=>c.path.endsWith('/material-apply')).length,1);
+    verified=true;f.node('material-history-refresh').click();await tick();assert.match(f.node('status').textContent,/Проверено/);assert.equal(f.node('material-apply').disabled,true,'resolved outcome still requires a new preview');assert.doesNotMatch(f.container.textContent,/PRIVATE_PROVIDER_ERROR/);
+  }finally{f.close();}
+});
+test('mixed-company material journal rejects the entire batch before rendering private titles',async()=>{
+  const f=materialFixture(c=>c.path.endsWith('/material-history')?{...materialDto(c),items:[{...materialDto(c),album:{title:'SHOULD_NOT_RENDER'}},{...materialDto(c),companyCode:'alvi',album:{title:'OTHER_COMPANY_PRIVATE'}}]}:undefined);
+  try{await f.mount();f.node('material-history-refresh').click();await tick();assert.doesNotMatch(f.container.textContent,/SHOULD_NOT_RENDER|OTHER_COMPANY_PRIVATE/);}finally{f.close();}
+});
+test('expired album previews never dispatch locally and explicit server expiry permits a new preview',async()=>{
+  for(const local of [true,false]){const f=materialFixture(c=>{
+    if(local&&c.path.endsWith('/material-preview'))return {...materialDto(c),expiresAt:'2000-01-01T00:00:00Z'};
+    if(!local&&c.path.endsWith('/material-apply')){const error=Error('PRIVATE');error.code='PREVIEW_EXPIRED';throw error;}
+  });try{await materialDraft(f);f.node('material-preview-button').click();await tick();f.node('material-apply').click();await tick();assert.equal(f.node('material-apply').disabled,true);assert.equal(f.node('material-preview-button').disabled,false);assert.match(f.node('status').textContent,/устарел/);assert.equal(f.calls.filter(c=>c.path.endsWith('/material-apply')).length,local?0:1);}finally{f.close();}}
+});
+test('known late album outcome clears only its company binding lock while unknown remains blocked',async()=>{
+  for(const status of ['verified','uncertain']){let release;const f=materialFixture(c=>c.path.endsWith('/material-apply')?new Promise(resolve=>{release=()=>resolve({...materialDto(c),requestId:c.body.requestId,status});}):undefined);
+    try{await materialDraft(f);f.node('material-preview-button').click();await tick();f.node('material-apply').click();await tick();await f.change('alvi');release();await tick();assert.doesNotMatch(f.node('status').textContent,/Проверено/);await f.change('palitra-love');assert.equal(f.node('materials-connection').textContent.includes('заблокирована'),status==='uncertain');}finally{f.close();}
+  }
 });

@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {createVkCommunityHandler}=require('./vk-community-http');
 function fixture() {
  const calls=[],responses=[];let reads=0;
- const community=Object.fromEntries(['getSettings','saveSettings','checkConnection','syncConversations','syncHistory','reply'].map(method=>[method,(code,body)=>{calls.push({method,code,body});return{companyCode:code,operation:method};}]));
+ const community=Object.fromEntries(['getSettings','saveSettings','checkConnection','syncConversations','syncHistory','reply','previewReply','confirmReply'].map(method=>[method,(code,body)=>{calls.push({method,code,body});return{companyCode:code,operation:method};}]));
  const handler=createVkCommunityHandler({community,companyModuleContext(req,code,permission){
   assert.equal(permission,'vk-community.owner');
   if(!req.identity)throw Object.assign(Error('Forbidden'),{status:403});
@@ -14,7 +14,7 @@ function fixture() {
  const request=(method,path,body,role='owner')=>handler({method,body,...(role?{identity:{role}}:{})},{},new URL('https://fixture.test'+path),{'x-fixture-cors':'yes'});
  return{calls,responses,request,community,get reads(){return reads;}};
 }
-const routes=[['GET','settings','getSettings'],['PUT','settings','saveSettings'],['POST','check','checkConnection'],['POST','conversations','syncConversations'],['POST','history','syncHistory'],['POST','reply','reply']];
+const routes=[['GET','settings','getSettings'],['PUT','settings','saveSettings'],['POST','check','checkConnection'],['POST','conversations','syncConversations'],['POST','history','syncHistory'],['POST','reply','reply'],['POST','reply-preview','previewReply'],['POST','reply-confirm','confirmReply']];
 
 test('HTTP handler rejects every non-owner before reading bodies or contacting a connector',async()=>{
  const f=fixture();for(const role of ['editor','viewer',null])for(const [method,path]of routes)await assert.rejects(f.request(method,`/vk-community/${path}?companyCode=avokado`,{},role),e=>e.status===403);
@@ -34,8 +34,19 @@ test('unsupported methods and unrelated paths never invoke a connector',async()=
  for(const [method,path]of [['GET','reply'],['POST','settings'],['DELETE','settings'],['POST','missing']])await assert.rejects(f.request(method,`/vk-community/${path}?companyCode=avokado`,{}),e=>e.status===405);
  assert.equal(f.calls.length,0);assert.equal(f.reads,0);
 });
+test('attachment routes bound body reads and revalidate owner/company after asynchronous body parsing',async()=>{
+ for(const route of ['reply-preview','reply-confirm'])for(const change of ['none','role','company','user']) {
+  const calls=[],limits=[];let scopeChecks=0;
+  const handler=createVkCommunityHandler({community:{previewReply:()=>calls.push('preview'),confirmReply:()=>calls.push('confirm')},
+   companyModuleContext(){scopeChecks++;return {identity:{userId:scopeChecks===2&&change==='user'?2:1,role:scopeChecks===2&&change==='role'?'viewer':'owner'},company:{code:scopeChecks===2&&change==='company'?'other':'avokado'}};},
+   readJson:async(req,limit)=>{limits.push(limit);return {};},send(){} });
+  const run=()=>handler({method:'POST'},{},new URL(`https://fixture.test/vk-community/${route}?companyCode=avokado`));
+  if(change==='none'){await run();assert.equal(calls.length,1);}else{await assert.rejects(run(),e=>e.status===403);assert.equal(calls.length,0);}
+  assert.equal(scopeChecks,2);assert.deepEqual(limits,[route==='reply-preview'?12*1024*1024:64*1024]);
+ }
+});
 test('malformed JSON body shapes fail as 400 without connector calls',async()=>{
- const f=fixture();for(const [method,path]of routes.filter(item=>['settings','conversations','history','reply'].includes(item[1])&&item[0]!=='GET'))for(const value of [null,[],true,1,'not an object'])await assert.rejects(f.request(method,`/vk-community/${path}?companyCode=avokado`,value),e=>e.status===400);
+ const f=fixture();for(const [method,path]of routes.filter(item=>['settings','conversations','history','reply','reply-preview','reply-confirm'].includes(item[1])&&item[0]!=='GET'))for(const value of [null,[],true,1,'not an object'])await assert.rejects(f.request(method,`/vk-community/${path}?companyCode=avokado`,value),e=>e.status===400);
  assert.equal(f.calls.length,0);
 });
 test('only known connector errors receive static safe HTTP code and message; unknown failures remain for server handling',async()=>{
