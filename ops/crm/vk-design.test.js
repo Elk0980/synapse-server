@@ -7,7 +7,7 @@ const oldImage={url:'https://sun1.userapi.com/old.jpg',width:1590,height:400};
 const newImage={url:'https://sun1.userapi.com/new.jpg',width:1590,height:400};
 function fixture(t) {
  const db=new DatabaseSync(':memory:');db.exec("CREATE TABLE companies(code TEXT PRIMARY KEY COLLATE NOCASE,is_deleted INTEGER NOT NULL DEFAULT 0);INSERT INTO companies VALUES('palitra-love',0),('alvi',0),('deleted',1)");t.after(()=>db.close());
- const settings={companyCode:'palitra-love',groupId:'241948768',revision:1,connected:true};
+ const settings={companyCode:'palitra-love',groupId:'12345',revision:1,connected:true};
  let description='Before',cover={enabled:1,images:[oldImage]},handler,uploadHandler;const calls=[],uploads=[];
  const direct={getSettings(code){return {...settings,companyCode:code,groupId:code==='alvi'?'222':settings.groupId};},async request(code,purpose,revision,method,params){
   assert.equal(purpose,'design');assert.equal(revision,settings.revision);const call={code,method,params};calls.push(call);if(handler)return handler(call);
@@ -49,7 +49,7 @@ test('stale provider state or changed binding fails before mutation',async t=>{
 test('concurrent apply blocks a second mutation and claims the first before provider call',async t=>{
  const f=fixture(t),p=await f.preview();let release;
  f.setHandler(({method})=>{
-  if(method==='groups.getById')return {groups:[{id:241948768,description:'Before',cover:{enabled:1,images:[oldImage]}}]};
+  if(method==='groups.getById')return {groups:[{id:12345,description:'Before',cover:{enabled:1,images:[oldImage]}}]};
   assert.equal(f.db.prepare('SELECT status FROM vk_design_actions').get().status,'applying');return new Promise(resolve=>release=()=>resolve(1));
  });
  const pending=f.apply(p);while(!release)await new Promise(resolve=>setImmediate(resolve));
@@ -59,7 +59,7 @@ test('concurrent apply blocks a second mutation and claims the first before prov
 test('uncertain mutation never retries, errors redact provider text and malformed acceptance is uncertain',async t=>{
  for(const mode of ['timeout','malformed','reject']){
   const f=fixture(t),p=await f.preview();f.setHandler(({method})=>{
-   if(method==='groups.getById')return {groups:[{id:241948768,description:'Before',cover:{enabled:1,images:[oldImage]}}]};
+   if(method==='groups.getById')return {groups:[{id:12345,description:'Before',cover:{enabled:1,images:[oldImage]}}]};
    if(mode==='malformed')return {secret:'TOKEN_DO_NOT_LEAK'};
    throw Object.assign(new Error('TOKEN_DO_NOT_LEAK'),{code:mode==='reject'?'ACCESS_DENIED':'CONNECTION_UNCERTAIN',ambiguous:mode!=='reject'});
   });
@@ -69,7 +69,7 @@ test('uncertain mutation never retries, errors redact provider text and malforme
 });
 
 test('accepted mutation is not represented as verified when readback differs or fails',async t=>{
- const f=fixture(t),p=await f.preview();f.setHandler(({method})=>method==='groups.edit'?1:{groups:[{id:241948768,description:'Before',cover:{enabled:1,images:[oldImage]}}]});
+ const f=fixture(t),p=await f.preview();f.setHandler(({method})=>method==='groups.edit'?1:{groups:[{id:12345,description:'Before',cover:{enabled:1,images:[oldImage]}}]});
  assert.equal((await f.apply(p)).status,'applied_unverified');
 });
 
@@ -93,7 +93,7 @@ test('cover acceptance needs saved-image match in readback; scalar response is n
  for(const mode of ['mismatch','scalar']){
   const f=fixture(t),p=await f.preview({operation:'cover',description:undefined,image:{mime:'image/png',base64:PNG}});
   f.setHandler(({method})=>({
-   'groups.getById':{groups:[{id:241948768,description:'Before',cover:{enabled:1,images:[oldImage]}}]},
+   'groups.getById':{groups:[{id:12345,description:'Before',cover:{enabled:1,images:[oldImage]}}]},
    'photos.getOwnerCoverPhotoUploadServer':{upload_url:'https://pu.vk.com/upload'},
    'photos.saveOwnerCoverPhoto':mode==='scalar'?1:{images:[newImage]},
   })[method]);assert.equal((await f.apply(p)).status,mode==='scalar'?'uncertain':'applied_unverified');
@@ -111,14 +111,14 @@ test('image and URL validation rejects malformed, oversized, arbitrary and priva
 test('unsafe upload server and bounded/invalid upload reply cannot reach cover save',async t=>{
  for(const mode of ['host','large','invalid','redirect']){
   const f=fixture(t),p=await f.preview({operation:'cover',description:undefined,image:{mime:'image/png',base64:PNG}});
-  f.setHandler(({method})=>method==='groups.getById'?{groups:[{id:241948768,description:'Before',cover:{enabled:1,images:[oldImage]}}]}:{upload_url:mode==='host'?'https://127.0.0.1/u':'https://pu.vk.com/u'});
+  f.setHandler(({method})=>method==='groups.getById'?{groups:[{id:12345,description:'Before',cover:{enabled:1,images:[oldImage]}}]}:{upload_url:mode==='host'?'https://127.0.0.1/u':'https://pu.vk.com/u'});
   f.setUploadHandler(()=>new Response(mode==='large'?'X'.repeat(2*1024*1024+1):mode==='invalid'?'{}':'redirect',{status:mode==='redirect'?302:200}));
   const result=await f.apply(p);assert.equal(result.status,'failed');assert.ok(!f.calls.some(c=>c.method==='photos.saveOwnerCoverPhoto'));assert.equal(f.uploads.length,mode==='host'?0:1);
  }
 });
 
 test('revision changes during read and between cover upload and save cannot mutate new binding',async t=>{
- const f=fixture(t);f.setHandler(()=>{f.settings.revision=2;return {groups:[{id:241948768,description:'Before',cover:{enabled:1,images:[oldImage]}}]};});
+ const f=fixture(t);f.setHandler(()=>{f.settings.revision=2;return {groups:[{id:12345,description:'Before',cover:{enabled:1,images:[oldImage]}}]};});
  await assert.rejects(f.preview(),errorCode('SETTINGS_CHANGED'));assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM vk_design_previews').get().n,0);
  const g=fixture(t),p=await g.preview({operation:'cover',description:undefined,image:{mime:'image/png',base64:PNG}});
  g.setUploadHandler(()=>{g.settings.revision=2;return new Response(JSON.stringify({hash:'h',photo:'p'}));});
@@ -127,7 +127,7 @@ test('revision changes during read and between cover upload and save cannot muta
 
 test('accepted write preserves unverified audit after connection changes mid mutation',async t=>{
  const f=fixture(t),p=await f.preview();f.setHandler(({method})=>{
-  if(method==='groups.getById')return {groups:[{id:241948768,description:'Before',cover:{enabled:1,images:[oldImage]}}]};
+  if(method==='groups.getById')return {groups:[{id:12345,description:'Before',cover:{enabled:1,images:[oldImage]}}]};
   f.settings.revision=2;return 1;
  });
  const result=await f.apply(p);assert.equal(result.status,'applied_unverified');assert.equal(result.code,'SETTINGS_CHANGED');assert.equal(f.api.history('palitra-love').items[0].revision,1);
@@ -135,7 +135,7 @@ test('accepted write preserves unverified audit after connection changes mid mut
 
 test('another pending action for the same group is blocked and failed claim leaves no new journal row',async t=>{
  const f=fixture(t),p=await f.preview(),other=await f.preview({description:'Second'});let release;
- f.setHandler(({method})=>method==='groups.getById'?{groups:[{id:241948768,description:'Before',cover:{enabled:1,images:[oldImage]}}]}:new Promise(resolve=>release=()=>resolve(1)));
+ f.setHandler(({method})=>method==='groups.getById'?{groups:[{id:12345,description:'Before',cover:{enabled:1,images:[oldImage]}}]}:new Promise(resolve=>release=()=>resolve(1)));
  const pending=f.apply(p);while(!release)await new Promise(resolve=>setImmediate(resolve));
  await assert.rejects(f.apply(other,{requestId:'fixture_request_0002'}),errorCode('OPERATION_BUSY'));assert.equal(f.api.history('palitra-love').items.length,1);release();await pending;
 });
@@ -148,8 +148,8 @@ test('upload deadline bounds a stuck fetch and never calls save',async t=>{
 });
 
 test('no hidden assumptions for malformed state, empty description is explicit and expiration needs new preview',async t=>{
- const f=fixture(t);f.setHandler(()=>({groups:[{id:241948768,cover:{enabled:0,images:[]}}]}));await assert.rejects(f.preview(),errorCode('RESPONSE_INVALID'));
- f.setHandler(()=>({groups:[{id:241948768,description:'',cover:{enabled:0}}]}));const p=await f.preview({description:''});assert.equal(p.before,'');assert.equal(p.after,'');
+ const f=fixture(t);f.setHandler(()=>({groups:[{id:12345,cover:{enabled:0,images:[]}}]}));await assert.rejects(f.preview(),errorCode('RESPONSE_INVALID'));
+ f.setHandler(()=>({groups:[{id:12345,description:'',cover:{enabled:0}}]}));const p=await f.preview({description:''});assert.equal(p.before,'');assert.equal(p.after,'');
  const expired=createVkDesign(f.db,{...f.options,now:()=>Date.parse('2026-10-04T13:00:00Z')});await assert.rejects(expired.apply('palitra-love',{revision:1,previewId:p.previewId,requestId:'fixture_request_0001'}),errorCode('PREVIEW_EXPIRED'));
 });
 
@@ -162,7 +162,7 @@ test('JPEG header dimensions are bounded, scan data is required and PNG input do
 });
 
 test('optional cover is unknown without blocking description and wrapped SDK upload response is accepted',async t=>{
- const f=fixture(t);f.setHandler(()=>({groups:[{id:241948768,description:'Before'}]}));assert.equal((await f.api.getState('palitra-love')).cover,null);
+ const f=fixture(t);f.setHandler(()=>({groups:[{id:12345,description:'Before'}]}));assert.equal((await f.api.getState('palitra-love')).cover,null);
  assert.equal((await f.preview()).before,'Before');await assert.rejects(f.preview({operation:'cover',description:undefined,image:{mime:'image/png',base64:PNG}}),errorCode('RESPONSE_INVALID'));
  const g=fixture(t),p=await g.preview({operation:'cover',description:undefined,image:{mime:'image/png',base64:PNG}});g.setUploadHandler(()=>new Response(JSON.stringify({response:{hash:'h',photo:'p'}})));
  assert.equal((await g.apply(p)).status,'verified');assert.equal(g.db.prepare('SELECT image_bytes FROM vk_design_previews').get().image_bytes,null);
@@ -180,17 +180,17 @@ test('design composes with real direct connector and preserves forced group and 
  const {createVkDirect}=require('./vk-direct');const f=fixture(t);let description='Before',cover={enabled:1,images:[oldImage]};const calls=[];
  const fetchImpl=async(url,options)=>{
   const method=url.split('/').at(-1),params=Object.fromEntries(new URLSearchParams(options.body));calls.push({method,params});assert.equal(options.headers.Authorization,'Bearer SYNTHETIC_GROUP_TOKEN');
-  if(!['groups.getTokenPermissions','photos.saveOwnerCoverPhoto'].includes(method))assert.equal(params.group_id,'241948768');
+  if(!['groups.getTokenPermissions','photos.saveOwnerCoverPhoto'].includes(method))assert.equal(params.group_id,'12345');
   let response;
   if(method==='groups.getTokenPermissions')response={mask:1,permissions:[]};
-  else if(method==='groups.getById')response={groups:[{id:241948768,description,cover}]};
+  else if(method==='groups.getById')response={groups:[{id:12345,description,cover}]};
   else if(method==='groups.edit'){description=params.description;response=1;}
   else if(method==='photos.getOwnerCoverPhotoUploadServer'){assert.equal(params.is_video_cover,'0');response={upload_url:'https://pu.vk.com/u'};}
   else if(method==='photos.saveOwnerCoverPhoto'){assert.equal(params.group_id,undefined);assert.equal(params.photo,'photo');cover={enabled:1,images:[newImage]};response={images:[newImage]};}
   else throw new Error('Unexpected method');
   return new Response(JSON.stringify({response}));
  };
- const direct=createVkDirect(f.db,{apiKey:'SYNTHETIC_STORAGE_KEY',fetchImpl});direct.saveSettings('palitra-love','design',{revision:0,groupId:'241948768',tokenType:'group',accessToken:'SYNTHETIC_GROUP_TOKEN'});
+ const direct=createVkDirect(f.db,{apiKey:'SYNTHETIC_STORAGE_KEY',fetchImpl});direct.saveSettings('palitra-love','design',{revision:0,groupId:'12345',tokenType:'group',accessToken:'SYNTHETIC_GROUP_TOKEN'});
  assert.equal((await direct.checkConnection('palitra-love','design')).ok,true);
  const api=createVkDesign(f.db,{direct,fetchImpl:async(url,options)=>{assert.equal(options.headers,undefined);assert.equal(url,'https://pu.vk.com/u');return new Response(JSON.stringify({response:{hash:'hash',photo:'photo'}}));}});
  const text=await api.preview('PALITRA-LOVE',{revision:1,operation:'description',description:'New description'});
@@ -202,7 +202,7 @@ test('design composes with real direct connector and preserves forced group and 
 
 test('ambiguous provider internal failure after mutation is uncertain and cannot dispatch a second time',async t=>{
  const f=fixture(t),p=await f.preview();f.setHandler(({method})=>{
-  if(method==='groups.getById')return {groups:[{id:241948768,description:'Before',cover:{enabled:1,images:[oldImage]}}]};
+  if(method==='groups.getById')return {groups:[{id:12345,description:'Before',cover:{enabled:1,images:[oldImage]}}]};
   f.setDescription('After');throw Object.assign(new Error('PRIVATE_PROVIDER_INTERNAL_FAILURE'),{code:'CONNECTION_UNCERTAIN',uncertain:true,ambiguous:true});
  });
  const result=await f.apply(p);assert.equal(result.status,'uncertain');assert.equal(result.code,'CONNECTION_UNCERTAIN');

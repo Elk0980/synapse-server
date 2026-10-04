@@ -13,4 +13,4 @@
 ## Phase 3: acceptance
 - [x] T007 Run focused unit, route, DOM and regression tests; review all deletions and secret-free diff.
 - [x] T008 Converge requirements and independent review; close findings.
-- [ ] T009 Commit/push feature branch, open draft PR and record exact validation/remaining live setup boundary.
+- [x] T009 Commit/push feature branch, open draft PR and record exact validation/remaining live setup boundary.

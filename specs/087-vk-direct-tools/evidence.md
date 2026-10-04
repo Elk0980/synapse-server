@@ -19,3 +19,7 @@
 No live VK token, OAuth grant, API write, browser use, deployment, merge, role change or customer message. Mock tests do not prove live provider rights or rollout. User authorization/OAuth issuance is not implemented here; private fields accept only an already authorized token after a separate setup decision. Menu/mobile cover/avatar/albums/market and automatic customer replies are outside this increment.
 
 An interrupted process can retain an applying action requiring manual operational reconciliation; no automatic resend or unlock. A cover restore needs a retained original image. Upload hosts are conservatively restricted by Synapse policy, not claimed as VK's complete official CDN contract.
+
+## Reviewable delivery
+
+Draft PR: https://github.com/Elk0980/synapse-server/pull/449, branch `087-vk-direct-tools`, base `f6a93da88d8d9b67ec74dccf096c8a1dd6779bcb`. Implementation commit `3f588dd80c8db300ee3e37acfa5f7b0cd8ce80ff`; follow-up replaces the public community number in fixtures with a generic fixture ID (no production behavior change). The affected design/DOM tests were rerun. CI results attach to the latest PR head; this document does not claim a completed CI run before its result exists. No merge or deployment.

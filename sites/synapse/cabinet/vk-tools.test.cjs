@@ -6,7 +6,7 @@ const {JSDOM} = require('jsdom');
 const source = fs.readFileSync(__dirname + '/vk-tools.js','utf8');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const readState = async f => { f.node('state').click(); await tick(); };
-const setting = (companyCode,purpose,extra={}) => ({companyCode,purpose,groupId:companyCode==='palitra-love'?'241948768':'123',tokenType:purpose==='analytics'?'user':'group',revision:2,configured:true,enabled:true,connected:true,...extra});
+const setting = (companyCode,purpose,extra={}) => ({companyCode,purpose,groupId:companyCode==='palitra-love'?'12345':'123',tokenType:purpose==='analytics'?'user':'group',revision:2,configured:true,enabled:true,connected:true,...extra});
 function fixture(override,role='owner') {
   const dom = new JSDOM('<main></main>',{url:'https://example.test',runScripts:'outside-only'}),w=dom.window,container=w.document.querySelector('main'),calls=[];
   w.eval(source);
@@ -16,7 +16,7 @@ function fixture(override,role='owner') {
     if(override){const value=await override(call);if(value!==undefined)return value;}
     if(call.path.endsWith('/settings'))return setting(call.companyCode,call.purpose,call.method==='PUT'?{revision:3,connected:false}:{});
     if(call.path.endsWith('/check'))return setting(call.companyCode,call.purpose);
-    const base={companyCode:call.companyCode,revision:2,groupId:call.companyCode==='palitra-love'?'241948768':'123'};
+    const base={companyCode:call.companyCode,revision:2,groupId:call.companyCode==='palitra-love'?'12345':'123'};
     if(call.path.endsWith('/state'))return {...base,description:'Старое описание',cover:{enabled:false,images:[]}};
     if(call.path.endsWith('/history'))return {companyCode:call.companyCode,items:[]};
     if(call.path.endsWith('/preview')||call.path.endsWith('/rollback-preview'))return {...base,previewId:'preview-fixture',operation:'description',before:'Старое описание',after:call.body.description||'Возврат',warnings:[]};
@@ -31,14 +31,14 @@ test('save clears secret and needs check, preserving publishing and adding CSRF/
 test('description requires explicit preview then separate apply; edited text invalidates preview',async()=>{const f=fixture();try{await f.mount();await readState(f);f.input('description','Новое <script>');f.node('description-preview').click();await tick();assert.equal(f.calls.at(-1).path,'/content/crm/vk-tools/design/preview');assert.equal(f.node('apply').disabled,false);assert.equal(f.container.querySelector('script'),null);assert.match(f.node('preview').textContent,/Новое <script>/);assert.ok(!f.calls.some(c=>c.path.endsWith('/apply')));f.input('description','Ещё новое');assert.equal(f.node('apply').disabled,true);f.node('apply').click();await tick();assert.ok(!f.calls.some(c=>c.path.endsWith('/apply')));}finally{f.close();}});
 test('uncertain apply never retries and retains request identity for explicit status recovery',async()=>{let original;const f=fixture(c=>{if(c.path.endsWith('/apply')){original=c.body;throw Error('FIXTURE_PRIVATE_ERROR');}});try{await f.mount();await readState(f);f.input('description','Новое');f.node('description-preview').click();await tick();f.node('apply').click();await tick();assert.match(original.requestId,/^[a-f0-9-]{36}$/);assert.equal(f.node('apply').disabled,true);assert.match(f.node('status').textContent,/не подтверждён/);assert.doesNotMatch(f.container.textContent,/FIXTURE_PRIVATE_ERROR/);f.node('apply').click();assert.equal(f.calls.filter(c=>c.path.endsWith('/apply')).length,1);f.node('history-refresh').click();await tick();assert.equal(f.calls.at(-1).method,'GET');}finally{f.close();}});
 test('company switch clears secrets/drafts and ignores late settings from old company',async()=>{let release;const f=fixture(c=>c.companyCode==='palitra-love'&&c.purpose==='analytics'?new Promise(r=>{release=r;}):undefined);try{const pending=f.mount();f.input('design-token','OLD_SECRET');f.input('description','OLD_PRIVATE_DRAFT');await f.change('alvi');assert.equal(f.node('design-token').value,'');assert.equal(f.node('description').value,'');release(setting('palitra-love','analytics',{group:{name:'OLD_PRIVATE_NAME'}}));await pending;assert.equal(f.node('analytics-group').value,'123');assert.doesNotMatch(f.container.textContent,/OLD_PRIVATE/);}finally{f.close();}});
-test('role loss clears UI and suppresses late previews',async()=>{let release;const f=fixture(c=>c.path.endsWith('/preview')?new Promise(r=>{release=()=>r({companyCode:c.companyCode,revision:2,groupId:'241948768',previewId:'p',operation:'description',before:{},after:{description:'PRIVATE_LATE'}});}):undefined);try{await f.mount();await readState(f);f.input('description','Text');f.node('description-preview').click();await tick();await f.change('palitra-love','editor');assert.equal(f.container.children.length,0);release();await tick();assert.equal(f.container.children.length,0);}finally{f.close();}});
-test('wrong company or revision preview cannot enable apply',async()=>{for(const extra of [{companyCode:'alvi'},{revision:999}]){const f=fixture(c=>c.path.endsWith('/preview')?{companyCode:c.companyCode,groupId:'241948768',revision:2,previewId:'p',operation:'description',before:{},after:{description:'WRONG_PRIVATE'},...extra}:undefined);try{await f.mount();await readState(f);f.input('description','Text');f.node('description-preview').click();await tick();assert.equal(f.node('apply').disabled,true);assert.doesNotMatch(f.container.textContent,/WRONG_PRIVATE/);}finally{f.close();}}});
+test('role loss clears UI and suppresses late previews',async()=>{let release;const f=fixture(c=>c.path.endsWith('/preview')?new Promise(r=>{release=()=>r({companyCode:c.companyCode,revision:2,groupId:'12345',previewId:'p',operation:'description',before:{},after:{description:'PRIVATE_LATE'}});}):undefined);try{await f.mount();await readState(f);f.input('description','Text');f.node('description-preview').click();await tick();await f.change('palitra-love','editor');assert.equal(f.container.children.length,0);release();await tick();assert.equal(f.container.children.length,0);}finally{f.close();}});
+test('wrong company or revision preview cannot enable apply',async()=>{for(const extra of [{companyCode:'alvi'},{revision:999}]){const f=fixture(c=>c.path.endsWith('/preview')?{companyCode:c.companyCode,groupId:'12345',revision:2,previewId:'p',operation:'description',before:{},after:{description:'WRONG_PRIVATE'},...extra}:undefined);try{await f.mount();await readState(f);f.input('description','Text');f.node('description-preview').click();await tick();assert.equal(f.node('apply').disabled,true);assert.doesNotMatch(f.container.textContent,/WRONG_PRIVATE/);}finally{f.close();}}});
 
 test('non-owner never reads private connections or retains controls',async()=>{
   const f=fixture(undefined,'editor');try{await f.mount();assert.equal(f.calls.length,0);assert.equal(f.container.children.length,0);}finally{f.close();}
 });
 test('unknown state is not treated as empty description and cannot be overwritten',async()=>{
-  const f=fixture(c=>c.path.endsWith('/state')?{companyCode:c.companyCode,groupId:'241948768',revision:2,description:null,cover:null}:undefined);
+  const f=fixture(c=>c.path.endsWith('/state')?{companyCode:c.companyCode,groupId:'12345',revision:2,description:null,cover:null}:undefined);
   try{await f.mount();f.input('description','UNSAVED');await readState(f);assert.equal(f.node('description').value,'UNSAVED');assert.equal(f.node('description-preview').disabled,true);assert.equal(f.node('cover-preview').disabled,true);assert.match(f.node('status').textContent,/неизвестного поля/);assert.ok(!f.calls.some(c=>c.path.endsWith('/preview')));}finally{f.close();}
 });
 test('binding or token type changes need a new credential, without posting or checking automatically',async()=>{
@@ -49,7 +49,7 @@ test('provider token-type errors show fixed wording and clear failed-save secret
   try{await f.mount();f.input('design-token','PRIVATE_SECRET');f.submit('design-form');await tick();assert.equal(f.node('design-token').value,'');assert.match(f.node('status').textContent,/Тип ключа не подходит/);assert.doesNotMatch(f.container.textContent,/SECRET_FROM_PROVIDER|PRIVATE_SECRET/);assert.equal(f.calls.filter(c=>c.method!=='GET').length,1);}finally{f.close();}
 });
 test('cover input is bounded, private, previewed before explicit apply and never uploaded on selection',async()=>{
-  const f=fixture(c=>c.path.endsWith('/preview')&&c.body.operation==='cover'?{companyCode:c.companyCode,groupId:'241948768',revision:2,previewId:'cover-preview',operation:'cover',before:{enabled:false,images:[]},after:{mime:'image/png',width:1590,height:400,crop:{x:0,y:0,x2:1590,y2:400}},warnings:['COVER_RESTORE_REQUIRES_ORIGINAL']}:undefined);
+  const f=fixture(c=>c.path.endsWith('/preview')&&c.body.operation==='cover'?{companyCode:c.companyCode,groupId:'12345',revision:2,previewId:'cover-preview',operation:'cover',before:{enabled:false,images:[]},after:{mime:'image/png',width:1590,height:400,crop:{x:0,y:0,x2:1590,y2:400}},warnings:['COVER_RESTORE_REQUIRES_ORIGINAL']}:undefined);
   try{
     await f.mount();await readState(f);
     const select=file=>{Object.defineProperty(f.node('cover'),'files',{configurable:true,value:[file]});f.node('cover').dispatchEvent(new f.w.Event('change'));};
@@ -67,7 +67,7 @@ test('history rollback only creates a new preview and requires its own explicit 
   try{await f.mount();f.node('history-refresh').click();await tick();f.container.querySelector('[data-rollback]').click();await tick();assert.equal(f.calls.at(-1).path,'/content/crm/vk-tools/design/rollback-preview');assert.deepEqual(f.calls.at(-1).body,{revision:2,requestId:'old-request'});assert.equal(f.node('apply').disabled,false);assert.equal(f.calls.some(c=>c.path.endsWith('/apply')),false);}finally{f.close();}
 });
 test('read-only state remains available after an unverified apply without clearing its request or unlocking mutation',async()=>{
-  const f=fixture(c=>c.path.endsWith('/apply')?{companyCode:c.companyCode,groupId:'241948768',revision:2,requestId:c.body.requestId,status:'applied_unverified'}:undefined);
+  const f=fixture(c=>c.path.endsWith('/apply')?{companyCode:c.companyCode,groupId:'12345',revision:2,requestId:c.body.requestId,status:'applied_unverified'}:undefined);
   try{
     await f.mount();await readState(f);f.input('description','Новое описание');f.node('description-preview').click();await tick();f.node('apply').click();await tick();
     const apply=f.calls.at(-1);assert.equal(f.node('state').disabled,false);assert.equal(f.node('description-preview').disabled,true);
