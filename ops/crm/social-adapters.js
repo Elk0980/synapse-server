@@ -32,6 +32,15 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
      Просмотры и реакции постов Bot API не отдаёт — и здесь их не появляется. */
   const CHANNEL_NOTE = 'регулярный счётчик подписчиков канала через существующего бота Synapse; просмотры и реакции постов через Bot API недоступны';
   const channelReady = () => Boolean(channelStats?.channelMembers && channelStats.ready !== false);
+  // Only an explicitly absent dedicated record preserves the previous provider path.
+  // A saved, disabled, invalid or unreadable connection must never expose legacy keys.
+  const vkConnection = (code) => {
+    if (!vkDirect) return null;
+    const connection = vkDirect.getSettings(code, 'analytics');
+    if (connection?.configured === false) return null;
+    if (connection?.configured === true) return connection;
+    throw Object.assign(new Error('Состояние отдельного подключения ВКонтакте не прочитано'), { code: 'RESPONSE_INVALID' });
+  };
   async function telegramChannel({ company, account }) {
     if (!channelReady()) return null;
     const ref = String(account?.account_ref || '').trim();
@@ -75,7 +84,7 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
     info: () => ({ name: 'direct', available: Boolean(transport || vkDirect), note: 'Прямые API площадок через сохранённые подключения; Instagram/TikTok/YouTube требуют собственных приложений и разрешений владельца.' }),
     // Отпечаток подключения площадки (ревизия/цель, без токена): сравнивается до и после сетевого вызова.
     connectionRevision({ company, platform, account }) {
-      if (platform === 'vk' && vkDirect) return vkDirect.connectionRevision(company.code, 'analytics');
+      if (platform === 'vk' && vkConnection(company.code)) return vkDirect.connectionRevision(company.code, 'analytics');
       /* Счётчик канала опирается на компанию и сохранённый канал. Но при временной
          недоступности счётчика сбор уходит на прежний путь через подключение площадки —
          значит ревизия ЭТОГО подключения из отпечатка выпадать не должна, иначе смена
@@ -99,15 +108,24 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
           missing: ['в аккаунте аналитики не указан канал', CHANNEL_NOTE] };
         return { status: 'depends_on_connection', missing: scopedNeed(platform, account), note: 'Проверяется при сборе по сохранённому подключению площадки.' };
       }
-      if (platform === 'vk' && vkDirect) return { status: 'depends_on_connection',
-        missing: ['отдельное проверенное подключение аналитики ВКонтакте с пользовательским ключом stats и тем же числовым ID сообщества'],
-        note: 'Публикации Onlypult не меняются. Доступ для оформления не используется для статистики.' };
+      if (platform === 'vk') {
+        try {
+          if (vkConnection(account?.company_code || account?.companyCode || '')) return { status: 'depends_on_connection',
+            missing: ['отдельное проверенное подключение аналитики ВКонтакте с пользовательским ключом stats и тем же числовым ID сообщества'],
+            note: 'Публикации Onlypult не меняются. Доступ для оформления не используется для статистики.' };
+        } catch { return { status: 'missing_access', missing: ['отдельное подключение аналитики ВКонтакте недоступно'] }; }
+      }
       if (platform === 'vk') return { status: 'depends_on_connection', missing: scopedNeed(platform, account), note: 'Проверяется при сборе по сохранённому подключению площадки.' };
       return { status: 'missing_access', missing: scopedNeed(platform, account) };
     },
     async collect({ company, platform, account, date, timezone, closed = true, dayStartMs, dayEndMs }) {
       const need = scopedNeed(platform, account);
       if (platform !== 'telegram' && platform !== 'vk') return { status: 'missing_access', missing: need };
+      let connection = null;
+      if (platform === 'vk') {
+        try { connection = vkConnection(company.code); }
+        catch { return { status: 'failed', error: 'Состояние отдельного подключения ВКонтакте не прочитано; сбор остановлен', missing: [] }; }
+      }
       /* Счётчик канала идёт первым и не требует сохранённого подключения площадки.
          Прежний прямой путь через подключение сохраняется как запасной. */
       let temporary = null;
@@ -124,7 +142,7 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
       const keepRetryable = (result) => (temporary && ['missing_access', 'unsupported'].includes(result.status)
         ? { status: 'failed', error: temporary.error, missing: [...temporary.missing, ...(result.missing || [])] }
         : result);
-      if (!transport?.readStats && !(platform === 'vk' && vkDirect)) return { status: 'unsupported', missing: ['транспорт подключений недоступен'] };
+      if (!transport?.readStats && !connection) return { status: 'unsupported', missing: ['транспорт подключений недоступен'] };
       if (platform === 'telegram') {
         const chat = account.account_ref || undefined;
         let result;
@@ -141,10 +159,7 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
       if (platform === 'vk') {
         const group = String(account.account_ref || '').replace(/^club/, '').replace(/^-/, '');
         let readStats = (method, params) => transport.readStats(company.code, 'vk', method, params);
-        if (vkDirect) {
-          let connection;
-          try { connection = vkDirect.getSettings(company.code, 'analytics'); }
-          catch { return { status: 'missing_access', missing: ['отдельное подключение аналитики ВКонтакте недоступно'] }; }
+        if (connection) {
           if (!/^[1-9]\d{0,14}$/.test(group) || !Number.isSafeInteger(Number(group)) || group !== connection.groupId)
             return { status: 'missing_access', missing: ['ID сообщества в аналитике не совпадает с отдельным подключением ВКонтакте'] };
           if (!connection.connected || !connection.enabled || connection.tokenType !== 'user')
@@ -155,9 +170,9 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
         let members, stats;
         try { members = await readStats('groups.getById', { group_id: group || undefined, fields: 'members_count' }); }
         catch (error) {
-          if (vkDirect && !['ACCESS_DENIED', 'CONNECTION_MISSING', 'CONNECTION_DISABLED', 'TOKEN_UNREADABLE', 'TOKEN_TYPE_MISMATCH'].includes(error?.code))
+          if (connection && !['ACCESS_DENIED', 'CONNECTION_MISSING', 'CONNECTION_DISABLED', 'TOKEN_UNREADABLE', 'TOKEN_TYPE_MISMATCH'].includes(error?.code))
             return { status: 'failed', error: 'Отдельное подключение ВКонтакте временно не подтвердило чтение сообщества; данные не записаны', missing: [] };
-          return { status: 'missing_access', missing: vkDirect
+          return { status: 'missing_access', missing: connection
             ? ['отдельное подключение аналитики ВКонтакте не подтвердило чтение сообщества']
             : [`ВКонтакте отклонил запрос (${error?.code || 'ошибка'})`, ...need] };
         }
@@ -172,7 +187,7 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
         const dayStart = Math.floor(bounds.startMs / 1000), dayEnd = Math.floor(bounds.endMs / 1000) - 1;
         try { stats = await readStats('stats.get', { group_id: group || info?.id, timestamp_from: dayStart, timestamp_to: dayEnd, interval: 'day', stats_groups: 'visitors,reach,activity' }); }
         catch (error) {
-          if (vkDirect) return { status: 'failed', error: 'Отдельное подключение ВКонтакте не подтвердило сбор; данные не записаны', missing: [] };
+          if (connection) return { status: 'failed', error: 'Отдельное подключение ВКонтакте не подтвердило сбор; данные не записаны', missing: [] };
           stats = null; missing.push(`stats.get недоступен (${error?.code || 'ошибка'}): ${need[0]}`);
         }
         const entry = Array.isArray(stats?.result) ? stats.result[0] : null;
@@ -202,7 +217,10 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
         : 'Onlypult Analytics не подключён: аналитический доступ и профиль an_… не сохранены.' }),
     // describe сети не касается: только сохранённое состояние доступа и выбранного профиля.
     describe(platform, account) {
-      if (platform === 'vk' && vkDirect) return direct.describe(platform, account);
+      if (platform === 'vk') {
+        try { if (vkConnection(account?.company_code || account?.companyCode || '')) return direct.describe(platform, account); }
+        catch { return { status: 'missing_access', missing: ['отдельное подключение аналитики ВКонтакте недоступно'] }; }
+      }
       /* Публикации Telegram могут идти через Onlypult — счётчик подписчиков это не
          отменяет: он снимается отдельным путём через бота Synapse и публикаций не касается. */
       if (platform === 'telegram' && channelReady()) return direct.describe('telegram', account);
@@ -219,7 +237,8 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
     /* Отпечаток аналитической привязки: ревизия доступа плюс профиль, native ID и система
        суток. Контракт вызова — один объект контекста, как у прямого адаптера. */
     connectionRevision({ company, account, platform } = {}) {
-      if (platform === 'vk' && vkDirect) return direct.connectionRevision({ company, account, platform });
+      if (platform === 'vk' && vkConnection(company?.code || account?.company_code || account?.companyCode || ''))
+        return direct.connectionRevision({ company, account, platform });
       /* У счётчика канала своя привязка: компания и сохранённый канал. Аналитический доступ
          Onlypult к нему отношения не имеет, поэтому и отпечаток другой. */
       if (platform === 'telegram' && channelReady())
@@ -235,7 +254,10 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
     },
     async collect({ company, platform, account, date, timezone, companyCode, closed = true, dayStartMs, dayEndMs }) {
       const code = company?.code || companyCode || account?.company_code || account?.companyCode || '';
-      if (platform === 'vk' && vkDirect) return direct.collect({ company: { code }, platform, account, date, timezone, closed, dayStartMs, dayEndMs });
+      if (platform === 'vk') {
+        try { if (vkConnection(code)) return direct.collect({ company: { code }, platform, account, date, timezone, closed, dayStartMs, dayEndMs }); }
+        catch { return { status: 'failed', error: 'Состояние отдельного подключения ВКонтакте не прочитано; сбор остановлен', missing: [] }; }
+      }
       // Счётчик подписчиков канала не зависит от того, чем ведутся публикации.
       if (platform === 'telegram' && channelReady()) return telegramChannel({ company: { code }, account });
       if (!ONLYPULT_PLATFORMS.includes(platform)) return { status: 'unsupported', missing: [ONLYPULT_NEED[3]] };

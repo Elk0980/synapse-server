@@ -23,3 +23,11 @@ An interrupted process can retain an applying action requiring manual operationa
 ## Reviewable delivery
 
 Draft PR: https://github.com/Elk0980/synapse-server/pull/449, branch `087-vk-direct-tools`, base `f6a93da88d8d9b67ec74dccf096c8a1dd6779bcb`. Implementation commit `3f588dd80c8db300ee3e37acfa5f7b0cd8ce80ff`; follow-up replaces the public community number in fixtures with a generic fixture ID (no production behavior change). The affected design/DOM tests were rerun. CI results attach to the latest PR head; this document does not claim a completed CI run before its result exists. No merge or deployment.
+
+## Compatibility and image boundary follow-up
+
+The dedicated analytics selector now preserves the existing direct provider only when the new company record is explicitly absent. Configured, disabled, invalid or unreadable records never fall back; Onlypult without the new record keeps its previous unsupported VK behavior. A real collector regression proves an in-flight legacy result is discarded when the dedicated record appears. Five additional compatibility tests passed in the author's 109-test regression command; independent review of the selector reported no blocker. Root also reran the 48 analytics regressions successfully.
+
+The image validator uses a nonrecursive invalid-character scan plus canonical Base64 roundtrip. All 22 design tests passed, including an actual multi-megabyte PNG preview, exactly 8 MiB accepted and 8 MiB + 1 byte rejected before provider access.
+
+Windows execution disconnected before the final combined rerun and local commit. The exact reviewed patches were reconstructed against published head `51b5f27561285fbb2e4e84526c0d4af34ffa283a` and delivered atomically through GitHub's API; final CI must be read on the resulting PR head. That prior head passed vk-direct-tools, spec-kit and both project-chat-check runs. Local checkout requires reconciliation after connection recovery; do not overwrite its uncommitted copies or force-push the earlier head. No merge or deployment.

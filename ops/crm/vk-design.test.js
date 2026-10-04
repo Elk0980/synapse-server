@@ -210,3 +210,40 @@ test('ambiguous provider internal failure after mutation is uncertain and cannot
  assert.deepEqual(await f.apply(p),result);assert.deepEqual(await f.apply(p,{requestId:'different_request_0001'}),result);
  assert.equal(f.calls.filter(c=>c.method==='groups.edit').length,1);assert.ok(!JSON.stringify(f.api.history('palitra-love')).includes('PRIVATE_PROVIDER_INTERNAL_FAILURE'));
 });
+
+test('multi-megabyte valid PNG reaches private preview, accepts exactly 8 MiB and rejects one byte over',async t=>{
+ const {deflateSync,inflateSync,crc32}=require('node:zlib');
+ const chunk=(type,data)=>{
+  const result=Buffer.alloc(data.length+12);result.writeUInt32BE(data.length);result.write(type,4,4,'ascii');data.copy(result,8);
+  result.writeUInt32BE(crc32(result.subarray(4,-4)),result.length-4);return result;
+ };
+ const width=1024,height=1024,scanlines=Buffer.alloc(height*(1+width*3));
+ for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+  const offset=y*(1+width*3)+1+x*3;scanlines[offset]=x%256;scanlines[offset+1]=y%256;scanlines[offset+2]=(x+y)%256;
+ }
+ const compressed=deflateSync(scanlines,{level:0});assert.deepEqual(inflateSync(compressed),scanlines);
+ const ihdr=Buffer.alloc(13);ihdr.writeUInt32BE(width);ihdr.writeUInt32BE(height,4);ihdr[8]=8;ihdr[9]=2;
+ const parts=[Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',ihdr),chunk('IDAT',compressed),chunk('IEND',Buffer.alloc(0))];
+ const png=Buffer.concat(parts);assert.ok(png.length>2*1024*1024&&png.length<6*1024*1024);
+ const f=fixture(t),preview=await f.preview({operation:'cover',description:undefined,image:{mime:'image/png',base64:png.toString('base64')}});
+ assert.equal(preview.after.width,width);assert.equal(preview.after.height,height);assert.equal(f.uploads.length,0);
+ assert.equal(f.db.prepare('SELECT LENGTH(image_bytes) AS n FROM vk_design_previews WHERE preview_id=?').get(preview.previewId).n,png.length);
+ const limit=8*1024*1024,padded=size=>{
+  // A legal ancillary text chunk adjusts file size without changing the decoded image or its valid CRCs.
+  const text=Buffer.alloc(size-png.length-12,65);text.write('Fixture\0',0,'latin1');
+  return Buffer.concat([...parts.slice(0,-1),chunk('tEXt',text),parts.at(-1)]);
+ };
+ const exact=padded(limit);assert.equal(exact.length,limit);
+ const boundary=await f.preview({operation:'cover',description:undefined,image:{mime:'image/png',base64:exact.toString('base64')}});
+ assert.equal(f.db.prepare('SELECT LENGTH(image_bytes) AS n FROM vk_design_previews WHERE preview_id=?').get(boundary.previewId).n,limit);
+ const calls=f.calls.length,tooLarge=padded(limit+1);assert.equal(tooLarge.length,limit+1);
+ await assert.rejects(f.preview({operation:'cover',description:undefined,image:{mime:'image/png',base64:tooLarge.toString('base64')}}),error=>{
+  assert.ok(!(error instanceof RangeError));assert.equal(error.code,'INVALID_IMAGE');return true;
+ });
+ assert.equal(f.calls.length,calls);assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM vk_design_previews').get().n,2);
+ for(const base64 of ['A'.repeat(limit),png.toString('base64').replace(/.$/,'='),png.toString('base64').slice(0,-4)+'A===']){
+  // Non-image bytes and noncanonical padding must fail through the typed validation error, never the regexp stack.
+  if(base64===png.toString('base64'))continue;
+  assert.throws(()=>validateImage({mime:'image/png',base64}),error=>{assert.ok(!(error instanceof RangeError));assert.equal(error.code,'INVALID_IMAGE');return true;});
+ }
+});

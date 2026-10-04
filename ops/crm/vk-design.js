@@ -31,7 +31,8 @@ function validateUploadUrl(value) {
 }
 function validateImage(image) {
  if(!object(image)||Object.keys(image).some(key=>!['mime','base64'].includes(key))||!['image/png','image/jpeg'].includes(image.mime)||
-  typeof image.base64!=='string'||!image.base64.length||image.base64.length%4!==0||image.base64.length>4*Math.ceil(MAX_IMAGE_BYTES/3)||! /^[A-Za-z0-9+/]*={0,2}$/.test(image.base64))fail('INVALID_IMAGE');
+  typeof image.base64!=='string'||!image.base64.length||image.base64.length%4!==0||image.base64.length>4*Math.ceil(MAX_IMAGE_BYTES/3)||/[^A-Za-z0-9+/=]/.test(image.base64))fail('INVALID_IMAGE');
+ // Canonical roundtrip below rejects misplaced/excess padding without a repeated-group regex over multi-megabyte input.
  const bytes=Buffer.from(image.base64,'base64');if(bytes.length>MAX_IMAGE_BYTES||bytes.toString('base64')!==image.base64)fail('INVALID_IMAGE');
  let width=0,height=0;
  if(image.mime==='image/png') {
