@@ -38,7 +38,7 @@ test('album transport rejects group tokens, analytics purpose, foreign ownership
     ['photos.save', { ...saveParams, group_id: '999' }], ['photos.save', { ...saveParams, caption: 'x'.repeat(2001) }],
     ['photos.getById', { photos: '-999_91' }], ['photos.getById', { photos: '-12345_91_accesskey' }],
     ['photos.getById', { photos: '-12345_91,-12345_92' }], ['photos.getById', { photos: '-12345_91', access_key: 'fixture' }],
-    ['photos.saveOwnerPhoto', saveParams], ['wall.post', {}],
+    ['photos.getOwnerPhotoUploadServer', { owner_id: -12345 }], ['photos.saveOwnerPhoto', saveParams], ['wall.post', {}],
   ];
   for (const [method, params] of attempts) await assert.rejects(f.direct.request('demo-a', 'design', 1, method, params));
   await assert.rejects(f.direct.request('demo-a', 'analytics', 1, 'photos.getAlbums'), { code: 'METHOD_DENIED' });
