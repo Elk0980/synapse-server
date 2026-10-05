@@ -17,8 +17,12 @@ jobs:
   reader:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      EVA_PACKAGE_SOURCE: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -31,6 +35,20 @@ jobs:
         run: python -m unittest discover -s ops/eva-tasks -p '*_test.py' -v
       - name: Check CRM syntax
         run: node --check ops/crm/server.js
+      - name: Build identical immutable preparation packages
+        run: |
+          python ops/eva-tasks/build_package.py --source "$EVA_PACKAGE_SOURCE" --output "$RUNNER_TEMP/eva-package-a"
+          python ops/eva-tasks/build_package.py --source "$EVA_PACKAGE_SOURCE" --output "$RUNNER_TEMP/eva-package-b"
+          diff -r "$RUNNER_TEMP/eva-package-a" "$RUNNER_TEMP/eva-package-b"
+      - name: Verify delivered Linux command without services or secrets
+        run: |
+          cd "$RUNNER_TEMP/eva-package-a"
+          sha256sum --check SHA256SUMS
+          bash COMMAND.txt
+          if bash COMMAND.txt; then
+            echo 'Repeated preparation unexpectedly overwrote its destination' >&2
+            exit 1
+          fi
       - name: Build isolated Eva image
         run: docker build -t synapse-eva:test ops/eva-tasks
       - name: Validate dormant Eva compose
