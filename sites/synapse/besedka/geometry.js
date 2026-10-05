@@ -11,6 +11,10 @@
     if(!['gable','flat','shed'].includes(p.roof))throw Error('Выберите форму крыши.');
     result.roof=p.roof;result.rise=p.roof==='flat'?0:Number(p.rise);
     if(!Number.isFinite(result.rise)||(p.roof!=='flat'&&(result.rise<.1||result.rise>5)))throw Error('Укажите подъём крыши от 0,1 до 5 м.');
+    result.cover=p.cover||'solid';if(!['solid','pergola'].includes(result.cover))throw Error('Выберите покрытие.');
+    if(result.cover==='pergola'&&result.roof==='gable')throw Error('В этом примере пергола доступна для односкатной или плоской крыши.');
+    result.section=p.section==null||p.section===''?100:Number(p.section);
+    if(!Number.isFinite(result.section)||result.section<50||result.section>300)throw Error('Сечение опор должно быть от 50 до 300 мм.');
     for(const [key,max] of Object.entries({material:100,region:120,notes:5000}))result[key]=typeof p[key]==='string'?p[key].slice(0,max):'';
     return result;
   }
@@ -25,17 +29,30 @@
       edges.push([4,8],[8,7],[5,9],[9,6],[8,9]);
     }else if(p.roof==='shed'){
       vertices[4][1]+=p.rise;vertices[5][1]+=p.rise;
-      faces.push({v:[4,5,6,7],color:'#657e65'});
-    }else faces.push({v:[4,5,6,7],color:'#657e65'});
+      if(p.cover!=='pergola')faces.push({v:[4,5,6,7],color:'#657e65'});
+    }else if(p.cover!=='pergola')faces.push({v:[4,5,6,7],color:'#657e65'});
     const solidStart=faces.length;
     function box(x1,y1,z1,x2,y2,z2){
       const start=vertices.length;vertices.push([x1,y1,z1],[x2,y1,z1],[x2,y1,z2],[x1,y1,z2],[x1,y2,z1],[x2,y2,z1],[x2,y2,z2],[x1,y2,z2]);
       for(const [indices,color] of [[[0,1,5,4],'#ae8e67'],[[1,2,6,5],'#91734f'],[[2,3,7,6],'#bb9c73'],[[3,0,4,7],'#967956'],[[4,5,6,7],'#c6ab83']])faces.push({v:indices.map(i=>i+start),color});
     }
-    const t=.12;
+    const t=p.section/1000;
     for(const [x,z] of [[-l,-w],[l-t,-w],[l-t,w-t],[-l,w-t]])box(x,0,z,x+t,h+(p.roof==='shed'&&z<0?p.rise:0),z+t);
     box(-l,h-t,w-t,l,h,w);
     box(-l,h-t+(p.roof==='shed'?p.rise:0),-w,l,h+(p.roof==='shed'?p.rise:0),-w+t);
+    if(p.cover==='pergola'){
+      for(const x of [-l,l-t]){
+        const start=vertices.length,high=h+(p.roof==='shed'?p.rise:0);
+        vertices.push([x,high-t,-w],[x+t,high-t,-w],[x+t,h-t,w],[x,h-t,w],[x,high,-w],[x+t,high,-w],[x+t,h,w],[x,h,w]);
+        for(const [ids,color] of [[[0,1,5,4],'#ae8e67'],[[1,2,6,5],'#91734f'],[[2,3,7,6],'#bb9c73'],[[3,0,4,7],'#967956'],[[4,5,6,7],'#c6ab83']])faces.push({v:ids.map(i=>i+start),color});
+      }
+      const count=Math.max(3,Math.ceil(p.width/.25));
+      for(let i=0;i<=count;i++){
+        const z=-w+(p.width-.1)*i/count,y1=h+(p.roof==='shed'?p.rise*(w-z)/p.width:0),y2=h+(p.roof==='shed'?p.rise*(w-z-.1)/p.width:0),start=vertices.length;
+        vertices.push([-l,y1-.025,z],[l,y1-.025,z],[l,y2-.025,z+.1],[-l,y2-.025,z+.1],[-l,y1,z],[l,y1,z],[l,y2,z+.1],[-l,y2,z+.1]);
+        for(const [ids,color] of [[[0,1,5,4],'#ae8e67'],[[1,2,6,5],'#91734f'],[[2,3,7,6],'#bb9c73'],[[3,0,4,7],'#967956'],[[4,5,6,7],'#c6ab83']])faces.push({v:ids.map(n=>n+start),color});
+      }
+    }
     return {vertices,faces,edges,solidStart};
   }
   function obj(mesh){return '# Gazebo sketch, units: metres\n'+mesh.vertices.map(v=>'v '+v.join(' ')).join('\n')+'\n'+mesh.faces.map(f=>'f '+f.v.map(i=>i+1).join(' ')).join('\n')+'\n'+(mesh.edges||[]).map(e=>'l '+e.map(i=>i+1).join(' ')).join('\n')+'\n';}

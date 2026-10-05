@@ -1,10 +1,10 @@
 /* Single-project workshop. All user data stays in the browser. */
 'use strict';
 const G=window.BesedkaGeometry,$=id=>document.getElementById(id);
-const fields=['length','width','height','roof','rise','material','region','notes'];
+const fields=['length','width','height','roof','rise','cover','section','material','region','notes'];
 const storageKey='besedka-work-v1';let current=null,mesh=null,svgText='',fileUrl=null;
 function raw(){return Object.fromEntries(fields.map(k=>[k,$(k).value]));}
-function write(p){for(const k of fields)$(k).value=p[k]??'';}
+function write(p){for(const k of fields)$(k).value=p[k]??(k==='cover'?'solid':k==='section'?100:'');}
 function persist(){try{localStorage.setItem(storageKey,JSON.stringify({version:1,project:'Беседка',parameters:raw()}));}catch{$('feedback').textContent='Автосохранение недоступно. Сохраните работу в файл.';}}
 function download(text,type,name){const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);}
 function escapeXml(s){return String(s).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]));}
@@ -48,6 +48,7 @@ function build(){try{const p=G.validate(raw());mesh=G.gazebo(p);current=p;scene.
 $('parameters').addEventListener('submit',e=>{e.preventDefault();build();});
 $('parameters').addEventListener('input',()=>{current=null;mesh=null;svgText='';scene.set(null);$('empty').hidden=false;$('drawing').textContent='Параметры изменены. Постройте эскиз заново.';for(const k of ['obj','png','svg','print'])$(k).disabled=true;persist();});
 $('reset').onclick=()=>scene.reset();
+$('example').onclick=()=>{write({length:4,width:3,height:2.5,roof:'shed',rise:1,cover:'pergola',section:100,material:'Древесина, без окраски',notes:'Пристройка к дому стороной 4 м. Односкатная пергола. Планируется забивной фундамент, пола пока нет.'});build();};
 for(const k of ['perspective','front','side','top'])$('angle-'+k).onclick=()=>scene.angle(k);
 function mode(value){scene.mode(value);document.body.dataset.view=value;$('design-mode').setAttribute('aria-pressed',String(value==='design'));$('engineering-mode').setAttribute('aria-pressed',String(value==='engineering'));document.querySelector('.engineering-note').hidden=value!=='engineering';}
 $('design-mode').onclick=()=>mode('design');$('engineering-mode').onclick=()=>mode('engineering');

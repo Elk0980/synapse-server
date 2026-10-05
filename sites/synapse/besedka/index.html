@@ -11,7 +11,7 @@
   <header><a href="./" aria-label="Мастерская, главная">Мастерская<span>Одна работа. Всё под рукой.</span></a><span class="badge">Работа № 1</span></header>
   <main>
     <section class="intro"><div><p class="eyebrow">АРХИТЕКТУРНАЯ МАСТЕРСКАЯ · ПРОЕКТ 01</p><h1>Беседка у дома</h1><p>От первого эскиза к понятному проекту.</p></div><div class="intro-actions"><button id="present">Показать клиенту</button><button id="save" class="secondary">Сохранить работу</button></div></section>
-    <p class="notice">Первый пример: деревянная пристройка 4 × 3 м, к дому примыкает сторона 4 м, крыша односкатная. Для показа взят условный подъём крыши 0,5 м и нижний край 2,5 м — эти высоты уточняем. Пол пока не предусмотрен, планируется забивной фундамент. Это эскиз, сечения и узлы ещё не рассчитаны.</p>
+    <p class="notice">Эскиз по вводным: пристройка 4 × 3 м, брус 100 × 100 мм, высота у стены 3,5 м, нижний край 2,5 м. Односкатная пергола показана открытой решёткой — тип покрытия уточняем. Пол пока не предусмотрен, планируется забивной фундамент. Шаг реек в примере условный, прочность и узлы ещё не рассчитаны.</p>
     <div class="workspace">
       <section class="settings" aria-labelledby="settings-title">
         <h2 id="settings-title">Параметры беседки</h2>
@@ -20,11 +20,14 @@
           <label>Ширина, м<input id="width" type="number" step="0.01" min="0.5" max="30" required value="3"></label>
           <label>Высота нижнего края, м<input id="height" type="number" step="0.01" min="1" max="10" required value="2.5"></label>
           <label>Форма крыши<select id="roof"><option value="">Выберите</option><option value="shed" selected>Односкатная — уклон по ширине</option><option value="gable">Двускатная</option><option value="flat">Плоская</option></select></label>
-          <label>Подъём крыши, м<input id="rise" type="number" step="0.01" min="0.1" max="5" value="0.5" placeholder="Разница высот или подъём конька"></label>
+          <label>Подъём крыши, м<input id="rise" type="number" step="0.01" min="0.1" max="5" value="1" placeholder="Разница высот или подъём конька"></label>
+          <label>Покрытие<select id="cover"><option value="pergola" selected>Открытая пергола</option><option value="solid">Сплошное покрытие</option></select></label>
+          <label>Сечение опор, мм<input id="section" type="number" min="50" max="300" step="5" value="100"></label>
           <label>Материал каркаса<input id="material" maxlength="100" value="Древесина, без окраски" placeholder="Например, дерево или металл"></label>
           <label>Город или район<input id="region" maxlength="120" placeholder="Для уточнения условий"></label>
-          <label>Ваши пожелания<textarea id="notes" rows="4" maxlength="5000" placeholder="Пол, ограждения, вход, покрытие, основание…">Пристройка к дому стороной 4 м. Крыша односкатная. Работа с нуля. Планируется забивной фундамент, пола пока нет. Древесина без окраски.</textarea></label>
+          <label>Ваши пожелания<textarea id="notes" rows="4" maxlength="5000" placeholder="Пол, ограждения, вход, покрытие, основание…">Пристройка к дому стороной 4 м. Односкатная пергола, высоты 3,5 и 2,5 м. Брус 100 × 100 мм. Работа с нуля. Планируется забивной фундамент, пола пока нет. Древесина без окраски.</textarea></label>
           <button type="submit">Построить эскиз</button>
+          <button id="example" type="button" class="secondary">Пример по исходным вводным</button>
         </form>
         <p id="feedback" role="status" aria-live="polite"></p>
         <p class="hint">Изменения сохраняются только в этом браузере. Файл работы поможет перенести их на другой компьютер.</p>
@@ -37,7 +40,7 @@
           <div class="angles" aria-label="Ракурс модели"><button id="angle-perspective" class="secondary">Перспектива</button><button id="angle-front" class="secondary">Фасад</button><button id="angle-side" class="secondary">Торец</button><button id="angle-top" class="secondary">Сверху</button></div>
           <div class="canvas-wrap"><canvas id="scene" aria-label="Трёхмерный эскиз беседки"></canvas><div id="empty">Начнём с размеров<span>Введите параметры слева — здесь появится ваша беседка.</span></div></div>
           <p id="model-caption" class="model-caption">Эскиз беседки · 4 × 3 м · односкатная крыша</p>
-          <p class="engineering-note" hidden>Показаны габариты и условные сечения 120 мм для визуализации. Сечения, нагрузки, крепление к дому и основание ещё не рассчитаны.</p>
+          <p class="engineering-note" hidden>Сечение опор задано в параметрах, доски перголы 100 × 25 мм. Шаг реек в примере условный; нагрузки, крепление к дому и основание ещё не рассчитаны.</p>
           <div class="toolbar"><p>Поворачивайте мышью или пальцем. Колесо — масштаб.</p><button id="reset" class="secondary">Вернуть вид</button></div>
           <div class="toolbar"><button id="obj" class="secondary" disabled>Скачать модель OBJ</button><button id="png" class="secondary" disabled>Скачать вид PNG</button></div>
         </section>
