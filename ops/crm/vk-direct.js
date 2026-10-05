@@ -6,15 +6,21 @@ const crypto = require('node:crypto');
 const MAX_BYTES = 2 * 1024 * 1024;
 const METHODS = Object.freeze({
   analytics: Object.freeze(['groups.getById', 'stats.get']),
-  design: Object.freeze(['groups.getById', 'groups.edit', 'photos.getOwnerCoverPhotoUploadServer', 'photos.saveOwnerCoverPhoto']),
+  design: Object.freeze(['groups.getById', 'groups.edit', 'photos.getOwnerCoverPhotoUploadServer', 'photos.saveOwnerCoverPhoto',
+    'photos.getAlbums', 'photos.getUploadServer', 'photos.save', 'photos.getById']),
 });
-const MUTATIONS = new Set(['groups.edit', 'photos.saveOwnerCoverPhoto']);
+const MUTATIONS = new Set(['groups.edit', 'photos.saveOwnerCoverPhoto', 'photos.save']);
+const MATERIAL_METHODS = new Set(['photos.getAlbums', 'photos.getUploadServer', 'photos.save', 'photos.getById']);
 const PARAMETERS = Object.freeze({
   'groups.getById': ['group_id', 'fields'],
   'stats.get': ['group_id', 'timestamp_from', 'timestamp_to', 'interval', 'stats_groups'],
   'groups.edit': ['group_id', 'description'],
   'photos.getOwnerCoverPhotoUploadServer': ['group_id', 'crop_x', 'crop_y', 'crop_x2', 'crop_y2', 'is_video_cover'],
   'photos.saveOwnerCoverPhoto': ['hash', 'photo', 'is_video_cover'],
+  'photos.getAlbums': ['owner_id', 'album_ids', 'offset', 'count'],
+  'photos.getUploadServer': ['album_id', 'group_id'],
+  'photos.save': ['album_id', 'group_id', 'server', 'photos_list', 'hash', 'caption'],
+  'photos.getById': ['photos'],
 });
 const ERRORS = Object.freeze({
   VALIDATION_ERROR: 'Проверьте параметры подключения ВКонтакте',
@@ -209,17 +215,37 @@ function createVkDirect(db, { apiKey, fetchImpl = fetch, now = Date.now, timeout
     if (!row) throw failure('CONNECTION_MISSING');
     if (revision !== row.revision) throw failure('SETTINGS_CHANGED');
     guard(row, true);
+    // Album upload/save are user-only in VK's official schema. Read methods are
+    // deliberately restricted to the same binding; group tokens fail closed.
+    if (MATERIAL_METHODS.has(method) && row.token_type !== 'user') throw failure('TOKEN_TYPE_MISMATCH');
     if (!object(params) || Object.keys(params).some(k => !PARAMETERS[method].includes(k))
       || Object.values(params).some(v => typeof v !== 'string' && !(typeof v === 'number' && Number.isFinite(v)))
       || (params.is_video_cover !== undefined && params.is_video_cover !== 0 && params.is_video_cover !== '0')
       || (method === 'groups.edit' && typeof params.description !== 'string')) throw failure('VALIDATION_ERROR');
     const bounded = { ...params };
-    if (method === 'photos.saveOwnerCoverPhoto') {
+    if (method === 'photos.getAlbums') {
+      if (params.owner_id !== undefined && String(params.owner_id) !== `-${row.group_id}`) throw failure('GROUP_MISMATCH');
+      if ((params.album_ids !== undefined && !/^[1-9]\d{0,9}$/.test(String(params.album_ids)))
+        || (params.offset !== undefined && (!Number.isSafeInteger(params.offset) || params.offset < 0 || params.offset > 1000000))
+        || (params.count !== undefined && (!Number.isSafeInteger(params.count) || params.count < 1 || params.count > 100))) throw failure('VALIDATION_ERROR');
+      bounded.owner_id = `-${row.group_id}`;
+    } else if (method === 'photos.getById') {
+      // Only a single public photo of the checked community; no access keys,
+      // foreign owners, lists or arbitrary references can enter this transport.
+      if (typeof params.photos !== 'string' || !new RegExp(`^-${row.group_id}_[1-9]\\d{0,14}$`).test(params.photos)) throw failure('GROUP_MISMATCH');
+    } else if (method === 'photos.saveOwnerCoverPhoto') {
       if (Object.hasOwn(params, 'group_id')) throw failure('VALIDATION_ERROR');
     } else {
       if (Object.hasOwn(params, 'group_id') && String(params.group_id) !== row.group_id) throw failure('GROUP_MISMATCH');
       bounded.group_id = row.group_id;
     }
+    if (method === 'photos.getUploadServer' || method === 'photos.save') {
+      if (!Number.isSafeInteger(params.album_id) || params.album_id <= 0 || params.album_id > 2147483647) throw failure('VALIDATION_ERROR');
+    }
+    if (method === 'photos.save' && (!Number.isSafeInteger(params.server) || params.server <= 0
+      || typeof params.photos_list !== 'string' || !params.photos_list || params.photos_list.length > 1024 * 1024
+      || typeof params.hash !== 'string' || !params.hash || params.hash.length > 4096
+      || typeof params.caption !== 'string' || params.caption.length > 2000 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(params.caption))) throw failure('VALIDATION_ERROR');
     const result = await call(row, method, bounded, MUTATIONS.has(method));
     if (method === 'groups.getById') exactGroup(result, row.group_id);
     return result;

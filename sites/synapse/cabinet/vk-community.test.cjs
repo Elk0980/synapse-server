@@ -279,3 +279,82 @@ test('losing owner through render invalidates a pending reply without showing it
     assert.equal(f.node('reply').value, ''); assert.equal(f.node('messages').children.length, 0);
   } finally { f.close(); }
 });
+
+const attachmentPreview=call=>({companyCode:call.companyCode,groupId:call.companyCode==='avokado'?'12345':'67890',revision:1,peerId:call.body.peerId,previewId:'attachment-preview',text:call.body.text,file:{name:call.body.file.name,mime:call.body.file.mime,size:7,sourceHash:'fixture-hash'},expiresAt:'2099-01-01T00:00:00Z'});
+function attachmentFixture(override){return fixture({override:async call=>{
+  if(override){const result=await override(call);if(result!==undefined)return result;}
+  if(call.path.endsWith('/reply-preview'))return attachmentPreview(call);
+  if(call.path.endsWith('/reply-confirm'))return {companyCode:call.companyCode,groupId:call.companyCode==='avokado'?'12345':'67890',revision:1,peerId:101,previewId:call.body.previewId,requestId:call.body.requestId,status:'sent',messageId:100};
+}});}
+async function attachmentFile(f,{name='fixture.pdf',type='application/pdf',bytes='fixture'}={}){
+  let files=[new f.w.File([bytes],name,{type})];const input=f.node('reply-file');
+  Object.defineProperty(input,'files',{configurable:true,get:()=>files});
+  Object.defineProperty(input,'value',{configurable:true,get:()=>files.length?'C:\\fakepath\\'+files[0].name:'',set:value=>{if(value==='')files=[];}});
+  input.dispatchEvent(new f.w.Event('change'));
+  for(let i=0;i<30&&files.length&&!f.node('reply-file-info').textContent;i++)await new Promise(resolve=>setTimeout(resolve,5));
+}
+async function attachmentDraft(f){await f.mount();await f.inbox();await attachmentFile(f);}
+
+test('incoming photo/PDF attachments render safe links and hostile/unsupported attachments stay unavailable',async()=>{
+  const f=fixture({override:call=>call.path.endsWith('/history')?{companyCode:call.companyCode,revision:1,peerId:101,items:[{...dialog().lastMessage,attachments:[
+    {type:'photo',url:'https://sun9.userapi.com/photo.jpg',name:'<img src=x>',width:100,height:80},
+    {type:'doc',url:'https://vk.com/doc1_2',name:'<script>.pdf',mime:'application/pdf'},
+    {type:'photo',url:'javascript:alert(1)',name:'BAD'},
+    {type:'photo',url:'https://userapi.com.attacker.test/a',name:'BAD'},
+    {type:'doc',url:'https://vk.com/doc1_3',name:'program.exe',mime:'application/octet-stream'},
+    {type:'unavailable',name:'Unsupported'}
+  ]}]}:undefined});
+  try{await f.mount();await f.inbox();const links=[...f.node('messages').querySelectorAll('a')];assert.equal(links.length,2);assert.ok(links.every(link=>link.rel==='noopener noreferrer'&&link.referrerPolicy==='no-referrer'));assert.equal(f.node('messages').querySelector('img,script'),null);assert.match(f.node('messages').textContent,/<img src=x>/);assert.equal((f.node('messages').textContent.match(/Вложение недоступно/g)||[]).length,4);assert.equal(f.calls.some(c=>c.path.includes('/reply')),false);}finally{f.close();}
+});
+test('file-only reply stays local through selection and requires preview then one frozen explicit confirmation',async()=>{
+  let release;const f=attachmentFixture(call=>call.path.endsWith('/reply-confirm')?new Promise(resolve=>{release=()=>resolve({companyCode:call.companyCode,groupId:'12345',revision:1,peerId:101,previewId:call.body.previewId,requestId:call.body.requestId,status:'sent'});}):undefined);
+  try{
+    await attachmentDraft(f);const before=f.calls.length;assert.equal(f.node('reply').value,'');f.submit('reply-panel');await tick();assert.equal(f.calls.length,before,'form submit with file cannot use text-only send');
+    f.node('reply-preview-button').click();await tick();assert.equal(f.calls.at(-1).path,'/content/crm/vk-community/reply-preview');assert.equal(f.calls.at(-1).body.text,'');assert.equal(f.calls.at(-1).body.file.mime,'application/pdf');assert.equal(f.calls.some(c=>c.path.endsWith('/reply-confirm')),false);
+    assert.match(f.node('reply-preview').textContent,/12345/);assert.match(f.node('reply-preview').textContent,/ID 101/);assert.match(f.node('reply-preview').textContent,/fixture.pdf/);assert.equal(f.node('reply-preview').querySelector('iframe,embed,object'),null);
+    f.node('reply-confirm').click();f.node('reply-confirm').click();await tick();assert.equal(f.calls.filter(c=>c.path.endsWith('/reply-confirm')).length,1);assert.deepEqual(Object.keys(f.calls.at(-1).body).sort(),['previewId','requestId','revision']);release();await tick();assert.match(f.node('status').textContent,/подтвердил отправку ответа с вложением/);assert.equal(f.node('reply-file-info').textContent,'');assert.equal(f.node('reply-confirm').disabled,true);assert.equal(f.node('messages').querySelectorAll('.vk-message-out').length,1);
+  }finally{f.close();}
+});
+test('attachment confirmation is invalidated by text, file and binding edits without sending',async()=>{
+  const f=attachmentFixture();try{
+    await attachmentDraft(f);
+    for(const edit of [()=>f.input('reply','Новый текст'),()=>attachmentFile(f,{name:'second.png',type:'image/png'}),()=>f.input('token',SECRET)]){
+      f.node('reply-preview-button').click();await tick();assert.equal(f.node('reply-confirm').disabled,false);await edit();assert.equal(f.node('reply-confirm').disabled,true);assert.equal(f.node('reply-preview').children.length,0);
+    }
+    assert.equal(f.calls.some(c=>c.path.endsWith('/reply-confirm')||c.path.endsWith('/reply')),false);
+  }finally{f.close();}
+});
+test('late attachment preview cannot revive confirmation after text edit, company change or role loss',async()=>{
+  for(const action of ['text','company','role']){let release;const f=attachmentFixture(call=>call.path.endsWith('/reply-preview')?new Promise(resolve=>{release=()=>resolve({...attachmentPreview(call),file:{...attachmentPreview(call).file,name:'PRIVATE_LATE_FILE'}});}):undefined);
+    try{await attachmentDraft(f);f.node('reply-preview-button').click();await tick();if(action==='text')f.input('reply','Changed');else await f.change(action==='company'?'alvi':'avokado',action==='role'?'editor':'owner',true);release();await tick();assert.doesNotMatch(f.container.textContent,/PRIVATE_LATE_FILE/);if(action!=='role')assert.equal(f.node('reply-confirm').disabled,true);else assert.equal(f.container.children.length,0);}finally{f.close();}
+  }
+});
+test('unknown attachment send remains blocked after file removal, dialog refresh and company roundtrip',async()=>{
+  const f=attachmentFixture(call=>{if(call.path.endsWith('/reply-confirm'))throw Error('PRIVATE_NETWORK_FAILURE');});
+  try{
+    await attachmentDraft(f);f.node('reply-preview-button').click();await tick();f.node('reply-confirm').click();await tick();assert.match(f.node('status').textContent,/не подтверждён/);f.node('reply-file-clear').click();f.input('reply','Edited text');f.submit('reply-panel');assert.equal(f.node('send').disabled,true);
+    await f.inbox();f.input('reply','Another text');assert.equal(f.node('send').disabled,true);await f.change('alvi');await f.change('avokado');await f.inbox();f.input('reply','Another text');assert.equal(f.node('send').disabled,true);assert.equal(f.calls.filter(c=>c.path.endsWith('/reply-confirm')).length,1);assert.equal(f.calls.filter(c=>c.path.endsWith('/reply')).length,0);assert.doesNotMatch(f.container.textContent,/PRIVATE_NETWORK_FAILURE/);
+  }finally{f.close();}
+});
+test('wrong-scope attachment preview never displays content or enables confirm',async()=>{
+  for(const wrong of [{companyCode:'alvi'},{revision:8},{peerId:999},{groupId:'999'}]){const f=attachmentFixture(call=>call.path.endsWith('/reply-preview')?{...attachmentPreview(call),...wrong,file:{...attachmentPreview(call).file,name:'WRONG_PRIVATE_FILE'}}:undefined);
+    try{await attachmentDraft(f);f.node('reply-preview-button').click();await tick();assert.equal(f.node('reply-confirm').disabled,true);assert.doesNotMatch(f.container.textContent,/WRONG_PRIVATE_FILE/);}finally{f.close();}
+  }
+});
+test('known late text/attachment send outcome clears only its original lock without rendering in another company',async()=>{
+  for(const attachment of [false,true])for(const status of ['sent','uncertain']){let release;const f=attachmentFixture(call=>call.path.endsWith(attachment?'/reply-confirm':'/reply')?new Promise(resolve=>{release=()=>resolve({companyCode:call.companyCode,groupId:'12345',revision:1,peerId:101,previewId:call.body.previewId,requestId:call.body.requestId,status});}):undefined);
+    try{
+      await f.mount();await f.inbox();f.input('reply','PRIVATE_OLD_REPLY');if(attachment){await attachmentFile(f);f.node('reply-preview-button').click();await tick();f.node('reply-confirm').click();}else f.submit('reply-panel');await tick();await f.change('alvi');release();await tick();assert.doesNotMatch(f.container.textContent,/PRIVATE_OLD_REPLY|подтвердил отправку/);
+      await f.change('avokado');await f.inbox();f.input('reply','Fresh reply');assert.equal(f.node('send').disabled,status==='uncertain');
+    }finally{f.close();}
+  }
+});
+test('explicit pre-dispatch attachment expiry allows a new preview; unknown transport error never does',async()=>{
+  for(const errorCode of ['PREVIEW_EXPIRED',null]){const f=attachmentFixture(call=>{if(call.path.endsWith('/reply-confirm')){const error=Error('PRIVATE');if(errorCode)error.code=errorCode;throw error;}});
+    try{await attachmentDraft(f);f.node('reply-preview-button').click();await tick();f.node('reply-confirm').click();await tick();assert.equal(f.node('reply-confirm').disabled,true);assert.equal(f.node('reply-preview-button').disabled,errorCode===null);assert.doesNotMatch(f.container.textContent,/PRIVATE/);}finally{f.close();}
+  }
+});
+test('returning to the original dialog before a late confirmed send refreshes controls without reviving old text',async()=>{
+  let release;const f=attachmentFixture(call=>call.path.endsWith('/reply-confirm')?new Promise(resolve=>{release=()=>resolve({companyCode:call.companyCode,groupId:'12345',revision:1,peerId:101,previewId:call.body.previewId,requestId:call.body.requestId,status:'sent'});}):undefined);
+  try{await attachmentDraft(f);f.input('reply','PRIVATE_PENDING_TEXT');f.node('reply-preview-button').click();await tick();f.node('reply-confirm').click();await tick();await f.change('alvi');await f.change('avokado');await f.inbox();f.input('reply','Fresh draft');assert.equal(f.node('send').disabled,true);release();await tick();assert.equal(f.node('send').disabled,false);assert.equal(f.node('reply').value,'Fresh draft');assert.doesNotMatch(f.container.textContent,/PRIVATE_PENDING_TEXT/);assert.equal(f.node('messages').querySelectorAll('.vk-message-out').length,0);}finally{f.close();}
+});

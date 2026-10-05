@@ -24,6 +24,11 @@ test('real content→CRM VK routes enforce owner, company, CSRF, safe DTOs and e
  function blocked(){throw new Error('External network disabled by VK HTTP fixture');}
  require('node:net').Socket.prototype.connect=blocked;require('node:tls').connect=blocked;
  globalThis.fetch=async function(url,options){
+  if(url==='https://pu.vk.com/message-upload'){
+   if(options.redirect!=='error'||!options.body.get('photo'))blocked();
+   fs.appendFileSync(${JSON.stringify(marker)},JSON.stringify({method:'fixture.upload',groupId:'12345',peerId:'101'})+'\\n');
+   return new Response(JSON.stringify({server:1,photo:'FIXTURE_PHOTO',hash:'FIXTURE_HASH'}));
+  }
   if(typeof url!=='string'||!url.startsWith('https://api.vk.com/method/'))blocked();
   const method=url.split('/').pop(),params=Object.fromEntries(new URLSearchParams(options.body));
   const group=params.group_id,peer=group==='12345'?101:202;
@@ -36,7 +41,9 @@ test('real content→CRM VK routes enforce owner, company, CSRF, safe DTOs and e
    'messages.getConversations':{count:1,items:[{conversation,last_message:message}]},
    'messages.getHistory':{count:1,items:[message]},
    'messages.getConversationsById':{count:1,items:[conversation]},
-   'messages.send':88
+   'messages.send':88,
+   'photos.getMessagesUploadServer':{upload_url:'https://pu.vk.com/message-upload'},
+   'photos.saveMessagesPhoto':[{id:22,owner_id:-12345,access_key:'FIXTURE_PRIVATE_ACCESS'}]
   }[method];
   if(payload===undefined)blocked();return new Response(JSON.stringify({response:payload}));
  };
@@ -52,7 +59,7 @@ test('real content→CRM VK routes enforce owner, company, CSRF, safe DTOs and e
  for(const companyCode of ['avokado','alvi'])assert.equal((await direct('/companies',{method:'POST',body:{code:companyCode,name:'Local '+companyCode}})).status,201);
  const sessions={};for(const login of ['owner','reader','editor']){const result=await request(contentBase,'/content/login',{method:'POST',body:{login,password}});assert.equal(result.status,200);const cookie=result.headers.get('set-cookie').split(';')[0];const profile=await request(contentBase,'/content/whoami',{headers:{cookie}});sessions[login]={cookie,'x-csrf-token':profile.body.csrfToken};}
  const through=(who,route,options={})=>request(contentBase,'/content/crm'+route,{...options,headers:{...sessions[who],...options.headers}});
- const routes=[['GET','settings'],['PUT','settings'],['POST','check'],['POST','conversations'],['POST','history'],['POST','reply']];
+ const routes=[['GET','settings'],['PUT','settings'],['POST','check'],['POST','conversations'],['POST','history'],['POST','reply'],['POST','reply-preview'],['POST','reply-confirm']];
  async function calls(){try{return(await fs.readFile(marker,'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));}catch(error){if(error.code==='ENOENT')return[];throw error;}}
  for(const [method,pathName]of routes){const route=`/vk-community/${pathName}?companyCode=avokado`,body=method==='GET'?undefined:{};
   assert.equal((await request(contentBase,'/content/crm'+route,{method,body,headers:{'x-api-key':key,'x-synapse-crm-identity':identity()}})).status,401);
@@ -97,5 +104,16 @@ test('real content→CRM VK routes enforce owner, company, CSRF, safe DTOs and e
  const sent=await through('owner','/vk-community/reply?companyCode=avokado',{method:'POST',body});assert.equal(sent.status,200);assert.equal(sent.body.status,'sent');assert.equal(sent.body.companyCode,'avokado');
  const repeated=await through('owner','/vk-community/reply?companyCode=avokado',{method:'POST',body});assert.deepEqual(repeated.body,sent.body);
  const sends=(await calls()).filter(c=>c.method==='messages.send');assert.deepEqual(sends,[{method:'messages.send',groupId:'12345',peerId:'101'}]);
- const stored=new DatabaseSync(crmDb);try{assert.equal(stored.prepare('SELECT COUNT(*) AS n FROM vk_community_replies').get().n,1);assert.equal(stored.prepare('SELECT COUNT(*) AS n FROM lead_email_outbox').get().n,0);}finally{stored.close();}
+ const callsBeforePreview=(await calls()).length;
+ const preview=await through('owner','/vk-community/reply-preview?companyCode=avokado',{method:'POST',body:{revision:1,peerId:101,text:'',file:{name:'fixture.png',mime:'image/png',base64:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jQ1sAAAAASUVORK5CYII='}}});
+ assert.equal(preview.status,200,JSON.stringify(preview.body));assert.equal((await calls()).length,callsBeforePreview,'preparing attachment must stay local');
+ const confirm={revision:1,previewId:preview.body.previewId,requestId:'fixture_photo_reply_0001'};
+ assert.equal((await through('owner','/vk-community/reply-confirm?companyCode=avokado',{method:'POST',body:confirm,headers:{'x-csrf-token':''}})).status,403);
+ assert.ok((await through('owner','/vk-community/reply-confirm?companyCode=alvi',{method:'POST',body:confirm})).status>=400);
+ assert.equal((await calls()).length,callsBeforePreview);
+ const attachmentSent=await through('owner','/vk-community/reply-confirm?companyCode=avokado',{method:'POST',body:confirm});assert.equal(attachmentSent.status,200,JSON.stringify(attachmentSent.body));assert.equal(attachmentSent.body.status,'sent',JSON.stringify(attachmentSent.body));
+ assert.deepEqual((await through('owner','/vk-community/reply-confirm?companyCode=avokado',{method:'POST',body:confirm})).body,attachmentSent.body);
+ assert.equal((await calls()).filter(c=>c.method==='fixture.upload').length,1);assert.equal((await calls()).filter(c=>c.method==='messages.send').length,2);
+ assert.doesNotMatch(JSON.stringify(attachmentSent.body),/FIXTURE_PRIVATE_ACCESS|FIXTURE_HASH|FIXTURE_PHOTO/);
+ const stored=new DatabaseSync(crmDb);try{assert.equal(stored.prepare('SELECT COUNT(*) AS n FROM vk_community_replies').get().n,2);assert.equal(stored.prepare('SELECT COUNT(*) AS n FROM vk_community_reply_actions').get().n,1);assert.equal(stored.prepare('SELECT COUNT(*) AS n FROM lead_email_outbox').get().n,0);}finally{stored.close();}
 });

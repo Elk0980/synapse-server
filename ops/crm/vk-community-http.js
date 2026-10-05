@@ -7,9 +7,13 @@ function createVkCommunityHandler({community,companyModuleContext,readJson,send}
     const {identity,company} = companyModuleContext(request,url.searchParams.get('companyCode'),'vk-community.owner');
     if (identity.role !== 'owner') fail(403,'Подключение и сообщения ВК доступны владельцу');
     const code = company.code; let result;
-    async function body() {
-      const value=await readJson(request);
+    async function body(limit=64*1024,revalidate=false) {
+      const value=await readJson(request,limit);
       if (!value || typeof value!=='object' || Array.isArray(value)) fail(400,'Ожидается объект JSON');
+      if(revalidate) {
+        const current=companyModuleContext(request,url.searchParams.get('companyCode'),'vk-community.owner');
+        if(current.identity.role!=='owner'||current.identity.userId!==identity.userId||current.company.code!==code)fail(403,'Доступ к выбранной компании изменился');
+      }
       return value;
     }
     try {
@@ -18,6 +22,8 @@ function createVkCommunityHandler({community,companyModuleContext,readJson,send}
       else if (url.pathname === '/vk-community/check' && request.method === 'POST') result = await community.checkConnection(code);
       else if (url.pathname === '/vk-community/conversations' && request.method === 'POST') result = await community.syncConversations(code,await body());
       else if (url.pathname === '/vk-community/history' && request.method === 'POST') result = await community.syncHistory(code,await body());
+      else if (url.pathname === '/vk-community/reply-preview' && request.method === 'POST') result = community.previewReply(code,await body(12*1024*1024,true));
+      else if (url.pathname === '/vk-community/reply-confirm' && request.method === 'POST') result = await community.confirmReply(code,await body(64*1024,true));
       else if (url.pathname === '/vk-community/reply' && request.method === 'POST') result = await community.reply(code,await body());
       else fail(405,'Метод не поддерживается');
       send(response,200,await result,{...cors,'cache-control':'no-store'});
