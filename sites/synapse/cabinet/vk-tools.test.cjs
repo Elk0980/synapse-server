@@ -143,3 +143,70 @@ test('known late album outcome clears only its company binding lock while unknow
     try{await materialDraft(f);f.node('material-preview-button').click();await tick();f.node('material-apply').click();await tick();await f.change('alvi');release();await tick();assert.doesNotMatch(f.node('status').textContent,/Проверено/);await f.change('palitra-love');assert.equal(f.node('materials-connection').textContent.includes('заблокирована'),status==='uncertain');}finally{f.close();}
   }
 });
+
+const avatarDto=c=>({companyCode:c.companyCode,groupId:c.companyCode==='palitra-love'?'12345':'123',revision:2,previewId:'avatar-preview',operation:'avatar',before:{hasPhoto:true,photo200:'https://sun9.userapi.com/old.jpg',photoMax:null,photoMaxOrig:null},after:{mime:c.body.image.mime,width:640,height:640,sourceHash:'a'.repeat(64)},sourceHash:'a'.repeat(64),warnings:['AVATAR_MAY_CREATE_PUBLIC_POST','AVATAR_APPLY_DISABLED','AVATAR_CROP_UNVERIFIED'],capabilities:{applyEnabled:false,cropSupported:false}});
+function avatarFixture(override,{width=640,height=640,deferDecode=false}={}){
+  const f=materialFixture(async c=>{if(override){const result=await override(c);if(result!==undefined)return result;}if(c.path.endsWith('/avatar-preview'))return avatarDto(c);});
+  f.decoders=[];
+  f.w.Image=class {
+    constructor(){this.naturalWidth=width;this.naturalHeight=height;f.decoders.push(this);}
+    set src(value){this.url=value;if(!deferDecode)setImmediate(()=>this.onload?.());}
+  };
+  return f;
+}
+async function avatarFile(f,{name='avatar.png',type='image/png',size,wait=true,file}={}){
+  file ||= new f.w.File(['synthetic-image-fixture'],name,{type});if(size!==undefined)Object.defineProperty(file,'size',{value:size});
+  let files=[file];const input=f.node('avatar-file');Object.defineProperty(input,'files',{configurable:true,get:()=>files});Object.defineProperty(input,'value',{configurable:true,get:()=>files.length?'C:\\fakepath\\'+files[0].name:'',set:value=>{if(value==='')files=[];}});
+  input.dispatchEvent(new f.w.Event('input'));input.dispatchEvent(new f.w.Event('change'));
+  if(wait)for(let i=0;i<30&&files.length&&!f.node('avatar-file-info').textContent;i++)await new Promise(resolve=>setTimeout(resolve,5));
+  return file;
+}
+test('avatar preparation keeps selection local, shows square/circle and submits only frozen image to scoped preview',async()=>{
+  const f=avatarFixture();try{
+    await f.mount();const before=f.calls.length;assert.equal(f.node('avatar-preview-button').disabled,true);await avatarFile(f,{name:'avatar <img src=x>.png'});assert.equal(f.calls.length,before);
+    const samples=[...f.node('avatar-local-preview').querySelectorAll('img')];assert.equal(samples.length,2);assert.ok(samples.every(img=>img.src.startsWith('data:image/png;base64,')));assert.equal(samples[1].style.borderRadius,'50%');assert.match(f.node('avatar-file-info').textContent,/640 × 640/);assert.equal(f.node('avatar-preview-button').disabled,false);
+    f.node('avatar-preview-button').click();await tick();const call=f.calls.at(-1);assert.equal(call.path,'/content/crm/vk-tools/design/avatar-preview');assert.equal(call.companyCode,'palitra-love');assert.equal(call.method,'POST');assert.deepEqual(Object.keys(call.body).sort(),['image','revision']);assert.deepEqual(Object.keys(call.body.image).sort(),['base64','mime']);assert.equal(call.body.revision,2);
+    assert.match(f.node('avatar-preview').textContent,/12345/);assert.match(f.node('avatar-preview').textContent,/Файл проверен сервером/);assert.match(f.node('avatar-preview').textContent,/не подтверждает права/);assert.equal(f.node('avatar-apply').disabled,true);assert.equal(f.node('avatar-effect').disabled,true);assert.equal(f.node('avatar-effect').checked,false);assert.equal(f.node('avatar-card').querySelector('script,iframe,input[type="range"]'),null);assert.ok(f.calls.every(c=>!c.path.endsWith('/avatar-apply')));
+    assert.match(f.node('avatar-warning').textContent,/публичную запись на стене/);assert.match(f.node('avatar-warning').textContent,/отдельное разрешение владельца/);assert.match(f.node('avatar-warning').textContent,/подтверждённый доступ к API/);assert.match(f.node('avatar-card').textContent,/кадрирование ВК не подтверждено/);
+    f.node('avatar-clear').click();assert.equal(f.node('avatar-local-preview').children.length,0);assert.equal(f.node('avatar-preview').children.length,0);assert.equal(f.node('avatar-file').value,'');assert.equal(f.node('avatar-preview-button').disabled,true);
+  }finally{f.close();}
+});
+test('avatar rejects non-square, unsupported, empty and oversized local files without any API call',async()=>{
+  for(const scenario of [{width:640,height:480},{type:'image/svg+xml'},{size:0},{size:8*1024*1024+1}]){
+    const f=avatarFixture(undefined,scenario);try{await f.mount();const before=f.calls.length;await avatarFile(f,scenario);assert.equal(f.calls.length,before);assert.equal(f.node('avatar-preview-button').disabled,true);assert.equal(f.node('avatar-local-preview').children.length,0);assert.match(f.node('status').textContent,/квадратный|квадратное/);}finally{f.close();}
+  }
+});
+test('avatar is gated on owner and checked user binding, independently from other design operations',async()=>{
+  for(const extra of [{tokenType:'group'},{tokenType:'user',connected:false},{tokenType:'user',enabled:false}]){
+    const f=fixture(c=>c.purpose==='design'&&c.path.endsWith('/settings')?setting(c.companyCode,'design',extra):undefined);
+    try{await f.mount();assert.equal(f.node('avatar-file').disabled,true);assert.equal(f.node('avatar-preview-button').disabled,true);f.node('avatar-preview-button').dispatchEvent(new f.w.MouseEvent('click'));assert.equal(f.calls.length,2);assert.equal(f.node('avatar-apply').disabled,true);}finally{f.close();}
+  }
+  const f=fixture(undefined,'editor');try{await f.mount();assert.equal(f.calls.length,0);assert.equal(f.container.children.length,0);}finally{f.close();}
+});
+test('avatar application cannot be enabled by forged capabilities, checkbox changes or programmatic clicks',async()=>{
+  const f=avatarFixture(c=>c.path.endsWith('/avatar-preview')?{...avatarDto(c),capabilities:{applyEnabled:true,cropSupported:true},warnings:[],before:{photoMaxOrig:'javascript:alert(1)'}}:undefined);
+  try{await f.mount();await avatarFile(f);f.node('avatar-preview-button').click();await tick();assert.equal(f.node('avatar-preview').children.length,0);assert.equal(f.node('avatar-apply').disabled,true);assert.equal(f.node('avatar-effect').disabled,true);
+    const before=f.calls.length;f.node('avatar-effect').disabled=false;f.node('avatar-effect').checked=true;f.node('avatar-effect').dispatchEvent(new f.w.Event('change'));assert.equal(f.node('avatar-effect').checked,false);assert.equal(f.node('avatar-effect').disabled,true);
+    f.node('avatar-apply').disabled=false;f.node('avatar-apply').dispatchEvent(new f.w.MouseEvent('click'));f.node('avatar-apply').click();await tick();assert.equal(f.calls.length,before);await f.change('palitra-love');assert.equal(f.node('avatar-apply').disabled,true);assert.match(f.node('avatar-warning').textContent,/публичную запись/);assert.equal(f.node('avatar-card').querySelector('[href]'),null);
+  }finally{f.close();}
+});
+test('reselecting the same avatar file or editing the binding invalidates prepared and in-flight previews',async()=>{
+  for(const action of ['same-file','input','binding']){let release;const f=avatarFixture(c=>c.path.endsWith('/avatar-preview')?new Promise(resolve=>{release=()=>resolve(avatarDto(c));}):undefined);
+    try{await f.mount();const file=await avatarFile(f);f.node('avatar-preview-button').click();await tick();if(action==='same-file')await avatarFile(f,{file});else if(action==='input')f.node('avatar-file').dispatchEvent(new f.w.Event('input'));else f.input('design-token','FIXTURE_ONLY');release();await tick();assert.equal(f.node('avatar-preview').children.length,0);assert.equal(f.node('avatar-apply').disabled,true);if(action!=='same-file')assert.equal(f.node('avatar-local-preview').children.length,0);}finally{f.close();}
+  }
+});
+test('company/role changes discard late avatar preview and local decoder callbacks',async()=>{
+  for(const phase of ['preview','decode'])for(const change of ['company','role']){let release;const f=avatarFixture(c=>phase==='preview'&&c.path.endsWith('/avatar-preview')?new Promise(resolve=>{release=()=>resolve(avatarDto(c));}):undefined,{deferDecode:phase==='decode'});
+    try{
+      await f.mount();await avatarFile(f,{wait:phase!=='decode'});
+      if(phase==='decode'){for(let i=0;i<30&&!f.decoders.length;i++)await new Promise(resolve=>setTimeout(resolve,5));release=()=>f.decoders[0].onload();}else{f.node('avatar-preview-button').click();await tick();}
+      await f.change(change==='company'?'alvi':'palitra-love',change==='role'?'editor':'owner');release();await tick();
+      if(change==='role')assert.equal(f.container.children.length,0);else{assert.equal(f.node('avatar-preview').children.length,0);assert.equal(f.node('avatar-local-preview').children.length,0);assert.equal(f.node('avatar-file-info').textContent,'');assert.equal(f.node('avatar-preview-button').disabled,true);}
+    }finally{f.close();}
+  }
+});
+test('avatar server preview rejects foreign scopes and missing or inconsistent source hashes',async()=>{
+  for(const wrong of [{companyCode:'alvi'},{groupId:'999'},{revision:999},{sourceHash:undefined},{sourceHash:'b'.repeat(64)}]){const f=avatarFixture(c=>c.path.endsWith('/avatar-preview')?{...avatarDto(c),...wrong}:undefined);
+    try{await f.mount();await avatarFile(f);f.node('avatar-preview-button').click();await tick();assert.equal(f.node('avatar-preview').children.length,0);assert.equal(f.node('avatar-apply').disabled,true);assert.ok(f.calls.every(c=>!c.path.endsWith('/avatar-apply')));}finally{f.close();}
+  }
+});

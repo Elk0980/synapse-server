@@ -19,6 +19,7 @@
     let ctx=initial, companyCode='', epoch=0, busy=false, destroyed=false, settings={analytics:null,design:null}, preview=null, pending=null, image=null, observed=null;
     // CABINET_SCOPE: private drafts and late responses belong to this company and binding only.
     let materialImage=null, materialPreview=null, materialPending=null, materialVersion=0, materialFileVersion=0, albumNextOffset=null;
+    let avatarImage=null, avatarVersion=0;
     const materialLocks=new Map();
     const owner=()=>ctx.identity?.role==='owner';
     const node=id=>container.querySelector('#vkt-'+id);
@@ -55,6 +56,12 @@
       node('material-preview-button').disabled=busy||!owner()||!materialsReady()||!node('album').value||!materialImage||materialUnresolved();
       node('material-apply').disabled=busy||!owner()||!materialsReady()||!materialPreview||!!materialPending||materialUnresolved();
       node('material-history-refresh').disabled=busy||!owner()||!companyCode;
+      node('avatar-file').disabled=busy||!owner()||!materialsReady();
+      node('avatar-clear').disabled=busy||!owner()||!node('avatar-file').files?.length;
+      node('avatar-preview-button').disabled=busy||!owner()||!materialsReady()||!avatarImage;
+      // Preparation only: neither provider capability flags nor acknowledgement can enable mutation.
+      node('avatar-effect').checked=false;node('avatar-effect').disabled=true;node('avatar-apply').disabled=true;
+      node('avatar-connection').textContent=materialsReady()?'Подключение пользователя проверено для чтения. Права на изменение аватара не подтверждены.':'Для подготовки аватара нужно проверенное подключение оформления с типом «Пользователь».';
       node('materials-connection').textContent=materialUnresolved()?'Результат прежней загрузки ещё не подтверждён. Новая загрузка заблокирована; обновите историю и проверьте альбом в ВК.':materialsReady()?'Проверено чтение сообщества. Доступ к фотоальбому и права на загрузку проверяет ВК при операции.':'Фотоальбомы требуют отдельного проверенного подключения оформления с типом «Пользователь». Получение ключа и необходимые разрешения уточняются для вашего приложения ВК.';
       container.querySelectorAll('[data-rollback]').forEach(el=>{el.disabled=busy||!owner()||!ready('design')||unresolved();});
     };
@@ -68,6 +75,14 @@
     const invalidate=()=>{preview=null;node('preview').replaceChildren();if(!unresolved())pending=null;controls();};
     const invalidateMaterial=()=>{materialVersion++;materialPreview=null;node('material-preview').replaceChildren();if(!materialUnresolved())materialPending=null;controls();};
     const clearMaterials=()=>{materialImage=null;materialPreview=null;materialPending=null;materialVersion++;materialFileVersion++;albumNextOffset=null;node('album').replaceChildren();node('material-file').value='';node('material-caption').value='';node('material-file-info').textContent='';node('material-preview').replaceChildren();node('material-history').replaceChildren();};
+    const invalidateAvatar=()=>{avatarVersion++;avatarImage=null;node('avatar-file-info').textContent='';node('avatar-local-preview').replaceChildren();node('avatar-preview').replaceChildren();node('avatar-effect').checked=false;};
+    const clearAvatar=()=>{invalidateAvatar();node('avatar-file').value='';};
+    const avatarSamples=(parent,source)=>{
+      for(const circle of [false,true]){const figure=document.createElement('figure'),img=document.createElement('img'),caption=document.createElement('figcaption');
+        img.src='data:'+source.mime+';base64,'+source.base64;img.alt=circle?'Пример круглого отображения аватара':'Пример квадратного отображения аватара';img.width=144;img.height=144;img.style.maxWidth='100%';img.style.objectFit='contain';if(circle)img.style.borderRadius='50%';
+        caption.textContent=circle?'Круг — приблизительно':'Квадрат — исходный файл';figure.append(img,caption);parent.append(figure);
+      }
+    };
     const drawSetting=purpose=>{
       const s=settings[purpose];node(purpose+'-group').value=s?.groupId||'';node(purpose+'-type').value=s?.tokenType||(purpose==='analytics'?'user':'group');node(purpose+'-enabled').checked=s?.enabled!==false;
       node(purpose+'-connection').textContent=!s?'Настройки не получены':!s.configured?'Не настроено':s.enabled===false?'Подключение отключено':s.connected?(purpose==='design'?'Сообщество и тип ключа проверены; права на изменение проверяет ВК при операции':'Доступ к статистике проверен'):'Сохранено; требуется проверка';
@@ -106,10 +121,11 @@
     container.classList.add('vk-tools');
     container.innerHTML=`<h3>Прямые инструменты ВК</h3><p>Оформление и статистика подключаются отдельно. Планирование и публикации остаются в Onlypult. Автоматический приём сообщений и автоответы здесь не включаются.</p><p id="vkt-status" role="status" aria-live="polite"></p><button type="button" id="vkt-refresh" class="plain-button">Обновить настройки инструментов</button><div class="vkt-connections">${panel('analytics')}${panel('design')}</div><section class="card vkt-editor"><h3>Предпросмотр оформления</h3><button type="button" id="vkt-state" class="plain-button">Прочитать текущее описание ВК</button><label>Новое описание сообщества<textarea id="vkt-description" maxlength="4000" rows="5"></textarea></label><button type="button" id="vkt-description-preview" class="plain-button">Предпросмотр описания</button><label>Файл статичной обложки (JPEG или PNG, до 8 МиБ)<input id="vkt-cover" type="file" accept="image/jpeg,image/png"></label><p id="vkt-file-info" class="vk-note"></p><button type="button" id="vkt-cover-preview" class="plain-button">Предпросмотр обложки</button><div id="vkt-preview" class="vkt-preview" aria-live="polite"></div><button type="button" id="vkt-apply" class="plain-button">Применить в ВК</button></section><section class="card"><div class="vk-actions"><h3>История оформления</h3><button type="button" id="vkt-history-refresh" class="plain-button">Обновить историю</button></div><div id="vkt-history"></div></section>`;
     container.insertAdjacentHTML('beforeend',`<section class="card vkt-editor"><h3>Фото в альбом сообщества</h3><p id="vkt-materials-connection"></p><p>Загрузка одного фото в существующий альбом выполняется только после предпросмотра. Публикации и расписание остаются в Onlypult.</p><div class="vk-actions"><button type="button" id="vkt-albums-refresh" class="plain-button">Получить альбомы</button><button type="button" id="vkt-albums-next" class="plain-button">Ещё альбомы</button></div><label>Альбом назначения<select id="vkt-album"></select></label><label>Файл фото (JPEG или PNG, до 8 МиБ)<input id="vkt-material-file" type="file" accept="image/jpeg,image/png"></label><p id="vkt-material-file-info" class="vk-note"></p><label>Подпись к фото<textarea id="vkt-material-caption" rows="3" maxlength="2000"></textarea></label><button type="button" id="vkt-material-preview-button" class="plain-button">Предпросмотр загрузки</button><div id="vkt-material-preview" class="vkt-preview" aria-live="polite"></div><button type="button" id="vkt-material-apply" class="plain-button">Загрузить фото в выбранный альбом ВК</button></section><section class="card"><div class="vk-actions"><h3>История загрузки фото</h3><button type="button" id="vkt-material-history-refresh" class="plain-button">Обновить историю загрузки</button></div><div id="vkt-material-history"></div></section>`);
+    node('apply').closest('section').insertAdjacentHTML('afterend',`<section class="card vkt-editor" id="vkt-avatar-card"><h3>Подготовка аватара</h3><p id="vkt-avatar-connection"></p><p>Выберите заранее подготовленное квадратное изображение JPEG или PNG, до 8 МиБ. Здесь можно подготовить предпросмотр; загрузка и установка аватара в ВК недоступны.</p><label>Квадратное изображение аватара<input id="vkt-avatar-file" type="file" accept="image/jpeg,image/png"></label><p id="vkt-avatar-file-info" class="vk-note"></p><button type="button" id="vkt-avatar-clear" class="plain-button">Убрать файл аватара</button><div id="vkt-avatar-local-preview" class="vkt-preview" aria-live="polite"></div><p>Квадрат и круг показывают приблизительный вид. Точное кадрирование ВК не подтверждено; настройка обрезки здесь недоступна.</p><button type="button" id="vkt-avatar-preview-button" class="plain-button">Подготовить предпросмотр аватара</button><div id="vkt-avatar-preview" class="vkt-preview" aria-live="polite"></div><p id="vkt-avatar-warning">Изменение аватара через ВК может создать публичную запись на стене сообщества. Применение заблокировано: нужны отдельное разрешение владельца на этот эффект и подтверждённый доступ к API. Публикации через Onlypult сохраняются.</p><label class="vkt-toggle"><input id="vkt-avatar-effect" type="checkbox" disabled>Подтверждаю возможность публичной записи на стене ВК — подтверждение пока недоступно</label><button type="button" id="vkt-avatar-apply" class="plain-button" disabled>Применение аватара недоступно</button></section>`);
     const load=async code=>{
       companyCode=String(code||'');epoch++;busy=false;settings={analytics:null,design:null};preview=null;pending=null;image=null;observed=null;
-      if(!owner()){container.querySelectorAll('input,textarea').forEach(el=>{el.value='';});container.replaceChildren();destroyed=true;return;}
-      clearMaterials();
+      if(!owner()){avatarImage=null;avatarVersion++;container.querySelectorAll('input,textarea').forEach(el=>{el.value='';});container.replaceChildren();destroyed=true;return;}
+      clearMaterials();clearAvatar();
       for(const purpose of ['analytics','design']){node(purpose+'-token').value='';drawSetting(purpose);}
       node('description').value='';node('cover').value='';node('file-info').textContent='';node('preview').replaceChildren();node('history').replaceChildren();node('current-state').replaceChildren();controls();
       if(!companyCode){say('Выберите компанию.');return;}
@@ -120,13 +136,13 @@
       });
     };
     for(const purpose of ['analytics','design']){
-      ['group','type','token','enabled'].forEach(field=>node(purpose+'-'+field).addEventListener(field==='enabled'||field==='type'?'change':'input',()=>{if(purpose==='design'){observed=null;invalidate();clearMaterials();}controls();}));
+      ['group','type','token','enabled'].forEach(field=>node(purpose+'-'+field).addEventListener(field==='enabled'||field==='type'?'change':'input',()=>{if(purpose==='design'){observed=null;invalidate();clearMaterials();clearAvatar();}controls();}));
       node(purpose+'-form').addEventListener('submit',event=>{
         event.preventDefault();if(busy||!owner()||!settings[purpose]||!node(purpose+'-form').reportValidity())return;
         const s=settings[purpose],groupId=node(purpose+'-group').value.trim(),tokenType=node(purpose+'-type').value,accessToken=node(purpose+'-token').value.trim();
         if((groupId!==String(s.groupId||'')||tokenType!==s.tokenType)&&!accessToken){say('Для нового сообщества или типа доступа нужен его ключ.');return;}
         const body={revision:s.revision,groupId,tokenType,enabled:node(purpose+'-enabled').checked,...(accessToken?{accessToken}:{})};
-        node(purpose+'-token').value='';if(purpose==='design'){observed=null;invalidate();clearMaterials();}
+        node(purpose+'-token').value='';if(purpose==='design'){observed=null;invalidate();clearMaterials();clearAvatar();}
         void run('Сохраняем отдельное подключение…',async current=>{const data=await request(purpose,'/settings',body,'PUT');if(!current())return;settings[purpose]=validate(data,purpose);drawSetting(purpose);say('Подключение сохранено. Теперь отдельно проверьте доступ.');});
       });
       node(purpose+'-check').addEventListener('click',()=>{if(dirty(purpose))return;const revision=settings[purpose].revision;void run('Проверяем доступ без изменения сообщества…',async current=>{const data=await request(purpose,'/check',{revision});if(!current())return;settings[purpose]=validate(data,purpose,revision);drawSetting(purpose);say(data.connected?(purpose==='analytics'?'Доступ к статистике подтверждён.':'Тип ключа и чтение сообщества проверены; права на изменение ещё не проверены.'):errorText[data.errorCode]||'Доступ пока не подтверждён.');});});
@@ -149,6 +165,41 @@
     });
     node('history-refresh').addEventListener('click',()=>void run('Читаем журнал изменений…',async current=>{const data=await request('design','/history');if(!current())return;validate(data,'design');drawHistory(data);if(!pending)say('История обновлена.');}));
     node('history').addEventListener('click',event=>{const button=event.target.closest('[data-rollback]');if(!button||!ready('design')||unresolved())return;const revision=settings.design.revision;invalidate();void run('Готовим предпросмотр возврата описания…',async current=>{const data=await request('design','/rollback-preview',{revision,requestId:button.dataset.rollback});if(!current())return;validate(data,'design',revision);if(!data.previewId||data.operation!=='description')throw Error('INVALID_PREVIEW');acceptPreview(data);});});
+    node('avatar-clear').addEventListener('click',()=>{clearAvatar();controls();});
+    node('avatar-file').addEventListener('input',()=>{invalidateAvatar();controls();});
+    node('avatar-effect').addEventListener('change',()=>{node('avatar-effect').checked=false;controls();});
+    node('avatar-file').addEventListener('change',()=>{
+      invalidateAvatar();controls();const file=node('avatar-file').files?.[0];if(!file)return;
+      if(!owner()||!materialsReady()){clearAvatar();controls();return;}
+      if(!['image/jpeg','image/png'].includes(file.type)||!file.size||file.size>8*1024*1024){clearAvatar();controls();say('Выберите квадратный JPEG или PNG размером до 8 МиБ.');return;}
+      const generation=epoch,version=avatarVersion,reader=new FileReader();
+      const current=()=>!destroyed&&owner()&&generation===epoch&&version===avatarVersion&&materialsReady()&&node('avatar-file').files?.[0]===file;
+      reader.onload=()=>{
+        if(!current())return;const source={mime:file.type,base64:String(reader.result).split(',')[1]},decoded=new Image();
+        decoded.onload=()=>{
+          if(!current())return;
+          if(!Number.isSafeInteger(decoded.naturalWidth)||decoded.naturalWidth<=0||decoded.naturalWidth!==decoded.naturalHeight){clearAvatar();controls();say('Для аватара нужен заранее подготовленный квадратный JPEG или PNG. Обрезка здесь недоступна.');return;}
+          avatarImage={...source,width:decoded.naturalWidth,height:decoded.naturalHeight};node('avatar-file-info').textContent=file.name+' · '+avatarImage.width+' × '+avatarImage.height+' · '+Math.ceil(file.size/1024)+' КиБ';avatarSamples(node('avatar-local-preview'),source);controls();
+        };
+        decoded.onerror=()=>{if(current()){clearAvatar();controls();say('Не удалось прочитать изображение аватара. Выберите корректный JPEG или PNG.');}};
+        decoded.src='data:'+source.mime+';base64,'+source.base64;
+      };
+      reader.onerror=()=>{if(current()){clearAvatar();controls();say('Не удалось прочитать файл аватара. Выберите его ещё раз.');}};reader.readAsDataURL(file);
+    });
+    node('avatar-preview-button').addEventListener('click',()=>{
+      if(busy||!owner()||!materialsReady()||!avatarImage)return;
+      node('avatar-preview').replaceChildren();const source=avatarImage,version=++avatarVersion,revision=settings.design.revision;
+      void run('Подготавливаем предпросмотр аватара без загрузки в ВК…',async current=>{
+        const data=await request('design','/avatar-preview',{revision,image:{mime:source.mime,base64:source.base64}});
+        if(!current()||version!==avatarVersion||!materialsReady()||avatarImage!==source)return;
+        validate(data,'design',revision);
+        if(typeof data.previewId!=='string'||!data.previewId||String(data.groupId)!==String(settings.design.groupId)||data.operation!=='avatar'||data.after?.mime!==source.mime||data.after.width!==source.width||data.after.height!==source.height||typeof data.sourceHash!=='string'||!/^[a-f0-9]{64}$/i.test(data.sourceHash)||data.after.sourceHash!==data.sourceHash||data.capabilities?.applyEnabled!==false||data.capabilities?.cropSupported!==false)throw Error('INVALID_PREVIEW');
+        const area=node('avatar-preview');paragraph(area,'Компания',ctx.identity.companies?.find(c=>String(c.id)===companyCode)?.name||companyCode);paragraph(area,'Сообщество ВК',data.groupId);paragraph(area,'Проверенный файл',data.after.width+' × '+data.after.height+' · '+data.after.mime);
+        paragraph(area,'Результат подготовки','Файл проверен сервером. Предпросмотр не подтверждает права на изменение аватара; загрузка в ВК не выполнялась.');
+        say('Предпросмотр аватара подготовлен. Применение остаётся заблокированным.');
+      });
+    });
+    // There is deliberately no avatar apply handler or route invocation in this preparation-only UI.
     const loadAlbums=offset=>{
       if(!materialsReady()||busy)return;
       invalidateMaterial();const revision=settings.design.revision,version=materialVersion;
@@ -230,6 +281,6 @@
     });
     node('refresh').addEventListener('click',()=>{if(!busy&&!unresolved()&&!materialUnresolved())void load(companyCode);else if(unresolved()||materialUnresolved())say('Сначала обновите историю и проверьте результат предыдущей операции.');});
     controls();
-    return {update(next,code=next.selectedProjectId){ctx=next;if(destroyed)return;if(!owner()||String(code||'')!==companyCode)return load(code);controls();},load,destroy(){epoch++;destroyed=true;container.querySelectorAll('input,textarea').forEach(el=>{el.value='';});container.replaceChildren();settings={};preview=null;pending=null;image=null;materialImage=null;materialPreview=null;materialPending=null;materialLocks.clear();}};
+    return {update(next,code=next.selectedProjectId){ctx=next;if(destroyed)return;if(!owner()||String(code||'')!==companyCode)return load(code);controls();},load,destroy(){epoch++;destroyed=true;container.querySelectorAll('input,textarea').forEach(el=>{el.value='';});container.replaceChildren();settings={};preview=null;pending=null;image=null;materialImage=null;materialPreview=null;materialPending=null;materialLocks.clear();avatarImage=null;avatarVersion++;}};
   };
 })();
