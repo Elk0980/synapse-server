@@ -27,7 +27,16 @@
       vertices[4][1]+=p.rise;vertices[5][1]+=p.rise;
       faces.push({v:[4,5,6,7],color:'#657e65'});
     }else faces.push({v:[4,5,6,7],color:'#657e65'});
-    return {vertices,faces,edges};
+    const solidStart=faces.length;
+    function box(x1,y1,z1,x2,y2,z2){
+      const start=vertices.length;vertices.push([x1,y1,z1],[x2,y1,z1],[x2,y1,z2],[x1,y1,z2],[x1,y2,z1],[x2,y2,z1],[x2,y2,z2],[x1,y2,z2]);
+      for(const [indices,color] of [[[0,1,5,4],'#ae8e67'],[[1,2,6,5],'#91734f'],[[2,3,7,6],'#bb9c73'],[[3,0,4,7],'#967956'],[[4,5,6,7],'#c6ab83']])faces.push({v:indices.map(i=>i+start),color});
+    }
+    const t=.12;
+    for(const [x,z] of [[-l,-w],[l-t,-w],[l-t,w-t],[-l,w-t]])box(x,0,z,x+t,h+(p.roof==='shed'&&z<0?p.rise:0),z+t);
+    box(-l,h-t,w-t,l,h,w);
+    box(-l,h-t+(p.roof==='shed'?p.rise:0),-w,l,h+(p.roof==='shed'?p.rise:0),-w+t);
+    return {vertices,faces,edges,solidStart};
   }
   function obj(mesh){return '# Gazebo sketch, units: metres\n'+mesh.vertices.map(v=>'v '+v.join(' ')).join('\n')+'\n'+mesh.faces.map(f=>'f '+f.v.map(i=>i+1).join(' ')).join('\n')+'\n'+(mesh.edges||[]).map(e=>'l '+e.map(i=>i+1).join(' ')).join('\n')+'\n';}
   function parseObj(text){

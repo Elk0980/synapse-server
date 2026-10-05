@@ -10,7 +10,7 @@
 <body>
   <header><a href="./" aria-label="Мастерская, главная">Мастерская<span>Одна работа. Всё под рукой.</span></a><span class="badge">Работа № 1</span></header>
   <main>
-    <section class="intro"><div><p class="eyebrow">ВАША РАБОТА</p><h1>Беседка</h1><p>Задайте размеры, рассмотрите модель и сохраните чертежи.</p></div><button id="save" class="secondary">Сохранить работу в файл</button></section>
+    <section class="intro"><div><p class="eyebrow">АРХИТЕКТУРНАЯ МАСТЕРСКАЯ · ПРОЕКТ 01</p><h1>Беседка у дома</h1><p>От первого эскиза к понятному проекту.</p></div><div class="intro-actions"><button id="present">Показать клиенту</button><button id="save" class="secondary">Сохранить работу</button></div></section>
     <p class="notice">Первый пример: пристройка 4 × 3 м, к дому примыкает сторона 4 м, крыша односкатная. Для показа взят условный подъём крыши 0,5 м и нижний край 2,5 м — эти высоты уточняем. Пола и фундамента пока нет. Это эскиз, сечения и узлы ещё не рассчитаны.</p>
     <div class="workspace">
       <section class="settings" aria-labelledby="settings-title">
@@ -31,9 +31,13 @@
         <label class="file-button">Открыть файл работы<input id="restore" type="file" accept=".json,application/json"></label>
       </section>
       <section class="viewer" aria-label="Модель и чертежи">
+        <div class="view-modes" aria-label="Стиль просмотра"><button id="design-mode" aria-pressed="true">Дизайнерский</button><button id="engineering-mode" aria-pressed="false">Инженерный</button></div>
         <div class="tabs" role="tablist" aria-label="Режим просмотра"><button id="tab-model" role="tab" aria-selected="true" aria-controls="model-panel">3D-модель</button><button id="tab-plan" role="tab" aria-selected="false" aria-controls="plan-panel" tabindex="-1">Чертежи</button></div>
         <section id="model-panel" role="tabpanel" aria-labelledby="tab-model">
+          <div class="angles" aria-label="Ракурс модели"><button id="angle-perspective" class="secondary">Перспектива</button><button id="angle-front" class="secondary">Фасад</button><button id="angle-side" class="secondary">Торец</button><button id="angle-top" class="secondary">Сверху</button></div>
           <div class="canvas-wrap"><canvas id="scene" aria-label="Трёхмерный эскиз беседки"></canvas><div id="empty">Начнём с размеров<span>Введите параметры слева — здесь появится ваша беседка.</span></div></div>
+          <p id="model-caption" class="model-caption">Эскиз беседки · 4 × 3 м · односкатная крыша</p>
+          <p class="engineering-note" hidden>Показаны габариты и условные сечения 120 мм для визуализации. Сечения, нагрузки, крепление к дому и основание ещё не рассчитаны.</p>
           <div class="toolbar"><p>Поворачивайте мышью или пальцем. Колесо — масштаб.</p><button id="reset" class="secondary">Вернуть вид</button></div>
           <div class="toolbar"><button id="obj" class="secondary" disabled>Скачать модель OBJ</button><button id="png" class="secondary" disabled>Скачать вид PNG</button></div>
         </section>
@@ -42,6 +46,6 @@
       </section>
     </div>
   </main>
-  <footer>Хью · Мастерская беседки <span>Эскиз и исходные файлы — без передачи на сервер</span></footer>
+  <footer>Мастерская · Беседка у дома <span>Эскизный проект · 01</span></footer>
 </body>
 </html>
