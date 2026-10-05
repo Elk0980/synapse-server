@@ -88,7 +88,7 @@ class PackageBuildTests(unittest.TestCase):
             "diff.algorithm": "histogram", "diff.mnemonicPrefix": "true",
             "diff.noprefix": "true", "diff.indentHeuristic": "true", "core.abbrev": "5",
         }
-        environment = {"GIT_CONFIG_COUNT": str(len(preferences))}
+        environment = {"GIT_CONFIG_COUNT": str(len(preferences)), "GIT_DIFF_OPTS": "--unified=0"}
         for index, (key, value) in enumerate(preferences.items()):
             environment["GIT_CONFIG_KEY_" + str(index)] = key
             environment["GIT_CONFIG_VALUE_" + str(index)] = value

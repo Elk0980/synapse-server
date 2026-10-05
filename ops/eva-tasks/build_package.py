@@ -31,9 +31,12 @@ def sha256(data):
 
 
 def git(root, *args):
+    environment = dict(os.environ)
+    # This legacy variable overrides even explicit --unified on the command line.
+    environment.pop("GIT_DIFF_OPTS", None)
     result = subprocess.run(
         ["git", "-c", "safe.directory=" + root.as_posix(), "-C", str(root), *args],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, env=environment,
     )
     if result.returncode:
         raise ValueError("Required committed source is unavailable; fetch the reviewed branch first.")
