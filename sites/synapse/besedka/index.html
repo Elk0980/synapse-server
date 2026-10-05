@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Беседка — мастерская</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="geometry.js"></script><script defer src="app.js"></script>
+</head>
+<body>
+  <header><a href="./" aria-label="Мастерская, главная">Мастерская<span>Одна работа. Всё под рукой.</span></a><span class="badge">Работа № 1</span></header>
+  <main>
+    <section class="intro"><div><p class="eyebrow">ВАША РАБОТА</p><h1>Беседка</h1><p>Задайте размеры, рассмотрите модель и сохраните чертежи.</p></div><button id="save" class="secondary">Сохранить работу в файл</button></section>
+    <p class="notice">Первый пример: пристройка 4 × 3 м, к дому примыкает сторона 4 м, крыша односкатная. Для показа взят условный подъём крыши 0,5 м и нижний край 2,5 м — эти высоты уточняем. Пола и фундамента пока нет. Это эскиз, сечения и узлы ещё не рассчитаны.</p>
+    <div class="workspace">
+      <section class="settings" aria-labelledby="settings-title">
+        <h2 id="settings-title">Параметры беседки</h2>
+        <form id="parameters">
+          <label>Длина, м<input id="length" type="number" step="0.01" min="0.5" max="30" required value="4"></label>
+          <label>Ширина, м<input id="width" type="number" step="0.01" min="0.5" max="30" required value="3"></label>
+          <label>Высота нижнего края, м<input id="height" type="number" step="0.01" min="1" max="10" required value="2.5"></label>
+          <label>Форма крыши<select id="roof"><option value="">Выберите</option><option value="shed" selected>Односкатная — уклон по ширине</option><option value="gable">Двускатная</option><option value="flat">Плоская</option></select></label>
+          <label>Подъём крыши, м<input id="rise" type="number" step="0.01" min="0.1" max="5" value="0.5" placeholder="Разница высот или подъём конька"></label>
+          <label>Материал каркаса<input id="material" maxlength="100" placeholder="Например, дерево или металл"></label>
+          <label>Город или район<input id="region" maxlength="120" placeholder="Для уточнения условий"></label>
+          <label>Ваши пожелания<textarea id="notes" rows="4" maxlength="5000" placeholder="Пол, ограждения, вход, покрытие, основание…">Пристройка к дому стороной 4 м. Крыша односкатная. Работа с нуля, пола и фундамента нет.</textarea></label>
+          <button type="submit">Построить эскиз</button>
+        </form>
+        <p id="feedback" role="status" aria-live="polite"></p>
+        <p class="hint">Изменения сохраняются только в этом браузере. Файл работы поможет перенести их на другой компьютер.</p>
+        <label class="file-button">Открыть файл работы<input id="restore" type="file" accept=".json,application/json"></label>
+      </section>
+      <section class="viewer" aria-label="Модель и чертежи">
+        <div class="tabs" role="tablist" aria-label="Режим просмотра"><button id="tab-model" role="tab" aria-selected="true" aria-controls="model-panel">3D-модель</button><button id="tab-plan" role="tab" aria-selected="false" aria-controls="plan-panel" tabindex="-1">Чертежи</button></div>
+        <section id="model-panel" role="tabpanel" aria-labelledby="tab-model">
+          <div class="canvas-wrap"><canvas id="scene" aria-label="Трёхмерный эскиз беседки"></canvas><div id="empty">Начнём с размеров<span>Введите параметры слева — здесь появится ваша беседка.</span></div></div>
+          <div class="toolbar"><p>Поворачивайте мышью или пальцем. Колесо — масштаб.</p><button id="reset" class="secondary">Вернуть вид</button></div>
+          <div class="toolbar"><button id="obj" class="secondary" disabled>Скачать модель OBJ</button><button id="png" class="secondary" disabled>Скачать вид PNG</button></div>
+        </section>
+        <section id="plan-panel" role="tabpanel" aria-labelledby="tab-plan" hidden><div id="drawing"><p class="empty-plan">Чертежи появятся после построения эскиза.</p></div><div class="toolbar"><button id="svg" class="secondary" disabled>Скачать чертёж SVG</button><button id="print" class="secondary" disabled>Печать / PDF</button></div></section>
+        <section class="references"><h2>Ваши исходные файлы</h2><p>Откройте модель OBJ или STL, чертёж PDF или изображение. Файлы остаются на вашем устройстве.</p><label class="file-button">Открыть исходный файл<input id="reference" type="file" accept=".obj,.stl,.pdf,.png,.jpg,.jpeg,.webp"></label><p id="file-status" role="status"></p><div id="reference-view"></div></section>
+      </section>
+    </div>
+  </main>
+  <footer>Хью · Мастерская беседки <span>Эскиз и исходные файлы — без передачи на сервер</span></footer>
+</body>
+</html>
