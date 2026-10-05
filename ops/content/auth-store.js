@@ -182,7 +182,9 @@ function createAuthStore(db, authUsers = '') {
       const { passwordHash, sessionVersion, companyCodes, ...safe } = user;
       return safe;
     },
-    create(actorId, input, passwordHash) {
+    /* options.within(userId) выполняется в той же транзакции после вставки (specs/085, приглашения):
+       исключение в нём откатывает создание целиком — частичной учётной записи не остаётся. */
+    create(actorId, input, passwordHash, options = {}) {
       const keys = Object.keys(input).sort().join(',');
       if (!['displayName,login,password', 'companies,displayName,login,password,permissions'].includes(keys)) fail(400, 'Переданы лишние или отсутствуют обязательные поля');
       const companies = input.companies ?? [];
@@ -202,7 +204,8 @@ function createAuthStore(db, authUsers = '') {
           const id = Number(result.lastInsertRowid);
           for (const code of companies) db.prepare('INSERT INTO auth_user_companies VALUES (?,?)').run(id, code);
           for (const permission of permissions) db.prepare('INSERT INTO auth_user_permissions VALUES (?,?)').run(id, permission);
-          audit(actorId, id, 'ACCOUNT_CREATED', { login: input.login, companies, permissions });
+          audit(actorId, id, 'ACCOUNT_CREATED', { login: input.login, companies, permissions, ...(options.auditSource ? { source: options.auditSource } : {}) });
+          if (typeof options.within === 'function') options.within(id);
           return decorate(getUser(id));
         });
       } catch (error) {
