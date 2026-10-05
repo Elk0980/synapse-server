@@ -18,3 +18,9 @@ Delivery source commit is **7addf2a476a3d75ca575a1acaae4c41cfc8403a9**. Later ev
 - [VK regression37262713988](https://github.com/Elk0980/synapse-server/actions/runs/37262713988) and [Spec Kit37262713925](https://github.com/Elk0980/synapse-server/actions/runs/37262713925) succeeded. General project CI is tracked independently in PR452.
 
 Spec converge: FR001-FR008 and SC001-SC004 checked against builder/bootstrap/tests/readme/delivery. No missing implementation within preparation scope. Production reader release, socket configuration, owner pairing and bot activation remain explicitly outside this task. No credentials, server deployment, timer operation or live Telegram call was performed.
+
+## Authorized code release checkpoint
+
+After explicit authorization for installing Eva and read-only task access to the six named projects, PR443 merged atfdad9c8daedb882663ac113934f698c1e17a6b9e. Its tree equals reviewed local integration32ef85a. Only the three package commits were rebased onto it; range-diff reports all three identical and the resulting application tree equals original452. Archive tag eva-preparation-7addf2a476a3 preserves the frozen delivery source and its pinned parent objects.
+
+Release validation exposed a CI path-filter gap: general project-chat-check did not cover Eva-only changes. Added ops/eva-tasks/** and ops/crm/eva-task-reader* to its existing push/PR path filters, with no job, permission or runtime change. This is the only additional release change beyond the reviewed package delta and this evidence. New-SHA CI/review and final merge results are recorded in the PR and release handoff; this checkpoint does not claim server deployment or owner pairing.

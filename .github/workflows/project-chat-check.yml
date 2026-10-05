@@ -12,6 +12,8 @@ name: project-chat-check
 on:
   push:
     paths:
+      - 'ops/eva-tasks/**'
+      - 'ops/crm/eva-task-reader*'
       - 'ops/chat/**'
       - 'ops/content/**'
       - 'ops/dev/**'
@@ -44,6 +46,8 @@ on:
       - '.github/workflows/project-chat-check.yml'
   pull_request:
     paths:
+      - 'ops/eva-tasks/**'
+      - 'ops/crm/eva-task-reader*'
       - 'ops/chat/**'
       - 'ops/content/**'
       - 'ops/dev/**'
