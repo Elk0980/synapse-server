@@ -36,6 +36,8 @@ const { createVkDesign } = require('./vk-design');
 const { createVkMaterials } = require('./vk-materials');
 const { createVkAvatar } = require('./vk-avatar');
 const { createVkToolsHandler } = require('./vk-tools-http');
+const { createVkEvents } = require('./vk-events');
+const { createVkEventsHandler } = require('./vk-events-http');
 const { createReviews } = require('./reviews');
 const { createReviewsHandler } = require('./reviews-http');
 const { createPlatformDemand } = require('./platform-demand');
@@ -633,6 +635,9 @@ const vkDesign = createVkDesign(db,{direct:vkDirect});
 const vkMaterials = createVkMaterials(db,{direct:vkDirect});
 const vkAvatar = createVkAvatar(db,{direct:vkDirect});
 const handleVkTools = createVkToolsHandler({direct:vkDirect,design:vkDesign,materials:vkMaterials,avatar:vkAvatar,companyModuleContext,readJson,send});
+// spec092: incoming VK events only (Callback + Bots Long Poll). Logs carry an error kind/code, never payloads or keys.
+const vkEvents = createVkEvents(db,{apiKey:API_KEY,onError:(kind,code)=>console.error('[crm] vk-events',kind,String(code||'').slice(0,80))});
+const handleVkEvents = createVkEventsHandler({events:vkEvents,companyModuleContext,readJson,send});
 const reviews = createReviews(db);
 const handleReviews = createReviewsHandler({reviews,companyModuleContext,readJson,send});
 const platformDemand = createPlatformDemand(db);
@@ -2572,6 +2577,7 @@ async function route(request, response) {
   if (await handleMediaMentor(request,response,url,cors)) return;
   if (await handleVkCommunity(request,response,url,cors)) return;
   if (await handleVkTools(request,response,url,cors)) return;
+  if (await handleVkEvents(request,response,url,cors)) return;
   if (await handleReviews(request,response,url,cors)) return;
   if (await handlePlatformDemand(request,response,url,cors)) return;
   if (await handleSocialStats(request,response,url,cors)) return;
@@ -3404,6 +3410,8 @@ if (IS_MAIN) {
     console.log(`Мини-CRM слушает порт ${PORT}; база: ${DATABASE_PATH}`);
     void deliverQueuedEmails();
     void autoposting.drain().catch(() => console.error('[crm] autoposting worker failed'));
+    // Restores only Long Poll bindings the owner left enabled and checked; one lease per binding.
+    try { vkEvents.resume(); } catch { console.error('[crm] vk-events resume failed'); }
   });
 }
 
@@ -3414,7 +3422,7 @@ function shutdown() {
   const evaTaskReaderStopped = evaTaskReaderReady.then(reader => reader?.close()).catch(() => {
     console.error('[crm] Eva task reader shutdown failed');
   });
-  const emailWorkersStopped = Promise.all([emailOutbox.stop(), emailCampaigns.stop(), autoposting.stop(), evaTaskReaderStopped]);
+  const emailWorkersStopped = Promise.all([emailOutbox.stop(), emailCampaigns.stop(), autoposting.stop(), evaTaskReaderStopped, vkEvents.close()]);
   server.close(async () => {
     await emailWorkersStopped;
     db.close();

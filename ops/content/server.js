@@ -589,7 +589,9 @@ async function proxyCrm(request, response, url, cors) {
   const crmPath = url.pathname.slice('/content/crm'.length) || '/';
   if (crmPath.startsWith('/internal/')) fail(403, 'Служебный маршрут недоступен');
   if (/^\/coordination(?:\/|$)/.test(crmPath) && identity.role !== 'owner') fail(403, 'Координация доступна владельцу');
-  if (/^\/(?:vk-community|vk-tools)(?:\/|$)/.test(crmPath)) {
+  // The VK Callback target is reachable only through /public-vk-callback, never with a cabinet session.
+  if (/^\/vk-events\/callback(?:\/|$)/.test(crmPath)) fail(404, 'Адрес не найден');
+  if (/^\/(?:vk-community|vk-tools|vk-events)(?:\/|$)/.test(crmPath)) {
     if (identity.role !== 'owner') fail(403,'Подключение и сообщения ВК доступны владельцу');
     const code = url.searchParams.get('companyCode');
     if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400,'Выберите компанию');
@@ -1195,6 +1197,22 @@ const server = http.createServer(async (request, response) => {
         return reply(200, { ok: true });
       }
       fail(404, 'Не найдено');
+    }
+
+    // spec092: VK Callback API target. Endpoint capability, group_id and secret are verified in CRM.
+    // No cookie, session, CSRF or identity header is forwarded; only VK's literal reply is returned.
+    if (parts[0] === 'public-vk-callback') {
+      const plainReply = (status, text) => { response.writeHead(status, {'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff'}); return response.end(text); };
+      if (request.method !== 'POST' || parts.length !== 2 || !/^[A-Za-z0-9_-]{32}$/.test(parts[1])) return plainReply(404, 'rejected');
+      const chunks = [];
+      let size = 0;
+      for await (const chunk of request) { size += chunk.length; if (size > 256 * 1024) return plainReply(413, 'rejected'); chunks.push(chunk); }
+      try {
+        const forwarded = String(request.headers['x-forwarded-for'] || request.socket.remoteAddress || '').split(',')[0].trim().slice(0, 64);
+        const upstream = await fetch(`${CRM_URL}/vk-events/callback/${parts[1]}`, {method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8000),
+          headers: {'content-type': 'application/json', 'x-api-key': CRM_API_KEY, ...(forwarded ? {'x-forwarded-for': forwarded} : {})}, body: Buffer.concat(chunks)});
+        return plainReply(upstream.status, (await upstream.text()).slice(0, 200));
+      } catch { return plainReply(503, 'retry'); }
     }
 
     // Capability link for recipients: no browser session or private CRM fields are forwarded.

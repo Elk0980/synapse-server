@@ -20,7 +20,7 @@
   };
   let controller;
   function create(container, initial) {
-    let ctx = initial, companyCode = '', epoch = 0, settings = null, selected = null, dialogs = [], busy = false, offset = 0, total = 0, pendingReply = null, tools;
+    let ctx = initial, companyCode = '', epoch = 0, settings = null, selected = null, dialogs = [], busy = false, offset = 0, total = 0, pendingReply = null, tools, events;
     // CABINET_SCOPE: retain only outcome locks across navigation, never private draft content.
     let replyFile=null, replyPreview=null, replyVersion=0, fileVersion=0;
     const uncertainReplies=new Map();
@@ -36,7 +36,7 @@
     const controls = () => {
       if (!node('status')) return;
       container.setAttribute('aria-busy', String(busy));
-      container.querySelectorAll('button,input,textarea,select').forEach(el => { if (!el.closest('.vk-tools')) el.disabled = busy || !isOwner(); });
+      container.querySelectorAll('button,input,textarea,select').forEach(el => { if (!el.closest('.vk-tools,.vk-events')) el.disabled = busy || !isOwner(); });
       node('check').disabled = busy || !settings?.configured || dirty();
       node('sync').disabled = busy || !settings?.connected || dirty();
       node('send').disabled = busy || !isOwner() || !settings?.connected || !selected?.canReply || dirty() || !node('reply').value.trim() || !!node('reply-file').files?.length || replyUncertain();
@@ -114,11 +114,13 @@
       <section class="card"><h3>Сообщения клиентов</h3><p>Текст ответа остаётся черновиком до нажатия «Отправить ответ». Ответ с вложением требует предпросмотра и отдельного подтверждения отправки. Автоответы не включены. В диалоге показаны последние 50 сообщений.</p>
         <div class="vk-inbox"><aside><div id="vk-dialog-list"><p>Подключите сообщения и нажмите «Получить диалоги».</p></div><div id="vk-pages" class="vk-actions" hidden><button type="button" id="vk-previous" class="plain-button">Назад</button><span id="vk-page-label"></span><button type="button" id="vk-next" class="plain-button">Далее</button></div></aside>
         <div><h4 id="vk-recipient" tabindex="-1">Выберите диалог</h4><div id="vk-messages" class="vk-messages"></div><form id="vk-reply-panel" hidden><label>Ваш ответ<textarea id="vk-reply" rows="4" maxlength="4000"></textarea></label><label>Одно вложение (JPEG, PNG или PDF, до 8 МиБ)<input id="vk-reply-file" type="file" accept="image/jpeg,image/png,application/pdf"></label><p id="vk-reply-file-info" class="vk-note"></p><button type="button" class="plain-button" id="vk-reply-file-clear">Убрать вложение</button><button type="button" class="plain-button" id="vk-reply-preview-button">Предпросмотр ответа с вложением</button><div id="vk-reply-preview" class="vkt-preview" aria-live="polite"></div><button type="button" class="plain-button" id="vk-reply-confirm" hidden>Подтвердить и отправить вложение</button><button type="submit" class="plain-button" id="vk-send">Отправить ответ</button></form></div></div>
-      </section><div id="vk-direct-tools"></div>`;
+      </section><div id="vk-direct-tools"></div><div id="vk-events-panel"></div>`;
     tools = cabinet.mountVkTools?.(node('direct-tools'), ctx);
+    events = cabinet.mountVkEvents?.(node('events-panel'), ctx);
     const load = async nextCode => {
       companyCode = String(nextCode || ''); epoch++; busy = false; settings = null; dialogs = []; total = 0; offset = 0; clearConversation();
       const toolsReady = tools?.update(ctx, companyCode);
+      void events?.update(ctx, companyCode);
       node('token').value = ''; node('group').value = ''; node('dialog-list').innerHTML = '<p>Подключите сообщения и нажмите «Получить диалоги».</p>'; node('pages').hidden = true; node('company-name').textContent = name(); node('publishing').textContent = 'Статус не получен'; drawSettings();
       if (!companyCode || !isOwner()) { message('Выберите компанию. Подключение доступно владельцу.'); controls(); return; }
       await run('Загружаем настройки выбранной компании…', async current => {
@@ -227,7 +229,7 @@
         else message('Результат отправки не подтверждён. Обновите диалоги и проверьте историю, чтобы не отправить ответ дважды.');
       });
     });
-    return {load,ready:load(ctx.selectedProjectId),update(next) {ctx = next; if (!isOwner()) {epoch++; settings = null; dialogs = []; selected = null; pendingReply = null;replyFile=null;replyPreview=null;replyVersion++;fileVersion++; tools?.destroy(); container.replaceChildren(); controller = null; return;} if (String(next.selectedProjectId || '') !== companyCode) return load(next.selectedProjectId); tools?.update(ctx, companyCode); controls();}};
+    return {load,ready:load(ctx.selectedProjectId),update(next) {ctx = next; if (!isOwner()) {epoch++; settings = null; dialogs = []; selected = null; pendingReply = null;replyFile=null;replyPreview=null;replyVersion++;fileVersion++; tools?.destroy(); events?.destroy(); container.replaceChildren(); controller = null; return;} if (String(next.selectedProjectId || '') !== companyCode) return load(next.selectedProjectId); tools?.update(ctx, companyCode); events?.update(ctx, companyCode); controls();}};
   }
   cabinet.registerView('vk-community', {title:'ВКонтакте',render(container,ctx) {if (ctx.identity?.role !== 'owner') {controller?.update(ctx); container.replaceChildren(); controller = null; return;} if (!controller) controller = create(container,ctx); else return controller.update(ctx); return controller.ready;},onProjectChange(ctx) {return controller?.update(ctx);}});
 })();
