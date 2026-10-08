@@ -40,6 +40,22 @@ test('saved UTM survives page navigation for 30 days and denied storage does not
   assert.equal(payload(values, location, {getItem() {throw Error('private mode');}}, now).source, 'Сайт АВОКАДО');
 });
 
+test('denied storage preserves real first-touch identity from page memory; DNT excludes it', () => {
+  const denied = {getItem() {throw Error('private mode');}};
+  const env = {memoryClientId: '12345678-abcd', memoryTouch: {source: '2gis', ts: now,
+    referrer: 'https://link.2gis.ru/', landingPage: '/'}};
+  const body = payload(values, location, denied, now + 1000, env);
+  assert.equal(body.clientId, env.memoryClientId);
+  assert.equal(body.source, '2gis');
+  assert.equal(body.referrer, env.memoryTouch.referrer);
+  assert.equal(body.landingPage, location.origin + '/');
+  assert.equal(body.utmSource, undefined);
+  const privateBody = payload(values, location, denied, now + 1000, {...env, doNotTrack: '1'});
+  assert.equal(privateBody.clientId, undefined);
+  assert.equal(privateBody.referrer, undefined);
+  assert.equal(privateBody.source, 'Сайт АВОКАДО');
+});
+
 test('only CRM 201 with a positive id confirms a new callback; deduplication is a distinct result', async () => {
   let request;
   const result = await send(transport(async (...args) => {

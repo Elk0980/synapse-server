@@ -11,25 +11,57 @@
 })(typeof window === 'undefined' ? null : window, function () {
   'use strict';
   const fields = {utm_source: 'utmSource', utm_medium: 'utmMedium', utm_campaign: 'utmCampaign', utm_content: 'utmContent', utm_term: 'utmTerm'};
+  // Сохранённые метки avk_src (пишет attribution.js). Запись без признака v:2, где есть только
+  // utm_source и utm_medium=referral, — это старая искусственная метка органики (до правки 08.10.2026):
+  // адрес предыдущего сайта, а не кампания. Такие метки не передаются как UTM.
+  function legacySynthetic(saved) {
+    if (!saved || saved.v === 2 || saved.utm_medium !== 'referral') return false;
+    return Object.keys(saved).every(key => ['utm_source', 'utm_medium', 'first_seen'].includes(key));
+  }
   function campaign(location, storage, now) {
     const query = new URL(location.href).searchParams;
     const tags = {};
     for (const key of Object.keys(fields)) {
       const value = query.get(key);
-      if (value) tags[key] = value.slice(0, 512);
+      if (value) tags[key] = value.slice(0, 500);
     }
     if (Object.keys(tags).length) return tags;
     try {
       const saved = JSON.parse(storage.getItem('avk_src') || '{}');
       const seen = Date.parse(saved.first_seen);
-      if (!Number.isFinite(seen) || seen > now || now - seen >= 30 * 86400000) return tags;
+      if (!Number.isFinite(seen) || seen > now || now - seen >= 30 * 86400000 || legacySynthetic(saved)) return tags;
       for (const key of Object.keys(fields)) {
-        if (typeof saved[key] === 'string' && saved[key]) tags[key] = saved[key].slice(0, 512);
+        if (typeof saved[key] === 'string' && saved[key]) tags[key] = saved[key].slice(0, 500);
       }
     } catch (_) {}
     return tags;
   }
-  function payload(values, location, storage, now = Date.now()) {
+  // Первое касание общего трекера track.js (synapse_ft) и его synapse_cid — тот же идентификатор,
+  // что у визитов. При «Не отслеживать» (DNT) не читаются и не передаются.
+  function touch(location, storage, now, env) {
+    const result = {};
+    const clip = value => (typeof value === 'string' && value.trim() ? value.trim().slice(0, 500) : '');
+    if (!env || env.doNotTrack !== '1') {
+      let first = null;
+      try { first = JSON.parse(storage.getItem('synapse_ft') || 'null'); } catch (_) { first = null; }
+      if (!first && env) first = env.memoryTouch;
+      if (first && typeof first === 'object' && now - Number(first.ts) < 30 * 86400000) {
+        if (clip(first.referrer)) result.referrer = clip(first.referrer);
+        if (clip(first.landingPage)) result.landingPage = clip(location.origin + first.landingPage.split('#')[0]);
+        if (clip(first.source) && first.source !== 'direct') result.source = clip(first.source);
+      }
+      let cid = '';
+      try { cid = clip(storage.getItem('synapse_cid')); } catch (_) {}
+      // Если localStorage недоступен, общий трекер держит CID в памяти этой же страницы.
+      if (!cid && env && typeof env.memoryClientId === 'string') cid = clip(env.memoryClientId);
+      if (/^[A-Za-z0-9-]{8,64}$/.test(cid)) result.clientId = cid;
+    }
+    if (!result.referrer && env && env.referrer) {
+      try { if (new URL(env.referrer).origin !== location.origin) result.referrer = clip(env.referrer); } catch (_) {}
+    }
+    return result;
+  }
+  function payload(values, location, storage, now = Date.now(), env = {}) {
     const name = String(values.name || '').trim();
     const contact = String(values.contact || '').trim();
     const comment = String(values.comment || '').trim();
@@ -41,11 +73,16 @@
     }
     if (comment.length > 1000) invalid('comment', 'Сократите комментарий до 1000 символов.');
     if (values.consent !== true) invalid('consent', 'Для отправки заявки нужно ваше согласие.');
-    const tags = campaign(location, storage, now);
+    let tags = {};
+    let first = {};
+    try { tags = campaign(location, storage, now); } catch (_) { tags = {}; }
+    try { first = touch(location, storage, now, env); } catch (_) { first = {}; }
     const page = location.origin + location.pathname;
     const result = {companyCode: 'avokado', name, contact, channel: 'Обратный звонок',
-      source: tags.utm_source || 'Сайт АВОКАДО', comment, page, landingPage: page};
+      source: tags.utm_source || first.source || 'Сайт АВОКАДО', comment, page, landingPage: first.landingPage || page};
     for (const [key, field] of Object.entries(fields)) if (tags[key]) result[field] = tags[key];
+    if (first.referrer) result.referrer = first.referrer;
+    if (first.clientId) result.clientId = first.clientId;
     return result;
   }
   async function send(win, body) {
@@ -124,7 +161,9 @@
         let storage;
         try { storage = win.localStorage; } catch (_) {}
         body = payload({name: controls.namedItem('name').value, contact: controls.namedItem('contact').value,
-          comment: !addComment || addComment.checked ? comment.value : '', consent: controls.namedItem('consent').checked}, win.location, storage);
+          comment: !addComment || addComment.checked ? comment.value : '', consent: controls.namedItem('consent').checked}, win.location, storage,
+          Date.now(), {doNotTrack: win.navigator && win.navigator.doNotTrack, referrer: win.document && win.document.referrer,
+            memoryClientId: win.__synapseClientId, memoryTouch: win.__synapseFirstTouch});
       } catch (error) {
         if (error.field) {
           controls.namedItem(error.field).setCustomValidity(error.message);
@@ -167,5 +206,5 @@
     });
   }
   function start(win, doc) { doc.querySelectorAll('[data-callback-form]').forEach(form => bind(win, form)); }
-  return {campaign, payload, send, report, outcomeGoal, bind, start};
+  return {campaign, touch, legacySynthetic, payload, send, report, outcomeGoal, bind, start};
 });
