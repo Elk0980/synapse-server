@@ -42,6 +42,16 @@ const init = (context) => {
 ctx = context;
 ({ identity, byId, escapeHTML, crmQuery, csrfOptions, scopeParams } = context);
 ({ formatMoney, formatROMI, periodDates, dateValue } = context);
+const contextPeriodDates = periodDates;
+periodDates = (period) => {
+  const dates = contextPeriodDates(period);
+  const length = period === '7d' ? 7 : period === '30d' ? 30 : null;
+  // Обе границы включены в API: 7 дней — сегодня и шесть предыдущих дней.
+  if (!length || !/^\d{4}-\d{2}-\d{2}$/.test(dates.to)) return dates;
+  const last = Date.parse(dates.to + 'T12:00:00Z');
+  if (!Number.isFinite(last)) return dates;
+  return { ...dates, from: new Date(last - (length - 1) * 86400000).toISOString().slice(0, 10) };
+};
 if (initialized) return;
 initialized = true;
 
@@ -202,8 +212,68 @@ const renderCompanyMetricsSection = (companyMetrics, owner) => {
       escapeHTML(String(coverage.expectedDays ?? 0))}. «Звонки и просмотры телефона» — не состоявшиеся звонки. ` +
     'Категории обращений не складываются друг с другом и с действиями на странице.</p>' + link;
 };
-const renderAnalytics = (dashboard, summary, expenses, potential = null, owner = analyticsState.payload?.owner, companyMetrics = analyticsState.payload?.companyMetrics ?? null) => {
-  analyticsState.payload = { dashboard, summary, expenses, potential, owner, companyMetrics };
+const renderAnalyticsGuide = () => `<section class="analytics-section analytics-guide">
+  <details><summary><strong>Как читать сквозную аналитику — инструкция</strong></summary>
+  <p>Сначала выберите компанию, затем даты «С» и «По». Для ежедневной проверки берите вчерашний полный день,
+  для сравнения — две полные недели одинаковой длины. Сегодняшние данные ещё неполные.</p>
+  <ol>
+    <li><strong>Проверьте свежесть.</strong> В блоке «Записи и оплаты из источников» посмотрите последний успешный сбор
+    отдельно для Метрики и YCLIENTS. «Не подключён», ошибка и отсутствие выгрузки означают неизвестные данные, а не ноль.</li>
+    <li><strong>Посмотрите путь клиента.</strong> Визиты и посетители сайта → действия на сайте → подтверждённые записи
+    → состоявшиеся посещения → оплаты с учётом возвратов. Клик на телефон или онлайн-запись ещё не подтверждает звонок или запись.</li>
+    <li><strong>Читайте цели по отдельности.</strong> «Целевые визиты» — визиты с выбранным действием;
+    «Достижения» — число его выполнений, включая повторы. Один посетитель может выполнить несколько целей.
+    Конверсия цели = целевые визиты / все визиты × 100%. Складывать цели как клиентов нельзя.</li>
+    <li><strong>Сравните источники.</strong> Источники и UTM показывают происхождение переходов.
+    В YCLIENTS проверьте записи с источником и без него, а также денежные операции без связи с записью.
+    Неизвестный источник нельзя автоматически приписывать рекламе. UTM 2ГИС не раскрывают поисковый запрос.</li>
+    <li><strong>Проверьте деньги.</strong> Денежный итог = платежи − возвраты; это не прибыль.
+    CAC = расходы на привлечение / новые платящие клиенты той же группы.
+    ROMI = (маржинальный доход этой группы − расходы на маркетинг) / расходы на маркетинг × 100%.
+    Без подтверждённых расходов, первых оплат, источников и себестоимости результат неизвестен.</li>
+  </ol>
+  <p>Даты создания записи, посещения и оплаты могут различаться. Делить итоги этих трёх событий за календарный
+  период друг на друга как конверсию нельзя: для неё нужна одна и та же группа записей.</p>
+  <p>В таблице «Можно ли доверять показателям» сначала прочитайте причины неполноты.
+  «Нет событий в снимке» отличается от «Пока неизвестно». Старый снимок, выборка и неизвестный источник
+  требуют отдельной проверки; подтверждённая строка не означает окупаемость рекламы.</p>
+  <p><strong>Каждый день, 5 минут:</strong> свежесть → визиты → подтверждённые записи → состоявшиеся посещения
+  → деньги и возвраты → неизвестные источники. <strong>Раз в неделю:</strong> сравните полные недели и выберите
+  одно улучшение по самому заметному месту потери клиентов. При сбое сообщите компанию, период и время последнего успеха;
+  не отправляйте клиентские телефоны или ключи доступа.</p>
+  <p class="crm-note">Фильтр площадок относится к воронке выше. «Записи и оплаты из источников» показывает компанию целиком.
+  Ручные данные 2ГИС и серверные данные имеют отдельные даты обновления.</p>
+  </details></section>`;
+const renderRevenueSection = (payload) => {
+  const head='<section class="analytics-section analytics-revenue"><h2>Записи и оплаты из источников</h2>';
+  if (!payload || payload.error) return head+'<p class="crm-note">Серверный сбор ещё не доступен. Клики и старые отметки CRM не подтверждают визит или оплату.</p></section>';
+  const num=(v)=>v===null||v===undefined?'—':escapeHTML(new Intl.NumberFormat('ru-RU',{maximumFractionDigits:2}).format(v));
+  const at=(v)=>v?escapeHTML(new Date(v).toLocaleString('ru-RU')):'ещё не было';
+  const accessError=(code)=>code==='TOKEN_REAUTH_REQUIRED'?'нужно повторно подключить Метрику':code==='TOKEN_REFRESH_UNCERTAIN'?'продление доступа не подтверждено; нужна проверка подключения':code==='TOKEN_REFRESH_BUSY'?'доступ обновляется; загрузка будет повторена':'ошибка загрузки';
+  const states=payload.state.providers.map(p=>'<li>'+escapeHTML(p.provider==='metrika'?'Яндекс Метрика':'YCLIENTS')+': '+
+    (!p.configured?'не подключён':!p.enabled?'сбор выключен':p.running?'идёт загрузка':p.errorCode?accessError(p.errorCode):p.stale?'данные требуют обновления':'обновляется сервером')+
+    '. Последний успех: '+at(p.lastSuccess)+'</li>').join('');
+  const m=payload.metrika,y=payload.yclients;
+  const quality=payload.quality?'<h3>Можно ли доверять показателям</h3><p class="crm-note">Проверка периода '+escapeHTML(payload.quality.period.from)+' — '+escapeHTML(payload.quality.period.to)+'. Каждый источник проверяется отдельно.</p><div class="crm-table-wrap"><table class="crm-table analytics-revenue-quality"><thead><tr><th>Проверка</th><th>Результат</th><th>Что это значит</th></tr></thead><tbody>'+payload.quality.checks.map(c=>'<tr><td>'+escapeHTML(c.title)+'</td><td>'+escapeHTML(({ok:'Проверено по снимку',attention:'Нужна проверка',unavailable:'Пока неизвестно',no_events:'Нет событий в снимке'})[c.status]||'Пока неизвестно')+'</td><td>'+escapeHTML(c.detail)+'</td></tr>').join('')+'</tbody></table></div>':'';
+  const trafficTable=(report,title)=>'<h4>'+title+'</h4><div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Источник</th><th>Визиты</th><th>Среднее время, сек.</th></tr></thead><tbody>'+report.rows.map(row=>'<tr><td>'+escapeHTML(row.dimensions.map(d=>d.name||d.id||'не определено').join(' / '))+'</td><td>'+num(row.metrics[0])+'</td><td>'+num(row.metrics[2])+'</td></tr>').join('')+'</tbody></table></div>';
+  const metrika=m?'<h3>Посещения сайта</h3><p>Визиты: <strong>'+num(m.overview.totals[0])+'</strong> · посетители: '+num(m.overview.totals[1])+
+    ' · среднее время: '+num(m.overview.totals[2])+' сек.</p><p class="crm-note">'+(m.current?'':'Подключение изменилось; это прежний снимок. ')+
+    'Снято: '+at(m.collectedAt)+'. '+(m.overview.sampled?'Применена выборка; доля '+num(m.overview.sampleShare*100)+'%. ':'')+
+    'Часовой пояс: '+escapeHTML(m.timezone)+'. Текущий день неполный.</p><div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Действие</th><th>Целевые визиты</th><th>Достижения</th><th>Конверсия</th></tr></thead><tbody>'+m.goals.map(g=>'<tr><td>'+escapeHTML(g.label)+'</td><td>'+num(g.visits)+'</td><td>'+num(g.reaches)+'</td><td>'+num(g.conversionRate)+'%</td></tr>').join('')+'</tbody></table></div>'+trafficTable(m.sources,'Откуда пришли на сайт')+trafficTable(m.utm,'Переходы по UTM')+'<p class="crm-note">Источник — последний значимый переход. Посетители и цели разных строк могут пересекаться; их нельзя складывать как клиентов. Пустая метка означает неизвестный источник.</p>':
+    '<p class="crm-note">Для этого периода пока нет выгрузки Метрики.</p>';
+  const yclients=y?'<h3>YCLIENTS: записи, визиты и реальные деньги</h3><p>Создано записей: <strong>'+num(y.createdBookings)+'</strong> · из них отменено: '+num(y.cancelledBookings)+
+    ' · состоялось визитов: '+num(y.attendedVisits)+' · платящих клиентов: '+num(y.payingClients)+'</p><p>Платежи: '+formatMoney(y.paymentKopecks/100)+
+    ' · возвраты: '+formatMoney(y.refundKopecks/100)+' · денежный итог: '+formatMoney(y.netCashKopecks/100)+'</p><p class="crm-note">'+
+    (y.partialHistory?'История до '+escapeHTML(y.historyFrom)+' не загружена. ':'')+(!y.financialClassificationComplete?'Статьи денег ещё не полностью сопоставлены. ':'')+'Операций с неизвестной статьёй: '+num(y.unknownExpenseTransactions)+
+    '; без связи с записью: '+num(y.unmatchedTransactions)+'. Записей с источником: '+num(y.bookingsWithSource)+'; без источника: '+num(y.bookingsWithoutSource)+
+    '. Каждый показатель относится к своей дате: создание записи, посещение или платёж. Их отношение не является конверсией одной группы клиентов.</p><div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Источник / кампания</th><th>Записи</th><th>Визиты</th><th>Денежный итог</th></tr></thead><tbody>'+y.sources.map(g=>'<tr><td>'+escapeHTML(g.utm?[g.utm.source,g.utm.medium,g.utm.campaign].filter(Boolean).join(' / '):'Источник неизвестен')+'</td><td>'+num(g.bookings)+'</td><td>'+num(g.attendedVisits)+'</td><td>'+formatMoney(g.netCashKopecks/100)+'</td></tr>').join('')+'</tbody></table></div>':
+    '<p class="crm-note">Записи и оплаты YCLIENTS ещё не загружены.</p>';
+  const action=identity.role==='owner'?'<button type="button" class="plain-button" data-revenue-collect>Обновить данные этого периода</button><p class="crm-note" data-revenue-result></p>':'';
+  return head+'<ul>'+states+'</ul>'+quality+'<p class="crm-note">Этот блок показывает компанию целиком; фильтр площадок выше относится к прежней воронке.</p>'+metrika+yclients+
+    '<p class="crm-note">'+escapeHTML(payload.economics.reason)+' UTM показывают метку перехода; поиск по названию или заслугу рекламы они сами по себе не доказывают.</p>'+action+'</section>';
+};
+const renderAnalytics = (dashboard, summary, expenses, potential = null, owner = analyticsState.payload?.owner, companyMetrics = analyticsState.payload?.companyMetrics ?? null, revenueData = analyticsState.payload?.revenueData ?? null) => {
+  analyticsState.payload = { dashboard, summary, expenses, potential, owner, companyMetrics, revenueData };
   const stats = Array.isArray(dashboard.sourceStats) ? dashboard.sourceStats : [];
   const allSelected = analyticsState.selected.size === ANALYTICS_PLATFORMS.length;
   const knownCodes = new Set(ANALYTICS_PLATFORMS.flatMap((platform) => platform.codes));
@@ -296,7 +366,10 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
       <td>${noExpenses ? "—" : formatMoney(platform.expenses)}</td>
       <td>${noExpenses ? "—" : formatROMI(platform.romi)}</td><td>${dataMark(kind, platform.capturedAt)}</td></tr>`;
   }).join("");
-  byId("analytics-content").innerHTML = `<section class="analytics-section"><h2>Воронка</h2>
+  byId("analytics-content").innerHTML = renderAnalyticsGuide() + `<section class="analytics-section"><h2>Воронка</h2>
+    <p class="crm-note">Здесь показаны зарегистрированные события сайта и статусы CRM. Счётчики CRM и визиты Метрики имеют разные определения.
+    «Прогрев» не подтверждает запись YCLIENTS, а «Сделка» и нулевая выручка CRM не подтверждают наличие или отсутствие оплат.
+    Проверенные записи, посещения и деньги смотрите отдельно в блоке «Записи и оплаты из источников».</p>
     <div class="analytics-funnel">${funnelRows}</div><div class="analytics-finance">
     <div class="crm-stat"><span>Расходы</span><strong>${financeUnavailable
       ? "по компании не ведутся" : financeExpenses === null ? "—" : formatMoney(financeExpenses)}</strong></div>
@@ -308,7 +381,22 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
     <table class="crm-table analytics-source-table"><thead><tr><th>Площадка</th><th>Показы</th><th>Клики</th>
     <th>Действия на сайте</th><th>Заявки</th><th>Продажи</th><th>Выручка</th><th>Расходы</th><th>ROMI</th>
     <th>Данные</th></tr></thead><tbody>${tableRows}</tbody></table></div></section>
-    ${renderCompanyMetricsSection(companyMetrics, owner)}`;
+    ${renderCompanyMetricsSection(companyMetrics, owner)}${renderRevenueSection(revenueData)}`;
+  byId('analytics-content').querySelector('[data-revenue-collect]')?.addEventListener('click',async(event)=>{
+    const button=event.currentTarget,out=button.parentElement.querySelector('[data-revenue-result]');button.disabled=true;
+    out.textContent='Сервер сверяет источники…';
+    try {
+      const results=[];
+      for(const provider of ['metrika','yclients']) {
+        if(!sameScope(owner))return;
+        results.push(await crmQuery('/revenue-analytics/collect',{companyCode:owner.companyCode,provider},csrfOptions('POST',provider==='metrika'?{from:owner.from,to:owner.to}:{})));
+      }
+      if(!sameScope(owner))return;
+      if(results.some(r=>!r.collected)){out.textContent='Обновление не завершено. Сохранены предыдущие данные.';return;}
+      await loadAnalytics();
+    } catch {if(sameScope(owner))out.textContent='Источник не подключён или не ответил. Предыдущие данные сохранены.';}
+    finally{button.disabled=false;}
+  });
   byId("analytics-content").querySelectorAll("[data-funnel-step]").forEach((button) => {
     button.addEventListener("click", () => {
       const detail = byId("analytics-content").querySelector(`[data-funnel-detail="${button.dataset.funnelStep}"]`);
@@ -372,7 +460,7 @@ const loadAnalytics = async () => {
   const current = () => requestId === analyticsRequestId && sameScope(owner);
   const scope = { companyCode: owner.companyCode };
   try {
-    const [dashboard, summary, expensePayload, potential, companyMetrics] = await Promise.all([
+    const [dashboard, summary, expensePayload, potential, companyMetrics, revenueData] = await Promise.all([
       crmQuery("/dashboard", { period: analyticsState.period, ...range, ...scope }),
       crmQuery("/summary", { ...range, ...scope }),
       crmQuery("/expenses", { ...range, ...scope }),
@@ -385,10 +473,13 @@ const loadAnalytics = async () => {
       crmQuery("/platform-demand/company-metrics", { ...range, ...scope })
         .then((result) => String(result?.companyCode || "").toLowerCase() === String(scope.companyCode).toLowerCase() &&
           result?.period?.from === range.from && result?.period?.to === range.to ? result : { error: true })
-        .catch(() => ({ error: true }))
+        .catch(() => ({ error: true })),
+      crmQuery('/revenue-analytics',{...range,...scope})
+        .then(result=>result?.companyCode===scope.companyCode&&result?.period?.from===range.from&&result?.period?.to===range.to?result:{error:true})
+        .catch(()=>({error:true}))
     ]);
     if (!current()) return;
-    renderAnalytics(dashboard, summary, expensePayload.expenses || [], potential, owner, companyMetrics);
+    renderAnalytics(dashboard, summary, expensePayload.expenses || [], potential, owner, companyMetrics, revenueData);
   } catch (error) {
     if (!current()) return;
     byId("analytics-content").innerHTML =
@@ -429,7 +520,8 @@ const renderAnalyticsControls = () => {
         analyticsState.payload.expenses,
         analyticsState.payload.potential,
         analyticsState.payload.owner,
-        analyticsState.payload.companyMetrics
+        analyticsState.payload.companyMetrics,
+        analyticsState.payload.revenueData
       );
     }
   });

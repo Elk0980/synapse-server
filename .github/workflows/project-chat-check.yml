@@ -35,6 +35,7 @@ on:
       - 'ops/crm/social-baselines*'
       - 'ops/crm/platform-demand*'
       - 'ops/crm/platform-company-metrics*'
+      - 'ops/crm/revenue-analytics*'
       - 'ops/crm/finance-ai*'
       - 'ops/crm/ai-trials.js'
       - 'ops/crm/commercial*'
@@ -69,6 +70,7 @@ on:
       - 'ops/crm/social-baselines*'
       - 'ops/crm/platform-demand*'
       - 'ops/crm/platform-company-metrics*'
+      - 'ops/crm/revenue-analytics*'
       - 'ops/crm/finance-ai*'
       - 'ops/crm/ai-trials.js'
       - 'ops/crm/commercial*'
@@ -144,6 +146,10 @@ jobs:
       - name: Тесты календаря и публикаций
         timeout-minutes: 10
         run: node --test ops/crm/autoposting*.test.js
+
+      - name: Тесты серверного сбора Метрики и YCLIENTS
+        timeout-minutes: 10
+        run: node --test ops/crm/revenue-analytics.test.js ops/crm/analytics.test.js
 
       # Расходы на ИИ внутри существующих Финансов и права раздела. Остальные наборы
       # каталога ops/crm этой проверкой по-прежнему не покрываются.
