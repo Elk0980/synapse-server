@@ -1,5 +1,5 @@
 'use strict';
-const {fail,range,id} = require('./revenue-analytics-access');
+const {fail,range,id,credential} = require('./revenue-analytics-access');
 const METRICS = ['ym:s:visits','ym:s:users','ym:s:avgVisitDurationSeconds','ym:s:bounceRate','ym:s:pageDepth'];
 const HOSTS = new Set(['api-metrika.yandex.net','api.yclients.ru']);
 const sleep = ms => new Promise(resolve => setTimeout(resolve,ms));
@@ -8,6 +8,31 @@ const safeDimension = v => typeof v === 'string' && v.length <= 200 && !/[@:\/?\
 function createRevenueAdapters({fetchImpl = fetch, wait = sleep, now = Date.now} = {}) {
   let queue = Promise.resolve(), lastAt = 0, closed = false;
   const abort = new AbortController();
+  async function refreshMetrika(c) {
+    credential('metrika',c);
+    if(!c.refreshToken)fail('TOKEN_REAUTH_REQUIRED',502);
+    if(closed)fail('SERVER_STOPPING',503);
+    let response;
+    // Refresh может менять ключи: один POST, без слепого повтора при неизвестном результате.
+    try {
+      response=await fetchImpl(new URL('https://oauth.yandex.ru/token'),{method:'POST',redirect:'error',
+        headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body:new URLSearchParams({grant_type:'refresh_token',refresh_token:c.refreshToken,client_id:c.clientId,client_secret:c.clientSecret}),
+        signal:AbortSignal.any([abort.signal,AbortSignal.timeout(25000)])});
+    }catch{fail('TOKEN_REFRESH_UNCERTAIN',502);}
+    if(response.status===429){await response.body?.cancel();fail('RATE_LIMITED',502);}
+    const reader=response.body?.getReader();if(!reader)fail('TOKEN_REFRESH_UNCERTAIN',502);
+    const chunks=[];let size=0,b;
+    try {
+      for(;;){const{value,done}=await reader.read();if(done)break;size+=value.length;if(size>16384){await reader.cancel();fail('TOKEN_REFRESH_UNCERTAIN',502);}chunks.push(value);}
+      b=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    }catch{fail('TOKEN_REFRESH_UNCERTAIN',502);}
+    if([400,401,403].includes(response.status) && ['invalid_grant','invalid_client','unauthorized_client'].includes(b.error))fail('TOKEN_REAUTH_REQUIRED',502);
+    if(!response.ok || b.token_type!=='bearer' || !Number.isSafeInteger(b.expires_in) || b.expires_in<3600 || b.expires_in>730*86400 || (b.scope!==undefined && b.scope!=='metrika:read'))fail('TOKEN_REFRESH_UNCERTAIN',502);
+    const refreshedAt=new Date(now()).toISOString(),expiresAt=new Date(now()+b.expires_in*1000).toISOString();
+    try {credential('metrika',{...c,token:b.access_token,refreshToken:b.refresh_token,refreshedAt,expiresAt});}catch{fail('TOKEN_REFRESH_UNCERTAIN',502);}
+    return {token:b.access_token,refreshToken:b.refresh_token,expiresAt,refreshedAt};
+  }
   async function json(url, headers) {
     if (!(url instanceof URL) || url.protocol !== 'https:' || !HOSTS.has(url.hostname) || url.port || url.username || url.password) fail('BAD_ENDPOINT',500);
     // Один ограничитель всех API-вызовов этого процесса: ниже лимита YCLIENTS 5/сек и 200/мин.
@@ -90,6 +115,6 @@ function createRevenueAdapters({fetchImpl = fetch, wait = sleep, now = Date.now}
     }
     return {overview,utm,sources,goals,attribution:'lastsign',period:r,timezone:c.config.timezone};
   }
-  return {metrika,ycPages,json,ycHeaders,verifyYclients,stop:()=>{closed=true;abort.abort();}};
+  return {metrika,refreshMetrika,ycPages,json,ycHeaders,verifyYclients,stop:()=>{closed=true;abort.abort();}};
 }
 module.exports={createRevenueAdapters,METRICS};

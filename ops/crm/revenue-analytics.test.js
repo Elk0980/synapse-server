@@ -21,7 +21,7 @@ function harness(t) {
   const a=createRevenueAnalytics(db,{apiKey:'test-storage-key',now:()=>time,adapters});
   const save=(code=A,provider='yclients',extra={})=>a.save(code,provider,{revision:a.access.get(code,provider).revision,config:config(provider),credential:credential(provider),enabled:true,...extra});
   const report=(code=A,from='2026-10-01',to='2026-10-08')=>a.report(code,from,to);
-  return {db,a,data,save,report,advance:n=>{time+=n;}};
+  return {db,a,data,adapters,save,report,advance:n=>{time+=n;}};
 }
 test('повтор сбора не удваивает деньги; разные даты этапов и возврат сохраняются',async t=>{
   const h=harness(t);h.save();h.data.cash.push(tx({id:102,expense:{id:6},amount:'200.05',date:'2026-10-05T12:00:00+0800'}));
@@ -153,4 +153,80 @@ test('HTTP: чтение analytics.view, настройки только вла�
   assert.equal((await call('PUT','/revenue-analytics/access?companyCode=demo-a&provider=yclients',{revision:0,config:config(),credential:credential('yclients'),enabled:true})).status,200);
   assert.equal((await call('GET','/revenue-analytics?companyCode=demo-a&from=bad&to=bad')).status,400);
   await assert.rejects(call('GET','/revenue-analytics?companyCode=demo-b&from=2026-10-01&to=2026-10-08'),{status:403});
+});
+
+const oauth=()=>({token:'synthetic-old-token',refreshToken:'synthetic-old-refresh',clientId:'00000000000000000000000000000001',clientSecret:'synthetic-client-secret',refreshedAt:'2026-07-01T08:00:00.000Z',expiresAt:'2027-07-01T08:00:00.000Z'});
+const rotated=()=>({token:'synthetic-new-token',refreshToken:'synthetic-new-refresh',refreshedAt:at.replace('Z','.000Z'),expiresAt:'2027-10-08T08:00:00.000Z'});
+test('общий OAuth двух компаний продлевается один раз, ключи зашифрованы и ревизии сохранены',async t=>{
+  const h=harness(t);h.save(A,'metrika',{credential:oauth()});h.save(B,'metrika',{credential:oauth(),config:{...config('metrika'),externalId:'202'}});
+  let refreshed=0;h.adapters.refreshMetrika=async()=>{refreshed++;return rotated();};
+  assert.equal((await h.a.collect(A,'metrika')).collected,true);assert.equal((await h.a.collect(B,'metrika')).collected,true);
+  assert.equal(refreshed,1);assert.equal(h.a.access.resolve(B,'metrika').credential.token,'synthetic-new-token');
+  assert.equal(h.a.access.get(A,'metrika').revision,1);assert.equal(h.a.access.get(B,'metrika').config.externalId,'202');
+  const stored=JSON.stringify(h.db.prepare('SELECT * FROM revenue_access').all())+JSON.stringify(h.db.prepare('SELECT * FROM revenue_oauth_refresh').all());
+  for(const key of ['synthetic-old-token','synthetic-new-token','synthetic-old-refresh','synthetic-new-refresh','synthetic-client-secret'])assert.ok(!stored.includes(key));
+  assert.ok(!JSON.stringify(h.a.settings(A)).includes('synthetic-new'));assert.equal(h.report(A,'2026-10-02','2026-10-08').metrika.current,true);
+});
+test('одновременный сбор компаний с общим grant не отправляет два refresh',async t=>{
+  const h=harness(t);for(const c of[A,B])h.save(c,'metrika',{credential:oauth()});let release,started;
+  const waiting=new Promise(r=>{release=r;}),ready=new Promise(r=>{started=r;});let count=0;
+  h.adapters.refreshMetrika=async()=>{count++;started();await waiting;return rotated();};
+  const a=h.a.collect(A,'metrika');await ready;
+  assert.equal((await h.a.collect(B,'metrika')).errorCode,'TOKEN_REFRESH_BUSY');release();assert.equal((await a).collected,true);
+  assert.equal((await h.a.collect(B,'metrika')).collected,true);assert.equal(count,1);
+});
+test('неопределённый refresh сохраняет прежний снимок и запрещает слепую повторную отправку',async t=>{
+  const h=harness(t);h.save(A,'metrika',{credential:{...oauth(),refreshedAt:at.replace('Z','.000Z')}});
+  await h.a.collect(A,'metrika');const old=h.a.status(A,'metrika').lastSuccess;h.advance(91*86400000);let count=0;
+  h.adapters.refreshMetrika=async()=>{count++;throw Object.assign(Error('PRIVATE'),{code:'TOKEN_REFRESH_UNCERTAIN'});};
+  for(let i=0;i<2;i++)assert.equal((await h.a.collect(A,'metrika')).errorCode,'TOKEN_REFRESH_UNCERTAIN');
+  assert.equal(count,1);assert.equal(h.a.status(A,'metrika').lastSuccess,old);assert.equal(h.report(A,'2026-10-02','2026-10-08').metrika.overview.totals[0],17);
+});
+test('истёкшая аренда refresh после перезапуска не повторяет неизвестный запрос',async t=>{
+  const h=harness(t);h.save(A,'metrika',{credential:oauth()});h.a.access.beginRefresh(h.a.access.resolve(A,'metrika'));h.advance(120001);
+  let count=0;h.adapters.refreshMetrika=async()=>{count++;return rotated();};
+  assert.equal((await h.a.collect(A,'metrika')).errorCode,'TOKEN_REFRESH_UNCERTAIN');assert.equal(count,0);
+});
+test('заменённый владельцем доступ соседней компании не перезаписывается ротацией',async t=>{
+  const h=harness(t);for(const c of[A,B])h.save(c,'metrika',{credential:oauth()});
+  h.adapters.refreshMetrika=async()=>{h.save(B,'metrika',{credential:{...oauth(),token:'owner-token',refreshToken:'owner-refresh'}});return rotated();};
+  await h.a.collect(A,'metrika');assert.equal(h.a.access.resolve(B,'metrika').credential.token,'owner-token');assert.equal(h.a.access.get(B,'metrika').revision,2);
+});
+test('неизменившийся refresh_token допускает следующее плановое продление',async t=>{
+  const h=harness(t);h.save(A,'metrika',{credential:oauth()});let count=0;
+  h.adapters.refreshMetrika=async()=>({...rotated(),refreshToken:oauth().refreshToken,token:'renewed-'+(++count)});
+  await h.a.collect(A,'metrika');h.advance(91*86400000);await h.a.collect(A,'metrika');assert.equal(count,2);
+});
+test('OAuth credential требует полную схему, а старый token продолжает работать',async t=>{
+  const h=harness(t);assert.throws(()=>h.save(A,'metrika',{credential:{token:'x',refreshToken:'y'}}),{code:'VALIDATION_ERROR'});
+  assert.throws(()=>h.save(A,'metrika',{credential:{...oauth(),expiresAt:'not-a-date'}}),{code:'VALIDATION_ERROR'});
+  h.save(A,'metrika');assert.equal((await h.a.collect(A,'metrika')).collected,true);
+});
+test('короткий OAuth не продлевается заново сразу после выдачи',async t=>{
+  const h=harness(t);h.save(A,'metrika',{credential:{...oauth(),refreshedAt:at.replace('Z','.000Z'),expiresAt:'2026-10-08T09:00:00.000Z'}});
+  let count=0;h.adapters.refreshMetrika=async()=>{count++;return rotated();};
+  await h.a.collect(A,'metrika');assert.equal(count,0);h.advance(55*60000);await h.a.collect(A,'metrika');assert.equal(count,1);
+});
+test('отозванный grant не повторяется; новая авторизация восстанавливает сбор',async t=>{
+  const h=harness(t);h.save(A,'metrika',{credential:oauth()});let count=0;
+  h.adapters.refreshMetrika=async()=>{count++;throw Object.assign(Error('PRIVATE'),{code:'TOKEN_REAUTH_REQUIRED'});};
+  for(let i=0;i<2;i++)assert.equal((await h.a.collect(A,'metrika')).errorCode,'TOKEN_REAUTH_REQUIRED');assert.equal(count,1);
+  h.save(A,'metrika',{credential:{...oauth(),refreshToken:'reauthorized-refresh'}});h.adapters.refreshMetrika=async()=>{count++;return rotated();};
+  assert.equal((await h.a.collect(A,'metrika')).collected,true);assert.equal(count,2);
+});
+test('refresh использует один POST на официальный адрес, без редиректа или секретов в URL',async()=>{
+  const calls=[];const a=createRevenueAdapters({now:()=>Date.parse(at),fetchImpl:async(url,opts)=>{calls.push({url,opts});return Response.json({token_type:'bearer',access_token:'synthetic-access',refresh_token:'synthetic-refresh',expires_in:31536000,scope:'metrika:read'});}});
+  const r=await a.refreshMetrika(oauth());assert.equal(r.token,'synthetic-access');assert.equal(calls.length,1);
+  assert.equal(String(calls[0].url),'https://oauth.yandex.ru/token');assert.equal(calls[0].opts.method,'POST');assert.equal(calls[0].opts.redirect,'error');assert.equal(calls[0].opts.body.get('grant_type'),'refresh_token');
+});
+test('таймаут, отказ и расширенный scope refresh не раскрывают тело ответа и не повторяют POST',async()=>{
+  for(const kind of['timeout','revoked','scope','rate','bad-json']){let count=0;
+    const a=createRevenueAdapters({fetchImpl:async()=>{count++;if(kind==='timeout')throw Error('PRIVATE SECRET');
+      if(kind==='revoked')return Response.json({error:'invalid_grant',error_description:'PRIVATE SECRET'},{status:400});
+      if(kind==='rate')return new Response('PRIVATE SECRET',{status:429});
+      if(kind==='bad-json')return new Response('PRIVATE SECRET');
+      return Response.json({token_type:'bearer',access_token:'SECRET',refresh_token:'SECRET',expires_in:31536000,scope:'metrika:read metrika:write'});}});
+    await assert.rejects(a.refreshMetrika(oauth()),e=>e.code===(kind==='revoked'?'TOKEN_REAUTH_REQUIRED':kind==='rate'?'RATE_LIMITED':'TOKEN_REFRESH_UNCERTAIN')&&!e.message.includes('PRIVATE'));
+    assert.equal(count,1);
+  }
 });

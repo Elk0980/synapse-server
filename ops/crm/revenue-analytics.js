@@ -3,7 +3,7 @@ const crypto=require('node:crypto');
 const {createRevenueAccess,company,provider,id,range,localDay,shiftDay,fail}=require('./revenue-analytics-access');
 const {createRevenueAdapters}=require('./revenue-analytics-adapters');
 const OFFSETS={'Asia/Irkutsk':'+08:00','Asia/Bangkok':'+07:00','Europe/Moscow':'+03:00',UTC:'Z'};
-const KNOWN_ERRORS=new Set(['MISSING_ACCESS','CREDENTIAL_UNREADABLE','ACCESS_DENIED','RATE_LIMITED','UPSTREAM_ERROR','CONNECTION_UNCERTAIN','RESPONSE_TOO_LARGE','RESPONSE_UNCERTAIN','INCOMPLETE','PROFILE_CHANGED','LEASE_LOST','REVISION_CONFLICT']);
+const KNOWN_ERRORS=new Set(['MISSING_ACCESS','CREDENTIAL_UNREADABLE','ACCESS_DENIED','RATE_LIMITED','UPSTREAM_ERROR','CONNECTION_UNCERTAIN','RESPONSE_TOO_LARGE','RESPONSE_UNCERTAIN','INCOMPLETE','PROFILE_CHANGED','LEASE_LOST','REVISION_CONFLICT','TOKEN_REAUTH_REQUIRED','TOKEN_REFRESH_UNCERTAIN','TOKEN_REFRESH_BUSY']);
 function dateTime(v,tz) {
   if(typeof v!=='string')fail('RESPONSE_UNCERTAIN',502);
   let s=v.replace(' ','T'); if(!/(?:Z|[+-]\d{2}:?\d{2})$/.test(s))s+=OFFSETS[tz];
@@ -60,6 +60,24 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
     db.prepare('INSERT INTO revenue_jobs(company,provider,next_at) VALUES(?,?,0) ON CONFLICT(company,provider) DO UPDATE SET next_at=0').run(c,p);
     return result;
   }
+  async function prepareBinding(c,p) {
+    let binding=access.resolve(c,p);
+    if(p!=='metrika' || !binding.credential.refreshToken)return binding;
+    const key=binding.credential;
+    const issued=Date.parse(key.refreshedAt),expiry=Date.parse(key.expiresAt);
+    const advance=Math.min(86400000,(expiry-issued)/10);
+    const due=Math.min(expiry-advance,issued+90*86400000);
+    if(now()<due)return binding;
+    const context=access.beginRefresh(binding);
+    try {
+      const next=await adapters.refreshMetrika(key);
+      access.finishRefresh(context,next);
+    } catch(e) {
+      access.abortRefresh(context,e?.code);throw e;
+    }
+    binding=access.resolve(c,p);
+    return binding;
+  }
   async function performCollect(c,p,requested=null) {
     company(c);provider(p);if(requested)range(requested.from,requested.to);
     const token=crypto.randomUUID(),at=now();
@@ -68,7 +86,7 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
     if(!acquired)return {companyCode:c,provider:p,busy:true};
     const before=job(c,p);
     try {
-      const binding=access.resolve(c,p),config=binding.config;
+      const binding=await prepareBinding(c,p),config=binding.config;
       const today=localDay(at,config.timezone);
       if(config.historyFrom>today)fail('BAD_PERIOD');
       let records,cash,reports=[];

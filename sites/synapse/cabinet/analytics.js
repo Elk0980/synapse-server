@@ -207,8 +207,9 @@ const renderRevenueSection = (payload) => {
   if (!payload || payload.error) return head+'<p class="crm-note">Серверный сбор ещё не доступен. Клики и старые отметки CRM не подтверждают визит или оплату.</p></section>';
   const num=(v)=>v===null||v===undefined?'—':escapeHTML(new Intl.NumberFormat('ru-RU',{maximumFractionDigits:2}).format(v));
   const at=(v)=>v?escapeHTML(new Date(v).toLocaleString('ru-RU')):'ещё не было';
+  const accessError=(code)=>code==='TOKEN_REAUTH_REQUIRED'?'нужно повторно подключить Метрику':code==='TOKEN_REFRESH_UNCERTAIN'?'продление доступа не подтверждено; нужна проверка подключения':code==='TOKEN_REFRESH_BUSY'?'доступ обновляется; загрузка будет повторена':'ошибка загрузки';
   const states=payload.state.providers.map(p=>'<li>'+escapeHTML(p.provider==='metrika'?'Яндекс Метрика':'YCLIENTS')+': '+
-    (!p.configured?'не подключён':!p.enabled?'сбор выключен':p.running?'идёт загрузка':p.errorCode?'ошибка загрузки':p.stale?'данные требуют обновления':'обновляется сервером')+
+    (!p.configured?'не подключён':!p.enabled?'сбор выключен':p.running?'идёт загрузка':p.errorCode?accessError(p.errorCode):p.stale?'данные требуют обновления':'обновляется сервером')+
     '. Последний успех: '+at(p.lastSuccess)+'</li>').join('');
   const m=payload.metrika,y=payload.yclients;
   const trafficTable=(report,title)=>'<h4>'+title+'</h4><div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Источник</th><th>Визиты</th><th>Среднее время, сек.</th></tr></thead><tbody>'+report.rows.map(row=>'<tr><td>'+escapeHTML(row.dimensions.map(d=>d.name||d.id||'не определено').join(' / '))+'</td><td>'+num(row.metrics[0])+'</td><td>'+num(row.metrics[2])+'</td></tr>').join('')+'</tbody></table></div>';

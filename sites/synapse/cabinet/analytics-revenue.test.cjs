@@ -71,3 +71,8 @@ test('переключение компании во время сбора не 
     const writes=f.calls.filter(c=>c.path==='/revenue-analytics/collect');assert.equal(writes.length,1);assert.equal(writes[0].params.companyCode,'demo-a');
   }finally{f.close();}
 });
+
+test('неопределённое продление доступа видно отдельно от прежних успешных чисел',async()=>{
+  const value=payload();value.state.providers[0].errorCode='TOKEN_REFRESH_UNCERTAIN';
+  const f=fixture({value});try{await f.render();assert.match(f.block().textContent,/продление доступа не подтверждено/);assert.match(f.block().textContent,/Визиты: 17/);assert.doesNotMatch(f.block().textContent,/TOKEN_REFRESH_UNCERTAIN/);}finally{f.close();}
+});
