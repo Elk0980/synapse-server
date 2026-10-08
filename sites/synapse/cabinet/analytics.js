@@ -42,6 +42,16 @@ const init = (context) => {
 ctx = context;
 ({ identity, byId, escapeHTML, crmQuery, csrfOptions, scopeParams } = context);
 ({ formatMoney, formatROMI, periodDates, dateValue } = context);
+const contextPeriodDates = periodDates;
+periodDates = (period) => {
+  const dates = contextPeriodDates(period);
+  const length = period === '7d' ? 7 : period === '30d' ? 30 : null;
+  // Обе границы включены в API: 7 дней — сегодня и шесть предыдущих дней.
+  if (!length || !/^\d{4}-\d{2}-\d{2}$/.test(dates.to)) return dates;
+  const last = Date.parse(dates.to + 'T12:00:00Z');
+  if (!Number.isFinite(last)) return dates;
+  return { ...dates, from: new Date(last - (length - 1) * 86400000).toISOString().slice(0, 10) };
+};
 if (initialized) return;
 initialized = true;
 
@@ -202,6 +212,35 @@ const renderCompanyMetricsSection = (companyMetrics, owner) => {
       escapeHTML(String(coverage.expectedDays ?? 0))}. «Звонки и просмотры телефона» — не состоявшиеся звонки. ` +
     'Категории обращений не складываются друг с другом и с действиями на странице.</p>' + link;
 };
+const renderAnalyticsGuide = () => `<section class="analytics-section analytics-guide">
+  <details><summary><strong>Как читать сквозную аналитику — инструкция</strong></summary>
+  <p>Сначала выберите компанию, затем даты «С» и «По». Для ежедневной проверки берите вчерашний полный день,
+  для сравнения — две полные недели одинаковой длины. Сегодняшние данные ещё неполные.</p>
+  <ol>
+    <li><strong>Проверьте свежесть.</strong> В блоке «Записи и оплаты из источников» посмотрите последний успешный сбор
+    отдельно для Метрики и YCLIENTS. «Не подключён», ошибка и отсутствие выгрузки означают неизвестные данные, а не ноль.</li>
+    <li><strong>Посмотрите путь клиента.</strong> Визиты и посетители сайта → действия на сайте → подтверждённые записи
+    → состоявшиеся посещения → оплаты с учётом возвратов. Клик на телефон или онлайн-запись ещё не подтверждает звонок или запись.</li>
+    <li><strong>Читайте цели по отдельности.</strong> «Целевые визиты» — визиты с выбранным действием;
+    «Достижения» — число его выполнений, включая повторы. Один посетитель может выполнить несколько целей.
+    Конверсия цели = целевые визиты / все визиты × 100%. Складывать цели как клиентов нельзя.</li>
+    <li><strong>Сравните источники.</strong> Источники и UTM показывают происхождение переходов.
+    В YCLIENTS проверьте записи с источником и без него, а также денежные операции без связи с записью.
+    Неизвестный источник нельзя автоматически приписывать рекламе. UTM 2ГИС не раскрывают поисковый запрос.</li>
+    <li><strong>Проверьте деньги.</strong> Денежный итог = платежи − возвраты; это не прибыль.
+    CAC = расходы на привлечение / новые платящие клиенты той же группы.
+    ROMI = (маржинальный доход этой группы − расходы на маркетинг) / расходы на маркетинг × 100%.
+    Без подтверждённых расходов, первых оплат, источников и себестоимости результат неизвестен.</li>
+  </ol>
+  <p>Даты создания записи, посещения и оплаты могут различаться. Делить итоги этих трёх событий за календарный
+  период друг на друга как конверсию нельзя: для неё нужна одна и та же группа записей.</p>
+  <p><strong>Каждый день, 5 минут:</strong> свежесть → визиты → подтверждённые записи → состоявшиеся посещения
+  → деньги и возвраты → неизвестные источники. <strong>Раз в неделю:</strong> сравните полные недели и выберите
+  одно улучшение по самому заметному месту потери клиентов. При сбое сообщите компанию, период и время последнего успеха;
+  не отправляйте клиентские телефоны или ключи доступа.</p>
+  <p class="crm-note">Фильтр площадок относится к воронке выше. «Записи и оплаты из источников» показывает компанию целиком.
+  Ручные данные 2ГИС и серверные данные имеют отдельные даты обновления.</p>
+  </details></section>`;
 const renderRevenueSection = (payload) => {
   const head='<section class="analytics-section analytics-revenue"><h2>Записи и оплаты из источников</h2>';
   if (!payload || payload.error) return head+'<p class="crm-note">Серверный сбор ещё не доступен. Клики и старые отметки CRM не подтверждают визит или оплату.</p></section>';
@@ -323,7 +362,10 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
       <td>${noExpenses ? "—" : formatMoney(platform.expenses)}</td>
       <td>${noExpenses ? "—" : formatROMI(platform.romi)}</td><td>${dataMark(kind, platform.capturedAt)}</td></tr>`;
   }).join("");
-  byId("analytics-content").innerHTML = `<section class="analytics-section"><h2>Воронка</h2>
+  byId("analytics-content").innerHTML = renderAnalyticsGuide() + `<section class="analytics-section"><h2>Воронка</h2>
+    <p class="crm-note">Здесь показаны зарегистрированные события сайта и статусы CRM. Счётчики CRM и визиты Метрики имеют разные определения.
+    «Прогрев» не подтверждает запись YCLIENTS, а «Сделка» и нулевая выручка CRM не подтверждают наличие или отсутствие оплат.
+    Проверенные записи, посещения и деньги смотрите отдельно в блоке «Записи и оплаты из источников».</p>
     <div class="analytics-funnel">${funnelRows}</div><div class="analytics-finance">
     <div class="crm-stat"><span>Расходы</span><strong>${financeUnavailable
       ? "по компании не ведутся" : financeExpenses === null ? "—" : formatMoney(financeExpenses)}</strong></div>

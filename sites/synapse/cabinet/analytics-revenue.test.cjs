@@ -76,3 +76,17 @@ test('неопределённое продление доступа видно 
   const value=payload();value.state.providers[0].errorCode='TOKEN_REFRESH_UNCERTAIN';
   const f=fixture({value});try{await f.render();assert.match(f.block().textContent,/продление доступа не подтверждено/);assert.match(f.block().textContent,/Визиты: 17/);assert.doesNotMatch(f.block().textContent,/TOKEN_REFRESH_UNCERTAIN/);}finally{f.close();}
 });
+
+test('быстрые периоды включают ровно 7 и 30 календарных дней, включая обе границы API',async()=>{
+  const f=fixture();try{
+    await f.render();
+    f.d.getElementById('analytics-periods').innerHTML='<button data-analytics-period="7d">7 дней</button><button data-analytics-period="30d">30 дней</button>';
+    for(const [key,start,length] of [['7d','2026-10-02',7],['30d','2026-09-09',30]]){
+      f.d.querySelector('[data-analytics-period="'+key+'"]').click();await f.settle();
+      const request=f.calls.filter(c=>c.path==='/revenue-analytics').at(-1);
+      assert.equal(request.params.from,start);assert.equal(request.params.to,'2026-10-08');
+      assert.equal((Date.parse(request.params.to)-Date.parse(request.params.from))/86400000+1,length);
+      assert.equal(f.d.getElementById('analytics-dates').elements.from.value,start);
+    }
+  }finally{f.close();}
+});
