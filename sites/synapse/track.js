@@ -5,6 +5,22 @@
     if (navigator.doNotTrack === '1' || window.__synapseTrackLoaded) return;
     window.__synapseTrackLoaded = true;
 
+    // Во фрейме визит не считается: его считает родительская
+    // страница. Встроенный прайс (?embedded=1 в iframe того же сайта) передаёт только клики; любой
+    // другой фрейм (предпросмотр кабинета, чужая страница) не передаёт ничего.
+    var framed = true;
+    try { framed = window.top !== window; } catch (_) { framed = true; }
+    var embeddedPrice = false;
+    if (framed) {
+      try {
+        embeddedPrice = new URLSearchParams(location.search).get('embedded') === '1' &&
+          window.parent.location.origin === location.origin;
+      } catch (_) { embeddedPrice = false; }
+      if (!embeddedPrice) return;
+    }
+    var LIMIT = 500; // CRM /events отклоняет строки длиннее 500 символов (локальный контракт 06.09)
+    function clip(value) { return String(value || '').slice(0, LIMIT); }
+
     var script = document.currentScript;
     var companyCode = script && script.getAttribute('data-company');
     if (companyCode !== 'alvi' && companyCode !== 'avokado') return;
@@ -60,11 +76,23 @@
       return host;
     }
 
-    var clientId = stored('synapse_cid');
+    // Same-origin прайс использует идентификатор родительской страницы даже без localStorage.
+    var parentClientId;
+    var parentTouch;
+    if (embeddedPrice) {
+      try {
+        parentClientId = window.parent.__synapseClientId;
+        parentTouch = window.parent.__synapseFirstTouch;
+      } catch (_) {}
+    }
+    var clientId = parentClientId || stored('synapse_cid');
     if (!clientId) {
       clientId = uuid();
       save('synapse_cid', clientId);
     }
+    // CID в памяти страницы — для формы заявки, когда localStorage недоступен
+    // (иначе визит и заявка получили бы разные или пустые идентификаторы). Только идентификатор, без данных.
+    try { window.__synapseClientId = clientId; } catch (_) {}
 
     var now = Date.now();
     var firstTouch;
@@ -74,19 +102,25 @@
     var hasUtm = UTM_KEYS.some(function (key) {
       return params.has('utm_' + key);
     });
-    if (!firstTouch || now - Number(firstTouch.ts) >= 30 * DAY || hasUtm) {
+    // Во встроенном прайсе первое касание не создаётся и не перезаписывается: адрес фрейма и его
+    // referrer (родительская страница) — не источник посетителя.
+    if (framed) firstTouch = parentTouch && typeof parentTouch === 'object' ? parentTouch :
+      (firstTouch && typeof firstTouch === 'object' ? firstTouch : {});
+    else if (!firstTouch || now - Number(firstTouch.ts) >= 30 * DAY || hasUtm) {
       firstTouch = {
-        source: sourceFrom(document.referrer, params.get('utm_source')),
-        referrer: document.referrer || '',
-        landingPage: location.pathname + location.hash,
+        source: clip(sourceFrom(document.referrer, params.get('utm_source'))),
+        referrer: clip(document.referrer),
+        landingPage: clip(location.pathname + location.hash),
         ts: now
       };
       UTM_KEYS.forEach(function (key) {
         firstTouch['utm' + key.charAt(0).toUpperCase() + key.slice(1)] =
-          params.get('utm_' + key) || '';
+          clip(params.get('utm_' + key));
       });
       save('synapse_ft', JSON.stringify(firstTouch));
     }
+    // Только в памяти того же origin: встроенный прайс наследует настоящее касание, не свой URL.
+    try { window.__synapseFirstTouch = firstTouch; } catch (_) {}
 
     function send(type, target, label) {
       try {
@@ -95,15 +129,15 @@
           type: type,
           companyCode: companyCode,
           clientId: clientId,
-          page: location.pathname + location.hash,
-          landingPage: firstTouch.landingPage || '',
-          referrer: firstTouch.referrer || '',
-          utmSource: firstTouch.utmSource || '',
-          utmMedium: firstTouch.utmMedium || '',
-          utmCampaign: firstTouch.utmCampaign || '',
-          utmContent: firstTouch.utmContent || '',
-          utmTerm: firstTouch.utmTerm || '',
-          source: firstTouch.source || 'direct',
+          page: clip(location.pathname + location.hash),
+          landingPage: clip(firstTouch.landingPage),
+          referrer: clip(firstTouch.referrer),
+          utmSource: clip(firstTouch.utmSource),
+          utmMedium: clip(firstTouch.utmMedium),
+          utmCampaign: clip(firstTouch.utmCampaign),
+          utmContent: clip(firstTouch.utmContent),
+          utmTerm: clip(firstTouch.utmTerm),
+          source: clip(firstTouch.source) || 'direct',
           target: target || '',
           label: safeLabel.replace(/\s+/g, ' ').trim().slice(0, 60),
           ts: new Date().toISOString()
@@ -121,13 +155,28 @@
       } catch (_) {}
     }
 
+    function pathOf(value) {
+      try {
+        return new URL(value, location.href).pathname;
+      } catch (_) {
+        return '';
+      }
+    }
+
     function clickTarget(link) {
       if (link.matches('.price-all__button') || link.hash === '#price') return 'price';
       var href = link.getAttribute('href') || '';
       var lower = href.toLowerCase();
       if (lower.indexOf('tel:') === 0) return 'phone';
-      if (lower.indexOf('tg://') === 0) return 'telegram';
+      if (lower.indexOf('tg:') === 0) return 'telegram';
+      if (lower.indexOf('whatsapp:') === 0) return 'whatsapp';
+      if (lower.indexOf('viber:') === 0) return 'viber';
       var host = hostOf(href);
+      // Онлайн-запись: это КЛИК по кнопке записи, а не запись. Запись подтверждает только Yclients.
+      if (host === 'yclients.com' || /\.yclients\.com$/.test(host)) return 'booking';
+      if (host === 'max.ru') return 'max';
+      if (host === 'vk.me' || ((host === 'vk.com' || host === 'vk.ru') &&
+          /^\/(im|write-?\d+)\/?$/.test(pathOf(href)))) return 'vk';
       if (host === 't.me' || /(^|\.)telegram\.org$/.test(host)) return 'telegram';
       if (host === 'wa.me' || host.indexOf('whatsapp') !== -1) return 'whatsapp';
       if (/(^|\.)2gis\.ru$/.test(host)) return '2gis';
@@ -162,6 +211,6 @@
       } catch (_) {}
     }, true);
 
-    send('visit');
+    if (!framed) send('visit');
   } catch (_) {}
 })();

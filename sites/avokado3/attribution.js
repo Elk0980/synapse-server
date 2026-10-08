@@ -59,6 +59,15 @@
     {host: /^(?:.+\.)?(?:instagram\.com|facebook\.com|fb\.com|ok\.ru|youtube\.com|youtu\.be|tiktok\.com|dzen\.ru)$/i,
       channel: 'social', direct: () => false}
   ];
+  // Правка 08.10.2026: органика больше не превращается в искусственные метки. Раньше заход со
+  // стороннего сайта без меток записывался как utm_source=<хост>, utm_medium=referral, и эти «метки»
+  // уходили в заявку и в ссылки Yclients. Теперь сохраняется только referrer (не метка), а записи
+  // помечаются v:2. Старая запись без v:2, где есть только utm_source и utm_medium=referral, считается
+  // искусственной и как метки не используется.
+  function legacySynthetic(saved) {
+    if (!saved || saved.v === 2 || saved.utm_medium !== 'referral') return false;
+    return Object.keys(saved).every(key => ['utm_source', 'utm_medium', 'first_seen'].includes(key));
+  }
   function readAttribution(location, referrer, storage, now) {
     const query = new URL(location.href).searchParams;
     const incoming = {};
@@ -74,16 +83,20 @@
       const keepDate = internalReferrer && sameCampaign && Number.isFinite(seen) && seen <= now && now - seen < lifetime;
       result = {...incoming, first_seen: keepDate ? saved.first_seen : new Date(now).toISOString()};
     } else if (Number.isFinite(seen) && seen <= now && now - seen < lifetime) {
-      keys.forEach(key => { if (typeof saved[key] === 'string' && saved[key]) result[key] = saved[key].slice(0, 512); });
+      if (!legacySynthetic(saved)) {
+        keys.forEach(key => { if (typeof saved[key] === 'string' && saved[key]) result[key] = saved[key].slice(0, 512); });
+      }
+      if (typeof saved.referrer === 'string' && saved.referrer) result.referrer = saved.referrer.slice(0, 500);
       result.first_seen = saved.first_seen;
     } else {
       try {
         const ref = new URL(referrer);
         if (['http:', 'https:'].includes(ref.protocol) && ref.hostname !== location.hostname) {
-          result = {utm_source: ref.hostname.replace(/^www\./, ''), utm_medium: 'referral', first_seen: new Date(now).toISOString()};
+          result = {referrer: ref.href.slice(0, 500), first_seen: new Date(now).toISOString()};
         }
       } catch (_) {}
     }
+    if (Object.keys(result).length) result.v = 2;
     try {
       if (Object.keys(result).length) storage.setItem(storageKey, JSON.stringify(result));
       else storage.removeItem(storageKey);
@@ -432,7 +445,7 @@
     return {attribution, tracker, watcher, embedded};
   }
   return {storageKey, lifetime, counterId, counterLoader, webvisor, stageGoals, actionGoals,
-    allowedGoals, bridgeGoals, bridgeToken, stageDwell, readAttribution, decorateUrl, classify,
+    allowedGoals, bridgeGoals, bridgeToken, stageDwell, legacySynthetic, readAttribution, decorateUrl, classify,
     startCounter, isEmbedded, loaderCovers, coverings, unobstructed, visibleEnough, createTracker,
     createStageWatcher, bridgeFrames, acceptBridgeMessage, start};
 });

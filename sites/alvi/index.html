@@ -3162,7 +3162,7 @@
     <div class="synapse-strip">сайт работает на <a href="https://synapsebusiness.ru" target="_blank" rel="noopener">Synapse Business</a></div>
   </main>
   <div class="cookie-notice" role="dialog" aria-label="Уведомление о cookie"><span>Сайт использует cookie для корректной работы.</span><button type="button">Хорошо</button></div>
-  <script src="callback.js?v=20261001-metrika" defer></script>
+  <script src="callback.js?v=20261008-attribution" defer></script>
 
   <script src="hero-idle.js?v=20260915-play-recovery"></script>
   <script>
@@ -4135,7 +4135,7 @@
 <script src="subscription-promo.js?v=20260915-subscriptions"></script>
   <script src="subscription-promo-content.js?v=20260917-green"></script>
 <script src="site-apply.js?v=20260916-faq" defer></script>
-<script src="https://synapse.synapsebusiness.ru/track.js?v=20260905" data-company="alvi" defer></script>
+<script src="https://synapse.synapsebusiness.ru/track.js?v=20261008-attribution" data-company="alvi" defer></script>
 <script src="price-render.js?v=20260918-contact-buttons" defer></script>
 <script>
   // Витрины «Проведи день для себя» и «Один ритм на двоих» берутся из data/price.json
@@ -4210,5 +4210,43 @@
   })();
   </script>
 <script src="https://synapse.synapsebusiness.ru/company-links.js?v=20260915-crm-links"></script>
+<script>/* Правка 08.10.2026 (UX, только адрес перехода). Кнопка с текстом «Подобрать программу…» ведёт к существующему
+   квизу (#quiz), а не в прайс. Кнопки «Программы и цены», «Посмотреть весь прайс», карточки программ и отдельная
+   страница прайса не меняются. Текст и адрес кнопок задаёт кабинет (site-apply.js) уже после загрузки, поэтому
+   проверка идёт по тексту и повторяется после изменений DOM. В предпросмотре кабинета (во фрейме) не работает. */
+(function () {
+  try { if (window.top !== window) return; } catch (e) { return; }
+  var pending = 0;
+  function toPrice(a) {
+    var u;
+    try { u = new URL(a.getAttribute('href') || '', location.href); } catch (e) { return false; }
+    return u.origin === location.origin && /\/price\.html$/.test(u.pathname) && !u.hash;
+  }
+  function fix() {
+    pending = 0;
+    if (!document.getElementById('quiz') || !document.getElementById('spa-quiz')) return;
+    var links = document.querySelectorAll('a[href]');
+    for (var i = 0; i < links.length; i++) {
+      var a = links[i];
+      var text = (a.textContent || '').replace(/\s+/g, ' ').trim();
+      if (/^Подобрать программу/i.test(text) && toPrice(a)) {
+        a.setAttribute('href', '#quiz');
+        a.setAttribute('data-quiz-route', '1');
+      }
+    }
+  }
+  function later() { if (!pending) pending = setTimeout(fix, 60); }
+  fix();
+  document.addEventListener('DOMContentLoaded', fix);
+  window.addEventListener('load', fix);
+  document.addEventListener('click', function (event) {
+    var a = event.target && event.target.closest && event.target.closest('a[href]');
+    if (a) fix();
+  }, true);
+  if (window.MutationObserver) {
+    new MutationObserver(later).observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['href'] });
+  }
+}());
+</script>
 </body>
 </html>

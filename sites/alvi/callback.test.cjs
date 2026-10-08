@@ -50,3 +50,28 @@ test('ALVI keeps the comment after a failed or duplicate request and rejects ove
     } finally {f.dom.window.close();}
   }
 });
+
+test('ALVI retains 2GIS first touch with blocked storage and excludes memory identity for DNT', async () => {
+  for (const dnt of [false, true]) {
+    let body;
+    const f = fixture(async (url, options) => {
+      body = JSON.parse(options.body);
+      return {ok: true, status: 201, json: async () => ({id: 5})};
+    });
+    try {
+      f.dom.reconfigure({url: 'https://spaalvi-38.ru/'});
+      const w = f.dom.window;
+      Object.defineProperty(w, 'localStorage', {get() {throw Error('private mode');}});
+      Object.defineProperty(w.navigator, 'doNotTrack', {value: dnt ? '1' : '0'});
+      w.__synapseClientId = '12345678-abcd';
+      w.__synapseFirstTouch = {source: '2gis', ts: Date.now(),
+        referrer: 'https://link.2gis.ru/', landingPage: '/price.html'};
+      await f.submit();
+      assert.equal(body.clientId, dnt ? undefined : '12345678-abcd');
+      assert.equal(body.source, dnt ? 'Сайт ALVI' : '2gis');
+      assert.equal(body.referrer, dnt ? undefined : 'https://link.2gis.ru/');
+      assert.equal(body.landingPage, 'https://spaalvi-38.ru/' + (dnt ? '' : 'price.html'));
+      assert.equal(body.utmSource, undefined);
+    } finally {f.dom.window.close();}
+  }
+});

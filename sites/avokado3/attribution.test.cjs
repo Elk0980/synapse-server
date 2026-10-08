@@ -21,12 +21,27 @@ test('current campaign replaces old tags and stays usable when storage is blocke
   assert.equal(next.yclid, undefined);
 });
 test('campaign survives internal navigation for 30 days, then expires; internal referrals are ignored', () => {
-  const original = {utm_source: 'yandex', utm_content: 'creative', first_seen: new Date(now).toISOString()};
+  const original = {utm_source: 'yandex', utm_content: 'creative', first_seen: new Date(now).toISOString(), v: 2};
   assert.deepEqual(readAttribution(new URL(base + 'price.html'), base, memory(original), now + 1000), original);
   assert.deepEqual(readAttribution(new URL(base + 'price.html?utm_source=yandex&utm_content=creative'), base, memory(original), now + 1000), original);
   assert.deepEqual(readAttribution(new URL(base), base + 'price.html', memory(original), now + lifetime), {});
   assert.deepEqual(readAttribution(new URL(base), base + 'price.html', memory(), now), {});
-  assert.equal(readAttribution(new URL(base), 'https://avokado38.ru.example.com/path', memory(), now).utm_source, 'avokado38.ru.example.com');
+  const external = readAttribution(new URL(base), 'https://avokado38.ru.example.com/path', memory(), now);
+  assert.equal(external.referrer, 'https://avokado38.ru.example.com/path');
+  assert.equal(external.utm_source, undefined);
+  assert.equal(external.utm_medium, undefined);
+});
+
+test('explicit referral campaign survives, legacy generated referral tags are not sent to booking', () => {
+  const explicit = readAttribution(new URL(base + '?utm_source=2gis&utm_medium=referral'), '', memory(), now);
+  const retained = readAttribution(new URL(base + 'price.html'), base, memory(explicit), now + 1000);
+  assert.equal(retained.utm_source, '2gis');
+  assert.equal(retained.utm_medium, 'referral');
+  const legacy = {utm_source: 'yandex.ru', utm_medium: 'referral', first_seen: new Date(now).toISOString()};
+  const cleaned = readAttribution(new URL(base), '', memory(legacy), now + 1000);
+  const target = new URL(decorateUrl(booking, base, cleaned, 'contacts_booking'));
+  assert.equal(target.searchParams.has('utm_source'), false);
+  assert.equal(target.searchParams.has('utm_medium'), false);
 });
 test('booking keeps campaign content separate from entry point and preserves booking parameters', () => {
   const url = new URL(decorateUrl(booking + '?staff=23&utm_content=sticky_cta#choose', base,

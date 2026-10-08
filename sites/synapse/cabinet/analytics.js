@@ -172,8 +172,6 @@ const renderPlatformFilter = () => {
     ${allChecked ? "checked" : ""}><strong>Все площадки</strong></label>${options}`;
   byId("platform-trigger").textContent = allChecked ? "Все площадки" : `Выбрано: ${analyticsState.selected.size}`;
 };
-const funnelProjectLabel = () => ctx.selectedProjectId === "synapse-business" ? "онлайн-созвон" :
-  ["alvi", "avokado"].includes(ctx.selectedProjectId) ? "запись на визит" : "заявка";
 /* Фактическая статистика 2ГИС: только загруженные в ЛК отчёты за тот же период.
    Эти события не сводятся с продажами CRM и не считаются уникальными обращениями:
    пересечение совокупностей отчётов 2ГИС между собой и с CRM не доказано. */
@@ -247,7 +245,7 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
         total("externalClicks") !== null ? "snapshot" : "live", date: newestCapture,
       note: `карточки: ${formatMetric(total("externalClicks"))} · сайт: ${formatMetric(total("visits"))}` },
     { id: "warmup", label: "Прогрев", value: warmup, kind: warmup === null ? "none" : "live",
-      note: `ключевой этап проекта: ${funnelProjectLabel()}` },
+      note: "Действия на сайте и заявки; это не подтверждённые записи или оплаты" },
     { id: "deal", label: "Сделка", value: sales, kind: sales === null ? "none" : "live",
       note: `выручка: ${financeRevenue === null || financeRevenue === undefined
         ? "—" : formatMoney(financeRevenue)} · повторные: нет данных` }
@@ -308,7 +306,7 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
       ? "по компании не ведутся" : formatROMI(financeRomi)}</strong></div></div></section>
     <section class="analytics-section"><h2>Площадки</h2><div class="crm-table-wrap">
     <table class="crm-table analytics-source-table"><thead><tr><th>Площадка</th><th>Показы</th><th>Клики</th>
-    <th>Обращения</th><th>Заявки</th><th>Продажи</th><th>Выручка</th><th>Расходы</th><th>ROMI</th>
+    <th>Действия на сайте</th><th>Заявки</th><th>Продажи</th><th>Выручка</th><th>Расходы</th><th>ROMI</th>
     <th>Данные</th></tr></thead><tbody>${tableRows}</tbody></table></div></section>
     ${renderCompanyMetricsSection(companyMetrics, owner)}`;
   byId("analytics-content").querySelectorAll("[data-funnel-step]").forEach((button) => {
