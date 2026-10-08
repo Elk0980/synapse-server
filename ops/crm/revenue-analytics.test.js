@@ -5,6 +5,7 @@ const {createRevenueAnalytics,kopecks,attribution,dateTime}=require('./revenue-a
 const {createRevenueAdapters}=require('./revenue-analytics-adapters');
 const {createRevenueHandler}=require('./revenue-analytics-http');
 const {localDay}=require('./revenue-analytics-access');
+const qualityCheck=(report,id)=>report.quality.checks.find(c=>c.id===id);
 const A='demo-a',B='demo-b',at='2026-10-08T08:00:00Z';
 const config=(provider='yclients')=>({externalId:provider==='yclients'?'101':'201',historyFrom:'2026-09-01',timezone:'Asia/Irkutsk',...(provider==='yclients'?{cashRules:[{expenseId:'5',kind:'signed'},{expenseId:'6',kind:'refund'}]}:{goals:[{id:'301',label:'Заявка'}]})});
 const credential=provider=>provider==='yclients'?{partnerToken:'synthetic-partner',userToken:'synthetic-user'}:{token:'synthetic-oauth'};
@@ -23,6 +24,76 @@ function harness(t) {
   const report=(code=A,from='2026-10-01',to='2026-10-08')=>a.report(code,from,to);
   return {db,a,data,adapters,save,report,advance:n=>{time+=n;}};
 }
+
+test('контроль качества различает отсутствующий источник и нулевые события в успешном снимке',async t=>{
+  const h=harness(t),missing=h.report();
+  assert.equal(missing.yclients,null);assert.equal(qualityCheck(missing,'booking_sources').status,'unavailable');
+  h.save();h.data.records=[];h.data.cash=[];await h.a.collect(A,'yclients');
+  const empty=h.report();assert.equal(empty.yclients.createdBookings,0);assert.equal(empty.yclients.sourceCoveragePercent,null);
+  assert.equal(qualityCheck(empty,'booking_sources').status,'no_events');
+  assert.equal(qualityCheck(empty,'client_identity').status,'no_events');
+  assert.equal(qualityCheck(empty,'economics').status,'unavailable');
+  assert.equal(qualityCheck(h.report(B),'booking_sources').status,'unavailable');
+});
+
+test('обновление другого диапазона не маскирует старый снимок Метрики',async t=>{
+  const h=harness(t);h.save(A,'metrika');
+  await h.a.collect(A,'metrika',{from:'2026-10-01',to:'2026-10-07'});
+  h.advance(4*3600000);await h.a.collect(A,'metrika',{from:'2026-10-02',to:'2026-10-08'});
+  const old=h.report(A,'2026-10-01','2026-10-07'),recent=h.report(A,'2026-10-02','2026-10-08');
+  assert.equal(old.state.providers[0].stale,false);
+  assert.equal(qualityCheck(old,'metrika_snapshot').status,'attention');
+  assert.equal(qualityCheck(recent,'metrika_snapshot').status,'ok');
+  assert.equal(qualityCheck(old,'period_coverage').status,'ok');
+  assert.equal(qualityCheck(recent,'period_coverage').status,'attention');
+});
+
+test('контроль периода замечает пробел истории и незавершённые даты YCLIENTS в его часовом поясе',async t=>{
+  const h=harness(t);h.save();await h.a.collect(A,'yclients');
+  const past=h.report(A,'2026-10-01','2026-10-07');
+  assert.equal(past.yclients.timezone,'Asia/Irkutsk');assert.equal(Date.parse(past.yclients.collectedAt),Date.parse(at));
+  assert.equal(qualityCheck(past,'period_coverage').status,'ok');
+  for(const [from,to] of [['2026-08-01','2026-10-07'],['2026-10-01','2026-10-08'],['2026-10-01','2026-10-09']])
+    assert.equal(qualityCheck(h.report(A,from,to),'period_coverage').status,'attention');
+});
+
+test('выборка целей, UTM и задержка не скрываются за полным общим итогом Метрики',async t=>{
+  const h=harness(t);h.save(A,'metrika');h.adapters.metrika=async(c,r)=>({
+    ...metrika(c,r),utm:{rows:[],sampled:true},sources:{rows:[],dataLagSeconds:180},goals:[{id:'301',label:'Заявка',sampled:true,visits:1,reaches:1,conversionRate:1}]
+  });
+  await h.a.collect(A,'metrika');const result=h.report(A,'2026-10-02','2026-10-08');
+  assert.equal(result.metrika.overview.sampled,false);
+  const check=qualityCheck(result,'metrika_sampling');assert.equal(check.status,'attention');
+  assert.match(check.detail,/UTM, цели/);assert.match(check.detail,/180 сек/);
+});
+
+test('неизвестные статьи, источники, связи и клиенты остаются отдельными причинами неполноты',async t=>{
+  const h=harness(t);h.save();h.data.records=[rec({from_url:''})];
+  h.data.cash=[tx({record_id:null,visit_id:null,client:null}),tx({id:102,expense:{id:99}})];
+  await h.a.collect(A,'yclients');const result=h.report();
+  for(const id of ['booking_sources','cash_rules','payment_links','client_identity'])assert.equal(qualityCheck(result,id).status,'attention');
+  assert.equal(result.yclients.paymentKopecks,100010);assert.equal(result.yclients.payingClients,0);
+  assert.doesNotMatch(JSON.stringify(result.quality),/PRIVATE|synthetic-partner|synthetic-user/);
+});
+
+test('изменение правил не переоценивает старые деньги, а сбой новой выгрузки не создаёт ложный ноль',async t=>{
+  const h=harness(t);h.save();await h.a.collect(A,'yclients');
+  const stored=h.db.prepare('SELECT payload FROM revenue_cash WHERE company=?').all(A);
+  h.save(A,'yclients',{config:{...config(),cashRules:[{expenseId:'5',kind:'exclude'}]}});
+  const before=h.report();assert.equal(before.yclients,null);
+  assert.match(qualityCheck(before,'yclients_snapshot').detail,/правила изменились/);
+  assert.deepEqual(h.db.prepare('SELECT payload FROM revenue_cash WHERE company=?').all(A),stored);
+  h.data.error='ACCESS_DENIED';await h.a.collect(A,'yclients');assert.equal(h.report().yclients,null);
+  h.data.error=null;await h.a.collect(A,'yclients');assert.equal(h.report().yclients.paymentKopecks,0);
+});
+
+test('отказ обновления явно помечает сохранившиеся деньги, не стирая снимок',async t=>{
+  const h=harness(t);h.save();await h.a.collect(A,'yclients');
+  h.data.error='ACCESS_DENIED';await h.a.collect(A,'yclients');
+  const result=h.report();assert.equal(result.yclients.paymentKopecks,100010);
+  assert.equal(qualityCheck(result,'yclients_snapshot').status,'attention');
+  assert.match(qualityCheck(result,'yclients_snapshot').detail,/ошибкой/);
+});
 test('повтор сбора не удваивает деньги; разные даты этапов и возврат сохраняются',async t=>{
   const h=harness(t);h.save();h.data.cash.push(tx({id:102,expense:{id:6},amount:'200.05',date:'2026-10-05T12:00:00+0800'}));
   for(let i=0;i<2;i++)assert.equal((await h.a.collect(A,'yclients')).collected,true);

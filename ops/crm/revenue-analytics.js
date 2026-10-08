@@ -2,6 +2,7 @@
 const crypto=require('node:crypto');
 const {createRevenueAccess,company,provider,id,range,localDay,shiftDay,fail}=require('./revenue-analytics-access');
 const {createRevenueAdapters}=require('./revenue-analytics-adapters');
+const {revenueQuality}=require('./revenue-analytics-quality');
 const OFFSETS={'Asia/Irkutsk':'+08:00','Asia/Bangkok':'+07:00','Europe/Moscow':'+03:00',UTC:'Z'};
 const KNOWN_ERRORS=new Set(['MISSING_ACCESS','CREDENTIAL_UNREADABLE','ACCESS_DENIED','RATE_LIMITED','UPSTREAM_ERROR','CONNECTION_UNCERTAIN','RESPONSE_TOO_LARGE','RESPONSE_UNCERTAIN','INCOMPLETE','PROFILE_CHANGED','LEASE_LOST','REVISION_CONFLICT','TOKEN_REAUTH_REQUIRED','TOKEN_REFRESH_UNCERTAIN','TOKEN_REFRESH_BUSY']);
 function dateTime(v,tz) {
@@ -169,7 +170,9 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
     const groups=new Map();
     const group=u=>{const key=sourceKey(u);if(!groups.has(key))groups.set(key,{utm:u.source?u:null,bookings:0,attendedVisits:0,paymentKopecks:0,refundKopecks:0,payingClients:new Set()});return groups.get(key);};
     let yclients=null;
-    if(yc.lastSuccess) {
+    // Новые правила статей/часового пояса нельзя применять к неподтверждённой старой выгрузке.
+    // Строки сохраняются для следующего сбора, но не выдаются как проверенный денежный итог.
+    if(yc.lastSuccess && yc.current) {
       const config=yc.config;const r=readRows('revenue_records',c);const tx=readRows('revenue_cash',c);const byId=new Map(r.map(v=>[v.id,v]));
       const historyFrom=job(c,'yclients').history_from||config.historyFrom;
       const byVisit=new Map();for(const v of r)if(v.visitId){const a=byVisit.get(v.visitId)||[];a.push(v);byVisit.set(v.visitId,a);}
@@ -200,11 +203,12 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
         else{stats.refundKopecks-=amount;g.refundKopecks-=amount;}
       }
       stats.netCashKopecks=stats.paymentKopecks-stats.refundKopecks;stats.payingClients=paying.size;
-      yclients={...stats,historyFrom,partialHistory:from<historyFrom,currency:'RUB',sources:[...groups.values()].map(g=>({...g,payingClients:g.payingClients.size,netCashKopecks:g.paymentKopecks-g.refundKopecks})),
+      yclients={...stats,historyFrom,partialHistory:from<historyFrom,current:yc.current,collectedAt:yc.lastSuccess,timezone:config.timezone,currency:'RUB',sources:[...groups.values()].map(g=>({...g,payingClients:g.payingClients.size,netCashKopecks:g.paymentKopecks-g.refundKopecks})),
         financialClassificationComplete:stats.unknownExpenseTransactions===0 && config.cashRules.length>0,
         sourceCoveragePercent:stats.createdBookings?100*stats.bookingsWithSource/stats.createdBookings:null};
     }
-    return {companyCode:c,period,state,metrika:m?{...JSON.parse(m.payload),collectedAt:m.collected_at,current:m.revision===mc.revision}:null,yclients,
+    const metrika=m?{...JSON.parse(m.payload),collectedAt:m.collected_at,current:m.revision===mc.revision}:null;
+    return {companyCode:c,period,state,metrika,yclients,quality:revenueQuality({period,state,metrika,yclients},now()),
       economics:{cac:null,romi:null,reason:'Расходы, первичные клиенты за всю историю и себестоимость ещё не подтверждены.'},
       definitions:{bookings:'Дата создания записи; отмены отдельно.',visits:'Фактическое посещение по дате визита; один visit_id считается один раз.',cash:'Реальные деньги по дате транзакции, с вычетом возвратов; неизвестные статьи не считаются доходом.',attribution:'UTM из from_url конкретной записи. Неизвестный источник не назначается рекламе. Итоги Метрики не связывают человека с оплатой сами по себе.'}};
   }

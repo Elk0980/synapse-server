@@ -49,6 +49,30 @@ test('блок различает цели, посещения, денежный
     assert.match(s,/не является конверсией одной группы/);assert.match(s,/фильтр площадок выше относится к прежней/);
   }finally{f.close();}
 });
+
+test('контроль качества показывает неизвестное, неполное и нулевые события отдельно и экранирует текст',async()=>{
+  const value=payload();value.quality={period:{...RANGE},checks:[
+    {id:'a',title:'Данные сайта',status:'ok',detail:'Итог периода'},
+    {id:'b',title:'Записи и деньги',status:'unavailable',detail:'Нет доступа <img src=x onerror=alert(1)>'},
+    {id:'c',title:'Источники записей',status:'no_events',detail:'Нет созданных записей в снимке'},
+    {id:'d',title:'Связи оплат',status:'attention',detail:'Неизвестный источник'}]};
+  const f=fixture({value,role:'employee'});try{
+    await f.render();const table=f.block().querySelector('.analytics-revenue-quality');
+    assert.equal(table.rows.length,5);assert.match(table.textContent,/Проверено по снимку/);
+    assert.match(table.textContent,/Пока неизвестно/);assert.match(table.textContent,/Нет событий в снимке/);
+    assert.match(table.textContent,/Нужна проверка/);assert.match(table.textContent,/<img src=x/);
+    assert.equal(table.querySelector('img'),null);assert.match(f.block().textContent,/2026-10-01 — 2026-10-08/);
+    assert.equal(f.calls.filter(c=>c.options?.method==='POST').length,0);
+  }finally{f.close();}
+});
+
+test('кабинет не превращает скрытый после смены правил денежный снимок в нулевую оплату',async()=>{
+  const value=payload();value.yclients=null;value.quality={period:{...RANGE},checks:[
+    {id:'yclients_snapshot',title:'Записи и деньги',status:'unavailable',detail:'Правила изменились; нужна новая выгрузка'}]};
+  const f=fixture({value});try{await f.render();assert.match(f.block().textContent,/Правила изменились/);
+    assert.doesNotMatch(f.block().textContent,/Платежи: 0|денежный итог: 0/);
+  }finally{f.close();}
+});
 test('ошибка, чужая компания или период не отображаются как свои деньги или нули',async()=>{
   for(const value of [Error('SECRET'),payload('demo-b'),{...payload(),period:{from:'2026-01-01',to:'2026-01-02'}}]){
     const f=fixture({value});try{await f.render();assert.match(f.block().textContent,/ещё не доступен/);assert.doesNotMatch(f.block().textContent,/SECRET|800 ₽/);assert.match(f.d.getElementById('analytics-content').textContent,/Воронка/);}finally{f.close();}

@@ -86,6 +86,10 @@
 .analytics-legal { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line); }
 .analytics-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
 .analytics-actions a { color: var(--accent); }
+.analytics-revenue-quality { width: 100%; min-width: 0; table-layout: fixed; }
+.analytics-revenue-quality th, .analytics-revenue-quality td { white-space: normal; overflow-wrap: anywhere; vertical-align: top; }
+.analytics-revenue-quality th:nth-child(1) { width: 22%; }
+.analytics-revenue-quality th:nth-child(2) { width: 23%; }
 
 @media (max-width: 760px) {
   .analytics-funnel { grid-template-columns: 128px minmax(0, 1fr); column-gap: 8px; row-gap: 24px; }

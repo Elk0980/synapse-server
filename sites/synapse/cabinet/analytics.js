@@ -234,6 +234,9 @@ const renderAnalyticsGuide = () => `<section class="analytics-section analytics-
   </ol>
   <p>Даты создания записи, посещения и оплаты могут различаться. Делить итоги этих трёх событий за календарный
   период друг на друга как конверсию нельзя: для неё нужна одна и та же группа записей.</p>
+  <p>В таблице «Можно ли доверять показателям» сначала прочитайте причины неполноты.
+  «Нет событий в снимке» отличается от «Пока неизвестно». Старый снимок, выборка и неизвестный источник
+  требуют отдельной проверки; подтверждённая строка не означает окупаемость рекламы.</p>
   <p><strong>Каждый день, 5 минут:</strong> свежесть → визиты → подтверждённые записи → состоявшиеся посещения
   → деньги и возвраты → неизвестные источники. <strong>Раз в неделю:</strong> сравните полные недели и выберите
   одно улучшение по самому заметному месту потери клиентов. При сбое сообщите компанию, период и время последнего успеха;
@@ -251,6 +254,7 @@ const renderRevenueSection = (payload) => {
     (!p.configured?'не подключён':!p.enabled?'сбор выключен':p.running?'идёт загрузка':p.errorCode?accessError(p.errorCode):p.stale?'данные требуют обновления':'обновляется сервером')+
     '. Последний успех: '+at(p.lastSuccess)+'</li>').join('');
   const m=payload.metrika,y=payload.yclients;
+  const quality=payload.quality?'<h3>Можно ли доверять показателям</h3><p class="crm-note">Проверка периода '+escapeHTML(payload.quality.period.from)+' — '+escapeHTML(payload.quality.period.to)+'. Каждый источник проверяется отдельно.</p><div class="crm-table-wrap"><table class="crm-table analytics-revenue-quality"><thead><tr><th>Проверка</th><th>Результат</th><th>Что это значит</th></tr></thead><tbody>'+payload.quality.checks.map(c=>'<tr><td>'+escapeHTML(c.title)+'</td><td>'+escapeHTML(({ok:'Проверено по снимку',attention:'Нужна проверка',unavailable:'Пока неизвестно',no_events:'Нет событий в снимке'})[c.status]||'Пока неизвестно')+'</td><td>'+escapeHTML(c.detail)+'</td></tr>').join('')+'</tbody></table></div>':'';
   const trafficTable=(report,title)=>'<h4>'+title+'</h4><div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Источник</th><th>Визиты</th><th>Среднее время, сек.</th></tr></thead><tbody>'+report.rows.map(row=>'<tr><td>'+escapeHTML(row.dimensions.map(d=>d.name||d.id||'не определено').join(' / '))+'</td><td>'+num(row.metrics[0])+'</td><td>'+num(row.metrics[2])+'</td></tr>').join('')+'</tbody></table></div>';
   const metrika=m?'<h3>Посещения сайта</h3><p>Визиты: <strong>'+num(m.overview.totals[0])+'</strong> · посетители: '+num(m.overview.totals[1])+
     ' · среднее время: '+num(m.overview.totals[2])+' сек.</p><p class="crm-note">'+(m.current?'':'Подключение изменилось; это прежний снимок. ')+
@@ -265,7 +269,7 @@ const renderRevenueSection = (payload) => {
     '. Каждый показатель относится к своей дате: создание записи, посещение или платёж. Их отношение не является конверсией одной группы клиентов.</p><div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Источник / кампания</th><th>Записи</th><th>Визиты</th><th>Денежный итог</th></tr></thead><tbody>'+y.sources.map(g=>'<tr><td>'+escapeHTML(g.utm?[g.utm.source,g.utm.medium,g.utm.campaign].filter(Boolean).join(' / '):'Источник неизвестен')+'</td><td>'+num(g.bookings)+'</td><td>'+num(g.attendedVisits)+'</td><td>'+formatMoney(g.netCashKopecks/100)+'</td></tr>').join('')+'</tbody></table></div>':
     '<p class="crm-note">Записи и оплаты YCLIENTS ещё не загружены.</p>';
   const action=identity.role==='owner'?'<button type="button" class="plain-button" data-revenue-collect>Обновить данные этого периода</button><p class="crm-note" data-revenue-result></p>':'';
-  return head+'<ul>'+states+'</ul><p class="crm-note">Этот блок показывает компанию целиком; фильтр площадок выше относится к прежней воронке.</p>'+metrika+yclients+
+  return head+'<ul>'+states+'</ul>'+quality+'<p class="crm-note">Этот блок показывает компанию целиком; фильтр площадок выше относится к прежней воронке.</p>'+metrika+yclients+
     '<p class="crm-note">'+escapeHTML(payload.economics.reason)+' UTM показывают метку перехода; поиск по названию или заслугу рекламы они сами по себе не доказывают.</p>'+action+'</section>';
 };
 const renderAnalytics = (dashboard, summary, expenses, potential = null, owner = analyticsState.payload?.owner, companyMetrics = analyticsState.payload?.companyMetrics ?? null, revenueData = analyticsState.payload?.revenueData ?? null) => {
