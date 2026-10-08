@@ -157,6 +157,31 @@ test('CRM proxy restricts pipelines to the owner and preserves company-scoped ed
     await crm(owner,'DELETE',`/tasks/${created.body.id}`);
     assert.equal((await crm(owner,'GET',route)).status,404);
   });
+  await t.test('server resource queue is owner-only with CSRF, opaque lease and revision fencing', async () => {
+    const route='/coordination/server-resource';
+    assert.equal((await crm(undefined,'GET',route)).status,401);
+    for(const session of [editor,mover,targetEditor,observer,viewer]) {
+      assert.equal((await crm(session,'GET',route)).status,403);
+      assert.equal((await crm(session,'POST',route+'/requests',{})).status,403);
+    }
+    const initial=await crm(owner,'GET',route);
+    assert.equal(initial.status,200);
+    assert.equal(initial.body.state,'unknown');
+    const body={requestKey:'http-queue-fixture',taskRef:'Fixture',threadId:'fixture-owner',executor:'QA',scope:'Only fixture',notBefore:new Date().toISOString(),durationMinutes:5};
+    assert.equal((await crm({...owner,csrf:'invalid'},'POST',route+'/requests',body)).status,403);
+    const added=await crm(owner,'POST',route+'/requests',body);
+    assert.equal(added.status,200,JSON.stringify(added.body));
+    const checked=await crm(owner,'POST',route+'/action',{action:'confirm_idle',revision:added.body.resource.revision,evidence:'Fixture checked idle'});
+    assert.equal(checked.status,200);
+    const claimed=await crm(owner,'POST',route+'/action',{action:'claim',revision:checked.body.resource.revision,requestId:added.body.request.id});
+    assert.equal(claimed.status,200,JSON.stringify(claimed.body));
+    const readback=await crm(owner,'GET',route);
+    assert.equal(readback.body.holder.id,added.body.request.id);
+    assert.ok(!JSON.stringify(readback.body).includes(claimed.body.leaseToken));
+    assert.match(readback.headers.get('cache-control'),/no-store/);
+    assert.equal((await crm(owner,'POST',route+'/action',{action:'release',revision:checked.body.resource.revision,requestId:added.body.request.id,leaseToken:claimed.body.leaseToken,fence:claimed.body.resource.fence,evidence:'stale'})).status,409);
+    assert.equal((await crm(owner,'POST',route+'/action',{action:'release',revision:readback.body.revision,requestId:added.body.request.id,leaseToken:claimed.body.leaseToken,fence:claimed.body.resource.fence,evidence:'Fixture finished'})).status,200);
+  });
   await t.test('email diagnostics require an owner session and expose only safe status', async () => {
     assert.equal((await crm(undefined, 'GET', '/email-status')).status, 401);
     for (const session of [editor, mover, targetEditor, observer, viewer]) {
