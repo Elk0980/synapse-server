@@ -53,6 +53,8 @@ const { createCompanyInformationCheck } = require('./company-information-check')
 const { createDealOrders } = require('./deal-orders');
 const { createTaskCoordination } = require('./task-coordination');
 const { createTaskDispatch } = require('./task-dispatch');
+const {createRevenueAnalytics} = require('./revenue-analytics');
+const {createRevenueHandler} = require('./revenue-analytics-http');
 
 const IS_MAIN = require.main === module;
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
@@ -636,6 +638,8 @@ const handleVkTools = createVkToolsHandler({direct:vkDirect,design:vkDesign,mate
 const reviews = createReviews(db);
 const handleReviews = createReviewsHandler({reviews,companyModuleContext,readJson,send});
 const platformDemand = createPlatformDemand(db);
+const revenueAnalytics = createRevenueAnalytics(db,{apiKey:API_KEY});
+const handleRevenueAnalytics = createRevenueHandler({analytics:revenueAnalytics,companyModuleContext,readJson,send});
 // Фактические показатели компании 2ГИС: отдельный сервис в том же разделе, без новых прав и маршрутов вне /platform-demand.
 const platformCompanyMetrics = createPlatformCompanyMetrics(db);
 const handlePlatformDemand = createPlatformDemandHandler({demand:platformDemand,companyMetrics:platformCompanyMetrics,companyModuleContext,readJson,send});
@@ -2573,6 +2577,7 @@ async function route(request, response) {
   if (await handleVkCommunity(request,response,url,cors)) return;
   if (await handleVkTools(request,response,url,cors)) return;
   if (await handleReviews(request,response,url,cors)) return;
+  if (await handleRevenueAnalytics(request,response,url,cors)) return;
   if (await handlePlatformDemand(request,response,url,cors)) return;
   if (await handleSocialStats(request,response,url,cors)) return;
   if (['/company-information','/company-information/check','/company-information/facts','/company-information/knowledge','/company-information/quote','/company-information/catalog-preview','/company-information/catalog-import'].includes(url.pathname)) {
@@ -3382,6 +3387,11 @@ const socialStatsTimer = IS_MAIN ? setInterval(() => {
   socialStats.collectDue().catch((error) => console.error('Ошибка сбора статистики соцсетей:', error?.code || error?.message));
 }, 10 * 60 * 1000) : null;
 if (socialStatsTimer) socialStatsTimer.unref();
+// Сбор внешних данных выполняет сервер, а не ПК/браузер/ИИ. Подключения выключены до явной настройки.
+const revenueAnalyticsTimer = IS_MAIN ? setInterval(() => {
+  void revenueAnalytics.collectDue().catch(() => console.error('[crm] revenue analytics worker failed'));
+}, 10 * 60 * 1000) : null;
+revenueAnalyticsTimer?.unref();
 const pipelineRulesTimer = IS_MAIN ? setInterval(() => {
   try { applyPipelineRules(); } catch (error) { console.error('Ошибка правил воронок:', error); }
 }, 60 * 60 * 1000) : null;
@@ -3390,7 +3400,7 @@ const emailOutboxTimer = IS_MAIN ? setInterval(deliverQueuedEmails, 2000) : null
 emailOutboxTimer?.unref();
 const autopostingTimer = IS_MAIN ? setInterval(() => {void autoposting.drain().catch(() => console.error('[crm] autoposting worker failed'));},30000) : null;
 autopostingTimer?.unref();
-server.on('close', () => { clearInterval(pipelineRulesTimer); clearInterval(emailOutboxTimer); clearInterval(autopostingTimer); });
+server.on('close', () => { clearInterval(revenueAnalyticsTimer); clearInterval(socialStatsTimer); clearInterval(pipelineRulesTimer); clearInterval(emailOutboxTimer); clearInterval(autopostingTimer); });
 
 // Dormant unless both explicit task-only socket settings are supplied. No shared API key is delegated.
 const evaTaskReaderReady = IS_MAIN
@@ -3403,18 +3413,21 @@ if (IS_MAIN) {
   server.listen(PORT, () => {
     console.log(`Мини-CRM слушает порт ${PORT}; база: ${DATABASE_PATH}`);
     void deliverQueuedEmails();
+    void revenueAnalytics.collectDue().catch(() => console.error('[crm] revenue analytics worker failed'));
     void autoposting.drain().catch(() => console.error('[crm] autoposting worker failed'));
   });
 }
 
 function shutdown() {
+  clearInterval(revenueAnalyticsTimer);
+  clearInterval(socialStatsTimer);
   clearInterval(pipelineRulesTimer);
   clearInterval(emailOutboxTimer);
   clearInterval(autopostingTimer);
   const evaTaskReaderStopped = evaTaskReaderReady.then(reader => reader?.close()).catch(() => {
     console.error('[crm] Eva task reader shutdown failed');
   });
-  const emailWorkersStopped = Promise.all([emailOutbox.stop(), emailCampaigns.stop(), autoposting.stop(), evaTaskReaderStopped]);
+  const emailWorkersStopped = Promise.all([emailOutbox.stop(), emailCampaigns.stop(), autoposting.stop(), evaTaskReaderStopped, revenueAnalytics.stop()]);
   server.close(async () => {
     await emailWorkersStopped;
     db.close();

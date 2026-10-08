@@ -202,8 +202,34 @@ const renderCompanyMetricsSection = (companyMetrics, owner) => {
       escapeHTML(String(coverage.expectedDays ?? 0))}. «Звонки и просмотры телефона» — не состоявшиеся звонки. ` +
     'Категории обращений не складываются друг с другом и с действиями на странице.</p>' + link;
 };
-const renderAnalytics = (dashboard, summary, expenses, potential = null, owner = analyticsState.payload?.owner, companyMetrics = analyticsState.payload?.companyMetrics ?? null) => {
-  analyticsState.payload = { dashboard, summary, expenses, potential, owner, companyMetrics };
+const renderRevenueSection = (payload) => {
+  const head='<section class="analytics-section analytics-revenue"><h2>Записи и оплаты из источников</h2>';
+  if (!payload || payload.error) return head+'<p class="crm-note">Серверный сбор ещё не доступен. Клики и старые отметки CRM не подтверждают визит или оплату.</p></section>';
+  const num=(v)=>v===null||v===undefined?'—':escapeHTML(new Intl.NumberFormat('ru-RU',{maximumFractionDigits:2}).format(v));
+  const at=(v)=>v?escapeHTML(new Date(v).toLocaleString('ru-RU')):'ещё не было';
+  const states=payload.state.providers.map(p=>'<li>'+escapeHTML(p.provider==='metrika'?'Яндекс Метрика':'YCLIENTS')+': '+
+    (!p.configured?'не подключён':!p.enabled?'сбор выключен':p.running?'идёт загрузка':p.errorCode?'ошибка загрузки':p.stale?'данные требуют обновления':'обновляется сервером')+
+    '. Последний успех: '+at(p.lastSuccess)+'</li>').join('');
+  const m=payload.metrika,y=payload.yclients;
+  const trafficTable=(report,title)=>'<h4>'+title+'</h4><div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Источник</th><th>Визиты</th><th>Среднее время, сек.</th></tr></thead><tbody>'+report.rows.map(row=>'<tr><td>'+escapeHTML(row.dimensions.map(d=>d.name||d.id||'не определено').join(' / '))+'</td><td>'+num(row.metrics[0])+'</td><td>'+num(row.metrics[2])+'</td></tr>').join('')+'</tbody></table></div>';
+  const metrika=m?'<h3>Посещения сайта</h3><p>Визиты: <strong>'+num(m.overview.totals[0])+'</strong> · посетители: '+num(m.overview.totals[1])+
+    ' · среднее время: '+num(m.overview.totals[2])+' сек.</p><p class="crm-note">'+(m.current?'':'Подключение изменилось; это прежний снимок. ')+
+    'Снято: '+at(m.collectedAt)+'. '+(m.overview.sampled?'Применена выборка; доля '+num(m.overview.sampleShare*100)+'%. ':'')+
+    'Часовой пояс: '+escapeHTML(m.timezone)+'. Текущий день неполный.</p><div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Действие</th><th>Целевые визиты</th><th>Достижения</th><th>Конверсия</th></tr></thead><tbody>'+m.goals.map(g=>'<tr><td>'+escapeHTML(g.label)+'</td><td>'+num(g.visits)+'</td><td>'+num(g.reaches)+'</td><td>'+num(g.conversionRate)+'%</td></tr>').join('')+'</tbody></table></div>'+trafficTable(m.sources,'Откуда пришли на сайт')+trafficTable(m.utm,'Переходы по UTM')+'<p class="crm-note">Источник — последний значимый переход. Посетители и цели разных строк могут пересекаться; их нельзя складывать как клиентов. Пустая метка означает неизвестный источник.</p>':
+    '<p class="crm-note">Для этого периода пока нет выгрузки Метрики.</p>';
+  const yclients=y?'<h3>YCLIENTS: записи, визиты и реальные деньги</h3><p>Создано записей: <strong>'+num(y.createdBookings)+'</strong> · из них отменено: '+num(y.cancelledBookings)+
+    ' · состоялось визитов: '+num(y.attendedVisits)+' · платящих клиентов: '+num(y.payingClients)+'</p><p>Платежи: '+formatMoney(y.paymentKopecks/100)+
+    ' · возвраты: '+formatMoney(y.refundKopecks/100)+' · денежный итог: '+formatMoney(y.netCashKopecks/100)+'</p><p class="crm-note">'+
+    (y.partialHistory?'История до '+escapeHTML(y.historyFrom)+' не загружена. ':'')+(!y.financialClassificationComplete?'Статьи денег ещё не полностью сопоставлены. ':'')+'Операций с неизвестной статьёй: '+num(y.unknownExpenseTransactions)+
+    '; без связи с записью: '+num(y.unmatchedTransactions)+'. Записей с источником: '+num(y.bookingsWithSource)+'; без источника: '+num(y.bookingsWithoutSource)+
+    '. Каждый показатель относится к своей дате: создание записи, посещение или платёж. Их отношение не является конверсией одной группы клиентов.</p><div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Источник / кампания</th><th>Записи</th><th>Визиты</th><th>Денежный итог</th></tr></thead><tbody>'+y.sources.map(g=>'<tr><td>'+escapeHTML(g.utm?[g.utm.source,g.utm.medium,g.utm.campaign].filter(Boolean).join(' / '):'Источник неизвестен')+'</td><td>'+num(g.bookings)+'</td><td>'+num(g.attendedVisits)+'</td><td>'+formatMoney(g.netCashKopecks/100)+'</td></tr>').join('')+'</tbody></table></div>':
+    '<p class="crm-note">Записи и оплаты YCLIENTS ещё не загружены.</p>';
+  const action=identity.role==='owner'?'<button type="button" class="plain-button" data-revenue-collect>Обновить данные этого периода</button><p class="crm-note" data-revenue-result></p>':'';
+  return head+'<ul>'+states+'</ul><p class="crm-note">Этот блок показывает компанию целиком; фильтр площадок выше относится к прежней воронке.</p>'+metrika+yclients+
+    '<p class="crm-note">'+escapeHTML(payload.economics.reason)+' UTM показывают метку перехода; поиск по названию или заслугу рекламы они сами по себе не доказывают.</p>'+action+'</section>';
+};
+const renderAnalytics = (dashboard, summary, expenses, potential = null, owner = analyticsState.payload?.owner, companyMetrics = analyticsState.payload?.companyMetrics ?? null, revenueData = analyticsState.payload?.revenueData ?? null) => {
+  analyticsState.payload = { dashboard, summary, expenses, potential, owner, companyMetrics, revenueData };
   const stats = Array.isArray(dashboard.sourceStats) ? dashboard.sourceStats : [];
   const allSelected = analyticsState.selected.size === ANALYTICS_PLATFORMS.length;
   const knownCodes = new Set(ANALYTICS_PLATFORMS.flatMap((platform) => platform.codes));
@@ -308,7 +334,22 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
     <table class="crm-table analytics-source-table"><thead><tr><th>Площадка</th><th>Показы</th><th>Клики</th>
     <th>Действия на сайте</th><th>Заявки</th><th>Продажи</th><th>Выручка</th><th>Расходы</th><th>ROMI</th>
     <th>Данные</th></tr></thead><tbody>${tableRows}</tbody></table></div></section>
-    ${renderCompanyMetricsSection(companyMetrics, owner)}`;
+    ${renderCompanyMetricsSection(companyMetrics, owner)}${renderRevenueSection(revenueData)}`;
+  byId('analytics-content').querySelector('[data-revenue-collect]')?.addEventListener('click',async(event)=>{
+    const button=event.currentTarget,out=button.parentElement.querySelector('[data-revenue-result]');button.disabled=true;
+    out.textContent='Сервер сверяет источники…';
+    try {
+      const results=[];
+      for(const provider of ['metrika','yclients']) {
+        if(!sameScope(owner))return;
+        results.push(await crmQuery('/revenue-analytics/collect',{companyCode:owner.companyCode,provider},csrfOptions('POST',provider==='metrika'?{from:owner.from,to:owner.to}:{})));
+      }
+      if(!sameScope(owner))return;
+      if(results.some(r=>!r.collected)){out.textContent='Обновление не завершено. Сохранены предыдущие данные.';return;}
+      await loadAnalytics();
+    } catch {if(sameScope(owner))out.textContent='Источник не подключён или не ответил. Предыдущие данные сохранены.';}
+    finally{button.disabled=false;}
+  });
   byId("analytics-content").querySelectorAll("[data-funnel-step]").forEach((button) => {
     button.addEventListener("click", () => {
       const detail = byId("analytics-content").querySelector(`[data-funnel-detail="${button.dataset.funnelStep}"]`);
@@ -372,7 +413,7 @@ const loadAnalytics = async () => {
   const current = () => requestId === analyticsRequestId && sameScope(owner);
   const scope = { companyCode: owner.companyCode };
   try {
-    const [dashboard, summary, expensePayload, potential, companyMetrics] = await Promise.all([
+    const [dashboard, summary, expensePayload, potential, companyMetrics, revenueData] = await Promise.all([
       crmQuery("/dashboard", { period: analyticsState.period, ...range, ...scope }),
       crmQuery("/summary", { ...range, ...scope }),
       crmQuery("/expenses", { ...range, ...scope }),
@@ -385,10 +426,13 @@ const loadAnalytics = async () => {
       crmQuery("/platform-demand/company-metrics", { ...range, ...scope })
         .then((result) => String(result?.companyCode || "").toLowerCase() === String(scope.companyCode).toLowerCase() &&
           result?.period?.from === range.from && result?.period?.to === range.to ? result : { error: true })
-        .catch(() => ({ error: true }))
+        .catch(() => ({ error: true })),
+      crmQuery('/revenue-analytics',{...range,...scope})
+        .then(result=>result?.companyCode===scope.companyCode&&result?.period?.from===range.from&&result?.period?.to===range.to?result:{error:true})
+        .catch(()=>({error:true}))
     ]);
     if (!current()) return;
-    renderAnalytics(dashboard, summary, expensePayload.expenses || [], potential, owner, companyMetrics);
+    renderAnalytics(dashboard, summary, expensePayload.expenses || [], potential, owner, companyMetrics, revenueData);
   } catch (error) {
     if (!current()) return;
     byId("analytics-content").innerHTML =
@@ -429,7 +473,8 @@ const renderAnalyticsControls = () => {
         analyticsState.payload.expenses,
         analyticsState.payload.potential,
         analyticsState.payload.owner,
-        analyticsState.payload.companyMetrics
+        analyticsState.payload.companyMetrics,
+        analyticsState.payload.revenueData
       );
     }
   });
