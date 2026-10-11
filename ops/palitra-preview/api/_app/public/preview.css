@@ -8,6 +8,16 @@
 .preview-banner p { flex: 1 1 220px; margin: 0; }
 .preview-banner .btn { min-height: 48px; }
 
+/* Парный тест с сайтом-черновиком: крупные кнопки 56 px, шрифт приложения. */
+.draft-pair { display: grid; gap: 10px; margin: 0; padding: 16px; background: var(--olive-soft, #E8EBD9); color: var(--ink, #2C2A25); font-size: 15px; }
+.draft-pair-title { margin: 0; font-size: 18px; line-height: 1.25; }
+.draft-pair p, .draft-pair ol { margin: 0; }
+.draft-pair ol { padding-left: 22px; display: grid; gap: 4px; }
+.draft-pair-warn { font-weight: 700; }
+.draft-pair-error { color: var(--red, #A33A2B); font-weight: 700; }
+.draft-pair-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.draft-pair-btn { min-height: 56px; border-radius: 28px; font: inherit; font-weight: 700; padding: 0 22px; text-decoration: none; }
+
 /* SDK Telegram выставляет переменные --tg-*; вне Telegram они не заданы и значения по умолчанию нулевые. */
 html.in-telegram body { min-height: var(--tg-viewport-stable-height, 100vh);
   padding-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)); }

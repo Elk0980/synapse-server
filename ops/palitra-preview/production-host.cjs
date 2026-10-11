@@ -7,6 +7,8 @@
  * Обязательное окружение:
  *   PALITRA_PREVIEW_PORT  порт слушателя на 127.0.0.1 (1024–65535, не 8789 — это просмотр Влада)
  *   PREVIEW_ORIGINS       точные HTTPS-адреса страницы через запятую, например https://preview.example.ru
+ * Необязательное:
+ *   PALITRA_DRAFT_ORIGIN  точный HTTPS-адрес сайта-черновика для парного теста (его прокси отдаёт сюда /_palitra_test/*)
  * Слушает ТОЛЬКО 127.0.0.1; снаружи доступен лишь через прокси. Host и X-Forwarded-* не используются для доступа:
  * изменения принимаются только при точном заголовке Origin из PREVIEW_ORIGINS.
  */
@@ -31,8 +33,21 @@ for (const raw of String(process.env.PREVIEW_ORIGINS || '').split(',').map((v) =
 }
 if (!origins.size) fail('укажите PREVIEW_ORIGINS — точные https-адреса страницы просмотра');
 
-const { createPreviewHandler } = require('./api/_app/handler');
-const handler = createPreviewHandler({ origins });
+// Необязательно: парный тест с сайтом-черновиком. Точный https-адрес черновика; прокси черновика направляет сюда
+// только /_palitra_test/*. Адрес черновика не может совпадать с адресом просмотра (разные cookie и проверки Origin).
+const draftRaw = String(process.env.PALITRA_DRAFT_ORIGIN || '').trim();
+let draft = null;
+if (draftRaw) {
+  let url;
+  try { url = new URL(draftRaw); } catch { fail(`PALITRA_DRAFT_ORIGIN: некорректный адрес ${JSON.stringify(draftRaw)}`); }
+  if (url.protocol !== 'https:' || url.origin !== draftRaw) fail(`PALITRA_DRAFT_ORIGIN: нужен точный https-адрес без пути и косой черты в конце, получено ${JSON.stringify(draftRaw)}`);
+  if (origins.has(draftRaw)) fail('PALITRA_DRAFT_ORIGIN не должен совпадать с адресом из PREVIEW_ORIGINS');
+  draft = { origin: draftRaw, url: `${draftRaw}/` };
+}
+
+const { createPreviewHandler, loadDraftPrice } = require('./api/_app/handler');
+if (draft && !loadDraftPrice()) fail('нет снимка прайса черновика api/_app/data/draft-price.json — тест с черновиком невозможен');
+const handler = createPreviewHandler({ origins, draft });
 const LOOPBACK = new Set(['127.0.0.1', '::ffff:127.0.0.1']);
 const server = http.createServer((req, res) => {
   // Подключения только от прокси на этом же сервере (слушатель и так привязан к 127.0.0.1).
@@ -44,7 +59,8 @@ server.headersTimeout = 15_000;
 server.keepAliveTimeout = 5_000;
 server.once('error', (error) => fail(error.code === 'EADDRINUSE' ? `127.0.0.1:${port} уже занят` : `не удалось запустить: ${error.code || error.message}`));
 server.listen(port, '127.0.0.1', () => {
-  process.stdout.write(`palitra-preview: слушаю 127.0.0.1:${port} (PID ${process.pid}); страница: ${[...origins].join(', ')}; данные вымышленные, отправки выключены\n`);
+  process.stdout.write(`palitra-preview: слушаю 127.0.0.1:${port} (PID ${process.pid}); страница: ${[...origins].join(', ')}; `
+    + `тест с черновиком: ${draft ? draft.origin : 'выключен'}; данные вымышленные, отправки выключены\n`);
 });
 const stop = () => { server.close(() => process.exit(0)); server.closeAllConnections(); setTimeout(() => process.exit(0), 5000).unref(); };
 process.once('SIGINT', stop);
