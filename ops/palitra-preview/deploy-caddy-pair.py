@@ -29,10 +29,11 @@ def candidate(data, port):
              f'{j}path /_palitra_test/*\n{i}}}\n{i}handle @palitra_test_pair {{\n'
              f'{j}reverse_proxy 127.0.0.1:{port}\n{i}}}\n')
     inserted = text[:m.start()] + extra + text[m.start():]
-    old = 'palitra-bot-preview.synapsebusiness.ru {\n  reverse_proxy 127.0.0.1:8799\n}'
-    new = f'palitra-bot-preview.synapsebusiness.ru {{\n  reverse_proxy 127.0.0.1:{port}\n}}'
-    if inserted.count(old) != 1:
+    previews = list(re.finditer(r'(?m)^palitra-bot-preview[.]synapsebusiness[.]ru \{\n[ \t]+reverse_proxy 127[.]0[.]0[.]1:8799\n\}', inserted))
+    if len(previews) != 1:
         raise ValueError('Существующий preview изменён — требуется новый BASE')
+    old = previews[0].group(0)
+    new = old.replace(':8799', f':{port}', 1)
     result = inserted.replace(old, new, 1)
     if result.replace(new, old, 1).replace(extra, '', 1) != text:
         raise ValueError('Изменения выходят за два точечных маршрута')
