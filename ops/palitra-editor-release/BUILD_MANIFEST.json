@@ -6,6 +6,11 @@
   "payloadFiles": 27,
   "files": [
     {
+      "path": "Dockerfile.overlay",
+      "bytes": 273,
+      "sha256": "583f0a8614110b58db9a5381ed1c93b8268e9d8b766f0727dac5b258c70c3db7"
+    },
+    {
       "path": "FONT_MANIFEST.json",
       "bytes": 5050,
       "sha256": "92cb7d348d1cbd4fcbed0f9dca28b4bd66675874153c781c3235b362f4ea9bf5"
