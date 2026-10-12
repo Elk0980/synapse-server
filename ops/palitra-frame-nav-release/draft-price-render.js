@@ -288,6 +288,9 @@ const PALITRA_PHOTO_FRAME = (function () {
           const override = item && overrides.get(item.id);
           // Обложка в прайсе уже другая (её заменила Дарья) — подмена черновика этого товара не действует.
           if (!override || (override.source !== null && item.photo !== override.source)) return item;
+          // PALITRA36: у исходной обложки есть явный кадр photoFrames для этого src (всё поле валидно) — свежее решение
+          // в редакторе; временная подмена черновика не применяется: фото прайса и их кадры (кадр не переносится на чужой снимок).
+          if (typeof item.photo === 'string' && !PF.itemProblems(item).length && PF.framesOf(item).has(item.photo.trim())) return item;
           replaced++;
           return { ...item, ...override.patch };
         }) : list;
