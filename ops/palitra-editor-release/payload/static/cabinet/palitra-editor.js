@@ -18,7 +18,10 @@
     }
     byId('status').textContent = '';
     const price = byId('price-link');
-    if (relative(config.priceEditorUrl)) { price.href = config.priceEditorUrl; price.hidden = false; }
+    if (relative(config.priceEditorUrl)) {
+      price.href = config.priceEditorUrl + '?site=' + encodeURIComponent('https://palitra-love-draft-1.synapsebusiness.ru');
+      price.hidden = false;
+    }
     else byId('price-missing').hidden = false;
     byId('photos-link').href = relative(config.photosUrl) ? config.photosUrl : '/cabinet/site-photos.html';
     // Карточка доступа — только подсказка интерфейса; право владельца проверяет сервер на каждом запросе.

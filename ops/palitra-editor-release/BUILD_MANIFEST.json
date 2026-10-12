@@ -28,7 +28,7 @@
     {
       "path": "SOURCE_PROVENANCE.json",
       "bytes": 10459,
-      "sha256": "dc97d442ac95bb2e3efc510d3727763558ff9de8d810707c976c11a787e911d6"
+      "sha256": "daf4d9f2d9f211b0d36590c489b271780bd48765b8956ca82f78a1a156e411fd"
     },
     {
       "path": "build-manifest.cjs",
@@ -97,8 +97,8 @@
     },
     {
       "path": "payload/static/cabinet/palitra-editor.js",
-      "bytes": 2434,
-      "sha256": "4172e32d668d468e07e2a0ba31fe21d7518dcb107fc687a44231d5ddd00a2667"
+      "bytes": 2533,
+      "sha256": "2211e0cc7a4687c39f863ee5a06a4438492df70c9fb51cca1e34b4611e04babe"
     },
     {
       "path": "payload/static/cabinet/palitra-photo-model.js",
