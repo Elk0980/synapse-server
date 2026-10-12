@@ -1,0 +1,33 @@
+{
+  "package": "PALITRA-BOT-EDITOR-35",
+  "pass": 2,
+  "status": "candidates_not_installed",
+  "base": {
+    "server.js": "7b60187397cb11fe7e382682fb65e5a1600b35255bf85c8bbdfe2b122c35d8a2",
+    "site-workspaces.js": "a28a415413a831ab9d1d4f2fa4655f00971f4ce7d88f2681077119401d4a1b96",
+    "site-workspace-routes.js": "1acb10b2045681162fd364e68780d8963b16a887f40beed9834d68de9938dbc6",
+    "auth-store.js": "не найден по LIVE sha 8171611e…; не патчится и не подменяется",
+    "site-workspace-feature.js": "нет в BASE; используется только workspaceFeature.store (workspace/file/save), без него фото отключаются 503"
+  },
+  "serverFiles": [
+    { "from": "WORK/server-adapter/native-feature.cjs", "to": "palitra-photo-feature.js (рядом с server.js)" },
+    { "from": "WORK/photo-model/palitra-photo-model.js", "to": "palitra-photo-model.js (рядом с server.js)" },
+    { "from": "WORK/photo-model/image-probe.js", "to": "palitra-image-check.js (рядом с server.js)" },
+    { "from": "WORK/server-adapter/sharp-decoder.cjs", "to": "palitra-image-decoder.js — только после установки sharp по DECODER.md", "optional": true }
+  ],
+  "serverPatches": [
+    { "name": "photo-feature", "spec": "WORK/server-candidate/patches.cjs#PHOTO_FEATURE", "edits": 3, "kind": "insert-only" },
+    { "name": "price-cas", "spec": "WORK/server-candidate/patches.cjs#PRICE_CAS", "edits": 3, "kind": "insert-only", "requires": ["palitra-price-validate.js и palitra-occasions.js из INPUTS (пакет 12–18) рядом с server.js"], "installWith": "frontend прайса 12–18 — отдельным шагом Root" }
+  ],
+  "cabinetStatic": {
+    "to": "/cabinet/",
+    "files": ["frontend/palitra-editor.html", "frontend/palitra-editor.js", "frontend/editor-config.js", "frontend/site-photos.html", "frontend/site-photos.js", "frontend/site-photos.css", "frontend/site-photos-core.js", "frontend/site-photos-access.html", "frontend/site-photos-access.js", "photo-model/palitra-photo-model.js"]
+  },
+  "botPreview": { "spec": "WORK/server-candidate/patches.cjs#BOT_PREVIEW_LINK", "file": "bot-preview-index.html", "edits": 1, "kind": "insert-only" },
+  "database": {
+    "newTables": ["palitra_site_photo_grants (пустая)", "palitra_site_photo_audit"],
+    "seed": "нет: права никому не выдаются автоматически"
+  },
+  "unchanged": ["auth-store.js", "whoami/publicIdentity", "сессии", "Bearer/x-api-key", "CSP", "Caddy", "права других проектов", "site_editor.* у Дарьи", "основной домен", "прайс/ID/цены", "формы", "заказы", "бот/BotFather/ключи"],
+  "notInstallable": ["WORK/server-adapter/site-photos-service.js (заглушка прохода 1)", "WORK/preview/*", "WORK/tests/*", "WORK/bot/staff-entry.js"]
+}
