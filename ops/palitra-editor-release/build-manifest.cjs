@@ -7,7 +7,7 @@ const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const paths = [];
 function scan(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-    if (entry.name === 'BUILD_MANIFEST.json' || entry.name.startsWith('.')) continue;
+    if (entry.name === 'BUILD_MANIFEST.json' || entry.name === '__pycache__' || entry.name.startsWith('.')) continue;
     const absolute = path.join(directory, entry.name);
     if (entry.isSymbolicLink()) throw new Error('Символические ссылки в пакете запрещены');
     if (entry.isDirectory()) scan(absolute);

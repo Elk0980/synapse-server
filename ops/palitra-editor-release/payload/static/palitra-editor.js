@@ -13,6 +13,10 @@
   const ASSETS = '/content/palitra/assets';
   const CAS_HEADER = 'X-Palitra-Price-CAS';
   const COMPANY = 'palitra-love';
+  /* Часовой пояс праздничных подборок Palitra — явное решение Влада 13.10.2026 (02:31): московское время.
+     Проверенная константа только для palitra-love. Не берётся из браузера, адреса, хранилища браузера или профиля whoami. */
+  const COMPANY_TIME_ZONE = 'Europe/Moscow';
+  const COMPANY_TIME_ZONE_LABEL = 'Московское время (Europe/Moscow)';
   const MAX_UPLOAD = 8 * 1024 * 1024;
   const LIST_STEP = 60;
   const CATS = O ? O.DEFAULT_PUBLIC : [];
@@ -33,7 +37,7 @@
   const catTitle = (key) => (CATS.find((c) => c.key === key) || {}).title || key;
 
   let session = null;       // профиль /content/whoami; CSRF только в памяти
-  let companyTz = null;     // подтверждённый сервером часовой пояс компании (или null)
+  let companyTz = null;     // часовой пояс компании (COMPANY_TIME_ZONE) после подтверждённой сессии, иначе null
   let view = 'items';
   let draft = null, draftSnap = '', draftNew = false;
   let holidayDraft = null, holidayOrig = null, holidaySnap = '';
@@ -87,9 +91,8 @@
         throw new Error('Не удалось подтвердить сессию. Войдите в кабинет снова.');
       }
       session = profile;
-      // Пояс — только из настройки компании на сервере; часовой пояс браузера не используется.
-      const tz = Array.isArray(profile.companies) ? (profile.companies.find((c) => c && c.id === COMPANY) || {}).timezone : null;
-      companyTz = O.isValidTimeZone(tz) ? tz : null;
+      // Пояс — фиксированная проверенная константа Palitra; профиль, браузер и адрес его не меняют.
+      companyTz = O.isValidTimeZone(COMPANY_TIME_ZONE) ? COMPANY_TIME_ZONE : null;
       $('#ed-login').hidden = true;
       $('#ed-session-retry').hidden = true;
       return session;
@@ -563,8 +566,8 @@
     const keys = O.baseKeys(CATS);
     const today = companyTz ? O.localDate(Date.now(), companyTz) : '';
     const tz = companyTz
-      ? `<div class="ed-tz"><b>Часовой пояс компании: ${h(companyTz)}</b> (настройка компании на сервере). Сегодня по нему: ${h(dateText(today))}. Праздник показывается с начала даты «с» до конца даты «по» включительно.</div>`
-      : `<div class="ed-tz is-missing"><b>Расписание праздников выключено.</b> На сервере не указан часовой пояс компании, а угадывать его нельзя: иначе праздник появится или исчезнет не в тот день. Подготовить праздники можно — на сайте они не появятся, пока администратор Synapse не укажет пояс компании.</div>`;
+      ? `<div class="ed-tz"><b>Часовой пояс компании: ${h(COMPANY_TIME_ZONE_LABEL)}</b>. Сегодня по нему: ${h(dateText(today))}. Праздник показывается с начала даты «с» до конца даты «по» включительно.</div>`
+      : `<div class="ed-tz is-missing"><b>Расписание праздников выключено.</b> Часовой пояс компании (${h(COMPANY_TIME_ZONE_LABEL)}) не подтверждён: вход не проверен или браузер не поддерживает этот пояс. Угадывать пояс нельзя: иначе праздник появится или исчезнет не в тот день. Подготовить праздники можно; проверьте вход и откройте редактор снова.</div>`;
     panel.innerHTML = `<div class="ed-card"><h2>Праздничные подборки</h2>
         <p class="ed-hint">Временная подборка собирает товары выбранных категорий на время праздника. Товары и обычные категории не меняются и не удаляются; вне дат подборки на сайте нет.</p>
         ${tz}
@@ -592,7 +595,7 @@
         <label class="ed-field"><span>Показывать с</span><input type="date" data-hd="start" value="${h(d.start)}" required></label>
         <label class="ed-field"><span>по (включительно)</span><input type="date" data-hd="end" value="${h(d.end)}" required></label>
       </div>
-      <p class="ed-hint">Даты — по часовому поясу компании${companyTz ? ` (${h(companyTz)})` : ' (пока не указан)'}, не по часам этого компьютера.</p>
+      <p class="ed-hint">Даты — по часовому поясу компании${companyTz ? ` (${h(COMPANY_TIME_ZONE_LABEL)})` : ' (пока не подтверждён)'}, не по часам этого компьютера.</p>
       <fieldset class="ed-card"><legend>Какие категории входят</legend>
         <div class="ed-checks">${CATS.map((c) => `<label class="ed-check"><input type="checkbox" data-hd-include="${h(c.key)}" ${d.include.includes(c.key) ? 'checked' : ''}><span>${h(c.title)}</span></label>`).join('')}</div>
         <p class="ed-hint">Товар из нескольких выбранных категорий показывается в подборке один раз.</p>
