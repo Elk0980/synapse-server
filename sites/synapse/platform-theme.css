@@ -1,0 +1,138 @@
+/* Тема интерфейса платформы Synapse. Тёмная палитра остаётся в workspace.css; здесь светлая
+   палитра тех же семантических переменных и светлые замены для модулей с фиксированными тёмными
+   цветами. Медиа, превью сайтов клиентов и брендовые изображения не перекрашиваются; filter не используется. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d1117; --surface: #151b23; --surface-soft: #1b2430;
+  --text: #edf2f7; --muted: #a7b3c3; --line: #2b3543; --accent: #a8cfff;
+  --sb-primary-bg: #a8cfff; --sb-primary-text: #0d203a; --sb-editor-line: #2b3543;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --surface-soft: #eef2f6;
+  --text: #17202b;
+  --muted: #536173;
+  --line: #d4dbe4;
+  --accent: #1d5fae;
+  --blue: #2e6bd6;
+  --green: #1c7c54;
+  --red: #b42318;
+  --sb-raised: #ffffff;
+  --sb-hover: rgba(23, 32, 43, 0.06);
+  --sb-nav-active-bg: #e2ecf9;
+  --sb-nav-active-text: #174a87;
+  --sb-nav-active-mark: #1d5fae;
+  --sb-pressed-border: #7f9fc6;
+  --sb-primary-bg: #1d5fae;
+  --sb-primary-text: #ffffff;
+  --sb-danger-text: #b42318;
+  --sb-warning-text: #8a5300;
+  --sb-success-text: #1c6b47;
+  --sb-backdrop: rgba(15, 23, 42, 0.42);
+  --sb-shadow: rgba(15, 23, 42, 0.16);
+  --sb-mobile-active: #e2ecf9;
+  --sb-scrollbar: rgba(23, 32, 43, 0.28);
+  --sb-scrollbar-hover: rgba(23, 32, 43, 0.46);
+  --sb-editor-line: #d4dbe4;
+  /* Переменные, которые модули читают с тёмным запасным значением, но нигде не объявляют. */
+  --surface-hover: #e2ecf9;
+  --surface-2: var(--surface-soft);
+  --panel: var(--surface);
+  --border: var(--line);
+  --pc-border: var(--line);
+  --accent-soft: #e2ecf9;
+}
+
+/* Переключатель темы. */
+.sb-theme-picker { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 8px; color: var(--muted); font-size: 13px; }
+.sb-theme-picker select { min-width: 0; max-width: 100%; min-height: 36px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 9px; color: var(--text); background: var(--surface-soft); font: inherit; cursor: pointer; }
+.sidebar > .sb-theme-picker { margin: 0 0 16px; }
+#auth-form .sb-theme-picker { padding: 0; margin-bottom: 16px; }
+body.sb-platform-editor :is(.ed-bar, .ed-panel, .ed-popup, .ed-modal, .ed-confirm, .ed-auth) { --ink: var(--text); --ink-dim: var(--muted); --ink-faint: var(--muted); --line: var(--sb-editor-line); }
+body.sb-platform-editor .ed-bar { background: var(--surface); color: var(--text); border-color: var(--line); }
+body.sb-platform-editor .ed-bar :is(input, select, button, .ed-btn) { color: var(--text); background: var(--surface-soft); border-color: var(--line); }
+body.sb-platform-editor .ed-bar .ed-btn--main { background: var(--sb-primary-bg); color: var(--sb-primary-text); }
+body.sb-platform-editor .ed-bar .sb-theme-picker { margin-left: auto; flex: 0 1 auto; }
+@media (max-width: 600px) { body.sb-platform-editor .ed-bar { flex-wrap: wrap; } }
+body.sb-platform-editor :is(.ed-panel, .ed-popup, .ed-modal, .ed-confirm, .ed-auth) { color: var(--text); background: var(--surface); border-color: var(--line); }
+body.sb-platform-editor :is(.ed-panel, .ed-popup, .ed-modal, .ed-confirm, .ed-auth) :is(input, select, textarea, button, .ed-btn) { color: var(--text); background: var(--surface-soft); border-color: var(--line); }
+.ma-theme { box-sizing: border-box; max-width: 960px; margin: 0 auto; padding: 8px 10px; }
+
+/* Оболочка кабинета. */
+:where(html[data-theme="light"]) dialog { color: var(--text); background-color: var(--surface); }
+html[data-theme="light"] .project-menu,
+html[data-theme="light"] .platform-panel,
+html[data-theme="light"] .widget-settings { box-shadow: 0 16px 40px var(--sb-shadow); }
+html[data-theme="light"] .card { background: var(--surface); }
+html[data-theme="light"] .auth-submit,
+html[data-theme="light"] .logout,
+html[data-theme="light"] .plain-button { border-color: #9db8da; background: #e8f0fa; }
+html[data-theme="light"] .view button:not(:disabled):hover,
+html[data-theme="light"] dialog button:not(:disabled):hover { border-color: #7f9fc6; }
+
+/* Сквозная аналитика. */
+html[data-theme="light"] .funnel-shape { background: linear-gradient(115deg, rgba(46, 107, 214, 0.32), rgba(46, 107, 214, 0.12)); }
+html[data-theme="light"] .data-mark[data-kind="manual"]::before { background: #c58a00; }
+
+/* Контент завод и автопостинг. */
+html[data-theme="light"] .ap-day { background: var(--surface-soft); }
+html[data-theme="light"] .ap-day.is-today { border-color: var(--accent); }
+html[data-theme="light"] .ap-card:hover { border-color: #7f9fc6; }
+html[data-theme="light"] .ap-thumb-label { color: #ffffff; }
+html[data-theme="light"] .ap-card-warning { color: var(--sb-warning-text); }
+html[data-theme="light"] .ap-status { background: rgba(23, 32, 43, 0.05); }
+html[data-theme="light"] .ap-status[data-status="pending"] { color: var(--sb-warning-text); border-color: rgba(138, 83, 0, 0.45); }
+html[data-theme="light"] .ap-status:is([data-status="rework"], [data-status="check"], [data-status="uncertain"]) { color: #9a3d00; border-color: rgba(154, 61, 0, 0.4); }
+html[data-theme="light"] .ap-status:is([data-status="approved"], [data-status="partial"]) { border-color: rgba(28, 124, 84, 0.45); }
+html[data-theme="light"] .ap-status:is([data-status="scheduled"], [data-status="publishing"]) { border-color: rgba(29, 95, 174, 0.45); }
+html[data-theme="light"] .ap-status[data-status="published"] { color: #ffffff; }
+html[data-theme="light"] .ap-status[data-status="failed"] { border-color: rgba(180, 35, 24, 0.45); }
+html[data-theme="light"] .autoposting-view .autoposting-editor[open] { background: var(--sb-backdrop); }
+html[data-theme="light"] .autoposting-view .autoposting-editor[open] #autoposting-save { box-shadow: 0 -6px 18px var(--sb-shadow); background: var(--sb-primary-bg); color: var(--sb-primary-text); }
+html[data-theme="light"] .mentor-day-preview { background: var(--surface-soft); box-shadow: 0 8px 24px var(--sb-shadow); }
+html[data-theme="light"] .mentor-day-preview-caption small { color: var(--accent); }
+html[data-theme="light"] .mentor-day-preview-caption span { color: var(--muted); }
+html[data-theme="light"] :is(.actor-onboarding-layout, .actor-workspace, .mentor-plan-filters) :is(input, select, textarea) { color-scheme: light; }
+html[data-theme="light"] .actor-workspace .primary-button { color: var(--sb-primary-text); }
+
+/* Коммерция, сделки и область компании. */
+html[data-theme="light"] .workspace-scope { border-color: #b7cbe3; background: #eaf2fb; color: #174a87; }
+html[data-theme="light"] .workspace-scope[data-scope=system] { border-color: #dcc68f; background: #fbf4e2; color: #6b4d00; }
+html[data-theme="light"] .commercial-summary { border-color: var(--line); background: var(--surface-soft); }
+html[data-theme="light"] .commercial-package-lines > [data-line] { border-bottom-color: var(--line); }
+html[data-theme="light"] dialog.commercial-dialog { color: var(--text); background: var(--surface); }
+html[data-theme="light"] :is(.commercial-dialog button, .commercial-actions button, .commercial-card > button) { border-color: var(--line); color: var(--text); background: var(--surface-soft); }
+html[data-theme="light"] :is(.commercial-dialog [role=alert], [data-commercial-error], .order-dialog [role=alert]) { color: var(--red); }
+html[data-theme="light"] .order-tabs [aria-current=page] { color: var(--sb-nav-active-text); background: var(--sb-nav-active-bg); }
+html[data-theme="light"] .order-contact { border-bottom-color: var(--line); }
+html[data-theme="light"] :is(.order-summary > div, .order-metrics > article) { background: var(--surface-soft); }
+html[data-theme="light"] :is(.order-main fieldset, .order-dialog fieldset) { border-color: var(--line); }
+html[data-theme="light"] .order-stage-guide { border-left-color: var(--accent); }
+html[data-theme="light"] .deals-dialog { box-shadow: 0 20px 70px var(--sb-shadow); }
+html[data-theme="light"] .deals-attention { border-color: #c69a4f; color: var(--sb-warning-text); }
+
+/* Аналитика площадок, отзывы, ВКонтакте, чат проекта. */
+html[data-theme="light"] .demand-tag { color: #4a3b2a; background: #efe8de; }
+html[data-theme="light"] .demand-tag[data-classification=target] { color: #1c5a3e; background: #dcf1e5; }
+html[data-theme="light"] .demand-tag[data-classification=non_target] { color: #7a3418; background: #fbe4d9; }
+html[data-theme="light"] :is(.platform-demand-view :focus-visible, .demand-company-metrics .demand-table-wrap:focus-visible) { outline-color: var(--accent); }
+html[data-theme="light"] .reviews-row[aria-pressed=true] { border-color: var(--accent); box-shadow: inset 3px 0 var(--accent); }
+html[data-theme="light"] .reviews-badge { background: #e2ecf9; }
+html[data-theme="light"] .reviews-badge[data-state=answered] { color: #1c5a3e; background: #dcf1e5; }
+html[data-theme="light"] .reviews-view :focus-visible { outline-color: var(--accent); }
+html[data-theme="light"] .vk-steps [data-complete=true] { color: var(--sb-success-text); }
+html[data-theme="light"] .vk-message-out { background: #e2ecf9; }
+html[data-theme="light"] .vk-dialog[aria-pressed=true] { background: #e2ecf9; }
+html[data-theme="light"] .vk-community-view :focus-visible { outline-color: var(--accent); }
+html[data-theme="light"] .pc-pub-published { color: var(--sb-success-text); }
+html[data-theme="light"] :is(.pc-pub-prepared, .pc-pub-awaiting_clarification) { color: var(--sb-warning-text); }
+html[data-theme="light"] .pc-company-alvi { border-color: #9db9d6; color: #1b4471; background: #e3eefa; }
+html[data-theme="light"] .pc-company-avokado { border-color: #9cc5a4; color: #23502f; background: #e2f2e4; }
+
+/* Сайты: карточки интерфейса, а не сами сайты клиентов. */
+html[data-theme="light"] .site-refresh-status { color: var(--sb-warning-text); }
+html[data-theme="light"] .site-card__address { color: var(--sb-success-text); }
+html[data-theme="light"] #sites-view .site-card--published { border-color: #2f9e66; background: linear-gradient(135deg, #e6f6ed, #f7fcf9); box-shadow: 0 0 0 1px rgba(47, 158, 102, 0.12), 0 8px 28px rgba(47, 158, 102, 0.1); }
+html[data-theme="light"] #sites-view :is(.site-action, button, select):focus-visible { outline-color: var(--accent); }

@@ -5,11 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Редактор сайта ALVI — тексты и фоны</title>
   <meta name="robots" content="noindex, nofollow">
+  <script src="platform-theme.js?v=20261012-appearance"></script>
+  <link rel="stylesheet" href="platform-theme.css?v=20261012-appearance">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=Cormorant+Garamond:wght@400;500;600&family=Playfair+Display:wght@400;500&family=Noto+Serif:wght@400;500&family=Manrope:wght@400;500;600&family=Montserrat:wght@400;500;600&family=Nunito:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-    :root {
+    body.sb-platform-editor {
       --bg: #16221a; --ink: #fffdf8; --ink-dim: rgba(255, 253, 248, 0.8); --ink-faint: rgba(255, 253, 248, 0.56);
       --gold: #e3d4a7; --gold-soft: #b39a68; --green-deep: #e3d4a7;
       --line: rgba(255, 255, 255, 0.16);
@@ -435,7 +437,7 @@
 <script defer src="avokado-editor-theme.js?v=20260915-brand"></script>
 <script src="subscription-promo-content.js?v=20260917-green"></script>
 </head>
-<body>
+<body class="sb-platform-editor">
   <div class="page-water is-on" aria-hidden="true">
     <video class="page-water__video" autoplay muted loop playsinline poster="https://alvi.synapsebusiness.ru/img/water-poster.jpg">
       <source src="https://alvi.synapsebusiness.ru/img/water-loop.webm" type="video/webm">
@@ -444,7 +446,7 @@
     <div class="page-water__veil"></div>
   </div>
 
-  <div class="ed-bar">
+  <div class="ed-bar" data-sb-theme-host>
     <span class="sb-brand sb-brand--icon" role="img" aria-label="Synapse Business"><span class="sb-orb" aria-hidden="true"><i class="sb-orb__stone"></i><i class="sb-orb__current"></i><i class="sb-orb__pulse"></i></span></span>
     <div class="ed-bar__title">Редактор сайта ALVI — тексты и фоны<small id="ed-sub">загрузка…</small></div>
     <span class="ed-status" id="ed-status"></span>

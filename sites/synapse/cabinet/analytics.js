@@ -33,6 +33,13 @@ const ANALYTICS_PLATFORMS = SbCabinet.ANALYTICS_PLATFORMS = [
   { group: "", id: "direct", label: "Прямые заходы", codes: ["direct"] }
 ];
 
+// Быстрые периоды — точное число календарных дат, обе границы включены.
+const PERIOD_DAYS = { "7d": 7, "30d": 30, "365d": 365 };
+const ANALYTICS_PRESETS = ["today", "7d", "30d", "365d"];
+// Серверный /dashboard знает только эти значения period; при явных from/to он их не использует.
+const DASHBOARD_PERIODS = ["today", "7d", "30d"];
+const DEFAULT_ANALYTICS_PERIOD = "30d";
+const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 let ctx;
 let identity, byId, escapeHTML, crmQuery, csrfOptions, scopeParams;
 let formatMoney, formatROMI, periodDates, dateValue;
@@ -45,20 +52,20 @@ ctx = context;
 const contextPeriodDates = periodDates;
 periodDates = (period) => {
   const dates = contextPeriodDates(period);
-  const length = period === '7d' ? 7 : period === '30d' ? 30 : null;
-  // Обе границы включены в API: 7 дней — сегодня и шесть предыдущих дней.
+  const length = PERIOD_DAYS[period] || null;
+  // Обе границы включены в API: 7 дней — сегодня и шесть предыдущих дней, «За год» — сегодня и 364 дня до него.
   if (!length || !/^\d{4}-\d{2}-\d{2}$/.test(dates.to)) return dates;
   const last = Date.parse(dates.to + 'T12:00:00Z');
-  if (!Number.isFinite(last)) return dates;
-  return { ...dates, from: new Date(last - (length - 1) * 86400000).toISOString().slice(0, 10) };
+  if (!Number.isFinite(last)) return { ...dates };
+  return { from: new Date(last - (length - 1) * 86400000).toISOString().slice(0, 10), to: dates.to };
 };
 if (initialized) return;
 initialized = true;
 
 let analyticsBound = false;
 const analyticsState = {
-  period: "today",
-  range: periodDates("today"),
+  period: DEFAULT_ANALYTICS_PERIOD,
+  range: periodDates(DEFAULT_ANALYTICS_PERIOD),
   selected: new Set(ANALYTICS_PLATFORMS.map((platform) => platform.id)),
   payload: null
 };
@@ -248,6 +255,8 @@ const renderRevenueSection = (payload) => {
   const head='<section class="analytics-section analytics-revenue"><h2>Записи и оплаты из источников</h2>';
   if (!payload || payload.error) return head+'<p class="crm-note">Серверный сбор ещё не доступен. Клики и старые отметки CRM не подтверждают визит или оплату.</p></section>';
   const num=(v)=>v===null||v===undefined?'—':escapeHTML(new Intl.NumberFormat('ru-RU',{maximumFractionDigits:2}).format(v));
+  // Неизвестная сумма показывается прочерком, а не «0 ₽».
+  const money=(kopecks)=>kopecks===null||kopecks===undefined?'—':formatMoney(kopecks/100);
   const at=(v)=>v?escapeHTML(new Date(v).toLocaleString('ru-RU')):'ещё не было';
   const accessError=(code)=>code==='TOKEN_REAUTH_REQUIRED'?'нужно повторно подключить Метрику':code==='TOKEN_REFRESH_UNCERTAIN'?'продление доступа не подтверждено; нужна проверка подключения':code==='TOKEN_REFRESH_BUSY'?'доступ обновляется; загрузка будет повторена':'ошибка загрузки';
   const states=payload.state.providers.map(p=>'<li>'+escapeHTML(p.provider==='metrika'?'Яндекс Метрика':'YCLIENTS')+': '+
@@ -262,11 +271,11 @@ const renderRevenueSection = (payload) => {
     'Часовой пояс: '+escapeHTML(m.timezone)+'. Текущий день неполный.</p><div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Действие</th><th>Целевые визиты</th><th>Достижения</th><th>Конверсия</th></tr></thead><tbody>'+m.goals.map(g=>'<tr><td>'+escapeHTML(g.label)+'</td><td>'+num(g.visits)+'</td><td>'+num(g.reaches)+'</td><td>'+num(g.conversionRate)+'%</td></tr>').join('')+'</tbody></table></div>'+trafficTable(m.sources,'Откуда пришли на сайт')+trafficTable(m.utm,'Переходы по UTM')+'<p class="crm-note">Источник — последний значимый переход. Посетители и цели разных строк могут пересекаться; их нельзя складывать как клиентов. Пустая метка означает неизвестный источник.</p>':
     '<p class="crm-note">Для этого периода пока нет выгрузки Метрики.</p>';
   const yclients=y?'<h3>YCLIENTS: записи, визиты и реальные деньги</h3><p>Создано записей: <strong>'+num(y.createdBookings)+'</strong> · из них отменено: '+num(y.cancelledBookings)+
-    ' · состоялось визитов: '+num(y.attendedVisits)+' · платящих клиентов: '+num(y.payingClients)+'</p><p>Платежи: '+formatMoney(y.paymentKopecks/100)+
-    ' · возвраты: '+formatMoney(y.refundKopecks/100)+' · денежный итог: '+formatMoney(y.netCashKopecks/100)+'</p><p class="crm-note">'+
+    ' · состоялось визитов: '+num(y.attendedVisits)+' · платящих клиентов: '+num(y.payingClients)+'</p><p>Платежи: '+money(y.paymentKopecks)+
+    ' · возвраты: '+money(y.refundKopecks)+' · денежный итог: '+money(y.netCashKopecks)+'</p><p class="crm-note">'+
     (y.partialHistory?'История до '+escapeHTML(y.historyFrom)+' не загружена. ':'')+(!y.financialClassificationComplete?'Статьи денег ещё не полностью сопоставлены. ':'')+'Операций с неизвестной статьёй: '+num(y.unknownExpenseTransactions)+
     '; без связи с записью: '+num(y.unmatchedTransactions)+'. Записей с источником: '+num(y.bookingsWithSource)+'; без источника: '+num(y.bookingsWithoutSource)+
-    '. Каждый показатель относится к своей дате: создание записи, посещение или платёж. Их отношение не является конверсией одной группы клиентов.</p><div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Источник / кампания</th><th>Записи</th><th>Визиты</th><th>Денежный итог</th></tr></thead><tbody>'+y.sources.map(g=>'<tr><td>'+escapeHTML(g.utm?[g.utm.source,g.utm.medium,g.utm.campaign].filter(Boolean).join(' / '):'Источник неизвестен')+'</td><td>'+num(g.bookings)+'</td><td>'+num(g.attendedVisits)+'</td><td>'+formatMoney(g.netCashKopecks/100)+'</td></tr>').join('')+'</tbody></table></div>':
+    '. Каждый показатель относится к своей дате: создание записи, посещение или платёж. Их отношение не является конверсией одной группы клиентов.</p><div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Источник / кампания</th><th>Записи</th><th>Визиты</th><th>Денежный итог</th></tr></thead><tbody>'+y.sources.map(g=>'<tr><td>'+escapeHTML(g.utm?[g.utm.source,g.utm.medium,g.utm.campaign].filter(Boolean).join(' / '):'Источник неизвестен')+'</td><td>'+num(g.bookings)+'</td><td>'+num(g.attendedVisits)+'</td><td>'+money(g.netCashKopecks)+'</td></tr>').join('')+'</tbody></table></div>':
     '<p class="crm-note">Записи и оплаты YCLIENTS ещё не загружены.</p>';
   const action=identity.role==='owner'?'<button type="button" class="plain-button" data-revenue-collect>Обновить данные этого периода</button><p class="crm-note" data-revenue-result></p>':'';
   return head+'<ul>'+states+'</ul>'+quality+'<p class="crm-note">Этот блок показывает компанию целиком; фильтр площадок выше относится к прежней воронке.</p>'+metrika+yclients+
@@ -461,7 +470,8 @@ const loadAnalytics = async () => {
   const scope = { companyCode: owner.companyCode };
   try {
     const [dashboard, summary, expensePayload, potential, companyMetrics, revenueData] = await Promise.all([
-      crmQuery("/dashboard", { period: analyticsState.period, ...range, ...scope }),
+      crmQuery("/dashboard", { ...(DASHBOARD_PERIODS.includes(analyticsState.period)
+        ? { period: analyticsState.period } : {}), ...range, ...scope }),
       crmQuery("/summary", { ...range, ...scope }),
       crmQuery("/expenses", { ...range, ...scope }),
       // Снимок 2ГИС не должен ломать всю аналитику: ошибка запроса показывается только в ступени «Потенциал».
@@ -487,11 +497,18 @@ const loadAnalytics = async () => {
     byId("expenses-content").replaceChildren();
   }
 };
+// Активна только кнопка, чей точный диапазон сейчас выбран; у ручного диапазона без совпадения — ни одна.
+const syncPeriodButtons = () => {
+  document.querySelectorAll("[data-analytics-period]").forEach((item) => {
+    item.setAttribute("aria-pressed", String(item.dataset.analyticsPeriod === analyticsState.period));
+  });
+};
 const renderAnalyticsControls = () => {
   const form = byId("analytics-dates");
   renderPlatformFilter();
   form.elements.from.value = analyticsState.range.from;
   form.elements.to.value = analyticsState.range.to;
+  syncPeriodButtons();
   byId("expense-form").hidden = !identity.permissions.includes("crm.edit");
   byId("expense-form").elements.date.value = dateValue(new Date());
   if (analyticsBound) return;
@@ -533,28 +550,35 @@ const renderAnalyticsControls = () => {
   byId("analytics-periods").addEventListener("click", (event) => {
     const button = event.target.closest("[data-analytics-period]");
     if (!button) return;
+    if (!ANALYTICS_PRESETS.includes(button.dataset.analyticsPeriod)) return;
     analyticsState.period = button.dataset.analyticsPeriod;
     analyticsState.range = periodDates(analyticsState.period);
     form.elements.from.value = analyticsState.range.from;
     form.elements.to.value = analyticsState.range.to;
-    document.querySelectorAll("[data-analytics-period]").forEach((item) => {
-      item.setAttribute("aria-pressed", String(item === button));
-    });
+    syncPeriodButtons();
     loadAnalytics();
   });
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (form.elements.from.value > form.elements.to.value) {
+    const from = form.elements.from.value;
+    const to = form.elements.to.value;
+    if (!DAY_PATTERN.test(from) || !DAY_PATTERN.test(to)) {
+      byId("analytics-content").innerHTML =
+        '<div class="crm-error" role="alert">Укажите обе даты: «С» и «По».</div>';
+      return;
+    }
+    if (from > to) {
       byId("analytics-content").innerHTML =
         '<div class="crm-error" role="alert">Дата «С» не может быть позже даты «По».</div>';
       return;
     }
-    analyticsState.range = { from: form.elements.from.value, to: form.elements.to.value };
-    const days = Math.ceil((new Date() - new Date(`${analyticsState.range.from}T00:00:00Z`)) / 86400000);
-    analyticsState.period = days <= 1 ? "today" : days <= 7 ? "7d" : "30d";
-    document.querySelectorAll("[data-analytics-period]").forEach((item) => {
-      item.setAttribute("aria-pressed", "false");
-    });
+    // Ручные даты уходят в запросы как введены; быстрый период лишь подсвечивается при точном совпадении.
+    analyticsState.range = { from, to };
+    analyticsState.period = ANALYTICS_PRESETS.find((preset) => {
+      const presetRange = periodDates(preset);
+      return presetRange.from === from && presetRange.to === to;
+    }) || "custom";
+    syncPeriodButtons();
     loadAnalytics();
   });
   byId("expense-form").addEventListener("submit", async (event) => {

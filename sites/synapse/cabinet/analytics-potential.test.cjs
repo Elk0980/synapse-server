@@ -31,7 +31,10 @@ async function fixture({code='alvi',permissions=['analytics.view'],potential,das
    if(path==='/platform-demand/potential'){const value=typeof potential==='function'?await potential(params):potential;if(value instanceof Error)throw value;return value;}
    throw Error('unexpected '+path);}};
  const container=d.getElementById('analytics-through-view');
- views['analytics-through'].render(container,ctx);await tick();
+ // Вид открывается с явными датами формы: тесты проверяют выбранный период, а не стартовый пресет 30 дней.
+ views['analytics-through'].initialize(ctx);
+ const dates=d.getElementById('analytics-dates');dates.elements.from.value=range.from;dates.elements.to.value=range.to;
+ dates.dispatchEvent(new w.Event('submit',{cancelable:true}));await tick();
  const card=()=>d.querySelector('.funnel-step .funnel-card'),conversion=()=>d.querySelectorAll('.funnel-conversion')[1]?.textContent||'',
   detail=()=>d.querySelector('[data-funnel-detail="potential"]').textContent,content=()=>d.getElementById('analytics-content').textContent;
  return {dom,w,d,ctx,calls,views,container,card,conversion,detail,content,setCompany(next){selected=next;views['analytics-through'].onProjectChange(ctx);},

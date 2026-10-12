@@ -5,8 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Редактор прайса Palitra — кабинет Synapse</title>
   <meta name="robots" content="noindex, nofollow">
+  <script src="platform-theme.js?v=20261012-appearance"></script>
+  <link rel="stylesheet" href="platform-theme.css?v=20261012-appearance">
   <style>
-    :root {
+    body.sb-platform-editor {
       --bg: #f5f5f7; --ink: #1a1a1a; --ink-dim: #454b52; --ink-faint: #6a737d;
       --gold: #3b5b7a; --gold-soft: #3b5b7a; --green-deep: #3b5b7a;
       --line: rgba(255, 255, 255, 0.16);
@@ -382,8 +384,8 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="apple-mobile-web-app-title" content="Synapse Business">
 </head>
-<body>
-  <div class="ed-bar">
+<body class="sb-platform-editor">
+  <div class="ed-bar" data-sb-theme-host>
     <span class="sb-brand sb-brand--icon" role="img" aria-label="Synapse Business"><span class="sb-orb" aria-hidden="true"><i class="sb-orb__stone"></i><i class="sb-orb__current"></i><i class="sb-orb__pulse"></i></span></span>
     <div class="ed-bar__title">Редактор прайса Palitra<small id="ed-sub">загрузка…</small></div>
     <span class="ed-status" id="ed-status"></span>

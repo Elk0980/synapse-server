@@ -2,7 +2,8 @@
 // Искусственные данные: ни ключей, ни клиентов из рабочих компаний.
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
 const {JSDOM}=require('jsdom');
-const RANGE={from:'2026-10-01',to:'2026-10-08'};
+// Стартовый период аналитики — 30 календарных дат по 2026-10-08 включительно.
+const RANGE={from:'2026-09-09',to:'2026-10-08'};
 const tick=()=>new Promise(r=>setImmediate(r));
 const skeleton=`<div id="analytics-periods"></div><form id="analytics-dates"><input name="from"><input name="to"></form>
 <div id="platform-filter"><button id="platform-trigger"></button><div id="platform-panel"></div></div>
@@ -61,7 +62,7 @@ test('контроль качества показывает неизвестн�
     assert.equal(table.rows.length,5);assert.match(table.textContent,/Проверено по снимку/);
     assert.match(table.textContent,/Пока неизвестно/);assert.match(table.textContent,/Нет событий в снимке/);
     assert.match(table.textContent,/Нужна проверка/);assert.match(table.textContent,/<img src=x/);
-    assert.equal(table.querySelector('img'),null);assert.match(f.block().textContent,/2026-10-01 — 2026-10-08/);
+    assert.equal(table.querySelector('img'),null);assert.match(f.block().textContent,/2026-09-09 — 2026-10-08/);
     assert.equal(f.calls.filter(c=>c.options?.method==='POST').length,0);
   }finally{f.close();}
 });
@@ -71,6 +72,13 @@ test('кабинет не превращает скрытый после сме�
     {id:'yclients_snapshot',title:'Записи и деньги',status:'unavailable',detail:'Правила изменились; нужна новая выгрузка'}]};
   const f=fixture({value});try{await f.render();assert.match(f.block().textContent,/Правила изменились/);
     assert.doesNotMatch(f.block().textContent,/Платежи: 0|денежный итог: 0/);
+  }finally{f.close();}
+});
+test('неизвестная сумма YCLIENTS показывается прочерком, а не нулём рублей',async()=>{
+  const value=payload();Object.assign(value.yclients,{paymentKopecks:null,refundKopecks:undefined,netCashKopecks:null});
+  value.yclients.sources=[{utm:null,bookings:2,attendedVisits:1,netCashKopecks:null}];
+  const f=fixture({value});try{await f.render();const s=f.block().textContent;
+    assert.match(s,/Платежи: — · возвраты: — · денежный итог: —/);assert.doesNotMatch(s,/(^|\D)0 ₽/);
   }finally{f.close();}
 });
 test('ошибка, чужая компания или период не отображаются как свои деньги или нули',async()=>{
