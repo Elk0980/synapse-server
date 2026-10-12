@@ -52,8 +52,8 @@
     },
     {
       "path": "patch-editor-timezone.py",
-      "bytes": 2330,
-      "sha256": "35ba12847c3d719dd9aefeb84d901464eb81e11a6ada794362435e8fd3b2a758"
+      "bytes": 2322,
+      "sha256": "f5bc18517f69120a72e538c33d9ad637161f1295f83fdc29dee5cffa0807cbec"
     },
     {
       "path": "patches/release-patches.cjs",

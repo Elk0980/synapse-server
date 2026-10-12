@@ -7,7 +7,7 @@ import stat
 import sys
 import tempfile
 
-TARGET = Path('/opt/synapse/sites/synapse/cabinet/palitra-editor.js')
+TARGET = Path('/opt/synapse/sites/synapse/palitra-editor.js')
 BEFORE = 'a9ccdaef0d2a98ff801b9d0b0f02b74dc8bfee0156765d929dea12af864b0e46'
 AFTER = '787bd664cc1f0b453adf3a7f85c246ce6103ca64c2ca127924cca2a3400760c3'
 
