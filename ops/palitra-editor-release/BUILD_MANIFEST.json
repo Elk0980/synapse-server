@@ -46,6 +46,11 @@
       "sha256": "992812e9e51ab358f5c8300b8609bb88edabf78afb996e4bdb00bdf2ea2d8ad3"
     },
     {
+      "path": "patch-access-dialog.py",
+      "bytes": 2276,
+      "sha256": "e5f46b32149e2f341c3c90385f32c69ad9da104a8e0d4ad4e23822b8074f01fe"
+    },
+    {
       "path": "patches/release-patches.cjs",
       "bytes": 1748,
       "sha256": "df33ec6126bfd49badc3fd3c1cfd6ecbceac3cf0b8db93a3fab4b0136170c725"
@@ -112,8 +117,8 @@
     },
     {
       "path": "payload/static/cabinet/site-photos-access.js",
-      "bytes": 3665,
-      "sha256": "f62bd13a10215592812a83566a20666392cc6a71d6324bf08c38bd4072d95d5d"
+      "bytes": 9134,
+      "sha256": "06771895f1e5aa4fd53932277a90eaa038d9362fbcb1583a098661bd15625600"
     },
     {
       "path": "payload/static/cabinet/site-photos-core.js",
