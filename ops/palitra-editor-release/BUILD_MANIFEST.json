@@ -31,6 +31,11 @@
       "sha256": "9e4acab09b0d7eff4e429ac7f091a7cf9416544a8541febeffa1d28245b8efd5"
     },
     {
+      "path": "download.py",
+      "bytes": 4093,
+      "sha256": "7ce6a6215c99536d35429686969b2731e85fd1a75a64e6ef8808bcf748dd0414"
+    },
+    {
       "path": "install.cjs",
       "bytes": 24066,
       "sha256": "992812e9e51ab358f5c8300b8609bb88edabf78afb996e4bdb00bdf2ea2d8ad3"
