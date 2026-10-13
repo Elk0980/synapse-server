@@ -1,26 +1,29 @@
 # Задачи и стадии
 
-Галочки обозначают подтверждённый объём, описанный в evidence; не пользовательскую приёмку Влада. Документационная задача не изменяет центральный список задач или человеческие статусы.
+Галочки обозначают только подтверждённый объём evidence. Они не меняют центральные задачи, пользовательские отметки «Проверил» и полномочия. Все feature-исполнители завершены; локальная code-acceptance отделена от native/full-ready.
 
 ## Подтверждено
 
-- [x] T001 Описать существующий native общий прайс, `siteOrders.submit`, очередь и границы Palitra — FR-001/004/009.
-- [x] T002 Зафиксировать установленное workplace: ordinary native auth, четыре вкладки, existing редакторы и реальная сохранённая история; перечислить ограничения исходящей доставки — FR-005/006.
-- [x] T003 Воспроизвести BASE-дефект CTA с пустой корзиной; подготовить ограниченный кандидат двух JS — FR-002/003.
-- [x] T004 Root: review diff/syntax и 14 изолированных browser-сценариев; отдельно проверить переносимый публичный пакет — SC-001.
-- [x] T005 Сверить cart manifest/SHA и описать fresh native BASE, порядок двух сохранений, readback и точечный откат — FR-007.
-- [x] T006 Отделить локальный webchat PhaseA от ещё не подключённых API/UI/bridge — FR-008.
+- [x] T001 Описать общий native прайс, `siteOrders.submit`, одну SQLite/очередь и границы Palitra — FR-001/004/009.
+- [x] T002 Зафиксировать установленное workplace: обычная auth, четыре вкладки, штатные редакторы и сохранённая история; ограничить вывод о доставке — FR-005/006.
+- [x] T003 Воспроизвести BASE cartCTA и подготовить точечный кандидат двух JS — FR-002/003.
+- [x] T004 Root: diff/syntax и14 изолированных cart-сценариев; portable повтор обозначен как повтор — SC-001.
+- [x] T005 Сверить cart manifest/SHA и versioned source/readback/точечный откат — FR-007.
+- [x] T006 Описать FINAL_SCOPE: канонический web/TG thread, собственный new-order grant, user START, файлы и стабильный UI — FR-008/010–016.
+- [x] T007 Root: owner/Palitra и fresh native BASE254 обоих cart-файлов проверены.
+- [x] T008 Root: order255 затем renderer256, full native readback/public exact приняты.
+- [x] T009 Root: Main CTA qty1/form, repeat qty1/focus приняты без новой заявки; cart остаётся опубликованным.
+- [x] T011 Root: последовательные B/C/D/E/R1 локально приняты; core/native wiring/media/upload/worker/UI проверены изолированно — SC-004/005.
+- [x] T014 Root: frozen coherent source16 E/R1 принят, release builder13 PASS; counters8, owner/buyer hash guards, latecaption/epoch, media/focus/playback перечислены раздельно в evidence.
 
-## Следующие шаги координатора
+## Открытые действия координатора и приёмка
 
-- [x] T007 Root: соединение восстановлено, owner/Palitra иfreshnativeBASE254 обоих файлов проверены.
-- [x] T008 Root: order255 затемrenderer256, reload/fullreadback/publicexact обоих приняты.
-- [x] T009 Root: Main product→CTA qty1/form, repeatqty1/focus приняты; реальныхзаявок не отправляли.
-- [ ] T010 Отдельно принять новую фактическую доставку owner-composer, физический Telegram WebView и безопасную связь customer order↔dialog. Не выдавать desktop/history за эти проверки — SC-003.
-- [ ] T011 Root: review локального webchat core; затем последовательный API/UI/bridge пакет с тестами guest isolation/auth/CSRF/idempotency и одним worker — FR-008, SC-004.
-- [ ] T012 Выпустить и принять веб-чат через fresh native source/guards/readback; оставить CRM flags выключенными до доказательства customer claim. Заявку26 не закрывать по локальному core — SC-004.
-- [ ] T013 Координатор: Spec Kit converge по фактическим стадиям, ровно одна `Spec:` строка в PR458, повторная проверка PR-события; code commit/PR edit выполняются вне этой документационной подзадачи.
+- [ ] T010 Принять новую фактическую owner-composer/TG-доставку, customer order↔thread proof и физический Telegram WebView/Safari. Desktop/history/isolated Chrome не заменяют эту приёмку — SC-003/006.
+- [ ] T012 Проверить свежий owner/window/native BASE и установить unified chat/upload через guarded package, readback/public proof. Новое native chat/upload0; локальная code-acceptance не закрывает этот пункт — SC-004.
+- [ ] T013 Root: собрать публичный exact release16, обновить PR458 с одной Spec-строкой и выполнить Spec Kit converge/PR-проверку. Эта документационная задача не меняет Git/PR.
+- [ ] T015 Лично принять native buyer, owner thread/legacy, scoped binary/upload, квитанции и recovery; любые реальные отправки — только при отдельном действующем разрешении.
+- [ ] T016 Подтвердить полную готовность и пользовательскую приёмку. Не объявлять «вся переписка готова» по локальным suite или установить человеческие галочки.
 
-## Не входит в текущую реализацию
+## Не входит
 
-Новые права сотрудников, auto-login Telegram, второй worker/DB, подключение WhatsApp/MAX, изменение цен/товаров, повторные реальные сообщения или заявки. Прежние native сохранения редакторов не являются выпуском нового cart-кандидата.
+Новые права/доступ сотрудников, Telegram auto-login/автоматический START, второй worker/DB/очередь, WhatsApp/MAX и личные TG-чаты, изменение цен/товаров/фотографий, автоматический old-history backfill, повторные реальные заявки/сообщения. Общий серверный ресурс не считается свободным по idle, prompt или hash.

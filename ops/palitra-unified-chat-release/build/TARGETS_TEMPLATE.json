@@ -1,0 +1,224 @@
+{
+  "schema": 1,
+  "note": "Образцы четырёх отдельных inputs. Root approval=false до finished E/UI acceptance. Worker image неизвестен: manifest и отдельный trusted CLI input заполняет Root из fresh native proof. Не installer.",
+  "source_manifest": {
+    "schema": 1,
+    "package_id": "palitra-unified-chat-root-finished-20261014",
+    "approved_finished": false,
+    "targets": [
+      {
+        "target": "content/server.js",
+        "source": "finished/content/server.js",
+        "sha256": "ROOT_FINAL_SHA256_REQUIRED",
+        "bytes": null
+      },
+      {
+        "target": "content/client-dialogs.js",
+        "source": "finished/content/client-dialogs.js",
+        "sha256": "ROOT_FINAL_SHA256_REQUIRED",
+        "bytes": null
+      },
+      {
+        "target": "content/palitra-host-adapter.cjs",
+        "source": "finished/content/palitra-host-adapter.cjs",
+        "sha256": "ROOT_FINAL_SHA256_REQUIRED",
+        "bytes": null
+      },
+      {
+        "target": "content/customer-chat.js",
+        "source": "finished/content/customer-chat.js",
+        "sha256": "ROOT_FINAL_SHA256_REQUIRED",
+        "bytes": null
+      },
+      {
+        "target": "content/customer-chat-http.cjs",
+        "source": "finished/content/customer-chat-http.cjs",
+        "sha256": "ROOT_FINAL_SHA256_REQUIRED",
+        "bytes": null
+      },
+      {
+        "target": "content/customer-chat-native-adapter.cjs",
+        "source": "finished/content/customer-chat-native-adapter.cjs",
+        "sha256": "ROOT_FINAL_SHA256_REQUIRED",
+        "bytes": null
+      },
+      {
+        "target": "content/customer-chat-media.cjs",
+        "source": "finished/content/customer-chat-media.cjs",
+        "sha256": "ROOT_FINAL_SHA256_REQUIRED",
+        "bytes": null
+      },
+      {
+        "target": "content/customer-chat-upload.cjs",
+        "source": "finished/content/customer-chat-upload.cjs",
+        "sha256": "ROOT_FINAL_SHA256_REQUIRED",
+        "bytes": "ROOT_FINAL_BYTES_REQUIRED"
+      },
+      {
+        "target": "content/palitra-review-public/palitra-chat.html",
+        "source": "finished/content/palitra-review-public/palitra-chat.html",
+        "sha256": "ROOT_FINAL_SHA256_REQUIRED",
+        "bytes": null
+      },
+      {
+        "target": "content/palitra-review-public/palitra-chat.js",
+        "source": "finished/content/palitra-review-public/palitra-chat.js",
+        "sha256": "ROOT_FINAL_SHA256_REQUIRED",
+        "bytes": null
+      },
+      {
+        "target": "content/palitra-review-public/palitra-chat.css",
+        "source": "finished/content/palitra-review-public/palitra-chat.css",
+        "sha256": "ROOT_FINAL_SHA256_REQUIRED",
+        "bytes": null
+      },
+      {
+        "target": "sites/synapse/cabinet/palitra-work.html",
+        "source": "finished/sites/synapse/cabinet/palitra-work.html",
+        "sha256": "ROOT_FINAL_SHA256_REQUIRED",
+        "bytes": null
+      },
+      {
+        "target": "sites/synapse/cabinet/palitra-work.js",
+        "source": "finished/sites/synapse/cabinet/palitra-work.js",
+        "sha256": "ROOT_FINAL_SHA256_REQUIRED",
+        "bytes": null
+      },
+      {
+        "target": "sites/synapse/cabinet/palitra-work.css",
+        "source": "finished/sites/synapse/cabinet/palitra-work.css",
+        "sha256": "ROOT_FINAL_SHA256_REQUIRED",
+        "bytes": null
+      },
+      {
+        "target": "managed-site/assets/order.js",
+        "source": "accepted-c/order.js",
+        "sha256": "230f1c13bf7a78bb4f0c6d19455d1dcad39384ad0d3b600c48ce43d2018b6553",
+        "bytes": 81841
+      },
+      {
+        "target": "ops/chat/client-bot-bridge.js",
+        "source": "finished/ops/chat/client-bot-bridge.js",
+        "sha256": "ROOT_FINAL_SHA256_REQUIRED",
+        "bytes": "ROOT_FINAL_BYTES_REQUIRED"
+      }
+    ]
+  },
+  "runtime_base_manifest": {
+    "schema": 1,
+    "root_approved": false,
+    "captured_at": "ROOT_FRESH_CAPTURE_TIMESTAMP_WITH_TIMEZONE_REQUIRED",
+    "image_id": "sha256:8a98cf8656cc139e6cbb842f81bc05e20c534065b2274063629b18c32db3fa72",
+    "targets": [
+      {
+        "target": "content/server.js",
+        "source": "runtime-snapshot/content/server.js",
+        "sha256": "26193d64a4a64cd3ca1308ec0e70ad4cd548524375f925cc72149e56ca30a395"
+      },
+      {
+        "target": "content/client-dialogs.js",
+        "source": "runtime-snapshot/content/client-dialogs.js",
+        "sha256": "321c48c9a4ee0f2febd693e7bd1b917f2e74d2466f82bf32ddce764c73523f8a"
+      },
+      {
+        "target": "content/palitra-host-adapter.cjs",
+        "source": "runtime-snapshot/content/palitra-host-adapter.cjs",
+        "sha256": "4827ba116be8ee04882cbdf44ad0ea27ab2e4ea843ea1ed145f4054af2091136"
+      },
+      {
+        "target": "content/customer-chat.js",
+        "source": "runtime-snapshot/content/customer-chat.js",
+        "sha256": null
+      },
+      {
+        "target": "content/customer-chat-http.cjs",
+        "source": "runtime-snapshot/content/customer-chat-http.cjs",
+        "sha256": null
+      },
+      {
+        "target": "content/customer-chat-native-adapter.cjs",
+        "source": "runtime-snapshot/content/customer-chat-native-adapter.cjs",
+        "sha256": null
+      },
+      {
+        "target": "content/customer-chat-media.cjs",
+        "source": "runtime-snapshot/content/customer-chat-media.cjs",
+        "sha256": null
+      },
+      {
+        "target": "content/customer-chat-upload.cjs",
+        "source": "runtime-snapshot/content/customer-chat-upload.cjs",
+        "sha256": null
+      },
+      {
+        "target": "content/palitra-review-public/palitra-chat.html",
+        "source": "runtime-snapshot/content/palitra-review-public/palitra-chat.html",
+        "sha256": null
+      },
+      {
+        "target": "content/palitra-review-public/palitra-chat.js",
+        "source": "runtime-snapshot/content/palitra-review-public/palitra-chat.js",
+        "sha256": null
+      },
+      {
+        "target": "content/palitra-review-public/palitra-chat.css",
+        "source": "runtime-snapshot/content/palitra-review-public/palitra-chat.css",
+        "sha256": null
+      }
+    ],
+    "preserved": [
+      {
+        "target": "content/site-orders.js",
+        "source": "runtime-snapshot/content/site-orders.js",
+        "sha256": "73700f9a14c95f62e825b12c11ef2880d883cad19f2cee3945bf0d735fe627d5"
+      },
+      {
+        "target": "content/draft-account-service.cjs",
+        "source": "runtime-snapshot/content/draft-account-service.cjs",
+        "sha256": "0b7cb428936e90ec3b97e55d2abea6bbd56e867b4fa51d13588abc5ff2bff993"
+      }
+    ]
+  },
+  "static_base_manifest": {
+    "schema": 1,
+    "root_approved": false,
+    "captured_at": "ROOT_FRESH_CAPTURE_TIMESTAMP_WITH_TIMEZONE_REQUIRED",
+    "targets": [
+      {
+        "target": "sites/synapse/cabinet/palitra-work.html",
+        "source": "static-snapshot/sites/synapse/cabinet/palitra-work.html",
+        "sha256": "4e632871379b035bb947935bfe27248190bc16af292bd5440813352cbabb3172"
+      },
+      {
+        "target": "sites/synapse/cabinet/palitra-work.js",
+        "source": "static-snapshot/sites/synapse/cabinet/palitra-work.js",
+        "sha256": "343fabbcf995e8bcb69e19c47c5cfb717632a4442b38c26fa108c247b27d0c4b"
+      },
+      {
+        "target": "sites/synapse/cabinet/palitra-work.css",
+        "source": "static-snapshot/sites/synapse/cabinet/palitra-work.css",
+        "sha256": "a9f4a2b4544cbe7e93140d4963bdf6cf80675eec377062e861f37b782c88335f"
+      },
+      {
+        "target": "managed-site/assets/order.js",
+        "source": "static-snapshot/managed-site/assets/order.js",
+        "sha256": "f3fb7853f8c3db9e2897bbfb497624ac18a6dad7df0bfbddc02e0c8586782173"
+      }
+    ]
+  },
+  "expected_worker_image": "ROOT_SEPARATELY_VERIFIED_WORKER_IMAGE_SHA256_REQUIRED",
+  "worker_base_manifest": {
+    "schema": 1,
+    "root_approved": false,
+    "captured_at": "ROOT_FRESH_TIME_WITH_TIMEZONE_REQUIRED",
+    "image_id": "ROOT_FRESH_WORKER_IMAGE_SHA256_REQUIRED",
+    "targets": [
+      {
+        "target": "ops/chat/client-bot-bridge.js",
+        "source": "worker-snapshot/ops/chat/client-bot-bridge.js",
+        "sha256": "ROOT_FRESH_WORKER_FILE_SHA256_REQUIRED",
+        "bytes": "ROOT_FRESH_WORKER_FILE_BYTES_REQUIRED"
+      }
+    ]
+  }
+}

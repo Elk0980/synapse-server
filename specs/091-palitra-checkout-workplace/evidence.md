@@ -1,69 +1,89 @@
 # Свидетельства проверки
 
-## Обновление Root после выпуска — 14.10.2026 01:27 Asia/Bangkok
+## Актуальный checkpoint Root — 14.10.2026 06:21 Asia/Bangkok
 
-Native source254 совпал с baseline SHA обоих cart-файлов. По одному штатному сохранению: order255 в01:26:00, renderer256 в01:27:12. После каждого reload полный native readback совпал с candidate; Main/draft GET200 exactSHA подтвердили оба файла. Main actual UI: product→CTA добавилqty1/9270₽ и открыл форму; повторный переход сохранилqty1 и фокус корзины. Свой QA товар затем убран, корзина0. Новыхзаявок/TGmessages не отправляли, прайс57/roles/bot не меняли. Cart live_applied=true; полная backend/delivery приёмка этим не заявляется.
+Main257/общий прайс57; фотографии владельца и человеческие данные сохранены. Cart order255/renderer256 опубликован и лично принят. Старое native workplace установлено и принято в desktop/read-объёме. Finished E/R1 локально принят, coherent source16 frozen; все feature-исполнители завершены. Новое native chat/API/UI/upload0. Общее серверное окно ещё не подтверждено.
 
-Root завершённый webchat PhaseA проверил: syntax0,20авторскихtestsPASS. Независимые8контрпримеровFAIL воспроизвели4дефекта FR-010–013. Последовательный Claude repair активен в прежней сессии, actualinitclaude-opus-5-5/ReadWrite/MCP0; backend/UI/nativeинтеграция0. Перед repair пакетSpecKit1.0.0 передан в read-onlyCONTEXT; генерация и передача ещё не доказывают прочтение.
-
-Историческая контрольная точка ниже описывает состояние ДО этого выпуска и не является актуальным статусом live_applied.
-
-Контрольная точка: 14.10.2026, Asia/Bangkok. Источники — публичные source-пакеты и проверенные отчёты/артефакты координатора Root. Подготовщик документации не проводил live-действий и не повторял browser-suite. Частные материалы, контакты, идентификаторы клиентов, коды и пути не включены.
+Это обновление документации по фактическим отчётам Root; подготовщик не запускал новые suite, браузер или сервисы. Частные пути/данные/контакты/токены и test logs не включены. Публичный `ops/palitra-unified-chat-release/` с payload16+builder готовит Root отдельно.
 
 ## Разные стадии
 
-| Область | Реально подтверждено | Ещё не подтверждено |
+| Область | Подтверждено | Открыто |
 |---|---|---|
-| Main/shared price | Native Main254, прайс57; штатный общий price document и `siteOrders`; предыдущие native readback приняты Root | Свежая BASE для следующего сохранения всегда читается заново |
-| Workplace | Backend/static установлены, runtime/static SHA и health200 приняты Root; desktop4tabs, оба штатных редактора, настоящая сохранённая история загружены | Новая actual composer-delivery, физический Telegram WebView, customer order↔dialog ownership claim |
-| Cart-кандидат | Diff/syntax приняты Root; исходный дефект воспроизведён; private и переносимый public runner по14PASS/0FAIL | **Live-applied=0**; native/public UI/backend/delivery для этого кандидата не приняты |
-| Новый веб-чат | По свежему поручению координатора последовательный локальный PhaseA завершён исполнителем exit0 | Review core, API/UI/bridge и native-интеграция; публикация=0 |
+| Main/shared price | Main257, центральный price57, native checkout и человеческие фотографии сохранены | Fresh BASE для каждого нового сохранения читается заново |
+| Existing workplace | Native image/static/readback, desktop4tabs, оба штатных редактора и существующая история приняты Root | Новая фактическая доставка и физический Telegram/Safari |
+| Cart | Native order255/renderer256, full readback/public exact, личные Main CTA/repeat/focus | Не доказывает всю backend/канальную доставку |
+| Unified chat/files | FINAL_SCOPE B/C/D/E/R1 локально принят; exact source16 и builder13 PASS | Native chat/upload0; install, readback, личные native/канальные сценарии, full-ready |
 
-Публичные `ops/palitra-app-workplace-release/README.md` и `METADATA.json` содержат прежний snapshot подготовки. Последующая установка подтверждена отдельной native-приёмкой координатора; она не означает, что все виды доставки проверены. Gate/галочки не подменяют эти доказательства.
+Старые `README/METADATA` описывают свою контрольную точку, а не текущую установку. Наличие source, галочка или локальный PASS не заменяют live-proof.
 
-## Точный cart-пакет
+## Native cart — уже принято, не повторять как pending
 
-Источник: `ops/palitra-cart-checkout-release/manifest.json`, `README.md`, `test/cart-flow.test.cjs`. Package ID: `palitra-cart-checkout-20261014`. `public_source_version:254`, `native_workspace_baseline_required:true`, `live_applied:false`.
+Root сопоставил свежий native BASE254 обоих файлов с baseline. По одному штатному сохранению: order255 в01:26:00, renderer256 в01:27:12. После каждого reload полный native readback совпал с candidate; Main/draft anonymous GET200 exact SHA подтвердили оба файла. Личный Main product→CTA добавилqty1 и открыл форму, повтор сохранилqty1 и focus корзины. Собственная QA-строка удалена; новых заявок/TG-сообщений не отправляли.
 
-| Target | BASE SHA256 | Candidate SHA256 | Candidate bytes |
+Исторический cart-пакет: `ops/palitra-cart-checkout-release/`, package ID `palitra-cart-checkout-20261014`. Public source254 служит provenance, не текущим native BASE. Исторический manifest `live_applied:false` не отменяет последующую Root-приёмку255/256.
+
+| Target | Исторический BASE SHA256 | Опубликованный cart candidate SHA256 | Bytes |
 |---|---|---|---|
 | `assets/order.js` | `b9a12c33fa8129b3bcbb6fd84f098299c690e39f49c5bda15b235b9374aff293` | `f3fb7853f8c3db9e2897bbfb497624ac18a6dad7df0bfbddc02e0c8586782173` | 63272 |
 | `price-render.js` | `0b87c08ed5498bb667bf1bcf079afafcb8b441b5f5bc52366d2c6a4b3a24d215` | `506a4048996930cfcd3d93ce6ef3c7d34b125a6d0a583585d4ba89e71e130b30` | 49409 |
 
-Подготовщик read-only сверил эти четыре файла по фактическим байтам; значения совпали с manifest и результатом Root. Baseline — анонимный public snapshot, не источник полномочий и не гарантия текущего native BASE.
+Будущий managed order в unified release содержит принятый chat delta и имеет собственный manifest/fresh native CAS; его нельзя подменять этой исторической hash-таблицей.
 
-## 14 изолированных сценариев Root
+## Исторические14 cart-сценариев
 
-Runner исполняет настоящие `price-format.js`, `price-render.js` и `assets/order.js` в порядке страницы. Все HTTP перехватываются/блокируются, service worker запрещён, пользовательский профиль не используется. Результат: `isolated:true`, `publicUiAcceptance:false`, passed14, failed0. Portable public package проверен Root отдельным прогоном с тем же результатом; это повтор проверки, а не28 различных сценариев.
+Реальные renderer/order/price-format выполнялись в порядке страницы, с перехватом всех HTTP и без пользовательского профиля. Root:14 PASS/0 FAIL; portable повтор с тем же результатом не является ещё14 уникальными сценариями.
 
-| Сценарий | Количество | Результат |
+| Объём | Cases |
+|---|---:|
+| BASE: CTA открывает пустую корзину без POST | 1 |
+| CTA добавляет1, icon не дублирует, qty4 и чужие строки сохраняются | 4 |
+| Цена по запросу; open/close/open не добавляет | 2 |
+| Неверный/пустой ID; лимит30 сохраняет корзину | 3 |
+| Mock201 с выбранным known/unknown товаром | 2 |
+| Reject/квитанция без orderId сохраняет форму и корзину | 2 |
+
+Только синтетические квитанции; actual delivery этими tests не подтверждена.
+
+## Existing workplace — ранее принятый объём
+
+Root подтвердил54 локальных проверки и80 динамических route-проверок; отдельно native image/static/health и desktop read-сценарии. Receipt/idempotency, отзыв owner, Origin/CSRF и expected-state конфликт проверялись без нового реального ответа. Загрузка настоящей истории не считается отправкой нового сообщения. CRM/clientBotOrders flags остаются false.
+
+## FINAL_SCOPE E/R1 — локальные доказательства Root
+
+Принимается одна каноническая web/TG-история собственной новой заявки, безопасный START с действием клиента, buyer/owner thread/legacy upload до20 MiB, существующая очередь/worker и устойчивые media/drafts. S1 устранил узкий source-comment defect; S2 исправил fixture с посторонним старым уведомлением без ослабления ID/ACK assertions. R1 исправил воспроизведённый text-only fallback во время SHA только в buyer/owner UI. Старые failing proofs сохранены как история исправления, не текущий статус.
+
+| Suite/этап | Фактический Root результат | Что подтверждает |
 |---|---|---|
-| BASE: CTA открывает пустую корзину, форма не делает POST | 1 | PASS, дефект воспроизведён |
-| CTA добавляет1; значок корзины не дублирует; количество4 сохраняется; повтор сохраняет чужую строку | 4 | PASS |
-| Цена по запросу; open/close/open не добавляет товар | 2 | PASS |
-| Неверный/пустой ID; лимит30 не теряет корзину | 3 | PASS |
-| Mock201 содержит выбранный товар с известной/неизвестной ценой | 2 | PASS |
-| Reject и ответ без orderId сохраняют форму/корзину, не показывают успех | 2 | PASS |
+| Итоговый syntax | 13 PASS; R1 buyer/work отдельно проверены | Парсинг final code/tests, не native запуск |
+| E backend | 12 PASS | Scoped upload/journal/recovery и контракты; неизменён после R1 |
+| E actual worker branch | 6 PASS | Настоящий multipart/receipt/recovery code с изолированным транспортом; не реальная TG-доставка |
+| Independent R1 UI | 8 PASS/0 FAIL | Same UUID lost prepare, reload/hash/name, buyer/owner thread/legacy SHA button+submit guard, latecaption/target/epoch/principal/clear/error/draft |
+| E authorUI6 + D UI7 + immutable UI3 после R1 | 16 PASS/0 FAIL | Конкретный повтор changed UI; authorUI6 входит в эти16 |
+| D полный regression до узкого R1 | 78 PASS/0 FAIL | Media source/API/regression на E0612; changed UI после R1 проверен строкой выше |
+| B/core/receipt/mirror/worker regression | 86 PASS/0 FAIL | Сохранённые core/native/queue assertions и совместимость |
+| C на finished R1 | 37 PASS/0 FAIL, 1 Windows symlink SKIP | Принятые C-контракты; skip не заменяет Linux proof |
+| Real decoder4 + active playback3 на finished R1 | 7 PASS/0 FAIL | No-autoplay, decode/time/pause и playing node/focus/draft при refresh/edit/status |
+| Release builder | 13 PASS | Локальные packaging guards; не установка |
 
-Только синтетические квитанции; реальных заявок/сообщений в этих тестах нет. Проверка не доказывает доставку или текущую работу опубликованного cart-кода.
+Эти suite имеют повторы и пересечения; общего числа уникальных tests не вычисляем. R1 counter заменяет прежний результат5 PASS/1 FAIL после исправления, а не прибавляет ещё8 уникальных сценариев. Изолированный headless Chrome не доказывает физический Safari/TG WebView.
 
-## Workplace: ранее принятый объём
+Coherent source16 принят Root без tests/logs/context/данных в payload: content11, existing worker1, cabinet3, managed order1. Новое native chat/upload не установлено.
 
-Root подтвердил54 локальных проверки и80 динамических route-проверок final workplace; отдельно native image/static installation, health и реальные desktop read-сценарии. Source-пакет: `ops/palitra-app-workplace-release`. Receipt/idempotency, отзыв owner при чтении тела, Origin/CSRF и конфликт expected state проверяются без реального исходящего сообщения. Загрузка истории/формы ответа не считается доставкой нового сообщения. CRM/clientBotOrders flags остаются false.
+## Остаток приёмки
 
-## Оставшиеся ограничения и converge
+FR-002/003 и SC-002 подтверждены личной native cart-приёмкой. FR-008/010–016 имеют локальное доказательство в указанном объёме; SC-004 native-часть и SC-006 full-ready открыты. SC-003 ограничен existing desktop/read/auth/queue: новая реальная доставка остаётся отдельной.
 
-FR-001/004/005/006 имеют source и предшествующую native-приёмку в перечисленном объёме. FR-002/003 и SC-001 подтверждены локально; SC-002 и live-часть FR-007 ожидают выпуска/проверки. FR-008/SC-004 ещё не завершены. SC-003 ограничен desktop/read/auth/queue evidence, а перечисленные live-канальные проверки остаются открытыми. FR-009 сохраняется как обязательная граница всех следующих действий.
+До установки нужны свежий owner/window, exact current BASE/image/worker inventory, persistent media/checkpoints, Linux storage/preflight, guarded builder/activation/readback/public exact. Реальные новые заявки/сообщения/файлы, доступ сотрудников и изменение flags этим checkpoint не разрешены. Откат сохраняет новые DB/media/history/ACK/uncertain и человеческие изменения.
 
-Штатное browser-соединение при последних попытках координатора не ответило. Пользователь выполнил предложенное действие; timeout инструмента не доказал отсутствие Chrome или отказ сайта. Ни неизвестное сохранение, ни отправка вслепую не повторялись.
+## Spec Kit и PR
 
-## Проверка комплекта Spec Kit
+Ранее `gate.py check`: status ok, verifiedFiles48. `check_pr` проверил предложенную строку, packet был not_sent. Эти результаты исторические; новая проверка после обновления не запускалась. Gate проверяет комплект, не истинность evidence или full-ready.
 
-Подготовщик выполнил только read-only локальные проверки:
+PR458 остаётся OPEN/unmerged по передаче Root. Окончательное тело и converge ведёт Root. Должна присутствовать ровно одна строка `Spec: specs/091-palitra-checkout-workplace`. Подготовщик этой документации не менял Git/PR/payload/BASE/WORK/CURRENT/state/userchecks/сервер и не создавал браузерных вкладок.
 
-- `gate.py check`: status=ok, integrations=codex/claude/qwen, verifiedFiles=48.
-- `check_pr` с будущей отдельной строкой `Spec: specs/091-palitra-checkout-workplace`: mode=spec, четыре документа присутствуют. Это проверка предложенной строки, а не фактического тела PR458.
-- `packet` сформирован в памяти/stdout: processVersion=1.0.0, fileCount=6, deliveryStatus=not_sent. Пакет никому не отправлен, получение/прочтение исполнителем не заявляется.
-- В каталоге ровно `spec.md`, `plan.md`, `tasks.md`, `evidence.md`; нет выявленных частных абсолютных путей/формы bot-token и завершающих пробелов. Cart SHA сверены по байтам с manifest.
+## Root: переносимый публичный пакет — 14.10.2026
 
-Gate проверяет наличие и целостность документов, не истинность функционального отчёта. Фактическое тело PR458/CI, native cart-выпуск и перечисленные live-проверки остаются действиями координатора. Подготовщик не менял payload/baseline/WORK/CURRENT/прайс/сервер/Git/PR и не создавал вкладок или фоновых процессов.
+Root сформировал `ops/palitra-unified-chat-release` из принятого exact-byte source16. Переносимый upload/worker/UI стенд лично пройден:24 PASS/0 FAIL; сборщик:13 PASS/0 FAIL/0 SKIP. Это повтор принятого объёма в публичном layout, не дополнительные уникальные сценарии. Payload16 совпадает с source-manifest; readonly зависимости проверены. Все HTTP изолированы, собственные temporary roots/contexts закрыты. UI fixture отличается только стандартным lookup Playwright; реальных пользовательских файлов в пакете нет.
+
+После обновления четырёх документов Root лично выполнил `gate.py check`:status ok/verifiedFiles48 и `git diff --check`. PR обновляет Root; native chat/upload и общее окно всё ещё не подтверждены.

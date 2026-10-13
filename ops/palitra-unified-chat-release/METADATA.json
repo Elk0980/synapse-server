@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "package_id": "palitra-unified-webchat-upload-20261014-r1",
+  "scope": {
+    "content": 11,
+    "worker": 1,
+    "cabinet": 3,
+    "managed": 1
+  },
+  "source_stage": "Root accepted local code",
+  "live_applied": false,
+  "shared_server_window_confirmed": false,
+  "fresh_native_base_verified": false,
+  "root_validation": {
+    "upload_backend": 12,
+    "upload_worker": 6,
+    "upload_UI": 6,
+    "independent_upload_UI": 8,
+    "D_compatibility": 78,
+    "B_core_receipt_worker": 86,
+    "C_compatibility_pass": 37,
+    "C_symlink_skip": 1,
+    "media_decoder_active": 7,
+    "assembler": 13,
+    "current_final_fail": 0
+  },
+  "validation_note": "Overlapping and repeated suites are not added into a unique total; synthetic network only. Linux symlink and native end-to-end remain unverified."
+}

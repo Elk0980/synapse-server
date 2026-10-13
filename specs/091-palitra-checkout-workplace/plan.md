@@ -1,43 +1,61 @@
 # План и существующие контракты
 
-Процесс Spec Kit 1.0.0. Один live-installer и координатор — Root/Codex; ограниченные реализации — последовательный Claude. Этот план не является блокировкой общего ресурса. Перед native-записью координатор заново проверяет владельца ресурса, компанию, режим и актуальные исходники.
+Процесс Spec Kit 1.0.0. Единственный live-installer — Root/Codex; feature-реализации выполнялись последовательно Claude и завершены. Локальное принятие E/R1 не означает свободного общего серверного окна. Перед установкой заново проверяются владелец, компания, режим и fresh native BASE.
 
 ## Модули и источники
 
-| Область | Существующий источник | Контракт |
+| Область | Источник | Контракт и стадия |
 |---|---|---|
-| Общий прайс и оформление | `ops/palitra-production-main-release/payload/content/palitra-host-adapter.cjs` | Main читает последнюю native-версию `palitra/price`; `/api/orders` направляется в тот же `siteOrders.submit` |
-| Native заявки/диалоги | `ops/palitra-app-workplace-release/payload/content/{server.js,site-orders.js,client-dialogs.js}` | Одна central SQLite, native auth, outbox и существующий worker |
-| Рабочее место | `ops/palitra-app-workplace-release/payload/sites/synapse/cabinet/palitra-work.{html,js,css}` | Обычный Synapse login; фиксированная Palitra; четыре вкладки; постоянные same-origin редакторы |
-| Исправление корзины | `ops/palitra-cart-checkout-release/{manifest.json,baseline,payload,test}` | Только два JS; manifest хранит точные BASE/candidate SHA, live-applied=false |
-| Веб-чат | Последовательная отдельная задача core → API → UI → интеграция | На этой контрольной точке core подготовлен локально; рабочие маршруты ещё не опубликованы |
+| Прайс и checkout | `ops/palitra-production-main-release/` | Последний центральный `palitra/price`, существующий `siteOrders.submit`; Main257/price57 сохраняются |
+| Native workplace | `ops/palitra-app-workplace-release/` | Установленные native auth/SQLite/outbox, четыре вкладки и существующая история; новые доставки отдельно |
+| Cart | `ops/palitra-cart-checkout-release/` | Два JS; native order255/renderer256 опубликованы, readback/public exact/Main CTA приняты Root |
+| Unified chat | Подготовлен `ops/palitra-unified-chat-release/` | Frozen E/R1 локально принят; exact payload16 + builder сформированы и проверены Root; новое native chat/upload0 |
 
-Публичные APP README/METADATA отражают состояние **подготовки** пакета; актуальная установка и ограничения зафиксированы проверенным checkpoint координатора в evidence. Наличие файла или старое поле `app_installed:false` не определяют текущий сервер.
+Старые README/METADATA отражают свой snapshot подготовки, а не текущий сервер. Stages определяются проверенным checkpoint Root и evidence.
 
-## Native workplace API
+## FINAL_SCOPE: один thread и одна очередь
 
-- `PUT /content/palitra/orders/:id/work`: owner + точный Origin + CSRF до тела и свежая сессия после него; `{status,expected?}`, состояния `new/in_work/done/cancelled`; несовпадение ожидаемого состояния —409 без записи.
-- `GET /content/palitra/orders/:id/dialog`: защищённое чтение единственной native-связи; отсутствие/неоднозначность — без подстановки последнего клиента.
-- `POST /content/palitra/client-dialogs/:id/reply`: только `{requestId,text}`, UUID и ограниченный текст; тот же owner/sessionVersion проверяются после тела. Сообщение, outbox, аудит и receipt сохраняются одной транзакцией; same-payload повтор возвращает ту же квитанцию, другое содержимое с тем же ID —409.
-- `Товары` встраивает `/price-editor-palitra.html`, `Сайт` — `/cabinet/site-photos.html`; `/palitra-review/` открывается отдельной ссылкой. Сессия истекла/отозвана — старые ответы не восстанавливают доступ и не выполняют запись.
+Новая принятая заявка и собственная гостевая сессия связываются транзакционно. Собственная web-history работает без Telegram. Серверная START-ссылка привязывает подтверждённого Telegram-клиента к этому thread; клиент сам нажимает «Начать». Контакт/номер заявки не заменяет proof и не открывает старую историю. Для других каналов Telegram не обязателен.
 
-Очередь не отправляет сообщение вторым worker и не имитирует Telegram update. «Поставлен в очередь», «принят запрос» и «доставлен» имеют разные значения.
+Owner workplace различает `thread:N` и `legacy:N`, сохраняет постоянные четыре вкладки/редакторы и черновики. Старые диалоги остаются native, без подставных legacy ID и автоматического backfill. Новые web/TG сообщения и файлы используют каноническую историю, существующие DB/transaction/outbox и единственный worker.
 
-## Выпуск cart-кандидата
+Upload до20 MiB поддерживается buyer, owner thread и legacy. Bytes в памяти браузера; metadata+UUID до prepare, same UUID при lost prepare, known ref через read-only status GET, same size/hash после reload. Raw POST коммитит/reconciles; GET не создаёт запись. Локальное подтверждение файла не означает Telegram delivery.
 
-1. Сверить SHA кандидатов с `manifest.json`; прочитать всё текущее native-содержимое обоих target и подтвердить fresh BASE, Main и ownership. Публичный baseline254 — ориентир для diff, не разрешение перезаписать свежий native-код.
-2. При расхождении остановить сохранение и перенести только принятый cart-delta на новую BASE; повторить необходимые проверки изменённого кандидата.
-3. Сохранить точечный `assets/order.js` **первым**, затем `price-render.js`, штатным native workspace-механизмом с версиями/историей. Общие данные прайса и backend не меняются.
-4. После каждой записи проверить native readback и фактический публичный SHA. Если ответ не получен, сначала выяснить результат первой записи; не повторять неизвестное сохранение вслепую.
-5. Лично проверить Main: товар → CTA → выбранная строка/сохранённое количество → форма, обычную корзину и ошибки. Не отправлять реальную тестовую заявку без соответствующего разрешения.
-6. Откат — только этих двух собственных JS к сохранённой fresh native BASE через тот же versioned workspace, если AFTER всё ещё принадлежит пакету. Чужие новые изменения требуют согласования/rebase; не откатывать весь сайт или прайс.
+Worker получает приватные bytes штатным scoped internal read и использует multipart/copy с настоящим tuple, планировщиком типа/подписи и строгой внешней квитанцией. Journal/quota/reservation, sent/sending/uncertain/ACK и recovery сохраняются. Не создаются вторая очередь, второй poller, новая DB или права.
 
-## Оставшаяся интеграция веб-чата
+## Native API и доступ
 
-Следующий отдельный пакет должен подключить локальный core к той же central SQLite и native outbox. Гостевая сессия — защищённая cookie с ограниченным сроком, exact Origin/CSRF и только собственная новая история; запросы идемпотентны. TG-переход выполняется клиентом; привязка требует доказательства владения и не раскрывает прежние диалоги. API/UI и worker-bridge проверяются отдельно до native-установки. CRM/clientBotOrders flags остаются выключенными до закрытия customer-claim gap.
+- `PUT /content/palitra/orders/:id/work`: owner, exact Origin/CSRF, свежая сессия после тела; expected-state conflict409 без записи.
+- `GET /content/palitra/orders/:id/dialog`: защищённое чтение единственной доказанной связи; отсутствие/неоднозначность не подменяются последним клиентом.
+- Owner reply требует `requestId/text`, точный typed target, действующего owner/site/company и транзакционную идемпотентную квитанцию. Same payload возвращает прежний receipt, иной payload с тем же ID конфликтует.
+- Buyer chat требует собственной native/account/chat-сессии и отдельного chat CSRF. Binary и upload ограничены собственной историей; owner использует auth/CSRF кабинета.
+- `Товары` встраивает штатный price editor, `Сайт` — site photos; `/palitra-review/` остаётся отдельной ссылкой. Новых вкладок workplace нет.
+- Pending UUID, late receipt, logout/revoke и target epoch сохраняют границы автора/диалога. Во время SHA блокируются и кнопка, и submit, без отправки подписи отдельно.
 
-Необходимы meaningful тесты: изоляция гостей/компаний, украденный/истёкший токен, CSRF/Origin, отзыв owner во время чтения тела, повтор и неопределённый ответ, конкурентная квитанция, единственная очередь, reload и реальные отображаемые состояния. Перед релизом — независимое ревью и native readback. Новые каналы/права и реальные исходящие сообщения не добавляются по одной спецификации.
+## Планируемый exact release16
+
+| Группа | Targets |
+|---|---|
+| Content runtime8 | `server.js`, `client-dialogs.js`, `palitra-host-adapter.cjs`, `customer-chat.js`, `customer-chat-http.cjs`, `customer-chat-native-adapter.cjs`, `customer-chat-media.cjs`, `customer-chat-upload.cjs` |
+| Content public3 | `palitra-review-public/palitra-chat.{html,js,css}` |
+| Existing worker1 | `ops/chat/client-bot-bridge.js` |
+| Cabinet3 | `sites/synapse/cabinet/palitra-work.{html,js,css}` |
+| Managed site1 | `managed-site/assets/order.js` |
+
+Content и worker используют разные captured immutable image BASE. Сборщик принимает exact source16/manifest/approval, не wildcard и не WORK auto-discovery; tests/logs/context/данные не входят в payload. Preserved account/siteOrders/config/price/фотографии не заменяются. Public package и его installer ведёт Root.
+
+## Установка и совместимый откат — ещё не выполнены
+
+1. Root подтверждает свежее эксклюзивное окно общего ресурса, оба runtime/image BASE, worker/checkpoints, persistent media, cabinet/managed source и untouched inventory. Предыдущие hash/prompt не являются lease.
+2. Проверяется Linux storage/preflight и exact manifest; расхождение BASE требует остановки и review/rebase. Windows skip не заменяет Linux proof.
+3. Совместимый backend устанавливается до producers/UI; обновляется один существующий worker. Producers открываются только после capability/health/readback. Auth и CRM/clientBotOrders flags не ослабляются.
+4. Cabinet применяет только guarded own delta; managed order — fresh native CAS/oneSave/full readback/public exact. Фотографии257, price57 и человеческие изменения сохраняются.
+5. Root отдельно принимает buyer/owner thread/legacy, файлы/статусы/recovery и физические каналы. Реальная отправка требует отдельного действующего разрешения; локальный fixture его не заменяет.
+6. Откат закрывает producers и сохраняет DB/media/journal/jobs/ACK/uncertain. Старый worker не получает неподдерживаемые upload jobs. Возврат бинарников допускается только по own AFTER/BASE и совместимости; whole DB/media restore поверх новой работы исключён.
 
 ## Проверки документации
 
-Read-only `gate.py check`, проверка четырёх документов через `check_pr`, формирование packet в stdout без отправки. Gate проверяет комплект/наличие, а не истинность evidence и не production-готовность. PR должен иметь ровно одну строку: `Spec: specs/091-palitra-checkout-workplace`.
+Ранее read-only `gate.py check` подтвердил комплект48 files; `check_pr` проверил предложенную Spec-строку, packet не отправлялся. Это не новая проверка после обновления и не доказательство native-готовности. Новые процессы проверки этой документационной задачей не запускались.
+
+В окончательном теле PR должна быть ровно одна строка:
+`Spec: specs/091-palitra-checkout-workplace`.
