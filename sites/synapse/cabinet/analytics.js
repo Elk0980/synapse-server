@@ -281,7 +281,18 @@ const renderRevenueSection = (payload) => {
     '. Каждый показатель относится к своей дате: создание записи, посещение или платёж. Их отношение не является конверсией одной группы клиентов.</p><div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Источник / кампания</th><th>Записи</th><th>Визиты</th><th>Денежный итог</th></tr></thead><tbody>'+y.sources.map(g=>'<tr><td>'+escapeHTML(g.utm?[g.utm.source,g.utm.medium,g.utm.campaign].filter(Boolean).join(' / '):'Источник неизвестен')+'</td><td>'+num(g.bookings)+'</td><td>'+num(g.attendedVisits)+'</td><td>'+formatMoney(g.netCashKopecks/100)+'</td></tr>').join('')+'</tbody></table></div>':
     '<p class="crm-note">Записи и оплаты YCLIENTS ещё не загружены.</p>';
   const action=identity.role==='owner'?'<button type="button" class="plain-button" data-revenue-collect>Обновить данные этого периода</button><p class="crm-note" data-revenue-result></p>':'';
-  return head+'<ul>'+states+'</ul>'+quality+'<p class="crm-note">Этот блок показывает компанию целиком; фильтр площадок выше относится к прежней воронке.</p>'+metrika+yclients+direct+
+  const cohort=payload.cohorts;
+  const reasons=(value)=>[...new Set((value?.reasons||[]).map(r=>r.label))].map(escapeHTML).join(' ');
+  const cohortBlock=cohort?'<h3>Клиенты по периоду привлечения</h3><p class="crm-note">Пришли '+escapeHTML(cohort.cohort.from)+' — '+escapeHTML(cohort.cohort.to)+
+    '; записи, посещения и деньги наблюдаем до '+escapeHTML(cohort.cohort.observationTo)+'. Оплата после периода привлечения учитывается до этой даты.</p>'+
+    '<p>Новых платящих клиентов: <strong>'+num(cohort.cohortTotals.newPayingClients.value)+'</strong>. '+reasons(cohort.cohortTotals.newPayingClients)+'</p>'+
+    '<p>Пришли и связаны с записью: '+num(cohort.cohortTotals.funnel.status==='unavailable'?null:cohort.cohortTotals.funnel.bookedClients)+
+    ' · посетили: '+num(cohort.cohortTotals.funnel.status==='unavailable'?null:cohort.cohortTotals.funnel.attendedClients)+
+    ' · пока без оплаты: '+num(cohort.cohortTotals.funnel.status==='unavailable'?null:cohort.cohortTotals.funnel.notYetPayingClients)+'</p>'+
+    '<p>Стоимость нового платящего клиента: '+(cohort.economics.cac.status==='verified'?formatMoney(cohort.economics.cac.valueKopecks/100):'—')+
+    ' · окупаемость рекламы: '+(cohort.economics.romi.status==='verified'?num(cohort.economics.romi.basisPoints/100)+'%':'—')+'</p>'+
+    '<p class="crm-note">'+reasons(cohort.coverage)+'</p>':'';
+  return head+'<ul>'+states+'</ul>'+quality+'<p class="crm-note">Этот блок показывает компанию целиком; фильтр площадок выше относится к прежней воронке.</p>'+metrika+yclients+direct+cohortBlock+
     '<p class="crm-note">'+escapeHTML(payload.economics.reason)+' UTM показывают метку перехода; поиск по названию или заслугу рекламы они сами по себе не доказывают.</p>'+action+'</section>';
 };
 const renderAnalytics = (dashboard, summary, expenses, potential = null, owner = analyticsState.payload?.owner, companyMetrics = analyticsState.payload?.companyMetrics ?? null, revenueData = analyticsState.payload?.revenueData ?? null) => {

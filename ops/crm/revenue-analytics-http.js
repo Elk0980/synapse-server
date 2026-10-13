@@ -3,7 +3,8 @@ const ERRORS={
   VALIDATION_ERROR:[400,'Проверьте параметры подключения.'],BAD_PERIOD:[400,'Проверьте даты периода.'],BAD_TIMEZONE:[400,'Проверьте часовой пояс.'],
   REVISION_CONFLICT:[409,'Подключение изменилось. Обновите страницу.'],BINDING_CHANGED:[409,'Сохранённые данные относятся к другому филиалу или счётчику. Смена привязки требует отдельной миграции.'],
   MISSING_ACCESS:[409,'Источник не подключён или сбор выключен.'],CREDENTIAL_UNREADABLE:[409,'Сохранённый доступ не читается. Нужен повторный ввод ключа.']
-  ,BINDING_OVERLAP:[409,'Эта кампания уже относится к другой компании. Проверьте привязку.'],BAD_CURRENCY:[400,'Проверьте валюту рекламного аккаунта.']
+  ,BINDING_OVERLAP:[409,'Эта кампания уже относится к другой компании. Проверьте привязку.'],BAD_CURRENCY:[400,'Проверьте валюту рекламного аккаунта.'],
+  BAD_MONEY:[422,'Денежные данные источника требуют проверки.'],MONEY_OVERFLOW:[422,'Суммы превышают точность денежного расчёта.'],FOREIGN_COMPANY:[409,'Факты относятся к другой компании.']
 };
 function createRevenueHandler({analytics,companyModuleContext,readJson,send}) {
   return async function handle(request,response,url,cors={}) {
@@ -12,7 +13,7 @@ function createRevenueHandler({analytics,companyModuleContext,readJson,send}) {
     const {company,identity}=companyModuleContext(request,url.searchParams.get('companyCode'),request.method==='GET'?'analytics.view':'crm.edit');
     try {
       let result;
-      if(url.pathname==='/revenue-analytics'&&request.method==='GET')result=analytics.report(company.code,url.searchParams.get('from'),url.searchParams.get('to'));
+      if(url.pathname==='/revenue-analytics'&&request.method==='GET')result=analytics.report(company.code,url.searchParams.get('from'),url.searchParams.get('to'),{observationTo:url.searchParams.get('observationTo')});
       else {
         if(identity.role!=='owner'){send(response,403,{error:'Подключение источников доступно владельцу.',code:'FORBIDDEN'},headers);return true;}
         const p=url.searchParams.get('provider');

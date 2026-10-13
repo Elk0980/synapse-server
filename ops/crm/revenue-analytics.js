@@ -1,13 +1,15 @@
 'use strict';
 const crypto=require('node:crypto');
-const {createRevenueAccess,PROVIDERS,company,provider,id,range,localDay,shiftDay,fail}=require('./revenue-analytics-access');
+const {createRevenueAccess,PROVIDERS,company,provider,id,day,range,localDay,shiftDay,fail}=require('./revenue-analytics-access');
 const {createRevenueAdapters}=require('./revenue-analytics-adapters');
 const {revenueQuality}=require('./revenue-analytics-quality');
+const {buildRevenueCohorts}=require('./revenue-analytics-cohorts');
 const OFFSETS={'Asia/Irkutsk':'+08:00','Asia/Bangkok':'+07:00','Europe/Moscow':'+03:00',UTC:'Z'};
 const KNOWN_ERRORS=new Set(['MISSING_ACCESS','CREDENTIAL_UNREADABLE','ACCESS_DENIED','RATE_LIMITED','UPSTREAM_ERROR','CONNECTION_UNCERTAIN','RESPONSE_TOO_LARGE','RESPONSE_UNCERTAIN','INCOMPLETE','PROFILE_CHANGED','LEASE_LOST','REVISION_CONFLICT','TOKEN_REAUTH_REQUIRED','TOKEN_REFRESH_UNCERTAIN','TOKEN_REFRESH_BUSY','CANCELLED','DELAYED','BAD_PERIOD','SERVER_STOPPING']);
 function dateTime(v,tz) {
   if(typeof v!=='string')fail('RESPONSE_UNCERTAIN',502);
   let s=v.replace(' ','T'); if(!/(?:Z|[+-]\d{2}:?\d{2})$/.test(s))s+=OFFSETS[tz];
+  try{day(s.slice(0,10));}catch{fail('RESPONSE_UNCERTAIN',502);}
   const n=Date.parse(s); if(!Number.isFinite(n))fail('RESPONSE_UNCERTAIN',502); return new Date(n).toISOString();
 }
 function kopecks(v) {
@@ -15,6 +17,7 @@ function kopecks(v) {
   const [whole,fraction='']=s.replace('-','').split('.'); const result=Number(whole)*100+Number(fraction.padEnd(2,'0'));
   if(!Number.isSafeInteger(result))fail('RESPONSE_UNCERTAIN',502);return s.startsWith('-')?-result:result;
 }
+function addMoney(a,b){const value=a+b;if(!Number.isSafeInteger(value))fail('MONEY_OVERFLOW',422);return value;}
 function attribution(url) {
   const result={}; let parsed; try {parsed=new URL(url);if(!['http:','https:'].includes(parsed.protocol))return result;}catch{return result;}
   for(const k of ['source','medium','campaign','content','term']) {
@@ -24,7 +27,8 @@ function attribution(url) {
   }
   return result;
 }
-function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAdapters()}={}) {
+function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAdapters(),cohortFacts=null}={}) {
+  if(cohortFacts!==null&&typeof cohortFacts!=='function')fail('COHORT_CONTEXT_INVALID',500);
   const access=createRevenueAccess(db,{apiKey,now});
   const active=new Set();let closing=false;
   db.exec('CREATE TABLE IF NOT EXISTS revenue_jobs(company TEXT NOT NULL,provider TEXT NOT NULL,lease TEXT,lease_until INTEGER NOT NULL DEFAULT 0,next_at INTEGER NOT NULL DEFAULT 0,last_attempt TEXT,last_success TEXT,success_revision INTEGER,error_code TEXT NOT NULL DEFAULT \'\',failures INTEGER NOT NULL DEFAULT 0,history_from TEXT,PRIMARY KEY(company,provider));'+
@@ -184,7 +188,7 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
       return results;
     })().finally(()=>{inFlight=null;});return inFlight;
   }
-  function report(c,from,to) {
+  function buildReport(c,from,to,{observationTo=null}={}) {
     company(c);const period=range(from,to),state=settings(c);
     const yc=state.providers.find(p=>p.provider==='yclients');const mc=state.providers.find(p=>p.provider==='metrika');
     const m=db.prepare('SELECT * FROM revenue_metrika WHERE company=? AND from_day=? AND to_day=?').get(c,from,to);
@@ -194,12 +198,13 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
     const sourceKey=u=>u.source?JSON.stringify([u.source,u.medium||'',u.campaign||'',u.content||'',u.term||'']):'unknown';
     const groups=new Map();
     const group=u=>{const key=sourceKey(u);if(!groups.has(key))groups.set(key,{utm:u.source?u:null,bookings:0,attendedVisits:0,paymentKopecks:0,refundKopecks:0,payingClients:new Set()});return groups.get(key);};
-    let yclients=null;
+    let yclients=null,cohortSnapshot=null;
     // Новые правила статей/часового пояса нельзя применять к неподтверждённой старой выгрузке.
     // Строки сохраняются для следующего сбора, но не выдаются как проверенный денежный итог.
     if(yc.lastSuccess && yc.current) {
       const config=yc.config;const r=readRows('revenue_records',c);const tx=readRows('revenue_cash',c);const byId=new Map(r.map(v=>[v.id,v]));
       const historyFrom=job(c,'yclients').history_from||config.historyFrom;
+      cohortSnapshot={companyCode:c,current:Boolean(yc.enabled&&!yc.stale&&!yc.errorCode),collectedAt:yc.lastSuccess,historyFrom,config,records:r,cash:tx};
       const byVisit=new Map();for(const v of r)if(v.visitId){const a=byVisit.get(v.visitId)||[];a.push(v);byVisit.set(v.visitId,a);}
       const inside=at=>{const d=localDay(Date.parse(at),config.timezone);return d>=from&&d<=to;};
       const stats={createdBookings:0,activeBookings:0,cancelledBookings:0,noShows:0,attendedVisits:0,paymentKopecks:0,refundKopecks:0,netCashKopecks:0,payingClients:0,unknownExpenseTransactions:0,unmatchedTransactions:0,bookingsWithSource:0,bookingsWithoutSource:0,clientIdentityMissing:0};
@@ -224,18 +229,39 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
         if(record && ((t.visitId&&record.visitId&&t.visitId!==record.visitId)||(t.client&&record.client&&t.client!==record.client)))record=null;
         if(!record)stats.unmatchedTransactions++;
         const g=group(record?.utm||{}),client=t.client||record?.client;
-        if(amount>0){stats.paymentKopecks+=amount;g.paymentKopecks+=amount;if(client){paying.add(client);g.payingClients.add(client);}else stats.clientIdentityMissing++;}
-        else{stats.refundKopecks-=amount;g.refundKopecks-=amount;}
+        if(amount>0){stats.paymentKopecks=addMoney(stats.paymentKopecks,amount);g.paymentKopecks=addMoney(g.paymentKopecks,amount);if(client){paying.add(client);g.payingClients.add(client);}else stats.clientIdentityMissing++;}
+        else{stats.refundKopecks=addMoney(stats.refundKopecks,-amount);g.refundKopecks=addMoney(g.refundKopecks,-amount);}
       }
-      stats.netCashKopecks=stats.paymentKopecks-stats.refundKopecks;stats.payingClients=paying.size;
-      yclients={...stats,historyFrom,partialHistory:from<historyFrom,current:yc.current,collectedAt:yc.lastSuccess,timezone:config.timezone,currency:'RUB',sources:[...groups.values()].map(g=>({...g,payingClients:g.payingClients.size,netCashKopecks:g.paymentKopecks-g.refundKopecks})),
+      stats.netCashKopecks=addMoney(stats.paymentKopecks,-stats.refundKopecks);stats.payingClients=paying.size;
+      yclients={...stats,historyFrom,partialHistory:from<historyFrom,current:yc.current,collectedAt:yc.lastSuccess,timezone:config.timezone,currency:'RUB',sources:[...groups.values()].map(g=>({...g,payingClients:g.payingClients.size,netCashKopecks:addMoney(g.paymentKopecks,-g.refundKopecks)})),
         financialClassificationComplete:stats.unknownExpenseTransactions===0 && config.cashRules.length>0,
         sourceCoveragePercent:stats.createdBookings?100*stats.bookingsWithSource/stats.createdBookings:null};
     }
     const metrika=m?{...JSON.parse(m.payload),collectedAt:m.collected_at,current:m.revision===mc.revision}:null;
-    return {companyCode:c,period,state,metrika,yclients,direct,quality:revenueQuality({period,state,metrika,yclients,direct},now()),
-      economics:{cac:null,romi:null,reason:'Расходы, первичные клиенты за всю историю и себестоимость ещё не подтверждены.'},
+    if(!cohortSnapshot&&yc.config&&yc.lastSuccess)cohortSnapshot={companyCode:c,current:false,collectedAt:yc.lastSuccess,
+      historyFrom:job(c,'yclients').history_from||yc.config.historyFrom,config:yc.config,records:[],cash:[]};
+    const timezone=yc.config?.timezone||mc.config?.timezone||'Asia/Irkutsk';
+    const closedThrough=shiftDay(localDay(Date.parse(yc.lastSuccess||new Date(now()).toISOString()),timezone),-1);
+    const observed=observationTo||(to>closedThrough?to:closedThrough);
+    // Источник фактов — только внутренний серверный reader. HTTP параметры не подтверждают историю или связь.
+    const facts=cohortFacts?.({companyCode:c,period:{...period},observationTo:observed,timezone})||null;
+    if(facts&&(Array.isArray(facts)||typeof facts!=='object'||typeof facts.then==='function'||
+      Object.keys(facts).some(k=>!['companyCode','vatMode','paymentHistory','leadBindings','spend','recordCosts'].includes(k))))fail('COHORT_CONTEXT_INVALID',500);
+    if(facts&&facts.companyCode!==c)fail('FOREIGN_COMPANY',409);
+    const cohorts=buildRevenueCohorts({companyCode:c,cohort:period,observationTo:observed,timezone,currency:'RUB',vatMode:facts?.vatMode||'unknown',
+      yclients:cohortSnapshot,paymentHistory:facts?.paymentHistory,leadBindings:facts?.leadBindings,spend:facts?.spend,recordCosts:facts?.recordCosts});
+    const economicReasons=[...new Set([...cohorts.economics.cac.reasons,...cohorts.economics.romi.reasons].map(r=>r.label))];
+    const economics={cac:cohorts.economics.cac.status==='verified'?cohorts.economics.cac.valueKopecks/100:null,
+      romi:cohorts.economics.romi.status==='verified'?cohorts.economics.romi.basisPoints/100:null,
+      reason:economicReasons.join(' ')||'Экономика относится к когорте по дате привлечения и её периоду наблюдения.'};
+    return {companyCode:c,period,state,metrika,yclients,direct,cohorts,quality:revenueQuality({period,state,metrika,yclients,direct,cohorts},now()),economics,
       definitions:{bookings:'Дата создания записи; отмены отдельно.',visits:'Фактическое посещение по дате визита; один visit_id считается один раз.',cash:'Реальные деньги по дате транзакции, с вычетом возвратов; неизвестные статьи не считаются доходом.',attribution:'UTM из from_url конкретной записи. Неизвестный источник не назначается рекламе. Итоги Метрики не связывают человека с оплатой сами по себе.'}};
+  }
+  function report(c,from,to,options={}) {
+    // Одна версия настроек, native строк и внутренних фактов даже при другом SQLite-писателе.
+    db.exec('BEGIN');
+    try {const result=buildReport(c,from,to,options);db.exec('COMMIT');return result;}
+    catch(e){db.exec('ROLLBACK');throw e;}
   }
   async function stop(){closing=true;adapters.stop?.();await Promise.allSettled([...active,...(inFlight?[inFlight]:[])]);}
   return {access,settings,save,status,collect,collectDue,report,stop};

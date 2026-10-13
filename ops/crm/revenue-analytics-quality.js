@@ -2,7 +2,7 @@
 const {localDay}=require('./revenue-analytics-access');
 
 // Только оценка уже сохранённого отчёта; внешних запросов и побочных эффектов нет.
-function revenueQuality({period,state,metrika:m,yclients:y,direct:d},now) {
+function revenueQuality({period,state,metrika:m,yclients:y,direct:d,cohorts},now) {
   const checks=[];
   const add=(id,title,status,detail)=>checks.push({id,title,status,detail});
   const sources=Object.fromEntries(state.providers.map(p=>[p.provider,p]));
@@ -75,7 +75,11 @@ function revenueQuality({period,state,metrika:m,yclients:y,direct:d},now) {
       y.clientIdentityMissing?'Без идентификатора клиента: '+y.clientIdentityMissing+' положительных операций. Уникальные платящие клиенты могут быть недосчитаны.':
       !y.paymentKopecks?'В снимке нет учтённых положительных платежей за период.':'Для учтённых положительных платежей определены клиенты. Новые клиенты требуют полной истории первых оплат.');
   }
-  add('economics','Стоимость клиента и окупаемость','unavailable','CAC и ROMI не рассчитаны: нужны полные расходы, история новых платящих клиентов и себестоимость той же группы. Не подставлять нули.');
+  if(cohorts) {
+    const unavailable=[...new Set([...cohorts.economics.cac.reasons,...cohorts.economics.romi.reasons].map(r=>r.label))];
+    const verified=cohorts.economics.cac.status==='verified'&&cohorts.economics.romi.status==='verified';
+    add('economics','Стоимость клиента и окупаемость',verified?'ok':'unavailable',verified?'Когорта и наблюдение подтверждены по сохранённым фактам; календарный денежный поток показан отдельно.':unavailable.join(' ')||'Стоимость клиента и окупаемость для этой группы не определены.');
+  }else add('economics','Стоимость клиента и окупаемость','unavailable','CAC и ROMI не рассчитаны: нужны полные расходы, история новых платящих клиентов и себестоимость той же группы. Не подставлять нули.');
   return {checkedAt:new Date(now).toISOString(),period:{...period},checks};
 }
 module.exports={revenueQuality};

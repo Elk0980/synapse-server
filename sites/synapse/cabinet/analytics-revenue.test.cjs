@@ -154,3 +154,30 @@ test('заголовки валюты и прежний снимок расхо�
     assert.equal(f.calls.filter(c=>c.options?.method==='POST').length,0);
   }finally{f.close();}
 });
+
+test('когорта отделяет время привлечения от наблюдения и не показывает неизвестных клиентов как ноль',async()=>{
+  const value=payload();value.cohorts={cohort:{from:'2026-10-01',to:'2026-10-08',observationTo:'2026-11-15'},
+    cohortTotals:{newPayingClients:{value:null,reasons:[{label:'Нет подтверждённой связи заявки и записи <img src=x>'}]},
+      funnel:{status:'unavailable',bookedClients:null,attendedClients:null,notYetPayingClients:null}},
+    economics:{cac:{status:'unavailable',valueKopecks:null},romi:{status:'unavailable',basisPoints:null}},
+    coverage:{reasons:[{label:'Журнал заявок пока не подключён.'}]}};
+  const f=fixture({value});try{
+    await f.render();const text=f.block().textContent;
+    assert.match(text,/Клиенты по периоду привлечения/);assert.match(text,/деньги наблюдаем до 2026-11-15/);
+    assert.match(text,/Новых платящих клиентов: —/);assert.match(text,/Стоимость нового платящего клиента: —/);
+    assert.doesNotMatch(text,/Новых платящих клиентов: 0/);assert.match(text,/Журнал заявок пока не подключён/);
+    assert.equal(f.block().querySelector('img'),null);
+  }finally{f.close();}
+});
+
+test('подтверждённая когорта показывает экономику, посетивших и ещё не оплативших отдельно',async()=>{
+  const value=payload();value.cohorts={cohort:{from:'2026-10-01',to:'2026-10-08',observationTo:'2026-11-15'},
+    cohortTotals:{newPayingClients:{value:1,reasons:[]},funnel:{status:'verified',bookedClients:2,attendedClients:2,notYetPayingClients:1}},
+    economics:{cac:{status:'verified',valueKopecks:40000},romi:{status:'verified',basisPoints:2500}},coverage:{reasons:[]}};
+  const f=fixture({value,role:'employee'});try{
+    await f.render();const text=f.block().textContent;
+    assert.match(text,/Новых платящих клиентов: 1/);assert.match(text,/пока без оплаты: 1/);
+    assert.match(text,/Стоимость нового платящего клиента: 400 ₽/);assert.match(text,/окупаемость рекламы: 25%/);
+    assert.equal(f.calls.filter(c=>c.options?.method==='POST').length,0);
+  }finally{f.close();}
+});
