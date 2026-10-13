@@ -1,0 +1,2 @@
+baseline/*.js -text
+payload/** -text
