@@ -250,10 +250,22 @@ const renderRevenueSection = (payload) => {
   const num=(v)=>v===null||v===undefined?'—':escapeHTML(new Intl.NumberFormat('ru-RU',{maximumFractionDigits:2}).format(v));
   const at=(v)=>v?escapeHTML(new Date(v).toLocaleString('ru-RU')):'ещё не было';
   const accessError=(code)=>code==='TOKEN_REAUTH_REQUIRED'?'нужно повторно подключить Метрику':code==='TOKEN_REFRESH_UNCERTAIN'?'продление доступа не подтверждено; нужна проверка подключения':code==='TOKEN_REFRESH_BUSY'?'доступ обновляется; загрузка будет повторена':'ошибка загрузки';
-  const states=payload.state.providers.map(p=>'<li>'+escapeHTML(p.provider==='metrika'?'Яндекс Метрика':'YCLIENTS')+': '+
+  const states=payload.state.providers.map(p=>'<li>'+escapeHTML(({metrika:'Яндекс Метрика',yclients:'YCLIENTS',direct:'Яндекс Директ'})[p.provider]||p.provider)+': '+
     (!p.configured?'не подключён':!p.enabled?'сбор выключен':p.running?'идёт загрузка':p.errorCode?accessError(p.errorCode):p.stale?'данные требуют обновления':'обновляется сервером')+
     '. Последний успех: '+at(p.lastSuccess)+'</li>').join('');
-  const m=payload.metrika,y=payload.yclients;
+  const m=payload.metrika,y=payload.yclients,d=payload.direct;
+  const directMoney=(v)=>{
+    if(!Number.isSafeInteger(v)||v<0)return '—';
+    const micros=BigInt(v),whole=(micros/1000000n).toLocaleString('ru-RU');
+    const fraction=(micros%1000000n).toString().padStart(6,'0').replace(/0+$/,'');
+    return escapeHTML(whole+(fraction?','+fraction:'')+' '+d.currency);
+  };
+  const direct=d?'<h3>Яндекс Директ: рекламные расходы</h3><p>Расход: <strong>'+directMoney(d.totalCostMicros)+
+    '</strong> · показы: '+num(d.totalImpressions)+' · клики: '+num(d.totalClicks)+'</p><p class="crm-note">'+
+    (d.current?'':'Подключение изменилось; это прежний снимок. ')+(d.periodClosed?'':'Период ещё не завершён. ')+
+    'Снято: '+at(d.collectedAt)+'. '+(d.includeVAT?'С НДС.':'Без НДС.')+' Сутки по московскому времени. '+
+    'Сумма относится только к выбранным кампаниям этой компании; она не подтверждает запись или оплату.</p>':
+    payload.state.providers.some(p=>p.provider==='direct')?'<p class="crm-note">Для этого периода пока нет выгрузки расходов Директа.</p>':'';
   const quality=payload.quality?'<h3>Можно ли доверять показателям</h3><p class="crm-note">Проверка периода '+escapeHTML(payload.quality.period.from)+' — '+escapeHTML(payload.quality.period.to)+'. Каждый источник проверяется отдельно.</p><div class="crm-table-wrap"><table class="crm-table analytics-revenue-quality"><thead><tr><th>Проверка</th><th>Результат</th><th>Что это значит</th></tr></thead><tbody>'+payload.quality.checks.map(c=>'<tr><td>'+escapeHTML(c.title)+'</td><td>'+escapeHTML(({ok:'Проверено по снимку',attention:'Нужна проверка',unavailable:'Пока неизвестно',no_events:'Нет событий в снимке'})[c.status]||'Пока неизвестно')+'</td><td>'+escapeHTML(c.detail)+'</td></tr>').join('')+'</tbody></table></div>':'';
   const trafficTable=(report,title)=>'<h4>'+title+'</h4><div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Источник</th><th>Визиты</th><th>Среднее время, сек.</th></tr></thead><tbody>'+report.rows.map(row=>'<tr><td>'+escapeHTML(row.dimensions.map(d=>d.name||d.id||'не определено').join(' / '))+'</td><td>'+num(row.metrics[0])+'</td><td>'+num(row.metrics[2])+'</td></tr>').join('')+'</tbody></table></div>';
   const metrika=m?'<h3>Посещения сайта</h3><p>Визиты: <strong>'+num(m.overview.totals[0])+'</strong> · посетители: '+num(m.overview.totals[1])+
@@ -269,7 +281,7 @@ const renderRevenueSection = (payload) => {
     '. Каждый показатель относится к своей дате: создание записи, посещение или платёж. Их отношение не является конверсией одной группы клиентов.</p><div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>Источник / кампания</th><th>Записи</th><th>Визиты</th><th>Денежный итог</th></tr></thead><tbody>'+y.sources.map(g=>'<tr><td>'+escapeHTML(g.utm?[g.utm.source,g.utm.medium,g.utm.campaign].filter(Boolean).join(' / '):'Источник неизвестен')+'</td><td>'+num(g.bookings)+'</td><td>'+num(g.attendedVisits)+'</td><td>'+formatMoney(g.netCashKopecks/100)+'</td></tr>').join('')+'</tbody></table></div>':
     '<p class="crm-note">Записи и оплаты YCLIENTS ещё не загружены.</p>';
   const action=identity.role==='owner'?'<button type="button" class="plain-button" data-revenue-collect>Обновить данные этого периода</button><p class="crm-note" data-revenue-result></p>':'';
-  return head+'<ul>'+states+'</ul>'+quality+'<p class="crm-note">Этот блок показывает компанию целиком; фильтр площадок выше относится к прежней воронке.</p>'+metrika+yclients+
+  return head+'<ul>'+states+'</ul>'+quality+'<p class="crm-note">Этот блок показывает компанию целиком; фильтр площадок выше относится к прежней воронке.</p>'+metrika+yclients+direct+
     '<p class="crm-note">'+escapeHTML(payload.economics.reason)+' UTM показывают метку перехода; поиск по названию или заслугу рекламы они сами по себе не доказывают.</p>'+action+'</section>';
 };
 const renderAnalytics = (dashboard, summary, expenses, potential = null, owner = analyticsState.payload?.owner, companyMetrics = analyticsState.payload?.companyMetrics ?? null, revenueData = analyticsState.payload?.revenueData ?? null) => {
@@ -387,9 +399,11 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
     out.textContent='Сервер сверяет источники…';
     try {
       const results=[];
-      for(const provider of ['metrika','yclients']) {
+      const providers=(revenueData?.state?.providers||[]).filter(p=>p.configured&&p.enabled&&['metrika','yclients','direct'].includes(p.provider)).map(p=>p.provider);
+      if(!providers.length){out.textContent='Источники пока не подключены.';return;}
+      for(const provider of providers) {
         if(!sameScope(owner))return;
-        results.push(await crmQuery('/revenue-analytics/collect',{companyCode:owner.companyCode,provider},csrfOptions('POST',provider==='metrika'?{from:owner.from,to:owner.to}:{})));
+        results.push(await crmQuery('/revenue-analytics/collect',{companyCode:owner.companyCode,provider},csrfOptions('POST',provider==='yclients'?{}:{from:owner.from,to:owner.to})));
       }
       if(!sameScope(owner))return;
       if(results.some(r=>!r.collected)){out.textContent='Обновление не завершено. Сохранены предыдущие данные.';return;}

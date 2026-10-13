@@ -18,7 +18,7 @@
 
 - `GET /revenue-analytics?companyCode=…&from=YYYY-MM-DD&to=YYYY-MM-DD` — сохранённый отчёт с состояниями источников.
 - `GET /revenue-analytics/access?companyCode=…` — настройки и ревизия, без ключей.
-- `PUT /revenue-analytics/access?companyCode=…&provider=metrika|yclients` — `{revision, enabled, config, credential}`. Ревизия обязательна; без `credential` сохраняется прежний секрет. Привязка к внешнему ID после первого сохранения неизменяема: смена требует отдельной проверенной миграции.
+- `PUT /revenue-analytics/access?companyCode=…&provider=metrika|yclients|direct` — `{revision, enabled, config, credential}`. Ревизия обязательна; без `credential` сохраняется прежний секрет. Привязка к внешнему ID после первого сохранения неизменяема: смена требует отдельной проверенной миграции.
 - `POST /revenue-analytics/collect?companyCode=…&provider=…` — `{}` запускает обычный сбор; для Метрики `{from,to}` сохраняет конкретный период. Ответ `collected:false` или `busy:true` не является успешной выгрузкой.
 
 `config` Метрики: `{externalId, historyFrom, timezone, goals:[{id,label}]}`; `credential`: `{token, refreshToken, clientId, clientSecret, expiresAt, refreshedAt}`. Даты — полный UTC ISO `YYYY-MM-DDTHH:mm:ss.sssZ` из момента выдачи и expires_in. Прежний `{token}` поддерживается, но автоматического продления не имеет. `config` YCLIENTS: `{externalId, historyFrom, timezone, cashRules:[{expenseId,kind}]}`; `credential`: `{partnerToken,userToken}`. Временно остановить сбор можно сохранением текущей конфигурации с `enabled:false` и её ревизией. Данные сохраняются.
@@ -46,3 +46,13 @@ UTM берутся из `from_url` записи, если поле действ�
 ## Проверки
 
 `node --test ops/crm/revenue-analytics.test.js ops/crm/analytics.test.js` и тесты кабинета `analytics-revenue.test.cjs`, `analytics-2gis.test.cjs`, `analytics-potential.test.cjs` (jsdom). Тесты используют вымышленные компании и ответы API. Они подтверждают реализацию, но не рабочие ключи, публикацию или ежедневный сбор на production.
+
+## Расходы Яндекс Директа
+Сборщик direct подключён к существующим шифрованию, заданиям, защищённому API и кабинету. config: {externalLogin, campaignIds, currency, timezone:"Europe/Moscow", includeVAT, includeDiscount:true, historyFrom}; credential: {token}. Ревизия обязательна. Логин, валюта и кампании после первого сохранения неизменяемы; одна кампания не назначается двум компаниям, в том числе при выключенном сборе.
+Только POST Reports https://api.direct.yandex.com/json/v501/reports. Фильтр объявленных кампаний; Date/CampaignId/Impressions/Clicks/Cost; НДС явно и IncludeSubscriptionDiscount=YES. Статистика всегда по Москве, не по расписанию показов. Валюта из привязки требует независимой сверки с кабинетом.
+Деньги сохраняются целыми микроединицами: без округления каждой строки. Полнота проверяется по точному заголовку периода, колонкам, итоговому числу строк, кампаниям, датам, дублям и безопасным суммам. Полный пустой TSV — ноль; HTML/отказ/неполная выдача/отсутствие снимка — неизвестно.
+201/202 ограниченно опрашиваются идентичным запросом после retryIn: максимум60/15мин одного отчёта, тело8МиБ. Новое имя в каждом часовом окне позволяет обновить корректировки закрытых периодов; внутри одного опроса имя неизменно. Токен и тексты API ошибок не журналируются.
+Плановый сбор раз в час: 30 завершённых московских дней плюс вся заданная история частями до1096дней, максимум20 частей. Набор сохраняется одним поколением в revenue_direct после проверки ревизии и аренды. Ошибка любой части сохраняет прежнее поколение. Общая аренда30минут: её превышение не является частичным успехом; долгий первичный импорт требует контрольных точек.
+Ручное {from,to} сохраняет точный период (до1096дней). report.direct отдаёт расход, кампании, период, валюту, НДС, периодClosed, происхождение и время; кабинет отображает отдельно от записей/оплат. Иркутские сутки нельзя автоматически совместить с московскими днями Директа. CAC/ROMI требуют доказанной сопоставимой когорты, полной истории первых оплат, всех расходов и себестоимости.
+До отката выключить все активные подключения владельцем, завершить задания и вернуть проверенный прежний код/образ. Таблицу revenue_direct не удалять. Рабочих OAuth/Reports вызовов и production установки этим этапом нет.
+Контракт: https://yandex.com/dev/direct/doc/en/reports ; https://yandex.com/dev/direct/doc/en/spec ; https://yandex.com/dev/direct/doc/en/headers ; https://yandex.com/dev/direct/doc/en/money ; https://yandex.ru/support/direct/ru/efficiency/timetargeting

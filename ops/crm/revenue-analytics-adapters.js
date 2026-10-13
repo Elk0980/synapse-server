@@ -1,5 +1,6 @@
 'use strict';
 const {fail,range,id,credential} = require('./revenue-analytics-access');
+const {createDirectAdapter}=require('./revenue-direct-adapter');
 const METRICS = ['ym:s:visits','ym:s:users','ym:s:avgVisitDurationSeconds','ym:s:bounceRate','ym:s:pageDepth'];
 const HOSTS = new Set(['api-metrika.yandex.net','api.yclients.ru']);
 const sleep = ms => new Promise(resolve => setTimeout(resolve,ms));
@@ -8,6 +9,11 @@ const safeDimension = v => typeof v === 'string' && v.length <= 200 && !/[@:\/?\
 function createRevenueAdapters({fetchImpl = fetch, wait = sleep, now = Date.now} = {}) {
   let queue = Promise.resolve(), lastAt = 0, closed = false;
   const abort = new AbortController();
+  const directAdapter=createDirectAdapter({fetchImpl,now,signal:abort.signal});
+  const direct=(binding,period)=>{
+    const {historyFrom,...config}=binding.config;
+    return directAdapter.collect({...binding,config},period);
+  };
   async function refreshMetrika(c) {
     credential('metrika',c);
     if(!c.refreshToken)fail('TOKEN_REAUTH_REQUIRED',502);
@@ -115,6 +121,6 @@ function createRevenueAdapters({fetchImpl = fetch, wait = sleep, now = Date.now}
     }
     return {overview,utm,sources,goals,attribution:'lastsign',period:r,timezone:c.config.timezone};
   }
-  return {metrika,refreshMetrika,ycPages,json,ycHeaders,verifyYclients,stop:()=>{closed=true;abort.abort();}};
+  return {metrika,direct,refreshMetrika,ycPages,json,ycHeaders,verifyYclients,stop:()=>{closed=true;abort.abort();directAdapter.stop();}};
 }
 module.exports={createRevenueAdapters,METRICS};

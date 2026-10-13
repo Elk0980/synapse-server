@@ -1,10 +1,10 @@
 'use strict';
 const crypto=require('node:crypto');
-const {createRevenueAccess,company,provider,id,range,localDay,shiftDay,fail}=require('./revenue-analytics-access');
+const {createRevenueAccess,PROVIDERS,company,provider,id,range,localDay,shiftDay,fail}=require('./revenue-analytics-access');
 const {createRevenueAdapters}=require('./revenue-analytics-adapters');
 const {revenueQuality}=require('./revenue-analytics-quality');
 const OFFSETS={'Asia/Irkutsk':'+08:00','Asia/Bangkok':'+07:00','Europe/Moscow':'+03:00',UTC:'Z'};
-const KNOWN_ERRORS=new Set(['MISSING_ACCESS','CREDENTIAL_UNREADABLE','ACCESS_DENIED','RATE_LIMITED','UPSTREAM_ERROR','CONNECTION_UNCERTAIN','RESPONSE_TOO_LARGE','RESPONSE_UNCERTAIN','INCOMPLETE','PROFILE_CHANGED','LEASE_LOST','REVISION_CONFLICT','TOKEN_REAUTH_REQUIRED','TOKEN_REFRESH_UNCERTAIN','TOKEN_REFRESH_BUSY']);
+const KNOWN_ERRORS=new Set(['MISSING_ACCESS','CREDENTIAL_UNREADABLE','ACCESS_DENIED','RATE_LIMITED','UPSTREAM_ERROR','CONNECTION_UNCERTAIN','RESPONSE_TOO_LARGE','RESPONSE_UNCERTAIN','INCOMPLETE','PROFILE_CHANGED','LEASE_LOST','REVISION_CONFLICT','TOKEN_REAUTH_REQUIRED','TOKEN_REFRESH_UNCERTAIN','TOKEN_REFRESH_BUSY','CANCELLED','DELAYED','BAD_PERIOD','SERVER_STOPPING']);
 function dateTime(v,tz) {
   if(typeof v!=='string')fail('RESPONSE_UNCERTAIN',502);
   let s=v.replace(' ','T'); if(!/(?:Z|[+-]\d{2}:?\d{2})$/.test(s))s+=OFFSETS[tz];
@@ -30,7 +30,8 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
   db.exec('CREATE TABLE IF NOT EXISTS revenue_jobs(company TEXT NOT NULL,provider TEXT NOT NULL,lease TEXT,lease_until INTEGER NOT NULL DEFAULT 0,next_at INTEGER NOT NULL DEFAULT 0,last_attempt TEXT,last_success TEXT,success_revision INTEGER,error_code TEXT NOT NULL DEFAULT \'\',failures INTEGER NOT NULL DEFAULT 0,history_from TEXT,PRIMARY KEY(company,provider));'+
     'CREATE TABLE IF NOT EXISTS revenue_records(company TEXT NOT NULL,id TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(company,id));'+
     'CREATE TABLE IF NOT EXISTS revenue_cash(company TEXT NOT NULL,id TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(company,id));'+
-    'CREATE TABLE IF NOT EXISTS revenue_metrika(company TEXT NOT NULL,from_day TEXT NOT NULL,to_day TEXT NOT NULL,revision INTEGER NOT NULL,payload TEXT NOT NULL,collected_at TEXT NOT NULL,PRIMARY KEY(company,from_day,to_day));');
+    'CREATE TABLE IF NOT EXISTS revenue_metrika(company TEXT NOT NULL,from_day TEXT NOT NULL,to_day TEXT NOT NULL,revision INTEGER NOT NULL,payload TEXT NOT NULL,collected_at TEXT NOT NULL,PRIMARY KEY(company,from_day,to_day));'+
+    'CREATE TABLE IF NOT EXISTS revenue_direct(company TEXT NOT NULL,from_day TEXT NOT NULL,to_day TEXT NOT NULL,revision INTEGER NOT NULL,payload TEXT NOT NULL,collected_at TEXT NOT NULL,PRIMARY KEY(company,from_day,to_day));');
   const stamp=()=>new Date(now()).toISOString();
   const job=(c,p)=>db.prepare('SELECT * FROM revenue_jobs WHERE company=? AND provider=?').get(c,p);
   const keyed=(c,clientId)=>clientId && Number(clientId)>0 ? crypto.createHmac('sha256',apiKey).update('revenue-client/v1/'+c+'/'+id(clientId)).digest('hex') : null;
@@ -53,9 +54,9 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
     const successCurrent=Boolean(j?.last_success && j.success_revision===connection.revision);
     return {...connection,lastAttempt:j?.last_attempt||null,lastSuccess:j?.last_success||null,nextCheckAt:j?.next_at?new Date(j.next_at).toISOString():null,
       running:Boolean(j?.lease && j.lease_until>now()),errorCode:j?.error_code||null,
-      current:successCurrent,stale:!successCurrent || now()-Date.parse(j.last_success)>(p==='metrika'?3:30)*3600000};
+      current:successCurrent,stale:!successCurrent || now()-Date.parse(j.last_success)>(['metrika','direct'].includes(p)?3:30)*3600000};
   }
-  const settings=c=>({companyCode:company(c),providers:['metrika','yclients'].map(p=>status(c,p))});
+  const settings=c=>({companyCode:company(c),providers:PROVIDERS.map(p=>status(c,p))});
   function save(c,p,b) {
     const result=access.save(c,p,b);
     db.prepare('INSERT INTO revenue_jobs(company,provider,next_at) VALUES(?,?,0) ON CONFLICT(company,provider) DO UPDATE SET next_at=0').run(c,p);
@@ -110,6 +111,26 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
           if(b.success!==true||!b.data||String(b.data.id)!==rid)fail('RESPONSE_UNCERTAIN',502);
           records.push(normalizeRecord(c,config,b.data));
         }
+      } else if(p==='direct') {
+        // Точная выбранная сумма сохраняется целиком. Плановый сбор покрывает всю заданную историю
+        // частями до 1096 дней и отдельно 30 завершённых московских дней для кабинета.
+        const yesterday=shiftDay(today,-1);
+        const periods=requested?[requested]:[{from:config.historyFrom>shiftDay(yesterday,-29)?config.historyFrom:shiftDay(yesterday,-29),to:yesterday}];
+        if(!requested)for(let start=config.historyFrom;start<=yesterday;) {
+          const end=shiftDay(start,1095)<yesterday?shiftDay(start,1095):yesterday;
+          periods.push({from:start,to:end});start=shiftDay(end,1);
+          if(periods.length>20)fail('INCOMPLETE',502);
+        }
+        const seen=new Set();
+        for(const r of periods) {
+          range(r.from,r.to);const key=r.from+'/'+r.to;if(seen.has(key))continue;seen.add(key);
+          const payload=await adapters.direct(binding,r);
+          if(payload.companyCode!==c || payload.provider!=='direct' || payload.externalLogin!==config.externalLogin ||
+            payload.period?.from!==r.from || payload.period?.to!==r.to || payload.timezone!==config.timezone ||
+            payload.currency!==config.currency || payload.includeVAT!==config.includeVAT || payload.moneyUnit!=='micros' ||
+            JSON.stringify(payload.campaignIds)!==JSON.stringify(config.campaignIds))fail('PROFILE_CHANGED',502);
+          reports.push({r,payload});
+        }
       } else {
         const periods=requested?[requested]:[{from:today,to:today},{from:shiftDay(today,-6),to:today},{from:shiftDay(today,-29),to:today},{from:config.historyFrom,to:today}];
         const seen=new Set();
@@ -131,12 +152,13 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
           db.prepare('DELETE FROM revenue_cash WHERE company=?').run(c);
           const add=db.prepare('INSERT INTO revenue_cash VALUES(?,?,?)');for(const t of cash)add.run(c,t.id,JSON.stringify(t));
         } else {
-          const add=db.prepare('INSERT INTO revenue_metrika VALUES(?,?,?,?,?,?) ON CONFLICT(company,from_day,to_day) DO UPDATE SET revision=excluded.revision,payload=excluded.payload,collected_at=excluded.collected_at');
+          const table=p==='direct'?'revenue_direct':'revenue_metrika';
+          const add=db.prepare('INSERT INTO '+table+' VALUES(?,?,?,?,?,?) ON CONFLICT(company,from_day,to_day) DO UPDATE SET revision=excluded.revision,payload=excluded.payload,collected_at=excluded.collected_at');
           for(const r of reports)add.run(c,r.r.from,r.r.to,binding.revision,JSON.stringify(r.payload),stamp());
-          db.prepare('DELETE FROM revenue_metrika WHERE company=? AND collected_at<?').run(c,new Date(now()-90*86400000).toISOString());
+          db.prepare('DELETE FROM '+table+' WHERE company=? AND collected_at<?').run(c,new Date(now()-90*86400000).toISOString());
         }
         db.prepare('UPDATE revenue_jobs SET lease=NULL,lease_until=0,last_success=?,success_revision=?,next_at=?,error_code=\'\',failures=0,history_from=? WHERE company=? AND provider=? AND lease=?')
-          .run(stamp(),binding.revision,now()+(p==='metrika'?3600000:86400000),config.historyFrom,c,p,token);
+          .run(stamp(),binding.revision,now()+(['metrika','direct'].includes(p)?3600000:86400000),config.historyFrom,c,p,token);
         db.exec('COMMIT');
       }catch(e){db.exec('ROLLBACK');throw e;}
       return {companyCode:c,provider:p,collected:true,status:status(c,p)};
@@ -166,6 +188,9 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
     company(c);const period=range(from,to),state=settings(c);
     const yc=state.providers.find(p=>p.provider==='yclients');const mc=state.providers.find(p=>p.provider==='metrika');
     const m=db.prepare('SELECT * FROM revenue_metrika WHERE company=? AND from_day=? AND to_day=?').get(c,from,to);
+    const dc=state.providers.find(p=>p.provider==='direct');
+    const ds=db.prepare('SELECT * FROM revenue_direct WHERE company=? AND from_day=? AND to_day=?').get(c,from,to);
+    const direct=ds?{...JSON.parse(ds.payload),collectedAt:ds.collected_at,current:ds.revision===dc.revision}:null;
     const sourceKey=u=>u.source?JSON.stringify([u.source,u.medium||'',u.campaign||'',u.content||'',u.term||'']):'unknown';
     const groups=new Map();
     const group=u=>{const key=sourceKey(u);if(!groups.has(key))groups.set(key,{utm:u.source?u:null,bookings:0,attendedVisits:0,paymentKopecks:0,refundKopecks:0,payingClients:new Set()});return groups.get(key);};
@@ -208,7 +233,7 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
         sourceCoveragePercent:stats.createdBookings?100*stats.bookingsWithSource/stats.createdBookings:null};
     }
     const metrika=m?{...JSON.parse(m.payload),collectedAt:m.collected_at,current:m.revision===mc.revision}:null;
-    return {companyCode:c,period,state,metrika,yclients,quality:revenueQuality({period,state,metrika,yclients},now()),
+    return {companyCode:c,period,state,metrika,yclients,direct,quality:revenueQuality({period,state,metrika,yclients,direct},now()),
       economics:{cac:null,romi:null,reason:'Расходы, первичные клиенты за всю историю и себестоимость ещё не подтверждены.'},
       definitions:{bookings:'Дата создания записи; отмены отдельно.',visits:'Фактическое посещение по дате визита; один visit_id считается один раз.',cash:'Реальные деньги по дате транзакции, с вычетом возвратов; неизвестные статьи не считаются доходом.',attribution:'UTM из from_url конкретной записи. Неизвестный источник не назначается рекламе. Итоги Метрики не связывают человека с оплатой сами по себе.'}};
   }

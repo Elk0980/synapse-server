@@ -114,3 +114,43 @@ test('быстрые периоды включают ровно 7 и 30 кале
     }
   }finally{f.close();}
 });
+
+test('расходы Директа отображаются отдельно, с точной валютой, НДС и московскими сутками',async()=>{
+  const value=payload();value.state.providers.push({provider:'direct',configured:true,enabled:true,lastSuccess:'2026-10-08T08:00:00Z'});
+  value.direct={totalCostMicros:1234567890,totalClicks:3,totalImpressions:25,currency:'RUB',includeVAT:false,periodClosed:true,current:true,collectedAt:'2026-10-08T08:00:00Z'};
+  const f=fixture({value});try{
+    await f.render();const text=f.block().textContent;
+    assert.match(text,/Яндекс Директ: рекламные расходы/);assert.match(text,/1\s234,56789 RUB/);
+    assert.match(text,/Без НДС/);assert.match(text,/московскому времени/);assert.match(text,/только к выбранным кампаниям/);
+    assert.match(text,/не подтверждает запись или оплату/);
+  }finally{f.close();}
+});
+
+test('неподключённый Директ и отсутствие снимка не превращаются в нулевой расход',async()=>{
+  const value=payload();value.state.providers.push({provider:'direct',configured:false,enabled:false});value.direct=null;
+  const f=fixture({value});try{
+    await f.render();assert.match(f.block().textContent,/Яндекс Директ: не подключён/);
+    assert.match(f.block().textContent,/пока нет выгрузки расходов Директа/);assert.doesNotMatch(f.block().textContent,/Расход: 0/);
+  }finally{f.close();}
+});
+
+test('обновление собирает только включённые источники и запрашивает точный период Директа',async()=>{
+  const value=payload();value.state.providers[1].enabled=false;
+  value.state.providers.push({provider:'direct',configured:true,enabled:true});
+  const f=fixture({value,custom:async(path)=>path==='/revenue-analytics'?value:{collected:true}});try{
+    await f.render();f.block().querySelector('[data-revenue-collect]').click();await f.settle();
+    const writes=f.calls.filter(c=>c.path==='/revenue-analytics/collect');
+    assert.deepEqual(writes.map(c=>c.params.provider),['metrika','direct']);
+    assert.deepEqual(JSON.parse(writes[1].options.body),RANGE);
+  }finally{f.close();}
+});
+
+test('заголовки валюты и прежний снимок расходов экранируются; нет скрытой серверной записи',async()=>{
+  const value=payload();value.state.providers.push({provider:'direct',configured:true,enabled:true});
+  value.direct={totalCostMicros:1000000,totalClicks:0,totalImpressions:0,currency:'<img src=x>',includeVAT:true,periodClosed:false,current:false,collectedAt:'2026-10-08T08:00:00Z'};
+  const f=fixture({value,role:'employee'});try{
+    await f.render();assert.equal(f.block().querySelector('img'),null);assert.match(f.block().textContent,/прежний снимок/);
+    assert.match(f.block().textContent,/Период ещё не завершён/);assert.match(f.block().textContent,/С НДС/);
+    assert.equal(f.calls.filter(c=>c.options?.method==='POST').length,0);
+  }finally{f.close();}
+});

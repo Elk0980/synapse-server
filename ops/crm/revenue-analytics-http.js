@@ -3,6 +3,7 @@ const ERRORS={
   VALIDATION_ERROR:[400,'Проверьте параметры подключения.'],BAD_PERIOD:[400,'Проверьте даты периода.'],BAD_TIMEZONE:[400,'Проверьте часовой пояс.'],
   REVISION_CONFLICT:[409,'Подключение изменилось. Обновите страницу.'],BINDING_CHANGED:[409,'Сохранённые данные относятся к другому филиалу или счётчику. Смена привязки требует отдельной миграции.'],
   MISSING_ACCESS:[409,'Источник не подключён или сбор выключен.'],CREDENTIAL_UNREADABLE:[409,'Сохранённый доступ не читается. Нужен повторный ввод ключа.']
+  ,BINDING_OVERLAP:[409,'Эта кампания уже относится к другой компании. Проверьте привязку.'],BAD_CURRENCY:[400,'Проверьте валюту рекламного аккаунта.']
 };
 function createRevenueHandler({analytics,companyModuleContext,readJson,send}) {
   return async function handle(request,response,url,cors={}) {

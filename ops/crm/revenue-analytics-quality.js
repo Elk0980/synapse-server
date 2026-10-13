@@ -2,7 +2,7 @@
 const {localDay}=require('./revenue-analytics-access');
 
 // Только оценка уже сохранённого отчёта; внешних запросов и побочных эффектов нет.
-function revenueQuality({period,state,metrika:m,yclients:y},now) {
+function revenueQuality({period,state,metrika:m,yclients:y,direct:d},now) {
   const checks=[];
   const add=(id,title,status,detail)=>checks.push({id,title,status,detail});
   const sources=Object.fromEntries(state.providers.map(p=>[p.provider,p]));
@@ -19,6 +19,15 @@ function revenueQuality({period,state,metrika:m,yclients:y},now) {
     return parts;
   };
   const mp=sources.metrika,yp=sources.yclients;
+  if(sources.direct) {
+    if(!d)add('direct_snapshot','Расходы Директа','unavailable',missing(sources.direct));
+    else {
+      const parts=issues(sources.direct,d,3*3600000);
+      if(!d.periodClosed)parts.push('Период Директа ещё не завершён.');
+      add('direct_snapshot','Расходы Директа',parts.length?'attention':'ok',parts.join(' ')||'Сохранён полный отчёт выбранных кампаний. Валюта требует сверки с кабинетом; расходы ещё не доказывают новых платящих клиентов.');
+      if((m&&m.timezone!==d.timezone)||(y&&y.timezone!==d.timezone))add('direct_timezone','Сопоставимость суток','attention','Директ считает дни по Москве. Для экономики требуется тот же часовой пояс когорты; дневные расходы нельзя перенести на иркутские сутки.');
+    }
+  }
   if(!m)add('metrika_snapshot','Данные сайта','unavailable',missing(mp));
   else {
     const parts=issues(mp,m,3*3600000);

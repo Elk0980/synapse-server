@@ -1,6 +1,7 @@
 'use strict';
 const crypto = require('node:crypto');
-const PROVIDERS = ['metrika', 'yclients'];
+const {directConfiguration,directCredential,assertDisjointDirectBindings}=require('./revenue-direct-adapter');
+const PROVIDERS = ['metrika', 'yclients', 'direct'];
 const fail = (code = 'VALIDATION_ERROR', status = 400) => { throw Object.assign(new Error(code), {code, status}); };
 const company = v => { if (typeof v !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(v)) fail(); return v; };
 const provider = v => { if (!PROVIDERS.includes(v)) fail(); return v; };
@@ -10,6 +11,7 @@ const range = (from, to) => { day(from); day(to); if (from > to || (Date.parse(t
 const localDay = (at, timezone) => new Intl.DateTimeFormat('en-CA', {timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(at);
 const shiftDay = (d, n) => new Date(Date.parse(day(d)) + n*86400000).toISOString().slice(0,10);
 function credential(name, value) {
+  if(name==='direct')return directCredential(value);
   const oauth = name === 'metrika' && value?.refreshToken !== undefined;
   const keys = name === 'metrika' ? oauth ? ['token','refreshToken','clientId','clientSecret','expiresAt','refreshedAt'] : ['token'] : ['partnerToken','userToken'];
   if (!value || Object.keys(value).sort().join(',') !== keys.sort().join(',')) fail();
@@ -23,6 +25,10 @@ function credential(name, value) {
 }
 function configuration(name, input) {
   if (!input || Array.isArray(input) || typeof input !== 'object') fail();
+  if(name==='direct') {
+    const {historyFrom,...direct}=input;
+    return {...directConfiguration(direct),historyFrom:day(historyFrom)};
+  }
   const allowed = name === 'metrika' ? ['externalId','historyFrom','timezone','goals'] : ['externalId','historyFrom','timezone','cashRules'];
   if (Object.keys(input).some(k => !allowed.includes(k))) fail();
   const c = {externalId:id(input.externalId),historyFrom:day(input.historyFrom),timezone:input.timezone || 'Asia/Irkutsk'};
@@ -62,13 +68,24 @@ function createRevenueAccess(db, {apiKey, now = Date.now}) {
   const row = (code, name) => db.prepare('SELECT * FROM revenue_access WHERE company=? AND provider=?').get(company(code),provider(name));
   const dto = (code,name,r) => ({companyCode:code,provider:name,configured:Boolean(r?.secret),enabled:Boolean(r?.enabled),revision:r?.revision || 0,config:r ? JSON.parse(r.config) : null,updatedAt:r?.updated_at || null});
   const get = (code,name) => dto(company(code),provider(name),row(code,name));
-  function save(code,name,b) {
+  function saveValue(code,name,b) {
     company(code); provider(name);
     if (!b || Object.keys(b).some(k => !['revision','config','credential','enabled'].includes(k)) || !Number.isSafeInteger(b.revision) || b.revision < 0 || typeof b.enabled !== 'boolean') fail();
     const old = row(code,name); if ((old?.revision || 0) !== b.revision) fail('REVISION_CONFLICT',409);
     const c = configuration(name,b.config);
     // Данные филиала не смешиваются при смене внешнего идентификатора. Нужна новая привязка компании.
-    if (old && JSON.parse(old.config).externalId !== c.externalId) fail('BINDING_CHANGED',409);
+    if (old) {
+      const prior=JSON.parse(old.config);
+      if(name==='direct') {
+        if(prior.externalLogin!==c.externalLogin || prior.currency!==c.currency || JSON.stringify(prior.campaignIds)!==JSON.stringify(c.campaignIds))fail('BINDING_CHANGED',409);
+      } else if(prior.externalId!==c.externalId)fail('BINDING_CHANGED',409);
+    }
+    if(name==='direct') {
+      const bindings=db.prepare("SELECT company,config FROM revenue_access WHERE provider='direct' AND company<>?").all(code)
+        .map(r=>({companyCode:r.company,config:((({historyFrom,...direct})=>direct)(JSON.parse(r.config)))}));
+      const {historyFrom,...direct}=c;
+      assertDisjointDirectBindings([...bindings,{companyCode:code,config:direct}]);
+    }
     let secret = old?.secret || '';
     if (b.credential !== undefined) {
       secret = crypt(code,name,credential(name,b.credential));
@@ -77,6 +94,12 @@ function createRevenueAccess(db, {apiKey, now = Date.now}) {
     db.prepare('INSERT INTO revenue_access VALUES(?,?,?,?,?,?,?) ON CONFLICT(company,provider) DO UPDATE SET config=excluded.config,secret=excluded.secret,revision=excluded.revision,enabled=excluded.enabled,updated_at=excluded.updated_at')
       .run(code,name,JSON.stringify(c),secret,b.revision+1,b.enabled?1:0,new Date(now()).toISOString());
     return get(code,name);
+  }
+  function save(code,name,b) {
+    // Проверка общей кампании и ревизии сериализуется с сохранением, в том числе между процессами.
+    db.exec('BEGIN IMMEDIATE');
+    try { const result=saveValue(code,name,b);db.exec('COMMIT');return result; }
+    catch(e) {db.exec('ROLLBACK');throw e;}
   }
   function resolve(code,name) {
     const r = row(code,name); if (!r?.secret || !r.enabled) fail('MISSING_ACCESS',409);
