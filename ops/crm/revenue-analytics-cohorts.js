@@ -1,8 +1,9 @@
 'use strict';
 // Когорты привлечения одной компании поверх уже нормализованных строк revenue_records/revenue_cash.
-// Клиент входит в когорту по местной дате самого раннего подтверждённого сервером касания (связь заявка→запись),
-// а не по дате первой оплаты. Чистое вычисление: без сети, БД, контактов и побочных эффектов.
-const {company,id,day,range,shiftDay,fail,configuration}=require('./revenue-analytics-access');
+// Клиент входит в когорту по дате самого раннего подтверждённого сервером касания (связь заявка→запись)
+// в явно выбранном часовом поясе анализа, а не по дате первой оплаты. Строки YCLIENTS — UTC-моменты;
+// их native timezone и покрытие выгрузки проверяются отдельно. Чистое вычисление: без сети, БД, контактов и побочных эффектов.
+const {company,id,day,range,localDay,shiftDay,fail,configuration}=require('./revenue-analytics-access');
 
 const CONTRACT='revenue-cohorts/v2';
 const TIMEZONES=['Asia/Irkutsk','Asia/Bangkok','Europe/Moscow','UTC'];
@@ -72,6 +73,8 @@ const DEFINITIONS={
   cac:'Полный сопоставимый рекламный расход окна привлечения / новые платящие клиенты этого окна. Только при подтверждённых клиентах, расходах и привязке.',
   romi:'(Чистая выручка когорты до observationTo − себестоимость − расход окна привлечения) / расход × 100, в базисных пунктах (10000 = 100%).',
   spendTimezone:'Директ отдаёт московские сутки. При другом поясе отчёта суммы не пересчитываются искусственно, экономика недоступна.',
+  timeBasis:'Часовой пояс отчёта (timezone запроса) явно выбран и задаёт полуоткрытые UTC-границы [from 00:00; observationTo+1 00:00). Строки YCLIENTS — UTC-моменты: каждая относится ровно к одному дню отчёта, суммы не сдвигаются и не делятся. Native timezone выгрузки сохраняется отдельно.',
+  nativeCoverage:'Покрытие выгрузки YCLIENTS: от 00:00 historyFrom до 00:00 native суток сбора (последние завершённые native сутки), в UTC. Если покрытие начинается позже UTC-начала окна или кончается раньше его конца, итог неполный. noPaymentsBefore истории оплат относится к native календарю, если в подтверждении не указан свой timezone.',
   money:'Целые копейки. Неизвестно не равно нулю.'
 };
 
@@ -98,6 +101,36 @@ const clientKey=v=>{if(v===null)return null;if(typeof v!=='string'||!/^[a-f0-9]{
 const optionalId=v=>v===null?null:id(v);
 const scoped=(v,c)=>{if(v.companyCode!==c)fail('FOREIGN_COMPANY',409);return v;};
 const visitKey=r=>r.visitId?'visit:'+r.visitId:'record:'+r.id;
+const utc=ms=>new Date(ms).toISOString();
+
+// --- Календари. Смещение пояса берётся из Intl в нужный момент, без таблицы: исторические правила пояса учитываются. ---
+const clocks=new Map();
+function offsetAt(ms,tz) {
+  if(!clocks.has(tz))clocks.set(tz,new Intl.DateTimeFormat('en-US',{timeZone:tz,hourCycle:'h23',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+  const p={};for(const x of clocks.get(tz).formatToParts(ms))p[x.type]=x.value;
+  return Date.UTC(Number(p.year),Number(p.month)-1,Number(p.day),Number(p.hour),Number(p.minute),Number(p.second))-Math.floor(ms/1000)*1000;
+}
+// Начало местных суток d в поясе tz как UTC-момент. Результат проверяется обратным преобразованием, а не принимается на веру.
+function dayStart(d,tz) {
+  const guess=Date.parse(day(d)+'T00:00:00Z');
+  let at=guess-offsetAt(guess,tz);at=guess-offsetAt(at,tz);
+  if(localDay(at,tz)!==d||localDay(at-1,tz)>=d)fail('BAD_TIMEZONE');
+  return at;
+}
+// Покрытие выгрузки в UTC: от native 00:00 historyFrom до начала native суток сбора.
+// Текущие native сутки сбора ещё не закрыты, поэтому момент сбора не продлевает покрытие.
+function nativeCoverage(data) {
+  const tz=data.config.timezone,from=dayStart(data.historyFrom,tz);
+  return {from,to:Math.max(from,dayStart(localDay(data.collectedAt,tz),tz))};
+}
+// Последний день выбранного календаря, целиком лежащий внутри завершённых native суток выгрузки.
+// Помощник для observationTo по умолчанию при календаре отчёта, отличном от native.
+function closedAnalysisDay(collectedAt,nativeTimezone,analysisTimezone) {
+  const nativeTz=oneOf(nativeTimezone,TIMEZONES,'BAD_TIMEZONE'),tz=oneOf(analysisTimezone,TIMEZONES,'BAD_TIMEZONE');
+  const end=dayStart(localDay(instant(collectedAt),nativeTz),nativeTz),last=localDay(end-1,tz);
+  return dayStart(shiftDay(last,1),tz)<=end?last:shiftDay(last,-1);
+}
+
 function evidence(v,kinds) {
   shape(v,['kind','reference','confirmedAt']);
   if(!kinds.includes(v.kind))fail('EVIDENCE_REJECTED');
@@ -144,23 +177,24 @@ function cashRow(t) {
   return {id:id(t.id),recordId:optionalId(t.recordId),visitId:optionalId(t.visitId),client:clientKey(t.client),at:instant(t.at),
     amount:kopecks(t.amount),expenseId:optionalId(t.expenseId),deleted:t.deleted};
 }
-function snapshotInput(y,c,tz) {
+function snapshotInput(y,c) {
   const r=reasons();
-  if(y===null)return {data:null,reasons:r.add('YCLIENTS_SNAPSHOT_MISSING'),source:null};
+  if(y===null)return {data:null,reasons:r.add('YCLIENTS_SNAPSHOT_MISSING'),source:null,nativeTimezone:null};
   shape(y,['companyCode','current','collectedAt','historyFrom','config','records','cash']);scoped(y,c);flag(y.current);
+  // config.timezone — native календарь выгрузки. Он не обязан совпадать с календарём отчёта:
+  // строки уже UTC-моменты, а покрытие проверяется в UTC (nativeCoverage).
   const config=configuration('yclients',y.config);
-  // Другой календарь даёт другие границы дней: такой вызов — ошибка интеграции, а не частичный отчёт.
-  if(config.timezone!==tz)fail('TIMEZONE_MISMATCH',409);
   const data={config,historyFrom:day(y.historyFrom),collectedAt:instant(y.collectedAt),
     records:unique(list(y.records).map(recordRow)),cash:unique(list(y.cash).map(cashRow))};
   const source={collectedAt:new Date(data.collectedAt).toISOString(),historyFrom:data.historyFrom,current:y.current};
-  if(!y.current)return {data:null,reasons:r.add('YCLIENTS_SNAPSHOT_STALE'),source};
-  return {data,reasons:r,source};
+  if(!y.current)return {data:null,reasons:r.add('YCLIENTS_SNAPSHOT_STALE'),source,nativeTimezone:config.timezone};
+  return {data,reasons:r,source,nativeTimezone:config.timezone};
 }
 function historyFact(v,c) {
   if(v==null)return null;
-  shape(v,['companyCode','noPaymentsBefore','evidence']);scoped(v,c);evidence(v.evidence,EVIDENCE.history);
-  return {noPaymentsBefore:day(v.noPaymentsBefore)};
+  // timezone необязателен: без него noPaymentsBefore — дата native календаря выгрузки. Пустое или чужое значение не угадывается.
+  shape(v,['companyCode','noPaymentsBefore','evidence'],['timezone']);scoped(v,c);evidence(v.evidence,EVIDENCE.history);
+  return {noPaymentsBefore:day(v.noPaymentsBefore),timezone:'timezone' in v?oneOf(v.timezone,TIMEZONES,'BAD_TIMEZONE'):null};
 }
 function bindingFact(b,c) {
   shape(b,['companyCode','recordId','leadId','firstTouch','evidence']);scoped(b,c);
@@ -240,6 +274,7 @@ function computeSpend(s,{cohort,currency,vatMode,tz}) {
     if(f.currency!==currency)r.add('CURRENCY_MISMATCH');
     if(f.vatMode!==vatMode)r.add('VAT_MODE_MISMATCH');
     // Московские сутки Директа не сдвигаются в пояс отчёта: сумма остаётся как есть, экономика недоступна.
+    // Пояс расхода не зависит от native пояса YCLIENTS: сравнивается только с выбранным календарём отчёта.
     if(f.timezone!==tz)r.add('TIMEZONE_MISMATCH');
     if(amount===null){r.add('EXPENSE_PERIOD_UNALLOCATED');continue;}
     const k=f.provider+'\n'+f.campaignId,mapped=conflicts.has(k)?null:dictionary.get(k)||null;
@@ -262,17 +297,25 @@ function buildRevenueCohorts(input) {
   const c=company(input.companyCode);
   shape(input.cohort,['from','to']);const cohort=range(input.cohort.from,input.cohort.to);
   const observationTo=day(input.observationTo);if(observationTo<cohort.to)fail('BAD_PERIOD');range(cohort.from,observationTo);
+  // timezone — явно выбранный календарь этого расчёта; native пояс выгрузки остаётся в snapshot.config.timezone.
   const tz=oneOf(input.timezone,TIMEZONES,'BAD_TIMEZONE'),currency=oneOf(input.currency,CURRENCIES),vatMode=oneOf(input.vatMode,[...VAT_MODES,'unknown']);
+  // Полуоткрытые UTC-границы: [from 00:00; to+1 00:00) и [from 00:00; observationTo+1 00:00) в календаре отчёта.
+  const bounds={cohortFrom:dayStart(cohort.from,tz),cohortTo:dayStart(shiftDay(cohort.to,1),tz),observationTo:dayStart(shiftDay(observationTo,1),tz)};
   const taxR=reasons();if(vatMode==='unknown')taxR.add('VAT_MODE_UNCONFIRMED');
   // Все факты проверяются до расчёта: строка чужой компании отклоняет весь вызов.
   const history=historyFact(input.paymentHistory,c);
   const bindings=input.leadBindings==null?[]:list(input.leadBindings).map(b=>bindingFact(b,c));
   const spend=computeSpend(spendInput(input.spend,c),{cohort,currency,vatMode,tz});
   const costs=costFacts(input.recordCosts,c);
-  const snapshot=snapshotInput(input.yclients,c,tz);
+  const snapshot=snapshotInput(input.yclients,c);
+  const native=snapshot.data?nativeCoverage(snapshot.data):null;
+  const gap=native&&{start:native.from>bounds.cohortFrom,cohortEnd:bounds.cohortTo>native.to,observationEnd:bounds.observationTo>native.to};
+  const timeBasis={analysisTimezone:tz,nativeTimezone:snapshot.nativeTimezone,
+    bounds:{cohortFromUtc:utc(bounds.cohortFrom),cohortToUtcExclusive:utc(bounds.cohortTo),observationToUtcExclusive:utc(bounds.observationTo)},
+    nativeCoverage:native&&{fromUtc:utc(native.from),toUtcExclusive:utc(native.to),startGap:gap.start,cohortEndGap:gap.cohortEnd,observationEndGap:gap.observationEnd}};
   // Заявки без записи появятся только с серверным журналом заявок; до этого стадия неизвестна, а не ноль.
   const leadsWithoutBooking=unavailableValue(reasons().add('LEAD_JOURNAL_NOT_INTEGRATED'),{value:null});
-  const result={contract:CONTRACT,companyCode:c,scope:{companyCode:c,timezone:tz,currency,vatMode,unit:'kopecks'},
+  const result={contract:CONTRACT,companyCode:c,scope:{companyCode:c,timezone:tz,currency,vatMode,unit:'kopecks'},timeBasis,
     cohort:{from:cohort.from,to:cohort.to,observationTo,basis:'server_bound_first_touch_local_day'},
     source:{yclients:snapshot.source,metrika:'not_linked_without_lead_binding',leadJournal:'not_integrated'},spend:spendOutput(spend),definitions:DEFINITIONS};
   if(!snapshot.data) {
@@ -288,11 +331,10 @@ function buildRevenueCohorts(input) {
       rows:[],economics:{cac:unavailableValue(blocked,{valueKopecks:null,exact:null}),romi:unavailableValue(blocked,{basisPoints:null,exact:null})},
       coverage:{status:'unavailable',reasons:blocked.list()}};
   }
-  const {config,records,cash,historyFrom}=snapshot.data;
-  // Тот же формат, что localDay() из revenue-analytics-access, но один форматтер на вызов.
+  const {config,records,cash}=snapshot.data;
+  // Тот же формат, что localDay() из revenue-analytics-access, но один форматтер на вызов. Дни — в календаре отчёта.
   const formatter=new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit'});
   const dayOf=ms=>formatter.format(ms),inCohort=d=>d>=cohort.from&&d<=cohort.to;
-  const collectedDay=dayOf(snapshot.data.collectedAt);
   const rules=new Map(config.cashRules.map(r=>[r.expenseId,r.kind]));
   const byId=new Map(records.map(r=>[r.id,r])),byVisit=new Map(),byClient=new Map();
   const push=(map,key,v)=>{const a=map.get(key);if(a)a.push(v);else map.set(key,[v]);};
@@ -315,9 +357,10 @@ function buildRevenueCohorts(input) {
   }
 
   // Календарные факты окна: отдельно от когорты привлечения.
+  // Покрытие сравнивается в UTC: при одном поясе это прежние сравнения historyFrom>from и to>=день сбора.
   const calendarR=reasons();
-  if(historyFrom>cohort.from)calendarR.add('HISTORY_AFTER_PERIOD_START');
-  if(cohort.to>=collectedDay)calendarR.add('PERIOD_NOT_CLOSED');
+  if(gap.start)calendarR.add('HISTORY_AFTER_PERIOD_START');
+  if(gap.cohortEnd)calendarR.add('PERIOD_NOT_CLOSED');
   if(!rules.size)calendarR.add('CASH_RULES_MISSING');
   calendarR.add('UNKNOWN_CASH_ARTICLE',unknownOps.filter(u=>inCohort(u.day)).length);
   const calendar={createdBookings:0,cancelledBookings:0,noShows:0,attendedUniqueVisits:0,paymentKopecks:0,refundKopecks:0,netCashKopecks:0,firstObservedPayers:0};
@@ -384,8 +427,8 @@ function buildRevenueCohorts(input) {
 
   // Причины неизвестности: привлечение (воронка) и новизна платящих (знаменатель CAC).
   const acqR=reasons(),freshR=reasons();
-  if(historyFrom>cohort.from){acqR.add('HISTORY_AFTER_PERIOD_START');freshR.add('HISTORY_AFTER_PERIOD_START');}
-  if(cohort.to>=collectedDay)acqR.add('PERIOD_NOT_CLOSED');
+  if(gap.start){acqR.add('HISTORY_AFTER_PERIOD_START');freshR.add('HISTORY_AFTER_PERIOD_START');}
+  if(gap.cohortEnd)acqR.add('PERIOD_NOT_CLOSED');
   // Связь без клиента с касанием не позже окна могла бы добавить члена или сдвинуть чьё-то первое касание раньше.
   for(const o of orphans)if(dayOf(o.touchAt)<=cohort.to){acqR.add(o.code);freshR.add(o.code);}
   let unknownClients=0,reactivated=0;
@@ -396,8 +439,9 @@ function buildRevenueCohorts(input) {
     // Неизвестный клиент без оплаты к observationTo не может быть новым платящим: CAC он не блокирует.
     if(paying(client))freshR.add(k.code);
   }
-  if(!history||historyFrom>history.noPaymentsBefore)freshR.add('PAYMENT_HISTORY_UNPROVEN');
-  if(observationTo>=collectedDay)freshR.add('PERIOD_NOT_CLOSED');
+  // Подтверждение истории и выгрузка должны стыковаться в UTC без непокрытых часов между ними.
+  if(!history||dayStart(history.noPaymentsBefore,history.timezone||config.timezone)<native.from)freshR.add('PAYMENT_HISTORY_UNPROVEN');
+  if(gap.observationEnd)freshR.add('PERIOD_NOT_CLOSED');
   if(!rules.size)freshR.add('CASH_RULES_MISSING');
   for(const e of entries)if(e.amount>0&&!e.client)freshR.add(e.clientConflict?'CLIENT_IDENTITY_CONFLICT':'CLIENT_IDENTITY_MISSING');
   const memberUnknown=reasons();
@@ -507,4 +551,4 @@ function buildRevenueCohorts(input) {
     rows,economics:{cac,romi},coverage:{status:coverage.size?'partial':'complete',reasons:coverage.list()}};
 }
 
-module.exports={buildRevenueCohorts,REASONS,EVIDENCE,CONTRACT};
+module.exports={buildRevenueCohorts,REASONS,EVIDENCE,CONTRACT,closedAnalysisDay};

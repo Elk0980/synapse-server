@@ -60,7 +60,8 @@ const analyticsState = {
   period: "today",
   range: periodDates("today"),
   selected: new Set(ANALYTICS_PLATFORMS.map((platform) => platform.id)),
-  payload: null
+  payload: null,
+  revenueTimezoneByCompany: new Map()
 };
 const shortDay = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? value.split("-").reverse().join(".") : "—";
 const shortRange = (range) => range ? `${shortDay(range.from)}–${shortDay(range.to)}` : "—";
@@ -249,6 +250,9 @@ const renderRevenueSection = (payload) => {
   if (!payload || payload.error) return head+'<p class="crm-note">Серверный сбор ещё не доступен. Клики и старые отметки CRM не подтверждают визит или оплату.</p></section>';
   const num=(v)=>v===null||v===undefined?'—':escapeHTML(new Intl.NumberFormat('ru-RU',{maximumFractionDigits:2}).format(v));
   const at=(v)=>v?escapeHTML(new Date(v).toLocaleString('ru-RU')):'ещё не было';
+  const calendar=payload.calendarBasis?.analysisTimezone||payload.cohorts?.scope?.timezone||payload.yclients?.timezone||'Asia/Irkutsk';
+  const calendarLabels={'Asia/Irkutsk':'Иркутск','Europe/Moscow':'Москва','Asia/Bangkok':'Бангкок',UTC:'UTC'};
+  const calendarControl='<label>Система суток расчёта экономики<select data-revenue-timezone>'+Object.entries(calendarLabels).map(([key,label])=>'<option value="'+key+'"'+(key===calendar?' selected':'')+'>'+label+'</option>').join('')+'</select></label><p class="crm-note">Расходы должны относиться к тем же суткам. Дневные суммы источников не сдвигаются автоматически.</p>';
   const accessError=(code)=>code==='TOKEN_REAUTH_REQUIRED'?'нужно повторно подключить Метрику':code==='TOKEN_REFRESH_UNCERTAIN'?'продление доступа не подтверждено; нужна проверка подключения':code==='TOKEN_REFRESH_BUSY'?'доступ обновляется; загрузка будет повторена':'ошибка загрузки';
   const states=payload.state.providers.map(p=>'<li>'+escapeHTML(({metrika:'Яндекс Метрика',yclients:'YCLIENTS',direct:'Яндекс Директ'})[p.provider]||p.provider)+': '+
     (!p.configured?'не подключён':!p.enabled?'сбор выключен':p.running?'идёт загрузка':p.errorCode?accessError(p.errorCode):p.stale?'данные требуют обновления':'обновляется сервером')+
@@ -284,7 +288,7 @@ const renderRevenueSection = (payload) => {
   const cohort=payload.cohorts;
   const reasons=(value)=>[...new Set((value?.reasons||[]).map(r=>r.label))].map(escapeHTML).join(' ');
   const cohortBlock=cohort?'<h3>Клиенты по периоду привлечения</h3><p class="crm-note">Пришли '+escapeHTML(cohort.cohort.from)+' — '+escapeHTML(cohort.cohort.to)+
-    '; записи, посещения и деньги наблюдаем до '+escapeHTML(cohort.cohort.observationTo)+'. Оплата после периода привлечения учитывается до этой даты.</p>'+
+    '; записи, посещения и деньги наблюдаем до '+escapeHTML(cohort.cohort.observationTo)+'. Система суток: '+escapeHTML(calendarLabels[calendar]||calendar)+'. Оплата после периода привлечения учитывается до этой даты.</p>'+
     '<p>Новых платящих клиентов: <strong>'+num(cohort.cohortTotals.newPayingClients.value)+'</strong>. '+reasons(cohort.cohortTotals.newPayingClients)+'</p>'+
     '<p>Пришли и связаны с записью: '+num(cohort.cohortTotals.funnel.status==='unavailable'?null:cohort.cohortTotals.funnel.bookedClients)+
     ' · посетили: '+num(cohort.cohortTotals.funnel.status==='unavailable'?null:cohort.cohortTotals.funnel.attendedClients)+
@@ -292,7 +296,7 @@ const renderRevenueSection = (payload) => {
     '<p>Стоимость нового платящего клиента: '+(cohort.economics.cac.status==='verified'?formatMoney(cohort.economics.cac.valueKopecks/100):'—')+
     ' · окупаемость рекламы: '+(cohort.economics.romi.status==='verified'?num(cohort.economics.romi.basisPoints/100)+'%':'—')+'</p>'+
     '<p class="crm-note">'+reasons(cohort.coverage)+'</p>':'';
-  return head+'<ul>'+states+'</ul>'+quality+'<p class="crm-note">Этот блок показывает компанию целиком; фильтр площадок выше относится к прежней воронке.</p>'+metrika+yclients+direct+cohortBlock+
+  return head+calendarControl+'<ul>'+states+'</ul>'+quality+'<p class="crm-note">Этот блок показывает компанию целиком; фильтр площадок выше относится к прежней воронке.</p>'+metrika+yclients+direct+cohortBlock+
     '<p class="crm-note">'+escapeHTML(payload.economics.reason)+' UTM показывают метку перехода; поиск по названию или заслугу рекламы они сами по себе не доказывают.</p>'+action+'</section>';
 };
 const renderAnalytics = (dashboard, summary, expenses, potential = null, owner = analyticsState.payload?.owner, companyMetrics = analyticsState.payload?.companyMetrics ?? null, revenueData = analyticsState.payload?.revenueData ?? null) => {
@@ -405,6 +409,11 @@ const renderAnalytics = (dashboard, summary, expenses, potential = null, owner =
     <th>Действия на сайте</th><th>Заявки</th><th>Продажи</th><th>Выручка</th><th>Расходы</th><th>ROMI</th>
     <th>Данные</th></tr></thead><tbody>${tableRows}</tbody></table></div></section>
     ${renderCompanyMetricsSection(companyMetrics, owner)}${renderRevenueSection(revenueData)}`;
+  byId('analytics-content').querySelector('[data-revenue-timezone]')?.addEventListener('change',async(event)=>{
+    if(!sameScope(owner))return;
+    analyticsState.revenueTimezoneByCompany.set(owner.companyCode,event.currentTarget.value);
+    await loadAnalytics();
+  });
   byId('analytics-content').querySelector('[data-revenue-collect]')?.addEventListener('click',async(event)=>{
     const button=event.currentTarget,out=button.parentElement.querySelector('[data-revenue-result]');button.disabled=true;
     out.textContent='Сервер сверяет источники…';
@@ -499,8 +508,9 @@ const loadAnalytics = async () => {
         .then((result) => String(result?.companyCode || "").toLowerCase() === String(scope.companyCode).toLowerCase() &&
           result?.period?.from === range.from && result?.period?.to === range.to ? result : { error: true })
         .catch(() => ({ error: true })),
-      crmQuery('/revenue-analytics',{...range,...scope})
-        .then(result=>result?.companyCode===scope.companyCode&&result?.period?.from===range.from&&result?.period?.to===range.to?result:{error:true})
+      crmQuery('/revenue-analytics',{...range,...scope,...(analyticsState.revenueTimezoneByCompany.has(scope.companyCode)?{analysisTimezone:analyticsState.revenueTimezoneByCompany.get(scope.companyCode)}:{})})
+        .then(result=>result?.companyCode===scope.companyCode&&result?.period?.from===range.from&&result?.period?.to===range.to&&
+          (!analyticsState.revenueTimezoneByCompany.has(scope.companyCode)||result.calendarBasis?.analysisTimezone===analyticsState.revenueTimezoneByCompany.get(scope.companyCode))?result:{error:true})
         .catch(()=>({error:true}))
     ]);
     if (!current()) return;

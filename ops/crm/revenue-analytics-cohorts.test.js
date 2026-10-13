@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
 const crypto=require('node:crypto');
-const {buildRevenueCohorts}=require('./revenue-analytics-cohorts');
+const {buildRevenueCohorts,closedAnalysisDay}=require('./revenue-analytics-cohorts');
 const A='demo-a',B='demo-b';
 // Синтетические статьи только для тестов. Настоящие cashRules задаёт владелец по подтверждённым статьям YCLIENTS.
 const PAY='900001',REFUND='900002';
@@ -29,6 +29,10 @@ const cost=(recordId,costKopecks)=>({companyCode:A,recordId,costKopecks,currency
 const spendFor=(from,to,amount)=>({companyCode:A,from,to,providers:['yandex_direct'],evidence:ev('owner_confirmed'),
   facts:[fact('synthetic-direct-'+from,'yandex_direct','701',amount,{serviceFrom:from,serviceTo:to})],campaigns:[campaign('yandex_direct','701','yandex','spa')]});
 const NOV={cohort:{from:'2026-11-01',to:'2026-11-14'},observationTo:'2026-11-15'};
+// Выгрузка в другом native поясе и дневной расход Директа в московских сутках (синтетика формата, не живая выгрузка).
+const cfg=v=>({...config(),...v});
+const MSK='Europe/Moscow',IRK='Asia/Irkutsk';
+const mskSpend=(from,to,amount)=>{const s=spendFor(from,to,amount);s.facts[0].timezone=MSK;return s;};
 
 // Полная синтетическая цепочка: заявка → запись → посещение → оплата → возврат, расходы и себестоимость.
 function fullFlow() {
@@ -287,9 +291,13 @@ test('поздняя оплата и возврат до observationTo вход�
   assert.equal(open.economics.romi.status,'unavailable');
 });
 
-test('разные календари не смешиваются; московские сутки Директа не пересчитываются',()=>{
-  assert.throws(()=>buildRevenueCohorts(input(snapshot([rec(1)],[pay(10)]),{timezone:'UTC'})),{code:'TIMEZONE_MISMATCH'});
-  const i=fullFlow();i.spend.facts[0].timezone='Europe/Moscow';const out=buildRevenueCohorts(i);
+// Прежде любой календарь отчёта, отличный от native, отклонялся TIMEZONE_MISMATCH 409. Теперь календарь выбран явно,
+// а строки YCLIENTS — UTC-моменты; несопоставимым остаётся только дневной расход в другом поясе.
+test('календарь отчёта может отличаться от native; московские сутки Директа под Иркутском не пересчитываются',()=>{
+  const utcOut=buildRevenueCohorts(input(snapshot([rec(1)],[pay(10)]),{timezone:'UTC'}));
+  assert.equal(utcOut.timeBasis.analysisTimezone,'UTC');assert.equal(utcOut.timeBasis.nativeTimezone,IRK);assert.equal(utcOut.scope.timezone,'UTC');
+  assert.equal(utcOut.calendar.status,'verified');assert.equal(utcOut.calendar.paymentKopecks,100000);
+  const i=fullFlow();i.spend.facts[0].timezone=MSK;const out=buildRevenueCohorts(i);
   assert.ok(has(out.spend,'TIMEZONE_MISMATCH'));assert.equal(out.spend.knownKopecks,250000);
   assert.equal(out.economics.cac.status,'unavailable');assert.ok(has(out.economics.cac,'TIMEZONE_MISMATCH'));
   assert.equal(out.cohortTotals.newPayingClients.status,'verified');
@@ -434,6 +442,10 @@ test('совместимость со строками существующег�
   assert.deepEqual(out.rows.find(r=>r.basis==='record_label').attribution,{source:'2gis',medium:'paid_maps',campaign:'spa'});
   assert.equal(out.economics.cac.status,'unavailable');
   assert.doesNotMatch(JSON.stringify(out),/PRIVATE|synthetic-partner|synthetic-user|example\.test/);
+  // Те же нормализованные UTC-строки в московском календаре отчёта: native пояс сохранён, деньги не потеряны и не удвоены.
+  const msk=buildRevenueCohorts(input(y,{timezone:MSK}));
+  assert.equal(msk.timeBasis.nativeTimezone,IRK);assert.equal(msk.calendar.paymentKopecks,100010);assert.equal(msk.calendar.status,'verified');
+  assert.doesNotMatch(JSON.stringify(msk),/PRIVATE|synthetic-partner|synthetic-user|example\.test/);
 });
 
 test('неподтверждённый НДС сохраняет календарь и клиентов, но не разрешает экономику',()=>{
@@ -455,4 +467,176 @@ test('отношение безопасных сумм не возвращает
   i.recordCosts=i.recordCosts.slice(0,1);i.recordCosts[0].costKopecks=0;
   i.spend.facts=i.spend.facts.slice(0,1);i.spend.facts[0].amountKopecks=1;i.spend.campaigns=i.spend.campaigns.slice(0,1);
   assert.throws(()=>buildRevenueCohorts(i),{code:'MONEY_OVERFLOW'});
+});
+
+// --- Выбранный календарь отчёта поверх UTC-native YCLIENTS (T008). Все строки и доказательства синтетические. ---
+
+test('одна UTC-оплата и одно касание попадают в разные даты Москвы и Иркутска',()=>{
+  // 31.10 17:30Z = 31.10 20:30 Москва = 01.11 01:30 Иркутск; запись 17:45Z, визит 17:50Z, оплата 18:00Z.
+  const y=snapshot([rec(1,{createdAt:'2026-10-31T17:45:00.000Z',visitAt:'2026-10-31T17:50:00.000Z'})],[pay(10,{at:'2026-10-31T18:00:00.000Z'})]);
+  const leadBindings=[bind('1','yandex','spa','2026-10-31T17:30:00.000Z')];
+  const mskOct=buildRevenueCohorts(input(y,{timezone:MSK,leadBindings}));
+  assert.deepEqual(mskOct.cohortTotals.newPayingClients,{status:'verified',value:1,knownValue:1,reasons:[]});
+  assert.equal(mskOct.calendar.status,'verified');assert.equal(mskOct.calendar.paymentKopecks,100000);
+  assert.equal(mskOct.calendar.createdBookings,1);assert.equal(mskOct.calendar.attendedUniqueVisits,1);assert.equal(mskOct.calendar.firstObservedPayers,1);
+  assert.deepEqual(mskOct.timeBasis,{analysisTimezone:MSK,nativeTimezone:IRK,
+    bounds:{cohortFromUtc:'2026-09-30T21:00:00.000Z',cohortToUtcExclusive:'2026-10-31T21:00:00.000Z',observationToUtcExclusive:'2026-11-15T21:00:00.000Z'},
+    nativeCoverage:{fromUtc:'2025-12-31T16:00:00.000Z',toUtcExclusive:'2026-11-19T16:00:00.000Z',startGap:false,cohortEndGap:false,observationEndGap:false}});
+  assert.equal(mskOct.source.yclients.historyFrom,'2026-01-01');
+  const irkOct=buildRevenueCohorts(input(y,{leadBindings}));
+  assert.deepEqual(irkOct.cohortTotals.newPayingClients,{status:'verified',value:0,knownValue:0,reasons:[]});
+  assert.equal(irkOct.cohortTotals.funnel.acquiredClients,0);assert.equal(irkOct.calendar.paymentKopecks,0);assert.equal(irkOct.calendar.createdBookings,0);
+  const irkNov=buildRevenueCohorts(input(y,{...NOV,leadBindings}));
+  assert.equal(irkNov.cohortTotals.newPayingClients.value,1);assert.equal(irkNov.calendar.paymentKopecks,100000);
+  const mskNov=buildRevenueCohorts(input(y,{...NOV,timezone:MSK,leadBindings}));
+  assert.deepEqual(mskNov.cohortTotals.newPayingClients,{status:'verified',value:0,knownValue:0,reasons:[]});assert.equal(mskNov.calendar.paymentKopecks,0);
+});
+
+// Три клиента у границ суток; native Иркутск, отчёт по Москве, Директ даёт московские сутки.
+function mskFlow(v={}) {
+  const records=[
+    rec(1,{createdAt:iso('2026-10-01T00:45:00+03:00'),visitAt:iso('2026-10-02T11:00:00+03:00')}),
+    rec(2,{client:client(2),createdAt:iso('2026-10-31T23:45:00+03:00'),visitAt:iso('2026-11-03T11:00:00+03:00')}),
+    rec(3,{client:client(3),createdAt:iso('2026-09-30T23:45:00+03:00'),visitAt:iso('2026-10-01T11:00:00+03:00')})
+  ];
+  const cash=[
+    pay(10,{amount:200000,at:iso('2026-10-02T12:00:00+03:00')}),
+    pay(11,{recordId:'2',visitId:'1002',client:client(2),amount:100000,at:iso('2026-11-03T12:00:00+03:00')}),
+    // 15.11 23:30 Москва = 16.11 04:30 Иркутск: внутри московского observationTo, вне иркутского.
+    pay(12,{recordId:'2',visitId:'1002',client:client(2),expenseId:REFUND,amount:10000,at:iso('2026-11-15T23:30:00+03:00')}),
+    pay(13,{recordId:'3',visitId:'1003',client:client(3),amount:70000,at:iso('2026-10-01T12:00:00+03:00')})
+  ];
+  return input(snapshot(records,cash),{timezone:MSK,
+    leadBindings:[bind('1','yandex','spa',iso('2026-10-01T00:30:00+03:00')),bind('2','yandex','spa',iso('2026-10-31T23:30:00+03:00')),
+      bind('3','yandex','spa',iso('2026-09-30T23:30:00+03:00'))],
+    spend:mskSpend('2026-10-01','2026-10-31',90000),recordCosts:[cost('1',50000),cost('2',20000),cost('3',15000)],...v});
+}
+
+test('полностью покрытый московский календарь с расходом Директа MSK даёт точные копейки, CAC и ROMI',()=>{
+  const out=buildRevenueCohorts(mskFlow());
+  assert.equal(out.timeBasis.nativeTimezone,IRK);assert.equal(out.timeBasis.nativeCoverage.observationEndGap,false);
+  // Члены октября по Москве: 1 (01.10 00:30) и 2 (31.10 23:30, оплата 3 нояб.). Клиент 3 привлечён 30.09 23:30 по Москве.
+  assert.deepEqual(out.cohortTotals.newPayingClients,{status:'verified',value:2,knownValue:2,reasons:[]});
+  const a=out.cohortTotals.activity;
+  assert.equal(a.status,'verified');assert.equal(a.paymentKopecks,300000);assert.equal(a.refundKopecks,10000);assert.equal(a.netKopecks,290000);
+  assert.deepEqual(out.cohortTotals.margin,{status:'verified',valueKopecks:220000,costKopecks:70000,reasons:[]});
+  assert.deepEqual(out.spend.reasons,[]);assert.equal(out.spend.knownKopecks,90000);
+  // CAC = 90 000 / 2; ROMI = (220 000 − 90 000) / 90 000 = 144,44% → 14444 б.п.
+  assert.deepEqual(out.economics.cac,{status:'verified',valueKopecks:45000,exact:{spendKopecks:90000,clients:2},reasons:[]});
+  assert.deepEqual(out.economics.romi,{status:'verified',basisPoints:14444,exact:{netMarginKopecks:220000,spendKopecks:90000},reasons:[]});
+  const y=touchRow(out,'yandex');assert.equal(y.clients,2);assert.equal(y.spendKopecks,90000);assert.equal(y.cac.valueKopecks,45000);assert.equal(y.romi.basisPoints,14444);
+  // Календарь окна по Москве: оплаты 1 и 2 окт.; оплата 3 нояб. — только в активности когорты.
+  assert.equal(out.calendar.status,'verified');assert.equal(out.calendar.paymentKopecks,270000);assert.equal(out.calendar.firstObservedPayers,2);
+  assert.equal(out.calendar.createdBookings,2);
+});
+
+test('отчёт по Иркутску с дневным расходом Директа MSK: экономика неизвестна, сумма не сдвигается',()=>{
+  const out=buildRevenueCohorts(mskFlow({timezone:IRK}));
+  // Иркутские сутки: члены октября 1 и 3; клиент 2 привлечён 01.11 по Иркутску.
+  assert.deepEqual(out.cohortTotals.newPayingClients,{status:'verified',value:2,knownValue:2,reasons:[]});
+  assert.equal(out.cohortTotals.activity.paymentKopecks,270000);assert.equal(out.cohortTotals.activity.refundKopecks,0);
+  assert.ok(has(out.spend,'TIMEZONE_MISMATCH'));assert.equal(out.spend.knownKopecks,90000);
+  assert.equal(out.economics.cac.status,'unavailable');assert.equal(out.economics.cac.valueKopecks,null);assert.ok(has(out.economics.cac,'TIMEZONE_MISMATCH'));
+  assert.equal(out.economics.romi.status,'unavailable');assert.equal(touchRow(out,'yandex').cac.status,'unavailable');
+  // Расход в иркутских сутках сопоставим: другая когорта, другие точные значения.
+  const irk=mskFlow({timezone:IRK});irk.spend.facts[0].timezone=IRK;const ok=buildRevenueCohorts(irk);
+  assert.deepEqual(ok.economics.cac,{status:'verified',valueKopecks:45000,exact:{spendKopecks:90000,clients:2},reasons:[]});
+  assert.deepEqual(ok.economics.romi,{status:'verified',basisPoints:12778,exact:{netMarginKopecks:205000,spendKopecks:90000},reasons:[]});
+});
+
+test('начало native покрытия: разница 5 часов между Москвой и Иркутском не скрывается',()=>{
+  const leadBindings=[bind('1','yandex','spa',T)];
+  const mskNative=snapshot([rec(1)],[pay(10)],{historyFrom:'2026-10-01',config:cfg({timezone:MSK,historyFrom:'2026-10-01'})});
+  const history=(v={})=>({companyCode:A,noPaymentsBefore:'2026-10-01',evidence:ev('owner_confirmed_opening_date'),...v});
+  // Native Москва с 01.10 00:00 MSK = 30.09 21:00Z, а октябрь по Иркутску начинается 30.09 16:00Z.
+  const irk=buildRevenueCohorts(input(mskNative,{leadBindings,paymentHistory:history()}));
+  assert.equal(irk.timeBasis.nativeCoverage.fromUtc,'2026-09-30T21:00:00.000Z');assert.equal(irk.timeBasis.nativeCoverage.startGap,true);
+  assert.equal(irk.calendar.status,'partial');assert.ok(has(irk.calendar,'HISTORY_AFTER_PERIOD_START'));assert.equal(irk.calendar.paymentKopecks,100000);
+  const n=irk.cohortTotals.newPayingClients;
+  assert.equal(n.value,null);assert.equal(n.knownValue,1);assert.ok(has(n,'HISTORY_AFTER_PERIOD_START'));assert.ok(!has(n,'PAYMENT_HISTORY_UNPROVEN'));
+  assert.equal(irk.economics.cac.status,'unavailable');
+  const msk=buildRevenueCohorts(input(mskNative,{timezone:MSK,leadBindings,paymentHistory:history()}));
+  assert.equal(msk.timeBasis.nativeCoverage.startGap,false);
+  assert.deepEqual(msk.cohortTotals.newPayingClients,{status:'verified',value:1,knownValue:1,reasons:[]});
+  // Обратная пара: native Иркутск с 01.10 (30.09 16:00Z) покрывает московский октябрь полностью.
+  const irkNative=snapshot([rec(1)],[pay(10)],{historyFrom:'2026-10-01',config:cfg({historyFrom:'2026-10-01'})});
+  const covered=buildRevenueCohorts(input(irkNative,{timezone:MSK,leadBindings,paymentHistory:history()}));
+  assert.equal(covered.timeBasis.nativeCoverage.startGap,false);assert.equal(covered.cohortTotals.newPayingClients.status,'verified');
+  // История «нет оплат до 01.10 по Иркутску» кончается 30.09 16:00Z: 5 часов до московской выгрузки не подтверждены.
+  const hole=buildRevenueCohorts(input(mskNative,{timezone:MSK,leadBindings,paymentHistory:history({timezone:IRK})}));
+  assert.ok(has(hole.cohortTotals.newPayingClients,'PAYMENT_HISTORY_UNPROVEN'));assert.equal(hole.economics.cac.status,'unavailable');
+  const explicit=buildRevenueCohorts(input(mskNative,{timezone:MSK,leadBindings,paymentHistory:history({timezone:MSK})}));
+  assert.equal(explicit.cohortTotals.newPayingClients.status,'verified');
+  for(const timezone of [null,'Mars/Base','']) assert.throws(()=>buildRevenueCohorts(input(mskNative,{timezone:MSK,leadBindings,paymentHistory:history({timezone})})),{code:'BAD_TIMEZONE'});
+});
+
+test('конец native покрытия: незакрытые иркутские сутки сбора делают московский итог неполным',()=>{
+  // Сбор 15.11 22:00Z = 16.11 06:00 Иркутск = 16.11 01:00 Москва. Завершены иркутские сутки по 15.11 включительно → покрытие до 15.11 16:00Z.
+  // Сравнение строк дат (16.11 по Москве > observationTo 15.11) ошибочно сочло бы период закрытым.
+  const cash=[pay(10),pay(11,{amount:5000,at:'2026-11-15T18:00:00.000Z'})];
+  const y=snapshot([rec(1)],cash,{collectedAt:'2026-11-15T22:00:00.000Z'});
+  const extra={leadBindings:[bind('1','yandex','spa',T)],spend:mskSpend('2026-10-01','2026-10-31',40000)};
+  const open=buildRevenueCohorts(input(y,{...extra,timezone:MSK}));
+  assert.equal(open.timeBasis.nativeCoverage.toUtcExclusive,'2026-11-15T16:00:00.000Z');
+  assert.equal(open.timeBasis.nativeCoverage.observationEndGap,true);assert.equal(open.timeBasis.nativeCoverage.cohortEndGap,false);
+  const n=open.cohortTotals.newPayingClients;
+  assert.equal(n.status,'unavailable');assert.equal(n.value,null);assert.equal(n.knownValue,1);assert.ok(has(n,'PERIOD_NOT_CLOSED'));
+  assert.equal(open.cohortTotals.activity.status,'partial');assert.equal(open.cohortTotals.activity.paymentKopecks,105000);
+  assert.equal(open.economics.cac.status,'unavailable');assert.ok(has(open.economics.cac,'PERIOD_NOT_CLOSED'));
+  assert.equal(open.calendar.status,'verified');
+  const closed=buildRevenueCohorts(input(y,{...extra,timezone:MSK,observationTo:'2026-11-14'}));
+  assert.equal(closed.cohortTotals.activity.status,'verified');assert.equal(closed.cohortTotals.activity.paymentKopecks,100000);
+  assert.deepEqual(closed.economics.cac,{status:'verified',valueKopecks:40000,exact:{spendKopecks:40000,clients:1},reasons:[]});
+  const irk=buildRevenueCohorts(input(y,{leadBindings:extra.leadBindings}));
+  assert.deepEqual(irk.cohortTotals.newPayingClients,{status:'verified',value:1,knownValue:1,reasons:[]});
+  assert.equal(irk.cohortTotals.activity.paymentKopecks,100000);
+  assert.equal(closedAnalysisDay('2026-11-15T22:00:00.000Z',IRK,MSK),'2026-11-14');
+  assert.equal(closedAnalysisDay('2026-11-15T22:00:00.000Z',IRK,IRK),'2026-11-15');
+  assert.equal(closedAnalysisDay('2026-11-15T22:00:00.000Z',MSK,IRK),'2026-11-15');
+  assert.throws(()=>closedAnalysisDay('2026-11-15T22:00:00.000Z','Mars/Base',MSK),{code:'BAD_TIMEZONE'});
+});
+
+test('нет native покрытия: выгрузка без завершённых суток не даёт проверенных нулей',()=>{
+  // historyFrom 20.11 по Иркутску, сбор 20.11 13:00 Иркутск: покрытие пустое [19.11 16:00Z; 19.11 16:00Z).
+  const y=snapshot([rec(1)],[pay(10)],{historyFrom:'2026-11-20',config:cfg({historyFrom:'2026-11-20'}),collectedAt:'2026-11-20T05:00:00.000Z'});
+  const oct=buildRevenueCohorts(input(y,{timezone:MSK,leadBindings:[bind('1','yandex','spa',T)],spend:mskSpend('2026-10-01','2026-10-31',40000)}));
+  const c=oct.timeBasis.nativeCoverage;
+  assert.equal(c.fromUtc,'2026-11-19T16:00:00.000Z');assert.equal(c.toUtcExclusive,c.fromUtc);assert.equal(c.startGap,true);
+  assert.equal(oct.calendar.status,'partial');assert.ok(has(oct.calendar,'HISTORY_AFTER_PERIOD_START'));
+  const n=oct.cohortTotals.newPayingClients;
+  assert.equal(n.status,'unavailable');assert.equal(n.value,null);assert.ok(has(n,'HISTORY_AFTER_PERIOD_START'));assert.ok(has(n,'PAYMENT_HISTORY_UNPROVEN'));
+  assert.equal(oct.economics.cac.status,'unavailable');assert.equal(oct.economics.romi.status,'unavailable');assert.equal(oct.coverage.status,'partial');
+  // Окно вокруг дня сбора: начало и конец вне пустого покрытия; ноль календаря не проверен.
+  const today=buildRevenueCohorts(input(y,{timezone:MSK,cohort:{from:'2026-11-19',to:'2026-11-20'},observationTo:'2026-11-20'}));
+  const g=today.timeBasis.nativeCoverage;
+  assert.deepEqual([g.startGap,g.cohortEndGap,g.observationEndGap],[true,true,true]);
+  assert.equal(today.calendar.paymentKopecks,0);assert.equal(today.calendar.status,'partial');
+  assert.ok(has(today.calendar,'HISTORY_AFTER_PERIOD_START'));assert.ok(has(today.calendar,'PERIOD_NOT_CLOSED'));
+  assert.equal(today.cohortTotals.newPayingClients.value,null);assert.ok(has(today.cohortTotals.newPayingClients,'PERIOD_NOT_CLOSED'));
+  const missing=buildRevenueCohorts(input(null,{timezone:MSK}));
+  assert.equal(missing.timeBasis.nativeTimezone,null);assert.equal(missing.timeBasis.nativeCoverage,null);
+  assert.equal(missing.timeBasis.bounds.cohortFromUtc,'2026-09-30T21:00:00.000Z');assert.equal(missing.coverage.status,'unavailable');
+  const stale=buildRevenueCohorts(input(snapshot([rec(1)],[pay(10)],{current:false}),{timezone:MSK}));
+  assert.equal(stale.timeBasis.nativeTimezone,IRK);assert.equal(stale.timeBasis.nativeCoverage,null);assert.equal(stale.calendar.paymentKopecks,null);
+});
+
+test('деньги у полуночи Москвы и Иркутска не теряются и не удваиваются при делении окна',()=>{
+  // 15.10: 15:59:59Z = 23:59:59 Иркутск; 16:00Z = 00:00 Иркутск 16.10; 20:59:59.999Z = 23:59:59.999 Москва; 21:00Z = 00:00 Москва 16.10.
+  const cash=[pay(10,{amount:100,at:'2026-10-15T15:59:59.000Z'}),pay(11,{amount:1000,at:'2026-10-15T16:00:00.000Z'}),
+    pay(12,{amount:10000,at:'2026-10-15T20:59:59.999Z'}),pay(13,{amount:100000,at:'2026-10-15T21:00:00.000Z'}),
+    pay(14,{expenseId:REFUND,amount:500,at:'2026-10-15T16:00:00.000Z'})];
+  const y=snapshot([rec(1)],cash);
+  const run=(timezone,from,to,v={})=>buildRevenueCohorts(input(y,{timezone,cohort:{from,to},observationTo:'2026-10-31',...v}));
+  const expected={[MSK]:{first:[11100,500],second:[100000,0]},[IRK]:{first:[100,0],second:[111000,500]}};
+  for(const tz of [MSK,IRK]) {
+    const first=run(tz,'2026-10-01','2026-10-15').calendar,second=run(tz,'2026-10-16','2026-10-31').calendar,whole=run(tz,'2026-10-01','2026-10-31').calendar;
+    for(const c of [first,second,whole])assert.equal(c.status,'verified');
+    assert.deepEqual([first.paymentKopecks,first.refundKopecks],expected[tz].first);
+    assert.deepEqual([second.paymentKopecks,second.refundKopecks],expected[tz].second);
+    assert.equal(first.paymentKopecks+second.paymentKopecks,whole.paymentKopecks);assert.equal(whole.paymentKopecks,111100);
+    assert.equal(first.refundKopecks+second.refundKopecks,whole.refundKopecks);assert.equal(whole.netCashKopecks,110600);
+    // Деньги одного клиента когорты считаются один раз в любом календаре отчёта.
+    const cohort=run(tz,'2026-10-01','2026-10-31',{leadBindings:[bind('1','yandex','spa',T)]}).cohortTotals.activity;
+    assert.equal(cohort.status,'verified');assert.equal(cohort.paymentKopecks,111100);assert.equal(cohort.netKopecks,110600);
+  }
 });

@@ -33,6 +33,35 @@ function harness(t,cohortFacts=null) {
   h.save();return h;
 }
 
+test('выбранная Москва объединяет UTC-native YCLIENTS с московским расходом, исходный календарь не переименован',async t=>{
+ let context;const h=harness(t,ctx=>{
+  context=ctx;const value=facts(ctx.companyCode);value.leadBindings[0].firstTouch.at='2026-10-31T17:00:00Z';value.spend.facts[0].timezone='Europe/Moscow';return value;
+ });
+ h.record.create_date='2026-10-31T17:30:00Z';await h.a.collect('demo-a','yclients');
+ const report=h.a.report('demo-a',P.from,P.to,{observationTo:'2026-11-15',analysisTimezone:'Europe/Moscow'});
+ assert.equal(context.timezone,'Europe/Moscow');assert.equal(report.calendarBasis.analysisTimezone,'Europe/Moscow');assert.equal(report.calendarBasis.nativeYclientsTimezone,'Asia/Irkutsk');
+ assert.equal(report.yclients.timezone,'Asia/Irkutsk');assert.equal(report.yclients.createdBookings,0);
+ assert.equal(report.cohorts.calendar.createdBookings,1);assert.equal(report.cohorts.cohortTotals.newPayingClients.value,1);assert.equal(report.economics.cac,400);assert.equal(report.economics.romi,25);
+ assert.equal(report.cohorts.timeBasis.nativeTimezone,'Asia/Irkutsk');assert.equal(report.cohorts.timeBasis.bounds.cohortFromUtc,'2026-09-30T21:00:00.000Z');
+ assert.equal(h.a.access.get('demo-a','yclients').config.timezone,'Asia/Irkutsk');
+});
+
+test('наблюдение по умолчанию не расширяет native покрытие на пять московских часов',async t=>{
+ const h=harness(t,ctx=>{const value=facts(ctx.companyCode);value.spend.facts[0].timezone='Europe/Moscow';return value});h.time=Date.parse('2026-11-15T22:00:00Z');await h.a.collect('demo-a','yclients');
+ const report=h.a.report('demo-a',P.from,P.to,{analysisTimezone:'Europe/Moscow'});assert.equal(report.cohorts.cohort.observationTo,'2026-11-14');assert.equal(report.economics.cac,400);
+ const beyond=h.a.report('demo-a',P.from,P.to,{analysisTimezone:'Europe/Moscow',observationTo:'2026-11-15'});assert.equal(beyond.economics.cac,null);assert.equal(beyond.cohorts.timeBasis.nativeCoverage.observationEndGap,true);
+ assert.ok(beyond.cohorts.economics.cac.reasons.some(r=>r.code==='PERIOD_NOT_CLOSED'));assert.equal(beyond.cohorts.cohortTotals.activity.status,'partial');assert.equal(beyond.cohorts.cohortTotals.activity.netKopecks,80000);
+});
+
+test('HTTP календарь контекстен: Москва допускается, пустой/неизвестный пояс отклоняется и не подтверждает VAT/history',async t=>{
+ const h=harness(t);await h.a.collect('demo-a','yclients');let answer;
+ const handler=createRevenueHandler({analytics:h.a,companyModuleContext:()=>({company:{code:'demo-a'},identity:{role:'employee'}}),readJson:async()=>assert.fail('GET не читает тело'),send:(_r,status,body)=>{answer={status,body}}});
+ const base='https://synthetic.invalid/revenue-analytics?companyCode=demo-a&from=2026-10-01&to=2026-10-31';
+ await handler({method:'GET'},{},new URL(base+'&analysisTimezone=Europe%2FMoscow&vatMode=no_vat&paymentHistory=verified'));assert.equal(answer.status,200);assert.equal(answer.body.cohorts.scope.timezone,'Europe/Moscow');assert.equal(answer.body.cohorts.scope.vatMode,'unknown');assert.equal(answer.body.economics.cac,null);
+ for(const tz of ['','Europe%2FBerlin','%3Cscript%3E']){await handler({method:'GET'},{},new URL(base+'&analysisTimezone='+tz));assert.equal(answer.status,400);assert.equal(answer.body.code,'BAD_TIMEZONE')}
+ await handler({method:'GET'},{},new URL(base));assert.equal(answer.status,200);assert.equal(answer.body.cohorts.scope.timezone,'Asia/Irkutsk');
+});
+
 test('SQL report использует нормализатор и поздние реальные поля API, отделяя календарь от когорты',async t=>{
   const h=harness(t,({companyCode})=>facts(companyCode));await h.a.collect('demo-a','yclients');
   const report=h.report();assert.equal(report.yclients.paymentKopecks,0);

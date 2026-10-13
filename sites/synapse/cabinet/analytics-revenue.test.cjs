@@ -39,6 +39,25 @@ function fixture({value=payload(),role='owner',custom}={}) {
     change:async code=>{company=code;views['analytics-through'].onProjectChange(ctx);await settle();},
     render:async()=>{views['analytics-through'].render(d.querySelector('main'),ctx);await settle();},close:()=>w.close()};
 }
+
+test('календарь экономики выбирается читающим запросом и отдельно для каждой компании',async()=>{
+ const f=fixture({role:'employee',custom:async(path,params)=>{
+  if(path==='/revenue-analytics'){const v=payload(params.companyCode);v.calendarBasis={analysisTimezone:params.analysisTimezone||'Asia/Irkutsk',nativeYclientsTimezone:'Asia/Irkutsk'};return v}
+  return {error:true};
+ }});try{
+  await f.render();const select=f.block().querySelector('[data-revenue-timezone]');assert.equal(select.value,'Asia/Irkutsk');select.value='Europe/Moscow';select.dispatchEvent(new f.dom.window.Event('change',{bubbles:true}));await f.settle();
+  assert.equal(f.block().querySelector('[data-revenue-timezone]').value,'Europe/Moscow');assert.equal(f.calls.filter(c=>c.path==='/revenue-analytics').at(-1).params.analysisTimezone,'Europe/Moscow');
+  assert.equal(f.calls.some(c=>c.options?.method==='POST'||c.options?.method==='PUT'),false);
+  assert.equal(f.calls.filter(c=>c.path==='/dashboard').at(-1).params.analysisTimezone,undefined);
+  await f.change('demo-b');assert.equal(f.block().querySelector('[data-revenue-timezone]').value,'Asia/Irkutsk');await f.change('demo-a');assert.equal(f.block().querySelector('[data-revenue-timezone]').value,'Europe/Moscow');
+ }finally{f.close()}
+});
+
+test('проигнорированный сервером календарь не выдаётся за выбранную экономику',async()=>{
+ const f=fixture();try{await f.render();const select=f.block().querySelector('[data-revenue-timezone]');select.value='Europe/Moscow';select.dispatchEvent(new f.dom.window.Event('change',{bubbles:true}));await f.settle();
+  assert.match(f.block().textContent,/Серверный сбор ещё не доступен/);assert.equal(f.block().querySelector('[data-revenue-timezone]'),null);
+ }finally{f.close()}
+});
 test('блок различает цели, посещения, денежный поток, источник и частичную историю',async()=>{
   const f=fixture();try{await f.render();const b=f.block(),s=b.textContent;
     assert.match(s,/Визиты: 17/);assert.match(s,/среднее время: 120 сек/);assert.match(s,/доля 50%/);

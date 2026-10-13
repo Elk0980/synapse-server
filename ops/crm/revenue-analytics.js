@@ -3,7 +3,7 @@ const crypto=require('node:crypto');
 const {createRevenueAccess,PROVIDERS,company,provider,id,day,range,localDay,shiftDay,fail}=require('./revenue-analytics-access');
 const {createRevenueAdapters}=require('./revenue-analytics-adapters');
 const {revenueQuality}=require('./revenue-analytics-quality');
-const {buildRevenueCohorts}=require('./revenue-analytics-cohorts');
+const {buildRevenueCohorts,closedAnalysisDay}=require('./revenue-analytics-cohorts');
 const OFFSETS={'Asia/Irkutsk':'+08:00','Asia/Bangkok':'+07:00','Europe/Moscow':'+03:00',UTC:'Z'};
 const KNOWN_ERRORS=new Set(['MISSING_ACCESS','CREDENTIAL_UNREADABLE','ACCESS_DENIED','RATE_LIMITED','UPSTREAM_ERROR','CONNECTION_UNCERTAIN','RESPONSE_TOO_LARGE','RESPONSE_UNCERTAIN','INCOMPLETE','PROFILE_CHANGED','LEASE_LOST','REVISION_CONFLICT','TOKEN_REAUTH_REQUIRED','TOKEN_REFRESH_UNCERTAIN','TOKEN_REFRESH_BUSY','CANCELLED','DELAYED','BAD_PERIOD','SERVER_STOPPING']);
 function dateTime(v,tz) {
@@ -188,7 +188,7 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
       return results;
     })().finally(()=>{inFlight=null;});return inFlight;
   }
-  function buildReport(c,from,to,{observationTo=null}={}) {
+  function buildReport(c,from,to,{observationTo=null,analysisTimezone=null}={}) {
     company(c);const period=range(from,to),state=settings(c);
     const yc=state.providers.find(p=>p.provider==='yclients');const mc=state.providers.find(p=>p.provider==='metrika');
     const m=db.prepare('SELECT * FROM revenue_metrika WHERE company=? AND from_day=? AND to_day=?').get(c,from,to);
@@ -240,8 +240,9 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
     const metrika=m?{...JSON.parse(m.payload),collectedAt:m.collected_at,current:m.revision===mc.revision}:null;
     if(!cohortSnapshot&&yc.config&&yc.lastSuccess)cohortSnapshot={companyCode:c,current:false,collectedAt:yc.lastSuccess,
       historyFrom:job(c,'yclients').history_from||yc.config.historyFrom,config:yc.config,records:[],cash:[]};
-    const timezone=yc.config?.timezone||mc.config?.timezone||'Asia/Irkutsk';
-    const closedThrough=shiftDay(localDay(Date.parse(yc.lastSuccess||new Date(now()).toISOString()),timezone),-1);
+    const nativeTimezone=yc.config?.timezone||mc.config?.timezone||'Asia/Irkutsk';
+    const timezone=analysisTimezone===null?nativeTimezone:analysisTimezone;
+    const closedThrough=closedAnalysisDay(yc.lastSuccess||new Date(now()).toISOString(),nativeTimezone,timezone);
     const observed=observationTo||(to>closedThrough?to:closedThrough);
     // Источник фактов — только внутренний серверный reader. HTTP параметры не подтверждают историю или связь.
     const facts=cohortFacts?.({companyCode:c,period:{...period},observationTo:observed,timezone})||null;
@@ -254,7 +255,9 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
     const economics={cac:cohorts.economics.cac.status==='verified'?cohorts.economics.cac.valueKopecks/100:null,
       romi:cohorts.economics.romi.status==='verified'?cohorts.economics.romi.basisPoints/100:null,
       reason:economicReasons.join(' ')||'Экономика относится к когорте по дате привлечения и её периоду наблюдения.'};
-    return {companyCode:c,period,state,metrika,yclients,direct,cohorts,quality:revenueQuality({period,state,metrika,yclients,direct,cohorts},now()),economics,
+    return {companyCode:c,period,state,metrika,yclients,direct,cohorts,
+      calendarBasis:{analysisTimezone:timezone,nativeYclientsTimezone:yc.config?.timezone||null,metrikaTimezone:mc.config?.timezone||null},
+      quality:revenueQuality({period,state,metrika,yclients,direct,cohorts},now()),economics,
       definitions:{bookings:'Дата создания записи; отмены отдельно.',visits:'Фактическое посещение по дате визита; один visit_id считается один раз.',cash:'Реальные деньги по дате транзакции, с вычетом возвратов; неизвестные статьи не считаются доходом.',attribution:'UTM из from_url конкретной записи. Неизвестный источник не назначается рекламе. Итоги Метрики не связывают человека с оплатой сами по себе.'}};
   }
   function report(c,from,to,options={}) {

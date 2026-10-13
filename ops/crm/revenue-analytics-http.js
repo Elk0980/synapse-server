@@ -13,7 +13,7 @@ function createRevenueHandler({analytics,companyModuleContext,readJson,send}) {
     const {company,identity}=companyModuleContext(request,url.searchParams.get('companyCode'),request.method==='GET'?'analytics.view':'crm.edit');
     try {
       let result;
-      if(url.pathname==='/revenue-analytics'&&request.method==='GET')result=analytics.report(company.code,url.searchParams.get('from'),url.searchParams.get('to'),{observationTo:url.searchParams.get('observationTo')});
+      if(url.pathname==='/revenue-analytics'&&request.method==='GET')result=analytics.report(company.code,url.searchParams.get('from'),url.searchParams.get('to'),{observationTo:url.searchParams.get('observationTo'),analysisTimezone:url.searchParams.get('analysisTimezone')});
       else {
         if(identity.role!=='owner'){send(response,403,{error:'Подключение источников доступно владельцу.',code:'FORBIDDEN'},headers);return true;}
         const p=url.searchParams.get('provider');
