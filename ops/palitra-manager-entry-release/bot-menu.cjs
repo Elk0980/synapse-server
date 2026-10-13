@@ -15,7 +15,7 @@ const before = { type: 'web_app', text: 'Тестовое приложение',
 const desired = { type: 'web_app', text: 'Каталог Palitra',
   web_app: { url: 'https://palitra-love.ru/catalog' } };
 const workplace = { type: 'web_app', text: 'Рабочее место',
-  web_app: { url: 'https://synapse.synapsebusiness.ru/cabinet.html#site-orders' } };
+  web_app: { url: 'https://synapse.synapsebusiness.ru/cabinet/palitra-work.html' } };
 const plainDefault = { type: 'default' };
 // Approved per-chat baselines before the manager write. Anything else stops.
 const managerBaselines = [before, desired, plainDefault];
