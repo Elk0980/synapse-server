@@ -49,14 +49,14 @@ function canonicalPostKey(platform, value) {
 }
 /* Единый словарь метрик: ключ Synapse → единица. Исходное имя поля площадки хранится отдельно (source_field). */
 const METRICS = Object.freeze({
-  followers: 'count', follower_change: 'count', reach: 'people', impressions: 'views', views: 'views', profile_visits: 'count',
+  followers: 'count', follower_change: 'count', reach: 'people', impressions: 'views', views: 'views', engaged_views: 'views', profile_visits: 'count',
   likes: 'count', comments: 'count', shares: 'count', saves: 'count', clicks: 'count', link_clicks: 'count',
   watch_time_seconds: 'seconds', avg_watch_seconds: 'seconds', retention_percent: 'percent', posts_published: 'count',
 });
 /* Тип агрегации за период: sum — складывается по дням; avg — НЕВЗВЕШЕННОЕ среднее суточных значений (проценты и средние длительности
    складывать нельзя; это не общее удержание за период — просмотры разных дней не взвешиваются); latest — состояние на дату (подписчики). */
 const AGGREGATION = Object.freeze({
-  followers: 'latest', follower_change: 'sum', reach: 'sum', impressions: 'sum', views: 'sum', profile_visits: 'sum',
+  followers: 'latest', follower_change: 'sum', reach: 'sum', impressions: 'sum', views: 'sum', engaged_views: 'sum', profile_visits: 'sum',
   likes: 'sum', comments: 'sum', shares: 'sum', saves: 'sum', clicks: 'sum', link_clicks: 'sum',
   watch_time_seconds: 'sum', avg_watch_seconds: 'avg', retention_percent: 'avg', posts_published: 'sum',
 });
@@ -430,9 +430,15 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
     const connectionFp = connectionBefore.ok ? connectionFingerprint(connectionBefore.value) : '';
     const runId = Number(db.prepare(`INSERT INTO social_collect_runs(company_code,platform,provider,trigger,date,started_at,closed,account_ref,account_revision,connection_fp) VALUES(?,?,?,?,?,?,?,?,?,?)`)
       .run(scope.code.toLowerCase(), platform, provider, trigger, target, stamp(), closed ? 1 : 0, row?.account_ref || '', row?.revision || 0, connectionFp).lastInsertRowid);
+    let queuedForRun = false;
     const finish = (status, extra = {}) => {
       db.prepare('UPDATE social_collect_runs SET finished_at=?,status=?,rows=?,error=?,missing=? WHERE id=?')
         .run(stamp(), oneOf(status, RUN_STATUS), extra.rows || 0, text(extra.error || '', 300), JSON.stringify(extra.missing || []), runId);
+      if(status==='failed'&&!queuedForRun&&row?.enabled) {
+        queueDate({code:scope.code.toLowerCase(),platform,accountRef:row.account_ref||'',date:target,status,
+          reason:extra.error||'сбор не завершён'});
+        queuedForRun=true;
+      }
       return { runId, status, rows: extra.rows || 0, missing: extra.missing || [], error: extra.error || '', date: target, platform, provider, closed };
     };
     if (!row || !row.enabled) return finish('unsupported', { missing: ['аккаунт площадки не настроен или выключен в кабинете'] });
@@ -554,7 +560,10 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
     /* Неполный день не забывается после полуночи, а закрытые сутки недавнего окна
        перепроверяются: источник может позднее исправить значение. */
     const queueKey = { code: scope.code.toLowerCase(), platform, accountRef: row.account_ref || '', date: target };
-    if (status === 'partial' || (result.missing || []).length) queueDate({ ...queueKey, reason: (result.missing || [])[0] || 'день неполный', status });
+    if(result.retryable===false) {dropQueued(queueKey);queuedForRun=true;}
+    else if (status === 'partial' || status === 'failed' || (result.missing || []).length) {
+      queueDate({ ...queueKey, reason: (result.missing || [])[0] || 'день неполный', status });queuedForRun=true;
+    }
     else if (closed) dropQueued(queueKey);
     return finish(status, { rows, missing: result.missing || [], error: result.error || '' });
   }
@@ -582,7 +591,13 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
         const handled = new Set();
         if (localHour(ms, row.timezone) >= row.collect_hour) {
           const done = lastRun(row, fp, yesterday, true);
-          if (!done || !['ok', 'partial', 'missing_access', 'unsupported'].includes(done.status)) {
+          const pending=db.prepare('SELECT next_attempt_at FROM social_collect_queue WHERE company_code=? COLLATE NOCASE AND platform=? AND account_ref=? AND date=?')
+            .get(row.company_code,row.platform,row.account_ref||'',yesterday);
+          // Не обходить сохранённую задержку основной веткой вчерашней даты. После исчерпания
+          // очереди failed также не начинает новый цикл на каждом тике.
+          const retryDue=done&&(pending?Date.parse(pending.next_attempt_at)<=ms:Date.parse(done.started_at)<=ms-86400000);
+          if (!done || (!['ok', 'partial', 'missing_access', 'unsupported'].includes(done.status)&&retryDue)) {
+            if(!done&&pending)dropQueued({code:row.company_code,platform:row.platform,accountRef:row.account_ref||'',date:yesterday});
             handled.add(yesterday);
             results.push(await collect(row.company_code, row.platform, { trigger: 'schedule', date: yesterday }));
           }
@@ -608,7 +623,9 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
            но только у источников, которые сами объявили, что задним числом правят историю
            (revisesHistory). Прямые подключения площадок так не делают, и навязывать им
            лишний суточный опрос нельзя. */
-        if (adapters[row.provider]?.revisesHistory === true) for (let back = 2; back <= RECHECK_WINDOW_DAYS; back += 1) {
+        const capability=adapters[row.provider]?.revisesHistory;
+        const revises=typeof capability==='function'?capability({company:scope,platform:row.platform,account:row})===true:capability===true;
+        if (revises) for (let back = 2; back <= RECHECK_WINDOW_DAYS; back += 1) {
           const date = localDay(ms - back * 86400000, row.timezone);
           const last = lastRun(row, fp, date, true);
           if (!last || ['missing_access', 'unsupported'].includes(last.status)) continue;
