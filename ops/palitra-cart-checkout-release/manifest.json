@@ -15,5 +15,8 @@
   ],
   "package_id": "palitra-cart-checkout-20261014",
   "native_workspace_baseline_required": true,
-  "live_applied": false
+  "live_applied": true,
+  "native_publication_versions": [255, 256],
+  "live_cart_ui_verified": true,
+  "live_order_delivery_verified": false
 }
