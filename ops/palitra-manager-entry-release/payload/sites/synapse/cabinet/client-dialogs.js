@@ -1,0 +1,349 @@
+(() => {
+"use strict";
+/* Клиентский Telegram-бот Palitra в ЛК владельца: состояние бота, привязка менеджера одноразовым кодом,
+   канал уведомлений о заявках и переписка клиентов (только чтение: менеджер отвечает в Telegram через
+   «Ответить»). Встраивается в вид «Заявки с сайта» (site-orders.js) и живёт в его жизненном цикле:
+   смена компании или уход с вида останавливают запросы и не применяют устаревшие ответы. */
+const cabinet = window.SbCabinet = window.SbCabinet || {};
+const WHO = Object.freeze({ client: "Клиент", operator: "Менеджер", system: "Бот" });
+const DELIVERY = Object.freeze({
+  in: { received: "", pending: "пересылается менеджеру", sending: "пересылается менеджеру", sent: "у менеджера в Telegram",
+    uncertain: "не подтверждено, дошло ли до менеджера", failed: "менеджеру не доставлено" },
+  out: { received: "", pending: "отправляется", sending: "отправляется", sent: "доставлено клиенту",
+    uncertain: "доставка не подтверждена — проверьте переписку в Telegram", failed: "клиенту не доставлено" },
+});
+const FILE_STATUS = Object.freeze({ pending: "файл ещё загружается", too_large: "файл не сохранён: слишком большой", unavailable: "файл не сохранён: недоступен боту",
+  quota_exceeded: "файл не сохранён: исчерпан лимит хранилища бота" });
+const TRANSPORT = Object.freeze({ project_bot: "бот Synapse (прежний канал)", client_bot: "клиентский бот компании" });
+const when = (iso) => { const date = new Date(iso); return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short" }).format(date); };
+
+function mountConsultation(node, context, alive) {
+  const companyCode = context.selectedProjectId;
+  const current = () => alive() && node.isConnected && context.selectedProjectId === companyCode;
+  node.innerHTML = `<h4>Ответ об услуге</h4><button type="button" data-consult-load>Загрузить проверенный каталог</button>
+    <label hidden data-consult-choice>Услуга<select data-consult-service></select></label>
+    <button type="button" hidden data-consult-prepare>Проверить цену и подготовить текст</button>
+    <p role="status" data-consult-status>Текст для ответа менеджера в Telegram. Запись и отправка выполняются отдельно.</p>
+    <label hidden data-consult-result>Текст для клиента<textarea readonly rows="7" data-consult-text></textarea></label>`;
+  const load = node.querySelector('[data-consult-load]'), choice = node.querySelector('[data-consult-choice]');
+  const select = node.querySelector('[data-consult-service]'), prepare = node.querySelector('[data-consult-prepare]');
+  const status = node.querySelector('[data-consult-status]'), result = node.querySelector('[data-consult-result]'), output = node.querySelector('[data-consult-text]');
+  let catalog = null, busy = false;
+  const clear = () => { output.value = ''; result.hidden = true; };
+  const lock = value => { busy = value; load.disabled = value; select.disabled = value; prepare.disabled = value; };
+  select.addEventListener('change', () => { clear(); prepare.hidden = !select.value; status.textContent = 'Перед ответом проверьте цену кнопкой ниже.'; });
+  load.addEventListener('click', async () => {
+    if (busy || !current()) return;
+    clear(); catalog = null; choice.hidden = prepare.hidden = true;
+    if (!context.crmQuery) { status.textContent = 'Обновите кабинет, чтобы прочитать каталог.'; return; }
+    lock(true); status.textContent = 'Читаем подтверждённые услуги…';
+    try {
+      const data = await context.crmQuery('/company-information/knowledge', { companyCode });
+      if (!current()) return;
+      if (data.companyCode !== companyCode || !Array.isArray(data.services) || !/^[a-f0-9]{64}$/.test(data.knowledgeRevision)) throw Error('Не удалось проверить компанию и версию каталога.');
+      catalog = data; select.replaceChildren();
+      const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Выберите услугу'; select.append(placeholder);
+      for (const service of data.services) {
+        const option = document.createElement('option'); option.value = service.id; option.textContent = service.title; select.append(option);
+      }
+      choice.hidden = !data.services.length;
+      status.textContent = data.services.length ? 'Выберите услугу; цена будет проверена перед подготовкой текста.' : 'Подтверждённых услуг пока нет. Цену нужно уточнить у администратора.';
+    } catch (error) { if (current()) status.textContent = error.message || 'Каталог недоступен. Уточните цену у администратора.'; }
+    finally { if (current()) lock(false); }
+  });
+  prepare.addEventListener('click', async () => {
+    if (busy || !current() || !catalog || !select.value) return;
+    const serviceId = select.value, knowledgeRevision = catalog.knowledgeRevision;
+    clear(); lock(true); status.textContent = 'Повторно проверяем услугу и цену…';
+    try {
+      const quote = await context.crmQuery('/company-information/quote', { companyCode, serviceId, knowledgeRevision });
+      if (!current()) return;
+      if (quote.companyCode !== companyCode || quote.knowledgeRevision !== knowledgeRevision || quote.service?.id !== serviceId || typeof quote.text !== 'string' || !quote.text.trim()) throw Error('Получено предложение другой компании или услуги.');
+      output.value = quote.text + '\nСвободное время и возможность записи уточнит администратор.';
+      result.hidden = false;
+      status.textContent = `Цена проверена ${when(new Date().toISOString())}. Перед последующим ответом проверьте её заново. Текст ещё не отправлен.`;
+    } catch (error) {
+      if (current()) { clear(); catalog = null; choice.hidden = prepare.hidden = true; status.textContent = (error.message || 'Не удалось проверить цену.') + ' Загрузите каталог заново.'; }
+    } finally { if (current()) lock(false); }
+  });
+}
+
+function render(container, context, { site, alive, api, mutation, onTransportChange = () => {} }) {
+  const h = context.escapeHTML;
+  const base = `/content/${site}`;
+  container.innerHTML = `<section class="card client-bot" data-client-bot><h2>Клиентский бот в Telegram</h2>
+      <p data-bot-summary>Загрузка…</p>
+      <div class="client-bot__actions">
+        <button type="button" data-bot-code hidden>Создать код привязки менеджера</button>
+        <button type="button" data-bot-transport hidden></button>
+        <button type="button" data-bot-revoke hidden>Отключить менеджера</button>
+      </div>
+      <div class="client-bot__code" data-bot-code-box hidden></div>
+      <p role="status" data-bot-status></p>
+      <details class="client-bot__events"><summary>Журнал бота</summary><ul data-bot-events></ul></details></section>
+    <section class="card client-dialogs" data-client-dialogs hidden><h2>Переписка с клиентами</h2>
+      <p class="client-dialogs__hint">Менеджер отвечает клиентам в Telegram кнопкой «Ответить». Здесь — копия переписки и статусы доставки.</p>
+      <div class="client-dialogs__layout"><div data-dialog-list aria-live="polite">Загрузка…</div><div class="client-dialogs__thread" data-dialog-thread hidden></div></div>
+      <div class="client-dialogs__more"><button type="button" data-dialog-more hidden>Показать ещё</button></div></section>`;
+  const summary = container.querySelector("[data-bot-summary]");
+  const codeButton = container.querySelector("[data-bot-code]");
+  const transportButton = container.querySelector("[data-bot-transport]");
+  const revokeButton = container.querySelector("[data-bot-revoke]");
+  const codeBox = container.querySelector("[data-bot-code-box]");
+  const status = container.querySelector("[data-bot-status]");
+  const events = container.querySelector("[data-bot-events]");
+  const dialogsCard = container.querySelector("[data-client-dialogs]");
+  const list = container.querySelector("[data-dialog-list]");
+  const thread = container.querySelector("[data-dialog-thread]");
+  const more = container.querySelector("[data-dialog-more]");
+  const actions = container.querySelector(".client-bot__actions");
+  let state = null, busy = false, dialogs = [], nextCursor = null, openId = null, openVersion = 0;
+  // Открытое подтверждение смены канала: панель, цель, компания и снимок состояния бота на момент открытия.
+  let pendingTransport = null;
+  const setBusy = (value) => { busy = value; for (const button of [codeButton, transportButton, revokeButton]) button.disabled = value; };
+
+  const describe = (bot) => {
+    if (!bot.enabled) return "Бот не подключён. После подключения здесь появятся его состояние и переписка с клиентами.";
+    const parts = [`Бот @${bot.username}.`];
+    parts.push(bot.bridge?.ready ? `Сервис chat подтвердил бота ${when(bot.bridge.checkedAt)}.`
+      : `Сервис chat не подтвердил бота${bot.bridge?.error ? `: ${bot.bridge.error}` : ""} — ссылки в Telegram после заявки не выдаются.`);
+    if (!bot.operator.bound) parts.push("Менеджер ещё не привязан: сообщения клиентов сохраняются, но в Telegram их никто не получает.");
+    else parts.push(`Менеджер привязан ${when(bot.operator.boundAt)} (Telegram ID ${bot.operator.telegramUserId})${bot.operator.matchesRecipient ? "" : " — не совпадает с получателем заявок"}.`);
+    parts.push(`Уведомления о заявках: ${TRANSPORT[bot.transport] || bot.transport}.`);
+    if (bot.unread) parts.push(`Непрочитанных сообщений: ${bot.unread}.`);
+    if (bot.deliveryProblems) parts.push(`Сообщений с неподтверждённой или неудачной доставкой: ${bot.deliveryProblems}.`);
+    if (bot.storage?.limitBytes) parts.push(`Файлы: ${Math.round(bot.storage.usedBytes / 1048576)} из ${Math.round(bot.storage.limitBytes / 1048576)} МБ.`);
+    return parts.join(" ");
+  };
+  // То, от чего зависит смысл подтверждения: бот, текущий канал, менеджер и готовность. Изменилось — подтверждение снимается.
+  const transportSnapshot = (bot, target) => (bot ? JSON.stringify([target, bot.enabled, bot.username, bot.transport,
+    bot.operator?.bound, bot.operator?.telegramUserId, bot.operator?.matchesRecipient, bot.transportReady?.ok]) : null);
+  const closeTransportConfirm = (message, restoreFocus = false) => {
+    const pending = pendingTransport;
+    if (!pending) return;
+    pendingTransport = null;
+    const hadFocus = pending.panel.contains(document.activeElement);
+    pending.panel.remove();
+    if (!alive()) return;
+    setBusy(false);
+    if (message) status.textContent = message;
+    if ((restoreFocus || hadFocus) && transportButton.isConnected && !transportButton.hidden) transportButton.focus();
+  };
+  const showState = (bot) => {
+    if (!alive()) return;
+    state = bot;
+    summary.textContent = describe(bot);
+    summary.dataset.state = !bot.enabled ? "disabled" : bot.operator.bound ? "ready" : "unbound";
+    codeButton.hidden = !bot.enabled;
+    codeButton.textContent = bot.operator.bound ? "Перепривязать менеджера новым кодом" : "Создать код привязки менеджера";
+    revokeButton.hidden = !bot.operator.bound;
+    const toClient = bot.transport !== "client_bot";
+    transportButton.hidden = !bot.enabled || (toClient && !bot.transportReady?.ok);
+    transportButton.textContent = toClient ? `Присылать заявки ботом @${bot.username}` : "Вернуть заявки на бот Synapse";
+    transportButton.dataset.target = toClient ? "client_bot" : "project_bot";
+    events.replaceChildren(...(bot.events || []).map((event) => {
+      const item = document.createElement("li");
+      item.textContent = `${when(event.createdAt)} · ${event.detail || event.kind}`;
+      return item;
+    }));
+    dialogsCard.hidden = !bot.enabled;
+    if (pendingTransport && (transportButton.hidden || transportButton.dataset.target !== pendingTransport.target
+      || context.selectedProjectId !== pendingTransport.companyCode || transportSnapshot(bot, pendingTransport.target) !== pendingTransport.snapshot)) {
+      closeTransportConfirm("Состояние бота изменилось — смена канала не выполнена. Проверьте состояние и подтвердите заново.");
+    }
+  };
+  const loadState = async () => {
+    try { showState(await api(`${base}/client-bot`)); }
+    catch (error) { if (alive() && error.name !== "AbortError") summary.textContent = "Не удалось загрузить состояние бота."; }
+  };
+
+  codeButton.addEventListener("click", async () => {
+    if (busy || !alive()) return;
+    setBusy(true); status.textContent = "Создаём одноразовый код…";
+    try {
+      const code = await api(`${base}/client-bot/operator-code`, mutation("POST"));
+      if (!alive()) return;
+      // Код показывается один раз и не сохраняется в браузере; он действует 10 минут и только для Telegram ID получателя.
+      codeBox.hidden = false;
+      codeBox.innerHTML = `<p>Передайте менеджеру. Код действует до ${h(when(code.expiresAt))} и подходит только для Telegram ID получателя заявок.</p>
+        <p><a href="${h(code.deepLink)}" target="_blank" rel="noopener noreferrer">Открыть бота и привязаться</a> или отправьте боту: <code data-bot-command>${h(code.command)}</code></p>`;
+      status.textContent = "Код создан. Прежний неиспользованный код больше не действует.";
+      await loadState();
+    } catch (error) {
+      if (alive()) status.textContent = error.status === 409 ? (error.message || "Сначала сохраните получателя заявок.") : "Не удалось создать код.";
+    } finally { if (alive()) setBusy(false); }
+  });
+  /* Смена канала подтверждается обычной панелью на странице (без window.confirm): запрос уходит только после
+     нажатия «Подтвердить смену канала», один раз. Пока панель открыта, все действия бота заблокированы. */
+  const confirmTransport = async () => {
+    const pending = pendingTransport;
+    if (!pending || pending.confirming) return;
+    if (!alive() || context.selectedProjectId !== pending.companyCode || transportSnapshot(state, pending.target) !== pending.snapshot) {
+      closeTransportConfirm("Состояние бота изменилось — смена канала не выполнена. Проверьте состояние и подтвердите заново.", true);
+      return;
+    }
+    pending.confirming = true;
+    const transport = pending.target;
+    const hadFocus = pending.panel.contains(document.activeElement);
+    pendingTransport = null;
+    pending.panel.remove();
+    if (hadFocus && transportButton.isConnected) transportButton.focus();
+    setBusy(true); status.textContent = "Меняем канал уведомлений…";
+    try {
+      await api(`${base}/order-recipient/transport`, mutation("PUT", { transport }));
+      if (!alive()) return;
+      status.textContent = "Канал изменён. Отправьте проверочное сообщение получателю, чтобы подтвердить доставку новым каналом.";
+      await loadState();
+      onTransportChange();
+    } catch (error) { if (alive()) status.textContent = error.status === 409 ? (error.message || "Бот ещё не готов.") : "Не удалось изменить канал."; }
+    finally { if (alive()) setBusy(false); }
+  };
+  transportButton.addEventListener("click", () => {
+    if (busy || pendingTransport || !alive() || !state) return;
+    const target = transportButton.dataset.target;
+    const panel = document.createElement("div");
+    panel.className = "client-bot__confirm";
+    panel.setAttribute("role", "group");
+    panel.setAttribute("aria-label", "Подтверждение смены канала уведомлений");
+    const warning = document.createElement("p");
+    warning.setAttribute("role", "alert");
+    warning.textContent = target === "client_bot"
+      ? `Новые заявки будут приходить менеджеру ботом @${state.username}. Уже отправленные заявки повторно не рассылаются.`
+      : "Новые заявки будут приходить прежним ботом Synapse. Уже отправленные заявки повторно не рассылаются.";
+    const row = document.createElement("div");
+    row.className = "client-bot__actions";
+    const confirmButton = document.createElement("button");
+    confirmButton.type = "button";
+    confirmButton.textContent = "Подтвердить смену канала";
+    const cancelButton = document.createElement("button");
+    cancelButton.type = "button";
+    cancelButton.textContent = "Отмена";
+    row.append(confirmButton, cancelButton);
+    panel.append(warning, row);
+    pendingTransport = { panel, target, companyCode: context.selectedProjectId, snapshot: transportSnapshot(state, target), confirming: false };
+    setBusy(true);
+    status.textContent = "Подтвердите смену канала или нажмите «Отмена».";
+    confirmButton.addEventListener("click", confirmTransport);
+    cancelButton.addEventListener("click", () => closeTransportConfirm("Канал уведомлений не изменён.", true));
+    panel.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault(); event.stopPropagation();
+      closeTransportConfirm("Канал уведомлений не изменён.", true);
+    });
+    actions.after(panel);
+    cancelButton.focus();
+  });
+  revokeButton.addEventListener("click", async () => {
+    if (busy || !alive()) return;
+    if (!window.confirm("Отключить менеджера от бота? Сообщения клиентов перестанут приходить ему в Telegram, заявки вернутся на прежний канал.")) return;
+    setBusy(true); status.textContent = "Отключаем менеджера…";
+    try {
+      showState(await api(`${base}/client-bot/revoke-operator`, mutation("POST")));
+      codeBox.hidden = true; codeBox.textContent = "";
+      if (alive()) status.textContent = "Менеджер отключён.";
+      onTransportChange();
+    } catch (error) { if (alive()) status.textContent = "Не удалось отключить менеджера."; }
+    finally { if (alive()) setBusy(false); }
+  });
+
+  const attachmentHtml = (file) => {
+    const label = `${h(file.name)}${file.size ? ` · ${h(Math.max(1, Math.round(file.size / 1024)))} КБ` : ""}`;
+    // Заменённое клиентом вложение показывается только как прежняя версия, не как текущий файл.
+    if (file.superseded) {
+      const old = file.status === "stored" ? `<a href="${h(`${base}/client-dialogs/attachments/${encodeURIComponent(file.id)}`)}" target="_blank" rel="noopener">${label}</a>` : label;
+      return `<p class="client-file client-file--replaced">📎 Прежняя версия (клиент заменил вложение ${h(when(file.supersededAt))}): ${old}</p>`;
+    }
+    if (file.status !== "stored") return `<p class="client-file client-file--missing">📎 ${label} — ${h(FILE_STATUS[file.status] || "файл не сохранён")}${file.error ? ` (${h(file.error)})` : ""}</p>`;
+    const url = `${base}/client-dialogs/attachments/${encodeURIComponent(file.id)}`;
+    if (/^image\//.test(file.mime)) return `<a class="client-file" href="${h(url)}" target="_blank" rel="noopener"><img src="${h(url)}" alt="${h(file.name)}" loading="lazy"></a>`;
+    if (/^audio\//.test(file.mime)) return `<audio class="client-file" controls preload="none" src="${h(url)}" aria-label="${h(file.name)}"></audio>`;
+    if (/^video\//.test(file.mime)) return `<video class="client-file" controls preload="none" src="${h(url)}" aria-label="${h(file.name)}"></video>`;
+    return `<a class="client-file" href="${h(url)}" download>📎 ${label}</a>`;
+  };
+  const messageHtml = (message) => {
+    const direction = message.direction === "out" ? "out" : "in";
+    const delivery = message.direction === "system" ? "" : (DELIVERY[direction][message.deliveryStatus] || "");
+    const problem = ["uncertain", "failed"].includes(message.deliveryStatus);
+    const versions = message.versions.length ? `<details class="client-message__versions"><summary>${message.versions.some((v) => v.kind === "operator_edit_not_sent") ? "Исправлено в Telegram, клиенту не отправлено" : "Изменено клиентом"}</summary>
+      <ul>${message.versions.map((v) => `<li>${h(when(v.createdAt))}: ${h(v.text)}${v.kind === "operator_edit_not_sent" ? " (не отправлено клиенту)" : " (прежний текст)"}</li>`).join("")}</ul></details>` : "";
+    return `<article class="client-message client-message--${h(message.direction)}${problem ? " client-message--problem" : ""}">
+      <header><b>${h(WHO[message.authorType] || message.authorType)}</b> · ${h(when(message.createdAt))}${delivery ? ` · <span class="client-message__delivery">${h(delivery)}</span>` : ""}</header>
+      ${message.text ? `<p class="client-message__text">${h(message.text)}</p>` : ""}
+      ${message.attachments.map(attachmentHtml).join("")}
+      ${problem && message.deliveryError ? `<p class="client-message__error">${h(message.deliveryError)}</p>` : ""}${versions}</article>`;
+  };
+  const openDialog = async (id) => {
+    const version = ++openVersion;
+    openId = id;
+    thread.hidden = false;
+    thread.textContent = "Загрузка переписки…";
+    try {
+      const data = await api(`${base}/client-dialogs/${encodeURIComponent(id)}`);
+      if (!alive() || version !== openVersion) return;
+      const d = data.dialog;
+      thread.innerHTML = `<header class="client-dialogs__head"><h3>${h(d.name)}${d.username ? ` <span>@${h(d.username)}</span>` : ""}</h3>
+        <p>Диалог №${h(d.id)}${d.source ? ` · источник: ${h(d.source)}` : ""}${data.order ? ` · заявка №${h(data.order.id)}` : ""}</p></header>
+        <section class="client-consultation" data-dialog-consultation></section>
+        <section data-dialog-crm><button type="button" data-dialog-crm-open>Создать или открыть карточку CRM</button><p data-dialog-crm-status role="status">Карточка связывает это обращение с записью на визит. Сообщения и уведомления не отправляются.</p><div data-dialog-crm-card class="studio-journey"></div></section>
+        <div class="client-dialogs__messages">${data.messages.map(messageHtml).join("") || "<p>Сообщений нет.</p>"}</div>`;
+      const crmButton=thread.querySelector('[data-dialog-crm-open]'),crmStatus=thread.querySelector('[data-dialog-crm-status]'),crmCard=thread.querySelector('[data-dialog-crm-card]');
+      const companyAtStart=context.selectedProjectId;
+      mountConsultation(thread.querySelector('[data-dialog-consultation]'), context, () => alive() && version === openVersion);
+      crmButton.addEventListener('click',async()=>{
+        if(crmButton.disabled||!alive()||version!==openVersion)return;
+        if(!cabinet.studioJourney||!context.crmQuery){crmStatus.textContent='Обновите кабинет, чтобы открыть карточку CRM.';return;}
+        crmButton.disabled=true;crmStatus.textContent='Открываем карточку обращения…';
+        try{
+          const result=await api(`${base}/client-dialogs/${encodeURIComponent(id)}/crm`,mutation('POST'));
+          if(!alive()||version!==openVersion||!crmCard.isConnected)return;
+          if(result.companyCode!==companyAtStart||!Number.isSafeInteger(result.leadId)||result.leadId<1)throw Error('Карточка относится к другой компании');
+          crmStatus.textContent=`Карточка CRM №${result.leadId}${result.created?' создана':' открыта'}.`;
+          await cabinet.studioJourney.mountCard(crmCard,context,result.leadId);
+          crmButton.textContent='Обновить карточку CRM';
+        }catch(error){if(alive()&&version===openVersion)crmStatus.textContent=error.message||'CRM недоступна. Повторное открытие найдёт ту же карточку.';}
+        finally{if(crmButton.isConnected)crmButton.disabled=false;}
+      });
+      if (d.unread) {
+        await api(`${base}/client-dialogs/${encodeURIComponent(id)}/read`, mutation("POST"));
+        if (!alive()) return;
+        dialogs = dialogs.map((row) => (row.id === d.id ? { ...row, unread: 0 } : row));
+        showDialogs();
+      }
+    } catch (error) {
+      if (alive() && version === openVersion && error.name !== "AbortError") thread.textContent = "Не удалось загрузить переписку.";
+    }
+  };
+  const showDialogs = () => {
+    if (!alive()) return;
+    more.hidden = nextCursor === null;
+    if (!dialogs.length) { list.textContent = "Клиенты ещё не писали боту."; return; }
+    const items = dialogs.map((dialog) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `client-dialog${dialog.id === openId ? " client-dialog--open" : ""}`;
+      button.dataset.dialogId = String(dialog.id);
+      button.innerHTML = `<b>${h(dialog.name)}</b>${dialog.unread ? ` <span class="client-dialog__unread" aria-label="Непрочитанных: ${h(dialog.unread)}">${h(dialog.unread)}</span>` : ""}
+        <span class="client-dialog__meta">${dialog.orderId ? `заявка №${h(dialog.orderId)} · ` : ""}${h(when(dialog.lastMessageAt))}</span>
+        <span class="client-dialog__last">${h(dialog.lastMessage || "")}</span>`;
+      button.addEventListener("click", () => { openDialog(dialog.id); showDialogs(); });
+      return button;
+    });
+    list.replaceChildren(...items);
+  };
+  const loadDialogs = async ({ append = false } = {}) => {
+    try {
+      const data = await api(`${base}/client-dialogs?limit=50${append && nextCursor !== null ? `&beforeId=${encodeURIComponent(nextCursor)}` : ""}`);
+      if (!alive()) return;
+      if (append) { const known = new Set(dialogs.map((row) => row.id)); dialogs = dialogs.concat(data.dialogs.filter((row) => !known.has(row.id))); }
+      else dialogs = data.dialogs;
+      nextCursor = data.nextCursor ?? null;
+      showDialogs();
+    } catch (error) { if (alive() && error.name !== "AbortError") list.textContent = "Не удалось загрузить переписку."; }
+  };
+  more.addEventListener("click", () => { if (alive() && nextCursor !== null) loadDialogs({ append: true }); });
+  const refresh = async () => { await loadState(); if (alive() && state?.enabled) { await loadDialogs(); if (openId !== null) await openDialog(openId); } };
+  return { refresh, ready: refresh() };
+}
+
+cabinet.clientDialogs = { render };
+})();
