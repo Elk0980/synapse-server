@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "package_id": "palitra-category-link-20261013",
+  "targets": [
+    {
+      "group": "static",
+      "target": "sites/synapse/palitra-editor.js",
+      "source": "payload/sites/synapse/palitra-editor.js",
+      "base_sha256": "60b29bae2c9bac3c8e912f962f7612ed42392cd5fde073fa1a0207ca48d7ac44",
+      "sha256": "c6b64070bf702e14ad98262fb61b5073659d396a9c7a944d8c6c704496ac160b"
+    },
+    {
+      "group": "static",
+      "target": "sites/synapse/palitra-editor-model.js",
+      "source": "payload/sites/synapse/palitra-editor-model.js",
+      "base_sha256": "47c1ad68b2911ab54afdcd42b1974d0c3f73f4b5f68df608fec60252dbf0f9c7",
+      "sha256": "c7d8cf07b6a23081ac35cd513242577e9ae63cca42ddb9583a08691d75c5d96f"
+    },
+    {
+      "group": "static",
+      "target": "sites/synapse/palitra-occasions.js",
+      "source": "payload/sites/synapse/palitra-occasions.js",
+      "base_sha256": "459bdee817c2cc50c715dbbcb9d9e8eef045c8657086ad83dd30a9ed4e2d0609",
+      "sha256": "15c8191f7e54f60cb8fa6e4e7ba81c0eb8a4a96a5598f60e5fb7026db7937708"
+    }
+  ]
+}

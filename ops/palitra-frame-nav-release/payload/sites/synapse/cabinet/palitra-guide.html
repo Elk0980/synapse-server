@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Palitra — инструкция по редакторам</title>
+  <style>
+    :root { color-scheme: light; font-family: Arial, sans-serif; color: #292921; background: #f7f5ef; }
+    * { box-sizing: border-box; }
+    body { margin: 0; line-height: 1.6; font-size: 17px; }
+    main { width: min(100% - 32px, 900px); margin: 32px auto; }
+    header, section { background: #fff; border: 1px solid #dedbd0; border-radius: 18px; padding: 24px; margin-bottom: 16px; }
+    h1 { margin: 0 0 8px; font-size: clamp(28px, 5vw, 38px); line-height: 1.2; }
+    h2 { margin: 0 0 12px; font-size: 23px; line-height: 1.3; }
+    p { margin: 10px 0; }
+    ol, ul { margin: 10px 0; padding-left: 24px; }
+    li + li { margin-top: 7px; }
+    a { color: #405329; text-underline-offset: 3px; overflow-wrap: anywhere; }
+    a:focus-visible { outline: 3px solid #b78b42; outline-offset: 4px; }
+    nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 20px 0 12px; }
+    nav a { display: flex; align-items: center; justify-content: center; padding: 12px; min-height: 50px; border: 1px solid #617344; border-radius: 10px; text-align: center; text-decoration: none; font-weight: bold; }
+    nav a:hover { background: #f0f3e9; }
+    .muted { color: #65655b; font-size: 15px; }
+    .save { border-left: 4px solid #617344; padding: 8px 14px; background: #f0f3e9; border-radius: 0 8px 8px 0; }
+    .pending { border: 1px dashed #a59b79; background: #faf9f4; }
+    .pending h2 { font-size: 20px; }
+    footer { padding: 0 4px; color: #65655b; font-size: 14px; }
+    @media (max-width: 480px) { main { width: calc(100% - 24px); margin: 12px auto; } header, section { padding: 18px; } nav { grid-template-columns: 1fr; } }
+    @media print {
+      :root { background: #fff; }
+      body { font-size: 11pt; }
+      main { width: 100%; margin: 0; }
+      header, section { border-radius: 0; margin-bottom: 10pt; padding: 12pt; break-inside: avoid; }
+      nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      a { color: #000; }
+      .save, .pending { background: #fff; }
+      footer { font-size: 9pt; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Palitra: фото, товары и задачи</h1>
+    <p>Войдите в кабинет под своим аккаунтом и выберите компанию <strong>Palitra</strong>. Если появится экран входа, сначала авторизуйтесь, затем снова откройте нужную ссылку.</p>
+    <nav aria-label="Переходы Palitra">
+      <a href="https://synapse.synapsebusiness.ru/cabinet/site-photos.html">Фото на сайте</a>
+      <a href="https://synapse.synapsebusiness.ru/price-editor-palitra.html?v=20261013-38&amp;site=https%3A%2F%2Fpalitra-love-draft-1.synapsebusiness.ru">Товары и прайс</a>
+      <a href="https://palitra-love-draft-1.synapsebusiness.ru/">Посмотреть черновик сайта</a>
+      <a href="https://synapse.synapsebusiness.ru/cabinet.html#tasks">Задачник</a>
+    </nav>
+    <p class="muted">Эти ссылки работают независимо от меню. Кнопка <strong>☰ Меню</strong> в редакторах открывает переходы к фото, прайсу, сайту и задачнику.</p>
+  </header>
+
+  <section aria-labelledby="products">
+    <h2 id="products">Изменить или добавить товар</h2>
+    <ol>
+      <li>Откройте <strong>«Товары»</strong>. Найдите товар по названию, номеру или цене и нажмите <strong>«Изменить»</strong>. Для нового товара — <strong>«+ Добавить товар»</strong>.</li>
+      <li>Заполните название, цену, описание и состав. В <strong>«Поводы на сайте»</strong> можно выбрать несколько категорий.</li>
+      <li>Нажмите <strong>«+ Добавить фото»</strong>. Для обложки выберите <strong>«Основное»</strong>; остальные фото останутся в галерее. Доступны <strong>«Заменить»</strong>, <strong>«Удалить»</strong> и стрелки порядка.</li>
+      <li>Нажмите <strong>«Готово»</strong> в форме, затем <strong>«Сохранить»</strong> в верхней части редактора. Дождитесь подтверждения и проверьте товар на сайте.</li>
+    </ol>
+    <p class="save"><strong>«Готово»</strong> применяет правки в открытом редакторе. Только <strong>«Сохранить»</strong> отправляет их на сервер.</p>
+    <p>Прайс общий: сохранённые изменения видны на страницах, подключённых к нему. Подключение всех старых страниц ещё проверяется.</p>
+  </section>
+
+  <section aria-labelledby="categories">
+    <h2 id="categories">Категории и временные праздники</h2>
+    <ul>
+      <li>В <strong>«Категории»</strong> выберите и расположите до шести основных категорий. Остальные доступны покупателю через <strong>«Показать ещё»</strong>.</li>
+      <li>В <strong>«Праздники» → «+ Новый праздник»</strong> укажите название, даты и входящие категории. При необходимости включите <strong>«Закрепить первым на главной и в каталоге на время праздника»</strong>.</li>
+      <li>Даты включения и скрытия — <strong>по московскому времени</strong>. Последняя дата включается целиком. Нажмите <strong>«Готово»</strong>, затем <strong>«Сохранить»</strong>.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="site-photos">
+    <h2 id="site-photos">Поменять фото в блоках сайта</h2>
+    <ol>
+      <li>Откройте <strong>«Фото на сайте»</strong> и выберите нужный блок: первый экран, категории, подборки по бюджету или галерею.</li>
+      <li>Выберите фото и нажмите <strong>«Готово»</strong>, затем <strong>«Сохранить в черновик»</strong>.</li>
+      <li>Откройте черновик сайта и проверьте результат на телефоне и компьютере.</li>
+    </ol>
+    <p>Этот редактор меняет фотографии <strong>только в черновике</strong>. Чистовик публикуется отдельно. Фото товара меняйте в редакторе прайса.</p>
+    <p class="muted">Доступные блоки: три кадра первого экрана, 11 категорий, три подборки по бюджету и галерея — первые четыре фото, остальные после раскрытия.</p>
+  </section>
+
+  <section class="pending" aria-labelledby="frame">
+    <h2 id="frame">Настроить кадр фотографии</h2>
+    <p>Нажмите «Настроить кадр» у фото товара, передвиньте изображение и измените масштаб. Сверяйтесь с рамкой и предпросмотром для покупателя. Затем примените кадр, нажмите <strong>«Готово»</strong> в форме товара и <strong>«Сохранить»</strong>.</p>
+  </section>
+
+  <section aria-labelledby="tasks">
+    <h2 id="tasks">Задачи и проверка результата</h2>
+    <p>Откройте <strong>«Задачник»</strong> и проверьте, что выбрана Palitra. Выполнение задачи и проверка Владом — разные статусы.</p>
+    <p>Чтобы отметить проверку в едином отчёте, сообщите в рабочей беседе номер и результат: <strong>«№ 7 — Проверил»</strong> или <strong>«№ 7 — Нужна правка: …»</strong>. Можно указать несколько номеров.</p>
+  </section>
+
+  <section aria-labelledby="conflict">
+    <h2 id="conflict">Если сохранение не подтверждено</h2>
+    <p>При сообщении о чужой версии или ошибке <strong>409</strong> не перезаписывайте данные вслепую. Используйте предложенное редактором обновление или перенос правок, проверьте результат и сохраните. Не отправляйте содержимое прайса и данные входа в чат.</p>
+    <p>Если открылся старый вид редактора, штатно обновите страницу. Перед обновлением завершите сохранение правок.</p>
+  </section>
+
+  <section aria-labelledby="desktop">
+    <h2 id="desktop">Сохранить инструкцию на рабочий стол</h2>
+    <p>Сохраните файл через <strong>«Сохранить как» → «Рабочий стол»</strong>. Открывайте его двойным щелчком. Для PDF нажмите <strong>Ctrl + P</strong> и выберите <strong>«Сохранить как PDF»</strong>.</p>
+  </section>
+
+  <footer>Инструкция для Дарьи и Влада · Palitra · 13.10.2026. Файл открывается без интернета; для редакторов и сайта интернет нужен.</footer>
+</main>
+</body>
+</html>

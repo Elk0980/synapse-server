@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Palitra — рабочее место</title>
+<link rel="stylesheet" href="/cabinet/palitra-work.css?v=20261014-c1">
+</head>
+<body>
+<div class="pw" id="pw">
+  <header class="pw-top">
+    <div class="pw-brand"><strong>Palitra</strong><span>рабочее место</span></div>
+    <div class="pw-user" id="pw-user" hidden>
+      <span class="pw-user__name" id="pw-user-name"></span>
+      <a class="pw-link" id="pw-tasks" href="/palitra-review/" target="_blank" rel="noopener noreferrer">Задачи ↗</a>
+      <button type="button" class="pw-btn pw-btn--quiet" id="pw-logout">Выйти</button>
+    </div>
+  </header>
+
+  <p class="pw-status" id="pw-status" role="status" aria-live="polite">Проверяем вход…</p>
+
+  <section class="pw-login" id="pw-login" hidden aria-labelledby="pw-login-title">
+    <h1 id="pw-login-title">Вход в Synapse</h1>
+    <p class="pw-muted" id="pw-login-note">Обычный логин и пароль кабинета Synapse.</p>
+    <form id="pw-login-form" novalidate>
+      <label class="pw-field">Логин<input name="login" autocomplete="username" required maxlength="120"></label>
+      <label class="pw-field">Пароль<input name="password" type="password" autocomplete="current-password" required maxlength="200"></label>
+      <p class="pw-error" id="pw-login-error" role="alert"></p>
+      <button class="pw-btn pw-btn--main" type="submit" id="pw-login-submit">Войти</button>
+    </form>
+  </section>
+
+  <section class="pw-denied" id="pw-denied" hidden>
+    <h1>Нет доступа</h1>
+    <p>Рабочее место Palitra пока открыто только владельцу. Если это ошибка, напишите администратору Synapse.</p>
+  </section>
+
+  <main class="pw-main" id="pw-main" hidden>
+    <section class="pw-panel" id="panel-orders" role="tabpanel" aria-labelledby="tab-orders">
+      <div class="pw-panel__head">
+        <h1>Заявки</h1>
+        <button type="button" class="pw-btn pw-btn--quiet" id="orders-refresh">Обновить</button>
+      </div>
+      <p class="pw-panel-status" id="orders-status" role="status" aria-live="polite"></p>
+      <ol class="pw-cards" id="orders-list"></ol>
+      <button type="button" class="pw-btn pw-btn--quiet pw-more" id="orders-more" hidden>Показать ещё</button>
+    </section>
+
+    <section class="pw-panel" id="panel-chat" role="tabpanel" aria-labelledby="tab-chat" hidden>
+      <div class="pw-chat" id="chat">
+        <div class="pw-chat__list" id="chat-list-wrap">
+          <div class="pw-panel__head">
+            <h1>Переписка</h1>
+            <button type="button" class="pw-btn pw-btn--quiet" id="dialogs-refresh">Обновить</button>
+          </div>
+          <h2 class="pw-list-title" id="threads-title">Чаты сайта</h2>
+          <p class="pw-panel-status" id="threads-status" role="status" aria-live="polite"></p>
+          <ul class="pw-dialogs" id="threads-list" aria-labelledby="threads-title"></ul>
+          <button type="button" class="pw-btn pw-btn--quiet pw-more" id="threads-more" hidden>Показать ещё</button>
+          <h2 class="pw-list-title" id="dialogs-title">Telegram-бот</h2>
+          <p class="pw-panel-status" id="dialogs-status" role="status" aria-live="polite"></p>
+          <ul class="pw-dialogs" id="dialogs-list" aria-labelledby="dialogs-title"></ul>
+          <button type="button" class="pw-btn pw-btn--quiet pw-more" id="dialogs-more" hidden>Показать ещё</button>
+        </div>
+        <div class="pw-chat__view" id="chat-view" hidden>
+          <div class="pw-panel__head">
+            <button type="button" class="pw-btn pw-btn--quiet" id="chat-back">← Все диалоги</button>
+            <button type="button" class="pw-btn pw-btn--quiet" id="chat-refresh">Обновить</button>
+          </div>
+          <h2 class="pw-chat__title" id="chat-title" tabindex="-1"></h2>
+          <p class="pw-muted" id="chat-meta"></p>
+          <p class="pw-muted pw-chat__note" id="chat-note"></p>
+          <p class="pw-panel-status" id="chat-status" role="status" aria-live="polite"></p>
+          <button type="button" class="pw-btn pw-btn--quiet pw-more" id="chat-earlier" hidden>Показать ранее</button>
+          <ol class="pw-messages" id="chat-messages"></ol>
+          <form class="pw-composer" id="composer" novalidate>
+            <label class="pw-field" for="composer-text" id="composer-label">Ответ клиенту в Telegram</label>
+            <p class="pw-muted" id="composer-hint" hidden></p>
+            <textarea id="composer-text" rows="3" maxlength="8000" placeholder="Текст ответа"></textarea>
+            <div class="pw-composer__row">
+              <span class="pw-muted" id="composer-count">0 / 8000</span>
+              <button type="submit" class="pw-btn pw-btn--main" id="composer-send">Отправить</button>
+            </div>
+            <p class="pw-composer__state" id="composer-state" role="status" aria-live="polite"></p>
+            <div class="pw-composer__row" id="composer-unknown" hidden>
+              <button type="button" class="pw-btn" id="composer-retry">Проверить и повторить ту же отправку</button>
+              <button type="button" class="pw-btn pw-btn--quiet" id="composer-drop">Отказаться от этой отправки</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section class="pw-panel pw-panel--frame" id="panel-products" role="tabpanel" aria-labelledby="tab-products" hidden>
+      <div class="pw-frame-note" id="products-note" hidden></div>
+      <div class="pw-frame-host" id="products-host"></div>
+    </section>
+
+    <section class="pw-panel pw-panel--frame" id="panel-site" role="tabpanel" aria-labelledby="tab-site" hidden>
+      <div class="pw-frame-note" id="site-note" hidden></div>
+      <div class="pw-frame-host" id="site-host"></div>
+    </section>
+  </main>
+
+  <nav class="pw-tabs" id="pw-tabs" role="tablist" aria-label="Разделы" hidden>
+    <button type="button" role="tab" class="pw-tab" id="tab-orders" data-tab="orders" aria-controls="panel-orders" aria-selected="true">Заявки</button>
+    <button type="button" role="tab" class="pw-tab" id="tab-chat" data-tab="chat" aria-controls="panel-chat" aria-selected="false" tabindex="-1">Переписка</button>
+    <button type="button" role="tab" class="pw-tab" id="tab-products" data-tab="products" aria-controls="panel-products" aria-selected="false" tabindex="-1">Товары</button>
+    <button type="button" role="tab" class="pw-tab" id="tab-site" data-tab="site" aria-controls="panel-site" aria-selected="false" tabindex="-1">Сайт</button>
+  </nav>
+</div>
+<script src="/cabinet/palitra-work.js?v=20261014-c1" defer></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "palitra-telegram-preview",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Тестовый просмотр интерфейса Palitra внутри Telegram: вымышленные данные, реальные каналы выключены",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "sync": "node tools/sync-from-app.cjs",
+    "verify": "node verify.cjs",
+    "preview": "node local-preview.cjs --port 8799"
+  }
+}

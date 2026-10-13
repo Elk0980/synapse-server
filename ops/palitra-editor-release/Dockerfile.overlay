@@ -1,0 +1,4 @@
+ARG PALITRA_BASE_IMAGE
+FROM ${PALITRA_BASE_IMAGE}
+# Keep every other module from the verified running image.
+COPY server.js palitra-photo-feature.js palitra-photo-model.js palitra-image-check.js palitra-image-decoder.js palitra-price-validate.js palitra-occasions.js /app/

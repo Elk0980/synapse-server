@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ru" data-mode="integration" data-preview="draft-test">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#F6F1E7">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light">
+  <title>Мои тестовые заказы — Palitra Love</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='10' fill='%2355642F'/%3E%3Cpath d='M9 24c4-7 8-11 14-15' stroke='%23FBF7EE' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='22' cy='9' r='3' fill='%23F3D7CC'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/_palitra_test/app.css">
+  <link rel="stylesheet" href="/_palitra_test/buyer.css">
+  <!-- Без SDK Telegram: страница открывается на сайте-черновике. buyer.js — до app.js (связь с тестовым сервером). -->
+  <script src="/_palitra_test/buyer.js" defer></script>
+  <script src="/_palitra_test/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">К содержимому</a>
+  <!-- Тестовые заказы покупателя черновика: только свои, без выбора участника и без оформления нового заказа здесь. -->
+  <div class="demo-bar test-bar" role="region" aria-label="Тестовые заказы">
+    <p><strong>Мои тестовые заказы · не настоящие</strong>
+      <span class="preview-note">Это проверка сайта вместе с приложением Palitra. Заказы видны только вам и тестовой команде, никуда не отправляются и хранятся лишь в памяти тестового сервера — не дольше 6 часов; при простое или перезапуске сервера пропадут.</span></p>
+    <div class="test-actions">
+      <a class="btn btn-primary test-btn" href="/">Вернуться на сайт</a>
+      <button type="button" class="btn btn-secondary test-btn" id="testReload">Обновить</button>
+    </div>
+  </div>
+  <div id="testBanner" class="preview-banner" role="alert" hidden></div>
+  <header class="topbar">
+    <div class="brand" aria-label="Palitra Love">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="10" fill="#55642F"/><path d="M9 24c4-7 8-11 14-15" stroke="#FBF7EE" stroke-width="2" fill="none" stroke-linecap="round"/><circle cx="22" cy="9" r="3" fill="#F3D7CC"/></svg>
+      Palitra<span class="brand-love">love</span>
+    </div>
+    <div id="who" class="who"></div>
+  </header>
+  <nav id="tabs" class="tabs" aria-label="Разделы" hidden></nav>
+  <main id="main" class="main" tabindex="-1">
+    <section id="list" class="pane-list" aria-label="Список"></section>
+    <section id="detail" class="pane-detail" aria-label="Карточка"></section>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+  <dialog id="sheet" class="sheet" aria-labelledby="sheetTitle"><div id="sheetBody" class="sheet-inner"></div></dialog>
+  <noscript><p class="noscript">Для работы страницы нужен включённый JavaScript.</p></noscript>
+</body>
+</html>

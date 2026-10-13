@@ -1,0 +1,112 @@
+{
+  "schema": 1,
+  "package_id": "palitra-app-workplace-20261013",
+  "files": [
+    {
+      "path": "Dockerfile",
+      "sha256": "2a71c8c4b37b6a9a5a144ce24fb5e6c5676b7e9d6e8efa0ba592d2109da0fbe2",
+      "bytes": 203
+    },
+    {
+      "path": "install.py",
+      "sha256": "65cc42f09b44aa91f97ff5ac620ed758f31105f0c565c06484fa0838203a86f0",
+      "bytes": 22391
+    },
+    {
+      "path": "manifest.json",
+      "sha256": "b2a42d9f990d806130eb58d3ef234ea8d9606fa360b89bb10bc677d26e19108a",
+      "bytes": 929
+    },
+    {
+      "path": "payload/content/client-dialogs.js",
+      "sha256": "321c48c9a4ee0f2febd693e7bd1b917f2e74d2466f82bf32ddce764c73523f8a",
+      "bytes": 86794
+    },
+    {
+      "path": "payload/content/server.js",
+      "sha256": "26193d64a4a64cd3ca1308ec0e70ad4cd548524375f925cc72149e56ca30a395",
+      "bytes": 103964
+    },
+    {
+      "path": "payload/content/site-orders.js",
+      "sha256": "73700f9a14c95f62e825b12c11ef2880d883cad19f2cee3945bf0d735fe627d5",
+      "bytes": 55075
+    },
+    {
+      "path": "payload/sites/synapse/cabinet/palitra-work.css",
+      "sha256": "a9f4a2b4544cbe7e93140d4963bdf6cf80675eec377062e861f37b782c88335f",
+      "bytes": 10920
+    },
+    {
+      "path": "payload/sites/synapse/cabinet/palitra-work.html",
+      "sha256": "4e632871379b035bb947935bfe27248190bc16af292bd5440813352cbabb3172",
+      "bytes": 6305
+    },
+    {
+      "path": "payload/sites/synapse/cabinet/palitra-work.js",
+      "sha256": "343fabbcf995e8bcb69e19c47c5cfb717632a4442b38c26fa108c247b27d0c4b",
+      "bytes": 53852
+    },
+    {
+      "path": "README.md",
+      "sha256": "2c85cb9e881abcdace63657ccb760b4c1ad3c0fee2199e8c878ba125776cbf96",
+      "bytes": 7211
+    }
+  ],
+  "expected_runtime": {
+    "server.js": "f457cfac0f12fdbe6d1d68f150d1750bada29a56c4620b34fff687f243b7f1c9",
+    "client-dialogs.js": "ae6ba408ba47aa74bdab6cffda3402882b37613b2e4fed8a91ee608694aa9784",
+    "site-orders.js": "46e27daa641591f60aeb08ec9a2702ba880cf4127d6231ce82bf82c9856d2dfe"
+  },
+  "static": {
+    "group": "static",
+    "targets": 3,
+    "expected_absence": true,
+    "manifest": "manifest.json",
+    "requires_backend_before_static": true
+  },
+  "content": {
+    "base_image": "palitra-category-content:20261013",
+    "files": [
+      "server.js",
+      "client-dialogs.js",
+      "site-orders.js"
+    ],
+    "category_image_installed_at_preparation": false,
+    "target_runtime_in_manifest": false,
+    "category_image_built": true,
+    "category_image_active": false,
+    "app_installed": false
+  },
+  "installer": {
+    "source_sha256": "f5d8ff19d1ec3baa9233d6395327765836111439d921fb4a44ed64dc3f5a0ba5",
+    "change": "ALLOWLIST only",
+    "reverse_source_bytes_equal": true
+  },
+  "verification": {
+    "root_reported_final_tests_passed": 54,
+    "root_reported_final_tests_total": 54,
+    "root_reported_routes_passed": 80,
+    "root_reported_routes_total": 80,
+    "independent_readonly_review": "final auth-read / positive-receipt review pending",
+    "preparer_tests_executed": 0,
+    "preparer_live_actions": 0,
+    "payload_all_sha_exact": true,
+    "detected_private_path_shape": false,
+    "detected_real_phone_shape": false,
+    "detected_bot_token_shape": false,
+    "initial_p1_review_fixed_accepted": true
+  },
+  "excluded": [
+    "DATA",
+    "price",
+    "credentials",
+    "contacts",
+    "activation codes",
+    "ACL",
+    "USER checks",
+    "queue rows",
+    "other packages",
+    "public publication"
+  ]
+}

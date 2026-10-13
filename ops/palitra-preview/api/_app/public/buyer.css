@@ -1,0 +1,12 @@
+/* Palitra — страница «Мои тестовые заказы» на сайте-черновике (поверх принятого app.css). */
+.test-bar p { margin: 0; display: grid; gap: 2px; }
+.preview-note { font-size: 13px; opacity: .85; }
+.test-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.test-btn { min-height: 56px; border-radius: 28px; font: inherit; font-weight: 700; padding: 0 22px; text-decoration: none; }
+.demo-bar a.test-btn { color: #fff; }
+.preview-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 0; padding: 12px 16px;
+  background: var(--gold-soft, #F6E7C4); color: var(--gold-ink, #5A430C); font-size: 14.5px; }
+.preview-banner p { flex: 1 1 220px; margin: 0; }
+
+/* Новый заказ оформляется только на сайте: вкладка и форма оформления здесь не показываются. */
+#tab-shop, [data-tab="shop"], #shopForm { display: none !important; }

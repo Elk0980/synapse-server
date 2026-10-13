@@ -1,0 +1,134 @@
+/* Palitra — чат по заявке (/chat). Телефон — основной экран: список заявок, затем переписка с полем внизу;
+   с 900px список и переписка рядом. Кнопки от 44px, видимый фокус, безопасные отступы. Только эта страница. */
+:root {
+  --pc-bg: #fffdf8;
+  --pc-surface: #ffffff;
+  --pc-ink: #302f2a;
+  --pc-muted: #5f5a4f;
+  --pc-olive: #69723e;
+  --pc-olive-dark: #5a6235;
+  --pc-soft: #f1ede3;
+  --pc-line: #e1dccd;
+  --pc-error: #a3361f;
+  --pc-ok: #3f6b2a;
+  --pc-radius: 28px;
+  --pc-radius-small: 16px;
+  color-scheme: light;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--pc-bg);
+  color: var(--pc-ink);
+  font: 16px/1.5 'Nunito Sans', Arial, system-ui, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+[hidden] { display: none !important; }
+h1, h2 { margin: 0; line-height: 1.2; }
+p { margin: 0; }
+a { color: var(--pc-olive-dark); }
+:focus-visible { outline: 3px solid var(--pc-olive); outline-offset: 2px; }
+
+.pc { min-height: 100vh; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom, 0px); }
+.pc-top {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
+  background: var(--pc-surface); border-bottom: 1px solid var(--pc-line);
+}
+.pc-brand { font-weight: 700; font-size: 1.2rem; text-decoration: none; color: var(--pc-olive-dark); min-height: 44px; display: inline-flex; align-items: center; }
+.pc-sub { color: var(--pc-muted); font-size: .9rem; }
+
+.pc-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 44px; padding: 10px 20px; border-radius: var(--pc-radius);
+  border: 2px solid var(--pc-olive); background: var(--pc-olive); color: #fff;
+  font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; touch-action: manipulation;
+}
+.pc-btn:hover { background: var(--pc-olive-dark); border-color: var(--pc-olive-dark); }
+.pc-btn--quiet { background: var(--pc-surface); color: var(--pc-ink); }
+.pc-btn--quiet:hover { background: var(--pc-soft); }
+.pc-btn--main { min-width: 140px; }
+.pc-btn:disabled { opacity: .55; cursor: progress; }
+.pc-link { border: 0; background: none; padding: 0; min-height: 44px; font: inherit; color: var(--pc-olive-dark); text-decoration: underline; cursor: pointer; }
+.pc-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pc-row--between { justify-content: space-between; }
+.pc-more { width: 100%; }
+
+.pc-status { margin: 10px 16px 0; padding: 10px 14px; border-radius: var(--pc-radius-small); background: var(--pc-soft); }
+.pc-status[data-state="error"], .pc-state[data-state="error"], .pc-note[data-state="error"], #pc-view-status[data-state="error"] { color: var(--pc-error); }
+.pc-state[data-state="ok"] { color: var(--pc-ok); }
+.pc-restart { margin: 10px 16px 0; }
+.pc-muted { color: var(--pc-muted); font-size: .92rem; }
+.pc-note:empty, .pc-state:empty, .pc-muted:empty { display: none; }
+
+.pc-main { flex: 1; display: flex; flex-direction: column; gap: 16px; padding: 16px; min-height: 0; }
+.pc-main.is-open .pc-list { display: none; }
+.pc-list, .pc-view { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.pc-list__title { font-size: 1.15rem; }
+.pc-threads { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pc-thread {
+  width: 100%; min-height: 56px; padding: 12px 16px; text-align: left; font: inherit; color: inherit; cursor: pointer;
+  background: var(--pc-surface); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-small);
+  display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere;
+}
+.pc-thread:hover { border-color: var(--pc-olive); }
+
+.pc-head { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.pc-title { font-size: clamp(1.25rem, 5vw, 1.6rem); overflow-wrap: anywhere; }
+.pc-title:focus { outline: none; }
+.pc-title:focus-visible { outline: 3px solid var(--pc-olive); outline-offset: 2px; }
+
+.pc-messages { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pc-msg {
+  max-width: 88%; padding: 10px 14px; border-radius: var(--pc-radius-small); overflow-wrap: anywhere;
+  display: flex; flex-direction: column; gap: 4px; background: var(--pc-surface); border: 1px solid var(--pc-line);
+}
+.pc-msg--own { align-self: flex-end; background: #eef0e2; border-color: transparent; }
+.pc-msg--shop { align-self: flex-start; }
+.pc-msg__meta, .pc-msg__status { color: var(--pc-muted); font-size: .8rem; }
+.pc-msg__text { white-space: pre-wrap; }
+/* PALITRA-WEBCHAT-PHASED1: вложения — в ширине сообщения, без автозапуска; ссылка скачивания — крупная цель касания. */
+.pc-file { display: flex; flex-direction: column; gap: 6px; max-width: 100%; }
+.pc-file__kind, .pc-file__state { color: var(--pc-muted); font-size: .85rem; }
+.pc-file__image, .pc-file__video { display: block; max-width: 100%; max-height: 360px; height: auto; border-radius: var(--pc-radius-small); background: var(--pc-soft); }
+.pc-file__video--round { width: min(240px, 100%); aspect-ratio: 1 / 1; object-fit: cover; border-radius: 50%; }
+.pc-file__audio { width: min(320px, 100%); max-width: 100%; }
+.pc-file__download { display: inline-flex; align-items: center; min-height: 44px; overflow-wrap: anywhere; }
+
+/* Поле сообщения прилипает к низу экрана над безопасной зоной: отправка и ошибка видны и при клавиатуре. */
+.pc-composer {
+  position: sticky; bottom: 0; z-index: 2;
+  background: var(--pc-bg); padding: 10px 0 calc(10px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--pc-line);
+}
+.pc-label { font-weight: 700; }
+.pc-composer textarea {
+  font: inherit; color: inherit; width: 100%; min-height: 88px; max-height: 40vh; resize: vertical;
+  padding: 10px 14px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-small); background: #fff;
+}
+.pc-composer textarea[readonly] { background: var(--pc-soft); }
+.pc-foot { padding: 0 0 8px; }
+/* PALITRA-WEBCHAT-PHASEE: «Прикрепить файл» — настоящий input[type=file] (фокус с клавиатуры), подпись-кнопка видима;
+   имя и размер выбранного файла переносятся по словам и не выходят за ширину экрана. */
+.pc-attach { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; position: relative; min-width: 0; }
+.pc-attach__input { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; opacity: 0; overflow: hidden; clip-path: inset(50%); }
+.pc-attach__input:focus-visible + .pc-attach__pick { outline: 3px solid var(--pc-olive); outline-offset: 2px; }
+.pc-attach__input:disabled + .pc-attach__pick { opacity: .55; cursor: progress; }
+.pc-attach__pick { cursor: pointer; }
+.pc-attach__name { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+
+@media (max-width: 359px) {
+  .pc-main { padding: 12px; }
+  .pc-btn { padding: 10px 14px; }
+  .pc-btn--main { min-width: 0; flex: 1 1 auto; }
+}
+@media (min-width: 900px) {
+  .pc-main { flex-direction: row; flex-wrap: wrap; align-items: flex-start; max-width: 1180px; width: 100%; margin: 0 auto; }
+  .pc-list { flex: 0 0 320px; position: sticky; top: 16px; }
+  .pc-main.is-open .pc-list { display: flex; }
+  .pc-view { flex: 1 1 480px; }
+  #pc-back { display: none; }
+  .pc-msg { max-width: 72%; }
+  .pc-foot { flex-basis: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }

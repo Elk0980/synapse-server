@@ -1,0 +1,57 @@
+{
+  "purpose": "Nunito Sans 400/600/700 для редактора прайса Palitra. Шрифт переменный: один woff2 на набор символов покрывает веса 400, 600 и 700 (как в Google Fonts CSS). @font-face — в WORK/palitra-editor.css.",
+  "status": "Скопировано Codex после завершения Claude93630; SHA256 проверены. Личная UI-проверка ещё ожидается.",
+  "source_of_truth": "BASE/storefront.css строки 147-158: проверенные production @font-face витрины с официальными URL fonts.gstatic.com/s/nunitosans/v19 (полные наборы, без text= subset).",
+  "family": "Nunito Sans",
+  "version": "v19",
+  "weights": [
+    400,
+    600,
+    700
+  ],
+  "files": [
+    {
+      "subset": "cyrillic-ext",
+      "official_url": "https://fonts.gstatic.com/s/nunitosans/v19/pe0TMImSLYBIv1o4X1M8ce2xCx3yop4tQpF_MeTm0lfGWVpNn64CL7U8upHZIbMV51Q42ptCp7t4R-tCKQ.woff2",
+      "work_path": "WORK/fonts/nunito-sans-v19-cyrillic-ext.woff2",
+      "served_as": "palitra-editor-fonts/nunito-sans-v19-cyrillic-ext.woff2",
+      "unicode_range": "U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F",
+      "sha256": "8a8e11bad67c3ae75ba03c969fbe5742b8bf088f1b2ca2dd04610a352475ee37"
+    },
+    {
+      "subset": "cyrillic",
+      "official_url": "https://fonts.gstatic.com/s/nunitosans/v19/pe0TMImSLYBIv1o4X1M8ce2xCx3yop4tQpF_MeTm0lfGWVpNn64CL7U8upHZIbMV51Q42ptCp7txR-tCKQ.woff2",
+      "work_path": "WORK/fonts/nunito-sans-v19-cyrillic.woff2",
+      "served_as": "palitra-editor-fonts/nunito-sans-v19-cyrillic.woff2",
+      "unicode_range": "U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116",
+      "sha256": "d3fe75d4c86f6df84f37c76ad44fa21c45778d7e14160b0294f92ec248fa144a"
+    },
+    {
+      "subset": "latin-ext",
+      "official_url": "https://fonts.gstatic.com/s/nunitosans/v19/pe0TMImSLYBIv1o4X1M8ce2xCx3yop4tQpF_MeTm0lfGWVpNn64CL7U8upHZIbMV51Q42ptCp7t7R-tCKQ.woff2",
+      "work_path": "WORK/fonts/nunito-sans-v19-latin-ext.woff2",
+      "served_as": "palitra-editor-fonts/nunito-sans-v19-latin-ext.woff2",
+      "unicode_range": "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF",
+      "sha256": "c648ee5bfda70d44b9fb628f4114d1cc4f984d050cbb4881052237ede3638a2e"
+    },
+    {
+      "subset": "latin",
+      "official_url": "https://fonts.gstatic.com/s/nunitosans/v19/pe0TMImSLYBIv1o4X1M8ce2xCx3yop4tQpF_MeTm0lfGWVpNn64CL7U8upHZIbMV51Q42ptCp7t1R-s.woff2",
+      "work_path": "WORK/fonts/nunito-sans-v19-latin.woff2",
+      "served_as": "palitra-editor-fonts/nunito-sans-v19-latin.woff2",
+      "unicode_range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD",
+      "sha256": "29e3890496844a9ea81975c52771c587c872b4eb317026422d1995b88d21b57d"
+    }
+  ],
+  "copy_steps_for_codex": [
+    "Получить 4 файла ровно по official_url (или взять уже проверенные копии этих же URL), сохранить в work_path. Имена не менять.",
+    "Проверить: первые 4 байта каждого файла = 'wOF2'; размер > 10 КБ; записать sha256 в это поле sha256.",
+    "Локальный preview (WORK/preview-server.cjs) отдаёт только эти 4 имени по /palitra-editor-fonts/<имя> из WORK/fonts, тип font/woff2, CSP font-src 'self'. Внешних origin в CSP нет; preview в сеть не ходит. Нет файла — 404.",
+    "Проверка факта: в DevTools > Rendering/Computed 'Rendered Fonts' = Nunito Sans (не Segoe UI/Roboto); document.fonts.check('600 16px \"Nunito Sans\"') после document.fonts.ready. Физический Safari не заявлять без проверки."
+  ],
+  "production_options": {
+    "A_recommended_selfhost": "Положить те же 4 файла рядом с price-editor-palitra.html в каталог palitra-editor-fonts/ на origin кабинета (synapse.synapsebusiness.ru). Нужен только font-src 'self' (или отсутствие font-src в CSP). CSS менять не надо.",
+    "B_official_cdn": "Заменить url(palitra-editor-fonts/…) в @font-face на official_url. Тогда CSP кабинета (Caddy) должна разрешать font-src https://fonts.gstatic.com. Владелец сервера сверяет текущую CSP Caddy сам; редактор её не меняет.",
+    "note": "Перед установкой проверить, что путь /palitra-editor-fonts/ на origin кабинета свободен. Стиль витрины (storefront.css) не меняется."
+  }
+}
