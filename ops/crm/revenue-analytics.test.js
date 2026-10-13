@@ -25,6 +25,94 @@ function harness(t) {
   return {db,a,data,adapters,save,report,advance:n=>{time+=n;}};
 }
 
+test('новая ревизия календаря перечитывает старые native записи и не меняет другую компанию',async t=>{
+  const h=harness(t);h.save();h.save(B);
+  h.data.records=[rec({create_date:'2026-10-02 12:00:00',datetime:'2026-10-03 12:00:00',last_change_date:'2026-10-03 13:00:00'})];
+  h.data.cash=[tx({date:'2026-10-03 13:00:00'})];
+  const original=h.adapters.ycPages;
+  // Запись старше перекрытия: API не возвращает её в запросе последних изменений.
+  h.adapters.ycPages=async(path,params,key,normalize)=>path.includes('/records/')&&params.changed_after!=='2026-09-01'?[]:original(path,params,key,normalize);
+  assert.equal((await h.a.collect(A,'yclients')).collected,true);
+  assert.equal((await h.a.collect(B,'yclients')).collected,true);
+  const stored=code=>h.db.prepare('SELECT payload FROM revenue_records WHERE company=? AND id=?').get(code,'1').payload;
+  const other=stored(B);
+  assert.equal(JSON.parse(stored(A)).visitAt,'2026-10-03T04:00:00.000Z');
+  h.save(A,'yclients',{config:{...config(),timezone:'Europe/Moscow'}});
+  assert.equal(h.a.status(A,'yclients').current,false);
+  assert.equal((await h.a.collect(A,'yclients')).collected,true);
+  assert.equal(h.a.status(A,'yclients').current,true);
+  assert.equal(JSON.parse(stored(A)).visitAt,'2026-10-03T09:00:00.000Z');
+  assert.equal(stored(B),other);
+});
+
+test('новая ревизия доступа заменяет прежний список записей только после целого успешного сбора',async t=>{
+  const h=harness(t);h.save();assert.equal((await h.a.collect(A,'yclients')).collected,true);
+  const before=h.db.prepare('SELECT payload FROM revenue_records WHERE company=?').all(A);
+  h.save(A,'yclients',{credential:{partnerToken:'synthetic-new-partner',userToken:'synthetic-new-user'}});
+  h.data.records=[];h.data.cash=[];
+  const original=h.adapters.ycPages;let rejectCash=true;
+  h.adapters.ycPages=async(path,params,key,normalize)=>{
+    if(path.includes('/transactions/')&&rejectCash)throw Object.assign(Error('synthetic'),{code:'INCOMPLETE'});
+    return original(path,params,key,normalize);
+  };
+  assert.equal((await h.a.collect(A,'yclients')).collected,false);
+  assert.deepEqual(h.db.prepare('SELECT payload FROM revenue_records WHERE company=?').all(A),before);
+  assert.equal(h.a.status(A,'yclients').current,false);
+  rejectCash=false;assert.equal((await h.a.collect(A,'yclients')).collected,true);
+  assert.equal(h.a.status(A,'yclients').current,true);
+  assert.equal(h.report().yclients.createdBookings,0);
+  assert.equal(h.report().yclients.paymentKopecks,0);
+});
+
+test('поздняя оплата старой записи сохраняет native связь после смены начала истории',async t=>{
+  const h=harness(t);h.save();assert.equal((await h.a.collect(A,'yclients')).collected,true);
+  const native=rec();h.data.records=[];let lookups=0;
+  h.adapters.json=async url=>{assert.equal(url.pathname,'/api/v1/record/101/1');lookups++;return {success:true,data:native};};
+  h.save(A,'yclients',{config:{...config(),historyFrom:'2026-10-03'}});
+  assert.equal((await h.a.collect(A,'yclients')).collected,true);
+  assert.equal(lookups,1);
+  assert.equal(h.report(A,'2026-10-03','2026-10-07').yclients.unmatchedTransactions,0);
+  assert.equal(h.db.prepare('SELECT count(*) n FROM revenue_records WHERE company=?').get(A).n,1);
+});
+
+test('сбор через полночь не закрывает сутки по времени завершения вместо границы API среза',async t=>{
+  const h=harness(t);h.save();
+  const cutoff='2026-10-08T15:55:00.000Z';h.advance(Date.parse(cutoff)-Date.parse(at));
+  let advanced=false;h.data.before=()=>{if(!advanced){h.advance(10*60000);advanced=true;}};
+  assert.equal((await h.a.collect(A,'yclients')).collected,true);
+  const report=h.report(),status=h.a.status(A,'yclients');
+  assert.equal(status.lastSuccess,'2026-10-08T16:05:00.000Z');
+  assert.equal(status.snapshotAt,cutoff);
+  assert.equal(report.yclients.dataCutoffAt,cutoff);
+  assert.equal(qualityCheck(report,'period_coverage').status,'attention');
+  assert.equal(report.cohorts.timeBasis.nativeCoverage.toUtcExclusive,'2026-10-07T16:00:00.000Z');
+});
+
+test('прежняя SQL схема сохраняет строки при миграции и не получает выдуманную границу среза',async t=>{
+  const h=harness(t);h.save();assert.equal((await h.a.collect(A,'yclients')).collected,true);
+  await h.a.stop();
+  const rows=h.db.prepare('SELECT payload FROM revenue_records WHERE company=?').all(A);
+  h.db.exec('ALTER TABLE revenue_jobs DROP COLUMN snapshot_at');
+  const upgraded=createRevenueAnalytics(h.db,{apiKey:'test-storage-key',now:()=>Date.parse(at),adapters:h.adapters});
+  t.after(()=>upgraded.stop());
+  assert.deepEqual(h.db.prepare('SELECT payload FROM revenue_records WHERE company=?').all(A),rows);
+  const legacy=upgraded.report(A,'2026-10-01','2026-10-07');
+  assert.equal(legacy.yclients.dataCutoffAt,null);
+  assert.equal(qualityCheck(legacy,'period_coverage').status,'attention');
+  assert.equal(legacy.cohorts.timeBasis.nativeCoverage,null);
+  h.data.calls=[];assert.equal((await upgraded.collect(A,'yclients')).collected,true);
+  assert.equal(h.data.calls.find(c=>c.path.includes('/records/')).params.changed_after,'2026-09-01');
+  assert.equal(qualityCheck(upgraded.report(A,'2026-10-01','2026-10-07'),'period_coverage').status,'ok');
+});
+
+test('будущий срез после отката часов не подтверждает покрытие native истории',async t=>{
+  const h=harness(t);h.save();await h.a.collect(A,'yclients');h.advance(-3600000);
+  const report=h.report(A,'2026-10-01','2026-10-07');
+  assert.equal(h.a.status(A,'yclients').snapshotAt,null);
+  assert.equal(report.cohorts.timeBasis.nativeCoverage,null);
+  assert.equal(qualityCheck(report,'period_coverage').status,'attention');
+});
+
 test('контроль качества различает отсутствующий источник и нулевые события в успешном снимке',async t=>{
   const h=harness(t),missing=h.report();
   assert.equal(missing.yclients,null);assert.equal(qualityCheck(missing,'booking_sources').status,'unavailable');

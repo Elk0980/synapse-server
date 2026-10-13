@@ -42,7 +42,8 @@ function revenueQuality({period,state,metrika:m,yclients:y,direct:d,cohorts},now
   if(m && period.to>=localDay(now,m.timezone))coverage.push('Метрика: выбран текущий или будущий день; итог периода ещё не завершён.');
   if(y){
     if(y.partialHistory)coverage.push('YCLIENTS: история до '+y.historyFrom+' не загружена.');
-    if(period.to>=localDay(Date.parse(y.collectedAt),y.timezone))coverage.push('YCLIENTS: период включает день последнего снимка или более поздние даты; итог ещё неполный.');
+    if(!y.dataCutoffAt)coverage.push('YCLIENTS: граница среза прежней выгрузки неизвестна; требуется новый сбор.');
+    else if(period.to>=localDay(Date.parse(y.dataCutoffAt),y.timezone))coverage.push('YCLIENTS: период включает день среза или более поздние даты; итог ещё неполный.');
   }
   add('period_coverage','Полнота периода',!m&&!y?'unavailable':coverage.length?'attention':'ok',
     coverage.join(' ')||(!m&&!y?'Без выгрузок полноту периода проверить нельзя.':'Имеющиеся снимки не включают незавершённые даты или известный пробел истории. Отсутствующий источник по-прежнему неизвестен.'));

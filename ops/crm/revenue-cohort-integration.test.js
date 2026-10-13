@@ -159,7 +159,7 @@ test('второй SQLite писатель во время чтения не с�
     return null;
   }});
   a.save('demo-a','yclients',{revision:0,config,enabled:true,credential:{partnerToken:'synthetic-partner',userToken:'synthetic-user'}});
-  db.prepare('UPDATE revenue_jobs SET last_success=?,success_revision=?,history_from=? WHERE company=? AND provider=?').run(new Date(AT).toISOString(),1,config.historyFrom,'demo-a','yclients');
+  db.prepare('UPDATE revenue_jobs SET last_success=?,snapshot_at=?,success_revision=?,history_from=? WHERE company=? AND provider=?').run(new Date(AT).toISOString(),new Date(AT).toISOString(),1,config.historyFrom,'demo-a','yclients');
   const record={id:'1',visitId:'501',client:'a'.repeat(64),createdAt:'2026-10-02T01:00:00Z',visitAt:'2026-10-03T01:00:00Z',changedAt:'2026-10-03T01:00:00Z',attendance:1,deleted:false,utm:{},online:true};
   db.prepare('INSERT INTO revenue_records VALUES(?,?,?)').run('demo-a','1',JSON.stringify(record));
   db.prepare('INSERT INTO revenue_cash VALUES(?,?,?)').run('demo-a','10',JSON.stringify({id:'10',recordId:'1',visitId:'501',client:'a'.repeat(64),at:'2026-10-03T01:00:00Z',amount:100000,expenseId:'5',deleted:false}));

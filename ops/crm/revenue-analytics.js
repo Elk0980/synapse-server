@@ -34,11 +34,13 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
   if(typeof nativeDirectSpend!=='boolean')fail('COHORT_CONTEXT_INVALID',500);
   const access=createRevenueAccess(db,{apiKey,now});
   const active=new Set();let closing=false;
-  db.exec('CREATE TABLE IF NOT EXISTS revenue_jobs(company TEXT NOT NULL,provider TEXT NOT NULL,lease TEXT,lease_until INTEGER NOT NULL DEFAULT 0,next_at INTEGER NOT NULL DEFAULT 0,last_attempt TEXT,last_success TEXT,success_revision INTEGER,error_code TEXT NOT NULL DEFAULT \'\',failures INTEGER NOT NULL DEFAULT 0,history_from TEXT,PRIMARY KEY(company,provider));'+
+  db.exec('CREATE TABLE IF NOT EXISTS revenue_jobs(company TEXT NOT NULL,provider TEXT NOT NULL,lease TEXT,lease_until INTEGER NOT NULL DEFAULT 0,next_at INTEGER NOT NULL DEFAULT 0,last_attempt TEXT,last_success TEXT,success_revision INTEGER,error_code TEXT NOT NULL DEFAULT \'\',failures INTEGER NOT NULL DEFAULT 0,history_from TEXT,snapshot_at TEXT,PRIMARY KEY(company,provider));'+
     'CREATE TABLE IF NOT EXISTS revenue_records(company TEXT NOT NULL,id TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(company,id));'+
     'CREATE TABLE IF NOT EXISTS revenue_cash(company TEXT NOT NULL,id TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(company,id));'+
     'CREATE TABLE IF NOT EXISTS revenue_metrika(company TEXT NOT NULL,from_day TEXT NOT NULL,to_day TEXT NOT NULL,revision INTEGER NOT NULL,payload TEXT NOT NULL,collected_at TEXT NOT NULL,PRIMARY KEY(company,from_day,to_day));'+
     'CREATE TABLE IF NOT EXISTS revenue_direct(company TEXT NOT NULL,from_day TEXT NOT NULL,to_day TEXT NOT NULL,revision INTEGER NOT NULL,payload TEXT NOT NULL,collected_at TEXT NOT NULL,PRIMARY KEY(company,from_day,to_day));');
+  // Старым поколениям нельзя приписывать неизвестную границу API-среза.
+  if(!db.prepare('PRAGMA table_info(revenue_jobs)').all().some(v=>v.name==='snapshot_at'))db.exec('ALTER TABLE revenue_jobs ADD COLUMN snapshot_at TEXT');
   const stamp=()=>new Date(now()).toISOString();
   const job=(c,p)=>db.prepare('SELECT * FROM revenue_jobs WHERE company=? AND provider=?').get(c,p);
   const keyed=(c,clientId)=>clientId && Number(clientId)>0 ? crypto.createHmac('sha256',apiKey).update('revenue-client/v1/'+c+'/'+id(clientId)).digest('hex') : null;
@@ -62,7 +64,10 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
   function status(c,p) {
     const connection=access.get(c,p),j=job(c,p);
     const successCurrent=Boolean(j?.last_success && j.success_revision===connection.revision);
+    const snapshotAt=successCurrent&&p==='yclients'&&j.snapshot_at&&Number.isFinite(Date.parse(j.snapshot_at))&&
+      new Date(j.snapshot_at).toISOString()===j.snapshot_at&&Date.parse(j.snapshot_at)<=Date.parse(j.last_success)&&Date.parse(j.snapshot_at)<=now()?j.snapshot_at:null;
     return {...connection,lastAttempt:j?.last_attempt||null,lastSuccess:j?.last_success||null,nextCheckAt:j?.next_at?new Date(j.next_at).toISOString():null,
+      snapshotAt,
       running:Boolean(j?.lease && j.lease_until>now()),errorCode:j?.error_code||null,
       current:successCurrent,stale:!successCurrent || now()-Date.parse(j.last_success)>(['metrika','direct'].includes(p)?3:30)*3600000};
   }
@@ -101,17 +106,18 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
       const binding=await prepareBinding(c,p),config=binding.config;
       const today=localDay(at,config.timezone);
       if(config.historyFrom>today)fail('BAD_PERIOD');
-      let records,cash,reports=[];
+      let records,cash,reports=[],replaceRecords=false;
       if(p==='yclients') {
         if(adapters.verifyYclients)await adapters.verifyYclients(binding);
-        // Первая выгрузка — исходная история; после неё перекрываем изменения на три дня.
-        const initial=!before.last_success || before.history_from!==config.historyFrom;
-        const since=initial ? config.historyFrom : new Date(Math.max(Date.parse(config.historyFrom),Date.parse(before.last_success)-3*86400000)).toISOString();
+        // Первая выгрузка и новая ревизия настроек — вся заданная история.
+        // Только внутри принятой ревизии перекрываем изменения на три дня.
+        replaceRecords=!before.last_success || !before.snapshot_at || before.success_revision!==binding.revision || before.history_from!==config.historyFrom;
+        const since=replaceRecords ? config.historyFrom : new Date(Math.max(Date.parse(config.historyFrom),Date.parse(before.snapshot_at)-3*86400000)).toISOString();
         records=await adapters.ycPages('/api/v1/records/'+config.externalId,{changed_after:since,changed_before:new Date(at).toISOString(),with_deleted:1,include_finance_transactions:0},binding.credential,r=>normalizeRecord(c,config,r));
         // Полный перечень активных реальных денежных операций: исчезнувшие/удалённые
         // операции не остаются доходом после атомарной замены. Услуги/цены не являются оплатой.
         cash=await adapters.ycPages('/api/v1/transactions/'+config.externalId,{start_date:config.historyFrom,end_date:today,real_money:1,deleted:0},binding.credential,r=>normalizeCash(c,config,r));
-        const known=new Set([...readRows('revenue_records',c),...records].map(r=>r.id));
+        const known=new Set([...(replaceRecords?[]:readRows('revenue_records',c)),...records].map(r=>r.id));
         const missing=[...new Set(cash.map(t=>t.recordId).filter(v=>v&&!known.has(v)))];
         if(missing.length>100)fail('INCOMPLETE',502);
         for(const rid of missing) {
@@ -156,7 +162,7 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
         if(access.get(c,p).revision!==binding.revision || !access.get(c,p).enabled)fail('REVISION_CONFLICT',409);
         const j=job(c,p);if(j.lease!==token||j.lease_until<=now())fail('LEASE_LOST',409);
         if(p==='yclients') {
-          if(!before.last_success || before.history_from!==config.historyFrom)db.prepare('DELETE FROM revenue_records WHERE company=?').run(c);
+          if(replaceRecords)db.prepare('DELETE FROM revenue_records WHERE company=?').run(c);
           const insert=db.prepare('INSERT INTO revenue_records VALUES(?,?,?) ON CONFLICT(company,id) DO UPDATE SET payload=excluded.payload');
           for(const r of records)insert.run(c,r.id,JSON.stringify(r));
           db.prepare('DELETE FROM revenue_cash WHERE company=?').run(c);
@@ -167,8 +173,8 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
           for(const r of reports)add.run(c,r.r.from,r.r.to,binding.revision,JSON.stringify(r.payload),stamp());
           db.prepare('DELETE FROM '+table+' WHERE company=? AND collected_at<?').run(c,new Date(now()-90*86400000).toISOString());
         }
-        db.prepare('UPDATE revenue_jobs SET lease=NULL,lease_until=0,last_success=?,success_revision=?,next_at=?,error_code=\'\',failures=0,history_from=? WHERE company=? AND provider=? AND lease=?')
-          .run(stamp(),binding.revision,now()+(['metrika','direct'].includes(p)?3600000:86400000),config.historyFrom,c,p,token);
+        db.prepare('UPDATE revenue_jobs SET lease=NULL,lease_until=0,last_success=?,success_revision=?,next_at=?,error_code=\'\',failures=0,history_from=?,snapshot_at=? WHERE company=? AND provider=? AND lease=?')
+          .run(stamp(),binding.revision,now()+(['metrika','direct'].includes(p)?3600000:86400000),config.historyFrom,p==='yclients'?new Date(at).toISOString():null,c,p,token);
         db.exec('COMMIT');
       }catch(e){db.exec('ROLLBACK');throw e;}
       return {companyCode:c,provider:p,collected:true,status:status(c,p)};
@@ -210,7 +216,7 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
     if(yc.lastSuccess && yc.current) {
       const config=yc.config;const r=readRows('revenue_records',c);const tx=readRows('revenue_cash',c);const byId=new Map(r.map(v=>[v.id,v]));
       const historyFrom=job(c,'yclients').history_from||config.historyFrom;
-      cohortSnapshot={companyCode:c,current:Boolean(yc.enabled&&!yc.stale&&!yc.errorCode),collectedAt:yc.lastSuccess,historyFrom,config,records:r,cash:tx};
+      cohortSnapshot={companyCode:c,current:Boolean(yc.enabled&&!yc.stale&&!yc.errorCode&&yc.snapshotAt),collectedAt:yc.snapshotAt||yc.lastSuccess,historyFrom,config,records:r,cash:tx};
       const byVisit=new Map();for(const v of r)if(v.visitId){const a=byVisit.get(v.visitId)||[];a.push(v);byVisit.set(v.visitId,a);}
       const inside=at=>{const d=localDay(Date.parse(at),config.timezone);return d>=from&&d<=to;};
       const stats={createdBookings:0,activeBookings:0,cancelledBookings:0,noShows:0,attendedVisits:0,paymentKopecks:0,refundKopecks:0,netCashKopecks:0,payingClients:0,unknownExpenseTransactions:0,unmatchedTransactions:0,bookingsWithSource:0,bookingsWithoutSource:0,clientIdentityMissing:0};
@@ -239,7 +245,7 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
         else{stats.refundKopecks=addMoney(stats.refundKopecks,-amount);g.refundKopecks=addMoney(g.refundKopecks,-amount);}
       }
       stats.netCashKopecks=addMoney(stats.paymentKopecks,-stats.refundKopecks);stats.payingClients=paying.size;
-      yclients={...stats,historyFrom,partialHistory:from<historyFrom,current:yc.current,collectedAt:yc.lastSuccess,timezone:config.timezone,currency:'RUB',sources:[...groups.values()].map(g=>({...g,payingClients:g.payingClients.size,netCashKopecks:addMoney(g.paymentKopecks,-g.refundKopecks)})),
+      yclients={...stats,historyFrom,partialHistory:from<historyFrom,current:yc.current,collectedAt:yc.lastSuccess,dataCutoffAt:yc.snapshotAt,timezone:config.timezone,currency:'RUB',sources:[...groups.values()].map(g=>({...g,payingClients:g.payingClients.size,netCashKopecks:addMoney(g.paymentKopecks,-g.refundKopecks)})),
         financialClassificationComplete:stats.unknownExpenseTransactions===0 && config.cashRules.length>0,
         sourceCoveragePercent:stats.createdBookings?100*stats.bookingsWithSource/stats.createdBookings:null};
     }
@@ -248,7 +254,7 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
       historyFrom:job(c,'yclients').history_from||yc.config.historyFrom,config:yc.config,records:[],cash:[]};
     const nativeTimezone=yc.config?.timezone||mc.config?.timezone||'Asia/Irkutsk';
     const timezone=analysisTimezone===null?nativeTimezone:analysisTimezone;
-    const closedThrough=closedAnalysisDay(yc.lastSuccess||new Date(now()).toISOString(),nativeTimezone,timezone);
+    const closedThrough=closedAnalysisDay(yc.snapshotAt||new Date(now()).toISOString(),nativeTimezone,timezone);
     const observed=observationTo||(to>closedThrough?to:closedThrough);
     // Источник фактов — только внутренний серверный reader. HTTP параметры не подтверждают историю или связь.
     const factsContext={companyCode:c,period:{...period},observationTo:observed,timezone};
