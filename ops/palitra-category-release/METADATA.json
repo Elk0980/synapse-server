@@ -1,0 +1,95 @@
+{
+  "package_id": "palitra-category-link-20261013",
+  "installer": {
+    "source_sha256": "a4b43ea3af7a35a9550429a47f211e6f515221a8651a60ad42c25c50e20fa589",
+    "targets": 3,
+    "change": "ALLOWLIST only",
+    "group": "static",
+    "source_reverse_bytes_equal": true
+  },
+  "schema": 1,
+  "site": {
+    "path": "assets/catalog-live.js",
+    "expected_workspace_revision": null,
+    "sha256": "2b17a187a763cc5913e57a0584a62bad5abda08c6f191c8b3c5c179d9d4e3268",
+    "installation": "separate native workspace save with fresh BASE/CAS/readback",
+    "payload": "payload/site/assets/catalog-live.js",
+    "local_base_sha256_reference_only": "bd724fb19c2ff3f8bc57510fee3958b02f415529a3c00cfae90f704025dc7315"
+  },
+  "excluded": {
+    "price": true,
+    "data": true,
+    "price_render_unchanged_sha256": "0b87c08ed5498bb667bf1bcf079afafcb8b441b5f5bc52366d2c6a4b3a24d215",
+    "acl": true
+  },
+  "files": [
+    {
+      "path": "Dockerfile",
+      "sha256": "af667b8f201901075c4fbe921d1c422ea1fe0cb3bd09886362d8814b6bd38afa",
+      "bytes": 191
+    },
+    {
+      "path": "install.py",
+      "sha256": "f5d8ff19d1ec3baa9233d6395327765836111439d921fb4a44ed64dc3f5a0ba5",
+      "bytes": 22379
+    },
+    {
+      "path": "manifest.json",
+      "sha256": "d36fc5ab3f885b3b988b04d8b2981a78fc4fcf25c0b0d0dbabab40a4d00ba375",
+      "bytes": 1091
+    },
+    {
+      "path": "payload/content/palitra-occasions.js",
+      "sha256": "15c8191f7e54f60cb8fa6e4e7ba81c0eb8a4a96a5598f60e5fb7026db7937708",
+      "bytes": 23265
+    },
+    {
+      "path": "payload/content/palitra-price-validate.js",
+      "sha256": "40737c48c3d9253505adaa667782b83c5efd8ea64f34c77adcf5865b5f06232f",
+      "bytes": 29777
+    },
+    {
+      "path": "payload/site/assets/catalog-live.js",
+      "sha256": "2b17a187a763cc5913e57a0584a62bad5abda08c6f191c8b3c5c179d9d4e3268",
+      "bytes": 61263
+    },
+    {
+      "path": "payload/sites/synapse/palitra-editor-model.js",
+      "sha256": "c7d8cf07b6a23081ac35cd513242577e9ae63cca42ddb9583a08691d75c5d96f",
+      "bytes": 66939
+    },
+    {
+      "path": "payload/sites/synapse/palitra-editor.js",
+      "sha256": "c6b64070bf702e14ad98262fb61b5073659d396a9c7a944d8c6c704496ac160b",
+      "bytes": 88423
+    },
+    {
+      "path": "payload/sites/synapse/palitra-occasions.js",
+      "sha256": "15c8191f7e54f60cb8fa6e4e7ba81c0eb8a4a96a5598f60e5fb7026db7937708",
+      "bytes": 23265
+    },
+    {
+      "path": "README.md",
+      "sha256": "798d54de500c554052f53ba0ab59f2d472bce187a8ed2737e0b948cf1ef50e33",
+      "bytes": 5670
+    }
+  ],
+  "content": {
+    "installer_group": null,
+    "base_image": "palitra-main-usability-content:20261013",
+    "files": [
+      "palitra-price-validate.js",
+      "palitra-occasions.js"
+    ],
+    "expected_runtime_base": {
+      "palitra-price-validate.js": "75df6a98b2a12fdf18448b00dce520aac00e4253d01336f5beefd4bf615aa97c",
+      "palitra-occasions.js": "459bdee817c2cc50c715dbbcb9d9e8eef045c8657086ad83dd30a9ed4e2d0609"
+    }
+  },
+  "verification": {
+    "root_reported_meaningful_tests_passed": 30,
+    "preparer_live_actions": 0,
+    "six_payload_copies_sha_exact": true,
+    "preparer_tests_executed": 0
+  }
+}
