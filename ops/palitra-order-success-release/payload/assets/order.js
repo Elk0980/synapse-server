@@ -438,7 +438,7 @@
   const SUCCESS_TEXT = 'Менеджер свяжется с вами, чтобы согласовать заказ.';
   const SUCCESS_STYLE_ID = 'palitra-order-success-style';
   const SUCCESS_CSS = [
-    '.palitra-order-success{box-sizing:border-box;width:min(480px,calc(100vw - 32px));max-width:calc(100vw - 32px);max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);margin:auto;padding:0;border:0;border-radius:28px;background:#fffdf8;color:#302f2a;box-shadow:0 24px 60px rgba(48,47,42,.28);overflow:auto;overscroll-behavior:contain;font-family:\'Nunito\',Arial,sans-serif;font-style:normal;text-align:left}',
+    '.palitra-order-success{box-sizing:border-box;width:min(480px,calc(100vw - 32px));max-width:calc(100vw - 32px);max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);margin:auto;padding:0;border:0;border-radius:28px;background:#fffdf8;color:#302f2a;box-shadow:0 24px 60px rgba(48,47,42,.28);overflow:auto;overscroll-behavior:contain;font-family:\'Nunito Sans\',Arial,sans-serif;font-style:normal;text-align:left}',
     '.palitra-order-success:not([open]){display:none}',
     '.palitra-order-success::backdrop{background:rgba(48,47,42,.45)}',
     '.palitra-order-success.is-fallback[open]{position:fixed;inset:0;z-index:2147483000;display:block;height:fit-content;box-shadow:0 0 0 100vmax rgba(48,47,42,.45),0 24px 60px rgba(48,47,42,.28)}',
