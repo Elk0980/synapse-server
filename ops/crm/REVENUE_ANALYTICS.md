@@ -45,6 +45,8 @@ UTM берутся из `from_url` записи, если поле действ�
 
 ## Проверки
 
+Журнал принятых форм create/dedup и границы сессий писателя: [REVENUE_LEAD_JOURNAL.md](REVENUE_LEAD_JOURNAL.md). Отправки форм показываются отдельно от native цепочки и экономики; отсутствие связей YCLIENTS не заменяется совпадениями контактов.
+
 `node --test ops/crm/revenue-analytics.test.js ops/crm/analytics.test.js` и тесты кабинета `analytics-revenue.test.cjs`, `analytics-2gis.test.cjs`, `analytics-potential.test.cjs` (jsdom). Тесты используют вымышленные компании и ответы API. Они подтверждают реализацию, но не рабочие ключи, публикацию или ежедневный сбор на production.
 
 ## Расходы Яндекс Директа

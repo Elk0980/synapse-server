@@ -33,6 +33,23 @@ function harness(t,cohortFacts=null) {
   h.save();return h;
 }
 
+test('внутренний журнал остаётся отдельным scoped фактом, не повышает firstTouch/economics и не возвращаетPII',t=>{
+ const db=new DatabaseSync(':memory:');t.after(()=>db.close());let mode='valid';
+ const a=createRevenueAnalytics(db,{apiKey:'synthetic-journal-key',now:()=>AT,adapters:{},leadJournal:ctx=>{
+  if(mode==='promise')return Promise.resolve({});
+  if(mode==='false')return false;
+  if(mode==='undefined')return undefined;
+  return {companyCode:mode==='foreign'?'demo-b':ctx.companyCode,period:{from:ctx.from,to:ctx.to,timezone:mode==='period'?'UTC':ctx.timezone},
+   writer:{status:'active',since:'2026-10-01T00:00:00Z',fullPeriodCovered:false,secret:'synthetic-do-not-return'},completeness:'partial',reasons:['writer_coverage_gap'],
+   knownReceiptCounts:{total:2,created:1,deduplicated:1},countsAreLowerBound:true,legacyLeadRowsCount:1,
+   firstTouch:'verified',nativeLinks:'verified',economics:'verified',names:['synthetic-person-private'],contacts:['private@synthetic.invalid']};
+ }});
+ const report=a.report('demo-a',P.from,P.to);assert.equal(report.leadJournal.knownReceiptCounts.total,2);assert.equal(report.leadJournal.firstTouch,'unknown');assert.equal(report.economics.cac,null);
+ assert.equal(report.leadJournal.nativeLinks,'missing');assert.equal(report.leadJournal.countsAreLowerBound,true);assert.equal(JSON.stringify(report).includes('synthetic-person-private'),false);assert.equal(JSON.stringify(report).includes('synthetic-do-not-return'),false);
+ for(const [value,code] of [['foreign','FOREIGN_COMPANY'],['period','COHORT_CONTEXT_INVALID'],['promise','COHORT_CONTEXT_INVALID'],['false','COHORT_CONTEXT_INVALID'],['undefined','COHORT_CONTEXT_INVALID']]){mode=value;assert.throws(()=>a.report('demo-a',P.from,P.to),{code})}
+ mode='valid';assert.equal(a.report('demo-a',P.from,P.to).leadJournal.legacyLeadRowsCount,1);
+});
+
 test('выбранная Москва объединяет UTC-native YCLIENTS с московским расходом, исходный календарь не переименован',async t=>{
  let context;const h=harness(t,ctx=>{
   context=ctx;const value=facts(ctx.companyCode);value.leadBindings[0].firstTouch.at='2026-10-31T17:00:00Z';value.spend.facts[0].timezone='Europe/Moscow';return value;

@@ -40,6 +40,13 @@ function fixture({value=payload(),role='owner',custom}={}) {
     render:async()=>{views['analytics-through'].render(d.querySelector('main'),ctx);await settle();},close:()=>w.close()};
 }
 
+test('журнал форм отделяет попытки/повторы/старыеCRMстроки; неизвестное не становится0илиоплатой',async()=>{
+ const value=payload();value.leadJournal={companyCode:'demo-a',period:{...RANGE,timezone:'Asia/Irkutsk'},completeness:'partial',reasons:['writer_coverage_gap'],knownReceiptCounts:{total:4,created:1,deduplicated:3},legacyLeadRowsCount:2};
+ const f=fixture({value});try{await f.render();const text=f.block().textContent;assert.match(text,/Зафиксировано отправок: 4/);assert.match(text,/повторных форм: 3/);assert.match(text,/Строк CRM за период: 2/);assert.match(text,/В работе журнала есть пропуски/);assert.match(text,/Отправка формы не означает отдельного человека/);
+  value.leadJournal.knownReceiptCounts=null;await f.render();assert.match(f.block().textContent,/Зафиксировано отправок: —/);assert.doesNotMatch(f.block().textContent,/Зафиксировано отправок: 0/);
+ }finally{f.close()}
+});
+
 test('календарь экономики выбирается читающим запросом и отдельно для каждой компании',async()=>{
  const f=fixture({role:'employee',custom:async(path,params)=>{
   if(path==='/revenue-analytics'){const v=payload(params.companyCode);v.calendarBasis={analysisTimezone:params.analysisTimezone||'Asia/Irkutsk',nativeYclientsTimezone:'Asia/Irkutsk'};return v}

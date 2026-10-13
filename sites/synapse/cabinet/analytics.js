@@ -286,6 +286,15 @@ const renderRevenueSection = (payload) => {
     '<p class="crm-note">Записи и оплаты YCLIENTS ещё не загружены.</p>';
   const action=identity.role==='owner'?'<button type="button" class="plain-button" data-revenue-collect>Обновить данные этого периода</button><p class="crm-note" data-revenue-result></p>':'';
   const cohort=payload.cohorts;
+  const journal=payload.leadJournal;
+  const journalReasons={writer_not_activated:'Запись отправок ещё не включена.',period_starts_before_writer_activation:'Начало периода раньше включения журнала.',period_not_closed:'Период ещё не завершён.',no_observed_receipt_window:'Для периода нет наблюдаемого окна.',writer_coverage_gap:'В работе журнала есть пропуски.'};
+  const journalBlock=journal?'<h3>Полученные формы</h3><p>Зафиксировано отправок: '+num(journal.knownReceiptCounts?.total)+
+    ' · новых строк CRM: '+num(journal.knownReceiptCounts?.created)+' · повторных форм: '+num(journal.knownReceiptCounts?.deduplicated)+
+    '</p><p class="crm-note">'+(journal.completeness==='captured_since'?'За этот закрытый период работа журнала подтверждена. ':'Период отражён неполностью. ')+
+    (journal.reasons||[]).map(r=>escapeHTML(journalReasons[r]||'Полнота журнала требует проверки.')).join(' ')+
+    '</p><p>Строк CRM за период: '+num(journal.legacyLeadRowsCount)+'. Это отдельный показатель; прежние повторные формы в нём не сохранялись.</p>'+
+    '<p class="crm-note">Отправка формы не означает отдельного человека, первое касание, запись или оплату. Метки источника переданы посетителем; связь с нативными записями ещё не подтверждена.</p>':
+    '<p class="crm-note">Журнал полученных форм ещё не подключён.</p>';
   const reasons=(value)=>[...new Set((value?.reasons||[]).map(r=>r.label))].map(escapeHTML).join(' ');
   const cohortBlock=cohort?'<h3>Клиенты по периоду привлечения</h3><p class="crm-note">Пришли '+escapeHTML(cohort.cohort.from)+' — '+escapeHTML(cohort.cohort.to)+
     '; записи, посещения и деньги наблюдаем до '+escapeHTML(cohort.cohort.observationTo)+'. Система суток: '+escapeHTML(calendarLabels[calendar]||calendar)+'. Оплата после периода привлечения учитывается до этой даты.</p>'+
@@ -296,7 +305,7 @@ const renderRevenueSection = (payload) => {
     '<p>Стоимость нового платящего клиента: '+(cohort.economics.cac.status==='verified'?formatMoney(cohort.economics.cac.valueKopecks/100):'—')+
     ' · окупаемость рекламы: '+(cohort.economics.romi.status==='verified'?num(cohort.economics.romi.basisPoints/100)+'%':'—')+'</p>'+
     '<p class="crm-note">'+reasons(cohort.coverage)+'</p>':'';
-  return head+calendarControl+'<ul>'+states+'</ul>'+quality+'<p class="crm-note">Этот блок показывает компанию целиком; фильтр площадок выше относится к прежней воронке.</p>'+metrika+yclients+direct+cohortBlock+
+  return head+calendarControl+'<ul>'+states+'</ul>'+quality+'<p class="crm-note">Этот блок показывает компанию целиком; фильтр площадок выше относится к прежней воронке.</p>'+metrika+yclients+direct+journalBlock+cohortBlock+
     '<p class="crm-note">'+escapeHTML(payload.economics.reason)+' UTM показывают метку перехода; поиск по названию или заслугу рекламы они сами по себе не доказывают.</p>'+action+'</section>';
 };
 const renderAnalytics = (dashboard, summary, expenses, potential = null, owner = analyticsState.payload?.owner, companyMetrics = analyticsState.payload?.companyMetrics ?? null, revenueData = analyticsState.payload?.revenueData ?? null) => {

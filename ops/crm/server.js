@@ -57,6 +57,7 @@ const { createTaskCoordination } = require('./task-coordination');
 const { createTaskDispatch } = require('./task-dispatch');
 const {createRevenueAnalytics} = require('./revenue-analytics');
 const {createRevenueHandler} = require('./revenue-analytics-http');
+const {createRevenueLeadReceipts, WRITER_VERSION: LEAD_RECEIPT_WRITER_VERSION} = require('./revenue-lead-receipts');
 
 const IS_MAIN = require.main === module;
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
@@ -640,7 +641,8 @@ const handleVkTools = createVkToolsHandler({direct:vkDirect,design:vkDesign,mate
 const reviews = createReviews(db);
 const handleReviews = createReviewsHandler({reviews,companyModuleContext,readJson,send});
 const platformDemand = createPlatformDemand(db);
-const revenueAnalytics = createRevenueAnalytics(db,{apiKey:API_KEY});
+const revenueLeadReceipts = createRevenueLeadReceipts(db);
+const revenueAnalytics = createRevenueAnalytics(db,{apiKey:API_KEY, leadJournal: context => revenueLeadReceipts.journal(context)});
 const handleRevenueAnalytics = createRevenueHandler({analytics:revenueAnalytics,companyModuleContext,readJson,send});
 // Фактические показатели компании 2ГИС: отдельный сервис в том же разделе, без новых прав и маршрутов вне /platform-demand.
 const platformCompanyMetrics = createPlatformCompanyMetrics(db);
@@ -1262,7 +1264,7 @@ function checkPublicOrigin(request, company, pathname) {
   const header = request.headers.origin || request.headers.referer;
   const originDomain = urlHostname(Array.isArray(header) ? header[0] : header);
   const domains = companyDomains(company);
-  if (originDomain && domains.has(originDomain)) return;
+  if (originDomain && domains.has(originDomain)) return 'matched';
   console.warn('[crm] public origin mismatch', JSON.stringify({
     path: pathname,
     companyCode: company.code,
@@ -1272,6 +1274,7 @@ function checkPublicOrigin(request, company, pathname) {
   if (STRICT_ORIGIN) {
     fail(403, 'Домен запроса не разрешён для компании', { code: 'ORIGIN_MISMATCH' });
   }
+  return header ? 'mismatch' : 'missing';
 }
 
 function requestIpHash(request) {
@@ -3135,58 +3138,68 @@ async function route(request, response) {
     const normalized = normalizeContact(contact);
     const companyCode = body.companyCode === undefined || body.companyCode === null ? null :
       requiredString(body.companyCode, 'companyCode').toLowerCase();
+    let originState = 'unknown';
     if (companyCode) {
       const company = db.prepare('SELECT * FROM companies WHERE code = ? COLLATE NOCASE').get(companyCode);
       if (!company || company.is_deleted) fail(409, 'Активная компания с таким кодом не найдена',
         { code: 'COMPANY_NOT_ACTIVE', field: 'companyCode' });
-      checkPublicOrigin(request, company, url.pathname);
+      originState = checkPublicOrigin(request, company, url.pathname);
     }
-    const duplicate = getLeadByContact.get(normalized, companyCode);
-    if (duplicate) {
-      emailOutbox.enqueue(duplicate, {repeated: true});
-      send(response, 200, { ...serializeLead(duplicate), deduplicated: true }, cors);
-      void deliverLeadEmails();
-      return;
-    }
-    const utmSource = optionalString(body.utmSource, 'utmSource');
-    const referrer = optionalString(body.referrer, 'referrer');
-    const sourceInput = optionalString(body.source, 'source');
-    const derived = deriveSource({ utmSource, referrer });
-    const source = sourceInput || (utmSource ? derived : (derived === 'direct' ? null : derived));
-    const landingPage = optionalString(body.landingPage, 'landingPage');
     let row;
+    let deduplicated = false;
     db.exec('BEGIN IMMEDIATE');
     try {
-      const result = createLead.run(
-        new Date().toISOString(),
-        requiredString(body.name, 'name'),
-        contact,
-        normalized,
-        optionalString(body.channel, 'channel'),
-        source,
-        optionalString(body.tag, 'tag'),
-        optionalString(body.page, 'page') || landingPage,
-        optionalString(body.firstQuestion, 'firstQuestion'),
-        optionalString(body.comment, 'comment'),
-        utmSource,
-        optionalString(body.utmMedium, 'utmMedium'),
-        optionalString(body.utmCampaign, 'utmCampaign'),
-        optionalString(body.utmContent, 'utmContent'),
-        optionalString(body.utmTerm, 'utmTerm'),
-        optionalString(body.clientId, 'clientId'),
-        referrer,
-        landingPage,
-        companyCode
-      );
-      row = getLead.get(Number(result.lastInsertRowid));
-      insertStageHistory.run(row.id, row.created_at, null, row.stage);
-      emailOutbox.enqueue(row);
+      // Проверка дубликата и receipt принадлежат одной принятой HTTP-попытке.
+      // Повтор не переписывает исходную CRM-строку и её первое наблюдённое время.
+      const duplicate = getLeadByContact.get(normalized, companyCode);
+      if (duplicate) {
+        row = duplicate;
+        deduplicated = true;
+        emailOutbox.enqueue(row, {repeated: true});
+      } else {
+        const utmSource = optionalString(body.utmSource, 'utmSource');
+        const referrer = optionalString(body.referrer, 'referrer');
+        const sourceInput = optionalString(body.source, 'source');
+        const derived = deriveSource({ utmSource, referrer });
+        const source = sourceInput || (utmSource ? derived : (derived === 'direct' ? null : derived));
+        const landingPage = optionalString(body.landingPage, 'landingPage');
+        const result = createLead.run(
+          new Date().toISOString(),
+          requiredString(body.name, 'name'),
+          contact,
+          normalized,
+          optionalString(body.channel, 'channel'),
+          source,
+          optionalString(body.tag, 'tag'),
+          optionalString(body.page, 'page') || landingPage,
+          optionalString(body.firstQuestion, 'firstQuestion'),
+          optionalString(body.comment, 'comment'),
+          utmSource,
+          optionalString(body.utmMedium, 'utmMedium'),
+          optionalString(body.utmCampaign, 'utmCampaign'),
+          optionalString(body.utmContent, 'utmContent'),
+          optionalString(body.utmTerm, 'utmTerm'),
+          optionalString(body.clientId, 'clientId'),
+          referrer,
+          landingPage,
+          companyCode
+        );
+        row = getLead.get(Number(result.lastInsertRowid));
+        insertStageHistory.run(row.id, row.created_at, null, row.stage);
+        emailOutbox.enqueue(row);
+      }
+      revenueLeadReceipts.appendAccepted({
+        companyCode, leadId: row.id, outcome: deduplicated ? 'deduplicated' : 'created', originState,
+        declared: {source: body.source, utmSource: body.utmSource, utmMedium: body.utmMedium,
+          utmCampaign: body.utmCampaign, utmContent: body.utmContent, utmTerm: body.utmTerm,
+          landingPage: body.landingPage},
+      });
       db.exec('COMMIT');
     } catch (error) {
       db.exec('ROLLBACK');
       throw error;
     }
-    send(response, 201, { ...serializeLead(row), deduplicated: false }, cors);
+    send(response, deduplicated ? 200 : 201, { ...serializeLead(row), deduplicated }, cors);
     void deliverLeadEmails();
     return;
   }
@@ -3404,7 +3417,12 @@ const emailOutboxTimer = IS_MAIN ? setInterval(deliverQueuedEmails, 2000) : null
 emailOutboxTimer?.unref();
 const autopostingTimer = IS_MAIN ? setInterval(() => {void autoposting.drain().catch(() => console.error('[crm] autoposting worker failed'));},30000) : null;
 autopostingTimer?.unref();
-server.on('close', () => { clearInterval(revenueAnalyticsTimer); clearInterval(socialStatsTimer); clearInterval(pipelineRulesTimer); clearInterval(emailOutboxTimer); clearInterval(autopostingTimer); });
+const leadReceiptHeartbeatTimer = IS_MAIN ? setInterval(() => {
+  try { revenueLeadReceipts.heartbeatWriter(); }
+  catch { console.error('[crm] lead receipt writer heartbeat failed code=LEAD_RECEIPT_HEARTBEAT'); }
+}, 60 * 1000) : null;
+leadReceiptHeartbeatTimer?.unref();
+server.on('close', () => { clearInterval(leadReceiptHeartbeatTimer); clearInterval(revenueAnalyticsTimer); clearInterval(socialStatsTimer); clearInterval(pipelineRulesTimer); clearInterval(emailOutboxTimer); clearInterval(autopostingTimer); });
 
 // Dormant unless both explicit task-only socket settings are supplied. No shared API key is delegated.
 const evaTaskReaderReady = IS_MAIN
@@ -3414,6 +3432,8 @@ const evaTaskReaderReady = IS_MAIN
   : Promise.resolve(null);
 
 if (IS_MAIN) {
+  // Только этот запуск с обоими установленными producer hooks подтверждает сессию.
+  revenueLeadReceipts.activateWriter({version: LEAD_RECEIPT_WRITER_VERSION});
   server.listen(PORT, () => {
     console.log(`Мини-CRM слушает порт ${PORT}; база: ${DATABASE_PATH}`);
     void deliverQueuedEmails();
@@ -3422,7 +3442,10 @@ if (IS_MAIN) {
   });
 }
 
+let shuttingDown = false;
 function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
   socialYoutubeStats.stop();
   socialYoutubeAccess.stop();
   clearInterval(revenueAnalyticsTimer);
@@ -3430,11 +3453,15 @@ function shutdown() {
   clearInterval(pipelineRulesTimer);
   clearInterval(emailOutboxTimer);
   clearInterval(autopostingTimer);
+  clearInterval(leadReceiptHeartbeatTimer);
   const evaTaskReaderStopped = evaTaskReaderReady.then(reader => reader?.close()).catch(() => {
     console.error('[crm] Eva task reader shutdown failed');
   });
   const emailWorkersStopped = Promise.all([emailOutbox.stop(), emailCampaigns.stop(), autoposting.stop(), evaTaskReaderStopped, revenueAnalytics.stop(), socialStats.stop()]);
   server.close(async () => {
+    // Активные HTTP-запросы уже завершены: поздняя принятая форма не выходит за close.
+    try { revenueLeadReceipts.closeWriter(); }
+    catch { console.error('[crm] lead receipt writer close failed code=LEAD_RECEIPT_CLOSE'); }
     await emailWorkersStopped;
     db.close();
     process.exit(0);

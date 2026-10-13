@@ -27,8 +27,9 @@ function attribution(url) {
   }
   return result;
 }
-function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAdapters(),cohortFacts=null}={}) {
+function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAdapters(),cohortFacts=null,leadJournal=null}={}) {
   if(cohortFacts!==null&&typeof cohortFacts!=='function')fail('COHORT_CONTEXT_INVALID',500);
+  if(leadJournal!==null&&typeof leadJournal!=='function')fail('COHORT_CONTEXT_INVALID',500);
   const access=createRevenueAccess(db,{apiKey,now});
   const active=new Set();let closing=false;
   db.exec('CREATE TABLE IF NOT EXISTS revenue_jobs(company TEXT NOT NULL,provider TEXT NOT NULL,lease TEXT,lease_until INTEGER NOT NULL DEFAULT 0,next_at INTEGER NOT NULL DEFAULT 0,last_attempt TEXT,last_success TEXT,success_revision INTEGER,error_code TEXT NOT NULL DEFAULT \'\',failures INTEGER NOT NULL DEFAULT 0,history_from TEXT,PRIMARY KEY(company,provider));'+
@@ -255,7 +256,28 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
     const economics={cac:cohorts.economics.cac.status==='verified'?cohorts.economics.cac.valueKopecks/100:null,
       romi:cohorts.economics.romi.status==='verified'?cohorts.economics.romi.basisPoints/100:null,
       reason:economicReasons.join(' ')||'Экономика относится к когорте по дате привлечения и её периоду наблюдения.'};
-    return {companyCode:c,period,state,metrika,yclients,direct,cohorts,
+    const rawJournal=leadJournal===null?null:leadJournal({companyCode:c,from,to,timezone});
+    if(rawJournal!==null&&(typeof rawJournal!=='object'||Array.isArray(rawJournal)||typeof rawJournal?.then==='function'))fail('COHORT_CONTEXT_INVALID',500);
+    if(rawJournal&&rawJournal.companyCode!==c)fail('FOREIGN_COMPANY',409);
+    if(rawJournal&&(rawJournal.period?.from!==from||rawJournal.period?.to!==to||rawJournal.period?.timezone!==timezone))fail('COHORT_CONTEXT_INVALID',500);
+    let journal=null;
+    if(rawJournal) {
+      if(!['unknown','partial','captured_since'].includes(rawJournal.completeness)||!Array.isArray(rawJournal.reasons)||rawJournal.reasons.some(r=>typeof r!=='string'||r.length>100))fail('COHORT_CONTEXT_INVALID',500);
+      const counts=rawJournal.knownReceiptCounts;
+      if(counts!==null&&(!counts||['total','created','deduplicated'].some(k=>!Number.isSafeInteger(counts[k])||counts[k]<0)||counts.total!==counts.created+counts.deduplicated))fail('COHORT_CONTEXT_INVALID',500);
+      if(!Number.isSafeInteger(rawJournal.legacyLeadRowsCount)||rawJournal.legacyLeadRowsCount<0)fail('COHORT_CONTEXT_INVALID',500);
+      const full=rawJournal.completeness==='captured_since';
+      if(full&&(counts===null||rawJournal.countsAreLowerBound!==false||rawJournal.writer?.fullPeriodCovered!==true))fail('COHORT_CONTEXT_INVALID',500);
+      const since=rawJournal.writer?.since??null;
+      if(since!==null&&(typeof since!=='string'||since.length>35||!Number.isFinite(Date.parse(since))))fail('COHORT_CONTEXT_INVALID',500);
+      journal={companyCode:c,period:{from,to,timezone},completeness:rawJournal.completeness,reasons:[...rawJournal.reasons],
+        knownReceiptCounts:counts===null?null:{total:counts.total,created:counts.created,deduplicated:counts.deduplicated},
+        countsAreLowerBound:!full,countBasis:'accepted_http_attempts_not_unique_leads',trust:'declared_public',
+        legacyLeadRowsCount:rawJournal.legacyLeadRowsCount,legacyLeadRowsBasis:'crm_leads_current_company_created_at_mutable',
+        writer:{status:['active','not_activated','inactive','closed'].includes(rawJournal.writer?.status)?rawJournal.writer.status:'unknown',since,fullPeriodCovered:full},
+        firstTouch:'unknown',nativeLinks:'missing',leadsWithoutBooking:'unavailable',economics:'unavailable'};
+    }
+    return {companyCode:c,period,state,metrika,yclients,direct,cohorts,leadJournal:journal,
       calendarBasis:{analysisTimezone:timezone,nativeYclientsTimezone:yc.config?.timezone||null,metrikaTimezone:mc.config?.timezone||null},
       quality:revenueQuality({period,state,metrika,yclients,direct,cohorts},now()),economics,
       definitions:{bookings:'Дата создания записи; отмены отдельно.',visits:'Фактическое посещение по дате визита; один visit_id считается один раз.',cash:'Реальные деньги по дате транзакции, с вычетом возвратов; неизвестные статьи не считаются доходом.',attribution:'UTM из from_url конкретной записи. Неизвестный источник не назначается рекламе. Итоги Метрики не связывают человека с оплатой сами по себе.'}};
