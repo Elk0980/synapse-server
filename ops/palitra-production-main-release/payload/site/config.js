@@ -45,7 +45,7 @@ window.PALITRA_CONFIG.COMPANY_TIMEZONE = 'Europe/Moscow';
 // Черновик: настоящие общие ракурсы тех же наборов, 12.10.2026. Общий прайс и цены не меняются.
 // sourcePhoto — обложка в общем прайсе, к которой относится подмена: если Дарья заменит обложку в прайсе,
 // черновик сразу покажет её фото, а не это.
-window.PALITRA_CONFIG.DRAFT_PHOTO_OVERRIDES = {
+window.PALITRA_CONFIG.SHOWCASE_PHOTO_OVERRIDES = {
   'vypiska-1': { sourcePhoto: '/assets/img/vypiska-malchik.jpg', photo: 'https://synapse.synapsebusiness.ru/content/publishing-assets/palitra-love/796154a73723327173395b8cdb2a4b14.jpg' },
   'import-drive-manual-014': { sourcePhoto: '/api/assets/mu57hpv7-import-drive-manual-014.webp', photo: 'https://synapse.synapsebusiness.ru/content/publishing-assets/palitra-love/b298da647f10164319be4f522545b46c.jpg' }
 };

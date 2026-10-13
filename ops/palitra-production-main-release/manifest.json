@@ -297,8 +297,8 @@
         "bytes": 4955
       },
       "candidate": {
-        "sha256": "446507181f20d439bf459a0ae64756138bfe3ce15f981b1f517449119b291c3c",
-        "bytes": 5145
+        "sha256": "05b04a22201a6df3c3090f31b32f3719a9160d42965336a37c721d69d0f1b1f3",
+        "bytes": 5148
       },
       "changed": true
     },
@@ -417,10 +417,10 @@
         "bytes": 48187
       },
       "candidate": {
-        "sha256": "cd9a109fcf4825b6164d77d96090cec1dd5de3e88938b70f27b85dc7c2bbdb62",
-        "bytes": 48187
+        "sha256": "0b87c08ed5498bb667bf1bcf079afafcb8b441b5f5bc52366d2c6a4b3a24d215",
+        "bytes": 48185
       },
-      "changed": false
+      "changed": true
     },
     {
       "path": "price.html",
@@ -559,5 +559,6 @@
     }
   ],
   "baseImage": "palitra-production-content:20261013",
-  "note": "One existing workspace and database; no price document copied or changed."
+  "note": "One existing workspace and database; no price document copied or changed.",
+  "baseHomepageVersion": 248
 }

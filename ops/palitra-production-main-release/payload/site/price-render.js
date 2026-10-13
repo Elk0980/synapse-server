@@ -231,8 +231,8 @@ const PALITRA_PHOTO_FRAME = (function () {
   const UNNAMED_TITLE = /^\s*(?:товар\s*(?:№\s*[\w-]*|\d+))?\s*$/i;
   const isUnnamed = (item) => UNNAMED_TITLE.test(String(item?.title ?? ''));
   /* Черновик, 12.10.2026: точные полные фото отдельных товаров вместо обрезанных в источнике обложек — без
-     изменения общего прайса. config.DRAFT_PHOTO_OVERRIDES = { '<id товара>': { sourcePhoto: '/…', photo: 'https://…', gallery: ['https://…'] } }
-     действует только при DRAFT_ONLY === true. Адрес — https:// или путь сайта «/…» (не «//»), без управляющих символов
+     изменения общего прайса. config.SHOWCASE_PHOTO_OVERRIDES = { '<id товара>': { sourcePhoto: '/…', photo: 'https://…', gallery: ['https://…'] } }
+     действует только при SHOWCASE_PHOTO_OVERRIDES is configured. Адрес — https:// или путь сайта «/…» (не «//»), без управляющих символов
      и обратной косой черты; неверное значение пропускается, исходное фото товара остаётся. gallery задаётся только
      непустым списком допустимых адресов без повторов. Остальные поля товара (название, цена, описание) не меняются. */
   const isPlainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -249,9 +249,9 @@ const PALITRA_PHOTO_FRAME = (function () {
      показывается как в свежем прайсе (её photo и gallery). Заданный не строкой или пустой sourcePhoto — запись
      пропускается. Без sourcePhoto — прежнее поведение. Сам sourcePhoto в копию товара не попадает. */
   function draftPhotoOverrides(config) {
-    if (!config || config.DRAFT_ONLY !== true || !isPlainObject(config.DRAFT_PHOTO_OVERRIDES)) return null;
+    if (!config || !isPlainObject(config.SHOWCASE_PHOTO_OVERRIDES)) return null;
     const out = new Map();
-    for (const [id, entry] of Object.entries(config.DRAFT_PHOTO_OVERRIDES)) {
+    for (const [id, entry] of Object.entries(config.SHOWCASE_PHOTO_OVERRIDES)) {
       if (!isPlainObject(entry)) continue;
       const hasSource = Object.prototype.hasOwnProperty.call(entry, 'sourcePhoto') && entry.sourcePhoto !== undefined;
       if (hasSource && (typeof entry.sourcePhoto !== 'string' || !entry.sourcePhoto.trim())) continue;
