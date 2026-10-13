@@ -4,6 +4,7 @@ const {createRevenueAccess,PROVIDERS,company,provider,id,day,range,localDay,shif
 const {createRevenueAdapters}=require('./revenue-analytics-adapters');
 const {revenueQuality}=require('./revenue-analytics-quality');
 const {buildRevenueCohorts,closedAnalysisDay}=require('./revenue-analytics-cohorts');
+const {createRevenueDirectSpendFacts}=require('./revenue-direct-spend-facts');
 const OFFSETS={'Asia/Irkutsk':'+08:00','Asia/Bangkok':'+07:00','Europe/Moscow':'+03:00',UTC:'Z'};
 const KNOWN_ERRORS=new Set(['MISSING_ACCESS','CREDENTIAL_UNREADABLE','ACCESS_DENIED','RATE_LIMITED','UPSTREAM_ERROR','CONNECTION_UNCERTAIN','RESPONSE_TOO_LARGE','RESPONSE_UNCERTAIN','INCOMPLETE','PROFILE_CHANGED','LEASE_LOST','REVISION_CONFLICT','TOKEN_REAUTH_REQUIRED','TOKEN_REFRESH_UNCERTAIN','TOKEN_REFRESH_BUSY','CANCELLED','DELAYED','BAD_PERIOD','SERVER_STOPPING']);
 function dateTime(v,tz) {
@@ -27,9 +28,10 @@ function attribution(url) {
   }
   return result;
 }
-function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAdapters(),cohortFacts=null,leadJournal=null}={}) {
+function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAdapters(),cohortFacts=null,leadJournal=null,nativeDirectSpend=true}={}) {
   if(cohortFacts!==null&&typeof cohortFacts!=='function')fail('COHORT_CONTEXT_INVALID',500);
   if(leadJournal!==null&&typeof leadJournal!=='function')fail('COHORT_CONTEXT_INVALID',500);
+  if(typeof nativeDirectSpend!=='boolean')fail('COHORT_CONTEXT_INVALID',500);
   const access=createRevenueAccess(db,{apiKey,now});
   const active=new Set();let closing=false;
   db.exec('CREATE TABLE IF NOT EXISTS revenue_jobs(company TEXT NOT NULL,provider TEXT NOT NULL,lease TEXT,lease_until INTEGER NOT NULL DEFAULT 0,next_at INTEGER NOT NULL DEFAULT 0,last_attempt TEXT,last_success TEXT,success_revision INTEGER,error_code TEXT NOT NULL DEFAULT \'\',failures INTEGER NOT NULL DEFAULT 0,history_from TEXT,PRIMARY KEY(company,provider));'+
@@ -41,6 +43,9 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
   const job=(c,p)=>db.prepare('SELECT * FROM revenue_jobs WHERE company=? AND provider=?').get(c,p);
   const keyed=(c,clientId)=>clientId && Number(clientId)>0 ? crypto.createHmac('sha256',apiKey).update('revenue-client/v1/'+c+'/'+id(clientId)).digest('hex') : null;
   const readRows=(table,c)=>db.prepare('SELECT payload FROM '+table+' WHERE company=?').all(c).map(r=>JSON.parse(r.payload));
+  // Расходы читаются из принятого canonical Direct snapshot этой же SQL версии.
+  // Один провайдер не подтверждает полный реестр затрат и денежную цепочку.
+  const nativeSpendFacts=nativeDirectSpend?createRevenueDirectSpendFacts(db,{providerState:c=>status(c,'direct'),now}):null;
   function normalizeRecord(c,config,r) {
     if(r.company_id!==undefined && String(r.company_id)!==config.externalId)fail('PROFILE_CHANGED',502);
     if(![-1,0,1,2].includes(r.attendance) || typeof r.deleted!=='boolean')fail('RESPONSE_UNCERTAIN',502);
@@ -246,7 +251,8 @@ function createRevenueAnalytics(db,{apiKey,now=Date.now,adapters=createRevenueAd
     const closedThrough=closedAnalysisDay(yc.lastSuccess||new Date(now()).toISOString(),nativeTimezone,timezone);
     const observed=observationTo||(to>closedThrough?to:closedThrough);
     // Источник фактов — только внутренний серверный reader. HTTP параметры не подтверждают историю или связь.
-    const facts=cohortFacts?.({companyCode:c,period:{...period},observationTo:observed,timezone})||null;
+    const factsContext={companyCode:c,period:{...period},observationTo:observed,timezone};
+    const facts=(cohortFacts!==null?cohortFacts(factsContext):nativeSpendFacts?.read(factsContext))||null;
     if(facts&&(Array.isArray(facts)||typeof facts!=='object'||typeof facts.then==='function'||
       Object.keys(facts).some(k=>!['companyCode','vatMode','paymentHistory','leadBindings','spend','recordCosts'].includes(k))))fail('COHORT_CONTEXT_INVALID',500);
     if(facts&&facts.companyCode!==c)fail('FOREIGN_COMPANY',409);

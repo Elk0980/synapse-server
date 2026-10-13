@@ -12,11 +12,12 @@ const CURRENCIES=['RUB'];
 const VAT_MODES=['no_vat','vat_included','vat_excluded'];
 const UTM_KEYS=['source','medium','campaign','content','term'];
 // Допустимые виды подтверждений. Автоматические совпадения (хэш телефона, имени, времени) не принимаются.
+// native_report_range — диапазон одного native отчёта (например, Директа): принимается только при complete:false.
 const EVIDENCE={
   history:['owner_confirmed_opening_date','accounting_ledger_review'],
   binding:['server_lead_record_link','server_record_origin'],
-  spendCoverage:['ad_cabinet_export','accounting_ledger','owner_confirmed'],
-  spend:['ad_cabinet_export','invoice','closing_act','accounting_ledger'],
+  spendCoverage:['ad_cabinet_export','accounting_ledger','owner_confirmed','native_report_range'],
+  spend:['ad_cabinet_export','invoice','closing_act','accounting_ledger','direct_reports_api'],
   campaign:['ad_cabinet_export','owner_confirmed'],
   cost:['accounting_ledger','owner_confirmed']
 };
@@ -103,6 +104,14 @@ const scoped=(v,c)=>{if(v.companyCode!==c)fail('FOREIGN_COMPANY',409);return v;}
 const visitKey=r=>r.visitId?'visit:'+r.visitId:'record:'+r.id;
 const utc=ms=>new Date(ms).toISOString();
 
+// --- Единицы расхода. 1 рубль = 1 000 000 micros (Директ), 1 копейка = 10 000 micros. ---
+// Факт расхода и его распределения несут ровно одну явную единицу. Внутри суммы точны (BigInt micros);
+// наружу — только безопасные JSON-числа: копейки округляются один раз в итоге, micros отдаются без округления.
+const KOPECK=10000n,MAX_SAFE=BigInt(Number.MAX_SAFE_INTEGER);
+const UNITS={amountKopecks:'kopecks',amountMicros:'micros'};
+const toMicros=(unit,value)=>unit==='micros'?BigInt(value):BigInt(value)*KOPECK;
+const safeMicros=m=>{if(m>MAX_SAFE)fail('MONEY_OVERFLOW',422);return Number(m);};
+
 // --- Календари. Смещение пояса берётся из Intl в нужный момент, без таблицы: исторические правила пояса учитываются. ---
 const clocks=new Map();
 function offsetAt(ms,tz) {
@@ -147,6 +156,7 @@ function ratio(numerator,denominator) {
   if(n<0n)n=-n;if(d<0n)d=-d;let q=n/d;if((n%d)*2n>=d)q++;
   const value=Number(negative?-q:q);if(!Number.isSafeInteger(value))fail('MONEY_OVERFLOW',422);return value;
 }
+const displayKopecks=m=>ratio(m,KOPECK);
 function reasons() {
   const map=new Map();
   const self={
@@ -207,24 +217,39 @@ function bindingFact(b,c) {
 }
 function allocationList(f,v) {
   if(v===null)return null;
-  const rows=list(v).map(a=>{shape(a,['from','to','amountKopecks']);range(a.from,a.to);return {from:a.from,to:a.to,amountKopecks:kopecks(a.amountKopecks,0)};})
-    .sort((a,b)=>a.from<b.from?-1:a.from>b.from?1:0);
-  // Подтверждённое распределение покрывает период услуги без пропусков и наложений и сходится до копейки.
+  // Распределение в той же единице, что и факт: копейки и micros в одном пакете не смешиваются.
+  const other=f.field==='amountMicros'?'amountKopecks':'amountMicros';
+  const rows=list(v).map(a=>{
+    if(isObject(a)&&other in a)fail('ALLOCATION_UNIT_MISMATCH');
+    shape(a,['from','to',f.field]);range(a.from,a.to);const value=kopecks(a[f.field],0);
+    return {from:a.from,to:a.to,value,micros:toMicros(f.unit,value)};
+  }).sort((a,b)=>a.from<b.from?-1:a.from>b.from?1:0);
+  // Подтверждённое распределение покрывает период услуги без пропусков и наложений и сходится до последней единицы.
   if(!rows.length||rows[0].from!==f.serviceFrom||rows.at(-1).to!==f.serviceTo)fail('ALLOCATION_MISMATCH');
-  let sum=0;rows.forEach((a,i)=>{if(i&&a.from!==shiftDay(rows[i-1].to,1))fail('ALLOCATION_MISMATCH');sum=plus(sum,a.amountKopecks);});
-  if(sum!==f.amountKopecks)fail('ALLOCATION_MISMATCH');
+  let sum=0n;rows.forEach((a,i)=>{if(i&&a.from!==shiftDay(rows[i-1].to,1))fail('ALLOCATION_MISMATCH');sum+=BigInt(a.value);if(sum>MAX_SAFE)fail('MONEY_OVERFLOW',422);});
+  if(sum!==BigInt(f.amount))fail('ALLOCATION_MISMATCH');
   return rows;
 }
 function spendInput(v,c) {
   if(v==null)return null;
-  shape(v,['companyCode','from','to','providers','evidence','facts','campaigns']);scoped(v,c);range(v.from,v.to);
-  evidence(v.evidence,EVIDENCE.spendCoverage);
+  // complete необязателен: прежние доверенные факты без поля считаются полным перечнем, как раньше.
+  shape(v,['companyCode','from','to','providers','evidence','facts','campaigns'],['complete','coveredRanges']);scoped(v,c);range(v.from,v.to);
+  const complete='complete' in v?flag(v.complete):true;
+  // Диапазон одного native отчёта не является реестром всех расходов: ни complete:true, ни его отсутствие его не повышают.
+  if(evidence(v.evidence,EVIDENCE.spendCoverage)==='native_report_range'&&complete)fail('EVIDENCE_REJECTED');
+  const coveredRanges=v.coveredRanges===undefined?null:list(v.coveredRanges).map(r=>{
+    shape(r,['from','to']);range(r.from,r.to);
+    if(r.from<v.from||r.to>v.to)fail('SPEND_COVERAGE_CONTRADICTION');return {from:r.from,to:r.to};
+  });
+  if(coveredRanges)coveredRanges.forEach((r,i)=>{if(i&&r.from<=coveredRanges[i-1].to)fail('SPEND_COVERAGE_CONTRADICTION');});
   const providers=list(v.providers).map(label);
   const facts=unique(list(v.facts).map(f=>{
-    shape(f,['companyCode','id','provider','campaignId','accountScope','kind','serviceFrom','serviceTo','amountKopecks','currency','vatMode','timezone','allocations','evidence']);
+    shape(f,['companyCode','id','provider','campaignId','accountScope','kind','serviceFrom','serviceTo','currency','vatMode','timezone','allocations','evidence'],Object.keys(UNITS));
+    const fields=Object.keys(UNITS).filter(k=>k in f);if(fields.length!==1)fail();
     scoped(f,c);evidence(f.evidence,EVIDENCE.spend);range(f.serviceFrom,f.serviceTo);
+    const field=fields[0],unit=UNITS[field],amount=kopecks(f[field],0);
     const fact={id:reference(f.id),provider:label(f.provider),campaignId:reference(f.campaignId),accountScope:oneOf(f.accountScope,['company','shared']),
-      kind:oneOf(f.kind,['spend','package']),serviceFrom:f.serviceFrom,serviceTo:f.serviceTo,amountKopecks:kopecks(f.amountKopecks,0),
+      kind:oneOf(f.kind,['spend','package']),serviceFrom:f.serviceFrom,serviceTo:f.serviceTo,field,unit,amount,micros:toMicros(unit,amount),
       currency:currencyCode(f.currency),vatMode:oneOf(f.vatMode,VAT_MODES),timezone:oneOf(f.timezone,TIMEZONES,'BAD_TIMEZONE')};
     fact.allocations=allocationList(fact,f.allocations);return fact;
   }));
@@ -232,7 +257,7 @@ function spendInput(v,c) {
     shape(m,['companyCode','provider','campaignId','utm','evidence']);scoped(m,c);evidence(m.evidence,EVIDENCE.campaign);shape(m.utm,['source','campaign']);
     return {provider:label(m.provider),campaignId:reference(m.campaignId),utm:{source:label(m.utm.source),campaign:label(m.utm.campaign)}};
   });
-  return {from:v.from,to:v.to,providers,facts,campaigns};
+  return {from:v.from,to:v.to,complete,providers,facts,campaigns,coveredRanges,nativeMicros:v.evidence.kind==='native_report_range'};
 }
 function costFacts(v,c) {
   if(v==null)return null;
@@ -245,29 +270,38 @@ function costFacts(v,c) {
   return map;
 }
 
-// --- Расходы окна когорты: только подтверждённые факты; период услуги, а не дата оплаты пакета. ---
+// --- Расходы окна когорты: только подтверждённые факты; период услуги, а не дата оплаты пакета. Суммы — точные BigInt micros. ---
 function allocated(f,cohort) {
   if(!f.allocations)return null;
-  let sum=0;
+  let sum=0n;
   for(const a of f.allocations) {
-    if(a.from>=cohort.from&&a.to<=cohort.to)sum=plus(sum,a.amountKopecks);
+    if(a.from>=cohort.from&&a.to<=cohort.to)sum+=a.micros;
     else if(a.to>=cohort.from&&a.from<=cohort.to)return null;
   }
   return sum;
 }
 function computeSpend(s,{cohort,currency,vatMode,tz}) {
   const r=reasons(),channel=reasons(),byKey=new Map();
-  if(!s)return {reasons:r.add('SPEND_COVERAGE_MISSING'),channelReasons:channel,byKey,total:null,provided:false};
-  if(s.from>cohort.from||s.to<cohort.to)r.add('SPEND_COVERAGE_MISSING');
+  if(!s)return {reasons:r.add('SPEND_COVERAGE_MISSING'),channelReasons:channel,byKey,total:null,provided:false,micros:false};
+  // Явно неполный перечень (в том числе native диапазон одного провайдера) не становится полным реестром расходов.
+  if(!s.complete||s.from>cohort.from||s.to<cohort.to)r.add('SPEND_COVERAGE_MISSING');
+  if(s.coveredRanges){
+    let next=cohort.from;
+    for(const span of s.coveredRanges){
+      if(span.to<next)continue;if(span.from>next)break;next=shiftDay(span.to,1);
+      if(next>cohort.to)break;
+    }
+    if(next<=cohort.to)r.add('SPEND_COVERAGE_MISSING');
+  }
   const dictionary=new Map(),conflicts=new Set();
   for(const m of s.campaigns) {
     const k=m.provider+'\n'+m.campaignId,key=JSON.stringify([m.utm.source,m.utm.campaign]);
     if(!dictionary.has(k))dictionary.set(k,{key,utm:m.utm});else if(dictionary.get(k).key!==key)conflicts.add(k);
   }
-  let total=0;
+  let total=0n;const currencies=new Set(),vatModes=new Set(),timezones=new Set();
   for(const f of s.facts) {
     let amount;
-    if(f.serviceFrom>=cohort.from&&f.serviceTo<=cohort.to)amount=f.amountKopecks;
+    if(f.serviceFrom>=cohort.from&&f.serviceTo<=cohort.to)amount=f.micros;
     else if(f.serviceTo<cohort.from||f.serviceFrom>cohort.to)continue;
     else amount=allocated(f,cohort);
     if(!s.providers.includes(f.provider))r.add('SPEND_COVERAGE_CONTRADICTION');
@@ -281,15 +315,27 @@ function computeSpend(s,{cohort,currency,vatMode,tz}) {
     if(conflicts.has(k))channel.add('CAMPAIGN_DICTIONARY_CONFLICT');else if(!mapped)channel.add('CAMPAIGN_UNMAPPED');
     // Общий кабинет: без подтверждения кампании этой компанией сумма не делится между компаниями.
     if(f.accountScope==='shared'&&!mapped){r.add('SHARED_ACCOUNT_UNALLOCATED');continue;}
-    total=plus(total,amount);
-    if(mapped){const prev=byKey.get(mapped.key);byKey.set(mapped.key,{utm:mapped.utm,amount:plus(prev?.amount||0,amount)});}
+    currencies.add(f.currency);vatModes.add(f.vatMode);timezones.add(f.timezone);
+    total+=amount;
+    if(mapped){const prev=byKey.get(mapped.key);byKey.set(mapped.key,{utm:mapped.utm,amount:(prev?.amount||0n)+amount});}
   }
-  return {reasons:r,channelReasons:channel,byKey,total,provided:true};
+  // Вход с micros отдаёт точные micros; прежний копеечный вход сохраняет прежнюю форму ответа.
+  const micros=s.nativeMicros||s.facts.some(f=>f.unit==='micros');
+  // Разные валюты и разные налоговые/календарные основания не образуют общего
+  // денежного итога даже при status partial. Исходные суммы остаются у провайдера.
+  if([...currencies].some(c=>c!==currency)||vatModes.size>1||timezones.size>1)
+    return {reasons:r,channelReasons:channel,byKey:new Map(),total:null,provided:true,micros};
+  // Переполнение отклоняется до расчёта: и копейки отображения, и точные micros обязаны быть безопасными JSON-числами.
+  for(const m of [total,...[...byKey.values()].map(v=>v.amount)]){displayKopecks(m);if(micros)safeMicros(m);}
+  return {reasons:r,channelReasons:channel,byKey,total,provided:true,micros};
 }
+// Копейки отображения округляются один раз из точной суммы; micros добавляются только для micros входа.
+const spendAmount=(spend,m,kopecksKey,microsKey)=>({[kopecksKey]:displayKopecks(m),...(spend.micros&&{[microsKey]:safeMicros(m)})});
 function spendOutput(spend) {
-  return {status:!spend.provided?'unavailable':state(spend.reasons),knownKopecks:spend.total,reasons:spend.reasons.list(),
+  return {status:!spend.provided?'unavailable':state(spend.reasons),
+    ...(spend.total===null?{knownKopecks:null,...(spend.micros?{knownMicros:null}:{})}:spendAmount(spend,spend.total,'knownKopecks','knownMicros')),reasons:spend.reasons.list(),
     channelStatus:!spend.provided?'unavailable':state(reasons().merge(spend.reasons,spend.channelReasons)),channelReasons:spend.channelReasons.list(),
-    channels:[...spend.byKey].sort((a,b)=>a[0]<b[0]?-1:1).map(([,v])=>({utm:{...v.utm},spendKopecks:v.amount}))};
+    channels:[...spend.byKey].sort((a,b)=>a[0]<b[0]?-1:1).map(([,v])=>({utm:{...v.utm},...spendAmount(spend,v.amount,'spendKopecks','spendMicros')}))};
 }
 
 function buildRevenueCohorts(input) {
@@ -511,14 +557,17 @@ function buildRevenueCohorts(input) {
   const costTotal=marginKnown?costOf(paidRecords):null,margin=marginKnown?plus(activity.netKopecks,-costTotal):null;
 
   // Знаменатель CAC — только новые платящие окна привлечения; расход — того же окна привлечения.
-  const romiValue=(netMargin,spendKopecks)=>({status:'verified',basisPoints:ratio(BigInt(plus(netMargin,-spendKopecks))*10000n,spendKopecks),
-    exact:{netMarginKopecks:netMargin,spendKopecks},reasons:[]});
+  // CAC и ROMI делят точные micros расхода; копейки отображения округляются один раз в самом отношении.
+  const exactSpend=m=>spendAmount(spend,m,'spendKopecks','spendMicros');
+  const romiValue=(netMargin,spendMicros)=>({status:'verified',basisPoints:ratio((BigInt(netMargin)*KOPECK-spendMicros)*10000n,spendMicros),
+    exact:{netMarginKopecks:netMargin,...exactSpend(spendMicros)},reasons:[]});
   const n=funnel.payingClients,cacR=reasons().merge(freshR,spend.reasons,taxR),romiR=reasons().merge(cacR,revenueR,marginR);
   const cac=cacR.size?unavailableValue(cacR,{valueKopecks:null,exact:null}):
-    !n?notApplicable('NO_NEW_CLIENTS',{valueKopecks:null,exact:{spendKopecks:spend.total,clients:0}}):
-    {status:'verified',valueKopecks:ratio(spend.total,n),exact:{spendKopecks:spend.total,clients:n},reasons:[]};
+    !n?notApplicable('NO_NEW_CLIENTS',{valueKopecks:null,exact:{...exactSpend(spend.total),clients:0}}):
+    {status:'verified',valueKopecks:ratio(spend.total,BigInt(n)*KOPECK),exact:{...exactSpend(spend.total),clients:n},reasons:[]};
+  // Ноль — только точный ноль micros: положительный 1 micro, отображаемый как 0 копеек, остаётся расходом.
   const romi=romiR.size?unavailableValue(romiR,{basisPoints:null,exact:null}):
-    !spend.total?notApplicable('ZERO_SPEND',{basisPoints:null,exact:{netMarginKopecks:margin,spendKopecks:0}}):romiValue(margin,spend.total);
+    !spend.total?notApplicable('ZERO_SPEND',{basisPoints:null,exact:{netMarginKopecks:margin,...exactSpend(0n)}}):romiValue(margin,spend.total);
 
   // Каналы: расход привязан словарём кампаний к первому касанию; метки записей расход не получают.
   for(const [key,v] of spend.byKey)if(!groups.has('first_touch|'+key))group('first_touch',key,{...v.utm});
@@ -526,11 +575,11 @@ function buildRevenueCohorts(input) {
   const rows=[...groups.values()].sort((a,b)=>a.basis<b.basis?-1:a.basis>b.basis?1:a.key<b.key?-1:a.key>b.key?1:0).map(g=>{
     const row={basis:g.basis,attribution:g.attribution,acquiredClients:g.acquired,clients:g.clients,createdBookings:g.createdBookings,cancelledBookings:g.cancelledBookings,
       noShows:g.noShows,attendedUniqueVisits:g.visits.size,paymentKopecks:g.paymentKopecks,refundKopecks:g.refundKopecks,
-      netKopecks:plus(g.paymentKopecks,-g.refundKopecks),spendKopecks:null,cac:null,romi:null};
+      netKopecks:plus(g.paymentKopecks,-g.refundKopecks),spendKopecks:null,...(spend.micros&&{spendMicros:null}),cac:null,romi:null};
     if(g.basis!=='first_touch')return row;
     if(channelR.size){row.cac=unavailableValue(channelR,{valueKopecks:null});row.romi=unavailableValue(channelRomiR,{basisPoints:null});return row;}
-    const s=spend.byKey.get(g.key)?.amount||0;row.spendKopecks=s;
-    row.cac=g.clients?{status:'verified',valueKopecks:ratio(s,g.clients),reasons:[]}:notApplicable('NO_NEW_CLIENTS',{valueKopecks:null});
+    const s=spend.byKey.get(g.key)?.amount||0n;Object.assign(row,exactSpend(s));
+    row.cac=g.clients?{status:'verified',valueKopecks:ratio(s,BigInt(g.clients)*KOPECK),reasons:[]}:notApplicable('NO_NEW_CLIENTS',{valueKopecks:null});
     row.romi=channelRomiR.size?unavailableValue(channelRomiR,{basisPoints:null}):!s?notApplicable('ZERO_SPEND',{basisPoints:null}):
       romiValue(plus(row.netKopecks,-costOf(g.records)),s);
     return row;

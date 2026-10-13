@@ -644,7 +644,7 @@ const reviews = createReviews(db);
 const handleReviews = createReviewsHandler({reviews,companyModuleContext,readJson,send});
 const platformDemand = createPlatformDemand(db);
 const revenueLeadReceipts = createRevenueLeadReceipts(db);
-const revenueAnalytics = createRevenueAnalytics(db,{apiKey:API_KEY, leadJournal: context => revenueLeadReceipts.journal(context)});
+const revenueAnalytics = createRevenueAnalytics(db,{apiKey:API_KEY,nativeDirectSpend:true,leadJournal: context => revenueLeadReceipts.journal(context)});
 const handleRevenueAnalytics = createRevenueHandler({analytics:revenueAnalytics,companyModuleContext,readJson,send});
 // Фактические показатели компании 2ГИС: отдельный сервис в том же разделе, без новых прав и маршрутов вне /platform-demand.
 const platformCompanyMetrics = createPlatformCompanyMetrics(db);

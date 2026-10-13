@@ -298,7 +298,7 @@ test('календарь отчёта может отличаться от nativ
   assert.equal(utcOut.timeBasis.analysisTimezone,'UTC');assert.equal(utcOut.timeBasis.nativeTimezone,IRK);assert.equal(utcOut.scope.timezone,'UTC');
   assert.equal(utcOut.calendar.status,'verified');assert.equal(utcOut.calendar.paymentKopecks,100000);
   const i=fullFlow();i.spend.facts[0].timezone=MSK;const out=buildRevenueCohorts(i);
-  assert.ok(has(out.spend,'TIMEZONE_MISMATCH'));assert.equal(out.spend.knownKopecks,250000);
+  assert.ok(has(out.spend,'TIMEZONE_MISMATCH'));assert.equal(out.spend.knownKopecks,null,'расходы разных календарных оснований не складываются в общий итог');
   assert.equal(out.economics.cac.status,'unavailable');assert.ok(has(out.economics.cac,'TIMEZONE_MISMATCH'));
   assert.equal(out.cohortTotals.newPayingClients.status,'verified');
 });
