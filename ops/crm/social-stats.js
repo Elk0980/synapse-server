@@ -1,11 +1,12 @@
 'use strict';
+const {ensureSocialPostPeriodSchema}=require('./social-post-period-schema');
 /* Сквозная аналитика соцсетей ТайСабай: ежедневные снимки аккаунтов и публикаций по площадкам, единый адаптер провайдеров
    (Onlypult — временный источник, прямые API — по мере доступа), идемпотентные сборы, журнал запусков, атрибуция
    contentId → платформенный пост/URL → обращения (leads) → продажи. Правила честности: нет данных = null (UNKNOWN), не 0;
    сумма просмотров разных площадок — не уникальный охват; органика/реклама различаются полем kind; секреты не хранятся здесь. */
 const { createHash } = require('node:crypto');
 const { receiptFormat } = require('./autoposting');
-const PLATFORMS = Object.freeze({ instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube', vk: 'ВКонтакте', telegram: 'Telegram' });
+const PLATFORMS = Object.freeze({ instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube', vk: 'ВКонтакте', telegram: 'Telegram', max: 'MAX' });
 const { buildInsights, previousPeriod } = require('./social-insights');
 const PROVIDERS = Object.freeze(['onlypult', 'direct', 'manual']);
 const KINDS = Object.freeze(['organic', 'paid', 'mixed', 'unknown']);
@@ -14,8 +15,9 @@ const KINDS = Object.freeze(['organic', 'paid', 'mixed', 'unknown']);
    считался чужими сутками. Историческим записям новый пояс задним числом не присваивается:
    он хранится в каждой строке снимка и входит в ключ. */
 const TIMEZONE_CHOICES = Object.freeze(['Asia/Bangkok', 'Asia/Irkutsk', 'Asia/Krasnoyarsk', 'Asia/Novosibirsk',
-  'Asia/Yekaterinburg', 'Europe/Moscow', 'Europe/Kaliningrad', 'Asia/Vladivostok', 'UTC']);
+  'Asia/Yekaterinburg', 'Europe/Moscow', 'Europe/Kaliningrad', 'Asia/Vladivostok', 'America/Los_Angeles', 'UTC']);
 const PERIODS = Object.freeze(['day', 'lifetime']);
+const POST_PERIODS = Object.freeze(['unknown', 'day', 'lifetime']);
 const COMPLETENESS = Object.freeze(['complete', 'partial', 'unknown']);
 const RUN_STATUS = Object.freeze(['ok', 'partial', 'missing_access', 'unsupported', 'failed']);
 /* Подтверждение внешней публикации (autoposting_publication_receipts) владелец записывает по площадкам автопостинга: там YouTube Shorts —
@@ -49,14 +51,14 @@ function canonicalPostKey(platform, value) {
 }
 /* Единый словарь метрик: ключ Synapse → единица. Исходное имя поля площадки хранится отдельно (source_field). */
 const METRICS = Object.freeze({
-  followers: 'count', follower_change: 'count', reach: 'people', impressions: 'views', views: 'views', profile_visits: 'count',
+  followers: 'count', follower_change: 'count', reach: 'people', impressions: 'views', views: 'views', engaged_views: 'views', profile_visits: 'count',
   likes: 'count', comments: 'count', shares: 'count', saves: 'count', clicks: 'count', link_clicks: 'count',
   watch_time_seconds: 'seconds', avg_watch_seconds: 'seconds', retention_percent: 'percent', posts_published: 'count',
 });
 /* Тип агрегации за период: sum — складывается по дням; avg — НЕВЗВЕШЕННОЕ среднее суточных значений (проценты и средние длительности
    складывать нельзя; это не общее удержание за период — просмотры разных дней не взвешиваются); latest — состояние на дату (подписчики). */
 const AGGREGATION = Object.freeze({
-  followers: 'latest', follower_change: 'sum', reach: 'sum', impressions: 'sum', views: 'sum', profile_visits: 'sum',
+  followers: 'latest', follower_change: 'sum', reach: 'sum', impressions: 'sum', views: 'sum', engaged_views: 'sum', profile_visits: 'sum',
   likes: 'sum', comments: 'sum', shares: 'sum', saves: 'sum', clicks: 'sum', link_clicks: 'sum',
   watch_time_seconds: 'sum', avg_watch_seconds: 'avg', retention_percent: 'avg', posts_published: 'sum',
 });
@@ -69,6 +71,7 @@ const ERRORS = Object.freeze({
   NOT_FOUND: 'Аккаунт или запись не найдены для выбранной компании.',
   REVISION_CONFLICT: 'Настройки аккаунтов изменились. Обновите данные перед сохранением.',
   FORBIDDEN: 'Недостаточно прав.',
+  SERVER_STOPPING: 'Сервер останавливается. Повторите сбор после восстановления.',
 });
 const fail = (code = 'VALIDATION_ERROR', status = 400, extra = {}) => { throw Object.assign(new Error(ERRORS[code]), { code, status, ...extra }); };
 const text = (value, max, required = false) => {
@@ -109,7 +112,9 @@ function dayBounds(date, tz) {
 /* evidence — журнал доказательств (ops/crm/social-analytics-evidence.js). Инъекцией, а не
    импортом: без него модуль работает как прежде, с ним каждое изменение проекции сопровождается
    неизменяемой записью о том, откуда взялось число. */
-function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence = null, logger = console } = {}) {
+function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence = null, maxIndex = null, maxEnabled = true, logger = console } = {}) {
+  let closing=false;
+  const active=new Set();
   db.exec(`
     CREATE TABLE IF NOT EXISTS social_accounts (
       company_code TEXT NOT NULL COLLATE NOCASE, platform TEXT NOT NULL, account_ref TEXT NOT NULL DEFAULT '', label TEXT NOT NULL DEFAULT '',
@@ -137,6 +142,12 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
       error TEXT NOT NULL DEFAULT '', missing TEXT NOT NULL DEFAULT '[]', source_note TEXT NOT NULL DEFAULT '');
     CREATE INDEX IF NOT EXISTS social_collect_runs_scope ON social_collect_runs(company_code, platform, id);
   `);
+  // Старые измерения не имели периода: переносим их без выдуманной дневной семантики.
+  // Новый ключ хранит day и lifetime раздельно, сохраняя все прежние строки.
+  const postPeriodSchema=ensureSocialPostPeriodSchema(db,{now});
+  // Другая версия успела перенести legacy projection без восстановления архива.
+  // Не выдаём смешанную синтетику за новое измерение и не запускаем writer.
+  if(postPeriodSchema.pendingRollbackCycle)fail('POST_PERIOD_RESTORE_REQUIRED',503);
   /* Семантика интервала и область в ключе проекции.
 
      Прежний UNIQUE(company_code,platform,account_ref,date,period,metric) не различал
@@ -224,6 +235,7 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
     return { sourceNote: row.source_note || (legacy ? row.error.slice(LEGACY_SOURCE_PREFIX.length) : ''), error: legacy ? '' : (row.error || '') };
   };
   const accountDto = (row, platform) => ({ platform, label: PLATFORMS[platform], accountRef: row?.account_ref || '', displayLabel: row?.label || '', provider: row?.provider || 'manual',
+    ...(platform==='max'&&row?.account_ref&&maxIndex?.historyCoverage?{historyIndex:maxIndex.historyCoverage(row.company_code,row.account_ref)}:{}),
     providerRef: row?.provider_ref || '', enabled: Boolean(row?.enabled), kind: row?.kind || 'organic', timezone: row?.timezone || 'Asia/Bangkok', collectHour: row?.collect_hour ?? 6,
     revision: row?.revision || 0,
     /* Строка без идентификатора аккаунта — это не настроенный источник. Прежде форма
@@ -293,15 +305,16 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
       db.prepare(`INSERT INTO social_posts(company_code,platform,platform_post_id,url,content_id,published_at,provider,kind,created_at,source_run_id,source_collected_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(company_code,platform,platform_post_id) DO UPDATE SET url=CASE WHEN excluded.url<>'' THEN excluded.url ELSE social_posts.url END,
         content_id=CASE WHEN excluded.content_id<>'' THEN excluded.content_id ELSE social_posts.content_id END,published_at=COALESCE(excluded.published_at,social_posts.published_at),
-        provider=excluded.provider,source_run_id=COALESCE(excluded.source_run_id,social_posts.source_run_id),source_collected_at=excluded.source_collected_at`)
+        provider=excluded.provider,source_run_id=COALESCE(excluded.source_run_id,social_posts.source_run_id),source_collected_at=excluded.source_collected_at
+        WHERE social_posts.source_collected_at IS NULL OR excluded.source_collected_at>=social_posts.source_collected_at`)
         .run(code.toLowerCase(), platform, pid, url, text(post.contentId, 200), post.publishedAt ? text(post.publishedAt, 40) : null, provider, oneOf(post.kind ?? 'organic', KINDS), collectedAt, runId, collectedAt);
       const id = db.prepare('SELECT id FROM social_posts WHERE company_code=? COLLATE NOCASE AND platform=? AND platform_post_id=?').get(code, platform, pid).id;
       for (const m of post.metrics || []) {
         const metric = oneOf(m.metric, Object.keys(METRICS));
-        db.prepare(`INSERT INTO social_post_metrics(post_id,date,metric,value,unit,source_field,completeness,provider,collected_at,run_id) VALUES(?,?,?,?,?,?,?,?,?,?)
-          ON CONFLICT(post_id,date,metric) DO UPDATE SET value=excluded.value,unit=excluded.unit,source_field=excluded.source_field,completeness=excluded.completeness,provider=excluded.provider,collected_at=excluded.collected_at,run_id=excluded.run_id`)
-          .run(id, day(m.date || post.date), metric, metricValue(m.value, metric), METRICS[metric], text(m.sourceField, 100), oneOf(m.completeness ?? 'unknown', COMPLETENESS), provider, collectedAt, runId);
-        count += 1;
+        count += db.prepare(`INSERT INTO social_post_metrics(post_id,date,metric,value,unit,source_field,completeness,provider,collected_at,run_id,period) VALUES(?,?,?,?,?,?,?,?,?,?,?)
+          ON CONFLICT(post_id,date,metric,period) DO UPDATE SET value=excluded.value,unit=excluded.unit,source_field=excluded.source_field,completeness=excluded.completeness,provider=excluded.provider,collected_at=excluded.collected_at,run_id=excluded.run_id
+          WHERE excluded.collected_at>=social_post_metrics.collected_at`)
+          .run(id, day(m.date || post.date), metric, metricValue(m.value, metric), METRICS[metric], text(m.sourceField, 100), oneOf(m.completeness ?? 'unknown', COMPLETENESS), provider, collectedAt, runId,oneOf(m.period ?? 'unknown',POST_PERIODS)).changes;
       }
     }
     return count;
@@ -412,7 +425,11 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
   }
 
   /* Сбор по одному аккаунту: адаптер возвращает {status, snapshots, posts, missing, error}. Любой исход записывается в журнал запусков. */
-  async function collect(code, platform, { trigger = 'manual', date = null } = {}) {
+  async function collectNow(code, platform, { trigger = 'manual', date = null } = {}) {
+    if(closing)fail('SERVER_STOPPING',503);
+    // Операционный откат MAX не останавливает расписание остальных источников
+    // и не меняет сохранённые аккаунты, очередь или прежние наблюдения.
+    if(platform==='max'&&maxEnabled===false)fail('MAX_ANALYTICS_PAUSED',503);
     const scope = company(code), row = accountRow(scope.code, oneOf(platform, Object.keys(PLATFORMS)));
     const tz = row?.timezone || 'Asia/Bangkok', today = localDay(now(), tz), target = date ? day(date) : today;
     if (target > today) fail();
@@ -424,15 +441,23 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
     const connectionBefore = row ? connectionRevision(adapter, { company: scope, platform, account: row }) : { ok: true, value: null };
     // VK's independent reader can serve an existing Onlypult-selected analytics account.
     // Preserve that setting, but attribute snapshots/evidence to the API actually used.
-    const provider = platform === 'vk' && connectionBefore.ok && connectionBefore.value?.provider === 'vk_direct'
+    const provider = connectionBefore.ok && ((platform === 'vk' && connectionBefore.value?.provider === 'vk_direct') ||
+      (platform === 'youtube' && connectionBefore.value?.provider === 'youtube_analytics') ||
+      (platform === 'max' && connectionBefore.value?.provider === 'max_analytics'))
       ? 'direct' : selectedProvider;
     // Отпечаток сорвавшегося чтения не вычисляется: такой запуск всё равно закончится failed и ничего не запишет.
     const connectionFp = connectionBefore.ok ? connectionFingerprint(connectionBefore.value) : '';
     const runId = Number(db.prepare(`INSERT INTO social_collect_runs(company_code,platform,provider,trigger,date,started_at,closed,account_ref,account_revision,connection_fp) VALUES(?,?,?,?,?,?,?,?,?,?)`)
       .run(scope.code.toLowerCase(), platform, provider, trigger, target, stamp(), closed ? 1 : 0, row?.account_ref || '', row?.revision || 0, connectionFp).lastInsertRowid);
+    let queuedForRun = false;
     const finish = (status, extra = {}) => {
       db.prepare('UPDATE social_collect_runs SET finished_at=?,status=?,rows=?,error=?,missing=? WHERE id=?')
         .run(stamp(), oneOf(status, RUN_STATUS), extra.rows || 0, text(extra.error || '', 300), JSON.stringify(extra.missing || []), runId);
+      if(status==='failed'&&!queuedForRun&&row?.enabled) {
+        queueDate({code:scope.code.toLowerCase(),platform,accountRef:row.account_ref||'',date:target,status,
+          reason:extra.error||'сбор не завершён'});
+        queuedForRun=true;
+      }
       return { runId, status, rows: extra.rows || 0, missing: extra.missing || [], error: extra.error || '', date: target, platform, provider, closed };
     };
     if (!row || !row.enabled) return finish('unsupported', { missing: ['аккаунт площадки не настроен или выключен в кабинете'] });
@@ -457,6 +482,7 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
     const observedAt = stamp();
     try { result = await adapter.collect({ company: scope, platform, account: row, date: target, timezone: tz, closed, dayStartMs: bounds.startMs, dayEndMs: bounds.endMs }); }
     catch (error) { logger.warn?.(`[crm] social-stats ${platform}/${provider}: ${error?.code || 'collect failed'}`); return finish('failed', { error: 'Сбор не удался: провайдер не ответил или ответ не распознан' }); }
+    if(closing)return finish('failed',{error:ERRORS.SERVER_STOPPING});
     // Пока ждали ответ, владелец мог сменить аккаунт аналитики или само подключение площадки (токен/цель): старый ответ к новому не относится.
     const fresh = accountRow(scope.code, platform);
     if (!fresh || fresh.revision !== row.revision || fresh.account_ref !== row.account_ref || fresh.provider !== row.provider || fresh.provider_ref !== row.provider_ref) {
@@ -545,8 +571,14 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
           }
           if (entries.length) evidence.recordRun(entries);
         }
-        return writeSnapshots(scope.code, platform, row.account_ref, snapshots, { provider, tz, runId, collectedAt: observedAt })
+        const rowsWritten=writeSnapshots(scope.code, platform, row.account_ref, snapshots, { provider, tz, runId, collectedAt: observedAt })
           + writePosts(scope.code, platform, result.posts || [], { provider, runId, collectedAt: observedAt });
+        if(platform==='max'&&provider==='direct'&&maxIndex&&result.maxIndexPrepared){
+          if(result.maxIndexPrepared.companyCode!==scope.code.toLowerCase()||result.maxIndexPrepared.chatId!==connectionBefore.value?.chatId)
+            fail('BINDING_CHANGED',409);
+          maxIndex.commit(result.maxIndexPrepared,{runId,collectedAt:observedAt,refreshBatch:result.maxRefreshBatch,advanceRefresh:result.maxAdvanceRefresh===true});
+        }
+        return rowsWritten;
       });
     } finally { releaseLease(lease); }
     if (fenced) return finish('failed', { error: 'Аренда сбора потеряна или привязка изменилась: результат отброшен, проекция не тронута' });
@@ -554,14 +586,22 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
     /* Неполный день не забывается после полуночи, а закрытые сутки недавнего окна
        перепроверяются: источник может позднее исправить значение. */
     const queueKey = { code: scope.code.toLowerCase(), platform, accountRef: row.account_ref || '', date: target };
-    if (status === 'partial' || (result.missing || []).length) queueDate({ ...queueKey, reason: (result.missing || [])[0] || 'день неполный', status });
+    if(result.retryable===false) {dropQueued(queueKey);queuedForRun=true;}
+    else if (status === 'partial' || status === 'failed' || (result.missing || []).length) {
+      queueDate({ ...queueKey, reason: (result.missing || [])[0] || 'день неполный', status });queuedForRun=true;
+    }
     else if (closed) dropQueued(queueKey);
     return finish(status, { rows, missing: result.missing || [], error: result.error || '' });
   }
   /* Ежедневный сбор. Итог — только за завершённый предыдущий локальный день: один раз после collect_hour (closed=1).
      Текущий день собирается как partial и обновляется не чаще раза в час, чтобы вечерняя активность не терялась; lifetime-снимки
      (подписчики) приходят с каждым сбором и хранятся отдельно по датам. Повторный вызов ничего не дублирует. */
-  async function collectDue() {
+  function collect(...args) {
+    const pending=collectNow(...args);active.add(pending);
+    pending.then(()=>active.delete(pending),()=>active.delete(pending));return pending;
+  }
+  async function collectDueNow() {
+    if(closing)return [];
     const due = db.prepare(`SELECT a.* FROM social_accounts a JOIN companies c ON c.code=a.company_code COLLATE NOCASE WHERE a.enabled=1 AND c.is_deleted=0 AND a.provider<>'manual'`).all();
     const results = [];
     // Только запуски этого же аккаунта, его ревизии и той же ревизии подключения площадки: после смены account_ref или пересохранения
@@ -569,9 +609,13 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
     const lastRun = (row, fp, date, closed) => db.prepare(`SELECT status, started_at FROM social_collect_runs WHERE company_code=? COLLATE NOCASE AND platform=? AND date=? AND closed=? AND account_ref=? AND account_revision=? AND connection_fp=? ORDER BY id DESC LIMIT 1`)
       .get(row.company_code, row.platform, date, closed ? 1 : 0, row.account_ref || '', row.revision || 0, fp);
     for (const row of due) {
+      if(closing)break;
+      if(row.platform==='max'&&maxEnabled===false)continue;
       // Сбой по одному аккаунту (нечитаемая ревизия подключения, испорченный пояс, отказ адаптера) не отменяет расписание остальных.
       try {
-        const ms = now(), today = localDay(ms, row.timezone), yesterday = localDay(ms - 86400000, row.timezone);
+        const ms = now(), today = localDay(ms, row.timezone);
+        const calendarDay = (back) => new Date(Date.parse(today+'T00:00:00Z')-back*86400000).toISOString().slice(0,10);
+        const yesterday=calendarDay(1);
         const scope = company(row.company_code);
         const revision = connectionRevision(adapters[row.provider], { company: scope, platform: row.platform, account: row });
         // Ревизия не прочитана — сравнивать запуски не с чем: идём в collect, он закончит запуск статусом failed и ничего не запишет.
@@ -582,7 +626,13 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
         const handled = new Set();
         if (localHour(ms, row.timezone) >= row.collect_hour) {
           const done = lastRun(row, fp, yesterday, true);
-          if (!done || !['ok', 'partial', 'missing_access', 'unsupported'].includes(done.status)) {
+          const pending=db.prepare('SELECT next_attempt_at FROM social_collect_queue WHERE company_code=? COLLATE NOCASE AND platform=? AND account_ref=? AND date=?')
+            .get(row.company_code,row.platform,row.account_ref||'',yesterday);
+          // Не обходить сохранённую задержку основной веткой вчерашней даты. После исчерпания
+          // очереди failed также не начинает новый цикл на каждом тике.
+          const retryDue=done&&(pending?Date.parse(pending.next_attempt_at)<=ms:Date.parse(done.started_at)<=ms-86400000);
+          if (!done || (!['ok', 'partial', 'missing_access', 'unsupported'].includes(done.status)&&retryDue)) {
+            if(!done&&pending)dropQueued({code:row.company_code,platform:row.platform,accountRef:row.account_ref||'',date:yesterday});
             handled.add(yesterday);
             results.push(await collect(row.company_code, row.platform, { trigger: 'schedule', date: yesterday }));
           }
@@ -608,8 +658,10 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
            но только у источников, которые сами объявили, что задним числом правят историю
            (revisesHistory). Прямые подключения площадок так не делают, и навязывать им
            лишний суточный опрос нельзя. */
-        if (adapters[row.provider]?.revisesHistory === true) for (let back = 2; back <= RECHECK_WINDOW_DAYS; back += 1) {
-          const date = localDay(ms - back * 86400000, row.timezone);
+        const capability=adapters[row.provider]?.revisesHistory;
+        const revises=typeof capability==='function'?capability({company:scope,platform:row.platform,account:row})===true:capability===true;
+        if (revises) for (let back = 2; back <= RECHECK_WINDOW_DAYS; back += 1) {
+          const date = calendarDay(back);
           const last = lastRun(row, fp, date, true);
           if (!last || ['missing_access', 'unsupported'].includes(last.status)) continue;
           if (Date.parse(last.started_at) > ms - 86400000) continue;
@@ -622,6 +674,10 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
       }
     }
     return results;
+  }
+  function collectDue() {
+    const pending=collectDueNow();active.add(pending);
+    pending.then(()=>active.delete(pending),()=>active.delete(pending));return pending;
   }
   /* Ручной импорт реальных чисел из кабинета площадки (снимок экрана/выгрузка): провайдер manual, обязательны момент снятия и пометка источника. Не заглушка: без чисел строки нет. */
   function importManual(code, body, actor = {}) {
@@ -871,8 +927,8 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
     const scope = company(code); day(from); day(to); if (from > to) fail();
     const projection = attributionPosts(scope);
     const storedTotal = db.prepare('SELECT COUNT(*) n FROM social_posts WHERE company_code=? COLLATE NOCASE').get(scope.code).n;
-    const read = db.prepare(`SELECT date, metric, value, unit, source_field, completeness, provider, collected_at, run_id
-      FROM social_post_metrics WHERE post_id=? AND date>=? AND date<=? ORDER BY date, metric`);
+    const read = db.prepare(`SELECT date, metric, value, unit, source_field, completeness, provider, collected_at, run_id,period
+      FROM social_post_metrics WHERE post_id=? AND date>=? AND date<=? ORDER BY date, metric,collected_at,period`);
     const dates = new Set();
     let measurementsRead = 0, sourcesWithMetrics = 0, knownValues = 0, latestKnownValues = 0, sourcesWithKnownValues = 0;
     const posts = projection.posts.map((post) => {
@@ -881,16 +937,21 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
         measurementsRead += rows.length;
         // Последнее измерение каждой метрики ВНУТРИ интервала: за его границы не выходим и «последнее вообще» не подставляем.
         const latest = new Map();
+        const periodsByMetric = new Map();
         // Известное значение считается по всем прочитанным строкам периода, а не по последним:
         // если вчера значение было, а сегодня null, история известного не исчезает, но последним остаётся null.
         let knownRows = 0;
-        for (const row of rows) { dates.add(row.date); latest.set(row.metric, row); if (row.value !== null && row.value !== undefined) knownRows += 1; }
+        for (const row of rows) { dates.add(row.date); latest.set(row.metric, row); if (row.value !== null && row.value !== undefined) knownRows += 1;
+          if(!periodsByMetric.has(row.metric))periodsByMetric.set(row.metric,new Set());periodsByMetric.get(row.metric).add(row.period);
+        }
+        for(const [metric,periods] of periodsByMetric)if(periods.size>1)latest.set(metric,{...latest.get(metric),value:null,period:'mixed',scopeConflict:true,completeness:'unknown'});
         if (rows.length) sourcesWithMetrics += 1;
         const measurements = [...latest.values()].map((row) => ({ metric: row.metric,
           date: row.date, value: row.value === null || row.value === undefined ? null : row.value, unit: row.unit,
           hasValue: !(row.value === null || row.value === undefined),
           sourceField: row.source_field || '', completeness: row.completeness || 'unknown', provider: row.provider,
-          collectedAt: row.collected_at, runId: row.run_id ?? null, referenceId: source.referenceId }))
+          collectedAt: row.collected_at, runId: row.run_id ?? null, referenceId: source.referenceId,
+          ...(row.period!=='unknown'?{period:row.period}:{}),...(row.scopeConflict?{scopeConflict:true}:{} ) }))
           .sort((a, b) => a.metric.localeCompare(b.metric));
         // Строка измерения и известное значение — разное: строка с value=null данных не даёт.
         // knownValuesInPeriod — по всем строкам периода; latestKnownValues — сколько показанных последних измерений известны.
@@ -1041,7 +1102,12 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
       today: localDay(now(), scope.timezone || 'Asia/Bangkok'),
     });
   }
-  return { accounts, saveAccounts, collect, collectDue, importManual, overview, insights, attribution, postMetrics, writeSnapshots, writePosts,
+  async function stop() {
+    closing=true;
+    for(const adapter of Object.values(adapters))adapter.stop?.();
+    await Promise.allSettled([...active]);
+  }
+  return { accounts, saveAccounts, collect, collectDue, stop, importManual, overview, insights, attribution, postMetrics, writeSnapshots, writePosts,
     migrateLegacyEvidence, queuedDates, acquireLease, releaseLease, localDay, dayBounds, PLATFORMS, METRICS, AGGREGATION };
 }
 module.exports = { createSocialStats, SOCIAL_STATS_ERRORS: ERRORS, PLATFORMS, METRICS, AGGREGATION, KINDS, TIMEZONE_CHOICES, localDay, dayBounds, canonicalPostKey, RECEIPT_TO_PLATFORM };

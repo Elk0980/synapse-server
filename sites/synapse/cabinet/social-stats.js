@@ -8,7 +8,7 @@
   const stamp = value => (value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString('ru-RU', { timeZone: 'Asia/Bangkok' }) + ' (Бангкок)' : '—');
   const day = value => (/^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? value.split('-').reverse().join('.') : '—');
   const PLATFORMS = ['instagram', 'tiktok', 'youtube', 'vk', 'telegram'];
-  const METRIC_LABELS = { followers: 'Подписчики', follower_change: 'Прирост подписчиков', reach: 'Охват', impressions: 'Показы', views: 'Просмотры', profile_visits: 'Переходы в профиль', likes: 'Реакции', comments: 'Комментарии', shares: 'Репосты', saves: 'Сохранения', clicks: 'Клики', link_clicks: 'Переходы по ссылке', watch_time_seconds: 'Время просмотра, с', avg_watch_seconds: 'Среднее время, с', retention_percent: 'Удержание, %', posts_published: 'Публикаций' };
+  const METRIC_LABELS = { followers: 'Подписчики', follower_change: 'Прирост подписчиков', reach: 'Охват', impressions: 'Показы', views: 'Просмотры', engaged_views:'Вовлечённые просмотры', profile_visits: 'Переходы в профиль', likes: 'Реакции', comments: 'Комментарии', shares: 'Репосты', saves: 'Сохранения', clicks: 'Клики', link_clicks: 'Переходы по ссылке', watch_time_seconds: 'Время просмотра, с', avg_watch_seconds: 'Среднее время, с', retention_percent: 'Удержание, %', posts_published: 'Публикаций' };
   const ACCESS = { ok: 'данные собираются', not_configured: 'аккаунт не настроен', missing_access: 'нет доступа', unsupported: 'не поддерживается', depends_on_connection: 'зависит от подключения площадки', manual: 'ручной ввод' };
   const RUN = { ok: 'собрано', partial: 'собрано частично', missing_access: 'нет доступа', unsupported: 'не поддерживается', failed: 'ошибка сбора' };
   const KIND = { organic: 'органика', paid: 'реклама', mixed: 'смешано', unknown: 'не размечено' };
@@ -64,6 +64,12 @@
       ${owner ? `<details class="card social-analytics-access"><summary>Аналитический доступ Onlypult (владелец)</summary>
         <p class="social-note">Отдельный ключ кабинета Onlypult для чтения аналитики Instagram и TikTok. Он не заменяет подключение публикаций и хранится отдельно. Ключ показывается только один раз — вам; кабинет его не отображает и не возвращает. ВКонтакте, Telegram, YouTube, 2ГИС и MAX этот источник не покрывает.</p>
         <div id="social-analytics-access"></div></details>
+      <details class="card social-youtube-access"><summary>Измерения YouTube (владелец)</summary>
+        <p class="social-note">Доступ для чтения статистики канала. Сначала сохраните точный канал в аккаунтах ниже и выберите систему суток America/Los_Angeles (Pacific). При смене доступа или канала нужна повторная проверка.</p>
+        <div id="social-youtube-access"></div></details>
+      <details class="card social-max-access"><summary>Измерения MAX (владелец)</summary>
+        <p class="social-note">Используется ранее выданный доступ бота к вашему каналу. Сначала сохраните числовой ID канала в аккаунтах ниже. Состав канала и просмотры постов снимаются на текущую дату; дневная история, охват, реакции и репосты этим источником не подтверждаются.</p>
+        <div id="social-max-access"></div></details>
       <details class="card social-settings"><summary>Аккаунты и источники (владелец)</summary><p class="social-note">Здесь только идентификаторы аккаунтов и выбор источника. Ключи и права живут в подключениях площадок (Автопостинг) или у провайдера; сюда их вводить нельзя.</p><div id="social-accounts"></div></details>
       <details class="card social-import"><summary>Ручной ввод реальных чисел (владелец)</summary><p class="social-note">Для площадок без API-доступа: числа из кабинета площадки с датой снятия и источником (скриншот, выгрузка). Это не автоматический сбор и не заглушка — без чисел строка не сохраняется.</p>
         <form id="social-import-form" class="crm-form"><label>Площадка<select name="platform">${PLATFORMS.map(p => `<option value="${p}">${p}</option>`).join('')}</select></label>
@@ -75,7 +81,7 @@
       state.from = from; state.to = to;
       const content = container.querySelector('#social-content');
       try {
-        const [data, accounts, baseline, access, insights] = await Promise.all([
+        const [data, accounts, baseline, access, insights, youtubeAccess,maxAccess] = await Promise.all([
           ctx.apiJson(`/content/crm/social-stats?companyCode=${encodeURIComponent(company)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
           owner ? ctx.apiJson(`/content/crm/social-stats/accounts?companyCode=${encodeURIComponent(company)}`) : null,
           ctx.apiJson(`/content/crm/social-stats/baseline?companyCode=${encodeURIComponent(company)}`),
@@ -83,6 +89,8 @@
           owner ? ctx.apiJson(`/content/crm/social-stats/analytics/access?companyCode=${encodeURIComponent(company)}`).catch(() => null) : null,
           // Сводка выводов не должна ронять страницу, если расчёт недоступен.
           ctx.apiJson(`/content/crm/social-stats/insights?companyCode=${encodeURIComponent(company)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`).catch((error) => ({ failed: error.message })),
+          owner ? ctx.apiJson(`/content/crm/social-stats/youtube/access?companyCode=${encodeURIComponent(company)}`).catch(() => null) : null,
+          owner ? ctx.apiJson(`/content/crm/social-stats/max/access?companyCode=${encodeURIComponent(company)}`).catch(() => null) : null,
         ]);
         if (id !== requestId || ctx.selectedProjectId !== company) return;
         if (data.companyCode !== String(company).toLowerCase() || baseline.companyCode !== String(company).toLowerCase()) throw new Error('Ответ другой компании');
@@ -100,6 +108,8 @@
         container.querySelector('#social-baseline-content').innerHTML = baselineMarkup(baseline);
         const cached = owner ? profilesFresh(ctx, access) : null;
         if (owner) renderAnalyticsAccess(container, ctx, access, load, cached);
+        if (owner) renderYoutubeAccess(container,ctx,youtubeAccess,load);
+        if (owner) renderMaxAccess(container,ctx,maxAccess,accounts,load);
         if (owner && accounts) renderAccounts(container, ctx, accounts, load, cached);
         bind(container, ctx, data, load);
       } catch (error) { if (id === requestId) content.innerHTML = `<p class="crm-error" role="alert">Не удалось загрузить: ${esc(error.message)}</p>`; }
@@ -362,7 +372,7 @@
     const measured = value => (value === null || value === undefined ? '<span class="social-no-data">нет данных</span>' : esc(String(value)));
     const rows = posts.map(post => {
       const sources = (post.sources || []).map(source => {
-        const list = (source.measurements || []).map(m => `<li>${esc(METRIC_LABELS[m.metric] || m.metric)}: ${measured(m.value)}${m.hasValue ? esc(unitSuffix(m.unit)) : ''} · за ${esc(day(m.date))} · собрано ${esc(stamp(m.collectedAt))} · ${esc(PROVIDER[m.provider] || m.provider || 'источник не указан')}${m.sourceField ? ` · поле ${esc(m.sourceField)}` : ''} · ${esc(COMPLETENESS_LABEL[m.completeness] || COMPLETENESS_LABEL.unknown)} · запись ${esc(m.referenceId)}</li>`).join('');
+        const list = (source.measurements || []).map(m => `<li>${esc(METRIC_LABELS[m.metric] || m.metric)}: ${measured(m.value)}${m.hasValue ? esc(unitSuffix(m.unit)) : ''} · ${m.period==='lifetime'?'накоплено на':m.period==='mixed'?'несовместимые периоды, дата':m.period==='day'?'за':'измерение от'} ${esc(day(m.date))} · собрано ${esc(stamp(m.collectedAt))} · ${esc(PROVIDER[m.provider] || m.provider || 'источник не указан')}${m.sourceField ? ` · поле ${esc(m.sourceField)}` : ''} · ${esc(COMPLETENESS_LABEL[m.completeness] || COMPLETENESS_LABEL.unknown)} · запись ${esc(m.referenceId)}</li>`).join('');
         return `<li>Источник ${esc(source.referenceId)} · ${esc(source.platformPostId || '—')} · ${esc(POST_SOURCE[source.provider] || source.provider || '—')}${list ? `<ul>${list}</ul>` : '<p class="social-note">Измерений за период нет.</p>'}</li>`;
       }).join('');
       return `<tr><td data-label="Площадка">${esc(post.platformLabel || post.platform)}</td>
@@ -436,6 +446,57 @@
   /* Аналитический доступ: сохранение ключа, проверка и загрузка списка профилей an_….
      Ключ уходит одним полем и обратно не возвращается: кабинет знает только «настроен или
      нет» и состояние проверки. Пустое поле при сохранении прежний ключ НЕ стирает. */
+  function renderYoutubeAccess(container,ctx,access,load) {
+    const node=container.querySelector('#social-youtube-access');if(!node)return;
+    const company=ctx.selectedProjectId;
+    if(!access||access.companyCode!==String(ctx.selectedProjectId).toLowerCase()) {
+      node.innerHTML='<p class="crm-error" role="alert">Состояние доступа YouTube этой компании не прочитано. Обновите страницу.</p>';return;
+    }
+    node.innerHTML=`<form id="social-youtube-form" class="crm-form"><p class="wide">${access.channelConfirmed?'Канал подтверждён: '+esc(access.channelTitle||access.channelId):esc(access.channelReason||'Канал ещё не подтверждён.')}</p>
+      <label>Идентификатор приложения Google<input name="clientId" autocomplete="off" maxlength="512"></label>
+      <label>Секрет приложения Google<input name="clientSecret" type="password" autocomplete="new-password" maxlength="512"></label>
+      <label>Постоянный доступ к каналу<input name="refreshToken" type="password" autocomplete="new-password" maxlength="2048"></label>
+      <p class="social-note wide">Сохранённые данные доступа не отображаются. Пустые поля оставляют их без изменения. Нужны разрешения только на чтение канала и его аналитики.</p>
+      <div class="crm-actions wide"><button type="submit" class="plain-button">Сохранить доступ</button><button type="button" class="plain-button" data-youtube="verify">Проверить канал</button>${access.configured?'<button type="button" class="plain-button" data-youtube="remove">Убрать доступ</button>':''}<span id="social-youtube-state" role="status"></span></div></form>`;
+    const form=node.querySelector('form'),out=node.querySelector('#social-youtube-state');
+    const endpoint=action=>`/content/crm/social-stats/youtube/${action}?companyCode=${encodeURIComponent(company)}`;
+    async function perform(action,method,body) {
+      if(ctx.selectedProjectId!==company)return;
+      const buttons=[...node.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);
+      try {await ctx.apiJson(endpoint(action),ctx.csrfOptions(method,body));if(ctx.selectedProjectId!==company)return;await load();const fresh=container.querySelector('#social-youtube-state');if(fresh)fresh.textContent=action==='verify'?'Канал проверен.':'Сохранено.';}
+      catch(error){out.textContent=error.message;}
+      finally {buttons.forEach(b=>b.disabled=false);}
+    }
+    form.addEventListener('submit',async event=>{
+      event.preventDefault();const data=Object.fromEntries(['clientId','clientSecret','refreshToken'].map(k=>[k,form.elements[k].value.trim()]));
+      if(Object.values(data).some(Boolean)&&Object.values(data).some(v=>!v)){out.textContent='Для нового доступа заполните все три поля.';return;}
+      await perform('access','PUT',{revision:access.revision,credential:Object.values(data).some(Boolean)?JSON.stringify(data):''});
+      for(const key of Object.keys(data))form.elements[key].value='';
+    });
+    node.querySelector('[data-youtube="verify"]').addEventListener('click',()=>perform('verify','POST',{}));
+    node.querySelector('[data-youtube="remove"]')?.addEventListener('click',()=>perform('access','DELETE',{revision:access.revision}));
+  }
+  function renderMaxAccess(container,ctx,access,accounts,load){
+    const node=container.querySelector('#social-max-access');if(!node)return;
+    const company=String(ctx.selectedProjectId||'');
+    if(!access||access.companyCode!==company.toLowerCase()){node.innerHTML='<p class="crm-error" role="alert">Состояние доступа MAX не прочитано. Обновите страницу.</p>';return;}
+    const account=accounts?.accounts?.find(a=>a.platform==='max');
+    const same=account&&String(account.accountRef||'').trim()===access.channelId;
+    const confirmed=access.channelConfirmed&&same;
+    node.innerHTML=`<form id="social-max-form" class="crm-form"><p class="wide">${confirmed?'Канал MAX подтверждён.':esc(access.channelConfirmed&&!same?'Сохранённый канал изменился: проверьте доступ заново.':access.channelReason||'Канал ещё не подтверждён.')}</p>
+      <label class="wide">Доступ к вашему каналу<input type="password" name="token" autocomplete="off" placeholder="Новый доступ или пусто — оставить сохранённый"></label>
+      <p class="social-note wide">Сохранённое значение не показывается. Ключ публикаций и права бота не меняются. Просмотры — накопленные значения на дату снятия, а не просмотры за день публикации.</p>
+      <div class="crm-actions wide"><button type="submit" class="plain-button">Сохранить доступ MAX</button><button type="button" class="plain-button" data-max="verify">Проверить канал MAX</button>${access.configured?'<button type="button" class="plain-button" data-max="remove">Убрать доступ MAX</button>':''}<span id="social-max-state" role="status"></span></div></form>`;
+    const form=node.querySelector('form'),out=node.querySelector('#social-max-state');
+    async function perform(action,method,body){
+      if(ctx.selectedProjectId!==company)return;const buttons=[...node.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);
+      try{await ctx.apiJson(`/content/crm/social-stats/max/${action}?companyCode=${encodeURIComponent(company)}`,ctx.csrfOptions(method,body));if(ctx.selectedProjectId!==company)return;await load();const fresh=container.querySelector('#social-max-state');if(fresh)fresh.textContent=action==='verify'?'Канал проверен.':'Сохранено.';}
+      catch(error){out.textContent=error.message;}finally{buttons.forEach(b=>b.disabled=false);}
+    }
+    form.addEventListener('submit',async event=>{event.preventDefault();const credential=form.elements.token.value.trim();await perform('access','PUT',{revision:access.revision,credential});form.elements.token.value='';});
+    node.querySelector('[data-max="verify"]').addEventListener('click',()=>perform('verify','POST',{}));
+    node.querySelector('[data-max="remove"]')?.addEventListener('click',()=>perform('access','DELETE',{revision:access.revision}));
+  }
   function renderAnalyticsAccess(container, ctx, access, load, cached) {
     const node = container.querySelector('#social-analytics-access'); if (!node) return;
     if (!access) { node.innerHTML = '<p class="crm-error" role="alert">Состояние аналитического доступа не прочитано. Обновите страницу.</p>'; return; }

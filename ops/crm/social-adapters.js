@@ -19,13 +19,34 @@ const ONLYPULT_NEED = ['аналитический ключ доступа ка�
   'подтверждённые самим профилем разделы (overview) и дневная детализация',
   'Onlypult Analytics не покрывает ВКонтакте, Telegram, YouTube, 2ГИС и MAX — для них нужен отдельный источник'];
 const { dayBounds } = require('./social-stats');
+const { youtubeChannelRef } = require('./social-youtube-access');
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 /* analytics — отдельный аналитический доступ и сборщик Onlypult Analytics.
    Он инъекцией, а не импортом подключения публикаций: у аналитики свой ключ, своя ревизия
    и свой список профилей, и перепутать их нельзя. Без инъекции адаптер честно говорит,
    что подключения нет, и чисел не выдумывает. */
-function createSocialAdapters({ transport, analytics = null, channelStats = null, vkDirect = null, env = process.env, now = () => Date.now() } = {}) {
+function createSocialAdapters({ transport, analytics = null, channelStats = null, vkDirect = null, youtubeStats = null, maxStats = null, env = process.env, now = () => Date.now() } = {}) {
+  const maxReady=()=>Boolean(maxStats?.collectDate&&maxStats?.ready&&maxStats?.bindingFingerprint);
+  function maxDescribe(account){
+    if(!maxReady())return {status:'missing_access',missing:['читающий доступ MAX ещё не подключён']};
+    const ref=require('./social-max-access').maxChatRef(account?.account_ref||'');
+    const ready=maxStats.ready(account?.company_code||account?.companyCode||'');
+    if(ref.kind!=='id')return {status:'missing_access',missing:['в аккаунте MAX укажите точный числовой ID канала']};
+    if(!ready.ok||ready.chatId!==ref.chatId)return {status:'missing_access',missing:[ready.reason||'текущий доступ и канал MAX ещё не подтверждены']};
+    return {status:'ok',missing:[],note:'MAX: текущий состав канала и накопленные просмотры постов на дату снятия; дневная история недоступна'};
+  }
+  const youtubeReady = () => Boolean(youtubeStats?.collectDate && youtubeStats?.ready && youtubeStats?.bindingFingerprint);
+  function youtubeDescribe(account) {
+    if(!youtubeReady())return {status:'missing_access',missing:scopedNeed('youtube',account)};
+    if(account?.timezone!=='America/Los_Angeles')return {status:'missing_access',missing:['для YouTube выберите систему суток America/Los_Angeles (Pacific)']};
+    const ref=youtubeChannelRef(account?.account_ref);
+    if(!ref.key)return {status:'missing_access',missing:['укажите точный канал YouTube: UC ID, ссылку канала или @имя']};
+    const ready=youtubeStats.ready(account?.company_code||account?.companyCode||'');
+    if(!ready.ok)return {status:'missing_access',missing:[ready.reason||'доступ и канал YouTube ещё не подтверждены']};
+    if(youtubeChannelRef(ready.accountRef).key!==ref.key)return {status:'missing_access',missing:['канал аккаунта отличается от подтверждённого: проверьте доступ заново']};
+    return {status:'ok',missing:[],note:'YouTube Analytics: дневные данные по Pacific; текущие подписчики отдельно.'};
+  }
   /* Отдельный путь для Telegram: текущий счётчик подписчиков через уже работающего бота
      Synapse. Он не зависит от того, чем ведутся ПУБЛИКАЦИИ: строка аккаунта может быть
      onlypult, а счётчик всё равно снимается. Подключения публикаций это не трогает.
@@ -81,9 +102,13 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
       provenance: { accountRef: answer.accountRef, observedAt: answer.observedAt || null, source: answer.source } };
   }
   const direct = {
-    info: () => ({ name: 'direct', available: Boolean(transport || vkDirect), note: 'Прямые API площадок через сохранённые подключения; Instagram/TikTok/YouTube требуют собственных приложений и разрешений владельца.' }),
+    info: () => ({ name: 'direct', available: Boolean(transport || vkDirect || youtubeReady()), note: 'Прямые API площадок через сохранённые подключения; для YouTube используется отдельный доступ только к измерениям.' }),
+    revisesHistory: ({platform}) => (platform==='youtube'&&youtubeReady())||(platform==='max'&&maxReady()),
+    stop: () => Promise.allSettled([youtubeStats?.stop?.(),maxStats?.stop?.()]),
     // Отпечаток подключения площадки (ревизия/цель, без токена): сравнивается до и после сетевого вызова.
     connectionRevision({ company, platform, account }) {
+      if(platform==='max'&&maxReady())return {provider:'max_analytics',binding:maxStats.bindingFingerprint(company.code),chatId:maxStats.ready(company.code).chatId,accountRef:account?.account_ref||''};
+      if(platform==='youtube'&&youtubeReady())return {provider:'youtube_analytics',binding:youtubeStats.bindingFingerprint(company.code),accountRef:account?.account_ref||''};
       if (platform === 'vk' && vkConnection(company.code)) return vkDirect.connectionRevision(company.code, 'analytics');
       /* Счётчик канала опирается на компанию и сохранённый канал. Но при временной
          недоступности счётчика сбор уходит на прежний путь через подключение площадки —
@@ -100,6 +125,8 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
       return info ? `${info.provider}:${info.revision}:${info.target}` : null;
     },
     describe(platform, account) {
+      if(platform==='max')return maxDescribe(account);
+      if(platform==='youtube')return youtubeDescribe(account);
       if (platform === 'telegram') {
         if (channelReady() && account?.account_ref) return { status: 'depends_on_connection',
           missing: ['подтверждённая ссылка на публичный канал в карточке компании (поле telegram_channel)', 'бот Synapse — администратор канала'],
@@ -118,7 +145,17 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
       if (platform === 'vk') return { status: 'depends_on_connection', missing: scopedNeed(platform, account), note: 'Проверяется при сборе по сохранённому подключению площадки.' };
       return { status: 'missing_access', missing: scopedNeed(platform, account) };
     },
-    async collect({ company, platform, account, date, timezone, closed = true, dayStartMs, dayEndMs }) {
+    async collect({ company, platform, account, date, timezone, closed = true, dayStartMs, dayEndMs, signal }) {
+      if(platform==='max'){
+        const ready=maxDescribe({...account,company_code:company.code});
+        if(ready.status!=='ok')return {status:'missing_access',missing:ready.missing};
+        return maxStats.collectDate({companyCode:company.code,date,timezone,signal});
+      }
+      if(platform==='youtube') {
+        if(!youtubeReady())return {status:'missing_access',missing:scopedNeed(platform,account)};
+        if(timezone!=='America/Los_Angeles')return {status:'missing_access',missing:['сутки YouTube относятся к Pacific: сохраните America/Los_Angeles и повторите сбор']};
+        return youtubeReady()?youtubeStats.collectDate(company.code,{date,closed,accountRef:account?.account_ref||'',signal}):{status:'missing_access',missing:scopedNeed(platform,account)};
+      }
       const need = scopedNeed(platform, account);
       if (platform !== 'telegram' && platform !== 'vk') return { status: 'missing_access', missing: need };
       let connection = null;
@@ -210,13 +247,16 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
   const onlypult = {
     /* Onlypult правит историю задним числом: закрытые сутки недавнего окна нужно перепроверять,
        иначе исправленное значение к нам не доедет. У прямых подключений такого поведения нет. */
-    revisesHistory: true,
-    info: () => ({ name: 'onlypult', available: analyticsReady(), temporary: false,
+    revisesHistory: ({platform}) => ONLYPULT_PLATFORMS.includes(platform)||(platform==='youtube'&&youtubeReady())||(platform==='max'&&maxReady()),
+    stop: () => Promise.allSettled([youtubeStats?.stop?.(),maxStats?.stop?.()]),
+    info: () => ({ name: 'onlypult', available: analyticsReady()||youtubeReady(), temporary: false,
       note: analyticsReady()
         ? 'Onlypult Analytics по REST: Instagram и TikTok по аналитическим профилям an_…; ВКонтакте, Telegram, YouTube, 2ГИС и MAX этот источник не покрывает.'
         : 'Onlypult Analytics не подключён: аналитический доступ и профиль an_… не сохранены.' }),
     // describe сети не касается: только сохранённое состояние доступа и выбранного профиля.
     describe(platform, account) {
+      if(platform==='max')return maxDescribe(account);
+      if(platform==='youtube')return youtubeDescribe(account);
       if (platform === 'vk') {
         try { if (vkConnection(account?.company_code || account?.companyCode || '')) return direct.describe(platform, account); }
         catch { return { status: 'missing_access', missing: ['отдельное подключение аналитики ВКонтакте недоступно'] }; }
@@ -237,6 +277,8 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
     /* Отпечаток аналитической привязки: ревизия доступа плюс профиль, native ID и система
        суток. Контракт вызова — один объект контекста, как у прямого адаптера. */
     connectionRevision({ company, account, platform } = {}) {
+      if(platform==='max'&&maxReady())return direct.connectionRevision({company,account,platform});
+      if(platform==='youtube'&&youtubeReady())return direct.connectionRevision({company,account,platform});
       if (platform === 'vk' && vkConnection(company?.code || account?.company_code || account?.companyCode || ''))
         return direct.connectionRevision({ company, account, platform });
       /* У счётчика канала своя привязка: компания и сохранённый канал. Аналитический доступ
@@ -252,8 +294,10 @@ function createSocialAdapters({ transport, analytics = null, channelStats = null
       return { revision: access.revision, provider: 'onlypult_analytics',
         providerRef: account?.provider_ref || '', accountRef: account?.account_ref || '', timezone: account?.timezone || '' };
     },
-    async collect({ company, platform, account, date, timezone, companyCode, closed = true, dayStartMs, dayEndMs }) {
+    async collect({ company, platform, account, date, timezone, companyCode, closed = true, dayStartMs, dayEndMs, signal }) {
+      if(platform==='max')return direct.collect({company,platform,account,date,timezone,closed,signal});
       const code = company?.code || companyCode || account?.company_code || account?.companyCode || '';
+      if(platform==='youtube')return direct.collect({company:{code},platform,account,date,timezone,closed,signal});
       if (platform === 'vk') {
         try { if (vkConnection(code)) return direct.collect({ company: { code }, platform, account, date, timezone, closed, dayStartMs, dayEndMs }); }
         catch { return { status: 'failed', error: 'Состояние отдельного подключения ВКонтакте не прочитано; сбор остановлен', missing: [] }; }

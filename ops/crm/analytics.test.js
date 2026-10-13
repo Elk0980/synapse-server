@@ -56,17 +56,23 @@ test('events, external snapshots, attribution and analytics work together', asyn
   });
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += chunk; });
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  let ready = false;
+  // На загруженном CI startup включает все миграции CRM; ждём реальную готовность,
+  // а не предполагаем, что фиксированных двух секунд достаточно.
+  const startupDeadline = Date.now() + 15000;
+  while (Date.now() < startupDeadline) {
     try {
-      await fetch(`http://127.0.0.1:${port}/companies`, {
-        headers: { 'X-API-Key': apiKey },
+      const response = await fetch(`http://127.0.0.1:${port}/companies`, {
+        headers: { 'X-API-Key': apiKey }, signal: AbortSignal.timeout(1000),
       });
-      break;
+      await response.body?.cancel();
+      if (response.ok) { ready = true; break; }
     } catch {
       if (child.exitCode !== null) throw new Error(stderr);
-      await new Promise((resolve) => setTimeout(resolve, 20));
     }
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
+  assert.equal(ready, true, 'Fixture CRM did not become ready within 15 seconds');
   const request = async (method, pathname, body, authenticated = true) => {
     const headers = authenticated ? { 'X-API-Key': apiKey } : {};
     if (body !== undefined) headers['Content-Type'] = 'application/json';

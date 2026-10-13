@@ -67,7 +67,8 @@ test('real CRM API requires trusted identity, scopes editors and persists compan
     child=spawn(process.execPath,[path.join(__dirname,'server.js')],{env:{...process.env,PORT:String(port),DATABASE_PATH:database,API_KEY:key,
       LEADS_SMTP_HOST:'',LEADS_SMTP_USER:'',LEADS_SMTP_PASSWORD:'',LEADS_NOTIFY_EMAIL:'',LEADS_NOTIFY_EMAIL_ALVI:'',LEADS_NOTIFY_EMAIL_AVOKADO:''},stdio:['ignore','pipe','ignore'],windowsHide:true});
     child.stdout.on('data',chunk=>output+=chunk);
-    for(let attempt=0;attempt<100&&!output.includes('слушает');attempt++){if(child.exitCode!==null)throw Error('Fixture CRM failed to start');await new Promise(resolve=>setTimeout(resolve,25));}
+    const startupDeadline=Date.now()+15000;
+    while(Date.now()<startupDeadline&&!output.includes('слушает')){if(child.exitCode!==null)throw Error('Fixture CRM failed to start');await new Promise(resolve=>setTimeout(resolve,50));}
     assert.match(output,/слушает/);
   }
   const encode=identity=>Buffer.from(JSON.stringify({v:1,userId:1,permissions:[],companyCodes:[],...identity})).toString('base64url');

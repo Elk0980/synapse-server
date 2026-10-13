@@ -31,10 +31,10 @@ on:
       - 'ops/crm/studio-journey*'
       - 'ops/crm/booking-catalog*'
       - 'ops/crm/client-intakes*'
-      - 'ops/crm/social-stats*'
-      - 'ops/crm/social-baselines*'
+      - 'ops/crm/social-*'
       - 'ops/crm/platform-demand*'
       - 'ops/crm/platform-company-metrics*'
+      - 'ops/crm/revenue-*'
       - 'ops/crm/finance-ai*'
       - 'ops/crm/ai-trials.js'
       - 'ops/crm/commercial*'
@@ -65,10 +65,10 @@ on:
       - 'ops/crm/studio-journey*'
       - 'ops/crm/booking-catalog*'
       - 'ops/crm/client-intakes*'
-      - 'ops/crm/social-stats*'
-      - 'ops/crm/social-baselines*'
+      - 'ops/crm/social-*'
       - 'ops/crm/platform-demand*'
       - 'ops/crm/platform-company-metrics*'
+      - 'ops/crm/revenue-*'
       - 'ops/crm/finance-ai*'
       - 'ops/crm/ai-trials.js'
       - 'ops/crm/commercial*'
@@ -135,7 +135,7 @@ jobs:
 
       - name: Тесты исходной статистики до запуска
         timeout-minutes: 10
-        run: node --test ops/crm/social-baselines.test.js ops/crm/social-stats.test.js ops/crm/social-stats-http.test.js
+        run: node --test ops/crm/social-*.test.js
 
       - name: Тесты спроса и фактических показателей 2ГИС
         timeout-minutes: 10
@@ -144,6 +144,10 @@ jobs:
       - name: Тесты календаря и публикаций
         timeout-minutes: 10
         run: node --test ops/crm/autoposting*.test.js
+
+      - name: Тесты серверного сбора Метрики и YCLIENTS
+        timeout-minutes: 10
+        run: node --test ops/crm/revenue-*.test.js ops/crm/analytics.test.js
 
       # Расходы на ИИ внутри существующих Финансов и права раздела. Остальные наборы
       # каталога ops/crm этой проверкой по-прежнему не покрываются.
