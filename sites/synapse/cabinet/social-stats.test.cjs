@@ -40,10 +40,36 @@ function fixture({role='owner',permissions=[],override}={}) {
       if(call.path==='/content/crm/social-stats/analytics/access')return {companyCode:call.code,provider:'onlypult_analytics',providerLabel:'Onlypult Analytics',configured:false,status:'not_configured',statusCode:'',revision:0,checkedRevision:null,checked:false,checkedAt:null,updatedAt:null};
       if(call.path==='/content/crm/social-stats/analytics/profiles')return {accessRevision:1,profiles:[],rejected:0,access:{configured:true,status:'connected',revision:1,checked:true,checkedAt:'2026-09-29T09:00:00.000Z'}};
       if(call.path==='/content/crm/social-stats/collect')return {status:'missing_access',missing:['x'],date:'2026-09-18',closed:true,rows:0};
+      if(call.path==='/content/crm/social-stats/youtube/access')return {companyCode:call.code,configured:false,revision:0,channelConfirmed:false,channelReason:'Канал ещё не подтверждён.'};
       if(call.path==='/content/crm/social-stats/import')return {ok:true,rows:call.body.rows.length};
       throw new Error('unexpected '+call.path);}};
   return {w,d,ctx,calls,views,container:d.getElementById('view'),render:async()=>{views['social-stats'].render(d.getElementById('view'),ctx);await settle();},close:()=>w.close()};
 }
+
+test('измерения YouTube: доступ владельца, отдельные секретные поля и проверка только сохранённого канала',async()=>{
+ const f=fixture({override:async c=>{
+  if(c.path==='/content/crm/social-stats/youtube/access'&&c.method==='PUT')return {companyCode:c.code,configured:true,revision:1,channelConfirmed:false};
+  if(c.path==='/content/crm/social-stats/youtube/verify')return {companyCode:c.code,configured:true,revision:1,channelConfirmed:true};
+ }});try{
+  await f.render();const form=f.d.querySelector('#social-youtube-form');assert.ok(form);
+  assert.equal(form.elements.clientSecret.type,'password');assert.equal(form.elements.refreshToken.type,'password');
+  form.elements.clientId.value='synthetic.apps.googleusercontent.com';form.elements.clientSecret.value='synthetic-secret';form.elements.refreshToken.value='synthetic-refresh';
+  form.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  const saved=f.calls.find(c=>c.path==='/content/crm/social-stats/youtube/access'&&c.method==='PUT');assert.equal(saved.code,'demo-travel');assert.equal(saved.body.revision,0);
+  assert.deepEqual(JSON.parse(saved.body.credential),{clientId:'synthetic.apps.googleusercontent.com',clientSecret:'synthetic-secret',refreshToken:'synthetic-refresh'});
+  assert.equal(f.d.querySelector('#social-youtube-form').elements.refreshToken.value,'');
+  f.d.querySelector('[data-youtube="verify"]').click();await settle();const checked=f.calls.find(c=>c.path==='/content/crm/social-stats/youtube/verify');assert.deepEqual(checked.body,{});
+ }finally{f.close()}
+ const viewer=fixture({role:'editor'});try{await viewer.render();assert.equal(viewer.d.querySelector('#social-youtube-access'),null);assert.equal(viewer.calls.some(c=>c.path.includes('/youtube/')),false)}finally{viewer.close()}
+});
+
+test('YouTube: ответ другой компании скрыт; запоздалая проверка не обновляет сменившуюся компанию',async()=>{
+ const wrong=fixture({override:async c=>c.path==='/content/crm/social-stats/youtube/access'?{companyCode:'other',configured:true,revision:9,channelConfirmed:true,channelTitle:'foreign channel'}:undefined});
+ try{await wrong.render();assert.equal(wrong.d.querySelector('#social-youtube-form'),null);assert.equal(wrong.d.getElementById('social-youtube-access').textContent.includes('foreign channel'),false)}finally{wrong.close()}
+ let finish;const f=fixture({override:async c=>c.path==='/content/crm/social-stats/youtube/verify'?new Promise(r=>{finish=r}):undefined});
+ try{await f.render();f.d.querySelector('[data-youtube="verify"]').click();await settle();const before=f.calls.length;f.ctx.selectedProjectId='other';finish({channelConfirmed:true});await settle();assert.equal(f.calls.length,before);assert.equal(f.d.querySelector('#social-youtube-state').textContent,'')}
+ finally{f.close()}
+});
 test('сводка: UNKNOWN показывается прочерком, не нулём; уникальный охват не суммируется; статусы доступа и список недостающего честные; атрибуция по UTM',async()=>{
   const f=fixture();try{
     await f.render();const text=f.container.textContent;
@@ -52,7 +78,8 @@ test('сводка: UNKNOWN показывается прочерком, не н
     {const tg=f.container.querySelector('[data-platform="telegram"]').textContent;assert.match(tg,/собрано частично/);assert.match(tg,/Подписчики/);assert.match(tg,/1\s?234/);}
     assert.match(f.container.querySelector('[data-platform="tiktok"]').textContent,/не настроен/);
     assert.match(f.container.querySelector('.social-crm').textContent,/UTM-метка/);assert.match(f.container.querySelector('.social-crm').textContent.replace(/\u00a0/g,' '),/15 000/);
-    assert.doesNotMatch(f.container.innerHTML,/token|Bearer/i);
+    assert.doesNotMatch(f.container.querySelector('#social-content').innerHTML,/token|Bearer/i);
+    for(const input of f.container.querySelectorAll('#social-youtube-form input'))assert.equal(input.value,'','сохранённые данные доступа не подставляются');
     assert.ok(f.container.querySelector('#social-accounts-form'),'владелец видит настройки');
     assert.ok(f.calls.every(c=>c.code==='demo-travel'));
   }finally{f.close();}

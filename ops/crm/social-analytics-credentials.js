@@ -8,7 +8,7 @@
    его получает только резолвер, который вызывает коллектор. */
 const crypto = require('node:crypto');
 
-const PROVIDERS = Object.freeze({onlypult_analytics: 'Onlypult Analytics'});
+const PROVIDERS = Object.freeze({onlypult_analytics: 'Onlypult Analytics', youtube_analytics: 'YouTube Analytics'});
 const STATUSES = Object.freeze(['not_configured', 'unchecked', 'connected', 'error']);
 const MAX_CREDENTIAL = 4096;
 

@@ -22,11 +22,23 @@ const ANALYTICS_HTTP = Object.freeze({
   PROFILE_CHANGED: [409, 'Ответ источника относится к другому аналитическому профилю.'],
   ACCOUNT_CHANGED: [409, 'Ответ источника относится к другому аккаунту площадки.'],
 });
+const YOUTUBE_HTTP = Object.freeze({...ANALYTICS_HTTP,
+  MISSING_ACCESS:[409,'Доступ к измерениям YouTube ещё не сохранён.'],
+  NOT_FOUND:[409,'Выданный доступ не показывает канал YouTube.'],
+  VALIDATION_ERROR:[400,'Проверьте поля доступа к измерениям YouTube.'],
+  REVISION_CONFLICT:[409,'Доступ изменился. Обновите страницу.'],
+  CHANNEL_REF_INVALID:[409,'В аккаунте укажите точный канал YouTube.'],
+  CHANNEL_HANDLE_UNRESOLVED:[409,'Канал по указанному имени не найден. Укажите UC ID или проверьте имя.'],
+  CHANNEL_AMBIGUOUS:[409,'Доступ показывает несколько каналов. Требуется точный канал компании.'],
+  CHANNEL_MISMATCH:[409,'Доступ относится к другому каналу компании.'],
+  BINDING_CHANGED:[409,'Привязка канала изменилась во время проверки. Повторите проверку.'],
+  STOPPED:[503,'Сервер останавливается. Повторите после восстановления.']
+});
 /* companyMetrics — уже существующий сервис загруженных отчётов 2ГИС. Он подключается сюда
    только для чтения сводки под ТЕМИ ЖЕ правами, что и его собственный маршрут
    /platform-demand/company-metrics (чтение — analytics.view в своей компании): нового
    доступа и новых прав здесь не появляется, хранилище не дублируется. */
-function createSocialStatsHandler({ stats, baselines, analytics = null, companyMetrics = null, companyModuleContext, readJson, send }) {
+function createSocialStatsHandler({ stats, baselines, analytics = null, youtube = null, companyMetrics = null, companyModuleContext, readJson, send }) {
   return async function handle(request, response, url, cors = {}) {
     if (!/^\/social-stats(?:\/|$)/.test(url.pathname)) return false;
     const headers = { ...cors, 'cache-control': 'no-store' };
@@ -71,6 +83,26 @@ function createSocialStatsHandler({ stats, baselines, analytics = null, companyM
         const body = await readJson(request);
         if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some((k) => !['platform', 'date'].includes(k))) { send(response, 400, { error: SOCIAL_STATS_ERRORS.VALIDATION_ERROR, code: 'VALIDATION_ERROR' }, headers); return true; }
         result = await stats.collect(company.code, body.platform, { trigger: `manual:${identity.userId}`, date: body.date || null });
+      } else if (url.pathname.startsWith('/social-stats/youtube')) {
+        if(!ownerOnly())return true;
+        if(!youtube?.access){send(response,503,{error:'Измерения YouTube ещё не подключены к серверу.',code:'NOT_CONFIGURED'},headers);return true;}
+        try {
+          if(url.pathname==='/social-stats/youtube/access'&&readOnly)result=youtube.access.get(company.code);
+          else if(url.pathname==='/social-stats/youtube/access'&&request.method==='PUT')result=youtube.access.saveAccess(company.code,await readJson(request),identity);
+          else if(url.pathname==='/social-stats/youtube/access'&&request.method==='DELETE')result=youtube.access.removeAccess(company.code,await readJson(request),identity);
+          else if(url.pathname==='/social-stats/youtube/verify'&&request.method==='POST') {
+            const body=await readJson(request);
+            if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).length) {
+              send(response,400,{error:'Канал берётся из сохранённого аккаунта аналитики.',code:'VALIDATION_ERROR'},headers);return true;
+            }
+            const accountRefNow=()=>stats.accounts(company.code).accounts.find(a=>a.platform==='youtube')?.accountRef||'';
+            result=await youtube.access.verify(company.code,{accountRef:accountRefNow(),accountRefNow,actor:identity});
+          } else {send(response,405,{error:'Метод не поддерживается.',code:'METHOD_NOT_ALLOWED'},headers);return true;}
+        } catch(error) {
+          const known=YOUTUBE_HTTP[error?.code]||[503,'Измерения YouTube временно недоступны.'];
+          send(response,known[0],{error:known[1],code:Object.hasOwn(YOUTUBE_HTTP,error?.code)?error.code:'YOUTUBE_UNAVAILABLE'},headers);return true;
+        }
+        send(response,200,result,headers);return true;
       } else if (url.pathname.startsWith('/social-stats/analytics')) {
         /* Отдельный аналитический доступ Onlypult Analytics. Только владелец своей компании:
            это ключ к кабинету источника, а не настройка показа. Ключ не возвращается ни в

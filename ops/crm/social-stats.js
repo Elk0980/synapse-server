@@ -14,7 +14,7 @@ const KINDS = Object.freeze(['organic', 'paid', 'mixed', 'unknown']);
    считался чужими сутками. Историческим записям новый пояс задним числом не присваивается:
    он хранится в каждой строке снимка и входит в ключ. */
 const TIMEZONE_CHOICES = Object.freeze(['Asia/Bangkok', 'Asia/Irkutsk', 'Asia/Krasnoyarsk', 'Asia/Novosibirsk',
-  'Asia/Yekaterinburg', 'Europe/Moscow', 'Europe/Kaliningrad', 'Asia/Vladivostok', 'UTC']);
+  'Asia/Yekaterinburg', 'Europe/Moscow', 'Europe/Kaliningrad', 'Asia/Vladivostok', 'America/Los_Angeles', 'UTC']);
 const PERIODS = Object.freeze(['day', 'lifetime']);
 const COMPLETENESS = Object.freeze(['complete', 'partial', 'unknown']);
 const RUN_STATUS = Object.freeze(['ok', 'partial', 'missing_access', 'unsupported', 'failed']);
@@ -69,6 +69,7 @@ const ERRORS = Object.freeze({
   NOT_FOUND: 'Аккаунт или запись не найдены для выбранной компании.',
   REVISION_CONFLICT: 'Настройки аккаунтов изменились. Обновите данные перед сохранением.',
   FORBIDDEN: 'Недостаточно прав.',
+  SERVER_STOPPING: 'Сервер останавливается. Повторите сбор после восстановления.',
 });
 const fail = (code = 'VALIDATION_ERROR', status = 400, extra = {}) => { throw Object.assign(new Error(ERRORS[code]), { code, status, ...extra }); };
 const text = (value, max, required = false) => {
@@ -110,6 +111,8 @@ function dayBounds(date, tz) {
    импортом: без него модуль работает как прежде, с ним каждое изменение проекции сопровождается
    неизменяемой записью о том, откуда взялось число. */
 function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence = null, logger = console } = {}) {
+  let closing=false;
+  const active=new Set();
   db.exec(`
     CREATE TABLE IF NOT EXISTS social_accounts (
       company_code TEXT NOT NULL COLLATE NOCASE, platform TEXT NOT NULL, account_ref TEXT NOT NULL DEFAULT '', label TEXT NOT NULL DEFAULT '',
@@ -412,7 +415,8 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
   }
 
   /* Сбор по одному аккаунту: адаптер возвращает {status, snapshots, posts, missing, error}. Любой исход записывается в журнал запусков. */
-  async function collect(code, platform, { trigger = 'manual', date = null } = {}) {
+  async function collectNow(code, platform, { trigger = 'manual', date = null } = {}) {
+    if(closing)fail('SERVER_STOPPING',503);
     const scope = company(code), row = accountRow(scope.code, oneOf(platform, Object.keys(PLATFORMS)));
     const tz = row?.timezone || 'Asia/Bangkok', today = localDay(now(), tz), target = date ? day(date) : today;
     if (target > today) fail();
@@ -424,7 +428,8 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
     const connectionBefore = row ? connectionRevision(adapter, { company: scope, platform, account: row }) : { ok: true, value: null };
     // VK's independent reader can serve an existing Onlypult-selected analytics account.
     // Preserve that setting, but attribute snapshots/evidence to the API actually used.
-    const provider = platform === 'vk' && connectionBefore.ok && connectionBefore.value?.provider === 'vk_direct'
+    const provider = connectionBefore.ok && ((platform === 'vk' && connectionBefore.value?.provider === 'vk_direct') ||
+      (platform === 'youtube' && connectionBefore.value?.provider === 'youtube_analytics'))
       ? 'direct' : selectedProvider;
     // Отпечаток сорвавшегося чтения не вычисляется: такой запуск всё равно закончится failed и ничего не запишет.
     const connectionFp = connectionBefore.ok ? connectionFingerprint(connectionBefore.value) : '';
@@ -463,6 +468,7 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
     const observedAt = stamp();
     try { result = await adapter.collect({ company: scope, platform, account: row, date: target, timezone: tz, closed, dayStartMs: bounds.startMs, dayEndMs: bounds.endMs }); }
     catch (error) { logger.warn?.(`[crm] social-stats ${platform}/${provider}: ${error?.code || 'collect failed'}`); return finish('failed', { error: 'Сбор не удался: провайдер не ответил или ответ не распознан' }); }
+    if(closing)return finish('failed',{error:ERRORS.SERVER_STOPPING});
     // Пока ждали ответ, владелец мог сменить аккаунт аналитики или само подключение площадки (токен/цель): старый ответ к новому не относится.
     const fresh = accountRow(scope.code, platform);
     if (!fresh || fresh.revision !== row.revision || fresh.account_ref !== row.account_ref || fresh.provider !== row.provider || fresh.provider_ref !== row.provider_ref) {
@@ -570,7 +576,12 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
   /* Ежедневный сбор. Итог — только за завершённый предыдущий локальный день: один раз после collect_hour (closed=1).
      Текущий день собирается как partial и обновляется не чаще раза в час, чтобы вечерняя активность не терялась; lifetime-снимки
      (подписчики) приходят с каждым сбором и хранятся отдельно по датам. Повторный вызов ничего не дублирует. */
-  async function collectDue() {
+  function collect(...args) {
+    const pending=collectNow(...args);active.add(pending);
+    pending.then(()=>active.delete(pending),()=>active.delete(pending));return pending;
+  }
+  async function collectDueNow() {
+    if(closing)return [];
     const due = db.prepare(`SELECT a.* FROM social_accounts a JOIN companies c ON c.code=a.company_code COLLATE NOCASE WHERE a.enabled=1 AND c.is_deleted=0 AND a.provider<>'manual'`).all();
     const results = [];
     // Только запуски этого же аккаунта, его ревизии и той же ревизии подключения площадки: после смены account_ref или пересохранения
@@ -578,9 +589,12 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
     const lastRun = (row, fp, date, closed) => db.prepare(`SELECT status, started_at FROM social_collect_runs WHERE company_code=? COLLATE NOCASE AND platform=? AND date=? AND closed=? AND account_ref=? AND account_revision=? AND connection_fp=? ORDER BY id DESC LIMIT 1`)
       .get(row.company_code, row.platform, date, closed ? 1 : 0, row.account_ref || '', row.revision || 0, fp);
     for (const row of due) {
+      if(closing)break;
       // Сбой по одному аккаунту (нечитаемая ревизия подключения, испорченный пояс, отказ адаптера) не отменяет расписание остальных.
       try {
-        const ms = now(), today = localDay(ms, row.timezone), yesterday = localDay(ms - 86400000, row.timezone);
+        const ms = now(), today = localDay(ms, row.timezone);
+        const calendarDay = (back) => new Date(Date.parse(today+'T00:00:00Z')-back*86400000).toISOString().slice(0,10);
+        const yesterday=calendarDay(1);
         const scope = company(row.company_code);
         const revision = connectionRevision(adapters[row.provider], { company: scope, platform: row.platform, account: row });
         // Ревизия не прочитана — сравнивать запуски не с чем: идём в collect, он закончит запуск статусом failed и ничего не запишет.
@@ -626,7 +640,7 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
         const capability=adapters[row.provider]?.revisesHistory;
         const revises=typeof capability==='function'?capability({company:scope,platform:row.platform,account:row})===true:capability===true;
         if (revises) for (let back = 2; back <= RECHECK_WINDOW_DAYS; back += 1) {
-          const date = localDay(ms - back * 86400000, row.timezone);
+          const date = calendarDay(back);
           const last = lastRun(row, fp, date, true);
           if (!last || ['missing_access', 'unsupported'].includes(last.status)) continue;
           if (Date.parse(last.started_at) > ms - 86400000) continue;
@@ -639,6 +653,10 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
       }
     }
     return results;
+  }
+  function collectDue() {
+    const pending=collectDueNow();active.add(pending);
+    pending.then(()=>active.delete(pending),()=>active.delete(pending));return pending;
   }
   /* Ручной импорт реальных чисел из кабинета площадки (снимок экрана/выгрузка): провайдер manual, обязательны момент снятия и пометка источника. Не заглушка: без чисел строки нет. */
   function importManual(code, body, actor = {}) {
@@ -1058,7 +1076,12 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
       today: localDay(now(), scope.timezone || 'Asia/Bangkok'),
     });
   }
-  return { accounts, saveAccounts, collect, collectDue, importManual, overview, insights, attribution, postMetrics, writeSnapshots, writePosts,
+  async function stop() {
+    closing=true;
+    for(const adapter of Object.values(adapters))adapter.stop?.();
+    await Promise.allSettled([...active]);
+  }
+  return { accounts, saveAccounts, collect, collectDue, stop, importManual, overview, insights, attribution, postMetrics, writeSnapshots, writePosts,
     migrateLegacyEvidence, queuedDates, acquireLease, releaseLease, localDay, dayBounds, PLATFORMS, METRICS, AGGREGATION };
 }
 module.exports = { createSocialStats, SOCIAL_STATS_ERRORS: ERRORS, PLATFORMS, METRICS, AGGREGATION, KINDS, TIMEZONE_CHOICES, localDay, dayBounds, canonicalPostKey, RECEIPT_TO_PLATFORM };

@@ -27,6 +27,12 @@ function setup(t,{filename=':memory:',closedStatus='partial',retryable=true}={})
   return h;
 }
 
+for(const [instant,yesterday] of [['2025-03-10T07:30:00Z','2025-03-09'],['2025-11-03T08:30:00Z','2025-11-02']])test('Pacific вчера по календарю после смены DST: '+instant,async t=>{
+ const h=setup(t,{closedStatus:'ok',retryable:false});h.time=Date.parse(instant);
+ h.stats.saveAccounts('demo-a',{accounts:[{platform:'youtube',provider:'direct',accountRef:'UCabcdefghijklmnopqrstuv',timezone:'America/Los_Angeles',collectHour:0,revision:1}]});
+ await h.stats.collectDue();assert.equal(h.calls.find(c=>c.closed).date,yesterday);
+});
+
 test('неготовая вчерашняя статистика с lifetime аудитории соблюдает backoff, неизвестные views не становятся нулём',async t=>{
   const h=setup(t,{closedStatus:'failed'});await h.stats.collectDue();
   assert.equal(h.yesterdayCalls().length,1);

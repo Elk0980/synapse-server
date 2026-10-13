@@ -49,6 +49,8 @@ const { createSocialStatsHandler } = require('./social-stats-http');
 const { createSocialAnalyticsCredentials } = require('./social-analytics-credentials');
 const { createSocialAnalyticsEvidence } = require('./social-analytics-evidence');
 const { createSocialOnlypultAnalytics } = require('./social-onlypult-analytics');
+const { createSocialYoutubeAccess } = require('./social-youtube-access');
+const { createSocialYoutubeStats } = require('./social-youtube-stats');
 const { createCompanyInformationCheck } = require('./company-information-check');
 const { createDealOrders } = require('./deal-orders');
 const { createTaskCoordination } = require('./task-coordination');
@@ -650,17 +652,19 @@ const socialAnalyticsEvidence = createSocialAnalyticsEvidence(db);
 const socialOnlypultAnalytics = createSocialOnlypultAnalytics({
   resolveCredential: (code) => socialAnalyticsCredentials.resolve(code)});
 const socialAnalytics = {credentials: socialAnalyticsCredentials, collector: socialOnlypultAnalytics, evidence: socialAnalyticsEvidence};
+const socialYoutubeAccess = createSocialYoutubeAccess(db,{credentials:socialAnalyticsCredentials});
+const socialYoutubeStats = createSocialYoutubeStats({access:socialYoutubeAccess});
 /* Счётчик подписчиков Telegram: адрес сервиса задаётся только на сервере, ключ — уже
    существующий межсервисный API_KEY. Новых секретов и новых прав не появляется; без
    настройки клиент честно не готов, и цифры не появляются. */
 const telegramChannelStats = createTelegramChannelStatsClient({
   baseUrl: process.env.CHAT_STATS_URL || '', apiKey: API_KEY});
 const socialStats = createSocialStats(db, {evidence: socialAnalyticsEvidence,
-  adapters: createSocialAdapters({transport: autopostingTransport, analytics: socialAnalytics, vkDirect,
+  adapters: createSocialAdapters({transport: autopostingTransport, analytics: socialAnalytics, vkDirect, youtubeStats:socialYoutubeStats,
     channelStats: telegramChannelStats})});
 const socialBaselines = createSocialBaselines(db, socialStats);
 const handleSocialStats = createSocialStatsHandler({stats: socialStats, baselines: socialBaselines,
-  analytics: socialAnalytics, companyMetrics: platformCompanyMetrics, companyModuleContext, readJson, send});
+  analytics: socialAnalytics, youtube:{access:socialYoutubeAccess}, companyMetrics: platformCompanyMetrics, companyModuleContext, readJson, send});
 function deliverLeadEmails() {
   return emailOutbox.drain().catch(() => {
     // Do not expose SMTP responses or contact details in service logs.
@@ -3419,6 +3423,8 @@ if (IS_MAIN) {
 }
 
 function shutdown() {
+  socialYoutubeStats.stop();
+  socialYoutubeAccess.stop();
   clearInterval(revenueAnalyticsTimer);
   clearInterval(socialStatsTimer);
   clearInterval(pipelineRulesTimer);
@@ -3427,7 +3433,7 @@ function shutdown() {
   const evaTaskReaderStopped = evaTaskReaderReady.then(reader => reader?.close()).catch(() => {
     console.error('[crm] Eva task reader shutdown failed');
   });
-  const emailWorkersStopped = Promise.all([emailOutbox.stop(), emailCampaigns.stop(), autoposting.stop(), evaTaskReaderStopped, revenueAnalytics.stop()]);
+  const emailWorkersStopped = Promise.all([emailOutbox.stop(), emailCampaigns.stop(), autoposting.stop(), evaTaskReaderStopped, revenueAnalytics.stop(), socialStats.stop()]);
   server.close(async () => {
     await emailWorkersStopped;
     db.close();
