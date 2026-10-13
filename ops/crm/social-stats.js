@@ -1,4 +1,5 @@
 'use strict';
+const {ensureSocialPostPeriodSchema}=require('./social-post-period-schema');
 /* Сквозная аналитика соцсетей ТайСабай: ежедневные снимки аккаунтов и публикаций по площадкам, единый адаптер провайдеров
    (Onlypult — временный источник, прямые API — по мере доступа), идемпотентные сборы, журнал запусков, атрибуция
    contentId → платформенный пост/URL → обращения (leads) → продажи. Правила честности: нет данных = null (UNKNOWN), не 0;
@@ -111,7 +112,7 @@ function dayBounds(date, tz) {
 /* evidence — журнал доказательств (ops/crm/social-analytics-evidence.js). Инъекцией, а не
    импортом: без него модуль работает как прежде, с ним каждое изменение проекции сопровождается
    неизменяемой записью о том, откуда взялось число. */
-function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence = null, maxIndex = null, logger = console } = {}) {
+function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence = null, maxIndex = null, maxEnabled = true, logger = console } = {}) {
   let closing=false;
   const active=new Set();
   db.exec(`
@@ -143,26 +144,10 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
   `);
   // Старые измерения не имели периода: переносим их без выдуманной дневной семантики.
   // Новый ключ хранит day и lifetime раздельно, сохраняя все прежние строки.
-  const postMetricColumns = db.prepare('PRAGMA table_info(social_post_metrics)').all();
-  if (!postMetricColumns.some(column => column.name === 'period' && column.pk > 0)) {
-    const existingPeriod = postMetricColumns.some(column => column.name === 'period');
-    db.exec('BEGIN IMMEDIATE');
-    try {
-      db.exec(`CREATE TABLE social_post_metrics_period_next (
-        post_id INTEGER NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE, date TEXT NOT NULL, metric TEXT NOT NULL,
-        value REAL, unit TEXT NOT NULL, source_field TEXT NOT NULL DEFAULT '', completeness TEXT NOT NULL DEFAULT 'unknown',
-        provider TEXT NOT NULL, collected_at TEXT NOT NULL, run_id INTEGER, period TEXT NOT NULL DEFAULT 'unknown',
-        PRIMARY KEY(post_id,date,metric,period));
-        INSERT INTO social_post_metrics_period_next(post_id,date,metric,value,unit,source_field,completeness,provider,collected_at,run_id,period)
-          SELECT post_id,date,metric,value,unit,source_field,completeness,provider,collected_at,run_id,${existingPeriod ? 'period' : "'unknown'"} FROM social_post_metrics;
-        DROP TABLE social_post_metrics;
-        ALTER TABLE social_post_metrics_period_next RENAME TO social_post_metrics;
-        COMMIT;`);
-    } catch (error) {
-      db.exec('ROLLBACK');
-      throw error;
-    }
-  }
+  const postPeriodSchema=ensureSocialPostPeriodSchema(db,{now});
+  // Другая версия успела перенести legacy projection без восстановления архива.
+  // Не выдаём смешанную синтетику за новое измерение и не запускаем writer.
+  if(postPeriodSchema.pendingRollbackCycle)fail('POST_PERIOD_RESTORE_REQUIRED',503);
   /* Семантика интервала и область в ключе проекции.
 
      Прежний UNIQUE(company_code,platform,account_ref,date,period,metric) не различал
@@ -250,6 +235,7 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
     return { sourceNote: row.source_note || (legacy ? row.error.slice(LEGACY_SOURCE_PREFIX.length) : ''), error: legacy ? '' : (row.error || '') };
   };
   const accountDto = (row, platform) => ({ platform, label: PLATFORMS[platform], accountRef: row?.account_ref || '', displayLabel: row?.label || '', provider: row?.provider || 'manual',
+    ...(platform==='max'&&row?.account_ref&&maxIndex?.historyCoverage?{historyIndex:maxIndex.historyCoverage(row.company_code,row.account_ref)}:{}),
     providerRef: row?.provider_ref || '', enabled: Boolean(row?.enabled), kind: row?.kind || 'organic', timezone: row?.timezone || 'Asia/Bangkok', collectHour: row?.collect_hour ?? 6,
     revision: row?.revision || 0,
     /* Строка без идентификатора аккаунта — это не настроенный источник. Прежде форма
@@ -441,6 +427,9 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
   /* Сбор по одному аккаунту: адаптер возвращает {status, snapshots, posts, missing, error}. Любой исход записывается в журнал запусков. */
   async function collectNow(code, platform, { trigger = 'manual', date = null } = {}) {
     if(closing)fail('SERVER_STOPPING',503);
+    // Операционный откат MAX не останавливает расписание остальных источников
+    // и не меняет сохранённые аккаунты, очередь или прежние наблюдения.
+    if(platform==='max'&&maxEnabled===false)fail('MAX_ANALYTICS_PAUSED',503);
     const scope = company(code), row = accountRow(scope.code, oneOf(platform, Object.keys(PLATFORMS)));
     const tz = row?.timezone || 'Asia/Bangkok', today = localDay(now(), tz), target = date ? day(date) : today;
     if (target > today) fail();
@@ -621,6 +610,7 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
       .get(row.company_code, row.platform, date, closed ? 1 : 0, row.account_ref || '', row.revision || 0, fp);
     for (const row of due) {
       if(closing)break;
+      if(row.platform==='max'&&maxEnabled===false)continue;
       // Сбой по одному аккаунту (нечитаемая ревизия подключения, испорченный пояс, отказ адаптера) не отменяет расписание остальных.
       try {
         const ms = now(), today = localDay(ms, row.timezone);

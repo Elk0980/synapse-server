@@ -659,13 +659,14 @@ const socialAnalytics = {credentials: socialAnalyticsCredentials, collector: soc
 const socialYoutubeAccess = createSocialYoutubeAccess(db,{credentials:socialAnalyticsCredentials});
 const socialYoutubeStats = createSocialYoutubeStats({access:socialYoutubeAccess});
 const socialMaxAccess = createSocialMaxAccess(db,{credentials:socialAnalyticsCredentials});
-const socialMaxStats = createSocialMaxService(db,{access:socialMaxAccess});
+const maxAnalyticsEnabled = process.env.SOCIAL_MAX_ANALYTICS_ENABLED !== '0';
+const socialMaxStats = maxAnalyticsEnabled ? createSocialMaxService(db,{access:socialMaxAccess}) : null;
 /* Счётчик подписчиков Telegram: адрес сервиса задаётся только на сервере, ключ — уже
    существующий межсервисный API_KEY. Новых секретов и новых прав не появляется; без
    настройки клиент честно не готов, и цифры не появляются. */
 const telegramChannelStats = createTelegramChannelStatsClient({
   baseUrl: process.env.CHAT_STATS_URL || '', apiKey: API_KEY});
-const socialStats = createSocialStats(db, {evidence: socialAnalyticsEvidence,maxIndex:socialMaxStats.index,
+const socialStats = createSocialStats(db, {evidence: socialAnalyticsEvidence,maxIndex:socialMaxStats?.index,maxEnabled:maxAnalyticsEnabled,
   adapters: createSocialAdapters({transport: autopostingTransport, analytics: socialAnalytics, vkDirect, youtubeStats:socialYoutubeStats,maxStats:socialMaxStats,
     channelStats: telegramChannelStats})});
 const socialBaselines = createSocialBaselines(db, socialStats);
