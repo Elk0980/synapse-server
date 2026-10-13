@@ -1,0 +1,19 @@
+{
+  "public_source_version": 254,
+  "schema": 1,
+  "files": [
+    {
+      "base_sha256": "b9a12c33fa8129b3bcbb6fd84f098299c690e39f49c5bda15b235b9374aff293",
+      "path": "assets/order.js",
+      "candidate_sha256": "f3fb7853f8c3db9e2897bbfb497624ac18a6dad7df0bfbddc02e0c8586782173"
+    },
+    {
+      "base_sha256": "0b87c08ed5498bb667bf1bcf079afafcb8b441b5f5bc52366d2c6a4b3a24d215",
+      "path": "price-render.js",
+      "candidate_sha256": "506a4048996930cfcd3d93ce6ef3c7d34b125a6d0a583585d4ba89e71e130b30"
+    }
+  ],
+  "package_id": "palitra-cart-checkout-20261014",
+  "native_workspace_baseline_required": true,
+  "live_applied": false
+}
