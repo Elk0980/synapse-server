@@ -41,6 +41,7 @@ function fixture({role='owner',permissions=[],override}={}) {
       if(call.path==='/content/crm/social-stats/analytics/profiles')return {accessRevision:1,profiles:[],rejected:0,access:{configured:true,status:'connected',revision:1,checked:true,checkedAt:'2026-09-29T09:00:00.000Z'}};
       if(call.path==='/content/crm/social-stats/collect')return {status:'missing_access',missing:['x'],date:'2026-09-18',closed:true,rows:0};
       if(call.path==='/content/crm/social-stats/youtube/access')return {companyCode:call.code,configured:false,revision:0,channelConfirmed:false,channelReason:'Канал ещё не подтверждён.'};
+      if(call.path==='/content/crm/social-stats/max/access')return {companyCode:call.code,configured:false,revision:0,channelConfirmed:false,channelReason:'Канал ещё не подтверждён.'};
       if(call.path==='/content/crm/social-stats/import')return {ok:true,rows:call.body.rows.length};
       throw new Error('unexpected '+call.path);}};
   return {w,d,ctx,calls,views,container:d.getElementById('view'),render:async()=>{views['social-stats'].render(d.getElementById('view'),ctx);await settle();},close:()=>w.close()};
@@ -605,4 +606,26 @@ test('сбой расчёта выводов не ломает сводку со
     assert.ok(f.container.querySelector('[data-platform="vk"]'));
     assert.match(f.container.querySelector('[data-platform="vk"]').textContent,/собрано/);
   }finally{f.close();}
+});
+
+test('MAX: владелец сохраняет отдельный скрытый доступ и проверяет сохранённый канал без body proof',async()=>{
+ const f=fixture({override:async c=>{
+  if(c.path==='/content/crm/social-stats/max/access'&&c.method==='PUT')return {companyCode:c.code,configured:true,revision:1,channelConfirmed:false};
+  if(c.path==='/content/crm/social-stats/max/verify')return {companyCode:c.code,configured:true,revision:1,channelConfirmed:false};
+ }});try{
+  await f.render();const form=f.d.querySelector('#social-max-form');assert.ok(form);assert.equal(form.elements.token.type,'password');form.elements.token.value='synthetic-owner-max';
+  form.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  const save=f.calls.find(c=>c.path==='/content/crm/social-stats/max/access'&&c.method==='PUT');assert.deepEqual(save.body,{revision:0,credential:'synthetic-owner-max'});assert.equal(save.code,'demo-travel');assert.equal(f.d.querySelector('#social-max-form').elements.token.value,'');
+  f.d.querySelector('[data-max="verify"]').click();await settle();const verify=f.calls.find(c=>c.path==='/content/crm/social-stats/max/verify');assert.deepEqual(verify.body,{});assert.equal(f.container.innerHTML.includes('synthetic-owner-max'),false);
+ }finally{f.close()}
+ const viewer=fixture({role:'editor'});try{await viewer.render();assert.equal(viewer.d.querySelector('#social-max-form'),null);assert.equal(viewer.calls.some(c=>c.path.includes('/max/')),false)}finally{viewer.close()}
+});
+test('MAX: чужой DTO доступа не создаёт форму сохранения в выбранной компании',async()=>{
+ const f=fixture({override:async c=>c.path==='/content/crm/social-stats/max/access'?{companyCode:'foreign',configured:true,revision:9,channelConfirmed:true}:undefined});
+ try{await f.render();assert.equal(f.d.querySelector('#social-max-form'),null);assert.match(f.d.querySelector('#social-max-access').textContent,/не прочитано/)}finally{f.close()}
+});
+
+test('постовые lifetime просмотры явно показывают накопление на дату снятия, смешанный период не выдаёт число',async()=>{
+ const f=fixture({override:async c=>{if(c.path!='/content/crm/social-stats')return undefined;const data=overview(c.code);data.postMetrics={companyCode:c.code,posts:[{platform:'max',platformLabel:'MAX',provenance:'collector',sources:[{referenceId:'p-1',platformPostId:'mid.a',provider:'direct',measurements:[{metric:'views',value:25,hasValue:true,period:'lifetime',unit:'views',date:'2026-09-18',collectedAt:'2026-09-18T02:00:00Z',provider:'direct',sourceField:'MAX.Message.stat.views',completeness:'complete',referenceId:'p-1'},{metric:'likes',value:null,hasValue:false,period:'mixed',unit:'count',date:'2026-09-18',collectedAt:'2026-09-18T02:00:00Z',provider:'direct',completeness:'unknown',referenceId:'p-1'}]}]}],coverage:{},summary:{}};return data;}});
+ try{await f.render();const text=f.d.querySelector('.social-post-metrics').textContent;assert.match(text,/накоплено на/);assert.match(text,/несовместимые периоды/);assert.match(text,/нет данных/);}finally{f.close()}
 });

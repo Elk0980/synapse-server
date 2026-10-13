@@ -31,8 +31,7 @@ on:
       - 'ops/crm/studio-journey*'
       - 'ops/crm/booking-catalog*'
       - 'ops/crm/client-intakes*'
-      - 'ops/crm/social-stats*'
-      - 'ops/crm/social-baselines*'
+      - 'ops/crm/social-*'
       - 'ops/crm/platform-demand*'
       - 'ops/crm/platform-company-metrics*'
       - 'ops/crm/revenue-*'
@@ -66,8 +65,7 @@ on:
       - 'ops/crm/studio-journey*'
       - 'ops/crm/booking-catalog*'
       - 'ops/crm/client-intakes*'
-      - 'ops/crm/social-stats*'
-      - 'ops/crm/social-baselines*'
+      - 'ops/crm/social-*'
       - 'ops/crm/platform-demand*'
       - 'ops/crm/platform-company-metrics*'
       - 'ops/crm/revenue-*'
@@ -137,7 +135,7 @@ jobs:
 
       - name: Тесты исходной статистики до запуска
         timeout-minutes: 10
-        run: node --test ops/crm/social-baselines.test.js ops/crm/social-stats.test.js ops/crm/social-stats-http.test.js
+        run: node --test ops/crm/social-*.test.js
 
       - name: Тесты спроса и фактических показателей 2ГИС
         timeout-minutes: 10

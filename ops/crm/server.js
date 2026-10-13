@@ -51,6 +51,8 @@ const { createSocialAnalyticsEvidence } = require('./social-analytics-evidence')
 const { createSocialOnlypultAnalytics } = require('./social-onlypult-analytics');
 const { createSocialYoutubeAccess } = require('./social-youtube-access');
 const { createSocialYoutubeStats } = require('./social-youtube-stats');
+const { createSocialMaxAccess } = require('./social-max-access');
+const { createSocialMaxService } = require('./social-max-service');
 const { createCompanyInformationCheck } = require('./company-information-check');
 const { createDealOrders } = require('./deal-orders');
 const { createTaskCoordination } = require('./task-coordination');
@@ -656,17 +658,19 @@ const socialOnlypultAnalytics = createSocialOnlypultAnalytics({
 const socialAnalytics = {credentials: socialAnalyticsCredentials, collector: socialOnlypultAnalytics, evidence: socialAnalyticsEvidence};
 const socialYoutubeAccess = createSocialYoutubeAccess(db,{credentials:socialAnalyticsCredentials});
 const socialYoutubeStats = createSocialYoutubeStats({access:socialYoutubeAccess});
+const socialMaxAccess = createSocialMaxAccess(db,{credentials:socialAnalyticsCredentials});
+const socialMaxStats = createSocialMaxService(db,{access:socialMaxAccess});
 /* Счётчик подписчиков Telegram: адрес сервиса задаётся только на сервере, ключ — уже
    существующий межсервисный API_KEY. Новых секретов и новых прав не появляется; без
    настройки клиент честно не готов, и цифры не появляются. */
 const telegramChannelStats = createTelegramChannelStatsClient({
   baseUrl: process.env.CHAT_STATS_URL || '', apiKey: API_KEY});
-const socialStats = createSocialStats(db, {evidence: socialAnalyticsEvidence,
-  adapters: createSocialAdapters({transport: autopostingTransport, analytics: socialAnalytics, vkDirect, youtubeStats:socialYoutubeStats,
+const socialStats = createSocialStats(db, {evidence: socialAnalyticsEvidence,maxIndex:socialMaxStats.index,
+  adapters: createSocialAdapters({transport: autopostingTransport, analytics: socialAnalytics, vkDirect, youtubeStats:socialYoutubeStats,maxStats:socialMaxStats,
     channelStats: telegramChannelStats})});
 const socialBaselines = createSocialBaselines(db, socialStats);
 const handleSocialStats = createSocialStatsHandler({stats: socialStats, baselines: socialBaselines,
-  analytics: socialAnalytics, youtube:{access:socialYoutubeAccess}, companyMetrics: platformCompanyMetrics, companyModuleContext, readJson, send});
+  analytics: socialAnalytics, youtube:{access:socialYoutubeAccess},max:{access:socialMaxAccess,credentials:socialAnalyticsCredentials}, companyMetrics: platformCompanyMetrics, companyModuleContext, readJson, send});
 function deliverLeadEmails() {
   return emailOutbox.drain().catch(() => {
     // Do not expose SMTP responses or contact details in service logs.
@@ -3448,6 +3452,7 @@ function shutdown() {
   shuttingDown = true;
   socialYoutubeStats.stop();
   socialYoutubeAccess.stop();
+  socialMaxAccess.stop();
   clearInterval(revenueAnalyticsTimer);
   clearInterval(socialStatsTimer);
   clearInterval(pipelineRulesTimer);

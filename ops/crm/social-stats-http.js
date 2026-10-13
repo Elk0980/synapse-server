@@ -38,7 +38,7 @@ const YOUTUBE_HTTP = Object.freeze({...ANALYTICS_HTTP,
    только для чтения сводки под ТЕМИ ЖЕ правами, что и его собственный маршрут
    /platform-demand/company-metrics (чтение — analytics.view в своей компании): нового
    доступа и новых прав здесь не появляется, хранилище не дублируется. */
-function createSocialStatsHandler({ stats, baselines, analytics = null, youtube = null, companyMetrics = null, companyModuleContext, readJson, send }) {
+function createSocialStatsHandler({ stats, baselines, analytics = null, youtube = null, max = null, companyMetrics = null, companyModuleContext, readJson, send }) {
   return async function handle(request, response, url, cors = {}) {
     if (!/^\/social-stats(?:\/|$)/.test(url.pathname)) return false;
     const headers = { ...cors, 'cache-control': 'no-store' };
@@ -83,6 +83,27 @@ function createSocialStatsHandler({ stats, baselines, analytics = null, youtube 
         const body = await readJson(request);
         if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some((k) => !['platform', 'date'].includes(k))) { send(response, 400, { error: SOCIAL_STATS_ERRORS.VALIDATION_ERROR, code: 'VALIDATION_ERROR' }, headers); return true; }
         result = await stats.collect(company.code, body.platform, { trigger: `manual:${identity.userId}`, date: body.date || null });
+      } else if (url.pathname.startsWith('/social-stats/max/')) {
+        if(!ownerOnly())return true;
+        if(!max?.access||!max?.credentials){send(response,503,{error:'Читающий сбор MAX ещё не подключён.',code:'NOT_CONFIGURED'},headers);return true;}
+        try {
+          if(url.pathname==='/social-stats/max/access'&&readOnly)result=max.access.get(company.code);
+          else if(url.pathname==='/social-stats/max/access'&&request.method==='PUT'){
+            max.credentials.save(company.code,'max_analytics',await readJson(request),identity);result=max.access.get(company.code);
+          } else if(url.pathname==='/social-stats/max/access'&&request.method==='DELETE'){
+            max.credentials.remove(company.code,'max_analytics',await readJson(request),identity);result=max.access.get(company.code);
+          } else if(url.pathname==='/social-stats/max/verify'&&request.method==='POST'){
+            const body=await readJson(request);
+            if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).length){send(response,400,{error:'Канал берётся из сохранённого аккаунта MAX.',code:'VALIDATION_ERROR'},headers);return true;}
+            const accountRefNow=()=>stats.accounts(company.code).accounts.find(a=>a.platform==='max')?.accountRef||'';
+            result=await max.access.verify(company.code,{accountRef:accountRefNow(),accountRefNow,actor:identity});
+          } else {send(response,405,{error:'Метод не поддерживается.',code:'METHOD_NOT_ALLOWED'},headers);return true;}
+        } catch(error) {
+          const code=['VALIDATION_ERROR','REVISION_CONFLICT','CHANNEL_REF_REQUIRED','CHANNEL_REF_INVALID','BINDING_UNCONFIRMED','CHANNEL_TAKEN','ACCESS_DENIED','STOPPED'].includes(error?.code)?error.code:'MAX_UNAVAILABLE';
+          const status=['VALIDATION_ERROR'].includes(code)?400:['REVISION_CONFLICT','CHANNEL_REF_REQUIRED','CHANNEL_REF_INVALID','BINDING_UNCONFIRMED','CHANNEL_TAKEN'].includes(code)?409:503;
+          send(response,status,{error:code==='REVISION_CONFLICT'?'Доступ или канал MAX изменился. Обновите страницу.':code==='CHANNEL_REF_REQUIRED'||code==='CHANNEL_REF_INVALID'?'В сохранённом аккаунте MAX укажите точный числовой ID канала.':'Доступ и канал MAX не подтверждены. Проверьте сохранённые настройки.',code},headers);return true;
+        }
+        send(response,200,result,headers);return true;
       } else if (url.pathname.startsWith('/social-stats/youtube')) {
         if(!ownerOnly())return true;
         if(!youtube?.access){send(response,503,{error:'Измерения YouTube ещё не подключены к серверу.',code:'NOT_CONFIGURED'},headers);return true;}

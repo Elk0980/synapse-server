@@ -5,7 +5,7 @@
    сумма просмотров разных площадок — не уникальный охват; органика/реклама различаются полем kind; секреты не хранятся здесь. */
 const { createHash } = require('node:crypto');
 const { receiptFormat } = require('./autoposting');
-const PLATFORMS = Object.freeze({ instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube', vk: 'ВКонтакте', telegram: 'Telegram' });
+const PLATFORMS = Object.freeze({ instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube', vk: 'ВКонтакте', telegram: 'Telegram', max: 'MAX' });
 const { buildInsights, previousPeriod } = require('./social-insights');
 const PROVIDERS = Object.freeze(['onlypult', 'direct', 'manual']);
 const KINDS = Object.freeze(['organic', 'paid', 'mixed', 'unknown']);
@@ -16,6 +16,7 @@ const KINDS = Object.freeze(['organic', 'paid', 'mixed', 'unknown']);
 const TIMEZONE_CHOICES = Object.freeze(['Asia/Bangkok', 'Asia/Irkutsk', 'Asia/Krasnoyarsk', 'Asia/Novosibirsk',
   'Asia/Yekaterinburg', 'Europe/Moscow', 'Europe/Kaliningrad', 'Asia/Vladivostok', 'America/Los_Angeles', 'UTC']);
 const PERIODS = Object.freeze(['day', 'lifetime']);
+const POST_PERIODS = Object.freeze(['unknown', 'day', 'lifetime']);
 const COMPLETENESS = Object.freeze(['complete', 'partial', 'unknown']);
 const RUN_STATUS = Object.freeze(['ok', 'partial', 'missing_access', 'unsupported', 'failed']);
 /* Подтверждение внешней публикации (autoposting_publication_receipts) владелец записывает по площадкам автопостинга: там YouTube Shorts —
@@ -110,7 +111,7 @@ function dayBounds(date, tz) {
 /* evidence — журнал доказательств (ops/crm/social-analytics-evidence.js). Инъекцией, а не
    импортом: без него модуль работает как прежде, с ним каждое изменение проекции сопровождается
    неизменяемой записью о том, откуда взялось число. */
-function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence = null, logger = console } = {}) {
+function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence = null, maxIndex = null, logger = console } = {}) {
   let closing=false;
   const active=new Set();
   db.exec(`
@@ -140,6 +141,28 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
       error TEXT NOT NULL DEFAULT '', missing TEXT NOT NULL DEFAULT '[]', source_note TEXT NOT NULL DEFAULT '');
     CREATE INDEX IF NOT EXISTS social_collect_runs_scope ON social_collect_runs(company_code, platform, id);
   `);
+  // Старые измерения не имели периода: переносим их без выдуманной дневной семантики.
+  // Новый ключ хранит day и lifetime раздельно, сохраняя все прежние строки.
+  const postMetricColumns = db.prepare('PRAGMA table_info(social_post_metrics)').all();
+  if (!postMetricColumns.some(column => column.name === 'period' && column.pk > 0)) {
+    const existingPeriod = postMetricColumns.some(column => column.name === 'period');
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.exec(`CREATE TABLE social_post_metrics_period_next (
+        post_id INTEGER NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE, date TEXT NOT NULL, metric TEXT NOT NULL,
+        value REAL, unit TEXT NOT NULL, source_field TEXT NOT NULL DEFAULT '', completeness TEXT NOT NULL DEFAULT 'unknown',
+        provider TEXT NOT NULL, collected_at TEXT NOT NULL, run_id INTEGER, period TEXT NOT NULL DEFAULT 'unknown',
+        PRIMARY KEY(post_id,date,metric,period));
+        INSERT INTO social_post_metrics_period_next(post_id,date,metric,value,unit,source_field,completeness,provider,collected_at,run_id,period)
+          SELECT post_id,date,metric,value,unit,source_field,completeness,provider,collected_at,run_id,${existingPeriod ? 'period' : "'unknown'"} FROM social_post_metrics;
+        DROP TABLE social_post_metrics;
+        ALTER TABLE social_post_metrics_period_next RENAME TO social_post_metrics;
+        COMMIT;`);
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+  }
   /* Семантика интервала и область в ключе проекции.
 
      Прежний UNIQUE(company_code,platform,account_ref,date,period,metric) не различал
@@ -296,15 +319,16 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
       db.prepare(`INSERT INTO social_posts(company_code,platform,platform_post_id,url,content_id,published_at,provider,kind,created_at,source_run_id,source_collected_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(company_code,platform,platform_post_id) DO UPDATE SET url=CASE WHEN excluded.url<>'' THEN excluded.url ELSE social_posts.url END,
         content_id=CASE WHEN excluded.content_id<>'' THEN excluded.content_id ELSE social_posts.content_id END,published_at=COALESCE(excluded.published_at,social_posts.published_at),
-        provider=excluded.provider,source_run_id=COALESCE(excluded.source_run_id,social_posts.source_run_id),source_collected_at=excluded.source_collected_at`)
+        provider=excluded.provider,source_run_id=COALESCE(excluded.source_run_id,social_posts.source_run_id),source_collected_at=excluded.source_collected_at
+        WHERE social_posts.source_collected_at IS NULL OR excluded.source_collected_at>=social_posts.source_collected_at`)
         .run(code.toLowerCase(), platform, pid, url, text(post.contentId, 200), post.publishedAt ? text(post.publishedAt, 40) : null, provider, oneOf(post.kind ?? 'organic', KINDS), collectedAt, runId, collectedAt);
       const id = db.prepare('SELECT id FROM social_posts WHERE company_code=? COLLATE NOCASE AND platform=? AND platform_post_id=?').get(code, platform, pid).id;
       for (const m of post.metrics || []) {
         const metric = oneOf(m.metric, Object.keys(METRICS));
-        db.prepare(`INSERT INTO social_post_metrics(post_id,date,metric,value,unit,source_field,completeness,provider,collected_at,run_id) VALUES(?,?,?,?,?,?,?,?,?,?)
-          ON CONFLICT(post_id,date,metric) DO UPDATE SET value=excluded.value,unit=excluded.unit,source_field=excluded.source_field,completeness=excluded.completeness,provider=excluded.provider,collected_at=excluded.collected_at,run_id=excluded.run_id`)
-          .run(id, day(m.date || post.date), metric, metricValue(m.value, metric), METRICS[metric], text(m.sourceField, 100), oneOf(m.completeness ?? 'unknown', COMPLETENESS), provider, collectedAt, runId);
-        count += 1;
+        count += db.prepare(`INSERT INTO social_post_metrics(post_id,date,metric,value,unit,source_field,completeness,provider,collected_at,run_id,period) VALUES(?,?,?,?,?,?,?,?,?,?,?)
+          ON CONFLICT(post_id,date,metric,period) DO UPDATE SET value=excluded.value,unit=excluded.unit,source_field=excluded.source_field,completeness=excluded.completeness,provider=excluded.provider,collected_at=excluded.collected_at,run_id=excluded.run_id
+          WHERE excluded.collected_at>=social_post_metrics.collected_at`)
+          .run(id, day(m.date || post.date), metric, metricValue(m.value, metric), METRICS[metric], text(m.sourceField, 100), oneOf(m.completeness ?? 'unknown', COMPLETENESS), provider, collectedAt, runId,oneOf(m.period ?? 'unknown',POST_PERIODS)).changes;
       }
     }
     return count;
@@ -429,7 +453,8 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
     // VK's independent reader can serve an existing Onlypult-selected analytics account.
     // Preserve that setting, but attribute snapshots/evidence to the API actually used.
     const provider = connectionBefore.ok && ((platform === 'vk' && connectionBefore.value?.provider === 'vk_direct') ||
-      (platform === 'youtube' && connectionBefore.value?.provider === 'youtube_analytics'))
+      (platform === 'youtube' && connectionBefore.value?.provider === 'youtube_analytics') ||
+      (platform === 'max' && connectionBefore.value?.provider === 'max_analytics'))
       ? 'direct' : selectedProvider;
     // Отпечаток сорвавшегося чтения не вычисляется: такой запуск всё равно закончится failed и ничего не запишет.
     const connectionFp = connectionBefore.ok ? connectionFingerprint(connectionBefore.value) : '';
@@ -557,8 +582,14 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
           }
           if (entries.length) evidence.recordRun(entries);
         }
-        return writeSnapshots(scope.code, platform, row.account_ref, snapshots, { provider, tz, runId, collectedAt: observedAt })
+        const rowsWritten=writeSnapshots(scope.code, platform, row.account_ref, snapshots, { provider, tz, runId, collectedAt: observedAt })
           + writePosts(scope.code, platform, result.posts || [], { provider, runId, collectedAt: observedAt });
+        if(platform==='max'&&provider==='direct'&&maxIndex&&result.maxIndexPrepared){
+          if(result.maxIndexPrepared.companyCode!==scope.code.toLowerCase()||result.maxIndexPrepared.chatId!==connectionBefore.value?.chatId)
+            fail('BINDING_CHANGED',409);
+          maxIndex.commit(result.maxIndexPrepared,{runId,collectedAt:observedAt,refreshBatch:result.maxRefreshBatch,advanceRefresh:result.maxAdvanceRefresh===true});
+        }
+        return rowsWritten;
       });
     } finally { releaseLease(lease); }
     if (fenced) return finish('failed', { error: 'Аренда сбора потеряна или привязка изменилась: результат отброшен, проекция не тронута' });
@@ -906,8 +937,8 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
     const scope = company(code); day(from); day(to); if (from > to) fail();
     const projection = attributionPosts(scope);
     const storedTotal = db.prepare('SELECT COUNT(*) n FROM social_posts WHERE company_code=? COLLATE NOCASE').get(scope.code).n;
-    const read = db.prepare(`SELECT date, metric, value, unit, source_field, completeness, provider, collected_at, run_id
-      FROM social_post_metrics WHERE post_id=? AND date>=? AND date<=? ORDER BY date, metric`);
+    const read = db.prepare(`SELECT date, metric, value, unit, source_field, completeness, provider, collected_at, run_id,period
+      FROM social_post_metrics WHERE post_id=? AND date>=? AND date<=? ORDER BY date, metric,collected_at,period`);
     const dates = new Set();
     let measurementsRead = 0, sourcesWithMetrics = 0, knownValues = 0, latestKnownValues = 0, sourcesWithKnownValues = 0;
     const posts = projection.posts.map((post) => {
@@ -916,16 +947,21 @@ function createSocialStats(db, { now = () => Date.now(), adapters = {}, evidence
         measurementsRead += rows.length;
         // Последнее измерение каждой метрики ВНУТРИ интервала: за его границы не выходим и «последнее вообще» не подставляем.
         const latest = new Map();
+        const periodsByMetric = new Map();
         // Известное значение считается по всем прочитанным строкам периода, а не по последним:
         // если вчера значение было, а сегодня null, история известного не исчезает, но последним остаётся null.
         let knownRows = 0;
-        for (const row of rows) { dates.add(row.date); latest.set(row.metric, row); if (row.value !== null && row.value !== undefined) knownRows += 1; }
+        for (const row of rows) { dates.add(row.date); latest.set(row.metric, row); if (row.value !== null && row.value !== undefined) knownRows += 1;
+          if(!periodsByMetric.has(row.metric))periodsByMetric.set(row.metric,new Set());periodsByMetric.get(row.metric).add(row.period);
+        }
+        for(const [metric,periods] of periodsByMetric)if(periods.size>1)latest.set(metric,{...latest.get(metric),value:null,period:'mixed',scopeConflict:true,completeness:'unknown'});
         if (rows.length) sourcesWithMetrics += 1;
         const measurements = [...latest.values()].map((row) => ({ metric: row.metric,
           date: row.date, value: row.value === null || row.value === undefined ? null : row.value, unit: row.unit,
           hasValue: !(row.value === null || row.value === undefined),
           sourceField: row.source_field || '', completeness: row.completeness || 'unknown', provider: row.provider,
-          collectedAt: row.collected_at, runId: row.run_id ?? null, referenceId: source.referenceId }))
+          collectedAt: row.collected_at, runId: row.run_id ?? null, referenceId: source.referenceId,
+          ...(row.period!=='unknown'?{period:row.period}:{}),...(row.scopeConflict?{scopeConflict:true}:{} ) }))
           .sort((a, b) => a.metric.localeCompare(b.metric));
         // Строка измерения и известное значение — разное: строка с value=null данных не даёт.
         // knownValuesInPeriod — по всем строкам периода; latestKnownValues — сколько показанных последних измерений известны.

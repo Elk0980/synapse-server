@@ -67,6 +67,9 @@
       <details class="card social-youtube-access"><summary>Измерения YouTube (владелец)</summary>
         <p class="social-note">Доступ для чтения статистики канала. Сначала сохраните точный канал в аккаунтах ниже и выберите систему суток America/Los_Angeles (Pacific). При смене доступа или канала нужна повторная проверка.</p>
         <div id="social-youtube-access"></div></details>
+      <details class="card social-max-access"><summary>Измерения MAX (владелец)</summary>
+        <p class="social-note">Используется ранее выданный доступ бота к вашему каналу. Сначала сохраните числовой ID канала в аккаунтах ниже. Состав канала и просмотры постов снимаются на текущую дату; дневная история, охват, реакции и репосты этим источником не подтверждаются.</p>
+        <div id="social-max-access"></div></details>
       <details class="card social-settings"><summary>Аккаунты и источники (владелец)</summary><p class="social-note">Здесь только идентификаторы аккаунтов и выбор источника. Ключи и права живут в подключениях площадок (Автопостинг) или у провайдера; сюда их вводить нельзя.</p><div id="social-accounts"></div></details>
       <details class="card social-import"><summary>Ручной ввод реальных чисел (владелец)</summary><p class="social-note">Для площадок без API-доступа: числа из кабинета площадки с датой снятия и источником (скриншот, выгрузка). Это не автоматический сбор и не заглушка — без чисел строка не сохраняется.</p>
         <form id="social-import-form" class="crm-form"><label>Площадка<select name="platform">${PLATFORMS.map(p => `<option value="${p}">${p}</option>`).join('')}</select></label>
@@ -78,7 +81,7 @@
       state.from = from; state.to = to;
       const content = container.querySelector('#social-content');
       try {
-        const [data, accounts, baseline, access, insights, youtubeAccess] = await Promise.all([
+        const [data, accounts, baseline, access, insights, youtubeAccess,maxAccess] = await Promise.all([
           ctx.apiJson(`/content/crm/social-stats?companyCode=${encodeURIComponent(company)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
           owner ? ctx.apiJson(`/content/crm/social-stats/accounts?companyCode=${encodeURIComponent(company)}`) : null,
           ctx.apiJson(`/content/crm/social-stats/baseline?companyCode=${encodeURIComponent(company)}`),
@@ -87,6 +90,7 @@
           // Сводка выводов не должна ронять страницу, если расчёт недоступен.
           ctx.apiJson(`/content/crm/social-stats/insights?companyCode=${encodeURIComponent(company)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`).catch((error) => ({ failed: error.message })),
           owner ? ctx.apiJson(`/content/crm/social-stats/youtube/access?companyCode=${encodeURIComponent(company)}`).catch(() => null) : null,
+          owner ? ctx.apiJson(`/content/crm/social-stats/max/access?companyCode=${encodeURIComponent(company)}`).catch(() => null) : null,
         ]);
         if (id !== requestId || ctx.selectedProjectId !== company) return;
         if (data.companyCode !== String(company).toLowerCase() || baseline.companyCode !== String(company).toLowerCase()) throw new Error('Ответ другой компании');
@@ -105,6 +109,7 @@
         const cached = owner ? profilesFresh(ctx, access) : null;
         if (owner) renderAnalyticsAccess(container, ctx, access, load, cached);
         if (owner) renderYoutubeAccess(container,ctx,youtubeAccess,load);
+        if (owner) renderMaxAccess(container,ctx,maxAccess,accounts,load);
         if (owner && accounts) renderAccounts(container, ctx, accounts, load, cached);
         bind(container, ctx, data, load);
       } catch (error) { if (id === requestId) content.innerHTML = `<p class="crm-error" role="alert">Не удалось загрузить: ${esc(error.message)}</p>`; }
@@ -367,7 +372,7 @@
     const measured = value => (value === null || value === undefined ? '<span class="social-no-data">нет данных</span>' : esc(String(value)));
     const rows = posts.map(post => {
       const sources = (post.sources || []).map(source => {
-        const list = (source.measurements || []).map(m => `<li>${esc(METRIC_LABELS[m.metric] || m.metric)}: ${measured(m.value)}${m.hasValue ? esc(unitSuffix(m.unit)) : ''} · за ${esc(day(m.date))} · собрано ${esc(stamp(m.collectedAt))} · ${esc(PROVIDER[m.provider] || m.provider || 'источник не указан')}${m.sourceField ? ` · поле ${esc(m.sourceField)}` : ''} · ${esc(COMPLETENESS_LABEL[m.completeness] || COMPLETENESS_LABEL.unknown)} · запись ${esc(m.referenceId)}</li>`).join('');
+        const list = (source.measurements || []).map(m => `<li>${esc(METRIC_LABELS[m.metric] || m.metric)}: ${measured(m.value)}${m.hasValue ? esc(unitSuffix(m.unit)) : ''} · ${m.period==='lifetime'?'накоплено на':m.period==='mixed'?'несовместимые периоды, дата':m.period==='day'?'за':'измерение от'} ${esc(day(m.date))} · собрано ${esc(stamp(m.collectedAt))} · ${esc(PROVIDER[m.provider] || m.provider || 'источник не указан')}${m.sourceField ? ` · поле ${esc(m.sourceField)}` : ''} · ${esc(COMPLETENESS_LABEL[m.completeness] || COMPLETENESS_LABEL.unknown)} · запись ${esc(m.referenceId)}</li>`).join('');
         return `<li>Источник ${esc(source.referenceId)} · ${esc(source.platformPostId || '—')} · ${esc(POST_SOURCE[source.provider] || source.provider || '—')}${list ? `<ul>${list}</ul>` : '<p class="social-note">Измерений за период нет.</p>'}</li>`;
       }).join('');
       return `<tr><td data-label="Площадка">${esc(post.platformLabel || post.platform)}</td>
@@ -470,6 +475,27 @@
     });
     node.querySelector('[data-youtube="verify"]').addEventListener('click',()=>perform('verify','POST',{}));
     node.querySelector('[data-youtube="remove"]')?.addEventListener('click',()=>perform('access','DELETE',{revision:access.revision}));
+  }
+  function renderMaxAccess(container,ctx,access,accounts,load){
+    const node=container.querySelector('#social-max-access');if(!node)return;
+    const company=String(ctx.selectedProjectId||'');
+    if(!access||access.companyCode!==company.toLowerCase()){node.innerHTML='<p class="crm-error" role="alert">Состояние доступа MAX не прочитано. Обновите страницу.</p>';return;}
+    const account=accounts?.accounts?.find(a=>a.platform==='max');
+    const same=account&&String(account.accountRef||'').trim()===access.channelId;
+    const confirmed=access.channelConfirmed&&same;
+    node.innerHTML=`<form id="social-max-form" class="crm-form"><p class="wide">${confirmed?'Канал MAX подтверждён.':esc(access.channelConfirmed&&!same?'Сохранённый канал изменился: проверьте доступ заново.':access.channelReason||'Канал ещё не подтверждён.')}</p>
+      <label class="wide">Доступ к вашему каналу<input type="password" name="token" autocomplete="off" placeholder="Новый доступ или пусто — оставить сохранённый"></label>
+      <p class="social-note wide">Сохранённое значение не показывается. Ключ публикаций и права бота не меняются. Просмотры — накопленные значения на дату снятия, а не просмотры за день публикации.</p>
+      <div class="crm-actions wide"><button type="submit" class="plain-button">Сохранить доступ MAX</button><button type="button" class="plain-button" data-max="verify">Проверить канал MAX</button>${access.configured?'<button type="button" class="plain-button" data-max="remove">Убрать доступ MAX</button>':''}<span id="social-max-state" role="status"></span></div></form>`;
+    const form=node.querySelector('form'),out=node.querySelector('#social-max-state');
+    async function perform(action,method,body){
+      if(ctx.selectedProjectId!==company)return;const buttons=[...node.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);
+      try{await ctx.apiJson(`/content/crm/social-stats/max/${action}?companyCode=${encodeURIComponent(company)}`,ctx.csrfOptions(method,body));if(ctx.selectedProjectId!==company)return;await load();const fresh=container.querySelector('#social-max-state');if(fresh)fresh.textContent=action==='verify'?'Канал проверен.':'Сохранено.';}
+      catch(error){out.textContent=error.message;}finally{buttons.forEach(b=>b.disabled=false);}
+    }
+    form.addEventListener('submit',async event=>{event.preventDefault();const credential=form.elements.token.value.trim();await perform('access','PUT',{revision:access.revision,credential});form.elements.token.value='';});
+    node.querySelector('[data-max="verify"]').addEventListener('click',()=>perform('verify','POST',{}));
+    node.querySelector('[data-max="remove"]')?.addEventListener('click',()=>perform('access','DELETE',{revision:access.revision}));
   }
   function renderAnalyticsAccess(container, ctx, access, load, cached) {
     const node = container.querySelector('#social-analytics-access'); if (!node) return;

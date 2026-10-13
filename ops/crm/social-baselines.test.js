@@ -28,7 +28,7 @@ test('разбор пустого снимка не придумывает ре�
   assert.equal(assessment.periodDays, 3);
   assert.deepEqual(assessment.platforms, []);
   assert.equal(assessment.publications.recorded, 0, 'это число записей, а не утверждение об отсутствии выходов');
-  assert.equal(assessment.unconfiguredPlatforms.length, 5);
+  assert.equal(assessment.unconfiguredPlatforms.length, 6, 'пять прежних платформ и новый MAX остаются ненастроенными, не нулевыми');
   assert.match(assessment.limitations.join(' '), /отсутствующие даты нельзя считать днями с нулевым результатом/);
   assert.match(assessment.limitations.join(' '), /качество содержания не оценено/);
   assert.match(assessment.actions.join(' '), /До запуска сохраните выгрузку/);
