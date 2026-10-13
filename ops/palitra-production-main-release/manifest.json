@@ -1,0 +1,563 @@
+{
+  "schema": 1,
+  "expectedWorkspaceRevision": 248,
+  "files": [
+    {
+      "path": "account/forgotten/index.html",
+      "base": {
+        "sha256": "edcd3591031372e30f695385e3ac7f406d293c0bbc5504e30fd8d4f49d9ce5f7",
+        "bytes": 11081
+      },
+      "candidate": {
+        "sha256": "064d4ffd38f6e1c6aba50d7a12fa8e6760f7e7befa1c98b31aa81d17dcec91f0",
+        "bytes": 10960
+      },
+      "changed": true
+    },
+    {
+      "path": "account/index.html",
+      "base": {
+        "sha256": "50e2f6f85e7a6ebb2b48be35cdbc08d9a9c58b5f949d33f9f5d6e92a22243ab7",
+        "bytes": 10752
+      },
+      "candidate": {
+        "sha256": "3109b522efdc51fee313842ff2a4947115fbd39adc9adf283586dda91f809285",
+        "bytes": 10631
+      },
+      "changed": true
+    },
+    {
+      "path": "account/login/index.html",
+      "base": {
+        "sha256": "ed96925ec635b6ad789fc5e1413d07f824df6c74437c445726d0098cf3d9b43d",
+        "bytes": 11609
+      },
+      "candidate": {
+        "sha256": "03ae5f9046f2d9bfa87158bedc223cc5405574198adf891e22477910cfce1153",
+        "bytes": 11488
+      },
+      "changed": true
+    },
+    {
+      "path": "account/register/index.html",
+      "base": {
+        "sha256": "59ed50a0e73226a199eb47ea96ef45166f6d36246d5dc4efb4014354ff9e9bac",
+        "bytes": 12536
+      },
+      "candidate": {
+        "sha256": "833e08f614655d2b2c27a2a83616da9635924b4eec5849000855d1dd978dbcf7",
+        "bytes": 12415
+      },
+      "changed": true
+    },
+    {
+      "path": "assets/app.js",
+      "base": {
+        "sha256": "d03dd77b7a4e991d47c2bb90c27ab28f33a38cb6e5d534d74bd2f4a03d9f3d78",
+        "bytes": 13011
+      },
+      "candidate": {
+        "sha256": "d03dd77b7a4e991d47c2bb90c27ab28f33a38cb6e5d534d74bd2f4a03d9f3d78",
+        "bytes": 13011
+      },
+      "changed": false
+    },
+    {
+      "path": "assets/catalog-live.js",
+      "base": {
+        "sha256": "9be33a1131999232736809628a8850390e06d1ed9a5c4a21da84f65be7f16bbb",
+        "bytes": 53458
+      },
+      "candidate": {
+        "sha256": "bd724fb19c2ff3f8bc57510fee3958b02f415529a3c00cfae90f704025dc7315",
+        "bytes": 53159
+      },
+      "changed": true
+    },
+    {
+      "path": "assets/hero.js",
+      "base": {
+        "sha256": "c8bcdf6fb3e29d929244846475e6df94c576b2c31521a72ca84b0ce09a6caa26",
+        "bytes": 5591
+      },
+      "candidate": {
+        "sha256": "c8bcdf6fb3e29d929244846475e6df94c576b2c31521a72ca84b0ce09a6caa26",
+        "bytes": 5591
+      },
+      "changed": false
+    },
+    {
+      "path": "assets/order.js",
+      "base": {
+        "sha256": "56f732232f13c0a4131b960debb0aebea208bb7351c382a13c5ef1a637c9a6f9",
+        "bytes": 48179
+      },
+      "candidate": {
+        "sha256": "8cb55585d42b41ad0c52897b86fe56e75f7b0743c6f34f25e148e652c51da02e",
+        "bytes": 49471
+      },
+      "changed": true
+    },
+    {
+      "path": "assets/price-format.js",
+      "base": {
+        "sha256": "126b1fd73525cdb7ee3b32c6484da59c85cabc0c4025ec5079ec533403fb5002",
+        "bytes": 1716
+      },
+      "candidate": {
+        "sha256": "126b1fd73525cdb7ee3b32c6484da59c85cabc0c4025ec5079ec533403fb5002",
+        "bytes": 1716
+      },
+      "changed": false
+    },
+    {
+      "path": "assets/quiz.js",
+      "base": {
+        "sha256": "bbcef0ae0e1bc0785fdeb9b44b4b380572fd38e03d9155838970cbf92645ff62",
+        "bytes": 10295
+      },
+      "candidate": {
+        "sha256": "bbcef0ae0e1bc0785fdeb9b44b4b380572fd38e03d9155838970cbf92645ff62",
+        "bytes": 10295
+      },
+      "changed": false
+    },
+    {
+      "path": "assets/storefront.js",
+      "base": {
+        "sha256": "10886ac16349686a118585eb6328aa5d60ef33b501ed8e77e86a45409a673348",
+        "bytes": 47792
+      },
+      "candidate": {
+        "sha256": "be956124433d3b596bea5c4b00bec436188948dfe98b4f9f529aa0d8e0ca90c0",
+        "bytes": 26933
+      },
+      "changed": true
+    },
+    {
+      "path": "blog/index.html",
+      "base": {
+        "sha256": "3157ed0fb61d57521d93972fcbdfd8c3b86dfd817266ec74458460d60798a7d5",
+        "bytes": 10892
+      },
+      "candidate": {
+        "sha256": "10b2d81c836c58e3b01be2192497f7e31c1582e8dd94f96ce47b2be9add0b7da",
+        "bytes": 10771
+      },
+      "changed": true
+    },
+    {
+      "path": "cart/index.html",
+      "base": {
+        "sha256": "5ed733905e84774a90efe22cccec28761883670df403bc6f46acf78bc008f7a7",
+        "bytes": 11072
+      },
+      "candidate": {
+        "sha256": "17f10a225c549cb36d9fca553f7f0aa64612f88804d4088ab92102c6f6f3b521",
+        "bytes": 10912
+      },
+      "changed": true
+    },
+    {
+      "path": "catalog/bukety/index.html",
+      "base": {
+        "sha256": "068635562c19f6fd3fb38cfa4ba6d98dbee0d903e931da5ac44f7f80c405fdb9",
+        "bytes": 17023
+      },
+      "candidate": {
+        "sha256": "72b67e51d113b0791739cfddd7e31d8dc2f321be8cc7e4e7102565b15ef89381",
+        "bytes": 16902
+      },
+      "changed": true
+    },
+    {
+      "path": "catalog/den-rozhdeniya/index.html",
+      "base": {
+        "sha256": "650bfd4b6aaba2c58e80097aaaf62699d2e4c1dda2b7f76fb0f36964d8dfde6e",
+        "bytes": 16757
+      },
+      "candidate": {
+        "sha256": "609ace2a7ba63f6fab91dbe08932c998593ec2840bfc860015878a1eb85f5806",
+        "bytes": 16636
+      },
+      "changed": true
+    },
+    {
+      "path": "catalog/devichnik/index.html",
+      "base": {
+        "sha256": "ba952ddbf8242c508e340f300484dc01ac14d7fae86a2cf89d99acb86af168f6",
+        "bytes": 16721
+      },
+      "candidate": {
+        "sha256": "22a18be2ec30608ada6ab4973832d9d91acbdbb8ae94dda8b3fb289c4f7f9926",
+        "bytes": 16600
+      },
+      "changed": true
+    },
+    {
+      "path": "catalog/dofaminovye/index.html",
+      "base": {
+        "sha256": "52e1619669e93a2b5ab311fb4f660841d395be73537af03d25726ef15cb3f0f5",
+        "bytes": 16745
+      },
+      "candidate": {
+        "sha256": "af10e8150e85d3be0f25d24828262d89bdb63de37d2e4db198ec7f42d63c8fcb",
+        "bytes": 16624
+      },
+      "changed": true
+    },
+    {
+      "path": "catalog/index.html",
+      "base": {
+        "sha256": "b315459115dc37b6c58180beb341c62438605acfcfa3b53e14ddd2a756a65de7",
+        "bytes": 16857
+      },
+      "candidate": {
+        "sha256": "73ade828f4374311df4fe08a2663151bf4f1e4d45c8418822e340d63e181497d",
+        "bytes": 16736
+      },
+      "changed": true
+    },
+    {
+      "path": "catalog/korziny/index.html",
+      "base": {
+        "sha256": "46c3e59a8379834846b0355b0742d8a36edfc2eaa0e31aa20368e936104df8ba",
+        "bytes": 17027
+      },
+      "candidate": {
+        "sha256": "98b3799a2b24fcc54e92282e2f74f3e4a66ca51fa481762aef86ec57b32bdcf5",
+        "bytes": 16906
+      },
+      "changed": true
+    },
+    {
+      "path": "catalog/malysham/index.html",
+      "base": {
+        "sha256": "e749713cad20b74fd98187424d2e1b3c1b2107a264147d084255b2473778353f",
+        "bytes": 16713
+      },
+      "candidate": {
+        "sha256": "502c2edfd1b82a654dc71d4a9202a0468763ac2d9b0bf708ddce4cc16dc94879",
+        "bytes": 16592
+      },
+      "changed": true
+    },
+    {
+      "path": "catalog/muzhchinam/index.html",
+      "base": {
+        "sha256": "d873c542c7acc8a771ad59a1c288301cc5f77f858df808e2a2d66bb37f46f5f0",
+        "bytes": 16721
+      },
+      "candidate": {
+        "sha256": "6642d91a8bd775023c8b3e8d6f8d4bfc5ed1dc7f380cc2724a9cf238ebf4d639",
+        "bytes": 16600
+      },
+      "changed": true
+    },
+    {
+      "path": "catalog/shary-giganty/index.html",
+      "base": {
+        "sha256": "9e153d542bdf04261532b24bf39189c147468513a9fe409446389b13505a001d",
+        "bytes": 16749
+      },
+      "candidate": {
+        "sha256": "8f4ec7a4b6f347ab6aa6e6a976919c7d7d02a7da0765a4a9d7ae7cd4b3d558e7",
+        "bytes": 16628
+      },
+      "changed": true
+    },
+    {
+      "path": "catalog/shary/index.html",
+      "base": {
+        "sha256": "01c28789336d89e5ac2c1a3e364e0e8e35e573dfd2864f2dd8f613d350858665",
+        "bytes": 16689
+      },
+      "candidate": {
+        "sha256": "41c4715ec7200e5d65f6ec7359062d2d8ad40cce1fecd22914ed9dcd0218618c",
+        "bytes": 16568
+      },
+      "changed": true
+    },
+    {
+      "path": "catalog/vypiska/index.html",
+      "base": {
+        "sha256": "f0b6ee7562e5c5662f2ff5bee0248e62729e94cb507169ea617e98f24222ecd5",
+        "bytes": 16793
+      },
+      "candidate": {
+        "sha256": "6e87a66be69fb94e29258f695bbbf7fe68a675d8a257de2f09193814096ea451",
+        "bytes": 16672
+      },
+      "changed": true
+    },
+    {
+      "path": "config.js",
+      "base": {
+        "sha256": "e194e45e831f3f5c16157735440a7cf5418de0635eec2972d69fe96a62740ff3",
+        "bytes": 4955
+      },
+      "candidate": {
+        "sha256": "446507181f20d439bf459a0ae64756138bfe3ce15f981b1f517449119b291c3c",
+        "bytes": 5145
+      },
+      "changed": true
+    },
+    {
+      "path": "contacts/index.html",
+      "base": {
+        "sha256": "18dfc8e2b2e5bc5b0b32d7c62fb9f20ccac66fd788fd7df6f4328cd40176ea97",
+        "bytes": 11371
+      },
+      "candidate": {
+        "sha256": "27eb646f79c6ec154d4f82c6aa8652805d2486af0fa6eb1e0bcb9ed4f141b81c",
+        "bytes": 11250
+      },
+      "changed": true
+    },
+    {
+      "path": "den-rozhdeniya/index.html",
+      "base": {
+        "sha256": "5998d6fd3ce1f7a0ef8cde2403c4518a10a7478ffd21dd799dd05414e68046e5",
+        "bytes": 18387
+      },
+      "candidate": {
+        "sha256": "c1271475bebb3384f44c004c8629a1eaed6425c0eb0311f65f40526d69ce92b2",
+        "bytes": 18266
+      },
+      "changed": true
+    },
+    {
+      "path": "devichnik/index.html",
+      "base": {
+        "sha256": "eb0118adb11445d7c652120541457ced35cfc5d78ef9047c8cf5bba5e92cb0ee",
+        "bytes": 17404
+      },
+      "candidate": {
+        "sha256": "68fe5430477ea0642249004c8d5aefcc9e9bada551b5cb8d1602129ebf7871d7",
+        "bytes": 17283
+      },
+      "changed": true
+    },
+    {
+      "path": "dofaminovye/index.html",
+      "base": {
+        "sha256": "5027da413809aef630e7901ba15565cfbc6434e53e7d06812ab245d04ddf546e",
+        "bytes": 14674
+      },
+      "candidate": {
+        "sha256": "79828ba7522b368942c328e04897172b8abe440390748498989335097ab40563",
+        "bytes": 14553
+      },
+      "changed": true
+    },
+    {
+      "path": "dostavka-i-oplata/index.html",
+      "base": {
+        "sha256": "c5c8c126770a3fcfde357716366cce7b58d0f3b41f631964ea9322cf5a64b0b4",
+        "bytes": 225001
+      },
+      "candidate": {
+        "sha256": "aa2919a725e13307b2c9f023678cac342024e22ecec9de19a11a0590bc241be1",
+        "bytes": 224880
+      },
+      "changed": true
+    },
+    {
+      "path": "important/index.html",
+      "base": {
+        "sha256": "670d385999d06b5957a42ef8f8ee3cf3875fb1174abef76fc0ce890703b8d22b",
+        "bytes": 11589
+      },
+      "candidate": {
+        "sha256": "e58178876dcb8105de8750bf4ba3064ffd84e5aa89ed4fdad947d035ecde6797",
+        "bytes": 11468
+      },
+      "changed": true
+    },
+    {
+      "path": "index.html",
+      "base": {
+        "sha256": "d2a78078656cb069618b93f65095001046a4c7cb301abb15d0db56c77ceaa1d3",
+        "bytes": 263989
+      },
+      "candidate": {
+        "sha256": "37f34ac3884d2d31352685e1ae6abcb634ad867b6cd4eeb479ce2c3b9beec3be",
+        "bytes": 263868
+      },
+      "changed": true
+    },
+    {
+      "path": "muzhchinam/index.html",
+      "base": {
+        "sha256": "09f84dd208d500ef78535615cdf96e8f08e054d561d4cc19089bc25596d3005b",
+        "bytes": 16629
+      },
+      "candidate": {
+        "sha256": "86d9541235c2b17212332a08ce8aacb1550eda93bfef5908d2a417d0cb06f0cb",
+        "bytes": 16508
+      },
+      "changed": true
+    },
+    {
+      "path": "oferta/index.html",
+      "base": {
+        "sha256": "a22738074c752477554308b3c03d4818a45d97bdc047b06e63eb60de380182a9",
+        "bytes": 16785
+      },
+      "candidate": {
+        "sha256": "2b5dacff7fce595fde38d803671ddc03500f99ac454f3cf960ff188c9b063f88",
+        "bytes": 16664
+      },
+      "changed": true
+    },
+    {
+      "path": "price-render.js",
+      "base": {
+        "sha256": "cd9a109fcf4825b6164d77d96090cec1dd5de3e88938b70f27b85dc7c2bbdb62",
+        "bytes": 48187
+      },
+      "candidate": {
+        "sha256": "cd9a109fcf4825b6164d77d96090cec1dd5de3e88938b70f27b85dc7c2bbdb62",
+        "bytes": 48187
+      },
+      "changed": false
+    },
+    {
+      "path": "price.html",
+      "base": {
+        "sha256": "01451f8071ffd0aa0c1df4f3644ac517f2c2fab7506ff30936042433ebecb4d7",
+        "bytes": 11994
+      },
+      "candidate": {
+        "sha256": "a1d337f53d93a2e26fc32b09c06dad0733188639be9dff7012acfdc035293314",
+        "bytes": 11873
+      },
+      "changed": true
+    },
+    {
+      "path": "privacy/index.html",
+      "base": {
+        "sha256": "b5d94b1f80439051cbfcf57b7c9281b5537ae1fd5f6cee91af3524e3e5fa7aa4",
+        "bytes": 17257
+      },
+      "candidate": {
+        "sha256": "fe1ed7856e6da2ebbf3c499f1851640d170ab4dc35dbcb2ad48e4d4e7c0f52f5",
+        "bytes": 17136
+      },
+      "changed": true
+    },
+    {
+      "path": "search/index.html",
+      "base": {
+        "sha256": "7fd6adee052d2e41e8aa0d93e99bd7d62832df1adf65069bb759b105eae4927b",
+        "bytes": 11042
+      },
+      "candidate": {
+        "sha256": "5e097364c64d5e8c6ff17b11ec6c9e9d2f63d7cbcd8a5c3db567da3cb7d3b589",
+        "bytes": 10921
+      },
+      "changed": true
+    },
+    {
+      "path": "shary-giganty/index.html",
+      "base": {
+        "sha256": "4b1a141920761c66fe5f7c7c6450ec71551bee9f81ff380570665e2fc989b0d8",
+        "bytes": 14516
+      },
+      "candidate": {
+        "sha256": "fefe380f272fb81513b7afe037b76ee4a17b902a12e86154b681e444b24511c5",
+        "bytes": 14395
+      },
+      "changed": true
+    },
+    {
+      "path": "socials/index.html",
+      "base": {
+        "sha256": "8c6377bf1a1c014cd1569fe262317606133913a18d1b5b662595663ef1ef2837",
+        "bytes": 16315
+      },
+      "candidate": {
+        "sha256": "a4702ecaf232fbc9cbdb140184288945bacaf77bb0bede634ec4807de1293459",
+        "bytes": 16194
+      },
+      "changed": true
+    },
+    {
+      "path": "uchitelyu/index.html",
+      "base": {
+        "sha256": "680f806fec43453ffe10af516144a304ec3915e0ce556a358b92c439884e6240",
+        "bytes": 16847
+      },
+      "candidate": {
+        "sha256": "ba5d60e7e5c6c46e73e71c4b1a17999f1b7f185fa13e0d7d950e1a48e04b18a0",
+        "bytes": 16726
+      },
+      "changed": true
+    },
+    {
+      "path": "vozvrat/index.html",
+      "base": {
+        "sha256": "99adb9c087e989eca05f77f3404f62cce34a66491b07e72cc575d48bf015b84c",
+        "bytes": 17106
+      },
+      "candidate": {
+        "sha256": "1d4886b26108f56888202331f796d3b3d9af2fc6a635129ccdba81b413c97bcf",
+        "bytes": 16985
+      },
+      "changed": true
+    },
+    {
+      "path": "vypiska/index.html",
+      "base": {
+        "sha256": "2614dff97e0a966f4eed1f0fb073a38fe103b1161c633120562cbbc837ed5580",
+        "bytes": 16710
+      },
+      "candidate": {
+        "sha256": "bf7edf091d95cae233cf705580550dc5e22d26755f76f5cceb15eb2637505559",
+        "bytes": 16589
+      },
+      "changed": true
+    },
+    {
+      "path": "wishlist/index.html",
+      "base": {
+        "sha256": "7513dc4fba50a4a413802987edb16f1585b041a98712b924b3a507780e26acc7",
+        "bytes": 10977
+      },
+      "candidate": {
+        "sha256": "5b6a404e7fdd41c955a41e3dfa74c4bcaa7516d24ed9e690bd00b4193459c862",
+        "bytes": 10856
+      },
+      "changed": true
+    }
+  ],
+  "content": [
+    {
+      "path": "server.js",
+      "sha256": "f457cfac0f12fdbe6d1d68f150d1750bada29a56c4620b34fff687f243b7f1c9",
+      "bytes": 100443
+    },
+    {
+      "path": "site-workspace-http.js",
+      "sha256": "3f08a192470dec74909315c37f58dc81262d5f2db28834152bb83f6fd5176aef",
+      "bytes": 9554
+    },
+    {
+      "path": "site-workspace-feature.js",
+      "sha256": "319c233f6066955193ac850ce8b58464b198ad262d168be64281659828e82910",
+      "bytes": 5127
+    },
+    {
+      "path": "draft-account-service.cjs",
+      "sha256": "0b7cb428936e90ec3b97e55d2abea6bbd56e867b4fa51d13588abc5ff2bff993",
+      "bytes": 10704
+    },
+    {
+      "path": "palitra-host-adapter.cjs",
+      "sha256": "4827ba116be8ee04882cbdf44ad0ea27ab2e4ea843ea1ed145f4054af2091136",
+      "bytes": 31364
+    }
+  ],
+  "baseImage": "palitra-production-content:20261013",
+  "note": "One existing workspace and database; no price document copied or changed."
+}
