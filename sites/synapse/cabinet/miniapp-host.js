@@ -42,6 +42,10 @@
   const color = value => (/^#[0-9a-fA-F]{6}$/.test(String(value || "")) ? value : "");
   const setVar = (name, value) => { if (value) document.documentElement.style.setProperty(name, value); };
   const applyTheme = () => {
+    if (window.SbTheme) {
+      window.SbTheme.useSystemTheme(() => tg && ['dark', 'light'].includes(tg.colorScheme) ? tg.colorScheme : null);
+      return;
+    }
     const theme = (tg && tg.themeParams) || {};
     setVar("--surface", color(theme.bg_color));
     setVar("--surface-soft", color(theme.secondary_bg_color));

@@ -4,7 +4,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
 const {JSDOM}=require('jsdom');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
-const RANGE={from:'2026-09-01',to:'2026-09-03'};
+// Стартовый период аналитики — 30 календарных дат по 2026-09-03 включительно.
+const RANGE={from:'2026-08-05',to:'2026-09-03'};
 const SKELETON=`<div id="analytics-periods"></div>
   <form id="analytics-dates"><input name="from"><input name="to"></form>
   <div id="platform-filter"><button id="platform-trigger" type="button"></button><div id="platform-panel"></div></div>
@@ -22,7 +23,7 @@ const metricsPayload=(over={})=>({companyCode:'alvi',organizationId:'70000000000
     metric('search_position','Позиция в выдаче',{aggregation:'daily_only',totalAvailable:false,min:4,max:7,daysWithValue:2}),
     metric('calls_and_phone_views','Звонки и просмотры телефона',{total:3,daysWithValue:1}),
     metric('address_clicks','Клики в адрес')],
-  coverage:{expectedDays:3,dates:['2026-09-01','2026-09-02'],datesWithValue:['2026-09-01','2026-09-02']},...over});
+  coverage:{expectedDays:30,dates:['2026-09-01','2026-09-02'],datesWithValue:['2026-09-01','2026-09-02']},...over});
 
 function fixture({metricsResult=metricsPayload(),permissions=['analytics.view']}={}) {
   const dom=new JSDOM(`<main>${SKELETON}</main>`,{url:'https://cabinet.example.test/',runScripts:'outside-only'});
@@ -60,7 +61,7 @@ test('блок 2ГИС берёт тот же период, показывает
     const block=f.section();assert.ok(block);
     assert.match(block.textContent,/Показы/);assert.match(block.textContent,/4–7 по дням/);
     assert.doesNotMatch(block.textContent,/Клики в адрес/,'показатели без данных в сводку не попадают');
-    assert.match(block.textContent,/Дней с измерениями: 2 из 3/);
+    assert.match(block.textContent,/Дней с измерениями: 2 из 30/);
     assert.match(block.textContent,/не состоявшиеся звонки/);
     assert.match(block.textContent,/не складываются/);
     assert.ok(block.querySelector('a[href="#platform-demand"]'),'есть ссылка на детали');

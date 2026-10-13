@@ -1,0 +1,46 @@
+name: ui-appearance
+on:
+  pull_request:
+    paths:
+      - 'sites/synapse/platform-theme.*'
+      - 'sites/synapse/cabinet.html'
+      - 'sites/synapse/cabinet/analytics*'
+      - 'sites/synapse/cabinet/workspace.css'
+      - 'sites/synapse/cabinet/menu-preferences*'
+      - 'sites/synapse/cabinet/miniapp-host*'
+      - 'sites/synapse/miniapp.html'
+      - 'sites/synapse/*editor*.html'
+      - '.github/workflows/ui-appearance.yml'
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  interface-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Подготовить среду DOM-проверок
+        run: npm install --prefix "$RUNNER_TEMP/synapse-ui-tests" --no-audit --no-fund jsdom@26
+      - name: Проверить тему, меню и периоды
+        env:
+          NODE_PATH: ${{ runner.temp }}/synapse-ui-tests/node_modules
+        run: >-
+          node --test sites/synapse/platform-theme.test.cjs
+          sites/synapse/cabinet/analytics-periods.test.cjs
+          sites/synapse/cabinet/menu-preferences.test.cjs
+          sites/synapse/cabinet/analytics-2gis.test.cjs
+          sites/synapse/cabinet/analytics-potential.test.cjs
+          sites/synapse/cabinet/analytics-revenue.test.cjs
+          sites/synapse/cabinet/miniapp-host.test.cjs
+      - name: Проверить синтаксис
+        run: |
+          node --check sites/synapse/platform-theme.js
+          node --check sites/synapse/cabinet/analytics.js
+          node --check sites/synapse/cabinet/miniapp-host.js

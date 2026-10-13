@@ -19,7 +19,7 @@ const snapshot = (over = {}) => ({ room: { replyMode: 'addressed', telegramChatI
   members: [{ userId: 2, displayName: 'Дарья' }], messages: [{ id: 'm1', authorType: 'assistant', authorName: 'Хью', text: 'Готово', createdAt: '2026-09-17T09:00:00.000Z', deliveryStatus: 'sent', attachments: [] }],
   tasks: [], stages: [], ai: { configured: true, connected: true, runtimeState: 'connected', queued: 0, failed: 0 }, hasMore: false, oldestMessageId: null, ...over });
 
-function boot({ telegram, routes = {} } = {}) {
+function boot({ telegram, routes = {}, platformTheme = false } = {}) {
   // Без pretendToBeVisual: его цикл кадров держит процесс живым. Видимость задаётся ниже вручную,
   // а окно закрывается в конце теста — вместе с ним гаснут таймеры опроса комнаты.
   const dom = new JSDOM('<main id="miniapp"></main>', { runScripts: 'outside-only', url: ORIGIN });
@@ -51,6 +51,10 @@ function boot({ telegram, routes = {} } = {}) {
       colorScheme: 'dark', viewportStableHeight: 640, safeAreaInset: { top: 20, bottom: 10, left: 0, right: 0 }, contentSafeAreaInset: { top: 46, bottom: 0, left: 0, right: 0 },
       ready() { this.readyCalled = true; }, expand() {}, close() { this.closed = true; }, onEvent() {},
       BackButton: { show() { back.shown = true; }, hide() { back.shown = false; }, onClick(fn) { back.handler = fn; } } } };
+  }
+  if (platformTheme) {
+    w.matchMedia = () => ({ matches: false, addEventListener() {} });
+    w.eval(fs.readFileSync(path.join(__dirname, '../platform-theme.js'), 'utf8'));
   }
   w.eval(HOST);
   w.eval(CHAT);
@@ -107,6 +111,21 @@ test('вход по подписи: тема и размеры Telegram прим
   assert.equal(h.d.querySelector('[data-pc-asset$="/1"] img').getAttribute('src'), 'blob:asset-1');
   assert.match(h.d.querySelector('[data-pc-asset$="/2"]').textContent, /Не удалось загрузить файл/);
   h.close();
+});
+
+test('общая тема следует Telegram в системном режиме, ручной выбор важнее темы Telegram', async () => {
+  const h = boot({ telegram: {}, platformTheme: true });
+  await settle();
+  assert.equal(h.w.SbTheme.preference, 'system');
+  assert.equal(h.d.documentElement.dataset.theme, 'dark');
+  h.w.SbTheme.set('light');
+  h.tg.colorScheme = 'dark';h.w.SbTheme.refresh();
+  assert.equal(h.d.documentElement.dataset.theme, 'light');
+  h.w.SbTheme.set('system');
+  assert.equal(h.d.documentElement.dataset.theme, 'dark');
+  h.tg.colorScheme = 'light';h.w.SbTheme.refresh();
+  assert.equal(h.d.documentElement.dataset.theme, 'light');
+  assert.equal(h.d.documentElement.style.getPropertyValue('--text'), '', 'цвет Telegram не перекрывает ручную палитру');
 });
 
 test('без ссылки проекта код не выдаётся: экран просит открыть ссылку своего проекта', async () => {

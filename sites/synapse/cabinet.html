@@ -6,6 +6,8 @@
 <meta name="theme-color" content="#0b0908">
 <meta name="color-scheme" content="dark">
 <title>Кабинет — Synapse Business</title>
+<script src="platform-theme.js?v=20261012-appearance"></script>
+<link rel="stylesheet" href="platform-theme.css?v=20261012-appearance">
 <link rel="stylesheet" href="cabinet/common.css?v=20260908-5">
 <link rel="stylesheet" href="cabinet/clients.css?v=20260915-company-links">
 <script>document.documentElement.classList.replace("no-js", "js");</script>
@@ -47,7 +49,7 @@ button { color: inherit; }
   padding: 10px 16px;
   transform: translateY(-150%);
   border-radius: 10px;
-  color: #06101d;
+  color: var(--sb-primary-text, #06101d);
   background: var(--accent);
 }
 .skip-link:focus { transform: none; }
@@ -154,7 +156,7 @@ button { color: inherit; }
   padding: 6px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: #201c19;
+  background: var(--sb-raised, #201c19);
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
 }
 .project-option {
@@ -189,7 +191,7 @@ button { color: inherit; }
   text-decoration: none;
   cursor: pointer;
 }
-.nav-link:hover, .nav-category:hover { background: rgba(255, 255, 255, 0.05); }
+.nav-link:hover, .nav-category:hover { background: var(--sb-hover, rgba(255, 255, 255, 0.05)); }
 .nav-link[aria-current="page"] { color: var(--accent); background: rgba(46, 107, 214, 0.2); }
 .nav-link[aria-disabled="true"] { color: var(--muted); opacity: 0.65; cursor: default; }
 .nav-link[aria-disabled="true"]:hover { background: transparent; }
@@ -198,7 +200,7 @@ button { color: inherit; }
   margin-left: auto;
   padding: 2px 6px;
   border-radius: 999px;
-  color: #171311;
+  color: var(--sb-primary-text, #171311);
   background: var(--accent);
   font-size: 0.75rem;
   text-align: center;
@@ -423,7 +425,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     transition: transform 0.2s ease;
   }
   .sidebar.is-open { transform: none; }
-  .backdrop { position: fixed; z-index: 40; inset: 0; display: block; border: 0; background: rgba(0, 0, 0, 0.68); }
+  .backdrop { position: fixed; z-index: 40; inset: 0; display: block; border: 0; background: var(--sb-backdrop, rgba(0, 0, 0, 0.68)); }
   .main { padding: 24px 16px 40px; }
   .content-header { margin-bottom: 20px; }
   h1 { font-size: 2.15rem; }
@@ -576,7 +578,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     <div class="auth-head">
       <div><a class="sb-brand " href="./" aria-label="Synapse Business — главная"><span class="sb-orb" aria-hidden="true"><i class="sb-orb__stone"></i><i class="sb-orb__current"></i><i class="sb-orb__pulse"></i></span><span class="sb-wordmark" aria-hidden="true"></span></a><p class="sb-brand-caption">Вход в личный кабинет</p></div>
     </div>
-    <form id="auth-form" autocomplete="off">
+    <form id="auth-form" autocomplete="off" data-sb-theme-host>
       <label class="auth-field"><span>Логин</span>
         <input id="auth-login" name="login" autocomplete="username" required></label>
       <label class="auth-field"><span>Пароль</span>
@@ -600,6 +602,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     <a class="sb-brand sb-mobile-logo" href="#home" aria-label="Synapse Business — главная кабинета"><span class="sb-orb" aria-hidden="true"><i class="sb-orb__stone"></i><i class="sb-orb__current"></i><i class="sb-orb__pulse"></i></span></a>
   </div>
   <aside class="sidebar" id="sidebar" aria-label="Меню кабинета">
+    <label class="sb-theme-picker"><span>Тема</span><select data-sb-theme-select>
+      <option value="system">Как в системе</option><option value="light">Светлая</option><option value="dark">Тёмная</option>
+    </select></label>
     <div class="sidebar-brand sb-sidebar-brand"><a class="sb-brand sb-brand--compact" href="./" aria-label="Synapse Business — главная"><span class="sb-orb" aria-hidden="true"><i class="sb-orb__stone"></i><i class="sb-orb__current"></i><i class="sb-orb__pulse"></i></span><span class="sb-wordmark" aria-hidden="true"></span></a><p class="sb-brand-caption">Личный кабинет</p></div>
     <div class="project-picker">
       <p class="project-label">Проект</p>
@@ -806,11 +811,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
             </div>
             <div class="crm-periods" id="analytics-periods" aria-label="Период аналитики">
               <button class="crm-period" type="button" data-analytics-period="today"
-                aria-pressed="true">Сегодня</button>
+                aria-pressed="false">Сегодня</button>
               <button class="crm-period" type="button" data-analytics-period="7d"
                 aria-pressed="false">7 дней</button>
               <button class="crm-period" type="button" data-analytics-period="30d"
-                aria-pressed="false">30 дней</button>
+                aria-pressed="true">30 дней</button>
+              <button class="crm-period" type="button" data-analytics-period="365d"
+                aria-pressed="false">За год</button>
             </div>
             <form class="analytics-dates" id="analytics-dates">
               <label>С<input name="from" type="date" required></label>
@@ -1069,7 +1076,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20261004-vk-direct-tools";
+  window.SB_CABINET_ASSET_VERSION = "20261012-appearance";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
