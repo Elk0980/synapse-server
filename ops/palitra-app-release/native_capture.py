@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 CONTENT_IMAGE = "sha256:8a98cf8656cc139e6cbb842f81bc05e20c534065b2274063629b18c32db3fa72"
-WORKER_IMAGE = "sha256:c5dd4502daf630afaac7415da5b19dc456c81a5f81626574f548adec04307cca"
+WORKER_IMAGE = "sha256:c5dd4502daf630afaac7415da5b19dc456c81a5f81626574f5480dec04307cca"
 CAPTURE_PARENT = Path("/opt/synapse/releases/palitra-app-20261015/capture")
 CABINET_PARENT = Path("/opt/synapse/sites/synapse")
 MAX_FILE = 16 * 1024 * 1024
