@@ -9,7 +9,7 @@ import sys
 
 CONTENT = "synapse-content-1"
 WORKER = "synapse-chat-1"
-CADDY = "synapse-caddy-1"
+CADDY = "caddy"
 CONTENT_IMAGE = "sha256:8a98cf8656cc139e6cbb842f81bc05e20c534065b2274063629b18c32db3fa72"
 WORKER_IMAGE = "sha256:c5dd4502daf630afaac7415da5b19dc456c81a5f81626574f5480dec04307cca"
 HOSTS = {"palitra-love.ru", "palitra-love-draft-1.synapsebusiness.ru", "synapse.synapsebusiness.ru"}
