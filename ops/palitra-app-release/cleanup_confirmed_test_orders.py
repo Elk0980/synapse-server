@@ -14,7 +14,7 @@ IMAGE='sha256:5cceeb7019e78fa1269e7e5ed1c5f93951ab26afae6aa73457cfb1622aaefa0e'
 WORKER_CID='7d7ec369e7ce44e492874137813caf3399b21b0242438b3b6df1281e4f379415'
 CONFIRM='USER_APPROVED_DELETE_ONLY_7_8_ROOT_VERIFIED_TEST_CONTACTS'
 IDS=(7,8);KEYS=tuple('palitra-love/order-workflow/orders/'+str(i)for i in IDS)
-DELETE_TABLES=('site_order_work_events','site_order_checklist_events','site_order_checklist','site_order_work','site_order_outbox','client_order_links','documents','site_orders')
+DELETE_TABLES=('site_order_work_events','site_order_checklist_events','site_order_checklist','site_order_work','site_order_outbox','client_bot_map','client_order_links','documents','site_orders')
 SOURCE={
  'server.js':'43bd9ad6a4a40870d6022705ab94bddffde38df3a318e252414ebc8fcc8c0660',
  'site-orders.js':'da10aa8c05af59e50d4d75406dbff4c90a05837f7ede4831a2c3812d7018e51f',
@@ -65,6 +65,20 @@ def table_names(conn):return {row[0]for row in conn.execute("SELECT name FROM sq
 def columns(conn,table):return {row['name']for row in conn.execute('PRAGMA table_info('+quoted(table)+')')}
 def selected(conn,table,condition,args):
  rows=[dict(r)for r in conn.execute('SELECT * FROM '+quoted(table)+' WHERE '+condition+' ORDER BY rowid LIMIT 101',args)];need(len(rows)<=100,'TARGET_ROW_BOUND_EXCEEDED');return rows
+def order_notification_maps(maps,outbox,counts):
+ # Only the order ACK INSERT in client-dialogs.js839: never a dialog/message map.
+ fields={'bot_key','chat_id','message_id','dialog_id','client_message_id','order_id','created_at'}
+ for row in maps:
+  need(set(row)==fields and row['bot_key']=='palitra'and type(row['order_id'])is int and row['order_id']in IDS and row['dialog_id']is None and row['client_message_id']is None and type(row['message_id'])is int and row['message_id']>0 and type(row['chat_id'])is str and row['chat_id'],'ORDER_NOTIFICATION_MAP_SCOPE_REFUSED',counts)
+  candidates=[job for job in outbox if job.get('site')=='palitra'and job.get('company_code')=='palitra-love'and job.get('order_id')==row['order_id']and job.get('kind')=='order'and job.get('transport')=='client_bot'and job.get('status')in ('sent','error')and job.get('chat_id')==row['chat_id']]
+  matched=False
+  for job in candidates:
+   try:ids=json.loads(job.get('external_ids','[]'))
+   except (TypeError,ValueError):raise Refused('ORDER_NOTIFICATION_EXTERNAL_IDS_REFUSED',counts)
+   need(type(ids)is list and len(ids)<=100 and all(type(value)is str and re.fullmatch('[0-9]{1,20}',value)is not None for value in ids),'ORDER_NOTIFICATION_EXTERNAL_IDS_REFUSED',counts)
+   matched=matched or str(row['message_id'])in ids
+  need(matched,'ORDER_NOTIFICATION_MAP_NOT_TERMINAL_OUTBOX',counts)
+
 def state(conn,expected_name,expected_comments):
  tables=table_names(conn);need(set(DELETE_TABLES)<=tables,'EXPECTED_TARGET_TABLES_REQUIRED');schema=[dict(r)for r in conn.execute("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE type IN ('table','index','trigger') ORDER BY type,name")];need(len(schema)<=3000,'SCHEMA_BOUND_EXCEEDED');triggers=[r for r in schema if r['type']=='trigger'and r['tbl_name']in DELETE_TABLES];need(not triggers,'TARGET_TRIGGER_REQUIRES_REVIEW')
  rows={};counts={};rows['site_orders']=selected(conn,'site_orders','id IN (?,?)',IDS);need([r['id']for r in rows['site_orders']]==list(IDS),'EXACT_TWO_ORDERS_REQUIRED')
@@ -77,6 +91,7 @@ def state(conn,expected_name,expected_comments):
  need(all(r['status']=='new'for r in rows['site_order_work']),'NON_NEW_WORK_REFUSED',counts);need(all(r.get('checked')in (0,None)for t in ('site_order_checklist','site_order_checklist_events')for r in rows[t]),'CHECKLIST_PROGRESS_REFUSED',counts)
  need(all(r.get('site')=='palitra'and r.get('company_code')=='palitra-love'and r.get('kind')=='order'and r.get('status')in ('sent','error')for r in rows['site_order_outbox']),'OUTBOX_INFLIGHT_UNKNOWN_OR_SCOPE_REFUSED',counts)
  need(all(r.get('site')=='palitra'and r.get('bot_key')=='palitra'for r in rows['client_order_links']),'ORDER_LINK_SCOPE_REFUSED',counts)
+ order_notification_maps(rows['client_bot_map'],rows['site_order_outbox'],counts)
  for row in rows['documents']:
   body=json.loads(row['body']);need(type(body)is dict and not body.get('confirmations')and not body.get('history')and body.get('stages')and body.get('currentStageId')==body['stages'][0]['id'],'WORKFLOW_PROGRESS_OR_PAYMENT_REFUSED',counts)
  blocked={};known=set(DELETE_TABLES)|{'site_order_rate','site_order_recipients'}
