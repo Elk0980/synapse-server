@@ -9,7 +9,7 @@ QUIET='6cb97cf8c85a4b6763c94c2ee3ba707a2d5fa33b2806ea5c7f0594dd137f634e'
 ROOT=Path('/opt/synapse/releases/palitra-app-20261015');LOCK='/opt/synapse/.palitra-app-release.lock';PID=2744197
 INSPECT='{"Id":{{json .Id}},"Image":{{json .Image}},"Config":{"Cmd":{{json .Config.Cmd}},"Entrypoint":{{json .Config.Entrypoint}},"WorkingDir":{{json .Config.WorkingDir}},"User":{{json .Config.User}},"Env":{{json .Config.Env}},"Labels":{{json .Config.Labels}}},"State":{"Running":{{json .State.Running}},"Status":{{json .State.Status}},"Health":{{json .State.Health.Status}}},"RestartCount":{{json .RestartCount}},"Mounts":{{json .Mounts}},"HostConfig":{"RestartPolicy":{{json .HostConfig.RestartPolicy}},"NetworkMode":{{json .HostConfig.NetworkMode}},"PortBindings":{{json .HostConfig.PortBindings}}}}'
 # .State.Health may not exist: Docker template index access is safe for an unconfigured healthcheck.
-INSPECT=INSPECT.replace('{{json .State.Health.Status}}','{{if .State.Health}}{{json .State.Health.Status}}{{else}}null{{end}}')
+INSPECT=INSPECT.replace('{{json .State.Health.Status}}','{{with index .State "Health"}}{{json .Status}}{{else}}null{{end}}')
 IMAGE_INSPECT='{"Id":{{json .Id}},"RepoTags":{{json .RepoTags}},"RepoDigests":{{json .RepoDigests}},"Os":{{json .Os}},"Architecture":{{json .Architecture}},"RootFS":{{json .RootFS}}}'
 PROBE=r'''const fs=require('node:fs'),c=require('node:crypto'),p=require('node:path');
 const hash=b=>c.createHash('sha256').update(b).digest('hex');
