@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "name": "post-features-a10-routing",
+  "status": "LOCAL_CANDIDATE_NOT_INSTALLED",
+  "sourcePath": "D:\\Codex-Private-Archive\\PALITRA_APP_SCHEME_20261014\\POST_RELEASE_BACKLOG_20261015\\WORKFLOW_BACKEND_1040\\INTEGRATED_RELEASE_1156\\bundle2\\candidate\\content\\palitra-orders-public\\shell.js",
+  "sourceSha256": "9db1f2eca6d8c28dd5a670be47a32f0a3904b8ca82eb30d63c7e7bddfe7da2cf",
+  "outputSha256": "3ce8a5c307f2011a5872377c8f7a8e599944c6a3a93ff78c80eda52d5507e877",
+  "bytes": 105349,
+  "hunks": [
+    {
+      "before": "  const nav = [];",
+      "after": "  const nav = [];\n  let initialWorkflowRoute = location.hash === '#A10';"
+    },
+    {
+      "before": "    state.role = uiRole();\n    nav.length = 0; state.frameId = null;\n    if (state.role && homeFrame(state.role)) open(homeFrame(state.role), {}, { replace: true }); else render();\n    refreshCounts(epoch);",
+      "after": "    state.role = uiRole();\n    nav.length = 0; state.frameId = null;\n    // Единственная стартовая ссылка настроек: роль и членство уже подтверждены backend.\n    const requestedWorkflow = initialWorkflowRoute; initialWorkflowRoute = false;\n    workflowIdentity();\n    const destination = requestedWorkflow && state.role === 'admin' && workflow && workflow.isOwner() && visibleFrame('A10', 'admin') ? 'A10' : homeFrame(state.role);\n    if (state.role && destination) open(destination, {}, { replace: true }); else render();\n    refreshCounts(epoch);"
+    },
+    {
+      "before": "  function buttonBlock(block, onclick = null, extra = '') {\n    const badge = countBadge(block.target);\n    return h('button', { type: 'button', class: `app-btn${extra}${badge ? ' has-notification-count' : ''}`, onclick: onclick || (() => go(block.target)) },",
+      "after": "  function buttonBlock(block, onclick = null, extra = '') {\n    // В принятом снимке у этой кнопки A01 цель пуста; явные переходы редактора сохраняем.\n    const target = !block.target && block.id === 'A01-b-mv8glw8qa' && state.frameId === 'A01' && state.role === 'admin' && workflow && workflow.isOwner() ? 'A10' : block.target;\n    const badge = countBadge(target);\n    return h('button', { type: 'button', class: `app-btn${extra}${badge ? ' has-notification-count' : ''}`, onclick: onclick || (() => go(target)) },"
+    }
+  ],
+  "targets": [
+    "content/palitra-orders-public/shell.js",
+    "/opt/synapse/sites/synapse/cabinet/palitra-orders/shell.js"
+  ],
+  "modelChanged": false,
+  "nativeActions": 0
+}
