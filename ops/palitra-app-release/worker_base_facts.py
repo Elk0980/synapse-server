@@ -5,7 +5,7 @@ from datetime import datetime,timezone
 CID='7d7ec369e7ce44e492874137813caf3399b21b0242438b3b6df1281e4f379415'
 IMAGE='sha256:c5dd4502daf630afaac7415da5b19dc456c81a5f81626574f5480dec04307cca'
 BRIDGE='36b0bdc733ad4f4514635d0416867d5964fef4c82aeabe125f542a20969de0ee'
-QUIET='6cb97cf8c85a4b6763c94c2ee3ba707a2d5fa33b2806ea5c7f0594dd137f634e'
+QUIET='4307380c32b34edf1f361f1ab9e618627aab251945c5f432d2a31f9e255bfd6b';QUIET_SIZE=2344
 ROOT=Path('/opt/synapse/releases/palitra-app-20261015');LOCK='/opt/synapse/.palitra-app-release.lock';PID=2744197
 INSPECT='{"Id":{{json .Id}},"Image":{{json .Image}},"Config":{"Cmd":{{json .Config.Cmd}},"Entrypoint":{{json .Config.Entrypoint}},"WorkingDir":{{json .Config.WorkingDir}},"User":{{json .Config.User}},"Env":{{json .Config.Env}},"Labels":{{json .Config.Labels}}},"State":{"Running":{{json .State.Running}},"Status":{{json .State.Status}},"Health":{{json .State.Health.Status}}},"RestartCount":{{json .RestartCount}},"Mounts":{{json .Mounts}},"HostConfig":{"RestartPolicy":{{json .HostConfig.RestartPolicy}},"NetworkMode":{{json .HostConfig.NetworkMode}},"PortBindings":{{json .HostConfig.PortBindings}}}}'
 # .State.Health may not exist: Docker template index access is safe for an unconfigured healthcheck.
@@ -103,7 +103,7 @@ def observe(reader,archive_root=ROOT):
   need(base['startupAllowed']and not base['appOrRuntimeMountOverlap'],'STARTUP_OR_MOUNT_NEEDS_REVIEW')
   output['images']=inventory(reader);probe=safe_probe(json.loads(reader.run(['docker','exec',CID,'node','-e',PROBE])));output['runtimeAndKnownCode']=probe
   need(set(probe['files'])=={'server.js','client-bot-bridge.js','quiet-hours.js','task-intake.js'},'KNOWN_FILE_SET_REQUIRED')
-  need(probe['files']['client-bot-bridge.js'].get('sha256')==BRIDGE and probe['files']['quiet-hours.js'].get('sha256')==QUIET,'RUNNING_CODE_PIN_CHANGED')
+  need(probe['files']['client-bot-bridge.js'].get('sha256')==BRIDGE and probe['files']['quiet-hours.js'].get('sha256')==QUIET and probe['files']['quiet-hours.js'].get('size')==QUIET_SIZE,'RUNNING_CODE_PIN_CHANGED')
   need(probe['files']['server.js'].get('available')is True and probe.get('binary',{}).get('available')is True and all(probe.get('api',{}).get(k)is True for k in ('fetch','FormData','Blob','abortTimeout')),'RUNTIME_NEEDS_REVIEW')
   output['archiveMetadata']=archives(archive_root);after_probe=safe_probe(json.loads(reader.run(['docker','exec',CID,'node','-e',PROBE])));after=safe_snapshot(reader.snapshot());reader.lease()
   need(base['configOpaqueSha256']==after['configOpaqueSha256']and base['restartCount']==after['restartCount']and canon(probe)==canon(after_probe),'FINAL_IDENTITY_CONFIG_OR_SOURCE_DRIFT')
