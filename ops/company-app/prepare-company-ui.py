@@ -72,8 +72,8 @@ change('shell.js',"        auth.cabinet = B.parseIdentity(who);", """        if 
 change('shell.js',"    renderDesktopNav();\n    if (!fresh)", "    renderDesktopNav();\n    renderCompanyNav();\n    if (!fresh)")
 change('shell.js',"text: DESIGN ? str(DESIGN.appTitle) || 'Palitra Love заказы' : 'Palitra Love заказы'", "text: multiCompany && auth.cabinet ? Companies.profile(activeCompany)?.name || 'Компании' : DESIGN ? str(DESIGN.appTitle) || 'Palitra Love заказы' : 'Palitra Love заказы'")
 workflow_guard = "    if (type === 'workflow') return Boolean(workflow"
-if source['shell.js'].count('/* PALITRA_UI_BUILD:palitra-chat-widget-compact-20261019-r1 */') == 1 and source['shell.js'].count("const SESSION_UI_BUILD = 'palitra-chat-widget-compact-20261019-r1';") == 1:
-    # Release35 adds Palitra's widget settings beside its workflow screen. Keep
+if any(source['shell.js'].count(f'/* PALITRA_UI_BUILD:{build} */') == 1 and source['shell.js'].count(f"const SESSION_UI_BUILD = '{build}';") == 1 for build in ['palitra-chat-widget-compact-20261019-r1', 'palitra-chat-open-layout-20261019-r1']):
+    # Releases35/36 include Palitra's widget settings beside its workflow screen. Keep
     # both native screens, but do not expose either under another studio.
     workflow_guard = "    if (type === 'workflow' || type === 'widget-settings') return Boolean(workflow"
 change('shell.js', workflow_guard, workflow_guard.replace('return Boolean(workflow', "return activeCompany === 'palitra-love' && Boolean(workflow"))
@@ -129,14 +129,14 @@ insert="""
 
 """
 change('shell.js',"  /* ---------- вход и смена identity ---------- */",insert+"  /* ---------- вход и смена identity ---------- */")
-accepted_builds = ['palitra-attach-paperclip-20261018-r1', 'palitra-chat-avatar-hugh-20261019-r1', 'palitra-chat-composer-bottom-20261019-r1', 'palitra-chat-widget-20261019-r1', 'palitra-chat-widget-compact-20261019-r1']
+accepted_builds = ['palitra-attach-paperclip-20261018-r1', 'palitra-chat-avatar-hugh-20261019-r1', 'palitra-chat-composer-bottom-20261019-r1', 'palitra-chat-widget-20261019-r1', 'palitra-chat-widget-compact-20261019-r1', 'palitra-chat-open-layout-20261019-r1']
 matched_builds = [build for build in accepted_builds
                   if source['shell.js'].count(f'/* PALITRA_UI_BUILD:{build} */') == 1
                   and source['shell.js'].count(f"const SESSION_UI_BUILD = '{build}';") == 1]
 if len(matched_builds) != 1:
     raise ValueError('Unknown or inconsistent source build; review the fresh base first')
 source_build = matched_builds[0]
-if source_build in ['palitra-chat-widget-20261019-r1', 'palitra-chat-widget-compact-20261019-r1']:
+if source_build in ['palitra-chat-widget-20261019-r1', 'palitra-chat-widget-compact-20261019-r1', 'palitra-chat-open-layout-20261019-r1']:
     # The shared-widget release adds a second staff list and two outstanding page
     # readers. None of those may survive a company change or revive a late result.
     change('shell.js', '        attachmentComposer = null; earlierRead = null; earlierThreadsRead = null; nav.length = 0; counts.orders = 0;',
