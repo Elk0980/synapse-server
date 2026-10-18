@@ -12,7 +12,7 @@ async function handle({request,url,reply,requireSession,readSnapshot=async()=>nu
  if(!permitted(session.user,company))fail(403,'Нет доступа к отчётам этой компании');
  for(const key of url.searchParams.keys())if(url.searchParams.getAll(key).length!==1)fail(400,'Фильтр задан несколько раз');
  const query=Object.fromEntries(url.searchParams),at=now();period(query,at);
- const snapshot=await readSnapshot(company);
+ const snapshot=await readSnapshot(company,query,at);
  const traffic=await readTraffic(company,query,at);
  const fresh=requireSession(request);
  if(fresh.user.id!==session.user.id||fresh.user.sessionVersion!==session.user.sessionVersion||!permitted(fresh.user,company))fail(403,'Доступ к отчётам изменился');

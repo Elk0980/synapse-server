@@ -28,3 +28,58 @@ test('source status and own receipt expose only metadata, preserve scope and nev
 test('receipt lookup cannot read another actor, a revoked company or malformed keys',async t=>{const {cache}=fixture(t);cache.publish([entry('alvi'),entry('avokado')],options('daily'));for(const [suffix,code,codes] of [['/receipt?requestId=missing',404,['alvi','avokado']],['/receipt?requestId=daily',403,['alvi']],['/receipt?requestId=daily&requestId=other',400,['alvi','avokado']],['/receipt?requestId=bad%2Fkey',400,['alvi','avokado']],['/status?company=alvi',400,['alvi','avokado']]]){const s=httpSetup({method:'GET',codes});s.args.url=new URL('https://synapse.synapsebusiness.ru/content/customer-reports/source'+suffix);s.args.cache=cache;await assert.rejects(I.handle(s.args),{status:code});assert.equal(s.replies.length,0);}for(const suffix of ['/status','/receipt?requestId=daily']){const s=httpSetup({method:'GET',role:'editor'});s.args.url=new URL('https://synapse.synapsebusiness.ru/content/customer-reports/source'+suffix);s.args.cache=cache;await assert.rejects(I.handle(s.args),{status:403});}});
 test('metadata read rechecks the same actor, version, role and companies before returning',async()=>{for(const mutate of [u=>({...u,id:2}),u=>({...u,sessionVersion:8}),u=>({...u,role:'editor'}),u=>({...u,companyCodes:['avokado']})]){let reads=0;const user={id:1,sessionVersion:7,role:'owner',companyCodes:['alvi','avokado']},s=httpSetup({method:'GET'});s.args.url.pathname+='/status';s.args.requireSession=()=>({user:reads++?mutate(user):user});s.args.cache={metadata:()=>null};await assert.rejects(I.handle(s.args),{status:403});assert.equal(s.replies.length,0);}});
 test('dedicated source reader enforces JSON, actual byte limit and UTF-8 before parsing',async()=>{const request=(bytes,type='application/json')=>Object.assign(Readable.from([bytes]),{headers:{'content-type':type}});assert.deepEqual(await I.readSourceJson(request(Buffer.from('{"ok":true}'))),{ok:true});await assert.rejects(I.readSourceJson(request(Buffer.from('{"т":"я"}')),5),{status:413});await assert.rejects(I.readSourceJson(request(Buffer.from('[]'),'text/plain')),{status:415});await assert.rejects(I.readSourceJson(request(Buffer.from('{"x":"\xff"}','latin1'))),{status:400});await assert.rejects(I.readSourceJson(request(Buffer.from('{broken'))),{status:400});});
+
+function periodSnapshot(at,n,company='alvi'){
+ const s=snapshot(company,n),day=require('./customer-reports.cjs').isoDay(at);
+ s.capturedAt=s.observedThrough=at;s.periods=[{from:day.slice(0,7)+'-01',to:day,newClients:n}];s.clients.asOfDay=day;return s;
+}
+test('a later month and reopening do not hide the saved old month or replace its recency with today',async t=>{
+ const {db,cache}=fixture(t),old=periodSnapshot('2026-09-30T12:00:00.000Z',7);
+ cache.publish([{companyCode:'alvi',expectedRevision:0,snapshot:old}],options('september'));
+ cache.publish([entry('alvi',2,1),entry('avokado',3)],options('october'));
+ const reopened=createCache(db,{clock:()=>now});
+ let response,observedQuery;
+ await H.handle({request:{method:'GET'},url:new URL('https://example.test/content/alvi/customer-reports?month=2026-09'),requireSession:()=>({user:{id:2,sessionVersion:1,role:'editor',companyCodes:['alvi'],permissions:['analytics.view']}}),readSnapshot:async(c,q,at)=>{observedQuery={c,q,at};return reopened.readForPeriod(c,q,at);},now:()=>now,reply:(status,body)=>response=body});
+ assert.deepEqual(observedQuery,{c:'alvi',q:{month:'2026-09'},at:now});
+ assert.equal(response.newClients.value,7);assert.equal(response.clients.value,10);assert.equal(response.groups[0].count,10);assert.equal(response.source.updatedAt,old.capturedAt);
+ assert.equal(reopened.readForPeriod('alvi',{month:'2026-10'}).periods[0].newClients,2);
+ assert.equal(reopened.metadata('alvi').revision,2);assert.equal(reopened.receipt(1,'october').notificationSent,false);
+ assert.equal(reopened.readForPeriod('avokado',{month:'2026-09'}).companyCode,'avokado');
+ assert.throws(()=>reopened.readForPeriod('palitra-love',{month:'2026-09'}),{status:403});
+});
+test('old daily counts remain available from their actual later snapshot, without inventing old client groups',t=>{
+ const {cache}=fixture(t),old=periodSnapshot('2026-09-30T12:00:00.000Z',7);
+ old.periods.push({from:'2026-09-10',to:'2026-09-10',newClients:3});
+ cache.publish([{companyCode:'alvi',expectedRevision:0,snapshot:old}],options('september'));
+ cache.publish([entry('alvi',2,1)],options('october'));
+ const query={mode:'day',day:'2026-09-10'},source=cache.readForPeriod('alvi',query);
+ const result=require('./customer-report-aggregates.cjs').report({companyCode:'alvi',query,snapshot:source,now});
+ assert.equal(result.newClients.value,3);assert.equal(result.clients.value,null);assert.ok(result.groups.every(g=>g.count===null));assert.equal(result.ltv.value,null);
+ assert.equal(result.source.updatedAt,old.capturedAt);
+ const unknown=require('./customer-report-aggregates.cjs').report({companyCode:'alvi',query:{month:'2026-08'},snapshot:cache.readForPeriod('alvi',{month:'2026-08'}),now});
+ assert.equal(unknown.newClients.value,null);assert.equal(unknown.clients.value,null);
+});
+test('correcting an old observed month does not hide a newer observed month',t=>{
+ const {db,cache}=fixture(t),old=periodSnapshot('2026-09-30T12:00:00.000Z',7);
+ cache.publish([{companyCode:'alvi',expectedRevision:0,snapshot:old}],options('september'));
+ cache.publish([entry('alvi',2,1)],options('october'));
+ const later='2026-10-19T17:00:00.000Z',writer=createCache(db,{clock:()=>later});
+ const corrected=structuredClone(old);corrected.capturedAt=later;corrected.periods[0].newClients=9;
+ writer.publish([{companyCode:'alvi',expectedRevision:2,snapshot:corrected}],options('correct-september'));
+ assert.equal(writer.readForPeriod('alvi',{month:'2026-09'}).periods[0].newClients,9);
+ assert.equal(writer.readForPeriod('alvi',{month:'2026-10'}).periods[0].newClients,2);
+ assert.equal(writer.metadata('alvi').revision,3);
+ assert.equal(db.prepare('SELECT count(*) n FROM salon_report_history_v1').get().n,3);
+});
+test('verified complete visit and cash history takes precedence and computes the selected past cut',t=>{
+ const {cache}=fixture(t),old=periodSnapshot('2026-09-30T12:00:00.000Z',7);
+ cache.publish([{companyCode:'alvi',expectedRevision:0,snapshot:old}],options('september'));
+ const first='2026-01-02T12:00:00.000Z',last='2026-10-18T16:00:00.000Z';
+ const history={contract:'salon-client-history/v1',companyCode:'alvi',branchId:989844,source:'yclients',capturedAt:now,observedThrough:now,coverage:{clients:true,visits:true,lifetimeHistory:true,payments:true,refunds:true},clients:[{id:'c1',createdAt:'2026-01-01T00:00:00.000Z',firstPaidVisitAt:first,lastVisitAt:last}],attendedVisits:[{id:'v1',clientId:'c1',at:first},{id:'v2',clientId:'c1',at:last}],cash:[{id:'p1',clientId:'c1',at:first,kind:'payment',amountKopecks:3000,currency:'RUB'},{id:'r1',clientId:'c1',at:'2026-02-01T12:00:00.000Z',kind:'refund',amountKopecks:500,currency:'RUB'}]};
+ cache.publish([{companyCode:'alvi',expectedRevision:1,snapshot:history}],options('complete-history'));
+ const query={month:'2026-09'},selected=cache.readForPeriod('alvi',query);
+ assert.equal(selected.contract,'salon-client-history/v1');
+ const report=require('./customer-reports.cjs').report({companyCode:'alvi',query,snapshot:selected,now});
+ assert.equal(report.newClients.value,0);assert.equal(report.clients.value,1);assert.equal(report.ltv.value,'2500');assert.equal(report.source.status,'complete');
+ assert.equal(report.groups.find(g=>g.key==='6to12').count,1);
+});

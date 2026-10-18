@@ -42,9 +42,28 @@ function createCache(db,{clock=()=>new Date().toISOString()}={}){
  db.exec(`CREATE TABLE IF NOT EXISTS salon_report_cache_v1(company TEXT PRIMARY KEY,revision INTEGER NOT NULL,body TEXT NOT NULL,sha256 TEXT NOT NULL,captured_at TEXT NOT NULL,received_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS salon_report_history_v1(company TEXT NOT NULL,revision INTEGER NOT NULL,body TEXT NOT NULL,sha256 TEXT NOT NULL,captured_at TEXT NOT NULL,received_at TEXT NOT NULL,PRIMARY KEY(company,revision));
  CREATE TABLE IF NOT EXISTS salon_report_import_v1(actor_id TEXT NOT NULL,request_id TEXT NOT NULL,request_sha TEXT NOT NULL,receipt TEXT NOT NULL,PRIMARY KEY(actor_id,request_id));`);
+ db.exec("CREATE INDEX IF NOT EXISTS salon_report_observed_v1 ON salon_report_history_v1(company,julianday(json_extract(body,'$.observedThrough')),revision)");
  const latest=db.prepare('SELECT * FROM salon_report_cache_v1 WHERE company=?');
+ const observed=db.prepare("SELECT body FROM salon_report_history_v1 WHERE company=? AND julianday(json_extract(body,'$.observedThrough'))>=julianday(?) AND julianday(json_extract(body,'$.observedThrough'))<julianday(?) AND julianday(captured_at)<=julianday(?) ORDER BY julianday(json_extract(body,'$.observedThrough')) DESC,revision DESC LIMIT 1");
+ const savedPeriod=db.prepare("SELECT body FROM salon_report_history_v1 h WHERE company=? AND json_extract(body,'$.contract')='salon-client-aggregates/v1' AND julianday(captured_at)<=julianday(?) AND EXISTS(SELECT 1 FROM json_each(h.body,'$.periods') p WHERE json_extract(p.value,'$.from')>=? AND json_extract(p.value,'$.to')<=?) ORDER BY revision DESC LIMIT 1");
  return Object.freeze({
   read(company){if(!companies.includes(company))fail(403,'Компания недоступна');const row=latest.get(company);return row?JSON.parse(row.body):null;},
+  readForPeriod(company,query={},at=clock()){
+   if(!companies.includes(company))fail(403,'Компания недоступна');
+   if(!time(at))fail(503,'Время сервера не подтверждено');
+   const p=R.period(query,at),row=latest.get(company);if(!row)return null;
+   const current=JSON.parse(row.body);
+   // A full-history contract supplies actual visits for a past cut. Do not
+   // calculate a potentially large report twice; the protected reader still
+   // validates all rows and money before returning any metrics.
+   if(current.contract==='salon-client-history/v1'&&['clients','visits','lifetimeHistory','payments','refunds'].every(key=>current.coverage?.[key]===true)&&Array.isArray(current.attendedVisits)&&Array.isArray(current.cash))return current;
+   const coherent=observed.get(company,p.fromAt,p.untilAt,at);
+   if(coherent)return JSON.parse(coherent.body);
+   // A saved later UI snapshot may still contain actual daily counts for the
+   // selected old day. Keep its source dates; unavailable historical groups stay unknown.
+   const counts=savedPeriod.get(company,at,p.from,p.to);
+   return counts?JSON.parse(counts.body):current;
+  },
   metadata(company){if(!companies.includes(company))fail(403,'Компания недоступна');const r=latest.get(company);return r?{companyCode:company,revision:r.revision,sha256:r.sha256,capturedAt:r.captured_at,receivedAt:r.received_at}:null;},
   receipt(actorId,requestId){if(!id(String(actorId??''))||!id(requestId))fail(400,'Некорректный ключ обновления');const row=db.prepare('SELECT receipt FROM salon_report_import_v1 WHERE actor_id=? AND request_id=?').get(String(actorId),requestId);return row?{...JSON.parse(row.receipt),requestId}:null;},
   publish(entries,{actorId,requestId,beforeCommit=()=>{}}={}){
