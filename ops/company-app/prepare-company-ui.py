@@ -123,7 +123,7 @@ insert="""
 
 """
 change('shell.js',"  /* ---------- вход и смена identity ---------- */",insert+"  /* ---------- вход и смена identity ---------- */")
-accepted_builds = ['palitra-attach-paperclip-20261018-r1', 'palitra-chat-avatar-hugh-20261019-r1']
+accepted_builds = ['palitra-attach-paperclip-20261018-r1', 'palitra-chat-avatar-hugh-20261019-r1', 'palitra-chat-composer-bottom-20261019-r1']
 matched_builds = [build for build in accepted_builds
                   if source['shell.js'].count(f'/* PALITRA_UI_BUILD:{build} */') == 1
                   and source['shell.js'].count(f"const SESSION_UI_BUILD = '{build}';") == 1]
@@ -135,7 +135,7 @@ change('shell.js', "  const CHANNEL_AUTHOR = {", """  function chatAuthorLabel(a
   }
   const CHANNEL_AUTHOR = {""")
 change('shell.js', '${CHANNEL_AUTHOR[author] || str(author)}', '${chatAuthorLabel(author)}')
-if source_build == 'palitra-chat-avatar-hugh-20261019-r1':
+if source_build != 'palitra-attach-paperclip-20261018-r1':
     change('shell.js', "    if (['shop', 'operator', 'manager', 'owner'].includes(author)) {", "    if (activeCompany === 'palitra-love' && ['shop', 'operator', 'manager', 'owner'].includes(author)) {")
     change('shell.js', "    const label = CHANNEL_AUTHOR[author] || str(author) || 'Участник';", "    const label = chatAuthorLabel(author) || 'Участник';")
 change('shell.js', f'/* PALITRA_UI_BUILD:{source_build} */', '/* PALITRA_UI_BUILD:synapse-company-app-20261018-r1 */')
@@ -147,6 +147,14 @@ source['shell.css']+='''\n/* One persistent company menu in the existing shell, 
 .company-nav__item:focus-visible { outline:3px solid var(--accent); outline-offset:1px; }
 .company-nav__item:disabled { opacity:.6; cursor:wait; }
 @media(min-width:1024px) { .phone:has(> .company-nav:not([hidden])) { grid-template-rows:76px minmax(0,1fr) auto; } .phone > .company-nav { grid-column:1 / -1; grid-row:3; } }
+@media(max-width:1023px) and (max-height:430px) {
+  .phone:has(> .company-nav:not([hidden])) .app-body--chat > .chat { gap:4px; }
+  .phone:has(> .company-nav:not([hidden])) .chat__list { padding-top:0; padding-bottom:0; }
+  .phone:has(> .company-nav:not([hidden])) .chat__dock { max-height:100%; grid-template-rows:minmax(24px,1fr) auto; }
+  .phone:has(> .company-nav:not([hidden])) .chat__dock:has(> .chat__files[hidden]) { grid-template-rows:auto; }
+  .phone:has(> .company-nav:not([hidden])) .chat__dock .chat__files { max-height:44px; }
+  .phone:has(> .company-nav:not([hidden])) .chat__dock .chat__input { min-height:44px; max-height:44px; }
+}
 '''
 change('cabinet.html','<title>Palitra Love заказы</title>','<title>Компании — приложение</title>')
 change('cabinet.html','<script src="synapse-bridge.js?v=15"></script>', '<script src="company-context.js?v=20261018-r1"></script>\n<script src="synapse-bridge.js?v=20261018-r1"></script>')
