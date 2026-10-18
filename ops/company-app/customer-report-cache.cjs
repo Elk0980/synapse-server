@@ -46,6 +46,7 @@ function createCache(db,{clock=()=>new Date().toISOString()}={}){
  return Object.freeze({
   read(company){if(!companies.includes(company))fail(403,'Компания недоступна');const row=latest.get(company);return row?JSON.parse(row.body):null;},
   metadata(company){if(!companies.includes(company))fail(403,'Компания недоступна');const r=latest.get(company);return r?{companyCode:company,revision:r.revision,sha256:r.sha256,capturedAt:r.captured_at,receivedAt:r.received_at}:null;},
+  receipt(actorId,requestId){if(!id(String(actorId??''))||!id(requestId))fail(400,'Некорректный ключ обновления');const row=db.prepare('SELECT receipt FROM salon_report_import_v1 WHERE actor_id=? AND request_id=?').get(String(actorId),requestId);return row?JSON.parse(row.receipt):null;},
   publish(entries,{actorId,requestId,beforeCommit=()=>{}}={}){
    if(!id(String(actorId??''))||!id(requestId)||!Array.isArray(entries)||!entries.length||entries.length>2)fail(400,'Нужны актор, ключ запроса и источники');
    const now=clock(),seen=new Set();if(!time(now))fail(503,'Время сервера не подтверждено');
