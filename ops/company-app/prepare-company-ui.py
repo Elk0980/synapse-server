@@ -90,6 +90,7 @@ insert="""
     }
     const sameActor = auth.cabinet && String(who.userId) === auth.cabinet.userId;
     if (!options.initial || activeCompany !== profile.code || (auth.cabinet && !sameActor)) {
+      clearTimeout(toastTimer); toastTimer = 0; ui.toast.hidden = true; ui.toast.textContent = '';
       if (!sameActor) clearIdentityData({ preserveCompanyContext: true });
       else {
         companyForms.set(`${auth.cabinet.userId}#${activeCompany}`, { ...form });
