@@ -99,6 +99,6 @@ change('cabinet.html', '<link rel="stylesheet" href="workflow-ui.css?v=1">', '<l
 change('cabinet.html', '<script src="company-context.js?v=20261018-r1"></script>', '<script src="company-context.js?v=20261018-r1"></script>\n<script src="customer-reports-ui.js?v=20261018-r1"></script>')
 for name, text in source.items():
     (out / name).write_text(text, encoding='utf-8', newline='\n')
-for name in ['customer-reports-ui.js', 'customer-reports-ui.css']:
+for name in ['customer-reports-ui.js', 'customer-reports-ui.css', 'report-source.html', 'report-source-ui.js', 'report-source.css']:
     shutil.copy2(root / name, out / name)
 print('Reports candidate prepared locally; not installed.')

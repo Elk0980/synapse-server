@@ -46,7 +46,7 @@ function createCache(db,{clock=()=>new Date().toISOString()}={}){
  return Object.freeze({
   read(company){if(!companies.includes(company))fail(403,'Компания недоступна');const row=latest.get(company);return row?JSON.parse(row.body):null;},
   metadata(company){if(!companies.includes(company))fail(403,'Компания недоступна');const r=latest.get(company);return r?{companyCode:company,revision:r.revision,sha256:r.sha256,capturedAt:r.captured_at,receivedAt:r.received_at}:null;},
-  receipt(actorId,requestId){if(!id(String(actorId??''))||!id(requestId))fail(400,'Некорректный ключ обновления');const row=db.prepare('SELECT receipt FROM salon_report_import_v1 WHERE actor_id=? AND request_id=?').get(String(actorId),requestId);return row?JSON.parse(row.receipt):null;},
+  receipt(actorId,requestId){if(!id(String(actorId??''))||!id(requestId))fail(400,'Некорректный ключ обновления');const row=db.prepare('SELECT receipt FROM salon_report_import_v1 WHERE actor_id=? AND request_id=?').get(String(actorId),requestId);return row?{...JSON.parse(row.receipt),requestId}:null;},
   publish(entries,{actorId,requestId,beforeCommit=()=>{}}={}){
    if(!id(String(actorId??''))||!id(requestId)||!Array.isArray(entries)||!entries.length||entries.length>2)fail(400,'Нужны актор, ключ запроса и источники');
    const now=clock(),seen=new Set();if(!time(now))fail(503,'Время сервера не подтверждено');
@@ -55,11 +55,11 @@ function createCache(db,{clock=()=>new Date().toISOString()}={}){
    db.exec('BEGIN IMMEDIATE');
    try{
     const previous=db.prepare('SELECT * FROM salon_report_import_v1 WHERE actor_id=? AND request_id=?').get(String(actorId),requestId);
-    if(previous){if(previous.request_sha!==requestSha)fail(409,'Этот ключ уже использован для другого источника');beforeCommit();db.exec('COMMIT');return{...JSON.parse(previous.receipt),replayed:true};}
+    if(previous){if(previous.request_sha!==requestSha)fail(409,'Этот ключ уже использован для другого источника');beforeCommit();db.exec('COMMIT');return{...JSON.parse(previous.receipt),requestId,replayed:true};}
     const plans=checked.map(e=>{const old=latest.get(e.companyCode);if((old?.revision||0)!==e.expectedRevision)fail(409,'Отчёт уже обновлён другим запуском');if(old&&Date.parse(e.capturedAt)<Date.parse(old.captured_at))fail(409,'Источник старее сохранённого отчёта');return{...e,changed:old?.sha256!==e.sha256,revision:(old?.revision||0)+(old?.sha256===e.sha256?0:1)};});
     beforeCommit(); // The native host rechecks current session/company/CSRF here.
     for(const p of plans)if(p.changed){const args=[p.companyCode,p.revision,p.body,p.sha256,p.capturedAt,now];db.prepare('INSERT INTO salon_report_cache_v1 VALUES(?,?,?,?,?,?) ON CONFLICT(company) DO UPDATE SET revision=excluded.revision,body=excluded.body,sha256=excluded.sha256,captured_at=excluded.captured_at,received_at=excluded.received_at').run(...args);db.prepare('INSERT INTO salon_report_history_v1 VALUES(?,?,?,?,?,?)').run(...args);}
-    const receipt={contract:'salon-report-import-receipt/v1',receivedAt:now,companies:plans.map(p=>({companyCode:p.companyCode,revision:p.revision,sha256:p.sha256,capturedAt:p.capturedAt,changed:p.changed})),notificationSent:false};
+    const receipt={contract:'salon-report-import-receipt/v1',requestId,receivedAt:now,companies:plans.map(p=>({companyCode:p.companyCode,revision:p.revision,sha256:p.sha256,capturedAt:p.capturedAt,changed:p.changed})),notificationSent:false};
     db.prepare('INSERT INTO salon_report_import_v1 VALUES(?,?,?,?)').run(String(actorId),requestId,requestSha,JSON.stringify(receipt));db.exec('COMMIT');return receipt;
    }catch(error){db.exec('ROLLBACK');throw error;}
   }

@@ -2,9 +2,17 @@
 const fail=(status,message)=>{throw Object.assign(new Error(message),{status});};
 const validBody=b=>Boolean(b&&typeof b==='object'&&!Array.isArray(b)&&Object.keys(b).sort().join(',')==='entries,requestId'&&Array.isArray(b.entries)&&b.entries.length>0&&b.entries.length<=2);
 const id=s=>typeof s==='string'&&/^[A-Za-z0-9:_-]{1,128}$/.test(s);
+const MAX_SOURCE_BODY=66*1024*1024;
+async function readSourceJson(request,limit=MAX_SOURCE_BODY){
+ if(!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(request.headers['content-type']||''))fail(415,'Нужен файл обновления в формате JSON');
+ const chunks=[];let size=0;
+ for await(const chunk of request){const bytes=Buffer.from(chunk);size+=bytes.length;if(size>limit)fail(413,'Пакет отчётов слишком большой');chunks.push(bytes);}
+ let body;try{body=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)));}catch{fail(400,'Файл обновления не прочитан');}
+ return body;
+}
 // Mount only inside the existing authenticated cabinet host. It grants no new
 // role, exposes no raw source GET, and never claims to send a push notification.
-async function handle({request,url,reply,requireSession,requireCsrf,readJson,origin,cache}){
+async function handle({request,url,reply,requireSession,requireCsrf,readJson=readSourceJson,origin,cache}){
  const paths=['/content/customer-reports/source','/content/customer-reports/source/status','/content/customer-reports/source/receipt'];
  if(!paths.includes(url.pathname))return false;
  if(url.pathname!==paths[0]){
@@ -34,4 +42,4 @@ async function handle({request,url,reply,requireSession,requireCsrf,readJson,ori
  const verify=()=>{const fresh=requireSession(request);if(fresh.user.id!==first.user.id||fresh.user.sessionVersion!==first.user.sessionVersion||fresh.user.role!=='owner'||!Array.isArray(fresh.user.companyCodes)||body.entries.some(e=>!e||!['alvi','avokado'].includes(e.companyCode)||!fresh.user.companyCodes.includes(e.companyCode)))fail(403,'Доступ к источникам отчётов изменился');requireCsrf(request,fresh);};
  verify();const result=cache.publish(body.entries,{actorId:first.user.id,requestId:body.requestId,beforeCommit:verify});reply(200,result,{'cache-control':'private, no-store'});return true;
 }
-module.exports={handle};
+module.exports={handle,readSourceJson,MAX_SOURCE_BODY};
