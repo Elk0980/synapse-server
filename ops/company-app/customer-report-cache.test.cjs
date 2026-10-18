@@ -83,3 +83,14 @@ test('verified complete visit and cash history takes precedence and computes the
  assert.equal(report.newClients.value,0);assert.equal(report.clients.value,1);assert.equal(report.ltv.value,'2500');assert.equal(report.source.status,'complete');
  assert.equal(report.groups.find(g=>g.key==='6to12').count,1);
 });
+test('historical cache selects the Irkutsk side of midnight at an exact month boundary',t=>{
+ const db=new DatabaseSync(':memory:');t.after(()=>db.close());
+ const at='2026-11-01T08:00:00.000Z',cache=createCache(db,{clock:()=>at});
+ const october=periodSnapshot('2026-10-31T15:59:59.999Z',12),november=periodSnapshot('2026-10-31T16:00:00.000Z',1);
+ cache.publish([{companyCode:'alvi',expectedRevision:0,snapshot:october}],options('last-october-ms'));
+ cache.publish([{companyCode:'alvi',expectedRevision:1,snapshot:november}],options('first-november-ms'));
+ assert.equal(cache.readForPeriod('alvi',{month:'2026-10'}).periods[0].newClients,12);
+ assert.equal(cache.readForPeriod('alvi',{month:'2026-11'}).periods[0].newClients,1);
+ assert.equal(cache.readForPeriod('alvi',{mode:'day',day:'2026-10-31'}).observedThrough,october.observedThrough);
+ assert.equal(cache.readForPeriod('alvi',{mode:'day',day:'2026-11-01'}).observedThrough,november.observedThrough);
+});
