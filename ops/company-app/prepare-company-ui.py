@@ -86,6 +86,8 @@ if any(source['shell.js'].count(f'/* PALITRA_UI_BUILD:{build} */') == 1 and sour
     # both native screens, but do not expose either under another studio.
     workflow_guard = "    if (type === 'workflow' || type === 'widget-settings') return Boolean(workflow"
 change('shell.js', workflow_guard, workflow_guard.replace('return Boolean(workflow', "return activeCompany === 'palitra-love' && Boolean(workflow"))
+change('shell.js', "if (workflow && state.role !== 'client' && frame.id === MENU_HOME[state.role])", "if (activeCompany === 'palitra-love' && workflow && state.role !== 'client' && frame.id === MENU_HOME[state.role])")
+change('shell.js', "workflow ? workflow.onboardingPanel(state.role, state.role === 'client' ? 'chat' : 'login', { force: true }) : null", "activeCompany === 'palitra-love' && workflow ? workflow.onboardingPanel(state.role, state.role === 'client' ? 'chat' : 'login', { force: true }) : null")
 change('shell.js',"if (!c['portal.staff']) sections.push(h('p', { class: 'hint', text: 'CRM Palitra: нет подтверждённой сессии сотрудника portal.' }));", "if (B.COMPANY_CODE === 'palitra-love' && !c['portal.staff']) sections.push(h('p', { class: 'hint', text: 'CRM Palitra: нет подтверждённой сессии сотрудника portal.' }));")
 change('shell.js',"readOnly: !caps()['native.write'], subtitle: ref.ns === 'legacy' ? 'Переписка в боте'", "readOnly: !caps()['native.write'] || Boolean(B.COMPANY_CODE && B.COMPANY_CODE !== 'palitra-love'), subtitle: ref.ns === 'legacy' ? (B.COMPANY_CODE && B.COMPANY_CODE !== 'palitra-love' ? 'Переписка в боте · только просмотр' : 'Переписка в боте')")
 # Insert helpers before initial sign-in code is invoked at the end of the renderer.
@@ -95,8 +97,13 @@ insert="""
   function renderCompanyNav() {
     if (!multiCompany || !companyContext) return;
     const snapshot = companyContext.snapshot();
-    Companies.renderNav({ document, parent: $('phone'), state: !state.role || state.role === 'client' ? { ...snapshot, companies: [] } : snapshot,
+    const companyNav = Companies.renderNav({ document, parent: $('phone'), state: !state.role || state.role === 'client' ? { ...snapshot, companies: [] } : snapshot,
       select: code => { void companyContext.choose(code).catch(error => { toast(error.message); renderCompanyNav(); }); } });
+    // Keep the existing composer last at the bottom. Company choices move
+    // above the conversation, inside its bounded header, on every chat screen.
+    const chatTop = $('body').querySelector('.chat__top');
+    if (chatTop) chatTop.prepend(companyNav);
+    else if (companyNav.parentNode !== $('phone')) $('phone').append(companyNav);
   }
   function activateCompany(profile, who, options = {}) {
     if (!profile) {
@@ -187,14 +194,16 @@ change('shell.js', '${CHANNEL_AUTHOR[author] || str(author)}', '${chatAuthorLabe
 if source_build != 'palitra-attach-paperclip-20261018-r1':
     change('shell.js', "    if (['shop', 'operator', 'manager', 'owner'].includes(author)) {", "    if (activeCompany === 'palitra-love' && ['shop', 'operator', 'manager', 'owner'].includes(author)) {")
     change('shell.js', "    const label = CHANNEL_AUTHOR[author] || str(author) || 'Участник';", "    const label = chatAuthorLabel(author) || 'Участник';")
-change('shell.js', f'/* PALITRA_UI_BUILD:{source_build} */', '/* PALITRA_UI_BUILD:synapse-company-app-20261019-r1 */')
-change('shell.js', f"const SESSION_UI_BUILD = '{source_build}';", "const SESSION_UI_BUILD = 'synapse-company-app-20261019-r1';")
+change('shell.js', f'/* PALITRA_UI_BUILD:{source_build} */', '/* PALITRA_UI_BUILD:synapse-company-app-20261019-r2 */')
+change('shell.js', f"const SESSION_UI_BUILD = '{source_build}';", "const SESSION_UI_BUILD = 'synapse-company-app-20261019-r2';")
 source['shell.css']+='''\n/* One persistent company menu in the existing shell, including mobile safe area. */
 .company-nav { flex:0 0 auto; display:flex; gap:6px; padding:8px 10px max(8px,env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--paper); z-index:5; }
 .company-nav__item { flex:1 1 0; min-width:0; min-height:48px; padding:8px 6px; border:1px solid transparent; border-radius:12px; background:transparent; color:var(--muted); cursor:pointer; font-weight:600; font-size:.88rem; }
 .company-nav__item[aria-pressed="true"] { color:var(--ink); background:var(--accent-soft); border-color:var(--accent); }
 .company-nav__item:focus-visible { outline:3px solid var(--accent); outline-offset:1px; }
 .company-nav__item:disabled { opacity:.6; cursor:wait; }
+.chat__top > .company-nav { min-width:0; border-top:0; border-bottom:1px solid var(--line); padding:4px 0 6px; }
+.chat__top > .company-nav .company-nav__item { min-height:44px; }
 @media(min-width:1024px) { .phone:has(> .company-nav:not([hidden])) { grid-template-rows:76px minmax(0,1fr) auto; } .phone > .company-nav { grid-column:1 / -1; grid-row:3; } }
 @media(max-width:1023px) and (max-height:430px) {
   .phone:has(> .company-nav:not([hidden])) .app-body--chat > .chat { gap:4px; }
