@@ -5,7 +5,11 @@ const TZ='Asia/Irkutsk', COMPANY=new Set(['alvi','avokado']);
 const fmt=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'});
 const local=at=>Object.fromEntries(fmt.formatToParts(new Date(at)).filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));
 const isoDay=at=>{const p=local(at);return `${p.year}-${p.month}-${p.day}`;};
-const instant=value=>typeof value==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(value)&&Number.isFinite(Date.parse(value));
+const instant=value=>{
+ if(typeof value!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(value)||!Number.isFinite(Date.parse(value)))return false;
+ const normalized=value.replace(/(?:\.(\d{1,3}))?Z$/,(_,ms)=>'.'+(ms||'').padEnd(3,'0')+'Z');
+ return new Date(value).toISOString()===normalized;
+};
 const fail=message=>{throw Object.assign(new Error(message),{status:400});};
 function day(value){if(typeof value!=='string'||!/^\d{4}-\d\d-\d\d$/.test(value))fail('Укажите существующую дату');const date=new Date(value+'T00:00:00Z');if(!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==value)fail('Укажите существующую дату');return value;}
 function shiftDay(value,n){return new Date(Date.parse(value+'T12:00:00Z')+n*86400000).toISOString().slice(0,10);}

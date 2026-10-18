@@ -51,3 +51,9 @@ test('unknown financial classification/client mapping/currency does not become a
 test('last-visit recency for an older month cannot be reconstructed from only current lastVisit',()=>{
  const s=snapshot([{...client('1','2026-01-01T00:00:00Z'),lastVisitAt:'2026-10-01T00:00:00Z'}],[]);const r=report(s,{month:'2026-09',basis:'lastVisit'});assert.equal(r.groupsReason,'HISTORICAL_LAST_VISIT_UNAVAILABLE');assert.ok(r.groups.every(g=>g.count===null));assert.equal(r.newClients.value,0);
 });
+test('nonexistent ISO dates and out-of-range hours are rejected instead of silently rolled forward',()=>{
+ for(const at of ['2026-02-30T00:00:00Z','2026-04-31T00:00:00Z','2026-09-30T24:00:00Z']){
+  assert.throws(()=>R.period({},at),{status:400});const s=snapshot();s.clients[0].lastVisitAt=at;assert.throws(()=>report(s),{status:400});
+ }
+ assert.equal(R.period({},'2026-10-18T15:00:00.1Z').month,'2026-10');
+});
