@@ -89,7 +89,7 @@ insert="""
       clearIdentityData({ preserveCompanyContext: true }); auth.cabinet = null; state.role = ''; state.frameId = null; render(); return;
     }
     const sameActor = auth.cabinet && String(who.userId) === auth.cabinet.userId;
-    if (!options.initial) {
+    if (!options.initial || activeCompany !== profile.code || (auth.cabinet && !sameActor)) {
       if (!sameActor) clearIdentityData({ preserveCompanyContext: true });
       else {
         companyForms.set(`${auth.cabinet.userId}#${activeCompany}`, { ...form });
@@ -123,13 +123,47 @@ insert="""
 
 """
 change('shell.js',"  /* ---------- вход и смена identity ---------- */",insert+"  /* ---------- вход и смена identity ---------- */")
-accepted_builds = ['palitra-attach-paperclip-20261018-r1', 'palitra-chat-avatar-hugh-20261019-r1', 'palitra-chat-composer-bottom-20261019-r1']
+accepted_builds = ['palitra-attach-paperclip-20261018-r1', 'palitra-chat-avatar-hugh-20261019-r1', 'palitra-chat-composer-bottom-20261019-r1', 'palitra-chat-widget-20261019-r1']
 matched_builds = [build for build in accepted_builds
                   if source['shell.js'].count(f'/* PALITRA_UI_BUILD:{build} */') == 1
                   and source['shell.js'].count(f"const SESSION_UI_BUILD = '{build}';") == 1]
 if len(matched_builds) != 1:
     raise ValueError('Unknown or inconsistent source build; review the fresh base first')
 source_build = matched_builds[0]
+if source_build == 'palitra-chat-widget-20261019-r1':
+    # The shared-widget release adds a second staff list and two outstanding page
+    # readers. None of those may survive a company change or revive a late result.
+    change('shell.js', '        attachmentComposer = null; earlierRead = null; earlierThreadsRead = null; nav.length = 0; counts.orders = 0;',
+           '        attachmentComposer = null; earlierRead = null; earlierThreadsRead = null; staffAdviceRead = null;\n        moreSiteChats = null; siteChatHeadRead = null; nav.length = 0; counts.orders = 0;')
+    change('shell.js', 'clientThreadLinked: false, error: \'\', menuOpen:',
+           'clientThreadLinked: false, siteChatThreads: null, siteChatThreadsBefore: null, error: \'\', menuOpen:')
+    old_list = "    'legacy.list': op({ auth: 'cabinet', cabinetPermission: 'crm.view', method: 'GET', path: () => `/content/${CONTENT_SITE}/client-dialogs`, proof: 'installed-read', source: 'E/palitra-work.js:55' }),"
+    change('synapse-bridge.js', old_list, old_list + """
+    'legacy.list.page': op({ auth: 'cabinet', cabinetPermission: 'crm.view', method: 'GET', path: () => `/content/${CONTENT_SITE}/client-dialogs`, query: input => {
+      const page = threadListQuery(input), result = {};
+      if (own(page, 'before')) result.beforeId = page.before;
+      if (own(page, 'limit')) result.limit = page.limit;
+      return result;
+    }, proof: 'reviewed-local', source: 'company-scoped-legacy-chat-list' }),""")
+    change('shell.js', "  function staffThreadPage(data, before = null) {", """  function companyChatListOperation() { return activeCompany === 'palitra-love' ? 'thread.list.page' : 'legacy.list.page'; }
+  function staffCompanyChatPage(data, before = null) {
+    if (activeCompany === 'palitra-love') return staffThreadPage(data, before);
+    if (!data || !Array.isArray(data.dialogs) || data.dialogs.length > 100) throw new Error('Не удалось загрузить список переписок.');
+    return staffThreadPage({ threads: data.dialogs, nextBefore: data.nextCursor }, before);
+  }
+  function staffThreadPage(data, before = null) {""")
+    change('shell.js', "staffThreadPage(await bridge.call('thread.list.page', { query: { limit: 30 } }))",
+           "staffCompanyChatPage(await bridge.call(companyChatListOperation(), { query: { limit: 30 } }))")
+    change('shell.js', "staffThreadPage(await bridge.call('thread.list.page', { query: { before, limit: 30 } }), before)",
+           "staffCompanyChatPage(await bridge.call(companyChatListOperation(), { query: { before, limit: 30 } }), before)")
+    change('shell.js', "    const chat = mobileFrame(state.role, 'chat'), rows = state.siteChatThreads;",
+           "    const chat = mobileFrame(state.role, 'chat'), rows = state.siteChatThreads, namespace = activeCompany === 'palitra-love' ? 'thread' : 'legacy';")
+    change('shell.js', "text: 'Переписки с сайта'", "text: activeCompany === 'palitra-love' ? 'Переписки с сайта' : 'Переписки'")
+    change('shell.js', "dataset: { thread: `thread:${row.id}` }", "dataset: { thread: `${namespace}:${row.id}` }")
+    change('shell.js', "{chat:`thread:${row.id}`, ...(row.orderId === null ? {} : {order:`native-order:${row.orderId}`})}",
+           "{chat:`${namespace}:${row.id}`, ...(row.orderId === null ? {} : {order:`native-order:${row.orderId}`})}")
+    change('shell.js', "row.orderId === null ? `Чат сайта №${row.id}` : `Общий чат · заявка №${row.orderId}`",
+           "activeCompany === 'palitra-love' ? (row.orderId === null ? `Чат сайта №${row.id}` : `Общий чат · заявка №${row.orderId}`) : (row.orderId === null ? `Переписка №${row.id}` : `Переписка · заявка №${row.orderId}`)")
 change('shell.js', "  const CHANNEL_AUTHOR = {", """  function chatAuthorLabel(author) {
     return author === 'shop' && activeCompany !== 'palitra-love' ? Companies.profile(activeCompany)?.name || 'Компания' : CHANNEL_AUTHOR[author] || str(author);
   }

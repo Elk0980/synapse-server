@@ -65,10 +65,7 @@ change('shell.js', "    if (!requestedWorkflow && requestedOrder && detail", '''
     } else if (!requestedWorkflow && requestedOrder && detail''')
 # Use the existing frame helper. Staff reports are added without changing Palitra's model.
 source['shell.js'] = source['shell.js'].replace("framesFor(state.role).find(f => screenType(f) === 'reports'", "frames().filter(f => f.role === state.role).find(f => screenType(f) === 'reports'")
-change('shell.js', "  const frames = () => { const existing = DESIGN ? DESIGN.frames : []; return existing.some((f) => f.id === 'A10') ? existing : [...existing, { id: 'A10', role: 'admin', kind: 'workflow', device: 'phone', title: 'Автоответ и этапы', blocks: [] }]; };", """  const frames = () => {
-    const existing = DESIGN ? DESIGN.frames : [];
-    const list = existing.some(f => f.id === 'A10') ? [...existing] : [...existing, { id: 'A10', role: 'admin', kind: 'workflow', device: 'phone', title: 'Автоответ и этапы', blocks: [] }];
-    if (activeCompany === 'palitra-love' || !salonAllowed()) return list;
+extend_report_frames = """    if (activeCompany === 'palitra-love' || !salonAllowed()) return list;
     for (const role of ['staff', 'admin']) if (!list.some(f => f.role === role && f.kind === 'reports' && f.hidden !== true))
       list.push({ id: role === 'staff' ? 'S_REPORTS' : 'A_REPORTS', role, kind: 'reports', device: 'mobile', title: 'Отчёты', menuVisible: true, blocks: [] });
     return list.map(frame => {
@@ -77,7 +74,18 @@ change('shell.js', "  const frames = () => { const existing = DESIGN ? DESIGN.fr
       if (!report || frame.blocks.some(b => b.type === 'button' && b.target === report.id)) return frame;
       return { ...frame, blocks: [...frame.blocks, { id: `${frame.id}-studio-reports`, type: 'button', label: 'Отчёты', target: report.id }] };
     });
-  };""")
+"""
+legacy_frames = "  const frames = () => { const existing = DESIGN ? DESIGN.frames : []; return existing.some((f) => f.id === 'A10') ? existing : [...existing, { id: 'A10', role: 'admin', kind: 'workflow', device: 'phone', title: 'Автоответ и этапы', blocks: [] }]; };"
+if source['shell.js'].count(legacy_frames) == 1:
+    change('shell.js', legacy_frames, """  const frames = () => {
+    const existing = DESIGN ? DESIGN.frames : [];
+    const list = existing.some(f => f.id === 'A10') ? [...existing] : [...existing, { id: 'A10', role: 'admin', kind: 'workflow', device: 'phone', title: 'Автоответ и этапы', blocks: [] }];
+""" + extend_report_frames + '  };')
+else:
+    # Reviewed widget33/34 builds add the shared client chat and staff lists here.
+    # Extend their exact existing list; keep every old/new native frame intact.
+    change('shell.js', "    return [...existing, ...builtins.filter(f => !existing.some(old => old.id === f.id))];\n  };",
+           "    const list = [...existing, ...builtins.filter(f => !existing.some(old => old.id === f.id))];\n" + extend_report_frames + '  };')
 change('shell.js', "    return effectiveMenu(role).menu.items.filter((item) => {", "    const visible = effectiveMenu(role).menu.items.filter((item) => {")
 change('shell.js', "      return true;\n    });\n  }\n  function homeFrame(role)", """      return true;
     });
