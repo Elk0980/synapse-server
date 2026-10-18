@@ -3,7 +3,9 @@ import shutil, hashlib, json
 import argparse
 parser=argparse.ArgumentParser(description='Prepare the existing shared company shell locally')
 parser.add_argument('--base',required=True,type=Path)
-BASE=parser.parse_args().base
+parser.add_argument('--bounds',type=Path,help='Exact reviewed CSS successor of the public36 base')
+args=parser.parse_args()
+BASE=args.base
 ROOT=Path(__file__).resolve().parent
 OUT=ROOT/'product'
 OUT.mkdir(exist_ok=True)
@@ -13,6 +15,13 @@ for name in ['shell.js','shell.css','synapse-bridge.js','native-host.js','cabine
     if pins.get(name)!=hashlib.sha256((BASE/name).read_bytes()).hexdigest():
         raise ValueError(f'Public base checksum mismatch: {name}')
 source={n:(BASE/n).read_text(encoding='utf-8') for n in ['shell.js','shell.css','synapse-bridge.js','native-host.js','cabinet.html']}
+if args.bounds:
+    if pins['shell.css'] != '5a5b3fe5b367d8bde8dbd7cabb6cd8cfe0b82ba8df6e7b493a5053a0a907ad37':
+        raise ValueError('Bounds patch requires the exact installed36 CSS')
+    payload=args.bounds.read_bytes()
+    if hashlib.sha256(payload).hexdigest() != '2095f3b0f873a1416e74931ce07e11384aa59aa1364ead66716ea6911226989b':
+        raise ValueError('Reviewed bounds CSS checksum mismatch')
+    source['shell.css']=payload.decode('utf-8')
 def change(name,old,new):
     if source[name].count(old)!=1:
         raise ValueError((name,old[:100],source[name].count(old)))
@@ -178,8 +187,8 @@ change('shell.js', '${CHANNEL_AUTHOR[author] || str(author)}', '${chatAuthorLabe
 if source_build != 'palitra-attach-paperclip-20261018-r1':
     change('shell.js', "    if (['shop', 'operator', 'manager', 'owner'].includes(author)) {", "    if (activeCompany === 'palitra-love' && ['shop', 'operator', 'manager', 'owner'].includes(author)) {")
     change('shell.js', "    const label = CHANNEL_AUTHOR[author] || str(author) || 'Участник';", "    const label = chatAuthorLabel(author) || 'Участник';")
-change('shell.js', f'/* PALITRA_UI_BUILD:{source_build} */', '/* PALITRA_UI_BUILD:synapse-company-app-20261018-r1 */')
-change('shell.js', f"const SESSION_UI_BUILD = '{source_build}';", "const SESSION_UI_BUILD = 'synapse-company-app-20261018-r1';")
+change('shell.js', f'/* PALITRA_UI_BUILD:{source_build} */', '/* PALITRA_UI_BUILD:synapse-company-app-20261019-r1 */')
+change('shell.js', f"const SESSION_UI_BUILD = '{source_build}';", "const SESSION_UI_BUILD = 'synapse-company-app-20261019-r1';")
 source['shell.css']+='''\n/* One persistent company menu in the existing shell, including mobile safe area. */
 .company-nav { flex:0 0 auto; display:flex; gap:6px; padding:8px 10px max(8px,env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--paper); z-index:5; }
 .company-nav__item { flex:1 1 0; min-width:0; min-height:48px; padding:8px 6px; border:1px solid transparent; border-radius:12px; background:transparent; color:var(--muted); cursor:pointer; font-weight:600; font-size:.88rem; }

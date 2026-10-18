@@ -106,6 +106,8 @@ change('shell.js', "if (event.persisted) { scheduleChatGeometry(); scheduleChatR
 change('cabinet.html', '<link rel="stylesheet" href="workflow-ui.css?v=1">', '<link rel="stylesheet" href="customer-reports-ui.css?v=20261018-r1">\n<link rel="stylesheet" href="workflow-ui.css?v=1">')
 change('cabinet.html', '<script src="company-context.js?v=20261018-r1"></script>', '<script src="company-context.js?v=20261018-r1"></script>\n<script src="customer-reports-ui.js?v=20261018-r1"></script>')
 for name, text in source.items():
+    if name == 'cabinet.html':
+        text=text.replace('v=20261018-r1','v=20261019-r1')
     (out / name).write_text(text, encoding='utf-8', newline='\n')
 for name in ['customer-reports-ui.js', 'customer-reports-ui.css', 'report-source.html', 'report-source-ui.js', 'report-source.css']:
     shutil.copy2(root / name, out / name)
