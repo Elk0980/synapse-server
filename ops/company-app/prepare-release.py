@@ -42,7 +42,7 @@ for before, after in [("FROZEN = False", "FROZEN = True"), ("MANIFEST_SHA = '0' 
 helper_sha = sha((packet / 'release-native.py').read_bytes())
 wrapper = '''import hashlib,json,os,sys,types
 from pathlib import Path
-CODE=Path('/opt/synapse/releases/palitra-app-20261015/multi-company-app-20261019-r1-code')
+CODE=Path('/opt/synapse/releases/palitra-app-20261015/multi-company-app-20261019-r2-code')
 HELPER_SHA='@HELPER_SHA@'
 def main():
  try:
@@ -59,13 +59,13 @@ if __name__=='__main__':sys.exit(main())
 (packet / 'company-app.py').write_text(wrapper, encoding='utf-8', newline='\n')
 inventory = {p.relative_to(packet).as_posix(): {'sha256': sha(p.read_bytes()), 'bytes': p.stat().st_size} for p in packet.rglob('*') if p.is_file()}
 assert len(inventory) == 25
-archive = args.out / 'code-r1.zip'
+archive = args.out / 'code-r2.zip'
 with zipfile.ZipFile(archive, 'x', zipfile.ZIP_DEFLATED) as z:
     for name in sorted(inventory): z.write(packet / name, name)
 archive_sha = sha(archive.read_bytes())
 prepare = '''import hashlib,io,json,os,re,stat,sys,urllib.request,zipfile
 from pathlib import Path,PurePosixPath
-CODE=Path('/opt/synapse/releases/palitra-app-20261015/multi-company-app-20261019-r1-code')
+CODE=Path('/opt/synapse/releases/palitra-app-20261015/multi-company-app-20261019-r2-code')
 ZIP_SHA='@ZIP_SHA@'
 EXPECTED=@EXPECTED@
 def need(v,c):
@@ -73,7 +73,7 @@ def need(v,c):
 def main():
  try:
   need(os.name=='posix' and os.geteuid()==0,'EXACT_ROOT_REQUIRED')
-  need(len(sys.argv)==2 and re.fullmatch(r'https://raw[.]githubusercontent[.]com/Elk0980/synapse-server/[0-9a-f]{40}/ops/releases/multi-company-app-20261019/code-r1[.]zip',sys.argv[1]),'EXACT_IMMUTABLE_URL_REQUIRED')
+  need(len(sys.argv)==2 and re.fullmatch(r'https://raw[.]githubusercontent[.]com/Elk0980/synapse-server/[0-9a-f]{40}/ops/releases/multi-company-app-20261019/code-r2[.]zip',sys.argv[1]),'EXACT_IMMUTABLE_URL_REQUIRED')
   for p in [*reversed(CODE.parents),CODE]:need(not p.is_symlink(),'CODE_SYMLINK_REFUSED')
   need(CODE.parent.is_dir() and CODE.parent.stat().st_uid==0 and not os.path.lexists(CODE),'NEW_CODE_NAMESPACE_REQUIRED_NO_RETRY')
   with urllib.request.urlopen(sys.argv[1],timeout=30) as response:raw=response.read(2*1024*1024+1)

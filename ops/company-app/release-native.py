@@ -17,7 +17,7 @@ import types
 
 FROZEN = False
 ROOT = Path('/opt/synapse/releases/palitra-app-20261015')
-NAME = 'multi-company-app-20261019-r1'
+NAME = 'multi-company-app-20261019-r2'
 CODE = ROOT / (NAME + '-code')
 LOCK = '/opt/synapse/.palitra-app-release.lock'
 PARENT = 'sha256:83b1873906d0740fc238acbf464bed02e88564e885e472f1cc68be3de336c063'
@@ -399,6 +399,8 @@ class Release:
         self.update(state, 'CONTENT_UP_STARTED_UNKNOWN', **proof)
         self.decision(pin); self.lease(); self.backups(state); self.stable()
         need(self.context_proof(state, True) == state['contextSha256'] and self.b.plan(before, 'content', self.paths['overlay']) == proof['plannedConfigHash'], 'LAST_CONTEXT_OR_COMPOSE_PLAN_CHANGED')
+        self.lease()
+        need(self.report_db() == ABSENT_REPORT_DB, 'LAST_REPORT_DATABASE_GROUP_MUST_BE_ABSENT')
         self.b.up(before, 'content', self.paths['overlay'])
         after = self.snapshot(child, frozenset(state['written']), proof)
         need(after['contentCid'] != before['contentCid'] and self.source_modes(True) == decision['sourceModes'], 'EXACT_NEW_CONTENT_AND_MODES_REQUIRED')
