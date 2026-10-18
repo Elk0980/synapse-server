@@ -17,7 +17,7 @@ import types
 
 FROZEN = False
 ROOT = Path('/opt/synapse/releases/palitra-app-20261015')
-NAME = 'multi-company-app-20261019-r2'
+NAME = 'multi-company-app-20261019-r3'
 CODE = ROOT / (NAME + '-code')
 LOCK = '/opt/synapse/.palitra-app-release.lock'
 PARENT = 'sha256:83b1873906d0740fc238acbf464bed02e88564e885e472f1cc68be3de336c063'
@@ -88,6 +88,11 @@ def load36(pid):
     current = types.SimpleNamespace(base=copy.deepcopy(receipt['after']), source=dict(accepted.final_source),
                                     static=dict(accepted.final_static), cabinet=accepted.cabinet, managed=accepted.managed,
                                     stable=stable, source_script=before35.source_script, accepted=accepted)
+    supplemental = {'client-bot-config.js': '33661a009e697c034c10632e3e6affdea30ba72176546147d029fd4b284706eb'}
+    need(not set(supplemental).intersection(current.source)
+         and b.photo.hashes(supplemental) == supplemental, 'EXACT_SUPPLEMENTAL_NATIVE_SOURCE_REQUIRED')
+    current.source.update(supplemental)
+    need(len(current.source) == 212, 'EXACT_AUGMENTED_SOURCE212_REQUIRED')
     return a, b, prior, current
 
 
@@ -102,12 +107,13 @@ def validate_records(manifest):
     names = {'product/' + n for n in products} | {'backend/company-app/' + n for n in modules} | {'backend/server.js', 'backend/client-bot-config.js'}
     result = {}
     for row in manifest['records']:
-        need(type(row) is dict and set(row) == {'name', 'target', 'sha256', 'bytes', 'beforeSha256', 'static'}
+        need(type(row) is dict and set(row) == {'name', 'target', 'sha256', 'bytes', 'beforeSha256', 'beforeSourceSha256', 'static'}
              and row['name'] in names and row['name'] not in result and digest(row['sha256'])
              and type(row['bytes']) is int and 0 < row['bytes'] <= 2 * 1024 * 1024
              and (row['beforeSha256'] is None or digest(row['beforeSha256'])), 'EXACT_PRODUCT_RECORD_REQUIRED')
         target = row['name'].removeprefix('backend/') if row['name'].startswith('backend/') else 'palitra-orders-public/' + row['name'].split('/')[-1]
         need(row['target'] == target and row['static'] == (row['name'].split('/')[-1] if row['name'].startswith('product/') else None), 'CLOSED_TARGET_MAPPING_REQUIRED')
+        need(row['beforeSourceSha256'] == (None if row['name'] == 'product/cabinet.html' else row['beforeSha256']), 'EXACT_DISTINCT_RUNTIME_STATIC_BASE_REQUIRED')
         result[row['name']] = row
     need(set(result) == names and len({r['target'] for r in result.values()}) == 21, 'CLOSED_UNIQUE_PAYLOAD_REQUIRED')
     return result
@@ -128,15 +134,15 @@ class Release:
         for row in self.records.values():
             raw = a.read(CODE / 'payload' / row['name'])
             need(len(raw) == row['bytes'] and sha(raw) == row['sha256'], 'PRODUCT_PAYLOAD_CHANGED')
-            need(current.source.get(row['target']) == row['beforeSha256'], 'SOURCE_BASE36_MISMATCH')
-            if row['beforeSha256'] is None: self.added_sources.append(row['target'])
+            need(current.source.get(row['target']) == row['beforeSourceSha256'], 'SOURCE_BASE36_MISMATCH')
+            if row['beforeSourceSha256'] is None: self.added_sources.append(row['target'])
             else: self.existing_sources[row['target']] = row
             self.source[row['target']] = row['sha256']
             if row['static']:
                 target = str(self.cabinet / row['static'])
                 need(current.static.get(target) == row['beforeSha256'], 'STATIC_BASE36_MISMATCH')
                 self.static[target] = row['sha256']; self.static_records[target] = row
-        need(len(self.source) == 225 and len(self.static) == 33 and len(self.added_sources) == 14, 'EXACT_SUCCESSOR225_STATIC33_REQUIRED')
+        need(len(current.source) == 212 and len(self.source) == 227 and len(self.static) == 33 and len(self.added_sources) == 15, 'EXACT_SUCCESSOR227_STATIC33_REQUIRED')
         self.pins = {str(CODE / 'payload/MANIFEST.json'): MANIFEST_SHA, str(Path(__file__)): sha(Path(__file__).read_bytes()), str(CODE / 'ROLLBACK.md'): ROLLBACK_SHA}
         self.b.lease = self.lease
 
@@ -235,8 +241,8 @@ class Release:
 
     def inspect_current(self):
         self.baseline()
-        return {'status': 'CURRENT36_READONLY_NOT_APPROVED', 'sourceFiles': 211, 'staticFiles': 27, 'chainFiles': 35,
-                'candidateSourceFiles': 225, 'candidateStaticFiles': 33, 'sourceModes': self.source_modes(), 'staticModes': self.static_modes(),
+        return {'status': 'CURRENT36_READONLY_NOT_APPROVED', 'sourceFiles': 212, 'sealedSourceFiles': 211, 'staticFiles': 27, 'chainFiles': 35,
+                'candidateSourceFiles': 227, 'candidateStaticFiles': 33, 'sourceModes': self.source_modes(), 'staticModes': self.static_modes(),
                 'reportDatabaseBefore': self.report_db(), 'runtimeWrites': 0}
 
     def acceptance(self, pin):
@@ -305,8 +311,8 @@ class Release:
         directory = self.a.exact_path(self.paths['backup']); s = directory.stat()
         need(stat.S_ISDIR(s.st_mode) and s.st_uid == 0 and stat.S_IMODE(s.st_mode) == 0o700
              and state['backupIdentity'] == [s.st_dev, s.st_ino, s.st_uid], 'PRIVATE_BACKUP_DIRECTORY_CHANGED')
-        need(len(state['sourceBackups']) == len(self.existing_sources) == 7
-             and {r['target']: r['baseSha256'] for r in state['sourceBackups']} == {k: v['beforeSha256'] for k, v in self.existing_sources.items()}
+        need(len(state['sourceBackups']) == len(self.existing_sources) == 6
+             and {r['target']: r['baseSha256'] for r in state['sourceBackups']} == {k: v['beforeSourceSha256'] for k, v in self.existing_sources.items()}
              and len(state['static']) == len(self.static_records) == 11
              and {r['target'] for r in state['static']} == set(self.static_records), 'EXACT_COMPLETE_BACKUP_INVENTORY_REQUIRED')
         for row in state['static']:
@@ -361,9 +367,9 @@ class Release:
         for target, row in sorted(self.existing_sources.items()):
             encoded = self.run(['docker', 'exec', 'synapse-content-1', 'node', '-e', self.current.source_script, target])
             need(len(encoded) < 3 * 1024 * 1024, 'BOUNDED_ORIGINAL_SOURCE_REQUIRED')
-            raw = base64.b64decode(encoded, validate=True); need(sha(raw) == row['beforeSha256'], 'SOURCE_BACKUP_BASE_CHANGED')
+            raw = base64.b64decode(encoded, validate=True); need(sha(raw) == row['beforeSourceSha256'], 'SOURCE_BACKUP_BASE_CHANGED')
             backup = self.paths['backup'] / ('source-' + str(len(state['sourceBackups'])))
-            self.files.write(backup, raw, 0o600); state['sourceBackups'].append({'target': target, 'baseSha256': row['beforeSha256'], 'backup': str(backup)})
+            self.files.write(backup, raw, 0o600); state['sourceBackups'].append({'target': target, 'baseSha256': row['beforeSourceSha256'], 'backup': str(backup)})
         for row in self.records.values():
             self.files.write(self.paths['context'] / 'app' / row['target'], self.a.read(CODE / 'payload' / row['name']), decision['sourceModes'][row['target']]['mode'])
         for target, row in sorted(self.static_records.items()):
@@ -407,7 +413,7 @@ class Release:
         report_db = self.report_db(); need(private_report_db(report_db), 'PRIVATE_REPORT_DB_CREATION_REQUIRED')
         self.update(state, 'APPLIED_NOT_CUSTOMER_ACCEPTANCE', after=after, reportDatabaseAfter=report_db, finishedAtUtc=self.a.stamp(time.time()))
         return {'status': 'APPLIED_NOT_CUSTOMER_ACCEPTANCE', 'receiptSha256': sha(self.a.read(self.paths['journal'])), 'contentImage': child,
-                'sourceFiles': 225, 'staticFiles': 33, 'chainFiles': 36, 'workerRecreated': False, 'mainDbDirectWrites': 0, 'oldJournalWrites': 0}
+                'sourceFiles': 227, 'staticFiles': 33, 'chainFiles': 36, 'workerRecreated': False, 'mainDbDirectWrites': 0, 'oldJournalWrites': 0}
 
     def inspect(self, pin):
         state = self.a.pinned(self.paths['journal'], pin, True)
@@ -422,7 +428,7 @@ class Release:
         proof = {k: state[k] for k in ('overlaySha256', 'plannedConfigHash')}
         need(self.snapshot(state['childImage'], frozenset(state['written']), proof) == state['after']
              and self.report_db() == state['reportDatabaseAfter'], 'OWN_INSTALLATION_CHANGED')
-        return {'status': 'OWN_COMPLETED_READONLY_NOT_CUSTOMER_ACCEPTANCE', 'sourceFiles': 225, 'staticFiles': 33, 'chainFiles': 36, 'runtimeWrites': 0}
+        return {'status': 'OWN_COMPLETED_READONLY_NOT_CUSTOMER_ACCEPTANCE', 'sourceFiles': 227, 'staticFiles': 33, 'chainFiles': 36, 'runtimeWrites': 0}
 
 
 def main():

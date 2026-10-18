@@ -26,7 +26,7 @@ def manifest():
     for name in names:
         public = name.startswith('product/')
         target = 'palitra-orders-public/' + name.split('/')[-1] if public else name.removeprefix('backend/')
-        rows.append({'name': name, 'target': target, 'sha256': 'a' * 64, 'beforeSha256': None, 'bytes': 32,
+        rows.append({'name': name, 'target': target, 'sha256': 'a' * 64, 'beforeSha256': None, 'beforeSourceSha256': None, 'bytes': 32,
                      'static': name.split('/')[-1] if public else None})
     return {'schema': 1, 'build': 'synapse-company-app-20261019-r2', 'records': rows}
 
@@ -61,6 +61,21 @@ class ClosedReleaseTests(unittest.TestCase):
         for item in cases:
             with self.subTest(item=item):
                 with self.assertRaises(ValueError): release.validate_records(item)
+
+    def test_cabinet_static_exists_while_runtime_is_absent(self):
+        item = manifest()
+        cabinet = next(r for r in item['records'] if r['name'] == 'product/cabinet.html')
+        cabinet['beforeSha256'] = 'b' * 64
+        self.assertIsNone(release.validate_records(item)['product/cabinet.html']['beforeSourceSha256'])
+        cabinet['beforeSourceSha256'] = 'b' * 64
+        with self.assertRaisesRegex(ValueError, 'DISTINCT_RUNTIME_STATIC_BASE'): release.validate_records(item)
+
+    def test_source_baseline_cannot_be_dropped_for_another_target(self):
+        item = manifest(); row = next(r for r in item['records'] if r['name'] == 'backend/client-bot-config.js')
+        row['beforeSha256'] = 'b' * 64
+        with self.assertRaisesRegex(ValueError, 'DISTINCT_RUNTIME_STATIC_BASE'): release.validate_records(item)
+        row['beforeSourceSha256'] = row['beforeSha256']
+        self.assertEqual(release.validate_records(item)[row['name']]['beforeSourceSha256'], 'b' * 64)
 
     def test_wrong_build_digest_or_unbounded_payload_is_refused(self):
         for field, value in [('bytes', 0), ('bytes', 3 * 1024 * 1024), ('bytes', True), ('sha256', '0'), ('beforeSha256', 'wrong')]:

@@ -21,7 +21,8 @@ records = []
 for row in review['files']:
     name = row['path']; target = row['runtime_target'].removeprefix('/app/')
     records.append({'name': name, 'target': target, 'sha256': row['sha256'], 'bytes': row['bytes'],
-                    'beforeSha256': row['before_sha256'], 'static': name.split('/')[-1] if name.startswith('product/') else None})
+                    'beforeSha256': row['before_sha256'], 'beforeSourceSha256': None if name == 'product/cabinet.html' else row['before_sha256'],
+                    'static': name.split('/')[-1] if name.startswith('product/') else None})
 manifest = {'schema': 1, 'build': review['build'], 'records': records}
 module.validate_records(manifest)
 args.out.mkdir(parents=True, exist_ok=False)
@@ -42,7 +43,7 @@ for before, after in [("FROZEN = False", "FROZEN = True"), ("MANIFEST_SHA = '0' 
 helper_sha = sha((packet / 'release-native.py').read_bytes())
 wrapper = '''import hashlib,json,os,sys,types
 from pathlib import Path
-CODE=Path('/opt/synapse/releases/palitra-app-20261015/multi-company-app-20261019-r2-code')
+CODE=Path('/opt/synapse/releases/palitra-app-20261015/multi-company-app-20261019-r3-code')
 HELPER_SHA='@HELPER_SHA@'
 def main():
  try:
@@ -59,13 +60,13 @@ if __name__=='__main__':sys.exit(main())
 (packet / 'company-app.py').write_text(wrapper, encoding='utf-8', newline='\n')
 inventory = {p.relative_to(packet).as_posix(): {'sha256': sha(p.read_bytes()), 'bytes': p.stat().st_size} for p in packet.rglob('*') if p.is_file()}
 assert len(inventory) == 25
-archive = args.out / 'code-r2.zip'
+archive = args.out / 'code-r3.zip'
 with zipfile.ZipFile(archive, 'x', zipfile.ZIP_DEFLATED) as z:
     for name in sorted(inventory): z.write(packet / name, name)
 archive_sha = sha(archive.read_bytes())
 prepare = '''import hashlib,io,json,os,re,stat,sys,urllib.request,zipfile
 from pathlib import Path,PurePosixPath
-CODE=Path('/opt/synapse/releases/palitra-app-20261015/multi-company-app-20261019-r2-code')
+CODE=Path('/opt/synapse/releases/palitra-app-20261015/multi-company-app-20261019-r3-code')
 ZIP_SHA='@ZIP_SHA@'
 EXPECTED=@EXPECTED@
 def need(v,c):
@@ -73,7 +74,7 @@ def need(v,c):
 def main():
  try:
   need(os.name=='posix' and os.geteuid()==0,'EXACT_ROOT_REQUIRED')
-  need(len(sys.argv)==2 and re.fullmatch(r'https://raw[.]githubusercontent[.]com/Elk0980/synapse-server/[0-9a-f]{40}/ops/releases/multi-company-app-20261019/code-r2[.]zip',sys.argv[1]),'EXACT_IMMUTABLE_URL_REQUIRED')
+  need(len(sys.argv)==2 and re.fullmatch(r'https://raw[.]githubusercontent[.]com/Elk0980/synapse-server/[0-9a-f]{40}/ops/releases/multi-company-app-20261019/code-r3[.]zip',sys.argv[1]),'EXACT_IMMUTABLE_URL_REQUIRED')
   for p in [*reversed(CODE.parents),CODE]:need(not p.is_symlink(),'CODE_SYMLINK_REFUSED')
   need(CODE.parent.is_dir() and CODE.parent.stat().st_uid==0 and not os.path.lexists(CODE),'NEW_CODE_NAMESPACE_REQUIRED_NO_RETRY')
   with urllib.request.urlopen(sys.argv[1],timeout=30) as response:raw=response.read(2*1024*1024+1)
@@ -101,7 +102,7 @@ if __name__=='__main__':sys.exit(main())
 result = {'status': 'IMMUTABLE_INSTALLER_FOR_ROOT_REVIEW_NOT_UPLOADED', 'atProductHead': review['head'], 'productArchiveSha256': review['archive_sha256'],
           'build': review['build'], 'codeArchive': str(archive), 'archiveSha256': archive_sha, 'manifestSha256': manifest_sha,
           'helperSha256': helper_sha, 'wrapperSha256': sha((packet / 'company-app.py').read_bytes()), 'rollbackSha256': sha(rollback),
-          'prepareSha256': sha((args.out / 'prepare.py').read_bytes()), 'files': inventory, 'targetCounts': {'source': 225, 'static': 33, 'chain': 36},
+          'prepareSha256': sha((args.out / 'prepare.py').read_bytes()), 'files': inventory, 'targetCounts': {'source': 227, 'static': 33, 'chain': 36},
           'requiresRootProductAndInstallerAcceptance': True, 'uploaded': False, 'applied': False}
 (args.out / 'INSTALLER_REVIEW_READY.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
 print(json.dumps({k: result[k] for k in ('status', 'archiveSha256', 'helperSha256', 'manifestSha256', 'rollbackSha256')}))
