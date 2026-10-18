@@ -123,8 +123,23 @@ insert="""
 
 """
 change('shell.js',"  /* ---------- вход и смена identity ---------- */",insert+"  /* ---------- вход и смена identity ---------- */")
-change('shell.js',"/* PALITRA_UI_BUILD:palitra-attach-paperclip-20261018-r1 */", "/* PALITRA_UI_BUILD:synapse-company-app-20261018-r1 */")
-change('shell.js',"const SESSION_UI_BUILD = 'palitra-attach-paperclip-20261018-r1';", "const SESSION_UI_BUILD = 'synapse-company-app-20261018-r1';")
+accepted_builds = ['palitra-attach-paperclip-20261018-r1', 'palitra-chat-avatar-hugh-20261019-r1']
+matched_builds = [build for build in accepted_builds
+                  if source['shell.js'].count(f'/* PALITRA_UI_BUILD:{build} */') == 1
+                  and source['shell.js'].count(f"const SESSION_UI_BUILD = '{build}';") == 1]
+if len(matched_builds) != 1:
+    raise ValueError('Unknown or inconsistent source build; review the fresh base first')
+source_build = matched_builds[0]
+change('shell.js', "  const CHANNEL_AUTHOR = {", """  function chatAuthorLabel(author) {
+    return author === 'shop' && activeCompany !== 'palitra-love' ? Companies.profile(activeCompany)?.name || 'Компания' : CHANNEL_AUTHOR[author] || str(author);
+  }
+  const CHANNEL_AUTHOR = {""")
+change('shell.js', '${CHANNEL_AUTHOR[author] || str(author)}', '${chatAuthorLabel(author)}')
+if source_build == 'palitra-chat-avatar-hugh-20261019-r1':
+    change('shell.js', "    if (['shop', 'operator', 'manager', 'owner'].includes(author)) {", "    if (activeCompany === 'palitra-love' && ['shop', 'operator', 'manager', 'owner'].includes(author)) {")
+    change('shell.js', "    const label = CHANNEL_AUTHOR[author] || str(author) || 'Участник';", "    const label = chatAuthorLabel(author) || 'Участник';")
+change('shell.js', f'/* PALITRA_UI_BUILD:{source_build} */', '/* PALITRA_UI_BUILD:synapse-company-app-20261018-r1 */')
+change('shell.js', f"const SESSION_UI_BUILD = '{source_build}';", "const SESSION_UI_BUILD = 'synapse-company-app-20261018-r1';")
 source['shell.css']+='''\n/* One persistent company menu in the existing shell, including mobile safe area. */
 .company-nav { flex:0 0 auto; display:flex; gap:6px; padding:8px 10px max(8px,env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--paper); z-index:5; }
 .company-nav__item { flex:1 1 0; min-width:0; min-height:48px; padding:8px 6px; border:1px solid transparent; border-radius:12px; background:transparent; color:var(--muted); cursor:pointer; font-weight:600; font-size:.88rem; }
