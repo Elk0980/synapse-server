@@ -114,5 +114,32 @@
     }));
     return nav;
   }
-  return Object.freeze({ profiles, profile, available, actor, create, renderNav });
+  // Ссылка в уже открытой странице проходит тот же начальный вход после
+  // безопасного обновления. Черновики, файлы и неизвестные отправки не выгружаем.
+  function createReportNavigation({ parse, initialHash = '', readBlockers, replaceHash, reload, onBlocked = () => {} } = {}) {
+    if ([parse, readBlockers, replaceHash, reload, onBlocked].some(fn => typeof fn !== 'function')) throw new TypeError('Нужны проверка ссылки и безопасный переход');
+    let stableHash = initialHash, reloading = false, disposed = false;
+    function blocked(message) {
+      try { replaceHash(stableHash); } catch (_) { /* Содержимое страницы всё равно сохраняется. */ }
+      try { onBlocked(message); } catch (_) { /* Ошибка уведомления не разрешает обновление. */ }
+      return false;
+    }
+    return Object.freeze({
+      remember(hash) { if (!disposed && typeof hash === 'string') stableHash = hash; },
+      observe(hash) {
+        if (disposed || reloading || typeof hash !== 'string' || hash === stableHash) return false;
+        let entry;
+        try { entry = parse(hash); } catch (_) { return blocked('Некорректная ссылка на отчёт. Текущая страница сохранена.'); }
+        if (!entry) return false;
+        let blockers;
+        try { blockers = readBlockers(); } catch (_) { blockers = null; }
+        if (!Array.isArray(blockers) || blockers.length) return blocked('Завершите текущий ввод или отправку и откройте ссылку ещё раз. Черновик и файл сохранены.');
+        reloading = true;
+        try { reload(); return true; }
+        catch (_) { reloading = false; return blocked('Не удалось открыть отчёт. Текущая страница сохранена.'); }
+      },
+      dispose() { disposed = true; },
+    });
+  }
+  return Object.freeze({ profiles, profile, available, actor, create, renderNav, createReportNavigation });
 });
