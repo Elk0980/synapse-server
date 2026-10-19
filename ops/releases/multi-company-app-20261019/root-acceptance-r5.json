@@ -1,0 +1,30 @@
+{
+  "schema": "synapse-root-r5-native-acceptance/v1",
+  "atBangkok": "2026-10-19T11:20:50.706667+07:00",
+  "status": "ACCEPTED_R5_PRODUCT_AND_INSTALLER",
+  "compatibility": "ACCEPTED_CURRENT36_COMPATIBILITY",
+  "installerStatus": "ACCEPTED_NATIVE_INSTALLER_AND_ROLLBACK",
+  "runtimeApplyAuthorized": true,
+  "writerThreadId": "01a0a408-4f98-7713-a652-e6a741da834c",
+  "reviewerThreadId": "01a0a408-4f98-7713-a652-e6a741da834c",
+  "parentReceiptSha256": "1e35fab2235f9acbdda2f114da61338b9bc13deaec109a12fd7798c242222b7b",
+  "parentImage": "sha256:10257c64ae44718cab6f8eff7410f05fee62b4aefb89b7e10ef59aab0413045b",
+  "productReviewSha256": "dcc6b40c2762f167db9096c0ab5b82e1e2cb2667fed02cd41e0c6e02b8852202",
+  "helperSha256": "b9108632e8f1d1cba15a6f0749c7b31642b1e12d4dd41b8b9aa9eb830b2848bd",
+  "dbGuardSha256": "08456dc9fcfae875b22c631a461e0cedea5a702b5f8d43ae770de7cff6e78a63",
+  "manifestSha256": "2ddecd2cfa48faf96c0bf9ff20291c941549d6f11e7ebbd671138441b5f47885",
+  "rollbackSha256": "556ad6492ccaf650b8eddd703c189a4f5950a089dcd5303452864a7a281bbdfe",
+  "archiveSha256": "3ba82a1a320b051988cc4b83ce9c953c58a7dc4e9c9832e3827d2ad39c9abf6c",
+  "prepareSha256": "ca3ad20ff120f324f36e2da38d4cade7c8a20d285b447ffa011d70ae0fc5df21",
+  "rootTests": {
+    "product": 51,
+    "installerMethods": 8,
+    "lateFaultCases": 6,
+    "realLocalSqliteWalBackup": true,
+    "nativeBeforeAcceptance": false
+  },
+  "conditions": "Fresh own single writer lease, full current R3 227/33/36 and unchanged lineage, new decision; exact four existing replacements, one content up, source227/static33/chain37; no worker recreation or direct live DB restore/write. UNKNOWN requires read, no retry.",
+  "installed": false,
+  "physicalSafari": false,
+  "fullCustomerAcceptance": false
+}
