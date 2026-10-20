@@ -1,0 +1,42 @@
+{
+  "company-app.py": {
+    "bytes": 4026,
+    "sha256": "4a31bf84c3686b603a994d85834fdd7737c9ad85b7b2dd15dd0ee45ef50f0638"
+  },
+  "content-db.py": {
+    "bytes": 7788,
+    "sha256": "d6363b217d69a49751d875b00cf50776593d01160b386190edaac8bf537ab4be"
+  },
+  "controller.py": {
+    "bytes": 14806,
+    "sha256": "94a9a892d0891cf9e3d5789f9bc5d1ff79b4b2a024dcf55f2749f26d64d841fa"
+  },
+  "manifest.json": {
+    "bytes": 2316,
+    "sha256": "47fa0af50afe0274fd48152661dca6cbe700e1339d885c0d74b81a92e32d8e38"
+  },
+  "native.py": {
+    "bytes": 27489,
+    "sha256": "a759e89e59eb8f0ac1e872dfba1895248a5b36b0eafbf7c65f4744fe5b7cebbb"
+  },
+  "parent-darya-r2.py": {
+    "bytes": 9446,
+    "sha256": "b77efd257d3e7b1076d72c0405a67c9f00e99c8de2eac67dd35313a40132b4d1"
+  },
+  "payload/customer-report-cache.cjs": {
+    "bytes": 12842,
+    "sha256": "5fb7f5ca7f897d04bd2c4907ad8422122209fa1df37d2a8a52b5fcdb4fbf7e70"
+  },
+  "report-db.py": {
+    "bytes": 7626,
+    "sha256": "08456dc9fcfae875b22c631a461e0cedea5a702b5f8d43ae770de7cff6e78a63"
+  },
+  "rollback-plan.py": {
+    "bytes": 3491,
+    "sha256": "73c940753ea8d871efb46cdbbcaf39fd27fbd74ce5e762bc4d5d761131054bbd"
+  },
+  "traffic-db.py": {
+    "bytes": 12391,
+    "sha256": "2b44578d7b7fee9d779fe647c6d3b56eb5aa9d377f89b68f5aaed7230ca1127f"
+  }
+}
