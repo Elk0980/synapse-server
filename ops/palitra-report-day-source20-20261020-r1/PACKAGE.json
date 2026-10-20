@@ -1,0 +1,29 @@
+{
+  "admissionTemplateEnabled": false,
+  "automaticRetry": false,
+  "automaticRollback": false,
+  "files": {
+    "admission.template.py": {
+      "bytes": 6758,
+      "sha256": "4b93f7385665d9f4dff9ecb84ff1c4194cf54277bfbae02ada7fb10c1193f659"
+    },
+    "installer-code.zip": {
+      "bytes": 35657,
+      "sha256": "cc330d71455321c1e102a4c83f89aee30b9340044365e49f0ec23a76b6e8ec82"
+    },
+    "prepare.py": {
+      "bytes": 4029,
+      "sha256": "2973af9c6108134dbf4e6d4948cd26c640c573a0338f55aa12ccb4461d907f44"
+    },
+    "stage.py": {
+      "bytes": 15196,
+      "sha256": "43353240fe847449b6888578692780e38738a18ef50a1d5564a0ac1bf2b94690"
+    }
+  },
+  "name": "report-day-source20-cache-20261020-r1",
+  "runtimeApplied": false,
+  "runtimePayloadFiles": 1,
+  "schema": 1,
+  "sourcePublished": false,
+  "status": "CODE_TRANSPORT_ONLY_NOT_RUNTIME_AUTHORIZATION"
+}
