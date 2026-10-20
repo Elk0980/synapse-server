@@ -1,0 +1,16 @@
+{
+  "actualLeaseRequired": true,
+  "directDatabaseWrite": false,
+  "file": {
+    "bytes": 14814,
+    "path": "diagnose-preflight-r1.py",
+    "sha256": "82524540b3e05e7dc204721c3a24412ac2bce9ab02178c8c3358016ae5465714"
+  },
+  "independentReview": "NO_OPEN_P1_P2",
+  "localTests": 18,
+  "repeatOldPreflight": false,
+  "runtimeInstall": false,
+  "schema": 1,
+  "secretExport": false,
+  "status": "READ_ONLY_DIAGNOSTIC_NOT_RUNTIME_AUTHORIZATION"
+}
