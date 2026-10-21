@@ -1,6 +1,7 @@
 {
   "beforeContentImage": "sha256:2010268786d7ee4b0ff9259c9cdbde7be9ac145c5bae2b0ac394bcfed27e7867",
-  "helperSha256": "f6986b4a43cf766791781c5bec0fbe71474d2e41628324a64168a911d92494be",
+  "helperSha256": "7538349eecc4a56e7a66af956d6b4175251d031f3cf930a41da2faaae8aa92ca",
+  "installerRevision": "r2-preserve-current-metadata",
   "manifestSha256": "756d918efe71157f20f49420cc3c31b70f62c38288d46363846f56009c00263c",
   "providerCallsAuthorized": false,
   "purpose": "Install user-requested Content calendar, published/planned, explicit draft duplication and shared arrows",
