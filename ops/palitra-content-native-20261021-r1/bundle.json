@@ -1,16 +1,16 @@
 {
-  "beforeContentImage": "sha256:2010268786d7ee4b0ff9259c9cdbde7be9ac145c5bae2b0ac394bcfed27e7867",
-  "helperSha256": "078b2a393a1dd3b6530dbcca19105599dac4bf63c5d45172fa11dc43696e1328",
-  "installerRevision": "r3-exact-linux-base",
-  "manifestSha256": "9f9c04cec0bf66f4a40a429f3cf6c71096f092893bbdd77509d7825385720550",
+  "beforeContentImage": "exact R3 installed.json result pin",
+  "helperSha256": "19d8c6ea00264dc276920b3a196df9c3931d4b2e22c63fbe171da6e13904d73c",
+  "installerRevision": "r4-incremental-existing-schema-readonly",
+  "manifestSha256": "c2931345c8ce3de18166be570d84b845ff59c58194918c3f04ab0aefbfe71d8a",
   "providerCallsAuthorized": false,
   "purpose": "Install user-requested Content calendar, published/planned, explicit draft duplication and shared arrows",
-  "rootReviewSha256": "6cf60540b6d1364fa5ecedd05336813b71961a076d60fd2d661f392d9fb9b371",
+  "rootReviewSha256": "bd9d61f3bfd0fe312174829d48943ad55d75079bc89b67d32d9f61ac86db9aa9",
   "runtimeAuthorization": false,
-  "runtimeFiles": 33,
+  "runtimeFiles": 3,
   "schemaObjects": 9,
   "schemaSha256": "6a03089b8c3d6ec4cab661f81b9167e2226fa17bb9d86019ad35dd126610f2db",
   "status": "ROOT_ACCEPTED_EXACT_CONTENT_CODE",
-  "zipBytes": 340943,
-  "zipSha256": "ce4231c8106592f2848f83dea5487af2c94156620d8fa83e0cc976057ac88f23"
+  "zipBytes": 111065,
+  "zipSha256": "f201420bd68e522cf8b377a8c07b2ade8a326a04b28bdfaca968eea69d32f0d8"
 }
