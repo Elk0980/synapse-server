@@ -26,7 +26,7 @@ def private_read(p):
    b=os.read(fd,min(65536,s.st_size+1-len(raw)))
    if not b:break
    raw+=b
-  keys=('st_dev','st_ino','st_mode','st_uid','st_gid','st_nlink','st_size','st_mtime_ns','st_ctime_ns')
+  keys=('st_dev','st_ino','st_mode','st_uid','st_gid','st_nlink','st_size','st_mtime_ns')+(('st_ctime_ns',) if os.name=='posix' else ())
   need(len(raw)==s.st_size and all(getattr(s,k)==getattr(os.fstat(fd),k)==getattr(p.lstat(),k) for k in keys),'CODE_READ_RACE');return raw
  finally:os.close(fd)
 def write(p,b):
