@@ -1,0 +1,15 @@
+{
+  "beforeContentImage": "sha256:2010268786d7ee4b0ff9259c9cdbde7be9ac145c5bae2b0ac394bcfed27e7867",
+  "helperSha256": "f6986b4a43cf766791781c5bec0fbe71474d2e41628324a64168a911d92494be",
+  "manifestSha256": "756d918efe71157f20f49420cc3c31b70f62c38288d46363846f56009c00263c",
+  "providerCallsAuthorized": false,
+  "purpose": "Install user-requested Content calendar, published/planned, explicit draft duplication and shared arrows",
+  "rootReviewSha256": "d5cf6bff75ca8d05d03dd6adc5bd746181d0502b1fae0fb1816e3ab02eab4acb",
+  "runtimeAuthorization": false,
+  "runtimeFiles": 33,
+  "schemaObjects": 9,
+  "schemaSha256": "6a03089b8c3d6ec4cab661f81b9167e2226fa17bb9d86019ad35dd126610f2db",
+  "status": "ROOT_ACCEPTED_EXACT_CONTENT_CODE",
+  "zipBytes": 340902,
+  "zipSha256": "110fc0db3a6bd9f4bf32b28b58f7aa5596bf2c17cebe5ab4db187f50dcfa831e"
+}
