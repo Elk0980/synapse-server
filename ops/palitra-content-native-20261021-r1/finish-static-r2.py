@@ -1,0 +1,48 @@
+"""Complete ONLY verified missing static files after one R3 up; never schema/up/apply retry."""
+import copy,hashlib,json,time
+from pathlib import Path
+p=Path('/tmp/pc-i3.py');b=p.read_bytes();assert hashlib.sha256(b).hexdigest()=='078b2a393a1dd3b6530dbcca19105599dac4bf63c5d45172fa11dc43696e1328'
+n={'__name__':'root_bounded_static_completion','__file__':str(p)};exec(compile(b,str(p),'exec'),n);staged,bundle,m=n['package']();product,native,reader,contract=n['primitive']();a=n['load'](n['AREA']/'action.json');base=n['load'](n['AREA']/'base.json');need=n['need'];native.Ticket.native_lease(a['lease']);parent=n['ROOT']/(a['namespace']+'-apply');records=[n['load'](p) for p in sorted(parent.glob('*.json'))];records=[r for r in records if 'phase' in r and 'status' in r]
+returned={r['phase']:r['facts'] for r in records if r['status']=='RETURNED_REQUIRES_READBACK'};need(all(k in returned for k in ['protected-backup','build-content','build-crm','compose-plan','single-additive-schema','content-crm-up']),'PRIOR_PHASES_MUST_BE_KNOWN_COMPLETE');need(not (n['AREA']/'installed.json').exists(),'ALREADY_INSTALLED_INSPECT_ONLY');need(records[-1]['phase']=='static-file' and records[-1]['status']=='CAS_READBACK','EXACT_ORIGINAL_PARTIAL_STATIC_JOURNAL_REQUIRED')
+children={n['CONTENT']:returned['build-content'],n['CRM']:returned['build-crm']};published={r['facts']['path'] for r in records if r['phase']=='static-file' and r['status']=='CAS_READBACK'};need(len(published)==5,'EXACT_FIVE_COMPLETED_STATIC');c=copy.deepcopy(base['content']['compose']);overlay=parent/'content-crm-overlay.json';c['files'].append({'path':str(overlay),'sha256':n['sha'](n['read'](overlay))});c['resolved']['services']['content']['image']=children[n['CONTENT']]['image'];c['resolved']['services']['crm']['image']=children[n['CRM']]['image'];need(json.loads(n['run'](n['compose_args'](c)+['config','--format','json']))==c['resolved'],'EXACT_INSTALLED_COMPOSE')
+obj=object.__new__(n['Apply']);obj.staged=staged;obj.bundle=bundle;obj.m=m;obj.product=product;obj.native=native;obj.reader=reader;obj.contract=contract;obj.action=a;obj.readLease=a['lease'];obj.base=base;obj.children=children;obj.plan=c;obj.published=published
+finish=n['ROOT']/(a['namespace']+'-static-finish-r2');need(not finish.exists(),'FINISH_CONSUMED_INSPECT_ONLY');published=set()
+for target,row in base['statics'].items():
+ current=n['sha'](n['read'](target));need(current in (row['sha256'],row['afterSha256']),'STATIC_STATE_MUST_BE_KNOWN_BEFORE_OR_AFTER')
+ if current==row['afterSha256']:published.add(target)
+obj.published=published;remaining={path:r for path,r in base['statics'].items() if path not in published};need(0<len(remaining)<=2 and len(published)>=10,'AT_MOST_TWO_VERIFIED_OLD_STATIC_FILES');
+# Capture exact guard inputs, returning them unchanged, to explain any transient error.
+captured={};real_snapshot=n['content_snapshot'];real_crm=obj.crm_guard
+def snapshot(*args):
+ value=real_snapshot(*args);captured['actual']=value;return value
+def crm_guard(after):
+ value=real_crm(after);captured['crm']=value;return value
+n['content_snapshot']=snapshot;obj.crm_guard=crm_guard;real_guard=obj.guard
+def guard(after=True):
+ try:return real_guard(after)
+ except ValueError as e:
+  if str(e)!='FULL_CONTENT_NATIVE_STATE_CHANGED':raise
+  want=copy.deepcopy(base['content']);want.update(image=children[n['CONTENT']]['image'],appTree=obj.expected_tree(n['CONTENT']),compose=c);want['source']={k:want['appTree'][k]['sha256'] for k in base['content']['source']};want['invariants']['foreignContainers'][n['CRM']]=reader.foreign(captured['crm'])
+  for group in ['authCode','pushCode']:
+   hashes=want['invariants'][group]['files'] if group=='authCode' else want['invariants'][group]
+   for rel,row in base['overlays'][n['CONTENT']].items():
+    if rel in hashes:hashes[rel]=row['sha256']
+  for path in obj.published:
+   if path in want['static']:want['static'][path]['sha256']=base['statics'][path]['afterSha256']
+  diffs=[]
+  def walk(x,y,path=''):
+   if type(x)!=type(y):diffs.append([path,'type']);return
+   if isinstance(x,dict):
+    for key in sorted(set(x)|set(y)):
+     if key not in x or key not in y:diffs.append([path+'.'+key,'missing'])
+     else:walk(x[key],y[key],path+'.'+key)
+   elif x!=y:diffs.append([path,n['sha'](n['enc'](x)),n['sha'](n['enc'](y))])
+  walk(want,captured['actual']);print(json.dumps({'status':'EXACT_GUARD_DIFFERENCES','diffs':diffs[:20]}),flush=True);raise
+obj.guard=guard;obj.guard(True);obj.schema_readback();finish.mkdir(mode=0o700);created=time.time();intent={'status':'ROOT_AUTHORIZED_BOUNDED_STATIC_COMPLETION','created':created,'expires':created+900,'lease':a['lease'],'originalActionSha256':n['sha'](n['read'](n['AREA']/'action.json')),'baseSha256':a['baseSha256'],'helperSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'remaining':list(remaining),'alreadyCompleted':sorted(published),'schemaUpRetryForbidden':True};n['write'](finish/'intent.json',n['enc'](intent));old_ticket=obj.ticket
+# Fresh narrow action plus all immutable original-artifact, base, lease and package checks.
+def ticket():
+ need(n['load'](finish/'intent.json')==intent and created<=time.time()<created+900 and hashlib.sha256(Path(__file__).read_bytes()).hexdigest()==intent['helperSha256'],'FRESH_FINISH_INTENT_REQUIRED');old_ticket()
+obj.ticket=ticket
+for index,(path,row) in enumerate(remaining.items()):
+ obj.guard(True);n['write'](finish/('%02d-start.json'%index),n['enc']({'path':path,'beforeSha256':row['sha256'],'status':'STARTED_UNKNOWN_INSPECT_ONLY'}));native.cas(path,row['sha256'],n['read'](n['AREA']/'code'/row['file']),row['mode'],ticket);obj.published.add(path);obj.guard(True);n['write'](finish/('%02d-done.json'%index),n['enc']({'path':path,'afterSha256':row['afterSha256'],'status':'CAS_VERIFIED'}));print('STATIC_VERIFIED '+str(index+1)+'/'+str(len(remaining)),flush=True)
+observed=obj.guard(True);schemaRead=obj.schema_readback();result={'status':'INSTALLED_PENDING_ROOT_LIVE_ACCEPTANCE','images':children,'plan':c,'backup':returned['protected-backup'],'schema':returned['single-additive-schema'],'schemaReadback':schemaRead,'snapshotSha256':observed,'staticFiles':len(obj.published),'originalJournal':str(parent),'completion':str(finish),'singleOriginalUp':True,'dataRestored':False,'wholePlatformAccepted':False};n['write'](finish/'result.json',n['enc'](result));n['write'](n['AREA']/'installed.json',n['enc'](result));print(json.dumps({'status':result['status'],'resultSha256':n['sha'](n['enc'](result)),'staticFiles':len(obj.published),'images':children}))
