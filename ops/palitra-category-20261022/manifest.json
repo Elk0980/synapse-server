@@ -1,0 +1,39 @@
+{
+  "status": "ROOT_REVIEW_READY_CODE_ONLY",
+  "files": [
+    {
+      "file": "candidate/content/palitra-price-validate.js",
+      "bytes": 29778,
+      "sha256": "a1ad5637f04ab6756d2c53d412bb245fcb230a5b172526724c76441a5b5726f9",
+      "beforeSha256": "40737c48c3d9253505adaa667782b83c5efd8ea64f34c77adcf5865b5f06232f",
+      "targets": [
+        "/app/palitra-price-validate.js"
+      ]
+    },
+    {
+      "file": "candidate/static/palitra-editor-model.js",
+      "bytes": 66959,
+      "sha256": "364641683219d283320298054956f68098fba9530f862392d8407ffce5f03d2b",
+      "beforeSha256": "c7d8cf07b6a23081ac35cd513242577e9ae63cca42ddb9583a08691d75c5d96f",
+      "targets": [
+        "/opt/synapse/sites/synapse/palitra-editor-model.js"
+      ]
+    },
+    {
+      "file": "candidate/static/palitra-editor.js",
+      "bytes": 102276,
+      "sha256": "e50b2b273391a35e301e79d73909cfc56f1e196910054e74062f59ad23e3529c",
+      "beforeSha256": "bda98ccf476e6614e6d5b67424f0a478b06fec882fdf9840a2262b27637ba1ec",
+      "targets": [
+        "/opt/synapse/sites/synapse/palitra-editor.js"
+      ]
+    }
+  ],
+  "zipSha256": "9bba4698c9d8a08ff0604bed8454ec17d6f7c38f9aa7bde1167db74d63ab4f1c",
+  "beforeImage": "sha256:c7e129b1ef3ce39dd801a467d2b0b6337476b6a90272bfcd2688a48b9eb084b3",
+  "crmImage": "sha256:6c802ba7fb5014becb2cd2c6c1b17ef509e2f9cda6780a841080cc36451e60d9",
+  "schemaWrites": 0,
+  "priceCalculationChanges": false,
+  "authChanges": false,
+  "rootReview": "Custom categories already pass public category validation; home whitelist now includes the same accepted keys. Holiday source restrictions unchanged. The two editor-only changes enumerate accepted custom categories and preserve the six-slot maximum. All product rows remain unchanged."
+}
