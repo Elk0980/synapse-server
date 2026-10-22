@@ -36,7 +36,7 @@ inventory("crm", "/var/lib/docker/volumes/synapse_crm_data/_data/crm.sqlite", ["
 
 # Caddy access logging may be disabled. An empty log is explicitly not proof of no requests.
 try:
-    result = subprocess.run(["docker", "logs", "--since", "36h", "synapse-caddy-1"], capture_output=True, text=True, timeout=20)
+    result = subprocess.run(["docker", "logs", "--since", "36h", "caddy"], capture_output=True, text=True, timeout=20)
     entries = []
     for line in (result.stdout + result.stderr).splitlines():
         try:
