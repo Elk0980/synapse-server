@@ -1,0 +1,22 @@
+{
+  "status": "ROOT_REVIEW_READY_CODE_ONLY",
+  "files": [
+    {
+      "file": "candidate/content/palitra-orders-public/synapse-bridge.js",
+      "sha256": "bc45a882da5ab88794bcef14ba989039d4efe2e98f0d9a4f47321925cd516269",
+      "beforeSha256": "56ba23db6004453bceb4293d3b97f65c8646e8219da7c4fccb7e6278a261c93d",
+      "bytes": 77659
+    },
+    {
+      "file": "candidate/static/cabinet/palitra-orders/synapse-bridge.js",
+      "sha256": "bc45a882da5ab88794bcef14ba989039d4efe2e98f0d9a4f47321925cd516269",
+      "beforeSha256": "56ba23db6004453bceb4293d3b97f65c8646e8219da7c4fccb7e6278a261c93d",
+      "bytes": 77659
+    }
+  ],
+  "zipSha256": "70651db77cafc2bb9311a81b23ac0672a983d8ee32b3e825757e5fb6e0c02c06",
+  "beforeImage": "sha256:cd7d38aaba043eebb0f564a8b1b5cf300bea2175a946db509a0723e8f8e5ca71",
+  "crmImage": "sha256:6c802ba7fb5014becb2cd2c6c1b17ef509e2f9cda6780a841080cc36451e60d9",
+  "schemaWrites": 0,
+  "rootReview": "Exact one Palitra editor href now includes a resource version so existing cached iframe HTML is not reused. Bridge has existing no-cache,must-revalidate delivery. No operation/auth/ACL/role/identity/request schema changes. Other company links unchanged. Existing full-tree/one-layer/config/backup/CAS/up methods byte-identical to accepted category installer."
+}
