@@ -1,0 +1,311 @@
+{
+  "checked": [
+    "Shared photo-frame block is byte-identical in renderer/model/server validator; legacy V1 scale semantics retained, new minimum fills without double zoom.",
+    "All 440 existing photos covered by 9348 geometry assertions; 530 already-filled layouts unchanged; all 322 product rows, prices, original sources and 148 frames retained.",
+    "43 save/CAS/source-binding/category-frame/noop/cancel/conflict/lost-response checks passed locally. No real price document written.",
+    "Actual local browser: upload, zoom, pan, cancel, save/reload; all 13 categories, catalog, existing gallery and cart desktop and mobile. All 35 page refs/width checks passed.",
+    "Legacy photo model parses all 13 categories, 5 hero, 3 budget and 6 gallery slots exactly; no change to legacy code needed.",
+    "Fresh ordinary managed-editor source293 captured for all37targets; matches public baseline except existing35noindex tags; tags retained; 34 non-home pages change only two asset references.",
+    "Native helper has only declared namespace/parent/scope/count/authorization-label substitutions; all full-tree, CAS, own-lease, backup, one-apply and independent-readback guards normalized byte/AST exact.",
+    "No auth, roles, subscriptions, CRM, prices, order calculations or original image bytes changed."
+  ],
+  "inlineHomeScriptsChecked": 4,
+  "installed": false,
+  "managedScope": [
+    {
+      "afterSha256": "501fa2d342909719da3df77d128a5d57875b58394419004705c67fe73df9cb5b",
+      "beforeSha256": "5fafbcb7c09dd89432218cb375ece8e178e8eec992f66075758552ce6df463d7",
+      "bytes": 10987,
+      "path": "account/forgotten/index.html"
+    },
+    {
+      "afterSha256": "63bd1ba44c4865620c018859b5d89b2287aa4068a65e3237d05ca2da0532308c",
+      "beforeSha256": "9f479afdf70790a43aaa1e91aa3a787ace6ba8d8b4645e1be6f11d9a003ce069",
+      "bytes": 10658,
+      "path": "account/index.html"
+    },
+    {
+      "afterSha256": "739c72680a37ad38e045cff5599e1ead9f3c93ea41e43b2e776651cb1c1c82d6",
+      "beforeSha256": "585585ae91b2916aba395eef1fded08d8ce90833e5ac77b8b6302b24c16c9f80",
+      "bytes": 11515,
+      "path": "account/login/index.html"
+    },
+    {
+      "afterSha256": "00db7c95700410cd57b21c08f02f643e811871c7074497638e0c35d33c9ceae7",
+      "beforeSha256": "f6252e4faba549e06a86a67937b5009e28042dfa969dbfa8d6728b3b07c60b0d",
+      "bytes": 12442,
+      "path": "account/register/index.html"
+    },
+    {
+      "afterSha256": "1a9084cbbee629cc68539fad9f3dd5995174fc83ff4a90811d6e1285f6e00ef8",
+      "beforeSha256": "8db405ab962b767ae4575002c391fa2cec54e5da1c7d870e8be3147d9078b53a",
+      "bytes": 72000,
+      "path": "assets/storefront.css"
+    },
+    {
+      "afterSha256": "1d5a401c98faaeabeb5d34f60f822b7653e462ed204eb06f6d2abde7daa91b00",
+      "beforeSha256": "6cd632b3423d0e6e15f8b58b3e65855789bc6744bdfb7f7473e18ecae734bdb2",
+      "bytes": 10798,
+      "path": "blog/index.html"
+    },
+    {
+      "afterSha256": "ed26d6c60f9c7a6bd034cc38c9cc45e2152b0963eb3996d2312c5df8664f9fac",
+      "beforeSha256": "5e4d1ff654157e5b33048d5c5de4e118f6e8441c558cba71ba5729f10bc2301a",
+      "bytes": 10939,
+      "path": "cart/index.html"
+    },
+    {
+      "afterSha256": "1eed8986ebb0d68f43ed330c6336ff3d4c66702fd4f64e36bc2605bd79f59b67",
+      "beforeSha256": "674560b9283741e436c00a86b219f949b68f5a23fa3ede518bcabdcef437e771",
+      "bytes": 16929,
+      "path": "catalog/bukety/index.html"
+    },
+    {
+      "afterSha256": "f5e255472b7f983436c21797fd727e8738675a578d90b90a4049ef4c2d11ca8f",
+      "beforeSha256": "68baf349f790a9a0b4893137fe927d2652efba6f0cd4d80dccd23b1297f1af8a",
+      "bytes": 16663,
+      "path": "catalog/den-rozhdeniya/index.html"
+    },
+    {
+      "afterSha256": "1212f5d142c11c92957c1468ee326c0a2496552dbb4b19c5ce9e5b5722efa8aa",
+      "beforeSha256": "b83b4ce59bcb294fcba2f33a3e66fd6b9b68f127798d93c2a7d07d5a8c67e8db",
+      "bytes": 16627,
+      "path": "catalog/devichnik/index.html"
+    },
+    {
+      "afterSha256": "0b4dc564a871e3bce75ea381ad10c29933d89bb0265f4e1632954b43a9535562",
+      "beforeSha256": "21a0420d67a785cda84fb7f0ff11da599a733143e571b67f7aa3834e0729af12",
+      "bytes": 16651,
+      "path": "catalog/dofaminovye/index.html"
+    },
+    {
+      "afterSha256": "0b926c7084f7bac318e99c54e9fcf9f6875acada7f4bc4050038e300659efcc8",
+      "beforeSha256": "612a5668b755d804d23b37704228f988cbb62e7e2fc9c535686679ddfb522782",
+      "bytes": 16763,
+      "path": "catalog/index.html"
+    },
+    {
+      "afterSha256": "3d25121756b8c00f3b35b97df93b717ae3c4e30539df583730cd45166da2794e",
+      "beforeSha256": "f43ae2d267859a430dbea4b3a921f288773ca57ba731d35c64230164ff0bd339",
+      "bytes": 16933,
+      "path": "catalog/korziny/index.html"
+    },
+    {
+      "afterSha256": "bcfd1e3f387af78695995c4dbee558330521b6d45f3eae9d63fdb7d238913843",
+      "beforeSha256": "552663a69a9ac04c3d53aa27fbaff34e409b0ea254894d0f2949a3238cde49f3",
+      "bytes": 16619,
+      "path": "catalog/malysham/index.html"
+    },
+    {
+      "afterSha256": "9b867e17458c92e5fd600bbcd203289876e0b1b55bea64b7f5cd72b3fba986c5",
+      "beforeSha256": "25096efa052a6d8ad751610d33d1f5eaac6f3a7acde74b4e0fef469eb26bf4b9",
+      "bytes": 16627,
+      "path": "catalog/muzhchinam/index.html"
+    },
+    {
+      "afterSha256": "522921cd01930981348cf921ae4e192f6ed25d599b9823964188ec7888c76505",
+      "beforeSha256": "1381bce05111cf1d4f5712ac5425f72381666c7905a1fe4c0b0e2d8bfb581f09",
+      "bytes": 16595,
+      "path": "catalog/shary/index.html"
+    },
+    {
+      "afterSha256": "4a842af3d66e07648d2bdccdcf9f2c89870284b125720e527e55a11fee00700c",
+      "beforeSha256": "681575f71bf7707e16cc13fa154df1fdf095c2819cafe770b4823d0ae27ab64e",
+      "bytes": 16655,
+      "path": "catalog/shary-giganty/index.html"
+    },
+    {
+      "afterSha256": "0bbf6a1a94b8255e76cc865b065056aca3940727e7abbd164ac50c423c8484d6",
+      "beforeSha256": "50d5317749e5a67bf0e73a4b4e4416f3e4f2c1a829d88921ce62b90fa182de61",
+      "bytes": 16699,
+      "path": "catalog/vypiska/index.html"
+    },
+    {
+      "afterSha256": "f9ea3bfeb6f2a1961d8eba3532a8dbd43cb0f90cefbcaad1f6da907aa218f60a",
+      "beforeSha256": "3e6b5128426550e0dd82a930811923bb583fb7ceb674d921d2bd144d2142419e",
+      "bytes": 11277,
+      "path": "contacts/index.html"
+    },
+    {
+      "afterSha256": "cae40f02ad8f4dc37187e364e209b9267552c26e338d1e19c76b0dc0839f683d",
+      "beforeSha256": "c1271475bebb3384f44c004c8629a1eaed6425c0eb0311f65f40526d69ce92b2",
+      "bytes": 18282,
+      "path": "den-rozhdeniya/index.html"
+    },
+    {
+      "afterSha256": "55a8255140d1c8c713fc30262bf61e010e8bb54d521f5ddbcc297adcfa7e4cd6",
+      "beforeSha256": "68fe5430477ea0642249004c8d5aefcc9e9bada551b5cb8d1602129ebf7871d7",
+      "bytes": 17299,
+      "path": "devichnik/index.html"
+    },
+    {
+      "afterSha256": "a6b8528bd1864a704359bc0a473ebb8fda7fc2f04f359307f96a4d89fc1f55bc",
+      "beforeSha256": "a5cb070a238161087f26cdcc4bac654cc83567d095d0fb10b1ff8b4df277a4d1",
+      "bytes": 14580,
+      "path": "dofaminovye/index.html"
+    },
+    {
+      "afterSha256": "970991ddd5da5cfcd0e300fec3f062fdda4a02af9323b20b0cd6721e42d9c4cf",
+      "beforeSha256": "77866dff84d8b2b367cfbbac47216ed02846750e13a22170fc57e9f05a54a2c6",
+      "bytes": 224929,
+      "path": "dostavka-i-oplata/index.html"
+    },
+    {
+      "afterSha256": "fcb5342c4da8712f7be713886645359dd21676596473203971fcdd57d469d847",
+      "beforeSha256": "c4039d80010bb27eb3fbb5d22102089c41b0de09b265e9e7b08a371740b3ace6",
+      "bytes": 11495,
+      "path": "important/index.html"
+    },
+    {
+      "afterSha256": "228336e4f6c55e5c17600448ab9ef63d42e83ded9fb5f80eaadf03ecfdef3d91",
+      "beforeSha256": "b0c1341980523ada3a1409c96d3c51fe0fef42d83d2078728dac7c7900afbe49",
+      "bytes": 233931,
+      "path": "index.html"
+    },
+    {
+      "afterSha256": "e8dbb305b04f3b9dd9ef2f36e0558f96da9fdad37e86f42ef0da23c86ad347c1",
+      "beforeSha256": "86d9541235c2b17212332a08ce8aacb1550eda93bfef5908d2a417d0cb06f0cb",
+      "bytes": 16524,
+      "path": "muzhchinam/index.html"
+    },
+    {
+      "afterSha256": "f87a0d6b15caf6444d7e340c9b4a57d000d47671de5bab7a49012d70f4f2fd33",
+      "beforeSha256": "2b5dacff7fce595fde38d803671ddc03500f99ac454f3cf960ff188c9b063f88",
+      "bytes": 16680,
+      "path": "oferta/index.html"
+    },
+    {
+      "afterSha256": "cafef0b95146525be1726d08c201d82e19ec2bf51d99077b7e2153b447ec54e3",
+      "beforeSha256": "506a4048996930cfcd3d93ce6ef3c7d34b125a6d0a583585d4ba89e71e130b30",
+      "bytes": 51266,
+      "path": "price-render.js"
+    },
+    {
+      "afterSha256": "86431ed6e8780d30de8c5435c0b9211a43db20c8b9b621a7071074caf187852f",
+      "beforeSha256": "a1d337f53d93a2e26fc32b09c06dad0733188639be9dff7012acfdc035293314",
+      "bytes": 11889,
+      "path": "price.html"
+    },
+    {
+      "afterSha256": "ec8c615a832e8a21ca08cb0d41c1f9fbacb49fc74c74f292c09c4cc2602b79ea",
+      "beforeSha256": "fe1ed7856e6da2ebbf3c499f1851640d170ab4dc35dbcb2ad48e4d4e7c0f52f5",
+      "bytes": 17152,
+      "path": "privacy/index.html"
+    },
+    {
+      "afterSha256": "dee3b3a0afc9278b2f108a79dd19c8b3045e19ff7faebbc28b94b2a296274c65",
+      "beforeSha256": "a3f316e8221fea4d6058910564176be80f57965cbf4b66869781828d8f431784",
+      "bytes": 10948,
+      "path": "search/index.html"
+    },
+    {
+      "afterSha256": "b1648d2a2422ebafd62fefb3ab28048fc896b908a960914763f06c57c3a70399",
+      "beforeSha256": "1ad550a42bc7881c7d3255738aed228e140448ae1ba5d14b663d7e5cf66f0ae2",
+      "bytes": 14422,
+      "path": "shary-giganty/index.html"
+    },
+    {
+      "afterSha256": "1841575855038e760bb7c8fe0444ccffd459999d637c894db818cdf0915bd807",
+      "beforeSha256": "e6a6a69660273b045d8fc4d7d9b481d95c2e7219e1b170ac50a0fbaeb26cb694",
+      "bytes": 16221,
+      "path": "socials/index.html"
+    },
+    {
+      "afterSha256": "9c4aaebe550d42dfa5df8b830b9ef1bd71058a0e09c2ab3a13cfb418cb66cad4",
+      "beforeSha256": "ba5d60e7e5c6c46e73e71c4b1a17999f1b7f185fa13e0d7d950e1a48e04b18a0",
+      "bytes": 16742,
+      "path": "uchitelyu/index.html"
+    },
+    {
+      "afterSha256": "8695060a01f1e85d26bcfe23d423ac58821f4c83411659a9dc71bcf9783151a0",
+      "beforeSha256": "1d4886b26108f56888202331f796d3b3d9af2fc6a635129ccdba81b413c97bcf",
+      "bytes": 17001,
+      "path": "vozvrat/index.html"
+    },
+    {
+      "afterSha256": "0a015012a4bbe35cb276c6c0cea31eabaf19ff3b7644e9013b93955ff6b4769b",
+      "beforeSha256": "bf7edf091d95cae233cf705580550dc5e22d26755f76f5cceb15eb2637505559",
+      "bytes": 16605,
+      "path": "vypiska/index.html"
+    },
+    {
+      "afterSha256": "a80c2bb2b55446d38b232ea462cf1e8542b206f4a1985d3debbc2d409287ab35",
+      "beforeSha256": "76513a5f587b02f8a855bd35dcbbdc581c6fbc153c543eb58a7bee9f72161db1",
+      "bytes": 10883,
+      "path": "wishlist/index.html"
+    }
+  ],
+  "mobileNativeRangeTouchVerified": false,
+  "nativeRangeObservation": "Same non-changing simulated touch in installed baseline and candidate; keyboard and desktop click work. Cause not established; physical check remains.",
+  "nativeScope": [
+    {
+      "beforeSha256": "ca8da2e9c4b7429bff8ecbd115b6b23e0df33bf14c544872299aa62481d8f6e1",
+      "bytes": 30360,
+      "file": "candidate/content/palitra-occasions.js",
+      "sha256": "c53d00807d21108b76166c778c004942aa37289777210ee2413ad414832c2d80"
+    },
+    {
+      "beforeSha256": "cbfab914ce66c8a6d080dcfd33d061b42c7f16f7c5c558c63240566a044ed5fa",
+      "bytes": 30796,
+      "file": "candidate/content/palitra-price-validate.js",
+      "sha256": "4eac59f8a84f6c19196d177bf45f4af5d366a94a8715bcf968ab9e636f7825eb"
+    },
+    {
+      "beforeSha256": "fd119dde3281cd56cbcdb710c413749db5dbae963dd160ff1dbc808bd2f44152",
+      "bytes": 74784,
+      "file": "candidate/static/palitra-editor-model.js",
+      "sha256": "cc9f3da7707e2ff016854fc648ae24193a2e8b63cb8e2761a8f42ab5226776ea"
+    },
+    {
+      "beforeSha256": "83c598e39ec03f1b40d1896b16b16e8699fce6e346f69f3ffb37e40e0f9ed7ed",
+      "bytes": 111670,
+      "file": "candidate/static/palitra-editor.js",
+      "sha256": "506f397611600dd1754a1fbcb98f21e522ee754a8dd45465f9db4d2aae50cce0"
+    },
+    {
+      "beforeSha256": "ca8da2e9c4b7429bff8ecbd115b6b23e0df33bf14c544872299aa62481d8f6e1",
+      "bytes": 30360,
+      "file": "candidate/static/palitra-occasions.js",
+      "sha256": "c53d00807d21108b76166c778c004942aa37289777210ee2413ad414832c2d80"
+    },
+    {
+      "beforeSha256": "87a51ad0b63db362edba6c3605aabc87f9045c88c1d3a4120c9571fff252939a",
+      "bytes": 25924,
+      "file": "candidate/static/palitra-editor.css",
+      "sha256": "de3431a2c512a5f211a28c9f5ee5ab544d0320af56302d05780948665693d5b8"
+    },
+    {
+      "beforeSha256": "9a0819a3c61d3786281f36769adcc76b0c4fb23d68eeea48ebfcbba72d7cbb6a",
+      "bytes": 5856,
+      "file": "candidate/static/price-editor-palitra.html",
+      "sha256": "b3694b008b08b22ded50b30f116523bd14056f50a6bdfc3047931b4dbc205247"
+    }
+  ],
+  "physicalPhoneVerified": false,
+  "pins": {
+    "beforeImage": "sha256:023ff079a56c02a8e628927dd3227652a83a41fa93f611fc9c889f93bf5dc059",
+    "guardsRemoved": 0,
+    "helperSha256": "8c795a1aab6e764d2395ab92d7b01a2e714f32325ce686e1317877b6bbff39bc",
+    "managedFiles": 37,
+    "manifestSha256": "ed4d65ee75bd8f0bb0d313671779a01b5ab94b7321ac16b4457dd4c4ee5d77e8",
+    "namespace": "palitra-cover-fill-20261023-r1",
+    "nativeFiles": 7,
+    "nativeInvoked": false,
+    "normalizedHelperByteAndAstExact": true,
+    "privateDataIncluded": false,
+    "siteManifestSha256": "d0eb83b88dd1bef5e4431bc79349380ecb714c52cb3fb36e15a8f0c79c29dee1",
+    "siteZipSha256": "45706c075bfc82b91da65c62b9839825752fedda793ef5f6016f8e61e7a7f45b",
+    "zipSha256": "9a96ff85be5639a256b94fb918f2407c23262684aed9ff0e5256630d7682ce59"
+  },
+  "productionAuthorization": "Existing direct user request; exact merged REVIEW_READY plus fresh board/queue/own lease/BASE/backup required. This review is not a live lease.",
+  "reviewer": "Root",
+  "status": "ROOT_COMPATIBILITY_ACCEPTED_EXACT_CODE_ONLY",
+  "syntaxJsFiles": [
+    "content/palitra-occasions.js",
+    "content/palitra-price-validate.js",
+    "site/price-render.js",
+    "static/palitra-editor-model.js",
+    "static/palitra-editor.js",
+    "static/palitra-occasions.js"
+  ]
+}

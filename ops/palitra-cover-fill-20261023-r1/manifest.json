@@ -1,0 +1,60 @@
+{
+  "accountOrRoleChanges": 0,
+  "beforeImage": "sha256:023ff079a56c02a8e628927dd3227652a83a41fa93f611fc9c889f93bf5dc059",
+  "businessRowsWritten": 0,
+  "crmImage": "sha256:6c802ba7fb5014becb2cd2c6c1b17ef509e2f9cda6780a841080cc36451e60d9",
+  "files": [
+    {
+      "beforeSha256": "ca8da2e9c4b7429bff8ecbd115b6b23e0df33bf14c544872299aa62481d8f6e1",
+      "bytes": 30360,
+      "file": "candidate/content/palitra-occasions.js",
+      "sha256": "c53d00807d21108b76166c778c004942aa37289777210ee2413ad414832c2d80"
+    },
+    {
+      "beforeSha256": "cbfab914ce66c8a6d080dcfd33d061b42c7f16f7c5c558c63240566a044ed5fa",
+      "bytes": 30796,
+      "file": "candidate/content/palitra-price-validate.js",
+      "sha256": "4eac59f8a84f6c19196d177bf45f4af5d366a94a8715bcf968ab9e636f7825eb"
+    },
+    {
+      "beforeSha256": "fd119dde3281cd56cbcdb710c413749db5dbae963dd160ff1dbc808bd2f44152",
+      "bytes": 74784,
+      "file": "candidate/static/palitra-editor-model.js",
+      "sha256": "cc9f3da7707e2ff016854fc648ae24193a2e8b63cb8e2761a8f42ab5226776ea"
+    },
+    {
+      "beforeSha256": "83c598e39ec03f1b40d1896b16b16e8699fce6e346f69f3ffb37e40e0f9ed7ed",
+      "bytes": 111670,
+      "file": "candidate/static/palitra-editor.js",
+      "sha256": "506f397611600dd1754a1fbcb98f21e522ee754a8dd45465f9db4d2aae50cce0"
+    },
+    {
+      "beforeSha256": "ca8da2e9c4b7429bff8ecbd115b6b23e0df33bf14c544872299aa62481d8f6e1",
+      "bytes": 30360,
+      "file": "candidate/static/palitra-occasions.js",
+      "sha256": "c53d00807d21108b76166c778c004942aa37289777210ee2413ad414832c2d80"
+    },
+    {
+      "beforeSha256": "87a51ad0b63db362edba6c3605aabc87f9045c88c1d3a4120c9571fff252939a",
+      "bytes": 25924,
+      "file": "candidate/static/palitra-editor.css",
+      "sha256": "de3431a2c512a5f211a28c9f5ee5ab544d0320af56302d05780948665693d5b8"
+    },
+    {
+      "beforeSha256": "9a0819a3c61d3786281f36769adcc76b0c4fb23d68eeea48ebfcbba72d7cbb6a",
+      "bytes": 5856,
+      "file": "candidate/static/price-editor-palitra.html",
+      "sha256": "b3694b008b08b22ded50b30f116523bd14056f50a6bdfc3047931b4dbc205247"
+    }
+  ],
+  "namespace": "palitra-cover-fill-20261023-r1",
+  "priceBase": 83,
+  "requiredManagedSiteVersionAtHandoff": 293,
+  "rootReview": "Exact code reviewed locally; own fresh native lease, BASE, readonly backup, one apply and independent readback required. Managed 37 files saved separately through existing editor. Physical phones remain open.",
+  "runtimeFiles": 2,
+  "schemaWrites": 0,
+  "staticFiles": 5,
+  "status": "ROOT_REVIEW_READY_CODE_ONLY",
+  "task": "product-cover-fill",
+  "zipSha256": "9a96ff85be5639a256b94fb918f2407c23262684aed9ff0e5256630d7682ce59"
+}

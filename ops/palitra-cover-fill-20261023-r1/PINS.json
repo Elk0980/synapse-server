@@ -1,0 +1,15 @@
+{
+  "beforeImage": "sha256:023ff079a56c02a8e628927dd3227652a83a41fa93f611fc9c889f93bf5dc059",
+  "guardsRemoved": 0,
+  "helperSha256": "8c795a1aab6e764d2395ab92d7b01a2e714f32325ce686e1317877b6bbff39bc",
+  "managedFiles": 37,
+  "manifestSha256": "ed4d65ee75bd8f0bb0d313671779a01b5ab94b7321ac16b4457dd4c4ee5d77e8",
+  "namespace": "palitra-cover-fill-20261023-r1",
+  "nativeFiles": 7,
+  "nativeInvoked": false,
+  "normalizedHelperByteAndAstExact": true,
+  "privateDataIncluded": false,
+  "siteManifestSha256": "d0eb83b88dd1bef5e4431bc79349380ecb714c52cb3fb36e15a8f0c79c29dee1",
+  "siteZipSha256": "45706c075bfc82b91da65c62b9839825752fedda793ef5f6016f8e61e7a7f45b",
+  "zipSha256": "9a96ff85be5639a256b94fb918f2407c23262684aed9ff0e5256630d7682ce59"
+}
