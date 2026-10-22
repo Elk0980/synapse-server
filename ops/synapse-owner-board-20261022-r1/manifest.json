@@ -1,0 +1,63 @@
+{
+  "status": "ROOT_REVIEW_READY_CODE_ONLY",
+  "files": [
+    {
+      "file": "candidate/content/owner-board-ui/app.js",
+      "beforeSha256": null,
+      "sha256": "a7fb8303f1f706784ff321605e6ff32afb826ade72577fd3d58f92480ff03231",
+      "bytes": 14694
+    },
+    {
+      "file": "candidate/content/owner-board-ui/index.html",
+      "beforeSha256": null,
+      "sha256": "ef10e86a91304ee8ea4d29aadbd9d0e8afeccfdc38555eeda2a90c216a4e4d5d",
+      "bytes": 9121
+    },
+    {
+      "file": "candidate/content/owner-board-ui/mobile.css",
+      "beforeSha256": null,
+      "sha256": "88eeadc32cf5d8b21c7bf273de28941090b2306b1ba6c5ddb9eee1aaa8e8a262",
+      "bytes": 27527
+    },
+    {
+      "file": "candidate/content/owner-board-ui/operator.html",
+      "beforeSha256": null,
+      "sha256": "36d4afc492cd358e9edc3187e8ad146a4c2c125f0c132cd20ec46741bb817735",
+      "bytes": 1622
+    },
+    {
+      "file": "candidate/content/owner-board-ui/operator.js",
+      "beforeSha256": null,
+      "sha256": "ddf868dd65c068bd17e3c7ea7809ffb5d6ac55b0417f68e285bb6cb2ba3c275c",
+      "bytes": 2689
+    },
+    {
+      "file": "candidate/content/owner-board-ui/style.css",
+      "beforeSha256": null,
+      "sha256": "6942dd916a1d9fee6b0a898410fa2c9337755a2aa397e71a4eb4f90c8db81b67",
+      "bytes": 7573
+    },
+    {
+      "file": "candidate/content/owner-board.cjs",
+      "beforeSha256": null,
+      "sha256": "f8cf4a1236610710c04128bf4646f79a33047801a64f064b8b4f946970909006",
+      "bytes": 30169
+    },
+    {
+      "file": "candidate/content/server.js",
+      "beforeSha256": "04e040a8a42ef7ffc4004dc093a9d9e00e062c7e7129795a9e1cd74c396f0472",
+      "sha256": "23c9664d8209ecf4aa4ce822a1a05a8cf0c2ee3fcb11afa93e396b1d5282d4ac",
+      "bytes": 133238
+    }
+  ],
+  "zipSha256": "3128e62abe52dde31febbd53a4b5b5cfd33d9fa8fb8f172d3a4885f09c653748",
+  "beforeImage": "sha256:7c48a73d56c64a18d81773597bd9a6f2236c189a035d9b1bb47740132ac1c8cc",
+  "crmImage": "sha256:6c802ba7fb5014becb2cd2c6c1b17ef509e2f9cda6780a841080cc36451e60d9",
+  "schemaWrites": 0,
+  "accountOrRoleChanges": 0,
+  "businessRowsWritten": 0,
+  "publicOrigin": "https://synapse.synapsebusiness.ru",
+  "privatePrefix": "/content/owner-board/",
+  "ownerId": 1,
+  "rootReview": "Separate private owner module. Exactly three server wiring additions; original auth/roles/providers/Palitra logic retained. All board files private; reports imported through authenticated UI after installation. No task data/images/secrets included in public payload."
+}
