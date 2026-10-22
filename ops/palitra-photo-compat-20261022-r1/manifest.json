@@ -1,0 +1,47 @@
+{
+  "accountOrRoleChanges": 0,
+  "beforeImage": "sha256:89805dcfb86b01dbeef6d9ff29b5ba63e0422ae6b48d299fefa04a196cf048b8",
+  "businessRowsWritten": 0,
+  "crmImage": "sha256:6c802ba7fb5014becb2cd2c6c1b17ef509e2f9cda6780a841080cc36451e60d9",
+  "files": [
+    {
+      "beforeSha256": "57f2daed26cab2199f2ec80b5e02893ee91e24a12df20d3aa4b3ff4ef4b9df62",
+      "bytes": 36055,
+      "file": "candidate/content/palitra-photo-model.js",
+      "sha256": "dffe0a8930873736e6765e75adbf23a5048256a21752e712ae2a6b77b27ac051"
+    },
+    {
+      "beforeSha256": "57f2daed26cab2199f2ec80b5e02893ee91e24a12df20d3aa4b3ff4ef4b9df62",
+      "bytes": 36055,
+      "file": "candidate/static/cabinet/palitra-photo-model.js",
+      "sha256": "dffe0a8930873736e6765e75adbf23a5048256a21752e712ae2a6b77b27ac051"
+    },
+    {
+      "beforeSha256": "95cbc5ab6e65c27008b439a23d5233d18f62f828828df1b5f9f9fbc60fe3371d",
+      "bytes": 41907,
+      "file": "candidate/static/cabinet/site-photos.js",
+      "sha256": "e5c9e8329dcfeb092aa18bb914f9a26ff8ab5795d2622bf93c57ebf6cf4dfb62"
+    },
+    {
+      "beforeSha256": "14ef76b21654d723a18a1d4928634573a17927686db261f3e099bcdc6fab3dd1",
+      "bytes": 7376,
+      "file": "candidate/static/cabinet/site-photos.html",
+      "sha256": "60dd3410667a9cfc398a02b82475e49392fc6156d38e810485fa4a4d7c7a182e"
+    }
+  ],
+  "managedSitePublicationIncluded": false,
+  "namespace": "palitra-photo-compat-20261022-r1",
+  "parentAssertion": "Exact installed category-photo image89805dcf required; per-target before pins and full runtime/static/DB guards required.",
+  "privateDataIncluded": false,
+  "requiredManagedSiteVersionAtHandoff": 293,
+  "rootReview": "Restore old photo editor for current13cards; category covers use existing price editor. Preserve old drafts, current accepted covers, price83 and all322products. No managed site or price document written. Fresh Root review/board/queue/own lease/BASE/backup/single apply/independent readback mandatory.",
+  "rootReviewRequired": true,
+  "runtimeAuthorization": false,
+  "runtimeFiles": 1,
+  "schemaWrites": 0,
+  "sourceCandidateManifestSha256": "e10cb1fd71673d11a8f4b317adabd7a830e4586eacd71c9e8961cc573748cf62",
+  "staticFiles": 3,
+  "status": "ROOT_REVIEW_READY_CODE_ONLY",
+  "task": "category-photo-legacy-compat",
+  "zipSha256": "00b04006d12f09e16f542cbcf755e300261916fe21d7bf563bea14893d60621e"
+}

@@ -1,0 +1,44 @@
+{
+  "checked": [
+    "Actual index293/current13category eager/static forms parse; duplicate/malformed cards fail closed.",
+    "Hero/budget/gallery edits preserve unrelated HTML bytes; old11card template produces identical results to old model.",
+    "Managed category operations blocked server-side before any patch; one existing price editor remains canonical.",
+    "Old pending category operations retained until explicit user removal; other pending gallery edit retained; no localStorage schema replacement.",
+    "No auth/roles/subscriptions/serviceworker/price/business-data code changed.",
+    "Helper only declared namespace/parent/scope/count/label replacements; all primitive guards normalized byte and AST exact."
+  ],
+  "physicalPhoneVerified": false,
+  "pins": {
+    "helperSha256": "57b24b28f452ea134dde00f45734b7290a55a40b5ea2f29740f1c48e13a1cc8d",
+    "manifestSha256": "23c86d755ad9342a3fcebb83e6878de1e2b4e49a4272848d666f09354829feda",
+    "zipSha256": "00b04006d12f09e16f542cbcf755e300261916fe21d7bf563bea14893d60621e"
+  },
+  "productionAuthorization": "Only exact single apply after fresh own native lease/BASE/backup; this file is not runtime authority.",
+  "scope": [
+    {
+      "beforeSha256": "57f2daed26cab2199f2ec80b5e02893ee91e24a12df20d3aa4b3ff4ef4b9df62",
+      "bytes": 36055,
+      "file": "candidate/content/palitra-photo-model.js",
+      "sha256": "dffe0a8930873736e6765e75adbf23a5048256a21752e712ae2a6b77b27ac051"
+    },
+    {
+      "beforeSha256": "57f2daed26cab2199f2ec80b5e02893ee91e24a12df20d3aa4b3ff4ef4b9df62",
+      "bytes": 36055,
+      "file": "candidate/static/cabinet/palitra-photo-model.js",
+      "sha256": "dffe0a8930873736e6765e75adbf23a5048256a21752e712ae2a6b77b27ac051"
+    },
+    {
+      "beforeSha256": "95cbc5ab6e65c27008b439a23d5233d18f62f828828df1b5f9f9fbc60fe3371d",
+      "bytes": 41907,
+      "file": "candidate/static/cabinet/site-photos.js",
+      "sha256": "e5c9e8329dcfeb092aa18bb914f9a26ff8ab5795d2622bf93c57ebf6cf4dfb62"
+    },
+    {
+      "beforeSha256": "14ef76b21654d723a18a1d4928634573a17927686db261f3e099bcdc6fab3dd1",
+      "bytes": 7376,
+      "file": "candidate/static/cabinet/site-photos.html",
+      "sha256": "60dd3410667a9cfc398a02b82475e49392fc6156d38e810485fa4a4d7c7a182e"
+    }
+  ],
+  "status": "ROOT_COMPATIBILITY_ACCEPTED_EXACT_CODE_ONLY"
+}

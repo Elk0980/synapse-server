@@ -1,0 +1,72 @@
+{
+  "contentParent": "sha256:89805dcfb86b01dbeef6d9ff29b5ba63e0422ae6b48d299fefa04a196cf048b8",
+  "crmImage": "sha256:6c802ba7fb5014becb2cd2c6c1b17ef509e2f9cda6780a841080cc36451e60d9",
+  "declaredReplacements": [
+    [
+      "palitra-category-photo-20261022-r1",
+      "palitra-photo-compat-20261022-r1"
+    ],
+    [
+      "sha256:f5c811da3d280dd9aac2454799bc1e2e575eabb8bdcd593bcb4f5f18437b37a1",
+      "sha256:89805dcfb86b01dbeef6d9ff29b5ba63e0422ae6b48d299fefa04a196cf048b8"
+    ],
+    [
+      "EXACT_PHOTO_CONTENT_PARENT",
+      "EXACT_PHOTO_COMPAT_CONTENT_PARENT"
+    ],
+    [
+      "EXACT_PHOTO_UNCHANGED_CRM",
+      "EXACT_PHOTO_COMPAT_UNCHANGED_CRM"
+    ],
+    [
+      "{'candidate/content/palitra-occasions.js', 'candidate/content/palitra-orders-public/synapse-bridge.js', 'candidate/content/palitra-price-validate.js', 'candidate/static/cabinet/palitra-orders/synapse-bridge.js', 'candidate/static/palitra-editor-model.js', 'candidate/static/palitra-editor.js', 'candidate/static/palitra-occasions.js', 'candidate/static/price-editor-palitra.html'}",
+      "{'candidate/content/palitra-photo-model.js', 'candidate/static/cabinet/palitra-photo-model.js', 'candidate/static/cabinet/site-photos.js', 'candidate/static/cabinet/site-photos.html'}"
+    ],
+    [
+      "len(rows) == 8",
+      "len(rows) == 4"
+    ],
+    [
+      "len(names) == 8",
+      "len(names) == 4"
+    ],
+    [
+      "'files': 8",
+      "'files': 4"
+    ],
+    [
+      "'runtimeFiles': 3, 'staticFiles': 5",
+      "'runtimeFiles': 1, 'staticFiles': 3"
+    ],
+    [
+      "'namespace': 'palitra-category-photo-r1-'",
+      "'namespace': 'palitra-photo-compat-r1-'"
+    ],
+    [
+      "independent category cover upload, replacement and reset; preserve all products and current five homepage covers",
+      "restore legacy photo-editor compatibility with current thirteen categories; retain the installed single cover editor, all products, accepted covers and drafts"
+    ],
+    [
+      "'category-photo-static-cas'",
+      "'photo-compat-static-cas'"
+    ],
+    [
+      "One-attempt category-photo runtime/static update",
+      "One-attempt legacy photo-editor compatibility runtime/static update"
+    ]
+  ],
+  "guardsRemoved": 0,
+  "helperSha256": "57b24b28f452ea134dde00f45734b7290a55a40b5ea2f29740f1c48e13a1cc8d",
+  "manifestSha256": "23c86d755ad9342a3fcebb83e6878de1e2b4e49a4272848d666f09354829feda",
+  "namespace": "palitra-photo-compat-20261022-r1",
+  "nativeFiles": 4,
+  "nativeInvoked": false,
+  "normalizedWholeModuleAstExact": true,
+  "normalizedWholeModuleByteExact": true,
+  "priceBase": 83,
+  "privateDataIncluded": false,
+  "runtimeFiles": 1,
+  "siteBase": 293,
+  "staticFiles": 3,
+  "zipSha256": "00b04006d12f09e16f542cbcf755e300261916fe21d7bf563bea14893d60621e"
+}
