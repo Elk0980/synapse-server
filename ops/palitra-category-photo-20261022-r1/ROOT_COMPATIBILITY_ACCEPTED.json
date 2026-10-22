@@ -1,0 +1,43 @@
+{
+  "at": "2026-10-22T13:33:56.525584+00:00",
+  "status": "ROOT_ACCEPTED_EXACT_CODE_PENDING_FRESH_NATIVE_BASE",
+  "task": "category-photo",
+  "pins": {
+    "allGuardsReversedAstExact": true,
+    "allGuardsReversedByteExact": true,
+    "contentParent": "sha256:f5c811da3d280dd9aac2454799bc1e2e575eabb8bdcd593bcb4f5f18437b37a1",
+    "crmImage": "sha256:6c802ba7fb5014becb2cd2c6c1b17ef509e2f9cda6780a841080cc36451e60d9",
+    "helperSha256": "fd775d4b10a21ab7185a35c36b5da4c0d09fdb6640a678526028c8291d32855c",
+    "managedSiteFiles": 1,
+    "manifestSha256": "b2af58899382de9a788b70c1943e356b3148fdc91009bab0b5eba224d9115741",
+    "namespace": "palitra-category-photo-20261022-r1",
+    "nativeFiles": 8,
+    "nativeHelperAncestorSha256": "7f40deca47e7350eb47e5140c6973b38462c85f7309748e3935e66507c191cc0",
+    "nativeInvoked": false,
+    "privateDataIncluded": false,
+    "runtimeAuthorization": false,
+    "siteBase": 292,
+    "sourceManifestSha256": "34be2d7ee09671567f1b5d3b44b02974c70ba3aad442f41e3edfdb8f66782dbb",
+    "zipSha256": "262a5b1568e8342b5f724e16d9e8396c18285067343077d065b7283816119d09"
+  },
+  "browserEvidence": {
+    "uploadReplaceSaveReloadReset": true,
+    "all322ProductsPreserved": true,
+    "editorAndHome320390": true,
+    "legacyCatalogBundleAfterCanonicalApi": true
+  },
+  "managedIndexOnlyCombinedCategoryControllerChanged": true,
+  "fiveInstalledCoversAndEveryOtherHtmlBytePreserved": true,
+  "nativeGuardsInheritedByteExactAfterDeclaredNamesAndPins": true,
+  "authRolesSubscriptionsWorkerServerJsDatabaseSchemaChanged": false,
+  "nativeInvoked": false,
+  "physicalPhoneVerified": false,
+  "authorizationSource": "Direct request for category photograph control, continue available board tasks in priority order; authenticated export31/R20 category-photo P3 pausedfalse.",
+  "requiredBeforeImage": "sha256:f5c811da3d280dd9aac2454799bc1e2e575eabb8bdcd593bcb4f5f18437b37a1",
+  "requiredManagedSiteVersion": 292,
+  "remaining": [
+    "Exact immutable transport SHA and public readback.",
+    "Fresh board, actual native queue/own lease/BASE/backup and one attempt; refusal or unknown is inspect-only, never retry.",
+    "Managed index current292 save after native readback, live editor/old entry/price preservation and physical phones separately."
+  ]
+}

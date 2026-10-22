@@ -1,0 +1,12 @@
+{
+  "status": "REVIEWED_CODE_ONLY_NOT_PUBLISHED",
+  "siteVersionBefore": 292,
+  "path": "index.html",
+  "beforeSha256": "cc4df6c8c1864a5a183fe13d4579962e3049fc962bcd435f940a99b0f79283e2",
+  "sha256": "b0c1341980523ada3a1409c96d3c51fe0fef42d83d2078728dac7c7900afbe49",
+  "bytes": 230978,
+  "onlyCategoryControllerChanged": true,
+  "fiveInstalledDefaultsPreserved": true,
+  "normalManagedEditorSaveRequired": true,
+  "oldPriceSnapshotApplied": false
+}

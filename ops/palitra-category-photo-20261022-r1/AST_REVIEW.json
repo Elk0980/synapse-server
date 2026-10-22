@@ -1,0 +1,42 @@
+{
+  "declaredReplacements": [
+    [
+      "palitra-product-order-20261022-r2",
+      "palitra-category-photo-20261022-r1"
+    ],
+    [
+      "sha256:e80871248a0d6d14caa0749f096cf5d08c66b358e0592ce60224d32d458bd69f",
+      "sha256:f5c811da3d280dd9aac2454799bc1e2e575eabb8bdcd593bcb4f5f18437b37a1"
+    ],
+    [
+      "EXACT_R2_CONTENT_PARENT",
+      "EXACT_PHOTO_CONTENT_PARENT"
+    ],
+    [
+      "EXACT_R2_UNCHANGED_CRM",
+      "EXACT_PHOTO_UNCHANGED_CRM"
+    ],
+    [
+      "'namespace': 'palitra-product-order-r2-'",
+      "'namespace': 'palitra-category-photo-r1-'"
+    ],
+    [
+      "manual product ordering within categories and collections",
+      "independent category cover upload, replacement and reset; preserve all products and current five homepage covers"
+    ],
+    [
+      "'product-order-static-cas'",
+      "'category-photo-static-cas'"
+    ],
+    [
+      "One-attempt product-order runtime/static update",
+      "One-attempt category-photo runtime/static update"
+    ]
+  ],
+  "guardsRemoved": 0,
+  "normalizedWholeModuleAstExact": true,
+  "normalizedWholeModuleByteExact": true,
+  "primitiveSha256": "19d8c6ea00264dc276920b3a196df9c3931d4b2e22c63fbe171da6e13904d73c",
+  "productionInvoked": false,
+  "status": "CODE_ONLY_REVIEW"
+}

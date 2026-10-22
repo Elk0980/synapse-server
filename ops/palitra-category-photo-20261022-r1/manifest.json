@@ -1,0 +1,71 @@
+{
+  "accountOrRoleChanges": 0,
+  "beforeImage": "sha256:f5c811da3d280dd9aac2454799bc1e2e575eabb8bdcd593bcb4f5f18437b37a1",
+  "businessRowsWritten": 0,
+  "crmImage": "sha256:6c802ba7fb5014becb2cd2c6c1b17ef509e2f9cda6780a841080cc36451e60d9",
+  "files": [
+    {
+      "beforeSha256": "842962a495ee97e70e282a63ca12dfa865b62984eb4d47856860023b2243231a",
+      "bytes": 28307,
+      "file": "candidate/content/palitra-occasions.js",
+      "sha256": "ca8da2e9c4b7429bff8ecbd115b6b23e0df33bf14c544872299aa62481d8f6e1"
+    },
+    {
+      "beforeSha256": "666f8e988ce07e00d71a8a52b68a2c2e967a7c27d4a09812091935e7d166a403",
+      "bytes": 77660,
+      "file": "candidate/content/palitra-orders-public/synapse-bridge.js",
+      "sha256": "e5b0a072a8cbf740ac88584825dab783d2c5e27fca119ef64a0964f72b4595f2"
+    },
+    {
+      "beforeSha256": "f726a5e5e90ddae3a1d061ffbbb2e7cf2092df3b6ff496034fa8fd395f552112",
+      "bytes": 29951,
+      "file": "candidate/content/palitra-price-validate.js",
+      "sha256": "cbfab914ce66c8a6d080dcfd33d061b42c7f16f7c5c558c63240566a044ed5fa"
+    },
+    {
+      "beforeSha256": "666f8e988ce07e00d71a8a52b68a2c2e967a7c27d4a09812091935e7d166a403",
+      "bytes": 77660,
+      "file": "candidate/static/cabinet/palitra-orders/synapse-bridge.js",
+      "sha256": "e5b0a072a8cbf740ac88584825dab783d2c5e27fca119ef64a0964f72b4595f2"
+    },
+    {
+      "beforeSha256": "7058a4788f40a9ac90cab64ca6fc02dabe60ebaefab54c8f87dd3ae236f3553d",
+      "bytes": 72125,
+      "file": "candidate/static/palitra-editor-model.js",
+      "sha256": "fd119dde3281cd56cbcdb710c413749db5dbae963dd160ff1dbc808bd2f44152"
+    },
+    {
+      "beforeSha256": "20c2f8036640f2ee131437de57d19c5ddca5a5300b015eed13c2829624da3d75",
+      "bytes": 109241,
+      "file": "candidate/static/palitra-editor.js",
+      "sha256": "83c598e39ec03f1b40d1896b16b16e8699fce6e346f69f3ffb37e40e0f9ed7ed"
+    },
+    {
+      "beforeSha256": "842962a495ee97e70e282a63ca12dfa865b62984eb4d47856860023b2243231a",
+      "bytes": 28307,
+      "file": "candidate/static/palitra-occasions.js",
+      "sha256": "ca8da2e9c4b7429bff8ecbd115b6b23e0df33bf14c544872299aa62481d8f6e1"
+    },
+    {
+      "beforeSha256": "cd3f1b798ba1bb8d3f0486c0d9b0bbc3f78cc6bdb62a1c82dadfbe8f42f870a4",
+      "bytes": 5872,
+      "file": "candidate/static/price-editor-palitra.html",
+      "sha256": "9a0819a3c61d3786281f36769adcc76b0c4fb23d68eeea48ebfcbba72d7cbb6a"
+    }
+  ],
+  "managedSitePublicationIncluded": false,
+  "namespace": "palitra-category-photo-20261022-r1",
+  "parentAssertion": "Exact installed product-order R2 parent f5c required; older e808/c4 are not accepted. Runtime fresh image/tree/target guards remain mandatory.",
+  "privateDataIncluded": false,
+  "requiredManagedSiteVersionAtHandoff": 292,
+  "rootReview": "Code-only independent category covers. Preserve private owner board, staff guidance, product ordering, current five homepage covers, every product and existing session. Exact Root review/fresh board/queue/own lease/BASE/backup/single apply/readback required; managed index292 is separate and no historical price document is applied.",
+  "rootReviewRequired": true,
+  "runtimeAuthorization": false,
+  "runtimeFiles": 3,
+  "schemaWrites": 0,
+  "sourceCandidateManifestSha256": "34be2d7ee09671567f1b5d3b44b02974c70ba3aad442f41e3edfdb8f66782dbb",
+  "staticFiles": 5,
+  "status": "ROOT_REVIEW_READY_CODE_ONLY",
+  "task": "category-photo",
+  "zipSha256": "262a5b1568e8342b5f724e16d9e8396c18285067343077d065b7283816119d09"
+}
