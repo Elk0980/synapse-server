@@ -1,0 +1,76 @@
+{
+  "accountOrRoleChanges": 0,
+  "beforeImage": "sha256:c4ab683a49bd1ba4cac783d3a5b5aaad3bf2ff58c119de26f94f23a1122f596c",
+  "businessRowsWritten": 0,
+  "crmImage": "sha256:6c802ba7fb5014becb2cd2c6c1b17ef509e2f9cda6780a841080cc36451e60d9",
+  "files": [
+    {
+      "beforeSha256": "4adcc96ddd1c6c9c6bcbfe37a33a615650b1dd66f48604e76d91966bf4bc0c1d",
+      "bytes": 360455,
+      "file": "candidate/content/palitra-orders-public/shell.js",
+      "sha256": "13af17961dd8370d74b9b9746c837c6a97a3db34a77f75ac9bf3f73e8e5341e1"
+    },
+    {
+      "beforeSha256": "5eefe236c7a45888168ddffdd41cea9e7d033a2ae0608c01f864ad40d5626a24",
+      "bytes": 108801,
+      "file": "candidate/content/palitra-orders-public/workflow-ui.js",
+      "sha256": "3dfc01a4b48b7f75a8c0e3d84a1351d304c14fa91700ded5d6224a7078f7d741"
+    },
+    {
+      "beforeSha256": "6d11be6f295f61bff9a3a060148b0af2fcede5daf5690162868f0bae6df2a8a4",
+      "bytes": 2932,
+      "file": "candidate/content/palitra-orders-public/cabinet.html",
+      "sha256": "1fad5ad085c9289b607faa69cf5b6768a7a4350b7669daa09a19b265723c2c39"
+    },
+    {
+      "beforeSha256": "919a42c4a907396e2c5e8ac597c51069ddc3442399163b2ab074c316ce7b951a",
+      "bytes": 2639,
+      "file": "candidate/content/palitra-orders-public/shop.html",
+      "sha256": "e43d0c8fe7e4abe797823786329ec43c4da5a0f3abde24cb233b3c1bdd99213a"
+    },
+    {
+      "beforeSha256": "18b6f921b55ecd5f30140b33d9e3e061c28fc28108fe61d1550ce3b7691999ee",
+      "bytes": 1363,
+      "file": "candidate/content/palitra-orders-public/telegram.html",
+      "sha256": "614ff5f96d15f79ed73e8183f9a788ce738d8e37f72bc3e8081b935a82f97e10"
+    },
+    {
+      "beforeSha256": "178191ec76d0beab852e01ad721c7926be44638b1566ccbe53c34ae0e582e1b7",
+      "bytes": 4439,
+      "file": "candidate/content/palitra-review-public/palitra-chat.html",
+      "sha256": "9af1a18726f7ea13f1cbd1e2c73e75eb9d7cd0368c512c9b0a3a1fca67294e3f"
+    },
+    {
+      "beforeSha256": "4adcc96ddd1c6c9c6bcbfe37a33a615650b1dd66f48604e76d91966bf4bc0c1d",
+      "bytes": 360455,
+      "file": "candidate/static/cabinet/palitra-orders/shell.js",
+      "sha256": "13af17961dd8370d74b9b9746c837c6a97a3db34a77f75ac9bf3f73e8e5341e1"
+    },
+    {
+      "beforeSha256": "5eefe236c7a45888168ddffdd41cea9e7d033a2ae0608c01f864ad40d5626a24",
+      "bytes": 108801,
+      "file": "candidate/static/cabinet/palitra-orders/workflow-ui.js",
+      "sha256": "3dfc01a4b48b7f75a8c0e3d84a1351d304c14fa91700ded5d6224a7078f7d741"
+    },
+    {
+      "beforeSha256": "6d11be6f295f61bff9a3a060148b0af2fcede5daf5690162868f0bae6df2a8a4",
+      "bytes": 2932,
+      "file": "candidate/static/cabinet/palitra-orders/cabinet.html",
+      "sha256": "1fad5ad085c9289b607faa69cf5b6768a7a4350b7669daa09a19b265723c2c39"
+    }
+  ],
+  "managedSitePublicationIncluded": false,
+  "permissionRequests": 0,
+  "privateDataIncluded": false,
+  "rootReview": "Code-only staff/admin guidance and existing shared UI. Root review, fresh authenticated task controls, live target pins, own lease, BASE and protected backup required before native writes. Preserve current server.js/private owner-board and every unrelated file, data and setting. Do not resume frozen product order or paused orders diagnosis; no subscriptions, permission, provider or delivery changes.",
+  "rootReviewRequired": true,
+  "runtimeAuthorization": false,
+  "runtimeFiles": 6,
+  "schemaWrites": 0,
+  "sourceCandidateManifestSha256": "e86137dfd55dd8a085bb6788685e6c58706820d68375008fa804d253ab537cb6",
+  "staticFiles": 3,
+  "status": "ROOT_REVIEW_READY_CODE_ONLY",
+  "subscriptionWrites": 0,
+  "task": "staff-notifications-install",
+  "zipSha256": "4d5b3b9a1a4d0c23d8164a6ad50046a77f9aab0dce2bd82be449f7b1fea81df8"
+}
