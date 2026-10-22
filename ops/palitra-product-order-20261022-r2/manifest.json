@@ -1,0 +1,71 @@
+{
+  "accountOrRoleChanges": 0,
+  "beforeImage": "sha256:e80871248a0d6d14caa0749f096cf5d08c66b358e0592ce60224d32d458bd69f",
+  "businessRowsWritten": 0,
+  "crmImage": "sha256:6c802ba7fb5014becb2cd2c6c1b17ef509e2f9cda6780a841080cc36451e60d9",
+  "files": [
+    {
+      "beforeSha256": "15c8191f7e54f60cb8fa6e4e7ba81c0eb8a4a96a5598f60e5fb7026db7937708",
+      "bytes": 26865,
+      "file": "candidate/content/palitra-occasions.js",
+      "sha256": "842962a495ee97e70e282a63ca12dfa865b62984eb4d47856860023b2243231a"
+    },
+    {
+      "beforeSha256": "cd2748fc92d231e3bc86b9364c6011f6f32913e0309c3d55ff02194f942205ac",
+      "bytes": 77659,
+      "file": "candidate/content/palitra-orders-public/synapse-bridge.js",
+      "sha256": "666f8e988ce07e00d71a8a52b68a2c2e967a7c27d4a09812091935e7d166a403"
+    },
+    {
+      "beforeSha256": "a1ad5637f04ab6756d2c53d412bb245fcb230a5b172526724c76441a5b5726f9",
+      "bytes": 29863,
+      "file": "candidate/content/palitra-price-validate.js",
+      "sha256": "f726a5e5e90ddae3a1d061ffbbb2e7cf2092df3b6ff496034fa8fd395f552112"
+    },
+    {
+      "beforeSha256": "cd2748fc92d231e3bc86b9364c6011f6f32913e0309c3d55ff02194f942205ac",
+      "bytes": 77659,
+      "file": "candidate/static/cabinet/palitra-orders/synapse-bridge.js",
+      "sha256": "666f8e988ce07e00d71a8a52b68a2c2e967a7c27d4a09812091935e7d166a403"
+    },
+    {
+      "beforeSha256": "6eb3f8a8e949264bfddf9369b52031178954f1b57d5ddae38af79b982e057e4d",
+      "bytes": 70175,
+      "file": "candidate/static/palitra-editor-model.js",
+      "sha256": "7058a4788f40a9ac90cab64ca6fc02dabe60ebaefab54c8f87dd3ae236f3553d"
+    },
+    {
+      "beforeSha256": "e50b2b273391a35e301e79d73909cfc56f1e196910054e74062f59ad23e3529c",
+      "bytes": 105765,
+      "file": "candidate/static/palitra-editor.js",
+      "sha256": "20c2f8036640f2ee131437de57d19c5ddca5a5300b015eed13c2829624da3d75"
+    },
+    {
+      "beforeSha256": "15c8191f7e54f60cb8fa6e4e7ba81c0eb8a4a96a5598f60e5fb7026db7937708",
+      "bytes": 26865,
+      "file": "candidate/static/palitra-occasions.js",
+      "sha256": "842962a495ee97e70e282a63ca12dfa865b62984eb4d47856860023b2243231a"
+    },
+    {
+      "beforeSha256": "bd81fa58528caba809d93ec4269668602647b9e98f616d89625f4108f651a890",
+      "bytes": 5869,
+      "file": "candidate/static/price-editor-palitra.html",
+      "sha256": "cd3f1b798ba1bb8d3f0486c0d9b0bbc3f78cc6bdb62a1c82dadfbe8f42f870a4"
+    }
+  ],
+  "managedSitePublicationIncluded": false,
+  "namespace": "palitra-product-order-20261022-r2",
+  "parentAssertion": "The e808 installed staff-update image is required. Historical c4 in the immutable candidate manifest is not accepted as the runtime parent. Fresh native exact parent/tree/target checks remain required.",
+  "privateDataIncluded": false,
+  "requiredManagedSiteVersionAtHandoff": 265,
+  "rootReview": "R2 code-only rebase preserves the installed staff notification update and existing private owner-board. Exact Root review, fresh controls, own lease, BASE and backup required. Managed site 265 must be freshly rebased separately; old site264 HTML/delivery copies are not authorized. Never apply a historical price snapshot.",
+  "rootReviewRequired": true,
+  "runtimeAuthorization": false,
+  "runtimeFiles": 3,
+  "schemaWrites": 0,
+  "sourceCandidateManifestSha256": "9e5b7424e3e07d909cd9928bba2f52a16be0653f2a623192424f5b0ba4c5ae71",
+  "staticFiles": 5,
+  "status": "ROOT_REVIEW_READY_CODE_ONLY",
+  "task": "category-product-order",
+  "zipSha256": "48ff2bfae17ffd25d21425b0775f89ab31dd5f25570c2e8c4063dc22e6493f48"
+}
