@@ -1,0 +1,34 @@
+{
+  "status": "ROOT_REVIEW_READY_CODE_ONLY",
+  "files": [
+    {
+      "file": "candidate/content/palitra-orders-public/synapse-bridge.js",
+      "beforeSha256": "bc45a882da5ab88794bcef14ba989039d4efe2e98f0d9a4f47321925cd516269",
+      "sha256": "cd2748fc92d231e3bc86b9364c6011f6f32913e0309c3d55ff02194f942205ac",
+      "bytes": 77659
+    },
+    {
+      "file": "candidate/static/cabinet/palitra-orders/synapse-bridge.js",
+      "beforeSha256": "bc45a882da5ab88794bcef14ba989039d4efe2e98f0d9a4f47321925cd516269",
+      "sha256": "cd2748fc92d231e3bc86b9364c6011f6f32913e0309c3d55ff02194f942205ac",
+      "bytes": 77659
+    },
+    {
+      "file": "candidate/static/palitra-editor-model.js",
+      "beforeSha256": "364641683219d283320298054956f68098fba9530f862392d8407ffce5f03d2b",
+      "sha256": "6eb3f8a8e949264bfddf9369b52031178954f1b57d5ddae38af79b982e057e4d",
+      "bytes": 66960
+    },
+    {
+      "file": "candidate/static/price-editor-palitra.html",
+      "beforeSha256": "10ae574b49dc678f76ea11f9447945029e71eb9ee58e13bca3f33b241bbe0f90",
+      "sha256": "bd81fa58528caba809d93ec4269668602647b9e98f616d89625f4108f651a890",
+      "bytes": 5854
+    }
+  ],
+  "zipSha256": "af496ca83640d5684ae0c9d316842dbc6f4a9e319d8fd9106c9da34fdfeb295d",
+  "beforeImage": "sha256:c64ca9fe5958474e299bb58a3d2fa0964c79f889efc2966e0edd6eeef077516d",
+  "crmImage": "sha256:6c802ba7fb5014becb2cd2c6c1b17ef509e2f9cda6780a841080cc36451e60d9",
+  "schemaWrites": 0,
+  "rootReview": "Client document validation must accept the same known published categories as the already installed server validation; holidays remain core-only. Three exact literals changed: client home validation; model resource version; Palitra editor iframe version. Other sources and all guard methods unchanged. Previous failed UI save was rejected by client before a PUT; no unknown server save repeated."
+}
