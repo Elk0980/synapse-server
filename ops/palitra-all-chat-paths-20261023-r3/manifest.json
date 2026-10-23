@@ -1,0 +1,22 @@
+{
+  "accountOrRoleChanges": 0,
+  "beforeImage": "sha256:4a1399f3bb8f39d9e29367953a310dce5b537b656b2cda8c287db397bd4f270f",
+  "businessRowsWritten": 0,
+  "crmImage": "sha256:6c802ba7fb5014becb2cd2c6c1b17ef509e2f9cda6780a841080cc36451e60d9",
+  "files": [
+    {
+      "beforeSha256": "5f352044ae196549179f2f14215d869c41e99717dc013b2081bc4479cb82848e",
+      "bytes": 1360,
+      "file": "candidate/content/palitra-orders-public/telegram.html",
+      "sha256": "02c6722091d7e359f8dda91f0fe5fb6eba292daca8091a3bfed307b34ceb3070"
+    }
+  ],
+  "namespace": "palitra-all-chat-paths-20261023-r3",
+  "rootReview": "One exact Telegram HTML script URL correction to its existing no-query route. Miniapp static route refuses arbitrary version queries; no-store serves already installed new UI bytes. Other seventeen installed code files unchanged. No schema/business/ACL writes. Original native gates retained.",
+  "runtimeFiles": 1,
+  "schemaWrites": 0,
+  "staticFiles": 0,
+  "status": "ROOT_REVIEW_READY_CODE_ONLY",
+  "task": "palitra-all-chat-entry-stages",
+  "zipSha256": "de028951818ae10a821fd6f781917bb8bcb77ada0195ee57dd6dead591c220da"
+}

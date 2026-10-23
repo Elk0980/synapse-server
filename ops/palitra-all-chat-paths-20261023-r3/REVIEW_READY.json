@@ -1,0 +1,10 @@
+{
+  "change": "Exact removal of unsupported miniapp-ui version query only; existing route no-store and new UI body verified. No static/auth/ACL or arbitrary query expansion. Original all full-tree/lease/BASE/backup/CAS gates retained. R2 single apply and independent readback PASS.",
+  "helperSha256": "4fdf4c9286c29ea275ba8aea1edb1aa3224ee1d48aae4ac42e31d217bfa4b235",
+  "manifestSha256": "e18f7b13ac0761f9fa74b7e5913833a50a393df716efa3614911ff6199684081",
+  "payloadSha256": "de028951818ae10a821fd6f781917bb8bcb77ada0195ee57dd6dead591c220da",
+  "runtimeFiles": 1,
+  "scope": 1,
+  "staticFiles": 0,
+  "status": "ROOT_COMPATIBILITY_ACCEPTED_CODE_ONLY"
+}
