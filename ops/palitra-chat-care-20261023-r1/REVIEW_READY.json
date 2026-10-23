@@ -1,0 +1,12 @@
+{
+  "files": 16,
+  "helperSha256": "c60684282522bd16b9e2c494dddc1ae3c934dd26517ba35691ba805ecb2b0c27",
+  "manifestSha256": "17857447bdef56c7faf4076a9b77fa44700410303a823f630b611f88da262fb3",
+  "offlineTests": "7 privacy/composer tests + 7 SQLite sequence/replay/rollback tests passed; editor mobile fixture verified separately",
+  "physicalVarvaraEvidence": "User confirmed actual phone screenshot: stage changed and photo stored. No claim of Push or separate text-send verification.",
+  "productionAuthorization": "Direct current user requests; pending exact native BASE/own lease/backup. No production writes by this builder.",
+  "runtimeFiles": 9,
+  "staticFiles": 7,
+  "status": "ROOT_COMPATIBILITY_ACCEPTED_CODE_ONLY",
+  "zipSha256": "3e9e0132d03fdf73f952c8aa85e8318d422fc48333a1cc5e6202ac3bdface7c5"
+}
