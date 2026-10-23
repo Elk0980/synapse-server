@@ -1,0 +1,1 @@
+Exact code-only all website chat entry stage compatibility. No customer data, exports, screenshots or credentials. Existing thread IDs, native orders, roles and customer history retained. Fresh guarded single native installation required.

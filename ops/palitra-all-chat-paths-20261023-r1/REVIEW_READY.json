@@ -1,0 +1,12 @@
+{
+  "helperSha256": "cf502544b0d2200769806ce79ec1c65031a1342c7ea136f7b5755eb84c2a3d89",
+  "manifestSha256": "67bd6acff169e85216d219075e84ebb863a7eb75b78dd199350045f927cc9d88",
+  "payloadSha256": "f9c665cb39a79ddf7265cc6f110e07e65dfbd77e5581eceb91bd478f2b652611",
+  "preservation": "Native order numeric branch retained. Thread state uses existing versioned documents, no new schema; no writes on GET. Exact site/company/thread checks; own existing crm.edit only. Customer projection unchanged. Receipt identities typed to prevent thread/order collisions. Core completion accepts only exact null-order canonical thread. Existing native order handover contract remains.",
+  "productionInstalled": false,
+  "runtimeFiles": 13,
+  "scope": 18,
+  "staticFiles": 5,
+  "status": "ROOT_COMPATIBILITY_ACCEPTED_CODE_ONLY",
+  "tests": "10 real SQLite and shared adapter permission/receipt/queue checks PASS; synthetic browser stage changed once, draft preserved, production writes0"
+}
