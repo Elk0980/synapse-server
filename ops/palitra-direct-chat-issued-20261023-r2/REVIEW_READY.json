@@ -1,0 +1,13 @@
+{
+  "files": 1,
+  "guardEquivalence": "All original native primitive, full-tree compare, single attempt, own lease, backup/CAS and independent inspect unchanged. Only namespace, exact one target, current parent image, human authorization changed.",
+  "helperSha256": "ddd193d95bb30e824c4296afa934f3eafc865d0ecf1479930259f1b2b7422075",
+  "manifestSha256": "95db23e45e82aa2f3700f891bc1f4101741d6376b5f35c98b379911e53160d3c",
+  "parentRefusal": "R1 FULL_CONTENT_NATIVE_STATE_CHANGED at workerConfig/botIdentities/0 public metadata; before compose up, journal000..005, backups/unused build exist, no installed receipt. Read-only three original full guards PASS identical original BASE. Same exact product bytes, fresh namespace only. Original full guard unchanged.",
+  "payloadSha256": "db88d18fb0eafa4593ef0a90a27af2a1b04b6c981f88a77b218211a407c2a506",
+  "regression": "Original adapter reproduces exact 404 Order not found during PDF preparation; fixed adapter passes real SQLite workflow and HTTP completion route with same server callback wiring. File storage and outbound delivery stubbed locally; no production handover made. Four new focused checks plus ten previous SQLite/adapter checks PASS.",
+  "runtimeFiles": 1,
+  "scope": "Typed exact Palitra thread resolution only. Numeric native-order resolution remains byte-identical. Existing core completion identity, transactional memo-review ordering and replay checks unchanged.",
+  "staticFiles": 0,
+  "status": "ROOT_COMPATIBILITY_ACCEPTED_CODE_ONLY"
+}
