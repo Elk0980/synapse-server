@@ -1,0 +1,22 @@
+{
+  "accountOrRoleChanges": 0,
+  "beforeImage": "sha256:4a9001d61f88d7c1d1805773f05ac62d9b841f6ddc07b667ef1823adc418f469",
+  "businessRowsWritten": 0,
+  "crmImage": "sha256:6c802ba7fb5014becb2cd2c6c1b17ef509e2f9cda6780a841080cc36451e60d9",
+  "files": [
+    {
+      "beforeSha256": "894f06ba1f9a98ac7a6f18bd5a33a17fd5f2e2dd144f7f58f83f9ca56d5795e3",
+      "bytes": 41402,
+      "file": "candidate/content/customer-chat-native-adapter.cjs",
+      "sha256": "0457646b76195b113834bcc26e4150bd488e3f4a19f83142006d666e277090f7"
+    }
+  ],
+  "namespace": "palitra-direct-chat-issued-20261023-r1",
+  "rootReview": "One exact internal native adapter identity correction. Direct website thread is not a native order. Typed existing thread lookup restricted to exact Palitra site/company; numeric native order branch byte-unchanged. No auth, schema, business, price or Push writes. Full-tree/CAS/own-lease/BASE/backup gates retained.",
+  "runtimeFiles": 1,
+  "schemaWrites": 0,
+  "staticFiles": 0,
+  "status": "ROOT_REVIEW_READY_CODE_ONLY",
+  "task": "palitra-direct-chat-confirm-issued",
+  "zipSha256": "db88d18fb0eafa4593ef0a90a27af2a1b04b6c981f88a77b218211a407c2a506"
+}
