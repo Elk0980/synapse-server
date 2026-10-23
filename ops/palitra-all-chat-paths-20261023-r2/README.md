@@ -1,0 +1,1 @@
+Reviewed17 code-only existing runtime/static paths. R1 stopped before BASE or apply on absent unused static Telegram UI duplicate; runtime Telegram path preserved. Original guards unchanged. No private data.

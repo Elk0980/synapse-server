@@ -1,0 +1,13 @@
+{
+  "helperSha256": "ca968164a2fc49e3d1342865d73f453a06d93b997dfa6e01d099a2d699a0776c",
+  "manifestSha256": "24032d6a88237235e7eb96d7ee60b3797267e6f4ddfff770538b72b4f2c94177",
+  "payloadSha256": "16a6b51d383e7a81ed4f3d4a58da4a7db0bd4b1005cf0c6d000b3be05666e6f0",
+  "preservation": "Native order numeric branch retained. Thread state uses existing versioned documents, no new schema; no writes on GET. Exact site/company/thread checks; own existing crm.edit only. Customer projection unchanged. Receipt identities typed to prevent thread/order collisions. Core completion accepts only exact null-order canonical thread. Existing native order handover contract remains.",
+  "previousAttempt": "R1 stage1 prepare1 refused missing unused cabinet miniapp-ui.js before BASE/admission/apply; native Telegram runtime path exists, untouched product payload17 byte exact. Unsupported static duplicate removed; every guard retained.",
+  "productionInstalled": false,
+  "runtimeFiles": 13,
+  "scope": 17,
+  "staticFiles": 4,
+  "status": "ROOT_COMPATIBILITY_ACCEPTED_CODE_ONLY",
+  "tests": "10 real SQLite and shared adapter permission/receipt/queue checks PASS; synthetic browser stage changed once, draft preserved, production writes0"
+}

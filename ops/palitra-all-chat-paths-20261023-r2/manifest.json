@@ -1,0 +1,118 @@
+{
+  "accountOrRoleChanges": 0,
+  "beforeImage": "sha256:c8c311639e9623d192211217f6122a93d3b568373bc776c6ffcd317331a65723",
+  "businessRowsWritten": 0,
+  "crmImage": "sha256:6c802ba7fb5014becb2cd2c6c1b17ef509e2f9cda6780a841080cc36451e60d9",
+  "files": [
+    {
+      "beforeSha256": "7f81db4316e1dae791ea18acb9aedff0e160aed720c89a1d52bf13f69dd2fa6a",
+      "bytes": 361225,
+      "file": "candidate/content/palitra-orders-public/shell.js",
+      "sha256": "823da57f742b6ac656b48acbc7a57cf7bd2f69b9ee4993e7fb678f3c7ce4ba28"
+    },
+    {
+      "beforeSha256": "7f81db4316e1dae791ea18acb9aedff0e160aed720c89a1d52bf13f69dd2fa6a",
+      "bytes": 361225,
+      "file": "candidate/static/cabinet/palitra-orders/shell.js",
+      "sha256": "823da57f742b6ac656b48acbc7a57cf7bd2f69b9ee4993e7fb678f3c7ce4ba28"
+    },
+    {
+      "beforeSha256": "97a80edd35526eed9e65d4c0441e493fcecdd5c5b065356de0f412ea7e8095f2",
+      "bytes": 110707,
+      "file": "candidate/content/palitra-orders-public/workflow-ui.js",
+      "sha256": "a66a3d40d78004ee357802eda683a649d2f123b922c74b4231100493713ad261"
+    },
+    {
+      "beforeSha256": "97a80edd35526eed9e65d4c0441e493fcecdd5c5b065356de0f412ea7e8095f2",
+      "bytes": 110707,
+      "file": "candidate/static/cabinet/palitra-orders/workflow-ui.js",
+      "sha256": "a66a3d40d78004ee357802eda683a649d2f123b922c74b4231100493713ad261"
+    },
+    {
+      "beforeSha256": "848ff558047e9c8f0104c6952f07868961cba0174289d14695d842bd664e808f",
+      "bytes": 47038,
+      "file": "candidate/content/palitra-orders-public/native-host.js",
+      "sha256": "697863cbd5ac96af57a58bcae84d4b0ba858b18d39a955c527463a6c4c756728"
+    },
+    {
+      "beforeSha256": "848ff558047e9c8f0104c6952f07868961cba0174289d14695d842bd664e808f",
+      "bytes": 47038,
+      "file": "candidate/static/cabinet/palitra-orders/native-host.js",
+      "sha256": "697863cbd5ac96af57a58bcae84d4b0ba858b18d39a955c527463a6c4c756728"
+    },
+    {
+      "beforeSha256": "782520bd8847e7b9ab97ab47e676c19fe916c750cf7125c4dff0103595ac842d",
+      "bytes": 29205,
+      "file": "candidate/content/palitra-orders-public/miniapp-ui.js",
+      "sha256": "1205b70d90d91315812fcbfbc1823396525d2fbf26b1391746f9978667787592"
+    },
+    {
+      "beforeSha256": "fa72fdce731cee9b86d8bba5be6be7f44fc9acb462e0d4989ecefa7ff7df7a22",
+      "bytes": 61052,
+      "file": "candidate/content/palitra-workflow.cjs",
+      "sha256": "99406c00fd4784561ffe3d09092b5161a54e8396bc272e2a63bf55fb972e2c4b"
+    },
+    {
+      "beforeSha256": "7ae411d70f0a008445369b09afb1b14a45017eb2d41de301f457aee3718aeb77",
+      "bytes": 149973,
+      "file": "candidate/content/customer-chat.js",
+      "sha256": "65439df0c0268aa49c33b679d4142090c72f54e02153d1fcf21383587a341ffa"
+    },
+    {
+      "beforeSha256": "4225e4ae704ada1b11060e842237124a1f33516d5e010d1e41e1ea9b578798ee",
+      "bytes": 20467,
+      "file": "candidate/content/palitra-manager-attention.cjs",
+      "sha256": "e950f9e4723a47abd8d5d2b039fe05d25a5ba13b362a46eac34c09004eb23b59"
+    },
+    {
+      "beforeSha256": "2e3d3c332383e2afa3c957eefaebab6a983e78e445198df4a5346c163b25e751",
+      "bytes": 8179,
+      "file": "candidate/content/miniapp-native.cjs",
+      "sha256": "b2ba9a6bdeb8d03e3eb4a7812db7b7038b22a0d544df2fac555f0a4862a6326b"
+    },
+    {
+      "beforeSha256": "4bcac4a87046982ddcba24f1b4671b8152db9330451c42bc9543f8ae0d3b93f3",
+      "bytes": 11858,
+      "file": "candidate/content/miniapp-services.cjs",
+      "sha256": "988a73be8e632f0b711f7411e5da9f757de109bea5b2ed39d2acf78404288479"
+    },
+    {
+      "beforeSha256": "18a6c2a3c7f0dae85eb89ab90f65be774769b359d73adac096419f31e98877db",
+      "bytes": 2948,
+      "file": "candidate/content/palitra-orders-public/cabinet.html",
+      "sha256": "b72a3343b8fc7758b80133115a2c84a49e550e4bdb694011436427da7946d0c8"
+    },
+    {
+      "beforeSha256": "18a6c2a3c7f0dae85eb89ab90f65be774769b359d73adac096419f31e98877db",
+      "bytes": 2948,
+      "file": "candidate/static/cabinet/palitra-orders/cabinet.html",
+      "sha256": "b72a3343b8fc7758b80133115a2c84a49e550e4bdb694011436427da7946d0c8"
+    },
+    {
+      "beforeSha256": "5fc9b0748d8175a745ec2f219aecc868f3b448afbd3669489aa9afb61bfdc486",
+      "bytes": 2655,
+      "file": "candidate/content/palitra-orders-public/shop.html",
+      "sha256": "f84733464fa8c0b2a8fed5acfbcedd1bc9be18fce277c93a15884f9b7383e1fd"
+    },
+    {
+      "beforeSha256": "5b81c717540d511876a9afed6311de6dcaaec4c193b7ec0435ef06b030b26e86",
+      "bytes": 1385,
+      "file": "candidate/content/palitra-orders-public/telegram.html",
+      "sha256": "5f352044ae196549179f2f14215d869c41e99717dc013b2081bc4479cb82848e"
+    },
+    {
+      "beforeSha256": "0433380efd52aaf7810ceb989a7fe2998cf43b6846612d5db40fa3072f74b3c9",
+      "bytes": 4436,
+      "file": "candidate/content/palitra-review-public/palitra-chat.html",
+      "sha256": "6586256f6500ef1ef20c2cde959d818a594216880f390289ed8ace4e10dda034"
+    }
+  ],
+  "namespace": "palitra-all-chat-paths-20261023-r2",
+  "rootReview": "Typed existing website threads use same funnel and permissions as orders. No fabricated orders or migration writes. Later exact checkout binding retains prior thread stage. Atomic care memo then review only after confirmed handover. Preserve old sessions, drafts, attachments, prices, roles and subscriptions. Fresh queue, own lease, live BASE, protected backups, single apply and independent readback mandatory.",
+  "runtimeFiles": 13,
+  "schemaWrites": 0,
+  "staticFiles": 4,
+  "status": "ROOT_REVIEW_READY_CODE_ONLY",
+  "task": "palitra-all-chat-entry-stages",
+  "zipSha256": "16a6b51d383e7a81ed4f3d4a58da4a7db0bd4b1005cf0c6d000b3be05666e6f0"
+}
