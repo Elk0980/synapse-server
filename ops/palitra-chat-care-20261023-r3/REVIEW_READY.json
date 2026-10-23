@@ -1,0 +1,16 @@
+{
+  "files": 16,
+  "freshReadOnlyProof": "New own ancestor lease3639157; original full guard PASS three times with identical snapshot",
+  "helperChange": "Only namespace/transport and exception difference-path output; every original gate retained",
+  "helperSha256": "65960fd0bd14bc7eabe786434354254dc7d6605cccdb07b6b32cd236d3ce36e4",
+  "manifestSha256": "385e6eaee4964feca5222533e5e1ae5f1c4aa587f2b32867e4ea75a043855a89",
+  "offlineTests": "7 privacy/composer tests + 7 SQLite sequence/replay/rollback tests passed; editor mobile fixture verified separately",
+  "physicalVarvaraEvidence": "User confirmed actual phone screenshot: stage changed and photo stored. No claim of Push or separate text-send verification.",
+  "previousAttempt": "R2 admitted once; backup only, no build/up/static writes; stopped and not replayed",
+  "productPayloadByteExactWithR2": true,
+  "productionAuthorization": "Direct current user requests; pending exact native BASE/own lease/backup. No production writes by this builder.",
+  "runtimeFiles": 9,
+  "staticFiles": 7,
+  "status": "ROOT_COMPATIBILITY_ACCEPTED_CODE_ONLY",
+  "zipSha256": "88a5346056785339bb8a185e57ebfa39750a6f37043cb8403f7b212fdfc38a9f"
+}

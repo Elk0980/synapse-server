@@ -1,0 +1,1 @@
+Exact accepted chat care payload. R3 uses fresh native admission after R2 stopped at backup, with diagnostic-only failure paths. No private customer content, memo files or credentials. Product payload matches R2 byte for byte. All original full-tree/CAS/own-lease checks remain.
