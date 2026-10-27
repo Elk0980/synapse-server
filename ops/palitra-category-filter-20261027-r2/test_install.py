@@ -8,6 +8,13 @@ m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 
 class StaticInstallTest(unittest.TestCase):
+    def test_mount_order_is_ignored_but_all_mount_values_are_checked(self):
+        first={'Type':'bind','Source':'/one','Destination':'/app','RW':False}
+        second={'Type':'volume','Name':'data','Source':'/volume','Destination':'/data','RW':True}
+        self.assertEqual(m.mount_digest([first,second]),m.mount_digest([second,first]))
+        self.assertNotEqual(m.mount_digest([first,second]),m.mount_digest([first,{**second,'RW':False}]))
+        self.assertNotEqual(m.mount_digest([first,second]),m.mount_digest([first,{**second,'Source':'/another'}]))
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name).resolve()

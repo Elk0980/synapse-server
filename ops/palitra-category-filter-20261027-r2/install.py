@@ -6,7 +6,7 @@ The caller must hold the existing release flock in an ancestor shell.
 from pathlib import Path
 import hashlib, json, os, re, stat, subprocess, sys, time, urllib.request
 
-NAME = 'palitra-category-filter-20261027-r1'
+NAME = 'palitra-category-filter-20261027-r2'
 ROOT = Path('/opt/synapse')
 AREA = ROOT / 'releases' / NAME
 LOCK = str(ROOT / '.palitra-app-release.lock')
@@ -37,6 +37,11 @@ def write_new(path, raw):
 def command(argv):
     return subprocess.check_output(argv, timeout=45)
 
+def mount_digest(mounts):
+    # Docker may return these same mount objects in another order on each inspect.
+    # Retain every field and value; only normalize the irrelevant list order.
+    return sha(enc(sorted(mounts, key=enc)))
+
 def lease():
     records = json.loads(command(['lslocks', '--json', '--output', 'PID,PATH']))['locks']
     records = [r for r in records if r.get('path') == LOCK]
@@ -63,7 +68,7 @@ def environment():
         if name in EXPECTED_IMAGES:
             need(row['Image'] == EXPECTED_IMAGES[name], 'CURRENT_IMAGE_CHANGED_INSPECT_ONLY')
         state[name] = {'id': row['Id'], 'image': row['Image'], 'config': sha(enc(row['Config'])),
-                       'host': sha(enc(row['HostConfig'])), 'mounts': sha(enc(row['Mounts']))}
+                       'host': sha(enc(row['HostConfig'])), 'mounts': mount_digest(row['Mounts'])}
     # Digest other static UI resources, not customer files or databases.
     static = {p.relative_to(ROOT).as_posix(): sha(p.read_bytes()) for p in (ROOT/'sites/synapse').rglob('*')
               if p.is_file() and not p.is_symlink() and p.suffix in ('.html', '.js', '.css') and p.relative_to(ROOT).as_posix() not in SCOPE}

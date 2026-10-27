@@ -1,6 +1,6 @@
 {
-  "packageId": "palitra-category-filter-20261027-r1",
-  "helperSha256": "2329c0d7187f0eace38451aa158cfb309d73a30702907ee584bed5952a4232a4",
+  "packageId": "palitra-category-filter-20261027-r2",
+  "helperSha256": "0ba17d90a5760dc2e7af68210de442ca68de9b02196ed5a1a645f398745d8566",
   "targets": [
     {
       "target": "sites/synapse/price-editor-palitra.html",
