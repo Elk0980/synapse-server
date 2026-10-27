@@ -1,3 +1,13 @@
+# Проверка R5
+
+R4 prepare остановился UNCHANGED_RUNTIME_PIN до BASE/action/journal/apply. Root доказал перестановку двух hex-позиций в первоначальной ручной записи SHA server.js; accepted CRM image и его полный runtime tree сохранились. Все пять payload before pins и static before pin совпали. Отдельно штатный config --images SERVICE разрешил все пять reference в фактические accepted image IDs; build-only chat не имеет явного image в JSON. Фактические policy guards прошли.
+
+Frozen R5 V2 helper1ead938a32edc4425bc06d6759399d4f52f4d574313f5a71c9093cfa604b1295, manifest1e3dfcebc25352d2391bb9280d78e1836923a9416eeecf048683e9e2151721d8. Root повторил99/99 private и99/99 public-package тестов без skips. Публичные fixtures используют пинованные code-only reader archives вместо внешних private-каталогов, assertions сохранены. Шесть reader files побайтно R4, productZIP побайтно принятому R2.
+
+R5 V1 не прошёл independent strict-output case: splitlines поглощал trailing controls. V1 сохранён, V2 меняет только parser на один LF/CRLF плюс строгую ASCII reference. Focused independent8/8 V2 PASS; финальная source/pin сверка до допуска к установке. TTL меньше default только сужает время Root permit; due/row/seal не продлеваются. Readonly inspect после expiry разрешён, повтор apply и rollback отсутствуют.
+
+Реальные приватные ID, row seals и Native квитанции не публикуются. Установка/Входящие/физический телефон пока отдельные шаги.
+
 Root лично повторил83/83 теста frozen R4 и83/83 в самодостаточном публичном пакете, без skips. Helper16e4114bb9505b42667e7130230b17b8b6b05998c0f9d047a3f11c231cb40b6e; manifest9587bc1a5e1e33645337e0b7f24d9bdf408ff59885307c58368280d3203ebbf3. Reader6 побайтно R3; новый entry manifest/ZIP. Независимый core review14/14 PASS; отдельный queue review выполняется до допуска к merge/установке. Публичные fixture-пути переносимы через original/previous reader archives, исходные assertions сохранены.
 
 # Диагностика установки R3
