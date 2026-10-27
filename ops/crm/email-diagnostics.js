@@ -4,7 +4,7 @@ const {companyRecipient}=require('./email-notifications');
 const ERROR_CODES = new Set([
   'SMTP_NOT_CONFIGURED', 'EMAIL_RECIPIENT_MISSING', 'EMAIL_RECIPIENT_REJECTED',
   'SMTP_AUTH', 'SMTP_CONNECTION', 'SMTP_SENDER', 'SMTP_RECIPIENT',
-  'SMTP_ENVELOPE', 'SMTP_SEND_FAILED',
+  'SMTP_ENVELOPE', 'SMTP_SEND_FAILED', 'EMAIL_DELIVERY_UNCONFIRMED',
 ]);
 const value = (environment, name, fallback = '') =>
   (environment[name] === undefined ? fallback : environment[name]).trim();

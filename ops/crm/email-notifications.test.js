@@ -23,7 +23,8 @@ test('ALVI notification uses its recipient and only populated lead fields', asyn
     assert.deepEqual(options, { host: 'smtp.example.test', port: 465, secure: true,
       auth: { user: 'crm@example.test', pass: 'secret' },
       connectionTimeout: 15000, greetingTimeout: 15000, socketTimeout: 30000 });
-    return { sendMail: async (message) => sent.push(message) };
+    // A real SMTP transport confirms the requested address; that confirmation is now required.
+    return { sendMail: async (message) => { sent.push(message); return { accepted: [message.to] }; } };
   });
   await notifications.notifyLead({
     company_code: 'ALVI', name: 'Анна', contact: '+7 900 000-00-00', channel: 'quiz',
@@ -49,7 +50,7 @@ test('Synapse notification uses its legacy recipient', async () => {
   const notifications = createEmailNotifications({
     LEADS_SMTP_USER: 'crm@example.test', LEADS_SMTP_PASSWORD: 'test-password', LEADS_NOTIFY_EMAIL: 'default@example.test',
     LEADS_NOTIFY_EMAIL_ALVI: 'owner@example.test',
-  }, console, () => ({ sendMail: async (message) => sent.push(message) }));
+  }, console, () => ({ sendMail: async (message) => { sent.push(message); return { accepted: [message.to] }; } }));
   await notifications.notifyLead({ company_code: 'synapse-business', name: 'Иван', contact: 'ivan@example.test',
     created_at: '2026-09-11T00:00:00.000Z' });
   assert.equal(sent[0].to, 'default@example.test');
@@ -61,7 +62,7 @@ test('Avokado has a separate recipient and brand and never falls back to another
   const environment = {LEADS_SMTP_USER: 'crm@example.test', LEADS_SMTP_PASSWORD: 'test-password',
     LEADS_NOTIFY_EMAIL: 'default@example.test', LEADS_NOTIFY_EMAIL_ALVI: 'alvi@example.test',
     LEADS_NOTIFY_EMAIL_AVOKADO: 'avokado@example.test'};
-  const make = env => createEmailNotifications(env, console, () => ({sendMail: async message => sent.push(message)}));
+  const make = env => createEmailNotifications(env, console, () => ({sendMail: async message => { sent.push(message); return {accepted: [message.to]}; }}));
   const lead = {company_code: 'AVOKADO', name: 'Анна', contact: '+7 900 000 00 00', created_at: '2026-09-15T00:00:00Z'};
   await make(environment).notifyLead(lead, {messageId: '<stable@example.test>', repeatedAt: '2026-09-16T00:00:00Z'});
   assert.equal(sent[0].to, 'avokado@example.test');

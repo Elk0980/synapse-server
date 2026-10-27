@@ -1,5 +1,7 @@
 'use strict';
 
+const {recipientsFromValue, acknowledgedAddress} = require('./email-recipients');
+
 const IRKUTSK_DATE_TIME = new Intl.DateTimeFormat('ru-RU', {
   timeZone: 'Asia/Irkutsk',
   dateStyle: 'long',
@@ -13,7 +15,7 @@ function value(environment, name, fallback = '') {
 // Persist/log categories only: SMTP responses can contain addresses and credentials.
 function emailErrorCode(error) {
   const code = String(error?.code || '').toUpperCase();
-  if (['SMTP_NOT_CONFIGURED', 'EMAIL_RECIPIENT_MISSING', 'EMAIL_RECIPIENT_REJECTED'].includes(code)) return code;
+  if (['SMTP_NOT_CONFIGURED', 'EMAIL_RECIPIENT_MISSING', 'EMAIL_RECIPIENT_REJECTED', 'EMAIL_DELIVERY_UNCONFIRMED'].includes(code)) return code;
   if (['EAUTH', 'ENOAUTH', 'EOAUTH2'].includes(code) || error?.responseCode === 535) return 'SMTP_AUTH';
   if (['ECONNECTION', 'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ESOCKET', 'ENOTFOUND', 'EAI_AGAIN', 'EDNS', 'ETLS'].includes(code)) return 'SMTP_CONNECTION';
   if (/^MAIL FROM\b/i.test(error?.command || '')) return 'SMTP_SENDER';
@@ -26,6 +28,21 @@ function notificationError(code, message) {
   return Object.assign(new Error(message), {code});
 }
 
+// Only an explicit SMTP acceptance of every requested address is a delivery. An empty
+// `accepted` list is a refusal (previous contract). A missing, malformed or different
+// acknowledgement, or a partial one for a list, proves neither delivery nor refusal and is
+// reported as EMAIL_DELIVERY_UNCONFIRMED. Raw SMTP data is never copied into the error.
+function confirmAcceptance(result, requested) {
+  const accepted = result !== null && typeof result === 'object' ? result.accepted : undefined;
+  if (!Array.isArray(accepted)) throw notificationError('EMAIL_DELIVERY_UNCONFIRMED', 'SMTP не подтвердил приём уведомления');
+  if (accepted.length === 0) throw notificationError('EMAIL_RECIPIENT_REJECTED', 'SMTP не принял получателя уведомления');
+  const confirmed = new Set(accepted.map(acknowledgedAddress).filter(Boolean));
+  const wanted = requested.map(acknowledgedAddress);
+  if (!wanted.length || wanted.some(address => !address || !confirmed.has(address))) {
+    throw notificationError('EMAIL_DELIVERY_UNCONFIRMED', 'SMTP не подтвердил приём уведомления каждым получателем');
+  }
+}
+
 function companyRecipient(environment, code) {
   const raw=String(code||'synapse-business').toLowerCase();
   const company=raw==='synapse'?'synapse-business':raw;
@@ -33,6 +50,10 @@ function companyRecipient(environment, code) {
   if(company==='alvi'||company==='avokado') return value(environment,'LEADS_NOTIFY_EMAIL_'+company.toUpperCase());
   // Legacy unscoped Synapse enquiries keep their destination; unrelated companies never inherit it.
   return !company || company==='synapse-business' || company==='synapse' ? value(environment,'LEADS_NOTIFY_EMAIL') : '';
+}
+// All configured addresses of one company (see email-recipients.js for the format).
+function companyRecipients(environment, code) {
+  return recipientsFromValue(companyRecipient(environment, code));
 }
 function emailNotificationReady(lead, environment) {
   const company = lead.company_code?.toLowerCase();
@@ -46,7 +67,8 @@ function createEmailNotifications(environment = process.env, logger = console, c
   const password = value(environment, 'LEADS_SMTP_PASSWORD');
   if (!host || !user || !password) {
     logger.info('email notifications disabled');
-    return { enabled: false, notifyLead: () => Promise.resolve(false), verify: () => Promise.resolve(false) };
+    return { enabled: false, notifyLead: () => Promise.resolve(false), verify: () => Promise.resolve(false),
+      recipients: lead => companyRecipients(environment, lead?.company_code?.toLowerCase()) };
   }
 
   const portText = value(environment, 'LEADS_SMTP_PORT', '465');
@@ -70,8 +92,15 @@ function createEmailNotifications(environment = process.env, logger = console, c
     const company = lead.company_code?.toLowerCase();
     // Explicit destinations prevent one studio's enquiries reaching another studio.
     const recipient = companyRecipient(environment, company);
+    const recipients = companyRecipients(environment, company);
     const brand = company === 'alvi' ? 'ALVI' : company === 'avokado' ? 'АВОКАДО' : !company || ['synapse','synapse-business'].includes(company) ? 'Synapse' : company;
-    if (!recipient) throw notificationError('EMAIL_RECIPIENT_MISSING', 'Не задан адрес получателя уведомления о заявке');
+    if (!recipient || !recipients.length) throw notificationError('EMAIL_RECIPIENT_MISSING', 'Не задан адрес получателя уведомления о заявке');
+    // The delivery queue sends one message per address so that each acceptance is known
+    // separately. An address that is no longer configured for this company is never used.
+    const single = notification.recipient !== undefined;
+    if (single && !recipients.includes(notification.recipient)) {
+      throw notificationError('EMAIL_RECIPIENT_MISSING', 'Адрес больше не входит в получателей компании');
+    }
     const fields = [
       ['Имя', lead.name],
       ['Контакт', lead.contact],
@@ -91,18 +120,17 @@ function createEmailNotifications(environment = process.env, logger = console, c
       .map(([label, fieldValue]) => `${label}: ${fieldValue}`).join('\n');
     const result = await transport.sendMail({
       from,
-      to: recipient,
+      to: single ? notification.recipient : recipient,
       subject: `Новая заявка с сайта ${brand} — ${lead.name}`,
       text,
       ...(notification.messageId ? {messageId: notification.messageId} : {}),
     });
-    if (Array.isArray(result?.accepted) && result.accepted.length === 0) {
-      throw notificationError('EMAIL_RECIPIENT_REJECTED', 'SMTP не принял получателя уведомления');
-    }
+    confirmAcceptance(result, single ? [notification.recipient] : recipients);
     return true;
   }
 
-  return { enabled: true, notifyLead, verify: () => transport.verify() };
+  return { enabled: true, notifyLead, verify: () => transport.verify(),
+    recipients: lead => companyRecipients(environment, lead?.company_code?.toLowerCase()) };
 }
 
-module.exports = { createEmailNotifications, emailErrorCode, emailNotificationReady, companyRecipient };
+module.exports = { createEmailNotifications, emailErrorCode, emailNotificationReady, companyRecipient, companyRecipients };

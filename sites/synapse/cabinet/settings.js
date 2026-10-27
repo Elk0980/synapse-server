@@ -72,7 +72,8 @@ const EMAIL_ERRORS = {
   SMTP_SENDER: "Почтовый сервер отклонил отправителя",
   SMTP_RECIPIENT: "Почтовый сервер отклонил получателя",
   SMTP_ENVELOPE: "Почтовый сервер не принял параметры отправки",
-  SMTP_SEND_FAILED: "Письмо не удалось отправить"
+  SMTP_SEND_FAILED: "Письмо не удалось отправить",
+  EMAIL_DELIVERY_UNCONFIRMED: "Почтовый сервер не подтвердил приём письма; отправка будет повторена"
 };
 const emailNode = (tag, text, className) => {
   const node = document.createElement(tag);
@@ -304,13 +305,13 @@ cabinet.registerView('settings', {title:'Настройки компании', a
   // Заявки с сайта ведутся только для Palitra: получатель в Telegram и повтор уведомлений — отдельный вид.
   if(code==='palitra-love')container.insertAdjacentHTML('beforeend','<div class="card"><h2>Заявки с сайта</h2><p>Корзина и форма сайта сохраняют заявки на сервере; уведомления уходят получателю в Telegram.</p><a href="#site-orders">Заявки с сайта и получатель уведомлений →</a></div>');
   const card=document.createElement('section');card.className='card settings-email';
-  card.innerHTML='<h2>Получатель заявок</h2><p>На этот адрес приходят уведомления только выбранной компании. Пустое поле отключает её уведомления.</p><form class="field-stack"><label>Почта компании<input name="recipient" type="email" maxlength="254" autocomplete="off"></label><button type="submit" disabled>Сохранить получателя</button><p role="status">Загрузка…</p></form><div data-company-email-status></div><p><a href="#system-settings">Общий отправитель — настройки системы →</a></p>';
+  card.innerHTML='<h2>Получатели заявок</h2><p>На эти адреса приходят уведомления только выбранной компании. Можно указать до 5 адресов через запятую, например: owner@example.test, admin@example.test. Каждый адрес получает отдельное письмо. Пустое поле отключает уведомления компании.</p><form class="field-stack"><label>Почта компании<input name="recipient" type="email" multiple maxlength="1024" autocomplete="off" aria-describedby="company-recipient-hint"></label><p id="company-recipient-hint" class="field-hint">Адреса через запятую, не больше 5.</p><button type="submit" disabled>Сохранить получателей</button><p role="status">Загрузка…</p></form><div data-company-email-status></div><p><a href="#system-settings">Общий отправитель — настройки системы →</a></p>';
   container.append(card);
   const form=card.querySelector('form'), status=form.querySelector('[role=status]'), button=form.querySelector('button');
   const path='/content/crm/company-email?companyCode='+encodeURIComponent(code);
   const current=()=>version===companyVersion&&context.selectedProjectId===code&&card.isConnected;
   const apply=data=>{if(!current())return;form.elements.recipient.value=data.recipient||'';renderEmailStatus(card.querySelector('[data-company-email-status]'),{...data.status,companies:(data.status?.companies||[]).map(c=>({...c,name}))});};
-  form.onsubmit=async event=>{event.preventDefault();if(!current()||button.disabled)return;button.disabled=true;status.textContent='Сохранение…';try{const data=await context.apiJson(path,{method:'PUT',headers:{'X-CSRF-Token':context.identity.csrfToken},body:JSON.stringify({recipient:form.elements.recipient.value.trim()})});if(!current())return;apply(data);status.textContent='Получатель сохранён для '+name+'.';}catch(error){if(current())status.textContent='Не удалось сохранить получателя.';}finally{if(current())button.disabled=false;}};
+  form.onsubmit=async event=>{event.preventDefault();if(!current()||button.disabled)return;if(!form.reportValidity())return;button.disabled=true;status.textContent='Сохранение…';try{const data=await context.apiJson(path,{method:'PUT',headers:{'X-CSRF-Token':context.identity.csrfToken},body:JSON.stringify({recipient:form.elements.recipient.value.trim()})});if(!current())return;apply(data);const count=Array.isArray(data.recipients)?data.recipients.length:(data.recipient?1:0);status.textContent=count?'Получатели сохранены для '+name+': '+count+'.':'Уведомления '+name+' отключены.';}catch(error){if(current())status.textContent='Не удалось сохранить получателей. Проверьте адреса: до 5 корректных адресов через запятую.';}finally{if(current())button.disabled=false;}};
   try{const data=await context.apiJson(path);if(!current())return;apply(data);button.disabled=false;status.textContent=data.senderConfigured?'Общий отправитель подключён.':'Общий отправитель пока не подключён.';}catch(error){if(current())status.textContent='Не удалось загрузить настройки компании.';}
 }});
 })();
