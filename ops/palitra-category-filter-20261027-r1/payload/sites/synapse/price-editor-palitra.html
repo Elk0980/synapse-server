@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Редактор прайса Palitra — кабинет Synapse</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="palitra-editor.css?v=20261027-category-filter-r1">
+  <link rel="stylesheet" href="/cabinet/palitra-nav.css?v=20261013-38">
+  <link rel="icon" type="image/png" sizes="32x32" href="brand/hugh-icon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="brand/hugh-icon-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="apple-mobile-web-app-title" content="Synapse Business">
+</head>
+<body>
+  <a class="ed-skip" href="#ed-main">К содержимому</a>
+  <header class="ed-bar">
+    <div class="ed-bar__title">
+      <nav class="pnav" aria-label="Редакторы Palitra">
+        <details class="pnav__menu">
+          <summary class="pnav__toggle" aria-label="Меню редакторов Palitra"><svg class="pnav__icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Меню</span></summary>
+          <ul class="pnav__list">
+            <li class="pnav__item"><a class="pnav__link" href="/cabinet/site-photos.html">Фото сайта</a></li>
+            <li class="pnav__item"><a class="pnav__link" href="/price-editor-palitra.html?v=20261013-38&amp;site=https%3A%2F%2Fpalitra-love.ru" aria-current="page">Товары и прайс</a></li>
+            <li class="pnav__item"><a class="pnav__link" href="https://palitra-love.ru/" target="_blank" rel="noopener">Открыть сайт<span class="pnav__sr"> (откроется в новой вкладке)</span><span aria-hidden="true">↗</span></a></li>
+            <li class="pnav__item"><a class="pnav__link" href="/palitra-review/">Задачник</a></li>
+          </ul>
+        </details>
+      </nav>
+      <h1>Прайс Palitra</h1>
+      <p class="ed-bar__sub" id="ed-sub">загрузка…</p>
+    </div>
+    <div class="ed-bar__actions">
+      <a class="ed-btn" href="https://palitra-love.synapsebusiness.ru/price.html" id="ed-open-price" target="_blank" rel="noopener" title="Так товары видят покупатели. Изменения появляются после «Сохранить»">Просмотр <span aria-hidden="true">↗</span><span class="ed-sr">(откроется в новой вкладке)</span></a>
+      <button class="ed-btn ed-btn--main" id="ed-save" type="button" disabled>Сохранить</button>
+    </div>
+    <p class="ed-status ed-bar__status" id="ed-status" role="status" aria-live="polite"></p>
+    <div class="ed-note" id="ed-cas-note" hidden>
+      <p id="ed-cas-note-text">Сохранение недоступно: сервер не подтвердил проверку версии прайса.</p>
+      <button class="ed-btn" type="button" data-alert="export">Скачать мои правки (файл)</button>
+    </div>
+    <div class="ed-bar__tools">
+      <button class="ed-btn ed-btn--quiet" id="ed-reset" type="button" hidden>Отменить все правки</button>
+      <button class="ed-btn ed-btn--quiet" id="ed-history" type="button">История</button>
+      <button class="ed-btn ed-btn--quiet" id="ed-import" type="button">Загрузить товары</button>
+      <input type="file" id="ed-import-file" accept="application/json,.json" hidden>
+      <a class="ed-btn ed-btn--quiet" id="ed-login" href="/cabinet.html" target="_blank" rel="noopener" hidden>Войти в кабинет</a>
+      <button class="ed-btn ed-btn--quiet" id="ed-session-retry" type="button" hidden>Проверить вход</button>
+    </div>
+  </header>
+
+  <div class="ed-alert" id="ed-alert" role="alert" hidden></div>
+
+  <div class="price-layout">
+    <nav class="ed-tabs" role="tablist" aria-label="Разделы редактора">
+      <button class="ed-tab" role="tab" type="button" id="tab-items" aria-controls="panel-items" aria-selected="true">Товары</button>
+      <button class="ed-tab" role="tab" type="button" id="tab-cats" aria-controls="panel-cats" aria-selected="false" tabindex="-1">Категории</button>
+      <button class="ed-tab" role="tab" type="button" id="tab-holidays" aria-controls="panel-holidays" aria-selected="false" tabindex="-1">Праздники</button>
+    </nav>
+    <main class="ed-main" id="ed-main" tabindex="-1">
+      <section class="ed-panel" id="panel-items" role="tabpanel" aria-labelledby="tab-items">
+        <p class="ed-status">Загружаю прайс…</p>
+      </section>
+      <section class="ed-panel" id="panel-item" aria-labelledby="ed-item-heading" hidden></section>
+      <section class="ed-panel" id="panel-cats" role="tabpanel" aria-labelledby="tab-cats" hidden></section>
+      <section class="ed-panel" id="panel-holidays" role="tabpanel" aria-labelledby="tab-holidays" hidden></section>
+    </main>
+  </div>
+
+  <div class="ed-modal" id="ed-modal"><div class="ed-modal__box" id="ed-modal-box" role="dialog" aria-modal="true" aria-labelledby="ed-modal-title"></div></div>
+
+  <script src="palitra-occasions.js?v=20261022-cover-fill-r1"></script>
+  <script src="palitra-editor-model.js?v=20261022-cover-fill-r1"></script>
+  <script src="palitra-editor-session.js?v=20261012-2"></script>
+  <script src="palitra-catalog-import.js?v=20260917-1"></script>
+  <script src="palitra-editor.js?v=20261027-category-filter-r1"></script>
+
+<!-- PALITRA_ACTION_CONTROLS_R3 -->
+<link rel="stylesheet" href="/content/ui/palitra-action-icons.css?v=20261021-r5">
+<script src="/content/ui/palitra-action-icons.js?v=20261021-r5" defer></script>
+</body>
+</html>

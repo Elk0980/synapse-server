@@ -1,0 +1,196 @@
+--- a/sites/synapse/price-editor-palitra.html
++++ b/sites/synapse/price-editor-palitra.html
+@@ -5,7 +5,7 @@
+   <meta name="viewport" content="width=device-width, initial-scale=1">
+   <title>Редактор прайса Palitra — кабинет Synapse</title>
+   <meta name="robots" content="noindex, nofollow">
+-  <link rel="stylesheet" href="palitra-editor.css?v=20261023-compact-header-r1">
++  <link rel="stylesheet" href="palitra-editor.css?v=20261027-category-filter-r1">
+   <link rel="stylesheet" href="/cabinet/palitra-nav.css?v=20261013-38">
+   <link rel="icon" type="image/png" sizes="32x32" href="brand/hugh-icon-32.png">
+   <link rel="apple-touch-icon" sizes="180x180" href="brand/hugh-icon-180.png">
+@@ -73,7 +73,7 @@
+   <script src="palitra-editor-model.js?v=20261022-cover-fill-r1"></script>
+   <script src="palitra-editor-session.js?v=20261012-2"></script>
+   <script src="palitra-catalog-import.js?v=20260917-1"></script>
+-  <script src="palitra-editor.js?v=20261023-compact-header-r1"></script>
++  <script src="palitra-editor.js?v=20261027-category-filter-r1"></script>
+ 
+ <!-- PALITRA_ACTION_CONTROLS_R3 -->
+ <link rel="stylesheet" href="/content/ui/palitra-action-icons.css?v=20261021-r5">
+--- a/sites/synapse/palitra-editor.js
++++ b/sites/synapse/palitra-editor.js
+@@ -45,7 +45,7 @@
+   let draft = null, draftSnap = '', draftNew = false;
+   let holidayDraft = null, holidayOrig = null, holidaySnap = '';
+   let renaming = null;
+-  let listQuery = '', listOwner = '', listLimit = LIST_STEP;
++  let listQuery = '', listOwner = '', listCategory = '', listLimit = LIST_STEP;
+   let orderScope = 'all';
+ 
+   const statusEl = $('#ed-status');
+@@ -261,9 +261,15 @@
+           <label class="ed-field ed-search"><span>Поиск товара</span>
+             <input id="ed-search" type="search" autocomplete="off" placeholder="Название, номер или цена" aria-describedby="ed-search-hint">
+             <small id="ed-search-hint">Можно несколько слов: «выписка мальчик». Цена — цифрами: 9270.</small></label>
+-          <label class="ed-field"><span>Раздел прайса</span><select id="ed-owner-filter"></select></label>
++          <label class="ed-field"><span>Категория на сайте</span><select id="ed-category-filter" aria-describedby="ed-category-hint"></select>
++            <small id="ed-category-hint">Те же названия и товары, что в каталоге сайта.</small></label>
+           <button class="ed-btn ed-btn--main ed-btn--big" id="ed-add-item" type="button">+ Добавить товар</button>
+         </div>
++        <details class="ed-storage-filter ed-card" id="ed-storage-filter">
++          <summary>Дополнительно: раздел хранения</summary>
++          <label class="ed-field"><span>Раздел хранения</span><select id="ed-owner-filter" aria-describedby="ed-storage-hint"></select>
++            <small id="ed-storage-hint">Дополнительный фильтр по внутренним разделам прайса. Категории сайта выбираются выше.</small></label>
++        </details>
+         <p class="ed-count" id="ed-count" aria-live="polite"></p>
+         <ul class="ed-list" id="ed-list"></ul>
+         <button class="ed-btn ed-more-btn" id="ed-list-more" type="button" hidden>Показать ещё</button>`;
+@@ -274,27 +280,38 @@
+     owner.innerHTML = '<option value="">Все разделы</option>' + local.categories.map((c) => `<option value="${h(c.id)}">${h(c.title)} (${(c.items || []).length})</option>`).join('');
+     if (!local.categories.some((c) => c.id === listOwner)) listOwner = '';
+     owner.value = listOwner;
++    if (listOwner) $('#ed-storage-filter').open = true;
++    const category = $('#ed-category-filter');
++    const counts = M.publicKeyCounts(local, CATS);
++    const unlisted = M.listItems(local, CATS).filter(row => !row.publicKeys.length).length;
++    if (listCategory && listCategory !== '__unlisted' && !CATS.some(c => c.key === listCategory)) listCategory = '';
++    category.innerHTML = `<option value="">Все товары (${M.itemCount(local)})</option>`
++      + CATS.filter(c => c.key !== 'all' && !c.holiday).map(c => `<option value="${h(c.key)}">${h(c.title)} (${counts[c.key] || 0})</option>`).join('')
++      + `<option value="__unlisted">Без категории на сайте (${unlisted})</option>`;
++    category.value = listCategory;
+     const search = $('#ed-search');
+     if (search.value !== listQuery) search.value = listQuery;
+     drawList();
+   }
+   function drawList() {
+-    const rows = M.searchItems(S.local, listQuery, { ownerId: listOwner || undefined, categories: CATS });
++    const rows = M.searchItems(S.local, listQuery, { ownerId: listOwner || undefined,
++      publicKey: listCategory && listCategory !== '__unlisted' ? listCategory : undefined, categories: CATS })
++      .filter(row => listCategory !== '__unlisted' || !row.publicKeys.length);
+     const diff = S.base ? M.diffDocs(S.base, S.local) : { changed: [], added: [] };
+     const changed = new Set(diff.changed.concat(diff.added));
+     const total = M.itemCount(S.local);
+-    $('#ed-count').textContent = listQuery || listOwner ? `Найдено: ${rows.length} из ${total}` : `Всего товаров: ${total}`;
++    $('#ed-count').textContent = listQuery || listOwner || listCategory ? `Найдено: ${rows.length} из ${total}` : `Всего товаров: ${total}`;
+     $('#ed-list').innerHTML = rows.slice(0, listLimit).map((r) => `<li class="ed-row${changed.has(r.id) ? ' is-changed' : ''}">
+       <div class="ed-thumb">${r.photo && imgUrl(r.photo) ? `<img src="${h(imgUrl(r.photo))}" alt="" loading="lazy" decoding="async">` : 'нет фото'}</div>
+       <div class="ed-row__body">
+         <p class="ed-row__title">${h(r.title || '(без названия)')}</p>
+         <p class="ed-row__meta">${h(r.price || 'цена не указана')}${r.photos > 1 ? ` · фото: ${r.photos}` : ''}</p>
+-        <p class="ed-row__meta">Раздел: ${h(r.ownerTitle)} · № ${h(r.id)}</p>
+-        <p class="ed-row__meta">Поводы: ${r.publicKeys.length ? h(r.publicKeys.map(catTitle).join(', ')) : 'нет'}${r.explicit ? '' : ' <span class="ed-badge">по разделу</span>'}</p>
++        <p class="ed-row__meta">Категории на сайте: ${r.publicKeys.length ? h(r.publicKeys.map(catTitle).join(', ')) : 'не выбраны'}${r.explicit ? '' : ' <span class="ed-badge">по разделу хранения</span>'}</p>
++        <p class="ed-row__meta ed-row__storage">Хранение: ${h(r.ownerTitle)} · № ${h(r.id)}</p>
+         ${changed.has(r.id) ? '<span class="ed-badge ed-badge--warn">изменён, не сохранён</span>' : ''}
+       </div>
+       <div class="ed-row__actions"><button class="ed-btn" type="button" data-edit="${h(r.id)}" aria-label="Изменить: ${h(r.title || r.id)}">Изменить</button></div>
+-    </li>`).join('') || '<li class="ed-status">Ничего не найдено. Измените запрос или раздел.</li>';
++    </li>`).join('') || '<li class="ed-status">Ничего не найдено. Измените запрос, категорию или дополнительный фильтр.</li>';
+     const more = $('#ed-list-more');
+     more.hidden = rows.length <= listLimit;
+     more.textContent = `Показать ещё (${Math.max(0, rows.length - listLimit)})`;
+@@ -315,7 +332,7 @@
+     const owner = cats.some((c) => c.id === 'prochee') ? 'prochee' : (cats[0] || {}).id;
+     if (!owner) { setStatus('Сначала создайте раздел прайса во вкладке «Категории»', 'error'); return; }
+     draft = { id: null, ownerId: owner, title: '', price: '', desc: '', note: '', composition: '', card: '', duration: '', who: '',
+-      itemsText: '', photos: [], photosTouched: false, frames: {}, framesTouched: false, manualCategories: true, publicCategories: [] };
++      itemsText: '', photos: [], photosTouched: false, frames: {}, framesTouched: false, manualCategories: true, publicCategories: listCategory && listCategory !== '__unlisted' ? [listCategory] : [] };
+     draftNew = true; draftSnap = JSON.stringify(draft);
+     view = 'item'; render();
+     $('#ed-item-heading')?.focus();
+@@ -329,9 +346,9 @@
+     const legacy = O.basePublicKeys({}, draft.ownerId, CATS);
+     const owner = S.local.categories.find((c) => c.id === draft.ownerId);
+     return `<label class="ed-check"><input type="checkbox" data-manual ${draft.manualCategories ? 'checked' : ''}>
+-        <span>Выбрать поводы вручную <small class="ed-hint">(можно несколько; товар останется одним, без копий)</small></span></label>
+-      <p class="ed-hint" id="ed-occ-legacy">${draft.manualCategories ? 'Отметьте поводы, в которых показывать товар.'
+-        : `Сейчас как раньше — по разделу прайса «${h(owner ? owner.title : draft.ownerId)}»: ${legacy.length ? h(legacy.map(catTitle).join(', ')) : 'ни в одном поводе'}.`}</p>
++        <span>Выбрать категории вручную <small class="ed-hint">(можно несколько; товар останется одним, без копий)</small></span></label>
++      <p class="ed-hint" id="ed-occ-legacy">${draft.manualCategories ? 'Отметьте категории каталога, в которых показывать товар.'
++        : `Категории выбраны по разделу хранения «${h(owner ? owner.title : draft.ownerId)}»: ${legacy.length ? h(legacy.map(catTitle).join(', ')) : 'нет категорий на сайте'}.`}</p>
+       <div class="ed-checks${draft.manualCategories ? '' : ' is-disabled'}">${CATS.map((c) => `<label class="ed-check"><input type="checkbox" data-occ="${h(c.key)}"
+         ${(draft.manualCategories ? draft.publicCategories : legacy).includes(c.key) ? 'checked' : ''} ${draft.manualCategories ? '' : 'disabled'}><span>${h(c.title)}</span></label>`).join('')}</div>`;
+   }
+@@ -363,10 +380,10 @@
+             ${field('composition', 'Состав', { area: true, hint: 'Что входит в набор. Можно по строкам.' })}
+             ${field('note', 'Примечание', { hint: 'Необязательно. Служебная строка «Цена из публикации…» на сайте не показывается.' })}
+           </div>
+-          <fieldset class="ed-card" id="ed-occ"><legend>Поводы на сайте</legend>${occasionsHtml()}</fieldset>
++          <fieldset class="ed-card" id="ed-occ"><legend>Категории на сайте</legend>${occasionsHtml()}</fieldset>
+           <details class="ed-details ed-card"><summary>Дополнительно</summary>
+-            <label class="ed-field"><span>Раздел прайса</span><select data-owner>${sameKind.map((c) => `<option value="${h(c.id)}" ${c.id === draft.ownerId ? 'selected' : ''}>${h(c.title)}</option>`).join('')}</select>
+-              <small>Внутренний раздел (старые адреса /catalog/…). Поводы на сайте выбираются выше.</small></label>
++            <label class="ed-field"><span>Раздел хранения</span><select data-owner>${sameKind.map((c) => `<option value="${h(c.id)}" ${c.id === draft.ownerId ? 'selected' : ''}>${h(c.title)}</option>`).join('')}</select>
++              <small>Внутренний раздел для хранения товара. Показ в каталоге задают категории выше.</small></label>
+             ${field('card', 'Короткое название (для списков редактора)')}
+             ${field('duration', 'Длительность')}
+             ${field('who', 'Кому подходит')}
+@@ -778,8 +795,8 @@
+         <p><button class="ed-btn" type="button" data-home="reset">Вернуть по умолчанию</button></p>
+       </div>
+       <div class="ed-card">
+-        <h2>Разделы прайса</h2>
+-        <p class="ed-hint">Внутренние разделы прайса и старые адреса /catalog/…. Каждый товар лежит в одном разделе; поводы на сайте выбираются в карточке товара. «Показать на сайте» добавляет раздел в каталог сайта как категорию с тем же названием.</p>
++        <h2>Разделы хранения</h2>
++        <p class="ed-hint">Каждый товар хранится в одном разделе и может показываться в нескольких категориях сайта. Категории выбираются в карточке товара. «Показать на сайте» создаёт категорию с названием раздела.</p>
+         <ul class="ed-order">${local.categories.map((c) => renaming === c.id ? `<li><form class="ed-rename" data-rename-form="${h(c.id)}">
+             <label class="ed-field"><span>Новое название раздела</span><input name="title" value="${h(c.title)}" maxlength="80" required></label>
+             <button class="ed-btn ed-btn--main" type="submit">Готово</button> <button class="ed-btn" type="button" data-section="cancel">Отмена</button></form></li>`
+@@ -1169,11 +1186,15 @@
+     if (t.hasAttribute('data-category-photo') && t.files && t.files[0]) { const file = t.files[0], key = t.dataset.categoryPhoto; t.value = ''; uploadCategoryPhoto(key, file); return; }
+     if (t.id === 'ed-product-order-scope') { orderScope = t.value; renderCats('#ed-product-order-scope'); return; }
+     if (t.hasAttribute('data-product-position')) { productOrderAction(t.dataset.productPosition, Number(t.value), null); return; }
++    if (t.id === 'ed-category-filter') {
++      listCategory = t.value; listOwner = ''; listLimit = LIST_STEP;
++      renderItems(); $('#ed-category-filter')?.focus(); return;
++    }
+     if (t.id === 'ed-owner-filter') { listOwner = t.value; listLimit = LIST_STEP; drawList(); return; }
+     if (draft && t.hasAttribute('data-manual')) {
+       draft.manualCategories = t.checked;
+       if (t.checked && !draft.publicCategories.length) draft.publicCategories = O.basePublicKeys({}, draft.ownerId, CATS);
+-      $('#ed-occ').innerHTML = '<legend>Поводы на сайте</legend>' + occasionsHtml();
++      $('#ed-occ').innerHTML = '<legend>Категории на сайте</legend>' + occasionsHtml();
+       $('#ed-occ [data-manual]')?.focus();
+       return;
+     }
+@@ -1186,7 +1207,7 @@
+     if (draft && t.hasAttribute('data-owner')) {
+       draft.ownerId = t.value;
+       const focus = document.activeElement;
+-      $('#ed-occ').innerHTML = '<legend>Поводы на сайте</legend>' + occasionsHtml();
++      $('#ed-occ').innerHTML = '<legend>Категории на сайте</legend>' + occasionsHtml();
+       focus?.focus();
+       return;
+     }
+@@ -1275,7 +1296,7 @@
+     'Что входит в набор. Можно по строкам.',
+     'Необязательно. Служебная строка «Цена из публикации…» на сайте не показывается.',
+     'Перетащите фото мышью или пальцем. С клавиатуры: стрелки — сдвиг (с Shift — крупнее), «+» и «−» — масштаб, Home — по центру. Сам файл фото не меняется.',
+-    'Внутренние разделы прайса и старые адреса /catalog/…. Каждый товар лежит в одном разделе; поводы на сайте выбираются в карточке товара. «Показать на сайте» добавляет раздел в каталог сайта как категорию с тем же названием.',
++    'Каждый товар хранится в одном разделе и может показываться в нескольких категориях сайта. Категории выбираются в карточке товара. «Показать на сайте» создаёт категорию с названием раздела.',
+     'Временная подборка собирает товары выбранных категорий на время праздника. Товары и обычные категории не меняются и не удаляются; вне дат подборки на сайте нет.',
+     'Товар из нескольких выбранных категорий показывается в подборке один раз.',
+     'Для сцены нужны три кадра: для компьютера (горизонтальный, на сайте 16:9), для планшета (горизонтальный, 4:3) и для телефона (вертикальный). Тексты, кнопки и смена сцен не меняются.',
+@@ -1283,7 +1304,7 @@
+     'Меняется только фото и его подпись. Ссылки, суммы и надписи остаются прежними.',
+     'Первые 4 фото видны сразу, остальные открываются кнопкой «Показать ещё» (если фото 4 или меньше, кнопки нет). В галерее остаётся хотя бы одно фото. Фото, убранное из показа, остаётся в хранилище материалов, и его можно вернуть.',
+     'Порядок категорий на главной задаётся в редакторе прайса',
+-    'Внутренний раздел (старые адреса /catalog/…). Поводы на сайте выбираются выше.',
++    'Внутренний раздел для хранения товара. Показ в каталоге задают категории выше.',
+     'По одному пункту в строке. Сайт это поле сейчас не показывает.',
+     'Можно продолжить переписку в Telegram — она останется и здесь.',
+     '«На сайте» ставится только после проверки работающей страницы: нужны ссылка и дата. Статус работы «Отменено» оставляет задачу видимой, но исправлением она не считается — даже если раньше была опубликована.',
+--- a/sites/synapse/palitra-editor.css
++++ b/sites/synapse/palitra-editor.css
+@@ -280,3 +280,10 @@
+ .ed-framer--category .ed-framer__card{position:relative;aspect-ratio:1;border:0}
+ .ed-framer--category .ed-framer__body{position:absolute;inset:auto 0 0;padding:2.5rem .8rem .8rem;background:linear-gradient(transparent,rgba(0,0,0,.6));color:#fff}
+ @media(max-width:700px){.ed-framer--category .ed-framer__frame{width:min(100%,22rem,calc(100dvh - 16rem))}}
++
++/* PALITRA_CATEGORY_FILTER_20261027: one vocabulary with the public catalog. */
++.ed-storage-filter { margin-top: .65rem; }
++.ed-storage-filter > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 600; }
++.ed-storage-filter[open] > summary { margin-bottom: .6rem; }
++.ed-storage-filter .ed-field { max-width: 32rem; margin-bottom: 0; }
++.ed-row__storage { margin-top: .25rem; font-size: .8rem; }
