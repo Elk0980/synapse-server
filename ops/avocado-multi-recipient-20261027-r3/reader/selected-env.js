@@ -1,0 +1,1 @@
+const out={};for(const k of ["PALITRA_CHECKOUT_ENABLED", "PALITRA_CRM_ENABLED", "PALITRA_CUSTOMER_CHAT_ENABLED", "PALITRA_WEB_UPLOADS_ENABLED", "PALITRA_MAIN_ORIGIN", "PALITRA_SHOP_ORIGIN", "PALITRA_CRM_SYNAPSE_ORIGIN", "PALITRA_CRM_BOT_ID"]){out[k]=process.env[k]===undefined?null:process.env[k]};console.log(JSON.stringify(out));
