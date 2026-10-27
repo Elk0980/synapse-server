@@ -1,0 +1,46 @@
+{
+  "entry": "/opt/synapse/releases/avocado-multi-recipient-20261027-r4/reader/reader.py",
+  "files": {
+    "config-readiness.js": "7ee95102786a534a307096c2ece36a06dec7805be7cd6b7b4242d9703caf17bb",
+    "reader.py": "96f607ba528241ada07a67be1e8a64817c532951e0a912b6c54314d7ce1108a2",
+    "selected-env.js": "722c7471751bb526954296d8e7e4fd13da1686d013e6ae9a861a2b3673367fd4",
+    "spec.json": "4d25df65502909d9ee4d25087c4c0b9b2ae24375017c7fc40179c86d9f3cbc75",
+    "tree.js": "b42266cabbc9f063f3c9460ed1c4b486f90738cfb09147cd2f087c150bdf9729",
+    "worker-graph.js": "8dcc2b1c4519dcc53521e077b16861f65258ba1e1e7eb6b60fe64d9e6bca956f"
+  },
+  "readOnly": true,
+  "readScriptScopes": {
+    "722c7471751bb526954296d8e7e4fd13da1686d013e6ae9a861a2b3673367fd4": {
+      "containers": [
+        "synapse-content-1",
+        "synapse-chat-1"
+      ],
+      "images": false
+    },
+    "7ee95102786a534a307096c2ece36a06dec7805be7cd6b7b4242d9703caf17bb": {
+      "containers": [
+        "synapse-content-1"
+      ],
+      "images": false
+    },
+    "8dcc2b1c4519dcc53521e077b16861f65258ba1e1e7eb6b60fe64d9e6bca956f": {
+      "containers": [
+        "synapse-chat-1"
+      ],
+      "images": false
+    },
+    "b42266cabbc9f063f3c9460ed1c4b486f90738cfb09147cd2f087c150bdf9729": {
+      "containers": [
+        "synapse-content-1"
+      ],
+      "images": true
+    }
+  },
+  "readScriptSha256": [
+    "722c7471751bb526954296d8e7e4fd13da1686d013e6ae9a861a2b3673367fd4",
+    "7ee95102786a534a307096c2ece36a06dec7805be7cd6b7b4242d9703caf17bb",
+    "8dcc2b1c4519dcc53521e077b16861f65258ba1e1e7eb6b60fe64d9e6bca956f",
+    "b42266cabbc9f063f3c9460ed1c4b486f90738cfb09147cd2f087c150bdf9729"
+  ],
+  "schema": "palitra-tg-root-readonly/v1"
+}
