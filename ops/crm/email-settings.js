@@ -1,7 +1,8 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const {createEmailNotifications, emailErrorCode} = require('./email-notifications');
+const {createEmailNotifications, emailErrorCode, companyRecipients} = require('./email-notifications');
+const {normalizeRecipientList, parseRecipientList, recipientsFromValue, MAX_RECIPIENTS} = require('./email-recipients');
 const PROVIDERS = Object.freeze({yandex: 'smtp.yandex.ru', mailru: 'smtp.mail.ru', gmail: 'smtp.gmail.com'});
 const PURPOSE = Buffer.from('synapse/crm/email-settings/v1');
 const FIELDS = ['provider', 'user', 'password', 'alviRecipient', 'avokadoRecipient'];
@@ -27,8 +28,9 @@ function validate(body) {
     fail('Переданы некорректные поля настроек почты');
   }
   if (typeof body.provider !== 'string' || !Object.hasOwn(PROVIDERS, body.provider.trim())) fail('Выберите Яндекс, Mail.ru или Google Workspace / Gmail');
+  // The sender stays one mailbox; company destinations accept the documented list format.
   const config = {provider: body.provider.trim(), user: mailbox(body.user, true),
-    alviRecipient: mailbox(body.alviRecipient), avokadoRecipient: mailbox(body.avokadoRecipient)};
+    alviRecipient: normalizeRecipientList(body.alviRecipient), avokadoRecipient: normalizeRecipientList(body.avokadoRecipient)};
   if (Object.hasOwn(body, 'password') && (typeof body.password !== 'string' || body.password.length > 512 || /[\r\n\x00]/.test(body.password))) {
     fail('Пароль приложения должен быть строкой не длиннее 512 символов без переноса строк');
   }
@@ -56,6 +58,8 @@ function createEmailSettings(db, {apiKey, environment = process.env, now = Date.
   )`);
   db.exec(`CREATE TABLE IF NOT EXISTS company_email_recipients (company_code TEXT PRIMARY KEY, recipient TEXT NOT NULL, updated_at TEXT NOT NULL)`);
   const recipientRows = () => db.prepare('SELECT company_code, recipient FROM company_email_recipients').all();
+  const upsertRecipient = db.prepare('INSERT INTO company_email_recipients VALUES (?,?,?) ON CONFLICT(company_code) DO UPDATE SET recipient=excluded.recipient,updated_at=excluded.updated_at');
+  const insertRecipientIfMissing = db.prepare('INSERT OR IGNORE INTO company_email_recipients VALUES (?,?,?)');
   const select = db.prepare('SELECT revision, encrypted_json, updated_at FROM email_settings WHERE singleton = 1');
   const upsert = db.prepare(`INSERT INTO email_settings(singleton,revision,encrypted_json,updated_at) VALUES(1,1,?,?)
     ON CONFLICT(singleton) DO UPDATE SET revision=email_settings.revision+1,
@@ -133,12 +137,16 @@ function createEmailSettings(db, {apiKey, environment = process.env, now = Date.
       ? state.environment.LEADS_COMPANY_RECIPIENTS[code]
       : ['alvi','avokado'].includes(code) ? envValue(state.environment,'LEADS_NOTIFY_EMAIL_'+code.toUpperCase())
       : code === 'synapse-business' ? envValue(state.environment,'LEADS_NOTIFY_EMAIL') : '';
-    return {companyCode:code, recipient, senderConfigured:Boolean(envValue(state.environment,'LEADS_SMTP_USER') && envValue(state.environment,'LEADS_SMTP_PASSWORD'))};
+    // `recipient` keeps its string contract ("a@x" or "a@x, b@y"); `recipients` is the parsed list.
+    return {companyCode:code, recipient, recipients: recipientsFromValue(recipient), recipientLimit: MAX_RECIPIENTS,
+      senderConfigured:Boolean(envValue(state.environment,'LEADS_SMTP_USER') && envValue(state.environment,'LEADS_SMTP_PASSWORD'))};
   }
   function saveCompany(code, body) {
     if(!body || Object.keys(body).some(key=>key!=='recipient') || !Object.hasOwn(body,'recipient')) fail('Укажите получателя выбранной компании');
-    const recipient=mailbox(body.recipient);
-    db.prepare('INSERT INTO company_email_recipients VALUES (?,?,?) ON CONFLICT(company_code) DO UPDATE SET recipient=excluded.recipient,updated_at=excluded.updated_at').run(code,recipient,new Date(now()).toISOString());
+    // The whole list is validated before one atomic write; an invalid element saves nothing.
+    const recipient=normalizeRecipientList(body.recipient);
+    try { upsertRecipient.run(code,recipient,new Date(now()).toISOString()); }
+    catch { throw Object.assign(new Error('Не удалось сохранить получателей'), {status: 500}); }
     return getCompany(code);
   }
   let activeToken, activeNotifier;
@@ -161,8 +169,28 @@ function createEmailSettings(db, {apiKey, environment = process.env, now = Date.
       }
       config.password = previous.config.password;
     }
-    try { upsert.run(encrypt(config), new Date(now()).toISOString()); }
-    catch { throw Object.assign(new Error('Не удалось сохранить настройки почты'), {status: 500}); }
+    // Multi-address lists are kept only in company_email_recipients, which every reader
+    // already prefers. The encrypted sender envelope keeps at most the first address, so an
+    // older build can still decrypt it after a rollback. Both writes share one transaction.
+    const time = new Date(now()).toISOString();
+    const lists = {};
+    for (const key of ['alviRecipient', 'avokadoRecipient']) {
+      const list = parseRecipientList(config[key]);
+      if (list.length > 1) lists[key.replace('Recipient', '')] = config[key];
+      config[key] = list[0] || '';
+    }
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      upsert.run(encrypt(config), time);
+      for (const [code, list] of Object.entries(lists)) {
+        if (Object.hasOwn(body, code + 'Recipient')) upsertRecipient.run(code, list, time);
+        else insertRecipientIfMissing.run(code, list, time);
+      }
+      db.exec('COMMIT');
+    } catch {
+      try { db.exec('ROLLBACK'); } catch {}
+      throw Object.assign(new Error('Не удалось сохранить настройки почты'), {status: 500});
+    }
     // Existing sends retain their original notifier reference until they finish.
     activeToken = undefined; activeNotifier = undefined;
     return readState().public;
@@ -179,7 +207,9 @@ function createEmailSettings(db, {apiKey, environment = process.env, now = Date.
     } catch (error) { return {ok: false, code: emailErrorCode(error)}; }
   }
   return {getCompany, saveCompany, getPublic: () => readState().public, getEnvironment: () => readState().environment, save, check,
-    notifications: {notifyLead: (lead, notification) => notifier().notifyLead(lead, notification)}};
+    notifications: {notifyLead: (lead, notification) => notifier().notifyLead(lead, notification),
+      // Resolving destinations reads settings only; it never constructs SMTP.
+      recipients: lead => companyRecipients(readState().environment, lead?.company_code?.toLowerCase())}};
 }
 
 module.exports = {createEmailSettings};
