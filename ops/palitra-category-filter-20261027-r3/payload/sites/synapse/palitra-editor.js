@@ -262,7 +262,7 @@
             <input id="ed-search" type="search" autocomplete="off" placeholder="Название, номер или цена" aria-describedby="ed-search-hint">
             <small id="ed-search-hint">Можно несколько слов: «выписка мальчик». Цена — цифрами: 9270.</small></label>
           <label class="ed-field"><span>Категория на сайте</span><select id="ed-category-filter" aria-describedby="ed-category-hint"></select>
-            <small id="ed-category-hint">Те же названия и товары, что в каталоге сайта.</small></label>
+            <small id="ed-category-hint">Названия — как на сайте. Здесь все товары категории, включая не показанные на сайте.</small></label>
           <button class="ed-btn ed-btn--main ed-btn--big" id="ed-add-item" type="button">+ Добавить товар</button>
         </div>
         <details class="ed-storage-filter ed-card" id="ed-storage-filter">

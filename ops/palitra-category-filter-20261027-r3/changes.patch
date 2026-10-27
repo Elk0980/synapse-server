@@ -5,7 +5,7 @@
    <title>Редактор прайса Palitra — кабинет Synapse</title>
    <meta name="robots" content="noindex, nofollow">
 -  <link rel="stylesheet" href="palitra-editor.css?v=20261023-compact-header-r1">
-+  <link rel="stylesheet" href="palitra-editor.css?v=20261027-category-filter-r1">
++  <link rel="stylesheet" href="palitra-editor.css?v=20261027-category-filter-r3">
    <link rel="stylesheet" href="/cabinet/palitra-nav.css?v=20261013-38">
    <link rel="icon" type="image/png" sizes="32x32" href="brand/hugh-icon-32.png">
    <link rel="apple-touch-icon" sizes="180x180" href="brand/hugh-icon-180.png">
@@ -14,7 +14,7 @@
    <script src="palitra-editor-session.js?v=20261012-2"></script>
    <script src="palitra-catalog-import.js?v=20260917-1"></script>
 -  <script src="palitra-editor.js?v=20261023-compact-header-r1"></script>
-+  <script src="palitra-editor.js?v=20261027-category-filter-r1"></script>
++  <script src="palitra-editor.js?v=20261027-category-filter-r3"></script>
  
  <!-- PALITRA_ACTION_CONTROLS_R3 -->
  <link rel="stylesheet" href="/content/ui/palitra-action-icons.css?v=20261021-r5">
@@ -35,7 +35,7 @@
              <small id="ed-search-hint">Можно несколько слов: «выписка мальчик». Цена — цифрами: 9270.</small></label>
 -          <label class="ed-field"><span>Раздел прайса</span><select id="ed-owner-filter"></select></label>
 +          <label class="ed-field"><span>Категория на сайте</span><select id="ed-category-filter" aria-describedby="ed-category-hint"></select>
-+            <small id="ed-category-hint">Те же названия и товары, что в каталоге сайта.</small></label>
++            <small id="ed-category-hint">Названия — как на сайте. Здесь все товары категории, включая не показанные на сайте.</small></label>
            <button class="ed-btn ed-btn--main ed-btn--big" id="ed-add-item" type="button">+ Добавить товар</button>
          </div>
 +        <details class="ed-storage-filter ed-card" id="ed-storage-filter">

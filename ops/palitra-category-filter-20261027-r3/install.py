@@ -6,7 +6,7 @@ The caller must hold the existing release flock in an ancestor shell.
 from pathlib import Path
 import hashlib, json, os, re, stat, subprocess, sys, time, urllib.request
 
-NAME = 'palitra-category-filter-20261027-r2'
+NAME = 'palitra-category-filter-20261027-r3'
 ROOT = Path('/opt/synapse')
 AREA = ROOT / 'releases' / NAME
 LOCK = str(ROOT / '.palitra-app-release.lock')
