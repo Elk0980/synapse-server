@@ -1,0 +1,91 @@
+{
+  "schema": "avokado-yandex-landing-candidate/v1",
+  "deployed": false,
+  "files": [
+    {
+      "path": "apparatnyy-massazh-irkutsk.html",
+      "bytes": 7809,
+      "sha256": "91edf112058feab08012aa6e8da047285d3de11dca24f121a509795a392260ec"
+    },
+    {
+      "path": "avokado-yandex-landing.css",
+      "bytes": 6254,
+      "sha256": "c272819562cda622fed1ca00b095b14dccd098a240dcd642aaa003d752e6acf3"
+    },
+    {
+      "path": "avokado-yandex-landing.js",
+      "bytes": 5398,
+      "sha256": "ce29a9b45ae7266f86e24558da4687a63e3d8c1357e84d34cdad46848d601c02"
+    },
+    {
+      "path": "BASE_MANIFEST.json",
+      "bytes": 2610,
+      "sha256": "084eeb6c7ea8c74ecbb5cc6b4d86f3fbdbce56f55b749de5e11f689ba2aee8b7"
+    },
+    {
+      "path": "fixture_server.py",
+      "bytes": 5123,
+      "sha256": "f9a32f7675049a21cf4d45079612987bebe495b1134e114a1efedd8f664f899b"
+    },
+    {
+      "path": "fixtures/callback-section.html",
+      "bytes": 2414,
+      "sha256": "0d50d4fd8074f90234997cb7d58d1fb2f50042c5d6e5f4c63561977f2f298aa5"
+    },
+    {
+      "path": "fixtures/public/attribution.js",
+      "bytes": 29442,
+      "sha256": "ff6b6cc8d5c835e5514e34efb29bf5be09bdb2ece7f90283e7c66cbed3d1b94d"
+    },
+    {
+      "path": "fixtures/public/callback.js",
+      "bytes": 9822,
+      "sha256": "60de6f0e66b9d2a5ceb0095c434b1834c4dcac01dfba3921b639de6e72c430aa"
+    },
+    {
+      "path": "fixtures/public/price-live.json",
+      "bytes": 21256,
+      "sha256": "21d33c8d355854ec94e68b5b47e45a67089fdfc0ed573803273ed2fc5503e54b"
+    },
+    {
+      "path": "README.md",
+      "bytes": 8827,
+      "sha256": "d8826451802fecdf7bc725dc5268e67c004473cf97004d3259997fea4783644a"
+    },
+    {
+      "path": "tests/landing.test.cjs",
+      "bytes": 10825,
+      "sha256": "304b154c24990b3aa1aac8654660736efe7c613b6b06f9fec2bd498196bdbb49"
+    },
+    {
+      "path": "tests/test_fixture.py",
+      "bytes": 2180,
+      "sha256": "4cbb04496a0936209a04d66d112e4707c3ea7e94f7c6332d882f12317c7956a8"
+    },
+    {
+      "path": "tools/build_from_public.py",
+      "bytes": 4152,
+      "sha256": "c8b65afdc43fd91bc8d84f27462c4c01080f7b54af62070180486ebdfd049c4f"
+    },
+    {
+      "path": "tools/landing.template.html",
+      "bytes": 5249,
+      "sha256": "b734333fbcf2214811fd18164cbb39e8957eb1c925c41af924bdb8b757f6cdcb"
+    },
+    {
+      "path": "tools/seal_candidate.py",
+      "bytes": 790,
+      "sha256": "3cb38bab5fc9156f28b34cb1a6e0d60ec59bedd89c84f8d24312a7a9898baf9e"
+    },
+    {
+      "path": "turbo-massazh-irkutsk.html",
+      "bytes": 7784,
+      "sha256": "ce705e703a294a7434cd12f10e86c777b476c354240cf2415ba59b6079bb0567"
+    },
+    {
+      "path": "VALIDATION.json",
+      "bytes": 1388,
+      "sha256": "cdc9c99b3516d6cf0396bc11506f8389c055ad626c36dadfdbb4e196d7902080"
+    }
+  ]
+}

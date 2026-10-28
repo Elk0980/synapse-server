@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="color-scheme" content="light">
+  <title>Яндекс в Synapse — учебная демонстрация</title>
+  <link rel="stylesheet" href="./yandex-panel.css">
+  <style>body{margin:0;background:#f6f7fa}#yandex-root{min-height:100vh}.demo-fallback{padding:32px;font-family:system-ui,sans-serif;max-width:800px;margin:auto}</style>
+</head>
+<body>
+  <main id="yandex-root"><div class="demo-fallback"><h1>Учебная демонстрация Яндекса</h1><p>Модуль должен загружаться с локального HTTP-адреса или внутри кабинета. Прямое открытие file:// может блокировать ES-модули браузером. Реальное подключение Яндекса отсутствует.</p></div></main>
+  <noscript><p class="demo-fallback">Для учебной демонстрации нужен JavaScript. Внешних действий и подключения Яндекса нет.</p></noscript>
+  <script type="module">
+    import { mountYandexPanel } from './yandex-panel.mjs';
+    import { createSyntheticAdapter, demoCompanies } from './synthetic-adapter.mjs';
+    mountYandexPanel(document.getElementById('yandex-root'), {
+      adapter: createSyntheticAdapter(), companies: demoCompanies,
+    });
+  </script>
+</body>
+</html>

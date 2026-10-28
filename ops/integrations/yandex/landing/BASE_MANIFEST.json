@@ -1,0 +1,85 @@
+{
+  "schema": "avokado-yandex-landing-base/v1",
+  "source": "reviewed-public-https-snapshot",
+  "sourceType": "fresh-public-bytes-handed-off-by-root-2026-10-28",
+  "sourceIsRepositoryCheckout": false,
+  "api": "/api/price",
+  "categoryId": "first-visit",
+  "itemId": "first-1",
+  "offerContractSha256": "949388cddbb5fdb22abe869222e367dc5fc6211e59fc962c45e7c972a5bd9abc",
+  "callbackSectionSha256": "0d50d4fd8074f90234997cb7d58d1fb2f50042c5d6e5f4c63561977f2f298aa5",
+  "files": [
+    {
+      "name": "attribution.js",
+      "bytes": 29442,
+      "sha256": "ff6b6cc8d5c835e5514e34efb29bf5be09bdb2ece7f90283e7c66cbed3d1b94d"
+    },
+    {
+      "name": "callback.js",
+      "bytes": 9822,
+      "sha256": "60de6f0e66b9d2a5ceb0095c434b1834c4dcac01dfba3921b639de6e72c430aa"
+    },
+    {
+      "name": "catalog.css",
+      "bytes": 16635,
+      "sha256": "43793d0ea7585c90f51f330ccea7099f4220a1a19ef387bff9fb4cf2f911c382"
+    },
+    {
+      "name": "catalog.js",
+      "bytes": 18813,
+      "sha256": "fe931292093380db9fd7ea5e69c577fcf312d8a8073fb7bb2817c571dffced91"
+    },
+    {
+      "name": "contact-route.js",
+      "bytes": 8049,
+      "sha256": "cbc976d44dc2de78e1bc141e74bbd49b95002439fb7e11b5b97abd37b5e27ae8"
+    },
+    {
+      "name": "index.html",
+      "bytes": 153421,
+      "sha256": "a7ff72162e9568d0fd6330a4b32bd1c6bbe20f071e11785c6d2f4eb3e4721b07"
+    },
+    {
+      "name": "mobile-foundation.css",
+      "bytes": 8098,
+      "sha256": "48c3ceb231ba52468ba79ba128862710a01580e3e804830435d79027c930a3a5"
+    },
+    {
+      "name": "price-live.json",
+      "bytes": 21256,
+      "sha256": "21d33c8d355854ec94e68b5b47e45a67089fdfc0ed573803273ed2fc5503e54b"
+    },
+    {
+      "name": "price-render.js",
+      "bytes": 12533,
+      "sha256": "f451901e6e5237225749d827013dbf785faf7c675e1c75947fddf554231998bb"
+    },
+    {
+      "name": "price-shell.css",
+      "bytes": 6229,
+      "sha256": "f4751e51ef9e853f1fe4f16bfd28b9d8a6387a8851ac73b3f950bf47d42a807f"
+    },
+    {
+      "name": "price-shell.js",
+      "bytes": 3372,
+      "sha256": "adf27954cddfc9d7508ce25cb3e8ca62ba2e7611d7dfbc505c385cf76c5d6cf6"
+    },
+    {
+      "name": "price.html",
+      "bytes": 5257,
+      "sha256": "f924aa191fefd377b0663fe7aa4423f192bca2143b7e32378e1dfa23d1312ea9"
+    }
+  ],
+  "productionFiles": [
+    "turbo-massazh-irkutsk.html",
+    "apparatnyy-massazh-irkutsk.html",
+    "avokado-yandex-landing.js",
+    "avokado-yandex-landing.css"
+  ],
+  "unchangedRuntimeDependencies": [
+    "/callback.js?v=20261001-goals",
+    "/attribution.js?v=20261001-goals"
+  ],
+  "deployed": false,
+  "campaignUrlsChanged": false
+}
