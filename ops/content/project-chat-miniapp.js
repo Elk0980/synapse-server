@@ -19,6 +19,13 @@ const BODY_LIMIT = 20 * 1024;
 const INIT_DATA_LIMIT = 16 * 1024;
 const AUTH_MAX_AGE_S = 5 * 60;
 const AUTH_FUTURE_S = 60;
+/* Граница свежести разрешения писать лично (specs/083, V4). Часы Telegram могут опережать часы сервера:
+   вход принимается с auth_date до AUTH_FUTURE_S секунд «из будущего» (на деле — до AUTH_FUTURE_S + 1 из-за
+   округления до секунды). Запуск, сформированный до события (привязка, отказ 403) при таком опережении, может
+   нести auth_date почти на AUTH_FUTURE_S + 1 секунд позже события и прийти уже после него. Поэтому событие
+   «перекрывает» всё подписанное раньше чем через FRESH_MARGIN_S секунд после себя: такие запуски не
+   засчитываются, нужен новый вход после этой паузы. */
+const FRESH_MARGIN_S = AUTH_FUTURE_S + 1;
 const NONCE_TTL_MS = 10 * 60 * 1000;
 const TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const CODE_TTL_MS = 15 * 60 * 1000;
@@ -66,6 +73,16 @@ function createProjectChatMiniApp({ db, authStore, botId = '', sessionSecret = '
       created_at TEXT NOT NULL, expires_at TEXT NOT NULL, used_at TEXT
     );
     CREATE TABLE IF NOT EXISTS project_chat_miniapp_nonces (nonce TEXT PRIMARY KEY, seen_at TEXT NOT NULL);
+    -- Разрешение писать лично (specs/083) для пары «Telegram ID + бот»; между ботами не переносится.
+    -- auth_date — подписанное Telegram время запуска Mini App (секунды): по нему упорядочиваются наблюдения.
+    -- received_at — время приёма сервером, только для журнала. revoked_floor — после отказа Telegram (403)
+    -- засчитываются только запуски строго позже этой секунды.
+    CREATE TABLE IF NOT EXISTS project_chat_telegram_write_access (
+      telegram_user_id TEXT NOT NULL, bot_id TEXT NOT NULL, allowed INTEGER NOT NULL CHECK(allowed IN (0,1)),
+      auth_date INTEGER NOT NULL, received_at TEXT NOT NULL, reason TEXT NOT NULL,
+      revoked_floor INTEGER NOT NULL DEFAULT 0, revoked_at TEXT,
+      PRIMARY KEY(telegram_user_id, bot_id)
+    );
   `);
 
   /* Подпись Telegram: bot_id:WebAppData + все пары key=value по ключу, без hash и signature. */
@@ -96,7 +113,10 @@ function createProjectChatMiniApp({ db, authStore, botId = '', sessionSecret = '
     // Одноразовость считается по тому, что подписано: bot ID и канонический data-check-string.
     // Перестановка параметров, другое percent-кодирование или правка неподписанного hash дают
     // ту же подписанную информацию и обязаны узнаваться как повтор.
-    return { telegramUserId: String(user.id), firstName: cleanName(user.first_name) || 'Участник Telegram', project, nonce: sha256(data) };
+    // allows_write_to_pm — подписанное Telegram поле: пользователь разрешил этому боту писать ему лично.
+    // Учитывается только буквальное true; отсутствие поля — «не разрешено».
+    return { telegramUserId: String(user.id), firstName: cleanName(user.first_name) || 'Участник Telegram', project, nonce: sha256(data),
+      allowsWriteToPm: user.allows_write_to_pm === true, authDate: Number(authDate) };
   }
 
   const linkVersion = (userId) => db.prepare('SELECT version FROM project_chat_telegram_link_versions WHERE user_id=?').get(userId)?.version || 1;
@@ -164,6 +184,9 @@ function createProjectChatMiniApp({ db, authStore, botId = '', sessionSecret = '
       if (!db.prepare('INSERT OR IGNORE INTO project_chat_miniapp_nonces(nonce,seen_at) VALUES(?,?)').run(verified.nonce, stamp(at)).changes) {
         return { status: 409, message: REOPEN, extra: { state: 'replayed' } };
       }
+      // Наблюдение принимается, только если его подписанный запуск строго новее прежнего и последнего отказа (403).
+      recordWriteAccess(verified.telegramUserId, verified.allowsWriteToPm, at, verified.authDate,
+        verified.allowsWriteToPm ? 'miniapp_allowed' : 'miniapp_not_allowed');
       const link = linkOf(verified.telegramUserId);
       const user = link ? authStore.getById(link.user_id) : null;
       if (!user) {
@@ -178,8 +201,13 @@ function createProjectChatMiniApp({ db, authStore, botId = '', sessionSecret = '
       if (!companies.length) return { status: 403, message: 'Владелец ещё не добавил вас в участники чата проекта', extra: { state: 'no_rooms' } };
       const minted = mintToken(user, verified.telegramUserId, at);
       // Подписанный проект возвращается как подсказка выбора; доступ по нему всё равно решает членство.
+      /* Состояние разрешения писать лично — тем же серверным критерием, что видит владелец (specs/083):
+         последнее принятое подписанное наблюдение, запуск позже текущей привязки, без более свежего отказа. */
+      const userLinks = linksOfUser(user.id);
+      const personalState = userLinks.length > 1 ? 'several_links' : writeAccessState(verified.telegramUserId, link.linked_at);
+      const personal = { confirmed: personalState === 'ready', state: personalState };
       return { ok: { ...minted, companies, startParam: companies.some((c) => c.code === verified.project) ? verified.project : null,
-        identity: { userId: user.id, displayName: user.displayName, role: 'member' } } };
+        identity: { userId: user.id, displayName: user.displayName, role: 'member' }, personal } };
     });
     if (outcome.ok) return outcome.ok;
     fail(outcome.status, outcome.message, outcome.extra);
@@ -259,7 +287,55 @@ function createProjectChatMiniApp({ db, authStore, botId = '', sessionSecret = '
     });
   }
 
-  return { issues, enabled, handle, session, verifyInitData, roomSession, mintToken, listLinks, createLink, deleteLink };
+  /* Разрешение писать лично. Всегда для бота этой конфигурации: смена TELEGRAM_BOT_ID делает прежние
+     наблюдения неприменимыми, пока получатель не откроет чат проекта в новом боте.
+
+     Порядок наблюдений — по подписанному auth_date (время запуска Mini App в секундах), а не по времени
+     приёма: данные входа действуют до 5 минут, и ещё не использованный старый запуск может прийти позже
+     нового. Принимается только запуск строго новее прежнего и строго позже последнего отказа (403);
+     равная секунда не принимается — при сомнении нужен новый запуск, а не угадывание порядка. */
+  function recordWriteAccess(telegramUserId, allowed, at, authDate, reason) {
+    const id = String(telegramUserId), signed = Number(authDate);
+    if (!Number.isSafeInteger(signed) || signed < 1) return false;
+    const row = db.prepare('SELECT * FROM project_chat_telegram_write_access WHERE telegram_user_id=? AND bot_id=?').get(id, bot);
+    if (row && (signed <= row.auth_date || signed <= row.revoked_floor)) return false;
+    db.prepare(`INSERT INTO project_chat_telegram_write_access(telegram_user_id,bot_id,allowed,auth_date,received_at,reason)
+      VALUES(?,?,?,?,?,?) ON CONFLICT(telegram_user_id,bot_id) DO UPDATE SET allowed=excluded.allowed,
+      auth_date=excluded.auth_date,received_at=excluded.received_at,reason=excluded.reason`)
+      .run(id, bot, allowed ? 1 : 0, signed, stamp(at), reason);
+    return true;
+  }
+  const writeAccess = (telegramUserId) => (TELEGRAM_ID.test(bot) && TELEGRAM_ID.test(String(telegramUserId))
+    ? db.prepare('SELECT * FROM project_chat_telegram_write_access WHERE telegram_user_id=? AND bot_id=?').get(String(telegramUserId), bot) || null : null);
+  /* Единый критерий для владельца и для Mini App: ready — последнее принятое наблюдение «разрешено»,
+     его подписанный запуск не раньше чем через FRESH_MARGIN_S секунд после текущей привязки
+     (auth_date·1000 ≥ linked_at + FRESH_MARGIN_S·1000) и само наблюдение принято сервером после привязки.
+     Любой запуск, сформированный до привязки, при опережении часов Telegram в пределах допуска входа
+     имеет auth_date < linked_at + FRESH_MARGIN_S (в секундах) и не засчитывается — даже если впервые пришёл
+     после привязки. Безопасный повторный вход: открыть чат заново через минуту после привязки. */
+  function writeAccessState(telegramUserId, linkedAt) {
+    const row = writeAccess(telegramUserId);
+    if (!row) return 'no_permission';
+    if (row.allowed !== 1) return row.reason === 'telegram_403' ? 'revoked' : 'no_permission';
+    const linked = Date.parse(linkedAt), received = Date.parse(row.received_at);
+    if (!Number.isFinite(linked) || row.auth_date * 1000 < linked + FRESH_MARGIN_S * 1000 || !(received > linked)) return 'stale_permission';
+    return 'ready';
+  }
+  /* Отказ Telegram (403): разрешение снято. Порог — секунда отказа плюс FRESH_MARGIN_S: запуск, сформированный
+     до отказа, при допустимом опережении часов Telegram имеет auth_date не выше порога и ничего не вернёт;
+     засчитывается только вход строго после порога (через минуту после отказа). */
+  function revokeWriteAccess(telegramUserId, botId, reason) {
+    if (String(botId) !== bot || !TELEGRAM_ID.test(String(telegramUserId))) return;
+    const id = String(telegramUserId), at = now(), floor = Math.floor(at / 1000) + FRESH_MARGIN_S;
+    db.prepare(`INSERT INTO project_chat_telegram_write_access(telegram_user_id,bot_id,allowed,auth_date,received_at,reason,revoked_floor,revoked_at)
+      VALUES(?,?,0,0,?,?,?,?) ON CONFLICT(telegram_user_id,bot_id) DO UPDATE SET allowed=0,reason=excluded.reason,
+      revoked_floor=MAX(project_chat_telegram_write_access.revoked_floor, project_chat_telegram_write_access.auth_date, excluded.revoked_floor),
+      revoked_at=excluded.revoked_at`).run(id, bot, stamp(at), reason, floor, stamp(at));
+  }
+  const linksOfUser = (userId) => db.prepare('SELECT * FROM project_chat_telegram_links WHERE user_id=? ORDER BY linked_at').all(userId);
+
+  return { issues, enabled, botId: bot, handle, session, verifyInitData, roomSession, mintToken, listLinks, createLink, deleteLink,
+    writeAccess, writeAccessState, revokeWriteAccess, linksOfUser, freshMarginSeconds: FRESH_MARGIN_S };
 }
 
 module.exports = { createProjectChatMiniApp, PRODUCTION_PUBLIC_KEY_HEX, SESSION_PATH, TOKEN_TTL_MS, CODE_TTL_MS, REOPEN };
