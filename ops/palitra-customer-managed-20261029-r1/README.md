@@ -9,3 +9,5 @@ The phone control keeps +7, normalizes a pasted Russian 8 prefix and preserves f
 Root independently ran 53 mask/prefill/contract fixtures plus 6 actual bindForm channel/fulfillment fixtures, all passing. Syntax checks pass. Before saving: fresh lease, workspace revision, exact file hashes and backup. After each save: history, full manifest comparison, public bytes including old query strings and live form checks. No service restart, queue, business-record or price edits belong to this payload.
 
 Prepared on 29 October 2026; installation evidence is recorded separately after actual readback.
+
+The native HTML textarea normalizes CRLF to LF. `order.editor-lf.js` is the exact editor payload: only CRLF/CR line endings of the reviewed order candidate become LF; all other characters are identical. Its SHA256 is `c590111397343a5b641ed84d44408aac8af82010973a88b106fa0d7ec4860ba6`. The first order save was stopped locally before submission on the byte guard, then this explicit normalized payload was frozen and syntax checked. The server's immutable prior revision remains unchanged.
