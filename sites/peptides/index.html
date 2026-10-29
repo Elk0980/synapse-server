@@ -112,7 +112,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 @media (max-width:900px){.trio{grid-template-columns:1fr;gap:8px}.trio ul{display:none}.trio .card{padding:14px 16px}.trio h3{font-size:16px}.panel.wide .head{margin-bottom:8px}.panel.wide .head h2{font-size:20px}}
 
 /* after the tour */
-.after{position:relative;z-index:3;background:linear-gradient(180deg,rgba(7,23,26,0) 0%,var(--bg) 12%);padding-top:14vh}
+.after{position:relative;z-index:3;background:linear-gradient(180deg,rgba(7,23,26,0) 0%,var(--bg) 10%);padding-top:22vh;margin-top:-10vh}
 .wrap{max-width:1160px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 section.block{padding-block:72px}
 .eyebrow{font-family:var(--display);font-weight:300;font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--signal)}
@@ -368,7 +368,7 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
     </div>
   </div>
 
-  <div class="panel" data-t="44,45.5" id="tour-8">
+  <div class="panel" data-t="43.6,44.8" id="tour-8">
     <div class="card">
       <div class="k">08 · Итог</div>
       <h2>Один сигнал — и клетка работает. Одна программа — и пациентка остаётся</h2>
@@ -532,17 +532,18 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
   function drawImg(im,alpha){var iw=im.naturalWidth||im.width,ih=im.naturalHeight||im.height;var s=Math.max(W/iw,H/ih);var w=iw*s,h=ih*s;ctx.globalAlpha=alpha;ctx.drawImage(im,(W-w)/2,(H-h)/2,w,h);ctx.globalAlpha=1;}
 
   var P=0,target=0,lastT=performance.now(),dirty=true,lastStep=-1,hidden=false;
-  function readScroll(){var y=window.scrollY-track.offsetTop;target=Math.max(0,Math.min(1,y/trackMax()));}
+  function readScroll(){var y=window.scrollY-track.offsetTop;target=Math.max(0,Math.min(1,y/trackMax()));dirty=true;}
   addEventListener('scroll',readScroll,{passive:true}); readScroll(); P=target;
   function ramp(p,a,b){return Math.max(0,Math.min(1,(p-a)/(b-a)))}
   function setPanels(p){
     var step=0;
-    ranges.forEach(function(r,i){var w=0.012;var o=Math.min(ramp(p,r.a-w,r.a+w),1-ramp(p,r.b-w,r.b+w));r.el.style.opacity=o;r.el.style.transform='translateY('+((1-o)*14)+'px)';r.el.classList.toggle('show',o>0.5);if(p>=r.a-w)step=i;});
+    var endGate=1-ramp(window.scrollY,track.offsetTop+track.offsetHeight-innerHeight*1.25,track.offsetTop+track.offsetHeight-innerHeight*0.95);
+    ranges.forEach(function(r,i){var w=0.012;var o=Math.min(ramp(p,r.a-w,r.a+w),1-ramp(p,r.b-w,r.b+w))*endGate;r.el.style.opacity=o;r.el.style.transform='translateY('+((1-o)*14)+'px)';r.el.classList.toggle('show',o>0.5);if(p>=r.a-w)step=i;});
     if(step!==lastStep){lastStep=step;cnt.textContent=(step<9?'0':'')+(step+1);dots.forEach(function(d,i){if(i===step)d.setAttribute('aria-current','step');else d.removeAttribute('aria-current')});}
     scrim.style.opacity=1-ramp(p,0.05,0.08);
     hint.style.opacity=p<0.03?1:0; hint.style.pointerEvents=p<0.03?'auto':'none';
     fade.style.opacity=Math.max(0.35*ramp(p,0.80,0.83)*(1-ramp(p,0.95,0.965)),ramp(p,0.975,1)*0.9);
-    var past=window.scrollY>track.offsetTop+track.offsetHeight-innerHeight*0.6; hud.style.opacity=past?0:1; hud.style.pointerEvents=past?'none':'auto';
+    hud.style.opacity=endGate; hud.style.pointerEvents=endGate>0.5?'auto':'none';
   }
   document.addEventListener('visibilitychange',function(){hidden=document.hidden;if(!hidden)requestAnimationFrame(frame)});
   function frame(){
