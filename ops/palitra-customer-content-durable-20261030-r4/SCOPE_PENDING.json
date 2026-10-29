@@ -1,0 +1,107 @@
+{
+  "status": "ROOT_REVIEWED_CODE_ONLY_NATIVE_NOT_STARTED",
+  "namespace": "palitra-customer-content-durable-20261030-r4",
+  "frozenR1R2R3Untouched": true,
+  "targets": [
+    {
+      "target": "/app/draft-account-service.cjs",
+      "beforeSha256": "0b7cb428936e90ec3b97e55d2abea6bbd56e867b4fa51d13588abc5ff2bff993",
+      "afterSha256": "23a0d76ed2d5d2bef47ad49e5822829a088b6148ceeffae09731b6f499d34f26"
+    },
+    {
+      "target": "/app/customer-chat.js",
+      "beforeSha256": "65439df0c0268aa49c33b679d4142090c72f54e02153d1fcf21383587a341ffa",
+      "afterSha256": "1a3927539386fe4e075bf9aa9ec7cfc995fe0b36787ebb67ad7898359058456e"
+    },
+    {
+      "target": "/app/customer-chat-native-adapter.cjs",
+      "beforeSha256": "0457646b76195b113834bcc26e4150bd488e3f4a19f83142006d666e277090f7",
+      "afterSha256": "a72732560bd9adb109080c09cf0ce3bd7774eb72614ea29073d301d44245037e"
+    },
+    {
+      "target": "/app/palitra-orders-public/shell.js",
+      "beforeSha256": "823da57f742b6ac656b48acbc7a57cf7bd2f69b9ee4993e7fb678f3c7ce4ba28",
+      "afterSha256": "b39d4cdb4d07673988249863d0ce4e767981565ed6f77350073aeff61ec273c9"
+    },
+    {
+      "target": "/app/palitra-review-public/palitra-chat.js",
+      "beforeSha256": "6ee45fc44d303314ba6124d0b37853f4129e579f9a29b6989d9ee39efdcd3cc6",
+      "afterSha256": "5752c762048c18aa01ccc52f503ef63230468d79ff7749895b6e4e0dd37d124b"
+    },
+    {
+      "target": "/app/site-workspace-feature.js",
+      "beforeSha256": "319c233f6066955193ac850ce8b58464b198ad262d168be64281659828e82910",
+      "afterSha256": "f36fe867ef6c5bf0f180ae3caec177f296503f365606c0d3e2b9cf262964ac5e"
+    }
+  ],
+  "inventorySourceSha256": "68998c94bb34426777b8199d86d02daebe33f25120711f542f825a9778983ec1",
+  "activeSqlContent": [
+    "/data/content.sqlite",
+    "/data/salon-reports.sqlite",
+    "/data/projects/palitra-love/sites/site-44bbe13f1bad5e005b2a/private/draft-accounts.sqlite"
+  ],
+  "fixedOpaqueArchives": [
+    "/data/nebo-project-20261020/content-before-site-r3.sqlite",
+    "/data/nebo-project-backup-20261020/content.sqlite",
+    "/data/nebo-project-backup-20261020/salon-reports.sqlite",
+    "/data/palitra-app-before-20261013.sqlite",
+    "/data/palitra-map-caption-20261019/content.sqlite",
+    "/data/palitra-production-before-20261013.sqlite",
+    "/data/palitra-unified-orders-20261021-r8-completion-c1-save/content.sqlite"
+  ],
+  "crmSqlPaths": [
+    "/data/crm.sqlite"
+  ],
+  "scopeChanges": [
+    "pinned pure OCI+legacy archive auditor only",
+    "OCI Descriptor/index identity distinct from selected config digest",
+    "selected runtime fullRootFS/Config/platform+unique reachable pinnedroot",
+    "attestation refs passive hash/size; not selected/executed",
+    "compressed digest/size; gzip/plain<=8MiB DiffID; same tar_members"
+  ],
+  "unchangedGuards": [
+    "strict build/IID authorization",
+    "parent layer prefix+1/full child tree/Config",
+    "allSQL/rawarchives/backups/wholeDB/startup/queues/HMAC/policies",
+    "no unrelated service recreation or data rollback"
+  ],
+  "nativePreflightReportedByRoot": {
+    "store": "Docker29/containerd",
+    "descriptorMedia": "application/vnd.oci.image.index.v1+json",
+    "legacyLayerTarCount": 0,
+    "regularMembers": 126,
+    "compatRows": 1,
+    "selectedConfigBytes": 3404,
+    "parentLayers": 118,
+    "lastMedia": "application/vnd.oci.image.layer.v1.tar+gzip",
+    "lastCompressedBytes": 12225,
+    "platform": "linux/amd64/null",
+    "rawConfigEqualsInspect": true,
+    "rootFsDiffIdsEqualInspect": true,
+    "wholeCompatOrderedPathCheck": "kept strict; native auditor validates, only last equality reported in preflight"
+  },
+  "manifestCreated": true,
+  "dockerOrProductionActions": 0,
+  "offlineTests": {
+    "installerOciPipeline": 32,
+    "economy": 10,
+    "binding": 9,
+    "crypto": 10,
+    "opaqueArchives": 8,
+    "imageArchive": 16,
+    "total": 85
+  },
+  "latestReadonlyPreparationReportedByRoot": {
+    "composeFiles": 68,
+    "newOverlayExpectedFiles": 69,
+    "services": 5,
+    "fullStaticFiles": 351,
+    "managedFiles": 141,
+    "managedVersion": 332,
+    "policyVerified": true,
+    "publicPriceVersion": 83,
+    "deploymentPermit": false
+  },
+  "rootAndIndependentTests": 85,
+  "freshImagesPersonallyObservedUtc": "2026-10-29T19:19:39.592029+00:00"
+}
