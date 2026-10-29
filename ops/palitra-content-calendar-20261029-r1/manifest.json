@@ -1,0 +1,20 @@
+{
+  "packageId": "palitra-content-calendar-20261029-r1",
+  "targets": [
+    {
+      "target": "sites/synapse/cabinet/palitra-orders/cabinet.html",
+      "beforeSha256": "b72a3343b8fc7758b80133115a2c84a49e550e4bdb694011436427da7946d0c8",
+      "afterSha256": "60a15f9d2dcfa331fe4841f09a88dbe2e4ba965bd9ca778eb0a49cdb4d2de0d8"
+    },
+    {
+      "target": "sites/synapse/cabinet/palitra-orders/palitra-content-tasks-ui.js",
+      "beforeSha256": "980d239b3321295cd2c2438dffb980fe93a0e153cfadbd2b3c4ca50cf83b709b",
+      "afterSha256": "096f6b62726e1cfae74d182c1546787f6649a5d95099a0c518b7d8b9c26b2780"
+    },
+    {
+      "target": "sites/synapse/cabinet/palitra-orders/shell.css",
+      "beforeSha256": "46a192454bdf4aa976fae6a466ea9c78b2706ddaf3f569a4ddbfa0ef71d32d26",
+      "afterSha256": "ac39d129b8d230814176f94efebfb738a6061bb5e37770cfb9e9559f0983f62c"
+    }
+  ]
+}
