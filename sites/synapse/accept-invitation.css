@@ -1,0 +1,8 @@
+/* Страница принятия приглашения (specs/085): отдельный файл — совместимо с CSP style-src 'self'. */
+body { margin: 0; font: 16px/1.5 system-ui, sans-serif; background: #f5f3ee; color: #1f2a24; }
+main { max-width: 28rem; margin: 0 auto; padding: 1.5rem 1rem; }
+label { display: block; margin: 0.8rem 0 0.3rem; }
+input { width: 100%; box-sizing: border-box; padding: 0.7rem; font: inherit; border: 1px solid #b9b4a8; border-radius: 0.5rem; }
+button { margin-top: 1rem; width: 100%; padding: 0.8rem; font: inherit; border: 0; border-radius: 0.5rem; background: #2f5d46; color: #fff; }
+.muted { color: #5b6660; font-size: 0.9rem; }
+.error { color: #a1301f; }

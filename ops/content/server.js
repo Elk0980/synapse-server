@@ -178,6 +178,9 @@ db.exec(`
 `);
 const authStore = createAuthStore(db, process.env.AUTH_USERS || '');
 const companyTeam = require('./company-team').createCompanyTeam(authStore);
+// Приглашения (specs/085): канал доставки в production не настроен — приглашение остаётся
+// recipient_unverified/channel_disabled и ничего не отправляет; ключа и транспорта здесь нет.
+const invitations = require('./invitations').createInvitations({ db, authStore, hashPassword, companies: COMPANIES, delivery: null });
 const actorOnboarding = createActorOnboarding({ db, authStore,
   requireSession: (request) => requireSession(request),
   requireCsrf: (request, session) => requireCsrf(request, session),
@@ -1119,6 +1122,9 @@ const server = http.createServer(async (request, response) => {
       fail(405, 'Метод не поддерживается');
     }
 
+    if (url.pathname.startsWith('/content/admin/invitations') || url.pathname.startsWith('/content/invitations/')) {
+      if (await invitations.handle(request, response, url, { requireSession, requireCsrf, readJson, reply, clientIp })) return;
+    }
     if (url.pathname === '/content/admin/accounts' || url.pathname.startsWith('/content/admin/accounts/')) {
       const session = requireSession(request);
       if (session.user.role !== 'owner' && !session.user.permissions.includes('account.view')) fail(403, 'Недостаточно прав');

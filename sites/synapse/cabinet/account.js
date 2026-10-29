@@ -181,7 +181,78 @@ const init = (context) => {
       }
     } catch (error) { content.textContent = "Не удалось загрузить: " + error.message; }
   };
-  Object.assign(api, { renderAccounts });
+  /* Приглашения (specs/085): только владелец. Компанию Palitra и ровно три права задаёт сервер; получатель —
+     только из списка подтверждённых сервером; ссылки, токена, пароля и произвольного адреса здесь нет. */
+  const INVITE_RIGHTS = { "sites.view": "Сайты — просмотр", "price.view": "Прайс — просмотр", "price.edit": "Прайс — товары и цены" };
+  const INVITE_STATUS = { pending: "Ожидает принятия", accepted: "Принято — учётная запись создана", revoked: "Отозвано", expired: "Срок истёк" };
+  const INVITE_DELIVERY = {
+    recipient_unverified: "Не отправлено: получатель не подтверждён", channel_disabled: "Не отправлено: канал доставки выключен",
+    queued: "В очереди на отправку", sending: "Отправляется", delivered: "Доставлено в личный канал (это ещё не вход)",
+    uncertain: "Исход отправки неизвестен — автоматического повтора нет", failed: "Отправка не удалась", not_sent: "Не отправлено"
+  };
+  let inviting = false;
+  const renderInvitations = async () => {
+    if (identity.role !== "owner") return;
+    const view = byId("accounts-view");
+    if (!view) return;
+    let card = byId("invitations-card");
+    if (!card) { card = document.createElement("div"); card.className = "card"; card.id = "invitations-card"; view.append(card); }
+    card.innerHTML = '<h2>Приглашения</h2><p role="status">Загрузка…</p>';
+    let data;
+    try { data = await apiJson("/content/admin/invitations"); }
+    catch (error) { card.innerHTML = `<h2>Приглашения</h2><p role="status">Не удалось загрузить: ${escapeHTML(error.message)}</p>`; return; }
+    const pilot = data && data.pilot ? data.pilot : { company: "palitra-love", permissions: ["price.edit", "price.view", "sites.view"] };
+    const recipients = Array.isArray(data?.recipients) ? data.recipients.filter(item => item && item.verified === true && Number.isSafeInteger(item.id)) : [];
+    const invitations = Array.isArray(data?.invitations) ? data.invitations : [];
+    const reason = data?.channel !== "enabled"
+      ? "Отправка приглашений выключена: канал доставки не настроен. Пока его не включат, приглашение не создаётся и никому не отправляется."
+      : !recipients.length ? "Нет подтверждённых получателей. Получатель сначала подтверждает свой личный канал; ввести адрес вручную нельзя." : "";
+    card.innerHTML = `<h2>Приглашения</h2>
+      <p>Компания: <b>Palitra</b>. Права: ${pilot.permissions.map(item => escapeHTML(INVITE_RIGHTS[item] || item)).join(", ")}. Набор фиксирован сервером.</p>
+      <p class="muted">Получатель сам задаёт пароль по ссылке, которую сервер отправляет только в его подтверждённый личный канал. Ссылка действует 24 часа и один раз.</p>
+      ${reason ? `<p role="status" data-invite-blocked>${escapeHTML(reason)}</p>` : ""}
+      <form data-invite-form class="field-stack">
+        <label>Логин <input name="login" required maxlength="64" pattern="[a-z0-9_-]{1,64}" autocomplete="off"></label>
+        <label>Отображаемое имя <input name="displayName" required maxlength="120"></label>
+        <label>Подтверждённый получатель <select name="recipientId" required>${recipients.map(item =>
+          `<option value="${item.id}">${escapeHTML(item.displayName)} · ${escapeHTML(item.channel)} ${escapeHTML(item.address)}</option>`).join("")}</select></label>
+        <button type="submit"${reason ? " disabled" : ""}>Отправить приглашение</button><p role="status" data-invite-result></p>
+      </form>
+      <div data-invite-list>${invitations.length ? "" : "<p>Приглашений пока нет.</p>"}</div>`;
+    const list = card.querySelector("[data-invite-list]");
+    for (const item of invitations) {
+      const row = document.createElement("article");
+      row.className = "account-card";
+      row.dataset.inviteId = String(item.id);
+      row.innerHTML = `<p><b>${escapeHTML(item.displayName)}</b> @${escapeHTML(item.login)} · ${escapeHTML(INVITE_STATUS[item.status] || item.status)}</p>
+        <p>${escapeHTML(INVITE_DELIVERY[item.delivery] || item.delivery)}${item.recipient ? ` · ${escapeHTML(item.recipient.displayName)} ${escapeHTML(item.recipient.address)}` : ""}</p>
+        <p class="muted">Действует до ${escapeHTML(new Date(item.expiresAt).toLocaleString("ru-RU"))}</p>
+        ${item.status === "pending" ? '<button class="danger" type="button" data-invite-revoke>Отозвать</button>' : ""}`;
+      row.querySelector("[data-invite-revoke]")?.addEventListener("click", async event => {
+        event.currentTarget.disabled = true;
+        try {
+          await apiJson(`/content/admin/invitations/${encodeURIComponent(item.id)}/revoke`, { method: "POST", headers: { "X-CSRF-Token": identity.csrfToken }, body: "{}" });
+          await renderInvitations();
+        } catch (error) { event.currentTarget.disabled = false; row.append(Object.assign(document.createElement("p"), { textContent: error.message })); }
+      });
+      list.append(row);
+    }
+    card.querySelector("[data-invite-form]").addEventListener("submit", async event => {
+      event.preventDefault();
+      if (inviting || reason) return;
+      const form = event.currentTarget, result = form.querySelector("[data-invite-result]");
+      inviting = true; form.querySelector('button[type="submit"]').disabled = true;
+      try {
+        const created = await apiJson("/content/admin/invitations", { method: "POST", headers: { "X-CSRF-Token": identity.csrfToken },
+          body: JSON.stringify({ login: form.elements.login.value, displayName: form.elements.displayName.value, recipientId: Number(form.elements.recipientId.value) }) });
+        await renderInvitations();
+        const status = byId("invitations-card")?.querySelector("[data-invite-result]");
+        if (status) status.textContent = `Приглашение создано: ${INVITE_DELIVERY[created?.invitation?.delivery] || "состояние обновится"}`;
+      } catch (error) { result.textContent = error.message; form.querySelector('button[type="submit"]').disabled = false; }
+      finally { inviting = false; }
+    });
+  };
+  Object.assign(api, { renderAccounts, renderInvitations });
   byId("account-create").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (creating) return;
@@ -237,6 +308,7 @@ SbCabinet.registerView("accounts", {
   initialize(context) {
     init(context);
     api.renderAccounts();
+    api.renderInvitations();
   },
 });
 })();
