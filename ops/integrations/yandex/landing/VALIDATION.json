@@ -1,0 +1,29 @@
+{
+  "date": "2026-10-28",
+  "scope": "Local candidate only; no browser/server/production acceptance",
+  "checks": [
+    {
+      "command": "node --test tests/landing.test.cjs",
+      "exitCode": 0,
+      "passed": 13,
+      "failed": 0,
+      "coverage": ["exact callback markup", "runtime/source SHA", "reviewed API offer", "unexpected-offer fallback", "URL allowlist", "XSS rejection/textContent", "stale price clearing", "GET-only API", "UTM/yclid link propagation", "existing callback consent and payload", "production/fixture separation", "all local anchors and unique IDs"]
+    },
+    {
+      "command": "python -B -m unittest discover -s tests -p \"test_fixture.py\"",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "coverage": ["all write methods rejected", "fixture guard ordering and CSP", "ready/unavailable/unexpected cases", "allowlisted fixture paths"]
+    }
+  ],
+  "fixtureServerStartedByAuthor": false,
+  "browserAcceptance": false,
+  "physicalDeviceAcceptance": false,
+  "realLeadsSubmitted": 0,
+  "metricsSent": 0,
+  "productionWrites": 0,
+  "campaignUrlsChanged": false,
+  "deployed": false,
+  "pending": ["Root browser QA 320/390/desktop", "fresh native BASE/config/lease and guarded release approval", "live static/API/runtime readback", "separate approval before any real technical submission", "campaign URL changes only after live acceptance"]
+}
