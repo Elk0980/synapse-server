@@ -25,6 +25,12 @@ Highwater хранится в новом protected release журнале: EXCL 
 
 Ограничения честные: новая бизнес-запись/новый бот/новый alert/payload transition/config/source change/extra generation вызывают отказ. Допуск не разрешает игнорировать целую таблицу или retry unknown. Live predicate/synthetic PASS не является deployment permit; fresh guards обязательны. Root ранний readonly native capture подтвердил D1/keys exist/steadyready/disabled plan, не установку.
 
+### Пассивная проверка source в chat перед первым native stage
+
+Root readonly preflight обнаружил: chat Config содержит Nodehooks, поэтому прежний runtime_tree(chat) правильно отказал READ_PROBE_HOOKS_NOT_ALLOWED. Ранний R5 SHA87378… не staged и не повторяется. Revised R5 сохраняет probe_profile/Env guards для content/CRM без ослабления. Для ровно одного chat source теперь закрытый пассивный `docker cp <fresh exact chatCID>:/app/client-bot-bridge.js -`: команды Node в chat нет, hooks не исполняются, файловая система не извлекается и не меняется.
+
+Capability выдаётся только внутри helper после exact foreign identity/config/image check, сразу отзывается и при ошибке. Only basename client-bot-bridge.js; plain tar stdout≤512000B/process20с, один regular header≤256000B, no symlink/hardlink/PAX/sparse/path/extra/nonzero trailing data, exact pinned sourceSHA. Tar не сообщает inode nlink исходника; helper не заявляет такую проверку. Это только read+hash известного source, не установка или смена inode. Before/after docker inspect подтверждает тот же foreign container/config/image/state. Content/CRM runtime tree и все остальные ограничения остаются прежними. Unknown read не повторяется автоматически.
+
 ## Что закрыто и что ещё требуется
 
 Три прежних placeholder-блокировки устранены конкретным кодом/доказательствами:
@@ -93,6 +99,7 @@ Guard проверяет no refresh через entire apply+margin window: cache
 ## Offline проверки
 
 - `python test_install.py` —32tests, real tempfiles/SQLite/tar, Docker/lease modeled; включая scope/failclosed/layer/unknown.
+- `python test_passive_chat_source.py` —8tests: hooked profile пассивно, closed one-use argv/cap, links/paths/extra/PAX/corruption/size/trailing/SHA, foreign identity, unknown no replay, реальный source_review_guard с прежним CRM branch.
 - `python test_diagnostic_preservation.py` —13tests: реальные heartbeat/ignored INSERT gaps, business/alerts/othersequence rejection, timestamp/TTL/clock/anchor, source branches/multiplicity, hwm chain, generation guards, exact current backup, late business fence.
 - `python test_economy_projection.py` —10tests,192 source-extracted conformance cases плюс opaque/shape/cache/window.
 - `python test_vault_binding.py` —9tests, real SQLite + fixed crypto-selector + real Python projection, full-cipher/config mismatch, unrelated-write scope proof + wholeDB refusal, late-write fence, nonce replay/mismatch/expiry/parent/env/source/identity.
@@ -100,4 +107,4 @@ Guard проверяет no refresh через entire apply+margin window: cache
 - `python test_opaque_archives.py` —8tests, реальные raw files/EXCLcopies и запрет SQLiteopen; absent/presentwal/shm, drift/inode/bounds/review/backup. На Windows только safe_read fdctime reader заменён path-stability fixture, Linux production FD guards не менялись.
 - `node --test test_vault_probe.cjs` —10tests, synthetic AES-GCM/HKDF keys only; stalecheck/balance distinction, wrongkey, corrupt envelope, host/contract, empty secret, sourcepin, full HMAC config/cipher/nonce binding.
 
-Итого98tests (без повтора full suites account/widget, Root их проверил52 отдельно). Все тесты обязательны после finalfreeze. Ни один native effect ими не выдан за проверенный.
+Итого106tests (без повтора full suites account/widget, Root их проверил52 отдельно). Все тесты обязательны после finalfreeze. Ни один native effect ими не выдан за проверенный.

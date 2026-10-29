@@ -89,8 +89,9 @@
     "crypto": 10,
     "opaqueArchives": 8,
     "imageArchive": 16,
-    "total": 98,
-    "diagnosticPreservation": 13
+    "total": 106,
+    "diagnosticPreservation": 13,
+    "passiveChatSource": 8
   },
   "latestReadonlyPreparationReportedByRoot": {
     "composeFiles": 68,
@@ -117,5 +118,18 @@
     "generationMaximum": 2,
     "autoRetry": false,
     "databaseWrites": 0
-  }
+  },
+  "passiveChatSource": {
+    "nodeExec": false,
+    "file": "/app/client-bot-bridge.js",
+    "transport": "closed docker cp stdout tar",
+    "maxArchiveBytes": 512000,
+    "maxFileBytes": 256000,
+    "timeoutSeconds": 20,
+    "foreignBeforeAfter": true,
+    "archiveExtraction": false,
+    "probeProfileUnchanged": true
+  },
+  "rootTests": 106,
+  "independentTests": 106
 }

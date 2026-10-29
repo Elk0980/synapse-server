@@ -90,6 +90,29 @@ def runtime_tree(container):
     probe_profile(container['Config'])
     return json.loads(run(['docker','exec',container['Id'],'node','-e',TREE_JS]))
 
+_PASSIVE_CHAT_READS=set()
+PASSIVE_TAR_LIMIT=512000
+
+def passive_chat_source(container,wanted):
+    # Passive archive read: never invokes Node or startup hooks in chat.
+    need(HEX.fullmatch(wanted)and re.fullmatch('[a-f0-9]{64}',container['Id']),'PASSIVE_CHAT_SCOPE')
+    need(foreign(inspect_container('synapse-chat-1'))==foreign(container),'PASSIVE_CHAT_IDENTITY_CHANGED')
+    argv=['docker','cp',container['Id']+':/app/client-bot-bridge.js','-'];capability=tuple(argv)
+    need(capability not in _PASSIVE_CHAT_READS,'PASSIVE_CHAT_READ_ALREADY_ACTIVE');_PASSIVE_CHAT_READS.add(capability)
+    try:raw=run(argv,timeout=20)
+    finally:_PASSIVE_CHAT_READS.remove(capability)
+    need(len(raw)<=PASSIVE_TAR_LIMIT,'PASSIVE_CHAT_ARCHIVE_BOUND')
+    with tarfile.open(fileobj=io.BytesIO(raw),mode='r:')as archive:
+        members=archive.getmembers();need(len(members)==1,'PASSIVE_CHAT_SINGLE_FILE_REQUIRED');entry=members[0]
+        need(entry.name=='client-bot-bridge.js'and entry.type in(tarfile.REGTYPE,tarfile.AREGTYPE)and entry.sparse is None and not entry.linkname and not entry.pax_headers and entry.offset==0 and 0<entry.size<=256000,'PASSIVE_CHAT_REGULAR_FILE_REQUIRED')
+        end=entry.offset_data+((entry.size+511)//512)*512
+        need(len(raw)>=end+1024 and len(raw)%512==0 and not any(raw[end:]),'PASSIVE_CHAT_TRAILING_DATA')
+        stream=archive.extractfile(entry);need(stream is not None,'PASSIVE_CHAT_MEMBER_REQUIRED');value=stream.read(256001)
+        need(len(value)==entry.size and sha(value)==wanted,'PASSIVE_CHAT_SOURCE_PIN_CHANGED')
+    need(foreign(inspect_container('synapse-chat-1'))==foreign(container),'PASSIVE_CHAT_IDENTITY_CHANGED')
+    return wanted
+
+
 def image_tree(image):
     probe_profile(image_info(image)['Config'])
     return json.loads(run(['docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint=node',image,'-e',TREE_JS]))
@@ -192,6 +215,7 @@ def allowed_command(argv):
     if type(argv)is not list or not all(type(v)is str and '\x00' not in v for v in argv):return False
     a=tuple(argv)
     if a==('lslocks','--json','--output','PID,PATH'):return True
+    if len(a)==4 and a[:2]==('docker','cp'):return bool(re.fullmatch(r'[a-f0-9]{64}:/app/client-bot-bridge\.js',a[2])and a[3]=='-'and a in _PASSIVE_CHAT_READS)
     if len(a)==3 and a[:2]==('docker','inspect') and a[2]in CONTAINERS:return True
     if len(a)==4 and a[:3]==('docker','image','inspect') and IMAGE.fullmatch(a[3]):return True
     if len(a)==6 and a[:4]==('docker','image','inspect','--format') and a[4]=='{{.Id}}' and re.fullmatch('[A-Za-z0-9][A-Za-z0-9_./:@-]{0,255}',a[5]):return True
@@ -218,7 +242,7 @@ def allowed_command(argv):
 def _process(argv,timeout,limit=MAX_FILE):
     allowed_system=argv in(['systemctl','is-active','synapse-sync.timer'],['systemctl','is-enabled','synapse-sync.timer'],['systemctl','show','synapse-sync.service','--property=ExecStart','--value'])
     need(allowed_system or allowed_command(argv),'CLOSED_COMMAND_CAPABILITY_REFUSED')
-    need(type(timeout)is int and 0<timeout<=180 and limit in(MAX_FILE,MAX_ARCHIVE),'PROCESS_DEFAULT_BOUNDS_REQUIRED')
+    need(type(timeout)is int and 0<timeout<=180 and limit in(MAX_FILE,MAX_ARCHIVE,PASSIVE_TAR_LIMIT)and(limit!=PASSIVE_TAR_LIMIT or argv[:2]==['docker','cp']),'PROCESS_DEFAULT_BOUNDS_REQUIRED')
     import tempfile
     need(resource is not None and os.name=='posix','NATIVE_BOUNDED_PROCESS_REQUIRED')
     def limits():resource.setrlimit(resource.RLIMIT_FSIZE,(limit,limit))
@@ -232,7 +256,8 @@ def _process(argv,timeout,limit=MAX_FILE):
 
 def run(argv,timeout=90):
     need(allowed_command(argv),'CLOSED_COMMAND_CAPABILITY_REFUSED')
-    code,out,err=_process(argv,timeout,MAX_ARCHIVE if argv[:4]==['docker','image','save','--output']else MAX_FILE)
+    limit=PASSIVE_TAR_LIMIT if argv[:2]==['docker','cp']else MAX_ARCHIVE if argv[:4]==['docker','image','save','--output']else MAX_FILE
+    code,out,err=_process(argv,timeout,limit)
     need(code==0,'COMMAND_FAILED_INSPECT_ONLY');return out
 
 def policy_state():
@@ -606,10 +631,12 @@ def source_review_guard(rows,tree):
     for key,want in load(AREA/'reviewed-source-pins.json').items():
         role,name=key.split('/',1)
         if role=='content':need(tree.get(name,{}).get('sha256')==want,'STARTUP_SOURCE_PIN_CHANGED:'+name)
+        elif role=='chat':
+            need(name=='client-bot-bridge.js','PASSIVE_CHAT_EXACT_SOURCE_REQUIRED');passive_chat_source(rows['synapse-chat-1'],want)
         else:
-            need(role in('crm','chat'),'UNKNOWN_REVIEWED_SOURCE_ROLE')
-            # Pure full-tree read, no application import.
-            other=runtime_tree(rows[CRM if role=='crm'else'synapse-chat-1']);need(other.get(name,{}).get('sha256')==want,'CRM_DISPATCH_SOURCE_PIN_CHANGED')
+            need(role=='crm','UNKNOWN_REVIEWED_SOURCE_ROLE')
+            # Existing CRM Node profile guard remains mandatory and unchanged.
+            other=runtime_tree(rows[CRM]);need(other.get(name,{}).get('sha256')==want,'CRM_DISPATCH_SOURCE_PIN_CHANGED')
 
 def managed_guard(paths):
     content=paths['content:/data/content.sqlite']['hostPath']
