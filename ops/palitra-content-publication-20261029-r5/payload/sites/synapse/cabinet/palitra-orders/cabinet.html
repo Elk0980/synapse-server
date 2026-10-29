@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru" data-entry="cabinet">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="referrer" content="same-origin">
+<!-- Вход владельца/сотрудника на адресе кабинета (https://synapse.synapsebusiness.ru): существующая cookie кабинета,
+     whoami + CSRF. Без crm-session.js и без инициализации магазина (аккаунт/чат покупателя здесь не запрашиваются).
+     Owner кабинета получает экран администратора; роль portal admin права owner кабинета не даёт.
+     Без mock и переключателя ролей. Сеть/E-R1 выключены флагами в native-host.js до native-proof Root. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+<title>Компании — приложение</title>
+<link rel="stylesheet" href="shell.css?v=20261029-content-publication-r2">
+<link rel="stylesheet" href="customer-reports-ui.css?v=20261019-r7">
+<link rel="stylesheet" href="workflow-ui.css?v=20261020-client-chat-offers-r1">
+<link rel="stylesheet" href="attachments-ui.css?v=1">
+<link rel="stylesheet" href="palitra-publication-composer.css?v=20261029-content-publication-r2">
+<link rel="stylesheet" href="palitra-platform-preview.css?v=20261029-content-publication-r2">
+<link rel="manifest" href="manifest-cabinet.webmanifest">
+<meta name="theme-color" content="#68713b">
+</head>
+<body>
+<div class="shell">
+  <div class="phone" id="phone">
+    <header class="app-header" id="header"></header>
+    <main class="app-body" id="body" tabindex="-1"><p class="app-empty">Загрузка…</p></main>
+    <div id="overlay"></div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<noscript><p class="app-empty">Для приложения нужен JavaScript.</p></noscript>
+<script src="design-data.js?v=4"></script>
+<script src="company-context.js?v=20261019-r7"></script>
+<script src="customer-reports-ui.js?v=20261019-r7"></script>
+<script src="synapse-bridge.js?v=20261019-r7"></script>
+<script src="native-host.js?v=20261029-content-publication-r4"></script>
+<script src="push-adapter.js?v=20261020-client-chat-offers-r1"></script>
+<script src="palitra-response-report-ui.js?v=20261020-darya-workspace-r2"></script>
+<script src="palitra-platform-preview.js?v=20261029-content-publication-r2"></script>
+<script src="palitra-publication-composer.js?v=20261029-content-publication-r4"></script>
+<script src="palitra-content-tasks-ui.js?v=20261029-content-publication-r5"></script>
+<script src="workflow-ui.js?v=20261023-chat-paths-r1"></script>
+<script src="attachments-ui.js?v=20261023-chat-cleanup-r1"></script>
+<script src="shell.js?v=20261029-content-publication-r3"></script>
+
+<!-- PALITRA_ACTION_CONTROLS_R3 -->
+<link rel="stylesheet" href="/content/ui/palitra-action-icons.css?v=20261021-r5">
+<script src="/content/ui/palitra-action-icons.js?v=20261021-r5" defer></script>
+</body>
+</html>
