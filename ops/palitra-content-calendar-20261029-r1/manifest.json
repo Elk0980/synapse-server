@@ -1,5 +1,6 @@
 {
   "packageId": "palitra-content-calendar-20261029-r1",
+  "helperSha256": "fc9b8e288c39dd0d219b20f8ae9a6ed596ed6487d93a62facf2dffbb1fd4b2c4",
   "targets": [
     {
       "target": "sites/synapse/cabinet/palitra-orders/cabinet.html",
