@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "status": "ROOT_REVIEWED_CODE_ONLY_BACKEND_REQUIRED",
+  "siteId": "site-44bbe13f1bad5e005b2a",
+  "companyCode": "palitra-love",
+  "baseVersion": 332,
+  "baseRevision": "3a405874ec122201d7be28b9ca378d35f10f94f553fe03b4c94ca2a30f713a64",
+  "requiredRuntime": {
+    "draft-account-service.cjs": "23a0d76ed2d5d2bef47ad49e5822829a088b6148ceeffae09731b6f499d34f26",
+    "site-workspace-feature.js": "f36fe867ef6c5bf0f180ae3caec177f296503f365606c0d3e2b9cf262964ac5e"
+  },
+  "files": [
+    {
+      "file": "storefront.js",
+      "target": "assets/storefront.js",
+      "beforeSha256": "b33d8bc56b9efd3bbd32f27f5eb93ccdd90c467a8a94b5016408cb70e415709b",
+      "afterSha256": "98ebd1820e7339d17ee05d4f9b87be531bbceff719859221c990606ca1a7413b",
+      "bytes": 59930
+    },
+    {
+      "file": "register.html",
+      "target": "account/register/index.html",
+      "beforeSha256": "00db7c95700410cd57b21c08f02f643e811871c7074497638e0c35d33c9ceae7",
+      "afterSha256": "8d5f8e165307dfc9272cbe8ec3851f0f85a2e6db370558b52face10dfb74dbf0",
+      "bytes": 12482
+    }
+  ]
+}
