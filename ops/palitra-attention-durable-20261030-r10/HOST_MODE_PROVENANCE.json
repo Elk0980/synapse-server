@@ -1,0 +1,36 @@
+{
+  "status": "ROOT_REPORTED_NATIVE_READONLY_METADATA_NOT_DEPLOYMENT_PERMIT",
+  "asOf": "2026-10-29T23:23:52Z",
+  "sourceProof": "ROUTE_ACTUAL/R9_PREHISTORY_REFUSED_STATIC_MODE.png",
+  "previousOutcome": "R9 stage1 PASS; prehistory1 HOST_STATIC_ROOT_MODE refused before history/base/build/apply",
+  "targets": {
+    "/opt/synapse/sites/synapse/cabinet/palitra-orders/native-host.js": {
+      "mode": "0600",
+      "uid": 0,
+      "gid": 0,
+      "nlink": 1,
+      "regular": true,
+      "symlink": false,
+      "canonical": true,
+      "parentMode": "0755",
+      "parentUid": 0,
+      "parentGid": 0,
+      "sha256": "f27b5ae1f9c0899a7b99ed756730874238c94c15ebda3d2913bc88d62d2b4d80"
+    },
+    "/opt/synapse/sites/synapse/cabinet/palitra-orders/shell.js": {
+      "mode": "0600",
+      "uid": 0,
+      "gid": 0,
+      "nlink": 1,
+      "regular": true,
+      "symlink": false,
+      "canonical": true,
+      "parentMode": "0755",
+      "parentUid": 0,
+      "parentGid": 0,
+      "sha256": "b40b738cab687e863fffc7e18486b068d5e2b21ed43bf5abfd230ae9d3244588"
+    }
+  },
+  "requiredPolicy": "strict0600-only; no0644/0660 accepted; aftermode copied from before; productionchmod0",
+  "agentNativeActions": 0
+}

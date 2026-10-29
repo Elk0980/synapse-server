@@ -1,0 +1,112 @@
+--- R8/install.py
++++ R9/install.py
+@@ -11,7 +11,7 @@
+  resource=None
+ from datetime import datetime,timezone,timedelta
+ sys.dont_write_bytecode=True
+-NAME='palitra-attention-durable-20261030-r8'
++NAME='palitra-attention-durable-20261030-r9'
+ ROOT=Path('/opt/synapse');AREA=ROOT/'releases'/NAME;SELF=Path(__file__).resolve();LOCK=ROOT/'.palitra-app-release.lock'
+ CRM='synapse-crm-1';CONTENT='synapse-content-1';CONTAINERS=(CRM,CONTENT,'synapse-hugh-runtime-1','synapse-chat-1','caddy')
+ BASE_IMAGE='sha256:e22ca4d3892a01454d749fbef49c10c2a1a93f0a863d977914f32ae21455a343'
+@@ -20,7 +20,7 @@
+ MAX_FILE=64*1024*1024;MAX_ARCHIVE=2*1024*1024*1024;PREPARE_TTL=900;APPLY_TTL=120;GRACE=60
+ sha=lambda raw:hashlib.sha256(raw).hexdigest()
+ enc=lambda v:(json.dumps(v,ensure_ascii=False,sort_keys=True,separators=(',',':'))+'\n').encode()
+-FILE_PINS={'/app/palitra-manager-attention.cjs': ('e950f9e4723a47abd8d5d2b039fe05d25a5ba13b362a46eac34c09004eb23b59', '6b8a661a60efd47a9d0bc1e5a3b2f343324e35c117170a20d1b90c0e2c79d649'), '/app/server.js': ('23c9664d8209ecf4aa4ce822a1a05a8cf0c2ee3fcb11afa93e396b1d5282d4ac', '183a0edd7559a7fa029c3b17e8931592133961f73454fb59afbcc8c6761b7713'), '/app/palitra-orders-public/native-host.js': ('697863cbd5ac96af57a58bcae84d4b0ba858b18d39a955c527463a6c4c756728', '0d5141c14c769cbd4dd4216e8983c742813877e5a225809f2113c1fbf559be7f'), '/app/palitra-orders-public/shell.js': ('b39d4cdb4d07673988249863d0ce4e767981565ed6f77350073aeff61ec273c9', 'e208cac821399fec15641450f7781c82cc7944b1ca4dfa57f5dd12412078971e')}
++FILE_PINS={'/app/palitra-manager-attention.cjs': ('e950f9e4723a47abd8d5d2b039fe05d25a5ba13b362a46eac34c09004eb23b59', '6b8a661a60efd47a9d0bc1e5a3b2f343324e35c117170a20d1b90c0e2c79d649'), '/app/server.js': ('23c9664d8209ecf4aa4ce822a1a05a8cf0c2ee3fcb11afa93e396b1d5282d4ac', '183a0edd7559a7fa029c3b17e8931592133961f73454fb59afbcc8c6761b7713'), '/app/palitra-orders-public/native-host.js': ('697863cbd5ac96af57a58bcae84d4b0ba858b18d39a955c527463a6c4c756728', '0d5141c14c769cbd4dd4216e8983c742813877e5a225809f2113c1fbf559be7f'), '/app/palitra-orders-public/shell.js': ('b39d4cdb4d07673988249863d0ce4e767981565ed6f77350073aeff61ec273c9', 'b7efae7638e05351296d93243f771b2c7ca134672bda1abe348ac7912d3fab60')}
+ ACTIVE_DATABASE_PATHS=('/data/content.sqlite','/data/salon-reports.sqlite','/data/projects/palitra-love/sites/site-44bbe13f1bad5e005b2a/private/draft-accounts.sqlite')
+ OPAQUE_ARCHIVE_PATHS=('/data/nebo-project-20261020/content-before-site-r3.sqlite','/data/nebo-project-backup-20261020/content.sqlite','/data/nebo-project-backup-20261020/salon-reports.sqlite','/data/palitra-app-before-20261013.sqlite','/data/palitra-map-caption-20261019/content.sqlite','/data/palitra-production-before-20261013.sqlite','/data/palitra-unified-orders-20261021-r8-completion-c1-save/content.sqlite')
+ TARGETS=tuple(FILE_PINS)
+@@ -29,7 +29,7 @@
+ STATIC_NAMES={'/opt/synapse/sites/synapse/cabinet/palitra-orders/native-host.js': 'cab-native-host.js', '/opt/synapse/sites/synapse/cabinet/palitra-orders/shell.js': 'cab-shell.js'}
+ PRESERVED_R7={'/app/draft-account-service.cjs': '23a0d76ed2d5d2bef47ad49e5822829a088b6148ceeffae09731b6f499d34f26', '/app/customer-chat.js': '1a3927539386fe4e075bf9aa9ec7cfc995fe0b36787ebb67ad7898359058456e', '/app/customer-chat-native-adapter.cjs': 'a72732560bd9adb109080c09cf0ce3bd7774eb72614ea29073d301d44245037e', '/app/palitra-review-public/palitra-chat.js': '5752c762048c18aa01ccc52f503ef63230468d79ff7749895b6e4e0dd37d124b', '/app/site-workspace-feature.js': 'f36fe867ef6c5bf0f180ae3caec177f296503f365606c0d3e2b9cf262964ac5e'}
+ MANAGED_REV='245ca86f12e50e696ee39c5d6c3ab0f1924c05e933abbcc3ba249a20e6d8d9f8' # Root native readonly22:45Z
+-REVIEWED_DATA_PINS={'reviewed-sql.json': '410b03163c43b703212e212d47821d9f2c427b21ee5ac17013d08a54c0193ba5', 'reviewed-source-pins.json': 'd4de0c682d08f12764311754444501f7bcaf3ae40bc4fbc7c11903673bff964e', 'inventory-review.json': '3f7ff5bf0b12e647542d5cf2b24c756eb801a9a03a4a1f5cc5cd4a1f1ba94222', 'economy_projection.py': 'f320cb7299bdb75037272ae55e388e76697e6ce4d3a910eb1b5412eae3d3a283', 'vault_probe.cjs': '8714b8bc8cda5a6724227e31fdab4b37825b161026d9326d3c61296589263c13', 'image_archive_audit.py': 'f9af133089f08ab2876945a1dd5b4c5a225097e5fc6fd91f6ebbefaa60e1cd8a', 'diagnostic_preservation.py': '658ddfc204ba95c75889a5f0d9f73d9f5142a30261cac462e461cbd431747a70', 'managed_history.py': '69690754e6efb394e3fede769257dc39df7fd1fe221d018c5cd7f77e346aa2cd', 'server_phase.py': '11d436096c1f56c7c4beccbbe18dd85c4dd875cb377ce1a4d412d0df4e492c10', 'host_static.py': 'ccb00090e56e6f922780e397742960a2d5a3835de6d60b3f4ab1bbcdec539766', 'scope-review.json': 'ee3ec42f0d09fd814dfe3f6bf59c51670e15a1f5759211f0c9a3e0dd56e41705', 'source-proof/server-before.js': '23c9664d8209ecf4aa4ce822a1a05a8cf0c2ee3fcb11afa93e396b1d5282d4ac', 'managed-anchor.json': '974ed3ee63c85fa0c2505d6d8188a4da2c546fde19c356b0c55d12c350eba503'}
++REVIEWED_DATA_PINS={'reviewed-sql.json': '410b03163c43b703212e212d47821d9f2c427b21ee5ac17013d08a54c0193ba5', 'reviewed-source-pins.json': 'd4de0c682d08f12764311754444501f7bcaf3ae40bc4fbc7c11903673bff964e', 'inventory-review.json': '3f7ff5bf0b12e647542d5cf2b24c756eb801a9a03a4a1f5cc5cd4a1f1ba94222', 'economy_projection.py': 'f320cb7299bdb75037272ae55e388e76697e6ce4d3a910eb1b5412eae3d3a283', 'vault_probe.cjs': '8714b8bc8cda5a6724227e31fdab4b37825b161026d9326d3c61296589263c13', 'image_archive_audit.py': 'f9af133089f08ab2876945a1dd5b4c5a225097e5fc6fd91f6ebbefaa60e1cd8a', 'diagnostic_preservation.py': '658ddfc204ba95c75889a5f0d9f73d9f5142a30261cac462e461cbd431747a70', 'managed_history.py': '69690754e6efb394e3fede769257dc39df7fd1fe221d018c5cd7f77e346aa2cd', 'server_phase.py': '11d436096c1f56c7c4beccbbe18dd85c4dd875cb377ce1a4d412d0df4e492c10', 'host_static.py': 'ccb00090e56e6f922780e397742960a2d5a3835de6d60b3f4ab1bbcdec539766', 'scope-review.json': '0c0be494a06204524a1a155655edfdf25f8c826418d7c73eaae76a32ba0457d1', 'source-proof/server-before.js': '23c9664d8209ecf4aa4ce822a1a05a8cf0c2ee3fcb11afa93e396b1d5282d4ac', 'managed-anchor.json': '974ed3ee63c85fa0c2505d6d8188a4da2c546fde19c356b0c55d12c350eba503'}
+ INVENTORY_REVIEW_SHA='3f7ff5bf0b12e647542d5cf2b24c756eb801a9a03a4a1f5cc5cd4a1f1ba94222'
+ def need(ok, reason):
+     if not ok: raise ValueError(reason)
+--- R8/make_manifest.py
++++ R9/make_manifest.py
+@@ -1,4 +1,4 @@
+-"""Code-only R8 assembler; no claim that supplied fresh image metadata is live proof."""
++"""Code-only R9 assembler; no claim that supplied fresh image metadata is live proof."""
+ from pathlib import Path
+ import importlib.util,json,sys
+ sys.dont_write_bytecode=True
+--- R8/scope-review.json
++++ R9/scope-review.json
+@@ -1,7 +1,7 @@
+ {
+-  "kind": "private-after-r7-rebase-plan-not-deployment-manifest",
++  "kind": "private-r9-combined-attention-account-prefill-code-scope",
+   "sourceChangedForR7": false,
+-  "candidateCopyCreated": false,
++  "candidateCopyCreated": true,
+   "cachedLineageVerified": true,
+   "livePermit": false,
+   "nativeReadPerformed": false,
+@@ -51,12 +51,17 @@
+       "target": "/app/palitra-orders-public/shell.js",
+       "kind": "content-runtime",
+       "beforeSha256": "b39d4cdb4d07673988249863d0ce4e767981565ed6f77350073aeff61ec273c9",
+-      "afterSha256": "e208cac821399fec15641450f7781c82cc7944b1ca4dfa57f5dd12412078971e",
++      "afterSha256": "b7efae7638e05351296d93243f771b2c7ca134672bda1abe348ac7912d3fab60",
+       "beforeBytes": 368671,
+-      "afterBytes": 371741,
+-      "candidateSource": "D:\\Codex_Task_Artifacts\\PALITRA_ORDER_DUPLICATE_20261029\\ATTENTION_DISPLAY_R4\\candidate\\shop-shell.js",
++      "afterBytes": 379553,
++      "candidateSource": "D:\\Codex_Task_Artifacts\\PALITRA_ORDER_DUPLICATE_20261029\\PRIVATE_SHOP_ACCOUNT_PREFILL_R1\\candidate\\shop-shell.js",
+       "cachedBeforeSource": "D:\\Codex_Task_Artifacts\\PALITRA_ORDER_DUPLICATE_20261029\\ATTENTION_DISPLAY_R4\\base\\shop-shell.js",
+-      "freshNativeBeforeCheckRequired": true
++      "freshNativeBeforeCheckRequired": true,
++      "combinedProvenance": {
++        "attentionBaseSha256": "e208cac821399fec15641450f7781c82cc7944b1ca4dfa57f5dd12412078971e",
++        "rootAndIndependentTests": 74,
++        "status": "ROOT_REVIEWED_CODE_ONLY_NOT_NATIVE_PERMIT"
++      }
+     },
+     {
+       "file": "cab-native-host.js",
+@@ -105,7 +110,7 @@
+     {
+       "target": "/app/palitra-orders-public/shell.js",
+       "r7AcceptedAfterSha256": "b39d4cdb4d07673988249863d0ce4e767981565ed6f77350073aeff61ec273c9",
+-      "requiredAfterAttentionSha256": "e208cac821399fec15641450f7781c82cc7944b1ca4dfa57f5dd12412078971e",
++      "requiredAfterAttentionSha256": "b7efae7638e05351296d93243f771b2c7ca134672bda1abe348ac7912d3fab60",
+       "attentionIntent": "only-approved-overlap: attention bounded delta above R7 b39"
+     },
+     {
+--- R8/test_runtime_host.py
++++ R9/test_runtime_host.py
+@@ -12,6 +12,20 @@
+   self.global_m=patch.object(inherited,'m',m);self.global_m.start();self.addCleanup(self.global_m.stop);self.f=inherited.Pipeline(methodName='runTest');self.f.store_manifest=types.MethodType(self.store_manifest,self.f);self.f.setUp();self.addCleanup(self.f.tearDown)
+   self.plancheck=patch.object(m,'r7_plan_guard');self.plancheck.start();self.addCleanup(self.plancheck.stop)
+   self.history=patch.object(m,'history_capture',return_value={'version':334,'revision':'a'*64,'fixture':'history independently tested'});self.history.start();self.addCleanup(self.history.stop)
++  # Windows lacks POSIX fchmod. Model it only in this fresh test module's os namespace;
++  # never mutate the real os module or add a production fallback/branch.
++  original_loader=m.module
++  def fixture_loader(name):
++   loaded=original_loader(name)
++   if name=='host_static.py'and os.name=='nt'and not hasattr(os,'fchmod'):
++    class FixtureOs:
++     def __getattr__(self,key):return getattr(os,key)
++     def fchmod(self,fd,mode):
++      self_test.assertIsInstance(fd,int);self_test.assertIn(mode,(0o600,0o644,0o666))
++    self_test=self;loaded.os=FixtureOs()
++   return loaded
++  self.loader_patch=patch.object(m,'module',side_effect=fixture_loader);self.loader_patch.start();self.addCleanup(self.loader_patch.stop)
++
+   self.f.patches.append(patch.object(m,'managed_guard',return_value={'version':334,'revision':'a'*64}));self.f.patches[-1].start()
+  def store_manifest(self,f):
+   if not getattr(f,'r8_ready',False):
+@@ -96,7 +110,7 @@
+    m.stage('b'*40,m.sha(files['manifest.json']));self.assertTrue((dest/'stage.json').exists());self.assertEqual(len(list((dest/'static-payload').iterdir())),2);self.assertFalse((dest/'base.json').exists())
+  def test_manifest_assembler_uses_only_reviewed_four_plus_two_and_no_real_file_written(self):
+   spec=importlib.util.spec_from_file_location('attention_assembler_test',HERE/'make_manifest.py');assembler=importlib.util.module_from_spec(spec);sys.modules[spec.name]=assembler;spec.loader.exec_module(assembler);am=assembler.m
+-  images={n:'sha256:'+'a'*64 for n in am.CONTAINERS};images[am.CONTENT]=am.BASE_IMAGE;inventory={'sourceReviewSha256':am.INVENTORY_REVIEW_SHA,'contentPaths':list(am.ACTIVE_DATABASE_PATHS+am.OPAQUE_ARCHIVE_PATHS),'crmPaths':['/data/crm.sqlite']};value=assembler.build(images,inventory);self.assertEqual(len(value['files']),4);self.assertEqual(len(value['staticFiles']),2);self.assertFalse((HERE/'manifest.json').exists())
++  images={n:'sha256:'+'a'*64 for n in am.CONTAINERS};images[am.CONTENT]=am.BASE_IMAGE;inventory={'sourceReviewSha256':am.INVENTORY_REVIEW_SHA,'contentPaths':list(am.ACTIVE_DATABASE_PATHS+am.OPAQUE_ARCHIVE_PATHS),'crmPaths':['/data/crm.sqlite']};before=(HERE/'manifest.json').read_bytes()if(HERE/'manifest.json').exists()else None;value=assembler.build(images,inventory);self.assertEqual(len(value['files']),4);self.assertEqual(len(value['staticFiles']),2);self.assertEqual((HERE/'manifest.json').read_bytes()if(HERE/'manifest.json').exists()else None,before)
+  def test_prehistory_witness_cannot_be_replaced_and_env_drift_requires_new_review(self):
+   m.prehistory();self.f.current[m.CONTENT]['Config']['Env'].append('SYNTHETIC_CONFIG_DRIFT=true')
+   with self.assertRaisesRegex(ValueError,'FRESH_BINDING'):m.prepare()
