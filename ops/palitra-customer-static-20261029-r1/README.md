@@ -8,4 +8,4 @@ The installer publishes exactly two static files using fresh root-owned lease, c
 
 Offline validation: `python ops/palitra-customer-static-20261029-r1/test_install.py`. The symlink fixture can skip when Windows lacks symlink permissions. Private UI tests and screenshots remain outside this repository.
 
-Status at code preparation: local validation only, not yet installed.
+Status29Oct: installed once and independently read back. Existing-query public resources and the prior staff session were personally verified at320/390; no runtime/database/restart writes. Full customer-form specification remains in progress.
