@@ -55,7 +55,7 @@
   if(typeof w.ResizeObserver==='function'){observer=new w.ResizeObserver(measure);observer.observe(strip,{box:'border-box'});}else listen(w,'resize',requestMeasure);
   return Object.freeze({setDate,center,move,dispose(){if(disposed)return;disposed=true;clearTimer();if(frame!==null){(w.cancelAnimationFrame||w.clearTimeout).call(w,frame);frame=null;}observer?.disconnect();for(const remove of listeners)remove();drag=null;pending=null;physicalTouches.clear();touches.clear();strip.classList.remove('content-calendar__week--dragging');}});
  }
- 
+
  function createCalendar({document:d,window:w,h,host,background,onSelect}){
   let selected=null,today=null,month=null,overlay=null,disposed=false;
   const label=s=>new Intl.DateTimeFormat('ru-RU',{timeZone:'UTC',day:'numeric',month:'long',year:'numeric'}).format(new Date(s+'T12:00:00Z'));
