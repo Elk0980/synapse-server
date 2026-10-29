@@ -414,6 +414,13 @@ taisabai.synapsebusiness.ru {
   import static
 }
 
+# --- CELL LAB: пептидная терапия для клиник (черновик) -----------------------
+peptides.synapsebusiness.ru {
+  root * /srv/sites/peptides
+  import draft
+  import static
+}
+
 # --- Черновики сайтов -------------------------------------------------------
 drafts.synapsebusiness.ru {
   root * /srv/sites/drafts
