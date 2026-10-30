@@ -1,4 +1,1 @@
-payload/assets/*.js -text
-fixtures/base/* -text
-accepted-profile-session.py -text
-verify_buyer_receipt.py -text
+* -text
