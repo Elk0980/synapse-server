@@ -1,0 +1,162 @@
+{
+  "kind": "private-r12-attention-combined-fastR2-fresh-base-code-only-NOT_NATIVE_PERMIT",
+  "sourceChangedForR7": false,
+  "candidateCopyCreated": true,
+  "cachedLineageVerified": true,
+  "livePermit": false,
+  "nativeReadPerformed": false,
+  "parentContentImageRequired": "sha256:e22ca4d3892a01454d749fbef49c10c2a1a93f0a863d977914f32ae21455a343",
+  "runtimeTargets": 4,
+  "cabinetStaticTargets": 2,
+  "totalTargets": 6,
+  "targets": [
+    {
+      "file": "palitra-manager-attention.cjs",
+      "target": "/app/palitra-manager-attention.cjs",
+      "kind": "content-runtime",
+      "beforeSha256": "e950f9e4723a47abd8d5d2b039fe05d25a5ba13b362a46eac34c09004eb23b59",
+      "afterSha256": "6b8a661a60efd47a9d0bc1e5a3b2f343324e35c117170a20d1b90c0e2c79d649",
+      "beforeBytes": 20467,
+      "afterBytes": 29406,
+      "candidateSource": "D:\\Codex_Task_Artifacts\\PALITRA_ORDER_DUPLICATE_20261029\\ATTENTION_DISPLAY_R4\\candidate\\palitra-manager-attention.cjs",
+      "cachedBeforeSource": "D:\\Codex_Task_Artifacts\\PALITRA_ORDER_DUPLICATE_20261029\\ATTENTION_DISPLAY_R4\\base\\palitra-manager-attention.cjs",
+      "freshNativeBeforeCheckRequired": true
+    },
+    {
+      "file": "server.js",
+      "target": "/app/server.js",
+      "kind": "content-runtime",
+      "beforeSha256": "23c9664d8209ecf4aa4ce822a1a05a8cf0c2ee3fcb11afa93e396b1d5282d4ac",
+      "afterSha256": "183a0edd7559a7fa029c3b17e8931592133961f73454fb59afbcc8c6761b7713",
+      "beforeBytes": 133238,
+      "afterBytes": 133499,
+      "candidateSource": "D:\\Codex_Task_Artifacts\\PALITRA_ORDER_DUPLICATE_20261029\\ATTENTION_DISPLAY_R4\\candidate\\server.js",
+      "cachedBeforeSource": "D:\\Codex_Task_Artifacts\\PALITRA_ORDER_DUPLICATE_20261029\\ATTENTION_DISPLAY_R4\\base\\server.js",
+      "freshNativeBeforeCheckRequired": true
+    },
+    {
+      "file": "shop-native-host.js",
+      "target": "/app/palitra-orders-public/native-host.js",
+      "kind": "content-runtime",
+      "beforeSha256": "697863cbd5ac96af57a58bcae84d4b0ba858b18d39a955c527463a6c4c756728",
+      "afterSha256": "0d5141c14c769cbd4dd4216e8983c742813877e5a225809f2113c1fbf559be7f",
+      "beforeBytes": 47038,
+      "afterBytes": 52696,
+      "candidateSource": "D:\\Codex_Task_Artifacts\\PALITRA_ORDER_DUPLICATE_20261029\\ATTENTION_DISPLAY_R4\\candidate\\shop-native-host.js",
+      "cachedBeforeSource": "D:\\Codex_Task_Artifacts\\PALITRA_ORDER_DUPLICATE_20261029\\ATTENTION_DISPLAY_R4\\base\\shop-native-host.js",
+      "freshNativeBeforeCheckRequired": true
+    },
+    {
+      "file": "shop-shell.js",
+      "target": "/app/palitra-orders-public/shell.js",
+      "kind": "content-runtime",
+      "beforeSha256": "b39d4cdb4d07673988249863d0ce4e767981565ed6f77350073aeff61ec273c9",
+      "afterSha256": "b7efae7638e05351296d93243f771b2c7ca134672bda1abe348ac7912d3fab60",
+      "beforeBytes": 368671,
+      "afterBytes": 379553,
+      "candidateSource": "D:\\Codex_Task_Artifacts\\PALITRA_ORDER_DUPLICATE_20261029\\PRIVATE_SHOP_ACCOUNT_PREFILL_R1\\candidate\\shop-shell.js",
+      "cachedBeforeSource": "D:\\Codex_Task_Artifacts\\PALITRA_ORDER_DUPLICATE_20261029\\ATTENTION_DISPLAY_R4\\base\\shop-shell.js",
+      "freshNativeBeforeCheckRequired": true,
+      "combinedProvenance": {
+        "attentionBaseSha256": "e208cac821399fec15641450f7781c82cc7944b1ca4dfa57f5dd12412078971e",
+        "rootAndIndependentTests": 74,
+        "status": "ROOT_REVIEWED_CODE_ONLY_NOT_NATIVE_PERMIT"
+      }
+    },
+    {
+      "file": "cab-native-host.js",
+      "target": "/opt/synapse/sites/synapse/cabinet/palitra-orders/native-host.js",
+      "kind": "cabinet-static",
+      "beforeSha256": "f27b5ae1f9c0899a7b99ed756730874238c94c15ebda3d2913bc88d62d2b4d80",
+      "afterSha256": "c5bedcfb395719d4b9ffa16c0820801dcb04e7c87d308bcc1f70b6f1ac07e704",
+      "beforeBytes": 80759,
+      "afterBytes": 86417,
+      "candidateSource": "D:\\Codex_Task_Artifacts\\PALITRA_ORDER_DUPLICATE_20261029\\ATTENTION_DISPLAY_R4\\candidate\\cab-native-host.js",
+      "cachedBeforeSource": "D:\\Codex_Task_Artifacts\\PALITRA_ORDER_DUPLICATE_20261029\\ATTENTION_DISPLAY_R4\\base\\cab-native-host.js",
+      "freshNativeBeforeCheckRequired": true
+    },
+    {
+      "file": "cab-shell.js",
+      "target": "/opt/synapse/sites/synapse/cabinet/palitra-orders/shell.js",
+      "kind": "cabinet-static",
+      "beforeSha256": "b40b738cab687e863fffc7e18486b068d5e2b21ed43bf5abfd230ae9d3244588",
+      "afterSha256": "1e770b202f0cfd129476d43e98ace02894665f0208ff059ecb5f8afd099fc796",
+      "beforeBytes": 364242,
+      "afterBytes": 367312,
+      "candidateSource": "D:\\Codex_Task_Artifacts\\PALITRA_ORDER_DUPLICATE_20261029\\ATTENTION_DISPLAY_R4\\candidate\\cab-shell.js",
+      "cachedBeforeSource": "D:\\Codex_Task_Artifacts\\PALITRA_ORDER_DUPLICATE_20261029\\ATTENTION_DISPLAY_R4\\base\\cab-shell.js",
+      "freshNativeBeforeCheckRequired": true
+    }
+  ],
+  "r7PayloadPreservation": [
+    {
+      "target": "/app/draft-account-service.cjs",
+      "r7AcceptedAfterSha256": "23a0d76ed2d5d2bef47ad49e5822829a088b6148ceeffae09731b6f499d34f26",
+      "requiredAfterAttentionSha256": "23a0d76ed2d5d2bef47ad49e5822829a088b6148ceeffae09731b6f499d34f26",
+      "attentionIntent": "preserve-exact"
+    },
+    {
+      "target": "/app/customer-chat.js",
+      "r7AcceptedAfterSha256": "1a3927539386fe4e075bf9aa9ec7cfc995fe0b36787ebb67ad7898359058456e",
+      "requiredAfterAttentionSha256": "1a3927539386fe4e075bf9aa9ec7cfc995fe0b36787ebb67ad7898359058456e",
+      "attentionIntent": "preserve-exact"
+    },
+    {
+      "target": "/app/customer-chat-native-adapter.cjs",
+      "r7AcceptedAfterSha256": "a72732560bd9adb109080c09cf0ce3bd7774eb72614ea29073d301d44245037e",
+      "requiredAfterAttentionSha256": "a72732560bd9adb109080c09cf0ce3bd7774eb72614ea29073d301d44245037e",
+      "attentionIntent": "preserve-exact"
+    },
+    {
+      "target": "/app/palitra-orders-public/shell.js",
+      "r7AcceptedAfterSha256": "b39d4cdb4d07673988249863d0ce4e767981565ed6f77350073aeff61ec273c9",
+      "requiredAfterAttentionSha256": "b7efae7638e05351296d93243f771b2c7ca134672bda1abe348ac7912d3fab60",
+      "attentionIntent": "only-approved-overlap: attention bounded delta above R7 b39"
+    },
+    {
+      "target": "/app/palitra-review-public/palitra-chat.js",
+      "r7AcceptedAfterSha256": "5752c762048c18aa01ccc52f503ef63230468d79ff7749895b6e4e0dd37d124b",
+      "requiredAfterAttentionSha256": "5752c762048c18aa01ccc52f503ef63230468d79ff7749895b6e4e0dd37d124b",
+      "attentionIntent": "preserve-exact"
+    },
+    {
+      "target": "/app/site-workspace-feature.js",
+      "r7AcceptedAfterSha256": "f36fe867ef6c5bf0f180ae3caec177f296503f365606c0d3e2b9cf262964ac5e",
+      "requiredAfterAttentionSha256": "f36fe867ef6c5bf0f180ae3caec177f296503f365606c0d3e2b9cf262964ac5e",
+      "attentionIntent": "preserve-exact"
+    }
+  ],
+  "sameCanonicalConversationFunctions": [
+    "conversationPage",
+    "conversationScopeKey",
+    "staffConversationSession",
+    "conversationView",
+    "ownerReadConversation"
+  ],
+  "managedProtection": {
+    "afterVersion": 334,
+    "currentFiles": 141,
+    "storefrontSha256": "98ebd1820e7339d17ee05d4f9b87be531bbceff719859221c990606ca1a7413b",
+    "registerSha256": "8d5f8e165307dfc9272cbe8ec3851f0f85a2e6db370558b52face10dfb74dbf0",
+    "publicRegisterSha256": "c97ba80a77028f17642fcdfefe137ad8c6849cfe2457db703eeb99993c1b023d",
+    "priceVersion": 83
+  },
+  "effectiveComposeFileCountFromRoot": 69,
+  "r7OverlayMustRemainOrderedPredecessor": "/opt/synapse/releases/palitra-customer-content-durable-20261030-r7/content-image-only.json",
+  "otherCompaniesChanged": false,
+  "schemaOrDataChanges": false,
+  "installerCreated": false,
+  "packagingProvenance": {
+    "namespace": "palitra-attention-durable-20261030-r12",
+    "basisNamespace": "palitra-attention-durable-20261030-r11",
+    "basisRegistrySha256": "30ba49ed653aa22eb3e792e02cae65e596ec8c5c2f47cf4934ea2dbc8139229d",
+    "selectedManagedModule": "PRIVATE_MANAGED_FAST_R2/managed_history.py",
+    "selectedModuleSha256": "9d00a086c983a0a7435cf6a6a2f726b570bc787bf52f56fc294ae03684aa640b",
+    "fullOriginalPrefixSha256": "69690754e6efb394e3fede769257dc39df7fd1fe221d018c5cd7f77e346aa2cd",
+    "freshBaseRequired": true,
+    "sealedPredecessorNotReplayed": true,
+    "nativeActions": 0,
+    "rootFinalReviewRequired": true,
+    "nativePermit": false
+  }
+}
