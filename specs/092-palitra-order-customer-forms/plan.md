@@ -32,3 +32,8 @@ AccountService используется также другими чернови
 ## Изолированный mail adapter
 
 Следующий private-only слой: использовать существующий getEnvironment внутри CRM как поздний источник настроек, без возврата/копирования рабочих секретов в content. Прототип принимает только injected fake transport и явное internal-enabled. Проверяет существующий service key, отсутствие browser identity/Origin и отдельную HMAC-подпись точного намерения с ограниченным сроком. Fixed company/realm/origin и фиксированные reset-link/reset-completed шаблоны; произвольные subject/HTML/cc/вложения не принимаются. Digest-only журнал намерений сохраняется до send, повторный job не отправляется заново, потерянный/неопределённый исход не переводится в pending. Это новый приватный контракт, не подключённый endpoint; фактические guards/API/SMTP настройки не меняются. Проверки — только :memory:, fake settings/keys/transport, включая сохранённые настройки и idempotency/отказы.
+
+
+## Приватная клиентская форма восстановления
+
+Один reusable fragment и ранний bootstrap без сторонних скриптов/хранилищ: fragment-token читается в closure, query/hash удаляются до session fetch; при невозможности удаления форма закрыта. Fixed same-origin API, session/CSRF только через текущий GET, POST только по явному submit. Двойное нажатие и unknown outcome блокируются без auto retry/auto login; поздний ответ не стирает более поздний ввод. Referrer-policy no-referrer, обычный вход открывается отдельно, пароли очищаются только после подтверждённого успеха без последующих правок. Штатные login/forgotten страницы не меняются до backend-интеграции. Локальная проверка jsdom и при доступном Chrome — толькоlocalhost/fake accounts/transport, затем уборка собственного helper/tab.
