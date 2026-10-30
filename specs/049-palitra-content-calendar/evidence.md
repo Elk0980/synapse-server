@@ -1,3 +1,11 @@
+## 30.10 17:27 Бангкок — новый статус установлен, внешняя доставка не подтверждена
+
+Publication-status-r1 commit996fe90270c9416217845c2efaba36fb4f0327ea: ровно3existingJS, stage1/prepare1/apply1/separateinspect1 PASS лично Root. Helper45a1d303a922c7837f50a8ed46432718ba185ecec6ffb8aa863d478490c4ead6; manifest7d12ea605875f69ff61c31e65a2f5855743a26369987cffac46a1840a25861e1. Ownlease179738/start24962868 освобождена однимexit и freshfilteredlslocks empty. Все5images/price83/внезадачнаястатика/окружение сохранены, runtime/DB/restarts0. Обычный reload со старымquery получил3точныхafterSHA.
+
+Root live: новая форма Черновик/Согласован и кнопка Согласовать и запланировать; desktop/390/320 scroll==client, метрики сброшены. Старый70v1/draft/textempty/deliveries0 имеет approveAndScheduleAvailable:true и новый selector. При выборе Согласован кнопкаdisabled с причинами: пустой текст, прошедшее время, неподключённые/выключенные каналы. Само согласование не выполнялось; create/approve/schedule/send0. Не выдавать interface/local mocks за реальную внешнюю отправку.
+
+Права учётных записей проверены владельцем только для чтения: у найденного пользователя согласование разрешено, однако он назначен другой компании. В целевой компании найден отдельный пользователь с теми же правами. Не входили за пользователей и не меняли доступ. Уточнение личности ожидается; общий код Palitra не объявляется приёмкой другого клиентского приложения. Имена, логины и компании этой проверки сохранены только в приватном receipt. Приватные evidence: PALITRA_PUBLICATION_STATUS_20261030/NATIVE_OUTCOME.json, NORMAL_RELOAD_RESOURCE_PINS.json, LIVE_OLD70_RECEIPT.json, ACCOUNT_RIGHTS_RECEIPT.json и реальные jpg.
+
 # Свидетельства
 
 ## 30.10 — статусы публикации: код и локальные проверки
