@@ -1,0 +1,44 @@
+{
+  "files": {
+    "accepted-profile-autocomplete.py": {
+      "sha256": "0ce85fcd329e4699651eb3a96b81c475fe0d5703e1266026f76a17fbbf031301",
+      "bytes": 24110
+    },
+    "fixtures/base/register.html": {
+      "sha256": "8d5f8e165307dfc9272cbe8ec3851f0f85a2e6db370558b52face10dfb74dbf0",
+      "bytes": 12482
+    },
+    "fixtures/base/storefront.js": {
+      "sha256": "4edebc359e56d9223f5fc4cfc6c49f85c45f08186099156416503f540510bc32",
+      "bytes": 60068
+    },
+    "payload/assets/storefront.js": {
+      "sha256": "008f75eecee63f7bd6657408d844f08f9f37472e1d1d3c81256f52505423a808",
+      "bytes": 64755
+    },
+    "profile-session-panel.js": {
+      "sha256": "02b9ac136cd5b8830e218f88b207ec93a647a8622edfe1e294b7dda59a6bc436",
+      "bytes": 4013
+    },
+    "README.md": {
+      "sha256": "bd3857ab7a4e9b3341938022507bca270cefec2be396628602dfa328f81e30c2",
+      "bytes": 5241
+    },
+    "REVIEW.json": {
+      "sha256": "f6f40fa68d8551438d13623e0df9d84ba8c9603b3d7cf082a2b2a7de1a26da1f",
+      "bytes": 871
+    },
+    "session-panel.test.cjs": {
+      "sha256": "359d336038088330497bfd756c80f92a45298ea43d1d3dd61152bef87f2b5895",
+      "bytes": 8822
+    },
+    "test_delivery.py": {
+      "sha256": "85cdbf37b50e3a4e857625f4ad8545344886be1f5272231b42bd56d7a6648211",
+      "bytes": 14532
+    },
+    "verify_profile_session.py": {
+      "sha256": "48e6e0ab462a1f193e9cbfc1970d277c38eec5f9f0d39f7458712bad963ea2ab",
+      "bytes": 24105
+    }
+  }
+}

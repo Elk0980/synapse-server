@@ -1,0 +1,237 @@
+"""UI-only evidence/backup/readback. No Save, application imports, SQL writes or network."""
+import argparse,hashlib,json,os,re,sqlite3,stat,subprocess,sys,time
+from pathlib import Path,PurePosixPath
+from datetime import datetime,timezone
+SITE='site-44bbe13f1bad5e005b2a';COMPANY='palitra-love'
+DATA=Path('/var/lib/docker/volumes/synapse_content_data/_data')
+NAME='palitra-profile-autocomplete-20261030-r1';ROOT=Path('/opt/synapse');AREA=ROOT/'releases'/NAME
+R7_AREA=ROOT/'releases/palitra-customer-content-durable-20261030-r7'
+SELF=Path(__file__).resolve();LOCK=ROOT/'.palitra-app-release.lock'
+BASE_REV='245ca86f12e50e696ee39c5d6c3ab0f1924c05e933abbcc3ba249a20e6d8d9f8';BASE_VERSION=334;HISTORY_COUNT=334
+TARGET='assets/storefront.js';BEFORE='98ebd1820e7339d17ee05d4f9b87be531bbceff719859221c990606ca1a7413b';AFTER='4edebc359e56d9223f5fc4cfc6c49f85c45f08186099156416503f540510bc32';BEFORE_BYTES=59930;AFTER_BYTES=60068
+REGISTER='account/register/index.html';REGISTER_SHA='8d5f8e165307dfc9272cbe8ec3851f0f85a2e6db370558b52face10dfb74dbf0'
+PRICE_SHA='47878c70b8e65e3612fb5953c6dabe2659d80c54ea9828941e6951deb934fc12'
+HEX=re.compile('[a-f0-9]{64}');LIMIT=16*1024*1024;PERMIT_SECONDS=180
+NAMES=('synapse-crm-1','synapse-content-1','synapse-hugh-runtime-1','synapse-chat-1','caddy')
+IMAGES={'caddy':'sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648','synapse-chat-1':'sha256:4d5b047dc76bae1d2b82067406f98c344eea4033f83f35a54cdef7cd355ed2ae','synapse-content-1':'sha256:e22ca4d3892a01454d749fbef49c10c2a1a93f0a863d977914f32ae21455a343','synapse-crm-1':'sha256:b74d9196617cd1ba4945d0b13b69a0648552c170c5c1680b76fab51cdb73b327','synapse-hugh-runtime-1':'sha256:1d89b9652c514c238c7509bd0d81f7a0a4d198cf7cd9990c90c7e3e05b045018'}
+HOST_PINS={'/opt/synapse/sites/synapse/cabinet/palitra-orders/native-host.js':'f27b5ae1f9c0899a7b99ed756730874238c94c15ebda3d2913bc88d62d2b4d80','/opt/synapse/sites/synapse/cabinet/palitra-orders/shell.js':'b40b738cab687e863fffc7e18486b068d5e2b21ed43bf5abfd230ae9d3244588'}
+RUNTIME_AFTER={'/app/draft-account-service.cjs':'23a0d76ed2d5d2bef47ad49e5822829a088b6148ceeffae09731b6f499d34f26','/app/site-workspace-feature.js':'f36fe867ef6c5bf0f180ae3caec177f296503f365606c0d3e2b9cf262964ac5e','/app/customer-chat.js':'1a3927539386fe4e075bf9aa9ec7cfc995fe0b36787ebb67ad7898359058456e','/app/customer-chat-native-adapter.cjs':'a72732560bd9adb109080c09cf0ce3bd7774eb72614ea29073d301d44245037e','/app/palitra-orders-public/shell.js':'b39d4cdb4d07673988249863d0ce4e767981565ed6f77350073aeff61ec273c9','/app/palitra-review-public/palitra-chat.js':'5752c762048c18aa01ccc52f503ef63230468d79ff7749895b6e4e0dd37d124b'}
+TABLES=('managed_sites','site_workspaces','site_workspace_revisions','documents')
+enc=lambda v:(json.dumps(v,sort_keys=True,ensure_ascii=False,separators=(',',':'))+'\n').encode()
+sha=lambda v:hashlib.sha256(v).hexdigest()
+
+
+def need(ok,code):
+ if not ok:raise ValueError(code)
+
+def pairs(items):
+ result={}
+ for k,v in items:need(k not in result,'DUPLICATE_JSON_KEY');result[k]=v
+ return result
+
+def parse(raw):return json.loads(raw,object_pairs_hook=pairs,parse_constant=lambda _:(_ for _ in()).throw(ValueError('NONFINITE_JSON')))
+
+def safe(path,limit=LIMIT):
+ path=Path(path);need(path.is_absolute()and path.resolve()==path,'CANONICAL_FILE_REQUIRED')
+ before=path.lstat();need(stat.S_ISREG(before.st_mode)and not path.is_symlink()and before.st_size<=limit,'REGULAR_BOUNDED_FILE_REQUIRED')
+ with path.open('rb')as f:raw=f.read(limit+1);inside=os.fstat(f.fileno())
+ after=path.lstat();keys=('st_dev','st_ino','st_size','st_mode','st_uid','st_gid','st_nlink','st_mtime_ns','st_ctime_ns')
+ need(len(raw)<=limit and all(getattr(before,k)==getattr(inside,k)==getattr(after,k)for k in keys),'READ_FILE_CHANGED');return raw
+
+def closed_inspect(name):
+ need(name in NAMES,'CLOSED_CONTAINER_NAME')
+ p=subprocess.run(['docker','inspect',name],stdin=subprocess.DEVNULL,capture_output=True,timeout=20,check=False)
+ need(p.returncode==0 and len(p.stdout)<=2*LIMIT and len(p.stderr)<=1024*1024,'INSPECT_REFUSED')
+ rows=parse(p.stdout);need(type(rows)is list and len(rows)==1,'ONE_CONTAINER_REQUIRED');r=rows[0]
+ need(r['Name'].lstrip('/')==name and HEX.fullmatch(r['Id'])and r['State']['Running']and not r['State'].get('Paused')and not r['State'].get('Dead')and not r['State']['Restarting']and not r['State']['OOMKilled']and r['State'].get('Health',{}).get('Status')in(None,'healthy'),'RUNNING_HEALTHY_REQUIRED')
+ return r
+
+def container_identity(r):
+ identity={k:r.get(k)for k in('Id','Image','Config','HostConfig','NetworkSettings','Mounts','RestartCount')}
+ mounts=identity['Mounts'];need(type(mounts)is list and all(type(m)is dict and type(m.get('Destination'))is str for m in mounts),'MOUNT_RECORDS_REQUIRED')
+ need(len({m['Destination']for m in mounts})==len(mounts),'DUPLICATE_MOUNT_DESTINATION')
+ identity['Mounts']=sorted(mounts,key=lambda m:m['Destination'])
+ identity['state']={k:r['State'].get(k)for k in('Running','Paused','Restarting','OOMKilled','Dead','StartedAt','FinishedAt')}
+ return identity
+
+def relative(name):
+ need(type(name)is str and name and '\\'not in name and not any(ord(c)<32 for c in name),'MANAGED_PATH_INVALID')
+ p=PurePosixPath(name);need(not p.is_absolute()and all(v not in('','.','..')for v in name.split('/'))and str(p)==name,'MANAGED_PATH_INVALID');return name
+
+def tree(folder,budget):
+ need(folder.is_dir()and not folder.is_symlink()and folder.resolve()==folder,'CANONICAL_VERSION_DIRECTORY')
+ entries={};dirs={}
+ def metadata(p):
+  s=p.lstat();return [s.st_dev,s.st_ino,s.st_mode,s.st_uid,s.st_gid,s.st_nlink,str(s.st_mtime_ns),str(s.st_ctime_ns)]
+ def walk_error(error):raise error
+ dirs['.']=metadata(folder)
+ for current,subdirs,files in os.walk(folder,followlinks=False,onerror=walk_error):
+  for n in subdirs:
+   p=Path(current)/n;need(not p.is_symlink(),'VERSION_SYMLINK_REFUSED');dirs[p.relative_to(folder).as_posix()]=metadata(p)
+  for n in files:
+   p=Path(current)/n;name=relative(p.relative_to(folder).as_posix());raw=safe(p);s=p.lstat()
+   budget[0]+=len(raw);budget[1]+=1;need(budget[0]<=6*1024**3 and budget[1]<=250000 and time.monotonic()-budget[2]<=180,'HISTORICAL_TREE_SCAN_BOUND')
+   entries[name]={'sha256':sha(raw),'bytes':len(raw),'stat':[s.st_dev,s.st_ino,s.st_mode,s.st_uid,s.st_gid,s.st_nlink,str(s.st_mtime_ns),str(s.st_ctime_ns)]}
+ return {'files':entries,'directories':dirs}
+
+def manifest_files(doc,files):
+ need(type(doc)is dict and len(doc)==141 and set(doc)==set(files),'EXACT141_MANIFEST_FILES')
+ for name,entry in doc.items():
+  relative(name);need(type(entry)is dict and type(entry.get('sha256'))is str and HEX.fullmatch(entry['sha256'])and type(entry.get('bytes'))is int and entry['sha256']==files[name]['sha256']and entry['bytes']==files[name]['bytes'],'MANIFEST_FILE_CONTENT_MISMATCH')
+
+def manifest_projection(doc):
+ return {name:{'sha256':entry['sha256'],'bytes':entry['bytes'],'metadataSha256':sha(enc({k:v for k,v in entry.items()if k not in('sha256','bytes')}))}for name,entry in doc.items()}
+
+
+def own_lease():
+ p=subprocess.run(['lslocks','--json','--output','PID,PATH'],stdin=subprocess.DEVNULL,capture_output=True,timeout=10,check=False)
+ need(p.returncode==0 and len(p.stdout)<=1024*1024 and len(p.stderr)<=1024*1024,'LEASE_METADATA_REFUSED')
+ rows=[r for r in parse(p.stdout)['locks']if r.get('path')==str(LOCK)];need(len(rows)==1,'ONE_FRESH_OWN_LEASE_REQUIRED');pid=int(rows[0]['pid']);ancestors=set();parent=os.getppid()
+ while parent>1 and parent not in ancestors:
+  ancestors.add(parent);value=Path('/proc/'+str(parent)+'/stat').read_text();parent=int(value[value.rfind(')')+2:].split()[1])
+ need(pid in ancestors,'OWN_ANCESTOR_LEASE_REQUIRED');value=Path('/proc/'+str(pid)+'/stat').read_text();return {'pid':pid,'startTicks':value[value.rfind(')')+2:].split()[19]}
+
+def file_meta(path):
+ s=path.lstat();return [s.st_dev,s.st_ino,s.st_mode,s.st_uid,s.st_gid,s.st_nlink,s.st_size,str(s.st_mtime_ns),str(s.st_ctime_ns)]
+
+def host_static():
+ result={}
+ for name,pin in HOST_PINS.items():
+  path=Path(name);raw=safe(path);s=path.lstat();need(s.st_nlink==1 and sha(raw)==pin,'HOST_STATIC_EXACT_BEFORE_REQUIRED')
+  if os.name=='posix':need(s.st_uid==s.st_gid==0 and stat.S_IMODE(s.st_mode)==0o600,'HOST_STATIC_ROOT600_REQUIRED')
+  result[name]={'sha256':sha(raw),'bytes':len(raw),'stat':file_meta(path)}
+ return result
+
+def provenance():
+ need(R7_AREA==ROOT/'releases/palitra-customer-content-durable-20261030-r7'and R7_AREA.resolve()==R7_AREA,'CLOSED_R7_PROVENANCE_AREA')
+ package_raw=safe(R7_AREA/'manifest.json');package=parse(package_raw);need({r['target']:r['afterSha256']for r in package['files']}==RUNTIME_AFTER and len(package['files'])==6,'R7_SIX_SOURCE_PROVENANCE_REQUIRED')
+ child_raw=safe(R7_AREA/'child.json');child=parse(child_raw);installed_raw=safe(R7_AREA/'installed.json');installed=parse(installed_raw)
+ need(child['image']==IMAGES['synapse-content-1']and installed['image']==child['image']and installed['status']=='APPLIED_REQUIRES_INDEPENDENT_INSPECT','R7_HISTORICAL_RECEIPT_REQUIRED')
+ receipts=sorted(R7_AREA.glob('inspect-*.json'),key=lambda p:p.name);need(receipts,'R7_INDEPENDENT_PROVENANCE_REQUIRED');raw=safe(receipts[-1]);proof=parse(raw)
+ need(proof['status']=='AFTER_INDEPENDENT_READBACK_PASS'and proof['contentRecreationsObserved']==1 and proof['otherServiceRestarts']==proof['directDatabaseWrites']==0 and proof['databaseRestored']is False and proof['automaticReplay']is False and installed['at']<=proof['at']<=time.time(),'R7_INDEPENDENT_PROVENANCE_REQUIRED')
+ # The old at is retained as historical provenance, never a fresh execution permit.
+ return {'manifestSha256':sha(package_raw),'childSha256':sha(child_raw),'installedSha256':sha(installed_raw),'receiptSha256':sha(raw),'historicalReceiptAt':proof['at']}
+
+def runtime():
+ result={}
+ for name in NAMES:
+  row=closed_inspect(name);need(row['Image']==IMAGES[name]and row['RestartCount']==0,'EXACT_R7_FIVE_IMAGES_RESTARTS_REQUIRED')
+  if name=='synapse-content-1':
+   mounts=[m for m in row['Mounts']if m['Destination']=='/data'];need(len(mounts)==1 and mounts[0]['Source']==str(DATA),'EXACT_CONTENT_DATA_MOUNT')
+  result[name]={'image':row['Image'],'identitySha256':sha(enc(container_identity(row)))}
+ return result
+
+def authorizer(action,arg1,arg2,db,trigger):
+ if action in(sqlite3.SQLITE_SELECT,sqlite3.SQLITE_FUNCTION,sqlite3.SQLITE_TRANSACTION):return sqlite3.SQLITE_OK
+ if action==sqlite3.SQLITE_READ and arg1 in(*TABLES,'sqlite_master','sqlite_schema'):return sqlite3.SQLITE_OK
+ if action==sqlite3.SQLITE_PRAGMA and arg1=='table_info'and arg2 in TABLES:return sqlite3.SQLITE_OK
+ return sqlite3.SQLITE_DENY
+
+def open_db():
+ path=DATA/'content.sqlite';need(path.resolve()==path and not path.is_symlink()and stat.S_ISREG(path.lstat().st_mode),'EXACT_ACTIVE_CONTENT_DB')
+ conn=sqlite3.connect(path.as_uri()+'?mode=ro',uri=True,timeout=5);conn.execute('PRAGMA query_only=ON');conn.set_authorizer(authorizer);conn.execute('BEGIN');return conn
+
+def cells(values):return [{'blob':v.hex()}if isinstance(v,bytes)else v for v in values]
+
+def rows(conn,table,order):
+ need(table in TABLES,'CLOSED_TABLE');cols=[r[1]for r in conn.execute('PRAGMA table_info('+table+')')];values=conn.execute('SELECT * FROM '+table+' ORDER BY '+order).fetchall();need(len(values)<=100000,'MANAGED_ROW_BOUND');return cols,values
+
+def bindings(conn):
+ schema=conn.execute('SELECT type,name,tbl_name,sql FROM sqlite_master WHERE tbl_name IN(?,?,?,?) ORDER BY type,name',TABLES).fetchall()
+ sites_cols,sites=rows(conn,'managed_sites','id');work_cols,workspaces=rows(conn,'site_workspaces','site_id')
+ need({'id','company_code','is_active','deleted_at','updated_at'}<=set(sites_cols)and {'site_id','hostname','runtime','current_revision'}<=set(work_cols),'CURRENT_ROWS_KNOWN_SCHEMA')
+ selected=[r for r in sites if r[sites_cols.index('id')]==SITE];selected_w=[r for r in workspaces if r[work_cols.index('site_id')]==SITE];need(len(selected)==len(selected_w)==1,'ONE_FIXED_CURRENT_ROW');site=dict(zip(sites_cols,selected[0]));workspace=dict(zip(work_cols,selected_w[0]))
+ need(site['company_code']==COMPANY and site['is_active']==1 and site['deleted_at']is None and workspace['hostname']=='palitra-love-draft-1.synapsebusiness.ru'and workspace['runtime']=='palitra-draft','EXACT_PALITRA_SITE_REQUIRED')
+ normalized_sites=[cells(r)for r in sites];normalized_work=[cells(r)for r in workspaces]
+ for r in normalized_sites:
+  if r[sites_cols.index('id')]==SITE:r[sites_cols.index('updated_at')]={'controlled':'new_revision_created_at'}
+ for r in normalized_work:
+  if r[work_cols.index('site_id')]==SITE:r[work_cols.index('current_revision')]={'controlled':'new_revision'}
+ history_cols=[r[1]for r in conn.execute('PRAGMA table_info(site_workspace_revisions)')];need({'site_id','revision','version','manifest_json','created_at'}<=set(history_cols),'KNOWN_REVISION_SCHEMA_REQUIRED');history=conn.execute('SELECT * FROM site_workspace_revisions WHERE site_id=? ORDER BY version,revision',(SITE,)).fetchall();need(1<=len(history)<=1000,'REVISION_HISTORY_BOUND')
+ price_cols=[r[1]for r in conn.execute('PRAGMA table_info(documents)')];need({'key','version','body'}<=set(price_cols),'PRICE_DOCUMENT_SCHEMA');price_row=conn.execute('SELECT * FROM documents WHERE key=? ORDER BY version DESC LIMIT 1',('palitra/price',)).fetchone();need(price_row is not None,'PRICE83_DOCUMENT_REQUIRED');price_doc=dict(zip(price_cols,price_row));body=price_doc['body'];need(price_doc['key']=='palitra/price'and type(price_doc['version'])is int and price_doc['version']==83 and type(body)is str and len(body.encode())<=4*1024*1024 and sha(body.encode())==PRICE_SHA,'PRICE83_EXACT_REQUIRED');parsed=parse(body);need(type(parsed)is dict and type(parsed.get('version'))is int and parsed['version']==83,'PRICE83_BODY_VERSION')
+ price={'version':83,'sha256':sha(body.encode()),'fullRowSha256':sha(enc(cells(price_row))),'schemaSha256':sha(enc([r for r in schema if r[2]=='documents']))}
+ managed={'schemaSha256':sha(enc(schema)),'sitesColumns':sites_cols,'workspacesColumns':work_cols,'siteRowsSha256':sha(enc(normalized_sites)),'workspaceRowsSha256':sha(enc(normalized_work))}
+ return {'managedRows':managed,'updatedAt':site['updated_at'],'revision':workspace['current_revision'],'historyColumns':history_cols,'historyRows':history,'price':price}
+
+def binding_digest(value):
+ return sha(enc({**value,'historyRows':[cells(r)for r in value['historyRows']]}))
+
+def snapshot():
+ begin=time.time();lease=own_lease();images=runtime();host=host_static();source=provenance();conn=open_db()
+ try:
+  state=bindings(conn);current=state['revision'];cols=state['historyColumns'];versions=DATA/'projects'/COMPANY/'sites'/SITE/'versions';need(versions.resolve()==versions and not versions.is_symlink(),'VERSION_ROOT_CANONICAL');records={};budget=[0,0,time.monotonic()];current_doc=None;current_tree=None
+  for values in state['historyRows']:
+   record=dict(zip(cols,values));rev=record['revision'];need(type(rev)is str and HEX.fullmatch(rev)and rev not in records and type(record['version'])is int,'REVISION_IDENTITY_REQUIRED');doc=parse(record['manifest_json']);physical=tree(versions/rev,budget);need(type(doc)is dict and set(doc)==set(physical['files']),'HISTORY_MANIFEST_FILESET')
+   records[rev]={'version':record['version'],'rowSha256':sha(enc(cells(values))),'treeSha256':sha(enc(physical)),'manifestSha256':sha(record['manifest_json'].encode()),'createdAt':record['created_at']}
+   if record['version']==BASE_VERSION+1:need(rev==sha((record['manifest_json']+'\n'+BASE_REV).encode()),'OFFICIAL_NEW_REVISION_DERIVATION_REQUIRED')
+   if rev==current:current_doc=doc;current_tree=physical;current_version=record['version'];manifest_files(doc,physical['files'])
+  need(current_doc is not None and {p.name for p in versions.iterdir()}==set(records),'UNTRACKED_OR_MISSING_HISTORICAL_VERSION');need(conn.total_changes==0,'NO_DATABASE_WRITES');original=binding_digest(state);conn.rollback()
+ finally:conn.close()
+ fresh=open_db()
+ try:need(binding_digest(bindings(fresh))==original and fresh.total_changes==0,'SQL_CHANGED_DURING_FULL_HISTORY_READ');fresh.rollback()
+ finally:fresh.close()
+ need(runtime()==images and host_static()==host and provenance()==source and own_lease()==lease,'ENVIRONMENT_CHANGED_DURING_READ')
+ current_metadata={'files':{name:entry['stat'][2:6]for name,entry in current_tree['files'].items()},'directories':{name:entry[2:6]for name,entry in current_tree['directories'].items()}}
+ return {'schema':1,'siteId':SITE,'companyCode':COMPANY,'version':current_version,'revision':current,'manifest':manifest_projection(current_doc),'history':records,'images':images,'price':state['price'],'hostStatic':host,'provenance':source,'managedRows':state['managedRows'],'targetUpdatedAt':state['updatedAt'],'currentMetadata':current_metadata,'targetStat':file_meta(versions/current/TARGET),'lease':lease,'beganAt':begin,'capturedAt':time.time()}
+
+def stamp(value):
+ need(type(value)is str and re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z',value),'EXACT_SAVE_STAMP_REQUIRED');return datetime.fromisoformat(value.replace('Z','+00:00')).timestamp()
+
+def compare(base,current,stage):
+ need(stage in('before','after')and base['schema']==current['schema']==1 and base['siteId']==current['siteId']==SITE and base['companyCode']==current['companyCode']==COMPANY,'FIXED_SITE_EVIDENCE_REQUIRED')
+ need(base['version']==BASE_VERSION and base['revision']==BASE_REV and len(base['history'])==HISTORY_COUNT and len(base['manifest'])==141,'EXACT_CURRENT334_BASE_REQUIRED')
+ need(max(entry['version']for entry in base['history'].values())==BASE_VERSION,'OFFICIAL_NEXT_VERSION_MUST_BE335')
+ need(base['manifest'][TARGET]['sha256']==BEFORE and base['manifest'][TARGET]['bytes']==BEFORE_BYTES and base['manifest'][REGISTER]['sha256']==REGISTER_SHA,'EXACT_PROFILE_AND_REGISTER_BASE_REQUIRED')
+ need(base['manifest'][TARGET]['metadataSha256']==sha(enc({})),'TARGET_METADATA_WOULD_BE_DROPPED')
+ expected_dirs={'.'}
+ for name in base['manifest']:
+  for parent in PurePosixPath(name).parents:
+   expected_dirs.add(str(parent))
+ need(set(base['currentMetadata']['directories'])==expected_dirs,'UNMANIFESTED_CURRENT_DIRECTORY_WOULD_BE_DROPPED')
+ if os.name=='posix':
+  need(all(value==[stat.S_IFREG|0o600,0,0,1]for value in base['currentMetadata']['files'].values()),'OFFICIAL_WRITER_FILE_MODE_COMPATIBILITY')
+  need(all(value[:3]==[stat.S_IFDIR|0o700,0,0]for value in base['currentMetadata']['directories'].values()),'OFFICIAL_WRITER_DIRECTORY_MODE_COMPATIBILITY')
+ for key in('images','price','hostStatic','provenance','managedRows','lease'):need(enc(current[key])==enc(base[key]),'PRESERVED_'+key.upper()+'_CHANGED')
+ need(all(current['history'].get(rev)==entry for rev,entry in base['history'].items()),'OLD334_ROWS_OR_FULL_TREES_CHANGED')
+ if current['version']==BASE_VERSION:
+  need(current['revision']==BASE_REV and current['history']==base['history']and current['manifest']==base['manifest']and current['targetUpdatedAt']==base['targetUpdatedAt']and current['currentMetadata']==base['currentMetadata']and current['targetStat']==base['targetStat'],'BEFORE_STATE_CHANGED')
+  return 'BEFORE_READY'if stage=='before'else'BEFORE_NO_REPLAY'
+ need(stage=='after'and current['version']==BASE_VERSION+1 and len(current['history'])==HISTORY_COUNT+1 and current['revision']not in base['history'],'EXACT_ONE_NEW335_REQUIRED')
+ new_record=current['history'].get(current['revision']);need(new_record and new_record['version']==BASE_VERSION+1,'NEW_CURRENT335_REQUIRED');need(current['targetUpdatedAt']==new_record['createdAt'],'EXACT_TWO_FIELD_METADATA_DELTA');saved=stamp(new_record['createdAt']);need(base['capturedAt']<=saved<=base['permitExpires']and saved<=current['capturedAt'],'SAVE_OUTSIDE_FRESH_PERMIT')
+ expected=parse(enc(base['manifest']));expected[TARGET]={**expected[TARGET],'sha256':AFTER,'bytes':AFTER_BYTES};need(current['manifest']==expected,'ONLY_STOREFRONT_MANIFEST_DELTA_REQUIRED');need(current['currentMetadata']==base['currentMetadata'],'NEW335_MODE_OWNER_LINK_DIRECTORY_CHANGED')
+ return 'AFTER_INDEPENDENT_READBACK_PASS'
+
+def write_new(path,raw):
+ need(path.parent.resolve()==path.parent,'CANONICAL_EVIDENCE_PARENT');fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0),0o600)
+ with os.fdopen(fd,'wb')as f:f.write(raw);f.flush();os.fsync(f.fileno())
+
+def sync_dir(path):
+ fd=os.open(path,os.O_RDONLY|getattr(os,'O_DIRECTORY',0))
+ try:os.fsync(fd)
+ finally:os.close(fd)
+
+def private_directory():
+ need(AREA.resolve()==AREA and AREA.is_dir()and not AREA.is_symlink(),'EXACT_PRIVATE_EVIDENCE_DIRECTORY')
+ if os.name=='posix':
+  state=AREA.lstat();need(state.st_uid==state.st_gid==0 and stat.S_IMODE(state.st_mode)==0o700,'PRIVATE_EVIDENCE_ROOT700_REQUIRED')
+
+def private_read(path,limit=LIMIT):
+ raw=safe(path,limit);s=path.lstat();need(s.st_nlink==1,'PRIVATE_ONE_LINK_REQUIRED')
+ if os.name=='posix':need(s.st_uid==s.st_gid==0 and stat.S_IMODE(s.st_mode)==0o600,'PRIVATE_ROOT600_REQUIRED')
+ return raw
+
+def protect_before():
+ need(not os.path.lexists(AREA),'EVIDENCE_NAMESPACE_EXISTS_INSPECT_ONLY');need(AREA.parent.resolve()==AREA.parent,'CANONICAL_RELEASES_REQUIRED');lease=own_lease();AREA.mkdir(mode=0o700);private_directory();helper=sha(safe(SELF));write_new(AREA/'before-intent.json',enc({'helperSha256':helper,'lease':lease,'at':time.time()}));sync_dir(AREA)
+ base=snapshot();base['permitExpires']=base['capturedAt']+PERMIT_SECONDS;need(base['lease']==lease,'OWN_LEASE_CHANGED');compare(base,base,'before');target=DATA/'projects'/COMPANY/'sites'/SITE/'versions'/BASE_REV/TARGET;raw=safe(target);need(sha(raw)==BEFORE and len(raw)==BEFORE_BYTES and file_meta(target)==base['targetStat'],'RAW_BEFORE_CHANGED_AFTER_SNAPSHOT');backup=AREA/'storefront.before.js';write_new(backup,raw);base['rawBefore']={'sha256':sha(private_read(backup)),'bytes':len(raw),'stat':file_meta(backup)};base['helperSha256']=helper
+ blob=enc(base);need(len(blob)<=LIMIT,'PROTECTED_METADATA_BOUND');write_new(AREA/'baseline.json',blob);write_new(AREA/'baseline.ready.json',enc({'baselineSha256':sha(blob),'helperSha256':helper,'lease':lease}));sync_dir(AREA);return {'status':'PROTECTED_BEFORE_READY_NOT_SAVED','baselineSha256':sha(blob),'revision':BASE_REV,'version':BASE_VERSION,'permitExpires':base['permitExpires']}
+
+def readback():
+ private_directory();ready=parse(private_read(AREA/'baseline.ready.json'));blob=private_read(AREA/'baseline.json');need(sha(blob)==ready['baselineSha256']and sha(safe(SELF))==ready['helperSha256'],'PROTECTED_BASE_OR_HELPER_CHANGED');base=parse(blob);need(base['helperSha256']==ready['helperSha256']and own_lease()==ready['lease']==base['lease'],'FRESH_SAME_OWN_LEASE_REQUIRED');raw=private_read(AREA/'storefront.before.js');need(sha(raw)==base['rawBefore']['sha256']==BEFORE and len(raw)==base['rawBefore']['bytes']==BEFORE_BYTES and file_meta(AREA/'storefront.before.js')==base['rawBefore']['stat'],'PROTECTED_RAW_BEFORE_CHANGED');current=snapshot();status=compare(base,current,'after');result={'status':status,'snapshot':current,'baselineSha256':ready['baselineSha256'],'helperSha256':ready['helperSha256'],'at':time.time(),'automaticReplay':False,'databaseRestored':False};write_new(AREA/('readback-'+str(time.time_ns())+'.json'),enc(result));sync_dir(AREA);return {'status':status,'version':current['version'],'revision':current['revision'],'baselineSha256':ready['baselineSha256'],'automaticReplay':False,'databaseRestored':False}
+
+def main():
+ parser=argparse.ArgumentParser();parser.add_argument('phase',choices=('before','after'));args=parser.parse_args();need(os.name=='posix'and os.geteuid()==0,'NATIVE_LINUX_ROOT_ONLY');need(AREA==ROOT/'releases'/NAME and AREA.resolve()==AREA,'CLOSED_FRESH_EVIDENCE_NAMESPACE');result=protect_before()if args.phase=='before'else readback();print(json.dumps(result,sort_keys=True,separators=(',',':')))
+if __name__=='__main__':
+ try:main()
+ except Exception as error:
+  if isinstance(error,ValueError)and re.fullmatch('[A-Z0-9_]{1,120}',str(error)):print('REFUSED: '+str(error),file=sys.stderr)
+  print('REFUSED_UI_READONLY_CHECKER_INSPECT_ONLY',file=sys.stderr);sys.exit(2)
