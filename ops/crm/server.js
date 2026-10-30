@@ -52,6 +52,7 @@ const { createSocialOnlypultAnalytics } = require('./social-onlypult-analytics')
 const { createCompanyInformationCheck } = require('./company-information-check');
 const { createDealOrders } = require('./deal-orders');
 const { createTaskCoordination } = require('./task-coordination');
+const { createServerResourceQueue } = require('./server-resource-queue');
 const { createTaskDispatch } = require('./task-dispatch');
 
 const IS_MAIN = require.main === module;
@@ -603,6 +604,7 @@ const emailCampaigns = createEmailCampaigns(db, {transport: campaignTransport, l
 const emailDiagnostics = createEmailDiagnostics(db, {getEnvironment: emailSettings.getEnvironment});
 const companyInformation = createCompanyInformation(db, {check: createCompanyInformationCheck()});
 const taskCoordination = createTaskCoordination(db);
+const serverResourceQueue = createServerResourceQueue(db);
 const taskDispatch = createTaskDispatch(db);
 const autopostingTransport = createAutopostingTransport(db, {apiKey: API_KEY});
 const contentFactoryWorkflow=require('./content-factory-workflow').createContentFactoryWorkflow(db);
@@ -2890,6 +2892,15 @@ async function route(request, response) {
     else if(request.method==='POST'&&dispatchMatch[2]==='enqueue') result=taskDispatch.enqueue(id,await readJson(request),actor);
     else if(request.method==='POST'&&dispatchMatch[2]==='action') result=taskDispatch.act(id,await readJson(request),actor);
     else fail(405,'Метод не поддерживается');
+    return send(response,200,result,{...cors,'cache-control':'private, no-store'});
+  }
+  if (/^\/coordination\/server-resource(?:\/|$)/.test(url.pathname)) {
+    const actor = crmIdentity(request);
+    let result;
+    if (url.pathname === '/coordination/server-resource' && request.method === 'GET') result = serverResourceQueue.get(actor);
+    else if (url.pathname === '/coordination/server-resource/requests' && request.method === 'POST') result = serverResourceQueue.add(await readJson(request),actor);
+    else if (url.pathname === '/coordination/server-resource/action' && request.method === 'POST') result = serverResourceQueue.act(await readJson(request),actor);
+    else fail(404,'Адрес не найден');
     return send(response,200,result,{...cors,'cache-control':'private, no-store'});
   }
   if (/^\/coordination(?:\/|$)/.test(url.pathname)) {
