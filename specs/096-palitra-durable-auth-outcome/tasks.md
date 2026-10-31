@@ -31,3 +31,7 @@
 ## Lifecycle R2 после реального preservation-stop31Oct
 
 R1 helper/stage/prehistory/prepare подтверждены, build остановился до журнала из-за CRM events/sqlite_sequence; production R7/337 не менялся. СтаруюBASE не перезаписывать. Новый узкий R2 переносит обе imagebuilds до finalfreshBASE, связывает stagedcode/образы, сохраняет exactwholeDB/backup/apply и блокирует directprepare/applyCLI. 14 lifecycle + отдельные14 release delta PASS; source review/production/5TestКЛ paths ещё OPEN. Receipt: SERVER_ACCESS_RESUME_20261031/RELEASE_PROTOCOL_R2/FOR_REVIEW.md.
+
+## Actual sparse-layer R3 — PRIVATE/source review pending
+
+R2 main built, fallback stopped at strict archive because actual layer onlysite-orders while manifest3 included2unchanged files. Runtime R7/managed337 unchanged; no finalBASE/backups/apply. R3 fixes effective manifest/factory1 and preserves server/manager/fulltree; strictvalidator unchanged. New phase validates only two fixed existing image IDs and exports code artifacts, no Docker rebuild/replay/old journal writes. Sparse6, release14 and lifecycle14 PASS in separate runs; syntax16. Native validation/release/clientadmin5paths OPEN. Receipt RELEASE_EFFECTIVE_LAYER_R3/FOR_REVIEW.md.
