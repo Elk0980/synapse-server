@@ -46,6 +46,9 @@ def reference(s):
 def envelope(s,manifest,rows):
  base=s.load(s.AREA/'base.json');child=s.load(s.AREA/'child.json')
  s.need(child['image']==IMAGE and rows[s.CONTENT]['Image']==IMAGE,'EXACT_CURRENT_INSTALLED_IMAGE_REQUIRED')
+ _,last=s.diagnostic_history(base)
+ s.need(last['generation']['phase']=='after'and last['generation']['count']==2,'ORIGINAL_OBSERVED_AFTER_GENERATION_REQUIRED')
+ s.diagnostic_generation(base,rows,True,last['generation'])
  s.built_image_guard(base,manifest,child);want=s.expected_tree(base,manifest);actual=s.runtime_tree(rows[s.CONTENT]);s.source_phase_tree(actual,True)
  s.need(actual==want and s.image_tree(child['image'])==want,'STATIC_COMPLETE_RUNTIME_TREE_CHANGED')
  for n in s.CONTAINERS:

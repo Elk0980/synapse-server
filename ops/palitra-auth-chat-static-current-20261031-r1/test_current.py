@@ -142,7 +142,7 @@ class CurrentGuard(unittest.TestCase):
     with self.assertRaisesRegex(ValueError,'INJECTED_'):self.invoke(s,c)
  def test_runtime_envelope_checks_complete_tree_image_config_foreign_and_price(self):
   base={'rows':{'content':{'Image':'old','identity':'before','config':'config'},'crm':{'identity':'foreign'}},'policy':'policy','price':'price'};child={'image':cur.IMAGE};rows={'content':{'Image':cur.IMAGE,'identity':'after','config':'config'},'crm':{'identity':'foreign'}}
-  def make():return types.SimpleNamespace(AREA=Path('/closed'),load=lambda p:base if p.name=='base.json'else child,CONTENT='content',CONTAINERS=('content','crm'),need=m.need,built_image_guard=lambda *a:None,expected_tree=lambda *a:'tree',runtime_tree=lambda *a:'tree',source_phase_tree=lambda *a:None,image_tree=lambda *a:'tree',foreign=lambda r:r['identity'],normalize_content=lambda r:r.get('config'),effective_plan=lambda *a:'plan',validated_plan=lambda *a:'plan',policy_state=lambda:'policy',price_pin=lambda:'price',source_review_guard=lambda *a:None)
+  def make():return types.SimpleNamespace(AREA=Path('/closed'),load=lambda p:base if p.name=='base.json'else child,CONTENT='content',CONTAINERS=('content','crm'),need=m.need,diagnostic_history=lambda b:({}, {'generation':{'phase':'after','count':2}}),diagnostic_generation=lambda *a:None,built_image_guard=lambda *a:None,expected_tree=lambda *a:'tree',runtime_tree=lambda *a:'tree',source_phase_tree=lambda *a:None,image_tree=lambda *a:'tree',foreign=lambda r:r['identity'],normalize_content=lambda r:r.get('config'),effective_plan=lambda *a:'plan',validated_plan=lambda *a:'plan',policy_state=lambda:'policy',price_pin=lambda:'price',source_review_guard=lambda *a:None)
   manifest={'expectedImages':{'content':'old','crm':'foreign'}};cur.envelope(make(),manifest,rows)
   for field in ('runtime_tree','image_tree','price_pin','policy_state','validated_plan','built_image_guard','source_review_guard'):
    with self.subTest(field=field):
@@ -155,6 +155,45 @@ class CurrentGuard(unittest.TestCase):
   for role,key,val in [('content','Image','other'),('content','config','other'),('crm','identity','other')]:
    bad=copy.deepcopy(rows);bad[role][key]=val
    with self.assertRaises(ValueError):cur.envelope(make(),manifest,bad)
+
+class GenerationBinding(unittest.TestCase):
+ def test_actual_original_generation_guard_rejects_same_image_new_id_or_start(self):
+  with tempfile.TemporaryDirectory()as tmp,patch.object(m,'AREA',Path(tmp)):
+   (Path(tmp)/'apply-intent.json').write_text('{}')
+   before={'Id':'0'*64,'RestartCount':0,'Image':m.BASE_IMAGE,'config':'cfg','State':{'Running':True,'Restarting':False,'OOMKilled':False,'StartedAt':'2026-10-31T10:00:00.000000000Z'}}
+   actual=copy.deepcopy(before);actual.update(Id='1'*64,Image=cur.IMAGE);actual['State']['StartedAt']='2026-10-31T12:35:46.804770651Z'
+   base={'rows':{m.CONTENT:before,'crm':{'identity':'foreign'}},'policy':'policy','price':'price'};child={'image':cur.IMAGE};rows={m.CONTENT:actual,'crm':{'identity':'foreign'}}
+   generation={'phase':'after','count':2,'identity':{'id':actual['Id'],'startedAt':actual['State']['StartedAt'],'restartCount':0}}
+   s=types.SimpleNamespace(AREA=Path('/closed'),load=lambda p:base if p.name=='base.json'else child,CONTENT=m.CONTENT,CONTAINERS=(m.CONTENT,'crm'),need=m.need,diagnostic_history=lambda b:({}, {'generation':generation}),diagnostic_generation=m.diagnostic_generation,built_image_guard=lambda *a:None,expected_tree=lambda *a:'tree',runtime_tree=lambda *a:'tree',source_phase_tree=lambda *a:None,image_tree=lambda *a:'tree',foreign=lambda r:r.get('identity'),normalize_content=lambda r:r.get('config'),effective_plan=lambda *a:'plan',validated_plan=lambda *a:'plan',policy_state=lambda:'policy',price_pin=lambda:'price',source_review_guard=lambda *a:None)
+   manifest={'expectedImages':{m.CONTENT:m.BASE_IMAGE,'crm':'foreign'}};cur.envelope(s,manifest,rows)
+   for kind in ('newId','newStart','restart','noOriginalAfter'):
+    with self.subTest(kind=kind):
+     r=copy.deepcopy(rows);g=copy.deepcopy(generation)
+     if kind=='newId':r[m.CONTENT]['Id']='2'*64
+     elif kind=='newStart':r[m.CONTENT]['State']['StartedAt']='2026-10-31T13:00:00.000000000Z'
+     elif kind=='restart':r[m.CONTENT]['RestartCount']=1
+     else:g.update(phase='before',count=1)
+     with patch.object(s,'diagnostic_history',return_value=({}, {'generation':g})):
+      with self.assertRaisesRegex(ValueError,'DIAGNOSTIC_|ORIGINAL_OBSERVED_AFTER'):cur.envelope(s,manifest,r)
+ def test_original_chain_rejects_foreign_base_head_or_tampered_input(self):
+  with tempfile.TemporaryDirectory()as tmp,patch.object(m,'AREA',Path(tmp)),patch.object(m,'safe_read',side_effect=lambda p:Path(p).read_bytes()):
+   (Path(tmp)/'diagnostic_preservation.py').write_bytes((MAIN/'diagnostic_preservation.py').read_bytes())
+   folder=Path(tmp)/'diagnostic-observations';folder.mkdir()
+   row={'Id':'0'*64,'RestartCount':0,'State':{'Running':True,'Restarting':False,'OOMKilled':False,'StartedAt':'2026-10-31T10:00:00.000000000Z'}}
+   obs={'bridge':{'key':'bridge','payload':'unchanged','checkedAt':'1970-01-01T00:00:00.000Z'},'sequence':{'value':1},'utcMs':1,'monoNs':1};base={'rows':{m.CONTENT:row},'diagnosticBase':obs}
+   g=m.diagnostic_generation(base,base['rows'],False);genesis={'baseSha256':m.sha(m.enc(base)),'previous':None,'observation':obs,'generation':g};a=m.enc(genesis)
+   after=copy.deepcopy(genesis);after['previous']=m.sha(a);after['generation']={'phase':'after','count':2,'identity':{'id':'1'*64,'startedAt':'2026-10-31T12:35:46.804770651Z','restartCount':0}};after['observation']=copy.deepcopy(obs);after['observation'].update(utcMs=2,monoNs=2);b=m.enc(after)
+   original={'000000.json':a,'000001.json':b,'head.json':m.enc({'baseSha256':genesis['baseSha256'],'count':2,'lastSha256':m.sha(b)})}
+   for n,raw in original.items():(folder/n).write_bytes(raw)
+   (Path(tmp)/'prepared.json').write_bytes(m.enc({'baseSha256':genesis['baseSha256'],'diagnosticGenesisSha256':m.sha(a)}));self.assertEqual(m.diagnostic_history(base)[1]['generation']['count'],2)
+   for kind in ('foreignBase','foreignHead','tamperedEntry'):
+    with self.subTest(kind=kind):
+     for n,raw in original.items():(folder/n).write_bytes(raw)
+     candidate=copy.deepcopy(base)
+     if kind=='foreignBase':candidate['foreign']='changed'
+     elif kind=='foreignHead':value=json.loads(original['head.json']);value['baseSha256']='f'*64;(folder/'head.json').write_bytes(m.enc(value))
+     else:value=json.loads(b);value['generation']['identity']['id']='2'*64;(folder/'000001.json').write_bytes(m.enc(value))
+     with self.assertRaisesRegex(ValueError,'DIAGNOSTIC_'):m.diagnostic_history(candidate)
 
 class NewProvenance(unittest.TestCase):
  def setUp(self):
