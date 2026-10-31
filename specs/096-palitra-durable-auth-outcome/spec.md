@@ -1,0 +1,20 @@
+# Durable outcome существующего входа Palitra
+
+Один writer Root. Только локальное исправление конкретного account/content partial-write failure, не новый recovery service/OTP и не release permission. Frozen preliminary R1 immutable.
+
+FR-001: durable operation journal в existing AccountService SQLite, outcome commits вместе с user/session. Не повторять регистрацию после неизвестного исхода.
+FR-002: server-generated attempt HttpOnly proof до credential writes; exact source/target account cookie, chat capability, origin/company/action/CSRF; body identifiers/email/phone/profile не authority. Prepared не verified.
+FR-003: no plaintext password/session/recovery secret в journal/browser storage/log; normal credential validation неизменна. Recovery target cookie только из server-proven committed outcome, не из гостевого DTO.
+FR-004: same attempt replay/readback/restart возвращает тот же target/user/session, без новых profile/chat/order; changed body/proof/session/origin/company/action/expired/cancelled fail closed.
+FR-005: сбои before/after writes/commits и lost body/Set-Cookie проверяются адресными изолированными fixtures. Не заявлять crossDB atomicity. Pending content completion — recoverable UI, не500 с повторной регистрацией.
+FR-006: UI GETsession/readback/resume не посылает пароль/регистрацию автоматически; signup success и wishlist failure независимы. Старые данные/identity/history/separateorders сохранены, guest не присваивается verified по контактам.
+FR-007: previous frozen packages untouched; actual router/wrapper/attach/push/delivery/rollback/guards/scope/live OPEN и не реконструируются тестовым glue. Не выпускать пакет/не обходить UI blocker.
+
+FR-008: только новая регистрация связывает исходный preliminary guest с созданным этим outcome новым UUID: exact original chat cookie + live server journal + verified credential outcome. Не phone/name/email/audit lookup. Привязка session/account в центральной транзакции, существующие grants/messages/orders/profile не копируются и не удаляются. После readback реальный candidate HTTP reader открывает прежний чат и отдельные order refs, включая записи окна completion_pending и отдельную authenticated chat session.
+FR-009: обычный вход в уже существующий аккаунт открывает только его ранее привязанную историю. Новый guest ему не присваивается; доступ к истории этого guest после полного login остаётся отдельным незакрытым вопросом, не выдаётся за сохранённый доступ по одному count. Logout и другой пользователь не читают привязанную историю новой регистрации.
+FR-010: expired unclaimed prepare при живом verified A не блокирует новую явную login/logout попытку. Чужая proof cookie с другой account/chat capability не позволяет отменить или отозвать результат A через normal login B.
+
+FR-011: production integration исходит из свежих server SHA31Oct, не historical HTTP candidate. Сохранять actual widget-settings GET/public projection, history-status no-body/no-query/Fetch-Site/CORP guards, start/contact query refusal, main/draft host routing и существующий miniapp/owner/legacy contract. Новый preliminary/history/account proof не удаляет действующие возможности.
+FR-012: все реальные web producers (HTTP/order/media/upload/history/Push) используют server-proven current account context. Ни original legacy G после binding, ни _account cookie без fresh account proof не дают доступ. Не включать Push/worker/notification settings ради QA.
+FR-013: совместимый fallback сохраняет новые binding и durable-auth guards/data; старыйR7/R13 и DBrestore запрещены. Проверить fallback/restart на вымышленных данных после new registration/partial write и A/B/logout, без выдачи guest authority связанным cookie.
+FR-014: done только после разрешённой установки в production и клиентской/административной приёмки пяти путей. Общий content recreate может затронуть другие проекты и требует отдельного конкретного согласия; shared chat restart отдельно не разрешён. До этого только source integration/fake fixtures/read-only server inspection, никаких executor/runtimepackage/lease/apply.
