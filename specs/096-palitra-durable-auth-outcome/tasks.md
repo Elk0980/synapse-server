@@ -59,3 +59,10 @@ R5 reached partial backups (11physical files/7 of11paths) before cache-margin ST
 
 
 31Oct R7 namespace-only successor: R6 sealed partialimageattestation cacheSTOP beforefinalBASE/apply; no replay. Sourceguards andproductexact, targeted3+6PASS. Images earlynaturalwindow, gate&&ONLYrelease beginningFOLLOWINGactualnaturalwindow under30minanchor. Review/runtime/actual5QA pending.
+
+
+## Fresh static-only delivery after actual R7 switch
+
+R7 applied once: current content53fcc6…bfea26, started12:35:46.804UTC/restarts0. Pure pinned AuthOutcome constructor initialized exact empty account additive schema; old account rows/schema exact. Original inspect then refused DIAG_CLOCK_WINDOW; no old BASE/journal rewrite or backend reapply. Historical readonly classification found timestamp-only provider refresh and one linked schedule/partial/closed0 CRM run at13:01:46UTC (queueattempts6, evidence+1, snapshot only collected_at/run_id, three sequences). Nine other content paths preserved. This is not old runtime acceptance.
+
+New ops/palitra-auth-chat-static-current-20261031-r1 is a separate explicit current/static context. Exact current fullDB snapshot/new diagnostic journal and original strict static guards, original evidence references and same own lease; CLI only prepare/host/shell/inspect. LF checker only provenance+namespace changed. Targeted18PASS/0FAIL/0.857s; new source review14pins df11e24d7ac932858f25ab157510cc4b53fc8df58c6bea1a93bc4d09baeaccd7 PENDING. Current schema/facts/source/5identity/backup/history/price/nonce/clock/staticTTL/CAS remain mandatory. Native new-context/static/managedSave/5TestKl paths not yet executed. Social actions0, unknown outcomes inspect-only.
