@@ -63,6 +63,34 @@ class SparseLayer(unittest.TestCase):
      broken=copy.deepcopy(tree);broken[name]['sha256']='changed'
      with self.assertRaises(ValueError):fm.source_phase_tree(broken,after)
    fm.tar_members(archive(raw),base,d)
+ def test_real_generated_package_337_338_with_closed_payload_one_and_pinned_controls(self):
+  import inspect,os
+  factory=load('sparse_package_factory',HERE/'prepare_fallback_package.py')
+  for version in(337,338):
+   with tempfile.TemporaryDirectory()as directory:
+    out=factory.assemble(p.EXISTING_MAIN,version,m.MANAGED_REV if version==337 else 'b'*64,0 if version==337 else 2,Path(directory)/'generated');fm=load('real_generated_package_'+str(version),out/'install.py');fm.AREA=out
+    if os.name=='nt':
+     # Windows lstat/fstat st_ctime_ns differ for copied fixtures. The Linux
+     # stable-file guard is unchanged; exercise real package() with bounded
+     # read-only fixture IO, not a replacement package/phase implementation.
+     def fixture_read(q):
+      if not Path(q).exists():raise FileNotFoundError(q)
+      q=Path(q);self.assertTrue(q.resolve().is_relative_to(out.resolve()));self.assertFalse(q.is_symlink());self.assertTrue(q.is_file());self.assertLessEqual(q.stat().st_size,fm.MAX_FILE)
+      raw=q.read_bytes();self.assertEqual(raw,q.read_bytes());return raw
+     fm.safe_read=fixture_read
+    raw=(out/'manifest.json').read_bytes();d=json.loads(raw);stage={'commit':'a'*40,'stageLease':{'pid':123},'helperSha256':m.sha((out/'install.py').read_bytes()),'manifestSha256':m.sha(raw),**{name+'Sha256':pin for name,pin in fm.REVIEWED_DATA_PINS.items()}};fm.write_new(out/'stage.json',m.enc(stage))
+    # This is the REAL package() boundary, including its two server-phase reads.
+    got,actual=fm.package();self.assertEqual(got,stage);self.assertEqual(actual,d)
+    self.assertEqual(sorted(q.relative_to(out/'payload').as_posix()for q in(out/'payload').rglob('*')if q.is_file()),['site-orders.js'])
+    self.assertIn('source-proof/server-after.js',fm.REVIEWED_DATA_PINS)
+    self.assertEqual((out/'source-proof/server-after.js').read_bytes(),(HERE/'payload/server.js').read_bytes())
+    # Exact predecessor read reproduced against the otherwise valid package.
+    prior=inspect.getsource(fm.package).replace("safe_read(AREA/'source-proof/server-after.js')","safe_read(AREA/'payload/server.js')");namespace=fm.__dict__.copy();exec(prior,namespace)
+    with self.assertRaises(FileNotFoundError):namespace['package']()
+    control=(out/'source-proof/server-after.js');saved=control.read_bytes();control.write_bytes(saved+b'changed')
+    with self.assertRaises(ValueError):fm.package()
+    control.write_bytes(saved);(out/'payload/server.js').write_bytes(saved)
+    with self.assertRaisesRegex(ValueError,'CLOSED_PAYLOAD'):fm.package()
  def test_existing_image_attestation_checks_parent_config_tree_and_strict_archive(self):
   base,_,doc,raw=fixture();config={'Entrypoint':['unchanged']};before={'Config':config,'RootFS':{'Layers':['base','forward']}}
   for mutation in (None,'parent','config','tree','content','extra'):

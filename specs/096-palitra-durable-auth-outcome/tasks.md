@@ -35,3 +35,8 @@ R1 helper/stage/prehistory/prepare подтверждены, build остано�
 ## Actual sparse-layer R3 — PRIVATE/source review pending
 
 R2 main built, fallback stopped at strict archive because actual layer onlysite-orders while manifest3 included2unchanged files. Runtime R7/managed337 unchanged; no finalBASE/backups/apply. R3 fixes effective manifest/factory1 and preserves server/manager/fulltree; strictvalidator unchanged. New phase validates only two fixed existing image IDs and exports code artifacts, no Docker rebuild/replay/old journal writes. Sparse6, release14 and lifecycle14 PASS in separate runs; syntax16. Native validation/release/clientadmin5paths OPEN. Receipt RELEASE_EFFECTIVE_LAYER_R3/FOR_REVIEW.md.
+
+
+## Corrected generated package boundary
+
+Independent R3 review caught missing payload/server.js under one-file contract. Previous draft unexecuted and archived. Factory pins separate immutable server-after control and rewrites real package proof-read, leaving payload1/runtime controls. Actual package()337/338 + predecessor FNF/tamper/extra negatives covered; local Windows fileIO fixture only, production Linux safe_read unchanged. Separate7+14PASS, old14 lifecycle carried unchanged; source/native/production boundaries preserved. New review RELEASE_EFFECTIVE_LAYER_R3/REVIEW_R2/FOR_REVIEW.md pending; no production update yet.

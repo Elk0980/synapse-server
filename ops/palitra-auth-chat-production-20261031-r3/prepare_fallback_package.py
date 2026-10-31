@@ -41,6 +41,7 @@ def assemble(forward_image,managed_version,managed_revision,static_phase,output=
   if n in excluded:continue
   dest=out/n;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(HERE/n,dest)
  (out/'source-proof/server-before.js').write_bytes((HERE/'payload/server.js').read_bytes())
+ (out/'source-proof/server-after.js').write_bytes((HERE/'payload/server.js').read_bytes())
  # Whole accepted337 or338 is captured afresh, never restored or rewritten.
  mh=(out/'managed_history.py').read_text(encoding='utf8')
  if managed_version==338:
@@ -63,6 +64,7 @@ def assemble(forward_image,managed_version,managed_revision,static_phase,output=
  s=s.replace("    module('fallback_image.py').validate(sys.modules[__name__])\n",'').replace("        elif mode=='build-fallback':module('fallback_image.py').build(sys.modules[__name__])\n",'')
  s=s.replace("FILE_PINS['/app/site-workspace-feature.js'][1 if after else 0]==tree.get('site-workspace-feature.js',{}).get('sha256')","PRESERVED_R7['/app/site-workspace-feature.js']==tree.get('site-workspace-feature.js',{}).get('sha256')")
  s=s.replace("FILE_PINS['/app/server.js'][1 if after else 0]","PRESERVED_R7['/app/server.js']").replace("FILE_PINS['/app/server.js'][0]","PRESERVED_R7['/app/server.js']")
+ s=s.replace("safe_read(AREA/'payload/server.js')","safe_read(AREA/'source-proof/server-after.js')")
  s=function(s,'r7_plan_guard',"""def r7_plan_guard(plan):
     predecessor=ROOT/'releases/palitra-auth-chat-production-20261031-r3/content-image-only.json'
     need(len(plan['files'])==70 and plan['files'][-1]['path']==str(predecessor),'EXACT_FORWARD_70_ORDERED_PARENT_REQUIRED')

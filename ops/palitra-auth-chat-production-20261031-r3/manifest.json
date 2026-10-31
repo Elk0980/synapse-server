@@ -98,7 +98,7 @@
       "bytes": 377837
     }
   ],
-  "helperSha256": "3984dd4ade3cd7828b06adb4e8459c997393a40b738a9b003a3f328b9dd9f694",
+  "helperSha256": "9952c54f5bda3ab659bf5e7fb402434c057325bfd590a5a41c49a11f500e558f",
   "packageId": "palitra-auth-chat-production-20261031-r3",
   "schema": 1,
   "staticFiles": [
