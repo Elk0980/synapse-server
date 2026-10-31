@@ -40,3 +40,7 @@ R2 main built, fallback stopped at strict archive because actual layer onlysite-
 ## Corrected generated package boundary
 
 Independent R3 review caught missing payload/server.js under one-file contract. Previous draft unexecuted and archived. Factory pins separate immutable server-after control and rewrites real package proof-read, leaving payload1/runtime controls. Actual package()337/338 + predecessor FNF/tamper/extra negatives covered; local Windows fileIO fixture only, production Linux safe_read unchanged. Separate7+14PASS, old14 lifecycle carried unchanged; source/native/production boundaries preserved. New review RELEASE_EFFECTIVE_LAYER_R3/REVIEW_R2/FOR_REVIEW.md pending; no production update yet.
+
+## Separate current-release managed verifier
+
+Corrected R3 source accepted with limits (57 pins); helper9952 downloaded and independently disk-verified before execution, stage PASS. The bundled predecessor managed verifier still names R1 and must not be used. Separate `ops/palitra-auth-chat-managed-20261031-r3/verify.py` binds exact R3 area/package/manifest21c/helper9952. All other guard functions are AST-exact predecessor. Six targeted isolated provenance tests PASS/0fail (0.489s), including old/foreign/tampered receipt rejection; Linux metadata/native acceptance not implied. Main accepted release files unchanged. Narrow review: SERVER_ACCESS_RESUME_20261031/MANAGED_R3_COMPANION_REVIEW/FOR_REVIEW.md. Actual images/release/static/managed CAS and client/admin QA remain OPEN.
