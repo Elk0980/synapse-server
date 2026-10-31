@@ -56,3 +56,6 @@ R4 independently source accepted65pins; both native existing image parent/config
 ## R6: images beforehand, direct admission immediately before final release
 
 R5 reached partial backups (11physical files/7 of11paths) before cache-margin STOP, no apply. Foldermtime11:16:57 is latest child addition, not backupentry; the earlier166s single-guard interpretation was wrong. Read-only component timings are fast; repeated26fullguards accumulate. No guard optimization/caching/removal. R6 only namespace5->6/hashcascade, separate3+6PASS; unchanged inline additional cache admission1test/8casesPASS. Complete images before a following fresh naturalwindow within30min imageanchor; then statusok/new checked==attempt/age0..30s gate immediately followed ONLY by release, target first5s. Exact operator commands pinned in EARLY_WINDOW_R6/REVIEW_R2; earlier gate-before-images draft archived70pins and neverexecuted. WholeDB/currentfacts/nonce/clock/TTL/diagnosticchain/foreignconditions remain exact. Native release/resources/clientadmin5QA stillOPEN.
+
+
+31Oct R7 namespace-only successor: R6 sealed partialimageattestation cacheSTOP beforefinalBASE/apply; no replay. Sourceguards andproductexact, targeted3+6PASS. Images earlynaturalwindow, gate&&ONLYrelease beginningFOLLOWINGactualnaturalwindow under30minanchor. Review/runtime/actual5QA pending.
