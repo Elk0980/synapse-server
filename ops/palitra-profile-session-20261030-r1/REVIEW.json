@@ -1,0 +1,23 @@
+{
+  "status": "ROOT_CODE_REVIEWED_TESTS_PASS_NOT_NATIVE",
+  "ancestorSha256": "0ce85fcd329e4699651eb3a96b81c475fe0d5703e1266026f76a17fbbf031301",
+  "helperSha256": "48e6e0ab462a1f193e9cbfc1970d277c38eec5f9f0d39f7458712bad963ea2ab",
+  "payloadSha256": "008f75eecee63f7bd6657408d844f08f9f37472e1d1d3c81256f52505423a808",
+  "payloadBytes": 64755,
+  "baseSha256": "4edebc359e56d9223f5fc4cfc6c49f85c45f08186099156416503f540510bc32",
+  "baseVersion": 335,
+  "newVersion": 336,
+  "helperLiteralChanges": 9,
+  "unchangedFunctions": 30,
+  "onlyFunctionDiff": "compare error labels only",
+  "helperFullReverseExact": true,
+  "productFullReverseExact": true,
+  "nativeBefore": 0,
+  "officialSave": 0,
+  "nativeAfter": 0,
+  "deliveryTests": 22,
+  "deliveryTestSeconds": 80.581,
+  "uiTests": 10,
+  "actualLocalChromeCases": 3,
+  "sourceReviewAt": "2026-10-30T11:00:06.445813+00:00"
+}

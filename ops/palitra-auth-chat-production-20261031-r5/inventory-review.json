@@ -1,0 +1,257 @@
+{
+  "status": "ROOT_ACCEPTED_R7_SOURCE_LINEAGE_NEEDS_FRESH_NATIVE_READ",
+  "company": "palitra-love",
+  "service": "content",
+  "sourcePins": {
+    "server.js": "23c9664d8209ecf4aa4ce822a1a05a8cf0c2ee3fcb11afa93e396b1d5282d4ac",
+    "site-workspace-feature.js": "f36fe867ef6c5bf0f180ae3caec177f296503f365606c0d3e2b9cf262964ac5e"
+  },
+  "databasePathEnv": "/data/content.sqlite",
+  "dataMount": "/var/lib/docker/volumes/synapse_content_data/_data",
+  "otherWorkspaceAccountDatabaseCountAtRead": 0,
+  "scopeRule": "Generic AccountService remains mandatory by default; optional mode is internal and selected only after fixed Palitra workspace/origin checks",
+  "nativeWrites": 0,
+  "deploymentRequirements": [
+    "Fresh data mount, paths, file identities and no symlinks at prepare/apply",
+    "Readonly SQLite consistent backups, schema and logical preservation",
+    "Fresh inventory discovery must match reviewed paths or refuse for review",
+    "Do not treat this local review as native state or permission",
+    "Do not restore old databases or overwrite later user registrations",
+    "Discover exact active plus fixed opaque archive union; no wildcard exclusion",
+    "SQL consistent backups active3+CRM; raw EXCL copies and hashes of every archive+existing WAL/SHM",
+    "Archived WAL-header copies may lack sidecars; do not create them by opening SQLite",
+    "Fresh sidecar addition/removal/identity/content drift must refuse; no historical DB restore"
+  ],
+  "activeDatabases": [
+    {
+      "containerPath": "/data/content.sqlite",
+      "source": "server DATABASE_PATH",
+      "nativeExists": true,
+      "sameResolvedPath": true,
+      "uid": 0,
+      "gid": 0,
+      "mode": "0644"
+    },
+    {
+      "containerPath": "/data/salon-reports.sqlite",
+      "source": "server createSalonCompanyApp databasePath dirname(DATABASE_PATH)/salon-reports.sqlite",
+      "nativeExists": true,
+      "sameResolvedPath": true,
+      "uid": 0,
+      "gid": 0,
+      "mode": "0600"
+    },
+    {
+      "containerPath": "/data/projects/palitra-love/sites/site-44bbe13f1bad5e005b2a/private/draft-accounts.sqlite",
+      "source": "exact workspace accountFactory root/company/sites/id/private/draft-accounts.sqlite",
+      "nativeExists": true,
+      "sameResolvedPath": true,
+      "uid": 0,
+      "gid": 0,
+      "mode": "0644"
+    }
+  ],
+  "archives": [
+    {
+      "containerPath": "/data/nebo-project-20261020/content-before-site-r3.sqlite",
+      "role": "opaque_retained_copy",
+      "nativeExists": true,
+      "sameResolvedPath": true,
+      "uid": 0,
+      "gid": 0,
+      "mode": "0600",
+      "nlink": 1,
+      "sqliteHeader": true,
+      "maxBytes": 67108864,
+      "sourceReview": "Outside exact startup DATABASE_PATH/salon/fixed account factory paths; preserve every raw byte and existing sidecars; never open via SQLite",
+      "observedBytes": 21372928,
+      "sidecars": {
+        "-wal": {
+          "present": true,
+          "mode": "0600",
+          "uid": 0,
+          "gid": 0,
+          "nlink": 1,
+          "bytes": 0,
+          "sameResolvedPath": true
+        },
+        "-shm": {
+          "present": true,
+          "mode": "0600",
+          "uid": 0,
+          "gid": 0,
+          "nlink": 1,
+          "bytes": 32768,
+          "sameResolvedPath": true
+        }
+      }
+    },
+    {
+      "containerPath": "/data/nebo-project-backup-20261020/content.sqlite",
+      "role": "opaque_retained_copy",
+      "nativeExists": true,
+      "sameResolvedPath": true,
+      "uid": 0,
+      "gid": 0,
+      "mode": "0600",
+      "nlink": 1,
+      "sqliteHeader": true,
+      "maxBytes": 67108864,
+      "sourceReview": "Outside exact startup DATABASE_PATH/salon/fixed account factory paths; preserve every raw byte and existing sidecars; never open via SQLite",
+      "observedBytes": 21327872,
+      "sidecars": {
+        "-wal": {
+          "present": false
+        },
+        "-shm": {
+          "present": false
+        }
+      }
+    },
+    {
+      "containerPath": "/data/nebo-project-backup-20261020/salon-reports.sqlite",
+      "role": "opaque_retained_copy",
+      "nativeExists": true,
+      "sameResolvedPath": true,
+      "uid": 0,
+      "gid": 0,
+      "mode": "0600",
+      "nlink": 1,
+      "sqliteHeader": true,
+      "maxBytes": 67108864,
+      "sourceReview": "Outside exact startup DATABASE_PATH/salon/fixed account factory paths; preserve every raw byte and existing sidecars; never open via SQLite",
+      "observedBytes": 45056,
+      "sidecars": {
+        "-wal": {
+          "present": false
+        },
+        "-shm": {
+          "present": false
+        }
+      }
+    },
+    {
+      "containerPath": "/data/palitra-app-before-20261013.sqlite",
+      "role": "opaque_retained_copy",
+      "nativeExists": true,
+      "sameResolvedPath": true,
+      "uid": 0,
+      "gid": 0,
+      "mode": "0600",
+      "nlink": 1,
+      "sqliteHeader": true,
+      "maxBytes": 67108864,
+      "sourceReview": "Outside exact startup DATABASE_PATH/salon/fixed account factory paths; preserve every raw byte and existing sidecars; never open via SQLite",
+      "observedBytes": 14454784,
+      "sidecars": {
+        "-wal": {
+          "present": false
+        },
+        "-shm": {
+          "present": false
+        }
+      }
+    },
+    {
+      "containerPath": "/data/palitra-map-caption-20261019/content.sqlite",
+      "role": "opaque_retained_copy",
+      "nativeExists": true,
+      "sameResolvedPath": true,
+      "uid": 0,
+      "gid": 0,
+      "mode": "0600",
+      "nlink": 1,
+      "sqliteHeader": true,
+      "maxBytes": 67108864,
+      "sourceReview": "Outside exact startup DATABASE_PATH/salon/fixed account factory paths; preserve every raw byte and existing sidecars; never open via SQLite",
+      "observedBytes": 21237760,
+      "sidecars": {
+        "-wal": {
+          "present": true,
+          "mode": "0600",
+          "uid": 0,
+          "gid": 0,
+          "nlink": 1,
+          "bytes": 0,
+          "sameResolvedPath": true
+        },
+        "-shm": {
+          "present": true,
+          "mode": "0600",
+          "uid": 0,
+          "gid": 0,
+          "nlink": 1,
+          "bytes": 32768,
+          "sameResolvedPath": true
+        }
+      }
+    },
+    {
+      "containerPath": "/data/palitra-production-before-20261013.sqlite",
+      "role": "opaque_retained_copy",
+      "nativeExists": true,
+      "sameResolvedPath": true,
+      "uid": 0,
+      "gid": 0,
+      "mode": "0600",
+      "nlink": 1,
+      "sqliteHeader": true,
+      "maxBytes": 67108864,
+      "sourceReview": "Outside exact startup DATABASE_PATH/salon/fixed account factory paths; preserve every raw byte and existing sidecars; never open via SQLite",
+      "observedBytes": 11595776,
+      "sidecars": {
+        "-wal": {
+          "present": false
+        },
+        "-shm": {
+          "present": false
+        }
+      }
+    },
+    {
+      "containerPath": "/data/palitra-unified-orders-20261021-r8-completion-c1-save/content.sqlite",
+      "role": "opaque_retained_copy",
+      "nativeExists": true,
+      "sameResolvedPath": true,
+      "uid": 0,
+      "gid": 0,
+      "mode": "0600",
+      "nlink": 1,
+      "sqliteHeader": true,
+      "maxBytes": 67108864,
+      "sourceReview": "Outside exact startup DATABASE_PATH/salon/fixed account factory paths; preserve every raw byte and existing sidecars; never open via SQLite",
+      "observedBytes": 21671936,
+      "sidecars": {
+        "-wal": {
+          "present": true,
+          "mode": "0600",
+          "uid": 0,
+          "gid": 0,
+          "nlink": 1,
+          "bytes": 0,
+          "sameResolvedPath": true
+        },
+        "-shm": {
+          "present": true,
+          "mode": "0600",
+          "uid": 0,
+          "gid": 0,
+          "nlink": 1,
+          "bytes": 32768,
+          "sameResolvedPath": true
+        }
+      }
+    }
+  ],
+  "fullDiscovery": {
+    "contentSqliteFiles": 10,
+    "crmSqliteFiles": 1,
+    "unexpectedFilesAfterExplicitInventory": 0,
+    "allFilesRegularNlink1Root": true,
+    "archiveLargestObservedBytes": 21671936,
+    "archiveSqliteOpenForbidden": true,
+    "evidence": "R3_NATIVE_FULL_INVENTORY_METADATA.png",
+    "sidecarEvidence": "R3_NATIVE_ARCHIVE_METADATA_SHORT.png"
+  },
+  "observedAtUtc": "2026-10-29T18:35Z"
+}

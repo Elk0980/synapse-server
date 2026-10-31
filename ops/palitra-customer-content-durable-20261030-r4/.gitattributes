@@ -1,0 +1,3 @@
+* -text whitespace=cr-at-eol
+*.diff -whitespace
+payload/** -whitespace

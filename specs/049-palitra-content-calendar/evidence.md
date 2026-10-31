@@ -1,4 +1,18 @@
+## 30.10 17:27 Бангкок — новый статус установлен, внешняя доставка не подтверждена
+
+Publication-status-r1 commit996fe90270c9416217845c2efaba36fb4f0327ea: ровно3existingJS, stage1/prepare1/apply1/separateinspect1 PASS лично Root. Helper45a1d303a922c7837f50a8ed46432718ba185ecec6ffb8aa863d478490c4ead6; manifest7d12ea605875f69ff61c31e65a2f5855743a26369987cffac46a1840a25861e1. Ownlease179738/start24962868 освобождена однимexit и freshfilteredlslocks empty. Все5images/price83/внезадачнаястатика/окружение сохранены, runtime/DB/restarts0. Обычный reload со старымquery получил3точныхafterSHA.
+
+Root live: новая форма Черновик/Согласован и кнопка Согласовать и запланировать; desktop/390/320 scroll==client, метрики сброшены. Старый70v1/draft/textempty/deliveries0 имеет approveAndScheduleAvailable:true и новый selector. При выборе Согласован кнопкаdisabled с причинами: пустой текст, прошедшее время, неподключённые/выключенные каналы. Само согласование не выполнялось; create/approve/schedule/send0. Не выдавать interface/local mocks за реальную внешнюю отправку.
+
+Права учётных записей проверены владельцем только для чтения: у найденного пользователя согласование разрешено, однако он назначен другой компании. В целевой компании найден отдельный пользователь с теми же правами. Не входили за пользователей и не меняли доступ. Уточнение личности ожидается; общий код Palitra не объявляется приёмкой другого клиентского приложения. Имена, логины и компании этой проверки сохранены только в приватном receipt. Приватные evidence: PALITRA_PUBLICATION_STATUS_20261030/NATIVE_OUTCOME.json, NORMAL_RELOAD_RESOURCE_PINS.json, LIVE_OLD70_RECEIPT.json, ACCOUNT_RIGHTS_RECEIPT.json и реальные jpg.
+
 # Свидетельства
+
+## 30.10 — статусы публикации: код и локальные проверки
+
+Свежие загруженные ресурсы рабочего кабинета прочитаны через Page.getResourceContent; native read-only подтвердил все три SHA, mode0644, root и отсутствие блокировки. Это не установка. В рабочем интерфейсе подтверждено отсутствие выбора статуса и выключенная отправка ВК/неподключённость остальных площадок. В пакете palitra-publication-status-20261030-r1 выбор статуса новой/существующей карточки связан с действующим atomic approve+schedule; старые контракты, права, linked-plan guards и неизвестные исходы сохранены.
+
+56 DOM/integration/regression PASS; 89 существующих серверных approval/destination/drain PASS; 20 installer tests OK, один symlink fixture пропущен Windows. Два первоначальных падения старого fixture относились к уже установленному тексту UX1 и отсутствующей ссылке на неизменяемый Plan dependency; изменены только тестовые ссылки/ожидание фактической базовой версии, не продукт ради теста. Синтаксис и Spec Kit gate48 PASS. Installer сохраняет 16 функций проверок байт-в-байт, apply_order меняет только docstring; добавлена проверка собственной блокировки перед stage. Старые apply не вызваны. Реальные create/approve/schedule/send/DB/runtime/restart0. T024 ещё открыт: нужна точечная установка, независимый readback, live и проверка прав Лены.
 
 ## Последний итог 29.10: native content и упрощение списка
 

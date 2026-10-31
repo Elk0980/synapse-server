@@ -1,0 +1,24 @@
+{
+  "status": "PRIVATE_R11_CODE_ONLY_PENDING_ROOT_REVIEW_NOT_NATIVE_PERMIT",
+  "nativeActions": 0,
+  "sourceR10RegistrySha256": "904181873460d20682950472889fbeb802718dcf111353282876be2aa66b7eb7",
+  "r10All34Verified": true,
+  "basisR10HelperSha256": "545f12e62f9cb2fed1a8cb3a9172d5720fc5781d4c2bd785c363a87c90997eda",
+  "helperSha256": "d40b876beb04c42e350a2ab9847facd2edb525d90c7b296c37485a78f60cb9b6",
+  "moduleSha256": "9d00a086c983a0a7435cf6a6a2f726b570bc787bf52f56fc294ae03684aa640b",
+  "fullPrefixSha256": "69690754e6efb394e3fede769257dc39df7fd1fe221d018c5cd7f77e346aa2cd",
+  "fullPrefixBytes": 6429,
+  "fullPrefixByteExact": true,
+  "helperReverseByteExactR10": true,
+  "helperChangesOnly": [
+    "NAME",
+    "managed_history.py pin",
+    "scope-review.json provenance pin"
+  ],
+  "scopeSha256": "01285ec8fd97284411495b50d84e1ab4de883d5ee834131e4553063016751209",
+  "manifestSha256": "5a110a82b5ce67345f1b953148d061111e3286dbfa1b42e0a4140f17ee7f7ca8",
+  "manifestTechnicalStatus": "ROOT_REVIEWED_CODE_ONLY",
+  "sameSixPayload": true,
+  "rootFinalReviewRequired": true,
+  "draftR1Untouched": true
+}

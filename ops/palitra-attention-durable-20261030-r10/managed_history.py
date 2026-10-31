@@ -1,0 +1,62 @@
+"""Readonly exact managed-history witness, adapted from reviewed QA_R4 primitives.
+No network/application imports/SQL writes/repair. Full SHA before/after; full stat between.
+"""
+from pathlib import Path,PurePosixPath
+import hashlib,json,os,re,stat,time
+SITE='site-44bbe13f1bad5e005b2a';COMPANY='palitra-love';HEX=re.compile('[a-f0-9]{64}')
+LIMIT=16*1024*1024;TOTAL=6*1024**3;MAXFILES=250000;SECONDS=180;HISTORY_COUNT=334
+PINS={'assets/storefront.js':'98ebd1820e7339d17ee05d4f9b87be531bbceff719859221c990606ca1a7413b','account/register/index.html':'8d5f8e165307dfc9272cbe8ec3851f0f85a2e6db370558b52face10dfb74dbf0'}
+enc=lambda v:(json.dumps(v,sort_keys=True,ensure_ascii=False,separators=(',',':'))+'\n').encode();sha=lambda v:hashlib.sha256(v).hexdigest()
+def need(ok,code):
+ if not ok:raise ValueError(code)
+def pairs(items):
+ out={}
+ for k,v in items:need(k not in out,'HISTORY_DUPLICATE_JSON_KEY');out[k]=v
+ return out
+def parse(raw):return json.loads(raw,object_pairs_hook=pairs,parse_constant=lambda _:(_ for _ in()).throw(ValueError('HISTORY_NONFINITE_JSON')))
+def relative(name):
+ need(type(name)is str and name and '\\'not in name and not any(ord(c)<32 for c in name),'HISTORY_PATH_INVALID');p=PurePosixPath(name);need(not p.is_absolute()and all(v not in('','.','..')for v in name.split('/'))and str(p)==name,'HISTORY_PATH_INVALID');return name
+def meta(path):
+ s=path.lstat();return [s.st_dev,s.st_ino,s.st_mode,s.st_uid,s.st_gid,s.st_nlink,s.st_size,str(s.st_mtime_ns),str(s.st_ctime_ns)]
+def safe(path):
+ need(path.is_absolute()and path.resolve()==path,'HISTORY_CANONICAL_FILE');before=path.lstat();need(stat.S_ISREG(before.st_mode)and not path.is_symlink()and before.st_size<=LIMIT,'HISTORY_REGULAR_BOUND')
+ fd=os.open(path,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0)|getattr(os,'O_NONBLOCK',0)|getattr(os,'O_BINARY',0))
+ with os.fdopen(fd,'rb')as f:raw=f.read(LIMIT+1);inside=os.fstat(f.fileno())
+ after=path.lstat();keys=('st_dev','st_ino','st_size','st_mode','st_uid','st_gid','st_nlink','st_mtime_ns','st_ctime_ns');need(len(raw)<=LIMIT and all(getattr(before,k)==getattr(inside,k)==getattr(after,k)for k in keys),'HISTORY_READ_CHANGED');return raw
+def tree(folder,budget,full,expected=None):
+ need(folder.is_dir()and not folder.is_symlink()and folder.resolve()==folder,'HISTORY_CANONICAL_DIRECTORY');files={};dirs={'.':meta(folder)}
+ def walk_error(error):raise error
+ for current,subdirs,names in os.walk(folder,followlinks=False,onerror=walk_error):
+  for n in subdirs:
+   p=Path(current)/n;need(not p.is_symlink(),'HISTORY_DIRECTORY_ALIAS');dirs[relative(p.relative_to(folder).as_posix())]=meta(p)
+  for n in names:
+   p=Path(current)/n;name=relative(p.relative_to(folder).as_posix());info=p.lstat();need(not p.is_symlink()and stat.S_ISREG(info.st_mode)and info.st_size<=LIMIT,'HISTORY_REGULAR_BOUND');before=meta(p)
+   budget[0]+=info.st_size;budget[1]+=1;need(budget[0]<=TOTAL and budget[1]<=MAXFILES and time.monotonic()-budget[2]<=SECONDS,'HISTORY_SCAN_BOUND')
+   if full:digest=sha(safe(p))
+   else:
+    need(expected is not None and name in expected['files']and expected['files'][name]['stat']==before,'HISTORY_STAT_CHANGED');digest=expected['files'][name]['sha256']
+   need(meta(p)==before,'HISTORY_STAT_CHANGED');files[name]={'sha256':digest,'bytes':info.st_size,'stat':before}
+ result={'files':files,'directories':dirs}
+ if expected is not None:need(enc(result)==enc(expected),'HISTORY_TREE_CHANGED')
+ return result
+
+def scan(conn,data,facts,required_revision,full=True,expected=None):
+ need(type(required_revision)is str and HEX.fullmatch(required_revision),'HISTORY_REVIEWED334_REV_REQUIRED')
+ row=conn.execute('SELECT m.id,m.company_code,m.is_active,m.deleted_at,w.hostname,w.runtime,w.current_revision FROM managed_sites m JOIN site_workspaces w ON w.site_id=m.id WHERE m.id=?',(SITE,)).fetchone();need(row and row[:6]==(SITE,COMPANY,1,None,'palitra-love-draft-1.synapsebusiness.ru','palitra-draft')and row[6]==required_revision,'HISTORY_FIXED_SITE334_REQUIRED')
+ tables=('managed_sites','site_workspaces','site_workspace_revisions');need(all(t in facts['tables']for t in tables),'HISTORY_MANAGED_TABLES_REQUIRED')
+ managed={'schema':[r for r in facts['schema']if r[2]in tables],'tables':{t:facts['tables'][t]for t in tables}}
+ cols=[r[1]for r in conn.execute('PRAGMA table_info(site_workspace_revisions)')];need({'site_id','revision','version','manifest_json'}<=set(cols),'HISTORY_KNOWN_SCHEMA')
+ rows=conn.execute('SELECT * FROM site_workspace_revisions WHERE site_id=? ORDER BY version,revision',(SITE,)).fetchall();need(len(rows)==HISTORY_COUNT,'HISTORY_EXACT334_REVISION_COUNT');versions=data/'projects'/COMPANY/'sites'/SITE/'versions';need(versions.resolve()==versions and versions.is_dir()and not versions.is_symlink(),'HISTORY_VERSIONS_ROOT');records={};budget=[0,0,time.monotonic()];current_doc=None
+ for values in rows:
+  record=dict(zip(cols,values));rev=record['revision'];need(type(rev)is str and HEX.fullmatch(rev)and rev not in records and type(record['version'])is int,'HISTORY_REVISION_IDENTITY')
+  doc=parse(record['manifest_json']);prior=None if expected is None else expected['history'].get(rev);need(expected is None or prior is not None,'HISTORY_UNEXPECTED_REVISION')
+  actual=tree(versions/rev,budget,full,None if prior is None else prior['tree']);need(type(doc)is dict and set(doc)==set(actual['files']),'HISTORY_MANIFEST_FILESET')
+  records[rev]={'version':record['version'],'rowSha256':sha(enc(list(values))),'manifestSha256':sha(record['manifest_json'].encode()),'tree':actual}
+  if rev==required_revision:
+   need(record['version']==334 and len(doc)==141,'HISTORY_EXACT334_141')
+   for name,item in doc.items():relative(name);need(item['sha256']==actual['files'][name]['sha256']and item['bytes']==actual['files'][name]['bytes'],'HISTORY_CURRENT_CONTENT_MISMATCH')
+   need(all(doc.get(k,{}).get('sha256')==v for k,v in PINS.items()),'HISTORY_ACCEPTED_FORMS_CHANGED');current_doc=doc
+ need(current_doc is not None and {p.name for p in versions.iterdir()}==set(records),'HISTORY_CURRENT_OR_PATHSET_CHANGED');need(conn.total_changes==0,'HISTORY_READONLY_REQUIRED')
+ result={'siteId':SITE,'companyCode':COMPANY,'version':334,'revision':required_revision,'managedRows':managed,'history':records,'manifestSha256':sha(enc(current_doc)),'files':budget[1],'bytes':budget[0]}
+ if expected is not None:need(enc(result)==enc(expected),'HISTORY_ROWS_OR_CONTENT_CHANGED')
+ return result

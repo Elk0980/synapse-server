@@ -1,0 +1,169 @@
+--- frozenR1/install.py
++++ R2/install.py
+@@ -4,14 +4,14 @@
+ """
+ from pathlib import Path
+ from contextlib import contextmanager
+-import ast,copy,hashlib,io,json,os,re,sqlite3,stat,subprocess,sys,tarfile,time,urllib.request
++import ast,copy,hashlib,hmac,io,json,os,re,sqlite3,stat,subprocess,sys,tarfile,time,urllib.request
+ try:
+  import resource
+ except ImportError:
+  resource=None
+ from datetime import datetime,timezone,timedelta
+ sys.dont_write_bytecode=True
+-NAME='palitra-customer-content-durable-20261030-r1'
++NAME='palitra-customer-content-durable-20261030-r2'
+ ROOT=Path('/opt/synapse');AREA=ROOT/'releases'/NAME;SELF=Path(__file__).resolve();LOCK=ROOT/'.palitra-app-release.lock'
+ CRM='synapse-crm-1';CONTENT='synapse-content-1';CONTAINERS=(CRM,CONTENT,'synapse-hugh-runtime-1','synapse-chat-1','caddy')
+ BASE_IMAGE='sha256:9a1ab665339b10a49a49d8c605075ae701e4b28a9db1a3bb3ec49483fd8e6f44'
+@@ -22,7 +22,7 @@
+ enc=lambda v:(json.dumps(v,ensure_ascii=False,sort_keys=True,separators=(',',':'))+'\n').encode()
+ FILE_PINS={'/app/draft-account-service.cjs': ('0b7cb428936e90ec3b97e55d2abea6bbd56e867b4fa51d13588abc5ff2bff993', '23a0d76ed2d5d2bef47ad49e5822829a088b6148ceeffae09731b6f499d34f26'), '/app/customer-chat.js': ('65439df0c0268aa49c33b679d4142090c72f54e02153d1fcf21383587a341ffa', '1a3927539386fe4e075bf9aa9ec7cfc995fe0b36787ebb67ad7898359058456e'), '/app/customer-chat-native-adapter.cjs': ('0457646b76195b113834bcc26e4150bd488e3f4a19f83142006d666e277090f7', 'a72732560bd9adb109080c09cf0ce3bd7774eb72614ea29073d301d44245037e'), '/app/palitra-orders-public/shell.js': ('823da57f742b6ac656b48acbc7a57cf7bd2f69b9ee4993e7fb678f3c7ce4ba28', 'b39d4cdb4d07673988249863d0ce4e767981565ed6f77350073aeff61ec273c9'), '/app/palitra-review-public/palitra-chat.js': ('6ee45fc44d303314ba6124d0b37853f4129e579f9a29b6989d9ee39efdcd3cc6', '5752c762048c18aa01ccc52f503ef63230468d79ff7749895b6e4e0dd37d124b'), '/app/site-workspace-feature.js': ('319c233f6066955193ac850ce8b58464b198ad262d168be64281659828e82910', 'f36fe867ef6c5bf0f180ae3caec177f296503f365606c0d3e2b9cf262964ac5e')}
+ TARGETS=tuple(FILE_PINS)
+-REVIEWED_DATA_PINS={'reviewed-sql.json': '410b03163c43b703212e212d47821d9f2c427b21ee5ac17013d08a54c0193ba5', 'reviewed-source-pins.json': '4d40b687ecd38b081e1ffd1f7a412c53c739681c472725ebdb0a2e49e3cee4a9', 'inventory-review.json': '8e2fb66d88cc1da78e297219068a7b924a94860c20b66042a52fac960c103311', 'economy_projection.py': 'f320cb7299bdb75037272ae55e388e76697e6ce4d3a910eb1b5412eae3d3a283', 'vault_probe.cjs': 'a0bdb5e3089355201dfa71fa205ff0524c418a110710d820a70a5148731ed8d3'}
++REVIEWED_DATA_PINS={'reviewed-sql.json': '410b03163c43b703212e212d47821d9f2c427b21ee5ac17013d08a54c0193ba5', 'reviewed-source-pins.json': '4d40b687ecd38b081e1ffd1f7a412c53c739681c472725ebdb0a2e49e3cee4a9', 'inventory-review.json': '8e2fb66d88cc1da78e297219068a7b924a94860c20b66042a52fac960c103311', 'economy_projection.py': 'f320cb7299bdb75037272ae55e388e76697e6ce4d3a910eb1b5412eae3d3a283', 'vault_probe.cjs': '8714b8bc8cda5a6724227e31fdab4b37825b161026d9326d3c61296589263c13'}
+ INVENTORY_REVIEW_SHA='8e2fb66d88cc1da78e297219068a7b924a94860c20b66042a52fac960c103311'
+ def need(ok, reason):
+     if not ok: raise ValueError(reason)
+@@ -195,6 +195,8 @@
+     if len(a)==6 and a[:4]==('docker','image','inspect','--format') and a[4]=='{{.Id}}' and re.fullmatch('[A-Za-z0-9][A-Za-z0-9_./:@-]{0,255}',a[5]):return True
+     if len(a)==6 and a[:3]==('docker','exec',a[2]) and re.fullmatch('[a-f0-9]{64}',a[2]) and a[3:]==('node','-e',TREE_JS):return True
+     if len(a)==6 and a[:2]==('docker','exec')and re.fullmatch('[a-f0-9]{64}',a[2])and a[3:5]==('node','-e'):
++        return False # R2 opaque proof requires exactly one fresh nonce argument
++    if len(a)==7 and a[:2]==('docker','exec')and re.fullmatch('[a-f0-9]{64}',a[2])and a[3:5]==('node','-e')and HEX.fullmatch(a[6]):
+         return a[5]==vault_code()
+     if len(a)==12 and a[:9]==('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint=node'):
+         return bool(IMAGE.fullmatch(a[9]) and a[10:]==('-e',TREE_JS))
+@@ -390,32 +392,58 @@
+         return {'dev':str(st.st_dev),'ino':str(st.st_ino),'size':str(st.st_size),'mtimeNs':str(st.st_mtime_ns),'ctimeNs':str(st.st_ctime_ns)}
+     except FileNotFoundError:return None
+ 
++_VAULT_PROOFS={}
++_USED_VAULT_NONCES=set()
++
++def vault_file_identity(path):
++    value=vault_file_state(path)
++    return {k:value[k]for k in('dev','ino')}if value is not None else None
++
+ def opaque_vault_probe(rows,path):
+-    row=rows[CONTENT];probe_profile(row['Config']);before=[vault_file_state(path),vault_file_state(str(path)+'-wal')]
++    row=rows[CONTENT];probe_profile(row['Config']);before=[vault_file_identity(path),vault_file_identity(str(path)+'-wal')]
+     need(before[0]is not None,'VAULT_DATABASE_MISSING');started=time.time()
+-    value=json.loads(run(['docker','exec',row['Id'],'node','-e',vault_code()],timeout=10))
+-    need(time.time()-started<=5 and set(value)=={'sourceSha256','settingsBinding','providers','canUseBalanceAccount','databasePath','files','asOfMs'},'VAULT_PROOF_FRESH_SHAPE')
++    nonce=os.urandom(32).hex();need(nonce not in _USED_VAULT_NONCES,'VAULT_NONCE_REUSE');_USED_VAULT_NONCES.add(nonce)
++    value=json.loads(run(['docker','exec',row['Id'],'node','-e',vault_code(),nonce],timeout=10))
++    need(time.time()-started<=5 and set(value)=={'nonce','sourceSha256','settingsBinding','providers','canUseBalanceAccount','databasePath','files','asOfMs'},'VAULT_PROOF_FRESH_SHAPE')
++    need(type(value['nonce'])is str and hmac.compare_digest(value['nonce'],nonce),'VAULT_NONCE_MISMATCH')
+     need(value['sourceSha256']=='6464ac246aa197ef8f9f197a332eed5d2b27f0acda445b08f89192c660514141'and value['databasePath']=='/data/content.sqlite','VAULT_PROOF_SCOPE')
++    need(type(value['settingsBinding'])is str and HEX.fullmatch(value['settingsBinding']),'VAULT_BINDING_FORMAT')
+     need(type(value['asOfMs'])is int and started*1000-1000<=value['asOfMs']<=time.time()*1000+1000,'VAULT_PROOF_TIMESTAMP')
+-    need(value['files']==before==[vault_file_state(path),vault_file_state(str(path)+'-wal')],'VAULT_DATABASE_CHANGED_DURING_PROBE')
++    need(value['files']==before==[vault_file_identity(path),vault_file_identity(str(path)+'-wal')],'VAULT_DATABASE_IDENTITY_CHANGED_DURING_PROBE')
+     fresh=inspect_container(CONTENT);need(fresh['Id']==row['Id']and fresh['Image']==row['Image']and fresh['Config']==row['Config'],'VAULT_PARENT_CHANGED')
++    _VAULT_PROOFS[nonce]={'proof':copy.deepcopy(value),'expiresAt':started+5,'parent':copy.deepcopy(row),'path':str(path)}
+     return value
++
++def settings_snapshot_binding(connection,nonce):
++    columns=[r[1]for r in connection.execute('PRAGMA table_info(hugh_provider_settings)')];need('encrypted_key'in columns and len(columns)==len(set(columns)),'VAULT_SCHEMA_UNKNOWN')
++    rows=[]
++    for row in connection.execute('SELECT * FROM hugh_provider_settings ORDER BY name'):
++        item=dict(zip(columns,row));need(all(v is None or type(v)is str or(type(v)is int and abs(v)<=9007199254740991)for v in item.values()),'VAULT_CANONICAL_SCALAR_UNKNOWN');rows.append(item)
++    need(len(rows)<=7,'VAULT_ROW_BOUND')
++    raw=json.dumps(rows,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()
++    binding=hmac.new(bytes.fromhex(nonce),b'palitra-vault-snapshot/v2\n'+raw,hashlib.sha256).hexdigest()
++    return binding
+ 
+ def economy_guard(connection,env,end,proof=None,path=None):
+     import importlib.util
+     module_path=AREA/'economy_projection.py';need(sha(safe_read(module_path))==REVIEWED_DATA_PINS[module_path.name],'ECONOMY_PROJECTION_PIN_CHANGED')
+     need(proof is not None and path is not None,'FRESH_OPAQUE_VAULT_PROOF_REQUIRED')
+-    need(proof['files']==[vault_file_state(path),vault_file_state(str(path)+'-wal')],'VAULT_DATABASE_CHANGED_BEFORE_PROJECTION')
+-    columns=[r[1]for r in connection.execute('PRAGMA table_info(hugh_provider_settings)')];need('encrypted_key'in columns,'VAULT_SCHEMA_UNKNOWN')
+-    metadata=[]
+-    for row in connection.execute('SELECT * FROM hugh_provider_settings ORDER BY name'):
+-        item=dict(zip(columns,row));item['keyPresent']=bool(item.pop('encrypted_key'));metadata.append(item)
+-    binding=sha(json.dumps(metadata,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode())
+-    need(binding==proof['settingsBinding'],'VAULT_SQLITE_SNAPSHOT_MISMATCH')
+-    module_path=AREA/'economy_projection.py';need(sha(safe_read(module_path))==REVIEWED_DATA_PINS[module_path.name],'ECONOMY_PROJECTION_PIN_CHANGED')
++    need(type(proof)is dict and type(proof.get('nonce'))is str,'FRESH_OPAQUE_VAULT_PROOF_REQUIRED')
++    issued=_VAULT_PROOFS.pop(proof['nonce'],None)
++    need(issued is not None and issued['proof']==proof and issued['path']==str(path),'VAULT_PROOF_NOT_ISSUED_OR_REPLAYED')
++    need(time.time()<=issued['expiresAt'],'VAULT_PROOF_EXPIRED')
++    fresh=inspect_container(CONTENT);parent=issued['parent']
++    need(fresh['Id']==parent['Id']and fresh['Image']==parent['Image']and fresh['Config']==parent['Config']and env==env_map(fresh),'VAULT_PARENT_OR_ENV_CHANGED')
++    need(proof['files']==[vault_file_identity(path),vault_file_identity(str(path)+'-wal')],'VAULT_DATABASE_IDENTITY_CHANGED_BEFORE_PROJECTION')
++    binding=settings_snapshot_binding(connection,proof['nonce'])
++    need(hmac.compare_digest(binding,proof['settingsBinding']),'VAULT_SQLITE_SNAPSHOT_MISMATCH')
+     spec=importlib.util.spec_from_file_location('reviewed_economy_projection',module_path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+     value=module.verify(connection,env,int(time.time()*1000),int(end*1000),{k:proof[k]for k in('providers','canUseBalanceAccount')})
+-    need(proof['files']==[vault_file_state(path),vault_file_state(str(path)+'-wal')],'VAULT_DATABASE_CHANGED_AFTER_PROJECTION')
++    need(proof['files']==[vault_file_identity(path),vault_file_identity(str(path)+'-wal')],'VAULT_DATABASE_IDENTITY_CHANGED_AFTER_PROJECTION')
++    fresh=inspect_container(CONTENT);need(fresh['Id']==parent['Id']and fresh['Image']==parent['Image']and fresh['Config']==parent['Config']and env==env_map(fresh),'VAULT_PARENT_OR_ENV_CHANGED')
++    with db_open(path)as latest:
++        need(hmac.compare_digest(settings_snapshot_binding(latest,proof['nonce']),proof['settingsBinding']),'VAULT_SETTINGS_CHANGED_AFTER_PROJECTION')
++    need(time.time()<=issued['expiresAt'],'VAULT_PROOF_EXPIRED')
+     return value
+ 
+ def query_metadata(connection,required,queries,params):
+@@ -548,6 +576,10 @@
+         permit=load(AREA/'apply-permit.json');margin=max(time.time(),permit['expires'])+GRACE
+         if not readback:need(permit['created']<=time.time()<permit['expires'],'APPLY_PERMIT_EXPIRED')
+     startup_guard(paths,rows,margin)
++    # R2 tolerant RO-binding must not replace the independent wholeDB fence.
++    for name,row in paths.items():
++        need(db_identity(row['hostPath'])==row['identity'],'DATABASE_IDENTITY_CHANGED_AFTER_STARTUP_GUARD')
++        with db_open(row['hostPath'])as conn:assert_database(conn,base['databaseFacts'][name])
+     return staged,manifest,base,rows
+ 
+ def backup_databases(base):
+--- frozenR1/vault_probe.cjs
++++ R2/vault_probe.cjs
+@@ -56,7 +56,8 @@
+   if (/\.\.|\/\//.test(url.pathname)) fail(400, 'Проверьте путь адреса API');
+   return `https://${host}${url.pathname.replace(/\/+$/, '')}`;
+ }
+-function evaluate(source,db,env){
++function evaluate(source,db,env,nonce){
++ need(typeof nonce==='string'&&/^[a-f0-9]{64}$/.test(nonce));
+  need(digest(source)===SOURCE_PIN);const normalized=source.toString('utf8').replace(/\r\n/g,'\n');
+  for(const part of FRAGMENTS)need(normalized.includes(part));need(normalized.includes(ACCOUNT_FRAGMENT));
+  const masterKey=String(env.HUGH_PROVIDER_MASTER_KEY||'');const available=masterKey.length>=MIN_MASTER_KEY;
+@@ -120,7 +121,7 @@
+  need(normalized.includes('const checkCurrent = '+checkCurrent.toString()+';'));
+  const rows=db.prepare('SELECT * FROM hugh_provider_settings ORDER BY name').all();
+  need(rows.length<=CATALOG.length&&rows.every(r=>BY_NAME.has(r.name))&&new Set(rows.map(r=>r.name)).size===rows.length);
+- const metadata=rows.map(({encrypted_key,...r})=>{r.keyPresent=Boolean(encrypted_key);return Object.fromEntries(Object.keys(r).sort().map(k=>[k,r[k]]));});
++ const metadata=rows.map(r=>{need(Object.values(r).every(v=>v===null||typeof v==='string'||(typeof v==='number'&&Number.isSafeInteger(v))));return Object.fromEntries(Object.keys(r).sort().map(k=>[k,r[k]]));});
+  const report=runtimeReport(),ready=new Set(report.ready.map(r=>r.name));
+  let balanceAccount;
+  const row=name=>rows.find(r=>r.name===name)||null;
+@@ -131,13 +132,14 @@
+  };
+  need(readBalanceAccount.toString().includes(ACCOUNT_FRAGMENT));
+  balanceAccount=readBalanceAccount();
+- const result={sourceSha256:SOURCE_PIN,settingsBinding:digest(JSON.stringify(metadata)),providers:CATALOG.map(p=>({provider:p.name,canDecryptAndPassRuntimeSelection:ready.has(p.name)})),canUseBalanceAccount:Boolean(balanceAccount)};
++ const result={nonce,sourceSha256:SOURCE_PIN,settingsBinding:crypto.createHmac('sha256',Buffer.from(nonce,'hex')).update('palitra-vault-snapshot/v2\n').update(JSON.stringify(metadata)).digest('hex'),providers:CATALOG.map(p=>({provider:p.name,canDecryptAndPassRuntimeSelection:ready.has(p.name)})),canUseBalanceAccount:Boolean(balanceAccount)};
+  // Secrets remain transient and are never serialized, logged, or hashed.
+  for(const r of report.ready)r.secret='';if(balanceAccount)balanceAccount.secret='';balanceAccount=null;
+  return result;
+ }
+-function fileState(path){try{const s=fs.lstatSync(path,{bigint:true});need(!s.isSymbolicLink()&&s.isFile()&&s.nlink===1n);return {dev:String(s.dev),ino:String(s.ino),size:String(s.size),mtimeNs:String(s.mtimeNs),ctimeNs:String(s.ctimeNs)};}catch(e){if(e.code==='ENOENT')return null;throw Error('VAULT_PROBE_REFUSED');}}
++function fileState(path){try{const s=fs.lstatSync(path,{bigint:true});need(!s.isSymbolicLink()&&s.isFile()&&s.nlink===1n);return {dev:String(s.dev),ino:String(s.ino)};}catch(e){if(e.code==='ENOENT')return null;throw Error('VAULT_PROBE_REFUSED');}}
+ function main(){let db;try{
++ need(process.argv.length===2&&/^[a-f0-9]{64}$/.test(process.argv[1]));const nonce=process.argv[1];
+  need(process.env.DATABASE_PATH===DB_PATH);const before=[DB_PATH,DB_PATH+'-wal'].map(fileState);need(before[0]);
+  const fd=fs.openSync(DB_PATH,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW),header=Buffer.alloc(20);try{need(fs.readSync(fd,header,0,20,0)===20);}finally{fs.closeSync(fd);}
+  const shm=fileState(DB_PATH+'-shm');if(header[18]===2||header[19]===2)need(before[1]&&shm);
+@@ -145,8 +147,8 @@
+  const {DatabaseSync}=require('node:sqlite');db=new DatabaseSync(DB_PATH,{readOnly:true});db.exec('PRAGMA query_only=ON;BEGIN');
+  const columns=new Set(db.prepare('PRAGMA table_info(hugh_provider_settings)').all().map(r=>r.name));
+  for(const name of ['name','enabled','encrypted_key','base_url','config_revision','check_state','checked_revision','budget_usd_micro','model_id','timeout_ms','max_output_tokens','price_prompt_micro','price_completion_micro'])need(columns.has(name));
+- const result=evaluate(source,db,process.env);need(db.prepare('SELECT total_changes() n').get().n===0);db.exec('ROLLBACK');db.close();db=null;
+- const after=[DB_PATH,DB_PATH+'-wal'].map(fileState);need(JSON.stringify(before)===JSON.stringify(after));const nextShm=fileState(DB_PATH+'-shm');need((!shm&&!nextShm)||(shm&&nextShm&&shm.dev===nextShm.dev&&shm.ino===nextShm.ino&&shm.size===nextShm.size));
++ const result=evaluate(source,db,process.env,nonce);need(db.prepare('SELECT total_changes() n').get().n===0);db.exec('ROLLBACK');db.close();db=null;
++ need(digest(fs.readFileSync(SOURCE_PATH))===SOURCE_PIN);const after=[DB_PATH,DB_PATH+'-wal'].map(fileState);need(JSON.stringify(before)===JSON.stringify(after));const nextShm=fileState(DB_PATH+'-shm');need((!shm&&!nextShm)||(shm&&nextShm&&shm.dev===nextShm.dev&&shm.ino===nextShm.ino));
+  process.stdout.write(JSON.stringify({...result,databasePath:DB_PATH,files:after,asOfMs:Date.now()}));
+  }catch{try{db?.close();}catch{}process.stderr.write('VAULT_PROBE_REFUSED');process.exitCode=78;}}
+ module.exports={evaluate,SOURCE_PIN,main};

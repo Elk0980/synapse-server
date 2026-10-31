@@ -1,0 +1,33 @@
+{
+  "status": "PRIVATE_R12_LOCAL_VERIFIED_NOT_NATIVE_PERMIT",
+  "atUtc": "2026-10-30T01:31:08.880419+00:00",
+  "tests": {
+    "command": "python -m unittest test_runtime_host test_managed_history test_host_static test_r9_lineage test_host_metadata -q",
+    "run": 34,
+    "passed": 34,
+    "skipped": 0,
+    "seconds": 44.907,
+    "exitCode": 0,
+    "printedPhaseNamesAndReadbacks": "SYNTHETIC_FIXTURES_ONLY"
+  },
+  "syntax": {
+    "pythonAllRootAst": "PASS",
+    "nodePayloadFiles": 6,
+    "nodePayloadChecks": "PASS"
+  },
+  "source": {
+    "status": "PRIVATE_R12_SOURCE_PASS_NOT_NATIVE_PERMIT",
+    "r11All40PinsExact": true,
+    "r11ByteExactFiles": 31,
+    "helperReverseTwoLiteralsByteExact": true,
+    "helperAstExactOutsideTwoAssignments": true,
+    "r2ExactAndUnchanged": true,
+    "fullPrefix6429Exact": true,
+    "allSixPayloadExact": true,
+    "r1R2DraftRegistriesUnchanged": true,
+    "nativeActions": 0
+  },
+  "rootFinalReview": "PENDING",
+  "independentFinalReview": "PENDING",
+  "nativeActions": 0
+}

@@ -1,0 +1,19 @@
+{
+  "content/content-plan-runner.js": "c6c5e145d3a0f8fd5817db69a2d66c6a50371509187394d61cbad6814b3d19de",
+  "content/task-dispatch-worker.js": "5422f7e5d2b524dfc9b9cf84227ca1f82fd662b0aa998d9ac12163703d770638",
+  "content/hugh-providers.js": "6464ac246aa197ef8f9f197a332eed5d2b27f0acda445b08f89192c660514141",
+  "content/project-chat.js": "6803bd270182de06339f9b6a14adbbbf92ced9f6f186a2966e3817aaee397e8d",
+  "content/hugh-fallback.js": "4b1c4071c868e687057d81fe601358d45b791d5519c4aae7a34b33b0df28ff33",
+  "content/hugh-economy.js": "65973debe10ca8cdae5ea463bc8e46da45dfd4d0a509b7064a72ee2435439d91",
+  "content/content-review-reminders.js": "42ef0f96ff7185a28b275c3e3fe888bb12dad2eb52f0db633c8ba3ca02bb9422",
+  "content/palitra-push-host.cjs": "729301f2dffe68f427a392c0baba946997b2fc7d9111724d45a8cd7e18bd9732",
+  "content/client-dialogs.js": "997bb8e40d88129857723d8c9c907a05d6201765d8d2144eb36e8fe034e145d4",
+  "content/native-contact-followup.cjs": "685fa6cd5effb24c72adf9fec6fa001bc3e39351549165d27d1b320ab2f5caf0",
+  "content/hugh-owner-alerts.js": "977c6e422eac9a109c5250b621f3e703e928218d3eb9db2cbccc0531c190663a",
+  "content/palitra-push.cjs": "6088b394c9a708269476310e7ab0db838c3188ba554e0981a9b67d2fd16ed2e7",
+  "content/hugh-budget.js": "4ee523b5d6395cd23d837efa0525ceacfbe8ea186e7e5341cb4d310ca88c675b",
+  "crm/task-dispatch.js": "93315f7740b27069afd795c7f2a4bac50e447e4bf7bde85fb8dd7ca7d2644535",
+  "content/server.js": "23c9664d8209ecf4aa4ce822a1a05a8cf0c2ee3fcb11afa93e396b1d5282d4ac",
+  "chat/client-bot-bridge.js": "36b0bdc733ad4f4514635d0416867d5964fef4c82aeabe125f542a20969de0ee",
+  "content/client-bot-config.js": "c2b4ae55a67246f7f4df7d82c24f00fabfd4cbe23c9b7fd49a47abc676340a2a"
+}

@@ -1,0 +1,119 @@
+{
+  "databaseInventory": {
+    "contentPaths": [
+      "/data/content.sqlite",
+      "/data/salon-reports.sqlite",
+      "/data/projects/palitra-love/sites/site-44bbe13f1bad5e005b2a/private/draft-accounts.sqlite",
+      "/data/nebo-project-20261020/content-before-site-r3.sqlite",
+      "/data/nebo-project-backup-20261020/content.sqlite",
+      "/data/nebo-project-backup-20261020/salon-reports.sqlite",
+      "/data/palitra-app-before-20261013.sqlite",
+      "/data/palitra-map-caption-20261019/content.sqlite",
+      "/data/palitra-production-before-20261013.sqlite",
+      "/data/palitra-unified-orders-20261021-r8-completion-c1-save/content.sqlite"
+    ],
+    "crmPaths": [
+      "/data/crm.sqlite"
+    ],
+    "sourceReviewSha256": "3f7ff5bf0b12e647542d5cf2b24c756eb801a9a03a4a1f5cc5cd4a1f1ba94222"
+  },
+  "expectedImages": {
+    "caddy": "sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648",
+    "synapse-chat-1": "sha256:4d5b047dc76bae1d2b82067406f98c344eea4033f83f35a54cdef7cd355ed2ae",
+    "synapse-content-1": "sha256:e22ca4d3892a01454d749fbef49c10c2a1a93f0a863d977914f32ae21455a343",
+    "synapse-crm-1": "sha256:b74d9196617cd1ba4945d0b13b69a0648552c170c5c1680b76fab51cdb73b327",
+    "synapse-hugh-runtime-1": "sha256:1d89b9652c514c238c7509bd0d81f7a0a4d198cf7cd9990c90c7e3e05b045018"
+  },
+  "files": [
+    {
+      "target": "/app/server.js",
+      "beforeSha256": "23c9664d8209ecf4aa4ce822a1a05a8cf0c2ee3fcb11afa93e396b1d5282d4ac",
+      "afterSha256": "755e27e780f48ff1c44fac4e153b4a003f0addaa408e54c66a629b6784a37115",
+      "bytes": 135104
+    },
+    {
+      "target": "/app/draft-account-service.cjs",
+      "beforeSha256": "23a0d76ed2d5d2bef47ad49e5822829a088b6148ceeffae09731b6f499d34f26",
+      "afterSha256": "cfb53698fc501d66e0adf70733edac468242851c52c59b1fe20f9c99203ee54c",
+      "bytes": 17460
+    },
+    {
+      "target": "/app/site-workspace-feature.js",
+      "beforeSha256": "f36fe867ef6c5bf0f180ae3caec177f296503f365606c0d3e2b9cf262964ac5e",
+      "afterSha256": "f444e576912653971374772b666e497b98bc88fec5dfb8bc5a243b0365aadcf3",
+      "bytes": 5273
+    },
+    {
+      "target": "/app/customer-chat.js",
+      "beforeSha256": "1a3927539386fe4e075bf9aa9ec7cfc995fe0b36787ebb67ad7898359058456e",
+      "afterSha256": "8f6060894d066080ca8f9d878e531fd9688984ed55b7d031755da314711448f2",
+      "bytes": 170209
+    },
+    {
+      "target": "/app/customer-chat-http.cjs",
+      "beforeSha256": "acedb869d8daeb589a44e9caea839693f38b86cf7aa47c8d9c198800adbb64fd",
+      "afterSha256": "d97707678c795241cd3ff7b62d1e38c4c17c0ae3fd7f88a756be202f1f5b6dff",
+      "bytes": 23942
+    },
+    {
+      "target": "/app/palitra-manager-attention.cjs",
+      "beforeSha256": "e950f9e4723a47abd8d5d2b039fe05d25a5ba13b362a46eac34c09004eb23b59",
+      "afterSha256": "031610cb51a5748913a3d26f1377d06eb9945d876affb199d06271f0209a1c80",
+      "bytes": 38059
+    },
+    {
+      "target": "/app/site-orders.js",
+      "beforeSha256": "cbded4d75f8539b8228a3957d24a90e73824f16e7148338ad3b92e8a1d56a49d",
+      "afterSha256": "3a2f275b55e91a6db94c3a97e9c98f424c5ae3d6aebf2b960b1a8cf07dc25859",
+      "bytes": 69180
+    },
+    {
+      "target": "/app/palitra-push-host.cjs",
+      "beforeSha256": "729301f2dffe68f427a392c0baba946997b2fc7d9111724d45a8cd7e18bd9732",
+      "afterSha256": "4e6e303a0d7d4130762f624b84c8903d96b1b7b161d9112f5521822625510d0a",
+      "bytes": 2520
+    },
+    {
+      "target": "/app/account-auth-outcome.cjs",
+      "beforeSha256": null,
+      "afterSha256": "b9318b19b78630111590977dd4b533a0b20e6fedd647c93819e81e8cd66b1c45",
+      "bytes": 18333
+    },
+    {
+      "target": "/app/palitra-review-public/palitra-chat.js",
+      "beforeSha256": "5752c762048c18aa01ccc52f503ef63230468d79ff7749895b6e4e0dd37d124b",
+      "afterSha256": "07e331c1130c9fc05cbdf932777cb56fe3fb04e293ba8f098409fdf3a22ed2d8",
+      "bytes": 142803
+    },
+    {
+      "target": "/app/palitra-orders-public/native-host.js",
+      "beforeSha256": "697863cbd5ac96af57a58bcae84d4b0ba858b18d39a955c527463a6c4c756728",
+      "afterSha256": "d8f8f04f5e833d4c0b3399037bb7ec8adb23e873a7baaa5dbc32d941ab3c2af0",
+      "bytes": 53065
+    },
+    {
+      "target": "/app/palitra-orders-public/shell.js",
+      "beforeSha256": "b39d4cdb4d07673988249863d0ce4e767981565ed6f77350073aeff61ec273c9",
+      "afterSha256": "173325f501d2ab881b18a4a842d68000d386932218023cc9a468f3a3c4180553",
+      "bytes": 377837
+    }
+  ],
+  "helperSha256": "f2de707bbebb818ab87cbcb1d8d44205bbfa77e5d6abd65f75e985ee48e1551a",
+  "packageId": "palitra-auth-chat-production-20261031-r1",
+  "schema": 1,
+  "staticFiles": [
+    {
+      "target": "/opt/synapse/sites/synapse/cabinet/palitra-orders/native-host.js",
+      "beforeSha256": "f27b5ae1f9c0899a7b99ed756730874238c94c15ebda3d2913bc88d62d2b4d80",
+      "afterSha256": "597a495e414d6f696dc86cf09b35bdcaa29556ac9f25d24f8e204f9edd1c485b",
+      "bytes": 86786
+    },
+    {
+      "target": "/opt/synapse/sites/synapse/cabinet/palitra-orders/shell.js",
+      "beforeSha256": "b40b738cab687e863fffc7e18486b068d5e2b21ed43bf5abfd230ae9d3244588",
+      "afterSha256": "ce05204609d4a63940df7c47771d6cf0deba1b116283d61bfc20fe3c32ee51d6",
+      "bytes": 373408
+    }
+  ],
+  "status": "ROOT_REVIEWED_CODE_ONLY"
+}

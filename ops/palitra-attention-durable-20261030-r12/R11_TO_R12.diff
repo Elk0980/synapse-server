@@ -1,0 +1,20 @@
+--- R11/install.py
++++ R12/install.py
+@@ -11,7 +11,7 @@
+  resource=None
+ from datetime import datetime,timezone,timedelta
+ sys.dont_write_bytecode=True
+-NAME='palitra-attention-durable-20261030-r11'
++NAME='palitra-attention-durable-20261030-r12'
+ ROOT=Path('/opt/synapse');AREA=ROOT/'releases'/NAME;SELF=Path(__file__).resolve();LOCK=ROOT/'.palitra-app-release.lock'
+ CRM='synapse-crm-1';CONTENT='synapse-content-1';CONTAINERS=(CRM,CONTENT,'synapse-hugh-runtime-1','synapse-chat-1','caddy')
+ BASE_IMAGE='sha256:e22ca4d3892a01454d749fbef49c10c2a1a93f0a863d977914f32ae21455a343'
+@@ -29,7 +29,7 @@
+ STATIC_NAMES={'/opt/synapse/sites/synapse/cabinet/palitra-orders/native-host.js': 'cab-native-host.js', '/opt/synapse/sites/synapse/cabinet/palitra-orders/shell.js': 'cab-shell.js'}
+ PRESERVED_R7={'/app/draft-account-service.cjs': '23a0d76ed2d5d2bef47ad49e5822829a088b6148ceeffae09731b6f499d34f26', '/app/customer-chat.js': '1a3927539386fe4e075bf9aa9ec7cfc995fe0b36787ebb67ad7898359058456e', '/app/customer-chat-native-adapter.cjs': 'a72732560bd9adb109080c09cf0ce3bd7774eb72614ea29073d301d44245037e', '/app/palitra-review-public/palitra-chat.js': '5752c762048c18aa01ccc52f503ef63230468d79ff7749895b6e4e0dd37d124b', '/app/site-workspace-feature.js': 'f36fe867ef6c5bf0f180ae3caec177f296503f365606c0d3e2b9cf262964ac5e'}
+ MANAGED_REV='245ca86f12e50e696ee39c5d6c3ab0f1924c05e933abbcc3ba249a20e6d8d9f8' # Root native readonly22:45Z
+-REVIEWED_DATA_PINS={'reviewed-sql.json': '410b03163c43b703212e212d47821d9f2c427b21ee5ac17013d08a54c0193ba5', 'reviewed-source-pins.json': 'd4de0c682d08f12764311754444501f7bcaf3ae40bc4fbc7c11903673bff964e', 'inventory-review.json': '3f7ff5bf0b12e647542d5cf2b24c756eb801a9a03a4a1f5cc5cd4a1f1ba94222', 'economy_projection.py': 'f320cb7299bdb75037272ae55e388e76697e6ce4d3a910eb1b5412eae3d3a283', 'vault_probe.cjs': '8714b8bc8cda5a6724227e31fdab4b37825b161026d9326d3c61296589263c13', 'image_archive_audit.py': 'f9af133089f08ab2876945a1dd5b4c5a225097e5fc6fd91f6ebbefaa60e1cd8a', 'diagnostic_preservation.py': '658ddfc204ba95c75889a5f0d9f73d9f5142a30261cac462e461cbd431747a70', 'managed_history.py': '9d00a086c983a0a7435cf6a6a2f726b570bc787bf52f56fc294ae03684aa640b', 'server_phase.py': '11d436096c1f56c7c4beccbbe18dd85c4dd875cb377ce1a4d412d0df4e492c10', 'host_static.py': '73b3c34e3d646e2b077b45b7fce84dfc3a480f39cf5dfbb5eeed8be4b94018f0', 'scope-review.json': '01285ec8fd97284411495b50d84e1ab4de883d5ee834131e4553063016751209', 'source-proof/server-before.js': '23c9664d8209ecf4aa4ce822a1a05a8cf0c2ee3fcb11afa93e396b1d5282d4ac', 'managed-anchor.json': '974ed3ee63c85fa0c2505d6d8188a4da2c546fde19c356b0c55d12c350eba503'}
++REVIEWED_DATA_PINS={'reviewed-sql.json': '410b03163c43b703212e212d47821d9f2c427b21ee5ac17013d08a54c0193ba5', 'reviewed-source-pins.json': 'd4de0c682d08f12764311754444501f7bcaf3ae40bc4fbc7c11903673bff964e', 'inventory-review.json': '3f7ff5bf0b12e647542d5cf2b24c756eb801a9a03a4a1f5cc5cd4a1f1ba94222', 'economy_projection.py': 'f320cb7299bdb75037272ae55e388e76697e6ce4d3a910eb1b5412eae3d3a283', 'vault_probe.cjs': '8714b8bc8cda5a6724227e31fdab4b37825b161026d9326d3c61296589263c13', 'image_archive_audit.py': 'f9af133089f08ab2876945a1dd5b4c5a225097e5fc6fd91f6ebbefaa60e1cd8a', 'diagnostic_preservation.py': '658ddfc204ba95c75889a5f0d9f73d9f5142a30261cac462e461cbd431747a70', 'managed_history.py': '9d00a086c983a0a7435cf6a6a2f726b570bc787bf52f56fc294ae03684aa640b', 'server_phase.py': '11d436096c1f56c7c4beccbbe18dd85c4dd875cb377ce1a4d412d0df4e492c10', 'host_static.py': '73b3c34e3d646e2b077b45b7fce84dfc3a480f39cf5dfbb5eeed8be4b94018f0', 'scope-review.json': 'fc42c9b9d51e9a06544f52162ba2e9c6dd38af09622a6606220f9312a3aafe73', 'source-proof/server-before.js': '23c9664d8209ecf4aa4ce822a1a05a8cf0c2ee3fcb11afa93e396b1d5282d4ac', 'managed-anchor.json': '974ed3ee63c85fa0c2505d6d8188a4da2c546fde19c356b0c55d12c350eba503'}
+ INVENTORY_REVIEW_SHA='3f7ff5bf0b12e647542d5cf2b24c756eb801a9a03a4a1f5cc5cd4a1f1ba94222'
+ def need(ok, reason):
+     if not ok: raise ValueError(reason)

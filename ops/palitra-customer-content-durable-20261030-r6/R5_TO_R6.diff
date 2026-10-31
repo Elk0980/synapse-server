@@ -1,0 +1,55 @@
+--- R5/install.py
++++ R6/install.py
+@@ -11,7 +11,7 @@
+  resource=None
+ from datetime import datetime,timezone,timedelta
+ sys.dont_write_bytecode=True
+-NAME='palitra-customer-content-durable-20261030-r5'
++NAME='palitra-customer-content-durable-20261030-r6'
+ ROOT=Path('/opt/synapse');AREA=ROOT/'releases'/NAME;SELF=Path(__file__).resolve();LOCK=ROOT/'.palitra-app-release.lock'
+ CRM='synapse-crm-1';CONTENT='synapse-content-1';CONTAINERS=(CRM,CONTENT,'synapse-hugh-runtime-1','synapse-chat-1','caddy')
+ BASE_IMAGE='sha256:9a1ab665339b10a49a49d8c605075ae701e4b28a9db1a3bb3ec49483fd8e6f44'
+@@ -24,7 +24,7 @@
+ ACTIVE_DATABASE_PATHS=('/data/content.sqlite','/data/salon-reports.sqlite','/data/projects/palitra-love/sites/site-44bbe13f1bad5e005b2a/private/draft-accounts.sqlite')
+ OPAQUE_ARCHIVE_PATHS=('/data/nebo-project-20261020/content-before-site-r3.sqlite','/data/nebo-project-backup-20261020/content.sqlite','/data/nebo-project-backup-20261020/salon-reports.sqlite','/data/palitra-app-before-20261013.sqlite','/data/palitra-map-caption-20261019/content.sqlite','/data/palitra-production-before-20261013.sqlite','/data/palitra-unified-orders-20261021-r8-completion-c1-save/content.sqlite')
+ TARGETS=tuple(FILE_PINS)
+-REVIEWED_DATA_PINS={'reviewed-sql.json': '410b03163c43b703212e212d47821d9f2c427b21ee5ac17013d08a54c0193ba5', 'reviewed-source-pins.json': 'd4de0c682d08f12764311754444501f7bcaf3ae40bc4fbc7c11903673bff964e', 'inventory-review.json': '68998c94bb34426777b8199d86d02daebe33f25120711f542f825a9778983ec1', 'economy_projection.py': 'f320cb7299bdb75037272ae55e388e76697e6ce4d3a910eb1b5412eae3d3a283', 'vault_probe.cjs': '8714b8bc8cda5a6724227e31fdab4b37825b161026d9326d3c61296589263c13', 'image_archive_audit.py': '51ee9e4085bc0e3f22d4a21354a5303f40c978faec7cfbc229346d73e3b448da', 'diagnostic_preservation.py': '658ddfc204ba95c75889a5f0d9f73d9f5142a30261cac462e461cbd431747a70'}
++REVIEWED_DATA_PINS={'reviewed-sql.json': '410b03163c43b703212e212d47821d9f2c427b21ee5ac17013d08a54c0193ba5', 'reviewed-source-pins.json': 'd4de0c682d08f12764311754444501f7bcaf3ae40bc4fbc7c11903673bff964e', 'inventory-review.json': '68998c94bb34426777b8199d86d02daebe33f25120711f542f825a9778983ec1', 'economy_projection.py': 'f320cb7299bdb75037272ae55e388e76697e6ce4d3a910eb1b5412eae3d3a283', 'vault_probe.cjs': '8714b8bc8cda5a6724227e31fdab4b37825b161026d9326d3c61296589263c13', 'image_archive_audit.py': 'f9af133089f08ab2876945a1dd5b4c5a225097e5fc6fd91f6ebbefaa60e1cd8a', 'diagnostic_preservation.py': '658ddfc204ba95c75889a5f0d9f73d9f5142a30261cac462e461cbd431747a70'}
+ INVENTORY_REVIEW_SHA='68998c94bb34426777b8199d86d02daebe33f25120711f542f825a9778983ec1'
+ def need(ok, reason):
+     if not ok: raise ValueError(reason)
+--- R5/image_archive_audit.py
++++ R6/image_archive_audit.py
+@@ -1,4 +1,4 @@
+-"""PRIVATE R4 candidate: Docker legacy + OCI image save, no extraction or app imports.
++"""PRIVATE R6 candidate: Docker legacy + OCI image save, no extraction or app imports.
+ Only the selected pinned config and complete final layer are accepted. Unknown formats fail.
+ """
+ from pathlib import Path
+@@ -84,13 +84,15 @@
+  need(len(raw)>=end+1024 and not any(raw[end:]),'IMAGE_LAYER_TRAILING_DATA_OR_END_MARKER')
+  tar_members(raw,base,manifest)
+ 
+-def compatibility(reader,child,pinned_config=None):
++def compatibility(reader,child,pinned_config=None,expected_layers=None):
+  data=parse_json(reader.raw('manifest.json',MAX_META));need(type(data)is list and 0<len(data)<=32,'IMAGE_LEGACY_MANIFEST_SHAPE');matches={}
+  for item in data:
+   need(type(item)is dict and type(item.get('Config'))is str and type(item.get('Layers'))is list and 0<len(item['Layers'])<=256,'IMAGE_LEGACY_MANIFEST_SHAPE')
+   raw=reader.raw(item['Config'],MAX_META)
+   if 'sha256:'+sha(raw)!=(pinned_config or child['Id']):continue
+-  need(len(item['Layers'])==len(child['RootFS']['Layers'])and len(set(item['Layers']))==len(item['Layers']),'IMAGE_LEGACY_LAYER_LIST')
++  need(len(item['Layers'])==len(child['RootFS']['Layers']),'IMAGE_LEGACY_LAYER_LIST')
++  if expected_layers is None:need(len(set(item['Layers']))==len(item['Layers']),'IMAGE_LEGACY_LAYER_LIST')
++  else:need(type(expected_layers)is list and item['Layers']==expected_layers,'IMAGE_COMPATIBILITY_LAYER_MISMATCH')
+   for name in item['Layers']:canonical_name(name);need(name in reader.entries and reader.entries[name].isfile(),'IMAGE_LEGACY_LAYER_MISSING')
+   config_check(raw,child,pinned_config);matches[(item['Config'],tuple(item['Layers']))]=item
+  need(len(matches)==1,'IMAGE_LEGACY_SELECTION_AMBIGUOUS_OR_MISSING');return next(iter(matches.values()))
+@@ -148,7 +150,7 @@
+    node,media,platforms=next(iter(roots.values()));walk(node,media,platforms,{pinned['digest']},0)
+    need(len(candidates)==1,'IMAGE_OCI_SELECTION_AMBIGUOUS_OR_MISSING');selected,config_digest=next(iter(candidates.values()));need(child['Id']in(pinned['digest'],config_digest),'IMAGE_ID_DESCRIPTOR_OR_CONFIG_BINDING');raw,name=reader.layer(selected['layers'][-1])
+    if 'manifest.json'in reader.entries:
+-    legacy=compatibility(reader,child,config_digest);need(legacy['Layers']==['blobs/sha256/'+v['digest'][7:]for v in selected['layers']],'IMAGE_COMPATIBILITY_LAYER_MISMATCH')
++    legacy=compatibility(reader,child,config_digest,['blobs/sha256/'+v['digest'][7:]for v in selected['layers']]);need(legacy['Layers']==['blobs/sha256/'+v['digest'][7:]for v in selected['layers']],'IMAGE_COMPATIBILITY_LAYER_MISMATCH')
+    complete_layer(raw,base,manifest,tar_members,want);kind='oci'
+   else:
+    selected=compatibility(reader,child);raw=reader.raw(selected['Layers'][-1],MAX_LAYER);complete_layer(raw,base,manifest,tar_members,want);kind='legacy';config_digest=child['Id']

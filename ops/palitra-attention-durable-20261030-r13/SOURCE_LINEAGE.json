@@ -1,0 +1,25 @@
+{
+  "status": "PRIVATE_R13_CODE_ONLY_PENDING_ROOT_REVIEW_NOT_NATIVE_PERMIT",
+  "nativeActions": 0,
+  "sourceR12RegistrySha256": "465c5bc6f2a9e33eaf104a4d4e0c9dfac751046c695d85bea3179fcd5c566c4c",
+  "r12All42Verified": true,
+  "basisR12HelperSha256": "280d7e97d6ceb38ade4e0a9eb37185bc5a8174fd149d6bf3e36840d833cc5e0e",
+  "helperSha256": "1d0c2ccedae8e60a8b731e8f620e159da4dbf25d6527c537091f898be2f0900f",
+  "moduleSha256": "9d00a086c983a0a7435cf6a6a2f726b570bc787bf52f56fc294ae03684aa640b",
+  "moduleByteExactR12": true,
+  "fullPrefixSha256": "69690754e6efb394e3fede769257dc39df7fd1fe221d018c5cd7f77e346aa2cd",
+  "fullPrefixBytes": 6429,
+  "fullPrefixByteExact": true,
+  "helperReverseByteExactR12": true,
+  "helperChangesOnly": [
+    "NAME",
+    "scope-review.json provenance pin"
+  ],
+  "scopeSha256": "0862dd59ab1455469138d98316eb7c836fbdabcf279edefc3ea2bc989a7aa1e9",
+  "manifestSha256": "a91c673565d1e8e31e1828b4bc3268223cbe52cf93362ab57c1593bb4ffa984e",
+  "manifestTechnicalStatus": "ROOT_REVIEWED_CODE_ONLY",
+  "sameSixPayload": true,
+  "freshBaseRequired": true,
+  "sealedR12NotReplayed": true,
+  "rootFinalReviewRequired": true
+}
