@@ -26,3 +26,8 @@
 - [x] T013 [local] Новый точный установщик12runtime+2static и RO verifier official storefront337→338; source guards/queues/economy/foreign/backup сохранены. Раздельные14 release checks,23 managed checks и1 config-identity target. Helper SHA рассчитан по фактическим read_bytes и проверен в основном/fallback model.
 - [ ] T014 После независимого ревью доставить immutable commit, сверить downloaded SHA до исполнения; ownlease/prehistory/prepare/backups/build/fallbackimage, один apply/inspect, staticpair, official managed CAS180s/fullreadback, health всех затронутых проектов.
 - [ ] T015 Подтверждённый TestКЛ: chat message/direct request/product→request/cart→request/direct manager; маркировка, реальные IDs и client/admin readback. Никаких чужих данных, оплаты, удаления, неизвестных повторов или соцсетей.
+
+
+## Lifecycle R2 после реального preservation-stop31Oct
+
+R1 helper/stage/prehistory/prepare подтверждены, build остановился до журнала из-за CRM events/sqlite_sequence; production R7/337 не менялся. СтаруюBASE не перезаписывать. Новый узкий R2 переносит обе imagebuilds до finalfreshBASE, связывает stagedcode/образы, сохраняет exactwholeDB/backup/apply и блокирует directprepare/applyCLI. 14 lifecycle + отдельные14 release delta PASS; source review/production/5TestКЛ paths ещё OPEN. Receipt: SERVER_ACCESS_RESUME_20261031/RELEASE_PROTOCOL_R2/FOR_REVIEW.md.

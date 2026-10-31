@@ -23,3 +23,8 @@ Expired prepared при verified A+31min заменяется новой явн�
 UI проверен через actual extracted storefront factory/raw dispatcher/form handler в synthetic DOM и реальном local AccountService/core/provider. Потеря body/cookie/всего ответа → check/resume без automatic credential POST; password поля очищены, journal/storage/log без plaintext secrets. Wishlist failure не повторяет регистрацию. UI fixture не unknown actual host router/fullpage/PWA.
 
 Промежуточные результаты не суммируются с окончательным: initial fault79/61PASS18FAIL был ошибкой fixture сравнения seed-register с login; corrected106PASS относится к состоянию ДО последнего isolation patch. Intermediate20PASS был до добавления/исправления G2+B. Frozen preliminary R1 и прежние P0 R1/R2 не изменены; независимое review нового delta PENDING. Actual server/router/schema/bootstrap/Push/delivery/compatible rollback/scopes/freshguards/lease/backup/readback/live OPEN. Runtime/user/admin QA0/5 из-за отдельного tool blocker, не productFAIL.
+
+
+## Lifecycle R2 после реального preservation-stop31Oct
+
+R1 helper/stage/prehistory/prepare подтверждены, build остановился до журнала из-за CRM events/sqlite_sequence; production R7/337 не менялся. СтаруюBASE не перезаписывать. Новый узкий R2 переносит обе imagebuilds до finalfreshBASE, связывает stagedcode/образы, сохраняет exactwholeDB/backup/apply и блокирует directprepare/applyCLI. 14 lifecycle + отдельные14 release delta PASS; source review/production/5TestКЛ paths ещё OPEN. Receipt: SERVER_ACCESS_RESUME_20261031/RELEASE_PROTOCOL_R2/FOR_REVIEW.md.

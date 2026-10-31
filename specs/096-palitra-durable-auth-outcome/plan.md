@@ -10,3 +10,8 @@ Node CJS/SQLite и существующий storefront JS/jsdom. Single writer R
 Actual site-workspace-http wrapper is not among available pinned sources; no assertion of live route forwarding/new routes. Conditional release remains blocked until actual sources. CrossDB crash atomicity is not promised; durable account outcome is authoritative for this operation.
 
 31Oct actual-source stage: existing Chrome3 Timeweb parent/iframe подтверждены, UID0/currentR7/source12 прочитаны. Cached HTTPaced/host7799/workspaceHTTP3f08 теперь exact current по serverSHA; прежняя строка о missing источниках историческая. Разрешённый рабочий integration каталог ops/palitra-production-integration-20261031; before12 immutable source copies, accepted127 freeze не менять. Merge actualHTTPguards/widget settings с accepted proof/DTO; Push provider берёт тот же server HTTP orderContext. Не писать deployhelper/runtimepackage до отдельного pending общегоcontent scope.
+
+
+## Lifecycle R2 после реального preservation-stop31Oct
+
+R1 helper/stage/prehistory/prepare подтверждены, build остановился до журнала из-за CRM events/sqlite_sequence; production R7/337 не менялся. СтаруюBASE не перезаписывать. Новый узкий R2 переносит обе imagebuilds до finalfreshBASE, связывает stagedcode/образы, сохраняет exactwholeDB/backup/apply и блокирует directprepare/applyCLI. 14 lifecycle + отдельные14 release delta PASS; source review/production/5TestКЛ paths ещё OPEN. Receipt: SERVER_ACCESS_RESUME_20261031/RELEASE_PROTOCOL_R2/FOR_REVIEW.md.
