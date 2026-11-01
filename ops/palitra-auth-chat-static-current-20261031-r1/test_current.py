@@ -195,6 +195,23 @@ class GenerationBinding(unittest.TestCase):
      else:value=json.loads(b);value['generation']['identity']['id']='2'*64;(folder/'000001.json').write_bytes(m.enc(value))
      with self.assertRaisesRegex(ValueError,'DIAGNOSTIC_'):m.diagnostic_history(candidate)
 
+class WriterProofBinding(unittest.TestCase):
+ def test_all_five_pins_match_independent_native_frozen_map_and_unknown_source_refuses(self):
+  raw=(HERE/'writer-source-proof-map.json').read_bytes();self.assertEqual(hashlib.sha256(raw).hexdigest(),'e4b79fc89ecb1e11591cb608b7d25b3332e1fc90b6956f926a3495ff68ee2f7c');proof=json.loads(raw)
+  self.assertEqual({role+'/'+name:pin for role,rows in d.WRITERS.items()for name,pin in rows.items()},{name:row['sha256']for name,row in proof.items()})
+  trees={role:{name.split('/',1)[1]:copy.deepcopy(row)for name,row in proof.items()if name.startswith(role+'/')}for role in ('crm','content')}
+  s=types.SimpleNamespace(AREA=Path('/fixture'),load=lambda p:{},backup_guard=lambda:None,CRM='crm',CONTENT='content',inspect_container=lambda role:role,runtime_tree=lambda role:trees[role],need=m.need)
+  rows={'crm':'crm','content':'content'};self.assertEqual(cur.classify_history(s,{},rows,{}),{})
+  for key in proof:
+   role,name=key.split('/',1)
+   for kind in ('unknown','missing'):
+    with self.subTest(key=key,kind=kind):
+     keep=copy.deepcopy(trees[role][name])
+     if kind=='unknown':trees[role][name]['sha256']='0'*64
+     else:del trees[role][name]
+     with self.assertRaisesRegex(ValueError,'EXACT_OBSERVED_BACKGROUND_WRITER_SOURCE_REQUIRED'):cur.classify_history(s,{},rows,{})
+     trees[role][name]=keep
+
 class NewProvenance(unittest.TestCase):
  def setUp(self):
   tmp=tempfile.TemporaryDirectory();self.addCleanup(tmp.cleanup);self.root=Path(tmp.name).resolve();self.source=self.root/'sources';self.source.mkdir();self.release=self.root/'releases/palitra-auth-chat-production-20261031-r7';self.release.mkdir(parents=True);self.current=self.root/'releases/palitra-auth-chat-static-current-20261031-r1';self.current.mkdir()

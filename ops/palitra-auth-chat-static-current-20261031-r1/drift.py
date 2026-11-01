@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 CRM_TABLES = {'social_collect_runs','social_analytics_evidence','social_snapshots','social_collect_queue','sqlite_sequence'}
 WRITERS = {
- 'crm': {'server.js':'b0146b3c3a9cb4a8cea15171d6edb46d178d83072dbf08945778d4be7a332248',
+ 'crm': {'server.js':'b0146b3c3a9bc4a8cea15171d6edb46d178d83072dbf08945778d4be7a332248',
          'social-stats.js':'30a0959148e1f51c9cef9c873588c6f16c1db2f449c9babb21a27e3c33baf720',
          'social-analytics-evidence.js':'7c742e2c4eef15d9027341a3fb857b35c2509361c5adf6c316ee8a74c63667b4'},
  'content': {'hugh-economy.js':'65973debe10ca8cdae5ea463bc8e46da45dfd4d0a509b7064a72ee2435439d91',
