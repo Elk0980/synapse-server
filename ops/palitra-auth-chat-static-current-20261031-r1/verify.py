@@ -117,8 +117,9 @@ def provenance():
  for name,pin in pins.items():
   raw=safe(source/name);need(sha(raw)==pin['sha256']and len(raw)==pin['bytes'],'CURRENT_STATIC_SOURCE_CHANGED')
  proof_raw=safe(current/'current-after.json');proof=parse(proof_raw);accepted=parse(safe(current/'current-after-accepted.json'));base_raw=safe(current/'static-base.json');base=parse(base_raw);complete=parse(safe(current/'static-complete.json'))
- kind='FRESH_CURRENT_RUNTIME_FOR_STATIC_ONLY_V1'
+ kind='FRESH_CURRENT_RUNTIME_FOR_STATIC_ONLY_V2_OWNER_BUSINESS_REFERENCE'
  need(proof['kind']==accepted['kind']==complete['kind']==kind and proof['status']=='FRESH_CURRENT_AFTER_STATIC_SCOPE_ONLY'and accepted['status']=='FRESH_CURRENT_AFTER_READBACK_PASS'and proof['originalExpiredAcceptanceReplaced']is False,'EXPLICIT_CURRENT_STATIC_ACCEPTANCE_REQUIRED')
+ need(proof.get('businessReferenceKind')=='OWNER_CURRENT_BUSINESS_REFERENCE_V2','EXPLICIT_OWNER_BUSINESS_REFERENCE_REQUIRED')
  need(proof['at']<=time.time()<proof['expires']and proof['expires']-proof['at']==900,'FRESH_STATIC_CONTEXT_EXPIRED')
  need(proof['lease']==base['lease']==own_lease(),'FRESH_STATIC_SAME_OWN_LEASE_REQUIRED')
  need(proof['companionPinsSha256']==accepted['companionPinsSha256']==base['companionPinsSha256']==sha(pins_raw),'CURRENT_STATIC_PIN_MANIFEST_CHANGED')

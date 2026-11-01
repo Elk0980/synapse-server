@@ -13,7 +13,7 @@ ORIGINAL=Path('/root/palitra-auth-chat-production-20261031-r7.py')
 MAIN_SHA='473028a50555fced995708ece843b9695fb4d5c0ee88d282c2ca806436e68838'
 MANIFEST_SHA='7ed89e7d55b7919605c597b62ebbc933507dfa1f90d969cc5e920f51dafa0427'
 IMAGE='sha256:53fcc6b81e2b68a782fdb58a0fa1a66e5ad3277dfc90fc08fd02cfb70ebfea26'
-KIND='FRESH_CURRENT_RUNTIME_FOR_STATIC_ONLY_V1'
+KIND='FRESH_CURRENT_RUNTIME_FOR_STATIC_ONLY_V2_OWNER_BUSINESS_REFERENCE'
 SELF=Path(__file__).resolve()
 
 def load_module(path,name):
@@ -59,25 +59,25 @@ def envelope(s,manifest,rows):
  return base,want,plan
 
 def classify_history(s,base,rows,paths):
- d=load_module(SELF.parent/'drift.py','static_current_drift');backups=s.load(s.AREA/'backups.json');s.backup_guard();result={}
+ d=load_module(SELF.parent/'drift.py','static_current_drift');s.backup_guard();result={}
  for role,name in ((s.CRM,'crm'),(s.CONTENT,'content')):
   tree=s.runtime_tree(rows[role]);s.need(all(tree.get(n,{}).get('sha256')==pin for n,pin in d.WRITERS[name].items()),'EXACT_OBSERVED_BACKGROUND_WRITER_SOURCE_REQUIRED')
  for key,row in paths.items():
   s.need(s.db_identity(row['hostPath'])==row['identity'],'HISTORICAL_DATABASE_IDENTITY_CHANGED')
-  if key not in('content:/data/content.sqlite','crm:/data/crm.sqlite'):
-   s.assert_preserved_path(row,base['databaseFacts'][key],after=True);continue
-  with contextlib.ExitStack()as stack:
-   live=stack.enter_context(s.db_open(row['hostPath']));old=stack.enter_context(s.db_open(backups[key]['path']));full=s.db_facts(live);prior=s.db_facts(old);end=time.time()
-   if key.startswith('crm:'):
-    s.need(s.enc(prior)==s.enc(base['databaseFacts'][key]),'EXACT_HISTORICAL_CRM_BACKUP_REQUIRED')
-    a={t:d.records(s,old,t)for t in d.CRM_TABLES};b={t:d.records(s,live,t)for t in d.CRM_TABLES}
-    result['crm']=d.crm(s,prior,full,a,b,base['created'],end)
-   else:
-    full=s.module('migration_guard.py').normalize(full,row['containerPath'],s.load(s.AREA/'migration-schema.json'),base['databaseFacts'][key])
-    obs=s.diagnostic_policy().capture(live,s.env_map(rows[s.CONTENT]),full)
-    full,appended=d.observed_appends(s,d,base['databaseFacts'][key],full,old,live,base['created'],end)
-    result['content']=d.content(s,base['databaseFacts'][key],full,base['diagnosticBase'],obs,d.records(s,old,'ai_balance_snapshots'),d.records(s,live,'ai_balance_snapshots'),base['created'],end)
-    result['content']['observedAppends']=appended
+  if row.get('preservation')=='opaque':
+   s.assert_preserved_path(row,base['databaseFacts'][key]);result[key]={'kind':'ORIGINAL_OPAQUE_ARCHIVE_UNCHANGED'}
+  else:
+   s.need(row.get('preservation')=='sqlite','DATABASE_PRESERVATION_KIND_UNKNOWN')
+   with s.db_open(row['hostPath'])as live:
+    full=s.db_facts(live)
+    if row['containerPath'] in ('/data/content.sqlite','/data/projects/palitra-love/sites/site-44bbe13f1bad5e005b2a/private/draft-accounts.sqlite'):
+     full=s.module('migration_guard.py').normalize(full,row['containerPath'],s.load(s.AREA/'migration-schema.json'),base['databaseFacts'][key])
+    if row['containerPath']=='/data/projects/palitra-love/sites/site-44bbe13f1bad5e005b2a/private/draft-accounts.sqlite':
+     s.need(all(s.enc(full['tables'][t])==s.enc(base['databaseFacts'][key]['tables'][t])for t in ('users','wishlist')),'ORIGINAL_ACCOUNT_USERS_AND_WISHLIST_CHANGED')
+    if key=='content:/data/content.sqlite':
+     obs=s.diagnostic_policy().capture(live,s.env_map(rows[s.CONTENT]),full)
+     result[key]=d.current_reference(s,base['databaseFacts'][key],full,base['diagnosticBase'],obs)
+    else:result[key]=d.current_reference(s,base['databaseFacts'][key],full)
   s.need(s.db_identity(row['hostPath'])==row['identity'],'HISTORICAL_DATABASE_IDENTITY_CHANGED_AT_END')
  return result
 
@@ -89,11 +89,11 @@ def prepare(s,c):
  queues=s.startup_guard(paths,rows,time.time()+s.APPLY_TTL+s.GRACE);diag={};facts=s.snapshot_databases(paths,diag,s.env_map(rows[s.CONTENT]))
  # Revalidate historical classification around capture; fresh facts must be
  # byte-exact on both current-state sweeps, except original diagnostic policy.
- s.need(classify_history(s,old,rows,paths)==classified,'HISTORICAL_CLASSIFICATION_CHANGED_DURING_CURRENT_CAPTURE')
+ s.need(classify_history(s,old,rows,paths)==classified,'CURRENT_BUSINESS_CHANGED_DURING_CAPTURE')
  s.need(reference(s)==refs and s.own_lease()==lease,'CURRENT_CAPTURE_REFERENCE_OR_LEASE_CHANGED')
  AREA.mkdir(mode=0o700);(AREA/'static-payload').mkdir(mode=0o700)
  for name in s.STATIC_NAMES.values():s.write_new(AREA/'static-payload'/name,s.safe_read(s.AREA/'static-payload'/name))
- now=time.time();proof={'kind':KIND,'status':'FRESH_CURRENT_AFTER_STATIC_SCOPE_ONLY','at':now,'expires':now+s.PREPARE_TTL,'lease':lease,'companionPinsSha256':pin,'originalReference':refs,'originalExpiredAcceptanceReplaced':False,'historicalClassification':classified,'identities':{n:s.sha(s.enc(s.foreign(r)))for n,r in rows.items()},'image':IMAGE}
+ now=time.time();proof={'kind':KIND,'status':'FRESH_CURRENT_AFTER_STATIC_SCOPE_ONLY','at':now,'expires':now+s.PREPARE_TTL,'lease':lease,'companionPinsSha256':pin,'originalReference':refs,'originalExpiredAcceptanceReplaced':False,'currentBusinessReference':classified,'businessReferenceKind':'OWNER_CURRENT_BUSINESS_REFERENCE_V2','identities':{n:s.sha(s.enc(s.foreign(r)))for n,r in rows.items()},'image':IMAGE}
  proof_raw=s.enc(proof);s.write_new(AREA/'current-after.json',proof_raw)
  base={'lease':lease,'created':now,'expires':now+s.PREPARE_TTL,'rows':rows,'tree':tree,'databases':paths,'databaseFacts':facts,'diagnosticBase':diag,'hostStatic':old['hostStatic'],'static':old['static'],'plan':plan,'managed':s.managed_guard(paths),'policy':old['policy'],'price':old['price'],'queueProof':queues,'currentAfterSha256':s.sha(proof_raw),'originalReference':refs,'companionPinsSha256':pin}
  (AREA/'static-layer').mkdir(mode=0o700);raw=s.enc(base);s.write_new(AREA/'static-base.json',raw);genesis=c.diagnostic_init(base,s.sha(raw),True);s.write_new(AREA/'static-layer/prepared.json',s.enc({'baseSha256':s.sha(raw),'diagnosticGenesisSha256':genesis,'stageManifestSha256':staged['manifestSha256']}));s.sync_dir(AREA/'static-layer');s.sync_dir(AREA)
@@ -106,6 +106,7 @@ def guard(s,c,phase,readback=False,history_full=False):
  s.need(s.sha(s.safe_read(AREA/'static-base.json'))==prepared['baseSha256']and staged['manifestSha256']==prepared['stageManifestSha256'],'STATIC_ANCHOR_PIN_CHANGED')
  s.need(own==base['lease']==proof['lease'],'STATIC_FRESH_OWN_LEASE_REQUIRED');s.need(readback or base['created']<=time.time()<base['expires'],'STATIC_ANCHOR_EXPIRED')
  s.need(proof['kind']==KIND and proof['status']=='FRESH_CURRENT_AFTER_STATIC_SCOPE_ONLY'and proof['originalExpiredAcceptanceReplaced']is False and pin==proof['companionPinsSha256']==base['companionPinsSha256'],'EXPLICIT_FRESH_STATIC_PROVENANCE_REQUIRED')
+ s.need(proof.get('businessReferenceKind')=='OWNER_CURRENT_BUSINESS_REFERENCE_V2','EXPLICIT_OWNER_BUSINESS_REFERENCE_REQUIRED')
  s.need(s.sha(s.safe_read(AREA/'current-after.json'))==base['currentAfterSha256']and reference(s)==base['originalReference']==proof['originalReference'],'CURRENT_STATIC_OR_ORIGINAL_REFERENCE_CHANGED')
  rows={n:s.inspect_container(n)for n in s.CONTAINERS};old,tree,plan=envelope(s,manifest,rows)
  s.need(all(s.sha(s.enc(s.foreign(rows[n])))==proof['identities'][n]for n in s.CONTAINERS),'FRESH_STATIC_FIVE_IDENTITIES_CHANGED')

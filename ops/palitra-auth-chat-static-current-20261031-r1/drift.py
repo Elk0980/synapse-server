@@ -149,3 +149,36 @@ def observed_appends(m, d, before, after, old, live, begin, end):
         'oldRowsAndSchemaPreserved': True,
         'credentialValuesReadOrPrinted': False,
     }
+
+
+def current_reference(m, before, current, original_diagnostic=None, observation=None):
+    m.need(m.enc(before['schema']) == m.enc(current['schema']) and
+           set(before['tables']) == set(current['tables']),
+           'CURRENT_BUSINESS_EXACT_ORIGINAL_SCHEMA_REQUIRED')
+    m.need(all(before['tables'][t]['columns'] == current['tables'][t]['columns']
+               for t in before['tables']), 'CURRENT_BUSINESS_EXACT_COLUMNS_REQUIRED')
+    fingerprint = copy.deepcopy(current)
+    if original_diagnostic is not None:
+        a, b = original_diagnostic, observation
+        m.need(b is not None and b['bridge']['key'] == a['bridge']['key'] and
+               b['bridge']['payload'] == a['bridge']['payload'] and
+               b['sequence']['key'] == a['sequence']['key'] and
+               b['sequence']['name'] == a['sequence']['name'] and
+               b['sequence']['value'] >= a['sequence']['value'],
+               'CURRENT_REFERENCE_ORIGINAL_DIAGNOSTIC_SCOPE_CHANGED')
+        policy = m.diagnostic_policy()
+        m.need(policy.stamp(b['bridge']['checkedAt']) >= policy.stamp(a['bridge']['checkedAt']),
+               'CURRENT_REFERENCE_ORIGINAL_DIAGNOSTIC_TIME_REGRESSION')
+        # The clock/window policy is still enforced by the frozen original
+        # startup/diagnostic guards around the fresh snapshot and both fences.
+        for table, key in (('client_bot_bridge_state', a['bridge']['key']),
+                           ('sqlite_sequence', a['sequence']['key'])):
+            m.need(key in fingerprint['tables'][table]['rows'] and
+                   key in before['tables'][table]['rows'],
+                   'CURRENT_REFERENCE_ORIGINAL_DIAGNOSTIC_KEY_REQUIRED')
+            fingerprint['tables'][table]['rows'][key] = before['tables'][table]['rows'][key]
+    return {'kind': 'OWNER_CURRENT_BUSINESS_REFERENCE_V2',
+            'factsSha256': m.sha(m.enc(fingerprint)),
+            'originalSchemaRetained': True,
+            'oldBusinessRowsAssertedUnchangedSinceYesterday': False,
+            'freshWholeFactsFencesRequired': True}
