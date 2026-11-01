@@ -78,7 +78,9 @@ function createAutopostingTransport(db, {apiKey, now = Date.now, fetchImpl = fet
      Instagram и MAX — до 10 вложений, но настоящий предел приходит от профиля перед отправкой. */
   const PROVIDER_CAPS = Object.freeze({
     youtube_shorts: {maxMedia: 1, mediaMode: 'video'},
-    tiktok: {maxMedia: 1, mediaMode: 'video'},
+    // Доступ к профилю и возможность доставки различаются. Известный барьер провайдера
+    // нужен календарю и постановке в очередь, а не только поздней ошибке publish.
+    tiktok: {maxMedia: 1, mediaMode: 'video', deliveryBlocker: 'TIKTOK_PRIVACY_UNCONFIRMED'},
     telegram: {maxText: 4000, maxCaption: 1024, maxMedia: 10, mediaMode: 'photos'},
     instagram: {maxMedia: 10, mediaMode: 'photos'},
     max: {maxMedia: 10, mediaMode: 'photos'},

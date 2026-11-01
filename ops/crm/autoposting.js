@@ -18,6 +18,16 @@ const mediaOnlyTargetMessage=name=>`${name}: без текста Synapse отп�
 const FORMATS=Object.freeze({post:'Пост',story:'Сторис',reel:'Reels / Shorts / клип',carousel:'Карусель'});
 const ROLES=Object.freeze({reach:'Охватный',affection:'На влюбление',sale:'На продажу'});
 const REVIEW_STATES=Object.freeze({draft:'Черновик',pending:'На согласовании',approved:'Согласовано',rejected:'Отклонено'});
+const DELIVERY_BLOCKER_MESSAGES=Object.freeze({
+  TIKTOK_PRIVACY_UNCONFIRMED:'Для отправки в TikTok сервис должен подтвердить доступную аудиторию профиля. Текущий контракт Onlypult этих данных не возвращает.',
+});
+function deliveryBlocker(channel){
+  const code=channel?.caps?.deliveryBlocker;
+  if(!code)return null;
+  return Object.hasOwn(DELIVERY_BLOCKER_MESSAGES,code)
+    ?{code,message:DELIVERY_BLOCKER_MESSAGES[code]}
+    :{code:'CHANNEL_DELIVERY_BLOCKED',message:'Возможность отправки на выбранную площадку не подтверждена.'};
+}
 const META_LIMITS=Object.freeze({audience:500,hook:500,idea:4000,hughNote:2000,metrics:1000,methodSource:300});
 function meta(value) {
   if(value===null||value===undefined)return {};
@@ -586,6 +596,7 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
   function capsIssues(channel,caption,mediaCount) {
     const caps=channel&&typeof channel.caps==='object'&&channel.caps?channel.caps:null,issues=[];
     if(!caps)return issues;
+    const blocker=deliveryBlocker(channel);if(blocker)issues.push(blocker.message);
     if(Number.isFinite(caps.maxText)&&caption.length>caps.maxText)issues.push(`Текст длиннее лимита площадки (${caps.maxText})`);
     if(Number.isFinite(caps.maxMedia)&&mediaCount>caps.maxMedia)issues.push(`Материалов больше, чем принимает площадка (${caps.maxMedia})`);
     if(Number.isFinite(caps.maxCaption)&&mediaCount&&caption.length>caps.maxCaption)issues.push(`Подпись к материалу длиннее лимита площадки (${caps.maxCaption})`);
@@ -1068,6 +1079,10 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
       const blocked=data.platformIds.filter((id,index)=>marked.has(channelPlatform(channels[index],id)));
       if(blocked.length)fail(409,`Уже отмечено как опубликованное вне ЛК: ${blocked.join(', ')}. Повторная отправка создаст дубликат.`,'EXTERNAL_PUBLICATION_RECORDED');
       if(channels.some(channel=>!channel||!channel.enabled||!channel.connected))fail(409,'Выбранный канал не подключён','CHANNEL_NOT_CONNECTED');
+      // Не создавать частичную доставку на остальные каналы при заведомом отказе одного.
+      // Одобрение содержимого допустимо отдельно; approveAndSchedule откатится атомарно.
+      const deliveryBlocked=channels.map(deliveryBlocker).find(Boolean);
+      if(deliveryBlocked)fail(409,deliveryBlocked.message,deliveryBlocked.code);
       if(companyApprovalRequired(row)&&!data.mediaUrls.length){
         if(!readiness(row).textOnly||channels.some(channel=>(channel.provider||'direct')!=='direct'||!['telegram','vk'].includes(channel.platform||channel.id)))
           fail(409,'Для этого способа публикации нужен материал: текст без медиа поддержан только прямыми Telegram и ВКонтакте','NOT_READY');
@@ -1560,6 +1575,12 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
       for(const delivery of conflicting)cancel.run(due.id,delivery.channel_id);
       review(due.id,'EXTERNAL_PUBLICATION_RECORDED');return;
     }
+    // Применяется и к старой очереди: известный отказ одного ещё не отправленного,
+    // согласованного канала останавливает группу до первого POST. Результаты уже
+    // выполненных доставок и сохранённые pending-записи остаются нетронутыми.
+    const deliveryBlocked=deliveries.filter(item=>item.status==='pending'&&deliveryApproved(due,item.channel_id))
+      .map(item=>deliveryBlocker(settings.channels.find(channel=>channel.id===item.channel_id))).find(Boolean);
+    if(deliveryBlocked){review(due.id,deliveryBlocked.code);return;}
     const lease=randomUUID();
     const claimed=db.prepare("UPDATE autoposting_posts SET status='publishing',publishing_at=?,lease=?,revision=revision+1,updated_at=? WHERE id=? AND status='scheduled' AND revision=? AND deleted_at IS NULL AND archived_at IS NULL")
       .run(now(),lease,iso(),due.id,due.revision);
