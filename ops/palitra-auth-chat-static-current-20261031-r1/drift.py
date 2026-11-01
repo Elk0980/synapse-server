@@ -123,14 +123,21 @@ def observed_appends(m, d, before, after, old, live, begin, end):
            'OBSERVED_APPEND_TIME_OUTSIDE_HISTORY')
     a = d.records(m, old, 'sqlite_sequence')
     b = d.records(m, live, 'sqlite_sequence')
-    d.bind_records(m, before, 'sqlite_sequence', a)
-    d.bind_records(m, after, 'sqlite_sequence', b)
     keys = [k for k, row in a.items() if row['name'] == 'chat_web_sessions']
     m.need(len(keys) == 1, 'ONE_ORIGINAL_SESSION_SEQUENCE_REQUIRED')
     key = keys[0]
     m.need(key in b and a[key] == {'name': 'chat_web_sessions', 'seq': 23} and
            b[key] == {'name': 'chat_web_sessions', 'seq': SESSION_ID},
            'EXACT_SESSION_SEQUENCE_23_TO_24_REQUIRED')
+    # Only bind the session-counter row introduced by this classifier. The
+    # frozen diagnostic policy separately admits its original monotone row,
+    # including a later backup observation; all remaining rows still reach
+    # the unchanged final whole-facts comparison in content().
+    for facts, row in ((before, a[key]), (after, b[key])):
+        table = facts['tables']['sqlite_sequence']
+        digest = m.sha(m.enc([m.cell(row[c]) for c in table['columns']]))
+        m.need(table['rows'].get(key) == digest,
+               'OBSERVED_SESSION_SEQUENCE_FACT_BINDING_CHANGED')
     value = copy.deepcopy(after)
     for table, primary in added.items():
         del value['tables'][table]['rows'][primary]

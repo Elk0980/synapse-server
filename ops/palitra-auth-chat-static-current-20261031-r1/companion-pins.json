@@ -4,8 +4,8 @@
     "sha256": "9c2e36b74a192ed7c8ce50d11fcc4f899b945f25e9ac6b8ba46a86a54c81caf4"
   },
   "drift.py": {
-    "bytes": 10248,
-    "sha256": "ff3fe0b2084f5b2be59359e539dcf44841adb3dd93c5c66e1fd9b4411fa6c82a"
+    "bytes": 10732,
+    "sha256": "da99096a7a083df3de029e925a8cff47b431cec5d746977a4d4ff331c9844436"
   },
   "verify.py": {
     "bytes": 28040,

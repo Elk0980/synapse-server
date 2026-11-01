@@ -48,13 +48,15 @@ class ObservedAppends(unittest.TestCase):
         with contextlib.closing(sqlite3.connect(':memory:',isolation_level=None)) as old,contextlib.closing(sqlite3.connect(':memory:',isolation_level=None)) as live:
             old.deserialize(self.old.serialize());live.deserialize(self.live.serialize())
             old.execute('PRAGMA query_only=ON');live.execute('PRAGMA query_only=ON')
-            before=m.db_facts(old);after=m.db_facts(live)
+            before=getattr(self,'beforeOverride',None) or m.db_facts(old);after=m.db_facts(live)
             normalized,proof=a.classify(m,d,before,after,old,live,self.begin,self.end)
             bridge=m.sha(m.enc([m.cell('fixture')]))
             seq=next(k for k,r in d.records(m,old,'sqlite_sequence').items()if r['name']=='hugh_owner_alerts')
             diag={'bridge':{'key':bridge,'payload':'synthetic fixed payload','checkedAt':'2026-10-31T13:00:00.000Z'},'sequence':{'key':seq,'name':'hugh_owner_alerts','value':1}}
+            obs=copy.deepcopy(diag)
+            obs['sequence']['value']=d.records(m,live,'sqlite_sequence')[seq]['seq']
             with patch.object(m,'diagnostic_policy',return_value=types.SimpleNamespace(stamp=d.stamp)):
-                d.content(m,before,normalized,diag,copy.deepcopy(diag),d.records(m,old,'ai_balance_snapshots'),d.records(m,live,'ai_balance_snapshots'),self.begin,self.end)
+                d.content(m,before,normalized,diag,obs,d.records(m,old,'ai_balance_snapshots'),d.records(m,live,'ai_balance_snapshots'),self.begin,self.end)
             return proof
     def test_exact_two_appends_preserve_all_original_rows(self):
         self.assertEqual(self.validate()['kind'],'EXACT_GUEST24_AND_EMPTY_EVENING_REMINDER_20261031')
@@ -101,5 +103,21 @@ class ObservedAppends(unittest.TestCase):
     def test_time_window_not_reanchored(self):
         self.begin=d.stamp('2026-10-31T17:00:00.000Z')
         with self.assertRaises(ValueError):self.validate()
+    def test_original_diagnostic_counter_can_advance_in_backup_without_accepting_other_rows(self):
+        with contextlib.closing(sqlite3.connect(':memory:',isolation_level=None)) as reader:
+            reader.deserialize(self.old.serialize());reader.execute('PRAGMA query_only=ON')
+            self.beforeOverride=m.db_facts(reader)
+        self.old.execute("UPDATE sqlite_sequence SET seq=2 WHERE name='hugh_owner_alerts'")
+        self.live.execute("UPDATE sqlite_sequence SET seq=3 WHERE name='hugh_owner_alerts'")
+        self.assertEqual(self.validate()['kind'],'EXACT_GUEST24_AND_EMPTY_EVENING_REMINDER_20261031')
+        self.live.execute("UPDATE customer_records SET body='unknown changed history'")
+        with self.assertRaisesRegex(ValueError,'UNKNOWN_CONTENT_BUSINESS_OR_SCHEMA_DIFF'):self.validate()
+    def test_session_counter_row_must_bind_to_the_actual_fact_digest(self):
+        with contextlib.closing(sqlite3.connect(':memory:',isolation_level=None)) as reader:
+            reader.deserialize(self.old.serialize());reader.execute('PRAGMA query_only=ON')
+            self.beforeOverride=m.db_facts(reader)
+            key=next(k for k,r in d.records(m,reader,'sqlite_sequence').items() if r['name']=='chat_web_sessions')
+        self.beforeOverride['tables']['sqlite_sequence']['rows'][key]='unbound-synthetic-digest'
+        with self.assertRaisesRegex(ValueError,'OBSERVED_SESSION_SEQUENCE_FACT_BINDING_CHANGED'):self.validate()
 
 if __name__=='__main__':unittest.main()
