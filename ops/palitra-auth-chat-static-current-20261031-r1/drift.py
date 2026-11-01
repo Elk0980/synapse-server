@@ -71,3 +71,74 @@ def content(m,before,after,diag,obs,oldbalance,newbalance,begin,end):
  value['tables']['ai_balance_snapshots']=before['tables']['ai_balance_snapshots']
  m.need(m.enc(value)==m.enc(before),'UNKNOWN_CONTENT_BUSINESS_OR_SCHEMA_DIFF')
  return {'cache':cache,'historicalDiagnosticMonotonicOnly':True,'expiredWindowAccepted':False}
+
+
+SESSION_ID = 24
+SESSION_CREATED = '2026-10-31T16:03:10.018Z'
+SESSION_EXPIRES = '2026-11-30T16:03:10.018Z'
+REMINDER_CREATED = '2026-10-31T15:00:54.872Z'
+REMINDER_COMPLETED = '2026-10-31T15:00:54.879Z'
+COMPANY = 'palitra-love'
+
+
+def observed_appends(m, d, before, after, old, live, begin, end):
+    m.need(m.enc(before['schema']) == m.enc(after['schema']) and
+           set(before['tables']) == set(after['tables']),
+           'OBSERVED_APPEND_SCHEMA_CHANGED')
+    targets = {
+        'chat_web_sessions': [SESSION_ID],
+        'content_review_reminder_runs': [COMPANY, '2026-10-31', 'evening'],
+    }
+    if all(m.enc(before['tables'][t]) == m.enc(after['tables'][t]) for t in targets):
+        return after, {'kind': 'NO_OBSERVED_APPENDS'}
+    added = {}
+    for table, primary in targets.items():
+        a, b = before['tables'][table], after['tables'][table]
+        key = m.sha(m.enc([m.cell(v) for v in primary]))
+        m.need(a['columns'] == b['columns'] and
+               set(b['rows']) - set(a['rows']) == {key} and
+               all(b['rows'].get(k) == v for k, v in a['rows'].items()),
+               'ONLY_TWO_EXACT_APPEND_KEYS_ALLOWED')
+        added[table] = key
+    # Do not retrieve token_hash, csrf_hash, account id, or chat id values.
+    session = live.execute('''SELECT
+        site='palitra' AND company_code=? AND
+        origin IN ('https://palitra-love.ru','https://palitra-love-draft-1.synapsebusiness.ru') AND
+        scope='customer_chat' AND account_kind='guest' AND account_user_id IS NULL AND
+        created_at=? AND expires_at=? AND revoked_at IS NULL AND
+        length(token_hash)=64 AND token_hash NOT GLOB '*[^0-9a-f]*' AND
+        length(csrf_hash)=64 AND csrf_hash NOT GLOB '*[^0-9a-f]*'
+        FROM chat_web_sessions WHERE id=?''',
+        (COMPANY, SESSION_CREATED, SESSION_EXPIRES, SESSION_ID)).fetchall()
+    m.need(session == [(1,)], 'EXACT_OBSERVED_GUEST_SESSION_REQUIRED')
+    reminder = live.execute('''SELECT
+        target_date='2026-11-01' AND status='empty' AND attempts=1 AND last_error IS NULL AND
+        created_at=? AND completed_at=? AND
+        chat_id=CAST((SELECT telegram_chat_id FROM project_chat_rooms WHERE company_code=?) AS TEXT)
+        FROM content_review_reminder_runs WHERE company_code=? AND run_date='2026-10-31' AND phase='evening' ''',
+        (REMINDER_CREATED, REMINDER_COMPLETED, COMPANY, COMPANY)).fetchall()
+    m.need(reminder == [(1,)], 'EXACT_OBSERVED_EMPTY_REMINDER_REQUIRED')
+    m.need(begin <= d.stamp(REMINDER_CREATED) <= d.stamp(REMINDER_COMPLETED) <= end and
+           begin <= d.stamp(SESSION_CREATED) <= end,
+           'OBSERVED_APPEND_TIME_OUTSIDE_HISTORY')
+    a = d.records(m, old, 'sqlite_sequence')
+    b = d.records(m, live, 'sqlite_sequence')
+    d.bind_records(m, before, 'sqlite_sequence', a)
+    d.bind_records(m, after, 'sqlite_sequence', b)
+    keys = [k for k, row in a.items() if row['name'] == 'chat_web_sessions']
+    m.need(len(keys) == 1, 'ONE_ORIGINAL_SESSION_SEQUENCE_REQUIRED')
+    key = keys[0]
+    m.need(key in b and a[key] == {'name': 'chat_web_sessions', 'seq': 23} and
+           b[key] == {'name': 'chat_web_sessions', 'seq': SESSION_ID},
+           'EXACT_SESSION_SEQUENCE_23_TO_24_REQUIRED')
+    value = copy.deepcopy(after)
+    for table, primary in added.items():
+        del value['tables'][table]['rows'][primary]
+    value['tables']['sqlite_sequence']['rows'][key] = before['tables']['sqlite_sequence']['rows'][key]
+    return value, {
+        'kind': 'EXACT_GUEST24_AND_EMPTY_EVENING_REMINDER_20261031',
+        'sessionCreatedAt': SESSION_CREATED,
+        'reminderCreatedAt': REMINDER_CREATED,
+        'oldRowsAndSchemaPreserved': True,
+        'credentialValuesReadOrPrinted': False,
+    }

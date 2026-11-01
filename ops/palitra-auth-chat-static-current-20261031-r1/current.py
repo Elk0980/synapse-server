@@ -75,7 +75,9 @@ def classify_history(s,base,rows,paths):
    else:
     full=s.module('migration_guard.py').normalize(full,row['containerPath'],s.load(s.AREA/'migration-schema.json'),base['databaseFacts'][key])
     obs=s.diagnostic_policy().capture(live,s.env_map(rows[s.CONTENT]),full)
+    full,appended=d.observed_appends(s,d,base['databaseFacts'][key],full,old,live,base['created'],end)
     result['content']=d.content(s,base['databaseFacts'][key],full,base['diagnosticBase'],obs,d.records(s,old,'ai_balance_snapshots'),d.records(s,live,'ai_balance_snapshots'),base['created'],end)
+    result['content']['observedAppends']=appended
   s.need(s.db_identity(row['hostPath'])==row['identity'],'HISTORICAL_DATABASE_IDENTITY_CHANGED_AT_END')
  return result
 
