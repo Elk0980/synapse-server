@@ -2,6 +2,9 @@
 
 // Метаданные существующих CRM-задач. Это учёт подтверждений, не запуск агентов.
 const STAGES = ['code', 'connected', 'verified', 'accepted'];
+const PERSON_WHITESPACE = [9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,
+  8232,8233,8239,8287,12288,65279];
+const PERSON_UPPERCASE_RU = 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ';
 const TEXT_FIELDS = ['module', 'ownerThreadId', 'ownerThreadName', 'executorId', 'executorName',
   'verifiedModel', 'scope', 'acceptance', 'result', 'blocker', 'nextAction'];
 const fail = (status, message) => { throw Object.assign(new Error(message), {status}); };
@@ -112,7 +115,7 @@ function createTaskCoordination(db, {now = () => Date.now()} = {}) {
   };
   return {get,list,save,tool:createTaskTools(db,{now,owner,entry,save})};
 }
-module.exports = {createTaskCoordination,migrateTasksMcp};
+module.exports = {createTaskCoordination,migrateTasksMcp,migrateTasksMcpPortable};
 
 // Вызывается только новым migrate-блоком до запуска HTTP-сервера.
 function migrateTasksMcp(db) {
@@ -154,7 +157,6 @@ function migrateTasksMcp(db) {
       function TEXT NOT NULL DEFAULT '', chat TEXT NOT NULL DEFAULT '',
       state TEXT NOT NULL CHECK(state IN ('work','wait','idle','unknown','error')),
       last_event TEXT NOT NULL DEFAULT '', last_event_at TEXT NOT NULL);
-    CREATE UNIQUE INDEX agents_name_key_uidx ON agents(${personKeySql('name')});
     CREATE TABLE agent_access (
       agent_id INTEGER PRIMARY KEY REFERENCES agents(id), owner_id INTEGER NOT NULL, projects TEXT NOT NULL);
     CREATE TABLE agent_sessions (
@@ -173,12 +175,6 @@ function migrateTasksMcp(db) {
       BEGIN SELECT RAISE(ABORT,'Immutable agent activity'); END;
     CREATE TRIGGER agent_activity_no_delete BEFORE DELETE ON agent_activity
       BEGIN SELECT RAISE(ABORT,'Immutable agent activity'); END;
-    CREATE TRIGGER tasks_reviewer_insert BEFORE INSERT ON tasks
-      WHEN ${personKeySql('NEW.reviewer_name')}<>'' AND ${personKeySql('NEW.reviewer_name')}=${personKeySql('NEW.assignee_name')}
-      BEGIN SELECT RAISE(ABORT,'TASK_REVIEWER_EQUALS_EXECUTOR'); END;
-    CREATE TRIGGER tasks_reviewer_update BEFORE UPDATE OF reviewer_name,assignee_name ON tasks
-      WHEN ${personKeySql('NEW.reviewer_name')}<>'' AND ${personKeySql('NEW.reviewer_name')}=${personKeySql('NEW.assignee_name')}
-      BEGIN SELECT RAISE(ABORT,'TASK_REVIEWER_EQUALS_EXECUTOR'); END;
     CREATE TRIGGER tasks_parent_insert BEFORE INSERT ON tasks
       WHEN NEW.parent_task_id IS NOT NULL AND (NEW.parent_task_id=NEW.id OR NOT EXISTS (
         SELECT 1 FROM tasks p WHERE p.id=NEW.parent_task_id AND p.is_deleted=0
@@ -192,6 +188,7 @@ function migrateTasksMcp(db) {
           AND (NEW.parent_task_id IS NOT NULL OR NEW.is_deleted<>0 OR lower(NEW.company_code)<>lower(OLD.company_code)))
       BEGIN SELECT RAISE(ABORT,'TASK_PARENT_INVALID'); END;
   `);
+  migrateTasksMcpPortable(db);
   // Старый CRUD и уже открытые формы участвуют в той же версии карточки.
   // updated_by=0 обозначает системную синхронизацию, а не личность владельца.
   createTaskCoordination(db);
@@ -233,14 +230,78 @@ function migrateTasksMcp(db) {
 
 // Только встроенные функции SQLite: правила работают в резервных копиях,
 // скриптах и втором подключении, не загружавшем этот модуль JavaScript.
+function asciiPersonKeySql(expression) {
+  return `lower(trim(${expression},char(${PERSON_WHITESPACE.join(',')})))`;
+}
+
 function personKeySql(expression) {
-  const whitespace = [9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,
-    8232,8233,8239,8287,12288,65279];
-  let result = `lower(trim(${expression},char(${whitespace.join(',')})))`;
-  for (const letter of 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ') {
+  let result = asciiPersonKeySql(expression);
+  for (const letter of PERSON_UPPERCASE_RU) {
     result = `replace(${result},'${letter}','${letter.toLowerCase()}')`;
   }
   return result;
+}
+
+// В постоянной схеме нельзя сохранять цепочку из 33 вложенных replace:
+// SQLite 3.45 переполняет стек парсера уже при открытии такой базы.
+// CTE разбивает ровно ту же нормализацию на короткие независимые выражения.
+function portablePersonKeysSql(input) {
+  const steps = [`person_key_0(kind,value) AS (${input})`];
+  let index = 0;
+  for (let offset = 0; offset < PERSON_UPPERCASE_RU.length; offset += 3) {
+    let expression = 'value';
+    for (const letter of PERSON_UPPERCASE_RU.slice(offset,offset+3)) {
+      expression = `replace(${expression},'${letter}','${letter.toLowerCase()}')`;
+    }
+    steps.push(`person_key_${index+1}(kind,value) AS (SELECT kind,${expression} FROM person_key_${index})`);
+    index++;
+  }
+  return {cte:`WITH ${steps.join(',\n')}`,table:`person_key_${index}`};
+}
+
+// Новая миграция 9: только наши индексы и триггеры. Строки, история,
+// внешние ключи, последовательности и колонки остаются неизменными.
+function migrateTasksMcpPortable(db) {
+  const duplicateKeys = portablePersonKeysSql(`SELECT id,${asciiPersonKeySql('name')} FROM agents`);
+  const duplicate = db.prepare(`${duplicateKeys.cte}
+    SELECT 1 FROM ${duplicateKeys.table} GROUP BY value HAVING count(*)>1 LIMIT 1`).get();
+  if (duplicate) throw new Error('Каталог агентов содержит совпадающие канонические имена');
+
+  const reviewer = portablePersonKeysSql(`VALUES
+    (0,${asciiPersonKeySql('NEW.reviewer_name')}),(1,${asciiPersonKeySql('NEW.assignee_name')})`);
+  const reviewerConflict = `${reviewer.cte}
+    SELECT 1 FROM ${reviewer.table} reviewer JOIN ${reviewer.table} executor ON reviewer.value=executor.value
+      WHERE reviewer.kind=0 AND executor.kind=1 AND reviewer.value<>''`;
+  const agentConflict = (insert) => {
+    // Точное имя оставлено UNIQUE(name): это сохраняет INSERT ...
+    // ON CONFLICT(name) DO UPDATE, которым агент сообщает новый статус.
+    const existing = insert ? 'name<>NEW.name' : 'id<>OLD.id';
+    const keys = portablePersonKeysSql(`SELECT 1,${asciiPersonKeySql('NEW.name')}
+      UNION ALL SELECT 0,${asciiPersonKeySql('name')} FROM agents WHERE ${existing}`);
+    return `${keys.cte}
+      SELECT 1 FROM ${keys.table} candidate JOIN ${keys.table} saved ON candidate.value=saved.value
+        WHERE candidate.kind=1 AND saved.kind=0`;
+  };
+  db.exec(`
+    DROP INDEX IF EXISTS agents_name_key_uidx;
+    DROP TRIGGER IF EXISTS tasks_reviewer_insert;
+    DROP TRIGGER IF EXISTS tasks_reviewer_update;
+    DROP TRIGGER IF EXISTS agents_name_key_insert;
+    DROP TRIGGER IF EXISTS agents_name_key_update;
+    CREATE UNIQUE INDEX agents_name_key_uidx ON agents(${asciiPersonKeySql('name')});
+    CREATE TRIGGER tasks_reviewer_insert BEFORE INSERT ON tasks
+      WHEN EXISTS (${reviewerConflict})
+      BEGIN SELECT RAISE(ABORT,'TASK_REVIEWER_EQUALS_EXECUTOR'); END;
+    CREATE TRIGGER tasks_reviewer_update BEFORE UPDATE OF reviewer_name,assignee_name ON tasks
+      WHEN EXISTS (${reviewerConflict})
+      BEGIN SELECT RAISE(ABORT,'TASK_REVIEWER_EQUALS_EXECUTOR'); END;
+    CREATE TRIGGER agents_name_key_insert BEFORE INSERT ON agents
+      WHEN EXISTS (${agentConflict(true)})
+      BEGIN SELECT RAISE(ABORT,'UNIQUE constraint failed: agents.name_key'); END;
+    CREATE TRIGGER agents_name_key_update BEFORE UPDATE OF name ON agents
+      WHEN EXISTS (${agentConflict(false)})
+      BEGIN SELECT RAISE(ABORT,'UNIQUE constraint failed: agents.name_key'); END;
+  `);
 }
 
 function withCoordinatedWrite(db, taskId, callback) {
