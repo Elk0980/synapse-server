@@ -1254,3 +1254,17 @@ test('дополнительные параметры через прямого 
   const plain=palitraDraft(f);f.channels[0].provider='direct';
   assert.equal((await approveSchedule(f,plain)).status,'scheduled','без доп. параметров прямой бот работает как раньше');
 });
+test('02.11.2026: неясный ответ одной площадки не останавливает остальные и не повторяется',async t=>{
+  const f=fixture(t),p=f.draft(['telegram','vk']);await f.schedule(p);f.advance(60000);let n=0;
+  f.setSend(async()=>{n++;if(n===1)throw Object.assign(Error('timeout'),{status:502,ambiguous:true,code:'CONNECTION_UNCERTAIN'});return {externalId:'vk-1'};});
+  await f.api.drain();const result=f.api.get(p.id,'alvi');
+  assert.equal(f.calls.length,2);assert.equal(result.deliveries[0].status,'needs_review');assert.equal(result.deliveries[0].errorCode,'PUBLICATION_UNCERTAIN');
+  assert.equal(result.deliveries[1].status,'published');assert.equal(result.status,'needs_review');
+  f.advance(LEASE_MS*2);await createAutoposting(f.db,f.options).drain();assert.equal(f.calls.length,2,'без повторной отправки');
+});
+test('02.11.2026: отказ площадки не мешает другим; если не вышла ни одна — «Ошибка отправки»',async t=>{
+  const f=fixture(t),p=f.draft(['telegram','vk']);await f.schedule(p);f.advance(60000);
+  f.setSend(async()=>{throw Object.assign(Error('rejected'),{status:502,ambiguous:false,code:'PLATFORM_REJECTED'});});
+  await f.api.drain();const result=f.api.get(p.id,'alvi');
+  assert.equal(f.calls.length,2);assert.deepEqual(result.deliveries.map(d=>d.status),['failed','failed']);assert.equal(result.status,'failed');assert.equal(result.lastErrorCode,'PUBLISH_FAILED');
+});

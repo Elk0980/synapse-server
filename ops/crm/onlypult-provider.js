@@ -85,7 +85,8 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
     const token = tokenFor(row), mutation = method !== 'GET';
     let response,data;
     try {
-      const signal = AbortSignal.timeout(20000);
+      // Создание поста ждёт дольше: Onlypult сначала сам скачивает видео (02.11.2026: 20 с не хватило для TikTok).
+      const signal = AbortSignal.timeout(mutation ? 90000 : 20000);
       response = await fetchImpl(BASE + path,{method,redirect:'error',signal,
         headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},
         ...(body ? {body:JSON.stringify(body)} : {})});

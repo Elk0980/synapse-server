@@ -12,7 +12,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 BUNDLE = json.loads((HERE / "bundle.json").read_text(encoding="utf-8"))
 CONTAINER = "synapse-crm-1"
 IMAGE_PREFIX = "sha256:b74d9196617c"
-CORE_PREFIX = "caf1675a"
+CORE_PREFIX = BUNDLE.get("core", {}).get("beforePrefix", "caf1675a")
 TRANSPORT = "c658463a093f9ffd9c45a3b2fdd8fce321b72bd3384d9bac7143963b0db396a7"
 STAMP = BUNDLE.get("stamp", "20261102-claude-r2")
 PUBLIC = "https://synapse.synapsebusiness.ru/cabinet/palitra-orders/"
@@ -167,8 +167,8 @@ def plan():
     need(sha(provider) == BUNDLE["provider"]["liveSha"], "PROVIDER_CHANGED")
     need(sha(transport) == TRANSPORT, "TRANSPORT_CHANGED")
     text = core.decode("utf-8")
-    text = patch(text, BUNDLE["core"]["r1"], "CORE_R1")
-    text = patch(text, BUNDLE["core"]["r2"], "CORE_R2")
+    for index, patches in enumerate(BUNDLE["core"].get("chain") or [BUNDLE["core"]["r1"], BUNDLE["core"]["r2"]]):
+        text = patch(text, patches, "CORE_" + str(index + 1))
     need(re.search(r"\bPLAN_PLATFORMS\s*=", text) is not None, "PLAN_PLATFORMS_MISSING")
     need("function createPublishedCopy" in text or b"function createPublishedCopy" not in core, "PUBLISHED_COPY_LOST")
     new_core = text.encode("utf-8")

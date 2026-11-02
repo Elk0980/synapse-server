@@ -1700,14 +1700,23 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
         const code=ambiguous?'PUBLICATION_UNCERTAIN':'PUBLISH_FAILED';
         db.prepare("UPDATE autoposting_deliveries SET status=?,error_code=?,finished_at=? WHERE post_id=? AND channel_id=? AND status='publishing'")
           .run(status,code,iso(),due.id,delivery.channel_id);
+        logger.warn(`[crm] autoposting code=${code} cause=${String(error?.code||'').slice(0,40)} channel=${delivery.channel_id}`);
+        // 02.11.2026: отказ или неясный ответ провайдера по одной площадке не останавливает остальные —
+        // это разные площадки, повтора и дубля нет. Барьер версии/плана (без status 502) по-прежнему останавливает группу.
+        if(error?.status===502)continue;
         db.prepare("UPDATE autoposting_posts SET status=?,last_error_code=?,revision=revision+1,updated_at=? WHERE id=? AND status='publishing' AND lease=?")
           .run(status,code,iso(),due.id,lease);
-        logger.warn(`[crm] autoposting code=${code}`);return;
+        return;
       }
     }
     db.prepare(`UPDATE autoposting_posts SET status='needs_review',last_error_code=COALESCE((SELECT error_code FROM autoposting_deliveries
       WHERE post_id=? AND status='needs_review' LIMIT 1),'PROVIDER_PENDING'),revision=revision+1,updated_at=?
       WHERE id=? AND status='publishing' AND lease=? AND EXISTS(SELECT 1 FROM autoposting_deliveries WHERE post_id=? AND status='needs_review')`)
+      .run(due.id,iso(),due.id,lease,due.id);
+    // Отказы отдельных площадок: ни одна не вышла — «Ошибка отправки», часть вышла — «Нужна проверка».
+    db.prepare(`UPDATE autoposting_posts SET status=CASE WHEN EXISTS(SELECT 1 FROM autoposting_deliveries WHERE post_id=? AND status='published') THEN 'needs_review' ELSE 'failed' END,
+      last_error_code='PUBLISH_FAILED',revision=revision+1,updated_at=?
+      WHERE id=? AND status='publishing' AND lease=? AND EXISTS(SELECT 1 FROM autoposting_deliveries WHERE post_id=? AND status='failed')`)
       .run(due.id,iso(),due.id,lease,due.id);
     db.prepare("UPDATE autoposting_posts SET status='published',last_error_code=NULL,revision=revision+1,updated_at=? WHERE id=? AND status='publishing' AND lease=? AND NOT EXISTS(SELECT 1 FROM autoposting_deliveries WHERE post_id=? AND status<>'published')")
       .run(iso(),due.id,lease,due.id);

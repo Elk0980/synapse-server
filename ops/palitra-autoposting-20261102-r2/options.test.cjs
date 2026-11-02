@@ -20,11 +20,11 @@ test('набор компании подставляется только в н�
  const other=await make({companyCode:'avokado'});try{assert.equal(other.q('[name="tiktokPrivacy"]').value,'');}finally{other.close();}
  const none=await make();try{assert.equal(none.q('[name="tiktokPrivacy"]').value,'');}finally{none.close();}
 });
-test('блок площадки виден только когда она отмечена; дополнительные поля свёрнуты',async()=>{
+test('блок площадки виден только когда она отмечена; параметры спрятаны под «Дополнительные настройки»',async()=>{
  const p=await make();try{
   const group=id=>p.q(`.palitra-composer-platform-options[data-platform="${id}"]`);
   assert.equal(group('telegram').hidden,true);p.set('platform-telegram',true);await settle();
-  assert.equal(group('telegram').hidden,false);assert.equal(group('telegram').querySelector('details').open,false);
+  assert.equal(group('telegram').hidden,false);const adv=group('telegram').closest('details.palitra-composer-advanced');assert.ok(adv,'внутри дополнительных настроек');assert.equal(adv.open,false);
   assert.equal(group('vk').hidden,true);
  }finally{p.close();}
 });
