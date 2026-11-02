@@ -24,3 +24,5 @@
 .content-day__fresh-post ul{margin:4px 0 0;padding:0;list-style:none}
 .content-day__fresh-post li{font-size:13px;line-height:1.6;overflow-wrap:anywhere}
 .content-day__fresh-post a{color:#2f5d1e;font-weight:600}
+.content-day__fresh-head h2{white-space:nowrap}
+.content-day__fresh-head .app-btn{width:auto;flex:0 0 auto}

@@ -1595,12 +1595,19 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
     db.prepare(`UPDATE autoposting_posts SET status=?,last_error_code=?,revision=revision+1,updated_at=?
       WHERE id=? AND status='needs_review' AND (status<>? OR COALESCE(last_error_code,'')<>COALESCE(?,''))`).run(status,code,iso(),postId,status,code);
   }
-  function settle() {
-    const done=db.prepare(`SELECT post_id,channel_id,provider_status FROM autoposting_deliveries WHERE status='needs_review'
-      AND provider_post_id IS NOT NULL AND provider_status IN ('published','failed') LIMIT 50`).all();
+  async function settle() {
+    const done=db.prepare(`SELECT d.post_id,d.channel_id,d.channel_revision,d.provider_post_id,d.provider_status,c.code FROM autoposting_deliveries d
+      JOIN autoposting_posts p ON p.id=d.post_id JOIN companies c ON c.id=p.company_id WHERE d.status='needs_review'
+      AND d.provider_post_id IS NOT NULL AND d.provider_status IN ('published','failed') LIMIT 50`).all();
     for(const d of done){
+      // Время выхода — то, что сообщил Onlypult; если его не узнать, — момент подтверждения.
+      let at=iso();
+      if(d.provider_status==='published'&&transport.findPosts){
+        try{const hit=(await transport.findPosts({companyCode:d.code,channelId:d.channel_id,channelRevision:d.channel_revision})).find(p=>p.id===d.provider_post_id);
+          if(hit?.publishedAt&&Date.parse(hit.publishedAt)<=now())at=hit.publishedAt;}catch{}
+      }
       if(d.provider_status==='published')db.prepare(`UPDATE autoposting_deliveries SET status='published',external_id=COALESCE(external_id,provider_post_id),
-        finished_at=?,error_code='PROVIDER_CONFIRMED' WHERE post_id=? AND channel_id=? AND status='needs_review' AND provider_status='published'`).run(iso(),d.post_id,d.channel_id);
+        finished_at=?,error_code='PROVIDER_CONFIRMED' WHERE post_id=? AND channel_id=? AND status='needs_review' AND provider_status='published'`).run(at,d.post_id,d.channel_id);
       else db.prepare(`UPDATE autoposting_deliveries SET status='failed',finished_at=?,error_code='PROVIDER_FAILED'
         WHERE post_id=? AND channel_id=? AND status='needs_review' AND provider_status='failed'`).run(iso(),d.post_id,d.channel_id);
     }
@@ -1614,7 +1621,7 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
       WHERE c.is_deleted=0 AND p.deleted_at IS NULL AND d.status='needs_review' AND d.provider_post_id IS NULL
       AND d.error_code='PUBLICATION_UNCERTAIN' AND d.started_at>=? ORDER BY d.started_at LIMIT 5`).all(recent);
     for(const d of uncertain){if(stopped)return;await bindUncertain(d);}
-    settle();
+    await settle();
     if(!transport.findLink)return;
     const linkless=db.prepare(`SELECT d.*,c.code FROM autoposting_deliveries d JOIN autoposting_posts p ON p.id=d.post_id JOIN companies c ON c.id=p.company_id
       WHERE c.is_deleted=0 AND p.deleted_at IS NULL AND d.status='published' AND d.url IS NULL AND d.provider_post_id IS NOT NULL

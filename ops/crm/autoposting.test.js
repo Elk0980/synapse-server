@@ -1277,14 +1277,15 @@ test('02.11.2026: неясный ответ связывается с единс
   f.transport.findPosts=async input=>{reads.push(input.channelId);return [
     {id:'op-old',status:'published',content:'Подтверждённый текст',createdAt:'2026-09-14T10:00:00.000Z'},
     {id:'op-other',status:'published',content:'Другой текст',createdAt:sentAt},
-    {id:'op-tg',status:'published',content:'Подтверждённый текст',createdAt:sentAt}];};
+    {id:'op-tg',status:'published',content:'Подтверждённый текст',createdAt:sentAt,publishedAt:'2026-09-15T00:01:30.000Z'}];};
   f.transport.reconcile=async input=>({providerPostId:input.providerPostId,providerStatus:'published',errorCode:'PROVIDER_LINK_UNAVAILABLE'});
   f.advance(61000);await f.api.drain();f.advance(61000);await f.api.drain();
   let result=f.api.get(p.id,'alvi');
-  assert.deepEqual(reads,['telegram'],'читаются посты только площадки с неясным ответом');
+  assert.deepEqual(reads,['telegram','telegram','vk'],'связывание читает только площадку с неясным ответом, затем время выхода по каждой');
   assert.deepEqual(result.deliveries.map(d=>[d.channelId,d.status,d.errorCode]),[['telegram','published','PROVIDER_CONFIRMED'],['vk','published','PROVIDER_CONFIRMED']]);
   assert.equal(result.status,'published');assert.equal(result.lastErrorCode,null);assert.equal(n,2,'без повторной отправки');
   assert.deepEqual(result.deliveries.map(d=>d.url),[null,null],'ссылка не придумывается');
+  assert.equal(result.deliveries[0].finishedAt,'2026-09-15T00:01:30.000Z','время выхода — по Onlypult');
   f.transport.findLink=async input=>input.channelId==='vk'?'https://vk.com/wall-1_2':null;
   f.advance(200000);await f.api.drain();result=f.api.get(p.id,'alvi');
   assert.deepEqual(result.deliveries.map(d=>d.url),[null,'https://vk.com/wall-1_2']);
