@@ -1,0 +1,23 @@
+{
+  "status": "PRIVATE_NOT_INSTALLED_TWO_FRONTEND_ONLY",
+  "actualAccountServiceSha256": "0b7cb428936e90ec3b97e55d2abea6bbd56e867b4fa51d13588abc5ff2bff993",
+  "targets": {
+    "home-storefront.js": {
+      "publicBeforeSha256": "d63674cb9b2b71aca15cea9e2af0d61feb3d6def5cf2b54086cad685412c0670",
+      "maskBaseSha256": "7a10b2239b1e9f5655864d1ead6dc2790f641cc6ce321028acc62b3f196cba91",
+      "afterSha256": "b33d8bc56b9efd3bbd32f27f5eb93ccdd90c467a8a94b5016408cb70e415709b",
+      "bytes": 59890
+    },
+    "home-order.js": {
+      "publicBeforeSha256": "cc52878ac147168ddc6195ed5ccd13383211e921f46b536eb1645e154e111b2f",
+      "maskBaseSha256": "cd97a02f6668069f895c406349bea626444b08c4edcf545d3b271cd7d5db7600",
+      "afterSha256": "c71d99922855cc5e20478a2890601ba6ad4c307ddd44c01e764ab4e22f44bf1c",
+      "bytes": 96388,
+      "boundedChanges": [
+        "pristine prefill controller with channel-aware phone dirty state",
+        "existing bindForm integration and phoneDraft ownership",
+        "clear only exactly matching injected hidden phone draft"
+      ]
+    }
+  }
+}

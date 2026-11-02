@@ -1,0 +1,13 @@
+{
+  "kind": "Root-accepted-readonly-metadata-not-permit",
+  "asOf": "2026-10-29T22:45:00Z",
+  "siteId": "site-44bbe13f1bad5e005b2a",
+  "companyCode": "palitra-love",
+  "version": 334,
+  "revision": "245ca86f12e50e696ee39c5d6c3ab0f1924c05e933abbcc3ba249a20e6d8d9f8",
+  "manifestFiles": 141,
+  "historyRecords": 334,
+  "canonicalHistoryDigestHardcoded": false,
+  "source": "Root native readonly report; ROOT_NATIVE_READONLY.py history serialization advisory only",
+  "livePermit": false
+}

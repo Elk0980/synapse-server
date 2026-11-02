@@ -1,0 +1,737 @@
+"""PRIVATE candidate only. Closed content-only durable image overlay, six source paths.
+Default native readiness remains fail-closed until exact economy/inventory/scoped-R2 proof.
+No application imports, queue mutations, database restore or automatic write retry.
+"""
+from pathlib import Path
+from contextlib import contextmanager
+import ast,copy,hashlib,hmac,io,json,os,re,sqlite3,stat,subprocess,sys,tarfile,time,urllib.request
+try:
+ import resource
+except ImportError:
+ resource=None
+from datetime import datetime,timezone,timedelta
+sys.dont_write_bytecode=True
+NAME='palitra-customer-content-durable-20261030-r2'
+ROOT=Path('/opt/synapse');AREA=ROOT/'releases'/NAME;SELF=Path(__file__).resolve();LOCK=ROOT/'.palitra-app-release.lock'
+CRM='synapse-crm-1';CONTENT='synapse-content-1';CONTAINERS=(CRM,CONTENT,'synapse-hugh-runtime-1','synapse-chat-1','caddy')
+BASE_IMAGE='sha256:9a1ab665339b10a49a49d8c605075ae701e4b28a9db1a3bb3ec49483fd8e6f44'
+HEX=re.compile('[a-f0-9]{64}');IMAGE=re.compile('sha256:[a-f0-9]{64}')
+LEGACY_SHA='91323f3430ee65b8df371c055d4fd1d3d7ff2762a09c5a379ee35263416cced7'
+MAX_FILE=64*1024*1024;MAX_ARCHIVE=2*1024*1024*1024;PREPARE_TTL=900;APPLY_TTL=120;GRACE=60
+sha=lambda raw:hashlib.sha256(raw).hexdigest()
+enc=lambda v:(json.dumps(v,ensure_ascii=False,sort_keys=True,separators=(',',':'))+'\n').encode()
+FILE_PINS={'/app/draft-account-service.cjs': ('0b7cb428936e90ec3b97e55d2abea6bbd56e867b4fa51d13588abc5ff2bff993', '23a0d76ed2d5d2bef47ad49e5822829a088b6148ceeffae09731b6f499d34f26'), '/app/customer-chat.js': ('65439df0c0268aa49c33b679d4142090c72f54e02153d1fcf21383587a341ffa', '1a3927539386fe4e075bf9aa9ec7cfc995fe0b36787ebb67ad7898359058456e'), '/app/customer-chat-native-adapter.cjs': ('0457646b76195b113834bcc26e4150bd488e3f4a19f83142006d666e277090f7', 'a72732560bd9adb109080c09cf0ce3bd7774eb72614ea29073d301d44245037e'), '/app/palitra-orders-public/shell.js': ('823da57f742b6ac656b48acbc7a57cf7bd2f69b9ee4993e7fb678f3c7ce4ba28', 'b39d4cdb4d07673988249863d0ce4e767981565ed6f77350073aeff61ec273c9'), '/app/palitra-review-public/palitra-chat.js': ('6ee45fc44d303314ba6124d0b37853f4129e579f9a29b6989d9ee39efdcd3cc6', '5752c762048c18aa01ccc52f503ef63230468d79ff7749895b6e4e0dd37d124b'), '/app/site-workspace-feature.js': ('319c233f6066955193ac850ce8b58464b198ad262d168be64281659828e82910', 'f36fe867ef6c5bf0f180ae3caec177f296503f365606c0d3e2b9cf262964ac5e')}
+TARGETS=tuple(FILE_PINS)
+REVIEWED_DATA_PINS={'reviewed-sql.json': '410b03163c43b703212e212d47821d9f2c427b21ee5ac17013d08a54c0193ba5', 'reviewed-source-pins.json': '4d40b687ecd38b081e1ffd1f7a412c53c739681c472725ebdb0a2e49e3cee4a9', 'inventory-review.json': '8e2fb66d88cc1da78e297219068a7b924a94860c20b66042a52fac960c103311', 'economy_projection.py': 'f320cb7299bdb75037272ae55e388e76697e6ce4d3a910eb1b5412eae3d3a283', 'vault_probe.cjs': '8714b8bc8cda5a6724227e31fdab4b37825b161026d9326d3c61296589263c13'}
+INVENTORY_REVIEW_SHA='8e2fb66d88cc1da78e297219068a7b924a94860c20b66042a52fac960c103311'
+def need(ok, reason):
+    if not ok: raise ValueError(reason)
+
+def safe_read(path):
+    path=Path(path)
+    for part in (path,*path.parents): need(not part.is_symlink(),'PATH_ALIAS')
+    before=path.lstat()
+    need(stat.S_ISREG(before.st_mode) and before.st_nlink==1 and before.st_size<=MAX_FILE,'REGULAR_BOUNDED_FILE')
+    if os.name=='posix': need(before.st_uid==before.st_gid==0,'ROOT_FILE_REQUIRED')
+    fd=os.open(path,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0)|getattr(os,'O_NONBLOCK',0)|getattr(os,'O_BINARY',0))
+    try:
+        with os.fdopen(fd,'rb',closefd=False) as stream: raw=stream.read(MAX_FILE+1)
+        keys=('st_dev','st_ino','st_size','st_mode','st_uid','st_gid','st_nlink','st_mtime_ns','st_ctime_ns')
+        need(len(raw)==before.st_size and all(getattr(before,k)==getattr(os.fstat(fd),k)==getattr(path.lstat(),k) for k in keys),'STABLE_READ_REQUIRED')
+        return raw
+    finally: os.close(fd)
+
+def write_new(path,raw,mode=0o600):
+    path=Path(path)
+    for part in (path,*path.parents): need(not part.is_symlink(),'WRITE_ALIAS')
+    fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0),mode)
+    with os.fdopen(fd,'wb') as stream: stream.write(raw);stream.flush();os.fsync(stream.fileno())
+
+def sync_dir(path):
+    fd=os.open(str(path),os.O_RDONLY|getattr(os,'O_DIRECTORY',0))
+    try: os.fsync(fd)
+    finally: os.close(fd)
+
+def load(path): return json.loads(safe_read(path))
+
+def own_lease():
+    rows=json.loads(run(['lslocks','--json','--output','PID,PATH']))['locks']
+    rows=[row for row in rows if row.get('path')==str(LOCK)]
+    need(len(rows)==1,'ONE_FRESH_LEASE_REQUIRED');pid=int(rows[0]['pid'])
+    ancestors=set();parent=os.getppid()
+    while parent>1 and parent not in ancestors:
+        ancestors.add(parent);value=Path('/proc/'+str(parent)+'/stat').read_text();parent=int(value[value.rfind(')')+2:].split()[1])
+    need(pid in ancestors,'OWN_ANCESTOR_LEASE_REQUIRED')
+    value=Path('/proc/'+str(pid)+'/stat').read_text()
+    return {'pid':pid,'startTicks':value[value.rfind(')')+2:].split()[19]}
+
+def inspect_container(name):
+    rows=json.loads(run(['docker','inspect',name]));need(len(rows)==1,'ONE_CONTAINER');row=rows[0]
+    need(row['Name'].lstrip('/')==name and row['State']['Running'] and not row['State']['Restarting'] and not row['State']['OOMKilled'] and row['State'].get('Health',{}).get('Status') in (None,'healthy'),'RUNNING_HEALTHY_CONTAINER_REQUIRED')
+    return row
+
+def image_info(image):
+    rows=json.loads(run(['docker','image','inspect',image]));need(len(rows)==1 and rows[0]['Id']==image,'EXACT_LOCAL_IMAGE');return rows[0]
+
+TREE_JS=r"""'use strict';const fs=require('node:fs'),p=require('node:path'),h=require('node:crypto');const out={};let count=0;
+function walk(base,rel){if(++count>50000)throw Error('TREE_BOUND');const at=p.join(base,rel),s=fs.lstatSync(at),mode=s.mode&4095,meta={uid:s.uid,gid:s.gid,mode};if(s.isSymbolicLink()){out[rel]={...meta,type:'symlink',target:fs.readlinkSync(at)};return;}if(s.isDirectory()){out[rel]={...meta,type:'directory'};for(const n of fs.readdirSync(at).sort())walk(base,rel?p.join(rel,n):n);return;}if(!s.isFile()||s.size>67108864)throw Error('TREE_FILE_BOUND');const fd=fs.openSync(at,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);try{const raw=fs.readFileSync(fd),t=fs.fstatSync(fd),u=fs.lstatSync(at);for(const k of ['dev','ino','mode','uid','gid','nlink','size','mtimeMs','ctimeMs'])if(s[k]!==t[k]||s[k]!==u[k])throw Error('TREE_CHANGED');out[rel]={...meta,type:'file',nlink:s.nlink,bytes:raw.length,sha256:h.createHash('sha256').update(raw).digest('hex')};}finally{fs.closeSync(fd);}}
+walk('/app','');process.stdout.write(JSON.stringify(out));"""
+
+def probe_profile(config):
+    need(config.get('WorkingDir')=='/app' and config.get('Cmd')==['node','server.js'] and config.get('Entrypoint') in (['docker-entrypoint.sh'],['/usr/local/bin/docker-entrypoint.sh']),'EXPECTED_NODE_STARTUP')
+    need(config.get('User','') in ('','root','0'),'EXPECTED_ROOT_NODE_IMAGE')
+    entries=config.get('Env',[]);keys=[v.split('=',1)[0] for v in entries];need(len(keys)==len(set(keys)),'DUPLICATE_ENVIRONMENT_KEYS')
+    env=dict(v.split('=',1) for v in entries)
+    need(not any(env.get(k) for k in ('NODE_OPTIONS','NODE_PATH','LD_PRELOAD','LD_LIBRARY_PATH','NODE_REPL_EXTERNAL_MODULE','NODE_REPL_EXTERNAL_MODULE_PATH')),'READ_PROBE_HOOKS_NOT_ALLOWED')
+
+def runtime_tree(container):
+    probe_profile(container['Config'])
+    return json.loads(run(['docker','exec',container['Id'],'node','-e',TREE_JS]))
+
+def image_tree(image):
+    probe_profile(image_info(image)['Config'])
+    return json.loads(run(['docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint=node',image,'-e',TREE_JS]))
+
+def foreign(row):
+    value={key:copy.deepcopy(row[key]) for key in ('Id','Image','Config','HostConfig','NetworkSettings')}
+    value['Mounts']=sorted(copy.deepcopy(row['Mounts']),key=lambda v:v['Destination'])
+    value['state']={key:row['State'].get(key) for key in ('Running','Paused','Restarting','OOMKilled','Dead','ExitCode','Error','StartedAt','FinishedAt')}
+    value['restarts']=row.get('RestartCount');return value
+
+def canonical_host(value):
+    value=copy.deepcopy(value)
+    if value.get('Binds') is not None:
+        need(type(value['Binds']) is list and len(value['Binds'])==len(set(value['Binds'])),'UNIQUE_HOST_BINDS');value['Binds']=sorted(value['Binds'])
+    return value
+
+def own_network(row):
+    value=copy.deepcopy(row['NetworkSettings']);cid=row['Id']
+    for key in ('SandboxID','SandboxKey'):
+        if key in value:value[key]='<own-recreated>'
+    for facts in value['Networks'].values():
+        for key in ('EndpointID','MacAddress'):facts[key]='<own-recreated>'
+        requested=facts.get('IPAMConfig') or {}
+        for key,request in (('IPAddress','IPv4Address'),('GlobalIPv6Address','IPv6Address')):
+            if not requested.get(request):facts[key]='<docker-assigned>'
+        for key in ('Aliases','DNSNames'):
+            if isinstance(facts.get(key),list):facts[key]=sorted('<own-cid>' if v in (cid,cid[:12]) else v for v in facts[key])
+    return value
+
+
+def service_hash(plan,service):
+    need(re.fullmatch('[A-Za-z0-9][A-Za-z0-9_-]{0,127}',service),'SAFE_SERVICE')
+    value=run(compose_args(plan)+['config','--hash',service]).decode().strip();match=re.fullmatch(re.escape(service)+' ([a-f0-9]{64})',value)
+    need(match is not None,'EXACT_SERVICE_HASH');return match.group(1)
+
+def image_reference(plan,service):
+    value=run(compose_args(plan)+['config','--images',service]).decode();value=value[:-2] if value.endswith('\r\n') else value[:-1] if value.endswith('\n') else value
+    need(value and value.isascii() and not value.startswith('-') and not any(c.isspace() or ord(c)<32 or ord(c)==127 for c in value),'ONE_LOCAL_IMAGE_REFERENCE');return value
+
+def longest_chain(chains):
+    need(chains and all(c and len(c)==len(set(c)) for c in chains),'UNIQUE_COMPOSE_CHAINS')
+    longest=max(chains,key=len);need(all(longest[:len(c)]==c for c in chains),'DIVERGENT_COMPOSE_CHAINS');return longest
+
+def effective_plan(rows,expected):
+    need(set(rows)==set(CONTAINERS) and all(rows[name]['Image']==expected[name] for name in CONTAINERS),'ALL_FIVE_ACTUAL_IMAGE_PINS')
+    labels={name:row['Config']['Labels'] for name,row in rows.items()}
+    need({v['com.docker.compose.project'] for v in labels.values()}=={'synapse'},'ONE_PROJECT')
+    directories={v['com.docker.compose.project.working_dir'] for v in labels.values()};need(len(directories)==1,'ONE_PROJECT_DIRECTORY')
+    chain=longest_chain([labels[name]['com.docker.compose.project.config_files'].split(',') for name in (CRM,CONTENT,'synapse-hugh-runtime-1')])
+    def files(paths):
+        need(paths and len(paths)==len(set(paths)) and all(Path(p).is_absolute() and str(Path(p).resolve())==p for p in paths),'CANONICAL_COMPOSE_FILES')
+        return [{'path':p,'sha256':sha(safe_read(p))} for p in paths]
+    plan={'project':'synapse','directory':directories.pop(),'files':files(chain)}
+    need(plan['directory']==str(ROOT),'EXPECTED_PROJECT_DIRECTORY')
+    plan['resolved']=json.loads(run(compose_args(plan)+['config','--format','json']))
+    own={};seen=set()
+    for name,row in rows.items():
+        service=labels[name]['com.docker.compose.service'];need(service not in seen and service in plan['resolved']['services'],'UNIQUE_GLOBAL_SERVICE');seen.add(service)
+        actual=run(['docker','image','inspect','--format','{{.Id}}',image_reference(plan,service)]).decode().strip()
+        need(actual==row['Image'],'GLOBAL_PLAN_MATCHES_EVERY_ACTIVE_IMAGE')
+        own_files=files(labels[name]['com.docker.compose.project.config_files'].split(','));own_plan={**plan,'files':own_files}
+        pin=labels[name]['com.docker.compose.config-hash'];need(HEX.fullmatch(pin) and service_hash(plan,service)==service_hash(own_plan,service)==pin,'GLOBAL_OWN_ACTUAL_CONFIG_HASH')
+        own[name]={'service':service,'files':own_files,'configHash':pin}
+    need(own[CRM]['service']=='crm'and own[CONTENT]['service']=='content','EXACT_SERVICES_REQUIRED');plan['ownChains']=own;return plan
+
+
+def db_identity(path):
+    info=Path(path).lstat();need(not Path(path).is_symlink() and stat.S_ISREG(info.st_mode) and info.st_nlink==1,'DATABASE_IDENTITY');return [info.st_dev,info.st_ino]
+
+@contextmanager
+def db_open(path):
+    connection=sqlite3.connect(Path(path).as_uri()+'?mode=ro',uri=True,isolation_level=None,timeout=5)
+    try:
+        connection.execute('PRAGMA query_only=ON');connection.execute('BEGIN');yield connection
+    finally:
+        if connection.in_transaction:connection.rollback()
+        connection.close()
+
+def quote(value):return '"'+value.replace('"','""')+'"'
+
+def cell(value):return {'blob':value.hex()} if isinstance(value,bytes) else value
+
+def price_pin():
+    with urllib.request.urlopen('https://palitra-love.ru/data/price.json',timeout=30) as response:raw=response.read(4*1024*1024+1)
+    need(len(raw)<=4*1024*1024,'PRICE_BOUND');value=json.loads(raw)
+    return {'version':value['version'],'sha256':sha(raw)}
+
+
+# All subprocess capabilities are closed here. No CLI accepts arbitrary commands.
+_COMPOSE_PREFIXES=set()
+def compose_args(plan):
+    need(plan.get('project')=='synapse' and plan.get('directory')==str(ROOT),'CLOSED_COMPOSE_PROJECT')
+    files=plan.get('files');need(type(files)is list and 1<=len(files)<=100,'BOUNDED_COMPOSE_CHAIN')
+    paths=[r['path'] for r in files]
+    need(len(paths)==len(set(paths)) and all(Path(v).is_absolute() and str(Path(v).resolve())==v for v in paths),'CANONICAL_COMPOSE_CHAIN')
+    argv=['docker','compose','--project-name','synapse','--project-directory',str(ROOT)]+[x for path in paths for x in ('--file',path)]
+    _COMPOSE_PREFIXES.add(tuple(argv));return argv
+
+def allowed_command(argv):
+    if type(argv)is not list or not all(type(v)is str and '\x00' not in v for v in argv):return False
+    a=tuple(argv)
+    if a==('lslocks','--json','--output','PID,PATH'):return True
+    if len(a)==3 and a[:2]==('docker','inspect') and a[2]in CONTAINERS:return True
+    if len(a)==4 and a[:3]==('docker','image','inspect') and IMAGE.fullmatch(a[3]):return True
+    if len(a)==6 and a[:4]==('docker','image','inspect','--format') and a[4]=='{{.Id}}' and re.fullmatch('[A-Za-z0-9][A-Za-z0-9_./:@-]{0,255}',a[5]):return True
+    if len(a)==6 and a[:3]==('docker','exec',a[2]) and re.fullmatch('[a-f0-9]{64}',a[2]) and a[3:]==('node','-e',TREE_JS):return True
+    if len(a)==6 and a[:2]==('docker','exec')and re.fullmatch('[a-f0-9]{64}',a[2])and a[3:5]==('node','-e'):
+        return False # R2 opaque proof requires exactly one fresh nonce argument
+    if len(a)==7 and a[:2]==('docker','exec')and re.fullmatch('[a-f0-9]{64}',a[2])and a[3:5]==('node','-e')and HEX.fullmatch(a[6]):
+        return a[5]==vault_code()
+    if len(a)==12 and a[:9]==('docker','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint=node'):
+        return bool(IMAGE.fullmatch(a[9]) and a[10:]==('-e',TREE_JS))
+    if len(a)==5 and a[:3]==('docker','image','ls') and a[3]=='--quiet':return bool(re.fullmatch(re.escape(NAME)+'-[a-f0-9]{16}(?:-base)?:local',a[4]))
+    if len(a)==5 and a[:3]==('docker','image','tag'):return bool(IMAGE.fullmatch(a[3]) and re.fullmatch(re.escape(NAME)+'-[a-f0-9]{16}-base:local',a[4]))
+    if len(a)==9 and a[:4]==('docker','build','--network=none','--pull=false') and a[4]=='--tag' and re.fullmatch(re.escape(NAME)+'-[a-f0-9]{16}:local',a[5]) and a[6]=='--iidfile' and a[7]==str(AREA/'build/image.id') and a[8]==str(AREA/'build'):return True
+    if len(a)==6 and a[:4]==('docker','image','save','--output') and a[4]==str(AREA/'build/child-image.tar') and IMAGE.fullmatch(a[5]):return True
+    for prefix in _COMPOSE_PREFIXES:
+        if a[:len(prefix)]==prefix:
+            suffix=a[len(prefix):]
+            if suffix==('config','--format','json'):return True
+            if len(suffix)==3 and suffix[:2]==('config','--hash') and re.fullmatch('[A-Za-z0-9][A-Za-z0-9_-]{0,127}',suffix[2]):return True
+            if len(suffix)==3 and suffix[:2]==('config','--images') and re.fullmatch('[A-Za-z0-9][A-Za-z0-9_-]{0,127}',suffix[2]):return True
+            if suffix==('up','--detach','--no-build','--pull','never','--no-deps','content'):return True
+    return False
+
+def _process(argv,timeout,limit=MAX_FILE):
+    allowed_system=argv in(['systemctl','is-active','synapse-sync.timer'],['systemctl','is-enabled','synapse-sync.timer'],['systemctl','show','synapse-sync.service','--property=ExecStart','--value'])
+    need(allowed_system or allowed_command(argv),'CLOSED_COMMAND_CAPABILITY_REFUSED')
+    need(type(timeout)is int and 0<timeout<=180 and limit in(MAX_FILE,MAX_ARCHIVE),'PROCESS_DEFAULT_BOUNDS_REQUIRED')
+    import tempfile
+    need(resource is not None and os.name=='posix','NATIVE_BOUNDED_PROCESS_REQUIRED')
+    def limits():resource.setrlimit(resource.RLIMIT_FSIZE,(limit,limit))
+    with tempfile.TemporaryFile()as out,tempfile.TemporaryFile()as err:
+        child=subprocess.Popen(argv,stdin=subprocess.DEVNULL,stdout=out,stderr=err,preexec_fn=limits)
+        try:child.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            child.kill();child.wait();raise ValueError('COMMAND_TIMEOUT_INSPECT_ONLY')
+        need(out.tell()<=limit and err.tell()<=1024*1024,'COMMAND_OUTPUT_BOUND')
+        out.seek(0);err.seek(0);return child.returncode,out.read(limit+1),err.read(1024*1024+1)
+
+def run(argv,timeout=90):
+    need(allowed_command(argv),'CLOSED_COMMAND_CAPABILITY_REFUSED')
+    code,out,err=_process(argv,timeout,MAX_ARCHIVE if argv[:4]==['docker','image','save','--output']else MAX_FILE)
+    need(code==0,'COMMAND_FAILED_INSPECT_ONLY');return out
+
+def policy_state():
+    # Exact known policy reads, no mutating systemctl capability.
+    result={}
+    for action,want in [('is-active','inactive'),('is-enabled','disabled')]:
+        argv=['systemctl',action,'synapse-sync.timer'];code,out,_=_process(argv,20)
+        need(code in(0,1,3,4)and out.decode().strip()==want,'LEGACY_SYNC_MUST_REMAIN_DISABLED');result[action]=want
+    code,out,_=_process(['systemctl','show','synapse-sync.service','--property=ExecStart','--value'],20)
+    need(code==0 and re.findall(r'(?:^|[ {;])path=([^ ;}]+)',out.decode())==['/usr/local/bin/synapse-sync'],'EXACT_LEGACY_EXECSTART')
+    need(not os.path.lexists('/usr/local/sbin/synapse-sync'),'LEGACY_SBIN_ABSENT')
+    for p in ['/etc/synapse/managed-release.json','/etc/systemd/system/synapse-sync.service.d/50-managed-release.conf','/usr/local/bin/synapse-sync','/opt/synapse/ops/synapse-sync','/opt/synapse/caddy/Caddyfile','/opt/synapse/docker-compose.yml']:
+        result[p]=sha(safe_read(p))
+    need(result['/usr/local/bin/synapse-sync']==result['/opt/synapse/ops/synapse-sync']==LEGACY_SHA,'LEGACY_BLOCKED_SCRIPT_PIN')
+    return result
+
+def validate_manifest(value):
+    need(set(value)=={'schema','packageId','status','helperSha256','expectedImages','files','databaseInventory'},'CLOSED_MANIFEST')
+    need(value['schema']==1 and value['packageId']==NAME and value['status']=='ROOT_REVIEWED_CODE_ONLY','ROOT_REVIEW_REQUIRED')
+    need(all(after is not None for before,after in FILE_PINS.values()),'SCOPED_R2_PINS_NOT_FROZEN')
+    need(type(value['helperSha256'])is str and HEX.fullmatch(value['helperSha256']),'HELPER_PIN_REQUIRED')
+    images=value['expectedImages'];need(type(images)is dict and set(images)==set(CONTAINERS) and all(type(v)is str and IMAGE.fullmatch(v)for v in images.values()),'FRESH_FIVE_IMAGES_REQUIRED')
+    need(images[CONTENT]==BASE_IMAGE,'EXACT_ACTUAL_PARENT_REQUIRED')
+    files=value['files'];need(type(files)is list and tuple(row.get('target')for row in files)==TARGETS,'EXACT_SIX_TARGETS_REQUIRED')
+    for row in files:
+        need(set(row)=={'target','beforeSha256','afterSha256','bytes'},'CLOSED_FILE_ROW')
+        need((row['beforeSha256'],row['afterSha256'])==FILE_PINS[row['target']],'REVIEWED_SOURCE_PINS_REQUIRED')
+        need(type(row['bytes'])is int and 0<row['bytes']<=512000,'BOUNDED_FILE_SIZE')
+    need(INVENTORY_REVIEW_SHA is not None,'PERSISTENT_DB_INVENTORY_NOT_FROZEN')
+    inv=value['databaseInventory']
+    need(type(inv)is dict and set(inv)=={'sourceReviewSha256','contentPaths','crmPaths'}and type(inv['sourceReviewSha256'])is str and HEX.fullmatch(inv['sourceReviewSha256']),'SOURCE_BASED_DATABASE_INVENTORY_REQUIRED')
+    need(inv['sourceReviewSha256']==INVENTORY_REVIEW_SHA,'REVIEWED_DATABASE_INVENTORY_PIN_REQUIRED')
+    for role in('content','crm'):
+        paths=inv[role+'Paths'];need(type(paths)is list and paths and len(paths)<=100 and len(paths)==len(set(paths)),'CONFIRMED_PERSISTENT_DATABASE_LIST_REQUIRED')
+        need(all(type(p)is str and re.fullmatch(r'/data/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.sqlite',p)and '..'not in Path(p).parts for p in paths),'CANONICAL_DATABASE_LIST_REQUIRED')
+    need(set(inv['contentPaths'])=={'/data/content.sqlite','/data/salon-reports.sqlite','/data/projects/palitra-love/sites/site-44bbe13f1bad5e005b2a/private/draft-accounts.sqlite'}and inv['crmPaths']==['/data/crm.sqlite'],'EXACT_REVIEWED_DATABASES_REQUIRED')
+    need(any(p.endswith('/sites/site-44bbe13f1bad5e005b2a/private/draft-accounts.sqlite')for p in inv['contentPaths']),'ACTUAL_ACCOUNT_DATABASE_REQUIRED')
+    return value
+
+def package():
+    staged=load(AREA/'stage.json');raw=safe_read(AREA/'manifest.json')
+    need(sha(safe_read(SELF))==staged['helperSha256']and sha(raw)==staged['manifestSha256'],'PINNED_PACKAGE_CHANGED')
+    manifest=validate_manifest(json.loads(raw));need(manifest['helperSha256']==staged['helperSha256'],'HELPER_PIN')
+    actual={p.relative_to(AREA/'payload').as_posix()for p in(AREA/'payload').rglob('*')if p.is_file()or p.is_symlink()}
+    need(actual=={p.removeprefix('/app/')for p in TARGETS},'CLOSED_PAYLOAD')
+    for row in manifest['files']:
+        raw=safe_read(AREA/'payload'/row['target'].removeprefix('/app/'));need(len(raw)==row['bytes']and sha(raw)==row['afterSha256'],'PAYLOAD_PIN')
+    for name in REVIEWED_DATA_PINS:
+        need(sha(safe_read(AREA/name))==staged[name+'Sha256']==REVIEWED_DATA_PINS[name],'REVIEWED_GUARD_DATA_CHANGED')
+    return staged,manifest
+
+def stage(commit,pin):
+    stage_lease=own_lease()
+    need(re.fullmatch('[a-f0-9]{40}',commit)and HEX.fullmatch(pin),'IMMUTABLE_PINS_REQUIRED');need(not os.path.lexists(AREA),'STAGE_EXISTS_INSPECT_ONLY')
+    base='https://raw.githubusercontent.com/Elk0980/synapse-server/'+commit+'/ops/'+NAME+'/'
+    def fetch(name,limit):
+        with urllib.request.urlopen(base+name,timeout=30)as response:raw=response.read(limit+1)
+        need(len(raw)<=limit,'PUBLIC_CODE_BOUND');return raw
+    raw=fetch('manifest.json',64000);need(sha(raw)==pin,'MANIFEST_PIN');manifest=validate_manifest(json.loads(raw));need(manifest['helperSha256']==sha(safe_read(SELF)),'HELPER_PIN')
+    allfiles={r['target'].removeprefix('/app/'):fetch('payload/'+r['target'].removeprefix('/app/'),r['bytes'])for r in manifest['files']}
+    for row in manifest['files']:need(sha(allfiles[row['target'].removeprefix('/app/')])==row['afterSha256'],'PAYLOAD_PIN')
+    extras={name:fetch(name,256000)for name in REVIEWED_DATA_PINS}
+    need(all(sha(raw)==REVIEWED_DATA_PINS[name]for name,raw in extras.items()),'REVIEWED_GUARD_DATA_PIN')
+    need(AREA.parent.resolve()==AREA.parent and AREA.parent.is_dir(),'CANONICAL_RELEASES');AREA.mkdir(mode=0o700)
+    for name,value in allfiles.items():
+        dest=AREA/'payload'/name;dest.parent.mkdir(parents=True,exist_ok=True,mode=0o700);write_new(dest,value)
+    for name,value in extras.items():write_new(AREA/name,value)
+    write_new(AREA/'manifest.json',raw)
+    write_new(AREA/'stage.json',enc({'commit':commit,'stageLease':stage_lease,'helperSha256':sha(safe_read(SELF)),'manifestSha256':pin,**{name+'Sha256':sha(value)for name,value in extras.items()}}));package();print('STAGED_NOT_INSTALLED')
+
+def normalize_content(row):
+    value=copy.deepcopy(row['Config']);value['Image']='<own-image>';value['Env']=sorted(value.get('Env',[]))
+    if value.get('Hostname')==row['Id'][:12]:value['Hostname']='<own-hostname>'
+    for key in('com.docker.compose.image','com.docker.compose.config-hash','com.docker.compose.project.config_files'):
+        need(key in value.get('Labels',{}),'COMPOSE_LABEL_REQUIRED');value['Labels'][key]='<own-controlled>'
+    return{'config':value,'host':canonical_host(row['HostConfig']),'mounts':sorted(row['Mounts'],key=lambda x:x['Destination']),'networks':own_network(row)}
+
+def env_map(row):
+    values=row['Config'].get('Env',[]);pairs=[v.split('=',1)for v in values];need(all(len(p)==2 for p in pairs),'ENVIRONMENT_FORMAT');need(len({p[0]for p in pairs})==len(pairs),'UNIQUE_ENVIRONMENT');return dict(pairs)
+
+def full_static():
+    result={}
+    for path in(ROOT/'sites').rglob('*'):
+        if path.is_file()and not path.is_symlink()and path.suffix in('.js','.html','.css','.json','.webmanifest'):
+            result[path.relative_to(ROOT).as_posix()]=sha(safe_read(path))
+    return result
+
+def covering_mount(row,container_path):
+    mounts=[v for v in row['Mounts']if container_path==v['Destination']or container_path.startswith(v['Destination'].rstrip('/')+'/')]
+    need(mounts,'CONFIRMED_DATABASE_MOUNT_REQUIRED');m=max(mounts,key=lambda v:len(v['Destination']));need(m['RW']and m['Destination']=='/data','EXPECTED_PERSISTENT_DATA_MOUNT')
+    return m
+
+def account_database_path(database_path,company_code,site_id):
+    from pathlib import PurePosixPath
+    need(database_path=='/data/content.sqlite'and bool(re.fullmatch('[A-Za-z0-9_-]{1,80}',company_code))and bool(re.fullmatch('[A-Za-z0-9_-]{1,80}',site_id)),'INVENTORY_SCOPE_PATH_UNKNOWN')
+    return str(PurePosixPath(database_path).parent/'projects'/company_code/'sites'/site_id/'private/draft-accounts.sqlite')
+
+def database_paths(rows,manifest):
+    result={}
+    for role,name in(('content',CONTENT),('crm',CRM)):
+        row=rows[name];declared=manifest['databaseInventory'][role+'Paths'];env=env_map(row)
+        need(env.get('DATABASE_PATH','/data/'+role+'.sqlite')=='/data/'+role+'.sqlite','ACTUAL_DATABASE_PATH_MISMATCH')
+        mount=covering_mount(row,declared[0]);source=Path(mount['Source']);need(source.resolve()==source and source.is_dir()and not source.is_symlink(),'CANONICAL_DATA_SOURCE')
+        discovered=set();count=0
+        for directory,dirs,files in os.walk(source,followlinks=False):
+            count+=len(dirs)+len(files);need(count<=200000,'DATA_INVENTORY_BOUND')
+            need(not any((Path(directory)/d).is_symlink()for d in dirs),'DATA_INVENTORY_ALIAS')
+            for file in files:
+                if file.endswith('.sqlite'):
+                    p=Path(directory)/file;db_identity(p);discovered.add('/data/'+p.relative_to(source).as_posix())
+        need(discovered==set(declared),'UNCONFIRMED_PERSISTENT_DATABASE_INVENTORY')
+        for target in declared:
+            need(covering_mount(row,target)==mount,'NESTED_DATABASE_MOUNT_CHANGED');host=source/target.removeprefix('/data/');db_identity(host)
+            info=host.stat();expected_mode=0o600 if target=='/data/salon-reports.sqlite'else 0o644
+            if os.name=='posix':
+                need(info.st_uid==info.st_gid==0 and not stat.S_IMODE(info.st_mode)&0o002,'DATABASE_ROOT_MODE_CHANGED')
+                if role=='content':need(stat.S_IMODE(info.st_mode)==expected_mode,'DATABASE_REVIEWED_MODE_CHANGED')
+            result[role+':'+target]={'role':role,'containerPath':target,'hostPath':str(host),'identity':db_identity(host),'metadata':{'mode':stat.S_IMODE(info.st_mode),'uid':info.st_uid,'gid':info.st_gid}}
+    return result
+
+def db_facts(connection):
+    need(connection.execute('PRAGMA quick_check').fetchone()==('ok',),'DATABASE_QUICK_CHECK')
+    schema=connection.execute('SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY type,name').fetchall();need(len(schema)<=5000,'DATABASE_SCHEMA_BOUND');tables={};row_count=0
+    for kind,name,_,sql in schema:
+        if kind!='table':continue
+        need(not re.match(r'\s*CREATE\s+VIRTUAL\s+TABLE',sql or'',re.I),'VIRTUAL_DATABASE_REQUIRES_REVIEW')
+        cols=connection.execute('PRAGMA table_info('+quote(name)+')').fetchall();keys=[r[1]for r in sorted(cols,key=lambda r:r[5])if r[5]];names=[r[1]for r in cols];values={};n=len(keys)or 1
+        for row in connection.execute('SELECT '+(','.join(map(quote,keys))if keys else'rowid')+','+','.join(map(quote,names))+' FROM '+quote(name)):
+            row_count+=1;need(row_count<=500000,'DATABASE_ROW_BOUND');need(all(not isinstance(v,(bytes,str))or len(v)<=MAX_FILE for v in row),'DATABASE_CELL_BOUND')
+            k=sha(enc([cell(v)for v in row[:n]]));need(k not in values,'UNIQUE_DATABASE_ROW_KEYS');values[k]=sha(enc([cell(v)for v in row[n:]]))
+        tables[name]={'columns':names,'rows':values}
+    need(connection.total_changes==0,'DATABASE_READONLY');return{'schema':schema,'tables':tables}
+
+def assert_database(connection,before):
+    actual=db_facts(connection);need(enc(actual)==enc(before),'DATABASE_SCHEMA_OR_ROWS_CHANGED_INSPECT_ONLY');return actual
+
+
+
+def review_window_guard(env,now,end):
+    if env.get('PALITRA_REVIEW_REMINDERS_ENABLED')!='true':return
+    evening=env.get('PALITRA_REVIEW_REMINDER_EVENING','');morning=env.get('PALITRA_REVIEW_REMINDER_MORNING','')
+    need(re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',evening),'UNKNOWN_REVIEW_WINDOW_CONFIG')
+    slots=[evening]+([morning]if morning else[])
+    need(all(re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',x)for x in slots),'UNKNOWN_REVIEW_WINDOW_CONFIG')
+    need(end-now<=3600,'BOUNDED_REVIEW_WINDOW')
+    first=datetime.fromtimestamp(now,timezone.utc).astimezone(timezone(timedelta(hours=3))).date()
+    for day in(first,first+timedelta(days=1)):
+        for slot in slots:
+            h,m=map(int,slot.split(':'));start=datetime.combine(day,datetime.min.time(),tzinfo=timezone(timedelta(hours=3))).replace(hour=h,minute=m).timestamp()
+            need(not(now<start+3600 and end>=start),'CURRENT_REVIEW_SLOT_REFUSED')
+
+def vault_code():
+    path=AREA/'vault_probe.cjs';raw=safe_read(path);need(sha(raw)==REVIEWED_DATA_PINS[path.name],'VAULT_PROBE_PIN_CHANGED')
+    return raw.decode('utf8')+'\nmain();'
+
+def vault_file_state(path):
+    try:
+        st=Path(path).lstat();need(not Path(path).is_symlink()and stat.S_ISREG(st.st_mode)and st.st_nlink==1,'VAULT_DATABASE_IDENTITY')
+        return {'dev':str(st.st_dev),'ino':str(st.st_ino),'size':str(st.st_size),'mtimeNs':str(st.st_mtime_ns),'ctimeNs':str(st.st_ctime_ns)}
+    except FileNotFoundError:return None
+
+_VAULT_PROOFS={}
+_USED_VAULT_NONCES=set()
+
+def vault_file_identity(path):
+    value=vault_file_state(path)
+    return {k:value[k]for k in('dev','ino')}if value is not None else None
+
+def opaque_vault_probe(rows,path):
+    row=rows[CONTENT];probe_profile(row['Config']);before=[vault_file_identity(path),vault_file_identity(str(path)+'-wal')]
+    need(before[0]is not None,'VAULT_DATABASE_MISSING');started=time.time()
+    nonce=os.urandom(32).hex();need(nonce not in _USED_VAULT_NONCES,'VAULT_NONCE_REUSE');_USED_VAULT_NONCES.add(nonce)
+    value=json.loads(run(['docker','exec',row['Id'],'node','-e',vault_code(),nonce],timeout=10))
+    need(time.time()-started<=5 and set(value)=={'nonce','sourceSha256','settingsBinding','providers','canUseBalanceAccount','databasePath','files','asOfMs'},'VAULT_PROOF_FRESH_SHAPE')
+    need(type(value['nonce'])is str and hmac.compare_digest(value['nonce'],nonce),'VAULT_NONCE_MISMATCH')
+    need(value['sourceSha256']=='6464ac246aa197ef8f9f197a332eed5d2b27f0acda445b08f89192c660514141'and value['databasePath']=='/data/content.sqlite','VAULT_PROOF_SCOPE')
+    need(type(value['settingsBinding'])is str and HEX.fullmatch(value['settingsBinding']),'VAULT_BINDING_FORMAT')
+    need(type(value['asOfMs'])is int and started*1000-1000<=value['asOfMs']<=time.time()*1000+1000,'VAULT_PROOF_TIMESTAMP')
+    need(value['files']==before==[vault_file_identity(path),vault_file_identity(str(path)+'-wal')],'VAULT_DATABASE_IDENTITY_CHANGED_DURING_PROBE')
+    fresh=inspect_container(CONTENT);need(fresh['Id']==row['Id']and fresh['Image']==row['Image']and fresh['Config']==row['Config'],'VAULT_PARENT_CHANGED')
+    _VAULT_PROOFS[nonce]={'proof':copy.deepcopy(value),'expiresAt':started+5,'parent':copy.deepcopy(row),'path':str(path)}
+    return value
+
+def settings_snapshot_binding(connection,nonce):
+    columns=[r[1]for r in connection.execute('PRAGMA table_info(hugh_provider_settings)')];need('encrypted_key'in columns and len(columns)==len(set(columns)),'VAULT_SCHEMA_UNKNOWN')
+    rows=[]
+    for row in connection.execute('SELECT * FROM hugh_provider_settings ORDER BY name'):
+        item=dict(zip(columns,row));need(all(v is None or type(v)is str or(type(v)is int and abs(v)<=9007199254740991)for v in item.values()),'VAULT_CANONICAL_SCALAR_UNKNOWN');rows.append(item)
+    need(len(rows)<=7,'VAULT_ROW_BOUND')
+    raw=json.dumps(rows,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()
+    binding=hmac.new(bytes.fromhex(nonce),b'palitra-vault-snapshot/v2\n'+raw,hashlib.sha256).hexdigest()
+    return binding
+
+def economy_guard(connection,env,end,proof=None,path=None):
+    import importlib.util
+    module_path=AREA/'economy_projection.py';need(sha(safe_read(module_path))==REVIEWED_DATA_PINS[module_path.name],'ECONOMY_PROJECTION_PIN_CHANGED')
+    need(proof is not None and path is not None,'FRESH_OPAQUE_VAULT_PROOF_REQUIRED')
+    need(type(proof)is dict and type(proof.get('nonce'))is str,'FRESH_OPAQUE_VAULT_PROOF_REQUIRED')
+    issued=_VAULT_PROOFS.pop(proof['nonce'],None)
+    need(issued is not None and issued['proof']==proof and issued['path']==str(path),'VAULT_PROOF_NOT_ISSUED_OR_REPLAYED')
+    need(time.time()<=issued['expiresAt'],'VAULT_PROOF_EXPIRED')
+    fresh=inspect_container(CONTENT);parent=issued['parent']
+    need(fresh['Id']==parent['Id']and fresh['Image']==parent['Image']and fresh['Config']==parent['Config']and env==env_map(fresh),'VAULT_PARENT_OR_ENV_CHANGED')
+    need(proof['files']==[vault_file_identity(path),vault_file_identity(str(path)+'-wal')],'VAULT_DATABASE_IDENTITY_CHANGED_BEFORE_PROJECTION')
+    binding=settings_snapshot_binding(connection,proof['nonce'])
+    need(hmac.compare_digest(binding,proof['settingsBinding']),'VAULT_SQLITE_SNAPSHOT_MISMATCH')
+    spec=importlib.util.spec_from_file_location('reviewed_economy_projection',module_path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    value=module.verify(connection,env,int(time.time()*1000),int(end*1000),{k:proof[k]for k in('providers','canUseBalanceAccount')})
+    need(proof['files']==[vault_file_identity(path),vault_file_identity(str(path)+'-wal')],'VAULT_DATABASE_IDENTITY_CHANGED_AFTER_PROJECTION')
+    fresh=inspect_container(CONTENT);need(fresh['Id']==parent['Id']and fresh['Image']==parent['Image']and fresh['Config']==parent['Config']and env==env_map(fresh),'VAULT_PARENT_OR_ENV_CHANGED')
+    with db_open(path)as latest:
+        need(hmac.compare_digest(settings_snapshot_binding(latest,proof['nonce']),proof['settingsBinding']),'VAULT_SETTINGS_CHANGED_AFTER_PROJECTION')
+    need(time.time()<=issued['expiresAt'],'VAULT_PROOF_EXPIRED')
+    return value
+
+def query_metadata(connection,required,queries,params):
+    for table,columns in required.items():
+        actual={r[1]for r in connection.execute('PRAGMA table_info('+quote(table)+')')}
+        need(set(columns)<=actual,'STARTUP_QUEUE_SCHEMA_MISMATCH:'+table)
+    values={}
+    for name,sql in queries.items():
+        cursor=connection.execute(sql,params);cols=[v[0]for v in cursor.description];values[name]=[dict(zip(cols,row))for row in cursor]
+    need(connection.total_changes==0,'QUEUE_READONLY');return values
+
+def zero(rows,columns,reason):
+    need(all(type(r.get(c))in(int,float)and r[c]==0 for r in rows for c in columns),reason)
+
+def startup_guard(paths,rows,end):
+    data=load(AREA/'reviewed-sql.json');now=time.time()
+    env=env_map(rows[CONTENT]);review_window_guard(env,now,end)
+    need(not env.get('HUGH_LOCAL_WORKER_KEY_SHA256')and env.get('HUGH_FALLBACK_LOCAL_OFFLINE_MINUTES','0')=='0','LOCAL_TAKEOVER_PROFILE_CHANGED')
+    iso=lambda x:datetime.fromtimestamp(x,timezone.utc).isoformat(timespec='milliseconds').replace('+00:00','Z')
+    params={'as_of':iso(now),'margin_end':iso(end),'sixty_seconds_before':iso(now-60),'fifteen_minutes_before':iso(now-900),
+            'yesterday_msk':(datetime.fromtimestamp(now,timezone.utc).astimezone(timezone(timedelta(hours=3))).date()-timedelta(days=1)).isoformat(),
+            'as_of_ms':int(now*1000),'margin_end_ms':int(end*1000),'stale_reservation_cutoff':iso(now-900),'stale_reservation_cutoff_window':iso(end-900)}
+    content_path=paths['content:/data/content.sqlite']['hostPath'];vault=opaque_vault_probe(rows,content_path)
+    with db_open(content_path)as conn:
+        c=query_metadata(conn,data['content_queue_required'],data['content_queue_queries'],params)
+        zero(c['ai_eligibility'],['eligible_in_window','startup_requeues'],'AI_ELIGIBLE_OR_STARTUP_REQUEUE')
+        for state,attempts,assistant,next_at,missing in conn.execute('SELECT status,attempts,api_assistant,next_attempt_at,reply_message_id IS NULL FROM project_chat_ai_jobs'):
+            need(state in('pending','error','blocked','running','done')and type(attempts)is int and attempts>=0 and assistant in(0,1),'AI_STATE_OR_METADATA_UNKNOWN')
+            if state in('pending','error')and missing and attempts<3:
+                try:
+                    parsed=datetime.fromisoformat(str(next_at).replace('Z','+00:00'));need(parsed.tzinfo is not None,'AI_QUEUE_TIMESTAMP_UNKNOWN')
+                except(ValueError,TypeError,OverflowError):raise ValueError('AI_QUEUE_TIMESTAMP_UNKNOWN')
+
+        zero(c['delivery_alert_events'],['missing_events'],'MISSING_DELIVERY_ALERT_EVENT')
+        for name in('potential_delay_effects','active_mirror_tasks','stale_task_alerts'):zero(c[name],['n'],'AUTOMATIC_ALERT_MIRROR_EFFECT:'+name)
+        need(all(r['status']in('sent','uncertain')for r in c['owner_alerts']),'OWNER_ALERT_ACTIVE_OR_UNKNOWN')
+        for name in('client_bot_outbox','site_order_outbox'):
+            need(all(r['status']in('sent','uncertain','error','failed','stopped','cancelled')and r['claimed']==0 for r in c[name]),'CLIENT_OUTBOX_ACTIVE_OR_UNKNOWN')
+        final=query_metadata(conn,data['final_content_required'],data['final_content_queries'],params)
+        zero(final['budget_recovery'],['startup_recover_writes','may_recover_in_window'],'BUDGET_RECOVERY_EFFECT')
+        need(all(r['state']in('kept','settled','released')for r in final['budget_recovery']),'BUDGET_STATE_ACTIVE_OR_UNKNOWN')
+        need(final['economy_meta']==[{'existing_singleton':1}],'EXISTING_ECONOMY_META_REQUIRED')
+        zero(final['push_envelopes'],['active_envelopes','invalid_metadata'],'PUSH_ENVELOPE_ACTIVE_OR_UNKNOWN')
+        for table in('project_chat_outbox','project_chat_message_edits','project_chat_scheduled'):
+            # Conservative empty-active policy: no past/future pending jobs, so
+            # expiration/claim/recovery writes cannot hide behind a distant date.
+            columns={r[1]for r in conn.execute('PRAGMA table_info('+quote(table)+')')};need('status'in columns,'STARTUP_QUEUE_SCHEMA_MISMATCH:'+table)
+            states=[r[0]for r in conn.execute('SELECT DISTINCT status FROM '+quote(table))]
+            need(all(s in('sent','done','uncertain','error','failed','stopped','cancelled')for s in states),'PROJECT_OUTBOX_ACTIVE_OR_UNKNOWN')
+            if 'claimed_at'in columns:need(conn.execute('SELECT count(*) FROM '+quote(table)+' WHERE claimed_at IS NOT NULL').fetchone()[0]==0,'PROJECT_OUTBOX_CLAIMED')
+        follow=conn.execute("WITH latest AS(SELECT key,MAX(version)version FROM documents WHERE key LIKE 'palitra-love/order-contact-followup/v1/%' GROUP BY key) SELECT COALESCE(SUM(CASE WHEN json_valid(d.body) THEN CASE WHEN json_extract(d.body,'$.state') IN('emitted','answered','stopped') THEN 0 ELSE 1 END ELSE 1 END),0) FROM documents d JOIN latest v ON d.key=v.key AND d.version=v.version").fetchone()[0]
+        need(follow==0,'FOLLOWUP_ACTIVE_OR_UNKNOWN')
+        need(conn.total_changes==0,'QUEUE_READONLY')
+        economy_guard(conn,env,end,vault,content_path) # fixed opaque proof + pure readonly projection
+    with db_open(paths['crm:/data/crm.sqlite']['hostPath'])as conn:
+        cr=query_metadata(conn,data['final_crm_required'],data['final_crm_queries'],params)
+        need(all(r['state']in('done','cancelled','review','needs_input','blocked','awaiting_executor')for r in cr['dispatch_states']),'CRM_DISPATCH_ACTIVE_OR_UNKNOWN')
+        need(not cr['reconcile_cancellations'],'CRM_RECONCILIATION_EFFECT')
+        need(all(r['handed_off']==1 for r in cr['dispatch_alerts']),'CRM_UNHANDED_ALERT')
+    return{'status':'EXACT_STARTUP_GUARD_PASS','asOf':iso(now),'marginEnd':iso(end),'contentDigest':sha(enc(c)),'finalContentDigest':sha(enc(final)),'crmDigest':sha(enc(cr))}
+
+def source_review_guard(rows,tree):
+    inventory=load(AREA/'inventory-review.json');fixed=account_database_path(inventory['databasePathEnv'],'palitra-love','site-44bbe13f1bad5e005b2a');need(fixed in{r['containerPath']for r in inventory['databases']},'INVENTORY_ACCOUNT_FORMULA_CHANGED');need(inventory['sourcePins']['server.js']==tree.get('server.js',{}).get('sha256')and inventory['sourcePins']['site-workspace-feature.js']==tree.get('site-workspace-feature.js',{}).get('sha256'),'INVENTORY_SOURCE_TREE_CHANGED')
+    need(covering_mount(rows[CONTENT],'/data/content.sqlite')['Source']==inventory['dataMount'],'INVENTORY_DATA_MOUNT_CHANGED')
+    for key,want in load(AREA/'reviewed-source-pins.json').items():
+        role,name=key.split('/',1)
+        if role=='content':need(tree.get(name,{}).get('sha256')==want,'STARTUP_SOURCE_PIN_CHANGED:'+name)
+        else:
+            # Exact read-only full CRM code tree, never require task-dispatch.
+            other=runtime_tree(rows[CRM]);need(other.get(name,{}).get('sha256')==want,'CRM_DISPATCH_SOURCE_PIN_CHANGED')
+
+def managed_guard(paths):
+    content=paths['content:/data/content.sqlite']['hostPath']
+    with db_open(content)as conn:
+        row=conn.execute("SELECT m.id,m.company_code,m.is_active,m.deleted_at,w.hostname,w.runtime,w.current_revision FROM managed_sites m JOIN site_workspaces w ON w.site_id=m.id WHERE m.id=?",('site-44bbe13f1bad5e005b2a',)).fetchone()
+        need(row is not None and row[:6]==('site-44bbe13f1bad5e005b2a','palitra-love',1,None,'palitra-love-draft-1.synapsebusiness.ru','palitra-draft'),'EXACT_MANAGED_SITE_REQUIRED')
+        rev=conn.execute('SELECT version,manifest_json FROM site_workspace_revisions WHERE site_id=? AND revision=?',(row[0],row[6])).fetchone();need(rev is not None,'MANAGED_REVISION_REQUIRED')
+        # At freeze the accepted base is v332. Later explicit managed edits require
+        # a new reviewed release base, not silently replacing this pin.
+        need(rev[0]==332 and row[6]=='3a405874ec122201d7be28b9ca378d35f10f94f553fe03b4c94ca2a30f713a64','MANAGED_V332_REQUIRED')
+        manifest=json.loads(rev[1]);files={}
+        folder=Path(content).parent/'projects/palitra-love/sites'/row[0]/'versions'/row[6]
+        for relative,entry in manifest.items():
+            need(not relative.startswith('/')and '..'not in Path(relative).parts,'CANONICAL_MANAGED_PATH')
+            p=folder/relative;raw=safe_read(p);need(sha(raw)==entry['sha256']and len(raw)==entry['bytes'],'MANAGED_FULL_MANIFEST_CHANGED');files[relative]=sha(raw)
+        return{'revision':row[6],'version':rev[0],'files':files,'manifestSha256':sha(rev[1].encode())}
+
+def snapshot_databases(paths):
+    result={}
+    for name,row in paths.items():
+        need(db_identity(row['hostPath'])==row['identity'],'DATABASE_IDENTITY_CHANGED')
+        with db_open(row['hostPath'])as conn:result[name]=db_facts(conn)
+    return result
+
+def prepare():
+    staged,manifest=package();need(not(AREA/'base.json').exists()and not(AREA/'apply-intent.json').exists(),'PREPARE_EXISTS_INSPECT_ONLY')
+    lease=own_lease();rows={n:inspect_container(n)for n in CONTAINERS};need(all(rows[n]['Image']==manifest['expectedImages'][n]for n in CONTAINERS),'FRESH_FIVE_IMAGES_REQUIRED')
+    need(rows[CONTENT]['Image']==BASE_IMAGE,'EXACT_ACTUAL_PARENT_REQUIRED')
+    need(not any(m['Destination']=='/app'or m['Destination'].startswith('/app/')for m in rows[CONTENT]['Mounts']),'APP_MOUNT_REFUSED')
+    tree=runtime_tree(rows[CONTENT]);need(tree==image_tree(BASE_IMAGE),'COMPLETE_PARENT_RUNTIME_MISMATCH')
+    for row in manifest['files']:
+        item=tree.get(row['target'].removeprefix('/app/'));need(item and item['type']=='file'and item['nlink']==1 and item['sha256']==row['beforeSha256'],'SIX_BEFORE_SOURCE_PINS')
+    source_review_guard(rows,tree);paths=database_paths(rows,manifest);queues=startup_guard(paths,rows,time.time()+APPLY_TTL+GRACE)
+    facts=snapshot_databases(paths)
+    base={'lease':lease,'created':time.time(),'expires':time.time()+PREPARE_TTL,'rows':rows,'tree':tree,'databases':paths,'databaseFacts':facts,'plan':effective_plan(rows,manifest['expectedImages']),
+          'policy':policy_state(),'static':full_static(),'price':price_pin(),'managed':managed_guard(paths),'queueProof':queues}
+    write_new(AREA/'base.json',enc(base));write_new(AREA/'prepared.json',enc({**staged,'baseSha256':sha(enc(base)),'lease':lease}))
+    print('PREPARED_PRIVATE_BASE_NOT_INSTALLED')
+
+def base_guard(after=False,readback=False):
+    staged,manifest=package();base=load(AREA/'base.json');prepared=load(AREA/'prepared.json')
+    need(sha(safe_read(AREA/'base.json'))==prepared['baseSha256']and all(prepared[k]==v for k,v in staged.items()),'BASE_PACKAGE_PIN_CHANGED')
+    lease=own_lease();need(readback or lease==base['lease'],'FRESH_OWN_LEASE_REQUIRED');need(readback or base['created']<=time.time()<base['expires'],'PREPARE_EXPIRED')
+    rows={n:inspect_container(n)for n in CONTAINERS}
+    for name in CONTAINERS:
+        if name!=CONTENT:need(foreign(rows[name])==foreign(base['rows'][name]),'FOREIGN_CONTAINER_CHANGED')
+    child=load(AREA/'child.json')if after else None;expected=child['image']if after else BASE_IMAGE
+    if after:built_image_guard(base,manifest,child)
+    need(rows[CONTENT]['Image']==expected,'CONTENT_IMAGE_CHANGED');need(normalize_content(rows[CONTENT])==normalize_content(base['rows'][CONTENT]),'CONTENT_CONFIG_CHANGED')
+    want=expected_tree(base,manifest)if after else base['tree'];need(runtime_tree(rows[CONTENT])==want and image_tree(expected)==want,'COMPLETE_APP_TREE_CHANGED')
+    images=dict(manifest['expectedImages']);images[CONTENT]=expected;plan=effective_plan(rows,images)
+    need(plan==(validated_plan(base,child)if after else base['plan']),'EFFECTIVE_COMPOSE_CHANGED')
+    need(policy_state()==base['policy']and full_static()==base['static']and price_pin()==base['price'],'POLICY_PRICE_STATIC_CHANGED')
+    paths=database_paths(rows,manifest);need(paths==base['databases'],'DATABASE_PATH_IDENTITY_CHANGED')
+    need(managed_guard(paths)==base['managed'],'MANAGED_REVISION_CHANGED')
+    for name,row in paths.items():
+        with db_open(row['hostPath'])as conn:assert_database(conn,base['databaseFacts'][name])
+    margin=time.time()+APPLY_TTL+GRACE
+    if(AREA/'apply-permit.json').exists():
+        permit=load(AREA/'apply-permit.json');margin=max(time.time(),permit['expires'])+GRACE
+        if not readback:need(permit['created']<=time.time()<permit['expires'],'APPLY_PERMIT_EXPIRED')
+    startup_guard(paths,rows,margin)
+    # R2 tolerant RO-binding must not replace the independent wholeDB fence.
+    for name,row in paths.items():
+        need(db_identity(row['hostPath'])==row['identity'],'DATABASE_IDENTITY_CHANGED_AFTER_STARTUP_GUARD')
+        with db_open(row['hostPath'])as conn:assert_database(conn,base['databaseFacts'][name])
+    return staged,manifest,base,rows
+
+def backup_databases(base):
+    need(not(AREA/'backups').exists(),'BACKUPS_EXIST_INSPECT_ONLY');(AREA/'backups').mkdir(mode=0o700)
+    result={}
+    for index,(name,row)in enumerate(base['databases'].items()):
+        base_guard();target=AREA/'backups'/('db-'+str(index)+'.sqlite');write_new(target,b'')
+        source=sqlite3.connect(Path(row['hostPath']).as_uri()+'?mode=ro',uri=True,timeout=5);destination=sqlite3.connect(target);started=time.monotonic()
+        def progress(status,remaining,total):
+            need(time.monotonic()-started<120 and own_lease()==base['lease']and time.time()<base['expires'],'BACKUP_LEASE_TIME_GUARD')
+        try:
+            source.execute('PRAGMA query_only=ON');need(source.execute('PRAGMA query_only').fetchone()==(1,),'BACKUP_READONLY_SOURCE');source.backup(destination,pages=128,progress=progress);assert_database(destination,base['databaseFacts'][name]);need(source.total_changes==0,'BACKUP_SOURCE_CHANGED')
+        finally:source.close();destination.close()
+        os.chmod(target,0o600);result[name]={'path':str(target),'sha256':sha(safe_read(target))}
+        base_guard()
+    write_new(AREA/'backups.json',enc(result));return result
+
+def expected_tree(base,manifest):
+    tree=copy.deepcopy(base['tree'])
+    for row in manifest['files']:
+        key=row['target'].removeprefix('/app/');tree[key]={**tree[key],'sha256':row['afterSha256'],'bytes':row['bytes']}
+    return tree
+
+def tar_members(raw,base,manifest):
+    expected={row['target'].removeprefix('/'):row for row in manifest['files']};seen=set()
+    with tarfile.open(fileobj=io.BytesIO(raw),mode='r:')as archive:
+        for info in archive:
+            name=info.name.rstrip('/');need(not name.startswith('/')and '..'not in name.split('/')and not any(v.startswith('.wh.')for v in name.split('/')),'LAYER_PATH_REFUSED')
+            need(name not in seen,'DUPLICATE_LAYER_MEMBER');seen.add(name)
+            if info.isdir():
+                relative=name.removeprefix('app/');key=''if name=='app'else relative
+                need((name=='app'or name.startswith('app/'))and any(target.startswith(name+'/')for target in expected),'FOREIGN_LAYER_DIRECTORY')
+                prior=base['tree'].get(key);need(prior and prior['type']=='directory'and(info.mode,info.uid,info.gid)==(prior['mode'],prior['uid'],prior['gid']),'DIRECTORY_METADATA_CHANGED');continue
+            need(info.isfile()and name in expected,'FOREIGN_OR_NONREGULAR_LAYER_FILE')
+            row=expected[name];prior=base['tree'][name.removeprefix('app/')];need(info.size==row['bytes']and(info.mode,info.uid,info.gid)==(prior['mode'],prior['uid'],prior['gid']),'LAYER_FILE_METADATA_CHANGED')
+            member=archive.extractfile(info);need(member is not None and sha(member.read(512001))==row['afterSha256'],'LAYER_FILE_CONTENT_CHANGED')
+    need(expected.keys()<=seen,'MISSING_LAYER_FILE')
+
+def audit_saved_layer(path,base,manifest,child_info):
+    need(path.is_file()and not path.is_symlink()and path.stat().st_size<=MAX_ARCHIVE,'BOUNDED_SAVED_IMAGE_REQUIRED')
+    before=path.stat();want=child_info['RootFS']['Layers'][-1];matched=0
+    with tarfile.open(path,mode='r:')as archive:
+        count=0
+        for entry in archive:
+            count+=1;need(count<=200000 and '..'not in entry.name.split('/')and not entry.name.startswith('/'),'SAVED_IMAGE_BOUND_OR_PATH')
+            need(entry.isfile()or entry.isdir(),'SAVED_IMAGE_NONREGULAR_ENTRY')
+            if not entry.isfile()or not entry.name.endswith('/layer.tar'):continue
+            source=archive.extractfile(entry);h=hashlib.sha256();small=bytearray()if entry.size<=8*1024*1024 else None
+            while True:
+                chunk=source.read(1024*1024)
+                if not chunk:break
+                h.update(chunk)
+                if small is not None:small.extend(chunk)
+            if 'sha256:'+h.hexdigest()==want:
+                need(small is not None,'CHILD_LAYER_SIZE_BOUND');tar_members(bytes(small),base,manifest);matched+=1
+    need(matched==1,'EXACT_CHILD_LAYER_REQUIRED')
+    after=path.stat();need((before.st_ino,before.st_size,before.st_mtime_ns)==(after.st_ino,after.st_size,after.st_mtime_ns),'SAVED_IMAGE_CHANGED')
+
+def build():
+    need(not(AREA/'build-intent.json').exists(),'ONE_BUILD_ATTEMPT_INSPECT_ONLY');_,manifest,base,_=base_guard()
+    write_new(AREA/'build-intent.json',enc({'at':time.time(),'lease':base['lease']}));backups=backup_databases(base)
+    folder=AREA/'build';folder.mkdir(mode=0o700);stream=io.BytesIO()
+    with tarfile.open(fileobj=stream,mode='w',format=tarfile.USTAR_FORMAT)as archive:
+        for row in manifest['files']:
+            key=row['target'].removeprefix('/app/');raw=safe_read(AREA/'payload'/key);before=base['tree'][key];info=tarfile.TarInfo(key);info.size=len(raw);info.mode=before['mode'];info.uid=before['uid'];info.gid=before['gid'];info.mtime=0;archive.addfile(info,io.BytesIO(raw))
+    payload=stream.getvalue();write_new(folder/'payload.tar',payload)
+    token=os.urandom(8).hex();alias=NAME+'-'+token+'-base:local';tag=NAME+'-'+token+':local'
+    need(not run(['docker','image','ls','--quiet',alias]).strip()and not run(['docker','image','ls','--quiet',tag]).strip(),'UNIQUE_LOCAL_IMAGE_TAGS')
+    dockerfile=('FROM '+alias+'\nADD payload.tar /app/\n').encode();write_new(folder/'Dockerfile',dockerfile)
+    need({p.name for p in folder.iterdir()}=={'payload.tar','Dockerfile'},'CLOSED_BUILD_CONTEXT')
+    base_guard();run(['docker','image','tag',BASE_IMAGE,alias]);need(run(['docker','image','inspect','--format','{{.Id}}',alias]).decode().strip()==BASE_IMAGE,'LOCAL_PARENT_ALIAS_PIN')
+    need(safe_read(folder/'payload.tar')==payload and safe_read(folder/'Dockerfile')==dockerfile,'BUILD_CONTEXT_CHANGED')
+    run(['docker','build','--network=none','--pull=false','--tag',tag,'--iidfile',str(folder/'image.id'),str(folder)],180)
+    image=safe_read(folder/'image.id').decode().strip();need(IMAGE.fullmatch(image),'CHILD_IMAGE_ID_REQUIRED');parent_info=image_info(BASE_IMAGE);child_info=image_info(image)
+    need(child_info['RootFS']['Layers'][:-1]==parent_info['RootFS']['Layers']and len(child_info['RootFS']['Layers'])==len(parent_info['RootFS']['Layers'])+1 and child_info['Config']==parent_info['Config'],'ONE_INHERITED_CONTENT_LAYER')
+    need(image_tree(image)==expected_tree(base,manifest),'FULL_CHILD_TREE_CHANGED')
+    # Export is a bounded private code artifact; never run the default app command.
+    run(['docker','image','save','--output',str(folder/'child-image.tar'),image],180)
+    audit_saved_layer(folder/'child-image.tar',base,manifest,child_info);base_guard()
+    child={'image':image,'parent':BASE_IMAGE,'imageConfigSha256':sha(enc(child_info['Config'])),'lastDiffId':child_info['RootFS']['Layers'][-1]}
+    write_new(AREA/'child.json',enc(child));make_plan(base,child)
+    print('BUILT_NOT_APPLIED')
+
+def make_plan(base,child):
+    overlay=AREA/'content-image-only.json';write_new(overlay,enc({'services':{'content':{'image':child['image']}}}))
+    plan=copy.deepcopy(base['plan']);plan['files'].append({'path':str(overlay),'sha256':sha(safe_read(overlay))});observed=json.loads(run(compose_args(plan)+['config','--format','json']))
+    want=copy.deepcopy(base['plan']['resolved']);want['services']['content']['image']=child['image'];need(observed==want,'ONLY_CONTENT_IMAGE_DELTA')
+    plan['resolved']=observed
+    for name,own in plan['ownChains'].items():
+        pin=service_hash(plan,own['service'])
+        if name==CONTENT:need(own['service']=='content','CONTENT_SERVICE_REQUIRED');own.update(files=copy.deepcopy(plan['files']),configHash=pin)
+        else:need(pin==own['configHash'],'FOREIGN_SERVICE_HASH_CHANGED')
+    write_new(AREA/'forward-plan.json',enc(plan));return plan
+
+def backup_guard():
+    backups=load(AREA/'backups.json')
+    for row in backups.values():need(sha(safe_read(row['path']))==row['sha256'],'PROTECTED_BACKUP_CHANGED')
+
+
+def built_image_guard(base,manifest,child):
+    need(set(child)=={'image','parent','imageConfigSha256','lastDiffId'}and IMAGE.fullmatch(child['image'])and child['parent']==BASE_IMAGE and child['image']!=BASE_IMAGE,'EXACT_CHILD_RECEIPT_REQUIRED')
+    before=image_info(BASE_IMAGE);after=image_info(child['image'])
+    need(after['Config']==before['Config']and sha(enc(after['Config']))==child['imageConfigSha256'],'CHILD_IMAGE_CONFIG_CHANGED')
+    need(after['RootFS']['Layers'][:-1]==before['RootFS']['Layers']and len(after['RootFS']['Layers'])==len(before['RootFS']['Layers'])+1 and after['RootFS']['Layers'][-1]==child['lastDiffId'],'CHILD_LAYER_ANCESTRY_CHANGED')
+    audit_saved_layer(AREA/'build/child-image.tar',base,manifest,after)
+
+def validated_plan(base,child):
+    overlay=AREA/'content-image-only.json';need(safe_read(overlay)==enc({'services':{'content':{'image':child['image']}}}),'IMAGE_ONLY_OVERLAY_CHANGED')
+    expected=copy.deepcopy(base['plan']);expected['files'].append({'path':str(overlay),'sha256':sha(safe_read(overlay))});expected['resolved']['services']['content']['image']=child['image']
+    actual=json.loads(run(compose_args(expected)+['config','--format','json']));need(actual==expected['resolved'],'ONLY_CONTENT_IMAGE_DELTA')
+    for name,own in expected['ownChains'].items():
+        value=service_hash(expected,own['service'])
+        if name==CONTENT:need(own['service']=='content','CONTENT_SERVICE_REQUIRED');own.update(files=copy.deepcopy(expected['files']),configHash=value)
+        else:need(value==own['configHash'],'FOREIGN_SERVICE_HASH_CHANGED')
+    need(load(AREA/'forward-plan.json')==expected,'FORWARD_PLAN_PIN_CHANGED');return expected
+
+def apply():
+    need(not(AREA/'apply-intent.json').exists()and not(AREA/'apply-permit.json').exists(),'ONE_APPLY_ATTEMPT_INSPECT_ONLY');_,manifest,base,_=base_guard();child=load(AREA/'child.json');plan=load(AREA/'forward-plan.json');backup_guard()
+    built_image_guard(base,manifest,child)
+    need(plan==validated_plan(base,child),'BUILT_FORWARD_PLAN_CHANGED')
+    need(image_tree(child['image'])==expected_tree(base,manifest),'BUILT_CHILD_CHANGED')
+    need(json.loads(run(compose_args(plan)+['config','--format','json']))==plan['resolved'],'LATE_COMPOSE_CAS')
+    now=time.time();write_new(AREA/'apply-permit.json',enc({'created':now,'expires':now+APPLY_TTL,'baseSha256':sha(safe_read(AREA/'base.json'))}))
+    base_guard();write_new(AREA/'apply-intent.json',enc({'at':time.time(),'image':child['image'],'lease':base['lease']}))
+    # Any error/timeout leaves this journal sealed. No second up is performed.
+    run(compose_args(plan)+['up','--detach','--no-build','--pull','never','--no-deps','content'],120)
+    write_new(AREA/'up-returned.json',enc({'at':time.time(),'image':child['image']}))
+    base_guard(after=True);write_new(AREA/'installed.json',enc({'status':'APPLIED_REQUIRES_INDEPENDENT_INSPECT','image':child['image'],'at':time.time()}))
+    print('APPLIED_REQUIRES_INDEPENDENT_INSPECT')
+
+def inspect_result():
+    # This path does not require installed.json: unknown up can have succeeded.
+    package();own_lease();need((AREA/'base.json').exists(),'BASE_REQUIRED');base=load(AREA/'base.json')
+    actual=inspect_container(CONTENT);intent=(AREA/'apply-intent.json').exists();child=load(AREA/'child.json')if(AREA/'child.json').exists()else None
+    if actual['Image']==BASE_IMAGE:
+        base_guard(readback=True);status='BEFORE_NO_REPLAY'if intent else'BEFORE_NOT_APPLIED'
+    elif child and actual['Image']==child['image']:
+        need(intent,'CHILD_WITHOUT_APPLY_INTENT');base_guard(after=True,readback=True);backup_guard();status='AFTER_INDEPENDENT_READBACK_PASS'
+    else:raise ValueError('UNEXPECTED_RUNNING_IMAGE_INSPECT_ONLY')
+    result={'status':status,'at':time.time(),'contentRecreationsObserved':int(status.startswith('AFTER')),'otherServiceRestarts':0,'directDatabaseWrites':0,'databaseRestored':False,'automaticReplay':False}
+    write_new(AREA/('inspect-'+str(time.time_ns())+'.json'),enc(result));print(json.dumps(result));return result
+
+if __name__=='__main__':
+    try:
+        need(os.name=='posix'and os.geteuid()==0,'NATIVE_LINUX_ROOT_ONLY');os.umask(0o077)
+        mode=sys.argv[1]
+        if mode=='stage':stage(sys.argv[2],sys.argv[3])
+        elif mode=='prepare':prepare()
+        elif mode=='build':build()
+        elif mode=='apply':apply()
+        elif mode=='inspect':inspect_result()
+        else:raise ValueError('KNOWN_MODE_REQUIRED')
+    except Exception as error:
+        # No command/env/DB payload is included in the public error.
+        print('REFUSED: '+type(error).__name__+': '+str(error),file=sys.stderr);sys.exit(2)

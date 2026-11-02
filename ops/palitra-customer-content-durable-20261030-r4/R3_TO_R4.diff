@@ -1,0 +1,49 @@
+--- frozenR3/install.py
++++ R4/install.py
+@@ -11,7 +11,7 @@
+  resource=None
+ from datetime import datetime,timezone,timedelta
+ sys.dont_write_bytecode=True
+-NAME='palitra-customer-content-durable-20261030-r3'
++NAME='palitra-customer-content-durable-20261030-r4'
+ ROOT=Path('/opt/synapse');AREA=ROOT/'releases'/NAME;SELF=Path(__file__).resolve();LOCK=ROOT/'.palitra-app-release.lock'
+ CRM='synapse-crm-1';CONTENT='synapse-content-1';CONTAINERS=(CRM,CONTENT,'synapse-hugh-runtime-1','synapse-chat-1','caddy')
+ BASE_IMAGE='sha256:9a1ab665339b10a49a49d8c605075ae701e4b28a9db1a3bb3ec49483fd8e6f44'
+@@ -24,7 +24,7 @@
+ ACTIVE_DATABASE_PATHS=('/data/content.sqlite','/data/salon-reports.sqlite','/data/projects/palitra-love/sites/site-44bbe13f1bad5e005b2a/private/draft-accounts.sqlite')
+ OPAQUE_ARCHIVE_PATHS=('/data/nebo-project-20261020/content-before-site-r3.sqlite','/data/nebo-project-backup-20261020/content.sqlite','/data/nebo-project-backup-20261020/salon-reports.sqlite','/data/palitra-app-before-20261013.sqlite','/data/palitra-map-caption-20261019/content.sqlite','/data/palitra-production-before-20261013.sqlite','/data/palitra-unified-orders-20261021-r8-completion-c1-save/content.sqlite')
+ TARGETS=tuple(FILE_PINS)
+-REVIEWED_DATA_PINS={'reviewed-sql.json': '410b03163c43b703212e212d47821d9f2c427b21ee5ac17013d08a54c0193ba5', 'reviewed-source-pins.json': '4d40b687ecd38b081e1ffd1f7a412c53c739681c472725ebdb0a2e49e3cee4a9', 'inventory-review.json': '68998c94bb34426777b8199d86d02daebe33f25120711f542f825a9778983ec1', 'economy_projection.py': 'f320cb7299bdb75037272ae55e388e76697e6ce4d3a910eb1b5412eae3d3a283', 'vault_probe.cjs': '8714b8bc8cda5a6724227e31fdab4b37825b161026d9326d3c61296589263c13'}
++REVIEWED_DATA_PINS={'reviewed-sql.json': '410b03163c43b703212e212d47821d9f2c427b21ee5ac17013d08a54c0193ba5', 'reviewed-source-pins.json': '4d40b687ecd38b081e1ffd1f7a412c53c739681c472725ebdb0a2e49e3cee4a9', 'inventory-review.json': '68998c94bb34426777b8199d86d02daebe33f25120711f542f825a9778983ec1', 'economy_projection.py': 'f320cb7299bdb75037272ae55e388e76697e6ce4d3a910eb1b5412eae3d3a283', 'vault_probe.cjs': '8714b8bc8cda5a6724227e31fdab4b37825b161026d9326d3c61296589263c13', 'image_archive_audit.py': '51ee9e4085bc0e3f22d4a21354a5303f40c978faec7cfbc229346d73e3b448da'}
+ INVENTORY_REVIEW_SHA='68998c94bb34426777b8199d86d02daebe33f25120711f542f825a9778983ec1'
+ def need(ok, reason):
+     if not ok: raise ValueError(reason)
+@@ -669,24 +669,10 @@
+     need(expected.keys()<=seen,'MISSING_LAYER_FILE')
+ 
+ def audit_saved_layer(path,base,manifest,child_info):
+-    need(path.is_file()and not path.is_symlink()and path.stat().st_size<=MAX_ARCHIVE,'BOUNDED_SAVED_IMAGE_REQUIRED')
+-    before=path.stat();want=child_info['RootFS']['Layers'][-1];matched=0
+-    with tarfile.open(path,mode='r:')as archive:
+-        count=0
+-        for entry in archive:
+-            count+=1;need(count<=200000 and '..'not in entry.name.split('/')and not entry.name.startswith('/'),'SAVED_IMAGE_BOUND_OR_PATH')
+-            need(entry.isfile()or entry.isdir(),'SAVED_IMAGE_NONREGULAR_ENTRY')
+-            if not entry.isfile()or not entry.name.endswith('/layer.tar'):continue
+-            source=archive.extractfile(entry);h=hashlib.sha256();small=bytearray()if entry.size<=8*1024*1024 else None
+-            while True:
+-                chunk=source.read(1024*1024)
+-                if not chunk:break
+-                h.update(chunk)
+-                if small is not None:small.extend(chunk)
+-            if 'sha256:'+h.hexdigest()==want:
+-                need(small is not None,'CHILD_LAYER_SIZE_BOUND');tar_members(bytes(small),base,manifest);matched+=1
+-    need(matched==1,'EXACT_CHILD_LAYER_REQUIRED')
+-    after=path.stat();need((before.st_ino,before.st_size,before.st_mtime_ns)==(after.st_ino,after.st_size,after.st_mtime_ns),'SAVED_IMAGE_CHANGED')
++    import importlib.util
++    code=AREA/'image_archive_audit.py';need(sha(safe_read(code))==REVIEWED_DATA_PINS[code.name],'IMAGE_ARCHIVE_AUDITOR_PIN_CHANGED')
++    spec=importlib.util.spec_from_file_location('reviewed_image_archive_audit',code);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
++    return module.audit(path,base,manifest,child_info,tar_members)
+ 
+ def build():
+     need(not(AREA/'build-intent.json').exists(),'ONE_BUILD_ATTEMPT_INSPECT_ONLY');_,manifest,base,_=base_guard()

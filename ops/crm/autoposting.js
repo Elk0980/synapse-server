@@ -18,6 +18,16 @@ const mediaOnlyTargetMessage=name=>`${name}: без текста Synapse отп�
 const FORMATS=Object.freeze({post:'Пост',story:'Сторис',reel:'Reels / Shorts / клип',carousel:'Карусель'});
 const ROLES=Object.freeze({reach:'Охватный',affection:'На влюбление',sale:'На продажу'});
 const REVIEW_STATES=Object.freeze({draft:'Черновик',pending:'На согласовании',approved:'Согласовано',rejected:'Отклонено'});
+const DELIVERY_BLOCKER_MESSAGES=Object.freeze({
+  TIKTOK_PRIVACY_UNCONFIRMED:'Для отправки в TikTok сервис должен подтвердить доступную аудиторию профиля. Текущий контракт Onlypult этих данных не возвращает.',
+});
+function deliveryBlocker(channel){
+  const code=channel?.caps?.deliveryBlocker;
+  if(!code)return null;
+  return Object.hasOwn(DELIVERY_BLOCKER_MESSAGES,code)
+    ?{code,message:DELIVERY_BLOCKER_MESSAGES[code]}
+    :{code:'CHANNEL_DELIVERY_BLOCKED',message:'Возможность отправки на выбранную площадку не подтверждена.'};
+}
 const META_LIMITS=Object.freeze({audience:500,hook:500,idea:4000,hughNote:2000,metrics:1000,methodSource:300});
 function meta(value) {
   if(value===null||value===undefined)return {};
@@ -40,12 +50,12 @@ const sha256=value=>{if(value===null||value===undefined||value==='')return '';if
    Состав полей взят из проверенной OpenAPI Onlypult (29.09.2026), ничего сверх неё не принимается.
    Опции одной площадки не отправляются другой.
    instagram: is_story и is_reels взаимоисключающие — Story и Reel это разные режимы.
-   tiktok.privacy: полного перечня доступных конкретному аккаунту режимов схема не даёт,
-   поэтому принимаются только два документированных значения, и «по умолчанию публично»
-   здесь не подставляется — без явного выбора отправка TikTok не идёт. */
+   tiktok.privacy: четыре значения контракта Onlypult (официальный SDK 0.1.9),
+   не перечень возможностей автора. «По умолчанию публично» не подставляется;
+   Onlypult должен принять точный согласованный режим без замены и повторного POST. */
 const PLATFORM_OPTION_SCHEMA=Object.freeze({
   instagram:Object.freeze({is_story:'boolean',is_reels:'boolean',disable_comment:'boolean'}),
-  tiktok:Object.freeze({privacy:['PUBLIC_TO_EVERYONE','SELF_ONLY'],disable_comment:'boolean',disable_duet:'boolean',disable_stitch:'boolean'}),
+  tiktok:Object.freeze({privacy:['PUBLIC_TO_EVERYONE','MUTUAL_FOLLOW_FRIENDS','FOLLOWER_OF_CREATOR','SELF_ONLY'],disable_comment:'boolean',disable_duet:'boolean',disable_stitch:'boolean'}),
   max:Object.freeze({pin_message:'boolean'}),
 });
 function platformOptions(value) {
@@ -452,6 +462,11 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
     const mediaOnlyStory=mediaOnlyStoryRow(row,media,caps);
     if(!row.text&&!Object.keys(caps).length&&!mediaOnlyStory)issues.push('Нет текста и подписей площадок');
     for(const [platform,caption]of Object.entries(caps))if(caption.length>CAPTION_PLATFORMS[platform].limit)issues.push(`Подпись ${CAPTION_PLATFORMS[platform].label} длиннее лимита`);
+    if(ids.includes('tiktok')){
+      const options=JSON.parse(row.platform_options||'{}').tiktok||{};
+      if(!PLATFORM_OPTION_SCHEMA.tiktok.privacy.includes(options.privacy))issues.push('Выберите, кто увидит видео TikTok');
+      if(media.length!==1||!isShortsVideoUrl(media[0]))issues.push('Для TikTok нужно одно видео');
+    }
     return {ready:!issues.length,issues,mediaKind:mediaKind(media),textOnly,mediaOnlyStory};
   }
   /* Одобрение привязано к content_revision — версии содержимого (текст, подписи, материал, день, происхождение).
@@ -586,6 +601,7 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
   function capsIssues(channel,caption,mediaCount) {
     const caps=channel&&typeof channel.caps==='object'&&channel.caps?channel.caps:null,issues=[];
     if(!caps)return issues;
+    const blocker=deliveryBlocker(channel);if(blocker)issues.push(blocker.message);
     if(Number.isFinite(caps.maxText)&&caption.length>caps.maxText)issues.push(`Текст длиннее лимита площадки (${caps.maxText})`);
     if(Number.isFinite(caps.maxMedia)&&mediaCount>caps.maxMedia)issues.push(`Материалов больше, чем принимает площадка (${caps.maxMedia})`);
     if(Number.isFinite(caps.maxCaption)&&mediaCount&&caption.length>caps.maxCaption)issues.push(`Подпись к материалу длиннее лимита площадки (${caps.maxCaption})`);
@@ -1067,7 +1083,12 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
       const marked=receiptPlatforms(row.id);
       const blocked=data.platformIds.filter((id,index)=>marked.has(channelPlatform(channels[index],id)));
       if(blocked.length)fail(409,`Уже отмечено как опубликованное вне ЛК: ${blocked.join(', ')}. Повторная отправка создаст дубликат.`,'EXTERNAL_PUBLICATION_RECORDED');
-      if(channels.some(channel=>!channel||!channel.enabled||!channel.connected))fail(409,'Выбранный канал не подключён','CHANNEL_NOT_CONNECTED');
+      if(channels.some(channel=>!channel||!channel.connected))fail(409,'Выбранный канал не подключён','CHANNEL_NOT_CONNECTED');
+      if(channels.some(channel=>!channel.enabled))fail(409,'Отправка на выбранную площадку выключена','CHANNEL_DISABLED');
+      // Не создавать частичную доставку на остальные каналы при заведомом отказе одного.
+      // Одобрение содержимого допустимо отдельно; approveAndSchedule откатится атомарно.
+      const deliveryBlocked=channels.map(deliveryBlocker).find(Boolean);
+      if(deliveryBlocked)fail(409,deliveryBlocked.message,deliveryBlocked.code);
       if(companyApprovalRequired(row)&&!data.mediaUrls.length){
         if(!readiness(row).textOnly||channels.some(channel=>(channel.provider||'direct')!=='direct'||!['telegram','vk'].includes(channel.platform||channel.id)))
           fail(409,'Для этого способа публикации нужен материал: текст без медиа поддержан только прямыми Telegram и ВКонтакте','NOT_READY');
@@ -1560,6 +1581,14 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
       for(const delivery of conflicting)cancel.run(due.id,delivery.channel_id);
       review(due.id,'EXTERNAL_PUBLICATION_RECORDED');return;
     }
+    // Применяется и к старой очереди: известный отказ одного ещё не отправленного,
+    // согласованного канала останавливает группу до первого POST. Результаты уже
+    // выполненных доставок и сохранённые pending-записи остаются нетронутыми.
+    const deliveryBlocked=deliveries.filter(item=>item.status==='pending'&&deliveryApproved(due,item.channel_id))
+      .map(item=>deliveryBlocker(settings.channels.find(channel=>channel.id===item.channel_id))).find(Boolean);
+    if(deliveryBlocked){review(due.id,deliveryBlocked.code);return;}
+    // Старые согласованные записи без явной аудитории также не дают частичной отправки.
+    if(deliveries.some(item=>item.status==='pending'&&item.channel_id==='tiktok'&&deliveryApproved(due,item.channel_id))&&!readiness(due).ready){review(due.id,'NOT_READY');return;}
     const lease=randomUUID();
     const claimed=db.prepare("UPDATE autoposting_posts SET status='publishing',publishing_at=?,lease=?,revision=revision+1,updated_at=? WHERE id=? AND status='scheduled' AND revision=? AND deleted_at IS NULL AND archived_at IS NULL")
       .run(now(),lease,iso(),due.id,due.revision);

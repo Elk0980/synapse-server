@@ -1,0 +1,121 @@
+{
+  "/data/content.sqlite": {
+    "chat_web_account_bindings": {
+      "columns": [
+        "session_id",
+        "account_user_id",
+        "created_at"
+      ],
+      "objects": [
+        [
+          "table",
+          "chat_web_account_bindings",
+          "chat_web_account_bindings",
+          "CREATE TABLE chat_web_account_bindings (\n    session_id INTEGER PRIMARY KEY REFERENCES chat_web_sessions(id), account_user_id TEXT NOT NULL,\n    created_at TEXT NOT NULL, CHECK(length(account_user_id) = 36)\n  )"
+        ]
+      ]
+    },
+    "chat_web_preliminary_profiles": {
+      "columns": [
+        "session_id",
+        "profile_id",
+        "thread_id",
+        "first_name",
+        "phone",
+        "consented_at",
+        "consent_version",
+        "revision",
+        "updated_at"
+      ],
+      "objects": [
+        [
+          "index",
+          "sqlite_autoindex_chat_web_preliminary_profiles_1",
+          "chat_web_preliminary_profiles",
+          null
+        ],
+        [
+          "table",
+          "chat_web_preliminary_profiles",
+          "chat_web_preliminary_profiles",
+          "CREATE TABLE chat_web_preliminary_profiles (\n    session_id INTEGER PRIMARY KEY REFERENCES chat_web_sessions(id),\n    profile_id TEXT NOT NULL UNIQUE, thread_id INTEGER NOT NULL REFERENCES chat_threads(id),\n    first_name TEXT NOT NULL, phone TEXT NOT NULL, consented_at TEXT NOT NULL,\n    consent_version TEXT NOT NULL, revision INTEGER NOT NULL, updated_at TEXT NOT NULL\n  )"
+        ]
+      ]
+    },
+    "chat_web_preliminary_requests": {
+      "columns": [
+        "session_id",
+        "request_id",
+        "fingerprint",
+        "accepted_revision",
+        "created_at"
+      ],
+      "objects": [
+        [
+          "index",
+          "sqlite_autoindex_chat_web_preliminary_requests_1",
+          "chat_web_preliminary_requests",
+          null
+        ],
+        [
+          "table",
+          "chat_web_preliminary_requests",
+          "chat_web_preliminary_requests",
+          "CREATE TABLE chat_web_preliminary_requests (\n    session_id INTEGER NOT NULL REFERENCES chat_web_sessions(id), request_id TEXT NOT NULL,\n    fingerprint TEXT NOT NULL, accepted_revision INTEGER NOT NULL, created_at TEXT NOT NULL,\n    PRIMARY KEY(session_id,request_id)\n  )"
+        ]
+      ]
+    }
+  },
+  "/data/projects/palitra-love/sites/site-44bbe13f1bad5e005b2a/private/draft-accounts.sqlite": {
+    "account_auth_outcomes": {
+      "columns": [
+        "id",
+        "proof_hash",
+        "company",
+        "workspace",
+        "origin",
+        "action",
+        "source_session_hash",
+        "source_csrf_hash",
+        "chat_hash",
+        "nonce",
+        "fingerprint",
+        "supersedes_id",
+        "state",
+        "target_user_id",
+        "target_session_hash",
+        "credential_tag",
+        "history_status",
+        "created_at",
+        "expires_at",
+        "completed_at"
+      ],
+      "objects": [
+        [
+          "index",
+          "account_auth_one_active",
+          "account_auth_outcomes",
+          "CREATE UNIQUE INDEX account_auth_one_active ON account_auth_outcomes(company,workspace,origin,source_session_hash,chat_hash) WHERE state IN('prepared','account_committed')"
+        ],
+        [
+          "index",
+          "sqlite_autoindex_account_auth_outcomes_1",
+          "account_auth_outcomes",
+          null
+        ],
+        [
+          "index",
+          "sqlite_autoindex_account_auth_outcomes_2",
+          "account_auth_outcomes",
+          null
+        ],
+        [
+          "table",
+          "account_auth_outcomes",
+          "account_auth_outcomes",
+          "CREATE TABLE account_auth_outcomes(\n   id TEXT PRIMARY KEY,proof_hash TEXT NOT NULL UNIQUE,company TEXT NOT NULL,workspace TEXT NOT NULL,origin TEXT NOT NULL,\n   action TEXT NOT NULL,source_session_hash TEXT NOT NULL,source_csrf_hash TEXT NOT NULL,chat_hash TEXT NOT NULL,\n   nonce TEXT NOT NULL,fingerprint TEXT,supersedes_id TEXT,state TEXT NOT NULL CHECK(state IN('prepared','account_committed','complete','cancelled')),\n   target_user_id TEXT,target_session_hash TEXT,credential_tag TEXT,history_status TEXT,created_at INTEGER NOT NULL,expires_at INTEGER NOT NULL,completed_at INTEGER\n  )"
+        ]
+      ]
+    }
+  }
+}

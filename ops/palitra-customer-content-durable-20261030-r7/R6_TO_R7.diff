@@ -1,0 +1,11 @@
+--- R6/install.py
++++ R7/install.py
+@@ -11,7 +11,7 @@
+  resource=None
+ from datetime import datetime,timezone,timedelta
+ sys.dont_write_bytecode=True
+-NAME='palitra-customer-content-durable-20261030-r6'
++NAME='palitra-customer-content-durable-20261030-r7'
+ ROOT=Path('/opt/synapse');AREA=ROOT/'releases'/NAME;SELF=Path(__file__).resolve();LOCK=ROOT/'.palitra-app-release.lock'
+ CRM='synapse-crm-1';CONTENT='synapse-content-1';CONTAINERS=(CRM,CONTENT,'synapse-hugh-runtime-1','synapse-chat-1','caddy')
+ BASE_IMAGE='sha256:9a1ab665339b10a49a49d8c605075ae701e4b28a9db1a3bb3ec49483fd8e6f44'

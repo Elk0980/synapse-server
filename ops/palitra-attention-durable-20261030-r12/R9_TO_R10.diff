@@ -1,0 +1,99 @@
+--- R9/install.py
++++ R10/install.py
+@@ -11,7 +11,7 @@
+  resource=None
+ from datetime import datetime,timezone,timedelta
+ sys.dont_write_bytecode=True
+-NAME='palitra-attention-durable-20261030-r9'
++NAME='palitra-attention-durable-20261030-r10'
+ ROOT=Path('/opt/synapse');AREA=ROOT/'releases'/NAME;SELF=Path(__file__).resolve();LOCK=ROOT/'.palitra-app-release.lock'
+ CRM='synapse-crm-1';CONTENT='synapse-content-1';CONTAINERS=(CRM,CONTENT,'synapse-hugh-runtime-1','synapse-chat-1','caddy')
+ BASE_IMAGE='sha256:e22ca4d3892a01454d749fbef49c10c2a1a93f0a863d977914f32ae21455a343'
+@@ -29,7 +29,7 @@
+ STATIC_NAMES={'/opt/synapse/sites/synapse/cabinet/palitra-orders/native-host.js': 'cab-native-host.js', '/opt/synapse/sites/synapse/cabinet/palitra-orders/shell.js': 'cab-shell.js'}
+ PRESERVED_R7={'/app/draft-account-service.cjs': '23a0d76ed2d5d2bef47ad49e5822829a088b6148ceeffae09731b6f499d34f26', '/app/customer-chat.js': '1a3927539386fe4e075bf9aa9ec7cfc995fe0b36787ebb67ad7898359058456e', '/app/customer-chat-native-adapter.cjs': 'a72732560bd9adb109080c09cf0ce3bd7774eb72614ea29073d301d44245037e', '/app/palitra-review-public/palitra-chat.js': '5752c762048c18aa01ccc52f503ef63230468d79ff7749895b6e4e0dd37d124b', '/app/site-workspace-feature.js': 'f36fe867ef6c5bf0f180ae3caec177f296503f365606c0d3e2b9cf262964ac5e'}
+ MANAGED_REV='245ca86f12e50e696ee39c5d6c3ab0f1924c05e933abbcc3ba249a20e6d8d9f8' # Root native readonly22:45Z
+-REVIEWED_DATA_PINS={'reviewed-sql.json': '410b03163c43b703212e212d47821d9f2c427b21ee5ac17013d08a54c0193ba5', 'reviewed-source-pins.json': 'd4de0c682d08f12764311754444501f7bcaf3ae40bc4fbc7c11903673bff964e', 'inventory-review.json': '3f7ff5bf0b12e647542d5cf2b24c756eb801a9a03a4a1f5cc5cd4a1f1ba94222', 'economy_projection.py': 'f320cb7299bdb75037272ae55e388e76697e6ce4d3a910eb1b5412eae3d3a283', 'vault_probe.cjs': '8714b8bc8cda5a6724227e31fdab4b37825b161026d9326d3c61296589263c13', 'image_archive_audit.py': 'f9af133089f08ab2876945a1dd5b4c5a225097e5fc6fd91f6ebbefaa60e1cd8a', 'diagnostic_preservation.py': '658ddfc204ba95c75889a5f0d9f73d9f5142a30261cac462e461cbd431747a70', 'managed_history.py': '69690754e6efb394e3fede769257dc39df7fd1fe221d018c5cd7f77e346aa2cd', 'server_phase.py': '11d436096c1f56c7c4beccbbe18dd85c4dd875cb377ce1a4d412d0df4e492c10', 'host_static.py': 'ccb00090e56e6f922780e397742960a2d5a3835de6d60b3f4ab1bbcdec539766', 'scope-review.json': '0c0be494a06204524a1a155655edfdf25f8c826418d7c73eaae76a32ba0457d1', 'source-proof/server-before.js': '23c9664d8209ecf4aa4ce822a1a05a8cf0c2ee3fcb11afa93e396b1d5282d4ac', 'managed-anchor.json': '974ed3ee63c85fa0c2505d6d8188a4da2c546fde19c356b0c55d12c350eba503'}
++REVIEWED_DATA_PINS={'reviewed-sql.json': '410b03163c43b703212e212d47821d9f2c427b21ee5ac17013d08a54c0193ba5', 'reviewed-source-pins.json': 'd4de0c682d08f12764311754444501f7bcaf3ae40bc4fbc7c11903673bff964e', 'inventory-review.json': '3f7ff5bf0b12e647542d5cf2b24c756eb801a9a03a4a1f5cc5cd4a1f1ba94222', 'economy_projection.py': 'f320cb7299bdb75037272ae55e388e76697e6ce4d3a910eb1b5412eae3d3a283', 'vault_probe.cjs': '8714b8bc8cda5a6724227e31fdab4b37825b161026d9326d3c61296589263c13', 'image_archive_audit.py': 'f9af133089f08ab2876945a1dd5b4c5a225097e5fc6fd91f6ebbefaa60e1cd8a', 'diagnostic_preservation.py': '658ddfc204ba95c75889a5f0d9f73d9f5142a30261cac462e461cbd431747a70', 'managed_history.py': '69690754e6efb394e3fede769257dc39df7fd1fe221d018c5cd7f77e346aa2cd', 'server_phase.py': '11d436096c1f56c7c4beccbbe18dd85c4dd875cb377ce1a4d412d0df4e492c10', 'host_static.py': '73b3c34e3d646e2b077b45b7fce84dfc3a480f39cf5dfbb5eeed8be4b94018f0', 'scope-review.json': '0c0be494a06204524a1a155655edfdf25f8c826418d7c73eaae76a32ba0457d1', 'source-proof/server-before.js': '23c9664d8209ecf4aa4ce822a1a05a8cf0c2ee3fcb11afa93e396b1d5282d4ac', 'managed-anchor.json': '974ed3ee63c85fa0c2505d6d8188a4da2c546fde19c356b0c55d12c350eba503'}
+ INVENTORY_REVIEW_SHA='3f7ff5bf0b12e647542d5cf2b24c756eb801a9a03a4a1f5cc5cd4a1f1ba94222'
+ def need(ok, reason):
+     if not ok: raise ValueError(reason)
+--- R9/host_static.py
++++ R10/host_static.py
+@@ -4,7 +4,7 @@
+ 
+ def file_state(m,target):
+  path=m.host_static_path(target);raw=m.safe_read(path);s=path.lstat();m.need(stat.S_ISREG(s.st_mode)and s.st_nlink==1,'HOST_STATIC_REGULAR_ONE_LINK')
+- if os.name=='posix':m.need(s.st_uid==s.st_gid==0 and stat.S_IMODE(s.st_mode)==0o644,'HOST_STATIC_ROOT_MODE')
++ if os.name=='posix':m.need(s.st_uid==s.st_gid==0 and stat.S_IMODE(s.st_mode)==0o600,'HOST_STATIC_ROOT_MODE')
+  return {'sha256':m.sha(raw),'bytes':len(raw),'stat':[s.st_dev,s.st_ino,s.st_mode,s.st_uid,s.st_gid,s.st_nlink,s.st_size,str(s.st_mtime_ns),str(s.st_ctime_ns)]}
+ 
+ def current(m):return {t:file_state(m,t)for t in m.STATIC_TARGETS}
+--- R9/make_manifest.py
++++ R10/make_manifest.py
+@@ -1,4 +1,4 @@
+-"""Code-only R9 assembler; no claim that supplied fresh image metadata is live proof."""
++"""Code-only R10 assembler; no claim that supplied fresh image metadata is live proof."""
+ from pathlib import Path
+ import importlib.util,json,sys
+ sys.dont_write_bytecode=True
+--- R9/test_runtime_host.py
++++ R10/test_runtime_host.py
+@@ -36,7 +36,7 @@
+     raw=(OLD/'payload'/target.removeprefix('/app/')).read_bytes();f.tree[target.removeprefix('/app/')]={'type':'file','nlink':1,'mode':0o644,'uid':0,'gid':0,'bytes':len(raw),'sha256':pin}
+    (f.area/'static-payload').mkdir();self.staticpins={};staticrows=[]
+    for i,target in enumerate(m.STATIC_TARGETS):
+-    path=f.root/target.removeprefix('/opt/synapse/');path.parent.mkdir(parents=True,exist_ok=True);before=('old static '+str(i)).encode();after=('new static '+str(i)).encode();path.write_bytes(before);path.chmod(0o644);(f.area/'static-payload'/m.STATIC_NAMES[target]).write_bytes(after);self.staticpins[target]=(m.sha(before),m.sha(after));staticrows.append({'target':target,'beforeSha256':m.sha(before),'afterSha256':m.sha(after),'bytes':len(after)})
++    path=f.root/target.removeprefix('/opt/synapse/');path.parent.mkdir(parents=True,exist_ok=True);before=('old static '+str(i)).encode();after=('new static '+str(i)).encode();path.write_bytes(before);path.chmod(0o600);(f.area/'static-payload'/m.STATIC_NAMES[target]).write_bytes(after);self.staticpins[target]=(m.sha(before),m.sha(after));staticrows.append({'target':target,'beforeSha256':m.sha(before),'afterSha256':m.sha(after),'bytes':len(after)})
+    f.patches.append(patch.object(m,'STATIC_PINS',self.staticpins));f.patches[-1].start()
+    for name in ['managed_history.py','host_static.py','server_phase.py','scope-review.json','managed-anchor.json','source-proof/server-before.js']:
+     raw=(HERE/name).read_bytes();f.guard_data[name]=raw;path=f.area/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(raw);m.REVIEWED_DATA_PINS[name]=m.sha(raw)
+--- R9/test_host_static.py
++++ R10/test_host_static.py
+@@ -14,11 +14,15 @@
+   m=self.m;m.sha=lambda b:hashlib.sha256(b).hexdigest();m.enc=lambda o:(json.dumps(o,sort_keys=True,separators=(',',':'))+'\n').encode();m.need=lambda ok,code:None if ok else(_ for _ in()).throw(ValueError(code));m.safe_read=lambda p:Path(p).read_bytes();m.load=lambda p:json.loads(m.safe_read(p));m.own_lease=lambda:{'pid':1,'startTicks':'1'};m.sync_dir=lambda p:None;m.write_new=write_new;m.host_static_path=lambda t:m.ROOT/t.removeprefix('/opt/synapse/');m.full_static=lambda:{str(p.relative_to(root)).replace('\\','/'):m.sha(p.read_bytes())for p in(root/'sites').rglob('*.js')}
+   (area/'static-payload').mkdir()
+   for i,t in enumerate(m.STATIC_TARGETS):
+-   name=('cab-native-host.js','cab-shell.js')[i];old=('v1-'+str(i)).encode();new=('v2-'+str(i)).encode();m.STATIC_NAMES[t]=name;m.STATIC_PINS[t]=(m.sha(old),m.sha(new));m.host_static_path(t).write_bytes(old);m.host_static_path(t).chmod(0o644);(area/'static-payload'/name).write_bytes(new)
++   name=('cab-native-host.js','cab-shell.js')[i];old=('v1-'+str(i)).encode();new=('v2-'+str(i)).encode();m.STATIC_NAMES[t]=name;m.STATIC_PINS[t]=(m.sha(old),m.sha(new));m.host_static_path(t).write_bytes(old);m.host_static_path(t).chmod(0o600);(area/'static-payload'/name).write_bytes(new)
+   (root/'sites/other.js').write_bytes(b'preserved other resource');protected=h.protect_before(m);self.base={'hostStatic':protected,'static':m.full_static()};(area/'static-base.json').write_bytes(m.enc(self.base));self.checks=[]
+   def guard(phase,readback=False,history_full=False):self.checks.append((phase,readback,history_full));h.expect(m,self.base,phase);return self.base
+   m.static_guard=guard
+-  if os.name=='nt':self.addCleanup(patch.stopall);patch.object(os,'fchmod',lambda *a:None,create=True).start()
++  if os.name=='nt':
++   class FixtureOs:
++    def __getattr__(self,key):return getattr(os,key)
++    def fchmod(self,fd,mode):self_test.assertIsInstance(fd,int);self_test.assertEqual(mode,stat.S_IMODE(os.fstat(fd).st_mode))
++   self_test=self;self.os_proxy=patch.object(h,'os',FixtureOs());self.os_proxy.start();self.addCleanup(self.os_proxy.stop)
+  def test_two_atomic_steps_preserve_all_other_resources_and_before_backups(self):
+   m=self.m;self.assertEqual(h.write_one(m,0)['phase'],1);self.assertEqual(h.write_one(m,1)['phase'],2);r=h.inspect(m,True);self.assertEqual(r['status'],'ATTENTION_ALL_AFTER_PASS');self.assertTrue(self.checks[-1][2]);self.assertEqual((m.ROOT/'sites/other.js').read_bytes(),b'preserved other resource');h.backup_guard(m,self.base)
+   with self.assertRaisesRegex(ValueError,'ONE_ATTEMPT'):h.write_one(m,0)
+--- R9/test_r9_lineage.py
++++ R10/test_r9_lineage.py
+@@ -2,7 +2,7 @@
+ from pathlib import Path
+ import ast,hashlib,importlib.util,json,sys,unittest
+ sys.dont_write_bytecode=True
+-HERE=Path(__file__).resolve().parent;BASE=HERE.parent/'ATTENTION_DURABLE_R8'
++HERE=Path(__file__).resolve().parent;BASE=HERE.parent/'ATTENTION_DURABLE_R9'
+ class R9Lineage(unittest.TestCase):
+  def test_combined_shop_exact_with_single_target_delta_and_unchanged_guards(self):
+   def load(name,path):
+@@ -10,13 +10,13 @@
+   old=load('r8_lineage',BASE/'install.py');new=load('r9_lineage',HERE/'install.py');assembler=load('r9_assembler_lineage',HERE/'make_manifest.py')
+   shop='/app/palitra-orders-public/shell.js';approved=HERE.parent/'PRIVATE_SHOP_ACCOUNT_PREFILL_R1/candidate/shop-shell.js';raw=(HERE/'payload'/shop.removeprefix('/app/')).read_bytes()
+   self.assertEqual(raw,approved.read_bytes());self.assertEqual(len(raw),379553);self.assertEqual(hashlib.sha256(raw).hexdigest(),'b7efae7638e05351296d93243f771b2c7ca134672bda1abe348ac7912d3fab60')
+-  self.assertEqual(new.NAME,'palitra-attention-durable-20261030-r9');self.assertEqual(new.BASE_IMAGE,old.BASE_IMAGE);self.assertEqual(new.STATIC_PINS,old.STATIC_PINS);self.assertEqual(new.PRESERVED_R7,old.PRESERVED_R7)
++  self.assertEqual(new.NAME,'palitra-attention-durable-20261030-r10');self.assertEqual(new.BASE_IMAGE,old.BASE_IMAGE);self.assertEqual(new.STATIC_PINS,old.STATIC_PINS);self.assertEqual(new.PRESERVED_R7,old.PRESERVED_R7)
+   self.assertEqual({k:v for k,v in new.FILE_PINS.items()if k!=shop},{k:v for k,v in old.FILE_PINS.items()if k!=shop});self.assertEqual(new.FILE_PINS[shop][0],old.FILE_PINS[shop][0])
+-  self.assertEqual({k:v for k,v in new.REVIEWED_DATA_PINS.items()if k!='scope-review.json'},{k:v for k,v in old.REVIEWED_DATA_PINS.items()if k!='scope-review.json'})
+-  skip={'NAME','FILE_PINS','REVIEWED_DATA_PINS'}
++  self.assertEqual({k:v for k,v in new.REVIEWED_DATA_PINS.items()if k!='host_static.py'},{k:v for k,v in old.REVIEWED_DATA_PINS.items()if k!='host_static.py'})
++  skip={'NAME','REVIEWED_DATA_PINS'}
+   def tree(path):
+    t=ast.parse(path.read_text());t.body=[n for n in t.body if not(isinstance(n,ast.Assign)and any(isinstance(x,ast.Name)and x.id in skip for x in n.targets))];return ast.dump(t,include_attributes=False)
+-  self.assertEqual(tree(HERE/'install.py'),tree(BASE/'install.py'))
++  self.assertEqual(tree(HERE/'install.py'),tree(BASE/'install.py'));self.assertEqual((HERE/'host_static.py').read_bytes(),(BASE/'host_static.py').read_bytes().replace(b'==0o644',b'==0o600'));self.assertEqual(new.FILE_PINS,old.FILE_PINS)
+   scope=json.loads((HERE/'scope-review.json').read_bytes());row=next(r for r in scope['targets']if r['target']==shop);self.assertEqual((row['beforeSha256'],row['afterSha256']),new.FILE_PINS[shop]);self.assertEqual(row['afterBytes'],len(raw))
+   images={n:'sha256:'+'a'*64 for n in new.CONTAINERS};images[new.CONTENT]=new.BASE_IMAGE;inv={'sourceReviewSha256':new.INVENTORY_REVIEW_SHA,'contentPaths':list(new.ACTIVE_DATABASE_PATHS+new.OPAQUE_ARCHIVE_PATHS),'crmPaths':['/data/crm.sqlite']};manifest=assembler.build(images,inv)
+   self.assertEqual(manifest['status'],'ROOT_REVIEWED_CODE_ONLY');self.assertEqual((len(manifest['files']),len(manifest['staticFiles'])),(4,2));assembled=next(r for r in manifest['files']if r['target']==shop);self.assertEqual((assembled['beforeSha256'],assembled['afterSha256'],assembled['bytes']),(*new.FILE_PINS[shop],379553))

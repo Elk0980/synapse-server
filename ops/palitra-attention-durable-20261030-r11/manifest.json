@@ -1,0 +1,71 @@
+{
+  "databaseInventory": {
+    "contentPaths": [
+      "/data/content.sqlite",
+      "/data/salon-reports.sqlite",
+      "/data/projects/palitra-love/sites/site-44bbe13f1bad5e005b2a/private/draft-accounts.sqlite",
+      "/data/nebo-project-20261020/content-before-site-r3.sqlite",
+      "/data/nebo-project-backup-20261020/content.sqlite",
+      "/data/nebo-project-backup-20261020/salon-reports.sqlite",
+      "/data/palitra-app-before-20261013.sqlite",
+      "/data/palitra-map-caption-20261019/content.sqlite",
+      "/data/palitra-production-before-20261013.sqlite",
+      "/data/palitra-unified-orders-20261021-r8-completion-c1-save/content.sqlite"
+    ],
+    "crmPaths": [
+      "/data/crm.sqlite"
+    ],
+    "sourceReviewSha256": "3f7ff5bf0b12e647542d5cf2b24c756eb801a9a03a4a1f5cc5cd4a1f1ba94222"
+  },
+  "expectedImages": {
+    "caddy": "sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648",
+    "synapse-chat-1": "sha256:4d5b047dc76bae1d2b82067406f98c344eea4033f83f35a54cdef7cd355ed2ae",
+    "synapse-content-1": "sha256:e22ca4d3892a01454d749fbef49c10c2a1a93f0a863d977914f32ae21455a343",
+    "synapse-crm-1": "sha256:b74d9196617cd1ba4945d0b13b69a0648552c170c5c1680b76fab51cdb73b327",
+    "synapse-hugh-runtime-1": "sha256:1d89b9652c514c238c7509bd0d81f7a0a4d198cf7cd9990c90c7e3e05b045018"
+  },
+  "files": [
+    {
+      "afterSha256": "6b8a661a60efd47a9d0bc1e5a3b2f343324e35c117170a20d1b90c0e2c79d649",
+      "beforeSha256": "e950f9e4723a47abd8d5d2b039fe05d25a5ba13b362a46eac34c09004eb23b59",
+      "bytes": 29406,
+      "target": "/app/palitra-manager-attention.cjs"
+    },
+    {
+      "afterSha256": "183a0edd7559a7fa029c3b17e8931592133961f73454fb59afbcc8c6761b7713",
+      "beforeSha256": "23c9664d8209ecf4aa4ce822a1a05a8cf0c2ee3fcb11afa93e396b1d5282d4ac",
+      "bytes": 133499,
+      "target": "/app/server.js"
+    },
+    {
+      "afterSha256": "0d5141c14c769cbd4dd4216e8983c742813877e5a225809f2113c1fbf559be7f",
+      "beforeSha256": "697863cbd5ac96af57a58bcae84d4b0ba858b18d39a955c527463a6c4c756728",
+      "bytes": 52696,
+      "target": "/app/palitra-orders-public/native-host.js"
+    },
+    {
+      "afterSha256": "b7efae7638e05351296d93243f771b2c7ca134672bda1abe348ac7912d3fab60",
+      "beforeSha256": "b39d4cdb4d07673988249863d0ce4e767981565ed6f77350073aeff61ec273c9",
+      "bytes": 379553,
+      "target": "/app/palitra-orders-public/shell.js"
+    }
+  ],
+  "helperSha256": "d40b876beb04c42e350a2ab9847facd2edb525d90c7b296c37485a78f60cb9b6",
+  "packageId": "palitra-attention-durable-20261030-r11",
+  "schema": 1,
+  "staticFiles": [
+    {
+      "afterSha256": "c5bedcfb395719d4b9ffa16c0820801dcb04e7c87d308bcc1f70b6f1ac07e704",
+      "beforeSha256": "f27b5ae1f9c0899a7b99ed756730874238c94c15ebda3d2913bc88d62d2b4d80",
+      "bytes": 86417,
+      "target": "/opt/synapse/sites/synapse/cabinet/palitra-orders/native-host.js"
+    },
+    {
+      "afterSha256": "1e770b202f0cfd129476d43e98ace02894665f0208ff059ecb5f8afd099fc796",
+      "beforeSha256": "b40b738cab687e863fffc7e18486b068d5e2b21ed43bf5abfd230ae9d3244588",
+      "bytes": 367312,
+      "target": "/opt/synapse/sites/synapse/cabinet/palitra-orders/shell.js"
+    }
+  ],
+  "status": "ROOT_REVIEWED_CODE_ONLY"
+}

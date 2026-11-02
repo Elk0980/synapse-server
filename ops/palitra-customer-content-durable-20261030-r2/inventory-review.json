@@ -1,0 +1,20 @@
+{
+  "status": "SOURCE_REVIEW_AND_NATIVE_EXISTENCE_CONFIRMED_NOT_A_DEPLOY_PERMIT",
+  "company": "palitra-love",
+  "service": "content",
+  "sourcePins": {
+    "server.js": "23c9664d8209ecf4aa4ce822a1a05a8cf0c2ee3fcb11afa93e396b1d5282d4ac",
+    "site-workspace-feature.js": "319c233f6066955193ac850ce8b58464b198ad262d168be64281659828e82910"
+  },
+  "databasePathEnv": "/data/content.sqlite",
+  "dataMount": "/var/lib/docker/volumes/synapse_content_data/_data",
+  "databases": [
+    {"containerPath": "/data/content.sqlite", "source": "server DATABASE_PATH", "nativeExists": true, "sameResolvedPath": true, "uid": 0, "gid": 0, "mode": "0644"},
+    {"containerPath": "/data/salon-reports.sqlite", "source": "server createSalonCompanyApp databasePath dirname(DATABASE_PATH)/salon-reports.sqlite", "nativeExists": true, "sameResolvedPath": true, "uid": 0, "gid": 0, "mode": "0600"},
+    {"containerPath": "/data/projects/palitra-love/sites/site-44bbe13f1bad5e005b2a/private/draft-accounts.sqlite", "source": "exact workspace accountFactory root/company/sites/id/private/draft-accounts.sqlite", "nativeExists": true, "sameResolvedPath": true, "uid": 0, "gid": 0, "mode": "0644"}
+  ],
+  "otherWorkspaceAccountDatabaseCountAtRead": 0,
+  "scopeRule": "Generic AccountService remains mandatory by default; optional mode is internal and selected only after fixed Palitra workspace/origin checks",
+  "nativeWrites": 0,
+  "deploymentRequirements": ["Fresh data mount, paths, file identities and no symlinks at prepare/apply", "Readonly SQLite consistent backups, schema and logical preservation", "Fresh inventory discovery must match reviewed paths or refuse for review", "Do not treat this local review as native state or permission", "Do not restore old databases or overwrite later user registrations"]
+}

@@ -1,0 +1,11 @@
+*.py text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.cjs text eol=lf
+payload/** -text
+reviewed-sql.json -text
+reviewed-source-pins.json -text
+
+static-payload/** -text
+source-proof/** -text
+* -text

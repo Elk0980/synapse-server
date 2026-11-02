@@ -1,0 +1,149 @@
+{
+  "content_queue_queries": {
+    "ai_eligibility": "SELECT j.company_code,j.status,j.api_assistant,j.attempts,COUNT(*) n,\n      SUM(CASE WHEN j.reply_message_id IS NULL AND j.status IN ('pending','error') AND j.attempts<3\n       AND j.next_attempt_at<=:margin_end AND (j.api_assistant=0 OR EXISTS\n       (SELECT 1 FROM project_chat_rooms r WHERE r.company_code=j.company_code AND r.api_assistant=1))\n       THEN 1 ELSE 0 END) eligible_in_window,\n      SUM(CASE WHEN j.status='running' THEN 1 ELSE 0 END) startup_requeues\n      FROM project_chat_ai_jobs j GROUP BY j.company_code,j.status,j.api_assistant,j.attempts",
+    "delivery_alert_events": "SELECT o.company_code,o.status,COUNT(*) n,\n      SUM(CASE WHEN NOT EXISTS(SELECT 1 FROM hugh_owner_alerts a WHERE a.event_key='delivery:'||o.id)\n      THEN 1 ELSE 0 END) missing_events FROM project_chat_outbox o\n      JOIN project_chat_ai_jobs j ON j.reply_message_id=o.message_id JOIN project_chat_messages m ON m.id=o.message_id\n      WHERE j.api_assistant=1 AND (o.status IN ('error','uncertain') OR (o.status<>'sent' AND m.created_at<:sixty_seconds_before))\n      GROUP BY o.company_code,o.status",
+    "potential_delay_effects": "SELECT j.company_code,COUNT(*) n,\n      SUM(CASE WHEN NOT EXISTS(SELECT 1 FROM hugh_owner_alerts a WHERE a.event_key='delay:'||j.id) THEN 1 ELSE 0 END) missing_alerts,\n      SUM(CASE WHEN NOT EXISTS(SELECT 1 FROM project_chat_acknowledged_jobs a WHERE a.job_id=j.id) THEN 1 ELSE 0 END) missing_acks\n      FROM project_chat_ai_jobs j JOIN project_chat_rooms r ON r.company_code=j.company_code\n      JOIN project_chat_messages m ON m.id=j.message_id WHERE j.api_assistant=1 AND r.api_assistant=1\n      AND j.status<>'done' AND j.reply_message_id IS NULL AND (m.created_at<:sixty_seconds_before OR j.attempts>=3)\n      GROUP BY j.company_code",
+    "active_mirror_tasks": "SELECT t.company_code,t.status,COUNT(*) n,\n      SUM(CASE WHEN l.chat_task_id IS NULL THEN 1 ELSE 0 END) missing_local_link\n      FROM project_chat_tasks t JOIN project_chat_rooms r ON r.company_code=t.company_code\n      LEFT JOIN task_dispatch_links l ON l.chat_task_id=t.id WHERE r.api_assistant=1\n      AND t.external_ref LIKE 'api-assistant:%' AND t.status NOT IN ('done','cancelled') GROUP BY t.company_code,t.status",
+    "stale_task_alerts": "SELECT t.company_code,COUNT(*) n,\n      SUM(CASE WHEN NOT EXISTS(SELECT 1 FROM hugh_owner_alerts a WHERE a.event_key='stale:'||t.id) THEN 1 ELSE 0 END) missing_events\n      FROM project_chat_tasks t JOIN project_chat_rooms r ON r.company_code=t.company_code WHERE r.api_assistant=1\n      AND t.external_ref LIKE 'api-assistant:%' AND t.status NOT IN ('done','cancelled') AND t.updated_at<:fifteen_minutes_before\n      AND NOT EXISTS(SELECT 1 FROM project_chat_task_notes n WHERE n.task_id=t.id AND n.created_at>=:fifteen_minutes_before)\n      GROUP BY t.company_code",
+    "owner_alerts": "SELECT company_code,status,COUNT(*) n,\n      SUM(CASE WHEN status='pending' AND next_attempt_at<=:margin_end THEN 1 ELSE 0 END) eligible_in_window\n      FROM hugh_owner_alerts GROUP BY company_code,status",
+    "client_bot_outbox": "SELECT company_code,kind,status,COUNT(*) n,\n      SUM(CASE WHEN next_attempt_at<=:margin_end THEN 1 ELSE 0 END) due_in_window,\n      SUM(CASE WHEN claimed_at IS NOT NULL THEN 1 ELSE 0 END) claimed\n      FROM client_bot_outbox GROUP BY company_code,kind,status",
+    "site_order_outbox": "SELECT site,company_code,transport,status,COUNT(*) n,\n      SUM(CASE WHEN next_attempt_at<=:margin_end THEN 1 ELSE 0 END) due_in_window,\n      SUM(CASE WHEN claimed_at IS NOT NULL THEN 1 ELSE 0 END) claimed\n      FROM site_order_outbox GROUP BY site,company_code,transport,status",
+    "budget_reservation_states": "SELECT state,COUNT(*) n FROM hugh_fallback_reservations GROUP BY state",
+    "provider_state": "SELECT name,enabled,revision,config_revision,check_state,checked_revision,\n      CASE WHEN length(encrypted_key)>0 THEN 1 ELSE 0 END key_present FROM hugh_provider_settings ORDER BY name",
+    "recent_review_runs": "SELECT company_code,run_date,phase,target_date,status,COUNT(*) n,MAX(attempts) max_attempts\n      FROM content_review_reminder_runs WHERE run_date>=:yesterday_msk GROUP BY company_code,run_date,phase,target_date,status",
+    "recent_review_item_counts": "SELECT company_code,publish_date,COUNT(*) n FROM content_review_reminder_items\n      WHERE publish_date>=:yesterday_msk GROUP BY company_code,publish_date"
+  },
+  "content_queue_required": {
+    "project_chat_ai_jobs": [
+      "api_assistant",
+      "attempts",
+      "company_code",
+      "message_id",
+      "next_attempt_at",
+      "reply_message_id",
+      "status",
+      "id"
+    ],
+    "project_chat_acknowledged_jobs": [
+      "job_id"
+    ],
+    "project_chat_rooms": [
+      "api_assistant",
+      "company_code"
+    ],
+    "project_chat_outbox": [
+      "company_code",
+      "id",
+      "message_id",
+      "status"
+    ],
+    "project_chat_messages": [
+      "created_at",
+      "id"
+    ],
+    "hugh_owner_alerts": [
+      "company_code",
+      "event_key",
+      "next_attempt_at",
+      "status"
+    ],
+    "project_chat_tasks": [
+      "company_code",
+      "external_ref",
+      "id",
+      "status",
+      "updated_at"
+    ],
+    "project_chat_task_notes": [
+      "created_at",
+      "task_id"
+    ],
+    "task_dispatch_links": [
+      "chat_task_id"
+    ],
+    "client_bot_outbox": [
+      "claimed_at",
+      "company_code",
+      "kind",
+      "next_attempt_at",
+      "status"
+    ],
+    "site_order_outbox": [
+      "claimed_at",
+      "company_code",
+      "next_attempt_at",
+      "site",
+      "status",
+      "transport"
+    ],
+    "hugh_fallback_reservations": [
+      "state"
+    ],
+    "hugh_provider_settings": [
+      "check_state",
+      "checked_revision",
+      "config_revision",
+      "enabled",
+      "encrypted_key",
+      "name",
+      "revision"
+    ],
+    "content_review_reminder_runs": [
+      "attempts",
+      "company_code",
+      "phase",
+      "run_date",
+      "status",
+      "target_date"
+    ],
+    "content_review_reminder_items": [
+      "company_code",
+      "publish_date"
+    ]
+  },
+  "final_content_required": {
+    "hugh_fallback_reservations": [
+      "created_at",
+      "provider",
+      "state"
+    ],
+    "ai_economy_meta": [
+      "id"
+    ],
+    "documents": [
+      "body",
+      "key",
+      "version"
+    ]
+  },
+  "final_content_queries": {
+    "budget_recovery": "SELECT provider,state,COUNT(*) n,\n SUM(CASE WHEN state='held' AND created_at<=:stale_reservation_cutoff THEN 1 ELSE 0 END) startup_recover_writes,\n SUM(CASE WHEN state='held' AND created_at<=:stale_reservation_cutoff_window THEN 1 ELSE 0 END) may_recover_in_window\n FROM hugh_fallback_reservations GROUP BY provider,state",
+    "economy_meta": "SELECT COUNT(*) existing_singleton FROM ai_economy_meta WHERE id=1",
+    "push_envelopes": "WITH latest AS (SELECT key,MAX(version) version FROM documents\n WHERE key LIKE 'palitra-push-private/v1/job/%' GROUP BY key)\n SELECT COUNT(*) latest_job_envelopes,\n COALESCE(SUM(CASE WHEN json_valid(d.body) THEN CASE WHEN json_extract(d.body,'$.active')=1 THEN 1 ELSE 0 END ELSE 0 END),0) active_envelopes,\n COALESCE(SUM(CASE WHEN NOT json_valid(d.body) THEN 1\n WHEN json_extract(d.body,'$.schema') IS NOT 1 OR json_extract(d.body,'$.cipher') IS NOT 'aes-256-gcm'\n OR COALESCE(json_type(d.body,'$.active'),'') NOT IN ('true','false') THEN 1 ELSE 0 END),0) invalid_metadata\n FROM documents d JOIN latest v ON d.key=v.key AND d.version=v.version"
+  },
+  "final_crm_required": {
+    "task_dispatch": [
+      "attempts",
+      "company_code",
+      "lease_until",
+      "next_at",
+      "state",
+      "task_id"
+    ],
+    "tasks": [
+      "company_code",
+      "id",
+      "is_deleted",
+      "status"
+    ],
+    "task_dispatch_alerts": [
+      "company_code",
+      "handed_off"
+    ]
+  },
+  "final_crm_queries": {
+    "dispatch_states": "SELECT company_code,state,attempts,COUNT(*) n,\n SUM(CASE WHEN state='queued' AND next_at<=:as_of_ms THEN 1 ELSE 0 END) claimable_now,\n SUM(CASE WHEN state='queued' AND next_at<=:margin_end_ms THEN 1 ELSE 0 END) claimable_in_window,\n SUM(CASE WHEN state='running' AND lease_until<=:margin_end_ms AND attempts<2 THEN 1 ELSE 0 END) may_requeue,\n SUM(CASE WHEN state='running' AND lease_until<=:margin_end_ms AND attempts>=2 THEN 1 ELSE 0 END) may_block_and_alert\n FROM task_dispatch GROUP BY company_code,state,attempts",
+    "reconcile_cancellations": "SELECT d.company_code,d.state,COUNT(*) n FROM task_dispatch d LEFT JOIN tasks t ON t.id=d.task_id\n WHERE d.state NOT IN ('done','cancelled') AND (t.id IS NULL OR t.is_deleted=1 OR t.company_code<>d.company_code\n OR t.status IN ('done','cancelled')) GROUP BY d.company_code,d.state",
+    "dispatch_alerts": "SELECT company_code,handed_off,COUNT(*) n FROM task_dispatch_alerts GROUP BY company_code,handed_off"
+  }
+}

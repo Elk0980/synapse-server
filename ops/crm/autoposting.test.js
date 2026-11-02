@@ -1016,7 +1016,7 @@ test('подписи и согласование охватывают семь �
   const f=fixture(t);
   const captions=Object.fromEntries(SEVEN.map(id=>[id,'Подпись '+id]));
   const post=f.api.create('alvi',{title:'Подписи',text:'Общий текст',mediaUrls:['https://cdn.example.test/d1.mp4'],
-    platformIds:SEVEN,captions,dayKey:'D1',scheduledAt:null,timezone:'Asia/Irkutsk',profileRevision:f.information.get('alvi').revision},7);
+    platformIds:SEVEN,captions,platformOptions:{tiktok:{privacy:'SELF_ONLY'}},dayKey:'D1',scheduledAt:null,timezone:'Asia/Irkutsk',profileRevision:f.information.get('alvi').revision},7);
   assert.deepEqual(Object.keys(post.captions).sort(),SEVEN.slice().sort());
   assert.deepEqual(post.platformApprovals.map(item=>item.platformId).sort(),SEVEN.slice().sort());
   assert.ok(post.platformApprovals.every(item=>item.state==='pending'));

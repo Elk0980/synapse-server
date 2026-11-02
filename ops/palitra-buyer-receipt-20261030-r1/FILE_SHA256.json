@@ -1,0 +1,44 @@
+{
+  "files": {
+    ".gitattributes": {
+      "sha256": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
+      "bytes": 8
+    },
+    "accepted-profile-session.py": {
+      "sha256": "48e6e0ab462a1f193e9cbfc1970d277c38eec5f9f0d39f7458712bad963ea2ab",
+      "bytes": 24105
+    },
+    "fixtures/base/order.js": {
+      "sha256": "c590111397343a5b641ed84d44408aac8af82010973a88b106fa0d7ec4860ba6",
+      "bytes": 95342
+    },
+    "fixtures/base/register.html": {
+      "sha256": "8d5f8e165307dfc9272cbe8ec3851f0f85a2e6db370558b52face10dfb74dbf0",
+      "bytes": 12482
+    },
+    "fixtures/base/storefront.js": {
+      "sha256": "008f75eecee63f7bd6657408d844f08f9f37472e1d1d3c81256f52505423a808",
+      "bytes": 64755
+    },
+    "payload/assets/order.js": {
+      "sha256": "37c87769cbffad6a2751df40b6911b48bf1a5646606fcb61937027755b103e6e",
+      "bytes": 95200
+    },
+    "README.md": {
+      "sha256": "bf93a620403bd013460909ac152ea8606c6c72eb803a0be44b398491dbadf100",
+      "bytes": 4165
+    },
+    "REVIEW.json": {
+      "sha256": "15392905d87bf4d61171b113dee4322e93703a4ee401c2b1d965c7d5fcd16ff1",
+      "bytes": 1244
+    },
+    "test_delivery.py": {
+      "sha256": "d175db638d588db06c9d2b82070fb0340789750efa5825eaa9558bfb6f6a6ee9",
+      "bytes": 14928
+    },
+    "verify_buyer_receipt.py": {
+      "sha256": "9b868c93af37cb899147db87fd69bb5b201e59ea48d1da88f611babd97504cc5",
+      "bytes": 24303
+    }
+  }
+}

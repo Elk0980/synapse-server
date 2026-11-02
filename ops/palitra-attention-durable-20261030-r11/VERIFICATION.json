@@ -1,0 +1,40 @@
+{
+  "status": "PRIVATE_R11_LOCAL_VERIFIED_NOT_NATIVE_PERMIT",
+  "atUtc": "2026-10-30T00:46:26.354300+00:00",
+  "tests": {
+    "command": "python -m unittest test_runtime_host test_managed_history test_host_static test_r9_lineage test_host_metadata -q",
+    "run": 34,
+    "passed": 34,
+    "skipped": 0,
+    "seconds": 44.882,
+    "exitCode": 0,
+    "printedPhaseNamesAndReadbacks": "SYNTHETIC_FIXTURES_ONLY"
+  },
+  "pythonSyntax": "ALL_PACKAGE_ROOT_PY_AST_PASS",
+  "nodeSyntax": {
+    "passed": 6,
+    "files": [
+      "payload/palitra-manager-attention.cjs",
+      "payload/palitra-orders-public/native-host.js",
+      "payload/palitra-orders-public/shell.js",
+      "payload/server.js",
+      "static-payload/cab-native-host.js",
+      "static-payload/cab-shell.js"
+    ]
+  },
+  "source": {
+    "status": "PRIVATE_SOURCE_CHECK_PASS_NOT_NATIVE_PERMIT",
+    "r10All34PinsExact": true,
+    "r10ByteExactFiles": 27,
+    "helperReverseFullBytesExact": true,
+    "helperAstExactOutsideTwoAssignments": true,
+    "fullPrefixBytes": 6429,
+    "r2ModuleExact": true,
+    "allSixPayloadExact": true,
+    "r1DraftAll41PinsExact": true,
+    "nativeActions": 0
+  },
+  "rootFinalReview": "PENDING",
+  "independentFinalReview": "PENDING",
+  "nativeActions": 0
+}

@@ -1,0 +1,168 @@
+--- SEALED_R13_readonly_reference
++++ current/install.py
+@@ -11,7 +11,7 @@
+  resource=None
+ from datetime import datetime,timezone,timedelta
+ sys.dont_write_bytecode=True
+-NAME='palitra-attention-durable-20261030-r13'
++NAME='palitra-auth-chat-production-20261031-r1'
+ ROOT=Path('/opt/synapse');AREA=ROOT/'releases'/NAME;SELF=Path(__file__).resolve();LOCK=ROOT/'.palitra-app-release.lock'
+ CRM='synapse-crm-1';CONTENT='synapse-content-1';CONTAINERS=(CRM,CONTENT,'synapse-hugh-runtime-1','synapse-chat-1','caddy')
+ BASE_IMAGE='sha256:e22ca4d3892a01454d749fbef49c10c2a1a93f0a863d977914f32ae21455a343'
+@@ -20,16 +20,16 @@
+ MAX_FILE=64*1024*1024;MAX_ARCHIVE=2*1024*1024*1024;PREPARE_TTL=900;APPLY_TTL=120;GRACE=60
+ sha=lambda raw:hashlib.sha256(raw).hexdigest()
+ enc=lambda v:(json.dumps(v,ensure_ascii=False,sort_keys=True,separators=(',',':'))+'\n').encode()
+-FILE_PINS={'/app/palitra-manager-attention.cjs': ('e950f9e4723a47abd8d5d2b039fe05d25a5ba13b362a46eac34c09004eb23b59', '6b8a661a60efd47a9d0bc1e5a3b2f343324e35c117170a20d1b90c0e2c79d649'), '/app/server.js': ('23c9664d8209ecf4aa4ce822a1a05a8cf0c2ee3fcb11afa93e396b1d5282d4ac', '183a0edd7559a7fa029c3b17e8931592133961f73454fb59afbcc8c6761b7713'), '/app/palitra-orders-public/native-host.js': ('697863cbd5ac96af57a58bcae84d4b0ba858b18d39a955c527463a6c4c756728', '0d5141c14c769cbd4dd4216e8983c742813877e5a225809f2113c1fbf559be7f'), '/app/palitra-orders-public/shell.js': ('b39d4cdb4d07673988249863d0ce4e767981565ed6f77350073aeff61ec273c9', 'b7efae7638e05351296d93243f771b2c7ca134672bda1abe348ac7912d3fab60')}
++FILE_PINS={'/app/server.js': ('23c9664d8209ecf4aa4ce822a1a05a8cf0c2ee3fcb11afa93e396b1d5282d4ac', '755e27e780f48ff1c44fac4e153b4a003f0addaa408e54c66a629b6784a37115'), '/app/draft-account-service.cjs': ('23a0d76ed2d5d2bef47ad49e5822829a088b6148ceeffae09731b6f499d34f26', 'cfb53698fc501d66e0adf70733edac468242851c52c59b1fe20f9c99203ee54c'), '/app/site-workspace-feature.js': ('f36fe867ef6c5bf0f180ae3caec177f296503f365606c0d3e2b9cf262964ac5e', 'f444e576912653971374772b666e497b98bc88fec5dfb8bc5a243b0365aadcf3'), '/app/customer-chat.js': ('1a3927539386fe4e075bf9aa9ec7cfc995fe0b36787ebb67ad7898359058456e', '8f6060894d066080ca8f9d878e531fd9688984ed55b7d031755da314711448f2'), '/app/customer-chat-http.cjs': ('acedb869d8daeb589a44e9caea839693f38b86cf7aa47c8d9c198800adbb64fd', 'd97707678c795241cd3ff7b62d1e38c4c17c0ae3fd7f88a756be202f1f5b6dff'), '/app/palitra-manager-attention.cjs': ('e950f9e4723a47abd8d5d2b039fe05d25a5ba13b362a46eac34c09004eb23b59', '031610cb51a5748913a3d26f1377d06eb9945d876affb199d06271f0209a1c80'), '/app/site-orders.js': ('cbded4d75f8539b8228a3957d24a90e73824f16e7148338ad3b92e8a1d56a49d', '3a2f275b55e91a6db94c3a97e9c98f424c5ae3d6aebf2b960b1a8cf07dc25859'), '/app/palitra-push-host.cjs': ('729301f2dffe68f427a392c0baba946997b2fc7d9111724d45a8cd7e18bd9732', '4e6e303a0d7d4130762f624b84c8903d96b1b7b161d9112f5521822625510d0a'), '/app/account-auth-outcome.cjs': (None, 'b9318b19b78630111590977dd4b533a0b20e6fedd647c93819e81e8cd66b1c45'), '/app/palitra-review-public/palitra-chat.js': ('5752c762048c18aa01ccc52f503ef63230468d79ff7749895b6e4e0dd37d124b', '07e331c1130c9fc05cbdf932777cb56fe3fb04e293ba8f098409fdf3a22ed2d8'), '/app/palitra-orders-public/native-host.js': ('697863cbd5ac96af57a58bcae84d4b0ba858b18d39a955c527463a6c4c756728', 'd8f8f04f5e833d4c0b3399037bb7ec8adb23e873a7baaa5dbc32d941ab3c2af0'), '/app/palitra-orders-public/shell.js': ('b39d4cdb4d07673988249863d0ce4e767981565ed6f77350073aeff61ec273c9', '173325f501d2ab881b18a4a842d68000d386932218023cc9a468f3a3c4180553')}
+ ACTIVE_DATABASE_PATHS=('/data/content.sqlite','/data/salon-reports.sqlite','/data/projects/palitra-love/sites/site-44bbe13f1bad5e005b2a/private/draft-accounts.sqlite')
+ OPAQUE_ARCHIVE_PATHS=('/data/nebo-project-20261020/content-before-site-r3.sqlite','/data/nebo-project-backup-20261020/content.sqlite','/data/nebo-project-backup-20261020/salon-reports.sqlite','/data/palitra-app-before-20261013.sqlite','/data/palitra-map-caption-20261019/content.sqlite','/data/palitra-production-before-20261013.sqlite','/data/palitra-unified-orders-20261021-r8-completion-c1-save/content.sqlite')
+ TARGETS=tuple(FILE_PINS)
+-STATIC_PINS={'/opt/synapse/sites/synapse/cabinet/palitra-orders/native-host.js': ('f27b5ae1f9c0899a7b99ed756730874238c94c15ebda3d2913bc88d62d2b4d80', 'c5bedcfb395719d4b9ffa16c0820801dcb04e7c87d308bcc1f70b6f1ac07e704'), '/opt/synapse/sites/synapse/cabinet/palitra-orders/shell.js': ('b40b738cab687e863fffc7e18486b068d5e2b21ed43bf5abfd230ae9d3244588', '1e770b202f0cfd129476d43e98ace02894665f0208ff059ecb5f8afd099fc796')}
++STATIC_PINS={'/opt/synapse/sites/synapse/cabinet/palitra-orders/native-host.js': ('f27b5ae1f9c0899a7b99ed756730874238c94c15ebda3d2913bc88d62d2b4d80', '597a495e414d6f696dc86cf09b35bdcaa29556ac9f25d24f8e204f9edd1c485b'), '/opt/synapse/sites/synapse/cabinet/palitra-orders/shell.js': ('b40b738cab687e863fffc7e18486b068d5e2b21ed43bf5abfd230ae9d3244588', 'ce05204609d4a63940df7c47771d6cf0deba1b116283d61bfc20fe3c32ee51d6')}
+ STATIC_TARGETS=tuple(STATIC_PINS)
+ STATIC_NAMES={'/opt/synapse/sites/synapse/cabinet/palitra-orders/native-host.js': 'cab-native-host.js', '/opt/synapse/sites/synapse/cabinet/palitra-orders/shell.js': 'cab-shell.js'}
+-PRESERVED_R7={'/app/draft-account-service.cjs': '23a0d76ed2d5d2bef47ad49e5822829a088b6148ceeffae09731b6f499d34f26', '/app/customer-chat.js': '1a3927539386fe4e075bf9aa9ec7cfc995fe0b36787ebb67ad7898359058456e', '/app/customer-chat-native-adapter.cjs': 'a72732560bd9adb109080c09cf0ce3bd7774eb72614ea29073d301d44245037e', '/app/palitra-review-public/palitra-chat.js': '5752c762048c18aa01ccc52f503ef63230468d79ff7749895b6e4e0dd37d124b', '/app/site-workspace-feature.js': 'f36fe867ef6c5bf0f180ae3caec177f296503f365606c0d3e2b9cf262964ac5e'}
+-MANAGED_REV='245ca86f12e50e696ee39c5d6c3ab0f1924c05e933abbcc3ba249a20e6d8d9f8' # Root native readonly22:45Z
+-REVIEWED_DATA_PINS={'reviewed-sql.json': '410b03163c43b703212e212d47821d9f2c427b21ee5ac17013d08a54c0193ba5', 'reviewed-source-pins.json': 'd4de0c682d08f12764311754444501f7bcaf3ae40bc4fbc7c11903673bff964e', 'inventory-review.json': '3f7ff5bf0b12e647542d5cf2b24c756eb801a9a03a4a1f5cc5cd4a1f1ba94222', 'economy_projection.py': 'f320cb7299bdb75037272ae55e388e76697e6ce4d3a910eb1b5412eae3d3a283', 'vault_probe.cjs': '8714b8bc8cda5a6724227e31fdab4b37825b161026d9326d3c61296589263c13', 'image_archive_audit.py': 'f9af133089f08ab2876945a1dd5b4c5a225097e5fc6fd91f6ebbefaa60e1cd8a', 'diagnostic_preservation.py': '658ddfc204ba95c75889a5f0d9f73d9f5142a30261cac462e461cbd431747a70', 'managed_history.py': '9d00a086c983a0a7435cf6a6a2f726b570bc787bf52f56fc294ae03684aa640b', 'server_phase.py': '11d436096c1f56c7c4beccbbe18dd85c4dd875cb377ce1a4d412d0df4e492c10', 'host_static.py': '73b3c34e3d646e2b077b45b7fce84dfc3a480f39cf5dfbb5eeed8be4b94018f0', 'scope-review.json': '0862dd59ab1455469138d98316eb7c836fbdabcf279edefc3ea2bc989a7aa1e9', 'source-proof/server-before.js': '23c9664d8209ecf4aa4ce822a1a05a8cf0c2ee3fcb11afa93e396b1d5282d4ac', 'managed-anchor.json': '974ed3ee63c85fa0c2505d6d8188a4da2c546fde19c356b0c55d12c350eba503'}
++PRESERVED_R7={'/app/palitra-host-adapter.cjs': '77993ec3a1a2d23b28c8908fb781b544a4267da3cf75762d4a51dece96e80546', '/app/site-workspace-http.js': '3f08a192470dec74909315c37f58dc81262d5f2db28834152bb83f6fd5176aef', '/app/client-dialogs.js': '997bb8e40d88129857723d8c9c907a05d6201765d8d2144eb36e8fe034e145d4', '/app/customer-chat-native-adapter.cjs': 'a72732560bd9adb109080c09cf0ce3bd7774eb72614ea29073d301d44245037e', '/app/palitra-order-read-state.cjs': '28ef0e0ff556cc6acd692730da061f5c3606a25732b0bcf172c41c3be2d591cc', '/app/customer-chat-media.cjs': '09d67b5dff2f540bedfad965ae5012c57971a3195d5834b5aad7d531e9d31f4a', '/app/customer-chat-upload.cjs': '6b4875553f0646f612e4781af88e765aa970d7cf0a35534c0600364371060d33'}
++MANAGED_REV='4d8e767175cb2d3c5f06a8e61ec40ab0122113e77691776f8ef04212e75055db'
++REVIEWED_DATA_PINS={'reviewed-sql.json': '410b03163c43b703212e212d47821d9f2c427b21ee5ac17013d08a54c0193ba5', 'reviewed-source-pins.json': 'd4de0c682d08f12764311754444501f7bcaf3ae40bc4fbc7c11903673bff964e', 'inventory-review.json': '3f7ff5bf0b12e647542d5cf2b24c756eb801a9a03a4a1f5cc5cd4a1f1ba94222', 'economy_projection.py': 'f320cb7299bdb75037272ae55e388e76697e6ce4d3a910eb1b5412eae3d3a283', 'vault_probe.cjs': '8714b8bc8cda5a6724227e31fdab4b37825b161026d9326d3c61296589263c13', 'image_archive_audit.py': 'f9af133089f08ab2876945a1dd5b4c5a225097e5fc6fd91f6ebbefaa60e1cd8a', 'diagnostic_preservation.py': '658ddfc204ba95c75889a5f0d9f73d9f5142a30261cac462e461cbd431747a70', 'managed_history.py': '8d2a22fff27de27c97aa844606f49da3674f0ae51e2152284e63befc44e4a76e', 'server_phase.py': '9037ef405ede0d9f8789b5aa3ee248dd86d4a289c97ae0c69dae855812b38671', 'host_static.py': '73b3c34e3d646e2b077b45b7fce84dfc3a480f39cf5dfbb5eeed8be4b94018f0', 'scope-review.json': '5beb66d8818234f31527bc36292a0dc0e2c7a5353dcdce1335c464e25021aaef', 'source-proof/server-before.js': '23c9664d8209ecf4aa4ce822a1a05a8cf0c2ee3fcb11afa93e396b1d5282d4ac', 'source-proof/storefront-after.js': 'eb5e683f1a69f5a8fcc417df219b74368da36eb668c5ee9e4a90d43956c09670', 'source-proof/storefront-before.js': '008f75eecee63f7bd6657408d844f08f9f37472e1d1d3c81256f52505423a808', 'managed-anchor.json': '9b62c4e61c3b8161acf414be0163b24a1f87d5bb6801911dd04909d043020841', 'migration_guard.py': 'fa1d00666fd84480973eac04f62c72e7aa1cb0293c125028a677c0354c26355c', 'migration-schema.json': '4ac15db85fd0bb8937099486575b6e9ca13f091677cae182d88454ab9d27bf29', 'fallback_image.py': '5f5deb7a2233d2094aecceb81a26f39b1fe67cfff0204715f31d7a425e896cc4', 'source-proof/fallback-server.js': '755e27e780f48ff1c44fac4e153b4a003f0addaa408e54c66a629b6784a37115', 'source-proof/fallback-palitra-manager-attention.cjs': '031610cb51a5748913a3d26f1377d06eb9945d876affb199d06271f0209a1c80', 'source-proof/fallback-site-orders.js': 'cbded4d75f8539b8228a3957d24a90e73824f16e7148338ad3b92e8a1d56a49d', 'managed_verify.py': '69a546304030c84dbb9196ff7430e1eed51ce4aa65b39b350f3084210467edb2', 'prepare_fallback_package.py': '08f6ac0bb82102efc9ee4e4ce69e7e275d3a9d6c4d316b1bb92521b0b76d410b'}
+ INVENTORY_REVIEW_SHA='3f7ff5bf0b12e647542d5cf2b24c756eb801a9a03a4a1f5cc5cd4a1f1ba94222'
+ def need(ok, reason):
+     if not ok: raise ValueError(reason)
+@@ -233,8 +233,8 @@
+         return bool(IMAGE.fullmatch(a[9]) and a[10:]==('-e',TREE_JS))
+     if len(a)==5 and a[:3]==('docker','image','ls') and a[3]=='--quiet':return bool(re.fullmatch(re.escape(NAME)+'-[a-f0-9]{16}(?:-base)?:local',a[4]))
+     if len(a)==5 and a[:3]==('docker','image','tag'):return bool(IMAGE.fullmatch(a[3]) and re.fullmatch(re.escape(NAME)+'-[a-f0-9]{16}-base:local',a[4]))
+-    if len(a)==9 and a[:4]==('docker','build','--network=none','--pull=false') and a[4]=='--tag' and re.fullmatch(re.escape(NAME)+'-[a-f0-9]{16}:local',a[5]) and a[6]=='--iidfile' and a[7]==str(AREA/'build/image.id') and a[8]==str(AREA/'build'):return True
+-    if len(a)==6 and a[:4]==('docker','image','save','--output') and a[4]==str(AREA/'build/child-image.tar') and IMAGE.fullmatch(a[5]):return True
++    if len(a)==9 and a[:4]==('docker','build','--network=none','--pull=false') and a[4]=='--tag' and re.fullmatch(re.escape(NAME)+'-[a-f0-9]{16}:local',a[5]) and a[6]=='--iidfile' and any(a[7]==str(AREA/folder/'image.id')and a[8]==str(AREA/folder)for folder in('build','fallback-build')):return True
++    if len(a)==6 and a[:4]==('docker','image','save','--output') and a[4]in(str(AREA/'build/child-image.tar'),str(AREA/'fallback-build/child-image.tar')) and IMAGE.fullmatch(a[5]):return True
+     for prefix in _COMPOSE_PREFIXES:
+         if a[:len(prefix)]==prefix:
+             suffix=a[len(prefix):]
+@@ -286,7 +286,7 @@
+     need(type(value['helperSha256'])is str and HEX.fullmatch(value['helperSha256']),'HELPER_PIN_REQUIRED')
+     images=value['expectedImages'];need(type(images)is dict and set(images)==set(CONTAINERS) and all(type(v)is str and IMAGE.fullmatch(v)for v in images.values()),'FRESH_FIVE_IMAGES_REQUIRED')
+     need(images[CONTENT]==BASE_IMAGE,'EXACT_ACTUAL_PARENT_REQUIRED')
+-    files=value['files'];need(type(files)is list and tuple(row.get('target')for row in files)==TARGETS,'EXACT_FOUR_RUNTIME_TARGETS_REQUIRED')
++    files=value['files'];need(type(files)is list and tuple(row.get('target')for row in files)==TARGETS,'EXACT_TWELVE_RUNTIME_TARGETS_REQUIRED')
+     for row in files:
+         need(set(row)=={'target','beforeSha256','afterSha256','bytes'},'CLOSED_FILE_ROW')
+         need((row['beforeSha256'],row['afterSha256'])==FILE_PINS[row['target']],'REVIEWED_SOURCE_PINS_REQUIRED')
+@@ -318,7 +318,7 @@
+     for row in manifest['staticFiles']:
+         raw=safe_read(AREA/'static-payload'/STATIC_NAMES[row['target']]);need(len(raw)==row['bytes']and sha(raw)==row['afterSha256'],'HOST_STATIC_PAYLOAD_PIN')
+     module('server_phase.py').validate(safe_read(AREA/'source-proof/server-before.js'),safe_read(AREA/'payload/server.js'))
+-    anchor=load(AREA/'managed-anchor.json');need(anchor['revision']==MANAGED_REV and anchor['version']==334 and anchor['manifestFiles']==141 and anchor['historyRecords']==334 and anchor['canonicalHistoryDigestHardcoded']is False,'MANAGED334_REVIEW_ANCHOR_REQUIRED')
++    anchor=load(AREA/'managed-anchor.json');need(anchor['revision']==MANAGED_REV and anchor['version']==337 and anchor['manifestFiles']==141 and anchor['historyRecords']==337 and anchor['canonicalHistoryDigestHardcoded']is False,'MANAGED337_REVIEW_ANCHOR_REQUIRED')
+     for name in REVIEWED_DATA_PINS:
+         need(sha(safe_read(AREA/name))==staged[name+'Sha256']==REVIEWED_DATA_PINS[name],'REVIEWED_GUARD_DATA_CHANGED')
+     return staged,manifest
+@@ -490,8 +490,14 @@
+     need(row.get('preservation')=='sqlite','DATABASE_PRESERVATION_KIND_UNKNOWN')
+     with db_open(row['hostPath'])as conn:
+         if base is not None and diagnostic_main(row):
+-            anchor=diagnostic_clock();full=db_facts(conn);observed=diagnostic_policy().capture(conn,env_map(rows[CONTENT]),full,anchor=anchor)
+-        else:return assert_database(conn,before)
++            anchor=diagnostic_clock();full=db_facts(conn)
++            if after and not static_layer:full=module('migration_guard.py').normalize(full,row['containerPath'],load(AREA/'migration-schema.json'),before)
++            observed=diagnostic_policy().capture(conn,env_map(rows[CONTENT]),full,anchor=anchor)
++        else:
++            if after and not static_layer and row['containerPath'] in ('/data/content.sqlite','/data/projects/palitra-love/sites/site-44bbe13f1bad5e005b2a/private/draft-accounts.sqlite'):
++                actual=module('migration_guard.py').normalize(db_facts(conn),row['containerPath'],load(AREA/'migration-schema.json'),before)
++                need(enc(actual)==enc(before),'DATABASE_SCHEMA_OR_ROWS_CHANGED_INSPECT_ONLY');return actual
++            return assert_database(conn,before)
+     return diagnostic_observe(base,rows,after,full,observed,static_layer)
+ 
+ 
+@@ -651,12 +657,12 @@
+ 
+ def source_review_guard(rows,tree,after=False):
+     source_phase_tree(tree,after)
+-    inventory=load(AREA/'inventory-review.json');need({r['containerPath']for r in inventory['activeDatabases']}==set(ACTIVE_DATABASE_PATHS)and {r['containerPath']for r in inventory['archives']}==set(OPAQUE_ARCHIVE_PATHS),'EXACT_ACTIVE_AND_OPAQUE_REVIEW_REQUIRED');fixed=account_database_path(inventory['databasePathEnv'],'palitra-love','site-44bbe13f1bad5e005b2a');need(fixed in{r['containerPath']for r in inventory['activeDatabases']},'INVENTORY_ACCOUNT_FORMULA_CHANGED');need(inventory['sourcePins']['server.js']==FILE_PINS['/app/server.js'][0]and tree.get('server.js',{}).get('sha256')==FILE_PINS['/app/server.js'][1 if after else 0]and inventory['sourcePins']['site-workspace-feature.js']==tree.get('site-workspace-feature.js',{}).get('sha256'),'INVENTORY_SOURCE_TREE_CHANGED')
++    inventory=load(AREA/'inventory-review.json');need({r['containerPath']for r in inventory['activeDatabases']}==set(ACTIVE_DATABASE_PATHS)and {r['containerPath']for r in inventory['archives']}==set(OPAQUE_ARCHIVE_PATHS),'EXACT_ACTIVE_AND_OPAQUE_REVIEW_REQUIRED');fixed=account_database_path(inventory['databasePathEnv'],'palitra-love','site-44bbe13f1bad5e005b2a');need(fixed in{r['containerPath']for r in inventory['activeDatabases']},'INVENTORY_ACCOUNT_FORMULA_CHANGED');need(inventory['sourcePins']['server.js']==FILE_PINS['/app/server.js'][0]and tree.get('server.js',{}).get('sha256')==FILE_PINS['/app/server.js'][1 if after else 0]and FILE_PINS['/app/site-workspace-feature.js'][1 if after else 0]==tree.get('site-workspace-feature.js',{}).get('sha256'),'INVENTORY_SOURCE_TREE_CHANGED')
+     need(covering_mount(rows[CONTENT],'/data/content.sqlite')['Source']==inventory['dataMount'],'INVENTORY_DATA_MOUNT_CHANGED')
+     for key,want in load(AREA/'reviewed-source-pins.json').items():
+         role,name=key.split('/',1)
+         if role=='content':
+-            expected=FILE_PINS['/app/server.js'][1 if after else 0]if name=='server.js'else want
++            expected=FILE_PINS['/app/'+name][1 if after else 0]if '/app/'+name in FILE_PINS else want
+             need(tree.get(name,{}).get('sha256')==expected,'STARTUP_SOURCE_PIN_CHANGED:'+name)
+         elif role=='chat':
+             need(name=='client-bot-bridge.js','PASSIVE_CHAT_EXACT_SOURCE_REQUIRED');passive_chat_source(rows['synapse-chat-1'],want)
+@@ -686,13 +692,13 @@
+     ready=load(AREA/'history-ready.json');raw=safe_read(AREA/'history-witness.json');need(sha(raw)==ready['witnessSha256']and ready['helperSha256']==sha(safe_read(SELF)),'HISTORY_WITNESS_PIN_CHANGED');return json.loads(raw)
+ 
+ def managed_guard(paths,full=False):
+-    witness=history_witness();history_capture(paths,full,witness['managed']);return {'witnessSha256':sha(safe_read(AREA/'history-witness.json')),'version':334,'revision':MANAGED_REV}
++    witness=history_witness();history_capture(paths,full,witness['managed']);return {'witnessSha256':sha(safe_read(AREA/'history-witness.json')),'version':337,'revision':MANAGED_REV}
+ 
+ def prehistory():
+     staged,manifest=package();need(not(AREA/'history-witness.json').exists()and not(AREA/'history-ready.json').exists()and not(AREA/'base.json').exists(),'HISTORY_WITNESS_EXISTS_INSPECT_ONLY');lease=own_lease();rows={n:inspect_container(n)for n in CONTAINERS}
+     need(all(rows[n]['Image']==manifest['expectedImages'][n]for n in CONTAINERS),'HISTORY_FRESH_IMAGES_REQUIRED');tree=runtime_tree(rows[CONTENT]);need(tree==image_tree(BASE_IMAGE),'HISTORY_PARENT_TREE_REQUIRED');source_review_guard(rows,tree)
+     for row in manifest['files']:
+-        item=tree.get(row['target'].removeprefix('/app/'));need(item and item['type']=='file'and item['nlink']==1 and item['sha256']==row['beforeSha256'],'PREHISTORY_FOUR_FRESH_BEFORE_PINS')
++        item=tree.get(row['target'].removeprefix('/app/'));need((item is None if row['beforeSha256'] is None else item and item['type']=='file'and item['nlink']==1 and item['sha256']==row['beforeSha256']),'PREHISTORY_TWELVE_FRESH_BEFORE_PINS')
+     r7_plan_guard(effective_plan(rows,manifest['expectedImages']));paths=database_paths(rows,manifest);hosts=module('host_static.py').current(sys.modules[__name__]);need(all(hosts[t]['sha256']==STATIC_PINS[t][0]for t in STATIC_TARGETS),'HISTORY_HOST_BEFORE_REQUIRED')
+     managed=history_capture(paths,True);history_capture(paths,False,managed)
+     need(all(foreign(inspect_container(n))==foreign(rows[n])for n in CONTAINERS),'HISTORY_IMAGES_CHANGED_DURING_SCAN');need(module('host_static.py').current(sys.modules[__name__])==hosts,'HISTORY_HOST_CHANGED_DURING_SCAN')
+@@ -719,7 +725,7 @@
+     need(not any(m['Destination']=='/app'or m['Destination'].startswith('/app/')for m in rows[CONTENT]['Mounts']),'APP_MOUNT_REFUSED')
+     tree=runtime_tree(rows[CONTENT]);need(tree==image_tree(BASE_IMAGE),'COMPLETE_PARENT_RUNTIME_MISMATCH')
+     for row in manifest['files']:
+-        item=tree.get(row['target'].removeprefix('/app/'));need(item and item['type']=='file'and item['nlink']==1 and item['sha256']==row['beforeSha256'],'FOUR_BEFORE_SOURCE_PINS')
++        item=tree.get(row['target'].removeprefix('/app/'));need((item is None if row['beforeSha256'] is None else item and item['type']=='file'and item['nlink']==1 and item['sha256']==row['beforeSha256']),'TWELVE_BEFORE_SOURCE_PINS')
+     witness=history_witness();need(witness['manifestSha256']==staged['manifestSha256']and witness['images']==manifest['expectedImages']and witness['sourceTreeSha256']==sha(enc(tree))and all(sha(enc(foreign(rows[n])))==witness['identities'][n]for n in CONTAINERS),'PREHISTORY_FRESH_BINDING_CHANGED')
+     source_review_guard(rows,tree);paths=database_paths(rows,manifest);need(module('host_static.py').current(sys.modules[__name__])==witness['hostBefore'],'PREHISTORY_HOST_BINDING_CHANGED');managed_guard(paths);queues=startup_guard(paths,rows,time.time()+APPLY_TTL+GRACE)
+     diagnostic={};facts=snapshot_databases(paths,diagnostic,env_map(rows[CONTENT]))
+@@ -793,7 +799,13 @@
+ def expected_tree(base,manifest):
+     tree=copy.deepcopy(base['tree'])
+     for row in manifest['files']:
+-        key=row['target'].removeprefix('/app/');tree[key]={**tree[key],'sha256':row['afterSha256'],'bytes':row['bytes']}
++        key=row['target'].removeprefix('/app/')
++        prior=tree.get(key)
++        if row['beforeSha256'] is None:
++            need(key=='account-auth-outcome.cjs'and prior is None,'EXACT_NEW_AUTH_MODULE_ONLY')
++            prior={'type':'file','uid':0,'gid':0,'mode':0o644,'nlink':1}
++        need(prior is not None,'REVIEWED_EXISTING_TARGET_REQUIRED')
++        tree[key]={**prior,'sha256':row['afterSha256'],'bytes':row['bytes']}
+     return tree
+ 
+ def tar_members(raw,base,manifest):
+@@ -807,7 +819,7 @@
+                 need((name=='app'or name.startswith('app/'))and any(target.startswith(name+'/')for target in expected),'FOREIGN_LAYER_DIRECTORY')
+                 prior=base['tree'].get(key);need(prior and prior['type']=='directory'and(info.mode,info.uid,info.gid)==(prior['mode'],prior['uid'],prior['gid']),'DIRECTORY_METADATA_CHANGED');continue
+             need(info.isfile()and name in expected,'FOREIGN_OR_NONREGULAR_LAYER_FILE')
+-            row=expected[name];prior=base['tree'][name.removeprefix('app/')];need(info.size==row['bytes']and(info.mode,info.uid,info.gid)==(prior['mode'],prior['uid'],prior['gid']),'LAYER_FILE_METADATA_CHANGED')
++            row=expected[name];prior=base['tree'].get(name.removeprefix('app/'),{'mode':0o644,'uid':0,'gid':0});need(info.size==row['bytes']and(info.mode,info.uid,info.gid)==(prior['mode'],prior['uid'],prior['gid']),'LAYER_FILE_METADATA_CHANGED')
+             member=archive.extractfile(info);need(member is not None and sha(member.read(512001))==row['afterSha256'],'LAYER_FILE_CONTENT_CHANGED')
+     need(expected.keys()<=seen,'MISSING_LAYER_FILE')
+ 
+@@ -823,7 +835,7 @@
+     folder=AREA/'build';folder.mkdir(mode=0o700);stream=io.BytesIO()
+     with tarfile.open(fileobj=stream,mode='w',format=tarfile.USTAR_FORMAT)as archive:
+         for row in manifest['files']:
+-            key=row['target'].removeprefix('/app/');raw=safe_read(AREA/'payload'/key);before=base['tree'][key];info=tarfile.TarInfo(key);info.size=len(raw);info.mode=before['mode'];info.uid=before['uid'];info.gid=before['gid'];info.mtime=0;archive.addfile(info,io.BytesIO(raw))
++            key=row['target'].removeprefix('/app/');raw=safe_read(AREA/'payload'/key);before=base['tree'].get(key,{'mode':0o644,'uid':0,'gid':0});info=tarfile.TarInfo(key);info.size=len(raw);info.mode=before['mode'];info.uid=before['uid'];info.gid=before['gid'];info.mtime=0;archive.addfile(info,io.BytesIO(raw))
+     payload=stream.getvalue();write_new(folder/'payload.tar',payload)
+     token=os.urandom(8).hex();alias=NAME+'-'+token+'-base:local';tag=NAME+'-'+token+':local'
+     need(not run(['docker','image','ls','--quiet',alias]).strip()and not run(['docker','image','ls','--quiet',tag]).strip(),'UNIQUE_LOCAL_IMAGE_TAGS')
+@@ -877,6 +889,7 @@
+ 
+ def apply():
+     need(not(AREA/'apply-intent.json').exists()and not(AREA/'apply-permit.json').exists(),'ONE_APPLY_ATTEMPT_INSPECT_ONLY');_,manifest,base,_=base_guard();child=load(AREA/'child.json');plan=load(AREA/'forward-plan.json');backup_guard()
++    module('fallback_image.py').validate(sys.modules[__name__])
+     built_image_guard(base,manifest,child)
+     need(plan==validated_plan(base,child),'BUILT_FORWARD_PLAN_CHANGED')
+     need(image_tree(child['image'])==expected_tree(base,manifest),'BUILT_CHILD_CHANGED')
+@@ -945,6 +958,7 @@
+         elif mode=='prehistory':prehistory()
+         elif mode=='prepare':prepare()
+         elif mode=='build':build()
++        elif mode=='build-fallback':module('fallback_image.py').build(sys.modules[__name__])
+         elif mode=='apply':apply()
+         elif mode=='inspect':inspect_result()
+         elif mode=='static-prepare':static_prepare()

@@ -1,0 +1,244 @@
+--- R4/install.py
++++ R5/install.py
+@@ -11,7 +11,7 @@
+  resource=None
+ from datetime import datetime,timezone,timedelta
+ sys.dont_write_bytecode=True
+-NAME='palitra-customer-content-durable-20261030-r4'
++NAME='palitra-customer-content-durable-20261030-r5'
+ ROOT=Path('/opt/synapse');AREA=ROOT/'releases'/NAME;SELF=Path(__file__).resolve();LOCK=ROOT/'.palitra-app-release.lock'
+ CRM='synapse-crm-1';CONTENT='synapse-content-1';CONTAINERS=(CRM,CONTENT,'synapse-hugh-runtime-1','synapse-chat-1','caddy')
+ BASE_IMAGE='sha256:9a1ab665339b10a49a49d8c605075ae701e4b28a9db1a3bb3ec49483fd8e6f44'
+@@ -24,7 +24,7 @@
+ ACTIVE_DATABASE_PATHS=('/data/content.sqlite','/data/salon-reports.sqlite','/data/projects/palitra-love/sites/site-44bbe13f1bad5e005b2a/private/draft-accounts.sqlite')
+ OPAQUE_ARCHIVE_PATHS=('/data/nebo-project-20261020/content-before-site-r3.sqlite','/data/nebo-project-backup-20261020/content.sqlite','/data/nebo-project-backup-20261020/salon-reports.sqlite','/data/palitra-app-before-20261013.sqlite','/data/palitra-map-caption-20261019/content.sqlite','/data/palitra-production-before-20261013.sqlite','/data/palitra-unified-orders-20261021-r8-completion-c1-save/content.sqlite')
+ TARGETS=tuple(FILE_PINS)
+-REVIEWED_DATA_PINS={'reviewed-sql.json': '410b03163c43b703212e212d47821d9f2c427b21ee5ac17013d08a54c0193ba5', 'reviewed-source-pins.json': '4d40b687ecd38b081e1ffd1f7a412c53c739681c472725ebdb0a2e49e3cee4a9', 'inventory-review.json': '68998c94bb34426777b8199d86d02daebe33f25120711f542f825a9778983ec1', 'economy_projection.py': 'f320cb7299bdb75037272ae55e388e76697e6ce4d3a910eb1b5412eae3d3a283', 'vault_probe.cjs': '8714b8bc8cda5a6724227e31fdab4b37825b161026d9326d3c61296589263c13', 'image_archive_audit.py': '51ee9e4085bc0e3f22d4a21354a5303f40c978faec7cfbc229346d73e3b448da'}
++REVIEWED_DATA_PINS={'reviewed-sql.json': '410b03163c43b703212e212d47821d9f2c427b21ee5ac17013d08a54c0193ba5', 'reviewed-source-pins.json': 'd4de0c682d08f12764311754444501f7bcaf3ae40bc4fbc7c11903673bff964e', 'inventory-review.json': '68998c94bb34426777b8199d86d02daebe33f25120711f542f825a9778983ec1', 'economy_projection.py': 'f320cb7299bdb75037272ae55e388e76697e6ce4d3a910eb1b5412eae3d3a283', 'vault_probe.cjs': '8714b8bc8cda5a6724227e31fdab4b37825b161026d9326d3c61296589263c13', 'image_archive_audit.py': '51ee9e4085bc0e3f22d4a21354a5303f40c978faec7cfbc229346d73e3b448da', 'diagnostic_preservation.py': '658ddfc204ba95c75889a5f0d9f73d9f5142a30261cac462e461cbd431747a70'}
+ INVENTORY_REVIEW_SHA='68998c94bb34426777b8199d86d02daebe33f25120711f542f825a9778983ec1'
+ def need(ok, reason):
+     if not ok: raise ValueError(reason)
+@@ -89,6 +89,29 @@
+ def runtime_tree(container):
+     probe_profile(container['Config'])
+     return json.loads(run(['docker','exec',container['Id'],'node','-e',TREE_JS]))
++
++_PASSIVE_CHAT_READS=set()
++PASSIVE_TAR_LIMIT=512000
++
++def passive_chat_source(container,wanted):
++    # Passive archive read: never invokes Node or startup hooks in chat.
++    need(HEX.fullmatch(wanted)and re.fullmatch('[a-f0-9]{64}',container['Id']),'PASSIVE_CHAT_SCOPE')
++    need(foreign(inspect_container('synapse-chat-1'))==foreign(container),'PASSIVE_CHAT_IDENTITY_CHANGED')
++    argv=['docker','cp',container['Id']+':/app/client-bot-bridge.js','-'];capability=tuple(argv)
++    need(capability not in _PASSIVE_CHAT_READS,'PASSIVE_CHAT_READ_ALREADY_ACTIVE');_PASSIVE_CHAT_READS.add(capability)
++    try:raw=run(argv,timeout=20)
++    finally:_PASSIVE_CHAT_READS.remove(capability)
++    need(len(raw)<=PASSIVE_TAR_LIMIT,'PASSIVE_CHAT_ARCHIVE_BOUND')
++    with tarfile.open(fileobj=io.BytesIO(raw),mode='r:')as archive:
++        members=archive.getmembers();need(len(members)==1,'PASSIVE_CHAT_SINGLE_FILE_REQUIRED');entry=members[0]
++        need(entry.name=='client-bot-bridge.js'and entry.type in(tarfile.REGTYPE,tarfile.AREGTYPE)and entry.sparse is None and not entry.linkname and not entry.pax_headers and entry.offset==0 and 0<entry.size<=256000,'PASSIVE_CHAT_REGULAR_FILE_REQUIRED')
++        end=entry.offset_data+((entry.size+511)//512)*512
++        need(len(raw)>=end+1024 and len(raw)%512==0 and not any(raw[end:]),'PASSIVE_CHAT_TRAILING_DATA')
++        stream=archive.extractfile(entry);need(stream is not None,'PASSIVE_CHAT_MEMBER_REQUIRED');value=stream.read(256001)
++        need(len(value)==entry.size and sha(value)==wanted,'PASSIVE_CHAT_SOURCE_PIN_CHANGED')
++    need(foreign(inspect_container('synapse-chat-1'))==foreign(container),'PASSIVE_CHAT_IDENTITY_CHANGED')
++    return wanted
++
+ 
+ def image_tree(image):
+     probe_profile(image_info(image)['Config'])
+@@ -192,6 +215,7 @@
+     if type(argv)is not list or not all(type(v)is str and '\x00' not in v for v in argv):return False
+     a=tuple(argv)
+     if a==('lslocks','--json','--output','PID,PATH'):return True
++    if len(a)==4 and a[:2]==('docker','cp'):return bool(re.fullmatch(r'[a-f0-9]{64}:/app/client-bot-bridge\.js',a[2])and a[3]=='-'and a in _PASSIVE_CHAT_READS)
+     if len(a)==3 and a[:2]==('docker','inspect') and a[2]in CONTAINERS:return True
+     if len(a)==4 and a[:3]==('docker','image','inspect') and IMAGE.fullmatch(a[3]):return True
+     if len(a)==6 and a[:4]==('docker','image','inspect','--format') and a[4]=='{{.Id}}' and re.fullmatch('[A-Za-z0-9][A-Za-z0-9_./:@-]{0,255}',a[5]):return True
+@@ -218,7 +242,7 @@
+ def _process(argv,timeout,limit=MAX_FILE):
+     allowed_system=argv in(['systemctl','is-active','synapse-sync.timer'],['systemctl','is-enabled','synapse-sync.timer'],['systemctl','show','synapse-sync.service','--property=ExecStart','--value'])
+     need(allowed_system or allowed_command(argv),'CLOSED_COMMAND_CAPABILITY_REFUSED')
+-    need(type(timeout)is int and 0<timeout<=180 and limit in(MAX_FILE,MAX_ARCHIVE),'PROCESS_DEFAULT_BOUNDS_REQUIRED')
++    need(type(timeout)is int and 0<timeout<=180 and limit in(MAX_FILE,MAX_ARCHIVE,PASSIVE_TAR_LIMIT)and(limit!=PASSIVE_TAR_LIMIT or argv[:2]==['docker','cp']),'PROCESS_DEFAULT_BOUNDS_REQUIRED')
+     import tempfile
+     need(resource is not None and os.name=='posix','NATIVE_BOUNDED_PROCESS_REQUIRED')
+     def limits():resource.setrlimit(resource.RLIMIT_FSIZE,(limit,limit))
+@@ -232,7 +256,8 @@
+ 
+ def run(argv,timeout=90):
+     need(allowed_command(argv),'CLOSED_COMMAND_CAPABILITY_REFUSED')
+-    code,out,err=_process(argv,timeout,MAX_ARCHIVE if argv[:4]==['docker','image','save','--output']else MAX_FILE)
++    limit=PASSIVE_TAR_LIMIT if argv[:2]==['docker','cp']else MAX_ARCHIVE if argv[:4]==['docker','image','save','--output']else MAX_FILE
++    code,out,err=_process(argv,timeout,limit)
+     need(code==0,'COMMAND_FAILED_INSPECT_ONLY');return out
+ 
+ def policy_state():
+@@ -379,12 +404,72 @@
+         files[suffix]={'sha256':sha(raw),'bytes':len(raw),'identity':[st.st_dev,st.st_ino],'metadata':{'mode':stat.S_IMODE(st.st_mode),'uid':st.st_uid,'gid':st.st_gid,'nlink':st.st_nlink,'mtimeNs':str(st.st_mtime_ns),'ctimeNs':str(st.st_ctime_ns)}}
+     return {'preservation':'opaque','files':files}
+ 
+-def assert_preserved_path(row,before):
++def diagnostic_policy():
++    import importlib.util
++    path=AREA/'diagnostic_preservation.py';need(sha(safe_read(path))==REVIEWED_DATA_PINS[path.name],'DIAGNOSTIC_POLICY_PIN_CHANGED')
++    spec=importlib.util.spec_from_file_location('reviewed_diagnostic_policy',path);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
++
++def diagnostic_clock():return {'utcMs':int(time.time()*1000),'monoNs':time.monotonic_ns()}
++
++def diagnostic_main(row):return row['role']=='content'and row['containerPath']=='/data/content.sqlite'
++
++def diagnostic_generation(base,rows,after,previous=None):
++    old=base['rows'][CONTENT];row=rows[CONTENT]
++    def identity(r):
++        need(type(r['RestartCount'])is int and r['RestartCount']==0 and r['State']['Running']and not r['State']['Restarting']and not r['State']['OOMKilled'],'DIAGNOSTIC_RESTART_REFUSED')
++        need(type(r['State']['StartedAt'])is str and bool(r['State']['StartedAt']),'DIAGNOSTIC_START_IDENTITY_REQUIRED')
++        return {'id':r['Id'],'startedAt':r['State']['StartedAt'],'restartCount':r['RestartCount']}
++    initial=identity(old);actual=identity(row)
++    if after:need((AREA/'apply-intent.json').exists()and actual['id']!=initial['id'],'DIAGNOSTIC_ONE_OWN_RECREATE_REQUIRED')
++    else:need(actual==initial,'DIAGNOSTIC_PARENT_GENERATION_CHANGED')
++    result={'phase':'after'if after else'before','identity':actual,'count':2 if after else 1}
++    if previous:
++        need(previous['phase']=='before'or after,'DIAGNOSTIC_GENERATION_REGRESSION')
++        if previous['phase']==result['phase']:need(previous==result,'DIAGNOSTIC_EXTRA_GENERATION_REFUSED')
++    return result
++
++def diagnostic_init(base,prepared_sha):
++    folder=AREA/'diagnostic-observations';folder.mkdir(mode=0o700)
++    genesis={'baseSha256':prepared_sha,'previous':None,'observation':base['diagnosticBase'],'generation':diagnostic_generation(base,base['rows'],False)}
++    raw=enc(genesis);write_new(folder/'000000.json',raw);head={'count':1,'lastSha256':sha(raw),'baseSha256':prepared_sha};write_new(folder/'head.json',enc(head));sync_dir(folder);return sha(raw)
++
++def diagnostic_history(base):
++    folder=AREA/'diagnostic-observations';prepared=load(AREA/'prepared.json');head=load(folder/'head.json');base_sha=sha(enc(base))
++    need(head['baseSha256']==prepared['baseSha256']==base_sha and type(head['count'])is int and 1<=head['count']<=2048,'DIAGNOSTIC_HEAD_INVALID')
++    need(set(x.name for x in folder.iterdir())=={'head.json'}|{str(i).zfill(6)+'.json'for i in range(head['count'])},'DIAGNOSTIC_JOURNAL_INCOMPLETE')
++    previous=None;last=None;policy=diagnostic_policy()
++    for i in range(head['count']):
++        raw=safe_read(folder/(str(i).zfill(6)+'.json'));item=json.loads(raw)
++        need(item['baseSha256']==base_sha and item['previous']==previous,'DIAGNOSTIC_CHAIN_CHANGED')
++        if i==0:need(sha(raw)==prepared['diagnosticGenesisSha256']and item['observation']==base['diagnosticBase']and item['generation']==diagnostic_generation(base,base['rows'],False),'DIAGNOSTIC_GENESIS_CHANGED')
++        else:
++            obs=item['observation'];prior=last['observation'];gen=item['generation'];oldgen=last['generation']
++            need(gen['count']in(1,2)and gen['phase']==('before'if gen['count']==1 else'after')and(oldgen==gen or oldgen['phase']=='before'and gen['phase']=='after'),'DIAGNOSTIC_GENERATION_CHAIN_CHANGED')
++            need(obs['bridge']['payload']==base['diagnosticBase']['bridge']['payload']and obs['bridge']['key']==base['diagnosticBase']['bridge']['key'],'DIAGNOSTIC_HISTORY_PAYLOAD_CHANGED')
++            need(policy.stamp(obs['bridge']['checkedAt'])>=policy.stamp(prior['bridge']['checkedAt'])and obs['sequence']['value']>=prior['sequence']['value']and obs['utcMs']>=prior['utcMs']and obs['monoNs']>=prior['monoNs'],'DIAGNOSTIC_HISTORY_HIGHWATER_CHANGED')
++        previous=sha(raw);last=item
++    need(previous==head['lastSha256'],'DIAGNOSTIC_HEAD_CHAIN_MISMATCH');return head,last
++
++def diagnostic_observe(base,rows,after,full,observed):
++    policy=diagnostic_policy();head,last=diagnostic_history(base);generation=diagnostic_generation(base,rows,after,last['generation'])
++    policy.compare(base['databaseFacts']['content:/data/content.sqlite'],base['diagnosticBase'],full,observed,last['observation'],generation['count'])
++    need(head['count']<2048,'DIAGNOSTIC_OBSERVATION_BOUND');folder=AREA/'diagnostic-observations'
++    item={'baseSha256':head['baseSha256'],'previous':head['lastSha256'],'observation':observed,'generation':generation};raw=enc(item)
++    write_new(folder/(str(head['count']).zfill(6)+'.json'),raw);sync_dir(folder)
++    temp=folder/'head.next';write_new(temp,enc({**head,'count':head['count']+1,'lastSha256':sha(raw)}));os.replace(temp,folder/'head.json');sync_dir(folder)
++    return full
++
++def assert_preserved_path(row,before,base=None,rows=None,after=False):
+     need(db_identity(row['hostPath'])==row['identity'],'DATABASE_IDENTITY_CHANGED')
+     if row.get('preservation')=='opaque':
+         need(enc(opaque_archive_facts(row))==enc(before),'OPAQUE_ARCHIVE_OR_SIDECAR_CHANGED');return before
+     need(row.get('preservation')=='sqlite','DATABASE_PRESERVATION_KIND_UNKNOWN')
+-    with db_open(row['hostPath'])as conn:return assert_database(conn,before)
++    with db_open(row['hostPath'])as conn:
++        if base is not None and diagnostic_main(row):
++            anchor=diagnostic_clock();full=db_facts(conn);observed=diagnostic_policy().capture(conn,env_map(rows[CONTENT]),full,anchor=anchor)
++        else:return assert_database(conn,before)
++    return diagnostic_observe(base,rows,after,full,observed)
++
+ 
+ def db_facts(connection):
+     need(connection.execute('PRAGMA quick_check').fetchone()==('ok',),'DATABASE_QUICK_CHECK')
+@@ -546,8 +631,11 @@
+     for key,want in load(AREA/'reviewed-source-pins.json').items():
+         role,name=key.split('/',1)
+         if role=='content':need(tree.get(name,{}).get('sha256')==want,'STARTUP_SOURCE_PIN_CHANGED:'+name)
++        elif role=='chat':
++            need(name=='client-bot-bridge.js','PASSIVE_CHAT_EXACT_SOURCE_REQUIRED');passive_chat_source(rows['synapse-chat-1'],want)
+         else:
+-            # Exact read-only full CRM code tree, never require task-dispatch.
++            need(role=='crm','UNKNOWN_REVIEWED_SOURCE_ROLE')
++            # Existing CRM Node profile guard remains mandatory and unchanged.
+             other=runtime_tree(rows[CRM]);need(other.get(name,{}).get('sha256')==want,'CRM_DISPATCH_SOURCE_PIN_CHANGED')
+ 
+ def managed_guard(paths):
+@@ -566,14 +654,16 @@
+             p=folder/relative;raw=safe_read(p);need(sha(raw)==entry['sha256']and len(raw)==entry['bytes'],'MANAGED_FULL_MANIFEST_CHANGED');files[relative]=sha(raw)
+         return{'revision':row[6],'version':rev[0],'files':files,'manifestSha256':sha(rev[1].encode())}
+ 
+-def snapshot_databases(paths):
++def snapshot_databases(paths,diagnostic_out=None,env=None):
+     result={}
+     for name,row in paths.items():
+         need(db_identity(row['hostPath'])==row['identity'],'DATABASE_IDENTITY_CHANGED')
+         if row.get('preservation')=='opaque':result[name]=opaque_archive_facts(row)
+         else:
+             need(row.get('preservation')=='sqlite','DATABASE_PRESERVATION_KIND_UNKNOWN')
+-            with db_open(row['hostPath'])as conn:result[name]=db_facts(conn)
++            with db_open(row['hostPath'])as conn:
++                anchor=diagnostic_clock();result[name]=db_facts(conn)
++                if diagnostic_out is not None and diagnostic_main(row):diagnostic_out.update(diagnostic_policy().capture(conn,env,result[name],anchor=anchor))
+     return result
+ 
+ def prepare():
+@@ -585,10 +675,10 @@
+     for row in manifest['files']:
+         item=tree.get(row['target'].removeprefix('/app/'));need(item and item['type']=='file'and item['nlink']==1 and item['sha256']==row['beforeSha256'],'SIX_BEFORE_SOURCE_PINS')
+     source_review_guard(rows,tree);paths=database_paths(rows,manifest);queues=startup_guard(paths,rows,time.time()+APPLY_TTL+GRACE)
+-    facts=snapshot_databases(paths)
+-    base={'lease':lease,'created':time.time(),'expires':time.time()+PREPARE_TTL,'rows':rows,'tree':tree,'databases':paths,'databaseFacts':facts,'plan':effective_plan(rows,manifest['expectedImages']),
++    diagnostic={};facts=snapshot_databases(paths,diagnostic,env_map(rows[CONTENT]))
++    base={'lease':lease,'created':time.time(),'expires':time.time()+PREPARE_TTL,'rows':rows,'tree':tree,'databases':paths,'databaseFacts':facts,'diagnosticBase':diagnostic,'plan':effective_plan(rows,manifest['expectedImages']),
+           'policy':policy_state(),'static':full_static(),'price':price_pin(),'managed':managed_guard(paths),'queueProof':queues}
+-    write_new(AREA/'base.json',enc(base));write_new(AREA/'prepared.json',enc({**staged,'baseSha256':sha(enc(base)),'lease':lease}))
++    base_sha=sha(enc(base));write_new(AREA/'base.json',enc(base));genesis=diagnostic_init(base,base_sha);write_new(AREA/'prepared.json',enc({**staged,'baseSha256':base_sha,'lease':lease,'diagnosticGenesisSha256':genesis}))
+     print('PREPARED_PRIVATE_BASE_NOT_INSTALLED')
+ 
+ def base_guard(after=False,readback=False):
+@@ -608,7 +698,7 @@
+     paths=database_paths(rows,manifest);need(paths==base['databases'],'DATABASE_PATH_IDENTITY_CHANGED')
+     need(managed_guard(paths)==base['managed'],'MANAGED_REVISION_CHANGED')
+     for name,row in paths.items():
+-        assert_preserved_path(row,base['databaseFacts'][name])
++        assert_preserved_path(row,base['databaseFacts'][name],base,rows,after)
+     margin=time.time()+APPLY_TTL+GRACE
+     if(AREA/'apply-permit.json').exists():
+         permit=load(AREA/'apply-permit.json');margin=max(time.time(),permit['expires'])+GRACE
+@@ -617,14 +707,14 @@
+     # R2 tolerant RO-binding must not replace the independent wholeDB fence.
+     for name,row in paths.items():
+         need(db_identity(row['hostPath'])==row['identity'],'DATABASE_IDENTITY_CHANGED_AFTER_STARTUP_GUARD')
+-        assert_preserved_path(row,base['databaseFacts'][name])
++        assert_preserved_path(row,base['databaseFacts'][name],base,rows,after)
+     return staged,manifest,base,rows
+ 
+ def backup_databases(base):
+     need(not(AREA/'backups').exists(),'BACKUPS_EXIST_INSPECT_ONLY');(AREA/'backups').mkdir(mode=0o700)
+     result={}
+     for index,(name,row)in enumerate(base['databases'].items()):
+-        base_guard()
++        checked=base_guard()
+         if row.get('preservation')=='opaque':
+             started=time.monotonic();assert_preserved_path(row,base['databaseFacts'][name])
+             for suffix,fact in base['databaseFacts'][name]['files'].items():
+@@ -635,13 +725,17 @@
+                 write_new(target,raw);result[name+suffix]={'path':str(target),'sha256':sha(safe_read(target))}
+                 need(result[name+suffix]['sha256']==fact['sha256'],'OPAQUE_ARCHIVE_BACKUP_MISMATCH')
+             assert_preserved_path(row,base['databaseFacts'][name]);need(time.monotonic()-started<120,'BACKUP_LEASE_TIME_GUARD');base_guard();continue
+-        need(row.get('preservation')=='sqlite','DATABASE_PRESERVATION_KIND_UNKNOWN')
++        need(row.get('preservation')=='sqlite','DATABASE_PRESERVATION_KIND_UNKNOWN');current_rows=checked[3]
+         target=AREA/'backups'/('db-'+str(index)+'.sqlite');write_new(target,b'')
+         source=sqlite3.connect(Path(row['hostPath']).as_uri()+'?mode=ro',uri=True,timeout=5);destination=sqlite3.connect(target);started=time.monotonic()
+         def progress(status,remaining,total):
+             need(time.monotonic()-started<120 and own_lease()==base['lease']and time.time()<base['expires'],'BACKUP_LEASE_TIME_GUARD')
+         try:
+-            source.execute('PRAGMA query_only=ON');need(source.execute('PRAGMA query_only').fetchone()==(1,),'BACKUP_READONLY_SOURCE');source.backup(destination,pages=128,progress=progress);assert_database(destination,base['databaseFacts'][name]);need(source.total_changes==0,'BACKUP_SOURCE_CHANGED')
++            source.execute('PRAGMA query_only=ON');need(source.execute('PRAGMA query_only').fetchone()==(1,),'BACKUP_READONLY_SOURCE');source.execute('BEGIN');anchor=diagnostic_clock();captured=db_facts(source)
++            if diagnostic_main(row):
++                observed=diagnostic_policy().capture(source,env_map(current_rows[CONTENT]),captured,anchor=anchor);diagnostic_observe(base,current_rows,False,captured,observed)
++            else:need(enc(captured)==enc(base['databaseFacts'][name]),'DATABASE_SCHEMA_OR_ROWS_CHANGED_INSPECT_ONLY')
++            source.backup(destination,pages=128,progress=progress);assert_database(destination,captured);need(source.total_changes==0,'BACKUP_SOURCE_CHANGED')
+         finally:source.close();destination.close()
+         os.chmod(target,0o600);result[name]={'path':str(target),'sha256':sha(safe_read(target))}
+         base_guard()
