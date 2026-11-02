@@ -14,7 +14,7 @@ function documentPath(value) {
   return value;
 }
 
-async function readBounded(root, relative) {
+async function readBounded(root, relative, {map = false} = {}) {
   documentPath(relative);
   try {
     const absoluteRoot = path.resolve(root);
@@ -50,13 +50,16 @@ async function readBounded(root, relative) {
     }
   } catch (error) {
     if (error.status) throw error;
+    if (map && ['ENOENT', 'ENOTDIR'].includes(error.code)) {
+      throw Object.assign(new Error('Карта не установлена'), {status:503, code:'MAP_NOT_INSTALLED'});
+    }
     fail(503, 'Документ карты отсутствует или недоступен; канон должен предоставить постановщик');
   }
 }
 
 async function readMap(root) {
   let map;
-  try { map = JSON.parse(await readBounded(root, 'MAP.json')); }
+  try { map = JSON.parse(await readBounded(root, 'MAP.json', {map:true})); }
   catch (error) {
     if (error.status) throw error;
     fail(503, 'Карта документов повреждена');

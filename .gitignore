@@ -6,3 +6,7 @@ __pycache__/
 .claude/projects/
 .qwen/settings.json
 .agents/sessions/
+
+# Канон, карта и данные Пульта передаются отдельно при выпуске: репозиторий публичный.
+docs/handoff/
+docs/seed/

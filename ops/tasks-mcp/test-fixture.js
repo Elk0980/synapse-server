@@ -24,7 +24,7 @@ async function unusedPort() {
   return port;
 }
 
-async function startFixture() {
+async function startFixture({installDocuments = true} = {}) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'tasks-mcp-integration-'));
   const key = randomBytes(32).toString('hex');
   const token = randomBytes(32).toString('hex');
@@ -104,15 +104,18 @@ async function startFixture() {
       return { status: response.status, body: await response.json(), headers: response.headers };
     }
     const docs = path.join(dir, 'handoff');
-    await fs.mkdir(docs);
-    const map = { always: ['CONSTITUTION.md', 'DIRECTION.md'], rules: [
-      { match: ['сайт', 'вёрстка', 'палитр'], read: ['SITE.md'], why: 'Правила сайта' },
-      { match: ['видео'], read: ['VIDEO.md'], why: 'Правила видео' }
-    ] };
-    await fs.writeFile(path.join(docs, 'MAP.json'), JSON.stringify(map));
-    for (const name of ['CONSTITUTION.md', 'DIRECTION.md', 'SITE.md', 'VIDEO.md']) {
-      await fs.writeFile(path.join(docs, name), `SAMPLE fixture ${name}`);
+    async function installSampleDocuments() {
+      await fs.mkdir(docs, {recursive: true});
+      const map = { always: ['CONSTITUTION.md', 'DIRECTION.md'], rules: [
+        { match: ['сайт', 'вёрстка', 'палитр'], read: ['SITE.md'], why: 'Правила сайта' },
+        { match: ['видео'], read: ['VIDEO.md'], why: 'Правила видео' }
+      ] };
+      await fs.writeFile(path.join(docs, 'MAP.json'), JSON.stringify(map));
+      for (const name of ['CONSTITUTION.md', 'DIRECTION.md', 'SITE.md', 'VIDEO.md']) {
+        await fs.writeFile(path.join(docs, name), `SAMPLE fixture ${name}`);
+      }
     }
+    if (installDocuments) await installSampleDocuments();
     const { createTasksMcpServer, loadConfig } = require('./server');
     const config = loadConfig({ PORT: '8080', CRM_URL: crmUrl, CRM_API_KEY: key,
       TASKS_MCP_TOKEN: token, TASKS_MCP_OWNER_ID: '1',
@@ -160,7 +163,7 @@ async function startFixture() {
     });
     servers.push(front);
     const frontUrl = await listen(front);
-    return { dir, docs, crm, cabinet, account, editor, rpc, call, mcpUrl, frontUrl, stop };
+    return { dir, docs, installSampleDocuments, crm, cabinet, account, editor, rpc, call, mcpUrl, frontUrl, stop };
   } catch (error) { await stop(); throw error; }
 }
 

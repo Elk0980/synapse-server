@@ -15,12 +15,14 @@ function config(extra = {}) {
 }
 
 async function fixture(t, options = {}) {
-  const docsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'tasks-mcp-test-'));
-  t.after(() => fs.rm(docsDir, {recursive:true, force:true}));
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'tasks-mcp-test-'));
+  const docsDir = options.absentDocs ? path.join(temporary, 'missing', 'handoff') : temporary;
+  t.after(() => fs.rm(temporary, {recursive:true, force:true}));
   const c = config({docsDir});
   const calls = [];
   const server = createTasksMcpServer(c, {callCrm:options.callCrm || (async (name, args) => {
     calls.push({name, args});
+    if (name === 'task_create') return {task:{id:42,title:args.title,company_code:args.project},created:true};
     return {tasks:[], ...(name === 'session_start' ? {session_id:'fixture-session', agent:{name:args.agent}} : {})};
   })});
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -112,6 +114,7 @@ test('отсутствующий канон не создаёт сессию; к
   const f = await fixture(t);
   let result = await f.rpc('tools/call', {name:'session_start',arguments:{agent:'Codex',kind:'codex',request:'правка сайта Палитры'}});
   assert.equal(result.body.result.structuredContent.error.status, 503);
+  assert.equal(result.body.result.structuredContent.error.message, 'Карта не установлена');
   assert.equal(f.calls.length, 0);
   const map = {always:['CONSTITUTION.md','DIRECTION.md'],rules:[
     {match:['сайт','вёрстка','palitra'],read:['SITE.md'],why:'Правила сайта'},
@@ -129,6 +132,50 @@ test('отсутствующий канон не создаёт сессию; к
   assert.equal(f.calls.length, 1);
 });
 
+test('HTTP работает без каталога документов; поздняя тестовая карта подключается без перезапуска', async t => {
+  const f = await fixture(t, {absentDocs:true});
+  assert.deepEqual(await (await fetch(`${f.origin}/health`)).json(), {status:'ok'});
+  const listed = await f.rpc('tools/list');
+  assert.equal(listed.response.status,200);
+  assert.equal(listed.body.result.tools.length,10);
+  let result = await f.rpc('tools/call', {name:'tasks_list',arguments:{project:'synapse-business'}});
+  assert.equal(result.body.result.isError,undefined);
+  assert.deepEqual(result.body.result.structuredContent.tasks,[]);
+  result = await f.rpc('tools/call', {name:'task_create',arguments:{client_ref:'without-docs',title:'SAMPLE без карты',project:'synapse-business'}});
+  assert.equal(result.body.result.isError,undefined);
+  assert.equal(result.body.result.structuredContent.created,true);
+  assert.equal(result.body.result.structuredContent.task.id,42);
+  assert.deepEqual(f.calls.map(call => call.name), ['tasks_list','task_create']);
+  const start = {name:'session_start',arguments:{agent:'Codex fixture',kind:'codex',request:'правка сайта'}};
+  result = await f.rpc('tools/call',start);
+  assert.equal(result.body.result.isError,true);
+  assert.deepEqual(result.body.result.structuredContent.error,{status:503,message:'Карта не установлена'});
+  result = await f.rpc('tools/call',{name:'doc_read',arguments:{path:'RULES.md'}});
+  assert.deepEqual(result.body.result.structuredContent.error,{status:503,message:'Карта не установлена'});
+  result = await f.rpc('tools/call',{name:'doc_read',arguments:{path:'../PRIVATE.md'}});
+  assert.equal(result.body.result.structuredContent.error.status,400);
+  assert.deepEqual(f.calls.map(call => call.name), ['tasks_list','task_create']);
+  await assert.rejects(fs.stat(f.docsDir), error => error.code === 'ENOENT');
+  await fs.mkdir(f.docsDir,{recursive:true});
+  await fs.writeFile(path.join(f.docsDir,'MAP.json'),'{');
+  result = await f.rpc('tools/call',start);
+  assert.equal(result.body.result.structuredContent.error.status,503);
+  assert.notEqual(result.body.result.structuredContent.error.message,'Карта не установлена');
+  await fs.writeFile(path.join(f.docsDir,'MAP.json'),JSON.stringify({always:['RULES.md'],rules:[]}));
+  result = await f.rpc('tools/call',start);
+  assert.equal(result.body.result.structuredContent.error.status,503);
+  assert.notEqual(result.body.result.structuredContent.error.message,'Карта не установлена');
+  assert.deepEqual(f.calls.map(call => call.name), ['tasks_list','task_create']);
+  await fs.writeFile(path.join(f.docsDir,'RULES.md'),'SAMPLE поздняя карта');
+  result = await f.rpc('tools/call',start);
+  assert.equal(result.body.result.isError,undefined);
+  assert.equal(result.body.result.structuredContent.session_id,'fixture-session');
+  assert.deepEqual(result.body.result.structuredContent.documents.map(document => document.path),['RULES.md']);
+  assert.deepEqual(f.calls.map(call => call.name), ['tasks_list','task_create','session_start']);
+  result = await f.rpc('tools/call',{name:'doc_read',arguments:{path:'RULES.md'}});
+  assert.equal(result.body.result.structuredContent.text,'SAMPLE поздняя карта');
+});
+
 test('CRM identity содержит только Owner и allowlist; upstream ошибки не раскрывают секреты', async t => {
   const c = config();
   const calls = [];
@@ -144,11 +191,17 @@ test('CRM identity содержит только Owner и allowlist; upstream о
   assert.equal(calls[0].options.headers['x-api-key'], c.crmKey);
   assert.equal(calls[0].options.redirect, 'error');
   await assert.rejects(call('leads_list', {}), error => error.status === 404);
-  const f = await fixture(t, {callCrm:async () => { throw Object.assign(new Error(`${c.token} ${c.crmKey}`),{status:404}); }});
+  const f = await fixture(t, {callCrm:async (name,args) => {
+    throw Object.assign(new Error(`${c.token} ${c.crmKey} /private/path`), {status:args.task_id === 99 ? 404 : 503});
+  }});
   const result = await f.rpc('tools/call',{name:'task_get',arguments:{task_id:99}});
   assert.equal(result.body.result.structuredContent.error.status, 404);
   const serialized = JSON.stringify(result.body);
   assert.ok(!serialized.includes(c.token) && !serialized.includes(c.crmKey));
+  const unavailable = await f.rpc('tools/call',{name:'task_get',arguments:{task_id:100}});
+  assert.equal(unavailable.body.result.structuredContent.error.status,503);
+  assert.equal(unavailable.body.result.structuredContent.error.message,'Сервис временно недоступен; результат операции не подтверждён');
+  assert.ok(!JSON.stringify(unavailable.body).includes('/private/path'));
 });
 
 test('CRM читает допустимый большой ответ и отменяет поток выше32MiB без повтора', async () => {

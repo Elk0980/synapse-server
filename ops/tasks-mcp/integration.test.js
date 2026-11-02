@@ -2,6 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const path = require('node:path');
 const { startFixture } = require('./test-fixture');
 
 test('MCP → настоящий кабинет/CSRF → MCP: одна запись, общий статус, изоляция', async t => {
@@ -56,4 +58,38 @@ test('MCP → настоящий кабинет/CSRF → MCP: одна запи�
   assert.match(sessionText, /SITE\.md/);
   assert.doesNotMatch(sessionText, /VIDEO\.md/);
   assert.equal((await f.call('session_end', { session_id: session.data.session_id, summary: 'SAMPLE завершено', statuses: [] })).isError, false);
+});
+
+test('отсутствующая папка канона не мешает MCP/CRM; тестовая карта подключается без перезапуска', async t => {
+  const f = await startFixture({installDocuments: false});
+  t.after(f.stop);
+  await assert.rejects(fs.stat(f.docs), error => error.code === 'ENOENT');
+  assert.equal((await fetch(f.mcpUrl + '/health')).status, 200);
+  assert.equal((await f.rpc('tools/list')).result.tools.length, 10);
+  assert.equal((await f.call('tasks_list', {})).isError, false);
+  const created = await f.call('task_create', {client_ref:'absent-map-1', title:'SAMPLE без карты',
+    project:'palitra-love', executor:'SAMPLE Codex', reviewer:'SAMPLE Owner', source:'manual'});
+  assert.equal(created.isError, false, JSON.stringify(created));
+  const id = created.data.task.id;
+  assert.equal((await f.call('task_get', {task_id:id})).data.id, id);
+  assert.equal((await f.call('task_update', {task_id:id, status:'in_progress'})).isError, false);
+  assert.equal((await f.call('task_comment', {task_id:id, author:'SAMPLE Codex', text:'SAMPLE без карты'})).isError, false);
+  const rejected = await f.call('session_start', {agent:'SAMPLE Codex', kind:'codex', request:'правка сайта'});
+  assert.equal(rejected.isError, true);
+  assert.equal(rejected.data.error.status, 503);
+  assert.equal(rejected.data.error.message, 'Карта не установлена');
+  assert.deepEqual((await f.call('agents_list', {})).data.agents, []);
+  await assert.rejects(fs.stat(f.docs), error => error.code === 'ENOENT');
+  await f.installSampleDocuments();
+  const session = await f.call('session_start', {agent:'SAMPLE Codex', kind:'codex', request:'правка сайта'});
+  assert.equal(session.isError, false, JSON.stringify(session));
+  assert.equal((await f.call('doc_read', {path:'SITE.md'})).data.text, 'SAMPLE fixture SITE.md');
+  const retained = f.docs + '-retained';
+  assert.equal(path.dirname(path.resolve(f.docs)), path.resolve(f.dir));
+  assert.equal(path.dirname(path.resolve(retained)), path.resolve(f.dir));
+  await fs.rename(f.docs, retained);
+  assert.equal((await f.call('session_end', {session_id:session.data.session_id, summary:'SAMPLE готово'})).isError, false);
+  assert.equal((await f.call('agent_report', {agent:'SAMPLE Codex', state:'idle', last_event:'SAMPLE завершено'})).isError, false);
+  assert.equal((await f.call('task_update', {task_id:id, status:'done'})).isError, false);
+  assert.equal((await f.cabinet('/coordination/mcp/task_get', 'POST', {task_id:id})).body.status, 'done');
 });

@@ -38,6 +38,7 @@ function loadConfig(env = process.env) {
 }
 
 function safeMessage(error, config) {
+  if (error.code === 'MAP_NOT_INSTALLED') return 'Карта не установлена';
   if (!Number.isInteger(error.status) || error.status >= 500) return 'Сервис временно недоступен; результат операции не подтверждён';
   let message = String(error.message || 'Запрос отклонён').slice(0, 400);
   for (const secret of [config.token, config.crmKey]) if (secret) message = message.split(secret).join('REDACTED');

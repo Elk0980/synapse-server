@@ -29,11 +29,26 @@ test('только пути карты; traversal, абсолютные пути
 test('повреждённая карта и отсутствующий обязательный документ дают точный отказ', async t => {
   const root = await fixture(t);
   await fs.unlink(path.join(root,'RULES.md'));
-  await assert.rejects(sessionDocuments(root,'сайт'), error => error.status === 503);
+  await assert.rejects(sessionDocuments(root,'сайт'), error => error.status === 503 &&
+    error.code !== 'MAP_NOT_INSTALLED' && error.message.includes('Документ карты отсутствует'));
   await fs.writeFile(path.join(root,'MAP.json'),JSON.stringify({always:['../private'],rules:[]}));
-  await assert.rejects(sessionDocuments(root,'сайт'), error => error.status === 503);
+  await assert.rejects(sessionDocuments(root,'сайт'), error => error.status === 503 && error.message === 'Некорректная карта документов');
   await fs.writeFile(path.join(root,'MAP.json'),'{');
-  await assert.rejects(sessionDocuments(root,'сайт'), error => error.status === 503);
+  await assert.rejects(sessionDocuments(root,'сайт'), error => error.status === 503 && error.message === 'Карта документов повреждена');
+});
+
+test('отсутствующие каталог и MAP сообщают «Карта не установлена» без создания файлов', async t => {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'tasks-no-map-test-'));
+  t.after(() => fs.rm(temporary, {recursive:true,force:true}));
+  const root = path.join(temporary, 'missing', 'handoff');
+  const missingMap = error => error.status === 503 && error.code === 'MAP_NOT_INSTALLED' && error.message === 'Карта не установлена';
+  await assert.rejects(sessionDocuments(root,'сайт'), missingMap);
+  await assert.rejects(readDocument(root,'RULES.md'), missingMap);
+  await assert.rejects(readDocument(root,'../PRIVATE.md'), error => error.status === 400);
+  await assert.rejects(fs.stat(root), error => error.code === 'ENOENT');
+  await fs.mkdir(root, {recursive:true});
+  await assert.rejects(sessionDocuments(root,'сайт'), missingMap);
+  assert.deepEqual(await fs.readdir(root), []);
 });
 
 test('символическая ссылка и файл сверх лимита не читаются', async t => {
