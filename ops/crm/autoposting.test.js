@@ -1268,3 +1268,35 @@ test('02.11.2026: отказ площадки не мешает другим; е
   await f.api.drain();const result=f.api.get(p.id,'alvi');
   assert.equal(f.calls.length,2);assert.deepEqual(result.deliveries.map(d=>d.status),['failed','failed']);assert.equal(result.status,'failed');assert.equal(result.lastErrorCode,'PUBLISH_FAILED');
 });
+test('02.11.2026: неясный ответ связывается с единственным постом Onlypult, итог и ссылка попадают в карточку',async t=>{
+  const f=fixture(t),p=f.draft(['telegram','vk']);await f.schedule(p);f.advance(60000);let n=0;const sentAt=new Date(Date.parse('2026-09-15T00:01:00Z')).toISOString();
+  f.setSend(async()=>{n++;if(n===1)throw Object.assign(Error('shape'),{status:502,ambiguous:true,code:'RESPONSE_UNCERTAIN'});
+    return {provider:'onlypult',providerPostId:'op-vk',providerStatus:'scheduled',status:'needs_review',errorCode:'PROVIDER_PENDING'};});
+  await f.api.drain();assert.equal(f.api.get(p.id,'alvi').deliveries[0].errorCode,'PUBLICATION_UNCERTAIN');
+  const reads=[];
+  f.transport.findPosts=async input=>{reads.push(input.channelId);return [
+    {id:'op-old',status:'published',content:'Подтверждённый текст',createdAt:'2026-09-14T10:00:00.000Z'},
+    {id:'op-other',status:'published',content:'Другой текст',createdAt:sentAt},
+    {id:'op-tg',status:'published',content:'Подтверждённый текст',createdAt:sentAt}];};
+  f.transport.reconcile=async input=>({providerPostId:input.providerPostId,providerStatus:'published',errorCode:'PROVIDER_LINK_UNAVAILABLE'});
+  f.advance(61000);await f.api.drain();f.advance(61000);await f.api.drain();
+  let result=f.api.get(p.id,'alvi');
+  assert.deepEqual(reads,['telegram'],'читаются посты только площадки с неясным ответом');
+  assert.deepEqual(result.deliveries.map(d=>[d.channelId,d.status,d.errorCode]),[['telegram','published','PROVIDER_CONFIRMED'],['vk','published','PROVIDER_CONFIRMED']]);
+  assert.equal(result.status,'published');assert.equal(result.lastErrorCode,null);assert.equal(n,2,'без повторной отправки');
+  assert.deepEqual(result.deliveries.map(d=>d.url),[null,null],'ссылка не придумывается');
+  f.transport.findLink=async input=>input.channelId==='vk'?'https://vk.com/wall-1_2':null;
+  f.advance(200000);await f.api.drain();result=f.api.get(p.id,'alvi');
+  assert.deepEqual(result.deliveries.map(d=>d.url),[null,'https://vk.com/wall-1_2']);
+});
+test('02.11.2026: два одинаковых поста — связи нет; отказ Onlypult по одной площадке даёт «нужна проверка»',async t=>{
+  const f=fixture(t),p=f.draft(['telegram','vk']);await f.schedule(p);f.advance(60000);let n=0;const at=new Date(Date.parse('2026-09-15T00:01:00Z')).toISOString();
+  f.setSend(async()=>{n++;if(n===1)throw Object.assign(Error('shape'),{status:502,ambiguous:true,code:'RESPONSE_UNCERTAIN'});
+    return {provider:'onlypult',providerPostId:'op-vk',providerStatus:'failed',status:'needs_review',errorCode:'PROVIDER_FAILED'};});
+  await f.api.drain();
+  f.transport.findPosts=async()=>[{id:'a',status:'published',content:'Подтверждённый текст',createdAt:at},{id:'b',status:'published',content:'Подтверждённый текст',createdAt:at}];
+  f.advance(61000);await f.api.drain();
+  const result=f.api.get(p.id,'alvi');
+  assert.deepEqual(result.deliveries.map(d=>[d.status,d.errorCode]),[['needs_review','PUBLICATION_UNCERTAIN'],['failed','PROVIDER_FAILED']]);
+  assert.equal(result.status,'needs_review');
+});

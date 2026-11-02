@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Палитра r2 (02.11.2026): автопостинг пяти площадок, параметры Onlypult и форма публикации.
+"""Палитра r2–r5 (02.11.2026): автопостинг пяти площадок, параметры Onlypult, форма публикации,
+сопровождение отправленного (итог Onlypult, ссылки) и уведомление «Вышло» в приложении.
 
 Режимы:  check             — только чтение, ничего не пишет;
          apply             — резервная копия, точечная установка, проверка, автооткат при сбое;
@@ -19,6 +20,7 @@ PUBLIC = "https://synapse.synapsebusiness.ru/cabinet/palitra-orders/"
 LOCK = "/opt/synapse/.palitra-app-release.lock"
 SEARCH_ROOTS = ["/opt", "/srv", "/var/www", "/var/lib/docker/volumes", "/root", "/home"]
 NEW_CSS = "palitra-content-layout.css"
+APP_FILES = ("autoposting.js", "onlypult-provider.js", "autoposting-transport.js")
 LOG = []
 
 
@@ -155,7 +157,7 @@ def plan():
     need(os.geteuid() == 0, "ROOT_REQUIRED")
     if "core" not in BUNDLE:
         say("1. Сервер CRM не меняется в этом выпуске")
-        return plan_static({"ident": None, "core": None, "provider": None, "stats": None})
+        return plan_static({"ident": None, "core": None, "provider": None, "transport": None, "stats": None})
     say("1. Сервер и CRM")
     ident = container_identity()
     say("  контейнер", ident[0][:12], "образ", ident[1][7:19], "перезапусков", ident[3])
@@ -165,7 +167,8 @@ def plan():
     say("  ядро", sha(core)[:12], len(core), "B; провайдер", sha(provider)[:12], "; транспорт", sha(transport)[:12])
     need(sha(core).startswith(os.environ.get("PALITRA_R2_TEST_CORE_PREFIX") or CORE_PREFIX), "CORE_CHANGED")
     need(sha(provider) == BUNDLE["provider"]["liveSha"], "PROVIDER_CHANGED")
-    need(sha(transport) == TRANSPORT, "TRANSPORT_CHANGED")
+    tspec = BUNDLE.get("transport")
+    need(sha(transport) == (tspec["liveSha"] if tspec else TRANSPORT), "TRANSPORT_CHANGED")
     text = core.decode("utf-8")
     for index, patches in enumerate(BUNDLE["core"].get("chain") or [BUNDLE["core"]["r1"], BUNDLE["core"]["r2"]]):
         text = patch(text, patches, "CORE_" + str(index + 1))
@@ -174,14 +177,17 @@ def plan():
     new_core = text.encode("utf-8")
     new_provider = patch(provider.decode("utf-8"), BUNDLE["provider"]["patches"], "PROVIDER").encode("utf-8")
     need(sha(new_provider) == BUNDLE["provider"]["afterSha"], "PROVIDER_RESULT")
+    new_transport = patch(transport.decode("utf-8"), tspec["patches"], "TRANSPORT").encode("utf-8") if tspec else transport
+    need(sha(new_transport) == (tspec["afterSha"] if tspec else TRANSPORT), "TRANSPORT_RESULT")
     node_check(new_core, "ядра")
     node_check(new_provider, "провайдера")
+    node_check(new_transport, "транспорта")
     say("  ядро после правок", sha(new_core)[:12], len(new_core), "B")
-    stats = {n: app_stat(n) for n in ("autoposting.js", "onlypult-provider.js")}
+    stats = {n: app_stat(n) for n in APP_FILES}
     db = json.loads(run(["docker", "exec", "-i", CONTAINER, "node", "-"], SCHEMA_JS.encode()))
     say("  каналы Палитры:", " ".join(db["channels"]))
     say("  публикации Палитры:", " ".join(db["statuses"]) or "нет")
-    return plan_static({"ident": ident, "core": (core, new_core), "provider": (provider, new_provider), "stats": stats})
+    return plan_static({"ident": ident, "core": (core, new_core), "provider": (provider, new_provider), "transport": (transport, new_transport), "stats": stats})
 
 
 def plan_static(p):
@@ -271,13 +277,15 @@ def backup(p):
         return bdir
     (bdir / "app-autoposting.js").write_bytes(p["core"][0])
     (bdir / "app-onlypult-provider.js").write_bytes(p["provider"][0])
+    (bdir / "app-autoposting-transport.js").write_bytes(p["transport"][0])
     dbname = "palitra-r2-backup-" + ts + ".sqlite"
     run(["docker", "exec", "-i", CONTAINER, "node", "-"],
         ("const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync('/data/crm.sqlite',{readOnly:true});"
          "db.exec(\"VACUUM INTO '/data/" + dbname + "'\");db.close();").encode(), timeout=600)
     run(["docker", "cp", CONTAINER + ":/data/" + dbname, str(bdir / "crm.sqlite")], timeout=600)
     run(["docker", "exec", "-u", "0", CONTAINER, "rm", "-f", "/data/" + dbname])
-    manifest.update({"core": sha(p["core"][0]), "provider": sha(p["provider"][0]), "newFiles": [NEW_CSS]})
+    # Удаляются при откате только файлы, которых до установки не было (r5: прежняя запись [NEW_CSS] удалила бы живой файл).
+    manifest.update({"core": sha(p["core"][0]), "provider": sha(p["provider"][0]), "transport": sha(p["transport"][0])})
     (bdir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1))
     say("  резервная копия:", bdir, "; база", (bdir / "crm.sqlite").stat().st_size // 1024, "КБ")
     return bdir
@@ -297,6 +305,8 @@ def restore(bdir):
         return
     write_app("autoposting.js", (bdir / "app-autoposting.js").read_bytes(), m["stats"]["autoposting.js"])
     write_app("onlypult-provider.js", (bdir / "app-onlypult-provider.js").read_bytes(), m["stats"]["onlypult-provider.js"])
+    if (bdir / "app-autoposting-transport.js").exists():
+        write_app("autoposting-transport.js", (bdir / "app-autoposting-transport.js").read_bytes(), m["stats"]["autoposting-transport.js"])
     run(["docker", "restart", CONTAINER], timeout=180)
     time.sleep(15)
     say("  откат выполнен из", bdir)
@@ -320,6 +330,8 @@ def apply():
         say("  файлы кабинета записаны:", len(p["new_static"]))
         if p["core"]:
             write_app("onlypult-provider.js", p["provider"][1], p["stats"]["onlypult-provider.js"])
+            if p["transport"][1] != p["transport"][0]:
+                write_app("autoposting-transport.js", p["transport"][1], p["stats"]["autoposting-transport.js"])
             write_app("autoposting.js", p["core"][1], p["stats"]["autoposting.js"])
             say("  файлы CRM записаны и прочитаны обратно")
             restart_and_watch(p["ident"][3])
@@ -328,8 +340,9 @@ def apply():
             got = fetch(PUBLIC + name + ("?v=" + STAMP if name != "cabinet.html" else "?nocache=" + str(time.time())))
             need(sha(got) == sha(data), "PUBLIC_READBACK_" + name)
         say("  все", len(p["new_static"]), "файлов отдаются сайтом в новой версии")
-        for name in (("autoposting.js", "onlypult-provider.js") if p["core"] else ()):
-            need(sha(app_file(name)) == sha(p["core"][1] if name == "autoposting.js" else p["provider"][1]), "APP_FINAL_" + name)
+        finals = {"autoposting.js": "core", "onlypult-provider.js": "provider", "autoposting-transport.js": "transport"}
+        for name in (APP_FILES if p["core"] else ()):
+            need(sha(app_file(name)) == sha(p[finals[name]][1]), "APP_FINAL_" + name)
     except BaseException as error:
         say("СБОЙ:", error, "— откатываю")
         try:

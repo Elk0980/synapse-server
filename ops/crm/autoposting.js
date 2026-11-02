@@ -1567,8 +1567,74 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
     db.prepare("UPDATE autoposting_posts SET last_error_code=?,revision=revision+1,updated_at=? WHERE id=? AND status='needs_review'")
       .run(result.errorCode||'PROVIDER_PENDING',iso(),postId);
   }
-  let stopped=false,running=null;
+  let stopped=false,running=null,lastFollow=0;
+  /* 02.11.2026: сопровождение уже отправленного через Onlypult (раз в минуту, только чтение у провайдера).
+     1) Неясный ответ при создании: доставка связывается с постом, только если у этого профиля ровно один
+        ещё не связанный пост с тем же текстом, созданный в окне этой отправки. Повторной отправки нет.
+     2) Итог Onlypult становится итогом доставки: published — «Опубликовано (подтвердил Onlypult)» без
+        выдуманной ссылки, failed — ошибка площадки. Карточка получает общий итог, когда решены все площадки.
+     3) Ссылка ищется на самой площадке (сейчас YouTube через RSS канала) и сохраняется, только если найдена. */
+  async function bindUncertain(d) {
+    let posts;
+    try{posts=await transport.findPosts({companyCode:d.code,channelId:d.channel_id,channelRevision:d.channel_revision});}catch{return;}
+    const row=db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(d.post_id);if(!row)return;
+    const view=dto(row,company(db,d.code));
+    const texts=new Set([view.text,...Object.values(view.captions||{})].filter(v=>typeof v==='string').map(v=>v.trim()).filter(Boolean));
+    const from=Number(d.started_at)-120000,to=Number(d.started_at)+LEASE_MS+300000;
+    const taken=new Set(db.prepare('SELECT provider_post_id FROM autoposting_deliveries WHERE provider_post_id IS NOT NULL').all().map(r=>r.provider_post_id));
+    const hits=posts.filter(p=>!taken.has(p.id)&&texts.has(p.content.trim())&&p.createdAt&&Date.parse(p.createdAt)>=from&&Date.parse(p.createdAt)<=to);
+    if(hits.length!==1)return;
+    db.prepare(`UPDATE autoposting_deliveries SET provider_post_id=?,provider_status=?,provider_checked_at=?,error_code='PROVIDER_PENDING'
+      WHERE post_id=? AND channel_id=? AND status='needs_review' AND provider_post_id IS NULL`).run(hits[0].id,hits[0].status,iso(),d.post_id,d.channel_id);
+  }
+  function rollup(postId) {
+    const states=db.prepare('SELECT status FROM autoposting_deliveries WHERE post_id=?').all(postId).map(r=>r.status);
+    if(!states.length||states.some(s=>['pending','publishing','needs_review'].includes(s)))return;
+    const published=states.filter(s=>s==='published').length,failed=states.filter(s=>s==='failed').length;
+    const [status,code]=published&&!failed?['published',null]:published?['needs_review','PUBLISH_FAILED']:['failed','PUBLISH_FAILED'];
+    db.prepare(`UPDATE autoposting_posts SET status=?,last_error_code=?,revision=revision+1,updated_at=?
+      WHERE id=? AND status='needs_review' AND (status<>? OR COALESCE(last_error_code,'')<>COALESCE(?,''))`).run(status,code,iso(),postId,status,code);
+  }
+  function settle() {
+    const done=db.prepare(`SELECT post_id,channel_id,provider_status FROM autoposting_deliveries WHERE status='needs_review'
+      AND provider_post_id IS NOT NULL AND provider_status IN ('published','failed') LIMIT 50`).all();
+    for(const d of done){
+      if(d.provider_status==='published')db.prepare(`UPDATE autoposting_deliveries SET status='published',external_id=COALESCE(external_id,provider_post_id),
+        finished_at=?,error_code='PROVIDER_CONFIRMED' WHERE post_id=? AND channel_id=? AND status='needs_review' AND provider_status='published'`).run(iso(),d.post_id,d.channel_id);
+      else db.prepare(`UPDATE autoposting_deliveries SET status='failed',finished_at=?,error_code='PROVIDER_FAILED'
+        WHERE post_id=? AND channel_id=? AND status='needs_review' AND provider_status='failed'`).run(iso(),d.post_id,d.channel_id);
+    }
+    for(const postId of new Set(done.map(d=>d.post_id)))rollup(postId);
+  }
+  async function followProvider() {
+    if(!transport.findPosts||stopped||now()-lastFollow<60000)return;
+    lastFollow=now();
+    const recent=now()-48*3600000;
+    const uncertain=db.prepare(`SELECT d.*,c.code FROM autoposting_deliveries d JOIN autoposting_posts p ON p.id=d.post_id JOIN companies c ON c.id=p.company_id
+      WHERE c.is_deleted=0 AND p.deleted_at IS NULL AND d.status='needs_review' AND d.provider_post_id IS NULL
+      AND d.error_code='PUBLICATION_UNCERTAIN' AND d.started_at>=? ORDER BY d.started_at LIMIT 5`).all(recent);
+    for(const d of uncertain){if(stopped)return;await bindUncertain(d);}
+    settle();
+    if(!transport.findLink)return;
+    const linkless=db.prepare(`SELECT d.*,c.code FROM autoposting_deliveries d JOIN autoposting_posts p ON p.id=d.post_id JOIN companies c ON c.id=p.company_id
+      WHERE c.is_deleted=0 AND p.deleted_at IS NULL AND d.status='published' AND d.url IS NULL AND d.provider_post_id IS NOT NULL
+      AND d.finished_at>=? AND (d.provider_checked_at IS NULL OR d.provider_checked_at<=?) ORDER BY d.finished_at DESC LIMIT 3`)
+      .all(new Date(recent).toISOString(),new Date(now()-180000).toISOString());
+    for(const d of linkless){
+      if(stopped)return;
+      db.prepare('UPDATE autoposting_deliveries SET provider_checked_at=? WHERE post_id=? AND channel_id=?').run(iso(),d.post_id,d.channel_id);
+      let link=null;
+      try{
+        const row=db.prepare('SELECT * FROM autoposting_posts WHERE id=?').get(d.post_id),view=dto(row,company(db,d.code));
+        link=await transport.findLink({companyCode:d.code,channelId:d.channel_id,channelRevision:d.channel_revision,
+          title:view.title||'',text:view.captions?.[d.channel_id]||view.text||'',publishedAt:d.finished_at});
+      }catch{link=null;}
+      if(typeof link==='string'&&/^https:\/\//.test(link))db.prepare("UPDATE autoposting_deliveries SET url=? WHERE post_id=? AND channel_id=? AND status='published' AND url IS NULL")
+        .run(url(link),d.post_id,d.channel_id);
+    }
+  }
   async function processDue() {
+    try{await followProvider();}catch(error){logger.warn(`[crm] autoposting follow failed ${String(error?.code||error?.message||'').slice(0,60)}`);}
     // Poll only known pending jobs. Unknown/timeout attempts cannot be reconciled by guessing text.
     if(transport.reconcile&&!stopped){
       const pending=db.prepare(`SELECT d.*,c.code FROM autoposting_deliveries d JOIN autoposting_posts p ON p.id=d.post_id

@@ -2,7 +2,8 @@
 
 // Contract: https://onlypult.com/dev/openapi.yaml, inspected 2026-09-17.
 // Post has id/status/profile_ids; its schema DOES NOT document a published URL.
-// A provider status alone must therefore never become Synapse "published".
+// 02.11.2026 (Влад): статус Onlypult «published» показывается в приложении как «Опубликовано —
+// подтвердил Onlypult» без выдуманной ссылки; ссылка появляется, только если найдена на самой площадке.
 const BASE = 'https://api.onlypult.com/v1';
 // Onlypult's live response on 2026-09-17 uses "vk"; OpenAPI documents "vkontakte".
 /* Соответствие площадок Synapse значениям Profile.platform у Onlypult.
@@ -80,6 +81,22 @@ const id = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(v
    проверен root 30.09.2026): PostCreateRequest.required = [profile_ids]; content — string без minLength,
    «Required unless media_ids or media_urls is provided». PlatformSettings.is_story — Story для Instagram,
    несовместим с is_reels/is_shorts. Поэтому при материале и пустом тексте content не отправляется вовсе. */
+// Причины, при которых профиль формально active, но публиковать нельзя (нужно переподключение).
+const BROKEN_ACCESS = /access_token|check_permissions|temporarily_locked|reconnect|expired/i;
+/* «2026-11-02 21:37:28» в часовом поясе аккаунта → ISO UTC. Пусто или нераспознано → null. */
+function utcOf(value,zone) {
+  const m = typeof value === 'string' && /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value.trim());
+  if (!m) return null;
+  const wall = Date.UTC(+m[1],m[2]-1,+m[3],+m[4],+m[5],+(m[6]||0));
+  const shift = at => {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:zone,hourCycle:'h23',year:'numeric',month:'2-digit',
+      day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}).formatToParts(new Date(at)).map(p => [p.type,p.value]));
+    return Date.UTC(+parts.year,parts.month-1,+parts.day,+parts.hour,+parts.minute,+parts.second) - at;
+  };
+  let at = wall - shift(wall);
+  at = wall - shift(at);
+  return Number.isFinite(at) ? new Date(at).toISOString() : null;
+}
 function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
   async function request(row,method,path,body) {
     const token = tokenFor(row), mutation = method !== 'GET';
@@ -126,17 +143,38 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
       return {id:profile.id,name:profile.name.slice(0,200),platform:row.id,status:profile.status.slice(0,60),
         username:typeof profile.username === 'string' ? profile.username.slice(0,120) : null};
     });
-    return {profiles:matching,diagnostics:{totalProfiles:profiles.length,
+    // Причина неработающего доступа нужна только проверке перед отправкой и наружу не отдаётся.
+    const messages = new Map(profiles.filter(profile => id(profile?.id) && typeof profile.status_message === 'string')
+      .map(profile => [profile.id,profile.status_message.slice(0,80)]));
+    return {profiles:matching,messages,diagnostics:{totalProfiles:profiles.length,
       platformCounts:Array.from(counts,([platform,count]) => ({platform,count})).sort((a,b) => a.platform.localeCompare(b.platform)),
       profileShapes:Array.from(shapes.values()),otherShapesCount}};
   }
   async function listProfiles(row) {return (await inspectProfiles(row)).profiles;}
   async function check(row) {
     if (!id(row.target)) throw failure('PROFILE_REQUIRED');
-    const profiles = await listProfiles(row), matches = profiles.filter(profile => profile.id === row.target);
+    const {profiles,messages} = await inspectProfiles(row), matches = profiles.filter(profile => profile.id === row.target);
     if (matches.length !== 1) throw failure('PROFILE_NOT_FOUND');
     if (matches[0].status !== 'active') throw failure('PROFILE_INACTIVE');
+    // Onlypult держит status=active и при отозванном доступе (02.11.2026 YouTube: invalid_access_token).
+    if (BROKEN_ACCESS.test(messages.get(row.target) || '')) throw failure('PROFILE_RECONNECT');
     return matches[0];
+  }
+  /* Посты профиля — только чтение. Время Onlypult приходит без зоны, в часовом поясе аккаунта;
+     здесь оно переводится в UTC. Пост другого профиля или неизвестной формы в список не попадает. */
+  async function listPosts(row,{limit = 30} = {}) {
+    if (!id(row.target)) throw failure('PROFILE_REQUIRED');
+    const account = await request(row,'GET','/account');
+    const zone = typeof account?.timezone === 'string' ? account.timezone : '';
+    try {new Intl.DateTimeFormat('en-US',{timeZone:zone});} catch {throw failure('RESPONSE_UNCERTAIN');}
+    const posts = await request(row,'GET',`/posts?profile_id=${encodeURIComponent(row.target)}&limit=${limit}`);
+    if (!Array.isArray(posts)) throw failure('RESPONSE_UNCERTAIN');
+    return posts.filter(post => post && typeof post === 'object' && id(post.id) && profileOf(post) === row.target &&
+      ['draft','scheduled','published','failed'].includes(post.status)).map(post => ({
+      id:post.id,status:post.status,content:typeof post.content === 'string' ? post.content : '',
+      title:typeof post.title === 'string' ? post.title : '',
+      createdAt:utcOf(post.created_at,zone),publishedAt:utcOf(post.published_at,zone),
+      error:typeof post.error === 'string' ? post.error.slice(0,300) : null}));
   }
   /* Профиль в ответе. Документированный контракт — profile_ids:string[]; живой ответ присылает
      одиночный числовой profile_id. Поддерживаются оба, строго: строковый идентификатор берётся как есть,
@@ -162,6 +200,8 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
     return fromList || fromSingle;
   }
   function receipt(data,row,expectedId) {
+    // 02.11.2026: создание поста отвечает списком из одного поста (по поступившему profile_ids), чтение — объектом.
+    if (Array.isArray(data) && data.length === 1) data = data[0];
     const profile = data && typeof data === 'object' && !Array.isArray(data) ? profileOf(data) : null;
     // Площадка названа — сверяем точно. Ответ без неё допустим только при строгом совпадении профиля.
     const platformNamed = data && Object.hasOwn(data,'platform');
@@ -252,6 +292,33 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
     if (!id(providerPostId) || !id(row.target)) throw failure('PROVIDER_POST_REQUIRED');
     return receipt(await request(row,'GET',`/posts/${encodeURIComponent(providerPostId)}`),row,providerPostId);
   }
-  return {listProfiles,inspectProfiles,check,publish,reconcile};
+  /* Ссылка на вышедший пост — только с самой площадки и только при однозначном совпадении.
+     YouTube: публичная RSS канала (platform_id профиля) — заголовок совпадает, выход в пределах 45 минут.
+     Остальные площадки публичного источника с сервера не дают (02.11.2026: t.me и Instagram недоступны
+     из Москвы, стена ВКонтакте закрыта для анонимных) — возвращается null, ссылка не придумывается. */
+  async function findLink(row,{title,text,publishedAt}) {
+    if (row.id !== 'youtube_shorts') return null;
+    const profile = await request(row,'GET',`/profiles/${encodeURIComponent(row.target)}`);
+    const channel = typeof profile?.platform_id === 'string' ? profile.platform_id : '';
+    if (!/^UC[\w-]{22}$/.test(channel)) return null;
+    let xml;
+    try {
+      const signal = AbortSignal.timeout(15000);
+      const response = await fetchImpl('https://www.youtube.com/feeds/videos.xml?channel_id=' + channel,{redirect:'error',signal});
+      if (!response.ok) return null;
+      xml = await readResponse(response,signal);
+    } catch {return null;}
+    const clean = value => String(value || '').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"')
+      .replace(/&#39;/g,"'").normalize('NFC').replace(/\s+/g,' ').trim().toLowerCase();
+    const wanted = clean(title || text), at = Date.parse(publishedAt);
+    if (!wanted || !Number.isFinite(at)) return null;
+    const hits = [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map(m => ({
+      video:(m[1].match(/<yt:videoId>([\w-]{11})<\/yt:videoId>/) || [])[1],
+      title:clean((m[1].match(/<title>([\s\S]*?)<\/title>/) || [])[1]),
+      published:Date.parse((m[1].match(/<published>([^<]+)<\/published>/) || [])[1])}))
+      .filter(entry => entry.video && entry.title === wanted && Math.abs(entry.published - at) <= 45 * 60000);
+    return hits.length === 1 ? `https://www.youtube.com/shorts/${hits[0].video}` : null;
+  }
+  return {listProfiles,inspectProfiles,check,publish,reconcile,listPosts,findLink};
 }
 module.exports = {createOnlypultProvider};

@@ -14,3 +14,13 @@
  .content-day>div>.content-day__channel{margin-top:0;height:100%}
  .content-day__create{justify-self:start;width:auto;min-width:260px;padding-inline:28px}
 }
+/* 02.11.2026: уведомление «Вышло» в приложении. */
+.content-day__fresh{margin:12px 0 4px;padding:12px 14px;border-radius:14px;background:#eef6e8;border:1px solid #cfe2bf;color:#24301a}
+.content-day__fresh-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.content-day__fresh-head h2{margin:0;font-size:16px}
+.content-day__fresh-head .app-btn{min-height:36px;padding:6px 12px}
+.content-day__fresh-post{margin-top:8px}
+.content-day__fresh-post strong{display:block;font-size:14px;overflow-wrap:anywhere}
+.content-day__fresh-post ul{margin:4px 0 0;padding:0;list-style:none}
+.content-day__fresh-post li{font-size:13px;line-height:1.6;overflow-wrap:anywhere}
+.content-day__fresh-post a{color:#2f5d1e;font-weight:600}
