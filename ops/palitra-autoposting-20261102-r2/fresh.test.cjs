@@ -26,7 +26,7 @@ test('старые и чужого дня публикации уведомле�
 });
 
 test('03.11.2026: раздел работает для Алви: свой день принимается, чужой — нет, страниц Палитры нет',async()=>{
- const alviDay=v=>({...day([ch('vk','ВКонтакте',[pub('d:9:vk',90,null)])]),companyCode:v});
+ const alviDay=v=>({...day([ch('vk','ВКонтакте',[pub('d:9:vk',90,null)])]),companyCode:v,actorScope:v+':1'});
  let f=await open(alviDay('alvi'),'alvi');
  try{const box=f.api.element.querySelector('.content-day__fresh');assert.ok(box);assert.match(box.textContent,/ВКонтакте · \d\d:\d\d · ссылка недоступна/);assert.equal(box.querySelectorAll('a').length,0);}finally{f.close();}
  f=await open(alviDay('palitra-love'),'alvi');
