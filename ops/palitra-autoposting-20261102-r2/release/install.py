@@ -14,7 +14,7 @@ CONTAINER = "synapse-crm-1"
 IMAGE_PREFIX = "sha256:b74d9196617c"
 CORE_PREFIX = "caf1675a"
 TRANSPORT = "c658463a093f9ffd9c45a3b2fdd8fce321b72bd3384d9bac7143963b0db396a7"
-STAMP = "20261102-claude-r2"
+STAMP = BUNDLE.get("stamp", "20261102-claude-r2")
 PUBLIC = "https://synapse.synapsebusiness.ru/cabinet/palitra-orders/"
 LOCK = "/opt/synapse/.palitra-app-release.lock"
 SEARCH_ROOTS = ["/opt", "/srv", "/var/www", "/var/lib/docker/volumes", "/root", "/home"]
@@ -110,6 +110,8 @@ def new_cabinet_html(text):
         rx = re.compile(r'((?:src|href)=")' + re.escape(name) + r'\?v=[^"]*"')
         need(len(rx.findall(text)) == 1, "HTML_REF_" + name)
         text = rx.sub(lambda m: m.group(1) + name + "?v=" + STAMP + '"', text, count=1)
+    if NEW_CSS not in BUNDLE.get("newStatic", {}):
+        return text
     anchor = re.compile(r'(<link rel="stylesheet" href="palitra-content-plan-ui\.css\?v=[^"]*">\n)')
     need(len(anchor.findall(text)) == 1 and NEW_CSS not in text, "HTML_ANCHOR")
     return anchor.sub(lambda m: m.group(1) + '<link rel="stylesheet" href="' + NEW_CSS + "?v=" + STAMP + '">\n', text, count=1)
@@ -151,6 +153,9 @@ db.close();
 def plan():
     """Всё, что можно проверить без записи. Возвращает подготовленную установку."""
     need(os.geteuid() == 0, "ROOT_REQUIRED")
+    if "core" not in BUNDLE:
+        say("1. Сервер CRM не меняется в этом выпуске")
+        return plan_static({"ident": None, "core": None, "provider": None, "stats": None})
     say("1. Сервер и CRM")
     ident = container_identity()
     say("  контейнер", ident[0][:12], "образ", ident[1][7:19], "перезапусков", ident[3])
@@ -176,11 +181,14 @@ def plan():
     db = json.loads(run(["docker", "exec", "-i", CONTAINER, "node", "-"], SCHEMA_JS.encode()))
     say("  каналы Палитры:", " ".join(db["channels"]))
     say("  публикации Палитры:", " ".join(db["statuses"]) or "нет")
+    return plan_static({"ident": ident, "core": (core, new_core), "provider": (provider, new_provider), "stats": stats})
 
+
+def plan_static(p):
     say("2. Файлы кабинета")
     found, partial = find_static_dir()
-    for p in partial[:4]:
-        say("  похожий каталог (не совпал):", p[0], "html" if p[1] else "-", p[2])
+    for part in partial[:4]:
+        say("  похожий каталог (не совпал):", part[0], "html" if part[1] else "-", part[2])
     need(len(found) == 1, "STATIC_DIR_" + str(len(found)))
     sdir = pathlib.Path(found[0][0])
     say("  каталог:", sdir)
@@ -202,12 +210,12 @@ def plan():
         data = patch((sdir / name).read_text(encoding="utf-8"), spec["patches"], name).encode("utf-8")
         need(sha(data) == spec["afterSha"], "RESULT_" + name)
         new_static[name] = data
-    new_static[NEW_CSS] = BUNDLE["newStatic"][NEW_CSS].encode("utf-8")
+    for name, text in BUNDLE.get("newStatic", {}).items():
+        need(not (sdir / name).exists(), "NEW_FILE_EXISTS_" + name)
+        new_static[name] = text.encode("utf-8")
     new_static["cabinet.html"] = new_cabinet_html((sdir / "cabinet.html").read_text(encoding="utf-8")).encode("utf-8")
-    need(not (sdir / NEW_CSS).exists(), "NEW_CSS_EXISTS")
     say("  подготовлено файлов:", len(new_static))
-    return {"ident": ident, "core": (core, new_core), "provider": (provider, new_provider), "stats": stats,
-            "sdir": sdir, "new_static": new_static}
+    return dict(p, sdir=sdir, new_static=new_static)
 
 
 # ---------- запись ----------
@@ -254,6 +262,13 @@ def backup(p):
     (bdir / "static").mkdir()
     for name in list(BUNDLE["static"]) + ["cabinet.html"]:
         shutil.copy2(p["sdir"] / name, bdir / "static" / name)
+    manifest = {"staticDir": str(p["sdir"]), "stats": p["stats"], "restarts": p["ident"][3] if p["ident"] else None,
+                "static": {n: sha((bdir / "static" / n).read_bytes()) for n in os.listdir(bdir / "static")},
+                "newFiles": [n for n in p["new_static"] if not (p["sdir"] / n).exists()], "crm": p["core"] is not None}
+    if not p["core"]:
+        (bdir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1))
+        say("  резервная копия:", bdir, "(только файлы кабинета)")
+        return bdir
     (bdir / "app-autoposting.js").write_bytes(p["core"][0])
     (bdir / "app-onlypult-provider.js").write_bytes(p["provider"][0])
     dbname = "palitra-r2-backup-" + ts + ".sqlite"
@@ -262,9 +277,7 @@ def backup(p):
          "db.exec(\"VACUUM INTO '/data/" + dbname + "'\");db.close();").encode(), timeout=600)
     run(["docker", "cp", CONTAINER + ":/data/" + dbname, str(bdir / "crm.sqlite")], timeout=600)
     run(["docker", "exec", "-u", "0", CONTAINER, "rm", "-f", "/data/" + dbname])
-    manifest = {"staticDir": str(p["sdir"]), "stats": p["stats"], "restarts": p["ident"][3],
-                "static": {n: sha((bdir / "static" / n).read_bytes()) for n in os.listdir(bdir / "static")},
-                "core": sha(p["core"][0]), "provider": sha(p["provider"][0]), "newCss": NEW_CSS}
+    manifest.update({"core": sha(p["core"][0]), "provider": sha(p["provider"][0]), "newFiles": [NEW_CSS]})
     (bdir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1))
     say("  резервная копия:", bdir, "; база", (bdir / "crm.sqlite").stat().st_size // 1024, "КБ")
     return bdir
@@ -276,9 +289,12 @@ def restore(bdir):
     sdir = pathlib.Path(m["staticDir"])
     for name in os.listdir(bdir / "static"):
         write_static(sdir / name, (bdir / "static" / name).read_bytes(), bdir / "static" / name if not (sdir / name).exists() else sdir / name)
-    extra = sdir / m["newCss"]
-    if extra.exists():
-        extra.unlink()
+    for name in m.get("newFiles", []):
+        if (sdir / name).exists():
+            (sdir / name).unlink()
+    if not m.get("crm", True):
+        say("  откат файлов кабинета выполнен из", bdir)
+        return
     write_app("autoposting.js", (bdir / "app-autoposting.js").read_bytes(), m["stats"]["autoposting.js"])
     write_app("onlypult-provider.js", (bdir / "app-onlypult-provider.js").read_bytes(), m["stats"]["onlypult-provider.js"])
     run(["docker", "restart", CONTAINER], timeout=180)
@@ -302,16 +318,17 @@ def apply():
             write_static(target, data, target if target.exists() else sdir / "cabinet.html")
             need(sha(target.read_bytes()) == sha(data), "STATIC_READBACK_" + name)
         say("  файлы кабинета записаны:", len(p["new_static"]))
-        write_app("onlypult-provider.js", p["provider"][1], p["stats"]["onlypult-provider.js"])
-        write_app("autoposting.js", p["core"][1], p["stats"]["autoposting.js"])
-        say("  файлы CRM записаны и прочитаны обратно")
-        restart_and_watch(p["ident"][3])
+        if p["core"]:
+            write_app("onlypult-provider.js", p["provider"][1], p["stats"]["onlypult-provider.js"])
+            write_app("autoposting.js", p["core"][1], p["stats"]["autoposting.js"])
+            say("  файлы CRM записаны и прочитаны обратно")
+            restart_and_watch(p["ident"][3])
         say("4. Проверка снаружи")
         for name, data in p["new_static"].items():
             got = fetch(PUBLIC + name + ("?v=" + STAMP if name != "cabinet.html" else "?nocache=" + str(time.time())))
             need(sha(got) == sha(data), "PUBLIC_READBACK_" + name)
         say("  все", len(p["new_static"]), "файлов отдаются сайтом в новой версии")
-        for name in ("autoposting.js", "onlypult-provider.js"):
+        for name in (("autoposting.js", "onlypult-provider.js") if p["core"] else ()):
             need(sha(app_file(name)) == sha(p["core"][1] if name == "autoposting.js" else p["provider"][1]), "APP_FINAL_" + name)
     except BaseException as error:
         say("СБОЙ:", error, "— откатываю")

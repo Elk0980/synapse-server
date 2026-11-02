@@ -13,7 +13,7 @@ async function material(extra={}){const e=env(),calls=[];let current=extra.curre
 test('новый черновик не согласуется и повтор submit не создаёт второй материал',async()=>{const f=await composer();try{await f.submit();await f.submit();assert.equal(f.calls.create.length,1);assert.equal(f.calls.actions.length,0);assert.equal(f.calls.saved[0].value.status,'draft');}finally{f.close();}});
 test('явный Согласован: один create и одна atomic approval+schedule с сохранённой ревизией',async()=>{const f=await composer();try{f.set('publicationStatus','approved');await f.submit();await f.submit();assert.equal(f.calls.create.length,1);assert.deepEqual(f.calls.actions,[{id:71,action:'approve',body:{revision:4,approved:true,schedule:true}}]);assert.equal(f.calls.saved[0].value.status,'scheduled');assert.equal(f.calls.create[0].scheduledAt,'2099-11-05T09:00:00.000Z');}finally{f.close();}});
 for(const [label,extra,change,expected]of [
- ['прошедшее время',{},f=>f.set('date','2000-01-01'),/будущем/],
+ // Прошедшее время больше не блокирует: с 02.11.2026 оно сдвигается на ближайшее (см. soon.test.cjs).
  ['выключенный канал',{readContext:async()=>({...context,channels:[{...context.channels[0],enabled:false}]})},()=>{},/ВКонтакте/],
  ['неподключённый канал',{readContext:async()=>({...context,channels:[{...context.channels[0],connected:false}]})},()=>{},/Подключите/],
  ['право согласования отсутствует',{canApprove:false},()=>{},/нет права/],
