@@ -435,11 +435,11 @@ vhod.synapsebusiness.ru {
   import static
 }
 
-# --- Доска задач агентов ----------------------------------------------------
-board.synapsebusiness.ru {
-  root * /srv/sites/board
-  import draft
-  import static
+# --- Единые задачи: MCP и существующий кабинет ------------------------------
+tasks.synapsebusiness.ru, board.synapsebusiness.ru {
+  @board host board.synapsebusiness.ru
+  redir @board "https://synapse.synapsebusiness.ru/cabinet.html#tasks" 308
+  reverse_proxy tasks-mcp:8080
 }
 
 # --- Чат -------------------------------------------------------------------

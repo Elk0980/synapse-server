@@ -1,0 +1,8 @@
+node_modules
+*.test.js
+test-fixture.js
+README.md
+REPORT.md
+CURRENT.md
+*.sqlite*
+.env*

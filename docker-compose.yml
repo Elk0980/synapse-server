@@ -45,6 +45,30 @@ services:
     volumes:
       - crm_data:/data
 
+  tasks-mcp:
+    build:
+      context: ./ops/tasks-mcp
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      CRM_URL: http://crm:8080
+      CRM_API_KEY: ${CRM_API_KEY}
+      TASKS_MCP_TOKEN: ${TASKS_MCP_TOKEN:-}
+      TASKS_MCP_OWNER_ID: ${TASKS_MCP_OWNER_ID:-}
+      TASKS_MCP_PROJECTS: ${TASKS_MCP_PROJECTS:-}
+      TASKS_MCP_PUBLIC_ORIGIN: ${TASKS_MCP_PUBLIC_ORIGIN:-https://tasks.synapsebusiness.ru}
+      TASKS_MCP_DOCS_DIR: /app/docs/handoff
+    expose:
+      - "8080"
+    volumes:
+      - type: bind
+        source: ./docs/handoff
+        target: /app/docs/handoff
+        read_only: true
+        bind:
+          # Пустая папка не должна останавливать общий compose up до передачи канона.
+          create_host_path: true
+
   chat:
     build:
       context: ./ops/chat
