@@ -4,14 +4,16 @@ const source = fs.readFileSync(require('node:path').join(__dirname,'src/native-h
 const start = source.indexOf('  function createContentDayTransport() {');
 const end = source.indexOf('\n  // PALITRA_MANAGER_ATTENTION_VALIDATOR:', start);
 assert.ok(start > 0 && end > start);
-const unit = source.slice(start,end);
+// 03.11.2026: общие для всех компаний объявления лежат вне блока транспорта — берём их из того же файла.
+const shared = ['  const CONTENT_COMPANIES','  const contentAssetPattern'].map(key=>{const i=source.indexOf(key);assert.ok(i>0,key);return source.slice(i,source.indexOf('\n',i));}).join('\n');
+const unit = shared+'\n'+source.slice(start,end);
 function response(value,status=200) { return {ok:status>=200&&status<300,status,json:async()=>value}; }
 function fixture(fetch) {
   const calls=[];
   const context={URL,Intl,Map,Set,JSON,Date,Number,Object,Error,TypeError,encodeURIComponent,
     allowed:true,entry:'cabinet',origin:'https://synapse.synapsebusiness.ru',CABINET:'https://synapse.synapsebusiness.ru',
     FLAGS:{network:true},activeCompany:'palitra-love',cabinetCsrf:'synthetic-csrf',contentDayEpoch:1,
-    window:{fetch:async(path,options)=>{calls.push({path,options});return fetch(path,options);}}};
+    window:{SynapseCompanies:{profile:code=>({'palitra-love':{name:'Палитра'},alvi:{name:'Алви'},avokado:{name:'Авокадо'}})[code]},fetch:async(path,options)=>{calls.push({path,options});return fetch(path,options);}}};
   const api=vm.runInNewContext(unit+'\ncreateContentDayTransport();',context);
   return {api,context,calls};
 }
@@ -153,4 +155,17 @@ test('правка старой карточки: независимый readbac
  const f=fixture(async()=>response(material(body(),{revision:2,platformOptions:{instagram:{is_reels:true},tiktok:{disable_comment:false,privacy:'PUBLIC_TO_EVERYONE'}}})));
  assert.equal((await f.api.updatePost(21,{revision:1,platformOptions})).revision,2);
  assert.deepEqual(f.calls.map(c=>c.options.method),['PATCH','GET']);assert.deepEqual(JSON.parse(f.calls[0].options.body).platformOptions,platformOptions);
+});
+
+test('03.11.2026: тот же раздел для Алви — запросы и проверки идут от своей компании',async()=>{
+  const f=fixture(async(path)=>{
+    if(path.startsWith('/content/crm/autoposting/settings'))return response({companyCode:'alvi',timezone:'Asia/Irkutsk',channels:[],profileState:'unknown',profileRevision:null,currentProfileRevision:null});
+    return response({companyCode:'palitra-love',posts:[]});});
+  f.context.activeCompany='alvi';
+  const ctx=await f.api.readContext().catch(e=>e);
+  assert.ok(f.calls.every(c=>/companyCode=alvi(&|$)/.test(c.path)),'в запросах только Алви: '+f.calls.map(c=>c.path).join(' '));
+  if(!(ctx instanceof Error))assert.equal(ctx.publisherLabel,'Алви');
+  await assert.rejects(f.api.readPosts?f.api.readPosts({}):Promise.reject(Error('x')),'ответ чужой компании не принимается');
+  f.context.activeCompany='other-company';
+  await assert.rejects(f.api.readContext(),e=>e.contextChanged===true,'компания без раздела «Контент» не читает');
 });

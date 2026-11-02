@@ -157,7 +157,7 @@ def plan():
     need(os.geteuid() == 0, "ROOT_REQUIRED")
     if "core" not in BUNDLE:
         say("1. Сервер CRM не меняется в этом выпуске")
-        return plan_static({"ident": None, "core": None, "provider": None, "transport": None, "stats": None})
+        return plan_static({"ident": None, "core": None, "provider": None, "transport": None, "extra": {}, "stats": None})
     say("1. Сервер и CRM")
     ident = container_identity()
     say("  контейнер", ident[0][:12], "образ", ident[1][7:19], "перезапусков", ident[3])
@@ -184,10 +184,19 @@ def plan():
     node_check(new_transport, "транспорта")
     say("  ядро после правок", sha(new_core)[:12], len(new_core), "B")
     stats = {n: app_stat(n) for n in APP_FILES}
+    # 03.11.2026: дополнительные файлы CRM (content-day.cjs и др.) — точечные правки с проверкой исходника.
+    extra = {}
+    for name, spec in BUNDLE.get("app", {}).items():
+        old = app_file(name)
+        need(sha(old) == spec["liveSha"], "APP_CHANGED_" + name)
+        new = patch(old.decode("utf-8"), spec["patches"], name).encode("utf-8")
+        node_check(new, name)
+        extra[name] = (old, new)
+        stats[name] = app_stat(name)
     db = json.loads(run(["docker", "exec", "-i", CONTAINER, "node", "-"], SCHEMA_JS.encode()))
     say("  каналы Палитры:", " ".join(db["channels"]))
     say("  публикации Палитры:", " ".join(db["statuses"]) or "нет")
-    return plan_static({"ident": ident, "core": (core, new_core), "provider": (provider, new_provider), "transport": (transport, new_transport), "stats": stats})
+    return plan_static({"ident": ident, "core": (core, new_core), "provider": (provider, new_provider), "transport": (transport, new_transport), "extra": extra, "stats": stats})
 
 
 def plan_static(p):
@@ -278,6 +287,8 @@ def backup(p):
     (bdir / "app-autoposting.js").write_bytes(p["core"][0])
     (bdir / "app-onlypult-provider.js").write_bytes(p["provider"][0])
     (bdir / "app-autoposting-transport.js").write_bytes(p["transport"][0])
+    for name, (old, _) in p["extra"].items():
+        (bdir / ("app-" + name)).write_bytes(old)
     dbname = "palitra-r2-backup-" + ts + ".sqlite"
     run(["docker", "exec", "-i", CONTAINER, "node", "-"],
         ("const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync('/data/crm.sqlite',{readOnly:true});"
@@ -285,7 +296,7 @@ def backup(p):
     run(["docker", "cp", CONTAINER + ":/data/" + dbname, str(bdir / "crm.sqlite")], timeout=600)
     run(["docker", "exec", "-u", "0", CONTAINER, "rm", "-f", "/data/" + dbname])
     # Удаляются при откате только файлы, которых до установки не было (r5: прежняя запись [NEW_CSS] удалила бы живой файл).
-    manifest.update({"core": sha(p["core"][0]), "provider": sha(p["provider"][0]), "transport": sha(p["transport"][0])})
+    manifest.update({"core": sha(p["core"][0]), "provider": sha(p["provider"][0]), "transport": sha(p["transport"][0]), "extra": sorted(p["extra"])})
     (bdir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1))
     say("  резервная копия:", bdir, "; база", (bdir / "crm.sqlite").stat().st_size // 1024, "КБ")
     return bdir
@@ -307,6 +318,8 @@ def restore(bdir):
     write_app("onlypult-provider.js", (bdir / "app-onlypult-provider.js").read_bytes(), m["stats"]["onlypult-provider.js"])
     if (bdir / "app-autoposting-transport.js").exists():
         write_app("autoposting-transport.js", (bdir / "app-autoposting-transport.js").read_bytes(), m["stats"]["autoposting-transport.js"])
+    for name in m.get("extra", []):
+        write_app(name, (bdir / ("app-" + name)).read_bytes(), m["stats"][name])
     run(["docker", "restart", CONTAINER], timeout=180)
     time.sleep(15)
     say("  откат выполнен из", bdir)
@@ -332,6 +345,8 @@ def apply():
             write_app("onlypult-provider.js", p["provider"][1], p["stats"]["onlypult-provider.js"])
             if p["transport"][1] != p["transport"][0]:
                 write_app("autoposting-transport.js", p["transport"][1], p["stats"]["autoposting-transport.js"])
+            for name, (old, new) in p["extra"].items():
+                write_app(name, new, p["stats"][name])
             write_app("autoposting.js", p["core"][1], p["stats"]["autoposting.js"])
             say("  файлы CRM записаны и прочитаны обратно")
             restart_and_watch(p["ident"][3])
@@ -343,6 +358,8 @@ def apply():
         finals = {"autoposting.js": "core", "onlypult-provider.js": "provider", "autoposting-transport.js": "transport"}
         for name in (APP_FILES if p["core"] else ()):
             need(sha(app_file(name)) == sha(p[finals[name]][1]), "APP_FINAL_" + name)
+        for name, (_, new) in p["extra"].items():
+            need(sha(app_file(name)) == sha(new), "APP_FINAL_" + name)
     except BaseException as error:
         say("СБОЙ:", error, "— откатываю")
         try:

@@ -1152,7 +1152,7 @@
   let sourceReportView=null, sourceReportKey='';
   let responseReportView = null, responseReportKey = '';
   let contentTasksView = null, contentTasksKey = '', contentTasksOverlay = null;
-  function contentTasksAllowed() { return document.documentElement.dataset.entry === 'cabinet' && activeCompany === 'palitra-love' && Boolean(state.role && state.role !== 'client' && auth.cabinet?.member && (auth.cabinet.role === 'owner' || auth.cabinet.permissions.includes('autoposting.view'))); }
+  function contentTasksAllowed() { return document.documentElement.dataset.entry === 'cabinet' && ['palitra-love', 'alvi', 'avokado'].includes(activeCompany) && Boolean(state.role && state.role !== 'client' && auth.cabinet?.member && (auth.cabinet.role === 'owner' || auth.cabinet.permissions.includes('autoposting.view'))); }
   function contentCreateAllowed() { return contentTasksAllowed() && Boolean(auth.cabinet.role === 'owner' || auth.cabinet.permissions.includes('autoposting.edit')); }
   function contentApproveAllowed() { return contentCreateAllowed() && Boolean(auth.cabinet.role === 'owner' || auth.cabinet.permissions.includes('autoposting.approve')); }
   function contentOwnerAllowed() { return contentCreateAllowed() && auth.cabinet.role === 'owner'; }
@@ -1230,7 +1230,7 @@
         return value;
       };
       const composerRead = (method, args, options) => contentCall(method, options === undefined ? [args] : [args,options], method === 'readContext' ? 'read' : 'write');
-      contentTasksView = window.PalitraContentTasksUI.create({ document, window,
+      contentTasksView = window.PalitraContentTasksUI.create({ document, window, companyCode: activeCompany,
         canEdit: contentCreateAllowed(), canApprove: contentApproveAllowed(), canOwner: contentOwnerAllowed(),
         readPost: (...args) => contentCall('readPost', args),
         readPosts: (...args) => contentCall('readPosts', args),

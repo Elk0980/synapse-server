@@ -27,6 +27,9 @@
   }
   const listeners = [];
   let activeCompany = 'palitra-love';
+  // 03.11.2026: раздел «Контент» работает для каждой компании приложения; данные и права — своей компании.
+  const CONTENT_COMPANIES = new Set(['palitra-love', 'alvi', 'avokado']);
+  const contentAssetPattern = () => new RegExp('^/content/publishing-assets/' + activeCompany.replace(/[^a-z0-9_-]/g, '') + '/[a-f0-9]{32}\\.(jpg|png|webp|mp4|webm)$');
   let contentDayEpoch = 0;
 
   // Optional recorded attribution enriches labels only; it grants no capability or identity.
@@ -41,12 +44,12 @@
     const positive=n=>Number.isSafeInteger(n)&&n>0;
     const day=s=>typeof s==='string'&&/^\d{4}-\d\d-\d\d$/.test(s)&&Number.isFinite(Date.parse(s+'T12:00:00Z'))&&new Date(s+'T12:00:00Z').toISOString().slice(0,10)===s;
     const bad=()=>{throw Error('CONTENT_DAY_RESPONSE');};
-    function validSource(b){const current=b.copySource==='current-material';return (b.copySource===undefined||['published-snapshot','current-material'].includes(b.copySource))&&(current?positive(b.currentContentRevision)&&b.confirmCurrentSource===true&&b.publishedContentRevision===undefined:b.currentContentRevision===undefined&&b.confirmCurrentSource===undefined&&(b.publishedContentRevision===undefined||positive(b.publishedContentRevision)));}function copy(v){if(v?.schema!=='palitra-content-copy/v1'||v.companyCode!=='palitra-love'||!/^[-a-zA-Z0-9_]{8,100}$/.test(v.requestId||'')||typeof v.found!=='boolean')bad();if(!v.found)return {schema:v.schema,companyCode:v.companyCode,requestId:v.requestId,found:false};if(!positive(v.sourceId)||!positive(v.sourceRevision)||!/^[-a-z0-9_]{1,64}$/.test(v.platformId||'')||!positive(v.post?.id)||!positive(v.post.revision)||!['draft','scheduled','publishing','published','failed','needs_review','cancelled'].includes(v.post.status))bad();return {schema:v.schema,companyCode:v.companyCode,requestId:v.requestId,found:true,sourceId:v.sourceId,sourceRevision:v.sourceRevision,platformId:v.platformId,copySource:v.copySource||'published-snapshot',sourceContentRevision:v.sourceContentRevision??null,post:{id:v.post.id,revision:v.post.revision,status:v.post.status,scheduledAt:v.post.scheduledAt},...(v.planCopy&&typeof v.planCopy.versionId==='string'&&v.planCopy.status==='pending'?{planCopy:{versionId:v.planCopy.versionId,status:'pending'}}:{})};}
-    function project(v,expected){if(v?.schema!=='palitra-content-day/v1'||v.companyCode!=='palitra-love'||!day(v.date)||expected&&v.date!==expected||!day(v.today)||typeof v.timezone!=='string'||!Array.isArray(v.channels)||!v.coverage||typeof v.coverage.complete!=='boolean'||!Number.isSafeInteger(v.coverage.unknownDateCount)||typeof v.capabilities?.duplicateDraft!=='boolean')bad();new Intl.DateTimeFormat('ru-RU',{timeZone:v.timezone});return {schema:v.schema,companyCode:v.companyCode,actorScope:v.actorScope,date:v.date,today:v.today,timezone:v.timezone,asOf:v.asOf,coverage:{basis:v.coverage.basis,complete:v.coverage.complete,unknownDateCount:v.coverage.unknownDateCount},capabilities:{duplicateDraft:v.capabilities.duplicateDraft},channels:v.channels.map(c=>({id:c.id,platform:c.platform,name:c.name,connected:c.connected,enabled:c.enabled,published:c.published.map(p=>({postId:p.postId,revision:p.revision,contentRevision:p.contentRevision,title:p.title,excerpt:p.excerpt,format:p.format,key:p.key,basis:p.basis,at:p.at,url:p.url,publishedContentRevision:p.publishedContentRevision,copyable:p.copyable,copyUnavailableReason:p.copyUnavailableReason,...(p.currentMaterial?{currentMaterial:{revision:p.currentMaterial.revision,contentRevision:p.currentMaterial.contentRevision,title:p.currentMaterial.title,text:p.currentMaterial.text,format:p.currentMaterial.format}}:{})})),planned:c.planned.map(p=>({postId:p.postId,revision:p.revision,contentRevision:p.contentRevision,title:p.title,format:p.format,state:p.state,scheduledAt:p.scheduledAt}))}))};}
+    function validSource(b){const current=b.copySource==='current-material';return (b.copySource===undefined||['published-snapshot','current-material'].includes(b.copySource))&&(current?positive(b.currentContentRevision)&&b.confirmCurrentSource===true&&b.publishedContentRevision===undefined:b.currentContentRevision===undefined&&b.confirmCurrentSource===undefined&&(b.publishedContentRevision===undefined||positive(b.publishedContentRevision)));}function copy(v){if(v?.schema!=='palitra-content-copy/v1'||v.companyCode!==activeCompany||!/^[-a-zA-Z0-9_]{8,100}$/.test(v.requestId||'')||typeof v.found!=='boolean')bad();if(!v.found)return {schema:v.schema,companyCode:v.companyCode,requestId:v.requestId,found:false};if(!positive(v.sourceId)||!positive(v.sourceRevision)||!/^[-a-z0-9_]{1,64}$/.test(v.platformId||'')||!positive(v.post?.id)||!positive(v.post.revision)||!['draft','scheduled','publishing','published','failed','needs_review','cancelled'].includes(v.post.status))bad();return {schema:v.schema,companyCode:v.companyCode,requestId:v.requestId,found:true,sourceId:v.sourceId,sourceRevision:v.sourceRevision,platformId:v.platformId,copySource:v.copySource||'published-snapshot',sourceContentRevision:v.sourceContentRevision??null,post:{id:v.post.id,revision:v.post.revision,status:v.post.status,scheduledAt:v.post.scheduledAt},...(v.planCopy&&typeof v.planCopy.versionId==='string'&&v.planCopy.status==='pending'?{planCopy:{versionId:v.planCopy.versionId,status:'pending'}}:{})};}
+    function project(v,expected){if(v?.schema!=='palitra-content-day/v1'||v.companyCode!==activeCompany||!day(v.date)||expected&&v.date!==expected||!day(v.today)||typeof v.timezone!=='string'||!Array.isArray(v.channels)||!v.coverage||typeof v.coverage.complete!=='boolean'||!Number.isSafeInteger(v.coverage.unknownDateCount)||typeof v.capabilities?.duplicateDraft!=='boolean')bad();new Intl.DateTimeFormat('ru-RU',{timeZone:v.timezone});return {schema:v.schema,companyCode:v.companyCode,actorScope:v.actorScope,date:v.date,today:v.today,timezone:v.timezone,asOf:v.asOf,coverage:{basis:v.coverage.basis,complete:v.coverage.complete,unknownDateCount:v.coverage.unknownDateCount},capabilities:{duplicateDraft:v.capabilities.duplicateDraft},channels:v.channels.map(c=>({id:c.id,platform:c.platform,name:c.name,connected:c.connected,enabled:c.enabled,published:c.published.map(p=>({postId:p.postId,revision:p.revision,contentRevision:p.contentRevision,title:p.title,excerpt:p.excerpt,format:p.format,key:p.key,basis:p.basis,at:p.at,url:p.url,publishedContentRevision:p.publishedContentRevision,copyable:p.copyable,copyUnavailableReason:p.copyUnavailableReason,...(p.currentMaterial?{currentMaterial:{revision:p.currentMaterial.revision,contentRevision:p.currentMaterial.contentRevision,title:p.currentMaterial.title,text:p.currentMaterial.text,format:p.currentMaterial.format}}:{})})),planned:c.planned.map(p=>({postId:p.postId,revision:p.revision,contentRevision:p.contentRevision,title:p.title,format:p.format,state:p.state,scheduledAt:p.scheduledAt}))}))};}
     function captureContext() { return { company: activeCompany, csrf: cabinetCsrf, epoch: contentDayEpoch }; }
     function checkContext(captured, signal) {
       if (!allowed || entry !== 'cabinet' || origin !== CABINET || FLAGS.network !== true ||
-          activeCompany !== 'palitra-love' || !cabinetCsrf || signal?.aborted ||
+          !CONTENT_COMPANIES.has(activeCompany) || !cabinetCsrf || signal?.aborted ||
           captured.company !== activeCompany || captured.csrf !== cabinetCsrf || captured.epoch !== contentDayEpoch)
         throw Object.assign(Error('CONTENT_CONTEXT_CHANGED'), { status: 403, contextChanged: true });
     }
@@ -54,7 +57,7 @@
       const write = method !== 'GET'; let dispatched = false;
       try {
         checkContext(captured, signal); dispatched = true;
-        const response = await window.fetch(path + (path.includes('?') ? '&' : '?') + 'companyCode=palitra-love', {
+        const response = await window.fetch(path + (path.includes('?') ? '&' : '?') + 'companyCode=' + encodeURIComponent(captured.company), {
           method, credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal,
           headers: { Accept: 'application/json', ...(write ? { 'Content-Type': binary ? body.type : 'application/json', 'X-CSRF-Token': captured.csrf } : {}),
             ...(binary ? { 'X-Filename': encodeURIComponent(body.name) } : {}) },
@@ -77,9 +80,9 @@
     const draftIntents = new Map(), platformIds = new Set(['telegram','vk','youtube_shorts','instagram','tiktok','max']);
     const originId = value => typeof value === 'string' && /^palitra-app:[a-zA-Z0-9_-]{16,100}$/.test(value);
     function draft(value, expectedOrigin) {
-      if (value?.companyCode !== 'palitra-love' || !positive(value.id) || !positive(value.revision) ||
+      if (value?.companyCode !== activeCompany || !positive(value.id) || !positive(value.revision) ||
           value.status !== 'draft' || value.origin !== expectedOrigin || typeof value.title !== 'string') bad();
-      return { companyCode: 'palitra-love', id: value.id, revision: value.revision, status: 'draft',
+      return { companyCode: activeCompany, id: value.id, revision: value.revision, status: 'draft',
         title: value.title, scheduledAt: value.scheduledAt ?? null, origin: value.origin };
     }
     function draftBody(body) {
@@ -90,7 +93,7 @@
           !Array.isArray(body.platformIds) || !body.platformIds.length || body.platformIds.length > 6 ||
           new Set(body.platformIds).size !== body.platformIds.length || body.platformIds.some(id => !platformIds.has(id)) ||
           !Array.isArray(body.mediaUrls) || body.mediaUrls.length > 10 || body.mediaUrls.some(value => {
-            try { const url = new URL(value); return url.origin !== CABINET || !/^\/content\/publishing-assets\/palitra-love\/[a-f0-9]{32}\.(jpg|png|webp|mp4|webm)$/.test(url.pathname) || url.search || url.hash || url.username || url.password; }
+            try { const url = new URL(value); return url.origin !== CABINET || !contentAssetPattern().test(url.pathname) || url.search || url.hash || url.username || url.password; }
             catch (_) { return true; }
           }) || !(body.scheduledAt === null || typeof body.scheduledAt === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(body.scheduledAt) && Number.isFinite(Date.parse(body.scheduledAt))) ||
           !(body.mediaSha256 === undefined || body.mediaSha256 === '' || /^[a-f0-9]{64}$/.test(body.mediaSha256)))
@@ -104,7 +107,7 @@
       const captured = captureContext(); checkContext(captured, signal);
       const settings = await request('/content/crm/autoposting/settings', { signal, captured });
       checkContext(captured, signal);
-      if (settings?.companyCode !== 'palitra-love' || !Array.isArray(settings.channels) ||
+      if (settings?.companyCode !== activeCompany || !Array.isArray(settings.channels) ||
           typeof settings.timezone !== 'string' || !settings.timezone) bad();
       new Intl.DateTimeFormat('ru-RU', {timeZone: settings.timezone});
       const channels = settings.channels.filter(item => platformIds.has(item?.id)).map(item => {
@@ -116,7 +119,7 @@
       // Reading the publication settings needs no separate company-information permission.
       const state = settings.profileState === undefined ? 'unknown' : settings.profileState;
       if (!['current','stale','missing','unknown'].includes(state) || !(settings.currentProfileRevision === undefined || settings.currentProfileRevision === null || positive(settings.currentProfileRevision)) || state === 'current' && !positive(settings.currentProfileRevision)) bad();
-      return { channels, timezone: settings.timezone, profileRevision: null, publisherLabel: 'Палитра',
+      return { channels, timezone: settings.timezone, profileRevision: null, publisherLabel: window.SynapseCompanies?.profile?.(activeCompany)?.name || 'Компания',
         currentProfileRevision: state === 'current' ? settings.currentProfileRevision : null, profileState: state };
     }
     async function uploadAsset(file, { signal } = {}) {
@@ -127,7 +130,7 @@
         throw Object.assign(TypeError(video ? 'INVALID_VIDEO' : 'INVALID_PHOTO'), { definitive: true });
       return request('/content/publishing-assets', { method: 'POST', body: file, binary: true, signal, validate: value => {
         let url; try { url = new URL(value?.url); } catch (_) { bad(); }
-        if (url.origin !== CABINET || !/^\/content\/publishing-assets\/palitra-love\/[a-f0-9]{32}\.(jpg|png|webp|mp4|webm)$/.test(url.pathname) ||
+        if (url.origin !== CABINET || !contentAssetPattern().test(url.pathname) ||
             url.search || url.hash || url.username || url.password || value.type !== file.type || value.size !== file.size || !/^[a-f0-9]{64}$/.test(value.sha256)) bad();
         return { url: url.href, type: value.type, size: value.size, sha256: value.sha256 };
       } });
@@ -153,7 +156,7 @@
       try {
         checkContext(intent.captured, signal);
         const list = await request('/content/crm/autoposting/posts', { signal, captured: intent.captured });
-        if (list?.companyCode !== 'palitra-love' || !Array.isArray(list.posts)) bad();
+        if (list?.companyCode !== activeCompany || !Array.isArray(list.posts)) bad();
         const matches = list.posts.filter(item => item?.origin === intent.body.origin);
         if (matches.length !== 1) throw unknownDraft();
         // Same origin is necessary but the returned material must also match this frozen intent.
@@ -204,11 +207,11 @@
       return output;
     }
     function safeMediaPreview(value) {
-      try { const parsed = new URL(value); return parsed.protocol === 'https:' && parsed.origin === CABINET && !parsed.username && !parsed.password && !parsed.hash && !parsed.search && /^\/content\/publishing-assets\/palitra-love\/[a-f0-9]{32}\.(jpg|png|webp|mp4|webm)$/.test(parsed.pathname) && !/[\u0000-\u0020\u007f]/.test(value) ? parsed.href : null; }
+      try { const parsed = new URL(value); return parsed.protocol === 'https:' && parsed.origin === CABINET && !parsed.username && !parsed.password && !parsed.hash && !parsed.search && contentAssetPattern().test(parsed.pathname) && !/[\u0000-\u0020\u007f]/.test(value) ? parsed.href : null; }
       catch (_) { return null; }
     }
     function post(value, expectedId) {
-      if (!plainObject(value) || value.companyCode !== 'palitra-love' || !positive(value.id) || expectedId !== undefined && value.id !== expectedId ||
+      if (!plainObject(value) || value.companyCode !== activeCompany || !positive(value.id) || expectedId !== undefined && value.id !== expectedId ||
           !positive(value.revision) || !postStates.has(value.status) || typeof value.title !== 'string' || value.title.length > 200 ||
           typeof value.text !== 'string' || value.text.length > 20000 || !Array.isArray(value.mediaUrls) || value.mediaUrls.length > 10 ||
           value.mediaUrls.some(item => typeof item !== 'string' || item.length > 4000) || !Array.isArray(value.platformIds) || value.platformIds.length > 20 ||
@@ -233,9 +236,9 @@
     async function readPosts({status,signal} = {}) {
       if (status !== undefined && !postStates.has(status)) throw Object.assign(TypeError('CONTENT_POST_STATUS'), {definitive:true});
       return request('/content/crm/autoposting/posts', {signal,validate:value => {
-        if (value?.companyCode !== 'palitra-love' || !Array.isArray(value.posts) || value.posts.length > 200) bad();
+        if (value?.companyCode !== activeCompany || !Array.isArray(value.posts) || value.posts.length > 200) bad();
         const items = value.posts.map(item => post(item));
-        return {companyCode:'palitra-love',posts:status === undefined ? items : items.filter(item => item.status === status),limit:200,truncated:items.length >= 200};
+        return {companyCode:activeCompany,posts:status === undefined ? items : items.filter(item => item.status === status),limit:200,truncated:items.length >= 200};
       }});
     }
     function updateBody(input) {
