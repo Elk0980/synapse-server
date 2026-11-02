@@ -659,3 +659,49 @@ test('настройки показывают реальные форматы н
  assert.equal((await tt.api.checkChannel('alvi','tiktok')).ok,true);
  assert.equal((await tt.publish({platformOptions:{tiktok:{privacy:'SELF_ONLY'}},mediaUrls:['https://cdn.example.test/d1.mp4']})).status,'needs_review');
 });
+
+/* 02.11.2026: полный набор параметров Onlypult (SDK 0.1.9, openapi.yaml). */
+const tgFixture=t=>newPlatformFixture(t,'telegram',{profile:'tg-1',platform:'telegram',
+ limits:{platform:{limits:{text:{charLimit:4096},media:{maxCount:10}}}},
+ post:{id:'tg0000000000000a',profile_id:'tg-1',status:'scheduled',platform:'telegram'}});
+const vkFixture=t=>newPlatformFixture(t,'vk',{profile:'vk-1',platform:'vkontakte',
+ limits:{platform:{limits:{text:{charLimit:15000},media:{maxCount:10}}}},
+ post:{id:'vk0000000000000a',profile_id:'vk-1',status:'scheduled',platform:'vkontakte'}});
+const lastPost=f=>f.calls.filter(call=>call.path==='/posts'&&call.options.method==='POST').pop().body;
+
+test('Telegram через Onlypult: закрепление, подпись над фото, опрос и автоудаление раскладываются по полям запроса',async t=>{
+ const f=tgFixture(t);f.save();assert.equal((await f.api.checkChannel('alvi','telegram')).ok,true);
+ await f.publish({platformOptions:{telegram:{pin_message:true,show_caption_above_media:true,poll_question:'Какой букет?',poll_options:['Розы','Пионы'],poll_anonymous:false,delete_after_value:2,delete_after_unit:'days'}}});
+ const body=lastPost(f);
+ assert.deepEqual(body.platform_options,{telegram:{pin_message:true,poll:{question:'Какой букет?',options:['Розы','Пионы'],anonymous:false}}});
+ assert.deepEqual(body.post_options,{show_caption_above_media:true});
+ assert.equal(body.delete_at_enable,true);assert.equal(body.delete_at_offset_value,2);assert.equal(body.delete_at_offset_unit,86400);
+ const before=f.calls.length;
+ for(const telegram of [{poll_question:'Один вариант',poll_options:['A']},{poll_options:['A','B']},{delete_after_value:2},{delete_after_value:2,delete_after_unit:'years'},{show_caption_above_media:'да'},{is_story:true}])
+  await assert.rejects(f.publish({platformOptions:{telegram}}),error=>error.code==='CONTENT_LIMIT',JSON.stringify(telegram));
+ assert.equal(f.calls.filter(call=>call.path==='/posts'&&call.options.method==='POST').length,1,'отклонённые параметры до POST не доходят');
+ assert.ok(f.calls.length>=before);
+});
+
+test('ВКонтакте через Onlypult: запрет комментариев, сетка вложений и опрос; Instagram: первый комментарий и пробный Reels',async t=>{
+ const vk=vkFixture(t);vk.save();assert.equal((await vk.api.checkChannel('alvi','vk')).ok,true);
+ await vk.publish({platformOptions:{vk:{disable_comment:true,attachments_mode:'grid',poll_question:'Вопрос',poll_options:['Да','Нет'],poll_multiple:true}}});
+ const vkBody=lastPost(vk);
+ assert.deepEqual(vkBody.platform_options,{vkontakte:{disable_comment:true,poll:{question:'Вопрос',options:['Да','Нет'],multiple:true}}});
+ assert.deepEqual(vkBody.post_options,{primary_attachments_mode:'grid'});
+ const ig=igFixture(t);ig.save();assert.equal((await ig.api.checkChannel('alvi','instagram')).ok,true);
+ await ig.publish({platformOptions:{instagram:{is_reels:true,graduation_strategy:'SS_PERFORMANCE',first_comment:'Ссылка в профиле'}},mediaUrls:['https://cdn.example.test/d1.mp4']});
+ const igBody=lastPost(ig);
+ assert.deepEqual(igBody.platform_options,{instagram:{is_reels:true,graduation_strategy:'SS_PERFORMANCE'}});
+ assert.equal(igBody.first_comment,'Ссылка в профиле');
+ await assert.rejects(ig.publish({platformOptions:{instagram:{graduation_strategy:'MANUAL'}},mediaUrls:['https://cdn.example.test/d1.jpg']}),error=>error.code==='CONTENT_LIMIT');
+});
+
+test('YouTube Shorts: доступ из материала, без выбора — открытый, как раньше',async t=>{
+ const f=youtubeFixture(t);f.save();assert.equal((await f.api.checkChannel('alvi','youtube_shorts')).ok,true);
+ await f.publish({platformOptions:{youtube_shorts:{privacy:'unlisted'}}});
+ assert.deepEqual(lastPost(f).platform_options,{youtube:{privacy:'unlisted',is_shorts:true}});
+ await f.publish({});
+ assert.deepEqual(lastPost(f).platform_options,{youtube:{is_shorts:true,privacy:'public'}});
+ await assert.rejects(f.publish({platformOptions:{youtube_shorts:{privacy:'friends'}}}),error=>error.code==='CONTENT_LIMIT');
+});

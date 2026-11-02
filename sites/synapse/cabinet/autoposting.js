@@ -323,9 +323,18 @@ function create(container, context) {
   const optionTouched=new Set();
   const readOptions=()=>{
     const out={};
+    /* 02.11.2026: параметры, которых в этой форме нет (приложение Палитры задаёт их больше),
+       сохраняются как были. Иначе простое сохранение карточки стёрло бы согласованные настройки. */
+    for(const [platform,options] of Object.entries(optionsBaseline||{})){
+      if(!options||typeof options!=='object'||Array.isArray(options))continue;
+      const known=new Set((PLATFORM_OPTIONS.find(([id])=>id===platform)?.[1]||[]).map(([key])=>key));
+      if(platform==='tiktok')known.add('privacy');
+      const rest=Object.fromEntries(Object.entries(options).filter(([key])=>!known.has(key)));
+      if(Object.keys(rest).length)out[platform]=rest;
+    }
     for(const [platform,fields] of PLATFORM_OPTIONS){
       const saved=optionsBaseline?.[platform]||{};
-      const value={};
+      const value={...(out[platform]||{})};
       if(platform==='tiktok'){
         const privacy=container.querySelector('[data-option="tiktok.privacy"]').value;
         if(privacy)value.privacy=privacy;
@@ -338,6 +347,7 @@ function create(container, context) {
         else if(Object.hasOwn(saved,key)||optionTouched.has(path))value[key]=false;
       }
       if(Object.keys(value).length)out[platform]=Object.fromEntries(Object.keys(value).sort().map(item=>[item,value[item]]));
+      else delete out[platform];
     }
     return Object.fromEntries(Object.keys(out).sort().map(key=>[key,out[key]]));
   };

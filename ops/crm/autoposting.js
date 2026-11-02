@@ -53,11 +53,44 @@ const sha256=value=>{if(value===null||value===undefined||value==='')return '';if
    tiktok.privacy: четыре значения контракта Onlypult (официальный SDK 0.1.9),
    не перечень возможностей автора. «По умолчанию публично» не подставляется;
    Onlypult должен принять точный согласованный режим без замены и повторного POST. */
+/* 02.11.2026: полный набор параметров Onlypult для наших шести площадок
+   (официальный SDK @onlypult/mcp 0.1.9 и https://onlypult.com/dev/openapi.yaml, сверено 02.11.2026).
+   Все параметры необязательны, кроме аудитории TikTok, и хранятся плоско в platform_options площадки.
+   Отправитель Onlypult сам раскладывает их по полям запроса (first_comment, delete_at_*, post_options, poll).
+   Прямое подключение ботом эти параметры не исполняет — постановка в очередь тогда отклоняется. */
+const DELETE_UNITS=Object.freeze(['minutes','hours','days','weeks']);
+const OPTION_TEXT=max=>Object.freeze({type:'text',max});
+const OPTION_INT=(min,max)=>Object.freeze({type:'int',min,max});
+const OPTION_LINES=Object.freeze({type:'lines',min:2,max:10,each:100});
+const DELETE_RULES=Object.freeze({delete_after_value:OPTION_INT(1,999),delete_after_unit:DELETE_UNITS});
+const POLL_RULES=Object.freeze({poll_question:OPTION_TEXT(300),poll_options:OPTION_LINES,poll_multiple:'boolean',poll_anonymous:'boolean'});
 const PLATFORM_OPTION_SCHEMA=Object.freeze({
-  instagram:Object.freeze({is_story:'boolean',is_reels:'boolean',disable_comment:'boolean'}),
-  tiktok:Object.freeze({privacy:['PUBLIC_TO_EVERYONE','MUTUAL_FOLLOW_FRIENDS','FOLLOWER_OF_CREATOR','SELF_ONLY'],disable_comment:'boolean',disable_duet:'boolean',disable_stitch:'boolean'}),
-  max:Object.freeze({pin_message:'boolean'}),
+  instagram:Object.freeze({is_story:'boolean',is_reels:'boolean',disable_comment:'boolean',graduation_strategy:['MANUAL','SS_PERFORMANCE'],first_comment:OPTION_TEXT(2200),...DELETE_RULES}),
+  tiktok:Object.freeze({privacy:['PUBLIC_TO_EVERYONE','MUTUAL_FOLLOW_FRIENDS','FOLLOWER_OF_CREATOR','SELF_ONLY'],disable_comment:'boolean',disable_duet:'boolean',disable_stitch:'boolean',...DELETE_RULES}),
+  youtube_shorts:Object.freeze({privacy:['public','unlisted','private'],...DELETE_RULES}),
+  telegram:Object.freeze({pin_message:'boolean',show_caption_above_media:'boolean',...POLL_RULES,...DELETE_RULES}),
+  vk:Object.freeze({disable_comment:'boolean',attachments_mode:['carousel','grid'],...POLL_RULES,...DELETE_RULES}),
+  max:Object.freeze({pin_message:'boolean',...DELETE_RULES}),
 });
+function optionValue(platform,key,rule,item){
+  if(rule==='boolean'){if(typeof item!=='boolean')fail(400,`Опция «${key}» — true или false`);return item;}
+  if(Array.isArray(rule)){if(typeof item!=='string'||!rule.includes(item))fail(400,`Опция «${key}»: допустимо ${rule.join(' или ')}`);return item;}
+  if(rule.type==='text'){
+    if(typeof item!=='string')fail(400,`Опция «${key}» — текст`);
+    const text=item.trim();if(!text)fail(400,`Опция «${key}» не может быть пустой`);
+    if(text.length>rule.max)fail(400,`Опция «${key}» длиннее ${rule.max} символов`);return text;
+  }
+  if(rule.type==='int'){if(!Number.isSafeInteger(item)||item<rule.min||item>rule.max)fail(400,`Опция «${key}»: целое число от ${rule.min} до ${rule.max}`);return item;}
+  if(rule.type==='lines'){
+    if(!Array.isArray(item))fail(400,`Опция «${key}» — список`);
+    const lines=item.map(line=>typeof line==='string'?line.trim():null);
+    if(lines.some(line=>!line||line.length>rule.each))fail(400,`Каждый вариант «${key}» — от 1 до ${rule.each} символов`);
+    if(lines.length<rule.min||lines.length>rule.max)fail(400,`Опция «${key}»: от ${rule.min} до ${rule.max} вариантов`);
+    if(new Set(lines).size!==lines.length)fail(400,`Варианты «${key}» повторяются`);
+    return lines;
+  }
+  fail(400,`Опция «${key}» для площадки ${platform} не поддерживается`);
+}
 function platformOptions(value) {
   if(value===null||value===undefined||value==='')return {};
   if(typeof value!=='object'||Array.isArray(value))fail(400,'Опции площадок должны быть объектом');
@@ -68,11 +101,13 @@ function platformOptions(value) {
     const schema=PLATFORM_OPTION_SCHEMA[platform],clean={};
     for(const [key,item]of Object.entries(options)){
       if(!Object.hasOwn(schema,key))fail(400,`Неизвестная опция «${key}» для площадки ${platform}`);
-      const rule=schema[key];
-      if(rule==='boolean'){if(typeof item!=='boolean')fail(400,`Опция «${key}» — true или false`);clean[key]=item;}
-      else{if(typeof item!=='string'||!rule.includes(item))fail(400,`Опция «${key}»: допустимо ${rule.join(' или ')}`);clean[key]=item;}
+      clean[key]=optionValue(platform,key,schema[key],item);
     }
     if(platform==='instagram'&&clean.is_story===true&&clean.is_reels===true)fail(400,'Story и Reel — разные режимы Instagram: выберите один');
+    if(platform==='instagram'&&Object.hasOwn(clean,'graduation_strategy')&&clean.is_reels!==true)fail(400,'Пробный Reels доступен только для формата «Ролик»');
+    if(Object.hasOwn(clean,'delete_after_value')!==Object.hasOwn(clean,'delete_after_unit'))fail(400,'Для автоудаления укажите и число, и единицу времени');
+    const poll=['poll_question','poll_options','poll_multiple','poll_anonymous'].filter(key=>Object.hasOwn(clean,key));
+    if(poll.length&&!(Object.hasOwn(clean,'poll_question')&&Object.hasOwn(clean,'poll_options')))fail(400,'Для опроса нужны вопрос и от 2 до 10 вариантов');
     if(Object.keys(clean).length)out[platform]=Object.fromEntries(Object.keys(clean).sort().map(key=>[key,clean[key]]));
   }
   return Object.fromEntries(Object.keys(out).sort().map(key=>[key,out[key]]));
@@ -1085,6 +1120,10 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
       if(blocked.length)fail(409,`Уже отмечено как опубликованное вне ЛК: ${blocked.join(', ')}. Повторная отправка создаст дубликат.`,'EXTERNAL_PUBLICATION_RECORDED');
       if(channels.some(channel=>!channel||!channel.connected))fail(409,'Выбранный канал не подключён','CHANNEL_NOT_CONNECTED');
       if(channels.some(channel=>!channel.enabled))fail(409,'Отправка на выбранную площадку выключена','CHANNEL_DISABLED');
+      // Дополнительные параметры исполняет только Onlypult: прямой бот не должен молча отправить без них.
+      const chosenOptions=JSON.parse(row.platform_options||'{}');
+      const directWithOptions=data.platformIds.find((id,index)=>(channels[index].provider||'direct')!=='onlypult'&&Object.keys(chosenOptions[id]||{}).length);
+      if(directWithOptions)fail(409,`Дополнительные параметры площадки ${PLAN_PLATFORMS[directWithOptions]?.label||directWithOptions} работают только при подключении через Onlypult`,'OPTIONS_NEED_ONLYPULT');
       // Не создавать частичную доставку на остальные каналы при заведомом отказе одного.
       // Одобрение содержимого допустимо отдельно; approveAndSchedule откатится атомарно.
       const deliveryBlocked=channels.map(deliveryBlocker).find(Boolean);

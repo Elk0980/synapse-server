@@ -12,12 +12,58 @@ const PLATFORM = {vk:['vkontakte','vk'],telegram:['telegram'],youtube_shorts:['y
   instagram:['instagram_business_login','instagram_business'],tiktok:['tiktok'],max:['max']};
 /* Ключ platform_options и закрытый список полей, которые Onlypult принимает для этой площадки.
    Опции одной площадки никогда не уходят другой: отправляется только ключ своей площадки. */
-const OPTION_KEY = {instagram:'instagram',tiktok:'tiktok',max:'max'};
+const OPTION_KEY = {instagram:'instagram',tiktok:'tiktok',max:'max',telegram:'telegram',vk:'vkontakte',youtube_shorts:'youtube'};
+/* 02.11.2026: полный набор параметров Onlypult для наших площадок (SDK 0.1.9, openapi.yaml).
+   Ключи без точки уходят в platform_options площадки; остальные раскладываются по запросу:
+   first_comment и delete_at_* — поля поста, show_caption_above_media и primary_attachments_mode —
+   post_options, poll_* — объект poll площадки. Других ключей нет. */
+const DELETE_FIELDS = ['delete_after_value','delete_after_unit'];
+const POLL_FIELDS = ['poll_question','poll_options','poll_multiple','poll_anonymous'];
 const OPTION_FIELDS = {
-  instagram:['is_story','is_reels','disable_comment'],
-  tiktok:['privacy','disable_comment','disable_duet','disable_stitch'],
-  max:['pin_message'],
+  instagram:['is_story','is_reels','disable_comment','graduation_strategy','first_comment',...DELETE_FIELDS],
+  tiktok:['privacy','disable_comment','disable_duet','disable_stitch',...DELETE_FIELDS],
+  max:['pin_message',...DELETE_FIELDS],
+  telegram:['pin_message','show_caption_above_media',...POLL_FIELDS,...DELETE_FIELDS],
+  vk:['disable_comment','attachments_mode',...POLL_FIELDS,...DELETE_FIELDS],
+  youtube_shorts:['privacy',...DELETE_FIELDS],
 };
+const DELETE_UNIT_SECONDS = {minutes:60,hours:3600,days:86400,weeks:604800};
+/* Раскладка сохранённых параметров площадки в поля запроса Onlypult. Неверное значение —
+   CONTENT_LIMIT до POST: опубликовать не то, что согласовали, нельзя. */
+function requestOptions(platform, options, failure) {
+  const settings = {}, extra = {};
+  for (const [key, value] of Object.entries(options)) {
+    if (!OPTION_FIELDS[platform].includes(key)) throw failure('CONTENT_LIMIT');
+    if (DELETE_FIELDS.includes(key) || POLL_FIELDS.includes(key)) continue;
+    if (key === 'first_comment') {
+      if (typeof value !== 'string' || !value.trim() || value.length > 2200) throw failure('CONTENT_LIMIT');
+      extra.first_comment = value;
+    } else if (key === 'show_caption_above_media') {
+      if (typeof value !== 'boolean') throw failure('CONTENT_LIMIT');
+      extra.post_options = {...(extra.post_options || {}), show_caption_above_media: value};
+    } else if (key === 'attachments_mode') {
+      if (!['carousel','grid'].includes(value)) throw failure('CONTENT_LIMIT');
+      extra.post_options = {...(extra.post_options || {}), primary_attachments_mode: value};
+    } else settings[key] = value;
+  }
+  const hasDelete = DELETE_FIELDS.map(key => Object.hasOwn(options, key));
+  if (hasDelete[0] !== hasDelete[1]) throw failure('CONTENT_LIMIT');
+  if (hasDelete[0]) {
+    const amount = options.delete_after_value, unit = DELETE_UNIT_SECONDS[options.delete_after_unit];
+    if (!Number.isSafeInteger(amount) || amount < 1 || amount > 999 || !unit) throw failure('CONTENT_LIMIT');
+    Object.assign(extra, {delete_at_enable: true, delete_at_offset_value: amount, delete_at_offset_unit: unit});
+  }
+  if (POLL_FIELDS.some(key => Object.hasOwn(options, key))) {
+    const question = options.poll_question, answers = options.poll_options;
+    if (typeof question !== 'string' || !question.trim() || question.length > 300 || !Array.isArray(answers) ||
+        answers.length < 2 || answers.length > 10 || answers.some(item => typeof item !== 'string' || !item.trim() || item.length > 100) ||
+        ['poll_multiple','poll_anonymous'].some(key => Object.hasOwn(options, key) && typeof options[key] !== 'boolean')) throw failure('CONTENT_LIMIT');
+    settings.poll = {question, options: answers,
+      ...(Object.hasOwn(options, 'poll_multiple') ? {multiple: options.poll_multiple} : {}),
+      ...(Object.hasOwn(options, 'poll_anonymous') ? {anonymous: options.poll_anonymous} : {})};
+  }
+  return {settings, extra};
+}
 // Канал YouTube Shorts: заголовок обязателен, ровно один публичный HTTPS-видеофайл.
 // Категорию не отправляем: она опциональна и её идентификаторы берутся из отдельного запроса профиля.
 /* Единое правило ссылки на видео для YouTube Shorts во всех трёх проверках (кабинет, сервер, адаптер):
@@ -156,12 +202,8 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
       ? post.platformOptions[row.id] : null) || null;
     if (chosen !== null && (typeof chosen !== 'object' || Array.isArray(chosen))) throw failure('CONTENT_LIMIT');
     if (OPTION_KEY[row.id]) {
-      const allowed = OPTION_FIELDS[row.id];
-      const options = {};
-      for (const [key, value] of Object.entries(chosen || {})) {
-        if (!allowed.includes(key)) throw failure('CONTENT_LIMIT');
-        options[key] = value;
-      }
+      const {settings: options, extra: requestExtra} = requestOptions(row.id, chosen || {}, failure);
+      Object.assign(extra, requestExtra);
       if (row.id === 'instagram') {
         /* Story и Reel — разные режимы, и пределы одного на другой не переносятся.
            Reel — это ровно одно вложение, и оно видео: фото «в довесок» к ролику не уходит. */
@@ -177,6 +219,13 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
         if (!['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'].includes(options.privacy)) throw failure('TIKTOK_PRIVACY_REQUIRED');
         if (['disable_comment','disable_duet','disable_stitch'].some(key => Object.hasOwn(options,key) && typeof options[key] !== 'boolean')) throw failure('CONTENT_LIMIT');
         if (post.mediaUrls.filter(isVideoUrl).length !== 1 || post.mediaUrls.length !== 1) throw failure('CONTENT_LIMIT');
+      }
+      if (row.id === 'instagram' && Object.hasOwn(options, 'graduation_strategy') && options.is_reels !== true) throw failure('CONTENT_LIMIT');
+      if (row.id === 'youtube_shorts') {
+        /* Shorts всегда is_shorts; доступ — согласованный в материале, без выбора — открытый, как раньше. */
+        if (Object.hasOwn(options, 'privacy') && !['public','unlisted','private'].includes(options.privacy)) throw failure('CONTENT_LIMIT');
+        options.is_shorts = true;
+        if (!Object.hasOwn(options, 'privacy')) options.privacy = 'public';
       }
       if (Object.keys(options).length) extra.platform_options = {[OPTION_KEY[row.id]]: options};
     } else if (chosen && Object.keys(chosen).length) {
@@ -194,7 +243,6 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
       // privacy: публикация из кабинета делается публичной осознанно, это видно в подписи действия.
       if (title.length > 100) throw failure('CONTENT_LIMIT');
       extra.title = title;
-      extra.platform_options = {youtube:{is_shorts:true,privacy:'public'}};
     }
     return receipt(await request(row,'POST','/posts',{profile_ids:[row.target],...(withoutText ? {} : {content:post.text}),
       publish_now:true,...(post.mediaUrls.length ? {media_urls:post.mediaUrls} : {}),...extra}),row);

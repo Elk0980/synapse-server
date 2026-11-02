@@ -1043,3 +1043,20 @@ test('сторис без подписи сохраняется по режим�
     const body=JSON.parse(create[0].options.body);assert.equal(body.format,'');assert.equal(body.text,'');assert.deepEqual(body.platformOptions,{instagram:{is_story:true}});
   }finally{f.close();}
 });
+
+test('02.11.2026: параметры из приложения Палитры, которых нет в этой форме, переживают сохранение карточки',async()=>{
+  const rich={telegram:{pin_message:true,poll_question:'Какой букет?',poll_options:['Розы','Пионы']},vk:{attachments_mode:'grid'},
+    instagram:{first_comment:'Ссылка в профиле',is_reels:true},tiktok:{privacy:'PUBLIC_TO_EVERYONE',delete_after_value:2,delete_after_unit:'days'}};
+  const f=await fixture({entries:[optionsEntry({id:804,platformIds:['telegram','vk','instagram','tiktok'],platformOptions:rich})]});try{
+    f.set('autoposting-select','804','change');await f.settle();
+    f.set('autoposting-date','2099-04-04T10:00');
+    await f.click('autoposting-save');await f.settle();
+    const sent=f.calls.filter(call=>call.method!=='GET'&&/\/posts\/\d+$/.test(call.path)).pop();
+    assert.ok(sent,'материал сохранился');
+    assert.deepEqual(JSON.parse(sent.options.body).platformOptions,{
+      instagram:{first_comment:'Ссылка в профиле',is_reels:true},
+      telegram:{pin_message:true,poll_options:['Розы','Пионы'],poll_question:'Какой букет?'},
+      tiktok:{delete_after_unit:'days',delete_after_value:2,privacy:'PUBLIC_TO_EVERYONE'},
+      vk:{attachments_mode:'grid'}},'ничего не стёрто');
+  }finally{f.close();}
+});

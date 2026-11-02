@@ -1077,7 +1077,7 @@ test('публикуемые опции входят в версию содер�
   assert.ok(changed.platformApprovals.every(item=>item.state==='pending'));
   // Закрытая схема: чужие поля, чужие площадки и неподтверждённые значения не принимаются.
   const revision=changed.revision,profileRevision=f.information.get('alvi').revision;
-  for(const options of [{instagram:{is_video:true}},{telegram:{pin_message:true}},{tiktok:{privacy:'FRIENDS'}},
+  for(const options of [{instagram:{is_video:true}},{telegram:{is_story:true}},{two_gis:{pin_message:true}},{tiktok:{privacy:'FRIENDS'}},
     {instagram:{is_story:true,is_reels:true}},{max:{pin_message:'да'}}]){
     assert.throws(()=>f.api.update(changed.id,'alvi',{revision,platformOptions:options,profileRevision}),error=>error.status===400);
   }
@@ -1150,7 +1150,7 @@ test('импорт пакета принимает публикуемые опц
   // Закрытая схема действует и в импорте.
   assert.throws(()=>f.api.importPackage('alvi',{items:[item({dayKey:'D2',title:'Чужое поле',platformOptions:{instagram:{is_video:true}}})]},7),
     error=>error.status===400);
-  assert.throws(()=>f.api.importPackage('alvi',{items:[item({dayKey:'D3',title:'Чужая площадка',platformOptions:{telegram:{pin_message:true}}})]},7),
+  assert.throws(()=>f.api.importPackage('alvi',{items:[item({dayKey:'D3',title:'Чужая площадка',platformOptions:{two_gis:{pin_message:true}}})]},7),
     error=>error.status===400);
 });
 
@@ -1223,4 +1223,34 @@ test('Календарь: Instagram Story без подписи не счита�
   assert.ok(!igItem.calendarReadiness.platforms[0].issues.some(i=>/текст/.test(i)),JSON.stringify(igItem.calendarReadiness.platforms[0].issues));
   assert.ok(tgItem.calendarReadiness.platforms[0].issues.some(i=>/без текста Synapse отправляет только Instagram Story/.test(i)));
   assert.ok(!tgItem.calendarReadiness.platforms[0].issues.some(i=>/нет ни подписи, ни общего текста/.test(i)));
+});
+
+/* 02.11.2026: полный набор параметров Onlypult. */
+test('новые параметры площадок принимаются по закрытой схеме и нормализуются',t=>{
+  const f=fixture(t),profileRevision=f.information.get('palitra-love').revision;
+  const post=f.api.create('palitra-love',{title:'Опции',text:'Текст',mediaUrls:['https://example.test/photo.webp'],platformIds:['telegram','vk','youtube_shorts','instagram'],
+    scheduledAt:null,timezone:'Europe/Moscow',profileRevision,platformOptions:{
+      telegram:{pin_message:true,show_caption_above_media:false,poll_question:'  Какой букет?  ',poll_options:[' Розы ','Пионы'],poll_anonymous:true,delete_after_value:3,delete_after_unit:'hours'},
+      vk:{disable_comment:true,attachments_mode:'grid'},youtube_shorts:{privacy:'unlisted'},instagram:{first_comment:'Ссылка в профиле'}}},7);
+  assert.deepEqual(post.platformOptions.telegram,{delete_after_unit:'hours',delete_after_value:3,pin_message:true,poll_anonymous:true,poll_options:['Розы','Пионы'],poll_question:'Какой букет?',show_caption_above_media:false});
+  assert.deepEqual(post.platformOptions.vk,{attachments_mode:'grid',disable_comment:true});
+  assert.deepEqual(post.platformOptions.youtube_shorts,{privacy:'unlisted'});
+  const bad=[{telegram:{poll_question:'Только вопрос'}},{telegram:{poll_question:'В',poll_options:['Один']}},{telegram:{poll_question:'В',poll_options:['А','А']}},
+    {vk:{delete_after_value:2}},{vk:{delete_after_value:0,delete_after_unit:'days'}},{max:{delete_after_value:2,delete_after_unit:'years'}},
+    {youtube_shorts:{privacy:'friends'}},{instagram:{graduation_strategy:'MANUAL'}},{instagram:{first_comment:'   '}},{vk:{attachments_mode:'slider'}},{telegram:{poll_question:'В',poll_options:Array.from({length:11},(_,i)=>'В'+i)}}];
+  for(const platformOptions of bad)assert.throws(()=>f.api.update(post.id,'palitra-love',{revision:post.revision,platformOptions,profileRevision}),error=>error.status===400,JSON.stringify(platformOptions));
+  assert.deepEqual(f.api.get(post.id,'palitra-love').platformOptions,post.platformOptions,'отклонённые правки ничего не записали');
+});
+
+test('дополнительные параметры через прямого бота не планируются: отказ атомарный и с понятной причиной',async t=>{
+  const f=fixture(t);
+  const p=palitraDraft(f,{platformOptions:{telegram:{pin_message:true}}});
+  await assert.rejects(approveSchedule(f,p),error=>error.details?.code==='OPTIONS_NEED_ONLYPULT'&&/только при подключении через Onlypult/.test(error.message));
+  const kept=f.api.get(p.id,'palitra-love');
+  assert.equal(kept.status,'draft');assert.equal(kept.approval.approved,false,'согласование не осталось половинчатым');
+  f.channels[0].provider='onlypult';
+  const scheduled=await approveSchedule(f,p);
+  assert.equal(scheduled.status,'scheduled');
+  const plain=palitraDraft(f);f.channels[0].provider='direct';
+  assert.equal((await approveSchedule(f,plain)).status,'scheduled','без доп. параметров прямой бот работает как раньше');
 });
