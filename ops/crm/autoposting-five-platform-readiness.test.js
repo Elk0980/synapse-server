@@ -8,7 +8,7 @@ const {createAutopostingTransport}=require('./autoposting-transport');
 
 const FOUR=['telegram','vk','youtube_shorts','instagram'],FIVE=[...FOUR,'tiktok'];
 const PLATFORM={telegram:'telegram',vk:'vk',youtube_shorts:'youtube',instagram:'instagram_business_login',tiktok:'tiktok'};
-async function fixture(t,{uncertain=null}={}){
+async function fixture(t,{uncertain=null,blocked=false}={}){
   t.mock.method(globalThis,'fetch',async()=>assert.fail('Настоящая сеть запрещена'));
   const db=new DatabaseSync(':memory:');t.after(()=>db.close());
   db.exec(`PRAGMA foreign_keys=ON;
@@ -33,7 +33,7 @@ async function fixture(t,{uncertain=null}={}){
       if(id===uncertain)throw Error('Вымышленная потеря ответа после отправки');
       data={id:'fixture-job-'+id,profile_ids:['fixture-'+id],platform:PLATFORM[id],status:'draft'};
     }else if(call.method==='GET'&&call.path.startsWith('/v1/posts/fixture-job-')){
-      const id=call.path.slice('/v1/posts/fixture-job-'.length);assert.ok(FOUR.includes(id));
+      const id=call.path.slice('/v1/posts/fixture-job-'.length);assert.ok(FIVE.includes(id));
       data={id:'fixture-job-'+id,profile_ids:['fixture-'+id],platform:PLATFORM[id],status:'published'};
     }else assert.fail('Непредусмотренный запрос '+call.method+' '+call.path);
     return new Response(JSON.stringify({data}),{status:200,headers:{'content-type':'application/json'}});
@@ -44,6 +44,7 @@ async function fixture(t,{uncertain=null}={}){
     transport.saveSettings('palitra-love',{channels:[{id,revision:0,enabled:true,provider:'onlypult',target:'fixture-'+id,token:'op_'+'b'.repeat(64)}]});
     assert.equal((await transport.checkChannel('palitra-love',id)).ok,true);
   }
+  if(blocked){const getSettings=transport.getSettings;transport.getSettings=code=>{const settings=getSettings(code);settings.channels.find(c=>c.id==='tiktok').caps.deliveryBlocker='TIKTOK_PRIVACY_UNCONFIRMED';return settings;};}
   calls.length=0;
   const api=createAutoposting(db,{information,transport,now,logger:{warn(){}}});
   const create=(ids=FIVE)=>api.create('palitra-love',{title:'Вымышленный тестовый ролик',text:'Вымышленный общий текст',
@@ -57,7 +58,7 @@ async function fixture(t,{uncertain=null}={}){
 }
 
 test('известный блокер TikTok останавливает всю выбранную очередь до записи доставок',async t=>{
-  const f=await fixture(t);let card=f.create();
+  const f=await fixture(t,{blocked:true});let card=f.create();
   await assert.rejects(f.schedule(card),e=>e.details?.code==='APPROVAL_REQUIRED');
   card=f.approve(card);
   const calendar=await f.api.calendar('palitra-love',{from:'2026-11-01',to:'2026-11-07'});
@@ -71,30 +72,31 @@ test('известный блокер TikTok останавливает всю �
   assert.equal(f.transport.getSettings('palitra-love').channels.find(x=>x.id==='tiktok').connected,true,'доступ и возможность отправки различаются');
 });
 
-test('четыре транспорта: одобрение и время обязательны, подписи и профили не смешиваются',async t=>{
-  const f=await fixture(t);let card=f.create(FOUR);
+test('все пять транспортов: одобрение и время обязательны, подписи и профили не смешиваются',async t=>{
+  const f=await fixture(t);let card=f.create(FIVE);
   await assert.rejects(f.schedule(card),e=>e.details?.code==='APPROVAL_REQUIRED');
   card=await f.schedule(f.approve(card));await f.api.drain();
   assert.equal(f.calls.filter(x=>x.method==='POST').length,0,'до срока отправки нет');
   f.advance();await f.api.drain();
-  const writes=f.calls.filter(x=>x.method==='POST');assert.equal(writes.length,4);
+  const writes=f.calls.filter(x=>x.method==='POST');assert.equal(writes.length,5);
   for(const call of writes){
-    const id=call.body.profile_ids[0].slice('fixture-'.length);assert.ok(FOUR.includes(id));
+    const id=call.body.profile_ids[0].slice('fixture-'.length);assert.ok(FIVE.includes(id));
     assert.equal(call.body.content,'Вымышленная подпись '+id);
     assert.deepEqual(call.body.media_urls,['https://cdn.example.test/fixture.mp4']);
+    if(id==='tiktok')assert.deepEqual(call.body.platform_options,{tiktok:{privacy:'SELF_ONLY'}});
     if(id==='instagram')assert.deepEqual(call.body.platform_options,{instagram:{is_reels:true}});
     if(id==='youtube_shorts')assert.deepEqual(call.body.platform_options,{youtube:{is_shorts:true,privacy:'public'}});
     if(['telegram','vk'].includes(id))assert.equal(call.body.platform_options,undefined);
   }
   f.advance();await f.api.drain();
-  assert.equal(f.calls.filter(x=>x.method==='POST').length,4,'статус провайдера сверяется только чтением');
+  assert.equal(f.calls.filter(x=>x.method==='POST').length,5,'статус провайдера сверяется только чтением');
   card=f.api.get(card.id,'palitra-love');assert.equal(card.status,'needs_review');
   assert.ok(card.deliveries.every(d=>d.url===null&&d.status==='needs_review'),'published провайдера не превращается в выдуманную ссылку');
   assert.equal(f.api.list('fixture-other').posts.length,0);
 });
 
 test('согласовать и запланировать: известный блокер откатывает решение целиком',async t=>{
-  const f=await fixture(t),card=f.create();
+  const f=await fixture(t,{blocked:true}),card=f.create();
   await assert.rejects(f.api.approveAndSchedule(card.id,'palitra-love',{
     revision:card.revision,approved:true,schedule:true,
   },{userId:7,userName:'Вымышленный согласующий'}),e=>e.details?.code==='TIKTOK_PRIVACY_UNCONFIRMED');
@@ -112,7 +114,7 @@ test('неизвестный ответ одного канала не прив�
 });
 
 test('старая очередь с пятью каналами останавливается до первой внешней отправки',async t=>{
-  const f=await fixture(t),getSettings=f.transport.getSettings;
+  const f=await fixture(t,{blocked:true}),getSettings=f.transport.getSettings;
   // Состояние старой версии только в memory fixture: доступ был проверен, раннего барьера ещё не было.
   f.transport.getSettings=code=>{
     const settings=getSettings(code);
@@ -126,4 +128,21 @@ test('старая очередь с пятью каналами останав�
   assert.equal(saved.status,'needs_review');assert.equal(saved.lastErrorCode,'TIKTOK_PRIVACY_UNCONFIRMED');
   assert.equal(saved.contentRevision,card.contentRevision);assert.deepEqual(saved.captions,card.captions);
   assert.ok(saved.deliveries.every(d=>d.status==='pending'),'сохранённые доставки не удаляются и не помечаются опубликованными');
+});
+
+test('TikTok без аудитории: одобрение и расписание недоступны, старые данные сохраняются',async t=>{
+ const f=await fixture(t);let card=f.create();card=f.api.update(card.id,'palitra-love',{revision:card.revision,platformOptions:{instagram:{is_reels:true}}});
+ assert.equal(card.readiness.ready,false);assert.match(card.readiness.issues.join(' '),/кто увидит/);
+ await assert.rejects(f.schedule(card),e=>['APPROVAL_REQUIRED','NOT_READY'].includes(e.details?.code));
+ assert.throws(()=>f.approve(card),e=>e.details?.code==='NOT_READY');
+ assert.equal(f.calls.filter(x=>x.method==='POST').length,0);assert.deepEqual(f.api.get(card.id,'palitra-love').mediaUrls,card.mediaUrls);
+});
+
+test('TikTok: ссылка на картинку с именем mp4 в query не становится видео',async t=>{
+ const f=await fixture(t);const initial=f.create(['tiktok']);
+ for(const url of ['https://cdn.example.test/image.jpg?name=.mp4','https://cdn.example.test/clip.mp4#t=1']){
+  const card=f.api.update(initial.id,'palitra-love',{revision:f.api.get(initial.id,'palitra-love').revision,mediaUrls:[url]});
+  assert.equal(card.readiness.ready,false);assert.match(card.readiness.issues.join(' '),/одно видео/);assert.throws(()=>f.approve(card),e=>e.details?.code==='NOT_READY');
+ }
+ assert.equal(f.calls.filter(x=>x.method==='POST').length,0);
 });

@@ -38,7 +38,7 @@ test('channel setup explains its own media rules and TikTok blocker without clai
   assert.match(help('youtube_shorts'),/один видеофайл.*Shorts в публичном доступе/);
   for(const id of ['instagram','tiktok','max'])assert.doesNotMatch(help(id),/Shorts|публичном доступе/);
   assert.match(help('instagram'),/истории и Reels/);assert.match(help('instagram'),/Reel — ровно одно видео/);
-  assert.match(help('tiktok'),/Отправка пока заблокирована/);assert.match(help('tiktok'),/режимы видимости не подтверждены/);
+  assert.match(help('tiktok'),/явно выбранная аудитория/);assert.match(help('tiktok'),/Согласование материала без отправки/);assert.doesNotMatch(help('tiktok'),/Отправка пока заблокирована/);
   assert.match(help('max'),/Вложения необязательны/);
   assert.ok(f.calls.every(call=>call.method==='GET'));
  }finally{f.close();}
@@ -758,6 +758,7 @@ test('публикуемые опции сохраняются вместе с �
     f.d.querySelector('[data-option="instagram.is_reels"]').click();
     f.d.querySelector('[data-option="tiktok.disable_duet"]').click();
     const select=f.d.querySelector('[data-option="tiktok.privacy"]');
+    assert.deepEqual([...select.options].map(option=>option.value),['','PUBLIC_TO_EVERYONE','MUTUAL_FOLLOW_FRIENDS','FOLLOWER_OF_CREATOR','SELF_ONLY']);
     select.value='SELF_ONLY';select.dispatchEvent(new f.w.Event('input',{bubbles:true}));
     await f.click('autoposting-save');await f.settle();
     const created=f.calls.find(call=>call.method==='POST'&&call.path.endsWith('/posts'));

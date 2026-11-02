@@ -50,12 +50,12 @@ const sha256=value=>{if(value===null||value===undefined||value==='')return '';if
    Состав полей взят из проверенной OpenAPI Onlypult (29.09.2026), ничего сверх неё не принимается.
    Опции одной площадки не отправляются другой.
    instagram: is_story и is_reels взаимоисключающие — Story и Reel это разные режимы.
-   tiktok.privacy: полного перечня доступных конкретному аккаунту режимов схема не даёт,
-   поэтому принимаются только два документированных значения, и «по умолчанию публично»
-   здесь не подставляется — без явного выбора отправка TikTok не идёт. */
+   tiktok.privacy: четыре значения контракта Onlypult (официальный SDK 0.1.9),
+   не перечень возможностей автора. «По умолчанию публично» не подставляется;
+   Onlypult должен принять точный согласованный режим без замены и повторного POST. */
 const PLATFORM_OPTION_SCHEMA=Object.freeze({
   instagram:Object.freeze({is_story:'boolean',is_reels:'boolean',disable_comment:'boolean'}),
-  tiktok:Object.freeze({privacy:['PUBLIC_TO_EVERYONE','SELF_ONLY'],disable_comment:'boolean',disable_duet:'boolean',disable_stitch:'boolean'}),
+  tiktok:Object.freeze({privacy:['PUBLIC_TO_EVERYONE','MUTUAL_FOLLOW_FRIENDS','FOLLOWER_OF_CREATOR','SELF_ONLY'],disable_comment:'boolean',disable_duet:'boolean',disable_stitch:'boolean'}),
   max:Object.freeze({pin_message:'boolean'}),
 });
 function platformOptions(value) {
@@ -462,6 +462,11 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
     const mediaOnlyStory=mediaOnlyStoryRow(row,media,caps);
     if(!row.text&&!Object.keys(caps).length&&!mediaOnlyStory)issues.push('Нет текста и подписей площадок');
     for(const [platform,caption]of Object.entries(caps))if(caption.length>CAPTION_PLATFORMS[platform].limit)issues.push(`Подпись ${CAPTION_PLATFORMS[platform].label} длиннее лимита`);
+    if(ids.includes('tiktok')){
+      const options=JSON.parse(row.platform_options||'{}').tiktok||{};
+      if(!PLATFORM_OPTION_SCHEMA.tiktok.privacy.includes(options.privacy))issues.push('Выберите, кто увидит видео TikTok');
+      if(media.length!==1||!isShortsVideoUrl(media[0]))issues.push('Для TikTok нужно одно видео');
+    }
     return {ready:!issues.length,issues,mediaKind:mediaKind(media),textOnly,mediaOnlyStory};
   }
   /* Одобрение привязано к content_revision — версии содержимого (текст, подписи, материал, день, происхождение).
@@ -1078,7 +1083,8 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
       const marked=receiptPlatforms(row.id);
       const blocked=data.platformIds.filter((id,index)=>marked.has(channelPlatform(channels[index],id)));
       if(blocked.length)fail(409,`Уже отмечено как опубликованное вне ЛК: ${blocked.join(', ')}. Повторная отправка создаст дубликат.`,'EXTERNAL_PUBLICATION_RECORDED');
-      if(channels.some(channel=>!channel||!channel.enabled||!channel.connected))fail(409,'Выбранный канал не подключён','CHANNEL_NOT_CONNECTED');
+      if(channels.some(channel=>!channel||!channel.connected))fail(409,'Выбранный канал не подключён','CHANNEL_NOT_CONNECTED');
+      if(channels.some(channel=>!channel.enabled))fail(409,'Отправка на выбранную площадку выключена','CHANNEL_DISABLED');
       // Не создавать частичную доставку на остальные каналы при заведомом отказе одного.
       // Одобрение содержимого допустимо отдельно; approveAndSchedule откатится атомарно.
       const deliveryBlocked=channels.map(deliveryBlocker).find(Boolean);
@@ -1581,6 +1587,8 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
     const deliveryBlocked=deliveries.filter(item=>item.status==='pending'&&deliveryApproved(due,item.channel_id))
       .map(item=>deliveryBlocker(settings.channels.find(channel=>channel.id===item.channel_id))).find(Boolean);
     if(deliveryBlocked){review(due.id,deliveryBlocked.code);return;}
+    // Старые согласованные записи без явной аудитории также не дают частичной отправки.
+    if(deliveries.some(item=>item.status==='pending'&&item.channel_id==='tiktok'&&deliveryApproved(due,item.channel_id))&&!readiness(due).ready){review(due.id,'NOT_READY');return;}
     const lease=randomUUID();
     const claimed=db.prepare("UPDATE autoposting_posts SET status='publishing',publishing_at=?,lease=?,revision=revision+1,updated_at=? WHERE id=? AND status='scheduled' AND revision=? AND deleted_at IS NULL AND archived_at IS NULL")
       .run(now(),lease,iso(),due.id,due.revision);
