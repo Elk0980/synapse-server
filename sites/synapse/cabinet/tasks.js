@@ -39,6 +39,43 @@ const init = (context) => {
   };
   let renderVersion = 0;
   let searchTimer;
+  const resourceLeases = new Map();
+  const renderServerQueue = async () => {
+    if(ctx.identity?.role !== 'owner') return;
+    clearTimeout(boardTimer);
+    const version=++renderVersion,content=byId('tasks-content');
+    content.textContent='Загрузка очереди сервера…';
+    try {
+      const data=await crmQuery('/coordination/server-resource',{});
+      if(version!==renderVersion||ctx.currentView!=='tasks')return;
+      const states={unknown:'Требуется проверка',idle:'Свободен после проверки',running:'Занят'};
+      const events={queued:'Ожидает',claimed:'Начало работы',renewed:'Работа продолжается',released:'Работа завершена',expired:'Пропущено завершение',confirmed_idle:'Свобода проверена',check_stale:'Проверка устарела',cancelled:'Ожидание отменено'};
+      const holder=data.holder,lease=holder&&resourceLeases.get(holder.id);
+      content.innerHTML=`<h2>Очередь общего сервера</h2><p><strong>${escapeHTML(states[data.state]||'Требуется проверка')}</strong> · время сервера: ${escapeHTML(displayDate(data.serverTime))}</p>
+        <p>Проверено: ${escapeHTML(displayDate(data.checkedAt)||'Ещё не проверено')} · ${escapeHTML(data.evidence||'Нет основания')}</p>
+        <p class="crm-muted">Перед изменениями исполнитель занимает ресурс, сообщает продолжение и завершение. Истёкшая аренда требует проверки результата. Произвольный SSH вне очереди технически не блокируется. Таймер не разрешает публикацию.</p>
+        <div class="crm-actions"><button type="button" data-resource-back>К доске проектов</button><button type="button" data-resource-refresh>Обновить очередь</button></div>
+        ${holder?`<section class="crm-card"><h3>Сейчас: ${escapeHTML(holder.executor)} · ${escapeHTML(holder.taskRef)}</h3><p>Чат: ${escapeHTML(holder.threadId)}<br>Область: ${escapeHTML(holder.scope)}<br>Начало: ${escapeHTML(displayDate(holder.startedAt))}<br>Аренда до: ${escapeHTML(displayDate(holder.leaseUntil))}</p>
+        ${lease?`<label>Результат и проверка освобождения<textarea data-resource-release-note maxlength="2000"></textarea></label><button type="button" data-resource-release>Завершить и освободить</button>${data.state==='running'?'<button type="button" data-resource-renew>Продлить свою аренду</button>':''}`:'<p>Токена этой аренды в данной сессии нет. Не повторяйте занятие: продолжите в сессии исполнителя или проверьте исход.</p>'}</section>`:''}
+        ${data.state!=='running'?`<form data-resource-idle><label>Основание свежей проверки свободы<textarea name="evidence" required maxlength="2000"></textarea></label>${holder?'<label>Проверенный исход<select name="outcome"><option value="">Выберите исход</option><option value="completed">Завершено</option><option value="stopped">Остановлено</option><option value="rolled_back">Откат выполнен</option><option value="no_write">Запись не начиналась</option></select></label>':''}<button type="submit">Подтвердить свободу после проверки</button></form>`:''}
+        <h3>Ожидают</h3>${data.queue.map((r,i)=>`<article class="crm-card"><strong>${i+1}. ${escapeHTML(r.executor)} · ${escapeHTML(r.taskRef)}</strong><p>Чат: ${escapeHTML(r.threadId)}<br>${escapeHTML(r.scope)}<br>Не раньше: ${escapeHTML(displayDate(r.notBefore))} · ${r.durationMinutes}мин</p>${i===0&&data.state==='idle'?`<button type="button" data-resource-claim="${r.id}">Занять сервер</button>`:''}<button type="button" data-resource-cancel="${r.id}">Отменить ожидание</button></article>`).join('')||'<p>Очередь пуста.</p>'}
+        <details><summary>Добавить работу в очередь</summary><form data-resource-add><label>Задача<input name="taskRef" required maxlength="120"></label><label>Постоянный ID чата<input name="threadId" required maxlength="200"></label><label>Исполнитель<input name="executor" required maxlength="200"></label><label>Область работы<textarea name="scope" required maxlength="2000"></textarea></label><label>Не раньше<input type="datetime-local" name="notBefore" required value="${escapeHTML(localDateInput(data.serverTime).slice(0,16))}"></label><label>Длительность, минут<input name="durationMinutes" type="number" min="5" max="60" value="15" required></label><button type="submit">Добавить в очередь</button></form></details>
+        <p>Следующая проверка: ${escapeHTML(displayDate(data.nextCheckAt))}</p><p role="status" data-resource-message></p>
+        <details><summary>Журнал сервера</summary>${data.history.map(h=>`<article><p>${escapeHTML(displayDate(h.at))} · ${escapeHTML(events[h.event]||h.event)}${h.executor?' · '+escapeHTML(h.executor):''}${h.taskRef?' · '+escapeHTML(h.taskRef):''}</p>${h.threadId?'<p>Чат: '+escapeHTML(h.threadId)+'<br>Область: '+escapeHTML(h.scope)+'</p>':''}<p>${escapeHTML(h.note)} · автор №${h.actorId}</p></article>`).join('')}</details>`;
+      const current=()=>version===renderVersion&&ctx.currentView==='tasks';
+      const send=async(body,button)=>{button.disabled=true;try{const result=await crmQuery('/coordination/server-resource/action',{},csrfOptions('POST',{revision:data.revision,...body}));if(result.leaseToken)resourceLeases.set(body.requestId,{leaseToken:result.leaseToken,fence:result.resource.fence});if(body.action==='release')resourceLeases.delete(body.requestId);if(current())await renderServerQueue();}catch(e){if(current()){content.querySelector('[data-resource-message]').textContent=e.message+' Сначала обновите очередь и проверьте результат; неизвестное действие не повторяйте.';}}};
+      content.querySelector('[data-resource-back]').onclick=()=>renderCoordination(true);
+      content.querySelector('[data-resource-refresh]').onclick=renderServerQueue;
+      content.querySelectorAll('[data-resource-claim]').forEach(b=>b.onclick=()=>send({action:'claim',requestId:Number(b.dataset.resourceClaim)},b));
+      content.querySelectorAll('[data-resource-cancel]').forEach(b=>b.onclick=()=>send({action:'cancel',requestId:Number(b.dataset.resourceCancel),evidence:'Владелец отменил ожидающую работу'},b));
+      content.querySelector('[data-resource-renew]')?.addEventListener('click',event=>send({action:'renew',requestId:holder.id,...lease},event.target));
+      content.querySelector('[data-resource-release]')?.addEventListener('click',event=>{const evidence=content.querySelector('[data-resource-release-note]').value.trim();if(!evidence){content.querySelector('[data-resource-message]').textContent='Укажите проверенный результат перед освобождением';return;}void send({action:'release',requestId:holder.id,...lease,evidence},event.target);});
+      const idleForm=content.querySelector('[data-resource-idle]');
+      if(idleForm)idleForm.onsubmit=event=>{event.preventDefault();void send({action:'confirm_idle',evidence:idleForm.elements.evidence.value,...(holder?{requestId:holder.id,outcome:idleForm.elements.outcome.value}:{})},idleForm.querySelector('button'));};
+      const addForm=content.querySelector('[data-resource-add]'),requestKey=window.crypto.randomUUID();
+      addForm.onsubmit=async event=>{event.preventDefault();const button=addForm.querySelector('button');button.disabled=true;try{const body=Object.fromEntries(['taskRef','threadId','executor','scope'].map(k=>[k,addForm.elements[k].value]));body.requestKey=requestKey;body.notBefore=new Date(addForm.elements.notBefore.value).toISOString();body.durationMinutes=Number(addForm.elements.durationMinutes.value);await crmQuery('/coordination/server-resource/requests',{},csrfOptions('POST',body));if(current())await renderServerQueue();}catch(e){if(current())content.querySelector('[data-resource-message]').textContent=e.message+' Проверьте очередь перед повтором.';}};
+    }catch(e){if(version===renderVersion&&ctx.currentView==='tasks')content.textContent=e.message;}
+  };
   const milestones = {code:'Код готов',connected:'Подключено',verified:'Проверено',accepted:'Принято'};
   const milestoneStates = {pending:'Не подтверждено',confirmed:'Подтверждено',not_required:'Не требуется'};
   const coordinationFields = {module:'Модуль',ownerThreadId:'Идентификатор ответственного чата',ownerThreadName:'Название чата',
@@ -97,7 +134,7 @@ const init = (context) => {
       content.innerHTML = `<h2>Доска проектов</h2><p><a href="#system-settings">Экономика ИИ: расходы, остатки и резерв моделей</a></p><p>Ответственный чат и исполнитель указываются отдельно. Отметки готовности подтверждаются основанием и датой.</p>
         <p class="crm-muted">Поручение помощнику обрабатывается на сервере. Здесь видны вопросы, результаты и задачи без исполнителя. Codex и Claude не запускаются без подключённого моста.</p>
         <div class="crm-actions"><button class="plain-button" type="button" data-coord-back>К списку задач</button>
-        <button class="plain-button" type="button" data-coord-add>Добавить задачу</button><button class="plain-button" type="button" data-coord-refresh>Обновить</button><label><input type="checkbox" data-coord-all ${allCompanies?'checked':''}>Все проекты</label></div>
+        <button class="plain-button" type="button" data-coord-add>Добавить задачу</button><button class="plain-button" type="button" data-coord-refresh>Обновить</button><button class="plain-button" type="button" data-coord-server>Очередь сервера</button><label><input type="checkbox" data-coord-all ${allCompanies?'checked':''}>Все проекты</label></div>
         <div class="coordination-board">${records.map(item=>`<article class="crm-card" style="padding:16px;margin:16px 0;border:1px solid currentColor;border-radius:12px;overflow-wrap:anywhere">
         <h3>#${item.taskId} · ${escapeHTML(item.title)}</h3>${dispatchSummary(item.dispatch)}<button class="plain-button" type="button" data-dispatch-open="${item.taskId}">Открыть задачу</button><p>${escapeHTML(taskCompanyName(item.companyCode))} · ${escapeHTML(item.module || 'Модуль не указан')}</p>
         <p>Ответственный чат: ${escapeHTML(item.ownerThreadName || item.ownerThreadId || 'Не назначен')}<br>Исполнитель: ${escapeHTML(item.executorName || item.assigneeName || 'Не назначен')}</p>
@@ -108,6 +145,7 @@ const init = (context) => {
       content.querySelector('[data-coord-back]').onclick = renderTaskList;
       content.querySelector('[data-coord-add]').onclick=openTaskCreate;
       content.querySelector('[data-coord-refresh]').onclick=()=>renderCoordination(allCompanies);
+      content.querySelector('[data-coord-server]').onclick=renderServerQueue;
       content.querySelectorAll('[data-dispatch-open]').forEach(button=>button.onclick=()=>{const item=records.find(x=>String(x.taskId)===button.dataset.dispatchOpen);if(item.companyCode!==ctx.selectedProjectId)chooseProject(item.companyCode);navigate(taskRoute(item.taskId));});
       boardTimer=setTimeout(()=>{if(version===renderVersion&&ctx.currentView==='tasks'&&!document.querySelector('dialog[open]'))void renderCoordination(allCompanies);},15000);
       content.querySelector('[data-coord-all]').onchange = event=>renderCoordination(event.target.checked);
