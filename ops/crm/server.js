@@ -536,6 +536,17 @@ migrate(7, () => {
   `);
 });
 
+// SQLite требует отключить FK до транзакции замены таблицы; после копирования
+// проверяется вся ссылочная целостность. Сервер ещё не принимает запросы.
+if (!db.prepare('SELECT 1 FROM schema_migrations WHERE version=8').get()) {
+  db.exec('PRAGMA foreign_keys=OFF');
+  try {
+    migrate(8, () => require('./task-coordination').migrateTasksMcp(db));
+  } finally {
+    db.exec('PRAGMA foreign_keys=ON');
+  }
+}
+
 // Owner-approved company display name. IDs, links and legal entities stay intact.
 db.prepare(`UPDATE companies SET name='Palitra', updated_at=?
   WHERE code IN ('palitra-love', 'palitra')
@@ -2880,6 +2891,12 @@ async function route(request, response) {
     else if(action==='ack-alert') result=taskDispatch.ackAlert(entityId(body.id));
     else fail(404,'Адрес не найден');
     return send(response,200,result,{...cors,'cache-control':'no-store'});
+  }
+  const tasksMcpMatch = url.pathname.match(/^\/coordination\/mcp\/([a-z_]+)$/);
+  if (tasksMcpMatch) {
+    if (request.method !== 'POST') fail(405, 'Метод не поддерживается');
+    const result = taskCoordination.tool(tasksMcpMatch[1], await readJson(request), crmIdentity(request));
+    return send(response, 200, result, {...cors, 'cache-control':'private, no-store'});
   }
   const dispatchMatch=url.pathname.match(/^\/coordination\/dispatch\/(\d+)(?:\/(enqueue|action))?$/);
   if(dispatchMatch){
