@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Только чтение кода CRM внутри контейнера (не данных, не env).
-python3 src.py find СЛОВО            — файлы и строки /app/*.js с этим словом
+python3 src.py [content] find СЛОВО            — файлы и строки /app/*.js с этим словом
 python3 src.py show ФАЙЛ СТРОКА N    — N строк файла начиная со СТРОКИ (обрезка 230 символов)
 python3 src.py grep ФАЙЛ СЛОВО ДО    — вокруг каждого вхождения СЛОВА по ДО символов
 """
 import subprocess, sys
 
 C = ["docker", "exec", "synapse-crm-1"]
+if len(sys.argv) > 1 and sys.argv[1] in ("crm", "content", "chat"):
+    C = ["docker", "exec", "synapse-%s-1" % sys.argv.pop(1)]
 
 
 def run(args):
@@ -16,7 +18,7 @@ def run(args):
 def main():
     mode = sys.argv[1]
     if mode == "find":
-        out = run(["sh", "-c", "grep -n -F -- \"$0\" /app/*.js | cut -c1-160 | head -40", sys.argv[2]])
+        out = run(["sh", "-c", "grep -rn -F --include=*.js --exclude-dir=node_modules -- \"$0\" /app | cut -c1-160 | head -40", sys.argv[2]])
         print(out)
     elif mode == "show":
         name, start, n = sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
