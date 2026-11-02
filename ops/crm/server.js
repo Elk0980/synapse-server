@@ -3386,6 +3386,14 @@ async function route(request, response) {
 
 const server = http.createServer((request, response) => {
   route(request, response).catch((error) => {
+    const taskRuleMessages = {
+      TASK_REVIEWER_EQUALS_EXECUTOR: 'Исполнитель и проверяющий должны быть разными',
+      TASK_PARENT_INVALID: 'Родитель и подзадача должны принадлежать одному проекту и одному уровню'
+    };
+    if (Object.hasOwn(taskRuleMessages, error.message)) {
+      error.status = 400;
+      error.message = taskRuleMessages[error.message];
+    }
     console.error(error);
     send(response, error.status || 500, {
       error: error.status ? error.message : 'Внутренняя ошибка сервиса',

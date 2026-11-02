@@ -2,7 +2,6 @@
 
 // Метаданные существующих CRM-задач. Это учёт подтверждений, не запуск агентов.
 const STAGES = ['code', 'connected', 'verified', 'accepted'];
-const coordinatedWriteDepth = new WeakMap();
 const TEXT_FIELDS = ['module', 'ownerThreadId', 'ownerThreadName', 'executorId', 'executorName',
   'verifiedModel', 'scope', 'acceptance', 'result', 'blocker', 'nextAction'];
 const fail = (status, message) => { throw Object.assign(new Error(message), {status}); };
@@ -20,7 +19,6 @@ const empty = () => ({...Object.fromEntries(TEXT_FIELDS.map(key => [key, ''])), 
   milestones: Object.fromEntries(STAGES.map(key => [key, {state:'pending', evidence:'', checkedAt:''}]))});
 
 function createTaskCoordination(db, {now = () => Date.now()} = {}) {
-  registerTaskFunctions(db);
   db.exec(`CREATE TABLE IF NOT EXISTS task_coordination (
     task_id INTEGER PRIMARY KEY REFERENCES tasks(id), revision INTEGER NOT NULL,
     data TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by INTEGER NOT NULL);
@@ -96,7 +94,7 @@ function createTaskCoordination(db, {now = () => Date.now()} = {}) {
       if (hasMcpSchema(db)) {
         validateReviewer('executorName' in body.data ? data.executorName : row.assignee_name, row.reviewer_name);
         if ('executorName' in body.data && data.executorName !== row.assignee_name) {
-          withCoordinatedWrite(db, () => db.prepare('UPDATE tasks SET assignee_name=?,updated_at=? WHERE id=?')
+          withCoordinatedWrite(db, id, () => db.prepare('UPDATE tasks SET assignee_name=?,updated_at=? WHERE id=?')
             .run(data.executorName, new Date(now()).toISOString(), id));
           row.assignee_name = data.executorName;
         }
@@ -118,7 +116,6 @@ module.exports = {createTaskCoordination,migrateTasksMcp};
 
 // Вызывается только новым migrate-блоком до запуска HTTP-сервера.
 function migrateTasksMcp(db) {
-  registerTaskFunctions(db);
   const objects = db.prepare(`SELECT sql FROM sqlite_master WHERE tbl_name='tasks'
     AND type IN ('index','trigger') AND sql IS NOT NULL`).all();
   const sequence = db.prepare("SELECT seq FROM sqlite_sequence WHERE name='tasks'").get()?.seq || 0;
@@ -142,6 +139,7 @@ function migrateTasksMcp(db) {
       id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER NOT NULL REFERENCES tasks(id),
       author TEXT NOT NULL, text TEXT NOT NULL, created_at TEXT NOT NULL);
     CREATE INDEX task_comments_task_idx ON task_comments(task_id,id);
+    CREATE TABLE task_coordination_write_context(task_id INTEGER PRIMARY KEY REFERENCES tasks(id));
     CREATE TABLE task_assignment_migration (
       task_id INTEGER PRIMARY KEY REFERENCES tasks(id), previous_assignee_name TEXT NOT NULL,
       previous_executor_name TEXT NOT NULL, migrated_at TEXT NOT NULL);
@@ -156,7 +154,7 @@ function migrateTasksMcp(db) {
       function TEXT NOT NULL DEFAULT '', chat TEXT NOT NULL DEFAULT '',
       state TEXT NOT NULL CHECK(state IN ('work','wait','idle','unknown','error')),
       last_event TEXT NOT NULL DEFAULT '', last_event_at TEXT NOT NULL);
-    CREATE UNIQUE INDEX agents_name_key_uidx ON agents(task_person_key(name));
+    CREATE UNIQUE INDEX agents_name_key_uidx ON agents(${personKeySql('name')});
     CREATE TABLE agent_access (
       agent_id INTEGER PRIMARY KEY REFERENCES agents(id), owner_id INTEGER NOT NULL, projects TEXT NOT NULL);
     CREATE TABLE agent_sessions (
@@ -176,23 +174,23 @@ function migrateTasksMcp(db) {
     CREATE TRIGGER agent_activity_no_delete BEFORE DELETE ON agent_activity
       BEGIN SELECT RAISE(ABORT,'Immutable agent activity'); END;
     CREATE TRIGGER tasks_reviewer_insert BEFORE INSERT ON tasks
-      WHEN task_person_key(NEW.reviewer_name)<>'' AND task_person_key(NEW.reviewer_name)=task_person_key(NEW.assignee_name)
-      BEGIN SELECT task_rule_error('TASK_REVIEWER_EQUALS_EXECUTOR'); END;
+      WHEN ${personKeySql('NEW.reviewer_name')}<>'' AND ${personKeySql('NEW.reviewer_name')}=${personKeySql('NEW.assignee_name')}
+      BEGIN SELECT RAISE(ABORT,'TASK_REVIEWER_EQUALS_EXECUTOR'); END;
     CREATE TRIGGER tasks_reviewer_update BEFORE UPDATE OF reviewer_name,assignee_name ON tasks
-      WHEN task_person_key(NEW.reviewer_name)<>'' AND task_person_key(NEW.reviewer_name)=task_person_key(NEW.assignee_name)
-      BEGIN SELECT task_rule_error('TASK_REVIEWER_EQUALS_EXECUTOR'); END;
+      WHEN ${personKeySql('NEW.reviewer_name')}<>'' AND ${personKeySql('NEW.reviewer_name')}=${personKeySql('NEW.assignee_name')}
+      BEGIN SELECT RAISE(ABORT,'TASK_REVIEWER_EQUALS_EXECUTOR'); END;
     CREATE TRIGGER tasks_parent_insert BEFORE INSERT ON tasks
       WHEN NEW.parent_task_id IS NOT NULL AND (NEW.parent_task_id=NEW.id OR NOT EXISTS (
         SELECT 1 FROM tasks p WHERE p.id=NEW.parent_task_id AND p.is_deleted=0
           AND p.parent_task_id IS NULL AND lower(p.company_code)=lower(NEW.company_code)))
-      BEGIN SELECT task_rule_error('TASK_PARENT_INVALID'); END;
+      BEGIN SELECT RAISE(ABORT,'TASK_PARENT_INVALID'); END;
     CREATE TRIGGER tasks_parent_update BEFORE UPDATE OF parent_task_id,company_code,is_deleted ON tasks
       WHEN (NEW.parent_task_id IS NOT NULL AND (NEW.parent_task_id=NEW.id OR NOT EXISTS (
         SELECT 1 FROM tasks p WHERE p.id=NEW.parent_task_id AND p.is_deleted=0
           AND p.parent_task_id IS NULL AND lower(p.company_code)=lower(NEW.company_code))))
         OR (EXISTS (SELECT 1 FROM tasks child WHERE child.parent_task_id=NEW.id AND child.is_deleted=0)
           AND (NEW.parent_task_id IS NOT NULL OR NEW.is_deleted<>0 OR lower(NEW.company_code)<>lower(OLD.company_code)))
-      BEGIN SELECT task_rule_error('TASK_PARENT_INVALID'); END;
+      BEGIN SELECT RAISE(ABORT,'TASK_PARENT_INVALID'); END;
   `);
   // Старый CRUD и уже открытые формы участвуют в той же версии карточки.
   // updated_by=0 обозначает системную синхронизацию, а не личность владельца.
@@ -217,7 +215,8 @@ function migrateTasksMcp(db) {
   const syncedFields = ['title','description','status','assignee_name','reviewer_name','due_date',
     'priority','company_code','parent_task_id','is_deleted'];
   db.exec(`CREATE TRIGGER tasks_legacy_coordination_sync AFTER UPDATE OF ${syncedFields.join(',')} ON tasks
-    WHEN task_coordinated_write()=0 AND (${syncedFields.map(field => `NEW.${field} IS NOT OLD.${field}`).join(' OR ')})
+    WHEN NOT EXISTS (SELECT 1 FROM task_coordination_write_context WHERE task_id=NEW.id)
+      AND (${syncedFields.map(field => `NEW.${field} IS NOT OLD.${field}`).join(' OR ')})
     BEGIN
       INSERT INTO task_coordination(task_id,revision,data,updated_at,updated_by)
         VALUES(NEW.id,
@@ -232,19 +231,23 @@ function migrateTasksMcp(db) {
   if (db.prepare('PRAGMA foreign_key_check').all().length) throw new Error('Нарушена целостность миграции задач MCP');
 }
 
-function registerTaskFunctions(db) {
-  db.function('task_person_key',{deterministic:true},value => String(value ?? '').trim().toLocaleLowerCase('ru'));
-  db.function('task_rule_error',value => fail(400,value==='TASK_REVIEWER_EQUALS_EXECUTOR'
-    ? 'Исполнитель и проверяющий должны быть разными'
-    : 'Родитель и подзадача должны принадлежать одному проекту и одному уровню. Сначала перенесите подзадачи'));
-  db.function('task_coordinated_write',() => coordinatedWriteDepth.get(db) || 0);
+// Только встроенные функции SQLite: правила работают в резервных копиях,
+// скриптах и втором подключении, не загружавшем этот модуль JavaScript.
+function personKeySql(expression) {
+  const whitespace = [9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,
+    8232,8233,8239,8287,12288,65279];
+  let result = `lower(trim(${expression},char(${whitespace.join(',')})))`;
+  for (const letter of 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ') {
+    result = `replace(${result},'${letter}','${letter.toLowerCase()}')`;
+  }
+  return result;
 }
 
-function withCoordinatedWrite(db, callback) {
-  const depth = coordinatedWriteDepth.get(db) || 0;
-  coordinatedWriteDepth.set(db,depth+1);
+function withCoordinatedWrite(db, taskId, callback) {
+  if (!db.isTransaction) throw new Error('Синхронизация задачи требует транзакцию');
+  const inserted = db.prepare('INSERT OR IGNORE INTO task_coordination_write_context(task_id) VALUES(?)').run(taskId).changes;
   try { return callback(); }
-  finally { coordinatedWriteDepth.set(db,depth); }
+  finally { if (inserted) db.prepare('DELETE FROM task_coordination_write_context WHERE task_id=?').run(taskId); }
 }
 
 function hasMcpSchema(db) {
@@ -277,7 +280,7 @@ function taskExtras(db, row, now) {
     FROM tasks WHERE parent_task_id=? AND is_deleted=0`).get(row.id);
   const coord = db.prepare('SELECT updated_at,data FROM task_coordination WHERE task_id=?').get(row.id);
   const assignment = row.assignee_name || (coord ? JSON.parse(coord.data).executorName : '');
-  const agent = db.prepare('SELECT state FROM agents WHERE task_person_key(name)=task_person_key(?)').get(assignment);
+  const agent = db.prepare(`SELECT state FROM agents WHERE ${personKeySql('name')}=${personKeySql('?')}`).get(assignment);
   const updated = Math.max(Date.parse(row.updated_at) || 0, Date.parse(coord?.updated_at) || 0);
   return {reviewer_name:row.reviewer_name, parent_task_id:row.parent_task_id, source:row.source,
     due_date:row.due_date, subtask_count:counts.total, subtask_done:counts.done,
@@ -382,7 +385,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
       changes.milestones={...previous.milestones,[stage]:{state:'confirmed',evidence,checkedAt}};
     }
     if (!Object.keys(updates).length && !Object.keys(changes).length) fail(400, 'Нет изменений задачи');
-    if (Object.keys(updates).length) withCoordinatedWrite(db, () =>
+    if (Object.keys(updates).length) withCoordinatedWrite(db, row.id, () =>
       db.prepare(`UPDATE tasks SET ${Object.keys(updates).map(key=>`${key}=?`).join(',')},updated_at=? WHERE id=?`)
         .run(...Object.values(updates),stamp(),row.id));
     touch({...row,...updates},changes,actor);
@@ -394,7 +397,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
     const codes=args.project!==undefined?[project(args.project,actor)]:[...allowed(actor)];
     const clauses=[`is_deleted=0`,`lower(company_code) IN (${codes.map(()=>'?').join(',')})`], params=[...codes];
     if (args.status!==undefined) { clauses.push('status=?'); params.push(enumValue(args.status,statuses,'status')); }
-    if (args.executor!==undefined) { clauses.push('task_person_key(assignee_name)=task_person_key(?)'); params.push(text(args.executor,200)); }
+    if (args.executor!==undefined) { clauses.push(`${personKeySql('assignee_name')}=${personKeySql('?')}`); params.push(text(args.executor,200)); }
     if (args.parent_id!==undefined) {
       if (args.parent_id===null) clauses.push('parent_task_id IS NULL');
       else { scopedTask(integer(args.parent_id),actor); clauses.push('parent_task_id=?');params.push(args.parent_id); }
@@ -412,7 +415,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
   const agentView = (row, actor) => {
     const codes=[...allowed(actor)];
     const activeWhere=`t.is_deleted=0 AND t.status NOT IN ('done','cancelled')
-      AND task_person_key(t.assignee_name)=task_person_key(?) AND lower(t.company_code) IN (${codes.map(()=>'?').join(',')})`;
+      AND ${personKeySql('t.assignee_name')}=${personKeySql('?')} AND lower(t.company_code) IN (${codes.map(()=>'?').join(',')})`;
     const taskTimes=db.prepare(`SELECT t.updated_at,c.updated_at coordination_updated_at FROM tasks t
       LEFT JOIN task_coordination c ON c.task_id=t.id WHERE ${activeWhere}`).all(row.name,...codes);
     const tasks=db.prepare(`SELECT t.* FROM tasks t WHERE ${activeWhere} ORDER BY t.id DESC LIMIT 100`)
@@ -426,7 +429,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
   const reportAgent = (args, actor) => {
     const name=text(args.agent,200);
     if (!name) fail(400,'Укажите имя агента');
-    const old=db.prepare('SELECT * FROM agents WHERE task_person_key(name)=task_person_key(?)').get(name);
+    const old=db.prepare(`SELECT * FROM agents WHERE ${personKeySql('name')}=${personKeySql('?')}`).get(name);
     if (old) {
       const access=db.prepare('SELECT * FROM agent_access WHERE agent_id=?').get(old.id);
       if (access && (access.owner_id!==actor.userId || access.projects!==JSON.stringify([...allowed(actor)].sort()))) fail(404,'Агент не найден в области подключения');
@@ -438,7 +441,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
     db.prepare(`INSERT INTO agents(name,kind,mode,function,chat,state,last_event,last_event_at) VALUES(?,?,?,?,?,?,?,?)
       ON CONFLICT(name) DO UPDATE SET kind=excluded.kind,mode=excluded.mode,function=excluded.function,chat=excluded.chat,
       state=excluded.state,last_event=excluded.last_event,last_event_at=excluded.last_event_at`).run(old?.name || name,kind,mode,role,chat,state,event,stamp());
-    const row=db.prepare('SELECT * FROM agents WHERE task_person_key(name)=task_person_key(?)').get(name);
+    const row=db.prepare(`SELECT * FROM agents WHERE ${personKeySql('name')}=${personKeySql('?')}`).get(name);
     db.prepare(`INSERT INTO agent_access(agent_id,owner_id,projects) VALUES(?,?,?) ON CONFLICT(agent_id)
       DO UPDATE SET owner_id=excluded.owner_id,projects=excluded.projects`).run(row.id,actor.userId,JSON.stringify([...allowed(actor)].sort()));
     return agentView(row,actor);

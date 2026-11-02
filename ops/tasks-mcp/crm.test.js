@@ -3,14 +3,17 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {DatabaseSync} = require('node:sqlite');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const {createTaskCoordination,migrateTasksMcp} = require('../crm/task-coordination');
 
 const owner = {role:'owner',userId:7,companyCodes:new Set(['alpha'])};
 const otherScope = {role:'owner',userId:7,companyCodes:new Set(['beta'])};
 const initialTime = Date.parse('2026-11-02T18:00:00Z');
 
-function fixture(t,{migrate=true}={}) {
-  const db = new DatabaseSync(':memory:');
+function fixture(t,{migrate=true,databasePath=':memory:'}={}) {
+  const db = new DatabaseSync(databasePath);
   t.after(()=>db.close());
   db.exec(`PRAGMA foreign_keys=ON;
     CREATE TABLE companies(code TEXT PRIMARY KEY,is_deleted INTEGER DEFAULT 0);
@@ -87,9 +90,9 @@ test('reviewer differs from executor in tools, old coordination and legacy SQL, 
   const row=call('task_create',{title:'Проверка',project:'alpha',client_ref:'review',executor:'Claude',reviewer:'Codex'}).task;
   assert.throws(()=>call('task_update',{task_id:row.id,executor:'codex'}),error=>error.status===400);
   assert.throws(()=>api.save(row.id,{revision:row.coordination.revision,data:{executorName:'CODEX'}},owner),error=>error.status===400);
-  assert.throws(()=>db.prepare('UPDATE tasks SET assignee_name=? WHERE id=?').run('codex',row.id),error=>error.status===400);
+  assert.throws(()=>db.prepare('UPDATE tasks SET assignee_name=? WHERE id=?').run('codex',row.id),/TASK_REVIEWER_EQUALS_EXECUTOR/);
   db.prepare('UPDATE tasks SET reviewer_name=? WHERE id=?').run('Влад',row.id);
-  assert.throws(()=>db.prepare('UPDATE tasks SET assignee_name=? WHERE id=?').run(' ВЛАД ',row.id),error=>error.status===400);
+  assert.throws(()=>db.prepare('UPDATE tasks SET assignee_name=? WHERE id=?').run(' ВЛАД ',row.id),/TASK_REVIEWER_EQUALS_EXECUTOR/);
   const updated=call('task_update',{task_id:row.id,executor:'Gemini'}).task;
   assert.equal(updated.assignee_name,'Gemini');assert.equal(updated.coordination.executorName,'Gemini');
   db.prepare('UPDATE tasks SET assignee_name=? WHERE id=?').run('Claude',row.id);
@@ -118,7 +121,7 @@ test('subtasks use one level and same project; old CRUD cannot break parent rela
   assert.equal(call('task_get',{task_id:21}).subtasks[0].id,child.id);
   assert.throws(()=>call('task_create',{title:'Внук',project:'alpha',client_ref:'grandchild',parent_id:child.id}),error=>error.status===400);
   assert.throws(()=>call('task_create',{title:'Чужой',project:'alpha',client_ref:'foreign-parent',parent_id:22}),error=>error.status===404);
-  for(const sql of ['UPDATE tasks SET company_code=\'beta\' WHERE id=21','UPDATE tasks SET is_deleted=1 WHERE id=21',`UPDATE tasks SET parent_task_id=${child.id} WHERE id=21`]) assert.throws(()=>db.exec(sql),error=>error.status===400);
+  for(const sql of ['UPDATE tasks SET company_code=\'beta\' WHERE id=21','UPDATE tasks SET is_deleted=1 WHERE id=21',`UPDATE tasks SET parent_task_id=${child.id} WHERE id=21`]) assert.throws(()=>db.exec(sql),/TASK_PARENT_INVALID/);
   call('task_update',{task_id:child.id,status:'done'});
   assert.equal(call('task_get',{task_id:21}).subtask_done,1);
 });
@@ -214,7 +217,7 @@ test('legacy changes advance the shared revision and preserve evidence, so stale
   assert.equal(db.prepare('SELECT count(*) n FROM task_coordination_history WHERE task_id=21').get().n,historyBefore+1);
   assert.throws(()=>api.save(21,{revision:before.revision,data:{executorName:'Codex',result:'Старая форма'}},owner),error=>error.status===409);
   assert.equal(call('task_get',{task_id:21}).assignee_name,'Gemini');
-  assert.equal(db.prepare('SELECT task_coordinated_write() depth').get().depth,0);
+  assert.equal(db.prepare('SELECT count(*) n FROM task_coordination_write_context').get().n,0);
 
   const data=Object.fromEntries(['module','ownerThreadId','ownerThreadName','executorId','executorName',
     'verifiedModel','scope','acceptance','result','blocker','nextAction','modelCheckedAt','milestones','links'].map(key=>[key,changed[key]]));
@@ -324,4 +327,35 @@ test('migration preserves the old visible executor and archives differing assign
     assert.equal(row.reviewer_name,'');assert.equal(row.parent_task_id,null);assert.equal(row.client_ref,null);
   }
   assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(),[]);
+});
+
+test('migrated SQLite remains portable to a second raw connection without JavaScript SQL functions',t=>{
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'tasks-mcp-portable-'));
+  const databasePath=path.join(directory,'crm.sqlite');
+  const {db,api,call}=fixture(t,{databasePath});
+  const second=new DatabaseSync(databasePath);
+  second.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000');
+  t.after(()=>{second.close();fs.rmSync(directory,{recursive:true,force:true});});
+  const schema=second.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL").all().map(row=>row.sql).join('\n');
+  assert.doesNotMatch(schema,/task_person_key\s*\(|task_rule_error\s*\(|task_coordinated_write\s*\(/);
+  call('task_update',{task_id:21,reviewer:'Влад'});
+  const before=api.get(21,owner);
+  second.prepare('UPDATE tasks SET assignee_name=?,updated_at=? WHERE id=21').run('Gemini','2026-11-02T18:15:00Z');
+  const changed=api.get(21,owner);
+  assert.equal(changed.revision,before.revision+1);
+  assert.equal(changed.executorName,'Gemini');assert.equal(changed.updatedBy,0);
+  assert.throws(()=>api.save(21,{revision:before.revision,data:{executorName:'Claude'}},owner),error=>error.status===409);
+  assert.throws(()=>second.prepare('UPDATE tasks SET assignee_name=? WHERE id=21').run('\u00a0 ВЛАД \u00a0'),/TASK_REVIEWER_EQUALS_EXECUTOR/);
+  assert.throws(()=>second.exec('UPDATE tasks SET parent_task_id=22 WHERE id=21'),/TASK_PARENT_INVALID/);
+  assert.equal(second.prepare('SELECT count(*) n FROM task_coordination_write_context').get().n,0);
+  const history=second.prepare('SELECT * FROM task_coordination_history WHERE task_id=21 ORDER BY revision DESC LIMIT 1').get();
+  assert.equal(history.revision,changed.revision);assert.equal(history.updated_by,0);
+  call('agent_report',{agent:'Клод',kind:'claude',state:'idle',last_event:'SAMPLE'});
+  assert.throws(()=>second.prepare('INSERT INTO agents(name,kind,state,last_event_at) VALUES(?,?,?,?)')
+    .run(' кЛОД ','claude','idle','2026-11-02T18:15:00Z'),/UNIQUE constraint failed/);
+  second.exec('BEGIN IMMEDIATE; INSERT INTO task_coordination_write_context VALUES(21)');
+  second.prepare('UPDATE tasks SET assignee_name=? WHERE id=21').run('Codex');
+  second.exec('ROLLBACK');
+  assert.equal(second.prepare('SELECT count(*) n FROM task_coordination_write_context').get().n,0);
+  assert.equal(db.prepare('SELECT assignee_name FROM tasks WHERE id=21').get().assignee_name,'Gemini');
 });
