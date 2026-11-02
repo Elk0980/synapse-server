@@ -25,8 +25,16 @@ class SourcePreservationTests(unittest.TestCase):
         self.assertEqual(result, b"// existing publication-copy extension must survive\n" + self.feature)
 
     def test_refuses_drift_before_any_patch(self):
+        spec = copy.deepcopy(probe.PATCH_SPEC)
+        spec["actualRuntimeBeforeSha256"] = "0" * 64
         with self.assertRaisesRegex(probe.Refused, "CORE_CHANGED"):
-            probe.rebase(self.before, probe.PATCH_SPEC)
+            probe.rebase(self.before, spec)
+
+    def test_refuses_a_transcribed_pin_of_wrong_length(self):
+        spec = copy.deepcopy(probe.PATCH_SPEC)
+        spec["actualRuntimeBeforeSha256"] = "f" * 65
+        with self.assertRaisesRegex(probe.Refused, "FULL_PIN_REQUIRED"):
+            probe.rebase(self.before, spec)
 
     def test_refuses_duplicate_patch_context(self):
         spec = copy.deepcopy(probe.PATCH_SPEC)
