@@ -310,6 +310,8 @@
    if(!title.value.trim()){error('Введите название материала.',title);return;}if(!selected().length){error('Отметьте хотя бы одну площадку.',channelCheckboxes.values().next().value);return;}
    if(!FORMATS.has(format.value)){error('Выберите формат.',format);return;}
    {const issue=platformConfig.problem(selected(),format.value);if(issue){error(issue[0],issue[1]);return;}}
+   // 02.11.2026: Telegram принимает подпись к фото или видео только до 1024 знаков — говорим об этом до отправки.
+   if(scheduleRequested&&selected().includes('telegram')&&media.length&&text.value.length>1024){error(`Telegram: подпись к фото или видео — до 1024 знаков, сейчас ${text.value.length}. Сократите текст или снимите отметку Telegram.`,text);return;}
    if(!validZone(zoneInput.value.trim())){error('Укажите корректный часовой пояс, например Europe/Moscow.',zoneInput);return;}
    let scheduledAt=null;try{if(dated.checked)scheduledAt=toUTC(dayInput.value+'T'+timeInput.value,zoneInput.value.trim());}catch(err){error(err.message==='AMBIGUOUS_DATE_TIME'?'Это время встречается дважды при переводе часов. Выберите другое время.':'Проверьте дату и время: выбранного времени может не быть из-за перевода часов.',dayInput);return;}
    // 02.11.2026: прошедшее, слишком близкое или не указанное время не мешает публикации —

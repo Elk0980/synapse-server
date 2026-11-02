@@ -81,8 +81,6 @@ const id = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(v
    проверен root 30.09.2026): PostCreateRequest.required = [profile_ids]; content — string без minLength,
    «Required unless media_ids or media_urls is provided». PlatformSettings.is_story — Story для Instagram,
    несовместим с is_reels/is_shorts. Поэтому при материале и пустом тексте content не отправляется вовсе. */
-// Причины, при которых профиль формально active, но публиковать нельзя (нужно переподключение).
-const BROKEN_ACCESS = /access_token|check_permissions|temporarily_locked|reconnect|expired/i;
 /* «2026-11-02 21:37:28» в часовом поясе аккаунта → ISO UTC. Пусто или нераспознано → null. */
 function utcOf(value,zone) {
   const m = typeof value === 'string' && /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value.trim());
@@ -156,8 +154,10 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
     const {profiles,messages} = await inspectProfiles(row), matches = profiles.filter(profile => profile.id === row.target);
     if (matches.length !== 1) throw failure('PROFILE_NOT_FOUND');
     if (matches[0].status !== 'active') throw failure('PROFILE_INACTIVE');
-    // Onlypult держит status=active и при отозванном доступе (02.11.2026 YouTube: invalid_access_token).
-    if (BROKEN_ACCESS.test(messages.get(row.target) || '')) throw failure('PROFILE_RECONNECT');
+    /* status_message (например invalid_access_token) в API Onlypult отстаёт: 02.11.2026 после переподключения
+       кабинет показывал «Токен активен», а API ещё старую причину. Поэтому она не блокирует отправку —
+       итог даёт сам Onlypult (failed), и он показывается в приложении. */
+    void messages;
     return matches[0];
   }
   /* Посты профиля — только чтение. Время Onlypult приходит без зоны, в часовом поясе аккаунта;
@@ -228,6 +228,16 @@ function createOnlypultProvider({failure,readResponse,fetchImpl,tokenFor}) {
     const storyMode = row.id === 'instagram' && chosenRaw?.is_story === true;
     const maxMedia = storyMode && positive(media?.maxCountStory) ? media.maxCountStory : media?.maxCount;
     if (positive(textLimits?.charLimit) && post.text.length > textLimits.charLimit) throw failure('CONTENT_LIMIT');
+    // 02.11.2026: файл больше лимита тарифа Onlypult отклоняется до отправки. Размер не узнали — не блокируем.
+    if (positive(limits?.global_max_file_size)) for (const media of post.mediaUrls) {
+      let size = NaN;
+      try {
+        const head = await fetchImpl(media,{method:'HEAD',redirect:'error',signal:AbortSignal.timeout(10000)});
+        size = Number(head?.headers?.get?.('content-length'));
+      } catch {}
+      if (Number.isFinite(size) && size > limits.global_max_file_size) throw failure('FILE_TOO_LARGE');
+    }
+    guard();
     if (positive(maxMedia) && post.mediaUrls.length > maxMedia) throw failure('CONTENT_LIMIT');
     /* Нижняя граница вложений профиля относится к обычной публикации: отдельного минимума
        для Story контракт не задаёт, и переносить на неё минимум другого режима нельзя. */

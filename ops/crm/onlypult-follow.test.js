@@ -18,12 +18,23 @@ test('ответ создания списком из одного поста п
   const receipt=await api.publish(row,{text:'Тест',title:'Тест',mediaUrls:['https://example.test/v.mp4']},()=>{});
   assert.equal(receipt.providerPostId,'abc');assert.equal(receipt.providerStatus,'scheduled');
 });
-test('отозванный доступ при status=active останавливает отправку до POST',async()=>{
-  const {api,calls}=provider({'/profiles':{data:[{id:'1864750',name:'P',status:'active',platform:'youtube',status_message:'invalid_access_token'}]}});
-  await assert.rejects(api.publish(row,{text:'Т',title:'Т',mediaUrls:[]},()=>{}),e=>e.code==='PROFILE_RECONNECT');
-  assert.ok(!calls.some(c=>c.startsWith('POST')));
-  const ok=provider({'/profiles':{data:[{id:'1864750',name:'P',status:'active',platform:'youtube',status_message:'empty_push_token'}]}});
-  assert.equal((await ok.api.check(row)).id,'1864750','push-токен Instagram не мешает публикации');
+test('устаревшая причина status_message не блокирует отправку: итог даёт Onlypult',async()=>{
+  const {api}=provider({'/profiles':{data:[{id:'1864750',name:'P',status:'active',platform:'youtube',status_message:'invalid_access_token'}]}});
+  assert.equal((await api.check(row)).id,'1864750');
+});
+test('файл больше лимита тарифа Onlypult отклоняется до POST; неизвестный размер не блокирует',async()=>{
+  const routes={'/profiles':{data:[{id:'1864750',name:'P',status:'active',platform:'youtube'}]},'/account':{data:{plan_active:true}},
+    '/posts/limits':{data:{global_max_file_size:1000}},'/posts':{data:{id:'abc',status:'scheduled',profile_id:1864750,platform:'youtube'}}};
+  const calls=[];
+  const make=size=>require('./onlypult-provider').createOnlypultProvider({failure,readResponse:async r=>r.text,tokenFor:()=>'t',fetchImpl:async(url,init={})=>{
+    calls.push((init.method||'GET')+' '+url);
+    if(url.startsWith('https://media.test/'))return {ok:true,status:200,headers:{get:k=>k==='content-length'&&size!==null?String(size):null},text:''};
+    const key=Object.keys(routes).find(k=>url.includes(k));return {ok:true,status:200,text:JSON.stringify(routes[key])};}});
+  const post={text:'Т',title:'Т',mediaUrls:['https://media.test/v.mp4']};
+  await assert.rejects(make(5000).publish(row,post,()=>{}),e=>e.code==='FILE_TOO_LARGE'&&e.ambiguous===false);
+  assert.ok(!calls.some(c=>c.startsWith('POST')),'POST не отправлялся');
+  assert.equal((await make(null).publish(row,post,()=>{})).providerPostId,'abc');
+  assert.equal((await make(900).publish(row,post,()=>{})).providerPostId,'abc');
 });
 test('посты профиля: только этот профиль, время аккаунта переводится в UTC',async()=>{
   const {api}=provider({'/account':{data:{timezone:'Asia/Bangkok'}},'/posts?':{data:[

@@ -1763,7 +1763,9 @@ function createAutoposting(db,{information,transport,planLink,reviewTasks,workfl
           review(due.id,'EXTERNAL_PUBLICATION_RECORDED');return;
         }
         const ambiguous=error?.ambiguous!==false,status=ambiguous?'needs_review':'failed';
-        const code=ambiguous?'PUBLICATION_UNCERTAIN':'PUBLISH_FAILED';
+        // 02.11.2026: у явного отказа сохраняется понятная причина (тариф, размер файла, доступ), а не общий код.
+        const KNOWN=['CONTENT_LIMIT','FILE_TOO_LARGE','PROVIDER_PLAN_INACTIVE','ACCESS_DENIED','PLATFORM_REJECTED','PROFILE_INACTIVE','PROFILE_NOT_FOUND','CONNECTION_MISSING'];
+        const code=ambiguous?'PUBLICATION_UNCERTAIN':KNOWN.includes(error?.code)?error.code:'PUBLISH_FAILED';
         db.prepare("UPDATE autoposting_deliveries SET status=?,error_code=?,finished_at=? WHERE post_id=? AND channel_id=? AND status='publishing'")
           .run(status,code,iso(),due.id,delivery.channel_id);
         logger.warn(`[crm] autoposting code=${code} cause=${String(error?.code||'').slice(0,40)} channel=${delivery.channel_id}`);
