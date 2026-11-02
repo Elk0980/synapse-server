@@ -88,7 +88,18 @@ def inspect(spec):
     app_changes = [line for line in changes if line[2:].startswith("/app")]
     compose = run("COMPOSE_PATH", ["docker", "inspect", CONTAINER, "--format",
                   '{{index .Config.Labels "com.docker.compose.project.config_files"}}']).decode().strip()
-    require(all(p.startswith("/opt/synapse/") for p in compose.split(",")), "COMPOSE_CONTEXT")
+    compose_paths = compose.split(",")
+    # Read-only discovery: the actual label includes historical /opt/palitra-*
+    # overlays. Do not execute Compose here or infer installation permission.
+    require(bool(compose) and all(
+        p.startswith(("/opt/synapse/", "/opt/palitra-")) and
+        ".." not in pathlib.PurePosixPath(p).parts and "\n" not in p
+        for p in compose_paths), "COMPOSE_CONTEXT")
+    print("RUNTIME_DISCOVERY", json.dumps({"containerId": fields[0],
+          "imageGroups": " ".join(fields[1][7:][i:i+8] for i in range(0,64,8)),
+          "startedAt": fields[2], "restartCount": fields[3],
+          "appChanges": app_changes, "composeFileCount": len(compose_paths),
+          "composeLabelSha256": digest(compose.encode())}, separators=(",", ":")), flush=True)
     source = run("CORE_SOURCE", ["docker", "exec", CONTAINER, "cat", "/app/autoposting.js"])
     provider = run("PROVIDER_SOURCE", ["docker", "exec", CONTAINER, "cat", "/app/onlypult-provider.js"])
     transport = run("TRANSPORT_SOURCE", ["docker", "exec", CONTAINER, "cat", "/app/autoposting-transport.js"])
@@ -98,6 +109,10 @@ def inspect(spec):
     observed_spec = dict(spec, actualRuntimeBeforeSha256=digest(source))
     require(digest(source).startswith("caf1675a"), "CORE_CONTEXT_CHANGED")
     candidate = rebase(source, observed_spec)
+    print("SOURCE_DISCOVERY", json.dumps({"beforeGroups": " ".join(digest(source)[i:i+8] for i in range(0,64,8)),
+          "afterGroups": " ".join(digest(candidate)[i:i+8] for i in range(0,64,8)),
+          "bytesBefore": len(source), "bytesAfter": len(candidate),
+          "reverseExact": True, "groups": len(spec["patches"])}, separators=(",", ":")), flush=True)
     run("CANDIDATE_SYNTAX", ["docker", "exec", "-i", CONTAINER, "node", "--check"], candidate)
     schema = json.loads(run("SCHEMA_READONLY", ["docker", "exec", "-i", CONTAINER, "node", "-"], SCHEMA_JS.encode()))
     locks = json.loads(run("LOCKS", ["lslocks", "-J", "-o", "PID,COMMAND,PATH"]))
@@ -106,7 +121,8 @@ def inspect(spec):
     info = lock_path.lstat()
     require(stat.S_ISREG(info.st_mode) and info.st_uid == 0 and info.st_nlink == 1, "LOCK_FILE_UNSAFE")
     print("RUNTIME_META", json.dumps({"uid": os.geteuid(), "container": fields,
-          "mounts": mounts, "appChanges": app_changes, "composeFiles": compose,
+          "mounts": mounts, "appChanges": app_changes,
+          "composeFileCount": len(compose_paths), "composeLabelSha256": digest(compose.encode()),
           "resourceLocks": relevant}, separators=(",", ":")))
     print("SOURCE_REBASE", json.dumps({"before": digest(source), "after": digest(candidate),
           "beforeGroups": " ".join(digest(source)[i:i+8] for i in range(0,64,8)),
