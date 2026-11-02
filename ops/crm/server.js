@@ -547,6 +547,9 @@ if (!db.prepare('SELECT 1 FROM schema_migrations WHERE version=8').get()) {
   }
 }
 
+// Служебные читатели SQLite 3.45 должны открывать ту же базу, что и Node 24.
+migrate(9, () => require('./task-coordination').migrateTasksMcpPortable(db));
+
 // Owner-approved company display name. IDs, links and legal entities stay intact.
 db.prepare(`UPDATE companies SET name='Palitra', updated_at=?
   WHERE code IN ('palitra-love', 'palitra')
