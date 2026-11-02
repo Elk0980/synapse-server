@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="description" content="Пептидная терапия для клиник: корейские пептиды Rejuva, готовые протоколы, обучение врачей и программа удержания пациентов. CELL LAB.">
+<meta name="description" content="Пептидная терапия для клиник: документы на каждую партию, холодовая цепь, обучение врачей и честная доказательная база. CELL LAB.">
 <meta name="robots" content="noindex, nofollow">
 <meta property="og:title" content="Путь пептида — CELL LAB для клиник">
-<meta property="og:description" content="От пациентки до её клетки — и обратно к бизнесу клиники. Экскурсия в пептидную терапию.">
+<meta property="og:description" content="От пациентки до её клетки — и обратно к бизнесу клиники. Экскурсия в пептидную терапию для медицинских специалистов.">
 <meta property="og:image" content="poster.jpg">
 <title>Путь пептида</title>
 <style>html{color-scheme:dark}img{max-width:100%}[hidden]{display:none!important}</style>
@@ -69,7 +69,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .cinema .close{position:absolute;top:calc(18px + env(safe-area-inset-top,0px));right:max(18px,env(safe-area-inset-right,0px));width:48px;height:48px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(0,0,0,.5);color:#fff;cursor:pointer;display:grid;place-items:center}
 
 /* scroll track + panels */
-.track{height:1000vh;position:relative;z-index:2}
+.track{height:1200vh;position:relative;z-index:2}
 .panel{position:fixed;z-index:5;opacity:0;pointer-events:none;transform:translateY(14px);left:max(20px,env(safe-area-inset-left,0px));right:max(20px,env(safe-area-inset-right,0px));top:50%;translate:0 -50%;max-width:520px;will-change:opacity,transform}
 .panel.show{pointer-events:auto}
 .panel .card{background:var(--glass);backdrop-filter:blur(22px) saturate(160%);-webkit-backdrop-filter:blur(22px) saturate(160%);border:1px solid var(--line);border-radius:22px;padding:clamp(22px,3vw,34px);box-shadow:0 30px 80px -30px rgba(0,0,0,.8)}
@@ -247,6 +247,73 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
 .splash-txt{font-size:13px;color:var(--fg2);font-variant-numeric:tabular-nums}
 @media (prefers-reduced-motion: reduce){.chain i{animation:none}}
 @media (max-height:720px){.panel.intro .meta{display:none}.panel.intro p{margin-top:14px;font-size:15px}.panel.intro h1{font-size:clamp(28px,4.2vw,50px)}}
+
+/* ===== v3: proof video rows ===== */
+.proof{padding-block:90px 40px;position:relative}
+.proof-h{font-size:clamp(28px,3.8vw,54px);font-weight:300;max-width:22ch;margin-top:14px}
+.proof-h b{font-weight:700;color:var(--teal)}
+.vrow{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:clamp(28px,4vw,64px);align-items:center;max-width:1320px;margin:clamp(56px,8vw,120px) auto 0;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.vrow.flip{grid-template-columns:minmax(0,1fr) minmax(0,1.45fr)}
+.vrow.flip .vmedia{order:2}
+.vmedia{position:relative;border-radius:28px;overflow:hidden;aspect-ratio:16/9;max-width:100%;background:#0B2226;box-shadow:0 40px 120px -40px rgba(0,0,0,.9),0 0 0 1px var(--line);transform:translateZ(0)}
+.vmedia::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 120%,rgba(242,164,68,.18),transparent 55%),linear-gradient(180deg,transparent 70%,rgba(7,23,26,.35))}
+.vmedia video{width:100%;height:100%;object-fit:cover;display:block}
+.vtext{display:grid;gap:14px;align-content:center;min-width:0}
+.vnum{font-family:var(--display);font-weight:200;font-size:13px;letter-spacing:.3em;color:var(--signal)}
+.vtext h3{font-size:clamp(24px,2.6vw,38px);font-weight:500}
+.vtext p{color:var(--fg2);font-size:17px;max-width:46ch}
+.vlist{list-style:none;padding:0;margin:4px 0 0;display:grid;gap:10px}
+.vlist li{position:relative;padding-left:22px;color:var(--fg);font-size:15.5px;line-height:1.5}
+.vlist li::before{content:"";position:absolute;left:0;top:.62em;width:10px;height:2px;background:var(--teal);border-radius:2px}
+.vtag{justify-self:start;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg2);padding:8px 13px;border:1px solid var(--line);border-radius:999px;margin-top:6px}
+.vtext .btn{justify-self:start;margin-top:8px}
+[data-reveal] .vmedia{clip-path:inset(8% 6% 8% 6% round 28px);opacity:.4;transform:scale(.96);transition:clip-path 1.1s cubic-bezier(.2,.7,.1,1),opacity 1s,transform 1.1s cubic-bezier(.2,.7,.1,1)}
+[data-reveal] .vtext>*{opacity:0;transform:translateY(18px);transition:opacity .7s,transform .7s}
+[data-reveal].in .vmedia{clip-path:inset(0 0 0 0 round 28px);opacity:1;transform:none}
+[data-reveal].in .vtext>*{opacity:1;transform:none}
+[data-reveal].in .vtext>*:nth-child(2){transition-delay:.08s}[data-reveal].in .vtext>*:nth-child(3){transition-delay:.16s}[data-reveal].in .vtext>*:nth-child(4){transition-delay:.24s}[data-reveal].in .vtext>*:nth-child(5){transition-delay:.32s}
+@media (max-width:900px){
+  .vrow,.vrow.flip{grid-template-columns:1fr;gap:22px;margin-top:64px}
+  .vrow.flip .vmedia{order:0}
+  .vmedia{border-radius:20px}
+  [data-reveal] .vmedia{clip-path:inset(4% 3% 4% 3% round 20px)}
+  [data-reveal].in .vmedia{clip-path:inset(0 0 0 0 round 20px)}
+  .vtext p{font-size:16px}
+}
+/* evidence */
+.ev{display:inline-grid;place-items:center;min-width:34px;height:26px;padding:0 9px;border-radius:999px;font:600 12px var(--body);letter-spacing:.06em}
+.ev-a{background:rgba(69,203,208,.16);color:var(--teal);border:1px solid rgba(69,203,208,.45)}
+.ev-b{background:rgba(242,164,68,.14);color:var(--signal);border:1px solid rgba(242,164,68,.45)}
+.ev-c{background:rgba(180,203,201,.08);color:var(--fg2);border:1px solid var(--line)}
+.dir .ev{position:absolute;top:22px;right:20px;z-index:1}
+.evgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:44px}
+.evcard{background:var(--glass2);border:1px solid var(--line);border-radius:22px;padding:26px 24px;display:grid;gap:14px;align-content:start;min-width:0}
+.evcard .ev{justify-self:start}
+.evcard h3{font-size:20px}
+.evnums{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:14px 0;border-block:1px solid var(--line)}
+.evnums b{display:block;white-space:nowrap;font-family:var(--display);font-weight:300;font-size:clamp(20px,2.1vw,30px);color:var(--fg);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.evnums span{display:block;font-size:12.5px;color:var(--fg3);margin-top:6px;line-height:1.4}
+.evcard p{color:var(--fg2);font-size:14.5px}
+.market{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:28px;padding-top:28px;border-top:1px solid var(--line)}
+.market b{font-family:var(--display);font-weight:200;font-size:clamp(40px,5vw,72px);color:var(--fg);line-height:1;font-variant-numeric:tabular-nums}
+.market small{font-size:15px;color:var(--teal);margin-left:6px}
+.market span{display:block;color:var(--fg3);font-size:14px;margin-top:10px;max-width:30ch}
+.src{color:var(--fg3);font-size:12.5px;margin-top:24px;max-width:110ch;line-height:1.5}
+@media (max-width:900px){.evgrid,.market{grid-template-columns:1fr}}
+/* final CTA video band */
+.contact-v{position:relative;height:clamp(260px,46vw,620px);margin-top:40px;overflow:hidden}
+.contact-v video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.bgv-shade{position:absolute;inset:0;background:linear-gradient(180deg,var(--bg) 0%,rgba(7,23,26,.15) 25%,rgba(7,23,26,.15) 60%,var(--bg) 100%)}
+.contact-v+.contact{margin-top:-120px;position:relative}
+@media (max-width:700px){.contact-v+.contact{margin-top:-60px}}
+/* specialist gate inside splash */
+.gate{display:grid;gap:12px;justify-items:center;margin-top:18px;opacity:0;transform:translateY(8px);transition:opacity .5s,transform .5s;pointer-events:none}
+.gate.on{opacity:1;transform:none;pointer-events:auto}
+.gate p{max-width:46ch;color:var(--fg2);font-size:13.5px;line-height:1.5}
+.gate .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.gate .btn{min-height:48px}
+.gate .alt{color:var(--fg3);font:400 13px var(--body);background:none;border:0;text-decoration:underline;cursor:pointer;min-height:36px}
+@media (prefers-reduced-motion: reduce){[data-reveal] .vmedia,[data-reveal] .vtext>*{transition:none;clip-path:none;opacity:1;transform:none}}
 </style>
 
 <div class="splash" id="splash" role="status" aria-live="polite">
@@ -256,6 +323,11 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
     <div class="splash-sub">Пептидная терапия для клиник</div>
     <div class="splash-bar"><b id="splashFill"></b></div>
     <div class="splash-txt">Загружаем экскурсию · <span id="splashPct">0%</span></div>
+    <div class="gate" id="gate">
+      <p>Материалы сайта предназначены для медицинских и фармацевтических работников.</p>
+      <div class="row"><button type="button" class="btn" id="gateYes">Я медицинский специалист</button></div>
+      <button type="button" class="alt" id="gateNo">Я не специалист</button>
+    </div>
   </div>
 </div>
 <canvas id="film" aria-hidden="true"></canvas>
@@ -296,46 +368,50 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
     </div>
   </div>
 
-  <div class="panel" data-t="8.4,10.6" id="tour-3">
+  <div class="panel" data-t="10.4,16.6" id="tour-3">
     <div class="card">
       <div class="k">03 · Кожа и ткань</div>
-      <h2>Повреждение подаёт сигнал тревоги</h2>
-      <p>При травме ткань сама выделяет короткие пептиды, мобилизующие ресурсы на восстановление. Терапия добавляет такие же сигналы в терапевтической дозе и многократно усиливает естественный процесс.</p>
-      <span class="tag">GHK-Cu · BPC-157</span>
+      <h2>Ткань сама говорит на языке пептидов</h2>
+      <p>При повреждении ткань выделяет короткие сигнальные пептиды. Один из самых изученных — медный трипептид GHK-Cu: в контролируемых исследованиях наружных средств (12 недель, до 71 участницы) отмечены рост плотности и толщины кожи и уменьшение морщин.</p>
+      <span class="tag">GHK-Cu · доказательность B · наружно</span>
+      <div class="scale"><i></i><b>≈ 2 мм</b> дерма</div>
     </div>
   </div>
 
-  <div class="panel right" data-t="11.6,16.6" id="tour-4">
+  <div class="panel right" data-t="19.2,25.6" id="tour-4">
     <div class="card">
       <div class="k">04 · Капилляр</div>
-      <h2>Кровь приносит пептид к клеткам-мишеням</h2>
-      <p>BPC-157 повышает факторы роста эндотелия (VEGF) и запускает рост новых капилляров, TB-500 облегчает миграцию клеток-репараторов. Лучше кровоснабжение — быстрее заживление.</p>
-      <span class="tag">Ангиогенез</span>
+      <h2>Кровь доставляет сигнал к клеткам-мишеням</h2>
+      <p>Через микроциркуляцию сигнальные молекулы доходят до нужных клеток. Регенеративные пептиды (BPC-157, TB-500) пока изучены в основном в доклинических работах и пилотных наблюдениях — мы прямо называем врачам уровень доказательности каждой молекулы.</p>
+      <span class="tag">Исследуемые молекулы · уровень C–D</span>
       <div class="scale"><i></i><b>≈ 50 мкм</b> сосуд</div>
+    </div>
     </div>
   </div>
 
-  <div class="panel" data-t="19,25.4" id="tour-5">
+  <div class="panel" data-t="28.2,34.6" id="tour-5">
     <div class="card">
       <div class="k">05 · Рецептор</div>
       <h2>Ключ подходит только к своему замку</h2>
-      <p>Пептид связывается с конкретным рецептором на мембране. Поэтому действие специфично: один усиливает синтез коллагена, другой регулирует аппетит, третий — выброс гормона роста, не затрагивая соседние системы.</p>
-      <span class="tag">Специфичность</span>
+      <p>Пептид связывается с конкретным рецептором на мембране — отсюда специфичность действия. Самый доказанный пример — агонисты рецепторов GLP-1: в исследовании STEP-1 (NEJM, 2021) масса тела снизилась на 14,9% за 68 недель против 2,4% на плацебо.</p>
+      <span class="tag">GLP-1 · доказательность A</span>
       <div class="scale"><i></i><b>≈ 10 нм</b> рецептор</div>
+    </div>
     </div>
   </div>
 
-  <div class="panel right" data-t="28,34.4" id="tour-6">
+  <div class="panel right" data-t="37.2,43.6" id="tour-6">
     <div class="card">
       <div class="k">06 · Внутри клетки</div>
       <h2>Клетка получает команду и выполняет её</h2>
-      <p>Сигнал доходит до ядра: включаются гены регенерации, фибробласт синтезирует коллаген и эластин, митохондрии дают энергию. Выполнив задачу, пептид распадается на аминокислоты и не накапливается в тканях.</p>
-      <span class="tag">Результат: новая ткань</span>
+      <p>Сигнал запускает каскад внутри клетки и меняет её работу: например, фибробласт усиливает синтез компонентов матрикса. Выполнив задачу, пептид распадается на аминокислоты и не накапливается в тканях.</p>
+      <span class="tag">Механизм · сигнальная регуляция</span>
       <div class="scale"><i></i><b>≈ 1 мкм</b> ядро</div>
+    </div>
     </div>
   </div>
 
-  <div class="panel wide" data-t="37.2,43.2" id="tour-7">
+  <div class="panel wide" data-t="46.4,52.4" id="tour-7">
     <div class="head"><div class="k">07 · Для клиники</div><h2>Не разовая процедура, а <b>программа ведения</b> пациента</h2></div>
     <div class="trio">
       <div class="card">
@@ -368,7 +444,7 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
     </div>
   </div>
 
-  <div class="panel" data-t="43.6,44.8" id="tour-8">
+  <div class="panel" data-t="53.2,54.6" id="tour-8">
     <div class="card">
       <div class="k">08 · Итог</div>
       <h2>Один сигнал — и клетка работает. Одна программа — и пациентка остаётся</h2>
@@ -378,14 +454,88 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
 </div>
 
 <div class="after">
+
+  <!-- PROOF: video rows -->
+  <section class="proof" id="proof">
+    <div class="wrap">
+      <p class="eyebrow">Почему клиники работают с нами</p>
+      <h2 class="proof-h">Клиника рискует не деньгами, а лицензией. Поэтому мы начинаем <b>с документов</b></h2>
+    </div>
+    <div class="vrow" data-reveal>
+      <div class="vmedia"><video class="lv" muted loop playsinline preload="none" poster="v/lab.jpg" data-src="v/lab.mp4" aria-label="Контроль качества партии в лаборатории"></video></div>
+      <div class="vtext">
+        <span class="vnum">01</span>
+        <h3>Документы на каждую партию</h3>
+        <p>До поставки клиника видит, что именно получит, и может проверить это сама.</p>
+        <ul class="vlist">
+          <li>Сертификат анализа партии (COA): чистота по ВЭЖХ, масс-спектрометрия, эндотоксины, стерильность</li>
+          <li>Производитель, страна, сертификаты производства</li>
+          <li>Правовой статус каждой позиции в РФ: регистрационное удостоверение или декларация</li>
+        </ul>
+        <span class="vtag">Проверка партии по номеру — по запросу</span>
+      </div>
+    </div>
+    <div class="vrow flip" data-reveal>
+      <div class="vmedia"><video class="lv" muted loop playsinline preload="none" poster="v/cold.jpg" data-src="v/cold.mp4" aria-label="Поставка в термоконтейнере с логгером температуры"></video></div>
+      <div class="vtext">
+        <span class="vnum">02</span>
+        <h3>Холодовая цепь до кабинета</h3>
+        <p>Пептиды чувствительны к температуре. Поэтому поставка — это не просто доставка.</p>
+        <ul class="vlist">
+          <li>Термоконтейнеры с хладоэлементами</li>
+          <li>Логгер температуры в каждой отправке: клиника видит, что цепь не прерывалась</li>
+          <li>Доставка по всей России, старт — Санкт-Петербург</li>
+        </ul>
+        <span class="vtag">Условия хранения — в документах к поставке</span>
+      </div>
+    </div>
+    <div class="vrow" data-reveal>
+      <div class="vmedia"><video class="lv" muted loop playsinline preload="none" poster="v/train.jpg" data-src="v/train.mp4" aria-label="Обучение врачей клиники"></video></div>
+      <div class="vtext">
+        <span class="vnum">03</span>
+        <h3>Обучение врачей — до первой закупки</h3>
+        <p>Врач, который понимает механизм и границы доказательности, сам ведёт пациента и не обещает лишнего.</p>
+        <ul class="vlist">
+          <li>Семинар для команды клиники: механизмы, уровни доказательности, противопоказания</li>
+          <li>Протоколы по направлениям и мониторинг</li>
+          <li>Юридическая памятка: как говорить с пациентами о пептидах в рамках закона о рекламе</li>
+        </ul>
+        <a class="btn" href="#start">Записать врачей на обучение</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- EVIDENCE -->
+  <section class="wrap block" id="evidence">
+    <p class="eyebrow">Наука без преувеличений</p>
+    <h2>Что доказано — <b>и насколько</b></h2>
+    <div class="evgrid">
+      <article class="evcard"><span class="ev ev-a">A</span><h3>Агонисты GLP-1 / GIP</h3>
+        <div class="evnums"><div><b>−14,9%</b><span>семаглутид, 68 недель<br>плацебо −2,4%</span></div><div><b>−20,9%</b><span>тирзепатид, 72 недели<br>плацебо −3,1%</span></div></div>
+        <p>STEP-1 (NEJM, 2021) и SURMOUNT-1 (NEJM, 2022; 2539 участников). В РФ зарегистрированы отечественные препараты; применяются по назначению врача в соответствии с инструкцией.</p></article>
+      <article class="evcard"><span class="ev ev-b">B</span><h3>GHK-Cu, наружно</h3>
+        <div class="evnums"><div><b>12 нед.</b><span>крем, 71 участница<br>с фотостарением</span></div><div><b>↑</b><span>плотность и толщина<br>кожи, ↓ морщины</span></div></div>
+        <p>Обзор Pickart &amp; Margolina (2018). Исследования небольшие, часть финансировалась производителями; данные получены для наружного применения.</p></article>
+      <article class="evcard"><span class="ev ev-c">C–D</span><h3>Исследуемые молекулы</h3>
+        <div class="evnums"><div><b>BPC-157</b><span>3 пилотных работы<br>на людях</span></div><div><b>Эпиталон</b><span>одна научная группа,<br>без репликаций</span></div></div>
+        <p>BPC-157, TB-500, эпиталон, MOTS-c изучены в основном доклинически. Мы не обещаем лечебных эффектов и обсуждаем их только со специалистами.</p></article>
+    </div>
+    <div class="market">
+      <div><b data-count="59">59</b><small>млрд ₽</small><span>инъекционная косметология в РФ за 2025 год, +34%</span></div>
+      <div><b data-count="24">24</b><small>млрд ₽</small><span>аптечные продажи семаглутида за январь–август 2026, +60%</span></div>
+      <div><b data-count="22">22</b><small>РУ</small><span>на семаглутид в ГРЛС: направление легально и растёт</span></div>
+    </div>
+    <p class="src">Источники: Wilding et al., NEJM 2021 (STEP-1); Jastreboff et al., NEJM 2022 (SURMOUNT-1); Pickart &amp; Margolina, Int J Mol Sci 2018; «Право на здоровье» / «Коммерсантъ», 2026; DSM Group / РБК, 2026. Уровни: A — крупные РКИ, B — небольшие исследования на людях, C — пилоты, D — доклинические данные.</p>
+  </section>
   <section class="wrap block" id="dirs">
     <p class="eyebrow">Направления</p>
-    <h2>Четыре линейки — под профиль <b>вашей</b> клиники</h2>
+    <h2>Четыре направления — с честным <b>уровнем доказательности</b></h2>
+    <p class="sub">Буква на карточке — уровень доказательности: A — крупные РКИ и регистрация, B — небольшие исследования на людях, C — пилоты и наблюдения, D — только доклинические данные.</p>
     <div class="dirs">
-      <article class="dir"><span class="ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h4l3 -8 4 14 3 -6h2"/></svg></span><h3>Регенерация</h3><p>Косметология и реабилитация: заживление после процедур, связки и суставы, слизистая ЖКТ. Меньше хронической боли, быстрее восстановление.</p><span class="who">BPC-157 · TB-500 · GHK-Cu · BBG70</span></article>
-      <article class="dir"><span class="ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><h3>Антиэйдж</h3><p>Эпиталон активирует теломеразу и нормализует мелатонин. Поддержка NAD+ включает пути долголетия (сиртуины) и снижает окислительный стресс.</p><span class="who">Эпиталон · NAD+ · MOTS-C</span></article>
-      <article class="dir"><span class="ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M5 8l7 -5 7 5M5 16l7 5 7 -5"/></svg></span><h3>Метаболизм и вес</h3><p>Эндокринология: агонисты GLP-1 и GIP снижают аппетит и улучшают гликемию. AOD-9604 стимулирует липолиз без эффектов самого гормона роста.</p><span class="who">Семаглутид · Тирзепатид · AOD-9604</span></article>
-      <article class="dir"><span class="ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7 -4.5 -7 -10a7 7 0 0 1 14 0c0 5.5 -7 10 -7 10z"/><circle cx="12" cy="11" r="2.5"/></svg></span><h3>Гормональная регуляция</h3><p>Кисспептин-10 мягко перезапускает ось гипоталамус–гипофиз–гонады. Ипаморелин усиливает физиологическую пульсацию соматотропина.</p><span class="who">Кисспептин-10 · Ипаморелин · PT-141</span></article>
+      <article class="dir"><span class="ev ev-a">A</span><span class="ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M5 8l7 -5 7 5M5 16l7 5 7 -5"/></svg></span><h3>Метаболизм и вес</h3><p>Агонисты GLP-1/GIP — класс с наивысшим уровнем доказательности: −14,9% массы тела (STEP-1) и −20,9% (SURMOUNT-1). Зарегистрированные в РФ препараты, по назначению врача. Помогаем выстроить программу сопровождения.</p><span class="who">Эндокринология · снижение веса</span></article>
+      <article class="dir"><span class="ev ev-b">B</span><span class="ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c1 1.2 2.2 1.8 3.5 1.8s2.5-.6 3.5-1.8"/><path d="M9 10h.01M15 10h.01"/></svg></span><h3>Эстетическая медицина</h3><p>Медный трипептид GHK-Cu — один из наиболее изученных косметических пептидов: в исследованиях наружных средств отмечены рост плотности кожи и уменьшение морщин. Сочетается с процедурами клиники.</p><span class="who">Косметология · трихология</span></article>
+      <article class="dir"><span class="ev ev-c">C–D</span><span class="ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h4l3 -8 4 14 3 -6h2"/></svg></span><h3>Регенерация и реабилитация</h3><p>BPC-157, TB-500 — исследуемые молекулы: данные в основном доклинические и пилотные. Обсуждаем только со специалистами, с указанием статуса в РФ. Важно для спортивной медицины: вещества входят в список ВАДА.</p><span class="who">Только для специалистов</span></article>
+      <article class="dir"><span class="ev ev-c">C</span><span class="ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><h3>Anti-age и интегративная медицина</h3><p>Эпиталон, NAD+, MOTS-c — направления исследований без обещаний «омоложения». Акцент программы — на диагностике, мониторинге маркеров и честной коммуникации с пациентом.</p><span class="who">Превентивная медицина</span></article>
     </div>
   </section>
 
@@ -408,12 +558,14 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
     <div class="two">
       <div>
         <p class="eyebrow">Документы и база</p>
-        <h2>Что получает клиника <b>до первой закупки</b></h2>
+        <h2>Что мы покажем <b>до первой поставки</b></h2>
         <div class="doclist">
-          <div class="doc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg><div><b>Учебник «Пептидная терапия» для врачей</b><span>33 страницы, 6 глав: категории и механизмы, показания, протоколы, побочные эффекты, долгосрочные программы</span></div><em>по заявке</em></div>
-          <div class="doc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><div><b>Сертификаты качества и документы на продукт</b><span>Происхождение, условия хранения, сопроводительные документы Rejuva</span></div><em>по запросу</em></div>
-          <div class="doc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg><div><b>Протоколы по категориям</b><span>12-недельные и 6-месячные программы, титрация, мониторинг, «план Б» при плато</span></div><em>с обучением</em></div>
-          <div class="doc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20h16M6 20V9l6-5 6 5v11"/><path d="M10 20v-6h4v6"/></svg><div><b>Шаблоны для клиники</b><span>Информированное согласие, дневник прогресса пациента, скрипты разговора врача</span></div><em>с обучением</em></div>
+          <div class="doc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20h16M6 20V9l6-5 6 5v11"/><path d="M10 20v-6h4v6"/></svg><div><b>Реквизиты и выписка ЕГРЮЛ</b><span>Юрлицо, ИНН/ОГРН, адрес склада — чтобы проверить контрагента до встречи</span></div><em>до встречи</em></div>
+          <div class="doc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg><div><b>Правовой статус каждой позиции</b><span>Матрица: позиция → статус в РФ → документ (РУ, декларация ЕАЭС)</span></div><em>до поставки</em></div>
+          <div class="doc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg><div><b>Сертификат анализа партии (COA)</b><span>Чистота по ВЭЖХ, масс-спектрометрия, эндотоксины, стерильность</span></div><em>к каждой партии</em></div>
+          <div class="doc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 2v20M2 12h20M5 5l14 14M19 5L5 19"/></svg><div><b>Холодовая цепь</b><span>Термоконтейнер и данные логгера температуры по каждой отправке</span></div><em>к каждой партии</em></div>
+          <div class="doc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg><div><b>Протоколы и учебник для врачей</b><span>Программы по направлениям, мониторинг, противопоказания, 33-страничный учебник</span></div><em>с обучением</em></div>
+          <div class="doc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><div><b>Медицинский советник</b><span>Врач, который отвечает команде клиники на вопросы по механизмам и сочетаемости</span></div><em>на встрече</em></div>
         </div>
       </div>
       <aside class="author">
@@ -431,6 +583,8 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
     <p class="eyebrow">Вопросы главврача</p>
     <h2>Что спрашивают <b>перед стартом</b></h2>
     <div class="faq">
+      <details><summary>Как проверить вас как поставщика?</summary><p>До встречи передаём реквизиты и выписку ЕГРЮЛ, до поставки — матрицу правового статуса каждой позиции с подтверждающими документами и сертификаты анализа партии. Всё это можно проверить самостоятельно.</p></details>
+      <details><summary>Можно ли рассказывать пациентам о пептидах в рекламе?</summary><p>Реклама медицинских услуг и препаратов регулируется законом «О рекламе» (ст. 24): обязательны предупреждения о противопоказаниях, а описание методов лечения и рецептурных препаратов допустимо только для специалистов. На обучении передаём памятку с безопасными формулировками для сайта и соцсетей клиники.</p></details>
       <details><summary>Насколько это безопасно для пациентов?</summary><p>Пептиды в целом хорошо переносятся: многие из них эндогенны, серьёзные побочные явления редки. У каждого препарата свой профиль — например, у агонистов GLP-1 самые частые реакции гастроинтестинальные и проходят по мере адаптации при постепенной титрации. Полный перечень по каждому препарату — в главе 5 учебника.</p></details>
       <details><summary>Кому пептиды назначать нельзя?</summary><p>Абсолютные противопоказания — беременность и лактация, активные онкологические процессы. Относительные — тяжёлая декомпенсация печени или почек, нестабильное состояние. У препаратов есть свои ограничения: агонисты GLP-1 не применяют при раке щитовидной железы в анамнезе и диабете 1 типа, PT-141 — при неконтролируемой гипертензии.</p></details>
       <details><summary>Сочетаются ли пептиды с нашими процедурами?</summary><p>Да, и это основа кросс-назначений: GHK-Cu сочетают с ретиноидами и факторами роста в косметологии, BPC-157 — с физиотерапией и ЛФК, GLP-1 — с диетой низкого гликемического индекса. Пептиды разных категорий можно комбинировать в одной программе, так как они работают через разные рецепторы.</p></details>
@@ -455,9 +609,10 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
   </section>
 
   <!-- LEAD FORM -->
+  <section class="contact-v" id="start-v" aria-hidden="true"><video class="lv bgv" muted loop playsinline preload="none" poster="v/deal.jpg" data-src="v/deal.mp4"></video><div class="bgv-shade"></div></section>
   <section class="wrap block contact" id="start">
     <div class="inner">
-      <div><p class="eyebrow">Старт</p><h2 style="margin-top:14px">Получите учебник и <b>программу под вашу клинику</b></h2><p class="sub">Оставьте контакт — пришлём учебник для врачей, подберём линейку под профиль клиники и назначим 20-минутную консультацию. Без предоплаты.</p>
+      <div><p class="eyebrow">Старт</p><h2 style="margin-top:14px">Встреча с медицинским советником — <b>30 минут</b></h2><p class="sub">Оставьте контакт — медицинский советник за 30 минут разберёт профиль клиники, покажет документы и предложит формат старта. Учебник для врачей пришлём сразу. Без предоплаты.</p>
         <div class="alt"><div class="crow"><div><div class="k">Менеджер проекта</div><div class="v">Елена · Instagram Direct</div></div></div>
         <div class="crow"><div class="v">@peptideselena</div><button type="button" class="copy" data-copy="@peptideselena">Скопировать</button></div>
         <div class="crow"><div class="v">селл-лаб.рф</div><button type="button" class="copy" data-copy="селл-лаб.рф">Скопировать</button></div></div>
@@ -467,7 +622,7 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
         <label>Профиль<select id="lProfile" name="profile"><option>Косметология</option><option>Эндокринология</option><option>Спортивная медицина</option><option>Реабилитация</option><option>Многопрофильный центр</option><option>Другое</option></select></label>
         <div class="f2"><label>Как к вам обращаться<input type="text" id="lName" name="name" autocomplete="name" required placeholder="Имя"></label><label>Контакт<input type="text" id="lContact" name="contact" required placeholder="Telegram, телефон или e-mail"></label></div>
         <label class="chk"><input type="checkbox" id="lAgree" required> Я представляю медицинскую организацию и согласен на обработку контактных данных</label>
-        <button type="submit" class="btn" id="leadBtn">Получить учебник и программу</button>
+        <button type="submit" class="btn" id="leadBtn">Записаться на встречу</button>
         <p class="err" id="leadErr" hidden>Заполните клинику, имя и контакт и поставьте галочку.</p>
         <div class="done" id="leadDone" hidden>
           <b id="doneTitle">Заявка принята</b>
@@ -480,13 +635,13 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
   </section>
   <footer class="wrap">
     <div class="fcol"><b>CELL LAB</b><span>Пептиды корейского качества Rejuva. Поставки для клиник по всей России.</span><span>Материалы основаны на учебнике «Пептидная терапия: профессиональный учебник для врачей».</span></div>
-    <div class="fcol"><span>Юридическое лицо: ООО «CELL LAB» · ИНН и ОГРН — по запросу</span><span>Адрес и телефон офиса — по запросу у менеджера</span><span>Информация предназначена для медицинских специалистов</span></div>
+    <div class="fcol"><span>Реквизиты юрлица и выписку ЕГРЮЛ направим по запросу до встречи</span><span>Адрес и телефон офиса — по запросу у менеджера</span><span>Информация предназначена для медицинских и фармацевтических работников. Имеются противопоказания, необходима консультация специалиста.</span></div>
   </footer>
 </div>
 
 <script>
 (function(){
-  var N=228, FPS=5, DUR=45.5;
+  var N=275, FPS=5, DUR=54.9;
   var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   var track=document.getElementById('track'), hud=document.getElementById('hud'), fade=document.getElementById('fade'), scrim=document.getElementById('scrim');
   var panels=[].slice.call(document.querySelectorAll('.panel'));
@@ -506,16 +661,21 @@ footer{display:grid;grid-template-columns:1fr 1fr;gap:24px}
   cv.addEventListener('ended',closeCinema);
   document.addEventListener('keydown',function(e){if(e.key==='Escape')closeCinema()});
 
-  if(reduce){document.body.classList.add('static');var sp=document.getElementById('splash');if(sp)sp.classList.add('off');return;}
+  if(reduce){document.body.classList.add('static');var sp=document.getElementById('splash'),g=document.getElementById('gate');var ok=false;try{ok=localStorage.getItem('cl_spec')==='1'}catch(e){} if(ok||!sp){if(sp)sp.classList.add('off');}else{g.classList.add('on');document.getElementById('gateYes').addEventListener('click',function(){try{localStorage.setItem('cl_spec','1')}catch(e){} sp.classList.add('off');});} return;}
 
   /* frames */
   var frames=new Array(N), loaded=0, canvas=document.getElementById('film'), ctx=canvas.getContext('2d'), W=0,H=0, dpr=Math.min(2,devicePixelRatio||1);
   function src(i){return 'frames/f'+('000'+(i+1)).slice(-4)+'.jpg'}
   var splash=document.getElementById('splash'), sFill=document.getElementById('splashFill'), sPct=document.getElementById('splashPct');
   var coarseStep=4, coarseTotal=Math.ceil(N/coarseStep), coarseLoaded=0, splashDone=false;
-  function openSplash(){if(splashDone)return;splashDone=true;splash.classList.add('off');document.body.style.overflow='';}
+  var gate=document.getElementById('gate'), gateOk=false, framesReady=false;
+  try{gateOk=localStorage.getItem('cl_spec')==='1'}catch(e){}
+  function reallyOpen(){if(splashDone)return;splashDone=true;splash.classList.add('off');document.body.style.overflow='';}
+  function openSplash(){framesReady=true; if(gateOk){reallyOpen();} else {gate.classList.add('on');}}
+  document.getElementById('gateNo').addEventListener('click',function(){gate.querySelector('p').textContent='Этот сайт для медицинских специалистов. По вопросам лечения обратитесь к лечащему врачу.';this.hidden=true;});
+  document.getElementById('gateYes').addEventListener('click',function(){gateOk=true;try{localStorage.setItem('cl_spec','1')}catch(e){} reallyOpen();});
   document.body.style.overflow='hidden';
-  setTimeout(openSplash,9000); /* never trap the viewer */
+  setTimeout(openSplash,9000); /* never wait on frames forever */
   function onLoaded(i){loaded++;if(i%coarseStep===0){coarseLoaded++;var c=Math.min(1,coarseLoaded/coarseTotal);sFill.style.width=(c*100)+'%';sPct.textContent=Math.round(c*100)+'%';if(c>=1)setTimeout(openSplash,250);}
     pct.textContent=Math.round(loaded/N*100)+'%';if(loaded>=N){loader.style.opacity=0;}}
   function load(i,cb){if(frames[i])return;var im=new Image();im.decoding='async';
@@ -594,6 +754,26 @@ document.querySelectorAll('.copy').forEach(function(b){
     var b=this; function ok(y){b.textContent=y?'Скопировано':'Выделите текст и скопируйте';setTimeout(function(){b.textContent='Скопировать сообщение'},1800)}
     if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(msg.value).then(function(){ok(true)},function(){msg.select();ok(false)})}else{msg.select();ok(false)}
   });
+})();
+
+/* v3: lazy looping videos, reveal, counters */
+(function(){
+  var vids=[].slice.call(document.querySelectorAll('video.lv'));
+  var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function load(v){if(!v.dataset.loaded){v.src=v.dataset.src;v.dataset.loaded='1';}}
+  if('IntersectionObserver' in window){
+    var io=new IntersectionObserver(function(es){es.forEach(function(e){var v=e.target;
+      if(e.isIntersecting){load(v); if(!reduce){var p=v.play(); if(p&&p.catch)p.catch(function(){});}}
+      else{v.pause();}
+    });},{rootMargin:'300px 0px 300px 0px',threshold:0.01});
+    vids.forEach(function(v){io.observe(v)});
+    var ro=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');ro.unobserve(e.target);}})},{threshold:0.25});
+    [].slice.call(document.querySelectorAll('[data-reveal]')).forEach(function(el){ro.observe(el)});
+    var co=new IntersectionObserver(function(es){es.forEach(function(e){if(!e.isIntersecting)return;co.unobserve(e.target);var el=e.target,t=+el.dataset.count,st=null;
+      if(reduce){el.textContent=t;return;}
+      function step(ts){if(!st)st=ts;var k=Math.min(1,(ts-st)/1400);el.textContent=Math.round(t*(1-Math.pow(1-k,3)));if(k<1)requestAnimationFrame(step);}requestAnimationFrame(step);});},{threshold:.6});
+    [].slice.call(document.querySelectorAll('[data-count]')).forEach(function(el){co.observe(el)});
+  } else { vids.forEach(load); [].slice.call(document.querySelectorAll('[data-reveal]')).forEach(function(el){el.classList.add('in')}); }
 })();
 </script>
 
