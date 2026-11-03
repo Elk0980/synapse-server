@@ -16,7 +16,8 @@ test('MCP → настоящий кабинет/CSRF → MCP: одна запи�
   const tools = await f.rpc('tools/list');
   assert.deepEqual(tools.result.tools.map(tool => tool.name).sort(), [
     'tasks_list', 'task_get', 'task_create', 'task_update', 'task_comment',
-    'agents_list', 'agent_report', 'session_start', 'doc_read', 'session_end'
+    'agents_list', 'agent_report', 'session_start', 'doc_read', 'session_end',
+    'archive_list', 'archive_read', 'archive_write'
   ].sort());
   assert.equal((await fetch(f.mcpUrl + '/mcp')).status, 401);
   const input = { title: 'SAMPLE сквозная задача', project: 'palitra-love', client_ref: 'acceptance-1',
@@ -65,7 +66,7 @@ test('отсутствующая папка канона не мешает MCP/C
   t.after(f.stop);
   await assert.rejects(fs.stat(f.docs), error => error.code === 'ENOENT');
   assert.equal((await fetch(f.mcpUrl + '/health')).status, 200);
-  assert.equal((await f.rpc('tools/list')).result.tools.length, 10);
+  assert.equal((await f.rpc('tools/list')).result.tools.length, 13);
   assert.equal((await f.call('tasks_list', {})).isError, false);
   const created = await f.call('task_create', {client_ref:'absent-map-1', title:'SAMPLE без карты',
     project:'palitra-love', executor:'SAMPLE Codex', reviewer:'SAMPLE Owner', source:'manual'});

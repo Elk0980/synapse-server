@@ -16,6 +16,14 @@ const links = z.array(z.strictObject({
   }, 'Нужна HTTPS-ссылка без учётных данных'),
   label:z.string().max(200), kind:z.enum(['link', 'image', 'video'])
 })).max(50);
+const archiveModule = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
+const archiveLinks = z.array(z.strictObject({
+  url:z.url().max(2000).refine(value => {
+    const parsed = new URL(value);
+    return parsed.protocol === 'https:' && !parsed.username && !parsed.password;
+  }, 'Нужна HTTPS-ссылка без учётных данных'),
+  label:z.string().max(200), kind:z.enum(['link', 'image', 'video', 'file'])
+})).max(50);
 
 const TOOLS = [
   ['tasks_list', 'Показать задачи разрешённых проектов с фильтрами; план дня рассчитывается по Asia/Bangkok.', {
@@ -60,6 +68,19 @@ const TOOLS = [
   ['session_end', 'Завершить свою сессию, записать итог в журнал и обновить состояния задач.', {
     session_id:short, summary:z.string().trim().min(1).max(10000), state:states.optional(),
     statuses:z.array(z.strictObject({task_id:id, status:statuses})).max(100).optional()
+  }],
+  ['archive_list', 'Прочитать карточки модулей и журнал разрешённых проектов; каждое чтение учитывается в аудите.', {
+    module:archiveModule.optional(), project:project.optional(), session_id:short.optional(),
+    limit:z.number().int().min(1).max(100).optional(), offset:z.number().int().min(0).max(1000000).optional()
+  }],
+  ['archive_read', 'Прочитать неизменяемую запись архива; чтение записывается в аудит.', {
+    id, session_id:short.optional()
+  }],
+  ['archive_write', 'Дописать запись в архив модуля от имени открытой сессии. Повтор client_ref не создаёт дубль; исправление — новая запись.', {
+    session_id:short, client_ref:short, module:archiveModule, project,
+    type:z.enum(['tried', 'succeeded', 'failed', 'report', 'decision', 'next_step']),
+    text:z.string().trim().min(1).max(10000), links:archiveLinks.optional(),
+    task_id:id.optional(), supersedes_id:id.optional()
   }]
 ].map(([name, description, shape]) => ({name, description, inputSchema:z.strictObject(shape)}));
 
@@ -69,7 +90,8 @@ const SESSION_RULES = [
   'Исполнитель и проверяющий различаются (maker ≠ checker). Код, подключение, проверка и приёмка подтверждаются раздельно.',
   'Не раскрывайте секреты и клиентские данные CRM. Секреты не включаются в документы, комментарии и отчёты.',
   'Обновляйте задачи и своё состояние по ходу работы. После 60 минут без отчёта активная задача помечается «нет отчёта».',
-  'Реестр агентов — ручной учёт; MCP не запускает агентов и не расширяет разрешения Owner.'
+  'Реестр агентов — ручной учёт; MCP не запускает агентов и не расширяет разрешения Owner.',
+  'Архив модуля читайте через archive_list/read; результаты дописывайте через archive_write с session_id и уникальным client_ref. Исправление — новая запись с supersedes_id; файлы и секреты в Git не помещать.'
 ];
 
 module.exports = {TOOLS, SESSION_RULES};

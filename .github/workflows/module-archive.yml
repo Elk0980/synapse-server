@@ -1,0 +1,29 @@
+name: module-archive
+on:
+  pull_request:
+    paths:
+      - 'ops/tasks-mcp/**'
+      - 'ops/crm/module-archive*'
+      - 'ops/crm/task-coordination.js'
+      - '.github/workflows/module-archive.yml'
+  push:
+    branches: ['codex/module-archive-20261103']
+permissions:
+  contents: read
+jobs:
+  archive-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Установить закреплённые тестовые зависимости
+        run: npm ci --prefix ops/tasks-mcp --ignore-scripts
+      - name: Проверить архив, прежние задачи и MCP на синтетических данных
+        env:
+          NODE_PATH: ${{ github.workspace }}/ops/tasks-mcp/node_modules
+        run: node --test --test-concurrency=2 ops/tasks-mcp/*.test.js ops/crm/task-coordination.test.js

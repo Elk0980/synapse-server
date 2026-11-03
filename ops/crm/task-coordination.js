@@ -352,6 +352,8 @@ function taskExtras(db, row, now) {
 }
 
 function createTaskTools(db, {now,owner,entry,save}) {
+  // Архив устанавливается отдельно с резервной копией; чтение старых задач не запускает DDL.
+  const archive = require('./module-archive').createModuleArchive(db, {now});
   const stamp = () => new Date(now()).toISOString();
   const integer = (value, label='задача') => {
     if (!Number.isSafeInteger(value) || value < 1) fail(400, `Некорректное поле: ${label}`);
@@ -539,6 +541,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
     owner(actor);
     if (!object(args)) fail(400,'Нужен объект параметров');
     if (!hasMcpSchema(db)) fail(503,'Миграция задач MCP не установлена');
+    if (name.startsWith('archive_')) return archive.tool(name,args,actor);
     if (name==='tasks_list') return tasksList(args,actor);
     if (name==='products_list') return products.list(args,actor);
     if (name==='task_duplicates') return products.duplicates(args,actor);
@@ -598,12 +601,12 @@ function createTaskTools(db, {now,owner,entry,save}) {
       const projects=JSON.stringify([...allowed(actor)].sort());
       if(existing) {
         if(existing.owner_id!==actor.userId||existing.projects!==projects)fail(404,'Сессия не найдена');
-        return {session_id:existing.id,agent,tasks:agent.active_tasks,resumed:true};
+        return {session_id:existing.id,agent,tasks:agent.active_tasks,resumed:true,archives:archive.hints(request,actor)};
       }
       const sessionId=require('node:crypto').randomUUID();
       db.prepare('INSERT INTO agent_sessions(id,agent_id,owner_id,request,projects,started_at) VALUES(?,?,?,?,?,?)')
         .run(sessionId,agent.id,actor.userId,request,projects,stamp());
-      return {session_id:sessionId,agent,tasks:agent.active_tasks,resumed:false};
+      return {session_id:sessionId,agent,tasks:agent.active_tasks,resumed:false,archives:archive.hints(request,actor)};
     });
     if(name==='session_end')return transaction(()=>{
       const session=db.prepare('SELECT * FROM agent_sessions WHERE id=?').get(text(args.session_id,100));
