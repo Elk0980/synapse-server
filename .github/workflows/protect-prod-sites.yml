@@ -1,0 +1,28 @@
+name: Protect production sites
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled, unlabeled, edited, ready_for_review]
+permissions:
+  contents: read
+  pull-requests: read
+concurrency:
+  group: protect-prod-sites-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  site-path-approval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Trusted base only. Never checkout, import or execute PR code here.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Проверить текущие метки и все пути PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: python tools/protect-prod-sites/guard.py --event "$GITHUB_EVENT_PATH" --repo "$REPOSITORY"

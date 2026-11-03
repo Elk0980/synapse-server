@@ -1,0 +1,28 @@
+name: Production sites guard tests
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  guard-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s tools/protect-prod-sites -p 'test_*.py' -v
+      # Bootstrap proof for the PR introducing the trusted-base workflow.
+      # This unprivileged head-code check is not the trusted admission check.
+      - name: Проверить этот PR (без привилегий)
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: python tools/protect-prod-sites/guard.py --event "$GITHUB_EVENT_PATH" --repo "$REPOSITORY"
