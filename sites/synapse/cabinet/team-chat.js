@@ -45,7 +45,15 @@
     document.querySelector('.shell').classList.add('open');
     for(const b of $('rooms').children)b.setAttribute('aria-current',String(b.dataset.code===code));
     history.replaceState(null,'',`?companyCode=${encodeURIComponent(code)}${location.hash}`);
-    await refresh();document.getElementById(location.hash.slice(1))?.scrollIntoView();
+    const version=epoch,target=/^#message-([1-9]\d*)$/.exec(location.hash);
+    if(target&&Number.isSafeInteger(Number(target[1])+1)) {
+      try {
+        const source=await api(path(code)+`&before=${Number(target[1])+1}`);
+        if(version!==epoch)return;
+        for(const m of source.messages)messages.set(m.id,m);render();
+      }catch(e){if(version===epoch)$('notice').textContent=e.message;}
+    }
+    await refresh();if(version===epoch)document.getElementById(location.hash.slice(1))?.scrollIntoView();
   }
   $('compose').onsubmit=async e=>{
     e.preventDefault();if(busy||!company)return;
