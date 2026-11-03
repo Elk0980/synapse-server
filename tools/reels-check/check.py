@@ -21,7 +21,8 @@ from pathlib import Path
 try:
     import numpy as np
 except ImportError:  # pragma: no cover - печатается пользователю
-    sys.exit('reels-check: нужен numpy (pip install numpy)')
+    print('reels-check: нужен numpy (pip install numpy)', file=sys.stderr)
+    sys.exit(2)
 
 OK, FAIL, WARN, SKIP = 'ok', 'fail', 'warn', 'skip'
 MARK = {OK: '✔', FAIL: '✘', WARN: '⚠', SKIP: '—'}
@@ -48,7 +49,7 @@ HANGING_WORDS = {
     'и', 'а', 'о', 'в', 'к', 'с', 'у', 'я', 'не', 'на', 'по', 'за', 'из', 'от', 'до',
     'но', 'во', 'со', 'ко', 'об', 'ни', 'же', 'ли', 'бы',
 }
-TITLE_STYLE = re.compile(r'title|titr|титр|top|head|верх', re.I)
+TITLE_STYLE = re.compile(r'title|titr|титр|\btop\b|head|верх', re.I)
 
 # Ручные правила: что показать человеку или модели в отчёте.
 MANUAL = {
@@ -108,9 +109,27 @@ def parse_rate(text):
     return float(text)
 
 
+URL_LIKE = re.compile(r'^[A-Za-z][A-Za-z0-9+.-]+:')  # concat:, http:, pipe: …; буква диска C: не попадает
+
+
+def local_input(path):
+    """Только локальный файл: протоколы ffmpeg (concat:, http:// и т. п.) отклоняются."""
+    text = str(path)
+    if URL_LIKE.match(text):
+        raise CheckError('Нужен локальный файл, а не адрес или протокол ffmpeg: ' + text)
+    p = Path(text)
+    if not p.is_file():
+        raise CheckError('Файл не найден: ' + text)
+    return 'file:' + str(p.resolve())
+
+
+def local_output(path):
+    return 'file:' + str(Path(path).resolve())
+
+
 def probe(path):
     data = json.loads(run(['ffprobe', '-v', 'error', '-print_format', 'json',
-                           '-show_format', '-show_streams', str(path)]))
+                           '-show_format', '-show_streams', local_input(path)]))
     video = next((s for s in data.get('streams', []) if s.get('codec_type') == 'video'), None)
     if video is None:
         raise CheckError('В файле нет видеодорожки: ' + str(path))
@@ -136,7 +155,7 @@ def probe(path):
 
 def decode_gray(path, info, width=160):
     height = max(2, int(round(width * info['height'] / info['width'] / 2.0)) * 2)
-    raw = run(['ffmpeg', '-v', 'error', '-i', str(path), '-map', '0:v:0', '-vf',
+    raw = run(['ffmpeg', '-v', 'error', '-i', local_input(path), '-map', '0:v:0', '-vf',
                f'scale={width}:{height}:flags=area,format=gray', '-f', 'rawvideo', '-'], binary=True)
     frame = width * height
     count = len(raw) // frame
@@ -181,7 +200,7 @@ def check_fps(info):
     if 23.9 <= fps <= 30.01:
         return result('R03', OK, f'{fps:.3g} к/с')
     if fps > 30.01:
-        return result('R03', WARN, f'{fps:.3g} к/с: больше 30 — стандарт 24–30')
+        return result('R03', FAIL, f'{fps:.3g} к/с: больше 30 — стандарт 24–30')
     return result('R03', FAIL, f'{fps:.3g} к/с: меньше 24')
 
 
@@ -249,7 +268,7 @@ def find_reverse(frames, fps):
 def check_reverse(frames, fps):
     best = find_reverse(frames, fps)
     if best is None:
-        return result('R06', OK, 'движения для разворота нет (кадр почти статичен)')
+        return result('R06', SKIP, 'движения для разворота нет (кадр почти статичен) — реверс не оценивался')
     score, c, mirror, base = best
     at = f'разворот около {fmt_t(c / fps)} (кадр {c})'
     detail = f'зеркальная разница {mirror:.2f} при движении {base:.2f} (отношение {score:.2f})'
@@ -344,7 +363,7 @@ def check_codec(path, info, mechanic):
 
 def check_keyframes(path, info):
     flags = run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries',
-                 'packet=flags', '-of', 'csv=p=0', str(path)]).split()
+                 'packet=flags', '-of', 'csv=p=0', local_input(path)]).split()
     keys = [i for i, f in enumerate(flags) if 'K' in f]
     if not keys:
         return result('R13', FAIL, 'ключевых кадров не найдено')
@@ -374,7 +393,7 @@ def check_site_audio(path, info):
 # ---------- звук и титры рилса ----------
 
 def loudness(path):
-    proc = subprocess.run(['ffmpeg', '-hide_banner', '-nostats', '-i', str(path), '-map', '0:a:0',
+    proc = subprocess.run(['ffmpeg', '-hide_banner', '-nostats', '-i', local_input(path), '-map', '0:a:0',
                            '-af', 'ebur128', '-f', 'null', '-'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     text = proc.stderr.decode('utf-8', 'replace')
     found = re.findall(r'I:\s+(-?[\d.]+|-inf)\s+LUFS', text)
@@ -393,7 +412,7 @@ def check_reel_audio(path, info, project):
     if not info['audio']:
         if policy == 'none':
             return [result('R16', OK, f'{project}: без звука, дорожки нет')]
-        return [result('R16', WARN, f'{project}: голос согласован, но дорожки нет')]
+        return [result('R16', FAIL, f'{project}: нужен голос, а звуковой дорожки нет')]
     level = loudness(path)
     silent = level is None or level < -60
     if policy == 'none':
@@ -506,7 +525,8 @@ def export_frames(path, info, out_dir):
     duration = max(info['duration'], 0.1)
     for label, t in (('first', 0.0), ('middle', duration / 2), ('last', max(0.0, duration - 1.5 / max(info['fps'], 1)))):
         target = out_dir / f'{Path(path).stem}_{label}.png'
-        run(['ffmpeg', '-v', 'error', '-y', '-ss', f'{t:.3f}', '-i', str(path), '-frames:v', '1', str(target)])
+        run(['ffmpeg', '-v', 'error', '-y', '-ss', f'{t:.3f}', '-i', local_input(path), '-frames:v', '1',
+             '-update', '1', local_output(target)])
         names.append(str(target))
     return names
 
@@ -603,8 +623,11 @@ def main(argv=None):
     try:
         report = check_video(args.video, args.profile, args.mechanic, args.source, args.subs,
                              args.project, args.mobile, args.frames_dir)
-    except (CheckError, OSError, ValueError) as error:
+    except CheckError as error:
         print('reels-check: ' + str(error), file=sys.stderr)
+        return 2
+    except Exception as error:  # любой сбой — ошибка запуска, а не «брак ролика»
+        print(f'reels-check: внутренняя ошибка {type(error).__name__}: {error}', file=sys.stderr)
         return 2
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))

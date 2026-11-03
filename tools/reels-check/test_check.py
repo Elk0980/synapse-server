@@ -2,6 +2,7 @@
 
 Запуск: python3 -m unittest discover -s tools/reels-check -p 'test_*.py'
 """
+import contextlib
 import io
 import json
 import re
@@ -59,13 +60,13 @@ class SubtitlesTest(unittest.TestCase):
         path.write_text(text, encoding='utf-8')
         return path
 
-    def test_good_srt_passes(self):
-        path = self.write('ok.srt', '1\n00:00:00,000 --> 00:00:01,000\nСантиметры ≠ жир\n\n'
+    def test_long_subtitle_fails_short_passes(self):
+        path = self.write('long.srt', '1\n00:00:00,000 --> 00:00:01,000\nСантиметры ≠ жир\n\n'
                                     '2\n00:00:01,000 --> 00:00:02,000\nЧто спросить мастеру\n')
         # «Что спросить мастеру» — 20 знаков: должно ловиться
         res = check.check_subs(path)
         self.assertEqual([r['status'] for r in res], [check.FAIL])
-        path = self.write('ok2.srt', '1\n00:00:00,000 --> 00:00:01,000\nСантиметры ≠ жир\n')
+        path = self.write('short.srt', '1\n00:00:00,000 --> 00:00:01,000\nСантиметры ≠ жир\n')
         self.assertEqual([r['status'] for r in check.check_subs(path)], [check.OK])
 
     def test_two_lines_and_hanging_word_fail(self):
@@ -82,6 +83,43 @@ class SubtitlesTest(unittest.TestCase):
         self.assertEqual([r['status'] for r in check.check_subs(path)], [check.OK])
         path = self.write('r2.ass', ass.replace('Массаж не', 'Массаж\\Nне'))
         self.assertEqual([r['status'] for r in check.check_subs(path)], [check.FAIL])
+
+    def test_top_matches_only_whole_word(self):
+        ass = ('[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'
+               'Dialogue: 0,0:00:00.00,0:00:02.00,Desktop,,0,0,0,,Массаж не равно похудение\n')
+        path = self.write('desk.ass', ass)
+        self.assertEqual([r['status'] for r in check.check_subs(path)], [check.FAIL])  # субтитр > 17 знаков
+        path = self.write('top.ass', ass.replace('Desktop', 'Top'))
+        self.assertEqual([r['status'] for r in check.check_subs(path)], [check.OK])
+
+
+class ExitCodeTest(unittest.TestCase):
+    def test_missing_numpy_exits_2(self):
+        code = ("import sys, runpy; sys.modules['numpy'] = None; "
+                "sys.argv = ['check.py', 'x.mp4', '--profile', 'reel']; "
+                f"runpy.run_path({str(HERE / 'check.py')!r}, run_name='__main__')")
+        proc = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertIn('numpy', proc.stderr)
+
+    def test_unexpected_exception_exits_2(self):
+        original = check.check_video
+        def boom(*args, **kwargs):
+            raise RuntimeError('сбой')
+        check.check_video = boom
+        try:
+            with redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(check.main(['x.mp4', '--profile', 'reel']), 2)
+        finally:
+            check.check_video = original
+
+    def test_urls_protocols_and_missing_files_are_rejected(self):
+        for arg in ('concat:a.mp4|b.mp4', 'http://example.com/a.mp4', 'pipe:0', '/nonexistent/clip.mp4'):
+            with self.subTest(arg=arg):
+                with self.assertRaises(check.CheckError):
+                    check.local_input(arg)
+        with tempfile.NamedTemporaryFile(suffix='.mp4') as tmp:
+            self.assertTrue(check.local_input(tmp.name).startswith('file:/'))
 
 
 @unittest.skipUnless(HAVE_FFMPEG, 'нужны ffmpeg и ffprobe')
@@ -145,6 +183,22 @@ class VideoTest(unittest.TestCase):
         self.assertEqual(statuses(report, 'R06'), [check.FAIL])
         at = [r['at'] for r in report['results'] if r['rule'] == 'R06'][0]
         self.assertRegex(at, r'кадр (5[7-9]|6[0-2])\)')  # разворот около 2 с
+
+    def test_static_clip_skips_reverse(self):
+        ff('-f', 'lavfi', '-i', 'color=c=0x336699:size=320x180:rate=30:duration=3',
+           '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(self.tmp / 'static.mp4'))
+        report = check.check_video(self.tmp / 'static.mp4', 'site-loop', 'M1')
+        self.assertEqual(statuses(report, 'R06'), [check.SKIP])
+
+    def test_fps_above_30_fails(self):
+        ff('-f', 'lavfi', '-i', 'testsrc=size=320x180:rate=60:duration=1',
+           '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(self.tmp / 'fps60.mp4'))
+        report = check.check_video(self.tmp / 'fps60.mp4', 'site-scrub', 'M3')
+        self.assertEqual(statuses(report, 'R03'), [check.FAIL])
+
+    def test_avokado_without_voice_fails(self):
+        report = check.check_video(self.tmp / 'reel_mute.mp4', 'reel', project='avokado')
+        self.assertEqual(statuses(report, 'R16'), [check.FAIL])
 
     def test_forward_clip_is_not_reverse(self):
         report = check.check_video(self.tmp / 'fwd.mp4', 'site-scrub', 'M3')
