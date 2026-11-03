@@ -600,7 +600,8 @@ function createTaskTools(db, {now,owner,entry,save,watchdog}) {
       db.prepare('UPDATE agents SET chat_url=? WHERE id=?').run(chatUrl,row.id);
       row.chat_url=chatUrl;
     }
-    db.prepare(`INSERT INTO agent_access(agent_id,owner_id,projects) VALUES(?,?,?) ON CONFLICT(agent_id)
+    // Отчёт/саморегистрация не восстанавливает отозванный grant.
+    if(!watchdog||watchdog.canGrant(actor))db.prepare(`INSERT INTO agent_access(agent_id,owner_id,projects) VALUES(?,?,?) ON CONFLICT(agent_id)
       DO UPDATE SET owner_id=excluded.owner_id,projects=excluded.projects`).run(row.id,actor.userId,JSON.stringify([...allowed(actor)].sort()));
     if(watchdog)watchdog.report(row.name,event,allowed(actor),actor);
     return agentView(row,actor);

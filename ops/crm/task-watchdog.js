@@ -242,6 +242,6 @@ function createTaskWatchdog(db,{now=()=>Date.now(),principal=()=>null,verifier=c
       }
     } finally {running=false;}
   }
-  return {authorize,prepare,guard:check,record,comment,author,accept,report,mode,snapshot,digest,audit,installGuards,prepareScheduledDigest,silence:t=>silence(db,t,now())};
+  return {authorize,prepare,guard:check,record,comment,author,accept,report,canGrant:actor=>principal(actor)?.kind==='vlad',mode,snapshot,digest,audit,installGuards,prepareScheduledDigest,silence:t=>silence(db,t,now())};
 }
 module.exports={createTaskWatchdog,createEvidenceVerifier,silence,activity};

@@ -45,3 +45,11 @@ test('enforce: real cabinet owner acceptance, credential-bound agent and no-code
  db.prepare('DELETE FROM agent_access WHERE agent_id=?').run(id);
  const revoked=await f.call('task_update',{task_id:taskId,stage:'accepted',evidence:'Не разрешено',checked_at:new Date().toISOString()});assert.equal(revoked.isError,true);assert.equal(revoked.data.error.status,403);
 });
+
+test('observe permits legacy report but revoked credential cannot recreate its own grant',async t=>{
+ const f=await startFixture({agentId:1});let db;t.after(async()=>{db?.close();await f.stop();});
+ const r=await f.cabinet('/coordination/mcp/agent_report','POST',{agent:'Codex fixture',kind:'codex',state:'work',last_event:'Grant owner'});assert.equal(r.status,200);
+ db=new DatabaseSync(path.join(f.dir,'crm.sqlite'));db.prepare('DELETE FROM agent_access WHERE agent_id=?').run(r.body.agent.id);
+ const retry=await f.call('agent_report',{agent:'Codex fixture',kind:'codex',state:'work',last_event:'Повторная регистрация'});assert.equal(retry.isError,false);
+ assert.equal(db.prepare('SELECT * FROM agent_access WHERE agent_id=?').get(r.body.agent.id),undefined);
+});
