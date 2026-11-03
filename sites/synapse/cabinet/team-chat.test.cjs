@@ -21,3 +21,10 @@ test('черновик по проекту, unknown повтор с тем же 
   $('compose').dispatchEvent(new w.Event('submit',{cancelable:true}));await flush();assert.equal(bodies.length,2);assert.deepEqual(bodies[0],bodies[1]);assert.equal($('text').value,'');assert.match($('messages').textContent,/№22/);
   denied=true;rooms[0].click();await flush();assert.equal($('compose').hidden,true);assert.equal($('messages').children.length,0);
 });
+test('ссылка из старой задачи открывает сообщение за пределами последних100',async t=>{
+  const dom=new JSDOM(fs.readFileSync(path.join(__dirname,'team-chat.html'),'utf8'),{url:'https://synapse.synapsebusiness.ru/cabinet/team-chat.html?companyCode=alpha#message-1',runScripts:'outside-only'}),w=dom.window;
+  t.after(()=>w.close());let scrolled='';w.AbortSignal=AbortSignal;w.HTMLElement.prototype.scrollIntoView=function(){scrolled=this.id;};
+  w.fetch=async url=>({ok:true,json:async()=>url.endsWith('context')?{user:{id:2},companies:[{id:'alpha',name:'Альфа'}]}:{messages:[{id:url.includes('before=2')?1:200,user_id:2,author_name:'Тест',text:'Сообщение',created_at:new Date().toISOString()}]}});
+  w.eval(fs.readFileSync(path.join(__dirname,'team-chat.js'),'utf8'));await flush();
+  assert.ok(w.document.getElementById('message-1'));assert.ok(w.document.getElementById('message-200'));assert.equal(scrolled,'message-1');
+});
