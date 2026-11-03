@@ -1,10 +1,11 @@
 # Задачи
 
-- [x] Разведка и план в №59/191.
-- [x] CRM guard, GitHub/health verifier, 45мин/3ч, вопрос30мин, digest и daily audit.
-- [x] Снимки 08/20 Bangkok без transport; пример реальных данных №59/201.
-- [x] SQL done guard и история без REPLACE; тесты совместимости.
-- [ ] Trusted issuer и запись роли/проверенных доказательств в журнал.
-- [ ] Положительные стадии по HTTP и no-code completion.
-- [ ] Боевой health.version контракт, UI №26 и Telegram после просмотра Влада.
-- [ ] Выпуск и реальная приёмка (не разрешены этим поручением).
+- [x] Разведка59/191, пример реальной доски59/201, ревью220 прочитано.
+- [x] Observe default / explicit enforce; роли из trusted context и registry ID.
+- [x] Separate MCP keys, exact agent_access, signed cabinet owner-session, отзыв доступа.
+- [x] HTTP authorize + atomic immutable provenance; accepted/no-code completion; dispatch accept.
+- [x] Только authenticated activity; health unconfigured skip; ждёт исполнителя.
+- [x] Модульные и реальные loopback тесты, сохранность существующих сценариев.
+- [ ] Повторное ревью Claude исправления220.
+- [ ] Интеграция UI26 / уведомлений / Telegram после просмотра Влада.
+- [ ] Production конфигурация, выпуск и фактическая приёмка (не разрешены этим поручением).

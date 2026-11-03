@@ -781,6 +781,9 @@ async function proxyCrm(request, response, url, cors) {
   // CRM accepts this header as trusted context, so caller-supplied claims must never pass through.
   delete headers[CRM_IDENTITY_HEADER];
   headers[CRM_IDENTITY_HEADER] = crmIdentityHeader(forwardIdentity);
+  delete headers['x-synapse-task-principal'];
+  const taskPrincipal=Buffer.from(JSON.stringify({v:1,source:'cabinet',identityHash:crypto.createHash('sha256').update(headers[CRM_IDENTITY_HEADER]).digest('hex'),userId:forwardIdentity.id,at:Date.now(),method:request.method,path:crmPath})).toString('base64url');
+  headers['x-synapse-task-principal']=taskPrincipal+'.'+crypto.createHmac('sha256',CRM_API_KEY).update(taskPrincipal).digest('base64url');
   if (requestBody) {
     delete headers['transfer-encoding'];
     headers['content-length'] = requestBody.length;

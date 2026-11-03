@@ -3,6 +3,11 @@ on:
   pull_request:
     paths:
       - 'ops/crm/task-watchdog*'
+      - 'ops/crm/task-principal*'
+      - 'ops/crm/task-dispatch*'
+      - 'ops/content/server.js'
+      - 'ops/tasks-mcp/server.js'
+      - 'ops/tasks-mcp/watchdog-http.test.js'
       - 'ops/crm/task-coordination*'
       - 'ops/crm/server.js'
       - 'ops/tasks-mcp/integration.test.js'
@@ -23,7 +28,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: npm ci --ignore-scripts --prefix ops/tasks-mcp
-      - run: node --test ops/crm/task-watchdog.test.js ops/crm/task-coordination.test.js ops/tasks-mcp/crm.test.js ops/tasks-mcp/integration.test.js
+      - run: node --test ops/crm/task-watchdog.test.js ops/crm/task-principal.test.js ops/crm/task-coordination.test.js ops/crm/task-dispatch*.test.js ops/tasks-mcp/crm.test.js ops/tasks-mcp/service.test.js ops/tasks-mcp/integration.test.js ops/tasks-mcp/watchdog-http.test.js
         env:
           NODE_PATH: ${{ github.workspace }}/ops/tasks-mcp/node_modules
       - run: node --check ops/crm/server.js

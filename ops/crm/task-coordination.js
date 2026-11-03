@@ -20,7 +20,7 @@ const date = value => {
   if (!Number.isFinite(parsed)) fail(400, 'Нужны дата и время проверки');
   return new Date(parsed).toISOString();
 };
-const empty = () => ({...Object.fromEntries(TEXT_FIELDS.map(key => [key, ''])), modelCheckedAt: '', links: [],
+const empty = () => ({codeRequired:true,...Object.fromEntries(TEXT_FIELDS.map(key => [key, ''])), modelCheckedAt: '', links: [],
   milestones: Object.fromEntries(STAGES.map(key => [key, {state:'pending', evidence:'', checkedAt:''}]))});
 
 function createTaskCoordination(db, {now = () => Date.now(), watchdog = null} = {}) {
@@ -64,20 +64,21 @@ function createTaskCoordination(db, {now = () => Date.now(), watchdog = null} = 
     return {tasks:db.prepare(`SELECT * FROM tasks WHERE ${where} ORDER BY id DESC LIMIT ? OFFSET ?`)
       .all(...params,limit,offset).map(entry), pagination:{total,limit,offset}};
   };
-  const save = (id, body, actor) => {
+  const normalize = (id, body, actor) => {
     owner(actor);
     if (!object(body) || Object.keys(body).some(k => !['revision','data'].includes(k)) ||
         !Number.isSafeInteger(body.revision) || body.revision < 0 || !object(body.data)) fail(400, 'Нужны версия и данные карточки');
-    const data = empty();
     const previous = db.prepare('SELECT data FROM task_coordination WHERE task_id=?').get(id);
-    data.links = previous ? JSON.parse(previous.data).links || [] : [];
-    if(previous) data.milestones={...data.milestones,...JSON.parse(previous.data).milestones};
-    if (Object.keys(body.data).some(k => ![...TEXT_FIELDS,'modelCheckedAt','milestones','links'].includes(k))) fail(400, 'Неизвестное поле карточки');
+    const saved=previous?JSON.parse(previous.data):{};
+    const data={...empty(),...saved,codeRequired:saved.codeRequired!==false,
+      links:saved.links||[],milestones:{...empty().milestones,...saved.milestones}};
+    if('codeRequired' in body.data){if(typeof body.data.codeRequired!=='boolean')fail(400,'codeRequired должен быть логическим');data.codeRequired=body.data.codeRequired;}
+    if (Object.keys(body.data).some(k => ![...TEXT_FIELDS,'modelCheckedAt','milestones','links','codeRequired'].includes(k))) fail(400, 'Неизвестное поле карточки');
     if ('links' in body.data) data.links = validateLinks(body.data.links);
     for (const key of TEXT_FIELDS) if (key in body.data) data[key] = text(body.data[key], ['scope','acceptance','result','blocker','nextAction'].includes(key) ? 4000 : 200);
     if (data.ownerThreadName && !data.ownerThreadId) fail(400, 'Укажите постоянный идентификатор ответственного чата');
     if (data.verifiedModel) {
-      data.modelCheckedAt = date(body.data.modelCheckedAt);
+      data.modelCheckedAt = date(body.data.modelCheckedAt ?? data.modelCheckedAt);
       if (Date.parse(data.modelCheckedAt) > now()) fail(400, 'Дата проверки модели находится в будущем');
     } else if (body.data.modelCheckedAt) fail(400, 'Укажите проверенную модель');
     const milestones = body.data.milestones || {};
@@ -93,7 +94,11 @@ function createTaskCoordination(db, {now = () => Date.now(), watchdog = null} = 
       if (checkedAt && Date.parse(checkedAt) > now()) fail(400, 'Дата проверки находится в будущем');
       data.milestones[key] = {state:item.state,evidence,checkedAt};
     }
-    if (watchdog) watchdog.guard(id,data,actor);
+    return data;
+  };
+  const save = (id,body,actor) => {
+    const data=normalize(id,body,actor);
+    const permit=watchdog?.guard(id,data,actor);
     const ownTransaction = !db.isTransaction;
     if (ownTransaction) db.exec('BEGIN IMMEDIATE');
     try {
@@ -113,6 +118,7 @@ function createTaskCoordination(db, {now = () => Date.now(), watchdog = null} = 
         ON CONFLICT(task_id) DO UPDATE SET revision=excluded.revision,data=excluded.data,updated_at=excluded.updated_at,updated_by=excluded.updated_by`)
         .run(id,revision,json,stamp,actor.userId);
       db.prepare('INSERT INTO task_coordination_history VALUES(?,?,?,?,?)').run(id,revision,json,stamp,actor.userId);
+      watchdog?.record(id,revision,data,permit);
       const result = entry(row);
       if (ownTransaction) db.exec('COMMIT'); return result;
     } catch (error) { if (ownTransaction) db.exec('ROLLBACK'); throw error; }
@@ -142,7 +148,28 @@ function createTaskCoordination(db, {now = () => Date.now(), watchdog = null} = 
       if(own)db.exec('COMMIT');return result;
     }catch(error){if(own)db.exec('ROLLBACK');throw error;}
   };
-  return {get,list,save,selfStatus,tool:createTaskTools(db,{now,owner,entry,save,watchdog})};
+  const tool=createTaskTools(db,{now,owner,entry,save,watchdog});
+  const saveAsync=async(id,body,actor)=>{const data=normalize(id,body,actor);await watchdog?.prepare(id,data,actor);return save(id,body,actor);};
+  const toolAsync=async(name,args,actor)=>{
+    if(name==='task_update'&&args.stage){
+      const current=tool('task_get',{task_id:args.task_id},actor).coordination;
+      const data=Object.fromEntries([...TEXT_FIELDS,'modelCheckedAt','milestones','links','codeRequired'].map(k=>[k,current[k]??empty()[k]]));
+      if('executor' in args)data.executorName=args.executor;
+      if('blocker' in args)data.blocker=args.blocker;
+      if('next_step' in args)data.nextAction=args.next_step;
+      if('links' in args)data.links=args.links;
+      data.milestones={...data.milestones,[args.stage]:{state:'confirmed',evidence:args.evidence,checkedAt:args.checked_at}};
+      await watchdog?.prepare(args.task_id,normalize(args.task_id,{revision:current.revision,data},actor),actor);
+    }
+    return tool(name,args,actor);
+  };
+  const acceptDispatch=(id,actor)=>{
+    const current=get(id,actor),data=Object.fromEntries([...TEXT_FIELDS,'modelCheckedAt','milestones','links','codeRequired'].map(k=>[k,current[k]??empty()[k]]));
+    data.milestones={...data.milestones,accepted:{state:'confirmed',evidence:'Влад принял результат в диспетчере',checkedAt:new Date(now()).toISOString()}};
+    const body={revision:current.revision,data},normalized=normalize(id,body,actor);
+    watchdog?.accept(id,normalized,actor);save(id,body,actor);
+  };
+  return {get,list,save,saveAsync,selfStatus,tool,toolAsync,acceptDispatch};
 }
 module.exports = {createTaskCoordination,migrateTasksMcp,migrateTasksMcpPortable,
   ...require('./task-products')};
@@ -467,7 +494,7 @@ function createTaskTools(db, {now,owner,entry,save,watchdog}) {
   };
   const touch = (row, changes, actor) => {
     const previous = entry(row);
-    const data = Object.fromEntries([...TEXT_FIELDS,'modelCheckedAt','milestones','links'].map(key => [key,previous[key] ?? empty()[key]]));
+    const data = Object.fromEntries([...TEXT_FIELDS,'modelCheckedAt','milestones','links','codeRequired'].map(key => [key,previous[key] ?? empty()[key]]));
     Object.assign(data,changes);
     save(row.id,{revision:previous.revision,data},actor);
   };
@@ -500,10 +527,12 @@ function createTaskTools(db, {now,owner,entry,save,watchdog}) {
       changes.milestones={...previous.milestones,[stage]:{state:'confirmed',evidence,checkedAt}};
     }
     if (!Object.keys(updates).length && !Object.keys(changes).length) fail(400, 'Нет изменений задачи');
+    const complete=updates.status==='done';if(complete)delete updates.status;
     if (Object.keys(updates).length) withCoordinatedWrite(db, row.id, () =>
       db.prepare(`UPDATE tasks SET ${Object.keys(updates).map(key=>`${key}=?`).join(',')},updated_at=? WHERE id=?`)
         .run(...Object.values(updates),stamp(),row.id));
     touch({...row,...updates},changes,actor);
+    if(complete)withCoordinatedWrite(db,row.id,()=>db.prepare("UPDATE tasks SET status='done',updated_at=? WHERE id=?").run(stamp(),row.id));
     return {task:taskView(scopedTask(row.id,actor),actor,true)};
   });
   const tasksList = (args, actor) => {
@@ -573,7 +602,7 @@ function createTaskTools(db, {now,owner,entry,save,watchdog}) {
     }
     db.prepare(`INSERT INTO agent_access(agent_id,owner_id,projects) VALUES(?,?,?) ON CONFLICT(agent_id)
       DO UPDATE SET owner_id=excluded.owner_id,projects=excluded.projects`).run(row.id,actor.userId,JSON.stringify([...allowed(actor)].sort()));
-    if(watchdog)watchdog.report(row.name,event,allowed(actor));
+    if(watchdog)watchdog.report(row.name,event,allowed(actor),actor);
     return agentView(row,actor);
   };
   return (name,args,actor) => {
@@ -626,9 +655,10 @@ function createTaskTools(db, {now,owner,entry,save,watchdog}) {
       return {task:taskView(row,actor,true),created:true};
     });
     if(name==='task_comment')return transaction(()=>{
-      const row=scopedTask(args.task_id,actor), author=text(args.author || args.agent || '',200), message=text(args.text,20000);
+      const row=scopedTask(args.task_id,actor), author=text(watchdog?.author(actor,args.author || args.agent || '')??args.author??args.agent??'',200), message=text(args.text,20000);
       if(!author||!message)fail(400,'Укажите автора и текст комментария');
       const result=db.prepare('INSERT INTO task_comments(task_id,author,text,created_at) VALUES(?,?,?,?)').run(row.id,author,message,stamp());
+      watchdog?.comment(row.id,Number(result.lastInsertRowid),actor);
       db.prepare('UPDATE tasks SET updated_at=? WHERE id=?').run(stamp(),row.id);
       return {comment:db.prepare('SELECT * FROM task_comments WHERE id=?').get(Number(result.lastInsertRowid))};
     });

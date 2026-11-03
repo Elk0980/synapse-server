@@ -625,7 +625,8 @@ const emailCampaigns = createEmailCampaigns(db, {transport: campaignTransport, l
 });
 const emailDiagnostics = createEmailDiagnostics(db, {getEnvironment: emailSettings.getEnvironment});
 const companyInformation = createCompanyInformation(db, {check: createCompanyInformationCheck()});
-const taskWatchdog = require('./task-watchdog').createTaskWatchdog(db);
+const taskPrincipals=require('./task-principal').createTaskPrincipals(db,{secret:API_KEY,releaseAgentId:Number(process.env.TASK_WATCHDOG_RELEASE_AGENT_ID||0),claudeAgentId:Number(process.env.TASK_WATCHDOG_CLAUDE_AGENT_ID||0)});
+const taskWatchdog = require('./task-watchdog').createTaskWatchdog(db,{principal:taskPrincipals.get,mode:process.env.TASK_WATCHDOG_MODE||'observe',verifier:require('./task-watchdog').createEvidenceVerifier({healthUrl:process.env.TASK_WATCHDOG_HEALTH_URL||''})});
 const taskCoordination = createTaskCoordination(db,{watchdog:taskWatchdog});
 taskWatchdog.installGuards();
 // Один незавершённый audit за раз; без исходящих уведомлений.
@@ -634,7 +635,7 @@ const watchdogTimer=setInterval(()=>{
   taskWatchdog.audit().catch(()=>console.error('[crm] watchdog audit unavailable'));
 },60000);
 watchdogTimer.unref();
-const taskDispatch = createTaskDispatch(db);
+const taskDispatch = createTaskDispatch(db,{onAccept:taskCoordination.acceptDispatch});
 const agentLaunch = createAgentLaunch(db, {coordination:taskCoordination});
 const autopostingTransport = createAutopostingTransport(db, {apiKey: API_KEY});
 const contentFactoryWorkflow=require('./content-factory-workflow').createContentFactoryWorkflow(db);
@@ -1452,8 +1453,8 @@ function crmIdentity(request) {
   if (identity.userName !== undefined && (typeof identity.userName !== 'string' ||
       !identity.userName.trim() || identity.userName.length > 200)) return null;
   if (identity.role !== undefined && !['owner','editor'].includes(identity.role)) return null;
-  return { userId: identity.userId, userName: identity.userName?.trim() || `#${identity.userId}`, role: identity.role || 'editor',
-    permissions: new Set(identity.permissions), companyCodes: new Set(companyCodes) };
+  return taskPrincipals.bind(request,{ userId: identity.userId, userName: identity.userName?.trim() || `#${identity.userId}`, role: identity.role || 'editor',
+    permissions: new Set(identity.permissions), companyCodes: new Set(companyCodes) });
 }
 
 function companyModuleContext(request, code, permission) {
@@ -2918,8 +2919,10 @@ async function route(request, response) {
   const tasksMcpMatch = url.pathname.match(/^\/coordination\/mcp\/([a-z_]+)$/);
   if (tasksMcpMatch) {
     if (request.method !== 'POST') fail(405, 'Метод не поддерживается');
-    const handler = AGENT_LAUNCH_METHODS.has(tasksMcpMatch[1]) ? agentLaunch : taskCoordination;
-    const result = handler.tool(tasksMcpMatch[1], await readJson(request), crmIdentity(request));
+    const args = await readJson(request), actor = crmIdentity(request);
+    const result = AGENT_LAUNCH_METHODS.has(tasksMcpMatch[1])
+      ? agentLaunch.tool(tasksMcpMatch[1], args, actor)
+      : await taskCoordination.toolAsync(tasksMcpMatch[1], args, actor);
     return send(response, 200, result, {...cors, 'cache-control':'private, no-store'});
   }
   const dispatchMatch=url.pathname.match(/^\/coordination\/dispatch\/(\d+)(?:\/(enqueue|action))?$/);
@@ -2946,7 +2949,7 @@ async function route(request, response) {
       result = taskCoordination.list(Object.fromEntries(url.searchParams), actor);
       result.tasks = result.tasks.map(item => ({...item, dispatch:taskDispatch.get(item.taskId,actor)}));
     } else if (match && request.method === 'GET') result = taskCoordination.get(entityId(match[1]), actor);
-    else if (match && request.method === 'PUT') result = taskCoordination.save(entityId(match[1]), await readJson(request), actor);
+    else if (match && request.method === 'PUT') result = await taskCoordination.saveAsync(entityId(match[1]), await readJson(request), actor);
     else fail(404, 'Адрес не найден');
     return send(response, 200, result, {...cors, 'cache-control':'private, no-store'});
   }

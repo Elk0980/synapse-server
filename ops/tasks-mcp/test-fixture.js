@@ -24,7 +24,7 @@ async function unusedPort() {
   return port;
 }
 
-async function startFixture({installDocuments = true, installArchive = false} = {}) {
+async function startFixture({installDocuments = true, installArchive = false,watchdogMode='observe',agentId=null} = {}) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'tasks-mcp-integration-'));
   const key = randomBytes(32).toString('hex');
   const token = randomBytes(32).toString('hex');
@@ -83,7 +83,7 @@ async function startFixture({installDocuments = true, installArchive = false} = 
         backupPath:path.join(dir, 'crm-before-archive.sqlite'), offlineConfirmation:'CRM_STOPPED'});
     }
     const crmUrl = await service('ops/crm', { DATABASE_PATH: path.join(dir, 'crm.sqlite'),
-      API_KEY: key, RATE_LIMIT_MAX: '10000' });
+      API_KEY: key, RATE_LIMIT_MAX: '10000',TASK_WATCHDOG_MODE:watchdogMode });
     const owner = Buffer.from(JSON.stringify({ v: 1, userId: 1, userName: 'Owner fixture',
       role: 'owner', permissions: ['crm.edit'], companyCodes: ['synapse-business', 'palitra-love'] })).toString('base64url');
     async function crm(route, method = 'GET', body, identity = owner) {
@@ -131,7 +131,7 @@ async function startFixture({installDocuments = true, installArchive = false} = 
     if (installDocuments) await installSampleDocuments();
     const { createTasksMcpServer, loadConfig } = require('./server');
     const config = loadConfig({ PORT: '8080', CRM_URL: crmUrl, CRM_API_KEY: key,
-      TASKS_MCP_TOKEN: token, TASKS_MCP_OWNER_ID: '1',
+      TASKS_MCP_TOKEN: token, TASKS_MCP_OWNER_ID: '1',...(agentId?{TASKS_MCP_AGENT_ID:String(agentId)}:{}),
       TASKS_MCP_PROJECTS: 'synapse-business,palitra-love',
       TASKS_MCP_PUBLIC_ORIGIN: 'https://tasks.example.test', TASKS_MCP_DOCS_DIR: docs });
     const mcp = createTasksMcpServer(config);
