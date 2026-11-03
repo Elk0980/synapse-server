@@ -4,7 +4,7 @@ import hmac
 from pathlib import Path
 import re
 import time
-from agent import GitHub, atomic, canonical, command, load, make_plan, need, private_file
+from agent import GitHub, atomic, canonical, command, exclude_applied_manual, load, make_plan, need, private_file
 from board import Board
 
 
@@ -14,6 +14,38 @@ def trusted(comment, registry, config, kind):
     # These fields MUST be stamped by a trusted server, never supplied as comment args.
     return bool(agent and identity.get('verified') is True and agent.get('kind') == kind and
                 identity.get('credentialId') == config['reviewerCredentials'].get(str(agent['id'])))
+
+
+def confirm_manual(config, plan):
+    """Same authenticated comment path as acceptance; author text never grants this."""
+    sha, parent = plan['sha'], plan['parent']
+    need(re.fullmatch('[a-f0-9]{40}', sha) and re.fullmatch('[a-f0-9]{40}', parent), 'MANUAL_SHA')
+    need(plan['taskId'] == config.get('taskId', 55), 'MANUAL_TASK')
+    command(['git', '-C', config['mirror'], 'merge-base', '--is-ancestor', sha, 'origin/main'])
+    first_parent = command(['git', '-C', config['mirror'], 'rev-parse', sha + '^1']).decode().strip()
+    need(first_parent == parent, 'MANUAL_PARENT')
+    changed = command(['git', '-C', config['mirror'], 'diff', '--name-only', '-z', parent, sha]).decode().split('\0')
+    actual = make_plan(config, plan, [p for p in changed if p])
+    need(actual['outcome'] == 'manual' and actual['manualPaths'] == plan['manualPaths'], 'MANUAL_PATHS')
+    path = Path(config['stateDir']) / 'manual' / (sha + '.json')
+    key = private_file(config['admissionKey'])
+    if path.exists():
+        saved = load(path)
+        signature = hmac.new(key, canonical(saved['body']), hashlib.sha256).hexdigest()
+        need(hmac.compare_digest(signature, saved['signature']), 'MANUAL_RECEIPT_SIGNATURE')
+        need(all(saved['body'].get(k) == plan.get(k) for k in ('sha', 'parent', 'taskId', 'manualPaths')), 'MANUAL_RECEIPT_BINDING')
+        return saved['body']
+    board = Board(config['boardUrlFile'])
+    task = board.task(plan['taskId'])
+    registry = board.call('agents_list', {})['agents']
+    exact = 'ПРИМЕНЕНО ВРУЧНУЮ ' + sha
+    comments = [c for c in task['comments'] if c.get('text', '').strip() == exact and
+                (trusted(c, registry, config, 'claude') or trusted(c, registry, config, 'owner'))]
+    need(comments, 'WAITS_TRUSTED_MANUAL_CONFIRMATION')
+    body = {k: plan[k] for k in ('sha', 'parent', 'taskId', 'manualPaths')}
+    body.update(commentId=comments[0]['id'], recordedAt=time.time())
+    atomic(path, {'body': body, 'signature': hmac.new(key, canonical(body), hashlib.sha256).hexdigest()})
+    return body
 
 
 def issue(config, sha, parent):
@@ -62,6 +94,8 @@ def issue(config, sha, parent):
     if plan['outcome'] == 'runtime':
         runtime = load(config['runtimeShaFile'])['sha']
         cumulative = command(['git', '-C', config['mirror'], 'diff', '--name-only', '-z', runtime, sha]).decode().split('\0')
+        receipts = [load(p)['body'] for p in (Path(config['stateDir']) / 'manual').glob('*.json')]
+        cumulative = exclude_applied_manual(config, cumulative, sha, receipts)
         plan = make_plan(config, body, [p for p in cumulative if p])
     need(plan['outcome'] != 'manual', 'MANUAL_APPLICATION_REQUIRED')
     body.update(services=plan['services'], writers=plan['writers'])

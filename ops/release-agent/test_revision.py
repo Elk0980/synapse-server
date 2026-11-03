@@ -45,12 +45,16 @@ class ReviewFixes(unittest.TestCase):
             old, new = 'a' * 40, 'b' * 40
             engine.save({'phase': 'idle', 'current': old})
             engine.deploy({'sha': new, 'parent': old})
+            manual = {'sha': 'd' * 40, 'parent': new, 'taskId': 55, 'manualPaths': ['docker-compose.yml']}
+            engine.advance(manual, 'manual_applied', receipt=manual)
             config = {'stateDir': str(engine.directory), 'lock': str(root / 'lock')}
             with patch.object(agent, 'ComposeBackend', return_value=backend), \
                  patch.object(agent, 'release_lock', return_value=contextlib.nullcontext()):
                 with self.assertRaisesRegex(agent.Blocked, 'ROLLBACK_STALE_SHA'):
                     agent.rollback_command(config, 'c' * 40, 'wrong')
                 agent.rollback_command(config, new, 'request-1')
+                self.assertEqual(engine.state()['cursor'], manual['sha'])
+                self.assertEqual(engine.state()['manualApplied'], [manual])
                 restores = backend.events.count('restore')
                 agent.rollback_command(config, new, 'request-1')
                 self.assertEqual(backend.events.count('restore'), restores)

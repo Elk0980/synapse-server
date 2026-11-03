@@ -23,6 +23,8 @@ class Fixture:
                 self.task_data['coordination']['milestones']['connected']['evidence'] = args['evidence']
             if 'next_step' in args:
                 self.task_data['coordination']['nextAction'] = args['next_step']
+            if 'blocker' in args:
+                self.task_data['coordination']['blocker'] = args['blocker']
         else:
             self.task_data['comments'].append({'text': args['text']})
         if self.fail: raise Blocked('BOARD_RESULT_UNCONFIRMED')

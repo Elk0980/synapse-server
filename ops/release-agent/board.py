@@ -111,12 +111,15 @@ class Outbox:
                                     'rolled_back_snapshot': 'Пропущен (откат); БД восстановлена из снимка до возврата трафика',
                                     'build_failed': 'Пропущен: сборка не прошла', 'skipped': 'Пропущен после прерывания сборки',
                                     'no_release': 'Выпуск не требуется', 'site_deferred': 'Выпуск сайта отдельным шагом №57',
+                                    'manual_applied': 'Принято вручную',
                                     'database_decision': 'ждёт Влада: восстановить БД из сохранённого снимка?',
                                     'waiting': 'Ожидается приёмка или зелёный CI'}
                         message = event.get('detail') or messages.get(event['kind'], event['kind'])
                         args['next_step'] = event['marker'] + ' ' + message[:3500]
                         if event['kind'] == 'manual':
                             args['blocker'] = message[:3500]
+                        if event['kind'] == 'manual_applied' and ('release:' + event['sha'] + ':manual') in coordination.get('nextAction', ''):
+                            args['blocker'] = ''
                         if event['kind'] == 'database_decision':
                             args['blocker'] = messages['database_decision'] + ' ' + event['sha']
                     self.board.call('task_update', args)

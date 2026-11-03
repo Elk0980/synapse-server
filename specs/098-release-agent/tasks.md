@@ -36,3 +36,11 @@
 - [x] README явно ограничивает DB auto-restore отсутствием trafficGate.
 - [x] Создана зависимость68, проверен principal PR485 и недостающий экспорт.
 - [ ] Задача68: реальный export→issuer с trusted comment provenance.
+
+## Исправления по298
+
+- [x] Service-context Markdown/SKILL.md runtime, только тесты/README*/CHANGELOG* исключены.
+- [x] Trusted manual-applied comment → exact SHA/parent/task/paths → cursor/receipt/report.
+- [x] До №68 legacy author fail-closed; неправильный SHA/credential/отрицание denied.
+- [x] Учёт неизменённых уже применённых путей в следующих runtime PR и при rollback.
+- [ ] Свежие CI exact head и повторная приёмка Claude.

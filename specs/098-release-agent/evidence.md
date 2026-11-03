@@ -1,3 +1,17 @@
+# Ревью298 — текущая ревизия
+
+Локально37tests=34PASS/3Linux-onlySKIP. Новые проверки: SKILL.md/docs-prompt внутри
+сервиса → runtime; внутренние README/CHANGELOG/тесты и внешние docs → no_release.
+Trusted manual confirmation: Claude и owner разрешены; legacy author, неверный SHA,
+неверный credential, unverified и «НЕ ПРИМЕНЕНО...» denied. Настоящий tick двигает
+только cursor, не вызывает build, пишет «Принято вручную», снимает свой blocker.
+Root-сервис сверяет first parent/task/manual paths, кэширует подписанную квитанцию.
+Подтверждённые неизменённые пути исключаются из повторного manual-blocker, изменённые
+заново — нет; CLI image rollback сохраняет эти proof/cursor. Неподключённый №68
+по-прежнему блокирует legacy комментарии. Свежие CI проверяются отдельно.
+
+История прежних ревизий ниже.
+
 # Ревью260 — текущая ревизия
 
 Локально33tests:30PASS/3Linux-onlySKIP. Новые тесты вызывают настоящий tick с

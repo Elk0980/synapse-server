@@ -225,7 +225,7 @@ class Engine:
 
     def deploy(self, plan):
         state = self.state()
-        need(state['phase'] in ('idle', 'verified', 'rolled_back', 'build_failed', 'skipped', 'no_release', 'site_deferred'), 'QUEUE_HALTED')
+        need(state['phase'] in ('idle', 'verified', 'rolled_back', 'build_failed', 'skipped', 'no_release', 'site_deferred', 'manual_applied'), 'QUEUE_HALTED')
         need(plan['parent'] == state.get('cursor', state['current']), 'OUT_OF_ORDER')
         previous = self.backend.capture(state['current'], plan)
         state.pop('waiting', None)
@@ -276,9 +276,14 @@ class Engine:
         if plan.get('sha'):
             atomic(self.directory / 'history' / (plan['sha'] + '-' + state['phase'] + '.json'), state)
 
-    def advance(self, plan, outcome, reason=''):
+    def advance(self, plan, outcome, reason='', receipt=None):
         state = self.state()
         need(plan['parent'] == state.get('cursor', state['current']), 'OUT_OF_ORDER')
+        if outcome == 'manual_applied':
+            need(isinstance(receipt, dict), 'MANUAL_CONFIRMATION_REQUIRED')
+            need(all(receipt.get(key) == plan.get(key) for key in ('sha', 'parent', 'taskId', 'manualPaths')),
+                 'MANUAL_CONFIRMATION_MISMATCH')
+            state.setdefault('manualApplied', []).append(receipt)
         state.pop('waiting', None)
         state.update(phase=outcome, cursor=plan['sha'], plan=plan, reason=reason)
         self.save(state)
@@ -445,28 +450,35 @@ class ComposeBackend:
         atomic(self.c['recipe'], previous['recipe'])
 
 
-def no_release_path(path):
+def test_path(path):
+    from pathlib import PurePosixPath
+    p = PurePosixPath(path)
+    return (p.parts[0] in ('tests', 'test') or 'tests' in p.parts[:-1] or '__tests__' in p.parts[:-1] or
+            re.fullmatch(r'test_[^/]+\.py|[^/]+\.test\.(js|cjs|mjs|ts|tsx)|[^/]+\.spec\.(js|ts|tsx)', p.name) is not None)
+
+
+def no_release_path(path, in_service=False):
     """Only explicit documentation and test paths may advance without applying."""
     from pathlib import PurePosixPath
     p = PurePosixPath(path)
     need(path and not p.is_absolute() and '..' not in p.parts and '\\' not in path, 'INVALID_CHANGED_PATH')
-    return (p.parts[0] in ('docs', 'specs', 'AI_HANDOFF', 'tests', 'test') or
-            p.suffix == '.md' or 'tests' in p.parts[:-1] or '__tests__' in p.parts[:-1] or
-            re.fullmatch(r'test_[^/]+\.py|[^/]+\.test\.(js|cjs|mjs|ts|tsx)|[^/]+\.spec\.(js|ts|tsx)', p.name) is not None)
+    if in_service:
+        return test_path(path) or p.name.upper().startswith(('README', 'CHANGELOG'))
+    return p.parts[0] in ('docs', 'specs', 'AI_HANDOFF') or p.suffix == '.md' or test_path(path)
 
 
 def make_plan(config, admission, changed):
     services, deferred, manual = set(), [], []
     for path in changed:
-        no_release = no_release_path(path)
+        matches = [name for name, value in config['services'].items()
+                   if path.startswith(value['context'].rstrip('/') + '/')]
+        no_release = no_release_path(path, in_service=bool(matches))
         # Sites are always a separate publisher, including their Markdown/tests.
         if path.startswith('sites/'):
             deferred.append(path)
             continue
         if no_release:
             continue
-        matches = [name for name, value in config['services'].items()
-                   if path.startswith(value['context'].rstrip('/') + '/')]
         services.update(matches)
         if not matches:
             manual.append(path)
@@ -490,9 +502,22 @@ def queue_waiting(engine, outbox, plan, reason=None):
     outbox.flush()
 
 
+def exclude_applied_manual(config, changed, candidate, receipts):
+    """Do not re-block unchanged infrastructure already acknowledged at an exact SHA."""
+    acknowledged = set()
+    for receipt in receipts:
+        paths = receipt['manualPaths']
+        if not paths:
+            continue
+        modified = command(['git', '-C', config['mirror'], 'diff', '--name-only', '-z',
+                            receipt['sha'], candidate, '--', *paths]).decode().split('\0')
+        acknowledged.update(set(paths) - set(modified))
+    return [path for path in changed if path not in acknowledged]
+
+
 def report_terminal(state, outbox, expected_sha=None, flush=True):
     plan = state.get('plan', {})
-    if (state.get('phase') in ('verified', 'rolled_back', 'build_failed', 'skipped', 'no_release', 'site_deferred') and plan and
+    if (state.get('phase') in ('verified', 'rolled_back', 'build_failed', 'skipped', 'no_release', 'site_deferred', 'manual_applied') and plan and
             (expected_sha is None or plan.get('sha') == expected_sha)):
         kind = ('connected' if state['phase'] == 'verified' else
                 'rolled_back_snapshot' if state['phase'] == 'rolled_back' and state.get('restoreDatabase') else state['phase'])
@@ -518,7 +543,7 @@ def tick(config):
             report_terminal(load(receipt), outbox, flush=False)
         report_terminal(state, outbox, flush=False)
         outbox.flush()
-        need(state['phase'] in ('idle', 'verified', 'rolled_back', 'build_failed', 'skipped', 'no_release', 'site_deferred'), 'QUEUE_HALTED')
+        need(state['phase'] in ('idle', 'verified', 'rolled_back', 'build_failed', 'skipped', 'no_release', 'site_deferred', 'manual_applied'), 'QUEUE_HALTED')
         command(['git', '-C', config['mirror'], 'fetch', '--quiet', 'origin', 'main'])
         current = state.get('cursor', state['current'])
         command(['git', '-C', config['mirror'], 'merge-base', '--is-ancestor', current, 'origin/main'])
@@ -531,7 +556,17 @@ def tick(config):
         changed = command(['git', '-C', config['mirror'], 'diff', '--name-only', '-z', current, sha]).decode().split('\0')
         classification = make_plan(config, {'sha': sha, 'parent': current, 'taskId': config.get('taskId', 55)}, [p for p in changed if p])
         if classification['outcome'] == 'manual':
-            queue_waiting(engine, outbox, classification)
+            try:
+                if config.get('brokerSocket'):
+                    receipt = backend.invoke('manual_confirmation', plan=classification)
+                else:
+                    from issuer import confirm_manual
+                    receipt = confirm_manual(config, classification)
+            except Exception:
+                queue_waiting(engine, outbox, classification)
+                return
+            engine.advance(classification, 'manual_applied', receipt=receipt)
+            report_terminal(engine.state(), outbox, expected_sha=sha)
             return
         if classification['outcome'] != 'runtime':
             engine.advance(classification, classification['outcome'])
@@ -559,6 +594,7 @@ def tick(config):
         plan = make_plan(config, admission, [p for p in changed if p])
         if plan['outcome'] == 'runtime':
             cumulative = command(['git', '-C', config['mirror'], 'diff', '--name-only', '-z', state['current'], sha]).decode().split('\0')
+            cumulative = exclude_applied_manual(config, cumulative, sha, state.get('manualApplied', []))
             plan = make_plan(config, admission, [p for p in cumulative if p])
         if plan['outcome'] == 'manual':
             queue_waiting(engine, outbox, plan)
@@ -613,6 +649,7 @@ def rollback_command(config, expected_sha, request_id):
         need(last['current'] == expected_sha, 'ROLLBACK_NOT_LAST_RELEASE')
         atomic(done, {'sha': expected_sha, 'state': 'unknown'})
         last['cursor'] = current.get('cursor', current['current'])
+        last['manualApplied'] = current.get('manualApplied', [])
         last['trafficReturned'] = True  # manual rollback always preserves new data
         cursor = last['cursor']
         engine.rollback(last)

@@ -11,7 +11,7 @@ import sys
 from agent import ComposeBackend, Blocked, atomic, canonical, load, need, private_file, verify_admission
 
 OPERATIONS = {'capture', 'build', 'stop', 'backup', 'switch', 'health', 'commit', 'restore',
-              'traffic_is_closed', 'return_traffic', 'restore_databases', 'admit', 'verify'}
+              'traffic_is_closed', 'return_traffic', 'restore_databases', 'admit', 'verify', 'manual_confirmation'}
 
 
 class NativeBackend(ComposeBackend):
@@ -52,6 +52,9 @@ def validate_plan(config, plan, historical=False):
 def dispatch(config, request):
     operation = request.get('operation')
     need(operation in OPERATIONS, 'BROKER_OPERATION_DENIED')
+    if operation == 'manual_confirmation':
+        from issuer import confirm_manual
+        return confirm_manual(config, request['plan'])
     if operation == 'admit':
         from issuer import issue
         return issue(config, request['sha'], request['parent'])
