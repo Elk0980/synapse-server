@@ -454,9 +454,9 @@
       const saveDraft = () => { if (!created) { draftRef = read('create')?.client_ref || draftRef; write('create',{...draft,...Object.fromEntries(new FormData(form)),parent_id:draft.parent_id,client_ref:draftRef}); } };
       rememberCreate = saveDraft;
       const showDuplicates = data => {
-        const found = (data.possible_duplicates || []).filter(item => item.status !== 'cancelled'), similarProducts = data.possible_product_duplicates || [];
-        duplicates.innerHTML = `${found.length ? '<strong>Похожие задачи — можно открыть существующую:</strong>' : ''}${found.map(task => `<button type="button" data-existing-task="${Number(task.id)}">№${task.id} ${esc(displayTitle(task))}</button>`).join('')}${similarProducts.length ? `<p>Похожие продукты: ${similarProducts.map(product => `<button type="button" data-existing-product="${product.id}">${esc(product.name)}</button>`).join('')}</p>` : ''}`;
-        form.querySelector('[data-force-label]').hidden = !(found.length || similarProducts.length);
+        const matches = data.possible_duplicates || [], found = matches.filter(item => item.status !== 'cancelled'), similarProducts = data.possible_product_duplicates || [];
+        duplicates.innerHTML = `${found.length ? '<strong>Похожие задачи — можно открыть существующую:</strong>' : ''}${found.map(task => `<button type="button" data-existing-task="${Number(task.id)}">№${task.id} ${esc(displayTitle(task))}</button>`).join('')}${matches.length > found.length ? '<p>Есть прежнее совпадение. Для отдельной задачи подтвердите создание.</p>' : ''}${similarProducts.length ? `<p>Похожие продукты: ${similarProducts.map(product => `<button type="button" data-existing-product="${product.id}">${esc(product.name)}</button>`).join('')}</p>` : ''}`;
+        form.querySelector('[data-force-label]').hidden = !(matches.length || similarProducts.length);
         duplicates.querySelectorAll('[data-existing-task]').forEach(button => button.onclick = () => { saveDraft(); openTask(Number(button.dataset.existingTask)); });
         duplicates.querySelectorAll('[data-existing-product]').forEach(button => button.onclick = () => { form.elements.product_id.value = button.dataset.existingProduct; form.querySelector('[data-new-product]').hidden = true; saveDraft(); });
       };

@@ -237,3 +237,14 @@ test('explicit questions on goals and orphan modules remain in waiting without i
   const records=[overviewTask(1000,{title:'Цель · Решение по системе',assignee_name:'Влад',status:'in_progress'}),overviewTask(1100,{title:'Модуль · Самостоятельный блок',parent_task_id:9999,status:'in_progress',coordination:{revision:1,blocker:'Ждёт Влада',nextAction:'',milestones:{}}}),overviewTask(1200,{title:'Модуль · Снятый вопрос',status:'cancelled',assignee_name:'Влад'}),overviewTask(201,{title:'Единственная работа',parent_task_id:1100,status:'in_progress'})];
   const f=await overviewFixture(records);try{assert.equal(f.d.querySelectorAll('.tb-waiting-row').length,2);assert.match(f.d.querySelector('[data-waiting]').textContent,/Решение по системе/);assert.match(f.d.querySelector('[data-waiting]').textContent,/Самостоятельный блок/);assert.doesNotMatch(f.d.querySelector('[data-waiting]').textContent,/Модуль ·|Цель ·|Снятый вопрос/);assert.ok(f.d.querySelector('[data-module-id="1100"]'));assert.match(f.d.querySelector('.tb-project-card[data-project="synapse-business"]').textContent,/В работе 1/);assert.equal(f.d.querySelectorAll('.tb-now-row').length,1);assert.equal(f.d.querySelector('.tb-now-row').dataset.taskOpen,'201');}finally{f.close();}
 });
+test('a cancelled duplicate stays hidden but permits explicit separate creation with the same client_ref',async()=>{
+  const f=fixture();try{
+    await settle();const hidden={...f.task,id:500,status:'cancelled',title:'Скрытое прежнее имя'};
+    f.intercept('task_duplicates',async()=>({possible_duplicates:[hidden],possible_product_duplicates:[]}));
+    f.intercept('task_create',async args=>args.force?{created:true,task:{...f.task,title:args.title}}:{created:false,possible_duplicates:[hidden],possible_product_duplicates:[]});
+    f.d.querySelector('[data-create-task]').click();const form=f.d.querySelector('[data-create-form]');f.input(form.elements.title,'Новая отдельная задача');form.elements.project.value='synapse-business';f.submit(form);await settle();
+    assert.equal(form.querySelector('[data-force-label]').hidden,false);assert.equal(form.querySelector('[data-existing-task="500"]'),null);assert.doesNotMatch(form.textContent,/Скрытое прежнее имя/);assert.match(form.querySelector('[data-create-duplicates]').textContent,/прежнее совпадение/);
+    const first=f.calls.find(call=>call.name==='task_create').args;assert.equal(first.force,undefined);form.elements.force.checked=true;form.elements.force.dispatchEvent(new f.w.Event('input',{bubbles:true}));f.submit(form);await settle();
+    const requests=f.calls.filter(call=>call.name==='task_create');assert.equal(requests.length,2);assert.equal(requests[1].args.force,true);assert.equal(requests[1].args.client_ref,first.client_ref);assert.equal(f.d.querySelector('[data-create-form]'),null);assert.equal(f.d.querySelector('.tb-task-title').textContent,f.task.title);
+  }finally{f.close();}
+});
