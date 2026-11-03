@@ -39,25 +39,33 @@ def main(folder):
                     env.write(value + "\n")
             try:
                 args = ["docker", "create", "--name", name, "--network", "none", "--restart", "no", "--env-file", env.name]
+                for flag, key in (("--user", "User"), ("--workdir", "WorkingDir")):
+                    if item["Config"].get(key):
+                        args += [flag, item["Config"][key]]
                 for mount in item["Mounts"]:
                     source = (root / "rootfs" / mount["Source"].lstrip("/")).resolve()
                     if not source.is_relative_to(root / "rootfs") or not source.exists() or "docker.sock" in str(source) or "," in str(source):
                         raise ValueError("Непереносимый mount")
                     args += ["--mount", f"type=bind,source={source},target={mount['Destination']}" + (",readonly" if not mount["RW"] else "")]
                 entry = item["Config"].get("Entrypoint") or []
-                if entry:
+                if "caddy" in original:
+                    site = os.environ["SYNAPSE_RESTORE_SITE_PATH"]
+                    if not site or any(part in ("", ".", "..") for part in site.split("/")) or not all(ch.isalnum() or ch in "-_/" for ch in site):
+                        raise ValueError("Нужен относительный каталог сайта")
+                    args += ["--entrypoint", "caddy", item["Image"], "file-server", "--root", "/srv/sites/" + site, "--listen", ":8080"]
+                elif entry:
                     args += ["--entrypoint", entry[0]]
-                args += [item["Image"], *entry[1:], *(item["Config"].get("Cmd") or [])]
+                    args += [item["Image"], *entry[1:], *(item["Config"].get("Cmd") or [])]
+                else:
+                    args += [item["Image"], *(item["Config"].get("Cmd") or [])]
                 run(args)
                 names.append(name)
                 run(["docker", "start", name])
                 if "crm" in original:
-                    probe = ["node", "-e", "fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+                    probe = ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/catalog',{headers:{'x-api-key':process.env.API_KEY}}).then(async r=>{await r.json();process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"]
                     kind = "crm"
                 else:
-                    # Configured static vhost must be supplied by reviewer.
-                    host = os.environ["SYNAPSE_RESTORE_SITE_HOST"]
-                    probe = ["wget", "-q", "--spider", "--header", "Host: " + host, "http://127.0.0.1/"]
+                    probe = ["wget", "-q", "--spider", "http://127.0.0.1:8080/"]
                     kind = "site"
                 for attempt in range(30):
                     result = sp.run(["docker", "exec", name, *probe], stdout=sp.DEVNULL, stderr=sp.DEVNULL, timeout=5)

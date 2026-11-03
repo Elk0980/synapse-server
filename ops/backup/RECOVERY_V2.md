@@ -139,13 +139,13 @@ StartWhenAvailable и вход пользователя догружают пр�
 
 ```bash
 python3 backup_v2.py restore /private/restore.json /private/КОПИЯ /private/restore-new
-SYNAPSE_RESTORE_SITE_HOST=СОГЛАСОВАННЫЙ-СТАТИЧЕСКИЙ-ДОМЕН python3 sandbox.py /private/restore-new
+SYNAPSE_RESTORE_SITE_PATH=СОГЛАСОВАННЫЙ-КАТАЛОГ-САЙТА python3 sandbox.py /private/restore-new
 ```
 
 Один вызов для распаковки и offline smoke в новом каталоге:
 
 ```bash
-SYNAPSE_RESTORE_SITE_HOST=СОГЛАСОВАННЫЙ-СТАТИЧЕСКИЙ-ДОМЕН python3 backup_v2.py restore-smoke /private/restore.json /private/КОПИЯ /private/restore-new
+SYNAPSE_RESTORE_SITE_PATH=СОГЛАСОВАННЫЙ-КАТАЛОГ-САЙТА python3 backup_v2.py restore-smoke /private/restore.json /private/КОПИЯ /private/restore-new
 ```
 
 Первая команда проверяет SHA, расшифровывает с аутентификацией age, безопасно
@@ -153,8 +153,10 @@ SYNAPSE_RESTORE_SITE_HOST=СОГЛАСОВАННЫЙ-СТАТИЧЕСКИЙ-ДО
 загружает сохранённые образы, создаёт только тестовые CRM/Caddy с уникальными
 именами, без сети и портов, выполняет локальные HTTP probes, удаляет свои
 контейнеры. Не трогает production volumes/имена; не запускает исходящие рассылки.
-При Caddy с принудительным HTTPS/нестандартной конфигурацией probe потребует
-reviewed sandbox Caddyfile. Кабинет/API между сервисами этим пока не проверяются.
+Сайт запускается встроенным file-server Caddy по HTTP внутри контейнера,
+из восстановленного каталога /srv/sites. Production Caddyfile/HTTPS этим не
+проверяются. CRM probe читает /catalog с API_KEY только из env восстановленного
+контейнера, ключ не печатается. Кабинет/API между сервисами пока не проверяются.
 
 VERIFIED.json не равен SANDBOX_OK.json. Даже SANDBOX_OK не равен переключению
 production. Для нового боевого сервера нужны точный managed-compose recipe,
