@@ -1,0 +1,30 @@
+{
+  "comment": "Какие сайты получают общий набор деталей. Правится вручную; затем node tools/site-kit/sync.js. Копируются files; тема (переменные сайта для --kit-*) генерируется в <dest>/theme.css.",
+  "files": ["fields.css", "select.css", "select.js"],
+  "sites": {
+    "palitra-love": {
+      "dest": "assets/kit",
+      "url": "/assets/kit/",
+      "theme": {
+        "--kit-bg": "var(--surface)",
+        "--kit-fg": "var(--text)",
+        "--kit-muted": "var(--muted)",
+        "--kit-border": "var(--muted)",
+        "--kit-accent": "var(--accent)",
+        "--kit-arrow": "var(--text)",
+        "--kit-accent-soft": "color-mix(in srgb, var(--accent) 20%, var(--surface))",
+        "--kit-shadow": "var(--shadow)",
+        "--kit-radius": "10px",
+        "--kit-pad-x": "12px",
+        "--kit-pad-y": "12px",
+        "--kit-font": "var(--font-body)"
+      }
+    }
+  },
+  "notConnected": {
+    "synapse": "Личный кабинет и редакторы — интерфейс Synapse, не клиентский сайт; подключение отдельной задачей.",
+    "board": "Внутренняя доска задач, не клиентский сайт.",
+    "chat": "Внутренний чат, не клиентский сайт.",
+    "drafts": "Черновики; подключаются при переносе в чистовой сайт."
+  }
+}

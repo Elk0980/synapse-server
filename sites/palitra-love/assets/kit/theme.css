@@ -1,0 +1,15 @@
+/* Сгенерировано tools/site-kit/sync.js из sites/_kit/sites.json (сайт palitra-love). Не править вручную. */
+:root {
+  --kit-bg: var(--surface);
+  --kit-fg: var(--text);
+  --kit-muted: var(--muted);
+  --kit-border: var(--muted);
+  --kit-accent: var(--accent);
+  --kit-arrow: var(--text);
+  --kit-accent-soft: color-mix(in srgb, var(--accent) 20%, var(--surface));
+  --kit-shadow: var(--shadow);
+  --kit-radius: 10px;
+  --kit-pad-x: 12px;
+  --kit-pad-y: 12px;
+  --kit-font: var(--font-body);
+}
