@@ -23,6 +23,7 @@ const { createActorWorkspace } = require('./actor-workspace');
 const { createHughProviders } = require('./hugh-providers');
 const {createMediaMentorSuggest, createMediaMentorSuggestRoute} = require('./media-mentor-suggest');
 const { clientIp, originOf } = require('./site-orders');
+const { createSiteOrderCrmSync } = require('./site-order-crm');
 const { clientCompanyConfig } = require('./client-bot-config');
 const { createClientDialogs } = require('./client-dialogs');
 const { createClientIntakeProxy } = require('./client-intake-proxy');
@@ -213,12 +214,15 @@ const projectChat = createProjectChat({ db, authStore, assetsDir: ASSETS_DIR,
   localWorker: { keySha256: HUGH_LOCAL_WORKER_KEY_SHA256, companies: HUGH_LOCAL_WORKER_COMPANIES },
   // Соль для хеша IP выводится из секрета сессий: сам IP не хранится, отдельного секрета не нужно.
   siteOrders: { sites: ORDER_SITES, groupNotificationSites: ['palitra'], priceReader: (site) => latestStmt.get(`${site}/price`)?.body ?? null,
+    onAccepted: () => siteOrderCrm?.kick(),
     ipSalt: crypto.createHash('sha256').update(`site-orders-ip:${SESSION_SECRET}`).digest('hex') },
   miniApp: { botId: TELEGRAM_BOT_ID, sessionSecret: SESSION_SECRET },
   // Команды Хью в группах: сводка плана берётся из CRM тем же служебным ключом; имя бота — не секрет.
   crmUrl: CRM_URL, crmApiKey: CRM_API_KEY, botUsername: (process.env.TELEGRAM_BOT_USERNAME || '').trim().replace(/^@/, ''),
   cabinetUrl: (process.env.CABINET_PUBLIC_URL || 'https://synapse.synapsebusiness.ru/cabinet.html').trim(),
   requireSession, requireCsrf, sendJson: send, readBody: readJson });
+/* Заказы сайтов → заявки CRM компании сайта: тот же служебный ключ CRM, повтор до подтверждения. */
+const siteOrderCrm = createSiteOrderCrmSync({ db, sites: ORDER_SITES, crmUrl: CRM_URL, apiKey: CRM_API_KEY });
 const taskDispatchWorker = require('./task-dispatch-worker').createTaskDispatchWorker({db,crmUrl:CRM_URL,crmApiKey:CRM_API_KEY,fallback:projectChat.fallback});
 const contentPlanRunner = require('./content-plan-runner').createContentPlanRunner({crmUrl:CRM_URL,crmApiKey:CRM_API_KEY,fallback:projectChat.fallback,
   alerts:require('./hugh-owner-alerts').createHughOwnerAlerts({db}),reviewDelayNotifications:true,
@@ -1407,6 +1411,7 @@ server.listen(PORT, () => {
   projectChat.startWorker();
   peopleService.start();
   taskDispatchWorker.start();
+  siteOrderCrm.start();
   if(process.env.CONTENT_PLAN_WORKER_ENABLED==='1')contentPlanRunner.start();
   const monitor=()=>hughProviders.monitorEconomy(projectChat.fallback.status()).catch(()=>{});
   economyTimer=setInterval(()=>void monitor(),600000);economyTimer.unref();void monitor();
@@ -1416,11 +1421,13 @@ function shutdownContent() {
   clearInterval(economyTimer);
   projectChat.stopWorker();
   taskDispatchWorker.stop();
+  const siteOrderCrmStopped=siteOrderCrm.stop();
   const contentPlanStopped=contentPlanRunner.stop();
   const peopleStopped=peopleService.stop();
   server.close(async () => {
     await contentPlanStopped;
     await peopleStopped;
+    await siteOrderCrmStopped;
     db.close();
     process.exit(0);
   });
