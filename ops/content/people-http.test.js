@@ -12,11 +12,14 @@ test('реальный HTTP: старая сессия, узкая роль, sel
     const actor=JSON.parse(Buffer.from(req.headers['x-synapse-crm-identity'],'base64url'));
     assert.deepEqual(actor.companyCodes,['synapse-business']);assert.equal(req.headers['x-api-key'],'synthetic-crm-key');
     let result;
-    if(req.url.startsWith('/media-mentor'))result={companyCode:'synapse-business',brief:{revision:0},plan:null,variants:[]};
-    else if(req.url.startsWith('/tasks?'))result={tasks:all.map(t=>({id:t.id,companyCode:t.company_code,description:t.description})),pagination:{total:all.length}};
-    else if(req.url.endsWith('/tasks_list'))result={tasks:all,total:all.length};
-    else if(req.url.endsWith('/task_get'))result={...all.find(x=>x.id===args.task_id),comments:[],subtasks:[]};
-    else if(req.url.endsWith('/task_update')){const row=all.find(x=>x.id===args.task_id);assert.equal(args.revision,row.coordination.revision);row.status=args.status;row.coordination.revision++;result={task:row};}
+    const action=new URL(req.url,'http://localhost').pathname.split('/').at(-1);
+    assert.equal(actor.role,actor.userId===1?'owner':'editor');
+    assert.deepEqual(actor.permissions,[['mediaMentor','planVariantsDecision'].includes(action)?'content-plan.approve':action==='task_update'?'tasks.self.edit':'tasks.self.view']);
+    if(action==='mediaMentor')result={companyCode:'synapse-business',brief:{revision:0},plan:null,variants:[]};
+    else if(action==='taskRecords')result={tasks:all.map(t=>({id:t.id,companyCode:t.company_code,description:t.description})),pagination:{total:all.length}};
+    else if(action==='tasks_list')result={tasks:all,total:all.length};
+    else if(action==='task_get')result={...all.find(x=>x.id===args.task_id),comments:[],subtasks:[]};
+    else if(action==='task_update'){const row=all.find(x=>x.id===args.task_id);assert.equal(args.revision,row.coordination.revision);row.status=args.status;row.coordination.revision++;result={task:row};}
     else throw Error('Неожиданный upstream request');
     res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(result));
   });
@@ -34,7 +37,7 @@ test('реальный HTTP: старая сессия, узкая роль, sel
   const login=async name=>{const r=await request('/content/login',null,'POST',{login:name,password});assert.equal(r.status,200);const cookie=r.headers.get('set-cookie').split(';')[0],data=await(await request('/content/whoami',{cookie})).json();return {cookie,csrf:data.csrfToken};};
   const owner=await login('root');
   assert.equal((await request('/content/people/context')).status,401);
-  assert.equal((await request('/content/admin/accounts',owner,'POST',{login:'lena',displayName:'Тестовый человек',password,companies:['alvi'],permissions:['crm.view']})).status,201);
+  assert.equal((await request('/content/admin/team',owner,'POST',{login:'lena',displayName:'Тестовый человек',password,companyCode:'synapse-business',staffRole:'administrator'})).status,201);
   const human=await login('lena');const accounts=await(await request('/content/admin/accounts',owner)).json();const user=accounts.accounts.find(x=>x.login==='lena');
   assert.equal((await request(`/content/people/members/${user.id}`,owner,'PUT',{companyCode:'synapse-business',staffRole:'human_executor'},false)).status,403);
   assert.equal((await request(`/content/people/members/${user.id}`,owner,'PUT',{companyCode:'synapse-business',staffRole:'human_executor'})).status,200);

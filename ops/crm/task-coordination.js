@@ -113,7 +113,32 @@ function createTaskCoordination(db, {now = () => Date.now()} = {}) {
       if (ownTransaction) db.exec('COMMIT'); return result;
     } catch (error) { if (ownTransaction) db.exec('ROLLBACK'); throw error; }
   };
-  return {get,list,save,tool:createTaskTools(db,{now,owner,entry,save})};
+  // Отдельная capability: не открывает обычный Owner API и не подменяет роль.
+  const selfStatus = (id,body,actor,companyCode) => {
+    const codes=actor?.companyCodes,permissions=actor?.permissions;
+    if(!actor||!['owner','editor'].includes(actor.role)||!Number.isSafeInteger(actor.userId)||actor.userId<1||
+      !(codes instanceof Set)||codes.size!==1||!codes.has(companyCode)||
+      actor.role!=='owner'&&(!(permissions instanceof Set)||!permissions.has('tasks.self.edit')))fail(403,'Нет права изменять свою задачу');
+    if(!object(body)||Object.keys(body).sort().join(',')!=='revision,status'||!Number.isSafeInteger(body.revision)||body.revision<0||
+      !['inbox','planned','in_progress','done','cancelled'].includes(body.status))fail(400,'Передайте только статус и ревизию');
+    if(!hasMcpSchema(db))fail(503,'Миграция задач MCP не установлена');
+    const own=!db.isTransaction;if(own)db.exec('BEGIN IMMEDIATE');
+    try {
+      const row=task(id);
+      if(String(row.company_code).toLowerCase()!==companyCode||actor.role!=='owner'&&row.assignee_name!==`person:${actor.userId}`)fail(404,'Задача не найдена');
+      const previous=db.prepare('SELECT revision,data FROM task_coordination WHERE task_id=?').get(id);
+      if((previous?.revision||0)!==body.revision)fail(409,'Задача изменилась. Обновите карточку');
+      // Статус не нормализует и не выбрасывает неизвестные прежние метаданные.
+      const json=previous?.data||JSON.stringify({...empty(),executorName:row.assignee_name}),revision=body.revision+1,stamp=new Date(now()).toISOString();
+      withCoordinatedWrite(db,id,()=>db.prepare('UPDATE tasks SET status=?,updated_at=? WHERE id=?').run(body.status,stamp,id));
+      db.prepare(`INSERT INTO task_coordination(task_id,revision,data,updated_at,updated_by) VALUES(?,?,?,?,?)
+        ON CONFLICT(task_id) DO UPDATE SET revision=excluded.revision,data=excluded.data,updated_at=excluded.updated_at,updated_by=excluded.updated_by`).run(id,revision,json,stamp,actor.userId);
+      db.prepare('INSERT INTO task_coordination_history(task_id,revision,data,updated_at,updated_by) VALUES(?,?,?,?,?)').run(id,revision,json,stamp,actor.userId);
+      const result=entry({...row,status:body.status});
+      if(own)db.exec('COMMIT');return result;
+    }catch(error){if(own)db.exec('ROLLBACK');throw error;}
+  };
+  return {get,list,save,selfStatus,tool:createTaskTools(db,{now,owner,entry,save})};
 }
 module.exports = {createTaskCoordination,migrateTasksMcp,migrateTasksMcpPortable};
 

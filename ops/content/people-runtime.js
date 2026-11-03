@@ -19,7 +19,11 @@ function createPeopleRuntime({db,authStore,tasks,call,notifications,now=Date.now
   let timer=null,active=null,stopping=false;
   const stamp=()=>new Date(now()).toISOString();
   const owner=(id,code)=>{const u=authStore.getById(id);if(!u||u.role!=='owner'||!u.companyCodes.includes(code))fail(403,'Настройку выполняет владелец');return u;};
-  function getRule(actorId,code) {owner(actorId,code);const row=db.prepare('SELECT settings FROM people_friday_rules WHERE company_code=?').get(code);return row?JSON.parse(row.settings):defaultRule();}
+  function getRule(actorId,code) {
+    owner(actorId,code);const row=db.prepare('SELECT settings FROM people_friday_rules WHERE company_code=?').get(code);
+    if(!row)return defaultRule();
+    const {_ownerUserId,...rule}=JSON.parse(row.settings);return rule;
+  }
   function saveRule(actorId,code,input) {
     owner(actorId,code);
     if(!input||Object.keys(input).some(k=>!Object.hasOwn(defaultRule(),k)))fail(400,'Переданы лишние настройки');
@@ -36,7 +40,7 @@ function createPeopleRuntime({db,authStore,tasks,call,notifications,now=Date.now
     const old=previous?JSON.parse(previous.settings):null;
     const anchor=old&&old.timezone===rule.timezone&&old.weekStart===rule.weekStart&&old.weekMode===rule.weekMode?previous.anchor_at:stamp();
     db.prepare(`INSERT INTO people_friday_rules VALUES(?,?,?,?,?) ON CONFLICT(company_code)
-      DO UPDATE SET user_id=excluded.user_id,settings=excluded.settings,anchor_at=excluded.anchor_at,updated_at=excluded.updated_at`).run(code,rule.userId,JSON.stringify(rule),anchor,stamp());
+      DO UPDATE SET user_id=excluded.user_id,settings=excluded.settings,anchor_at=excluded.anchor_at,updated_at=excluded.updated_at`).run(code,rule.userId,JSON.stringify({...rule,_ownerUserId:actorId}),anchor,stamp());
     authStore.audit(actorId,rule.userId,'PEOPLE_FRIDAY_RULE_SAVED',{companyCode:code,...rule});
     return rule;
   }
@@ -62,7 +66,8 @@ function createPeopleRuntime({db,authStore,tasks,call,notifications,now=Date.now
     const rule=JSON.parse(stored.settings);
     if(!rule.enabled||rule.userId!==userId)return false;
     let user;try{user=tasks.access(userId,companyCode);}catch{return false;}
-    const result=await summary(user,companyCode,rule,stored.anchor_at);
+    const sourceOwner=owner(rule._ownerUserId,companyCode);
+    const result=await summary(sourceOwner,companyCode,rule,stored.anchor_at);
     const fresh=db.prepare('SELECT * FROM people_friday_rules WHERE company_code=?').get(companyCode);
     if(!fresh||fresh.settings!==stored.settings||fresh.updated_at!==stored.updated_at||fresh.anchor_at!==stored.anchor_at)return false;
     for(const slot of ['morning','evening']) {
@@ -97,11 +102,12 @@ function createPeopleRuntime({db,authStore,tasks,call,notifications,now=Date.now
           const rule=JSON.parse(stored.settings);if(!rule.enabled)continue;
           const weekday=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(new Intl.DateTimeFormat('en-US',{timeZone:rule.timezone,weekday:'short'}).format(now()));
           if(weekday!==rule.weekday)continue;
-          const recipient=tasks.access(rule.userId,stored.company_code);
+          tasks.access(rule.userId,stored.company_code);
+          const sourceOwner=owner(rule._ownerUserId,stored.company_code);
           const hour=Number(new Intl.DateTimeFormat('en-GB',{timeZone:rule.timezone,hour:'2-digit',hourCycle:'h23'}).format(now()));
           const slot=hour>=rule.eveningHour?'evening':hour>=rule.morningHour?'morning':null;
           if(!slot)continue;
-          const result=await summary(recipient,stored.company_code,rule,stored.anchor_at);
+          const result=await summary(sourceOwner,stored.company_code,rule,stored.anchor_at);
           const fresh=db.prepare('SELECT settings FROM people_friday_rules WHERE company_code=?').get(stored.company_code);
           if(fresh?.settings!==stored.settings)continue;
           tasks.access(rule.userId,stored.company_code);

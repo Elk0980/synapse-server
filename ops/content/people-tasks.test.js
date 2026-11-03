@@ -57,7 +57,7 @@ test('переназначение родительской ветки во вр
 });
 test('владелец явно переводит существующего редактора: данные/пароль не меняются, широкие права заменяются',t=>{
   const f=fixture(t),before=f.auth.getById(f.other.id);
-  f.auth.updateAccess(1,f.other.id,['alvi','avokado'],['crm.edit','account.view']);
+  f.auth.updateAccess(1,f.other.id,['synapse-business','alvi','avokado'],['crm.edit','account.view']);
   f.team.assignHuman(1,f.other.id,'synapse-business');const after=f.auth.getById(f.other.id);
   assert.equal(after.passwordHash,before.passwordHash);assert.equal(after.login,before.login);
   assert.deepEqual(after.permissions,['tasks.self.edit','tasks.self.view']);assert.deepEqual(after.companyCodes,['synapse-business']);

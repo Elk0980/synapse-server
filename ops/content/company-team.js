@@ -52,6 +52,10 @@ function createCompanyTeam(auth) {
     const actor=access(actorId,companyCode),user=auth.getById(userId);
     if(actor.role!=='owner')fail(403,'Доступ исполнителя назначает владелец');
     if(!user||user.role==='owner')fail(400,'Выберите существующего редактора');
+    const member=db.prepare(`SELECT 1 FROM company_team_members m
+      JOIN auth_user_companies c ON c.user_id=m.user_id AND c.company_code=m.company_code
+      WHERE m.user_id=? AND m.company_code=?`).get(userId,companyCode);
+    if(!member)fail(403,'Пользователь не состоит в команде этой компании');
     // Явное действие владельца: права заменяются узким пресетом, данные аккаунта сохраняются.
     db.exec('BEGIN IMMEDIATE');
     try {

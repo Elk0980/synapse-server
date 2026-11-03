@@ -4,14 +4,17 @@ function createPeopleCrmClient({crmUrl,apiKey,fetchImpl=fetch}) {
   const actions=new Set(['tasks_list','task_get','task_update','mediaMentor','taskRecords','planVariantsDecision']);
   return async function call(action,args,user,companyCode) {
     if(!actions.has(action)||!apiKey)fail(503,'Источник задач не настроен');
-    // Внутренний брокер читает существующие Owner tools. Пользователь не получает
-    // эту личность: people-tasks проверяет стабильное назначение, компанию и CAS.
-    // Произвольные путь, тело, заголовки и права из браузера сюда не поступают.
-    const identity={v:1,userId:user.id,userName:user.displayName,role:'owner',permissions:['crm.view','crm.edit'],companyCodes:[companyCode]};
+    const permission=['mediaMentor','planVariantsDecision'].includes(action)?'content-plan.approve':
+      action==='task_update'?'tasks.self.edit':'tasks.self.view';
+    if(!user||!['owner','editor'].includes(user.role)||!Number.isSafeInteger(user.id)||user.id<1||
+      typeof companyCode!=='string'||!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(companyCode)||
+      !user.companyCodes?.includes(companyCode)||user.role!=='owner'&&!user.permissions?.includes(permission))fail(403,'Недостаточно прав в выбранной компании');
+    // Реальная роль и одна нужная операция; CRM повторно проверяет эти права,
+    // компанию и назначение. Человек никогда не представляется владельцем.
+    const identity={v:1,userId:user.id,userName:user.displayName,role:user.role,permissions:[permission],companyCodes:[companyCode]};
     const readOnly=action==='mediaMentor'||action==='taskRecords';
-    const route=action==='mediaMentor'?`/media-mentor?companyCode=${encodeURIComponent(companyCode)}`:
-      action==='taskRecords'?`/tasks?companyCode=${encodeURIComponent(companyCode)}&limit=200&offset=${Number(args.offset)||0}`:
-      action==='planVariantsDecision'?`/media-mentor/plan/variants/decision?companyCode=${encodeURIComponent(companyCode)}`:`/coordination/mcp/${action}`;
+    const route=`/internal/people/${action}?companyCode=${encodeURIComponent(companyCode)}`+
+      (action==='taskRecords'?`&offset=${Number(args.offset)||0}`:'');
     let response;
     try {response=await fetchImpl(`${crmUrl}${route}`,{method:readOnly?'GET':'POST',
       headers:{'content-type':'application/json','x-api-key':apiKey,'x-synapse-crm-identity':Buffer.from(JSON.stringify(identity)).toString('base64url')},

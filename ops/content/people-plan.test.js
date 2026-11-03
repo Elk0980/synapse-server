@@ -11,19 +11,19 @@ function fixture(t) {
     INSERT INTO companies(id,code,name,timezone,socials) VALUES(1,'alvi','Тест','Asia/Irkutsk','[]');`);
   const auth=createAuthStore(db,`root:owner:${hashPassword('test-only-people-plan')}`),team=createCompanyTeam(auth);
   const human=team.create(1,{login:'reviewer',displayName:'Тестовый согласующий',companyCode:'alvi',password:'test-only-people-plan',staffRole:'human_executor'});
-  let at=Date.parse('2026-11-06T01:00:00Z'),reads=0;
+  let at=Date.parse('2026-11-06T01:00:00Z'),reads=0;const sourceUsers=[];
   const mentor=createMediaMentor(db,{now:()=>at});
   mentor.saveBrief('alvi',{revision:0,brief:{goal:'Семь материалов на неделю',platforms:['vk']}},{userId:1,userName:'Owner'});
   mentor.savePlan('alvi',{planRevision:0,briefRevision:1,days:Array.from({length:7},(_,i)=>({date:`2026-11-${String(9+i).padStart(2,'0')}`,platform:'vk',format:'post',role:'reach',topic:`Тема ${i+1}`,variants:{vk:{text:`Согласуемый текст ${i+1}`}}}))},{userId:1,userName:'Owner'});
   const call=async(name,args,user)=>{reads++;
     if(name==='taskRecords')return {tasks:[],pagination:{total:0}};
     if(name==='tasks_list')return {tasks:[],total:0};
-    if(name==='mediaMentor')return mentor.get('alvi');
+    if(name==='mediaMentor'){sourceUsers.push({id:user.id,role:user.role});return mentor.get('alvi');}
     if(name==='planVariantsDecision')return mentor.decideVariants('alvi',args,{userId:user.id,userName:user.displayName});
     throw Error('unexpected action');
   };
   const tasks=createPeopleTasks({db,authStore:auth,call}),plan=createPeoplePlan({db,authStore:auth,tasks,call});
-  return {db,auth,human,mentor,call,tasks,plan,now:()=>at,setTime:value=>{at=Date.parse(value);},reads:()=>reads};
+  return {db,auth,human,mentor,call,tasks,plan,sourceUsers,now:()=>at,setTime:value=>{at=Date.parse(value);},reads:()=>reads};
 }
 test('отдельное право человека согласует реальные версии плана без owner/публикации и даёт7 уникальных публикаций',async t=>{
   const f=fixture(t);
@@ -55,8 +55,23 @@ test('пятничный runtime читает реальный план, нов�
   runtime.saveRule(1,'alvi',{enabled:true,userId:f.human.id,timezone:'Asia/Irkutsk',weekStart:'',morningHour:9,eveningHour:18});
   const preview=await runtime.preview(1,'alvi');assert.equal(queued.length,0);assert.equal(preview.summary.weekStart,'2026-11-09');assert.match(preview.event.body,/Согласовано 0 из 7, на согласовании 7/);
   await runtime.runOnce();assert.equal(queued.length,1);assert.ok(await runtime.validateEvent({...queued[0],payload:{body:queued[0].body}}));
+  assert.ok(f.sourceUsers.every(user=>user.id===1&&user.role==='owner'));
+  assert.equal(f.auth.getById(f.human.id).role,'editor');assert.ok(!f.auth.getById(f.human.id).permissions.includes('content-plan.approve'));
+  assert.equal(runtime.getRule(1,'alvi')._ownerUserId,undefined);
   runtime.saveRule(1,'alvi',{...runtime.getRule(1,'alvi'),enabled:false});
   assert.equal(await runtime.validateEvent({...queued[0],payload:{body:queued[0].body}}),false);
+});
+test('правило без реального владельца не повышает получателя до owner и не читает источник',async t=>{
+  const f=fixture(t);f.db.exec('CREATE TABLE people_notification_preferences(user_id,company_code,enabled);');
+  const queued=[],runtime=createPeopleRuntime({db:f.db,authStore:f.auth,tasks:f.tasks,call:f.call,
+    notifications:{enqueue:x=>queued.push(x),runOnce:async()=>{}},now:f.now,enabled:true});
+  runtime.saveRule(1,'alvi',{enabled:true,userId:f.human.id,timezone:'Asia/Irkutsk',weekStart:''});
+  const saved=JSON.parse(f.db.prepare('SELECT settings FROM people_friday_rules').get().settings);
+  delete saved._ownerUserId;f.db.prepare('UPDATE people_friday_rules SET settings=?').run(JSON.stringify(saved));
+  await runtime.runOnce();assert.equal(f.sourceUsers.length,0);assert.equal(queued.length,0);
+  saved._ownerUserId=f.human.id;f.db.prepare('UPDATE people_friday_rules SET settings=?').run(JSON.stringify(saved));
+  await runtime.runOnce();assert.equal(f.sourceUsers.length,0);assert.equal(queued.length,0);
+  await runtime.stop();
 });
 test('повторное сохранение anchored правила не возвращает интервал назад; source/anchor stable',async t=>{
   const f=fixture(t);f.db.exec('CREATE TABLE people_notification_preferences(user_id,company_code,enabled);');

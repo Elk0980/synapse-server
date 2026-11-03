@@ -51,8 +51,8 @@ function createPeopleTasks({authStore,db,call}) {
       ...(children?{subtasks:children,comments:task.comments||[],comments_pagination:task.comments_pagination}:{} )};
   }
   async function list(userId,code) {
-    // MCP summary не содержит description. Получаем описания пакетно через прежний
-    // GET /tasks, без N запросов detail и без изменения контракта доски №26.
+    // Summary не содержит description. Узкий CRM taskRecords возвращает описания
+    // доступных записей пакетно, без N запросов detail и без изменения доски №26.
     const descriptions=new Map();let offset=0;
     for(let page=0;page<50;page++) {
       const actor=access(userId,code),result=await call('taskRecords',{offset},actor,code);
