@@ -4,6 +4,7 @@
 const SbCabinet = window.SbCabinet = window.SbCabinet || {};
 let ctx, byId, escapeHTML, crmQuery, csrfOptions, scopeParams, chooseProject, navigate;
 let initialized = false;
+let compactBoard = null;
 const api = {};
 const init = (context) => {
   ctx = context;
@@ -714,7 +715,7 @@ const init = (context) => {
   const renderTaskCard = async (id) => {
     clearTimeout(boardTimer);
     const version = ++renderVersion;
-    const scope = scopeParams();
+    const scope = ctx.identity?.role === 'owner' && location.hash.startsWith('#tasks/record/') ? {companyCode:''} : scopeParams();
     const content = byId("tasks-content");
     content.textContent = "Загрузка…";
     try {
@@ -774,12 +775,27 @@ const init = (context) => {
   };
   const renderTasksRoute = () => {
     clearTimeout(searchTimer);
+    clearTimeout(boardTimer);
+    const compactRoute = location.hash.slice(1).split('?')[0].split('/')[1] || '';
+    if (ctx.identity?.role === 'owner' && window.SbTaskBoard && compactRoute !== 'record') {
+      ++renderVersion;
+      const route = compactRoute;
+      compactBoard?.destroy();
+      compactBoard = window.SbTaskBoard.mount(byId('tasks-content'), ctx, {
+        view: ['board','projects','plan','today','agents'].includes(route) ? route : 'projects',
+        ...( /^\d+$/.test(route) ? {taskId:Number(route)} : {} )
+      });
+      return;
+    }
+    compactBoard?.destroy();
+    compactBoard = null;
     const hash = location.hash.slice(1);
     const queryIndex = hash.indexOf("?");
     const route = queryIndex < 0 ? hash : hash.slice(0, queryIndex);
     readTaskFilters(queryIndex < 0 ? "" : hash.slice(queryIndex + 1));
-    const id = decodeURIComponent(route.split("/")[1] || "");
-    const canonical = `#${taskRoute(id)}`;
+    const record = ctx.identity?.role === 'owner' && compactRoute === 'record';
+    const id = decodeURIComponent(route.split("/")[record ? 2 : 1] || "");
+    const canonical = record ? `#tasks/record/${encodeURIComponent(id)}` : `#${taskRoute(id)}`;
     if (location.hash !== canonical) history.replaceState(null, "", canonical);
     if (['board','today','agents'].includes(id)) { boardView = id; renderCoordination(true); }
     else if (id) renderTaskCard(id);
@@ -863,7 +879,7 @@ const init = (context) => {
       ...taskPayload(form), reviewer:form.elements.namedItem('reviewer')?.value || '',client_ref:form.dataset.sourceRef
     });
   });
-  Object.assign(api, { renderTasksRoute, loadTasksSummary });
+  Object.assign(api, { renderTasksRoute, loadTasksSummary, cancelRender: () => { ++renderVersion; clearTimeout(boardTimer); clearTimeout(searchTimer); } });
 };
 
 SbCabinet.registerView("tasks", {
@@ -879,6 +895,11 @@ SbCabinet.registerView("tasks", {
   onProjectChange(context) {
     init(context);
     api.renderTasksRoute();
+  },
+  onLeave() {
+    api.cancelRender?.();
+    compactBoard?.destroy();
+    compactBoard = null;
   },
 });
 })();
