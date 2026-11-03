@@ -26,7 +26,7 @@ class Board:
             data=canonical({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
                             'params': {'name': name, 'arguments': args}}))
         try:
-            with urllib.request.build_opener(NoRedirect()).open(request, timeout=20) as response:
+            with urllib.request.build_opener(NoRedirect()).open(request, timeout=5) as response:
                 raw = response.read(4 * 1024 * 1024 + 1)
                 need(len(raw) <= 4 * 1024 * 1024, 'BOARD_RESPONSE_LIMIT')
                 result = json.loads(raw)['result']
@@ -62,43 +62,57 @@ class Outbox:
     def __init__(self, path, board):
         self.path, self.board = Path(path), board
 
+    def events(self):
+        if not self.path.exists():
+            return []
+        saved = load(self.path)
+        return saved if isinstance(saved, list) else [saved]
+
     def enqueue(self, task_id, sha, kind):
-        if self.path.exists():
-            old = load(self.path)
-            need(old['marker'] == f'release:{sha}:{kind}' or old['phase'] == 'done', 'OUTBOX_PENDING')
-            if old['marker'] == f'release:{sha}:{kind}':
-                return
-        atomic(self.path, {'taskId': task_id, 'sha': sha, 'kind': kind,
-                           'marker': f'release:{sha}:{kind}', 'phase': 'ready',
-                           'at': datetime.now(timezone.utc).isoformat()})
+        events = self.events()
+        marker = f'release:{sha}:{kind}'
+        if any(e['marker'] == marker for e in events):
+            return
+        events.append({'taskId': task_id, 'sha': sha, 'kind': kind, 'marker': marker,
+                       'phase': 'ready', 'attempts': 0, 'nextAttempt': 0,
+                       'at': datetime.now(timezone.utc).isoformat()})
+        atomic(self.path, events)
 
     def flush(self):
-        if not self.path.exists():
-            return
-        event = load(self.path)
-        if event['phase'] == 'done':
-            return
-        task = self.board.task(event['taskId'])
-        if event['kind'] == 'connected':
-            previous = task['coordination']['milestones']['connected'].get('evidence', '')
-            already = event['marker'] in previous
-        else:
-            already = any(event['marker'] in c['text'] for c in task['comments'])
-        if already:
-            event['phase'] = 'done'
-            atomic(self.path, event)
-            return
-        need(event['phase'] != 'unknown', 'BOARD_UNKNOWN_AWAIT_RECONCILIATION')
-        event['phase'] = 'unknown'
-        atomic(self.path, event)
-        if event['kind'] == 'connected':
-            self.board.call('task_update', {'task_id': event['taskId'],
-                'revision': task['coordination']['revision'], 'stage': 'connected',
-                'evidence': event['marker'] + ' health PASS; commit=' + event['sha'],
-                'checked_at': event['at']})
-        else:
-            self.board.call('task_comment', {'task_id': event['taskId'],
-                'author': 'Выпускающий агент',
-                'text': event['marker'] + ' Выпуск откатан; health или операция выпуска не прошла. Данные сохранены.'})
-        event['phase'] = 'done'
-        atomic(self.path, event)
+        import time
+        events = self.events()
+        attempted = 0
+        for event in events:
+            if event['phase'] == 'done' or event.get('nextAttempt', 0) > time.time():
+                continue
+            if attempted >= 2:
+                break
+            attempted += 1
+            try:
+                task = self.board.task(event['taskId'])
+                # Every report is a CAS task update; retries cannot duplicate comments.
+                coordination = task['coordination']
+                evidence = coordination['milestones']['connected'].get('evidence', '')
+                seen = (event['marker'] in evidence or event['marker'] in coordination.get('nextAction', '') or
+                        any(event['marker'] in c['text'] for c in task['comments']))
+                if not seen:
+                    event['phase'] = 'unknown'
+                    atomic(self.path, events)
+                    args = {'task_id': event['taskId'], 'revision': coordination['revision']}
+                    if event['kind'] == 'connected':
+                        args.update(stage='connected', evidence=event['marker'] + ' health PASS; commit=' + event['sha'], checked_at=event['at'])
+                    else:
+                        messages = {'rolled_back': 'Пропущен (откат), данные сохранены',
+                                    'build_failed': 'Пропущен: сборка не прошла', 'skipped': 'Пропущен после прерывания сборки',
+                                    'no_release': 'Выпуск не требуется', 'site_deferred': 'Выпуск сайта отдельным шагом №57',
+                                    'database_decision': 'ждёт Влада: восстановить БД из сохранённого снимка?',
+                                    'waiting': 'Ожидается приёмка или зелёный CI'}
+                        args['next_step'] = event['marker'] + ' ' + messages.get(event['kind'], event['kind'])
+                        if event['kind'] == 'database_decision':
+                            args['blocker'] = messages['database_decision'] + ' ' + event['sha']
+                    self.board.call('task_update', args)
+                event['phase'] = 'done'
+            except Exception:
+                event['attempts'] = event.get('attempts', 0) + 1
+                event['nextAttempt'] = time.time() + min(3600, 5 * 2 ** min(event['attempts'], 9))
+            atomic(self.path, events)

@@ -18,6 +18,8 @@ jobs:
       - run: python -m unittest discover -s ops/release-agent -v
       - name: Real disposable Docker image rollback and SQLite preservation
         run: sudo env RELEASE_DOCKER_TEST=1 python3 -m unittest discover -s ops/release-agent -p test_docker.py -v
+      - name: Real unprivileged worker against local broker on a copy
+        run: sudo env RELEASE_DOCKER_TEST=1 python3 -m unittest discover -s ops/release-agent -p test_privilege.py -v
       - name: Verify inert installation on a copy
         run: |
           python ops/release-agent/install.py --root "$RUNNER_TEMP/release-copy"

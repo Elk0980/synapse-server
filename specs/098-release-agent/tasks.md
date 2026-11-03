@@ -14,3 +14,16 @@
 - [ ] Подключить rollback ACL/button с единственным владельцем26.
 - [ ] Окончательная единая команда full bootstrap, проверенная на копии.
 - [ ] Production≤5мин, дваPR, failingPR, кнопка и приёмка Claude.
+
+## Исправления по Claude222
+
+- [x] Разделить cursor и runtime, продвигать skipped/build_failed/rollback/no_release.
+- [x] sites deferred отдельному publisher57, не применять из workshop.
+- [x] PR-head CI и обязательный merge SpecKit, Composebuild с полным build spec.
+- [x] Multi-event outbox/backoff/CAS, offline reporting не останавливает release.
+- [x] DBrestore только доказанный pretraffic; поздний preserve + owner decision.
+- [x] Issuer по связанному task/comment/registry с обязательным credential stamp.
+- [ ] Реальный trusted producer stamp229 и кнопка26: нуждаются в интеграции.
+- [x] Rollback CLI expected SHA + request-id, pinned enabled bootstrap, nonroot worker.
+- [x] Узкий local root broker без выдачи docker group/sudo worker.
+- [ ] Свежий LinuxCI, проверенная боeвая установка и приёмка Claude.

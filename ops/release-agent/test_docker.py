@@ -23,7 +23,7 @@ class DockerRollback(unittest.TestCase):
             with contextlib.closing(sqlite3.connect(data / 'live.sqlite')) as db, db:
                 db.execute('CREATE TABLE messages(text TEXT)')
                 db.execute("INSERT INTO messages VALUES ('old draft')")
-            (app / 'Dockerfile').write_text('FROM python:3.12-alpine\nWORKDIR /app\nCOPY . .\nCMD ["python","app.py"]\n')
+            (app / 'Dockerfile.fixture').write_text('FROM python:3.12-alpine AS runtime\nARG PROOF\nRUN test "$PROOF" = "compose-args"\nWORKDIR /app\nCOPY . .\nCMD ["python","app.py"]\n')
             (app / 'version').write_text('good')
             (app / 'app.py').write_text('''from http.server import BaseHTTPRequestHandler, HTTPServer
 import sqlite3
@@ -38,12 +38,15 @@ HTTPServer(('0.0.0.0',8080),Handler).serve_forever()
             git('add', '.'); git('commit', '-qm', 'good')
             old = git('rev-parse', 'HEAD')
             tag = 'synapse-release-test:' + old
-            command(['docker', 'build', '-t', tag, str(app)], timeout=240)
+            command(['docker', 'build', '-t', tag, '--file', str(app / 'Dockerfile.fixture'),
+                     '--build-arg', 'PROOF=compose-args', '--target', 'runtime', str(app)], timeout=240)
             project = 'release-test-' + old[:8]
             with socket.socket() as sock:
                 sock.bind(('127.0.0.1', 0)); port = sock.getsockname()[1]
             recipe = root / 'recipe.json'
             atomic(recipe, {'services': {'fixture': {'image': tag,
+                'build': {'context': 'ops/fixture', 'dockerfile': 'Dockerfile.fixture',
+                          'args': {'PROOF': 'compose-args'}, 'target': 'runtime'},
                 'ports': [f'127.0.0.1:{port}:8080'], 'volumes': [str(data) + ':/data']}}})
             config = {'project': project, 'checkout': str(source), 'recipe': str(recipe),
                 'stateDir': str(root / 'state'), 'mirror': str(source),

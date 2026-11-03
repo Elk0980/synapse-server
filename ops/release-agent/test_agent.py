@@ -85,7 +85,7 @@ class Transactions(unittest.TestCase):
         self.assertEqual(self.engine.state()['current'], 'a')
         self.assertEqual(self.rows(), [('draft / old conversation',), ('new request',)])
         self.assertEqual(self.rows(self.root / 'b.sqlite'), [('draft / old conversation',)])
-        with self.assertRaisesRegex(agent.Blocked, 'QUEUE_HALTED'):
+        with self.assertRaisesRegex(agent.Blocked, 'OUT_OF_ORDER'):
             self.engine.deploy(self.plan)
 
     def test_backup_failure_never_switches(self):
@@ -132,6 +132,27 @@ class Transactions(unittest.TestCase):
         with self.assertRaisesRegex(agent.Blocked, 'ROLLBACK_NOT_CURRENT_VERIFIED'):
             self.engine.rollback()
 
+    def test_correcting_pr_after_rollback_uses_cursor_not_runtime_sha(self):
+        self.backend.fail = 'health'
+        with self.assertRaises(agent.Blocked): self.engine.deploy(self.plan)
+        self.assertEqual(self.engine.state()['cursor'], 'b')
+        self.assertEqual(self.engine.state()['current'], 'a')
+        self.engine.deploy({'sha': 'c', 'parent': 'b'})
+        self.assertEqual(self.engine.state()['current'], 'c')
+
+    def test_build_failed_prepared_and_docs_do_not_stop_future_pr(self):
+        self.backend.fail = 'build'
+        with self.assertRaises(agent.Blocked): self.engine.deploy(self.plan)
+        self.backend.fail = None
+        self.engine.advance({'sha': 'docs', 'parent': 'b'}, 'no_release')
+        self.engine.deploy({'sha': 'fixed', 'parent': 'docs'})
+        self.assertEqual(self.engine.state()['current'], 'fixed')
+        self.engine.save({'phase': 'prepared', 'current': 'fixed', 'cursor': 'fixed',
+                          'plan': {'sha': 'interrupted', 'parent': 'fixed'}})
+        self.engine.recover()
+        self.engine.deploy({'sha': 'after', 'parent': 'interrupted'})
+        self.assertEqual(self.engine.state()['current'], 'after')
+
     def test_lock_excludes_second_writer(self):
         if agent.os.name != 'posix': self.skipTest('flock requires Linux')
         with agent.release_lock(self.root / 'lease'):
@@ -162,26 +183,30 @@ class Gates(unittest.TestCase):
         with self.assertRaisesRegex(agent.Blocked, 'ADMISSION_SIGNATURE'):
             agent.verify_admission(self.signed(), b'wrong', 'b', 'a', now=1)
 
-    def test_unknown_static_and_configuration_paths_wait_for_review(self):
+    def test_nonruntime_is_consumed_and_sites_are_deferred(self):
         config = {'services': {'crm': {'context': 'ops/crm', 'writers': ['content']},
                                'content': {'context': 'ops/content'}}}
         plan = agent.make_plan(config, {}, ['ops/crm/server.js'])
         self.assertEqual(plan['writers'], ['content', 'crm'])
-        for path in ('docker-compose.yml', 'sites/synapse/cabinet.html', 'ops/crm-evil/server.js'):
-            with self.subTest(path=path), self.assertRaises(agent.Blocked):
-                agent.make_plan(config, {}, [path])
+        self.assertEqual(plan['outcome'], 'runtime')
+        for path in ('docs/a.md', 'specs/a.md', 'AI_HANDOFF/a.md', 'docker-compose.yml', 'ops/crm-evil/a'):
+            self.assertEqual(agent.make_plan(config, {}, [path])['outcome'], 'no_release')
+        self.assertEqual(agent.make_plan(config, {}, ['sites/alvi/index.html'])['outcome'], 'site_deferred')
 
-    def test_ci_is_for_merge_not_pr_head_and_all_pages(self):
+    def test_ci_accepts_pr_head_checks_and_requires_merge_spec_kit(self):
         api = agent.GitHub('fixture/repo')
-        pr = {'number': 1, 'merged_at': 'now', 'merge_commit_sha': 'b', 'base': {'ref': 'main'}}
-        check = {'head_sha': 'b', 'name': 'test', 'status': 'completed', 'conclusion': 'success'}
-        responses = [[pr], {'total_count': 1, 'check_runs': [check]}, {'total_count': 0}]
-        with patch.object(api, 'get', side_effect=responses): api.gate('b', {'pr': 1, 'requiredChecks': ['test']})
-        for field, value in [('head_sha', 'head'), ('conclusion', 'failure'), ('status', 'queued')]:
+        pr = {'number': 1, 'merged_at': 'now', 'merge_commit_sha': 'b', 'base': {'ref': 'main'}, 'head': {'sha': 'h'}}
+        check = {'head_sha': 'h', 'name': 'test', 'status': 'completed', 'conclusion': 'success'}
+        spec = dict(check, head_sha='b', name='process-check')
+        admission = {'pr': 1, 'headSha': 'h', 'requiredChecks': ['test']}
+        responses = [[pr], {'total_count': 1, 'check_runs': [check]}, {'total_count': 1, 'check_runs': [spec]}, {'total_count': 0}]
+        with patch.object(api, 'get', side_effect=responses): api.gate('b', admission)
+        for field, value in [('head_sha', 'old'), ('conclusion', 'failure'), ('status', 'queued')]:
             with self.subTest(field=field), patch.object(api, 'get', side_effect=[
                 [pr], {'total_count': 1, 'check_runs': [dict(check, **{field: value})]}]):
-                with self.assertRaisesRegex(agent.Blocked, 'CI_NOT_GREEN'):
-                    api.gate('b', {'pr': 1, 'requiredChecks': ['test']})
+                with self.assertRaises(agent.Blocked): api.gate('b', admission)
+        with patch.object(api, 'get', side_effect=[[pr], {'total_count': 1, 'check_runs': [check]}, {'total_count': 0, 'check_runs': []}]):
+            with self.assertRaisesRegex(agent.Blocked, 'MERGE_SPEC_KIT'): api.gate('b', admission)
 
 
 if __name__ == '__main__': unittest.main()

@@ -67,7 +67,7 @@ def private_file(path):
     need(not any(p.is_symlink() for p in (path, *path.parents)), 'PRIVATE_PATH_SYMLINK')
     st = path.stat()
     if os.name == 'posix':
-        need(st.st_uid == 0 and st.st_mode & 0o077 == 0, 'PRIVATE_FILE_PERMISSIONS')
+        need(st.st_uid in (0, os.geteuid()) and st.st_mode & 0o037 == 0, 'PRIVATE_FILE_PERMISSIONS')
     return path.read_bytes()
 
 
@@ -132,10 +132,7 @@ class GitHub:
             need(len(raw) <= 4 * 1024 * 1024, 'GITHUB_RESPONSE_LIMIT')
             return json.loads(raw)
 
-    def gate(self, sha, admission):
-        prs = self.get('/commits/' + sha + '/pulls')
-        need(any(p['number'] == admission['pr'] and p.get('merged_at') and
-                 p['merge_commit_sha'] == sha and p['base']['ref'] == 'main' for p in prs), 'PR_MERGE_LINK')
+    def checks(self, sha):
         checks = []
         for page in range(1, 21):
             data = self.get('/commits/' + sha + '/check-runs?per_page=100&page=' + str(page))
@@ -144,12 +141,31 @@ class GitHub:
                 break
         else:
             raise Blocked('CHECKS_PAGE_LIMIT')
-        # Require checks for the MERGE SHA, never borrow head-branch checks.
-        need(checks and all(c['head_sha'] == sha and c['status'] == 'completed' and
-                            c['conclusion'] == 'success' for c in checks), 'CI_NOT_GREEN')
+        # Reruns supersede old attempts with the same app/name.
+        latest = {}
+        for check in checks:
+            identity = (check.get('app', {}).get('id'), check['name'])
+            if check.get('id', 0) >= latest.get(identity, {}).get('id', -1):
+                latest[identity] = check
+        return list(latest.values())
+
+    def gate(self, sha, admission):
+        prs = self.get('/commits/' + sha + '/pulls')
+        matches = [p for p in prs if p['number'] == admission['pr'] and p.get('merged_at') and
+                   p['merge_commit_sha'] == sha and p['base']['ref'] == 'main']
+        need(len(matches) == 1, 'PR_MERGE_LINK')
+        head = matches[0]['head']['sha']
+        need(head == admission.get('headSha'), 'ACCEPTED_PR_HEAD_CHANGED')
+        checks = self.checks(head)
         required = set(admission.get('requiredChecks', []))
         need(required and required <= {c['name'] for c in checks}, 'REQUIRED_CHECKS_MISSING')
-        status = self.get('/commits/' + sha + '/status')
+        need(checks and all(c['head_sha'] == head and c['status'] == 'completed' and
+                            c['conclusion'] in ('success', 'neutral', 'skipped') for c in checks), 'PR_CI_NOT_GREEN')
+        need(all(c['conclusion'] == 'success' for c in checks if c['name'] in required), 'REQUIRED_CHECK_FAILED')
+        merge = self.checks(sha)
+        spec = [c for c in merge if c['name'] == 'process-check' and c['head_sha'] == sha]
+        need(spec and all(c['status'] == 'completed' and c['conclusion'] == 'success' for c in spec), 'MERGE_SPEC_KIT_NOT_GREEN')
+        status = self.get('/commits/' + head + '/status')
         need(status.get('total_count', 0) == 0 or status['state'] == 'success', 'COMMIT_STATUS_FAILED')
 
 
@@ -170,8 +186,10 @@ class Engine:
         if state.get('phase') in ('stopping', 'backing_up', 'switching', 'checking', 'rolling_back'):
             # Journal is committed before ANY mutation. Unknown operations are not replayed.
             self.rollback(state, recovery=True)
-        elif state.get('phase') in ('prepared', 'build_failed', 'rollback_failed'):
-            raise Blocked('INTERRUPTED_RELEASE_NEEDS_REVIEW')
+        elif state.get('phase') == 'prepared':
+            self.advance(state['plan'], 'skipped', 'INTERRUPTED_BUILD')
+        elif state.get('phase') == 'rollback_failed':
+            raise Blocked('ROLLBACK_NEEDS_REVIEW')
 
     def rollback(self, state=None, recovery=False):
         if state is None:
@@ -181,8 +199,15 @@ class Engine:
         state['phase'] = 'rolling_back'
         self.save(state)
         try:
+            self.backend.stop(state['plan'])
+            state['restoreDatabase'] = bool(state['plan'].get('hasMigration') and state.get('backupComplete') and
+                                            state.get('migrationAttempted') and not state.get('trafficReturned', True))
+            if state['restoreDatabase']:
+                self.backend.restore_databases(state['plan'])
             self.backend.restore(state['previous'], state['plan'])
             self.backend.health()
+            if hasattr(self.backend, 'return_traffic'):
+                self.backend.return_traffic(state['plan'])
         except Exception:
             state['phase'] = 'rollback_failed'
             self.save(state)
@@ -190,25 +215,27 @@ class Engine:
         state['phase'] = 'rolled_back'
         state['failedSha'] = state['plan']['sha']
         state['current'] = state['previous']['sha']
+        state['cursor'] = state['plan']['sha']
         state['recovered'] = recovery
         # Never restore an old SQLite over new requests. Images must accept forward data.
-        state['dataPolicy'] = 'preserve-forward-data'
+        state['dataPolicy'] = 'restore-pretraffic-snapshot' if state.get('restoreDatabase') else 'preserve-forward-data'
+        state['needsDatabaseDecision'] = bool(state.get('trafficReturned') and state['plan'].get('hasMigration'))
+        self.record(state)
         self.save(state)
 
     def deploy(self, plan):
         state = self.state()
-        need(state['phase'] in ('idle', 'verified'), 'QUEUE_HALTED')
-        need(plan['parent'] == state['current'], 'OUT_OF_ORDER')
+        need(state['phase'] in ('idle', 'verified', 'rolled_back', 'build_failed', 'skipped', 'no_release', 'site_deferred'), 'QUEUE_HALTED')
+        need(plan['parent'] == state.get('cursor', state['current']), 'OUT_OF_ORDER')
         previous = self.backend.capture(state['current'], plan)
-        state.update(plan=plan, previous=previous, phase='prepared')
+        state.update(plan=plan, previous=previous, phase='prepared', trafficReturned=False,
+                     backupComplete=False, migrationAttempted=False, needsDatabaseDecision=False)
         self.save(state)
         try:
             self.backend.build(plan)
         except Exception:
-            state['phase'] = 'build_failed'
-            self.save(state)
+            self.advance(plan, 'build_failed', 'BUILD_FAILED_NO_SWITCH')
             raise Blocked('BUILD_FAILED_NO_SWITCH') from None
-        # build_failed is deliberately halted until explicit re-admission.
         try:
             state['phase'] = 'stopping'
             self.save(state)
@@ -216,18 +243,44 @@ class Engine:
             state['phase'] = 'backing_up'
             self.save(state)
             self.backend.backup(plan)
+            state['backupComplete'] = True
             state['phase'] = 'switching'
+            self.save(state)
+            # Without a real closed-traffic barrier, be conservative before up:
+            # even crash during startup may have accepted customer writes.
+            closed = self.backend.traffic_is_closed(plan) if hasattr(self.backend, 'traffic_is_closed') else False
+            state['trafficReturned'] = not closed
+            state['migrationAttempted'] = bool(plan.get('hasMigration'))
             self.save(state)
             self.backend.switch(plan)
             state['phase'] = 'checking'
             self.save(state)
             self.backend.health()
+            # Journal BEFORE opening the gate: an unknown open result preserves data.
+            state['trafficReturned'] = True
+            self.save(state)
+            if closed:
+                self.backend.return_traffic(plan)
         except Exception:
             self.rollback(state)
             raise Blocked('RELEASE_ROLLED_BACK') from None
-        state.update(phase='verified', current=plan['sha'], verifiedAt=time.time(), reported=False)
+        state.update(phase='verified', current=plan['sha'], cursor=plan['sha'], verifiedAt=time.time(), reported=False)
         self.backend.commit(plan)
         self.save(state)
+        atomic(self.directory / 'last-verified.json', state)
+        self.record(state)
+
+    def record(self, state):
+        plan = state.get('plan', {})
+        if plan.get('sha'):
+            atomic(self.directory / 'history' / (plan['sha'] + '-' + state['phase'] + '.json'), state)
+
+    def advance(self, plan, outcome, reason=''):
+        state = self.state()
+        need(plan['parent'] == state.get('cursor', state['current']), 'OUT_OF_ORDER')
+        state.update(phase=outcome, cursor=plan['sha'], plan=plan, reason=reason)
+        self.save(state)
+        self.record(state)
 
 
 class ComposeBackend:
@@ -275,14 +328,74 @@ class ComposeBackend:
             need(all(m.isfile() or m.isdir() for m in bundle.getmembers()), 'SOURCE_LINK')
             bundle.extractall(tree, filter='data')
         recipe = json.loads(private_file(self.c['recipe']))
+        build_recipe = json.loads(private_file(self.c.get('buildRecipe', self.c['recipe'])))
         for name in plan['services']:
-            directory = self.c['services'][name]['context']
-            tag = 'synapse-release-' + name + ':' + plan['sha']
-            command(['docker', 'build', '--tag', tag, str(tree / directory)], timeout=240)
+            spec = build_recipe['services'][name].get('build', self.c['services'][name].get('build',
+                                                    {'context': self.c['services'][name]['context']}))
+            spec = {'context': spec} if isinstance(spec, str) else dict(spec)
+            original = Path(spec['context'])
+            if original.is_absolute():
+                need(original.is_relative_to(Path(self.c['checkout'])), 'BUILD_CONTEXT_ESCAPE')
+                original = original.relative_to(Path(self.c['checkout']))
+            context = (tree / original).resolve()
+            need(context.is_relative_to(tree.resolve()), 'BUILD_CONTEXT_ESCAPE')
+            spec['context'] = str(context)
+            dockerfile = spec.get('dockerfile', 'Dockerfile')
+            if Path(dockerfile).is_absolute():
+                need(Path(dockerfile).is_relative_to(Path(self.c['checkout'])), 'DOCKERFILE_ESCAPE')
+                dockerfile = str(tree / Path(dockerfile).relative_to(Path(self.c['checkout'])))
+                spec['dockerfile'] = dockerfile
+            need((context / dockerfile).resolve().is_relative_to(tree.resolve()), 'DOCKERFILE_ESCAPE')
+            build_recipe['services'][name]['build'] = spec
+            build_recipe['services'][name]['image'] = 'synapse-release-' + name + ':' + plan['sha']
+        build_path = area / 'build.json'
+        atomic(build_path, build_recipe)
+        self.compose(build_path, 'build', *plan['services'])
+        for name in plan['services']:
+            tag = build_recipe['services'][name]['image']
             image = json.loads(command(['docker', 'image', 'inspect', tag]))[0]['Id']
             recipe['services'][name]['image'] = image
             recipe['services'][name].pop('build', None)
         atomic(area / 'candidate.json', recipe)
+
+    def traffic_is_closed(self, plan):
+        # No pretend barrier: only an actual configured broker gate can establish this.
+        if not self.c.get('trafficGate'):
+            return False
+        self.gate('close', plan)
+        return True
+
+    def gate(self, operation, plan):
+        raise Blocked('TRAFFIC_GATE_REQUIRES_BROKER')
+
+    def return_traffic(self, plan):
+        if self.c.get('trafficGate'):
+            self.gate('open', plan)
+
+    def restore_databases(self, plan):
+        manifest = load(self.area(plan) / 'backups.json')
+        for name in plan['writers']:
+            for i, db in enumerate(self.c['services'][name].get('databases', [])):
+                snapshot = self.area(plan) / (name + '-' + str(i) + '.sqlite')
+                need(hashlib.sha256(snapshot.read_bytes()).hexdigest() == manifest[name + ':' + str(i)], 'SNAPSHOT_HASH')
+                # Writers and ingress MUST still be closed. Keep failed DB, WAL and SHM.
+                target = Path(db)
+                for suffix in ('', '-wal', '-shm'):
+                    old = Path(str(target) + suffix)
+                    if old.exists():
+                        saved = self.area(plan) / (name + '-' + str(i) + '-failed' + suffix)
+                        need(not saved.exists(), 'RESTORE_ALREADY_ATTEMPTED')
+                        shutil.copy2(old, saved)
+                replacement = target.with_name(target.name + '.release-restore')
+                need(not replacement.exists(), 'RESTORE_UNKNOWN')
+                shutil.copy2(snapshot, replacement)
+                with open(replacement, 'rb') as stream:
+                    os.fsync(stream.fileno())
+                for suffix in ('-wal', '-shm'):
+                    old = Path(str(target) + suffix)
+                    if old.exists():
+                        old.rename(self.area(plan) / (name + '-' + str(i) + '-retained' + suffix))
+                os.replace(replacement, target)
 
     def stop(self, plan):
         self.compose(self.c['recipe'], 'stop', *plan['writers'])
@@ -331,43 +444,51 @@ class ComposeBackend:
 
 
 def make_plan(config, admission, changed):
-    services = set()
+    services, deferred = set(), []
     for path in changed:
         matches = [name for name, value in config['services'].items()
                    if path.startswith(value['context'].rstrip('/') + '/')]
-        need(matches, 'UNSUPPORTED_PATH_REQUIRES_REVIEW')
         services.update(matches)
-    need(services, 'NO_RUNTIME_CHANGES')
-    # Explicit data-writer closure is root-owned, includes consumers of shared DBs.
+        if path.startswith('sites/'):
+            deferred.append(path)
     writers = set(services)
     for name in services:
         writers.update(config['services'][name].get('writers', []))
     need(writers <= config['services'].keys(), 'UNKNOWN_WRITER')
-    return dict(admission, services=sorted(services), writers=sorted(writers))
+    return dict(admission, services=sorted(services), writers=sorted(writers),
+                deferredSites=deferred, outcome='runtime' if services else 'site_deferred' if deferred else 'no_release')
 
 
-def report_terminal(state, outbox, expected_sha=None):
+def report_terminal(state, outbox, expected_sha=None, flush=True):
     plan = state.get('plan', {})
-    if (state.get('phase') in ('verified', 'rolled_back') and plan and
+    if (state.get('phase') in ('verified', 'rolled_back', 'build_failed', 'skipped', 'no_release', 'site_deferred') and plan and
             (expected_sha is None or plan.get('sha') == expected_sha)):
         outbox.enqueue(plan['taskId'], plan['sha'],
-                       'connected' if state['phase'] == 'verified' else 'rolled_back')
-    outbox.flush()
+                       'connected' if state['phase'] == 'verified' else state['phase'])
+        if state.get('needsDatabaseDecision'):
+            outbox.enqueue(plan['taskId'], plan['sha'], 'database_decision')
+    if flush:
+        outbox.flush()
 
 
 def tick(config):
     from board import Board, Outbox
-    engine = Engine(config['stateDir'], ComposeBackend(config))
+    from broker import BrokerBackend
+    backend = BrokerBackend(config) if config.get('brokerSocket') else ComposeBackend(config)
+    engine = Engine(config['stateDir'], backend)
     board = Board(config['boardUrlFile'])
     outbox = Outbox(Path(config['stateDir']) / 'outbox.json', board)
     with release_lock(config['lock']):
         engine.recover()
         state = engine.state()
         # Rebuild outbox from durable transaction journal after crash, before next PR.
-        report_terminal(state, outbox)
-        need(state['phase'] in ('idle', 'verified'), 'QUEUE_HALTED')
+        for receipt in sorted((Path(config['stateDir']) / 'history').glob('*.json')):
+            report_terminal(load(receipt), outbox, flush=False)
+        report_terminal(state, outbox, flush=False)
+        outbox.flush()
+        need(state['phase'] in ('idle', 'verified', 'rolled_back', 'build_failed', 'skipped', 'no_release', 'site_deferred'), 'QUEUE_HALTED')
         command(['git', '-C', config['mirror'], 'fetch', '--quiet', 'origin', 'main'])
-        current = state['current']
+        current = state.get('cursor', state['current'])
         command(['git', '-C', config['mirror'], 'merge-base', '--is-ancestor', current, 'origin/main'])
         commits = command(['git', '-C', config['mirror'], 'rev-list', '--first-parent', '--reverse',
                            current + '..origin/main']).decode().split()
@@ -375,16 +496,35 @@ def tick(config):
             return
         sha = commits[0]
         need(bool(re.fullmatch('[a-f0-9]{40}', sha)), 'COMMIT_FORMAT')
-        admission_path = Path(config['admissions']) / (sha + '.json')
-        need(admission_path.exists(), 'WAITS_AUTHENTICATED_ADMISSION')
-        admission = verify_admission(json.loads(private_file(admission_path)),
-                                     private_file(config['admissionKey']), sha, current)
-        GitHub(config['repository']).gate(sha, admission)
-        board.acceptance(admission, config['repository'])
         changed = command(['git', '-C', config['mirror'], 'diff', '--name-only', '-z', current, sha]).decode().split('\0')
+        classification = make_plan(config, {'sha': sha, 'parent': current, 'taskId': config.get('taskId', 55)}, [p for p in changed if p])
+        if classification['outcome'] != 'runtime':
+            engine.advance(classification, classification['outcome'])
+            report_terminal(engine.state(), outbox, expected_sha=sha)
+            return
+        admission_path = Path(config['admissions']) / (sha + '.json')
+        if config.get('brokerSocket'):
+            try:
+                admission = backend.invoke('verify', sha=sha, parent=current)
+            except Exception:
+                admission = backend.invoke('admit', sha=sha, parent=current)
+        else:
+            if not admission_path.exists():
+                from issuer import issue
+                issue(config, sha, current)
+            admission = verify_admission(json.loads(private_file(admission_path)),
+                                         private_file(config['admissionKey']), sha, current)
+        GitHub(config['repository']).gate(sha, admission)
+        # A valid signed admission is cached proof; reporting/board outages do not veto it.
         plan = make_plan(config, admission, [p for p in changed if p])
+        if plan['outcome'] == 'runtime':
+            cumulative = command(['git', '-C', config['mirror'], 'diff', '--name-only', '-z', state['current'], sha]).decode().split('\0')
+            plan = make_plan(config, admission, [p for p in cumulative if p])
         try:
-            engine.deploy(plan)
+            if plan['outcome'] == 'runtime':
+                engine.deploy(plan)
+            else:
+                engine.advance(plan, plan['outcome'])
         finally:
             state = engine.state()
             report_terminal(state, outbox, expected_sha=sha)
@@ -393,17 +533,50 @@ def tick(config):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', required=True)
+    parser.add_argument('--rollback', action='store_true')
+    parser.add_argument('--expected-sha')
+    parser.add_argument('--request-id')
     args = parser.parse_args()
     os.umask(0o077)
     try:
         config = json.loads(private_file(args.config))
-        tick(config)
+        if args.rollback:
+            rollback_command(config, args.expected_sha, args.request_id)
+        else:
+            tick(config)
         print('RELEASE_TICK_OK')
     except Exception as error:
         # Only fixed internal codes; neither exception text nor subprocess output.
         print('RELEASE_WAIT ' + (str(error) if isinstance(error, Blocked) else 'UNCONFIRMED'))
         return 1
     return 0
+
+
+def rollback_command(config, expected_sha, request_id):
+    from broker import BrokerBackend
+    need(expected_sha and re.fullmatch('[a-f0-9]{40}', expected_sha), 'ROLLBACK_EXPECTED_SHA')
+    need(request_id and re.fullmatch('[A-Za-z0-9_-]{1,100}', request_id), 'ROLLBACK_REQUEST_ID')
+    backend = BrokerBackend(config) if config.get('brokerSocket') else ComposeBackend(config)
+    engine = Engine(config['stateDir'], backend)
+    with release_lock(config['lock']):
+        done = Path(config['stateDir']) / 'commands' / (request_id + '.json')
+        if done.exists():
+            need(load(done)['sha'] == expected_sha, 'ROLLBACK_REQUEST_REUSED')
+            need(load(done)['state'] == 'done', 'ROLLBACK_RESULT_UNCONFIRMED')
+            return
+        current = engine.state()
+        need(current['current'] == expected_sha, 'ROLLBACK_STALE_SHA')
+        last = load(Path(config['stateDir']) / 'last-verified.json')
+        need(last['current'] == expected_sha, 'ROLLBACK_NOT_LAST_RELEASE')
+        atomic(done, {'sha': expected_sha, 'state': 'unknown'})
+        last['cursor'] = current.get('cursor', current['current'])
+        last['trafficReturned'] = True  # manual rollback always preserves new data
+        cursor = last['cursor']
+        engine.rollback(last)
+        state = engine.state()
+        state['cursor'] = cursor
+        engine.save(state)
+        atomic(done, {'sha': expected_sha, 'state': 'done'})
 
 
 if __name__ == '__main__':

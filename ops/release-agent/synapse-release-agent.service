@@ -6,14 +6,17 @@ ConditionPathExists=/etc/synapse/release-agent/accepted-config.json
 
 [Service]
 Type=oneshot
-User=root
+User=synapse-release
+Group=synapse-release
 UMask=0077
 ExecStart=/usr/bin/python3 /opt/synapse-release-agent/agent.py --config /etc/synapse/release-agent/accepted-config.json
 TimeoutStartSec=12min
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
-ProtectSystem=full
-ReadWritePaths=/opt/synapse /opt/synapse-release-agent /var/lib/synapse-release-agent /etc/synapse/release-agent
+ProtectSystem=strict
+ReadOnlyPaths=/opt/synapse /opt/synapse-release-agent /etc/synapse/release-agent
+ReadWritePaths=/var/lib/synapse-release-agent /opt/synapse/.palitra-app-release.lock
+RuntimeDirectory=synapse-release-worker
 StandardOutput=journal
 StandardError=null

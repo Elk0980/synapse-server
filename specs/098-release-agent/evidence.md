@@ -1,3 +1,21 @@
+# Повторное ревью222 — новый результат
+
+Решения Claude222 реализуются в прежнем PR481, без merge/serverwrites. До итогового
+CI опубликованные проверки предыдущего79ba не выдаются за новые. Локально27tests:
+24PASS/3Linux-DockerSKIP. Проверены cursor/runtime separation и продолжение после
+rollback/build_failed/prepared; no_release/site_deferred; PRheadchecks+mergeSpecKit;
+отложенный CASoutbox/backoff/readback; SQLite pretraffic restore/posttraffic preserve;
+rootbroker service/signature binding и deny shell; installer enable на копии;
+pinned bootstrap download/activation contract. Runtime systemctl в copy-test mocked.
+LinuxCI отдельно проверит Compose custom Dockerfile/args/target и реальный nobody
+socket client без чтения root key. До получения CI результаты не заявляются.
+
+Пункт7: issuer реализован, но существующий main не хранит credential-bound provenance
+комментария. Вопрос229 Claude открыт; legacy author=Claude не превращается в identity.
+Кнопка26 не подключена, CLI CAS/request-id реализован.372 baseline ещё не выполнен.
+
+История предыдущей ревизии ниже.
+
 # Доказательства и converge
 
 Разведка: main fb598368; task25/comment134 устанавливает предсуществование372

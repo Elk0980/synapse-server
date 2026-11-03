@@ -1,100 +1,118 @@
-# №55 — выпускающий агент, кандидат для ревью
+# №55 — выпускающий агент, PR481
 
-**Не установлен. Не включать на production. Полная приёмка №55 не выполнена.**
-Ветка `codex/release-agent-20261103` от main `fb598368`. Выпуски478/477,
-ключи, права и уведомления эта работа не меняет. Старый sync не включается.
+Кандидат после ревью Claude222. На production НЕ установлен; сервер478/477,
+legacy-sync, клиентские данные, ключи и уведомления эта работа не меняет.
 
-## Проверенная часть
+## Поведение после ревью
 
-`agent.py`: исходящий polling first-parent main, один коммит за проход,
-exact merge SHA CI, обязательные имена checks, PR/commit linkage, HMAC admission
-для точного SHA/parent/task/reviewer/срока/совместимости/recipe digest.
-Общая существующая lock `/opt/synapse/.palitra-app-release.lock`.
-Журнал fsync до мутаций, остановка явного набора writers, `VACUUM INTO`,
-integrity/FK, адресная сборка выбранных сервисов с тегом SHA и переключение
-по immutable image ID на основе **полного принятого managed Compose recipe**.
-Health проверяет заданные read-only адреса, в том числе старые ресурсы.
-Любая ошибка после stop откатывает прежние образы. Сбой самого отката
-останавливает очередь; после crash фаза восстанавливается из журнала.
+1. `cursor` — последний обработанный main-коммит; `current` — реально работающий.
+   Build failure, прерванный prepared и успешный rollback продвигают только cursor.
+   Исправляющий PR после них собирается из нового полного дерева. Настоящий
+   rollback_failed остаётся аварией: продолжать поверх неизвестного runtime нельзя.
+2. Документы/specs/AI_HANDOFF и другие изменения вне сервисов отмечаются
+   «выпуск не требуется» без ожидания admission. sites/** отмечаются как отложенный
+   отдельный выпуск57; worker не публикует их из мастерской. Инфраструктура/статика
+   не применяются автоматически. Смешанный PR собирает только разрешённые сервисы.
+3. Проверяются зелёные checks exact PR head, вошедшего в merge, и отдельно
+   process-check/spec-kit на merge SHA. Выбран этот вариант: существующие workflows
+   запускают сервисные проверки на PR, а на main гарантирован только Spec Kit.
+   Новая попытка check supersedes старую по app/name/id; required checks должны
+   иметь именно success. Список requiredChecks задаётся принятым приватным конфигом.
+4. Сборка через `docker compose build <только выбранные сервисы>` сохраняет context,
+   dockerfile, args и target принятого build recipe. Context переносится в отдельное
+   дерево exact SHA. Контейнеры используют immutable image ID, окружение/mounts
+   из полного фактического managed recipe. Нет общего compose up/build или reset.
+5. До stop/build/switch записывается fsync-журнал. SQLite VACUUM INTO/integrity/FK.
+   Снимки НЕ удаляются агентом: срок хранения минимум7 дней, по умолчанию бессрочно.
+6. При миграции и health failure ДО возврата трафика снимок восстанавливается
+   автоматически, только если реальный root gate подтвердил закрытие и все writers
+   остановлены. Старые DB/WAL/SHM сохраняются в приватной area перед восстановлением.
+   Без доказанного gate startup считается возвратом трафика ещё ДО up: новые данные
+   никогда не заменяются старым снимком. Поздний сбой откатывает images и сохраняет
+   blocker «ждёт Влада: восстановить БД из сохранённого снимка?» с SHA area.
+7. Outbox хранит несколько событий, повторяет с exponential backoff. Ошибка доски
+   не выбрасывается в выпуск. Отчёты используют revision CAS и readback; нет слепого
+   повтора комментария. На проход ограничено число попыток. Cached signed admission
+   позволяет выпуск при недоступной доске; отсутствие самой доказанной приёмки
+   по-прежнему безопасно ждёт, а не выдаёт разрешение без источника.
 
-Снимки SQLite сохраняются. Старую БД нельзя автоматически писать поверх
-принятых после старта запросов. Откат образов сохраняет forward-данные;
-только совместимость, подтверждённая приёмкой, допускает выпуск.
-Восстановление БД и необратимые миграции требуют отдельного проекта процедуры
-с закрытым входом записей. «Резервная копия создана» не равно проверке такого восстановления.
+## Права
 
-Команды запускаются массивами аргументов, stdout/stderr дочерних процессов
-не попадают в журнал. Приватные конфигурация, admission key, recipes, backups,
-inventory — вне git, только root, каталоги700/файлы600. Ключ приёмки здесь
-не генерируется; существующие ключи не изменяются. Сервис не слушает порт.
+Worker `synapse-release` без login, root, sudoers и docker group. Код в
+/opt/synapse-release-agent только чтение, /opt/synapse только чтение, кроме доступа
+к существующему inode общей flock. Собственный журнал/mirror в /var/lib/synapse-release-agent.
 
-## Что требуется до боевого включения
+Локальный socket-activated root broker — граница привилегий, а не root worker.
+Он принимает фиксированные typed операции для root-config allowlist сервисов.
+Нет shell/произвольных argv/compose paths/mounts/DB paths от вызывающего.
+Сервисы/parent/SHA/PR/head/task/migration/recipe digest закреплены подписанным receipt.
+Предыдущий recipe берётся из root-owned capture, не из запроса worker. Подписывающий
+локальный ключ root-only; существующие внешние ключи не меняются. Runtime операции
+по умолчанию недоступны без receipt. Gate — отдельно принятый root-owned executable
+с командами close/open; без него восстановление БД запрещено. Сам broker не даёт
+агенту право на другие сервисы. Изоляция Docker daemon — его штатная root граница.
 
-1. Завершение чужого478/477 и свежая проверка свободного общего ресурса.
-2. Полный приватный снимок checkout, актуального managed recipe/env/images,
-   bind mounts, SQLite с закрытыми writers. Не путать tar живой БД с согласованной копией.
-3. Поимённый inventory **копии**: `python3 audit.py --snapshot /private/copy --report /private/inventory.json`.
-   Проверить каждую строку: managed source → review/PR, секреты/данные → private
-   layer, unknown → ожидание решения. Снимок сохраняется; reset/stash/delete
-   не выполняются. 372 — историческое число; фактическое число может измениться.
-4. Доказать соответствие clean main всем runtime/bind/static данным, включая
-   принятые overlays, старые записи, открытые сессии и старые URL ресурсов.
-   Только после этого начальный `state.json` с current=этот фактический SHA.
-   `reconciled:true` нельзя ставить на основании наличия файла.
-5. Подключить аутентифицированный admission issuer и доску (контракт ниже).
-   Сейчас комментарий `task_comment.author` — произвольная строка вызывающего:
-   доверять ей как удостоверению Claude небезопасно. Подписанный receipt в этом
-   кандидате — интерфейс к будущему issuer, а не уже работающая интеграция.
-6. Доделать stаtic/Caddy/Compose/self-update: сейчас неизвестные пути блокируются,
-   а не развёртываются частично. Автовыпуск runtime не означает обновление всей площадки.
-7. Тест на Docker-копии фактического recipe, затем приёмка Claude:
-   два PR, failing PR/rollback ≤5мин, реальные CRM/MCP/cabinet/sites, кнопка,
-   connected receipt, восстановление старой страницы, сохранность данных.
+## Издатель admission и фактический блокер229
 
-## Контракт интеграции с владельцем №26
+`issuer.py` находит merged PR и связанную ссылкой задачу, читает комментарий
+«КОД ПРИНЯТ», содержащий exact PR head SHA, и agents registry. Принимается только
+серверный identity stamp {verified:true, agentId, credentialId}, где kind=claude,
+а credential соответствует root-owned reviewerCredentials. Строка author не используется
+как удостоверение. Принятый receipt кэшируется; root key не передаётся worker.
+Необратимая миграция требует authenticated owner «ОТВЕТ: да» с exact merge SHA;
+до него выставляется blocker «ждёт Влада».
 
-Не изменять общий router/board параллельно исполнителю26. Нужен узкий endpoint
-приёмки с серверной аутентификацией reviewer (Claude/Влад), привязкой PR↔task,
-exact merged SHA и проверкой актуальной стадии code. После слияния issuer
-формирует подписанный `body`:
+**В текущем main task_comments не содержит такого stamp.** agent_access хранит
+owner/projects, а MCP передаёт общую Owner identity. Автоматически приписать legacy
+комментарий Claude нельзя. Реальный issuer будет ждать WAITS_AUTHENTICATED_CLAUDE_COMMENT
+до подключения доверенного provenance producer. Вопрос229 в55 направлен Claude:
+нужен его владелец и контракт в общих CRM/MCP файлах. Этот блокер не замаскирован
+зелёными fixture-тестами. Наличие issuer.py НЕ означает подключённую приёмку.
 
-```json
-{"sha":"<40hex>","parent":"<40hex>","pr":1,"taskId":55,
- "reviewerRole":"claude","codeAccepted":true,"expires":0,
- "migration":"forward-compatible","reconciled":true,
- "recipeSha256":"<64hex>","requiredChecks":["release-agent"]}
+## Откат без повторной установки
+
+CLI того же пользователя, с CAS текущего SHA и durable request-id:
+
+```sh
+python3 /opt/synapse-release-agent/agent.py --config /etc/synapse/release-agent/accepted-config.json --rollback --expected-sha <текущий40hex> --request-id <уникальный-id>
 ```
 
-Подпись `HMAC-SHA256(key, canonical(body))`; canonical — UTF8 JSON с сортировкой
-ключей без пробелов (ensure_ascii=false). Шлюз должен сам получать эти факты,
-не подписывать произвольные поля от браузера. Рабочий root-secret не передавать
-в браузер, MCP, комментарии или репозиторий. `expires:0` в примере намеренно
-невалидно. Worker не умеет сам выдавать себе приёмку.
+Повтор завершённого request возвращает прежний результат, чужой SHA отклоняется,
+неизвестный результат требует readback. CLI сохраняет новые данные. Для кнопки26
+нужен серверный ACL owner/Claude+CSRF и вызов этого фиксированного контракта после
+аутентификации. Общий router/board26 не изменены; кнопка пока не подключена.
 
-После health `board.py` доставляет идемпотентное событие `release:<sha>:connected`
-на доску с taskId, SHA, временем и health evidence через существующий исходящий MCP.
-Транспорт проверен fixture-тестами; live credentials и доска production не подключались.
-Потеря ответа не повторяет выпуск. Outbox сохраняется отдельно от current;
-при неизвестном результате сверяется вся пагинация комментариев/текущая стадия,
-без подтверждённого readback повторная запись блокируется.
-Кнопка отката: POST с CSRF, server-side ACL owner/конкретный Claude principal,
-CAS `expectedCurrentSha`, одноразовый requestId; команда durable и адресована
-только последнему verified release. Агент получает её исходящим запросом,
-берёт общую lock, повторно сверяет SHA, выполняет Engine.rollback и возвращает
-квитанцию. UI не выдаёт постановку команды за выполненный откат. Данный контракт
-ещё требует подключения у владельца26; кнопка в этом PR не заявлена рабочей.
+## Одна команда установки после приёмки
 
-## Установка
+`bootstrap.py --commit <принятый40hex> --bundle <root-owned accepted-bundle.json>`
+полностью скачивает пакет из immutable SHA, затем ставит units и включает socket
+и таймер. `install.py --root <копия>` остаётся безопасной стадией теста. Активация
+проверяет acceptedByClaude/reconciled/initialSha; эти поля — утверждения из принятого
+root-owned baseline, их нельзя выставлять на основании наличия файла. Сам агент
+не очищает checkout372 и не придумывает initialSha. Конкретная строка с immutable SHA
+передаётся после публикации коммита, исполнять до приёмки нельзя.
 
-`install.py --root <копия>` проверяет весь список целей до записи, копирует
-только файлы своего пакета, сверяет SHA readback, запрещает перезапись и symlink.
-Таймер остаётся **неактивным**, accepted-config не создаётся. Служебная команда
-`python3 ops/release-agent/install.py` из immutable принятого checkout ставит
-только этот неактивный пакет. Это НЕ финальная команда запуска всей №55.
-Единую команду боевого bootstrap можно фиксировать только после решения пунктов
-1–7, принятого immutable SHA и проверки полного сценария на копии; сейчас
-выдавать её за «последнюю консоль» было бы неверно.
+Приватный bundle: worker и broker конфиги, initialSha, acceptedByClaude/reconciled.
+Фиксированные пути: worker state/mirror /var/lib/synapse-release-agent[/mirror],
+broker state/admissions/runtime.json /var/lib/synapse-release-broker,
+key /etc/synapse/release-agent/admission.key, socket /run/synapse-release/broker.sock.
+Broker config также задаёт baseline, полный recipe/buildRecipe, DB paths, health,
+repository, reviewerCredentials, requiredChecks и существующий boardUrlFile.
+Worker config содержит только metadata/config для исходящих запросов, root key не получает.
+Рецепты, credentials, manifests и bundle не входят в git. Installer копирует прежний
+report URL с группой только worker, не ротирует существующий ключ. Локальный HMAC
+для receipts создаётся один раз и не является новым доступом к внешнему сервису.
 
-Проверки: `python -m unittest discover -s ops/release-agent -v`.
-Windows пропускает flock; LinuxCI выполняет его и установку в одноразовый root.
-Браузер/консоль этой задачей не открывались, уборка чужих вкладок не требуется.
+## Проверка и остаток
+
+`python -m unittest discover -s ops/release-agent -v` + LinuxCI. Docker copy проверяет
+плохой image→health failure→image rollback и старую/новую SQLite, custom Dockerfile,
+build args/target. Отдельный CI запускает настоящий uid nobody против локального
+broker: разрешён typed verify, запрещён shell, root key не читается. Bootstrap/install
+tестируются на копии; внешние useradd/systemctl в copy-test записываются mock runner,
+поэтому это не доказательство запуска настоящего production systemd.
+
+Остаётся: доверенный producer comment identity229, ACL/UI26, production372 baseline,
+отдельный site publisher57, actual same-host copy/установка и приёмка≤5мин.
+Старые и новые данные/сеансы/URL должны проверяться после разрешённой установки.
+Никаких connected/accepted55 до этой проверки.
