@@ -41,6 +41,10 @@ test('child MCP exposes only own-task tools, no Owner launch/claim or cross-task
   assert.equal(f.calls.length,0);
   assert.equal((await f.call('task_get',{task_id:40,comments_offset:20})).isError,undefined);
   assert.equal(f.calls.length,1);
+  const range = await f.call('task_get',{task_id:40,comments_limit:100});
+  assert.equal(range.isError,true);
+  assert.match(range.content[0].text,/comments_limit.*от 1 до 20/);
+  assert.equal(f.calls.length,1,'невалидный лимит не отправляется вверх');
 });
 
 test('child MCP pins map selection and identity; sessions/documents cannot escape the run', async t => {

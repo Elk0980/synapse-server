@@ -8,7 +8,7 @@ const path=require('node:path');
 const {execFile}=require('node:child_process');
 const {promisify}=require('node:util');
 const execute=promisify(execFile);
-const {publishRun,githubRepo,safePath,publisherEnvironment}=require('./agent-launch-publisher');
+const {publishRun,githubRepo,safePath,validateAllowedPaths,publisherEnvironment}=require('./agent-launch-publisher');
 
 async function fixture(t) {
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'agent-publisher-test-'));
@@ -45,7 +45,11 @@ async function fixture(t) {
       assert.equal(args[0],'pr');
       assert.ok(args.includes('--repo'));
       assert.equal(args[args.indexOf('--repo')+1],'sample-owner/sample-project');
-      if(args[1]==='list')return {stdout:JSON.stringify(published?[{url:prUrl}]:[])};
+      if(args[1]==='list') {
+        assert.equal(args[args.indexOf('--json')+1],'url,isDraft');
+        assert.equal(args[args.indexOf('--base')+1],'main');
+        return {stdout:JSON.stringify(published?[{url:prUrl,isDraft:true}]:[])};
+      }
       assert.equal(args[1],'create');
       assert.ok(args.includes('--draft'));
       assert.equal(args[args.indexOf('--base')+1],'main');
@@ -57,7 +61,8 @@ async function fixture(t) {
     return execute(file,args,opts);
   };
   return {dir,repo,worktree,runId,taskId,branch,git,calls,execImpl,prUrl,
-    args:{repo,worktree,runId,taskId,branch,title:'PRIVATE INPUT TITLE'}};
+    args:{repo,worktree,runId,taskId,branch,title:'PRIVATE INPUT TITLE',code_only:true,
+      allowed_paths:['README.md','feature.js','feature.png','dependency','.gitignore','docs/']}};
 }
 
 test('trusted publisher commits a real worktree and creates one draft PR with fixed argv',async t=>{
@@ -79,6 +84,100 @@ test('trusted publisher commits a real worktree and creates one draft PR with fi
   }
   const push=f.calls.find(call=>call.file==='git'&&call.args.includes('push'));
   assert.deepEqual(push.args.slice(push.args.indexOf('push')),['push','--set-upstream','origin',`HEAD:refs/heads/${f.branch}`]);
+});
+
+test('publisher requires explicit trusted code scope and rejects malformed path permissions',async()=>{
+  for(const invalid of [undefined,[],['.'],['/'],['ops/../feature.js'],['ops//feature.js'],['ops/*'],['ops/?'],['ops/[a]'],
+    ['ops/{a}'],['ops\\feature.js'],['C:/feature.js'],['ops/\x00bad'],[' ops/'],Array(101).fill('ops/')]) {
+    assert.throws(()=>validateAllowedPaths(invalid),error=>error.code==='PUBLISH_SCOPE_INVALID');
+  }
+  assert.deepEqual(validateAllowedPaths(['README.md','ops/feature/']),['README.md','ops/feature/']);
+  const runId='bb7d7fc7-8fe5-46e4-ae88-e925beed0466', taskId=123;
+  const args={repo:path.resolve('sample-repo'),worktree:path.resolve('sample-tree'),runId,taskId,
+    branch:`codex/agent-task-${taskId}-${runId.slice(0,8)}`};
+  await assert.rejects(publishRun({...args,code_only:true}),error=>error.code==='PUBLISH_SCOPE_INVALID');
+  await assert.rejects(publishRun({...args,code_only:false,allowed_paths:['ops/']}),error=>error.code==='PUBLISH_SCOPE_INVALID');
+});
+
+test('publisher rejects staged changes outside frozen allowed paths without changing index or HEAD',async t=>{
+  const f=await fixture(t);
+  await fs.writeFile(path.join(f.worktree,'README.md'),'SAMPLE outside permitted source file\n');
+  await f.git(f.worktree,['add','README.md']);
+  const index=await f.git(f.worktree,['ls-files','--stage']), head=(await f.git(f.worktree,['rev-parse','HEAD'])).trim();
+  await assert.rejects(publishRun({...f.args,allowed_paths:['feature.js']},{execImpl:f.execImpl}),error=>error.code==='PUBLISH_SCOPE_VIOLATION');
+  assert.equal(await f.git(f.worktree,['ls-files','--stage']),index);
+  assert.equal((await f.git(f.worktree,['rev-parse','HEAD'])).trim(),head);
+  assert.ok(!f.calls.some(call=>call.file==='gh'||call.args.includes('add')||call.args.includes('push')));
+});
+
+test('publisher rejects historical paths outside frozen scope even after the files are removed',async t=>{
+  const f=await fixture(t);
+  await fs.writeFile(path.join(f.worktree,'outside.js'),'module.exports = 1;\n');
+  await f.git(f.worktree,['add','outside.js']);
+  await f.git(f.worktree,['commit','-m','SAMPLE outside scope']);
+  await fs.unlink(path.join(f.worktree,'outside.js'));
+  await f.git(f.worktree,['commit','-am','SAMPLE outside removal']);
+  const head=(await f.git(f.worktree,['rev-parse','HEAD'])).trim();
+  await assert.rejects(publishRun({...f.args,allowed_paths:['feature.js']},{execImpl:f.execImpl}),error=>error.code==='PUBLISH_SCOPE_VIOLATION');
+  assert.equal((await f.git(f.worktree,['rev-parse','HEAD'])).trim(),head);
+  assert.ok(!f.calls.some(call=>call.file==='gh'||call.args.includes('add')||call.args.includes('push')));
+});
+
+test('publisher rejects a merge commit that alone introduces an outside binary blob',async t=>{
+  const f=await fixture(t);
+  const parent=(await f.git(f.worktree,['rev-parse','HEAD'])).trim();
+  const baselineTree=(await f.git(f.worktree,['rev-parse','HEAD^{tree}'])).trim();
+  const secondary=(await f.git(f.worktree,['commit-tree',baselineTree,'-p',parent,'-m','SAMPLE empty secondary parent'])).trim();
+  await fs.writeFile(path.join(f.worktree,'outside.png'),Buffer.from([0,1,2,3,4,5]));
+  await f.git(f.worktree,['add','outside.png']);
+  const mergeTree=(await f.git(f.worktree,['write-tree'])).trim();
+  const merge=(await f.git(f.worktree,['commit-tree',mergeTree,'-p',parent,'-p',secondary,'-m','SAMPLE merge-only binary'])).trim();
+  await f.git(f.worktree,['reset','--hard',merge]);
+  assert.equal((await f.git(f.worktree,['diff-tree','--no-commit-id','--name-only','-r',secondary])).trim(),'');
+  assert.ok((await f.git(f.worktree,['ls-tree','HEAD','outside.png'])).includes('outside.png'));
+  assert.equal((await f.git(f.worktree,['status','--porcelain'])).trim(),'');
+  await assert.rejects(publishRun({...f.args,allowed_paths:['feature.js']},{execImpl:f.execImpl}),error=>error.code==='PUBLISH_MERGE_REJECTED');
+  assert.equal((await f.git(f.worktree,['rev-parse','HEAD'])).trim(),merge);
+  assert.ok(!f.calls.some(call=>call.file==='gh'||call.args.includes('add')||call.args.includes('push')));
+});
+
+test('publisher directory scope allows its children and excludes adjacent prefixes',async t=>{
+  const f=await fixture(t);
+  await fs.mkdir(path.join(f.worktree,'ops','feature-extra'),{recursive:true});
+  await fs.writeFile(path.join(f.worktree,'ops','feature-extra','source.js'),'module.exports = 1;\n');
+  await assert.rejects(publishRun({...f.args,allowed_paths:['ops/feature/']},{execImpl:f.execImpl}),error=>error.code==='PUBLISH_SCOPE_VIOLATION');
+  await fs.unlink(path.join(f.worktree,'ops','feature-extra','source.js'));
+  await fs.mkdir(path.join(f.worktree,'ops','feature'),{recursive:true});
+  await fs.writeFile(path.join(f.worktree,'ops','feature','source.js'),'module.exports = 1;\n');
+  const result=await publishRun({...f.args,allowed_paths:['ops/feature/']},{execImpl:f.execImpl});
+  assert.equal(result.pr_url,f.prUrl);
+});
+
+test('publisher refuses an existing ready PR before staging, committing or pushing',async t=>{
+  const f=await fixture(t);
+  await fs.writeFile(path.join(f.worktree,'feature.js'),'module.exports = 1;\n');
+  const head=(await f.git(f.worktree,['rev-parse','HEAD'])).trim();
+  const execImpl=async(file,args,opts)=>{
+    if(file==='gh') { f.calls.push({file,args,opts}); assert.equal(args[1],'list'); return {stdout:JSON.stringify([{url:f.prUrl,isDraft:false}])}; }
+    return f.execImpl(file,args,opts);
+  };
+  await assert.rejects(publishRun(f.args,{execImpl}),error=>error.code==='PUBLISH_PR_NOT_DRAFT');
+  assert.equal((await f.git(f.worktree,['rev-parse','HEAD'])).trim(),head);
+  assert.equal((await f.git(f.worktree,['diff','--cached','--name-only'])).trim(),'');
+  assert.ok(!f.calls.some(call=>call.args.includes('add')||call.args.includes('commit')||call.args.includes('push')||call.args.includes('ready')));
+});
+
+test('publisher rechecks draft status immediately before pushing',async t=>{
+  const f=await fixture(t);
+  await fs.writeFile(path.join(f.worktree,'feature.js'),'module.exports = 1;\n');
+  let listings=0;
+  const execImpl=async(file,args,opts)=>{
+    if(file==='gh') { f.calls.push({file,args,opts}); assert.equal(args[1],'list'); return {stdout:JSON.stringify(++listings===1?[]:[{url:f.prUrl,isDraft:false}])}; }
+    return f.execImpl(file,args,opts);
+  };
+  await assert.rejects(publishRun(f.args,{execImpl}),error=>error.code==='PUBLISH_PR_NOT_DRAFT');
+  assert.equal(listings,2);
+  assert.ok(!f.calls.some(call=>call.args.includes('push')||call.args.includes('ready')||(call.file==='gh'&&call.args[1]==='create')));
 });
 
 for(const [name,content,expected] of [

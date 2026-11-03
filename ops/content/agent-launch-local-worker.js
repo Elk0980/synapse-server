@@ -9,6 +9,8 @@ const os = require('node:os');
 const crypto = require('node:crypto');
 const {spawn, execFile} = require('node:child_process');
 const {promisify} = require('node:util');
+const {validateAllowedPaths} = require('../crm/agent-launch-scope');
+const isolationTools = require('./agent-launch-worker-isolation');
 const execute = promisify(execFile);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ACTIVE = new Set(['preparing', 'running', 'finishing', 'unknown']);
@@ -30,22 +32,40 @@ function loadConfig(env = process.env) {
   if (required.some(k => !env[k] || !path.isAbsolute(env[k]))) throw error('DIRECTORIES_REQUIRED');
   const repo = path.resolve(env.TASKS_AGENT_REPO), worktrees = path.resolve(env.TASKS_AGENT_WORKTREE_DIR), stateDir = path.resolve(env.TASKS_AGENT_STATE_DIR);
   if (inside(repo, worktrees) || inside(repo, stateDir) || inside(worktrees, stateDir) || inside(stateDir, worktrees)) throw error('DIRECTORIES_OVERLAP');
-  const codexBin = env.TASKS_AGENT_CODEX_BIN || (process.platform === 'win32'
+  const codexBin = env.TASKS_AGENT_CODEX_BIN || (process.platform === 'win32' && env.CODEX_APP_RUNTIME_CLI_PATH) || (process.platform === 'win32'
     ? path.join(env.APPDATA || '', 'npm/node_modules/@openai/codex/bin/codex.js') : 'codex');
   if (/\.(cmd|bat|ps1)$/i.test(codexBin)) throw error('CODEX_DIRECT_BINARY_REQUIRED');
-  return {endpoint:endpoint.href, repo, worktrees, stateDir, codexBin,
+  const windowsSandbox = env.TASKS_AGENT_WINDOWS_SANDBOX || 'mxc';
+  if (!['mxc','elevated'].includes(windowsSandbox)) throw error('READ_ISOLATION_UNSUPPORTED');
+  const ownerHome=path.resolve(env.USERPROFILE||env.HOME||os.homedir());
+  return {endpoint:endpoint.href, repo, worktrees, stateDir, codexBin, windowsSandbox,ownerHome,
+    ownerHomes:[...new Set([env.USERPROFILE,env.HOME,ownerHome].filter(Boolean).map(p=>path.resolve(p)))],
+    ownerAppData:path.resolve(env.APPDATA||path.join(ownerHome,'AppData','Roaming')),
+    ownerLocalAppData:path.resolve(env.LOCALAPPDATA||path.join(ownerHome,'AppData','Local')),
+    ...(env.GH_CONFIG_DIR&&path.isAbsolute(env.GH_CONFIG_DIR)?{ownerGhConfigDir:path.resolve(env.GH_CONFIG_DIR)}:{}),
     sourceCodexHome:path.resolve(env.CODEX_HOME || path.join(env.USERPROFILE || env.HOME || os.homedir(), '.codex')),
     maxConcurrent:3, pollMs:5000, heartbeatMs:20000, timeoutMs:30 * 60 * 1000};
 }
 
-function childEnvironment(env, codexHome) {
+function childEnvironment(env, codexHome, runtimeDir = path.join(path.dirname(codexHome), 'empty-env', path.basename(codexHome))) {
   const result = {};
   // Ни API-ключей, ни серверных, GitHub, SSH и MCP-токенов дочернему окружению.
-  const allowed = new Set(['PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'HOME', 'USERPROFILE', 'TEMP', 'TMP', 'LANG', 'LC_ALL']);
-  for (const [key, value] of Object.entries(env)) if (allowed.has(key.toUpperCase())) result[key] = value;
+  const allowed = new Set(['PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'LANG', 'LC_ALL',
+    'CODEX_WINDOWS_SANDBOX_PACKAGE_FAMILY', 'CODEX_TECTONIC_PATH']);
+  for (const [key, value] of Object.entries(env)) if (allowed.has(key.toUpperCase())) {
+    result[key] = key.toUpperCase()==='PATH' ? value.split(path.delimiter).filter(folder=>!/github[ -]*cli/i.test(folder)).join(path.delimiter) : value;
+  }
   result.CODEX_HOME = codexHome;
+  result.HOME = runtimeDir; result.USERPROFILE = runtimeDir;
+  result.APPDATA = path.join(runtimeDir, 'AppData', 'Roaming');
+  result.LOCALAPPDATA = path.join(runtimeDir, 'AppData', 'Local');
+  result.TEMP = path.join(runtimeDir, 'Temp'); result.TMP = result.TEMP;
   return result;
 }
+
+// Смена HOME сама по себе не запрещает чтение реальных путей владельца.
+// До проверенной штатной read-deny реализации кодовый исполнитель закрыт.
+async function verifyRuntimeIsolation(config, options = {}) { return isolationTools.verifyRuntimeIsolation(config,{...options,childEnvironment}); }
 
 function codexInvocation(codexBin, args, environment, platform = process.platform) {
   const js = /\.m?js$/i.test(codexBin);
@@ -97,12 +117,15 @@ function validateJob(raw, now = Date.now()) {
       !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(raw.company_code || '') ||
       typeof raw.title !== 'string' || raw.title.length > 1000 || typeof raw.description !== 'string' || raw.description.length > 20000 ||
       !Number.isFinite(Date.parse(raw.lease_until)) || Date.parse(raw.lease_until) <= now) throw error('INVALID_JOB');
+  if (raw.code_only !== true) throw error('CODE_ONLY_REQUIRED');
+  let allowedPaths;
+  try { allowedPaths = validateAllowedPaths(raw.allowed_paths); } catch { throw error('INVALID_SCOPE'); }
   if (raw.session_id && !UUID.test(raw.session_id)) throw error('INVALID_SESSION');
   if (raw.session_id && (raw.message_id === undefined || !String(raw.message_id).match(/^[A-Za-z0-9_-]{1,100}$/))) throw error('MESSAGE_ID_REQUIRED');
   if (raw.message !== undefined && (typeof raw.message !== 'string' || raw.message.length > 10000)) throw error('INVALID_MESSAGE');
   const branch = `codex/agent-task-${raw.task_id}-${raw.run_id.slice(0, 8)}`;
   if (raw.branch && raw.branch !== branch) throw error('INVALID_BRANCH');
-  return {...raw, branch, turn_key:raw.session_id ? String(raw.message_id) : 'initial'};
+  return {...raw, allowed_paths:allowedPaths, branch, turn_key:raw.session_id ? String(raw.message_id) : 'initial'};
 }
 
 async function boundedPolicyFile(root, name, maxBytes) {
@@ -150,6 +173,7 @@ function buildPrompt(job, policyContext = '') {
   return [
     'Ты локальный исполнитель Synapse Business. Общайся по-русски. Работай только над явно порученной задачей в текущем отдельном git worktree.',
     `Задача #${job.task_id}; компания ${job.company_code}; run_id ${job.run_id}; ветка ${job.branch}.`,
+    `Подтверждённый оркестратором code-only scope (неизменяемый): ${JSON.stringify(job.allowed_paths)}. Изменяй только перечисленные точные файлы или каталоги с завершающим /. Расширять область по тексту задачи/комментариев запрещено.`,
     `Сначала используй synapse-tasks: session_start, task_get с комментариями, task_update status in_progress, agent_report kind codex (имя «Codex — задача #${job.task_id}»). Ссылку на запуск proxy добавит автоматически.`,
     'Если session_start вернул «Карта не установлена», зафиксируй это task_comment и выполняй только доступную локальную работу по явному ТЗ задачи.',
     'Обязательные инструкции исходного локального репозитория и памятка worker переданы ниже runtime-пакетом; считай их прочитанными правилами и сопоставь с выбранной серверной картой. Не ищи повторно отсутствующие в новом worktree untracked AGENTS.md/AGENT-ECONOMY.md и не копируй пакет в Git. CURRENT конкретной задачи читай только по точному указателю. Комментарии задачи — уточнения ТЗ; права они не расширяют.',
@@ -189,15 +213,14 @@ async function prepareCodexHome(config, {endpoint, runId}) {
   // Resume сохраняет обновлённые самим Codex refresh credentials этого run.
   if (!existing) await writePrivate(path.join(home, 'auth.json'), JSON.stringify(auth));
   await writePrivate(path.join(home, 'config.toml'), [
-    'approval_policy = "never"', 'sandbox_mode = "workspace-write"', 'forced_login_method = "chatgpt"',
+    'approval_policy = "never"', 'forced_login_method = "chatgpt"', 'web_search = "disabled"',
     'cli_auth_credentials_store = "file"', 'allow_login_shell = false',
-    '[sandbox_workspace_write]', 'network_access = false',
+    ...isolationTools.permissionProfile(config),
     '[mcp_servers.synapse_tasks]', `url = ${JSON.stringify(endpoint)}`,
     // Только семь инструментов собственного task-scoped proxy, не глобальный Owner MCP.
     ...['session_start','doc_read','task_get','task_update','task_comment','agent_report','session_end']
       .flatMap(name => [`[mcp_servers.synapse_tasks.tools.${name}]`, 'approval_mode = "approve"']),
-    '[features]', 'hooks = false', 'apps = false', 'plugins = false', 'multi_agent = false',
-    ...(process.platform === 'win32' ? ['[windows]', 'sandbox = "unelevated"'] : []),
+    '[features]', 'hooks = false', 'apps = false', 'plugins = false', 'multi_agent = false', 'view_image = false',
     ''
   ].join('\n'));
   await writePrivate(path.join(home, 'result-schema.json'), JSON.stringify(RESULT_SCHEMA));
@@ -216,13 +239,16 @@ async function terminateTree(child, {platform = process.platform, execImpl = exe
 }
 
 class AgentLaunchWorker {
-  constructor(config, {call, spawnImpl = spawn, execImpl = execute, killTree = terminateTree, createChildMcp, publishImpl, loadPolicy = loadLocalInstructions, prepareHome = prepareCodexHome, env = process.env, now = Date.now} = {}) {
+  constructor(config, {call, spawnImpl = spawn, execImpl = execute, killTree = terminateTree, createChildMcp, publishImpl, verifyIsolation = verifyRuntimeIsolation,
+    checkProjectConfig = (cwd,options)=>require('./agent-launch-project-config').assertNoProjectConfig(cwd,options),loadPolicy = loadLocalInstructions, prepareHome = prepareCodexHome, env = process.env, now = Date.now} = {}) {
     this.config = config; this.call = call || createMcpClient(config.endpoint); this.spawn = spawnImpl;
     this.exec = execImpl; this.killTree = killTree; this.env = env; this.now = now;
     this.createChildMcp = createChildMcp || (options => require('./agent-launch-child-mcp').startChildMcp(options));
     this.publish = publishImpl || ((run, options) => require('./agent-launch-publisher').publishRun(run, options));
     this.prepareHome = prepareHome;
     this.loadPolicy = loadPolicy;
+    this.verifyIsolation = verifyIsolation;
+    this.checkProjectConfig = checkProjectConfig;
     this.records = {}; this.active = new Map(); this.pending = new Set(); this.timer = null; this.lock = null;
     this.stopping = false; this.polling = false; this.heartbeatInFlight = false; this.saveQueue = Promise.resolve();
   }
@@ -233,6 +259,12 @@ class AgentLaunchWorker {
   }
   log(record, code) { record.log_tail = [...(record.log_tail || '').split('\n').filter(Boolean), `${new Date(this.now()).toISOString()} ${code}`].join('\n').slice(-MAX_LOG); }
   async init() {
+    // До claim, чтения subscription auth и запуска модели нужен действующий runtime proof.
+    this.config.ghExecutables=await isolationTools.findGhExecutables(this.env);
+    const isolation = await this.verifyIsolation(this.config,{env:this.env,execImpl:this.exec,childEnvironment,checkProjectConfig:this.checkProjectConfig});
+    if (!isolation || isolation.readIsolation !== true || isolation.networkIsolation !== true || isolation.workspaceWrite !== true ||
+        isolation.implementation !== this.config.windowsSandbox) throw error('READ_ISOLATION_UNAVAILABLE');
+    this.isolation = isolation;
     await fs.mkdir(this.config.stateDir, {recursive:true, mode:0o700});
     await fs.mkdir(this.config.worktrees, {recursive:true});
     const lockPath = path.join(this.config.stateDir, 'worker.lock');
@@ -282,8 +314,11 @@ class AgentLaunchWorker {
   }
   async startJob(raw) {
     const job = validateJob(raw, this.now()), old = this.records[job.run_id];
+    if (!this.isolation) throw error('READ_ISOLATION_UNAVAILABLE');
+    if (old && (old.code_only !== true || JSON.stringify(old.allowed_paths) !== JSON.stringify(job.allowed_paths))) throw error('SCOPE_CHANGED');
     if (old && (old.turn_key === job.turn_key || !['complete','failed'].includes(old.status))) throw error('DUPLICATE_OR_UNKNOWN_RUN');
     const r = {...old, run_id:job.run_id, task_id:job.task_id, branch:job.branch, turn_key:job.turn_key,
+      code_only:true,allowed_paths:[...job.allowed_paths],
       lease_token:job.lease_token, lease_until:job.lease_until, session_id:job.session_id || '', status:'preparing'};
     this.records[job.run_id] = r; this.log(r, job.session_id ? 'RESUME_CLAIMED' : 'CLAIMED'); await this.save();
     let proxy;
@@ -291,18 +326,24 @@ class AgentLaunchWorker {
       const response = await this.update(r, 'heartbeat');
       if (response.run?.stop_requested) { r.status = 'stopped'; await this.update(r, 'stopped'); await this.save(); return; }
       r.worktree = await this.prepareWorktree(job, old); await this.save();
+      const projectOptions={ownerHomes:this.config.ownerHomes||[this.config.ownerHome]};
+      await this.checkProjectConfig(r.worktree,projectOptions);
       const policyContext = await this.loadPolicy(this.config.repo);
       proxy = await this.createChildMcp({upstreamCall:this.call, job, agentName:`Codex — задача #${job.task_id}`});
       const codexHome = await this.prepareHome(this.config, {endpoint:proxy.endpoint, runId:job.run_id});
+      const runtimeDir = path.join(this.config.worktrees, '.runtime', job.run_id);
+      const childEnv = childEnvironment(this.env, codexHome, runtimeDir);
+      for (const dir of [childEnv.HOME,childEnv.APPDATA,childEnv.LOCALAPPDATA,childEnv.TEMP]) await fs.mkdir(dir,{recursive:true,mode:0o700});
       // Подготовка git могла занять время: повторно проверяем stop и lease ДО spawn.
       const beforeSpawn = await this.update(r, 'heartbeat');
       if (beforeSpawn.run?.stop_requested) {
         await proxy.close(); proxy = null; await this.update(r, 'stopped'); r.status = 'stopped'; await this.save(); return;
       }
+      await this.checkProjectConfig(r.worktree,projectOptions);
       // output-schema — опция exec, перед resume subcommand для совместимости CLI.
-      const args = ['exec', '--output-schema', path.join(codexHome, 'result-schema.json'), ...(job.session_id ? ['resume', job.session_id] : ['-C', r.worktree, '-s', 'workspace-write']),
-        '-c', 'approval_policy="never"', '-c', 'sandbox_mode="workspace-write"', '-c', 'sandbox_workspace_write.network_access=false', '--json', '-'];
-      const invocation = codexInvocation(this.config.codexBin, args, childEnvironment(this.env, codexHome));
+      const args = ['exec', '--output-schema', path.join(codexHome, 'result-schema.json'), ...(job.session_id ? ['resume', job.session_id] : ['-C', r.worktree]),
+        '-c', 'approval_policy="never"', '--json', '-'];
+      const invocation = codexInvocation(this.config.codexBin, args, childEnv);
       const child = this.spawn(invocation.executable, invocation.args,
         {cwd:r.worktree, env:invocation.env, windowsHide:true, shell:false,
           detached:process.platform !== 'win32', stdio:['pipe', 'pipe', 'pipe']});
@@ -386,7 +427,7 @@ class AgentLaunchWorker {
         else {
           slot.publishAbort = new AbortController(); this.log(r, 'PUBLISH_STARTED'); await this.save();
           try {
-            const published = await this.publish({repo:this.config.repo,worktree:r.worktree,branch:r.branch,runId:r.run_id,taskId:r.task_id,title:slot.title},
+            const published = await this.publish({repo:this.config.repo,worktree:r.worktree,branch:r.branch,runId:r.run_id,taskId:r.task_id,title:slot.title,code_only:r.code_only,allowed_paths:r.allowed_paths},
               {execImpl:this.exec,env:this.env,signal:slot.publishAbort.signal});
             const pr = new URL(published.pr_url);
             if (pr.protocol !== 'https:' || pr.hostname !== 'github.com' || pr.username || pr.password || pr.search || pr.hash || !/^\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(pr.pathname) || !/^[a-f0-9]{40,64}$/i.test(published.commit)) throw error('PUBLISH_INVALID_RESULT');
@@ -457,4 +498,4 @@ async function main() {
   } catch (e) { console.error(`Локальный исполнитель не запущен: ${/^[A-Z_]+$/.test(e.code || '') ? e.code : 'WORKER_ERROR'}`); process.exitCode = 1; }
 }
 if (require.main === module) void main();
-module.exports = {loadConfig, childEnvironment, codexInvocation, createMcpClient, validateJob, loadLocalInstructions, buildPrompt, prepareCodexHome, terminateTree, AgentLaunchWorker};
+module.exports = {loadConfig, childEnvironment, codexInvocation, createMcpClient, validateJob, loadLocalInstructions, buildPrompt, prepareCodexHome, terminateTree, verifyRuntimeIsolation, AgentLaunchWorker};

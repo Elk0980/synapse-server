@@ -59,8 +59,12 @@ const TOOLS = [
     function:z.string().max(500).optional(), chat:z.string().max(500).optional(), state:states,
     last_event:z.string().trim().min(1).max(2000)
   }],
-  ['agent_launch', 'Поставить локальную работу с кодом в dispatch для codex-code. Только Owner и разрешённый проект; production/merge/deploy не разрешаются. Повтор client_ref не создаёт дубль.', {
-    task_id:id,executor_profile:z.literal('codex-code').optional(),client_ref:short.optional()
+  ['agent_launch', 'Поставить локальную работу с кодом в dispatch для codex-code. Оркестратор обязан явно задать code_only:true и неизменяемую область allowed_paths. Только Owner и разрешённый проект; production/merge/deploy не разрешаются. Повтор client_ref не создаёт дубль.', {
+    task_id:id,code_only:z.literal(true),allowed_paths:z.array(z.string().min(1).max(500)).min(1).max(100).refine(value => value.every(entry => {
+      if (entry !== entry.trim() || entry.startsWith('/') || /[\x00-\x1f\x7f\\:*?\[\]{}]/.test(entry)) return false;
+      return (entry.endsWith('/') ? entry.slice(0,-1) : entry).split('/').every(part => part && part !== '.' && part !== '..');
+    }),'Нужны точные пути или префиксы каталогов без wildcard и выхода из репозитория'),
+    executor_profile:z.literal('codex-code').optional(),client_ref:short.optional()
   }],
   ['agent_status', 'Прочитать состояние запуска, session_id и очищенный хвост технического журнала. Истёкшая аренда не доказывает остановку процесса.', {
     run_id:z.uuid()

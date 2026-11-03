@@ -15,15 +15,17 @@ const {loadConfig, childEnvironment, codexInvocation, createMcpClient, validateJ
 const actualArgs = invocation => invocation.settings.env.TASKS_AGENT_EXEC_JSON ? JSON.parse(invocation.settings.env.TASKS_AGENT_EXEC_JSON).arguments : invocation.args;
 const resumeArgs = invocation => {const args=actualArgs(invocation);return args.slice(args.indexOf('resume'),args.indexOf('resume')+2);};
 const finishReady = child => {child.stdout.write(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({outcome:'ready',summary:'SAMPLE готово'})}})+'\n');child.stdout.write(JSON.stringify({type:'turn.completed'})+'\n');child.end(0);};
+const syntheticIsolation = async()=>({implementation:'mxc',readIsolation:true,networkIsolation:true,workspaceWrite:true});
 
 const job = (fields = {}) => ({run_id:randomUUID(), task_id:40, company_code:'synapse-business', executor_profile:'codex-code',
-  title:'SAMPLE локальная задача', description:'Только тестовые данные', lease_token:randomUUID(), lease_until:new Date(Date.now() + 180000).toISOString(), ...fields});
+  code_only:true,allowed_paths:['sample.txt'],title:'SAMPLE локальная задача', description:'Только тестовые данные', lease_token:randomUUID(), lease_until:new Date(Date.now() + 180000).toISOString(), ...fields});
 const tick = async (predicate, attempts=100) => { for (let i=0; i<attempts; i++) { if (predicate()) return; await new Promise(r => setTimeout(r, 10)); } throw Error('Тестовое ожидание истекло'); };
 async function fixture(t, options = {}) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-worker-'));
   const config = {repo:path.join(dir, 'repo'), worktrees:path.join(dir, 'trees'), stateDir:path.join(dir, 'state'),
     sourceCodexHome:path.join(dir, 'source'), endpoint:'https://tasks.example.test/mcp/' + 's'.repeat(32), codexBin:'codex',
-    maxConcurrent:3, pollMs:5000, heartbeatMs:20000, timeoutMs:60000};
+    ownerHome:path.join(dir,'owner'),ownerAppData:path.join(dir,'owner','AppData','Roaming'),ownerLocalAppData:path.join(dir,'owner','AppData','Local'),
+    windowsSandbox:'mxc',maxConcurrent:3, pollMs:5000, heartbeatMs:20000, timeoutMs:60000};
   const calls = [], children = [], spawns = [], commands = [];
   let proxyClosed = 0;
   const call = async (name, args) => { calls.push({name, args}); return options.call ? options.call(name, args) : {run:{state:'running', stop_requested:false}}; };
@@ -40,6 +42,8 @@ async function fixture(t, options = {}) {
     createChildMcp:async () => ({endpoint:'http://127.0.0.1:54321/mcp/test', close:async () => { proxyClosed++; }}),
     publishImpl:async()=>({pr_url:'https://github.com/example/sample/pull/1',commit:'a'.repeat(40)}),
     loadPolicy:async()=>'SAMPLE runtime-пакет обязательных правил.',
+    verifyIsolation:syntheticIsolation,
+    checkProjectConfig:async()=>{},
     prepareHome:async () => path.join(config.stateDir, 'codex-home'),
     env:{PATH:process.env.PATH, OPENAI_API_KEY:'fake-api-key', TASKS_MCP_ENDPOINT:'fake-owner-endpoint', GH_TOKEN:'fake-gh-token'}, ...options.dependencies});
   await worker.init();
@@ -59,7 +63,25 @@ test('конфигурация требует явные внешние ката
   assert.throws(() => loadConfig({...env,TASKS_AGENT_STATE_DIR:path.join(base,'repo','private')}), /DIRECTORIES_OVERLAP/);
   assert.throws(() => loadConfig({...env,TASKS_MCP_ENDPOINT:'http://tasks.example.test/mcp/' + 'x'.repeat(32)}), /ENDPOINT_INVALID/);
   assert.throws(() => loadConfig({...env,TASKS_AGENT_CODEX_BIN:'codex.cmd'}), /CODEX_DIRECT_BINARY_REQUIRED/);
+  assert.throws(() => loadConfig({...env,TASKS_AGENT_WINDOWS_SANDBOX:'unelevated'}), /READ_ISOLATION_UNSUPPORTED/);
   assert.doesNotMatch(JSON.stringify(childEnvironment({...process.env,OPENAI_API_KEY:'secret1',GH_TOKEN:'secret2',TASKS_MCP_ENDPOINT:'secret3'},base)), /secret[123]/);
+  const isolated=childEnvironment({HOME:'owner-home',USERPROFILE:'owner-profile',APPDATA:'owner-roaming',LOCALAPPDATA:'owner-local',TEMP:'owner-temp',TMP:'owner-tmp'},base);
+  assert.doesNotMatch(JSON.stringify(isolated),/owner-/);
+  assert.equal(isolated.HOME,isolated.USERPROFILE);assert.notEqual(isolated.HOME,base);assert.equal(isolated.CODEX_HOME,base);
+});
+
+test('без живого доказательства изоляции worker не забирает задания и не копирует auth', async t => {
+  const f=await fixture(t), blockedConfig={...f.config,stateDir:path.join(f.dir,'blocked-state')};
+  let claims=0,spawns=0,copies=0;
+  const worker=new AgentLaunchWorker(blockedConfig,{call:async()=>{claims++;},spawnImpl:()=>{spawns++;},prepareHome:async()=>{copies++;}});
+  await assert.rejects(worker.init(),{code:'READ_ISOLATION_UNAVAILABLE'});
+  assert.deepEqual([claims,spawns,copies],[0,0,0]);
+  await assert.rejects(fs.access(blockedConfig.stateDir),{code:'ENOENT'});
+  for(const proof of [null,{implementation:'mxc',readIsolation:false,networkIsolation:true,workspaceWrite:true},
+    {implementation:'unelevated',readIsolation:true,networkIsolation:true,workspaceWrite:true}]) {
+    const invalid=new AgentLaunchWorker(blockedConfig,{verifyIsolation:async()=>proof});
+    await assert.rejects(invalid.init(),{code:'READ_ISOLATION_UNAVAILABLE'});
+  }
 });
 
 test('проверка job исключает ветки-пути, устаревшие lease и resume без ID сообщения', () => {
@@ -67,6 +89,9 @@ test('проверка job исключает ветки-пути, устаре�
   assert.throws(() => validateJob({...j,branch:'../../outside'}),/INVALID_BRANCH/);
   assert.throws(() => validateJob({...j,lease_until:new Date(0).toISOString()}),/INVALID_JOB/);
   assert.throws(() => validateJob({...j,session_id:randomUUID()}),/MESSAGE_ID_REQUIRED/);
+  assert.throws(() => validateJob({...j,code_only:false}),/CODE_ONLY_REQUIRED/);
+  assert.throws(() => validateJob({...j,code_only:undefined}),/CODE_ONLY_REQUIRED/);
+  for(const allowed_paths of [undefined,[],['.'],['../other'],['src/*'],['C:/private'],['src\\x'],[' src/']])assert.throws(()=>validateJob({...j,allowed_paths}),/INVALID_SCOPE/);
   const prompt = buildPrompt(validateJob(j));
   for (const name of ['session_start','task_get','task_update','agent_report','task_comment','ВОПРОС → Claude']) assert.ok(prompt.includes(name));
   assert.ok(prompt.includes('Merge, deploy')); assert.ok(prompt.includes('PR без merge'));
@@ -131,10 +156,13 @@ test('приватный CODEX_HOME копирует только subscription a
   const runId=randomUUID(), endpoint='http://127.0.0.1:54321/mcp/nonce';
   const home=await prepareCodexHome(f.config,{endpoint,runId});
   const config=await fs.readFile(path.join(home,'config.toml'),'utf8');
-  assert.ok(config.includes(endpoint)); assert.ok(config.includes('network_access = false')); assert.ok(config.includes('forced_login_method = "chatgpt"'));
+  assert.ok(config.includes(endpoint)); assert.ok(config.includes('[permissions.synapse_agent.network]\nenabled = false')); assert.ok(config.includes('forced_login_method = "chatgpt"'));
+  assert.ok(config.includes('default_permissions = "synapse_agent"'));assert.ok(!config.includes('sandbox_mode'));
+  assert.ok(config.includes(JSON.stringify(f.config.stateDir)+' = "deny"'));assert.ok(config.includes(JSON.stringify(f.config.sourceCodexHome)+' = "deny"'));
   assert.equal((config.match(/approval_mode = "approve"/g)||[]).length,7);
   assert.ok(config.includes('[mcp_servers.synapse_tasks.tools.task_get]')); assert.ok(!config.includes('codex_hooks'));
-  if(process.platform==='win32')assert.ok(config.includes('[windows]\nsandbox = "unelevated"'));
+  assert.ok(config.includes('view_image = false'));
+  if(process.platform==='win32')assert.ok(config.includes('[windows]\nsandbox = "mxc"'));
   assert.ok(!config.includes(f.config.endpoint)); assert.ok(!config.includes('synthetic-token'));
   assert.deepEqual((await fs.readdir(home)).sort(),['auth.json','config.toml','result-schema.json']);
   await assert.rejects(prepareCodexHome(f.config,{endpoint:f.config.endpoint,runId}),/CHILD_PROXY_REQUIRED/);
@@ -152,7 +180,9 @@ test('exec и resume используют один worktree/session; сырые 
   assert.equal(f.spawns.length,1); const first=f.spawns[0];
   assert.equal(first.settings.shell,false); assert.equal(first.settings.windowsHide,true);
   assert.equal(first.settings.env.OPENAI_API_KEY,undefined); assert.equal(first.settings.env.GH_TOKEN,undefined); assert.equal(first.settings.env.TASKS_MCP_ENDPOINT,undefined);
-  assert.ok(actualArgs(first).includes('workspace-write')); assert.ok(actualArgs(first).includes('sandbox_workspace_write.network_access=false'));
+  assert.ok(first.settings.env.HOME.startsWith(f.config.worktrees));assert.equal(first.settings.env.USERPROFILE,first.settings.env.HOME);
+  for(const name of ['HOME','APPDATA','LOCALAPPDATA','TEMP'])assert.ok((await fs.stat(first.settings.env[name])).isDirectory());
+  assert.ok(!actualArgs(first).includes('-s'));assert.ok(!actualArgs(first).some(arg=>arg.includes('sandbox_mode')||arg.includes('sandbox_workspace_write')));
   f.children[0].stdout.write(JSON.stringify({type:'thread.started',thread_id:session})+'\n');
   f.children[0].stdout.write(JSON.stringify({type:'item.completed',item:{text:'synthetic-client-secret'}})+'\n');
   f.children[0].stderr.write('synthetic-raw-error'); finishReady(f.children[0]);
@@ -168,6 +198,45 @@ test('exec и resume используют один worktree/session; сырые 
   assert.equal(f.commands.filter(x=>x.args.includes('worktree')).length,1,'новый worktree при resume не создаётся');
   finishReady(f.children[1]); await tick(()=>f.worker.active.size===0);
   await assert.rejects(f.worker.startJob({...j,session_id:session,message_id:1}),/DUPLICATE_OR_UNKNOWN_RUN/);
+  await assert.rejects(f.worker.startJob({...j,session_id:session,message_id:2,allowed_paths:['other.txt']}),/SCOPE_CHANGED/);
+});
+
+test('неизменяемые code_only/allowed_paths из очереди сохраняются и передаются publisher', async t => {
+  let published;
+  const f=await fixture(t,{dependencies:{publishImpl:async args=>{published=args;return{pr_url:'https://github.com/example/sample/pull/1',commit:'a'.repeat(40)};}}});
+  const j=job({allowed_paths:['src/','sample.txt']});await f.worker.startJob(j);j.allowed_paths.push('unexpected/');
+  f.children[0].stdout.write(JSON.stringify({type:'thread.started',thread_id:randomUUID()})+'\n');finishReady(f.children[0]);await tick(()=>f.worker.active.size===0);
+  assert.equal(published.code_only,true);assert.deepEqual(published.allowed_paths,['src/','sample.txt']);
+  assert.deepEqual(f.worker.records[j.run_id].allowed_paths,['src/','sample.txt']);
+});
+
+test('project config в новом worktree блокирует authcopy и запуск модели', async t => {
+  const {assertNoProjectConfig}=require('./agent-launch-project-config');
+  let homes=0;
+  const f=await fixture(t,{dependencies:{prepareHome:async()=>{homes++;return'UNUSED';}}});
+  f.worker.config.ownerHomes=[os.homedir()];f.worker.checkProjectConfig=assertNoProjectConfig;
+  f.worker.prepareWorktree=async j=>{const cwd=path.join(f.config.worktrees,'task-'+j.run_id);await fs.mkdir(path.join(cwd,'.codex'),{recursive:true});
+    await fs.writeFile(path.join(cwd,'.codex','config.toml'),'[windows]\nsandbox="unelevated"\n');return cwd;};
+  const j=job();await f.worker.startJob(j);
+  assert.equal(homes,0);assert.equal(f.spawns.length,0);assert.equal(f.worker.records[j.run_id].status,'failed');
+});
+
+test('добавленный project config перед resume повторно блокирует authcopy и spawn', async t => {
+  const {assertNoProjectConfig}=require('./agent-launch-project-config');let homes=0;
+  const f=await fixture(t,{dependencies:{prepareHome:async()=>{homes++;return path.join(f.config.stateDir,'fake-home');}}});
+  f.worker.config.ownerHomes=[os.homedir()];f.worker.checkProjectConfig=assertNoProjectConfig;
+  f.worker.prepareWorktree=async j=>{const cwd=path.join(f.config.worktrees,'task-'+j.run_id);await fs.mkdir(cwd,{recursive:true});return cwd;};
+  const j=job(),session=randomUUID();await f.worker.startJob(j);f.children[0].stdout.write(JSON.stringify({type:'thread.started',thread_id:session})+'\n');finishReady(f.children[0]);await tick(()=>f.worker.active.size===0);
+  const cwd=f.worker.records[j.run_id].worktree;await fs.mkdir(path.join(cwd,'.codex'));await fs.writeFile(path.join(cwd,'.codex','config.toml'),'[mcp_servers.untrusted]\ncommand="SYNTHETIC_NOT_RUN"\n');
+  homes=0;await f.worker.startJob({...j,session_id:session,message_id:2,lease_token:randomUUID()});
+  assert.equal(homes,0);assert.equal(f.spawns.length,1);assert.equal(f.worker.records[j.run_id].status,'failed');
+});
+
+test('project config проверяется повторно после подготовки auth, прямо перед spawn', async t => {
+  let checks=0,homes=0;
+  const f=await fixture(t,{dependencies:{checkProjectConfig:async()=>{checks++;if(checks===2)throw Object.assign(Error('PROJECT_CONFIG_UNSUPPORTED'),{code:'PROJECT_CONFIG_UNSUPPORTED'});},
+    prepareHome:async()=>{homes++;return path.join(f.config.stateDir,'fake-home');}}});
+  const j=job();await f.worker.startJob(j);assert.equal(checks,2);assert.equal(homes,1);assert.equal(f.spawns.length,0);assert.equal(f.worker.records[j.run_id].status,'failed');
 });
 
 test('poll держит максимум три процесса даже если сервер отдаёт больше', async t => {
@@ -206,7 +275,7 @@ test('неизвестное complete блокирует новые claims; пе
   await tick(()=>f.worker.active.size===0); assert.equal(f.worker.records[j.run_id].status,'unknown');
   await f.worker.poll(); assert.equal(claims,0);
   await f.worker.releaseLock();
-  const restarted=new AgentLaunchWorker(f.config,{call:async()=>{claims++;return{job:null};}});
+  const restarted=new AgentLaunchWorker(f.config,{verifyIsolation:syntheticIsolation,call:async()=>{claims++;return{job:null};}});
   await restarted.init(); await restarted.poll(); assert.equal(claims,0); assert.equal(restarted.workerId,f.worker.workerId);
   await restarted.stop();
 });

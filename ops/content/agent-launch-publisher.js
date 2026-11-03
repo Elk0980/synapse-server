@@ -66,9 +66,29 @@ function statusPaths(output) {
   return [...result];
 }
 
-async function publishRun({repo,worktree,branch,runId,taskId}, {execImpl = execute, env = process.env, signal} = {}) {
+function validateAllowedPaths(value) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > MAX_FILES) fail('PUBLISH_SCOPE_INVALID');
+  const result=[];
+  for (const item of value) {
+    if (typeof item !== 'string' || !item || item.length > 500 || item !== item.trim() ||
+        /[\x00-\x1f\x7f\\:*?\[\]{}]/.test(item) || path.posix.isAbsolute(item)) fail('PUBLISH_SCOPE_INVALID');
+    const name=item.endsWith('/') ? item.slice(0,-1) : item;
+    if (!name || name.split('/').some(part=>!part||part==='.'||part==='..')) fail('PUBLISH_SCOPE_INVALID');
+    result.push(item);
+  }
+  return Object.freeze(result);
+}
+
+async function publishRun({repo,worktree,branch,runId,taskId,code_only,allowed_paths}, {execImpl = execute, env = process.env, signal} = {}) {
   if (!path.isAbsolute(repo || '') || !path.isAbsolute(worktree || '') || !UUID.test(runId || '') ||
       !Number.isSafeInteger(taskId) || taskId < 1 || branch !== `codex/agent-task-${taskId}-${runId.slice(0,8)}`) fail('PUBLISH_ARGUMENTS_REJECTED');
+  if (code_only !== true) fail('PUBLISH_SCOPE_INVALID');
+  // Scope приходит от оркестратора через неизменяемую запись run, а не из ответа модели.
+  const allowed=validateAllowedPaths(allowed_paths);
+  const checkScope=name=>{
+    safePath(name);
+    if (!allowed.some(item=>item.endsWith('/') ? name.startsWith(item) : name===item)) fail('PUBLISH_SCOPE_VIOLATION');
+  };
   let temp;
   try {
     const repoRoot = await fs.realpath(repo), treeRoot = await fs.realpath(worktree);
@@ -97,17 +117,23 @@ async function publishRun({repo,worktree,branch,runId,taskId}, {execImpl = execu
     };
     await verifyRemotes();
     await git(treeRoot,['rev-parse','--verify','origin/main']);
+    // Обычный git log не показывает diff merge-коммита. Вместо исключений для
+    // скрытых merge-only blobs запрещаем такие коммиты в локальном результате.
+    const merges=Number((await git(treeRoot,['rev-list','--count','--min-parents=2','origin/main..HEAD'])).trim());
+    if (!Number.isSafeInteger(merges) || merges < 0) fail('PUBLISH_HISTORY_REJECTED');
+    if (merges > 0) fail('PUBLISH_MERGE_REJECTED');
     const changed = statusPaths(await git(treeRoot,['status','--porcelain=v1','-z','--untracked-files=all']));
+    changed.forEach(checkScope);
     const historyNames = (await git(treeRoot,['-c','core.quotePath=false','log','--format=','--name-only','--no-renames','origin/main..HEAD'])).split(/\r?\n/).filter(Boolean);
     if (new Set([...changed,...historyNames]).size > MAX_FILES) fail('PUBLISH_LIMIT');
-    historyNames.forEach(safePath);
+    historyNames.forEach(checkScope);
     // --patch не раскрывает содержимое binary blob. Проверяем каждый commit,
     // включая файлы, удалённые следующим commit и отсутствующие в текущем дереве.
     const historyStats = await git(treeRoot,['-c','core.quotePath=false','log','--format=','--numstat','--no-renames','origin/main..HEAD','--']);
     for (const line of historyStats.split(/\r?\n/).filter(Boolean)) {
       const match = /^(\d+|-)\t(\d+|-)\t(.+)$/.exec(line);
       if (!match) fail('PUBLISH_HISTORY_REJECTED');
-      safePath(match[3]);
+      checkScope(match[3]);
       if (match[1] === '-' || match[2] === '-') fail('PUBLISH_BINARY_REJECTED');
     }
     let total = 0;
@@ -136,6 +162,17 @@ async function publishRun({repo,worktree,branch,runId,taskId}, {execImpl = execu
     }
     scanSecrets(await git(treeRoot,['diff','--no-ext-diff','--no-textconv','HEAD','--']));
     scanSecrets(await git(treeRoot,['log','--format=','--patch','--no-ext-diff','--no-textconv','origin/main..HEAD','--']));
+    const existingCount=Number((await git(treeRoot,['rev-list','--count','origin/main..HEAD'])).trim());
+    if (!Number.isSafeInteger(existingCount) || existingCount < 0 || existingCount + Number(changed.length > 0) > 50 ||
+        (!changed.length && existingCount < 1)) fail('PUBLISH_NO_COMMITS');
+    const expected = new RegExp(`^https://github\\.com/${remote.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}/pull/[1-9][0-9]*$`,'i');
+    const draftPr=async()=>{
+      const list=JSON.parse(await gh(['pr','list','--repo',remote,'--head',branch,'--base','main','--state','open','--json','url,isDraft']));
+      if (!Array.isArray(list) || list.length > 1 || (list.length && !expected.test(list[0]?.url || ''))) fail('PUBLISH_PR_INVALID');
+      if (list.length && list[0].isDraft !== true) fail('PUBLISH_PR_NOT_DRAFT');
+      return list;
+    };
+    let listed=await draftPr();
     // Только после полного preflight начинаются изменения index и commit.
     if (changed.length) {
       await git(treeRoot,['add','-A','--',...changed]);
@@ -146,8 +183,8 @@ async function publishRun({repo,worktree,branch,runId,taskId}, {execImpl = execu
     const count = Number((await git(treeRoot,['rev-list','--count','origin/main..HEAD'])).trim());
     if (!Number.isSafeInteger(count) || count < 1 || count > 50) fail('PUBLISH_NO_COMMITS');
     await verifyRemotes();
+    listed=await draftPr();
     await git(treeRoot,['push','--set-upstream','origin',`HEAD:refs/heads/${branch}`]);
-    const listed = JSON.parse(await gh(['pr','list','--repo',remote,'--head',branch,'--state','open','--json','url']));
     let url;
     if (Array.isArray(listed) && listed.length) url=listed[0]?.url;
     else {
@@ -156,7 +193,6 @@ async function publishRun({repo,worktree,branch,runId,taskId}, {execImpl = execu
       url=(await gh(['pr','create','--repo',remote,'--draft','--base','main','--head',branch,
         '--title',`Задача #${taskId}: результат локального агента`,'--body-file',bodyFile])).trim();
     }
-    const expected = new RegExp(`^https://github\\.com/${remote.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}/pull/[1-9][0-9]*$`,'i');
     if (typeof url !== 'string' || !expected.test(url)) fail('PUBLISH_PR_INVALID');
     return {pr_url:url,commit};
   } catch (error) {
@@ -170,4 +206,4 @@ async function publishRun({repo,worktree,branch,runId,taskId}, {execImpl = execu
   }
 }
 
-module.exports={publishRun,githubRepo,safePath,scanSecrets,statusPaths,publisherEnvironment};
+module.exports={publishRun,githubRepo,safePath,scanSecrets,statusPaths,validateAllowedPaths,publisherEnvironment};

@@ -1,5 +1,21 @@
 # Задача #40 — запуск локальных агентов, 03.11.2026
 
+## Доработка по ревью Claude 82
+
+Исправления подготовлены в той же ветке, [PR #477](https://github.com/Elk0980/synapse-server/pull/477) остаётся draft. Слияние, production и изменения #26/#35/#38 не выполнялись. Требуется повторная проверка Claude.
+
+1. Ребёнок получает пустые HOME/USERPROFILE/APPDATA/LOCALAPPDATA. Реальный HOME владельца, source CODEX_HOME, весь state с own/sibling auth, SSH/GH paths и исходный checkout (включая ignored `.env`) закрыты read-deny ОС. Узкие read-grants оставлены только проверенным runtime Node/Codex/PowerShell. Реальные пути и junction-пересечения проверяются до авторизации. До аренды и копирования auth воркер подтверждает изоляцию и работоспособность shell.
+2. Запуск требует `code_only:true` и `allowed_paths` от Owner/оркестратора. Область неизменяема, старые записи не получают разрешение автоматически. RU/EN словарь служит дополнительным отказом. Publisher проверяет changed/staged/всю историю по этой области, отвергает merge-коммиты и готовый PR, создаёт только draft. Снятие draft — отдельное действие после review Claude.
+3. Dispatch `review/needs_input/blocked` и другие занятые этапы отклоняются без изменения данных. Если внешний этап появился после launch, агент получает stop, чужие row/revision/result/question/history сохраняются побайтно. Поздний отчёт старого запуска не забирает очередь.
+4. **Живая Windows-проверка: unelevated FAIL, MXC PASS.** npm CLI 0.149.1 и app CLI 0.166.0-alpha.5.1 с unelevated читают canaries и имеют raw TCP; этот режим запрещён. Уже установленный app CLI с MXC на Windows 26200.9711: 0/5 canary reads, своя запись работает, внешняя запись, loopback/external TCP запрещены. Отдельный synthetic ignored `.env` в source checkout недоступен. Auth/SSH/gh владельца не читались, установка/admin/ACL/firewall не менялись.
+5. **Ребейз после #475 ожидает слияния:** последняя проверка — PR OPEN, mergedAt=null, origin/main `ac4c7616`. Чужой PR не сливается этим исполнителем. После слияния нужно обновить main, выполнить rebase этой ветки, сохранить все MCP-инструменты и повторить соответствующие проверки. Вопрос Claude оставлен в комментарии #40.
+
+Итоговый полный `npm test` после исправлений: **130 PASS, 0 FAIL, 0 SKIP**. Root повторил настоящий subscription worker на конечном профиле: initial и resume COMPLETE, один session_id/worktree, файл создан/изменён и прочитан, по одному вызову тестового publisher на готовый ход. Внешняя публикация в smoke подменена; отдельные настоящие временные Git-репозитории покрывают publisher без сетевых публикаций.
+
+Дополнительно закрыт обнаруженный project-config override: наличие исполняемого `.codex/config.toml` по lexical/canonical рабочему пути отклоняется до authcopy и повторно до spawn/resume, без удаления файла. Защита записи `.codex/.git` проверена native MXC. `view_image`, web search, apps/plugins/hooks выключены; actual exec с localmock подтвердил отсутствие `view_image` в каталоге. Исполняемые команды не имеют сети; доверенный хост CLI использует подписку и ограниченный MCP.
+
+Памятка и параметры: [AGENT_LAUNCH.md](AGENT_LAUNCH.md). Ниже сохранён предыдущий срез, который был возвращён ревью82; он не описывает текущую границу безопасности.
+
 Ветка `codex/agent-launch-20261103`, основа `ac4c7616`, только локальные изменения и PR без merge. Постановщик Влад, исполнитель «Codex — Запуск агентов», проверяющий Claude. #24/#25 не блокируют этот MVP. #26/#35/#38 и боевой сервер не менялись.
 
 Результат: [черновой PR #477](https://github.com/Elk0980/synapse-server/pull/477), код `6cb70ff1`. Слияние и установка не выполнялись.

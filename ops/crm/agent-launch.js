@@ -3,6 +3,7 @@
 // The existing dispatch queue remains canonical. Runs hold process identity and
 // leases; an expired lease never proves that a local process has stopped.
 const {randomUUID} = require('node:crypto');
+const {validateAllowedPaths} = require('./agent-launch-scope');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const LEASE_MS = 120000;
 const LIVE = new Set(['running', 'unknown']);
@@ -24,7 +25,7 @@ function codeOnly(task) {
     .replace(/не\s+(?:делать|делай|делал|выполнять|выполняй|выполнял)\s+(?:merge|deploy)(?![\p{L}\p{N}_])/giu,'')
     .replace(/не\s+(?:трогать|трогай|трогал|трогали|менять|меняй|менял|меняли|изменять|изменяй|изменял|изменяли|обновлять|обновляй|обновлял|обновляли)\s+(?:боев[а-яё]*(?:\s+сервер)?|production|prod)(?![\p{L}\p{N}_])/giu,'')
     .replace(/(?:боев[а-яё]*(?:\s+сервер)?|production|prod)\s+не\s+(?:трогать|трогай|трогал|трогали|менять|меняй|менял|меняли|изменять|изменяй|изменял|изменяли|обновлять|обновляй|обновлял|обновляли)(?![\p{L}\p{N}_])/giu,'');
-  return !/(?:production|\bprod\b|боев[а-яё]*|депло[йя][а-яё]*|разв[её]ртыван[а-яё]*|\bdeploy\b|\bmerge\b|слияние\s+(?:в|с)\s+main)/iu.test(text);
+  return !/(?:production|(?<![\p{L}\p{N}_])[pр][rг][oо0][dд](?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])прод(?:акш[её]?[нм][а-яё]*|уктив[а-яё]*|ов[а-яё]*)?(?![\p{L}\p{N}_])|боев[а-яё]*|депло[йя][а-яё]*|разв[её]ртыван[а-яё]*|\bdeploy\b|\bmerge\b|слияние\s+(?:в|с)\s+main|\bgit\s+push\s+(?:[^\r\n;]*?\s)?(?:origin\s+)?(?:main|master|HEAD:main|HEAD:master|HEAD:refs\/heads\/(?:main|master))\b|(?:выкат[а-яё]*|выкач[а-яё]*|зал(?:ей|ить|ива[а-яё]*)|загруз[а-яё]*|установ[а-яё]*|постав[а-яё]*|обнов[а-яё]*)\s+(?:(?:на|в)\s+)?(?:сервер|server)|\b(?:roll\s*out|release|ship|upload|install|update)\s+(?:to\s+)?(?:the\s+)?server\b)/iu.test(text);
 }
 function safeLog(value) {
   return value.replace(/https?:\/\/\S+/gi, '[URL]')
@@ -53,6 +54,14 @@ function createAgentLaunch(db, {coordination, now = Date.now} = {}) {
       BEGIN SELECT RAISE(ABORT,'Immutable agent message'); END;
     CREATE TRIGGER IF NOT EXISTS task_dispatch_agent_message_immutable_delete BEFORE DELETE ON task_dispatch_agent_messages
       BEGIN SELECT RAISE(ABORT,'Immutable agent message'); END;`);
+  // Old runs were created without explicit code-only or file-scope consent.
+  // Additions must never authorize them by inferring intent from their text.
+  const columns = new Set(db.prepare('PRAGMA table_info(task_dispatch_agent_runs)').all().map(column => column.name));
+  if (!columns.has('code_only')) db.exec('ALTER TABLE task_dispatch_agent_runs ADD COLUMN code_only INTEGER NOT NULL DEFAULT 0 CHECK(code_only IN (0,1))');
+  if (!columns.has('allowed_paths')) db.exec("ALTER TABLE task_dispatch_agent_runs ADD COLUMN allowed_paths TEXT NOT NULL DEFAULT '[]'");
+  db.exec(`CREATE TRIGGER IF NOT EXISTS task_dispatch_agent_scope_immutable BEFORE UPDATE OF code_only,allowed_paths ON task_dispatch_agent_runs
+    WHEN NEW.code_only<>OLD.code_only OR NEW.allowed_paths<>OLD.allowed_paths
+    BEGIN SELECT RAISE(ABORT,'Immutable agent scope'); END;`);
   const stamp = () => new Date(now()).toISOString();
   const tx = fn => {
     const own = !db.isTransaction;
@@ -73,6 +82,10 @@ function createAgentLaunch(db, {coordination, now = Date.now} = {}) {
     return row;
   };
   const raw = id => db.prepare('SELECT * FROM task_dispatch_agent_runs WHERE run_id=?').get(id);
+  const approvedScope = row => {
+    if (row.code_only !== 1) return null;
+    try { return validateAllowedPaths(JSON.parse(row.allowed_paths)); } catch { return null; }
+  };
   const safeTask = row => codeOnly({title:row.title,description:[row.description || '',
     db.prepare('SELECT source_note FROM task_dispatch_mirrors WHERE task_id=?').get(row.id)?.source_note || '',
     ...db.prepare('SELECT text FROM task_comments WHERE task_id=? ORDER BY id').all(row.id).map(comment => comment.text)].join('\n')});
@@ -84,6 +97,7 @@ function createAgentLaunch(db, {coordination, now = Date.now} = {}) {
     return row;
   };
   const view = row => ({run_id:row.run_id, task_id:row.task_id, company_code:row.company_code,
+    code_only:row.code_only === 1,allowed_paths:approvedScope(row) || [],
     executor_profile:row.executor_profile, branch:row.branch, state:row.state,
     stop_requested:Boolean(row.stop_requested), session_id:row.session_id,
     chat:row.session_id ? `codex://threads/${row.session_id}` : `synapse-agent:${row.run_id}`,
@@ -92,6 +106,9 @@ function createAgentLaunch(db, {coordination, now = Date.now} = {}) {
   const patch = (id, data) => db.prepare(`UPDATE task_dispatch_agent_runs SET ${Object.keys(data).map(key => `${key}=?`).join(',')},updated_at=? WHERE run_id=?`)
     .run(...Object.values(data),stamp(),id);
   const agentName = row => `Codex — задача #${row.task_id}`;
+  const currentRun = row => db.prepare('SELECT run_id FROM task_dispatch_agent_runs WHERE task_id=? ORDER BY rowid DESC LIMIT 1').get(row.task_id)?.run_id === row.run_id;
+  const ownsDispatch = (row, dispatch = db.prepare('SELECT * FROM task_dispatch WHERE task_id=?').get(row.task_id)) =>
+    currentRun(row) && dispatch?.company_code === row.company_code && dispatch.state.startsWith('agent_');
   function report(row, actor, message) {
     coordination.tool('agent_report', {agent:agentName(row),kind:'codex',mode:'once',
       function:'Локальная работа в git worktree; PR без merge/deploy',
@@ -100,15 +117,17 @@ function createAgentLaunch(db, {coordination, now = Date.now} = {}) {
       last_event:message},actor);
   }
   function audit(row, actor, note) {
-    const message = `[agent ${row.run_id}] ${note}`;
-    coordination.tool('task_comment', {task_id:row.task_id,author:'Система запуска агентов',text:message},actor);
     const dispatch = db.prepare('SELECT * FROM task_dispatch WHERE task_id=?').get(row.task_id);
-    if (!dispatch) throw new Error('Отсутствует запись существующей очереди');
-    db.prepare(`UPDATE task_dispatch SET state=?,revision=revision+1,updated_at=? WHERE task_id=?`)
-      .run(`agent_${row.state}`,stamp(),row.task_id);
-    db.prepare(`INSERT INTO task_dispatch_history(task_id,revision,state,note,created_at)
-      VALUES(?,?,?,?,?)`).run(row.task_id,dispatch.revision+1,`agent_${row.state}`,message,stamp());
-    report(row,actor,note);
+    const owned = ownsDispatch(row,dispatch);
+    const message = `[agent ${row.run_id}] ${note}${owned ? '' : ' Внешний этап диспетчера сохранён; запуск не владеет этой очередью.'}`;
+    coordination.tool('task_comment', {task_id:row.task_id,author:'Система запуска агентов',text:message},actor);
+    if (owned) {
+      db.prepare(`UPDATE task_dispatch SET state=?,revision=revision+1,updated_at=? WHERE task_id=?`)
+        .run(`agent_${row.state}`,stamp(),row.task_id);
+      db.prepare(`INSERT INTO task_dispatch_history(task_id,revision,state,note,created_at)
+        VALUES(?,?,?,?,?)`).run(row.task_id,dispatch.revision+1,`agent_${row.state}`,message,stamp());
+    }
+    if (currentRun(row)) report(row,actor,note);
   }
   function reconcile(actor) {
     const codes = scope(actor);
@@ -119,11 +138,16 @@ function createAgentLaunch(db, {coordination, now = Date.now} = {}) {
         // Do not report into another company's moved/deleted task. Preserve the
         // process reservation until its original worker confirms termination.
         patch(row.run_id, LIVE.has(row.state) ? {stop_requested:1} : {state:'stopped',stop_requested:1});
-      } else if (!safeTask(current)) {
+      } else if (!ownsDispatch(row)) {
+        if (!row.stop_requested) {
+          patch(row.run_id,LIVE.has(row.state) ? {stop_requested:1} : {state:'stopped',stop_requested:1});
+          audit(raw(row.run_id),actor,'Очередь перешла другому этапу. Запрошена остановка локального запуска.');
+        }
+      } else if (!approvedScope(row) || !safeTask(current)) {
         const data = LIVE.has(row.state) ? {stop_requested:1} : {state:'failed',summary:'Исходная задача больше не проходит ограничение локального кода'};
         if (!row.stop_requested && row.state !== 'failed') {
           patch(row.run_id,data);
-          audit(raw(row.run_id),actor,'Изменённая задача остановлена ограничением локального кода.');
+          audit(raw(row.run_id),actor,!approvedScope(row) ? 'Запуск без явного разрешения локального кода и области файлов остановлен.' : 'Изменённая задача остановлена ограничением локального кода.');
         }
       }
       // Stop requests and changed tasks do not prove process termination. A
@@ -150,6 +174,8 @@ function createAgentLaunch(db, {coordination, now = Date.now} = {}) {
       .run(actor.userId,req.ref,id,action,message);
   }
   function launch(args, actor) {
+    if (args.code_only !== true) fail(403,'Нужно явное code_only:true от оркестратора');
+    const allowedPaths = validateAllowedPaths(args.allowed_paths), encodedPaths = JSON.stringify(allowedPaths);
     const t = task(args.task_id,actor);
     if ((args.executor_profile || 'codex-code') !== 'codex-code') fail(400,'Поддерживается только codex-code');
     const ref = args.client_ref === undefined ? null : clean(args.client_ref,200,true);
@@ -157,6 +183,8 @@ function createAgentLaunch(db, {coordination, now = Date.now} = {}) {
     if (previous) {
       const old = run(previous.run_id,actor);
       if (previous.action !== 'launch' || old.task_id !== t.id) fail(409,'client_ref уже использован для другого действия');
+      if (!approvedScope(old)) fail(403,'Старый запуск не имеет явного разрешения локального кода и области файлов');
+      if (old.allowed_paths !== encodedPaths) fail(409,'Область файлов существующего запуска неизменяема');
       return {run:view(old),created:false};
     }
     if (['done','cancelled'].includes(t.status)) fail(409,'Задача закрыта');
@@ -164,16 +192,24 @@ function createAgentLaunch(db, {coordination, now = Date.now} = {}) {
     const existing = db.prepare("SELECT * FROM task_dispatch_agent_runs WHERE task_id=? AND state IN ('queued','running','unknown','waiting')").get(t.id);
     if (existing) {
       const allowed = run(existing.run_id,actor);
+      if (!approvedScope(allowed)) fail(403,'Старый запуск не имеет явного разрешения локального кода и области файлов');
+      if (allowed.allowed_paths !== encodedPaths) fail(409,'Область файлов существующего запуска неизменяема');
       if (ref) remember({ref},actor,'launch',allowed.run_id);
       return {run:view(allowed),created:false};
     }
     const dispatch = db.prepare('SELECT * FROM task_dispatch WHERE task_id=?').get(t.id);
-    if (dispatch && ['queued','running'].includes(dispatch.state)) fail(409,'Задача уже занята серверным диспетчером');
+    if (dispatch) {
+      const priorLocal = ['agent_failed','agent_stopped'].includes(dispatch.state) && db.prepare("SELECT 1 FROM task_dispatch_agent_runs WHERE task_id=? AND owner_id=? AND company_code=? AND state IN ('failed','stopped')").get(t.id,actor.userId,t.company_code);
+      if (dispatch.state !== 'awaiting_executor' && !priorLocal) fail(409,'Существующий этап диспетчера нельзя заменять запуском агента');
+    }
     if (!dispatch) db.prepare("INSERT INTO task_dispatch(task_id,company_code,state,created_at,updated_at) VALUES(?,?,'agent_queued',?,?)")
       .run(t.id,t.company_code,stamp(),stamp());
     const id = randomUUID(), branch = `codex/agent-task-${t.id}-${id.slice(0,8)}`;
-    db.prepare(`INSERT INTO task_dispatch_agent_runs(run_id,task_id,company_code,owner_id,executor_profile,branch,state,created_at,updated_at)
-      VALUES(?,?,?,?,'codex-code',?,'queued',?,?)`).run(id,t.id,t.company_code,actor.userId,branch,stamp(),stamp());
+    db.prepare(`INSERT INTO task_dispatch_agent_runs(run_id,task_id,company_code,owner_id,executor_profile,branch,state,created_at,updated_at,code_only,allowed_paths)
+      VALUES(?,?,?,?,'codex-code',?,'queued',?,?,1,?)`).run(id,t.id,t.company_code,actor.userId,branch,stamp(),stamp(),encodedPaths);
+    // The explicit, checked awaiting_executor transition is the only point at
+    // which this run may acquire an existing non-agent queue row.
+    db.prepare("UPDATE task_dispatch SET state='agent_queued' WHERE task_id=? AND state='awaiting_executor'").run(t.id);
     if (ref) remember({ref},actor,'launch',id);
     coordination.tool('task_update',{task_id:t.id,executor:agentName(raw(id))},actor);
     audit(raw(id),actor,'Запуск поставлен в существующую очередь dispatch; локальный процесс ещё не запущен.');
@@ -181,6 +217,8 @@ function createAgentLaunch(db, {coordination, now = Date.now} = {}) {
   }
   function message(args, actor) {
     const r = run(args.run_id,actor), text = clean(args.text,10000,true);
+    if (!approvedScope(r)) fail(403,'Продолжение старого запуска без явного code_only и области файлов запрещено');
+    if (!ownsDispatch(r)) fail(409,'Продолжение не владеет текущей очередью задачи');
     const req = request(args,actor,'message',r.run_id,text);
     if (req?.old) return {run:view(r),queued:false};
     if (!['waiting','failed'].includes(r.state) || !r.session_id || r.stop_requested) fail(409,'Продолжение доступно после завершения turn с сохранённым session_id');
@@ -206,10 +244,12 @@ function createAgentLaunch(db, {coordination, now = Date.now} = {}) {
     const live = db.prepare("SELECT count(*) n FROM task_dispatch_agent_runs WHERE state IN ('running','unknown')").get().n;
     if (live >= 3) return {job:null};
     const r = db.prepare(`SELECT r.* FROM task_dispatch_agent_runs r JOIN tasks t ON t.id=r.task_id
-      WHERE r.owner_id=? AND r.state='queued' AND r.stop_requested=0 AND t.is_deleted=0
+      WHERE r.owner_id=? AND r.state='queued' AND r.code_only=1 AND r.stop_requested=0 AND t.is_deleted=0
       AND t.status NOT IN ('done','cancelled') AND t.company_code=r.company_code
       AND lower(r.company_code) IN (${codes.map(()=>'?').join(',')}) ORDER BY r.created_at,r.run_id LIMIT 1`).get(actor.userId,...codes);
     if (!r) return {job:null};
+    const allowedPaths = approvedScope(r);
+    if (!allowedPaths) { patch(r.run_id,{state:'failed',summary:'Нет явного разрешения локального кода и области файлов'});audit(raw(r.run_id),actor,'Запуск без разрешённой области файлов отклонён.');return {job:null}; }
     const t = task(r.task_id,actor);
     if (!safeTask(t)) { patch(r.run_id,{state:'failed',summary:'Изменённая задача не проходит ограничение локального кода'});audit(raw(r.run_id),actor,'Запуск отклонён после изменения исходной задачи.');return {job:null}; }
     const token = randomUUID(), until = now()+LEASE_MS;
@@ -219,6 +259,7 @@ function createAgentLaunch(db, {coordination, now = Date.now} = {}) {
     const description = [t.description || '',db.prepare('SELECT source_note FROM task_dispatch_mirrors WHERE task_id=?').get(t.id)?.source_note || '']
       .filter(Boolean).join('\n').slice(0,20000);
     return {job:{run_id:r.run_id,task_id:r.task_id,company_code:r.company_code,executor_profile:r.executor_profile,
+      code_only:true,allowed_paths:allowedPaths,
       branch:r.branch,title:t.title,description,lease_token:token,lease_until:new Date(until).toISOString(),
       session_id:r.session_id,...(m ? {message_id:m.id,message:m.text} : {})}};
   }
@@ -259,7 +300,7 @@ function createAgentLaunch(db, {coordination, now = Date.now} = {}) {
     patch(r.run_id,fields);
     const next = raw(r.run_id);
     if (validTask && (terminal || (args.event === 'started' && (!r.session_id || r.state === 'unknown')))) {
-      if (args.event === 'started') coordination.tool('task_update',{task_id:r.task_id,status:'in_progress'},actor);
+      if (args.event === 'started' && !next.stop_requested && ownsDispatch(next)) coordination.tool('task_update',{task_id:r.task_id,status:'in_progress'},actor);
       audit(next,actor,terminal ? `Turn завершён: ${next.state}; ${next.summary || 'результат ожидает проверки'}` : 'codex exec запущен; контекст зарегистрирован.');
     } else if (validTask) report(next,actor,r.stop_requested ? 'Ожидается подтверждение остановки процесса.' : 'Heartbeat локального процесса получен.');
     return {run:view(next)};

@@ -20,9 +20,9 @@ test('real MCP → CRM → existing dispatch → worker claim, session resume an
   const oldComment = await call('task_comment',{task_id:old.id,author:'Owner',text:'SAMPLE прежний комментарий'});
   const target = (await call('task_create',{client_ref:'test-code-task',title:'SAMPLE Исправить код',project:'synapse-business',
     description:'Добавить локальную проверку модуля',executor:'Codex',reviewer:'Claude'})).task;
-  const result = await call('agent_launch',{task_id:target.id,client_ref:'test-launch'});
+  const result = await call('agent_launch',{code_only:true,allowed_paths:['ops/'],task_id:target.id,client_ref:'test-launch'});
   assert.equal(result.run.state,'queued');
-  assert.equal((await call('agent_launch',{task_id:target.id,client_ref:'test-launch'})).created,false);
+  assert.equal((await call('agent_launch',{code_only:true,allowed_paths:['ops/'],task_id:target.id,client_ref:'test-launch'})).created,false);
   const worker_id = randomUUID();
   const {job} = await call('agent_worker_claim',{worker_id});
   assert.equal(job.run_id,result.run.run_id);

@@ -4,7 +4,9 @@
 const http = require('node:http');
 const {randomBytes, timingSafeEqual} = require('node:crypto');
 const MAX_BODY = 64 * 1024;
-const fail = () => { throw Error('Запрос вне разрешённой области запуска'); };
+const fail = (message = 'Запрос вне разрешённой области запуска') => {
+  throw Object.assign(Error(message),{code:'CHILD_SCOPE_REJECTED'});
+};
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 const str = (value, max) => typeof value === 'string' && value.trim() && value.length <= max;
 const integer = (value, min, max) => Number.isSafeInteger(value) && value >= min && value <= max;
@@ -61,6 +63,9 @@ async function startChildMcp({upstreamCall, job, agentName}) {
         schema.required.some(key => !Object.hasOwn(args,key))) fail();
     for (const [key,value] of Object.entries(args)) {
       const rule = schema.properties[key];
+      if (rule.type === 'integer' && !integer(value,rule.minimum ?? 1,rule.maximum ?? Number.MAX_SAFE_INTEGER)) {
+        fail(`Аргумент ${key}: нужно целое число от ${rule.minimum ?? 1} до ${rule.maximum ?? Number.MAX_SAFE_INTEGER}.`);
+      }
       if ((rule.type === 'string' && (typeof value !== 'string' || value.length > (rule.maxLength ?? 200) ||
           (rule.minLength && !value.trim()))) ||
           (rule.type === 'integer' && !integer(value,rule.minimum ?? 1,rule.maximum ?? Number.MAX_SAFE_INTEGER)) ||
@@ -129,7 +134,7 @@ async function startChildMcp({upstreamCall, job, agentName}) {
         } catch (error) {
           const missingMap = error?.code === 'MAP_NOT_INSTALLED';
           result = {isError:true, ...(missingMap ? {structuredContent:{error:{status:503,message:'Карта не установлена'}}} : {}),
-            content:[{type:'text',text:missingMap ? 'Карта не установлена' : 'Запрос отклонён или результат не подтверждён; проверьте состояние своей задачи.'}]};
+            content:[{type:'text',text:missingMap ? 'Карта не установлена' : error?.code === 'CHILD_SCOPE_REJECTED' ? error.message : 'Запрос отклонён или результат не подтверждён; проверьте состояние своей задачи.'}]};
         }
       } else return send(response,200,{jsonrpc:'2.0',id,error:{code:-32601,message:'Метод недоступен'}});
       send(response,200,{jsonrpc:'2.0',id,result});

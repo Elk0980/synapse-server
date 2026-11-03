@@ -63,7 +63,7 @@ npm test
 | `session_start` | `agent`, `kind`, `request`; обязательные правила, документы с причинами, задачи агента, `session_id` |
 | `doc_read` | `path` из карты; `{path,text}`, только чтение |
 | `session_end` | `session_id`, `summary`; необязательные `state`, `statuses:[{task_id,status}]`; запись итога в CRM |
-| `agent_launch` | `task_id`, необязательные `executor_profile:"codex-code"`, `client_ref`; ставит локальный запуск в dispatch, возвращает `run` |
+| `agent_launch` | `task_id`, обязательные `code_only:true`, `allowed_paths:["ops/module/"]`; необязательные `executor_profile:"codex-code"`, `client_ref`; ставит локальный запуск в dispatch, возвращает `run` |
 | `agent_status` | `run_id`; состояние, ограниченный журнал, ветка и ссылка на контекст; без lease token |
 | `agent_message` | `run_id`, `text`, необязательный `client_ref`; продолжение завершённого хода в прежнем контексте |
 | `agent_stop` | `run_id`; запрос остановки с подтверждением воркера, повтор безопасен |
