@@ -47,15 +47,21 @@ test('реальные content→CRM запросы editor: узкие зада�
     // Добавочная колонка моделирует совместимость следующей схемы: status-write
     // не пересобирает строку и не теряет поля продукта или прежние метаданные.
     const compatibility=new DatabaseSync(database);
+    let expectedProductId=345;
     try {
-      compatibility.exec('ALTER TABLE tasks ADD COLUMN product_id INTEGER');
-      compatibility.prepare('UPDATE tasks SET product_id=? WHERE id=?').run(345,own.id);
+      if(!compatibility.prepare('PRAGMA table_info(tasks)').all().some(column=>column.name==='product_id'))
+        compatibility.exec('ALTER TABLE tasks ADD COLUMN product_id INTEGER');
+      // В схеме 10 колонка уже существует и защищена FK/проверкой компании.
+      if(compatibility.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='products'").get())
+        expectedProductId=Number(compatibility.prepare('INSERT INTO products(company_code,name,slug) VALUES(?,?,?)')
+          .run('alpha','Тест сохранения продукта','people-status-preservation').lastInsertRowid);
+      compatibility.prepare('UPDATE tasks SET product_id=? WHERE id=?').run(expectedProductId,own.id);
       const row=compatibility.prepare('SELECT data FROM task_coordination WHERE task_id=?').get(own.id);
       compatibility.prepare('UPDATE task_coordination SET data=? WHERE task_id=?').run(JSON.stringify({...JSON.parse(row.data),futureMetadata:{retained:true}}),own.id);
     }finally{compatibility.close();}
     const before=await call('task_get',{task_id:own.id},user,'alpha');
     const updated=await call('task_update',{task_id:own.id,status:'done',revision:before.coordination.revision},user,'alpha');assert.equal(updated.task.status,'done');assert.equal(updated.task.coordination.revision,before.coordination.revision+1);
-    const db=new DatabaseSync(database,{readOnly:true});try{assert.equal(db.prepare('SELECT updated_by FROM task_coordination WHERE task_id=?').get(own.id).updated_by,2);assert.equal(db.prepare('SELECT updated_by FROM task_coordination_history WHERE task_id=? ORDER BY revision DESC LIMIT 1').get(own.id).updated_by,2);assert.equal(db.prepare('SELECT product_id FROM tasks WHERE id=?').get(own.id).product_id,345);assert.deepEqual(JSON.parse(db.prepare('SELECT data FROM task_coordination WHERE task_id=?').get(own.id).data).futureMetadata,{retained:true});}finally{db.close();}
+    const db=new DatabaseSync(database,{readOnly:true});try{assert.equal(db.prepare('SELECT updated_by FROM task_coordination WHERE task_id=?').get(own.id).updated_by,2);assert.equal(db.prepare('SELECT updated_by FROM task_coordination_history WHERE task_id=? ORDER BY revision DESC LIMIT 1').get(own.id).updated_by,2);assert.equal(db.prepare('SELECT product_id FROM tasks WHERE id=?').get(own.id).product_id,expectedProductId);assert.deepEqual(JSON.parse(db.prepare('SELECT data FROM task_coordination WHERE task_id=?').get(own.id).data).futureMetadata,{retained:true});}finally{db.close();}
     await assert.rejects(call('task_update',{task_id:own.id,status:'planned',revision:before.coordination.revision},user,'alpha'),{status:409});
     await assert.rejects(call('task_update',{task_id:inherited.id,status:'done',revision:inherited.coordination.revision},user,'alpha'),{status:404});
     const response=await request('/internal/people/task_update?companyCode=alpha','POST',{task_id:own.id,status:'done',revision:updated.task.coordination.revision,executor:'person:2'},editor);assert.equal(response.status,400);
