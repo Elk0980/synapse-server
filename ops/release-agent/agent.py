@@ -14,9 +14,14 @@ import re
 import shutil
 import sqlite3
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.request
+
+# Keep board.py on the same exception/types when invoked as a systemd script.
+if __name__ == '__main__':
+    sys.modules['agent'] = sys.modules[__name__]
 
 
 class Blocked(Exception):
