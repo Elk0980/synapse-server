@@ -377,6 +377,13 @@ alvi.synapsebusiness.ru {
 # --- Synapse Business: сайт-презентация -------------------------------------
 synapse.synapsebusiness.ru {
   root * /srv/sites/synapse
+  @vk_callback {
+    path_regexp vk_callback ^/public-vk-callback/[A-Za-z0-9_-]{32}$
+    method POST
+  }
+  handle @vk_callback {
+    reverse_proxy content:8080
+  }
   @email_unsubscribe {
     path_regexp email_unsubscribe ^/email-unsubscribe/[A-Za-z0-9_-]{43}$
     method GET POST

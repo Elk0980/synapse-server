@@ -1,0 +1,12 @@
+.vk-events{margin-block:28px;padding-top:24px;border-top:1px solid var(--line,#31404e)}
+.vk-events fieldset{border:1px solid var(--line,#31404e);border-radius:12px;padding:12px 16px;margin-block:14px}
+.vk-events label{display:flex;flex-direction:column;gap:6px;margin-block:10px}
+.vk-events .vke-toggle{flex-direction:row;align-items:center}
+.vk-events .vke-toggle input{width:20px;min-height:20px}
+.vk-events code{overflow-wrap:anywhere}
+.vke-state p,.vke-note{overflow-wrap:anywhere}
+.vke-journal{padding-left:20px}
+.vke-journal li{border-top:1px solid var(--line,#31404e);padding-block:8px;overflow-wrap:anywhere}
+.vke-journal .vke-unknown{border-left:3px solid var(--accent,#a8ceff);padding-left:8px}
+#vke-status{min-height:24px}
+@media(max-width:640px){.vk-events button{min-height:44px;width:100%}}
