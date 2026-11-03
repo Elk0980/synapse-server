@@ -34,6 +34,29 @@ class MigrationBackend(Backend):
 
 
 class ReviewFixes(unittest.TestCase):
+    def test_rollback_cli_is_cas_and_request_id_idempotent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            database = root / 'db.sqlite'
+            with contextlib.closing(sqlite3.connect(database)) as db, db:
+                db.execute('CREATE TABLE messages(text TEXT)')
+            backend = Backend(database)
+            engine = agent.Engine(root / 'state', backend)
+            old, new = 'a' * 40, 'b' * 40
+            engine.save({'phase': 'idle', 'current': old})
+            engine.deploy({'sha': new, 'parent': old})
+            config = {'stateDir': str(engine.directory), 'lock': str(root / 'lock')}
+            with patch.object(agent, 'ComposeBackend', return_value=backend), \
+                 patch.object(agent, 'release_lock', return_value=contextlib.nullcontext()):
+                with self.assertRaisesRegex(agent.Blocked, 'ROLLBACK_STALE_SHA'):
+                    agent.rollback_command(config, 'c' * 40, 'wrong')
+                agent.rollback_command(config, new, 'request-1')
+                restores = backend.events.count('restore')
+                agent.rollback_command(config, new, 'request-1')
+                self.assertEqual(backend.events.count('restore'), restores)
+                with self.assertRaisesRegex(agent.Blocked, 'ROLLBACK_REQUEST_REUSED'):
+                    agent.rollback_command(config, old, 'request-1')
+
     def test_pinned_bootstrap_downloads_complete_package_then_enables_once(self):
         import bootstrap
         import install as installer

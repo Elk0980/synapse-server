@@ -33,13 +33,14 @@ class NativeBackend(ComposeBackend):
         command([str(executable), operation, *plan['writers']])
 
 
-def validate_plan(config, plan):
+def validate_plan(config, plan, historical=False):
     import re
     need(isinstance(plan, dict) and re.fullmatch('[a-f0-9]{40}', plan.get('sha', '')), 'BROKER_SHA')
     need(set(plan.get('services', [])) <= set(config['services']) and
          set(plan.get('writers', [])) <= set(config['services']), 'BROKER_SERVICE_DENIED')
     envelope = load(Path(config['admissions']) / (plan['sha'] + '.json'))
-    body = verify_admission(envelope, private_file(config['admissionKey']), plan['sha'], plan['parent'])
+    body = verify_admission(envelope, private_file(config['admissionKey']), plan['sha'], plan['parent'],
+                            now=0 if historical else None)
     for key in ('sha', 'parent', 'pr', 'taskId', 'headSha', 'hasMigration', 'recipeSha256'):
         need(plan.get(key) == body.get(key), 'BROKER_PLAN_BINDING')
     # The signed receipt also binds the allowed service closure.
@@ -58,9 +59,12 @@ def dispatch(config, request):
         envelope = load(Path(config['admissions']) / (request['sha'] + '.json'))
         return verify_admission(envelope, private_file(config['admissionKey']), request['sha'], request['parent'])
     plan = request['plan']
-    validate_plan(config, plan)
+    import re
+    need(re.fullmatch('[a-f0-9]{40}', plan.get('sha', '')), 'BROKER_SHA')
     backend = NativeBackend(config)
-    receipt = backend.area(plan) / 'previous.json'
+    receipt = Path(config['stateDir']) / plan['sha'] / 'previous.json'
+    historical = operation in ('stop', 'restore', 'health', 'return_traffic', 'restore_databases') and receipt.exists()
+    validate_plan(config, plan, historical=historical)
     if operation == 'capture':
         # Immutable previous receipt is reused on recovery, never overwritten.
         if not receipt.exists():

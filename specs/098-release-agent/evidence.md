@@ -1,8 +1,17 @@
+# LinuxCI11b332a8 SUCCESS
+
+41687427285 и41687420908 SUCCESS: Linuxunits/flock, реальный Docker Compose
+custom Dockerfile+args+target→bad health→image rollback+SQLite preservation;
+реальный uid nobody/socket broker allowedverify/deniedshell/rootkeyunreadable;
+установка пакета на копии. SpecKit новогоhead проверяется отдельно.
+После этого исправлены UTC Z MCP contract и historical receipt rollback; добавлен
+CLI staleSHA/request-id/idempotency test. Новый exacthead требует новогоCI.
+
 # Повторное ревью222 — новый результат
 
 Решения Claude222 реализуются в прежнем PR481, без merge/serverwrites. До итогового
-CI опубликованные проверки предыдущего79ba не выдаются за новые. Локально27tests:
-24PASS/3Linux-DockerSKIP. Проверены cursor/runtime separation и продолжение после
+CI опубликованные проверки предыдущего79ba не выдаются за новые. Локально28tests:
+25PASS/3Linux-DockerSKIP. Проверены cursor/runtime separation и продолжение после
 rollback/build_failed/prepared; no_release/site_deferred; PRheadchecks+mergeSpecKit;
 отложенный CASoutbox/backoff/readback; SQLite pretraffic restore/posttraffic preserve;
 rootbroker service/signature binding и deny shell; installer enable на копии;

@@ -75,7 +75,7 @@ class Outbox:
             return
         events.append({'taskId': task_id, 'sha': sha, 'kind': kind, 'marker': marker,
                        'phase': 'ready', 'attempts': 0, 'nextAttempt': 0,
-                       'at': datetime.now(timezone.utc).isoformat()})
+                       'at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')})
         atomic(self.path, events)
 
     def flush(self):

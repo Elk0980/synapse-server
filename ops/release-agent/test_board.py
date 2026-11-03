@@ -15,6 +15,8 @@ class Fixture:
     def task(self, task_id): return self.task_data
 
     def call(self, method, args):
+        if 'checked_at' in args:
+            assert args['checked_at'].endswith('Z'), 'MCP z.iso.datetime requires UTC Z'
         self.calls += 1
         if method == 'task_update':
             if 'evidence' in args:

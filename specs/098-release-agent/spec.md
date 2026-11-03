@@ -7,7 +7,7 @@
 - FR1: сначала полный приватный снимок и поимённый разбор предсуществующих372
   изменений; checkout/runtime/main согласуются без удаления данных и managed слоёв.
 - FR2: исходящий worker60–120сек, один first-parent commit за раз, зелёный CI
-  exact merge SHA и связанная с PR задача с подтверждённой приёмкой Claude.
+  exact PR head + Spec Kit merge SHA и связанная с PR задача с подтверждённой приёмкой Claude.
   Свободная строка автора комментария не удостоверяет личность.
 - FR3: общая managed lock, полный прежний Compose recipe, адресные immutable
   images, остановка затронутых writers, VACUUM INTO + integrity/FK.
