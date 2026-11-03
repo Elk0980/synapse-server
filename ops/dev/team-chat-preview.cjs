@@ -1,0 +1,18 @@
+'use strict';
+// Synthetic loopback preview: no credentials, production requests or notifications.
+const http=require('node:http'),fs=require('node:fs'),path=require('node:path');
+const root=path.resolve(__dirname,'../../sites/synapse/cabinet');
+let items=[{id:1,company_code:'alpha',user_id:3,author_name:'Тестовая коллега',text:'Здесь обсуждаем работу команды проекта.',created_at:new Date().toISOString(),command_state:'none'}];
+http.createServer(async(req,res)=>{
+  const url=new URL(req.url,'http://localhost');
+  res.setHeader('cache-control','no-store');
+  if(url.pathname==='/') {res.setHeader('content-type','text/html; charset=utf-8');return res.end('<style>body{margin:0;background:#080f18;color:white;font-family:system-ui}iframe{height:760px;border:1px solid #557}section{display:flex;gap:16px}</style><h1>Синтетическая проверка · ПК 900 px и телефон 390 px</h1><section><iframe width="900" src="/team-chat.html?companyCode=alpha"></iframe><iframe width="390" src="/team-chat.html?companyCode=alpha"></iframe></section>');}
+  if(url.pathname.startsWith('/content/people/')) {
+    res.setHeader('content-type','application/json');
+    if(url.pathname.endsWith('/context'))return res.end(JSON.stringify({user:{id:2},csrfToken:'synthetic',companies:[{id:'alpha',name:'Тестовый проект'}]}));
+    if(req.method==='POST'){let raw='';for await(const b of req)raw+=b;const body=JSON.parse(raw);let row=items.find(m=>m.client_id===body.clientMessageId);if(!row){row={id:items.length+1,user_id:2,author_name:'Тестовый человек',text:body.text,client_id:body.clientMessageId,created_at:new Date().toISOString(),task_id:101,command_state:'done'};items.push(row);}return res.end(JSON.stringify({message:row}));}
+    return res.end(JSON.stringify({messages:items,hasMore:false}));
+  }
+  const name=url.pathname.slice(1);if(!['team-chat.html','team-chat.js','team-chat.css'].includes(name)){res.writeHead(404);return res.end();}
+  res.setHeader('content-type',name.endsWith('.css')?'text/css':name.endsWith('.js')?'application/javascript':'text/html; charset=utf-8');res.end(fs.readFileSync(path.join(root,name)));
+}).listen(38736,'127.0.0.1',()=>console.log('Synthetic preview http://127.0.0.1:38736'));

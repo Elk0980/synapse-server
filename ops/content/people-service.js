@@ -10,6 +10,7 @@ function createPeopleService({db,authStore,team,crmUrl,crmKey,requireSession,req
   const enabled=env.PEOPLE_NOTIFICATIONS_ENABLED==='1'&&env.PEOPLE_NOTIFICATIONS_TEXT_APPROVED==='1';
   const call=createPeopleCrmClient({crmUrl,apiKey:crmKey});
   const tasks=createPeopleTasks({authStore,db,call});
+  const chat=require('./team-chat').createTeamChat({db,tasks,call});
   const plan=createPeoplePlan({db,authStore,tasks,call});
   const transport={...createPeopleNotificationTransport({vapidSubject:env.PEOPLE_VAPID_SUBJECT,
     vapidPublicKey:env.PEOPLE_VAPID_PUBLIC_KEY,vapidPrivateKey:env.PEOPLE_VAPID_PRIVATE_KEY}),deliveryEnabled:enabled};
@@ -26,7 +27,7 @@ function createPeopleService({db,authStore,team,crmUrl,crmKey,requireSession,req
       return runtime.validateEvent({userId,companyCode,eventKey,payload});
     }});
   const runtime=createPeopleRuntime({db,authStore,tasks,call,notifications,enabled});
-  const handle=createPeopleHttp({authStore,team,tasks,plan,notifications,runtime,transport,requireSession,requireCsrf,readJson,sendJson});
+  const handle=createPeopleHttp({authStore,team,tasks,chat,plan,notifications,runtime,transport,requireSession,requireCsrf,readJson,sendJson});
   return {handle,start:runtime.start,stop:runtime.stop};
 }
 module.exports={createPeopleService};
