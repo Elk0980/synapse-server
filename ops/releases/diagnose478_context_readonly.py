@@ -24,7 +24,9 @@ def settings(cfg,service,row):
  parent={x.split('=',1)[0]:x.split('=',1)[1] for x in image(row['Image'])['Config'].get('Env',[]) }
  expected={**parent,**given}
  diff=sorted(k for k in set(expected)|set(old) if expected.get(k)!=old.get(k))
- return {'image_matches':image(s['image'])['Id']==row['Image'],'environment_matches':not diff,'environment_different_keys':diff}
+ ref=s.get('image'); resolved=sp.run(['docker','image','inspect',ref],capture_output=True,timeout=60) if ref else None
+ image_id=json.loads(resolved.stdout)[0]['Id'] if resolved and resolved.returncode==0 else None
+ return {'image_reference_available':image_id is not None,'image_matches':image_id==row['Image'],'environment_matches':not diff,'environment_different_keys':diff}
 def main():
  os.umask(0o077);need(os.geteuid()==0 and run(['hostname']).decode().strip()=='msk-1-vm-tgnt' and lockfree())
  target=N/'context-diagnostic.redacted.json';need(not target.exists() and not target.is_symlink())
