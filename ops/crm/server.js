@@ -52,6 +52,7 @@ const { createSocialOnlypultAnalytics } = require('./social-onlypult-analytics')
 const { createCompanyInformationCheck } = require('./company-information-check');
 const { createDealOrders } = require('./deal-orders');
 const { createTaskCoordination } = require('./task-coordination');
+const { createPeopleHandler } = require('./people-http');
 const { createTaskDispatch } = require('./task-dispatch');
 
 const IS_MAIN = require.main === module;
@@ -639,6 +640,7 @@ const handleClientIntakes = createClientIntakesHandler({intakes:createClientInta
 const mediaMentorRollout = createMediaMentorRollout(db);
 const handleMediaMentorRollout = createMediaMentorRolloutHandler({rollout:mediaMentorRollout,companyModuleContext,readJson,send});
 const mediaMentor = createMediaMentor(db);
+const handlePeople = createPeopleHandler({db,taskCoordination,mentor:mediaMentor,identity:crmIdentity,readJson,send});
 const mediaMentorTransfer = createMediaMentorTransfer(db,{mentor:mediaMentor,autoposting,information:companyInformation});
 const contentPlanJobs = createContentPlanJobs(db,{requireWorker:true});
 const contentPlanDispatch = require('./content-plan-dispatch').createContentPlanDispatch({jobs:contentPlanJobs});
@@ -2517,6 +2519,7 @@ async function route(request, response) {
   takeRateLimit(request);
   const publicPost = request.method === 'POST' && ['/leads', '/events'].includes(url.pathname);
   if (!publicPost) requireApiKey(request);
+  if (await handlePeople(request,response,url,cors)) return;
 
   // Испытания моделей живут в том же owner-only разделе, что каталог и финансы.
   if(url.pathname==='/catalog'||url.pathname==='/finances'||/^\/finances\/\d+$/.test(url.pathname)

@@ -3,7 +3,7 @@
 /* Synapse Business — сервис контента сайтов.
    Хранит JSON-документы (например, прайс ALVI) с историей версий.
    Кабинет проверяет сессию, проект и права; сайты читают отдельный публичный маршрут.
-   Внешних пакетов нет: Node 24, встроенный node:sqlite. */
+   Node 24, встроенный node:sqlite; Web Push использует пакет web-push. */
 
 const http = require('node:http');
 const fs = require('node:fs');
@@ -227,6 +227,8 @@ const contentPlanRunner = require('./content-plan-runner').createContentPlanRunn
 const telegramSources = createTelegramSources({db, assetsDir:ASSETS_DIR, authStore, requireSession, requireCsrf, sendJson:send,
   config:readSourceConfig(path.join(path.dirname(DATABASE_PATH),'telegram-sources.json'))});
 if (!telegramSources.healthy) console.warn('content: настройки источников Telegram требуют проверки; приём выключен');
+const peopleService=require('./people-service').createPeopleService({db,authStore,team:companyTeam,
+  crmUrl:CRM_URL,crmKey:CRM_API_KEY,requireSession,requireCsrf,readJson,sendJson:send});
 const contentFactorySources=createContentFactorySourceBridge({db,authStore,assetsDir:ASSETS_DIR,
   requireSession,requireCsrf,readJson,sendJson:send,publishingOrigin:PUBLISHING_ASSET_ORIGIN,
   maxImageBytes:MAX_PUBLISHING_ASSET,maxVideoBytes:MAX_PUBLISHING_VIDEO,ready:()=>Boolean(CRM_API_KEY),
@@ -941,6 +943,7 @@ const server = http.createServer(async (request, response) => {
       } catch { return reply(503,{state:'unavailable',connected:false,configured:true,provider:'codex',
         error:'Подключение Хью пока недоступно'},{'cache-control':'no-store'}); }
     }
+    if (await peopleService.handle(request,response,url)) return;
     if (await contentFactorySources.handle(request,response,url)) return;
     if (await telegramSources.handle(request,response,url)) return;
     if (await projectChat.handle(request,response,url)) return;
@@ -1402,6 +1405,7 @@ let economyTimer;
 server.listen(PORT, () => {
   console.log(`content: слушает порт ${PORT}, база ${DATABASE_PATH}`);
   projectChat.startWorker();
+  peopleService.start();
   taskDispatchWorker.start();
   if(process.env.CONTENT_PLAN_WORKER_ENABLED==='1')contentPlanRunner.start();
   const monitor=()=>hughProviders.monitorEconomy(projectChat.fallback.status()).catch(()=>{});
@@ -1413,8 +1417,10 @@ function shutdownContent() {
   projectChat.stopWorker();
   taskDispatchWorker.stop();
   const contentPlanStopped=contentPlanRunner.stop();
+  const peopleStopped=peopleService.stop();
   server.close(async () => {
     await contentPlanStopped;
+    await peopleStopped;
     db.close();
     process.exit(0);
   });

@@ -53,3 +53,50 @@ test('ошибка вставки откатывает аккаунт и дос�
   db.exec("CREATE TRIGGER fail_team BEFORE INSERT ON company_team_members BEGIN SELECT RAISE(ABORT,'test failure'); END;");
   assert.throws(()=>team.create(manager.id,body()));assert.equal(auth.getByLogin('worker'),null);
 });
+
+function snapshot(db){
+  return {
+    users:db.prepare('SELECT * FROM auth_users ORDER BY id').all(),
+    companies:db.prepare('SELECT * FROM auth_user_companies ORDER BY user_id,company_code').all(),
+    permissions:db.prepare('SELECT * FROM auth_user_permissions ORDER BY user_id,permission').all(),
+    members:db.prepare('SELECT * FROM company_team_members ORDER BY user_id').all(),
+    audit:db.prepare('SELECT * FROM auth_audit ORDER BY id').all(),
+    changes:db.prepare('SELECT total_changes() AS n').get().n,
+  };
+}
+
+test('перевод исполнителя не переносит сотрудника из другой команды и не снимает его доступы',t=>{
+  const {team,owner,auth,db}=setup(t),member=team.create(owner.id,body());
+  auth.updateAccess(owner.id,member.id,['alvi','avokado'],['crm.edit','autoposting.edit']);
+  const before=snapshot(db);
+  assert.throws(()=>team.assignHuman(owner.id,member.id,'avokado'),{status:403});
+  assert.deepEqual(snapshot(db),before);
+});
+
+test('обычная учётная запись с доступом к компании без членства в команде не переводится в исполнителя',t=>{
+  const {team,owner,auth,db}=setup(t);
+  const user=auth.create(owner.id,{login:'existing',displayName:'Существующий редактор',password,companies:['alvi'],permissions:['crm.edit']},hash);
+  const before=snapshot(db);
+  assert.throws(()=>team.assignHuman(owner.id,user.id,'alvi'),{status:403});
+  assert.deepEqual(snapshot(db),before);
+});
+
+test('устаревшее членство после отзыва компании не разрешает перевод и не меняет запись',t=>{
+  const {team,owner,auth,db}=setup(t),member=team.create(owner.id,body());
+  auth.updateAccess(owner.id,member.id,['avokado'],['crm.view']);
+  const before=snapshot(db);
+  assert.throws(()=>team.assignHuman(owner.id,member.id,'alvi'),{status:403});
+  assert.deepEqual(snapshot(db),before);
+});
+
+test('владелец переводит действующего члена своей команды, сохраняя пароль и данные учётной записи',t=>{
+  const {team,owner,auth,db}=setup(t),member=team.create(owner.id,body({staffRole:'administrator'}));
+  const before=auth.getById(member.id);
+  const result=team.assignHuman(owner.id,member.id,'alvi'),after=auth.getById(member.id);
+  assert.equal(result.staffRole,'human_executor');
+  assert.equal(after.id,before.id);assert.equal(after.login,before.login);assert.equal(after.displayName,before.displayName);
+  assert.equal(after.passwordHash,before.passwordHash);assert.equal(after.createdAt,before.createdAt);assert.equal(after.sessionVersion,before.sessionVersion);
+  assert.deepEqual(after.companyCodes,['alvi']);assert.deepEqual(after.permissions,['tasks.self.edit','tasks.self.view']);
+  assert.equal(db.prepare('SELECT company_code FROM company_team_members WHERE user_id=?').get(member.id).company_code,'alvi');
+  assert.equal(db.prepare("SELECT count(*) n FROM auth_audit WHERE action='HUMAN_EXECUTOR_ASSIGNED' AND target_user_id=?").get(member.id).n,1);
+});

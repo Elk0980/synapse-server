@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#102137">
+  <title>Моя работа — Synapse Business</title>
+  <link rel="icon" href="../brand/hugh-icon-32.png">
+  <link rel="apple-touch-icon" href="../brand/hugh-icon-180.png">
+  <link rel="manifest" href="people.webmanifest">
+  <link rel="stylesheet" href="people.css?v=20261103-people-1">
+  <script defer src="people.js?v=20261103-people-1"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">К содержимому</a>
+  <header class="app-header"><a class="brand" href="../cabinet.html">Synapse <span>Business</span></a><button id="logout" type="button" hidden>Выйти</button></header>
+  <main id="main" class="page">
+    <section id="login-panel" class="card login" hidden>
+      <h1>Вход в кабинет</h1><p class="muted">Ваши задачи и уведомления по проектам.</p>
+      <form id="login-form">
+        <label>Логин<input name="login" autocomplete="username" required maxlength="64"></label>
+        <label>Пароль<input name="password" type="password" autocomplete="current-password" required></label>
+        <p id="login-error" class="message error" role="alert" hidden></p>
+        <button type="submit" class="primary">Войти</button>
+      </form>
+    </section>
+    <p id="global-message" class="message" role="status" aria-live="polite">Открываем кабинет…</p>
+    <section id="workspace" hidden>
+      <div class="workspace-head"><div><p class="eyebrow" id="person-name"></p><h1>Моя работа</h1></div><button id="refresh" type="button" aria-label="Обновить текущий проект">Обновить</button></div>
+      <label class="project-label">Проект<select id="company" aria-label="Рабочий проект"></select></label>
+      <nav class="tabs" aria-label="Разделы"><button id="tab-tasks" type="button" aria-pressed="true">Задачи</button><button id="tab-plan" type="button" aria-pressed="false" hidden>План</button><button id="tab-settings" type="button" aria-pressed="false">Уведомления</button><button id="tab-owner" type="button" aria-pressed="false" hidden>Люди и правило</button></nav>
+      <section id="tasks-panel" aria-labelledby="tasks-heading"><div class="section-head"><h2 id="tasks-heading">Назначено вам</h2><span class="muted" id="task-count"></span></div><div id="task-list" class="task-list"></div></section>
+      <section id="plan-panel" hidden aria-labelledby="plan-heading"><h2 id="plan-heading">Согласование контент-плана</h2><p class="muted">Проверьте полные тексты версий. Согласование не публикует материалы.</p><p id="plan-message" class="message" role="status" hidden></p><div id="plan-list"></div></section>
+      <section id="settings-panel" hidden aria-labelledby="settings-heading">
+        <div class="card"><h2 id="settings-heading">Получать уведомления</h2>
+          <form id="preferences-form">
+            <label class="check"><input name="enabled" type="checkbox">Получать уведомления этого проекта</label>
+            <label class="check"><input name="push" type="checkbox">Push на устройстве</label>
+            <label class="check"><input name="telegram" type="checkbox">Дубль в Telegram</label>
+            <p class="muted">Telegram использует уже привязанный к кабинету аккаунт и бота этого проекта.</p>
+            <button class="primary" type="submit">Сохранить настройки</button>
+          </form>
+          <div class="button-row"><button id="enable-push" type="button">Подключить push на устройстве</button><button id="disable-push" type="button">Отключить push на устройстве</button></div>
+          <p id="push-status" class="message" role="status" hidden></p>
+          <details><summary>Установить на iPhone</summary><p>Откройте эту страницу в Safari. Нажмите «Поделиться» → «На экран Домой», затем откройте приложение с главного экрана. Подключите push кнопкой выше и разрешите уведомления.</p></details>
+        </div>
+        <div class="card"><h2>Последние уведомления</h2><div id="notification-list" class="muted">Пока нет уведомлений.</div></div>
+      </section>
+      <section id="owner-panel" hidden aria-labelledby="owner-heading">
+        <div class="card"><h2 id="owner-heading">Доступ людей</h2><p class="muted">Доступ создаёт владелец. Приглашение не отправляется.</p><div id="member-list"></div>
+          <details><summary>Создать доступ</summary><form id="member-create-form">
+            <label>Имя<input name="displayName" maxlength="120" autocomplete="off" required></label>
+            <label>Логин<input name="login" pattern="[a-z0-9_-]{1,64}" maxlength="64" autocomplete="off" required></label>
+            <label>Пароль<input name="password" type="password" autocomplete="new-password" minlength="12" required></label>
+            <button class="primary" type="submit">Создать доступ</button>
+          </form></details>
+          <details><summary>Подключить существующую учётную запись</summary><form id="member-adopt-form"><label>Номер учётной записи<input name="userId" type="number" min="1" step="1" required></label><p class="message" id="member-adopt-warning">Прежние права и компании будут заменены ролью исполнителя выбранного проекта; данные и пароль сохранятся.</p><button type="submit" aria-describedby="member-adopt-warning">Подключить к проекту</button></form></details>
+        </div>
+        <div class="card"><h2>Правило согласования</h2><p class="muted">По умолчанию — каждую пятницу минимум 7 согласованных публикаций на следующую неделю, с понедельника по воскресенье. Проверка ничего не отправляет.</p>
+          <form id="friday-form">
+            <label class="check"><input name="enabled" type="checkbox">Включить пятничное правило</label>
+            <label>Получатель<select name="userId" required></select></label>
+            <label>Часовой пояс<input name="timezone" placeholder="Например, Asia/Irkutsk" required></label>
+            <label>Что считать<select name="metric"><option value="approvedIdeas">Уникальные согласованные публикации</option><option value="pendingIdeas">Уникальные публикации на согласовании</option></select></label>
+            <div class="form-columns"><label>Минимум публикаций<input name="minimum" type="number" min="1" max="1000" value="7" required></label><label>День проверки<select name="weekday"><option value="1">Понедельник</option><option value="2">Вторник</option><option value="3">Среда</option><option value="4">Четверг</option><option value="5" selected>Пятница</option><option value="6">Суббота</option><option value="0">Воскресенье</option></select></label></div>
+            <label>Неделя публикаций<select name="weekMode"><option value="nextWeek">Следующая неделя, понедельник — воскресенье</option><option value="anchored">Явный интервал по 7 дней от выбранной даты</option></select></label>
+            <label id="week-anchor-label" hidden>Начало первого интервала<input name="weekStart" type="date"></label>
+            <div class="form-columns"><label>Утро, час<input name="morningHour" type="number" min="0" max="23" value="9" required></label><label>Вечер, час<input name="eveningHour" type="number" min="0" max="23" value="18" required></label></div>
+            <button class="primary" type="submit">Сохранить правило</button>
+          </form>
+          <button id="friday-preview" type="button">Проверить без отправки</button><div id="friday-result" class="message" role="status" hidden></div>
+        </div>
+      </section>
+    </section>
+  </main>
+  <div id="task-overlay" class="overlay" hidden><section class="task-sheet" role="dialog" aria-modal="true" aria-labelledby="task-title" tabindex="-1"><button id="close-task" type="button" class="close">Закрыть</button><h2 id="task-title"></h2><p id="task-purpose" class="purpose" hidden></p><p id="task-description" class="description"></p><div id="task-progress"></div><form id="task-status-form"><label>Статус<select name="status"><option value="inbox">Входящие</option><option value="planned">Запланировано</option><option value="in_progress">В работе</option><option value="done">Готово</option><option value="cancelled">Отменено</option></select></label><button class="primary" type="submit">Сохранить статус</button></form><p id="task-message" class="message" role="status" hidden></p><h3>Подзадачи</h3><div id="task-children"></div></section></div>
+</body>
+</html>
