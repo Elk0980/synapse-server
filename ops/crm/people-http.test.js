@@ -60,7 +60,9 @@ test('реальные content→CRM запросы editor: узкие зада�
       compatibility.prepare('UPDATE task_coordination SET data=? WHERE task_id=?').run(JSON.stringify({...JSON.parse(row.data),futureMetadata:{retained:true}}),own.id);
     }finally{compatibility.close();}
     const before=await call('task_get',{task_id:own.id},user,'alpha');
-    const updated=await call('task_update',{task_id:own.id,status:'done',revision:before.coordination.revision},user,'alpha');assert.equal(updated.task.status,'done');assert.equal(updated.task.coordination.revision,before.coordination.revision+1);
+    await assert.rejects(call('task_update',{task_id:own.id,status:'done',revision:before.coordination.revision},user,'alpha'),{status:400});
+    assert.equal((await call('task_get',{task_id:own.id},user,'alpha')).coordination.revision,before.coordination.revision);
+    const updated=await call('task_update',{task_id:own.id,status:'in_progress',revision:before.coordination.revision},user,'alpha');assert.equal(updated.task.status,'in_progress');assert.equal(updated.task.coordination.revision,before.coordination.revision+1);
     const db=new DatabaseSync(database,{readOnly:true});try{assert.equal(db.prepare('SELECT updated_by FROM task_coordination WHERE task_id=?').get(own.id).updated_by,2);assert.equal(db.prepare('SELECT updated_by FROM task_coordination_history WHERE task_id=? ORDER BY revision DESC LIMIT 1').get(own.id).updated_by,2);assert.equal(db.prepare('SELECT product_id FROM tasks WHERE id=?').get(own.id).product_id,expectedProductId);assert.deepEqual(JSON.parse(db.prepare('SELECT data FROM task_coordination WHERE task_id=?').get(own.id).data).futureMetadata,{retained:true});}finally{db.close();}
     await assert.rejects(call('task_update',{task_id:own.id,status:'planned',revision:before.coordination.revision},user,'alpha'),{status:409});
     await assert.rejects(call('task_update',{task_id:inherited.id,status:'done',revision:inherited.coordination.revision},user,'alpha'),{status:404});
