@@ -625,7 +625,15 @@ const emailCampaigns = createEmailCampaigns(db, {transport: campaignTransport, l
 });
 const emailDiagnostics = createEmailDiagnostics(db, {getEnvironment: emailSettings.getEnvironment});
 const companyInformation = createCompanyInformation(db, {check: createCompanyInformationCheck()});
-const taskCoordination = createTaskCoordination(db);
+const taskWatchdog = require('./task-watchdog').createTaskWatchdog(db);
+const taskCoordination = createTaskCoordination(db,{watchdog:taskWatchdog});
+taskWatchdog.installGuards();
+// Один незавершённый audit за раз; без исходящих уведомлений.
+const watchdogTimer=setInterval(()=>{
+  try{taskWatchdog.prepareScheduledDigest();}catch{console.error('[crm] watchdog digest unavailable');}
+  taskWatchdog.audit().catch(()=>console.error('[crm] watchdog audit unavailable'));
+},60000);
+watchdogTimer.unref();
 const taskDispatch = createTaskDispatch(db);
 const agentLaunch = createAgentLaunch(db, {coordination:taskCoordination});
 const autopostingTransport = createAutopostingTransport(db, {apiKey: API_KEY});
@@ -2925,6 +2933,10 @@ async function route(request, response) {
     else fail(405,'Метод не поддерживается');
     return send(response,200,result,{...cors,'cache-control':'private, no-store'});
   }
+  if (url.pathname === '/coordination/watchdog' && request.method === 'GET') {
+    if(crmIdentity(request)?.role!=='owner')fail(403,'Сводка доступна владельцу');
+    return send(response,200,taskWatchdog.digest(),{...cors,'cache-control':'private, no-store'});
+  }
   if (/^\/coordination(?:\/|$)/.test(url.pathname)) {
     const actor = crmIdentity(request);
     if (actor?.role !== 'owner') fail(403, 'Координация доступна владельцу');
@@ -3404,7 +3416,8 @@ const server = http.createServer((request, response) => {
   route(request, response).catch((error) => {
     const taskRuleMessages = {
       TASK_REVIEWER_EQUALS_EXECUTOR: 'Исполнитель и проверяющий должны быть разными',
-      TASK_PARENT_INVALID: 'Родитель и подзадача должны принадлежать одному проекту и одному уровню'
+      TASK_PARENT_INVALID: 'Родитель и подзадача должны принадлежать одному проекту и одному уровню',
+      WATCHDOG_ACCEPTANCE_REQUIRED: 'Для статуса «готово» требуется подтверждённая приёмка Влада'
     };
     if (Object.hasOwn(taskRuleMessages, error.message)) {
       error.status = 400;

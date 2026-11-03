@@ -23,7 +23,7 @@ const date = value => {
 const empty = () => ({...Object.fromEntries(TEXT_FIELDS.map(key => [key, ''])), modelCheckedAt: '', links: [],
   milestones: Object.fromEntries(STAGES.map(key => [key, {state:'pending', evidence:'', checkedAt:''}]))});
 
-function createTaskCoordination(db, {now = () => Date.now()} = {}) {
+function createTaskCoordination(db, {now = () => Date.now(), watchdog = null} = {}) {
   db.exec(`CREATE TABLE IF NOT EXISTS task_coordination (
     task_id INTEGER PRIMARY KEY REFERENCES tasks(id), revision INTEGER NOT NULL,
     data TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by INTEGER NOT NULL);
@@ -71,6 +71,7 @@ function createTaskCoordination(db, {now = () => Date.now()} = {}) {
     const data = empty();
     const previous = db.prepare('SELECT data FROM task_coordination WHERE task_id=?').get(id);
     data.links = previous ? JSON.parse(previous.data).links || [] : [];
+    if(previous) data.milestones={...data.milestones,...JSON.parse(previous.data).milestones};
     if (Object.keys(body.data).some(k => ![...TEXT_FIELDS,'modelCheckedAt','milestones','links'].includes(k))) fail(400, 'Неизвестное поле карточки');
     if ('links' in body.data) data.links = validateLinks(body.data.links);
     for (const key of TEXT_FIELDS) if (key in body.data) data[key] = text(body.data[key], ['scope','acceptance','result','blocker','nextAction'].includes(key) ? 4000 : 200);
@@ -92,6 +93,7 @@ function createTaskCoordination(db, {now = () => Date.now()} = {}) {
       if (checkedAt && Date.parse(checkedAt) > now()) fail(400, 'Дата проверки находится в будущем');
       data.milestones[key] = {state:item.state,evidence,checkedAt};
     }
+    if (watchdog) watchdog.guard(id,data,actor);
     const ownTransaction = !db.isTransaction;
     if (ownTransaction) db.exec('BEGIN IMMEDIATE');
     try {
@@ -140,7 +142,7 @@ function createTaskCoordination(db, {now = () => Date.now()} = {}) {
       if(own)db.exec('COMMIT');return result;
     }catch(error){if(own)db.exec('ROLLBACK');throw error;}
   };
-  return {get,list,save,selfStatus,tool:createTaskTools(db,{now,owner,entry,save})};
+  return {get,list,save,selfStatus,tool:createTaskTools(db,{now,owner,entry,save,watchdog})};
 }
 module.exports = {createTaskCoordination,migrateTasksMcp,migrateTasksMcpPortable,
   ...require('./task-products')};
@@ -367,17 +369,13 @@ function validateLinks(value) {
 function taskExtras(db, row, now) {
   const counts = db.prepare(`SELECT count(*) total,coalesce(sum(status='done'),0) done
     FROM tasks WHERE parent_task_id=? AND is_deleted=0`).get(row.id);
-  const coord = db.prepare('SELECT updated_at,data FROM task_coordination WHERE task_id=?').get(row.id);
-  const assignment = row.assignee_name || (coord ? JSON.parse(coord.data).executorName : '');
-  const agent = db.prepare(`SELECT state FROM agents WHERE ${personKeySql('name')}=${personKeySql('?')}`).get(assignment);
-  const updated = Math.max(Date.parse(row.updated_at) || 0, Date.parse(coord?.updated_at) || 0);
   return {reviewer_name:row.reviewer_name, parent_task_id:row.parent_task_id, source:row.source,
     due_date:row.due_date, subtask_count:counts.total, subtask_done:counts.done,
     ...boardFields(db,row),
-    no_report:agent?.state === 'work' && ['inbox','planned','in_progress'].includes(row.status) && now-updated > 60*60*1000};
+    ...(require('./task-watchdog').silence(db,row,now))};
 }
 
-function createTaskTools(db, {now,owner,entry,save}) {
+function createTaskTools(db, {now,owner,entry,save,watchdog}) {
   // Архив устанавливается отдельно с резервной копией; чтение старых задач не запускает DDL.
   const archive = require('./module-archive').createModuleArchive(db, {now});
   const stamp = () => new Date(now()).toISOString();
@@ -547,7 +545,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
     const sameScope=access?.owner_id===actor.userId && access.projects===JSON.stringify([...allowed(actor)].sort());
     return {...row,...(!sameScope?{state:'unknown',last_event:'',last_event_at:'',function:'',chat:'',...(hasBoardSchema(db)?{chat_url:''}:{})}:{}),tracking:'manual',
       active_tasks:tasks,active_task_count:taskTimes.length,
-      no_report:sameScope&&row.state==='work'&&taskTimes.some(task=>now()-Math.max(Date.parse(task.updated_at)||0,Date.parse(task.coordination_updated_at)||0)>60*60*1000)};
+      no_report:sameScope&&db.prepare(`SELECT t.* FROM tasks t WHERE ${activeWhere}`).all(row.name,...codes).some(t=>require('./task-watchdog').silence(db,t,now()).no_report)};
   };
   const reportAgent = (args, actor) => {
     const name=text(args.agent,200);
@@ -575,6 +573,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
     }
     db.prepare(`INSERT INTO agent_access(agent_id,owner_id,projects) VALUES(?,?,?) ON CONFLICT(agent_id)
       DO UPDATE SET owner_id=excluded.owner_id,projects=excluded.projects`).run(row.id,actor.userId,JSON.stringify([...allowed(actor)].sort()));
+    if(watchdog)watchdog.report(row.name,event,allowed(actor));
     return agentView(row,actor);
   };
   return (name,args,actor) => {

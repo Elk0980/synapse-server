@@ -1,0 +1,29 @@
+name: board-watchdog
+on:
+  pull_request:
+    paths:
+      - 'ops/crm/task-watchdog*'
+      - 'ops/crm/task-coordination*'
+      - 'ops/crm/server.js'
+      - 'ops/tasks-mcp/integration.test.js'
+      - '.github/workflows/board-watchdog.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --ignore-scripts --prefix ops/tasks-mcp
+      - run: node --test ops/crm/task-watchdog.test.js ops/crm/task-coordination.test.js ops/tasks-mcp/crm.test.js ops/tasks-mcp/integration.test.js
+        env:
+          NODE_PATH: ${{ github.workspace }}/ops/tasks-mcp/node_modules
+      - run: node --check ops/crm/server.js

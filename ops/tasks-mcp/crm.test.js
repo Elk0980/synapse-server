@@ -170,6 +170,8 @@ test('manual agents, overdue task reports, sessions and immutable end activity s
   assert.equal(call('agents_list').agents.length,1);
   assert.equal(call('agents_list').agents[0].no_report,true,'heartbeat агента не заменяет обновление задачи');
   call('task_update',{task_id:21,blocker:'Жду результат'});
+  assert.equal(call('agents_list').agents[0].no_report,true,'Правка метаданных не является отчётом исполнителя');
+  call('task_comment',{task_id:21,author:'Codex',text:'Этап проверки выполнен'});
   assert.equal(call('agents_list').agents[0].no_report,false);
   assert.throws(()=>call('session_end',{session_id:session.session_id,summary:'x'},otherScope),error=>error.status===404);
   assert.equal(call('agents_list',{},otherScope).agents[0].last_event,'');
