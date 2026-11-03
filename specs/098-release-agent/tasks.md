@@ -27,3 +27,12 @@
 - [x] Rollback CLI expected SHA + request-id, pinned enabled bootstrap, nonroot worker.
 - [x] Узкий local root broker без выдачи docker group/sudo worker.
 - [ ] Свежий LinuxCI, проверенная боeвая установка и приёмка Claude.
+
+## Исправления по260
+
+- [x] Явный no_release allowlist; unknown/manual пути без cursor advance.
+- [x] Unknown в смешанном PR блокирует всё до сборки; issuer не подписывает manual.
+- [x] Waiting enqueue и разделение snapshot/preserve rollback сообщений.
+- [x] README явно ограничивает DB auto-restore отсутствием trafficGate.
+- [x] Создана зависимость68, проверен principal PR485 и недостающий экспорт.
+- [ ] Задача68: реальный export→issuer с trusted comment provenance.

@@ -189,8 +189,13 @@ class Gates(unittest.TestCase):
         plan = agent.make_plan(config, {}, ['ops/crm/server.js'])
         self.assertEqual(plan['writers'], ['content', 'crm'])
         self.assertEqual(plan['outcome'], 'runtime')
-        for path in ('docs/a.md', 'specs/a.md', 'AI_HANDOFF/a.md', 'docker-compose.yml', 'ops/crm-evil/a'):
+        for path in ('docs/a.md', 'specs/a.md', 'AI_HANDOFF/a.md', 'README.md', 'tests/test_release.py', 'ops/crm/server.test.js'):
             self.assertEqual(agent.make_plan(config, {}, [path])['outcome'], 'no_release')
+        for path in ('docker-compose.yml', '.github/workflows/deploy.yml', 'caddy/Caddyfile', 'ops/crm-evil/a', 'package.json'):
+            for changed in ([path], [path, 'ops/crm/server.js']):
+                plan = agent.make_plan(config, {}, changed)
+                self.assertEqual(plan['outcome'], 'manual')
+                self.assertEqual(plan['manualPaths'], [path])
         self.assertEqual(agent.make_plan(config, {}, ['sites/alvi/index.html'])['outcome'], 'site_deferred')
 
     def test_ci_accepts_pr_head_checks_and_requires_merge_spec_kit(self):

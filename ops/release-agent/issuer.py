@@ -63,6 +63,7 @@ def issue(config, sha, parent):
         runtime = load(config['runtimeShaFile'])['sha']
         cumulative = command(['git', '-C', config['mirror'], 'diff', '--name-only', '-z', runtime, sha]).decode().split('\0')
         plan = make_plan(config, body, [p for p in cumulative if p])
+    need(plan['outcome'] != 'manual', 'MANUAL_APPLICATION_REQUIRED')
     body.update(services=plan['services'], writers=plan['writers'])
     # Do not cache a signature until CI and PR/task/head checks all pass.
     api.gate(sha, body)

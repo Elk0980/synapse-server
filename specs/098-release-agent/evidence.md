@@ -1,3 +1,21 @@
+# Ревью260 — текущая ревизия
+
+Локально33tests:30PASS/3Linux-onlySKIP. Новые тесты вызывают настоящий tick с
+неизвестным compose+runtime (cursor/current не сдвигаются, build не вызывается,
+outbox manual с путями), runtime без admission (waiting в outbox и на доске),
+allowlisted docs (cursor двигается), два разных rollback текста и superseded waiting.
+Тест классификации переписан: docker-compose/caddy/.github/package.json/новый
+сервис — manual, включая смешанный PR. Issuer также не подписывает manual plan.
+
+Создана дочерняя задача68 «серверная метка личности на комментариях» к55, без дубля
+по поиску/client_ref. Проверен PR485 c36ea45b: HMAC principal+auth storage есть,
+но task_get и task_comment не экспортируют stamp. Это остаток68, не новый механизм
+аутентификации. Общие файлы PR485 не менялись. README явно говорит: без trafficGate
+при сбое миграции всегда ждёт Влада, автоматического восстановления БД нет.
+Свежие CI этого head проверяются отдельно. Production/merge0.
+
+История прежних ревизий ниже.
+
 # LinuxCI11b332a8 SUCCESS
 
 41687427285 и41687420908 SUCCESS: Linuxunits/flock, реальный Docker Compose

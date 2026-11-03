@@ -68,12 +68,17 @@ class Outbox:
         saved = load(self.path)
         return saved if isinstance(saved, list) else [saved]
 
-    def enqueue(self, task_id, sha, kind):
+    def enqueue(self, task_id, sha, kind, detail=None):
         events = self.events()
         marker = f'release:{sha}:{kind}'
         if any(e['marker'] == marker for e in events):
             return
+        if kind not in ('waiting', 'manual'):
+            for event in events:
+                if event['sha'] == sha and event['kind'] in ('waiting', 'manual'):
+                    event['phase'] = 'superseded'
         events.append({'taskId': task_id, 'sha': sha, 'kind': kind, 'marker': marker,
+                       'detail': detail,
                        'phase': 'ready', 'attempts': 0, 'nextAttempt': 0,
                        'at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')})
         atomic(self.path, events)
@@ -83,7 +88,7 @@ class Outbox:
         events = self.events()
         attempted = 0
         for event in events:
-            if event['phase'] == 'done' or event.get('nextAttempt', 0) > time.time():
+            if event['phase'] in ('done', 'superseded') or event.get('nextAttempt', 0) > time.time():
                 continue
             if attempted >= 2:
                 break
@@ -102,12 +107,16 @@ class Outbox:
                     if event['kind'] == 'connected':
                         args.update(stage='connected', evidence=event['marker'] + ' health PASS; commit=' + event['sha'], checked_at=event['at'])
                     else:
-                        messages = {'rolled_back': 'Пропущен (откат), данные сохранены',
+                        messages = {'rolled_back': 'Пропущен (откат образов); текущие данные оставлены без восстановления снимка',
+                                    'rolled_back_snapshot': 'Пропущен (откат); БД восстановлена из снимка до возврата трафика',
                                     'build_failed': 'Пропущен: сборка не прошла', 'skipped': 'Пропущен после прерывания сборки',
                                     'no_release': 'Выпуск не требуется', 'site_deferred': 'Выпуск сайта отдельным шагом №57',
                                     'database_decision': 'ждёт Влада: восстановить БД из сохранённого снимка?',
                                     'waiting': 'Ожидается приёмка или зелёный CI'}
-                        args['next_step'] = event['marker'] + ' ' + messages.get(event['kind'], event['kind'])
+                        message = event.get('detail') or messages.get(event['kind'], event['kind'])
+                        args['next_step'] = event['marker'] + ' ' + message[:3500]
+                        if event['kind'] == 'manual':
+                            args['blocker'] = message[:3500]
                         if event['kind'] == 'database_decision':
                             args['blocker'] = messages['database_decision'] + ' ' + event['sha']
                     self.board.call('task_update', args)

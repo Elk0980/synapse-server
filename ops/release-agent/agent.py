@@ -228,6 +228,7 @@ class Engine:
         need(state['phase'] in ('idle', 'verified', 'rolled_back', 'build_failed', 'skipped', 'no_release', 'site_deferred'), 'QUEUE_HALTED')
         need(plan['parent'] == state.get('cursor', state['current']), 'OUT_OF_ORDER')
         previous = self.backend.capture(state['current'], plan)
+        state.pop('waiting', None)
         state.update(plan=plan, previous=previous, phase='prepared', trafficReturned=False,
                      backupComplete=False, migrationAttempted=False, needsDatabaseDecision=False)
         self.save(state)
@@ -278,6 +279,7 @@ class Engine:
     def advance(self, plan, outcome, reason=''):
         state = self.state()
         need(plan['parent'] == state.get('cursor', state['current']), 'OUT_OF_ORDER')
+        state.pop('waiting', None)
         state.update(phase=outcome, cursor=plan['sha'], plan=plan, reason=reason)
         self.save(state)
         self.record(state)
@@ -443,28 +445,58 @@ class ComposeBackend:
         atomic(self.c['recipe'], previous['recipe'])
 
 
+def no_release_path(path):
+    """Only explicit documentation and test paths may advance without applying."""
+    from pathlib import PurePosixPath
+    p = PurePosixPath(path)
+    need(path and not p.is_absolute() and '..' not in p.parts and '\\' not in path, 'INVALID_CHANGED_PATH')
+    return (p.parts[0] in ('docs', 'specs', 'AI_HANDOFF', 'tests', 'test') or
+            p.suffix == '.md' or 'tests' in p.parts[:-1] or '__tests__' in p.parts[:-1] or
+            re.fullmatch(r'test_[^/]+\.py|[^/]+\.test\.(js|cjs|mjs|ts|tsx)|[^/]+\.spec\.(js|ts|tsx)', p.name) is not None)
+
+
 def make_plan(config, admission, changed):
-    services, deferred = set(), []
+    services, deferred, manual = set(), [], []
     for path in changed:
+        no_release = no_release_path(path)
+        # Sites are always a separate publisher, including their Markdown/tests.
+        if path.startswith('sites/'):
+            deferred.append(path)
+            continue
+        if no_release:
+            continue
         matches = [name for name, value in config['services'].items()
                    if path.startswith(value['context'].rstrip('/') + '/')]
         services.update(matches)
-        if path.startswith('sites/'):
-            deferred.append(path)
+        if not matches:
+            manual.append(path)
     writers = set(services)
     for name in services:
         writers.update(config['services'][name].get('writers', []))
     need(writers <= config['services'].keys(), 'UNKNOWN_WRITER')
     return dict(admission, services=sorted(services), writers=sorted(writers),
-                deferredSites=deferred, outcome='runtime' if services else 'site_deferred' if deferred else 'no_release')
+                manualPaths=sorted(set(manual)), deferredSites=deferred,
+                outcome='manual' if manual else 'runtime' if services else 'site_deferred' if deferred else 'no_release')
+
+
+def queue_waiting(engine, outbox, plan, reason=None):
+    state = engine.state()
+    manual = plan.get('outcome') == 'manual'
+    detail = 'ручное применение: ' + ', '.join(plan['manualPaths']) if manual else (reason or 'Ожидается приёмка или зелёный CI')
+    state['waiting'] = dict(plan, detail=detail, kind='manual' if manual else 'waiting')
+    # No phase/current/cursor change and no Engine.advance for a blocked commit.
+    engine.save(state)
+    outbox.enqueue(plan['taskId'], plan['sha'], 'manual' if manual else 'waiting', detail=detail)
+    outbox.flush()
 
 
 def report_terminal(state, outbox, expected_sha=None, flush=True):
     plan = state.get('plan', {})
     if (state.get('phase') in ('verified', 'rolled_back', 'build_failed', 'skipped', 'no_release', 'site_deferred') and plan and
             (expected_sha is None or plan.get('sha') == expected_sha)):
-        outbox.enqueue(plan['taskId'], plan['sha'],
-                       'connected' if state['phase'] == 'verified' else state['phase'])
+        kind = ('connected' if state['phase'] == 'verified' else
+                'rolled_back_snapshot' if state['phase'] == 'rolled_back' and state.get('restoreDatabase') else state['phase'])
+        outbox.enqueue(plan['taskId'], plan['sha'], kind)
         if state.get('needsDatabaseDecision'):
             outbox.enqueue(plan['taskId'], plan['sha'], 'database_decision')
     if flush:
@@ -498,28 +530,39 @@ def tick(config):
         need(bool(re.fullmatch('[a-f0-9]{40}', sha)), 'COMMIT_FORMAT')
         changed = command(['git', '-C', config['mirror'], 'diff', '--name-only', '-z', current, sha]).decode().split('\0')
         classification = make_plan(config, {'sha': sha, 'parent': current, 'taskId': config.get('taskId', 55)}, [p for p in changed if p])
+        if classification['outcome'] == 'manual':
+            queue_waiting(engine, outbox, classification)
+            return
         if classification['outcome'] != 'runtime':
             engine.advance(classification, classification['outcome'])
             report_terminal(engine.state(), outbox, expected_sha=sha)
             return
         admission_path = Path(config['admissions']) / (sha + '.json')
-        if config.get('brokerSocket'):
-            try:
-                admission = backend.invoke('verify', sha=sha, parent=current)
-            except Exception:
-                admission = backend.invoke('admit', sha=sha, parent=current)
-        else:
-            if not admission_path.exists():
-                from issuer import issue
-                issue(config, sha, current)
-            admission = verify_admission(json.loads(private_file(admission_path)),
-                                         private_file(config['admissionKey']), sha, current)
-        GitHub(config['repository']).gate(sha, admission)
+        try:
+            if config.get('brokerSocket'):
+                try:
+                    admission = backend.invoke('verify', sha=sha, parent=current)
+                except Exception:
+                    admission = backend.invoke('admit', sha=sha, parent=current)
+            else:
+                if not admission_path.exists():
+                    from issuer import issue
+                    issue(config, sha, current)
+                admission = verify_admission(json.loads(private_file(admission_path)),
+                                             private_file(config['admissionKey']), sha, current)
+            GitHub(config['repository']).gate(sha, admission)
+        except Exception:
+            # Fixed public reason; never relay raw API/URL/secret diagnostics.
+            queue_waiting(engine, outbox, classification)
+            return
         # A valid signed admission is cached proof; reporting/board outages do not veto it.
         plan = make_plan(config, admission, [p for p in changed if p])
         if plan['outcome'] == 'runtime':
             cumulative = command(['git', '-C', config['mirror'], 'diff', '--name-only', '-z', state['current'], sha]).decode().split('\0')
             plan = make_plan(config, admission, [p for p in cumulative if p])
+        if plan['outcome'] == 'manual':
+            queue_waiting(engine, outbox, plan)
+            return
         try:
             if plan['outcome'] == 'runtime':
                 engine.deploy(plan)
