@@ -20,9 +20,64 @@ import sys
 import tarfile
 import tempfile
 import time
+import board_report
 
 ID = re.compile(r"synapse-\d{8}T\d{6}Z")
 FILES = ("data.tar.age", "images.tar.age")
+
+
+class BackupError(ValueError):
+    pass
+
+
+def completed(root):
+    return sorted((p for p in root.iterdir() if ID.fullmatch(p.name) and not p.is_symlink()
+                   and p.is_dir() and (p / "receipt.json").is_file()), reverse=True)
+
+
+def cleanup_partial(root, now=None):
+    now = time.time() if now is None else now
+    for p in root.iterdir():
+        if p.name.endswith(".partial") and ID.fullmatch(p.name[:-8]) and not p.is_symlink() and p.is_dir() and now - p.stat().st_mtime > 86400:
+            shutil.rmtree(p)
+
+
+def rotate_local(root):
+    paths = completed(root)
+    keep = keep_ids([p.name for p in paths], dt.datetime.now(dt.timezone.utc).date())
+    for p in paths:
+        if p.name not in keep:
+            shutil.rmtree(p)
+
+
+def validate_bundle(bundle):
+    receipt = json.loads((bundle / "receipt.json").read_text())
+    if receipt.get("id") != bundle.name or set(receipt.get("files", {})) != set(FILES):
+        raise BackupError("BAD_RECEIPT")
+    for f in FILES:
+        info = receipt["files"][f]
+        path = bundle / f
+        if path.is_symlink() or path.stat().st_size != info["bytes"] or sha(path) != info["sha256"]:
+            raise BackupError("BAD_SHA")
+    return receipt
+
+
+def rotate_server(root, count):
+    paths = completed(root)
+    if len(paths) > count:
+        # Never delete a fallback unless the newest encrypted bundle is intact.
+        validate_bundle(paths[0])
+        for p in paths[count:]:
+            shutil.rmtree(p)
+
+
+def link_target(path, roots):
+    raw = os.readlink(path)
+    target = Path(os.path.normpath(raw if os.path.isabs(raw) else path.parent / raw))
+    if not any(target.is_relative_to(root) for root in roots):
+        raise BackupError("LINK_OUTSIDE_ROOTS")
+    # Both map under rootfs; no absolute symlink enters the archive.
+    return os.path.relpath(target, path.parent).replace(os.sep, "/")
 
 
 def run(args, **kw):
@@ -92,9 +147,18 @@ def create(c):
     os.chown(out, 0, gid)
     os.chmod(out, 0o750)
     with lock(out / ".writer.lock"):
-        if (out / ".paused.json").exists():
-            raise ValueError("Есть незавершённый pause; сначала recover")
-        _create(c, out)
+        status = {"phase": "create", "result": "ERROR"}
+        try:
+            cleanup_partial(out)
+            rotate_server(out, 1)  # latest + new partial: at most two bundles
+            status.update(_create(c, out), result="OK")
+        except BackupError as error:
+            status["error"] = str(error)
+            raise
+        finally:
+            status.setdefault("error", "CREATE_FAILED" if status["result"] == "ERROR" else "")
+            write_json(out / "status.json", status)
+            board_report.publish(c, out, status)
 
 
 def _create(c, out):
@@ -109,11 +173,9 @@ def _create(c, out):
     bound = int(c["max_bundle_bytes"])
     scratch = int(c["max_sqlite_bytes"])
     if min(bound, scratch) <= 0 or shutil.disk_usage(out).free < bound + scratch + 2**30:
-        raise ValueError("Недостаточно места для новой копии без удаления старых")
+        raise BackupError("NO_SPACE_SERVER")
     ids = run(["docker", "ps", "-q"], capture_output=True, text=True).stdout.split()
     metadata = json.loads(run(["docker", "inspect", *ids], capture_output=True).stdout) if ids else []
-    if any(x["State"]["Paused"] for x in metadata):
-        raise ValueError("Есть чужие приостановленные контейнеры")
     actual = {x["Name"].lstrip("/") for x in metadata}
     if actual != set(c["containers"]):
         raise ValueError("Состав запущенных контейнеров изменился: нужна новая инвентаризация")
@@ -131,17 +193,10 @@ def _create(c, out):
     name = "synapse-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     partial = out / (name + ".partial")
     partial.mkdir()
-    paused = []
     try:
         with tempfile.TemporaryDirectory(prefix=".sqlite-", dir=out) as tmp:
             tmp = Path(tmp)
-            # All application writers must be containers; host writers must be
-            # quiesced by an approved external maintenance window first.
-            for item in metadata:
-                # Journal BEFORE pause: ExecStopPost can resume after SIGKILL.
-                write_json(out / ".paused.json", paused + [item["Id"]])
-                run(["docker", "pause", item["Id"]], stdout=sp.DEVNULL)
-                paused.append(item["Id"])
+            # Online per-database SQLite snapshots; never pause application writers.
             entries = []
             replacements = {}
             for root in roots:
@@ -159,8 +214,7 @@ def _create(c, out):
             for root in roots:
                 for path in sorted(root.rglob("*")):
                     if path.is_symlink():
-                        # Copying node_modules/.bin links is supported by tar's
-                        # safe extraction filter; escaping links fail at restore.
+                        link_target(path, roots)  # fail before publishing a bad archive
                         entries.append((path, path))
                     elif path.is_dir() or path.is_file():
                         base = str(path)
@@ -172,29 +226,39 @@ def _create(c, out):
                 with tarfile.open(fileobj=pipe, mode="w|gz", dereference=False) as tar:
                     for original, source in entries:
                         arc = "rootfs/" + original.as_posix().lstrip("/")
-                        if source.is_file() and not source.is_symlink():
-                            manifest["files"][arc] = sha(source)
                         if original in replacements:
                             manifest["sqlite"].append(arc)
-                        tar.add(source, arcname=arc, recursive=False)
+                        info = tar.gettarinfo(source, arcname=arc)
+                        if source.is_symlink():
+                            info.linkname = link_target(original, roots)
+                            tar.addfile(info)
+                        elif source.is_file():
+                            # Hash exactly the bytes sent to tar, not an earlier read.
+                            with source.open("rb") as f:
+                                before = os.fstat(f.fileno())
+                                info.type, info.linkname = tarfile.REGTYPE, ""
+                                info.size = before.st_size
+                                reader = HashReader(f)
+                                tar.addfile(info, reader)
+                                after = os.fstat(f.fileno())
+                                if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+                                    raise BackupError("SOURCE_CHANGED")
+                                manifest["files"][arc] = reader.digest.hexdigest()
+                        else:
+                            tar.addfile(info)
                     for arc, value in (("manifest.json", manifest), ("containers.json", metadata)):
                         data = json.dumps(value).encode()
                         info = tarfile.TarInfo(arc)
                         info.size, info.mode = len(data), 0o600
                         tar.addfile(info, io.BytesIO(data))
             encrypt(c, partial / FILES[0], stream_data)
-            # Consistent files + SQLite are now captured. Resume before image export.
-            while paused:
-                run(["docker", "unpause", paused[-1]], stdout=sp.DEVNULL)
-                paused.pop()
-                write_json(out / ".paused.json", paused)
             images = sorted({x["Image"] for x in metadata})
             if not images:
                 raise ValueError("Нет образов для восстановления")
             def stream_images(pipe):
                 run(["docker", "image", "save", *images], stdout=pipe)
             encrypt(c, partial / FILES[1], stream_images)
-            receipt = {"schema": 2, "id": name, "files": {f: {"sha256": sha(partial / f), "bytes": (partial / f).stat().st_size} for f in FILES}}
+            receipt = {"schema": 2, "id": name, "restore_bytes": total * 3 + 2**30, "files": {f: {"sha256": sha(partial / f), "bytes": (partial / f).stat().st_size} for f in FILES}}
             write_json(partial / "receipt.json", receipt)
             import grp
             gid = grp.getgrnam(c["reader_group"]).gr_gid
@@ -204,31 +268,29 @@ def _create(c, out):
             os.chown(partial, 0, gid)
             os.chmod(partial, 0o750)
             os.rename(partial, out / name)
-            # Only completed v2 bundles; old backup.sh archives are untouched.
-            completed = sorted((p for p in out.iterdir() if ID.fullmatch(p.name) and (p / "receipt.json").is_file()), reverse=True)
-            for path in completed[3:]:
-                shutil.rmtree(path)
+            rotate_server(out, 2)
+            return {"id": name, "bytes": sum(x["bytes"] for x in receipt["files"].values()), "sha": "OK"}
     finally:
-        recover({"output": str(out)})
         if partial.exists():
             shutil.rmtree(partial)
 
 
-def recover(c):
-    journal = Path(c["output"]) / ".paused.json"
-    if not journal.exists():
-        return
-    remaining = []
-    for container in json.loads(journal.read_text()):
-        if not re.fullmatch("[0-9a-f]{64}", container):
-            raise ValueError("Неверный pause journal")
-        state = sp.run(["docker", "inspect", "-f", "{{.State.Paused}}", container], capture_output=True, text=True)
-        if state.returncode or (state.stdout.strip() == "true" and sp.run(["docker", "unpause", container], stdout=sp.DEVNULL).returncode):
-            remaining.append(container)
-    if remaining:
-        write_json(journal, remaining)
-        raise ValueError("Не все контейнеры возобновлены")
-    journal.unlink()
+class HashReader:
+    def __init__(self, stream):
+        self.stream, self.digest = stream, hashlib.sha256()
+
+    def read(self, size=-1):
+        data = self.stream.read(size)
+        self.digest.update(data)
+        return data
+
+
+def prune(c):
+    root = Path(c["output"]).resolve()
+    with lock(root / ".writer.lock"):
+        paths = completed(root)
+        if paths and board_report.acknowledged(c, paths[0].name, sha(paths[0] / "receipt.json")):
+            rotate_server(root, 1)
 
 
 def encrypt(c, path, producer):
@@ -262,101 +324,196 @@ def serve(c):
 
 
 def ssh(c, command, target):
-    run([c.get("ssh", "ssh"), "-T", "-oBatchMode=yes", "-oIdentitiesOnly=yes", "-oStrictHostKeyChecking=yes", "-oConnectTimeout=20", "-oServerAliveInterval=30", "-oServerAliveCountMax=3", "-oUserKnownHostsFile=" + c["known_hosts"], "-i", c["ssh_key"], c["host"], command], stdout=target, timeout=7200)
+    timeout = 3600 if command.startswith("get ") and not command.endswith("receipt.json") else 30
+    run([c.get("ssh", "ssh"), "-T", "-oBatchMode=yes", "-oIdentitiesOnly=yes", "-oStrictHostKeyChecking=yes", "-oConnectTimeout=20", "-oServerAliveInterval=30", "-oServerAliveCountMax=3", "-oUserKnownHostsFile=" + c["known_hosts"], "-i", c["ssh_key"], c["host"], command], stdout=target, timeout=timeout)
 
 
 def pull(c):
     root = Path(c["destination"]).resolve()
     root.mkdir(parents=True, exist_ok=True)
     with lock(root / ".pull.lock"):
-        with tempfile.TemporaryFile() as f:
-            ssh(c, "list", f)
-            f.seek(0)
-            ids = json.load(f)
-        if not ids or any(not ID.fullmatch(x) for x in ids):
-            raise ValueError("Нет завершённой копии")
-        name = max(ids)
-        date = dt.datetime.strptime(name[8:16], "%Y%m%d").date()
-        if (dt.datetime.now(dt.timezone.utc).date() - date).days > 1:
-            raise ValueError("Копия сервера старше суток")
-        dest = root / name
-        pending = root / (name + ".partial")
-        pending.mkdir(exist_ok=True)
-        with (pending / "receipt.json").open("wb") as f:
-            ssh(c, f"get {name} receipt.json", f)
-        receipt = json.loads((pending / "receipt.json").read_text())
-        if receipt.get("id") != name or set(receipt.get("files", {})) != set(FILES):
-            raise ValueError("Неверный receipt")
-        for file, info in receipt["files"].items():
-            if not re.fullmatch("[0-9a-f]{64}", info["sha256"]) or not 0 < info["bytes"] <= c["max_bundle_bytes"]:
-                raise ValueError("Неверный размер/SHA")
-            path = pending / file
-            if dest.exists():
-                path = dest / file
-            if not path.exists() or path.stat().st_size != info["bytes"] or sha(path) != info["sha256"]:
-                if dest.exists():
-                    raise ValueError("Ранее проверенная копия повреждена; не перезаписываю")
-                if shutil.disk_usage(root).free < info["bytes"] + 2**30:
-                    raise ValueError("Недостаточно места на D; старые копии сохранены")
-                with path.open("wb") as f:
-                    ssh(c, f"get {name} {file}", f)
-                if path.stat().st_size != info["bytes"] or sha(path) != info["sha256"]:
-                    raise ValueError("Загрузка: SHA/размер не совпал")
-        if not dest.exists():
-            os.rename(pending, dest)
-        else:
-            shutil.rmtree(pending)
-        # Weekly authenticated decrypt + full manifest/SQLite verification, not just SHA.
         state_path = root / "status.json"
         old = json.loads(state_path.read_text()) if state_path.exists() else {}
-        now = time.time()
-        verified_at = old.get("verified_at", 0)
-        if now - verified_at >= 7 * 86400:
-            with tempfile.TemporaryDirectory(prefix=".verify-", dir=root) as tmp:
-                restore(c, dest, Path(tmp) / "restore")
-            verified_at = now
-        write_json(state_path, {"id": name, "bytes": sum(x["bytes"] for x in receipt["files"].values()), "sha": "OK", "verified_at": verified_at, "checked_at": now})
-        complete = [p for p in root.iterdir() if ID.fullmatch(p.name) and (p / "receipt.json").is_file()]
-        keep = keep_ids([p.name for p in complete], dt.datetime.now(dt.timezone.utc).date())
-        for path in complete:
-            if path.name not in keep and not path.is_symlink():
-                shutil.rmtree(path)
-        print(json.dumps({"backup": name, "sha": "OK", "bytes": sum(x["bytes"] for x in receipt["files"].values())}))
+        status = {"phase": "pull", "result": "ERROR", "sha": "UNKNOWN", "verified_at": old.get("verified_at", 0), "checked_at": time.time()}
+        try:
+            cleanup_partial(root)
+            dest, receipt = download(c, root)
+            status.update(id=dest.name, sha="OK", bytes=sum(x["bytes"] for x in receipt["files"].values()))
+            if time.time() - status["verified_at"] >= 7 * 86400:
+                weekly_verify(c, dest)
+                status["verified_at"] = time.time()
+            status.update(result="OK", receipt_sha=sha(dest / "receipt.json"))
+        except Exception as error:
+            status["error"] = str(error) if isinstance(error, BackupError) else "PULL_OR_VERIFY_FAILED"
+            raise
+        finally:
+            # Verification, download or network failure cannot bypass housekeeping.
+            try:
+                cleanup_partial(root)
+                rotate_local(root)
+            finally:
+                write_json(state_path, status)
+                status["board"] = "OK" if board_report.publish(c, root, status) else "PENDING"
+                write_json(state_path, status)
+        if status["board"] != "OK":
+            raise BackupError("BOARD_REPORT_PENDING")
+        print(json.dumps(status))
+
+
+def download(c, root):
+    with tempfile.TemporaryFile() as f:
+        ssh(c, "list", f)
+        f.seek(0)
+        ids = json.load(f)
+    if not ids or any(not ID.fullmatch(x) for x in ids):
+        raise BackupError("NO_BACKUP")
+    name = max(ids)
+    date = dt.datetime.strptime(name[8:16], "%Y%m%d").date()
+    if (dt.datetime.now(dt.timezone.utc).date() - date).days > 1:
+        raise BackupError("STALE_BACKUP")
+    dest, pending = root / name, root / (name + ".partial")
+    if dest.is_symlink() or pending.is_symlink():
+        raise BackupError("UNSAFE_DESTINATION")
+    pending.mkdir(exist_ok=True)
+    with (pending / "receipt.json").open("wb") as f:
+        ssh(c, f"get {name} receipt.json", f)
+    receipt = json.loads((pending / "receipt.json").read_text())
+    if receipt.get("id") != name or set(receipt.get("files", {})) != set(FILES):
+        raise BackupError("BAD_RECEIPT")
+    for file, info in receipt["files"].items():
+        if not re.fullmatch("[0-9a-f]{64}", info["sha256"]) or not 0 < info["bytes"] <= c["max_bundle_bytes"]:
+            raise BackupError("BAD_RECEIPT")
+        path = (dest if dest.exists() else pending) / file
+        if path.is_symlink():
+            raise BackupError("UNSAFE_DESTINATION")
+        if not path.exists() or path.stat().st_size != info["bytes"] or sha(path) != info["sha256"]:
+            if dest.exists():
+                raise BackupError("LOCAL_BACKUP_DAMAGED")
+            if shutil.disk_usage(root).free < info["bytes"] + 2**30:
+                raise BackupError("NO_SPACE_D")
+            with path.open("wb") as f:
+                ssh(c, f"get {name} {file}", f)
+            if path.stat().st_size != info["bytes"] or sha(path) != info["sha256"]:
+                raise BackupError("BAD_SHA")
+    if not dest.exists():
+        os.rename(pending, dest)
+    else:
+        shutil.rmtree(pending)
+    validate_bundle(dest)
+    return dest, receipt
+
+
+def private_dir(path):
+    if os.name == "nt":
+        identity = run(["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True, text=True).stdout
+        sid = re.search(r"S-1-5-\d+(?:-\d+)+", identity).group()
+        run(["icacls", str(path), "/inheritance:r", "/grant:r", f"*{sid}:(OI)(CI)F", "*S-1-5-18:(OI)(CI)F"], stdout=sp.DEVNULL, stderr=sp.DEVNULL)
+    else:
+        path.chmod(0o700)
+
+
+def restore_budget(c, bundle):
+    receipt = json.loads((bundle / "receipt.json").read_text())
+    amount = receipt.get("restore_bytes")
+    if not isinstance(amount, int) or not 0 < amount <= c["max_restore_bytes"]:
+        raise BackupError("RESTORE_BUDGET_INVALID")
+    return amount
+
+
+def temporary_parent(c, bundle):
+    parent = Path(c.get("verify_temp_dir", tempfile.gettempdir())).resolve()
+    if not parent.is_dir() or parent.is_relative_to(bundle.parent):
+        raise BackupError("TEMP_MUST_BE_OUTSIDE_BACKUPS")
+    identity = Path(c["identity"]).resolve()
+    if identity.is_relative_to(bundle.parent):
+        raise BackupError("IDENTITY_MUST_BE_OUTSIDE_BACKUPS")
+    return parent
+
+
+def weekly_verify(c, bundle):
+    parent = temporary_parent(c, bundle)
+    amount = restore_budget(c, bundle)
+    if shutil.disk_usage(parent).free < amount:
+        raise BackupError("NO_SPACE_TEMP")
+    with tempfile.TemporaryDirectory(prefix="synapse-verify-", dir=parent) as tmp:
+        private_dir(Path(tmp))
+        restore(c, bundle, Path(tmp) / "restore")
+
+
+def decrypt(c, encrypted, output, limit):
+    proc = sp.Popen([c.get("age", "age"), "-d", "-i", c["identity"], str(encrypted)], stdout=sp.PIPE, stderr=sp.DEVNULL)
+    count = 0
+    try:
+        with output.open("xb") as target:
+            while data := proc.stdout.read(1024 * 1024):
+                count += len(data)
+                if count > limit:
+                    raise BackupError("RESTORE_BUDGET_EXCEEDED")
+                target.write(data)
+        if proc.wait():
+            raise BackupError("BAD_SHA")
+    finally:
+        proc.stdout.close()
+        if proc.poll() is None:
+            proc.kill()
+        proc.wait()
 
 
 def restore(c, bundle, target):
     bundle, target = Path(bundle).resolve(), Path(target).resolve()
     if target.exists():
         raise ValueError("Нужен новый каталог; существующие данные не перезаписываются")
-    receipt = json.loads((bundle / "receipt.json").read_text())
-    for name in FILES:
-        if sha(bundle / name) != receipt["files"][name]["sha256"]:
-            raise ValueError("SHA не совпал")
-    target.mkdir(parents=True, mode=0o700)
-    try:
+    validate_bundle(bundle)
+    parent = temporary_parent(c, bundle)
+    amount = restore_budget(c, bundle)
+    # Conservative budget checked on BOTH filesystems before plaintext is written.
+    if not target.parent.is_dir() or min(shutil.disk_usage(parent).free, shutil.disk_usage(target.parent).free) < amount:
+        raise BackupError("NO_SPACE_TEMP")
+    with tempfile.TemporaryDirectory(prefix="synapse-decrypt-", dir=parent) as tmp:
+        tmp = Path(tmp)
+        private_dir(tmp)
+        staged = tmp / "verified"
+        staged.mkdir(mode=0o700)
         # Decrypt fully before extraction: age must authenticate the final chunk.
         for file in FILES:
-            plain = target / (file + ".plain")
-            with plain.open("xb") as f:
-                run([c.get("age", "age"), "-d", "-i", c["identity"], str(bundle / file)], stdout=f)
+            plain = tmp / (file + ".plain")
+            decrypt(c, bundle / file, plain, amount)
             if file == FILES[0]:
                 with tarfile.open(plain) as tar:
-                    tar.extractall(target, filter="data")
+                    members = tar.getmembers()
+                    if sum(x.size for x in members) > amount:
+                        raise BackupError("RESTORE_BUDGET_EXCEEDED")
+                    tar.extractall(staged, members=members, filter="data")
                 plain.unlink()
             else:
-                plain.rename(target / "images.tar")
-        manifest = json.loads((target / "manifest.json").read_text())
+                with tarfile.open(plain) as tar:
+                    for member in tar:
+                        if member.isfile():
+                            with tar.extractfile(member) as source:
+                                while source.read(1024 * 1024):
+                                    pass
+                plain.rename(staged / "images.tar")
+        manifest = json.loads((staged / "manifest.json").read_text())
         for name, digest in manifest["files"].items():
-            path = (target / name).resolve()
-            if not path.is_relative_to(target) or sha(path) != digest:
+            path = (staged / name).resolve()
+            if not path.is_relative_to(staged) or sha(path) != digest:
                 raise ValueError("Неверный внутренний SHA/путь")
         for name in manifest["sqlite"]:
-            check_db(target / name)
-        write_json(target / "VERIFIED.json", {"schema": 2, "sqlite": len(manifest["sqlite"]), "files": len(manifest["files"]), "services_started": False})
-    except BaseException:
-        # Preserve failed restore for investigation; never promote partial data.
-        (target / "FAILED").touch()
-        raise
+            path = (staged / name).resolve()
+            if not path.is_relative_to(staged):
+                raise BackupError("UNSAFE_SQLITE_PATH")
+            check_db(path)
+        write_json(staged / "VERIFIED.json", {"schema": 2, "sqlite": len(manifest["sqlite"]), "files": len(manifest["files"]), "services_started": False})
+        # Promote only authenticated, fully verified content; temporary plaintext
+        # is deleted on every exit, including extraction/SQLite failures.
+        target.mkdir(mode=0o700)
+        try:
+            private_dir(target)
+            shutil.copytree(staged, target, symlinks=True, dirs_exist_ok=True)
+        except BaseException:
+            if target.exists():
+                shutil.rmtree(target)
+            raise
 
 
 def main():
@@ -371,8 +528,8 @@ def main():
         serve(c)
     elif action == "pull":
         pull(c)
-    elif action == "recover":
-        recover(c)
+    elif action == "prune":
+        prune(c)
     elif action == "restore" and len(args) == 2:
         restore(c, *args)
     elif action == "restore-smoke" and len(args) == 2:

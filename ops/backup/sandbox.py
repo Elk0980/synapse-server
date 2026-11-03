@@ -52,7 +52,7 @@ def main(folder):
                     site = os.environ["SYNAPSE_RESTORE_SITE_PATH"]
                     if not site or any(part in ("", ".", "..") for part in site.split("/")) or not all(ch.isalnum() or ch in "-_/" for ch in site):
                         raise ValueError("Нужен относительный каталог сайта")
-                    args += ["--entrypoint", "caddy", item["Image"], "file-server", "--root", "/srv/sites/" + site, "--listen", ":8080"]
+                    args += ["--entrypoint", "caddy", item["Image"], "file-server", "--root", "/srv/sites", "--listen", ":8080"]
                 elif entry:
                     args += ["--entrypoint", entry[0]]
                     args += [item["Image"], *entry[1:], *(item["Config"].get("Cmd") or [])]
@@ -65,7 +65,7 @@ def main(folder):
                     probe = ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/catalog',{headers:{'x-api-key':process.env.API_KEY}}).then(async r=>{await r.json();process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"]
                     kind = "crm"
                 else:
-                    probe = ["wget", "-q", "--spider", "http://127.0.0.1:8080/"]
+                    probe = ["wget", "-q", "--spider", "http://127.0.0.1:8080/" + site + "/"]
                     kind = "site"
                 for attempt in range(30):
                     result = sp.run(["docker", "exec", name, *probe], stdout=sp.DEVNULL, stderr=sp.DEVNULL, timeout=5)
@@ -75,11 +75,18 @@ def main(folder):
                     time.sleep(1)
                 else:
                     raise ValueError("Сервис не прошёл health probe")
+                if "caddy" in original:
+                    cabinet = os.environ.get("SYNAPSE_RESTORE_CABINET_PATH", "synapse")
+                    if not cabinet or any(part in ("", ".", "..") for part in cabinet.split("/")) or not all(ch.isalnum() or ch in "-_/" for ch in cabinet):
+                        raise ValueError("Нужен относительный каталог кабинета")
+                    for page in ("cabinet.html", "cabinet/common.css", "cabinet/account.js"):
+                        run(["docker", "exec", name, "wget", "-q", "--spider", f"http://127.0.0.1:8080/{cabinet}/{page}"], timeout=10)
+                    checks.add("cabinet")
             finally:
                 Path(env.name).unlink()
-        if checks != {"crm", "site"}:
-            raise ValueError("CRM и сайт не найдены в принятой инвентаризации")
-        (root / "SANDBOX_OK.json").write_text(json.dumps({"crm": True, "site": True, "network": "none", "production": False}))
+        if checks != {"crm", "site", "cabinet"}:
+            raise ValueError("CRM, кабинет и сайт не найдены в принятой инвентаризации")
+        (root / "SANDBOX_OK.json").write_text(json.dumps({"crm": True, "site": True, "cabinet": True, "network": "none", "production": False}))
     finally:
         for name in names:
             run(["docker", "rm", "-f", "-v", name])

@@ -1,0 +1,7 @@
+[Unit]
+Description=Prune Synapse encrypted backup after verified D receipt in task 58
+After=network-online.target
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/usr/bin/python3 /usr/local/lib/synapse-backup/backup_v2.py prune /etc/synapse-backup/server.json

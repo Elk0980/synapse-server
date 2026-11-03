@@ -12,6 +12,6 @@ foreach ($p in @($Python,$Config,$Script)) {
 $action = New-ScheduledTaskAction -Execute $Python -Argument ('"{0}" pull "{1}"' -f $Script,$Config)
 $daily = New-ScheduledTaskTrigger -Daily -At '04:30'
 $logon = New-ScheduledTaskTrigger -AtLogOn -User ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
-$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 3) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 6) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
 Register-ScheduledTask -TaskName 'SynapseBackupToD' -Action $action -Trigger @($daily,$logon) -Settings $settings -Principal $principal -Description 'Загрузка зашифрованной копии; StartWhenAvailable; без открытого чата' | Out-Null

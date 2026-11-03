@@ -7,7 +7,6 @@ Requires=docker.service
 Type=oneshot
 UMask=0077
 ExecStart=/usr/bin/python3 /usr/local/lib/synapse-backup/backup_v2.py create /etc/synapse-backup/server.json
-ExecStopPost=/usr/bin/python3 /usr/local/lib/synapse-backup/backup_v2.py recover /etc/synapse-backup/server.json
 Nice=15
 IOSchedulingClass=idle
 TimeoutStartSec=45min
