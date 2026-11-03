@@ -1,6 +1,7 @@
 name: Production sites guard tests
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled, edited, ready_for_review]
   push:
     branches: [main]
 permissions:

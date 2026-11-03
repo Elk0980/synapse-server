@@ -15,7 +15,36 @@ class AdmissionTests(unittest.TestCase):
         return guard.evaluate(pr, files, 'a' * 40)
 
     def test_workshop(self):
-        self.check(['ops/crm/server.js', 'sites/synapse/cabinet.html'])
+        self.check(['ops/tasks-mcp/server.js', 'sites/synapse/cabinet.html'])
+
+    def test_all_github_paths_require_infrastructure_label(self):
+        for path in ('.github/workflows/other.yml', '.github/workflows/new-status-writer.yaml',
+                     '.github/actions/local/action.yml', '.github/dependabot.yml',
+                     '.github/ISSUE_TEMPLATE/bug.md', '.github/copilot-instructions.md'):
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                self.check([path])
+            self.check([path], [guard.INFRA])
+
+    def test_all_content_and_crm_paths_require_infrastructure_label(self):
+        for service in ('content', 'crm'):
+            for name in ('server.js', 'Dockerfile', 'package-lock.json', 'new-module.js'):
+                path = 'ops/' + service + '/' + name
+                with self.subTest(path=path), self.assertRaises(ValueError):
+                    self.check([path])
+                self.check([path], [guard.INFRA])
+
+    def test_rename_out_of_protected_infrastructure(self):
+        pr = {'state': 'open', 'head': {'sha': 'a'}, 'changed_files': 1, 'labels': []}
+        for previous in ('.github/workflows/other.yml', 'ops/content/server.js', 'ops/crm/server.js'):
+            files = [{'filename': 'ops/tasks-mcp/new.js', 'status': 'renamed',
+                      'previous_filename': previous}]
+            with self.subTest(previous=previous), self.assertRaises(ValueError):
+                guard.evaluate(pr, files, 'a')
+
+    def test_bootstrap_workflow_rechecks_label_events(self):
+        workflow = (Path(__file__).resolve().parents[2] /
+                    '.github/workflows/protect-prod-sites-tests.yml').read_text(encoding='utf-8')
+        self.assertRegex(workflow, r'pull_request:\s+types: \[[^\]]*\blabeled\b[^\]]*\bunlabeled\b')
 
     def test_client_requires_exact_label(self):
         for labels in ([], ['сайт alvi2'], ['Сайт alvi'], ['сайт alvi ']):
@@ -64,7 +93,7 @@ class AdmissionTests(unittest.TestCase):
         for kwargs in ({'changed_files': 2}, {'changed_files': 3001},
                        {'head': {'sha': 'old'}}, {'state': 'closed'}):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
-                self.check(['ops/crm/a'], **kwargs)
+                self.check(['ops/tasks-mcp/a'], **kwargs)
 
     def test_bad_paths(self):
         for path in ('../sites/alvi/a', '/sites/alvi/a', 'sites\\alvi\\a', ''):
@@ -103,7 +132,7 @@ class AdmissionTests(unittest.TestCase):
         pr = {'state': 'open', 'head': {'sha': 'a', 'repo': {'pushed_at': '1'}},
               'base': {'sha': 'b'}, 'changed_files': 1, 'labels': [], 'updated_at': '1'}
         latest = {**pr, 'head': {'sha': 'a', 'repo': {'pushed_at': '2'}}, 'updated_at': '2'}
-        files = [{'filename': 'ops/crm/a', 'status': 'modified'}]
+        files = [{'filename': 'ops/tasks-mcp/a', 'status': 'modified'}]
         with patch.object(guard, 'fetch_json', side_effect=[pr, files, latest]):
             guard.check_remote('owner/repo', 1, 'a')
         latest['base'] = {'sha': 'changed'}

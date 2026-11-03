@@ -3,6 +3,8 @@
 Дата: 04.11.2026 (Asia/Bangkok). Исполнитель: Codex — Защита чистовиков.
 Основа: main fb598368ba0d05447e04d254bb8fd67807d891fa. Разведка до изменений: №57, комментарий184.
 Это план для приёмки Claude и код CI, не установленная серверная изоляция.
+Ревью224: [инструкция защиты main](MAIN_PROTECTION.md) и
+[совместная серверная приёмка с №55](ISOLATION_ACCEPTANCE.md).
 Сервер, содержимое sites/, текущие Caddy/Compose, данные и права не изменены.
 
 ## Проверка PR
@@ -15,17 +17,21 @@
 больше/неполный ответ/смена SHA или меток при чтении — закрытый отказ).
 
 Общие Caddy/Compose, legacy sync, shared track.js/company-links.js, корневые файлы
-sites/, CODEOWNERS и сама защита требуют `сайты: инфраструктура`.
+sites/, ВСЕ `.github/**` (включая любые новые workflows/actions), сама защита и ВСЕ
+`ops/content/**` и `ops/crm/**` требуют `сайты: инфраструктура`.
 Каталоги мастерской sites/{synapse,chat,board,vhod} не требуют клиентской метки,
-кроме перечисленных shared JS. ops/{crm,content,chat} остаются backend мастерской:
-CI-метка не обещает совместимость их API; runtime admission описан ниже.
+кроме перечисленных shared JS. Backend content/CRM защищён целиком, поскольку
+новый модуль, Dockerfile или зависимости также могут изменить цены/API.
+CI-метка не обещает совместимость API; runtime admission описан ниже. Chat требует
+отдельной проверки совместимости по текущему runtime-контракту.
 CODEOWNERS с вымышленным GitHub аккаунтом Claude не создаётся.
 
 Доверенный `pull_request_target` запускает guard только из base SHA, с read-only
 contents/pull-requests и statuses:write только для статуса exact PR head; код PR не исполняется. Текущие файлы и метки читает GitHub API,
 переименования проверяются по previous_filename. События labeled/unlabeled повторяют
 проверку, concurrency отменяет прежний запуск. Secrets, отправок и deployment нет.
-Непривилегированный PR workflow отдельно исполняет тесты и bootstrap-проверку.
+Непривилегированный PR workflow отдельно исполняет тесты и bootstrap-проверку,
+включая labeled/unlabeled: добавление и снятие метки проверяются автоматически.
 Его зелёный результат не подменяет доверенный target check.
 
 Доверенный job пишет pending/failure/success с контекстом

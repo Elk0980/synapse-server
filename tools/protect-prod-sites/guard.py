@@ -23,8 +23,8 @@ def required_labels(paths):
                 or re.fullmatch(r'(docker-)?compose[^/]*\.ya?ml', path)
                 or path.startswith('ops/synapse-sync')
                 or path.startswith('tools/protect-prod-sites/')
-                or path.startswith('.github/workflows/protect-prod-sites')
-                or path == '.github/CODEOWNERS'):
+                or parts[0] == '.github'
+                or (len(parts) > 1 and parts[0] == 'ops' and parts[1] in {'content', 'crm'})):
             required.add(INFRA)
         elif parts[0] == 'sites':
             if len(parts) < 3:
