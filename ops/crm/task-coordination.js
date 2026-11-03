@@ -1,4 +1,5 @@
 'use strict';
+const {waitingSince} = require('./task-waiting');
 const {hasBoardSchema,boardFields,createTaskProducts,validatedChat} = require('./task-products');
 
 // Метаданные существующих CRM-задач. Это учёт подтверждений, не запуск агентов.
@@ -415,20 +416,33 @@ function createTaskTools(db, {now,owner,entry,save}) {
     }
     return {limit,offset};
   };
-  const taskSummary = row => {
+  const taskSummary = (row,overview=false) => {
     const fields=['id','title','company_code','assignee_name','reviewer_name','parent_task_id',
       'status','priority','due_date','source','updated_at'];
     const coordination=entry(row);
+    let description='',descriptionTruncated=false;
+    if(overview===true) {
+      let count=0;
+      for(const character of row.description || '') {
+        if(count===1000){descriptionTruncated=true;break;}
+        description+=character;count++;
+      }
+    }
     return {...Object.fromEntries(fields.map(key=>[key,row[key]])),
       ...boardFields(db,row),
       subtask_count:coordination.subtask_count,subtask_done:coordination.subtask_done,no_report:coordination.no_report,
+      ...(overview===true?{description,description_truncated:descriptionTruncated,
+        created_at:row.created_at,waiting_since:waitingSince(db,row,coordination,now())}:{}),
       coordination:{revision:coordination.revision,executorName:row.assignee_name,
+        ...(overview===true?{blocker:coordination.blocker,nextAction:coordination.nextAction,updatedAt:coordination.updatedAt}:{}),
         milestones:Object.fromEntries(STAGES.map(stage=>[stage,{state:coordination.milestones[stage].state}]))}};
   };
   const taskView = (row, actor, detail=false, args={}) => {
     const fields = ['id','created_at','updated_at','title','description','company_code','assignee_name',
       'status','priority','due_date','source','parent_task_id','reviewer_name','client_ref'];
-    const result = {...Object.fromEntries(fields.map(key => [key,row[key]])), ...taskExtras(db,row,now()), coordination:entry(row)};
+    const coordination=entry(row);
+    const result = {...Object.fromEntries(fields.map(key => [key,row[key]])), ...taskExtras(db,row,now()), coordination,
+      waiting_since:waitingSince(db,row,coordination,now())};
     if (detail) {
       const comments=page(args,'comments',20), subtasks=page(args,'subtasks',100);
       const codes=[...allowed(actor)], childWhere=`parent_task_id=? AND is_deleted=0
@@ -495,6 +509,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
     return {task:taskView(scopedTask(row.id,actor),actor,true)};
   });
   const tasksList = (args, actor) => {
+    if(args.overview!==undefined&&typeof args.overview!=='boolean')fail(400,'overview должен быть логическим');
     const limit=args.limit===undefined?100:integer(args.limit,'limit'), offset=args.offset===undefined?0:args.offset;
     if (limit>100 || !Number.isSafeInteger(offset) || offset<0) fail(400, 'Некорректная страница');
     const codes=args.project!==undefined?[project(args.project,actor)]:[...allowed(actor)];
@@ -517,7 +532,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
     }
     if (args.search!==undefined) { const search=text(args.search,500);clauses.push('(title LIKE ? OR description LIKE ?)');params.push(`%${search}%`,`%${search}%`); }
     const where=clauses.join(' AND '), total=db.prepare(`SELECT count(*) n FROM tasks WHERE ${where}`).get(...params).n;
-    const tasks=db.prepare(`SELECT * FROM tasks WHERE ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params,limit,offset).map(taskSummary);
+    const tasks=db.prepare(`SELECT * FROM tasks WHERE ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params,limit,offset).map(row=>taskSummary(row,args.overview===true));
     return {tasks,pagination:{total,limit,offset}};
   };
   const agentView = (row, actor) => {

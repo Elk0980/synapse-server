@@ -6,6 +6,7 @@
   const PROJECTS = {'synapse-business':'Synapse', alvi:'ALVI', avokado:'Авокадо', palitra:'Палитра', taisabai:'TaiSabai'};
   const UNASSIGNED = '__unassigned__';
   const controllers = new WeakMap();
+  const waitingRequests = new Map();
   const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[ch]));
   const safeUrl = value => {
     try { const url = new URL(value); return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? url.href : ''; }
@@ -26,6 +27,12 @@
     if (prior) { void prior.render(initial); return prior; }
     let alive = true, sequence = 0, detailSequence = 0, focusBeforeSheet, draggedId;
     let tasks = [], products = [], agents = [], taskSheet, createSheet;
+    const overviewCache = new Map();
+    const waitingInflight = {
+      has:id=>waitingRequests.has(`${key}:${id}`),get:id=>waitingRequests.get(`${key}:${id}`),
+      set:(id,value)=>waitingRequests.set(`${key}:${id}`,value),delete:id=>waitingRequests.delete(`${key}:${id}`)
+    };
+    const syncWaitingTask = id => taskSheet?.body.querySelector(`[data-wait-task="${id}"]`)?.dispatchEvent(new Event('tb-wait-sync'));
     const key = `sb-task-board:${ctx.identity.userId || ctx.identity.id || ctx.identity.login || 'owner'}`;
     const legacyPrefix = `sb-task:${ctx.identity.userId || ctx.identity.id || ctx.identity.login || 'owner'}`;
     const read = suffix => { try { return JSON.parse(sessionStorage.getItem(`${key}:${suffix}`) || 'null'); } catch { return null; } };
@@ -76,6 +83,43 @@
     const notice = (text, error = false) => {
       const node = container.querySelector('[data-board-notice]'); if (node) { node.textContent = text; node.setAttribute('role', error ? 'alert' : 'status'); }
     };
+    const percentage = value => `<span class="tb-percentage">${Number(value) || 0}%</span><progress max="100" value="${Number(value) || 0}" aria-label="Подтверждённые этапы"></progress>`;
+    const overviewMarkup = () => {
+      const helper = window.SbTaskOverview; if (!helper) return '';
+      const model = helper.build(tasks.filter(task => matchesProject(task)));
+      const waiting = model.waiting.length ? `<section class="tb-waiting" data-waiting><h2>Ждут Влада <span>${model.waiting.length}</span></h2><div>${model.waiting.map(task => {
+        const since = typeof task.waiting_since === 'string' && Number.isFinite(Date.parse(task.waiting_since)) ? task.waiting_since : '';
+        return `<button type="button" class="tb-waiting-row" data-task-open="${task.id}"><span class="tb-waiting-id">№${task.id} · ${esc(name(task.company_code))}</span><strong>${esc(helper.waitingNeed(task))}</strong>${since ? `<time datetime="${esc(since)}">с ${esc(stamp(since))}</time>` : '<span class="tb-waiting-date">Время ожидания не указано</span>'}</button>`;
+      }).join('')}</div></section>` : '';
+      if (state.view !== 'projects') return waiting;
+      const help = `<details class="tb-how" data-board-guide><summary>Как читать доску</summary><p>Цель → Направления → Задачи → Этапы</p><p>Каждый подтверждённый этап даёт 25%: код, подключено, проверено, принято Владом. Статус задачи сам по себе не подтверждает готовность.</p><p>Процент направления — среднее по уникальным задачам состава: непосредственные подзадачи и перечисленные ссылки. Процент цели — среднее по уникальным задачам состава её направлений. Подзадачи не заменяют этапы родительской задачи. Неподтверждённые этапы дают 0%.</p></details>`;
+      const goals = model.goals.map(goal => `<article class="tb-goal" data-goal="${goal.task.id}"><div class="tb-overview-title"><button type="button" data-task-open="${goal.task.id}"><span>Цель</span><strong>${esc(goal.title)}</strong></button>${percentage(goal.progress)}</div>${goal.current.length || goal.next.length ? `<p>Сейчас строим: ${esc(goal.current.map(direction => direction.title).join(', ') || 'направление ещё не начато')}${goal.next.length ? ` → потом: ${esc(goal.next.map(direction => direction.title).join(', '))}` : ''}</p>` : ''}</article>`).join('');
+      const active = model.directions.filter(direction => direction.started);
+      const directions = active.length ? `<section class="tb-directions" data-active-directions><h2>Идёт сейчас</h2><div class="tb-direction-grid">${active.map(direction => `<article class="tb-direction"><div class="tb-overview-title"><button type="button" data-task-open="${direction.task.id}"><strong>${esc(direction.title)}</strong></button>${percentage(direction.progress)}</div>${direction.why ? `<p class="tb-direction-why">Зачем: ${esc(direction.why)}</p>` : ''}${direction.task.assignee_name || direction.task.reviewer_name ? `<p class="tb-direction-people">${direction.task.assignee_name ? `Ведёт ${esc(direction.task.assignee_name)}` : ''}${direction.task.reviewer_name ? ` · Принимает ${esc(direction.task.reviewer_name)}` : ''}</p>` : ''}${direction.current.length ? `<div class="tb-direction-current">${direction.current.map(task => `<button type="button" data-task-open="${task.id}">Сейчас: №${task.id} ${esc(task.title)} — ${esc(helper.stageText(task))}</button>`).join('')}</div>` : '<p class="tb-direction-people">Сейчас нет задачи в работе</p>'}</article>`).join('')}</div></section>` : '';
+      const next = model.directions.filter(direction => !direction.started);
+      const upcoming = next.length ? `<section class="tb-upcoming"><h2>Дальше по плану</h2><div>${next.map(direction => `<button type="button" data-task-open="${direction.task.id}">${esc(direction.title)} · ${direction.progress}%</button>`).join('')}</div></section>` : '';
+      const now = model.now.length ? `<section class="tb-now" data-now-tasks><h2>Сейчас в работе</h2>${model.now.map(item => `<button type="button" class="tb-now-row" data-task-open="${item.task.id}"><span class="tb-now-direction">${esc(item.directions.length ? item.directions.map(direction => direction.title).join(' · ') : 'Вне цели')}</span><strong>№${item.task.id} ${esc(item.task.title)}</strong>${stageDots(item.task)}<span class="tb-now-stage">${esc(item.stage)}</span></button>`).join('')}</section>` : '';
+      return `<div class="tb-overview">${waiting}${help}${goals}${directions}${upcoming}${now}${tasks.some(task => task._overview_incomplete) ? '<p class="tb-overview-incomplete">Часть сведений пока недоступна. Обновите доску для проверки.</p>' : ''}</div>`;
+    };
+    async function hydrateOverview(records) {
+      if (!window.SbTaskOverview) return records;
+      const result = [...records], pending = records.map((task,index) => ({task,index})).filter(({task}) => !task.product_placeholder && (task.description_truncated === true || !Object.hasOwn(task,'description') || !Object.hasOwn(task,'waiting_since') || !Object.hasOwn(task.coordination || {},'blocker') || !Object.hasOwn(task.coordination || {},'nextAction')));
+      let cursor = 0;
+      await Promise.all(Array.from({length:Math.min(3,pending.length)},async () => {
+        while (cursor < pending.length && alive) {
+          const {task,index} = pending[cursor++], signature = JSON.stringify([task.coordination?.revision,task.updated_at]);
+          const cached = overviewCache.get(task.id);
+          if (cached?.signature === signature && task.coordination?.revision !== undefined) { result[index] = {...task,...cached.value,coordination:{...task.coordination,...cached.value.coordination}}; continue; }
+          try {
+            const data = await tool('task_get',{task_id:task.id,comments_limit:1,subtasks_limit:1}), full = data.task || data;
+            if (full.id !== task.id || full.company_code !== task.company_code) throw Error('Область карточки изменилась');
+            const value = {description:full.description,description_truncated:false,created_at:full.created_at,waiting_since:full.waiting_since,coordination:{...task.coordination,...full.coordination}};
+            result[index] = {...task,...value}; overviewCache.set(task.id,{signature,value});
+          } catch { result[index] = {...task,_overview_incomplete:true}; }
+        }
+      }));
+      return result;
+    }
     const updateStatus = async (id, status) => {
       const task = tasks.find(item => item.id === Number(id));
       try { await tool('task_update', {task_id:Number(id), status, revision:task?.coordination?.revision}); await render(); }
@@ -84,7 +128,7 @@
     async function load() {
       const records = []; let page, offset = 0;
       do {
-        page = await tool('tasks_list', {limit:100, offset});
+        page = await tool('tasks_list', {limit:100, offset,overview:true});
         records.push(...(page.tasks || [])); offset = records.length;
       } while (page.tasks?.length && offset < (page.pagination?.total ?? page.total ?? 0));
       const [productData, agentData] = await Promise.all([tool('products_list',{limit:100,offset:0}), tool('agents_list')]);
@@ -94,7 +138,7 @@
         if (!next.products?.length) break;
         allProducts.push(...next.products);
       }
-      return {tasks:records, products:allProducts, agents:agentData.agents || []};
+      return {tasks:await hydrateOverview(records), products:allProducts, agents:agentData.agents || []};
     }
     async function render(next = {}) {
       Object.assign(state, next);
@@ -129,6 +173,7 @@
       } else body = `<div class="tb-columns" aria-label="Доска по статусам">${['inbox','planned','in_progress','done'].map(status => `<section class="tb-column" data-drop-status="${status}"><h3><span class="tb-dot" data-status="${status}"></span>${STATUS[status]} <span>${statusCount(records,status)}</span></h3><div>${records.filter(task => task.status === status).map(card).join('') || '<p class="tb-empty">Нет задач</p>'}</div></section>`).join('')}</div><details class="tb-cancelled"><summary>Отменено · ${statusCount(records,'cancelled')}</summary><div class="tb-cancelled-list">${records.filter(task => task.status === 'cancelled').map(card).join('')}</div></details>`;
       const legacy = tasks.filter(task => task.product_placeholder && matchesProject(task));
       container.innerHTML = `<div class="tb-board"><header class="tb-toolbar"><div class="tb-heading"><h2>Задачи</h2><button type="button" class="tb-primary" data-create-task>+ Задача</button></div><nav class="tb-project-tabs" aria-label="Проекты"><button type="button" data-project="" aria-pressed="${!state.project}">Все проекты</button>${projects().map(code => `<button type="button" data-project="${esc(code)}" aria-pressed="${state.project === code}">${esc(name(code))}</button>`).join('')}</nav><div class="tb-controls"><nav class="tb-view-tabs" aria-label="Вид задач">${Object.entries({board:'Доска',plan:'План',today:'План дня',projects:'Обзор',agents:'Агенты'}).map(([view,label]) => `<button type="button" data-board-view="${view}" aria-pressed="${state.view === view}">${label}</button>`).join('')}</nav><button type="button" data-board-refresh aria-label="Обновить доску">↻</button><input type="search" data-board-search aria-label="Поиск задач" placeholder="Поиск задач" value="${esc(state.search)}"></div>${visibleProducts.length ? `<nav class="tb-product-chips" aria-label="Продукты"><button type="button" data-product="" aria-pressed="${!state.product}">Все продукты</button>${visibleProducts.map(product => `<button type="button" data-product="${product.id}" aria-pressed="${String(state.product) === String(product.id)}">${esc(product.name)}</button>`).join('')}</nav>` : ''}</header><p class="tb-notice" data-board-notice role="status"></p>${state.project && !['agents','projects'].includes(state.view) ? '<form class="tb-quick" data-quick-task><input name="title" required maxlength="300" aria-label="Новая задача" placeholder="Что сделать?"><button type="submit">+ Задача</button></form>' : ''}${body}${legacy.length ? `<details class="tb-cancelled"><summary>Прежние продукты · ${legacy.length}</summary><div class="tb-cancelled-list">${legacy.map(card).join('')}</div></details>` : ''}</div>`;
+      container.querySelector('.tb-board').insertAdjacentHTML('afterbegin',overviewMarkup());
       container.querySelectorAll('[data-project]').forEach(button => button.onclick = () => { state.project = button.dataset.project; state.product = ''; if (state.view === 'projects') state.view = 'plan'; draw(); });
       container.querySelectorAll('[data-product]').forEach(button => button.onclick = () => { state.product = button.dataset.product; draw(); });
       container.querySelectorAll('[data-board-view]').forEach(button => button.onclick = () => { state.view = button.dataset.boardView; draw(); });
@@ -181,6 +226,96 @@
     const taskLinks = task => task.coordination?.links || task.links || [];
     const chatUrl = task => safeUrl(task.chat_url) || safeUrl(taskLinks(task).find(link => /^чат/i.test(link.label || ''))?.url) || safeUrl(agents.find(agent => agent.name === task.assignee_name)?.chat_url || agents.find(agent => agent.name === task.assignee_name)?.chat);
     const productOptions = (project, selected) => `<option value="">Без продукта</option>${products.filter(product => product.company_code === project).map(product => `<option value="${product.id}"${Number(product.id) === Number(selected) ? ' selected' : ''}>${esc(product.name)}</option>`).join('')}`;
+    function waitingPanel(task,own) {
+      if (!window.SbTaskOverview?.isWaiting(task)) return;
+      const id = task.id, draftKey = `waitreply:${id}`, previous = read(draftKey) || {};
+      const panel = document.createElement('section'); panel.className = 'tb-waiting-actions'; panel.dataset.waitingActions = ''; panel.dataset.waitTask = String(id);
+      panel.innerHTML = `<h3>Ждёт вашего решения</h3><p>${esc(window.SbTaskOverview.waitingNeed(task))}</p><form data-wait-reply><label>Ответить<textarea name="text" maxlength="3990" required>${esc(previous.text || '')}</textarea></label><div class="tb-wait-buttons"><button type="submit">Отправить ответ</button><button type="button" data-wait-choice="Да">Да</button><button type="button" data-wait-choice="Нет">Нет</button><button type="button" data-wait-check hidden>Проверить отправку</button></div><p data-wait-result role="status"></p></form><button type="button" data-wait-clear>Снять ожидание</button>`;
+      own.body.querySelector('.tb-task-project').after(panel);
+      const form = panel.querySelector('form'), result = panel.querySelector('[data-wait-result]');
+      const canClearBlocker = window.SbTaskOverview.hasWaitingBlocker(task);
+      if (!canClearBlocker) {
+        panel.querySelector('[data-wait-clear]').hidden = true;
+        const hint = document.createElement('p'); hint.className = 'tb-waiting-hint';
+        hint.textContent = 'Ожидание задано следующим шагом или назначением — измените план задачи.';
+        const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = 'Открыть план задачи'; edit.dataset.waitEditPlan = '';
+        edit.onclick = () => { const plan = own.body.querySelector('[data-plan-form]'); if (plan) { plan.closest('details').open = true; plan.elements.executor.focus(); } };
+        panel.append(hint,edit);
+      }
+      const persist = () => write(draftKey,{...(read(draftKey) || {}),text:form.elements.text.value});
+      const sync = () => {
+        const pending = read(draftKey)?.pending, running = waitingInflight.has(id);
+        form.querySelector('[type=submit]').disabled = !!pending || running;
+        form.querySelectorAll('[data-wait-choice]').forEach(button => { button.disabled = !!pending || running; });
+        form.querySelector('[data-wait-check]').hidden = !pending;
+        form.querySelector('[data-wait-check]').disabled = running;
+        if (running) result.textContent = 'Ответ отправляется…';
+        else if (pending) result.textContent = `${pending.error ? pending.error+'. ' : ''}Исход отправки ещё не подтверждён. Отправка не повторяется автоматически; сначала проверьте результат.`;
+      };
+      panel.addEventListener('tb-wait-sync',sync);
+      const finish = pending => {
+        const current = read(draftKey);
+        if (current?.pending?.id !== pending.id) return;
+        const text = pending.fromField && current.text === pending.inputAtSend ? '' : current.text || '';
+        if (text) write(draftKey,{...current,text,pending:undefined}); else write(draftKey,null);
+        if (own.overlay.isConnected && form.elements.text.value === pending.inputAtSend && pending.fromField) form.elements.text.value = '';
+      };
+      form.oninput = persist;
+      const send = async (text,fromField) => {
+        if (waitingInflight.has(id) || read(draftKey)?.pending || !String(text).trim()) return;
+        persist();
+        const pending = {id:`reply:${Date.now()}:${Math.random().toString(36).slice(2)}`,text:`ОТВЕТ: ${String(text).trim()}`,inputAtSend:form.elements.text.value,fromField,baselineId:Math.max(0,...(task.comments || []).map(item => Number(item.id) || 0))};
+        waitingInflight.set(id,pending.id); write(draftKey,{...(read(draftKey) || {}),pending}); sync(); result.textContent = 'Ответ отправляется…';
+        try {
+          await tool('task_comment',{task_id:id,author:'Влад',text:pending.text}); finish(pending);
+          if (alive) await render();
+          if (taskSheet === own) { await openTask(id); taskSheet?.body.querySelector('[data-wait-result]')?.append('Ответ добавлен в ход работы.'); }
+        } catch (error) {
+          const current = read(draftKey);
+          if (current?.pending?.id === pending.id) write(draftKey,{...current,pending:{...current.pending,error:error.message}});
+          if (own.overlay.isConnected) { sync(); result.textContent = `${error.message}. Отправка не повторяется автоматически; сначала проверьте результат.`; }
+        } finally {
+          if (waitingInflight.get(id) === pending.id) waitingInflight.delete(id);
+          window.dispatchEvent(new CustomEvent('sb-waiting-reply-settled',{detail:{key,id}}));
+        }
+      };
+      form.onsubmit = event => { event.preventDefault(); void send(form.elements.text.value,true); };
+      form.querySelectorAll('[data-wait-choice]').forEach(button => button.onclick = () => send(button.dataset.waitChoice,false));
+      form.querySelector('[data-wait-check]').onclick = async event => {
+        const button = event.currentTarget, pending = read(draftKey)?.pending; if (waitingInflight.has(id) || !pending) return; button.disabled = true;
+        try {
+          let found = false, complete = false, offset = 0;
+          for (let page=0;page<5 && !found && !complete;page++) {
+            const data = await tool('task_get',{task_id:id,comments_limit:20,comments_offset:offset,subtasks_limit:1}), latest = data.task || data, comments = latest.comments || [];
+            if (latest.id !== id || latest.company_code !== task.company_code) throw Error('Область карточки изменилась. Откройте задачу заново.');
+            found = comments.some(item => item.id>pending.baselineId && item.author === 'Влад' && item.text === pending.text);
+            offset += comments.length;
+            complete = comments.some(item => item.id<=pending.baselineId) || comments.length<20 || offset >= (latest.comments_pagination?.total ?? Infinity);
+          }
+          if (found) { finish(pending); await render(); if (taskSheet === own) { await openTask(id); taskSheet?.body.querySelector('[data-wait-result]')?.append('Ранее отправленный ответ найден.'); } }
+          else if (complete) {
+            const current = read(draftKey); if (current?.pending?.id === pending.id) write(draftKey,{...current,pending:undefined});
+            sync(); result.textContent = 'Ответ не найден среди последних комментариев. Проверьте ход работы; повторная отправка возможна только по вашему действию.';
+          } else result.textContent = 'Проверена часть истории. Исход отправки ещё неизвестен; повтор остаётся заблокирован.';
+        } catch (error) { result.textContent = `${error.message}. Ответ остаётся в черновике.`; }
+        finally { button.disabled = false; }
+      };
+      panel.querySelector('[data-wait-clear]').onclick = async event => {
+        if (!canClearBlocker) return;
+        const button = event.currentTarget; button.disabled = true;
+        try {
+          await tool('task_update',{task_id:id,revision:task.coordination?.revision,blocker:''}); await render();
+          if (taskSheet === own) {
+            await openTask(id);
+            const body = taskSheet?.body, residual = body?.querySelector('[data-waiting-actions]');
+            const output = residual?.querySelector('[data-wait-result]') || body?.querySelector('[data-detail-result]');
+            if (output) output.textContent = residual ? 'Блокер ожидания снят. Ожидание остаётся в карточке: проверьте следующий шаг и назначение.' : 'Блокер ожидания снят.';
+          }
+        }
+        catch (error) { result.textContent = error.message; button.disabled = false; }
+      };
+      sync();
+    }
     async function openTask(id) {
       taskSheet?.close(); createSheet?.close();
       const current = ++detailSequence;
@@ -188,6 +323,8 @@
         const body = taskSheet?.body, plan = body?.querySelector('[data-plan-form]'), comment = body?.querySelector('[data-comment-form]');
         if (plan?.dataset.dirty) write(`plan:${id}`,Object.fromEntries(new FormData(plan)));
         if (comment?.elements.text.value) persistComment(id,comment.elements.text.value);
+        const waitReply = body?.querySelector('[data-wait-reply]');
+        if (waitReply) write(`waitreply:${id}`,{...(read(`waitreply:${id}`) || {}),text:waitReply.elements.text.value});
         body?.querySelectorAll('[data-stage-form]').forEach(form => { if (form.dataset.dirty) write(`stage:${id}:${form.dataset.stageForm}`,Object.fromEntries(new FormData(form))); });
       });
       const own = taskSheet; own.body.innerHTML = '<p role="status">Загрузка задачи…</p>';
@@ -207,6 +344,7 @@
           return `<details class="tb-milestone"><summary><span class="tb-stage" data-state="${esc(stage.state || 'pending')}"></span>${label}${stage.checkedAt ? `<time>${esc(stamp(stage.checkedAt))}</time>` : ''}</summary>${stage.evidence ? `<p>${linkedText(stage.evidence)}</p>` : ''}<form data-stage-form="${code}"><label>Основание<textarea name="evidence" maxlength="4000" required>${esc(stage.evidence || '')}</textarea></label><label>Дата проверки<input name="checked_at" type="datetime-local" required></label><button type="submit">Подтвердить этап</button><p data-stage-result role="status"></p></form></details>`;
         }).join('')}</section>${taskLinks(task).length ? `<section class="tb-detail-section"><h3>Ссылки</h3><ul>${taskLinks(task).map(link => { const url = safeUrl(link.url); return url ? `<li><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(link.label || url)}</a></li>` : ''; }).join('')}</ul></section>` : ''}<section class="tb-detail-section"><h3>Подзадачи <span>${Number(task.subtask_done) || 0}/${Number(task.subtask_count) || 0}</span></h3><ul class="tb-subtasks" data-subtasks>${(task.subtasks || []).map(item => `<li><button type="button" data-child-open="${item.id}">${STATUS[item.status] || ''} · №${item.id} ${esc(item.title)}</button></li>`).join('')}</ul>${(task.subtasks_pagination?.total || 0) > (task.subtasks || []).length ? '<button type="button" data-subtasks-more>Ещё подзадачи</button>' : ''}<button type="button" data-add-subtask>+ Подзадача</button></section><details class="tb-detail-section"${Object.keys(draft).length ? ' open' : ''}><summary>План задачи</summary><form class="tb-form" data-plan-form><label>Исполнитель<input name="executor" maxlength="200" value="${esc(field('executor',task.assignee_name))}"></label><label>Проверяет<input name="reviewer" maxlength="200" value="${esc(field('reviewer',task.reviewer_name))}"></label><label>Срок<input name="due_date" type="date" value="${esc(field('due_date',task.due_date))}"></label><label>Приоритет<select name="priority">${options(PRIORITY,field('priority',task.priority))}</select></label><label class="tb-wide">Следующий шаг<textarea name="next_step" maxlength="4000">${esc(field('next_step',coord.nextAction))}</textarea></label><label class="tb-wide">Мешает<textarea name="blocker" maxlength="4000">${esc(field('blocker',coord.blocker))}</textarea></label><label class="tb-wide">Чат исполнителя<input name="chat_url" type="url" value="${esc(field('chat_url',href))}" placeholder="https://"></label><label>Продукт<select name="product_id">${productOptions(task.company_code,field('product_id',task.product_id))}</select></label><label>Родительская задача<select name="parent_id"><option value="">Без родителя</option>${parentTasks.map(item => `<option value="${item.id}"${String(field('parent_id',task.parent_task_id)) === String(item.id) ? ' selected' : ''}>№${item.id} ${esc(item.title)}</option>`).join('')}</select></label><button type="submit">Сохранить план</button><p class="tb-wide" data-plan-result role="status"></p></form></details><section class="tb-detail-section"><h3>Ход работы</h3><ol class="tb-comments" data-comments>${(task.comments || []).map(listComment).join('')}</ol>${(task.comments_pagination?.total || 0) > (task.comments || []).length ? '<button type="button" data-comments-more>Все комментарии</button>' : ''}<form class="tb-comment-form" data-comment-form><label>Комментарий от Влада<textarea name="text" maxlength="10000" required>${esc(read(`comment:${id}`)?.text || '')}</textarea></label><button type="submit">Добавить комментарий</button><p data-comment-result role="status"></p></form></section>`;
         const result = own.body.querySelector('[data-detail-result]');
+        waitingPanel(task,own);
         own.body.querySelector('[data-task-record]').onclick = event => {
           event.preventDefault();
           if (task.company_code && ctx.selectedProjectId !== task.company_code) ctx.chooseProject?.(task.company_code);
@@ -381,9 +519,11 @@
     };
     const pageShow = event => { if (event.persisted) void recover(); };
     const visibility = () => { if (document.visibilityState === 'visible') void recover(); };
+    const replySettled = event => { if (event.detail?.key === key) syncWaitingTask(event.detail.id); };
     window.addEventListener('pageshow',pageShow); document.addEventListener('visibilitychange',visibility);
+    window.addEventListener('sb-waiting-reply-settled',replySettled);
     mediaTheme?.addEventListener?.('change',applyTheme);
-    const controller = {render,openTask,destroy:() => { alive = false; ++sequence; ++detailSequence; taskSheet?.close(); createSheet?.close(); window.removeEventListener('pageshow',pageShow); document.removeEventListener('visibilitychange',visibility); mediaTheme?.removeEventListener?.('change',applyTheme); document.body.classList.remove('tb-owner-theme-light','tb-owner-theme-dark'); delete container.dataset.tbTheme; controllers.delete(container); }};
+    const controller = {render,openTask,destroy:() => { alive = false; ++sequence; ++detailSequence; taskSheet?.close(); createSheet?.close(); window.removeEventListener('pageshow',pageShow); window.removeEventListener('sb-waiting-reply-settled',replySettled); document.removeEventListener('visibilitychange',visibility); mediaTheme?.removeEventListener?.('change',applyTheme); document.body.classList.remove('tb-owner-theme-light','tb-owner-theme-dark'); delete container.dataset.tbTheme; controllers.delete(container); }};
     controllers.set(container,controller); void render(initial); return controller;
   }
   window.SbTaskBoard = Object.freeze({mount});
