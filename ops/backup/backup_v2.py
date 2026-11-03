@@ -157,8 +157,13 @@ def create(c):
             raise
         finally:
             status.setdefault("error", "CREATE_FAILED" if status["result"] == "ERROR" else "")
+            try:
+                write_json(out / "status.json", status)
+            finally:
+                status["board"] = "OK" if board_report.publish(c, out, status) else "PENDING"
             write_json(out / "status.json", status)
-            board_report.publish(c, out, status)
+            if status["result"] == "OK" and status["board"] != "OK":
+                raise BackupError("BOARD_REPORT_PENDING")
 
 
 def _create(c, out):
@@ -333,7 +338,10 @@ def pull(c):
     root.mkdir(parents=True, exist_ok=True)
     with lock(root / ".pull.lock"):
         state_path = root / "status.json"
-        old = json.loads(state_path.read_text()) if state_path.exists() else {}
+        try:
+            old = json.loads(state_path.read_text()) if state_path.exists() else {}
+        except (ValueError, OSError):
+            old = {}  # Corrupt previous status must not disable housekeeping.
         status = {"phase": "pull", "result": "ERROR", "sha": "UNKNOWN", "verified_at": old.get("verified_at", 0), "checked_at": time.time()}
         try:
             cleanup_partial(root)
@@ -352,8 +360,10 @@ def pull(c):
                 cleanup_partial(root)
                 rotate_local(root)
             finally:
-                write_json(state_path, status)
-                status["board"] = "OK" if board_report.publish(c, root, status) else "PENDING"
+                try:
+                    write_json(state_path, status)
+                finally:
+                    status["board"] = "OK" if board_report.publish(c, root, status) else "PENDING"
                 write_json(state_path, status)
         if status["board"] != "OK":
             raise BackupError("BOARD_REPORT_PENDING")

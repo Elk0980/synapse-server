@@ -16,6 +16,19 @@ import backup_v2 as b
 
 
 class BackupTests(unittest.TestCase):
+    @unittest.skipIf(os.name == "nt", "Linux server reporting fixture")
+    def test_server_no_space_writes_status_and_reports(self):
+        import grp
+        with tempfile.TemporaryDirectory() as tmp:
+            c = {"reviewed_inventory": True, "output": tmp, "reader_group": grp.getgrgid(os.getgid()).gr_name}
+            with patch.object(b.os, "chown"), patch.object(b, "_create", side_effect=b.BackupError("NO_SPACE_SERVER")), patch.object(b.board_report, "publish", return_value=True) as report:
+                with self.assertRaisesRegex(b.BackupError, "NO_SPACE_SERVER"):
+                    b.create(c)
+            status = json.loads((Path(tmp) / "status.json").read_text())
+            self.assertEqual(status["error"], "NO_SPACE_SERVER")
+            self.assertEqual(status["board"], "OK")
+            self.assertEqual(report.call_args.args[2]["error"], "NO_SPACE_SERVER")
+
     @unittest.skipUnless(os.name != "nt" and shutil.which("age") and shutil.which("age-keygen"), "Linux online create/age fixture")
     def test_online_create_restore_absolute_link_without_container_pause(self):
         import grp
