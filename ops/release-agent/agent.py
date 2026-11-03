@@ -169,7 +169,9 @@ class Engine:
             raise Blocked('INTERRUPTED_RELEASE_NEEDS_REVIEW')
 
     def rollback(self, state=None, recovery=False):
-        state = state or self.state()
+        if state is None:
+            state = self.state()
+            need(state.get('phase') == 'verified', 'ROLLBACK_NOT_CURRENT_VERIFIED')
         need(state.get('previous') and state.get('plan'), 'NO_PREVIOUS_RELEASE')
         state['phase'] = 'rolling_back'
         self.save(state)
@@ -241,7 +243,7 @@ class ComposeBackend:
         need(hashlib.sha256(raw).hexdigest() == plan['recipeSha256'], 'RECIPE_DRIFT')
         recipe = json.loads(raw)
         previous = {'sha': current, 'recipe': recipe}
-        for name in plan['services']:
+        for name in plan['writers']:
             ids = self.compose(self.c['recipe'], 'ps', '-q', name).decode().split()
             need(len(ids) == 1, 'SERVICE_INSTANCE_COUNT')
             container = json.loads(command(['docker', 'inspect', ids[0]]))[0]
@@ -339,6 +341,15 @@ def make_plan(config, admission, changed):
     return dict(admission, services=sorted(services), writers=sorted(writers))
 
 
+def report_terminal(state, outbox, expected_sha=None):
+    plan = state.get('plan', {})
+    if (state.get('phase') in ('verified', 'rolled_back') and plan and
+            (expected_sha is None or plan.get('sha') == expected_sha)):
+        outbox.enqueue(plan['taskId'], plan['sha'],
+                       'connected' if state['phase'] == 'verified' else 'rolled_back')
+    outbox.flush()
+
+
 def tick(config):
     from board import Board, Outbox
     engine = Engine(config['stateDir'], ComposeBackend(config))
@@ -348,10 +359,7 @@ def tick(config):
         engine.recover()
         state = engine.state()
         # Rebuild outbox from durable transaction journal after crash, before next PR.
-        if state.get('phase') in ('verified', 'rolled_back') and state.get('plan'):
-            outbox.enqueue(state['plan']['taskId'], state['plan']['sha'],
-                           'connected' if state['phase'] == 'verified' else 'rolled_back')
-        outbox.flush()
+        report_terminal(state, outbox)
         need(state['phase'] in ('idle', 'verified'), 'QUEUE_HALTED')
         command(['git', '-C', config['mirror'], 'fetch', '--quiet', 'origin', 'main'])
         current = state['current']
@@ -374,10 +382,7 @@ def tick(config):
             engine.deploy(plan)
         finally:
             state = engine.state()
-            if state.get('phase') in ('verified', 'rolled_back'):
-                outbox.enqueue(admission['taskId'], sha,
-                               'connected' if state['phase'] == 'verified' else 'rolled_back')
-                outbox.flush()
+            report_terminal(state, outbox, expected_sha=sha)
 
 
 def main():

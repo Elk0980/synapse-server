@@ -2,7 +2,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from board import Outbox
-from agent import Blocked, load
+from agent import Blocked, load, report_terminal
 
 
 class Fixture:
@@ -23,6 +23,18 @@ class Fixture:
 
 
 class Reporting(unittest.TestCase):
+    def test_failed_preflight_never_reports_new_sha_as_connected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            board = Fixture()
+            out = Outbox(Path(directory) / 'out.json', board)
+            # Previous successful state remains if next capture or preflight fails.
+            state = {'phase': 'verified', 'plan': {'sha': 'old', 'taskId': 55}}
+            report_terminal(state, out, expected_sha='new')
+            self.assertFalse(out.path.exists())
+            self.assertEqual(board.calls, 0)
+            report_terminal(state, out, expected_sha='old')
+            self.assertEqual(board.calls, 1)
+
     def test_unknown_write_reconciles_readback_without_duplicate(self):
         with tempfile.TemporaryDirectory() as directory:
             board = Fixture()

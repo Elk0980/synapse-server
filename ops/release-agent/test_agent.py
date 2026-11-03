@@ -129,6 +129,8 @@ class Transactions(unittest.TestCase):
         self.engine.rollback()
         self.assertEqual(self.backend.image, 'old')
         self.assertEqual(len(self.rows()), 2)
+        with self.assertRaisesRegex(agent.Blocked, 'ROLLBACK_NOT_CURRENT_VERIFIED'):
+            self.engine.rollback()
 
     def test_lock_excludes_second_writer(self):
         if agent.os.name != 'posix': self.skipTest('flock requires Linux')
