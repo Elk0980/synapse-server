@@ -33,3 +33,20 @@ test('nested active descendants inherit membership without being added to the ex
   const model=api.build([task(10,{title:'Цель · Потомки'}),task(11,{parent_task_id:10,description:'Состав: №20'}),task(20,{coordination:stages(2)}),task(21,{parent_task_id:20,status:'in_progress',coordination:stages(4)})]);
   assert.equal(model.directions[0].progress,50);assert.equal(model.goals[0].progress,50);assert.equal(model.directions[0].current[0].id,21);assert.equal(model.now[0].directions[0].task.id,11);
 });
+test('module prefixes identify structure independently of goal presence and hide the storage prefix',()=>{
+  const model=api.build([task(1000,{title:'Цель · Удалённая цель',status:'cancelled'}),task(1100,{title:'Модуль · Отдельный блок',parent_task_id:1000,status:'in_progress'}),task(1200,{title:'Модуль · Без цели',parent_task_id:9999,status:'in_progress'}),task(1300,{title:'Модуль · Снятый',status:'cancelled'}),task(1400,{parent_task_id:1100,status:'in_progress'})]);
+  assert.equal(model.goals.length,0);assert.equal(model.modules.length,2);assert.deepEqual(Array.from(model.modules,item=>item.title),['Отдельный блок','Без цели']);assert.deepEqual(Array.from(model.now,item=>item.task.id),[1400]);assert.equal(model.structuralIds.includes(1100),true);assert.equal(model.structuralIds.includes(1200),true);assert.equal(api.title(task(1,{title:'Модуль · Название'})),'Название');
+});
+test('module contains all visible tasks once and traverses cancelled intermediate parents',()=>{
+  const model=api.build([task(1000,{title:'Цель · Проверка'}),task(1100,{title:'Модуль · Полный состав',parent_task_id:1000,description:'Состав: №1400, №1400, №1500, №1900'}),task(1400,{parent_task_id:1100,status:'planned',coordination:stages(1)}),task(1450,{parent_task_id:1400,status:'done',coordination:stages(4)}),task(1500,{status:'cancelled',coordination:stages(4)}),task(1600,{parent_task_id:1500,status:'in_progress',coordination:stages(2)}),task(1900,{company_code:'foreign',coordination:stages(4)})]);
+  assert.deepEqual(Array.from(model.modules[0].members,item=>item.id),[1400]);assert.equal(model.modules[0].progress,25);assert.deepEqual(Array.from(model.modules[0].allMembers,item=>item.id),[1400,1450,1600]);assert.equal(model.modules[0].current[0].id,1600);assert.equal(model.now[0].modules[0].task.id,1100);assert.equal(model.goals[0].progress,25);
+});
+test('explicit owner questions on goals and modules stay visible while cancelled questions do not',()=>{
+  const goal=task(1000,{title:'Цель · Решение',assignee_name:'Влад'}),module=task(1100,{title:'Модуль · Вопрос',parent_task_id:1000,coordination:{blocker:'Ждёт Влада: принять модуль'}}),cancelled=task(1200,{title:'Модуль · Не показывать',status:'cancelled',assignee_name:'Влад'});
+  const model=api.build([goal,module,cancelled]);assert.deepEqual(Array.from(model.waiting,item=>item.id),[1000,1100]);assert.equal(api.waitingNeed(goal),'Решение');assert.equal(api.waitingNeed(task(1,{title:'Модуль · Заголовок',assignee_name:'Влад'})),'Заголовок');
+});
+test('empty description fields never consume the next line or turn purpose text into composition',()=>{
+  const emptyWhy=task(11,{title:'Модуль · Пустой результат',parent_task_id:10,description:'ЦКП:\nСостав: №20'}),emptyComposition=task(12,{title:'Модуль · Пустой состав',parent_task_id:10,description:'Состав:  \r\n\tЦКП:\tРезультат №20'});
+  assert.equal(api.descriptionField(emptyWhy,'ЦКП'),'');assert.equal(api.descriptionField(emptyWhy,'Состав'),'№20');assert.equal(api.descriptionField(emptyComposition,'Состав'),'');assert.equal(api.descriptionField(emptyComposition,'ЦКП'),'Результат №20');
+  const model=api.build([task(10,{title:'Цель · Поля'}),emptyWhy,emptyComposition,task(20,{coordination:stages(2)})]);assert.equal(model.modules[0].why,'');assert.equal(model.modules[0].members.length,1);assert.equal(model.modules[1].members.length,0);
+});
