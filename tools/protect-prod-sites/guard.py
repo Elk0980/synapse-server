@@ -82,9 +82,13 @@ def check_remote(repo, number, expected_sha):
         files.extend(fetch_json(repo, endpoint + '/files?per_page=100&page=' + str(page)))
     # Detect changes while paging (including labels removed during the check).
     latest = fetch_json(repo, endpoint)
-    for key in ('head', 'base', 'changed_files', 'labels', 'state', 'updated_at'):
-        if latest.get(key) != pr.get(key):
-            raise ValueError('PR изменился во время проверки; повторите CI')
+    def admission_state(value):
+        # Repository metadata also changes on unrelated branch pushes.
+        return (value.get('head', {}).get('sha'), value.get('base', {}).get('sha'),
+                value.get('changed_files'), value.get('state'),
+                sorted(label['name'] for label in value.get('labels', [])))
+    if admission_state(latest) != admission_state(pr):
+        raise ValueError('PR изменился во время проверки; повторите CI')
     return evaluate(latest, files, expected_sha)
 
 

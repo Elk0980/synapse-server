@@ -99,6 +99,18 @@ class AdmissionTests(unittest.TestCase):
                     guard.main()
                 self.assertEqual(status.call_args_list[-1].args, ('owner/repo', 'a' * 40, 'success'))
 
+    def test_unrelated_repo_metadata_does_not_change_admission(self):
+        pr = {'state': 'open', 'head': {'sha': 'a', 'repo': {'pushed_at': '1'}},
+              'base': {'sha': 'b'}, 'changed_files': 1, 'labels': [], 'updated_at': '1'}
+        latest = {**pr, 'head': {'sha': 'a', 'repo': {'pushed_at': '2'}}, 'updated_at': '2'}
+        files = [{'filename': 'ops/crm/a', 'status': 'modified'}]
+        with patch.object(guard, 'fetch_json', side_effect=[pr, files, latest]):
+            guard.check_remote('owner/repo', 1, 'a')
+        latest['base'] = {'sha': 'changed'}
+        with patch.object(guard, 'fetch_json', side_effect=[pr, files, latest]):
+            with self.assertRaises(ValueError):
+                guard.check_remote('owner/repo', 1, 'a')
+
     def test_status_rejects_invalid_target(self):
         with self.assertRaises(ValueError):
             guard.publish_status('owner/repo', '../main', 'success')
