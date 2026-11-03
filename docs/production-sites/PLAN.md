@@ -22,14 +22,21 @@ CI-метка не обещает совместимость их API; runtime a
 CODEOWNERS с вымышленным GitHub аккаунтом Claude не создаётся.
 
 Доверенный `pull_request_target` запускает guard только из base SHA, с read-only
-contents/pull-requests; код PR не исполняется. Текущие файлы и метки читает GitHub API,
+contents/pull-requests и statuses:write только для статуса exact PR head; код PR не исполняется. Текущие файлы и метки читает GitHub API,
 переименования проверяются по previous_filename. События labeled/unlabeled повторяют
 проверку, concurrency отменяет прежний запуск. Secrets, отправок и deployment нет.
 Непривилегированный PR workflow отдельно исполняет тесты и bootstrap-проверку.
 Его зелёный результат не подменяет доверенный target check.
 
+Доверенный job пишет pending/failure/success с контекстом
+`production-sites/path-approval` на exact PR head SHA: target workflow сам работает
+на base SHA, его job не заменяет проверку head. Ошибка записи оставляет отсутствующий
+или pending результат. Unprivileged workflow не имеет statuses:write и этот статус
+не публикует. При подключении привязать required status к ожидаемому источнику
+GitHub Actions; приёмку Claude это не заменяет.
+
 При разведке GitHub main/protection=404 Branch not protected, rulesets=[].
-До отдельного подключения required check `site-path-approval` CI может отклонить PR,
+До отдельного подключения required status `production-sites/path-approval` CI может отклонить PR,
 но GitHub не запрещает merge. Этот PR настройки не меняет. После будущего одобренного
 merge владелец репозитория подключает required check без bypass, затем проверяет
 реальный отрицательный PR, добавление/снятие метки, смену SHA и правку самой защиты.

@@ -9,6 +9,7 @@ from pathlib import PurePosixPath, Path
 INFRA = 'сайты: инфраструктура'
 WORKSHOP = {'synapse', 'chat', 'board', 'vhod'}
 SHARED_JS = {'sites/synapse/track.js', 'sites/synapse/company-links.js'}
+STATUS_CONTEXT = 'production-sites/path-approval'
 
 
 def required_labels(paths):
@@ -87,14 +88,40 @@ def check_remote(repo, number, expected_sha):
     return evaluate(latest, files, expected_sha)
 
 
+def publish_status(repo, sha, state):
+    if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo) or not re.fullmatch(r'[0-9a-f]{40}', sha):
+        raise ValueError('Некорректная цель статуса')
+    payload = json.dumps({'state': state, 'context': STATUS_CONTEXT,
+                          'description': 'Проверка путей и меток клиентских сайтов: ' + state}).encode()
+    request = urllib.request.Request(
+        'https://api.github.com/repos/' + repo + '/statuses/' + sha,
+        data=payload, method='POST',
+        headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json',
+                 'X-GitHub-Api-Version': '2022-11-28'})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        json.load(response)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--event', required=True)
     parser.add_argument('--repo', required=True)
+    parser.add_argument('--publish-status', action='store_true')
     args = parser.parse_args()
     event = json.loads(Path(args.event).read_text(encoding='utf-8'))
     pr = event['pull_request']
-    result = check_remote(args.repo, pr['number'], pr['head']['sha'])
+    sha = pr['head']['sha']
+    if args.publish_status:
+        publish_status(args.repo, sha, 'pending')
+    try:
+        result = check_remote(args.repo, pr['number'], sha)
+    except Exception:
+        if args.publish_status:
+            publish_status(args.repo, sha, 'failure')
+        raise
+    if args.publish_status:
+        publish_status(args.repo, sha, 'success')
     print(json.dumps(result, ensure_ascii=False))
 
 

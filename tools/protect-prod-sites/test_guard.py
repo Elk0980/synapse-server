@@ -1,4 +1,7 @@
 import unittest
+import json
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 import guard
 
@@ -78,6 +81,27 @@ class AdmissionTests(unittest.TestCase):
         with patch.object(guard, 'fetch_json', side_effect=[pr, files[:100], files[100:], {**pr, 'labels': []}]):
             with self.assertRaises(ValueError):
                 guard.check_remote('owner/repo', 1, 'a')
+
+    def test_status_targets_exact_head(self):
+        event = {'pull_request': {'number': 1, 'head': {'sha': 'a' * 40}}}
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'event.json'
+            path.write_text(json.dumps(event), encoding='utf-8')
+            argv = ['guard', '--event', str(path), '--repo', 'owner/repo', '--publish-status']
+            with patch('sys.argv', argv), patch.object(guard, 'publish_status') as status:
+                with patch.object(guard, 'check_remote', side_effect=ValueError('missing label')):
+                    with self.assertRaises(ValueError):
+                        guard.main()
+                self.assertEqual([c.args for c in status.call_args_list], [
+                    ('owner/repo', 'a' * 40, 'pending'), ('owner/repo', 'a' * 40, 'failure')])
+            with patch('sys.argv', argv), patch.object(guard, 'publish_status') as status:
+                with patch.object(guard, 'check_remote', return_value={'files': 1}):
+                    guard.main()
+                self.assertEqual(status.call_args_list[-1].args, ('owner/repo', 'a' * 40, 'success'))
+
+    def test_status_rejects_invalid_target(self):
+        with self.assertRaises(ValueError):
+            guard.publish_status('owner/repo', '../main', 'success')
 
 
 if __name__ == '__main__':
