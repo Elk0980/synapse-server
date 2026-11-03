@@ -6,7 +6,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { once } = require('node:events');
-const { spawn } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const { randomBytes } = require('node:crypto');
 const root = path.resolve(__dirname, '../..');
 
@@ -24,7 +24,7 @@ async function unusedPort() {
   return port;
 }
 
-async function startFixture({installDocuments = true} = {}) {
+async function startFixture({installDocuments = true, installArchive = false} = {}) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'tasks-mcp-integration-'));
   const key = randomBytes(32).toString('hex');
   const token = randomBytes(32).toString('hex');
@@ -69,6 +69,19 @@ async function startFixture({installDocuments = true} = {}) {
     throw Error(`Стенд ${relative} не запустился: ${output.slice(-2500)}`);
   }
   try {
+    if (installArchive) {
+      // Офлайн-схема на синтетической БД: сервис ещё не слушает порт и не имеет писателей.
+      const databasePath = path.join(dir, 'crm.sqlite');
+      const bootstrap = spawnSync(process.execPath, ['-e', "require('./server.js')"], {
+        cwd:path.join(root, 'ops/crm'), windowsHide:true, timeout:15000,
+        env:{SystemRoot:process.env.SystemRoot || '', PATH:process.env.PATH || '',
+          NODE_PATH:process.env.NODE_PATH || path.join(__dirname, 'node_modules'),
+          DATABASE_PATH:databasePath, API_KEY:key}, encoding:'utf8'
+      });
+      if (bootstrap.status !== 0) throw Error('Не подготовлена офлайн-схема тестовой CRM: ' + (bootstrap.error?.message || bootstrap.stderr).slice(-1000));
+      await require('../crm/module-archive-migrate').migrateArchiveDatabase({databasePath,
+        backupPath:path.join(dir, 'crm-before-archive.sqlite'), offlineConfirmation:'CRM_STOPPED'});
+    }
     const crmUrl = await service('ops/crm', { DATABASE_PATH: path.join(dir, 'crm.sqlite'),
       API_KEY: key, RATE_LIMIT_MAX: '10000' });
     const owner = Buffer.from(JSON.stringify({ v: 1, userId: 1, userName: 'Owner fixture',
@@ -140,7 +153,13 @@ async function startFixture({installDocuments = true} = {}) {
       const result = await rpc('tools/call', { name, arguments: args });
       if (result.error) return { isError: true, error: result.error };
       const value = result.result;
-      return { isError: Boolean(value.isError), data: value.structuredContent || JSON.parse(value.content[0].text) };
+      let data = value.structuredContent;
+      if (!data) {
+        const content = value.content.filter(item => item.type === 'text').map(item => item.text).join('\n');
+        try { data = JSON.parse(content); }
+        catch { data = {error:{message:content}}; }
+      }
+      return { isError: Boolean(value.isError), data };
     }
     // Та же HTML-страница и ресурсы; только локальный маршрутизатор вместо Caddy.
     const front = http.createServer(async (request, response) => {

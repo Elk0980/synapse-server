@@ -77,7 +77,7 @@ test('официальный Streamable HTTP: initialize, tools/list, ping и о
   const listed = await f.rpc('tools/list');
   assert.equal(listed.response.status, 200);
   assert.deepEqual(listed.body.result.tools.map(tool => tool.name), TOOLS.map(tool => tool.name));
-  assert.equal(listed.body.result.tools.length, 10);
+  assert.equal(listed.body.result.tools.length, 13);
   assert.ok(listed.body.result.tools.every(tool => /[а-яА-Я]/.test(tool.description)));
   assert.equal((await f.rpc('ping')).response.status, 200);
   for (const method of ['GET','DELETE','PUT']) assert.equal((await fetch(f.endpoint, {method})).status, 405);
@@ -137,7 +137,7 @@ test('HTTP работает без каталога документов; поз
   assert.deepEqual(await (await fetch(`${f.origin}/health`)).json(), {status:'ok'});
   const listed = await f.rpc('tools/list');
   assert.equal(listed.response.status,200);
-  assert.equal(listed.body.result.tools.length,10);
+  assert.equal(listed.body.result.tools.length,13);
   let result = await f.rpc('tools/call', {name:'tasks_list',arguments:{project:'synapse-business'}});
   assert.equal(result.body.result.isError,undefined);
   assert.deepEqual(result.body.result.structuredContent.tasks,[]);
