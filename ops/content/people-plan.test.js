@@ -1,0 +1,72 @@
+'use strict';
+const {test}=require('node:test'),assert=require('node:assert/strict');
+const {DatabaseSync}=require('node:sqlite');
+const {createAuthStore}=require('./auth-store'),{createCompanyTeam}=require('./company-team'),{hashPassword}=require('./passwords');
+const {createPeopleTasks}=require('./people-tasks'),{createPeoplePlan}=require('./people-plan');
+const {createPeopleRuntime}=require('./people-runtime'),{fridaySummary}=require('./people-friday');
+const {createMediaMentor}=require('../crm/media-mentor');
+function fixture(t) {
+  const db=new DatabaseSync(':memory:');t.after(()=>db.close());
+  db.exec(`CREATE TABLE companies(id INTEGER PRIMARY KEY,code TEXT UNIQUE COLLATE NOCASE,name TEXT,city TEXT,timezone TEXT,phone TEXT,email TEXT,website_url TEXT,socials TEXT,is_deleted INTEGER DEFAULT 0,updated_at TEXT);
+    INSERT INTO companies(id,code,name,timezone,socials) VALUES(1,'alvi','Тест','Asia/Irkutsk','[]');`);
+  const auth=createAuthStore(db,`root:owner:${hashPassword('test-only-people-plan')}`),team=createCompanyTeam(auth);
+  const human=team.create(1,{login:'reviewer',displayName:'Тестовый согласующий',companyCode:'alvi',password:'test-only-people-plan',staffRole:'human_executor'});
+  let at=Date.parse('2026-11-06T01:00:00Z'),reads=0;
+  const mentor=createMediaMentor(db,{now:()=>at});
+  mentor.saveBrief('alvi',{revision:0,brief:{goal:'Семь материалов на неделю',platforms:['vk']}},{userId:1,userName:'Owner'});
+  mentor.savePlan('alvi',{planRevision:0,briefRevision:1,days:Array.from({length:7},(_,i)=>({date:`2026-11-${String(9+i).padStart(2,'0')}`,platform:'vk',format:'post',role:'reach',topic:`Тема ${i+1}`,variants:{vk:{text:`Согласуемый текст ${i+1}`}}}))},{userId:1,userName:'Owner'});
+  const call=async(name,args,user)=>{reads++;
+    if(name==='taskRecords')return {tasks:[],pagination:{total:0}};
+    if(name==='tasks_list')return {tasks:[],total:0};
+    if(name==='mediaMentor')return mentor.get('alvi');
+    if(name==='planVariantsDecision')return mentor.decideVariants('alvi',args,{userId:user.id,userName:user.displayName});
+    throw Error('unexpected action');
+  };
+  const tasks=createPeopleTasks({db,authStore:auth,call}),plan=createPeoplePlan({db,authStore:auth,tasks,call});
+  return {db,auth,human,mentor,call,tasks,plan,now:()=>at,setTime:value=>{at=Date.parse(value);},reads:()=>reads};
+}
+test('отдельное право человека согласует реальные версии плана без owner/публикации и даёт7 уникальных публикаций',async t=>{
+  const f=fixture(t);
+  await assert.rejects(f.plan.get(f.human.id,'alvi'),{status:403});
+  f.plan.grant(1,f.human.id,'alvi',true);
+  const before=await f.plan.get(f.human.id,'alvi');assert.equal(before.snapshot.plan.days.length,7);
+  const body={planRevision:1,briefRevision:1,scope:'plan',decision:'approved',comment:''};
+  const result=await f.plan.decide(f.human.id,'alvi',body);
+  assert.equal(f.auth.getById(f.human.id).role,'editor');assert.ok(!f.auth.getById(f.human.id).permissions.includes('autoposting.edit'));
+  assert.equal(f.db.prepare('SELECT count(*) n FROM media_mentor_variant_approvals WHERE actor_id=?').get(f.human.id).n,7);
+  const count=fridaySummary(result.snapshot,{now:f.now(),timezone:'Asia/Irkutsk',metric:'approvedIdeas',weekStart:'2026-11-09'});
+  assert.equal(count.approvedIdeas,7);assert.equal(count.pendingIdeas,0);
+  assert.equal(f.db.prepare("SELECT count(*) n FROM sqlite_master WHERE name='autoposting_posts'").get().n,0);
+  f.mentor.saveBrief('alvi',{revision:1,brief:{goal:'Новый бриф'}},{userId:1,userName:'Owner'});
+  await assert.rejects(f.plan.decide(f.human.id,'alvi',body),{status:409});
+});
+test('согласование своей компании: другие компании, отзыв права и расширенный body закрыты до CRM',async t=>{
+  const f=fixture(t);f.plan.grant(1,f.human.id,'alvi',true);
+  await assert.rejects(f.plan.get(f.human.id,'avokado'),{status:403});
+  await assert.rejects(f.plan.decide(f.human.id,'alvi',{planRevision:1,briefRevision:1,scope:'plan',decision:'approved',comment:'',publish:true}),{status:400});
+  f.plan.grant(1,f.human.id,'alvi',false);const before=f.reads();
+  await assert.rejects(f.plan.get(f.human.id,'alvi'),{status:403});assert.equal(f.reads(),before);
+});
+test('пятничный runtime читает реальный план, новый defaultnextWeek и конфиг порога/дня; preview не отправляет',async t=>{
+  const f=fixture(t);f.db.exec('CREATE TABLE people_notification_preferences(user_id,company_code,enabled);');
+  const queued=[],notifications={enqueue:event=>{queued.push(event);return {queued:1};},runOnce:async()=>({})};
+  const runtime=createPeopleRuntime({db:f.db,authStore:f.auth,tasks:f.tasks,call:f.call,notifications,now:f.now,enabled:true});t.after(()=>runtime.stop());
+  assert.equal(runtime.getRule(1,'alvi').metric,'approvedIdeas');assert.equal(runtime.getRule(1,'alvi').minimum,7);
+  runtime.saveRule(1,'alvi',{enabled:true,userId:f.human.id,timezone:'Asia/Irkutsk',weekStart:'',morningHour:9,eveningHour:18});
+  const preview=await runtime.preview(1,'alvi');assert.equal(queued.length,0);assert.equal(preview.summary.weekStart,'2026-11-09');assert.match(preview.event.body,/Согласовано 0 из 7, на согласовании 7/);
+  await runtime.runOnce();assert.equal(queued.length,1);assert.ok(await runtime.validateEvent({...queued[0],payload:{body:queued[0].body}}));
+  runtime.saveRule(1,'alvi',{...runtime.getRule(1,'alvi'),enabled:false});
+  assert.equal(await runtime.validateEvent({...queued[0],payload:{body:queued[0].body}}),false);
+});
+test('повторное сохранение anchored правила не возвращает интервал назад; source/anchor stable',async t=>{
+  const f=fixture(t);f.db.exec('CREATE TABLE people_notification_preferences(user_id,company_code,enabled);');
+  const runtime=createPeopleRuntime({db:f.db,authStore:f.auth,tasks:f.tasks,call:f.call,notifications:{},now:f.now});
+  f.setTime('2026-11-03T01:00:00Z');
+  const rule=runtime.saveRule(1,'alvi',{enabled:false,userId:f.human.id,timezone:'Asia/Irkutsk',weekMode:'anchored',weekStart:'2026-11-09'});
+  const anchor=f.db.prepare('SELECT anchor_at FROM people_friday_rules').get().anchor_at;
+  f.setTime('2026-11-20T01:00:00Z');
+  assert.equal((await runtime.preview(1,'alvi')).summary.weekStart,'2026-11-23');
+  runtime.saveRule(1,'alvi',rule);
+  assert.equal(f.db.prepare('SELECT anchor_at FROM people_friday_rules').get().anchor_at,anchor);
+  assert.equal((await runtime.preview(1,'alvi')).summary.weekStart,'2026-11-23');
+});

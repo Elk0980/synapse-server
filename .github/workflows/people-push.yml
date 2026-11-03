@@ -1,0 +1,28 @@
+name: people-push
+on:
+  push:
+    paths: ['ops/content/**', 'sites/synapse/cabinet/people*', '.github/workflows/people-push.yml']
+  pull_request:
+    paths: ['ops/content/**', 'sites/synapse/cabinet/people*', '.github/workflows/people-push.yml']
+permissions:
+  contents: read
+jobs:
+  isolated-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: ops/content/package-lock.json
+      - name: Install locked test dependencies
+        working-directory: ops/content
+        run: npm ci --ignore-scripts
+      - name: Core, HTTP, existing accounts and sessions (loopback fixtures)
+        env:
+          PEOPLE_TEST_REAL_WEB_PUSH: '1'
+        run: node --test ops/content/people-*.test.js ops/content/company-team*.test.js ops/content/content-admin.test.js ops/content/session-persistence.test.js ops/content/crm-permissions.test.js
+      - name: People UI and service worker (DOM, no browser or delivery)
+        run: NODE_PATH="$PWD/ops/content/node_modules" node --test sites/synapse/cabinet/people.test.cjs

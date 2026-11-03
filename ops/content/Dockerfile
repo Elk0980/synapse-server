@@ -3,6 +3,8 @@ FROM node:24-alpine
 RUN apk add --no-cache tesseract-ocr tesseract-ocr-data-rus tesseract-ocr-data-eng poppler-utils
 
 WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 COPY *.js ./
 COPY seed ./seed
 # Доверенный каталог навыков читается только на чтение и только как markdown.
