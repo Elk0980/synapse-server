@@ -90,7 +90,7 @@
     const notice = (text, error = false) => {
       const node = container.querySelector('[data-board-notice]'); if (node) { node.textContent = text; node.setAttribute('role', error ? 'alert' : 'status'); }
     };
-    const percentage = value => `<span class="tb-percentage">${Number(value) || 0}%</span><progress max="100" value="${Number(value) || 0}" aria-label="Подтверждённые этапы"></progress>`;
+    const percentage = value => `<span class="tb-percentage">${Number(value) || 0}%</span><progress max="100" value="${Number(value) || 0}" aria-label="Готовность"></progress>`;
     const overviewMarkup = () => {
       const helper = window.SbTaskOverview; if (!helper) return '';
       const model = helper.build(tasks.filter(task => matchesProject(task)));
@@ -99,10 +99,11 @@
         return `<button type="button" class="tb-waiting-row" data-task-open="${task.id}"><span class="tb-waiting-id">№${task.id} · ${esc(name(task.company_code))}</span><strong>${esc(helper.waitingNeed(task))}</strong>${since ? `<time datetime="${esc(since)}">с ${esc(stamp(since))}</time>` : '<span class="tb-waiting-date">Время ожидания не указано</span>'}</button>`;
       }).join('')}</div></section>` : '';
       if (state.view !== 'projects') return waiting;
-      const help = `<details class="tb-how" data-board-guide><summary>Как читать доску</summary><p>Цель → Модули → Задачи → Этапы</p><p>Каждый подтверждённый этап даёт 25%: код, подключено, проверено, принято Владом. Статус задачи сам по себе не подтверждает готовность.</p><p>Процент модуля — среднее по уникальным задачам состава: непосредственные подзадачи и перечисленные ссылки. Процент цели — среднее по уникальным задачам состава её модулей. Вложенные задачи видны в карточке модуля и не заменяют этапы родительской задачи. Неподтверждённые этапы дают 0%.</p></details>`;
+      const help = `<details class="tb-how" data-board-guide><summary>Как читать доску</summary><p>Цель → Модули → Задачи → Этапы</p><p>Завершённая задача даёт 100%. Для остальных каждый подтверждённый этап даёт 25%: код, подключено, проверено, принято Владом. Отметки этапов сохраняются.</p><p>Процент модуля — среднее по уникальным задачам состава: непосредственные подзадачи, ссылки состава и задачи с указанием модуля в описании. Процент цели — среднее процентов её модулей с равным весом: 100% и 0% у двух модулей дают цели 50%. Вложенные задачи не заменяют этапы родительской задачи. Неподтверждённые этапы незавершённой задачи дают 0%.</p></details>`;
       const goals = model.goals.map(goal => `<article class="tb-goal" data-goal="${goal.task.id}"><div class="tb-overview-title"><button type="button" data-task-open="${goal.task.id}"><span>Цель</span><strong>${esc(goal.title)}</strong></button>${percentage(goal.progress)}</div>${goal.current.length || goal.next.length ? `<p>Сейчас строим: ${esc(goal.current.map(module => module.title).join(', ') || 'модуль ещё не начат')}${goal.next.length ? ` → потом: ${esc(goal.next.map(module => module.title).join(', '))}` : ''}</p>` : ''}</article>`).join('');
       const modules = model.modules || model.directions;
-      const directions = modules.length ? `<section class="tb-directions" data-active-directions data-modules><h2>Модули</h2><div class="tb-direction-grid">${modules.map(module => `<article class="tb-direction" data-module-id="${module.task.id}"><div class="tb-overview-title"><button type="button" data-task-open="${module.task.id}"><strong>${esc(module.title)}</strong></button>${percentage(module.progress)}</div><p class="tb-module-state">${module.started ? 'Работа начата' : 'Дальше по плану'}</p>${module.why ? `<p class="tb-direction-why">Зачем: ${esc(module.why)}</p>` : ''}${module.task.assignee_name || module.task.reviewer_name ? `<p class="tb-direction-people">${module.task.assignee_name ? `Ведёт ${esc(module.task.assignee_name)}` : ''}${module.task.reviewer_name ? ` · Принимает ${esc(module.task.reviewer_name)}` : ''}</p>` : ''}<div class="tb-direction-current tb-module-tasks">${module.allMembers.map(task => `<button type="button" class="tb-module-task" data-module-task="${task.id}" data-task-open="${task.id}"><strong>№${task.id} ${esc(displayTitle(task))}</strong><span class="tb-module-task-progress">${helper.progress(task)}%</span><span class="tb-module-task-stage">${esc(helper.stageText(task))}</span></button>`).join('') || '<p class="tb-direction-people">Задач пока нет</p>'}</div></article>`).join('')}</div></section>` : '';
+      const activeModules = modules.filter(module => module.started);
+      const directions = activeModules.length ? `<section class="tb-directions" data-active-directions data-modules><h2>Модули</h2><div class="tb-direction-grid">${activeModules.map(module => `<article class="tb-direction" data-module-id="${module.task.id}"><div class="tb-overview-title"><button type="button" data-task-open="${module.task.id}"><strong>${esc(module.title)}</strong></button>${percentage(module.progress)}</div><p class="tb-module-state">Работа начата</p>${module.why ? `<p class="tb-direction-why">Зачем: ${esc(module.why)}</p>` : ''}${module.task.assignee_name || module.task.reviewer_name ? `<p class="tb-direction-people">${module.task.assignee_name ? `Ведёт ${esc(module.task.assignee_name)}` : ''}${module.task.reviewer_name ? ` · Принимает ${esc(module.task.reviewer_name)}` : ''}</p>` : ''}<div class="tb-direction-current tb-module-tasks">${module.allMembers.map(task => `<button type="button" class="tb-module-task" data-module-task="${task.id}" data-task-open="${task.id}"><strong>№${task.id} ${esc(displayTitle(task))}</strong><span class="tb-module-task-progress">${helper.progress(task)}%</span><span class="tb-module-task-stage">${esc(helper.stageText(task))}</span></button>`).join('') || '<p class="tb-direction-people">Задач пока нет</p>'}</div></article>`).join('')}</div></section>` : '';
       const next = modules.filter(module => !module.started);
       const upcoming = next.length ? `<section class="tb-upcoming"><h2>Дальше по плану</h2><div>${next.map(direction => `<button type="button" data-task-open="${direction.task.id}">${esc(direction.title)} · ${direction.progress}%</button>`).join('')}</div></section>` : '';
       const now = model.now.length ? `<section class="tb-now" data-now-tasks><h2>Сейчас в работе</h2>${model.now.map(item => `<button type="button" class="tb-now-row" data-task-open="${item.task.id}"><span class="tb-now-direction">${esc(item.directions.length ? item.directions.map(direction => direction.title).join(' · ') : 'Вне цели')}</span><strong>№${item.task.id} ${esc(item.task.title)}</strong>${stageDots(item.task)}<span class="tb-now-stage">${esc(item.stage)}</span></button>`).join('')}</section>` : '';
@@ -242,10 +243,12 @@
       own.body.querySelector('.tb-task-project').after(panel);
       const form = panel.querySelector('form'), result = panel.querySelector('[data-wait-result]');
       const canClearBlocker = window.SbTaskOverview.hasWaitingBlocker(task);
-      if (!canClearBlocker) {
+      const canClearNextStep = window.SbTaskOverview.hasWaitingNextStep?.(task) === true;
+      const canClearWaiting = canClearBlocker || canClearNextStep;
+      if (!canClearWaiting) {
         panel.querySelector('[data-wait-clear]').hidden = true;
         const hint = document.createElement('p'); hint.className = 'tb-waiting-hint';
-        hint.textContent = 'Ожидание задано следующим шагом или назначением — измените план задачи.';
+        hint.textContent = 'Ожидание задано назначением — измените план задачи.';
         const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = 'Открыть план задачи'; edit.dataset.waitEditPlan = '';
         edit.onclick = () => { const plan = own.body.querySelector('[data-plan-form]'); if (plan) { plan.closest('details').open = true; plan.elements.executor.focus(); } };
         panel.append(hint,edit);
@@ -309,15 +312,18 @@
         finally { button.disabled = false; }
       };
       panel.querySelector('[data-wait-clear]').onclick = async event => {
-        if (!canClearBlocker) return;
+        if (!canClearWaiting) return;
         const button = event.currentTarget; button.disabled = true;
         try {
-          await tool('task_update',{task_id:id,revision:task.coordination?.revision,blocker:''}); await render();
+          const patch = {task_id:id,revision:task.coordination?.revision};
+          if (canClearBlocker) patch.blocker = '';
+          if (canClearNextStep) patch.next_step = window.SbTaskOverview.stripWaitingPrefix(task.coordination.nextAction);
+          await tool('task_update',patch); await render();
           if (taskSheet === own) {
             await openTask(id);
             const body = taskSheet?.body, residual = body?.querySelector('[data-waiting-actions]');
             const output = residual?.querySelector('[data-wait-result]') || body?.querySelector('[data-detail-result]');
-            if (output) output.textContent = residual ? 'Блокер ожидания снят. Ожидание остаётся в карточке: проверьте следующий шаг и назначение.' : 'Блокер ожидания снят.';
+            if (output) output.textContent = residual ? 'Маркер ожидания снят. Ожидание остаётся в карточке: проверьте план задачи.' : 'Маркер ожидания снят.';
           }
         }
         catch (error) { result.textContent = error.message; button.disabled = false; }
@@ -353,6 +359,10 @@
           return `<details class="tb-milestone"><summary><span class="tb-stage" data-state="${esc(stage.state || 'pending')}"></span>${label}${stage.checkedAt ? `<time>${esc(stamp(stage.checkedAt))}</time>` : ''}</summary>${stage.evidence ? `<p>${linkedText(stage.evidence)}</p>` : ''}<form data-stage-form="${code}"><label>Основание<textarea name="evidence" maxlength="4000" required>${esc(stage.evidence || '')}</textarea></label><label>Дата проверки<input name="checked_at" type="datetime-local" required></label><button type="submit">Подтвердить этап</button><p data-stage-result role="status"></p></form></details>`;
         }).join('')}</section>${taskLinks(task).length ? `<section class="tb-detail-section"><h3>Ссылки</h3><ul>${taskLinks(task).map(link => { const url = safeUrl(link.url); return url ? `<li><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(link.label || url)}</a></li>` : ''; }).join('')}</ul></section>` : ''}<section class="tb-detail-section"><h3>Подзадачи <span>${childProgress(task).done}/${childProgress(task).count}</span></h3><ul class="tb-subtasks" data-subtasks>${(task.subtasks || []).filter(isVisibleWork).map(item => `<li><button type="button" data-child-open="${item.id}">${STATUS[item.status] || ''} · №${item.id} ${esc(displayTitle(item))}</button></li>`).join('')}</ul>${(task.subtasks_pagination?.total || 0) > (task.subtasks || []).length ? '<button type="button" data-subtasks-more>Ещё подзадачи</button>' : ''}<button type="button" data-add-subtask>+ Подзадача</button></section><details class="tb-detail-section"${Object.keys(draft).length ? ' open' : ''}><summary>План задачи</summary><form class="tb-form" data-plan-form><label>Исполнитель<input name="executor" maxlength="200" value="${esc(field('executor',task.assignee_name))}"></label><label>Проверяет<input name="reviewer" maxlength="200" value="${esc(field('reviewer',task.reviewer_name))}"></label><label>Срок<input name="due_date" type="date" value="${esc(field('due_date',task.due_date))}"></label><label>Приоритет<select name="priority">${options(PRIORITY,field('priority',task.priority))}</select></label><label class="tb-wide">Следующий шаг<textarea name="next_step" maxlength="4000">${esc(field('next_step',coord.nextAction))}</textarea></label><label class="tb-wide">Мешает<textarea name="blocker" maxlength="4000">${esc(field('blocker',coord.blocker))}</textarea></label><label class="tb-wide">Чат исполнителя<input name="chat_url" type="url" value="${esc(field('chat_url',href))}" placeholder="https://"></label><label>Продукт<select name="product_id">${productOptions(task.company_code,field('product_id',task.product_id))}</select></label><label>Родительская задача<select name="parent_id"><option value="">Без родителя</option>${parentTasks.map(item => `<option value="${item.id}"${String(field('parent_id',task.parent_task_id)) === String(item.id) ? ' selected' : ''}>№${item.id} ${esc(displayTitle(item))}</option>`).join('')}</select></label><button type="submit">Сохранить план</button><p class="tb-wide" data-plan-result role="status"></p></form></details><section class="tb-detail-section"><h3>Ход работы</h3><ol class="tb-comments" data-comments>${(task.comments || []).map(listComment).join('')}</ol>${(task.comments_pagination?.total || 0) > (task.comments || []).length ? '<button type="button" data-comments-more>Все комментарии</button>' : ''}<form class="tb-comment-form" data-comment-form><label>Комментарий от Влада<textarea name="text" maxlength="10000" required>${esc(read(`comment:${id}`)?.text || '')}</textarea></label><button type="submit">Добавить комментарий</button><p data-comment-result role="status"></p></form></section>`;
         const result = own.body.querySelector('[data-detail-result]');
+        const module = window.SbTaskOverview?.build(tasks.map(item => item.id === task.id ? task : item)).modules?.find(item => item.task.id === task.id);
+        if (module) {
+          own.body.querySelector('.tb-task-project').insertAdjacentHTML('afterend',`<section class="tb-detail-section" data-module-composition><h3>Задачи модуля</h3><div class="tb-direction-current tb-module-tasks">${module.allMembers.map(item => `<button type="button" class="tb-module-task" data-module-task="${item.id}" data-child-open="${item.id}"><strong>№${item.id} ${esc(displayTitle(item))}</strong><span class="tb-module-task-progress">${window.SbTaskOverview.progress(item)}%</span><span class="tb-module-task-stage">${esc(window.SbTaskOverview.stageText(item))}</span></button>`).join('') || '<p class="tb-direction-people">Задач пока нет</p>'}</div></section>`);
+        }
         waitingPanel(task,own);
         own.body.querySelector('[data-task-record]').onclick = event => {
           event.preventDefault();
