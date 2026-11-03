@@ -590,7 +590,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 <div class="shell" id="app" hidden>
   <nav class="mobile-shortcuts" id="mobile-shortcuts" aria-label="Быстрые разделы">
     <a href="#home" data-view-link="home">Главная</a><a href="#crm" data-view-link="crm">Заявки</a>
-    <a href="#clients" data-view-link="clients">Клиенты</a><button type="button" id="mobile-more" aria-label="Открыть все разделы">Меню</button>
+    <a href="#clients" data-view-link="clients">Клиенты</a><a href="#tasks" data-view-link="tasks" data-owner-board-entry hidden>Задачи</a><button type="button" id="mobile-more" aria-label="Открыть все разделы">Меню</button>
   </nav>
   <div class="mobile-bar">
     <button class="menu-button" id="menu-button" type="button" aria-controls="sidebar" aria-expanded="false"
@@ -1069,7 +1069,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   </form>
 </dialog>
 <script>
-  window.SB_CABINET_ASSET_VERSION = "20261004-vk-direct-tools";
+  window.SB_CABINET_ASSET_VERSION = "20261103-board-lk";
   window.SbCabinet = window.SbCabinet || {};
   window.SbCabinet.views = window.SbCabinet.views || {};
   window.SbCabinet.registerView ||= (name, definition) => {
@@ -1078,9 +1078,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   // project-chat.js загружается после hugh.js: общий чат проекта регистрирует вид «hugh».
   // Личная переписка владельца по проектам живёт в owner-private-chat.js и ходит
   // по собственному маршруту /content/owner-chat с серверной проверкой владельца.
-  const cabinetAssets = ["platform-links", "home", "tasks", "company-information", "reviews", "studio-journey", "leads", "deals", "clients", "chat", "hugh", "project-chat", "analytics",
+  const cabinetAssets = ["platform-links", "home", "task-board", "tasks", "company-information", "reviews", "studio-journey", "leads", "deals", "clients", "chat", "hugh", "project-chat", "analytics",
     "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking", "sites", "settings", "client-dialogs", "site-orders", "account", "company-team", "trademarks", "campaigns", "autoposting", "media-mentor-materials", "media-mentor-rules", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "telegram-sources", "telegram-sources-view", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
-  const cabinetStyles = ["reviews", "analytics", "ad-platforms", "platform-demand", "social-stats", "deals", "home", "chat", "hugh", "project-chat", "settings", "client-dialogs", "site-orders", "trademarks", "sites", "campaigns", "company-information", "autoposting", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial"];
+  const cabinetStyles = ["reviews", "analytics", "ad-platforms", "platform-demand", "social-stats", "deals", "home", "chat", "hugh", "project-chat", "settings", "client-dialogs", "site-orders", "trademarks", "sites", "campaigns", "company-information", "autoposting", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial", "task-board", "task-board-shell"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join(""));
@@ -1252,13 +1252,15 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const renderScopeBanner = () => {
     const el=byId('workspace-scope');
     el.dataset.scope=SYSTEM_VIEWS.has(currentView)?'system':currentView==='account'?'personal':'company';
-    const caption=currentView==='trademarks'?'Общая справочная инструкция Synapse'
+    const ownerBoard = currentView === 'tasks' && identity?.role === 'owner';
+    const caption=ownerBoard?'Все проекты · Synapse Задачи':currentView==='trademarks'?'Общая справочная инструкция Synapse'
       : SYSTEM_VIEWS.has(currentView)?'Управление всей системой · все компании'
       : currentView==='account'?'Личный аккаунт · '+(identity?.displayName||identity?.login||'')
       : 'Компания: '+projectContext();
     el.querySelector('strong').textContent=caption;
-    el.querySelector('button').hidden=SYSTEM_VIEWS.has(currentView)||currentView==='account';
+    el.querySelector('button').hidden=ownerBoard||SYSTEM_VIEWS.has(currentView)||currentView==='account';
     document.title=(factoryViews.includes(currentView)?'Контент завод':VIEW_TITLES[currentView])+' — '+(SYSTEM_VIEWS.has(currentView)?'Система Synapse':projectContext());
+    if (ownerBoard) document.title = 'Synapse Задачи';
   };
   const renderProjectContexts = () => {
     byId("analytics-project-context").textContent = `Проект: ${projectContext()}`;
@@ -1615,6 +1617,10 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     const nextView = validView(viewName) ? viewName : defaultView();
     if (nextView !== currentView) registeredViews[currentView]?.onLeave?.();
     currentView = nextView;
+    const ownerBoard = currentView === 'tasks' && identity?.role === 'owner';
+    document.body.classList.toggle('owner-task-board', ownerBoard);
+    document.body.classList.toggle('owner-task-navigation', identity?.role === 'owner');
+    document.querySelector('link[rel="manifest"]').href = ownerBoard ? 'board.webmanifest' : 'manifest.webmanifest';
     const factory = factoryViews.includes(currentView);
     byId("content-factory-header").hidden = !factory;
     byId("content-factory-header").querySelectorAll("[data-factory-view]").forEach(link => {
@@ -1655,7 +1661,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     registeredViews[currentView]?.render(active, cabinetContext());
     SbCabinet.renderModuleGuide?.(active, currentView, cabinetContext());
     byId("mobile-shortcuts").querySelectorAll("[data-view-link]").forEach(link => {
-      link.hidden = !permittedView(link.dataset.viewLink);
+      link.hidden = link.hasAttribute('data-owner-board-entry') ? identity?.role !== 'owner' : !permittedView(link.dataset.viewLink);
     });
     if (focusMain) { window.scrollTo({top: 0, behavior: "instant"}); byId("main-content").focus({preventScroll: true}); }
   };

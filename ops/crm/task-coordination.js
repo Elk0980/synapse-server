@@ -1,4 +1,5 @@
 'use strict';
+const {hasBoardSchema,boardFields,createTaskProducts,validatedChat} = require('./task-products');
 
 // Метаданные существующих CRM-задач. Это учёт подтверждений, не запуск агентов.
 const STAGES = ['code', 'connected', 'verified', 'accepted'];
@@ -115,7 +116,8 @@ function createTaskCoordination(db, {now = () => Date.now()} = {}) {
   };
   return {get,list,save,tool:createTaskTools(db,{now,owner,entry,save})};
 }
-module.exports = {createTaskCoordination,migrateTasksMcp,migrateTasksMcpPortable};
+module.exports = {createTaskCoordination,migrateTasksMcp,migrateTasksMcpPortable,
+  ...require('./task-products')};
 
 // Вызывается только новым migrate-блоком до запуска HTTP-сервера.
 function migrateTasksMcp(db) {
@@ -345,6 +347,7 @@ function taskExtras(db, row, now) {
   const updated = Math.max(Date.parse(row.updated_at) || 0, Date.parse(coord?.updated_at) || 0);
   return {reviewer_name:row.reviewer_name, parent_task_id:row.parent_task_id, source:row.source,
     due_date:row.due_date, subtask_count:counts.total, subtask_done:counts.done,
+    ...boardFields(db,row),
     no_report:agent?.state === 'work' && ['inbox','planned','in_progress'].includes(row.status) && now-updated > 60*60*1000};
 }
 
@@ -390,6 +393,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
       'status','priority','due_date','source','updated_at'];
     const coordination=entry(row);
     return {...Object.fromEntries(fields.map(key=>[key,row[key]])),
+      ...boardFields(db,row),
       subtask_count:coordination.subtask_count,subtask_done:coordination.subtask_done,no_report:coordination.no_report,
       coordination:{revision:coordination.revision,executorName:row.assignee_name,
         milestones:Object.fromEntries(STAGES.map(stage=>[stage,{state:coordination.milestones[stage].state}]))}};
@@ -412,6 +416,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
     return result;
   };
   const statuses = ['inbox','planned','in_progress','done','cancelled'];
+  const products=createTaskProducts(db,{project,scopedTask,allowed,taskSummary});
   const enumValue = (value, values, label) => { if (!values.includes(value)) fail(400, `Некорректное поле: ${label}`); return value; };
   const dueDate = value => {
     const result = text(value,10);
@@ -436,6 +441,16 @@ function createTaskTools(db, {now,owner,entry,save}) {
     if ('executor' in args) { updates.assignee_name = text(args.executor,200); changes.executorName=updates.assignee_name; }
     if ('reviewer' in args) updates.reviewer_name = text(args.reviewer,200);
     if ('due_date' in args) updates.due_date = dueDate(args.due_date);
+    if ('priority' in args) updates.priority=enumValue(args.priority,['low','normal','high','urgent'],'priority');
+    if ('parent_id' in args) updates.parent_task_id=products.validateParent(args.parent_id===null?null:integer(args.parent_id,'parent_id'),row,actor);
+    if ('product_id' in args) {
+      if(!hasBoardSchema(db))fail(503,'Миграция продуктов доски не установлена');
+      updates.product_id=args.product_id===null?null:products.product(args.product_id,row.company_code.toLowerCase(),actor).id;
+    }
+    if ('chat_url' in args) {
+      if (!hasBoardSchema(db)) fail(503,'Миграция доски не установлена');
+      updates.chat_url=validatedChat(args.chat_url);
+    }
     validateReviewer(updates.assignee_name ?? row.assignee_name, updates.reviewer_name ?? row.reviewer_name);
     if ('blocker' in args) changes.blocker=text(args.blocker,4000);
     if ('next_step' in args) changes.nextAction=text(args.next_step,4000);
@@ -458,6 +473,11 @@ function createTaskTools(db, {now,owner,entry,save}) {
     const codes=args.project!==undefined?[project(args.project,actor)]:[...allowed(actor)];
     const clauses=[`is_deleted=0`,`lower(company_code) IN (${codes.map(()=>'?').join(',')})`], params=[...codes];
     if (args.status!==undefined) { clauses.push('status=?'); params.push(enumValue(args.status,statuses,'status')); }
+    if (args.product!==undefined) {
+      if(!hasBoardSchema(db))fail(503,'Миграция продуктов доски не установлена');
+      if(args.product===null)clauses.push('product_id IS NULL');
+      else { products.product(args.product,args.project!==undefined?codes[0]:null,actor);clauses.push('product_id=?');params.push(args.product); }
+    }
     if (args.executor!==undefined) { clauses.push(`${personKeySql('assignee_name')}=${personKeySql('?')}`); params.push(text(args.executor,200)); }
     if (args.parent_id!==undefined) {
       if (args.parent_id===null) clauses.push('parent_task_id IS NULL');
@@ -483,7 +503,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
       .all(row.name,...codes).map(taskSummary);
     const access=db.prepare('SELECT * FROM agent_access WHERE agent_id=?').get(row.id);
     const sameScope=access?.owner_id===actor.userId && access.projects===JSON.stringify([...allowed(actor)].sort());
-    return {...row,...(!sameScope?{state:'unknown',last_event:'',last_event_at:'',function:'',chat:''}:{}),tracking:'manual',
+    return {...row,...(!sameScope?{state:'unknown',last_event:'',last_event_at:'',function:'',chat:'',...(hasBoardSchema(db)?{chat_url:''}:{})}:{}),tracking:'manual',
       active_tasks:tasks,active_task_count:taskTimes.length,
       no_report:sameScope&&row.state==='work'&&taskTimes.some(task=>now()-Math.max(Date.parse(task.updated_at)||0,Date.parse(task.coordination_updated_at)||0)>60*60*1000)};
   };
@@ -498,11 +518,19 @@ function createTaskTools(db, {now,owner,entry,save}) {
     const kind=enumValue(args.kind ?? old?.kind,['owner','claude','codex','gpt','gemini','hailuo'],'kind');
     const mode=enumValue(args.mode ?? old?.mode ?? 'event',['permanent','periodic','event','once'],'mode');
     const state=enumValue(args.state ?? old?.state ?? 'unknown',['work','wait','idle','unknown','error'],'state');
-    const event=text(args.last_event ?? old?.last_event ?? '',4000), role=text(args.function ?? old?.function ?? '',500), chat=text(args.chat ?? old?.chat ?? '',500);
+    const event=text(args.last_event ?? old?.last_event ?? '',4000), role=text(args.function ?? old?.function ?? '',500),
+      chat='chat_url' in args?validatedChat(args.chat_url):text(args.chat ?? old?.chat ?? '',2048);
     db.prepare(`INSERT INTO agents(name,kind,mode,function,chat,state,last_event,last_event_at) VALUES(?,?,?,?,?,?,?,?)
       ON CONFLICT(name) DO UPDATE SET kind=excluded.kind,mode=excluded.mode,function=excluded.function,chat=excluded.chat,
       state=excluded.state,last_event=excluded.last_event,last_event_at=excluded.last_event_at`).run(old?.name || name,kind,mode,role,chat,state,event,stamp());
     const row=db.prepare(`SELECT * FROM agents WHERE ${personKeySql('name')}=${personKeySql('?')}`).get(name);
+    if(hasBoardSchema(db)) {
+      let chatUrl=old?.chat_url || '';
+      if('chat_url' in args)chatUrl=validatedChat(args.chat_url);
+      else if('chat' in args) { try { chatUrl=validatedChat(args.chat); } catch { chatUrl=''; } }
+      db.prepare('UPDATE agents SET chat_url=? WHERE id=?').run(chatUrl,row.id);
+      row.chat_url=chatUrl;
+    }
     db.prepare(`INSERT INTO agent_access(agent_id,owner_id,projects) VALUES(?,?,?) ON CONFLICT(agent_id)
       DO UPDATE SET owner_id=excluded.owner_id,projects=excluded.projects`).run(row.id,actor.userId,JSON.stringify([...allowed(actor)].sort()));
     return agentView(row,actor);
@@ -512,6 +540,8 @@ function createTaskTools(db, {now,owner,entry,save}) {
     if (!object(args)) fail(400,'Нужен объект параметров');
     if (!hasMcpSchema(db)) fail(503,'Миграция задач MCP не установлена');
     if (name==='tasks_list') return tasksList(args,actor);
+    if (name==='products_list') return products.list(args,actor);
+    if (name==='task_duplicates') return products.duplicates(args,actor);
     if (name==='task_get') return taskView(scopedTask(args.task_id,actor),actor,true,args);
     if (name==='task_update') return update(args,actor);
     if (name==='task_create') return transaction(()=>{
@@ -523,6 +553,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
         return {task:taskView(scopedTask(existing.id,actor),actor,true),created:false};
       }
       const title=text(args.title,1000); if(!title)fail(400,'Укажите название задачи');
+      if(args.force!==undefined&&typeof args.force!=='boolean')fail(400,'force должен быть логическим');
       const executor=text(args.executor || '',200), reviewer=text(args.reviewer || '',200);validateReviewer(executor,reviewer);
       const parent=args.parent_id==null?null:integer(args.parent_id,'parent_id');
       if(parent!==null) {
@@ -531,14 +562,25 @@ function createTaskTools(db, {now,owner,entry,save}) {
           fail(400,'Подзадача должна принадлежать корневой задаче того же проекта');
         }
       }
+      const description=text(args.description || '',20000), priority=enumValue(args.priority || 'normal',['low','normal','high','urgent'],'priority'),
+        due=dueDate(args.due_date || ''),source=enumValue(args.source || 'manual',['claude','gpt','manual'],'source'),
+        status=enumValue(args.status || 'inbox',statuses,'status'),links=validateLinks(args.links || []),chatUrl=validatedChat(args.chat_url || '');
+      let productId=null;
+      if(hasBoardSchema(db)) {
+        const duplicates=products.duplicates(args,actor);
+        if(!args.force&&(duplicates.possible_duplicates.length||duplicates.possible_product_duplicates.length))return {created:false,...duplicates};
+        productId=products.resolve(args,code,actor);
+      } else if(args.product_id!=null||args.new_product!==undefined||args.chat_url!==undefined)fail(503,'Миграция продуктов доски не установлена');
       const time=stamp();
       const result=db.prepare(`INSERT INTO tasks(created_at,updated_at,title,description,company_code,assignee_name,reviewer_name,
         priority,due_date,source,created_by,parent_task_id,client_ref,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(time,time,title,
-        text(args.description || '',20000),code,executor,reviewer,enumValue(args.priority || 'normal',['low','normal','high','urgent'],'priority'),
-        dueDate(args.due_date || ''),enumValue(args.source || 'manual',['claude','gpt','manual'],'source'),String(actor.userId),parent,clientRef,
-        enumValue(args.status || 'inbox',statuses,'status'));
+        description,code,executor,reviewer,priority,due,source,String(actor.userId),parent,clientRef,status);
       const row=scopedTask(Number(result.lastInsertRowid),actor);
-      touch(row,{executorName:executor,links:validateLinks(args.links || [])},actor);
+      if(hasBoardSchema(db)) {
+        db.prepare('UPDATE tasks SET product_id=?,chat_url=? WHERE id=?').run(productId,chatUrl,row.id);
+        row.product_id=productId;row.chat_url=chatUrl;
+      }
+      touch(row,{executorName:executor,links},actor);
       return {task:taskView(row,actor,true),created:true};
     });
     if(name==='task_comment')return transaction(()=>{

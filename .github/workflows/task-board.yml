@@ -1,0 +1,43 @@
+name: task-board
+
+on:
+  pull_request:
+    paths:
+      - 'ops/crm/task-coordination*'
+      - 'ops/crm/task-products*'
+      - 'ops/crm/server.js'
+      - 'ops/tasks-mcp/**'
+      - 'sites/synapse/cabinet/task*'
+      - 'sites/synapse/cabinet.html'
+      - 'sites/synapse/board.*'
+      - '.github/workflows/task-board.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  board:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: ops/tasks-mcp/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned test dependencies
+        run: npm ci --ignore-scripts --prefix ops/tasks-mcp
+      - name: Old and new tasks, migration, cabinet and owner board
+        env:
+          NODE_PATH: ${{ github.workspace }}/ops/tasks-mcp/node_modules
+        run: node --test ops/tasks-mcp/*.test.js ops/crm/task-coordination.test.js ops/crm/task-products*.test.js sites/synapse/cabinet/task*.test.cjs
+      - name: Syntax and public spec
+        run: |
+          node --check ops/crm/server.js
+          node --check sites/synapse/cabinet/task-board.js
+          python tools/spec-kit/gate.py check
