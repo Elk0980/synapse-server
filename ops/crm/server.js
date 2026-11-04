@@ -3180,10 +3180,15 @@ async function route(request, response) {
         { code: 'COMPANY_NOT_ACTIVE', field: 'companyCode' });
       checkPublicOrigin(request, company, url.pathname);
     }
+    // Публичная форма получает только номер заявки и признак дубля. Полная запись — только
+    // доверенным сервисам с API-ключом: иначе по телефону можно прочитать чужую заявку (№97).
+    const trusted = request.headers['x-api-key'] === API_KEY;
+    const leadResponse = (lead, deduplicated) => trusted
+      ? { ...serializeLead(lead), deduplicated } : { id: lead.id, deduplicated };
     const duplicate = getLeadByContact.get(normalized, companyCode);
     if (duplicate) {
       emailOutbox.enqueue(duplicate, {repeated: true});
-      send(response, 200, { ...serializeLead(duplicate), deduplicated: true }, cors);
+      send(response, 200, leadResponse(duplicate, true), cors);
       void deliverLeadEmails();
       return;
     }
@@ -3225,7 +3230,7 @@ async function route(request, response) {
       db.exec('ROLLBACK');
       throw error;
     }
-    send(response, 201, { ...serializeLead(row), deduplicated: false }, cors);
+    send(response, 201, leadResponse(row, false), cors);
     void deliverLeadEmails();
     return;
   }
