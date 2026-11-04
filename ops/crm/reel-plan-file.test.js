@@ -68,3 +68,10 @@ test('XLSX rejects compressed oversized XML and malformed archives without retur
   for(const bytes of [Buffer.alloc(0),Buffer.from('not a workbook'),Buffer.from([0x50,0x4b,3,4])])await reject(request('bad.xlsx',bytes));
   const file=xlsx();await reject({...file,base64:file.base64.slice(0,-8)});
 });
+
+test('export escaping neutralises formula-looking cells kept as text by import',()=>{
+  const {exportCell}=require('./reel-plan-file');
+  assert.equal(exportCell('=HYPERLINK("x")'),`"'=HYPERLINK(""x"")"`);
+  for(const value of ['+7 900','-1','@SUM(A1)'])assert.equal(exportCell(value),`'${value}`);
+  assert.equal(exportCell('Обычная тема'),'Обычная тема');assert.equal(exportCell('a;b'),'"a;b"');
+});

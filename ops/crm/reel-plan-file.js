@@ -97,4 +97,11 @@ async function preview(body) {
     }));
   } catch(error) {if(error.status===400)throw error;invalid();}
 }
-module.exports={preview};
+/* Импорт хранит «=…», «+…», «-…», «@…» как обычный текст. Любая будущая выгрузка плана в CSV/XLSX
+   обязана пропускать ячейки через exportCell: иначе таблица выполнит их как формулу (ревью PR 496). */
+function exportCell(value) {
+  const text=String(value??'');
+  const safe=/^[=+\-@\t\r]/.test(text)?`'${text}`:text;
+  return /[",;\r\n]/.test(safe)?`"${safe.replace(/"/g,'""')}"`:safe;
+}
+module.exports={preview,exportCell};
