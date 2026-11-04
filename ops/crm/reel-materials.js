@@ -20,14 +20,26 @@ function platforms(value){
     fail(400,'Площадки: '+PLATFORMS.join(', '));
   return PLATFORMS.filter(id=>value.includes(id));
 }
-/* Ролик принимается только из хранилища публикаций той же компании: чужая ссылка не попадёт в материалы. */
-function mediaUrl(value,code){
-  if(typeof value!=='string'||value.length>500)fail(400,'Нужна ссылка на ролик');
-  let parsed;try{parsed=new URL(value);}catch{fail(400,'Нужна ссылка на ролик');}
-  const match=/^\/content\/publishing-assets\/([a-z0-9_-]{1,64})\/[a-f0-9]{32}\.(?:mp4|webm)$/.exec(parsed.pathname);
-  if(parsed.protocol!=='https:'||parsed.username||parsed.password||parsed.search||parsed.hash||!match)fail(400,'Ролик должен быть загружен в хранилище публикаций (MP4/WebM)');
-  if(match[1]!==code.toLowerCase())fail(403,'Ролик принадлежит другой компании','FORBIDDEN');
-  return parsed.href;
+/* Ролик принимается только из хранилища публикаций той же компании и только с разрешённого хоста
+   (по умолчанию — origin хранилища content, PUBLISHING_ASSET_ORIGIN). Относительный путь своего хранилища
+   дополняется первым разрешённым origin. Чужой хост → 400: агент монтажа не скачивает с произвольного адреса. */
+const DEFAULT_MEDIA_ORIGINS=Object.freeze(['https://synapse.synapsebusiness.ru']);
+const ASSET_PATH=/^\/content\/publishing-assets\/([a-z0-9_-]{1,64})\/[a-f0-9]{32}\.(?:mp4|webm)$/;
+function mediaOriginsOf(value){
+  const list=(Array.isArray(value)?value:String(value||'').split(',')).map(item=>String(item).trim()).filter(Boolean);
+  const out=list.map(item=>{let url;try{url=new URL(item);}catch{throw Error('Неверный origin хранилища роликов: '+item);}
+    if(url.protocol!=='https:'||url.username||url.password||url.pathname!=='/'||url.search||url.hash)throw Error('Origin хранилища роликов: только https://хост');return url.origin;});
+  if(!out.length)throw Error('Не задан origin хранилища роликов');
+  return Object.freeze([...new Set(out)]);
+}
+function checkMedia(value,code,allowed){
+  if(typeof value!=='string'||value.length>500)return {status:400,message:'Нужна ссылка на ролик'};
+  let parsed;try{parsed=new URL(value,value.startsWith('/')&&!value.startsWith('//')?allowed[0]:undefined);}catch{return {status:400,message:'Нужна ссылка на ролик'};}
+  const match=ASSET_PATH.exec(parsed.pathname);
+  if(parsed.protocol!=='https:'||parsed.username||parsed.password||parsed.search||parsed.hash||!match)return {status:400,message:'Ролик должен быть загружен в хранилище публикаций (MP4/WebM)'};
+  if(!allowed.includes(parsed.origin))return {status:400,message:'Ролик должен быть в хранилище публикаций Synapse: чужой адрес не принимается',code:'MEDIA_HOST'};
+  if(match[1]!==code.toLowerCase())return {status:403,message:'Ролик принадлежит другой компании',code:'FORBIDDEN'};
+  return {href:parsed.href};
 }
 const sha=value=>{if(value===undefined||value===null||value==='')return '';if(typeof value!=='string'||!/^[a-f0-9]{64}$/i.test(value))fail(400,'SHA-256: 64 шестнадцатеричных символа');return value.toLowerCase();};
 
@@ -63,7 +75,9 @@ function edl(value,durationMs){
   return {v:1,video,audio,captions:titles,coverMs,speed,outputMs:Math.round(total/speed)};
 }
 
-function createReelMaterials(db,{autoposting,information}={}){
+function createReelMaterials(db,{autoposting,information,mediaOrigins=process.env.PUBLISHING_ASSET_ORIGINS||DEFAULT_MEDIA_ORIGINS}={}){
+  const allowedOrigins=mediaOriginsOf(mediaOrigins);
+  const mediaUrl=(value,code)=>{const result=checkMedia(value,code,allowedOrigins);if(!result.href)fail(result.status,result.message,result.code);return result.href;};
   db.exec(`CREATE TABLE IF NOT EXISTS reel_materials (
       id INTEGER PRIMARY KEY AUTOINCREMENT, company_id INTEGER NOT NULL REFERENCES companies(id),
       title TEXT NOT NULL, release_date TEXT NOT NULL DEFAULT '', platforms TEXT NOT NULL DEFAULT '[]',
@@ -85,6 +99,14 @@ function createReelMaterials(db,{autoposting,information}={}){
     sha256:v.sha256,durationMs:v.duration_ms,editId:v.edit_id,note:v.note,createdAt:v.created_at}));
   const editDto=e=>({id:e.id,kind:e.kind,baseVersion:e.base_version,status:e.status,edl:e.edl?parse(e.edl,null):null,comment:e.comment,
     startMs:e.start_ms,endMs:e.end_ms,taskId:e.task_id,resultVersion:e.result_version,authorName:e.author_name,createdAt:e.created_at,updatedAt:e.updated_at});
+  const seconds=ms=>(ms/1000).toFixed(1);
+  function logEntries(e,title,withTitle){
+    const where=withTitle?`«${title}» — `:'';
+    const ask=e.kind==='request'?`${where}Хью, измени (v${e.baseVersion}, ${seconds(e.startMs)}–${seconds(e.endMs)} с): ${e.comment}`:`${where}Правки монтажа к v${e.baseVersion}${e.comment?': '+e.comment:''}`;
+    return [{key:`reel-edit:${e.id}:request`,at:e.createdAt,from:'user',authorName:e.authorName,editId:e.id,text:ask},
+      ...(e.status==='done'?[{key:`reel-edit:${e.id}:done`,at:e.updatedAt,from:'hugh',editId:e.id,text:`Исправлено: ${withTitle?`«${title}» — `:''}готова v${e.resultVersion}`}]:[]),
+      ...(e.status==='cancelled'?[{key:`reel-edit:${e.id}:cancelled`,at:e.updatedAt,from:'hugh',editId:e.id,text:`Правка №${e.id}${withTitle?` к «${title}»`:''} отменена`}]:[])];
+  }
   function reelDto(row,owner,full){
     const versions=versionsOf(row.id),current=versions.at(-1)||null;
     const base={id:row.id,key:'reel:'+row.id,source:'materials',companyCode:owner.code.toLowerCase(),title:row.title,releaseDate:row.release_date,
@@ -92,17 +114,15 @@ function createReelMaterials(db,{autoposting,information}={}){
       openEdits:db.prepare("SELECT COUNT(*) n FROM reel_edits WHERE reel_id=? AND status IN ('pending','in_progress')").get(row.id).n};
     if(!full)return base;
     const edits=db.prepare('SELECT * FROM reel_edits WHERE reel_id=? ORDER BY id').all(row.id).map(editDto);
-    /* Журнал для личного чата пользователя с Хью: запрос пользователя и ответ «исправлено» с номером версии. */
-    const log=edits.flatMap(e=>[{at:e.createdAt,from:'user',authorName:e.authorName,editId:e.id,
-      text:e.kind==='request'?`Хью, измени (v${e.baseVersion}, ${(e.startMs/1000).toFixed(1)}–${(e.endMs/1000).toFixed(1)} с): ${e.comment}`:`Правки монтажа к v${e.baseVersion}${e.comment?': '+e.comment:''}`},
-      ...(e.status==='done'?[{at:e.updatedAt,from:'hugh',editId:e.id,text:`Исправлено: готова v${e.resultVersion}`}]:[])]);
+    /* Журнал правок ролика; те же записи уходят в личный чат автора с Хью (hughLog → content). */
+    const log=edits.flatMap(e=>logEntries(e,row.title,false));
     return {...base,versions,edits,log};
   }
   /* Рилсы из контент-плана: карточка автопостинга с видео, ещё не взятая в «Материалы». Показываются как v1, без копирования. */
   function planReels(owner,taken){
     if(!autoposting)return [];
     return autoposting.list(owner.code).posts.filter(post=>!taken.has(post.id)).map(post=>{
-      const video=(post.mediaUrls||[]).find(item=>/\.(?:mp4|webm|mov)(?:$|\?)/i.test(item));if(!video)return null;
+      const video=(post.mediaUrls||[]).find(item=>checkMedia(item,owner.code,allowedOrigins).href);if(!video)return null;
       let releaseDate='';if(post.scheduledAt){try{releaseDate=new Intl.DateTimeFormat('en-CA',{timeZone:post.timezone||'UTC'}).format(new Date(post.scheduledAt));}catch{releaseDate=post.scheduledAt.slice(0,10);}}
       return {id:null,key:'post:'+post.id,source:'plan',companyCode:owner.code.toLowerCase(),title:post.title||`Публикация №${post.id}`,releaseDate,
         platforms:(post.platformIds||[]).filter(id=>PLATFORMS.includes(id)),postId:post.id,
@@ -226,6 +246,13 @@ function createReelMaterials(db,{autoposting,information}={}){
       return {reel,version:reel.versions.at(-1),hughChat:edit?{companyCode:reel.companyCode,authorId:edit.author_id,text:`Исправлено: «${row.title}» — готова v${version}.`}:null};
     });
   }
-  return {list,get,create,update,requestEdit,cancelEdit,createPublication,queue,claim,addVersion};
+  /* Личный лог автора правок для чата с Хью (room hugh:<id> в content). Только правки этого автора в этой компании. */
+  function hughLog(code,authorId){
+    const owner=company(db,code),author=String(authorId??'');if(!/^[1-9]\d{0,15}$/.test(author))fail(400,'Нужен автор правок');
+    const rows=db.prepare(`SELECT e.*,r.title FROM reel_edits e JOIN reel_materials r ON r.id=e.reel_id AND r.company_id=e.company_id
+      WHERE e.company_id=? AND e.author_id=? ORDER BY e.id DESC LIMIT 200`).all(owner.id,author).reverse();
+    return {companyCode:owner.code.toLowerCase(),authorId:Number(author),entries:rows.flatMap(row=>logEntries(editDto(row),row.title,true).map(entry=>({...entry,reelId:row.reel_id})))};
+  }
+  return {list,get,create,update,requestEdit,cancelEdit,createPublication,queue,claim,addVersion,hughLog};
 }
-module.exports={createReelMaterials,validateEdl:edl,PLATFORMS,EDIT_STATES,MONTAGE_EXECUTOR};
+module.exports={createReelMaterials,validateEdl:edl,PLATFORMS,EDIT_STATES,MONTAGE_EXECUTOR,DEFAULT_MEDIA_ORIGINS};

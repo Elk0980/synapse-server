@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {DatabaseSync}=require('node:sqlite');
 const {createReelMaterials,validateEdl}=require('./reel-materials');
 const {createReelMaterialsHandler}=require('./reel-materials-http');
-const asset=(code,n='a')=>`https://synapse.example/content/publishing-assets/${code}/${n.repeat(32)}.mp4`;
+const asset=(code,n='a')=>`https://synapse.synapsebusiness.ru/content/publishing-assets/${code}/${n.repeat(32)}.mp4`;
 const edl=over=>({v:1,video:[{inMs:0,outMs:4000},{inMs:6000,outMs:9000}],audio:[{inMs:0,outMs:7000,gain:0.5,muted:false}],captions:[{startMs:0,endMs:1500,text:'Новый титр'}],coverMs:1200,speed:1.25,...over});
 
 function fixture(){
@@ -49,11 +49,28 @@ test('Список: рилсы из плана и из «Материалов»,
 test('Изоляция: ролик другой компании не принимается и не читается по id',()=>{
   const f=fixture();
   assert.throws(()=>f.materials.create('avokado',{title:'x',mediaUrl:asset('alvi')},editor),{status:403});
-  assert.throws(()=>f.materials.create('avokado',{title:'x',mediaUrl:'http://synapse.example/content/publishing-assets/avokado/'+'a'.repeat(32)+'.mp4'},editor),{status:400});
+  assert.throws(()=>f.materials.create('avokado',{title:'x',mediaUrl:'http://synapse.synapsebusiness.ru/content/publishing-assets/avokado/'+'a'.repeat(32)+'.mp4'},editor),{status:400});
   const alien=f.materials.create('alvi',{title:'Чужой',mediaUrl:asset('alvi')},editor);
   assert.throws(()=>f.materials.get('avokado',alien.id),{status:404});
   assert.throws(()=>f.materials.requestEdit('avokado',alien.id,{clientRequestId:'r1',baseVersion:1,kind:'request',comment:'x',startMs:0,endMs:1000},editor),{status:404});
   assert.throws(()=>f.materials.addVersion('avokado',alien.id,{mediaUrl:asset('avokado','b')}),{status:404});
+});
+
+test('Хост ролика: только разрешённый origin хранилища или относительный путь; чужой хост → 400 (кабинет и агент монтажа)',()=>{
+  const f=fixture(),name='a'.repeat(32)+'.mp4',path='/content/publishing-assets/avokado/'+name;
+  for(const host of ['https://evil.example','https://synapse.synapsebusiness.ru.evil.example','https://synapse.synapsebusiness.ru:8443','https://127.0.0.1'])
+    assert.throws(()=>f.materials.create('avokado',{title:'x',mediaUrl:host+path},editor),error=>error.status===400&&error.details?.code==='MEDIA_HOST',host);
+  assert.throws(()=>f.materials.create('avokado',{title:'x',mediaUrl:'//evil.example'+path},editor),{status:400});
+  const relative=f.materials.create('avokado',{title:'Относительный',mediaUrl:path},editor);
+  assert.equal(relative.versions[0].mediaUrl,'https://synapse.synapsebusiness.ru'+path);
+  assert.throws(()=>f.materials.addVersion('avokado',relative.id,{mediaUrl:'https://evil.example/content/publishing-assets/avokado/'+'b'.repeat(32)+'.mp4'}),{status:400});
+  const custom=createReelMaterials(f.db,{mediaOrigins:'https://cdn.synapse.test, https://synapse.synapsebusiness.ru'});
+  assert.equal(custom.create('avokado',{title:'CDN',mediaUrl:'https://cdn.synapse.test'+path},editor).versions[0].mediaUrl,'https://cdn.synapse.test'+path);
+  assert.throws(()=>createReelMaterials(f.db,{mediaOrigins:'http://insecure.test'}),/https/);
+  /* Рилс из плана с видео на чужом хосте в «Материалы» не попадает. */
+  const db=new DatabaseSync(':memory:');db.exec("CREATE TABLE companies(id INTEGER PRIMARY KEY,code TEXT,is_deleted INTEGER DEFAULT 0);INSERT INTO companies VALUES(1,'avokado',0);CREATE TABLE tasks(id INTEGER PRIMARY KEY);");
+  const plan=createReelMaterials(db,{autoposting:{list:()=>({posts:[{id:1,title:'Чужой хост',mediaUrls:['https://evil.example'+path],platformIds:[]}]})}});
+  assert.deepEqual(plan.list('avokado').reels,[]);
 });
 
 test('Правка → задача монтажа → claim → новая версия v2, журнал «исправлено»; повтор запроса без дубля',()=>{
@@ -77,6 +94,12 @@ test('Правка → задача монтажа → claim → новая ве
   assert.throws(()=>f.materials.addVersion('avokado',reel.id,{mediaUrl:asset('avokado','d'),editId:first.edit.id}),{status:409});
   assert.equal(f.materials.cancelEdit('avokado',reel.id,edlEdit.edit.id).edits[1].status,'cancelled');
   assert.equal(f.db.prepare('SELECT status FROM tasks WHERE id=?').get(edlEdit.edit.taskId).status,'cancelled');
+  const log=f.materials.hughLog('avokado',7);
+  assert.deepEqual(log.entries.map(e=>[e.key.replace(/\d+/,'N'),e.from]),[['reel-edit:N:request','user'],['reel-edit:N:done','hugh'],['reel-edit:N:request','user'],['reel-edit:N:cancelled','hugh']]);
+  assert.match(log.entries[0].text,/^«Рилс» — Хью, измени \(v1, 2\.0–3\.5 с\): Хью, убери паузу$/);assert.match(log.entries[1].text,/Исправлено: «Рилс» — готова v2/);
+  assert.deepEqual(f.materials.hughLog('avokado',8).entries,[],'чужой автор не видит правки');
+  assert.deepEqual(f.materials.hughLog('alvi',7).entries,[],'другая компания не видит правки');
+  assert.throws(()=>f.materials.hughLog('avokado','0'),{status:400});
 });
 
 test('Создать публикацию: черновик автопостинга с версией ролика, без отправки; рилс из плана берётся в материалы один раз',()=>{

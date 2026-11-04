@@ -19,9 +19,11 @@ test('Материалы через настоящий CRM: ролик → пр�
     return {status:response.status,body:await response.json()};
   }
   for(const code of ['avokado','alvi'])assert.equal((await request('POST','/companies',{body:{code,name:code,timezone:'UTC'}})).status,201);
-  const asset=(code,n)=>`https://synapse.example/content/publishing-assets/${code}/${n.repeat(32)}.mp4`;
+  const asset=(code,n)=>`https://synapse.synapsebusiness.ru/content/publishing-assets/${code}/${n.repeat(32)}.mp4`;
   const reel=await request('POST','/autoposting/reels?companyCode=avokado',{identity:smm,body:{title:'Рилс №1',releaseDate:'2026-11-07',platforms:['instagram','tiktok'],mediaUrl:asset('avokado','a'),durationMs:12000}});
   assert.equal(reel.status,201,JSON.stringify(reel.body));
+  const alienHost=await request('POST','/autoposting/reels?companyCode=avokado',{identity:smm,body:{title:'Чужой хост',mediaUrl:asset('avokado','a').replace('synapse.synapsebusiness.ru','evil.example')}});
+  assert.equal(alienHost.status,400,'чужой хост ролика → 400');
   assert.equal((await request('GET','/autoposting/reels?companyCode=alvi',{identity:smm})).status,403);
   assert.equal((await request('GET',`/autoposting/reels/${reel.body.id}?companyCode=alvi`)).status,404);
   const edit=await request('POST',`/autoposting/reels/${reel.body.id}/edits?companyCode=avokado`,{identity:smm,body:{clientRequestId:'k1',baseVersion:1,kind:'edl',
@@ -33,6 +35,11 @@ test('Материалы через настоящий CRM: ролик → пр�
   assert.equal((await request('POST',`/internal/reel-materials/edits/${edit.body.edit.id}/claim?companyCode=avokado`,{identity:null})).body.status,'in_progress');
   const v2=await request('POST',`/internal/reel-materials/reels/${reel.body.id}/versions?companyCode=avokado`,{identity:null,body:{mediaUrl:asset('avokado','b'),durationMs:8000,editId:edit.body.edit.id}});
   assert.equal(v2.body.version.version,2);
+  const badVersion=await request('POST',`/internal/reel-materials/reels/${reel.body.id}/versions?companyCode=avokado`,{identity:null,body:{mediaUrl:'https://evil.example/content/publishing-assets/avokado/'+'c'.repeat(32)+'.mp4'}});
+  assert.equal(badVersion.status,400,'агент монтажа не может записать версию с чужого хоста');
+  assert.equal((await request('GET','/internal/reel-materials/hugh-log?companyCode=avokado&authorId=5',{identity:smm})).status,403,'лог только ключом сервиса');
+  const hughLog=await request('GET','/internal/reel-materials/hugh-log?companyCode=avokado&authorId=5',{identity:null});
+  assert.deepEqual(hughLog.body.entries.map(e=>e.from),['user','hugh']);assert.match(hughLog.body.entries[1].text,/Исправлено: «Рилс №1» — готова v2/);
   const tasks=await request('GET','/tasks?companyCode=avokado');
   assert.ok(JSON.stringify(tasks.body).includes('Монтаж: «Рилс №1» v1'),'задача монтажа на общей доске');
   const pub=await request('POST',`/autoposting/reels/${reel.body.id}/publication?companyCode=avokado`,{identity:smm,body:{version:2,platformIds:['instagram']}});
