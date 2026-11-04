@@ -1,0 +1,16 @@
+'use strict';
+const assert=require('node:assert/strict'),S=require('./solar.js'),M=require('./editor-model.js');
+const close=(a,b,tolerance=1e-8)=>assert.ok(Math.abs(a-b)<tolerance,`${a} ≠ ${b}`);
+const site={date:'2026-06-21',latitude:53,longitude:104,timezone:8,north:0};
+const summer=S.daylight(site),winter=S.daylight({...site,date:'2026-12-21'});
+assert.ok(summer.sunset-summer.sunrise>16);assert.ok(winter.sunset-winter.sunrise<8);
+const morning=S.position({...site,hour:8}),evening=S.position({...site,hour:18}),noon=S.position({...site,hour:summer.noon});
+assert.ok(morning.direction[0]>0&&evening.direction[0]<0);assert.ok(noon.altitude>59&&noon.altitude<61);assert.ok(!S.position({...site,hour:0}).daylight);
+const eastShadow=S.shadow([0,2,0],[Math.SQRT1_2,Math.SQRT1_2,0]);close(eastShadow[0],-2);close(eastShadow[1],0);close(eastShadow[2],0);assert.equal(S.shadow([1,2,3],[0,-1,0]),null);
+const p=S.position({...site,hour:10}),turned=S.position({...site,hour:10,north:90});close(p.direction[0],turned.direction[2]);close(-p.direction[2],turned.direction[0]);close(Math.hypot(...p.direction),1);
+assert.equal(S.daylight({...site,latitude:80,date:'2026-12-21'}).polar,'night');assert.equal(S.daylight({...site,latitude:80}).polar,'day');
+assert.throws(()=>S.settings({date:'2026-02-30'}));assert.throws(()=>S.settings({latitude:NaN}));assert.throws(()=>S.settings({timezone:99}));assert.doesNotThrow(()=>S.settings({date:'2028-02-29'}));
+let work=M.add(M.empty(),{dimensions:[.1,2.5,.1]});work.environment={...S.settings(site),north:123,northKnown:true,hour:9.5};
+assert.deepEqual(M.load(JSON.stringify(work)).environment,work.environment);const legacy={...work};delete legacy.environment;assert.ok(M.validate(legacy).environment.ground);
+const moved=M.transform(work,work.parts.map(p=>p.id),{rotation:[0,90,0]});assert.deepEqual(moved.parts[0].dimensions,work.parts[0].dimensions);assert.deepEqual(moved.environment,work.environment);
+console.log('PASS: seasonal daylight, sun direction, night/polar cases, ground projection, north rotation, date validation, environment persistence');
