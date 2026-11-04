@@ -480,7 +480,27 @@ def inventory(c):
             'images': images, 'raw_bytes': total, 'max_snapshot': maximum, 'bound': bound}
 
 
-def _data_producer(c, inv, scratch, children, deadline, name):
+def _same_inventory(expected, fresh, same_databases=False):
+    if (fresh['roots'] != expected['roots'] or fresh['bound'] != expected['bound']
+            or fresh['max_snapshot'] != expected['max_snapshot'] or fresh['images'] != expected['images']
+            or _facts(fresh['metadata']) != _facts(expected['metadata'])
+            or same_databases and fresh['databases'] != expected['databases']):
+        fail('SOURCE_CHANGED')
+
+
+def _data_producer(c, inv, scratch, children, deadline, name, refresh=None):
+    def members():
+        # Snapshot/stream/delete each DB BEFORE the filesystem catalogue. New
+        # attachments committed while a PC was offline are not omitted by an
+        # hours-old offer catalogue. No two SQL snapshots coexist.
+        yield from sorted(inv['databases'])
+        if refresh is not None:
+            fresh = refresh()
+            _same_inventory(inv, fresh, same_databases=True)
+            inv.update(fresh)
+        for path in inv['entries']:
+            if path not in inv['databases']:
+                yield path
     def tar_info(arc, info, kind):
         value = tarfile.TarInfo(arc)
         value.uid, value.gid, value.mode, value.mtime = info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode), info.st_mtime
@@ -488,9 +508,10 @@ def _data_producer(c, inv, scratch, children, deadline, name):
         value.size = info.st_size if kind == tarfile.REGTYPE else 0
         return value
     def produce(pipe):
+        inv['streamed_data_bytes'] = 0
         manifest = {'schema': 2, 'created': name, 'roots': [str(x) for x in inv['roots']], 'files': {}, 'sqlite': []}
         with tarfile.open(fileobj=pipe, mode='w|gz', dereference=False) as archive:
-            for original in inv['entries']:
+            for original in members():
                 time_left(deadline)
                 if any(str(original) == str(db) + suffix for db in inv['databases'] for suffix in ['-wal', '-shm', '-journal']):
                     continue
@@ -525,6 +546,7 @@ def _data_producer(c, inv, scratch, children, deadline, name):
                             info = tar_info(arc, before, tarfile.REGTYPE)
                             reader = b.HashReader(stream)
                             archive.addfile(info, reader)
+                            inv['streamed_data_bytes'] += info.size
                             after = os.fstat(stream.fileno())
                             if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
                                 fail('SOURCE_CHANGED')
@@ -553,6 +575,7 @@ def _data_producer(c, inv, scratch, children, deadline, name):
                 info = tarfile.TarInfo(arc)
                 info.size, info.mode = len(data), 0o600
                 archive.addfile(info, io.BytesIO(data))
+                inv['streamed_data_bytes'] += len(data)
     return produce
 
 
@@ -676,11 +699,15 @@ def produce(c):
             with tempfile.TemporaryDirectory(prefix='stream-sqlite-', dir=scratch_base) as temporary:
                 scratch = Path(temporary)
                 scratch.chmod(0o700)
-                producers = [_data_producer(c, inv, scratch, owned, deadline, name), None]
+                producers = [_data_producer(c, inv, scratch, owned, deadline, name,
+                                            refresh=lambda: inventory(c)), None]
                 def images(pipe):
+                    inv['streamed_images_bytes'] = 0
                     proc = owned.start(['docker', 'image', 'save', *inv['images']], stdout=sp.PIPE, stderr=sp.DEVNULL)
                     try:
-                        shutil.copyfileobj(proc.stdout, pipe, BLOCK)
+                        while chunk := proc.stdout.read(BLOCK):
+                            pipe.write(chunk)
+                            inv['streamed_images_bytes'] += len(chunk)
                         if proc.wait(timeout=min(time_left(deadline), 30)) != 0:
                             fail('CREATE_FAILED')
                     finally:
@@ -689,6 +716,10 @@ def produce(c):
                 producers[1] = images
                 for index, filename in enumerate(b.FILES):
                     def connected(filename=filename):
+                        if filename == b.FILES[0]:
+                            fresh = inventory(c)
+                            _same_inventory(inv, fresh)
+                            inv.update(fresh)
                         state['state'] = 'STREAMING'
                         state['files'][filename]['state'] = 'STREAMING'
                         atomic_metadata(directory / META, state, gid)
@@ -701,8 +732,9 @@ def produce(c):
             current = json.loads(b.run(['docker', 'inspect', *[x['Id'] for x in inv['metadata']]], capture_output=True, timeout=30).stdout)
             if _facts(current) != _facts(inv['metadata']):
                 fail('SOURCE_CHANGED')
+            raw_estimate = max(inv['raw_bytes'], inv['streamed_data_bytes'] + inv['streamed_images_bytes'])
             receipt = {'schema': 2, 'transport': TRANSPORT, 'id': name,
-                       'restore_bytes': inv['raw_bytes'] * 3 + MARGIN, 'files': hashes}
+                       'restore_bytes': raw_estimate * 3 + MARGIN, 'files': hashes}
             atomic_metadata(directory / 'receipt.json', receipt, gid)
             state['state'] = 'COMMITTED'
             atomic_metadata(directory / META, state, gid)

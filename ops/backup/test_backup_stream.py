@@ -487,6 +487,71 @@ class LinuxStreamTests(unittest.TestCase):
             manifest=json.load(archive.extractfile('manifest.json'))
             self.assertEqual(len(manifest['sqlite']),2)
 
+    def test_fresh_file_catalogue_includes_attachment_committed_after_offer(self):
+        deploy, scratch = self.root/'deploy', self.root/'scratch'
+        deploy.mkdir(); scratch.mkdir()
+        source = deploy/'messages.sqlite'
+        with contextlib.closing(sqlite3.connect(source)) as db:
+            db.execute('CREATE TABLE attachments(path)'); db.commit()
+        # The offer catalogued only the DB. The PC was then offline while an
+        # attachment and its committed reference were created.
+        inv = {'roots':[deploy], 'entries':[source], 'databases':{source},
+               'max_snapshot':1024**2, 'metadata':[], 'images':[],
+               'bound':4*1024**2, 'raw_bytes':source.stat().st_size}
+        attachment = deploy/'new-attachment.bin'
+        attachment.write_bytes(b'attachment committed while PC offline')
+        with contextlib.closing(sqlite3.connect(source)) as db:
+            db.execute('INSERT INTO attachments VALUES(?)', (attachment.name,)); db.commit()
+        sequence = []
+        def snapshot(original, target, maximum, margin, deadline, children):
+            self.assertEqual(list(scratch.iterdir()), [])
+            sequence.append('sqlite')
+            b.snapshot(original, target)
+        def refresh():
+            self.assertEqual(sequence, ['sqlite'])
+            self.assertEqual(list(scratch.iterdir()), [])
+            sequence.append('files')
+            return dict(inv, entries=sorted(deploy.iterdir()),
+                        raw_bytes=sum(p.stat().st_size for p in deploy.iterdir()))
+        data = io.BytesIO()
+        with patch.object(s, 'snapshot_one', side_effect=snapshot):
+            s._data_producer(self.c, inv, scratch, s.Children(), time.monotonic()+5,
+                             self.name, refresh=refresh)(data)
+        self.assertEqual(sequence, ['sqlite', 'files'])
+        data.seek(0)
+        with tarfile.open(fileobj=data) as archive:
+            names = archive.getnames()
+            db_name = 'rootfs/'+source.as_posix().lstrip('/')
+            attachment_name = 'rootfs/'+attachment.as_posix().lstrip('/')
+            self.assertLess(names.index(db_name), names.index(attachment_name))
+            self.assertEqual(archive.extractfile(attachment_name).read(), attachment.read_bytes())
+            restored = self.root/'restored.sqlite'
+            restored.write_bytes(archive.extractfile(db_name).read())
+        with contextlib.closing(sqlite3.connect(restored)) as db:
+            self.assertEqual(db.execute('SELECT path FROM attachments').fetchall(), [(attachment.name,)])
+
+    def test_new_sqlite_after_snapshots_rejects_incomplete_catalogue(self):
+        deploy, scratch = self.root/'deploy', self.root/'scratch'
+        deploy.mkdir(); scratch.mkdir()
+        source = deploy/'messages.sqlite'
+        with contextlib.closing(sqlite3.connect(source)) as db:
+            db.execute('CREATE TABLE old_messages(body)'); db.commit()
+        inv = {'roots':[deploy], 'entries':[source], 'databases':{source},
+               'max_snapshot':1024**2, 'metadata':[], 'images':[],
+               'bound':4*1024**2, 'raw_bytes':source.stat().st_size}
+        def snapshot(original, target, maximum, margin, deadline, children):
+            b.snapshot(original, target)
+        def refresh():
+            new_db = deploy/'new.sqlite'
+            with contextlib.closing(sqlite3.connect(new_db)) as db:
+                db.execute('CREATE TABLE new_messages(body)'); db.commit()
+            return dict(inv, entries=sorted(deploy.iterdir()), databases={source,new_db})
+        with patch.object(s, 'snapshot_one', side_effect=snapshot):
+            with self.assertRaisesRegex(b.BackupError, 'SOURCE_CHANGED'):
+                s._data_producer(self.c, inv, scratch, s.Children(), time.monotonic()+5,
+                                 self.name, refresh=refresh)(io.BytesIO())
+        self.assertEqual(list(scratch.iterdir()), [])
+
 
 if __name__ == '__main__':
     unittest.main()
