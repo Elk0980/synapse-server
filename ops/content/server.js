@@ -30,6 +30,7 @@ const { hashPassword, verifyPassword } = require('./passwords');
 const { createCompanyLinksReader } = require('./company-links-reader');
 const { createEmailUnsubscribeProxy, TOKEN: EMAIL_UNSUBSCRIBE_TOKEN } = require('./email-unsubscribe-proxy');
 const { resolveSessionSecret } = require('./session-secret');
+const { normalizeCrmPath } = require('./crm-proxy-path');
 
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
 const DATABASE_PATH = process.env.DATABASE_PATH || '/data/content.sqlite';
@@ -588,8 +589,11 @@ async function proxyCrm(request, response, url, cors) {
   const initialSession = requireSession(request);
   const identity = initialSession.user;
   const readOnly = request.method === 'GET';
-  const crmPath = url.pathname.slice('/content/crm'.length) || '/';
-  if (crmPath.startsWith('/internal/')) fail(403, 'Служебный маршрут недоступен');
+  // Проверки ниже и запрос в CRM используют один нормализованный путь.
+  const normalizedPath = normalizeCrmPath(url.pathname.slice('/content/crm'.length));
+  if (!normalizedPath.ok && normalizedPath.status === 403) fail(403, 'Служебный маршрут недоступен');
+  if (!normalizedPath.ok) fail(404, 'Адрес не найден');
+  const crmPath = normalizedPath.path;
   if (/^\/coordination(?:\/|$)/.test(crmPath) && identity.role !== 'owner') fail(403, 'Координация доступна владельцу');
   if (/^\/(?:vk-community|vk-tools)(?:\/|$)/.test(crmPath)) {
     if (identity.role !== 'owner') fail(403,'Подключение и сообщения ВК доступны владельцу');
