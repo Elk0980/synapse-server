@@ -7,7 +7,9 @@
   `external_stats`, `platform_company_metric_values` (2ГИС), `leads`, `events`. Отсутствующая таблица — пропуск, не ошибка.
   Подтверждения владельца — приватная переменная `CONTENT_CONNECTIONS_DECLARED` (JSON), не в репозитории.
   В `ops/crm/server.js` — одна строка require, одна создания, одна маршрута. В `ops/content/server.js` — ветка прав прокси.
-  Миграций нет.
+  `ops/crm/metrika-site-probe.js` — GET главной и скриптов своего домена (до 25, сначала analytics/attribution), таймаут 5 с,
+  кэш 6 ч (сбой — 10 мин), IP/localhost/внутренние домены и редирект на чужой домен не запрашиваются;
+  выключается `CONTENT_CONNECTIONS_SITE_PROBE=0`. Миграций нет.
 - (б) Интерфейс. `sites/synapse/cabinet/content-connections.js`, `content-stats.js`, общий `content-connections.css`;
   регистрация через `window.SynapseModules.register` (контракт А). В `cabinet.html` — только добавление id в
   `cabinetAssets`/`cabinetStyles`. Меню и маршруты `#content/*` — агент А.

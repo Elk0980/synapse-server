@@ -14,7 +14,7 @@ function fixture() {
     CREATE TABLE autoposting_channels(company_code TEXT COLLATE NOCASE, id TEXT, provider TEXT, status TEXT, revision INTEGER, checked_revision INTEGER, encrypted_token TEXT);
     CREATE TABLE external_stats(source TEXT, company_code TEXT COLLATE NOCASE, date TEXT, metrics TEXT);
     CREATE TABLE leads(id INTEGER PRIMARY KEY, created_at TEXT, channel TEXT, source TEXT, company_code TEXT COLLATE NOCASE);
-    CREATE TABLE events(id INTEGER PRIMARY KEY, created_at TEXT, company_code TEXT COLLATE NOCASE);
+    CREATE TABLE events(id INTEGER PRIMARY KEY, created_at TEXT, type TEXT DEFAULT 'visit', company_code TEXT COLLATE NOCASE, page TEXT, landing_page TEXT, utm_source TEXT, utm_medium TEXT);
     INSERT INTO companies(id,code,name,website_url,socials) VALUES
       (1,'demo-a','А','https://a.example/','[{"type":"vk","url":"https://vk.com/demo_a"},{"type":"two_gis","url":"https://2gis.ru/x/firm/1"},{"type":"booking","url":"https://n1.yclients.com/company/1"}]'),
       (2,'demo-b','Б',NULL,'[]');
@@ -32,9 +32,9 @@ function fixture() {
 }
 const byId = (result) => Object.fromEntries(result.platforms.map((p) => [p.id, p]));
 
-test('статус считается по факту данных и настроек', () => {
+test('статус считается по факту данных и настроек', async () => {
   const svc = createContentConnections(fixture(), { now: () => NOW });
-  const a = byId(svc.list('demo-a'));
+  const a = byId(await svc.list('demo-a'));
   assert.equal(a.instagram.status, 'green'); assert.equal(a.instagram.dataMode, 'live');
   assert.equal(a.tiktok.status, 'yellow'); assert.match(a.tiktok.statusText, /ручным вводом/);
   assert.equal(a.youtube.status, 'yellow'); assert.match(a.youtube.statusText, /последние 2026-09-01/);
@@ -44,43 +44,72 @@ test('статус считается по факту данных и настр
   assert.equal(a.yclients.status, 'red'); assert.match(a.yclients.next, /YCLIENTS/);
   assert.equal(a.metrika.status, 'red'); assert.equal(a.yandex_direct.status, 'red');
   assert.equal(a.telegram_bot.status, 'red'); assert.equal(a.max.status, 'red');
-  assert.equal(svc.list('demo-a').platforms.length, 13);
+  assert.equal((await svc.list('demo-a')).platforms.length, 13);
 });
 
-test('изоляция компаний: данные Б не видны в А и наоборот', () => {
+test('изоляция компаний: данные Б не видны в А и наоборот', async () => {
   const svc = createContentConnections(fixture(), { now: () => NOW });
-  const a = byId(svc.list('demo-a')), b = byId(svc.list('demo-b'));
+  const a = byId(await svc.list('demo-a')), b = byId(await svc.list('demo-b'));
   assert.equal(b.vk.status, 'green'); assert.equal(a.vk.status, 'red');
   assert.equal(b.telegram_bot.status, 'green'); assert.equal(a.telegram_bot.status, 'red');
-  assert.equal(b.yandex_direct.status, 'yellow'); assert.equal(a.yandex_direct.status, 'red');
+  assert.equal(b.yandex_direct.status, 'green'); assert.equal(a.yandex_direct.status, 'red');
   assert.equal(b.instagram.status, 'red'); assert.equal(b.website.status, 'red'); assert.equal(b.website.link, null);
   assert.equal(b.telegram_channel.settings.publishing, null);
 });
 
-test('подтверждение владельца даёт 🟡, а не 🔴, и только своей компании', () => {
+test('Директ: серверный признак — 🟢 за 7 дн., старее — 🟡; платные визиты Яндекса тоже признак', async () => {
+  const db = fixture();
+  db.exec(`INSERT INTO external_stats VALUES('yandex-direct','demo-a','2026-10-20','{"cost":1}');`);
+  const svc = createContentConnections(db, { now: () => NOW });
+  let a = byId(await svc.list('demo-a')), b = byId(await svc.list('demo-b'));
+  assert.equal(b.yandex_direct.status, 'green'); assert.equal(b.yandex_direct.dataMode, 'live');
+  assert.equal(a.yandex_direct.status, 'yellow'); assert.match(a.yandex_direct.statusText, /за 7 дн\. нет \(последние 2026-10-20\)/);
+  db.exec(`INSERT INTO events(created_at,company_code,type,utm_source,utm_medium) VALUES('2026-11-03T05:00:00Z','demo-a','visit','yandex','cpc')`);
+  a = byId(await svc.list('demo-a'));
+  assert.equal(a.yandex_direct.status, 'green'); assert.match(a.yandex_direct.facts.join(' '), /рекламы Яндекса.*: 1/);
+  db.exec(`INSERT INTO events(created_at,company_code,type,landing_page) VALUES('2026-11-04T05:00:00Z','demo-c-none','visit','https://x/?yclid=1')`);
+  assert.equal(byId(await svc.list('demo-b')).yandex_direct.facts.some((f) => /рекламы Яндекса/.test(f)), false, 'визиты чужой компании не учитываются');
+});
+
+test('Метрика: счётчик на сайте компании — 🟡 «вне ЛК», не найден — 🔴; сайт берётся из CRM своей компании', async () => {
+  const asked = [];
+  const siteProbe = { probe: async (url) => { asked.push(url); return url === 'https://a.example/' ? { counterId: '112233', checked: true } : { counterId: null, checked: true }; } };
+  const db = fixture(); db.exec("UPDATE companies SET website_url='https://b.example/' WHERE code='demo-b'");
+  const svc = createContentConnections(db, { now: () => NOW, siteProbe });
+  const a = byId(await svc.list('demo-a')), b = byId(await svc.list('demo-b'));
+  assert.equal(a.metrika.status, 'yellow'); assert.equal(a.metrika.statusText, 'Подключено вне ЛК, не проверено системой');
+  assert.equal(a.metrika.settings.siteCounter.counterId, '112233'); assert.match(a.metrika.facts.join(' '), /112233.*a\.example/);
+  assert.equal(b.metrika.status, 'red'); assert.match(b.metrika.facts.join(' '), /не найден/);
+  assert.deepEqual(asked, ['https://a.example/', 'https://b.example/']);
+  db.exec(`INSERT INTO external_stats VALUES('metrika','demo-a','2026-11-03','{"visits":5}')`);
+  const live = byId(await svc.list('demo-a'));
+  assert.equal(live.metrika.status, 'green'); assert.equal(asked.length, 2, 'при серверных данных сайт не опрашивается');
+});
+
+test('подтверждение владельца даёт 🟡, а не 🔴, и только своей компании', async () => {
   const declared = declaredFromEnv('{"DEMO-A":{"metrika":{"by":"Владелец","date":"2026-11-04"},"yandex_direct":{"by":"Владелец","date":"2026-11-04"}}}');
   const svc = createContentConnections(fixture(), { now: () => NOW, declared });
-  const a = byId(svc.list('demo-a')), b = byId(svc.list('demo-b'));
+  const a = byId(await svc.list('demo-a')), b = byId(await svc.list('demo-b'));
   assert.equal(a.metrika.status, 'yellow'); assert.equal(a.metrika.statusText, 'Подключено, данные в ЛК ещё не приходят');
   assert.equal(a.yandex_direct.status, 'yellow');
   assert.equal(b.metrika.status, 'red');
   assert.deepEqual(declaredFromEnv('not json'), {}); assert.deepEqual(declaredFromEnv('[1]'), {});
 });
 
-test('ключи не выходят наружу, только «есть / нет»', () => {
+test('ключи не выходят наружу, только «есть / нет»', async () => {
   const svc = createContentConnections(fixture(), { now: () => NOW });
-  const json = JSON.stringify(svc.list('demo-a'));
+  const json = JSON.stringify(await svc.list('demo-a'));
   assert.doesNotMatch(json, /SECRET|ENVELOPE|encrypted/);
 });
 
-test('без таблиц соседних модулей всё 🔴, без падения; неверные входы — ошибка', () => {
+test('без таблиц соседних модулей всё 🔴, без падения; неверные входы — ошибка', async () => {
   const db = new DatabaseSync(':memory:');
   db.exec("CREATE TABLE companies(id INTEGER PRIMARY KEY, code TEXT, name TEXT, website_url TEXT, socials TEXT, is_deleted INTEGER DEFAULT 0); INSERT INTO companies(code,name) VALUES('demo-c','В')");
   const svc = createContentConnections(db, { now: () => NOW });
-  assert.ok(svc.list('demo-c').platforms.every((p) => p.status === 'red'));
-  assert.throws(() => svc.list('нет'), { status: 400 });
-  assert.throws(() => svc.list('demo-z'), { status: 404 });
-  assert.throws(() => svc.list('demo-c', { days: 0 }), { status: 400 });
+  assert.ok((await svc.list('demo-c')).platforms.every((p) => p.status === 'red'));
+  await assert.rejects(svc.list('нет'), { status: 400 });
+  await assert.rejects(svc.list('demo-z'), { status: 404 });
+  await assert.rejects(svc.list('demo-c', { days: 0 }), { status: 400 });
 });
 
 test('HTTP: только GET, право публикаций или аналитики, чужая компания — 403', async () => {

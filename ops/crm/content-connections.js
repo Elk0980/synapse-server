@@ -5,6 +5,7 @@
    🟡 yellow — есть настройка, ссылка подключения, ручные/старые данные или подтверждение владельца;
    🔴 red — ничего из этого нет. Ссылки — только типизированные из CRM (companyPublicLinks). */
 const { companyPublicLinks } = require('./company-links');
+const { createMetrikaSiteProbe } = require('./metrika-site-probe');
 /* Подтверждения владельца («подключено вне ЛК», напр. Метрика) — состояние клиента, в публичный
    репозиторий не пишется: приходит из приватной настройки сервера CONTENT_CONNECTIONS_DECLARED (JSON
    {"<компания>": {"metrika": {"by": "…", "date": "ГГГГ-ММ-ДД"}}}). Ошибка формата — пустой список. */
@@ -25,8 +26,9 @@ const PLATFORMS = Object.freeze([
   { id: 'max', label: 'MAX', link: 'max', channel: 'max', external: ['max'] },
   { id: 'two_gis', label: '2ГИС', link: 'two_gis', external: ['2gis'], gisReports: true },
   { id: 'yandex_maps', label: 'Яндекс Карты', link: 'yandex_maps', external: ['yandex-maps'] },
-  { id: 'yandex_direct', label: 'Яндекс Директ', external: ['yandex-direct', 'yandex-rsya', 'yandex-master', 'yandex-product', 'yandex-display', 'yandex-business'] },
-  { id: 'metrika', label: 'Яндекс Метрика' },
+  /* marker — серверный признак работы: строки источника за 7 дн. дают 🟢, старее — 🟡. */
+  { id: 'yandex_direct', label: 'Яндекс Директ', marker: true, paidYandex: true, external: ['yandex-direct', 'yandex-rsya', 'yandex-master', 'yandex-product', 'yandex-display', 'yandex-business'] },
+  { id: 'metrika', label: 'Яндекс Метрика', marker: true, external: ['metrika', 'yandex-metrika'], siteCounter: true },
   { id: 'yclients', label: 'YCLIENTS', link: 'booking' },
   { id: 'website', label: 'Сайт', link: 'website', events: true },
 ]);
@@ -46,22 +48,27 @@ const NEEDS = Object.freeze({
   website: 'Ссылка на сайт в CRM и счётчик ЛК (track.js) на страницах сайта.',
 });
 
-function createContentConnections(db, { now = () => Date.now(), declared = {} } = {}) {
+const MARKER_DAYS = 7;
+/* Платные переходы Яндекса на сайт: utm_source Яндекса с платным utm_medium или yclid в адресе входа. */
+const PAID_YANDEX = "(lower(utm_source) IN ('yandex','yandex-direct','yandex_direct','direct.yandex','ya-direct') AND lower(utm_medium) IN ('cpc','ppc','paid','cpm','cpa')) OR landing_page LIKE '%yclid=%' OR page LIKE '%yclid=%'";
+
+function createContentConnections(db, { now = () => Date.now(), declared = {}, siteProbe = null } = {}) {
   const tables = () => new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((r) => r.name));
   const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
 
-  function list(code, { days = 14 } = {}) {
+  async function list(code, { days = 14 } = {}) {
     if (typeof code !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) throw Object.assign(Error('Выберите компанию'), { status: 400 });
     if (!Number.isInteger(days) || days < 1 || days > 90) throw Object.assign(Error('Период — от 1 до 90 дней'), { status: 400 });
     const company = db.prepare('SELECT * FROM companies WHERE code=? COLLATE NOCASE AND is_deleted=0').get(code);
     if (!company) throw Object.assign(Error('Компания не найдена'), { status: 404 });
-    const cc = company.code, has = tables(), since = isoDay(now() - (days - 1) * 86400000);
+    const cc = company.code, has = tables(), since = isoDay(now() - (days - 1) * 86400000), markerSince = isoDay(now() - (MARKER_DAYS - 1) * 86400000);
     const all = (sql, ...args) => db.prepare(sql).all(cc, ...args);
     const one = (sql, ...args) => db.prepare(sql).get(cc, ...args);
     const links = companyPublicLinks({ code: cc, website_url: company.website_url, socials: company.socials }).links;
     const ownDeclared = Object.entries(declared || {}).find(([key]) => key.toLowerCase() === cc.toLowerCase())?.[1] || {};
 
-    const platforms = PLATFORMS.map((p) => {
+    const platforms = [];
+    for (const p of PLATFORMS) {
       const facts = [], settings = {};
       let lastAuto = '', lastManual = '', lastAny = '';
       const seen = (date, auto) => { if (!date) return; if (date > lastAny) lastAny = date; if (auto && date > lastAuto) lastAuto = date; if (!auto && date > lastManual) lastManual = date; };
@@ -85,7 +92,11 @@ function createContentConnections(db, { now = () => Date.now(), declared = {} } 
       }
       if (p.external && has.has('external_stats')) {
         const r = db.prepare(`SELECT MAX(date) d FROM external_stats WHERE company_code=? COLLATE NOCASE AND source IN (${p.external.map(() => '?').join(',')})`).get(cc, ...p.external);
-        if (r?.d) { seen(r.d, false); facts.push(`Ручные снимки показателей: последний за ${r.d}.`); }
+        if (r?.d) { seen(r.d, Boolean(p.marker)); facts.push(`${p.marker ? 'Данные площадки в ЛК' : 'Ручные снимки показателей'}: последние за ${r.d}.`); }
+      }
+      if (p.paidYandex && has.has('events')) {
+        const r = one(`SELECT MAX(substr(created_at,1,10)) d, COUNT(*) n FROM events WHERE company_code=? COLLATE NOCASE AND type='visit' AND (${PAID_YANDEX})`);
+        if (r?.d) { seen(r.d, true); facts.push(`Визиты на сайт с рекламы Яндекса (метки cpc/yclid): ${r.n}, последний ${r.d}.`); }
       }
       if (p.gisReports && has.has('platform_company_metric_values')) {
         const r = one('SELECT MAX(date) d FROM platform_company_metric_values WHERE company_code=? COLLATE NOCASE AND superseded_by IS NULL');
@@ -103,19 +114,30 @@ function createContentConnections(db, { now = () => Date.now(), declared = {} } 
       if (p.id === 'yclients' && link && !/(^|\.)yclients\.com$/i.test(new URL(link).hostname)) settings.bookingIsNotYclients = true;
       const decl = ownDeclared[p.id] && typeof ownDeclared[p.id] === 'object' ? ownDeclared[p.id] : null;
       if (decl) facts.push(`Подключено со слов владельца (${decl.by || 'владелец'}, ${decl.date || 'дата не указана'}).`);
-      const configured = Boolean(settings.statsAccount || settings.publishing || settings.community || decl);
+      let counter = null;
+      if (p.siteCounter && !lastAny && links.website && siteProbe) {
+        counter = await siteProbe.probe(links.website).catch(() => null);
+        settings.siteCounter = counter ? { found: Boolean(counter.counterId), counterId: counter.counterId || null, checked: Boolean(counter.checked) } : null;
+        if (counter?.counterId) facts.push(`Счётчик Метрики ${counter.counterId} найден в коде сайта ${links.website}.`);
+        else if (counter?.checked) facts.push(`Счётчик Метрики в коде сайта ${links.website} не найден.`);
+        else if (counter) facts.push(`Сайт не проверен: ${counter.reason || 'нет ответа'}.`);
+      }
+      const configured = Boolean(settings.statsAccount || settings.publishing || settings.community || decl || counter?.counterId);
       let status, text;
-      if (lastAuto && lastAuto >= since) { status = 'green'; text = 'Подключено, данные приходят'; }
+      if (p.marker && lastAuto && lastAuto >= markerSince) { status = 'green'; text = 'Подключено, данные приходят'; }
+      else if (p.marker && lastAny) { status = 'yellow'; text = `Данных за ${MARKER_DAYS} дн. нет (последние ${lastAny})`; }
+      else if (counter?.counterId) { status = 'yellow'; text = 'Подключено вне ЛК, не проверено системой'; }
+      else if (lastAuto && lastAuto >= since) { status = 'green'; text = 'Подключено, данные приходят'; }
       else if (lastManual && lastManual >= since) { status = 'yellow'; text = 'Данные только ручным вводом'; }
       else if (configured || lastAny) {
         status = 'yellow';
         text = decl && !lastAny ? 'Подключено, данные в ЛК ещё не приходят' : lastAny ? `Данных за ${days} дн. нет (последние ${lastAny})` : 'Настроено, данных нет';
       } else if (p.id === 'website' && link) { status = 'yellow'; text = 'Сайт есть, счётчик ЛК не присылает данные'; }
       else { status = 'red'; text = link ? 'Не подключено (в CRM есть только ссылка)' : 'Не подключено'; }
-      return { id: p.id, label: p.label, status, statusText: text, lastDataDate: lastAny || null,
+      platforms.push({ id: p.id, label: p.label, status, statusText: text, lastDataDate: lastAny || null,
         dataMode: lastAuto ? 'live' : lastManual ? 'manual' : 'none', link, settings, facts,
-        next: status === 'green' ? '' : NEEDS[p.id] };
-    });
+        next: status === 'green' ? '' : NEEDS[p.id] });
+    }
     return { companyCode: cc.toLowerCase(), days, since, checkedAt: new Date(now()).toISOString(), platforms,
       note: 'Статус считается по сохранённым настройкам и данным ЛК. Ключи не показываются — только «есть / нет».' };
   }
@@ -132,10 +154,10 @@ function createContentConnectionsHandler({ connections, companyModuleContext, se
     try { companyModuleContext(request, code, 'autoposting.view'); }
     catch (error) { if (error?.status !== 403) throw error; companyModuleContext(request, code, 'analytics.view'); }
     const days = url.searchParams.has('days') ? Number(url.searchParams.get('days')) : 14;
-    try { send(response, 200, connections.list(code, { days }), headers); }
+    try { send(response, 200, await connections.list(code, { days }), headers); }
     catch (error) { if (!error.status) throw error; send(response, error.status, { error: error.message }, headers); }
     return true;
   };
 }
 
-module.exports = { createContentConnections, createContentConnectionsHandler, declaredFromEnv, PLATFORMS };
+module.exports = { createContentConnections, createContentConnectionsHandler, declaredFromEnv, createMetrikaSiteProbe, PLATFORMS };

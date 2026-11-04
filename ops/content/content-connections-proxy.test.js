@@ -46,6 +46,7 @@ test('подключения через прокси: права, изоляци
   }
   await start(path.join(__dirname, '../crm/server.js'), { PORT: String(crmPort), DATABASE_PATH: crmDb, API_KEY: key, RATE_LIMIT_MAX: '10000',
     STRICT_ORIGIN: '', LEADS_SMTP_HOST: '', LEADS_SMTP_USER: '', LEADS_SMTP_PASSWORD: '', LEADS_NOTIFY_EMAIL: '',
+    CONTENT_CONNECTIONS_SITE_PROBE: '0',
     CONTENT_CONNECTIONS_DECLARED: '{"avokado":{"metrika":{"by":"Владелец","date":"2026-11-04"}}}' }, crmBase);
   await start(path.join(__dirname, 'server.js'), { PORT: String(contentPort), DATABASE_PATH: contentDb, AUTH_USERS: '', API_KEY: '',
     CRM_URL: crmBase, CRM_API_KEY: key, SEED_DIR: directory, ASSETS_DIR: path.join(directory, 'assets'),
