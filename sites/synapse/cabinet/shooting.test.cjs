@@ -104,3 +104,38 @@ test('без настроек — честная подсказка; смена 
   await p.registered['content-shooting'].mount(root, {...p.ctx, companyCode: 'alvi'});
   assert.equal(job.controller.signal.aborted, true); assert.equal(p.w.SbShooting.view.active.size, 0);
 });
+
+test('контракт А: без csrfToken байты идут через api.raw; ошибка — тот же файл продолжает; подпуть без перезагрузки плана', async () => {
+  const p = page({path: 'r-first'}), root = p.d.getElementById('m'), raws = [];
+  delete p.ctx.csrfToken;
+  let fails = 1;
+  p.ctx.api.raw = async (target, init) => {
+    raws.push([target, init.method || 'GET', init.headers['X-CSRF-Token']]);
+    if (init.method === 'PATCH' && fails-- > 0) throw Object.assign(new Error('Слишком большой кусок'), {status: 413});
+    const done = init.method === 'PATCH';
+    return {ok: true, status: 200, json: async () => ({upload: {id: 9, offset: done ? 5 : 0, size: 5, status: done ? 'stored' : 'uploading', chunkBytes: 5}})};
+  };
+  const def = p.registered['content-shooting'];
+  await def.mount(root, p.ctx); await settle();
+  const button = root.querySelector('[data-slot="1"] .shoot-upload');
+  assert.equal(button.disabled, false, 'api.raw оболочки включает загрузку');
+  const view = root.__shooting, file = {name: 'A.MOV', size: 5, type: 'video/quicktime', lastModified: 2, slice: () => 'bytes'};
+  view.startUpload(file, 1); await settle();
+  assert.match(root.querySelector('[data-files="1"]').textContent, /Слишком большой кусок/);
+  view.startUpload(file, 1); await settle();
+  assert.deepEqual(raws.map(([t, m]) => `${m} ${t}`), ['POST shooting/uploads', 'PATCH shooting/uploads/9', 'POST shooting/uploads', 'PATCH shooting/uploads/9']);
+  assert.ok(raws.every(([, , csrf]) => csrf === undefined), 'CSRF добавляет оболочка, модуль его не подделывает');
+  assert.equal(p.w.SbShooting.view.active.size, 0, 'повтор того же файла после ошибки завершился');
+  const crmCalls = p.calls.filter(([kind]) => kind === 'crm').length;
+  def.onRoute({path: ''});
+  assert.equal(root.querySelectorAll('.shoot-row').length, 2, 'список без повторной загрузки');
+  def.onRoute({path: 'r-first'}); await settle();
+  assert.equal(root.querySelectorAll('.shoot-frame').length, 5);
+  assert.equal(p.calls.filter(([kind]) => kind === 'crm').length, crmCalls, 'план из CRM не перечитывается');
+  def.unmount(root);
+  const none = page({path: 'r-first'}), noneRoot = none.d.getElementById('m');
+  delete none.ctx.csrfToken;
+  await none.registered['content-shooting'].mount(noneRoot, none.ctx); await settle();
+  assert.ok([...noneRoot.querySelectorAll('.shoot-upload')].every((b) => b.disabled));
+  assert.match(noneRoot.querySelector('.shoot-slot__reason').textContent, /Загрузка недоступна/);
+});

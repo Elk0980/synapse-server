@@ -1,27 +1,32 @@
 'use strict';
 /* 🧪 ТЕСТОВАЯ ВЕРСИЯ: эскиз кадра раскадровки (свет, тени, что в кадре) картинкой OpenAI.
    Ключ берётся тем же путём, что у резервного Хью (hughProviders.runtimeProviders(): только
-   проверенный и включённый провайдер openai); ключ не читается кабинетом, не логируется и не
-   меняется. Только по нажатию, с суточным лимитом на компанию. */
+   проверенный и включённый провайдер openai), иначе — из окружения сервера (HUGH_FALLBACK_OPENAI_*,
+   как у резервного Хью). Ключ не уходит в кабинет, не логируется и не меняется. Только по нажатию, с суточным лимитом на компанию. */
 const crypto = require('node:crypto');
 const {Readable} = require('node:stream');
+const {readProviders} = require('./hugh-fallback');
 
 const fail = (status, message, code) => { throw Object.assign(new Error(message), {status, details: {code}}); };
 const MODEL = 'gpt-image-1';
 const NEED = 'Нужно от Влада: включить и проверить ключ OpenAI в «Хью → Провайдеры» и подтвердить право ключа на генерацию изображений (gpt-image-1).';
 
-function createSketches({db, storage, providers, fetchImpl = (...args) => globalThis.fetch(...args), dailyLimit = 20, now = () => new Date()}) {
+function createSketches({db, storage, providers, env = process.env, fetchImpl = (...args) => globalThis.fetch(...args), dailyLimit = 20, now = () => new Date()}) {
   db.exec(`CREATE TABLE IF NOT EXISTS shooting_sketches(id INTEGER PRIMARY KEY AUTOINCREMENT, company_code TEXT NOT NULL,
     idea_id TEXT NOT NULL, frame INTEGER NOT NULL, disk_key TEXT NOT NULL, size INTEGER NOT NULL, created_by TEXT NOT NULL,
     created_at TEXT NOT NULL); CREATE INDEX IF NOT EXISTS shooting_sketches_idea ON shooting_sketches(company_code, idea_id, frame, id);`);
+  const fromEnv = readProviders(env).providers;
+  const pending = new Map(); // запросы в работе считаются в лимит: два одновременных нажатия не обходят его
   const provider = () => {
     let list = [];
     try { list = providers?.runtimeProviders?.() || []; } catch { list = []; }
+    if (!list.some((item) => item.name === 'openai')) list = [...list, ...fromEnv];
     return list.find((item) => item.name === 'openai' && /^https:\/\/api\.openai\.com(?:\/v1)?$/.test(String(item.url).replace(/\/$/, '')));
   };
   function status(code) {
     const day = now().toISOString().slice(0, 10);
-    const used = db.prepare('SELECT COUNT(*) n FROM shooting_sketches WHERE company_code=? AND substr(created_at,1,10)=?').get(code, day).n;
+    const used = db.prepare('SELECT COUNT(*) n FROM shooting_sketches WHERE company_code=? AND substr(created_at,1,10)=?').get(code, day).n
+      + (pending.get(code) || 0);
     const ready = Boolean(provider());
     return {available: ready && used < dailyLimit, used, limit: dailyLimit, model: MODEL,
       reason: !ready ? `Эскизы недоступны: у Хью нет проверенного ключа OpenAI. ${NEED}` : used >= dailyLimit ? `Лимит эскизов на сегодня исчерпан (${dailyLimit}).` : ''};
@@ -38,10 +43,15 @@ function createSketches({db, storage, providers, fetchImpl = (...args) => global
     const state = status(code);
     if (!state.available) fail(state.used >= state.limit ? 429 : 503, state.reason, state.used >= state.limit ? 'SKETCH_LIMIT' : 'SKETCH_UNAVAILABLE');
     const labels = {shot: 'В кадре', angle: 'Ракурс', transition: 'Смена плана', notes: 'Важно', line: 'Реплика'};
-    const prompt = `Простой карандашный эскиз-раскадровка одного кадра вертикального видео 9:16 для кафе. ` +
+    const prompt = `Простой карандашный эскиз-раскадровка одного кадра вертикального видео 9:16. ` +
       `Покажи композицию, направление и мягкость света, тени, расположение людей и предметов. Без текста и логотипов, без узнаваемых лиц.\n` +
       describe.map(([key, value]) => `${labels[key]}: ${value}`).join('\n');
     const openai = provider();
+    pending.set(code, (pending.get(code) || 0) + 1);
+    try { return await draw(code, idea, frame, prompt, openai, actor); }
+    finally { const left = (pending.get(code) || 1) - 1; if (left) pending.set(code, left); else pending.delete(code); }
+  }
+  async function draw(code, idea, frame, prompt, openai, actor) {
     let response;
     try {
       response = await fetchImpl(`${String(openai.url).replace(/\/$/, '').replace(/\/v1$/, '')}/v1/images/generations`, {method: 'POST', redirect: 'error',

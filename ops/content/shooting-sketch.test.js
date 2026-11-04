@@ -6,13 +6,13 @@ const {createSketches} = require('./shooting-sketch');
 const {createLocalStorage} = require('./shooting-storage');
 const PNG = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.alloc(32, 1)]);
 
-function setup(t, {provider = {name: 'openai', url: 'https://api.openai.com/v1', secret: 'sk-SAMPLE'}, reply} = {}) {
+function setup(t, {provider = {name: 'openai', url: 'https://api.openai.com/v1', secret: 'sk-SAMPLE'}, reply, env = {}} = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sketch-')), db = new DatabaseSync(':memory:'), calls = [];
   t.after(() => { db.close(); fs.rmSync(dir, {recursive: true, force: true}); });
   const fetchImpl = async (url, options) => { calls.push({url, options, body: JSON.parse(options.body)});
     return reply ? reply() : {ok: true, status: 200, json: async () => ({data: [{b64_json: PNG.toString('base64')}]})}; };
   const storage = createLocalStorage(dir, {statfs: () => ({bavail: 1e6, bsize: 4096, blocks: 2e6})});
-  return {calls, storage, api: createSketches({db, storage, providers: {runtimeProviders: () => provider ? [provider] : []}, fetchImpl, dailyLimit: 2})};
+  return {calls, storage, api: createSketches({db, storage, env, providers: {runtimeProviders: () => provider ? [provider] : []}, fetchImpl, dailyLimit: 2})};
 }
 const actor = {name: 'SAMPLE СММ'};
 
@@ -41,4 +41,19 @@ test('эскиз недоступен: нет ключа или у ключа н
   const foreign = setup(t, {provider: {name: 'openai', url: 'https://evil.example/v1', secret: 'x'}});
   assert.equal(foreign.api.status('avokado').available, false, 'только официальный хост');
   await assert.rejects(denied.api.generate('avokado', 'r1', {frame: 1}, actor), (e) => e.status === 400);
+});
+
+test('эскиз: ключ из окружения сервера, в ответ кабинету ключ не попадает, одновременные нажатия не обходят лимит', async (t) => {
+  const env = {HUGH_FALLBACK_PROVIDERS: 'openai', HUGH_FALLBACK_OPENAI_URL: 'https://api.openai.com/v1',
+    HUGH_FALLBACK_OPENAI_KEY: 'sk-ENV-SAMPLE', HUGH_FALLBACK_OPENAI_MODEL: 'gpt-4o-mini'};
+  const s = setup(t, {provider: null, env});
+  const state = s.api.status('avokado');
+  assert.equal(state.available, true);
+  assert.doesNotMatch(JSON.stringify(state), /sk-ENV-SAMPLE/);
+  const results = await Promise.allSettled([1, 2, 3].map((frame) => s.api.generate('avokado', 'r1', {frame, shot: 'стойка'}, actor)));
+  assert.deepEqual(results.map((r) => r.status), ['fulfilled', 'fulfilled', 'rejected']);
+  assert.equal(results[2].reason.details.code, 'SKETCH_LIMIT');
+  assert.equal(s.calls.length, 2); assert.equal(s.calls[0].options.headers.authorization, 'Bearer sk-ENV-SAMPLE');
+  assert.doesNotMatch(JSON.stringify(results[0].value), /sk-ENV-SAMPLE/);
+  assert.doesNotMatch(s.calls[0].body.prompt, /кафе/, 'описание кадра без привязки к виду бизнеса');
 });

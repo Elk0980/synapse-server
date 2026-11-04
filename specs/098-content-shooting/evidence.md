@@ -50,3 +50,17 @@
 - Playwright 390/1440, вкладка «Раскадровка»: без горизонтальной прокрутки, 0 ошибок. Снимки вне git:
   `scratchpad/shots/d-board/*`.
 - Реальная генерация в OpenAI НЕ выполнялась (ключ не трогали): право ключа на изображения не проверено.
+
+## (г) доработка и сверка с контрактом А — 05.11, ~01:30 Бангкок
+- `node --test ops/content/shooting-sketch.test.js`: 3/3 PASS — новый тест: ключ из окружения сервера
+  (`HUGH_FALLBACK_OPENAI_*`, вымышленный `sk-ENV-SAMPLE`) не попадает ни в статус, ни в ответ кабинету;
+  3 одновременных нажатия при лимите 2 → 2 запроса в OpenAI, третье 429 `SKETCH_LIMIT`; в описании нет «кафе».
+- `node --test sites/synapse/cabinet/shooting.test.cjs` (jsdom): 5/5 PASS — новый тест: без `csrfToken` загрузка идёт
+  через `ctx.api.raw` (POST/PATCH `shooting/uploads[/9]`, CSRF модуль не подставляет), ошибка 413 → повтор того же файла
+  завершается (раньше блокировался), `onRoute` список ↔ карточка без повторного запроса CRM, без обоих — кнопки выключены.
+- Все тесты «Съёмки»: 20/20 PASS; вместе с `company-modules-access`, `compose-contract`, `hugh-fallback` — 60/60 PASS.
+  `node --check ops/content/server.js` — OK; `tools/spec-kit/gate.py check` — status ok, 48 файлов.
+- Playwright (Chromium), заглушка API: список, карточка и вкладка «Раскадровка» при 390 и 1440 px —
+  scrollWidth = clientWidth (390/390, 1440/1440), ошибок страницы 0; бейдж «🧪 ТЕСТОВАЯ ВЕРСИЯ» на каждом из 7 кадров,
+  без ключа кнопки эскиза выключены. Снимки вне git: `scratchpad/shots/v-final*/`.
+- Суфлёр после правок не менялся; его снимки 390/1440 — из (в).

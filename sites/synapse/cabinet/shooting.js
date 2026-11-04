@@ -7,6 +7,7 @@
   const ID = 'content-shooting';
   const active = new Map(); // загрузки живут дольше экрана: уход в другой раздел их не обрывает
   let activeCompany = '';
+  let current = null; // открытый экран: прогресс загрузок, начатых до перемонтирования, рисуется в нём
 
   function h(tag, attrs = {}, ...children) {
     const node = document.createElement(tag);
@@ -28,12 +29,34 @@
     constructor(root, ctx) {
       this.root = root; this.ctx = ctx; this.code = ctx.companyCode; this.alive = true;
       this.csrf = ctx.csrfToken ?? ctx.api?.csrfToken ?? null;
+      this.route = ctx.route || {path: ''};
       if (activeCompany && activeCompany !== this.code) {
         for (const [key, job] of active) if (job.companyCode !== this.code) { job.controller.abort(); active.delete(key); }
       }
       activeCompany = this.code;
     }
-    destroy() { this.alive = false; this.prompter?.close?.(); }
+    destroy() { this.alive = false; this.prompter?.close?.(); if (current === this) current = null; }
+    /* Байты загрузки: CSRF из контекста (контракт А) или api.raw оболочки, который сам добавляет
+       companyCode и CSRF. Нет ни того ни другого — кнопки выключены с понятной причиной. */
+    transport() {
+      if (this.csrf) return {headers: {'X-CSRF-Token': this.csrf}};
+      const raw = this.ctx.api?.raw;
+      if (typeof raw !== 'function') return null;
+      return {headers: {}, fetchImpl: async (url, init) => {
+        const target = String(url).replace(/^\/content\//, '').split('?')[0];
+        try {
+          const result = await raw(target, init);
+          return result && typeof result.json === 'function' ? result : {ok: true, status: 200, json: async () => result};
+        } catch (error) {
+          if (!error?.status) throw error;
+          return {ok: false, status: error.status, json: async () => ({error: error.message, details: error.details || {code: error.code, upload: error.upload}})};
+        }
+      }};
+    }
+    show() {
+      const ideaId = decodeURIComponent(this.route?.path || '').split('/')[0];
+      if (ideaId) this.renderCard(ideaId); else this.renderList();
+    }
     async load() {
       const [snapshot, shooting, settings] = await Promise.all([
         this.ctx.crm('/media-mentor', {companyCode: this.code}),
@@ -51,8 +74,7 @@
         return;
       }
       if (!this.alive) return;
-      const ideaId = decodeURIComponent(this.ctx.route?.path || '').split('/')[0];
-      if (ideaId) this.renderCard(ideaId); else this.renderList();
+      this.show();
     }
     open(ideaId) { this.ctx.navigate(ideaId ? `content/shooting/${encodeURIComponent(ideaId)}` : 'content/shooting'); }
 
@@ -143,7 +165,7 @@
 
     uploadSlot(frame) {
       const storage = this.shooting.storage || {};
-      const reason = !this.shooting.canEdit ? 'Нет права загружать материалы' : !this.csrf ? 'Загрузка недоступна: обновите кабинет'
+      const reason = !this.shooting.canEdit ? 'Нет права загружать материалы' : !this.transport() ? 'Загрузка недоступна: обновите кабинет'
         : storage.canUpload === false ? storage.reason : '';
       const input = h('input', {type: 'file', accept: 'video/*,image/jpeg,image/png,.mov,.mp4', multiple: true, hidden: true,
         onchange: (event) => { [...event.target.files].forEach((file) => this.startUpload(file, frame)); event.target.value = ''; }});
@@ -155,16 +177,17 @@
     }
     startUpload(file, frame) {
       const {idea} = this.card.reel, key = `${this.code}|${idea.ideaId}|${file.name}|${file.size}|${frame}`;
-      if (active.has(key)) return;
+      if (active.get(key) && !active.get(key).error) return; // после ошибки тот же файл продолжает с принятого байта
       const job = {key, companyCode: this.code, ideaId: idea.ideaId, frame, name: file.name, size: file.size, offset: 0, error: '', controller: new AbortController()};
       active.set(key, job);
       this.renderUploads();
-      S.upload.upload({file, ideaId: idea.ideaId, frame, companyCode: this.code, headers: {'X-CSRF-Token': this.csrf}, signal: job.controller.signal,
-        onProgress: (offset, size, state) => { job.offset = offset; job.waiting = Boolean(state.waiting); this.renderUploads(); }})
-        .then(() => { active.delete(key); this.refreshUploads(idea.ideaId); })
-        .catch((error) => { job.error = error.name === 'AbortError' ? 'Загрузка отменена' : error.message; this.renderUploads(); });
+      S.upload.upload({file, ideaId: idea.ideaId, frame, companyCode: this.code, ...this.transport(), signal: job.controller.signal,
+        onProgress: (offset, size, state) => { job.offset = offset; job.waiting = Boolean(state.waiting); current?.renderUploads(); }})
+        .then(() => { active.delete(key); current?.refreshUploads(idea.ideaId); })
+        .catch((error) => { job.error = error.name === 'AbortError' ? 'Загрузка отменена' : error.message; current?.renderUploads(); });
     }
     async refreshUploads(ideaId) {
+      if (this.card?.reel.idea.ideaId !== ideaId) return;
       try { this.detail = await this.ctx.api.get(`shooting/reels/${encodeURIComponent(ideaId)}`); } catch { this.detail = this.detail || {uploads: []}; }
       if (this.alive) this.renderUploads();
     }
@@ -205,10 +228,16 @@
   });
   const definition = {
     title: 'Съёмка',
-    mount(root, ctx) { const view = new ShootingView(root, ctx); root.__shooting = view; return view.start(); },
-    unmount(root) { root.__shooting?.destroy(); root.__shooting = null; }
+    mount(root, ctx) { const view = new ShootingView(root, ctx); root.__shooting = view; current = view; return view.start(); },
+    unmount(root) { root.__shooting?.destroy(); root.__shooting = null; },
+    // Смена подпути внутри «Съёмки» (#content/shooting/<ideaId>) — без повторной загрузки плана.
+    onRoute(route) {
+      if (!current?.alive || !current.list) return;
+      current.prompter?.close?.(); current.card = null; current.detail = null;
+      current.route = route || {path: ''}; current.show();
+    }
   };
   S.view = {ShootingView, definition, active};
   if (window.SynapseModules?.register) window.SynapseModules.register(ID, definition);
-  else (window.SynapseModulesPending = window.SynapseModulesPending || []).push([ID, definition]);
+  else (window.SynapseModulesQueue = window.SynapseModulesQueue || []).push([ID, definition]); // очередь контракта А
 })();
