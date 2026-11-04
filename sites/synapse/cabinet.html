@@ -589,8 +589,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
 <a class="skip-link" href="#main-content">Перейти к содержимому</a>
 <div class="shell" id="app" hidden>
   <nav class="mobile-shortcuts" id="mobile-shortcuts" aria-label="Быстрые разделы">
-    <a href="#home" data-view-link="home">Главная</a><a href="#crm" data-view-link="crm">Заявки</a>
-    <a href="#clients" data-view-link="clients">Клиенты</a><a href="#tasks" data-view-link="tasks" data-owner-board-entry hidden>Задачи</a><button type="button" id="mobile-more" aria-label="Открыть все разделы">Меню</button>
+    <a href="#home" data-view-link="home">Главная</a><button type="button" id="mobile-content" data-open-category="content-menu" aria-label="Открыть разделы контента">Контент</button><a href="#crm" data-view-link="crm">Заявки</a>
+    <a href="#tasks" data-view-link="tasks" data-owner-board-entry hidden>Задачи</a><a href="#chats" data-view-link="chats" data-view-also="hugh">Чаты</a><button type="button" id="mobile-more" aria-label="Открыть все разделы">Меню</button>
   </nav>
   <div class="mobile-bar">
     <button class="menu-button" id="menu-button" type="button" aria-controls="sidebar" aria-expanded="false"
@@ -614,10 +614,20 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     <p class="no-projects" id="no-projects" role="status" hidden>Для учётной записи не настроены проекты</p>
     <nav class="nav" aria-label="Разделы кабинета">
       <a class="nav-link" href="#home" data-view-link="home">Главная</a>
-      <a class="nav-link" id="hugh-link" href="#hugh" data-view-link="hugh">Хью</a>
+      <button class="nav-category" id="content-category" type="button" aria-expanded="false" aria-controls="content-menu" hidden>Контент</button>
+      <div class="subnav" id="content-menu" hidden>
+        <a class="nav-link" href="#content/plan" data-view-link="content-plan" data-view-also="media-mentor">Контент-план</a>
+        <a class="nav-link" href="#content/shooting" data-view-link="content-shooting">Съёмка</a>
+        <a class="nav-link" href="#content/materials" data-view-link="content-materials" data-view-also="telegram-sources">Материалы</a>
+        <a class="nav-link" id="content-factory-link" href="#content-factory" data-view-link="content-factory" hidden>Постинг</a>
+        <a class="nav-link" href="#content/connections" data-view-link="content-connections">Подключения</a>
+        <a class="nav-link" href="#content/stats" data-view-link="content-stats" data-view-also="content-factory-stats media-mentor-rollout">Статистика</a>
+      </div>
       <a class="nav-link" id="tasks-link" href="#tasks" data-view-link="tasks">
         Задачи <span class="nav-badge" id="tasks-badge" hidden></span>
       </a>
+      <a class="nav-link" id="hugh-link" href="#chats" data-view-link="chats" data-view-also="hugh">Чаты</a>
+      <a class="nav-link" id="settings-link" href="#settings" data-view-link="settings" data-view-also="settings-content">Настройки</a>
       <button class="nav-category" id="crm-category" type="button" aria-expanded="false"
         aria-controls="crm-menu">CRM</button>
       <div class="subnav" id="crm-menu" hidden>
@@ -647,8 +657,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       </div>
       <button class="nav-category" type="button" aria-expanded="false" aria-controls="marketing-menu">Продвижение</button>
       <div class="subnav" id="marketing-menu" hidden>
-      <a class="nav-link" id="content-factory-link" href="#content-factory"
-        data-view-link="content-factory" hidden>Контент завод</a>
       <a class="nav-link" id="actor-onboarding-link" href="#actor-onboarding"
         data-view-link="actor-onboarding" hidden>Моя анкета</a>
       <a class="nav-link" id="actor-workspace-link" href="#actor-workspace"
@@ -662,7 +670,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <div class="subnav" id="finance-menu" hidden><a class="nav-link" href="#finance" data-view-link="finance">Доходы и расходы</a><a class="nav-link" href="#catalog" data-view-link="catalog">Модули и пакеты</a></div>
       <button class="nav-category" type="button" aria-expanded="false" aria-controls="management-menu">Управление</button>
       <div class="subnav" id="management-menu" hidden>
-      <a class="nav-link" id="settings-link" href="#settings" data-view-link="settings">Настройки компании</a>
       <a class="nav-link" id="site-orders-link" href="#site-orders" data-view-link="site-orders" hidden>Заявки с сайта</a>
       <a class="nav-link" id="system-settings-link" href="#system-settings" data-view-link="system-settings" hidden>Настройки системы</a>
       <a class="nav-link" id="company-team-link" href="#company-team" data-view-link="company-team" hidden>Моя команда</a>
@@ -696,6 +703,17 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         <section class="card factory-compose" id="content-factory-compose" aria-live="polite" hidden></section>
       </div>
     </div>
+    <nav class="sb-settings-tabs" id="settings-tabs" aria-label="Разделы настроек" hidden>
+      <a class="plain-button" href="#settings" data-settings-tab="settings">Компания</a>
+      <a class="plain-button" href="#settings/content" data-settings-tab="settings-content">Контент</a>
+    </nav>
+    <section class="view-panel" id="content-plan-view" data-view="content-plan" hidden></section>
+    <section class="view-panel" id="content-shooting-view" data-view="content-shooting" hidden></section>
+    <section class="view-panel" id="content-materials-view" data-view="content-materials" hidden></section>
+    <section class="view-panel" id="content-connections-view" data-view="content-connections" hidden></section>
+    <section class="view-panel" id="content-stats-view" data-view="content-stats" hidden></section>
+    <section class="view-panel" id="chats-view" data-view="chats" hidden></section>
+    <section class="view-panel" id="settings-content-view" data-view="settings-content" hidden></section>
     <section class="view-panel" id="home-view" data-view="home" hidden>
       <div class="content-header home-header"><h1>Главная</h1>
         <div class="home-tools"><div class="home-periods" id="home-periods" role="group"
@@ -1078,9 +1096,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   // project-chat.js загружается после hugh.js: общий чат проекта регистрирует вид «hugh».
   // Личная переписка владельца по проектам живёт в owner-private-chat.js и ходит
   // по собственному маршруту /content/owner-chat с серверной проверкой владельца.
-  const cabinetAssets = ["platform-links", "home", "task-overview", "task-board", "tasks", "company-information", "reviews", "studio-journey", "leads", "deals", "clients", "chat", "hugh", "project-chat", "analytics",
-    "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking", "sites", "settings", "client-dialogs", "site-orders", "account", "company-team", "trademarks", "campaigns", "autoposting", "media-mentor-materials", "media-mentor-rules", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "telegram-sources", "telegram-sources-view", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
-  const cabinetStyles = ["reviews", "analytics", "ad-platforms", "platform-demand", "social-stats", "deals", "home", "chat", "hugh", "project-chat", "settings", "client-dialogs", "site-orders", "trademarks", "sites", "campaigns", "company-information", "autoposting", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial", "task-board", "task-board-shell"];
+  const cabinetAssets = ["module-registry", "platform-links", "home", "task-overview", "task-board", "tasks", "company-information", "reviews", "studio-journey", "leads", "deals", "clients", "chat", "hugh", "project-chat", "analytics",
+    "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking", "sites", "settings", "client-dialogs", "site-orders", "account", "company-team", "trademarks", "campaigns", "autoposting", "media-mentor-materials", "media-mentor-rules", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "telegram-sources", "telegram-sources-view", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial", "content-settings"];
+  const cabinetStyles = ["reviews", "analytics", "ad-platforms", "platform-demand", "social-stats", "deals", "home", "chat", "hugh", "project-chat", "settings", "client-dialogs", "site-orders", "trademarks", "sites", "campaigns", "company-information", "autoposting", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial", "task-board", "task-board-shell", "shell", "content-settings"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join(""));
@@ -1201,8 +1219,31 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     accounts: "Настройка аккаунтов",
     "company-team": "Моя команда",
     "access-denied": "Доступ ограничен",
-    trademarks: "Помощь в регистрации знаков"
+    trademarks: "Помощь в регистрации знаков",
+    "content-plan": "Контент-план",
+    "content-shooting": "Съёмка",
+    "content-materials": "Материалы",
+    "content-connections": "Подключения",
+    "content-stats": "Статистика",
+    chats: "Чаты",
+    "settings-content": "Настройки контента"
   });
+  /* Экраны, которые монтирует реестр модулей (контракт А, specs/098-content-shell).
+     legacy — прежний рабочий экран, пока модуль не зарегистрирован; иначе заглушка «Скоро». */
+  const MODULE_ROUTES = Object.freeze({
+    "content-plan": {route: "content/plan", stub: {text: "Опросник и готовый план с согласованием появятся здесь.",
+      links: [{href: "#content-factory/plan/proposals", label: "Предложения плана"}, {href: "#content-factory/plan", label: "Постинг"}]}},
+    "content-shooting": {route: "content/shooting", stub: {text: "Рилсы для съёмки по порядку, суфлёр и загрузка материалов появятся здесь.",
+      links: [{href: "#content-factory/sources", label: "Исходники"}]}},
+    "content-materials": {route: "content/materials", stub: {text: "Смонтированные рилсы с предпросмотром по площадкам появятся здесь.",
+      links: [{href: "#content-factory/sources", label: "Исходники"}, {href: "#content-factory/plan", label: "Постинг"}]}},
+    "content-connections": {route: "content/connections", stub: {text: "Статус подключения каждой площадки компании появится здесь.",
+      links: [{href: "#social-stats", label: "Соцсети"}]}},
+    "content-stats": {route: "content/stats", legacy: "content-factory-stats"},
+    chats: {route: "chats", legacy: "hugh"},
+    "settings-content": {route: "settings/content", stub: {text: "Настройки контента загружаются."}}
+  });
+  const routeOf = (view) => MODULE_ROUTES[view]?.route || view;
   const CRM_API = "/content/crm";
   const EDITOR_PROJECTS = Object.freeze(["alvi", "avokado"]);
   const byId = (id) => document.getElementById(id);
@@ -1373,12 +1414,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     if(window.matchMedia("(max-width: 760px)").matches)setDrawer(false);
     const context = cabinetContext();
     // Entity IDs and unfinished forms belong to the previous company.
-    history.replaceState(null, '', '#'+(factoryRoutes[currentView] || currentView));
+    history.replaceState(null, '', '#'+(factoryRoutes[currentView] || routeOf(currentView)));
     const view=registeredViews[currentView];
     if(view?.onProjectChange) view.onProjectChange(context);
     else view?.render(document.querySelector(`[data-view="${currentView}"]`),context);
     SbCabinet.renderModuleGuide?.(document.querySelector(`[data-view="${currentView}"]`),currentView,context);
     if (currentView !== "tasks") registeredViews.tasks?.updateSummary?.(context);
+    window.SynapseModules?.chat.companyChanged();
   };
 
   const editorSupported = (kind) =>
@@ -1528,6 +1570,11 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const hasPermission = (permission) => identity?.role === "owner" ||
     identity?.permissions.includes(permission);
   const permittedView = (value) => {
+    if (["content-plan", "content-shooting", "content-materials", "content-connections", "content-stats"].includes(value)) {
+      return !!selectedProject() && (hasPermission("autoposting.view") || hasPermission("content-plan.approve"));
+    }
+    if (value === "chats") return allowedProjects.length > 0;
+    if (value === "settings-content") return !!selectedProject() && (hasPermission("settings.view") || hasPermission("autoposting.view") || hasPermission("content-plan.approve"));
     if (value === "telegram-sources") return !!selectedProject() && hasPermission("autoposting.view");
     if (["system-settings", "catalog", "finance", "vk-community", "site-orders"].includes(value)) return identity?.role === "owner";
     if (["company-information", "autoposting"].includes(value)) return identity?.role === "owner" || identity?.permissions?.includes(value + ".view");
@@ -1556,6 +1603,33 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     return true;
   };
   const defaultView = () => "home";
+  let moduleRoute = {path: "", query: ""};
+  let moduleController = null;
+  // Модуль не зарегистрирован, а прежний экран есть — показываем его под тем же пунктом меню.
+  const effectiveView = (view) => {
+    const legacy = MODULE_ROUTES[view]?.legacy;
+    return legacy && !window.SynapseModules?.has(view) && permittedView(legacy) ? legacy : view;
+  };
+  const unmountModule = () => { moduleController?.unmount(); moduleController = null; };
+  const mountModule = (view, element) => {
+    unmountModule();
+    moduleController = window.SynapseModules.mount(element, view, {route: moduleRoute, stub: {title: VIEW_TITLES[view], ...(MODULE_ROUTES[view].stub || {})}});
+  };
+  Object.keys(MODULE_ROUTES).forEach(view => {
+    registeredViews[view] = {
+      render(element) {
+        const definition = window.SynapseModules?.get(view);
+        if (moduleController?.id === view && moduleController.definition === definition && definition?.onRoute) {
+          try { definition.onRoute({path: moduleRoute.path, params: new URLSearchParams(moduleRoute.query)}); } catch (error) { console.error(error); }
+          return;
+        }
+        mountModule(view, element);
+      },
+      // Смена компании всегда перемонтирует модуль: прежний контекст и запросы отменяются.
+      onProjectChange() { if (currentView === view) mountModule(view, byId(`${view}-view`)); },
+      onLeave: unmountModule
+    };
+  });
   const validView = (value) => Object.hasOwn(VIEW_TITLES, value) && permittedView(value);
   /* Контент завод (CF1): четыре вкладки. Канонические адреса видов; прежние адреса (#autoposting,
      #content-factory/materials, #media-mentor, #media-mentor-rollout, #telegram-sources) переводятся
@@ -1570,6 +1644,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     const raw = decodeURIComponent(location.hash.slice(1));
     const pathPart = raw.split("?")[0], query = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
     let value = pathPart.split("/")[0];
+    moduleRoute = {path: "", query};
+    const moduleView = Object.keys(MODULE_ROUTES).find(view => pathPart === MODULE_ROUTES[view].route || pathPart.startsWith(MODULE_ROUTES[view].route + "/"));
+    if (moduleView) {
+      value = moduleView;
+      moduleRoute = {path: pathPart.slice(MODULE_ROUTES[moduleView].route.length + 1), query};
+    }
+    if (pathPart === "content/posting") value = "autoposting";
     if (value === "content-factory") {
       const part = pathPart.slice("content-factory/".length);
       if (Object.hasOwn(factoryParts, part)) value = factoryParts[part];
@@ -1584,7 +1665,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const setCategoryForView = (viewName) => {
     const analyticsViews = ["analytics-through", "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking"];
     const crmViews = ["crm", "deals", "clients", "chat"];
-    const categoryId = ["catalog","finance"].includes(viewName) ? "finance-menu" : ["reviews", "autoposting", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "telegram-sources", "content-factory-stats", "content-factory-settings", "company-information", "content-factory", "campaigns", "vk-community"].includes(viewName) ? "marketing-menu" :
+    const contentViews = [...Object.keys(MODULE_ROUTES).filter(view => view.startsWith("content-")), ...factoryViews, "media-mentor"];
+    const categoryId = contentViews.includes(viewName) ? "content-menu" : ["catalog","finance"].includes(viewName) ? "finance-menu" : ["reviews", "autoposting", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "telegram-sources", "content-factory-stats", "content-factory-settings", "company-information", "content-factory", "campaigns", "vk-community"].includes(viewName) ? "marketing-menu" :
       ["settings", "site-orders", "system-settings", "accounts", "account", "company-team", "trademarks"].includes(viewName) ? "management-menu" : analyticsViews.includes(viewName) ? "analytics-menu" :
       viewName === "sites" ? "site-menu" : crmViews.includes(viewName) || viewName.startsWith("crm-")
         ? "crm-menu" : null;
@@ -1614,7 +1696,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     dateValue
   });
   const setView = (viewName, focusMain = false) => {
-    const nextView = validView(viewName) ? viewName : defaultView();
+    const routeView = validView(viewName) ? viewName : defaultView();
+    const nextView = effectiveView(routeView);
     if (nextView !== currentView) registeredViews[currentView]?.onLeave?.();
     currentView = nextView;
     const ownerBoard = currentView === 'tasks' && identity?.role === 'owner';
@@ -1637,9 +1720,20 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     document.querySelectorAll("[data-view]").forEach((view) => {
       view.hidden = view.dataset.view !== currentView;
     });
+    document.body.dataset.view = currentView;
+    const claimed = [...document.querySelectorAll("#content-menu [data-view-also]")].some(link => link.dataset.viewAlso.split(" ").includes(currentView));
+    const settingsView = ["settings", "settings-content"].includes(currentView);
+    byId("settings-tabs").hidden = !settingsView;
+    byId("settings-tabs").querySelectorAll("[data-settings-tab]").forEach(tab => {
+      tab.hidden = !permittedView(tab.dataset.settingsTab);
+      if (tab.dataset.settingsTab === currentView) tab.setAttribute("aria-current", "page"); else tab.removeAttribute("aria-current");
+    });
+    const contentMaterials = !!window.SynapseModules?.has("content-materials");
+    byId("content-factory-plan-bar").querySelector('[data-factory-action="create"]').hidden = contentMaterials;
     document.querySelectorAll("[data-view-link]").forEach((link) => {
       const clientRoute = currentView.startsWith("crm-") && link.dataset.viewLink === "clients";
-      if (link.dataset.viewLink === currentView || clientRoute || (factory && link.dataset.viewLink === "content-factory")) link.setAttribute("aria-current", "page");
+      const also = (link.dataset.viewAlso || "").split(" ").includes(currentView) || link.dataset.viewLink === routeView;
+      if (link.dataset.viewLink === currentView || clientRoute || also || (factory && !claimed && link.dataset.viewLink === "content-factory")) link.setAttribute("aria-current", "page");
       else link.removeAttribute("aria-current");
     });
     document.querySelectorAll("[data-client-view]").forEach((link) => {
@@ -1666,8 +1760,9 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     if (focusMain) { window.scrollTo({top: 0, behavior: "instant"}); byId("main-content").focus({preventScroll: true}); }
   };
   const navigate = (viewName) => {
-    if (location.hash === `#${viewName}`) setView(viewFromHash(), true);
-    else location.hash = viewName;
+    const route = routeOf(viewName);
+    if (location.hash === `#${route}`) setView(viewFromHash(), true);
+    else location.hash = route;
   };
 
   const setDrawer = (open, restoreFocus = false) => {
@@ -1778,8 +1873,14 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       byId("reviews-link").hidden = !permittedView("reviews");
       byId("autoposting-view").hidden = !permittedView("autoposting");
       byId("content-factory-link").hidden = !permittedView("content-factory");
+      byId("content-category").hidden = !permittedView("content-plan") && !permittedView("content-factory");
+      byId("content-menu").querySelectorAll("[data-view-link]").forEach(link => { if (link.id !== "content-factory-link") link.hidden = !permittedView(link.dataset.viewLink); });
+      byId("mobile-content").hidden = byId("content-category").hidden;
+      const settingsTarget = permittedView("settings") ? "settings" : "settings-content";
+      byId("settings-link").dataset.viewLink = settingsTarget;
+      byId("settings-link").href = "#" + routeOf(settingsTarget);
       byId("content-factory-view").hidden = !permittedView("content-factory");
-      byId("settings-link").hidden = !permittedView("settings");
+      byId("settings-link").hidden = !permittedView("settings") && !permittedView("settings-content");
       byId("site-orders-link").hidden = !permittedView("site-orders");
       byId("campaigns-link").hidden = !permittedView("campaigns");
       byId("company-team-link").hidden = !hasPermission("team.manage");
@@ -1811,6 +1912,12 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       SbCabinet.initMenuPreferences?.({identity, setDrawer});
       // Ключи провайдеров вводит только владелец и только в настройках системы.
       if (identity.role === "owner") SbCabinet.initHughProviders?.({identity, byId, apiJson, escapeHTML});
+      window.SynapseModules?.attachShell({identity: () => identity, company: selectedProject, apiJson, crmQuery,
+        navigate: (route) => { location.hash = route; }, escapeHTML});
+      window.SynapseModules?.onRegister(id => {
+        // Поздняя регистрация: открытый экран модуля или его прежняя замена перерисовываются.
+        if (id === currentView || MODULE_ROUTES[id]?.legacy === currentView || id === "content-materials") setView(viewFromHash());
+      });
       setView(viewFromHash());
       registeredViews.sites.initialize(context);
       if (hasPermission("account.view")) registeredViews.accounts.initialize(context);
@@ -1892,6 +1999,13 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     if (window.matchMedia("(max-width: 760px)").matches) setDrawer(false);
   });
   byId("mobile-more").addEventListener("click", () => setDrawer(true));
+  byId("mobile-content").addEventListener("click", () => {
+    const button = byId("content-category");
+    button.setAttribute("aria-expanded", "true");
+    byId("content-menu").hidden = false;
+    setDrawer(true);
+    button.focus();
+  });
   byId("menu-button").addEventListener("click", () => setDrawer(!drawerOpen, drawerOpen));
   byId("backdrop").addEventListener("click", () => setDrawer(false, true));
   byId("sidebar").addEventListener("keydown", (event) => {

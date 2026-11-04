@@ -227,6 +227,8 @@ const contentPlanRunner = require('./content-plan-runner').createContentPlanRunn
 const telegramSources = createTelegramSources({db, assetsDir:ASSETS_DIR, authStore, requireSession, requireCsrf, sendJson:send,
   config:readSourceConfig(path.join(path.dirname(DATABASE_PATH),'telegram-sources.json'))});
 if (!telegramSources.healthy) console.warn('content: настройки источников Telegram требуют проверки; приём выключен');
+// Настройки → Контент (№98): по компании, запись — владелец или settings.edit.
+const contentSettings=require('./content-settings').createContentSettings({db,authStore,requireSession,requireCsrf,readJson,sendJson:send});
 const peopleService=require('./people-service').createPeopleService({db,authStore,team:companyTeam,
   crmUrl:CRM_URL,crmKey:CRM_API_KEY,requireSession,requireCsrf,readJson,sendJson:send});
 const contentFactorySources=createContentFactorySourceBridge({db,authStore,assetsDir:ASSETS_DIR,
@@ -971,6 +973,9 @@ const server = http.createServer(async (request, response) => {
     }
     // Личная переписка владельца по проектам. Область проверяется внутри модуля по серверной
     // сессии; ни один клиентский маршрут к этим таблицам не обращается.
+    if (url.pathname === '/content/content-settings') {
+      if (await contentSettings.handle(request, response, url)) return;
+    }
     if (url.pathname === '/content/owner-chat' || url.pathname.startsWith('/content/owner-chat/')) {
       if (await ownerPrivateChat.handle(request, response, url)) return;
     }
