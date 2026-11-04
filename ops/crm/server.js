@@ -46,6 +46,7 @@ const { createSocialBaselines } = require('./social-baselines');
 const { createSocialAdapters } = require('./social-adapters');
 const { createTelegramChannelStatsClient } = require('./telegram-channel-stats');
 const { createSocialStatsHandler } = require('./social-stats-http');
+const { createContentConnections, createContentConnectionsHandler, declaredFromEnv } = require('./content-connections');
 const { createSocialAnalyticsCredentials } = require('./social-analytics-credentials');
 const { createSocialAnalyticsEvidence } = require('./social-analytics-evidence');
 const { createSocialOnlypultAnalytics } = require('./social-onlypult-analytics');
@@ -691,6 +692,8 @@ const socialStats = createSocialStats(db, {evidence: socialAnalyticsEvidence,
 const socialBaselines = createSocialBaselines(db, socialStats);
 const handleSocialStats = createSocialStatsHandler({stats: socialStats, baselines: socialBaselines,
   analytics: socialAnalytics, companyMetrics: platformCompanyMetrics, companyModuleContext, readJson, send});
+const handleContentConnections = createContentConnectionsHandler({companyModuleContext, send,
+  connections: createContentConnections(db, {declared: declaredFromEnv(process.env.CONTENT_CONNECTIONS_DECLARED)})});
 function deliverLeadEmails() {
   return emailOutbox.drain().catch(() => {
     // Do not expose SMTP responses or contact details in service logs.
@@ -2610,6 +2613,7 @@ async function route(request, response) {
   if (await handleReviews(request,response,url,cors)) return;
   if (await handlePlatformDemand(request,response,url,cors)) return;
   if (await handleSocialStats(request,response,url,cors)) return;
+  if (await handleContentConnections(request,response,url,cors)) return;
   if (['/company-information','/company-information/check','/company-information/facts','/company-information/knowledge','/company-information/quote','/company-information/catalog-preview','/company-information/catalog-import'].includes(url.pathname)) {
     const permission = request.method === 'GET' ? 'company-information.view' : 'company-information.edit';
     const {identity,company} = companyModuleContext(request,url.searchParams.get('companyCode'),permission);
