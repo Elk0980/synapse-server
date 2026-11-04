@@ -17,7 +17,8 @@ test('MCP → настоящий кабинет/CSRF → MCP: одна запи�
   assert.deepEqual(tools.result.tools.map(tool => tool.name).sort(), [
     'tasks_list', 'task_get', 'task_create', 'task_update', 'task_comment',
     'agents_list', 'agent_report', 'session_start', 'doc_read', 'session_end',
-    'archive_list', 'archive_read', 'archive_write'
+    'archive_list', 'archive_read', 'archive_write',
+    'agent_launch', 'agent_status', 'agent_message', 'agent_stop', 'agent_worker_claim', 'agent_worker_update'
   ].sort());
   assert.equal((await fetch(f.mcpUrl + '/mcp')).status, 401);
   const input = { title: 'SAMPLE сквозная задача', project: 'palitra-love', client_ref: 'acceptance-1',
@@ -38,6 +39,11 @@ test('MCP → настоящий кабинет/CSRF → MCP: одна запи�
   const legacy = await f.cabinet(`/tasks/${id}?companyCode=palitra-love`, 'PATCH', { status: 'done' });
   assert.equal(legacy.status, 200, JSON.stringify(legacy.body));
   assert.equal((await f.call('task_get', { task_id: id })).data.status, 'done');
+  const fakeStage=await f.call('task_update',{task_id:id,stage:'code',evidence:'https://github.com/Elk0980/synapse-server/pull/999999999',checked_at:new Date().toISOString()});
+  assert.equal(fakeStage.isError,false);
+  const digest=await f.cabinet('/coordination/watchdog');
+  assert.equal(digest.status,200);assert.equal(digest.body.delivery_enabled,false);assert.equal(digest.body.mode,'observe');
+  assert.equal((await f.cabinet('/coordination/watchdog','GET',undefined,f.editor)).status,403);
   const sameReviewer = await f.cabinet(`/tasks/${id}?companyCode=palitra-love`, 'PATCH', { assigneeName: input.reviewer });
   assert.equal(sameReviewer.status, 400);
   const assigned = await f.cabinet(`/tasks/${id}?companyCode=palitra-love`, 'PATCH', { assigneeName: 'Claude fixture' });
@@ -66,7 +72,7 @@ test('отсутствующая папка канона не мешает MCP/C
   t.after(f.stop);
   await assert.rejects(fs.stat(f.docs), error => error.code === 'ENOENT');
   assert.equal((await fetch(f.mcpUrl + '/health')).status, 200);
-  assert.equal((await f.rpc('tools/list')).result.tools.length, 13);
+  assert.equal((await f.rpc('tools/list')).result.tools.length, 19);
   assert.equal((await f.call('tasks_list', {})).isError, false);
   const created = await f.call('task_create', {client_ref:'absent-map-1', title:'SAMPLE без карты',
     project:'palitra-love', executor:'SAMPLE Codex', reviewer:'SAMPLE Owner', source:'manual'});

@@ -2,7 +2,7 @@ const {createCommercial}=require('./commercial');
 'use strict';
 
 const http = require('node:http');
-const { createHash, randomUUID } = require('node:crypto');
+const { createHash, randomUUID, timingSafeEqual } = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 const { URL } = require('node:url');
 const { createEmailSettings } = require('./email-settings');
@@ -54,6 +54,7 @@ const { createDealOrders } = require('./deal-orders');
 const { createTaskCoordination } = require('./task-coordination');
 const { createPeopleHandler } = require('./people-http');
 const { createTaskDispatch } = require('./task-dispatch');
+const { createAgentLaunch, AGENT_LAUNCH_METHODS } = require('./agent-launch');
 
 const IS_MAIN = require.main === module;
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
@@ -624,8 +625,18 @@ const emailCampaigns = createEmailCampaigns(db, {transport: campaignTransport, l
 });
 const emailDiagnostics = createEmailDiagnostics(db, {getEnvironment: emailSettings.getEnvironment});
 const companyInformation = createCompanyInformation(db, {check: createCompanyInformationCheck()});
-const taskCoordination = createTaskCoordination(db);
-const taskDispatch = createTaskDispatch(db);
+const taskPrincipals=require('./task-principal').createTaskPrincipals(db,{secret:API_KEY,releaseAgentId:Number(process.env.TASK_WATCHDOG_RELEASE_AGENT_ID||0),claudeAgentId:Number(process.env.TASK_WATCHDOG_CLAUDE_AGENT_ID||0)});
+const taskWatchdog = require('./task-watchdog').createTaskWatchdog(db,{principal:taskPrincipals.get,mode:process.env.TASK_WATCHDOG_MODE||'observe',verifier:require('./task-watchdog').createEvidenceVerifier({healthUrl:process.env.TASK_WATCHDOG_HEALTH_URL||''})});
+const taskCoordination = createTaskCoordination(db,{watchdog:taskWatchdog});
+taskWatchdog.installGuards();
+// Один незавершённый audit за раз; без исходящих уведомлений.
+const watchdogTimer=setInterval(()=>{
+  try{taskWatchdog.prepareScheduledDigest();}catch{console.error('[crm] watchdog digest unavailable');}
+  taskWatchdog.audit().catch(()=>console.error('[crm] watchdog audit unavailable'));
+},60000);
+watchdogTimer.unref();
+const taskDispatch = createTaskDispatch(db,{onAccept:taskCoordination.acceptDispatch});
+const agentLaunch = createAgentLaunch(db, {coordination:taskCoordination});
 const autopostingTransport = createAutopostingTransport(db, {apiKey: API_KEY});
 const contentFactoryWorkflow=require('./content-factory-workflow').createContentFactoryWorkflow(db);
 const autoposting = createAutoposting(db, {information: companyInformation, transport: autopostingTransport,reviewTasks:createReviewTasks(db),workflow:contentFactoryWorkflow});
@@ -1410,8 +1421,20 @@ function takeRateLimit(request) {
   rateLimits.set(ip, recent);
 }
 
+// Сравнение секретов за постоянное время: сравниваются SHA-256 одинаковой длины,
+// поэтому ни длина, ни совпавший префикс ключа по времени ответа не угадываются.
+function sameSecret(value, expected) {
+  if (typeof value !== 'string' || typeof expected !== 'string' || !expected) return false;
+  const digest = (text) => createHash('sha256').update(text, 'utf8').digest();
+  return timingSafeEqual(digest(value), digest(expected));
+}
+
+function hasApiKey(request) {
+  return sameSecret(request.headers['x-api-key'], API_KEY);
+}
+
 function requireApiKey(request) {
-  if (request.headers['x-api-key'] !== API_KEY) fail(401, 'Неверный API-ключ');
+  if (!hasApiKey(request)) fail(401, 'Неверный API-ключ');
 }
 
 function crmIdentity(request) {
@@ -1442,8 +1465,8 @@ function crmIdentity(request) {
   if (identity.userName !== undefined && (typeof identity.userName !== 'string' ||
       !identity.userName.trim() || identity.userName.length > 200)) return null;
   if (identity.role !== undefined && !['owner','editor'].includes(identity.role)) return null;
-  return { userId: identity.userId, userName: identity.userName?.trim() || `#${identity.userId}`, role: identity.role || 'editor',
-    permissions: new Set(identity.permissions), companyCodes: new Set(companyCodes) };
+  return taskPrincipals.bind(request,{ userId: identity.userId, userName: identity.userName?.trim() || `#${identity.userId}`, role: identity.role || 'editor',
+    permissions: new Set(identity.permissions), companyCodes: new Set(companyCodes) });
 }
 
 function companyModuleContext(request, code, permission) {
@@ -2908,7 +2931,10 @@ async function route(request, response) {
   const tasksMcpMatch = url.pathname.match(/^\/coordination\/mcp\/([a-z_]+)$/);
   if (tasksMcpMatch) {
     if (request.method !== 'POST') fail(405, 'Метод не поддерживается');
-    const result = taskCoordination.tool(tasksMcpMatch[1], await readJson(request), crmIdentity(request));
+    const args = await readJson(request), actor = crmIdentity(request);
+    const result = AGENT_LAUNCH_METHODS.has(tasksMcpMatch[1])
+      ? agentLaunch.tool(tasksMcpMatch[1], args, actor)
+      : await taskCoordination.toolAsync(tasksMcpMatch[1], args, actor);
     return send(response, 200, result, {...cors, 'cache-control':'private, no-store'});
   }
   const dispatchMatch=url.pathname.match(/^\/coordination\/dispatch\/(\d+)(?:\/(enqueue|action))?$/);
@@ -2922,6 +2948,10 @@ async function route(request, response) {
     else fail(405,'Метод не поддерживается');
     return send(response,200,result,{...cors,'cache-control':'private, no-store'});
   }
+  if (url.pathname === '/coordination/watchdog' && request.method === 'GET') {
+    if(crmIdentity(request)?.role!=='owner')fail(403,'Сводка доступна владельцу');
+    return send(response,200,taskWatchdog.digest(),{...cors,'cache-control':'private, no-store'});
+  }
   if (/^\/coordination(?:\/|$)/.test(url.pathname)) {
     const actor = crmIdentity(request);
     if (actor?.role !== 'owner') fail(403, 'Координация доступна владельцу');
@@ -2931,7 +2961,7 @@ async function route(request, response) {
       result = taskCoordination.list(Object.fromEntries(url.searchParams), actor);
       result.tasks = result.tasks.map(item => ({...item, dispatch:taskDispatch.get(item.taskId,actor)}));
     } else if (match && request.method === 'GET') result = taskCoordination.get(entityId(match[1]), actor);
-    else if (match && request.method === 'PUT') result = taskCoordination.save(entityId(match[1]), await readJson(request), actor);
+    else if (match && request.method === 'PUT') result = await taskCoordination.saveAsync(entityId(match[1]), await readJson(request), actor);
     else fail(404, 'Адрес не найден');
     return send(response, 200, result, {...cors, 'cache-control':'private, no-store'});
   }
@@ -3162,10 +3192,15 @@ async function route(request, response) {
         { code: 'COMPANY_NOT_ACTIVE', field: 'companyCode' });
       checkPublicOrigin(request, company, url.pathname);
     }
+    // Публичная форма получает только номер заявки и признак дубля. Полная запись — только
+    // доверенным сервисам с API-ключом: иначе по телефону можно прочитать чужую заявку (№97).
+    const trusted = hasApiKey(request);
+    const leadResponse = (lead, deduplicated) => trusted
+      ? { ...serializeLead(lead), deduplicated } : { id: lead.id, deduplicated };
     const duplicate = getLeadByContact.get(normalized, companyCode);
     if (duplicate) {
       emailOutbox.enqueue(duplicate, {repeated: true});
-      send(response, 200, { ...serializeLead(duplicate), deduplicated: true }, cors);
+      send(response, 200, leadResponse(duplicate, true), cors);
       void deliverLeadEmails();
       return;
     }
@@ -3207,7 +3242,7 @@ async function route(request, response) {
       db.exec('ROLLBACK');
       throw error;
     }
-    send(response, 201, { ...serializeLead(row), deduplicated: false }, cors);
+    send(response, 201, leadResponse(row, false), cors);
     void deliverLeadEmails();
     return;
   }
@@ -3401,7 +3436,8 @@ const server = http.createServer((request, response) => {
   route(request, response).catch((error) => {
     const taskRuleMessages = {
       TASK_REVIEWER_EQUALS_EXECUTOR: 'Исполнитель и проверяющий должны быть разными',
-      TASK_PARENT_INVALID: 'Родитель и подзадача должны принадлежать одному проекту и одному уровню'
+      TASK_PARENT_INVALID: 'Родитель и подзадача должны принадлежать одному проекту и одному уровню',
+      WATCHDOG_ACCEPTANCE_REQUIRED: 'Для статуса «готово» требуется подтверждённая приёмка Влада'
     };
     if (Object.hasOwn(taskRuleMessages, error.message)) {
       error.status = 400;
@@ -3460,7 +3496,7 @@ function shutdown() {
   });
 }
 
-module.exports = { deriveSource };
+module.exports = { deriveSource, sameSecret };
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);

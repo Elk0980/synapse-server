@@ -1,0 +1,165 @@
+# №58 — кандидат бэкапа на D, исправление review221
+
+Не устанавливать до приёмки Claude. Сервер/ключи/расписания не менялись.
+Фактическая копия на D и восстановление за час ещё не подтверждены.
+
+## Состав и согласованность
+
+Старый backup.sh сохраняет частичные сайты/raw volumes. before-board-v10 —
+страховка миграции CRM, а не полный бэкап. Фактическую inventory и размеры
+получить через владельца консоли. Не удалять Docker cache/releases/старые снимки.
+При разведке D свободно113.33GiB; сервер64.5/80GB — сообщение задачи, не замер.
+local-hugh/runtime есть в source, стандартная установка SynapseHugh не найдена.
+Иной активный фоновый worker не изменяется.
+
+В roots включить ВСЕ фактические bind/volume sources из docker inspect,
+SQLite независимо от расширения, полные сайты/panel/caddy/ops/managed releases,
+локальные изменения, .env/другие env, Compose/overlays, нужныеunits/конфигиОС,
+TLS state и приватный runtime. Не включать /proc,/sys,/dev, overlay cache и архивы.
+Не-SQLite БД при обнаружении требуют отдельного dump.
+
+Паузы контейнеров НЕТ. Online VACUUM INTO + integrity_check согласует каждую
+SQLite, но не создаёт общую транзакцию всех БД и файлов. Межсервисные миграции
+исключить из окна бэкапа организационно. SHA считается с байтов, реально
+отправленных в tar; изменение size/mtime файла прерывает копию. Ссылки внутрь
+roots переписываются относительными, наружу — отказ. SQLite вне roots не найдётся
+автоматически: inventory обязательна.
+
+## Место и хранение
+
+B — data/images, S — SQLite scratch, R — бюджет распаковки, M — число месяцев.
+D >= (14+M)*B + B на загрузку + R + резерв. Месячные копии не удаляются.
+На сервере максимум ДВЕ копии, включая строящуюся. Перед стартом проверяется
+SHA последней завершённой; она сохраняется, более старые удаляются. Затем
+проверяется свободное место B+S+1GiB. При ошибке последняя остаётся. После успеха
+остаются две завершённые. Нельзя удалять последнюю ради новой. NO_SPACE_SERVER
+пишется в status и отчёт «нет места». Старые backup.sh архивы не затрагиваются.
+
+После SHA и успешной обязательной проверки (если нужна) ПК пишет в №58
+BACKUP58_ACK с id и SHA receipt.json. Root-owned backup-prune.timer раз в15мин
+сверяет подтверждение с ПОСЛЕДНЕЙ серверной копией и оставляет только последнюю.
+Без подтверждения/при недоступной доске не удаляет. SSH остаётся только list/get,
+ack/delete/put по нему запрещены. Никакого sudo/записи пользователю backup-read.
+
+Ротация D:14дней + последняя копия каждого месяца в finally независимо от
+загрузки/проверки. Только завершённые synapse-* каталоги. Свои *.partial старше
+24часов удаляются под pull-lock при следующем запуске; чужие пути/ссылки не трогать.
+Проверенные файлы не качаются повторно; недокачанный файл качается заново.
+
+## Доступ — короткий шаг лично Влада
+
+После review: «ждёт Влада: создать отдельный SSH-ключ backup-read и передать
+только публичную часть установщику». Приватный ключ/identity не передавать в чат.
+
+```powershell
+ssh-keygen -t ed25519 -f "$env:USERPROFILE\.ssh\synapse_backup_read" -C synapse-backup-read
+```
+
+Для автономной задачи нужен ключ без интерактивного пароля, DACL Влад+SYSTEM.
+Это не root-ключ. Пользователь backup-read без sudo/пароля/других ключей/доступа
+к raw data. Authorized_keys/скрипт/reader.json root-owned:
+
+```text
+restrict,command="/usr/bin/python3 /usr/local/lib/synapse-backup/backup_v2.py serve /etc/synapse-backup/reader.json" ssh-ed25519 <публичная часть>
+```
+
+reader.json содержит только output. Каталог root:backup-read0750, encrypted
+files/receipt0640; private scratch0700. Не ставить nologin без проверки forced
+command: sshd использует login shell. Проверить list/get и отказ shell/put/ack/
+delete/forwarding/traversal. Host key сверить через консоль и закрепить отдельным
+known_hosts; StrictHostKeyChecking не отключать.
+
+Влад отдельно создаёт age identity (age-keygen -o <приватный файл>) и указывает
+место ВНЕ D:/Synapse_Backup, например защищённый каталог/подключаемый носитель.
+Единственная копия не должна оставаться на ПК. На сервер только public recipient.
+Для автопроверки identity должна быть доступна по выбранному Владом пути.
+При отсутствии — ошибка, не автоматический перенос/копирование ключа.
+
+## Приватные конфиги вне checkout
+
+Server JSON (max_* в байтах из inventory):
+
+```json
+{
+  "reviewed_inventory": false,
+  "output": "/var/backups/synapse-v2",
+  "reader_group": "backup-read",
+  "roots": ["/opt/synapse", "/ФАКТИЧЕСКИЙ/ИСТОЧНИК/ТОМА", "/etc/synapse"],
+  "containers": ["ФАКТИЧЕСКИЕ-ИМЕНА"],
+  "max_bundle_bytes": 1,
+  "max_sqlite_bytes": 1,
+  "recipient": "PUBLIC-AGE-RECIPIENT",
+  "board_endpoint_file": "/private/backup/tasks-mcp-url"
+}
+```
+
+Windows JSON:
+
+```json
+{
+  "destination": "D:/Synapse_Backup",
+  "host": "backup-read@ФАКТИЧЕСКИЙ-ХОСТ",
+  "ssh_key": "C:/Users/Vlad/.ssh/synapse_backup_read",
+  "known_hosts": "D:/Synapse_Private/backup_known_hosts",
+  "identity": "МЕСТО-ВЫБРАННОЕ-ВЛАДОМ/backup.agekey",
+  "age": "D:/Tools/age/age.exe",
+  "max_bundle_bytes": 1,
+  "max_restore_bytes": 1,
+  "verify_temp_dir": "TEMP-КАТАЛОГ-ВНЕ-АРХИВОВ",
+  "board_endpoint_file": "ПРИВАТНЫЙ-КАТАЛОГ/tasks-mcp-url"
+}
+```
+
+board_endpoint_file ссылается на существующее ЯВНО разрешённое MCP-подключение.
+Файл может содержать секретный URL: доступ только владельцу+SYSTEM/root.
+Скрипт не ищет/не генерирует/не копирует Owner-ключи. Размещение существующего
+доступа проверяет Claude при подключении; backup-read права не расширяются.
+
+Каждый create/pull пишет status.json и короткий task_comment в фиксированную№58
+через MCP tools/call. TLS проверяется, redirects запрещены. Отказ — сообщение
+в .board-outbox, статус PENDING; pull даёт ошибку. Неизвестная отправка сверяется
+с историей по marker и не повторяется вслепую. Такой outbox проверяет координатор.
+Пустой доступ означает pending, не успешную доставку. Ротация/status независимы
+от доставки. Ошибка сама не ставит «ждёт Влада»: необходимость решает координатор.
+
+## Проверка и расписания
+
+SHA проверяется ежедневно. Раз в7суток: аутентифицированная расшифровка age,
+чтение tar, внутренние SHA и SQLite. Сначала место по restore_bytes и локальному
+max_restore_bytes на обеих файловых системах. Расшифровка/проверка ТОЛЬКО во
+TemporaryDirectory вне архивов:0700 Linux, DACL Влад+SYSTEM Windows. Временные
+данные удаляются при нормальном выходе/исключениях, включая ошибки age/tar/SQLite.
+При выключении питания/принудительном завершении ОС немедленная уборка
+невозможна: перед повторным подключением проверить остатки synapse-verify-*/
+synapse-decrypt-* в выбранном private temp. Это не результаты для хранения.
+
+Install-BackupTask.ps1:04:30местного времени + входВлада, StartWhenAvailable,
+без открытого чата. Лимит6часов; большиеSSH-файлы по1часу, list/receipt по30сек.
+До входаВлада при холодном старте задача не работает. Проверить Bangkok timezone.
+Linux timer02:15Bangkok. Существующий Hugh worker не меняется.
+Нужны Python3.12+, age/OpenSSH, LinuxDocker для smoke.
+
+## Восстановление
+
+На отдельном Linux/Docker компьютере/новом сервере скопировать scripts,
+bundle/receipt и private config с identity/temp/max_restore_bytes. Один вызов:
+
+```bash
+SYNAPSE_RESTORE_SITE_PATH=КАТАЛОГ-САЙТА SYNAPSE_RESTORE_CABINET_PATH=synapse python3 backup_v2.py restore-smoke /private/restore.json /private/КОПИЯ /private/restore-new
+```
+
+restore сначала проверяет всё во временной папке; только успешный результат
+переносит в НОВЫЙ каталог. Не перезаписывает существующие. Неуспешная проверка
+не оставляет постоянной распаковки с секретами. Sandbox создаёт уникальные
+CRM/Caddy без сети/портов, проверяет CRM GET/catalog, HTTP сайта и cabinet.html/
+common.css/account.js, удаляет только свои контейнеры. API_KEY используется
+только внутри env контейнера. Это HTTP smoke кабинета/ресурсов, не полноценная
+авторизация/работа всех разделов. ProductionHTTPS/связи сервисов ещё не доказаны.
+
+VERIFIED.json != SANDBOX_OK.json != переключение production. Для боевого сервера
+нужны фактический managed-compose recipe, архитектура/UID, networks/DNS/TLS,
+один активный отправитель. Автоматический cutover пока не реализован.
+ЦельRTO:10мин подготовка,20мин перенос/decrypt,20мин подъём,10мин проверка;
+реальный час ещё не измерен. ПриёмкаClaude: копиясегодняD, выключенныйПК→догрузка,
+старые чаты/вложения/черновики/согласия, CRM/кабинет/сайт, актуальные ресурсы после
+восстановления/перезагрузки. Не откатывать старуюБД поверх новых записей.

@@ -62,3 +62,29 @@ test('символическая ссылка и файл сверх лимит�
   await fs.writeFile(path.join(root,'MAP.json'),JSON.stringify({always:['external/LEAK.md'],rules:[]}));
   await assert.rejects(readDocument(root,'external/LEAK.md'),error => error.status === 400);
 });
+
+
+test('объекты always, причины, fallback и старый строковый формат совместимы', async t => {
+  const root = await fixture(t);
+  const map = {version:'SAMPLE-1',always:[{doc:'RULES.md',why:'SAMPLE канон'}],
+    rules:[{match:['тема'],read:['TOPIC.md','RULES.md'],why:'SAMPLE тема'}],
+    fallback:{read:['FALLBACK.md'],why:'SAMPLE fallback'}};
+  await fs.writeFile(path.join(root,'TOPIC.md'),'SAMPLE тема');
+  await fs.writeFile(path.join(root,'FALLBACK.md'),'SAMPLE fallback');
+  await fs.writeFile(path.join(root,'MAP.json'),JSON.stringify(map));
+  assert.deepEqual(await sessionDocuments(root,'ТЕМА'),[
+    {path:'RULES.md',reasons:['SAMPLE канон','SAMPLE тема']},
+    {path:'TOPIC.md',reasons:['SAMPLE тема']}]);
+  assert.deepEqual((await sessionDocuments(root,'другое')).map(d=>d.path),['RULES.md','FALLBACK.md']);
+  assert.equal((await readDocument(root,'FALLBACK.md')).text,'SAMPLE fallback');
+  for (const broken of [
+    {...map,always:[{doc:'../secret',why:'SAMPLE'}]},
+    {...map,always:[{doc:'RULES.md',why:''}]},
+    {...map,fallback:{read:['../secret'],why:'SAMPLE'}},
+    {...map,fallback:{read:['MAP.json'],why:'SAMPLE'}},
+    {...map,rules_version:42}
+  ]) {
+    await fs.writeFile(path.join(root,'MAP.json'),JSON.stringify(broken));
+    await assert.rejects(sessionDocuments(root,'тема'),e=>e.status===503);
+  }
+});

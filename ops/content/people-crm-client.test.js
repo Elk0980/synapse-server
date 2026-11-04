@@ -11,6 +11,12 @@ test('каждая операция передаёт реальную editor р�
     assert.ok(!identity.permissions.includes('crm.edit'));assert.match(new URL(url).pathname,/^\/internal\/people\//);assert.equal(new URL(url).searchParams.get('companyCode'),'alvi');
   }
 });
+test('контекст плана сохраняет фактическое право согласования, не выдаёт его исполнителю',async()=>{
+  const seen=[],call=createPeopleCrmClient({crmUrl:'http://127.0.0.1',apiKey:'synthetic',fetchImpl:async(u,o)=>{seen.push(JSON.parse(Buffer.from(o.headers['x-synapse-crm-identity'],'base64url')));return new Response('{}');}});
+  const user={id:2,role:'editor',displayName:'Тест',companyCodes:['alvi'],permissions:['tasks.self.view']};
+  await call('teamChatContext',{},user,'alvi');assert.deepEqual(seen.at(-1).permissions,['tasks.self.view']);
+  await call('teamChatContext',{}, {...user,permissions:[...user.permissions,'content-plan.approve']},'alvi');assert.deepEqual(seen.at(-1).permissions,['tasks.self.view','content-plan.approve']);
+});
 test('отсутствующее право и чужая компания не заменяются owner; запрос не выходит',async()=>{
   let calls=0;const call=createPeopleCrmClient({crmUrl:'http://127.0.0.1',apiKey:'synthetic-test',fetchImpl:async()=>{calls++;return new Response('{}');}});
   const user={id:2,role:'editor',displayName:'Тест',companyCodes:['alvi'],permissions:['tasks.self.view']};

@@ -1,4 +1,5 @@
 'use strict';
+const {waitingSince} = require('./task-waiting');
 const {hasBoardSchema,boardFields,createTaskProducts,validatedChat} = require('./task-products');
 
 // Метаданные существующих CRM-задач. Это учёт подтверждений, не запуск агентов.
@@ -19,10 +20,10 @@ const date = value => {
   if (!Number.isFinite(parsed)) fail(400, 'Нужны дата и время проверки');
   return new Date(parsed).toISOString();
 };
-const empty = () => ({...Object.fromEntries(TEXT_FIELDS.map(key => [key, ''])), modelCheckedAt: '', links: [],
+const empty = () => ({codeRequired:true,...Object.fromEntries(TEXT_FIELDS.map(key => [key, ''])), modelCheckedAt: '', links: [],
   milestones: Object.fromEntries(STAGES.map(key => [key, {state:'pending', evidence:'', checkedAt:''}]))});
 
-function createTaskCoordination(db, {now = () => Date.now()} = {}) {
+function createTaskCoordination(db, {now = () => Date.now(), watchdog = null} = {}) {
   db.exec(`CREATE TABLE IF NOT EXISTS task_coordination (
     task_id INTEGER PRIMARY KEY REFERENCES tasks(id), revision INTEGER NOT NULL,
     data TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by INTEGER NOT NULL);
@@ -63,19 +64,21 @@ function createTaskCoordination(db, {now = () => Date.now()} = {}) {
     return {tasks:db.prepare(`SELECT * FROM tasks WHERE ${where} ORDER BY id DESC LIMIT ? OFFSET ?`)
       .all(...params,limit,offset).map(entry), pagination:{total,limit,offset}};
   };
-  const save = (id, body, actor) => {
+  const normalize = (id, body, actor) => {
     owner(actor);
     if (!object(body) || Object.keys(body).some(k => !['revision','data'].includes(k)) ||
         !Number.isSafeInteger(body.revision) || body.revision < 0 || !object(body.data)) fail(400, 'Нужны версия и данные карточки');
-    const data = empty();
     const previous = db.prepare('SELECT data FROM task_coordination WHERE task_id=?').get(id);
-    data.links = previous ? JSON.parse(previous.data).links || [] : [];
-    if (Object.keys(body.data).some(k => ![...TEXT_FIELDS,'modelCheckedAt','milestones','links'].includes(k))) fail(400, 'Неизвестное поле карточки');
+    const saved=previous?JSON.parse(previous.data):{};
+    const data={...empty(),...saved,codeRequired:saved.codeRequired!==false,
+      links:saved.links||[],milestones:{...empty().milestones,...saved.milestones}};
+    if('codeRequired' in body.data){if(typeof body.data.codeRequired!=='boolean')fail(400,'codeRequired должен быть логическим');data.codeRequired=body.data.codeRequired;}
+    if (Object.keys(body.data).some(k => ![...TEXT_FIELDS,'modelCheckedAt','milestones','links','codeRequired'].includes(k))) fail(400, 'Неизвестное поле карточки');
     if ('links' in body.data) data.links = validateLinks(body.data.links);
     for (const key of TEXT_FIELDS) if (key in body.data) data[key] = text(body.data[key], ['scope','acceptance','result','blocker','nextAction'].includes(key) ? 4000 : 200);
     if (data.ownerThreadName && !data.ownerThreadId) fail(400, 'Укажите постоянный идентификатор ответственного чата');
     if (data.verifiedModel) {
-      data.modelCheckedAt = date(body.data.modelCheckedAt);
+      data.modelCheckedAt = date(body.data.modelCheckedAt ?? data.modelCheckedAt);
       if (Date.parse(data.modelCheckedAt) > now()) fail(400, 'Дата проверки модели находится в будущем');
     } else if (body.data.modelCheckedAt) fail(400, 'Укажите проверенную модель');
     const milestones = body.data.milestones || {};
@@ -91,6 +94,11 @@ function createTaskCoordination(db, {now = () => Date.now()} = {}) {
       if (checkedAt && Date.parse(checkedAt) > now()) fail(400, 'Дата проверки находится в будущем');
       data.milestones[key] = {state:item.state,evidence,checkedAt};
     }
+    return data;
+  };
+  const save = (id,body,actor) => {
+    const data=normalize(id,body,actor);
+    const permit=watchdog?.guard(id,data,actor);
     const ownTransaction = !db.isTransaction;
     if (ownTransaction) db.exec('BEGIN IMMEDIATE');
     try {
@@ -110,6 +118,7 @@ function createTaskCoordination(db, {now = () => Date.now()} = {}) {
         ON CONFLICT(task_id) DO UPDATE SET revision=excluded.revision,data=excluded.data,updated_at=excluded.updated_at,updated_by=excluded.updated_by`)
         .run(id,revision,json,stamp,actor.userId);
       db.prepare('INSERT INTO task_coordination_history VALUES(?,?,?,?,?)').run(id,revision,json,stamp,actor.userId);
+      watchdog?.record(id,revision,data,permit);
       const result = entry(row);
       if (ownTransaction) db.exec('COMMIT'); return result;
     } catch (error) { if (ownTransaction) db.exec('ROLLBACK'); throw error; }
@@ -139,7 +148,28 @@ function createTaskCoordination(db, {now = () => Date.now()} = {}) {
       if(own)db.exec('COMMIT');return result;
     }catch(error){if(own)db.exec('ROLLBACK');throw error;}
   };
-  return {get,list,save,selfStatus,tool:createTaskTools(db,{now,owner,entry,save})};
+  const tool=createTaskTools(db,{now,owner,entry,save,watchdog});
+  const saveAsync=async(id,body,actor)=>{const data=normalize(id,body,actor);await watchdog?.prepare(id,data,actor);return save(id,body,actor);};
+  const toolAsync=async(name,args,actor)=>{
+    if(name==='task_update'&&args.stage){
+      const current=tool('task_get',{task_id:args.task_id},actor).coordination;
+      const data=Object.fromEntries([...TEXT_FIELDS,'modelCheckedAt','milestones','links','codeRequired'].map(k=>[k,current[k]??empty()[k]]));
+      if('executor' in args)data.executorName=args.executor;
+      if('blocker' in args)data.blocker=args.blocker;
+      if('next_step' in args)data.nextAction=args.next_step;
+      if('links' in args)data.links=args.links;
+      data.milestones={...data.milestones,[args.stage]:{state:'confirmed',evidence:args.evidence,checkedAt:args.checked_at}};
+      await watchdog?.prepare(args.task_id,normalize(args.task_id,{revision:current.revision,data},actor),actor);
+    }
+    return tool(name,args,actor);
+  };
+  const acceptDispatch=(id,actor)=>{
+    const current=get(id,actor),data=Object.fromEntries([...TEXT_FIELDS,'modelCheckedAt','milestones','links','codeRequired'].map(k=>[k,current[k]??empty()[k]]));
+    data.milestones={...data.milestones,accepted:{state:'confirmed',evidence:'Влад принял результат в диспетчере',checkedAt:new Date(now()).toISOString()}};
+    const body={revision:current.revision,data},normalized=normalize(id,body,actor);
+    watchdog?.accept(id,normalized,actor);save(id,body,actor);
+  };
+  return {get,list,save,saveAsync,selfStatus,tool,toolAsync,acceptDispatch};
 }
 module.exports = {createTaskCoordination,migrateTasksMcp,migrateTasksMcpPortable,
   ...require('./task-products')};
@@ -366,17 +396,13 @@ function validateLinks(value) {
 function taskExtras(db, row, now) {
   const counts = db.prepare(`SELECT count(*) total,coalesce(sum(status='done'),0) done
     FROM tasks WHERE parent_task_id=? AND is_deleted=0`).get(row.id);
-  const coord = db.prepare('SELECT updated_at,data FROM task_coordination WHERE task_id=?').get(row.id);
-  const assignment = row.assignee_name || (coord ? JSON.parse(coord.data).executorName : '');
-  const agent = db.prepare(`SELECT state FROM agents WHERE ${personKeySql('name')}=${personKeySql('?')}`).get(assignment);
-  const updated = Math.max(Date.parse(row.updated_at) || 0, Date.parse(coord?.updated_at) || 0);
   return {reviewer_name:row.reviewer_name, parent_task_id:row.parent_task_id, source:row.source,
     due_date:row.due_date, subtask_count:counts.total, subtask_done:counts.done,
     ...boardFields(db,row),
-    no_report:agent?.state === 'work' && ['inbox','planned','in_progress'].includes(row.status) && now-updated > 60*60*1000};
+    ...(require('./task-watchdog').silence(db,row,now))};
 }
 
-function createTaskTools(db, {now,owner,entry,save}) {
+function createTaskTools(db, {now,owner,entry,save,watchdog}) {
   // Архив устанавливается отдельно с резервной копией; чтение старых задач не запускает DDL.
   const archive = require('./module-archive').createModuleArchive(db, {now});
   const stamp = () => new Date(now()).toISOString();
@@ -415,20 +441,33 @@ function createTaskTools(db, {now,owner,entry,save}) {
     }
     return {limit,offset};
   };
-  const taskSummary = row => {
+  const taskSummary = (row,overview=false) => {
     const fields=['id','title','company_code','assignee_name','reviewer_name','parent_task_id',
       'status','priority','due_date','source','updated_at'];
     const coordination=entry(row);
+    let description='',descriptionTruncated=false;
+    if(overview===true) {
+      let count=0;
+      for(const character of row.description || '') {
+        if(count===1000){descriptionTruncated=true;break;}
+        description+=character;count++;
+      }
+    }
     return {...Object.fromEntries(fields.map(key=>[key,row[key]])),
       ...boardFields(db,row),
       subtask_count:coordination.subtask_count,subtask_done:coordination.subtask_done,no_report:coordination.no_report,
+      ...(overview===true?{description,description_truncated:descriptionTruncated,
+        created_at:row.created_at,waiting_since:waitingSince(db,row,coordination,now())}:{}),
       coordination:{revision:coordination.revision,executorName:row.assignee_name,
+        ...(overview===true?{blocker:coordination.blocker,nextAction:coordination.nextAction,updatedAt:coordination.updatedAt}:{}),
         milestones:Object.fromEntries(STAGES.map(stage=>[stage,{state:coordination.milestones[stage].state}]))}};
   };
   const taskView = (row, actor, detail=false, args={}) => {
     const fields = ['id','created_at','updated_at','title','description','company_code','assignee_name',
       'status','priority','due_date','source','parent_task_id','reviewer_name','client_ref'];
-    const result = {...Object.fromEntries(fields.map(key => [key,row[key]])), ...taskExtras(db,row,now()), coordination:entry(row)};
+    const coordination=entry(row);
+    const result = {...Object.fromEntries(fields.map(key => [key,row[key]])), ...taskExtras(db,row,now()), coordination,
+      waiting_since:waitingSince(db,row,coordination,now())};
     if (detail) {
       const comments=page(args,'comments',20), subtasks=page(args,'subtasks',100);
       const codes=[...allowed(actor)], childWhere=`parent_task_id=? AND is_deleted=0
@@ -455,7 +494,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
   };
   const touch = (row, changes, actor) => {
     const previous = entry(row);
-    const data = Object.fromEntries([...TEXT_FIELDS,'modelCheckedAt','milestones','links'].map(key => [key,previous[key] ?? empty()[key]]));
+    const data = Object.fromEntries([...TEXT_FIELDS,'modelCheckedAt','milestones','links','codeRequired'].map(key => [key,previous[key] ?? empty()[key]]));
     Object.assign(data,changes);
     save(row.id,{revision:previous.revision,data},actor);
   };
@@ -488,13 +527,16 @@ function createTaskTools(db, {now,owner,entry,save}) {
       changes.milestones={...previous.milestones,[stage]:{state:'confirmed',evidence,checkedAt}};
     }
     if (!Object.keys(updates).length && !Object.keys(changes).length) fail(400, 'Нет изменений задачи');
+    const complete=updates.status==='done';if(complete)delete updates.status;
     if (Object.keys(updates).length) withCoordinatedWrite(db, row.id, () =>
       db.prepare(`UPDATE tasks SET ${Object.keys(updates).map(key=>`${key}=?`).join(',')},updated_at=? WHERE id=?`)
         .run(...Object.values(updates),stamp(),row.id));
     touch({...row,...updates},changes,actor);
+    if(complete)withCoordinatedWrite(db,row.id,()=>db.prepare("UPDATE tasks SET status='done',updated_at=? WHERE id=?").run(stamp(),row.id));
     return {task:taskView(scopedTask(row.id,actor),actor,true)};
   });
   const tasksList = (args, actor) => {
+    if(args.overview!==undefined&&typeof args.overview!=='boolean')fail(400,'overview должен быть логическим');
     const limit=args.limit===undefined?100:integer(args.limit,'limit'), offset=args.offset===undefined?0:args.offset;
     if (limit>100 || !Number.isSafeInteger(offset) || offset<0) fail(400, 'Некорректная страница');
     const codes=args.project!==undefined?[project(args.project,actor)]:[...allowed(actor)];
@@ -517,7 +559,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
     }
     if (args.search!==undefined) { const search=text(args.search,500);clauses.push('(title LIKE ? OR description LIKE ?)');params.push(`%${search}%`,`%${search}%`); }
     const where=clauses.join(' AND '), total=db.prepare(`SELECT count(*) n FROM tasks WHERE ${where}`).get(...params).n;
-    const tasks=db.prepare(`SELECT * FROM tasks WHERE ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params,limit,offset).map(taskSummary);
+    const tasks=db.prepare(`SELECT * FROM tasks WHERE ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params,limit,offset).map(row=>taskSummary(row,args.overview===true));
     return {tasks,pagination:{total,limit,offset}};
   };
   const agentView = (row, actor) => {
@@ -532,7 +574,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
     const sameScope=access?.owner_id===actor.userId && access.projects===JSON.stringify([...allowed(actor)].sort());
     return {...row,...(!sameScope?{state:'unknown',last_event:'',last_event_at:'',function:'',chat:'',...(hasBoardSchema(db)?{chat_url:''}:{})}:{}),tracking:'manual',
       active_tasks:tasks,active_task_count:taskTimes.length,
-      no_report:sameScope&&row.state==='work'&&taskTimes.some(task=>now()-Math.max(Date.parse(task.updated_at)||0,Date.parse(task.coordination_updated_at)||0)>60*60*1000)};
+      no_report:sameScope&&db.prepare(`SELECT t.* FROM tasks t WHERE ${activeWhere}`).all(row.name,...codes).some(t=>require('./task-watchdog').silence(db,t,now()).no_report)};
   };
   const reportAgent = (args, actor) => {
     const name=text(args.agent,200);
@@ -558,8 +600,10 @@ function createTaskTools(db, {now,owner,entry,save}) {
       db.prepare('UPDATE agents SET chat_url=? WHERE id=?').run(chatUrl,row.id);
       row.chat_url=chatUrl;
     }
-    db.prepare(`INSERT INTO agent_access(agent_id,owner_id,projects) VALUES(?,?,?) ON CONFLICT(agent_id)
+    // Отчёт/саморегистрация не восстанавливает отозванный grant.
+    if(!watchdog||watchdog.canGrant(actor))db.prepare(`INSERT INTO agent_access(agent_id,owner_id,projects) VALUES(?,?,?) ON CONFLICT(agent_id)
       DO UPDATE SET owner_id=excluded.owner_id,projects=excluded.projects`).run(row.id,actor.userId,JSON.stringify([...allowed(actor)].sort()));
+    if(watchdog)watchdog.report(row.name,event,allowed(actor),actor);
     return agentView(row,actor);
   };
   return (name,args,actor) => {
@@ -612,9 +656,10 @@ function createTaskTools(db, {now,owner,entry,save}) {
       return {task:taskView(row,actor,true),created:true};
     });
     if(name==='task_comment')return transaction(()=>{
-      const row=scopedTask(args.task_id,actor), author=text(args.author || args.agent || '',200), message=text(args.text,20000);
+      const row=scopedTask(args.task_id,actor), author=text(watchdog?.author(actor,args.author || args.agent || '')??args.author??args.agent??'',200), message=text(args.text,20000);
       if(!author||!message)fail(400,'Укажите автора и текст комментария');
       const result=db.prepare('INSERT INTO task_comments(task_id,author,text,created_at) VALUES(?,?,?,?)').run(row.id,author,message,stamp());
+      watchdog?.comment(row.id,Number(result.lastInsertRowid),actor);
       db.prepare('UPDATE tasks SET updated_at=? WHERE id=?').run(stamp(),row.id);
       return {comment:db.prepare('SELECT * FROM task_comments WHERE id=?').get(Number(result.lastInsertRowid))};
     });

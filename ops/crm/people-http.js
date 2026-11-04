@@ -37,9 +37,19 @@ function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send}
     if(values.length!==1||[...url.searchParams.keys()].some(key=>!['companyCode','offset'].includes(key)))fail(400,'Укажите один проект');
     const action=url.pathname.slice('/internal/people/'.length),method=request.method;
     const plan=action==='mediaMentor'||action==='planVariantsDecision';
-    const actor=access(request,code,plan?'content-plan.approve':action==='task_update'?'tasks.self.edit':'tasks.self.view');
+    const actor=access(request,code,plan?'content-plan.approve':['task_update','teamChatTask'].includes(action)?'tasks.self.edit':'tasks.self.view');
     let result;
-    if(action==='mediaMentor'&&method==='GET')result=mentor.get(code);
+    if(action==='teamChatContext'&&method==='GET') {
+      const all=projectRows(code),map=new Map(all.map(row=>[row.id,row]));
+      const snapshot=actor.role==='owner'||actor.permissions.has('content-plan.approve')?mentor.get(code):null;
+      if(snapshot&&snapshot.companyCode!==code)fail(502,'Источник другого проекта');
+      result={companyCode:code,tasks:all.filter(row=>visible(row,map,actor,code)).map(row=>({id:row.id,title:row.title,status:row.status,due_date:row.due_date})),
+        plan:(snapshot?.plan?.days||[]).map(day=>({date:day.date,topic:day.topic,scripts:Object.values(day.variants||{}).map(v=>v.text||'')}))};
+    } else if(action==='teamChatTask'&&method==='POST') {
+      const body=await readJson(request),fresh=access(request,code,'tasks.self.edit');
+      if(fresh.userId!==actor.userId)fail(403,'Доступ изменился');
+      result=require('./team-chat-task').createTeamChatTask(db,code,fresh,body);
+    } else if(action==='mediaMentor'&&method==='GET')result=mentor.get(code);
     else if(action==='planVariantsDecision'&&method==='POST') {
       const body=await readJson(request),fresh=access(request,code,'content-plan.approve');
       if(fresh.userId!==actor.userId)fail(403,'Доступ изменился');
@@ -48,7 +58,7 @@ function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send}
       result=mentor.decideVariants(code,body,{userId:fresh.userId,userName:fresh.userName});
     } else if(['tasks_list','task_get','task_update'].includes(action)&&method==='POST'||action==='taskRecords'&&method==='GET') {
       const body=method==='POST'?await readJson(request):{};
-      const fresh=access(request,code,action==='task_update'?'tasks.self.edit':'tasks.self.view');
+      const fresh=access(request,code,['task_update','teamChatTask'].includes(action)?'tasks.self.edit':'tasks.self.view');
       if(fresh.userId!==actor.userId)fail(403,'Доступ изменился');
       const allowed=action==='tasks_list'?['project','limit','offset']:action==='task_get'?['task_id','subtasks_limit','subtasks_offset','comments_limit','comments_offset']:action==='task_update'?['task_id','status','revision']:[];
       if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>!allowed.includes(k)))fail(400,'Переданы лишние параметры');

@@ -1,10 +1,10 @@
 'use strict';
 const fail=(status,message)=>{throw Object.assign(Error(message),{status});};
-function createPeopleHttp({authStore,team,tasks,plan,notifications,runtime,transport,requireSession,requireCsrf,readJson,sendJson}) {
+function createPeopleHttp({authStore,team,tasks,chat,plan,notifications,runtime,transport,requireSession,requireCsrf,readJson,sendJson}) {
   return async function handle(request,response,url) {
     if(!/^\/content\/people(?:\/|$)/.test(url.pathname))return false;
     const session=requireSession(request),path=url.pathname.slice('/content/people'.length),method=request.method;
-    const reply=(status,body)=>{sendJson(response,status,body,{'cache-control':'private, no-store'});return true;};
+    const reply=(status,body)=>{fresh(null);sendJson(response,status,body,{'cache-control':'private, no-store'});return true;};
     const company=()=>{const values=url.searchParams.getAll('companyCode');if(values.length!==1||!session.user.companyCodes.includes(values[0]))fail(403,'Выберите доступную компанию');return values[0];};
     const fresh=(code,owner=false)=>{
       const current=requireSession(request);
@@ -22,6 +22,15 @@ function createPeopleHttp({authStore,team,tasks,plan,notifications,runtime,trans
     }
     const member=/^\/members\/(\d+)$/.exec(path);
     const approval=/^\/members\/(\d+)\/approval$/.exec(path);
+    const reset=/^\/members\/(\d+)\/temp-password$/.exec(path);
+    if(reset&&method==='POST') {
+      if(session.user.role!=='owner')fail(403,'Пароль выдаёт владелец');
+      const body=await read(null);fresh(body.companyCode,true);
+      if(Object.keys(body).join(',')!=='companyCode')fail(400,'Переданы лишние поля');
+      const id=Number(reset[1]);
+      if(!team.list(session.user.id,body.companyCode).some(m=>m.id===id&&m.staffRole==='human_executor'))fail(403,'Выберите исполнителя этой команды');
+      return reply(200,authStore.issueTemporary(session.user.id,id));
+    }
     if(approval&&method==='PUT') {
       if(session.user.role!=='owner')fail(403,'Право назначает владелец');
       const body=await read(null);fresh(body.companyCode,true);
@@ -36,7 +45,8 @@ function createPeopleHttp({authStore,team,tasks,plan,notifications,runtime,trans
         const body=await read(null,false);code=body.companyCode;fresh(code,true);
         if(path==='/members'&&method==='POST') {
           if(body.staffRole!=='human_executor')fail(400,'Выберите роль исполнителя');
-          return reply(201,{member:team.create(session.user.id,body)});
+          const {temporaryPassword,expiresAt,...member}=team.create(session.user.id,body,true);
+          return reply(201,{member,temporaryPassword,expiresAt});
         }
         if(member&&method==='PUT') {
           if(Object.keys(body).sort().join(',')!=='companyCode,staffRole'||body.staffRole!=='human_executor')fail(400,'Переданы лишние поля');
@@ -47,6 +57,8 @@ function createPeopleHttp({authStore,team,tasks,plan,notifications,runtime,trans
       fail(405,'Метод не поддерживается');
     }
     const code=company();fresh(code);
+    if(path==='/team-chat'&&method==='GET')return reply(200,chat.list(session.user.id,code,url.searchParams.get('before')));
+    if(path==='/team-chat'&&method==='POST')return reply(200,await chat.send(session.user.id,code,await read(code)));
     if(path==='/plan'&&method==='GET')return reply(200,await plan.get(session.user.id,code));
     if(path==='/plan/decision'&&method==='POST')return reply(200,await plan.decide(session.user.id,code,await read(code)));
     if(path==='/tasks'&&method==='GET')return reply(200,await tasks.list(session.user.id,code));

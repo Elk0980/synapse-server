@@ -6,6 +6,7 @@
   const PROJECTS = {'synapse-business':'Synapse', alvi:'ALVI', avokado:'Авокадо', palitra:'Палитра', taisabai:'TaiSabai'};
   const UNASSIGNED = '__unassigned__';
   const controllers = new WeakMap();
+  const waitingRequests = new Map();
   const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[ch]));
   const safeUrl = value => {
     try { const url = new URL(value); return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? url.href : ''; }
@@ -26,6 +27,13 @@
     if (prior) { void prior.render(initial); return prior; }
     let alive = true, sequence = 0, detailSequence = 0, focusBeforeSheet, draggedId;
     let tasks = [], products = [], agents = [], taskSheet, createSheet;
+    let structuralTaskIds = new Set();
+    const overviewCache = new Map();
+    const waitingInflight = {
+      has:id=>waitingRequests.has(`${key}:${id}`),get:id=>waitingRequests.get(`${key}:${id}`),
+      set:(id,value)=>waitingRequests.set(`${key}:${id}`,value),delete:id=>waitingRequests.delete(`${key}:${id}`)
+    };
+    const syncWaitingTask = id => taskSheet?.body.querySelector(`[data-wait-task="${id}"]`)?.dispatchEvent(new Event('tb-wait-sync'));
     const key = `sb-task-board:${ctx.identity.userId || ctx.identity.id || ctx.identity.login || 'owner'}`;
     const legacyPrefix = `sb-task:${ctx.identity.userId || ctx.identity.id || ctx.identity.login || 'owner'}`;
     const read = suffix => { try { return JSON.parse(sessionStorage.getItem(`${key}:${suffix}`) || 'null'); } catch { return null; } };
@@ -61,21 +69,65 @@
     const name = code => code === UNASSIGNED ? 'Без проекта' : PROJECTS[code] || ctx.identity.companies?.find(item => (item.id || item.code) === code)?.name || code || 'Без проекта';
     const projects = () => [...new Set([...ctx.identity.companies?.map(item => item.id || item.code).filter(Boolean) || [], ...tasks.map(task => task.company_code || UNASSIGNED)])];
     const matchesProject = (task,project=state.project) => !project || (task.company_code || UNASSIGNED) === project;
-    const filtered = () => tasks.filter(task => !task.product_placeholder && matchesProject(task) && (!state.product || String(task.product_id) === String(state.product)) && (!state.search || `${task.title} ${task.assignee_name}`.toLowerCase().includes(state.search.toLowerCase())));
+    const isVisibleWork = task => task.status !== 'cancelled' && !task.product_placeholder && !structuralTaskIds.has(task.id);
+    const displayTitle = task => window.SbTaskOverview?.title(task) || String(task.title || '').replace(/^\s*(?:Цель|Модуль|Направление)\s*·\s*/i,'').trim();
+    const childProgress = task => {
+      const children = tasks.filter(item => item.parent_task_id === task.id && item.company_code === task.company_code && isVisibleWork(item));
+      return {count:children.length,done:children.filter(item => item.status === 'done').length};
+    };
+    const filtered = () => tasks.filter(task => isVisibleWork(task) && matchesProject(task) && (!state.product || String(task.product_id) === String(state.product)) && (!state.search || `${task.title} ${task.assignee_name}`.toLowerCase().includes(state.search.toLowerCase())));
     const stageDots = task => `<span class="tb-stages" aria-label="Этапы">${Object.entries(STAGES).map(([code,label]) => {
       const stage = task.coordination?.milestones?.[code];
       return `<span class="tb-stage" data-state="${esc(stage?.state || 'pending')}" title="${label}: ${stage?.state === 'confirmed' ? 'подтверждено' : stage?.state === 'not_required' ? 'не требуется' : 'ожидает'}"><span class="tb-sr">${label}: ${stage?.state === 'confirmed' ? 'подтверждено' : 'ожидает'}</span></span>`;
     }).join('')}</span>`;
-    const taskMeta = task => `<span class="tb-task-meta"><span>№${Number(task.id)}</span>${task.assignee_name || task.reviewer_name ? `<span>${esc(task.assignee_name)}${task.reviewer_name ? ` → ${esc(task.reviewer_name)}` : ''}</span>` : ''}${task.due_date ? `<time class="${task.due_date < day() && !['done','cancelled'].includes(task.status) ? 'tb-overdue' : ''}" datetime="${esc(task.due_date)}">${esc(task.due_date)}</time>` : ''}${task.subtask_count ? `<span title="Подзадачи">${Number(task.subtask_done) || 0}/${Number(task.subtask_count)}</span>` : ''}${task.no_report ? '<span class="tb-overdue">Нет отчёта</span>' : ''}</span>`;
-    const card = task => `<button type="button" class="tb-task" data-task-open="${Number(task.id)}" draggable="true">${task.product_name ? `<span class="tb-product-label">${esc(task.product_name)}</span>` : ''}<strong>${esc(task.title)}</strong>${stageDots(task)}${taskMeta(task)}</button>`;
+    const taskMeta = task => { const children = childProgress(task); return `<span class="tb-task-meta"><span>№${Number(task.id)}</span>${task.assignee_name || task.reviewer_name ? `<span>${esc(task.assignee_name)}${task.reviewer_name ? ` → ${esc(task.reviewer_name)}` : ''}</span>` : ''}${task.due_date ? `<time class="${task.due_date < day() && !['done','cancelled'].includes(task.status) ? 'tb-overdue' : ''}" datetime="${esc(task.due_date)}">${esc(task.due_date)}</time>` : ''}${children.count ? `<span title="Подзадачи">${children.done}/${children.count}</span>` : ''}${task.no_report ? '<span class="tb-overdue">Нет отчёта</span>' : ''}</span>`; };
+    const card = task => `<button type="button" class="tb-task" data-task-open="${Number(task.id)}" draggable="true">${task.product_name ? `<span class="tb-product-label">${esc(task.product_name)}</span>` : ''}<strong>${esc(displayTitle(task))}</strong>${stageDots(task)}${taskMeta(task)}</button>`;
     const statusCount = (records, status) => records.filter(task => task.status === status).length;
     const summary = code => {
-      const records = tasks.filter(task => !task.product_placeholder && matchesProject(task,code)), working = records.filter(task => task.status === 'in_progress');
-      return `<button type="button" class="tb-project-card" data-project="${esc(code)}"><strong>${esc(name(code))}</strong><span class="tb-status-bar" aria-label="Распределение задач">${Object.keys(STATUS).map(status => `<i data-status="${status}" style="flex:${statusCount(records,status)}" title="${STATUS[status]}: ${statusCount(records,status)}"></i>`).join('')}</span><span class="tb-project-counts">В работе ${working.length} · План ${statusCount(records,'planned')} · Входящие ${statusCount(records,'inbox')}</span>${records.some(task => task.no_report) ? `<span class="tb-overdue">Нет отчёта ${records.filter(task => task.no_report).length}</span>` : ''}${working.length ? `<span class="tb-current">Сейчас: ${esc(working.map(task => task.title).join(' · '))}</span>` : ''}</button>`;
+      const records = tasks.filter(task => isVisibleWork(task) && matchesProject(task,code)), working = records.filter(task => task.status === 'in_progress');
+      return `<button type="button" class="tb-project-card" data-project="${esc(code)}"><strong>${esc(name(code))}</strong><span class="tb-status-bar" aria-label="Распределение задач">${Object.keys(STATUS).filter(status => status !== 'cancelled').map(status => `<i data-status="${status}" style="flex:${statusCount(records,status)}" title="${STATUS[status]}: ${statusCount(records,status)}"></i>`).join('')}</span><span class="tb-project-counts">В работе ${working.length} · План ${statusCount(records,'planned')} · Входящие ${statusCount(records,'inbox')}</span>${records.some(task => task.no_report) ? `<span class="tb-overdue">Нет отчёта ${records.filter(task => task.no_report).length}</span>` : ''}${working.length ? `<span class="tb-current">Сейчас: ${esc(working.map(displayTitle).join(' · '))}</span>` : ''}</button>`;
     };
     const notice = (text, error = false) => {
       const node = container.querySelector('[data-board-notice]'); if (node) { node.textContent = text; node.setAttribute('role', error ? 'alert' : 'status'); }
     };
+    const percentage = value => `<span class="tb-percentage">${Number(value) || 0}%</span><progress max="100" value="${Number(value) || 0}" aria-label="Готовность"></progress>`;
+    const overviewMarkup = () => {
+      const helper = window.SbTaskOverview; if (!helper) return '';
+      const model = helper.build(tasks.filter(task => matchesProject(task)));
+      const waiting = model.waiting.length ? `<section class="tb-waiting" data-waiting><h2>Ждут Влада <span>${model.waiting.length}</span></h2><div>${model.waiting.map(task => {
+        const since = typeof task.waiting_since === 'string' && Number.isFinite(Date.parse(task.waiting_since)) ? task.waiting_since : '';
+        return `<button type="button" class="tb-waiting-row" data-task-open="${task.id}"><span class="tb-waiting-id">№${task.id} · ${esc(name(task.company_code))}</span><strong>${esc(helper.waitingNeed(task))}</strong>${since ? `<time datetime="${esc(since)}">с ${esc(stamp(since))}</time>` : '<span class="tb-waiting-date">Время ожидания не указано</span>'}</button>`;
+      }).join('')}</div></section>` : '';
+      if (state.view !== 'projects') return waiting;
+      const help = `<details class="tb-how" data-board-guide><summary>Как читать доску</summary><p>Цель → Модули → Задачи → Этапы</p><p>Завершённая задача даёт 100%. Для остальных каждый подтверждённый этап даёт 25%: код, подключено, проверено, принято Владом. Отметки этапов сохраняются.</p><p>Процент модуля — среднее по уникальным задачам состава: непосредственные подзадачи, ссылки состава и задачи с указанием модуля в описании. Процент цели — среднее процентов её модулей с равным весом: 100% и 0% у двух модулей дают цели 50%. Вложенные задачи не заменяют этапы родительской задачи. Неподтверждённые этапы незавершённой задачи дают 0%.</p></details>`;
+      const goals = model.goals.map(goal => `<article class="tb-goal" data-goal="${goal.task.id}"><div class="tb-overview-title"><button type="button" data-task-open="${goal.task.id}"><span>Цель</span><strong>${esc(goal.title)}</strong></button>${percentage(goal.progress)}</div>${goal.current.length || goal.next.length ? `<p>Сейчас строим: ${esc(goal.current.map(module => module.title).join(', ') || 'модуль ещё не начат')}${goal.next.length ? ` → потом: ${esc(goal.next.map(module => module.title).join(', '))}` : ''}</p>` : ''}</article>`).join('');
+      const modules = model.modules || model.directions;
+      const activeModules = modules.filter(module => module.started);
+      const directions = activeModules.length ? `<section class="tb-directions" data-active-directions data-modules><h2>Модули</h2><div class="tb-direction-grid">${activeModules.map(module => `<article class="tb-direction" data-module-id="${module.task.id}"><div class="tb-overview-title"><button type="button" data-task-open="${module.task.id}"><strong>${esc(module.title)}</strong></button>${percentage(module.progress)}</div><p class="tb-module-state">Работа начата</p>${module.why ? `<p class="tb-direction-why">Зачем: ${esc(module.why)}</p>` : ''}${module.task.assignee_name || module.task.reviewer_name ? `<p class="tb-direction-people">${module.task.assignee_name ? `Ведёт ${esc(module.task.assignee_name)}` : ''}${module.task.reviewer_name ? ` · Принимает ${esc(module.task.reviewer_name)}` : ''}</p>` : ''}<div class="tb-direction-current tb-module-tasks">${module.allMembers.map(task => `<button type="button" class="tb-module-task" data-module-task="${task.id}" data-task-open="${task.id}"><strong>№${task.id} ${esc(displayTitle(task))}</strong><span class="tb-module-task-progress">${helper.progress(task)}%</span><span class="tb-module-task-stage">${esc(helper.stageText(task))}</span></button>`).join('') || '<p class="tb-direction-people">Задач пока нет</p>'}</div></article>`).join('')}</div></section>` : '';
+      const next = modules.filter(module => !module.started);
+      const upcoming = next.length ? `<section class="tb-upcoming"><h2>Дальше по плану</h2><div>${next.map(direction => `<button type="button" data-task-open="${direction.task.id}">${esc(direction.title)} · ${direction.progress}%</button>`).join('')}</div></section>` : '';
+      const now = model.now.length ? `<section class="tb-now" data-now-tasks><h2>Сейчас в работе</h2>${model.now.map(item => `<button type="button" class="tb-now-row" data-task-open="${item.task.id}"><span class="tb-now-direction">${esc(item.directions.length ? item.directions.map(direction => direction.title).join(' · ') : 'Вне цели')}</span><strong>№${item.task.id} ${esc(item.task.title)}</strong>${stageDots(item.task)}<span class="tb-now-stage">${esc(item.stage)}</span></button>`).join('')}</section>` : '';
+      return `<div class="tb-overview">${waiting}${help}${goals}${directions}${upcoming}${now}${tasks.some(task => task._overview_incomplete) ? '<p class="tb-overview-incomplete">Часть сведений пока недоступна. Обновите доску для проверки.</p>' : ''}</div>`;
+    };
+    async function hydrateOverview(records) {
+      if (!window.SbTaskOverview) return records;
+      const result = [...records], pending = records.map((task,index) => ({task,index})).filter(({task}) => !task.product_placeholder && (task.description_truncated === true || !Object.hasOwn(task,'description') || !Object.hasOwn(task,'waiting_since') || !Object.hasOwn(task.coordination || {},'blocker') || !Object.hasOwn(task.coordination || {},'nextAction')));
+      let cursor = 0;
+      await Promise.all(Array.from({length:Math.min(3,pending.length)},async () => {
+        while (cursor < pending.length && alive) {
+          const {task,index} = pending[cursor++], signature = JSON.stringify([task.coordination?.revision,task.updated_at]);
+          const cached = overviewCache.get(task.id);
+          if (cached?.signature === signature && task.coordination?.revision !== undefined) { result[index] = {...task,...cached.value,coordination:{...task.coordination,...cached.value.coordination}}; continue; }
+          try {
+            const data = await tool('task_get',{task_id:task.id,comments_limit:1,subtasks_limit:1}), full = data.task || data;
+            if (full.id !== task.id || full.company_code !== task.company_code) throw Error('Область карточки изменилась');
+            const value = {description:full.description,description_truncated:false,created_at:full.created_at,waiting_since:full.waiting_since,coordination:{...task.coordination,...full.coordination}};
+            result[index] = {...task,...value}; overviewCache.set(task.id,{signature,value});
+          } catch { result[index] = {...task,_overview_incomplete:true}; }
+        }
+      }));
+      return result;
+    }
     const updateStatus = async (id, status) => {
       const task = tasks.find(item => item.id === Number(id));
       try { await tool('task_update', {task_id:Number(id), status, revision:task?.coordination?.revision}); await render(); }
@@ -84,7 +136,7 @@
     async function load() {
       const records = []; let page, offset = 0;
       do {
-        page = await tool('tasks_list', {limit:100, offset});
+        page = await tool('tasks_list', {limit:100, offset,overview:true});
         records.push(...(page.tasks || [])); offset = records.length;
       } while (page.tasks?.length && offset < (page.pagination?.total ?? page.total ?? 0));
       const [productData, agentData] = await Promise.all([tool('products_list',{limit:100,offset:0}), tool('agents_list')]);
@@ -94,7 +146,7 @@
         if (!next.products?.length) break;
         allProducts.push(...next.products);
       }
-      return {tasks:records, products:allProducts, agents:agentData.agents || []};
+      return {tasks:await hydrateOverview(records), products:allProducts, agents:agentData.agents || []};
     }
     async function render(next = {}) {
       Object.assign(state, next);
@@ -112,6 +164,7 @@
     }
     function draw() {
       write('filters', {view:state.view, project:state.project, product:state.product});
+      structuralTaskIds = new Set(window.SbTaskOverview?.build(tasks).structuralIds || tasks.filter(task => /^\s*(?:Цель|Модуль|Направление)\s*·\s*/i.test(task.title || '')).map(task => task.id));
       const records = filtered().sort(dueSort), visibleProducts = products.filter(item => !state.project || item.company_code === state.project);
       let body;
       if (state.view === 'projects') body = `<div class="tb-projects">${projects().map(summary).join('') || '<p>Проектов пока нет.</p>'}</div>`;
@@ -121,14 +174,15 @@
       }).join('') || '<p>Агенты пока не зарегистрированы.</p>'}</div>`;
       else if (['plan','today'].includes(state.view)) {
         const planned = state.view === 'today' ? records.filter(task => task.due_date && task.due_date <= day() && !['done','cancelled'].includes(task.status)) : records;
-        body = `${state.view === 'today' ? `<p class="tb-day">До ${esc(day())} · Бангкок</p>` : ''}<div class="tb-plan">${['in_progress','planned','inbox','done','cancelled'].map(status => {
+        body = `${state.view === 'today' ? `<p class="tb-day">До ${esc(day())} · Бангкок</p>` : ''}<div class="tb-plan">${['in_progress','planned','inbox','done'].map(status => {
           const list = planned.filter(task => task.status === status);
-          const rows = list.map(task => `<button type="button" class="tb-plan-row" data-task-open="${Number(task.id)}"><span class="tb-dot" data-status="${status}"></span><span class="tb-plan-title"><strong>${esc(task.title)}</strong>${task.product_name ? `<small>${esc(task.product_name)}</small>` : ''}</span>${taskMeta(task)}${stageDots(task)}</button>`).join('');
+          const rows = list.map(task => `<button type="button" class="tb-plan-row" data-task-open="${Number(task.id)}"><span class="tb-dot" data-status="${status}"></span><span class="tb-plan-title"><strong>${esc(displayTitle(task))}</strong>${task.product_name ? `<small>${esc(task.product_name)}</small>` : ''}</span>${taskMeta(task)}${stageDots(task)}</button>`).join('');
           return ['done','cancelled'].includes(status) ? `<details class="tb-plan-group"><summary>${STATUS[status]} <span>${list.length}</span></summary>${rows}</details>` : `<section class="tb-plan-group"><h3>${STATUS[status]} <span>${list.length}</span></h3>${rows || '<p class="tb-empty">Нет задач</p>'}</section>`;
         }).join('')}</div>`;
-      } else body = `<div class="tb-columns" aria-label="Доска по статусам">${['inbox','planned','in_progress','done'].map(status => `<section class="tb-column" data-drop-status="${status}"><h3><span class="tb-dot" data-status="${status}"></span>${STATUS[status]} <span>${statusCount(records,status)}</span></h3><div>${records.filter(task => task.status === status).map(card).join('') || '<p class="tb-empty">Нет задач</p>'}</div></section>`).join('')}</div><details class="tb-cancelled"><summary>Отменено · ${statusCount(records,'cancelled')}</summary><div class="tb-cancelled-list">${records.filter(task => task.status === 'cancelled').map(card).join('')}</div></details>`;
-      const legacy = tasks.filter(task => task.product_placeholder && matchesProject(task));
+      } else body = `<div class="tb-columns" aria-label="Доска по статусам">${['inbox','planned','in_progress','done'].map(status => `<section class="tb-column" data-drop-status="${status}"><h3><span class="tb-dot" data-status="${status}"></span>${STATUS[status]} <span>${statusCount(records,status)}</span></h3><div>${records.filter(task => task.status === status).map(card).join('') || '<p class="tb-empty">Нет задач</p>'}</div></section>`).join('')}</div>`;
+      const legacy = tasks.filter(task => task.product_placeholder && task.status !== 'cancelled' && matchesProject(task));
       container.innerHTML = `<div class="tb-board"><header class="tb-toolbar"><div class="tb-heading"><h2>Задачи</h2><button type="button" class="tb-primary" data-create-task>+ Задача</button></div><nav class="tb-project-tabs" aria-label="Проекты"><button type="button" data-project="" aria-pressed="${!state.project}">Все проекты</button>${projects().map(code => `<button type="button" data-project="${esc(code)}" aria-pressed="${state.project === code}">${esc(name(code))}</button>`).join('')}</nav><div class="tb-controls"><nav class="tb-view-tabs" aria-label="Вид задач">${Object.entries({board:'Доска',plan:'План',today:'План дня',projects:'Обзор',agents:'Агенты'}).map(([view,label]) => `<button type="button" data-board-view="${view}" aria-pressed="${state.view === view}">${label}</button>`).join('')}</nav><button type="button" data-board-refresh aria-label="Обновить доску">↻</button><input type="search" data-board-search aria-label="Поиск задач" placeholder="Поиск задач" value="${esc(state.search)}"></div>${visibleProducts.length ? `<nav class="tb-product-chips" aria-label="Продукты"><button type="button" data-product="" aria-pressed="${!state.product}">Все продукты</button>${visibleProducts.map(product => `<button type="button" data-product="${product.id}" aria-pressed="${String(state.product) === String(product.id)}">${esc(product.name)}</button>`).join('')}</nav>` : ''}</header><p class="tb-notice" data-board-notice role="status"></p>${state.project && !['agents','projects'].includes(state.view) ? '<form class="tb-quick" data-quick-task><input name="title" required maxlength="300" aria-label="Новая задача" placeholder="Что сделать?"><button type="submit">+ Задача</button></form>' : ''}${body}${legacy.length ? `<details class="tb-cancelled"><summary>Прежние продукты · ${legacy.length}</summary><div class="tb-cancelled-list">${legacy.map(card).join('')}</div></details>` : ''}</div>`;
+      container.querySelector('.tb-board').insertAdjacentHTML('afterbegin',overviewMarkup());
       container.querySelectorAll('[data-project]').forEach(button => button.onclick = () => { state.project = button.dataset.project; state.product = ''; if (state.view === 'projects') state.view = 'plan'; draw(); });
       container.querySelectorAll('[data-product]').forEach(button => button.onclick = () => { state.product = button.dataset.product; draw(); });
       container.querySelectorAll('[data-board-view]').forEach(button => button.onclick = () => { state.view = button.dataset.boardView; draw(); });
@@ -181,6 +235,101 @@
     const taskLinks = task => task.coordination?.links || task.links || [];
     const chatUrl = task => safeUrl(task.chat_url) || safeUrl(taskLinks(task).find(link => /^чат/i.test(link.label || ''))?.url) || safeUrl(agents.find(agent => agent.name === task.assignee_name)?.chat_url || agents.find(agent => agent.name === task.assignee_name)?.chat);
     const productOptions = (project, selected) => `<option value="">Без продукта</option>${products.filter(product => product.company_code === project).map(product => `<option value="${product.id}"${Number(product.id) === Number(selected) ? ' selected' : ''}>${esc(product.name)}</option>`).join('')}`;
+    function waitingPanel(task,own) {
+      if (!window.SbTaskOverview?.isWaiting(task)) return;
+      const id = task.id, draftKey = `waitreply:${id}`, previous = read(draftKey) || {};
+      const panel = document.createElement('section'); panel.className = 'tb-waiting-actions'; panel.dataset.waitingActions = ''; panel.dataset.waitTask = String(id);
+      panel.innerHTML = `<h3>Ждёт вашего решения</h3><p>${esc(window.SbTaskOverview.waitingNeed(task))}</p><form data-wait-reply><label>Ответить<textarea name="text" maxlength="3990" required>${esc(previous.text || '')}</textarea></label><div class="tb-wait-buttons"><button type="submit">Отправить ответ</button><button type="button" data-wait-choice="Да">Да</button><button type="button" data-wait-choice="Нет">Нет</button><button type="button" data-wait-check hidden>Проверить отправку</button></div><p data-wait-result role="status"></p></form><button type="button" data-wait-clear>Снять ожидание</button>`;
+      own.body.querySelector('.tb-task-project').after(panel);
+      const form = panel.querySelector('form'), result = panel.querySelector('[data-wait-result]');
+      const canClearBlocker = window.SbTaskOverview.hasWaitingBlocker(task);
+      const canClearNextStep = window.SbTaskOverview.hasWaitingNextStep?.(task) === true;
+      const canClearWaiting = canClearBlocker || canClearNextStep;
+      if (!canClearWaiting) {
+        panel.querySelector('[data-wait-clear]').hidden = true;
+        const hint = document.createElement('p'); hint.className = 'tb-waiting-hint';
+        hint.textContent = 'Ожидание задано назначением — измените план задачи.';
+        const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = 'Открыть план задачи'; edit.dataset.waitEditPlan = '';
+        edit.onclick = () => { const plan = own.body.querySelector('[data-plan-form]'); if (plan) { plan.closest('details').open = true; plan.elements.executor.focus(); } };
+        panel.append(hint,edit);
+      }
+      const persist = () => write(draftKey,{...(read(draftKey) || {}),text:form.elements.text.value});
+      const sync = () => {
+        const pending = read(draftKey)?.pending, running = waitingInflight.has(id);
+        form.querySelector('[type=submit]').disabled = !!pending || running;
+        form.querySelectorAll('[data-wait-choice]').forEach(button => { button.disabled = !!pending || running; });
+        form.querySelector('[data-wait-check]').hidden = !pending;
+        form.querySelector('[data-wait-check]').disabled = running;
+        if (running) result.textContent = 'Ответ отправляется…';
+        else if (pending) result.textContent = `${pending.error ? pending.error+'. ' : ''}Исход отправки ещё не подтверждён. Отправка не повторяется автоматически; сначала проверьте результат.`;
+      };
+      panel.addEventListener('tb-wait-sync',sync);
+      const finish = pending => {
+        const current = read(draftKey);
+        if (current?.pending?.id !== pending.id) return;
+        const text = pending.fromField && current.text === pending.inputAtSend ? '' : current.text || '';
+        if (text) write(draftKey,{...current,text,pending:undefined}); else write(draftKey,null);
+        if (own.overlay.isConnected && form.elements.text.value === pending.inputAtSend && pending.fromField) form.elements.text.value = '';
+      };
+      form.oninput = persist;
+      const send = async (text,fromField) => {
+        if (waitingInflight.has(id) || read(draftKey)?.pending || !String(text).trim()) return;
+        persist();
+        const pending = {id:`reply:${Date.now()}:${Math.random().toString(36).slice(2)}`,text:`ОТВЕТ: ${String(text).trim()}`,inputAtSend:form.elements.text.value,fromField,baselineId:Math.max(0,...(task.comments || []).map(item => Number(item.id) || 0))};
+        waitingInflight.set(id,pending.id); write(draftKey,{...(read(draftKey) || {}),pending}); sync(); result.textContent = 'Ответ отправляется…';
+        try {
+          await tool('task_comment',{task_id:id,author:'Влад',text:pending.text}); finish(pending);
+          if (alive) await render();
+          if (taskSheet === own) { await openTask(id); taskSheet?.body.querySelector('[data-wait-result]')?.append('Ответ добавлен в ход работы.'); }
+        } catch (error) {
+          const current = read(draftKey);
+          if (current?.pending?.id === pending.id) write(draftKey,{...current,pending:{...current.pending,error:error.message}});
+          if (own.overlay.isConnected) { sync(); result.textContent = `${error.message}. Отправка не повторяется автоматически; сначала проверьте результат.`; }
+        } finally {
+          if (waitingInflight.get(id) === pending.id) waitingInflight.delete(id);
+          window.dispatchEvent(new CustomEvent('sb-waiting-reply-settled',{detail:{key,id}}));
+        }
+      };
+      form.onsubmit = event => { event.preventDefault(); void send(form.elements.text.value,true); };
+      form.querySelectorAll('[data-wait-choice]').forEach(button => button.onclick = () => send(button.dataset.waitChoice,false));
+      form.querySelector('[data-wait-check]').onclick = async event => {
+        const button = event.currentTarget, pending = read(draftKey)?.pending; if (waitingInflight.has(id) || !pending) return; button.disabled = true;
+        try {
+          let found = false, complete = false, offset = 0;
+          for (let page=0;page<5 && !found && !complete;page++) {
+            const data = await tool('task_get',{task_id:id,comments_limit:20,comments_offset:offset,subtasks_limit:1}), latest = data.task || data, comments = latest.comments || [];
+            if (latest.id !== id || latest.company_code !== task.company_code) throw Error('Область карточки изменилась. Откройте задачу заново.');
+            found = comments.some(item => item.id>pending.baselineId && item.author === 'Влад' && item.text === pending.text);
+            offset += comments.length;
+            complete = comments.some(item => item.id<=pending.baselineId) || comments.length<20 || offset >= (latest.comments_pagination?.total ?? Infinity);
+          }
+          if (found) { finish(pending); await render(); if (taskSheet === own) { await openTask(id); taskSheet?.body.querySelector('[data-wait-result]')?.append('Ранее отправленный ответ найден.'); } }
+          else if (complete) {
+            const current = read(draftKey); if (current?.pending?.id === pending.id) write(draftKey,{...current,pending:undefined});
+            sync(); result.textContent = 'Ответ не найден среди последних комментариев. Проверьте ход работы; повторная отправка возможна только по вашему действию.';
+          } else result.textContent = 'Проверена часть истории. Исход отправки ещё неизвестен; повтор остаётся заблокирован.';
+        } catch (error) { result.textContent = `${error.message}. Ответ остаётся в черновике.`; }
+        finally { button.disabled = false; }
+      };
+      panel.querySelector('[data-wait-clear]').onclick = async event => {
+        if (!canClearWaiting) return;
+        const button = event.currentTarget; button.disabled = true;
+        try {
+          const patch = {task_id:id,revision:task.coordination?.revision};
+          if (canClearBlocker) patch.blocker = '';
+          if (canClearNextStep) patch.next_step = window.SbTaskOverview.stripWaitingPrefix(task.coordination.nextAction);
+          await tool('task_update',patch); await render();
+          if (taskSheet === own) {
+            await openTask(id);
+            const body = taskSheet?.body, residual = body?.querySelector('[data-waiting-actions]');
+            const output = residual?.querySelector('[data-wait-result]') || body?.querySelector('[data-detail-result]');
+            if (output) output.textContent = residual ? 'Маркер ожидания снят. Ожидание остаётся в карточке: проверьте план задачи.' : 'Маркер ожидания снят.';
+          }
+        }
+        catch (error) { result.textContent = error.message; button.disabled = false; }
+      };
+      sync();
+    }
     async function openTask(id) {
       taskSheet?.close(); createSheet?.close();
       const current = ++detailSequence;
@@ -188,6 +337,8 @@
         const body = taskSheet?.body, plan = body?.querySelector('[data-plan-form]'), comment = body?.querySelector('[data-comment-form]');
         if (plan?.dataset.dirty) write(`plan:${id}`,Object.fromEntries(new FormData(plan)));
         if (comment?.elements.text.value) persistComment(id,comment.elements.text.value);
+        const waitReply = body?.querySelector('[data-wait-reply]');
+        if (waitReply) write(`waitreply:${id}`,{...(read(`waitreply:${id}`) || {}),text:waitReply.elements.text.value});
         body?.querySelectorAll('[data-stage-form]').forEach(form => { if (form.dataset.dirty) write(`stage:${id}:${form.dataset.stageForm}`,Object.fromEntries(new FormData(form))); });
       });
       const own = taskSheet; own.body.innerHTML = '<p role="status">Загрузка задачи…</p>';
@@ -195,18 +346,24 @@
         const data = await tool('task_get', {task_id:id,comments_limit:3,subtasks_limit:20});
         if (!alive || current !== detailSequence || taskSheet !== own) return;
         const task = data.task || data, coord = task.coordination || {}, href = chatUrl(task), draftKey = `plan:${id}`, draft = read(draftKey) || {};
+        if (task.status === 'cancelled') { own.body.innerHTML = '<p role="status">Задача снята с доски.</p>'; return; }
         if (read(`comment:${id}`) === null) {
           const previous = legacyDraft(`comment:${task.company_code}:${id}`);
           if (typeof previous?.text === 'string') write(`comment:${id}`,previous);
         }
         const field = (key, fallback = '') => draft[key] ?? fallback;
-        const parentTasks = tasks.filter(item => item.company_code === task.company_code && item.id !== id && !item.parent_task_id);
+        const parentTasks = tasks.filter(item => item.status !== 'cancelled' && item.company_code === task.company_code && item.id !== id && !item.parent_task_id);
         const listComment = comment => `<li data-comment-id="${Number(comment.id)}"><small>${esc(comment.author)} · ${esc(stamp(comment.created_at))}</small><p>${linkedText(comment.text)}</p></li>`;
-        own.body.innerHTML = `<h3 class="tb-task-title">${esc(task.title)}</h3><p class="tb-task-project">${esc(name(task.company_code))}${task.product_name ? ` · ${esc(task.product_name)}` : ''}</p>${href ? `<a class="tb-chat-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Открыть чат исполнителя ↗</a>` : ''}<p><a href="#tasks/record/${Number(id)}" data-task-record>Расширенная карточка · вложения и работа помощников</a></p><dl class="tb-facts">${coord.result ? `<div><dt>Результат</dt><dd>${linkedText(coord.result)}</dd></div>` : ''}${task.assignee_name ? `<div><dt>Делает</dt><dd>${esc(task.assignee_name)}</dd></div>` : ''}${task.reviewer_name ? `<div><dt>Проверяет</dt><dd>${esc(task.reviewer_name)}</dd></div>` : ''}${task.due_date ? `<div><dt>Срок</dt><dd>${esc(task.due_date)}</dd></div>` : ''}${coord.nextAction ? `<div><dt>Следующий шаг</dt><dd>${linkedText(coord.nextAction)}</dd></div>` : ''}${coord.blocker ? `<div><dt>Мешает</dt><dd>${linkedText(coord.blocker)}</dd></div>` : ''}</dl><div class="tb-status-buttons" aria-label="Статус задачи">${Object.entries(STATUS).map(([status,label]) => `<button type="button" data-detail-status="${status}" aria-pressed="${task.status === status}">${label}</button>`).join('')}</div><p data-detail-result role="status"></p>${task.description ? `<details class="tb-description"><summary>Описание · показать всё</summary><p>${linkedText(task.description)}</p></details>` : ''}<section class="tb-detail-section"><h3>Этапы</h3>${Object.entries(STAGES).map(([code,label]) => {
+        own.body.innerHTML = `<h3 class="tb-task-title">${esc(displayTitle(task))}</h3><p class="tb-task-project">${esc(name(task.company_code))}${task.product_name ? ` · ${esc(task.product_name)}` : ''}</p>${href ? `<a class="tb-chat-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Открыть чат исполнителя ↗</a>` : ''}<p><a href="#tasks/record/${Number(id)}" data-task-record>Расширенная карточка · вложения и работа помощников</a></p><dl class="tb-facts">${coord.result ? `<div><dt>Результат</dt><dd>${linkedText(coord.result)}</dd></div>` : ''}${task.assignee_name ? `<div><dt>Делает</dt><dd>${esc(task.assignee_name)}</dd></div>` : ''}${task.reviewer_name ? `<div><dt>Проверяет</dt><dd>${esc(task.reviewer_name)}</dd></div>` : ''}${task.due_date ? `<div><dt>Срок</dt><dd>${esc(task.due_date)}</dd></div>` : ''}${coord.nextAction ? `<div><dt>Следующий шаг</dt><dd>${linkedText(coord.nextAction)}</dd></div>` : ''}${coord.blocker ? `<div><dt>Мешает</dt><dd>${linkedText(coord.blocker)}</dd></div>` : ''}</dl><div class="tb-status-buttons" aria-label="Статус задачи">${Object.entries(STATUS).map(([status,label]) => `<button type="button" data-detail-status="${status}" aria-pressed="${task.status === status}">${label}</button>`).join('')}</div><p data-detail-result role="status"></p>${task.description ? `<details class="tb-description"><summary>Описание · показать всё</summary><p>${linkedText(task.description)}</p></details>` : ''}<section class="tb-detail-section"><h3>Этапы</h3>${Object.entries(STAGES).map(([code,label]) => {
           const stage = coord.milestones?.[code] || {};
           return `<details class="tb-milestone"><summary><span class="tb-stage" data-state="${esc(stage.state || 'pending')}"></span>${label}${stage.checkedAt ? `<time>${esc(stamp(stage.checkedAt))}</time>` : ''}</summary>${stage.evidence ? `<p>${linkedText(stage.evidence)}</p>` : ''}<form data-stage-form="${code}"><label>Основание<textarea name="evidence" maxlength="4000" required>${esc(stage.evidence || '')}</textarea></label><label>Дата проверки<input name="checked_at" type="datetime-local" required></label><button type="submit">Подтвердить этап</button><p data-stage-result role="status"></p></form></details>`;
-        }).join('')}</section>${taskLinks(task).length ? `<section class="tb-detail-section"><h3>Ссылки</h3><ul>${taskLinks(task).map(link => { const url = safeUrl(link.url); return url ? `<li><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(link.label || url)}</a></li>` : ''; }).join('')}</ul></section>` : ''}<section class="tb-detail-section"><h3>Подзадачи <span>${Number(task.subtask_done) || 0}/${Number(task.subtask_count) || 0}</span></h3><ul class="tb-subtasks" data-subtasks>${(task.subtasks || []).map(item => `<li><button type="button" data-child-open="${item.id}">${STATUS[item.status] || ''} · №${item.id} ${esc(item.title)}</button></li>`).join('')}</ul>${(task.subtasks_pagination?.total || 0) > (task.subtasks || []).length ? '<button type="button" data-subtasks-more>Ещё подзадачи</button>' : ''}<button type="button" data-add-subtask>+ Подзадача</button></section><details class="tb-detail-section"${Object.keys(draft).length ? ' open' : ''}><summary>План задачи</summary><form class="tb-form" data-plan-form><label>Исполнитель<input name="executor" maxlength="200" value="${esc(field('executor',task.assignee_name))}"></label><label>Проверяет<input name="reviewer" maxlength="200" value="${esc(field('reviewer',task.reviewer_name))}"></label><label>Срок<input name="due_date" type="date" value="${esc(field('due_date',task.due_date))}"></label><label>Приоритет<select name="priority">${options(PRIORITY,field('priority',task.priority))}</select></label><label class="tb-wide">Следующий шаг<textarea name="next_step" maxlength="4000">${esc(field('next_step',coord.nextAction))}</textarea></label><label class="tb-wide">Мешает<textarea name="blocker" maxlength="4000">${esc(field('blocker',coord.blocker))}</textarea></label><label class="tb-wide">Чат исполнителя<input name="chat_url" type="url" value="${esc(field('chat_url',href))}" placeholder="https://"></label><label>Продукт<select name="product_id">${productOptions(task.company_code,field('product_id',task.product_id))}</select></label><label>Родительская задача<select name="parent_id"><option value="">Без родителя</option>${parentTasks.map(item => `<option value="${item.id}"${String(field('parent_id',task.parent_task_id)) === String(item.id) ? ' selected' : ''}>№${item.id} ${esc(item.title)}</option>`).join('')}</select></label><button type="submit">Сохранить план</button><p class="tb-wide" data-plan-result role="status"></p></form></details><section class="tb-detail-section"><h3>Ход работы</h3><ol class="tb-comments" data-comments>${(task.comments || []).map(listComment).join('')}</ol>${(task.comments_pagination?.total || 0) > (task.comments || []).length ? '<button type="button" data-comments-more>Все комментарии</button>' : ''}<form class="tb-comment-form" data-comment-form><label>Комментарий от Влада<textarea name="text" maxlength="10000" required>${esc(read(`comment:${id}`)?.text || '')}</textarea></label><button type="submit">Добавить комментарий</button><p data-comment-result role="status"></p></form></section>`;
+        }).join('')}</section>${taskLinks(task).length ? `<section class="tb-detail-section"><h3>Ссылки</h3><ul>${taskLinks(task).map(link => { const url = safeUrl(link.url); return url ? `<li><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(link.label || url)}</a></li>` : ''; }).join('')}</ul></section>` : ''}<section class="tb-detail-section"><h3>Подзадачи <span>${childProgress(task).done}/${childProgress(task).count}</span></h3><ul class="tb-subtasks" data-subtasks>${(task.subtasks || []).filter(isVisibleWork).map(item => `<li><button type="button" data-child-open="${item.id}">${STATUS[item.status] || ''} · №${item.id} ${esc(displayTitle(item))}</button></li>`).join('')}</ul>${(task.subtasks_pagination?.total || 0) > (task.subtasks || []).length ? '<button type="button" data-subtasks-more>Ещё подзадачи</button>' : ''}<button type="button" data-add-subtask>+ Подзадача</button></section><details class="tb-detail-section"${Object.keys(draft).length ? ' open' : ''}><summary>План задачи</summary><form class="tb-form" data-plan-form><label>Исполнитель<input name="executor" maxlength="200" value="${esc(field('executor',task.assignee_name))}"></label><label>Проверяет<input name="reviewer" maxlength="200" value="${esc(field('reviewer',task.reviewer_name))}"></label><label>Срок<input name="due_date" type="date" value="${esc(field('due_date',task.due_date))}"></label><label>Приоритет<select name="priority">${options(PRIORITY,field('priority',task.priority))}</select></label><label class="tb-wide">Следующий шаг<textarea name="next_step" maxlength="4000">${esc(field('next_step',coord.nextAction))}</textarea></label><label class="tb-wide">Мешает<textarea name="blocker" maxlength="4000">${esc(field('blocker',coord.blocker))}</textarea></label><label class="tb-wide">Чат исполнителя<input name="chat_url" type="url" value="${esc(field('chat_url',href))}" placeholder="https://"></label><label>Продукт<select name="product_id">${productOptions(task.company_code,field('product_id',task.product_id))}</select></label><label>Родительская задача<select name="parent_id"><option value="">Без родителя</option>${parentTasks.map(item => `<option value="${item.id}"${String(field('parent_id',task.parent_task_id)) === String(item.id) ? ' selected' : ''}>№${item.id} ${esc(displayTitle(item))}</option>`).join('')}</select></label><button type="submit">Сохранить план</button><p class="tb-wide" data-plan-result role="status"></p></form></details><section class="tb-detail-section"><h3>Ход работы</h3><ol class="tb-comments" data-comments>${(task.comments || []).map(listComment).join('')}</ol>${(task.comments_pagination?.total || 0) > (task.comments || []).length ? '<button type="button" data-comments-more>Все комментарии</button>' : ''}<form class="tb-comment-form" data-comment-form><label>Комментарий от Влада<textarea name="text" maxlength="10000" required>${esc(read(`comment:${id}`)?.text || '')}</textarea></label><button type="submit">Добавить комментарий</button><p data-comment-result role="status"></p></form></section>`;
         const result = own.body.querySelector('[data-detail-result]');
+        const module = window.SbTaskOverview?.build(tasks.map(item => item.id === task.id ? task : item)).modules?.find(item => item.task.id === task.id);
+        if (module) {
+          own.body.querySelector('.tb-task-project').insertAdjacentHTML('afterend',`<section class="tb-detail-section" data-module-composition><h3>Задачи модуля</h3><div class="tb-direction-current tb-module-tasks">${module.allMembers.map(item => `<button type="button" class="tb-module-task" data-module-task="${item.id}" data-child-open="${item.id}"><strong>№${item.id} ${esc(displayTitle(item))}</strong><span class="tb-module-task-progress">${window.SbTaskOverview.progress(item)}%</span><span class="tb-module-task-stage">${esc(window.SbTaskOverview.stageText(item))}</span></button>`).join('') || '<p class="tb-direction-people">Задач пока нет</p>'}</div></section>`);
+        }
+        waitingPanel(task,own);
         own.body.querySelector('[data-task-record]').onclick = event => {
           event.preventDefault();
           if (task.company_code && ctx.selectedProjectId !== task.company_code) ctx.chooseProject?.(task.company_code);
@@ -271,7 +428,7 @@
         });
         own.body.querySelector('[data-subtasks-more]')?.addEventListener('click', async event => {
           const button = event.currentTarget; button.disabled = true;
-          try { const response = await more('subtasks',subtasksOffset), next = response.task || response; const list = own.body.querySelector('[data-subtasks]'); for (const item of next.subtasks || []) { const li = document.createElement('li'), child = document.createElement('button'); child.type = 'button'; child.textContent = `${STATUS[item.status] || ''} · №${item.id} ${item.title}`; child.onclick = () => openTask(item.id); li.append(child); list.append(li); } subtasksOffset += next.subtasks?.length || 0; button.hidden = subtasksOffset >= (next.subtasks_pagination?.total || 0); }
+          try { const response = await more('subtasks',subtasksOffset), next = response.task || response; const list = own.body.querySelector('[data-subtasks]'); for (const item of next.subtasks || []) { if (!isVisibleWork(item)) continue; const li = document.createElement('li'), child = document.createElement('button'); child.type = 'button'; child.textContent = `${STATUS[item.status] || ''} · №${item.id} ${displayTitle(item)}`; child.onclick = () => openTask(item.id); li.append(child); list.append(li); } subtasksOffset += next.subtasks?.length || 0; button.hidden = subtasksOffset >= (next.subtasks_pagination?.total || 0); }
           catch (error) { result.textContent = error.message; } finally { button.disabled = false; }
         });
       } catch (error) { if (taskSheet === own) own.body.innerHTML = `<p role="alert">${esc(error.message)}</p>`; }
@@ -307,9 +464,9 @@
       const saveDraft = () => { if (!created) { draftRef = read('create')?.client_ref || draftRef; write('create',{...draft,...Object.fromEntries(new FormData(form)),parent_id:draft.parent_id,client_ref:draftRef}); } };
       rememberCreate = saveDraft;
       const showDuplicates = data => {
-        const found = data.possible_duplicates || [], similarProducts = data.possible_product_duplicates || [];
-        duplicates.innerHTML = `${found.length ? '<strong>Похожие задачи — можно открыть существующую:</strong>' : ''}${found.map(task => `<button type="button" data-existing-task="${Number(task.id)}">№${task.id} ${esc(task.title)}</button>`).join('')}${similarProducts.length ? `<p>Похожие продукты: ${similarProducts.map(product => `<button type="button" data-existing-product="${product.id}">${esc(product.name)}</button>`).join('')}</p>` : ''}`;
-        form.querySelector('[data-force-label]').hidden = !(found.length || similarProducts.length);
+        const matches = data.possible_duplicates || [], found = matches.filter(item => item.status !== 'cancelled'), similarProducts = data.possible_product_duplicates || [];
+        duplicates.innerHTML = `${found.length ? '<strong>Похожие задачи — можно открыть существующую:</strong>' : ''}${found.map(task => `<button type="button" data-existing-task="${Number(task.id)}">№${task.id} ${esc(displayTitle(task))}</button>`).join('')}${matches.length > found.length ? '<p>Есть прежнее совпадение. Для отдельной задачи подтвердите создание.</p>' : ''}${similarProducts.length ? `<p>Похожие продукты: ${similarProducts.map(product => `<button type="button" data-existing-product="${product.id}">${esc(product.name)}</button>`).join('')}</p>` : ''}`;
+        form.querySelector('[data-force-label]').hidden = !(matches.length || similarProducts.length);
         duplicates.querySelectorAll('[data-existing-task]').forEach(button => button.onclick = () => { saveDraft(); openTask(Number(button.dataset.existingTask)); });
         duplicates.querySelectorAll('[data-existing-product]').forEach(button => button.onclick = () => { form.elements.product_id.value = button.dataset.existingProduct; form.querySelector('[data-new-product]').hidden = true; saveDraft(); });
       };
@@ -381,9 +538,11 @@
     };
     const pageShow = event => { if (event.persisted) void recover(); };
     const visibility = () => { if (document.visibilityState === 'visible') void recover(); };
+    const replySettled = event => { if (event.detail?.key === key) syncWaitingTask(event.detail.id); };
     window.addEventListener('pageshow',pageShow); document.addEventListener('visibilitychange',visibility);
+    window.addEventListener('sb-waiting-reply-settled',replySettled);
     mediaTheme?.addEventListener?.('change',applyTheme);
-    const controller = {render,openTask,destroy:() => { alive = false; ++sequence; ++detailSequence; taskSheet?.close(); createSheet?.close(); window.removeEventListener('pageshow',pageShow); document.removeEventListener('visibilitychange',visibility); mediaTheme?.removeEventListener?.('change',applyTheme); document.body.classList.remove('tb-owner-theme-light','tb-owner-theme-dark'); delete container.dataset.tbTheme; controllers.delete(container); }};
+    const controller = {render,openTask,destroy:() => { alive = false; ++sequence; ++detailSequence; taskSheet?.close(); createSheet?.close(); window.removeEventListener('pageshow',pageShow); window.removeEventListener('sb-waiting-reply-settled',replySettled); document.removeEventListener('visibilitychange',visibility); mediaTheme?.removeEventListener?.('change',applyTheme); document.body.classList.remove('tb-owner-theme-light','tb-owner-theme-dark'); delete container.dataset.tbTheme; controllers.delete(container); }};
     controllers.set(container,controller); void render(initial); return controller;
   }
   window.SbTaskBoard = Object.freeze({mount});

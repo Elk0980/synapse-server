@@ -4,7 +4,7 @@ const DEPARTMENTS=['coordination','engineering','design','marketing','analytics'
 const fail=(status,message)=>{throw Object.assign(new Error(message),{status});};
 const clean=(v,max=4000)=>{if(typeof v!=='string'||v.length>max)fail(400,'Некорректное поле задачи');return v.trim();};
 const owner=a=>{if(a?.role!=='owner'||!Number.isSafeInteger(a.userId)||a.userId<1)fail(403,'Диспетчер доступен владельцу');};
-function createTaskDispatch(db,{now=()=>Date.now()}={}){
+function createTaskDispatch(db,{now=()=>Date.now(),onAccept=()=>{}}={}){
  db.exec(`CREATE TABLE IF NOT EXISTS task_dispatch(task_id INTEGER PRIMARY KEY REFERENCES tasks(id),company_code TEXT NOT NULL,
  revision INTEGER NOT NULL DEFAULT 1,cycle INTEGER NOT NULL DEFAULT 1,state TEXT NOT NULL,department TEXT NOT NULL DEFAULT 'coordination',
  question TEXT NOT NULL DEFAULT '',answer TEXT NOT NULL DEFAULT '',result TEXT NOT NULL DEFAULT '',provider TEXT NOT NULL DEFAULT '',model TEXT NOT NULL DEFAULT '',
@@ -22,6 +22,7 @@ function createTaskDispatch(db,{now=()=>Date.now()}={}){
  const tx=fn=>{db.exec('BEGIN IMMEDIATE');try{const r=fn();db.exec('COMMIT');return r;}catch(e){db.exec('ROLLBACK');throw e;}};
  const task=id=>{if(!Number.isSafeInteger(id)||id<1)fail(400,'Некорректная задача');const r=db.prepare('SELECT * FROM tasks WHERE id=? AND is_deleted=0').get(id);if(!r)fail(404,'Задача не найдена');return r;};
  const row=id=>db.prepare('SELECT * FROM task_dispatch WHERE task_id=?').get(id);
+ const localActive=id=>db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='task_dispatch_agent_runs'").get()&&db.prepare("SELECT 1 FROM task_dispatch_agent_runs WHERE task_id=? AND state IN ('queued','running','unknown','waiting')").get(id);
  const history=(id,note)=>{const r=row(id);db.prepare('INSERT INTO task_dispatch_history(task_id,revision,state,note,question,result,model,created_at,review) VALUES(?,?,?,?,?,?,?,?,?)').run(id,r.revision,r.state,note,r.question,r.result,r.model,stamp(),r.review);};
  const change=(id,fields,note)=>{db.prepare(`UPDATE task_dispatch SET ${Object.keys(fields).map(k=>`${k}=?`).join(',')},revision=revision+1,updated_at=? WHERE task_id=?`).run(...Object.values(fields),stamp(),id);history(id,note);};
  const alert=(r,label)=>db.prepare('INSERT OR IGNORE INTO task_dispatch_alerts(task_id,company_code,event_key,text) VALUES(?,?,?,?)').run(r.task_id,r.company_code,`dispatch:${r.task_id}:${r.cycle}:${r.state}`,`Задача #${r.task_id} · ${r.company_code}\n${label}\n${r.question||r.result||'Требуется проверка владельца'}\nЛК → Задачи → Доска проектов.`.slice(0,3000));
@@ -40,8 +41,9 @@ function createTaskDispatch(db,{now=()=>Date.now()}={}){
  }
  function enqueue(id,b,a){owner(a);tx(()=>put(id,b.revision));return get(id,a);}
  function act(id,b,a){owner(a);reconcile();tx(()=>{task(id);const r=row(id);if(!r||r.revision!==b.revision)fail(409,'Карточка изменилась. Обновите её');
+  if(localActive(id))fail(409,'Задача принадлежит локальному запуску. Используйте agent_stop или agent_message; действие диспетчера не останавливает процесс.');
   if(b.action==='cancel'){change(id,{state:'cancelled',lease_token:'',lease_until:0},'Владелец остановил обработку');return;}
-  if(b.action==='accept'){if(r.state!=='review')fail(409,'Нет результата на проверке');change(id,{state:'done'},'Владелец принял результат');db.prepare("UPDATE tasks SET status='done',updated_at=? WHERE id=?").run(stamp(),id);return;}
+  if(b.action==='accept'){if(r.state!=='review')fail(409,'Нет результата на проверке');onAccept(id,a);change(id,{state:'done'},'Владелец принял результат');db.prepare("UPDATE tasks SET status='done',updated_at=? WHERE id=?").run(stamp(),id);return;}
   if(!['answer','revise','retry'].includes(b.action)||!['needs_input','review','blocked','awaiting_executor'].includes(r.state))fail(409,'Действие недоступно');
   if(b.action==='answer'&&r.state!=='needs_input')fail(409,'Нет вопроса');if(b.action==='revise'&&r.state!=='review')fail(409,'Нет результата');
   const answer=clean(b.text||'',2000);if(!answer)fail(400,'Укажите ответ или следующий шаг');
@@ -71,7 +73,10 @@ function createTaskDispatch(db,{now=()=>Date.now()}={}){
    const old=db.prepare('SELECT * FROM task_dispatch_mirrors WHERE room=? AND source_id=?').get(b.room,b.sourceId);
    if(old){const current=task(old.task_id),dispatch=row(old.task_id);if(current.company_code!==b.companyCode)fail(409,'Задача перенесена в другую компанию');
     if(version>old.source_version){db.prepare('UPDATE task_dispatch_mirrors SET source_note=?,source_version=? WHERE room=? AND source_id=?').run(note,version,b.room,b.sourceId);
-     if(!['done','cancelled'].includes(current.status)&&!['done','cancelled'].includes(dispatch.state))change(old.task_id,{state:'queued',review:'null',question:'',cycle:dispatch.cycle+1,attempts:0,next_at:0,lease_token:'',lease_until:0,result:''},'Получено новое уточнение из переписки; прошлый результат требует повторной проверки');
+     if(!['done','cancelled'].includes(current.status)&&!['done','cancelled'].includes(dispatch.state)){
+      if(localActive(old.task_id))history(old.task_id,'Уточнение сохранено. Локальный запуск не повторяется; продолжение передаётся через agent_message.');
+      else change(old.task_id,{state:'queued',review:'null',question:'',cycle:dispatch.cycle+1,attempts:0,next_at:0,lease_token:'',lease_until:0,result:''},'Получено новое уточнение из переписки; прошлый результат требует повторной проверки');
+     }
     }return {taskId:old.task_id,state:row(old.task_id)?.state};}
 
    const id=Number(db.prepare("INSERT INTO tasks(title,description,company_code,created_at,updated_at,source,source_ref,source_author,created_by) VALUES(?,?,?,?,?,'chat',?,'Хью','Серверный помощник')").run(title,note,b.companyCode,stamp(),stamp(),`project-chat:${b.room}:${b.sourceId}`).lastInsertRowid);

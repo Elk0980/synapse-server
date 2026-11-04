@@ -2,6 +2,7 @@
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const {createHash} = require('node:crypto');
 const MAX_DOCUMENT_BYTES = 512 * 1024;
 const fail = (status, message) => { throw Object.assign(new Error(message), {status}); };
 
@@ -69,42 +70,67 @@ async function readMap(root) {
       map.rules.length > 200 || map.always.length > 50) fail(503, 'Некорректная карта документов');
   const validateList = values => Array.isArray(values) && values.length > 0 && values.length <= 50 &&
     values.every(value => { try { documentPath(value); return value !== 'MAP.json'; } catch { return false; } });
-  if (!validateList(map.always) || map.rules.some(rule => !rule || typeof rule !== 'object' ||
+  const validReason = value => typeof value === 'string' && !!value.trim() && value.length <= 2000;
+  const always = map.always.map(item => typeof item === 'string' ?
+    {doc:item, why:'Обязательный документ для каждой сессии'} : item);
+  if (always.some(item => !item || typeof item !== 'object' ||
+      !validateList([item.doc]) || !validReason(item.why)) ||
+      (map.version !== undefined && (typeof map.version !== 'string' || !map.version.trim() || map.version.length > 200)) ||
+      (map.rules_version !== undefined && (typeof map.rules_version !== 'string' || !map.rules_version.trim() || map.rules_version.length > 200)) ||
+      (map.fallback !== undefined && (!map.fallback || !validateList(map.fallback.read) || !validReason(map.fallback.why))) || map.rules.some(rule => !rule || typeof rule !== 'object' ||
       !validateList(rule.read) || !Array.isArray(rule.match) || !rule.match.length || rule.match.length > 50 ||
       rule.match.some(term => typeof term !== 'string' || !term.trim() || term.length > 100) ||
       typeof rule.why !== 'string' || !rule.why.trim() || rule.why.length > 2000)) {
     fail(503, 'Некорректная карта документов');
   }
-  return map;
+  return {...map, always};
 }
 
 function selectedDocuments(map, request) {
-  const selected = new Map(map.always.map(item => [item, {path:item, reasons:['Обязательный документ для каждой сессии']} ]));
+  const selected = new Map(map.always.map(item => [item.doc, {path:item.doc, reasons:[item.why]} ]));
   const query = request.toLocaleLowerCase('ru');
+  let matched = false;
   for (const rule of map.rules) {
     if (!rule.match.some(term => query.includes(term.trim().toLocaleLowerCase('ru')))) continue;
+    matched = true;
     for (const item of rule.read) {
       if (!selected.has(item)) selected.set(item, {path:item, reasons:[]});
       if (!selected.get(item).reasons.includes(rule.why)) selected.get(item).reasons.push(rule.why);
     }
   }
+  if (!matched && map.fallback) for (const item of map.fallback.read) {
+    if (!selected.has(item)) selected.set(item, {path:item, reasons:[]});
+    if (!selected.get(item).reasons.includes(map.fallback.why)) selected.get(item).reasons.push(map.fallback.why);
+  }
   return [...selected.values()];
 }
 
-async function sessionDocuments(root, request) {
+async function sessionContext(root, request) {
   const map = await readMap(root);
   const documents = selectedDocuments(map, request);
-  // Проверяем поставленный канон до регистрации сессии и изменения состояния агента.
-  for (const document of documents) await readBounded(root, document.path);
-  return documents;
+  const mandatory = new Set(map.always.map(item => item.doc));
+  const rules = [];
+  // Один снимок карты; канон проверяется до любого изменения CRM.
+  for (const document of documents) {
+    const text = await readBounded(root, document.path);
+    if (mandatory.has(document.path)) rules.push({path:document.path, text});
+  }
+  const revision = createHash('sha256').update(JSON.stringify({map, rules})).digest('hex');
+  return {documents, rules:rules.map(item => item.text), rules_documents:rules,
+    map_version:map.version || null, rules_version:map.rules_version || map.version || null,
+    rules_revision:revision};
+}
+
+async function sessionDocuments(root, request) {
+  return (await sessionContext(root, request)).documents;
 }
 
 async function readDocument(root, relative) {
   documentPath(relative);
   const map = await readMap(root);
-  const allowed = new Set([...map.always, ...map.rules.flatMap(rule => rule.read)]);
+  const allowed = new Set([...map.always.map(item => item.doc), ...map.rules.flatMap(rule => rule.read), ...(map.fallback?.read || [])]);
   if (!allowed.has(relative)) fail(404, 'Документ не включён в карту');
   return {path:relative, text:await readBounded(root, relative)};
 }
 
-module.exports = {sessionDocuments, readDocument, documentPath, readMap, MAX_DOCUMENT_BYTES};
+module.exports = {sessionContext, sessionDocuments, readDocument, documentPath, readMap, MAX_DOCUMENT_BYTES};

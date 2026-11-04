@@ -77,7 +77,7 @@ test('официальный Streamable HTTP: initialize, tools/list, ping и о
   const listed = await f.rpc('tools/list');
   assert.equal(listed.response.status, 200);
   assert.deepEqual(listed.body.result.tools.map(tool => tool.name), TOOLS.map(tool => tool.name));
-  assert.equal(listed.body.result.tools.length, 13);
+  assert.equal(listed.body.result.tools.length, 19);
   assert.ok(listed.body.result.tools.every(tool => /[а-яА-Я]/.test(tool.description)));
   assert.equal((await f.rpc('ping')).response.status, 200);
   for (const method of ['GET','DELETE','PUT']) assert.equal((await fetch(f.endpoint, {method})).status, 405);
@@ -98,7 +98,18 @@ test('схемы инструментов запрещают превышени�
     ['agent_report',{agent:'Codex',state:'work',last_event:'event',chat:'x'.repeat(501)}],
     ['task_get',{task_id:1,comments_limit:21}],
     ['task_get',{task_id:1,subtasks_limit:101}],
-    ['task_get',{task_id:1,comments_offset:-1}]]) {
+    ['agent_launch',{task_id:1}],
+    ['agent_launch',{task_id:1,code_only:false,allowed_paths:['ops/']}],
+    ['agent_launch',{task_id:1,code_only:true}],
+    ['agent_launch',{task_id:1,code_only:true,allowed_paths:[]}],
+    ['agent_launch',{task_id:1,code_only:true,allowed_paths:['../']}],
+    ['agent_launch',{task_id:1,code_only:true,allowed_paths:['ops/*']}],
+    ['task_get',{task_id:1,comments_offset:-1}],
+    ['agent_launch',{task_id:1,executor_profile:'shell'}],
+    ['agent_launch',{task_id:1,production_approved:true}],
+    ['agent_status',{run_id:'../not-a-run'}],
+    ['agent_message',{run_id:'00000000-0000-4000-8000-000000000001',text:''}],
+    ['agent_worker_update',{run_id:'00000000-0000-4000-8000-000000000001',event:'deploy'}]]) {
     const result = await f.rpc('tools/call', {name,arguments:args});
     assert.ok(result.body.error || result.body.result.isError);
   }
@@ -125,7 +136,7 @@ test('отсутствующий канон не создаёт сессию; к
   const payload = result.body.result.structuredContent;
   assert.equal(payload.session_id, 'fixture-session');
   assert.deepEqual(payload.documents.map(document => document.path), ['CONSTITUTION.md','DIRECTION.md','SITE.md']);
-  assert.ok(payload.rules.some(rule => rule.includes('maker ≠ checker')));
+  assert.deepEqual(payload.rules, ['SAMPLE fixture', 'SAMPLE fixture']);
   assert.equal(f.calls.length, 1);
   result = await f.rpc('tools/call', {name:'doc_read',arguments:{path:'SITE.md'}});
   assert.equal(result.body.result.structuredContent.text, 'SAMPLE fixture');
@@ -137,7 +148,7 @@ test('HTTP работает без каталога документов; поз
   assert.deepEqual(await (await fetch(`${f.origin}/health`)).json(), {status:'ok'});
   const listed = await f.rpc('tools/list');
   assert.equal(listed.response.status,200);
-  assert.equal(listed.body.result.tools.length,13);
+  assert.equal(listed.body.result.tools.length,19);
   let result = await f.rpc('tools/call', {name:'tasks_list',arguments:{project:'synapse-business'}});
   assert.equal(result.body.result.isError,undefined);
   assert.deepEqual(result.body.result.structuredContent.tasks,[]);
@@ -224,4 +235,55 @@ test('CRM читает допустимый большой ответ и отм�
   }), {headers:{'content-length':String(MAX_CRM_RESPONSE_BYTES + 1)}}));
   await assert.rejects(declared('tasks_list',{}),error => error.status === 502);
   assert.equal(cancelled,2);
+});
+
+
+test('приватная карта: полный канон, fallback и обновление открытой сессии без перезапуска', async t => {
+  const f = await fixture(t);
+  const call = async () => (await f.rpc('tools/call', {name:'session_start',
+    arguments:{agent:'SAMPLE агент',kind:'codex',request:'неизвестная тема'}})).body.result;
+  const map = {version:'SAMPLE-map-1', rules_version:'SAMPLE-rules-1',
+    always:[{doc:'RULES.md',why:'SAMPLE обязательно'}], rules:[],
+    fallback:{read:['REFERENCE.md'],why:'SAMPLE справочник'}};
+  await fs.writeFile(path.join(f.docsDir,'MAP.json'),JSON.stringify(map));
+  await fs.writeFile(path.join(f.docsDir,'RULES.md'),'SAMPLE канон 1');
+  let result = await call();
+  assert.equal(result.isError,true);
+  assert.equal(f.calls.length,0);
+  await fs.writeFile(path.join(f.docsDir,'REFERENCE.md'),'SAMPLE справочник');
+  let payload = (await call()).structuredContent;
+  assert.deepEqual(payload.rules,['SAMPLE канон 1']);
+  assert.equal(payload.rules_version,'SAMPLE-rules-1');
+  assert.equal(payload.rules_changed,null);
+  assert.deepEqual(payload.documents.map(d=>d.path),['RULES.md','REFERENCE.md']);
+  assert.equal((await call()).structuredContent.rules_changed,false);
+  map.rules_version = 'SAMPLE-rules-2';
+  await fs.writeFile(path.join(f.docsDir,'MAP.json'),JSON.stringify(map));
+  await fs.writeFile(path.join(f.docsDir,'RULES.md'),'SAMPLE канон 2');
+  payload = (await call()).structuredContent;
+  assert.equal(payload.session_id,'fixture-session');
+  assert.equal(payload.rules_changed,true);
+  assert.match(payload.rules_notice,/Правила изменились/);
+  assert.deepEqual(payload.rules_documents,[{path:'RULES.md',text:'SAMPLE канон 2'}]);
+  const revision = payload.rules_revision;
+  // Изменение текста тоже обнаруживается, даже если поставщик забыл сменить версию.
+  await fs.writeFile(path.join(f.docsDir,'RULES.md'),'SAMPLE исправленный канон');
+  payload = (await call()).structuredContent;
+  assert.equal(payload.rules_changed,true);
+  assert.notEqual(payload.rules_revision,revision);
+  const read = await f.rpc('tools/call',{name:'doc_read',arguments:{path:'REFERENCE.md'}});
+  assert.equal(read.body.result.structuredContent.text,'SAMPLE справочник');
+});
+
+test('separate MCP keys bind different registry IDs; caller agent label never selects identity',async t=>{
+ const first='fixture-primary-token-for-tests-00000001',second='fixture-secondary-token-for-tests-000002';
+ const c=loadConfig({TASKS_MCP_TOKEN:first,TASKS_MCP_AGENT_ID:'1',TASKS_MCP_OWNER_ID:'7',TASKS_MCP_PROJECTS:'alpha',CRM_API_KEY:'fixture-crm-key',TASKS_MCP_AGENT_CREDENTIALS:JSON.stringify([{token:second,agentId:2}])});
+ const seen=[];const server=createTasksMcpServer(c,{fetchImpl:async(url,options)=>{const claim=options.headers['x-synapse-task-principal'].split('.')[0];seen.push(JSON.parse(Buffer.from(claim,'base64url').toString('utf8')).agentId);return new Response(JSON.stringify({agents:[]}),{status:200});}});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
+ for(const token of [first,second]) {
+  const r=await fetch(`http://127.0.0.1:${server.address().port}/mcp/${token}`,{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'agents_list',arguments:{}}})});
+  assert.equal(r.status,200);assert.equal((await r.json()).result.isError,undefined);
+ }
+ assert.deepEqual(seen,[1,2]);
+ assert.throws(()=>loadConfig({TASKS_MCP_TOKEN:first,TASKS_MCP_OWNER_ID:'7',TASKS_MCP_PROJECTS:'alpha',CRM_API_KEY:'fixture',TASKS_MCP_AGENT_CREDENTIALS:JSON.stringify([{token:first,agentId:2}])}),/bindings/);
 });
