@@ -27,7 +27,8 @@ test('normalizeCrmPath: служебные и ненормализованные
   for (const raw of ['/internal/x', '//internal/x', '/INTERNAL/x', '/Internal', '/internal', '///internal//x',
     '/%69nternal/x']) assert.deepEqual(normalizeCrmPath(raw), { ok: false, status: 403 }, raw);
   for (const raw of ['/./internal/x', '/../internal/x', '/%2Finternal/x', '/%2finternal', '/%2E/internal',
-    '/%2e%2e/internal', '/leads/%2F..', '/a%5Cb', '/%252Finternal', '/%E0%A4%A', '/a%00b', '/.', '/..'])
+    '/%2e%2e/internal', '/leads/%2F..', '/a%5Cb', '/%252Finternal', '/%E0%A4%A', '/a%00b', '/.', '/..',
+    '/leads;x', '/internal;x', '/leads/1;x', '/leads%3Bx', '/internal%3bx'])
     assert.equal(normalizeCrmPath(raw).ok, false, raw);
 });
 
@@ -101,7 +102,7 @@ test('прокси /content/crm: служебные пути закрыты, о�
   const blocked = ['/content/crm//internal/task-dispatch/claim', '/content/crm/./internal/task-dispatch/claim',
     '/content/crm/%2Finternal/task-dispatch/claim', '/content/crm/INTERNAL/task-dispatch/claim',
     '/content/crm/%2e/internal/x', '/content/crm/%2E%2E/internal/x', '/content/crm///internal', '/content/crm/Internal/x',
-    '/content/crm/a/%2F/internal'];
+    '/content/crm/a/%2F/internal', '/content/crm/internal;x', '/content/crm/leads;x', '/content/crm/leads%3Bx?companyCode=avokado'];
   for (const route of blocked) {
     const result = await rawRequest(contentPort, route, { cookie });
     assert.ok([403, 404].includes(result.status), `${route} → ${result.status}`);

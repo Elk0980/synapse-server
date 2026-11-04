@@ -4,10 +4,10 @@
    Проверки прав и запрос в CRM используют одну и ту же строку, которую возвращает эта функция. */
 
 // Символы pchar (RFC 3986), которые encodeURIComponent кодирует, а в сегменте пути они допустимы как есть.
-const PCHAR_RESTORE = { '%24': '$', '%26': '&', '%2B': '+', '%2C': ',', '%3B': ';', '%3D': '=', '%3A': ':', '%40': '@' };
+const PCHAR_RESTORE = { '%24': '$', '%26': '&', '%2B': '+', '%2C': ',', '%3D': '=', '%3A': ':', '%40': '@' };
 
 function encodeSegment(value) {
-  return encodeURIComponent(value).replace(/%(?:24|26|2B|2C|3B|3D|3A|40)/g, (code) => PCHAR_RESTORE[code]);
+  return encodeURIComponent(value).replace(/%(?:24|26|2B|2C|3D|3A|40)/g, (code) => PCHAR_RESTORE[code]);
 }
 
 /**
@@ -22,9 +22,9 @@ function normalizeCrmPath(rawPath) {
     if (segment === '.' || segment === '..') return { ok: false, status: 404 };
     let decoded;
     try { decoded = decodeURIComponent(segment); } catch { return { ok: false, status: 404 }; }
-    // Раскодирование не должно менять границы сегментов, давать «.»/«..», управляющие символы
+    // Раскодирование не должно менять границы сегментов, давать «.»/«..», «;», управляющие символы
     // или ещё один слой кодирования.
-    if (decoded === '.' || decoded === '..' || /[/\\\u0000-\u001f\u007f]/.test(decoded) ||
+    if (decoded === '.' || decoded === '..' || /[/\\;\u0000-\u001f\u007f]/.test(decoded) ||
       /%[0-9a-f]{2}/i.test(decoded)) return { ok: false, status: 404 };
     normalized.push(decoded);
   }
