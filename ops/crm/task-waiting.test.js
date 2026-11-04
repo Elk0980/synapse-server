@@ -83,6 +83,10 @@ test('tasks_list supplies detail-free waiting data and legacy edits cannot inven
   clock.value=Date.parse(times[3]);assert.equal(call('tasks_list',{overview:true}).tasks[0].waiting_since,times[1]);
   const assigned=create('SAMPLE назначение','alpha','Влад');
   api.save(assigned.id,{revision:assigned.coordination.revision,data:{result:'Старый редактор сохранил отчёт'}},owner);
+  assert.equal(call('task_get',{task_id:assigned.id}).waiting_since,assigned.created_at,'partial save preserves the existing executor and proven start');
+  // Emulate a snapshot made by the legacy save, which could erase executorName.
+  const revision=call('task_get',{task_id:assigned.id}).coordination.revision;
+  api.save(assigned.id,{revision,data:{executorName:'',result:'SAMPLE legacy empty executor snapshot'}},owner);
   assert.equal(call('task_get',{task_id:assigned.id}).waiting_since,null,'legacy empty executor is uncertain even if actual assignment remains Vlad');
   clock.value+=1000;call('task_update',{task_id:assigned.id,next_step:'Проверить'});
   assert.equal(call('task_get',{task_id:assigned.id}).waiting_since,null,'a later touch must not pretend that waiting just began');

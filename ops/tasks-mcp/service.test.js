@@ -274,3 +274,16 @@ test('приватная карта: полный канон, fallback и обн
   const read = await f.rpc('tools/call',{name:'doc_read',arguments:{path:'REFERENCE.md'}});
   assert.equal(read.body.result.structuredContent.text,'SAMPLE справочник');
 });
+
+test('separate MCP keys bind different registry IDs; caller agent label never selects identity',async t=>{
+ const first='fixture-primary-token-for-tests-00000001',second='fixture-secondary-token-for-tests-000002';
+ const c=loadConfig({TASKS_MCP_TOKEN:first,TASKS_MCP_AGENT_ID:'1',TASKS_MCP_OWNER_ID:'7',TASKS_MCP_PROJECTS:'alpha',CRM_API_KEY:'fixture-crm-key',TASKS_MCP_AGENT_CREDENTIALS:JSON.stringify([{token:second,agentId:2}])});
+ const seen=[];const server=createTasksMcpServer(c,{fetchImpl:async(url,options)=>{const claim=options.headers['x-synapse-task-principal'].split('.')[0];seen.push(JSON.parse(Buffer.from(claim,'base64url').toString('utf8')).agentId);return new Response(JSON.stringify({agents:[]}),{status:200});}});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
+ for(const token of [first,second]) {
+  const r=await fetch(`http://127.0.0.1:${server.address().port}/mcp/${token}`,{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'agents_list',arguments:{}}})});
+  assert.equal(r.status,200);assert.equal((await r.json()).result.isError,undefined);
+ }
+ assert.deepEqual(seen,[1,2]);
+ assert.throws(()=>loadConfig({TASKS_MCP_TOKEN:first,TASKS_MCP_OWNER_ID:'7',TASKS_MCP_PROJECTS:'alpha',CRM_API_KEY:'fixture',TASKS_MCP_AGENT_CREDENTIALS:JSON.stringify([{token:first,agentId:2}])}),/bindings/);
+});

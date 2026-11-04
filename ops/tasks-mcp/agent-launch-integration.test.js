@@ -3,6 +3,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {randomUUID} = require('node:crypto');
+const path = require('node:path');
+const {DatabaseSync} = require('node:sqlite');
 const {startFixture} = require('./test-fixture');
 const {startChildMcp} = require('../content/agent-launch-child-mcp');
 const {createMcpClient} = require('../content/agent-launch-local-worker');
@@ -50,7 +52,11 @@ test('real MCP → CRM → existing dispatch → worker claim, session resume an
   await assert.rejects(childCall('agent_launch',{task_id:old.id}),{code:'MCP_REJECTED'});
   const catalog = await call('agents_list',{});
   const agent = catalog.agents.find(a => a.name===`Codex — задача #${target.id}`);
-  assert.equal(agent.state,'work');assert.equal(agent.active_tasks[0].id,target.id);
+  // MCP registration does not create the Owner grant introduced by the watchdog.
+  assert.equal(agent.state,'unknown');assert.equal(agent.active_tasks[0].id,target.id);
+  const registry = new DatabaseSync(path.join(fixture.dir,'crm.sqlite'),{readOnly:true});
+  try { assert.equal(registry.prepare('SELECT count(*) n FROM agent_access WHERE agent_id=?').get(agent.id).n,0); }
+  finally { registry.close(); }
   await call('agent_worker_update',{...credentials,event:'complete',session_id,summary:'TURN_COMPLETE',exit_code:0});
   const message = await call('agent_message',{run_id:job.run_id,text:'SAMPLE исправить проверку',client_ref:'test-followup'});
   const continued = (await call('agent_worker_claim',{worker_id})).job;

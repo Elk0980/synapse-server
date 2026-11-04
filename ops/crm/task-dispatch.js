@@ -4,7 +4,7 @@ const DEPARTMENTS=['coordination','engineering','design','marketing','analytics'
 const fail=(status,message)=>{throw Object.assign(new Error(message),{status});};
 const clean=(v,max=4000)=>{if(typeof v!=='string'||v.length>max)fail(400,'Некорректное поле задачи');return v.trim();};
 const owner=a=>{if(a?.role!=='owner'||!Number.isSafeInteger(a.userId)||a.userId<1)fail(403,'Диспетчер доступен владельцу');};
-function createTaskDispatch(db,{now=()=>Date.now()}={}){
+function createTaskDispatch(db,{now=()=>Date.now(),onAccept=()=>{}}={}){
  db.exec(`CREATE TABLE IF NOT EXISTS task_dispatch(task_id INTEGER PRIMARY KEY REFERENCES tasks(id),company_code TEXT NOT NULL,
  revision INTEGER NOT NULL DEFAULT 1,cycle INTEGER NOT NULL DEFAULT 1,state TEXT NOT NULL,department TEXT NOT NULL DEFAULT 'coordination',
  question TEXT NOT NULL DEFAULT '',answer TEXT NOT NULL DEFAULT '',result TEXT NOT NULL DEFAULT '',provider TEXT NOT NULL DEFAULT '',model TEXT NOT NULL DEFAULT '',
@@ -43,7 +43,7 @@ function createTaskDispatch(db,{now=()=>Date.now()}={}){
  function act(id,b,a){owner(a);reconcile();tx(()=>{task(id);const r=row(id);if(!r||r.revision!==b.revision)fail(409,'Карточка изменилась. Обновите её');
   if(localActive(id))fail(409,'Задача принадлежит локальному запуску. Используйте agent_stop или agent_message; действие диспетчера не останавливает процесс.');
   if(b.action==='cancel'){change(id,{state:'cancelled',lease_token:'',lease_until:0},'Владелец остановил обработку');return;}
-  if(b.action==='accept'){if(r.state!=='review')fail(409,'Нет результата на проверке');change(id,{state:'done'},'Владелец принял результат');db.prepare("UPDATE tasks SET status='done',updated_at=? WHERE id=?").run(stamp(),id);return;}
+  if(b.action==='accept'){if(r.state!=='review')fail(409,'Нет результата на проверке');onAccept(id,a);change(id,{state:'done'},'Владелец принял результат');db.prepare("UPDATE tasks SET status='done',updated_at=? WHERE id=?").run(stamp(),id);return;}
   if(!['answer','revise','retry'].includes(b.action)||!['needs_input','review','blocked','awaiting_executor'].includes(r.state))fail(409,'Действие недоступно');
   if(b.action==='answer'&&r.state!=='needs_input')fail(409,'Нет вопроса');if(b.action==='revise'&&r.state!=='review')fail(409,'Нет результата');
   const answer=clean(b.text||'',2000);if(!answer)fail(400,'Укажите ответ или следующий шаг');

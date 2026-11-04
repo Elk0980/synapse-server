@@ -39,6 +39,11 @@ test('MCP → настоящий кабинет/CSRF → MCP: одна запи�
   const legacy = await f.cabinet(`/tasks/${id}?companyCode=palitra-love`, 'PATCH', { status: 'done' });
   assert.equal(legacy.status, 200, JSON.stringify(legacy.body));
   assert.equal((await f.call('task_get', { task_id: id })).data.status, 'done');
+  const fakeStage=await f.call('task_update',{task_id:id,stage:'code',evidence:'https://github.com/Elk0980/synapse-server/pull/999999999',checked_at:new Date().toISOString()});
+  assert.equal(fakeStage.isError,false);
+  const digest=await f.cabinet('/coordination/watchdog');
+  assert.equal(digest.status,200);assert.equal(digest.body.delivery_enabled,false);assert.equal(digest.body.mode,'observe');
+  assert.equal((await f.cabinet('/coordination/watchdog','GET',undefined,f.editor)).status,403);
   const sameReviewer = await f.cabinet(`/tasks/${id}?companyCode=palitra-love`, 'PATCH', { assigneeName: input.reviewer });
   assert.equal(sameReviewer.status, 400);
   const assigned = await f.cabinet(`/tasks/${id}?companyCode=palitra-love`, 'PATCH', { assigneeName: 'Claude fixture' });

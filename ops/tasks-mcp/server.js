@@ -2,7 +2,7 @@
 
 const http = require('node:http');
 const path = require('node:path');
-const {createHash, timingSafeEqual} = require('node:crypto');
+const {createHash, createHmac, timingSafeEqual} = require('node:crypto');
 const {McpServer} = require('@modelcontextprotocol/server');
 const {NodeStreamableHTTPServerTransport} = require('@modelcontextprotocol/node');
 const {TOOLS} = require('./tools');
@@ -16,12 +16,27 @@ function loadConfig(env = process.env) {
   const ownerId = Number(env.TASKS_MCP_OWNER_ID);
   const token = env.TASKS_MCP_TOKEN || '';
   const crmKey = env.CRM_API_KEY || '';
+  const agentId=env.TASKS_MCP_AGENT_ID ? Number(env.TASKS_MCP_AGENT_ID) : null;
+  if(agentId!==null&&(!Number.isSafeInteger(agentId)||agentId<1))throw new Error('Некорректный TASKS_MCP_AGENT_ID');
   const projects = [...new Set((env.TASKS_MCP_PROJECTS || '').split(',').map(value => value.trim().toLowerCase()).filter(Boolean))];
   if (!Number.isInteger(port) || port < 1 || port > 65535 || !Number.isSafeInteger(ownerId) || ownerId < 1 ||
       !/^[a-zA-Z0-9_-]{32,256}$/.test(token) || !crmKey.trim() || projects.length < 1 || projects.length > 100 ||
       projects.some(value => !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(value))) {
     throw new Error('Нужны корректные PORT, Owner ID, секретный токен, CRM-ключ и явный список проектов');
   }
+  let agentCredentials=[];
+  try {
+    const input=JSON.parse(env.TASKS_MCP_AGENT_CREDENTIALS||'[]');
+    if(!Array.isArray(input)||input.length>100)throw Error();
+    const seen=new Set([token]);
+    agentCredentials=input.map(c=>{
+      if(!c||typeof c!=='object'||Object.keys(c).some(k=>!['token','agentId','projects'].includes(k))||
+        !/^[a-zA-Z0-9_-]{32,256}$/.test(c.token||'')||seen.has(c.token)||!Number.isSafeInteger(c.agentId)||c.agentId<1)throw Error();
+      const scope=c.projects===undefined?projects:c.projects;
+      if(!Array.isArray(scope)||!scope.length||new Set(scope).size!==scope.length||scope.some(v=>!projects.includes(v)))throw Error();
+      seen.add(c.token);return Object.freeze({token:c.token,agentId:c.agentId,projects:Object.freeze([...scope])});
+    });
+  } catch {throw new Error('Некорректные credential bindings агентов');}
   let crmUrl, publicOrigin;
   try {
     crmUrl = new URL(env.CRM_URL || 'http://crm:8080');
@@ -33,7 +48,7 @@ function loadConfig(env = process.env) {
       publicOrigin.pathname !== '/' || publicOrigin.search || publicOrigin.hash) {
     throw new Error('CRM должен быть внутренним, а публичный адрес — HTTPS origin');
   }
-  return Object.freeze({port, ownerId, token, crmKey, projects, crmUrl:crmUrl.origin,
+  return Object.freeze({port, ownerId, token, crmKey, projects, agentId, agentCredentials:Object.freeze(agentCredentials), crmUrl:crmUrl.origin,
     publicOrigin:publicOrigin.origin, docsDir:path.resolve(env.TASKS_MCP_DOCS_DIR || '/app/docs/handoff')});
 }
 
@@ -41,7 +56,7 @@ function safeMessage(error, config) {
   if (error.code === 'MAP_NOT_INSTALLED') return 'Карта не установлена';
   if (!Number.isInteger(error.status) || error.status >= 500) return 'Сервис временно недоступен; результат операции не подтверждён';
   let message = String(error.message || 'Запрос отклонён').slice(0, 400);
-  for (const secret of [config.token, config.crmKey]) if (secret) message = message.split(secret).join('REDACTED');
+  for (const secret of [config.token, config.crmKey,...(config.redactionTokens||[]),...(config.agentCredentials||[]).map(c=>c.token)]) if (secret) message = message.split(secret).join('REDACTED');
   return message;
 }
 
@@ -51,11 +66,13 @@ function crmClient(config, fetchImpl = fetch) {
   const allowed = new Set(TOOLS.filter(tool => tool.name !== 'doc_read').map(tool => tool.name));
   return async (name, args) => {
     if (!allowed.has(name)) fail(404, 'Инструмент не найден');
+    const claim=Buffer.from(JSON.stringify({v:1,source:'mcp',identityHash:createHash('sha256').update(identity).digest('hex'),userId:config.ownerId,agentId:config.agentId,at:Date.now(),method:'POST',path:`/coordination/mcp/${name}`})).toString('base64url');
+    const principal=claim+'.'+createHmac('sha256',config.crmKey).update(claim).digest('base64url');
     let response;
     try {
       response = await fetchImpl(`${config.crmUrl}/coordination/mcp/${name}`, {
         method:'POST', headers:{'content-type':'application/json', 'x-api-key':config.crmKey,
-          'x-synapse-crm-identity':identity}, body:JSON.stringify(args),
+          'x-synapse-crm-identity':identity,'x-synapse-task-principal':principal}, body:JSON.stringify(args),
         redirect:'error', signal:AbortSignal.timeout(15000)
       });
     } catch { fail(503, 'CRM недоступна; результат операции не подтверждён'); }
@@ -138,9 +155,9 @@ async function readBody(request) {
   catch { fail(400, 'Некорректный JSON'); }
 }
 
-function createTasksMcpServer(config, {fetchImpl, callCrm = crmClient(config, fetchImpl)} = {}) {
+function createTasksMcpServer(config, {fetchImpl, callCrm} = {}) {
   const revisions = new Map();
-  const expected = createHash('sha256').update(`/mcp/${config.token}`).digest();
+  const credentials=[config,...(config.agentCredentials||[]).map(c=>({...config,...c}))].map(c=>({config:{...c,redactionTokens:[config.token,...(config.agentCredentials||[]).map(v=>v.token)]},expected:createHash('sha256').update(`/mcp/${c.token}`).digest(),callCrm:callCrm||crmClient(c,fetchImpl)}));
   const publicUrl = new URL(config.publicOrigin);
   const server = http.createServer(async (request, response) => {
     response.setHeader('cache-control', 'no-store');
@@ -150,7 +167,8 @@ function createTasksMcpServer(config, {fetchImpl, callCrm = crmClient(config, fe
       // Сравнение фиксированных хешей исключает ранний выход по длине секрета.
       const candidate = createHash('sha256').update(request.url || '').digest();
       if (request.url === '/health' && request.method === 'GET') return sendJson(response, 200, {status:'ok'});
-      if (!timingSafeEqual(candidate, expected)) return sendJson(response, 401, {error:'Требуется авторизация Owner'});
+      let credential;for(const c of credentials)if(timingSafeEqual(candidate,c.expected))credential=c;
+      if (!credential) return sendJson(response, 401, {error:'Требуется авторизация Owner'});
       let hostUrl;
       try { hostUrl = new URL(`http://${request.headers.host}`); }
       catch { return sendJson(response, 403, {error:'Недопустимый Host'}); }
@@ -169,7 +187,7 @@ function createTasksMcpServer(config, {fetchImpl, callCrm = crmClient(config, fe
         return sendJson(response, 415, {error:'Требуется application/json'});
       }
       const body = await readBody(request);
-      instance = mcpServer(config, callCrm, revisions);
+      instance = mcpServer(credential.config, credential.callCrm, revisions);
       transport = new NodeStreamableHTTPServerTransport({sessionIdGenerator:undefined, enableJsonResponse:true});
       await instance.connect(transport);
       await transport.handleRequest(request, response, body);
