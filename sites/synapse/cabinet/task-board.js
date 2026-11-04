@@ -12,10 +12,7 @@
     try { const url = new URL(value); return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? url.href : ''; }
     catch { return ''; }
   };
-  const linkedText = value => String(value || '').split(/(https?:\/\/[^\s<>]+)/g).map(part => {
-    const href = /^https?:\/\//.test(part) && safeUrl(part);
-    return href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(part)}</a>` : esc(part);
-  }).join('');
+  const linkedText = value => esc(value);
   const day = () => new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Bangkok', year:'numeric', month:'2-digit', day:'2-digit'}).format(new Date());
   const stamp = value => { const date = new Date(value); return Number.isFinite(date.getTime()) ? date.toLocaleString('ru-RU') : ''; };
   const options = (values, selected) => Object.entries(values).map(([value, label]) => `<option value="${esc(value)}"${String(value) === String(selected) ? ' selected' : ''}>${esc(label)}</option>`).join('');
@@ -96,7 +93,7 @@
       const model = helper.build(tasks.filter(task => matchesProject(task)));
       const waiting = model.waiting.length ? `<section class="tb-waiting" data-waiting><h2>Ждут Влада <span>${model.waiting.length}</span></h2><div>${model.waiting.map(task => {
         const since = typeof task.waiting_since === 'string' && Number.isFinite(Date.parse(task.waiting_since)) ? task.waiting_since : '';
-        return `<button type="button" class="tb-waiting-row" data-task-open="${task.id}"><span class="tb-waiting-id">№${task.id} · ${esc(name(task.company_code))}</span><strong>${esc(helper.waitingNeed(task))}</strong>${since ? `<time datetime="${esc(since)}">с ${esc(stamp(since))}</time>` : '<span class="tb-waiting-date">Время ожидания не указано</span>'}</button>`;
+        return `<article class="tb-waiting-row"><button type="button" class="tb-waiting-open" data-task-open="${task.id}"><span class="tb-waiting-id">№${task.id} · ${esc(name(task.company_code))}</span><strong>${esc(displayTitle(task))}</strong></button><div class="tb-waiting-instructions"><p class="tb-waiting-text">${esc(task.coordination?.blocker || helper.waitingNeed(task))}</p>${task.coordination?.nextAction ? `<p class="tb-waiting-text"><b>Следующий шаг</b>\n${esc(task.coordination.nextAction)}</p>` : ''}${linksMarkup(task)}</div>${since ? `<time datetime="${esc(since)}">с ${esc(stamp(since))}</time>` : '<span class="tb-waiting-date">Время ожидания не указано</span>'}</article>`;
       }).join('')}</div></section>` : '';
       if (state.view !== 'projects') return waiting;
       const help = `<details class="tb-how" data-board-guide><summary>Как читать доску</summary><p>Цель → Модули → Задачи → Этапы</p><p>Завершённая задача даёт 100%. Для остальных каждый подтверждённый этап даёт 25%: код, подключено, проверено, принято Владом. Отметки этапов сохраняются.</p><p>Процент модуля — среднее по уникальным задачам состава: непосредственные подзадачи, ссылки состава и задачи с указанием модуля в описании. Процент цели — среднее процентов её модулей с равным весом: 100% и 0% у двух модулей дают цели 50%. Вложенные задачи не заменяют этапы родительской задачи. Неподтверждённые этапы незавершённой задачи дают 0%.</p></details>`;
@@ -111,7 +108,7 @@
     };
     async function hydrateOverview(records) {
       if (!window.SbTaskOverview) return records;
-      const result = [...records], pending = records.map((task,index) => ({task,index})).filter(({task}) => !task.product_placeholder && (task.description_truncated === true || !Object.hasOwn(task,'description') || !Object.hasOwn(task,'waiting_since') || !Object.hasOwn(task.coordination || {},'blocker') || !Object.hasOwn(task.coordination || {},'nextAction')));
+      const result = [...records], pending = records.map((task,index) => ({task,index})).filter(({task}) => !task.product_placeholder && (task.description_truncated === true || !Object.hasOwn(task,'description') || !Object.hasOwn(task,'waiting_since') || !Object.hasOwn(task.coordination || {},'blocker') || !Object.hasOwn(task.coordination || {},'nextAction') || (window.SbTaskOverview.isWaiting(task) && !Array.isArray(task.coordination?.links))));
       let cursor = 0;
       await Promise.all(Array.from({length:Math.min(3,pending.length)},async () => {
         while (cursor < pending.length && alive) {
@@ -233,13 +230,15 @@
       return {overlay, body:overlay.querySelector('[data-sheet-body]'), close};
     }
     const taskLinks = task => task.coordination?.links || task.links || [];
+    const linksMarkup = task => `<div class="tb-waiting-links">${taskLinks(task).map(link=>{const href=safeUrl(link.url);return href?`<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(link.label||href)} ↗</a>`:'';}).join('')}</div>`;
+
     const chatUrl = task => safeUrl(task.chat_url) || safeUrl(taskLinks(task).find(link => /^чат/i.test(link.label || ''))?.url) || safeUrl(agents.find(agent => agent.name === task.assignee_name)?.chat_url || agents.find(agent => agent.name === task.assignee_name)?.chat);
     const productOptions = (project, selected) => `<option value="">Без продукта</option>${products.filter(product => product.company_code === project).map(product => `<option value="${product.id}"${Number(product.id) === Number(selected) ? ' selected' : ''}>${esc(product.name)}</option>`).join('')}`;
     function waitingPanel(task,own) {
       if (!window.SbTaskOverview?.isWaiting(task)) return;
       const id = task.id, draftKey = `waitreply:${id}`, previous = read(draftKey) || {};
       const panel = document.createElement('section'); panel.className = 'tb-waiting-actions'; panel.dataset.waitingActions = ''; panel.dataset.waitTask = String(id);
-      panel.innerHTML = `<h3>Ждёт вашего решения</h3><p>${esc(window.SbTaskOverview.waitingNeed(task))}</p><form data-wait-reply><label>Ответить<textarea name="text" maxlength="3990" required>${esc(previous.text || '')}</textarea></label><div class="tb-wait-buttons"><button type="submit">Отправить ответ</button><button type="button" data-wait-choice="Да">Да</button><button type="button" data-wait-choice="Нет">Нет</button><button type="button" data-wait-check hidden>Проверить отправку</button></div><p data-wait-result role="status"></p></form><button type="button" data-wait-clear>Снять ожидание</button>`;
+      panel.innerHTML = `<h3>Ждёт вашего решения</h3><p class="tb-waiting-text">${esc(task.coordination?.blocker || window.SbTaskOverview.waitingNeed(task))}</p>${task.coordination?.nextAction ? `<p class="tb-waiting-text"><b>Следующий шаг</b>\n${esc(task.coordination.nextAction)}</p>` : ''}${linksMarkup(task)}<form data-wait-reply><label>Ответить<textarea name="text" maxlength="3990" required>${esc(previous.text || '')}</textarea></label><div class="tb-wait-buttons"><button type="submit">Отправить ответ</button><button type="button" data-wait-choice="Да">Да</button><button type="button" data-wait-choice="Нет">Нет</button><button type="button" data-wait-check hidden>Проверить отправку</button></div><p data-wait-result role="status"></p></form><button type="button" data-wait-clear>Снять ожидание</button>`;
       own.body.querySelector('.tb-task-project').after(panel);
       const form = panel.querySelector('form'), result = panel.querySelector('[data-wait-result]');
       const canClearBlocker = window.SbTaskOverview.hasWaitingBlocker(task);

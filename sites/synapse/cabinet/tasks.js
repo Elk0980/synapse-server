@@ -537,7 +537,7 @@ const init = (context) => {
   const taskFormMarkup = (task) => `<form class="crm-form" data-task-form>
     <label class="wide">Название *<input name="title" required maxlength="300"
       value="${escapeHTML(task.title || "")}"></label>
-    <label class="wide">Описание<textarea name="description">${escapeHTML(task.description || "")}</textarea></label>
+    <div class="wide" style="white-space:pre-wrap;overflow-wrap:anywhere">${escapeHTML(task.description || "")}</div><label class="wide">Описание<textarea name="description">${escapeHTML(task.description || "")}</textarea></label>
     <label>Проект<select name="companyCode"${canTransferTask() ? "" : " disabled"}>
       ${taskCompanyOptions(task.companyCode || "")}</select></label>
     <label>Исполнитель<select name="assigneeRole">${taskOptions(TASK_ROLES, task.assigneeRole)}</select></label>
@@ -564,7 +564,7 @@ const init = (context) => {
     <label>Подпись<input data-task-link-label value="${escapeHTML(link.label || '')}" maxlength="200"></label>
     <label>Тип<select data-task-link-kind>${taskOptions({link:'Ссылка',image:'Фото',video:'Видео'}, link.kind || 'link')}</select></label>
     <button type="button" data-task-link-remove>Убрать ссылку</button></fieldset>`;
-  const commentMarkup = comment => `<li data-task-comment-id="${Number(comment.id) || ''}"><strong>${escapeHTML(comment.author)}</strong> · ${escapeHTML(displayDate(comment.created_at))}<p>${escapeHTML(comment.text)}</p></li>`;
+  const commentMarkup = comment => `<li data-task-comment-id="${Number(comment.id) || ''}"><strong>${escapeHTML(comment.author)}</strong> · ${escapeHTML(displayDate(comment.created_at))}<p style="white-space:pre-wrap;overflow-wrap:anywhere">${escapeHTML(comment.text)}</p></li>`;
   const subtaskMarkup = (child, companyCode) => `<li data-task-subtask-id="${Number(child.id)}">${projectTaskLink(child.id,child.company_code || companyCode,`#${Number(child.id)} · ${escapeHTML(child.title)}`)} · ${escapeHTML(TASK_STATUSES[child.status] || child.status)}</li>`;
   const renderOwnerTaskPanel = async (container, id, version) => {
     if (!container || ctx.identity?.role !== 'owner') return;

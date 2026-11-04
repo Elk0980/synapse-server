@@ -24,7 +24,7 @@ function fixture(role='owner', initial={view:'board'}) {
     if(name==='task_create')return replay?{created:false,task}:duplicates&&!args.force?{created:false,possible_duplicates:[task],possible_product_duplicates:[]}:{created:true,task};
     throw Error('Unexpected '+name);
   }};
-  w.eval(source);
+  w.eval(fs.readFileSync(__dirname+'/task-text.js','utf8'));w.eval(source);
   const controller=w.SbTaskBoard.mount(d.getElementById('board'),ctx,initial);
   const input=(field,value)=>{field.value=value;field.dispatchEvent(new w.Event('input',{bubbles:true}));};
   const submit=form=>form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
@@ -264,4 +264,21 @@ test('goal shows equal module weights, completed work gives 100%, and future mod
   const done=overviewTask(201,{title:'Завершённая работа',parent_task_id:1100,status:'done',coordination:{revision:1,blocker:'',nextAction:'',milestones:{}}});
   const records=[overviewTask(1000,{title:'Цель · Равные модули'}),overviewTask(1100,{title:'Модуль · Завершённый блок',parent_task_id:1000}),overviewTask(1200,{title:'Модуль · Будущий блок',parent_task_id:1000}),done,overviewTask(202,{parent_task_id:1200}),overviewTask(203,{parent_task_id:1200}),overviewTask(204,{description:'Модуль №1200'})],before=JSON.stringify(records),f=await overviewFixture(records);
   try{assert.match(f.d.querySelector('[data-goal]').textContent,/50%/);assert.match(f.d.querySelector('[data-board-guide]').textContent,/среднее процентов её модулей с равным весом/);assert.match(f.d.querySelector('[data-board-guide]').textContent,/Завершённая задача даёт 100%/);assert.match(f.d.querySelector('[data-module-id="1100"] [data-module-task="201"]').textContent,/100%/);assert.match(f.d.querySelector('[data-module-id="1100"] [data-module-task="201"]').textContent,/готово/);assert.equal(f.d.querySelector('[data-module-id="1200"]'),null);const row=f.d.querySelector('.tb-upcoming [data-task-open="1200"]');assert.ok(row);assert.equal(f.d.querySelectorAll('.tb-upcoming [data-task-open="1200"]').length,1);row.click();await settle();assert.equal(f.d.querySelectorAll('[data-module-composition] [data-module-task]').length,3);assert.ok(f.d.querySelector('[data-module-composition] [data-module-task="204"]'));assert.match(f.d.querySelector('[data-module-composition]').textContent,/0%/);assert.equal(JSON.stringify(records),before);}finally{f.close();}
+});
+
+test('waiting instructions expose full blocker, next step and link buttons directly; text URLs are safe in all fields',async()=>{
+ const blocker='ждёт Влада: Первая строка\nВторая строка: github.com/Elk0980/synapse-server/pull/523\nТретья строка — '+ 'Длинный текст '.repeat(60);
+ const next='Открыть synapse.synapsebusiness.ru/cabinet/people.html\nЗатем принять решение';
+ const task=overviewTask(201,{description:'Описание https://example.test/description <img src=x onerror=alert(1)>',coordination:{revision:2,blocker,nextAction:next,milestones:{},links:[{url:'https://example.test/button',label:'Открыть инструкцию'},{url:'javascript:alert(1)',label:'Запрещено'}]}});
+ task.comments=[{id:1,author:'Claude',text:'Комментарий github.com/Elk0980/synapse-server',created_at:'2026-01-01'}];
+ const f=await overviewFixture([task]);try{
+ const row=f.d.querySelector('.tb-waiting-row');assert.equal(row.querySelector('.tb-waiting-text').textContent,blocker);assert.match(row.textContent,/Следующий шаг/);assert.ok(row.querySelector('a[href="https://example.test/button"]'));assert.equal(row.querySelector('button a'),null);
+ assert.ok(row.querySelector('a[href="https://github.com/Elk0980/synapse-server/pull/523"]'));
+ await f.controller.openTask(201);await settle();const panel=f.d.querySelector('[data-waiting-actions]');
+ assert.equal(panel.querySelector('.tb-waiting-text').textContent,blocker);assert.match(panel.textContent,/Затем принять решение/);assert.ok(panel.querySelector('a[href="https://example.test/button"]'));
+ assert.ok(f.d.querySelector('.tb-description a[href="https://example.test/description"]'));assert.ok(f.d.querySelector('[data-comments] a[href="https://github.com/Elk0980/synapse-server"]'));
+ assert.equal(f.d.querySelector('img'),null);assert.equal(f.d.querySelector('a[href^="javascript:"]'),null);
+ assert.equal(f.d.querySelector('[data-plan-form]').elements.blocker.value,blocker);
+ for(const a of panel.querySelectorAll('a')){assert.equal(a.target,'_blank');assert.equal(a.rel,'noopener noreferrer');}
+ }finally{f.close();}
 });

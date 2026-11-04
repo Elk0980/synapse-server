@@ -34,8 +34,8 @@ test('board app starts inside existing cabinet and its icons exist; resources ar
   assert.equal(manifest.display,'standalone');
   for (const icon of manifest.icons) assert.ok(fs.existsSync(root+'/'+icon.src));
   const page = fs.readFileSync(root+'/cabinet.html','utf8');
-  assert.match(page,/20261104-waiting-vlad-43-r2/);
-  assert.ok(page.indexOf('"task-overview", "task-board"') > 0);
+  assert.match(page,/SB_CABINET_ASSET_VERSION = "\d{8}-[a-z0-9-]+"/);
+  assert.ok(page.indexOf('"task-overview", "task-text", "task-board"') > 0);
   assert.ok(page.indexOf('"task-board", "tasks"') > 0);
   assert.match(page,/data-owner-board-entry/);
   assert.match(page,/link\.hasAttribute\('data-owner-board-entry'\) \? identity\?\.role !== 'owner'/);
