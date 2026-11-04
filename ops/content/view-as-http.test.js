@@ -62,5 +62,10 @@ test('view-as HTTP: owner, employee, forgery, binding, readonly, live permission
   }
   const {DatabaseSync}=require('node:sqlite'),auditDb=new DatabaseSync(env.DATABASE_PATH);
   assert.equal(auditDb.prepare("SELECT count(*) n FROM auth_audit WHERE action='VIEW_AS_STARTED'").get().n,1);auditDb.close();
+  assert.equal((await fetch(`http://127.0.0.1:${port}/content/whoami`,{headers:{'X-View-As':token}})).status,403);
+  assert.equal((await request(`/content/admin/accounts/${id}/access`,owner,'PUT',{companies:['synapse-business'],permissions:[]})).status,200);
+  assert.deepEqual((await(await viewed()).json()).permissions,[]);
+  assert.equal((await request(`/content/admin/accounts/${id}`,owner,'DELETE')).status,200);
+  assert.equal((await viewed()).status,403);
   assert.equal((await request('/content/whoami',owner)).status,200);
 });

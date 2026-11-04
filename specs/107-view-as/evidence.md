@@ -3,3 +3,5 @@
 Converge: серверные требования реализованы; остаются независимое ревью Claude и проверка полной интеграционной сборки №98 после подключения. Production не трогали, прав/ключей/схемы не меняли.
 
 Дополнительно: полный cabinet.html из этой ветки в Playwright Chrome390/1440 с синтетическим whoami PASS: приложение открылось, ctx.user.id=2/editor, ctx.permissions только tasks.self.view, ctx.viewAs.readOnly=true, JS errors0/overflow0. Снимки full-cabinet-390/1440.png. Это локальная оболочка main, не ночная сборка Claude и не production. Отдельные защищённые board/editors/people/team-chat получают тот же transport; автоплашка восстанавливается на DOMContentLoaded. Проверены malformed Unicode signature403 и private,no-store.
+
+Совмещено с main7678403 (PR493), его актуальные чат/контекст сохранены. Общий people HTTP тест в чистом main падал400!=201 на создании peer по устаревшему password контракту; fixture переведён на штатное создание existing administrator+assignHuman (только синтетические аккаунты). После исправления view-as/people/team-chat5/5PASS. Дополнены тесты отзыва доступа, удаления цели и отсутствующей сессии. Собственный CI view-as добавлен.
