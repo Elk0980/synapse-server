@@ -1,0 +1,220 @@
+{
+  "accepted_by_claude": false,
+  "base_main": "0a618bedc5ad6746f1d84f7b13af6cfd33f1e94d",
+  "captured_source": [
+    {
+      "applied_to_runtime_path": false,
+      "captured_path": "docs/server-live-snapshot/20261104/captured-source/ops/content/server.js",
+      "matches_fresh_managed_source": true,
+      "method": "local pinned reconstruction, no normalization, exact forward/reverse checks",
+      "missing_relative_imports_in_main": [
+        "./action-controls-static.cjs",
+        "./company-app/runtime.cjs",
+        "./customer-chat-http.cjs",
+        "./customer-chat-media.cjs",
+        "./customer-chat-native-adapter.cjs",
+        "./customer-chat-upload.cjs",
+        "./miniapp-host.cjs",
+        "./miniapp-legacy-core.cjs",
+        "./native-contact-followup.cjs",
+        "./owner-board.cjs",
+        "./palitra-attribution-http.cjs",
+        "./palitra-attribution.cjs",
+        "./palitra-crm/app/lib/host-integration",
+        "./palitra-host-adapter.cjs",
+        "./palitra-image-decoder",
+        "./palitra-manager-attention.cjs",
+        "./palitra-order-memo.cjs",
+        "./palitra-order-read-http.cjs",
+        "./palitra-order-read-state.cjs",
+        "./palitra-photo-feature",
+        "./palitra-price-validate.js",
+        "./palitra-push-host.cjs",
+        "./palitra-response-report.cjs",
+        "./palitra-task-review.cjs",
+        "./palitra-workflow.cjs",
+        "./project-forms.cjs",
+        "./site-workspace-feature"
+      ],
+      "repo_path": "ops/content/server.js",
+      "sha256": "e7e22062e4a30c424fdddd926327a30dce5bb17b82d506bfa7e1cb4d4a30dd65",
+      "size": 135915
+    }
+  ],
+  "expected_main_checksum_lists": {
+    "content": {
+      "entries": 60,
+      "file": "main-content.sha256",
+      "not_yet_compared_with_live_image": true
+    },
+    "crm": {
+      "entries": 85,
+      "file": "main-crm.sha256",
+      "not_yet_compared_with_live_image": true
+    },
+    "tasks-mcp": {
+      "entries": 6,
+      "file": "main-tasks-mcp.sha256",
+      "not_yet_compared_with_live_image": true
+    }
+  },
+  "grouping": "node_modules anywhere; otherwise first two path segments",
+  "limitations": [
+    "full git diff list not transferred",
+    "full managed runtime/source index not transferred",
+    "client sites and private-layer reconciliation incomplete",
+    "runtime source byte export pending approved transport",
+    "not an accepted agent481 baseline"
+  ],
+  "managed_source_hashes": [
+    {
+      "actual_sha256": "4fb16d330b854bab859c2dc504e8d28dfd7ed59c91bc0c638ed26a8fc39d051a",
+      "actual_size": 16528,
+      "main_blob_sha256": "0e9a59c5a04e609b7c958e015ba2e8420bf1fb6cc9c28ee79331da9dddb613e8",
+      "main_blob_size": 16477,
+      "matches_main_blob": false,
+      "path": "ops/content/auth-store.js"
+    },
+    {
+      "actual_sha256": "e7e22062e4a30c424fdddd926327a30dce5bb17b82d506bfa7e1cb4d4a30dd65",
+      "actual_size": 135915,
+      "main_blob_sha256": "b2355f0bb2a980e3a1175b3c3b0e4b74dcf87936f5010eb20bd90780fe105133",
+      "main_blob_size": 93115,
+      "matches_main_blob": false,
+      "path": "ops/content/server.js"
+    },
+    {
+      "actual_sha256": "c4f0c6790b5cf580315ce01b574e9aa812e6fd9673da7fd76be252a76b8d6f43",
+      "actual_size": 194880,
+      "main_blob_sha256": "8899561801bad7b1110f5322951ec92c0392d7f8dcb36575b3accd6c3f97efd9",
+      "main_blob_size": 195052,
+      "matches_main_blob": false,
+      "path": "ops/crm/server.js"
+    },
+    {
+      "actual_sha256": "a7a72b6e2544861b2166a42c62e8ad6a59708c5d887a05d7bf94cf3c2ee91b38",
+      "actual_size": 15935,
+      "main_blob_sha256": "a7a72b6e2544861b2166a42c62e8ad6a59708c5d887a05d7bf94cf3c2ee91b38",
+      "main_blob_size": 15935,
+      "matches_main_blob": true,
+      "path": "ops/crm/task-dispatch.js"
+    },
+    {
+      "actual_sha256": "6fac0e2ecc1614d0ac32b154c1742ada43c356b2862a0127198b8112900e9af8",
+      "actual_size": 7178,
+      "main_blob_sha256": "6fac0e2ecc1614d0ac32b154c1742ada43c356b2862a0127198b8112900e9af8",
+      "main_blob_size": 7178,
+      "matches_main_blob": true,
+      "path": "ops/tasks-mcp/documents.js"
+    },
+    {
+      "actual_sha256": "116aebf6b2da11944de8b6d61185fd1d38ef6cf0f9990ed1734b57e07864a5d0",
+      "actual_size": 13124,
+      "main_blob_sha256": "116aebf6b2da11944de8b6d61185fd1d38ef6cf0f9990ed1734b57e07864a5d0",
+      "main_blob_size": 13124,
+      "matches_main_blob": true,
+      "path": "ops/tasks-mcp/server.js"
+    }
+  ],
+  "managed_source_read_at": "2026-11-04T08:02:28.530Z",
+  "other_entries": 677,
+  "public_files": [
+    {
+      "content_type": "text/html; charset=utf-8",
+      "no_authorization_or_cookies_sent": true,
+      "path": "sites/synapse/cabinet.html",
+      "sha256": "ebd258b3c5cf5c98e5895b74cf5318fdc94960bfb6e7079b869cdfabda09cef6",
+      "size": 114873,
+      "status": 200,
+      "url": "https://synapse.synapsebusiness.ru/cabinet.html"
+    },
+    {
+      "content_type": "text/javascript; charset=utf-8",
+      "no_authorization_or_cookies_sent": true,
+      "path": "sites/synapse/cabinet/project-forms.js",
+      "sha256": "59f65e501267d8304aed0795e6d05b270242cfa69d3e2a72391064f8ce0abcfe",
+      "size": 5447,
+      "status": 200,
+      "url": "https://synapse.synapsebusiness.ru/cabinet/project-forms.js?v=20261104-waiting-vlad-43-r2"
+    },
+    {
+      "content_type": "text/css; charset=utf-8",
+      "no_authorization_or_cookies_sent": true,
+      "path": "sites/synapse/cabinet/sites-projects.css",
+      "sha256": "6a08c031cf80fd580deec03751c2c297f292b0f1ce58cad6f1190890f841f873",
+      "size": 1893,
+      "status": 200,
+      "url": "https://synapse.synapsebusiness.ru/cabinet/sites-projects.css?v=20261007-2"
+    }
+  ],
+  "server_checkout_head": "28fbec23b055cd57f793f77dbfe3f1c9d18c2f24",
+  "server_files_created_or_modified": 0,
+  "server_readonly_metadata_at": "2026-11-04T07:55:07.110Z",
+  "server_status_all_entries": 6452,
+  "server_status_default_entries": 386,
+  "snapshot_complete": false,
+  "source_transport": "public HTTPS without cookies or authorization",
+  "task_id": 84,
+  "top15_groups": [
+    [
+      "releases/palitra-app-20261015",
+      3951
+    ],
+    [
+      "sites/drafts",
+      303
+    ],
+    [
+      "node_modules",
+      292
+    ],
+    [
+      "sites/synapse",
+      158
+    ],
+    [
+      "releases/site-recovery-20261027-r1",
+      150
+    ],
+    [
+      "releases/palitra-auth-chat-production-20261031-r7",
+      142
+    ],
+    [
+      "releases/palitra-customer-content-durable-20261030-r7",
+      122
+    ],
+    [
+      "releases/palitra-auth-chat-production-20261031-r5",
+      102
+    ],
+    [
+      "releases/palitra-attention-durable-20261030-r10",
+      99
+    ],
+    [
+      "releases/palitra-customer-content-durable-20261030-r6",
+      99
+    ],
+    [
+      "releases/palitra-customer-content-durable-20261030-r5",
+      98
+    ],
+    [
+      "releases/palitra-attention-durable-20261030-r11",
+      73
+    ],
+    [
+      "releases/palitra-customer-content-durable-20261030-r13",
+      69
+    ],
+    [
+      "releases/palitra-auth-chat-production-20261031-r4",
+      60
+    ],
+    [
+      "releases/palitra-auth-chat-production-20261031-r2",
+      57
+    ]
+  ]
+}

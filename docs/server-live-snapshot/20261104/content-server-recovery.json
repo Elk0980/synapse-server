@@ -1,0 +1,65 @@
+{
+  "base_bytes": 135104,
+  "base_path": "ops/palitra-production-integration-20261031/fallback-r2/server.js",
+  "base_sha256": "755e27e780f48ff1c44fac4e153b4a003f0addaa408e54c66a629b6784a37115",
+  "exact_reverse_to_base": true,
+  "fixed_public_helper": "release478_attempt5.py",
+  "fixed_public_helper_sha256": "24169c8092e711000d858bb3b4329931c91dd81cc1d61669aae1f86632e3952e",
+  "matches_fresh_server_sha_and_size": true,
+  "native_actions": 0,
+  "normalization_performed": false,
+  "recovered_path": "captured-source/ops/content/server.js",
+  "result_bytes": 135915,
+  "result_sha256": "e7e22062e4a30c424fdddd926327a30dce5bb17b82d506bfa7e1cb4d4a30dd65",
+  "source_only": true,
+  "steps": [
+    {
+      "effective_fixed_edits": 6,
+      "hunk_manifest": "package478/runtime-hunks.json",
+      "manifest_sha256": "2ade66410a6823ee1abf64801d2f48eb8aa985fdc063dee0649c4c4e8976b9f7",
+      "original_edits": 5,
+      "pair_pins": [
+        {
+          "after_sha256": "d4d9aa4b28adc3e7b31b24f91a69cad83f9b07a1e0b039afbd83e2d02a38a016",
+          "before_sha256": "fe62d95cbd0acd720c2a12f12a204d8449db46e0ae15b51cea087ade95387b9f"
+        },
+        {
+          "after_sha256": "ce07b7839a6d34ec3e07410ac0ec2ddbf7fdb52a79cd37d59f72721609270e41",
+          "before_sha256": "604ae814cb58228422a360158bf716d3abf18328594065240d5cfb23dd2dc89f"
+        },
+        {
+          "after_sha256": "cde7166c7f3da9bb8a5901c28cad5eb2e5ee0b985d8a7b32044487fff8f34516",
+          "before_sha256": "69fc7e7c9cc7fc320db74f5a37ea5a5c383307b81ed0f7a2a3cbe980a48edbe2"
+        },
+        {
+          "after_sha256": "7d17f7cc8540c76ce5975ca6e3825ab6d596986f239cdef8db8de5f5b913dd67",
+          "before_sha256": "32ca22972acabf0dc0dd2127d38ec97c768e249b82aeea5d0055e0706b142b83"
+        },
+        {
+          "after_sha256": "a3532249c629aba0285b3153b9095d091033cf393ebfedad0e178a6e4703169d",
+          "before_sha256": "c8f80249ed16545c483569cba8445aafc7b2d948f05d3fa7616616423ebda53f"
+        },
+        {
+          "after_sha256": "0f4f375b122935a0a5524eb475495d9e966d5ec8ad96ef6c6d5bd0899af00345",
+          "before_sha256": "7c96558e089aefdd7125e5eb1598cdcd2fbce7bd15c483e6298b08fa6222599a"
+        }
+      ],
+      "rule_path": "ops/content/server.js"
+    },
+    {
+      "effective_fixed_edits": 1,
+      "hunk_manifest": "package485/runtime-hunks.json",
+      "manifest_sha256": "b885783103ec7cd068ba15d6781019b7b5c7f69f51e6a59979d1c26cddbc1f2c",
+      "original_edits": 1,
+      "pair_pins": [
+        {
+          "after_sha256": "ccfebab3804c42814f73fc9cd672f05bf99269b57c426c756d20bc4ec53a9831",
+          "before_sha256": "c791bb37ee9364404fc3373b39edf7bc2204028750d4c0102cce121ab8535a23"
+        }
+      ],
+      "rule_path": "ops/content/server.js"
+    }
+  ],
+  "task": 84,
+  "whole_tree_snapshot_complete": false
+}
