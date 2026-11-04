@@ -34,3 +34,10 @@
 1. В `applyBackgrounds`: `default` только обновляет существующий статический слой; новый слой создаётся лишь для явной картинки владельца (`if (!bg.image && !layer) continue`).
 2. В `tag_site.py`: не записывать `default` для секций без статического слоя / с видеофоном.
 3. Вынести `applyBackgrounds` в `sites/_kit/site-apply-backgrounds.js` и раздать через тот же `sync.js`, затем убрать per-site заплатки после скриншотов до/после.
+
+## Доработка по ревью PR 487 (04.11)
+- select.js: поиск по буквам при скрытом выбранном пункте (start = -1) больше не даёт TypeError; тест падает на прежнем коде и проходит на новом.
+- aria-label без связанной подписи: ближайший `<label>` рядом, затем placeholder/пустой первый пункт; иначе атрибута нет (select.name не используется).
+- palitra-love: `--kit-control-weight: 700` — значение в списке той же жирности, что поля ввода (computed: input 700, kit-кнопка 700).
+- site-kit.yml: actions закреплены по SHA (checkout v4.4.0, setup-node v4.4.0, upload-artifact v4.6.2).
+- Проверки: site-kit + site-seo + no-nested — 23/23; `sync.js --check` — ок; browser-check `/` и `/oferta/` — ок; скриншоты 48, системных select 0 (вне git).

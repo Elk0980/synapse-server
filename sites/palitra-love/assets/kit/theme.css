@@ -12,4 +12,5 @@
   --kit-pad-x: 12px;
   --kit-pad-y: 12px;
   --kit-font: var(--font-body);
+  --kit-control-weight: 700;
 }

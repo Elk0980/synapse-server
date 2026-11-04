@@ -209,3 +209,34 @@ test('select.js: на сенсорном экране остаётся сист�
   assert.ok(d.querySelector('.kit-select__button'), 'select, добавленный скриптом сайта (квиз), тоже оформлен');
   w.close();
 });
+
+test('select.js: поиск по буквам при скрытом выбранном пункте-подсказке не падает', async () => {
+  const { w, d } = await mount(`<form><label>Повод<select name="r"><option value="" hidden selected>Выберите</option>
+    <option value="b">Букет</option><option value="t">Телеграм</option><option value="tt">Тест</option></select></label></form>`);
+  const select = d.querySelector('[name=r]');
+  const button = d.querySelector('.kit-select__button');
+  // Нет совпадения на первой букве — выбранным остаётся скрытый пункт, вторая буква раньше давала TypeError.
+  // Исключение в обработчике события не всплывает в dispatchEvent — ловим его как ошибку окна.
+  const errors = [];
+  w.addEventListener('error', (e) => { errors.push(e.error || e.message); e.preventDefault(); });
+  key(w, button, 'х'); key(w, button, 'х');
+  assert.deepEqual(errors.map(String), []);
+  assert.equal(select.value, '');
+  w.close();
+  const again = await mount(`<form><label>Повод<select name="r"><option value="" hidden selected>Выберите</option>
+    <option value="b">Букет</option><option value="t">Телеграм</option><option value="tt">Тест</option></select></label></form>`);
+  const b2 = again.d.querySelector('.kit-select__button');
+  for (const k of ['т', 'е', 'с']) key(again.w, b2, k);
+  assert.equal(again.d.querySelector('[name=r]').value, 'tt', 'быстрый набор «тес» находит «Тест»');
+  again.w.close();
+});
+
+test('select.js: aria-label — подпись рядом или подсказка, но не техническое имя поля', async () => {
+  const { w, d } = await mount(`<div><label>Способ связи</label><select name="contactChannel"><option>A</option></select></div>
+    <div><select name="channel2" data-placeholder="Куда написать"><option>A</option></select></div>
+    <div><select name="channel3"><option value="">Как связаться</option><option>A</option></select></div>
+    <div><select name="channel4"><option>A</option></select></div>`);
+  const labels = [...d.querySelectorAll('.kit-select__button')].map((b) => b.getAttribute('aria-label'));
+  assert.deepEqual(labels, ['Способ связи', 'Куда написать', 'Как связаться', null]);
+  w.close();
+});

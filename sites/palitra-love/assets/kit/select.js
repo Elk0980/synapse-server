@@ -17,9 +17,22 @@
   const eligible = (select) => select instanceof root.HTMLSelectElement && !select.multiple && !(select.size > 1)
     && !select.closest('[data-kit-native]') && !select.dataset.kitSelect;
 
+  // Без связанной подписи: ближайший <label> перед списком, затем подсказка (placeholder,
+  // пустой первый пункт). Техническое имя поля (select.name) человеку не показываем — лучше пусто.
+  function nearbyText(select) {
+    for (let el = select.previousElementSibling; el; el = el.previousElementSibling) {
+      if (el.matches('label') && !el.htmlFor) return el.textContent.replace(/\s+/g, ' ').trim();
+      if (el.matches('select, input, textarea')) break;
+    }
+    const hint = select.getAttribute('placeholder') || select.dataset.placeholder;
+    if (hint) return hint.trim();
+    const first = select.options[0];
+    return first && first.value === '' ? first.textContent.replace(/\s+/g, ' ').trim() : '';
+  }
+
   function labelText(select) {
     const label = select.labels && select.labels[0];
-    if (!label) return select.getAttribute('aria-label') || select.name || '';
+    if (!label) return select.getAttribute('aria-label') || nearbyText(select);
     if (!label.contains(select)) return label.textContent.trim();
     let text = '';
     for (const node of label.childNodes) {
@@ -99,7 +112,7 @@
       const current = select.options[select.selectedIndex];
       value.textContent = current ? (current.label || current.textContent) : '';
       button.disabled = select.disabled;
-      button.setAttribute('aria-label', name);
+      if (name) button.setAttribute('aria-label', name); else button.removeAttribute('aria-label');
       if (select.required) button.setAttribute('aria-required', 'true'); else button.removeAttribute('aria-required');
       for (const { li, option } of items) li.setAttribute('aria-selected', option.selected ? 'true' : 'false');
     }
@@ -163,7 +176,9 @@
       typedAt = now;
       if (!items.length) renderOptions();
       const start = isOpen() ? active : items.findIndex((item) => item.option.selected);
-      const order = items.map((_, i) => (i + start + (typed.length > 1 ? 0 : 1)) % items.length);
+      // start = -1, если выбран скрытый пункт-подсказка: тогда поиск идёт с первого пункта.
+      const from = start < 0 ? 0 : start + (typed.length > 1 ? 0 : 1);
+      const order = items.map((_, i) => (i + from) % items.length);
       const hit = order.find((i) => items[i].li.getAttribute('aria-disabled') !== 'true'
         && items[i].li.textContent.trim().toLowerCase().startsWith(typed));
       if (hit === undefined) return;
