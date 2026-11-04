@@ -1,8 +1,8 @@
 (() => {
   'use strict';
   const sb = window.SbCabinet = window.SbCabinet || {};
-  const fields = {date:'Дата',platforms:'Площадки',topic:'Тема',format:'Формат',script:'Сценарий',filmingBy:'Кто снимает',productionStatus:'Статус подготовки'};
-  const aliases = {date:['дата','date'],platforms:['площадка','площадки','platform','platforms'],topic:['тема','topic','название'],format:['формат','format'],script:['сценарий','script'],filmingBy:['ктоснимает','снимающий','filmingby'],productionStatus:['статус','статусподготовки','productionstatus']};
+  const fields = {date:'Дата',platforms:'Площадки',topic:'Тема',format:'Формат',script:'Сценарий',filmingBy:'Кто снимает',productionStatus:'Статус подготовки',hook:'Хук',broll:'Вставки (B-roll)',style:'Стиль',props:'Реквизит'};
+  const aliases = {date:['дата','date'],platforms:['площадка','площадки','platform','platforms'],topic:['тема','topic','название'],format:['формат','format'],script:['сценарий','script'],filmingBy:['ктоснимает','снимающий','filmingby'],productionStatus:['статус','статусподготовки','productionstatus'],hook:['хук','зацепка','hook'],broll:['вставки','вставкиbroll','broll','бролл'],style:['стиль','style'],props:['реквизит','props']};
   const statuses = {planned:'Запланировано',shot:'Отснято',editing:'В монтаже',draft:'Черновик'};
   const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const key = value => String(value).toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
@@ -32,8 +32,11 @@
         const statusText = value('productionStatus').trim();
         const productionStatus = statusText ? lookup(statusText,Object.entries(statuses).map(([id,label])=>({id,label}))) : 'planned';
         if (!productionStatus) throw Error('Статус: запланировано, отснято, в монтаже или черновик; согласование не импортируется');
-        items.push({ideaId:`import-${prefix}-${index+1}`,date:date(value('date').trim()),platform:platforms[0],format,role:vocabulary.roles[0]?.id || 'reach',topic,script,filmingBy,productionStatus,
-          hook:'',assetId:'',mentorNote:'',variants:Object.fromEntries(platforms.map(platform=>[platform,{text:'',hook:'',format,assetId:'',mentorNote:''}]))});
+        // №98 Б: хук, вставки, стиль, реквизит; подпись версии — из хука и темы, иначе версия «пустая» и не согласуется.
+        const hook = value('hook').trim().slice(0,500), extras = Object.fromEntries([['broll',4000],['style',1000],['props',2000]].map(([k,max])=>[k,value(k).trim().slice(0,max)]).filter(([,v])=>v));
+        const text = [hook,topic].filter(Boolean).join('\n\n');
+        items.push({ideaId:`import-${prefix}-${index+1}`,date:date(value('date').trim()),platform:platforms[0],format,role:vocabulary.roles[0]?.id || 'reach',topic,script,filmingBy,productionStatus,...extras,
+          hook,assetId:'',mentorNote:'',variants:Object.fromEntries(platforms.map(platform=>[platform,{text,hook,format,assetId:'',mentorNote:''}]))});
       } catch (error) { errors.push(`Строка ${index+2}: ${error.message}`); }
     });
     if (!items.length && !errors.length) errors.push('В файле нет материалов');

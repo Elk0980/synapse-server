@@ -617,7 +617,7 @@
     const formatLabel = vocabulary.formats.find((row) => row.id === item.format)?.label || item.format || 'Формат';
     return `<article class="mentor-row mentor-day" data-row data-day-index="${index}"
       data-idea-id="${esc(item.ideaId || '')}"
-      data-reel-fields="${['script','filmingBy','productionStatus'].filter(key=>Object.hasOwn(item,key)).join(',')}"
+      data-reel-fields="${['script','filmingBy','productionStatus','broll','style','props'].filter(key=>Object.hasOwn(item,key)).join(',')}"
       ${index >= 0 ? `data-source-order="${index}"` : ''} data-plan-date="${esc(item.date)}"
       data-plan-platform="${esc(item.platform)}" data-plan-platforms="${esc(rowPlatforms(item).join(' '))}"
       data-card-status="${status}" data-card-ids="${esc(cards.map((card) => card.postId).join(' '))}">
@@ -647,6 +647,9 @@
         </div>
         <label>Тема<input data-field="topic" maxlength="300" required value="${esc(item.topic)}"></label>
         <label>Сценарий<textarea data-field="script" data-script-source="${esc(JSON.stringify(item.script || ''))}" maxlength="20000" rows="4">\n${esc(item.script || '')}</textarea></label>
+        <label>Вставки (B-roll)<textarea data-field="broll" maxlength="4000" rows="2">${esc(item.broll || '')}</textarea></label>
+        <label>Стиль<input data-field="style" maxlength="1000" value="${esc(item.style || '')}"></label>
+        <label>Реквизит<textarea data-field="props" maxlength="2000" rows="2">${esc(item.props || '')}</textarea></label>
         <label>Кто снимает<input data-field="filmingBy" maxlength="200" value="${esc(item.filmingBy || '')}"></label>
         <label>Статус подготовки<select data-field="productionStatus">${options([{id:'planned',label:'Запланировано'},{id:'shot',label:'Отснято'},{id:'editing',label:'В монтаже'},{id:'draft',label:'Черновик'}],item.productionStatus || 'planned')}</select></label>
         ${variantsMarkup(item, data, index)}
@@ -1014,7 +1017,7 @@
     .map((row) => ({...rowValues(row), ideaId: row.dataset.ideaId || '', variants: rowVariants(row),reelFields:row.dataset.reelFields || ''}))
     .map((row) => ({date: row.date, platform: row.platform, format: row.format, role: row.role,
       topic: row.topic, hook: row.hook, assetId: row.assetId, mentorNote: row.mentorNote,
-      ...Object.fromEntries(Object.entries({script:'',filmingBy:'',productionStatus:'planned'})
+      ...Object.fromEntries(Object.entries({script:'',filmingBy:'',productionStatus:'planned',broll:'',style:'',props:''})
         .filter(([key,fallback])=>row.reelFields.split(',').includes(key)||(row[key] ?? fallback)!==fallback)
         .map(([key,fallback])=>[key,row[key] ?? fallback])),
       // Пустой ideaId не передаётся: сервер выдаёт его сам при первом сохранении идеи.
