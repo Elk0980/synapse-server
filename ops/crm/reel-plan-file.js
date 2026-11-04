@@ -90,9 +90,10 @@ async function preview(body) {
     if(!input.length||input.length>MAX_FILE)invalid();
     const rows=/\.csv$/i.test(body.filename)?csv(input):await readSheet(workbook(input),1,{trim:false});
     if(rows.length<2||rows.length>MAX_ROWS||rows.some(row=>row.length>MAX_COLS))invalid();
+    let total=0;
     return rows.map(row=>row.map(value=>{
       const result=value instanceof Date?value.toISOString().slice(0,10):String(value??'');
-      if(result.length>20000)invalid();return result;
+      if(result.length>20000||(total+=Buffer.byteLength(result,'utf8'))>2*MAX_FILE)invalid();return result;
     }));
   } catch(error) {if(error.status===400)throw error;invalid();}
 }

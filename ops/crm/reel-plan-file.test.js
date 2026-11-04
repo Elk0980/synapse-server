@@ -54,6 +54,9 @@ test('XLSX rejects formulas, external relations, macros, DTD and excessive coord
   ])await reject(xlsx({extra}));
 });
 test('XLSX rejects compressed oversized XML and malformed archives without returning partial rows',async()=>{
+  const repeated=Array.from({length:94},(_,i)=>`<row r="${i+1}"><c r="A${i+1}" t="s"><v>0</v></c><c r="B${i+1}" t="s"><v>0</v></c></row>`).join('');
+  await reject(xlsx({sheet:`<worksheet xmlns="${NS}"><sheetData>${repeated}</sheetData></worksheet>`,
+    extra:{'xl/sharedStrings.xml':`<sst xmlns="${NS}"><si><t>${'x'.repeat(20000)}</t></si></sst>`}}));
   const bomb=xlsx({extra:{'oversized.xml':'<fixture>'+ 'x'.repeat(2*1024*1024)+'</fixture>'}});
   await reject(bomb);
   const forged=Buffer.from(bomb.base64,'base64');
