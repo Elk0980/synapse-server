@@ -47,11 +47,14 @@
 .cp-views [aria-pressed="true"] { border-color:var(--accent,#9fd4ff); color:var(--accent,#9fd4ff); }
 /* Полный план как таблица: прокручивается только сама таблица, страница — нет. */
 .cp-sheet-wrap { max-width:100%; overflow-x:auto; border:1px solid var(--line,#333); border-radius:12px; }
-.cp-sheet { border-collapse:collapse; min-width:1180px; width:100%; font-size:.9rem; }
-.cp-sheet th, .cp-sheet td { border-bottom:1px solid var(--line,#333); padding:8px; text-align:left; vertical-align:top; overflow-wrap:anywhere; }
+.cp-sheet { border-collapse:collapse; min-width:1100px; width:100%; font-size:.9rem; }
+.cp-sheet > thead > tr > th, .cp-sheet > tbody > tr > td { border-bottom:1px solid var(--line,#333); padding:8px; text-align:left; vertical-align:top; overflow-wrap:break-word; }
+.cp-sheet > tbody > tr > td:nth-child(-n+3) { white-space:nowrap; }
+.cp-sheet td[data-label="Тема"] { min-width:150px; }
 .cp-sheet thead th { position:sticky; top:0; background:var(--surface,#12100f); color:var(--muted,#b9afa7); font-weight:600; }
-.cp-sheet td[data-label="Сценарий по ролям"] { min-width:260px; }
-.cp-sheet .cp-script th { width:auto; }
+.cp-sheet td[data-label="Сценарий по ролям"] { min-width:280px; }
+.cp-sheet .cp-script th { width:auto; white-space:nowrap; }
+.cp-sheet .cp-script td { overflow-wrap:break-word; }
 .cp-link { background:none; border:0; color:var(--accent,#9fd4ff); font:inherit; cursor:pointer; padding:0; min-height:32px !important; text-decoration:underline; }
 @media (max-width: 640px) {
   .cp-line { grid-template-columns:auto 1fr; grid-template-areas:"n date" "topic topic" "pl st"; gap:4px 10px; }
@@ -61,10 +64,11 @@
   .cp-sheet-wrap { overflow:visible; border:0; }
   .cp-sheet { min-width:0; display:block; }
   .cp-sheet thead { display:none; }
-  .cp-sheet tbody, .cp-sheet tr, .cp-sheet td { display:block; width:100%; }
+  .cp-sheet > tbody, .cp-sheet > tbody > tr, .cp-sheet > tbody > tr > td { display:block; width:100%; white-space:normal; }
   .cp-sheet > tbody > tr { border:1px solid var(--line,#333); border-radius:12px; margin-bottom:8px; padding:6px 10px; background:var(--surface,#12100f); }
   .cp-sheet > tbody > tr > td { border:0; padding:4px 0; }
   .cp-sheet > tbody > tr > td:empty { display:none; }
   .cp-sheet > tbody > tr > td::before { content:attr(data-label); display:block; color:var(--muted,#b9afa7); font-size:.8rem; }
-  .cp-sheet .cp-script, .cp-sheet .cp-script tbody { display:table; width:100%; } .cp-sheet .cp-script tr { display:table-row; } .cp-sheet .cp-script th, .cp-sheet .cp-script td { display:table-cell; }
+  .cp-sheet td[data-label="Тема"], .cp-sheet td[data-label="Сценарий по ролям"] { min-width:0; }
+  .cp-sheet .cp-script th { white-space:normal; width:34%; }
 }
