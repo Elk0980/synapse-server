@@ -137,6 +137,8 @@ def keep_ids(ids, today, days=14):
 
 
 def create(c):
+    if c.get("transport") == "stream-v1":
+        raise ValueError("Для потока нужен отдельный принятый root producer")
     if os.name == "nt" or not c.get("reviewed_inventory"):
         raise ValueError("Нужны Linux и принятая инвентаризация")
     os.umask(0o077)
@@ -291,6 +293,9 @@ class HashReader:
 
 
 def prune(c):
+    if c.get("transport") == "stream-v1":
+        import backup_stream
+        return backup_stream.prune(c)
     root = Path(c["output"]).resolve()
     with lock(root / ".writer.lock"):
         paths = completed(root)
@@ -311,6 +316,9 @@ def encrypt(c, path, producer):
 
 
 def serve(c):
+    if c.get("transport") == "stream-v1":
+        import backup_stream
+        return backup_stream.serve(c)
     # authorized_keys: restrict,command="python3 ... serve /etc/.../reader.json"
     # Reader OS account has NO shell/sudo and read permission only on encrypted out.
     command = os.environ.get("SSH_ORIGINAL_COMMAND", "").split()
@@ -334,6 +342,9 @@ def ssh(c, command, target):
 
 
 def pull(c):
+    if c.get("transport") == "stream-v1":
+        import backup_stream
+        backup_stream.checked_path(Path(c["destination"]).absolute())
     root = Path(c["destination"]).resolve()
     root.mkdir(parents=True, exist_ok=True)
     with lock(root / ".pull.lock"):
@@ -350,6 +361,9 @@ def pull(c):
             if time.time() - status["verified_at"] >= 7 * 86400:
                 weekly_verify(c, dest)
                 status["verified_at"] = time.time()
+            if c.get("transport") == "stream-v1":
+                import backup_stream
+                dest = backup_stream.promote(c, root, dest)
             status.update(result="OK", receipt_sha=sha(dest / "receipt.json"))
         except Exception as error:
             status["error"] = str(error) if isinstance(error, BackupError) else "PULL_OR_VERIFY_FAILED"
@@ -358,6 +372,9 @@ def pull(c):
             # Verification, download or network failure cannot bypass housekeeping.
             try:
                 cleanup_partial(root)
+                if c.get("transport") == "stream-v1":
+                    import backup_stream
+                    backup_stream.cleanup_local(root)
                 rotate_local(root)
             finally:
                 try:
@@ -371,6 +388,9 @@ def pull(c):
 
 
 def download(c, root):
+    if c.get("transport") == "stream-v1":
+        import backup_stream
+        return backup_stream.download(c, root)
     with tempfile.TemporaryFile() as f:
         ssh(c, "list", f)
         f.seek(0)
@@ -534,6 +554,13 @@ def main():
     c = json.loads(Path(config).read_text(encoding="utf-8-sig"))
     if action == "create":
         create(c)
+    elif action == "create-stream":
+        import backup_stream
+        try:
+            backup_stream.produce(c)
+        except backup_stream.ConfigurationError:
+            print("STREAM_CONFIG_REVIEW_REQUIRED", file=sys.stderr)
+            raise SystemExit(78)
     elif action == "serve":
         serve(c)
     elif action == "pull":
@@ -551,6 +578,8 @@ def main():
 
 
 if __name__ == "__main__":
+    # The optional transport must share BackupError/locks with this entry point.
+    sys.modules["backup_v2"] = sys.modules[__name__]
     try:
         main()
     except Exception:
