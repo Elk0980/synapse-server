@@ -227,7 +227,7 @@ const contentPlanRunner = require('./content-plan-runner').createContentPlanRunn
 const telegramSources = createTelegramSources({db, assetsDir:ASSETS_DIR, authStore, requireSession, requireCsrf, sendJson:send,
   config:readSourceConfig(path.join(path.dirname(DATABASE_PATH),'telegram-sources.json'))});
 if (!telegramSources.healthy) console.warn('content: настройки источников Telegram требуют проверки; приём выключен');
-// Контент → Съёмка: дубли частями с продолжением и API монтажёра; приватный конфиг на томе (нет файла — монтажёр выключен).
+// Контент → Съёмка: дубли частями с продолжением; монтажёр работает по сессии кабинета. Лимиты — приватный файл тома (нет — по умолчанию).
 const shooting=require('./shooting').createShooting({db,authStore,assetsDir:ASSETS_DIR,requireSession,requireCsrf,readJson,sendJson:send,
   config:require('./shooting').readShootingConfig(path.join(path.dirname(DATABASE_PATH),'shooting.json'))});
 const peopleService=require('./people-service').createPeopleService({db,authStore,team:companyTeam,
