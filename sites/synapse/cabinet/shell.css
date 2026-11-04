@@ -45,8 +45,8 @@
   body.sb-chat-open { overflow: hidden; }
   body.drawer-open .sb-chat-fab,
   body.sb-chat-open .sb-chat-fab,
-  body[data-view="hugh"] .sb-chat-fab,
-  body[data-view="chats"] .sb-chat-fab { display: none; }
+  body[data-cabinet-view="hugh"] .sb-chat-fab,
+  body[data-cabinet-view="chats"] .sb-chat-fab { display: none; }
   .mobile-shortcuts a, .mobile-shortcuts button { font-size: 11px; padding-inline: 2px; }
   .main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
 }

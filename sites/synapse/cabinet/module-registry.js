@@ -77,7 +77,8 @@
     const card = node('section', 'sb-module-stub card');
     const head = node('div', 'sb-module-stub__head');
     head.append(node('h1', '', stub.title || 'Раздел'), node('span', 'sb-soon-badge', 'Скоро'));
-    card.append(head, node('p', 'muted', stub.text || 'Раздел готовится. Данные и права уже проверяет сервер, экран появится здесь.'));
+    card.append(head, node('p', 'sb-module-stub__lead', 'Раздел в разработке · готовим к утру'));
+    if (stub.text) card.append(node('p', 'muted', stub.text));
     const links = (stub.links || []).filter((link) => link && /^#[a-z0-9/_-]+$/i.test(link.href));
     if (links.length) {
       const list = node('div', 'sb-module-stub__links');

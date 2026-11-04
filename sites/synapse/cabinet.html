@@ -618,7 +618,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <div class="subnav" id="content-menu" hidden>
         <a class="nav-link" href="#content/plan" data-view-link="content-plan" data-view-also="media-mentor">Контент-план</a>
         <a class="nav-link" href="#content/shooting" data-view-link="content-shooting">Съёмка</a>
-        <a class="nav-link" href="#content/materials" data-view-link="content-materials" data-view-also="telegram-sources">Материалы</a>
+        <a class="nav-link" href="#content/materials" data-view-link="content-materials">Материалы</a>
         <a class="nav-link" id="content-factory-link" href="#content-factory" data-view-link="content-factory" hidden>Постинг</a>
         <a class="nav-link" href="#content/connections" data-view-link="content-connections">Подключения</a>
         <a class="nav-link" href="#content/stats" data-view-link="content-stats" data-view-also="content-factory-stats media-mentor-rollout">Статистика</a>
@@ -707,13 +707,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       <a class="plain-button" href="#settings" data-settings-tab="settings">Компания</a>
       <a class="plain-button" href="#settings/content" data-settings-tab="settings-content">Контент</a>
     </nav>
-    <section class="view-panel" id="content-plan-view" data-view="content-plan" hidden></section>
-    <section class="view-panel" id="content-shooting-view" data-view="content-shooting" hidden></section>
-    <section class="view-panel" id="content-materials-view" data-view="content-materials" hidden></section>
-    <section class="view-panel" id="content-connections-view" data-view="content-connections" hidden></section>
-    <section class="view-panel" id="content-stats-view" data-view="content-stats" hidden></section>
-    <section class="view-panel" id="chats-view" data-view="chats" hidden></section>
-    <section class="view-panel" id="settings-content-view" data-view="settings-content" hidden></section>
     <section class="view-panel" id="home-view" data-view="home" hidden>
       <div class="content-header home-header"><h1>Главная</h1>
         <div class="home-tools"><div class="home-periods" id="home-periods" role="group"
@@ -1228,22 +1221,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     chats: "Чаты",
     "settings-content": "Настройки контента"
   });
-  /* Экраны, которые монтирует реестр модулей (контракт А, specs/098-content-shell).
-     legacy — прежний рабочий экран, пока модуль не зарегистрирован; иначе заглушка «Скоро». */
-  const MODULE_ROUTES = Object.freeze({
-    "content-plan": {route: "content/plan", stub: {text: "Опросник и готовый план с согласованием появятся здесь.",
-      links: [{href: "#content-factory/plan/proposals", label: "Предложения плана"}, {href: "#content-factory/plan", label: "Постинг"}]}},
-    "content-shooting": {route: "content/shooting", stub: {text: "Рилсы для съёмки по порядку, суфлёр и загрузка материалов появятся здесь.",
-      links: [{href: "#content-factory/sources", label: "Исходники"}]}},
-    "content-materials": {route: "content/materials", stub: {text: "Смонтированные рилсы с предпросмотром по площадкам появятся здесь.",
-      links: [{href: "#content-factory/sources", label: "Исходники"}, {href: "#content-factory/plan", label: "Постинг"}]}},
-    "content-connections": {route: "content/connections", stub: {text: "Статус подключения каждой площадки компании появится здесь.",
-      links: [{href: "#social-stats", label: "Соцсети"}]}},
-    "content-stats": {route: "content/stats", legacy: "content-factory-stats"},
-    chats: {route: "chats", legacy: "hugh"},
-    "settings-content": {route: "settings/content", stub: {text: "Настройки контента загружаются."}}
-  });
-  const routeOf = (view) => MODULE_ROUTES[view]?.route || view;
   const CRM_API = "/content/crm";
   const EDITOR_PROJECTS = Object.freeze(["alvi", "avokado"]);
   const byId = (id) => document.getElementById(id);
@@ -1603,33 +1580,23 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     return true;
   };
   const defaultView = () => "home";
-  let moduleRoute = {path: "", query: ""};
-  let moduleController = null;
-  // Модуль не зарегистрирован, а прежний экран есть — показываем его под тем же пунктом меню.
-  const effectiveView = (view) => {
-    const legacy = MODULE_ROUTES[view]?.legacy;
-    return legacy && !window.SynapseModules?.has(view) && permittedView(legacy) ? legacy : view;
-  };
-  const unmountModule = () => { moduleController?.unmount(); moduleController = null; };
-  const mountModule = (view, element) => {
-    unmountModule();
-    moduleController = window.SynapseModules.mount(element, view, {route: moduleRoute, stub: {title: VIEW_TITLES[view], ...(MODULE_ROUTES[view].stub || {})}});
-  };
-  Object.keys(MODULE_ROUTES).forEach(view => {
-    registeredViews[view] = {
-      render(element) {
-        const definition = window.SynapseModules?.get(view);
-        if (moduleController?.id === view && moduleController.definition === definition && definition?.onRoute) {
-          try { definition.onRoute({path: moduleRoute.path, params: new URLSearchParams(moduleRoute.query)}); } catch (error) { console.error(error); }
-          return;
-        }
-        mountModule(view, element);
-      },
-      // Смена компании всегда перемонтирует модуль: прежний контекст и запросы отменяются.
-      onProjectChange() { if (currentView === view) mountModule(view, byId(`${view}-view`)); },
-      onLeave: unmountModule
-    };
+  /* Экраны, которые монтирует реестр модулей (контракт А, specs/098-content-shell).
+     legacy — прежний рабочий экран, пока модуль не зарегистрирован; иначе заглушка «Скоро». */
+  const MODULE_ROUTES = Object.freeze({
+    "content-plan": {route: "content/plan", stub: {text: "Опросник и готовый план с согласованием появятся здесь.",
+      links: [{href: "#content-factory/plan/proposals", label: "Предложения плана"}, {href: "#content-factory/plan", label: "Постинг"}]}},
+    "content-shooting": {route: "content/shooting", stub: {text: "Рилсы для съёмки по порядку, суфлёр и загрузка материалов появятся здесь.",
+      links: [{href: "#content-factory/sources", label: "Исходники"}]}},
+    "content-materials": {route: "content/materials", stub: {text: "Смонтированные рилсы с предпросмотром по площадкам появятся здесь.",
+      links: [{href: "#content-factory/sources", label: "Исходники"}, {href: "#content-factory/plan", label: "Постинг"}]}},
+    "content-connections": {route: "content/connections", stub: {text: "Статус подключения каждой площадки компании появится здесь.",
+      links: [{href: "#social-stats", label: "Соцсети"}]}},
+    "content-stats": {route: "content/stats", legacy: "content-factory-stats"},
+    chats: {route: "chats", legacy: "hugh"},
+    "settings-content": {route: "settings/content", stub: {text: "Настройки контента загружаются."}}
   });
+  const routeOf = (view) => MODULE_ROUTES[view]?.route || view;
+  let moduleRoute = {path: "", query: ""};
   const validView = (value) => Object.hasOwn(VIEW_TITLES, value) && permittedView(value);
   /* Контент завод (CF1): четыре вкладки. Канонические адреса видов; прежние адреса (#autoposting,
      #content-factory/materials, #media-mentor, #media-mentor-rollout, #telegram-sources) переводятся
@@ -1676,6 +1643,39 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     button.setAttribute("aria-expanded", "true");
     menu.hidden = false;
   };
+  let moduleController = null;
+  // Модуль не зарегистрирован, а прежний экран есть — показываем его под тем же пунктом меню.
+  const effectiveView = (view) => {
+    const legacy = MODULE_ROUTES[view]?.legacy;
+    return legacy && !window.SynapseModules?.has(view) && permittedView(legacy) ? legacy : view;
+  };
+  const unmountModule = () => { moduleController?.unmount(); moduleController = null; };
+  const mountModule = (view, element) => {
+    unmountModule();
+    moduleController = window.SynapseModules.mount(element, view, {route: moduleRoute, stub: {title: VIEW_TITLES[view], ...(MODULE_ROUTES[view].stub || {})}});
+  };
+  Object.keys(MODULE_ROUTES).forEach(view => {
+    // Контейнеры экранов модулей создаются здесь: разметка кабинета не меняется.
+    if (!byId(`${view}-view`)) {
+      const section = document.createElement("section");
+      Object.assign(section, {className: "view-panel", id: `${view}-view`, hidden: true});
+      section.dataset.view = view;
+      byId("home-view").before(section);
+    }
+    registeredViews[view] = {
+      render(element) {
+        const definition = window.SynapseModules?.get(view);
+        if (moduleController?.id === view && moduleController.definition === definition && definition?.onRoute) {
+          try { definition.onRoute({path: moduleRoute.path, params: new URLSearchParams(moduleRoute.query)}); } catch (error) { console.error(error); }
+          return;
+        }
+        mountModule(view, element);
+      },
+      // Смена компании всегда перемонтирует модуль: прежний контекст и запросы отменяются.
+      onProjectChange() { if (currentView === view) mountModule(view, byId(`${view}-view`)); },
+      onLeave: unmountModule
+    };
+  });
   const cabinetContext = () => ({
     identity,
     get selectedProjectId() { return selectedProjectId; },
@@ -1720,7 +1720,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     document.querySelectorAll("[data-view]").forEach((view) => {
       view.hidden = view.dataset.view !== currentView;
     });
-    document.body.dataset.view = currentView;
+    document.body.dataset.cabinetView = currentView;
     const claimed = [...document.querySelectorAll("#content-menu [data-view-also]")].some(link => link.dataset.viewAlso.split(" ").includes(currentView));
     const settingsView = ["settings", "settings-content"].includes(currentView);
     byId("settings-tabs").hidden = !settingsView;
