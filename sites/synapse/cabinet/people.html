@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-title" content="Синапс" data-palitra-content="">
   <script src="../brand/app-identity.js?v=20261105-1"></script>
   <link rel="stylesheet" href="people.css?v=20261103-people-1">
-  <script defer src="people.js?v=20261103-people-1"></script>
+  <script defer src="people.js?v=20261104-password-1"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">К содержимому</a>
@@ -25,6 +25,15 @@
         <label>Пароль<input name="password" type="password" autocomplete="current-password" required></label>
         <p id="login-error" class="message error" role="alert" hidden></p>
         <button type="submit" class="primary">Войти</button>
+      </form>
+    </section>
+    <section id="password-panel" class="card login" hidden>
+      <h1>Придумайте свой пароль</h1><p class="muted">Для продолжения замените временный пароль своим. Не менее 10 символов.</p>
+      <form id="password-form">
+        <label>Новый пароль<input name="password" type="password" autocomplete="new-password" minlength="10" required></label>
+        <label>Повторите пароль<input name="confirmation" type="password" autocomplete="new-password" minlength="10" required></label>
+        <p id="password-error" class="message error" role="alert" hidden></p>
+        <button type="submit" class="primary">Сохранить пароль</button>
       </form>
     </section>
     <p id="global-message" class="message" role="status" aria-live="polite">Открываем кабинет…</p>
@@ -51,10 +60,10 @@
       </section>
       <section id="owner-panel" hidden aria-labelledby="owner-heading">
         <div class="card"><h2 id="owner-heading">Доступ людей</h2><p class="muted">Доступ создаёт владелец. Приглашение не отправляется.</p><div id="member-list"></div>
+          <div id="temporary-password" class="message" role="status" hidden></div>
           <details><summary>Создать доступ</summary><form id="member-create-form">
             <label>Имя<input name="displayName" maxlength="120" autocomplete="off" required></label>
             <label>Логин<input name="login" pattern="[a-z0-9_-]{1,64}" maxlength="64" autocomplete="off" required></label>
-            <label>Пароль<input name="password" type="password" autocomplete="new-password" minlength="12" required></label>
             <button class="primary" type="submit">Создать доступ</button>
           </form></details>
           <details><summary>Подключить существующую учётную запись</summary><form id="member-adopt-form"><label>Номер учётной записи<input name="userId" type="number" min="1" step="1" required></label><p class="message" id="member-adopt-warning">Прежние права и компании будут заменены ролью исполнителя выбранного проекта; данные и пароль сохранятся.</p><button type="submit" aria-describedby="member-adopt-warning">Подключить к проекту</button></form></details>

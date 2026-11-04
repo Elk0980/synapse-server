@@ -2,7 +2,7 @@
 (() => {
   const statusLabels = {inbox:'Входящие',planned:'Запланировано',in_progress:'В работе',done:'Готово',cancelled:'Отменено'};
   const $ = id => document.getElementById(id);
-  const state = {context:null,company:'',epoch:0,identityEpoch:0,taskEpoch:0,activeTask:null,preferences:null,pushPublicKey:'',tab:'tasks',snapshot:null};
+  const state = {context:null,company:'',epoch:0,identityEpoch:0,taskEpoch:0,temporaryEpoch:0,activeTask:null,preferences:null,pushPublicKey:'',tab:'tasks',snapshot:null,mustChangePassword:false};
   const message = (id,text,error=false) => {const node=$(id);node.textContent=text || '';node.hidden=!text;node.classList.toggle('error',error);};
   const node = (tag,text,className) => {const element=document.createElement(tag);if(text!==undefined)element.textContent=String(text);if(className)element.className=className;return element;};
   const scoped = (path,company=state.company) => `${path}?companyCode=${encodeURIComponent(company)}`;
@@ -18,13 +18,18 @@
     return write?'Результат сохранения не подтверждён. Обновите кабинет и проверьте запись перед повтором.':'Не удалось загрузить данные. Попробуйте обновить кабинет.';
   }
   async function api(path,{method='GET',body}={}) {
+    const identityEpoch=state.identityEpoch;
     const controller = new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
     try {
       const response = await fetch(path,{method,credentials:'same-origin',cache:'no-store',redirect:'error',signal:controller.signal,
         headers:{accept:'application/json',...(body!==undefined?{'content-type':'application/json'}:{}),
           ...(mutable(method)&&state.context?.csrfToken?{'x-csrf-token':state.context.csrfToken}:{})},
         ...(body!==undefined?{body:JSON.stringify(body)}:{})});
-      if(!response.ok)throw Object.assign(Error(failure(response.status,mutable(method))),{status:response.status,userVisible:true});
+      if(!response.ok){
+        const data=await response.json().catch(()=>({}));
+        if(response.status===403&&data.details?.mustChangePassword&&identityEpoch===state.identityEpoch)showPasswordChange(data.details);
+        throw Object.assign(Error(path==='/content/password'&&response.status===400&&typeof data.error==='string'?data.error:failure(response.status,mutable(method))),{status:response.status,userVisible:true});
+      }
       return response.status===204?{}:await response.json();
     } catch(error) {
       if(Number.isInteger(error.status))throw error;
@@ -101,6 +106,14 @@
       const row=node('div',undefined,'member-row');row.append(node('strong',member.displayName),node('span',`${member.login} · №${member.id}`,'muted'));
       if(member.executorKey)row.append(node('span',`Для назначения задач: ${member.executorKey}`,'muted'));list.append(row);
       if(state.context?.isOwner){
+        if(member.staffRole==='human_executor'){
+        const reset=node('button','Новый временный пароль');reset.type='button';row.append(reset);
+        reset.addEventListener('click',async()=>{
+          const company=state.company,epoch=state.epoch,temporaryEpoch=clearTemporaryPassword();reset.disabled=true;
+          try{const result=await api(`/content/people/members/${member.id}/temp-password`,{method:'POST',body:{companyCode:company}});if(active(epoch,company))showTemporaryPassword(result,temporaryEpoch);}
+          catch(error){if(active(epoch,company))message('global-message',error.message,true);}finally{reset.disabled=false;}
+        });
+        }
         const form=node('form'),label=node('label',undefined,'check'),checkbox=node('input'),save=node('button','Сохранить право');
         checkbox.type='checkbox';checkbox.checked=member.canApprovePlan===true;checkbox.setAttribute('aria-label',`Согласование плана: ${member.displayName}`);
         label.append(checkbox,document.createTextNode('Согласование контент-плана'));save.type='submit';form.append(label,save);row.append(form);
@@ -164,6 +177,7 @@
   }
   async function loadCompany() {
     const company=state.company,epoch=++state.epoch;
+    clearTemporaryPassword();
     closeTask();state.preferences=null;state.pushPublicKey='';state.snapshot=null;$('task-list').replaceChildren();$('task-count').textContent='';$('plan-list').replaceChildren();message('plan-message','');
     $('member-list').replaceChildren();$('notification-list').replaceChildren();$('preferences-form').reset();$('friday-form').reset();
     $('member-create-form').reset();$('member-adopt-form').reset();message('friday-result','');message('push-status','');
@@ -215,9 +229,23 @@
     }catch(error){if(active(epoch,company))message('global-message',error.message,true);}
   }
   function showLogin() {
+    state.mustChangePassword=false;clearTemporaryPassword();$('password-panel').hidden=true;$('password-form').reset();message('password-error','');$('login-form').elements.password.value='';
     state.epoch++;state.identityEpoch++;state.taskEpoch++;state.context=null;state.company='';state.activeTask=null;state.preferences=null;state.pushPublicKey='';
     $('workspace').hidden=true;$('login-panel').hidden=false;$('logout').hidden=true;closeTask();message('global-message','');
     state.snapshot=null;$('plan-list').replaceChildren();$('task-list').replaceChildren();$('member-list').replaceChildren();$('notification-list').replaceChildren();$('member-create-form').reset();$('member-adopt-form').reset();$('friday-form').reset();$('preferences-form').reset();
+  }
+  function showPasswordChange(details) {
+    showLogin();state.mustChangePassword=true;state.context={csrfToken:details.csrfToken};
+    $('login-panel').hidden=true;$('logout').hidden=false;$('password-panel').hidden=false;$('password-form').elements.password.focus();
+  }
+  function clearTemporaryPassword() {$('temporary-password').replaceChildren();$('temporary-password').hidden=true;return ++state.temporaryEpoch;}
+  function showTemporaryPassword(result,temporaryEpoch) {
+    if(temporaryEpoch!==state.temporaryEpoch)return;
+    clearTemporaryPassword();if(!result.temporaryPassword)return;
+    const box=$('temporary-password'),close=node('button','Закрыть');close.type='button';close.addEventListener('click',clearTemporaryPassword);
+    box.append(node('p','Передайте временный пароль человеку. При первом входе он задаст свой пароль.'),node('output',result.temporaryPassword));
+    const expires=new Date(result.expiresAt);if(Number.isFinite(expires.valueOf()))box.append(node('p',`Действует до ${new Intl.DateTimeFormat('ru-RU',{dateStyle:'medium',timeStyle:'short'}).format(expires)}`));
+    box.append(close);box.hidden=false;
   }
   async function initialize() {
     const identityEpoch=++state.identityEpoch;
@@ -225,7 +253,7 @@
       const context=await api('/content/people/context');
       if(identityEpoch!==state.identityEpoch)return;
       const previousCompany=state.company;
-      state.context=context;$('login-panel').hidden=true;$('workspace').hidden=false;$('logout').hidden=false;
+      state.context=context;state.mustChangePassword=false;$('password-panel').hidden=true;$('login-panel').hidden=true;$('workspace').hidden=false;$('logout').hidden=false;
       $('person-name').textContent=context.user.displayName || context.user.login || '';
       $('tab-owner').hidden=!context.isOwner;$('tab-plan').hidden=!canApprove();$('company').replaceChildren();
       for(const company of context.companies || []){const option=node('option',company.name || company.id);option.value=company.id;$('company').append(option);}
@@ -281,8 +309,14 @@
   },'login-error');});
   $('logout').addEventListener('click',()=>{void busy($('login-form'),async()=>{
     // Отписываем только endpoint текущего пользователя после подтверждения сервера.
-    await disablePush({silent:true});await api('/content/logout',{method:'POST'});showLogin();
+    if(!state.mustChangePassword)await disablePush({silent:true});await api('/content/logout',{method:'POST'});showLogin();
   });});
+  $('password-form').addEventListener('submit',event=>{event.preventDefault();void busy(event.currentTarget,async()=>{
+    const form=$('password-form'),password=form.elements.password.value,identityEpoch=state.identityEpoch;
+    if(password.length<10){message('password-error','Введите не менее 10 символов.',true);return;}
+    if(password!==form.elements.confirmation.value){message('password-error','Пароли не совпадают.',true);return;}
+    await api('/content/password',{method:'POST',body:{password}});if(identityEpoch!==state.identityEpoch)return;form.reset();message('password-error','');await initialize();
+  },'password-error');});
   $('company').addEventListener('change',()=>{state.company=$('company').value;void loadCompany();});
   $('refresh').addEventListener('click',()=>{void initialize();});
   for(const tab of ['tasks','plan','settings','owner'])$(`tab-${tab}`).addEventListener('click',()=>setTab(tab));
@@ -310,8 +344,8 @@
     }
   });
   $('member-create-form').addEventListener('submit',event=>{event.preventDefault();const company=state.company,epoch=state.epoch;void busy(event.currentTarget,async()=>{
-    const form=$('member-create-form');await api('/content/people/members',{method:'POST',body:{companyCode:company,displayName:form.elements.displayName.value.trim(),login:form.elements.login.value.trim(),password:form.elements.password.value,staffRole:'human_executor'}});
-    if(!active(epoch,company))return;form.reset();const members=await api(scoped('/content/people/members',company));if(active(epoch,company)){renderMembers(members);message('global-message','Доступ создан. Приглашение не отправлялось.');}
+    const form=$('member-create-form'),temporaryEpoch=clearTemporaryPassword();const result=await api('/content/people/members',{method:'POST',body:{companyCode:company,displayName:form.elements.displayName.value.trim(),login:form.elements.login.value.trim(),staffRole:'human_executor'}});
+    if(!active(epoch,company))return;form.reset();showTemporaryPassword(result,temporaryEpoch);const members=await api(scoped('/content/people/members',company));if(active(epoch,company)){renderMembers(members);message('global-message','Доступ создан. Приглашение не отправлялось.');}
   });});
   $('member-adopt-form').addEventListener('submit',event=>{event.preventDefault();const company=state.company,epoch=state.epoch;void busy(event.currentTarget,async()=>{
     const form=$('member-adopt-form'),id=Number(form.elements.userId.value);if(!Number.isSafeInteger(id)||id<1)throw Error('Укажите номер учётной записи.');
@@ -333,5 +367,7 @@
   });
   // Малый публичный интерфейс для проверки без браузерной автоматизации.
   window.SynapsePeople=Object.freeze({progress,initialize,pushAvailable});
+  window.addEventListener('pagehide',()=>{clearTemporaryPassword();$('password-form').reset();});
+  window.addEventListener('pageshow',event=>{if(event.persisted)void initialize();});
   void initialize();
 })();

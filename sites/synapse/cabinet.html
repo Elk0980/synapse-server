@@ -1158,9 +1158,15 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     };
     return { signal, rethrow, json };
   };
+  const passwordChangeNotice = (response, body) => {
+    if (response.status !== 403 || !body?.details?.mustChangePassword) return false;
+    for (const id of ["auth-error", "startup-error"]) { const el = byId(id); el.replaceChildren("Нужно сменить пароль. ", Object.assign(document.createElement("a"), { href: "/cabinet/people.html", target: "_blank", rel: "noopener", textContent: "Сменить пароль" })); el.hidden = false; }
+    return true;
+  };
   const responseError = (response, body) => {
-    const error = new Error(response.status === 403 ? "Недостаточно прав" : body?.error || (response.status >= 500 ? "Ошибка сервера, попробуйте позже" : "Ошибка запроса"));
-    error.status = response.status;
+    const mustChangePassword = response.status === 403 && body?.details?.mustChangePassword; if (mustChangePassword) passwordChangeNotice(response, body);
+    const error = new Error(mustChangePassword ? "Нужно сменить пароль" : response.status === 403 ? "Недостаточно прав" : body?.error || (response.status >= 500 ? "Ошибка сервера, попробуйте позже" : "Ошибка запроса"));
+    error.status = response.status; error.mustChangePassword = Boolean(mustChangePassword);
     // CRM кладёт код отказа в details.code; верхний code (сервис контента) имеет приоритет.
     const validCode = (value) => typeof value === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(value);
     if (validCode(body?.code)) error.code = body.code;
@@ -2084,6 +2090,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
+        if (passwordChangeNotice(response, body)) return;
         const disabled = response.status === 403 && /отключ/i.test(body.error || "");
         showAuthError(response.status === 401 ? "Неверный логин или пароль" : disabled
           ? "Учётная запись отключена" : response.status === 429
@@ -2093,7 +2100,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
       await response.json();
       enterCabinet(await apiJson("/content/whoami"));
     } catch (error) {
-      showAuthError("Ошибка сервера, попробуйте позже");
+      if (!error.mustChangePassword) showAuthError("Ошибка сервера, попробуйте позже");
     }
   });
 
@@ -2105,6 +2112,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         enterCabinet(await response.json());
         return;
       }
+      if (passwordChangeNotice(response, await response.json().catch(() => ({})))) return;
       if (response.status !== 401) showAuthError("Сервер входа недоступен");
     } catch (error) {
       showAuthError("Сервер входа недоступен");

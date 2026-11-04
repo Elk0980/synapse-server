@@ -11,7 +11,7 @@
     let r;
     try { r=await fetch(`/content/people/${path}`,{method:body?'POST':'GET',credentials:'same-origin',cache:'no-store',redirect:'error',signal:AbortSignal.timeout(body?28000:20000),headers:{'content-type':'application/json',...(body?{'x-csrf-token':context.csrfToken}:{})},...(body?{body:JSON.stringify(body)}:{})}); }
     catch {throw Error(body?'Результат отправки не подтверждён. Повтор сохранённой отправки безопасен.':'Не удалось загрузить чат. Нажмите на проект для повтора.');}
-    if(!r.ok)throw Error(r.status===401?'Войдите через «Моя работа» и вернитесь в чат.':r.status===403?'Доступ к проекту отозван.':body?'Результат отправки не подтверждён. Повтор сохранённой отправки безопасен.':'Не удалось загрузить чат. Нажмите на проект для повтора.');
+    if(!r.ok){const error=await r.json().catch(()=>({}));throw Error(r.status===403&&error.details?.mustChangePassword?'Нужно сменить пароль. Откройте «Моя работа», сохранив этот чат.':r.status===401?'Войдите через «Моя работа» и вернитесь в чат.':r.status===403?'Доступ к проекту отозван.':body?'Результат отправки не подтверждён. Повтор сохранённой отправки безопасен.':'Не удалось загрузить чат. Нажмите на проект для повтора.');}
     return r.json();
   }
   const path=code=>`team-chat?companyCode=${encodeURIComponent(code)}`;

@@ -126,6 +126,7 @@ function createProjectChatMiniApp({ db, authStore, botId = '', sessionSecret = '
     if (!claims || claims.k !== 'room' || !Number.isSafeInteger(claims.exp) || claims.exp * 1000 <= now()) fail(401, REOPEN);
     const user = authStore.getById(claims.uid);
     if (!user || user.sessionVersion !== claims.sv) fail(401, REOPEN);
+    if (user.mustChangePassword) fail(403, 'Нужно сменить пароль в кабинете', {mustChangePassword:true});
     const link = typeof claims.tg === 'string' && TELEGRAM_ID.test(claims.tg) ? linkOf(claims.tg) : null;
     if (!link || link.user_id !== user.id || linkVersion(user.id) !== claims.lv) fail(401, REOPEN);
     return { user, telegramUserId: claims.tg };
@@ -174,6 +175,7 @@ function createProjectChatMiniApp({ db, authStore, botId = '', sessionSecret = '
         if (issued.limited) return { status: 429, message: 'Слишком много запросов кода. Попробуйте позже', extra: {} };
         return { status: 403, message: 'Ваш Telegram ещё не привязан к аккаунту участника', extra: { state: 'unlinked', linkCode: issued.code, expiresAt: issued.expiresAt, project: verified.project } };
       }
+      if (user.mustChangePassword) return {status:403,message:'Нужно сменить пароль в кабинете',extra:{mustChangePassword:true}};
       const companies = rooms(user);
       if (!companies.length) return { status: 403, message: 'Владелец ещё не добавил вас в участники чата проекта', extra: { state: 'no_rooms' } };
       const minted = mintToken(user, verified.telegramUserId, at);

@@ -4,9 +4,10 @@ const fail=(status,message)=>{throw Object.assign(new Error(message),{status});}
 const key=id=>`person:${id}`;
 const same=(a,b)=>String(a||'').toLowerCase()===String(b||'').toLowerCase();
 function createPeopleTasks({authStore,db,call}) {
-  function access(userId,companyCode,write=false) {
+  function access(userId,companyCode,write=false,{allowPasswordChange=false}={}) {
     const user=authStore.getById(userId);
     if(!user)fail(401,'Требуется вход в кабинет');
+    if(user.mustChangePassword&&!allowPasswordChange)fail(403,'Нужно сменить пароль');
     if(!user.companyCodes.includes(companyCode))fail(403,'Компания недоступна');
     if(user.role!=='owner') {
       const member=db.prepare("SELECT 1 FROM company_team_members WHERE user_id=? AND company_code=? AND staff_role='human_executor'").get(userId,companyCode);
@@ -81,9 +82,11 @@ function createPeopleTasks({authStore,db,call}) {
     return {task:dto(result,user,children)};
   }
   async function update(userId,code,id,body) {
+    const version=access(userId,code,true).sessionVersion;
     if(!body||Object.keys(body).sort().join(',')!=='revision,status'||!Number.isSafeInteger(body.revision)||
       !['inbox','planned','in_progress','done','cancelled'].includes(body.status))fail(400,'Передайте только статус и ревизию задачи');
     const {task}=await get(userId,code,id);let user=access(userId,code,true);
+    if(user.sessionVersion!==version)fail(401,'Сессия изменилась. Войдите заново');
     if(user.role!=='owner'&&task.assignee_name!==key(user.id))fail(403,'Статус меняет назначенный исполнитель');
     if(task.coordination.revision!==body.revision)fail(409,'Задача изменилась. Обновите карточку');
     const result=await call('task_update',{task_id:id,status:body.status,revision:body.revision},user,code);
