@@ -82,7 +82,7 @@ cabinet.registerView("site-orders", { title: "Заявки с сайта",
       <p role="status" data-recipient-status></p></form>
       <p class="site-orders__hint">Бот пишет только тем, кто сам начал с ним диалог: для прежнего канала получатель один раз отправляет /start боту @synapse_sb_bot, для клиентского бота компании — привязывается кодом ниже. Сохранение ничего не отправляет; проверка отправляет одно служебное сообщение.</p></section>
       <div data-client-bot-box></div>
-      <section class="card"><h2>Заявки</h2><div data-orders-list aria-live="polite">Загрузка…</div>
+      <section class="card"><h2>Заявки</h2><p class="site-orders__warning" data-orders-crm-errors hidden></p><div data-orders-list aria-live="polite">Загрузка…</div>
       <div class="site-orders__more"><button type="button" data-orders-more hidden>Показать ещё</button><p role="status" data-orders-more-status></p></div></section>`;
     container.append(panel);
     const summary = panel.querySelector("[data-recipient-summary]");
@@ -231,6 +231,9 @@ cabinet.registerView("site-orders", { title: "Заявки с сайта",
         shown = fresh.concat(tail);
         nextCursor = tail.length ? nextCursor : (data.nextCursor ?? null);
         showRecipient(data.recipient); showOrders(shown);
+        const crmErrors = panel.querySelector("[data-orders-crm-errors]");
+        const failed = Number.isSafeInteger(data.crmErrors) && data.crmErrors > 0 ? data.crmErrors : 0;
+        crmErrors.hidden = !failed; crmErrors.textContent = failed ? `Не передано в CRM: ${failed}` : "";
         if (!quiet) status.textContent = "";
       } catch (error) {
         if (!alive() || error.name === "AbortError") return;

@@ -477,7 +477,9 @@ function createSiteOrders({ db, tx, sites = {}, priceReader, ipSalt = '', now = 
       ? db.prepare('SELECT * FROM site_orders WHERE site=? ORDER BY id DESC LIMIT ?').all(site, size + 1)
       : db.prepare('SELECT * FROM site_orders WHERE site=? AND id<? ORDER BY id DESC LIMIT ?').all(site, cursor, size + 1);
     const page = rows.slice(0, size);
-    return { orders: page.map(orderJSON), nextCursor: rows.length > size ? page[page.length - 1].id : null, recipient: recipientStatus(site) };
+    // Заказы, которые не удалось передать в CRM (повторы исчерпаны или отказ): одна цифра для списка кабинета.
+    const crmErrors = db.prepare("SELECT count(*) n FROM site_orders WHERE site=? AND crm_status='error'").get(site).n;
+    return { orders: page.map(orderJSON), nextCursor: rows.length > size ? page[page.length - 1].id : null, recipient: recipientStatus(site), crmErrors };
   }
   /* Смена получателя сбрасывает подтверждение и меняет версию: старые тесты и задания ей не засчитываются. */
   function setRecipient(site, body) {

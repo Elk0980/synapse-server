@@ -14,3 +14,10 @@
 ## Converge
 
 FR1–FR8 покрыты кодом и тестами выше. Не выполнено: T6 (выпуск и проверка живой корзиной), T7 (перенос исторических заказов) — требуют решения владельца.
+
+## Правки по ревью (04.11)
+
+- `site-order-crm.test.js` 7/7 (новые: предел 48 попыток и 7 суток → `error`, счётчик `crmErrors` в `listOrders`, остановленные не уходят автоматически; битые `items_json`/`utm_json` → `error` «Ошибка подготовки заявки», соседний заказ `sent`). Заявка собирается до сетевого вызова, поэтому битая строка не принимается за «CRM недоступна».
+- `site-order-leads.test.js` 1/1: ответ служебного маршрута без `access-control-allow-origin`.
+- `sites/synapse/cabinet/site-orders.test.cjs` 15/15: строка «Не передано в CRM: N» только при N > 0.
+- Полный ops/content: 706, 701 pass, 3 fail, 2 skip. Эти 3 теста живого сервера (`platform-demand-proxy`, `project-chat-integration`, `project-chat-local-worker-integration`) упали, пока параллельно шли наборы другой ветки; отдельный повтор — 3/3 pass. Полный ops/crm: 992, 990 pass, 2 fail (те же, что на чистом main). `gate.py check` — ok.

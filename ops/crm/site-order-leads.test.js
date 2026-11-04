@@ -34,7 +34,7 @@ test('заказ сайта: одна заявка по номеру заказ�
   const call = async (method, pathname, body, key = apiKey) => {
     const r = await fetch(`http://127.0.0.1:${port}${pathname}`, { method, headers: { ...(key ? { 'x-api-key': key } : {}), 'content-type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body) });
-    return { status: r.status, body: await r.json() };
+    return { status: r.status, body: await r.json(), headers: r.headers };
   };
   let child = await start(dbPath, apiKey, port);
   try {
@@ -53,6 +53,7 @@ test('заказ сайта: одна заявка по номеру заказ�
     assert.equal((await call('POST', '/internal/site-orders/lead', order, 'wrong')).status, 401);
     const created = await call('POST', '/internal/site-orders/lead', order);
     assert.equal(created.status, 201);
+    assert.equal(created.headers.get('access-control-allow-origin'), null, 'служебный маршрут без CORS');
     assert.equal(created.body.duplicate, false);
     assert.equal(created.body.companyCode, 'palitra-love');
     const again = await call('POST', '/internal/site-orders/lead', { ...order, name: 'Иначе' });

@@ -11,6 +11,9 @@
 const BATCH = 10;
 const BASE_DELAY = 30 * 1000;
 const MAX_DELAY = 60 * 60 * 1000;
+/* Предел повторов: 7 суток с оформления заказа или 48 попыток — затем crm_status='error' (счётчик в кабинете). */
+const MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+const MAX_ATTEMPTS = 48;
 const CONTACT_CHANNELS = Object.freeze({ phone: 'Звонок', telegram: 'Telegram', whatsapp: 'WhatsApp', max: 'MAX' });
 const COLUMNS = Object.freeze({
   crm_status: "TEXT NOT NULL DEFAULT ''", crm_attempts: 'INTEGER NOT NULL DEFAULT 0', crm_next_attempt_at: 'TEXT',
@@ -70,6 +73,8 @@ function createSiteOrderCrmSync({ db, sites = {}, crmUrl = '', apiKey = '', fetc
 
   const retry = (order, error) => {
     const attempts = order.crm_attempts + 1;
+    const created = Date.parse(order.created_at);
+    if (attempts >= MAX_ATTEMPTS || (Number.isFinite(created) && now() - created >= MAX_AGE)) return stop(order, `${error}; повторы исчерпаны`);
     const delay = Math.min(MAX_DELAY, BASE_DELAY * 2 ** Math.min(attempts - 1, 12));
     db.prepare("UPDATE site_orders SET crm_attempts=?, crm_next_attempt_at=?, crm_error=? WHERE id=? AND crm_status='pending'")
       .run(attempts, stamp(now() + delay), clip(error, 200), order.id);
@@ -81,10 +86,12 @@ function createSiteOrderCrmSync({ db, sites = {}, crmUrl = '', apiKey = '', fetc
     const config = siteConfig(order.site);
     // Компания проверяется на сервере: заказ уходит только в CRM компании, за которой закреплён сайт.
     if (!config || !config.companyCode || config.companyCode !== order.company_code) return stop(order, 'Компания заказа не совпадает с сайтом');
+    // Заявка собирается до сети: битая строка — ошибка подготовки (остановка), а не «CRM недоступна».
+    const payload = JSON.stringify(leadPayload(order, config));
     let response;
     try {
       response = await fetchImpl(`${base}/internal/site-orders/lead`, { method: 'POST', redirect: 'error',
-        headers: { 'content-type': 'application/json', 'x-api-key': apiKey }, body: JSON.stringify(leadPayload(order, config)),
+        headers: { 'content-type': 'application/json', 'x-api-key': apiKey }, body: payload,
         signal: AbortSignal.timeout(timeoutMs) });
     } catch { return retry(order, 'CRM недоступна'); }
     let data = null;
@@ -105,7 +112,10 @@ function createSiteOrderCrmSync({ db, sites = {}, crmUrl = '', apiKey = '', fetc
     if (!configured()) return { configured: false, processed: 0 };
     const rows = db.prepare(`SELECT * FROM site_orders WHERE crm_status='pending' AND (crm_next_attempt_at IS NULL OR crm_next_attempt_at<=?)
       ORDER BY id LIMIT ?`).all(stamp(), BATCH);
-    for (const order of rows) await deliver(order);
+    for (const order of rows) {
+      // Ошибка подготовки одной строки (битый items_json/utm_json) не блокирует очередь.
+      try { await deliver(order); } catch (error) { stop(order, `Ошибка подготовки заявки: ${error?.message || error}`); }
+    }
     return { configured: true, processed: rows.length };
   }
   /* Один проход за раз: параллельный вызов дожидается текущего. */
@@ -128,4 +138,4 @@ function createSiteOrderCrmSync({ db, sites = {}, crmUrl = '', apiKey = '', fetc
   return { sync, kick, start, stop: stopSync, status, configured };
 }
 
-module.exports = { createSiteOrderCrmSync, migrateSiteOrderCrm, revertSiteOrderCrm, leadPayload };
+module.exports = { createSiteOrderCrmSync, migrateSiteOrderCrm, revertSiteOrderCrm, leadPayload, MAX_AGE, MAX_ATTEMPTS };

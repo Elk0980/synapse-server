@@ -3218,7 +3218,8 @@ async function route(request, response) {
   // Служебный приём заказа сайта: x-api-key уже проверен выше (маршрут не публичный).
   if (request.method === 'POST' && url.pathname === '/internal/site-orders/lead') {
     const result = siteOrderLeads.accept(await readJson(request, 64 * 1024));
-    return send(response, result.status, result.body, { ...cors, 'cache-control': 'no-store' });
+    // Служебный вызов сервер→сервер: заголовки CORS не нужны.
+    return send(response, result.status, result.body, { 'cache-control': 'no-store' });
   }
 
   if (request.method === 'GET' && url.pathname === '/leads') {

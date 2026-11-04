@@ -177,3 +177,38 @@ test('миграция на старой схеме: прежние заказы
   createSiteOrders({ db, tx: txOf(db), sites: SITES, priceReader: () => PRICE });
   assert.ok(db.prepare("SELECT name FROM pragma_table_info('site_orders')").all().some((row) => row.name === 'crm_status'));
 });
+
+test('предел очереди: 7 суток с оформления или 48 попыток → error; счётчик в списке заказов', async () => {
+  const { db, orders, sync, crm, clock, submit } = setup();
+  crm.state.up = false;
+  const old = submit({ phone: '+7 900 100-00-01', name: 'Клиент 1' }).body.orderId;
+  const many = submit({ phone: '+7 900 100-00-02', name: 'Клиент 2' }).body.orderId;
+  db.prepare('UPDATE site_orders SET crm_attempts=47 WHERE id=?').run(many);
+  await sync.sync();
+  assert.equal(sync.status(many).status, 'error', '48-я попытка исчерпывает повторы');
+  assert.match(sync.status(many).error, /повторы исчерпаны/);
+  assert.equal(sync.status(old).status, 'pending', 'первая неудача — повтор');
+  assert.equal(orders.listOrders('palitra').crmErrors, 1);
+  clock.at += 7 * 24 * 60 * 60 * 1000;
+  await sync.sync();
+  assert.equal(sync.status(old).status, 'error', 'старше 7 суток — остановка');
+  assert.equal(orders.listOrders('palitra').crmErrors, 2);
+  crm.state.up = true;
+  await sync.sync();
+  assert.equal(crm.state.leads.length, 0, 'остановленные не отправляются повторно автоматически');
+});
+
+test('битый items_json/utm_json одной строки не блокирует очередь', async () => {
+  const { db, sync, crm, submit } = setup();
+  const broken = submit({ phone: '+7 900 100-00-03', name: 'Клиент 3' }).body.orderId;
+  const brokenUtm = submit({ phone: '+7 900 100-00-04', name: 'Клиент 4' }).body.orderId;
+  const good = submit({ phone: '+7 900 100-00-05', name: 'Клиент 5' }).body.orderId;
+  db.prepare("UPDATE site_orders SET items_json='{broken' WHERE id=?").run(broken);
+  db.prepare("UPDATE site_orders SET utm_json='nope' WHERE id=?").run(brokenUtm);
+  await sync.sync();
+  assert.equal(sync.status(broken).status, 'error');
+  assert.match(sync.status(broken).error, /Ошибка подготовки заявки/);
+  assert.equal(sync.status(brokenUtm).status, 'error');
+  assert.equal(sync.status(good).status, 'sent');
+  assert.equal(crm.state.leads.length, 1);
+});

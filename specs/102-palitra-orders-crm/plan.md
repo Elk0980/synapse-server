@@ -1,6 +1,6 @@
 # План
 
-Владелец: Claude, одна ветка, один писатель. Разрешённые файлы: `ops/content/site-order-crm*.js`, `ops/content/site-orders.js` (точечно), `ops/content/server.js` (точечно), `ops/crm/site-order-leads*.js`, `ops/crm/server.js` (точечно), `.github/workflows/project-chat-check.yml` (добавить тест), `specs/097-palitra-orders-crm/`.
+Владелец: Claude, одна ветка, один писатель. Разрешённые файлы: `ops/content/site-order-crm*.js`, `ops/content/site-orders.js` (точечно), `ops/content/server.js` (точечно), `ops/crm/site-order-leads*.js`, `ops/crm/server.js` (точечно), `.github/workflows/project-chat-check.yml` (добавить тест), `specs/102-palitra-orders-crm/`.
 
 ## Существующее, что переиспользуется
 

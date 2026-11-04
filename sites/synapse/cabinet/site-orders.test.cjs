@@ -333,3 +333,14 @@ test('renotify показанной заявки за пределами пер�
   assert.equal(f.calls.length, 5, 'ровно один POST и одно перечитывание');
   f.w.close();
 });
+
+test('список заказов: одна строка «Не передано в CRM: N» только при N > 0', async () => {
+  const f = fixture(), rendering = f.render();
+  f.calls[0].resolve({ orders: [order(5, 'accepted')], recipient: recipient(), crmErrors: 3 }); await rendering; await tick();
+  const line = f.container.querySelector('[data-orders-crm-errors]');
+  assert.equal(line.hidden, false); assert.equal(line.textContent, 'Не передано в CRM: 3');
+  const g = fixture(), second = g.render();
+  g.calls[0].resolve({ orders: [], recipient: recipient(), crmErrors: 0 }); await second; await tick();
+  assert.equal(g.container.querySelector('[data-orders-crm-errors]').hidden, true);
+  f.w.close(); g.w.close();
+});
