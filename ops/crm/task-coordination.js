@@ -466,6 +466,7 @@ function createTaskTools(db, {now,owner,entry,save,watchdog}) {
           ...Object.fromEntries(OWNER_FIELDS.map(key=>[key,coordination[key]]))}:{}),
         milestones:Object.fromEntries(STAGES.map(stage=>[stage,{state:coordination.milestones[stage].state}]))}};
   };
+  const commentView = row => ({...row,identity:watchdog?.commentIdentity(row)??{source:'task-watchdog',verified:false}});
   const taskView = (row, actor, detail=false, args={}) => {
     const fields = ['id','created_at','updated_at','title','description','company_code','assignee_name',
       'status','priority','due_date','source','parent_task_id','reviewer_name','client_ref'];
@@ -480,7 +481,7 @@ function createTaskTools(db, {now,owner,entry,save,watchdog}) {
         .all(row.id,...codes,subtasks.limit,subtasks.offset).map(taskSummary);
       result.subtasks_pagination={total:db.prepare(`SELECT count(*) n FROM tasks WHERE ${childWhere}`).get(row.id,...codes).n,...subtasks};
       result.comments = db.prepare(`SELECT id,task_id,author,text,created_at FROM task_comments WHERE task_id=?
-        ORDER BY id DESC LIMIT ? OFFSET ?`).all(row.id,comments.limit,comments.offset);
+        ORDER BY id DESC LIMIT ? OFFSET ?`).all(row.id,comments.limit,comments.offset).map(commentView);
       result.comments_pagination={total:db.prepare('SELECT count(*) n FROM task_comments WHERE task_id=?').get(row.id).n,...comments};
     }
     return result;
@@ -665,7 +666,7 @@ function createTaskTools(db, {now,owner,entry,save,watchdog}) {
       const result=db.prepare('INSERT INTO task_comments(task_id,author,text,created_at) VALUES(?,?,?,?)').run(row.id,author,message,stamp());
       watchdog?.comment(row.id,Number(result.lastInsertRowid),actor);
       db.prepare('UPDATE tasks SET updated_at=? WHERE id=?').run(stamp(),row.id);
-      return {comment:db.prepare('SELECT * FROM task_comments WHERE id=?').get(Number(result.lastInsertRowid))};
+      return {comment:commentView(db.prepare('SELECT * FROM task_comments WHERE id=?').get(Number(result.lastInsertRowid)))};
     });
     if(name==='agents_list')return {agents:db.prepare('SELECT * FROM agents ORDER BY id').all().map(row=>agentView(row,actor))};
     if(name==='agent_report')return transaction(()=>({agent:reportAgent(args,actor)}));
