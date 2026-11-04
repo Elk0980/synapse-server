@@ -1,0 +1,15 @@
+[Unit]
+Description=Synapse: автовыпуск статики кабинета из публичного main
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/synapse-autosync/synapse-autosync.py
+Nice=10
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+# Запись только в белый список статики и собственные каталоги.
+ReadWritePaths=/opt/synapse/sites/synapse/cabinet -/opt/synapse/sites/synapse/brand /opt/synapse-autosync /var/lib/synapse-autosync /var/backups/synapse-autosync /var/log/synapse-autosync.log /run

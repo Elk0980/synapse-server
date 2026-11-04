@@ -1,0 +1,10 @@
+[Unit]
+Description=Synapse: автовыпуск статики кабинета раз в 2 минуты
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target
