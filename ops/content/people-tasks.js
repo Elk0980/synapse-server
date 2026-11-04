@@ -91,6 +91,25 @@ function createPeopleTasks({authStore,db,call}) {
     if(!result.task||!same(result.task.company_code,code)||user.role!=='owner'&&result.task.assignee_name!==key(user.id))fail(409,'Доступ к задаче изменился. Обновите список');
     return {task:dto(result.task,user)};
   }
-  return {access,list,get,update};
+  // «Задачи» сотрудника: разделы доски по человеку; CRM повторно проверяет компанию и назначение.
+  function checkBoard(result,code) {
+    if(!result||result.companyCode!==code||!['assigned','hugh','deleted'].every(k=>Array.isArray(result[k]))||
+      ['assigned','hugh','deleted'].some(k=>result[k].some(t=>!same(t.company_code,code))))fail(502,'Некорректный список задач');
+    const pick=t=>({id:t.id,title:t.title,status:t.status,priority:t.priority,due_date:t.due_date||'',section:t.section,from:t.from,
+      paused:t.paused===true,deletedAt:t.deletedAt||'',subtask_count:t.subtask_count||0,subtask_done:t.subtask_done||0});
+    return {companyCode:code,assigned:result.assigned.map(pick),hugh:result.hugh.map(pick),deleted:result.deleted.map(pick)};
+  }
+  async function board(userId,code) {
+    const result=await call('myBoard',{},access(userId,code),code);access(userId,code);
+    return checkBoard(result,code);
+  }
+  async function boardAction(userId,code,body) {
+    const ok=body&&typeof body==='object'&&!Array.isArray(body)&&(['pause','resume','delete','restore'].includes(body.op)&&Object.keys(body).sort().join(',')==='op,taskId'&&Number.isSafeInteger(body.taskId)||
+      body.op==='order'&&Object.keys(body).sort().join(',')==='op,order,section'&&['assigned','hugh'].includes(body.section)&&Array.isArray(body.order)&&body.order.length<=500&&body.order.every(Number.isSafeInteger));
+    if(!ok)fail(400,'Некорректное действие с задачей');
+    const result=await call('myBoardAction',body,access(userId,code,true),code);access(userId,code,true);
+    return checkBoard(result,code);
+  }
+  return {access,list,get,update,board,boardAction};
 }
 module.exports={createPeopleTasks,executorKey:key};
