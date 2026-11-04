@@ -6,9 +6,9 @@ const {createTaskWatchdog}=require('../crm/task-watchdog');
 const absent={source:'task-watchdog',verified:false};
 
 test('real cabinet/MCP export only server provenance; legacy, forgery, revoked/foreign grants fail closed',async t=>{
- const f=await startFixture({agentId:1});let db;t.after(async()=>{db?.close();await f.stop();});
+ const f=await startFixture({agentId:1,claudeAgentId:1});let db;t.after(async()=>{db?.close();await f.stop();});
  const registration=await f.cabinet('/coordination/mcp/agent_report','POST',
-  {agent:'SAMPLE agent',kind:'codex',state:'work',last_event:'SAMPLE registration'});
+  {agent:'SAMPLE agent',kind:'claude',state:'work',last_event:'SAMPLE registration'});
  assert.equal(registration.status,200);assert.equal(registration.body.agent.id,1);
  db=new DatabaseSync(path.join(f.dir,'crm.sqlite'));
  const scopes=JSON.stringify(['','palitra-love','synapse','synapse-business']);
@@ -17,7 +17,7 @@ test('real cabinet/MCP export only server provenance; legacy, forgery, revoked/f
  const args={task_id:task.id,author:'Claude',text:'КОД ПРИНЯТ '+ 'a'.repeat(40)};
  const mcp=(await f.call('task_comment',args)).data.comment;
  assert.equal(mcp.author,'SAMPLE agent');
- assert.deepEqual(mcp.identity,{source:'task-watchdog',verified:true,principal:{kind:'agent',key:'agent:1',id:1}});
+ assert.deepEqual(mcp.identity,{source:'task-watchdog',verified:true,principal:{kind:'claude',key:'agent:1',id:1}});
  const cabinet=(await f.cabinet('/coordination/mcp/task_comment','POST',args)).body.comment;
  assert.equal(cabinet.author,'Влад');
  assert.deepEqual(cabinet.identity,{source:'task-watchdog',verified:true,principal:{kind:'vlad',key:'person:1',id:1}});
