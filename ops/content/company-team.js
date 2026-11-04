@@ -1,5 +1,6 @@
 'use strict';
 const {hashPassword} = require('./passwords');
+const crypto=require('node:crypto');
 const ROLES = Object.freeze({
   administrator: {name:'Администратор', permissions:['crm.view','crm.edit','autoposting.view','autoposting.edit','company-information.view','actor-onboarding.self']},
   master: {name:'Мастер', permissions:['actor-onboarding.self','autoposting.view','company-information.view']},
@@ -25,27 +26,31 @@ function createCompanyTeam(auth) {
       WHERE m.company_code=? AND u.role='editor' ORDER BY u.display_name`).all(code)
       .map(member=>({...member,executorKey:`person:${member.id}`}));
   }
-  function create(actorId,body) {
-    if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).sort().join(',')!=='companyCode,displayName,login,password,staffRole')fail(400,'Заполните данные сотрудника без дополнительных прав');
+  function create(actorId,body,temporary=false) {
+    if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).sort().join(',')!==(temporary?'companyCode,displayName,login,staffRole':'companyCode,displayName,login,password,staffRole'))fail(400,'Заполните данные сотрудника без дополнительных прав');
     access(actorId,body.companyCode);
     if(!Object.hasOwn(ROLES,body.staffRole))fail(400,'Выберите администратора или мастера');
     if(body.staffRole==='human_executor'&&auth.getById(actorId)?.role!=='owner')fail(403,'Доступ исполнителя создаёт владелец');
     if(typeof body.login!=='string'||!/^[a-z0-9_-]{1,64}$/.test(body.login))fail(400,'Логин: латинские буквы, цифры, дефис или подчёркивание');
     if(typeof body.displayName!=='string'||!body.displayName.trim()||body.displayName.length>120)fail(400,'Укажите имя сотрудника');
-    const passwordHash=hashPassword(body.password);
+    if(temporary&&(body.staffRole!=='human_executor'||auth.getById(actorId)?.role!=='owner'))fail(403,'Доступ создаёт владелец');
+    const temporaryPassword=temporary?crypto.randomBytes(18).toString('base64url'):undefined;
+    const expiresAt=temporary?new Date(Date.now()+72*3600000).toISOString():null;
+    const passwordHash=hashPassword(temporaryPassword??body.password);
     db.exec('BEGIN IMMEDIATE');
     try {
       if(auth.getByLogin(body.login))fail(409,'Этот логин уже занят');
       const stamp=new Date().toISOString();
-      const id=Number(db.prepare(`INSERT INTO auth_users(login,display_name,role,password_hash,created_at,updated_at)
-        VALUES(?,?,'editor',?,?,?)`).run(body.login,body.displayName.trim(),passwordHash,stamp,stamp).lastInsertRowid);
+      const id=Number(db.prepare(`INSERT INTO auth_users(login,display_name,role,password_hash,created_at,updated_at,must_change_password,temp_password_expires_at)
+        VALUES(?,?,'editor',?,?,?,?,?)`).run(body.login,body.displayName.trim(),passwordHash,stamp,stamp,temporary?1:0,expiresAt).lastInsertRowid);
       db.prepare('INSERT INTO auth_user_companies VALUES(?,?)').run(id,body.companyCode);
       for(const permission of ROLES[body.staffRole].permissions)db.prepare('INSERT INTO auth_user_permissions VALUES(?,?)').run(id,permission);
       db.prepare('INSERT INTO company_team_members VALUES(?,?,?,?)').run(id,body.companyCode,body.staffRole,actorId);
       db.prepare('INSERT INTO auth_audit(actor_user_id,target_user_id,action,details_json,created_at) VALUES(?,?,?,?,?)')
         .run(actorId,id,'TEAM_MEMBER_CREATED',JSON.stringify({companyCode:body.companyCode,staffRole:body.staffRole}),stamp);
+      if(temporary)auth.audit(actorId,id,'TEMP_PASSWORD_ISSUED');
       db.exec('COMMIT');
-      return {id,login:body.login,displayName:body.displayName.trim(),staffRole:body.staffRole,executorKey:`person:${id}`};
+      return {id,login:body.login,displayName:body.displayName.trim(),staffRole:body.staffRole,executorKey:`person:${id}`,...(temporary?{temporaryPassword,expiresAt}:{})};
     } catch(error) {db.exec('ROLLBACK');throw error;}
   }
   function assignHuman(actorId,userId,companyCode) {
