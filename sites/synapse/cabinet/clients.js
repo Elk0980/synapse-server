@@ -521,8 +521,10 @@ const renderEntityCard = async (view, id) => {
     ${view === "crm-companies" ? `<nav class="company-card-tabs" aria-label="Разделы карточки">
       <button type="button" class="plain-button" aria-pressed="true" data-company-tab="summary">Обзор</button>
       <button type="button" class="plain-button" aria-pressed="false" data-company-tab="documents">Документы</button>
+      ${identity.role === "owner" && SbCabinet.companyModulesUI ? '<button type="button" class="plain-button" aria-pressed="false" data-company-tab="modules">Модули</button>' : ""}
     </nav><div data-company-summary><p>Карточка клиента: загрузка…</p></div>
-    <div data-company-documents hidden><p>Документы: загрузка…</p></div>` : ""}
+    <div data-company-documents hidden><p>Документы: загрузка…</p></div>
+    <div data-company-modules hidden></div>` : ""}
     <section class="crm-relations"><h3>Связи</h3><div data-relations></div></section>`;
   content.querySelector("[data-entity-back]").addEventListener("click", (event) => {
     event.preventDefault();
@@ -540,13 +542,18 @@ const bindCompanyTabs = (company) => {
   const content = byId("crm-companies-content");
   const summary = content.querySelector("[data-company-summary]");
   const documents = content.querySelector("[data-company-documents]");
+  const modules = content.querySelector("[data-company-modules]");
+  SbCabinet.companyModulesUI?.reset();
   content.querySelectorAll("[data-company-tab]").forEach((button) => button.addEventListener("click", () => {
-    const showDocuments = button.dataset.companyTab === "documents";
-    summary.hidden = showDocuments;
-    documents.hidden = !showDocuments;
+    const tab = button.dataset.companyTab;
+    summary.hidden = tab !== "summary";
+    documents.hidden = tab !== "documents";
+    modules.hidden = tab !== "modules";
     content.querySelectorAll("[data-company-tab]").forEach((item) =>
       item.setAttribute("aria-pressed", String(item === button)));
-    if (showDocuments && !documents.dataset.loaded) loadCompanyDocuments(company);
+    if (tab === "documents" && !documents.dataset.loaded) loadCompanyDocuments(company);
+    // Модули перечитываются при каждом открытии: их меняют и из сделки, и из соседней вкладки.
+    if (tab === "modules") void SbCabinet.companyModulesUI.render(modules, { company, crmQuery, csrfOptions, escapeHTML, identity });
   }));
   loadCompanySummary(company);
 };

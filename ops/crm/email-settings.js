@@ -48,7 +48,10 @@ function disabledEnvironment() {
     LEADS_MAIL_FROM: '', LEADS_NOTIFY_EMAIL: '', LEADS_NOTIFY_EMAIL_ALVI: '', LEADS_NOTIFY_EMAIL_AVOKADO: ''};
 }
 
-function createEmailSettings(db, {apiKey, environment = process.env, now = Date.now, createTransport} = {}) {
+/* moduleRecipients — адреса из параметров включённого модуля компании (company-modules.js):
+   {companyCode: "a@x, b@y"}. Заданный в модуле список главнее прежних настроек этой компании;
+   компании без такого параметра читают прежние настройки без изменений. Отправитель SMTP не меняется. */
+function createEmailSettings(db, {apiKey, environment = process.env, now = Date.now, createTransport, moduleRecipients = () => ({})} = {}) {
   if (typeof apiKey !== 'string' || !apiKey.trim()) throw new Error('Ключ сервиса для хранения настроек почты отсутствует');
   // A versioned authenticated envelope protects a database-only copy. The service
   // key remains outside SQLite; replacing it requires the owner to enter a new password.
@@ -129,6 +132,16 @@ function createEmailSettings(db, {apiKey, environment = process.env, now = Date.
       state.public[code+'Recipient'] = recipients[code];
     }
     state.token += ':'+JSON.stringify(recipients);
+    // Модуль только для доставки: публичные поля отправителя и сохраняемый конверт не затрагиваются.
+    let overrides = {};
+    try { overrides = moduleRecipients() || {}; } catch { overrides = {}; }
+    const moduleCodes = Object.keys(overrides).filter(code => typeof overrides[code] === 'string');
+    if (moduleCodes.length) {
+      state.environment.LEADS_COMPANY_RECIPIENTS = {...recipients, ...Object.fromEntries(moduleCodes.map(code => [code, overrides[code]]))};
+      state.moduleCodes = new Set(moduleCodes);
+      state.environment.LEADS_RECIPIENT_MODULE_CODES = moduleCodes;
+      state.token += ':module:'+JSON.stringify(moduleCodes.map(code => [code, overrides[code]]));
+    } else state.moduleCodes = new Set();
     return state;
   }
   function getCompany(code) {
@@ -139,6 +152,7 @@ function createEmailSettings(db, {apiKey, environment = process.env, now = Date.
       : code === 'synapse-business' ? envValue(state.environment,'LEADS_NOTIFY_EMAIL') : '';
     // `recipient` keeps its string contract ("a@x" or "a@x, b@y"); `recipients` is the parsed list.
     return {companyCode:code, recipient, recipients: recipientsFromValue(recipient), recipientLimit: MAX_RECIPIENTS,
+      ...(state.moduleCodes.has(code) ? {source: 'module'} : {}),
       senderConfigured:Boolean(envValue(state.environment,'LEADS_SMTP_USER') && envValue(state.environment,'LEADS_SMTP_PASSWORD'))};
   }
   function saveCompany(code, body) {

@@ -470,6 +470,30 @@ test('CRM proxy restricts pipelines to the owner and preserves company-scoped ed
     assert.equal((await crm(owner,'PUT','/deals/criteria?companyCode=alvi',{stages:remove})).status,409);
   });
 
+  await t.test('company modules: owner only, company checked by CRM, CSRF on save, neighbour unaffected',async()=>{
+    assert.equal((await crm(undefined,'GET','/company-modules?companyCode=alvi')).status,401);
+    for(const session of [editor,viewer]) assert.equal((await crm(session,'GET','/company-modules?companyCode=alvi')).status,403);
+    assert.equal((await crm(owner,'GET','/company-modules')).status,400);
+    assert.equal((await crm(owner,'GET','/company-modules?companyCode=no-such-company')).status,404);
+    const list=await crm(owner,'GET','/company-modules?companyCode=alvi');
+    assert.equal(list.status,200,JSON.stringify(list.body));
+    assert.ok(list.body.modules.some(m=>m.key==='crm'&&m.enabled===false));
+    const body={enabled:true,version:0,params:{leadEmailRecipients:'modules-qa@example.test'}};
+    assert.equal((await crm({...owner,csrf:'invalid'},'PUT','/company-modules/crm?companyCode=alvi',body)).status,403);
+    assert.equal((await crm(editor,'PUT','/company-modules/crm?companyCode=alvi',body)).status,403);
+    assert.equal((await crm(owner,'PUT','/company-modules/crm?companyCode=alvi',{...body,params:{smtpPassword:'x'}})).status,400);
+    const saved=await crm(owner,'PUT','/company-modules/crm?companyCode=alvi',body);
+    assert.equal(saved.status,200,JSON.stringify(saved.body));
+    assert.equal(saved.body.modules.find(m=>m.key==='crm').enabled,true);
+    assert.equal((await crm(owner,'GET','/company-email?companyCode=alvi')).body.recipient,'modules-qa@example.test');
+    assert.equal((await crm(owner,'GET','/company-email?companyCode=avokado')).body.recipient,qaEmailSettings.avokadoRecipient);
+    assert.equal((await crm(owner,'GET','/company-modules?companyCode=avokado')).body.history.length,0);
+    // Вернуть прежнее состояние: следующие проверки читают прежних получателей ALVI.
+    assert.equal((await crm(owner,'PUT','/company-modules/crm?companyCode=alvi',{enabled:false,version:1})).status,200);
+    assert.equal((await crm(owner,'GET','/company-email?companyCode=alvi')).body.recipient,qaEmailSettings.alviRecipient);
+    assertNoQueuedOrAttemptedEmail();
+  });
+
   await t.test('company mail and deal representatives never inherit another company customer base',async()=>{
     const settings=await crm(owner,'GET','/company-email?companyCode=alvi');
     assert.equal(settings.status,200,JSON.stringify(settings.body));

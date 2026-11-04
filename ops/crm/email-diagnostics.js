@@ -20,9 +20,10 @@ function createEmailDiagnostics(db, {environment = process.env, getEnvironment =
     const password = Boolean(value(environment, 'LEADS_SMTP_PASSWORD'));
     const from = Boolean(value(environment, 'LEADS_MAIL_FROM') || value(environment, 'LEADS_SMTP_USER'));
     const smtp = {host, port, user, password, from, configured: host && port && user && password};
+    // Адреса берутся тем же путём, что и при отправке: параметр модуля CRM компании главнее прежних настроек.
     const recipients = {
-      alvi: Boolean(value(environment, 'LEADS_NOTIFY_EMAIL_ALVI')),
-      avokado: Boolean(value(environment, 'LEADS_NOTIFY_EMAIL_AVOKADO')),
+      alvi: Boolean(companyRecipient(environment, 'alvi')),
+      avokado: Boolean(companyRecipient(environment, 'avokado')),
     };
     return {smtp, recipients};
   };
@@ -35,7 +36,10 @@ function createEmailDiagnostics(db, {environment = process.env, getEnvironment =
   function getStatus(scope = null) {
     const {smtp, recipients} = configFlags();
     const companies = (scope ? [scope] : ['alvi', 'avokado']).map(code => ({code,
-      recipientConfigured: Boolean(companyRecipient(getEnvironment(),code)), queued: 0, sending: 0, sent: 0, errors: []}));
+      recipientConfigured: Boolean(companyRecipient(getEnvironment(),code)),
+      // Поле появляется только при переопределении модулем: прежняя форма ответа не меняется.
+      ...((getEnvironment().LEADS_RECIPIENT_MODULE_CODES || []).includes(code) ? {recipientSource: 'module'} : {}),
+      queued: 0, sending: 0, sent: 0, errors: []}));
     const errors = new Map(companies.map(company => [company.code, new Map()]));
     for (const row of counts.all(scope,scope)) {
       const company = companies.find(item => item.code === row.company);
