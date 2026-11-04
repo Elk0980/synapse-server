@@ -17,7 +17,7 @@
       const ask = node('button', 'sbt-primary', 'Поставить задачу Хью'); ask.type = 'button';
       ask.onclick = () => openChat(null, 'Сделай ');
       head.append(ask);
-      if (ctx.user?.role === 'owner') { const all = node('a', 'plain-button', 'Вся доска'); all.href = '/board.html'; head.append(all); }
+      if (ctx.user?.role === 'owner') { const all = node('a', 'plain-button', 'Вся доска'); all.href = '#tasks'; head.append(all); }
       root.append(head, node('p', 'sbt-hint', 'Ваши задачи с общей доски компании. Порядок меняется перетаскиванием или стрелками; пауза и удаление видны только вам, данные задачи сохраняются.'), tabs, notice, list);
       el.replaceChildren(root);
       function openChat(task, prefill) {
@@ -91,4 +91,35 @@
   };
   if (window.SynapseModules?.register) window.SynapseModules.register('tasks', definition);
   else (window.SynapseModulesQueue = window.SynapseModulesQueue || []).push(['tasks', definition]);
+
+  /* Экран #tasks уже есть (tasks.js). Сотрудник видит на нём свою доску; владелец — общую доску,
+     а свою — по #tasks/mine. Карточка #tasks/<id> открывается прежним экраном. */
+  const views = window.SbCabinet?.views, legacy = views?.tasks;
+  if (!legacy || legacy.personalBoard) return;
+  let controller = null;
+  const hashRoute = () => { const raw = location.hash.slice(1), at = raw.indexOf('?'); return { sub: (at < 0 ? raw : raw.slice(0, at)).split('/')[1] || '', query: at < 0 ? '' : raw.slice(at + 1) }; };
+  const header = () => document.querySelector('#tasks-view > .content-header');
+  const stop = () => { if (!controller) return; controller.unmount(); controller = null; const h = header(); if (h) h.hidden = false; };
+  // У владельца заголовок экрана скрыт общей доской, поэтому переход — отдельной строкой над доской.
+  function ownerLink(context, visible) {
+    const card = document.querySelector('#tasks-view > .card');
+    let link = document.querySelector('#tasks-view > .sbt-mine-link');
+    if (!link && card && context?.identity?.role === 'owner') {
+      link = node('a', 'plain-button sbt-mine-link', 'Мои задачи'); link.href = '#tasks/mine'; card.before(link);
+    }
+    if (link) link.hidden = !visible;
+  }
+  function show(context) {
+    const { sub, query } = hashRoute(), host = document.getElementById('tasks-content');
+    const personal = sub === 'mine' || (context?.identity?.role !== 'owner' && !/^\d+$/.test(sub));
+    if (!personal || !host || !window.SynapseModules?.mount) { stop(); ownerLink(context, !!window.SynapseModules?.mount); return false; }
+    stop(); legacy.onLeave?.(); ownerLink(context, false);
+    const h = header(); if (h) h.hidden = true;
+    controller = window.SynapseModules.mount(host, 'tasks', { route: { path: 'mine', query } });
+    return true;
+  }
+  views.tasks = { ...legacy, personalBoard: true,
+    render(container, context) { if (!show(context)) legacy.render(container, context); },
+    onProjectChange(context) { if (!show(context)) legacy.onProjectChange?.(context); },
+    onLeave() { stop(); legacy.onLeave?.(); } };
 })();

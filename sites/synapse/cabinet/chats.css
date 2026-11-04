@@ -77,3 +77,5 @@
   .sbt-item { flex-direction: column; align-items: stretch; cursor: default; }
   .sbt-item__actions { justify-content: flex-start; }
 }
+.sbt-mine-link { display: inline-flex; margin: 0 0 10px; text-decoration: none; }
+.sbt-mine-link[hidden] { display: none; }

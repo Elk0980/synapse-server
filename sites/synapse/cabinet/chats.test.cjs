@@ -44,3 +44,25 @@ test('«Задачи»: разделы, перестановка, удалени
   f.dock.querySelector('textarea').value='Уточнение';f.dock.querySelector('form').dispatchEvent(new f.w.Event('submit',{cancelable:true}));await flush();
   const sent=f.calls.filter(c=>c[0]==='POST'&&c[1]==='people/team-chat').at(-1)[2];assert.equal(sent.room,'hugh:2');assert.equal(sent.taskId,11);
 });
+test('«Задачи»: перетаскивание меняет порядок тем же действием order',async t=>{
+  const f=load();t.after(()=>f.w.close());f.mount(f.host,'tasks');await flush();
+  const fire=(el,type)=>{const e=new f.w.Event(type,{bubbles:true,cancelable:true});Object.defineProperty(e,'dataTransfer',{value:{setData(){},effectAllowed:''}});el.dispatchEvent(e);};
+  const [first,second]=f.host.querySelectorAll('.sbt-item');assert.equal(first.draggable,true);
+  fire(second,'dragstart');fire(first,'dragover');fire(first,'drop');await flush();
+  assert.equal(JSON.stringify(f.calls.at(-1)),JSON.stringify(['POST','people/my-board/action',{op:'order',section:'assigned',order:[12,11]}]));
+});
+test('экран #tasks: сотрудник видит свою доску, владелец — общую и ссылку «Мои задачи», карточка №id — прежний экран',async t=>{
+  const dom=new JSDOM('<!doctype html><section id="tasks-view"><div class="content-header"><h1>Задачи</h1></div><div class="card"><div id="tasks-content"></div></div></section>',{runScripts:'outside-only',url:'https://cabinet.test/#tasks'});
+  const w=dom.window;t.after(()=>w.close());const seen=[];
+  w.SbCabinet={views:{tasks:{title:'Задачи',render(){seen.push('legacy');},onLeave(){seen.push('leave');},updateSummary(){}}}};
+  w.SynapseModules={register(){},mount(host,id,o){seen.push(`${id}:${o.route.path}`);host.textContent='личная доска';return {unmount(){seen.push('unmount');}};}};
+  w.eval(fs.readFileSync(path.join(__dirname,'my-tasks.js'),'utf8'));
+  const view=w.SbCabinet.views.tasks,editor={identity:{role:'editor'}},owner={identity:{role:'owner'}};
+  assert.equal(typeof view.updateSummary,'function');
+  view.render(null,editor);assert.deepEqual(seen,['leave','tasks:mine']);assert.equal(w.document.querySelector('.content-header').hidden,true);
+  w.location.hash='#tasks/42';view.render(null,editor);assert.deepEqual(seen.slice(2),['unmount','legacy']);assert.equal(w.document.querySelector('.content-header').hidden,false);
+  w.location.hash='#tasks';seen.length=0;view.render(null,owner);assert.deepEqual(seen,['legacy']);
+  const link=w.document.querySelector('.sbt-mine-link');assert.equal(link.getAttribute('href'),'#tasks/mine');assert.equal(link.hidden,false);
+  w.location.hash='#tasks/mine';view.render(null,owner);assert.deepEqual(seen.slice(1),['leave','tasks:mine']);assert.equal(link.hidden,true);
+  view.onLeave();assert.deepEqual(seen.slice(3),['unmount','leave']);
+});
