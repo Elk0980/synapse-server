@@ -231,6 +231,9 @@ const telegramSources = createTelegramSources({db, assetsDir:ASSETS_DIR, authSto
 if (!telegramSources.healthy) console.warn('content: настройки источников Telegram требуют проверки; приём выключен');
 // Настройки → Контент (№98): по компании, запись — владелец или settings.edit.
 const contentSettings=require('./content-settings').createContentSettings({db,authStore,requireSession,requireCsrf,readJson,sendJson:send});
+// Контент → Съёмка: дубли частями с продолжением; монтажёр работает по сессии кабинета. Лимиты — приватный файл тома (нет — по умолчанию).
+const shooting=require('./shooting').createShooting({db,authStore,assetsDir:ASSETS_DIR,requireSession,requireCsrf,readJson,sendJson:send,providers:hughProviders,
+  config:require('./shooting').readShootingConfig(path.join(path.dirname(DATABASE_PATH),'shooting.json'))});
 const peopleService=require('./people-service').createPeopleService({db,authStore,team:companyTeam,
   crmUrl:CRM_URL,crmKey:CRM_API_KEY,requireSession,requireCsrf,readJson,sendJson:send});
 const contentFactorySources=createContentFactorySourceBridge({db,authStore,assetsDir:ASSETS_DIR,
@@ -961,6 +964,7 @@ const server = http.createServer(async (request, response) => {
     if (await peopleService.handle(request,response,url)) return;
     if (await contentFactorySources.handle(request,response,url)) return;
     if (await telegramSources.handle(request,response,url)) return;
+    if (await shooting.handle(request,response,url)) return;
     if (await projectChat.handle(request,response,url)) return;
 
     if (await actorOnboarding.handle(request,response,url)) return;
