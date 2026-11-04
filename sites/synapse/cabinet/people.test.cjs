@@ -24,7 +24,7 @@ function fixture(t,{owner=false,permissions=[],handler,setup,tasks=[task()],cont
     if(parsed.pathname==='/content/people/friday-rule')return response({rule:{enabled:false,userId:7,timezone:'Asia/Irkutsk',metric:'pendingIdeas',weekStart:'2026-11-09',morningHour:9,eveningHour:18}});
     return response({});
   };
-  setup?.(w);w.eval(script);return {w,dom,calls,byId:id=>w.document.getElementById(id)};
+  setup?.(w);w.eval(fs.readFileSync(path.join(__dirname,'permission-help.js'),'utf8'));w.eval(script);return {w,dom,calls,byId:id=>w.document.getElementById(id)};
 }
 test('обычный вход показывает назначенные задачи и не запускает подписки или отправки',async t=>{
   const f=fixture(t);await flush();

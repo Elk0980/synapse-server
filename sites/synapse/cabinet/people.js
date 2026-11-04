@@ -104,6 +104,7 @@
     if(!members.length)list.append(node('p','В этом проекте пока нет подключённых людей.','muted'));
     for(const member of members){
       const row=node('div',undefined,'member-row');row.append(node('strong',member.displayName),node('span',`${member.login} · №${member.id}`,'muted'));
+      if(member.staffRole==='human_executor'){const rights=node('div');rights.innerHTML=window.SynapsePermissionHelp.markup(['tasks.self.view','tasks.self.edit']);row.append(rights);}
       if(member.executorKey)row.append(node('span',`Для назначения задач: ${member.executorKey}`,'muted'));list.append(row);
       if(state.context?.isOwner){
         if(member.staffRole==='human_executor'){
@@ -114,9 +115,9 @@
           catch(error){if(active(epoch,company))message('global-message',error.message,true);}finally{reset.disabled=false;}
         });
         }
-        const form=node('form'),label=node('label',undefined,'check'),checkbox=node('input'),save=node('button','Сохранить право');
-        checkbox.type='checkbox';checkbox.checked=member.canApprovePlan===true;checkbox.setAttribute('aria-label',`Согласование плана: ${member.displayName}`);
-        label.append(checkbox,document.createTextNode('Согласование контент-плана'));save.type='submit';form.append(label,save);row.append(form);
+        const form=node('form'),right=window.SynapsePermissionHelp.row('content-plan.approve',{selectable:true,checked:member.canApprovePlan?['content-plan.approve']:[]}),checkbox=right.querySelector('input'),save=node('button','Сохранить право');
+        checkbox.setAttribute('aria-label',`Согласование плана: ${member.displayName}`);
+        save.type='submit';form.append(right,save);row.append(form);
         form.addEventListener('submit',event=>{event.preventDefault();const company=state.company,epoch=state.epoch;void busy(form,async()=>{
           await api(`/content/people/members/${member.id}/approval`,{method:'PUT',body:{companyCode:company,enabled:checkbox.checked}});
           if(active(epoch,company))message('global-message','Право согласования сохранено. Другие действия с публикациями не разрешены.');
