@@ -1,8 +1,6 @@
-diff --git a/sites/synapse/cabinet.html b/sites/synapse/cabinet.html
-index abe36e6..0d8c343 100644
 --- a/sites/synapse/cabinet.html
 +++ b/sites/synapse/cabinet.html
-@@ -565,10 +565,11 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+@@ -565,10 +565,11 @@
  
  <link rel="stylesheet" href="brand/living-logo.css?v=20260911-projects-1">
  <script defer src="brand/living-logo.js?v=20260911-1"></script>
@@ -17,7 +15,7 @@ index abe36e6..0d8c343 100644
  <link rel="stylesheet" href="./cabinet/sites-projects.css?v=20261007-2">
  </head>
  <body>
-@@ -1081,7 +1082,7 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+@@ -1087,7 +1088,7 @@
    </form>
  </dialog>
  <script>
@@ -26,7 +24,7 @@ index abe36e6..0d8c343 100644
    window.SbCabinet = window.SbCabinet || {};
    window.SbCabinet.views = window.SbCabinet.views || {};
    window.SbCabinet.registerView ||= (name, definition) => {
-@@ -1101,8 +1102,8 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
+@@ -1107,8 +1108,8 @@
    ).join(""));
    // №98, контракт А (specs/098-content-shell): реестр модулей и экраны раздела «Контент».
    // Новые модули добавляются только в эти два списка; module-registry всегда первым.

@@ -1,5 +1,3 @@
-diff --git a/sites/synapse/cabinet/people.html b/sites/synapse/cabinet/people.html
-index d6dd362..c05dddc 100644
 --- a/sites/synapse/cabinet/people.html
 +++ b/sites/synapse/cabinet/people.html
 @@ -6,9 +6,11 @@
@@ -14,5 +12,5 @@ index d6dd362..c05dddc 100644
 +  <meta name="apple-mobile-web-app-title" content="Синапс" data-palitra-content="">
 +  <script src="../brand/app-identity.js?v=20261105-1"></script>
    <link rel="stylesheet" href="people.css?v=20261103-people-1">
-   <script defer src="people.js?v=20261103-people-1"></script>
+   <script defer src="people.js?v=20261104-password-1"></script>
  </head>

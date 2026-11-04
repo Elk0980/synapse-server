@@ -1,15 +1,3 @@
-# Dry-run сборки №98, 05.11.2026 01:19 Бангкок, patch --dry-run --fuzz=0
-## cabinet.html — живая копия, скачана 01:19 (= копия 00:37 + cabinet-html.patch PR 514)
-checking file live
-Hunk #2 succeeded at 1088 (offset 6 lines).
-Hunk #3 succeeded at 1108 (offset 6 lines).
-rc=0
-## cabinet.html — копия 00:37 после cabinet-html.patch (514)
-checking file live
-Hunk #2 succeeded at 1088 (offset 6 lines).
-Hunk #3 succeeded at 1108 (offset 6 lines).
-rc=0
-## cabinet/people.html — живая (совпадает с main)
-checking file live
-rc=0
-## Итог применения: отличия живой от сборки = те же 46 строк, что живая отличается от main (проверено diff)
+dry-run 2026-11-04T19:45:30Z против живых копий (curl ?nc), fuzz 0:
+checking file /tmp/claude-0/-home-claude/61878e25-e97f-5d4b-8e76-94afbe75e91e/scratchpad/chk_cab.html
+checking file /tmp/claude-0/-home-claude/61878e25-e97f-5d4b-8e76-94afbe75e91e/scratchpad/chk_people.html
