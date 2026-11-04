@@ -273,7 +273,8 @@ const mediaMentorSuggestRoute = createMediaMentorSuggestRoute({
       {headers: {'x-api-key': CRM_API_KEY, [CRM_IDENTITY_HEADER]: crmIdentityHeader(identity)}});
     if (!upstream.ok) return null;
     const data = await upstream.json();
-    return data?.brief?.fields ?? null;
+    // №98 Б: анкета контент-плана идёт в подсказку рядом с брифом, но не становится брифом.
+    return data?.brief?.fields ? {...data.brief.fields, questionnaire: data.questionnaire ?? null} : null;
   },
   // Разбор результатов читает и статистику, и текущий план: выводы без плана были бы «в воздух».
   loadStats: async (code, {from, to} = {}, identity) => {

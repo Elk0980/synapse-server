@@ -26,7 +26,7 @@ function versionNumber(value) {
   return parsed;
 }
 
-function createMediaMentorHandler({mentor, transfer, generation, generationDrafts, workflow, companyModuleContext, readJson, send}) {
+function createMediaMentorHandler({mentor, transfer, generation, generationDrafts, workflow, workspace, companyModuleContext, readJson, send}) {
   return async function handleMediaMentor(request, response, url, cors = {}) {
     // Раздел внедрения живёт на /media-mentor-rollout и сюда не попадает: после имени
     // модуля обязателен «/» или конец пути.
@@ -43,10 +43,22 @@ function createMediaMentorHandler({mentor, transfer, generation, generationDraft
     const generationJob = /^\/media-mentor\/generation\/([a-zA-Z0-9_-]+)$/.exec(url.pathname);
     const generationImport = /^\/media-mentor\/generation\/([a-zA-Z0-9_-]+)\/drafts$/.exec(url.pathname);
     let result, status = 200;
-    if(url.pathname==='/media-mentor/plan/import-preview'&&request.method==='POST') {
+    // №98 Б: анкета контент-плана и отметки согласующих. Отметку ставит только сам согласующий.
+    const workspaceRoute = ['/media-mentor/questionnaire', '/media-mentor/plan/signoffs'].includes(url.pathname);
+    if (workspaceRoute && !workspace) fail(501, 'Анкета и согласование отметками пока не подключены', 'PROVIDER_NOT_CONFIGURED');
+    if (url.pathname === '/media-mentor/questionnaire' && readOnly) result = workspace.questionnaire(code);
+    else if (url.pathname === '/media-mentor/questionnaire' && request.method === 'PUT')
+      result = workspace.saveQuestionnaire(code, await readJson(request), actor);
+    else if (url.pathname === '/media-mentor/plan/signoffs' && readOnly) result = workspace.signoffs(code, identity);
+    else if (url.pathname === '/media-mentor/plan/signoffs' && request.method === 'POST') {
+      const body = await readJson(request), fresh = companyModuleContext(request, code, 'autoposting.edit');
+      if (fresh.identity.userId !== actor.userId) fail(403, 'Доступ изменился во время операции', 'FORBIDDEN');
+      result = workspace.signoff(code, body, fresh.identity);
+    } else if (workspaceRoute) fail(405, 'Метод не поддерживается');
+    else if(url.pathname==='/media-mentor/plan/import-preview'&&request.method==='POST') {
       const body=await readJson(request,1500000);
       if(companyModuleContext(request,code,'autoposting.edit').identity.userId!==actor.userId)fail(403,'Доступ изменился во время операции','FORBIDDEN');
-      result={companyCode:code,rows:await require('./reel-plan-file').preview(body)};
+      result={companyCode:String(code).toLowerCase(),rows:await require('./reel-plan-file').preview(body)};
       if(companyModuleContext(request,code,'autoposting.edit').identity.userId!==actor.userId)fail(403,'Доступ изменился во время операции','FORBIDDEN');
     } else if(generationImport){
       if(request.method!=='POST')fail(405,'Метод не поддерживается');
@@ -60,7 +72,9 @@ function createMediaMentorHandler({mentor, transfer, generation, generationDraft
       else fail(405,'Метод не поддерживается');
     } else if (url.pathname === '/media-mentor' && readOnly) {
       result = {...served(mentor.get(code)), transfer: transfer.status(code),
-        variantTransfer: transfer.variantStatus(code)};
+        variantTransfer: transfer.variantStatus(code),
+        // Анкета читается подсказкой Хью вместе с брифом; без модуля поле просто отсутствует.
+        ...(workspace ? {questionnaire: workspace.questionnaire(code).fields} : {})};
     } else if (url.pathname === '/media-mentor/plan/transfer' && request.method === 'POST') {
       // Перенос согласованной версии плана в черновики автопостинга. Ничего не публикуется
       // и не ставится в очередь: права те же, что на правку карточек автопостинга.

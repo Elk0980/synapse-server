@@ -17,7 +17,9 @@ const BRIEF_FIELDS=['goal','product','audience','pains','confirmedFacts','assets
 /* Поля идеи. Прежние имена сохранены целиком: старые планы читаются и сохраняются без
    переименования, миграция клиентской базы руками не нужна. Новое — стабильный ideaId и
    variants: отдельная версия идеи для каждой площадки. */
-const DAY_FIELDS=['ideaId','date','platform','format','role','topic','hook','assetId','mentorNote','variants','script','filmingBy','productionStatus'];
+const DAY_FIELDS=['ideaId','date','platform','format','role','topic','hook','assetId','mentorNote','variants','script','filmingBy','productionStatus','broll','style','props'];
+// №98 Б: вставки (B-roll), стиль и реквизит рилса — свободный текст, как сценарий; правка требует нового согласования.
+const REEL_TEXT_LIMITS=Object.freeze({script:20000,filmingBy:200,broll:4000,style:1000,props:2000});
 /* Поля версии для площадки. plannedDate/plannedTime/timezone — это ПЛАН выхода, а не очередь
    публикации: постановка в очередь и отправка живут в автопостинге и здесь не выполняются. */
 /* contentRevision принимается только для того, чтобы кабинет мог вернуть план в том виде,
@@ -147,7 +149,8 @@ function variantEffective(variant,idea) {
     timezone:variant.timezone||'',excluded:variant.excluded===true};
 }
 // Сценарий влияет на согласование каждой площадки, но не становится подписью.
-const variantContent=(variant,idea)=>JSON.stringify([...Object.values(variantEffective(variant,idea)),...(idea.script?[idea.script]:[])]);
+const variantContent=(variant,idea)=>JSON.stringify([...Object.values(variantEffective(variant,idea)),...(idea.script?[idea.script]:[]),
+  ...['broll','style','props'].filter(key=>idea[key]).map(key=>`${key}:${idea[key]}`)]);
 /* Календарные даты без времени: этап основы ничего не планирует к отправке,
    поэтому часовой пояс и минуты выхода остаются задачей этапа публикации. */
 /* reserve(ideaId,platform) выдаёт СЛЕДУЮЩУЮ свободную ревизию содержимого по сохранённой
@@ -190,13 +193,13 @@ function normalizeDays(value,brief,priorPlan=null,reserve=null) {
     // Старый клиент может не знать новые поля. Отсутствие не стирает ранее
     // сохранённый сценарий; у старых планов новые ключи сами не появляются.
     const prior=before.get(ideaId);
-    for(const key of ['script','filmingBy','productionStatus']) {
+    for(const key of ['script','filmingBy','productionStatus','broll','style','props']) {
       const source=Object.hasOwn(row,key)?row:prior;
       if(!source||!Object.hasOwn(source,key))continue;
       if(key==='productionStatus') {
         if(!['planned','shot','editing','draft'].includes(source[key]))fail(400,'Статус подготовки: planned, shot, editing или draft');
         idea[key]=source[key];
-      }else{const clean=text(source[key],key==='script'?20000:200);idea[key]=key==='script'?source[key]:clean;}
+      }else{const clean=text(source[key],REEL_TEXT_LIMITS[key]);idea[key]=key==='filmingBy'?clean:source[key];}
     }
     /* Версии площадок. Старый план их не содержит: тогда идея читается как ОДНА версия для
        своей площадки — ровно то, что было раньше. Остальные площадки появляются только
