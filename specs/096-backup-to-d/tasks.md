@@ -20,6 +20,7 @@
 - [ ] Проверить последовательные SQLite snapshot/WAL/удаление scratch/abort/таймаут/завершённый receipt.
 - [ ] Проверить real age/старый restore и отрицательные сценарии list/get/пути/конкурентный читатель/бюджеты.
 - [x] Обновить RECOVERY, пройти Windows backup suite и Spec Kit gate; Linux CI отдельно.
-- [ ] Пройти Linux FIFO/age/SQLite quota/link-race CI exact head и независимое ревью исправлений.
-- [ ] Открыть draft PR с отдельной строкой Spec: и передать exact head независимому Claude через№58.
+- [x] Пройти Linux FIFO/age/SQLite quota/link-race CI runtime745b363d:50/50; независимое Codex-review исправлений пройдено.
+- [x] Открыть draft PR525 с отдельной строкой Spec:; передать окончательный head независимому Claude через№58.
+- [ ] Независимая приёмка Claude окончательного head PR525.
 - [ ] После приёмки и разрешённой передачи сервера — отдельная live-проверка копии наD; не отмечать заранее.
