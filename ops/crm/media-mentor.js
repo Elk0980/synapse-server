@@ -199,7 +199,7 @@ function normalizeDays(value,brief,priorPlan=null,reserve=null) {
       if(key==='productionStatus') {
         if(!['planned','shot','editing','draft'].includes(source[key]))fail(400,'Статус подготовки: planned, shot, editing или draft');
         idea[key]=source[key];
-      }else{const clean=text(source[key],REEL_TEXT_LIMITS[key]);idea[key]=key==='filmingBy'?clean:source[key];}
+      }else{const clean=text(source[key],REEL_TEXT_LIMITS[key]);idea[key]=key==='script'?source[key]:clean;}
     }
     /* Версии площадок. Старый план их не содержит: тогда идея читается как ОДНА версия для
        своей площадки — ровно то, что было раньше. Остальные площадки появляются только
