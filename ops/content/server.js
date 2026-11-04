@@ -652,6 +652,12 @@ async function proxyCrm(request, response, url, cors) {
   if (/^\/(?:email-campaigns|email-subscriptions)(?:\/|$)/.test(crmPath) && identity.role !== 'owner') {
     fail(403, 'Рассылки доступны только владельцу');
   }
+  // Модули компании (каталог Synapse, параметры) включает только владелец; CRM проверяет то же самое.
+  if (/^\/company-modules(?:\/|$)/.test(crmPath)) {
+    if (identity.role !== 'owner') fail(403, 'Модули компании доступны владельцу');
+    const code = url.searchParams.get('companyCode');
+    if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400, 'Выберите компанию');
+  }
   if (['/company-email', '/email-status', '/email-settings', '/email-settings/check'].includes(crmPath) && identity.role !== 'owner') {
     fail(403, 'Настройки и диагностика почты доступны только владельцу');
   }

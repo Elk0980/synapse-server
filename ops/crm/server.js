@@ -51,6 +51,7 @@ const { createSocialAnalyticsEvidence } = require('./social-analytics-evidence')
 const { createSocialOnlypultAnalytics } = require('./social-onlypult-analytics');
 const { createCompanyInformationCheck } = require('./company-information-check');
 const { createDealOrders } = require('./deal-orders');
+const { createCompanyModules, migrateCompanyModules, moduleLeadRecipients } = require('./company-modules');
 const { createTaskCoordination } = require('./task-coordination');
 const { createPeopleHandler } = require('./people-http');
 const { createTaskDispatch } = require('./task-dispatch');
@@ -608,7 +609,9 @@ const createLead = db.prepare(`
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'новая', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 const getLead = db.prepare('SELECT * FROM leads WHERE id = ?');
-const emailSettings = createEmailSettings(db, {apiKey: API_KEY});
+// Модули компании: таблицы создаются до почты — адреса писем о заявках могут задаваться параметром модуля CRM.
+migrateCompanyModules(db);
+const emailSettings = createEmailSettings(db, {apiKey: API_KEY, moduleRecipients: () => moduleLeadRecipients(db)});
 const emailSendLimit = createEmailSendLimit(db, {dailyCap: process.env.CRM_MAIL_DAILY_CAP || 100});
 function notificationReady(lead) {
   return emailNotificationReady(lead, emailSettings.getEnvironment());
@@ -2507,6 +2510,7 @@ function taskSummary(url) {
 
 const dealOrders = createDealOrders({db,fail,getStages:pipelineStages,getPipelines:pipelineList,setStages:(body,pipeline)=>replacePipelineStages(body,pipeline,false),getCatalog:()=>commercial.catalog()});
 const commercial=createCommercial({db,fail});
+const companyModules=createCompanyModules({db,fail,getCatalog:()=>commercial.catalog()});
 const aiTrials=require('./ai-trials').createAiTrials({db,fail});
 
 async function route(request, response) {
@@ -2799,6 +2803,17 @@ async function route(request, response) {
     return send(response, 200, companyPublicLinks(company), { ...cors, 'cache-control': 'no-store' });
   }
 
+  // Модули компании: включает владелец; компания проверяется здесь, а не только в кабинете.
+  if (url.pathname === '/company-modules' || /^\/company-modules\/[a-z0-9][a-z0-9_-]{0,79}$/.test(url.pathname)) {
+    const actor=crmIdentity(request); if(actor?.role!=='owner') fail(403,'Модули компании доступны владельцу',{code:'FORBIDDEN'});
+    const code=url.searchParams.get('companyCode'); if(!code) fail(400,'Выберите компанию');
+    const key=url.pathname.split('/')[2];
+    let result;
+    if(request.method==='GET'&&!key) result=companyModules.list(code);
+    else if(request.method==='PUT'&&key) result=companyModules.save(code,key,await readJson(request,64*1024),actor);
+    else fail(405,'Метод не поддерживается');
+    return send(response,200,result,{...cors,'cache-control':'no-store'});
+  }
   if (url.pathname === '/company-email') {
     const actor=crmIdentity(request); if(actor?.role!=='owner') fail(403,'Настройки почты доступны владельцу');
     const code=url.searchParams.get('companyCode'); if(!code) fail(400,'Выберите компанию');
