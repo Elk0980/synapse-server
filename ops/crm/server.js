@@ -644,6 +644,8 @@ const handleContentFactoryCompletion=require('./content-factory-completion-http'
 const handleContentFactoryReviewDelays=require('./content-factory-review-delays-http').createContentFactoryReviewDelaysHandler({
   delays:require('./content-factory-review-delays').createContentFactoryReviewDelays({db}),readJson,send});
 const handleContentFactorySources=createContentFactorySourceHandler({autoposting,companyModuleContext,readJson,send});
+const handleReelMaterials=require('./reel-materials-http').createReelMaterialsHandler({materials:require('./reel-materials').createReelMaterials(db,{autoposting,information:companyInformation}),
+  companyModuleContext,readJson,send,trustedService:request=>!request.headers[CRM_IDENTITY_HEADER]});
 const studioJourney = createStudioJourney(db,{quoteService:(code,id,version)=>companyInformation.quote(code,id,version)});
 const studioContentPlan = createStudioContentPlan(db,{autoposting,information:companyInformation});
 const handleStudioJourney = createStudioJourneyHandler({journey:studioJourney,companyModuleContext,readJson,send});
@@ -2649,6 +2651,7 @@ async function route(request, response) {
     else fail(405,'Метод не поддерживается');
     return send(response,200,result,{...cors,'cache-control':'no-store'});
   }
+  if(await handleReelMaterials(request,response,url))return;
   // Детерминированные напоминания: ключ сервиса уже проверен общим маршрутом.
   // Сессионный proxy не получает новый способ обхода прав через служебный GET.
   if (url.pathname === '/autoposting/review-reminders' && request.method === 'GET') {

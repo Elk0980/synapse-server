@@ -236,6 +236,8 @@ const shooting=require('./shooting').createShooting({db,authStore,assetsDir:ASSE
   config:require('./shooting').readShootingConfig(path.join(path.dirname(DATABASE_PATH),'shooting.json'))});
 const peopleService=require('./people-service').createPeopleService({db,authStore,team:companyTeam,
   crmUrl:CRM_URL,crmKey:CRM_API_KEY,requireSession,requireCsrf,readJson,sendJson:send});
+// Лог правок «Материалов» → личный чат с Хью (hugh:<id>); без комнат чата ничего не пишет.
+const reelHughLog=require('./reel-materials-chat').createReelHughLog({db,crmUrl:CRM_URL,crmKey:CRM_API_KEY});
 const contentFactorySources=createContentFactorySourceBridge({db,authStore,assetsDir:ASSETS_DIR,
   requireSession,requireCsrf,readJson,sendJson:send,publishingOrigin:PUBLISHING_ASSET_ORIGIN,
   maxImageBytes:MAX_PUBLISHING_ASSET,maxVideoBytes:MAX_PUBLISHING_VIDEO,ready:()=>Boolean(CRM_API_KEY),
@@ -807,6 +809,7 @@ async function proxyCrm(request, response, url, cors) {
     const responseHeaders = { ...upstreamResponse.headers, ...cors };
     response.writeHead(upstreamResponse.statusCode || 502, responseHeaders);
     upstreamResponse.pipe(response);
+    upstreamResponse.on('end', () => { reelHughLog.afterProxy(crmPath, request.method, upstreamResponse.statusCode, url.searchParams.get('companyCode'), forwardIdentity); });
   });
   upstream.on('error', (error) => {
     console.error('content: ошибка прокси CRM:', error);
@@ -961,6 +964,7 @@ const server = http.createServer(async (request, response) => {
       } catch { return reply(503,{state:'unavailable',connected:false,configured:true,provider:'codex',
         error:'Подключение Хью пока недоступно'},{'cache-control':'no-store'}); }
     }
+    await reelHughLog.beforePeople(request,url,requireSession);
     if (await peopleService.handle(request,response,url)) return;
     if (await contentFactorySources.handle(request,response,url)) return;
     if (await telegramSources.handle(request,response,url)) return;
