@@ -15,7 +15,8 @@ test('реальный HTTP: старая сессия, узкая роль, sel
     const action=new URL(req.url,'http://localhost').pathname.split('/').at(-1);
     assert.equal(actor.role,actor.userId===1?'owner':'editor');
     assert.deepEqual(actor.permissions,[['mediaMentor','planVariantsDecision'].includes(action)?'content-plan.approve':action==='task_update'?'tasks.self.edit':'tasks.self.view']);
-    if(action==='mediaMentor')result={companyCode:'synapse-business',brief:{revision:0},plan:null,variants:[]};
+    if(action==='teamChatContext')result={companyCode:'synapse-business',tasks:all,plan:[]};
+    else if(action==='mediaMentor')result={companyCode:'synapse-business',brief:{revision:0},plan:null,variants:[]};
     else if(action==='taskRecords')result={tasks:all.map(t=>({id:t.id,companyCode:t.company_code,description:t.description})),pagination:{total:all.length}};
     else if(action==='tasks_list')result={tasks:all,total:all.length};
     else if(action==='task_get')result={...all.find(x=>x.id===args.task_id),comments:[],subtasks:[]};
@@ -77,7 +78,12 @@ test('реальный HTTP: старая сессия, узкая роль, sel
   assert.equal((await request(scoped('/team-chat'),human,'POST',chatBody,false)).status,403);
   assert.equal((await request(scoped('/team-chat'),human,'POST',chatBody)).status,200);
   assert.equal((await request(scoped('/team-chat'),human,'POST',chatBody)).status,200);
-  const chatHistory=await(await request(scoped('/team-chat'),human)).json();assert.equal(chatHistory.messages.length,1);
+  const chatHistory=await(await request(scoped('/team-chat'),human)).json();assert.equal(chatHistory.messages.length,2);assert.equal(chatHistory.messages[1].text,'Ответ пока недоступен. Вопрос сохранён для проверки.');
+  assert.equal(chatHistory.reviewQueue,undefined);
+  const ownerHistory=await(await request(scoped('/team-chat'),owner)).json();assert.equal(ownerHistory.reviewQueue.length,1);
+  assert.equal((await request('/content/people/members',owner,'POST',{login:'peer',displayName:'Коллега',password,companyCode:'synapse-business',staffRole:'human_executor'})).status,201);
+  const peer=await login('peer'),peerHistory=await(await request(scoped('/team-chat'),peer)).json();
+  assert.equal(peerHistory.messages.length,1);assert.equal(peerHistory.reviewQueue,undefined);
   assert.equal((await request('/content/people/team-chat?companyCode=alvi',human)).status,403);
   const beforeRevoke=calls;
   assert.equal((await request(`/content/admin/accounts/${user.id}/access`,owner,'PUT',{companies:['synapse-business'],permissions:[]})).status,200);

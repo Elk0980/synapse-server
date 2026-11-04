@@ -3,7 +3,7 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const {JSDOM}=require('jsdom');
 const flush=async()=>{for(let n=0;n<10;n++)await new Promise(setImmediate);};
 test('черновик по проекту, unknown повтор с тем же ID, XSS текстом и отзыв открытой сессии',async t=>{
-  const dom=new JSDOM(fs.readFileSync(path.join(__dirname,'team-chat.html'),'utf8'),{url:'https://synapse.synapsebusiness.ru/cabinet/team-chat.html?companyCode=alpha',runScripts:'outside-only'}),w=dom.window;
+  const dom=new JSDOM(fs.readFileSync(path.join(__dirname,'team-chat.html'),'utf8'),{url:'https://synapse.synapsebusiness.ru/cabinet/team-chat.html?companyCode=alpha',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
   t.after(()=>w.close());let denied=false,failOnce=true;const bodies=[];
   w.HTMLElement.prototype.scrollIntoView=()=>{};w.AbortSignal=AbortSignal;
   w.fetch=async(url,options)=>{
@@ -20,6 +20,17 @@ test('черновик по проекту, unknown повтор с тем же 
   $('compose').dispatchEvent(new w.Event('submit',{cancelable:true}));await flush();assert.equal($('text').readOnly,true);assert.match($('notice').textContent,/не подтверждён/);
   $('compose').dispatchEvent(new w.Event('submit',{cancelable:true}));await flush();assert.equal(bodies.length,2);assert.deepEqual(bodies[0],bodies[1]);assert.equal($('text').value,'');assert.match($('messages').textContent,/№22/);
   denied=true;rooms[0].click();await flush();assert.equal($('compose').hidden,true);assert.equal($('messages').children.length,0);
+});
+test('обновление области чтения очищает старую ленту и очередь, сохраняя черновик',async t=>{
+  const dom=new JSDOM(fs.readFileSync(path.join(__dirname,'team-chat.html'),'utf8'),{url:'https://synapse.synapsebusiness.ru/cabinet/team-chat.html?companyCode=alpha',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
+  t.after(()=>w.close());let poll,owner=true,viewerId=1;w.AbortSignal=AbortSignal;w.setInterval=fn=>{poll=fn;return 1;};w.clearInterval=()=>{};
+  w.fetch=async url=>({ok:true,json:async()=>url.endsWith('context')?{user:{id:1},companies:[{id:'alpha',name:'Альфа'}]}:
+    {viewerId,visibilityKey:`${viewerId}:${owner}`,messages:owner?[{id:4,user_id:0,author_name:'Хью',text:'Личный ответ',created_at:new Date().toISOString()}]:[],...(owner?{reviewQueue:[{message_id:2,text:'Проверить вопрос'}]}:{})}});
+  w.eval(fs.readFileSync(path.join(__dirname,'team-chat.js'),'utf8'));await flush();const $=id=>w.document.getElementById(id);
+  assert.match($('messages').textContent,/Личный ответ/);assert.match($('review-queue').textContent,/Проверить вопрос/);
+  $('text').value='Черновик';$('text').dispatchEvent(new w.Event('input'));owner=false;poll();await flush();
+  assert.equal($('messages').children.length,0);assert.equal($('review-queue'),null);assert.equal($('text').value,'Черновик');
+  viewerId=3;owner=true;poll();await flush();assert.equal($('messages').children.length,0);assert.equal($('review-queue'),null);assert.equal($('compose').hidden,true);
 });
 test('ссылка из старой задачи открывает сообщение за пределами последних100',async t=>{
   const dom=new JSDOM(fs.readFileSync(path.join(__dirname,'team-chat.html'),'utf8'),{url:'https://synapse.synapsebusiness.ru/cabinet/team-chat.html?companyCode=alpha#message-1',runScripts:'outside-only'}),w=dom.window;
