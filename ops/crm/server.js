@@ -1776,6 +1776,8 @@ async function handleEntityRoutes(request, response, url, cors) {
       let values = validateEntity(config, body);
       if (config.table === 'tasks') {
         values = { ...config.defaults, ...values };
+        // specs/101: создание сразу в «Готово» с открытыми шагами из описания → 409.
+        if (values.status === 'done') taskCoordination.assertCanFinish({id:null,status:'inbox',description:values.description || ''});
         if (company) values.companyCode = company.code.toLowerCase();
         if (values.sourceRef) {
           const duplicate = db.prepare(
@@ -1865,6 +1867,15 @@ async function handleEntityRoutes(request, response, url, cors) {
           requireTaskTransferPermission(request, sourceCompany, requestedCompany);
         }
         const values = validateEntity(config, body, true, row); const entries = Object.entries(values);
+        // Шаги приёмки (specs/101): старый CRUD тоже не закрывает задачу с открытыми шагами.
+        // Проверка по объединённой строке и по прежней: новое описание в том же запросе
+        // не закрывает и не стирает шаги приёмки.
+        if (taskPatch && values.status === 'done') {
+          taskCoordination.assertCanFinish(row);
+          if (values.description !== undefined) taskCoordination.assertCanFinish({...row, description:values.description});
+        }
+        // Блок шагов из прежнего описания сохраняется до правки текста (системная запись, updated_by=0).
+        if (taskPatch && values.description !== undefined) taskCoordination.preserveSteps(row, values.description);
         const assignments = entries.map(([field]) => `${column(config, field)}=?`);
         const parameters = entries.map(([, value]) => value);
         if (config.table === 'contacts' && values.phone !== undefined) { assignments.push('normalized_phone=?');

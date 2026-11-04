@@ -41,7 +41,7 @@ function createTaskDispatch(db,{now=()=>Date.now()}={}){
  function enqueue(id,b,a){owner(a);tx(()=>put(id,b.revision));return get(id,a);}
  function act(id,b,a){owner(a);reconcile();tx(()=>{task(id);const r=row(id);if(!r||r.revision!==b.revision)fail(409,'Карточка изменилась. Обновите её');
   if(b.action==='cancel'){change(id,{state:'cancelled',lease_token:'',lease_until:0},'Владелец остановил обработку');return;}
-  if(b.action==='accept'){if(r.state!=='review')fail(409,'Нет результата на проверке');change(id,{state:'done'},'Владелец принял результат');db.prepare("UPDATE tasks SET status='done',updated_at=? WHERE id=?").run(stamp(),id);return;}
+  if(b.action==='accept'){if(r.state!=='review')fail(409,'Нет результата на проверке');require('./task-coordination-steps').assertTaskCanFinish(db,task(id));change(id,{state:'done'},'Владелец принял результат');db.prepare("UPDATE tasks SET status='done',updated_at=? WHERE id=?").run(stamp(),id);return;}
   if(!['answer','revise','retry'].includes(b.action)||!['needs_input','review','blocked','awaiting_executor'].includes(r.state))fail(409,'Действие недоступно');
   if(b.action==='answer'&&r.state!=='needs_input')fail(409,'Нет вопроса');if(b.action==='revise'&&r.state!=='review')fail(409,'Нет результата');
   const answer=clean(b.text||'',2000);if(!answer)fail(400,'Укажите ответ или следующий шаг');

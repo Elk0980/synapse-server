@@ -1,5 +1,7 @@
 'use strict';
+const {waitingSince} = require('./task-waiting');
 const {hasBoardSchema,boardFields,createTaskProducts,validatedChat} = require('./task-products');
+const Steps = require('./task-coordination-steps');
 
 // Метаданные существующих CRM-задач. Это учёт подтверждений, не запуск агентов.
 const STAGES = ['code', 'connected', 'verified', 'accepted'];
@@ -70,6 +72,9 @@ function createTaskCoordination(db, {now = () => Date.now()} = {}) {
     const data = empty();
     const previous = db.prepare('SELECT data FROM task_coordination WHERE task_id=?').get(id);
     data.links = previous ? JSON.parse(previous.data).links || [] : [];
+    // «Точка А → Точка Б» меняется только отдельными инструментами и переносится как есть.
+    const previousPointAB = previous ? JSON.parse(previous.data).pointAB : undefined;
+    if (previousPointAB !== undefined) data.pointAB = previousPointAB;
     if (Object.keys(body.data).some(k => ![...TEXT_FIELDS,'modelCheckedAt','milestones','links'].includes(k))) fail(400, 'Неизвестное поле карточки');
     if ('links' in body.data) data.links = validateLinks(body.data.links);
     for (const key of TEXT_FIELDS) if (key in body.data) data[key] = text(body.data[key], ['scope','acceptance','result','blocker','nextAction'].includes(key) ? 4000 : 200);
@@ -129,6 +134,7 @@ function createTaskCoordination(db, {now = () => Date.now()} = {}) {
       if(String(row.company_code).toLowerCase()!==companyCode||actor.role!=='owner'&&row.assignee_name!==`person:${actor.userId}`)fail(404,'Задача не найдена');
       const previous=db.prepare('SELECT revision,data FROM task_coordination WHERE task_id=?').get(id);
       if((previous?.revision||0)!==body.revision)fail(409,'Задача изменилась. Обновите карточку');
+      if(body.status==='done')Steps.assertTaskCanFinish(db,row);
       // Статус не нормализует и не выбрасывает неизвестные прежние метаданные.
       const json=previous?.data||JSON.stringify({...empty(),executorName:row.assignee_name}),revision=body.revision+1,stamp=new Date(now()).toISOString();
       withCoordinatedWrite(db,id,()=>db.prepare('UPDATE tasks SET status=?,updated_at=? WHERE id=?').run(body.status,stamp,id));
@@ -139,7 +145,9 @@ function createTaskCoordination(db, {now = () => Date.now()} = {}) {
       if(own)db.exec('COMMIT');return result;
     }catch(error){if(own)db.exec('ROLLBACK');throw error;}
   };
-  return {get,list,save,selfStatus,tool:createTaskTools(db,{now,owner,entry,save})};
+  return {get,list,save,selfStatus,assertCanFinish:row=>Steps.assertTaskCanFinish(db,row),
+    preserveSteps:(row,description)=>Steps.preserveBeforeDescriptionChange(db,row,description,new Date(now()).toISOString()),
+    tool:createTaskTools(db,{now,owner,entry,save})};
 }
 module.exports = {createTaskCoordination,migrateTasksMcp,migrateTasksMcpPortable,
   ...require('./task-products')};
@@ -363,6 +371,14 @@ function validateLinks(value) {
   });
 }
 
+// Блок «Точка А → Точка Б»: сохранённый в coordination или разобранный из старого описания.
+function pointABView(row, coordination) {
+  const value = Steps.effective(coordination?.pointAB, row.description);
+  const steps = Steps.counts(value);
+  return {point_ab:value, acceptance_steps:steps,
+    progress:Steps.progress(row.status, coordination?.milestones, steps)};
+}
+
 function taskExtras(db, row, now) {
   const counts = db.prepare(`SELECT count(*) total,coalesce(sum(status='done'),0) done
     FROM tasks WHERE parent_task_id=? AND is_deleted=0`).get(row.id);
@@ -415,20 +431,34 @@ function createTaskTools(db, {now,owner,entry,save}) {
     }
     return {limit,offset};
   };
-  const taskSummary = row => {
+  const taskSummary = (row,overview=false) => {
     const fields=['id','title','company_code','assignee_name','reviewer_name','parent_task_id',
       'status','priority','due_date','source','updated_at'];
     const coordination=entry(row);
+    let description='',descriptionTruncated=false;
+    if(overview===true) {
+      let count=0;
+      for(const character of row.description || '') {
+        if(count===1000){descriptionTruncated=true;break;}
+        description+=character;count++;
+      }
+    }
+    const ab=pointABView(row,coordination);
     return {...Object.fromEntries(fields.map(key=>[key,row[key]])),
-      ...boardFields(db,row),
+      ...boardFields(db,row),acceptance_steps:ab.acceptance_steps,progress:ab.progress,
       subtask_count:coordination.subtask_count,subtask_done:coordination.subtask_done,no_report:coordination.no_report,
+      ...(overview===true?{description,description_truncated:descriptionTruncated,
+        created_at:row.created_at,waiting_since:waitingSince(db,row,coordination,now())}:{}),
       coordination:{revision:coordination.revision,executorName:row.assignee_name,
+        ...(overview===true?{blocker:coordination.blocker,nextAction:coordination.nextAction,updatedAt:coordination.updatedAt}:{}),
         milestones:Object.fromEntries(STAGES.map(stage=>[stage,{state:coordination.milestones[stage].state}]))}};
   };
   const taskView = (row, actor, detail=false, args={}) => {
     const fields = ['id','created_at','updated_at','title','description','company_code','assignee_name',
       'status','priority','due_date','source','parent_task_id','reviewer_name','client_ref'];
-    const result = {...Object.fromEntries(fields.map(key => [key,row[key]])), ...taskExtras(db,row,now()), coordination:entry(row)};
+    const coordination=entry(row);
+    const result = {...Object.fromEntries(fields.map(key => [key,row[key]])), ...taskExtras(db,row,now()), coordination,
+      waiting_since:waitingSince(db,row,coordination,now()), ...pointABView(row,coordination)};
     if (detail) {
       const comments=page(args,'comments',20), subtasks=page(args,'subtasks',100);
       const codes=[...allowed(actor)], childWhere=`parent_task_id=? AND is_deleted=0
@@ -465,6 +495,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
     if (args.revision !== undefined && args.revision !== previous.revision) fail(409, 'Задача изменена. Обновите карточку');
     const updates = {}, changes = {};
     if ('status' in args) updates.status = enumValue(args.status,statuses,'status');
+    if (updates.status === 'done') Steps.assertTaskCanFinish(db,row);
     if ('executor' in args) { updates.assignee_name = text(args.executor,200); changes.executorName=updates.assignee_name; }
     if ('reviewer' in args) updates.reviewer_name = text(args.reviewer,200);
     if ('due_date' in args) updates.due_date = dueDate(args.due_date);
@@ -495,6 +526,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
     return {task:taskView(scopedTask(row.id,actor),actor,true)};
   });
   const tasksList = (args, actor) => {
+    if(args.overview!==undefined&&typeof args.overview!=='boolean')fail(400,'overview должен быть логическим');
     const limit=args.limit===undefined?100:integer(args.limit,'limit'), offset=args.offset===undefined?0:args.offset;
     if (limit>100 || !Number.isSafeInteger(offset) || offset<0) fail(400, 'Некорректная страница');
     const codes=args.project!==undefined?[project(args.project,actor)]:[...allowed(actor)];
@@ -517,7 +549,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
     }
     if (args.search!==undefined) { const search=text(args.search,500);clauses.push('(title LIKE ? OR description LIKE ?)');params.push(`%${search}%`,`%${search}%`); }
     const where=clauses.join(' AND '), total=db.prepare(`SELECT count(*) n FROM tasks WHERE ${where}`).get(...params).n;
-    const tasks=db.prepare(`SELECT * FROM tasks WHERE ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params,limit,offset).map(taskSummary);
+    const tasks=db.prepare(`SELECT * FROM tasks WHERE ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params,limit,offset).map(row=>taskSummary(row,args.overview===true));
     return {tasks,pagination:{total,limit,offset}};
   };
   const agentView = (row, actor) => {
@@ -561,6 +593,37 @@ function createTaskTools(db, {now,owner,entry,save}) {
     db.prepare(`INSERT INTO agent_access(agent_id,owner_id,projects) VALUES(?,?,?) ON CONFLICT(agent_id)
       DO UPDATE SET owner_id=excluded.owner_id,projects=excluded.projects`).run(row.id,actor.userId,JSON.stringify([...allowed(actor)].sort()));
     return agentView(row,actor);
+  };
+  // Отдельная запись блока А/Б: ревизия и неизменяемая история те же, что у карточки.
+  const pointAB = (name, args, actor) => {
+    const allowedKeys = {task_point_ab:['task_id','revision','point_ab'],
+      task_step_close:['task_id','revision','step_id','evidence','kind','author'],
+      task_step_reopen:['task_id','revision','step_id'],
+      task_step_remove:['task_id','revision','step_id','reason','author']}[name];
+    if (Object.keys(args).some(key => !allowedKeys.includes(key))) fail(400,'Неизвестный параметр шага приёмки');
+    const row = scopedTask(args.task_id,actor);
+    const saved = db.prepare('SELECT revision,data FROM task_coordination WHERE task_id=?').get(row.id);
+    if (args.revision !== undefined && args.revision !== (saved?.revision || 0)) fail(409,'Задача изменена. Обновите карточку');
+    const data = saved ? JSON.parse(saved.data) : {...empty(),executorName:row.assignee_name};
+    const current = Steps.effective(data.pointAB,row.description);
+    let next;
+    if (name === 'task_point_ab') next = Steps.merge(current,Steps.validateIncoming(args.point_ab));
+    else {
+      if (!current) fail(404,'Шаг приёмки не найден');
+      const author = args.author === undefined || name === 'task_step_reopen' ? '' : text(args.author,200);
+      if (name === 'task_step_remove') next = Steps.remove(current,{id:args.step_id,reason:args.reason},
+        {...actor,author},row.assignee_name,stamp());
+      else if (name === 'task_step_close') next = Steps.close(current,{id:args.step_id,evidence:args.evidence,
+        ...(args.kind === undefined ? {} : {kind:args.kind})},{...actor,author},row.assignee_name,stamp());
+      else next = Steps.reopen(current,{id:args.step_id});
+    }
+    data.pointAB = Steps.stored(next);
+    const revision = (saved?.revision || 0) + 1, time = stamp(), json = JSON.stringify(data);
+    db.prepare(`INSERT INTO task_coordination(task_id,revision,data,updated_at,updated_by) VALUES(?,?,?,?,?)
+      ON CONFLICT(task_id) DO UPDATE SET revision=excluded.revision,data=excluded.data,updated_at=excluded.updated_at,updated_by=excluded.updated_by`)
+      .run(row.id,revision,json,time,actor.userId);
+    db.prepare('INSERT INTO task_coordination_history(task_id,revision,data,updated_at,updated_by) VALUES(?,?,?,?,?)').run(row.id,revision,json,time,actor.userId);
+    return {task:taskView(scopedTask(row.id,actor),actor,true)};
   };
   return (name,args,actor) => {
     owner(actor);
@@ -609,6 +672,8 @@ function createTaskTools(db, {now,owner,entry,save}) {
         row.product_id=productId;row.chat_url=chatUrl;
       }
       touch(row,{executorName:executor,links},actor);
+      // Новая задача сразу в «Готово» проходит ту же проверку шагов, что и смена статуса.
+      if(status==='done')Steps.assertTaskCanFinish(db,{...row,status:'inbox'});
       return {task:taskView(row,actor,true),created:true};
     });
     if(name==='task_comment')return transaction(()=>{
@@ -618,6 +683,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
       db.prepare('UPDATE tasks SET updated_at=? WHERE id=?').run(stamp(),row.id);
       return {comment:db.prepare('SELECT * FROM task_comments WHERE id=?').get(Number(result.lastInsertRowid))};
     });
+    if(['task_point_ab','task_step_close','task_step_reopen','task_step_remove'].includes(name))return transaction(()=>pointAB(name,args,actor));
     if(name==='agents_list')return {agents:db.prepare('SELECT * FROM agents ORDER BY id').all().map(row=>agentView(row,actor))};
     if(name==='agent_report')return transaction(()=>({agent:reportAgent(args,actor)}));
     if(name==='session_start')return transaction(()=>{
