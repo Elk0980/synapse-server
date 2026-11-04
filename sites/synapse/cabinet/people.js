@@ -106,12 +106,14 @@
       const row=node('div',undefined,'member-row');row.append(node('strong',member.displayName),node('span',`${member.login} · №${member.id}`,'muted'));
       if(member.executorKey)row.append(node('span',`Для назначения задач: ${member.executorKey}`,'muted'));list.append(row);
       if(state.context?.isOwner){
+        if(member.staffRole==='human_executor'){
         const reset=node('button','Новый временный пароль');reset.type='button';row.append(reset);
         reset.addEventListener('click',async()=>{
           const company=state.company,epoch=state.epoch,temporaryEpoch=clearTemporaryPassword();reset.disabled=true;
           try{const result=await api(`/content/people/members/${member.id}/temp-password`,{method:'POST',body:{companyCode:company}});if(active(epoch,company))showTemporaryPassword(result,temporaryEpoch);}
           catch(error){if(active(epoch,company))message('global-message',error.message,true);}finally{reset.disabled=false;}
         });
+        }
         const form=node('form'),label=node('label',undefined,'check'),checkbox=node('input'),save=node('button','Сохранить право');
         checkbox.type='checkbox';checkbox.checked=member.canApprovePlan===true;checkbox.setAttribute('aria-label',`Согласование плана: ${member.displayName}`);
         label.append(checkbox,document.createTextNode('Согласование контент-плана'));save.type='submit';form.append(label,save);row.append(form);

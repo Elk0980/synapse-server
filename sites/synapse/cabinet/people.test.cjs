@@ -147,11 +147,11 @@ test('новый временный пароль очищается при см�
 test('поздний сброс пароля не заменяет результат последней операции',async t=>{
   let release;const delayed=new Promise(resolve=>{release=resolve;});
   const f=fixture(t,{owner:true,handler:async(route,options)=>{
-    if(route==='/content/people/members?companyCode=alvi')return response({members:[{id:7,displayName:'Первый',login:'one'},{id:8,displayName:'Второй',login:'two'}]});
+    if(route==='/content/people/members?companyCode=alvi')return response({members:[{id:7,displayName:'Первый',login:'one',staffRole:'human_executor'},{id:8,displayName:'Второй',login:'two',staffRole:'human_executor'},{id:9,displayName:'Администратор',login:'admin',staffRole:'administrator'}]});
     if(route.endsWith('/7/temp-password'))return delayed;
     if(route.endsWith('/8/temp-password'))return response({temporaryPassword:'current-secret'});
   }});await flush();const buttons=[...f.byId('member-list').querySelectorAll('button')].filter(button=>button.textContent==='Новый временный пароль');
-  buttons[0].click();buttons[1].click();await flush();release(response({temporaryPassword:'outdated-secret'}));await flush();
+  assert.equal(buttons.length,2);buttons[0].click();buttons[1].click();await flush();release(response({temporaryPassword:'outdated-secret'}));await flush();
   assert.equal(f.byId('temporary-password').querySelector('output').textContent,'current-secret');assert.equal(f.byId('temporary-password').textContent.includes('outdated-secret'),false);
 });
 const restricted=()=>response({error:'Нужно сменить пароль',details:{mustChangePassword:true,csrfToken:'restricted-csrf'}},403);
