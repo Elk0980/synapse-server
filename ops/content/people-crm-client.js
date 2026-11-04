@@ -1,7 +1,7 @@
 'use strict';
 const fail=(status,message)=>{throw Object.assign(Error(message),{status});};
 function createPeopleCrmClient({crmUrl,apiKey,fetchImpl=fetch}) {
-  const actions=new Set(['tasks_list','task_get','task_update','teamChatTask','teamChatContext','mediaMentor','taskRecords','planVariantsDecision']);
+  const actions=new Set(['ownerDecisionEvents','tasks_list','task_get','task_update','teamChatTask','teamChatContext','mediaMentor','taskRecords','planVariantsDecision']);
   return async function call(action,args,user,companyCode) {
     if(!actions.has(action)||!apiKey)fail(503,'Источник задач не настроен');
     const permission=['mediaMentor','planVariantsDecision'].includes(action)?'content-plan.approve':
@@ -14,8 +14,9 @@ function createPeopleCrmClient({crmUrl,apiKey,fetchImpl=fetch}) {
     const permissions=[permission];
     if(action==='teamChatContext'&&user.permissions?.includes('content-plan.approve'))permissions.push('content-plan.approve');
     const identity={v:1,userId:user.id,userName:user.displayName,role:user.role,permissions,companyCodes:[companyCode]};
-    const readOnly=['mediaMentor','taskRecords','teamChatContext'].includes(action);
+    const readOnly=['ownerDecisionEvents','mediaMentor','taskRecords','teamChatContext'].includes(action);
     const route=`/internal/people/${action}?companyCode=${encodeURIComponent(companyCode)}`+
+      (action==='ownerDecisionEvents'?`&offset=${Number(args.offset)||0}${args.taskId?`&taskId=${Number(args.taskId)}`:''}`:'')+
       (action==='taskRecords'?`&offset=${Number(args.offset)||0}`:'');
     let response;
     try {response=await fetchImpl(`${crmUrl}${route}`,{method:readOnly?'GET':'POST',

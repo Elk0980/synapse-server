@@ -31,6 +31,26 @@ test('реальные content→CRM запросы editor: узкие зада�
   assert.equal(scopedContext.companyCode,'alpha');assert.deepEqual(scopedContext.tasks.map(t=>t.id),[branch.id,own.id,inherited.id]);
   assert.ok(scopedContext.tasks.every(t=>!('description' in t)&&!('assignee_name' in t)));
   await assert.rejects(call('teamChatContext',{},user,'beta'),{status:403});
+  await t.test('owner decision events: scope, editor denial, create, blocker changes and dedupe',async()=>{
+    const decision=await create('Решение','Влад');
+    const route='/internal/people/ownerDecisionEvents?companyCode=alpha';
+    assert.equal((await request(route,'GET',undefined,editor)).status,403);
+    assert.equal((await request(route,'GET',undefined,owner,false)).status,401);
+    let events=(await request(route)).body.events;
+    assert.ok(events.some(e=>e.eventKey===`owner-decision:${decision.id}:created`));
+    assert.equal((await request('/coordination/mcp/task_update','POST',{task_id:decision.id,blocker:'ждёт Влада: выбор'},owner)).status,200);
+    const read=async()=> (await request(route)).body.events.find(e=>e.taskId===decision.id);
+    const a=await read();assert.match(a.eventKey,/:blocker:/);
+    await request('/coordination/mcp/task_update','POST',{task_id:decision.id,next_action:'Новый отчёт'},owner);
+    assert.equal((await read()).eventKey,a.eventKey);
+    await request('/coordination/mcp/task_update','POST',{task_id:decision.id,blocker:'ждёт Влада: другой выбор'},owner);
+    assert.notEqual((await read()).eventKey,a.eventKey);
+    const other=await request('/internal/people/ownerDecisionEvents?companyCode=beta','GET',undefined,{...owner,companyCodes:['beta']});
+    assert.ok(!other.body.events.some(e=>e.taskId===decision.id));
+    const fromClient=await call('ownerDecisionEvents',{taskId:decision.id},{id:1,role:'owner',companyCodes:['alpha']},'alpha');
+    assert.equal(fromClient.events.length,1);
+  });
+
   await t.test('identity, API key, компания и capability проверяются CRM до чтения',async()=>{
     const route='/internal/people/tasks_list?companyCode=alpha',body={project:'alpha',limit:100,offset:0};
     assert.equal((await request(route,'POST',body,editor,false)).status,401);

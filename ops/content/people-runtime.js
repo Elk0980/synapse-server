@@ -80,6 +80,22 @@ function createPeopleRuntime({db,authStore,tasks,call,notifications,now=Date.now
     if(stopping||enabled!==true)return Promise.resolve({enabled:false});
     if(active)return active;
     active=(async()=>{
+      const owners=db.prepare(`SELECT * FROM people_notification_preferences WHERE enabled=1`).all().filter(p=>p.push===1 && authStore.getById(p.user_id)?.role==='owner');
+      for(const person of owners) {
+        if(stopping)break;
+        try {
+          const actor=owner(person.user_id,person.company_code);
+          let offset=0;
+          for(let page=0;page<100;page++) {
+            const result=await call('ownerDecisionEvents',{offset},actor,person.company_code);
+            owner(actor.id,person.company_code);
+            for(const event of result.events)notifications.enqueue({userId:actor.id,companyCode:person.company_code,
+              eventKey:event.eventKey,title:`Нужно ваше решение: №${event.taskId} ${event.title}`.slice(0,120),
+              body:event.title.slice(0,1000),url:`/cabinet/people.html?company=${encodeURIComponent(person.company_code)}&task=${event.taskId}`,pushOnly:true});
+            if(result.nextOffset===null)break;offset=result.nextOffset;
+          }
+        }catch{} // Failure is not an event; retry read on next existing scheduler tick.
+      }
       const people=db.prepare(`SELECT m.user_id,m.company_code FROM company_team_members m
         JOIN people_notification_preferences p ON p.user_id=m.user_id AND p.company_code=m.company_code
         WHERE m.staff_role='human_executor' AND p.enabled=1`).all();
