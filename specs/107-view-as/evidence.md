@@ -1,0 +1,3 @@
+# Проверки 05.11.2026
+Реализовано FR-001–006. HTTP настоящий content-service с временной БД: owner/employee/forgery/other-session/CSRF/non-GET/effective identity/audit PASS. Регрессия people HTTP PASS. jsdom scoped fetch, menu/banner PASS. Playwright Chrome 390×844 и 1440×844: изолированный компонент меню/плашки, overflow отсутствует, снимки D:/Codex_Task_Artifacts/VIEW_AS_107_20261105. Это НЕ проверка всей живой оболочки. gate check 48 PASS; diff check PASS.
+Converge: серверные требования реализованы; остаются независимое ревью Claude и проверка полной интеграционной сборки №98 после подключения. Production не трогали, прав/ключей/схемы не меняли.
