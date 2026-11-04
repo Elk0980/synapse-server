@@ -47,7 +47,10 @@ function createPeopleHttp({authStore,team,tasks,chat,plan,notifications,runtime,
       fail(405,'Метод не поддерживается');
     }
     const code=company();fresh(code);
-    if(path==='/team-chat'&&method==='GET')return reply(200,chat.list(session.user.id,code,url.searchParams.get('before')));
+    if(path==='/team-chat'&&method==='GET')return reply(200,chat.list(session.user.id,code,url.searchParams.get('before'),url.searchParams.get('room')||'common'));
+    if(path==='/team-chat/rooms'&&method==='GET')return reply(200,chat.members(session.user.id,code));
+    if(path==='/my-board'&&method==='GET')return reply(200,await tasks.board(session.user.id,code));
+    if(path==='/my-board/action'&&method==='POST')return reply(200,await tasks.boardAction(session.user.id,code,await read(code)));
     if(path==='/team-chat'&&method==='POST')return reply(200,await chat.send(session.user.id,code,await read(code)));
     if(path==='/plan'&&method==='GET')return reply(200,await plan.get(session.user.id,code));
     if(path==='/plan/decision'&&method==='POST')return reply(200,await plan.decide(session.user.id,code,await read(code)));
