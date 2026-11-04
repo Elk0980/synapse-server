@@ -1,6 +1,6 @@
 'use strict';
 
-/* Медиа-наставник Хью, этап основы. Хранилище брифа компании и контент-плана на 7–14 дней.
+/* Медиа-наставник Хью, этап основы. Хранилище брифа компании и ручного контент-плана на 1–31 день.
    Здесь нет публикаций, расписаний, доставок, обращений к моделям и к сети: модуль только
    принимает, проверяет, версионирует и согласовывает текст, который ввёл человек.
    Словарь площадок, форматов и ролей берётся из autoposting, чтобы следующий этап
@@ -17,7 +17,7 @@ const BRIEF_FIELDS=['goal','product','audience','pains','confirmedFacts','assets
 /* Поля идеи. Прежние имена сохранены целиком: старые планы читаются и сохраняются без
    переименования, миграция клиентской базы руками не нужна. Новое — стабильный ideaId и
    variants: отдельная версия идеи для каждой площадки. */
-const DAY_FIELDS=['ideaId','date','platform','format','role','topic','hook','assetId','mentorNote','variants'];
+const DAY_FIELDS=['ideaId','date','platform','format','role','topic','hook','assetId','mentorNote','variants','script','filmingBy','productionStatus'];
 /* Поля версии для площадки. plannedDate/plannedTime/timezone — это ПЛАН выхода, а не очередь
    публикации: постановка в очередь и отправка живут в автопостинге и здесь не выполняются. */
 /* contentRevision принимается только для того, чтобы кабинет мог вернуть план в том виде,
@@ -28,7 +28,7 @@ const MAX_VARIANT_TEXT=20000;
 const MAX_FEEDBACK_PER_PLAN=200;
 const EMPTY_BRIEF=Object.freeze({goal:'',product:'',audience:'',pains:[],confirmedFacts:[],assets:[],
   shootingComfort:Object.freeze({level:'unknown',notes:''}),platforms:[]});
-const MIN_DAYS=7,MAX_DAYS=14,MAX_ITEMS_PER_DAY=3;
+const MIN_DAYS=1,MAX_DAYS=31,MAX_ITEMS_PER_DAY=3;
 const NOTICE='Этап основы медиа-наставника: бриф и план хранятся только в CRM. Публикация не выполняется, '+
   'модели не вызываются, HTTP-маршрутов и интерфейса кабинета у раздела ещё нет.';
 
@@ -146,7 +146,8 @@ function variantEffective(variant,idea) {
     plannedDate:variant.plannedDate||idea.date||'',plannedTime:variant.plannedTime||'',
     timezone:variant.timezone||'',excluded:variant.excluded===true};
 }
-const variantContent=(variant,idea)=>JSON.stringify(Object.values(variantEffective(variant,idea)));
+// Сценарий влияет на согласование каждой площадки, но не становится подписью.
+const variantContent=(variant,idea)=>JSON.stringify([...Object.values(variantEffective(variant,idea)),...(idea.script?[idea.script]:[])]);
 /* Календарные даты без времени: этап основы ничего не планирует к отправке,
    поэтому часовой пояс и минуты выхода остаются задачей этапа публикации. */
 /* reserve(ideaId,platform) выдаёт СЛЕДУЮЩУЮ свободную ревизию содержимого по сохранённой
@@ -186,6 +187,17 @@ function normalizeDays(value,brief,priorPlan=null,reserve=null) {
     seenIdeas.add(ideaId);
     const idea={ideaId,date:date.value,platform:row.platform,format:row.format,role:row.role,
       topic:text(row.topic,300,true),hook:text(row.hook??'',500),assetId,mentorNote:text(row.mentorNote??'',2000)};
+    // Старый клиент может не знать новые поля. Отсутствие не стирает ранее
+    // сохранённый сценарий; у старых планов новые ключи сами не появляются.
+    const prior=before.get(ideaId);
+    for(const key of ['script','filmingBy','productionStatus']) {
+      const source=Object.hasOwn(row,key)?row:prior;
+      if(!source||!Object.hasOwn(source,key))continue;
+      if(key==='productionStatus') {
+        if(!['planned','shot','editing','draft'].includes(source[key]))fail(400,'Статус подготовки: planned, shot, editing или draft');
+        idea[key]=source[key];
+      }else{const clean=text(source[key],key==='script'?20000:200);idea[key]=key==='script'?source[key]:clean;}
+    }
     /* Версии площадок. Старый план их не содержит: тогда идея читается как ОДНА версия для
        своей площадки — ровно то, что было раньше. Остальные площадки появляются только
        явным добавлением, автоматического согласия за них никто не даёт. */

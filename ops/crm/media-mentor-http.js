@@ -43,7 +43,12 @@ function createMediaMentorHandler({mentor, transfer, generation, generationDraft
     const generationJob = /^\/media-mentor\/generation\/([a-zA-Z0-9_-]+)$/.exec(url.pathname);
     const generationImport = /^\/media-mentor\/generation\/([a-zA-Z0-9_-]+)\/drafts$/.exec(url.pathname);
     let result, status = 200;
-    if(generationImport){
+    if(url.pathname==='/media-mentor/plan/import-preview'&&request.method==='POST') {
+      const body=await readJson(request,1500000);
+      if(companyModuleContext(request,code,'autoposting.edit').identity.userId!==actor.userId)fail(403,'Доступ изменился во время операции','FORBIDDEN');
+      result={companyCode:code,rows:await require('./reel-plan-file').preview(body)};
+      if(companyModuleContext(request,code,'autoposting.edit').identity.userId!==actor.userId)fail(403,'Доступ изменился во время операции','FORBIDDEN');
+    } else if(generationImport){
       if(request.method!=='POST')fail(405,'Метод не поддерживается');
       if(!generationDrafts)fail(501,'Перенос предложений пока не подключён','PROVIDER_NOT_CONFIGURED');
       result=generationDrafts.transfer(code,generationImport[1],await readJson(request),actor);
