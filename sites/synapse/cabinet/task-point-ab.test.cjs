@@ -18,7 +18,8 @@ function fixture(taskPatch = {}) {
     point_ab:{source:'card',pointA:'Было <img src=x onerror=alert(1)>',pointB:'Будет',example:'SAMPLE пример',
       pointAImage:'https://example.test/a.png',pointBImage:'javascript:alert(1)',
       steps:[{id:'s1',text:'<script>bad()</script> шаг',state:'closed',evidence:'https://example.test/proof',evidenceKind:'link',closedBy:'Codex',closedAt:'2026-11-04T00:00:00Z'},
-        {id:'s2',text:'второй шаг',state:'open',evidence:''}]},comments:[],subtasks:[],...taskPatch};
+        {id:'s2',text:'второй шаг',state:'open',evidence:''},
+        {id:'s3',text:'снятый шаг',state:'open',removed:true,removalConfirmed:true,removedReason:'SAMPLE <i>не нужен</i>',removedBy:'Влад'}]},comments:[],subtasks:[],...taskPatch};
   const module = {id:4,title:'Модуль · SAMPLE',description:'Состав: №5',company_code:'synapse-business',status:'in_progress',coordination:{revision:1,milestones:{}}};
   const ctx = {identity:{role:'owner',userId:1,companies:[{id:'synapse-business',name:'Synapse'}]},csrfOptions:(method,body) => ({method,body}),
     crmQuery:async (path,query,options) => {
@@ -27,7 +28,7 @@ function fixture(taskPatch = {}) {
       if (name === 'products_list') return {products:[],pagination:{total:0}};
       if (name === 'agents_list') return {agents:[]};
       if (name === 'task_get') return structuredClone(args.task_id === 4 ? module : task);
-      if (['task_step_close','task_step_reopen','task_point_ab','task_update'].includes(name)) return {task};
+      if (['task_step_close','task_step_reopen','task_step_remove','task_point_ab','task_update'].includes(name)) return {task};
       throw Error('Unexpected ' + name);
     }};
   w.eval(overview); w.eval(board);
@@ -67,6 +68,11 @@ test('module card shows «N из M шагов»; task card renders «Было | 
     assert.equal(section.querySelector('[data-step=s1]').dataset.state, 'closed');
     assert.match(section.querySelector('[data-step=s1]').textContent, /<script>bad\(\)<\/script> шаг/);
     assert.ok(section.querySelector('[data-step=s1] a[href="https://example.test/proof"]'));
+    assert.equal(section.querySelector('[data-step=s3]').dataset.state, 'removed');
+    assert.match(section.querySelector('[data-step=s3]').textContent, /Удалён: SAMPLE <i>не нужен<\/i>/);
+    assert.equal(section.querySelector('[data-step=s3] i'), null);
+    assert.equal(section.querySelector('[data-step-close=s3]'), null);
+    assert.doesNotMatch(section.querySelector('[data-ab-form]').elements.steps.value, /снятый шаг/);
   } finally { f.close(); }
 });
 
@@ -83,6 +89,13 @@ test('closing a step requires https evidence and sends revision; reopen and edit
     form.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true})); await settle();
     assert.deepEqual(plain(f.calls.find(call => call.name === 'task_step_close').args),
       {task_id:5,revision:4,step_id:'s2',evidence:'https://example.test/ok',kind:'link'});
+    await f.controller.openTask(5);
+    const remove = f.d.querySelector('[data-step-remove=s2]');
+    remove.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true})); await settle();
+    assert.equal(f.calls.some(call => call.name === 'task_step_remove'), false, 'без причины не отправляется');
+    remove.elements.reason.value = 'SAMPLE причина';
+    remove.dispatchEvent(new f.w.Event('submit',{bubbles:true,cancelable:true})); await settle();
+    assert.deepEqual(plain(f.calls.find(call => call.name === 'task_step_remove').args), {task_id:5,revision:4,step_id:'s2',reason:'SAMPLE причина'});
     await f.controller.openTask(5);
     f.d.querySelector('[data-step-reopen=s1]').click(); await settle();
     assert.deepEqual(plain(f.calls.find(call => call.name === 'task_step_reopen').args), {task_id:5,revision:4,step_id:'s1'});
@@ -107,7 +120,7 @@ test('done task shows «Было → Стало»; description-parsed block asks
     assert.equal(done.d.querySelector('[data-point-ab] h3').textContent, 'Было → Стало');
     assert.match(done.d.querySelector('[data-ab-side=b] figcaption').textContent, /Стало/);
   } finally { done.close(); }
-  const legacy = fixture({point_ab:{source:'description',pointA:'А',pointB:'Б',example:'',pointAImage:'',pointBImage:'',steps:[{id:'d1',text:'шаг',state:'open'}]}});
+  const legacy = fixture({point_ab:{source:'description',pointA:'А',pointB:'Б',example:'',pointAImage:'',pointBImage:'',steps:[{id:'d1',text:'шаг',state:'open',legacy:true},{id:'d2',text:'второй',state:'open'}]}});
   try {
     await settle(); await legacy.controller.openTask(5);
     assert.match(legacy.d.querySelector('[data-point-ab]').textContent, /Разобрано из описания/);
@@ -115,5 +128,10 @@ test('done task shows «Было → Стало»; description-parsed block asks
     form.elements.evidence.value = 'https://example.test/ok';
     form.dispatchEvent(new legacy.w.Event('submit',{bubbles:true,cancelable:true})); await settle();
     assert.equal(legacy.calls.some(call => call.name === 'task_step_close'), false);
+    assert.match(legacy.d.querySelector('[data-step=d1] [data-step-legacy]').textContent, /наследие.*нужно доказательство/);
+    assert.equal(legacy.d.querySelector('[data-step=d2] [data-step-legacy]'), null);
+    const edit = legacy.d.querySelector('[data-ab-form]');
+    edit.dispatchEvent(new legacy.w.Event('submit',{bubbles:true,cancelable:true})); await settle();
+    assert.deepEqual(plain(legacy.calls.find(call => call.name === 'task_point_ab').args.point_ab.steps), [{id:'d1',text:'шаг'},{id:'d2',text:'второй'}]);
   } finally { legacy.close(); }
 });

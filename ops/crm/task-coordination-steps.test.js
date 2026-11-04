@@ -43,8 +43,8 @@ test('description parsing: labelled multi-line blocks until next label, [ ]/[x] 
   assert.equal(parsed.pointB, 'блок «Было | Будет»');
   assert.equal(parsed.example, 'SAMPLE-карточка');
   assert.deepEqual(parsed.steps.map(step => [step.text, step.state]),
-    [['карточка видна на 390px','open'],['текст экранирован','closed'],['шаг со звёздочкой','closed']]);
-  assert.equal(parsed.steps[1].legacy, true);
+    [['карточка видна на 390px','open'],['текст экранирован','open'],['шаг со звёздочкой','open']]);
+  assert.deepEqual(parsed.steps.map(step => !!step.legacy), [false,true,true], '«[x]» — только пометка наследия, не закрытие');
   assert.equal(Steps.parseDescription('Обычное описание\nПример: без блока'), null);
   assert.equal(Steps.parseDescription(''), null);
   assert.equal(Steps.parseDescription('Точка a: латиница\nТочка Б: ок').pointA, 'латиница');
@@ -63,11 +63,11 @@ test('legacy description steps appear in task_get, list counts and progress with
   const {call,create} = fixture(t), task = create('SAMPLE legacy', LEGACY);
   const full = call('task_get',{task_id:task.id});
   assert.equal(full.point_ab.source, 'description');
-  assert.deepEqual(full.acceptance_steps, {total:3,closed:2});
-  assert.equal(full.progress, 33); // (0 + 66.7)/2
+  assert.deepEqual(full.acceptance_steps, {total:3,closed:0});
+  assert.equal(full.progress, 0);
   const listed = call('tasks_list',{overview:true}).tasks[0];
-  assert.deepEqual(listed.acceptance_steps, {total:3,closed:2});
-  assert.equal(listed.progress, 33);
+  assert.deepEqual(listed.acceptance_steps, {total:3,closed:0});
+  assert.equal(listed.progress, 0);
   assert.equal(listed.point_ab, undefined, 'список отдаёт только счётчики');
 });
 
@@ -157,4 +157,63 @@ test('old schema (before MCP migration): regular save keeps a stored block untou
   api.save(1,{revision:1,data:{result:'SAMPLE'}},{role:'owner',userId:1});
   assert.deepEqual(api.get(1,{role:'owner',userId:1}).pointAB, block);
   assert.equal(api.get(1,{role:'owner',userId:1}).result, 'SAMPLE');
+});
+
+test('[x] in the description never closes a step, even when the description is edited directly', t => {
+  const {db,call,create} = fixture(t), task = create('SAMPLE ticked', 'Точка А: а\nШаги приёмки:\n- [ ] один\n- [ ] два');
+  db.prepare('UPDATE tasks SET description=? WHERE id=?').run('Точка А: а\nШаги приёмки:\n- [x] один\n- [x] два', task.id);
+  assert.deepEqual(call('task_get',{task_id:task.id}).acceptance_steps, {total:2,closed:0});
+  assert.throws(() => call('task_update',{task_id:task.id,status:'done'}), error => error.status === 409);
+  // Сохранение разобранного блока переносит пометку наследия, шаги остаются открытыми.
+  const saved = call('task_point_ab',{task_id:task.id,point_ab:{steps:[{id:'d1',text:'один'},{id:'d2',text:'два'}]}}).task;
+  assert.equal(saved.point_ab.source, 'card');
+  assert.deepEqual(saved.point_ab.steps.map(step => [step.state,step.legacy]), [['open',true],['open',true]]);
+  assert.deepEqual(saved.acceptance_steps, {total:2,closed:0});
+  const closed = call('task_step_close',{task_id:task.id,step_id:'d1',evidence:'https://example.test/one'}).task;
+  assert.equal(closed.point_ab.steps[0].legacy, undefined);
+});
+
+test('open steps cannot be dropped by task_point_ab; closed ones can', t => {
+  const {db,call,create} = fixture(t), task = create('SAMPLE drop');
+  call('task_point_ab',{task_id:task.id,point_ab:{steps:[{text:'один'},{text:'два'}]}});
+  for (const steps of [[],[{id:'s1',text:'один'}],[{text:'один'},{text:'два'}]])
+    assert.throws(() => call('task_point_ab',{task_id:task.id,point_ab:{steps}}), error => error.status === 400 && /нельзя удалить/.test(error.message));
+  assert.equal(call('task_get',{task_id:task.id}).point_ab.steps.length, 2);
+  assert.throws(() => call('task_update',{task_id:task.id,status:'done'}), error => error.status === 409);
+  call('task_step_close',{task_id:task.id,step_id:'s1',evidence:'https://example.test/one'});
+  const kept = call('task_point_ab',{task_id:task.id,point_ab:{steps:[{id:'s2',text:'два'}]}}).task;
+  assert.deepEqual(kept.point_ab.steps.map(step => step.id), ['s2']);
+  assert.equal(db.prepare('SELECT status FROM tasks WHERE id=?').get(task.id).status, 'inbox');
+});
+
+test('task_step_remove: reason required, history kept; executor removal still blocks until a reviewer confirms', t => {
+  const {db,call,create} = fixture(t), task = create('SAMPLE remove', '', 'Claude');
+  call('task_point_ab',{task_id:task.id,point_ab:{steps:[{text:'один'},{text:'два'}]}});
+  call('task_step_close',{task_id:task.id,step_id:'s1',evidence:'https://example.test/one'});
+  assert.throws(() => call('task_step_remove',{task_id:task.id,step_id:'s2'}), error => error.status === 400);
+  assert.throws(() => call('task_step_remove',{task_id:task.id,step_id:'s2',reason:'   '}), error => error.status === 400);
+  const pending = call('task_step_remove',{task_id:task.id,step_id:'s2',reason:'SAMPLE не нужен',author:'Claude'}).task;
+  const step = pending.point_ab.steps[1];
+  assert.deepEqual([step.removed,step.removalConfirmed,step.removedReason,step.removedBy], [true,false,'SAMPLE не нужен','Claude']);
+  assert.deepEqual(pending.acceptance_steps, {total:2,closed:1});
+  assert.throws(() => call('task_update',{task_id:task.id,status:'done'}), error => error.status === 409);
+  assert.throws(() => call('task_point_ab',{task_id:task.id,point_ab:{steps:[{id:'s1',text:'один'}]}}), error => error.status === 400);
+  const confirmed = call('task_step_remove',{task_id:task.id,step_id:'s2',reason:'SAMPLE согласен',author:'Codex'}).task;
+  assert.equal(confirmed.point_ab.steps[1].removalConfirmed, true);
+  assert.deepEqual(confirmed.acceptance_steps, {total:1,closed:1});
+  assert.throws(() => call('task_step_close',{task_id:task.id,step_id:'s2',evidence:'https://example.test/x'}), error => error.status === 409);
+  // Снятый шаг остаётся в блоке при правке списка и в неизменяемой истории.
+  const edited = call('task_point_ab',{task_id:task.id,point_ab:{steps:[{id:'s1',text:'один'}]}}).task;
+  assert.deepEqual(edited.point_ab.steps.map(item => [item.id,!!item.removed]), [['s1',false],['s2',true]]);
+  const history = db.prepare('SELECT data FROM task_coordination_history WHERE task_id=? ORDER BY revision').all(task.id).map(row => JSON.parse(row.data));
+  assert.ok(history.some(data => data.pointAB?.steps?.[1]?.removedReason === 'SAMPLE не нужен'));
+  assert.equal(call('task_update',{task_id:task.id,status:'done'}).task.status, 'done');
+});
+
+test('task_create straight into done with open description steps -> 409 and nothing is created', t => {
+  const {db,call} = fixture(t);
+  assert.throws(() => call('task_create',{title:'SAMPLE done create',project:'alpha',status:'done',client_ref:'sample:done',
+    description:'Точка Б: б\nШаги приёмки:\n- [x] один'}), error => error.status === 409);
+  assert.equal(db.prepare("SELECT count(*) n FROM tasks WHERE client_ref='sample:done'").get().n, 0);
+  assert.equal(call('task_create',{title:'SAMPLE done plain',project:'alpha',status:'done',client_ref:'sample:plain'}).task.status, 'done');
 });

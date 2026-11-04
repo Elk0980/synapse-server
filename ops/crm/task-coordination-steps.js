@@ -51,9 +51,11 @@ function parseDescription(description) {
   for (const line of blocks.steps) {
     const step = line.match(STEP_LINE);
     if (!step) continue;
-    const closed = step[1].trim() !== '';
-    result.steps.push({id:`d${++index}`, text:step[2].trim().slice(0, 500), state:closed ? 'closed' : 'open',
-      evidence:'', evidenceKind:'', closedAt:'', closedBy:'', ...(closed ? {legacy:true} : {})});
+    // «[x]» в описании не закрывает шаг: его можно поставить правкой текста без доказательства.
+    // Такой шаг остаётся открытым с пометкой наследия, пока проверяющий не закроет его с доказательством.
+    const marked = step[1].trim() !== '';
+    result.steps.push({id:`d${++index}`, text:step[2].trim().slice(0, 500), state:'open',
+      evidence:'', evidenceKind:'', closedAt:'', closedBy:'', ...(marked ? {legacy:true} : {})});
     if (result.steps.length === MAX_STEPS) break;
   }
   return result;
@@ -68,8 +70,10 @@ function effective(stored, description) {
 
 const blank = () => ({pointA:'', pointB:'', example:'', pointAImage:'', pointBImage:'', steps:[]});
 const stored = value => { if (!value) return blank(); const {source, ...rest} = value; return rest; };
+// Снятый проверяющим шаг не учитывается; снятие исполнителем ждёт подтверждения и шаг продолжает блокировать.
+const withdrawn = step => step?.removed === true && step.removalConfirmed === true;
 const counts = value => {
-  const steps = Array.isArray(value?.steps) ? value.steps : [];
+  const steps = (Array.isArray(value?.steps) ? value.steps : []).filter(step => !withdrawn(step));
   return {total:steps.length, closed:steps.filter(step => step.state === 'closed').length};
 };
 
@@ -117,9 +121,17 @@ function merge(previous, incoming) {
       if (!item.id) return {id:nextId(), text:item.text, state:'open', evidence:'', evidenceKind:'', closedAt:'', closedBy:''};
       const step = old.get(item.id);
       if (!step) fail(400, 'Неизвестный шаг приёмки');
+      if (withdrawn(step)) fail(409, 'Шаг снят: верните его повторным открытием');
       if (step.state === 'closed' && step.text !== item.text) fail(409, 'Закрытый шаг нельзя переписать: сначала откройте его заново');
       return {...step, text:item.text};
     });
+    const kept = new Set(incoming.steps.map(item => item.id).filter(Boolean));
+    for (const step of base.steps) {
+      if (kept.has(step.id) || step.state === 'closed') continue;
+      // Снятые шаги остаются в блоке как след решения; открытый шаг молча удалить нельзя.
+      if (withdrawn(step)) { result.steps.push(step); continue; }
+      fail(400, 'Открытый шаг приёмки нельзя удалить: закройте его с доказательством или снимите через task_step_remove с причиной');
+    }
   }
   return result;
 }
@@ -141,6 +153,7 @@ function close(previous, value, actor, executorName, stamp) {
   const base = stored(previous), step = base.steps.find(item => item.id === value.id);
   if (!step) fail(404, 'Шаг приёмки не найден');
   if (step.state === 'closed') fail(409, 'Шаг уже закрыт');
+  if (withdrawn(step)) fail(409, 'Шаг снят: верните его повторным открытием');
   const kind = value.kind === undefined ? 'link' : value.kind;
   if (!['link', 'image'].includes(kind)) fail(400, 'Доказательство — ссылка или картинка');
   const evidence = text(value.evidence, 2048, 'доказательство') ?
@@ -151,12 +164,27 @@ function close(previous, value, actor, executorName, stamp) {
     closedAt:stamp, closedBy, closedById:actor.userId, legacy:undefined} : item)};
 }
 
+// Снятие шага: причина обязательна, запись идёт в ревизию и историю. Исполнитель может только
+// предложить снятие — шаг блокирует «Готово», пока его не снимет или не закроет проверяющий.
+function remove(previous, value, actor, executorName, stamp) {
+  if (!object(value) || Object.keys(value).some(key => !['id', 'reason'].includes(key))) fail(400, 'Передайте шаг и причину');
+  const base = stored(previous), step = base.steps.find(item => item.id === value.id);
+  if (!step) fail(404, 'Шаг приёмки не найден');
+  if (withdrawn(step)) fail(409, 'Шаг уже снят');
+  const reason = text(value.reason, 500, 'причина');
+  if (!reason) fail(400, 'Укажите причину снятия шага');
+  const by = String(actor?.author || actor?.userName || `#${actor?.userId}`).slice(0, 200);
+  const confirmed = step.state === 'closed' || !isExecutor(executorName, actor);
+  return {...base, steps:base.steps.map(item => item.id === step.id ? {...item, removed:true, removalConfirmed:confirmed,
+    removedReason:reason, removedBy:by, removedById:actor.userId, removedAt:stamp} : item)};
+}
+
 function reopen(previous, value) {
   if (!object(value) || Object.keys(value).join() !== 'id') fail(400, 'Передайте шаг');
   const base = stored(previous);
   if (!base.steps.some(item => item.id === value.id)) fail(404, 'Шаг приёмки не найден');
   return {...base, steps:base.steps.map(item => item.id === value.id ?
-    {id:item.id, text:item.text, state:'open', evidence:'', evidenceKind:'', closedAt:'', closedBy:''} : item)};
+    {id:item.id, text:item.text, state:'open', evidence:'', evidenceKind:'', closedAt:'', closedBy:'', ...(item.legacy ? {legacy:true} : {})} : item)};
 }
 
 function assertCanFinish(value) {
@@ -165,9 +193,11 @@ function assertCanFinish(value) {
 }
 
 // Единая серверная проверка перехода в «Готово» для всех путей записи статуса.
+// row — строка задачи с уже применёнными изменениями (например, новым описанием), status — прежний статус.
 function assertTaskCanFinish(db, row) {
   if (!row || row.status === 'done') return;
-  const table = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='task_coordination'").get();
+  const table = Number.isSafeInteger(row.id) &&
+    db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='task_coordination'").get();
   const saved = table ? db.prepare('SELECT data FROM task_coordination WHERE task_id=?').get(row.id) : null;
   let data = {};
   try { data = saved ? JSON.parse(saved.data) : {}; } catch { data = {}; }
@@ -175,5 +205,5 @@ function assertTaskCanFinish(db, row) {
   if (value) assertCanFinish(value);
 }
 
-module.exports = {assertTaskCanFinish, MAX_STEPS,parseDescription, effective, counts, progress, validateIncoming, merge, close, reopen,
+module.exports = {assertTaskCanFinish, MAX_STEPS,parseDescription, effective, counts, progress, validateIncoming, merge, close, remove, reopen, withdrawn,
   assertCanFinish, isExecutor, httpsUrl, stored};

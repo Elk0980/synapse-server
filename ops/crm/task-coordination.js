@@ -597,7 +597,8 @@ function createTaskTools(db, {now,owner,entry,save}) {
   const pointAB = (name, args, actor) => {
     const allowedKeys = {task_point_ab:['task_id','revision','point_ab'],
       task_step_close:['task_id','revision','step_id','evidence','kind','author'],
-      task_step_reopen:['task_id','revision','step_id']}[name];
+      task_step_reopen:['task_id','revision','step_id'],
+      task_step_remove:['task_id','revision','step_id','reason','author']}[name];
     if (Object.keys(args).some(key => !allowedKeys.includes(key))) fail(400,'Неизвестный параметр шага приёмки');
     const row = scopedTask(args.task_id,actor);
     const saved = db.prepare('SELECT revision,data FROM task_coordination WHERE task_id=?').get(row.id);
@@ -608,8 +609,10 @@ function createTaskTools(db, {now,owner,entry,save}) {
     if (name === 'task_point_ab') next = Steps.merge(current,Steps.validateIncoming(args.point_ab));
     else {
       if (!current) fail(404,'Шаг приёмки не найден');
-      const author = args.author === undefined ? '' : text(args.author,200);
-      if (name === 'task_step_close') next = Steps.close(current,{id:args.step_id,evidence:args.evidence,
+      const author = args.author === undefined || name === 'task_step_reopen' ? '' : text(args.author,200);
+      if (name === 'task_step_remove') next = Steps.remove(current,{id:args.step_id,reason:args.reason},
+        {...actor,author},row.assignee_name,stamp());
+      else if (name === 'task_step_close') next = Steps.close(current,{id:args.step_id,evidence:args.evidence,
         ...(args.kind === undefined ? {} : {kind:args.kind})},{...actor,author},row.assignee_name,stamp());
       else next = Steps.reopen(current,{id:args.step_id});
     }
@@ -668,6 +671,8 @@ function createTaskTools(db, {now,owner,entry,save}) {
         row.product_id=productId;row.chat_url=chatUrl;
       }
       touch(row,{executorName:executor,links},actor);
+      // Новая задача сразу в «Готово» проходит ту же проверку шагов, что и смена статуса.
+      if(status==='done')Steps.assertTaskCanFinish(db,{...row,status:'inbox'});
       return {task:taskView(row,actor,true),created:true};
     });
     if(name==='task_comment')return transaction(()=>{
@@ -677,7 +682,7 @@ function createTaskTools(db, {now,owner,entry,save}) {
       db.prepare('UPDATE tasks SET updated_at=? WHERE id=?').run(stamp(),row.id);
       return {comment:db.prepare('SELECT * FROM task_comments WHERE id=?').get(Number(result.lastInsertRowid))};
     });
-    if(['task_point_ab','task_step_close','task_step_reopen'].includes(name))return transaction(()=>pointAB(name,args,actor));
+    if(['task_point_ab','task_step_close','task_step_reopen','task_step_remove'].includes(name))return transaction(()=>pointAB(name,args,actor));
     if(name==='agents_list')return {agents:db.prepare('SELECT * FROM agents ORDER BY id').all().map(row=>agentView(row,actor))};
     if(name==='agent_report')return transaction(()=>({agent:reportAgent(args,actor)}));
     if(name==='session_start')return transaction(()=>{

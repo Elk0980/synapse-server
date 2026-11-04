@@ -37,7 +37,7 @@ jobs:
       - name: Old and new tasks, migration, cabinet and owner board
         env:
           NODE_PATH: ${{ github.workspace }}/ops/tasks-mcp/node_modules
-        run: node --test ops/tasks-mcp/*.test.js ops/crm/task-coordination.test.js ops/crm/task-coordination-steps.test.js ops/crm/task-products*.test.js ops/crm/task-waiting.test.js sites/synapse/cabinet/task*.test.cjs
+        run: node --test ops/tasks-mcp/*.test.js ops/crm/task-coordination.test.js ops/crm/task-coordination-steps*.test.js ops/crm/task-dispatch*.test.js ops/crm/task-products*.test.js ops/crm/task-waiting.test.js sites/synapse/cabinet/task*.test.cjs
       - name: Syntax and public spec
         run: |
           node --check ops/crm/server.js
