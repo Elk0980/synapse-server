@@ -1,0 +1,20 @@
+checking file live_try.html
+Hunk #1 succeeded at 590 (offset 1 line).
+Hunk #2 succeeded at 620 (offset 2 lines).
+Hunk #3 succeeded at 660 (offset 2 lines).
+Hunk #4 succeeded at 673 (offset 2 lines).
+Hunk #5 succeeded at 706 (offset 2 lines).
+Hunk #6 succeeded at 1105 (offset 6 lines).
+Hunk #7 succeeded at 1229 (offset 7 lines).
+Hunk #8 succeeded at 1408 (offset 7 lines).
+Hunk #9 succeeded at 1568 (offset 8 lines).
+Hunk #10 succeeded at 1598 (offset 8 lines).
+Hunk #11 succeeded at 1629 (offset 8 lines).
+Hunk #12 succeeded at 1650 (offset 8 lines).
+Hunk #13 succeeded at 1661 (offset 8 lines).
+Hunk #14 succeeded at 1724 (offset 8 lines).
+Hunk #15 succeeded at 1748 (offset 8 lines).
+Hunk #16 succeeded at 1788 (offset 8 lines).
+Hunk #17 succeeded at 1908 (offset 15 lines).
+Hunk #18 succeeded at 1948 (offset 16 lines).
+Hunk #19 succeeded at 2035 (offset 16 lines).
