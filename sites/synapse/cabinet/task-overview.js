@@ -12,7 +12,18 @@
     const value = waitingField(coord.blocker) ? coord.blocker : waitingField(coord.nextAction) ? coord.nextAction : coord.nextAction || title(task);
     return String(value || '').trim().replace(/^(?:жд[её]т\s+влада|вопрос\s*→\s*влад)\s*[:—–-]?\s*/i,'').trim() || title(task);
   };
-  const progress = task => task.status === 'done' ? 100 : STAGES.filter(stage => task.coordination?.milestones?.[stage]?.state === 'confirmed').length * 25;
+  // specs/101: без шагов — этапы×25; с шагами — среднее этапов×25 и доли закрытых шагов×100.
+  const steps = task => {
+    const value = task.acceptance_steps, total = Number(value?.total) || 0, closed = Math.min(total, Number(value?.closed) || 0);
+    return {total:total > 0 ? total : 0, closed:total > 0 ? closed : 0};
+  };
+  const progress = task => {
+    if (task.status === 'done') return 100;
+    const base = STAGES.filter(stage => task.coordination?.milestones?.[stage]?.state === 'confirmed').length * 25, {total, closed} = steps(task);
+    return total ? Math.round((base + 100 * closed / total) / 2) : base;
+  };
+  const stepsText = task => { const {total, closed} = steps(task); return total ? `${closed} из ${total} шагов` : ''; };
+  const sumSteps = members => members.reduce((sum, task) => { const value = steps(task); return {total:sum.total + value.total, closed:sum.closed + value.closed}; }, {total:0, closed:0});
   const stageText = task => {
     if (task.status === 'done') return 'готово';
     const next = STAGES.find(stage => task.coordination?.milestones?.[stage]?.state !== 'confirmed');
@@ -62,7 +73,7 @@
       const seeds = [...children(task),...referencedIds(task).map(id => byId.get(id)),...(moduleMembers.get(task.id) || [])];
       const members = [...new Map(seeds.filter(item => item && item.status !== 'cancelled' && item.company_code === task.company_code && !structural.has(item.id)).map(item => [item.id,item])).values()].sort(taskOrder);
       const allMembers = descendants(seeds,task.company_code);
-      return {task,title:title(task),why:descriptionField(task,'ЦКП'),members,allMembers,progress:mean(members),
+      return {task,title:title(task),why:descriptionField(task,'ЦКП'),members,allMembers,progress:mean(members),steps:sumSteps(allMembers),
         started:task.status === 'in_progress' || allMembers.some(item => item.status === 'in_progress' || progress(item)>0),
         current:allMembers.filter(item => item.status === 'in_progress').sort(taskOrder)};
     });
@@ -79,5 +90,5 @@
     });
     return {goals:goalModels,modules,directions:modules,structuralIds:[...structural],now,waiting:tasks.filter(isWaiting).sort((a,b) => String(a.waiting_since || '9999').localeCompare(String(b.waiting_since || '9999')) || a.id-b.id)};
   }
-  window.SbTaskOverview = Object.freeze({build,isWaiting,waitingNeed,hasWaitingBlocker:task=>waitingField(task.coordination?.blocker),hasWaitingNextStep:task=>waitingField(task.coordination?.nextAction),stripWaitingPrefix,progress,stageText,title,descriptionField});
+  window.SbTaskOverview = Object.freeze({build,isWaiting,waitingNeed,hasWaitingBlocker:task=>waitingField(task.coordination?.blocker),hasWaitingNextStep:task=>waitingField(task.coordination?.nextAction),stripWaitingPrefix,progress,steps,stepsText,stageText,title,descriptionField});
 })();

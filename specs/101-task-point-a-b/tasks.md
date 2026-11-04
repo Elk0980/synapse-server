@@ -1,0 +1,10 @@
+# Задачи — 101 task-point-a-b
+
+- [x] T1 Серверный модуль шагов: разбор описания, валидация https, слияние, закрытие не исполнителем, формула.
+- [x] T2 Хранение в `coordination.data.pointAB`, перенос при `save`, действия `task_point_ab` / `task_step_close` / `task_step_reopen`.
+- [x] T3 409 при done с открытыми шагами: `task_update`, `selfStatus`, PATCH CRUD, `task-dispatch accept`.
+- [x] T4 `acceptance_steps` и `progress` в `tasks_list`/`task_get`; формула в кабинете; «N из M шагов» на модуле.
+- [x] T5 Карточка: «Было | Будет», 390px друг под другом, «Было → Стало» у готовой, форма правки, закрытие шага с доказательством.
+- [x] T6 Тесты сервера и кабинета; workflow `task-board` включает новый набор.
+- [x] T7 Скриншоты 1280/390 (вне git), evidence.
+- [ ] T8 (следующая итерация) Загрузка файлов картинок; инструменты для агентов в `ops/tasks-mcp`.

@@ -1865,6 +1865,8 @@ async function handleEntityRoutes(request, response, url, cors) {
           requireTaskTransferPermission(request, sourceCompany, requestedCompany);
         }
         const values = validateEntity(config, body, true, row); const entries = Object.entries(values);
+        // Шаги приёмки (specs/101): старый CRUD тоже не закрывает задачу с открытыми шагами.
+        if (taskPatch && values.status === 'done') taskCoordination.assertCanFinish(row);
         const assignments = entries.map(([field]) => `${column(config, field)}=?`);
         const parameters = entries.map(([, value]) => value);
         if (config.table === 'contacts' && values.phone !== undefined) { assignments.push('normalized_phone=?');
