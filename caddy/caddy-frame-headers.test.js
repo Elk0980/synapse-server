@@ -18,13 +18,20 @@ function siteBlock(host) {
   throw new Error(`блок ${host} не закрыт`);
 }
 
-test('кабинет запрещает встраивание чужими доменами', () => {
+test('кабинет встраивается только своим доменом и панелью черновиков', () => {
   const block = siteBlock('synapse.synapsebusiness.ru');
   assert.match(block, /@not_miniapp not path \/miniapp\.html/);
-  const headers = /header @not_miniapp \{([\s\S]*?)\}/.exec(block);
-  assert.ok(headers, 'нет заголовков для страниц кабинета');
-  assert.match(headers[1], /X-Frame-Options SAMEORIGIN/);
-  assert.match(headers[1], /Content-Security-Policy "frame-ancestors 'self'"/);
+  const line = /header @not_miniapp (.+)/.exec(block);
+  assert.ok(line, 'нет заголовка для страниц кабинета');
+  assert.equal(line[1].trim(), `Content-Security-Policy "frame-ancestors 'self' https://panel.synapsebusiness.ru"`);
+  // X-Frame-Options не умеет список доменов и сломал бы превью панели.
+  assert.doesNotMatch(block, /^\s*(header .*)?X-Frame-Options \S/m);
+});
+
+test('превью панели встраивает именно разрешённый домен', () => {
+  const panel = fs.readFileSync(path.join(__dirname, '..', 'panel', 'index.html'), 'utf8');
+  assert.match(panel, /<iframe src="https:\/\/synapse\.synapsebusiness\.ru\//);
+  assert.ok(siteBlock('panel.synapsebusiness.ru'));
 });
 
 test('мини-приложение Telegram сохраняет собственные рамки', () => {

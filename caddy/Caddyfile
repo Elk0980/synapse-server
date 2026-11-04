@@ -387,13 +387,12 @@ synapse.synapsebusiness.ru {
   }
   @cabinet path /cabinet.html /cabinet/*
   header @cabinet Cache-Control "no-cache, must-revalidate"
-  # Кабинет и служебные страницы встраиваются только в страницы этого же домена.
+  # Весь домен (кабинет, публичные страницы, /leads, /content/*) встраивается только в страницы
+  # этого же домена и в превью панели черновиков panel.synapsebusiness.ru. X-Frame-Options не задан:
+  # он не умеет список доменов; современные браузеры применяют frame-ancestors.
   # miniapp.html задаёт собственный frame-ancestors для клиентов Telegram ниже.
   @not_miniapp not path /miniapp.html
-  header @not_miniapp {
-    X-Frame-Options SAMEORIGIN
-    Content-Security-Policy "frame-ancestors 'self'"
-  }
+  header @not_miniapp Content-Security-Policy "frame-ancestors 'self' https://panel.synapsebusiness.ru"
   # Telegram Mini App чата проекта: страница открывается внутри клиентов Telegram (мобильный WebView —
   # верхний уровень, Telegram Web — iframe с web.telegram.org). Только эта страница разрешает такие
   # рамки и внешний скрипт telegram.org; остальные страницы домена не затрагиваются.
