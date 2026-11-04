@@ -76,6 +76,13 @@ test('реальные content→CRM запросы editor: узкие зада�
     const days=Array.from({length:7},(_,i)=>({date:`2026-11-${String(9+i).padStart(2,'0')}`,platform:'vk',format:'post',role:'reach',topic:`Тема ${i+1}`,variants:{vk:{text:`Полный текст ${i+1}`}}}));
     assert.equal((await request('/media-mentor/plan?companyCode=alpha','PUT',{planRevision:0,briefRevision:1,days})).status,200);
     const snapshot=await call('mediaMentor',{},user,'alpha');assert.equal(snapshot.plan.days.length,7);
+    const context=await call('teamChatContext',{},user,'alpha');assert.equal(context.plan.length,7);assert.deepEqual(context.plan[0].scripts,['Полный текст 1']);
+    const tasksOnly={...user,permissions:['tasks.self.view']};
+    const restricted=await call('teamChatContext',{},tasksOnly,'alpha');assert.deepEqual(restricted.plan,[]);assert.ok(restricted.tasks.length>0);
+    assert.ok(!JSON.stringify(restricted).includes('Полный текст'));assert.ok(!JSON.stringify(restricted).includes('Тема 1'));
+    const raw=await request('/internal/people/teamChatContext?companyCode=alpha','GET',undefined,{...editor,permissions:['tasks.self.view']});
+    assert.equal(raw.status,200);assert.deepEqual(raw.body.plan,[]);
+    const ownerContext=await call('teamChatContext',{}, {...user,id:1,role:'owner',permissions:[]},'alpha');assert.equal(ownerContext.plan.length,7);
     const body={planRevision:1,briefRevision:1,scope:'plan',decision:'approved',comment:''};
     const approved=await call('planVariantsDecision',body,user,'alpha');assert.equal(approved.variants.filter(v=>v.status==='approved').length,7);assert.equal(approved.variants[0].actorId,2);
     const missing={...user,permissions:['tasks.self.view']};await assert.rejects(call('planVariantsDecision',body,missing,'alpha'),{status:403});

@@ -1,7 +1,7 @@
 'use strict';
 (() => {
   const $ = id => document.getElementById(id), node = (tag,text) => {const n=document.createElement(tag);n.textContent=text;return n;};
-  let context, company='', epoch=0, pending=null, busy=false, timer;
+  let context, company='', epoch=0, pending=null, busy=false, timer,visibilityKey='';
   const drafts=new Map(), messages=new Map();
   const fit=()=>document.documentElement.style.setProperty('--chat-height',String(window.visualViewport?.height || window.innerHeight)+'px');
   fit();window.visualViewport?.addEventListener('resize',fit);window.addEventListener('resize',fit);
@@ -33,13 +33,22 @@
     try {
       const before=older&&messages.size?`&before=${Math.min(...messages.keys())}`:'';
       const data=await api(path(code)+before);if(version!==epoch)return;
+      if(data.viewerId!==undefined&&data.viewerId!==context.user.id){messages.clear();render();$('review-queue')?.remove();$('compose').hidden=true;clearInterval(timer);$('notice').textContent='Сессия изменилась. Обновите страницу.';return;}
+      if(visibilityKey&&data.visibilityKey!==visibilityKey)messages.clear();
+      visibilityKey=data.visibilityKey||'';
+      let queue=$('review-queue');
+      if(data.reviewQueue){
+        if(!queue){queue=node('details','');queue.id='review-queue';document.querySelector('.conversation header').append(queue);}
+        queue.replaceChildren(node('summary',`Последние вопросы для проверки: ${data.reviewQueue.length}`));
+        for(const item of data.reviewQueue)queue.append(node('p',`№${item.message_id}: ${item.text}`));
+      }else queue?.remove();
       for(const m of data.messages)messages.set(m.id,m);render();
       if(older||!messages.size||!before)$('older').hidden=!data.hasMore;
       $('notice').textContent=pending?'Есть сохранённая отправка. Нажмите ➤, чтобы проверить её результат.':'';
-    }catch(e){if(version===epoch){$('notice').textContent=e.message;if(/отозван|Войдите/.test(e.message)){$('compose').hidden=true;messages.clear();render();clearInterval(timer);}}}
+    }catch(e){if(version===epoch){$('notice').textContent=e.message;if(/отозван|Войдите/.test(e.message)){$('compose').hidden=true;messages.clear();$('review-queue')?.remove();render();clearInterval(timer);}}}
   }
   async function select(code) {
-    if(busy)return;save();company=code;epoch++;pending=null;messages.clear();
+    if(busy)return;save();company=code;epoch++;pending=null;visibilityKey='';messages.clear();$('review-queue')?.remove();
     try{const old=JSON.parse(sessionStorage.getItem(storageKey(code))||'null');if(old){drafts.set(code,old.text);pending=old.pending;}}catch{}
     $('text').value=drafts.get(code)||'';$('text').readOnly=Boolean(pending);
     $('title').textContent=context.companies.find(c=>c.id===code).name;$('compose').hidden=false;
@@ -51,6 +60,7 @@
       try {
         const source=await api(path(code)+`&before=${Number(target[1])+1}`);
         if(version!==epoch)return;
+        if(source.viewerId!==undefined&&source.viewerId!==context.user.id)throw Error('Сессия изменилась. Обновите страницу.');
         for(const m of source.messages)messages.set(m.id,m);render();
       }catch(e){if(version===epoch)$('notice').textContent=e.message;}
     }

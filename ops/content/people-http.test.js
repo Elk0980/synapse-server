@@ -78,7 +78,12 @@ test('реальный HTTP: старая сессия, узкая роль, sel
   assert.equal((await request(scoped('/team-chat'),human,'POST',chatBody,false)).status,403);
   assert.equal((await request(scoped('/team-chat'),human,'POST',chatBody)).status,200);
   assert.equal((await request(scoped('/team-chat'),human,'POST',chatBody)).status,200);
-  const chatHistory=await(await request(scoped('/team-chat'),human)).json();assert.equal(chatHistory.messages.length,2);assert.equal(chatHistory.messages[1].text,'Передал вопрос Владу');
+  const chatHistory=await(await request(scoped('/team-chat'),human)).json();assert.equal(chatHistory.messages.length,2);assert.equal(chatHistory.messages[1].text,'Ответ пока недоступен. Вопрос сохранён для проверки.');
+  assert.equal(chatHistory.reviewQueue,undefined);
+  const ownerHistory=await(await request(scoped('/team-chat'),owner)).json();assert.equal(ownerHistory.reviewQueue.length,1);
+  assert.equal((await request('/content/people/members',owner,'POST',{login:'peer',displayName:'Коллега',password,companyCode:'synapse-business',staffRole:'human_executor'})).status,201);
+  const peer=await login('peer'),peerHistory=await(await request(scoped('/team-chat'),peer)).json();
+  assert.equal(peerHistory.messages.length,1);assert.equal(peerHistory.reviewQueue,undefined);
   assert.equal((await request('/content/people/team-chat?companyCode=alvi',human)).status,403);
   const beforeRevoke=calls;
   assert.equal((await request(`/content/admin/accounts/${user.id}/access`,owner,'PUT',{companies:['synapse-business'],permissions:[]})).status,200);

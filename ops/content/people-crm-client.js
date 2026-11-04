@@ -11,7 +11,9 @@ function createPeopleCrmClient({crmUrl,apiKey,fetchImpl=fetch}) {
       !user.companyCodes?.includes(companyCode)||user.role!=='owner'&&!user.permissions?.includes(permission))fail(403,'Недостаточно прав в выбранной компании');
     // Реальная роль и одна нужная операция; CRM повторно проверяет эти права,
     // компанию и назначение. Человек никогда не представляется владельцем.
-    const identity={v:1,userId:user.id,userName:user.displayName,role:user.role,permissions:[permission],companyCodes:[companyCode]};
+    const permissions=[permission];
+    if(action==='teamChatContext'&&user.permissions?.includes('content-plan.approve'))permissions.push('content-plan.approve');
+    const identity={v:1,userId:user.id,userName:user.displayName,role:user.role,permissions,companyCodes:[companyCode]};
     const readOnly=['mediaMentor','taskRecords','teamChatContext'].includes(action);
     const route=`/internal/people/${action}?companyCode=${encodeURIComponent(companyCode)}`+
       (action==='taskRecords'?`&offset=${Number(args.offset)||0}`:'');
