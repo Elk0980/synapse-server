@@ -614,6 +614,11 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     <p class="no-projects" id="no-projects" role="status" hidden>Для учётной записи не настроены проекты</p>
     <nav class="nav" aria-label="Разделы кабинета">
       <a class="nav-link" href="#home" data-view-link="home">Главная</a>
+      <a class="nav-link" id="hugh-link" href="#hugh" data-view-link="hugh">Хью</a>
+      <a class="nav-link" id="tasks-link" href="#tasks" data-view-link="tasks">
+        Задачи <span class="nav-badge" id="tasks-badge" hidden></span>
+      </a>
+      <!-- №98: меню «Контент» и «Настройки»; оболочка ставит «Контент» после «Главной», а «Хью» превращает в «Чаты». -->
       <button class="nav-category" id="content-category" type="button" aria-expanded="false" aria-controls="content-menu" hidden>Контент</button>
       <div class="subnav" id="content-menu" hidden>
         <a class="nav-link" href="#content/plan" data-view-link="content-plan" data-view-also="media-mentor">Контент-план</a>
@@ -623,10 +628,6 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
         <a class="nav-link" href="#content/connections" data-view-link="content-connections">Подключения</a>
         <a class="nav-link" href="#content/stats" data-view-link="content-stats" data-view-also="content-factory-stats media-mentor-rollout">Статистика</a>
       </div>
-      <a class="nav-link" id="tasks-link" href="#tasks" data-view-link="tasks">
-        Задачи <span class="nav-badge" id="tasks-badge" hidden></span>
-      </a>
-      <a class="nav-link" id="hugh-link" href="#chats" data-view-link="chats" data-view-also="hugh">Чаты</a>
       <a class="nav-link" id="settings-link" href="#settings" data-view-link="settings" data-view-also="settings-content">Настройки</a>
       <button class="nav-category" id="crm-category" type="button" aria-expanded="false"
         aria-controls="crm-menu">CRM</button>
@@ -1089,13 +1090,22 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   // project-chat.js загружается после hugh.js: общий чат проекта регистрирует вид «hugh».
   // Личная переписка владельца по проектам живёт в owner-private-chat.js и ходит
   // по собственному маршруту /content/owner-chat с серверной проверкой владельца.
-  const cabinetAssets = ["module-registry", "platform-links", "home", "task-overview", "task-board", "tasks", "company-information", "reviews", "studio-journey", "leads", "deals", "clients", "chat", "hugh", "project-chat", "analytics",
-    "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking", "sites", "settings", "client-dialogs", "site-orders", "account", "company-team", "trademarks", "campaigns", "autoposting", "media-mentor-materials", "media-mentor-rules", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "telegram-sources", "telegram-sources-view", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial", "content-settings"];
-  const cabinetStyles = ["reviews", "analytics", "ad-platforms", "platform-demand", "social-stats", "deals", "home", "chat", "hugh", "project-chat", "settings", "client-dialogs", "site-orders", "trademarks", "sites", "campaigns", "company-information", "autoposting", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial", "task-board", "task-board-shell", "shell", "content-settings"];
+  const cabinetAssets = ["platform-links", "home", "task-overview", "task-board", "tasks", "company-information", "reviews", "studio-journey", "leads", "deals", "clients", "chat", "hugh", "project-chat", "analytics",
+    "ad-platforms", "platform-demand", "social-stats", "hypotheses", "competitors", "calltracking", "sites", "settings", "client-dialogs", "site-orders", "account", "company-team", "trademarks", "campaigns", "autoposting", "media-mentor-materials", "media-mentor-rules", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "telegram-sources", "telegram-sources-view", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "module-guide", "menu-preferences", "deal-orders", "commercial"];
+  const cabinetStyles = ["reviews", "analytics", "ad-platforms", "platform-demand", "social-stats", "deals", "home", "chat", "hugh", "project-chat", "settings", "client-dialogs", "site-orders", "trademarks", "sites", "campaigns", "company-information", "autoposting", "media-mentor", "actor-onboarding", "actor-workspace", "media-mentor-rollout", "content-factory", "hugh-providers", "owner-private-chat", "vk-tools", "vk-community", "studio-journey", "workspace", "deal-orders", "commercial", "task-board", "task-board-shell"];
   document.write(cabinetStyles.map((asset) =>
     `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
   ).join(""));
   document.write(cabinetAssets.map((asset) =>
+    `<script src="cabinet/${asset}.js?v=${window.SB_CABINET_ASSET_VERSION}"><\/script>`
+  ).join(""));
+  // №98, контракт А (specs/098-content-shell): реестр модулей и экраны раздела «Контент».
+  // Новые модули добавляются только в эти два списка; module-registry всегда первым.
+  const shellAssets = ["module-registry", "content-settings"];
+  const shellStyles = ["shell", "content-settings"];
+  document.write(shellStyles.map((asset) =>
+    `<link rel="stylesheet" href="cabinet/${asset}.css?v=${window.SB_CABINET_ASSET_VERSION}">`
+  ).join("") + shellAssets.map((asset) =>
     `<script src="cabinet/${asset}.js?v=${window.SB_CABINET_ASSET_VERSION}"><\/script>`
   ).join(""));
 </script>
@@ -1547,14 +1557,14 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
   const hasPermission = (permission) => identity?.role === "owner" ||
     identity?.permissions.includes(permission);
   const permittedView = (value) => {
+    if (value === "telegram-sources") return !!selectedProject() && hasPermission("autoposting.view");
+    if (["system-settings", "catalog", "finance", "vk-community", "site-orders"].includes(value)) return identity?.role === "owner";
+    if (["company-information", "autoposting"].includes(value)) return identity?.role === "owner" || identity?.permissions?.includes(value + ".view");
     if (["content-plan", "content-shooting", "content-materials", "content-connections", "content-stats"].includes(value)) {
       return !!selectedProject() && (hasPermission("autoposting.view") || hasPermission("content-plan.approve"));
     }
     if (value === "chats") return allowedProjects.length > 0;
     if (value === "settings-content") return !!selectedProject() && (hasPermission("settings.view") || hasPermission("autoposting.view") || hasPermission("content-plan.approve"));
-    if (value === "telegram-sources") return !!selectedProject() && hasPermission("autoposting.view");
-    if (["system-settings", "catalog", "finance", "vk-community", "site-orders"].includes(value)) return identity?.role === "owner";
-    if (["company-information", "autoposting"].includes(value)) return identity?.role === "owner" || identity?.permissions?.includes(value + ".view");
     // Медиа-наставник переиспользует право раздела публикаций: новых прав не заводим.
     if (["media-mentor", "media-mentor-rollout", "content-factory-settings", "content-factory-stats"].includes(value)) return identity?.role === "owner" || identity?.permissions?.includes("autoposting.view");
     if (value === "actor-onboarding") return identity?.role === "owner" || identity?.permissions?.includes("actor-onboarding.self") || identity?.permissions?.includes("actor-onboarding.manage");
@@ -1643,6 +1653,16 @@ dialog { max-width: min(540px, calc(100vw - 32px)); border: 0; border-radius: 18
     button.setAttribute("aria-expanded", "true");
     menu.hidden = false;
   };
+  // №98: порядок меню «Главная → Контент → Задачи → Чаты → Настройки»; «Хью» становится «Чатами».
+  // Делается здесь, чтобы не трогать соседние строки меню (точечная вставка в общий файл).
+  (() => {
+    const home = document.querySelector('.nav [data-view-link="home"]'), chats = byId("hugh-link");
+    home.after(byId("content-category"), byId("content-menu"));
+    chats.setAttribute("href", "#chats");
+    Object.assign(chats.dataset, {viewLink: "chats", viewAlso: "hugh"});
+    chats.textContent = "Чаты";
+    byId("tasks-link").after(chats);
+  })();
   let moduleController = null;
   // Модуль не зарегистрирован, а прежний экран есть — показываем его под тем же пунктом меню.
   const effectiveView = (view) => {
