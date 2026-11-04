@@ -37,3 +37,16 @@
   открывается pdf-lib. Суфлёр 390/1440: без горизонтальной прокрутки, 0 ошибок страницы.
   Снимки вне git: `scratchpad/shots/c-prompter/*`, `scratchpad/shots/c/share.{png,pdf}`.
 - В jsdom canvas нет — кнопки PNG/PDF показывают честный отказ (проверено тестом).
+
+## (г) раскадровка и эскиз — 05.11
+- `node --test ops/content/shooting-sketch.test.js`: 2/2 PASS — вызов `https://api.openai.com/v1/images/generations`
+  (`gpt-image-1`, 1024×1536, quality low) ключом из `runtimeProviders()` (заглушка `sk-SAMPLE`), файл эскиза
+  только своей компании (чужая — 404), лимит 2/сутки на компанию → 429, нет ключа → 503 без запроса,
+  403 «organization must be verified» → «нет права … Нужно от Влада», неофициальный хост не используется.
+  Вместе с `shooting.test.js`, `company-modules-access`, `compose-contract` — 13/13 PASS.
+- `node --test sites/synapse/cabinet/shooting-board.test.cjs`: 2/2 PASS — черновик из сценария (3 кадра,
+  вставка → «крупный план», реквизит в «важное»), сохранение `revision 0` с правкой ракурса, эскиз кадра 1
+  с репликой, пометка «🧪 ТЕСТОВАЯ ВЕРСИЯ» на каждом кадре; без ключа кнопки выключены, причина видна.
+- Playwright 390/1440, вкладка «Раскадровка»: без горизонтальной прокрутки, 0 ошибок. Снимки вне git:
+  `scratchpad/shots/d-board/*`.
+- Реальная генерация в OpenAI НЕ выполнялась (ключ не трогали): право ключа на изображения не проверено.

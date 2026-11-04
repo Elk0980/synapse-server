@@ -9,6 +9,7 @@ const crypto = require('node:crypto');
 const {pipeline} = require('node:stream/promises');
 const {COMPANIES} = require('./auth-store');
 const {createLocalStorage} = require('./shooting-storage');
+const {createSketches} = require('./shooting-sketch');
 
 const MiB = 1024 ** 2, GiB = 1024 ** 3;
 const MAX_FILE = 2 * GiB, CHUNK = 8 * MiB, MAX_CHUNK = 16 * MiB;
@@ -52,7 +53,7 @@ function signatureOk(mime, head) {
 }
 
 function createShooting({db, authStore, assetsDir, requireSession, requireCsrf, readJson, sendJson,
-  config = {...DEFAULTS, editors: []}, storage = createLocalStorage(path.join(assetsDir, 'shooting')), now = () => new Date()}) {
+  config = {...DEFAULTS, editors: []}, storage = createLocalStorage(path.join(assetsDir, 'shooting')), now = () => new Date(), providers = null, fetchImpl}) {
   db.exec(`CREATE TABLE IF NOT EXISTS shooting_uploads(
       id INTEGER PRIMARY KEY AUTOINCREMENT, company_code TEXT NOT NULL, idea_id TEXT NOT NULL, frame INTEGER,
       kind TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, disk_key TEXT NOT NULL UNIQUE,
@@ -63,6 +64,7 @@ function createShooting({db, authStore, assetsDir, requireSession, requireCsrf, 
       company_code TEXT NOT NULL, idea_id TEXT NOT NULL, status TEXT, board TEXT NOT NULL DEFAULT '[]',
       board_revision INTEGER NOT NULL DEFAULT 0, updated_at TEXT, updated_by TEXT, PRIMARY KEY(company_code, idea_id));`);
   const busy = new Set();
+  const sketches = createSketches({db, storage, providers, fetchImpl, dailyLimit: config.sketchDailyLimit ?? DEFAULTS.sketchDailyLimit, now});
   const iso = () => now().toISOString();
 
   function cabinet(request, code, edit) {
@@ -228,7 +230,7 @@ function createShooting({db, authStore, assetsDir, requireSession, requireCsrf, 
     const uploads = db.prepare("SELECT * FROM shooting_uploads WHERE company_code=? AND idea_id=? AND status IN ('stored','uploading') ORDER BY id")
       .all(code, idea).map((item) => view(item));
     return {reel: {ideaId: idea, ...summary(code, idea), board: JSON.parse(state?.board || '[]'), updatedAt: state?.updated_at || null,
-      updatedBy: state?.updated_by || ''}, uploads};
+      updatedBy: state?.updated_by || '', sketches: sketches.latest(code, idea), sketchStatus: sketches.status(code)}, uploads};
   }
 
   async function handle(request, response, url) {
@@ -284,6 +286,10 @@ function createShooting({db, authStore, assetsDir, requireSession, requireCsrf, 
     if ((match = /^\/reels\/([^/]+)\/status$/.exec(route)) && method === 'PUT') {
       return reply(200, {reel: setStatus(code, ideaId(match[1]), (await readJson(request)).status, actor)});
     }
+    if ((match = /^\/reels\/([^/]+)\/sketch$/.exec(route)) && method === 'POST') {
+      return reply(201, await sketches.generate(code, ideaId(match[1]), await readJson(request), actor));
+    }
+    if ((match = /^\/sketches\/(\d+)$/.exec(route)) && ['GET', 'HEAD'].includes(method)) return sendFile(request, response, sketches.file(code, match[1]));
     if (route === '/uploads' && method === 'POST') {
       const result = createUpload(code, await readJson(request), actor, ['take', 'draft']);
       return reply(result.status, {upload: result.upload});
