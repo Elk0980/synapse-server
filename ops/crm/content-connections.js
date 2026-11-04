@@ -1,14 +1,11 @@
 'use strict';
-/* Контент → Подключения. Только чтение уже сохранённого: никаких запросов к площадкам,
-   ключи не расшифровываются и наружу не выходят — отдаётся лишь «ключ есть / нет».
-   Статус считается по факту: 🟢 green — свежие данные из автоматического источника;
-   🟡 yellow — есть настройка, ссылка подключения, ручные/старые данные или подтверждение владельца;
-   🔴 red — ничего из этого нет. Ссылки — только типизированные из CRM (companyPublicLinks). */
+/* Контент → Подключения. Только чтение сохранённого, без сети; ключи — лишь «есть / нет». 🟢 — свежие данные
+   автоматического источника; 🟡 — настройка, ручные/старые данные, счётчик в исходниках сайта или слова владельца; 🔴 — ничего.
+   Ссылки — только типизированные из CRM (companyPublicLinks). */
 const { companyPublicLinks } = require('./company-links');
-const { createMetrikaSiteProbe } = require('./metrika-site-probe');
-/* Подтверждения владельца («подключено вне ЛК», напр. Метрика) — состояние клиента, в публичный
-   репозиторий не пишется: приходит из приватной настройки сервера CONTENT_CONNECTIONS_DECLARED (JSON
-   {"<компания>": {"metrika": {"by": "…", "date": "ГГГГ-ММ-ДД"}}}). Ошибка формата — пустой список. */
+const { createMetrikaSiteSource } = require('./metrika-site-source');
+/* Слова владельца («подключено вне ЛК») — приватная настройка CONTENT_CONNECTIONS_DECLARED, не репозиторий:
+   {"<компания>": {"metrika": {"by": "…", "date": "ГГГГ-ММ-ДД"}}}. Ошибка формата — пусто. */
 function declaredFromEnv(raw) {
   if (!raw) return {};
   try { const v = JSON.parse(raw); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch { return {}; }
@@ -52,7 +49,7 @@ const MARKER_DAYS = 7;
 /* Платные переходы Яндекса на сайт: utm_source Яндекса с платным utm_medium или yclid в адресе входа. */
 const PAID_YANDEX = "(lower(utm_source) IN ('yandex','yandex-direct','yandex_direct','direct.yandex','ya-direct') AND lower(utm_medium) IN ('cpc','ppc','paid','cpm','cpa')) OR landing_page LIKE '%yclid=%' OR page LIKE '%yclid=%'";
 
-function createContentConnections(db, { now = () => Date.now(), declared = {}, siteProbe = null } = {}) {
+function createContentConnections(db, { now = () => Date.now(), declared = {}, siteSource = null } = {}) {
   const tables = () => new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((r) => r.name));
   const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
 
@@ -62,8 +59,7 @@ function createContentConnections(db, { now = () => Date.now(), declared = {}, s
     const company = db.prepare('SELECT * FROM companies WHERE code=? COLLATE NOCASE AND is_deleted=0').get(code);
     if (!company) throw Object.assign(Error('Компания не найдена'), { status: 404 });
     const cc = company.code, has = tables(), since = isoDay(now() - (days - 1) * 86400000), markerSince = isoDay(now() - (MARKER_DAYS - 1) * 86400000);
-    const all = (sql, ...args) => db.prepare(sql).all(cc, ...args);
-    const one = (sql, ...args) => db.prepare(sql).get(cc, ...args);
+    const all = (sql, ...args) => db.prepare(sql).all(cc, ...args), one = (sql, ...args) => db.prepare(sql).get(cc, ...args);
     const links = companyPublicLinks({ code: cc, website_url: company.website_url, socials: company.socials }).links;
     const ownDeclared = Object.entries(declared || {}).find(([key]) => key.toLowerCase() === cc.toLowerCase())?.[1] || {};
 
@@ -114,13 +110,11 @@ function createContentConnections(db, { now = () => Date.now(), declared = {}, s
       if (p.id === 'yclients' && link && !/(^|\.)yclients\.com$/i.test(new URL(link).hostname)) settings.bookingIsNotYclients = true;
       const decl = ownDeclared[p.id] && typeof ownDeclared[p.id] === 'object' ? ownDeclared[p.id] : null;
       if (decl) facts.push(`Подключено со слов владельца (${decl.by || 'владелец'}, ${decl.date || 'дата не указана'}).`);
-      let counter = null;
-      if (p.siteCounter && !lastAny && links.website && siteProbe) {
-        counter = await siteProbe.probe(links.website).catch(() => null);
-        settings.siteCounter = counter ? { found: Boolean(counter.counterId), counterId: counter.counterId || null, checked: Boolean(counter.checked) } : null;
-        if (counter?.counterId) facts.push(`Счётчик Метрики ${counter.counterId} найден в коде сайта ${links.website}.`);
-        else if (counter?.checked) facts.push(`Счётчик Метрики в коде сайта ${links.website} не найден.`);
-        else if (counter) facts.push(`Сайт не проверен: ${counter.reason || 'нет ответа'}.`);
+      const counter = p.siteCounter && !lastAny && siteSource ? siteSource.find(cc) : null;
+      if (counter) {
+        settings.siteCounter = { found: Boolean(counter.counterId), counterId: counter.counterId };
+        facts.push(counter.counterId ? `Счётчик Метрики ${counter.counterId} есть в исходниках сайта (${counter.site}/${counter.file}).`
+          : `В исходниках сайта (${counter.site}) счётчик Метрики не найден.`);
       }
       const configured = Boolean(settings.statsAccount || settings.publishing || settings.community || decl || counter?.counterId);
       let status, text;
@@ -160,4 +154,4 @@ function createContentConnectionsHandler({ connections, companyModuleContext, se
   };
 }
 
-module.exports = { createContentConnections, createContentConnectionsHandler, declaredFromEnv, createMetrikaSiteProbe, PLATFORMS };
+module.exports = { createContentConnections, createContentConnectionsHandler, declaredFromEnv, createMetrikaSiteSource, PLATFORMS };

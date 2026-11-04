@@ -46,7 +46,7 @@ const { createSocialBaselines } = require('./social-baselines');
 const { createSocialAdapters } = require('./social-adapters');
 const { createTelegramChannelStatsClient } = require('./telegram-channel-stats');
 const { createSocialStatsHandler } = require('./social-stats-http');
-const { createContentConnections, createContentConnectionsHandler, declaredFromEnv, createMetrikaSiteProbe } = require('./content-connections');
+const { createContentConnections, createContentConnectionsHandler, declaredFromEnv, createMetrikaSiteSource } = require('./content-connections');
 const { createSocialAnalyticsCredentials } = require('./social-analytics-credentials');
 const { createSocialAnalyticsEvidence } = require('./social-analytics-evidence');
 const { createSocialOnlypultAnalytics } = require('./social-onlypult-analytics');
@@ -694,7 +694,7 @@ const handleSocialStats = createSocialStatsHandler({stats: socialStats, baseline
   analytics: socialAnalytics, companyMetrics: platformCompanyMetrics, companyModuleContext, readJson, send});
 const handleContentConnections = createContentConnectionsHandler({companyModuleContext, send,
   connections: createContentConnections(db, {declared: declaredFromEnv(process.env.CONTENT_CONNECTIONS_DECLARED),
-    siteProbe: process.env.CONTENT_CONNECTIONS_SITE_PROBE === '0' ? null : createMetrikaSiteProbe()})});
+    siteSource: createMetrikaSiteSource({sitesDir: process.env.CONTENT_CONNECTIONS_SITES_DIR || ''})})});
 function deliverLeadEmails() {
   return emailOutbox.drain().catch(() => {
     // Do not expose SMTP responses or contact details in service logs.

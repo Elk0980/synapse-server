@@ -7,13 +7,7 @@ const { spawn } = require('node:child_process'), { once } = require('node:events
 const { randomBytes } = require('node:crypto'), { DatabaseSync } = require('node:sqlite');
 const { createAuthStore } = require('./auth-store'), { hashPassword } = require('./passwords');
 
-async function freePort() {
-  const server = net.createServer();
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const { port } = server.address();
-  await new Promise((resolve) => server.close(resolve));
-  return port;
-}
+const freePort = () => new Promise((resolve) => { const s = net.createServer().listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => resolve(port)); }); });
 
 test('подключения через прокси: права, изоляция компании, только чтение', { timeout: 60000 }, async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'content-connections-proxy-')), children = [];
@@ -21,18 +15,13 @@ test('подключения через прокси: права, изоляци
     for (const child of children.reverse()) if (child.exitCode === null && child.signalCode === null) { const exited = once(child, 'exit'); child.kill(); await exited; }
     await fs.rm(directory, { recursive: true, force: true });
   });
-  const contentDb = path.join(directory, 'content.sqlite'), crmDb = path.join(directory, 'crm.sqlite');
-  const password = 'Local-connections-password', key = randomBytes(32).toString('hex');
-  const authDb = new DatabaseSync(contentDb);
-  const auth = createAuthStore(authDb, `owner:owner:${hashPassword(password)}`), owner = auth.getByLogin('owner');
+  const contentDb = path.join(directory, 'content.sqlite'), crmDb = path.join(directory, 'crm.sqlite'), password = 'Local-connections-password', key = randomBytes(32).toString('hex');
+  const authDb = new DatabaseSync(contentDb), auth = createAuthStore(authDb, `owner:owner:${hashPassword(password)}`), owner = auth.getByLogin('owner');
   for (const [login, companies, permissions] of [['poster', ['avokado'], ['autoposting.view']], ['analyst', ['avokado'], ['analytics.view']],
-    ['stranger', ['alvi'], ['autoposting.view', 'analytics.view']], ['crmonly', ['avokado'], ['crm.view']]]) {
-    auth.create(owner.id, { login, displayName: login, password, companies, permissions }, hashPassword(password));
-  }
+    ['stranger', ['alvi'], ['autoposting.view', 'analytics.view']], ['crmonly', ['avokado'], ['crm.view']]]) auth.create(owner.id, { login, displayName: login, password, companies, permissions }, hashPassword(password));
   authDb.close();
 
-  const crmPort = await freePort(), contentPort = await freePort();
-  const crmBase = `http://127.0.0.1:${crmPort}`, contentBase = `http://127.0.0.1:${contentPort}`;
+  const crmBase = `http://127.0.0.1:${await freePort()}`, contentBase = `http://127.0.0.1:${await freePort()}`;
   async function start(file, env, base) {
     let errors = '';
     const child = spawn(process.execPath, [file], { env: { ...process.env, ...env }, stdio: ['ignore', 'ignore', 'pipe'] });
@@ -44,19 +33,17 @@ test('подключения через прокси: права, изоляци
     }
     throw Error('Service not ready: ' + errors);
   }
-  await start(path.join(__dirname, '../crm/server.js'), { PORT: String(crmPort), DATABASE_PATH: crmDb, API_KEY: key, RATE_LIMIT_MAX: '10000',
+  await start(path.join(__dirname, '../crm/server.js'), { PORT: new URL(crmBase).port, DATABASE_PATH: crmDb, API_KEY: key, RATE_LIMIT_MAX: '10000',
     STRICT_ORIGIN: '', LEADS_SMTP_HOST: '', LEADS_SMTP_USER: '', LEADS_SMTP_PASSWORD: '', LEADS_NOTIFY_EMAIL: '',
-    CONTENT_CONNECTIONS_SITE_PROBE: '0',
     CONTENT_CONNECTIONS_DECLARED: '{"avokado":{"metrika":{"by":"Владелец","date":"2026-11-04"}}}' }, crmBase);
-  await start(path.join(__dirname, 'server.js'), { PORT: String(contentPort), DATABASE_PATH: contentDb, AUTH_USERS: '', API_KEY: '',
+  await start(path.join(__dirname, 'server.js'), { PORT: new URL(contentBase).port, DATABASE_PATH: contentDb, AUTH_USERS: '', API_KEY: '',
     CRM_URL: crmBase, CRM_API_KEY: key, SEED_DIR: directory, ASSETS_DIR: path.join(directory, 'assets'),
     SESSION_SECRET: randomBytes(32).toString('hex'), HUGH_RUNNER_URL: '', CHAT_URL: '', CHAT_API_KEY: '', CONTENT_PLAN_WORKER_ENABLED: '0' }, contentBase);
 
   async function request(base, route, { method = 'GET', body, headers = {} } = {}) {
     const response = await fetch(base + route, { method, headers: { ...headers, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
       body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(8000) });
-    const text = await response.text();
-    return { status: response.status, body: text ? JSON.parse(text) : null, headers: response.headers };
+    const text = await response.text(); return { status: response.status, body: text ? JSON.parse(text) : null, headers: response.headers };
   }
   const forged = Buffer.from(JSON.stringify({ v: 1, userId: 1, role: 'owner', permissions: [], companyCodes: ['alvi', 'avokado'] })).toString('base64url');
   for (const [code, socials] of [['avokado', [{ type: 'vk', url: 'https://vk.com/demo_avokado' }]], ['alvi', []]]) {
@@ -68,8 +55,7 @@ test('подключения через прокси: права, изоляци
   for (const login of ['owner', 'poster', 'analyst', 'stranger', 'crmonly']) {
     const signed = await request(contentBase, '/content/login', { method: 'POST', body: { login, password } });
     assert.equal(signed.status, 200, login);
-    const cookie = signed.headers.get('set-cookie').split(';')[0];
-    const profile = await request(contentBase, '/content/whoami', { headers: { cookie } });
+    const cookie = signed.headers.get('set-cookie').split(';')[0], profile = await request(contentBase, '/content/whoami', { headers: { cookie } });
     sessions[login] = { cookie, 'x-csrf-token': profile.body.csrfToken };
   }
   const through = (who, route, options = {}) => request(contentBase, '/content/crm/content-connections' + route, { ...options, headers: { ...sessions[who], ...options.headers } });

@@ -3,7 +3,8 @@
    Компании, ссылки и числа синтетические. */
 const test = require('node:test'), assert = require('node:assert/strict');
 const { DatabaseSync } = require('node:sqlite');
-const { createContentConnections, createContentConnectionsHandler, declaredFromEnv } = require('./content-connections');
+const { createContentConnections, declaredFromEnv } = require('./content-connections');
+const { createMetrikaSiteSource, counterIn, PUBLISHED_SITE_DIRS } = require('./metrika-site-source'), fs = require('node:fs'), path = require('node:path');
 
 const NOW = Date.parse('2026-11-04T12:00:00Z');
 function fixture() {
@@ -71,19 +72,32 @@ test('Директ: серверный признак — 🟢 за 7 дн., с�
   assert.equal(byId(await svc.list('demo-b')).yandex_direct.facts.some((f) => /рекламы Яндекса/.test(f)), false, 'визиты чужой компании не учитываются');
 });
 
-test('Метрика: счётчик на сайте компании — 🟡 «вне ЛК», не найден — 🔴; сайт берётся из CRM своей компании', async () => {
-  const asked = [];
-  const siteProbe = { probe: async (url) => { asked.push(url); return url === 'https://a.example/' ? { counterId: '112233', checked: true } : { counterId: null, checked: true }; } };
-  const db = fixture(); db.exec("UPDATE companies SET website_url='https://b.example/' WHERE code='demo-b'");
-  const svc = createContentConnections(db, { now: () => NOW, siteProbe });
+test('Метрика: счётчик в исходниках своего сайта — 🟡 «вне ЛК», нет сайта — 🔴; без сети', async (t) => {
+  const realFetch = globalThis.fetch; let network = 0; t.after(() => { globalThis.fetch = realFetch; });
+  globalThis.fetch = () => { network++; throw Error('сетевой вызов запрещён'); };
+  const siteSource = createMetrikaSiteSource({ sitesDir: path.join(__dirname, '../../sites'), dirs: { 'demo-a': 'avokado3', 'demo-b': 'alvi', 'demo-c': '../ops' } });
+  const db = fixture(); db.exec("INSERT INTO companies(id,code,name) VALUES(3,'demo-c','В'),(4,'demo-d','Г')");
+  const svc = createContentConnections(db, { now: () => NOW, siteSource });
   const a = byId(await svc.list('demo-a')), b = byId(await svc.list('demo-b'));
   assert.equal(a.metrika.status, 'yellow'); assert.equal(a.metrika.statusText, 'Подключено вне ЛК, не проверено системой');
-  assert.equal(a.metrika.settings.siteCounter.counterId, '112233'); assert.match(a.metrika.facts.join(' '), /112233.*a\.example/);
-  assert.equal(b.metrika.status, 'red'); assert.match(b.metrika.facts.join(' '), /не найден/);
-  assert.deepEqual(asked, ['https://a.example/', 'https://b.example/']);
+  assert.equal(a.metrika.settings.siteCounter.counterId, '112772817'); assert.match(a.metrika.facts.join(' '), /avokado3\/attribution\.js/);
+  assert.equal(b.metrika.settings.siteCounter.counterId, '112777602');
+  assert.doesNotMatch(JSON.stringify(await svc.list('demo-a')), /112777602|alvi/, 'счётчик и сайт другой компании не попадают в ответ');
+  assert.equal(byId(await svc.list('demo-c')).metrika.status, 'red', 'путь за пределы каталога сайтов не читается');
+  assert.equal(byId(await svc.list('demo-d')).metrika.status, 'red');
+  const noDir = createContentConnections(fixture(), { now: () => NOW, siteSource: createMetrikaSiteSource({ dirs: { 'demo-a': 'avokado3' } }) });
+  assert.equal(byId(await noDir.list('demo-a')).metrika.status, 'red', 'каталог не задан — источника нет');
   db.exec(`INSERT INTO external_stats VALUES('metrika','demo-a','2026-11-03','{"visits":5}')`);
-  const live = byId(await svc.list('demo-a'));
-  assert.equal(live.metrika.status, 'green'); assert.equal(asked.length, 2, 'при серверных данных сайт не опрашивается');
+  assert.equal(byId(await svc.list('demo-a')).metrika.status, 'green'); assert.equal(network, 0);
+});
+
+test('папки опубликованных сайтов совпадают с карточками site-store и существуют', () => {
+  const store = fs.readFileSync(path.join(__dirname, '../content/site-store.js'), 'utf8');
+  const published = [...store.matchAll(/\['[^']+', '([^']+)', '[^']+', 'published'/g)].map((m) => m[1]).sort();
+  assert.deepEqual(Object.keys(PUBLISHED_SITE_DIRS).sort(), published);
+  for (const dir of Object.values(PUBLISHED_SITE_DIRS)) assert.ok(fs.existsSync(path.join(__dirname, '../../sites', dir, 'index.html')), dir);
+  assert.equal(counterIn("ym(7788990, 'init', {})"), '7788990');
+  assert.equal(counterIn('const counterId = 123456;'), null, 'номер без загрузчика Метрики не засчитывается');
 });
 
 test('подтверждение владельца даёт 🟡, а не 🔴, и только своей компании', async () => {
@@ -97,8 +111,7 @@ test('подтверждение владельца даёт 🟡, а не 🔴,
 });
 
 test('ключи не выходят наружу, только «есть / нет»', async () => {
-  const svc = createContentConnections(fixture(), { now: () => NOW });
-  const json = JSON.stringify(await svc.list('demo-a'));
+  const json = JSON.stringify(await createContentConnections(fixture(), { now: () => NOW }).list('demo-a'));
   assert.doesNotMatch(json, /SECRET|ENVELOPE|encrypted/);
 });
 
@@ -110,24 +123,4 @@ test('без таблиц соседних модулей всё 🔴, без п
   await assert.rejects(svc.list('нет'), { status: 400 });
   await assert.rejects(svc.list('demo-z'), { status: 404 });
   await assert.rejects(svc.list('demo-c', { days: 0 }), { status: 400 });
-});
-
-test('HTTP: только GET, право публикаций или аналитики, чужая компания — 403', async () => {
-  const connections = createContentConnections(fixture(), { now: () => NOW });
-  const run = async (perms, code, method = 'GET') => {
-    let sent;
-    const handle = createContentConnectionsHandler({ connections, send: (r, status, payload, headers) => { sent = { status, payload, headers }; },
-      companyModuleContext: (req, c, permission) => {
-        if (!perms.includes(permission) || c !== 'demo-a') throw Object.assign(Error('Нет доступа'), { status: 403 });
-        return { company: { code: c } };
-      } });
-    try { await handle({ method }, {}, new URL('https://x/content-connections?companyCode=' + code)); } catch (e) { sent = { status: e.status }; }
-    return sent;
-  };
-  assert.equal((await run(['autoposting.view'], 'demo-a')).status, 200);
-  const viaAnalytics = await run(['analytics.view'], 'demo-a');
-  assert.equal(viaAnalytics.status, 200); assert.equal(viaAnalytics.headers['cache-control'], 'no-store');
-  assert.equal((await run(['crm.view'], 'demo-a')).status, 403);
-  assert.equal((await run(['autoposting.view', 'analytics.view'], 'demo-b')).status, 403);
-  assert.equal((await run(['autoposting.view'], 'demo-a', 'POST')).status, 405);
 });
