@@ -81,7 +81,10 @@ test('реальный HTTP: старая сессия, узкая роль, sel
   const chatHistory=await(await request(scoped('/team-chat'),human)).json();assert.equal(chatHistory.messages.length,2);assert.equal(chatHistory.messages[1].text,'Ответ пока недоступен. Вопрос сохранён для проверки.');
   assert.equal(chatHistory.reviewQueue,undefined);
   const ownerHistory=await(await request(scoped('/team-chat'),owner)).json();assert.equal(ownerHistory.reviewQueue.length,1);
-  assert.equal((await request('/content/people/members',owner,'POST',{login:'peer',displayName:'Коллега',password,companyCode:'synapse-business',staffRole:'human_executor'})).status,201);
+  // Existing-account fixture: temporary-password first login has its own HTTP suite.
+  assert.equal((await request('/content/admin/team',owner,'POST',{login:'peer',displayName:'Коллега',password,companyCode:'synapse-business',staffRole:'administrator'})).status,201);
+  const peerAccounts=await(await request('/content/admin/accounts',owner)).json(),peerId=peerAccounts.accounts.find(x=>x.login==='peer').id;
+  assert.equal((await request(`/content/people/members/${peerId}`,owner,'PUT',{companyCode:'synapse-business',staffRole:'human_executor'})).status,200);
   const peer=await login('peer'),peerHistory=await(await request(scoped('/team-chat'),peer)).json();
   assert.equal(peerHistory.messages.length,1);assert.equal(peerHistory.reviewQueue,undefined);
   assert.equal((await request('/content/people/team-chat?companyCode=alvi',human)).status,403);

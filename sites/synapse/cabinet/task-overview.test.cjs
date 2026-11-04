@@ -74,3 +74,12 @@ test('waiting prefix removal preserves the next action body and ignores ordinary
   for(const value of ['ВОПРОС → Владимир: другое','Действие ждёт Влада','  Обычный шаг  ']) assert.equal(api.stripWaitingPrefix(value),value);
   assert.equal(api.hasWaitingNextStep(task(1,{coordination:{nextAction:'ВОПРОС → Влад: действие'}})),true);assert.equal(api.hasWaitingNextStep(task(1,{coordination:{nextAction:'Обычный шаг'}})),false);
 });
+
+test('waiting today excludes completed, cancelled, future and next-step-only tasks in Bangkok',()=>{
+ const now=Date.parse('2026-11-05T00:00:00Z');
+ const base=task(1,{assignee_name:'Влад',due_date:'2026-11-05'});assert.equal(api.actionableWaiting(base,now),true);
+ for(const status of ['done','cancelled'])assert.equal(api.actionableWaiting({...base,status},now),false);
+ assert.equal(api.actionableWaiting({...base,due_date:'2026-11-06'},now),false);assert.equal(api.actionableWaiting({...base,due_date:''},now),true);
+ assert.equal(api.actionableWaiting(task(2,{coordination:{nextAction:'ждёт Влада: потом'}}),now),false);
+ assert.equal(api.actionableWaiting(task(2,{coordination:{blocker:'ждёт Влада: сейчас'}}),now),true);
+});

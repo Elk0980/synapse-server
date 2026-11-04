@@ -13,6 +13,13 @@
     catch { return ''; }
   };
   const linkedText = value => esc(value);
+  const waitingAge = since => {
+    const minutes=Math.max(0,Math.floor((Date.now()-Date.parse(since))/60000));
+    if(minutes<1)return 'Ждёт меньше минуты';
+    if(minutes<60)return `Ждёт ${minutes} мин`;
+    const hours=Math.floor(minutes/60);
+    return hours<24?`Ждёт ${hours} ч ${minutes%60} мин`:`Ждёт ${Math.floor(hours/24)} дн ${hours%24} ч`;
+  };
   const day = () => new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Bangkok', year:'numeric', month:'2-digit', day:'2-digit'}).format(new Date());
   const stamp = value => { const date = new Date(value); return Number.isFinite(date.getTime()) ? date.toLocaleString('ru-RU') : ''; };
   const options = (values, selected) => Object.entries(values).map(([value, label]) => `<option value="${esc(value)}"${String(value) === String(selected) ? ' selected' : ''}>${esc(label)}</option>`).join('');
@@ -93,7 +100,7 @@
       const model = helper.build(tasks.filter(task => matchesProject(task)));
       const waiting = model.waiting.length ? `<section class="tb-waiting" data-waiting><h2>Ждут Влада <span>${model.waiting.length}</span></h2><div>${model.waiting.map(task => {
         const since = typeof task.waiting_since === 'string' && Number.isFinite(Date.parse(task.waiting_since)) ? task.waiting_since : '';
-        return `<article class="tb-waiting-row"><button type="button" class="tb-waiting-open" data-task-open="${task.id}"><span class="tb-waiting-id">№${task.id} · ${esc(name(task.company_code))}</span><strong>${esc(displayTitle(task))}</strong></button><div class="tb-waiting-instructions"><p class="tb-waiting-text">${esc(task.coordination?.blocker || helper.waitingNeed(task))}</p>${task.coordination?.nextAction ? `<p class="tb-waiting-text"><b>Следующий шаг</b>\n${esc(task.coordination.nextAction)}</p>` : ''}${linksMarkup(task)}</div>${since ? `<time datetime="${esc(since)}">с ${esc(stamp(since))}</time>` : '<span class="tb-waiting-date">Время ожидания не указано</span>'}</article>`;
+        return `<article class="tb-waiting-row"><button type="button" class="tb-waiting-open" data-task-open="${task.id}"><span class="tb-waiting-id">№${task.id} · ${esc(name(task.company_code))}</span><strong>${esc(displayTitle(task))}</strong></button><div class="tb-waiting-instructions"><p class="tb-waiting-text">${esc(task.coordination?.blocker || helper.waitingNeed(task))}</p>${task.coordination?.nextAction ? `<p class="tb-waiting-text"><b>Следующий шаг</b>\n${esc(task.coordination.nextAction)}</p>` : ''}${linksMarkup(task)}</div>${since ? `<time datetime="${esc(since)}">${esc(waitingAge(since))}</time>` : '<span class="tb-waiting-date">Ждёт решения · начало не зафиксировано</span>'}</article>`;
       }).join('')}</div></section>` : '';
       if (state.view !== 'projects') return waiting;
       const help = `<details class="tb-how" data-board-guide><summary>Как читать доску</summary><p>Цель → Модули → Задачи → Этапы</p><p>Завершённая задача даёт 100%. Для остальных каждый подтверждённый этап даёт 25%: код, подключено, проверено, принято Владом. Отметки этапов сохраняются.</p><p>Процент модуля — среднее по уникальным задачам состава: непосредственные подзадачи, ссылки состава и задачи с указанием модуля в описании. Процент цели — среднее процентов её модулей с равным весом: 100% и 0% у двух модулей дают цели 50%. Вложенные задачи не заменяют этапы родительской задачи. Неподтверждённые этапы незавершённой задачи дают 0%.</p></details>`;
@@ -528,20 +535,36 @@
       }
       saveDraft(); form.elements.title.focus(); if (draft.title) searchDuplicates();
     }
-    const recover = async () => {
-      if (!alive || document.visibilityState === 'hidden') return;
-      if (taskSheet || createSheet) {
-        try { const data = await load(); if (!alive) return; ({tasks,products,agents} = data); notice('Доска обновлена. Открытый черновик сохранён.'); }
-        catch (error) { if (alive) notice(error.message,true); }
-      } else await render();
+    let recovery=null;
+    const recover = () => {
+      if (!alive || document.visibilityState === 'hidden') return Promise.resolve();
+      if(recovery)return recovery;
+      recovery=render().then(()=>{if(alive&&(taskSheet||createSheet))notice('Доска обновлена. Открытый черновик сохранён.');}).finally(()=>{recovery=null;});
+      return recovery;
     };
-    const pageShow = event => { if (event.persisted) void recover(); };
+    const pageShow = () => { void recover(); };
     const visibility = () => { if (document.visibilityState === 'visible') void recover(); };
+    const focus = () => { void recover(); };
+    let pull=null;
+    const touchStart=event=>{
+      if(taskSheet||createSheet||window.scrollY>0||event.touches?.length!==1||event.target.closest('input,textarea,button,a,select,[contenteditable]')){pull=null;return;}
+      pull={x:event.touches[0].clientX,y:event.touches[0].clientY,distance:0};
+    };
+    const touchMove=event=>{
+      if(!pull||event.touches?.length!==1)return;
+      const dy=event.touches[0].clientY-pull.y,dx=Math.abs(event.touches[0].clientX-pull.x);
+      pull.distance=dy>dx*2?dy:0;
+      if(pull.distance>20&&event.cancelable)event.preventDefault();
+    };
+    const touchEnd=()=>{const distance=pull?.distance||0;pull=null;if(distance>=75){notice('Обновляем доску…');void recover();}};
+    const touchCancel=()=>{pull=null;};
+    const refreshTimer=window.setInterval(()=>void recover(),45000);
+    container.addEventListener('touchstart',touchStart,{passive:true});container.addEventListener('touchmove',touchMove,{passive:false});container.addEventListener('touchend',touchEnd);container.addEventListener('touchcancel',touchCancel);
     const replySettled = event => { if (event.detail?.key === key) syncWaitingTask(event.detail.id); };
-    window.addEventListener('pageshow',pageShow); document.addEventListener('visibilitychange',visibility);
+    window.addEventListener('pageshow',pageShow);window.addEventListener('focus',focus); document.addEventListener('visibilitychange',visibility);
     window.addEventListener('sb-waiting-reply-settled',replySettled);
     mediaTheme?.addEventListener?.('change',applyTheme);
-    const controller = {render,openTask,destroy:() => { alive = false; ++sequence; ++detailSequence; taskSheet?.close(); createSheet?.close(); window.removeEventListener('pageshow',pageShow); window.removeEventListener('sb-waiting-reply-settled',replySettled); document.removeEventListener('visibilitychange',visibility); mediaTheme?.removeEventListener?.('change',applyTheme); document.body.classList.remove('tb-owner-theme-light','tb-owner-theme-dark'); delete container.dataset.tbTheme; controllers.delete(container); }};
+    const controller = {render,openTask,destroy:() => { alive = false; ++sequence; ++detailSequence; taskSheet?.close(); createSheet?.close(); window.removeEventListener('pageshow',pageShow);window.removeEventListener('focus',focus);window.clearInterval(refreshTimer);container.removeEventListener('touchstart',touchStart);container.removeEventListener('touchmove',touchMove);container.removeEventListener('touchend',touchEnd);container.removeEventListener('touchcancel',touchCancel); window.removeEventListener('sb-waiting-reply-settled',replySettled); document.removeEventListener('visibilitychange',visibility); mediaTheme?.removeEventListener?.('change',applyTheme); document.body.classList.remove('tb-owner-theme-light','tb-owner-theme-dark'); delete container.dataset.tbTheme; controllers.delete(container); }};
     controllers.set(container,controller); void render(initial); return controller;
   }
   window.SbTaskBoard = Object.freeze({mount});

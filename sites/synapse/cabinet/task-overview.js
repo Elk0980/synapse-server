@@ -7,6 +7,12 @@
   const waitingField = value => waitPrefix.test(normalized(value));
   const stripWaitingPrefix = value => String(value || '').replace(/^\s*(?:жд[её]т\s+влада|вопрос\s*→\s*влад)(?![\p{L}\p{N}_])(?:[^\S\r\n]*[:—–-])?[^\S\r\n]*/iu,'');
   const isWaiting = task => waitingField(task.coordination?.blocker) || waitingField(task.coordination?.nextAction) || normalized(task.assignee_name) === 'влад';
+  const actionableWaiting = (task,at=Date.now()) => {
+    const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(at));
+    return !['done','cancelled'].includes(task.status) && (!task.due_date || task.due_date<=today) &&
+      (waitingField(task.coordination?.blocker) || normalized(task.assignee_name)==='влад');
+  };
+
   const waitingNeed = task => {
     const coord = task.coordination || {};
     const value = waitingField(coord.blocker) ? coord.blocker : waitingField(coord.nextAction) ? coord.nextAction : coord.nextAction || title(task);
@@ -77,7 +83,7 @@
       const membership = modules.filter(module => module.allMembers.some(member => member.id === task.id));
       return {task,modules:membership,directions:membership,progress:progress(task),stage:stageText(task)};
     });
-    return {goals:goalModels,modules,directions:modules,structuralIds:[...structural],now,waiting:tasks.filter(isWaiting).sort((a,b) => String(a.waiting_since || '9999').localeCompare(String(b.waiting_since || '9999')) || a.id-b.id)};
+    return {goals:goalModels,modules,directions:modules,structuralIds:[...structural],now,waiting:tasks.filter(task=>actionableWaiting(task)).sort((a,b) => String(a.waiting_since || '9999').localeCompare(String(b.waiting_since || '9999')) || a.id-b.id)};
   }
-  window.SbTaskOverview = Object.freeze({build,isWaiting,waitingNeed,hasWaitingBlocker:task=>waitingField(task.coordination?.blocker),hasWaitingNextStep:task=>waitingField(task.coordination?.nextAction),stripWaitingPrefix,progress,stageText,title,descriptionField});
+  window.SbTaskOverview = Object.freeze({build,isWaiting,actionableWaiting,waitingNeed,hasWaitingBlocker:task=>waitingField(task.coordination?.blocker),hasWaitingNextStep:task=>waitingField(task.coordination?.nextAction),stripWaitingPrefix,progress,stageText,title,descriptionField});
 })();

@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const {JSDOM} = require('jsdom');
 const source = fs.readFileSync(__dirname + '/task-board.js','utf8');
 const settle = async () => { for (let i=0;i<12;i++) await new Promise(resolve => setImmediate(resolve)); };
-function fixture(role='owner', initial={view:'board'}) {
+function fixture(role='owner', initial={view:'board'},setup) {
   const dom = new JSDOM('<main id="board"></main>',{url:'https://example.test/cabinet.html#tasks',runScripts:'outside-only'});
   const w=dom.window,d=w.document,calls=[],interceptors={};
   const milestones = {code:{state:'confirmed',evidence:'https://example.test/review',checkedAt:'2026-01-01T00:00:00Z'},connected:{state:'pending'},verified:{state:'pending'},accepted:{state:'pending'}};
@@ -24,7 +24,7 @@ function fixture(role='owner', initial={view:'board'}) {
     if(name==='task_create')return replay?{created:false,task}:duplicates&&!args.force?{created:false,possible_duplicates:[task],possible_product_duplicates:[]}:{created:true,task};
     throw Error('Unexpected '+name);
   }};
-  w.eval(fs.readFileSync(__dirname+'/task-text.js','utf8'));w.eval(source);
+  setup?.(w);w.eval(fs.readFileSync(__dirname+'/task-text.js','utf8'));w.eval(source);
   const controller=w.SbTaskBoard.mount(d.getElementById('board'),ctx,initial);
   const input=(field,value)=>{field.value=value;field.dispatchEvent(new w.Event('input',{bubbles:true}));};
   const submit=form=>form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
@@ -178,7 +178,7 @@ test('owner overview orders waiting, guide, goal, active directions, future and 
 });
 test('waiting block hides when empty and never substitutes last update for an unknown start date',async()=>{
   const task=overviewTask(201,{coordination:{revision:1,blocker:'Пока без вопроса',nextAction:'',updatedAt:'2026-01-01T00:00:00Z',milestones:{}}});
-  const f=await overviewFixture([task]);try{assert.equal(f.d.querySelector('[data-waiting]'),null);task.assignee_name='Влад';await f.controller.render();assert.ok(f.d.querySelector('[data-waiting]'));assert.equal(f.d.querySelector('[data-waiting] time'),null);assert.match(f.d.querySelector('[data-waiting]').textContent,/Время ожидания не указано/);}finally{f.close();}
+  const f=await overviewFixture([task]);try{assert.equal(f.d.querySelector('[data-waiting]'),null);task.assignee_name='Влад';await f.controller.render();assert.ok(f.d.querySelector('[data-waiting]'));assert.equal(f.d.querySelector('[data-waiting] time'),null);assert.match(f.d.querySelector('[data-waiting]').textContent,/Ждёт решения · начало не зафиксировано/);}finally{f.close();}
 });
 test('waiting Yes and No add only explicit comments; unrelated blocker and next step are preserved',async()=>{
   const task=overviewTask(201,{assignee_name:'Влад',coordination:{revision:2,blocker:'Нужны данные клиента',nextAction:'ВОПРОС → Влад: выбрать вариант',milestones:{}}});
@@ -280,5 +280,18 @@ test('waiting instructions expose full blocker, next step and link buttons direc
  assert.equal(f.d.querySelector('img'),null);assert.equal(f.d.querySelector('a[href^="javascript:"]'),null);
  assert.equal(f.d.querySelector('[data-plan-form]').elements.blocker.value,blocker);
  for(const a of panel.querySelectorAll('a')){assert.equal(a.target,'_blank');assert.equal(a.rel,'noopener noreferrer');}
+ }finally{f.close();}
+});
+
+test('45s refresh, focus and pull update waiting while preserving open drafts; destroy clears timer',async()=>{
+ let tick,cleared=false;const f=fixture('owner',{view:'board'},w=>{
+ Object.defineProperty(w.document,'visibilityState',{configurable:true,value:'visible'});
+ w.setInterval=(callback,ms)=>{assert.equal(ms,45000);tick=callback;return 123;};w.clearInterval=id=>{if(id===123)cleared=true;};
+ });try{await settle();const before=f.refreshCount();tick();await settle();assert.equal(f.refreshCount(),before+1);
+ await f.controller.openTask(1);const draft=f.d.querySelector('[data-comment-form] textarea');f.input(draft,'Не потерять');tick();await settle();assert.equal(draft.value,'Не потерять');assert.ok(draft.isConnected);
+ f.d.querySelector('[data-sheet-close]').click();const count=f.refreshCount();f.w.dispatchEvent(new f.w.Event('focus'));await settle();assert.equal(f.refreshCount(),count+1);
+ const container=f.d.querySelector('#board'),event=(type,touches)=>{const e=new f.w.Event(type,{bubbles:true,cancelable:true});Object.defineProperty(e,'touches',{value:touches});container.dispatchEvent(e);};
+ const pulls=f.refreshCount();event('touchstart',[{clientX:20,clientY:10}]);event('touchmove',[{clientX:20,clientY:100}]);event('touchend',[]);await settle();assert.equal(f.refreshCount(),pulls+1);
+ f.controller.destroy();assert.equal(cleared,true);
  }finally{f.close();}
 });
