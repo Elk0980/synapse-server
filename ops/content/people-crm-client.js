@@ -1,11 +1,11 @@
 'use strict';
 const fail=(status,message)=>{throw Object.assign(Error(message),{status});};
 function createPeopleCrmClient({crmUrl,apiKey,fetchImpl=fetch}) {
-  const actions=new Set(['tasks_list','task_get','task_update','mediaMentor','taskRecords','planVariantsDecision']);
+  const actions=new Set(['tasks_list','task_get','task_update','teamChatTask','mediaMentor','taskRecords','planVariantsDecision']);
   return async function call(action,args,user,companyCode) {
     if(!actions.has(action)||!apiKey)fail(503,'Источник задач не настроен');
     const permission=['mediaMentor','planVariantsDecision'].includes(action)?'content-plan.approve':
-      action==='task_update'?'tasks.self.edit':'tasks.self.view';
+      ['task_update','teamChatTask'].includes(action)?'tasks.self.edit':'tasks.self.view';
     if(!user||!['owner','editor'].includes(user.role)||!Number.isSafeInteger(user.id)||user.id<1||
       typeof companyCode!=='string'||!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(companyCode)||
       !user.companyCodes?.includes(companyCode)||user.role!=='owner'&&!user.permissions?.includes(permission))fail(403,'Недостаточно прав в выбранной компании');

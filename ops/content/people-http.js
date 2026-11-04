@@ -1,6 +1,6 @@
 'use strict';
 const fail=(status,message)=>{throw Object.assign(Error(message),{status});};
-function createPeopleHttp({authStore,team,tasks,plan,notifications,runtime,transport,requireSession,requireCsrf,readJson,sendJson}) {
+function createPeopleHttp({authStore,team,tasks,chat,plan,notifications,runtime,transport,requireSession,requireCsrf,readJson,sendJson}) {
   return async function handle(request,response,url) {
     if(!/^\/content\/people(?:\/|$)/.test(url.pathname))return false;
     const session=requireSession(request),path=url.pathname.slice('/content/people'.length),method=request.method;
@@ -47,6 +47,8 @@ function createPeopleHttp({authStore,team,tasks,plan,notifications,runtime,trans
       fail(405,'Метод не поддерживается');
     }
     const code=company();fresh(code);
+    if(path==='/team-chat'&&method==='GET')return reply(200,chat.list(session.user.id,code,url.searchParams.get('before')));
+    if(path==='/team-chat'&&method==='POST')return reply(200,await chat.send(session.user.id,code,await read(code)));
     if(path==='/plan'&&method==='GET')return reply(200,await plan.get(session.user.id,code));
     if(path==='/plan/decision'&&method==='POST')return reply(200,await plan.decide(session.user.id,code,await read(code)));
     if(path==='/tasks'&&method==='GET')return reply(200,await tasks.list(session.user.id,code));

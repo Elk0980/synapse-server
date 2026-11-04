@@ -73,9 +73,16 @@ test('реальный HTTP: старая сессия, узкая роль, sel
   const rule={enabled:false,userId:user.id,timezone:'Asia/Irkutsk',metric:'pendingIdeas',weekStart:'2026-11-09',morningHour:9,eveningHour:18};
   assert.equal((await request(scoped('/friday-rule'),owner,'PUT',rule)).status,200);
   const preview=await request(scoped('/friday-preview'),owner,'POST');assert.equal(preview.status,200);assert.equal((await preview.json()).summary.count,0);
+  const chatBody={text:'Внутреннее обсуждение',clientMessageId:'http-chat-36'};
+  assert.equal((await request(scoped('/team-chat'),human,'POST',chatBody,false)).status,403);
+  assert.equal((await request(scoped('/team-chat'),human,'POST',chatBody)).status,200);
+  assert.equal((await request(scoped('/team-chat'),human,'POST',chatBody)).status,200);
+  const chatHistory=await(await request(scoped('/team-chat'),human)).json();assert.equal(chatHistory.messages.length,1);
+  assert.equal((await request('/content/people/team-chat?companyCode=alvi',human)).status,403);
   const beforeRevoke=calls;
   assert.equal((await request(`/content/admin/accounts/${user.id}/access`,owner,'PUT',{companies:['synapse-business'],permissions:[]})).status,200);
   assert.equal((await request(scoped('/tasks'),human)).status,403);assert.equal(calls,beforeRevoke);
   assert.equal((await request(scoped('/subscriptions'),human,'DELETE',{endpoint:subscription.endpoint})).status,403);
+  assert.equal((await request('/content/people/team-chat?companyCode=synapse-business',human)).status,403);
   assert.equal((await request('/content/people/context',human)).status,403);
 });

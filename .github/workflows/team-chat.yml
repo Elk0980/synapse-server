@@ -1,0 +1,18 @@
+name: team-chat
+on:
+  pull_request:
+    paths: ['ops/content/team-chat*', 'ops/content/people-*', 'ops/crm/team-chat*', 'ops/crm/people-http.js', 'sites/synapse/cabinet/team-chat*', '.github/workflows/team-chat.yml']
+permissions:
+  contents: read
+jobs:
+  isolated-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: ops/content
+      - run: node --test ops/content/team-chat.test.js ops/content/people-http.test.js ops/content/people-tasks.test.js ops/crm/team-chat.integration.test.js ops/crm/people-http.test.js
+      - run: NODE_PATH="$PWD/ops/content/node_modules" node --test sites/synapse/cabinet/team-chat.test.cjs

@@ -29,7 +29,7 @@
     <section id="workspace" hidden>
       <div class="workspace-head"><div><p class="eyebrow" id="person-name"></p><h1>Моя работа</h1></div><button id="refresh" type="button" aria-label="Обновить текущий проект">Обновить</button></div>
       <label class="project-label">Проект<select id="company" aria-label="Рабочий проект"></select></label>
-      <nav class="tabs" aria-label="Разделы"><button id="tab-tasks" type="button" aria-pressed="true">Задачи</button><button id="tab-plan" type="button" aria-pressed="false" hidden>План</button><button id="tab-settings" type="button" aria-pressed="false">Уведомления</button><button id="tab-owner" type="button" aria-pressed="false" hidden>Люди и правило</button></nav>
+      <nav class="tabs" aria-label="Разделы"><a href="team-chat.html">Рабочий чат</a><button id="tab-tasks" type="button" aria-pressed="true">Задачи</button><button id="tab-plan" type="button" aria-pressed="false" hidden>План</button><button id="tab-settings" type="button" aria-pressed="false">Уведомления</button><button id="tab-owner" type="button" aria-pressed="false" hidden>Люди и правило</button></nav>
       <section id="tasks-panel" aria-labelledby="tasks-heading"><div class="section-head"><h2 id="tasks-heading">Назначено вам</h2><span class="muted" id="task-count"></span></div><div id="task-list" class="task-list"></div></section>
       <section id="plan-panel" hidden aria-labelledby="plan-heading"><h2 id="plan-heading">Согласование контент-плана</h2><p class="muted">Проверьте полные тексты версий. Согласование не публикует материалы.</p><p id="plan-message" class="message" role="status" hidden></p><div id="plan-list"></div></section>
       <section id="settings-panel" hidden aria-labelledby="settings-heading">
