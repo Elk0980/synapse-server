@@ -2,7 +2,7 @@ const {createCommercial}=require('./commercial');
 'use strict';
 
 const http = require('node:http');
-const { createHash, randomUUID } = require('node:crypto');
+const { createHash, randomUUID, timingSafeEqual } = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 const { URL } = require('node:url');
 const { createEmailSettings } = require('./email-settings');
@@ -1424,8 +1424,20 @@ function takeRateLimit(request) {
   rateLimits.set(ip, recent);
 }
 
+// Сравнение секретов за постоянное время: сравниваются SHA-256 одинаковой длины,
+// поэтому ни длина, ни совпавший префикс ключа по времени ответа не угадываются.
+function sameSecret(value, expected) {
+  if (typeof value !== 'string' || typeof expected !== 'string' || !expected) return false;
+  const digest = (text) => createHash('sha256').update(text, 'utf8').digest();
+  return timingSafeEqual(digest(value), digest(expected));
+}
+
+function hasApiKey(request) {
+  return sameSecret(request.headers['x-api-key'], API_KEY);
+}
+
 function requireApiKey(request) {
-  if (request.headers['x-api-key'] !== API_KEY) fail(401, 'Неверный API-ключ');
+  if (!hasApiKey(request)) fail(401, 'Неверный API-ключ');
 }
 
 function crmIdentity(request) {
@@ -3184,10 +3196,15 @@ async function route(request, response) {
         { code: 'COMPANY_NOT_ACTIVE', field: 'companyCode' });
       checkPublicOrigin(request, company, url.pathname);
     }
+    // Публичная форма получает только номер заявки и признак дубля. Полная запись — только
+    // доверенным сервисам с API-ключом: иначе по телефону можно прочитать чужую заявку (№97).
+    const trusted = hasApiKey(request);
+    const leadResponse = (lead, deduplicated) => trusted
+      ? { ...serializeLead(lead), deduplicated } : { id: lead.id, deduplicated };
     const duplicate = getLeadByContact.get(normalized, companyCode);
     if (duplicate) {
       emailOutbox.enqueue(duplicate, {repeated: true});
-      send(response, 200, { ...serializeLead(duplicate), deduplicated: true }, cors);
+      send(response, 200, leadResponse(duplicate, true), cors);
       void deliverLeadEmails();
       return;
     }
@@ -3229,7 +3246,7 @@ async function route(request, response) {
       db.exec('ROLLBACK');
       throw error;
     }
-    send(response, 201, { ...serializeLead(row), deduplicated: false }, cors);
+    send(response, 201, leadResponse(row, false), cors);
     void deliverLeadEmails();
     return;
   }
@@ -3483,7 +3500,7 @@ function shutdown() {
   });
 }
 
-module.exports = { deriveSource };
+module.exports = { deriveSource, sameSecret };
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
