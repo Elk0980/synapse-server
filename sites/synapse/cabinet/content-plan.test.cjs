@@ -164,12 +164,12 @@ test('row edit keeps other fields and replaces caption; signoff posts own slot; 
   assert.deepEqual(a.opened.at(-1), ['hugh']);
 });
 
-test('approvers come from Настройки → Контент: names from candidates, honest note while server uses the stub', async () => {
+test('approvers come from Настройки → Контент: names from candidates, honest note when server fell back to the owner', async () => {
   const settings = { version: 2, canEdit: true, settings: { approverUserIds: [5, 7] }, candidates: [{ id: 5, name: 'SAMPLE Лена' }, { id: 7, name: 'SAMPLE Таня' }] };
   const a = api({ settings }); await a.mount();
   const block = a.root.querySelector('.cp-approve').textContent;
   assert.match(block, /Согласуют по «Настройкам → Контент»: SAMPLE Лена, SAMPLE Таня/);
-  assert.match(block, /Сервер пока принимает только отметку владельца/);
+  assert.match(block, /Сервер не принял выбранных согласующих/);
   a.root.querySelector('[data-cp="settings"]').click();
   assert.deepEqual(a.opened.at(-1), ['navigate', 'settings/content']);
   const b = api({ settings: 'missing', role: 'editor', permissions: ['autoposting.view'] }); await b.mount();
