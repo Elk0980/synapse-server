@@ -1,10 +1,10 @@
 'use strict';
 /* Маршруты «Материалов». Браузер приходит через content proxy (/content/crm/autoposting/reels…):
    proxy уже проверяет autoposting.view/edit для компании и CSRF; здесь права и компания проверяются повторно.
-   /internal/reel-materials/* — только по ключу сервиса без заголовка личности: это API агента монтажа. */
+   /internal/reel-materials/* — только по ключу сервиса без заголовка личности: API агента монтажа и лог для чата с Хью. */
 const fail=(status,message,code)=>{throw Object.assign(Error(message),{status,...(code?{details:{code}}:{})});};
 const REEL=/^\/autoposting\/reels(?:\/(\d+)(?:\/(edits|publication)(?:\/(\d+)\/(cancel))?)?)?$/;
-const INTERNAL=/^\/internal\/reel-materials\/(?:(queue)|edits\/(\d+)\/(claim)|reels\/(\d+)\/(versions))$/;
+const INTERNAL=/^\/internal\/reel-materials\/(?:(queue|hugh-log)|edits\/(\d+)\/(claim)|reels\/(\d+)\/(versions))$/;
 function createReelMaterialsHandler({materials,companyModuleContext,readJson,send,trustedService}){
   return async function handle(request,response,url){
     const headers={'cache-control':'no-store'};
@@ -13,7 +13,9 @@ function createReelMaterialsHandler({materials,companyModuleContext,readJson,sen
       if(!trustedService(request))fail(403,'Только служебный обработчик');
       const code=url.searchParams.get('companyCode')||'';
       let result;
-      if(internal[1]){if(request.method!=='GET')fail(405,'Метод не поддерживается');result=materials.queue(code||null);}
+      if(internal[1]){if(request.method!=='GET')fail(405,'Метод не поддерживается');
+        /* hugh-log: content забирает записи правок автора в его личный чат с Хью (компания обязательна). */
+        result=internal[1]==='queue'?materials.queue(code||null):materials.hughLog(code,url.searchParams.get('authorId'));}
       else if(request.method!=='POST')fail(405,'Метод не поддерживается');
       else if(internal[3])result=materials.claim(code,Number(internal[2]));
       else{const body=await readJson(request);result=materials.addVersion(code,Number(internal[4]),body,request.headers['x-agent-name']);}
