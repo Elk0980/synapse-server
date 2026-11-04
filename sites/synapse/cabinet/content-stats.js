@@ -11,6 +11,7 @@
   const ENGAGEMENT = ['likes', 'comments', 'shares', 'saves'];
   const DAILY = ['views', 'reach', 'likes', 'comments', 'follower_change'];
   const isoDay = (offset) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() + offset * 86400000));
+  const RUN = { ok: 'успешно', partial: 'частично', missing_access: 'нет доступа', unsupported: 'не поддерживается', failed: 'ошибка' };
   const state = { days: 30, tab: 'summary' };
 
   /* Метка по фактическим провайдерам строк периода и последнего lifetime-замера. */
@@ -43,7 +44,7 @@
     const dates = Object.keys(p.days || {}).sort().reverse();
     const missing = p.access?.missing?.length ? `<p class="cs-note">Чего не хватает: ${esc(p.access.missing.join('; '))}.</p>` : '';
     return `<section class="cs-platform" data-cs-platform="${id}"><h2>${esc(label)} ${badge(mode(p))}</h2>
-      <p class="cs-note">Подписчики: <b>${num(followers(p))}</b>${p.latest?.followers?.date ? ` на ${day(p.latest.followers.date)}` : ''}. Последний сбор: ${p.lastRun ? `${esc(day(p.lastRun.date))}, ${esc(p.lastRun.status)}` : 'не запускался'}.</p>${missing}
+      <p class="cs-note">Подписчики: <b>${num(followers(p))}</b>${p.latest?.followers?.date ? ` на ${day(p.latest.followers.date)}` : ''}. Последний сбор: ${p.lastRun ? `${esc(day(p.lastRun.date))}, ${esc(RUN[p.lastRun.status] || p.lastRun.status)}` : 'не запускался'}.</p>${missing}
       ${totals.length ? `<dl class="cs-totals">${totals.map(([m, v]) => `<div><dt>${esc(METRICS[m] || m)}</dt><dd>${num(v)}</dd></div>`).join('')}</dl>` : '<p class="cs-empty">За период данных нет.</p>'}
       ${dates.length ? `<div class="cs-table-wrap"><table class="cs-table cs-daily"><thead><tr><th>Дата</th>${DAILY.map((m) => `<th>${esc(METRICS[m])}</th>`).join('')}</tr></thead><tbody>
         ${dates.map((d) => `<tr><th scope="row">${day(d)}</th>${DAILY.map((m) => `<td data-label="${esc(METRICS[m])}">${num(p.days[d][m]?.value)}${p.days[d][m]?.provider === 'manual' ? ' <small>ручн.</small>' : ''}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : ''}</section>`;

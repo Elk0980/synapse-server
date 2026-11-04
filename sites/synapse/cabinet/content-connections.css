@@ -2,11 +2,13 @@
 .cc-root, .cs-root { display: grid; gap: 14px; min-width: 0; }
 .cc-summary { margin: 0; font-weight: 600; }
 .cc-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
-.cc-card { border: 1px solid var(--line, #dfe3ea); border-left-width: 5px; border-radius: 12px; padding: 12px 14px; background: var(--surface, #fff); display: grid; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.cc-card { border: 1px solid var(--line, #dfe3ea); border-left-width: 5px; border-radius: 12px; padding: 12px 14px; background: var(--surface, #fff); display: grid; gap: 6px; align-content: start; min-width: 0; overflow-wrap: anywhere; }
 .cc-card header { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; justify-content: space-between; }
 .cc-card h3 { margin: 0; font-size: 1.05rem; }
 .cc-green { border-left-color: #2e9d58; } .cc-yellow { border-left-color: #d9a400; } .cc-red { border-left-color: #d64545; }
-.cc-pill { font-size: .85rem; padding: 2px 8px; border-radius: 999px; background: rgba(0, 0, 0, .05); }
+.cc-pill { font-size: .85rem; padding: 2px 8px; border-radius: 999px; background: var(--surface-soft, #f1f3f6); }
+.cc-root a, .cs-root a { color: var(--accent, #1f6feb); }
+.cs-root a.plain-button { color: var(--text, inherit); text-decoration: none; }
 .cc-meta, .cc-next, .cc-link { margin: 0; font-size: .9rem; }
 .cc-facts { margin: 0; padding-left: 18px; font-size: .88rem; color: var(--muted, #5b6472); }
 .cc-mode, .cs-badge { display: inline-block; font-size: .72rem; font-weight: 700; letter-spacing: .02em; padding: 1px 6px; border-radius: 4px; margin-right: 4px; vertical-align: middle; }
@@ -17,7 +19,7 @@
 .cs-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .cs-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
 .cs-tabs button { border: 1px solid var(--line, #dfe3ea); background: var(--surface, #fff); border-radius: 999px; padding: 6px 12px; cursor: pointer; font: inherit; }
-.cs-tabs button[aria-selected="true"] { background: var(--accent, #1f6feb); border-color: var(--accent, #1f6feb); color: #fff; }
+.cs-tabs button[aria-selected="true"] { background: var(--accent, #1f6feb); border-color: var(--accent, #1f6feb); color: var(--bg, #fff); }
 .cs-table-wrap { max-width: 100%; overflow-x: auto; }
 .cs-table { width: 100%; border-collapse: collapse; font-size: .92rem; }
 .cs-table th, .cs-table td { padding: 8px 10px; border-bottom: 1px solid var(--line, #dfe3ea); text-align: right; }

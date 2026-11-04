@@ -11,7 +11,7 @@ const connections = (code) => ({ companyCode: code, days: 14, checkedAt: '2026-1
   { id: 'max', label: 'MAX', status: 'red', statusText: 'Не подключено', dataMode: 'none', lastDataDate: null, link: 'javascript:alert(1)', facts: ['<img src=x onerror=alert(1)>'], next: '' }] });
 const stats = (code) => ({ companyCode: code, from: '2026-10-06', to: '2026-11-04', socialAggregate: { views: 1500, likes: 30, comments: 5 }, platforms: {
   instagram: { totals: { views: 1000, reach: 700, likes: 20, comments: 5 }, latest: { followers: { value: 4200, date: '2026-11-04', provider: 'onlypult' } }, days: { '2026-11-04': { views: { value: 1000, provider: 'onlypult' } } } },
-  telegram: { totals: { views: 500, likes: 10 }, latest: {}, days: { '2026-11-03': { views: { value: 500, provider: 'manual' } } }, access: { missing: ['бот не администратор'] } },
+  telegram: { totals: { views: 500, likes: 10 }, latest: {}, days: { '2026-11-03': { views: { value: 500, provider: 'manual' } } }, access: { missing: ['бот не администратор'] }, lastRun: { date: '2026-11-04', status: 'missing_access' } },
   vk: { totals: {}, latest: {}, days: {}, access: { missing: ['аккаунт площадки не настроен в кабинете'] } } } });
 
 function setup({ perms = ['autoposting.view', 'analytics.view'], reply = null } = {}) {
@@ -69,6 +69,7 @@ test('Статистика: вкладка площадки, период, пр�
   await registered['content-stats'].mount(el, ctx);
   el.querySelector('[data-cs-tab="telegram"]').click();
   assert.match(el.querySelector('[data-cs-platform="telegram"]').textContent, /бот не администратор/);
+  assert.match(el.querySelector('[data-cs-platform="telegram"]').textContent, /04\.11\.2026, нет доступа/);
   assert.match(el.querySelector('.cs-daily').textContent, /ручн\./);
   const select = el.querySelector('[data-cs-days]'); select.value = '7'; select.dispatchEvent(new w.Event('change', { bubbles: true }));
   await new Promise((r) => setImmediate(r));
