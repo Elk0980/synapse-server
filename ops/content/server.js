@@ -662,7 +662,15 @@ async function proxyCrm(request, response, url, cors) {
   if (identity.role !== 'owner' && identity.companyCodes.length === 0) {
     fail(403, 'Аккаунту не назначена компания');
   }
-  if (identity.role !== 'owner' && !companyModule && !mentorRollout && !mentorPlan) {
+  // Контент → Подключения: только чтение, право публикаций ИЛИ аналитики в своей компании.
+  const contentConnections = crmPath === '/content-connections';
+  if (contentConnections) {
+    const code = url.searchParams.get('companyCode');
+    if (!code || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(code)) fail(400, 'Выберите компанию');
+    if (!readOnly) fail(405, 'Метод не поддерживается');
+    if (identity.role !== 'owner') requirePermission(request, identity.permissions.includes('autoposting.view') ? 'autoposting.view' : 'analytics.view', code.toLowerCase());
+  }
+  if (identity.role !== 'owner' && !companyModule && !mentorRollout && !mentorPlan && !contentConnections) {
     if (readOnly) {
       const permission = analyticsReadPath && identity.permissions.includes('analytics.view')
         ? 'analytics.view' : 'crm.view';
