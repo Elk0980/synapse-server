@@ -11,4 +11,7 @@
   (alvi → alvi, avokado → avokado3, palitra-love → palitra-love; сверяется тестом с site-store) в каталоге
   `CONTENT_CONNECTIONS_SITES_DIR` (только чтение). Сетевых запросов нет. Каталог не задан — источник выключен.
   Миграций нет.
-- Проверки: `node --test ops/crm/content-connections.test.js ops/content/content-connections-proxy.test.js`.
+- (б) Интерфейс: `sites/synapse/cabinet/content-connections.js`, `content-stats.js`, общий `content-connections.css`,
+  регистрация через `window.SynapseModules.register` (контракт А); в `cabinet.html` — только id в списках модулей.
+- Проверки: `node --test ops/crm/content-connections.test.js ops/content/content-connections-proxy.test.js`,
+  jsdom `sites/synapse/cabinet/content-connections.test.cjs`, Playwright 390/1440 (скрипт вне репозитория).
