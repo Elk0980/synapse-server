@@ -36,7 +36,8 @@ function createTeamChatAnswers({db,tasks,call,env=process.env,fetchImpl=fetch,no
     message_id INTEGER PRIMARY KEY REFERENCES team_chat_messages(id), status TEXT NOT NULL,
     payload TEXT NOT NULL DEFAULT '', review_payload TEXT NOT NULL DEFAULT '',
     model TEXT NOT NULL DEFAULT '', review_model TEXT NOT NULL DEFAULT '',
-    checked_at TEXT NOT NULL DEFAULT '', reason TEXT NOT NULL DEFAULT '', reply_id INTEGER);`);
+    checked_at TEXT NOT NULL DEFAULT '', reason TEXT NOT NULL DEFAULT '', reply_id INTEGER);
+    CREATE UNIQUE INDEX IF NOT EXISTS team_chat_answers_reply_idx ON team_chat_answers(reply_id) WHERE reply_id IS NOT NULL;`);
   const running=new Map(),stamp=()=>new Date(now()).toISOString();
   const row=id=>db.prepare('SELECT * FROM team_chat_answers WHERE message_id=?').get(id);
   async function bounded(work,ms) {
