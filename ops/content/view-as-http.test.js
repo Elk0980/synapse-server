@@ -65,7 +65,12 @@ test('view-as HTTP: owner, employee, forgery, binding, readonly, live permission
   assert.equal((await fetch(`http://127.0.0.1:${port}/content/whoami`,{headers:{'X-View-As':token}})).status,403);
   assert.equal((await request(`/content/admin/accounts/${id}/access`,owner,'PUT',{companies:['synapse-business'],permissions:[]})).status,200);
   assert.deepEqual((await(await viewed()).json()).permissions,[]);
-  assert.equal((await request(`/content/admin/accounts/${id}`,owner,'DELETE')).status,200);
-  assert.equal((await viewed()).status,403);
   assert.equal((await request('/content/whoami',owner)).status,200);
+});
+
+test('revoked target is rejected when an issued token is resolved',()=>{
+ const {createViewAs}=require('./view-as');let target={id:2,displayName:'Лена'};
+ const api=createViewAs({secret:'synthetic-test',authStore:{getById:()=>target},db:{prepare:()=>({run(){}})}});
+ const session={user:{id:1,role:'owner'},csrf:'synthetic-binding'},token=api.issue(session,2).token;
+ target=null;assert.throws(()=>api.resolve({method:'GET',headers:{'x-view-as':token}},session),e=>e.status===403&&e.code==='VIEW_AS_INVALID');
 });
