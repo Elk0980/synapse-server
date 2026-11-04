@@ -24,6 +24,10 @@ window.SynapseModules.register('content-shooting', {
 - Модуль, загруженный раньше реестра, кладёт `[id, definition]` в `window.SynapseModulesQueue = [...]`;
   реестр разбирает очередь при загрузке, а позже `SynapseModulesQueue.push([id, definition])` регистрирует сразу.
 - Пока модуль не зарегистрирован, на его месте заглушка «Скоро» без падений.
+- Свежая версия: реестр читает `cabinet/shell-version.json` (`{"commit":"<sha>"}`, `cache: 'no-store'`). Файл пишет
+  автовыпуск статики. Если commit отличается от `?v=` в cabinet.html, файлы из `shellAssets`/`shellStyles` (кроме самого
+  реестра) подгружаются ещё раз с `?v=<commit>`. Если файла нет, остаётся прежняя `?v`. Поэтому файл модуля должен
+  спокойно выполняться повторно: только `register(...)`, без глобальных слушателей вне `mount`. Результат — `SynapseModules.shellVersion` (Promise).
 - `mount` вызывается при каждом входе на экран и при смене компании (перед этим `unmount`).
   Содержимое `el` после `unmount` оболочка очищает сама.
 
