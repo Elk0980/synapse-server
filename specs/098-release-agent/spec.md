@@ -35,3 +35,8 @@ Waiting должен быть виден на доске. Rollback snapshot/pres
 снимается точным «ПРИМЕНЕНО ВРУЧНУЮ <sha>» от доверенного Влада/Claude через №68.
 Сверить SHA/parent/task/paths, двигать cursor, сохранить proof, отчитаться на доске.
 Без proof cursor остаётся прежним; current SHA не приписывать вручную.
+
+Ревью307: для mixed manual+runtime подтверждение касается только manual-путей.
+Сервисы требуют обычного admission/CI/deploy, cursor не двигать до результата
+транзакции. Manual-only сохраняет прежний путь manual_applied. README*/CHANGELOG*
+в сервисах исключаются только для .md/.txt/файлов без расширения.

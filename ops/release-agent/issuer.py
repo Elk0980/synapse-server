@@ -91,7 +91,7 @@ def issue(config, sha, parent):
             'recipeSha256': hashlib.sha256(private_file(config['recipe'])).hexdigest(),
             'requiredChecks': config['requiredChecks']}
     plan = make_plan(config, body, changed)
-    if plan['outcome'] == 'runtime':
+    if plan['services']:
         runtime = load(config['runtimeShaFile'])['sha']
         cumulative = command(['git', '-C', config['mirror'], 'diff', '--name-only', '-z', runtime, sha]).decode().split('\0')
         receipts = [load(p)['body'] for p in (Path(config['stateDir']) / 'manual').glob('*.json')]

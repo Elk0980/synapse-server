@@ -289,6 +289,17 @@ class Engine:
         self.save(state)
         self.record(state)
 
+    def remember_manual(self, plan, receipt):
+        """Record applied infrastructure without consuming the pending runtime commit."""
+        state = self.state()
+        need(plan['parent'] == state.get('cursor', state['current']), 'OUT_OF_ORDER')
+        need(isinstance(receipt, dict) and all(receipt.get(k) == plan.get(k)
+             for k in ('sha', 'parent', 'taskId', 'manualPaths')), 'MANUAL_CONFIRMATION_MISMATCH')
+        receipts = state.setdefault('manualApplied', [])
+        if not any(saved['sha'] == receipt['sha'] for saved in receipts):
+            receipts.append(receipt)
+        self.save(state)
+
 
 class ComposeBackend:
     """Uses the FULL resolved managed recipe supplied after reconciliation.
@@ -463,7 +474,8 @@ def no_release_path(path, in_service=False):
     p = PurePosixPath(path)
     need(path and not p.is_absolute() and '..' not in p.parts and '\\' not in path, 'INVALID_CHANGED_PATH')
     if in_service:
-        return test_path(path) or p.name.upper().startswith(('README', 'CHANGELOG'))
+        documentation = p.name.upper().startswith(('README', 'CHANGELOG')) and p.suffix.lower() in ('', '.md', '.txt')
+        return test_path(path) or documentation
     return p.parts[0] in ('docs', 'specs', 'AI_HANDOFF') or p.suffix == '.md' or test_path(path)
 
 
@@ -565,9 +577,16 @@ def tick(config):
             except Exception:
                 queue_waiting(engine, outbox, classification)
                 return
-            engine.advance(classification, 'manual_applied', receipt=receipt)
-            report_terminal(engine.state(), outbox, expected_sha=sha)
-            return
+            if not classification['services']:
+                engine.advance(classification, 'manual_applied', receipt=receipt)
+                report_terminal(engine.state(), outbox, expected_sha=sha)
+                return
+            # Manual acknowledgement covers only infrastructure. Runtime still
+            # requires its ordinary admission/CI/build/health transaction.
+            engine.remember_manual(classification, receipt)
+            state = engine.state()
+            changed = [p for p in changed if p not in receipt['manualPaths']]
+            classification = make_plan(config, classification, [p for p in changed if p])
         if classification['outcome'] != 'runtime':
             engine.advance(classification, classification['outcome'])
             report_terminal(engine.state(), outbox, expected_sha=sha)

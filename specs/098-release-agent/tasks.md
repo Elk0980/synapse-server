@@ -44,3 +44,12 @@
 - [x] До №68 legacy author fail-closed; неправильный SHA/credential/отрицание denied.
 - [x] Учёт неизменённых уже применённых путей в следующих runtime PR и при rollback.
 - [ ] Свежие CI exact head и повторная приёмка Claude.
+
+## Исправление по307
+
+- [x] Mixed commit после manual confirmation идёт в обычный admission/deploy.
+- [x] Root issuer применяет manual receipts и для mixed plan с сервисами.
+- [x] Тест на настоящем локальном Git: без code acceptance не строить/cursor старый;
+      после допуска build/switch/health при старом cursor, затем verified или rollback.
+- [x] README/CHANGELOG JSON/JS runtime, исключения только .md/.txt/без расширения.
+- [ ] Свежие CI exact head и приёмка Claude.

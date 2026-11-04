@@ -1,3 +1,19 @@
+# Ревью307 — смешанный ручной/сервисный выпуск
+
+Локально39tests=36PASS/3Linux-onlySKIP. Новый тест создаёт настоящий локальный Git
+с двумя коммитами и origin/main; root confirm_manual и issuer.issue выполняются
+реально с синтетической доверенной доской, signed receipts/admission и SQLite.
+Проверены три варианта: только manual acknowledgement без code acceptance
+(нет build, cursor прежний), code acceptance+health PASS (обычный build/switch/health,
+cursor меняется в конце), code acceptance+health FAIL (прежний image rollback).
+На каждом шаге admission/capture/build/switch/health проверяется прежний cursor.
+Сохраняется proof ручных путей, issuer root умеет исключать их из mixed plan;
+успех снимает собственный ручной blocker. Дополнительный тест README JSON/CHANGELOG
+JS требует runtime, README/CHANGELOG .md/.txt/без расширения no_release.
+Свежие CI нового head проверяются отдельно; сервер/merge0.
+
+История прежних ревизий ниже.
+
 # Ревью298 — текущая ревизия
 
 Локально37tests=34PASS/3Linux-onlySKIP. Новые проверки: SKILL.md/docs-prompt внутри

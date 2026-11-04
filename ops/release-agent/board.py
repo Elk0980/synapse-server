@@ -106,6 +106,9 @@ class Outbox:
                     args = {'task_id': event['taskId'], 'revision': coordination['revision']}
                     if event['kind'] == 'connected':
                         args.update(stage='connected', evidence=event['marker'] + ' health PASS; commit=' + event['sha'], checked_at=event['at'])
+                        if coordination.get('blocker', '').startswith('ручное применение:') and \
+                                ('release:' + event['sha'] + ':') in coordination.get('nextAction', ''):
+                            args.update(blocker='', next_step=event['marker'] + ' Выпущено, проверка состояния пройдена')
                     else:
                         messages = {'rolled_back': 'Пропущен (откат образов); текущие данные оставлены без восстановления снимка',
                                     'rolled_back_snapshot': 'Пропущен (откат); БД восстановлена из снимка до возврата трафика',
