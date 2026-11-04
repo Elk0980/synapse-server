@@ -72,7 +72,9 @@ test('заявка без своих меток берёт первое каса
       name: 'Synthetic', contact: `+7000000020${phone}`, companyCode: 'stitch_a', ...over,
     }, false);
     assert.equal(result.status, 201);
-    return result.body;
+    assert.deepEqual(Object.keys(result.body).sort(), ['deduplicated', 'id'], 'публичный ответ без полей визита');
+    // Сохранённую заявку читаем доверенным запросом с ключом.
+    return (await request('GET', `/leads/${result.body.id}`)).body;
   };
   const fromMap = await lead({ clientId: 'v-2gis' });
   assert.equal(fromMap.source, '2gis');
@@ -81,6 +83,11 @@ test('заявка без своих меток берёт первое каса
   assert.equal(fromAd.source, 'yandex-direct');
   assert.equal(fromAd.utmMedium, 'cpc');
   assert.equal(fromAd.utmCampaign, 'cmp-1');
+  const keepsForm = await lead({ clientId: 'v-direct-ad', utmCampaign: 'form-campaign', utmMedium: 'social' });
+  assert.equal(keepsForm.source, 'yandex-direct', 'источник визита заполняет пустое поле');
+  assert.equal(keepsForm.utmCampaign, 'form-campaign', 'UTM формы не затираются визитом');
+  assert.equal(keepsForm.utmMedium, 'social');
+  assert.equal(keepsForm.utmContent, null);
   assert.equal((await lead({ clientId: 'v-typed' })).source, null, 'прямой заход остаётся прямым');
   assert.equal((await lead({ clientId: 'v-2gis', utmSource: 'vk' })).source, 'vk', 'UTM формы важнее визита');
   assert.equal((await lead({ clientId: 'v-2gis', source: 'Сайт' })).source, 'Сайт', 'явный источник не меняется');
@@ -94,5 +101,5 @@ test('заявка без своих меток берёт первое каса
   const map = dashboard.body.sourceStats.find((row) => row.source === '2gis');
   assert.equal(map.visits, 1);
   assert.equal(map.leads, 1, 'заявка в той же строке, что визит');
-  assert.equal(dashboard.body.sourceStats.find((row) => row.source === 'yandex-direct').leads, 1);
+  assert.equal(dashboard.body.sourceStats.find((row) => row.source === 'yandex-direct').leads, 2);
 });

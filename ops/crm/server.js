@@ -3213,13 +3213,16 @@ async function route(request, response) {
       utmTerm: optionalString(body.utmTerm, 'utmTerm'),
       referrer: optionalString(body.referrer, 'referrer'),
     };
-    // Сшивка с визитом (spec 112): без своих UTM, referrer и source заявка берёт первое касание
-    // того же посетителя этой компании за 30 дней. Явные данные формы всегда важнее.
+    // Сшивка с визитом (spec 112): без своих utmSource, referrer и source заявка берёт первое касание
+    // того же посетителя этой компании за 30 дней. Поля, заполненные формой, не перезаписываются.
     const firstTouch = companyCode && clientId && !sourceInput && !tags.utmSource && !tags.referrer
       ? leadFirstTouch.get(companyCode, clientId, new Date(Date.now() - FIRST_TOUCH_DAYS * 86400000).toISOString())
       : null;
     if (firstTouch) {
-      for (const [field, column] of Object.entries(FIRST_TOUCH_FIELDS)) tags[field] = firstTouch[column] || null;
+      // Данные формы важнее: из визита заполняются только пустые поля.
+      for (const [field, column] of Object.entries(FIRST_TOUCH_FIELDS)) {
+        if (!tags[field]) tags[field] = firstTouch[column] || null;
+      }
     }
     const { utmSource, referrer } = tags;
     const derived = deriveSource({ utmSource, referrer });

@@ -8,8 +8,9 @@
 
 - FR-1: в POST /leads с компанией и clientId, если в форме нет source, utmSource и referrer, берётся самый ранний
   визит этого clientId в этой компании за последние 30 дней.
-- FR-2: из визита копируются source, utm_source/medium/campaign/content/term и referrer.
+- FR-2: из визита заполняются только пустые поля формы: source, utm_source/medium/campaign/content/term и referrer.
   Визит с source=direct источник не задаёт, заявка остаётся прямой (null), как раньше.
+- FR-2a: публичный ответ формы не содержит полей визита. Формат ответа задаёт №97 (specs/113): `{id, deduplicated}`.
 - FR-3: явные данные формы (source, utmSource, referrer) всегда важнее визита. Визиты другой компании и старше 30 дней
   не используются.
 - FR-4: схема БД не меняется, миграций нет. Без clientId поведение прежнее.
