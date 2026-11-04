@@ -1,0 +1,9 @@
+[Unit]
+Description=Synapse backup at night in Bangkok
+[Timer]
+OnCalendar=*-*-* 02:15:00 Asia/Bangkok
+Persistent=true
+RandomizedDelaySec=5min
+Unit=backup-v2.service
+[Install]
+WantedBy=timers.target

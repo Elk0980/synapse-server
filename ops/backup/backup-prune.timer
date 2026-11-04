@@ -1,0 +1,8 @@
+[Unit]
+Description=Check verified D receipt without extending backup SSH permissions
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=15min
+Unit=backup-prune.service
+[Install]
+WantedBy=timers.target

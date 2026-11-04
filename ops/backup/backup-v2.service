@@ -1,0 +1,12 @@
+[Unit]
+Description=Encrypted complete Synapse backup (candidate task 58)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/usr/bin/python3 /usr/local/lib/synapse-backup/backup_v2.py create /etc/synapse-backup/server.json
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=45min
