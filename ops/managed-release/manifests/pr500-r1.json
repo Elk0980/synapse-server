@@ -1,0 +1,89 @@
+{
+  "approved_head": "8ea5d3ab9f1b755f659bf66bbb387e229ac6a3ec",
+  "dependency_changes": false,
+  "format": 1,
+  "merge_sha": "b2fb672fd03f5c48b902d485db7a7390f4661fed",
+  "no_business_smoke": true,
+  "parent": {
+    "merge": "9475a5d5c8975ad9cdb0b9648f7ccbce06fc8e5f",
+    "plan": "/opt/synapse/releases/tasks-mcp-20261103-r1/release-485-59-r2/release-plan.private.json",
+    "plan_sha256": "d8fcf03d69d7c16f0ab59c90390566e5f296fa21682281e522d510f000b43929",
+    "receipt": "/opt/synapse/releases/tasks-mcp-20261103-r1/release-485-59-r2/final-verified.redacted.json",
+    "receipt_sha256": "642ada6be28fc42e494b4ed935fcca0f5a0b77c1b3e30ee103f7e01a17a73ff9",
+    "source": "/opt/synapse/releases/tasks-mcp-20261103-r1/release485-onefile-r2.py",
+    "source_sha256": "db5d5648506260d6193a7eb7b275277ae1c6ddd7f3c31b7657d50d3224aedeeb"
+  },
+  "pr": 500,
+  "profile": "schema0",
+  "public_base": "0a618bedc5ad6746f1d84f7b13af6cfd33f1e94d",
+  "public_blobs": {
+    "ops/crm/server.js": {
+      "before": {
+        "bytes": 195052,
+        "git_blob": "ac2b23e0b3d9cf0b2ec9335a5f982006a8c1f3d8",
+        "sha256": "8899561801bad7b1110f5322951ec92c0392d7f8dcb36575b3accd6c3f97efd9"
+      },
+      "bytes": 196176,
+      "git_blob": "a1d81156180e53339f2880ba490553b1b6d2d457",
+      "sha256": "a1288e4f1e1275110d82c83132374291797fff26deb54794a751c6a424748562"
+    }
+  },
+  "public_queries": [
+    ""
+  ],
+  "publish_order": [],
+  "release_id": "pr500-r1",
+  "rules": {
+    "approved_head": "8ea5d3ab9f1b755f659bf66bbb387e229ac6a3ec",
+    "files": [
+      {
+        "edits": [
+          {
+            "after": "'use strict';\n\nconst http = require('node:http');\nconst { createHash, randomUUID, timingSafeEqual } = require('node:crypto');\nconst { DatabaseSync } = require('node:sqlite');\nconst { URL } = require('node:url');\nconst { createEmailSettings } = require('./email-settings');\n",
+            "after_sha256": "5702bff1b934627dfac58a76a562f7183cfcde034a47d571adfaa6fa71e4255b",
+            "before": "'use strict';\n\nconst http = require('node:http');\nconst { createHash, randomUUID } = require('node:crypto');\nconst { DatabaseSync } = require('node:sqlite');\nconst { URL } = require('node:url');\nconst { createEmailSettings } = require('./email-settings');\n",
+            "before_sha256": "99aedbbf7833d86831bb1e9629eebc135d5054b2c13d028f105fcad0eb1b4915"
+          },
+          {
+            "after": "  rateLimits.set(ip, recent);\n}\n\n// Сравнение секретов за постоянное время: сравниваются SHA-256 одинаковой длины,\n// поэтому ни длина, ни совпавший префикс ключа по времени ответа не угадываются.\nfunction sameSecret(value, expected) {\n  if (typeof value !== 'string' || typeof expected !== 'string' || !expected) return false;\n  const digest = (text) => createHash('sha256').update(text, 'utf8').digest();\n  return timingSafeEqual(digest(value), digest(expected));\n}\n\nfunction hasApiKey(request) {\n  return sameSecret(request.headers['x-api-key'], API_KEY);\n}\n\nfunction requireApiKey(request) {\n  if (!hasApiKey(request)) fail(401, 'Неверный API-ключ');\n}\n\nfunction crmIdentity(request) {\n",
+            "after_sha256": "5a332cb7052bf8d5292b378ebf9c8865780da2db76ff47cbf81077ca8806ceae",
+            "before": "  rateLimits.set(ip, recent);\n}\n\nfunction requireApiKey(request) {\n  if (request.headers['x-api-key'] !== API_KEY) fail(401, 'Неверный API-ключ');\n}\n\nfunction crmIdentity(request) {\n",
+            "before_sha256": "3c86089c317f43092cccc99c37eecaaaefd6f306eedee98c269ddc416f1556fe"
+          },
+          {
+            "after": "        { code: 'COMPANY_NOT_ACTIVE', field: 'companyCode' });\n      checkPublicOrigin(request, company, url.pathname);\n    }\n    // Публичная форма получает только номер заявки и признак дубля. Полная запись — только\n    // доверенным сервисам с API-ключом: иначе по телефону можно прочитать чужую заявку (№97).\n    const trusted = hasApiKey(request);\n    const leadResponse = (lead, deduplicated) => trusted\n      ? { ...serializeLead(lead), deduplicated } : { id: lead.id, deduplicated };\n    const duplicate = getLeadByContact.get(normalized, companyCode);\n    if (duplicate) {\n      emailOutbox.enqueue(duplicate, {repeated: true});\n      send(response, 200, leadResponse(duplicate, true), cors);\n      void deliverLeadEmails();\n      return;\n    }\n",
+            "after_sha256": "0dbc6f98b9bdde2c9104d85b2fe35e3f0b57b52b324ec59a6ea00e8e0d933067",
+            "before": "        { code: 'COMPANY_NOT_ACTIVE', field: 'companyCode' });\n      checkPublicOrigin(request, company, url.pathname);\n    }\n    const duplicate = getLeadByContact.get(normalized, companyCode);\n    if (duplicate) {\n      emailOutbox.enqueue(duplicate, {repeated: true});\n      send(response, 200, { ...serializeLead(duplicate), deduplicated: true }, cors);\n      void deliverLeadEmails();\n      return;\n    }\n",
+            "before_sha256": "ebd41a6214542efdd09eae351616cb3a33f8fb76fb5c72769985011270599332"
+          },
+          {
+            "after": "      db.exec('ROLLBACK');\n      throw error;\n    }\n    send(response, 201, leadResponse(row, false), cors);\n    void deliverLeadEmails();\n    return;\n  }\n",
+            "after_sha256": "f8877a15093ea7c42e2e3cbab28c947c9558df2d5b6a6bf282096bf3c198706d",
+            "before": "      db.exec('ROLLBACK');\n      throw error;\n    }\n    send(response, 201, { ...serializeLead(row), deduplicated: false }, cors);\n    void deliverLeadEmails();\n    return;\n  }\n",
+            "before_sha256": "d6c69a8789737f9f227b9141d1bd2d30ca7b3e68bbf08dfa23d93d58ca98023d"
+          },
+          {
+            "after": "  });\n}\n\nmodule.exports = { deriveSource, sameSecret };\n\nprocess.on('SIGTERM', shutdown);\nprocess.on('SIGINT', shutdown);\n",
+            "after_sha256": "215a78bf2c91abc4e0f775454d64fdd4107d828653491093206a1223b0b040e5",
+            "before": "  });\n}\n\nmodule.exports = { deriveSource };\n\nprocess.on('SIGTERM', shutdown);\nprocess.on('SIGINT', shutdown);\n",
+            "before_sha256": "c089a8640070987c786cf2608af852ec13343054e0021fecec1d9f7133bdbf70"
+          }
+        ],
+        "kind": "crm",
+        "operation": "exact_unique_hunks",
+        "path": "ops/crm/server.js",
+        "target": "/app/server.js"
+      }
+    ],
+    "format": 1,
+    "public_base": "0a618bedc5ad6746f1d84f7b13af6cfd33f1e94d"
+  },
+  "runtime_paths": [
+    "ops/crm/server.js"
+  ],
+  "schema_changes": 0,
+  "static_paths": [],
+  "target_services": [
+    "crm"
+  ]
+}
