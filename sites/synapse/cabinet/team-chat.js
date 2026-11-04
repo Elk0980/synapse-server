@@ -9,7 +9,7 @@
   const save=()=>{if(!company)return;drafts.set(company,$('text').value);try{sessionStorage.setItem(storageKey(company),JSON.stringify({text:$('text').value,pending}));}catch{}};
   async function api(path,body) {
     let r;
-    try { r=await fetch(`/content/people/${path}`,{method:body?'POST':'GET',credentials:'same-origin',cache:'no-store',redirect:'error',signal:AbortSignal.timeout(20000),headers:{'content-type':'application/json',...(body?{'x-csrf-token':context.csrfToken}:{})},...(body?{body:JSON.stringify(body)}:{})}); }
+    try { r=await fetch(`/content/people/${path}`,{method:body?'POST':'GET',credentials:'same-origin',cache:'no-store',redirect:'error',signal:AbortSignal.timeout(body?28000:20000),headers:{'content-type':'application/json',...(body?{'x-csrf-token':context.csrfToken}:{})},...(body?{body:JSON.stringify(body)}:{})}); }
     catch {throw Error(body?'Результат отправки не подтверждён. Повтор сохранённой отправки безопасен.':'Не удалось загрузить чат. Нажмите на проект для повтора.');}
     if(!r.ok)throw Error(r.status===401?'Войдите через «Моя работа» и вернитесь в чат.':r.status===403?'Доступ к проекту отозван.':body?'Результат отправки не подтверждён. Повтор сохранённой отправки безопасен.':'Не удалось загрузить чат. Нажмите на проект для повтора.');
     return r.json();
@@ -21,6 +21,7 @@
     for(const m of [...messages.values()].sort((a,b)=>a.id-b.id)) {
       const li=node('li','');li.id=`message-${m.id}`;if(m.user_id===context.user.id)li.className='own';
       li.append(node('strong',m.author_name),node('span',m.text),node('time',new Date(m.created_at).toLocaleString('ru-RU')));
+      if(m.answerAudit)li.append(node('small',`${m.answerAudit.model?m.answerAudit.model+' · ':''}${m.answerAudit.status==='approved'?'Проверено':m.answerAudit.status==='refused'?'Запрос отклонён':'Передано на проверку'}`));
       if(m.task_id)li.append(node('span',`Хью · задача №${m.task_id} на доске`));
       else if(m.command_state==='pending')li.append(node('span','Хью · создание задачи ещё не подтверждено'));
       list.append(li);
@@ -59,12 +60,12 @@
     e.preventDefault();if(busy||!company)return;
     const code=company,version=epoch;
     pending ||= {text:$('text').value,clientMessageId:crypto.randomUUID()};save();busy=true;
-    $('text').readOnly=true;$('compose').querySelector('button').disabled=true;
+    $('text').readOnly=true;$('compose').querySelector('[type=submit]').disabled=true;
     try {
       const data=await api(path(code),pending);if(version!==epoch)return;
-      messages.set(data.message.id,data.message);pending=null;$('text').value='';save();render();$('messages').scrollTop=$('messages').scrollHeight;$('notice').textContent='';
+      messages.set(data.message.id,data.message);pending=null;$('text').value='';save();await refresh();render();$('messages').scrollTop=$('messages').scrollHeight;$('notice').textContent='';
     }catch(e){if(version===epoch)$('notice').textContent=e.message;}
-    finally{busy=false;$('text').readOnly=Boolean(pending);$('compose').querySelector('button').disabled=false;}
+    finally{busy=false;$('text').readOnly=Boolean(pending);$('compose').querySelector('[type=submit]').disabled=false;}
   };
   $('text').oninput=save;$('older').onclick=()=>void refresh(true);
   $('back').onclick=()=>{if(!busy){save();document.querySelector('.shell').classList.remove('open');}};

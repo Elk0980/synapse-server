@@ -39,7 +39,12 @@ function createPeopleHandler({db,taskCoordination,mentor,identity,readJson,send}
     const plan=action==='mediaMentor'||action==='planVariantsDecision';
     const actor=access(request,code,plan?'content-plan.approve':['task_update','teamChatTask'].includes(action)?'tasks.self.edit':'tasks.self.view');
     let result;
-    if(action==='teamChatTask'&&method==='POST') {
+    if(action==='teamChatContext'&&method==='GET') {
+      const all=projectRows(code),map=new Map(all.map(row=>[row.id,row])),snapshot=mentor.get(code);
+      if(snapshot.companyCode!==code)fail(502,'Источник другого проекта');
+      result={companyCode:code,tasks:all.filter(row=>visible(row,map,actor,code)).map(row=>({id:row.id,title:row.title,status:row.status,due_date:row.due_date})),
+        plan:(snapshot.plan?.days||[]).map(day=>({date:day.date,topic:day.topic,scripts:Object.values(day.variants||{}).map(v=>v.text||'')}))};
+    } else if(action==='teamChatTask'&&method==='POST') {
       const body=await readJson(request),fresh=access(request,code,'tasks.self.edit');
       if(fresh.userId!==actor.userId)fail(403,'Доступ изменился');
       result=require('./team-chat-task').createTeamChatTask(db,code,fresh,body);

@@ -27,6 +27,10 @@ test('реальные content→CRM запросы editor: узкие зада�
   }
   const branch=await create('Своя ветка','person:2'),own=await create('Прямая задача','person:2',branch.id),inherited=await create('Неназначенная задача','',branch.id),foreign=await create('Чужая ветка','person:3'),foreignChild=await create('Закрытая подветка','person:3',branch.id),wrongProject=await create('Другой проект','person:2',null,'beta');
   const call=createPeopleCrmClient({crmUrl:base,apiKey:key});
+  const scopedContext=await call('teamChatContext',{},user,'alpha');
+  assert.equal(scopedContext.companyCode,'alpha');assert.deepEqual(scopedContext.tasks.map(t=>t.id),[branch.id,own.id,inherited.id]);
+  assert.ok(scopedContext.tasks.every(t=>!('description' in t)&&!('assignee_name' in t)));
+  await assert.rejects(call('teamChatContext',{},user,'beta'),{status:403});
   await t.test('identity, API key, компания и capability проверяются CRM до чтения',async()=>{
     const route='/internal/people/tasks_list?companyCode=alpha',body={project:'alpha',limit:100,offset:0};
     assert.equal((await request(route,'POST',body,editor,false)).status,401);

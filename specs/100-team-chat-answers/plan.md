@@ -1,0 +1,5 @@
+# План
+Переиспользовать people ACL/CRM scoped identity, текущие HUGH_RUNTIME_URL/CHAT_API_KEY и строгий /reply (actor-private audience, отдельные jobId). Узкий teamChatContext возвращает доступные задачи и allowlist полей плана, без паспорта/людей/комментариев/секретов.
+Аддитивная team_chat_answers хранит неизменный generation/review payload, фактические model/review_model, checked_at, результат/причину и уникальную связь исходного сообщения. Ответ пишется в существующую team_chat_messages транзакционно. Только явная отправка запускает обработку; нет фонового worker и догоняния истории.
+Контекст≤6с + генерация≤8с + review≤8с; единый deadline24с, browser28с; late result не публикуется. Недоступный runtime → durable handoff; никаких запасных провайдеров.
+Проверки: изоляция context/editor, runtime contract loopback, 3вопроса,10примеров review, модель/журнал, повторы/restart/отзыв, прежние core/DOM тесты, desktop390 на синтетике. Таблицу с private payload при откате не удалять; выпуск и live проверки вне PR.
