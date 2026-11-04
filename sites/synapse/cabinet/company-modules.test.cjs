@@ -62,3 +62,22 @@ test('не владелец не получает экран; ответ пре�
     assert.equal(target.textContent,'другая карточка');
   }finally{w.close();}
 });
+
+test('пустой список адресов: подтверждение отключения писем; отказ — без запроса; «в разработке» у переключателя',async()=>{
+  const {w,ui,target}=setup();const bodies=[];const asked=[];let answer=false;
+  w.confirm=(text)=>{asked.push(text);return answer;};
+  const d=data();d.modules[1].enabled=true;d.modules[1].version=1;
+  const crmQuery=async(path,query,options)=>{if(options?.method==='PUT')bodies.push(JSON.parse(options.body));return d;};
+  try{
+    await ui.render(target,{company:{code:'alvi'},crmQuery,csrfOptions:(method,body)=>({method,headers:{},body:JSON.stringify(body)}),escapeHTML:esc,identity:{role:'owner'}});
+    assert.equal(target.querySelector('[data-module=crm] [data-module-dev]').textContent,'в разработке');
+    assert.equal(target.querySelector('[data-module=analytics] [data-module-dev]'),null,'доступный модуль без подписи');
+    const card=target.querySelector('[data-module=crm]');
+    const box=card.querySelector('[data-param-inherit]');box.checked=false;box.dispatchEvent(new w.Event('change'));
+    card.querySelector('[data-param]').value='  ';
+    card.querySelector('[data-module-save]').click();await tick();
+    assert.equal(asked.length,1);assert.match(asked[0],/перестанут приходить/);assert.equal(bodies.length,0,'отказ — ничего не отправлено');
+    answer=true;card.querySelector('[data-module-save]').click();await tick();
+    assert.equal(bodies.length,1);assert.equal(bodies[0].params.leadEmailRecipients,'');
+  }finally{w.close();}
+});

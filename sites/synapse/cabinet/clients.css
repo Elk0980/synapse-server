@@ -257,3 +257,4 @@
 .company-module-enable { border-color: var(--accent); color: var(--accent); }
 .company-module-param input[type=text] { min-height: var(--cabinet-control-height, 44px); padding: 0 12px; border-radius: var(--cabinet-radius-sm, 10px); border: 1px solid var(--line); background: transparent; color: inherit; font: inherit; }
 .company-module-param input[type=text]:disabled { opacity: .55; }
+.company-module-dev { align-self: center; font-size: .85rem; padding: 2px 10px; border: 1px dashed var(--line); border-radius: 999px; opacity: .85; }

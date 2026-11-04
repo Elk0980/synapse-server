@@ -10,6 +10,8 @@
 
   const historyLine = (item, names, esc) => {
     const was = item.before ? (item.before.enabled ? 'включён' : 'выключен') : 'не настроен';
+    if (item.after.unreadable) return `<li><strong>${esc(names.get(item.moduleKey) || item.moduleKey)}</strong>: запись истории не читается
+      <span>${esc(item.actor)} · ${esc(new Date(item.at).toLocaleString('ru-RU'))}</span></li>`;
     const now = item.after.enabled ? 'включён' : 'выключен';
     const params = item.before && JSON.stringify(item.before.params) !== JSON.stringify(item.after.params) ? ' · параметры изменены' : '';
     return `<li><strong>${esc(names.get(item.moduleKey) || item.moduleKey)}</strong>: ${esc(was)} → ${esc(now)}${esc(params)}
@@ -41,6 +43,7 @@
       ${module.paramsSchema.map((field) => paramField(module, field, esc)).join('')}
       <div class="crm-actions">
         ${removed && !module.enabled ? '' : `<button type="button" class="plain-button${module.enabled ? '' : ' company-module-enable'}" data-module-toggle>${esc(action)}</button>`}
+        ${module.status === 'development' ? '<span class="company-module-dev" data-module-dev>в разработке</span>' : ''}
         ${module.paramsSchema.length ? '<button type="button" class="plain-button" data-module-save>Сохранить параметры</button>' : ''}
       </div>
       <p class="crm-error" role="alert" hidden></p></article>`;
@@ -72,10 +75,14 @@
         [input.dataset.param, input.disabled ? null : input.value.trim()]));
       const save = async (button, enabled) => {
         if (button.disabled || turn !== sequence) return;
+        const values = module.paramsSchema.length ? params() : {};
+        // Пустой список при снятом «как в прежних настройках» отключает письма компании — только после подтверждения.
+        if (enabled && values.leadEmailRecipients === ''
+          && !window.confirm('Письма о заявках этой компании перестанут приходить. Продолжить?')) return;
         button.disabled = true; error.hidden = true;
         try {
           const body = { enabled, version: module.version };
-          if (module.paramsSchema.length) body.params = params();
+          if (module.paramsSchema.length) body.params = values;
           const data = await crmQuery(`${path}/${encodeURIComponent(module.key)}`, query, csrfOptions('PUT', body));
           paint(data);
         } catch (failure) {

@@ -71,11 +71,12 @@ function createCompanyModules({ db, fail, getCatalog, now = () => new Date().toI
   function validateParams(key, value) {
     if (value === undefined) return {};
     if (!value || typeof value !== 'object' || Array.isArray(value)) bad('Параметры модуля — объект');
-    const schema = MODULE_PARAMS[key] || {};
+    const schema = Object.hasOwn(MODULE_PARAMS, key) ? MODULE_PARAMS[key] : {};
     const out = {};
     for (const [name, raw] of Object.entries(value)) {
       if (SECRET_NAME.test(name)) bad('Секреты в параметрах модуля не хранятся: SMTP и ключи настраиваются в настройках системы');
-      const field = schema[name];
+      // Только собственные поля схемы: __proto__, constructor, toString и т. п. — неизвестный параметр.
+      const field = Object.hasOwn(schema, name) ? schema[name] : null;
       if (!field) bad(`Неизвестный параметр модуля: ${name}`);
       if (raw === null) continue; // null — параметр не задан
       if (field.type === 'emailList') {
@@ -102,7 +103,7 @@ function createCompanyModules({ db, fail, getCatalog, now = () => new Date().toI
     }
     return byKey;
   }
-  const schemaJSON = (key) => Object.entries(MODULE_PARAMS[key] || {}).map(([name, field]) => ({ name, ...field }));
+  const schemaJSON = (key) => Object.entries(Object.hasOwn(MODULE_PARAMS, key) ? MODULE_PARAMS[key] : {}).map(([name, field]) => ({ name, ...field }));
   const moduleJSON = (item, row, bought) => ({ key: item.id, name: item.name, status: item.status, billing: item.billing,
     enabled: Boolean(row?.enabled), params: paramsOf(row), version: row?.version || 0,
     updatedBy: row?.updated_by || null, updatedAt: row?.updated_at || null,
@@ -117,8 +118,12 @@ function createCompanyModules({ db, fail, getCatalog, now = () => new Date().toI
     // Модуль удалён из каталога, но был включён — показываем, чтобы его можно было выключить.
     for (const [key, row] of rows) if (!catalogKeys.has(key)) modules.push({ ...moduleJSON({ id: key, name: key, status: 'removed', billing: null }, row, bought.get(key)) });
     const history = db.prepare('SELECT * FROM company_module_audit WHERE company_code = ? COLLATE NOCASE ORDER BY id DESC LIMIT 30').all(companyRow.code)
-      .map((row) => ({ id: row.id, moduleKey: row.module_key, at: row.at, actor: row.actor,
-        before: row.before_data ? JSON.parse(row.before_data) : null, after: JSON.parse(row.after_data) }));
+      .map((row) => {
+        // Повреждённая строка истории не роняет раздел: показывается без содержимого.
+        const parse = (text) => { try { return text ? JSON.parse(text) : null; } catch { return null; } };
+        return { id: row.id, moduleKey: row.module_key, at: row.at, actor: row.actor,
+          before: parse(row.before_data), after: parse(row.after_data) || { enabled: null, params: {}, unreadable: true } };
+      });
     return { companyCode: companyRow.code, companyName: companyRow.name, modules, history };
   }
 

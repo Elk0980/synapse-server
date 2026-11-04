@@ -16,3 +16,10 @@
 ## Converge
 
 FR1–FR8 покрыты кодом и тестами. Не выполнено: T8 (выпуск), T9 (перевод других функций на `companyModule`).
+
+## Правки по ревью (04.11)
+
+- `company-modules.test.js` 8/8 (новые: `__proto__`/`constructor`/`toString`/`hasOwnProperty` → 400 и ничего не сохраняется; повреждённая строка истории → `unreadable`, раздел читается; диагностика почты: адрес из модуля → `recipientConfigured`, `recipientSource: 'module'`, Авокадо без изменений).
+- `email-diagnostics*.test.js`, `email-settings*.test.js` — без изменений формы ответа (поле `recipientSource` только при переопределении модулем).
+- `sites/synapse/cabinet/company-modules.test.cjs` 4/4: подтверждение при пустом списке адресов (отказ — запрос не отправлен), подпись «в разработке» только у модулей в разработке.
+- `crm-permissions.test.js` 31/31. Полный ops/crm: 999, 997 pass, 2 fail (те же, что на чистом main). Кабинет+sites: 995, 992 pass, 3 fail (те же, что на чистом main). `gate.py check` — ok. Скриншоты 1280/390 обновлены вне git.

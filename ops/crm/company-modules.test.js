@@ -127,3 +127,39 @@ test('миграция на прежней схеме и откат', () => {
   assert.deepEqual(tables(), []);
   assert.equal(db.prepare('SELECT count(*) n FROM companies').get().n, 1, 'прежние таблицы не тронуты');
 });
+
+test('параметры: имена из прототипа (__proto__, constructor, toString, hasOwnProperty) — 400', () => {
+  const { db, modules } = setup();
+  for (const text of ['{"__proto__":{"x":1}}', '{"constructor":"a@b.test"}', '{"toString":"a@b.test"}', '{"hasOwnProperty":"a@b.test"}']) {
+    assert.equal(status(() => modules.save('alvi', 'crm', { enabled: true, version: 0, params: JSON.parse(text) }, owner)), 400, text);
+  }
+  assert.equal(db.prepare('SELECT count(*) n FROM company_modules').get().n, 0);
+});
+
+test('повреждённая строка истории не роняет раздел', () => {
+  const { db, modules } = setup();
+  modules.save('alvi', 'crm', { enabled: true, version: 0 }, owner);
+  db.prepare("INSERT INTO company_module_audit(company_code,module_key,at,actor,before_data,after_data) VALUES('alvi','crm','2026-11-04T00:00:00Z','x','{bad','{bad')").run();
+  const listed = modules.list('alvi');
+  assert.equal(listed.history.length, 2);
+  assert.equal(listed.history[0].before, null);
+  assert.equal(listed.history[0].after.unreadable, true);
+  assert.equal(listed.history[1].after.enabled, true);
+});
+
+test('диагностика почты учитывает адреса из модуля CRM', () => {
+  const { db, modules } = setup();
+  db.exec('CREATE TABLE leads(id INTEGER PRIMARY KEY, company_code TEXT); CREATE TABLE lead_email_outbox(id INTEGER PRIMARY KEY, lead_id INTEGER, status TEXT, last_error_code TEXT);');
+  const { createEmailDiagnostics } = require('./email-diagnostics');
+  const environment = { LEADS_NOTIFY_EMAIL_AVOKADO: 'avokado@example.test' };
+  const settings = createEmailSettings(db, { apiKey: 'fixture-key', environment, moduleRecipients: () => moduleLeadRecipients(db) });
+  const diagnostics = createEmailDiagnostics(db, { getEnvironment: () => settings.getEnvironment() });
+  const alvi = () => diagnostics.getStatus('alvi').companies[0];
+  assert.equal(alvi().recipientConfigured, false);
+  assert.equal(alvi().recipientSource, undefined);
+  modules.save('alvi', 'crm', { enabled: true, version: 0, params: { leadEmailRecipients: 'm@example.test' } }, owner);
+  assert.equal(alvi().recipientConfigured, true);
+  assert.equal(alvi().recipientSource, 'module');
+  assert.equal(diagnostics.getStatus('avokado').companies[0].recipientSource, undefined);
+  assert.equal(diagnostics.getStatus('avokado').companies[0].recipientConfigured, true);
+});

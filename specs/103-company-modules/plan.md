@@ -1,6 +1,6 @@
 # План
 
-Владелец: Claude, ветка `claude/company-modules-20261104`, один писатель. Разрешённые файлы: `ops/crm/company-modules*.js`, `ops/crm/email-settings.js` (точечно), `ops/crm/server.js` (точечно), `ops/content/server.js` (точечно), `ops/content/crm-permissions.test.js` (подтест), `sites/synapse/cabinet/company-modules*.{js,cjs}`, `sites/synapse/cabinet/clients.{js,css}` (вкладка), `sites/synapse/cabinet.html` (список ресурсов, версия), `.github/workflows/project-chat-check.yml` (тест), `specs/098-company-modules/`.
+Владелец: Claude, ветка `claude/company-modules-20261104`, один писатель. Разрешённые файлы: `ops/crm/company-modules*.js`, `ops/crm/email-settings.js` (точечно), `ops/crm/server.js` (точечно), `ops/content/server.js` (точечно), `ops/content/crm-permissions.test.js` (подтест), `sites/synapse/cabinet/company-modules*.{js,cjs}`, `sites/synapse/cabinet/clients.{js,css}` (вкладка), `sites/synapse/cabinet.html` (список ресурсов, версия), `.github/workflows/project-chat-check.yml` (тест), `specs/103-company-modules/`.
 
 ## Переиспользуется
 

@@ -139,6 +139,7 @@ function createEmailSettings(db, {apiKey, environment = process.env, now = Date.
     if (moduleCodes.length) {
       state.environment.LEADS_COMPANY_RECIPIENTS = {...recipients, ...Object.fromEntries(moduleCodes.map(code => [code, overrides[code]]))};
       state.moduleCodes = new Set(moduleCodes);
+      state.environment.LEADS_RECIPIENT_MODULE_CODES = moduleCodes;
       state.token += ':module:'+JSON.stringify(moduleCodes.map(code => [code, overrides[code]]));
     } else state.moduleCodes = new Set();
     return state;
