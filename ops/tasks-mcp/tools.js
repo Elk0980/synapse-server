@@ -3,6 +3,7 @@
 const z = require('zod');
 const short = z.string().trim().min(1).max(200);
 const optionalName = z.string().trim().max(200);
+const ownerLine = max => z.string().regex(/^[^\u0000-\u001f\u007f\u2028\u2029]*$/u).trim().regex(new RegExp(`^[\\s\\S]{0,${max}}$`, 'u'));
 const id = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 const project = z.string().trim().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/i);
 const statuses = z.enum(['inbox', 'planned', 'in_progress', 'done', 'cancelled']);
@@ -28,7 +29,7 @@ const archiveLinks = z.array(z.strictObject({
 const TOOLS = [
   ['tasks_list', 'Показать задачи разрешённых проектов с фильтрами; план дня рассчитывается по Asia/Bangkok.', {
     project:project.optional(), status:statuses.optional(), executor:short.optional(), parent_id:id.nullable().optional(),
-    today:z.boolean().optional(), search:z.string().max(200).optional(), limit:z.number().int().min(1).max(100).optional(),
+    today:z.boolean().optional(), overview:z.boolean().optional(), search:z.string().max(200).optional(), limit:z.number().int().min(1).max(100).optional(),
     offset:z.number().int().min(0).max(1000000).optional()
   }],
   ['task_get', 'Прочитать задачу, её подзадачи, комментарии и подтверждённые стадии координации. Большие списки возвращаются страницами.', {
@@ -48,6 +49,8 @@ const TOOLS = [
     evidence:z.string().trim().min(1).max(4000).optional(), checked_at:z.iso.datetime().optional(),
     executor:optionalName.optional(), reviewer:optionalName.optional(), due_date:dueDate.optional(),
     blocker:z.string().max(4000).optional(), next_step:z.string().max(4000).optional(), links:links.optional(),
+    owner_question:ownerLine(120).optional(), if_yes:ownerLine(200).optional(), if_no:ownerLine(200).optional(),
+    owner_minutes:z.number().int().min(0).max(120).nullable().optional(),
     revision:z.number().int().min(0).optional()
   }],
   ['task_comment', 'Добавить неизменяемый комментарий к задаче от имени агента.', {
@@ -115,6 +118,7 @@ const SESSION_RULES = [
   'Исполнитель и проверяющий различаются (maker ≠ checker). Код, подключение, проверка и приёмка подтверждаются раздельно.',
   'Не раскрывайте секреты и клиентские данные CRM. Секреты не включаются в документы, комментарии и отчёты.',
   'Обновляйте задачи и своё состояние по ходу работы. После 60 минут без отчёта активная задача помечается «нет отчёта».',
+  'Если ждёте решения Влада, заполните task_update: owner_question простым русским, if_yes и if_no с последствиями «Да»/«Нет», owner_minutes с нужным временем. Технические подробности остаются в blocker и карточке. Неполный вопрос возвращается оркестратору и не показывается Владу.',
   'Реестр agent_report — ручной учёт. agent_launch создаёт локальное поручение; фактический запуск подтверждается отдельным обработчиком. Только локальный код, PR без merge/deploy; разрешения Owner не расширяются.',
   'Архив модуля читайте через archive_list/read; результаты дописывайте через archive_write с session_id и уникальным client_ref. Исправление — новая запись с supersedes_id; файлы и секреты в Git не помещать.'
 ];

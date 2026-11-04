@@ -34,7 +34,7 @@ test('board app starts inside existing cabinet and its icons exist; resources ar
   assert.equal(manifest.display,'standalone');
   for (const icon of manifest.icons) assert.ok(fs.existsSync(root+'/'+icon.src));
   const page = fs.readFileSync(root+'/cabinet.html','utf8');
-  assert.match(page,/20261104-waiting-vlad-43-r2/);
+  assert.match(page,/20261104-owner-question-88-r2/);
   assert.ok(page.indexOf('"task-overview", "task-board"') > 0);
   assert.ok(page.indexOf('"task-board", "tasks"') > 0);
   assert.match(page,/data-owner-board-entry/);

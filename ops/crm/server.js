@@ -558,6 +558,7 @@ if (!db.prepare('SELECT 1 FROM schema_migrations WHERE version=10').get()) {
   require('./task-products').backupTasksBoard(db,DATABASE_PATH);
   migrate(10, () => require('./task-products').migrateTasksBoard(db));
 }
+migrate(12, () => require('./task-owner-question').migrateOwnerQuestions(db));
 
 // Owner-approved company display name. IDs, links and legal entities stay intact.
 db.prepare(`UPDATE companies SET name='Palitra', updated_at=?
