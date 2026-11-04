@@ -54,6 +54,7 @@ const { createDealOrders } = require('./deal-orders');
 const { createTaskCoordination } = require('./task-coordination');
 const { createPeopleHandler } = require('./people-http');
 const { createTaskDispatch } = require('./task-dispatch');
+const { createAgentLaunch, AGENT_LAUNCH_METHODS } = require('./agent-launch');
 
 const IS_MAIN = require.main === module;
 const PORT = Number.parseInt(process.env.PORT || '8080', 10);
@@ -626,6 +627,7 @@ const emailDiagnostics = createEmailDiagnostics(db, {getEnvironment: emailSettin
 const companyInformation = createCompanyInformation(db, {check: createCompanyInformationCheck()});
 const taskCoordination = createTaskCoordination(db);
 const taskDispatch = createTaskDispatch(db);
+const agentLaunch = createAgentLaunch(db, {coordination:taskCoordination});
 const autopostingTransport = createAutopostingTransport(db, {apiKey: API_KEY});
 const contentFactoryWorkflow=require('./content-factory-workflow').createContentFactoryWorkflow(db);
 const autoposting = createAutoposting(db, {information: companyInformation, transport: autopostingTransport,reviewTasks:createReviewTasks(db),workflow:contentFactoryWorkflow});
@@ -2908,7 +2910,8 @@ async function route(request, response) {
   const tasksMcpMatch = url.pathname.match(/^\/coordination\/mcp\/([a-z_]+)$/);
   if (tasksMcpMatch) {
     if (request.method !== 'POST') fail(405, 'Метод не поддерживается');
-    const result = taskCoordination.tool(tasksMcpMatch[1], await readJson(request), crmIdentity(request));
+    const handler = AGENT_LAUNCH_METHODS.has(tasksMcpMatch[1]) ? agentLaunch : taskCoordination;
+    const result = handler.tool(tasksMcpMatch[1], await readJson(request), crmIdentity(request));
     return send(response, 200, result, {...cors, 'cache-control':'private, no-store'});
   }
   const dispatchMatch=url.pathname.match(/^\/coordination\/dispatch\/(\d+)(?:\/(enqueue|action))?$/);

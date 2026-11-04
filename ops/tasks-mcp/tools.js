@@ -59,6 +59,31 @@ const TOOLS = [
     function:z.string().max(500).optional(), chat:z.string().max(500).optional(), state:states,
     last_event:z.string().trim().min(1).max(2000)
   }],
+  ['agent_launch', 'Поставить локальную работу с кодом в dispatch для codex-code. Оркестратор обязан явно задать code_only:true и неизменяемую область allowed_paths. Только Owner и разрешённый проект; production/merge/deploy не разрешаются. Повтор client_ref не создаёт дубль.', {
+    task_id:id,code_only:z.literal(true),allowed_paths:z.array(z.string().min(1).max(500)).min(1).max(100).refine(value => value.every(entry => {
+      if (entry !== entry.trim() || entry.startsWith('/') || /[\x00-\x1f\x7f\\:*?\[\]{}]/.test(entry)) return false;
+      return (entry.endsWith('/') ? entry.slice(0,-1) : entry).split('/').every(part => part && part !== '.' && part !== '..');
+    }),'Нужны точные пути или префиксы каталогов без wildcard и выхода из репозитория'),
+    executor_profile:z.literal('codex-code').optional(),client_ref:short.optional()
+  }],
+  ['agent_status', 'Прочитать состояние запуска, session_id и очищенный хвост технического журнала. Истёкшая аренда не доказывает остановку процесса.', {
+    run_id:z.uuid()
+  }],
+  ['agent_message', 'Поставить продолжение в прежнем контексте и worktree после завершения turn. Только локальный код; production/merge/deploy запрещены.', {
+    run_id:z.uuid(),text:z.string().trim().min(1).max(10000),client_ref:short.optional()
+  }],
+  ['agent_stop', 'Запросить остановку локального запуска. Живой процесс считается остановленным только после подтверждения его обработчика.', {
+    run_id:z.uuid()
+  }],
+  ['agent_worker_claim', 'Локальному обработчику Owner: атомарно забрать локальный код из dispatch; максимум три живых или неизвестных процесса. Не перезапускает истёкшую аренду.', {
+    worker_id:z.uuid()
+  }],
+  ['agent_worker_update', 'Локальному обработчику Owner: heartbeat, контекст и подтверждение завершения процесса. Сырые команды, секреты и клиентские данные в журнал не передавать.', {
+    run_id:z.uuid(),worker_id:z.uuid(),lease_token:z.uuid(),
+    event:z.enum(['heartbeat','started','complete','failed','stopped']),session_id:z.uuid().optional(),
+    log_tail:z.string().max(8000).optional(),summary:z.string().max(4000).optional(),
+    exit_code:z.number().int().min(-2147483648).max(2147483647).optional()
+  }],
   ['session_start', 'Начать рабочую сессию: получить обязательные правила, карту документов под запрос и свои задачи.', {
     agent:short, kind:kinds, request:z.string().trim().min(1).max(4000)
   }],
@@ -90,7 +115,7 @@ const SESSION_RULES = [
   'Исполнитель и проверяющий различаются (maker ≠ checker). Код, подключение, проверка и приёмка подтверждаются раздельно.',
   'Не раскрывайте секреты и клиентские данные CRM. Секреты не включаются в документы, комментарии и отчёты.',
   'Обновляйте задачи и своё состояние по ходу работы. После 60 минут без отчёта активная задача помечается «нет отчёта».',
-  'Реестр агентов — ручной учёт; MCP не запускает агентов и не расширяет разрешения Owner.',
+  'Реестр agent_report — ручной учёт. agent_launch создаёт локальное поручение; фактический запуск подтверждается отдельным обработчиком. Только локальный код, PR без merge/deploy; разрешения Owner не расширяются.',
   'Архив модуля читайте через archive_list/read; результаты дописывайте через archive_write с session_id и уникальным client_ref. Исправление — новая запись с supersedes_id; файлы и секреты в Git не помещать.'
 ];
 

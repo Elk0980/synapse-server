@@ -77,7 +77,7 @@ test('официальный Streamable HTTP: initialize, tools/list, ping и о
   const listed = await f.rpc('tools/list');
   assert.equal(listed.response.status, 200);
   assert.deepEqual(listed.body.result.tools.map(tool => tool.name), TOOLS.map(tool => tool.name));
-  assert.equal(listed.body.result.tools.length, 13);
+  assert.equal(listed.body.result.tools.length, 19);
   assert.ok(listed.body.result.tools.every(tool => /[а-яА-Я]/.test(tool.description)));
   assert.equal((await f.rpc('ping')).response.status, 200);
   for (const method of ['GET','DELETE','PUT']) assert.equal((await fetch(f.endpoint, {method})).status, 405);
@@ -98,7 +98,18 @@ test('схемы инструментов запрещают превышени�
     ['agent_report',{agent:'Codex',state:'work',last_event:'event',chat:'x'.repeat(501)}],
     ['task_get',{task_id:1,comments_limit:21}],
     ['task_get',{task_id:1,subtasks_limit:101}],
-    ['task_get',{task_id:1,comments_offset:-1}]]) {
+    ['agent_launch',{task_id:1}],
+    ['agent_launch',{task_id:1,code_only:false,allowed_paths:['ops/']}],
+    ['agent_launch',{task_id:1,code_only:true}],
+    ['agent_launch',{task_id:1,code_only:true,allowed_paths:[]}],
+    ['agent_launch',{task_id:1,code_only:true,allowed_paths:['../']}],
+    ['agent_launch',{task_id:1,code_only:true,allowed_paths:['ops/*']}],
+    ['task_get',{task_id:1,comments_offset:-1}],
+    ['agent_launch',{task_id:1,executor_profile:'shell'}],
+    ['agent_launch',{task_id:1,production_approved:true}],
+    ['agent_status',{run_id:'../not-a-run'}],
+    ['agent_message',{run_id:'00000000-0000-4000-8000-000000000001',text:''}],
+    ['agent_worker_update',{run_id:'00000000-0000-4000-8000-000000000001',event:'deploy'}]]) {
     const result = await f.rpc('tools/call', {name,arguments:args});
     assert.ok(result.body.error || result.body.result.isError);
   }
@@ -137,7 +148,7 @@ test('HTTP работает без каталога документов; поз
   assert.deepEqual(await (await fetch(`${f.origin}/health`)).json(), {status:'ok'});
   const listed = await f.rpc('tools/list');
   assert.equal(listed.response.status,200);
-  assert.equal(listed.body.result.tools.length,13);
+  assert.equal(listed.body.result.tools.length,19);
   let result = await f.rpc('tools/call', {name:'tasks_list',arguments:{project:'synapse-business'}});
   assert.equal(result.body.result.isError,undefined);
   assert.deepEqual(result.body.result.structuredContent.tasks,[]);
