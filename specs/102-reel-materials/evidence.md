@@ -5,6 +5,12 @@
 - `node --test ops/crm/reel-materials-http.test.js` — 1 тест на настоящем `server.js`, pass 1: ролик SMM → EDL → служебный queue/claim/versions → задача «Монтаж: …» на доске → черновик автопостинга v2 без даты; чужая компания 403/404; служебный API с личностью 403.
 - Регрессия: `autoposting-trash-http.test.js`, `content-factory-source-http.test.js` — pass 9, fail 0.
 
+## PR (б) — «Материалы» и «Постинг» (05.11.2026, Бангкок)
+- `node --test sites/synapse/cabinet/materials.test.cjs` (jsdom) — 5/5: регистрация `content-materials`, сетка v2/«правок: 1», фильтры уходят на сервер, перепутанные даты не уходят, ответ другой компании не показывается, маска 6 площадок, версии, «Скачать», «Создать публикацию» {version, platformIds}, переход в «Постинг», права view/edit.
+- Playwright (Chromium) на стенде с заглушкой API и синтетическими роликами ffmpeg (testsrc2/smptebars, без данных клиентов), 390×844 и 1440×900: карточек 3, фильтр TikTok → 1, маска `tiktok`, черновик №77 «Ничего не отправлено», горизонтальная прокрутка 0 px на всех экранах, ошибок страницы 0. Снимки: materials-grid-390/1440, materials-detail-tiktok-390/1440 (scratchpad агента, в git не добавлены).
+- Регрессия «Постинга»: autoposting-cf23 11/11, autoposting-cf26 3/3; autoposting.test.cjs и autoposting-daily.test.cjs дают одинаковый файловый тайм-аут и на чистом origin/main (сравнение списков подтестов совпало), т. е. это не следствие правки.
+- Не проверено в браузере: маска в предпросмотре «Постинга» (проверены только синтаксис и общий рендер маски).
+
 ## Исправления по независимому ревью №98 (05.11.2026, Бангкок)
 ### PR 501 — хост ролика
 - `mediaUrl()` сравнивает origin с разрешённым списком (`PUBLISHING_ASSET_ORIGINS`, по умолчанию `https://synapse.synapsebusiness.ru` = `PUBLISHING_ASSET_ORIGIN` content); относительный путь `/content/publishing-assets/<code>/…` дополняется этим origin.
@@ -17,3 +23,8 @@
 - `node --test ops/content/reel-materials-chat.test.js` — 3/3 (комната hugh:7, повтор без дублей, общий чат пуст; без комнат — пропуск; чужая комната/компания/ответ CRM отклоняются, интервал 15 с).
 - Сверка с кодом 504: `team-chat.js` из `origin/claude/night98-chats-tasks` + этот модуль (скрипт в scratchpad): `list(7,'hugh:7')` → 2 записи (Лена; Хью · ИИ «Исправлено: … готова v2»), `common` → 0, Таня читает `hugh:7` → 403.
 - Регрессия content (настоящий server.js): autoposting-receipts-proxy, people-http, crm-permissions, content-factory-sources-proxy, media-mentor-proxy, chat-proxy, team-chat* — 39/39. CRM: autoposting-trash-http, content-factory-source-http, reel-materials* — 17/17.
+### PR 507 — сетка на 390 px
+- Причина: кнопка карточки `.mt-card__open` — `display:grid` с неявной колонкой `auto`; минимальная ширина видео/текста растягивала содержимое правой карточки за колонку (стенд до правки: колонка до 378 px, содержимое `mt-thumb`/`mt-card__body` 201…426 px, обрезано).
+- Исправление: `grid-template-columns:minmax(0,1fr)` и `min-width:0` у карточки и кнопки, `minmax(min(160px,100%),1fr)` в сетке, `min(150px,100%)` в списках площадок и масках «Постинга», без фиксированной ширины.
+- Playwright (Chromium), стенд: настоящие `materials.js/css` + стили `cabinet.html`, заглушка `ctx.api`, синтетический ролик ffmpeg testsrc2 1080×1920. 390×844: сетка — правый край любого элемента ≤ 378 px (было 426), карточки 190/378/190, прокрутка 0, ошибок 0; карточка ролика — ≤ 378 px, 0. 1440×900: сетка и карточка ≤ 1384 px, прокрутка 0, ошибок 0. Снимки after-grid/detail-390/1440 — в scratchpad, не в git.
+- jsdom `materials.test.cjs` — 5/5.
